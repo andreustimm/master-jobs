@@ -44,7 +44,7 @@ export type AddJobResult = {
   warnings: string[];
 };
 
-async function ensureSource(id: string, kind: string, handle: string, label: string) {
+export async function ensureImportSource(id: string, kind: string, handle: string, label: string) {
   const db = getDb();
   await db
     .insert(source)
@@ -68,7 +68,10 @@ async function ensureCompany(name: string): Promise<number | null> {
   return found[0]?.id ?? null;
 }
 
-async function upsert(raw: RawJob, sourceId: string): Promise<{ jobId: number; created: boolean }> {
+export async function upsertRawJob(
+  raw: RawJob,
+  sourceId: string,
+): Promise<{ jobId: number; created: boolean }> {
   const db = getDb();
   const fp = fingerprint(raw);
   const stamp = new Date().toISOString();
@@ -139,7 +142,7 @@ export async function addJob(input: ManualJobInput): Promise<AddJobResult> {
       .limit(1);
     const label = input.companyName ?? configured[0]?.label ?? detected.label;
 
-    await ensureSource(sourceId, detected.kind, detected.handle, label);
+    await ensureImportSource(sourceId, detected.kind, detected.handle, label);
 
     try {
       const adapter = getAdapter(detected.kind);
@@ -155,7 +158,7 @@ export async function addJob(input: ManualJobInput): Promise<AddJobResult> {
         jobs.find((j) => j.url === input.url || j.applyUrl === input.url);
 
       if (match) {
-        const { jobId, created } = await upsert(match, sourceId);
+        const { jobId, created } = await upsertRawJob(match, sourceId);
         return {
           jobId,
           created,
@@ -203,7 +206,7 @@ export async function addJob(input: ManualJobInput): Promise<AddJobResult> {
   }
 
   const sourceId = `manual:${host}`;
-  await ensureSource(sourceId, "manual", host, unfetchableHost ?? host);
+  await ensureImportSource(sourceId, "manual", host, unfetchableHost ?? host);
 
   const raw: RawJob = {
     externalId: input.url,
@@ -225,7 +228,7 @@ export async function addJob(input: ManualJobInput): Promise<AddJobResult> {
     );
   }
 
-  const { jobId, created } = await upsert(raw, sourceId);
+  const { jobId, created } = await upsertRawJob(raw, sourceId);
   return {
     jobId,
     created,

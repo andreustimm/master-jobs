@@ -43,10 +43,14 @@ AI-Lead nos EUA, Canadá e Europa.
    passa de 70 de fit e **nenhuma** passa de 80. E 92,4% da base vem de uma única
    fonte (Lever). O gargalo não é coleta.
 
-4. **A Frente A inteira é irrelevante como fonte de dados.** Nenhum marketplace
-   de talento expõe API pública utilizável (Wellfound responde 403; Hired e Otta
-   nem existem mais como marcas independentes). Eles importam como canal de
-   colocação, não de listagem.
+4. **Da Frente A, só uma plataforma é integrável — e duas nem existem mais.**
+   O **Braintrust expõe API pública aberta** (`app.usebraintrust.com/api/jobs/`,
+   sem auth) com **país de elegibilidade estruturado**: 13 das 121 vagas listam
+   `country: "BR"`. É a única. Wellfound e Toptal respondem 403; **`hired.com`
+   redireciona para a LHH** (marca aposentada em jun/2024) e **`otta.com`
+   redireciona para a Welcome to the Jungle**, com migração destrutiva marcada
+   para setembro de 2026. Para o resto, o caminho continua sendo job alert por
+   e-mail — como a ADR já previa.
 
 5. **Para este perfil, o canal decide mais que o ranqueamento.** Referrals são 7%
    dos candidatos e 40% das contratações; 18–27% dos anúncios são ghost jobs; e a
@@ -59,70 +63,142 @@ AI-Lead nos EUA, Canadá e Europa.
 # Frente A — Agregadores e marketplaces para talento sênior / remoto / contractor
 
 > Coluna crítica: **contrata contractor a partir do Brasil?**
-> Status de API e redirects verificados por requisição direta em 18/08/2026.
-> Onde a fonte primária não publica a informação, está escrito
-> "não publicado" — não foi preenchido por inferência.
+> Status de API, redirects e contagens de vagas verificados por requisição
+> direta em 18/08/2026. Onde a fonte primária não publica o dado, está escrito
+> **"não publicado"** — nada foi preenchido por inferência.
 
 ## 1. Tabela dos agregadores e marketplaces
 
 | Plataforma | Público | API pública? | Contrata do Brasil? | Quem paga |
 |---|---|---|---|---|
-| [Welcome to the Jungle (ex-Otta)](https://uk.welcometothejungle.com/) | Tech/startups, UK/EU/US | **Parcial** — `api.welcometothejungle.com/api/v1/organizations` responde 200 sem auth | Vagas majoritariamente EU/UK com direito a trabalho local | Empresa |
-| [Wellfound (ex-AngelList Talent)](https://wellfound.com/) | Startups, early-stage | **Não** — `/api/jobs` responde **403**; site bloqueia automação | Maioria exige US work auth; filtro de remoto existe mas é fraco | Empresa |
-| [Hired](https://www.lhh.com/us/en/hired/) | Marketplace reverso | **Não** | **Marca absorvida** — `hired.com` redireciona (301) para LHH/Adecco | Empresa |
-| [Toptal](https://www.toptal.com/freelance-jobs) | Freelance "top 3%" | **Não** | Sim — "freelancers de todo o mundo"; sem restrição geográfica publicada | **Empresa** (Toptal fatura o cliente; sem taxa publicada ao freelancer) |
-| [Braintrust](https://www.usebraintrust.com/) | Marketplace de talento | **Não** | **Sim** — "global talent pool across 100+ countries" | **Empresa** — "zero platform fees for talent"; talento fica com 100% |
-| [A.Team](https://www.a.team/join) | Times sob demanda, sênior | **Não** | Não publicado (escritórios NY/Tel Aviv) | **Empresa** — "you set your rate, we don't skim it"; aceitação <2% |
-| [Lemon.io](https://lemon.io/for-developers/) | Freelance dev p/ startups | **Não** | **Sim, na prática** — depoimento oficial cita dev trabalhando do Brasil; paga via Wise/Payoneer | Empresa (Lemon.io paga o dev direto) |
-| [Gun.io](https://gun.io) | Freelance sênior | **Não** (403 a automação) | Não publicado | Empresa |
-| [Arc.dev](https://arc.dev/remote-jobs) | Remoto global | **Não** | **Sim — explícito**, tem trilha "Remote jobs in Brazil" e demais países LATAM | Empresa |
-| [Turing](https://www.turing.com/jobs) | Devs p/ empresas US | **Não** | Não publicado; posiciona-se como "globally distributed", contrata como contractor | Empresa (gratuito p/ dev) |
-| [Andela](https://www.andela.com/) | Talento AI-native | **Não** | **Sim** — cita time "de Europa, Quênia, **Brasil**, Índia e América do Norte" | Empresa |
-| [X-Team](https://x-team.com) | Staff augmentation | **Não** | Não publicado | Empresa |
+| [Braintrust](https://www.usebraintrust.com/) | Marketplace de talento | ✅ **SIM — aberta, sem auth** | ✅ **Sim, explícito** — 13 das 121 vagas listam `country: "BR"` | Cliente (**15%**); talento paga **0%** |
+| [A.Team](https://www.a.team/join) | Times sob demanda, sênior | ❌ (SPA fechada) | ❓ **Não publicado** — mas anuncia "building density in the Americas/EST" | Cliente — *"you set your rate, we don't skim it"* |
+| [Toptal](https://www.toptal.com/) | Freelance "top 3%" | ❌ (Cloudflare 403) | ✅ Sim — "over 100 countries"; **sem visa sponsorship** = contractor | Cliente ($79/mês + markup **oculto, est. 40–60%**) |
+| [Lemon.io](https://lemon.io/for-developers/) | Freelance dev p/ startups | ❌ | ✅ Na prática — paga via Wise/Payoneer | Cliente |
+| [Arc.dev](https://arc.dev/remote-jobs) | Remoto global | ❌ | ✅ **Sim, explícito** — trilha "Remote jobs in Brazil" | Cliente |
+| [Andela](https://www.andela.com/) | Talento AI-native | ❌ | ✅ Sim — cita time "de Europa, Quênia, **Brasil**, Índia" | Cliente |
+| [Turing](https://www.turing.com/jobs) | Devs p/ empresas US | ❌ | Não publicado — "globally distributed", contractor | Cliente (grátis p/ dev) |
+| [Wellfound](https://wellfound.com/) | Startups early-stage | ❌ (Cloudflare 403) | 🟡 Depende do empregador — **219 vagas BR vs 14.819 US** | Cliente (job posts grátis; ads a partir de $200) |
+| [Welcome to the Jungle (ex-Otta)](https://uk.welcometothejungle.com/) | Tech/startups UK/EU/US | 🟡 Parcial, **não documentada** | ❌ Não é o mercado deles (FR/UK/US) | Cliente |
+| [X-Team](https://x-team.com) | Staff augmentation | ❌ | Não publicado | Cliente |
+| [Gun.io](https://gun.io) | Freelance sênior | ❌ (403) | Não publicado | Cliente |
+| [Hired](https://www.lhh.com/) | Marketplace reverso | ☠️ | ☠️ **MORTO** | — |
 
-### Observações verificadas de primeira mão
+**Todas são gratuitas para o candidato.** Nenhuma das 12 cobra do talento — o
+modelo é sempre taxa sobre o cliente. Braintrust é a única com 0% contratual e
+explícito para o talento ([Site Service Fees Terms](https://usebraintrust.com/site-service-fees-terms)).
 
-- **Otta não existe mais como marca independente.** `otta.com` responde **301**
-  para `uk.welcometothejungle.com`. A aquisição pela Welcome to the Jungle foi
-  [anunciada em janeiro de 2024](https://press.welcometothejungle.com/en/news/uk-recruitment-platform-otta-acquired-by-welcome-to-the-jungle).
-- **Hired foi absorvida.** `hired.com` responde **301** para
-  `lhh.com/us/en/hired/` (LHH, grupo Adecco). Não é mais o marketplace reverso
-  independente que era.
-- **Wellfound bloqueia acesso programático** — `403` em `/api/jobs`. Integração só
-  por scraping com browser, com o risco de ToS correspondente.
-- **Braintrust é o modelo economicamente mais favorável ao talento** entre os
-  verificados: [a página de preços](https://www.usebraintrust.com/pricing) afirma
-  "zero platform fees for talent" — o talento fica com 100% da tarifa e a margem
-  vem do lado do cliente. A.Team faz afirmação equivalente ("we don't skim it").
-- **Toptal não publica a taxa cobrada do freelancer.** A página oficial diz apenas
-  que o freelancer define a própria tarifa e que a Toptal fatura o cliente. O
-  markup sobre o cliente **não é publicado**.
+### 1.1 Duas plataformas não existem mais como produto independente
 
-### Leitura de R&S sobre a Frente A
+Verificado por `curl` hoje:
 
-Nenhuma dessas plataformas expõe API pública utilizável — a única exceção parcial
-é a Welcome to the Jungle. **Do ponto de vista de integração no job-hunt-os, a
-Frente A inteira é irrelevante como fonte de dados.** O valor dela é outro: são
-canais de *colocação*, não de *listagem*.
+- **Hired está morto.** `hired.com` → **301** para a página "nossa história" da
+  LHH. A LHH incorporou o Hired ao LHH Recruitment Solutions em **14/06/2024**
+  ([Staffing Industry Analysts](https://www.staffingindustry.com/news/global-daily-news/adecco-incorporating-hired-lhh-business);
+  [discussão no HN](https://news.ycombinator.com/item?id=40746030)). Qualquer
+  artigo de 2025–2026 recomendando "Hired.com" é conteúdo desatualizado.
+- **Otta acabou como marca.** `otta.com` → **301** para
+  `uk.welcometothejungle.com`; `app.otta.com` → **301** para o login da WTTJ.
+  E há uma **migração destrutiva marcada para setembro de 2026**, descrita pela
+  própria empresa em [go.welcometothejungle.com/candidate-migration](https://go.welcometothejungle.com/candidate-migration):
+  *"The app is closing in September"*, vagas salvas e histórico de candidaturas
+  não migram, e *"your messages won't carry over"*. **Não construa estado em
+  cima da Otta.**
 
-E como canal de colocação para este perfil, o ranking é curto:
+### 1.2 O achado integrável: Braintrust expõe API pública aberta
 
-1. **Braintrust e A.Team** — economicamente os melhores (talento fica com 100%),
-   explicitamente globais, posicionados em sênior. Braintrust confirma 100+ países.
-2. **Arc.dev** — o único que assume publicamente trilha para o Brasil.
-3. **Lemon.io** — aceita LATAM e paga via Wise/Payoneer, mas a faixa divulgada
-   ("senior a partir de US$ 55/h") fica abaixo do que um arquiteto com 20+ anos
-   deveria cobrar. Serve como fluxo de caixa, não como destino.
-4. **Toptal** — alcance global e tarifas melhores, mas o processo de triagem é
-   longo e a taxa cobrada do cliente não é transparente.
-5. **Turing / Andela / X-Team** — modelo de staff augmentation. Andela pivotou
-   para "AI-native engineers" com trilhas Builders/Integrators/Scalers. Tendem a
-   posicionar o profissional como capacidade alocada, não como arquiteto — o que
-   é o oposto do posicionamento-alvo.
-6. **Wellfound e Welcome to the Jungle** — bons boards, mas o inventário é
-   majoritariamente preso a direito de trabalho local (US/UK/EU).
+Este é o único resultado da Frente A com valor direto de engenharia. Verificado
+por requisição própria em 18/08/2026:
 
----
+```
+GET https://app.usebraintrust.com/api/jobs/        → HTTP 200, JSON, sem auth
+GET https://app.usebraintrust.com/api/jobs/?page=2 → paginação DRF
+GET https://app.usebraintrust.com/api/jobs/{id}/   → detalhe
+```
+
+Sem chave, sem header, sem cookie. E os campos são **exatamente os que nosso
+scorer consome**: `budget_minimum_usd`, `budget_maximum_usd`, `payment_type`,
+`contract_type`, `expected_hours_per_week`, `timezones`, `main_skills`,
+`locations[].country`, `start_date`, `deadline`.
+
+Contagens que fiz percorrendo a paginação inteira:
+
+| Métrica | Valor |
+|---|---:|
+| Vagas abertas no mundo | **121** |
+| Elegíveis ao Brasil (`country == "BR"`) | **13** |
+| Títulos com "architect" | 1 |
+| Títulos com "principal" | 1 |
+| Títulos com "staff" | 1 |
+| Títulos com "senior" | 23 |
+
+**Leitura honesta:** a API é ótima e a ingestão é trivial — mas 121 vagas globais
+é um marketplace pequeno, e o inventário de nível Architect/Staff/Principal é
+**quase inexistente**. Boa parte do restante é trabalho de treinamento de IA a
+US$ 15–32/h. Vale como fonte automatizada barata com filtro geográfico
+estruturado — **não como canal principal**.
+
+### 1.3 Sinais de risco verificados
+
+- **O token BTRST do Braintrust colapsou.** Dados da
+  [CoinGecko](https://www.coingecko.com/en/coins/braintrust): **US$ 0,0565**
+  contra ATH de **US$ 46,82** em 15/09/2021 — **−99,88%**. A tese de "você é dono
+  da rede" está economicamente morta. Se oferecerem BTRST como parte da
+  remuneração, trate como valor ~zero. O ceticismo já estava no
+  [HN em 2022](https://news.ycombinator.com/item?id=32946968): a rede é dividida
+  entre uma empresa privada (dona do site) e uma fundação panamenha (dona do
+  token) — *"it's questionable to say the token holders 'own' the network."*
+- **Wellfound: "ghost application harvesting".** O usuário FireBeyond documentou
+  o mesmo padrão quatro vezes no HN só em 2026, com números crescentes:
+  [80+ candidaturas sem resposta (abr)](https://news.ycombinator.com/item?id=47617555),
+  [mai](https://news.ycombinator.com/item?id=47998972),
+  [jun](https://news.ycombinator.com/item?id=48562595) e
+  [120+ candidaturas e "crickets" (jul)](https://news.ycombinator.com/item?id=49053869).
+  Some-se a isso: **219 vagas no Brasil contra 14.819 nos EUA, e zero de
+  Principal Engineer no Brasil.**
+- **Toptal: markup oculto e compressão de taxa.** A empresa afirma não tirar
+  percentual do freelancer — verdade na letra, porque a margem é markup em cima,
+  não divulgado a nenhum dos lados. Relatos de primeira mão no HN estimam 40–60%:
+  [*"more or less a 50% markup over what developer gets"*](https://news.ycombinator.com/item?id=10114857)
+  e [*"we are still talking $30/hr with them getting $100/hr"*](https://news.ycombinator.com/item?id=14845568).
+  Há também relato de [taxa caindo de forma sustentada dentro da plataforma](https://news.ycombinator.com/item?id=10112786)
+  e de [triagem em que o revisor sequer olhou o projeto entregue](https://news.ycombinator.com/item?id=15625602).
+  Funil de 3–8 semanas.
+- **A.Team: o nível é o certo, a opacidade é total.** É a única plataforma cujo
+  posicionamento explícito é Architect/Staff — o anúncio deles no "Who is hiring"
+  do HN em [02/03/2026](https://news.ycombinator.com/item?id=47220100) oferece
+  **US$ 120–170/h** para Senior AI Architect e diz *"building density in the
+  Americas/EST"*, janela em que o Brasil (UTC−3) se encaixa. Mas **não há
+  política pública de elegibilidade por país**, e nem os termos de serviço são
+  legíveis (SPA que exige JavaScript). Ressalva relevante de um membro da própria
+  rede, [no HN](https://news.ycombinator.com/item?id=34693244): *"they don't even
+  have many contracts available right now (…) contracting is a horrible
+  replacement for full time opportunities. It's unpredictable."*
+
+### 1.4 Leitura de R&S sobre a Frente A
+
+**Como fonte de dados, a Frente A é quase toda irrelevante** — apenas o Braintrust
+é integrável. Wellfound, Toptal, Gun.io estão atrás de Cloudflare; A.Team é SPA
+fechada; a WTTJ tem endpoints sem documentação que podem quebrar sem aviso (e
+está em migração agora). Para essas, o caminho legítimo continua sendo **job
+alert por e-mail + cadastro manual**, como já decidido na ADR do projeto.
+
+**Como canal de colocação**, a ordem para este perfil:
+
+1. **A.Team** — único com fit real de Architect/Staff e tarifa compatível
+   (US$ 120–170/h), timezone Americas/EST explicitamente priorizado. Entrada
+   manual. **Ação: perguntar por escrito sobre elegibilidade Brasil e método de
+   pagamento antes de investir no funil.**
+2. **Toptal** — aceita contractor de 100+ países sem exigir autorização US, paga
+   em USD. Custo: 3–8 semanas de triagem e markup de 40–60% corroendo a tarifa.
+3. **Braintrust** — o único automatizável, com país de elegibilidade estruturado.
+   Volume e nível baixos; vale como fonte barata, não como aposta.
+4. **Arc.dev / Andela / Lemon.io** — aceitam Brasil, mas posicionam o
+   profissional como capacidade alocada, não como arquiteto. Lemon.io divulga
+   sênior a partir de US$ 55/h, abaixo do alvo. Fluxo de caixa, não destino.
+5. **Descartar:** Hired (morto), Otta/WTTJ (marca extinta, migração destrutiva,
+   mercado errado), Wellfound (219 vagas BR, zero Principal, padrão documentado
+   de candidatura-fantasma).
 
 # Frente B — Alternativas open source e self-hosted
 
@@ -467,6 +543,12 @@ mais que qualquer expansão de adapter:
 
 1. **Adicionar Hacker News "Who is hiring?" (API do Algolia, gratuita, verificada
    funcionando).** Maior ganho de sinal por hora de implementação de toda a lista.
+   É onde o time de engenharia escreve o próprio anúncio, com contato direto e
+   sem ATS no meio — e foi exatamente ali que a A.Team publicou uma vaga de
+   Senior AI Architect a US$ 120–170/h priorizando o fuso das Américas.
+   **Bônus barato:** o adapter do **Braintrust** (JSON aberto, com
+   `locations[].country` e faixa em USD já estruturados) custa poucas horas e
+   alimenta o scorer com os campos de geo e compensação prontos.
 2. **Inverter o modelo de empresa-primeiro em vez de vaga-primeiro.** Manter uma
    lista curada de empresas que comprovadamente contratam PJ no Brasil e vigiar os
    boards *delas*. É o que o career-ops faz com 150+ career pages, e é a

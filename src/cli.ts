@@ -13,6 +13,7 @@ import { listBoard, pipelineCounts, setApplicationStatus } from "./core/db/repo.
 import { application, job, jobScore, positioningTask, source } from "./core/db/schema.ts";
 import { APPLICATION_STATUSES } from "./core/db/schema.ts";
 import { ageInDays, loadRates, refreshRates, STALE_AFTER_DAYS } from "./core/fx.ts";
+import { importJobs, parseFile } from "./core/ingest/import.ts";
 import { addJob } from "./core/ingest/manual.ts";
 import { syncAll, pruneClosed } from "./core/ingest/run.ts";
 import { loadProfile } from "./core/profile/load.ts";
@@ -423,6 +424,62 @@ jobs
       }
 
       console.log(c.dim(`\n  Detalhes: jho jobs show ${result.jobId}\n`));
+    });
+  });
+
+jobs
+  .command("import <file>")
+  .description("Import jobs from a JSON payload captured from an authenticated platform")
+  .requiredOption("--source <key>", "short source key, e.g. revelo or bairesdev")
+  .option("--label <name>", "human-readable source label")
+  .option("--company <name>", "company, when the payload does not carry one")
+  .option("--base-url <url>", "prefix for building job URLs when the payload has only ids")
+  .option("--dry-run", "parse and report without writing anything")
+  .action(async (file: string, opts: {
+    source: string; label?: string; company?: string; baseUrl?: string; dryRun?: boolean;
+  }) => {
+    await withDb(async () => {
+      await runMigrations();
+      const parsed = await parseFile(file, { company: opts.company, baseUrl: opts.baseUrl });
+
+      for (const w of parsed.warnings) console.log(c.yellow(`  ! ${w}`));
+
+      if (parsed.jobs.length === 0) {
+        console.error(c.red("Nenhuma vaga reconhecida no payload."));
+        if (parsed.unmappedFields.length > 0) {
+          console.log(c.dim(`  Campos encontrados: ${parsed.unmappedFields.slice(0, 25).join(", ")}`));
+        }
+        process.exitCode = 1;
+        return;
+      }
+
+      console.log(`\n${c.bold(String(parsed.jobs.length))} vaga(s) reconhecida(s):\n`);
+      for (const j of parsed.jobs.slice(0, 10)) {
+        const desc = j.descriptionText ? `${j.descriptionText.length} chars` : c.yellow("sem descrição");
+        console.log(`  ${truncate(j.title, 44)} ${c.dim(`${j.companyName} · ${desc}`)}`);
+      }
+      if (parsed.jobs.length > 10) console.log(c.dim(`  … e mais ${parsed.jobs.length - 10}`));
+
+      if (parsed.unmappedFields.length > 0) {
+        console.log(c.dim(`\n  Campos não mapeados: ${parsed.unmappedFields.slice(0, 15).join(", ")}`));
+      }
+
+      if (opts.dryRun) {
+        console.log(c.dim("\n  --dry-run: nada foi gravado.\n"));
+        return;
+      }
+
+      const run = await importJobs(parsed, {
+        sourceKey: opts.source,
+        label: opts.label ?? opts.source,
+      });
+      console.log(
+        `\n${c.green("\u2713")} ${c.green(`${run.inserted} nova(s)`)} · ${run.updated} já conhecida(s)`,
+      );
+
+      const scored = await scoreAll();
+      if (scored.fxWarning) console.log(c.yellow(`  ! ${scored.fxWarning}`));
+      console.log(`${c.bold("Scoring")} ${scored.scored} pontuada(s)\n`);
     });
   });
 

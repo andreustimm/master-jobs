@@ -47,6 +47,45 @@ personalizado por candidato. Duas consequências:
    reaproveitar — e persistir credencial de SSO seria exatamente o tipo de
    decisão que a ADR 0001 recusou.
 
+### Como importar hoje
+
+`jho jobs import` existe exatamente para isto. Você autentica, copia o payload
+que a própria página já buscou, e o sistema faz o resto:
+
+1. Abra a área de vagas da Revelo logado.
+2. DevTools (F12) → aba **Network** → filtre por `central_candidates_frontend`.
+3. Recarregue a página. Clique na requisição de `positions` → **Response** →
+   botão direito → *Copy response*.
+4. Salve num arquivo, por exemplo `~/revelo.json`.
+
+```bash
+# confira o que foi reconhecido antes de gravar
+pnpm jho jobs import ~/revelo.json \
+  --source revelo --label "Revelo (international)" \
+  --base-url "https://app.careers.revelo.com/#/international/positions" \
+  --dry-run
+
+# grave
+pnpm jho jobs import ~/revelo.json --source revelo --label "Revelo (international)" \
+  --base-url "https://app.careers.revelo.com/#/international/positions"
+```
+
+O parser não assume o formato da Revelo. Procura os nomes de campo que essas
+APIs de fato usam (`title`/`name`/`position`, `company`/`employer`, objetos
+aninhados como `{ company: { name } }`), aceita camelCase e snake_case, e ao
+final **lista os campos que não soube mapear** — se aparecerem coisas úteis como
+`englishLevel` ou `seniorityLevel`, é sinal de que vale estender o mapeamento.
+
+A fonte é criada **desabilitada**: `jobs sync` nunca vai tentar buscá-la, porque
+não há nada público para buscar.
+
+Validado ponta a ponta com um payload no formato da Revelo: uma vaga
+"Remote - LATAM" a USD 13.000/mês pontuou 78,8 no cluster `architect`,
+reconhecendo o período mensal; uma "Remote - US" recebeu bloqueio automático
+de *Local work authorization required*.
+
+### Por que não automatizamos o navegador
+
 ### Caminho recomendado: leitura assistida
 
 O mesmo padrão da fila de engajamento do LinkedIn — o humano autentica, o agente
