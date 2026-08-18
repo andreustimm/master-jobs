@@ -158,6 +158,13 @@ https://api.smartrecruiters.com/v1/companies/{handle}/postings?limit=100&offset=
   smartrecruiters:<handle> list endpoint has no job body; keyword scoring uses titles only
   ```
 
+  **Mas o warning é condicional:** o `push` está dentro de
+  `if (jobs.length > 0) { ... }`. Um `handle` errado — ou uma empresa sem vaga
+  aberta — devolve zero postings e o adapter fica **completamente calado**: não
+  existe aqui o equivalente ao `ashby:<handle> returned no listed jobs`. A fonte
+  reporta `ok` com 0 fetched e nenhum warning, exatamente o mesmo output de um
+  board legitimamente vazio.
+
   Consequência concreta: `scoreKeywords()` roda sobre o título e mais nada. O
   componente `keyword` vale até 30 dos 100 pontos — uma fonte sem corpo compete
   de mão amarrada. Trate o score dela como piso, nunca como veredicto.
@@ -221,7 +228,7 @@ https://remotive.com/api/remote-jobs?limit=50[&search={handle}]
 - **`handle`** = termo de busca **opcional**, enviado como `search`.
 - Configurado **duas vezes** em `sources.yaml`: `architect` e `ai engineer`. São
   duas passadas no mesmo board com queries diferentes; a deduplicação por
-  `fingerprint` colapsa o que se repetir (ver a tabela do primeiro sync).
+  `fingerprint` colapsa o que se repetir (ver a tabela de estado do banco).
 - `remote` forçado para `true`.
 - `locationRaw = candidate_required_location ?? "Remote"`.
 
@@ -235,11 +242,15 @@ https://www.arbeitnow.com/api/job-board-api
   justamente para deixar isso explícito — sempre puxa o board inteiro.
 - `created_at` vem em **segundos** (`toIso`).
 - `employmentType = toList(j.job_types).join(", ") || null`.
-- **Estado atual no banco:** esta fonte está com `last_status = 'error'` e
-  `last_error = '(j.job_types ?? []).join is not a function'`. Esse erro é de
-  uma versão anterior do adapter, quando `job_types` era assumido como array; o
-  código atual já usa `toList()`. O estado de erro persiste porque
-  `source.lastError` só é reescrito no próximo sync daquela fonte.
+- **Estado atual no banco:** `last_status = 'ok'`, `last_error = NULL`,
+  `last_job_count = 176` (sync de 2026-08-18T17:46:03Z), 173 linhas em `job`.
+  Num sync anterior esta fonte esteve em `error` com
+  `last_error = '(j.job_types ?? []).join is not a function'` — resíduo de uma
+  versão do adapter que assumia `job_types` como array, antes do `toList()`. O
+  estado de erro sobreviveu até o sync seguinte porque `source.lastError` só é
+  reescrito quando aquela fonte roda de novo; o branch de sucesso de `syncOne()`
+  (`set({ lastStatus: "ok", lastError: null, ... })` em `src/core/ingest/run.ts`)
+  limpou os dois campos de uma vez.
 
 #### `remoteok`
 
@@ -407,17 +418,20 @@ pnpm jho jobs list --min-fit 60
 
 ---
 
-## O primeiro sync real
+## O estado do banco
 
-Estado observado em `data/jobs.db` (sync de 2026-08-18). `source.last_job_count`
-= vagas devolvidas pelo adapter; "linhas em `job`" = o que sobrou depois da
-deduplicação global por `fingerprint`.
+Estado observado em `data/jobs.db` após o sync de 2026-08-18T17:46Z.
+**"Fetched" é `source.last_job_count`** — quantas vagas o adapter devolveu **no
+último sync daquela fonte**, e só nele. **"Linhas em `job`" é cumulativo**: tudo
+que já entrou desde o primeiro sync e sobreviveu à dedup global por
+`fingerprint`. As duas colunas medem coisas diferentes e não precisam bater.
 
 | Fonte (`source.id`) | Status | Fetched | Linhas em `job` |
 |---|---|---:|---:|
 | `lever:jobgether` | ok | 4691 | 4639 |
-| `remoteok:` | ok | 100 | 100 |
-| `himalayas:` | ok | 20 | 20 |
+| `arbeitnow:` | ok | 176 | 173 |
+| `remoteok:` | ok | 100 | 104 |
+| `himalayas:` | ok | 20 | 40 |
 | `ashby:reflow` | ok | 18 | 18 |
 | `remotive:ai engineer` | ok | 17 | 17 |
 | `remotive:architect` | ok | 17 | 0 |
@@ -426,37 +440,52 @@ deduplicação global por `fingerprint`.
 | `ashby:g2i` | ok | 8 | 8 |
 | `ashby:redcan` | ok | 1 | 1 |
 | `ashby:textlayer` | ok | 1 | 1 |
-| `arbeitnow:` | **error** | — | 0 |
-| **Total** | 11 ok / 1 error | **4893** | **4824** |
+| **Total** | **12 ok / 0 error** | **5069** | **5021** |
 
 Como ler esta tabela:
 
-- **4893 fetched, 4824 linhas.** As 69 de diferença são fingerprints repetidos:
-  52 dentro do próprio `lever:jobgether` (a mesma vaga listada em mais de uma
-  região colapsa quando `normalizeLocation()` as iguala) e 17 de
-  `remotive:architect`, cujos resultados colidiram integralmente com os que
-  `remotive:ai engineer` havia inserido milissegundos antes.
+- **Fetched maior que linhas = dedup.** `lever:jobgether` traz 4691 e assenta em
+  4639: 52 fingerprints repetidos, a mesma vaga listada em mais de uma região
+  colapsando quando `normalizeLocation()` as iguala. `arbeitnow:` faz o mesmo em
+  escala menor (176 → 173).
+- **Linhas maior que fetched = boards que rotacionam.** `himalayas:` puxa
+  `limit=50` mas só 20 vieram no último sync, e ainda assim tem 40 linhas
+  acumuladas; `remoteok:` tem 104 linhas para 100 fetched. Vaga antiga que saiu
+  da listagem é **fechada** (`closed_at`), não apagada — são 24 linhas com
+  `closed_at` preenchido no banco hoje.
 - **`remotive:architect` com 0 linhas não é falha.** A atribuição de
   `job.source_id` fica com quem inseriu primeiro; um update só reescreve o
   `source_id` quando o `contentHash` mudou. Duas fontes que veem a mesma vaga
-  produzem uma linha só, e ela pertence a quem chegou antes.
-- **`lever:jobgether` domina o banco** (4639 de 4824, 96%) — e é exatamente a
-  fonte afetada pela armadilha da `descriptionPlain` vazia. São 113 empresas
-  distintas no total.
-- **`arbeitnow` em erro não custou nada às outras 11.** É o invariante nº 2 em
-  funcionamento.
+  produzem uma linha só, e ela pertence a quem chegou antes. As 17 da query
+  `architect` colidiram integralmente com as que `ai engineer` inseriu
+  milissegundos antes.
+- **`lever:jobgether` domina o banco** (4639 de 5021, 92%) — e é exatamente a
+  fonte afetada pela armadilha da `descriptionPlain` vazia. São **239 valores
+  distintos de `job.company_name`** e 238 linhas na tabela `company`.
+- **Quando `arbeitnow` esteve em `error`, as outras 11 fontes não pagaram nada
+  por isso** — invariante nº 2 em funcionamento. O sync seguinte reescreveu a
+  fonte para `ok`, que é por que a tabela acima não tem mais nenhum erro.
 
-Distribuição resultante de `job_score.cluster` (todas as 4824 vagas pontuadas,
-fit máximo 74,2 / médio 29,5):
+Distribuição de `job_score.cluster` (**5021 linhas em `job_score`**, fit máximo
+74,2 / médio 29,5):
 
 | Cluster | Vagas |
 |---|---:|
-| `other` | 2370 |
-| `ai_lead` | 1080 |
-| `eng_lead` | 1005 |
-| `architect` | 225 |
-| `staff` | 139 |
+| `other` | 2491 |
+| `ai_lead` | 1114 |
+| `eng_lead` | 1032 |
+| `architect` | 236 |
+| `staff` | 143 |
 | `senior_ic` | 5 |
+
+> **Invariante:** `job_score` pode ficar atrás de `job`. Aconteceu neste
+> repositório: um `jobs sync --no-score` ingeriu 173 vagas de `arbeitnow:`,
+> 20 de `himalayas:` e 4 de `remoteok:` que ficaram sem score até rodar
+> `jobs score` (hoje as duas tabelas estão em 5021). É deriva de snapshot, não
+> defeito: `jobs sync` chama `scoreAll()` no fim, salvo com `--no-score`. Ao ler qualquer número deste
+> documento, nunca assuma que "todas as vagas estão pontuadas" — confira
+> `select count(*) from job_score` contra `select count(*) from job`, ou rode
+> `pnpm jho jobs score` antes de tirar conclusão de distribuição.
 
 ---
 

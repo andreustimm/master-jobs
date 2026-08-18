@@ -2,9 +2,9 @@
 
 `job-hunt-os` é o cockpit de busca de vagas de **Andreus Timm** (Senior AI Software Architect, 20+ anos, Brasil, remoto B2B, **sem autorização de trabalho nos EUA**). Ele resolve três problemas que o LinkedIn não resolve: (1) as vagas boas estão espalhadas por dezenas de boards ATS públicos que ninguém consegue varrer à mão todo dia, (2) 90% do que aparece é ruído — júnior demais, restrito a `US only`, ou fora do stack — e (3) sem um registro próprio, o funil de candidaturas vira memória e planilha morta.
 
-O sistema busca vagas em APIs **públicas e não autenticadas** de ATS e agregadores (Greenhouse, Lever, Ashby, SmartRecruiters, Recruitee, Himalayas, Remotive, Arbeitnow, RemoteOK, Adzuna), deduplica por `fingerprint`, aplica um **fit score determinístico** derivado de `profile/profile.yaml` — sem LLM, sem aleatoriedade, sempre auditável via `jho jobs show <id>` — e mantém o funil de candidaturas em tabelas separadas do fato observado. Hoje roda **localmente**, com libSQL como arquivo em `data/jobs.db`; Turso + Vercel é caminho preparado, não modo atual.
+O sistema busca vagas em APIs **públicas e não autenticadas** de ATS e agregadores. O sourcing ativo são as **12 fontes de `config/sources.yaml`, cobrindo 7 `kind`s**: `greenhouse` (1), `ashby` (5), `lever` (1), `himalayas` (1), `remotive` (2), `arbeitnow` (1), `remoteok` (1). `src/core/sources/registry.ts` registra três adapters a mais — `smartrecruiters`, `recruitee` e `adzuna` — mas nenhum tem entrada ativa (`adzuna` está comentado no YAML), então o sync real não busca vagas neles. O pipeline deduplica por `fingerprint`, aplica um **fit score determinístico** derivado de `profile/profile.yaml` — sem LLM, sem aleatoriedade, sempre auditável via `jho jobs show <id>` — e mantém o funil de candidaturas em tabelas separadas do fato observado. Hoje roda **localmente**, com libSQL como arquivo em `data/jobs.db`; Turso + Vercel é caminho preparado, não modo atual.
 
-> **Invariante:** Não descreva como pronto o que ainda não está. Pronto e validado: 12 fontes configuradas, 4.824 vagas ingeridas num sync real, scoring auditável, funil, export para o vault Obsidian. **Não existe ainda:** UI Next.js, deploy Vercel, geração de CV/cover letter, integração de publicação no LinkedIn.
+> **Invariante:** Não descreva como pronto o que ainda não está. Pronto e validado: 12 fontes configuradas, 4.824 vagas ingeridas num sync real, scoring auditável, funil, export markdown para o vault Obsidian (dependente de `JHO_VAULT_PATH`). **Não existe ainda:** UI Next.js, deploy Vercel, geração de CV/cover letter, integração de publicação no LinkedIn.
 
 ---
 
@@ -23,10 +23,11 @@ Notas que economizam confusão:
 
 - `pnpm jho ...` é `node --experimental-strip-types --no-warnings --env-file-if-exists=.env src/cli.ts`. Exige **Node >= 24**.
 - `jobs sync` já chama `runMigrations()` no início e `scoreAll()` no final — `db migrate` acima é redundante na prática, mas é a forma explícita de verificar que o banco abre antes de fazer rede. Use `--no-score` para pular a pontuação.
-- Nenhuma variável de ambiente é obrigatória. `TURSO_DATABASE_URL` tem default `file:./data/jobs.db`; só o adapter `adzuna` (comentado em `config/sources.yaml`) precisa de credenciais, e sem elas ele retorna 0 vagas com warning em vez de falhar.
+- Nenhuma variável de ambiente é obrigatória para sincronizar e pontuar. `TURSO_DATABASE_URL` tem default `file:./data/jobs.db`; o adapter `adzuna` (comentado em `config/sources.yaml`) precisa de `ADZUNA_APP_ID`/`ADZUNA_APP_KEY`, e sem elas retorna 0 vagas com warning em vez de falhar.
+- **`jho report` só grava arquivo se você disser onde.** `buildReport()` resolve o destino como `opts.outPath ?? (JHO_VAULT_PATH ? join(JHO_VAULT_PATH, JHO_REPORT_DIR, ...) : null)` (`JHO_REPORT_DIR` default `05_Interviews/LinkedIn`). Sem `JHO_VAULT_PATH` e sem `--out`, `target` é `null`, nada é escrito e a CLI cai no ramo `if (opts.stdout || !path)`, que apenas imprime o markdown. O repositório não versiona `.env` (está no `.gitignore`; existe só `.env.example`), então **na configuração default o export para o vault não acontece** — copie `.env.example` para `.env` e preencha `JHO_VAULT_PATH`.
 - Todo comando é idempotente. Rodar de novo nunca estraga nada.
 
-Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track <id> shortlisted` → `jho pipeline` → `jho report`.
+Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track <id> shortlisted` → `jho pipeline` → `jho report` (com `JHO_VAULT_PATH` ou `--out`; sem isso, `report` só imprime no stdout).
 
 ---
 

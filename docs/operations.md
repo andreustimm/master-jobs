@@ -166,8 +166,10 @@ pnpm jho db prune --days 90
 ```
 
 Deleta `job` com `closed_at` anterior ao corte **e** que não está referenciada em
-`application`. Hoje isso retorna 0: nenhuma vaga foi fechada ainda no banco
-local.
+`application`. Hoje isso retorna 0, mas não por falta de vagas fechadas: o banco
+já tem 24 linhas com `closed_at` preenchido, todas fechadas em 2026-08-18, e
+`pruneClosed()` compara `closed_at` com `now - 90 dias`. Nenhuma delas é velha o
+bastante para ser recolhida ainda.
 
 > **Invariante:** Vaga que some é fechada, não deletada — `closedAt` recebe
 > timestamp e a linha fica. `pruneClosed()` é a única exclusão permitida, e ela
@@ -194,7 +196,7 @@ O relatório separa `Novas oportunidades` (sem status ou `backlog`) de
 ```bash
 pnpm jho pipeline
 pnpm jho sources list
-pnpm check                 # tsgo --noEmit + vitest
+pnpm check                 # tsc --noEmit + vitest
 ```
 
 `jho pipeline` imprime só os status com contagem > 0, mais a lista ordenada por
@@ -205,23 +207,25 @@ pnpm check                 # tsgo --noEmit + vitest
 
 ## O que é "bom", em números
 
-### Baseline do sistema (verificado em `data/jobs.db`, 2026-08-18)
+### Baseline do sistema (verificado em `data/jobs.db` após o sync de
+2026-08-18T17:46Z)
 
 | Métrica | Valor |
 |---|---:|
-| `job` ingeridas | 4824 |
-| `job` com `closed_at` preenchido | 0 |
-| `job_score` gravados | 4824 |
-| Fontes configuradas | 12 (11 `ok`, 1 `error`) |
-| Fit máximo / médio | 74,2 / 29,5 |
+| `job` ingeridas | 5021 |
+| `job` com `closed_at` preenchido | 24 (todas fechadas em 2026-08-18) |
+| `job_score` gravados | 5021 (toda vaga aberta pontuada; inclui as 24 fechadas) |
+| Fontes configuradas | 12 (todas `ok`, nenhuma com `last_error`) |
+| Fit máximo / médio | 74,2 / 29,3 |
 | Vagas com fit ≥ 70 | 1 |
 | Vagas com fit ≥ 60 | 15 |
-| Vagas com fit ≥ 45 | 325 |
+| Vagas com fit ≥ 45 | 346 (abertas) |
 | Vagas com ao menos um blocker | 21 |
 
-Distribuição de cluster no acervo: `other` 2370, `ai_lead` 1080, `eng_lead`
-1005, `architect` 225, `staff` 139, `senior_ic` 5. Acima do corte de 45 a
-proporção muda: `ai_lead` 196, `architect` 56, `staff` 42, `eng_lead` 31.
+Distribuição de cluster no acervo: `other` 2491, `ai_lead` 1114, `eng_lead`
+1032, `architect` 236, `staff` 143, `senior_ic` 5. Acima do corte de 45 a
+proporção muda: `ai_lead` 212, `architect` 57, `staff` 44, `eng_lead` 33 —
+e `other` desaparece por completo, que é o sinal de que o corte funciona.
 
 Leituras práticas disso:
 
@@ -234,7 +238,7 @@ Leituras práticas disso:
   8,25/15; sem compensação divulgada a comp vale 4/8. Vaga perfeita e calada não
   chega perto de 100 — não persiga 100.
 - **Um dia normal de sync** move dezenas de linhas, não milhares.
-  `lever:jobgether` sozinho traz ~4.700 das 4.824; qualquer variação grande vem
+  `lever:jobgether` sozinho traz 4.639 das 5.021; qualquer variação grande vem
   de lá.
 
 ### Métricas de posicionamento (auditoria, §2.1 e §14)
@@ -284,15 +288,56 @@ Nada disso é confiável sem o passo seguinte.
 
 ### Registrar métricas do LinkedIn
 
-Não existe comando para isso — a tabela `metric_snapshot` (`at`, `key`, `value`,
-`note`, único em `(at, key)`) existe e nenhum código escreve nela. Registre à
-mão, semanalmente:
+A tabela `metric_snapshot` (`id`, `at`, `key`, `value`, `note`, único em
+`(at, key)`) já vem com o baseline da auditoria carregado por código:
+
+```bash
+pnpm jho db seed
+```
+
+`db seed` roda `runMigrations()` e depois `seedPositioning()`
+(`src/core/positioning/seed.ts`), que insere as 31 tarefas do
+`POSITIONING_PLAN` e as **11 métricas** do baseline de `2026-07-27` —
+`ssi_total`, `ssi_brand`, `ssi_people`, `ssi_insights`, `ssi_relationships`,
+`search_appearances_7d`, `profile_views_7d`, `views_from_search_pct`,
+`recruiter_views_1y`, `followers`, `recommendations_received`. O insert é
+`onConflictDoNothing()` sobre `(at, key)`, então rodar de novo não duplica nada.
+
+> **Invariante:** `db seed` é idempotente nos dois sentidos e nunca destrói
+> progresso: métricas repetidas caem no `onConflictDoNothing()`, e a tarefa de
+> posicionamento que já existe tem **só o texto** atualizado (`horizon`,
+> `title`, `why`, `how`, `expected`, `priority`, `effort`, `sourceRef`) — o
+> `status` e o `doneAt` são do usuário e ficam intactos.
+
+O que **não** existe é comando para registrar a medição da semana seguinte. Para
+acrescentar um ponto novo na série, é SQL:
 
 ```bash
 sqlite3 data/jobs.db "
   insert into metric_snapshot (at, key, value, note)
-  values ('2026-08-18','search_appearances_7d', 72, 'baseline da auditoria');"
+  values ('2026-08-18','search_appearances_7d', 72, 'medição semanal');"
 ```
+
+Use sempre a mesma `key` do baseline — é a chave que torna a série comparável.
+
+### Tocar o plano de posicionamento
+
+O mesmo seed carrega o plano derivado da auditoria (31 tarefas nos horizontes
+`24h`, `week`, `30d`, `60d`, `90d`):
+
+```bash
+pnpm jho tasks list                    # só todo/doing
+pnpm jho tasks list --horizon week
+pnpm jho tasks list --all              # inclui done e skipped
+pnpm jho tasks show PT-0003            # detalhe + a referência à auditoria
+pnpm jho tasks done PT-0003
+pnpm jho tasks done PT-0003 --status skipped
+```
+
+`tasks done` aceita `--status todo | doing | done | skipped`; `doneAt` só é
+carimbado quando o status é `done`, e volta a `null` em qualquer outro. O `<id>`
+é normalizado com `toUpperCase()`, então `pt-0003` funciona. Os ids vão de
+`PT-0001` a `PT-0031`.
 
 ---
 
@@ -328,8 +373,17 @@ que o status vira `applied`, e sempre insere um `application_event` com
 `jho track` só grava `status`, `applied_at` e `updated_at`. As colunas
 `channel`, `cv_variant`, `cover_letter_path`, `contact_name`, `contact_url`,
 `rate_discussed`, `next_action`, `next_action_at` e `notes` existem no schema e
-são **lidas** por `jho jobs show` e `jho pipeline` (`next:` e as notas), mas
-nenhum código as preenche. Até existir UI, é SQL:
+nenhum código as preenche. E só **três** delas chegam a ser exibidas:
+
+| Coluna | Quem lê |
+|---|---|
+| `notes` | `jho jobs show` |
+| `next_action` | `jho jobs show` (`next: …`) e `jho pipeline` (`next: …`) |
+| `next_action_at` | `jho jobs show`, entre parênteses depois do `next_action` |
+| `channel`, `cv_variant`, `cover_letter_path`, `contact_name`, `contact_url`, `rate_discussed` | ninguém — nenhum comando do CLI lê ou imprime |
+
+Ou seja: escrever `cv_variant` ou `rate_discussed` via SQL guarda o dado, mas
+nada no CLI o mostra de volta hoje. Até existir UI, é SQL:
 
 ```bash
 sqlite3 data/jobs.db "
@@ -377,10 +431,13 @@ A linha vermelha `↳ <lastError>` é o `error.message` que derrubou aquele
 | `... is not a function` | Formato de campo mudou na API | Reproduzir com `sources probe`, corrigir o mapeamento |
 
 O estado de erro é **pegajoso**: `last_error` só é limpo quando aquela fonte
-completa um sync com sucesso. É por isso que `arbeitnow:` ainda aparece hoje com
-`(j.job_types ?? []).join is not a function` — a causa já foi corrigida no
-código (o adapter usa `toList()`), mas o registro fica até o próximo sync bem
-sucedido.
+completa um sync com sucesso. Consequência prática: a fonte pode aparecer
+vermelha em `sources list` depois de o bug já estar consertado no código — o
+registro é do último sync, não do estado atual do adapter. Foi o que aconteceu
+com `arbeitnow:`, que carregou `(j.job_types ?? []).join is not a function` até
+o adapter passar a usar `toList()` e rodar um sync limpo. Hoje as 12 fontes
+estão `ok` com `last_error` nulo (sync de 2026-08-18T17:46Z), então essa seção
+descreve um estado que você só vai reencontrar depois da próxima falha.
 
 Antes de qualquer correção, reproduza sem tocar no banco:
 
@@ -551,6 +608,8 @@ pnpm jho jobs sync                       # diário: buscar + pontuar
 pnpm jho jobs list --min-fit 60          # diário: revisar o topo
 pnpm jho jobs show <id>                  # diário: entender o score
 pnpm jho track <id> <status> -n "nota"   # diário: mover no funil
+pnpm jho tasks list                      # diário: plano de posicionamento em aberto
+pnpm jho tasks done <PT-XXXX>            # diário: fechar item do plano
 
 pnpm jho profile                         # semanal: validar profile.yaml
 pnpm jho jobs score --all                # semanal: após bump de SCORER_VERSION
@@ -558,5 +617,7 @@ pnpm jho db prune --days 90              # semanal: limpar fechadas sem candidat
 pnpm jho report                          # semanal: snapshot no vault
 pnpm jho pipeline                        # semanal: estado do funil
 pnpm jho sources list                    # semanal: saúde das fontes
-pnpm check                               # semanal: tsgo --noEmit + vitest
+pnpm jho tasks show <PT-XXXX>            # semanal: detalhe de um item do plano
+pnpm jho db seed                         # sob demanda: plano + baseline de métricas (idempotente)
+pnpm check                               # semanal: tsc --noEmit + vitest
 ```

@@ -29,12 +29,16 @@ Fontes normativas relacionadas: `docs/adr/0001-nao-fazer-scraping-do-linkedin.md
 **Publicação pela API oficial. Todo o resto é assistido — o agente redige, o
 humano executa. Zero scraping.**
 
-| Capacidade | Como é feito neste projeto | Risco |
-|---|---|---|
-| Publicar post no próprio perfil | API oficial, escopo `w_member_social` | Nenhum |
-| Comentar, conectar, seguir, mandar mensagem | **Assistido**: rascunho enfileirado na tabela `engagement`; o humano abre a `target_url` e age | Nenhum |
-| Buscar vagas | **Não vem do LinkedIn.** Vem de APIs públicas e não autenticadas de ATS e agregadores (ver `config/sources.yaml` e ADR 0003) | Nenhum |
-| Métricas (SSI, impressões, profile views) | Anotadas à mão em `metric_snapshot` | Nenhum |
+| Capacidade | Regra: o único jeito permitido | Estado hoje | Risco |
+|---|---|---|---|
+| Publicar post no próprio perfil | API oficial, escopo `w_member_social` | **Não implementado** — só a tabela `post` e as variáveis do `.env.example` existem | Nenhum |
+| Comentar, conectar, seguir, mandar mensagem | **Assistido**: rascunho enfileirado na tabela `engagement`; o humano abre a `target_url` e age | **Não implementado** — só a tabela `engagement` existe | Nenhum |
+| Buscar vagas | **Não vem do LinkedIn.** Vem de APIs públicas e não autenticadas de ATS e agregadores (ver `config/sources.yaml` e ADR 0003) | **Operante** — 12 fontes configuradas | Nenhum |
+| Métricas (SSI, impressões, profile views) | Anotadas à mão em `metric_snapshot` | Só o baseline de 2026-07-27, gravado por `jho db seed` | Nenhum |
+
+A coluna do meio é **norma**, não relato: descreve o único caminho autorizado
+caso a capacidade seja construída. O que existe de fato está na coluna "Estado
+hoje" e detalhado na §4.
 
 > **Invariante:** Nenhum código deste repositório pode ler o cookie `li_at`,
 > dirigir uma sessão autenticada do LinkedIn, subir um Chromium logado, ou usar
@@ -185,12 +189,17 @@ Tabelas irmãs, com o mesmo regime: `post` (rascunhos de conteúdo),
 > desta política travestida de infraestrutura.
 
 **Estado real hoje (verificado no código):** nenhuma linha do repositório
-escreve em `post`, `engagement`, `target_account` ou `metric_snapshot`. A única
-leitura de tabela de posicionamento é `openTasks()` em `src/core/db/repo.ts`,
-que consulta `positioning_task` com `status in ('todo','doing')`. Não existe
-comando `jho` para LinkedIn, e `src/core/linkedin/` e `src/core/positioning/`
-estão vazios. As tabelas são o contrato já acordado; a implementação ainda não
-existe — não descreva como pronto o que não está.
+escreve em `post`, `engagement` ou `target_account`. Em `metric_snapshot` a
+única escrita é o baseline de 2026-07-27 da auditoria, inserido com
+`onConflictDoNothing()` por `seedPositioning()` (`src/core/positioning/seed.ts`)
+quando se roda `jho db seed` — não existe coleta automática nem comando para
+registrar uma métrica nova. Essa mesma função é também a única que escreve em
+`positioning_task`; a leitura é `openTasks()` em `src/core/db/repo.ts`
+(`status in ('todo','doing')`) e os comandos `jho tasks list|show|done`. Não
+existe comando `jho` para LinkedIn, nenhuma variável `LINKEDIN_*` é lida por
+código, e `src/core/linkedin/` está vazio. As tabelas `post`, `engagement` e
+`target_account` são o contrato já acordado; a implementação ainda não existe —
+não descreva como pronto o que não está.
 
 > **Nota para não confundir:** `JHO_REPORT_DIR` tem default
 > `05_Interviews/LinkedIn` (`src/core/report/markdown.ts:76`). Isso é apenas o

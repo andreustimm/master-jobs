@@ -229,7 +229,7 @@ sync**, que é o que `pnpm jho sources list` imprime.
 | `label` | nome legível; vários adapters usam como `companyName` quando a API não devolve o nome da empresa |
 | `enabled` | INTEGER boolean, default `true`. `loadSources()` já filtra `enabled: true` e descarta o campo, então o banco praticamente sempre vê `true` |
 | `rationale` | por que essa fonte está na lista — mantém o config auto-documentado |
-| `last_synced_at`, `last_status`, `last_error`, `last_job_count` | carimbados no fim de `syncOne()`, tanto no caminho de sucesso quanto no `catch` |
+| `last_synced_at`, `last_status`, `last_error`, `last_job_count` | carimbados no fim de `syncOne()`, mas **não do mesmo jeito nos dois caminhos**: o ramo de sucesso grava os quatro (`lastStatus: "ok"`, `lastError: null`, `lastJobCount: result.fetched`); o `catch` grava só `lastSyncedAt`, `lastStatus: "error"` e `lastError`. `last_job_count` fica com o valor do último sync bem-sucedido, então `pnpm jho sources list` imprime esse número obsoleto ao lado do status `error` |
 
 Índice único: `source_kind_handle_idx (kind, handle)` — redundante com a PK por
 construção, mas impede duas linhas com o mesmo par se alguém inserir à mão.

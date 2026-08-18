@@ -178,7 +178,8 @@ Detalhes que importam na leitura:
 `getAdapter(kind).fetchJobs({ kind, handle, label: handle })` e imprime a contagem, os
 warnings do adapter e os 5 primeiros títulos.
 
-Este é o único comando que **não** passa por `withDb()` — ele não abre o banco. É seguro
+Este é um dos dois comandos que **não** passam por `withDb()` — o outro é `jho profile`.
+Ele não abre o banco, então é seguro
 rodar contra um handle que você acabou de descobrir, antes de tocar `sources.yaml`.
 
 Sem flags.
@@ -248,15 +249,21 @@ pnpm jho jobs sync
 ```
 Syncing 12 source(s)…
 
-  ✓ greenhouse:stackblitz         41 fetched  +3 new  38 updated  0 closed 812ms
-  ✓ ashby:textlayer                8 fetched  +0 new  8 updated  0 closed 341ms
+  ✓ greenhouse:stackblitz         11 fetched  +0 new  0 updated  0 closed 241ms
+  ✓ ashby:textlayer                1 fetched  +0 new  0 updated  0 closed 438ms
   ! ashby:reflow returned no listed jobs
-  ✗ arbeitnow:                    (j.job_types ?? []).join is not a function 1204ms
+  ✗ ashby:handle-errado           GET https://api.ashbyhq.com/... -> 404 183ms
+  ✓ lever:jobgether             4691 fetched  +0 new  6 updated  0 closed 14344ms
 
-Totals  4824 fetched · 112 new · 4700 updated · 12 closed · 1 failed
+Totals  5069 fetched · 197 new · 7 updated · 24 closed · 1 failed
 
-Scoring 112 job(s) scored · best fit 74
+Scoring 197 job(s) scored · best fit 74
 ```
+
+Exemplo ilustrativo, com uma fonte quebrada de propósito para mostrar como a
+falha aparece. Um `✗` **não interrompe o sync** — as outras 11 fontes seguem, e
+o erro fica registrado em `source.lastError`, visível em `jho sources list`.
+No estado atual do repositório as 12 fontes retornam `ok`.
 
 Sync mais lento e sequencial, para debugar ordem de chamadas:
 
@@ -301,7 +308,7 @@ pnpm jho jobs score --all
 ```
 
 ```
-✓ scored 4824 job(s) · best fit 74
+✓ scored 4997 job(s) · best fit 74
 ```
 
 `scoreAll()` sempre chama `loadProfile(true)`, ou seja, força releitura do
@@ -388,7 +395,7 @@ pnpm jho jobs list --min-fit 65 --limit 20 --json
     "fit": 74.2,
     "cluster": "architect",
     "blockers": [],
-    "reasons": ["Title matches architect cluster", "..."],
+    "reasons": ["Title matches \"AI Solutions Architect\" (cluster architect)", "..."],
     "status": "shortlisted",
     "appliedAt": null
   }
@@ -418,11 +425,11 @@ https://jobs.ashbyhq.com/textlayer/8f2c...
 
 Fit 74.2 / 100  (cluster: architect)
   title 35 · keywords 24.6 · seniority 12 · geo 15 · comp 4 · penalty -5
-  · Title matches architect cluster
+  · Title matches "AI Solutions Architect" (cluster architect)
   · Explicitly open to LATAM/Brazil
   · No compensation disclosed
 
-  Matched: ai architecture, multi-agent, typescript, aws, rag
+  Matched: ai architect, multi-agent, typescript, aws, rag
   Missing: kubernetes
 
 Pipeline shortlisted
@@ -456,7 +463,9 @@ No job with id 999999
 
 ## `jho track <id> <status>`
 
-`"Move a job through the pipeline"`. Valida `status` contra `APPLICATION_STATUSES`
+`"Move a job through the pipeline (backlog | shortlisted | preparing | applied |
+screening | interviewing | offer | rejected | withdrawn | archived)"` — a descrição é
+montada com `${APPLICATION_STATUSES.join(" | ")}`. Valida `status` contra `APPLICATION_STATUSES`
 **antes** de abrir o banco; status inválido imprime a lista de válidos e sai com
 `exitCode = 1`. Em seguida chama `setApplicationStatus(jobId, status, note)`, que cria a
 linha em `application` se ainda não existir e **sempre** grava um `application_event`
@@ -541,8 +550,11 @@ pnpm jho pipeline
 
 O funil só imprime status com contagem maior que zero, respeitando a ordem de
 `APPLICATION_STATUSES` (e não a ordem de contagem). A linha `next:` só aparece quando
-`application.next_action` está preenchido — hoje nenhum comando da CLI escreve esse
-campo; ele é preenchido fora da CLI.
+`application.next_action` está preenchido — e **nada no projeto escreve esse campo**:
+`setApplicationStatus()` (`src/core/db/repo.ts`) não o toca, e as únicas referências em
+`src/` são leituras (`src/cli.ts`) mais a definição da coluna
+(`src/core/db/schema.ts:181`). Hoje só um `UPDATE` manual no SQLite preenche
+`next_action` / `next_action_at`.
 
 Funil vazio:
 
@@ -568,14 +580,29 @@ quando há vagas com status diferente de `backlog` — `## Em andamento`.
 | `--out <path>` | — | write somewhere else |
 | `--stdout` | — | print instead of writing |
 
-Resolução do destino, em ordem:
+Resolução do destino (`target`, em `src/core/report/markdown.ts`), em ordem:
 
-1. `--stdout` → `outPath` vira `undefined` e o markdown é impresso (nada é escrito).
-2. `--out <path>` → escreve exatamente nesse caminho (`mkdir -p` do diretório incluso).
-3. Nem um nem outro → `<JHO_VAULT_PATH>/<JHO_REPORT_DIR>/vagas-match-<YYYY-MM-DD>.md`,
+1. `--out <path>` **sem** `--stdout` → escreve exatamente nesse caminho (`mkdir -p` do
+   diretório incluso). `--stdout` anula o `--out`: a CLI passa
+   `outPath: opts.stdout ? undefined : opts.out`.
+2. Sem `outPath` → `<JHO_VAULT_PATH>/<JHO_REPORT_DIR>/vagas-match-<YYYY-MM-DD>.md`,
    onde `JHO_REPORT_DIR` tem default `05_Interviews/LinkedIn`.
-4. Sem `JHO_VAULT_PATH` definido e sem `--out` → o path resolvido é `null`, **nada é
-   escrito** e o markdown cai no stdout.
+3. Sem `outPath` **e** sem `JHO_VAULT_PATH` → `target` é `null`, **nada é escrito** e o
+   markdown cai no stdout.
+
+`--stdout` **não** é dry-run: ele apenas força o `console.log(markdown)`. Como
+`JHO_VAULT_PATH` está definido no caso normal (o valor vive em `.env.example:36`),
+`pnpm jho report --stdout` **imprime e também escreve** o snapshot do dia no vault.
+Para imprimir sem tocar em disco, zere a variável no ambiente — o `--env-file-if-exists`
+do script `jho` deixa o ambiente vencer o `.env`:
+
+```bash
+JHO_VAULT_PATH= pnpm jho report --min-fit 60 --stdout
+```
+
+> **Invariante:** a única condição que impede a escrita é `target === null`, isto é,
+> nenhum `outPath` **e** `JHO_VAULT_PATH` vazio/ausente. Nunca trate nem documente
+> `--stdout` como "não escreve".
 
 ```bash
 pnpm jho report
@@ -629,8 +656,8 @@ pnpm jho profile
 ```
 ✓ profile.yaml is valid
 
-Andreus Timm — Senior AI Software Architect
-Brazil · 20+ years
+Andreus Jarta Timm — Senior AI Software Architect
+São Paulo, Brazil · 20+ years
 
 Target clusters
   architect    weight 1  cv:architect
@@ -823,10 +850,11 @@ pnpm jho report --min-fit 50 --limit 60
 ✓ wrote /Users/andreus/Documents/Obsidian Vault/05_Interviews/LinkedIn/vagas-match-2026-08-18.md
 ```
 
-Revisar antes de deixar no vault:
+Revisar a saída. Atenção: `--stdout` **também grava** o snapshot do dia no vault; para
+só olhar, zere `JHO_VAULT_PATH` ou mande para fora do vault com `--out`:
 
 ```bash
-pnpm jho report --min-fit 50 --stdout | head -60
+JHO_VAULT_PATH= pnpm jho report --min-fit 50 --stdout | head -60
 pnpm jho report --min-fit 50 --out ./out/vagas-hoje.md
 ```
 

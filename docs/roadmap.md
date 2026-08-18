@@ -41,24 +41,28 @@ Tudo nesta seção foi verificado contra `src/` e contra o banco em
 | Perfil validado por Zod v4 | ✅ | `profile/profile.yaml`, `src/core/profile/schema.ts` |
 | Migrations Drizzle (11 tabelas, 1 migration) | ✅ | `drizzle/0000_remarkable_solo.sql` |
 | Skills de agente (triage, kit, perfil, posicionamento) | ✅ | `.claude/skills/*/SKILL.md` |
+| Suíte Vitest do scorer e do normalizador (14 `describe`, 31 `it()`) | ✅ | `tests/scoring.test.ts`, `tests/normalize.test.ts` |
 | ADRs das decisões estruturais (6) | ✅ | `docs/adr/` |
 
 ### O sync real que já aconteceu
 
-Um sync completo já rodou contra as 12 fontes públicas e **ingeriu 4.824
-vagas**. Estado atual do `data/jobs.db` (68 MB, gitignored):
+Um sync completo já rodou contra as 12 fontes públicas e o banco acumula
+**5.021 vagas**. Estado atual do `data/jobs.db` (72 MB, gitignored):
 
 | Métrica | Valor |
 |---|---|
-| Linhas em `job` | 4824 |
-| Linhas em `job_score` | 4824 |
-| Linhas em `source` | 12 (11 `ok`, 1 `error`) |
-| Vagas com `fit >= 45` (default do `jobs list`) | 325 |
+| Linhas em `job` | 5021 (4997 abertas, 24 com `closed_at`) |
+| Linhas em `job_score` | 5021 |
+| Linhas em `source` | 12 (todas `ok`) |
+| Vagas com `fit >= 45` (default do `jobs list`) | 346 abertas |
 | Vagas com `fit >= 60` | 15 |
 | Maior fit observado | 74.2 (cluster `ai_lead`) |
 
-Distribuição por cluster: `other` 2370, `ai_lead` 1080, `eng_lead` 1005,
-`architect` 225, `staff` 139, `senior_ic` 5.
+Distribuição por cluster: `other` 2491, `ai_lead` 1114, `eng_lead` 1032,
+`architect` 236, `staff` 143, `senior_ic` 5. Hoje `job` e `job_score` estão
+alinhados em 5021 linhas, mas essa igualdade não é garantida: rodar
+`jobs sync --no-score` deixa as vagas novas sem score até o próximo
+`pnpm jho jobs score` (sem `--all`), que seleciona exatamente as pendentes.
 
 O ciclo que funciona hoje, ponta a ponta:
 
@@ -79,8 +83,7 @@ arquitetura nova.
 
 | Dívida | Evidência | Primeiro passo |
 |---|---|---|
-| `arbeitnow` está em `last_status = 'error'` | `last_error = "(j.job_types ?? []).join is not a function"`, de uma versão anterior; o código atual já usa `toList()` | Rodar `pnpm jho sources probe arbeitnow ""` e depois um `jobs sync` — o carimbo de saúde é reescrito por fonte |
-| `tests/` está vazio, mas `pnpm check` roda `vitest` | `vitest.config.ts` inclui `tests/**/*.test.ts` | Primeiro teste em `tests/score.test.ts`: o scorer é puro e não toca banco — congelar `scoreJob()` para 3 vagas reais (uma `architect`, uma com blocker, uma `other`) |
+| Cobertura de teste só cobre o núcleo puro | `tests/scoring.test.ts` e `tests/normalize.test.ts` não tocam banco; não há teste de `run.ts`, `apply.ts` nem dos adapters | Um teste de ingestão com fixture de payload por adapter, validando que o `fingerprint` não muda entre duas execuções |
 | `db:seed` aponta para um subcomando inexistente | `package.json` → `"db:seed": "pnpm jho db seed"`; não há `db.command("seed")` em `src/cli.ts` | Remover o script, ou implementar `db seed` para popular `positioning_task` (a única tabela com leitor pronto, `repo.openTasks()`) |
 | `smartrecruiters` e `recruitee` têm adapter mas nenhuma entrada em `config/sources.yaml` | `registry.ts` registra os dois | Validar um handle real com `pnpm jho sources probe` antes de adicionar |
 
@@ -92,7 +95,7 @@ arquitetura nova.
 
 ---
 
-## Fase 2 — Automação (planejado, nada implementado)
+## Fase 2 — Automação (planejado; só o Loop de 2.6 já existe em arquivo)
 
 Ordem proposta: os itens 1 e 2 destravam o uso diário; 3 e 4 melhoram a
 qualidade da decisão; 5 e 6 são o lado de posicionamento.
@@ -102,8 +105,9 @@ qualidade da decisão; 5 e 6 são o lado de posicionamento.
 **Estado: 🟡 scaffolding.** `next.config.ts` já define
 `serverExternalPackages: ["@libsql/client"]`, `experimental.cacheComponents: true`
 e `typedRoutes: true`; `next@16`, `react@19` e `tailwindcss@4` estão instalados;
-os scripts `dev`/`build`/`start` existem. Os diretórios `app/`, `components/` e
-`lib/` estão **vazios** — não há uma única rota.
+os scripts `dev`/`build`/`start` existem. `components/` e `lib/` estão
+**vazios** e `app/` contém apenas o subdiretório vazio `app/api/` — não há uma
+única rota, nenhum `page.tsx`, nenhum `route.ts`.
 
 **Primeiro passo concreto:** criar `app/layout.tsx` + `app/page.tsx` como Server
 Components que chamem `listBoard()` de `src/core/db/repo.ts` e rendam exatamente
@@ -141,8 +145,8 @@ Checagem de saúde da rotina: `pnpm jho sources list` (coluna `STATUS` + a linha
 **Estado: ⬜.** Isto já está previsto no cabeçalho de
 `src/core/scoring/score.ts`: *"An LLM pass is worth adding later, but only on the
 top slice this scorer already surfaced."* O determinístico é o filtro barato
-sobre 4.824 linhas; o LLM é o desempate caro sobre dezenas. Com os números de
-hoje o slice é minúsculo: 325 vagas acima de 45 de fit, 15 acima de 60.
+sobre as 5.021 linhas de `job`; o LLM é o desempate caro sobre dezenas. Com os números de
+hoje o slice é minúsculo: 346 vagas acima de 45 de fit, 17 acima de 60.
 
 **Primeiro passo concreto:** um subcomando `jho jobs rerank --min-fit 60 --limit 25`
 que lê pelo `listBoard()`, manda ao modelo o `title`, o `descriptionText`
@@ -198,15 +202,27 @@ o LinkedIn nesse caminho de código.
 
 ### 2.6 Loops Compozy para as rodadas recorrentes
 
-**Estado: ⬜.** Os diretórios `compozy/` e `compozy/loops/` existem e estão
-vazios.
+**Estado: 🟡 escrito, não registrado.** O loop de triagem diária existe:
+`compozy/loops/job-sweep.yaml` (`apiVersion: compozy.loop/v1`, `kind: Loop`,
+`meta.name: job-sweep`) roda `pnpm jho jobs sync`, depois
+`pnpm jho jobs list --min-fit {{ .inputs.min_fit }} --limit 25` e um
+`pnpm jho jobs show <id>` por vaga nova acima de 60 de fit, com
+`output_schema` exigindo `status`/`summary`/`candidates`. O `compozy/README.md`
+registra o estado exato: o arquivo está **validado** contra o daemon 0.3
+(`Loop validation passed`), mas o workspace **não** está registrado no daemon e
+não há automation job agendado.
 
-**Primeiro passo concreto:** um único loop — o de triagem diária: rodar
-`jho jobs sync`, ler `jho jobs list --min-fit 60 --json`, aplicar a skill
-`job-triage` sobre esse JSON e devolver uma lista de candidatas a
-`jho track <id> shortlisted`. O `--json` do `jobs list` existe exatamente para
-esse consumo programático. Só depois disso o loop de kit de candidatura (2.4) e
-o de engajamento (2.5).
+**Primeiro passo concreto:** os dois comandos que faltam, ambos no
+`compozy/README.md`: `~/bin/cy03 workspaces add "<repo>"` e
+`~/bin/cy03 loop create --file compozy/loops/job-sweep.yaml`. Só depois de o
+`job-sweep` rodar à mão algumas vezes é que entram o agendamento
+(`automation jobs create --loop job-sweep --schedule "0 9 * * 1-5"`), o loop de
+kit de candidatura (2.4) e o de engajamento (2.5).
+
+> **Invariante:** O Loop recomenda, não move o funil. `job-sweep` não pode
+> chamar `jho track` — a tabela `application` é a única coisa que o sistema não
+> consegue recriar por sync, e a decisão de candidatar-se é do usuário. A regra
+> está escrita no prompt do próprio loop e no `compozy/README.md`.
 
 ---
 

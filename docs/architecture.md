@@ -50,7 +50,7 @@ Drizzle, migrations).
 
 ## Por que `core/` é separado de `cli.ts` (e da futura UI)
 
-`src/cli.ts` tem 392 linhas e **nenhuma regra de negócio**. Ele é Commander +
+`src/cli.ts` tem 486 linhas e **nenhuma regra de negócio**. Ele é Commander +
 formatação ANSI (`c`, `fitColor()`, `truncate()`) + `withDb()`, um wrapper que
 garante `closeDb()` no `finally`. Todo o resto é chamada para `src/core/**`.
 
@@ -232,9 +232,11 @@ O que isso compra:
   funciona igual no macOS do usuário e no builder da Vercel.
 - **Zero reescrita na migração.** Trocar de local para Turso é mudar duas
   variáveis de ambiente. Nenhuma query, nenhum schema, nenhuma migration muda.
-- **Um único cliente cacheado em módulo** (`getDb()` / `closeDb()`), que serve
-  tanto ao CLI (que fecha no `finally` do `withDb()`) quanto ao runtime do
-  Next.js, que mantém o cliente quente entre requisições.
+- **Um único cliente cacheado em módulo** (`getDb()` / `closeDb()`). Hoje quem
+  o usa é o CLI, que fecha no `finally` do `withDb()`; quando a UI existir, o
+  runtime do Next.js manterá o mesmo cliente quente entre requisições — é o
+  cenário que o comentário sobre `closeDb()` em `src/core/db/client.ts`
+  antecipa.
 
 Guarda explícita em `getDb()`: se a URL **não** começa com `file:` e
 `TURSO_AUTH_TOKEN` está vazio, ele lança — "failing loudly here beats a
@@ -275,7 +277,7 @@ Proibido no repositório inteiro:
 
 | Construção | Por quê | O que usar |
 |---|---|---|
-| `enum Status { ... }` | Compila para um objeto em runtime | `const X = [...] as const` + union type — é o que `APPLICATION_STATUSES` e `SourceKind` fazem |
+| `enum Status { ... }` | Compila para um objeto em runtime | `const X = [...] as const` + union type — é o que `APPLICATION_STATUSES` faz em `src/core/db/schema.ts` (com `ApplicationStatus = (typeof APPLICATION_STATUSES)[number]`). `SourceKind` inverte a direção: é um union escrito à mão em `src/core/sources/types.ts`, e o array `KINDS` de `src/core/sources/config.ts` é derivado dele via `as const satisfies readonly SourceKind[]` |
 | `constructor(private x: T)` (parameter properties) | Gera atribuição em runtime | Campo declarado + atribuição explícita — ver a classe `HttpError` em `src/core/sources/http.ts` |
 | `namespace Foo { ... }` | Gera IIFE | Módulos ES |
 | Decorators (`@algo`) | Semântica de runtime | Funções normais |
@@ -288,7 +290,7 @@ Detalhes que decorrem disso e que um agente precisa respeitar:
 - `isolatedModules: true` está ligado: tipos re-exportados precisam de
   `export type` / `import type`.
 - Sintoma de violação em runtime: `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`. O
-  `pnpm typecheck` (`tsgo --noEmit`) pega antes.
+  `pnpm typecheck` (`tsc --noEmit`) pega antes.
 
 > **Invariante:** Só sintaxe TypeScript apagável. Sem `enum`, sem parameter
 > properties, sem `namespace`, sem decorators. Ver
@@ -371,13 +373,13 @@ account inside the LinkedIn User Agreement."
 
 | Arquivo | O que é |
 |---|---|
-| `src/cli.ts` | Toda a superfície de uso hoje: Commander com os grupos `db` / `sources` / `jobs` e os comandos soltos `track` / `pipeline` / `report` / `profile`. Helpers locais de cor ANSI (`c`), `fitColor()`, `truncate()` e `withDb()` (garante `closeDb()` no `finally`). Sem regra de negócio. |
+| `src/cli.ts` | Toda a superfície de uso hoje: Commander com os grupos `db` (`migrate`, `check`, `prune`, `seed`), `sources`, `jobs` e `tasks` (`list`/`ls` com `--horizon <name>` e `--all`, `show <id>`, `done <id>` com `--status <name>` default `done`), mais os comandos soltos `track` / `pipeline` / `report` / `profile`. Helpers locais de cor ANSI (`c`), `fitColor()`, `truncate()` e `withDb()` (garante `closeDb()` no `finally`). Sem regra de negócio. |
 
 ### Banco de dados
 
 | Arquivo | O que é |
 |---|---|
-| `src/core/db/schema.ts` | Modelo Drizzle/SQLite completo (11 tabelas), a const `APPLICATION_STATUSES` e os tipos inferidos (`$inferSelect` / `$inferInsert`). Define a constante `now` como `strftime('%Y-%m-%dT%H:%M:%fZ','now')`, default de todo timestamp. |
+| `src/core/db/schema.ts` | Modelo Drizzle/SQLite completo (11 tabelas), a const `APPLICATION_STATUSES` e os tipos inferidos (`$inferSelect` / `$inferInsert`). Define a constante `now` como `strftime('%Y-%m-%dT%H:%M:%fZ','now')`, usada como default de `created_at`, `updated_at`, `first_seen_at`, `last_seen_at`, `scored_at` e `application_event.at` — os demais timestamps (`source.last_synced_at`, `job.posted_at`, `job.closed_at`, `application.applied_at`, `application.next_action_at`, `post.scheduled_for`/`published_at`, `engagement.queued_for`/`done_at`, `target_account.last_touch_at`, `metric_snapshot.at`, `positioning_task.done_at`) são preenchidos pelo código. |
 | `src/core/db/client.ts` | Cliente libSQL único e cacheado em módulo (`getDb` / `closeDb`), `resolveUrl()` com default `file:./data/jobs.db`, e a guarda que lança quando a URL é remota e `TURSO_AUTH_TOKEN` está vazio. Reexporta `schema`. |
 | `src/core/db/migrate.ts` | `runMigrations(folder = "./drizzle")` via `drizzle-orm/libsql/migrator`; cria o diretório do arquivo com `mkdir` recursivo quando a URL é `file:`, senão o libSQL não abre o banco. |
 | `src/core/db/repo.ts` | Queries compartilhadas entre CLI e futura UI: tipo `BoardRow`, `listBoard()`, `setApplicationStatus()`, `pipelineCounts()`, `openTasks()`. O filtro de status (incluindo o pseudo-status `unfiled`, que é `status === null`) é feito em memória, depois do SQL. |
@@ -410,6 +412,16 @@ account inside the LinkedIn User Agreement."
 | `src/core/profile/load.ts` | `profilePath()` (`JHO_PROFILE_PATH` ou `<cwd>/profile/profile.yaml`) e `loadProfile(force = false)` com cache em módulo; erro agregado listando cada issue como `path: message`. |
 | `src/core/report/markdown.ts` | `buildReport()`: monta o markdown em pt-BR, escapa pipes com `esc()`, separa `open` (sem status ou `backlog`) de `tracked`, e grava em `opts.outPath` ou em `<JHO_VAULT_PATH>/<JHO_REPORT_DIR>/vagas-match-<YYYY-MM-DD>.md`. |
 
+### Posicionamento
+
+| Arquivo | O que é |
+|---|---|
+| `src/core/positioning/plan.ts` | `POSITIONING_PLAN: NewPositioningTask[]` — o plano de ação da seção 14 da auditoria de posicionamento (`Relatorio-Posicionamento-Andreus-Timm-2026-07-27.md`) como linhas executáveis, IDs `PT-0001`…, cada uma com `horizon` / `priority` / `effort` / `why` / `how` / `expected` / `sourceRef`. |
+| `src/core/positioning/seed.ts` | `seedPositioning()` e a const `BASELINE` (métricas de 2026-07-27: SSI, search appearances, profile views, followers). Idempotente por construção: re-seed atualiza o texto da tarefa, **nunca** o `status`; o baseline entra com `onConflictDoNothing()`. |
+
+> **Invariante:** `seedPositioning()` nunca reseta o `status` de uma tarefa. O
+> progresso pertence ao usuário — re-seed refresca redação, não estado.
+
 ### Dados e configuração
 
 | Arquivo | O que é |
@@ -426,28 +438,37 @@ account inside the LinkedIn User Agreement."
 
 | Arquivo | O que é |
 |---|---|
-| `package.json` | `job-hunt-os` 0.1.0, `type: module`, `engines.node >= 24.0.0`. Script `jho` = `node --experimental-strip-types --no-warnings --env-file-if-exists=.env src/cli.ts`. Atenção: o script `db:seed` aponta para `pnpm jho db seed`, subcomando que **não existe** em `src/cli.ts`. |
+| `package.json` | `job-hunt-os` 0.1.0, `type: module`, `engines.node >= 24.0.0`. Script `jho` = `node --experimental-strip-types --no-warnings --env-file-if-exists=.env src/cli.ts`. O script `db:seed` chama `pnpm jho db seed`, que carrega o plano de posicionamento e o baseline de métricas. |
 | `tsconfig.json` | `target ES2023`, `module esnext`, `moduleResolution bundler`, `strict`, `noUncheckedIndexedAccess`, `isolatedModules`, **`erasableSyntaxOnly: true`**, `noEmit`, `jsx preserve`, plugin `next`, paths `@/*` e `@core/*`. |
 | `drizzle.config.ts` | `dialect: "turso"`, schema `./src/core/db/schema.ts`, out `./drizzle`, credenciais de `TURSO_DATABASE_URL` (default `file:./data/jobs.db`) + `TURSO_AUTH_TOKEN`, `verbose` e `strict`. |
 | `next.config.ts` | `serverExternalPackages: ["@libsql/client"]`, `experimental.cacheComponents: true` (Next 16 Cache Components), `typedRoutes: true`. Nenhuma rota ou página existe ainda. |
 | `vitest.config.ts` | `include: ["tests/**/*.test.ts"]`, `environment: "node"`, `globals: false`. |
 | `CLAUDE.md` / `AGENTS.md` | Instruções para agentes. São espelhos um do outro. |
+| `.claude/agents/fit-analyst.md`, `.claude/commands/{aplicar,fonte-nova,funil,vagas}.md` | Agente e slash-commands do Claude Code para triagem e funil. |
+| `.claude/skills/{application-kit,candidate-profile,job-triage,linkedin-positioning}/SKILL.md` | As quatro skills que empacotam o procedimento de cada frente. |
+| `.codex/config.toml`, `compozy/loops/job-sweep.yaml`, `compozy/README.md` | Configuração do Codex e o loop de varredura periódica de vagas. |
 | `docs/adr/0001..0006` | As seis decisões arquiteturais registradas: não fazer scraping do LinkedIn, libSQL em vez de better-sqlite3, sourcing via ATS públicos, scoring determinístico, separação entre fato observado e decisão do usuário, TypeScript apagável sem build step. |
 
 ### Scaffolding vazio
 
 Diretórios que existem mas não contêm nenhum arquivo hoje: `app/api/`,
-`components/`, `lib/`, `tests/`, `migrations/`, `compozy/loops/`,
-`.claude/agents/`, `.claude/commands/`, `.codex/`, `src/db/`, `src/ingest/`,
-`src/lib/`, `src/linkedin/`, `src/positioning/`, `src/report/`, `src/scoring/`,
-`src/sources/`, `src/core/linkedin/`, `src/core/positioning/`.
+`components/`, `lib/`, `migrations/`, `src/db/`, `src/ingest/`, `src/lib/`,
+`src/linkedin/`, `src/positioning/`, `src/report/`, `src/scoring/`,
+`src/sources/` e `src/core/linkedin/`.
 
 Toda a lógica real vive em `src/core/**` e `src/cli.ts`. Os diretórios
 duplicados na raiz de `src/` (`src/scoring/` vs `src/core/scoring/`) são resíduo
 de scaffolding — não coloque código neles.
 
-> **Invariante:** `tests/` está vazio, apesar de `pnpm check` ser
-> `typecheck && test`. Não descreva o projeto como testado.
+Cobertura de teste hoje: `tests/scoring.test.ts` (181 linhas, 18 blocos `it(`,
+contra `scoreJob()`) e `tests/normalize.test.ts` (101 linhas, 13 blocos `it(`,
+contra `normalize.ts`) — 282 linhas ao todo. É cobertura do núcleo
+determinístico, não do CLI, da ingestão nem do repo.
+
+> **Invariante:** O escopo de teste é o núcleo puro (`scoring` e `normalize`).
+> Mexeu nos pesos ou nas regexes de normalização? Atualize os testes na mesma
+> mudança — `pnpm check` é `typecheck && test`, e essas duas suítes são o que
+> segura o scorer.
 
 ---
 
@@ -474,9 +495,10 @@ sync real, scoring auditável, funil funcionando, export pro Obsidian.
 
 **Não existe ainda**: UI Next.js (nenhuma rota ou página em `app/`), deploy na
 Vercel, geração de CV/cover letter e a integração de publicação no LinkedIn. As
-tabelas `post`, `engagement`, `target_account`, `metric_snapshot` e
-`positioning_task` estão no schema, mas nenhum código escreve nelas hoje —
-`positioning_task` é apenas lida, por `repo.openTasks()`.
+tabelas `post`, `engagement` e `target_account` estão no schema, mas nenhum
+código escreve nelas hoje. `positioning_task` e `metric_snapshot` já têm
+escrita: `seedPositioning()` insere/atualiza tarefas e insere o baseline com
+`onConflictDoNothing()`, e `jho tasks done` faz `update(positioningTask)`.
 
 > **Invariante:** Não descreva como pronto o que ainda não está. Isso vale para
 > este documento também — se você implementar uma camada, atualize esta seção na

@@ -2,7 +2,7 @@
 
 ## Por que isto existe
 
-O `jobs sync` traz milhares de vagas por rodada (hoje: **4824 linhas em `job`**, todas com score). Ler isso na mão é inviável, e mandar cada descrição para um LLM seria caro, lento e — o problema real — **irreprodutível**: a mesma vaga poderia ranquear diferente amanhã, e não haveria como escrever teste de regressão nem explicar por que a vaga #42 ficou na frente da #41.
+O `jobs sync` traz milhares de vagas por rodada (hoje: **5021 linhas em `job`** e **5021 em `job_score`**; a igualdade não é garantida — `jobs sync --no-score` deixa as vagas novas pendentes até o próximo `jobs score`). Ler isso na mão é inviável, e mandar cada descrição para um LLM seria caro, lento e — o problema real — **irreprodutível**: a mesma vaga poderia ranquear diferente amanhã, e não haveria como escrever teste de regressão nem explicar por que a vaga #42 ficou na frente da #41.
 
 O scorer é determinístico e puro por três motivos, escritos no cabeçalho de `src/core/scoring/score.ts`:
 
@@ -120,18 +120,18 @@ Pesos de cluster atuais em `profile.yaml`, e o teto de título que cada um permi
 | `eng_lead` | 0.85 | 29.75 | `lead` |
 | `senior_ic` | 0.6 | 21.0 | `senior` |
 
-Default quando nada casa: `{ score: 0, cluster: "other", reason: "Title does not match any target cluster" }`. No banco atual, `other` são 2370 das 4824 vagas — metade do corpus não é do target, e isso é esperado: os agregadores (`himalayas`, `remoteok`, `arbeitnow`) puxam board inteiro.
+Default quando nada casa: `{ score: 0, cluster: "other", reason: "Title does not match any target cluster" }`. No banco atual, `other` são 2491 das 5021 vagas — metade do corpus não é do target, e isso é esperado: os agregadores (`himalayas`, `remoteok`, `arbeitnow`) puxam board inteiro.
 
 Distribuição real por cluster (`data/jobs.db`):
 
 | cluster | vagas | fit médio | fit máx |
 | --- | --- | --- | --- |
-| `staff` | 139 | 43.2 | 69.6 |
-| `ai_lead` | 1080 | 42.0 | **74.2** |
-| `architect` | 225 | 40.4 | 66.1 |
-| `eng_lead` | 1005 | 33.9 | 67.3 |
+| `staff` | 143 | 43.3 | 69.6 |
+| `ai_lead` | 1114 | 42.0 | **74.2** |
+| `architect` | 236 | 40.1 | 66.3 |
+| `eng_lead` | 1032 | 33.9 | 67.3 |
 | `senior_ic` | 5 | 26.9 | 28.9 |
-| `other` | 2370 | 20.2 | 29.8 |
+| `other` | 2491 | 20.0 | 35.3 |
 
 > **Invariante:** `job_score.cluster` é derivado **exclusivamente** de `scoreTitle()`. Nada mais no scorer escreve cluster. Se o cluster de uma vaga parece errado, a correção é em `targets.clusters[*].titles` ou em `avoid_titles`, nunca em outro componente.
 
@@ -259,14 +259,16 @@ O 4.0 de "não divulgou" é intencional: a maioria dos boards não publica faixa
 
 | valor | vagas | `factor` aplicado |
 | --- | --- | --- |
-| *(null)* | 4795 | 1 |
-| `annual` | 15 | 1 (correto por acidente) |
+| *(null)* | 4972 | 1 |
+| `annual` | 35 | 1 (correto por acidente) |
 | `1 YEAR` | 6 | 1 (correto por acidente) |
 | `year` | 3 | 1 |
 | `hourly` | 4 | **1 — deveria ser 2080** |
 | `monthly` | 1 | **1 — deveria ser 12** |
 
-Efeito concreto: job `52`, `Lawyer`, `80–180 hourly` → `top = 180`, considerado "abaixo do floor", `comp_score = 0.0`. Se `hourly` fosse reconhecido, seriam 374 400/ano e 8.0. São 5 vagas de 4824 hoje, e nenhuma delas é do target — por isso não foi corrigido —, mas quem mexer em `scoreComp()` deve **normalizar o período antes de comparar**, não acrescentar mais um `===`.
+(Contagens sobre `job` inteiro — 5021 linhas. Restrito ao subconjunto pontuado, `job join job_score`, os números caem para 4795 *(null)* e 15 `annual`; os demais são idênticos.)
+
+Efeito concreto: job `52`, `Lawyer`, `80–180 hourly` → `top = 180`, considerado "abaixo do floor", `comp_score = 0.0`. Se `hourly` fosse reconhecido, seriam 374 400/ano e 8.0. São 5 vagas de 5021 hoje: `50` `Technical Support Analyst (Fr-Tu 6a-2:30p)` (`eng_lead`), `52` `Lawyer` (`other`), `60` `QA Support…` (`other`), `62` `Data Engineer ( WestBend AMS )` (`ai_lead`) e `65` `Field Service Engineer (Texas)` (`ai_lead`). Três delas carregam cluster-alvo em `job_score.cluster`, mas nenhuma é do target de fato — suporte técnico, jurídico e field service —, e é por isso que a armadilha não foi corrigida. Quem mexer em `scoreComp()` deve **normalizar o período antes de comparar**, não acrescentar mais um `===`.
 
 ---
 
@@ -304,7 +306,7 @@ Por que limitar em vez de zerar é a decisão certa aqui:
 - Blocker frequentemente é negociável. Um posting "US preferred" com contrato B2B é exatamente o tipo de conversa que vale ter.
 - Com o cap, a vaga continua no banco, continua no `jobs list` se passar do `--min-fit`, e o `jobs show` imprime `Blockers: <reason>` em vermelho. A informação é apresentada, não descartada.
 
-Efeito real no corpus (4824 vagas):
+Efeito real no corpus (5021 vagas):
 
 | `penalty` | vagas | leitura |
 | --- | --- | --- |
@@ -370,7 +372,7 @@ O que esse exemplo ensina sobre a calibração atual: **74.2 é o teto do corpus
 | 45–49 | 188 |
 | < 45 | 4499 |
 
-É isso que faz o default `--min-fit 45` do `jobs list` e do `report` render ~325 vagas em vez de 4824.
+É isso que faz o default `--min-fit 45` do `jobs list` e do `report` deixar **346 vagas abertas elegíveis** em vez de 5021. Elegíveis, não impressas: cada comando tem o seu próprio `--limit` — `30` no `jobs list` (`src/cli.ts`, que ainda fatia com `rows.slice(0, limit)`) e `100` no `report` (também o default de `limit` em `buildReport()`). Para ver as 346 é preciso passar `--limit` explicitamente.
 
 ---
 
@@ -420,10 +422,11 @@ opts.all
   : sql`${job.closedAt} is null and (${jobScore.jobId} is null or ${jobScore.scorerVersion} <> ${SCORER_VERSION})`
 ```
 
-Sem `--all`, `scoreAll()` só toca em jobs **sem score** ou com `scorer_version` **diferente** do atual. Se você editar o `profile.yaml` e não bumpar, o próximo `jobs sync` vai pontuar só as vagas novas com as regras novas e deixar as 4824 antigas com as regras velhas — **duas gerações de score misturadas na mesma coluna `fit`, ordenadas juntas, sem nenhum sinal visível de que isso aconteceu**. O `scorer_version` é justamente o mecanismo que torna essa mistura detectável.
+Sem `--all`, `scoreAll()` só toca em jobs **sem score** ou com `scorer_version` **diferente** do atual. Se você editar o `profile.yaml` e não bumpar, o próximo `jobs sync` vai pontuar só as vagas novas com as regras novas e deixar as 5021 antigas com as regras velhas — **duas gerações de score misturadas na mesma coluna `fit`, ordenadas juntas, sem nenhum sinal visível de que isso aconteceu**. O `scorer_version` é justamente o mecanismo que torna essa mistura detectável.
 
 Notas de execução:
 
+- **Nem `--all` toca vaga fechada.** Os dois ramos da query filtram `job.closedAt is null`. Uma vaga fechada mantém o score que tinha quando ainda estava aberta — hoje são 24 linhas nessa condição. Consequência prática: `count(*) from job_score` pode divergir de `count(*) from job` nas duas direções — para menos, quando há vagas novas ainda não pontuadas; e com scores obsoletos, para as já fechadas.
 - `scoreAll()` chama `loadProfile(true)` — força releitura do YAML, ignorando o cache de módulo. Não é preciso reiniciar nada entre edições.
 - Após um rescore, `job_score` continua com uma linha por job (`onConflictDoUpdate` em `job_id`). Score é derivado e descartável: `job_score` pode ser truncada e reconstruída a qualquer momento a partir de `job` + `profile.yaml`.
 - `skipped` no retorno de `scoreAll()` é **sempre 0** hoje; não é métrica útil.
@@ -433,7 +436,7 @@ Notas de execução:
 
 ### Use o banco como laboratório antes de commitar
 
-`data/jobs.db` tem 4824 vagas já pontuadas. É barato medir o efeito de uma mudança antes de fechá-la:
+`data/jobs.db` tem 5021 vagas já pontuadas. É barato medir o efeito de uma mudança antes de fechá-la:
 
 ```bash
 sqlite3 data/jobs.db "select cluster, count(*), round(avg(fit),1), max(fit) from job_score group by 1 order by 3 desc;"
