@@ -41,7 +41,14 @@ precisa ficar abaixo de ~US$ 30 — o que elimina aquisição paga. E "matching
 explicável" já é vendido, mas como *paywall*, não como proposta de valor:
 Huntr, Jobscan, Resume Worded e LinkedIn Premium dão o número e cobram o porquê.
 
-**6. Canal decide mais que ranqueamento.** Referrals são 7% dos candidatos e 40%
+**6. O "75% dos currículos são rejeitados pelo ATS" é mito.** A estatística mais
+citada do mercado não vem de pesquisa: rastreada até a Preptel, empresa que
+vendia otimização de currículo e fechou em 2013. O relatório de Harvard citado
+como fonte não contém o número. A exclusão é configurada pelo empregador, não
+inventada pelo algoritmo — o que significa que otimizar currículo para "passar
+no ATS" resolve um problema que em boa parte não existe.
+
+**7. Canal decide mais que ranqueamento.** Referrals são 7% dos candidatos e 40%
 das contratações. 18–27% dos anúncios são ghost jobs. E a fraude de localização
 em massa transformou o filtro de work authorization em defesa anti-fraude — que
 elimina um arquiteto brasileiro legítimo junto com o ruído.

@@ -426,6 +426,71 @@ aplicar em **menos** vagas, melhor escolhidas, com justificativa auditável. Iss
 já faz por construção — e é uma história que sobrevive ao escrutínio de quem está do outro lado da
 mesa. As ferramentas de auto-apply estão do lado errado dessa narrativa e vão continuar apanhando.
 
+
+### 5.5 Adendo: a função-objetivo real dos rankers — e por que ela muda a estratégia
+
+Pesquisa complementar em papers e documentação oficial fechou a lacuna mais importante da §5.1. O que
+os motores publicam sobre *sinais* é marketing; o que eles publicam sobre a **métrica que otimizam**
+é a informação que importa — e ela está documentada.
+
+| Plataforma | O que o ranker realmente otimiza | Fonte |
+|---|---|---|
+| **LinkedIn Recruiter** | **Aceitação de InMail** — "the key business metric in the Recruiter product is based on **inMail Accepts**"; ranqueia por "utility for the recruiter... and would be **willing to accept the request**". Label binário: mensagem enviada **e** respondida positivamente | [Ramanath et al., CIKM 2018](https://arxiv.org/abs/1809.06473); [Entity Personalized Talent Search, WWW 2019](https://arxiv.org/abs/1902.09041); [SIGIR 2018](https://arxiv.org/abs/1809.06481) |
+| **LinkedIn Recruiter** (documentação viva, não só papers) | "ranked based on various factors... the similarity of their work experience/skills with the search criteria, and **the likelihood of a response from an interested candidate**, weighted using machine-learning models" | [LinkedIn Help — AI-Assisted Search](https://www.linkedin.com/help/recruiter/answer/a1660341) |
+| **LinkedIn, lado candidato** | Prediz "**how likely a member is to hear back if he or she applies**". A personalização por membro **decai pela metade em 3 semanas** sem re-treino | [LinkedIn Engineering](https://www.linkedin.com/blog/engineering/ai/quality-matches-via-personalized-ai) |
+| **LinkedIn Hiring Assistant** | Mesmo após toda a camada agêntica, a métrica publicada continua sendo aceitação de InMail: **36% vs. 28%** no sourcing manual | [LinkedIn Talent Blog](https://www.linkedin.com/business/talent/blog/talent-acquisition/early-impact-of-linkedin-hiring-assistant-and-ai-agent) |
+| **Indeed** | **Orçamento é sinal de ranking, por admissão escrita:** "Strongly budgeting jobs signal that you're actively hiring and engaged, **so we prioritize them in search results**". Vagas patrocinadas recebem **2,1x mais candidaturas** | [Indeed](https://www.indeed.com/lead/how-indeed-became-the-leading-job-site-around-the-world) |
+| **ZipRecruiter** | Loop de imitação declarado em filing da SEC: "**When an employer gives an applicant a positive rating, our technology searches for other job seekers with similar profiles to that candidate** and proactively encourages them to apply" | [10-K FY2025, CIK 0001617553](https://www.sec.gov/Archives/edgar/data/1617553/000161755326000016/zip-20251231.htm) |
+
+**A consequência estratégica é grande e pouco explorada comercialmente.**
+
+O ranking que decide quem o recrutador vê **não prevê desempenho no cargo — prevê probabilidade de
+resposta.** Isso não é crítica: é a função-objetivo declarada, e faz sentido para o negócio do
+LinkedIn. Mas significa que boa parte do que o mercado de ferramentas de candidato vende
+("otimize suas competências para o match") está mirando a variável errada.
+
+O que é otimizado é **responsividade e sinal de disponibilidade**. E há número para isso: candidatos
+com o selo **"Open to Work" têm +37% de taxa de resposta**, medido pelo próprio LinkedIn sobre dezenas
+de milhões de InMails ([LinkedIn Talent Blog](https://www.linkedin.com/business/talent/blog/talent-strategy/these-inmails-get-best-response-rates)).
+Não há declaração oficial de que o selo eleve o ranking — mas como o ranker otimiza resposta, o sinal
+entra pela função-objetivo, sem precisar de boost explícito.
+
+**Três implicações diretas para o job-hunt-os:**
+
+1. **Sinal de disponibilidade e velocidade de resposta valem mais do que refinamento de currículo.**
+   Um produto que garante resposta rápida e presença legível bate um que reescreve bullet points.
+2. **O loop da ZipRecruiter confirma o mecanismo "quem se parece com quem já deu certo".** Isso
+   penaliza estruturalmente trajetórias não canônicas — imigrantes, pessoas em transição de carreira,
+   perfis híbridos. É exatamente o perfil do dono deste produto. Um sistema próprio de ranqueamento
+   é uma resposta racional a um ranker que, por construção, não o favorece.
+3. **O ranking do Indeed é parcialmente comprado.** Vaga bem patrocinada sobe. Logo, posição no
+   resultado de busca **não é evidência de qualidade nem de vaga real** — mais um argumento para
+   agregar direto das APIs de ATS em vez de confiar na ordenação de agregador.
+
+### 5.6 Correção importante: o "75% dos currículos são rejeitados pelo ATS" é mito
+
+Esta é uma correção que **muda uma decisão de produto**, e vale registrar com precisão.
+
+A estatística mais citada do mercado de ferramentas de candidato — "75% dos currículos nunca são
+vistos por um humano porque o ATS rejeita" — **não tem origem em pesquisa.** A cadeia de citação foi
+rastreada até a **Preptel, empresa que vendia otimização de currículo e fechou em agosto de 2013**
+([investigação de Christine Assaf, via Ask a Manager](https://www.askamanager.org/2020/10/your-job-application-was-rejected-by-a-human-not-a-computer.html)).
+O relatório de Harvard frequentemente citado como fonte **não contém essa estatística**: o único
+"75%" no documento é a porcentagem de empregadores dos EUA que *usam* RMS.
+
+O mecanismo real: **a lógica de exclusão é configurada pelo empregador, não inventada pelo algoritmo.**
+Os grandes ATS hoje atribuem nota de aderência individual — Workday/HiredScore usa grade **A/B/C/D**
+(aderência aos requisitos, **não ranking entre candidatos**); o [Greenhouse Talent Matching](https://support.greenhouse.io/hc/en-us/articles/41396009937307-Talent-Matching)
+usa 5 categorias e declara explicitamente "**assistive AI, not automated-decision-making**".
+
+**Isto reforça a recomendação da §5.4, item 3:** a premissa comercial central do Jobscan e de toda a
+categoria de "otimização para ATS" repousa sobre um número inventado por uma empresa que vendia a
+solução e faliu. **O job-hunt-os não deve construir valor sobre "vencer o parser do ATS."**
+
+> Nota de escopo: a auditoria de conformidade (LL144, EU AI Act) e os estudos de viés em triagem por
+> LLM foram levantados mas ficam fora deste documento, que é comercial. Ver os relatórios das outras
+> frentes em `docs/benchmark/`.
+
 ---
 
 ## 6. Veredito comercial
