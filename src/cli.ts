@@ -14,6 +14,7 @@ import { application, job, jobScore, positioningTask, source } from "./core/db/s
 import { APPLICATION_STATUSES } from "./core/db/schema.ts";
 import { ageInDays, loadRates, refreshRates, STALE_AFTER_DAYS } from "./core/fx.ts";
 import { importJobs, parseFile } from "./core/ingest/import.ts";
+import { decideSuggestion, importMail, listSuggestions } from "./core/mail/run.ts";
 import { addJob } from "./core/ingest/manual.ts";
 import { syncAll, pruneClosed } from "./core/ingest/run.ts";
 import { loadProfile } from "./core/profile/load.ts";
@@ -601,6 +602,106 @@ program
         if (r.nextAction) console.log(c.dim(`       next: ${r.nextAction}`));
       }
       console.log();
+    });
+  });
+
+/* ---------------------------------- mail ---------------------------------- */
+
+const mail = program
+  .command("mail")
+  .description("Ingest job alerts and ATS mail from your own inbox (ADR 0008)");
+
+mail
+  .command("import <path>")
+  .description("Parse .eml files from a directory or a single file")
+  .option("--dry-run", "classify and report without writing anything")
+  .action(async (path: string, opts: { dryRun?: boolean }) => {
+    await withDb(async () => {
+      await runMigrations();
+      const r = await importMail(path, { dryRun: opts.dryRun });
+
+      for (const w of r.warnings.slice(0, 12)) console.log(c.yellow(`  ! ${w}`));
+
+      console.log(
+        `\n${c.bold(String(r.files))} arquivo(s) · ${r.parsed} novo(s) · ${r.duplicates} já conhecido(s)`,
+      );
+
+      const kinds = Object.entries(r.byKind).sort((a, b) => b[1] - a[1]);
+      if (kinds.length > 0) {
+        console.log();
+        for (const [kind, n] of kinds) {
+          const colour = kind === "unknown" ? c.dim : kind.startsWith("ats_") ? c.cyan : c.green;
+          console.log(`  ${colour(truncate(kind, 18))} ${String(n).padStart(4)}`);
+        }
+      }
+
+      if (r.jobsCreated > 0) console.log(`\n${c.green("\u2713")} ${r.jobsCreated} vaga(s) nova(s) dos alertas`);
+      if (r.suggestions > 0) {
+        console.log(
+          `${c.green("\u2713")} ${r.suggestions} sugestão(ões) de funil` +
+          (r.unmatched > 0 ? c.dim(` (${r.unmatched} sem candidatura correspondente)`) : ""),
+        );
+        console.log(c.dim("  Revise com: jho mail suggestions"));
+      }
+
+      if (opts.dryRun) console.log(c.dim("\n  --dry-run: nada foi gravado.\n"));
+      else console.log();
+
+      if (!opts.dryRun && r.jobsCreated > 0) {
+        const scored = await scoreAll();
+        console.log(`${c.bold("Scoring")} ${scored.scored} pontuada(s)\n`);
+      }
+    });
+  });
+
+mail
+  .command("suggestions")
+  .alias("sug")
+  .description("Funnel changes implied by email, awaiting your decision")
+  .action(async () => {
+    await withDb(async () => {
+      const rows = await listSuggestions();
+      if (rows.length === 0) {
+        console.log(c.dim("\n  Nenhuma sugestão pendente.\n"));
+        return;
+      }
+      console.log(c.bold("\n   ID  CONF  STATUS SUGERIDO  ASSUNTO"));
+      for (const r of rows) {
+        const conf = r.confidence >= 0.8 ? c.green : r.confidence >= 0.5 ? c.yellow : c.dim;
+        const target = r.applicationId ? c.cyan(r.suggestedStatus ?? "?") : c.dim(`${r.suggestedStatus} (sem match)`);
+        console.log(
+          `  ${String(r.id).padStart(3)} ${conf(r.confidence.toFixed(2))}  ${truncate(target, 18)} ${truncate(r.subject, 46)}`,
+        );
+        console.log(c.dim(`       ${r.rationale}`));
+      }
+      console.log(c.dim("\n  jho mail accept <id> · jho mail dismiss <id>\n"));
+    });
+  });
+
+mail
+  .command("accept <id>")
+  .description("Apply a suggested funnel change")
+  .action(async (id: string) => {
+    await withDb(async () => {
+      const { jobId, status } = await decideSuggestion(Number(id), "accepted");
+      if (!jobId || !status) {
+        console.log(c.yellow("Sugestão sem candidatura correspondente — nada a aplicar."));
+        return;
+      }
+      // Routed through the normal path so the transition lands in
+      // application_event exactly like a manual one.
+      await setApplicationStatus(jobId, status as never, `via e-mail (sugestão #${id})`);
+      console.log(`${c.green("\u2713")} vaga ${jobId} → ${c.cyan(status)}`);
+    });
+  });
+
+mail
+  .command("dismiss <id>")
+  .description("Reject a suggestion without touching the funnel")
+  .action(async (id: string) => {
+    await withDb(async () => {
+      await decideSuggestion(Number(id), "dismissed");
+      console.log(`${c.dim("\u2013")} sugestão ${id} descartada`);
     });
   });
 

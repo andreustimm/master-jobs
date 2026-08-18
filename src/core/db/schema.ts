@@ -315,6 +315,92 @@ export const positioningTask = sqliteTable("positioning_task", {
 });
 
 /* -------------------------------------------------------------------------- */
+/* Correspondence (ADR 0008)                                                   */
+/* -------------------------------------------------------------------------- */
+
+export const MAIL_KINDS = [
+  "job_alert",          // LinkedIn/board alert listing openings
+  "ats_received",       // "we received your application"
+  "ats_screening",      // invitation to a screen or assessment
+  "ats_interview",      // scheduling or interview confirmation
+  "ats_rejection",      // "we decided to move forward with other candidates"
+  "ats_offer",
+  "recruiter_inbound",  // a human reaching out
+  "unknown",
+] as const;
+
+export type MailKind = (typeof MAIL_KINDS)[number];
+
+/**
+ * An email the user received, parsed.
+ *
+ * Per ADR 0008 this is a SOURCING and EVIDENCE channel: the message is parsed
+ * locally and never triggers an action on the platform that sent it.
+ *
+ * Note what this table does NOT have: a foreign key that lets a parsed email
+ * mutate an application. Emails produce *suggestions* (see `mail_suggestion`);
+ * only the user moves the funnel. That keeps ADR 0005 intact — ingestion of any
+ * kind never overwrites a decision.
+ */
+export const mailMessage = sqliteTable(
+  "mail_message",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** RFC 5322 Message-ID; the natural dedupe key across re-imports. */
+    messageId: text("message_id").notNull(),
+    fromAddress: text("from_address"),
+    fromName: text("from_name"),
+    subject: text("subject"),
+    receivedAt: text("received_at"),
+    kind: text("kind").notNull().default("unknown"),
+    /** linkedin | greenhouse | lever | ashby | workday | unknown */
+    provider: text("provider"),
+    /** Company inferred from the sender or body, when identifiable. */
+    companyGuess: text("company_guess"),
+    bodyText: text("body_text"),
+    /** How many jobs were extracted, for job_alert messages. */
+    extractedJobs: integer("extracted_jobs").notNull().default(0),
+    importedAt: text("imported_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("mail_message_id_idx").on(t.messageId),
+    index("mail_kind_idx").on(t.kind),
+    index("mail_received_idx").on(t.receivedAt),
+  ],
+);
+
+/**
+ * A funnel change an email implies, awaiting the user's confirmation.
+ *
+ * > **Invariante:** parsing email never writes to `application`. It writes here,
+ * > and the user accepts or dismisses. An automated rejection parser that is
+ * > wrong once and silently archives a live opportunity is worse than no parser.
+ */
+export const mailSuggestion = sqliteTable(
+  "mail_suggestion",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    mailId: integer("mail_id")
+      .notNull()
+      .references(() => mailMessage.id, { onDelete: "cascade" }),
+    /** Null when we could not match the email to a tracked application. */
+    applicationId: integer("application_id").references(() => application.id, {
+      onDelete: "cascade",
+    }),
+    jobId: integer("job_id").references(() => job.id, { onDelete: "cascade" }),
+    suggestedStatus: text("suggested_status"),
+    /** Why we think so — shown to the user before they accept. */
+    rationale: text("rationale"),
+    /** 0..1, from how unambiguous the signal was. */
+    confidence: real("confidence").notNull().default(0),
+    status: text("status").notNull().default("pending"), // pending | accepted | dismissed
+    decidedAt: text("decided_at"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [index("mail_suggestion_status_idx").on(t.status)],
+);
+
+/* -------------------------------------------------------------------------- */
 /* Foreign exchange                                                            */
 /* -------------------------------------------------------------------------- */
 
@@ -357,6 +443,9 @@ export type Post = typeof post.$inferSelect;
 export type Engagement = typeof engagement.$inferSelect;
 export type PositioningTask = typeof positioningTask.$inferSelect;
 export type FxRate = typeof fxRate.$inferSelect;
+export type MailMessage = typeof mailMessage.$inferSelect;
+export type NewMailMessage = typeof mailMessage.$inferInsert;
+export type MailSuggestion = typeof mailSuggestion.$inferSelect;
 export type NewPositioningTask = typeof positioningTask.$inferInsert;
 export type NewTargetAccount = typeof targetAccount.$inferInsert;
 export type MetricSnapshot = typeof metricSnapshot.$inferSelect;

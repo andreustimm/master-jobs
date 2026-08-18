@@ -15,6 +15,13 @@
       "when": 1787077130256,
       "tag": "0001_supreme_rawhide_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787086613796,
+      "tag": "0002_warm_killer_shrike",
+      "breakpoints": true
     }
   ]
 }
