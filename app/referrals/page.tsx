@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { companiesWithContacts, referralOpportunities } from "../../src/core/contacts.ts";
-import { Chip, Fit } from "../ui";
+import { Fit, StatusBadge } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -11,91 +14,56 @@ export default async function Referrals() {
   ]);
 
   return (
-    <main style={{ paddingTop: 40 }}>
-      <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-.02em", margin: "0 0 8px" }}>
-        Referrals
-      </h1>
-      <p style={{ color: "var(--text-2)", maxWidth: "62ch", margin: "0 0 28px" }}>
-        Vagas abertas onde você já conhece alguém. Referrals são ~7% dos
-        candidatos e ~40% das contratações — nenhuma outra alavanca do sistema
-        chega perto.
+    <main className="pt-10">
+      <h1 className="mb-2 text-3xl font-bold tracking-tight">Referrals</h1>
+      <p className="mb-7 max-w-[62ch] text-muted-foreground">
+        Vagas abertas onde você já conhece alguém. Referrals são ~7% dos candidatos
+        e ~40% das contratações — nenhuma outra alavanca do sistema chega perto.
       </p>
 
       {opps.length === 0 ? (
-        <div
-          style={{
-            background: "var(--surface)",
-            border: "1px solid var(--line)",
-            borderRadius: 10,
-            padding: 24,
-          }}
-        >
-          <p style={{ margin: 0, color: "var(--text-2)" }}>
-            {network.size === 0 ? (
-              <>
-                Nenhum contato registrado. Comece com{" "}
-                <code className="mono">pnpm jho contacts seed</code>, que carrega
-                as empresas onde você já trabalhou.
-              </>
-            ) : (
-              <>
-                <strong>{network.size} empresa(s)</strong> na sua rede, nenhuma
-                com vaga aberta no acervo hoje. Isso é uma resposta, não um erro
-                — quando abrir, aparece aqui.
-              </>
-            )}
-          </p>
-        </div>
+        <Card className="p-6 text-muted-foreground">
+          {network.size === 0 ? (
+            <>
+              Nenhum contato registrado. Comece com{" "}
+              <code className="font-mono text-foreground">pnpm jho contacts seed</code>, que
+              carrega as empresas onde você já trabalhou.
+            </>
+          ) : (
+            <>
+              <strong className="text-foreground">{network.size} empresa(s)</strong> na sua rede,
+              nenhuma com vaga aberta no acervo hoje. Isso é uma resposta, não um erro — quando
+              abrir, aparece aqui.
+            </>
+          )}
+        </Card>
       ) : (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 1,
-            background: "var(--line)",
-            border: "1px solid var(--line)",
-            borderRadius: 10,
-            overflow: "hidden",
-          }}
-        >
+        <div className="divide-y overflow-hidden rounded-xl border">
           {opps.map((o) => (
             <div
               key={o.jobId}
-              style={{
-                background: "var(--surface)",
-                display: "grid",
-                gridTemplateColumns: "56px 1fr auto",
-                gap: 16,
-                alignItems: "center",
-                padding: "14px 18px",
-              }}
+              className="grid grid-cols-[52px_1fr_auto] items-center gap-4 bg-card px-5 py-3.5"
             >
-              <div style={{ textAlign: "center" }}>
+              <div className="text-center">
                 <Fit value={o.fit} />
               </div>
-              <div>
-                <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-                  <Link
-                    href={`/jobs/${o.jobId}`}
-                    style={{ fontWeight: 600, color: "var(--text)", textDecoration: "none" }}
-                  >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-baseline gap-2.5">
+                  <Link href={`/jobs/${o.jobId}`} className="font-semibold hover:underline">
                     {o.title}
                   </Link>
-                  {o.status && <Chip>{o.status}</Chip>}
+                  {o.status && <StatusBadge status={o.status} />}
                 </div>
-                <div style={{ fontSize: 12.5, color: "var(--text-2)", marginTop: 3 }}>
-                  {o.companyName}
-                </div>
-                <div style={{ fontSize: 12.5, color: "var(--color-strong)", marginTop: 4 }}>
+                <div className="mt-0.5 text-xs text-muted-foreground">{o.companyName}</div>
+                <div className="mt-1 text-xs text-[var(--color-strong)]">
                   via {o.contacts.join(", ")}
                 </div>
               </div>
               <a
-                className="mono"
                 href={o.applyUrl ?? o.url}
                 target="_blank"
                 rel="noopener"
-                style={{ fontSize: 12, color: "var(--accent)", whiteSpace: "nowrap" }}
+                className={cn(buttonVariants({ size: "sm" }), "font-mono text-xs")}
               >
                 aplicar →
               </a>

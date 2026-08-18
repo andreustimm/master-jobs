@@ -1,9 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import { getJobDetail } from "../../../src/core/db/repo.ts";
 import { APPLICATION_STATUSES } from "../../../src/core/db/schema.ts";
 import { trackAction } from "../../actions";
-import { Chip, Fit, Legend, ScoreBar } from "../../ui";
+import { Fit, Legend, ScoreBar, StatusBadge } from "../../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -19,134 +25,102 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   const reasons = (score?.reasons as string[]) ?? [];
 
   return (
-    <main style={{ paddingTop: 36, paddingBottom: 60 }}>
-      <Link href="/jobs" style={{ fontSize: 13, color: "var(--accent)" }}>
+    <main className="pt-9 pb-16">
+      <Link href="/jobs" className="text-sm text-primary hover:underline">
         ← vagas
       </Link>
 
-      <header style={{ margin: "18px 0 24px" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-.02em", margin: 0 }}>
-            {job.title}
-          </h1>
-          {application && <Chip>{application.status}</Chip>}
-          {job.closedAt && <Chip tone="alert">fechada</Chip>}
+      <header className="mt-4 mb-6">
+        <div className="flex flex-wrap items-baseline gap-3">
+          <h1 className="text-3xl font-bold tracking-tight text-balance">{job.title}</h1>
+          {application && <StatusBadge status={application.status} />}
+          {job.closedAt && <Badge variant="destructive">fechada</Badge>}
         </div>
-        <p style={{ color: "var(--text-2)", margin: "8px 0 0" }}>
-          <strong style={{ color: "var(--text)" }}>{job.companyName}</strong>
+        <p className="mt-2 text-muted-foreground">
+          <strong className="text-foreground">{job.companyName}</strong>
           {job.locationRaw ? ` · ${job.locationRaw}` : ""}
         </p>
-        <p className="mono" style={{ color: "var(--text-3)", fontSize: 11.5, margin: "6px 0 0" }}>
+        <p className="mt-1.5 font-mono text-[11.5px] text-muted-foreground">
           {source?.label ?? job.sourceId} · visto em {job.firstSeenAt.slice(0, 10)}
         </p>
-        <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+
+        {/* Two destinations: the bare URL shows the description, /apply opens
+            the form. Sending someone to a form for a job they have not read is
+            the wrong default. */}
+        <div className="mt-4 flex flex-wrap gap-2.5">
           <a
             href={job.url}
             target="_blank"
             rel="noopener"
-            style={{
-              padding: "8px 16px",
-              borderRadius: 6,
-              border: "1px solid var(--line)",
-              color: "var(--text)",
-              textDecoration: "none",
-              fontSize: 14,
-            }}
+            className={buttonVariants({ variant: "outline" })}
           >
             Ver vaga na origem
           </a>
           {job.applyUrl && job.applyUrl !== job.url && (
-            <a
-              href={job.applyUrl}
-              target="_blank"
-              rel="noopener"
-              style={{
-                padding: "8px 16px",
-                borderRadius: 6,
-                background: "var(--accent)",
-                color: "#fff",
-                textDecoration: "none",
-                fontSize: 14,
-                fontWeight: 600,
-              }}
-            >
+            <a href={job.applyUrl} target="_blank" rel="noopener" className={buttonVariants()}>
               Aplicar →
             </a>
           )}
         </div>
-        <p className="mono" style={{ fontSize: 11, color: "var(--text-3)", marginTop: 8, wordBreak: "break-all" }}>
-          {job.url}
-        </p>
+        <p className="mt-2 font-mono text-[11px] break-all text-muted-foreground">{job.url}</p>
       </header>
 
       {score && (
-        <section
-          style={{
-            background: "var(--surface)",
-            border: "1px solid var(--line)",
-            borderRadius: 10,
-            padding: 20,
-            marginBottom: 24,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
-            <Fit value={score.fit} />
-            <span style={{ color: "var(--text-2)", fontSize: 14 }}>
-              de 100 · cluster <span className="mono">{score.cluster}</span>
-            </span>
-          </div>
+        <Card className="mb-6">
+          <CardContent className="pt-0">
+            <div className="mb-3 flex items-center gap-3.5">
+              <Fit value={score.fit} />
+              <span className="text-sm text-muted-foreground">
+                de 100 · cluster <span className="font-mono">{score.cluster}</span>
+              </span>
+            </div>
 
-          <ScoreBar parts={score as unknown as Record<string, number | null>} />
-          <div style={{ marginTop: 12 }}>
-            <Legend />
-          </div>
+            <ScoreBar parts={score as unknown as Record<string, number | null>} />
+            <div className="mt-3">
+              <Legend />
+            </div>
 
-          <ul style={{ margin: "16px 0 0", paddingLeft: 18, color: "var(--text-2)", fontSize: 13.5 }}>
-            {reasons.map((r, i) => (
-              <li key={i} style={{ marginBottom: 3 }}>
-                {r}
-              </li>
-            ))}
-          </ul>
+            <ul className="mt-4 list-disc pl-5 text-[13.5px] text-muted-foreground">
+              {reasons.map((r, i) => (
+                <li key={i} className="mb-0.5">
+                  {r}
+                </li>
+              ))}
+            </ul>
 
-          {blockers.length > 0 && (
-            <p style={{ color: "var(--color-alert)", fontSize: 13.5, marginTop: 14, marginBottom: 0 }}>
-              ⚠ {blockers.join("; ")}
-            </p>
-          )}
+            {blockers.length > 0 && (
+              <p className="mt-3.5 text-[13.5px] text-destructive">⚠ {blockers.join("; ")}</p>
+            )}
 
-          {matched.length > 0 && (
-            <p className="mono" style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 14, marginBottom: 0 }}>
-              casadas: {matched.join(", ")}
-            </p>
-          )}
-          {missing.length > 0 && (
-            <p className="mono" style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 6, marginBottom: 0 }}>
-              ausentes: {missing.join(", ")}
-            </p>
-          )}
-        </section>
+            {matched.length > 0 && (
+              <>
+                <Separator className="my-4" />
+                <p className="font-mono text-[11.5px] text-muted-foreground">
+                  casadas: {matched.join(", ")}
+                </p>
+              </>
+            )}
+            {missing.length > 0 && (
+              <p className="mt-1.5 font-mono text-[11.5px] text-muted-foreground">
+                ausentes: {missing.join(", ")}
+              </p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
-      <form
-        action={trackAction}
-        style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 28 }}
-      >
+      <form action={trackAction} className="mb-7 flex flex-wrap items-center gap-2">
         <input type="hidden" name="jobId" value={job.id} />
-        <label className="mono" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".1em", color: "var(--text-3)" }}>
+        <span className="font-mono text-[10.5px] tracking-[.1em] text-muted-foreground uppercase">
           mover para
-        </label>
+        </span>
         <select
           name="status"
           defaultValue={application?.status ?? "shortlisted"}
-          style={{
-            background: "var(--surface)",
-            color: "var(--text)",
-            border: "1px solid var(--line)",
-            borderRadius: 6,
-            padding: "6px 10px",
-            fontSize: 14,
-          }}
+          className={cn(
+            "h-9 rounded-lg border border-input bg-background px-3 text-sm",
+            "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+          )}
         >
           {APPLICATION_STATUSES.map((s) => (
             <option key={s} value={s}>
@@ -154,56 +128,20 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
             </option>
           ))}
         </select>
-        <input
-          name="note"
-          placeholder="nota (opcional)"
-          style={{
-            background: "var(--surface)",
-            color: "var(--text)",
-            border: "1px solid var(--line)",
-            borderRadius: 6,
-            padding: "6px 10px",
-            fontSize: 14,
-            minWidth: 220,
-          }}
-        />
-        <button
-          type="submit"
-          style={{
-            background: "var(--accent)",
-            color: "#fff",
-            border: 0,
-            borderRadius: 6,
-            padding: "7px 16px",
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          Salvar
-        </button>
+        <Input name="note" placeholder="nota (opcional)" className="max-w-[260px]" />
+        <Button type="submit">Salvar</Button>
       </form>
 
       {job.descriptionText && (
         <section>
-          <h2 style={{ fontSize: 18, fontWeight: 600, margin: "0 0 10px" }}>Descrição</h2>
-          <pre
-            style={{
-              whiteSpace: "pre-wrap",
-              fontFamily: "inherit",
-              fontSize: 14,
-              lineHeight: 1.6,
-              color: "var(--text-2)",
-              background: "var(--sunk)",
-              padding: 18,
-              borderRadius: 10,
-              maxHeight: 520,
-              overflow: "auto",
-              margin: 0,
-            }}
-          >
-            {job.descriptionText}
-          </pre>
+          <h2 className="mb-2.5 text-lg font-semibold">Descrição</h2>
+          <Card>
+            <CardContent className="max-h-[520px] overflow-auto pt-0">
+              <pre className="font-sans text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                {job.descriptionText}
+              </pre>
+            </CardContent>
+          </Card>
         </section>
       )}
     </main>

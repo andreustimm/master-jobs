@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,7 +8,8 @@ export const metadata: Metadata = {
   description: "Sourcing, ranqueamento e funil de candidaturas",
 };
 
-const navLink = { color: "var(--text-2)", textDecoration: "none" } as const;
+const navClass =
+  "text-sm text-muted-foreground transition-colors hover:text-foreground";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -20,42 +22,32 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
         />
       </head>
-      <body>
-        <header style={{ borderBottom: "1px solid var(--line)", background: "var(--surface)" }}>
-          <nav
-            style={{
-              maxWidth: 1140,
-              margin: "0 auto",
-              padding: "0 24px",
-              display: "flex",
-              alignItems: "center",
-              gap: 28,
-              height: 56,
-            }}
-          >
-            <span className="mono" style={{ fontWeight: 500, letterSpacing: "-.01em" }}>
-              job-hunt-os
-            </span>
-            {/* Written out rather than mapped: `typedRoutes` validates each
-                href against the real route tree, and a mapped union defeats
-                that check — which is the whole point of the flag. */}
-            <div style={{ display: "flex", gap: 20, fontSize: 14 }}>
-              <Link href="/" style={navLink}>
-                Cockpit
-              </Link>
-              <Link href="/jobs" style={navLink}>
-                Vagas
-              </Link>
-              <Link href="/pipeline" style={navLink}>
-                Funil
-              </Link>
-              <Link href="/referrals" style={navLink}>
-                Referrals
-              </Link>
-            </div>
-          </nav>
-        </header>
-        <div style={{ maxWidth: 1140, margin: "0 auto", padding: "0 24px 96px" }}>{children}</div>
+      <body className="bg-background text-foreground antialiased">
+        <TooltipProvider>
+          <header className="border-b bg-card">
+            <nav className="mx-auto flex h-14 max-w-[1140px] items-center gap-7 px-6">
+              <span className="font-mono text-sm font-medium tracking-tight">job-hunt-os</span>
+              {/* Written out rather than mapped: `typedRoutes` validates each
+                  href against the real route tree, and a mapped union defeats
+                  exactly that check. */}
+              <div className="flex gap-5">
+                <Link href="/" className={navClass}>
+                  Cockpit
+                </Link>
+                <Link href="/jobs" className={navClass}>
+                  Vagas
+                </Link>
+                <Link href="/pipeline" className={navClass}>
+                  Funil
+                </Link>
+                <Link href="/referrals" className={navClass}>
+                  Referrals
+                </Link>
+              </div>
+            </nav>
+          </header>
+          <div className="mx-auto max-w-[1140px] px-6 pb-24">{children}</div>
+        </TooltipProvider>
       </body>
     </html>
   );

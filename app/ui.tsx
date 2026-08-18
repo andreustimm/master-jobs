@@ -1,63 +1,53 @@
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
 /**
- * Shared presentation pieces.
+ * Presentation pieces built on shadcn primitives.
  *
- * The score bar is the one that matters: this product's claim is that a rank is
- * explainable, and a number alone does not deliver that. Showing the five
- * components in proportion makes a false positive visible at a glance — a high
- * fit carried entirely by geo and pay, with no title match, reads wrong
- * immediately.
+ * The score bar stays hand-rolled: it is the one thing no component library
+ * ships, and it is this product's actual argument — a rank is only trustworthy
+ * if you can see what produced it. Showing the five components in proportion
+ * makes a false positive obvious, where a bare number never would.
  */
 
 export const COMPONENTS = [
-  { key: "titleScore", label: "Cargo", color: "var(--color-brand)" },
-  { key: "keywordScore", label: "Palavras-chave", color: "var(--color-brand-bright)" },
-  { key: "geoScore", label: "Elegibilidade", color: "var(--color-strong)" },
-  { key: "seniorityScore", label: "Senioridade", color: "var(--color-mid)" },
-  { key: "compScore", label: "Remuneração", color: "#5b5fa8" },
+  { key: "titleScore", label: "Cargo", className: "bg-[var(--color-brand)]" },
+  { key: "keywordScore", label: "Palavras-chave", className: "bg-[var(--color-brand-bright)]" },
+  { key: "geoScore", label: "Elegibilidade", className: "bg-[var(--color-strong)]" },
+  { key: "seniorityScore", label: "Senioridade", className: "bg-[var(--color-mid)]" },
+  { key: "compScore", label: "Remuneração", className: "bg-[#5b5fa8]" },
 ] as const;
 
-export function fitTone(fit: number | null): string {
-  if (fit == null) return "var(--text-3)";
-  if (fit >= 70) return "var(--color-strong)";
-  if (fit >= 55) return "var(--color-mid)";
-  return "var(--text-3)";
-}
-
-export function Fit({ value }: { value: number | null }) {
+export function Fit({ value, className }: { value: number | null; className?: string }) {
+  const tone =
+    value == null
+      ? "text-muted-foreground"
+      : value >= 70
+        ? "text-[var(--color-strong)]"
+        : value >= 55
+          ? "text-[var(--color-mid)]"
+          : "text-muted-foreground";
   return (
-    <span
-      className="mono"
-      style={{ color: fitTone(value), fontWeight: 700, fontSize: 22, lineHeight: 1 }}
-    >
+    <span className={cn("font-mono text-[22px] font-bold leading-none tabular-nums", tone, className)}>
       {value == null ? "—" : value.toFixed(0)}
     </span>
   );
 }
 
 export function ScoreBar({ parts }: { parts: Record<string, number | null> }) {
-  const segments = COMPONENTS.map((c) => ({
-    ...c,
-    value: Number(parts[c.key] ?? 0),
-  })).filter((s) => s.value > 0);
-
+  const segments = COMPONENTS.map((c) => ({ ...c, value: Number(parts[c.key] ?? 0) })).filter(
+    (s) => s.value > 0,
+  );
   const used = segments.reduce((sum, s) => sum + s.value, 0);
 
   return (
-    <div
-      style={{
-        display: "flex",
-        height: 5,
-        borderRadius: 3,
-        overflow: "hidden",
-        background: "var(--line)",
-        maxWidth: 520,
-      }}
-    >
+    <div className="flex h-[5px] max-w-[520px] overflow-hidden rounded-sm bg-border">
       {segments.map((s) => (
         <span
           key={s.key}
           title={`${s.label}: ${s.value.toFixed(1)}`}
-          style={{ flex: s.value, background: s.color }}
+          className={s.className}
+          style={{ flex: s.value }}
         />
       ))}
       {used < 100 && <span style={{ flex: 100 - used }} />}
@@ -67,10 +57,10 @@ export function ScoreBar({ parts }: { parts: Record<string, number | null> }) {
 
 export function Legend() {
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 14, fontSize: 12, color: "var(--text-2)" }}>
+    <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
       {COMPONENTS.map((c) => (
-        <span key={c.key} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <i style={{ width: 9, height: 9, borderRadius: 2, background: c.color, display: "inline-block" }} />
+        <span key={c.key} className="inline-flex items-center gap-1.5">
+          <i className={cn("inline-block size-2 rounded-[2px]", c.className)} />
           {c.label}
         </span>
       ))}
@@ -78,41 +68,40 @@ export function Legend() {
   );
 }
 
-export function Chip({ children, tone = "accent" }: { children: React.ReactNode; tone?: "accent" | "muted" | "alert" }) {
-  const bg =
-    tone === "alert" ? "var(--color-alert)" : tone === "muted" ? "var(--sunk)" : "var(--accent)";
-  const fg = tone === "muted" ? "var(--text-2)" : "#fff";
+export function StatusBadge({ status }: { status: string }) {
+  const variant =
+    status === "rejected" || status === "withdrawn"
+      ? "destructive"
+      : status === "offer" || status === "interviewing"
+        ? "default"
+        : "secondary";
   return (
-    <span
-      className="mono"
-      style={{
-        fontSize: 10,
-        letterSpacing: ".08em",
-        textTransform: "uppercase",
-        padding: "2px 7px",
-        borderRadius: 3,
-        background: bg,
-        color: fg,
-      }}
-    >
-      {children}
-    </span>
+    <Badge variant={variant} className="font-mono text-[10px] tracking-wider uppercase">
+      {status}
+    </Badge>
   );
 }
 
-export function Stat({ value, label, accent }: { value: string | number; label: string; accent?: boolean }) {
+export function Stat({
+  value,
+  label,
+  accent,
+}: {
+  value: string | number;
+  label: string;
+  accent?: boolean;
+}) {
   return (
-    <div style={{ background: "var(--surface)", padding: "16px 18px" }}>
+    <div className="bg-card px-4 py-4">
       <div
-        className="mono"
-        style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.1, color: accent ? "var(--accent)" : "var(--text)" }}
+        className={cn(
+          "font-mono text-2xl leading-tight font-bold tabular-nums",
+          accent && "text-primary",
+        )}
       >
         {value}
       </div>
-      <div
-        className="mono"
-        style={{ fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-3)", marginTop: 5 }}
-      >
+      <div className="mt-1 font-mono text-[10.5px] tracking-[.1em] text-muted-foreground uppercase">
         {label}
       </div>
     </div>

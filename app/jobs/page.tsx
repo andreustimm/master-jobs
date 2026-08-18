@@ -1,7 +1,7 @@
 import { boardFacets, countBoard, listBoard } from "../../src/core/db/repo.ts";
 import { FilterBar, readFilters, toBoardFilters } from "../filters";
 import { GridToolbar, Pagination, Presets } from "../grid";
-import { JobList } from "../page";
+import { JobList } from "../joblist";
 import { Legend } from "../ui";
 
 export const dynamic = "force-dynamic";
@@ -31,11 +31,9 @@ export default async function Jobs({
 
   return (
     <main>
-      <header style={{ padding: "40px 0 16px" }}>
-        <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-.02em", margin: "0 0 8px" }}>
-          Vagas
-        </h1>
-        <p style={{ color: "var(--text-2)", margin: 0 }}>
+      <header className="pt-10 pb-4">
+        <h1 className="mb-2 text-3xl font-bold tracking-tight">Vagas</h1>
+        <p className="text-muted-foreground">
           {total.toLocaleString("pt-BR")} correspondem aos filtros
           {state.q ? ` para “${state.q}”` : ""}.
         </p>
@@ -45,7 +43,7 @@ export default async function Jobs({
       <FilterBar base="/jobs" state={state} facets={facets} />
       <GridToolbar base="/jobs" state={state} total={total} dense={dense} />
 
-      <div style={{ marginBottom: 14 }}>
+      <div className="mb-3.5">
         <Legend />
       </div>
 

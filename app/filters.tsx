@@ -1,9 +1,17 @@
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+
 /**
  * Filter bar, shared by the cockpit and the job list.
  *
- * State lives in the URL, not in React. Three reasons that matter here: a
- * filtered view is shareable and bookmarkable, the back button behaves, and
- * every page stays a Server Component with no client bundle at all.
+ * State lives in the URL, not in React: a filtered view is shareable and
+ * bookmarkable, the back button behaves, and every page stays a Server
+ * Component with no client bundle.
  *
  * Each toggle shows what it yields, because a filter that silently returns
  * nothing is indistinguishable from a broken page.
@@ -34,7 +42,6 @@ export type Facets = {
   sources: string[];
 };
 
-/** Build a URL preserving current state, with one key changed or removed. */
 export function href(base: string, state: FilterState, patch: Record<string, string | undefined>) {
   const params = new URLSearchParams();
   const merged: Record<string, unknown> = { ...state, ...patch };
@@ -47,32 +54,46 @@ export function href(base: string, state: FilterState, patch: Record<string, str
   return qs ? `${base}?${qs}` : base;
 }
 
-const chip = (active: boolean) => ({
-  padding: "3px 9px",
-  borderRadius: 4,
-  textDecoration: "none",
-  fontSize: 12,
-  background: active ? "var(--accent)" : "var(--sunk)",
-  color: active ? "#fff" : "var(--text-2)",
-  border: "1px solid var(--line)",
-  whiteSpace: "nowrap" as const,
-});
-
-const groupLabel = {
-  fontSize: 10.5,
-  letterSpacing: ".1em",
-  textTransform: "uppercase" as const,
-  color: "var(--text-3)",
-};
+const chipClass = (active: boolean) =>
+  cn(
+    buttonVariants({ variant: active ? "default" : "outline", size: "sm" }),
+    "h-7 px-2.5 text-xs font-normal",
+    active && "font-medium",
+  );
 
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
-      <span className="mono" style={groupLabel}>
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="font-mono text-[10.5px] tracking-[.1em] text-muted-foreground uppercase">
         {label}
       </span>
       {children}
     </div>
+  );
+}
+
+function Toggle({
+  href: to,
+  active,
+  hint,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  hint: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <a href={to} className={chipClass(active)}>
+            {children}
+          </a>
+        }
+      />
+      <TooltipContent>{hint}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -88,117 +109,84 @@ export function FilterBar({
   const CUTS = [0, 45, 55, 60, 70];
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-        padding: "14px 16px",
-        background: "var(--surface)",
-        border: "1px solid var(--line)",
-        borderRadius: 10,
-        marginBottom: 20,
-      }}
-    >
-      <form method="get" action={base} style={{ display: "flex", gap: 8 }}>
-        {/* Preserve the other filters when searching. */}
+    <Card className="mb-5 gap-3 p-4">
+      <form method="get" action={base} className="flex gap-2">
         {Object.entries(state).map(([k, v]) =>
           k === "q" || v === undefined || v === false ? null : (
             <input key={k} type="hidden" name={k} value={v === true ? "1" : String(v)} />
           ),
         )}
-        <input
-          name="q"
-          defaultValue={state.q ?? ""}
-          placeholder="buscar por cargo ou empresa…"
-          style={{
-            flex: 1,
-            background: "var(--bg)",
-            color: "var(--text)",
-            border: "1px solid var(--line)",
-            borderRadius: 6,
-            padding: "7px 11px",
-            fontSize: 14,
-          }}
-        />
-        <button
-          type="submit"
-          style={{
-            background: "var(--accent)",
-            color: "#fff",
-            border: 0,
-            borderRadius: 6,
-            padding: "7px 16px",
-            fontSize: 14,
-            cursor: "pointer",
-          }}
-        >
-          Buscar
-        </button>
+        <Input name="q" defaultValue={state.q ?? ""} placeholder="buscar por cargo ou empresa…" />
+        <Button type="submit">Buscar</Button>
         {state.q && (
-          <a href={href(base, state, { q: undefined })} style={{ ...chip(false), lineHeight: "26px" }}>
+          <a href={href(base, state, { q: undefined })} className={chipClass(false)}>
             limpar
           </a>
         )}
       </form>
 
+      <Separator />
+
       <Group label="corte">
         {CUTS.map((c) => (
-          <a key={c} href={href(base, state, { fit: String(c) })} className="mono" style={chip(state.fit === c)}>
+          <a
+            key={c}
+            href={href(base, state, { fit: String(c) })}
+            className={cn(chipClass(state.fit === c), "font-mono")}
+          >
             {c === 0 ? "todas" : `${c}+`}
           </a>
         ))}
       </Group>
 
       <Group label="qualidade">
-        <a
+        <Toggle
           href={href(base, state, { unblocked: state.unblocked ? undefined : "1" })}
-          style={chip(Boolean(state.unblocked))}
-          title="Esconde vagas com exigência de autorização de trabalho, presencial ou W2"
+          active={Boolean(state.unblocked)}
+          hint="Esconde vagas que exigem autorização de trabalho, presença física ou W2"
         >
           sem bloqueio · {facets.unblocked}
-        </a>
-        <a
+        </Toggle>
+        <Toggle
           href={href(base, state, { named: state.named ? undefined : "1" })}
-          style={chip(Boolean(state.named))}
-          title="Esconde agregadores que ocultam o empregador — não dá para pesquisar nem acionar rede"
+          active={Boolean(state.named)}
+          hint="Esconde agregadores que ocultam o empregador — não dá para pesquisar nem acionar rede"
         >
           empresa identificada · {facets.named}
-        </a>
-        <a
+        </Toggle>
+        <Toggle
           href={href(base, state, { fresh: state.fresh ? undefined : "1" })}
-          style={chip(Boolean(state.fresh))}
-          title="Publicadas nos últimos 3 dias — taxa de resposta muito maior"
+          active={Boolean(state.fresh)}
+          hint="Publicadas nos últimos 3 dias — taxa de resposta muito maior"
         >
           recentes · {facets.fresh}
-        </a>
-        <a
+        </Toggle>
+        <Toggle
           href={href(base, state, { described: state.described ? undefined : "1" })}
-          style={chip(Boolean(state.described))}
-          title="Vaga sem descrição zera o componente de keywords (30 pontos) — a nota fica não-medida, não baixa"
+          active={Boolean(state.described)}
+          hint="Vaga sem descrição zera um componente de 30 pontos — a nota fica não-medida, não baixa"
         >
           com descrição · {facets.described}
-        </a>
-        <a
+        </Toggle>
+        <Toggle
           href={href(base, state, { paid: state.paid ? undefined : "1" })}
-          style={chip(Boolean(state.paid))}
-          title="Apenas vagas que divulgam remuneração"
+          active={Boolean(state.paid)}
+          hint="Apenas vagas que divulgam remuneração"
         >
           com salário · {facets.withComp}
-        </a>
+        </Toggle>
       </Group>
 
       {facets.clusters.length > 0 && (
         <Group label="cluster">
-          <a href={href(base, state, { cluster: undefined })} className="mono" style={chip(!state.cluster)}>
+          <a href={href(base, state, { cluster: undefined })} className={cn(chipClass(!state.cluster), "font-mono")}>
             todos
           </a>
           {facets.clusters.map((c) => (
             <a
               key={c}
               href={href(base, state, { cluster: c })}
-              className="mono"
-              style={chip(state.cluster === c)}
+              className={cn(chipClass(state.cluster === c), "font-mono")}
             >
               {c}
             </a>
@@ -208,11 +196,15 @@ export function FilterBar({
 
       {facets.sources.length > 1 && (
         <Group label="fonte">
-          <a href={href(base, state, { source: undefined })} className="mono" style={chip(!state.source)}>
+          <a href={href(base, state, { source: undefined })} className={cn(chipClass(!state.source), "font-mono")}>
             todas
           </a>
           {facets.sources.map((s) => (
-            <a key={s} href={href(base, state, { source: s })} className="mono" style={chip(state.source === s)}>
+            <a
+              key={s}
+              href={href(base, state, { source: s })}
+              className={cn(chipClass(state.source === s), "font-mono")}
+            >
               {s}
             </a>
           ))}
@@ -220,21 +212,20 @@ export function FilterBar({
       )}
 
       <Group label="ordenar">
-        <a href={href(base, state, { sort: undefined })} style={chip(!state.sort || state.sort === "fit")}>
+        <a href={href(base, state, { sort: undefined })} className={chipClass(!state.sort || state.sort === "fit")}>
           aderência
         </a>
-        <a href={href(base, state, { sort: "recent" })} style={chip(state.sort === "recent")}>
+        <a href={href(base, state, { sort: "recent" })} className={chipClass(state.sort === "recent")}>
           mais recentes
         </a>
-        <a href={href(base, state, { sort: "comp" })} style={chip(state.sort === "comp")}>
+        <a href={href(base, state, { sort: "comp" })} className={chipClass(state.sort === "comp")}>
           maior salário
         </a>
       </Group>
-    </div>
+    </Card>
   );
 }
 
-/** Parse searchParams into typed state. */
 export function readFilters(params: Record<string, string | string[] | undefined>): FilterState {
   const one = (k: string) => {
     const v = params[k];
@@ -255,7 +246,6 @@ export function readFilters(params: Record<string, string | string[] | undefined
   };
 }
 
-/** Translate UI state into repo filters. */
 export function toBoardFilters(state: FilterState) {
   return {
     minFit: state.fit,
@@ -271,3 +261,5 @@ export function toBoardFilters(state: FilterState) {
     sort: (state.sort ?? "fit") as "fit" | "recent" | "comp",
   };
 }
+
+export { Badge };

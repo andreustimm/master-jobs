@@ -6,6 +6,8 @@
  * inside a form — the browser already knows how to do this, and reaching for
  * client state here would buy nothing.
  */
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { href, type FilterState } from "./filters";
 
 export const PAGE_SIZES = [25, 50, 100, 200] as const;
@@ -36,68 +38,48 @@ export function Pagination({
 
   const link = (p: number) => href(base, state, { page: p === 1 ? undefined : String(p) });
 
-  const box = (active: boolean) => ({
-    padding: "4px 10px",
-    borderRadius: 4,
-    fontSize: 13,
-    textDecoration: "none",
-    background: active ? "var(--accent)" : "var(--surface)",
-    color: active ? "#fff" : "var(--text-2)",
-    border: "1px solid var(--line)",
-  });
+  const box = (active: boolean) =>
+    cn(buttonVariants({ variant: active ? "default" : "outline", size: "sm" }), "h-8 px-3 text-xs");
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 16,
-        flexWrap: "wrap",
-        marginTop: 18,
-      }}
-    >
-      <span className="mono" style={{ fontSize: 12, color: "var(--text-3)" }}>
+    <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+      <span className="font-mono text-xs text-muted-foreground">
         {from.toLocaleString("pt-BR")}–{to.toLocaleString("pt-BR")} de{" "}
         {total.toLocaleString("pt-BR")}
       </span>
 
-      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      <div className="flex flex-wrap items-center gap-1.5">
         {current > 1 && (
-          <a href={link(current - 1)} style={box(false)}>
+          <a href={link(current - 1)} className={box(false)}>
             ← anterior
           </a>
         )}
         {window.map((p, i) => (
-          <span key={p} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <span key={p} className="flex items-center gap-1.5">
             {i > 0 && window[i - 1] !== undefined && p - window[i - 1]! > 1 && (
-              <span style={{ color: "var(--text-3)", fontSize: 12 }}>…</span>
+              <span className="text-xs text-muted-foreground">…</span>
             )}
-            <a href={link(p)} className="mono" style={box(p === current)}>
+            <a href={link(p)} className={cn("font-mono", box(p === current))}>
               {p}
             </a>
           </span>
         ))}
         {current < pages && (
-          <a href={link(current + 1)} style={box(false)}>
+          <a href={link(current + 1)} className={box(false)}>
             próxima →
           </a>
         )}
       </div>
 
-      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <span
-          className="mono"
-          style={{ fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-3)" }}
-        >
+      <div className="flex items-center gap-1.5">
+        <span className="font-mono text-[10.5px] tracking-[.1em] text-muted-foreground uppercase">
           por página
         </span>
         {PAGE_SIZES.map((n) => (
           <a
             key={n}
             href={href(base, state, { size: n === 50 ? undefined : String(n), page: undefined })}
-            className="mono"
-            style={box(pageSize === n)}
+            className={cn("font-mono", box(pageSize === n))}
           >
             {n}
           </a>
@@ -119,34 +101,24 @@ export function GridToolbar({
   dense: boolean;
 }) {
   const exportHref = `/api/export${new URL(href(base, state, {}), "http://x").search}`;
-  const box = (active: boolean) => ({
-    padding: "4px 10px",
-    borderRadius: 4,
-    fontSize: 12,
-    textDecoration: "none",
-    background: active ? "var(--accent)" : "var(--sunk)",
-    color: active ? "#fff" : "var(--text-2)",
-    border: "1px solid var(--line)",
-  });
+  const box = (active: boolean) =>
+    cn(buttonVariants({ variant: active ? "default" : "outline", size: "sm" }), "h-7 px-2.5 text-xs");
 
   return (
-    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
-      <span
-        className="mono"
-        style={{ fontSize: 10.5, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-3)" }}
-      >
+    <div className="mb-3 flex flex-wrap items-center gap-2.5">
+      <span className="font-mono text-[10.5px] tracking-[.1em] text-muted-foreground uppercase">
         densidade
       </span>
-      <a href={href(base, state, { dense: undefined })} style={box(!dense)}>
+      <a href={href(base, state, { dense: undefined })} className={box(!dense)}>
         confortável
       </a>
-      <a href={href(base, state, { dense: "1" })} style={box(dense)}>
+      <a href={href(base, state, { dense: "1" })} className={box(dense)}>
         compacta
       </a>
 
-      <span style={{ flex: 1 }} />
+      <span className="flex-1" />
 
-      <a href={exportHref} style={box(false)} title={`Exporta as ${total} linhas filtradas`}>
+      <a href={exportHref} className={box(false)} title={`Exporta as ${total} linhas filtradas`}>
         ↓ exportar CSV
       </a>
     </div>
@@ -167,24 +139,16 @@ export const PRESETS = [
 
 export function Presets({ base }: { base: string }) {
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+    <div className="mb-4 flex flex-wrap gap-2">
       {PRESETS.map((p) => (
         <a
           key={p.label}
           href={`${base}?${p.query}`}
           title={p.hint}
-          style={{
-            padding: "6px 12px",
-            borderRadius: 6,
-            border: "1px solid var(--line)",
-            background: "var(--surface)",
-            color: "var(--text)",
-            textDecoration: "none",
-            fontSize: 13,
-          }}
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-auto py-1.5 text-[13px] font-normal")}
         >
           {p.label}
-          <span style={{ color: "var(--text-3)", fontSize: 11.5 }}> · {p.hint}</span>
+          <span className="ml-1 text-[11.5px] text-muted-foreground"> · {p.hint}</span>
         </a>
       ))}
     </div>
