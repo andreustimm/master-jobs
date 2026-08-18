@@ -315,6 +315,34 @@ export const positioningTask = sqliteTable("positioning_task", {
 });
 
 /* -------------------------------------------------------------------------- */
+/* Foreign exchange                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Cached exchange rates.
+ *
+ * Rates are stored rather than fetched per score for two reasons: the scorer
+ * must stay pure and offline, and a score has to remain reproducible — knowing
+ * only that a job "was above the floor" is useless without the rate that made
+ * it so.
+ */
+export const fxRate = sqliteTable(
+  "fx_rate",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Quote date as published by the provider, not the fetch time. */
+    date: text("date").notNull(),
+    base: text("base").notNull(),
+    currency: text("currency").notNull(),
+    /** 1 unit of `base` buys `rate` units of `currency`. */
+    rate: real("rate").notNull(),
+    provider: text("provider").notNull(), // frankfurter | erapi | manual
+    fetchedAt: text("fetched_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("fx_rate_unique_idx").on(t.date, t.base, t.currency)],
+);
+
+/* -------------------------------------------------------------------------- */
 /* Inferred types                                                              */
 /* -------------------------------------------------------------------------- */
 
@@ -328,6 +356,7 @@ export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
 export type Post = typeof post.$inferSelect;
 export type Engagement = typeof engagement.$inferSelect;
 export type PositioningTask = typeof positioningTask.$inferSelect;
+export type FxRate = typeof fxRate.$inferSelect;
 export type NewPositioningTask = typeof positioningTask.$inferInsert;
 export type NewTargetAccount = typeof targetAccount.$inferInsert;
 export type MetricSnapshot = typeof metricSnapshot.$inferSelect;

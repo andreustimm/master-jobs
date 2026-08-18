@@ -10,9 +10,20 @@
  * Bump SCORER_VERSION whenever weights or logic change, so stale scores are
  * detectable and `jobs score --rescore` knows what to redo.
  */
+import {
+  annualize,
+  convert,
+  formatMoney,
+  money,
+  parseCurrency,
+  parsePeriod,
+  type FxTable,
+  type Money,
+  type Period,
+} from "../money.ts";
 import type { Profile } from "../profile/schema.ts";
 
-export const SCORER_VERSION = "1.0.0";
+export const SCORER_VERSION = "1.1.0";
 
 export type ScoreInput = {
   title: string;
@@ -24,6 +35,8 @@ export type ScoreInput = {
   compMax?: number | null;
   compCurrency?: string | null;
   compPeriod?: string | null;
+  /** Set for fixed-price engagements; required to annualise them. */
+  compDurationMonths?: number | null;
 };
 
 export type ScoreResult = {
@@ -220,28 +233,180 @@ function scoreGeo(
 
 /* ---------------------------- Compensation ------------------------------- */
 
-function scoreComp(input: ScoreInput, profile: Profile): { score: number; reason: string } {
-  const { compMin, compMax, compPeriod } = input;
-  if (compMin == null && compMax == null) {
-    return { score: WEIGHTS.comp * 0.5, reason: "No compensation disclosed" };
-  }
+/**
+ * Compensation scoring, currency-aware.
+ *
+ * Before v1.1.0 this compared a raw number against a USD floor while ignoring
+ * `comp_currency` entirely, so a posting quoted in MXN or PHP was weighed as if
+ * it were dollars. It also only recognised the period strings "hour" and
+ * "month", which meant "hourly" — the spelling several APIs actually use — fell
+ * through to the annual branch and turned USD 100/hour into USD 100/year.
+ *
+ * Matching order:
+ *   1. An explicit range for the posting's own (currency, period).
+ *   2. An explicit range for that currency in any period, compared annualised.
+ *   3. Conversion to the reference currency, compared against its range.
+ *   4. No rate available -> treated as undisclosed, never as equivalent.
+ */
+function scoreComp(
+  input: ScoreInput,
+  profile: Profile,
+  fx: FxTable | null,
+): { score: number; reason: string } {
+  const { compMin, compMax } = input;
+  const amount = compMax ?? compMin ?? 0;
 
-  // Normalise to an annual figure so hourly and monthly postings compare.
-  const factor = compPeriod === "hour" ? 2080 : compPeriod === "month" ? 12 : 1;
-  const top = (compMax ?? compMin ?? 0) * factor;
-
-  if (top >= profile.compensation.target) {
-    return { score: WEIGHTS.comp, reason: `Pays up to ${Math.round(top).toLocaleString()} — at or above target` };
+  // Several aggregators emit 0 rather than null for "not disclosed". Treating
+  // that as a real figure would either score it as below-floor or, worse, hand
+  // it the undisclosed consolation score — both wrong.
+  if ((compMin == null && compMax == null) || amount <= 0) {
+    return { score: WEIGHTS.comp * 0.5, reason: "Remuneração não divulgada" };
   }
-  if (top >= profile.compensation.floor) {
-    const span = profile.compensation.target - profile.compensation.floor;
-    const fraction = span > 0 ? (top - profile.compensation.floor) / span : 0;
+  const currency = parseCurrency(input.compCurrency);
+  const period = parsePeriod(input.compPeriod);
+
+  // A number with no currency is unusable: we cannot tell 60000 BRL from
+  // 60000 USD, and guessing is exactly the bug this rewrite removes.
+  if (!currency) {
     return {
-      score: WEIGHTS.comp * (0.4 + 0.6 * fraction),
-      reason: `Pays up to ${Math.round(top).toLocaleString()} — between floor and target`,
+      score: WEIGHTS.comp * 0.5,
+      reason: `Valor ${amount.toLocaleString()} sem moeda declarada — não comparável`,
     };
   }
-  return { score: 0, reason: `Pays up to ${Math.round(top).toLocaleString()} — below the floor` };
+  if (!period) {
+    return {
+      score: WEIGHTS.comp * 0.5,
+      reason: `Período "${input.compPeriod}" não reconhecido — não comparável`,
+    };
+  }
+
+  const posted: Money = money(
+    amount,
+    currency,
+    period,
+    input.compDurationMonths ?? undefined,
+  );
+
+  /* --- fixed-price projects ------------------------------------------- */
+  if (period === "project") {
+    const project = profile.compensation.project;
+    if (!project.accepted) {
+      return { score: 0, reason: "Projeto fechado — modalidade não aceita" };
+    }
+    if (!input.compDurationMonths) {
+      return {
+        score: WEIGHTS.comp * 0.4,
+        reason: `${formatMoney(posted)} sem duração — não dá para comparar com salário`,
+      };
+    }
+    if (input.compDurationMonths > project.max_duration_months) {
+      return {
+        score: WEIGHTS.comp * 0.2,
+        reason: `Projeto de ${input.compDurationMonths} meses excede o máximo de ${project.max_duration_months}`,
+      };
+    }
+  }
+
+  /* --- 1. exact (currency, period) range ------------------------------- */
+  const exact = profile.compensation.ranges.find(
+    (r) => r.currency.toUpperCase() === currency && r.period === period,
+  );
+  if (exact) {
+    return gradeAgainst(posted, exact, `${formatMoney(posted)}`);
+  }
+
+  /* --- 2. same currency, different period ------------------------------ */
+  const annualPosted = annualize(posted);
+  if (annualPosted) {
+    const sameCurrency = profile.compensation.ranges.filter(
+      (r) => r.currency.toUpperCase() === currency,
+    );
+    for (const range of sameCurrency) {
+      const annualRange = annualiseRange(range);
+      if (annualRange) {
+        return gradeAgainst(annualPosted, annualRange, `${formatMoney(posted)}`);
+      }
+    }
+  }
+
+  /* --- 3. convert to the reference currency ---------------------------- */
+  const reference = profile.compensation.reference_currency.toUpperCase();
+  if (annualPosted && fx) {
+    const converted = convert(annualPosted, reference, fx);
+    if (converted) {
+      const refRange = profile.compensation.ranges.find(
+        (r) => r.currency.toUpperCase() === reference,
+      );
+      const annualRefRange = refRange ? annualiseRange(refRange) : null;
+      if (annualRefRange) {
+        const graded = gradeAgainst(
+          converted,
+          annualRefRange,
+          `${formatMoney(posted)} \u2248 ${formatMoney(converted)}`,
+        );
+        return { score: graded.score, reason: `${graded.reason} (câmbio de ${fx.date})` };
+      }
+    }
+  }
+
+  /* --- 4. no basis for comparison -------------------------------------- */
+  return {
+    score: WEIGHTS.comp * 0.5,
+    reason: `${formatMoney(posted)} — sem faixa nem cotação para ${currency}; rode \`jho fx refresh\``,
+  };
+}
+
+type AnnualRange = { floor: number; target: number; ideal?: number; currency: string };
+
+/** Express a declared range per year so it compares with an annualised offer. */
+function annualiseRange(range: {
+  currency: string;
+  period: Period;
+  floor: number;
+  target: number;
+  ideal?: number;
+}): AnnualRange | null {
+  const floor = annualize(money(range.floor, range.currency, range.period));
+  const target = annualize(money(range.target, range.currency, range.period));
+  if (!floor || !target) return null;
+  const ideal =
+    range.ideal != null ? annualize(money(range.ideal, range.currency, range.period)) : null;
+  return {
+    currency: range.currency.toUpperCase(),
+    floor: floor.amount,
+    target: target.amount,
+    ideal: ideal?.amount,
+  };
+}
+
+/** Grade an offer against a range expressed in the SAME currency and period. */
+function gradeAgainst(
+  offer: Money,
+  range: { floor: number; target: number; ideal?: number },
+  label: string,
+): { score: number; reason: string } {
+  const value = offer.amount;
+
+  if (range.ideal != null && value >= range.ideal) {
+    return { score: WEIGHTS.comp, reason: `${label} — no topo da faixa desejada` };
+  }
+  if (value >= range.target) {
+    const span = (range.ideal ?? range.target * 1.4) - range.target;
+    const bonus = span > 0 ? Math.min(1, (value - range.target) / span) : 1;
+    return {
+      score: WEIGHTS.comp * (0.85 + 0.15 * bonus),
+      reason: `${label} — no ou acima do alvo`,
+    };
+  }
+  if (value >= range.floor) {
+    const span = range.target - range.floor;
+    const fraction = span > 0 ? (value - range.floor) / span : 0;
+    return {
+      score: WEIGHTS.comp * (0.4 + 0.45 * fraction),
+      reason: `${label} — entre o piso e o alvo`,
+    };
+  }
+  return { score: 0, reason: `${label} — abaixo do piso` };
 }
 
 /* ------------------------------- Blockers -------------------------------- */
@@ -262,14 +427,18 @@ function findBlockers(input: ScoreInput, profile: Profile): string[] {
 
 /* --------------------------------- Score --------------------------------- */
 
-export function scoreJob(input: ScoreInput, profile: Profile): ScoreResult {
+export function scoreJob(
+  input: ScoreInput,
+  profile: Profile,
+  fx: FxTable | null = null,
+): ScoreResult {
   const fullText = `${input.title}\n${input.descriptionText ?? ""}`;
 
   const title = scoreTitle(input.title, profile);
   const keywords = scoreKeywords(fullText, profile);
   const seniority = scoreSeniority(fullText, profile);
   const geo = scoreGeo(input, profile);
-  const comp = scoreComp(input, profile);
+  const comp = scoreComp(input, profile, fx);
   const blockers = findBlockers(input, profile);
 
   // Blockers cap the score rather than zeroing it: a great role that says

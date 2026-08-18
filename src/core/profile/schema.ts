@@ -51,12 +51,39 @@ export const ProfileSchema = z.object({
     .array(z.object({ pattern: z.string(), reason: z.string() }))
     .default([]),
   compensation: z.object({
-    currency: z.string().default("USD"),
-    period: z.string().default("year"),
-    floor: z.number(),
-    target: z.number(),
-    hourly_floor: z.number().optional(),
-    hourly_target: z.number().optional(),
+    reference_currency: z.string().length(3).default("USD"),
+    /**
+     * Independent ranges per (currency, period). Not conversions of each other:
+     * a contract in BRL carries different currency risk and taxation, so the
+     * premium required in each currency is a business decision.
+     */
+    ranges: z
+      .array(
+        z.object({
+          currency: z.string().length(3),
+          period: z.enum(["year", "month", "week", "day", "hour"]),
+          floor: z.number().nonnegative(),
+          target: z.number().nonnegative(),
+          ideal: z.number().nonnegative().optional(),
+        }),
+      )
+      .min(1),
+    project: z
+      .object({
+        accepted: z.boolean().default(false),
+        currency: z.string().length(3).default("USD"),
+        min_total: z.number().nonnegative().default(0),
+        max_duration_months: z.number().positive().default(12),
+      })
+      .default({ accepted: false, currency: "USD", min_total: 0, max_duration_months: 12 }),
+    benefits: z
+      .object({
+        required: z.array(z.string()).default([]),
+        preferred: z.array(z.string()).default([]),
+        nice_to_have: z.array(z.string()).default([]),
+        irrelevant: z.array(z.string()).default([]),
+      })
+      .default({ required: [], preferred: [], nice_to_have: [], irrelevant: [] }),
   }),
   seniority: z.object({
     years_experience: z.number(),

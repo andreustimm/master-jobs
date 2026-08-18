@@ -140,14 +140,93 @@ describe("seniority", () => {
 });
 
 describe("compensation", () => {
-  it("normalises hourly rates to an annual figure", () => {
-    const hourly = scoreJob(job({ compMax: 100, compPeriod: "hour" }), profile);
-    expect(hourly.compScore).toBe(8);
+  it("scores an hourly rate against the hourly range", () => {
+    // USD 100/hour clears the hourly ideal of 120? No — but it beats target 85.
+    const hourly = scoreJob(
+      job({ compMax: 100, compCurrency: "USD", compPeriod: "hourly" }),
+      profile,
+    );
+    expect(hourly.compScore).toBeGreaterThan(6);
+  });
+
+  it("recognises every period spelling the sources emit", () => {
+    // "hourly" used to fall through to the annual branch, turning USD 100/hour
+    // into USD 100/year and discarding the job as below floor.
+    for (const spelling of ["hour", "hourly", "per hour"]) {
+      const r = scoreJob(
+        job({ compMax: 100, compCurrency: "USD", compPeriod: spelling }),
+        profile,
+      );
+      expect(r.compScore, `period spelling: ${spelling}`).toBeGreaterThan(6);
+    }
   });
 
   it("zeroes pay below the floor", () => {
-    const low = scoreJob(job({ compMax: 40000, compPeriod: "year" }), profile);
+    const low = scoreJob(
+      job({ compMax: 40000, compCurrency: "USD", compPeriod: "year" }),
+      profile,
+    );
     expect(low.compScore).toBe(0);
+  });
+
+  it("refuses to compare a figure with no currency", () => {
+    // Treating a bare number as USD is exactly the bug this replaced: the
+    // corpus contains CAD, AUD, MXN and PHP postings.
+    const noCurrency = scoreJob(job({ compMax: 200000, compPeriod: "year" }), profile);
+    expect(noCurrency.reasons.some((r) => r.includes("sem moeda"))).toBe(true);
+  });
+
+  it("treats a zero amount as undisclosed, not as below floor", () => {
+    // Several aggregators emit 0 instead of null.
+    const zero = scoreJob(
+      job({ compMax: 0, compMin: 0, compCurrency: "USD", compPeriod: "year" }),
+      profile,
+    );
+    expect(zero.reasons.some((r) => r.includes("não divulgada"))).toBe(true);
+  });
+
+  it("converts a foreign currency before judging it", () => {
+    const fx = {
+      base: "USD",
+      date: "2026-08-18",
+      rates: { PHP: 61.78, CAD: 1.3874 },
+    };
+    // PHP 150k/year is about USD 2.4k — far below floor, though the raw number
+    // looks like a healthy salary.
+    const php = scoreJob(
+      job({ compMax: 150000, compCurrency: "PHP", compPeriod: "annual" }),
+      profile,
+      fx,
+    );
+    expect(php.compScore).toBe(0);
+
+    // CAD 330k is about USD 238k — top of the range.
+    const cad = scoreJob(
+      job({ compMax: 330000, compCurrency: "CAD", compPeriod: "1 YEAR" }),
+      profile,
+      fx,
+    );
+    expect(cad.compScore).toBe(8);
+  });
+
+  it("cannot annualise a fixed-price project without a duration", () => {
+    const noDuration = scoreJob(
+      job({ compMax: 30000, compCurrency: "USD", compPeriod: "project" }),
+      profile,
+    );
+    expect(noDuration.reasons.some((r) => r.includes("sem duração"))).toBe(true);
+
+    const withDuration = scoreJob(
+      job({
+        compMax: 30000,
+        compCurrency: "USD",
+        compPeriod: "project",
+        compDurationMonths: 2,
+      }),
+      profile,
+    );
+    // 30k over 2 months is a 180k/year pace — above target.
+    expect(withDuration.compScore).toBeGreaterThan(6);
   });
 });
 

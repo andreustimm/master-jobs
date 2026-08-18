@@ -197,15 +197,53 @@ blockers:
     reason: W2 employment only, incompatible with B2B from Brazil
 
 # Compensation reference for the markup hypothesis (see LinkedIn/vagas_agosto_2026).
+# Compensation.
+#
+# Ranges are declared per (currency, period) and are INDEPENDENT of each other —
+# a BRL range is deliberately not the conversion of the USD one. A contract in
+# BRL carries different currency risk and different taxation, so the premium the
+# candidate requires in each is a business decision, not arithmetic.
+#
+# Conversion (see `jho fx refresh`) is the FALLBACK for a posting quoted in a
+# currency with no declared range, never the rule.
 compensation:
-  currency: USD
-  period: year
-  # Below this a role is not worth the switching cost.
-  floor: 90000
-  target: 150000
-  # Hourly contractor equivalent.
-  hourly_floor: 55
-  hourly_target: 85
+  # Currency used for reporting and for comparing across postings.
+  reference_currency: USD
+
+  ranges:
+    - { currency: USD, period: year,  floor: 90000, target: 150000, ideal: 220000 }
+    - { currency: USD, period: month, floor: 7500,  target: 12500,  ideal: 18000 }
+    - { currency: USD, period: hour,  floor: 55,    target: 85,     ideal: 120 }
+    - { currency: BRL, period: month, floor: 40000, target: 60000,  ideal: 85000 }
+    - { currency: EUR, period: year,  floor: 80000, target: 130000, ideal: 190000 }
+
+  # Fixed-price engagements. The amount is the whole deal, so it only compares
+  # to a salary once divided by duration.
+  project:
+    accepted: true
+    currency: USD
+    min_total: 15000
+    max_duration_months: 12
+
+  # Benefits matching. `required` absent from a posting is a blocker;
+  # `preferred` and `nice_to_have` add points; `irrelevant` is ignored.
+  # Irrelevant here because the candidate wants remote B2B, not relocation.
+  benefits:
+    required: []
+    preferred:
+      - paid_time_off
+      - equity
+      - learning_budget
+      - health_stipend
+    nice_to_have:
+      - home_office_stipend
+      - coworking
+      - async_first
+    irrelevant:
+      - visa_sponsorship
+      - relocation
+      - free_lunch
+      - gym
 
 seniority:
   years_experience: 20

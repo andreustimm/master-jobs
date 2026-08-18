@@ -5,6 +5,7 @@
 import { eq, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { job, jobScore } from "../db/schema.ts";
+import { ageInDays, loadRates, STALE_AFTER_DAYS } from "../fx.ts";
 import { loadProfile } from "../profile/load.ts";
 import { SCORER_VERSION, scoreJob } from "./score.ts";
 
@@ -12,6 +13,9 @@ export type ScoreRunResult = {
   scored: number;
   skipped: number;
   topFit: number;
+  /** Surfaced so the CLI can warn instead of silently scoring without rates. */
+  fxDate?: string;
+  fxWarning?: string;
 };
 
 /**
@@ -21,6 +25,16 @@ export type ScoreRunResult = {
 export async function scoreAll(opts: { all?: boolean } = {}): Promise<ScoreRunResult> {
   const db = getDb();
   const profile = await loadProfile(true);
+
+  // Loaded once per run: scoring stays pure and offline, and every job in a run
+  // is graded against the same quote.
+  const fx = await loadRates(profile.compensation.reference_currency);
+  let fxWarning: string | undefined;
+  if (!fx) {
+    fxWarning = "Sem cotações em cache — vagas em outras moedas não serão comparadas. Rode `jho fx refresh`.";
+  } else if (ageInDays(fx) > STALE_AFTER_DAYS) {
+    fxWarning = `Cotações de ${fx.date} têm mais de ${STALE_AFTER_DAYS} dias. Rode \`jho fx refresh\`.`;
+  }
 
   const rows = await db
     .select({
@@ -48,7 +62,7 @@ export async function scoreAll(opts: { all?: boolean } = {}): Promise<ScoreRunRe
   let topFit = 0;
 
   for (const row of rows) {
-    const result = scoreJob(row, profile);
+    const result = scoreJob(row, profile, fx);
     topFit = Math.max(topFit, result.fit);
 
     await db
@@ -92,5 +106,5 @@ export async function scoreAll(opts: { all?: boolean } = {}): Promise<ScoreRunRe
     scored++;
   }
 
-  return { scored, skipped: 0, topFit };
+  return { scored, skipped: 0, topFit, fxDate: fx?.date, fxWarning };
 }

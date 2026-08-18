@@ -12,6 +12,7 @@ import { runMigrations } from "./core/db/migrate.ts";
 import { listBoard, pipelineCounts, setApplicationStatus } from "./core/db/repo.ts";
 import { application, job, jobScore, positioningTask, source } from "./core/db/schema.ts";
 import { APPLICATION_STATUSES } from "./core/db/schema.ts";
+import { ageInDays, loadRates, refreshRates, STALE_AFTER_DAYS } from "./core/fx.ts";
 import { addJob } from "./core/ingest/manual.ts";
 import { syncAll, pruneClosed } from "./core/ingest/run.ts";
 import { loadProfile } from "./core/profile/load.ts";
@@ -175,6 +176,51 @@ tasks
     });
   });
 
+/* ----------------------------------- fx ----------------------------------- */
+
+const fx = program
+  .command("fx")
+  .description("Exchange rates used to compare pay across currencies");
+
+fx.command("refresh")
+  .description("Fetch the latest rates (Frankfurter/ECB, falling back to open.er-api)")
+  .option("--base <currency>", "base currency", "USD")
+  .action(async (opts: { base: string }) => {
+    await withDb(async () => {
+      await runMigrations();
+      const r = await refreshRates(opts.base.toUpperCase());
+      console.log(
+        `${c.green("\u2713")} ${r.count} cotações de ${c.bold(r.date)} ` +
+        `(base ${r.base}, via ${r.provider})`,
+      );
+      console.log(c.dim(`  ${r.currencies.join(" ")}`));
+    });
+  });
+
+fx.command("show")
+  .description("Show the cached rate table")
+  .option("--base <currency>", "base currency", "USD")
+  .action(async (opts: { base: string }) => {
+    await withDb(async () => {
+      const table = await loadRates(opts.base.toUpperCase());
+      if (!table) {
+        console.log(c.yellow("Nenhuma cotação em cache. Rode: jho fx refresh"));
+        return;
+      }
+      const age = ageInDays(table);
+      const stamp = age > STALE_AFTER_DAYS ? c.red(`${table.date} (${age}d)`) : c.green(table.date);
+      console.log(`\n  Base ${c.bold(table.base)} · cotação de ${stamp}\n`);
+      const entries = Object.entries(table.rates).sort(([a], [b]) => a.localeCompare(b));
+      for (const [code, rate] of entries) {
+        console.log(`  1 ${table.base} = ${String(rate.toFixed(4)).padStart(12)} ${code}`);
+      }
+      if (age > STALE_AFTER_DAYS) {
+        console.log(c.yellow(`\n  Cotações com mais de ${STALE_AFTER_DAYS} dias. Rode: jho fx refresh`));
+      }
+      console.log();
+    });
+  });
+
 /* -------------------------------- sources --------------------------------- */
 
 const sources = program.command("sources").description("Inspect configured job sources");
@@ -255,6 +301,7 @@ jobs
 
       if (opts.score !== false) {
         const scored = await scoreAll();
+        if (scored.fxWarning) console.log(c.yellow(`  ! ${scored.fxWarning}`));
         console.log(`${c.bold("Scoring")} ${scored.scored} job(s) scored · best fit ${scored.topFit.toFixed(0)}`);
       }
       console.log();
