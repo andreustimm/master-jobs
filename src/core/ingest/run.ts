@@ -9,7 +9,7 @@
  */
 import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
-import { company, job, source } from "../db/schema.ts";
+import { company, job, jobScore, source } from "../db/schema.ts";
 import { getAdapter, sourceId } from "../sources/registry.ts";
 import type { SourceConfig } from "../sources/types.ts";
 import { contentHash, fingerprint, slugifyCompany, toIsoDate } from "./normalize.ts";
@@ -21,6 +21,8 @@ export type SyncSourceResult = {
   inserted: number;
   updated: number;
   closed: number;
+  /** Scores invalidated because the posting's content changed. */
+  rescored: number;
   warnings: string[];
   error?: string;
   durationMs: number;
@@ -30,7 +32,14 @@ export type SyncResult = {
   startedAt: string;
   finishedAt: string;
   sources: SyncSourceResult[];
-  totals: { fetched: number; inserted: number; updated: number; closed: number; failed: number };
+  totals: {
+    fetched: number;
+    inserted: number;
+    updated: number;
+    closed: number;
+    rescored: number;
+    failed: number;
+  };
 };
 
 /** Upsert the configured sources so the YAML config is the source of truth. */
@@ -82,6 +91,7 @@ async function syncOne(config: SourceConfig): Promise<SyncSourceResult> {
     inserted: 0,
     updated: 0,
     closed: 0,
+    rescored: 0,
     warnings: [],
     durationMs: 0,
   };
@@ -139,11 +149,23 @@ async function syncOne(config: SourceConfig): Promise<SyncSourceResult> {
         result.inserted++;
       } else {
         // Reopen anything that came back, and refresh only when content moved.
+        const contentChanged = found.contentHash !== ch;
         await db
           .update(job)
-          .set(found.contentHash === ch ? { lastSeenAt: stamp, closedAt: null } : { ...values, closedAt: null })
+          .set(contentChanged ? { ...values, closedAt: null } : { lastSeenAt: stamp, closedAt: null })
           .where(eq(job.id, found.id));
-        if (found.contentHash !== ch) result.updated++;
+
+        if (contentChanged) {
+          result.updated++;
+          // The score was computed from the OLD text, so it is now a lie.
+          // Dropping it makes `jobs score` pick the job up again — without
+          // this, an edited posting keeps a stale rank forever and nothing
+          // surfaces the discrepancy. This is exactly how 4.538 Lever
+          // postings kept a zero keyword score after their descriptions
+          // were finally parsed correctly.
+          await db.delete(jobScore).where(eq(jobScore.jobId, found.id));
+          result.rescored++;
+        }
       }
     }
 
@@ -218,9 +240,10 @@ export async function syncAll(
       inserted: acc.inserted + r.inserted,
       updated: acc.updated + r.updated,
       closed: acc.closed + r.closed,
+      rescored: acc.rescored + r.rescored,
       failed: acc.failed + (r.ok ? 0 : 1),
     }),
-    { fetched: 0, inserted: 0, updated: 0, closed: 0, failed: 0 },
+    { fetched: 0, inserted: 0, updated: 0, closed: 0, rescored: 0, failed: 0 },
   );
 
   return { startedAt, finishedAt: new Date().toISOString(), sources: results, totals };

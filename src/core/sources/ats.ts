@@ -8,7 +8,7 @@
  *   SmartRecr.  api.smartrecruiters.com/v1/companies/{company}/postings
  *   Recruitee   {company}.recruitee.com/api/offers/
  */
-import { getJson, htmlToText } from "./http.ts";
+import { firstNonEmpty, getJson, htmlToText } from "./http.ts";
 import type { RawJob, SourceAdapter, SourceConfig, FetchResult } from "./types.ts";
 
 /* ------------------------------- Greenhouse ------------------------------- */
@@ -67,6 +67,9 @@ type LeverJob = {
   country?: string;
   descriptionPlain?: string;
   description?: string;
+  /** Sections like "Accountabilities" / "Requirements" — where the real
+   *  keyword signal lives on aggregator boards such as Jobgether. */
+  lists?: Array<{ text?: string; content?: string }>;
   categories?: {
     commitment?: string;
     location?: string;
@@ -83,6 +86,19 @@ export const lever: SourceAdapter = {
     const data = await getJson<LeverJob[]>(url);
     const jobs = (data ?? []).map((j): RawJob => {
       const locations = j.categories?.allLocations ?? [];
+      // Lever splits a posting across several fields and leaves the unused ones
+      // as EMPTY STRINGS rather than null, so `??` silently keeps "". The body
+      // is in `description`, and the requirements — the part that actually
+      // carries keyword signal — are in `lists`.
+      const sections = (j.lists ?? [])
+        .map((l) => [l.text, htmlToText(l.content)].filter(Boolean).join("\n"))
+        .filter((s) => s.length > 0)
+        .join("\n\n");
+      const bodyText = firstNonEmpty(j.descriptionPlain, htmlToText(j.description));
+      // `additional` is the board's own boilerplate ("How Jobgether works"),
+      // identical on every posting — including it would pollute the keywords.
+      const fullText = [bodyText, sections].filter(Boolean).join("\n\n") || null;
+
       return {
         externalId: j.id,
         companyName: config.label,
@@ -93,7 +109,7 @@ export const lever: SourceAdapter = {
         remote: j.workplaceType ? j.workplaceType.toLowerCase() === "remote" : null,
         employmentType: j.categories?.commitment ?? null,
         descriptionHtml: j.description ?? null,
-        descriptionText: j.descriptionPlain ?? htmlToText(j.description),
+        descriptionText: fullText,
         // Lever returns epoch milliseconds.
         postedAt: j.createdAt ? new Date(j.createdAt).toISOString() : null,
         raw: j,
@@ -159,7 +175,7 @@ export const ashby: SourceAdapter = {
           remote: j.isRemote ?? (j.workplaceType ? j.workplaceType.toLowerCase() === "remote" : null),
           employmentType: j.employmentType ?? null,
           descriptionHtml: j.descriptionHtml ?? null,
-          descriptionText: j.descriptionPlain ?? htmlToText(j.descriptionHtml),
+          descriptionText: firstNonEmpty(j.descriptionPlain, htmlToText(j.descriptionHtml)),
           postedAt: j.publishedAt ?? null,
           compMin: salary?.minValue ?? null,
           compMax: salary?.maxValue ?? null,

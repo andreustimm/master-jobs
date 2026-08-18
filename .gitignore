@@ -30,3 +30,6 @@ next-env.d.ts
 
 # generated dashboard — contains personal funnel data
 dashboard.html
+
+# agent worktrees
+.claude/worktrees/

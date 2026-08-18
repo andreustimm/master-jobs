@@ -296,7 +296,9 @@ jobs
       const t = result.totals;
       console.log(
         `\n${c.bold("Totals")}  ${t.fetched} fetched · ${c.green(`${t.inserted} new`)} · ` +
-        `${t.updated} updated · ${t.closed} closed · ${t.failed ? c.red(`${t.failed} failed`) : "0 failed"}`,
+        `${t.updated} updated · ${t.closed} closed · ` +
+        (t.rescored ? `${c.yellow(`${t.rescored} rescore`)} · ` : "") +
+        `${t.failed ? c.red(`${t.failed} failed`) : "0 failed"}`,
       );
 
       if (opts.score !== false) {

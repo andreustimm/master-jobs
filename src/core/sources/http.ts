@@ -69,10 +69,28 @@ export async function getJson<T = unknown>(
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
+/**
+ * First value that is actually present.
+ *
+ * Exists because `??` only falls through on null/undefined, and several job
+ * APIs return an EMPTY STRING for a field they did not populate. Lever is the
+ * worst offender: `descriptionPlain` came back as "" on 4.538 postings while
+ * the real content sat in `description`, so `a ?? b` silently kept the empty
+ * string and the keyword scorer read nothing at all.
+ */
+export function firstNonEmpty(
+  ...values: Array<string | null | undefined>
+): string | null {
+  for (const v of values) {
+    if (typeof v === "string" && v.trim().length > 0) return v;
+  }
+  return null;
+}
+
 /** Cheap HTML -> text. Good enough for keyword scoring, not for rendering. */
 export function htmlToText(html: string | null | undefined): string | null {
   if (!html) return null;
-  return html
+  const text = html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<br\s*\/?>/gi, "\n")
@@ -87,4 +105,6 @@ export function htmlToText(html: string | null | undefined): string | null {
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+  // An empty result must be null, not "", or it defeats every ?? downstream.
+  return text.length > 0 ? text : null;
 }

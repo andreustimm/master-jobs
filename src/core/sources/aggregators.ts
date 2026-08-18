@@ -5,7 +5,7 @@
  * noisier than ATS boards, so the scorer does the filtering — not the fetcher.
  * Field shapes verified against live responses.
  */
-import { getJson, htmlToText } from "./http.ts";
+import { firstNonEmpty, getJson, htmlToText } from "./http.ts";
 import type { RawJob, SourceAdapter, SourceConfig, FetchResult } from "./types.ts";
 
 /* -------------------------------- Himalayas ------------------------------- */
@@ -66,7 +66,7 @@ export const himalayas: SourceAdapter = {
       employmentType: j.employmentType ?? null,
       seniorityRaw: Array.isArray(j.seniority) ? j.seniority.join(", ") : (j.seniority ?? null),
       descriptionHtml: j.description ?? null,
-      descriptionText: htmlToText(j.description) ?? j.excerpt ?? null,
+      descriptionText: firstNonEmpty(htmlToText(j.description), j.excerpt),
       postedAt: toIso(j.pubDate),
       compMin: j.minSalary ?? null,
       compMax: j.maxSalary ?? null,
@@ -255,7 +255,7 @@ export const adzuna: SourceAdapter = {
       remote: null,
       employmentType: j.contract_time ?? null,
       descriptionHtml: null,
-      descriptionText: j.description ?? null,
+      descriptionText: firstNonEmpty(j.description),
       postedAt: j.created ?? null,
       compMin: j.salary_min ? Math.round(j.salary_min) : null,
       compMax: j.salary_max ? Math.round(j.salary_max) : null,
