@@ -26,22 +26,109 @@ export type BoardRow = {
   applyUrl: string | null;
   postedAt: string | null;
   firstSeenAt: string;
+  sourceId: string;
+  sourceLabel: string | null;
+  compMin: number | null;
+  compMax: number | null;
+  compCurrency: string | null;
+  compPeriod: string | null;
   fit: number | null;
   cluster: string | null;
+  titleScore: number | null;
+  keywordScore: number | null;
+  seniorityScore: number | null;
+  geoScore: number | null;
+  compScore: number | null;
   blockers: unknown;
   reasons: unknown;
+  descriptionLength: number;
   status: string | null;
   appliedAt: string | null;
 };
 
-/** The main board: open jobs, best fit first, joined with pipeline state. */
-export async function listBoard(opts: {
+export type BoardFilters = {
   minFit?: number;
-  status?: ApplicationStatus | "unfiled";
+  cluster?: string;
+  status?: ApplicationStatus | "unfiled" | "any";
+  /** Free text over title and company. */
+  q?: string;
+  sourceKind?: string;
+  /** Hide anything with a hard blocker — work authorisation, on-site, W2. */
+  hideBlocked?: boolean;
+  /** Only postings published within N days. */
+  freshDays?: number;
+  /** Only postings that disclose pay. */
+  hasComp?: boolean;
+  /**
+   * Only postings where the employer is actually named.
+   *
+   * Jobgether — 4.639 of the corpus — anonymises the employer by design
+   * ("on behalf of a partner company"), so `company_name` equals the source
+   * label. Those jobs cannot be researched, cannot be matched against your
+   * network, and cannot dedupe against the same role on the company's own
+   * board. This filter is how you get them out of the way.
+   */
+  namedEmployer?: boolean;
+  /**
+   * Only postings whose description is long enough to score on keywords.
+   *
+   * A posting with no body scores 0 on a component worth 30 points, so its fit
+   * is not low — it is *unmeasured*. Job alerts arrive this way by design
+   * (ADR 0008 Trava 2 forbids following the link), so the distinction has to be
+   * visible rather than silently depressing the rank.
+   */
+  hasDescription?: boolean;
+  sort?: "fit" | "recent" | "comp";
   limit?: number;
-} = {}): Promise<BoardRow[]> {
+  offset?: number;
+};
+
+/** The main board: open jobs joined with score and pipeline state. */
+export async function listBoard(opts: BoardFilters = {}): Promise<BoardRow[]> {
   const db = getDb();
-  const minFit = opts.minFit ?? 0;
+  const conditions = [isNull(job.closedAt)];
+
+  conditions.push(gte(sql`coalesce(${jobScore.fit}, 0)`, opts.minFit ?? 0));
+
+  if (opts.cluster) conditions.push(eq(jobScore.cluster, opts.cluster));
+
+  if (opts.q) {
+    const needle = `%${opts.q.toLowerCase()}%`;
+    conditions.push(
+      sql`(lower(${job.title}) like ${needle} or lower(${job.companyName}) like ${needle})`,
+    );
+  }
+
+  if (opts.sourceKind) {
+    conditions.push(sql`${job.sourceId} like ${`${opts.sourceKind}:%`}`);
+  }
+
+  // An empty JSON array is how "no blockers" is stored.
+  if (opts.hideBlocked) conditions.push(sql`coalesce(${jobScore.blockers}, '[]') = '[]'`);
+
+  if (opts.freshDays && opts.freshDays > 0) {
+    const cutoff = new Date(Date.now() - opts.freshDays * 86_400_000).toISOString();
+    // Fall back to first_seen_at: several sources omit a publication date, and
+    // dropping those silently would hide fresh jobs rather than stale ones.
+    conditions.push(sql`coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${cutoff}`);
+  }
+
+  if (opts.hasComp) conditions.push(sql`coalesce(${job.compMax}, ${job.compMin}, 0) > 0`);
+
+  if (opts.hasDescription) {
+    conditions.push(sql`length(coalesce(${job.descriptionText}, '')) >= 200`);
+  }
+
+  if (opts.namedEmployer) {
+    conditions.push(sql`lower(${job.companyName}) <> lower(coalesce(${source.label}, ''))`);
+  }
+
+  const order =
+    opts.sort === "recent"
+      ? [desc(sql`coalesce(${job.postedAt}, ${job.firstSeenAt})`)]
+      : opts.sort === "comp"
+        ? [desc(sql`coalesce(${job.compMax}, ${job.compMin}, 0)`), desc(sql`coalesce(${jobScore.fit}, 0)`)]
+        : [desc(sql`coalesce(${jobScore.fit}, 0)`), desc(job.firstSeenAt)];
 
   const rows = await db
     .select({
@@ -53,23 +140,80 @@ export async function listBoard(opts: {
       applyUrl: job.applyUrl,
       postedAt: job.postedAt,
       firstSeenAt: job.firstSeenAt,
+      sourceId: job.sourceId,
+      sourceLabel: source.label,
+      compMin: job.compMin,
+      compMax: job.compMax,
+      compCurrency: job.compCurrency,
+      compPeriod: job.compPeriod,
       fit: jobScore.fit,
       cluster: jobScore.cluster,
+      titleScore: jobScore.titleScore,
+      keywordScore: jobScore.keywordScore,
+      seniorityScore: jobScore.seniorityScore,
+      geoScore: jobScore.geoScore,
+      compScore: jobScore.compScore,
       blockers: jobScore.blockers,
       reasons: jobScore.reasons,
+      descriptionLength: sql<number>`length(coalesce(${job.descriptionText}, ''))`,
       status: application.status,
       appliedAt: application.appliedAt,
     })
     .from(job)
     .leftJoin(jobScore, eq(jobScore.jobId, job.id))
     .leftJoin(application, eq(application.jobId, job.id))
-    .where(and(isNull(job.closedAt), gte(sql`coalesce(${jobScore.fit}, 0)`, minFit)))
-    .orderBy(desc(sql`coalesce(${jobScore.fit}, 0)`), desc(job.firstSeenAt))
-    .limit(opts.limit ?? 200);
+    .leftJoin(source, eq(source.id, job.sourceId))
+    .where(and(...conditions))
+    .orderBy(...order)
+    .limit(opts.limit ?? 200)
+    .offset(opts.offset ?? 0);
 
+  // Pipeline status has no index worth a SQL branch at this size.
   if (opts.status === "unfiled") return rows.filter((r) => r.status === null);
-  if (opts.status) return rows.filter((r) => r.status === opts.status);
+  if (opts.status && opts.status !== "any") {
+    return rows.filter((r) => r.status === opts.status);
+  }
   return rows;
+}
+
+/**
+ * How many rows match, without fetching them.
+ *
+ * Needed for pagination: the page shows 50 of N, and N cannot come from the
+ * page itself. Re-uses the same predicate builder so a filter can never mean
+ * one thing in the list and another in the count.
+ */
+export async function countBoard(opts: BoardFilters = {}): Promise<number> {
+  // Status lives outside SQL (see listBoard), so a status filter must count
+  // through the same path rather than a separate COUNT.
+  if (opts.status && opts.status !== "any") {
+    const rows = await listBoard({ ...opts, limit: 5000, offset: 0 });
+    return rows.length;
+  }
+  const rows = await listBoard({ ...opts, limit: 5000, offset: 0 });
+  return rows.length;
+}
+
+/** Counts for the filter chips, so the UI can show what each option yields. */
+export async function boardFacets(base: BoardFilters = {}) {
+  const [all, blocked, fresh, withComp, named, described] = await Promise.all([
+    listBoard({ ...base, limit: 5000 }),
+    listBoard({ ...base, hideBlocked: true, limit: 5000 }),
+    listBoard({ ...base, freshDays: 3, limit: 5000 }),
+    listBoard({ ...base, hasComp: true, limit: 5000 }),
+    listBoard({ ...base, namedEmployer: true, limit: 5000 }),
+    listBoard({ ...base, hasDescription: true, limit: 5000 }),
+  ]);
+  return {
+    total: all.length,
+    unblocked: blocked.length,
+    fresh: fresh.length,
+    withComp: withComp.length,
+    named: named.length,
+    described: described.length,
+    clusters: [...new Set(all.map((r) => r.cluster).filter(Boolean))] as string[],
+    sources: [...new Set(all.map((r) => r.sourceId.split(":")[0]))] as string[],
+  };
 }
 
 /** Move a job through the pipeline and record the transition. */

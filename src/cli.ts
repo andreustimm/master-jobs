@@ -25,6 +25,7 @@ import {
 import { decideSuggestion, importMail, listSuggestions } from "./core/mail/run.ts";
 import { addJob } from "./core/ingest/manual.ts";
 import { syncAll, pruneClosed } from "./core/ingest/run.ts";
+import { verifyJobs } from "./core/ingest/verify.ts";
 import { loadProfile } from "./core/profile/load.ts";
 import { buildReport } from "./core/report/markdown.ts";
 import { seedPositioning } from "./core/positioning/seed.ts";
@@ -489,6 +490,57 @@ jobs
       const scored = await scoreAll();
       if (scored.fxWarning) console.log(c.yellow(`  ! ${scored.fxWarning}`));
       console.log(`${c.bold("Scoring")} ${scored.scored} pontuada(s)\n`);
+    });
+  });
+
+jobs
+  .command("verify")
+  .description("Check that top-ranked postings still exist — closes the ones that 404")
+  .option("--min-fit <n>", "only verify above this fit", "55")
+  .option("--limit <n>", "how many to check", "100")
+  .option("--dry-run", "report without closing anything")
+  .action(async (opts: { minFit: string; limit: string; dryRun?: boolean }) => {
+    await withDb(async () => {
+      let last = 0;
+      const r = await verifyJobs({
+        minFit: Number(opts.minFit),
+        limit: Number(opts.limit),
+        dryRun: opts.dryRun,
+        onProgress: (done, total) => {
+          if (done - last >= 20 || done === total) {
+            process.stdout.write(`\r  ${done}/${total} verificadas`);
+            last = done;
+          }
+        },
+      });
+      process.stdout.write("\r\x1b[K");
+
+      console.log(
+        `\n${c.green("\u2713")} ${r.checked} verificadas · ` +
+        `${c.green(`${r.alive} vivas`)} · ${c.red(`${r.gone} mortas`)} · ` +
+        c.dim(`${r.inconclusive} inconclusivas`),
+      );
+
+      const kinds = Object.entries(r.bySource).sort((a, b) => b[1].gone - a[1].gone);
+      if (kinds.length > 0) {
+        console.log();
+        for (const [kind, s] of kinds) {
+          const total = s.gone + s.alive + s.inconclusive;
+          const rate = total > 0 ? Math.round((s.gone / total) * 100) : 0;
+          console.log(
+            `  ${truncate(kind, 18)} ${String(s.gone).padStart(3)} mortas de ${String(total).padStart(3)}` +
+            (rate > 0 ? c.red(`  ${rate}%`) : ""),
+          );
+        }
+      }
+
+      if (r.inconclusive > 0) {
+        console.log(
+          c.dim("\n  Inconclusivas são bloqueio de bot (403) ou erro de rede — não foram fechadas."),
+        );
+      }
+      if (opts.dryRun) console.log(c.dim("  --dry-run: nada foi fechado."));
+      console.log();
     });
   });
 

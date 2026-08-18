@@ -39,14 +39,44 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
         <p className="mono" style={{ color: "var(--text-3)", fontSize: 11.5, margin: "6px 0 0" }}>
           {source?.label ?? job.sourceId} · visto em {job.firstSeenAt.slice(0, 10)}
         </p>
-        <a
-          href={job.applyUrl ?? job.url}
-          target="_blank"
-          rel="noopener"
-          style={{ display: "inline-block", marginTop: 14, color: "var(--accent)", fontSize: 14 }}
-        >
-          {job.applyUrl ?? job.url}
-        </a>
+        <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+          <a
+            href={job.url}
+            target="_blank"
+            rel="noopener"
+            style={{
+              padding: "8px 16px",
+              borderRadius: 6,
+              border: "1px solid var(--line)",
+              color: "var(--text)",
+              textDecoration: "none",
+              fontSize: 14,
+            }}
+          >
+            Ver vaga na origem
+          </a>
+          {job.applyUrl && job.applyUrl !== job.url && (
+            <a
+              href={job.applyUrl}
+              target="_blank"
+              rel="noopener"
+              style={{
+                padding: "8px 16px",
+                borderRadius: 6,
+                background: "var(--accent)",
+                color: "#fff",
+                textDecoration: "none",
+                fontSize: 14,
+                fontWeight: 600,
+              }}
+            >
+              Aplicar →
+            </a>
+          )}
+        </div>
+        <p className="mono" style={{ fontSize: 11, color: "var(--text-3)", marginTop: 8, wordBreak: "break-all" }}>
+          {job.url}
+        </p>
       </header>
 
       {score && (
