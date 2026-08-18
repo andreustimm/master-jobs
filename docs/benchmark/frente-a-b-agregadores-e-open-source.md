@@ -1,3 +1,170 @@
+# Benchmark competitivo — job-hunt-os
+
+**Data:** 18 de agosto de 2026
+**Escopo:** Frente A (agregadores e marketplaces de talento) + Frente B
+(alternativas open source e self-hosted)
+**Perfil de referência:** arquiteto de IA sênior, 20+ anos, no Brasil, contractor
+B2B remoto, **sem autorização de trabalho nos EUA**, mirando Architect / Staff /
+AI-Lead nos EUA, Canadá e Europa.
+
+## Método e honestidade dos dados
+
+- Estrelas, datas de último commit, licenças e status de arquivamento vieram da
+  **API do GitHub**, consultadas em 18/08/2026 — não de estimativa.
+- Status de API, redirects e volume de vagas foram verificados por **requisição
+  direta** na data acima; os códigos HTTP estão citados no texto.
+- Números da nossa própria base saíram de consultas SQL em `data/jobs.db`.
+- Onde a fonte primária não publica um dado (preço, política geográfica), está
+  escrito **"não publicado"**. Nada foi preenchido por inferência.
+
+> **Aviso sobre o resultado.** Este benchmark encontrou um concorrente open source
+> que faz, hoje, mais do que nós em quase todas as dimensões que consideramos
+> nossas. A Seção 3 trata disso sem atenuação. Um benchmark que só confirmasse a
+> tese do produto não teria valor.
+
+---
+
+## Resumo executivo — as cinco conclusões
+
+1. **Existe um concorrente open source que nos domina na coleta.**
+   [career-ops](https://github.com/santifer/career-ops) (65.306 estrelas, MIT,
+   commits diários) tem **75 providers de vagas** e cobre **todas as nossas 12
+   fontes**, com a mesma tese arquitetural — API pública, zero-auth. Não há uma
+   fonte nossa que ele não tenha, salvo o Adzuna.
+
+2. **Nossa vantagem real é o scoring determinístico, e ela é estreita mas
+   defensável.** career-ops pontua com LLM por vaga (não reprodutível, custo
+   marginal por vaga, "740+ vagas avaliadas" numa busca inteira). Nós pontuamos
+   5.021 num run a custo zero, com nota decomponível e `SCORER_VERSION`
+   versionado. A arquitetura certa combina os dois: determinístico para triagem
+   de massa, LLM para os finalistas.
+
+3. **Nosso funil está quebrado onde importa.** De 5.021 vagas coletadas, **1**
+   passa de 70 de fit e **nenhuma** passa de 80. E 92,4% da base vem de uma única
+   fonte (Lever). O gargalo não é coleta.
+
+4. **A Frente A inteira é irrelevante como fonte de dados.** Nenhum marketplace
+   de talento expõe API pública utilizável (Wellfound responde 403; Hired e Otta
+   nem existem mais como marcas independentes). Eles importam como canal de
+   colocação, não de listagem.
+
+5. **Para este perfil, o canal decide mais que o ranqueamento.** Referrals são 7%
+   dos candidatos e 40% das contratações; 18–27% dos anúncios são ghost jobs; e a
+   fraude de localização em massa fez o filtro de work authorization virar defesa
+   anti-fraude — o que elimina um arquiteto brasileiro legítimo junto com o
+   ruído. Nenhum ajuste no scorer conserta um problema de canal.
+
+---
+
+# Frente A — Agregadores e marketplaces para talento sênior / remoto / contractor
+
+> Coluna crítica: **contrata contractor a partir do Brasil?**
+> Status de API e redirects verificados por requisição direta em 18/08/2026.
+> Onde a fonte primária não publica a informação, está escrito
+> "não publicado" — não foi preenchido por inferência.
+
+## 1. Tabela dos agregadores e marketplaces
+
+| Plataforma | Público | API pública? | Contrata do Brasil? | Quem paga |
+|---|---|---|---|---|
+| [Welcome to the Jungle (ex-Otta)](https://uk.welcometothejungle.com/) | Tech/startups, UK/EU/US | **Parcial** — `api.welcometothejungle.com/api/v1/organizations` responde 200 sem auth | Vagas majoritariamente EU/UK com direito a trabalho local | Empresa |
+| [Wellfound (ex-AngelList Talent)](https://wellfound.com/) | Startups, early-stage | **Não** — `/api/jobs` responde **403**; site bloqueia automação | Maioria exige US work auth; filtro de remoto existe mas é fraco | Empresa |
+| [Hired](https://www.lhh.com/us/en/hired/) | Marketplace reverso | **Não** | **Marca absorvida** — `hired.com` redireciona (301) para LHH/Adecco | Empresa |
+| [Toptal](https://www.toptal.com/freelance-jobs) | Freelance "top 3%" | **Não** | Sim — "freelancers de todo o mundo"; sem restrição geográfica publicada | **Empresa** (Toptal fatura o cliente; sem taxa publicada ao freelancer) |
+| [Braintrust](https://www.usebraintrust.com/) | Marketplace de talento | **Não** | **Sim** — "global talent pool across 100+ countries" | **Empresa** — "zero platform fees for talent"; talento fica com 100% |
+| [A.Team](https://www.a.team/join) | Times sob demanda, sênior | **Não** | Não publicado (escritórios NY/Tel Aviv) | **Empresa** — "you set your rate, we don't skim it"; aceitação <2% |
+| [Lemon.io](https://lemon.io/for-developers/) | Freelance dev p/ startups | **Não** | **Sim, na prática** — depoimento oficial cita dev trabalhando do Brasil; paga via Wise/Payoneer | Empresa (Lemon.io paga o dev direto) |
+| [Gun.io](https://gun.io) | Freelance sênior | **Não** (403 a automação) | Não publicado | Empresa |
+| [Arc.dev](https://arc.dev/remote-jobs) | Remoto global | **Não** | **Sim — explícito**, tem trilha "Remote jobs in Brazil" e demais países LATAM | Empresa |
+| [Turing](https://www.turing.com/jobs) | Devs p/ empresas US | **Não** | Não publicado; posiciona-se como "globally distributed", contrata como contractor | Empresa (gratuito p/ dev) |
+| [Andela](https://www.andela.com/) | Talento AI-native | **Não** | **Sim** — cita time "de Europa, Quênia, **Brasil**, Índia e América do Norte" | Empresa |
+| [X-Team](https://x-team.com) | Staff augmentation | **Não** | Não publicado | Empresa |
+
+### Observações verificadas de primeira mão
+
+- **Otta não existe mais como marca independente.** `otta.com` responde **301**
+  para `uk.welcometothejungle.com`. A aquisição pela Welcome to the Jungle foi
+  [anunciada em janeiro de 2024](https://press.welcometothejungle.com/en/news/uk-recruitment-platform-otta-acquired-by-welcome-to-the-jungle).
+- **Hired foi absorvida.** `hired.com` responde **301** para
+  `lhh.com/us/en/hired/` (LHH, grupo Adecco). Não é mais o marketplace reverso
+  independente que era.
+- **Wellfound bloqueia acesso programático** — `403` em `/api/jobs`. Integração só
+  por scraping com browser, com o risco de ToS correspondente.
+- **Braintrust é o modelo economicamente mais favorável ao talento** entre os
+  verificados: [a página de preços](https://www.usebraintrust.com/pricing) afirma
+  "zero platform fees for talent" — o talento fica com 100% da tarifa e a margem
+  vem do lado do cliente. A.Team faz afirmação equivalente ("we don't skim it").
+- **Toptal não publica a taxa cobrada do freelancer.** A página oficial diz apenas
+  que o freelancer define a própria tarifa e que a Toptal fatura o cliente. O
+  markup sobre o cliente **não é publicado**.
+
+### Leitura de R&S sobre a Frente A
+
+Nenhuma dessas plataformas expõe API pública utilizável — a única exceção parcial
+é a Welcome to the Jungle. **Do ponto de vista de integração no job-hunt-os, a
+Frente A inteira é irrelevante como fonte de dados.** O valor dela é outro: são
+canais de *colocação*, não de *listagem*.
+
+E como canal de colocação para este perfil, o ranking é curto:
+
+1. **Braintrust e A.Team** — economicamente os melhores (talento fica com 100%),
+   explicitamente globais, posicionados em sênior. Braintrust confirma 100+ países.
+2. **Arc.dev** — o único que assume publicamente trilha para o Brasil.
+3. **Lemon.io** — aceita LATAM e paga via Wise/Payoneer, mas a faixa divulgada
+   ("senior a partir de US$ 55/h") fica abaixo do que um arquiteto com 20+ anos
+   deveria cobrar. Serve como fluxo de caixa, não como destino.
+4. **Toptal** — alcance global e tarifas melhores, mas o processo de triagem é
+   longo e a taxa cobrada do cliente não é transparente.
+5. **Turing / Andela / X-Team** — modelo de staff augmentation. Andela pivotou
+   para "AI-native engineers" com trilhas Builders/Integrators/Scalers. Tendem a
+   posicionar o profissional como capacidade alocada, não como arquiteto — o que
+   é o oposto do posicionamento-alvo.
+6. **Wellfound e Welcome to the Jungle** — bons boards, mas o inventário é
+   majoritariamente preso a direito de trabalho local (US/UK/EU).
+
+---
+
+# Frente B — Alternativas open source e self-hosted
+
+> Dados coletados via API do GitHub em **18/08/2026**. Estrelas, datas de último
+> push e licenças foram verificadas na origem, não estimadas.
+
+## 2. Tabela dos projetos open source
+
+| Projeto | Estrelas | Último push | Fontes de dados | Faz scoring? | Licença |
+|---|---:|---|---|---|---|
+| [santifer/career-ops](https://github.com/santifer/career-ops) | **65.306** | 2026-08-18 | Greenhouse, Ashby, Lever, Wellfound (150+ career pages pré-configuradas) + HN "Who is hiring" via Algolia | **Sim** — rubrica A–G avaliada por LLM, nota 1.0–5.0 | MIT |
+| [feder-cr/Jobs_Applier_AI_Agent_AIHawk](https://github.com/feder-cr/Jobs_Applier_AI_Agent_AIHawk) | **30.203** | 2026-08-18 | LinkedIn (Selenium) | Não — foca em auto-apply e geração de CV | AGPL-3.0 |
+| [speedyapply/JobSpy](https://github.com/speedyapply/JobSpy) | **4.107** | 2026-02-18 | LinkedIn, Indeed, Glassdoor, Google, ZipRecruiter, Bayt, Naukri, BDJobs (scraping) | Não — só coleta, devolve DataFrame | MIT |
+| [DaKheera47/job-ops](https://github.com/DaKheera47/job-ops) | **3.855** | 2026-08-18 | Ingestão manual + extensão; self-hosted (Next.js/Docker) | Parcial — análise assistida por LLM | NOASSERTION |
+| [GodsScion/Auto_job_applier_linkedIn](https://github.com/GodsScion/Auto_job_applier_linkedIn) | 2.710 | 2026-08-10 | LinkedIn (Selenium) | Não | MIT |
+| [PaulMcInnis/JobFunnel](https://github.com/PaulMcInnis/JobFunnel) | 2.179 | 2025-12-10 | Indeed, Monster (scraping estático) | Não — dedup + CSV | MIT |
+| [Gsync/jobsync](https://github.com/Gsync/jobsync) | 909 | 2026-08-18 | Entrada manual; tracker self-hosted com Ollama | Parcial — review de CV e match por LLM | MIT |
+| [wodsuz/EasyApplyJobsBot](https://github.com/wodsuz/EasyApplyJobsBot) | 808 | 2026-05-18 | LinkedIn, Glassdoor (Easy Apply) | Não | NOASSERTION |
+| [DanielPan12/JobHuntBot](https://github.com/DanielPan12/JobHuntBot) | 465 | 2026-08-08 | Agent-driven, multi-board | Parcial | MIT |
+| [Donvink/swiss-job-hunter](https://github.com/Donvink/swiss-job-hunter) | 137 | 2026-08-04 | 7 job boards suíços | **Sim** — score contra o CV | AGPL-3.0 |
+| [kalil0321/ats-scrapers](https://github.com/kalil0321/ats-scrapers) | 131 | 2026-08-07 | **ATS puros** — mesma tese de coleta que a nossa | Não — é dataset | MIT |
+| [theihasan/geezap](https://github.com/theihasan/geezap) | 129 | 2026-03-17 | Agregação multi-API (Laravel) | Parcial | não declarada |
+| [vesaias/JobNavigator](https://github.com/vesaias/JobNavigator) | 13 | 2026-08-16 | Multi-source scraping | **Sim** — AI scoring | MIT |
+
+### O caso JobFunnel — a lápide que valida nossa arquitetura
+
+JobFunnel está **arquivado** (`archived: true` na API do GitHub). O autor não
+abandonou por desinteresse; ele explicou o motivo no próprio README:
+
+> "JobFunnel foi construído numa era em que os grandes job boards expunham HTML
+> majoritariamente estático com paginação simples. (…) Desde então, a maioria dos
+> job boards migrou para anti-automação e detecção de bots muito mais agressivas.
+> Reimplementar o JobFunnel sobre automação de browser completa (…) é tecnicamente
+> possível, mas lento demais, frágil demais e operacionalmente complexo demais
+> (…). Em vez de fingir que isso ainda funciona, estou arquivando o projeto."
+> — [README do JobFunnel](https://github.com/PaulMcInnis/JobFunnel)
+
+Isso é a evidência mais forte a favor da nossa escolha de **API pública em vez de
+scraping**: 2.179 estrelas não impediram o projeto de morrer pelo lado da coleta.
+
+---
+
 ## 3. O que já existe e faz melhor que nós
 
 ### 3.1 career-ops: nossa camada de coleta é um subconjunto estrito da dele

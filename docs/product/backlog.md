@@ -101,6 +101,20 @@ Decisão de fronteira que precisa ser acertada: o que é por candidato (perfil,
 alvos, restrições, ranges, benefícios, funil) e o que é compartilhado (corpus de
 vagas, registro de empresas, taxas de câmbio). Errar essa linha é caro.
 
+### F-04 · Fontes autenticadas: Revelo, BairesDev, marketplaces 📋
+
+Andreus já trabalhou via **Revelo** (MPC) e **BairesDev** (ADT Solar, Red
+Ventures), e mantém conta ativa nas duas. As vagas dessas plataformas só existem
+dentro da área logada — a API da Revelo devolve 401 e usa Keycloak SSO com token
+em memória, sem credencial reutilizável.
+
+Investigação completa em `docs/sources-autenticadas.md`. Caminho proposto:
+leitura assistida via extensão do Chrome, com as vagas entrando por
+`jho jobs add`. Nunca adapter automático sem ADR própria.
+
+> **Invariante:** ausência de cláusula proibindo automação nos termos não é
+> permissão. Vale o mesmo rigor da ADR 0001.
+
 ### F-03 · Referral não é rastreado 📋
 
 O campo `application.channel` existe e nada o alimenta. Referral vale ordens de
