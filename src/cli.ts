@@ -12,6 +12,7 @@ import { runMigrations } from "./core/db/migrate.ts";
 import { listBoard, pipelineCounts, setApplicationStatus } from "./core/db/repo.ts";
 import { application, job, jobScore, positioningTask, source } from "./core/db/schema.ts";
 import { APPLICATION_STATUSES } from "./core/db/schema.ts";
+import { addJob } from "./core/ingest/manual.ts";
 import { syncAll, pruneClosed } from "./core/ingest/run.ts";
 import { loadProfile } from "./core/profile/load.ts";
 import { buildReport } from "./core/report/markdown.ts";
@@ -308,6 +309,71 @@ jobs
         if (blockers.length > 0) console.log(c.red(`       ⚠ ${blockers.join("; ")}`));
       }
       console.log(c.dim(`\n  ${rows.length} row(s). Details: jho jobs show <id>\n`));
+    });
+  });
+
+jobs
+  .command("add <url>")
+  .description("Register a job by URL — pulls the full posting when the ATS is known")
+  .option("-t, --title <text>", "title, when the URL cannot be resolved")
+  .option("-c, --company <name>", "company, when the URL cannot be resolved")
+  .option("-l, --location <text>", "location as advertised")
+  .option("-d, --description <text>", "job description; without it keyword scoring is 0")
+  .option("--posted <date>", "publication date (ISO)")
+  .option("-n, --notes <text>", "your own note about this job")
+  .option("-s, --status <name>", "put it straight into the funnel")
+  .action(async (url: string, opts: {
+    title?: string; company?: string; location?: string;
+    description?: string; posted?: string; notes?: string; status?: string;
+  }) => {
+    await withDb(async () => {
+      await runMigrations();
+      const result = await addJob({
+        url,
+        title: opts.title,
+        companyName: opts.company,
+        location: opts.location,
+        description: opts.description,
+        postedAt: opts.posted,
+        notes: opts.notes,
+      });
+
+      for (const w of result.warnings) console.log(c.yellow(`  ! ${w}`));
+
+      const verb = result.created ? "added" : "already known, updated";
+      const how = result.via === "ats" ? c.green(`via ${result.kind} API`) : c.dim("manual entry");
+      console.log(
+        `${c.green("\u2713")} ${verb}: ${c.bold(result.title)} \u2014 ${result.companyName} ` +
+        `${c.dim(`#${result.jobId}`)} ${how}`,
+      );
+
+      // Score immediately so the new row is comparable with everything else.
+      const scored = await scoreAll();
+      if (scored.scored > 0) {
+        const rows = await getDb()
+          .select({ fit: jobScore.fit, cluster: jobScore.cluster, blockers: jobScore.blockers })
+          .from(jobScore)
+          .where(eq(jobScore.jobId, result.jobId))
+          .limit(1);
+        const s = rows[0];
+        if (s) {
+          console.log(`  fit ${c.bold(s.fit.toFixed(1))} ${c.dim(`(cluster: ${s.cluster})`)}`);
+          const blockers = s.blockers as string[];
+          if (blockers.length > 0) console.log(c.red(`  \u26a0 ${blockers.join("; ")}`));
+        }
+      }
+
+      if (opts.status) {
+        if (!(APPLICATION_STATUSES as readonly string[]).includes(opts.status)) {
+          console.error(c.red(`Unknown status "${opts.status}"`));
+          process.exitCode = 1;
+          return;
+        }
+        await setApplicationStatus(result.jobId, opts.status as never, opts.notes);
+        console.log(`  ${c.cyan(opts.status)} \u2014 tracked`);
+      }
+
+      console.log(c.dim(`\n  Detalhes: jho jobs show ${result.jobId}\n`));
     });
   });
 
