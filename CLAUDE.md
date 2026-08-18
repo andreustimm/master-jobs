@@ -5,42 +5,47 @@ Sistema de sourcing, scoring e gestão de candidaturas de **Andreus Timm**
 **sem autorização de trabalho nos EUA**).
 
 Objetivo: encontrar vagas que dão match com o perfil, ranqueá-las de forma
-auditável, e gerenciar o funil de candidaturas. Hoje roda **localmente**.
+auditável, e gerenciar o funil de candidaturas. Roda **localmente** — CLI +
+dashboard Next.js em `localhost:3000`.
 
 ---
 
 ## Regras invioláveis
 
 > **1. Nunca faça scraping do LinkedIn.**
-> Nada neste repositório pode ler `li_at`, dirigir uma sessão autenticada,
-> ou usar um "LinkedIn MCP" não oficial. Isso viola a seção 8.2 do User
-> Agreement e coloca em risco a conta que é o principal ativo de
-> posicionamento do usuário. Publicação usa a API oficial
-> (`w_member_social`); comentários, conexões e busca são **assistidos** —
-> o agente redige, o humano executa. Detalhes: `docs/linkedin-policy.md`.
+> Nada aqui pode ler `li_at`, dirigir sessão autenticada, ou usar "LinkedIn MCP"
+> não oficial. Viola a §8.2 do User Agreement e arrisca a conta que é o
+> principal ativo de posicionamento do usuário. Publicação usaria a API oficial
+> (`w_member_social`); comentários e conexões são **assistidos**.
+> **Job alert por e-mail é permitido** e é a via legítima — ver ADR 0008.
+> Detalhes: `docs/linkedin-policy.md`, `docs/adr/0001`, `docs/adr/0008`.
 
 > **2. Ingestão nunca escreve em `application`.**
-> A tabela `application` é estado do usuário. Sync pode inserir, atualizar e
-> fechar `job`, mas jamais toca decisões. Quebrar isso destrói histórico.
+> Sync, import e parsing de e-mail mexem em `job`; jamais em decisões do
+> usuário. E-mail produz **sugestões** em `mail_suggestion`, que o usuário
+> aceita ou descarta. Quebrar isso destrói o único dado irrecuperável.
 
-> **3. Vaga que some é fechada, não deletada.**
-> Marque `closedAt`. Deletar quebra o histórico de candidaturas.
+> **3. Vaga que some é fechada (`closedAt`), nunca deletada.**
+> Deletar quebra o histórico de candidaturas por foreign key.
 
 > **4. Só sintaxe TypeScript apagável.**
-> O runtime é o type stripping nativo do Node 24 — sem `enum`, sem parameter
-> properties (`constructor(private x: T)`), sem `namespace`, sem decorators.
-> `erasableSyntaxOnly: true` está ligado no `tsconfig.json` para pegar isso
-> em tempo de checagem. Se o `pnpm jho` estourar `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`,
-> é isso.
+> Runtime é o type stripping nativo do Node 24: sem `enum`, sem parameter
+> properties, sem `namespace`, sem decorators. `erasableSyntaxOnly: true` no
+> `tsconfig.json`. Se `pnpm jho` estourar `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`,
+> é isso. Imports relativos carregam extensão `.ts` explícita.
 
-> **5. Mexeu em `profile.yaml` ou no scorer? Bump `SCORER_VERSION`.**
-> Fica em `src/core/scoring/score.ts`. Depois rode `pnpm jho jobs score --all`.
-> Sem o bump, scores antigos ficam misturados com novos e ninguém percebe.
+> **5. Mexeu no scorer ou em `profile.yaml`? Bump `SCORER_VERSION`.**
+> Fica em `src/core/scoring/score.ts` (hoje `1.1.0`). Depois
+> `pnpm jho jobs score --all`. Sem o bump, duas gerações de score convivem na
+> mesma coluna sem sinal visível.
 
 > **6. Não invente evidência.**
-> O agente de tailoring de CV só pode citar o que está em `profile.yaml`
-> na chave `evidence`. O que está em `growth` é lacuna assumida — sinalize,
-> nunca maquie.
+> Tailoring de CV só cita o que está em `evidence:` no `profile.yaml`.
+> O que está em `growth:` é lacuna assumida — sinalize, nunca maquie.
+
+> **7. `??` não protege contra string vazia.**
+> Várias APIs devolvem `""` para campo não preenchido. Use `firstNonEmpty()`
+> de `src/core/sources/http.ts`. Esse bug já apagou 4.538 descrições uma vez.
 
 ---
 
@@ -48,23 +53,52 @@ auditável, e gerenciar o funil de candidaturas. Hoje roda **localmente**.
 
 ```bash
 pnpm install
+pnpm dev                     # dashboard em localhost:3000
+
+# banco
 pnpm jho db migrate          # cria/atualiza o schema
-pnpm jho jobs sync           # busca todas as fontes + score automático
+pnpm jho db seed             # plano de posicionamento + baseline de métricas
+pnpm jho db prune --days 90  # remove vagas fechadas sem candidatura
+
+# sourcing
+pnpm jho jobs sync           # busca todas as fontes + pontua
+pnpm jho jobs score --all    # repontua tudo
+pnpm jho jobs verify         # checa se as vagas do topo ainda existem (404 → fecha)
+pnpm jho jobs add <url>      # cadastra vaga por URL, resolvendo pelo ATS
+pnpm jho jobs import <file> --source revelo   # importa JSON de plataforma logada
+pnpm jho sources list        # saúde das fontes
+pnpm jho sources probe ashby textlayer        # testa um handle sem gravar
+
+# triagem e funil
 pnpm jho jobs list --min-fit 60
 pnpm jho jobs show <id>      # breakdown completo do score
-pnpm jho track <id> applied  # move no funil
-pnpm jho pipeline            # estado do funil
-pnpm jho report              # exporta markdown pro vault Obsidian
-pnpm jho sources list        # saúde das fontes
-pnpm jho sources probe ashby textlayer   # testa um handle sem gravar nada
-pnpm jho profile             # valida profile.yaml
-pnpm jho db seed             # carrega o plano de posicionamento (auditoria §14)
-pnpm jho tasks list          # plano de posicionamento em aberto
-pnpm jho tasks done PT-0001  # conclui um item do plano
+pnpm jho track <id> applied --channel referral
+pnpm jho pipeline
 
-pnpm test                    # vitest
-pnpm typecheck               # tsgo --noEmit
-pnpm check                   # typecheck + test
+# câmbio
+pnpm jho fx refresh          # cotações do BCE (Frankfurter)
+pnpm jho fx show
+
+# e-mail (ADR 0008)
+pnpm jho mail import ~/mail --dry-run
+pnpm jho mail suggestions    # mudanças de funil sugeridas por e-mail
+pnpm jho mail accept <id> | dismiss <id>
+
+# rede e referrals
+pnpm jho contacts seed       # empresas onde já trabalhou
+pnpm jho contacts add "Nome" -c Empresa -k former
+pnpm jho referrals           # vagas onde já conhece alguém
+
+# posicionamento
+pnpm jho tasks list --horizon 24h
+pnpm jho tasks done PT-0001
+
+# saída
+pnpm jho report              # markdown pro vault Obsidian
+pnpm jho profile             # valida profile.yaml
+
+# desenvolvimento
+pnpm check                   # typecheck + testes — verde antes de qualquer entrega
 pnpm db:generate             # gera migration após editar schema.ts
 ```
 
@@ -75,65 +109,88 @@ Referência completa: `docs/cli.md`.
 ## Arquitetura
 
 ```
-src/core/          lógica pura, compartilhada entre CLI e futura UI Next.js
-  db/              schema Drizzle, client libSQL, queries, migrations
-  sources/         um adapter por board público (ATS + agregadores)
-  ingest/          normalização, fingerprint, upsert idempotente
+src/core/          lógica pura, compartilhada entre CLI e UI
+  db/              schema Drizzle (14 tabelas), client libSQL, queries, migrations
+  sources/         um adapter por board público + registry
+  ingest/          normalização, fingerprint, upsert, import manual, verificação
   scoring/         fit score determinístico + persistência
   profile/         carga e validação de profile.yaml (Zod)
-  report/          export markdown pro vault
-src/cli.ts         Commander — toda a superfície de uso hoje
+  mail/            parser MIME, classificador, extrator de job alert
+  positioning/     plano da auditoria como dados
+  report/          export markdown
+  money.ts         value object (amount + currency + period)
+  fx.ts            cotações com cache
+  contacts.ts      rede profissional e referrals
+src/cli.ts         Commander
+app/               dashboard Next.js 16 — Server Components sobre src/core
 config/sources.yaml   quais boards buscar
 profile/profile.yaml  perfil do candidato — fonte da verdade do scoring
-drizzle/           migrations SQL geradas
 data/jobs.db       banco local (gitignored)
 ```
 
-Fluxo: `sources` → `ingest` → `scoring` → `application` → `report`.
+Fluxo: `sources → ingest → scoring → application → report/UI`.
 
-Detalhes: `docs/architecture.md` e `docs/data-model.md`.
+> **Invariante:** a UI é **adaptador**, não implementação paralela. Server
+> Components chamam as mesmas funções de `src/core` que a CLI chama, e a única
+> mutação passa por `setApplicationStatus`. Nunca duplique query entre as duas
+> superfícies — coloque em `src/core/db/repo.ts`.
+
+Detalhes: `docs/architecture.md`, `docs/data-model.md`.
+A migração para hexagonal/DDD está decidida em `docs/adr/0007` e rastreada em
+`MIGRATION.md` — **leia antes de criar arquivo novo**.
 
 ---
 
 ## Convenções de código
 
-- **Comentários explicam _por quê_, não _o quê_.** O código já diz o que faz.
-  Comente decisões, trade-offs e armadilhas (ex.: "Greenhouse HTML-escapa o
-  content", "o primeiro item do RemoteOK é aviso legal").
-- **Adapters são burros:** fetch, mapear, retornar. Nada de normalizar,
-  deduplicar ou pontuar dentro de um adapter.
-- **Erros de uma fonte não derrubam o sync.** Registre em `source.lastError`
-  e siga. Um board com handle errado não pode custar as outras 11 fontes.
-- **Tudo idempotente.** Todo comando pode rodar de novo sem estragar nada.
+- **Comentários explicam _por quê_**, não o quê. Comente decisões, trade-offs e
+  armadilhas ("Greenhouse HTML-escapa o content", "o primeiro item do RemoteOK
+  é aviso legal", "Jobgether anonimiza o empregador por design").
+- **Adapters são burros:** fetch, mapear, retornar.
+- **Erro de uma fonte não derruba o sync.** Registra em `source.lastError`.
+- **Tudo idempotente.**
 - **Zod valida o que é editado à mão** (`profile.yaml`, `sources.yaml`).
-  Falhe alto e com mensagem útil, não silenciosamente.
-- **Sem dependência nativa.** libSQL, não `better-sqlite3` — o mesmo driver
-  serve arquivo local hoje e Turso amanhã.
+- **Sem dependência nativa.** libSQL, não `better-sqlite3`.
+- **UI:** shadcn/ui sobre Tailwind v4. `--primary` é o azul do `DESIGN.md`.
+  Estado de filtro vive na URL, não em React — as páginas não enviam JS de
+  cliente.
 
 ---
 
 ## Ao adicionar uma fonte
 
-1. Escreva o adapter em `src/core/sources/` implementando `SourceAdapter`.
-2. Registre em `src/core/sources/registry.ts`.
-3. Adicione em `config/sources.yaml` com um `rationale` — por que essa fonte
-   está na lista.
-4. **Valide contra a API real** antes de commitar:
-   `pnpm jho sources probe <kind> <handle>`.
+1. Adapter em `src/core/sources/` implementando `SourceAdapter`.
+2. Registrar em `registry.ts` e no union `SourceKind` de `types.ts`.
+3. Adicionar em `config/sources.yaml` com `rationale`.
+4. **Validar contra a API real:** `pnpm jho sources probe <kind> <handle>`.
 
-Nunca escreva um mapeamento de campos a partir de documentação sem conferir
-uma resposta real. Todos os adapters atuais foram verificados assim.
+Nunca mapeie campos a partir de documentação sem conferir resposta real.
+
+> **Invariante de qualidade de fonte:** fonte que **nomeia o empregador** vale
+> mais que volume anônimo. O Jobgether responde por 74% do acervo, oculta a
+> empresa por design e teve **25% de links mortos** na verificação; o Braintrust
+> tem 119 vagas, empresa nomeada e elegibilidade por país estruturada.
 
 ---
 
 ## Estado atual
 
-Fase 1 pronta e validada: 12 fontes configuradas, **4.824 vagas ingeridas**
-num sync real, scoring auditável, funil funcionando, export pro Obsidian.
+| Item | Número |
+|---|---:|
+| Vagas abertas | 6.239 |
+| Vagas pontuadas | 6.553 |
+| Empresas | 1.031 |
+| Fontes ativas | 13 |
+| Acima de 45 / 60 / 70 | 1.207 / 175 / 23 |
+| Melhor fit | 85,9 |
+| Testes | 126 |
 
-Não existe ainda: UI Next.js, deploy Vercel, geração de CV/cover letter,
-integração de publicação no LinkedIn. Ver `docs/roadmap.md` — e não descreva
-como pronto o que ainda não está.
+Pronto: sourcing (10 adapters), scoring com moeda, funil, e-mail, referrals,
+verificação de links, dashboard Next.js, export CSV e markdown.
+
+Não existe ainda: deploy, OAuth do Gmail, geração de CV/cover letter,
+publicação no LinkedIn, submissão autônoma. Ver `docs/roadmap.md` — e **não
+descreva como pronto o que não está**.
 
 ---
 
@@ -141,15 +198,20 @@ como pronto o que ainda não está.
 
 | Documento | Quando ler |
 |---|---|
-| `docs/architecture.md` | Entender o sistema inteiro |
+| `docs/architecture.md` | Entender o sistema |
 | `docs/data-model.md` | Mexer no schema ou em queries |
-| `docs/sources.md` | Adicionar/debugar uma fonte |
+| `docs/sources.md` | Adicionar/debugar fonte |
 | `docs/scoring.md` | Ajustar o ranking |
-| `docs/linkedin-policy.md` | **Antes de qualquer coisa envolvendo LinkedIn** |
+| `docs/linkedin-policy.md` | **Antes de qualquer coisa de LinkedIn** |
+| `docs/email-ingestion.md` | Mexer no pipeline de e-mail |
+| `docs/sources-autenticadas.md` | Revelo, BairesDev, marketplaces logados |
 | `docs/cli.md` | Referência de comandos |
-| `docs/operations.md` | Rotina diária/semanal |
+| `docs/operations.md` | Rotina diária e semanal |
 | `docs/roadmap.md` | O que vem depois |
-| `docs/adr/` | Por que as decisões foram tomadas |
+| `docs/benchmark/` | Concorrentes e mercado |
+| `docs/product/` | Visão, backlog priorizado |
+| `docs/adr/` | Por que cada decisão |
+| `MIGRATION.md` | **Antes de criar arquivo novo em `src/`** |
 
 `AGENTS.md` é o espelho deste arquivo para Codex e OpenCode. **Editou um,
-edite o outro** — eles devem dizer a mesma coisa.
+edite o outro.**

@@ -621,3 +621,58 @@ pnpm jho tasks show <PT-XXXX>            # semanal: detalhe de um item do plano
 pnpm jho db seed                         # sob demanda: plano + baseline de métricas (idempotente)
 pnpm check                               # semanal: tsc --noEmit + vitest
 ```
+
+
+## A rotina, atualizada
+
+### Diária
+
+```bash
+pnpm jho jobs sync                       # busca e pontua
+pnpm jho jobs list --min-fit 60          # ou abra localhost:3000
+pnpm jho track <id> shortlisted -n "motivo"
+```
+
+No dashboard, o preset **"Aplicáveis hoje"** (`fit=60&unblocked=1&named=1`) é o
+que vale abrir primeiro: corta bloqueios estruturais e agregadores anônimos de
+uma vez.
+
+### Semanal
+
+```bash
+pnpm jho fx refresh                      # cotações do BCE
+pnpm jho jobs verify --min-fit 55 --limit 250   # fecha o que morreu
+pnpm jho mail import ~/mail              # alertas e e-mails de ATS
+pnpm jho mail suggestions                # revisa o que o e-mail sugere
+pnpm jho referrals                       # onde você já conhece alguém
+pnpm jho db prune --days 90
+pnpm jho report                          # snapshot pro vault
+```
+
+`jobs verify` é o que mantém o board honesto: 25% dos links do Jobgether
+estavam mortos na primeira execução. Sem isso, a lista envelhece em silêncio e
+você perde confiança no ranking junto com os links.
+
+### Ao mexer no perfil
+
+```bash
+# editar profile/profile.yaml
+pnpm jho profile                         # valida
+# bump SCORER_VERSION em src/core/scoring/score.ts
+pnpm jho jobs score --all
+```
+
+---
+
+## Ordem que importa
+
+Uma armadilha real: **`jobs sync` sem `fx refresh` prévio** pontua vagas em
+moeda estrangeira sem taxa de câmbio. Elas não quebram — o scorer recusa a
+comparar e diz isso —, mas ficam com o componente de remuneração neutro.
+
+Outra: **`jobs sync --no-score`** deixa as vagas novas sem pontuação. O sync
+avisa, mas se você usar essa flag, rode `jobs score` depois.
+
+Desde a correção da invalidação, conteúdo alterado **descarta o score
+automaticamente** e o sync reporta quantos foram invalidados.
+

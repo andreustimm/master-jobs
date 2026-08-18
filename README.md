@@ -7,7 +7,7 @@ Encontra vagas em APIs públicas de ATS e agregadores, pontua cada uma contra um
 perfil estruturado de forma **determinística e auditável**, e gerencia o funil —
 do backlog à proposta.
 
-Roda **localmente**. Sem servidor, sem conta, sem token.
+Roda **localmente**: CLI + dashboard. Sem servidor, sem conta, sem token.
 
 ---
 
@@ -16,9 +16,10 @@ Roda **localmente**. Sem servidor, sem conta, sem token.
 ```bash
 pnpm install
 pnpm jho db migrate       # cria o schema em data/jobs.db
-pnpm jho db seed          # carrega o plano de posicionamento e a baseline
+pnpm jho db seed          # plano de posicionamento + baseline
+pnpm jho fx refresh       # cotações do BCE, para comparar salário entre moedas
 pnpm jho jobs sync        # busca todas as fontes e pontua
-pnpm jho jobs list --min-fit 60
+pnpm dev                  # dashboard em localhost:3000
 ```
 
 Nenhuma variável de ambiente é obrigatória.
@@ -27,109 +28,128 @@ Nenhuma variável de ambiente é obrigatória.
 
 ### Encontra
 
-Nove adapters contra endpoints públicos e sem autenticação, todos verificados
+Dez adapters contra endpoints públicos e sem autenticação, todos verificados
 contra respostas reais da API — não contra documentação, que estava errada em
 vários casos.
 
 **ATS** — Greenhouse · Lever · Ashby · SmartRecruiters · Recruitee
 **Agregadores** — Himalayas · Remotive · Arbeitnow · RemoteOK · Adzuna (opcional)
+**Marketplace** — Braintrust, o único com elegibilidade por país estruturada
 
-Estado atual do acervo: **5.021 vagas** de 12 fontes configuradas, todas `ok`.
+Acervo atual: **6.239 vagas abertas**, 1.031 empresas, 13 fontes ativas.
 
 ### Ranqueia, e explica o ranking
 
-O scorer é determinístico, não um LLM. Isso é uma decisão de produto, não uma
-limitação: roda sobre milhares de vagas em segundos, é reproduzível o bastante
-para ter teste de regressão, e — o que importa de verdade — **é possível
-discordar dele**.
+O scorer é determinístico, não um LLM. Decisão de produto, não limitação: roda
+sobre milhares de vagas em segundos, é reproduzível o bastante para ter teste de
+regressão, e — o que importa — **é possível discordar dele**.
 
 ```
-$ pnpm jho jobs show 42
+$ pnpm jho jobs show 6439
 
-Applied AI Engineer  #42
-Paires · Canada / South Africa / Portugal / Brazil / ...
+Lead AI & Data Platform Engineer  #6439
+Stealth Company · North America / Asia / Brazil / Europe / ...
 
-Fit 74.2 / 100  (cluster: ai_lead)
-  title 33.3 · keywords 10.8 · seniority 7.2 · geo 15 · comp 8 · penalty -0
-  · Title matches "Applied AI Engineer" (cluster ai_lead)
+Fit 83.8 / 100  (cluster: ai_lead)
+  title 24.9 · keywords 26.9 · seniority 12 · geo 15 · comp 5
   · Explicitly open to LATAM/Brazil
-  · Pays up to 330,000 — at or above target
-
-  Matched: llm, rag, evals, guardrails, python, aws
+  · Asks for 7+ years — matches seniority
+  · $70/hour — entre o piso e o alvo
 ```
 
-Bloqueios estruturais — exigência de autorização de trabalho nos EUA,
-presencial, W2-only — são detectados e **limitam** a nota em vez de zerá-la:
-uma vaga ótima que diz "US preferred" ainda merece ser vista, só não no topo.
+Remuneração é comparada **com moeda**: faixas independentes por moeda, projeto
+de preço fechado, e conversão via cotações do Banco Central Europeu quando não
+há faixa declarada. Bloqueios estruturais — autorização de trabalho nos EUA,
+presencial, W2-only — limitam a nota em vez de zerá-la.
 
-Hoje: 346 vagas acima do corte de 45, 41 acima de 55, 17 acima de 60.
+Hoje: 1.207 vagas acima de 45, 175 acima de 60, 23 acima de 70.
+
+### Filtra o que não vale seu tempo
+
+```bash
+pnpm jho jobs verify      # checa se as vagas do topo ainda existem
+```
+
+Na última verificação: **25% dos links do Jobgether estavam mortos** (404) e
+zero em todas as outras fontes. 314 vagas fechadas.
+
+O dashboard filtra por corte, cluster, fonte, busca textual, e três critérios
+que importam neste caso: **sem bloqueio**, **empresa identificada** (agregadores
+que ocultam o empregador impedem pesquisa e uso de rede) e **recentes**
+(publicadas há menos de 3 dias respondem muito mais).
 
 ### Gerencia o funil
 
 ```bash
-pnpm jho track 42 applied -n "enviado via Ashby"
+pnpm jho track 42 applied --channel referral
 pnpm jho pipeline
-pnpm jho report            # exporta markdown pro vault Obsidian
+pnpm jho report            # markdown pro vault Obsidian
 ```
 
 O histórico de candidaturas é a única coisa que o sistema **não consegue
-recriar**. Por isso a ingestão nunca escreve nele, e vagas que somem da fonte
+recriar**. Por isso nenhuma ingestão escreve nele, e vagas que somem da fonte
 são marcadas como fechadas em vez de deletadas.
 
-### Executa o plano de posicionamento
-
-O plano de ação da auditoria de julho/2026 vive como 31 tarefas consultáveis,
-com prioridade, esforço e a referência exata da seção que as originou.
+### Lê a sua caixa de entrada
 
 ```bash
-pnpm jho tasks list --horizon 24h
-pnpm jho tasks show PT-0001
-pnpm jho tasks done PT-0001
+pnpm jho mail import ~/mail
+pnpm jho mail suggestions
 ```
+
+Job alerts do LinkedIn viram vagas; e-mails de ATS viram **sugestões** de
+mudança de funil, que você aceita ou descarta. Isso fecha a lacuna da ADR 0001
+sem tocar a plataforma — ver [ADR 0008](docs/adr/0008-ingestao-de-email-como-fonte-de-sourcing.md).
+
+### Sabe quem você conhece
+
+```bash
+pnpm jho contacts seed     # empresas onde você já trabalhou
+pnpm jho referrals
+```
+
+Referrals são ~7% dos candidatos e ~40% das contratações. Nenhuma outra alavanca
+do sistema chega perto.
 
 ## LinkedIn
 
-Este projeto **não faz scraping do LinkedIn**, por decisão explícita
+Este projeto **não faz scraping do LinkedIn**
 ([ADR 0001](docs/adr/0001-nao-fazer-scraping-do-linkedin.md)).
 
-Publicação usaria a API oficial (`w_member_social`, self-serve, sem fila de
-aprovação). Comentários, conexões e busca são **assistidos**: o agente redige e
-enfileira, o humano abre e age. Dirigir o cookie `li_at` viola a seção 8.2 do
-User Agreement e arrisca a conta — que é justamente o principal ativo de
-posicionamento.
+O caso hiQ terminou com o LinkedIn ganhando por quebra de contrato — US$ 500 mil
+e injunção permanente. A CFAA saiu do caminho para dado público; o contrato não.
 
-A busca de vagas não sofreu com isso. Ficou melhor: os ATS entregam JSON
-estruturado com faixa salarial e descrição completa.
+Publicação usaria a API oficial (`w_member_social`). Comentários e conexões são
+assistidos. E **job alerts por e-mail são a via legítima**, porque o e-mail é
+sua correspondência e nada toca a plataforma.
 
 ## Stack
 
-Node 24 com type stripping nativo — **sem build step** e só sintaxe TypeScript
+Node 24 com type stripping nativo — **sem build step**, só sintaxe TypeScript
 apagável ([ADR 0006](docs/adr/0006-typescript-apagavel-sem-build-step.md)).
 TypeScript 7 · Drizzle ORM · libSQL · Zod · Commander · Vitest.
+Dashboard em Next.js 16 com shadcn/ui e Tailwind v4, em Server Components —
+as páginas não enviam JavaScript de cliente.
 
 libSQL roda como arquivo local hoje e aponta para Turso amanhã sem trocar uma
 linha de SQL ([ADR 0002](docs/adr/0002-libsql-em-vez-de-better-sqlite3.md)).
-
-Next.js 16 e deploy na Vercel estão preparados no caminho, mas **não foram
-construídos** — não existe `app/`, UI nem cron. Ver [roadmap](docs/roadmap.md).
 
 ## Documentação
 
 | Trilha | O que responde |
 |---|---|
 | [Referência](docs/README.md) | Como o sistema funciona |
-| [Engenharia](docs/engineering/README.md) | Como trabalhar nele |
-| [Produto](docs/product/README.md) | Por que ele existe |
 | [ADRs](docs/adr/) | Por que cada decisão foi tomada |
+| [Produto](docs/product/) | Visão e backlog priorizado |
+| [Benchmark](docs/benchmark/) | Concorrentes, mercado e riscos |
+| [MIGRATION.md](MIGRATION.md) | **Antes de criar arquivo novo em `src/`** |
 
 Agentes de IA: `CLAUDE.md` (Claude Code) ou `AGENTS.md` (Codex, OpenCode).
-Skills, commands e subagentes ficam em `.claude/`, espelhados em `.opencode/`.
 
 ## Desenvolvimento
 
 ```bash
-pnpm check          # typecheck + testes
-pnpm test
+pnpm check          # typecheck + 126 testes
 pnpm db:generate    # após editar src/core/db/schema.ts
 pnpm db:studio      # inspeção visual do banco
 ```

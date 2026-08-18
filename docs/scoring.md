@@ -444,3 +444,61 @@ sqlite3 data/jobs.db "select count(*) from job_score where fit >= 45;"
 ```
 
 Se um ajuste mover a contagem acima de 45 de ~325 para 2000, ele não tornou o scorer melhor — tornou-o inútil como filtro.
+
+
+## Versão 1.1.0 — remuneração com moeda
+
+A 1.0.0 comparava um número cru contra um piso em USD enquanto `comp_currency`
+ficava na linha sem ser lido. O corpus tem vagas em CAD, AUD, MXN e PHP, então
+uma vaga de PHP 150.000/ano — cerca de USD 2.400 — era pesada como se passasse
+de um piso de USD 90.000.
+
+Havia um segundo defeito no mesmo componente: os períodos não eram normalizados.
+Cinco grafias chegam de cinco APIs — `annual`, `1 YEAR`, `year`, `hourly`,
+`monthly` — e só `"hour"` e `"month"` eram reconhecidas. Então `hourly` caía no
+ramo anual e **USD 100/hora virava USD 100/ano**, descartado por estar abaixo do
+piso. Contrato por hora é justamente o modelo B2B que este candidato busca.
+
+E um terceiro, achado ao corrigir os dois: vários agregadores emitem `0` em vez
+de `null` para "não divulgado", e o zero estava sendo tratado como valor real.
+
+### Faixas por moeda
+
+```yaml
+compensation:
+  reference_currency: USD
+  ranges:
+    - { currency: USD, period: year,  floor: 90000, target: 150000, ideal: 220000 }
+    - { currency: USD, period: hour,  floor: 55,    target: 85,     ideal: 120 }
+    - { currency: BRL, period: month, floor: 40000, target: 60000,  ideal: 85000 }
+```
+
+> **Invariante de domínio:** a faixa em BRL **não é a conversão** da faixa em
+> USD. Contrato em BRL carrega risco cambial e tributação diferentes, e o prêmio
+> exigido em cada moeda é decisão de negócio, não aritmética. A conversão é o
+> *fallback* para moeda sem faixa declarada, nunca a regra.
+
+Ordem de comparação: faixa exata para `(moeda, período)` → mesma moeda em outro
+período, anualizada → conversão para a moeda de referência → **recusa a
+comparar** em vez de adivinhar quando não há taxa.
+
+### Projeto de preço fechado
+
+`period: project` é estruturalmente diferente: o valor é o negócio inteiro, não
+uma taxa. USD 30k em 2 meses é um ritmo de 180k/ano; os mesmos 30k em 12 meses
+ficam abaixo do piso.
+
+Por isso `annualize()` de um projeto **sem duração retorna null** em vez de
+inventar prazo — um palpite errado inverte o veredito.
+
+### Câmbio
+
+[Frankfurter](https://frankfurter.dev), taxas de referência do BCE, sem chave.
+Fallback `open.er-api.com`. Cacheadas em `fx_rate` pela data da cotação, para
+que o scorer permaneça puro e um score continue reproduzível a partir da taxa
+que o gerou.
+
+Rode `jho fx refresh` antes de pontuar. Sem cotações, vagas em outras moedas não
+são comparadas — e o scorer **diz isso** em vez de silenciosamente tratá-las
+como dólar.
+

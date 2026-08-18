@@ -405,6 +405,91 @@ pnpm jho jobs list --min-fit 65 --limit 20 --json
 O `--json` imprime exatamente as linhas `BoardRow` de `src/core/db/repo.ts`, já filtradas
 e cortadas.
 
+### `jho jobs add <url>`
+
+O caminho para uma vaga que você encontrou em qualquer lugar — um post no
+LinkedIn, uma newsletter, uma indicação.
+
+```bash
+pnpm jho jobs add "https://jobs.ashbyhq.com/textlayer/8dbad922-..."
+```
+
+Reconhece o ATS pela URL (Greenhouse, Lever, Ashby, SmartRecruiters, Recruitee)
+e **puxa a vaga completa** pelo adapter que já existe, em vez de pedir três
+campos digitados. Quando o host é reconhecível mas ilegível — LinkedIn, Workday,
+Indeed, Gem, Loxo — diz isso e cai para entrada manual.
+
+| Flag | Efeito |
+|---|---|
+| `-t, --title <text>` | Título, quando a URL não resolve |
+| `-c, --company <name>` | Empresa, quando a URL não resolve |
+| `-l, --location <text>` | Local anunciado |
+| `-d, --description <text>` | Descrição — **sem ela o score de keywords fica em zero** |
+| `--posted <date>` | Data de publicação (ISO) |
+| `-n, --notes <text>` | Sua nota sobre a vaga |
+| `-s, --status <name>` | Já coloca no funil |
+
+Uma vaga adicionada à mão é linha de primeira classe: mesma tabela, mesmo
+fingerprint, mesmo scorer. É isso que faz ela **deduplicar** contra a mesma vaga
+chegando depois por um sync.
+
+### `jho jobs import <file>`
+
+Importa um payload JSON capturado de uma plataforma que só serve vagas logado —
+Revelo, BairesDev, marketplaces. Ver `docs/sources-autenticadas.md`.
+
+```bash
+pnpm jho jobs import ~/revelo.json --source revelo \
+  --base-url "https://app.careers.revelo.com/#/international/positions" --dry-run
+```
+
+| Flag | Obrigatória | Efeito |
+|---|---|---|
+| `--source <key>` | sim | Chave curta da fonte, ex.: `revelo` |
+| `--label <name>` | não | Rótulo legível |
+| `--company <name>` | não | Empresa, quando o payload não traz |
+| `--base-url <url>` | não | Prefixo para montar URL a partir de ids |
+| `--dry-run` | não | Analisa e reporta sem gravar |
+
+O parser não assume formato: acha o array com qualquer nome de envelope, casa
+nomes de campo sem ligar para maiúsculas, e lê valores de objetos aninhados.
+Ao final **lista os campos que não soube mapear** — se aparecer algo útil, vale
+estender. E **avisa quando nenhuma vaga trouxe descrição**, que é a assinatura
+de ter copiado o endpoint de listagem em vez do de detalhe.
+
+Fontes importadas nascem **desabilitadas**: `jobs sync` nunca tenta buscar algo
+que não tem endpoint público.
+
+### `jho jobs verify`
+
+Checa se as vagas do topo ainda existem, e fecha as que sumiram.
+
+```bash
+pnpm jho jobs verify --min-fit 55 --limit 250
+```
+
+| Flag | Padrão | Efeito |
+|---|---|---|
+| `--min-fit <n>` | `55` | Só verifica acima deste fit |
+| `--limit <n>` | `100` | Quantas checar |
+| `--dry-run` | — | Reporta sem fechar nada |
+
+```
+✓ 250 verificadas · 203 vivas · 47 mortas · 0 inconclusivas
+
+  lever               47 mortas de 191  25%
+  himalayas            0 mortas de  36
+  braintrust           0 mortas de   5
+```
+
+> **Invariante:** só **404** e **410** fecham uma vaga. Um **403** é o site
+> bloqueando bot — o Himalayas devolve isso em toda requisição — e fechar por
+> 403 apagaria vagas vivas. Timeout e 5xx não provam nada e entram como
+> inconclusivos.
+
+Verifica só o topo de propósito: checar 6.000 links para policiar linhas que
+ninguém vai abrir seria indelicado com os boards e inútil aqui.
+
 ### `jho jobs show <id>`
 
 `"Full detail for one job, including why it scored the way it did"`. Faz
@@ -739,6 +824,147 @@ pnpm jho tasks done PT-0019 --status skipped
 | `--status <name>` | `done` | `todo`, `doing`, `done` ou `skipped` |
 
 `done` carimba `doneAt`; qualquer outro status limpa o carimbo.
+
+## Área `fx` — câmbio
+
+Cotações usadas para comparar remuneração entre moedas. Sem elas, uma vaga em
+CAD é medida contra um piso em USD como se fossem a mesma unidade — o defeito
+que a versão 1.1.0 do scorer corrigiu.
+
+### `jho fx refresh`
+
+```bash
+pnpm jho fx refresh
+```
+
+```
+✓ 29 cotações de 2026-08-18 (base USD, via frankfurter)
+  AUD BRL CAD CHF CNY CZK DKK EUR GBP HKD HUF IDR ILS INR ISK JPY KRW MXN MYR NOK NZD PHP PLN RON SEK SGD THB TRY ZAR
+```
+
+| Flag | Padrão | Efeito |
+|---|---|---|
+| `--base <currency>` | `USD` | Moeda base da tabela |
+
+Fonte primária: [Frankfurter](https://frankfurter.dev), que publica as taxas de
+referência do Banco Central Europeu — sem chave, sem cadastro. Fallback:
+`open.er-api.com`, para moedas fora das 30 do BCE.
+
+As taxas ficam em `fx_rate`, indexadas pela **data da cotação**. O scorer nunca
+faz requisição: lê a tabela. Isso mantém a pontuação pura, offline e —
+principalmente — reproduzível, já que a taxa que produziu um score continua em
+disco.
+
+### `jho fx show`
+
+Imprime a tabela em cache, com a idade da cotação. Acima de 7 dias o aviso fica
+vermelho. O BCE não publica em fim de semana e feriado, então 2–4 dias é normal.
+
+---
+
+## Área `mail` — caixa de entrada
+
+Implementa a [ADR 0008](adr/0008-ingestao-de-email-como-fonte-de-sourcing.md).
+Leia a ADR antes de mexer: ela contém as três travas que tornam este caminho
+defensável.
+
+### `jho mail import <path>`
+
+```bash
+pnpm jho mail import ~/mail/alertas --dry-run
+pnpm jho mail import ~/mail/alertas
+```
+
+Aceita um arquivo ou um diretório com `.eml`, `.txt` ou `.html`.
+
+| Flag | Efeito |
+|---|---|
+| `--dry-run` | Classifica e reporta sem gravar nada |
+
+Cada mensagem é classificada em `job_alert`, `ats_received`, `ats_screening`,
+`ats_interview`, `ats_offer`, `ats_rejection`, `recruiter_inbound` ou `unknown`.
+Alertas viram vagas; e-mails de ATS viram **sugestões**.
+
+> **Invariante:** parsear e-mail nunca escreve em `application`. Grava em
+> `mail_suggestion` e o usuário decide. Um parser de rejeição que erra uma vez e
+> fecha silenciosamente um processo vivo seria o pior defeito possível — "sem
+> resposta" é indistinguível de "rejeitado" para quem parou de fazer follow-up.
+
+Deduplicação por `Message-ID`; um `.eml` sem esse header cai para o caminho do
+arquivo.
+
+### `jho mail suggestions` (alias `sug`)
+
+Lista as mudanças de funil que os e-mails sugerem, com a confiança e o sinal que
+produziu cada uma.
+
+```
+   ID  CONF  STATUS SUGERIDO  ASSUNTO
+    2  0.95  rejected         Update on your application to TextLayer
+       rejeição: move forward with other candidat — casado com "TextLayer"
+```
+
+### `jho mail accept <id>` · `jho mail dismiss <id>`
+
+Aplica ou descarta. Ao aceitar, a transição passa por `setApplicationStatus`
+como qualquer outra, então fica registrada em `application_event` igual a uma
+mudança manual — não há caminho paralelo.
+
+---
+
+## Área `contacts` — rede profissional
+
+Referrals são ~7% dos candidatos e ~40% das contratações. Até esta área existir,
+`application.channel` era uma coluna que nada preenchia.
+
+### `jho contacts seed`
+
+Carrega as 14 empresas onde Andreus já trabalhou ou entregou, a partir do
+currículo. Ex-empregador ou ex-cliente abrindo vaga é o mais perto de uma
+indicação quente que existe.
+
+### `jho contacts add <name>`
+
+```bash
+pnpm jho contacts add "Fulana de Tal" -c Braintrust -k ai-leader -r "Head of AI"
+```
+
+| Flag | Obrigatória | Efeito |
+|---|---|---|
+| `-c, --company <name>` | sim | Onde a pessoa trabalha |
+| `-k, --category <name>` | não (`peer`) | `recruiter`, `ai-leader`, `peer`, `former`, `company` |
+| `-r, --role <title>` | não | Cargo |
+| `-u, --url <linkedin>` | não | Perfil — é a chave natural de deduplicação |
+| `--country <code>` | não | País |
+| `-n, --notes <text>` | não | Como você conhece a pessoa |
+
+Ao adicionar, o comando já informa se isso destrava alguma vaga que está no
+acervo.
+
+### `jho contacts list` (alias `ls`)
+
+| Flag | Efeito |
+|---|---|
+| `-k, --category <name>` | Filtra por categoria |
+
+---
+
+## `jho referrals`
+
+Vagas abertas em empresas onde já existe contato, melhor fit primeiro.
+
+| Flag | Padrão | Efeito |
+|---|---|---|
+| `--min-fit <n>` | `45` | Corte de aderência |
+
+O casamento normaliza os dois lados com o mesmo slug que o deduplicador usa, de
+modo que um contato na "Nubank" é encontrado numa vaga de "Nubank Ltd" sem
+casar "Scope3" com "Scope AI".
+
+Quando não há nada, o comando diz **por quê** — se é falta de contato ou falta
+de vaga aberta. Silêncio seria indistinguível de defeito.
+
+---
 
 ## Variáveis de ambiente que a CLI respeita
 

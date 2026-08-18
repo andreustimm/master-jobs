@@ -75,3 +75,30 @@ O texto normativo está em `CLAUDE.md` (e no espelho `AGENTS.md`). Resumo, com o
 > **Invariante:** Não invente evidência. O agente de tailoring de CV só pode citar o que está sob a chave `evidence` de `profile.yaml`. O que está em `growth` é lacuna assumida — sinalize, nunca maquie.
 
 > **Invariante:** `CLAUDE.md` e `AGENTS.md` devem dizer a mesma coisa. Editou um, edite o outro.
+
+
+## Documentos adicionados depois
+
+| Documento | Quando ler |
+|---|---|
+| [email-ingestion.md](email-ingestion.md) | Mexer no pipeline de e-mail |
+| [sources-autenticadas.md](sources-autenticadas.md) | Revelo, BairesDev, marketplaces logados |
+| [adr/0007](adr/0007-arquitetura-hexagonal-monolito-modular.md) | Arquitetura de destino |
+| [adr/0008](adr/0008-ingestao-de-email-como-fonte-de-sourcing.md) | Por que e-mail é legítimo |
+| [product/backlog.md](product/backlog.md) | Backlog priorizado por impacto |
+| [benchmark/](benchmark/) | Concorrentes, mercado e riscos |
+| [../MIGRATION.md](../MIGRATION.md) | **Antes de criar arquivo novo em `src/`** |
+
+## Números, em 2026-08-18
+
+| Item | Valor |
+|---|---:|
+| Vagas abertas | 6.239 |
+| Vagas fechadas (verificação) | 314 |
+| Empresas | 1.031 |
+| Fontes ativas | 13 |
+| Acima de 45 / 60 / 70 | 1.207 / 175 / 23 |
+| Melhor fit | 85,9 |
+| Tabelas | 14 |
+| Testes | 126 |
+

@@ -313,3 +313,46 @@ gravando o `urn:li:share:...` retornado em `post.linkedin_urn`.
 > `erasableSyntaxOnly: true` está ligado no `tsconfig.json`; o sintoma em runtime
 > é `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`. Vale para cada arquivo novo das Fases 2
 > e 3.
+
+
+## Status em 2026-08-18, fim do dia
+
+Muita coisa da Fase 2 foi entregue no mesmo dia em que foi planejada. O que
+mudou de estado:
+
+| Item | Antes | Agora |
+|---|---|---|
+| Dashboard Next.js | ⬜ planejado | ✅ 5 rotas, shadcn/ui, Server Components |
+| Remuneração com moeda | ⬜ não existia | ✅ `Money`, faixas por moeda, câmbio do BCE |
+| Ingestão de e-mail | ⬜ planejado | ✅ ADR 0008 + pipeline completo |
+| Referrals | ⬜ planejado | ✅ `contacts` + `referrals` |
+| Cadastro por URL | ⬜ planejado | ✅ `jobs add`, resolvendo pelo ATS |
+| Import de plataforma logada | ⬜ não existia | ✅ `jobs import` |
+| Verificação de links | ⬜ não existia | ✅ `jobs verify` — 314 vagas mortas fechadas |
+| Braintrust | ⬜ não existia | ✅ elegibilidade por país estruturada |
+| Export CSV | ⬜ não existia | ✅ `/api/export`, respeitando filtros |
+| Arquitetura hexagonal | ⬜ indecisa | 🟡 decidida (ADR 0007), passo 1 de 12 feito |
+
+### O que continua não existindo
+
+- **Deploy.** Roda local por decisão. Turso + Vercel é caminho preparado.
+- **OAuth do Gmail.** E-mail hoje é exportação manual de `.eml`.
+- **Geração de CV e cover letter.** A skill `application-kit` descreve o
+  processo; não há comando.
+- **Publicação no LinkedIn.** A API oficial permite; não foi integrada.
+- **Submissão autônoma.** Último passo da migração, e o mais irreversível.
+- **Re-ranking por LLM.** A arquitetura certa é híbrida — determinístico para a
+  massa, LLM para os finalistas —, mas o segundo estágio não existe.
+
+### O que o benchmark mudou de prioridade
+
+Duas conclusões do `docs/benchmark/` reordenam a fila:
+
+**Fonte que nomeia o empregador vale mais que volume anônimo.** O Jobgether é
+74% do acervo, oculta a empresa e teve 25% de links mortos. Reduzir o peso dele
+e adicionar boards diretos rende mais que qualquer refinamento de scorer.
+
+**Canal decide mais que ranqueamento.** Referrals são ~40% das contratações.
+O `contacts`/`referrals` existe, mas as 30 contas-alvo da auditoria §2.2 ainda
+precisam ser cadastradas — é pesquisa, não código.
+

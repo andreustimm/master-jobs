@@ -524,3 +524,81 @@ sinal; página maior só aumenta a conta de quem hospeda.
 | `docs/scoring.md` | Por que "sem corpo da vaga" custa até 30 pontos |
 | `docs/cli.md` | `sources list`, `sources probe` e `jobs sync` em detalhe |
 | `docs/linkedin-policy.md` | **Antes de considerar qualquer fonte autenticada** |
+
+
+## Braintrust — a fonte de maior sinal
+
+Adicionada depois do benchmark competitivo, que varreu todo marketplace de
+talento atrás de API aberta. Wellfound e Toptal devolvem 403; `hired.com`
+redireciona para a LHH e `otta.com` para a Welcome to the Jungle — dois deixaram
+de existir como produto independente. Sobrou o Braintrust.
+
+```
+https://app.usebraintrust.com/api/jobs/?limit=20     lista, paginada por `next`
+https://app.usebraintrust.com/api/jobs/{id}/         detalhe, com a descrição
+```
+
+O que o torna especial: **`locations[].country` é código ISO**. Toda outra fonte
+obriga o componente geográfico do scorer a ler prosa e adivinhar. Aqui "posso
+pegar essa vaga do Brasil?" é um campo. Para um candidato cuja restrição mais
+dura é autorização de trabalho, nenhum outro atributo chega perto.
+
+Também casa com o modelo de contratação: `budget_minimum_usd` já vem em dólar
+pelo nome do campo, `payment_type` é explícito, e a maioria é contrato por hora
+ou preço fechado — o que só passou a ser pontuável depois da correção de moeda
+e período.
+
+Custo pago de propósito: **o endpoint de lista não traz descrição alguma**, então
+o corpo de cada vaga é buscado individualmente. Pular isso reproduziria
+exatamente a falha do Lever — toda vaga com zero em keywords, sem causa visível.
+
+O adapter traduz a elegibilidade estruturada numa frase que o scorer consegue
+ler, em vez de abrir exceção para a fonte dentro do scorer.
+
+---
+
+## Paginação do Himalayas
+
+O board expõe **101.022 vagas** e servia 20 porque o adapter nunca paginava.
+
+Duas coisas precisaram ser entendidas antes de corrigir:
+
+- O tamanho de página é fixo no servidor: `limit=100`, `200` e `500` devolvem
+  exatamente 20. O board inteiro seriam ~5.000 requisições num serviço gratuito.
+- O parâmetro `q` é **aceito e ignorado**. Toda busca devolve os mesmos 101.018
+  resultados, então o `q=<handle>` do adapter anterior não filtrava nada
+  enquanto parecia filtrar.
+
+O que torna uma fatia limitada a resposta certa, e não um meio-termo: o board é
+ordenado por data de publicação decrescente — offset 0 é hoje, offset 2000 é
+anteontem. Frescor é a maior alavanca de taxa de resposta em recrutamento, então
+as primeiras páginas são também as mais valiosas.
+
+`handle` é a contagem de páginas. Em 60 páginas pegamos as ~1.200 mais recentes,
+com 120 ms entre requisições, e **avisamos explicitamente** o que ficou de fora
+em vez de sugerir cobertura total.
+
+---
+
+## Qualidade de fonte: o que a verificação revelou
+
+`jho jobs verify` checa se as vagas do topo ainda existem. Resultado na base real:
+
+| Fonte | Links mortos |
+|---|---|
+| `lever:jobgether` | **47 de 191 — 25%** |
+| Ashby, Greenhouse, Braintrust, Himalayas, Arbeitnow, RemoteOK, Remotive | **0** |
+
+Isso bate com a taxa de 18–27% de *ghost jobs* que o benchmark encontrou no
+mercado, e diz sem ambiguidade qual fonte está degradando o board.
+
+> **Invariante de qualidade de fonte:** fonte que **nomeia o empregador** vale
+> mais por vaga que agregador anônimo com muito mais volume. O Jobgether
+> anonimiza por design — a descrição diz literalmente *"on behalf of a partner
+> company"* — o que quebra três coisas de uma vez: não dá para pesquisar a
+> empresa, não dá para cruzar com a rede (referral), e a mesma vaga no board
+> próprio da empresa **não deduplica**, já que o `fingerprint` inclui a empresa.
+
+O dashboard tem um filtro **"empresa identificada"** por causa disso: com fit
+≥ 60 o board vai de 214 vagas para 40.
+

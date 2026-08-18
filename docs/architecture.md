@@ -503,3 +503,76 @@ escrita: `seedPositioning()` insere/atualiza tarefas e insere o baseline com
 > **Invariante:** Não descreva como pronto o que ainda não está. Isso vale para
 > este documento também — se você implementar uma camada, atualize esta seção na
 > mesma mudança.
+
+
+## Módulos adicionados depois da primeira versão
+
+| Módulo | Papel | Por que existe separado |
+|---|---|---|
+| `src/core/money.ts` | Value object `Money` (amount + currency + period) | O scorer comparava número cru contra piso em USD, ignorando `comp_currency`. Puro e sem dependência — as taxas vêm do chamador |
+| `src/core/fx.ts` | Cotações com cache em `fx_rate` | Segundo cliente HTTP do repositório. Frankfurter (BCE) com fallback `open.er-api` |
+| `src/core/contacts.ts` | Rede profissional e referrals | Referrals são ~40% das contratações e `application.channel` não era preenchido por nada |
+| `src/core/mail/` | Parser MIME, classificador, extrator de alerta | Implementa a ADR 0008 |
+| `src/core/ingest/detect.ts` | Reconhece o ATS por uma URL | Colar um link é o caminho mais rápido de cadastrar vaga |
+| `src/core/ingest/manual.ts` | Cadastro por URL, resolvendo pelo adapter | Vaga manual é linha de primeira classe — mesmo fingerprint, mesmo dedupe |
+| `src/core/ingest/import.ts` | Importa JSON de plataforma logada | Revelo e afins não têm endpoint público (ADR 0001 aplicada) |
+| `src/core/ingest/verify.ts` | Checa se a vaga ainda existe | 25% dos links do Jobgether estavam mortos |
+| `src/core/sources/braintrust.ts` | Adapter próprio | Único com elegibilidade por país **estruturada** |
+
+### `src/core/mail/` em detalhe
+
+```
+eml.ts        RFC 5322/MIME mínimo, sem dependência externa
+classify.ts   tipo da mensagem + confiança + sinal que decidiu
+job-alert.ts  extrai vagas de um alerta
+run.ts        pipeline: parse → classifica → vagas ou sugestões
+```
+
+O parser foi escrito à mão de propósito. `mailparser` é a escolha óbvia e é boa,
+mas traz uma árvore grande de dependências para um projeto que manteve cinco
+pacotes de runtime por decisão. O que se precisa é estreito — headers dobrados,
+encoded-words, multipart aninhado, quoted-printable, base64, charset — e são
+~150 linhas testáveis.
+
+---
+
+## A camada de interface
+
+```
+app/
+  layout.tsx           navegação, TooltipProvider
+  page.tsx             cockpit
+  joblist.tsx          o card de vaga, compartilhado entre rotas
+  filters.tsx          barra de filtros + parsing de searchParams
+  grid.tsx             paginação, densidade, export, presets
+  ui.tsx               Fit, ScoreBar, Legend, StatusBadge, Stat
+  actions.ts           server action de mudança de status
+  jobs/page.tsx        lista com filtros e paginação
+  jobs/[id]/page.tsx   detalhe com breakdown
+  pipeline/page.tsx    funil
+  referrals/page.tsx   vagas onde há contato
+  api/export/route.ts  CSV dos filtros atuais
+```
+
+Next.js 16 com shadcn/ui sobre Tailwind v4.
+
+> **Invariante:** a UI é **adaptador**, não implementação paralela. Server
+> Components chamam as mesmas funções de `src/core` que a CLI chama, e a única
+> mutação passa por `setApplicationStatus` — uma mudança de status feita no
+> navegador cai em `application_event` exatamente como uma feita no terminal.
+> Nunca duplique query entre as superfícies: coloque em `src/core/db/repo.ts`.
+
+Três decisões que valem registro:
+
+**Estado de filtro vive na URL**, não em React. A visão filtrada é
+compartilhável, o botão voltar funciona, e toda página continua Server Component
+— o dashboard não envia JavaScript de cliente.
+
+**`cacheComponents` do Next 16 está desligado.** Este dashboard lê um banco que
+muda a cada sync, então cache só adiciona uma classe de bug de dado velho — e
+proíbe os route segment configs que expressam "sempre fresco" em uma linha.
+
+**`--primary` do shadcn resolve para o azul do `DESIGN.md`**, senão todo botão e
+anel de foco carregaria o cinza padrão da biblioteca. `--accent` **não** foi
+remapeado: no vocabulário do shadcn é superfície de hover, não cor de destaque.
+

@@ -605,3 +605,64 @@ pnpm jho db migrate     # aplica; roda tambem no inicio de `jho jobs sync`
 > **gerado**. Editar o `.sql` à mão desincroniza o snapshot de `drizzle/meta/` e
 > a próxima geração produz um diff errado. Mexeu no schema, rode
 > `pnpm db:generate` e commite os dois.
+
+
+## Tabelas adicionadas depois da primeira versão
+
+### `fx_rate` — cotações em cache
+
+| Coluna | Papel |
+|---|---|
+| `date` | Data da cotação **publicada pelo provedor**, não do fetch |
+| `base`, `currency`, `rate` | 1 unidade de `base` compra `rate` de `currency` |
+| `provider` | `frankfurter` \| `erapi` \| `manual` |
+
+Único por `(date, base, currency)`.
+
+> **Invariante:** o scorer **nunca** faz requisição de câmbio. Ele lê esta
+> tabela. Isso mantém a pontuação pura e offline, e — o que mais importa —
+> reproduzível: a taxa que produziu um score continua em disco.
+
+### `mail_message` — correspondência analisada
+
+Implementa a [ADR 0008](adr/0008-ingestao-de-email-como-fonte-de-sourcing.md).
+
+| Coluna | Papel |
+|---|---|
+| `message_id` | RFC 5322; chave natural de deduplicação entre reimportações |
+| `kind` | `job_alert`, `ats_received`, `ats_screening`, `ats_interview`, `ats_offer`, `ats_rejection`, `recruiter_inbound`, `unknown` |
+| `provider` | ATS ou board de origem, quando reconhecível |
+| `company_guess` | Empresa inferida — do **nome de exibição** do remetente antes do domínio |
+| `extracted_jobs` | Quantas vagas saíram, para `job_alert` |
+
+Repare no que esta tabela **não** tem: nenhuma chave estrangeira que permita a
+um e-mail mutar uma candidatura.
+
+### `mail_suggestion` — o que o e-mail sugere
+
+| Coluna | Papel |
+|---|---|
+| `mail_id`, `application_id`, `job_id` | Origem e alvo; os dois últimos são nulos quando não houve casamento |
+| `suggested_status` | Para onde o e-mail indica mover |
+| `rationale` | Por que achamos isso — mostrado antes de aceitar |
+| `confidence` | 0..1, derivado de quão inequívoco foi o sinal |
+| `status` | `pending` \| `accepted` \| `dismissed` |
+
+> **Invariante:** parsear e-mail nunca escreve em `application`. Escreve aqui, e
+> o usuário aceita ou descarta. Um parser de rejeição que erra uma vez e fecha
+> silenciosamente um processo vivo violaria a ADR 0005 do modo mais caro
+> possível — "sem resposta" é indistinguível de "rejeitado" para quem parou de
+> fazer follow-up.
+
+Ao aceitar, a mudança passa por `setApplicationStatus`, então cai em
+`application_event` igual a uma transição manual. Não há caminho paralelo.
+
+### `target_account` — a rede, agora com uso
+
+A tabela existia desde o início para as 30 contas-alvo da auditoria §2.2, e
+ficou vazia. Hoje `jho contacts seed` a popula com as **14 empresas onde o
+candidato já trabalhou ou entregou**, categoria `former` — o vínculo mais forte
+que existe, e que estava parado no currículo.
+
+Categorias: `recruiter`, `ai-leader`, `peer`, `former`, `company`.
+
