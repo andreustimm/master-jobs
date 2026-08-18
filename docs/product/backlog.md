@@ -119,12 +119,17 @@ leitura assistida via extensão do Chrome, com as vagas entrando por
 > **Invariante:** ausência de cláusula proibindo automação nos termos não é
 > permissão. Vale o mesmo rigor da ADR 0001.
 
-### F-03 · Referral não é rastreado 📋
+### F-03 · Referral não é rastreado ✅ implementado
 
-O campo `application.channel` existe e nada o alimenta. Referral vale ordens de
-grandeza mais que aplicação fria. Cruzar empresas-alvo com as 30 contas-alvo da
-auditoria e sinalizar "você conhece alguém aqui" move mais resultado do que
-qualquer refinamento de matching.
+`jho contacts add` registra a rede, `jho contacts seed` semeia as 14 empresas
+onde Andreus já trabalhou ou entregou (o vínculo mais forte que existe, e que
+estava parado no currículo), e `jho referrals` lista vagas abertas onde já há
+contato. `jho track <id> applied --channel referral` finalmente alimenta a
+coluna que existia sem uso.
+
+Estado hoje: 14 empresas na rede, nenhuma com vaga aberta no acervo — o comando
+reporta isso em vez de ficar em silêncio. As 30 contas-alvo da auditoria §2.2
+ainda precisam ser adicionadas à mão.
 
 ---
 

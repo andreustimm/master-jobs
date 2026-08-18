@@ -14,6 +14,14 @@ import { application, job, jobScore, positioningTask, source } from "./core/db/s
 import { APPLICATION_STATUSES } from "./core/db/schema.ts";
 import { ageInDays, loadRates, refreshRates, STALE_AFTER_DAYS } from "./core/fx.ts";
 import { importJobs, parseFile } from "./core/ingest/import.ts";
+import {
+  CONTACT_CATEGORIES,
+  addContact,
+  companiesWithContacts,
+  listContacts,
+  referralOpportunities,
+  seedWorkHistory,
+} from "./core/contacts.ts";
 import { decideSuggestion, importMail, listSuggestions } from "./core/mail/run.ts";
 import { addJob } from "./core/ingest/manual.ts";
 import { syncAll, pruneClosed } from "./core/ingest/run.ts";
@@ -554,7 +562,11 @@ program
   .command("track <id> <status>")
   .description(`Move a job through the pipeline (${APPLICATION_STATUSES.join(" | ")})`)
   .option("-n, --note <text>", "attach a note to the transition")
-  .action(async (id: string, status: string, opts: { note?: string }) => {
+  .option(
+    "--channel <name>",
+    "direct | ats | referral | recruiter | agency — referral is worth recording",
+  )
+  .action(async (id: string, status: string, opts: { note?: string; channel?: string }) => {
     if (!(APPLICATION_STATUSES as readonly string[]).includes(status)) {
       console.error(c.red(`Unknown status "${status}". Valid: ${APPLICATION_STATUSES.join(", ")}`));
       process.exitCode = 1;
@@ -602,6 +614,139 @@ program
         if (r.nextAction) console.log(c.dim(`       next: ${r.nextAction}`));
       }
       console.log();
+    });
+  });
+
+/* -------------------------------- contacts -------------------------------- */
+
+const contacts = program
+  .command("contacts")
+  .description("Your network — who you know, and where");
+
+contacts
+  .command("add <name>")
+  .description("Record someone in your network")
+  .requiredOption("-c, --company <name>", "where they work")
+  .option("-r, --role <title>", "their role")
+  .option("-u, --url <linkedin>", "LinkedIn profile URL")
+  .option(
+    "-k, --category <name>",
+    CONTACT_CATEGORIES.join(" | "),
+    "peer",
+  )
+  .option("--country <code>", "country")
+  .option("-n, --notes <text>", "how you know them")
+  .action(async (name: string, opts: {
+    company: string; role?: string; url?: string; category: string;
+    country?: string; notes?: string;
+  }) => {
+    if (!(CONTACT_CATEGORIES as readonly string[]).includes(opts.category)) {
+      console.error(c.red(`Categoria inválida. Use: ${CONTACT_CATEGORIES.join(", ")}`));
+      process.exitCode = 1;
+      return;
+    }
+    await withDb(async () => {
+      await runMigrations();
+      const r = await addContact({
+        name,
+        company: opts.company,
+        role: opts.role,
+        linkedinUrl: opts.url,
+        category: opts.category as never,
+        country: opts.country,
+        notes: opts.notes,
+      });
+      console.log(
+        `${c.green("\u2713")} ${r.created ? "adicionado" : "atualizado"}: ${c.bold(name)} ` +
+        c.dim(`@ ${opts.company} · ${opts.category} · #${r.id}`),
+      );
+
+      // Immediately useful: does this unlock anything already in the board?
+      const opps = await referralOpportunities(45);
+      const here = opps.filter((o) => o.contacts.some((x) => x.startsWith(name)));
+      if (here.length > 0) {
+        console.log(c.green(`\n  ${here.length} vaga(s) aberta(s) nessa empresa:`));
+        for (const o of here.slice(0, 5)) {
+          console.log(`    ${String(o.fit.toFixed(0)).padStart(3)} ${truncate(o.title, 48)}`);
+        }
+      }
+      console.log();
+    });
+  });
+
+contacts
+  .command("seed")
+  .description("Seed companies you have worked with — your strongest referral surface")
+  .action(async () => {
+    await withDb(async () => {
+      await runMigrations();
+      const r = await seedWorkHistory();
+      console.log(
+        `${c.green("\u2713")} ${r.inserted} empresa(s) adicionada(s), ${r.updated} atualizada(s)`,
+      );
+      const opps = await referralOpportunities(45);
+      if (opps.length > 0) {
+        console.log(c.green(`\n  ${opps.length} vaga(s) aberta(s) onde você já tem histórico:`));
+        for (const o of opps.slice(0, 8)) {
+          console.log(`    ${String(o.fit.toFixed(0)).padStart(3)} ${truncate(o.companyName, 20)} ${truncate(o.title, 40)}`);
+        }
+        console.log(c.dim("\n  Detalhes: jho referrals"));
+      }
+      console.log();
+    });
+  });
+
+contacts
+  .command("list")
+  .alias("ls")
+  .description("Show your network")
+  .option("-k, --category <name>", "filter by category")
+  .action(async (opts: { category?: string }) => {
+    await withDb(async () => {
+      const rows = await listContacts(opts.category);
+      if (rows.length === 0) {
+        console.log(c.dim("\n  Nenhum contato. Comece com: jho contacts add \"Nome\" -c Empresa\n"));
+        return;
+      }
+      console.log(c.bold("\n   ID  CATEGORIA    EMPRESA               NOME"));
+      for (const r of rows) {
+        console.log(
+          `  ${String(r.id).padStart(3)} ${truncate(r.category, 12)} ${truncate(r.company, 21)} ${truncate(r.name, 28)}`,
+        );
+        if (r.role) console.log(c.dim(`       ${r.role}`));
+      }
+      console.log(c.dim(`\n  ${rows.length} contato(s)\n`));
+    });
+  });
+
+program
+  .command("referrals")
+  .description("Open jobs where you already know someone — the highest-yield list you have")
+  .option("--min-fit <n>", "minimum fit", "45")
+  .action(async (opts: { minFit: string }) => {
+    await withDb(async () => {
+      const opps = await referralOpportunities(Number(opts.minFit));
+      if (opps.length === 0) {
+        const known = await companiesWithContacts();
+        console.log(
+          known.size === 0
+            ? c.dim("\n  Nenhum contato registrado ainda. jho contacts add \"Nome\" -c Empresa\n")
+            : c.dim(`\n  ${known.size} empresa(s) com contato, nenhuma com vaga aberta acima do corte.\n`),
+        );
+        return;
+      }
+      console.log(
+        c.bold("\n   ID  FIT  EMPRESA               VAGA") +
+        c.dim("\n  referral vale ~10x uma candidatura fria\n"),
+      );
+      for (const o of opps) {
+        const status = o.status ? c.cyan(` [${o.status}]`) : "";
+        console.log(
+          `  ${String(o.jobId).padStart(4)} ${fitColor(o.fit)}  ${truncate(o.companyName, 21)} ${truncate(o.title, 40)}${status}`,
+        );
+        console.log(c.green(`        via ${o.contacts.join(", ")}`));
+      }
+      console.log(c.dim(`\n  ${opps.length} oportunidade(s)\n`));
     });
   });
 
