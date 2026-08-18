@@ -53,6 +53,17 @@ sources:
     label: Jobgether
     rationale: "Benchmark — AI Solutions Architect, remote contract aggregator"
 
+  # --- Marketplace com elegibilidade estruturada ---------------------------
+  - kind: braintrust
+    handle: "150"
+    label: Braintrust
+    rationale: >-
+      Único marketplace encontrado com API pública aberta E país de
+      elegibilidade em campo estruturado (locations[].country), em vez de
+      prosa. Contratos freelance/hourly já em USD. Para um candidato cuja
+      restrição mais dura é autorização de trabalho, é a fonte de maior
+      densidade de sinal do acervo.
+
   # --- Broad remote aggregators --------------------------------------------
   # These widen the funnel beyond known companies. Noisy by design; the scorer
   # filters, not the fetcher.
