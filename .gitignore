@@ -27,3 +27,6 @@ coverage/
 .next/
 next-env.d.ts
 .vercel/
+
+# generated dashboard — contains personal funnel data
+dashboard.html
