@@ -45,17 +45,51 @@ function toIso(value: number | string | undefined | null): string | null {
   return Number.isNaN(parsed) ? null : new Date(parsed).toISOString();
 }
 
+/** Page size is fixed server-side: `limit` above 20 is silently ignored. */
+const HIMALAYAS_PAGE = 20;
+const HIMALAYAS_DEFAULT_PAGES = 50;
+
 export const himalayas: SourceAdapter = {
   kind: "himalayas",
   docs: "https://himalayas.app/api",
   async fetchJobs(config: SourceConfig): Promise<FetchResult> {
-    // `handle` is an optional free-text filter; empty means "everything recent".
-    const params = new URLSearchParams({ limit: "50" });
-    if (config.handle) params.set("q", config.handle);
-    const data = await getJson<{ jobs?: HimalayasJob[] }>(
-      `https://himalayas.app/jobs/api?${params}`,
-    );
-    const jobs = (data.jobs ?? []).map((j): RawJob => ({
+    // Himalayas exposes ~101.000 postings but serves 20 per request and
+    // ignores a larger `limit`, so the whole board would be ~5.000 calls —
+    // neither practical nor polite. It orders by publication date descending,
+    // which makes the first pages the freshest postings, and freshness is the
+    // strongest lever on reply rate. So we page a bounded, recent slice.
+    //
+    // `handle` is the page count ("" uses the default). It is NOT a search
+    // term: the API accepts `q` and ignores it — every query returns the same
+    // 101.018 results — so filtering happens in the scorer, as everywhere else.
+    const requested = Number.parseInt(config.handle, 10);
+    const pages =
+      Number.isFinite(requested) && requested > 0 ? requested : HIMALAYAS_DEFAULT_PAGES;
+
+    const collected: HimalayasJob[] = [];
+    const warnings: string[] = [];
+    let total: number | undefined;
+
+    for (let page = 0; page < pages; page++) {
+      const offset = page * HIMALAYAS_PAGE;
+      const data = await getJson<{ jobs?: HimalayasJob[]; totalCount?: number }>(
+        `https://himalayas.app/jobs/api?limit=${HIMALAYAS_PAGE}&offset=${offset}`,
+      );
+      total = data.totalCount ?? total;
+      const batch = data.jobs ?? [];
+      collected.push(...batch);
+      if (batch.length < HIMALAYAS_PAGE) break;
+      // Deliberate pacing: this is a free service doing us a favour.
+      if (page < pages - 1) await new Promise((r) => setTimeout(r, 120));
+    }
+
+    if (total && collected.length < total) {
+      warnings.push(
+        `himalayas: ${collected.length} de ${total.toLocaleString()} vagas (as mais recentes). Aumente o handle para paginar mais.`,
+      );
+    }
+
+    const jobs = collected.map((j): RawJob => ({
       externalId: j.guid,
       companyName: j.companyName,
       title: j.title.trim(),
@@ -74,7 +108,7 @@ export const himalayas: SourceAdapter = {
       compPeriod: j.salaryPeriod ?? null,
       raw: j,
     })) as RawJob[];
-    return { jobs, warnings: [] };
+    return { jobs, warnings };
   },
 };
 

@@ -274,6 +274,36 @@ evidence:
     - "CTO & Partner at Consulta Já (2014–2017)."
     - "IT Mentor at BairesDev — mentored 10+ teams in PHPUnit, Cypress, CSS, Docker, Shell Script and AWS."
 
+# Channels the candidate has already been through, and what he learned.
+#
+# Matters for triage: a posting reached through an agency he already knows is a
+# different proposition from a cold one, and going direct to a former agency
+# client removes an intermediary that was taking a cut.
+channels:
+  worked_through:
+    - name: BairesDev
+      role: Senior Software Engineer & IT Mentor (2021–2023)
+      clients_reached: [ADT Solar / Sunpro, Red Ventures]
+      note: >-
+        26 processos seletivos mapeados em 2026 sem fechar. A hipótese do
+        markup foi investigada em LinkedIn/vagas_agosto_2026.md: das 24
+        empresas, 9 não têm vaga própria em canal algum e várias das 15
+        restantes não contratam contractor internacional. O gargalo não é só
+        preço — mas nas 4 empresas de Nível 1 aplicar direto elimina o
+        intermediário.
+    - name: Revelo
+      role: Senior Software Engineer na MPC — Mobile Price Card (USA)
+      note: Marketplace LATAM; contratação B2B a partir do Brasil já validada por esse canal.
+
+  # Marketplaces do mesmo tipo, ainda não usados — avaliar no benchmark.
+  peers_to_evaluate: [Toptal, Turing, Andela, A.Team, Braintrust, Lemon.io, Gun.io, Arc.dev]
+
+  # Regra de triagem derivada da experiência acima.
+  preference: >-
+    Canal direto da empresa vence agência sempre que a vaga existir nos dois.
+    Agência só quando é o único canal — que foi o caso em 9 das 24 empresas
+    investigadas.
+
 # Honest gaps. The agent must flag these rather than paper over them.
 growth:
   - "No public, sanitized case study yet for Zorbit or Contas Casal (audit §4.2)."

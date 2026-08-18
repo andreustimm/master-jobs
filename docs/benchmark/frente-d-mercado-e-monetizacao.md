@@ -276,3 +276,25 @@ explicável"**. Elas se vendem como "vagas que te patrocinam".
 te contratar". A explicabilidade é o mecanismo; a promessa vendável é a economia de tempo e a
 ausência de rejeição previsível.
 
+### 3.2 O teste do capital: quem consegue levantar dinheiro
+
+Se ainda restar dúvida sobre qual lado do mercado é um negócio, o mercado de capital de risco já
+votou — e a diferença é de uma ordem de grandeza.
+
+| Lado | Empresa | Capital levantado | Valuation / ARR |
+|---|---|---|---|
+| 🏢 Recrutador | **Eightfold AI** | **US$ 410 M+** | **US$ 2,1 bi** ([TechCrunch](https://techcrunch.com/2021/06/10/ai-startup-eightfold-valued-at-2-1b-in-softbank-led-220m-funding/)) |
+| 🏢 Recrutador | **SeekOut** | **US$ 186 M** | **US$ 1,2 bi**; ARR US$ 25,2 M em 2024 ([BusinessWire](https://www.businesswire.com/news/home/20220112005166/en/SeekOut-Raises-$115-Million-in-Series-C-Funding-Bringing-Valuation-to-$1.2-Billion-in-Four-Years), [Latka](https://getlatka.com/companies/seekout)) |
+| 👤 Candidato | **Teal** | US$ 20,7 M em 4 rodadas | Não divulgado ([Tracxn](https://tracxn.com/d/companies/teal/__2DKqrP7V66-l9-_sa9s2S0-7EBbtBWPDi1lVoI8b7Os)) |
+| 👤 Candidato | **Final Round AI** | US$ 6,88 M (seed, jan/2025) | 27 funcionários ([Tracxn](https://tracxn.com/d/companies/final-round-ai/__jExsq_yeYZhlcwnffrolaaPsPaK8ZXTi3dPNjZJHLJE)) |
+| 👤 Candidato | **Simplify Jobs** (YC, Craft Ventures) | **US$ 4,35 M**, última rodada mar/2024 | 1 M+ candidatos, 100 M+ candidaturas, **equipe de 7** ([Tracxn](https://tracxn.com/d/companies/simplify-jobs/__Nghq6k46Vs-N_rZ2M26VOUDcy5eji4eK0ZC_K36a0HQ/funding-and-investors)) |
+| 👤 Candidato | **Jobscan** | **US$ 0 — bootstrapped** | ARR US$ 2–3,8 M, lucrativa, 1,2 M visitas/mês ([Kona Equity](https://www.konaequity.com/company/jobscan-4864089829/), [Growjo](https://growjo.com/company/Jobscan)) |
+
+Leia a linha da Simplify com atenção: **1 milhão de candidatos, 100 milhões de candidaturas
+processadas, e a empresa levantou US$ 4,35 M e tem 7 pessoas.** Escala de uso enorme, monetização
+minúscula. Não é falta de execução — é o teto da categoria.
+
+E leia a linha da Jobscan como a boa notícia realista: **13 anos, bootstrapped, lucrativa, ~US$ 3 M
+de ARR.** Este é o melhor caso plausível do lado candidato feito com disciplina. É um excelente
+negócio para uma ou duas pessoas. Não é um negócio de capital de risco.
+

@@ -57,9 +57,13 @@ sources:
   # These widen the funnel beyond known companies. Noisy by design; the scorer
   # filters, not the fetcher.
   - kind: himalayas
-    handle: ""
-    label: Himalayas (all remote)
-    rationale: "Free public API, strong LATAM-friendly remote coverage"
+    handle: "60"
+    label: Himalayas (recentes)
+    rationale: >-
+      101.022 vagas no board, servidas 20 por requisição e ordenadas por data.
+      60 páginas = as ~1.200 vagas mais recentes, que é onde a taxa de resposta
+      é maior. O handle é a contagem de páginas, não um termo de busca — a API
+      aceita `q` e o ignora.
   - kind: remotive
     handle: "architect"
     label: Remotive (architect)
