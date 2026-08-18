@@ -1,0 +1,19 @@
+# Codex configuration for job-hunt-os.
+#
+# Instructions live in AGENTS.md at the repository root — that file is the
+# mirror of CLAUDE.md. Edit both together.
+
+[project]
+name = "job-hunt-os"
+instructions = "AGENTS.md"
+
+# Every shell command must be prefixed with `rtk` in Codex (see AGENTS.md).
+# The commands below are the ones worth knowing before touching anything.
+[project.commands]
+install = "rtk pnpm install"
+test = "rtk pnpm test"
+typecheck = "rtk pnpm typecheck"
+check = "rtk pnpm check"
+sync = "rtk pnpm jho jobs sync"
+list = "rtk pnpm jho jobs list --min-fit 55"
+pipeline = "rtk pnpm jho pipeline"

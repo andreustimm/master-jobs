@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "allowJs": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    // Node 24 type stripping resolves imports at runtime, so relative imports
+    // must carry the explicit .ts extension. See docs/adr/0006.
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "erasableSyntaxOnly": true,
+    "incremental": true,
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "skipLibCheck": true,
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["./*"],
+      "@core/*": ["./src/core/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

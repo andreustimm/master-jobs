@@ -1,0 +1,254 @@
+# ---------------------------------------------------------------------------
+# Candidate profile — the single source of truth for scoring, CV tailoring and
+# the `candidate-profile` agent skill.
+#
+# Derived from:
+#   - CV/ATS Curriculum Andreus Timm 2026-07 - EN.md
+#   - Relatorio-Posicionamento-Andreus-Timm-2026-07-27.md (sections 6, 7.2, 13)
+#
+# Editing rule: facts only. Anything aspirational goes under `growth`, never
+# under `evidence`, so the tailoring agent can never claim it as experience.
+# ---------------------------------------------------------------------------
+
+identity:
+  name: Andreus Jarta Timm
+  headline: Senior AI Software Architect
+  location: São Paulo, Brazil
+  timezone: America/Sao_Paulo
+  email: andreus.timm@gmail.com
+  linkedin: https://www.linkedin.com/in/andreus-timm
+  github: https://github.com/andreustimm
+  languages:
+    - { lang: English, level: C2 }
+    - { lang: Portuguese, level: native }
+    - { lang: Spanish, level: A2-B1 }
+
+# What we are actually hunting for. Drives the title scorer.
+targets:
+  # Each cluster maps to a CV variant and a cover-letter angle.
+  clusters:
+    architect:
+      weight: 1.0
+      titles:
+        - AI Solutions Architect
+        - AI Software Architect
+        - Software Architect
+        - Solutions Architect
+        - Principal Architect
+        - Cloud Architect
+      cv_variant: architect
+    staff:
+      weight: 0.95
+      titles:
+        - Staff Software Engineer
+        - Principal Software Engineer
+        - Staff Engineer
+        - Principal Engineer
+        - Senior Staff Engineer
+      cv_variant: staff
+    ai_lead:
+      weight: 0.95
+      titles:
+        - AI Engineering Lead
+        - Head of AI Engineering
+        - Lead AI Engineer
+        - Applied AI Engineer
+        - AI Engineer
+        - Machine Learning Engineer
+      cv_variant: ai
+    eng_lead:
+      weight: 0.85
+      titles:
+        - Engineering Lead
+        - Engineering Manager
+        - Tech Lead
+        - Technical Lead
+        - Head of Engineering
+        - VP of Engineering
+      cv_variant: lead
+    senior_ic:
+      weight: 0.6
+      titles:
+        - Senior Software Engineer
+        - Senior Backend Engineer
+        - Senior Full Stack Engineer
+        - Senior Platform Engineer
+      cv_variant: senior
+
+  # Titles that actively damage positioning — section 6.3 of the audit.
+  avoid_titles:
+    - Junior
+    - Intern
+    - Trainee
+    - Graduate
+    - Associate Software Engineer
+    - Support Engineer
+    - QA Analyst
+    - Sales
+    - Account Executive
+    - Recruiter
+    - Customer Success
+    - Data Entry
+
+# Hard constraints. A violated constraint is a blocker, not a low score.
+constraints:
+  # No US work authorization; contracts are B2B from Brazil.
+  work_authorization: [Brazil]
+  needs_visa_sponsorship_for: [US, Canada, UK, EU]
+  contract_models: [b2b, contractor, cnpj, freelance, full-time-remote]
+  remote_only: true
+  # Regions that reliably hire remote contractors from Brazil.
+  acceptable_regions: [worldwide, global, latam, americas, brazil, remote]
+  max_timezone_offset_hours: 6
+
+# Keyword model. Weights are relative, normalised at scoring time.
+keywords:
+  critical:      # section 6.1 — highest commercial value
+    - { term: "ai architect", weight: 10 }
+    - { term: "solutions architect", weight: 9 }
+    - { term: "software architecture", weight: 9 }
+    - { term: "agentic", weight: 9 }
+    - { term: "multi-agent", weight: 9 }
+    - { term: "llm", weight: 8 }
+    - { term: "rag", weight: 8 }
+    - { term: "retrieval augmented generation", weight: 8 }
+    - { term: "production ai", weight: 8 }
+    - { term: "distributed systems", weight: 8 }
+    - { term: "system design", weight: 7 }
+    - { term: "technical leadership", weight: 7 }
+    - { term: "multi-tenant", weight: 7 }
+    - { term: "platform engineering", weight: 7 }
+  strong:        # section 7.2 — what job posts actually ask for
+    - { term: "evals", weight: 6 }
+    - { term: "evaluation", weight: 4 }
+    - { term: "guardrails", weight: 6 }
+    - { term: "observability", weight: 6 }
+    - { term: "tool calling", weight: 6 }
+    - { term: "vector database", weight: 5 }
+    - { term: "embeddings", weight: 5 }
+    - { term: "reranking", weight: 5 }
+    - { term: "fine-tuning", weight: 4 }
+    - { term: "llmops", weight: 6 }
+    - { term: "human-in-the-loop", weight: 5 }
+    - { term: "model routing", weight: 5 }
+    - { term: "cost optimization", weight: 4 }
+    - { term: "governance", weight: 4 }
+    - { term: "event-driven", weight: 5 }
+    - { term: "microservices", weight: 4 }
+    - { term: "api design", weight: 4 }
+    - { term: "saas", weight: 4 }
+    - { term: "data pipeline", weight: 4 }
+    - { term: "etl", weight: 3 }
+    - { term: "legacy modernization", weight: 5 }
+    - { term: "mentoring", weight: 3 }
+    - { term: "stakeholder", weight: 3 }
+  stack:         # proven hands-on — evidence exists in the CV
+    - { term: "typescript", weight: 5 }
+    - { term: "python", weight: 5 }
+    - { term: "node", weight: 4 }
+    - { term: "next.js", weight: 4 }
+    - { term: "fastapi", weight: 4 }
+    - { term: "react", weight: 3 }
+    - { term: "go", weight: 3 }
+    - { term: "golang", weight: 3 }
+    - { term: "rust", weight: 2 }
+    - { term: "php", weight: 2 }
+    - { term: "laravel", weight: 2 }
+    - { term: "kotlin", weight: 2 }
+    - { term: "postgres", weight: 3 }
+    - { term: "kubernetes", weight: 3 }
+    - { term: "terraform", weight: 3 }
+    - { term: "aws", weight: 3 }
+    - { term: "gcp", weight: 2 }
+    - { term: "docker", weight: 2 }
+    - { term: "langchain", weight: 3 }
+    - { term: "langgraph", weight: 3 }
+    - { term: "openai", weight: 3 }
+    - { term: "anthropic", weight: 3 }
+  # Presence of these means the role is off-axis for the target positioning.
+  negative:
+    - { term: "wordpress", weight: -6 }
+    - { term: "salesforce developer", weight: -5 }
+    - { term: "sharepoint", weight: -6 }
+    - { term: "sap abap", weight: -6 }
+    - { term: "manual testing", weight: -5 }
+    - { term: "cobol", weight: -6 }
+    - { term: ".net framework", weight: -3 }
+    - { term: "unity", weight: -3 }
+    - { term: "game developer", weight: -3 }
+
+# Phrases that disqualify a posting regardless of keyword match.
+blockers:
+  - pattern: "must be (located |based )?in the (united states|us|usa)"
+    reason: US-only location requirement
+  - pattern: "us citizen|u\\.s\\. citizen|citizenship required"
+    reason: Citizenship requirement
+  - pattern: "security clearance|top secret|ts/sci"
+    reason: Security clearance required
+  - pattern: "green card|permanent resident"
+    reason: US residency requirement
+  - pattern: "(must be )?authorized to work in the (us|united states|uk|canada)"
+    reason: Local work authorization required
+  - pattern: "no (visa )?sponsorship"
+    reason: No sponsorship offered
+  - pattern: "on[- ]?site|in[- ]?office|hybrid \\(\\d"
+    reason: Requires physical presence
+  - pattern: "w2 only|w-2 only"
+    reason: W2 employment only, incompatible with B2B from Brazil
+
+# Compensation reference for the markup hypothesis (see LinkedIn/vagas_agosto_2026).
+compensation:
+  currency: USD
+  period: year
+  # Below this a role is not worth the switching cost.
+  floor: 90000
+  target: 150000
+  # Hourly contractor equivalent.
+  hourly_floor: 55
+  hourly_target: 85
+
+seniority:
+  years_experience: 20
+  # Years-required thresholds beyond which a posting is under-levelled.
+  min_years_expected: 7
+  reject_below_years: 3
+
+# Evidence the tailoring agent may cite. Nothing outside this list is claimable.
+evidence:
+  ai_platforms:
+    - "Architected AI platforms at The Hackett Group (NASDAQ: HCKT) generating business systems and dashboards from natural language using LLMs, BI abstractions and scalable data pipelines."
+    - "Built multi-agent orchestration and skill-based execution pipelines with Spec-Driven Development across Python, TypeScript, FastAPI, Next.js and Kotlin."
+    - "Zorbit — agent orchestration platform with isolation, permissions, retries and audit trail (private)."
+  saas_architecture:
+    - "Mahout ERP Cloud — founded and scaled a multi-tenant ERP SaaS covering finance, POS, inventory, CRM, BI and e-commerce."
+    - "MPC — enterprise multi-tenant User Management System on Laravel 12 + Jetstream."
+    - "Consulta Já — healthcare SaaS used by 30+ clinics, R$1M+ VC funding raised."
+  modernization:
+    - "Quilt Software / PosNation — led modernization of a large legacy PHP POS platform and standardized multiple databases."
+    - "Regal Rexnord — upgraded mission-critical apps from PHP 5.6 to 8.4 across 10 major versions with zero-downtime deploys."
+  cloud_devops:
+    - "Red Ventures — CI/CD and Terraform IaC on AWS reaching near-100% automated provisioning."
+    - "ADT Solar / Sunpro — React, Node.js, MongoDB, WebSockets, Kubernetes and AWS Lambda; technical reference for a team across 11 countries."
+  data:
+    - "ETL workflows, data discovery, enrichment, hierarchical models and data-quality governance for analytics at The Hackett Group."
+  leadership:
+    - "Co-Founder, CEO & CTO at Mahout ERP Cloud (2017–2021)."
+    - "CTO & Partner at Consulta Já (2014–2017)."
+    - "IT Mentor at BairesDev — mentored 10+ teams in PHPUnit, Cypress, CSS, Docker, Shell Script and AWS."
+
+# Honest gaps. The agent must flag these rather than paper over them.
+growth:
+  - "No public, sanitized case study yet for Zorbit or Contas Casal (audit §4.2)."
+  - "Kubernetes appears in delivery work but is not a headline strength."
+  - "Formal evals/golden-dataset tooling is practiced internally, not yet demonstrated publicly."
+  - "Only 2 LinkedIn recommendations; neither validates architecture or AI (audit §3.8)."
+
+# CV variants live here; the tailoring agent picks by cluster.
+cv:
+  base: ../../CV/ATS Curriculum Andreus Timm 2026-07 - EN.md
+  variants:
+    architect: profile/variants/architect.md
+    staff: profile/variants/staff.md
+    ai: profile/variants/ai.md
+    lead: profile/variants/lead.md
+    senior: profile/variants/senior.md

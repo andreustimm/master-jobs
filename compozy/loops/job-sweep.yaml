@@ -1,0 +1,103 @@
+apiVersion: compozy.loop/v1
+kind: Loop
+meta:
+  name: job-sweep
+  description: Varredura diária de vagas — sincroniza fontes, pontua e propõe triagem.
+  catalog:
+    use_when: >-
+      Você quer a varredura diária de vagas do job-hunt-os: sincronizar todas as
+      fontes públicas, repontuar e receber uma recomendação de triagem.
+    keywords:
+      - jobs
+      - sourcing
+      - triage
+      - career
+    category: Career
+
+concurrency: forbid
+
+inputs:
+  min_fit:
+    type: number
+    default: 55
+  analyst:
+    type: agent
+    default: general
+
+contract:
+  goal: >
+    Sincronizar todas as fontes de vagas configuradas, repontuar o backlog e
+    entregar uma recomendação de triagem para as vagas acima do corte de fit.
+  definition_of_done: >
+    O sync rodou, os scores estão atualizados, e cada vaga nova acima do corte
+    recebeu um veredito (aplicar / talvez / descartar) com justificativa.
+  terminal_states:
+    - done
+    - no-op
+    - blocked
+    - failed
+  iteration_cap: 5
+  no_progress:
+    window: 2
+  budget:
+    tokens: 0
+    wall_clock_sec: 0
+    on_exceeded: halt
+
+graph:
+  nodes:
+    - id: min_fit_input
+      class: source
+      kind: input
+      input_ref: min_fit
+
+    - id: sweep
+      class: action
+      kind: run-agent
+      timeout: 20m
+      retry:
+        max_attempts: 2
+      params:
+        agent: "{{ .inputs.analyst }}"
+        prompt: |
+          Execute a varredura diária de vagas do job-hunt-os.
+
+          Diretiva: esta execução já é a autorização do operador. Comece
+          imediatamente, não peça confirmação e não responda com saudação.
+
+          Passos:
+          1. `pnpm jho jobs sync` — reporte o resultado por fonte. Se alguma
+             falhar, diga qual e por quê.
+          2. `pnpm jho jobs list --min-fit {{ .inputs.min_fit }} --limit 25`
+          3. Para cada vaga nova acima de 60 de fit, rode
+             `pnpm jho jobs show <id>` e avalie: blockers primeiro, depois o
+             breakdown do score, depois aderência real ao perfil.
+          4. Produza a recomendação de triagem.
+
+          Regras:
+          - Só cite experiência que exista em `evidence:` no profile.yaml.
+          - Bloqueio duro (autorização de trabalho nos EUA, presencial, W2) é
+            eliminatório — descarte e siga.
+          - NÃO mova nada no funil. A decisão é do usuário.
+
+          Skills: job-triage, candidate-profile.
+        output_schema:
+          type: object
+          required:
+            - status
+            - summary
+            - candidates
+          properties:
+            status:
+              enum:
+                - completed
+            summary:
+              type: string
+            sources_failed:
+              type: array
+            candidates:
+              type: array
+
+  edges:
+    - from: min_fit_input
+      to: sweep

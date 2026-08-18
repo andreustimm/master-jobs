@@ -1,0 +1,47 @@
+{
+  "name": "job-hunt-os",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Job sourcing, fit scoring, application pipeline and LinkedIn positioning cockpit.",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "jho": "node --experimental-strip-types --no-warnings --env-file-if-exists=.env src/cli.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "pnpm jho db seed",
+    "sync": "pnpm jho jobs sync",
+    "score": "pnpm jho jobs score",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "pnpm typecheck && pnpm test"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.4",
+    "commander": "^15.0.0",
+    "drizzle-orm": "^0.45.2",
+    "next": "^16.3.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "yaml": "^2.8.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.4",
+    "drizzle-kit": "^0.31.10",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

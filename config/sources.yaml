@@ -1,0 +1,85 @@
+# ---------------------------------------------------------------------------
+# Job sources.
+#
+# Every entry is a public, unauthenticated endpoint. Nothing here scrapes a
+# logged-in session — see docs/linkedin-policy.md for why that boundary exists.
+#
+# `handle` meaning by kind:
+#   greenhouse       board token in boards-api.greenhouse.io/v1/boards/<token>
+#   lever            company slug in api.lever.co/v0/postings/<slug>
+#   ashby            board name in jobs.ashbyhq.com/<board>
+#   smartrecruiters  company identifier
+#   recruitee        subdomain in <handle>.recruitee.com
+#   himalayas        optional free-text query ("" = everything recent)
+#   remotive         optional search term
+#   arbeitnow        ignored (whole board)
+#   remoteok         ignored (whole board)
+#   adzuna           "<country>:<query>", requires ADZUNA_APP_ID/KEY
+#
+# Verify a handle before adding it:  pnpm jho sources probe <kind> <handle>
+# ---------------------------------------------------------------------------
+
+sources:
+  # --- Tier 1: companies already confirmed to hire remotely from Brazil -----
+  # Source: LinkedIn/vagas_agosto_2026.md (BairesDev client mapping, Aug 2026)
+  - kind: greenhouse
+    handle: stackblitz
+    label: Bolt (StackBlitz)
+    rationale: "Tier 1 — global remote, Staff/Senior Applied AI Engineer roles open"
+
+  # --- Companies from the July 2026 job benchmark (audit §7.2) --------------
+  - kind: ashby
+    handle: textlayer
+    label: TextLayer
+    rationale: "Benchmark — Staff AI Architect, agent architecture + multi-tenant"
+  - kind: ashby
+    handle: paires
+    label: Paires
+    rationale: "Benchmark — Applied AI Engineer, explicitly open to Brazil"
+  - kind: ashby
+    handle: reflow
+    label: Reflow
+    rationale: "Benchmark — AI Engineer, remote across Canada/Europe/LatAm/US"
+  - kind: ashby
+    handle: g2i
+    label: G2i
+    rationale: "Benchmark — Senior/Staff AI Engineer, remote contract"
+  - kind: ashby
+    handle: redcan
+    label: Redcan
+    rationale: "Benchmark — Staff Software Engineer, Agentic AI Products"
+  - kind: lever
+    handle: jobgether
+    label: Jobgether
+    rationale: "Benchmark — AI Solutions Architect, remote contract aggregator"
+
+  # --- Broad remote aggregators --------------------------------------------
+  # These widen the funnel beyond known companies. Noisy by design; the scorer
+  # filters, not the fetcher.
+  - kind: himalayas
+    handle: ""
+    label: Himalayas (all remote)
+    rationale: "Free public API, strong LATAM-friendly remote coverage"
+  - kind: remotive
+    handle: "architect"
+    label: Remotive (architect)
+    rationale: "Free API, filtered to architecture-flavoured roles"
+  - kind: remotive
+    handle: "ai engineer"
+    label: Remotive (AI engineer)
+    rationale: "Second pass on the AI cluster"
+  - kind: arbeitnow
+    handle: ""
+    label: Arbeitnow
+    rationale: "Free API aggregating ATS boards, mostly EU — useful for EU B2B"
+  - kind: remoteok
+    handle: ""
+    label: RemoteOK
+    rationale: "Free API, worldwide remote, salary data on many postings"
+
+  # --- Optional, needs credentials -----------------------------------------
+  # Uncomment after setting ADZUNA_APP_ID / ADZUNA_APP_KEY in .env.local
+  # - kind: adzuna
+  #   handle: "us:AI solutions architect"
+  #   label: Adzuna (US, AI architect)
+  #   rationale: "Broad market sweep for salary benchmarking"
