@@ -13,6 +13,7 @@ import {
   job,
   jobScore,
   positioningTask,
+  source,
   type ApplicationStatus,
 } from "./schema.ts";
 
@@ -145,4 +146,82 @@ export async function openTasks() {
     .from(positioningTask)
     .where(sql`${positioningTask.status} in ('todo','doing')`)
     .orderBy(positioningTask.priority, positioningTask.horizon);
+}
+
+/** Everything the detail view needs, in one round trip. */
+export async function getJobDetail(jobId: number) {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(job)
+    .leftJoin(jobScore, eq(jobScore.jobId, job.id))
+    .leftJoin(application, eq(application.jobId, job.id))
+    .leftJoin(source, eq(source.id, job.sourceId))
+    .where(eq(job.id, jobId))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    job: row.job,
+    score: row.job_score,
+    application: row.application,
+    source: row.source,
+  };
+}
+
+/** Headline numbers for the cockpit. */
+export async function corpusStats() {
+  const db = getDb();
+  const [row] = await db
+    .select({
+      open: sql<number>`(select count(*) from job where closed_at is null)`,
+      companies: sql<number>`(select count(*) from company)`,
+      sources: sql<number>`(select count(*) from source where enabled = 1)`,
+      above45: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where j.closed_at is null and s.fit >= 45)`,
+      above60: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where j.closed_at is null and s.fit >= 60)`,
+      above70: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where j.closed_at is null and s.fit >= 70)`,
+      best: sql<number>`(select coalesce(max(fit), 0) from job_score s join job j on j.id = s.job_id where j.closed_at is null)`,
+    })
+    .from(sql`(select 1)`);
+  return row;
+}
+
+/** Cluster distribution above a cut, for the cockpit chart. */
+export async function clusterBreakdown(minFit = 45) {
+  const db = getDb();
+  return db
+    .select({
+      cluster: jobScore.cluster,
+      n: sql<number>`count(*)`,
+      best: sql<number>`max(${jobScore.fit})`,
+    })
+    .from(jobScore)
+    .innerJoin(job, eq(job.id, jobScore.jobId))
+    .where(and(isNull(job.closedAt), gte(jobScore.fit, minFit)))
+    .groupBy(jobScore.cluster)
+    .orderBy(desc(sql`count(*)`));
+}
+
+/** The funnel, with the job each application points at. */
+export async function pipelineRows() {
+  const db = getDb();
+  return db
+    .select({
+      jobId: job.id,
+      title: job.title,
+      companyName: job.companyName,
+      url: job.url,
+      status: application.status,
+      channel: application.channel,
+      appliedAt: application.appliedAt,
+      nextAction: application.nextAction,
+      notes: application.notes,
+      fit: jobScore.fit,
+      updatedAt: application.updatedAt,
+    })
+    .from(application)
+    .innerJoin(job, eq(job.id, application.jobId))
+    .leftJoin(jobScore, eq(jobScore.jobId, job.id))
+    .orderBy(desc(application.updatedAt));
 }

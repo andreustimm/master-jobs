@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+/* Tokens from DESIGN.md (HP-inspired), extended with a dark theme.
+   The light palette is the source; dark redefines only what must change. */
+@theme {
+  --color-brand: #024ad8;
+  --color-brand-bright: #296ef9;
+  --color-brand-deep: #0e3191;
+  --color-brand-soft: #c9e0fc;
+
+  --color-ink: #1a1a1a;
+  --color-ink-soft: #292929;
+  --color-canvas: #ffffff;
+  --color-cloud: #f7f7f7;
+  --color-fog: #e8e8e8;
+  --color-steel: #c2c2c2;
+
+  /* Semantic, deliberately separate from the brand accent. */
+  --color-strong: #0e7c63;
+  --color-mid: #9a6b12;
+  --color-weak: #6b7a89;
+  --color-alert: #a33a2a;
+
+  --font-sans: Archivo, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+:root {
+  --bg: var(--color-canvas);
+  --surface: #ffffff;
+  --sunk: var(--color-cloud);
+  --line: var(--color-fog);
+  --text: var(--color-ink);
+  --text-2: #5a6472;
+  --text-3: #8b95a1;
+  --accent: var(--color-brand);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1116;
+    --surface: #141a21;
+    --sunk: #1b222b;
+    --line: #242d38;
+    --text: #e6ecf2;
+    --text-2: #9eaebe;
+    --text-3: #6b7a89;
+    --accent: var(--color-brand-bright);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d1116;
+  --surface: #141a21;
+  --sunk: #1b222b;
+  --line: #242d38;
+  --text: #e6ecf2;
+  --text-2: #9eaebe;
+  --text-3: #6b7a89;
+  --accent: var(--color-brand-bright);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
