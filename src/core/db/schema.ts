@@ -127,12 +127,19 @@ export const jobScore = sqliteTable(
     seniorityScore: real("seniority_score").notNull(),
     geoScore: real("geo_score").notNull(),
     compScore: real("comp_score").notNull(),
+    /** Conversion signal, not fit: how likely applying still does anything. */
+    freshnessScore: real("freshness_score").notNull().default(0),
+    benefitScore: real("benefit_score").notNull().default(0),
     /** Negative points from disqualifiers (on-site only, visa required, ...). */
     penalty: real("penalty").notNull().default(0),
     /** architect | staff | ai-lead | backend | other — drives CV variant choice. */
     cluster: text("cluster").notNull(),
     matchedKeywords: text("matched_keywords", { mode: "json" }).notNull(),
     missingKeywords: text("missing_keywords", { mode: "json" }).notNull(),
+    /** Canonical benefit keys the posting mentions, independent of the profile. */
+    detectedBenefits: text("detected_benefits", { mode: "json" }),
+    /** Age in days at scoring time; null when no date was available. */
+    ageDays: integer("age_days"),
     /** Human-readable justification lines, for the UI and for agent review. */
     reasons: text("reasons", { mode: "json" }).notNull(),
     /** Hard blockers found in the text, e.g. "requires US work authorization". */

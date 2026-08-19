@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { loadProfile } from "../src/core/profile/load.ts";
-import { scoreJob, type ScoreInput } from "../src/core/scoring/score.ts";
+import { WEIGHTS, scoreJob, type ScoreInput } from "../src/core/scoring/score.ts";
 import type { Profile } from "../src/core/profile/schema.ts";
 
 let profile: Profile;
@@ -135,7 +135,7 @@ describe("seniority", () => {
 
   it("gives full credit at or above the target", () => {
     const result = scoreJob(job({ descriptionText: "Requires 10+ years of experience." }), profile);
-    expect(result.seniorityScore).toBe(12);
+    expect(result.seniorityScore).toBe(WEIGHTS.seniority);
   });
 });
 

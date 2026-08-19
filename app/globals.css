@@ -54,6 +54,13 @@
   --color-weak: #6b7a89;
   --color-alert: #a33a2a;
 
+  /* Conversion signals (freshness, benefits) — the "storm" family from
+     DESIGN.md. Cooler and lower-contrast than the fit components on purpose:
+     they answer "is applying still worth doing", not "is this the right job",
+     so the eye should reach them second. */
+  --color-signal: #356373;
+  --color-signal-soft: #7fadbe;
+
   --font-sans: Archivo, ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }

@@ -22,8 +22,10 @@ import {
   type Period,
 } from "../money.ts";
 import type { Profile } from "../profile/schema.ts";
+import { scoreBenefits } from "./benefits.ts";
+import { scoreFreshness } from "./freshness.ts";
 
-export const SCORER_VERSION = "1.1.0";
+export const SCORER_VERSION = "1.2.0";
 
 export type ScoreInput = {
   title: string;
@@ -37,6 +39,10 @@ export type ScoreInput = {
   compPeriod?: string | null;
   /** Set for fixed-price engagements; required to annualise them. */
   compDurationMonths?: number | null;
+  /** Employer-stated posting date. The real freshness signal when present. */
+  postedAt?: string | null;
+  /** When this system first saw it — a ceiling on age, used as fallback. */
+  firstSeenAt?: string | null;
 };
 
 export type ScoreResult = {
@@ -46,21 +52,38 @@ export type ScoreResult = {
   seniorityScore: number;
   geoScore: number;
   compScore: number;
+  freshnessScore: number;
+  benefitScore: number;
   penalty: number;
   cluster: string;
   matchedKeywords: string[];
   missingKeywords: string[];
+  /** Canonical benefit keys the posting mentions. Worth storing on its own. */
+  detectedBenefits: string[];
+  /** Days since posting, or null when no date could be established. */
+  ageDays: number | null;
   reasons: string[];
   blockers: string[];
 };
 
-/** Component weights. They sum to 100 before penalties are subtracted. */
-const WEIGHTS = {
-  title: 35,
-  keyword: 30,
-  seniority: 12,
+/**
+ * Component weights. They sum to 100 before penalties are subtracted.
+ *
+ * v1.2.0 took 10 points from fit-shaped components to fund two conversion-shaped
+ * ones. The reasoning is a recruiting one, not an engineering one: title and
+ * keywords tell you whether the job is right, but they say nothing about whether
+ * applying still accomplishes anything. Freshness does, and it is the single
+ * strongest lever on reply rate. Both new weights are small on purpose — they
+ * break near-ties, they do not let a weak-but-new posting outrank a strong one.
+ */
+export const WEIGHTS = {
+  title: 30,
+  keyword: 27,
+  seniority: 10,
   geo: 15,
   comp: 8,
+  freshness: 6,
+  benefits: 4,
 } as const;
 
 function normalize(text: string): string {
@@ -439,14 +462,32 @@ export function scoreJob(
   const seniority = scoreSeniority(fullText, profile);
   const geo = scoreGeo(input, profile);
   const comp = scoreComp(input, profile, fx);
+  const fresh = scoreFreshness(input);
+  const benefits = scoreBenefits(input.descriptionText, profile.compensation.benefits);
   const blockers = findBlockers(input, profile);
+
+  // A benefit the candidate marked `required` and a readable posting does not
+  // offer is a real blocker. `scoreBenefits` only ever reports this for postings
+  // long enough that silence actually means something.
+  for (const missing of benefits.missingRequired) {
+    blockers.push(`Missing required benefit: ${missing.replace(/_/g, " ")}`);
+  }
 
   // Blockers cap the score rather than zeroing it: a great role that says
   // "US preferred" is still worth seeing, just not at the top of the list.
   const penalty = blockers.length * 12 + (keywords.negatives.length > 0 ? 5 : 0);
 
+  const freshnessScore = fresh.factor * WEIGHTS.freshness;
+  const benefitScore = benefits.factor * WEIGHTS.benefits;
+
   const rawTotal =
-    title.score + keywords.score + seniority.score + geo.score + comp.score;
+    title.score +
+    keywords.score +
+    seniority.score +
+    geo.score +
+    comp.score +
+    freshnessScore +
+    benefitScore;
   const fit = Math.max(0, Math.min(100, rawTotal - penalty));
 
   const reasons = [
@@ -455,6 +496,8 @@ export function scoreJob(
     seniority.reason,
     geo.reason,
     comp.reason,
+    fresh.reason,
+    benefits.reason,
   ];
   if (keywords.negatives.length > 0) {
     reasons.push(`Off-axis signals: ${keywords.negatives.join(", ")}`);
@@ -467,10 +510,14 @@ export function scoreJob(
     seniorityScore: Math.round(seniority.score * 10) / 10,
     geoScore: Math.round(geo.score * 10) / 10,
     compScore: Math.round(comp.score * 10) / 10,
+    freshnessScore: Math.round(freshnessScore * 10) / 10,
+    benefitScore: Math.round(benefitScore * 10) / 10,
     penalty,
     cluster: title.cluster,
     matchedKeywords: keywords.matched,
     missingKeywords: keywords.missing,
+    detectedBenefits: benefits.detected,
+    ageDays: fresh.ageDays === null ? null : Math.round(fresh.ageDays),
     reasons,
     blockers,
   };

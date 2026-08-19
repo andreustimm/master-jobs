@@ -609,7 +609,8 @@ jobs
         console.log(
           c.dim(
             `  title ${s.titleScore} · keywords ${s.keywordScore} · seniority ${s.seniorityScore} · ` +
-            `geo ${s.geoScore} · comp ${s.compScore} · penalty -${s.penalty}`,
+            `geo ${s.geoScore} · comp ${s.compScore} · fresh ${s.freshnessScore} · ` +
+            `benefits ${s.benefitScore} · penalty -${s.penalty}`,
           ),
         );
         for (const reason of s.reasons as string[]) console.log(`  · ${reason}`);

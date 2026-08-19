@@ -8,6 +8,10 @@ import { cn } from "@/lib/utils";
  * ships, and it is this product's actual argument — a rank is only trustworthy
  * if you can see what produced it. Showing the five components in proportion
  * makes a false positive obvious, where a bare number never would.
+ *
+ * Two of these are not fit at all: freshness and benefits answer "is applying
+ * still worth doing" rather than "is this the right job". They are last in the
+ * bar for that reason — the eye reads fit first.
  */
 
 export const COMPONENTS = [
@@ -16,6 +20,8 @@ export const COMPONENTS = [
   { key: "geoScore", label: "Elegibilidade", className: "bg-[var(--color-strong)]" },
   { key: "seniorityScore", label: "Senioridade", className: "bg-[var(--color-mid)]" },
   { key: "compScore", label: "Remuneração", className: "bg-[#5b5fa8]" },
+  { key: "freshnessScore", label: "Frescor", className: "bg-[var(--color-signal)]" },
+  { key: "benefitScore", label: "Benefícios", className: "bg-[var(--color-signal-soft)]" },
 ] as const;
 
 export function Fit({ value, className }: { value: number | null; className?: string }) {
