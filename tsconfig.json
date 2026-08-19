@@ -15,6 +15,9 @@
     // Node 24 type stripping resolves imports at runtime, so relative imports
     // must carry the explicit .ts extension. See docs/adr/0006.
     "allowImportingTsExtensions": true,
+    // A type-only import that survives to runtime is a broken import under
+    // Node type stripping. This makes the compiler say so.
+    "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "erasableSyntaxOnly": true,
     "incremental": true,

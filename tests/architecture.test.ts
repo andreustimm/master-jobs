@@ -1,0 +1,124 @@
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+/**
+ * Executable architecture rules.
+ *
+ * Every assertion here is already true today — that is deliberate. A fitness
+ * test that starts red is a wish; one that starts green is a wall. These exist
+ * so the ADR 0007 migration cannot silently regress while two conventions live
+ * side by side, which the panel named as its own biggest risk.
+ */
+
+function walk(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) walk(full, out);
+    else if (full.endsWith(".ts") || full.endsWith(".tsx")) out.push(full);
+  }
+  return out;
+}
+
+const SRC = walk("src");
+const read = (f: string) => readFileSync(f, "utf8");
+
+describe("erasable TypeScript (ADR 0006)", () => {
+  it("uses no enum, namespace, decorator or parameter property", () => {
+    const offenders: string[] = [];
+    for (const file of SRC) {
+      const code = read(file);
+      if (/^\s*(export\s+)?enum\s+\w/m.test(code)) offenders.push(`${file}: enum`);
+      if (/^\s*(export\s+)?namespace\s+\w/m.test(code)) offenders.push(`${file}: namespace`);
+      if (/^\s*@[A-Z]\w*\s*\(/m.test(code)) offenders.push(`${file}: decorator`);
+      if (/constructor\s*\([^)]*\b(private|public|readonly|protected)\s+\w/.test(code)) {
+        offenders.push(`${file}: parameter property`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("carries explicit .ts extensions on relative imports", () => {
+    const offenders: string[] = [];
+    for (const file of SRC) {
+      for (const m of read(file).matchAll(/from\s+"(\.[^"]+)"/g)) {
+        const spec = m[1]!;
+        if (!spec.endsWith(".ts") && !spec.endsWith(".tsx") && !spec.endsWith(".json")) {
+          offenders.push(`${file}: ${spec}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("layering", () => {
+  it("keeps the skills domain free of infrastructure", () => {
+    // The property that makes the extractor testable without a database.
+    const domain = SRC.filter((f) => f.includes("contexts/skills/domain"));
+    expect(domain.length).toBeGreaterThan(0);
+
+    const offenders: string[] = [];
+    for (const file of domain) {
+      const code = read(file);
+      for (const forbidden of ["drizzle-orm", "db/client", "db/schema", "node:fs"]) {
+        if (code.includes(forbidden)) offenders.push(`${file}: ${forbidden}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("keeps src/ free of any dependency on the UI", () => {
+    // Careful: `./app/` inside a bounded context is its APPLICATION layer
+    // (ADR 0007), not Next's `app/`. Only a path that climbs out of src/ or
+    // uses the `@/app` alias is actually reaching into the UI.
+    const offenders = SRC.filter(
+      (f) => /from\s+"(?:\.\.\/)+app\//.test(read(f)) || /from\s+"(?:@\/app\/|next\/)/.test(read(f)),
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("write-path invariants (ADR 0005)", () => {
+  it("routes every application status change through setApplicationStatus", () => {
+    // Ingestion must never write the funnel. If a second write path appears,
+    // this fails before anyone notices decisions being overwritten.
+    const offenders: string[] = [];
+    const ingestion = SRC.filter(
+      (f) =>
+        f.includes("src/core/ingest") ||
+        f.includes("src/core/sources") ||
+        f.includes("src/core/mail"),
+    );
+    for (const file of ingestion) {
+      const code = read(file);
+      if (/\.(insert|update)\(\s*application\s*\)/.test(code)) {
+        offenders.push(`${file}: writes application directly`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("closes jobs instead of deleting them", () => {
+    const run = read("src/core/ingest/run.ts");
+    expect(run).toContain("closedAt");
+    // The only delete in the sync path is pruneClosed, and it is guarded.
+    const prune = run.slice(run.indexOf("pruneClosed"));
+    expect(prune).toContain("not in (select job_id from application)");
+  });
+});
+
+describe("scoring purity (ADR 0004)", () => {
+  it("never reaches the network", () => {
+    for (const file of SRC.filter((f) => f.includes("src/core/scoring"))) {
+      const code = read(file);
+      expect(code, file).not.toContain("fetch(");
+      expect(code, file).not.toContain("getJson");
+    }
+  });
+
+  it("keeps SCORER_VERSION declared where the weights live", () => {
+    const score = read("src/core/scoring/score.ts");
+    expect(score).toMatch(/SCORER_VERSION\s*=\s*"\d+\.\d+\.\d+"/);
+  });
+});
