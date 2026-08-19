@@ -61,8 +61,19 @@
   --color-signal: #356373;
   --color-signal-soft: #7fadbe;
 
-  --font-sans: Archivo, ui-sans-serif, system-ui, sans-serif;
+  /* Inter substitui a Forma DJR Micro da especificação — proprietária. É a
+     alternativa livre mais próxima (~85%), à frente de Work Sans. Ver a nota
+     no topo de design-tokens.css. */
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* O preflight do Tailwind v4 aplica `font-family: var(--default-font-family,
+     -apple-system, …)` no documento. Sem estas duas linhas a variável não
+     existe, o fallback vence, e a página inteira renderiza na fonte do sistema
+     — que foi exatamente o que aconteceu: o DESIGN.md estava carregado,
+     compilado e sendo ignorado. */
+  --default-font-family: var(--font-sans);
+  --default-mono-font-family: var(--font-mono);
 }
 
 :root {
@@ -149,8 +160,17 @@ body {
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 @theme inline {
+  /*
+    `--font-sans: var(--font-sans)` estava aqui, vindo do scaffold do shadcn.
+    Dentro de `@theme inline` a variável é definida neste mesmo escopo, então a
+    linha se auto-referenciava — dependência cíclica, que o CSS resolve
+    invalidando a propriedade. O efeito: TODO `var(--font-sans)` da aplicação
+    caía no fallback, e a fonte do DESIGN.md nunca chegou a ser aplicada, por
+    mais correto que o resto do sistema estivesse.
+
+    A família é declarada uma vez só, no bloco de tokens acima.
+  */
   --font-heading: var(--font-sans);
-  --font-sans: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

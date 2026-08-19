@@ -1,12 +1,31 @@
 /* ===========================================================================
    DESIGN.md — sistema completo, gerado a partir do arquivo instalado.
 
-   Uma substituição deliberada: a especificação pede Forma DJR Micro, que é
-   a face proprietária da HP e não pode ser redistribuída. Archivo é a
-   grotesk geométrica mais próxima disponível no Google Fonts. A ESCALA, os
-   PESOS e o TRACKING abaixo são os da especificação — inclusive os display
-   em peso 500 com line-height 1.0, e os botões em caixa alta com 0.7px de
-   tracking, que é o traço mais reconhecível do sistema.
+   SUBSTITUIÇÃO DE FONTE, declarada e justificada.
+
+   A especificação pede Forma DJR Micro em todos os 16 estilos. É uma face
+   proprietária (Font Bureau / David Jonathan Ross, licenciável via Adobe
+   Fonts) e não pode ser redistribuída, então o projeto usa a alternativa
+   livre mais próxima: INTER, com ~85% de similaridade e licença OFL-1.1.
+
+   Inter foi escolhida por medida, não por gosto: é a fonte do Google Fonts
+   apontada como mais próxima da Forma DJR, à frente de Work Sans. (Uma versão
+   anterior deste arquivo usava Archivo, que não figura entre as alternativas
+   reconhecidas — troca corrigida.)
+
+   Se você tiver Creative Cloud, a Forma DJR real está disponível no Adobe
+   Fonts: acrescente o kit e mude apenas `--font-sans` em globals.css. Todo o
+   resto deste arquivo já está correto.
+
+   A ESCALA, os PESOS, o LINE-HEIGHT e o TRACKING abaixo são os da
+   especificação — inclusive os display em peso 500 com line-height 1.0, e os
+   botões em caixa alta com 0.7px de tracking, que é o traço mais reconhecível
+   do sistema.
+
+   Cada classe declara `font-family` explicitamente. A especificação repete
+   `fontFamily` em todos os 16 estilos, e herdar do body faria qualquer
+   elemento dentro de um contêiner com fonte própria sair da escala em
+   silêncio.
    =========================================================================== */
 
 @theme {
@@ -66,56 +85,67 @@
 
 @layer components {
   .type-display-xxl {
+  font-family: var(--font-sans);
   font-size: 72px;
   font-weight: 500;
   line-height: 1.0;
   }
   .type-display-xl {
+  font-family: var(--font-sans);
   font-size: 56px;
   font-weight: 500;
   line-height: 1.0;
   }
   .type-display-lg {
+  font-family: var(--font-sans);
   font-size: 44px;
   font-weight: 500;
   line-height: 1.0;
   }
   .type-display-md {
+  font-family: var(--font-sans);
   font-size: 32px;
   font-weight: 500;
   line-height: 1.0;
   }
   .type-display-sm {
+  font-family: var(--font-sans);
   font-size: 24px;
   font-weight: 500;
   line-height: 1.17;
   }
   .type-display-xs {
+  font-family: var(--font-sans);
   font-size: 20px;
   font-weight: 500;
   line-height: 1.0;
   }
   .type-body-lg {
+  font-family: var(--font-sans);
   font-size: 18px;
   font-weight: 400;
   line-height: 1.33;
   }
   .type-body-md {
+  font-family: var(--font-sans);
   font-size: 16px;
   font-weight: 400;
   line-height: 1.38;
   }
   .type-body-emphasis {
+  font-family: var(--font-sans);
   font-size: 16px;
   font-weight: 500;
   line-height: 1.38;
   }
   .type-caption-md {
+  font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 400;
   line-height: 1.5;
   }
   .type-caption-sm {
+  font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 400;
   line-height: 1.33;
@@ -134,28 +164,33 @@
      faltavam na mesma régua.
      --------------------------------------------------------------------- */
   .type-meta {
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 400;
   line-height: 1.36;
   letter-spacing: 0.01em;
   }
   .type-micro {
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 500;
   line-height: 1.4;
   letter-spacing: 0.02em;
   }
   .type-caption-bold {
+  font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 700;
   line-height: 1.3;
   }
   .type-link-md {
+  font-family: var(--font-sans);
   font-size: 16px;
   font-weight: 500;
   line-height: 1.38;
   }
   .type-button-md {
+  font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 600;
   line-height: 1.4;
@@ -163,12 +198,14 @@
   text-transform: uppercase;
   }
   .type-button-sm {
+  font-family: var(--font-sans);
   font-size: 12.6px;
   font-weight: 700;
   line-height: 1.0;
   letter-spacing: 0.126px;
   }
   .type-price-md {
+  font-family: var(--font-sans);
   font-size: 24px;
   font-weight: 500;
   line-height: 1.17;

@@ -75,12 +75,59 @@ describe("design tokens", () => {
     }
   });
 
-  it("uses the specified typefaces", () => {
-    // Forma DJR is HP's proprietary face and cannot be redistributed; Archivo
-    // is the documented substitute. The substitution is deliberate and noted
-    // in design-tokens.css — what matters is that nothing else creeps in.
+  it("uses the substitute typeface the docs name", () => {
+    // Forma DJR is proprietary and cannot be redistributed; Inter is the
+    // closest free alternative (~85%) and the substitution is documented in
+    // design-tokens.css. What matters is that nothing else creeps in.
     const globals = read("app/globals.css");
-    expect(globals).toContain("Archivo");
+    expect(globals).toContain("Inter,");
     expect(globals).toContain("IBM Plex Mono");
+  });
+
+  it("loads the typeface it declares", () => {
+    // A family named in CSS but never fetched renders as the fallback, and the
+    // page looks almost right — which is how this went unnoticed.
+    const layout = read("app/layout.tsx");
+    expect(layout).toContain("fonts.googleapis.com");
+    expect(layout).toContain("family=Inter");
+  });
+
+  it("defines the variable Tailwind's preflight actually reads", () => {
+    // Tailwind v4 applies `font-family: var(--default-font-family, -apple-system…)`
+    // to the document. Leaving that variable undefined means the whole app
+    // renders in the system font while the design tokens sit there, compiled
+    // and ignored.
+    const globals = read("app/globals.css");
+    expect(globals).toContain("--default-font-family:");
+    expect(globals).toContain("--default-mono-font-family:");
+  });
+
+  it("has no self-referencing custom property", () => {
+    // `--font-sans: var(--font-sans)` shipped in the shadcn scaffold. Inside
+    // `@theme inline` the variable is defined in that same scope, so the line
+    // referenced itself — a cyclic dependency, which CSS resolves by
+    // invalidating the property. Every `var(--font-sans)` in the app fell
+    // through to its fallback, silently.
+    const offenders: string[] = [];
+    for (const file of ["app/globals.css", "app/design-tokens.css"]) {
+      // Comments are stripped first: this file documents the bug it prevents,
+      // and the explanation must not trip the check.
+      const css = read(file).replace(/\/\*[\s\S]*?\*\//g, "");
+      for (const m of css.matchAll(/(--[\w-]+):\s*var\(\s*(--[\w-]+)\s*[,)]/g)) {
+        if (m[1] === m[2]) offenders.push(`${file}: ${m[1]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("declares a family on every type style, as the spec does", () => {
+    // DESIGN.md repeats `fontFamily` on all 16 styles. Inheriting from the
+    // body means any element inside a container with its own font silently
+    // leaves the scale.
+    const tokens = read("app/design-tokens.css");
+    const classes = [...tokens.matchAll(/\.type-[a-z-]+ \{/g)].length;
+    const families = [...tokens.matchAll(/font-family: var\(--font-sans\)/g)].length;
+    expect(classes).toBeGreaterThan(10);
+    expect(families).toBe(classes);
   });
 });

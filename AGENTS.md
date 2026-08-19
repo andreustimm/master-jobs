@@ -83,6 +83,9 @@ dashboard Next.js em `localhost:3000`.
 > curto vale 0,5 e **nunca** gera bloqueador.
 
 > **9. Todo frontend segue o `DESIGN.md`. Sem exceção.**
+> A fonte da especificação é **Forma DJR Micro**, proprietária. O projeto usa
+> **Inter** (~85% de similaridade, OFL-1.1) e a substituição está documentada
+> no topo de `app/design-tokens.css`. Com Adobe Fonts, troque só `--font-sans`.
 > `DESIGN.md` (raiz) é a fonte da verdade visual — cores, tipografia, escala de
 > espaçamento, raios, motivos. Ele já está traduzido em `app/design-tokens.css`
 > (28 cores, 16 estilos de texto, 8 raios, 8 espaçamentos) e em `app/globals.css`.
