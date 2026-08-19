@@ -15,8 +15,8 @@ export default async function Referrals() {
 
   return (
     <main className="pt-10">
-      <h1 className="mb-2 text-3xl font-bold tracking-tight">Referrals</h1>
-      <p className="mb-7 max-w-[62ch] text-muted-foreground">
+      <h1 className="type-display-md chevron mb-4">Referrals</h1>
+      <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
         Vagas abertas onde você já conhece alguém. Referrals são ~7% dos candidatos
         e ~40% das contratações — nenhuma outra alavanca do sistema chega perto.
       </p>

@@ -14,8 +14,8 @@ export default async function Pipeline() {
 
   return (
     <main className="pt-10">
-      <h1 className="mb-2 text-3xl font-bold tracking-tight">Funil</h1>
-      <p className="mb-7 max-w-[62ch] text-muted-foreground">
+      <h1 className="type-display-md chevron mb-4">Funil</h1>
+      <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
         A única coisa que o sistema não consegue recriar. Nenhuma ingestão escreve
         aqui — só você.
       </p>

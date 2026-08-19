@@ -23,8 +23,8 @@ export default async function CandidateArea() {
 
   return (
     <main className="pt-10 pb-16">
-      <h1 className="mb-2 text-3xl font-bold tracking-tight">Área do candidato</h1>
-      <p className="mb-7 max-w-[62ch] text-muted-foreground">
+      <h1 className="type-display-md chevron mb-4">Área do candidato</h1>
+      <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
         Cole o currículo aqui. Ele fica versionado — cada salvamento vira uma
         versão, e a anterior continua consultável. Guardar o texto só vale a pena
         pelo que ele destrava:{" "}
@@ -97,7 +97,7 @@ export default async function CandidateArea() {
         <>
           <Separator className="my-8" />
           <section>
-            <h2 className="mb-1 text-xl font-semibold">
+            <h2 className="type-display-sm mb-2">
               O que as vagas dizem e o seu CV não
             </h2>
             <p className="mb-5 text-sm text-muted-foreground">
@@ -178,7 +178,7 @@ export default async function CandidateArea() {
         <>
           <Separator className="my-8" />
           <section>
-            <h2 className="mb-3 text-lg font-semibold">Versões</h2>
+            <h2 className="type-display-xs mb-3">Versões</h2>
             <div className="divide-y overflow-hidden rounded-xl border">
               {history.map((h) => (
                 <div key={h.id} className="flex items-center gap-3 bg-card px-4 py-2.5 text-sm">

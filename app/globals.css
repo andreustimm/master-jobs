@@ -1,12 +1,41 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "./design-tokens.css";
 
 @custom-variant dark (&:is(.dark *));
 
 /* Tokens from DESIGN.md (HP-inspired), extended with a dark theme.
    The light palette is the source; dark redefines only what must change. */
 @theme {
+  /* ---- DESIGN.md tokens -------------------------------------------------
+     Applied from the HP-inspired system installed via getdesign.
+
+     One deliberate substitution: the spec calls for Forma DJR Micro, which is
+     HP's proprietary face and cannot be redistributed. Archivo is the closest
+     geometric grotesk available on Google Fonts, and the *scale and weights*
+     below are the spec's — display sizes at weight 500 with line-height 1.0,
+     not the 700 a default would give.
+  --------------------------------------------------------------------- */
+
+  /* rounded */
+  --radius-none: 0px;
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 16px;
+
+  /* spacing */
+  --spacing-xxs: 4px;
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 16px;
+  --spacing-lg: 20px;
+  --spacing-xl: 24px;
+  --spacing-xxl: 32px;
+  --spacing-section: 80px;
+
   --color-brand: #024ad8;
   --color-brand-bright: #296ef9;
   --color-brand-deep: #0e3191;
@@ -37,13 +66,13 @@
   --text: var(--color-ink);
   --text-2: #5a6472;
   --text-3: #8b95a1;
-  --accent: oklch(0.97 0 0);
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  --accent: var(--color-primary-soft);
+  --background: var(--color-canvas);
+  --foreground: var(--color-ink);
+  --card: var(--color-paper);
+  --card-foreground: var(--color-ink);
+  --popover: var(--color-paper);
+  --popover-foreground: var(--color-ink);
   /* The brand blue from DESIGN.md drives shadcn's primary, so every Button,
      link and focus ring carries the project's identity instead of the
      library's neutral default. `--accent` keeps shadcn's meaning (a subtle
@@ -51,21 +80,22 @@
   --primary: var(--color-brand);
   --primary-foreground: #ffffff;
   --ring: var(--color-brand);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
+  --secondary: var(--color-cloud);
+  --secondary-foreground: var(--color-ink);
+  --muted: var(--color-cloud);
+  --muted-foreground: var(--color-graphite);
+  --accent-foreground: var(--color-primary-deep);
+  --destructive: var(--color-error);
+  --border: var(--color-hairline);
+  --input: var(--color-hairline-strong);
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
+  /* DESIGN.md rounded.md — the spec's control radius, not shadcn's default 10px */
+  --radius: 4px;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -101,6 +131,8 @@
 }
 
 body {
+  font-size: 16px;
+  line-height: 1.38;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
@@ -153,38 +185,26 @@ body {
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: var(--color-brand-bright);
-  --primary-foreground: #ffffff;
-  --ring: var(--color-brand-bright);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Derived from the spec rather than invented: ink deepens into the ground,
+     the bright primary carries contrast, and the neutrals keep their roles. */
+  --background: #0d1116;
+  --foreground: #e6ecf2;
+  --card: #141a21;
+  --card-foreground: #e6ecf2;
+  --popover: #141a21;
+  --popover-foreground: #e6ecf2;
+  --primary: var(--color-primary-bright);
+  --primary-foreground: var(--color-on-primary);
+  --secondary: #1b222b;
+  --secondary-foreground: #e6ecf2;
+  --muted: #1b222b;
+  --muted-foreground: #9eaebe;
+  --accent: #14263f;
+  --accent-foreground: var(--color-primary-soft);
+  --destructive: var(--color-bloom-coral);
+  --border: #242d38;
+  --input: #2c3744;
+  --ring: var(--color-primary-bright);
 }
 
 @layer base {
@@ -197,4 +217,61 @@ body {
   html {
     @apply font-sans;
   }
+}
+
+/* -------------------------------------------------------------------------
+   DESIGN.md type scale.
+
+   The spec's display sizes are weight 500 with line-height 1.0 — noticeably
+   lighter and tighter than a default heading. Applied as utilities so page
+   markup asks for the scale by name instead of guessing sizes.
+   ------------------------------------------------------------------------- */
+@layer components {
+  .display-xl {
+    font-size: 56px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: 0;
+  }
+  .display-lg {
+    font-size: 44px;
+    font-weight: 500;
+    line-height: 1;
+  }
+  .display-md {
+    font-size: 32px;
+    font-weight: 500;
+    line-height: 1;
+  }
+  .display-sm {
+    font-size: 24px;
+    font-weight: 500;
+    line-height: 1.17;
+  }
+
+  /* button-primary: rounded.md, 12px/24px, 44px tall */
+  .btn-hp {
+    height: 44px;
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+  }
+
+  /* The chevron motif — the HP wordmark's parallel slashes, used as a
+     section marker rather than decoration. */
+  .chevron::before {
+    content: "";
+    display: inline-block;
+    width: 10px;
+    height: 18px;
+    margin-right: 10px;
+    vertical-align: -3px;
+    background: var(--color-brand);
+    clip-path: polygon(0 0, 55% 0, 100% 50%, 55% 100%, 0 100%, 45% 50%);
+  }
+}
+
+@media (max-width: 640px) {
+  .display-xl { font-size: 40px; }
+  .display-lg { font-size: 34px; }
+  .display-md { font-size: 27px; }
 }

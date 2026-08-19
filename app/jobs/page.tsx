@@ -32,8 +32,8 @@ export default async function Jobs({
   return (
     <main>
       <header className="pt-10 pb-4">
-        <h1 className="mb-2 text-3xl font-bold tracking-tight">Vagas</h1>
-        <p className="text-muted-foreground">
+        <h1 className="type-display-md chevron mb-4">Vagas</h1>
+        <p className="type-body-md text-muted-foreground">
           {total.toLocaleString("pt-BR")} correspondem aos filtros
           {state.q ? ` para “${state.q}”` : ""}.
         </p>

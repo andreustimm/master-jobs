@@ -30,10 +30,10 @@ export default async function Cockpit({
         <p className="mb-3 font-mono text-[11.5px] tracking-[.14em] text-muted-foreground uppercase">
           Cockpit
         </p>
-        <h1 className="mb-2.5 text-4xl font-bold tracking-tight text-balance">
+        <h1 className="type-display-lg chevron mb-4 text-balance">
           O que vale seu tempo hoje
         </h1>
-        <p className="max-w-[62ch] text-muted-foreground">
+        <p className="type-body-md max-w-[62ch] text-muted-foreground">
           Ranqueamento determinístico contra o seu perfil. Cada barra mostra{" "}
           <strong className="text-foreground">de onde veio a nota</strong> — aderência alta
           sustentada só por elegibilidade e salário costuma ser falso positivo.
@@ -54,7 +54,7 @@ export default async function Cockpit({
 
       <section>
         <div className="mb-1.5 flex items-baseline justify-between">
-          <h2 className="text-xl font-semibold">
+          <h2 className="type-display-sm">
             Topo do ranking
             <span className="ml-1 text-sm font-normal text-muted-foreground">
               · {facets.total} correspondem
@@ -72,7 +72,7 @@ export default async function Cockpit({
 
       {clusters.length > 0 && (
         <section className="mt-11">
-          <h2 className="mb-1 text-xl font-semibold">Por cluster</h2>
+          <h2 className="type-display-sm mb-2">Por cluster</h2>
           <p className="mb-4 text-sm text-muted-foreground">
             Acima do corte de 45, no acervo inteiro.
           </p>

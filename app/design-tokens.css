@@ -1,0 +1,151 @@
+/* ===========================================================================
+   DESIGN.md — sistema completo, gerado a partir do arquivo instalado.
+
+   Uma substituição deliberada: a especificação pede Forma DJR Micro, que é
+   a face proprietária da HP e não pode ser redistribuída. Archivo é a
+   grotesk geométrica mais próxima disponível no Google Fonts. A ESCALA, os
+   PESOS e o TRACKING abaixo são os da especificação — inclusive os display
+   em peso 500 com line-height 1.0, e os botões em caixa alta com 0.7px de
+   tracking, que é o traço mais reconhecível do sistema.
+   =========================================================================== */
+
+@theme {
+  /* cores */
+  --color-primary: #024ad8;
+  --color-primary-bright: #296ef9;
+  --color-primary-deep: #0e3191;
+  --color-primary-soft: #c9e0fc;
+  --color-on-primary: #ffffff;
+  --color-ink: #1a1a1a;
+  --color-ink-deep: #000000;
+  --color-ink-soft: #292929;
+  --color-on-ink: #ffffff;
+  --color-canvas: #ffffff;
+  --color-paper: #ffffff;
+  --color-cloud: #f7f7f7;
+  --color-fog: #e8e8e8;
+  --color-steel: #c2c2c2;
+  --color-graphite: #636363;
+  --color-charcoal: #3d3d3d;
+  --color-hairline: #e8e8e8;
+  --color-hairline-strong: #c2c2c2;
+  --color-link: #024ad8;
+  --color-link-pressed: #0e3191;
+  --color-bloom-coral: #ff5050;
+  --color-bloom-rose: #f9d4d2;
+  --color-bloom-deep: #b3262b;
+  --color-bloom-wine: #5a1313;
+  --color-storm-mist: #8ebdce;
+  --color-storm-sea: #7fadbe;
+  --color-storm-deep: #356373;
+  --color-error: #b3262b;
+
+  /* rounded */
+  --radius-none: 0px;
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 16px;
+  --radius-pill: 9999px;
+  --radius-full: 9999px;
+
+  /* spacing */
+  --spacing-xxs: 4px;
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 16px;
+  --spacing-lg: 20px;
+  --spacing-xl: 24px;
+  --spacing-xxl: 32px;
+  --spacing-section: 80px;
+
+  --font-sans: Archivo, "Forma DJR Micro", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+@layer components {
+  .type-display-xxl {
+  font-size: 72px;
+  font-weight: 500;
+  line-height: 1.0;
+  }
+  .type-display-xl {
+  font-size: 56px;
+  font-weight: 500;
+  line-height: 1.0;
+  }
+  .type-display-lg {
+  font-size: 44px;
+  font-weight: 500;
+  line-height: 1.0;
+  }
+  .type-display-md {
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 1.0;
+  }
+  .type-display-sm {
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.17;
+  }
+  .type-display-xs {
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.0;
+  }
+  .type-body-lg {
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.33;
+  }
+  .type-body-md {
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.38;
+  }
+  .type-body-emphasis {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.38;
+  }
+  .type-caption-md {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  }
+  .type-caption-sm {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.33;
+  }
+  .type-caption-bold {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  }
+  .type-link-md {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.38;
+  }
+  .type-button-md {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  }
+  .type-button-sm {
+  font-size: 12.6px;
+  font-weight: 700;
+  line-height: 1.0;
+  letter-spacing: 0.126px;
+  }
+  .type-price-md {
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.17;
+  }
+}

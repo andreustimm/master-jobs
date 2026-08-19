@@ -32,7 +32,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
 
       <header className="mt-4 mb-6">
         <div className="flex flex-wrap items-baseline gap-3">
-          <h1 className="text-3xl font-bold tracking-tight text-balance">{job.title}</h1>
+          <h1 className="type-display-md text-balance">{job.title}</h1>
           {application && <StatusBadge status={application.status} />}
           {job.closedAt && <Badge variant="destructive">fechada</Badge>}
         </div>
@@ -134,7 +134,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
 
       {job.descriptionText && (
         <section>
-          <h2 className="mb-2.5 text-lg font-semibold">Descrição</h2>
+          <h2 className="type-display-xs mb-3">Descrição</h2>
           <Card>
             <CardContent className="max-h-[520px] overflow-auto pt-0">
               <pre className="font-sans text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
