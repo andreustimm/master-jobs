@@ -191,6 +191,38 @@ normalizados, ordenar por remuneração produz um ranking sem sentido.
 
 ---
 
+### UI-01 · Motion para transições e movimento 📋
+
+Implementar [Motion](https://motion.dev/) nas transições do sistema.
+
+**Contexto que restringe a solução:** hoje o dashboard não envia **nenhum**
+JavaScript de cliente — todas as páginas são Server Components e o estado de
+filtro vive na URL. A única exceção é o editor de markdown, que é um Client
+Component isolado porque um editor não tem como não ser.
+
+Motion exige JavaScript no cliente. Então a decisão não é "usar ou não", é
+**onde**:
+
+| Abordagem | Custo | Quando faz sentido |
+|---|---|---|
+| CSS puro (`@starting-style`, `view-transition-name`) | zero JS | Fade de entrada, transição entre rotas |
+| Motion como ilha em componentes específicos | JS só onde há movimento | Barra de score animando ao carregar, cards do funil reordenando |
+| `motion` global com `LayoutGroup` | JS em toda página | Só se o movimento for identidade do produto |
+
+**Recomendação a validar:** começar pelo View Transitions API nativo para
+navegação entre rotas — que o Next 16 estabilizou e custa zero JavaScript — e
+usar Motion apenas onde o movimento carrega informação: a barra de composição
+do score crescendo componente a componente, e as linhas do funil reordenando
+quando um status muda. Movimento decorativo em cima de uma grade de 6.000 vagas
+é ruído, não polimento.
+
+**Primeiro passo concreto:** medir. Rodar a UI atual com `view-transition-name`
+nas rotas e ver se resolve, antes de adicionar dependência.
+
+> **Invariante a preservar:** qualquer animação deve respeitar
+> `prefers-reduced-motion`. Uma grade de triagem que se move quando o usuário
+> pediu que não se movesse é uma falha de acessibilidade, não um detalhe.
+
 ## P3 — Estrutura e futuro
 
 ### E-01 · Arquitetura hexagonal, DDD, monolito modular 🔄

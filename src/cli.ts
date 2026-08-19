@@ -49,6 +49,14 @@ import {
   saveDocument,
   syncCandidateFromProfile,
 } from "./core/candidate.ts";
+import {
+  auditSkill,
+  candidateSkills,
+  listCatalog,
+  seedCatalog,
+  skillDemand,
+} from "./core/skills.ts";
+import { skillExtraction } from "./contexts/skills/index.ts";
 import { buildReport, exportDossiers } from "./core/report/markdown.ts";
 import { seedPositioning } from "./core/positioning/seed.ts";
 import { scoreAll } from "./core/scoring/apply.ts";
@@ -1286,6 +1294,154 @@ cv.command("gap")
       }
 
       console.log(c.dim(`\n  ${report.confirmed.length} termo(s) já cobertos · ${report.unused.length} raros no alvo\n`));
+    });
+  });
+
+const skills = program
+  .command("skills")
+  .description("Skill catalogue, detection from the CV, and market demand");
+
+skills
+  .command("seed")
+  .description("Load the global skill catalogue")
+  .action(async () => {
+    await withDb(async () => {
+      await runMigrations();
+      const r = await seedCatalog();
+      console.log(`${c.green("\u2713")} ${r.inserted} skill(s) adicionada(s), ${r.updated} atualizada(s)`);
+    });
+  });
+
+skills
+  .command("detect")
+  .description("Detect skills in the current CV — produces candidates for audit, not claims")
+  .action(async () => {
+    await withDb(async () => {
+      await runMigrations();
+      const candidateId = await syncCandidateFromProfile();
+      const doc = await currentDocument(candidateId, "cv");
+      if (!doc) {
+        console.log(c.dim("\n  Nenhum currículo salvo. jho cv set <arquivo>\n"));
+        return;
+      }
+      const r = await skillExtraction({ candidateId, text: doc.content, source: "cv" });
+      console.log(
+        `${c.green("\u2713")} ${r.added} nova(s) · ${r.refreshed} atualizada(s) · ` +
+        c.dim(`${r.preserved} já auditada(s), preservada(s)`),
+      );
+
+      const strong = r.detections.filter((d) => d.confidence >= 0.75);
+      const weak = r.detections.filter((d) => d.confidence < 0.55);
+      console.log(
+        c.dim(`  ${r.detections.length} detecções · `) +
+        c.green(`${strong.length} com evidência de uso`) +
+        c.dim(` · ${weak.length} só menção solta`),
+      );
+      console.log(c.dim("  Detectada não é confirmada. Revise: jho skills list\n"));
+    });
+  });
+
+skills
+  .command("list")
+  .alias("ls")
+  .description("Skills attributed to the candidate")
+  .option("-s, --status <name>", "detected | confirmed | rejected")
+  .action(async (opts: { status?: string }) => {
+    await withDb(async () => {
+      const candidateId = await syncCandidateFromProfile();
+      const rows = await candidateSkills(candidateId, opts.status);
+      if (rows.length === 0) {
+        console.log(c.dim("\n  Nenhuma skill. Rode: jho skills seed && jho skills detect\n"));
+        return;
+      }
+      let cat = "";
+      for (const r of rows.sort((a, b) => a.category.localeCompare(b.category) || b.occurrences - a.occurrences)) {
+        if (r.category !== cat) {
+          cat = r.category;
+          console.log(c.bold(`\n  ${cat.toUpperCase()}`));
+        }
+        const mark =
+          r.status === "confirmed" ? c.green("\u2713") : r.status === "rejected" ? c.red("\u2717") : c.dim("?");
+        console.log(
+          `  ${mark} ${String(r.id).padStart(3)} ${truncate(r.name, 26)} ${c.dim(`${r.occurrences}x`)}`,
+        );
+      }
+      const counts = rows.reduce<Record<string, number>>((a, r) => {
+        a[r.status] = (a[r.status] ?? 0) + 1;
+        return a;
+      }, {});
+      console.log(
+        c.dim(`\n  ${counts.detected ?? 0} a auditar · ${counts.confirmed ?? 0} confirmadas · ${counts.rejected ?? 0} rejeitadas`),
+      );
+      console.log(c.dim("  jho skills confirm <id> · jho skills reject <id>\n"));
+    });
+  });
+
+skills
+  .command("confirm <id>")
+  .description("Confirm a detected skill — only confirmed skills may be cited as experience")
+  .option("-l, --level <text>", "your own assessment")
+  .action(async (id: string, opts: { level?: string }) => {
+    await withDb(async () => {
+      await auditSkill(Number(id), "confirmed", { level: opts.level });
+      console.log(`${c.green("\u2713")} #${id} confirmada`);
+    });
+  });
+
+skills
+  .command("reject <id>")
+  .description("Reject a false positive")
+  .action(async (id: string) => {
+    await withDb(async () => {
+      await auditSkill(Number(id), "rejected");
+      console.log(`${c.red("\u2717")} #${id} rejeitada`);
+    });
+  });
+
+skills
+  .command("demand")
+  .description("What the target market asks for, against what you have")
+  .option("--min-fit <n>", "which jobs count as target", "60")
+  .option("--limit <n>", "how many rows", "25")
+  .action(async (opts: { minFit: string; limit: string }) => {
+    await withDb(async () => {
+      const candidateId = await syncCandidateFromProfile();
+      const rows = await skillDemand({ minFit: Number(opts.minFit), candidateId });
+      console.log(c.bold("\n  DEMANDA DO MERCADO-ALVO\n"));
+      for (const r of rows.slice(0, Number(opts.limit))) {
+        const pct = Math.round(r.demand * 100);
+        const bar = "\u2588".repeat(Math.max(1, Math.round(pct / 5)));
+        const mine =
+          r.candidateStatus === "confirmed"
+            ? c.green(" voce tem")
+            : r.candidateStatus === "detected"
+              ? c.yellow(" a auditar")
+              : r.candidateStatus === "rejected"
+                ? c.red(" rejeitada")
+                : c.dim(" ausente");
+        console.log(`  ${truncate(r.name, 24)} ${c.cyan(bar)} ${String(pct).padStart(3)}%${mine}`);
+      }
+      console.log();
+    });
+  });
+
+skills
+  .command("catalog")
+  .description("The global catalogue")
+  .option("-c, --category <name>", "filter")
+  .action(async (opts: { category?: string }) => {
+    await withDb(async () => {
+      const rows = await listCatalog(opts.category);
+      let cat = "";
+      for (const r of rows) {
+        if (r.category !== cat) {
+          cat = r.category;
+          console.log(c.bold(`\n  ${cat.toUpperCase()}`));
+        }
+        const aliases = (r.aliases as string[]) ?? [];
+        console.log(`    ${truncate(r.canonicalName, 26)} ${c.dim(aliases.slice(0, 4).join(", "))}`);
+      }
+      console.log(c.dim(`\n  ${rows.length} skill(s) no catálogo\n`));
     });
   });
 

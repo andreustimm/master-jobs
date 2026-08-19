@@ -389,6 +389,100 @@ export const candidateDocument = sqliteTable(
 );
 
 /* -------------------------------------------------------------------------- */
+/* Skills                                                                      */
+/* -------------------------------------------------------------------------- */
+
+export const SKILL_CATEGORIES = [
+  "language",   // TypeScript, Python, Go
+  "framework",  // Next.js, FastAPI, Laravel
+  "ai",         // RAG, LangGraph, evals
+  "cloud",      // AWS, Kubernetes, Terraform
+  "data",       // Postgres, Kafka, dbt
+  "practice",   // TDD, DDD, observability
+  "domain",     // fintech, healthcare, ERP
+  "tool",       // Docker, Datadog
+  "soft",       // mentoring, stakeholder management
+] as const;
+
+export type SkillCategory = (typeof SKILL_CATEGORIES)[number];
+
+/**
+ * The global skill catalogue.
+ *
+ * Exists because the same capability is written a dozen ways — "Node.js",
+ * "NodeJS", "node", "Node" — and without a canonical row you cannot count,
+ * compare or audit anything. The catalogue is shared: it is not scoped to a
+ * candidate, so a future multi-candidate setup compares like with like.
+ *
+ * `aliases` is what makes detection work on real CVs and real job postings,
+ * which never agree on spelling.
+ */
+export const skill = sqliteTable(
+  "skill",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    slug: text("slug").notNull(),
+    /** How it should be written when the system displays it. */
+    canonicalName: text("canonical_name").notNull(),
+    category: text("category").notNull(),
+    /** Every spelling seen in the wild, as JSON. Drives detection. */
+    aliases: text("aliases", { mode: "json" }).notNull(),
+    /** Set when a human vetted this catalogue entry — the admin audit hook. */
+    verifiedAt: text("verified_at"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("skill_slug_idx").on(t.slug),
+    index("skill_category_idx").on(t.category),
+  ],
+);
+
+export const SKILL_SOURCES = ["cv", "profile", "manual", "inferred"] as const;
+export const SKILL_STATUSES = ["detected", "confirmed", "rejected"] as const;
+
+/**
+ * A skill attributed to a candidate.
+ *
+ * Detection is automatic; **confirmation is not**. A row starts as `detected`
+ * with the sentence from the CV that produced it, and a human promotes it to
+ * `confirmed` or knocks it down to `rejected`. That distinction is the whole
+ * point: the system may claim it *found* a skill, never that the candidate
+ * *has* one.
+ *
+ * > **Invariante:** only `confirmed` skills may be cited as experience. This is
+ * > rule 6 of CLAUDE.md expressed in the schema — a detector that reads
+ * > "migrating away from Kafka" and lets an agent claim Kafka experience is
+ * > exactly the failure mode this column prevents.
+ */
+export const candidateSkill = sqliteTable(
+  "candidate_skill",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    skillId: integer("skill_id")
+      .notNull()
+      .references(() => skill.id, { onDelete: "cascade" }),
+    source: text("source").notNull().default("cv"),
+    status: text("status").notNull().default("detected"),
+    /** The sentence that produced the detection, so a human can judge it. */
+    evidence: text("evidence"),
+    /** Optional, and deliberately not inferred: only a human sets this. */
+    level: text("level"),
+    /** How many times it appears in the source document. */
+    occurrences: integer("occurrences").notNull().default(1),
+    detectedAt: text("detected_at").notNull().default(now),
+    auditedAt: text("audited_at"),
+    auditedBy: text("audited_by"),
+  },
+  (t) => [
+    uniqueIndex("candidate_skill_unique_idx").on(t.candidateId, t.skillId),
+    index("candidate_skill_status_idx").on(t.status),
+  ],
+);
+
+/* -------------------------------------------------------------------------- */
 /* Correspondence (ADR 0008)                                                   */
 /* -------------------------------------------------------------------------- */
 
@@ -517,6 +611,9 @@ export type Post = typeof post.$inferSelect;
 export type Engagement = typeof engagement.$inferSelect;
 export type PositioningTask = typeof positioningTask.$inferSelect;
 export type FxRate = typeof fxRate.$inferSelect;
+export type Skill = typeof skill.$inferSelect;
+export type NewSkill = typeof skill.$inferInsert;
+export type CandidateSkill = typeof candidateSkill.$inferSelect;
 export type Candidate = typeof candidate.$inferSelect;
 export type NewCandidate = typeof candidate.$inferInsert;
 export type CandidateDocument = typeof candidateDocument.$inferSelect;

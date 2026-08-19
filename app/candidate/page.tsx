@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +24,12 @@ export default async function CandidateArea() {
 
   return (
     <main className="pt-10 pb-16">
-      <h1 className="type-display-md chevron mb-4">Área do candidato</h1>
+      <div className="mb-4 flex items-baseline gap-3">
+        <h1 className="type-display-md chevron">Área do candidato</h1>
+        <Link href="/candidate/skills" className="text-sm text-primary hover:underline">
+          skills →
+        </Link>
+      </div>
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
         Cole o currículo aqui. Ele fica versionado — cada salvamento vira uma
         versão, e a anterior continua consultável. Guardar o texto só vale a pena
