@@ -14,6 +14,14 @@ import {
   THEME_COOKIE,
 } from "../src/core/theme.ts";
 import { AppearanceSwitch } from "./theme-switch";
+import { LocaleSwitch } from "./locale-switch";
+import { headers } from "next/headers";
+import {
+  LOCALE_COOKIE,
+  isLocale,
+  negotiateLocale,
+  translator,
+} from "../src/core/i18n/index.ts";
 
 export const metadata: Metadata = {
   title: "job-hunt-os",
@@ -55,10 +63,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const { currentSession } = await import("./auth");
   const signedIn = Boolean(await currentSession());
 
+  // Escolha gravada primeiro; sem ela, negocia pelo Accept-Language. Servir
+  // português a quem pediu inglês no navegador é ignorar informação que já
+  // temos.
+  const saved = jar.get(LOCALE_COOKIE)?.value;
+  const locale = isLocale(saved)
+    ? saved
+    : negotiateLocale((await headers()).get("accept-language"));
+  const { t } = translator(locale);
+
   return (
     // `data-mode` fica ausente em `system` — é a ausência que devolve a decisão
     // para a `prefers-color-scheme`.
-    <html lang="pt-BR" data-theme={theme} data-mode={modeAttribute(mode)}>
+    <html lang={locale} data-theme={theme} data-mode={modeAttribute(mode)}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -107,23 +124,24 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 {/* Escritos um a um: `typedRoutes` valida cada href contra a
                     árvore real de rotas, e uma união mapeada anula essa checagem. */}
                 <Link href="/" className={navClass}>
-                  Cockpit
+                  {t("nav.cockpit")}
                 </Link>
                 <Link href="/jobs" className={navClass}>
-                  Vagas
+                  {t("nav.jobs")}
                 </Link>
                 <Link href="/pipeline" className={navClass}>
-                  Funil
+                  {t("nav.pipeline")}
                 </Link>
                 <Link href="/referrals" className={navClass}>
-                  Referrals
+                  {t("nav.referrals")}
                 </Link>
                 <Link href="/candidate" className={navClass}>
-                  Candidato
+                  {t("nav.candidate")}
                 </Link>
               </nav>
 
               <div className="flex shrink-0 items-center gap-2">
+                <LocaleSwitch current={locale} label={t("nav.language")} />
                 <AppearanceSwitch theme={theme} mode={mode} />
                 <SessionBadge />
               </div>

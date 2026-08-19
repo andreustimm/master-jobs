@@ -23,16 +23,14 @@ import { chromium } from "playwright";
 const BASE = process.env.E2E_BASE ?? "http://127.0.0.1:3000";
 
 /**
- * Credenciais da execução.
+ * Credenciais da conta dedicada, criada por `tests/e2e/setup.mjs`.
  *
- * Autenticação é o padrão desde que o modo aberto deixou de ser, então o e2e
- * precisa entrar antes de olhar qualquer tela. Crie a conta uma vez:
- *
- *   pnpm jho auth add-user e2e@local --role owner
- *   echo "senha-de-teste-e2e" | pnpm jho auth set-password e2e@local --stdin
+ * Conta separada de propósito: apontar o teste para a conta real faria trocar
+ * a própria senha quebrar a suíte, e a credencial de verdade não deve estar
+ * escrita em arquivo nenhum do repositório.
  */
-const E2E_EMAIL = process.env.E2E_EMAIL ?? "andreus@zorbit.com.br";
-const E2E_PASSWORD = process.env.E2E_PASSWORD ?? "senha-forte-de-teste";
+const E2E_EMAIL = process.env.E2E_EMAIL ?? "e2e@local.test";
+const E2E_PASSWORD = process.env.E2E_PASSWORD ?? "conta-de-teste-e2e-42";
 const results = [];
 let failed = 0;
 
@@ -51,6 +49,11 @@ page.on("console", (m) => {
 page.on("pageerror", (e) => consoleErrors.push("pageerror: " + String(e).slice(0, 200)));
 
 try {
+  // Fixa o idioma para o texto ser previsível. Onde o alvo é um controle e não
+  // uma frase, o teste usa `data-testid`: buscar botão por texto num sistema
+  // bilíngue é um teste que quebra quando alguém traduz uma palavra.
+  await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+
   /* ------------------------------ Autenticação ----------------------------- */
 
   // Antes de qualquer coisa: nada deve responder sem sessão.
@@ -192,8 +195,8 @@ try {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`${BASE}/referrals`, { waitUntil: "networkidle" });
 
-  const triggerBox = await page.getByRole("button", { name: "Aparência" }).boundingBox();
-  await page.getByRole("button", { name: "Aparência" }).click();
+  const triggerBox = await page.locator('[data-testid="appearance"]').boundingBox();
+  await page.locator('[data-testid="appearance"]').click();
   await page.waitForTimeout(300);
   const panel = await page.locator("#appearance-popover").boundingBox();
 
@@ -215,7 +218,7 @@ try {
   // `<details>` não fazia isto: ele só fecha pelo próprio summary.
   check("fecha ao clicar fora", !(await page.locator("#appearance-popover").isVisible()));
 
-  await page.getByRole("button", { name: "Aparência" }).click();
+  await page.locator('[data-testid="appearance"]').click();
   await page.waitForTimeout(250);
   await page.keyboard.press("Escape");
   await page.waitForTimeout(250);
@@ -295,13 +298,18 @@ try {
   /* --------------------------------- Logout -------------------------------- */
 
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "sair" }).click();
+  await page.locator('[data-testid="sign-out"]').click();
   await page.waitForTimeout(1000);
   await page.goto(`${BASE}/jobs`, { waitUntil: "domcontentloaded" });
   // Revogado no servidor, não só apagado do navegador.
   check("logout encerra a sessão de verdade", page.url().includes("/login"), page.url());
 
   check("nenhum erro de console", consoleErrors.length === 0, consoleErrors.slice(0, 2).join(" | "));
+} catch (error) {
+  // Um passo que estoura não pode apagar o relatório do que já passou: sem
+  // isto, a suíte inteira vira um stack trace e some a informação de onde
+  // exatamente parou.
+  check("suíte concluiu sem exceção", false, String(error).split("\n")[0].slice(0, 120));
 } finally {
   await browser.close();
 }

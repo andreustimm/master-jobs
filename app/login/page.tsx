@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { getTranslator } from "../i18n";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { passwordLoginAction } from "./actions";
@@ -26,24 +27,23 @@ export default async function LoginPage({
   const { getDb } = await import("../../src/core/db/client.ts");
   const { authUser } = await import("../../src/core/db/schema.ts");
   const accounts = await getDb().select({ id: authUser.id }).from(authUser).limit(1);
+  const { t } = await getTranslator();
 
   if (accounts.length === 0) {
     return (
       <main className="flex min-h-[70vh] flex-col items-center justify-center py-16">
-        <h1 className="type-display-md chevron mb-4">Primeiro acesso</h1>
+        <h1 className="type-display-md chevron mb-4">{t("login.firstAccess")}</h1>
         <Card className="w-full max-w-[46ch]">
           <CardContent className="pt-0">
             <p className="type-body-md">
-              Nenhuma conta cadastrada ainda. Crie a sua no terminal:
+              {t("login.noAccounts")}
             </p>
             <pre className="type-mono-sm mt-3 overflow-x-auto rounded-[var(--radius-surface)] bg-[var(--muted)] p-3">
 {`pnpm jho auth add-user ${"seu@email.com"} --role owner
 pnpm jho auth set-password ${"seu@email.com"}`}
             </pre>
             <p className="type-body-sm mt-4 text-muted-foreground">
-              Depois recarregue esta página. A senha é lida do terminal, nunca de
-              argumento — argumento aparece no histórico do shell e em{" "}
-              <code className="type-mono-sm">ps</code>.
+              {t("login.afterCreate")}
             </p>
           </CardContent>
         </Card>
@@ -55,11 +55,11 @@ pnpm jho auth set-password ${"seu@email.com"}`}
 
   const message =
     error === "missing"
-      ? "Informe e-mail e senha."
+      ? t("login.missing")
       : error === "rate_limited"
-        ? "Tentativas demais. Espere alguns minutos."
+        ? t("login.rateLimited")
         : error
-          ? "E-mail ou senha incorretos."
+          ? t("login.invalid")
           : null;
 
   return (
@@ -67,13 +67,13 @@ pnpm jho auth set-password ${"seu@email.com"}`}
     // ao redor, e um formulário encostado no canto de uma tela vazia parece
     // um erro de layout.
     <main className="flex min-h-[70vh] flex-col items-center justify-center py-16">
-      <h1 className="type-display-md chevron mb-4">Entrar</h1>
+      <h1 className="type-display-md chevron mb-4">{t("login.title")}</h1>
 
       <Card className="w-full max-w-[42ch]">
         <CardContent className="pt-0">
           <form action={passwordLoginAction} className="grid gap-4">
             <div className="grid gap-1.5">
-              <Label htmlFor="email">E-mail</Label>
+              <Label htmlFor="email">{t("login.email")}</Label>
               <Input
                 id="email"
                 name="email"
@@ -84,7 +84,7 @@ pnpm jho auth set-password ${"seu@email.com"}`}
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="password">Senha</Label>
+              <Label htmlFor="password">{t("login.password")}</Label>
               <Input
                 id="password"
                 name="password"
@@ -100,17 +100,17 @@ pnpm jho auth set-password ${"seu@email.com"}`}
               </p>
             )}
 
-            <Button type="submit">Entrar</Button>
+            <Button type="submit">{t("login.submit")}</Button>
           </form>
 
           <p className="type-body-sm mt-5 border-t border-[var(--color-hairline)] pt-4 text-muted-foreground">
-            Sem senha definida? Um link de uso único também entra:{" "}
+            {t("login.magicLinkHint")}{" "}
             <code className="type-mono-sm rounded bg-[var(--color-cloud)] px-1 py-0.5">
               pnpm jho auth login &lt;email&gt;
             </code>
           </p>
           <p className="type-body-sm mt-2 text-muted-foreground">
-            Definir senha:{" "}
+            {t("login.setPasswordHint")}{" "}
             <code className="type-mono-sm rounded bg-[var(--color-cloud)] px-1 py-0.5">
               pnpm jho auth set-password &lt;email&gt;
             </code>

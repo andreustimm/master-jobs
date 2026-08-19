@@ -1,5 +1,6 @@
 import { isOpenMode } from "../src/contexts/auth/index.ts";
 import { currentSession } from "./auth";
+import { getTranslator } from "./i18n";
 import { logoutAction } from "./logout-action";
 
 /**
@@ -12,6 +13,7 @@ import { logoutAction } from "./logout-action";
 export async function SessionBadge() {
   const open = isOpenMode();
   const session = await currentSession();
+  const { t } = await getTranslator();
 
   if (open) {
     // Avisa, e avisa em cor de alerta: o modo aberto expõe currículo, funil e
@@ -21,7 +23,7 @@ export async function SessionBadge() {
         className="type-micro rounded-full border border-[var(--bad)] px-2 py-0.5 text-[var(--bad)]"
         title="JHO_AUTH_MODE=open — sem autenticação. Currículo, funil e export ficam acessíveis a qualquer requisição. Remova a variável para exigir login."
       >
-        sem proteção
+        {t("nav.unprotected")}
       </span>
     );
   }
@@ -29,7 +31,7 @@ export async function SessionBadge() {
   if (!session) {
     return (
       <a href="/login" className="type-micro text-[var(--primary-text)] hover:underline">
-        entrar
+        {t("nav.signIn")}
       </a>
     );
   }
@@ -40,8 +42,12 @@ export async function SessionBadge() {
           aparência. Some no celular: quem está logado sabe quem é, e o botão
           de sair é o que precisa estar ao alcance. */}
       <span className="hidden type-micro text-muted-foreground sm:inline">{session.email}</span>
-      <button type="submit" className="type-micro text-[var(--primary-text)] hover:underline">
-        sair
+      <button
+        type="submit"
+        data-testid="sign-out"
+        className="type-micro text-[var(--primary-text)] hover:underline"
+      >
+        {t("nav.signOut")}
       </button>
     </form>
   );

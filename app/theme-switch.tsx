@@ -95,6 +95,7 @@ export function AppearanceSwitch({
         popoverTarget={POPOVER_ID}
         onClick={place}
         aria-label="Aparência"
+        data-testid="appearance"
         className={cn(
           "flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-action)]",
           "border border-[var(--hairline)] px-2.5 type-micro text-muted-foreground",

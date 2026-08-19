@@ -82,7 +82,16 @@ dashboard Next.js em `localhost:3000`.
 > pela qualidade do emprego. `freshness` sem data vale 0,5; `benefits` em texto
 > curto vale 0,5 e **nunca** gera bloqueador.
 
-> **9. Todo frontend segue o sistema de temas.**
+> **9. Texto de interface vem do dicionário, nunca do JSX.**
+> `pt-BR` e `en` em `src/core/i18n/`. As chaves são tipadas contra o dicionário
+> português, então tradução faltando é erro de compilação — e não espaço em
+> branco descoberto por um usuário. Página obtém o tradutor com
+> `getTranslator()`; string literal no JSX é tradução que nunca vai existir.
+>
+> **Teste que busca controle por texto quebra quando alguém traduz.** Use
+> `data-testid` para controle e texto só para conteúdo.
+
+> **10. Todo frontend segue o sistema de temas.**
 > Três temas — **HP**, **Huly**, **Graphy** — cada um com ambiente claro e
 > escuro, e um terceiro estado que segue o sistema operacional. Definidos em
 > `app/themes.css`, registrados em `src/core/theme.ts`.
@@ -119,7 +128,7 @@ dashboard Next.js em `localhost:3000`.
 > Vale igual para responsividade: **toda tela precisa funcionar no celular**
 > (ver regra 10). Um layout que só existe no desktop não cumpriu o DESIGN.md.
 
-> **10. Toda tela funciona no celular.**
+> **11. Toda tela funciona no celular.**
 > Verificado por `pnpm test:e2e`, que mede `scrollWidth` real em 375px. Teste
 > estático não pega estouro horizontal — os dois que existiam passavam por
 > todos os greps e só apareceram num browser.
@@ -128,17 +137,17 @@ dashboard Next.js em `localhost:3000`.
 > múltiplas colunas precisa de fallback de coluna única; nada de largura fixa
 > acima de 360px; nunca limite o zoom. Coberto por `tests/mobile.test.ts`.
 
-> **11. O dashboard nunca faz bind fora de `127.0.0.1`.**
+> **12. O dashboard nunca faz bind fora de `127.0.0.1`.**
 > Não há autenticação nenhuma, e ele serve CV, funil e piso salarial. Em rede
 > compartilhada isso é publicação. `--hostname 127.0.0.1` nos scripts `dev` e
 > `start`; travado por teste. Ver `docs/security.md`.
 
-> **12. Nada neste sistema envia uma candidatura.**
+> **13. Nada neste sistema envia uma candidatura.**
 > `jho prep` monta o dossiê; quem envia é o usuário. Automatizar envio antes de
 > a triagem estar calibrada acelera o gargalo errado, e candidatura enviada não
 > volta. ADR 0010 define as três condições para reavaliar.
 
-> **13. Autenticação é exigida por omissão.**
+> **14. Autenticação é exigida por omissão.**
 > Nenhuma página nem API responde sem sessão válida — inclusive `/api/export`,
 > que carrega o acervo inteiro. O modo aberto existe mas precisa ser pedido:
 > `JHO_AUTH_MODE=open`. "Só roda em loopback" protege contra a internet, não
@@ -149,7 +158,7 @@ dashboard Next.js em `localhost:3000`.
 > `jho auth set-password <email>`. Sem conta cadastrada, `/login` mostra esses
 > dois comandos em vez de um formulário sem saída.
 
-> **14. Autorização passa por `can()`, e o escopo vem da sessão.**
+> **15. Autorização passa por `can()`, e o escopo vem da sessão.**
 > Toda Server Action chama `guard(...)` **antes** de qualquer efeito, e **toda
 > página chama `requirePage(...)`** — guardar só as actions deixa o dado
 > legível por quem não tem sessão. `middleware.ts` é a rede grossa (existe
@@ -160,13 +169,13 @@ dashboard Next.js em `localhost:3000`.
 > A decisão mora em `src/contexts/auth/domain/policy.ts`, é pura, e nega por
 > padrão. Coberto por teste de arquitetura.
 
-> **15. Chave de API nunca vai para o banco.**
+> **16. Chave de API nunca vai para o banco.**
 > O cadastro de provedores guarda o **nome da variável de ambiente**, jamais a
 > chave. Banco é copiado, versionado em backup e aberto por outros processos —
 > chave dentro dele viaja junto. BYOK só é promessa cumprida se for estrutural.
 > Há teste asserindo que nenhuma coluna guarda chave e que nada a imprime.
 
-> **16. `??` não protege contra string vazia.**
+> **17. `??` não protege contra string vazia.**
 > Várias APIs devolvem `""` para campo não preenchido. Use `firstNonEmpty()`
 > de `src/core/sources/http.ts`. Esse bug já apagou 4.538 descrições uma vez.
 
@@ -279,6 +288,7 @@ Referência completa: `docs/cli.md`.
 
 ```
 src/contexts/      bounded contexts (ADR 0007) — auth, skills
+  i18n/            pt-BR e en, chaves tipadas contra o dicionário português
 src/core/          lógica pura, compartilhada entre CLI e UI
   db/              schema Drizzle (14 tabelas), client libSQL, queries, migrations
   sources/         um adapter por board público + registry + careers (página própria)
