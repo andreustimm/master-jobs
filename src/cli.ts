@@ -686,7 +686,8 @@ program
 program
   .command("pipeline")
   .description("Show the application funnel")
-  .action(async () => {
+  .option("--json", "saída legível por máquina")
+  .action(async (opts: { json?: boolean }) => {
     await withDb(async () => {
       const counts = await pipelineCounts();
       const rows = await getDb()
@@ -701,6 +702,11 @@ program
         .from(application)
         .innerJoin(job, eq(job.id, application.jobId))
         .orderBy(desc(application.updatedAt));
+
+      if (opts.json) {
+        console.log(JSON.stringify({ counts, applications: rows }, null, 2));
+        return;
+      }
 
       console.log(c.bold("\n  FUNNEL"));
       for (const status of APPLICATION_STATUSES) {
@@ -828,9 +834,14 @@ program
   .command("referrals")
   .description("Open jobs where you already know someone — the highest-yield list you have")
   .option("--min-fit <n>", "minimum fit", "45")
-  .action(async (opts: { minFit: string }) => {
+  .option("--json", "saída legível por máquina")
+  .action(async (opts: { minFit: string; json?: boolean }) => {
     await withDb(async () => {
       const opps = await referralOpportunities(Number(opts.minFit));
+      if (opts.json) {
+        console.log(JSON.stringify(opps, null, 2));
+        return;
+      }
       if (opps.length === 0) {
         const known = await companiesWithContacts();
         console.log(

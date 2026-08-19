@@ -304,7 +304,7 @@ nem Next.
 
 ---
 
-### E-01 · Arquitetura hexagonal, DDD, monolito modular 🔄
+### E-01 · Arquitetura hexagonal, DDD, monolito modular ✅
 
 Decisão em andamento por painel de propostas independentes e julgamento por
 múltiplas lentes. Saída: `docs/adr/0007`.

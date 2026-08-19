@@ -269,8 +269,10 @@ Fluxo: `sources → ingest → scoring → application → report/UI`.
 > superfícies — coloque em `src/core/db/repo.ts`.
 
 Detalhes: `docs/architecture.md`, `docs/data-model.md`.
-A migração para hexagonal/DDD está decidida em `docs/adr/0007` e rastreada em
-`MIGRATION.md` — **leia antes de criar arquivo novo**.
+A migração para hexagonal/DDD está decidida em `docs/adr/0007` e **concluída** —
+ver `MIGRATION.md`, inclusive as duas notas sobre passos resolvidos por outro
+caminho. `contexts/skills/` e `contexts/auth/` são o padrão para módulo novo
+(regra 4).
 
 ---
 

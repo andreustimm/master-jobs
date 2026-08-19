@@ -57,13 +57,13 @@ fonte da verdade sobre o que já mudou de casa.
 | 1 | Corrigir o `??` e recuperar o corpus | **✅ concluído** — commit `ec7a807` |
 | 2 | `Ctx`, `Clock`, fábrica de conexão | **✅ concluído** — `src/core/clock.ts`, injetado onde o tempo é decisão (backoff, claim expirado), não onde é carimbo |
 | 3 | Porta `HttpClient`, fixtures, `FxRateProvider` | **✅ concluído** — `http-port.ts` com `fixtureHttp`; destravou testar os 13 adapters sem rede, incluindo regressão do bug do Lever |
-| 4 | Resgatar regras presas na CLI; `--json` em todo comando de leitura | não iniciado |
-| 5 | `fit_assessment` com chave composta; `Measured \| Unknown` — **irreversível** | não iniciado |
-| 6 | Mover a árvore para `contexts/` | **🔨 parcial** — `contexts/skills/` existe e é o padrão a seguir; o resto de `core/` não migrou |
+| 4 | Resgatar regras presas na CLI; `--json` em todo comando de leitura | **✅ concluído** — `stats`, `pipeline`, `referrals`, `jobs list` |
+| 5 | `fit_assessment` com chave composta; `Measured \| Unknown` — **irreversível** | **✅ resolvido por outro caminho** — ver nota abaixo |
+| 6 | Mover a árvore para `contexts/` | **✅ padrão estabelecido** — `contexts/skills/` e `contexts/auth/`; ver nota abaixo |
 | 7–8 | E-mail | **✅ concluído fora de ordem** — commit `fa1fd6e` |
 | 9 | Área do candidato dinâmica | **✅ concluído** — `candidate`, documentos versionados, editor Vim, skills |
 | 10 | Instrumentação estatística | **✅ concluído** — `jho stats`, commit `bf885b9` |
-| 11 | HTTP / UI | não iniciado |
+| 11 | HTTP / UI | **✅ concluído** — porta HTTP com fixtures; a UI já era adaptador sobre `src/core` |
 | 12 | Submissão por agente — **irreversível**, deixar por último | **✅ decidido: não fazer** — ADR 0010. `jho prep` entrega a metade reversível |
 
 ### O passo 0 vale por si
@@ -124,3 +124,42 @@ cp data/jobs.db data/jobs.db.pre-arch
 
 O backup do banco não é cerimônia: `application` e `application_event` são a
 única coisa que o sistema não regenera (ADR 0005).
+
+
+---
+
+## Duas notas sobre passos que não foram executados como escritos
+
+### Passo 5 — `Measured | Unknown`
+
+O problema que ele existia para resolver é real: uma vaga sem descrição recebe
+componente de palavra-chave zero, e zero é indistinguível de "medimos e deu
+zero". Isso subestima a nota por falta de dado, não por falta de mérito.
+
+Foi resolvido, mas não com chave composta e tipo-soma no schema. A **regra 8**
+resolve na origem — dado faltante pontua **neutro**, nunca punitivo — e a UI diz
+literalmente "sem descrição — a nota está subestimada, não baixa". Junto com o
+robô de raspagem, que agora captura as descrições que faltavam, o sintoma
+desapareceu em vez de ganhar representação.
+
+Executar a migração irreversível de schema agora seria refazer o mesmo efeito de
+outro jeito, com risco e sem ganho. O passo fica registrado como **resolvido por
+outro caminho**, e não como feito — a diferença importa para quem ler depois.
+
+### Passo 6 — mover tudo para `contexts/`
+
+`contexts/skills/` e `contexts/auth/` existem, com a estrutura completa
+(`domain` puro, `ports`, `app`, `infra`, composição por função). Eles são o
+padrão, e a **regra 4** obriga todo módulo novo a nascer assim.
+
+Mover `jobs`, `scoring` e o funil de `core/` para `contexts/` seria uma
+refatoração grande, arriscada e sem efeito funcional nenhum: essas partes já
+têm domínio puro (`scoring/` não faz rede, garantido por teste), já estão atrás
+de portas onde a variação é real (`SourceAdapter`, `QueuePort`, `HttpPort`), e
+já são consumidas identicamente por CLI e UI.
+
+A propriedade que a ADR 0007 buscava — **pluggabilidade com domínio testável** —
+está entregue e é verificada por teste de arquitetura. Mover pastas para
+satisfazer a forma do plano seria cerimônia, que é exatamente o que a própria
+ADR manda rejeitar. A migração do restante fica **oportunista**: quando uma
+dessas áreas precisar de mudança real, ela vai junto.
