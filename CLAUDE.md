@@ -35,7 +35,7 @@ dashboard Next.js em `localhost:3000`.
 > é isso. Imports relativos carregam extensão `.ts` explícita.
 
 > **5. Mexeu no scorer ou em `profile.yaml`? Bump `SCORER_VERSION`.**
-> Fica em `src/core/scoring/score.ts` (hoje `1.2.0`). Depois
+> Fica em `src/core/scoring/score.ts` (hoje `1.2.1`). Depois
 > `pnpm jho jobs score --all`. Sem o bump, duas gerações de score convivem na
 > mesma coluna sem sinal visível.
 
@@ -107,6 +107,9 @@ pnpm jho skills detect       # detecta skills no CV (detectada != confirmada)
 pnpm jho tasks list --horizon 24h
 pnpm jho tasks done PT-0001
 
+# análise
+pnpm jho stats               # diagnóstico do scorer e do funil (--json)
+
 # saída
 pnpm jho report              # markdown pro vault Obsidian
 pnpm jho profile             # valida profile.yaml
@@ -133,6 +136,7 @@ src/core/          lógica pura, compartilhada entre CLI e UI
   mail/            parser MIME, classificador, extrator de job alert
   positioning/     plano da auditoria como dados
   report/          export markdown
+  analytics/       estatística: Wilson, Spearman, diagnóstico de componente
   money.ts         value object (amount + currency + period)
   pdf.ts           extração de PDF (unpdf, JS puro) + limpeza de texto
   fx.ts            cotações com cache
@@ -201,7 +205,7 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 | Melhor fit | 84,0 |
 | Vagas com bloqueador | 468 |
 | Candidaturas no funil | 1 |
-| Testes | 176 |
+| Testes | 227 |
 
 > A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
 > candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de

@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { scoreBenefits, detectBenefits } from "../src/core/scoring/benefits.ts";
-import { scoreFreshness } from "../src/core/scoring/freshness.ts";
+import { HALF_LIFE_DAYS, PLATEAU_DAYS, scoreFreshness } from "../src/core/scoring/freshness.ts";
 
 const NOW = Date.parse("2026-08-18T12:00:00Z");
 const daysAgo = (d: number) => new Date(NOW - d * 86_400_000).toISOString();
 
 describe("scoreFreshness", () => {
   it("treats anything inside the hot window as fully fresh", () => {
+    // Asserted against the constant, not a literal: the curve is calibrated to
+    // the corpus and moves when the corpus does. The property is what is fixed.
     expect(scoreFreshness({ postedAt: daysAgo(0) }, NOW).factor).toBe(1);
-    expect(scoreFreshness({ postedAt: daysAgo(3) }, NOW).factor).toBe(1);
+    expect(scoreFreshness({ postedAt: daysAgo(PLATEAU_DAYS) }, NOW).factor).toBe(1);
+  });
+
+  it("starts decaying immediately after the hot window", () => {
+    expect(scoreFreshness({ postedAt: daysAgo(PLATEAU_DAYS + 1) }, NOW).factor).toBeLessThan(1);
   });
 
   it("decays monotonically after the plateau", () => {
@@ -17,8 +23,10 @@ describe("scoreFreshness", () => {
     for (let i = 1; i < factors.length; i++) {
       expect(factors[i]!).toBeLessThan(factors[i - 1]!);
     }
-    // Half-life of 14 days past the plateau.
-    expect(scoreFreshness({ postedAt: daysAgo(17) }, NOW).factor).toBeCloseTo(0.5, 2);
+    // One half-life past the plateau is worth exactly half.
+    expect(
+      scoreFreshness({ postedAt: daysAgo(PLATEAU_DAYS + HALF_LIFE_DAYS) }, NOW).factor,
+    ).toBeCloseTo(0.5, 2);
   });
 
   it("stays neutral when no date is available", () => {

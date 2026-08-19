@@ -1343,6 +1343,89 @@ cv.command("gap")
     });
   });
 
+program
+  .command("stats")
+  .description("Diagnóstico estatístico do scorer e do funil")
+  .option("--json", "saída em JSON")
+  .action(async (opts: { json?: boolean }) => {
+    await withDb(async () => {
+      const { scorerDiagnostics, funnelAnalysis } = await import("./core/analytics/index.ts");
+      const [scorer, funnel] = await Promise.all([scorerDiagnostics(), funnelAnalysis()]);
+
+      if (opts.json) {
+        console.log(JSON.stringify({ scorer, funnel }, null, 2));
+        return;
+      }
+
+      const pct = (n: number) => `${(n * 100).toFixed(0)}%`;
+
+      console.log(`\n${c.bold("Scorer")} ${c.dim(`· ${scorer.jobs.toLocaleString("pt-BR")} vagas abertas pontuadas`)}`);
+      console.log(
+        c.dim(
+          `  fit: média ${scorer.fit.mean} · desvio ${scorer.fit.stdDev} · ` +
+          `p10 ${scorer.fit.p10} · mediana ${scorer.fit.median} · p90 ${scorer.fit.p90}`,
+        ),
+      );
+
+      console.log(`\n  ${"componente".padEnd(16)}${"peso".padStart(5)}${"média".padStart(8)}${"infl.".padStart(7)}${"uso".padStart(6)}  situação`);
+      for (const comp of scorer.components) {
+        const tone =
+          comp.verdict === "healthy" ? c.green : comp.verdict === "dead-weight" ? c.red : c.yellow;
+        console.log(
+          `  ${comp.label.padEnd(16)}${String(comp.weight).padStart(5)}` +
+          `${comp.mean.toFixed(1).padStart(8)}${pct(comp.influence).padStart(7)}` +
+          `${pct(comp.utilisation).padStart(6)}  ${tone(comp.verdict)}`,
+        );
+      }
+      console.log(
+        c.dim("\n  influência = fatia da dispersão total do fit. Peso é o que se pretendeu;"),
+      );
+      console.log(c.dim("  influência é o que aconteceu. Componente sem dispersão não reordena nada."));
+
+      for (const comp of scorer.components.filter((x) => x.verdict !== "healthy")) {
+        console.log(`\n  ${c.yellow("!")} ${c.bold(comp.label)}: ${comp.note}`);
+      }
+
+      if (scorer.redundant.length > 0) {
+        console.log(`\n${c.bold("Redundância")}`);
+        for (const pair of scorer.redundant) {
+          console.log(`  ${pair.a} × ${pair.b} — ρ=${pair.rho}`);
+        }
+      }
+
+      console.log(`\n${c.bold("Funil")}`);
+      if (funnel.power) console.log(c.yellow(`  ! ${funnel.power}`));
+      console.log(
+        `  ${funnel.applied} candidatura(s) · ${funnel.replied} com retorno · ` +
+        c.dim(`taxa ${pct(funnel.overall.point)} (IC95 ${pct(funnel.overall.low)}–${pct(funnel.overall.high)})`),
+      );
+
+      if (funnel.trustworthy) {
+        for (const [title, rows] of [
+          ["cluster", funnel.byCluster],
+          ["fonte", funnel.bySource],
+          ["canal", funnel.byChannel],
+        ] as const) {
+          if (rows.length === 0) continue;
+          console.log(`\n  ${c.bold(`por ${title}`)}`);
+          for (const r of rows) {
+            console.log(
+              `    ${r.group.padEnd(18)} ${String(r.replied).padStart(3)}/${String(r.applied).padEnd(4)} ` +
+              c.dim(`${pct(r.rate.point)} (${pct(r.rate.low)}–${pct(r.rate.high)})`),
+            );
+          }
+        }
+        if (funnel.componentSignal.length > 0) {
+          console.log(`\n  ${c.bold("componente × retorno")} ${c.dim("(correlação de posto)")}`);
+          for (const sig of funnel.componentSignal) {
+            console.log(`    ${sig.key.padEnd(18)} ${sig.rho === null ? c.dim("—") : sig.rho.toFixed(3)}`);
+          }
+        }
+      }
+      console.log();
+    });
+  });
+
 const skills = program
   .command("skills")
   .description("Skill catalogue, detection from the CV, and market demand");

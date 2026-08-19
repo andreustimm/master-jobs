@@ -25,7 +25,7 @@ import type { Profile } from "../profile/schema.ts";
 import { scoreBenefits } from "./benefits.ts";
 import { scoreFreshness } from "./freshness.ts";
 
-export const SCORER_VERSION = "1.2.0";
+export const SCORER_VERSION = "1.2.1";
 
 export type ScoreInput = {
   title: string;

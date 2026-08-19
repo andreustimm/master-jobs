@@ -345,18 +345,34 @@ humana §7.2 por caminho diferente, e encontrou dois termos que ela não listou.
 
 ## E7 — Aprender com o próprio funil
 
-### E7.1 📋 Análise estatística do matching (E-02)
+### E7.1 ✅ Análise estatística do matching (E-02)
 > Como **Andreus**, quero saber quais componentes do score realmente predizem
 > resposta.
 
 **Aceite**
-- [ ] Correlação entre componente e resultado do funil
-- [ ] Taxa de resposta por cluster, fonte e canal
-- [ ] Recalibração de peso proposta, **nunca aplicada sozinha**
-- [ ] Intervalo de confiança visível — 40 candidaturas não sustentam conclusão
-      forte, e o sistema precisa dizer isso
+- [x] `jho stats` — diagnóstico do scorer e do funil
+- [x] Intervalo de Wilson em toda taxa; nenhuma porcentagem sai sozinha
+- [x] Recortes por cluster, fonte e canal **ocultos** abaixo de 30 candidaturas
+- [x] Correlação de posto entre componente e retorno
+- [x] Rejeição conta como resposta — excluí-la mediria "bom desfecho" chamando
+      de taxa de resposta, e o número melhoraria conforme o processo piorasse
+- [x] O sistema diz quantas candidaturas faltam para a conta significar algo
 
-**Bloqueado por dado:** 1 candidatura registrada. Precisa de ~30 com desfecho.
+**A parte que não dependia do funil.** A pergunta "que componente prediz
+resposta" precisa de desfechos que não existem (2 candidaturas). Mas a pergunta
+"cada componente de fato ordena alguma coisa" precisa só dos 6.239 scores — e é
+a que pega scorer quebrado. A distinção que a ferramenta faz:
+
+> **Peso não é influência.** Componente que devolve quase o mesmo valor para
+> toda vaga desloca todos os scores igualmente e não reordena nada, valendo os
+> pontos que valer.
+
+**Achado imediato:** o Frescor, entregue no dia anterior, estava com uso de 92%
+e variação de 13% — peso morto. O platô de 3 dias cobria metade do acervo, que
+recebia nota idêntica. Recalibrado para platô de 1 dia e meia-vida de 7
+(`SCORER_VERSION` 1.2.1): influência subiu de 4% para 6%, uso caiu para 76%,
+componente passou a discriminar. A ferramenta criticou o trabalho de quem a
+escreveu, que é exatamente o serviço que se espera dela.
 
 ---
 

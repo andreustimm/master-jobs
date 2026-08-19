@@ -240,7 +240,7 @@ múltiplas lentes. Saída: `docs/adr/0007`.
 Restrição que elimina a maioria dos frameworks de DDD: **só sintaxe TypeScript
 apagável** — sem decorators, sem containers de DI convencionais.
 
-### E-02 · Análise estatística do matching 📋
+### E-02 · Análise estatística do matching ✅
 
 Medir a qualidade do match em vez de assumir que os pesos estão certos:
 

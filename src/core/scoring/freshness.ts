@@ -12,11 +12,26 @@
  * mediocre-but-new posting outrank a strong-but-two-week-old one.
  */
 
-/** Days inside which a posting counts as fully fresh. */
-const PLATEAU_DAYS = 3;
+/**
+ * Days inside which a posting counts as fully fresh.
+ *
+ * Was 3, which turned out to be wrong for this corpus: half of all open jobs
+ * are 0–3 days old, so a 3-day plateau handed an identical score to half the
+ * board and reordered nothing. `jho stats` flagged the component as dead
+ * weight — 92% utilisation, 13% variation. One day is the honest hot window
+ * anyway: applying today versus in a week is a real difference in whether a
+ * shortlist has formed.
+ */
+export const PLATEAU_DAYS = 1;
 
-/** After the plateau, value halves every this many days. */
-const HALF_LIFE_DAYS = 14;
+/**
+ * After the plateau, value halves every this many days.
+ *
+ * Was 14. With 99% of the corpus under two weeks old, a 14-day half-life spent
+ * its entire range on jobs that do not exist here. Seven days puts the decay
+ * where the postings actually are.
+ */
+export const HALF_LIFE_DAYS = 7;
 
 /**
  * Score for a posting whose age is unknown.
