@@ -116,8 +116,13 @@ dashboard Next.js em `localhost:3000`.
 > volta. ADR 0010 define as três condições para reavaliar.
 
 > **13. Autorização passa por `can()`, e o escopo vem da sessão.**
-> Toda Server Action chama `guard(...)` **antes** de qualquer efeito. Nenhuma
-> aceita `candidateId` da própria entrada — id em FormData é pedido, não prova.
+> Toda Server Action chama `guard(...)` **antes** de qualquer efeito, e **toda
+> página chama `requirePage(...)`** — guardar só as actions deixa o dado
+> legível por quem não tem sessão. `middleware.ts` é a rede grossa (existe
+> cookie?), a página é a checagem real (o cookie vale?). Nenhuma action aceita
+> `candidateId` da própria entrada — id em FormData é pedido, não prova.
+> Exceção única e registrada: `passwordLoginAction`, onde a sessão nasce; ela
+> é protegida por limite de tentativas, não por permissão.
 > A decisão mora em `src/contexts/auth/domain/policy.ts`, é pura, e nega por
 > padrão. Coberto por teste de arquitetura.
 
@@ -161,7 +166,8 @@ pnpm jho sources snippet revelo               # extrator para plataforma logada
 # autenticação
 pnpm jho auth status         # modo e contas
 pnpm jho auth add-user <email> --role owner
-pnpm jho auth login <email>  # link de uso único → /login/callback
+pnpm jho auth set-password <email>   # senha (entrada escondida ou --stdin)
+pnpm jho auth login <email>          # link de uso único → /login/callback
 
 # LLM opcional (BYOK — sua chave, seu custo)
 pnpm jho llm seed            # cadastra provedores conhecidos

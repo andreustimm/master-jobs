@@ -4,10 +4,13 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { companiesWithContacts, referralOpportunities } from "../../src/core/contacts.ts";
 import { Fit, StatusBadge } from "../ui";
+import { requirePage } from "../auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function Referrals() {
+  await requirePage("job:read");
+
   const [opps, network] = await Promise.all([
     referralOpportunities(40),
     companiesWithContacts(),

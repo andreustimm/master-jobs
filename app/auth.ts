@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import {
   authorize,
   resolveSession,
@@ -58,4 +59,27 @@ export async function guardOwnCandidate(action: Action): Promise<{ session: Sess
   }
   authorize(session, action, { kind: "candidate", candidateId });
   return { session: session as Session, candidateId };
+}
+
+/**
+ * Requires a real session for a page, or redirects to login.
+ *
+ * The authoritative half of the pair described in `middleware.ts`: middleware
+ * only sees whether a cookie exists, this resolves it against the database, so
+ * a forged or revoked token dies here.
+ *
+ * Every page that reads candidate or funnel data calls this. A page that
+ * forgets it is caught by the architecture test.
+ */
+export async function requireSession(): Promise<Session> {
+  const session = await currentSession();
+  if (!session) redirect("/login");
+  return session;
+}
+
+/** Requires a session AND authorisation for one action. */
+export async function requirePage(action: Action, resource?: Resource): Promise<Session> {
+  const session = await requireSession();
+  authorize(session, action, resource ?? { kind: "global" });
+  return session;
 }

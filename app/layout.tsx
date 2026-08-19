@@ -39,7 +39,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
         />
       </head>
-      <body className="bg-background text-foreground antialiased">
+      {/*
+        Extensões de navegador injetam atributos no <body> antes da hidratação —
+        Grammarly grava `data-gr-ext-installed`, entre outras. O React compara o
+        HTML do servidor com o DOM do cliente, encontra a diferença e reporta
+        mismatch de hidratação. O aviso é legítimo em geral, mas aqui a causa é
+        externa à aplicação e não há correção do nosso lado.
+
+        `suppressHydrationWarning` vale só para os atributos deste elemento e
+        não desce para os filhos, então continuamos vendo qualquer mismatch de
+        verdade dentro da árvore.
+      */}
+      <body className="bg-background text-foreground antialiased" suppressHydrationWarning>
         <TooltipProvider>
           <header className="border-b bg-card">
             {/* The nav scrolls sideways on a narrow screen rather than wrapping

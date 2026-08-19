@@ -13,10 +13,15 @@ import {
 } from "../../src/core/candidate.ts";
 import { MarkdownEditor } from "./editor";
 import { importPdfAction, saveCvAction } from "./actions";
+import { requirePage } from "../auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function CandidateArea() {
+  // Guard antes de ler qualquer dado. O escopo vem da sessão.
+  const session = await requirePage("candidate:read");
+  void session;
+
   const person = await getCandidate();
   const doc = person ? await currentDocument(person.id, "cv") : null;
   const history = person ? await documentHistory(person.id, "cv") : [];

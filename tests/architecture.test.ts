@@ -207,6 +207,16 @@ describe("pluggability (rule 4)", () => {
 describe("authorisation (AUTH-01)", () => {
   const APP = walk("app").filter((f) => f.endsWith("actions.ts"));
 
+  /**
+   * The one action that may not be guarded, and why.
+   *
+   * Sign-in is where a session begins, so requiring one would be circular. It
+   * is the only unauthenticated write in the system, which is why the rate
+   * limit lives underneath it. Listed here explicitly so the exception is a
+   * decision on the record rather than an omission nobody noticed.
+   */
+  const UNGUARDED_BY_DESIGN = new Set(["passwordLoginAction"]);
+
   it("guards every Server Action", () => {
     // A Server Action is a public HTTP endpoint. One that forgets the guard is
     // reachable by anyone who can reach the server, and the omission is
@@ -220,6 +230,7 @@ describe("authorisation (AUTH-01)", () => {
 
       for (const match of code.matchAll(/export async function (\w+)\s*\([^)]*\)\s*\{/g)) {
         const name = match[1]!;
+        if (UNGUARDED_BY_DESIGN.has(name)) continue;
         const body = code.slice(match.index, code.indexOf("\n}", match.index));
         if (!/await guard(OwnCandidate)?\(/.test(body)) {
           offenders.push(`${file}: ${name}`);
@@ -227,6 +238,29 @@ describe("authorisation (AUTH-01)", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it("rate-limits the one action that cannot be guarded", () => {
+    // Sign-in is unauthenticated by necessity, so the protection has to be a
+    // limit rather than a permission.
+    const login = read("src/contexts/auth/infra/password-login.ts");
+    expect(login).toContain("MAX_ATTEMPTS");
+    expect(login).toContain("recentFailures");
+  });
+
+  it("answers identically for a wrong password and a missing account", () => {
+    // Anything else turns the login form into an account-enumeration oracle.
+    const login = read("src/contexts/auth/infra/password-login.ts");
+    expect(login).toContain("decoy");
+    const action = read("app/login/actions.ts");
+    expect(action).not.toMatch(/conta (não existe|inexistente)/i);
+  });
+
+  it("hashes passwords with a memory-hard KDF, never a plain digest", () => {
+    const pw = read("src/contexts/auth/domain/password.ts");
+    expect(pw).toContain("scrypt");
+    expect(pw).toContain("timingSafeEqual");
+    expect(pw).not.toMatch(/createHash\(["']sha256["']\)/);
   });
 
   it("never lets an action take a candidate id from its own input", () => {

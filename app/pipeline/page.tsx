@@ -6,10 +6,13 @@ import { cn } from "@/lib/utils";
 import { pipelineCounts, pipelineRows } from "../../src/core/db/repo.ts";
 import { APPLICATION_STATUSES } from "../../src/core/db/schema.ts";
 import { Fit, StatusBadge } from "../ui";
+import { requirePage } from "../auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function Pipeline() {
+  await requirePage("job:read");
+
   const [counts, rows] = await Promise.all([pipelineCounts(), pipelineRows()]);
 
   return (

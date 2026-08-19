@@ -64,6 +64,13 @@
       "when": 1787141409548,
       "tag": "0008_outstanding_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1787146168950,
+      "tag": "0009_flowery_patriot",
+      "breakpoints": true
     }
   ]
 }

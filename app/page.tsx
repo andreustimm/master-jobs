@@ -3,6 +3,7 @@ import { boardFacets, clusterBreakdown, corpusStats, listBoard, pipelineCounts }
 import { FilterBar, readFilters, toBoardFilters } from "./filters";
 import { JobList } from "./joblist";
 import { Legend, Stat } from "./ui";
+import { requirePage } from "./auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,8 @@ export default async function Cockpit({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePage("job:read");
+
   const state = readFilters(await searchParams);
   const filters = toBoardFilters(state);
 

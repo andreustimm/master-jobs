@@ -1,5 +1,9 @@
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { passwordLoginAction } from "./actions";
 import { isSingleUser } from "../../src/contexts/auth/index.ts";
 
 export const dynamic = "force-dynamic";
@@ -50,30 +54,64 @@ export default async function LoginPage({
 
   const { error } = await searchParams;
 
+  const message =
+    error === "missing"
+      ? "Informe e-mail e senha."
+      : error === "rate_limited"
+        ? "Tentativas demais. Espere alguns minutos."
+        : error
+          ? "E-mail ou senha incorretos."
+          : null;
+
   return (
     <main className="pt-10 pb-16">
-      <h1 className="type-display-md chevron mb-3">Login</h1>
-      <Card className="max-w-[62ch]">
+      <h1 className="type-display-md chevron mb-3">Entrar</h1>
+
+      <Card className="max-w-[42ch]">
         <CardContent className="pt-0">
-          {error ? (
-            <>
-              <p className="type-body-md text-[var(--color-alert)]">
-                {error === "missing" ? "Link sem token." : "Link inválido ou já usado."}
+          <form action={passwordLoginAction} className="grid gap-4">
+            <div className="grid gap-1.5">
+              <Label htmlFor="email">E-mail</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="username"
+                required
+                autoFocus
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="password">Senha</Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+              />
+            </div>
+
+            {message && (
+              <p className="type-body-sm text-[var(--color-alert)]" role="alert">
+                {message}
               </p>
-              <p className="type-body-sm mt-2 text-muted-foreground">
-                Links são de uso único e expiram em 15 minutos. Um link que continua valendo é
-                uma credencial parada no histórico do shell.
-              </p>
-            </>
-          ) : (
-            <p className="type-body-md">Abra o link que você recebeu para entrar.</p>
-          )}
-          <p className="type-body-sm mt-4 text-muted-foreground">
-            Gere um novo com{" "}
+            )}
+
+            <Button type="submit">Entrar</Button>
+          </form>
+
+          <p className="type-body-sm mt-5 border-t border-[var(--color-hairline)] pt-4 text-muted-foreground">
+            Sem senha definida? Um link de uso único também entra:{" "}
             <code className="type-mono-sm rounded bg-[var(--color-cloud)] px-1 py-0.5">
               pnpm jho auth login &lt;email&gt;
             </code>
-            .
+          </p>
+          <p className="type-body-sm mt-2 text-muted-foreground">
+            Definir senha:{" "}
+            <code className="type-mono-sm rounded bg-[var(--color-cloud)] px-1 py-0.5">
+              pnpm jho auth set-password &lt;email&gt;
+            </code>
           </p>
         </CardContent>
       </Card>

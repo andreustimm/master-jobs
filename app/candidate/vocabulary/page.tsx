@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { syncCandidateFromProfile, currentDocument } from "../../../src/core/candidate.ts";
 import { vocabularyGap } from "../../../src/contexts/skills/index.ts";
 import type { GapItem } from "../../../src/contexts/skills/index.ts";
+import { requirePage } from "../../auth";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,10 @@ function QuickWin({ item }: { item: GapItem }) {
 }
 
 export default async function VocabularyPage() {
+  // Guard antes de ler qualquer dado. O escopo vem da sessão.
+  const session = await requirePage("candidate:read");
+  void session;
+
   const candidateId = await syncCandidateFromProfile();
   const doc = await currentDocument(candidateId, "cv");
 

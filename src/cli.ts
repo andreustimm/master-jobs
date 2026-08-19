@@ -1513,6 +1513,59 @@ auth
   });
 
 auth
+  .command("set-password <email>")
+  .description("Definir senha (lida do terminal ou de stdin, nunca de argumento)")
+  .option("--stdin", "ler a senha de stdin, uma linha — para automação")
+  .action(async (email: string, opts: { stdin?: boolean }) => {
+    await withDb(async () => {
+      await runMigrations();
+      const { checkPassword, MIN_LENGTH } = await import("./contexts/auth/domain/password.ts");
+      const { setPassword } = await import("./contexts/auth/infra/password-login.ts");
+
+      // Never as an argument: argv shows up in shell history and in `ps`.
+      let password: string;
+      let confirmation: string;
+
+      if (opts.stdin) {
+        const chunks: Buffer[] = [];
+        for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+        password = Buffer.concat(chunks).toString("utf8").split("\n")[0]!.trim();
+        confirmation = password;
+      } else {
+        const { createInterface } = await import("node:readline/promises");
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        try {
+          console.log(c.dim(`\n  Mínimo de ${MIN_LENGTH} caracteres. A digitação fica visível neste terminal.`));
+          password = await rl.question("  Senha: ");
+          confirmation = await rl.question("  Repita: ");
+        } finally {
+          rl.close();
+        }
+      }
+
+      if (password !== confirmation) {
+        console.error(c.red("\n  As senhas não conferem.\n"));
+        process.exitCode = 1;
+        return;
+      }
+      const check = checkPassword(password);
+      if (!check.ok) {
+        console.error(c.red(`\n  ${check.reason}\n`));
+        process.exitCode = 1;
+        return;
+      }
+
+      if (await setPassword(email, password)) {
+        console.log(`${c.green("\u2713")} senha definida para ${email}`);
+        console.log(c.dim("  Sessões anteriores foram encerradas — é o ponto de trocar a senha.\n"));
+      } else {
+        console.error(c.red(`\n  Conta ${email} não existe. Crie com: jho auth add-user\n`));
+        process.exitCode = 1;
+      }
+    });
+  });
+
+auth
   .command("login <email>")
   .description("Gerar um link de acesso de uso único")
   .action(async (email: string) => {

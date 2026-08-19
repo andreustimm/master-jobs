@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { syncCandidateFromProfile } from "../../../src/core/candidate.ts";
 import { candidateSkills, skillDemand } from "../../../src/core/skills.ts";
 import { auditAction, detectAction } from "./actions";
+import { requirePage } from "../../auth";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,10 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 export default async function SkillsPage() {
+  // Guard antes de ler qualquer dado. O escopo vem da sessão.
+  const session = await requirePage("candidate:read");
+  void session;
+
   const candidateId = await syncCandidateFromProfile();
   const [mine, demand] = await Promise.all([
     candidateSkills(candidateId),

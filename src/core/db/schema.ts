@@ -806,6 +806,11 @@ export const authUser = sqliteTable(
     email: text("email").notNull(),
     /** JSON array of roles: owner | admin. */
     roles: text("roles", { mode: "json" }).notNull(),
+    /**
+     * scrypt hash, as `scrypt$N$r$p$salt$hash`. Null when the account uses
+     * only magic links — both methods are supported and neither is required.
+     */
+    passwordHash: text("password_hash"),
     /** The candidate this account acts for. Null for an admin-only account. */
     candidateId: integer("candidate_id").references(() => candidate.id, { onDelete: "set null" }),
     disabledAt: text("disabled_at"),

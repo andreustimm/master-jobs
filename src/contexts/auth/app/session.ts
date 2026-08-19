@@ -30,6 +30,9 @@ async function record(
     userId: input.userId ?? null,
     email: input.email ?? null,
     detail: input.detail ?? null,
+    // From the injected clock, so anything that reasons over a time window
+    // (rate limiting) measures against the same timeline it writes.
+    at: clock().iso(),
   });
 }
 

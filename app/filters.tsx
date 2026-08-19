@@ -1,9 +1,9 @@
 import { Badge } from "@/components/ui/badge";
+import { Toggle } from "./filter-toggle";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 /**
@@ -69,31 +69,6 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
       </span>
       {children}
     </div>
-  );
-}
-
-function Toggle({
-  href: to,
-  active,
-  hint,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  hint: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <a href={to} className={chipClass(active)}>
-            {children}
-          </a>
-        }
-      />
-      <TooltipContent>{hint}</TooltipContent>
-    </Tooltip>
   );
 }
 

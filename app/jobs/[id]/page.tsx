@@ -10,10 +10,13 @@ import { getJobDetail } from "../../../src/core/db/repo.ts";
 import { APPLICATION_STATUSES } from "../../../src/core/db/schema.ts";
 import { trackAction } from "../../actions";
 import { Fit, Legend, ScoreBar, StatusBadge } from "../../ui";
+import { requirePage } from "../../auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function JobDetail({ params }: { params: Promise<{ id: string }> }) {
+  await requirePage("job:read");
+
   const { id } = await params;
   const detail = await getJobDetail(Number(id));
   if (!detail) notFound();

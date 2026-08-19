@@ -3,6 +3,7 @@ import { FilterBar, readFilters, toBoardFilters } from "../filters";
 import { GridToolbar, Pagination, Presets } from "../grid";
 import { JobList } from "../joblist";
 import { Legend } from "../ui";
+import { requirePage } from "../auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,8 @@ export default async function Jobs({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requirePage("job:read");
+
   const params = await searchParams;
   const state = readFilters(params);
   const filters = toBoardFilters(state);
