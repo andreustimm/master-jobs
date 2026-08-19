@@ -152,3 +152,41 @@ describe("floating layers", () => {
     expect(hook).toContain('typeof document === "undefined"');
   });
 });
+
+describe("pluggability (rule 4)", () => {
+  // The system exists to receive modules: sources, queues, LLM providers. Each
+  // is a port with adapters, and the value only survives if the boundary does.
+  it("keeps every port free of a concrete implementation", () => {
+    const ports = SRC.filter((f) => f.endsWith("ports.ts") || f.endsWith("llm/port.ts"));
+    expect(ports.length).toBeGreaterThan(0);
+
+    const offenders: string[] = [];
+    for (const file of ports) {
+      const code = read(file);
+      for (const forbidden of ["drizzle-orm", "getDb", "node:fs"]) {
+        if (code.includes(forbidden)) offenders.push(`${file}: ${forbidden}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("never hard-codes an LLM provider outside its adapter file", () => {
+    // A direct call to api.anthropic.com anywhere else would defeat BYOK: the
+    // user could no longer choose, and the key would spread.
+    const offenders = SRC.filter(
+      (f) => !f.endsWith("llm/providers.ts") && /api\.(anthropic|openai)\.com/.test(read(f)),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("never persists or prints an API key", () => {
+    const offenders: string[] = [];
+    for (const file of SRC) {
+      const code = read(file);
+      // Keys are read at call time from the environment and go nowhere else.
+      if (/console\.log\([^)]*(?:apiKey|API_KEY)/.test(code)) offenders.push(`${file}: log`);
+      if (/insert\([^)]*\)[^;]*apiKey/.test(code)) offenders.push(`${file}: persist`);
+    }
+    expect(offenders).toEqual([]);
+  });
+});

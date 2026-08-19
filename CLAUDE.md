@@ -28,28 +28,61 @@ dashboard Next.js em `localhost:3000`.
 > **3. Vaga que some é fechada (`closedAt`), nunca deletada.**
 > Deletar quebra o histórico de candidaturas por foreign key.
 
-> **4. Só sintaxe TypeScript apagável.**
+> **4. Módulo novo entra por porta. Sempre.**
+> O sistema é feito para receber módulos: fontes, filas, provedores de LLM,
+> armazenamento. Cada um desses é uma **porta** com adapter, nunca uma chamada
+> direta espalhada pelo código.
+>
+> As portas que já existem, e que são o padrão a seguir:
+>
+> | Porta | Variação que ela absorve |
+> |---|---|
+> | `SourceAdapter` | cada board, ATS e career page |
+> | `QueuePort` | tabela hoje, Upstash quando for para a web (ADR 0009) |
+> | `LlmPort` | Anthropic, OpenAI, o que vier — BYOK |
+> | `SkillCatalogPort` · `CandidateSkillPort` · `TargetCorpusPort` | contexto de skills (ADR 0007) |
+>
+> **Regra de quando criar porta:** só onde a variação é real. Porta com uma
+> implementação e nenhuma alternativa plausível é cerimônia — ADR 0007 rejeita
+> isso explicitamente. Mas onde há troca previsível (provedor, serviço, board),
+> a porta é obrigatória.
+>
+> **Domínio puro:** a lógica que decide fica em funções puras, sem banco, sem
+> rede, sem relógio. É o que torna `scoring/`, `skills/domain/` e `analytics/`
+> testáveis exaustivamente. Adapter é burro: busca, mapeia, devolve.
+>
+> Estrutura para contexto novo (espelhe `src/contexts/skills/`):
+> ```
+> domain/     puro — tipos e regras
+> ports.ts    só as portas com variação real
+> app/        casos de uso, orquestração burra
+> infra/      o único lugar que conhece SQL ou HTTP
+> index.ts    composição por função, sem container
+> ```
+> Injeção é composição de função. Container seria ilegal sob a regra 5 (sintaxe apagável).
+
+> **5. Só sintaxe TypeScript apagável.**
 > Runtime é o type stripping nativo do Node 24: sem `enum`, sem parameter
 > properties, sem `namespace`, sem decorators. `erasableSyntaxOnly: true` no
 > `tsconfig.json`. Se `pnpm jho` estourar `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`,
 > é isso. Imports relativos carregam extensão `.ts` explícita.
 
-> **5. Mexeu no scorer ou em `profile.yaml`? Bump `SCORER_VERSION`.**
+> **6. Mexeu no scorer ou em `profile.yaml`? Bump `SCORER_VERSION`.**
 > Fica em `src/core/scoring/score.ts` (hoje `1.2.1`). Depois
 > `pnpm jho jobs score --all`. Sem o bump, duas gerações de score convivem na
 > mesma coluna sem sinal visível.
 
-> **6. Não invente evidência.**
+> **7. Não invente evidência.**
 > Tailoring de CV só cita o que está em `evidence:` no `profile.yaml`.
 > O que está em `growth:` é lacuna assumida — sinalize, nunca maquie.
 
-> **7. Dado faltante pontua neutro, nunca punitivo.**
+> **8. Dado faltante pontua neutro, nunca punitivo.**
 > Vaga sem data de publicação não é vaga velha; vaga sem descrição não é vaga
 > sem benefício. Punir ausência rebaixa a fonte pela qualidade da API dela, não
 > pela qualidade do emprego. `freshness` sem data vale 0,5; `benefits` em texto
 > curto vale 0,5 e **nunca** gera bloqueador.
 
-> **8. Todo frontend segue o `DESIGN.md`. Sem exceção.**
+> **9. Todo frontend segue o `DESIGN.md`. Sem exceção.**
 > `DESIGN.md` (raiz) é a fonte da verdade visual — cores, tipografia, escala de
 > espaçamento, raios, motivos. Ele já está traduzido em `app/design-tokens.css`
 > (28 cores, 16 estilos de texto, 8 raios, 8 espaçamentos) e em `app/globals.css`.
@@ -64,25 +97,25 @@ dashboard Next.js em `localhost:3000`.
 > num componente é sinal de que a regra foi quebrada — há teste cobrindo isso.
 >
 > Vale igual para responsividade: **toda tela precisa funcionar no celular**
-> (ver regra 9). Um layout que só existe no desktop não cumpriu o DESIGN.md.
+> (ver regra 10). Um layout que só existe no desktop não cumpriu o DESIGN.md.
 
-> **9. Toda tela funciona no celular.**
+> **10. Toda tela funciona no celular.**
 > `export const viewport` com `width: device-width` no layout raiz — sem isso o
 > telefone renderiza a 980px e todo o CSS responsivo vira código morto. Grid de
 > múltiplas colunas precisa de fallback de coluna única; nada de largura fixa
 > acima de 360px; nunca limite o zoom. Coberto por `tests/mobile.test.ts`.
 
-> **10. O dashboard nunca faz bind fora de `127.0.0.1`.**
+> **11. O dashboard nunca faz bind fora de `127.0.0.1`.**
 > Não há autenticação nenhuma, e ele serve CV, funil e piso salarial. Em rede
 > compartilhada isso é publicação. `--hostname 127.0.0.1` nos scripts `dev` e
 > `start`; travado por teste. Ver `docs/security.md`.
 
-> **11. Nada neste sistema envia uma candidatura.**
+> **12. Nada neste sistema envia uma candidatura.**
 > `jho prep` monta o dossiê; quem envia é o usuário. Automatizar envio antes de
 > a triagem estar calibrada acelera o gargalo errado, e candidatura enviada não
 > volta. ADR 0010 define as três condições para reavaliar.
 
-> **12. `??` não protege contra string vazia.**
+> **13. `??` não protege contra string vazia.**
 > Várias APIs devolvem `""` para campo não preenchido. Use `firstNonEmpty()`
 > de `src/core/sources/http.ts`. Esse bug já apagou 4.538 descrições uma vez.
 
@@ -108,6 +141,9 @@ pnpm jho jobs import <file> --source revelo   # importa JSON de plataforma logad
 pnpm jho sources list        # saúde das fontes
 pnpm jho sources probe ashby textlayer        # testa um handle sem gravar
 pnpm jho sources snippet revelo               # extrator para plataforma logada
+
+# LLM opcional (BYOK — sua chave, seu custo)
+pnpm jho analyze <id>        # leitura qualitativa da vaga; pede confirmação antes de enviar
 
 # candidatura
 pnpm jho prep <id>           # dossiê: bloqueios, rede, evidências, vocabulário
@@ -188,6 +224,7 @@ src/core/          lógica pura, compartilhada entre CLI e UI
   scrape/          fila, robots.txt, captura e extração (duas etapas)
   security.ts      autoverificações (bind, PII, segredos, permissões)
   apply/           dossiê de candidatura (prepara; nunca envia — ADR 0010)
+  llm/             porta BYOK + adapters (Anthropic, OpenAI) — a chave é do usuário
   money.ts         value object (amount + currency + period)
   pdf.ts           extração de PDF (unpdf, JS puro) + limpeza de texto
   fx.ts            cotações com cache
@@ -288,6 +325,7 @@ descreva como pronto o que não está**.
 | `DESIGN.md` | **Antes de qualquer trabalho de frontend** |
 | `docs/adr/0009` | **Fila de raspagem — por que tabela e não broker** |
 | `docs/adr/0010` | **Antes de automatizar envio de candidatura** |
+| `docs/prompts/system/` | **Antes de mexer em qualquer prompt de LLM** |
 | `docs/roadmap.md` | O que vem depois |
 | `docs/benchmark/` | Concorrentes e mercado |
 | `docs/product/` | **Visão, personas, user stories, backlog** |

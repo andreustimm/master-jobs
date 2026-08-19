@@ -4,7 +4,13 @@
 > `src/core/` ou `src/contexts/`? Enquanto os dois existirem, leia isto antes
 > de escrever qualquer código.
 
-**Estado: passo 1 concluído. Passos 0 e 2–12 não iniciados.**
+**Estado (19/08/2026): passos 0, 1, 7–8, 9, 10 concluídos; 12 decidido como
+não-fazer. Restam 2, 3, 4, 5, 6 e 11.**
+
+> Este arquivo mentiu sobre o próprio estado por uma sessão inteira — vários
+> passos foram entregues sem serem marcados. Um plano de migração que não
+> reflete o código orienta a próxima decisão para o lugar errado, que é
+> exatamente o risco que ele existe para reduzir.
 
 A [ADR 0007](docs/adr/0007-arquitetura-hexagonal-monolito-modular.md) decidiu
 mover o projeto para hexagonal com DDD seletivo em monólito modular, seis
@@ -47,18 +53,18 @@ fonte da verdade sobre o que já mudou de casa.
 
 | # | O quê | Estado |
 |---|---|---|
-| 0 | Rede de segurança: `verbatimModuleSyntax`, `createTestDb()`, teste de arquitetura, testes de caracterização, `git tag pre-arch` | **não iniciado** |
+| 0 | Rede de segurança: `verbatimModuleSyntax`, `createTestDb()`, teste de arquitetura, testes de caracterização, `git tag pre-arch` | **✅ concluído** — commit `083403c` |
 | 1 | Corrigir o `??` e recuperar o corpus | **✅ concluído** — commit `ec7a807` |
 | 2 | `Ctx`, `Clock`, fábrica de conexão | não iniciado |
 | 3 | Porta `HttpClient`, fixtures, `FxRateProvider` | não iniciado |
 | 4 | Resgatar regras presas na CLI; `--json` em todo comando de leitura | não iniciado |
 | 5 | `fit_assessment` com chave composta; `Measured \| Unknown` — **irreversível** | não iniciado |
-| 6 | Mover a árvore para `contexts/` | não iniciado |
+| 6 | Mover a árvore para `contexts/` | **🔨 parcial** — `contexts/skills/` existe e é o padrão a seguir; o resto de `core/` não migrou |
 | 7–8 | E-mail | **✅ concluído fora de ordem** — commit `fa1fd6e` |
-| 9 | Área do candidato dinâmica | não iniciado |
-| 10 | Instrumentação estatística | não iniciado |
+| 9 | Área do candidato dinâmica | **✅ concluído** — `candidate`, documentos versionados, editor Vim, skills |
+| 10 | Instrumentação estatística | **✅ concluído** — `jho stats`, commit `bf885b9` |
 | 11 | HTTP / UI | não iniciado |
-| 12 | Submissão por agente — **irreversível**, deixar por último | não iniciado |
+| 12 | Submissão por agente — **irreversível**, deixar por último | **✅ decidido: não fazer** — ADR 0010. `jho prep` entrega a metade reversível |
 
 ### O passo 0 vale por si
 

@@ -63,6 +63,22 @@ import { scoreAll } from "./core/scoring/apply.ts";
 import { loadSources } from "./core/sources/config.ts";
 import { getAdapter } from "./core/sources/registry.ts";
 
+/**
+ * One-line confirmation on stdin.
+ *
+ * Used before anything that leaves the machine or costs money. Defaults to no:
+ * an empty Enter must never be read as consent.
+ */
+async function ask(question: string): Promise<string> {
+  const { createInterface } = await import("node:readline/promises");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    return await rl.question(question);
+  } finally {
+    rl.close();
+  }
+}
+
 const program = new Command();
 program
   .name("jho")
@@ -1407,6 +1423,96 @@ cv.command("gap")
       }
 
       console.log(c.dim(`\n  ${report.confirmed.length} termo(s) já cobertos · ${report.unused.length} raros no alvo\n`));
+    });
+  });
+
+program
+  .command("analyze <id>")
+  .description("Leitura qualitativa de uma vaga com LLM (BYOK — sua chave, seu custo)")
+  .option("--yes", "não pedir confirmação antes de enviar")
+  .action(async (id: string, opts: { yes?: boolean }) => {
+    await withDb(async () => {
+      const { resolveLlm } = await import("./core/llm/providers.ts");
+      const { ENV_KEYS, redactKey } = await import("./core/llm/port.ts");
+
+      const resolved = resolveLlm();
+      if (!resolved) {
+        console.error(c.red("\n  Nenhuma chave de API configurada."));
+        console.log(
+          c.dim(
+            `  Defina ${Object.values(ENV_KEYS).join(" ou ")} no .env.\n` +
+            "  A chave é sua: fica só no seu .env, nunca vai para o banco nem para log.\n" +
+            "  Ver docs/prompts/system/README.md\n",
+          ),
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      const { buildDossier } = await import("./core/apply/dossier.ts");
+      const { analyzeJob, payloadSize } = await import("./core/llm/analyze.ts");
+
+      const candidateId = await syncCandidateFromProfile();
+      const doc = await currentDocument(candidateId, "cv");
+      const dossier = await buildDossier(Number(id), doc?.content ?? null);
+      if (!dossier) {
+        console.error(c.red(`\n  Vaga ${id} não encontrada.\n`));
+        process.exitCode = 1;
+        return;
+      }
+      if (!dossier.hasDescription) {
+        console.error(c.red("\n  Sem descrição capturada — nada para analisar."));
+        console.log(c.dim("  Rode: jho scrape queue && jho scrape run\n"));
+        process.exitCode = 1;
+        return;
+      }
+
+      const { getDb } = await import("./core/db/client.ts");
+      const { job, jobPage } = await import("./core/db/schema.ts");
+      const { eq } = await import("drizzle-orm");
+      const [page] = await getDb()
+        .select({ text: jobPage.text, fallback: job.descriptionText })
+        .from(job)
+        .leftJoin(jobPage, eq(jobPage.jobId, job.id))
+        .where(eq(job.id, Number(id)))
+        .limit(1);
+      const description = page?.text ?? page?.fallback ?? "";
+
+      // Everything else here runs offline. This is the one command that sends
+      // data somewhere, so it says so before doing it rather than after.
+      const bytes = payloadSize(dossier, description);
+      console.log(`\n${c.bold("Isto vai sair da sua máquina")}`);
+      console.log(
+        c.dim(
+          `  destino: ${resolved.provider} (${resolved.port.model})\n` +
+          `  chave:   ${redactKey(process.env[ENV_KEYS[resolved.provider]])}\n` +
+          `  envia:   o anúncio da vaga, ~${bytes.toLocaleString("pt-BR")} caracteres\n` +
+          `  NÃO envia: seu currículo, seu perfil, nem o funil`,
+        ),
+      );
+
+      if (!opts.yes) {
+        const answer = await ask(`\n  Enviar? [s/N] `);
+        if (!/^s(im)?$/i.test(answer.trim())) {
+          console.log(c.dim("  Cancelado.\n"));
+          return;
+        }
+      }
+
+      try {
+        const analysis = await analyzeJob(resolved.port, dossier, description);
+        console.log(`\n${c.bold(dossier.job.title)} ${c.dim(`· ${dossier.job.companyName}`)}\n`);
+        console.log(analysis.text);
+        console.log(
+          c.dim(
+            `\n  ${analysis.model} · ${analysis.inputTokens ?? "?"} entrada / ` +
+            `${analysis.outputTokens ?? "?"} saída tokens\n`,
+          ),
+        );
+      } catch (error) {
+        console.error(c.red(`\n  ${(error as Error).message}\n`));
+        process.exitCode = 1;
+      }
     });
   });
 
