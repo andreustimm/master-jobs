@@ -8,8 +8,10 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
 import { Vim, vim } from "@replit/codemirror-vim";
 import { useEffect, useRef, useState } from "react";
+import { Columns2, Eye, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { MarkdownPreview } from "./markdown-preview";
 
 /**
  * Markdown editor with optional vim bindings.
@@ -42,6 +44,8 @@ export function MarkdownEditor({
   // The form posts this hidden input; CodeMirror keeps it in sync.
   const mirror = useRef<HTMLTextAreaElement>(null);
   const [vimOn, setVimOn] = useState<boolean | null>(null);
+  const [mode, setMode] = useState<"edit" | "split" | "preview">("edit");
+  const [previewSource, setPreviewSource] = useState(defaultValue);
   const [status, setStatus] = useState("");
 
   // Read the preference before the first mount that builds the editor, so the
@@ -122,15 +126,66 @@ export function MarkdownEditor({
     };
   }, [vimOn, defaultValue, minHeight]);
 
+  /**
+   * Keeps the preview fed while typing.
+   *
+   * CodeMirror owns its own document, so React never sees the keystrokes. The
+   * hidden textarea already mirrors the value for form submission; this reads
+   * the same source, on a small debounce, only while a preview is visible.
+   */
+  useEffect(() => {
+    if (mode === "edit" || !view.current) return;
+    const tick = setInterval(() => {
+      const next = view.current?.state.doc.toString() ?? "";
+      setPreviewSource((current) => (current === next ? current : next));
+    }, 300);
+    // Seed immediately so switching to preview is not blank for a frame.
+    setPreviewSource(view.current.state.doc.toString());
+    return () => clearInterval(tick);
+  }, [mode]);
+
   function toggleVim() {
     const next = !vimOn;
     setVimOn(next);
     localStorage.setItem(VIM_KEY, next ? "1" : "0");
   }
 
+  const MODES = [
+    { id: "edit" as const, label: "Editar", Icon: Pencil },
+    { id: "split" as const, label: "Dividido", Icon: Columns2 },
+    { id: "preview" as const, label: "Visualizar", Icon: Eye },
+  ];
+
   return (
     <div className="grid gap-2">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Segmented control. Icons carry a visible label from `sm` up: an icon
+            alone is a guess, and this toolbar has room. */}
+        <div
+          role="group"
+          aria-label="Modo de visualização"
+          className="inline-flex overflow-hidden rounded-lg border border-[var(--color-hairline)]"
+        >
+          {MODES.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setMode(id)}
+              aria-pressed={mode === id}
+              title={label}
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 px-2.5 type-micro transition-colors",
+                mode === id
+                  ? "bg-[var(--color-brand)] text-white"
+                  : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              <Icon className="size-3.5" aria-hidden />
+              <span className="hidden sm:inline">{label}</span>
+            </button>
+          ))}
+        </div>
+
         <Button
           type="button"
           variant={vimOn ? "default" : "outline"}
@@ -143,12 +198,37 @@ export function MarkdownEditor({
         {status && (
           <span className="font-mono type-meta text-muted-foreground">{status}</span>
         )}
-        <span className="ml-auto font-mono type-meta text-muted-foreground">
-          markdown
-        </span>
+        <span className="ml-auto font-mono type-meta text-muted-foreground">markdown</span>
       </div>
 
-      <div ref={host} className={cn("overflow-hidden", vimOn === null && "opacity-0")} />
+      <div
+        className={cn(
+          "grid gap-3",
+          // Side by side only where there is width for it; stacked columns on a
+          // phone would be two half-useless panes.
+          mode === "split" && "lg:grid-cols-2",
+        )}
+      >
+        {/* Kept mounted in every mode: unmounting would destroy the CodeMirror
+            instance and lose the cursor, the history and the vim state. */}
+        <div
+          ref={host}
+          className={cn(
+            "overflow-hidden",
+            vimOn === null && "opacity-0",
+            mode === "preview" && "hidden",
+          )}
+        />
+
+        {mode !== "edit" && (
+          <div
+            className="overflow-y-auto rounded-lg border border-[var(--color-hairline)] bg-card p-4"
+            style={{ minHeight }}
+          >
+            <MarkdownPreview source={previewSource} />
+          </div>
+        )}
+      </div>
 
       {/* CodeMirror is not a form control, so the value travels through here. */}
       <textarea ref={mirror} name={name} defaultValue={defaultValue} hidden readOnly />

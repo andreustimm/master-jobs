@@ -676,3 +676,28 @@ avisa, mas se você usar essa flag, rode `jobs score` depois.
 Desde a correção da invalidação, conteúdo alterado **descarta o score
 automaticamente** e o sync reporta quantos foram invalidados.
 
+
+
+---
+
+## Erro do Turbopack no dev server
+
+Sintoma, depois de muitas edições com `pnpm dev` no ar:
+
+```
+FATAL: An unexpected Turbopack error occurred.
+[Server HMR] Subscription error: TurbopackInternalError: Cell CellId ... no longer exists
+```
+
+É um defeito interno do HMR do Turbopack: o cache incremental fica inconsistente
+quando muitos arquivos mudam sob o servidor. Não é defeito da aplicação, e o
+build de produção não é afetado.
+
+```bash
+pkill -f "next dev"
+rm -rf .next
+pnpm dev
+```
+
+Se voltar com frequência, rode o dev server sem Turbopack (`next dev`, sem a
+flag) enquanto durar a sessão de edição pesada.
