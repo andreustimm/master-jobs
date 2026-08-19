@@ -4,13 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import {
   analyseGap,
   currentDocument,
   documentHistory,
   getCandidate,
 } from "../../src/core/candidate.ts";
+import { MarkdownEditor } from "./editor";
 import { saveCvAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -63,17 +63,8 @@ export default async function CandidateArea() {
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="content">Currículo em texto</Label>
-          <Textarea
-            id="content"
-            name="content"
-            rows={18}
-            required
-            minLength={100}
-            defaultValue={doc?.content ?? ""}
-            placeholder="Cole aqui o texto do currículo…"
-            className="font-mono text-[13px] leading-relaxed"
-          />
+          <Label htmlFor="content">Currículo em markdown</Label>
+          <MarkdownEditor name="content" defaultValue={doc?.content ?? ""} />
         </div>
         <div className="flex items-center gap-3">
           <Button type="submit">Salvar versão</Button>
