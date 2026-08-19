@@ -67,12 +67,12 @@ export async function capture(
     return { kind: "failed", reason: `URL inválida: ${task.url}`, retryable: false };
   }
 
-  if (!(await mayFetch(task.url, fetcher))) {
+  if (!(await mayFetch(task.url))) {
     // Not a failure. The site said no, and that is a final answer.
     return { kind: "blocked", reason: "robots.txt não permite" };
   }
 
-  const rules = await robotsFor(url.origin, fetcher);
+  const rules = await robotsFor(url.origin);
   await waitForHost(url.origin, rules.crawlDelayMs ?? DEFAULT_HOST_DELAY_MS);
 
   let res: Response;

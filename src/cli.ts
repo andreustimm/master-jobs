@@ -1426,23 +1426,183 @@ cv.command("gap")
     });
   });
 
+const llm = program
+  .command("llm")
+  .description("Provedores e modelos de LLM (BYOK — a chave fica no seu .env)");
+
+llm
+  .command("seed")
+  .description("Cadastrar os provedores conhecidos")
+  .action(async () => {
+    await withDb(async () => {
+      await runMigrations();
+      const { seedProviders } = await import("./core/llm/registry.ts");
+      const r = await seedProviders();
+      console.log(`${c.green("\u2713")} ${r.providers} provedor(es), ${r.models} modelo(s)`);
+      console.log(c.dim("  Nada foi sobrescrito. Veja: jho llm list\n"));
+    });
+  });
+
+llm
+  .command("list", { isDefault: true })
+  .description("Modelos cadastrados e quais têm chave disponível")
+  .option("--all", "incluir desabilitados")
+  .action(async (opts: { all?: boolean }) => {
+    await withDb(async () => {
+      await runMigrations();
+      const { chooseModel, listModels } = await import("./core/llm/registry.ts");
+      const models = await listModels(!opts.all);
+
+      if (models.length === 0) {
+        console.log(c.dim("\n  Nenhum modelo cadastrado. Rode: jho llm seed\n"));
+        return;
+      }
+
+      const active = await chooseModel();
+      console.log(`\n  ${"provedor".padEnd(12)}${"modelo".padEnd(30)}${"esforço".padEnd(9)}${"custo /Mtok".padEnd(14)}chave`);
+      for (const m of models) {
+        const cost =
+          m.inputCostPerMTok === null
+            ? "—"
+            : `$${m.inputCostPerMTok}/$${m.outputCostPerMTok ?? "?"}`;
+        const isActive = active?.modelId === m.modelId;
+        const name = `${isActive ? "→ " : "  "}${m.modelLabel}`;
+        console.log(
+          (isActive ? c.green : (x: string) => x)(
+            `  ${m.providerLabel.padEnd(12)}${name.padEnd(30)}` +
+            `${(m.supportsReasoning ? (m.effort ?? "sim") : "—").padEnd(9)}${cost.padEnd(14)}` +
+            (m.keyPresent ? c.green("ok") : c.dim(m.apiKeyEnv)),
+          ),
+        );
+      }
+      console.log(
+        c.dim(
+          "\n  → é o modelo em uso. Trocar: jho llm use <modelo>\n" +
+          "  A chave nunca é gravada no banco: o cadastro guarda só o NOME da variável.\n",
+        ),
+      );
+    });
+  });
+
+llm
+  .command("use <model>")
+  .description("Definir o modelo padrão")
+  .action(async (model: string) => {
+    await withDb(async () => {
+      const { setDefaultModel } = await import("./core/llm/registry.ts");
+      if (await setDefaultModel(model)) {
+        console.log(`${c.green("\u2713")} padrão: ${model}\n`);
+      } else {
+        console.error(c.red(`\n  Modelo "${model}" não cadastrado. Veja: jho llm list\n`));
+        process.exitCode = 1;
+      }
+    });
+  });
+
+llm
+  .command("add-provider <slug>")
+  .description("Cadastrar um provedor (inclusive compatível com OpenAI)")
+  .requiredOption("--label <nome>", "nome exibido")
+  .requiredOption("--key-env <VAR>", "nome da variável de ambiente com a chave")
+  .option("--kind <tipo>", "anthropic | openai | compatible", "compatible")
+  .option("--base-url <url>", "endpoint, para serviço compatível ou self-hosted")
+  .action(async (slug: string, opts: { label: string; keyEnv: string; kind: string; baseUrl?: string }) => {
+    await withDb(async () => {
+      await runMigrations();
+      const { isKind } = await import("./core/llm/registry.ts");
+      if (!isKind(opts.kind)) {
+        console.error(c.red(`\n  Tipo inválido: ${opts.kind}. Use anthropic, openai ou compatible.\n`));
+        process.exitCode = 1;
+        return;
+      }
+      const { llmProvider } = await import("./core/db/schema.ts");
+      await getDb()
+        .insert(llmProvider)
+        .values({
+          slug,
+          label: opts.label,
+          kind: opts.kind,
+          apiKeyEnv: opts.keyEnv,
+          baseUrl: opts.baseUrl ?? null,
+        })
+        .onConflictDoUpdate({
+          target: llmProvider.slug,
+          set: { label: opts.label, kind: opts.kind, apiKeyEnv: opts.keyEnv, baseUrl: opts.baseUrl ?? null },
+        });
+      console.log(`${c.green("\u2713")} provedor ${slug}`);
+      console.log(c.dim(`  A chave continua sendo sua: defina ${opts.keyEnv} no .env.\n`));
+    });
+  });
+
+llm
+  .command("add-model <providerSlug> <modelId>")
+  .description("Cadastrar um modelo de um provedor")
+  .requiredOption("--label <nome>", "nome exibido")
+  .option("--reasoning", "o modelo aceita controle de esforço")
+  .option("--effort <nivel>", "low | medium | high | xhigh | max")
+  .option("--max-tokens <n>", "teto de saída", "4096")
+  .option("--in-cost <usd>", "custo de entrada por milhão de tokens")
+  .option("--out-cost <usd>", "custo de saída por milhão de tokens")
+  .action(async (providerSlug: string, modelId: string, opts: Record<string, string | boolean>) => {
+    await withDb(async () => {
+      await runMigrations();
+      const { isEffort } = await import("./core/llm/registry.ts");
+      const effort = typeof opts.effort === "string" ? opts.effort : null;
+      if (effort && !isEffort(effort)) {
+        console.error(c.red(`\n  Esforço inválido: ${effort}. Use low, medium, high, xhigh ou max.\n`));
+        process.exitCode = 1;
+        return;
+      }
+
+      const { llmModel, llmProvider } = await import("./core/db/schema.ts");
+      const [provider] = await getDb()
+        .select({ id: llmProvider.id })
+        .from(llmProvider)
+        .where(eq(llmProvider.slug, providerSlug))
+        .limit(1);
+
+      if (!provider) {
+        console.error(c.red(`\n  Provedor "${providerSlug}" não cadastrado.\n`));
+        process.exitCode = 1;
+        return;
+      }
+
+      await getDb()
+        .insert(llmModel)
+        .values({
+          providerId: provider.id,
+          modelId,
+          label: String(opts.label),
+          supportsReasoning: Boolean(opts.reasoning),
+          defaultEffort: effort,
+          maxOutputTokens: Number(opts.maxTokens ?? 4096),
+          inputCostPerMTok: opts.inCost ? Number(opts.inCost) : null,
+          outputCostPerMTok: opts.outCost ? Number(opts.outCost) : null,
+        })
+        .onConflictDoNothing();
+      console.log(`${c.green("\u2713")} modelo ${modelId}\n`);
+    });
+  });
+
 program
   .command("analyze <id>")
   .description("Leitura qualitativa de uma vaga com LLM (BYOK — sua chave, seu custo)")
   .option("--yes", "não pedir confirmação antes de enviar")
-  .action(async (id: string, opts: { yes?: boolean }) => {
+  .option("--model <id>", "modelo específico (ver: jho llm list)")
+  .action(async (id: string, opts: { yes?: boolean; model?: string }) => {
     await withDb(async () => {
-      const { resolveLlm } = await import("./core/llm/providers.ts");
-      const { ENV_KEYS, redactKey } = await import("./core/llm/port.ts");
+      const { chooseModel, portFor } = await import("./core/llm/registry.ts");
+      const { redactKey } = await import("./core/llm/port.ts");
+      const { ENV_KEYS } = await import("./core/llm/port.ts");
 
-      const resolved = resolveLlm();
-      if (!resolved) {
-        console.error(c.red("\n  Nenhuma chave de API configurada."));
+      const choice = await chooseModel(typeof opts.model === "string" ? opts.model : undefined);
+      if (!choice) {
+        console.error(c.red("\n  Nenhum modelo disponível com chave configurada."));
         console.log(
           c.dim(
+            `  Cadastre: jho llm seed · veja: jho llm list\n` +
             `  Defina ${Object.values(ENV_KEYS).join(" ou ")} no .env.\n` +
-            "  A chave é sua: fica só no seu .env, nunca vai para o banco nem para log.\n" +
-            "  Ver docs/prompts/system/README.md\n",
+            "  A chave é sua: fica só no .env, nunca no banco nem em log.\n",
           ),
         );
         process.exitCode = 1;
@@ -1482,10 +1642,11 @@ program
       // data somewhere, so it says so before doing it rather than after.
       const bytes = payloadSize(dossier, description);
       console.log(`\n${c.bold("Isto vai sair da sua máquina")}`);
+      const effortLabel = choice.supportsReasoning ? ` · esforço ${choice.effort ?? "padrão"}` : "";
       console.log(
         c.dim(
-          `  destino: ${resolved.provider} (${resolved.port.model})\n` +
-          `  chave:   ${redactKey(process.env[ENV_KEYS[resolved.provider]])}\n` +
+          `  destino: ${choice.providerLabel} (${choice.modelLabel})${effortLabel}\n` +
+          `  chave:   ${redactKey(process.env[choice.apiKeyEnv])} (de ${choice.apiKeyEnv})\n` +
           `  envia:   o anúncio da vaga, ~${bytes.toLocaleString("pt-BR")} caracteres\n` +
           `  NÃO envia: seu currículo, seu perfil, nem o funil`,
         ),
@@ -1500,7 +1661,10 @@ program
       }
 
       try {
-        const analysis = await analyzeJob(resolved.port, dossier, description);
+        const analysis = await analyzeJob(portFor(choice), dossier, description, process.cwd(), {
+          effort: choice.supportsReasoning ? (choice.effort ?? undefined) : undefined,
+          maxTokens: choice.maxOutputTokens,
+        });
         console.log(`\n${c.bold(dossier.job.title)} ${c.dim(`· ${dossier.job.companyName}`)}\n`);
         console.log(analysis.text);
         console.log(

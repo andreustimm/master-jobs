@@ -115,7 +115,13 @@ dashboard Next.js em `localhost:3000`.
 > a triagem estar calibrada acelera o gargalo errado, e candidatura enviada não
 > volta. ADR 0010 define as três condições para reavaliar.
 
-> **13. `??` não protege contra string vazia.**
+> **13. Chave de API nunca vai para o banco.**
+> O cadastro de provedores guarda o **nome da variável de ambiente**, jamais a
+> chave. Banco é copiado, versionado em backup e aberto por outros processos —
+> chave dentro dele viaja junto. BYOK só é promessa cumprida se for estrutural.
+> Há teste asserindo que nenhuma coluna guarda chave e que nada a imprime.
+
+> **14. `??` não protege contra string vazia.**
 > Várias APIs devolvem `""` para campo não preenchido. Use `firstNonEmpty()`
 > de `src/core/sources/http.ts`. Esse bug já apagou 4.538 descrições uma vez.
 
@@ -143,6 +149,11 @@ pnpm jho sources probe ashby textlayer        # testa um handle sem gravar
 pnpm jho sources snippet revelo               # extrator para plataforma logada
 
 # LLM opcional (BYOK — sua chave, seu custo)
+pnpm jho llm seed            # cadastra provedores conhecidos
+pnpm jho llm list            # modelos, esforço, custo e quais têm chave
+pnpm jho llm use <modelo>    # define o padrão
+pnpm jho llm add-provider <slug> --label X --key-env VAR [--kind compatible --base-url URL]
+pnpm jho llm add-model <provedor> <modelo> --label X [--reasoning --effort high]
 pnpm jho analyze <id>        # leitura qualitativa da vaga; pede confirmação antes de enviar
 
 # candidatura
@@ -224,7 +235,9 @@ src/core/          lógica pura, compartilhada entre CLI e UI
   scrape/          fila, robots.txt, captura e extração (duas etapas)
   security.ts      autoverificações (bind, PII, segredos, permissões)
   apply/           dossiê de candidatura (prepara; nunca envia — ADR 0010)
-  llm/             porta BYOK + adapters (Anthropic, OpenAI) — a chave é do usuário
+  llm/             porta BYOK, adapters e cadastro de provedores/modelos
+                   port.ts · providers.ts · registry.ts · analyze.ts
+  clock.ts         relógio injetável — só onde o tempo é decisão, não carimbo
   money.ts         value object (amount + currency + period)
   pdf.ts           extração de PDF (unpdf, JS puro) + limpeza de texto
   fx.ts            cotações com cache
@@ -326,6 +339,7 @@ descreva como pronto o que não está**.
 | `docs/adr/0009` | **Fila de raspagem — por que tabela e não broker** |
 | `docs/adr/0010` | **Antes de automatizar envio de candidatura** |
 | `docs/prompts/system/` | **Antes de mexer em qualquer prompt de LLM** |
+| `docs/product/task-auth.md` | Autenticação e autorização — planejado |
 | `docs/roadmap.md` | O que vem depois |
 | `docs/benchmark/` | Concorrentes e mercado |
 | `docs/product/` | **Visão, personas, user stories, backlog** |

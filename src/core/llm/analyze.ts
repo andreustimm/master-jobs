@@ -15,7 +15,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Dossier } from "../apply/dossier.ts";
-import type { LlmPort } from "./port.ts";
+import type { LlmPort, LlmRequest } from "./port.ts";
 
 export type Analysis = {
   text: string;
@@ -64,6 +64,7 @@ export async function analyzeJob(
   dossier: Dossier,
   description: string,
   root = process.cwd(),
+  options: { effort?: LlmRequest["effort"]; maxTokens?: number } = {},
 ): Promise<Analysis> {
   const system = await loadSystemPrompt("job-analysis", root);
   const input = buildAnalysisInput(dossier, description);
@@ -71,7 +72,8 @@ export async function analyzeJob(
   const response = await llm.complete({
     system,
     messages: [{ role: "user", content: input }],
-    maxTokens: 1600,
+    maxTokens: options.maxTokens ?? 1600,
+    effort: options.effort,
     // Low, because the job is to report what the ad says, not to be creative
     // about it. A confident invention here costs the user an application.
     temperature: 0.1,

@@ -179,14 +179,27 @@ describe("pluggability (rule 4)", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("never persists or prints an API key", () => {
-    const offenders: string[] = [];
-    for (const file of SRC) {
-      const code = read(file);
-      // Keys are read at call time from the environment and go nowhere else.
-      if (/console\.log\([^)]*(?:apiKey|API_KEY)/.test(code)) offenders.push(`${file}: log`);
-      if (/insert\([^)]*\)[^;]*apiKey/.test(code)) offenders.push(`${file}: persist`);
-    }
+  it("handles the API key only where authentication happens", () => {
+    // `providers.ts` must touch the key — it is what signs the request. Nowhere
+    // else has any reason to, and a key that spreads is a key that leaks.
+    const allowed = "src/core/llm/providers.ts";
+    const offenders = SRC.filter(
+      (f) => f !== allowed && /\bapiKey\b/.test(read(f)) && !/apiKeyEnv/.test(read(f)),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("never writes a key to the database", () => {
+    // The registry stores the NAME of the environment variable. A database file
+    // gets copied, backed up and opened by other processes; a key inside it
+    // travels with all of that.
+    const schema = read("src/core/db/schema.ts");
+    expect(schema).toContain("apiKeyEnv");
+    expect(schema).not.toMatch(/apiKey:\s*text\("api_key"/);
+  });
+
+  it("never prints a key", () => {
+    const offenders = SRC.filter((f) => /console\.(log|error)\([^)]*\bapiKey\b/.test(read(f)));
     expect(offenders).toEqual([]);
   });
 });

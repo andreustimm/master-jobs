@@ -715,3 +715,82 @@ export const jobPage = sqliteTable(
 
 export type ScrapeTask = typeof scrapeTask.$inferSelect;
 export type JobPage = typeof jobPage.$inferSelect;
+
+/* -------------------------------------------------------------------------- */
+/* LLM providers and models (BYOK, administered)                              */
+/* -------------------------------------------------------------------------- */
+
+export const LLM_KINDS = ["anthropic", "openai", "compatible"] as const;
+export type LlmKind = (typeof LLM_KINDS)[number];
+
+/** Reasoning effort, where the model supports it. */
+export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
+export type EffortLevel = (typeof EFFORT_LEVELS)[number];
+
+/**
+ * A configured provider.
+ *
+ * The one thing this table deliberately does NOT hold is the API key. It holds
+ * the NAME of the environment variable to read it from. That keeps BYOK a real
+ * promise rather than a slogan: the key lives in the user's `.env`, never in a
+ * database file that gets copied, backed up, or opened by another process.
+ *
+ * `kind` selects the wire protocol, not the vendor — "compatible" covers every
+ * service that speaks the OpenAI shape (Groq, Together, OpenRouter, Ollama),
+ * which is most of them.
+ */
+export const llmProvider = sqliteTable(
+  "llm_provider",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    slug: text("slug").notNull(),
+    label: text("label").notNull(),
+    kind: text("kind").notNull(),
+    /** Override for a self-hosted or proxy endpoint. Null means the default. */
+    baseUrl: text("base_url"),
+    /** Name of the env var holding the key — never the key itself. */
+    apiKeyEnv: text("api_key_env").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    notes: text("notes"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("llm_provider_slug_idx").on(t.slug)],
+);
+
+/**
+ * A model offered by a provider.
+ *
+ * Cost per million tokens is stored because with BYOK the user pays directly,
+ * and a number they can see before a call is the difference between an informed
+ * choice and a surprise invoice.
+ */
+export const llmModel = sqliteTable(
+  "llm_model",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    providerId: integer("provider_id")
+      .notNull()
+      .references(() => llmProvider.id, { onDelete: "cascade" }),
+    /** The identifier the API expects, e.g. "claude-sonnet-5". */
+    modelId: text("model_id").notNull(),
+    label: text("label").notNull(),
+    /** Whether the model exposes a reasoning/effort control at all. */
+    supportsReasoning: integer("supports_reasoning", { mode: "boolean" }).notNull().default(false),
+    /** low | medium | high | xhigh | max. Null when unsupported. */
+    defaultEffort: text("default_effort"),
+    maxOutputTokens: integer("max_output_tokens").notNull().default(4096),
+    inputCostPerMTok: real("input_cost_per_mtok"),
+    outputCostPerMTok: real("output_cost_per_mtok"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    /** Exactly one model should carry this; the resolver enforces it. */
+    isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("llm_model_unique_idx").on(t.providerId, t.modelId),
+    index("llm_model_default_idx").on(t.isDefault),
+  ],
+);
+
+export type LlmProvider = typeof llmProvider.$inferSelect;
+export type LlmModel = typeof llmModel.$inferSelect;

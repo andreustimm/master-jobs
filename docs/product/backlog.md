@@ -259,6 +259,27 @@ desta UI por polimento.
 
 ## P3 — Estrutura e futuro
 
+### AUTH-01 · Autenticação e autorização 📋
+
+Detalhamento completo em [`task-auth.md`](task-auth.md).
+
+Pré-requisito de deploy, multi-candidato e do painel de admin do catálogo. Hoje
+o dashboard não tem autenticação — defensável em loopback para um usuário, e foi
+exatamente o que transformou um bind errado em vazamento do currículo inteiro na
+rede local (ver `docs/security.md`).
+
+A parte que costuma ser feita errado e está explícita nos critérios de aceite:
+**escopo por candidato precisa nascer da sessão e atravessar até a query**.
+Filtrar na UI é cosmético — uma Server Action com id trocado devolve o dado de
+outra pessoa.
+
+Entra por porta, como todo módulo (regra 4): `IdentityProvider` absorve link
+mágico hoje e OAuth depois; `SessionStore` é tabela agora e Redis quando houver
+mais de um processo. A decisão de permissão é função pura `can(session, action,
+resource)`, que é onde bug de autorização mora e onde teste exaustivo é barato.
+
+---
+
 ### E-01 · Arquitetura hexagonal, DDD, monolito modular 🔄
 
 Decisão em andamento por painel de propostas independentes e julgamento por

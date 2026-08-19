@@ -55,8 +55,8 @@ fonte da verdade sobre o que já mudou de casa.
 |---|---|---|
 | 0 | Rede de segurança: `verbatimModuleSyntax`, `createTestDb()`, teste de arquitetura, testes de caracterização, `git tag pre-arch` | **✅ concluído** — commit `083403c` |
 | 1 | Corrigir o `??` e recuperar o corpus | **✅ concluído** — commit `ec7a807` |
-| 2 | `Ctx`, `Clock`, fábrica de conexão | não iniciado |
-| 3 | Porta `HttpClient`, fixtures, `FxRateProvider` | não iniciado |
+| 2 | `Ctx`, `Clock`, fábrica de conexão | **✅ concluído** — `src/core/clock.ts`, injetado onde o tempo é decisão (backoff, claim expirado), não onde é carimbo |
+| 3 | Porta `HttpClient`, fixtures, `FxRateProvider` | **✅ concluído** — `http-port.ts` com `fixtureHttp`; destravou testar os 13 adapters sem rede, incluindo regressão do bug do Lever |
 | 4 | Resgatar regras presas na CLI; `--json` em todo comando de leitura | não iniciado |
 | 5 | `fit_assessment` com chave composta; `Measured \| Unknown` — **irreversível** | não iniciado |
 | 6 | Mover a árvore para `contexts/` | **🔨 parcial** — `contexts/skills/` existe e é o padrão a seguir; o resto de `core/` não migrou |

@@ -26,6 +26,16 @@ export type LlmRequest = {
   messages: LlmMessage[];
   maxTokens?: number;
   temperature?: number;
+  /**
+   * Reasoning effort, for models that expose it.
+   *
+   * Each vendor spells this differently — Anthropic takes a thinking token
+   * budget, OpenAI takes a named level — so the port carries the intent and
+   * each adapter translates. Ignored by models that do not support it, rather
+   * than erroring: a request that works on one model should not break when the
+   * user switches to another.
+   */
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
 };
 
 export type LlmResponse = {

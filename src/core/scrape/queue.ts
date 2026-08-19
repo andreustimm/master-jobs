@@ -18,6 +18,7 @@
  * so exactly one worker gets the row.
  */
 import { and, asc, desc, eq, isNull, lte, or, sql } from "drizzle-orm";
+import { clock } from "../clock.ts";
 import { getDb } from "../db/client.ts";
 import { job, jobPage, jobScore, scrapeTask, type ScrapeStatus } from "../db/schema.ts";
 
@@ -42,7 +43,7 @@ export const MAX_ATTEMPTS = 4;
 /** Backoff in minutes, indexed by attempt. Long enough to outlast a rate limit. */
 const BACKOFF_MINUTES = [1, 5, 20, 60];
 
-function isoIn(minutes: number, now = Date.now()): string {
+function isoIn(minutes: number, now = clock().now()): string {
   return new Date(now + minutes * 60_000).toISOString();
 }
 
@@ -57,7 +58,7 @@ const STALE_CLAIM_MINUTES = 15;
 export const dbQueue: QueuePort = {
   async claim(status, worker) {
     const db = getDb();
-    const nowIso = new Date().toISOString();
+    const nowIso = clock().iso();
     const staleBefore = isoIn(-STALE_CLAIM_MINUTES);
     const working: ScrapeStatus = status === "pending" ? "fetching" : "parsing";
 
@@ -97,7 +98,7 @@ export const dbQueue: QueuePort = {
         claimedAt: null,
         claimedBy: null,
         lastError: null,
-        updatedAt: new Date().toISOString(),
+        updatedAt: clock().iso(),
       })
       .where(eq(scrapeTask.id, id));
   },
@@ -126,7 +127,7 @@ export const dbQueue: QueuePort = {
         runAfter: exhausted
           ? null
           : isoIn(BACKOFF_MINUTES[Math.min(attempts, BACKOFF_MINUTES.length - 1)]!),
-        updatedAt: new Date().toISOString(),
+        updatedAt: clock().iso(),
       })
       .where(eq(scrapeTask.id, id));
   },

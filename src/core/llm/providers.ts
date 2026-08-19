@@ -16,20 +16,44 @@ import {
 
 const TIMEOUT_MS = 120_000;
 
+/**
+ * Thinking budget per effort level, in tokens.
+ *
+ * Anthropic bills thinking tokens as output, so these are the user's money —
+ * chosen to be useful rather than maximal. `max` is deliberately not unbounded.
+ */
+const THINKING_BUDGET: Record<string, number> = {
+  low: 1024,
+  medium: 4096,
+  high: 12_000,
+  xhigh: 24_000,
+  max: 32_000,
+};
+
+/** OpenAI takes a named level and has no equivalent for the top two. */
+const OPENAI_EFFORT: Record<string, string> = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+  xhigh: "high",
+  max: "high",
+};
+
 /** Defaults chosen for cost, not ceiling: this reads job ads, not research. */
 const DEFAULT_MODEL: Record<Provider, string> = {
   anthropic: "claude-sonnet-5",
   openai: "gpt-5-mini",
 };
 
-export function anthropicProvider(apiKey: string, model?: string): LlmPort {
+export function anthropicProvider(apiKey: string, model?: string, baseUrl?: string): LlmPort {
   const chosen = model ?? process.env.JHO_LLM_MODEL ?? DEFAULT_MODEL.anthropic;
+  const endpoint = `${(baseUrl ?? "https://api.anthropic.com").replace(/\/$/, "")}/v1/messages`;
 
   return {
     name: "anthropic",
     model: chosen,
     async complete(req: LlmRequest): Promise<LlmResponse> {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch(endpoint, {
         method: "POST",
         signal: AbortSignal.timeout(TIMEOUT_MS),
         headers: {
@@ -40,7 +64,11 @@ export function anthropicProvider(apiKey: string, model?: string): LlmPort {
         body: JSON.stringify({
           model: chosen,
           max_tokens: req.maxTokens ?? 2000,
-          temperature: req.temperature ?? 0.2,
+          // Temperature and extended thinking are mutually exclusive on this
+          // API; sending both is a 400.
+          ...(req.effort
+            ? { thinking: { type: "enabled", budget_tokens: THINKING_BUDGET[req.effort] ?? 4096 } }
+            : { temperature: req.temperature ?? 0.2 }),
           system: req.system,
           messages: req.messages,
         }),
@@ -52,6 +80,8 @@ export function anthropicProvider(apiKey: string, model?: string): LlmPort {
         throw new LlmError("anthropic", res.status, error?.message ?? `HTTP ${res.status}`);
       }
 
+      // With thinking enabled the response carries thinking blocks too; only
+      // the text blocks are the answer.
       const content = (json.content ?? []) as Array<{ type: string; text?: string }>;
       const usage = (json.usage ?? {}) as { input_tokens?: number; output_tokens?: number };
 
@@ -65,14 +95,20 @@ export function anthropicProvider(apiKey: string, model?: string): LlmPort {
   };
 }
 
-export function openaiProvider(apiKey: string, model?: string): LlmPort {
+/**
+ * Also serves every "OpenAI-compatible" service — Groq, Together, OpenRouter,
+ * Ollama — which is why `baseUrl` is a parameter rather than a constant. The
+ * wire shape is the same; only the host changes.
+ */
+export function openaiProvider(apiKey: string, model?: string, baseUrl?: string): LlmPort {
   const chosen = model ?? process.env.JHO_LLM_MODEL ?? DEFAULT_MODEL.openai;
+  const endpoint = `${(baseUrl ?? "https://api.openai.com").replace(/\/$/, "")}/v1/chat/completions`;
 
   return {
     name: "openai",
     model: chosen,
     async complete(req: LlmRequest): Promise<LlmResponse> {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch(endpoint, {
         method: "POST",
         signal: AbortSignal.timeout(TIMEOUT_MS),
         headers: {
@@ -82,6 +118,7 @@ export function openaiProvider(apiKey: string, model?: string): LlmPort {
         body: JSON.stringify({
           model: chosen,
           max_completion_tokens: req.maxTokens ?? 2000,
+          ...(req.effort ? { reasoning_effort: OPENAI_EFFORT[req.effort] ?? "medium" } : {}),
           messages: [{ role: "system", content: req.system }, ...req.messages],
         }),
       });

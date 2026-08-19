@@ -12,6 +12,9 @@
  * dangerous than one that is clear about its limits.
  */
 
+import { http } from "../sources/http-port.ts";
+import "../sources/http.ts";
+
 export type RobotsRules = {
   /** Longest match wins, which is what the spec says. */
   rules: Array<{ allow: boolean; path: string }>;
@@ -93,35 +96,39 @@ export function clearRobotsCache(): void {
   cache.clear();
 }
 
-export async function robotsFor(origin: string, fetcher = fetch): Promise<RobotsRules> {
+/**
+ * Goes through the HTTP port, not `fetch`.
+ *
+ * robots.txt is a network call like any other, and routing it through the port
+ * is what lets a test assert that a forbidden page was never even requested —
+ * which is the only way to verify the invariant rather than trust it.
+ */
+export async function robotsFor(origin: string): Promise<RobotsRules> {
   const cached = cache.get(origin);
   if (cached) return cached;
 
   let rules: RobotsRules = { rules: [], crawlDelayMs: null };
-  try {
-    const res = await fetcher(`${origin}/robots.txt`, {
-      signal: AbortSignal.timeout(8000),
-      headers: { "user-agent": OUR_AGENT },
-    });
-    // 404 means no rules, which means everything is permitted. A 5xx is not a
-    // statement about permission either, so it is treated the same way rather
-    // than blocking the whole host on a transient error.
-    if (res.ok) rules = parseRobots(await res.text());
-  } catch {
-    // Unreachable robots.txt: same reasoning.
-  }
+  // 404 means no rules, which means everything is permitted. An unreachable or
+  // erroring robots.txt is not a statement about permission either, so it is
+  // treated the same way rather than blocking the whole host on a transient
+  // failure. `text()` already returns null for both.
+  const body = await http().text(`${origin}/robots.txt`, {
+    timeoutMs: 8000,
+    headers: { "user-agent": OUR_AGENT },
+  });
+  if (body !== null) rules = parseRobots(body);
 
   cache.set(origin, rules);
   return rules;
 }
 
-export async function mayFetch(url: string, fetcher = fetch): Promise<boolean> {
+export async function mayFetch(url: string): Promise<boolean> {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
     return false;
   }
-  const rules = await robotsFor(parsed.origin, fetcher);
+  const rules = await robotsFor(parsed.origin);
   return isAllowed(rules, parsed.pathname + parsed.search);
 }
