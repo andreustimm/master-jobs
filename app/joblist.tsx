@@ -74,7 +74,7 @@ export function JobList({ rows, dense = false }: { rows: Row[]; dense?: boolean 
                   {anonymous ? `${r.companyName} · empregador oculto` : r.companyName}
                 </span>
                 {r.cluster && (
-                  <Badge variant="outline" className="font-mono type-micro text-primary">
+                  <Badge variant="outline" className="font-mono type-micro text-[var(--primary-text)]">
                     {r.cluster}
                   </Badge>
                 )}

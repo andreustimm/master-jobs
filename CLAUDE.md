@@ -82,7 +82,20 @@ dashboard Next.js em `localhost:3000`.
 > pela qualidade do emprego. `freshness` sem data vale 0,5; `benefits` em texto
 > curto vale 0,5 e **nunca** gera bloqueador.
 
-> **9. Todo frontend segue o `DESIGN.md`. Sem exceção.**
+> **9. Todo frontend segue o sistema de temas.**
+> Três temas — **HP**, **Huly**, **Graphy** — cada um com ambiente claro e
+> escuro, e um terceiro estado que segue o sistema operacional. Definidos em
+> `app/themes.css`, registrados em `src/core/theme.ts`.
+>
+> **Componente lê só token semântico:** `--background`, `--foreground`,
+> `--card`, `--primary` (superfície de botão), `--primary-text` (link e texto
+> de acento — contrasta com o FUNDO, não com o botão), `--border`, `--muted`,
+> `--hairline`, `--good`, `--warn`, `--bad`, `--accent-2`.
+> Um `#hex` ou um token bruto (`--color-iris`) num componente é o tema vazando,
+> e a partir daí um dos temas começa a ficar errado.
+>
+> Tema novo = um bloco em `themes.css` + uma linha em `theme.ts`. Nada em
+> `components/` muda.
 > **Nunca use `max-w-xs`, `max-w-sm`, `max-w-md`, `max-w-lg` nem `max-w-xl`**
 > (idem `w-`, `h-`, `min-w-`). O Tailwind v4 resolve esses nomes por
 > `--spacing-<nome>`, e o DESIGN.md nomeia os espaçamentos assim — `max-w-xs`

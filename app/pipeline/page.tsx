@@ -37,7 +37,7 @@ export default async function Pipeline() {
       {rows.length === 0 ? (
         <Card className="p-6 text-sm text-muted-foreground">
           Nada no funil ainda. Comece pela{" "}
-          <Link href="/jobs" className="text-primary hover:underline">
+          <Link href="/jobs" className="text-[var(--primary-text)] hover:underline">
             lista de vagas
           </Link>
           .

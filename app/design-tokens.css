@@ -1,233 +1,239 @@
 /* ===========================================================================
-   DESIGN.md — sistema completo, gerado a partir do arquivo instalado.
+   Sistema visual — derivado do design system do Huly.
 
-   SUBSTITUIÇÃO DE FONTE, declarada e justificada.
+   Substitui o DESIGN.md da HP, que era claro, azul corporativo e com o motivo
+   de chevron. Dois sistemas concorrentes fazem uma UI virar colcha de
+   retalhos, então este é a fonte da verdade a partir de agora (regra 9).
 
-   A especificação pede Forma DJR Micro em todos os 16 estilos. É uma face
-   proprietária (Font Bureau / David Jonathan Ross, licenciável via Adobe
-   Fonts) e não pode ser redistribuída, então o projeto usa a alternativa
-   livre mais próxima: INTER, com ~85% de similaridade e licença OFL-1.1.
+   O QUE DEFINE ESTE SISTEMA
 
-   Inter foi escolhida por medida, não por gosto: é a fonte do Google Fonts
-   apontada como mais próxima da Forma DJR, à frente de Work Sans. (Uma versão
-   anterior deste arquivo usava Archivo, que não figura entre as alternativas
-   reconhecidas — troca corrigida.)
+   1. Escuro por padrão. Este dashboard é aberto às 21h40 — é o que a persona
+      do próprio produto diz. Fundo quase preto, e o claro existe como
+      alternativa, não como base.
+   2. Dois acentos, e só dois. Iris para ação, ember para o que é escasso ou
+      urgente. Toda cor semântica extra dilui os dois e a hierarquia some.
+   3. Borda antes de sombra. Em superfície escura a sombra some; a separação
+      vem de uma linha de baixo contraste.
+   4. Pílula na ação, canto suave no contêiner. Botão e etiqueta são
+      totalmente arredondados; card é 12px. É o traço mais reconhecível.
+   5. Tracking negativo. Título grande com espaçamento apertado é o que separa
+      "editorial" de "SaaS genérico".
 
-   Se você tiver Creative Cloud, a Forma DJR real está disponível no Adobe
-   Fonts: acrescente o kit e mude apenas `--font-sans` em globals.css. Todo o
-   resto deste arquivo já está correto.
-
-   A ESCALA, os PESOS, o LINE-HEIGHT e o TRACKING abaixo são os da
-   especificação — inclusive os display em peso 500 com line-height 1.0, e os
-   botões em caixa alta com 0.7px de tracking, que é o traço mais reconhecível
-   do sistema.
-
-   Cada classe declara `font-family` explicitamente. A especificação repete
-   `fontFamily` em todos os 16 estilos, e herdar do body faria qualquer
-   elemento dentro de um contêiner com fonte própria sair da escala em
-   silêncio.
+   A fonte continua Inter, que a referência também usa — a única coisa do
+   sistema anterior que sobrevive intacta.
    =========================================================================== */
 
 @theme {
-  /* cores */
-  --color-primary: #024ad8;
-  --color-primary-bright: #296ef9;
-  --color-primary-deep: #0e3191;
-  --color-primary-soft: #c9e0fc;
-  --color-on-primary: #ffffff;
-  --color-ink: #1a1a1a;
-  --color-ink-deep: #000000;
-  --color-ink-soft: #292929;
-  --color-on-ink: #ffffff;
-  --color-canvas: #ffffff;
-  --color-paper: #ffffff;
-  --color-cloud: #f7f7f7;
-  --color-fog: #e8e8e8;
-  --color-steel: #c2c2c2;
-  --color-graphite: #636363;
-  --color-charcoal: #3d3d3d;
-  --color-hairline: #e8e8e8;
-  --color-hairline-strong: #c2c2c2;
-  --color-link: #024ad8;
-  --color-link-pressed: #0e3191;
-  --color-bloom-coral: #ff5050;
-  --color-bloom-rose: #f9d4d2;
-  --color-bloom-deep: #b3262b;
-  --color-bloom-wine: #5a1313;
-  --color-storm-mist: #8ebdce;
-  --color-storm-sea: #7fadbe;
-  --color-storm-deep: #356373;
-  --color-error: #b3262b;
+  /* --- Acentos ---------------------------------------------------------- */
+  --color-iris: #5683da;
+  --color-iris-bright: #7ba0e8;
+  --color-iris-deep: #3a5fa8;
+  --color-iris-ghost: #5683da1f;
 
-  /* rounded */
-  --radius-none: 0px;
-  --radius-xs: 2px;
-  --radius-sm: 3px;
-  --radius-md: 4px;
-  --radius-lg: 8px;
-  --radius-xl: 16px;
+  --color-ember: #ff8964;
+  --color-ember-bright: #ffa588;
+  --color-ember-deep: #d9603c;
+  --color-ember-ghost: #ff89641f;
+
+  /* --- Neutros escuros -------------------------------------------------- */
+  --color-void: #090a0c;
+  --color-obsidian: #16181c;
+  --color-charcoal: #1e2126;
+  --color-slate: #2a2d34;
+  --color-slate-edge: #383c44;
+  --color-steel-dim: #5c626d;
+  --color-smoke: #9599a3;
+  --color-mist: #c9ccd3;
+  --color-snow: #f2f3f5;
+
+  /* --- Neutros claros --------------------------------------------------- */
+  --color-linen: #e5e5e7;
+  --color-frost: #d1d1d3;
+
+  /* --- Semânticas, distintas dos acentos -------------------------------- */
+  --color-good: #4ba585;
+  --color-warn: #d9a441;
+  --color-bad: #e0655a;
+
+  /* --- Raios: pílula na ação, canto suave no contêiner ------------------ */
   --radius-pill: 9999px;
-  --radius-full: 9999px;
+  --radius-input: 6px;
+  --radius-card: 12px;
+  --radius-panel: 20px;
 
-  /*
-    ARMADILHA: os nomes abaixo colidem com a escala de largura do Tailwind.
-
-    O Tailwind v4 resolve `max-w-<nome>` por `--spacing-<nome>` quando o nome
-    não é numérico. Como o DESIGN.md nomeia os espaçamentos xs, sm, md, lg e
-    xl, a classe `max-w-xs` passou a valer 8px em vez de 320px — o tooltip
-    renderizava com a largura de um caractere, quebrando o texto letra a letra.
-
-    Declarar `--container-*` não resolve: esta versão do Tailwind resolve pelo
-    spacing de qualquer forma.
-
-    **Nunca use `max-w-xs`, `max-w-sm`, `max-w-md`, `max-w-lg` ou `max-w-xl`**
-    (nem `w-`, `h-`, `min-w-` com esses nomes). Use valor explícito —
-    `max-w-[20rem]` — ou um nome numérico da escala do Tailwind. Há teste que
-    reprova o uso.
-
-    Os tokens de espaçamento em si estão corretos e são a fonte da verdade
-    para `mb-xxl`, `p-lg` e afins.
-  */
-
-  /* spacing — nomes do DESIGN.md; ver a nota acima sobre a colisão */
+  /* --- Espaçamento, base 4 ---------------------------------------------- */
   --spacing-xxs: 4px;
   --spacing-xs: 8px;
   --spacing-sm: 12px;
   --spacing-md: 16px;
-  --spacing-lg: 20px;
-  --spacing-xl: 24px;
-  --spacing-xxl: 32px;
-  --spacing-section: 80px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+  --spacing-section: 96px;
 
-  --font-sans: Archivo, "Forma DJR Micro", ui-sans-serif, system-ui, sans-serif;
+  /*
+    ARMADILHA HERDADA, e ela continua valendo.
+
+    O Tailwind v4 resolve `max-w-<nome>` por `--spacing-<nome>` quando o nome
+    não é numérico. Como os espaçamentos acima usam xs, sm, md, lg e xl,
+    `max-w-xs` vale 8px e não 320px — foi assim que o tooltip renderizou com a
+    largura de um caractere.
+
+    **Nunca use `max-w-xs`, `max-w-sm`, `max-w-md`, `max-w-lg`, `max-w-xl`**
+    (nem `w-`, `h-`, `min-w-`, `min-h-` com esses nomes). Use valor explícito.
+    Há teste que reprova.
+  */
+
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --default-font-family: var(--font-sans);
+  --default-mono-font-family: var(--font-mono);
 }
 
 @layer components {
+  /* -------------------------------------------------------------------------
+     Escala tipográfica — Minor Third (1.2×) a partir de 16px.
+
+     O tracking fecha conforme o tamanho cresce: é o que dá o ar editorial.
+     Cada classe declara a família, porque herdar faz um elemento dentro de um
+     contêiner com fonte própria sair da escala em silêncio.
+     ------------------------------------------------------------------------- */
+
   .type-display-xxl {
-  font-family: var(--font-sans);
-  font-size: 72px;
-  font-weight: 500;
-  line-height: 1.0;
+    font-family: var(--font-sans);
+    font-size: 76px;
+    /* Peso e tracking vêm do tema: é o que separa "editorial" de "corporativo". */
+    font-weight: var(--display-weight, 600);
+    line-height: 1.02;
+    letter-spacing: var(--tracking-display, 0em);
   }
   .type-display-xl {
-  font-family: var(--font-sans);
-  font-size: 56px;
-  font-weight: 500;
-  line-height: 1.0;
+    font-family: var(--font-sans);
+    font-size: 56px;
+    /* Peso e tracking vêm do tema: é o que separa "editorial" de "corporativo". */
+    font-weight: var(--display-weight, 600);
+    line-height: 1.05;
+    letter-spacing: var(--tracking-display, 0em);
   }
   .type-display-lg {
-  font-family: var(--font-sans);
-  font-size: 44px;
-  font-weight: 500;
-  line-height: 1.0;
+    font-family: var(--font-sans);
+    font-size: 40px;
+    /* Peso e tracking vêm do tema: é o que separa "editorial" de "corporativo". */
+    font-weight: var(--display-weight, 600);
+    line-height: 1.1;
+    letter-spacing: var(--tracking-display, 0em);
   }
   .type-display-md {
-  font-family: var(--font-sans);
-  font-size: 32px;
-  font-weight: 500;
-  line-height: 1.0;
+    font-family: var(--font-sans);
+    font-size: 30px;
+    /* Peso e tracking vêm do tema: é o que separa "editorial" de "corporativo". */
+    font-weight: var(--display-weight, 600);
+    line-height: 1.15;
+    letter-spacing: var(--tracking-display, 0em);
   }
   .type-display-sm {
-  font-family: var(--font-sans);
-  font-size: 24px;
-  font-weight: 500;
-  line-height: 1.17;
+    font-family: var(--font-sans);
+    font-size: 24px;
+    /* Peso e tracking vêm do tema: é o que separa "editorial" de "corporativo". */
+    font-weight: var(--display-weight, 600);
+    line-height: 1.2;
+    letter-spacing: var(--tracking-display, 0em);
   }
   .type-display-xs {
-  font-family: var(--font-sans);
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 1.0;
+    font-family: var(--font-sans);
+    font-size: 20px;
+    /* Peso e tracking vêm do tema: é o que separa "editorial" de "corporativo". */
+    font-weight: var(--display-weight, 600);
+    line-height: 1.25;
+    letter-spacing: var(--tracking-display, 0em);
   }
+
   .type-body-lg {
-  font-family: var(--font-sans);
-  font-size: 18px;
-  font-weight: 400;
-  line-height: 1.33;
+    font-family: var(--font-sans);
+    font-size: 17px;
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: -0.006em;
   }
   .type-body-md {
-  font-family: var(--font-sans);
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 1.38;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1.55;
+    letter-spacing: -0.004em;
   }
   .type-body-emphasis {
-  font-family: var(--font-sans);
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1.38;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.55;
+    letter-spacing: -0.004em;
   }
   .type-caption-md {
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.5;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.45;
   }
   .type-caption-sm {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.33;
-  }
-  /* ---------------------------------------------------------------------
-     Extensão disciplinada da escala.
-
-     O DESIGN.md termina em 12px (caption-sm) porque foi desenhado para páginas
-     de marketing. Esta aplicação é uma grade de triagem: badges de cluster,
-     rótulos de fonte e metadados de linha precisam de dois degraus abaixo, ou
-     a densidade que torna a lista legível não existe.
-
-     Derivado, não inventado: mesma família, mesma progressão de line-height,
-     e o tracking sobe conforme o tamanho cai — que é o que a especificação faz
-     entre display e caption. Nada aqui é um valor solto; são os degraus que
-     faltavam na mesma régua.
-     --------------------------------------------------------------------- */
-  .type-meta {
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 1.36;
-  letter-spacing: 0.01em;
-  }
-  .type-micro {
-  font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1.4;
-  letter-spacing: 0.02em;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
   }
   .type-caption-bold {
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.3;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .type-meta {
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 450;
+    line-height: 1.4;
+    letter-spacing: 0.005em;
+  }
+  .type-micro {
+    font-family: var(--font-sans);
+    font-size: 10.5px;
+    font-weight: 550;
+    line-height: 1.35;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
   .type-link-md {
-  font-family: var(--font-sans);
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1.38;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.55;
   }
   .type-button-md {
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.4;
-  letter-spacing: 0.7px;
-  text-transform: uppercase;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 550;
+    line-height: 1;
+    letter-spacing: -0.006em;
   }
   .type-button-sm {
-  font-family: var(--font-sans);
-  font-size: 12.6px;
-  font-weight: 700;
-  line-height: 1.0;
-  letter-spacing: 0.126px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 550;
+    line-height: 1;
+    letter-spacing: -0.004em;
+  }
+  .type-mono-sm {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
+    font-variant-numeric: tabular-nums;
   }
   .type-price-md {
-  font-family: var(--font-sans);
-  font-size: 24px;
-  font-weight: 500;
-  line-height: 1.17;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.3;
+    font-variant-numeric: tabular-nums;
   }
 }

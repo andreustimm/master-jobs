@@ -102,7 +102,7 @@ export function Stat({
       <div
         className={cn(
           "font-mono text-2xl leading-tight font-bold tabular-nums",
-          accent && "text-primary",
+          accent && "text-[var(--primary-text)]",
         )}
       >
         {value}

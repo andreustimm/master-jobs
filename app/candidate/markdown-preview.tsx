@@ -47,7 +47,7 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary hover:underline"
+          className="text-[var(--primary-text)] hover:underline"
         >
           {label}
         </a>,

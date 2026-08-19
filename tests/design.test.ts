@@ -24,12 +24,40 @@ const read = (f: string) => readFileSync(f, "utf8");
 const COMPONENTS = [...walk("app"), ...walk("components")];
 
 describe("design tokens", () => {
-  it("keeps the token file in step with DESIGN.md", () => {
+  it("keeps the HP theme faithful to DESIGN.md", () => {
+    // As cores saíram de design-tokens.css e viraram tema: o arquivo de tokens
+    // agora carrega escala e tipografia, e themes.css carrega paleta.
     const design = read("DESIGN.md");
-    const tokens = read("app/design-tokens.css");
-    // The primary is the one value the whole system hangs off.
+    const themes = read("app/themes.css");
     expect(design).toContain("#024ad8");
-    expect(tokens).toContain("#024ad8");
+    expect(themes).toContain("#024ad8");
+  });
+
+  it("defines every theme in the registry, and only those", () => {
+    const themes = read("app/themes.css");
+    const registry = read("src/core/theme.ts");
+    for (const id of ["hp", "huly", "graphy"]) {
+      expect(themes, id).toContain(`[data-theme="${id}"]`);
+      expect(registry, id).toContain(`id: "${id}"`);
+    }
+  });
+
+  it("gives every theme a dark variant", () => {
+    // Um tema sem variante escura deixaria o usuário preso no claro ao trocar
+    // de identidade visual — e ele não tem como saber disso antes de tentar.
+    const themes = read("app/themes.css");
+    for (const id of ["hp", "huly", "graphy"]) {
+      expect(themes, `${id} escolha explícita`).toContain(`[data-theme="${id}"][data-mode="dark"]`);
+      expect(themes, `${id} sistema`).toContain(`[data-theme="${id}"]:not([data-mode="light"])`);
+    }
+  });
+
+  it("lets an explicit light choice beat a dark operating system", () => {
+    // Sem o `:not([data-mode="light"])`, quem pediu claro num sistema noturno
+    // recebe escuro assim mesmo — a escolha do usuário perde para o SO.
+    const themes = read("app/themes.css");
+    const media = themes.slice(themes.indexOf("@media (prefers-color-scheme: dark)"));
+    expect(media).toContain(':not([data-mode="light"])');
   });
 
   it("uses no literal hex colour in a component", () => {
@@ -139,9 +167,13 @@ describe("design tokens", () => {
     // body means any element inside a container with its own font silently
     // leaves the scale.
     const tokens = read("app/design-tokens.css");
-    const classes = [...tokens.matchAll(/\.type-[a-z-]+ \{/g)].length;
-    const families = [...tokens.matchAll(/font-family: var\(--font-sans\)/g)].length;
-    expect(classes).toBeGreaterThan(10);
-    expect(families).toBe(classes);
+    // Conta dentro de cada bloco `.type-*`, e não no arquivo inteiro: as
+    // declarações do `@theme` também casariam com um regex solto.
+    const blocks = [...tokens.matchAll(/\.type-[a-z-]+ \{([^}]*)\}/g)];
+    const withoutFamily = blocks
+      .filter((b) => !/font-family: var\(--font-(sans|mono)\)/.test(b[1]!))
+      .map((b) => b[0].split(" ")[0]);
+    expect(blocks.length).toBeGreaterThan(10);
+    expect(withoutFamily).toEqual([]);
   });
 });

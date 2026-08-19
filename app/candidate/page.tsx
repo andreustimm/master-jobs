@@ -31,10 +31,10 @@ export default async function CandidateArea() {
     <main className="pt-10 pb-16">
       <div className="mb-4 flex items-baseline gap-3">
         <h1 className="type-display-md chevron">Área do candidato</h1>
-        <Link href="/candidate/skills" className="text-sm text-primary hover:underline">
+        <Link href="/candidate/skills" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           skills →
         </Link>
-        <Link href="/candidate/vocabulary" className="text-sm text-primary hover:underline">
+        <Link href="/candidate/vocabulary" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           vocabulário →
         </Link>
       </div>
@@ -149,15 +149,16 @@ export default async function CandidateArea() {
                     key={t.term}
                     className="flex items-center gap-3 rounded-lg border bg-card px-4 py-2.5"
                   >
-                    <span className="min-w-[190px] font-mono text-sm">{t.term}</span>
+                    <span className="min-w-0 flex-1 truncate sm:min-w-[190px] sm:flex-none font-mono text-sm">{t.term}</span>
                     <div className="h-1.5 flex-1 overflow-hidden rounded-sm bg-border">
                       <span
                         className="block h-full rounded-sm bg-[var(--color-mid)]"
                         style={{ width: `${Math.round(t.coverage * 100)}%` }}
                       />
                     </div>
-                    <span className="w-28 text-right font-mono text-xs text-muted-foreground">
-                      {Math.round(t.coverage * 100)}% das vagas
+                    <span className="shrink-0 text-right font-mono text-xs whitespace-nowrap text-muted-foreground">
+                      {Math.round(t.coverage * 100)}%
+                      <span className="hidden sm:inline"> das vagas</span>
                     </span>
                   </div>
                 ))}

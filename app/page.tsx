@@ -63,7 +63,7 @@ export default async function Cockpit({
               · {facets.total} correspondem
             </span>
           </h2>
-          <Link href="/jobs" className="text-sm text-primary hover:underline">
+          <Link href="/jobs" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
             ver todas →
           </Link>
         </div>

@@ -25,7 +25,7 @@ export async function SessionBadge() {
 
   if (!session) {
     return (
-      <a href="/login" className="type-micro text-primary hover:underline">
+      <a href="/login" className="type-micro text-[var(--primary-text)] hover:underline">
         entrar
       </a>
     );
@@ -34,7 +34,7 @@ export async function SessionBadge() {
   return (
     <form action="/logout" method="post" className="flex items-center gap-2">
       <span className="type-micro text-muted-foreground">{session.email}</span>
-      <button type="submit" className="type-micro text-primary hover:underline">
+      <button type="submit" className="type-micro text-[var(--primary-text)] hover:underline">
         sair
       </button>
     </form>

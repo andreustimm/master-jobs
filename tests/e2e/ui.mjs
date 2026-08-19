@@ -66,7 +66,20 @@ try {
   // página cair no fallback sem nenhum sinal no CSS.
   check("fonte do DESIGN.md realmente carregada", typography.loaded.includes("Inter"), typography.loaded.join(", "));
   check("body renderiza na fonte do sistema de design", typography.body?.family === "Inter", typography.body?.family);
-  check("h1 segue display-md da spec (32px / 500)", typography.h1?.size === "32px" && typography.h1?.weight === "500", JSON.stringify(typography.h1));
+  // A escala é Minor Third (1.2×) a partir de 16px, e o PESO vem do tema —
+  // HP em 500, Huly em 600, Graphy em 700. Fixar o peso aqui obrigaria a
+  // mudar o teste a cada tema novo, que é exatamente o acoplamento que o
+  // sistema de temas existe para evitar.
+  check(
+    "h1 segue a escala tipográfica (display-md, 30px)",
+    typography.h1?.size === "30px",
+    JSON.stringify(typography.h1),
+  );
+  check(
+    "peso do display vem do tema",
+    ["500", "600", "700"].includes(typography.h1?.weight ?? ""),
+    typography.h1?.weight,
+  );
 
   /* -------------------------------- Tooltips ------------------------------- */
 
@@ -105,13 +118,130 @@ try {
     check(`${path} responde`, response?.status() === 200, String(response?.status()));
   }
 
-  // Overflow horizontal é a falha de mobile que passa despercebida no desktop.
-  await page.setViewportSize({ width: 375, height: 812 });
-  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  /* --------------------------------- Mobile -------------------------------- */
+
+  // Rolagem horizontal é a falha que passa despercebida no desktop, porque só
+  // aparece quando a janela é estreita o bastante para o conteúdo não caber.
+  const widths = [375, 390, 412, 768];
+  const overflows = [];
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: 812 });
+    for (const path of ["/", "/jobs", "/candidate", "/candidate/skills", "/pipeline"]) {
+      await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      if (overflow > 1) overflows.push(`${width}px ${path}: ${overflow}px`);
+    }
+  }
+  check("sem rolagem horizontal em nenhuma largura", overflows.length === 0, overflows.slice(0, 3).join(" · "));
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  /* ------------------------------- Aparência ------------------------------- */
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${BASE}/referrals`, { waitUntil: "networkidle" });
+
+  const triggerBox = await page.getByRole("button", { name: "Aparência" }).boundingBox();
+  await page.getByRole("button", { name: "Aparência" }).click();
+  await page.waitForTimeout(300);
+  const panel = await page.locator("#appearance-popover").boundingBox();
+
+  // Duas tentativas anteriores erraram aqui: com CSS Anchor Positioning o
+  // painel caiu no centro da tela, e com canto fixo ele abriu longe do botão.
+  // O certo é sob o botão, alinhado pela direita dele.
+  const alignedToTrigger =
+    Boolean(panel) &&
+    Math.abs(panel.x + panel.width - (triggerBox.x + triggerBox.width)) < 6;
+  const below = Boolean(panel) && panel.y >= triggerBox.y + triggerBox.height - 2;
+  check(
+    "painel de aparência abre sob o botão",
+    alignedToTrigger && below,
+    panel ? `painel@${Math.round(panel.x)} botão@${Math.round(triggerBox.x)}` : "não abriu",
   );
-  check("sem rolagem horizontal em 375px", overflow <= 1, `${overflow}px`);
+
+  await page.mouse.click(400, 600);
+  await page.waitForTimeout(250);
+  // `<details>` não fazia isto: ele só fecha pelo próprio summary.
+  check("fecha ao clicar fora", !(await page.locator("#appearance-popover").isVisible()));
+
+  await page.getByRole("button", { name: "Aparência" }).click();
+  await page.waitForTimeout(250);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(250);
+  check("fecha com Escape", !(await page.locator("#appearance-popover").isVisible()));
+
+  /* ------------------------ Temas, ambientes, contraste --------------------- */
+
+  const luminance = (rgb) => {
+    const [r, g, b] = rgb.map((v) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (a, b) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  const toRgb = (value) => (value.match(/\d+/g) ?? [0, 0, 0]).slice(0, 3).map(Number);
+
+  const backgrounds = new Set();
+  let lowContrast = [];
+
+  for (const theme of ["hp", "huly", "graphy"]) {
+    for (const mode of ["light", "dark"]) {
+      await page.context().addCookies([
+        { name: "jho_theme", value: theme, url: BASE },
+        { name: "jho_mode", value: mode, url: BASE },
+      ]);
+      await page.goto(`${BASE}/candidate/skills`, { waitUntil: "networkidle" });
+      backgrounds.add(await page.evaluate(() => getComputedStyle(document.body).backgroundColor));
+
+      const samples = await page.evaluate(() => {
+        const out = [];
+        const seen = new Set();
+        for (const el of document.querySelectorAll("button, a, h1, h2, p, .type-micro")) {
+          const rect = el.getBoundingClientRect();
+          if (rect.width < 8 || rect.height < 8) continue;
+          const label = (el.textContent ?? "").trim().slice(0, 24);
+          if (!label || seen.has(label)) continue;
+          seen.add(label);
+          let node = el;
+          let bg = getComputedStyle(el).backgroundColor;
+          while (node && (bg === "rgba(0, 0, 0, 0)" || bg === "transparent")) {
+            node = node.parentElement;
+            if (!node) break;
+            bg = getComputedStyle(node).backgroundColor;
+          }
+          out.push({ label, fg: getComputedStyle(el).color, bg: bg || "rgb(255,255,255)" });
+        }
+        return out.slice(0, 50);
+      });
+
+      for (const sample of samples) {
+        const ratio = contrast(toRgb(sample.fg), toRgb(sample.bg));
+        // 4.5:1 é o mínimo do WCAG AA para texto normal.
+        if (ratio < 4.5) lowContrast.push(`${theme}/${mode} "${sample.label}" ${ratio.toFixed(2)}:1`);
+      }
+    }
+  }
+
+  // Seis combinações têm de produzir seis fundos distintos; iguais significaria
+  // um tema que não chegou a ser aplicado.
+  check("cada tema e ambiente tem fundo próprio", backgrounds.size === 6, `${backgrounds.size}/6`);
+  check(
+    "todo texto passa em 4.5:1 nos seis ambientes",
+    lowContrast.length === 0,
+    lowContrast.slice(0, 3).join(" · "),
+  );
+
+  // Volta ao padrão para não deixar o cookie sujo para a próxima execução.
+  await page.context().addCookies([
+    { name: "jho_theme", value: "hp", url: BASE },
+    { name: "jho_mode", value: "system", url: BASE },
+  ]);
 
   check("nenhum erro de console", consoleErrors.length === 0, consoleErrors.slice(0, 2).join(" | "));
 } finally {

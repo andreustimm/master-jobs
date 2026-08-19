@@ -125,7 +125,7 @@ export function JobModal({ row }: { row: BoardRow }) {
                 <p className="type-body-sm mt-3 border-t border-[var(--color-hairline)] pt-3 text-muted-foreground">
                   Prévia de {text.length.toLocaleString("pt-BR")} de{" "}
                   {row.pageTextLength.toLocaleString("pt-BR")} caracteres.{" "}
-                  <a href={`/jobs/${row.jobId}`} className="text-primary hover:underline">
+                  <a href={`/jobs/${row.jobId}`} className="text-[var(--primary-text)] hover:underline">
                     Abrir a vaga completa →
                   </a>
                 </p>
@@ -148,7 +148,7 @@ export function JobModal({ row }: { row: BoardRow }) {
           href={row.url}
           target="_blank"
           rel="noopener"
-          className="type-body-sm text-primary hover:underline"
+          className="type-body-sm text-[var(--primary-text)] hover:underline"
         >
           abrir no site →
         </a>
@@ -157,7 +157,7 @@ export function JobModal({ row }: { row: BoardRow }) {
             href={row.applyUrl}
             target="_blank"
             rel="noopener"
-            className="type-body-sm ml-auto font-medium text-primary hover:underline"
+            className="type-body-sm ml-auto font-medium text-[var(--primary-text)] hover:underline"
           >
             aplicar →
           </a>

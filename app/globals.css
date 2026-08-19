@@ -3,7 +3,27 @@
 @import "shadcn/tailwind.css";
 @import "./design-tokens.css";
 
-@custom-variant dark (&:is(.dark *));
+/*
+  O variant `dark:` do Tailwind, religado ao eixo de modo deste projeto.
+
+  Os componentes do shadcn trazem 25 usos de `dark:`, e eles esperavam a classe
+  `.dark` — que este projeto não usa. Redefinir o variant faz os 25 passarem a
+  seguir `data-mode`, sem reescrever nenhum.
+
+  As duas regras cobrem os dois caminhos: escolha explícita pelo escuro, e
+  sistema no escuro sem escolha. O `:not([data-mode="light"])` garante que
+  quem pediu claro não receba escuro por causa do sistema operacional.
+*/
+@custom-variant dark {
+  &:where([data-mode="dark"], [data-mode="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(html:not([data-mode="light"]), html:not([data-mode="light"]) *) {
+      @slot;
+    }
+  }
+}
 
 /* Tokens from DESIGN.md (HP-inspired), extended with a dark theme.
    The light palette is the source; dark redefines only what must change. */
@@ -76,88 +96,69 @@
   --default-mono-font-family: var(--font-mono);
 }
 
+/* ===========================================================================
+   Camada de compatibilidade.
+
+   Este arquivo tinha um SEGUNDO sistema de cores (`--bg`, `--text`, `--surface`)
+   com o próprio `@media (prefers-color-scheme: dark)` e um
+   `:root[data-theme="dark"]` que colidia com o eixo de temas. O resultado
+   estava na tela: fundo de página de um sistema, cards de outro, e botões que
+   só apareciam no hover porque a cor de fundo deles empatava com a superfície.
+
+   Agora existe um só. Os nomes antigos continuam, mas como APELIDOS da
+   semântica do tema — assim os ~40 usos espalhados em `app/` e `components/`
+   passaram a seguir o tema sem precisar ser reescritos um a um.
+
+   Regra daqui para frente: componente lê `--background`, `--foreground`,
+   `--card`, `--primary`, `--border`, `--muted`, `--hairline`, `--good`,
+   `--warn`, `--bad`. Os apelidos existem para o código que já estava escrito.
+   =========================================================================== */
+
 :root {
-  --bg: var(--color-canvas);
-  --surface: #ffffff;
-  --sunk: var(--color-cloud);
-  --line: var(--color-fog);
-  --text: var(--color-ink);
-  --text-2: #5a6472;
-  --text-3: #8b95a1;
-  --accent: var(--color-primary-soft);
-  --background: var(--color-canvas);
-  --foreground: var(--color-ink);
-  --card: var(--color-paper);
-  --card-foreground: var(--color-ink);
-  --popover: var(--color-paper);
-  --popover-foreground: var(--color-ink);
-  /* The brand blue from DESIGN.md drives shadcn's primary, so every Button,
-     link and focus ring carries the project's identity instead of the
-     library's neutral default. `--accent` keeps shadcn's meaning (a subtle
-     hover surface) rather than ours — the two vocabularies collided. */
-  --primary: var(--color-brand);
-  --primary-foreground: #ffffff;
-  --ring: var(--color-brand);
-  --secondary: var(--color-cloud);
-  --secondary-foreground: var(--color-ink);
-  --muted: var(--color-cloud);
-  --muted-foreground: var(--color-graphite);
-  --accent-foreground: var(--color-primary-deep);
-  --destructive: var(--color-error);
-  --border: var(--color-hairline);
-  --input: var(--color-hairline-strong);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  /* DESIGN.md rounded.md — the spec's control radius, not shadcn's default 10px */
-  --radius: 4px;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
+  /* Apelidos do sistema antigo → semântica do tema. */
+  --bg: var(--background);
+  --surface: var(--card);
+  --sunk: var(--surface-sunken);
+  --line: var(--border);
+  --text: var(--foreground);
+  --text-2: var(--muted-foreground);
+  --text-3: var(--muted-foreground);
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0d1116;
-    --surface: #141a21;
-    --sunk: #1b222b;
-    --line: #242d38;
-    --text: #e6ecf2;
-    --text-2: #9eaebe;
-    --text-3: #6b7a89;
-    --accent: var(--color-brand-bright);
-  }
-}
+  /* Cores nomeadas do DESIGN.md, remapeadas. Um `--color-brand` fixo em
+     #024ad8 deixaria o tema Huly com um azul que não é dele. */
+  /* Texto e link usam a variante que contrasta com o FUNDO. */
+  --color-brand: var(--primary-text, var(--primary));
+  --color-brand-bright: var(--primary-text, var(--primary));
+  --color-brand-soft: var(--accent);
+  --color-canvas: var(--background);
+  --color-paper: var(--card);
+  --color-cloud: var(--muted);
+  --color-fog: var(--border);
+  --color-steel: var(--input);
+  --color-ink: var(--foreground);
+  --color-hairline: var(--hairline);
+  --color-hairline-strong: var(--input);
+  --color-strong: var(--good);
+  --color-mid: var(--warn);
+  --color-weak: var(--muted-foreground);
+  --color-alert: var(--bad);
+  --color-error: var(--bad);
 
-:root[data-theme="dark"] {
-  --bg: #0d1116;
-  --surface: #141a21;
-  --sunk: #1b222b;
-  --line: #242d38;
-  --text: #e6ecf2;
-  --text-2: #9eaebe;
-  --text-3: #6b7a89;
-  --accent: var(--color-brand-bright);
+  /* Sinais de conversão (frescor, benefícios) — o segundo acento do tema. */
+  --color-signal: var(--accent-2);
+  --color-signal-soft: var(--accent-2-ghost);
 }
 
 body {
-  font-size: 16px;
-  line-height: 1.38;
-  background: var(--bg);
-  color: var(--text);
+  font-size: 15px;
+  line-height: 1.55;
+  /* Do tema, não do sistema paralelo que existia aqui. */
+  background: var(--background);
+  color: var(--foreground);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
-
-.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 @theme inline {
   /*
@@ -211,28 +212,11 @@ body {
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-.dark {
-  /* Derived from the spec rather than invented: ink deepens into the ground,
-     the bright primary carries contrast, and the neutrals keep their roles. */
-  --background: #0d1116;
-  --foreground: #e6ecf2;
-  --card: #141a21;
-  --card-foreground: #e6ecf2;
-  --popover: #141a21;
-  --popover-foreground: #e6ecf2;
-  --primary: var(--color-primary-bright);
-  --primary-foreground: var(--color-on-primary);
-  --secondary: #1b222b;
-  --secondary-foreground: #e6ecf2;
-  --muted: #1b222b;
-  --muted-foreground: #9eaebe;
-  --accent: #14263f;
-  --accent-foreground: var(--color-primary-soft);
-  --destructive: var(--color-bloom-coral);
-  --border: #242d38;
-  --input: #2c3744;
-  --ring: var(--color-primary-bright);
-}
+/*
+  O bloco `.dark` do shadcn foi removido: ele definia um terceiro conjunto de
+  tokens, concorrendo com os temas. Luminosidade agora vem de `data-mode`, e a
+  paleta de cada combinação está em `app/themes.css`.
+*/
 
 @layer base {
   * {
@@ -380,5 +364,34 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+
+/* ===========================================================================
+   Alvo de toque.
+
+   Num aparelho de toque o dedo não tem a precisão do ponteiro: um chip de 28px
+   de altura é acertável com esforço, e errar significa aplicar o filtro
+   errado. A regra vale só onde o ponteiro é grosso (`pointer: coarse`), então
+   o desktop continua compacto — a densidade da grade de triagem é uma
+   qualidade lá, e seria desperdício de tela aumentar tudo por causa do celular.
+
+   Aplicada por padding, não por altura fixa: assim o conteúdo continua
+   centralizado e nada muda de posição.
+   =========================================================================== */
+@media (pointer: coarse) {
+  a[class*="inline-flex"],
+  button:not([popovertargetaction]),
+  [role="button"],
+  summary {
+    min-height: 40px;
+  }
+
+  /* Link de texto corrido fica de fora: aumentar a caixa dele criaria zonas
+     clicáveis invisíveis no meio de um parágrafo. */
+  p a,
+  li a {
+    min-height: 0;
   }
 }

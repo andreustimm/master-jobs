@@ -1,0 +1,429 @@
+/* ===========================================================================
+   Temas — dois eixos independentes.
+
+     data-theme   identidade visual: hp · huly · graphy
+     data-mode    luminosidade:      light · dark · (ausente = sistema)
+
+   São eixos separados de propósito. "Escuro" não é uma inversão de "claro": é
+   outra paleta que precisa das mesmas decisões de contraste, e um sistema que
+   trata modo como propriedade do tema obriga a duplicar a identidade toda vez
+   que alguém quer o outro modo.
+
+   TRÊS ESTADOS, e é onde quase todo site erra. O usuário pode ter escolhido
+   claro, escuro, ou nada — e "nada" é o caso mais comum, porque é o padrão.
+   Cada tema portanto declara:
+
+     [data-theme=X]                          → paleta clara (base)
+     [data-theme=X][data-mode="dark"]        → escolha explícita pelo escuro
+     @media (prefers-color-scheme: dark)
+       [data-theme=X]:not([data-mode=light]) → sistema no escuro, sem escolha
+
+   O `:not([data-mode="light"])` é o que faz uma escolha explícita pelo claro
+   ganhar de um sistema operacional no escuro. Sem ele, quem pediu claro num
+   Mac em modo noturno recebe escuro assim mesmo.
+
+   Cada componente lê apenas TOKEN SEMÂNTICO. Nenhum conhece um tema, e é por
+   isso que acrescentar o próximo é um bloco aqui e uma linha em
+   `src/core/theme.ts`.
+   =========================================================================== */
+
+/* ===========================================================================
+   HP — azul corporativo, cantos discretos.
+   Do DESIGN.md original (`npx getdesign@latest add hp`). A especificação pede
+   Forma DJR Micro, proprietária; usamos Inter.
+   =========================================================================== */
+
+[data-theme="hp"] {
+  color-scheme: light;
+
+  --background: #ffffff;
+  --foreground: #1a1a1a;
+  --card: #ffffff;
+  --card-foreground: #1a1a1a;
+  --popover: #1a1a1a;
+  --popover-foreground: #ffffff;
+
+  --primary: #024ad8;
+  --primary-foreground: #ffffff;
+  --secondary: #f7f7f7;
+  --secondary-foreground: #1a1a1a;
+
+  --muted: #f7f7f7;
+  --muted-foreground: #636363;
+  --accent: #f7f7f7;
+  --accent-foreground: #1a1a1a;
+
+  --border: #e8e8e8;
+  --input: #c2c2c2;
+  --ring: #024ad8;
+  --destructive: #b3262b;
+
+  /* O HP não tem segundo acento; repetir o primário é mais honesto que
+     inventar uma cor que a especificação não define. */
+  --accent-2: #024ad8;
+  --accent-2-ghost: #024ad81f;
+
+  --surface-raised: #ffffff;
+  --surface-sunken: #f7f7f7;
+  --hairline: #e8e8e8;
+
+  --good: #0e7c63;
+  --warn: #9a6b12;
+  --bad: #a33a2a;
+
+  /* Cor de link e de texto de acento — precisa contrastar com o FUNDO, e não
+     com a superfície do botão. São problemas diferentes e por isso são tokens
+     diferentes; usar `--primary` para os dois deixava o link em 4.19:1. */
+  --primary-text: #024ad8;
+
+  --radius-action: 8px;
+  --radius-surface: 12px;
+  --tracking-display: 0em;
+  --display-weight: 500;
+}
+
+/*
+  HP escuro.
+
+  O #024ad8 não sobrevive a um fundo escuro: contra quase-preto ele fica denso
+  e sem luz. Sobe para o #296ef9, que a própria especificação já traz como
+  `primary-bright` — é a resposta do sistema para quando o azul precisa brilhar,
+  e não uma cor inventada aqui.
+*/
+[data-theme="hp"][data-mode="dark"] {
+  --primary-text: #5b9bff;
+  color-scheme: dark;
+
+  --background: #101215;
+  --foreground: #f0f1f3;
+  --card: #171a1f;
+  --card-foreground: #f0f1f3;
+  --popover: #1f232a;
+  --popover-foreground: #f0f1f3;
+
+  --primary: #4d8bff;
+  /* Texto escuro sobre azul claro: 6.1:1. Branco sobre o mesmo azul dá
+     4.48:1, abaixo do mínimo — medido, não estimado. */
+  --primary-foreground: #0b0d10;
+  --secondary: #1f232a;
+  --secondary-foreground: #c8cbd2;
+
+  --muted: #1f232a;
+  --muted-foreground: #949aa4;
+  --accent: #272c34;
+  --accent-foreground: #f0f1f3;
+
+  --border: #272c34;
+  --input: #363c46;
+  --ring: #296ef9;
+  --destructive: #e0655a;
+
+  --accent-2: #296ef9;
+  --accent-2-ghost: #296ef926;
+
+  --surface-raised: #1f232a;
+  --surface-sunken: #0b0d10;
+  --hairline: #242931;
+
+  --good: #4ba585;
+  --warn: #d9a441;
+  --bad: #e0655a;
+}
+
+/* ===========================================================================
+   Huly — dois acentos, geometria de pílula.
+   Nativamente escuro; a variante clara é a adaptação.
+   =========================================================================== */
+
+/*
+  Huly claro.
+
+  Iris e ember foram desenhados para brilhar sobre quase-preto. Sobre branco
+  ambos precisam escurecer para manter contraste de texto — daí `iris-deep` e
+  `ember-deep`. O que não muda é a regra do sistema: dois acentos, e o ember
+  reservado ao que é escasso ou urgente.
+*/
+[data-theme="huly"] {
+  --primary-text: #3a5fa8;
+  color-scheme: light;
+
+  --background: #fbfbfc;
+  --foreground: #16181c;
+  --card: #ffffff;
+  --card-foreground: #16181c;
+  --popover: #16181c;
+  --popover-foreground: #f2f3f5;
+
+  --primary: #3a5fa8;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f2f4;
+  --secondary-foreground: #2a2d34;
+
+  --muted: #f1f2f4;
+  --muted-foreground: #5c626d;
+  --accent: #eceef1;
+  --accent-foreground: #16181c;
+
+  --border: #e2e4e8;
+  --input: #c9ccd3;
+  --ring: #3a5fa8;
+  --destructive: #c0453a;
+
+  --accent-2: #d9603c;
+  --accent-2-ghost: #d9603c14;
+
+  --surface-raised: #ffffff;
+  --surface-sunken: #f1f2f4;
+  --hairline: #e2e4e8;
+
+  --good: #1f7a5c;
+  --warn: #a8741a;
+  --bad: #c0453a;
+
+  --radius-action: 9999px;
+  --radius-surface: 12px;
+  --tracking-display: -0.03em;
+  --display-weight: 600;
+}
+
+/* Huly escuro — a paleta original da referência. */
+[data-theme="huly"][data-mode="dark"] {
+  --primary-text: #7ba0e8;
+  color-scheme: dark;
+
+  --background: #0f1114;
+  --foreground: #f2f3f5;
+  --card: #16181c;
+  --card-foreground: #f2f3f5;
+  --popover: #1e2126;
+  --popover-foreground: #f2f3f5;
+
+  --primary: #5683da;
+  /* 5.09:1 com o fundo escuro; branco daria 3.71:1. */
+  --primary-foreground: #0f1114;
+  --secondary: #1e2126;
+  --secondary-foreground: #c9ccd3;
+
+  --muted: #1e2126;
+  --muted-foreground: #9599a3;
+  --accent: #2a2d34;
+  --accent-foreground: #f2f3f5;
+
+  --border: #2a2d34;
+  --input: #383c44;
+  --ring: #5683da;
+  --destructive: #e0655a;
+
+  --accent-2: #ff8964;
+  --accent-2-ghost: #ff89641f;
+
+  --surface-raised: #1e2126;
+  --surface-sunken: #0b0d10;
+  --hairline: #24272e;
+
+  --good: #4ba585;
+  --warn: #d9a441;
+  --bad: #e0655a;
+}
+
+/* ===========================================================================
+   Graphy — cobalto, hairline no lugar de sombra.
+   =========================================================================== */
+
+[data-theme="graphy"] {
+  --primary-text: #2450d8;
+  color-scheme: light;
+
+  --background: #f2f4f8;
+  --foreground: #20295a;
+  --card: #ffffff;
+  --card-foreground: #20295a;
+  --popover: #20295a;
+  --popover-foreground: #ffffff;
+
+  --primary: #2e62ff;
+  --primary-foreground: #ffffff;
+  --secondary: #e2e9f6;
+  --secondary-foreground: #20295a;
+
+  --muted: #e2e9f6;
+  --muted-foreground: #666666;
+  --accent: #e2e9f6;
+  --accent-foreground: #20295a;
+
+  --border: #0000001a;
+  --input: #c2c2c2;
+  --ring: #2e62ff;
+  --destructive: #c0392b;
+
+  /* Só em borda, nunca preenchido: mantém o cobalto como voz cromática única. */
+  --accent-2: #0099ff;
+  --accent-2-ghost: #0099ff14;
+
+  --surface-raised: #ffffff;
+  --surface-sunken: #e8ecf4;
+  /* Onyx a ~8%. Hairline substitui sombra em todo o sistema. */
+  --hairline: #00000014;
+
+  --good: #1f7a5c;
+  --warn: #a8741a;
+  --bad: #c0392b;
+
+  --radius-action: 12px;
+  --radius-surface: 8px;
+  --tracking-display: -0.038em;
+  --display-weight: 700;
+}
+
+/*
+  Graphy escuro.
+
+  A hierarquia de duas camadas é o que define este sistema, e ela é preservada:
+  canvas mais escuro, card um degrau acima. O indigo #20295a, que no claro é a
+  cor do texto, vira a base do fundo — a paleta continua a mesma, com os papéis
+  trocados, em vez de virar um cinza qualquer.
+
+  A borda segue hairline, agora branco a 10%, porque em superfície escura a
+  linha precisa vir da luz e não da tinta.
+*/
+[data-theme="graphy"][data-mode="dark"] {
+  --primary-text: #8fabff;
+  color-scheme: dark;
+
+  --background: #0d1020;
+  --foreground: #e8ebf5;
+  --card: #161a2e;
+  --card-foreground: #e8ebf5;
+  --popover: #1d2238;
+  --popover-foreground: #e8ebf5;
+
+  --primary: #5b83ff;
+  /* 5.52:1; branco daria 3.42:1. */
+  --primary-foreground: #0d1020;
+  --secondary: #1d2238;
+  --secondary-foreground: #c3c9dd;
+
+  --muted: #1d2238;
+  --muted-foreground: #8b93af;
+  --accent: #252b45;
+  --accent-foreground: #e8ebf5;
+
+  --border: #ffffff1a;
+  --input: #3a4160;
+  --ring: #5b83ff;
+  --destructive: #e0655a;
+
+  --accent-2: #33aaff;
+  --accent-2-ghost: #33aaff1f;
+
+  --surface-raised: #1d2238;
+  --surface-sunken: #080a16;
+  --hairline: #ffffff1a;
+
+  --good: #4ba585;
+  --warn: #d9a441;
+  --bad: #e0655a;
+}
+
+/* ===========================================================================
+   Sistema no escuro, sem escolha explícita.
+
+   O `:not([data-mode="light"])` é o que faz "quero claro" ganhar de um sistema
+   operacional em modo noturno. Sem ele, a escolha do usuário seria ignorada
+   justamente por quem tem o SO no escuro — que é a maioria de quem se importa
+   com o assunto.
+   =========================================================================== */
+@media (prefers-color-scheme: dark) {
+  [data-theme="hp"]:not([data-mode="light"]) {
+    --primary-text: #5b9bff;
+    color-scheme: dark;
+    --background: #101215;
+    --foreground: #f0f1f3;
+    --card: #171a1f;
+    --card-foreground: #f0f1f3;
+    --popover: #1f232a;
+    --popover-foreground: #f0f1f3;
+    --primary: #296ef9;
+    --primary-foreground: #0b0d10;
+    --secondary: #1f232a;
+    --secondary-foreground: #c8cbd2;
+    --muted: #1f232a;
+    --muted-foreground: #949aa4;
+    --accent: #272c34;
+    --accent-foreground: #f0f1f3;
+    --border: #272c34;
+    --input: #363c46;
+    --ring: #296ef9;
+    --destructive: #e0655a;
+    --accent-2: #296ef9;
+    --accent-2-ghost: #296ef926;
+    --surface-raised: #1f232a;
+    --surface-sunken: #0b0d10;
+    --hairline: #242931;
+    --good: #4ba585;
+    --warn: #d9a441;
+    --bad: #e0655a;
+  }
+
+  [data-theme="huly"]:not([data-mode="light"]) {
+    --primary-text: #7ba0e8;
+    color-scheme: dark;
+    --background: #0f1114;
+    --foreground: #f2f3f5;
+    --card: #16181c;
+    --card-foreground: #f2f3f5;
+    --popover: #1e2126;
+    --popover-foreground: #f2f3f5;
+    --primary: #5683da;
+    --primary-foreground: #0f1114;
+    --secondary: #1e2126;
+    --secondary-foreground: #c9ccd3;
+    --muted: #1e2126;
+    --muted-foreground: #9599a3;
+    --accent: #2a2d34;
+    --accent-foreground: #f2f3f5;
+    --border: #2a2d34;
+    --input: #383c44;
+    --ring: #5683da;
+    --destructive: #e0655a;
+    --accent-2: #ff8964;
+    --accent-2-ghost: #ff89641f;
+    --surface-raised: #1e2126;
+    --surface-sunken: #0b0d10;
+    --hairline: #24272e;
+    --good: #4ba585;
+    --warn: #d9a441;
+    --bad: #e0655a;
+  }
+
+  [data-theme="graphy"]:not([data-mode="light"]) {
+    --primary-text: #8fabff;
+    color-scheme: dark;
+    --background: #0d1020;
+    --foreground: #e8ebf5;
+    --card: #161a2e;
+    --card-foreground: #e8ebf5;
+    --popover: #1d2238;
+    --popover-foreground: #e8ebf5;
+    --primary: #5b83ff;
+    --primary-foreground: #0d1020;
+    --secondary: #1d2238;
+    --secondary-foreground: #c3c9dd;
+    --muted: #1d2238;
+    --muted-foreground: #8b93af;
+    --accent: #252b45;
+    --accent-foreground: #e8ebf5;
+    --border: #ffffff1a;
+    --input: #3a4160;
+    --ring: #5b83ff;
+    --destructive: #e0655a;
+    --accent-2: #33aaff;
+    --accent-2-ghost: #33aaff1f;
+    --surface-raised: #1d2238;
+    --surface-sunken: #080a16;
+    --hairline: #ffffff1a;
+    --good: #4ba585;
+    --warn: #d9a441;
+    --bad: #e0655a;
+  }
+}

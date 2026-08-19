@@ -42,7 +42,7 @@ export default async function LoginPage({
               <code className="type-mono-sm">pnpm jho auth add-user</code>.
             </p>
             <p className="type-body-sm mt-4">
-              <Link href="/" className="text-primary hover:underline">
+              <Link href="/" className="text-[var(--primary-text)] hover:underline">
                 ← voltar ao cockpit
               </Link>
             </p>

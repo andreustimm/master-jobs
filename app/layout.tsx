@@ -4,6 +4,16 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { SessionBadge } from "./session-badge";
 import "./globals.css";
+import "./themes.css";
+import { cookies } from "next/headers";
+import {
+  MODE_COOKIE,
+  modeAttribute,
+  resolveMode,
+  resolveTheme,
+  THEME_COOKIE,
+} from "../src/core/theme.ts";
+import { AppearanceSwitch } from "./theme-switch";
 
 export const metadata: Metadata = {
   title: "job-hunt-os",
@@ -25,12 +35,28 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+/**
+ * Link de navegação.
+ *
+ * `py-2.5` existe pelo alvo de toque, não pelo espaçamento: o texto sozinho
+ * dava 20px de altura, bem abaixo do mínimo confortável no celular. A área
+ * clicável cresce sem que nada se mexa visualmente, porque a barra já tem
+ * altura fixa.
+ */
 const navClass =
-  "shrink-0 text-sm text-muted-foreground transition-colors hover:text-foreground";
+  "flex shrink-0 items-center py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Lido no servidor para o tema já vir certo no primeiro byte. Resolver isso
+  // no cliente produziria o flash branco clássico de quem escolheu localStorage.
+  const jar = await cookies();
+  const theme = resolveTheme(jar.get(THEME_COOKIE)?.value);
+  const mode = resolveMode(jar.get(MODE_COOKIE)?.value);
+
   return (
-    <html lang="pt-BR">
+    // `data-mode` fica ausente em `system` — é a ausência que devolve a decisão
+    // para a `prefers-color-scheme`.
+    <html lang="pt-BR" data-theme={theme} data-mode={modeAttribute(mode)}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -62,7 +88,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               inteira. Era 100px de rolagem horizontal em 375px, invisível no
               desktop e só detectável medindo `scrollWidth` num browser real.
             */}
-            <div className="mx-auto flex h-14 max-w-[1140px] items-center gap-4 px-4 sm:gap-6 sm:px-6">
+            <div className="mx-auto flex h-14 w-full max-w-[min(90vw,1760px)] items-center gap-4 px-4 sm:gap-6 sm:px-6">
               <span className="shrink-0 font-mono text-sm font-medium tracking-tight">
                 job-hunt-os
               </span>
@@ -92,12 +118,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </Link>
               </nav>
 
-              <div className="shrink-0">
+              <div className="flex shrink-0 items-center gap-2">
+                <AppearanceSwitch theme={theme} mode={mode} />
                 <SessionBadge />
               </div>
             </div>
           </header>
-          <div className="mx-auto max-w-[1140px] px-4 pb-24 sm:px-6">{children}</div>
+          {/* 90% da largura da janela, com teto: acima de ~1760px a linha de texto
+              fica longa demais para ler com conforto, e o ganho vira cansaço. */}
+          <div className="mx-auto w-full max-w-[min(90vw,1760px)] px-4 pb-24 sm:px-6">
+            {children}
+          </div>
         </TooltipProvider>
       </body>
     </html>

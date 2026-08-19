@@ -50,10 +50,10 @@ export default async function SkillsPage() {
     <main className="pt-10 pb-16">
       <div className="mb-2 flex items-baseline gap-3">
         <h1 className="type-display-md chevron">Skills</h1>
-        <Link href="/candidate" className="text-sm text-primary hover:underline">
+        <Link href="/candidate" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           ← currículo
         </Link>
-        <Link href="/candidate/vocabulary" className="text-sm text-primary hover:underline">
+        <Link href="/candidate/vocabulary" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           vocabulário →
         </Link>
       </div>
@@ -200,7 +200,7 @@ export default async function SkillsPage() {
       {mine.length === 0 && (
         <Card className="p-6 text-sm text-muted-foreground">
           Nenhuma skill detectada ainda. Salve um currículo em{" "}
-          <Link href="/candidate" className="text-primary hover:underline">
+          <Link href="/candidate" className="text-[var(--primary-text)] hover:underline">
             /candidate
           </Link>{" "}
           e clique em “Redetectar do CV”.

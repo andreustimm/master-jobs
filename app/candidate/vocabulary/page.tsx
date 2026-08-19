@@ -75,7 +75,7 @@ export default async function VocabularyPage() {
         <h1 className="type-display-md chevron mb-2">Vocabulário</h1>
         <p className="type-body-md text-muted-foreground">
           Nenhum currículo salvo.{" "}
-          <Link href="/candidate" className="text-primary hover:underline">
+          <Link href="/candidate" className="text-[var(--primary-text)] hover:underline">
             Cole o seu currículo
           </Link>{" "}
           para comparar com a linguagem do mercado.
@@ -90,10 +90,10 @@ export default async function VocabularyPage() {
     <main className="pt-10 pb-16">
       <div className="mb-2 flex items-baseline gap-3">
         <h1 className="type-display-md chevron">Vocabulário</h1>
-        <Link href="/candidate" className="text-sm text-primary hover:underline">
+        <Link href="/candidate" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           ← currículo
         </Link>
-        <Link href="/candidate/skills" className="text-sm text-primary hover:underline">
+        <Link href="/candidate/skills" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           skills →
         </Link>
       </div>
