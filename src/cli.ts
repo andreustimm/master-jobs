@@ -1232,6 +1232,51 @@ cv.command("set <file>")
     });
   });
 
+cv.command("import <file>")
+  .description("Extrair um currículo de PDF e salvá-lo como texto")
+  .option("-l, --label <text>", "rótulo da versão")
+  .option("--dry-run", "mostrar o que seria extraído sem salvar")
+  .action(async (file: string, opts: { label?: string; dryRun?: boolean }) => {
+    await withDb(async () => {
+      await runMigrations();
+      const bytes = await readFile(file);
+      const { extractPdfText } = await import("./core/pdf.ts");
+      const r = await extractPdfText(new Uint8Array(bytes));
+
+      console.log(
+        `\n${c.bold(basename(file))} ${c.dim(`· ${r.pages} página(s) · ${r.text.length.toLocaleString("pt-BR")} caracteres`)}`,
+      );
+      for (const w of r.warnings) console.log(c.yellow(`  ! ${w}`));
+
+      if (r.text.trim().length < 100) {
+        console.error(c.red("\n  Texto insuficiente. Nada foi salvo.\n"));
+        process.exitCode = 1;
+        return;
+      }
+
+      if (opts.dryRun) {
+        console.log(c.dim("\n--- início ---"));
+        console.log(r.text.slice(0, 1200));
+        console.log(c.dim("--- corte ---\n"));
+        return;
+      }
+
+      const candidateId = await syncCandidateFromProfile();
+      const saved = await saveDocument({
+        candidateId,
+        kind: "cv",
+        label: opts.label ?? basename(file),
+        content: r.text,
+        format: "text",
+      });
+      console.log(
+        `${c.green("\u2713")} versão #${saved.id} salva` +
+        (saved.previousRetired ? c.dim(" · versão anterior arquivada") : ""),
+      );
+      console.log(c.dim("  Extração de PDF erra. Revise em /candidate antes de confiar.\n"));
+    });
+  });
+
 cv.command("show")
   .description("Print the current CV")
   .action(async () => {

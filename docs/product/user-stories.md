@@ -248,7 +248,14 @@ ADR 0008.
 - [x] CodeMirror 6 com `@replit/codemirror-vim`
 - [x] Preview de Markdown
 - [x] Persistência em `candidate_document`
-- [ ] Upload de PDF com extração (**planejado**)
+- [x] Upload de PDF com extração (`jho cv import` e formulário em `/candidate`)
+- [x] PDF vira versão nova como qualquer outra — revisável antes de confiar
+- [x] Currículo digitalizado falha com mensagem, não salva três linhas de cabeçalho
+
+**Onde está o trabalho:** extrair é uma chamada de biblioteca; o que importa é
+a limpeza. `observ-\nability` não casa com nenhuma das metades, e esse texto
+alimenta a detecção de skills e a análise de vocabulário — lixo entra, resposta
+errada sai.
 
 ---
 

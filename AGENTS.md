@@ -95,6 +95,10 @@ rtk pnpm jho contacts seed       # empresas onde já trabalhou
 rtk pnpm jho contacts add "Nome" -c Empresa -k former
 rtk pnpm jho referrals           # vagas onde já conhece alguém
 
+# currículo
+rtk pnpm jho cv import <arquivo.pdf>   # extrai texto de PDF (--dry-run para conferir)
+rtk pnpm jho cv set <arquivo.md>       # salva de texto/markdown
+
 # vocabulário e skills
 rtk pnpm jho skills gap          # o que o mercado escreve e o CV não — lacuna de vocabulário
 rtk pnpm jho skills detect       # detecta skills no CV (detectada != confirmada)
@@ -130,6 +134,7 @@ src/core/          lógica pura, compartilhada entre CLI e UI
   positioning/     plano da auditoria como dados
   report/          export markdown
   money.ts         value object (amount + currency + period)
+  pdf.ts           extração de PDF (unpdf, JS puro) + limpeza de texto
   fx.ts            cotações com cache
   contacts.ts      rede profissional e referrals
 src/cli.ts         Commander

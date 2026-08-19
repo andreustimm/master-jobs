@@ -12,7 +12,7 @@ import {
   getCandidate,
 } from "../../src/core/candidate.ts";
 import { MarkdownEditor } from "./editor";
-import { saveCvAction } from "./actions";
+import { importPdfAction, saveCvAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +59,32 @@ export default async function CandidateArea() {
           </CardContent>
         </Card>
       )}
+
+      <form
+        action={importPdfAction}
+        className="mb-8 flex flex-wrap items-end gap-3 rounded-lg border border-[var(--color-hairline)] bg-[var(--color-cloud)] p-4"
+      >
+        <div className="grid gap-1.5">
+          <Label htmlFor="file">Importar de PDF</Label>
+          <Input
+            id="file"
+            name="file"
+            type="file"
+            accept="application/pdf,.pdf"
+            required
+            className="max-w-[320px]"
+          />
+        </div>
+        <Button type="submit" variant="outline">
+          Extrair texto
+        </Button>
+        <p className="type-body-sm w-full text-muted-foreground">
+          Vira uma versão nova, como qualquer outra —{" "}
+          <strong className="text-foreground">revise antes de confiar</strong>. Extração de
+          PDF erra com layout em colunas, e currículo digitalizado não tem texto
+          nenhum para ler.
+        </p>
+      </form>
 
       <form action={saveCvAction} className="mb-8 grid gap-3">
         <div className="grid gap-1.5">
