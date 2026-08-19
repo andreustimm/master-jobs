@@ -115,13 +115,19 @@ dashboard Next.js em `localhost:3000`.
 > a triagem estar calibrada acelera o gargalo errado, e candidatura enviada não
 > volta. ADR 0010 define as três condições para reavaliar.
 
-> **13. Chave de API nunca vai para o banco.**
+> **13. Autorização passa por `can()`, e o escopo vem da sessão.**
+> Toda Server Action chama `guard(...)` **antes** de qualquer efeito. Nenhuma
+> aceita `candidateId` da própria entrada — id em FormData é pedido, não prova.
+> A decisão mora em `src/contexts/auth/domain/policy.ts`, é pura, e nega por
+> padrão. Coberto por teste de arquitetura.
+
+> **14. Chave de API nunca vai para o banco.**
 > O cadastro de provedores guarda o **nome da variável de ambiente**, jamais a
 > chave. Banco é copiado, versionado em backup e aberto por outros processos —
 > chave dentro dele viaja junto. BYOK só é promessa cumprida se for estrutural.
 > Há teste asserindo que nenhuma coluna guarda chave e que nada a imprime.
 
-> **14. `??` não protege contra string vazia.**
+> **15. `??` não protege contra string vazia.**
 > Várias APIs devolvem `""` para campo não preenchido. Use `firstNonEmpty()`
 > de `src/core/sources/http.ts`. Esse bug já apagou 4.538 descrições uma vez.
 
@@ -147,6 +153,11 @@ rtk pnpm jho jobs import <file> --source revelo   # importa JSON de plataforma l
 rtk pnpm jho sources list        # saúde das fontes
 rtk pnpm jho sources probe ashby textlayer        # testa um handle sem gravar
 rtk pnpm jho sources snippet revelo               # extrator para plataforma logada
+
+# autenticação
+rtk pnpm jho auth status         # modo e contas
+rtk pnpm jho auth add-user <email> --role owner
+rtk pnpm jho auth login <email>  # link de uso único
 
 # LLM opcional (BYOK — sua chave, seu custo)
 rtk pnpm jho llm seed            # cadastra provedores conhecidos
@@ -221,6 +232,7 @@ Referência completa: `docs/cli.md`.
 ## Arquitetura
 
 ```
+src/contexts/      bounded contexts (ADR 0007) — auth, skills
 src/core/          lógica pura, compartilhada entre CLI e UI
   db/              schema Drizzle (14 tabelas), client libSQL, queries, migrations
   sources/         um adapter por board público + registry + careers (página própria)

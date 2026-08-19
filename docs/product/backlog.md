@@ -259,7 +259,7 @@ desta UI por polimento.
 
 ## P3 — Estrutura e futuro
 
-### AUTH-01 · Autenticação e autorização 📋
+### AUTH-01 · Autenticação e autorização ✅
 
 Detalhamento completo em [`task-auth.md`](task-auth.md).
 
@@ -277,6 +277,30 @@ Entra por porta, como todo módulo (regra 4): `IdentityProvider` absorve link
 mágico hoje e OAuth depois; `SessionStore` é tabela agora e Redis quando houver
 mais de um processo. A decisão de permissão é função pura `can(session, action,
 resource)`, que é onde bug de autorização mora e onde teste exaustivo é barato.
+
+**Entregue (19/08).** `src/contexts/auth/` com domínio puro, duas portas, casos
+de uso e infra Drizzle. 33 testes.
+
+Decisões que valem registrar:
+
+- **Sem senha em lugar nenhum.** Link mágico de uso único e curto. Não há o que
+  guardar, o que vazar, nem o que reaproveitar de outro site.
+- **Só hash, nunca o token.** Vale para sessão e para link. Cópia do banco não
+  pode ser cópia das credenciais de todo mundo — mesma razão da regra 13.
+- **Logout revoga no servidor.** Cookie que o cliente apaga continua válido
+  para quem copiou.
+- **Conta desabilitada perde acesso na hora**, não no vencimento da sessão.
+- **Admin não lê o CV de candidato.** Curar o catálogo global não é ser
+  superusuário; juntar os dois é como "admin" vira "lê a pretensão salarial de
+  todo mundo".
+- **`single-user` é modo de verdade**, não gambiarra. Login contra si mesmo em
+  loopback é teatro, e teatro que irrita acaba desligado. O guard roda igual
+  nos dois modos, então o caminho multiusuário não é um ramo que ninguém
+  exercita.
+
+**O que o teste de arquitetura trava:** toda Server Action tem guard, nenhuma
+aceita `candidateId` da própria entrada, e a política não importa banco, cookie
+nem Next.
 
 ---
 

@@ -57,6 +57,13 @@
       "when": 1787140857812,
       "tag": "0007_narrow_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1787141409548,
+      "tag": "0008_outstanding_meteorite",
+      "breakpoints": true
     }
   ]
 }

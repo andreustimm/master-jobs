@@ -1426,6 +1426,122 @@ cv.command("gap")
     });
   });
 
+const auth = program
+  .command("auth")
+  .description("Contas e sessões (AUTH-01)");
+
+auth
+  .command("status", { isDefault: true })
+  .description("Modo de autenticação e contas cadastradas")
+  .action(async () => {
+    await withDb(async () => {
+      await runMigrations();
+      const { isSingleUser } = await import("./contexts/auth/index.ts");
+      const { authUser } = await import("./core/db/schema.ts");
+      const users = await getDb().select().from(authUser);
+
+      const single = isSingleUser();
+      console.log(`\n${c.bold("Modo")} ${single ? c.yellow("single-user") : c.green("multi")}`);
+      console.log(
+        c.dim(
+          single
+            ? "  Sem login: você em loopback. Toda ação ainda passa pelo mesmo guard.\n" +
+              "  Qualquer deploy DEVE definir JHO_AUTH_MODE=multi."
+            : "  Login obrigatório.",
+        ),
+      );
+
+      if (users.length === 0) {
+        console.log(c.dim("\n  Nenhuma conta. Crie: jho auth add-user <email>\n"));
+        return;
+      }
+      console.log(`\n${c.bold("Contas")}`);
+      for (const u of users) {
+        const roles = (u.roles as string[]).join(", ");
+        console.log(
+          `  ${u.email.padEnd(30)} ${roles.padEnd(14)}` +
+          (u.disabledAt ? c.red("desabilitada") : c.dim(`candidato ${u.candidateId ?? "—"}`)),
+        );
+      }
+      console.log();
+    });
+  });
+
+auth
+  .command("add-user <email>")
+  .description("Criar conta")
+  .option("--role <papel>", "owner | admin (repetível com vírgula)", "owner")
+  .option("--candidate <id>", "candidato que esta conta representa")
+  .action(async (email: string, opts: { role: string; candidate?: string }) => {
+    await withDb(async () => {
+      await runMigrations();
+      const { ROLES } = await import("./contexts/auth/index.ts");
+      const roles = opts.role.split(",").map((r) => r.trim());
+      const invalid = roles.filter((r) => !(ROLES as readonly string[]).includes(r));
+      if (invalid.length > 0) {
+        console.error(c.red(`\n  Papel inválido: ${invalid.join(", ")}. Use ${ROLES.join(" ou ")}.\n`));
+        process.exitCode = 1;
+        return;
+      }
+
+      const candidateId = opts.candidate
+        ? Number(opts.candidate)
+        : roles.includes("owner")
+          ? await syncCandidateFromProfile()
+          : null;
+
+      const { authUser } = await import("./core/db/schema.ts");
+      await getDb()
+        .insert(authUser)
+        .values({ email: email.toLowerCase().trim(), roles, candidateId })
+        .onConflictDoUpdate({ target: authUser.email, set: { roles, candidateId } });
+
+      console.log(`${c.green("\u2713")} ${email} · ${roles.join(", ")}`);
+      console.log(c.dim("  Entrar: jho auth login <email>\n"));
+    });
+  });
+
+auth
+  .command("login <email>")
+  .description("Gerar um link de acesso de uso único")
+  .action(async (email: string) => {
+    await withDb(async () => {
+      await runMigrations();
+      const { startLogin } = await import("./contexts/auth/index.ts");
+      const { token, expiresAt } = await startLogin(email);
+      console.log(`\n${c.bold("Link de acesso")} ${c.dim(`· válido até ${expiresAt.slice(11, 16)}`)}`);
+      console.log(`  ${c.cyan(`http://127.0.0.1:3000/login?token=${token}`)}`);
+      console.log(
+        c.dim(
+          "\n  Uso único e curto. Se o e-mail não tiver conta, o link simplesmente\n" +
+          "  não funciona — e daqui não dá para saber qual dos dois foi.\n",
+        ),
+      );
+    });
+  });
+
+auth
+  .command("revoke <email>")
+  .description("Encerrar todas as sessões de uma conta")
+  .action(async (email: string) => {
+    await withDb(async () => {
+      const { drizzleSessions } = await import("./contexts/auth/index.ts");
+      const { authUser } = await import("./core/db/schema.ts");
+      const [user] = await getDb()
+        .select({ id: authUser.id })
+        .from(authUser)
+        .where(eq(authUser.email, email.toLowerCase().trim()))
+        .limit(1);
+      if (!user) {
+        console.error(c.red(`\n  Conta ${email} não existe.\n`));
+        process.exitCode = 1;
+        return;
+      }
+      const n = await drizzleSessions.revokeAllFor(user.id);
+      console.log(`${c.green("\u2713")} ${n} sessão(ões) encerrada(s)\n`);
+    });
+  });
+
 const llm = program
   .command("llm")
   .description("Provedores e modelos de LLM (BYOK — a chave fica no seu .env)");

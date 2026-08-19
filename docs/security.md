@@ -117,10 +117,11 @@ deliberada e documentada. `jho security check` avisa.
 
 ## Riscos aceitos conscientemente
 
-**Server Actions sem autenticação.** Uma aplicação de um usuário em loopback
-não tem contra quem autenticar, e uma tela de login aqui seria teatro. Vira
-obrigatório no dia em que houver deploy ou segundo candidato — a modelagem já
-é multi-candidato, então isso vai chegar.
+**Server Actions sem autenticação** — ✅ **resolvido em 19/08.** Toda Server
+Action passa por `guard(...)` antes de qualquer efeito, e o escopo por candidato
+nasce da sessão em vez de vir da entrada. O modo `single-user` mantém o uso
+local sem login, e o guard é o mesmo código nos dois modos — o caminho
+multiusuário não é um ramo que ninguém exercita. Ver AUTH-01.
 
 **Sem criptografia em repouso.** O banco é um arquivo SQLite legível por
 qualquer processo do usuário. Quem tem acesso local à conta já tem acesso a

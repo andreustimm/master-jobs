@@ -794,3 +794,89 @@ export const llmModel = sqliteTable(
 
 export type LlmProvider = typeof llmProvider.$inferSelect;
 export type LlmModel = typeof llmModel.$inferSelect;
+
+/* -------------------------------------------------------------------------- */
+/* Authentication (AUTH-01)                                                   */
+/* -------------------------------------------------------------------------- */
+
+export const authUser = sqliteTable(
+  "auth_user",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    email: text("email").notNull(),
+    /** JSON array of roles: owner | admin. */
+    roles: text("roles", { mode: "json" }).notNull(),
+    /** The candidate this account acts for. Null for an admin-only account. */
+    candidateId: integer("candidate_id").references(() => candidate.id, { onDelete: "set null" }),
+    disabledAt: text("disabled_at"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("auth_user_email_idx").on(t.email)],
+);
+
+/**
+ * A live session.
+ *
+ * `tokenHash` — never the token. The cookie holds a secret; this table holds
+ * proof that a secret was issued. Storing the token itself would mean a copy of
+ * the database is a copy of every user's credentials, which is the same
+ * reasoning that keeps API keys out (regra 13).
+ */
+export const authSession = sqliteTable(
+  "auth_session",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    tokenHash: text("token_hash").notNull(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => authUser.id, { onDelete: "cascade" }),
+    expiresAt: text("expires_at").notNull(),
+    /** Set on logout. Kept rather than deleted, so the audit trail survives. */
+    revokedAt: text("revoked_at"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("auth_session_token_idx").on(t.tokenHash),
+    index("auth_session_user_idx").on(t.userId),
+  ],
+);
+
+/** Single-use magic link. Hashed for the same reason as a session token. */
+export const authLoginToken = sqliteTable(
+  "auth_login_token",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    tokenHash: text("token_hash").notNull(),
+    email: text("email").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    usedAt: text("used_at"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("auth_login_token_idx").on(t.tokenHash)],
+);
+
+export const AUTH_EVENTS = [
+  "login",
+  "login_failed",
+  "logout",
+  "session_expired",
+  "denied",
+  "role_changed",
+] as const;
+
+/** Audit trail. Never records a token, a cookie or a key. */
+export const authEvent = sqliteTable(
+  "auth_event",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id").references(() => authUser.id, { onDelete: "set null" }),
+    email: text("email"),
+    kind: text("kind").notNull(),
+    detail: text("detail"),
+    at: text("at").notNull().default(now),
+  },
+  (t) => [index("auth_event_at_idx").on(t.at)],
+);
+
+export type AuthUser = typeof authUser.$inferSelect;
+export type AuthSession = typeof authSession.$inferSelect;

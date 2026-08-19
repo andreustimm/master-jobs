@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { guard } from "./auth";
 import { setApplicationStatus } from "../src/core/db/repo.ts";
 import { APPLICATION_STATUSES } from "../src/core/db/schema.ts";
 
@@ -12,6 +13,10 @@ import { APPLICATION_STATUSES } from "../src/core/db/schema.ts";
  * no second write path — the UI is an adapter, not a parallel implementation.
  */
 export async function trackAction(formData: FormData) {
+  // Before any effect, never after: an action that validates late has already
+  // written by the time it decides it should not have.
+  await guard("application:write");
+
   const jobId = Number(formData.get("jobId"));
   const status = String(formData.get("status"));
   const note = formData.get("note");

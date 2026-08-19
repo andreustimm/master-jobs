@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { ensureCandidate, saveDocument, syncCandidateFromProfile } from "../../src/core/candidate.ts";
+import { guardOwnCandidate } from "../auth";
+import { saveDocument } from "../../src/core/candidate.ts";
 
 /**
  * Save the CV the candidate pasted.
@@ -11,6 +12,8 @@ import { ensureCandidate, saveDocument, syncCandidateFromProfile } from "../../s
  * and guessing.
  */
 export async function saveCvAction(formData: FormData) {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+
   const content = String(formData.get("content") ?? "").trim();
   const label = String(formData.get("label") ?? "").trim() || `CV ${new Date().toISOString().slice(0, 10)}`;
 
@@ -18,11 +21,8 @@ export async function saveCvAction(formData: FormData) {
     throw new Error("O texto é curto demais para ser um currículo (mínimo 100 caracteres).");
   }
 
-  // Identity comes from profile.yaml so the two never drift on who this is.
-  const candidateId = await syncCandidateFromProfile().catch(() =>
-    ensureCandidate({ name: "Candidato" }),
-  );
-
+  // The id comes from the guard, never from the form: a candidate id in
+  // FormData is a request, not a proof.
   await saveDocument({ candidateId, kind: "cv", label, content, format: "text" });
 
   revalidatePath("/candidate");
@@ -37,6 +37,8 @@ export async function saveCvAction(formData: FormData) {
  * better than silently storing three lines of header.
  */
 export async function importPdfAction(formData: FormData) {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     throw new Error("Selecione um arquivo PDF.");
@@ -53,10 +55,6 @@ export async function importPdfAction(formData: FormData) {
       "Quase nenhum texto no PDF. Provavelmente é digitalizado (imagem), sem camada de texto — cole o conteúdo manualmente.",
     );
   }
-
-  const candidateId = await syncCandidateFromProfile().catch(() =>
-    ensureCandidate({ name: "Candidato" }),
-  );
 
   await saveDocument({
     candidateId,

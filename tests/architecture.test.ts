@@ -203,3 +203,52 @@ describe("pluggability (rule 4)", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("authorisation (AUTH-01)", () => {
+  const APP = walk("app").filter((f) => f.endsWith("actions.ts"));
+
+  it("guards every Server Action", () => {
+    // A Server Action is a public HTTP endpoint. One that forgets the guard is
+    // reachable by anyone who can reach the server, and the omission is
+    // invisible in review because the file looks like ordinary code.
+    expect(APP.length).toBeGreaterThan(0);
+    const offenders: string[] = [];
+
+    for (const file of APP) {
+      const code = read(file);
+      if (!code.includes('"use server"')) continue;
+
+      for (const match of code.matchAll(/export async function (\w+)\s*\([^)]*\)\s*\{/g)) {
+        const name = match[1]!;
+        const body = code.slice(match.index, code.indexOf("\n}", match.index));
+        if (!/await guard(OwnCandidate)?\(/.test(body)) {
+          offenders.push(`${file}: ${name}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("never lets an action take a candidate id from its own input", () => {
+    // The classic multi-tenant leak: the UI filters correctly, and a hand-made
+    // POST with someone else's id walks straight through. Scope must come from
+    // the session, which is why `guardOwnCandidate` takes no id at all.
+    const offenders: string[] = [];
+    for (const file of APP) {
+      const code = read(file);
+      if (/formData\.get\(\s*["']candidateId["']/.test(code)) offenders.push(file);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("keeps the permission decision in one pure function", () => {
+    // Authorisation bugs come from a check that exists in four places and
+    // disagrees with itself in one.
+    const policy = read("src/contexts/auth/domain/policy.ts");
+    for (const forbidden of ["drizzle-orm", "getDb", "cookies", "next/"]) {
+      expect(policy, forbidden).not.toContain(forbidden);
+    }
+    // And it must never fall through to permitted.
+    expect(policy).not.toMatch(/default:\s*\n?\s*return ALLOW/);
+  });
+});

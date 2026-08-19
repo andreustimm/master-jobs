@@ -1,0 +1,175 @@
+/**
+ * Drizzle implementations of the auth ports.
+ *
+ * The only file in the context that knows SQL exists.
+ */
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { and, eq, isNull, lt, sql } from "drizzle-orm";
+import { clock } from "../../../core/clock.ts";
+import { getDb } from "../../../core/db/client.ts";
+import { authLoginToken, authSession, authUser } from "../../../core/db/schema.ts";
+import type { Identity, IdentityProvider, NewSession, SessionStore } from "../ports.ts";
+import type { Role, Session } from "../domain/types.ts";
+
+/** 32 bytes of CSPRNG. Guessing is not a threat model at this width. */
+function newToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+/**
+ * SHA-256, not a password hash.
+ *
+ * Deliberate: a password is low-entropy and needs an expensive KDF to survive
+ * an offline attack. A 256-bit random token has nothing to brute-force, and
+ * running bcrypt on every request would cost latency for no security.
+ */
+function hash(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/** Constant-time compare, so lookup latency cannot leak a prefix. */
+export function tokensMatch(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
+
+export const SESSION_DAYS = 30;
+
+export const drizzleSessions: SessionStore = {
+  async create(input: NewSession): Promise<string> {
+    const token = newToken();
+    await getDb().insert(authSession).values({
+      tokenHash: hash(token),
+      userId: input.userId,
+      expiresAt: input.expiresAt,
+    });
+    // Returned once. After this the system cannot recover it, by design.
+    return token;
+  },
+
+  async resolve(token: string): Promise<Session | null> {
+    if (!token) return null;
+    const db = getDb();
+    const [row] = await db
+      .select({
+        userId: authSession.userId,
+        expiresAt: authSession.expiresAt,
+        revokedAt: authSession.revokedAt,
+        email: authUser.email,
+        roles: authUser.roles,
+        candidateId: authUser.candidateId,
+        disabledAt: authUser.disabledAt,
+      })
+      .from(authSession)
+      .innerJoin(authUser, eq(authUser.id, authSession.userId))
+      .where(eq(authSession.tokenHash, hash(token)))
+      .limit(1);
+
+    if (!row) return null;
+    if (row.revokedAt) return null;
+    // A disabled account must lose access immediately, not at session expiry.
+    if (row.disabledAt) return null;
+    if (Date.parse(row.expiresAt) <= clock().now()) return null;
+
+    return {
+      userId: row.userId,
+      candidateId: row.candidateId,
+      roles: (row.roles as Role[]) ?? [],
+      email: row.email,
+      expiresAt: row.expiresAt,
+    };
+  },
+
+  async revoke(token: string): Promise<void> {
+    await getDb()
+      .update(authSession)
+      .set({ revokedAt: clock().iso() })
+      .where(eq(authSession.tokenHash, hash(token)));
+  },
+
+  async revokeAllFor(userId: number): Promise<number> {
+    const rows = await getDb()
+      .update(authSession)
+      .set({ revokedAt: clock().iso() })
+      .where(and(eq(authSession.userId, userId), isNull(authSession.revokedAt)))
+      .returning({ id: authSession.id });
+    return rows.length;
+  },
+
+  async purgeExpired(): Promise<number> {
+    const rows = await getDb()
+      .delete(authSession)
+      .where(lt(authSession.expiresAt, clock().iso()))
+      .returning({ id: authSession.id });
+    return rows.length;
+  },
+};
+
+export const MAGIC_LINK_MINUTES = 15;
+
+/**
+ * Magic link.
+ *
+ * No password anywhere: nothing to store, nothing to leak, nothing to reuse
+ * across sites. The token is single-use and short-lived, and the account must
+ * already exist — this is a personal system, not a public sign-up.
+ */
+export const magicLink: IdentityProvider = {
+  name: "magic-link",
+
+  async begin(email: string): Promise<{ token: string; expiresAt: string }> {
+    const token = newToken();
+    const expiresAt = new Date(clock().now() + MAGIC_LINK_MINUTES * 60_000).toISOString();
+    await getDb().insert(authLoginToken).values({
+      tokenHash: hash(token),
+      email: email.toLowerCase().trim(),
+      expiresAt,
+    });
+    return { token, expiresAt };
+  },
+
+  async complete(token: string): Promise<Identity | null> {
+    const db = getDb();
+    const tokenHash = hash(token);
+
+    // Consume first, then read: marking it used in the same statement that
+    // selects it is what stops two concurrent redemptions from both winning.
+    const consumed = await db
+      .update(authLoginToken)
+      .set({ usedAt: clock().iso() })
+      .where(
+        and(
+          eq(authLoginToken.tokenHash, tokenHash),
+          isNull(authLoginToken.usedAt),
+          sql`${authLoginToken.expiresAt} > ${clock().iso()}`,
+        ),
+      )
+      .returning({ email: authLoginToken.email });
+
+    const row = consumed[0];
+    if (!row) return null;
+
+    const [user] = await db
+      .select({
+        email: authUser.email,
+        roles: authUser.roles,
+        candidateId: authUser.candidateId,
+        disabledAt: authUser.disabledAt,
+      })
+      .from(authUser)
+      .where(eq(authUser.email, row.email))
+      .limit(1);
+
+    // No implicit account creation. An unknown address gets nothing, and the
+    // caller cannot tell it apart from a bad token.
+    if (!user || user.disabledAt) return null;
+
+    return {
+      email: user.email,
+      roles: (user.roles as Role[]) ?? [],
+      candidateId: user.candidateId,
+    };
+  },
+};
