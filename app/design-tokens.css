@@ -69,7 +69,27 @@
   --radius-pill: 9999px;
   --radius-full: 9999px;
 
-  /* spacing */
+  /*
+    ARMADILHA: os nomes abaixo colidem com a escala de largura do Tailwind.
+
+    O Tailwind v4 resolve `max-w-<nome>` por `--spacing-<nome>` quando o nome
+    não é numérico. Como o DESIGN.md nomeia os espaçamentos xs, sm, md, lg e
+    xl, a classe `max-w-xs` passou a valer 8px em vez de 320px — o tooltip
+    renderizava com a largura de um caractere, quebrando o texto letra a letra.
+
+    Declarar `--container-*` não resolve: esta versão do Tailwind resolve pelo
+    spacing de qualquer forma.
+
+    **Nunca use `max-w-xs`, `max-w-sm`, `max-w-md`, `max-w-lg` ou `max-w-xl`**
+    (nem `w-`, `h-`, `min-w-` com esses nomes). Use valor explícito —
+    `max-w-[20rem]` — ou um nome numérico da escala do Tailwind. Há teste que
+    reprova o uso.
+
+    Os tokens de espaçamento em si estão corretos e são a fonte da verdade
+    para `mb-xxl`, `p-lg` e afins.
+  */
+
+  /* spacing — nomes do DESIGN.md; ver a nota acima sobre a colisão */
   --spacing-xxs: 4px;
   --spacing-xs: 8px;
   --spacing-sm: 12px;

@@ -102,6 +102,20 @@ describe("design tokens", () => {
     expect(globals).toContain("--default-mono-font-family:");
   });
 
+  it("avoids width classes whose name collides with the spacing scale", () => {
+    // Tailwind v4 resolves `max-w-<name>` through `--spacing-<name>` for
+    // non-numeric names. DESIGN.md names its spacing xs/sm/md/lg/xl, so
+    // `max-w-xs` silently became 8px — the tooltip rendered one character
+    // wide, breaking its text letter by letter.
+    const COLLIDING = /\b(max-w|max-h|min-w|min-h|w|h)-(xxs|xs|sm|md|lg|xl|xxl|section)\b/;
+    const offenders: string[] = [];
+    for (const file of COMPONENTS) {
+      const m = COLLIDING.exec(read(file));
+      if (m) offenders.push(`${file}: ${m[0]}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it("has no self-referencing custom property", () => {
     // `--font-sans: var(--font-sans)` shipped in the shadcn scaffold. Inside
     // `@theme inline` the variable is defined in that same scope, so the line

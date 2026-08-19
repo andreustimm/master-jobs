@@ -75,19 +75,28 @@ try {
   check("chips de filtro presentes", total > 0, `${total}`);
 
   let opened = 0;
+  let wellShaped = 0;
+  const shapes = [];
   for (let i = 0; i < total; i++) {
     await triggers.nth(i).hover();
     await page.waitForTimeout(350);
-    const visible = await page
-      .locator('[data-slot="tooltip-content"]')
-      .first()
-      .isVisible()
-      .catch(() => false);
-    if (visible) opened++;
+    const popup = page.locator('[data-slot="tooltip-content"]').first();
+    const visible = await popup.isVisible().catch(() => false);
+    if (visible) {
+      opened++;
+      const box = await popup.boundingBox();
+      // Visível não basta. Uma versão anterior abria com 24px de largura e
+      // 140px de altura, quebrando o texto letra por letra — passou por um
+      // teste que só perguntava "está visível?". A forma é o que prova que
+      // está legível.
+      if (box && box.width >= 120 && box.height <= 200) wellShaped++;
+      else shapes.push(`${Math.round(box?.width ?? 0)}x${Math.round(box?.height ?? 0)}`);
+    }
     await page.mouse.move(5, 5);
     await page.waitForTimeout(150);
   }
   check("todo chip abre seu tooltip no hover", opened === total && total > 0, `${opened}/${total}`);
+  check("tooltip abre legível, não colapsado", wellShaped === total && total > 0, shapes.join(", "));
 
   /* ------------------------------ Outras telas ----------------------------- */
 

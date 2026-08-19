@@ -83,6 +83,10 @@ dashboard Next.js em `localhost:3000`.
 > curto vale 0,5 e **nunca** gera bloqueador.
 
 > **9. Todo frontend segue o `DESIGN.md`. Sem exceção.**
+> **Nunca use `max-w-xs`, `max-w-sm`, `max-w-md`, `max-w-lg` nem `max-w-xl`**
+> (idem `w-`, `h-`, `min-w-`). O Tailwind v4 resolve esses nomes por
+> `--spacing-<nome>`, e o DESIGN.md nomeia os espaçamentos assim — `max-w-xs`
+> vale 8px, não 320px. Use valor explícito. Coberto por teste.
 > A fonte da especificação é **Forma DJR Micro**, proprietária. O projeto usa
 > **Inter** (~85% de similaridade, OFL-1.1) e a substituição está documentada
 > no topo de `app/design-tokens.css`. Com Adobe Fonts, troque só `--font-sans`.
