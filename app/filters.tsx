@@ -76,10 +76,14 @@ export function FilterBar({
   base,
   state,
   facets,
+  t,
 }: {
   base: string;
   state: FilterState;
   facets: Facets;
+  /** Tradutor da requisição. Recebido por prop porque este é Server Component
+      e o chamador já o resolveu — buscar de novo aqui repetiria o trabalho. */
+  t: (key: string, values?: Record<string, string | number>) => string;
 }) {
   const CUTS = [0, 45, 55, 60, 70];
 
@@ -91,71 +95,71 @@ export function FilterBar({
             <input key={k} type="hidden" name={k} value={v === true ? "1" : String(v)} />
           ),
         )}
-        <Input name="q" defaultValue={state.q ?? ""} placeholder="buscar por cargo ou empresa…" />
-        <Button type="submit">Buscar</Button>
+        <Input name="q" defaultValue={state.q ?? ""} placeholder={t("filters.search")} />
+        <Button type="submit">{t("filters.submit")}</Button>
         {state.q && (
           <a href={href(base, state, { q: undefined })} className={chipClass(false)}>
-            limpar
+            {t("filters.clear")}
           </a>
         )}
       </form>
 
       <Separator />
 
-      <Group label="corte">
+      <Group label={t("filters.cut")}>
         {CUTS.map((c) => (
           <a
             key={c}
             href={href(base, state, { fit: String(c) })}
             className={cn(chipClass(state.fit === c), "font-mono")}
           >
-            {c === 0 ? "todas" : `${c}+`}
+            {c === 0 ? t("filters.all") : `${c}+`}
           </a>
         ))}
       </Group>
 
-      <Group label="qualidade">
+      <Group label={t("filters.quality")}>
         <Toggle
           href={href(base, state, { unblocked: state.unblocked ? undefined : "1" })}
           active={Boolean(state.unblocked)}
-          hint="Esconde vagas que exigem autorização de trabalho, presença física ou W2"
+          hint={t("hints.unblocked")}
         >
-          sem bloqueio · {facets.unblocked}
+          {t("filters.unblocked")} · {facets.unblocked}
         </Toggle>
         <Toggle
           href={href(base, state, { named: state.named ? undefined : "1" })}
           active={Boolean(state.named)}
-          hint="Esconde agregadores que ocultam o empregador — não dá para pesquisar nem acionar rede"
+          hint={t("hints.named")}
         >
-          empresa identificada · {facets.named}
+          {t("filters.named")} · {facets.named}
         </Toggle>
         <Toggle
           href={href(base, state, { fresh: state.fresh ? undefined : "1" })}
           active={Boolean(state.fresh)}
-          hint="Publicadas nos últimos 3 dias — taxa de resposta muito maior"
+          hint={t("hints.fresh")}
         >
-          recentes · {facets.fresh}
+          {t("filters.fresh")} · {facets.fresh}
         </Toggle>
         <Toggle
           href={href(base, state, { described: state.described ? undefined : "1" })}
           active={Boolean(state.described)}
-          hint="Vaga sem descrição zera um componente de 30 pontos — a nota fica não-medida, não baixa"
+          hint={t("hints.described")}
         >
-          com descrição · {facets.described}
+          {t("filters.described")} · {facets.described}
         </Toggle>
         <Toggle
           href={href(base, state, { paid: state.paid ? undefined : "1" })}
           active={Boolean(state.paid)}
-          hint="Apenas vagas que divulgam remuneração"
+          hint={t("hints.paid")}
         >
-          com salário · {facets.withComp}
+          {t("filters.paid")} · {facets.withComp}
         </Toggle>
       </Group>
 
       {facets.clusters.length > 0 && (
-        <Group label="cluster">
+        <Group label={t("filters.cluster")}>
           <a href={href(base, state, { cluster: undefined })} className={cn(chipClass(!state.cluster), "font-mono")}>
-            todos
+            {t("filters.all")}
           </a>
           {facets.clusters.map((c) => (
             <a
@@ -170,9 +174,9 @@ export function FilterBar({
       )}
 
       {facets.sources.length > 1 && (
-        <Group label="fonte">
+        <Group label={t("filters.source")}>
           <a href={href(base, state, { source: undefined })} className={cn(chipClass(!state.source), "font-mono")}>
-            todas
+            {t("filters.all")}
           </a>
           {facets.sources.map((s) => (
             <a
@@ -186,15 +190,15 @@ export function FilterBar({
         </Group>
       )}
 
-      <Group label="ordenar">
+      <Group label={t("filters.sort")}>
         <a href={href(base, state, { sort: undefined })} className={chipClass(!state.sort || state.sort === "fit")}>
-          aderência
+          {t("filters.byFit")}
         </a>
         <a href={href(base, state, { sort: "recent" })} className={chipClass(state.sort === "recent")}>
-          mais recentes
+          {t("filters.byRecent")}
         </a>
         <a href={href(base, state, { sort: "comp" })} className={chipClass(state.sort === "comp")}>
-          maior salário
+          {t("filters.byComp")}
         </a>
       </Group>
     </Card>

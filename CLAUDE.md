@@ -83,6 +83,11 @@ dashboard Next.js em `localhost:3000`.
 > curto vale 0,5 e **nunca** gera bloqueador.
 
 > **9. Texto de interface vem do dicionário, nunca do JSX.**
+> Isto inclui **rótulo dentro de constante** — `COMPONENTS` em `app/ui.tsx` e
+> `FIELD_LABEL` no modal guardavam texto e produziram 72 das ocorrências de
+> português vazando para a interface em inglês. Constante guarda chave.
+> `pnpm test:e2e` varre as seis telas em inglês e reprova qualquer palavra
+> portuguesa.
 > `pt-BR` e `en` em `src/core/i18n/`. As chaves são tipadas contra o dicionário
 > português, então tradução faltando é erro de compilação — e não espaço em
 > branco descoberto por um usuário. Página obtém o tradutor com

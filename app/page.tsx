@@ -4,6 +4,7 @@ import { FilterBar, readFilters, toBoardFilters } from "./filters";
 import { JobList } from "./joblist";
 import { Legend, Stat } from "./ui";
 import { requirePage } from "./auth";
+import { getTranslator } from "./i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export default async function Cockpit({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { t, locale } = await getTranslator();
   await requirePage("job:read");
 
   const state = readFilters(await searchParams);
@@ -31,53 +33,53 @@ export default async function Cockpit({
     <main>
       <header className="pt-11 pb-6">
         <p className="mb-3 font-mono type-meta tracking-[.14em] text-muted-foreground uppercase">
-          Cockpit
+          {t("nav.cockpit")}
         </p>
         <h1 className="type-display-lg chevron mb-4 text-balance">
-          O que vale seu tempo hoje
+          {t("cockpit.title")}
         </h1>
         <p className="type-body-md max-w-[62ch] text-muted-foreground">
-          Ranqueamento determinístico contra o seu perfil. Cada barra mostra{" "}
-          <strong className="text-foreground">de onde veio a nota</strong> — aderência alta
-          sustentada só por elegibilidade e salário costuma ser falso positivo.
+          {t("cockpit.lead")}{" "}
+          <strong className="text-foreground">{t("cockpit.leadStrong")}</strong>{" "}
+          {t("cockpit.leadTail")}
         </p>
       </header>
 
       <div className="mb-7 grid grid-cols-[repeat(auto-fit,minmax(104px,1fr))] gap-px overflow-hidden rounded-xl border bg-border">
-        <Stat value={stats?.open?.toLocaleString("pt-BR") ?? "0"} label="vagas abertas" />
-        <Stat value={stats?.companies?.toLocaleString("pt-BR") ?? "0"} label="empresas" />
-        <Stat value={facets.named.toLocaleString("pt-BR")} label="empresa nomeada" />
-        <Stat value={facets.unblocked} label="sem bloqueio" accent />
-        <Stat value={facets.fresh} label="últimos 3 dias" accent />
-        <Stat value={Number(stats?.best ?? 0).toFixed(0)} label="melhor fit" />
-        <Stat value={tracked} label="no funil" />
+        <Stat value={stats?.open?.toLocaleString(locale) ?? "0"} label={t("cockpit.openJobs")} />
+        <Stat value={stats?.companies?.toLocaleString(locale) ?? "0"} label={t("cockpit.companies")} />
+        <Stat value={facets.named.toLocaleString(locale)} label={t("cockpit.namedEmployer")} />
+        <Stat value={facets.unblocked} label={t("cockpit.unblocked")} accent />
+        <Stat value={facets.fresh} label={t("cockpit.lastThreeDays")} accent />
+        <Stat value={Number(stats?.best ?? 0).toFixed(0)} label={t("cockpit.bestFit")} />
+        <Stat value={tracked} label={t("cockpit.inPipeline")} />
       </div>
 
-      <FilterBar base="/" state={state} facets={facets} />
+      <FilterBar base="/" state={state} facets={facets} t={t} />
 
       <section>
         <div className="mb-1.5 flex items-baseline justify-between">
           <h2 className="type-display-sm">
-            Topo do ranking
+            {t("cockpit.topRanked")}
             <span className="ml-1 text-sm font-normal text-muted-foreground">
-              · {facets.total} correspondem
+              · {t("cockpit.matching", { count: facets.total.toLocaleString(locale) })}
             </span>
           </h2>
           <Link href="/jobs" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
-            ver todas →
+            {t("cockpit.seeAll")} →
           </Link>
         </div>
         <div className="mt-3 mb-4">
-          <Legend />
+          <Legend t={t} />
         </div>
-        <JobList rows={top} />
+        <JobList rows={top} t={t} />
       </section>
 
       {clusters.length > 0 && (
         <section className="mt-11">
-          <h2 className="type-display-sm mb-2">Por cluster</h2>
+          <h2 className="type-display-sm mb-2">{t("filters.cluster")}</h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Acima do corte de 45, no acervo inteiro.
+            {t("jobDetail.aboveCut", { cut: state.fit })}
           </p>
           <div className="grid max-w-[560px] gap-2.5">
             {clusters.map((c) => {

@@ -19,7 +19,15 @@ function pay(r: Row): string | null {
   return formatMoney(money(amount, currency, period), "pt-BR");
 }
 
-export function JobList({ rows, dense = false }: { rows: Row[]; dense?: boolean }) {
+export function JobList({
+  rows,
+  dense = false,
+  t,
+}: {
+  rows: Row[];
+  dense?: boolean;
+  t: (key: string, values?: Record<string, string | number>) => string;
+}) {
   if (rows.length === 0) {
     return (
       <Card className="p-6 text-sm text-muted-foreground">
@@ -71,7 +79,7 @@ export function JobList({ rows, dense = false }: { rows: Row[]; dense?: boolean 
                 <span
                   className={cn("font-semibold", anonymous ? "text-muted-foreground" : "text-foreground")}
                 >
-                  {anonymous ? `${r.companyName} · empregador oculto` : r.companyName}
+                  {anonymous ? `${r.companyName} · ${t("jobs.anonymousEmployer")}` : r.companyName}
                 </span>
                 {r.cluster && (
                   <Badge variant="outline" className="font-mono type-micro text-[var(--primary-text)]">
@@ -84,13 +92,13 @@ export function JobList({ rows, dense = false }: { rows: Row[]; dense?: boolean 
 
               {!dense && (
                 <div className="mt-2.5">
-                  <ScoreBar parts={r as unknown as Record<string, number | null>} />
+                  <ScoreBar parts={r as unknown as Record<string, number | null>} t={t} />
                 </div>
               )}
 
               {r.descriptionLength < 200 && (
                 <p className="mt-2 text-xs text-[var(--color-mid)]">
-                  sem descrição — a nota está subestimada, não baixa
+                  {t("jobs.noDescription")}
                 </p>
               )}
               {blockers.length > 0 && (
@@ -117,9 +125,9 @@ export function JobList({ rows, dense = false }: { rows: Row[]; dense?: boolean 
                   "font-mono text-xs",
                   !r.pageText && "opacity-60",
                 )}
-                title={r.pageText ? "Descrição completa, offline" : "Ainda não capturada"}
+                title={r.pageText ? t("jobDetail.fullDescription") : t("jobDetail.notCaptured")}
               >
-                vaga
+                {t("jobs.view")}
               </button>
               <a
                 href={r.url}
@@ -127,7 +135,7 @@ export function JobList({ rows, dense = false }: { rows: Row[]; dense?: boolean 
                 rel="noopener"
                 className={cn(buttonVariants({ variant: "outline", size: "sm" }), "font-mono text-xs")}
               >
-                site ↗
+                {t("jobs.site")} ↗
               </a>
               {r.applyUrl && r.applyUrl !== r.url && (
                 <a
@@ -136,11 +144,11 @@ export function JobList({ rows, dense = false }: { rows: Row[]; dense?: boolean 
                   rel="noopener"
                   className={cn(buttonVariants({ size: "sm" }), "font-mono text-xs")}
                 >
-                  aplicar →
+                  {t("jobs.apply")} →
                 </a>
               )}
             </div>
-            <JobModal row={r} />
+            <JobModal row={r} t={t} />
           </article>
         );
       })}

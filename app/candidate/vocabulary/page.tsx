@@ -5,6 +5,7 @@ import { syncCandidateFromProfile, currentDocument } from "../../../src/core/can
 import { vocabularyGap } from "../../../src/contexts/skills/index.ts";
 import type { GapItem } from "../../../src/contexts/skills/index.ts";
 import { requirePage } from "../../auth";
+import { getTranslator } from "../../i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,8 @@ function QuickWin({ item }: { item: GapItem }) {
 }
 
 export default async function VocabularyPage() {
+  const { t, locale } = await getTranslator();
+  void locale;
   // Guard antes de ler qualquer dado. O escopo vem da sessão.
   const session = await requirePage("candidate:read");
   void session;
@@ -89,7 +92,7 @@ export default async function VocabularyPage() {
   return (
     <main className="pt-10 pb-16">
       <div className="mb-2 flex items-baseline gap-3">
-        <h1 className="type-display-md chevron">Vocabulário</h1>
+        <h1 className="type-display-md chevron">{t("vocabulary.title")}</h1>
         <Link href="/candidate" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           ← currículo
         </Link>
@@ -123,7 +126,7 @@ export default async function VocabularyPage() {
       {report.quickWins.length > 0 && (
         <Card className="mb-8">
           <CardContent className="pt-0">
-            <h2 className="type-display-xs mb-1">Ganho rápido</h2>
+            <h2 className="type-display-xs mb-1">{t("vocabulary.quickWin")}</h2>
             <p className="type-body-sm mb-2 text-muted-foreground">
               Você tem a experiência e o currículo comprova — sob outra grafia.
               Trocar a palavra é a coisa mais barata desta lista.
@@ -145,7 +148,7 @@ export default async function VocabularyPage() {
       {report.realGaps.length > 0 && (
         <Card className="mb-8">
           <CardContent className="pt-0">
-            <h2 className="type-display-xs mb-1">Lacuna real</h2>
+            <h2 className="type-display-xs mb-1">{t("vocabulary.realGap")}</h2>
             <p className="type-body-sm mb-4 text-muted-foreground">
               O mercado pede e o currículo não mostra, sob grafia nenhuma. Nem
               toda lacuna precisa ser fechada — algumas são de vagas que você não
@@ -178,7 +181,7 @@ export default async function VocabularyPage() {
 
       <Card>
         <CardContent className="pt-0">
-          <h2 className="type-display-xs mb-4">Já coberto</h2>
+          <h2 className="type-display-xs mb-4">{t("vocabulary.covered")}</h2>
           <ul className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
             {report.items
               .filter((i) => i.kind === "covered")

@@ -14,12 +14,13 @@ import type { BoardRow } from "../src/core/db/repo.ts";
  * employer's server nor tells them you looked.
  */
 
+/** Chaves de tradução, não texto — a mesma lição da legenda do score. */
 const FIELD_LABEL: Record<string, string> = {
-  employmentType: "Contratação",
-  workplace: "Modelo",
-  seniority: "Nível",
-  salary: "Remuneração",
-  visa: "Autorização",
+  employmentType: "jobDetail.employmentType",
+  workplace: "jobDetail.workplace",
+  seniority: "jobDetail.seniority",
+  salary: "score.compensation",
+  visa: "jobDetail.visa",
 };
 
 type Extracted = {
@@ -28,7 +29,13 @@ type Extracted = {
   requirements?: string[];
 };
 
-export function JobModal({ row }: { row: BoardRow }) {
+export function JobModal({
+  row,
+  t,
+}: {
+  row: BoardRow;
+  t: (key: string, values?: Record<string, string | number>) => string;
+}) {
   const id = `job-modal-${row.jobId}`;
   const extracted = (row.pageExtracted ?? {}) as Extracted;
   const fields = extracted.fields ?? {};
@@ -69,7 +76,7 @@ export function JobModal({ row }: { row: BoardRow }) {
             {Object.entries(fields).map(([key, value]) => (
               <div key={key} className="flex items-baseline gap-2">
                 <dt className="type-body-sm shrink-0 text-muted-foreground">
-                  {FIELD_LABEL[key] ?? key}
+                  {FIELD_LABEL[key] ? t(FIELD_LABEL[key]) : key}
                 </dt>
                 <dd className="type-body-sm font-medium">{value}</dd>
               </div>
@@ -126,7 +133,7 @@ export function JobModal({ row }: { row: BoardRow }) {
                   Prévia de {text.length.toLocaleString("pt-BR")} de{" "}
                   {row.pageTextLength.toLocaleString("pt-BR")} caracteres.{" "}
                   <a href={`/jobs/${row.jobId}`} className="text-[var(--primary-text)] hover:underline">
-                    Abrir a vaga completa →
+                    {t("jobDetail.openFull")}
                   </a>
                 </p>
               )}

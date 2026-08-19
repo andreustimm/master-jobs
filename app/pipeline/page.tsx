@@ -7,20 +7,22 @@ import { pipelineCounts, pipelineRows } from "../../src/core/db/repo.ts";
 import { APPLICATION_STATUSES } from "../../src/core/db/schema.ts";
 import { Fit, StatusBadge } from "../ui";
 import { requirePage } from "../auth";
+import { getTranslator } from "../i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function Pipeline() {
+  const { t, locale } = await getTranslator();
+  void locale;
   await requirePage("job:read");
 
   const [counts, rows] = await Promise.all([pipelineCounts(), pipelineRows()]);
 
   return (
     <main className="pt-10">
-      <h1 className="type-display-md chevron mb-4">Funil</h1>
+      <h1 className="type-display-md chevron mb-4">{t("pipeline.title")}</h1>
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
-        A única coisa que o sistema não consegue recriar. Nenhuma ingestão escreve
-        aqui — só você.
+        {t("copy.pipelineLead")}
       </p>
 
       <div className="mb-8 flex flex-wrap gap-2.5">

@@ -11,10 +11,12 @@ import { APPLICATION_STATUSES } from "../../../src/core/db/schema.ts";
 import { trackAction } from "../../actions";
 import { Fit, Legend, ScoreBar, StatusBadge } from "../../ui";
 import { requirePage } from "../../auth";
+import { getTranslator } from "../../i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function JobDetail({ params }: { params: Promise<{ id: string }> }) {
+  const { t } = await getTranslator();
   await requirePage("job:read");
 
   const { id } = await params;
@@ -78,9 +80,9 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
               </span>
             </div>
 
-            <ScoreBar parts={score as unknown as Record<string, number | null>} />
+            <ScoreBar parts={score as unknown as Record<string, number | null>} t={t} />
             <div className="mt-3">
-              <Legend />
+              <Legend t={t} />
             </div>
 
             <ul className="mt-4 list-disc pl-5 type-caption-sm text-muted-foreground">
@@ -137,7 +139,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
 
       {job.descriptionText && (
         <section>
-          <h2 className="type-display-xs mb-3">Descrição</h2>
+          <h2 className="type-display-xs mb-3">{t("jobDetail.description")}</h2>
           <Card>
             <CardContent className="max-h-[520px] overflow-auto pt-0">
               <pre className="font-sans text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">

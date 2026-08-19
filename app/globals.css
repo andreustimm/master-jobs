@@ -395,3 +395,22 @@ body {
     min-height: 0;
   }
 }
+
+
+/* ===========================================================================
+   Cursor em controle interativo.
+
+   O reset do Tailwind deixa `<button>` com o cursor padrão, porque o padrão da
+   plataforma mudou. O efeito é um item de menu que não parece clicável: quem
+   passa o mouse não recebe o sinal de que ali há uma ação, e hesita.
+
+   Vale para o que é controle. `disabled` fica de fora — cursor de ponteiro num
+   botão que não responde promete uma ação que não existe.
+   =========================================================================== */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+summary,
+label[for],
+select:not(:disabled) {
+  cursor: pointer;
+}

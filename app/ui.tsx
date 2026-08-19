@@ -14,14 +14,21 @@ import { cn } from "@/lib/utils";
  * bar for that reason — the eye reads fit first.
  */
 
+/**
+ * `label` é CHAVE de tradução, não texto.
+ *
+ * A legenda aparece em toda tela de vaga e era a maior fonte de português
+ * vazando para a interface em inglês: 72 ocorrências de 8 strings, quase todas
+ * daqui.
+ */
 export const COMPONENTS = [
-  { key: "titleScore", label: "Cargo", className: "bg-[var(--color-brand)]" },
-  { key: "keywordScore", label: "Palavras-chave", className: "bg-[var(--color-brand-bright)]" },
-  { key: "geoScore", label: "Elegibilidade", className: "bg-[var(--color-strong)]" },
-  { key: "seniorityScore", label: "Senioridade", className: "bg-[var(--color-mid)]" },
-  { key: "compScore", label: "Remuneração", className: "bg-[#5b5fa8]" },
-  { key: "freshnessScore", label: "Frescor", className: "bg-[var(--color-signal)]" },
-  { key: "benefitScore", label: "Benefícios", className: "bg-[var(--color-signal-soft)]" },
+  { key: "titleScore", label: "score.title", className: "bg-[var(--color-brand)]" },
+  { key: "keywordScore", label: "score.keyword", className: "bg-[var(--color-brand-bright)]" },
+  { key: "geoScore", label: "score.eligibility", className: "bg-[var(--color-strong)]" },
+  { key: "seniorityScore", label: "score.seniority", className: "bg-[var(--color-mid)]" },
+  { key: "compScore", label: "score.compensation", className: "bg-[#5b5fa8]" },
+  { key: "freshnessScore", label: "score.freshness", className: "bg-[var(--color-signal)]" },
+  { key: "benefitScore", label: "score.benefits", className: "bg-[var(--color-signal-soft)]" },
 ] as const;
 
 export function Fit({ value, className }: { value: number | null; className?: string }) {
@@ -40,7 +47,13 @@ export function Fit({ value, className }: { value: number | null; className?: st
   );
 }
 
-export function ScoreBar({ parts }: { parts: Record<string, number | null> }) {
+export function ScoreBar({
+  parts,
+  t,
+}: {
+  parts: Record<string, number | null>;
+  t?: (key: string) => string;
+}) {
   const segments = COMPONENTS.map((c) => ({ ...c, value: Number(parts[c.key] ?? 0) })).filter(
     (s) => s.value > 0,
   );
@@ -51,7 +64,7 @@ export function ScoreBar({ parts }: { parts: Record<string, number | null> }) {
       {segments.map((s) => (
         <span
           key={s.key}
-          title={`${s.label}: ${s.value.toFixed(1)}`}
+          title={`${t ? t(s.label) : s.label}: ${s.value.toFixed(1)}`}
           className={s.className}
           style={{ flex: s.value }}
         />
@@ -61,13 +74,13 @@ export function ScoreBar({ parts }: { parts: Record<string, number | null> }) {
   );
 }
 
-export function Legend() {
+export function Legend({ t }: { t: (key: string) => string }) {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
       {COMPONENTS.map((c) => (
         <span key={c.key} className="inline-flex items-center gap-1.5">
           <i className={cn("inline-block size-2 rounded-[2px]", c.className)} />
-          {c.label}
+          {t(c.label)}
         </span>
       ))}
     </div>

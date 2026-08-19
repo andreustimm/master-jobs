@@ -295,6 +295,41 @@ try {
     { name: "jho_mode", value: "system", url: BASE },
   ]);
 
+  /* --------------------------------- Idioma -------------------------------- */
+
+  // Traduzir é fácil de começar e fácil de deixar pela metade: a interface fica
+  // 80% em inglês e ninguém percebe as 20% restantes até um usuário reclamar —
+  // que foi como estas 72 ocorrências apareceram.
+  const PORTUGUESE =
+    /\b(vagas?|empresas?|buscar|corte|qualidade|fonte|ordenar|aderência|salário|palavras-chave|elegibilidade|senioridade|remuneração|frescor|benefícios|correspondem|densidade|confortável|compacta|exportar|empregador oculto|nenhuma|você)\b/i;
+
+  await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
+  const leaks = [];
+  for (const path of ["/", "/jobs", "/pipeline", "/referrals", "/candidate", "/candidate/skills"]) {
+    await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+    const texts = await page.evaluate(() => {
+      const out = [];
+      const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walk.nextNode())) {
+        const text = (node.textContent ?? "").trim();
+        const tag = node.parentElement?.tagName;
+        if (text.length > 2 && tag && !["SCRIPT", "STYLE"].includes(tag)) out.push(text);
+      }
+      return out;
+    });
+    for (const text of texts) {
+      if (PORTUGUESE.test(text)) leaks.push(`${path}: "${text.slice(0, 36)}"`);
+    }
+  }
+  check(
+    "interface em inglês não vaza português",
+    leaks.length === 0,
+    [...new Set(leaks)].slice(0, 3).join(" · "),
+  );
+
+  await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+
   /* --------------------------------- Logout -------------------------------- */
 
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });

@@ -5,10 +5,13 @@ import { cn } from "@/lib/utils";
 import { companiesWithContacts, referralOpportunities } from "../../src/core/contacts.ts";
 import { Fit, StatusBadge } from "../ui";
 import { requirePage } from "../auth";
+import { getTranslator } from "../i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function Referrals() {
+  const { t, locale } = await getTranslator();
+  void locale;
   await requirePage("job:read");
 
   const [opps, network] = await Promise.all([
@@ -20,9 +23,7 @@ export default async function Referrals() {
     <main className="pt-10">
       <h1 className="type-display-md chevron mb-4">Referrals</h1>
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
-        Vagas abertas onde você já conhece alguém. Referrals são ~7% dos candidatos
-        e ~40% das contratações — nenhuma outra alavanca do sistema chega perto.
-      </p>
+        {t("copy.referralsLead")}</p>
 
       {opps.length === 0 ? (
         <Card className="p-6 text-muted-foreground">
@@ -30,13 +31,12 @@ export default async function Referrals() {
             <>
               Nenhum contato registrado. Comece com{" "}
               <code className="font-mono text-foreground">pnpm jho contacts seed</code>, que
-              carrega as empresas onde você já trabalhou.
+              {t("copy.referralsSeed")}
             </>
           ) : (
             <>
-              <strong className="text-foreground">{network.size} empresa(s)</strong> na sua rede,
-              nenhuma com vaga aberta no acervo hoje. Isso é uma resposta, não um erro — quando
-              abrir, aparece aqui.
+              <strong className="text-foreground">{network.size} {t("referrals.companies")}</strong>{" "}
+              {t("copy.referralsEmpty")}
             </>
           )}
         </Card>

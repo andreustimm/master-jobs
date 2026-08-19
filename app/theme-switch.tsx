@@ -129,7 +129,7 @@ export function AppearanceSwitch({
             type="button"
             onClick={() => apply(t.id, mode)}
             className={cn(
-              "flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[var(--muted)]",
+              "flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[var(--muted)]",
               t.id === theme && "bg-[var(--muted)]",
             )}
           >
@@ -159,7 +159,7 @@ export function AppearanceSwitch({
                 type="button"
                 onClick={() => apply(theme, m.id)}
                 className={cn(
-                  "flex flex-1 items-center justify-center gap-1.5 rounded-[var(--radius-action)]",
+                  "flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-[var(--radius-action)]",
                   "border px-2 py-1.5 type-caption-sm transition-colors",
                   m.id === mode
                     ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]"

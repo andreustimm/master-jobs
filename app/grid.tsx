@@ -18,12 +18,14 @@ export function Pagination({
   page,
   pageSize,
   total,
+  t,
 }: {
   base: string;
   state: FilterState;
   page: number;
   pageSize: number;
   total: number;
+  t: (key: string, values?: Record<string, string | number>) => string;
 }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const current = Math.min(page, pages);
@@ -94,11 +96,13 @@ export function GridToolbar({
   state,
   total,
   dense,
+  t,
 }: {
   base: string;
   state: FilterState;
   total: number;
   dense: boolean;
+  t: (key: string, values?: Record<string, string | number>) => string;
 }) {
   const exportHref = `/api/export${new URL(href(base, state, {}), "http://x").search}`;
   const box = (active: boolean) =>
@@ -107,19 +111,19 @@ export function GridToolbar({
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2.5">
       <span className="font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
-        densidade
+        {t("grid.density")}
       </span>
       <a href={href(base, state, { dense: undefined })} className={box(!dense)}>
-        confortável
+        {t("grid.comfortable")}
       </a>
       <a href={href(base, state, { dense: "1" })} className={box(dense)}>
-        compacta
+        {t("grid.compact")}
       </a>
 
       <span className="flex-1" />
 
-      <a href={exportHref} className={box(false)} title={`Exporta as ${total} linhas filtradas`}>
-        ↓ exportar CSV
+      <a href={exportHref} className={box(false)} title={t("grid.exportHint", { count: total })}>
+        ↓ {t("grid.exportCsv")}
       </a>
     </div>
   );
@@ -128,32 +132,39 @@ export function GridToolbar({
 /** The saved views that actually get used, as one-click presets. */
 export const PRESETS = [
   {
-    label: "Aplicáveis hoje",
-    hint: "acima de 60, sem bloqueio, empresa identificada",
+    key: "applicableToday",
     query: "fit=60&unblocked=1&named=1",
   },
-  { label: "Recém-publicadas", hint: "últimos 3 dias, sem bloqueio", query: "fit=45&fresh=1&unblocked=1" },
-  { label: "Com salário", hint: "remuneração divulgada, maior primeiro", query: "fit=45&paid=1&sort=comp" },
-  { label: "Não triadas", hint: "ainda fora do funil", query: "fit=55&status=unfiled" },
+  { key: "recent", query: "fit=45&fresh=1&unblocked=1" },
+  { key: "withSalary", query: "fit=45&paid=1&sort=comp" },
+  { key: "untriaged", query: "fit=55&status=unfiled" },
 ] as const;
 
-export function Presets({ base }: { base: string }) {
+export function Presets({
+  base,
+  t,
+}: {
+  base: string;
+  /** Tradutor da requisição, por prop: estes são Server Components e o
+      chamador já o resolveu. */
+  t: (key: string, values?: Record<string, string | number>) => string;
+}) {
   return (
     <div className="mb-4 flex flex-wrap gap-2">
       {PRESETS.map((p) => (
         <a
-          key={p.label}
+          key={p.key}
           href={`${base}?${p.query}`}
-          title={p.hint}
+          title={t(`presets.${p.key}Hint`)}
           className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-auto py-1.5 type-caption-sm font-normal")}
         >
-          {p.label}
+          {t(`presets.${p.key}`)}
           {/* A explicação junta com o rótulo dá 459px numa linha que o
               buttonVariants marca como `whitespace-nowrap` — estourava a tela
               de 375px. Ela já está no `title`, então no celular fica só lá. */}
           <span className="ml-1 hidden type-meta text-muted-foreground sm:inline">
             {" "}
-            · {p.hint}
+            · {t(`presets.${p.key}Hint`)}
           </span>
         </a>
       ))}

@@ -4,6 +4,7 @@ import { GridToolbar, Pagination, Presets } from "../grid";
 import { JobList } from "../joblist";
 import { Legend } from "../ui";
 import { requirePage } from "../auth";
+import { getTranslator } from "../i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export default async function Jobs({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { t, locale } = await getTranslator();
   await requirePage("job:read");
 
   const params = await searchParams;
@@ -35,24 +37,24 @@ export default async function Jobs({
   return (
     <main>
       <header className="pt-10 pb-4">
-        <h1 className="type-display-md chevron mb-4">Vagas</h1>
+        <h1 className="type-display-md chevron mb-4">{t("jobs.title")}</h1>
         <p className="type-body-md text-muted-foreground">
-          {total.toLocaleString("pt-BR")} correspondem aos filtros
+          {total.toLocaleString(locale)} {t("jobs.matching")}
           {state.q ? ` para “${state.q}”` : ""}.
         </p>
       </header>
 
-      <Presets base="/jobs" />
-      <FilterBar base="/jobs" state={state} facets={facets} />
-      <GridToolbar base="/jobs" state={state} total={total} dense={dense} />
+      <Presets base="/jobs" t={t} />
+      <FilterBar base="/jobs" state={state} facets={facets} t={t} />
+      <GridToolbar base="/jobs" state={state} total={total} dense={dense} t={t} />
 
       <div className="mb-3.5">
-        <Legend />
+        <Legend t={t} />
       </div>
 
-      <JobList rows={rows} dense={dense} />
+      <JobList rows={rows} dense={dense} t={t} />
 
-      <Pagination base="/jobs" state={state} page={page} pageSize={pageSize} total={total} />
+      <Pagination base="/jobs" state={state} page={page} pageSize={pageSize} total={total} t={t} />
     </main>
   );
 }

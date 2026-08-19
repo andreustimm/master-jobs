@@ -6,8 +6,18 @@
  * e porque, se isto virar produto, o mercado-alvo é internacional.
  */
 export const LOCALES = [
-  { id: "pt-BR", label: "Português", short: "PT" },
-  { id: "en", label: "English", short: "EN" },
+  /**
+   * `flag` é emoji, não imagem: nenhuma requisição, escala com a fonte, e
+   * funciona em qualquer tema sem precisar de duas versões.
+   *
+   * A bandeira representa a VARIANTE do idioma, não o idioma — daí a dos EUA
+   * para `en`, que é a variante escrita nos dicionários. Bandeira para idioma
+   * é impreciso por natureza (o inglês não é dos EUA, o português não é do
+   * Brasil), então ela vem acompanhada do nome escrito, que é o que de fato
+   * identifica a opção.
+   */
+  { id: "pt-BR", label: "Português", short: "PT", flag: "🇧🇷" },
+  { id: "en", label: "English", short: "EN", flag: "🇺🇸" },
 ] as const;
 
 export type LocaleId = (typeof LOCALES)[number]["id"];

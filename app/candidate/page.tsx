@@ -14,10 +14,13 @@ import {
 import { MarkdownEditor } from "./editor";
 import { importPdfAction, saveCvAction } from "./actions";
 import { requirePage } from "../auth";
+import { getTranslator } from "../i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function CandidateArea() {
+  const { t, locale } = await getTranslator();
+  void locale;
   // Guard antes de ler qualquer dado. O escopo vem da sessão.
   const session = await requirePage("candidate:read");
   void session;
@@ -30,7 +33,7 @@ export default async function CandidateArea() {
   return (
     <main className="pt-10 pb-16">
       <div className="mb-4 flex items-baseline gap-3">
-        <h1 className="type-display-md chevron">Área do candidato</h1>
+        <h1 className="type-display-md chevron">{t("candidate.title")}</h1>
         <Link href="/candidate/skills" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           skills →
         </Link>
@@ -43,7 +46,7 @@ export default async function CandidateArea() {
         versão, e a anterior continua consultável. Guardar o texto só vale a pena
         pelo que ele destrava:{" "}
         <strong className="text-foreground">
-          comparar o seu vocabulário com o das vagas que você realmente quer
+          {t("copy.vocabularyLead")}
         </strong>
         .
       </p>
@@ -70,7 +73,7 @@ export default async function CandidateArea() {
         className="mb-8 flex flex-wrap items-end gap-3 rounded-lg border border-[var(--color-hairline)] bg-[var(--color-cloud)] p-4"
       >
         <div className="grid gap-1.5">
-          <Label htmlFor="file">Importar de PDF</Label>
+          <Label htmlFor="file">{t("candidate.importPdf")}</Label>
           <Input
             id="file"
             name="file"
@@ -81,7 +84,7 @@ export default async function CandidateArea() {
           />
         </div>
         <Button type="submit" variant="outline">
-          Extrair texto
+          {t("candidate.extractText")}
         </Button>
         <p className="type-body-sm w-full text-muted-foreground">
           Vira uma versão nova, como qualquer outra —{" "}
@@ -93,7 +96,7 @@ export default async function CandidateArea() {
 
       <form action={saveCvAction} className="mb-8 grid gap-3">
         <div className="grid gap-1.5">
-          <Label htmlFor="label">Rótulo desta versão</Label>
+          <Label htmlFor="label">{t("candidate.versionLabel")}</Label>
           <Input
             id="label"
             name="label"
@@ -103,11 +106,11 @@ export default async function CandidateArea() {
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="content">Currículo em markdown</Label>
+          <Label htmlFor="content">{t("candidate.cvMarkdown")}</Label>
           <MarkdownEditor name="content" defaultValue={doc?.content ?? ""} />
         </div>
         <div className="flex items-center gap-3">
-          <Button type="submit">Salvar versão</Button>
+          <Button type="submit">{t("candidate.save")}</Button>
           {doc && (
             <span className="text-xs text-muted-foreground">
               atual: <strong className="text-foreground">{doc.label}</strong> ·{" "}
@@ -129,13 +132,10 @@ export default async function CandidateArea() {
           <Separator className="my-8" />
           <section>
             <h2 className="type-display-sm mb-2">
-              O que as vagas dizem e o seu CV não
+              {t("copy.vocabularyGapTitle")}
             </h2>
             <p className="mb-5 text-sm text-muted-foreground">
-              Comparado com {gap.jobsAnalysed} vagas acima de {gap.minFit} de
-              aderência. Só entram termos que aparecem em pelo menos 10% delas —
-              o resto é ruído.
-            </p>
+              {t("copy.vocabularyCompared", { jobs: gap.jobsAnalysed, cut: gap.minFit })}</p>
 
             {gap.missing.length === 0 ? (
               <Card className="p-5 text-sm text-muted-foreground">
@@ -144,21 +144,21 @@ export default async function CandidateArea() {
               </Card>
             ) : (
               <div className="mb-8 grid gap-2">
-                {gap.missing.slice(0, 18).map((t) => (
+                {gap.missing.slice(0, 18).map((term) => (
                   <div
-                    key={t.term}
+                    key={term.term}
                     className="flex items-center gap-3 rounded-lg border bg-card px-4 py-2.5"
                   >
-                    <span className="min-w-0 flex-1 truncate sm:min-w-[190px] sm:flex-none font-mono text-sm">{t.term}</span>
+                    <span className="min-w-0 flex-1 truncate sm:min-w-[190px] sm:flex-none font-mono text-sm">{term.term}</span>
                     <div className="h-1.5 flex-1 overflow-hidden rounded-sm bg-border">
                       <span
                         className="block h-full rounded-sm bg-[var(--color-mid)]"
-                        style={{ width: `${Math.round(t.coverage * 100)}%` }}
+                        style={{ width: `${Math.round(term.coverage * 100)}%` }}
                       />
                     </div>
                     <span className="shrink-0 text-right font-mono text-xs whitespace-nowrap text-muted-foreground">
-                      {Math.round(t.coverage * 100)}%
-                      <span className="hidden sm:inline"> das vagas</span>
+                      {Math.round(term.coverage * 100)}%
+                      <span className="hidden sm:inline"> {t("candidate.ofJobs")}</span>
                     </span>
                   </div>
                 ))}
@@ -170,9 +170,9 @@ export default async function CandidateArea() {
                 Vocabulário que já está funcionando ({gap.confirmed.length})
               </summary>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {gap.confirmed.map((t) => (
-                  <Badge key={t.term} variant="secondary" className="font-mono type-meta">
-                    {t.term} · {Math.round(t.coverage * 100)}%
+                {gap.confirmed.map((term) => (
+                  <Badge key={term.term} variant="secondary" className="font-mono type-meta">
+                    {term.term} · {Math.round(term.coverage * 100)}%
                   </Badge>
                 ))}
               </div>
@@ -181,16 +181,14 @@ export default async function CandidateArea() {
             {gap.unused.length > 0 && (
               <details>
                 <summary className="cursor-pointer text-sm font-medium">
-                  No CV, mas raro nas vagas do alvo ({gap.unused.length})
+                  {t("copy.vocabularyRareTitle")} ({gap.unused.length})
                 </summary>
                 <p className="mt-2 mb-3 max-w-[62ch] text-xs text-muted-foreground">
-                  Não significa remover — significa que esses termos não estão
-                  puxando aderência. Se o CV está longo, é aqui que sobra espaço.
-                </p>
+                  {t("copy.vocabularyRareNote")}</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {gap.unused.map((t) => (
-                    <Badge key={t.term} variant="outline" className="font-mono type-meta">
-                      {t.term}
+                  {gap.unused.map((term) => (
+                    <Badge key={term.term} variant="outline" className="font-mono type-meta">
+                      {term.term}
                     </Badge>
                   ))}
                 </div>

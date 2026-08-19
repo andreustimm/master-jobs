@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { Check, Languages } from "lucide-react";
+import { Check } from "lucide-react";
 import { LOCALES, type LocaleId } from "../src/core/i18n/index.ts";
 import { setLocaleAction } from "./locale-action";
 import { cn } from "@/lib/utils";
@@ -36,7 +36,7 @@ export function LocaleSwitch({ current, label }: { current: LocaleId; label: str
     panel.style.top = `${rect.bottom + 6}px`;
   }
 
-  const short = LOCALES.find((l) => l.id === current)?.short ?? "PT";
+  const active = LOCALES.find((l) => l.id === current) ?? LOCALES[0];
 
   return (
     <>
@@ -53,8 +53,8 @@ export function LocaleSwitch({ current, label }: { current: LocaleId; label: str
           pending && "opacity-60",
         )}
       >
-        <Languages className="size-3.5" aria-hidden />
-        {short}
+        <span aria-hidden className="type-caption-sm leading-none">{active.flag}</span>
+        {active.short}
       </button>
 
       <div
@@ -73,7 +73,7 @@ export function LocaleSwitch({ current, label }: { current: LocaleId; label: str
             type="button"
             onClick={() => choose(locale.id)}
             className={cn(
-              "flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-[var(--muted)]",
+              "flex w-full cursor-pointer items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-[var(--muted)]",
               locale.id === current && "bg-[var(--muted)]",
             )}
           >
@@ -84,6 +84,7 @@ export function LocaleSwitch({ current, label }: { current: LocaleId; label: str
               )}
               aria-hidden
             />
+            <span aria-hidden className="type-body-md leading-none">{locale.flag}</span>
             <span className="type-caption-md">{locale.label}</span>
           </button>
         ))}

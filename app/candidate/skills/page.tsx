@@ -8,6 +8,7 @@ import { syncCandidateFromProfile } from "../../../src/core/candidate.ts";
 import { candidateSkills, skillDemand } from "../../../src/core/skills.ts";
 import { auditAction, detectAction } from "./actions";
 import { requirePage } from "../../auth";
+import { getTranslator } from "../../i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,8 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 export default async function SkillsPage() {
+  const { t, locale } = await getTranslator();
+  void locale;
   // Guard antes de ler qualquer dado. O escopo vem da sessão.
   const session = await requirePage("candidate:read");
   void session;
@@ -49,7 +52,7 @@ export default async function SkillsPage() {
   return (
     <main className="pt-10 pb-16">
       <div className="mb-2 flex items-baseline gap-3">
-        <h1 className="type-display-md chevron">Skills</h1>
+        <h1 className="type-display-md chevron">{t("skills.title")}</h1>
         <Link href="/candidate" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           ← currículo
         </Link>
@@ -70,21 +73,21 @@ export default async function SkillsPage() {
       <div className="mb-8 flex flex-wrap items-center gap-3">
         <form action={detectAction}>
           <Button type="submit" variant="outline" size="sm">
-            Redetectar do CV
+            {t("skills.redetect")}
           </Button>
         </form>
         <span className="text-xs text-muted-foreground">
-          {pending.length} a auditar · {confirmed.length} confirmadas ·{" "}
-          {rejected.length} rejeitadas
+          {pending.length} {t("skills.toAuditCount")} · {confirmed.length} {t("skills.confirmed")} ·{" "}
+          {rejected.length} {t("skills.rejected")}
         </span>
       </div>
 
       {gaps.length > 0 && (
         <Card className="mb-8">
           <CardContent className="pt-0">
-            <h2 className="type-display-xs mb-1">Pedidas pelo mercado, não confirmadas</h2>
+            <h2 className="type-display-xs mb-1">{t("skills.marketWants")}</h2>
             <p className="mb-4 text-sm text-muted-foreground">
-              Aparecem em pelo menos 15% das vagas acima de 60 de aderência.
+              {t("skills.marketThreshold")}
             </p>
             <div className="grid gap-2">
               {gaps.slice(0, 12).map((g) => (
@@ -117,7 +120,7 @@ export default async function SkillsPage() {
 
       {pending.length > 0 && (
         <section className="mb-10">
-          <h2 className="type-display-sm mb-2">A auditar</h2>
+          <h2 className="type-display-sm mb-2">{t("skills.toAudit")}</h2>
           <p className="mb-4 text-sm text-muted-foreground">
             Cada uma traz a frase do currículo que a produziu, para você julgar.
           </p>
