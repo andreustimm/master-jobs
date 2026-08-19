@@ -257,7 +257,7 @@ desta UI por polimento.
 > `prefers-reduced-motion`. Uma grade de triagem que se move quando o usuário
 > pediu que não se movesse é uma falha de acessibilidade, não um detalhe.
 
-### UI-02 · Histórico de versões do currículo: modal, restaurar, renomear, excluir 📋
+### UI-02 · Histórico de versões do currículo: modal, restaurar, renomear, excluir ✅ (falta a migração de `cv_variant`)
 
 Pedido em 19/08/2026. Hoje `/candidate` lista as versões no rodapé da página,
 somente leitura: rótulo, tamanho em caracteres e data. Não dá para voltar a
@@ -356,16 +356,41 @@ versão em si é dado do usuário e leva `data-user-content`.
 
 ---
 
-#### Ordem sugerida
+#### Entregue em 19/08/2026
 
-1. Renomear e o guard de salvamento sem mudança — barato, e sozinho já conserta
-   a lista ilegível de hoje.
-2. Modal com o diff entre duas versões.
-3. Restaurar (acrescentando).
-4. Migração de `cv_variant` para chave estrangeira, e então excluir.
+Modal em `<dialog>` nativo — foco preso, `Escape` e backdrop do navegador, sem
+dependência de biblioteca. Ver (renderizado e markdown cru), restaurar,
+renomear e excluir, com confirmação que **nomeia** a versão.
 
-O item 4 vem por último de propósito: excluir antes de o vínculo existir é
-entregar a faca sem o cabo.
+As regras vivem em `src/core/candidate.ts` e estão travadas por 15 testes em
+`tests/candidate-versions.test.ts`:
+
+- Restaurar acrescenta; `is_current` nunca volta para trás.
+- A versão atual não se exclui nem se restaura — os botões nem aparecem na
+  linha dela.
+- Versão citada por `application.cv_variant` não se exclui, e a recusa **nomeia
+  as candidaturas** que a prendem.
+- Toda operação filtra por `candidateId`: id vindo de formulário é pedido, não
+  prova.
+- Salvar sem mudança não cria versão. Era a fonte dos três `ATS EN 2026-07`.
+- `documentHistory` desempata por `id`, porque `created_at` empata dentro do
+  mesmo milissegundo e ordem instável faz clicar na linha errada.
+
+Cada linha mostra a diferença de tamanho contra a atual: os três homônimos da
+captura viraram `+672`, `+673` e `+611` caracteres. É o que torna a lista
+decidível sem abrir cada uma.
+
+#### O que ficou de fora, e por quê
+
+**Migração de `cv_variant` para chave estrangeira.** A proteção contra excluir
+uma versão que o funil diz ter enviado está na camada de aplicação, e funciona
+— mas quem garante é o código, não o banco. Uma escrita por outro caminho
+(script, CLI, SQL direto) passa por cima. `ON DELETE RESTRICT` fecharia isso de
+vez.
+
+**Diff entre duas versões.** Hoje se vê uma por vez. A diferença de tamanho
+resolve *escolher*; um diff por linha resolveria *entender o que mudou*, que é
+outra pergunta.
 
 ## P3 — Estrutura e futuro
 

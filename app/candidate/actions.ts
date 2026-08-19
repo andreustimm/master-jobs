@@ -2,7 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { guardOwnCandidate } from "../auth";
-import { saveDocument } from "../../src/core/candidate.ts";
+import {
+  deleteDocument,
+  documentById,
+  renameDocument,
+  restoreDocument,
+  saveDocument,
+  type VersionError,
+} from "../../src/core/candidate.ts";
 
 /**
  * Save the CV the candidate pasted.
@@ -65,4 +72,65 @@ export async function importPdfAction(formData: FormData) {
   });
 
   revalidatePath("/candidate");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Versões                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * As ações de versão **retornam** o erro em vez de lançar.
+ *
+ * As duas outras ações deste arquivo lançam, e para elas serve: "PDF sem texto"
+ * é excepcional. Aqui não é. "Não dá para excluir, três candidaturas citam esta
+ * versão" é uma resposta prevista, que o usuário precisa ler ao lado da linha
+ * que clicou — e não numa fronteira de erro que substitui a página inteira.
+ *
+ * O código volta como chave; a tela traduz. Mensagem montada no servidor sai
+ * sempre no idioma de quem escreveu o código, não no de quem lê.
+ */
+export type VersionActionResult =
+  | { ok: true }
+  | { ok: false; error: VersionError; detail?: string };
+
+export async function renameVersionAction(
+  id: number,
+  label: string,
+): Promise<VersionActionResult> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  const result = await renameDocument(candidateId, id, label);
+  if (result.ok) revalidatePath("/candidate");
+  return result;
+}
+
+export async function deleteVersionAction(id: number): Promise<VersionActionResult> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  const result = await deleteDocument(candidateId, id);
+  if (result.ok) revalidatePath("/candidate");
+  return result;
+}
+
+/**
+ * `label` chega pronto da tela porque é dado do usuário no idioma dele: um
+ * sufixo "(restaurada)" montado no servidor sairia em português para quem está
+ * lendo a interface em inglês, e ficaria gravado assim para sempre.
+ */
+export async function restoreVersionAction(
+  id: number,
+  label: string,
+): Promise<VersionActionResult> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  const result = await restoreDocument(candidateId, id, label);
+  if (result.ok) revalidatePath("/candidate");
+  return result.ok ? { ok: true } : result;
+}
+
+/** Conteúdo de uma versão, para o painel de visualização. */
+export async function readVersionAction(
+  id: number,
+): Promise<{ ok: true; label: string; content: string } | { ok: false; error: VersionError }> {
+  const { candidateId } = await guardOwnCandidate("candidate:read");
+  const doc = await documentById(candidateId, id);
+  if (!doc) return { ok: false, error: "not-found" };
+  return { ok: true, label: doc.label, content: doc.content };
 }

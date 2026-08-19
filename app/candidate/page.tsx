@@ -12,12 +12,32 @@ import {
   getCandidate,
 } from "../../src/core/candidate.ts";
 import { MarkdownEditor } from "./editor";
+import { VersionHistory } from "./versions";
 import { importPdfAction, saveCvAction } from "./actions";
 import { requirePage } from "../auth";
 import { getTranslator } from "../i18n";
 import { formatNumber } from "../../src/core/i18n/index.ts";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Rótulos do histórico, já traduzidos.
+ *
+ * O modal é ilha de cliente e o tradutor tem métodos — método não atravessa a
+ * fronteira do Server Component. Um mapa plano de strings atravessa, e mantém
+ * o i18n do lado servidor como no resto da aplicação.
+ */
+const VERSION_KEYS = [
+  "title", "open", "empty", "close", "cancel", "current", "chars", "view",
+  "restore", "rename", "remove", "save", "newLabel", "restoredSuffix",
+  "rendered", "raw", "sameAsCurrent", "deltaMore", "deltaLess",
+  "confirmDelete", "confirmRestore", "errorNotFound", "errorEmptyLabel",
+  "errorLabelTooLong", "errorIsCurrent", "errorReferenced", "referencedBy",
+] as const;
+
+function versionLabels(t: (key: string) => string): Record<string, string> {
+  return Object.fromEntries(VERSION_KEYS.map((key) => [key, t(`versions.${key}`)]));
+}
 
 export default async function CandidateArea() {
   const { t, locale } = await getTranslator();
@@ -216,11 +236,28 @@ export default async function CandidateArea() {
         </Card>
       )}
 
-      {history.length > 1 && (
+      {history.length > 0 && (
         <>
           <Separator className="my-8" />
           <section>
-            <h2 className="type-display-xs mb-3">{t("candidate.versions")}</h2>
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <h2 className="type-display-xs">{t("candidate.versions")}</h2>
+              {/* A lista abaixo é leitura; as operações moram no modal. Ver e
+                  restaurar são decisões que merecem foco e confirmação, não um
+                  clique perdido no meio de uma página longa. */}
+              <VersionHistory
+                rows={history.map((h) => ({
+                  id: h.id,
+                  label: h.label,
+                  isCurrent: h.isCurrent,
+                  length: h.length,
+                  createdAt: h.createdAt,
+                }))}
+                currentLength={doc?.content.length ?? 0}
+                locale={locale}
+                labels={versionLabels(t)}
+              />
+            </div>
             <div className="divide-y overflow-hidden rounded-xl border">
               {history.map((h) => (
                 <div key={h.id} className="flex items-center gap-3 bg-card px-4 py-2.5 text-sm">
