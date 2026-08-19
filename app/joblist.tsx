@@ -1,3 +1,4 @@
+import type * as React from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -28,7 +29,7 @@ export function JobList({ rows, dense = false }: { rows: Row[]; dense?: boolean 
 
   return (
     <div className="divide-y overflow-hidden rounded-xl border">
-      {rows.map((r) => {
+      {rows.map((r, index) => {
         const blockers = Array.isArray(r.blockers) ? (r.blockers as string[]) : [];
         const salary = pay(r);
         // Jobgether and other intermediaries publish under their own name, so
@@ -40,8 +41,12 @@ export function JobList({ rows, dense = false }: { rows: Row[]; dense?: boolean 
         return (
           <article
             key={r.jobId}
+            // The stagger reads top-to-bottom, which is the order the list is
+            // meant to be triaged in. It saturates at 8 (see .jho-rise): a
+            // cascade over a full page of results would be waiting, not motion.
+            style={{ "--jho-index": index } as React.CSSProperties}
             className={cn(
-              "grid grid-cols-[58px_1fr_auto] items-start gap-4 bg-card transition-colors hover:bg-muted/40",
+              "jho-rise grid grid-cols-[58px_1fr_auto] items-start gap-4 bg-card transition-colors hover:bg-muted/40",
               dense ? "px-4 py-2.5" : "px-5 py-4",
             )}
           >

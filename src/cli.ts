@@ -1682,6 +1682,12 @@ program
   .action(async () => {
     const profile = await loadProfile(true);
     console.log(`${c.green("✓")} profile.yaml is valid`);
+    const { missingProfileEnv } = await import("./core/profile/load.ts");
+    if (missingProfileEnv.length > 0) {
+      console.log(
+        c.yellow(`! sem valor para ${missingProfileEnv.join(", ")} — defina em .env (ver .env.example)`),
+      );
+    }
     console.log(`\n${c.bold(profile.identity.name)} — ${profile.identity.headline}`);
     console.log(c.dim(`${profile.identity.location} · ${profile.seniority.years_experience}+ years`));
     console.log(c.bold("\nTarget clusters"));

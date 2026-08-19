@@ -282,3 +282,83 @@ body {
   .display-lg { font-size: 34px; }
   .display-md { font-size: 27px; }
 }
+
+/* ===========================================================================
+   Movimento (UI-01)
+
+   Motion (motion.dev) foi avaliado e **não** foi adicionado. A própria tarefa
+   pedia medir antes de trazer dependência, e o que ela descreve — transição
+   entre rotas e a barra de score crescendo — o CSS nativo entrega com zero
+   JavaScript. Este dashboard não envia nenhum bundle de cliente fora do editor
+   de markdown, e gastar esse invariante em animação decorativa seria trocar a
+   propriedade mais valiosa da UI por polimento.
+
+   Se um dia o funil precisar reordenar linhas com continuidade visual —
+   movimento que carrega informação, não enfeite — aí Motion se paga, como
+   ilha, só naquele componente.
+
+   Regra que não se negocia: nada aqui se move quando o usuário pediu que não
+   se movesse. Uma grade de triagem que anima contra a vontade da pessoa é
+   falha de acessibilidade, não detalhe.
+   =========================================================================== */
+
+/* Navegação entre rotas. Inócuo em navegador sem suporte. */
+@view-transition {
+  navigation: auto;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 180ms;
+    animation-timing-function: var(--ease-out, cubic-bezier(0.2, 0, 0, 1));
+  }
+
+  /* Entrada das listas. Escalonada por posição para o olho ler de cima para
+     baixo, que é a ordem em que a lista deve ser triada. O atraso satura em
+     8 itens: 6.000 vagas em cascata seria espera, não movimento. */
+  @keyframes jho-rise {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .jho-rise {
+    animation: jho-rise 220ms var(--ease-out, cubic-bezier(0.2, 0, 0, 1)) both;
+    animation-delay: calc(min(var(--jho-index, 0), 8) * 28ms);
+  }
+
+  /* A barra de score cresce a partir do zero. É o único movimento aqui que
+     carrega informação: mostra a composição sendo somada componente a
+     componente, em vez de aparecer pronta. */
+  @keyframes jho-grow {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  .jho-bar > span {
+    transform-origin: left center;
+    animation: jho-grow 420ms var(--ease-out, cubic-bezier(0.2, 0, 0, 1)) both;
+  }
+}
+
+/* Sem exceção e sem "quase": movimento zero quando o sistema pede. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

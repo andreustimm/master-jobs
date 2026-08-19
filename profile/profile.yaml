@@ -15,7 +15,10 @@ identity:
   headline: Senior AI Software Architect
   location: São Paulo, Brazil
   timezone: America/Sao_Paulo
-  email: andreus.timm@gmail.com
+  # Contato pessoal fica fora do versionamento: Git guarda histórico, então
+  # publicar e remover depois não resolve. Defina JHO_CANDIDATE_EMAIL no .env
+  # (ignorado). Vazio não quebra nada — ver docs/security.md.
+  email: "${JHO_CANDIDATE_EMAIL}"
   linkedin: https://www.linkedin.com/in/andreus-timm
   github: https://github.com/andreustimm
   languages:

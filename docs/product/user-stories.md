@@ -386,3 +386,29 @@ escreveu, que é exatamente o serviço que se espera dela.
 
 **Ressalva de produto:** acelera o gargalo errado. Só faz sentido depois que
 E7.1 provar que a triagem está calibrada. Ver antivisão em `vision.md`.
+
+
+---
+
+## E8 — Interface
+
+### E8.1 ✅ Movimento que informa, sem custo de bundle
+> Como **Andreus**, quero que a interface tenha transições, sem que ela fique
+> pesada.
+
+**Aceite**
+- [x] Transição entre rotas (`@view-transition`)
+- [x] Entrada escalonada nas listas, na ordem de leitura, saturando em 8 itens
+- [x] Barra de score crescendo a partir do zero — o único movimento aqui que
+      carrega informação, porque mostra a composição sendo somada
+- [x] **`prefers-reduced-motion` respeitado sem exceção**
+- [x] Zero dependências, zero JavaScript de cliente adicionado
+
+**Decisão:** Motion (motion.dev) foi avaliado e não adicionado. A tarefa pedia
+medir antes de trazer dependência; o CSS nativo entregou o que ela descrevia.
+Este dashboard não envia bundle de cliente fora do editor de markdown, e gastar
+esse invariante em animação de entrada seria trocar a propriedade mais valiosa
+da UI por polimento.
+
+**Invariante de acessibilidade:** uma grade de triagem que se move depois de a
+pessoa ter pedido que não se movesse é falha de acessibilidade, não detalhe.

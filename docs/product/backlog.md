@@ -198,7 +198,7 @@ normalizados, ordenar por remuneração produz um ranking sem sentido.
 
 ---
 
-### UI-01 · Motion para transições e movimento 📋
+### UI-01 · Motion para transições e movimento ✅ (resolvido sem a dependência)
 
 Implementar [Motion](https://motion.dev/) nas transições do sistema.
 
@@ -225,6 +225,17 @@ quando um status muda. Movimento decorativo em cima de uma grade de 6.000 vagas
 
 **Primeiro passo concreto:** medir. Rodar a UI atual com `view-transition-name`
 nas rotas e ver se resolve, antes de adicionar dependência.
+
+**Resultado da medição (19/08):** resolveu. Entregue com CSS nativo e **zero
+dependências** — `@view-transition` para navegação, entrada escalonada nas
+listas e a barra de score crescendo a partir do zero. Verificado: 50 linhas
+animadas na página de vagas, nenhum byte de JavaScript de cliente adicionado.
+
+Motion continua justificável no dia em que o funil precisar reordenar linhas
+com continuidade visual — movimento que carrega informação. Aí entra como
+ilha, só naquele componente. Enquanto o movimento for de entrada e de
+composição, pagar um bundle por ele seria trocar a propriedade mais valiosa
+desta UI por polimento.
 
 > **Invariante a preservar:** qualquer animação deve respeitar
 > `prefers-reduced-motion`. Uma grade de triagem que se move quando o usuário

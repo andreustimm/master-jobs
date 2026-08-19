@@ -47,7 +47,7 @@ export function ScoreBar({ parts }: { parts: Record<string, number | null> }) {
   const used = segments.reduce((sum, s) => sum + s.value, 0);
 
   return (
-    <div className="flex h-[5px] max-w-[520px] overflow-hidden rounded-sm bg-border">
+    <div className="jho-bar flex h-[5px] max-w-[520px] overflow-hidden rounded-sm bg-border">
       {segments.map((s) => (
         <span
           key={s.key}

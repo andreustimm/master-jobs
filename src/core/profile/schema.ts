@@ -24,7 +24,15 @@ export const ProfileSchema = z.object({
     headline: z.string(),
     location: z.string(),
     timezone: z.string(),
-    email: z.string(),
+    /**
+     * Vem de ${JHO_CANDIDATE_EMAIL}. Vazio quando não configurado — nada no
+     * ranking depende dele, e derrubar a carga do perfil por causa de um campo
+     * de contato pararia CLI, sourcing e scoring de uma vez.
+     */
+    email: z
+      .string()
+      .nullish()
+      .transform((v) => v ?? ""),
     linkedin: z.string().optional(),
     github: z.string().optional(),
     languages: z.array(z.object({ lang: z.string(), level: z.string() })).default([]),
