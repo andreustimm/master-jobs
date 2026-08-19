@@ -1,6 +1,7 @@
 import type * as React from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { JobModal } from "./job-modal";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -46,8 +47,9 @@ export function JobList({ rows, dense = false }: { rows: Row[]; dense?: boolean 
             // cascade over a full page of results would be waiting, not motion.
             style={{ "--jho-index": index } as React.CSSProperties}
             className={cn(
-              "jho-rise grid grid-cols-[58px_1fr_auto] items-start gap-4 bg-card transition-colors hover:bg-muted/40",
-              dense ? "px-4 py-2.5" : "px-5 py-4",
+              "jho-rise grid grid-cols-[46px_1fr] items-start gap-3 bg-card transition-colors",
+              "sm:grid-cols-[58px_1fr_auto] sm:gap-4 hover:bg-muted/40",
+              dense ? "px-3 py-2.5 sm:px-4" : "px-4 py-4 sm:px-5",
             )}
           >
             <div className="pt-0.5 text-center">
@@ -58,7 +60,7 @@ export function JobList({ rows, dense = false }: { rows: Row[]; dense?: boolean 
               <div className="flex flex-wrap items-baseline gap-2.5">
                 <Link
                   href={`/jobs/${r.jobId}`}
-                  className="text-[15.5px] font-semibold hover:underline"
+                  className="type-body-md font-semibold hover:underline"
                 >
                   {r.title}
                 </Link>
@@ -72,7 +74,7 @@ export function JobList({ rows, dense = false }: { rows: Row[]; dense?: boolean 
                   {anonymous ? `${r.companyName} · empregador oculto` : r.companyName}
                 </span>
                 {r.cluster && (
-                  <Badge variant="outline" className="font-mono text-[10px] text-primary">
+                  <Badge variant="outline" className="font-mono type-micro text-primary">
                     {r.cluster}
                   </Badge>
                 )}
@@ -96,18 +98,36 @@ export function JobList({ rows, dense = false }: { rows: Row[]; dense?: boolean 
               )}
             </div>
 
-            {/* Two links, because they are two different pages: on Lever the
-                /apply suffix opens the form, while the bare URL is where the
-                description lives. Sending someone to a form for a job they have
-                not read is the wrong default. */}
-            <div className="flex flex-col gap-1.5 pt-0.5">
+            {/* Three actions, because they answer three different questions.
+                "Vaga" reads the description we captured — offline, and without
+                telling the employer you looked. "Site" is the posting itself.
+                "Aplicar" is the form, which on Lever is a different URL from
+                the description: sending someone to a form for a job they have
+                not read is the wrong default.
+
+                On mobile they sit in a row under the content; from `sm` up they
+                stack in the right-hand column. */}
+            <div className="col-span-2 flex flex-wrap gap-1.5 sm:col-span-1 sm:flex-col sm:pt-0.5">
+              <button
+                type="button"
+                popoverTarget={`job-modal-${r.jobId}`}
+                popoverTargetAction="show"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "font-mono text-xs",
+                  !r.pageText && "opacity-60",
+                )}
+                title={r.pageText ? "Descrição completa, offline" : "Ainda não capturada"}
+              >
+                vaga
+              </button>
               <a
                 href={r.url}
                 target="_blank"
                 rel="noopener"
                 className={cn(buttonVariants({ variant: "outline", size: "sm" }), "font-mono text-xs")}
               >
-                ver vaga
+                site ↗
               </a>
               {r.applyUrl && r.applyUrl !== r.url && (
                 <a
@@ -120,6 +140,7 @@ export function JobList({ rows, dense = false }: { rows: Row[]; dense?: boolean 
                 </a>
               )}
             </div>
+            <JobModal row={r} />
           </article>
         );
       })}

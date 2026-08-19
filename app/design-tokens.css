@@ -120,6 +120,31 @@
   font-weight: 400;
   line-height: 1.33;
   }
+  /* ---------------------------------------------------------------------
+     Extensão disciplinada da escala.
+
+     O DESIGN.md termina em 12px (caption-sm) porque foi desenhado para páginas
+     de marketing. Esta aplicação é uma grade de triagem: badges de cluster,
+     rótulos de fonte e metadados de linha precisam de dois degraus abaixo, ou
+     a densidade que torna a lista legível não existe.
+
+     Derivado, não inventado: mesma família, mesma progressão de line-height,
+     e o tracking sobe conforme o tamanho cai — que é o que a especificação faz
+     entre display e caption. Nada aqui é um valor solto; são os degraus que
+     faltavam na mesma régua.
+     --------------------------------------------------------------------- */
+  .type-meta {
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.36;
+  letter-spacing: 0.01em;
+  }
+  .type-micro {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  }
   .type-caption-bold {
   font-size: 14px;
   font-weight: 700;

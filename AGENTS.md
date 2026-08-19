@@ -49,12 +49,35 @@ dashboard Next.js em `localhost:3000`.
 > pela qualidade do emprego. `freshness` sem data vale 0,5; `benefits` em texto
 > curto vale 0,5 e **nunca** gera bloqueador.
 
-> **8. O dashboard nunca faz bind fora de `127.0.0.1`.**
+> **8. Todo frontend segue o `DESIGN.md`. Sem exceção.**
+> `DESIGN.md` (raiz) é a fonte da verdade visual — cores, tipografia, escala de
+> espaçamento, raios, motivos. Ele já está traduzido em `app/design-tokens.css`
+> (28 cores, 16 estilos de texto, 8 raios, 8 espaçamentos) e em `app/globals.css`.
+>
+> **Tela nova, componente novo, ajuste visual: derive dos tokens existentes.**
+> Nunca escreva cor, tamanho de fonte ou espaçamento fora da escala — nem
+> "só desta vez", nem "um valor aproximado". Se algo parece faltar no sistema,
+> a resposta é compor com o que existe, não inventar um valor novo.
+>
+> Na prática: use `var(--color-*)`, as classes `type-*`, e os utilitários de
+> espaçamento do Tailwind já mapeados. Um `#hex` literal ou um `text-[13px]`
+> num componente é sinal de que a regra foi quebrada — há teste cobrindo isso.
+>
+> Vale igual para responsividade: **toda tela precisa funcionar no celular**
+> (ver regra 9). Um layout que só existe no desktop não cumpriu o DESIGN.md.
+
+> **9. Toda tela funciona no celular.**
+> `export const viewport` com `width: device-width` no layout raiz — sem isso o
+> telefone renderiza a 980px e todo o CSS responsivo vira código morto. Grid de
+> múltiplas colunas precisa de fallback de coluna única; nada de largura fixa
+> acima de 360px; nunca limite o zoom. Coberto por `tests/mobile.test.ts`.
+
+> **10. O dashboard nunca faz bind fora de `127.0.0.1`.**
 > Não há autenticação nenhuma, e ele serve CV, funil e piso salarial. Em rede
 > compartilhada isso é publicação. `--hostname 127.0.0.1` nos scripts `dev` e
 > `start`; travado por teste. Ver `docs/security.md`.
 
-> **9. `??` não protege contra string vazia.**
+> **11. `??` não protege contra string vazia.**
 > Várias APIs devolvem `""` para campo não preenchido. Use `firstNonEmpty()`
 > de `src/core/sources/http.ts`. Esse bug já apagou 4.538 descrições uma vez.
 
@@ -118,6 +141,12 @@ rtk pnpm jho tasks done PT-0001
 # segurança
 rtk pnpm jho security check      # bind, PII versionada, segredos, permissões do banco
 
+# raspagem (robô de descrições)
+rtk pnpm jho scrape queue        # enfileira vagas por fit
+rtk pnpm jho scrape run          # captura e trata, em paralelo
+rtk pnpm jho scrape status       # situação da fila
+rtk pnpm jho scrape reparse      # reprocessa tudo sem baixar de novo
+
 # análise
 rtk pnpm jho stats               # diagnóstico do scorer e do funil (--json)
 
@@ -148,6 +177,7 @@ src/core/          lógica pura, compartilhada entre CLI e UI
   positioning/     plano da auditoria como dados
   report/          export markdown
   analytics/       estatística: Wilson, Spearman, diagnóstico de componente
+  scrape/          fila, robots.txt, captura e extração (duas etapas)
   security.ts      autoverificações (bind, PII, segredos, permissões)
   money.ts         value object (amount + currency + period)
   pdf.ts           extração de PDF (unpdf, JS puro) + limpeza de texto
@@ -246,6 +276,8 @@ descreva como pronto o que não está**.
 | `docs/cli.md` | Referência de comandos |
 | `docs/operations.md` | Rotina diária e semanal |
 | `docs/security.md` | **Antes de expor a UI ou publicar o repositório** |
+| `DESIGN.md` | **Antes de qualquer trabalho de frontend** |
+| `docs/adr/0009` | **Fila de raspagem — por que tabela e não broker** |
 | `docs/roadmap.md` | O que vem depois |
 | `docs/benchmark/` | Concorrentes e mercado |
 | `docs/product/` | **Visão, personas, user stories, backlog** |

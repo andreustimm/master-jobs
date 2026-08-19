@@ -24,7 +24,7 @@ export default async function Pipeline() {
         {APPLICATION_STATUSES.filter((s) => counts[s]).map((s) => (
           <Card key={s} className="min-w-[96px] gap-0 px-4 py-2.5">
             <div className="font-mono text-2xl font-bold tabular-nums">{counts[s]}</div>
-            <div className="mt-0.5 font-mono text-[10px] tracking-[.1em] text-muted-foreground uppercase">
+            <div className="mt-0.5 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
               {s}
             </div>
           </Card>
@@ -44,7 +44,7 @@ export default async function Pipeline() {
           {rows.map((r) => (
             <div
               key={r.jobId}
-              className="grid grid-cols-[52px_1fr_auto] items-center gap-4 bg-card px-5 py-3.5"
+              className="grid grid-cols-[44px_1fr] items-center gap-3 bg-card px-4 py-3.5 sm:grid-cols-[52px_1fr_auto] sm:gap-4 sm:px-5"
             >
               <div className="text-center">
                 <Fit value={r.fit} />
@@ -56,7 +56,7 @@ export default async function Pipeline() {
                   </Link>
                   <StatusBadge status={r.status} />
                   {r.channel && (
-                    <Badge variant="outline" className="font-mono text-[10px]">
+                    <Badge variant="outline" className="font-mono type-micro">
                       {r.channel}
                     </Badge>
                   )}
@@ -75,7 +75,11 @@ export default async function Pipeline() {
                 href={r.url}
                 target="_blank"
                 rel="noopener"
-                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "font-mono text-xs")}
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  // Own row on a phone; right-hand column from `sm` up.
+                  "col-span-2 justify-self-start font-mono text-xs sm:col-span-1 sm:justify-self-auto",
+                )}
               >
                 abrir →
               </a>

@@ -40,7 +40,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
           <strong className="text-foreground">{job.companyName}</strong>
           {job.locationRaw ? ` · ${job.locationRaw}` : ""}
         </p>
-        <p className="mt-1.5 font-mono text-[11.5px] text-muted-foreground">
+        <p className="mt-1.5 font-mono type-meta text-muted-foreground">
           {source?.label ?? job.sourceId} · visto em {job.firstSeenAt.slice(0, 10)}
         </p>
 
@@ -62,7 +62,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
             </a>
           )}
         </div>
-        <p className="mt-2 font-mono text-[11px] break-all text-muted-foreground">{job.url}</p>
+        <p className="mt-2 font-mono type-meta break-all text-muted-foreground">{job.url}</p>
       </header>
 
       {score && (
@@ -80,7 +80,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
               <Legend />
             </div>
 
-            <ul className="mt-4 list-disc pl-5 text-[13.5px] text-muted-foreground">
+            <ul className="mt-4 list-disc pl-5 type-caption-sm text-muted-foreground">
               {reasons.map((r, i) => (
                 <li key={i} className="mb-0.5">
                   {r}
@@ -89,19 +89,19 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
             </ul>
 
             {blockers.length > 0 && (
-              <p className="mt-3.5 text-[13.5px] text-destructive">⚠ {blockers.join("; ")}</p>
+              <p className="mt-3.5 type-caption-sm text-destructive">⚠ {blockers.join("; ")}</p>
             )}
 
             {matched.length > 0 && (
               <>
                 <Separator className="my-4" />
-                <p className="font-mono text-[11.5px] text-muted-foreground">
+                <p className="font-mono type-meta text-muted-foreground">
                   casadas: {matched.join(", ")}
                 </p>
               </>
             )}
             {missing.length > 0 && (
-              <p className="mt-1.5 font-mono text-[11.5px] text-muted-foreground">
+              <p className="mt-1.5 font-mono type-meta text-muted-foreground">
                 ausentes: {missing.join(", ")}
               </p>
             )}
@@ -111,7 +111,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
 
       <form action={trackAction} className="mb-7 flex flex-wrap items-center gap-2">
         <input type="hidden" name="jobId" value={job.id} />
-        <span className="font-mono text-[10.5px] tracking-[.1em] text-muted-foreground uppercase">
+        <span className="font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
           mover para
         </span>
         <select

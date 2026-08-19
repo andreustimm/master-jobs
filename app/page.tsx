@@ -27,7 +27,7 @@ export default async function Cockpit({
   return (
     <main>
       <header className="pt-11 pb-6">
-        <p className="mb-3 font-mono text-[11.5px] tracking-[.14em] text-muted-foreground uppercase">
+        <p className="mb-3 font-mono type-meta tracking-[.14em] text-muted-foreground uppercase">
           Cockpit
         </p>
         <h1 className="type-display-lg chevron mb-4 text-balance">
@@ -40,7 +40,7 @@ export default async function Cockpit({
         </p>
       </header>
 
-      <div className="mb-7 grid grid-cols-[repeat(auto-fit,minmax(126px,1fr))] gap-px overflow-hidden rounded-xl border bg-border">
+      <div className="mb-7 grid grid-cols-[repeat(auto-fit,minmax(104px,1fr))] gap-px overflow-hidden rounded-xl border bg-border">
         <Stat value={stats?.open?.toLocaleString("pt-BR") ?? "0"} label="vagas abertas" />
         <Stat value={stats?.companies?.toLocaleString("pt-BR") ?? "0"} label="empresas" />
         <Stat value={facets.named.toLocaleString("pt-BR")} label="empresa nomeada" />
@@ -81,7 +81,7 @@ export default async function Cockpit({
               const max = Math.max(...clusters.map((x) => Number(x.n)));
               return (
                 <div key={c.cluster}>
-                  <div className="flex justify-between text-[13px]">
+                  <div className="flex justify-between type-caption-sm">
                     <span className="font-mono">{c.cluster}</span>
                     <span className="font-mono text-muted-foreground">
                       {c.n} · melhor {Number(c.best).toFixed(0)}

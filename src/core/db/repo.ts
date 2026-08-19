@@ -9,6 +9,7 @@ import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "./client.ts";
 import {
   application,
+  jobPage,
   applicationEvent,
   job,
   jobScore,
@@ -39,12 +40,22 @@ export type BoardRow = {
   seniorityScore: number | null;
   geoScore: number | null;
   compScore: number | null;
+  freshnessScore: number | null;
+  benefitScore: number | null;
   blockers: unknown;
   reasons: unknown;
   descriptionLength: number;
+  /** Description captured offline by the scraper, if any. */
+  pageText: string | null;
+  pageTextLength: number;
+  pageExtracted: unknown;
+  pageFetchedAt: string | null;
   status: string | null;
   appliedAt: string | null;
 };
+
+/** How much captured description a list row carries. See the query below. */
+export const PREVIEW_CHARS = 2500;
 
 export type BoardFilters = {
   minFit?: number;
@@ -153,9 +164,23 @@ export async function listBoard(opts: BoardFilters = {}): Promise<BoardRow[]> {
       seniorityScore: jobScore.seniorityScore,
       geoScore: jobScore.geoScore,
       compScore: jobScore.compScore,
+      freshnessScore: jobScore.freshnessScore,
+      benefitScore: jobScore.benefitScore,
       blockers: jobScore.blockers,
       reasons: jobScore.reasons,
       descriptionLength: sql<number>`length(coalesce(${job.descriptionText}, ''))`,
+      // Captured offline by the scraper. Present means the description can be
+      // read without leaving the app — and without the employer seeing a visit.
+      //
+      // Truncated in SQL, not in the component: a board page carries dozens of
+      // rows, Next serialises the data twice (HTML plus the RSC payload), and
+      // full descriptions average 7.400 characters. Sending all of it would
+      // cost a megabyte to render a list nobody reads in full. The job's own
+      // page loads the complete text, where it is one row and free.
+      pageText: sql<string | null>`substr(${jobPage.text}, 1, ${PREVIEW_CHARS})`,
+      pageTextLength: sql<number>`length(coalesce(${jobPage.text}, ''))`,
+      pageExtracted: jobPage.extracted,
+      pageFetchedAt: jobPage.fetchedAt,
       status: application.status,
       appliedAt: application.appliedAt,
     })
@@ -163,6 +188,7 @@ export async function listBoard(opts: BoardFilters = {}): Promise<BoardRow[]> {
     .leftJoin(jobScore, eq(jobScore.jobId, job.id))
     .leftJoin(application, eq(application.jobId, job.id))
     .leftJoin(source, eq(source.id, job.sourceId))
+    .leftJoin(jobPage, eq(jobPage.jobId, job.id))
     .where(and(...conditions))
     .orderBy(...order)
     .limit(opts.limit ?? 200)

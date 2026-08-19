@@ -53,7 +53,7 @@ export default async function CandidateArea() {
             <p className="mt-1">
               {[person.location, person.email].filter(Boolean).join(" · ")}
             </p>
-            <p className="mt-2 font-mono text-[11px]">
+            <p className="mt-2 font-mono type-meta">
               identidade vem de <code>profile/profile.yaml</code>, para as duas fontes não divergirem
             </p>
           </CardContent>
@@ -165,7 +165,7 @@ export default async function CandidateArea() {
               </summary>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {gap.confirmed.map((t) => (
-                  <Badge key={t.term} variant="secondary" className="font-mono text-[11px]">
+                  <Badge key={t.term} variant="secondary" className="font-mono type-meta">
                     {t.term} · {Math.round(t.coverage * 100)}%
                   </Badge>
                 ))}
@@ -183,7 +183,7 @@ export default async function CandidateArea() {
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {gap.unused.map((t) => (
-                    <Badge key={t.term} variant="outline" className="font-mono text-[11px]">
+                    <Badge key={t.term} variant="outline" className="font-mono type-meta">
                       {t.term}
                     </Badge>
                   ))}
@@ -209,7 +209,7 @@ export default async function CandidateArea() {
               {history.map((h) => (
                 <div key={h.id} className="flex items-center gap-3 bg-card px-4 py-2.5 text-sm">
                   {h.isCurrent ? (
-                    <Badge className="text-[10px]">atual</Badge>
+                    <Badge className="type-micro">atual</Badge>
                   ) : (
                     <span className="w-[46px]" />
                   )}

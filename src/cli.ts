@@ -1410,6 +1410,117 @@ cv.command("gap")
     });
   });
 
+const scrape = program
+  .command("scrape")
+  .description("Robô que captura e trata as descrições de vaga (fila com status)");
+
+scrape
+  .command("queue")
+  .description("Enfileirar vagas para captura")
+  .option("--min-fit <n>", "só vagas acima deste fit", "45")
+  .option("-n, --limit <n>", "teto", "500")
+  .option("--refresh", "recapturar vagas que já têm página")
+  .action(async (opts: { minFit: string; limit: string; refresh?: boolean }) => {
+    await withDb(async () => {
+      await runMigrations();
+      const { enqueuePending } = await import("./core/scrape/queue.ts");
+      const r = await enqueuePending({
+        minFit: Number(opts.minFit),
+        limit: Number(opts.limit),
+        refresh: opts.refresh,
+      });
+      console.log(`${c.green("\u2713")} ${r.queued} na fila`);
+      console.log(c.dim("  Capturar: jho scrape run\n"));
+    });
+  });
+
+scrape
+  .command("run")
+  .description("Rodar as duas etapas: captura e tratamento")
+  .option("-c, --concurrency <n>", "workers simultâneos", "4")
+  .option("-n, --limit <n>", "teto de páginas nesta rodada")
+  .option("--fetch-only", "só capturar")
+  .option("--parse-only", "só tratar o que já foi capturado")
+  .action(async (opts: { concurrency: string; limit?: string; fetchOnly?: boolean; parseOnly?: boolean }) => {
+    await withDb(async () => {
+      await runMigrations();
+      const concurrency = Number(opts.concurrency);
+      const limit = opts.limit ? Number(opts.limit) : undefined;
+
+      if (!opts.parseOnly) {
+        const { runFetchStage } = await import("./core/scrape/fetcher.ts");
+        console.log(c.dim(`\n  Capturando com ${concurrency} worker(s)…`));
+        const r = await runFetchStage({ concurrency, limit });
+        console.log(
+          `${c.green("\u2713")} captura · ${r.stored} guardada(s) · ` +
+          c.dim(`${r.blocked} bloqueada(s) por robots.txt · ${r.failed} falha(s)`),
+        );
+      }
+
+      if (!opts.fetchOnly) {
+        const { runParseStage } = await import("./core/scrape/parser.ts");
+        console.log(c.dim(`  Tratando…`));
+        const r = await runParseStage({ concurrency, limit });
+        console.log(
+          `${c.green("\u2713")} tratamento · ${r.parsed} descrição(ões) · ` +
+          c.dim(`${r.failed} sem texto utilizável`),
+        );
+        if (r.rescored > 0) {
+          console.log(c.yellow(`  ! ${r.rescored} vaga(s) sem score — rode: jho jobs score`));
+        }
+      }
+      console.log();
+    });
+  });
+
+scrape
+  .command("status")
+  .description("Situação da fila")
+  .action(async () => {
+    await withDb(async () => {
+      const { dbQueue } = await import("./core/scrape/queue.ts");
+      const stats = await dbQueue.stats();
+      const order = ["pending", "fetching", "fetched", "parsing", "done", "failed", "blocked"];
+      console.log(`\n${c.bold("Fila de captura")}`);
+      const total = Object.values(stats).reduce((a, b) => a + b, 0);
+      if (total === 0) {
+        console.log(c.dim("  vazia — jho scrape queue\n"));
+        return;
+      }
+      for (const status of order) {
+        const n = stats[status] ?? 0;
+        if (n === 0) continue;
+        const tone = status === "failed" ? c.red : status === "done" ? c.green : c.dim;
+        console.log(`  ${tone(status.padEnd(10))} ${String(n).padStart(6)}`);
+      }
+      console.log();
+    });
+  });
+
+scrape
+  .command("retry")
+  .description("Devolver as falhas para a fila (ex.: depois de melhorar o extrator)")
+  .action(async () => {
+    await withDb(async () => {
+      const { retryFailed } = await import("./core/scrape/queue.ts");
+      const n = await retryFailed();
+      console.log(`${c.green("\u2713")} ${n} tarefa(s) de volta à fila\n`);
+    });
+  });
+
+scrape
+  .command("reparse")
+  .description("Reprocessar toda página já capturada, sem baixar de novo")
+  .action(async () => {
+    await withDb(async () => {
+      const { reparseAll } = await import("./core/scrape/parser.ts");
+      const r = await reparseAll();
+      console.log(
+        `${c.green("\u2713")} ${r.parsed} reprocessada(s) · ${c.dim(`${r.failed} sem texto`)}\n`,
+      );
+    });
+  });
+
 program
   .command("security")
   .description("Verificações de segurança específicas deste sistema")

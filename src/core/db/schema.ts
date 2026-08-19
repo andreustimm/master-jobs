@@ -630,3 +630,88 @@ export type MailSuggestion = typeof mailSuggestion.$inferSelect;
 export type NewPositioningTask = typeof positioningTask.$inferInsert;
 export type NewTargetAccount = typeof targetAccount.$inferInsert;
 export type MetricSnapshot = typeof metricSnapshot.$inferSelect;
+
+/* -------------------------------------------------------------------------- */
+/* Scraping queue                                                             */
+/* -------------------------------------------------------------------------- */
+
+export const SCRAPE_STATUSES = [
+  "pending",
+  "fetching",
+  "fetched",
+  "parsing",
+  "done",
+  "failed",
+  "blocked",
+] as const;
+
+export type ScrapeStatus = (typeof SCRAPE_STATUSES)[number];
+
+/**
+ * One unit of scraping work.
+ *
+ * The pipeline is split in two on purpose — `fetching` then `parsing` — because
+ * the two halves fail for unrelated reasons and cost unrelated amounts. Fetching
+ * is slow, rate-limited and can be refused by the site; parsing is free, offline
+ * and improves every time the extractor gets smarter. Keeping them apart means a
+ * better parser reprocesses the whole corpus without re-downloading a byte, and
+ * a site that blocks us never costs us the pages we already have.
+ */
+export const scrapeTask = sqliteTable(
+  "scrape_task",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    jobId: integer("job_id")
+      .notNull()
+      .references(() => job.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    status: text("status").notNull().default("pending"),
+    /** Higher runs first. Derived from fit, so good jobs get pages first. */
+    priority: real("priority").notNull().default(0),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    /** Set while a worker holds the task; lets a crashed claim be reclaimed. */
+    claimedAt: text("claimed_at"),
+    claimedBy: text("claimed_by"),
+    /** Backoff: not eligible for claim before this. */
+    runAfter: text("run_after"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("scrape_task_job_idx").on(t.jobId),
+    index("scrape_task_claim_idx").on(t.status, t.priority),
+  ],
+);
+
+/**
+ * The captured page, stored verbatim.
+ *
+ * Raw HTML is kept rather than only the extracted text because extraction is a
+ * guess that gets better: keeping the source means a parser fix is a reprocess,
+ * not a re-crawl. This is also what makes the job description available offline.
+ */
+export const jobPage = sqliteTable(
+  "job_page",
+  {
+    jobId: integer("job_id")
+      .primaryKey()
+      .references(() => job.id, { onDelete: "cascade" }),
+    /** Final URL after redirects — not always the one we asked for. */
+    finalUrl: text("final_url").notNull(),
+    httpStatus: integer("http_status").notNull(),
+    html: text("html"),
+    /** Extracted, readable description. Null until the parser has run. */
+    text: text("text"),
+    /** Structured fields the parser recovered, as JSON. */
+    extracted: text("extracted", { mode: "json" }),
+    contentHash: text("content_hash").notNull(),
+    bytes: integer("bytes").notNull().default(0),
+    fetchedAt: text("fetched_at").notNull().default(now),
+    parsedAt: text("parsed_at"),
+  },
+  (t) => [index("job_page_parsed_idx").on(t.parsedAt)],
+);
+
+export type ScrapeTask = typeof scrapeTask.$inferSelect;
+export type JobPage = typeof jobPage.$inferSelect;

@@ -42,7 +42,7 @@ export default async function Referrals() {
           {opps.map((o) => (
             <div
               key={o.jobId}
-              className="grid grid-cols-[52px_1fr_auto] items-center gap-4 bg-card px-5 py-3.5"
+              className="grid grid-cols-[44px_1fr] items-center gap-3 bg-card px-4 py-3.5 sm:grid-cols-[52px_1fr_auto] sm:gap-4 sm:px-5"
             >
               <div className="text-center">
                 <Fit value={o.fit} />
@@ -63,7 +63,11 @@ export default async function Referrals() {
                 href={o.applyUrl ?? o.url}
                 target="_blank"
                 rel="noopener"
-                className={cn(buttonVariants({ size: "sm" }), "font-mono text-xs")}
+                className={cn(
+                  buttonVariants({ size: "sm" }),
+                  // Own row on a phone; right-hand column from `sm` up.
+                  "col-span-2 justify-self-start font-mono text-xs sm:col-span-1 sm:justify-self-auto",
+                )}
               >
                 aplicar →
               </a>

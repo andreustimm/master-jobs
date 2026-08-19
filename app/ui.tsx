@@ -34,7 +34,7 @@ export function Fit({ value, className }: { value: number | null; className?: st
           ? "text-[var(--color-mid)]"
           : "text-muted-foreground";
   return (
-    <span className={cn("font-mono text-[22px] font-bold leading-none tabular-nums", tone, className)}>
+    <span className={cn("font-mono type-display-xs font-bold leading-none tabular-nums", tone, className)}>
       {value == null ? "—" : value.toFixed(0)}
     </span>
   );
@@ -82,7 +82,7 @@ export function StatusBadge({ status }: { status: string }) {
         ? "default"
         : "secondary";
   return (
-    <Badge variant={variant} className="font-mono text-[10px] tracking-wider uppercase">
+    <Badge variant={variant} className="font-mono type-micro tracking-wider uppercase">
       {status}
     </Badge>
   );
@@ -107,7 +107,7 @@ export function Stat({
       >
         {value}
       </div>
-      <div className="mt-1 font-mono text-[10.5px] tracking-[.1em] text-muted-foreground uppercase">
+      <div className="mt-1 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
         {label}
       </div>
     </div>

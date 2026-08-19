@@ -40,7 +40,7 @@ function QuickWin({ item }: { item: GapItem }) {
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div className="flex items-baseline gap-3">
           <span className="type-body-lg font-medium">{item.marketTerm}</span>
-          <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+          <Badge variant="outline" className="type-micro uppercase tracking-wide">
             {item.skill.category}
           </Badge>
         </div>
@@ -154,7 +154,7 @@ export default async function VocabularyPage() {
                 >
                   <div className="flex items-baseline gap-3">
                     <span className="type-body-md">{item.marketTerm}</span>
-                    <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                    <Badge variant="outline" className="type-micro uppercase tracking-wide">
                       {item.skill.category}
                     </Badge>
                   </div>

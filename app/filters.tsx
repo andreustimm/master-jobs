@@ -64,7 +64,7 @@ const chipClass = (active: boolean) =>
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="font-mono text-[10.5px] tracking-[.1em] text-muted-foreground uppercase">
+      <span className="font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
         {label}
       </span>
       {children}

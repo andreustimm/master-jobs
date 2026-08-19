@@ -96,9 +96,9 @@ export default async function SkillsPage() {
                   </span>
                   <span className="w-24 text-right text-xs">
                     {g.candidateStatus === "detected" ? (
-                      <Badge variant="secondary" className="text-[10px]">a auditar</Badge>
+                      <Badge variant="secondary" className="type-micro">a auditar</Badge>
                     ) : g.candidateStatus === "rejected" ? (
-                      <Badge variant="destructive" className="text-[10px]">rejeitada</Badge>
+                      <Badge variant="destructive" className="type-micro">rejeitada</Badge>
                     ) : (
                       <span className="text-muted-foreground">ausente</span>
                     )}
@@ -119,7 +119,7 @@ export default async function SkillsPage() {
 
           {Object.entries(byCategory).map(([cat, items]) => (
             <div key={cat} className="mb-6">
-              <h3 className="mb-2 font-mono text-[10.5px] tracking-[.1em] text-muted-foreground uppercase">
+              <h3 className="mb-2 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
                 {CATEGORY_LABEL[cat] ?? cat}
               </h3>
               <div className="divide-y overflow-hidden rounded-xl border">
@@ -127,7 +127,7 @@ export default async function SkillsPage() {
                   <div key={s.id} className="grid gap-2 bg-card px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold">{s.name}</span>
-                      <Badge variant="outline" className="font-mono text-[10px]">
+                      <Badge variant="outline" className="font-mono type-micro">
                         {s.occurrences}× no CV
                       </Badge>
                       <span className="ml-auto flex gap-2">
@@ -167,7 +167,7 @@ export default async function SkillsPage() {
             <h2 className="type-display-sm mb-3">Confirmadas</h2>
             <div className="flex flex-wrap gap-1.5">
               {confirmed.map((s) => (
-                <Badge key={s.id} className="font-mono text-[11px]">
+                <Badge key={s.id} className="font-mono type-meta">
                   {s.name}
                   {s.level ? ` · ${s.level}` : ""}
                 </Badge>
@@ -179,12 +179,12 @@ export default async function SkillsPage() {
 
       {rejected.length > 0 && (
         <section className="mt-8">
-          <h3 className="mb-2 font-mono text-[10.5px] tracking-[.1em] text-muted-foreground uppercase">
+          <h3 className="mb-2 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
             Rejeitadas ({rejected.length})
           </h3>
           <div className="flex flex-wrap gap-1.5">
             {rejected.map((s) => (
-              <Badge key={s.id} variant="outline" className={cn("font-mono text-[11px] line-through opacity-60")}>
+              <Badge key={s.id} variant="outline" className={cn("font-mono type-meta line-through opacity-60")}>
                 {s.name}
               </Badge>
             ))}

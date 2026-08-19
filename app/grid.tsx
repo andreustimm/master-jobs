@@ -72,7 +72,7 @@ export function Pagination({
       </div>
 
       <div className="flex items-center gap-1.5">
-        <span className="font-mono text-[10.5px] tracking-[.1em] text-muted-foreground uppercase">
+        <span className="font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
           por página
         </span>
         {PAGE_SIZES.map((n) => (
@@ -106,7 +106,7 @@ export function GridToolbar({
 
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2.5">
-      <span className="font-mono text-[10.5px] tracking-[.1em] text-muted-foreground uppercase">
+      <span className="font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
         densidade
       </span>
       <a href={href(base, state, { dense: undefined })} className={box(!dense)}>
@@ -145,10 +145,10 @@ export function Presets({ base }: { base: string }) {
           key={p.label}
           href={`${base}?${p.query}`}
           title={p.hint}
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-auto py-1.5 text-[13px] font-normal")}
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-auto py-1.5 type-caption-sm font-normal")}
         >
           {p.label}
-          <span className="ml-1 text-[11.5px] text-muted-foreground"> · {p.hint}</span>
+          <span className="ml-1 type-meta text-muted-foreground"> · {p.hint}</span>
         </a>
       ))}
     </div>
