@@ -91,6 +91,8 @@ rtk pnpm jho fx refresh          # cotações do BCE (Frankfurter)
 rtk pnpm jho fx show
 
 # e-mail (ADR 0008)
+rtk pnpm jho mail auth           # conecta o Gmail (escopo somente leitura)
+rtk pnpm jho mail fetch          # baixa .eml — não importa nada sozinho
 rtk pnpm jho mail import ~/mail --dry-run
 rtk pnpm jho mail suggestions    # mudanças de funil sugeridas por e-mail
 rtk pnpm jho mail accept <id> | dismiss <id>
@@ -141,7 +143,7 @@ src/core/          lógica pura, compartilhada entre CLI e UI
   scoring/         fit score determinístico (7 componentes) + persistência
                    score.ts · freshness.ts · benefits.ts · apply.ts
   profile/         carga e validação de profile.yaml (Zod)
-  mail/            parser MIME, classificador, extrator de job alert
+  mail/            parser MIME, classificador, extrator de job alert, Gmail OAuth
   positioning/     plano da auditoria como dados
   report/          export markdown
   analytics/       estatística: Wilson, Spearman, diagnóstico de componente

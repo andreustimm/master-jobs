@@ -115,3 +115,63 @@ cada reimportação.
   sugestão com justificativa visível, nunca ação automática.
 - `Message-ID` é a chave de deduplicação; um `.eml` salvo à mão sem esse header
   cai para o caminho do arquivo.
+
+
+---
+
+## Conectar o Gmail (F-01)
+
+O parser sempre funcionou com `.eml` exportado à mão. Isto automatiza a coleta,
+sem mudar nada do que acontece depois.
+
+### O que é preciso de você, uma vez
+
+Cinco minutos no [Google Cloud Console](https://console.cloud.google.com):
+
+1. Crie um projeto (ou use um existente).
+2. **APIs e serviços → Biblioteca →** ative a **Gmail API**.
+3. **Tela de consentimento OAuth →** tipo *Externo*, preencha o mínimo, e
+   adicione seu próprio e-mail em *Usuários de teste*. Não precisa publicar: um
+   app em teste funciona indefinidamente para os usuários de teste.
+4. **Credenciais → Criar credenciais → ID do cliente OAuth → App para
+   computador.**
+5. Copie o ID e a chave secreta para o `.env`:
+
+```
+GMAIL_CLIENT_ID=...apps.googleusercontent.com
+GMAIL_CLIENT_SECRET=...
+```
+
+### Depois disso
+
+```bash
+pnpm jho mail auth              # abre o consentimento, salva o token
+pnpm jho mail fetch             # baixa como .eml em data/mail
+pnpm jho mail import data/mail --dry-run
+pnpm jho mail import data/mail
+pnpm jho mail suggestions
+```
+
+### Decisões que valem explicar
+
+**Escopo somente leitura.** `gmail.readonly` não consegue enviar, apagar nem
+marcar nada. A ADR 0008 diz que e-mail é sinal de sourcing e nunca gatilho de
+ação; o escopo transforma isso em garantia estrutural em vez de promessa. Mesmo
+que o token vaze inteiro, ninguém mexe na sua caixa.
+
+**Redirect em loopback, com PKCE.** O fluxo "copie este código" está obsoleto e
+é passível de phishing. A resposta volta para um servidor em `127.0.0.1` numa
+porta efêmera, que existe pelos segundos do fluxo. O PKCE entra porque essa
+porta é local e qualquer processo da máquina poderia disputá-la — sem o
+verificador, um código interceptado bastaria.
+
+**`fetch` baixa, não importa.** Os `.eml` ficam em `data/mail` (ignorado pelo
+Git) para você ler antes de qualquer coisa tocar o banco. `mail import` segue
+sendo o único caminho de escrita, com `--dry-run` intacto.
+
+**Sem `googleapis`.** A biblioteca oficial traz uma árvore de dependências
+enorme para embrulhar quatro chamadas HTTP.
+
+**O token é credencial.** Fica em `.gmail.token.json`, modo 600, coberto por
+`*.token.json` no `.gitignore`. Para revogar:
+[myaccount.google.com/permissions](https://myaccount.google.com/permissions).

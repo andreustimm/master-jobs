@@ -214,7 +214,7 @@ nunca escreve em `application` — garantido por teste de arquitetura.
 
 ---
 
-### E4.2 🔨 Detectar mudança de funil no e-mail
+### E4.2 ✅ Detectar mudança de funil no e-mail
 > Como **Andreus**, quero que "infelizmente seguimos com outros candidatos" me
 > sugira marcar como rejeitado.
 
@@ -222,7 +222,9 @@ nunca escreve em `application` — garantido por teste de arquitetura.
 - [x] Classificador gera `mail_suggestion`
 - [x] `jho mail accept <id>` / `dismiss <id>`
 - [x] **E-mail nunca muda o funil sozinho** — só sugere
-- [ ] OAuth do Gmail (**F-01** — hoje exige `.eml` exportado à mão)
+- [x] OAuth do Gmail — `jho mail auth` e `jho mail fetch`
+- [x] Escopo somente leitura: o token não consegue enviar nem apagar
+- [x] `fetch` baixa `.eml`; **só `import` escreve no banco**
 
 **Trava de projeto:** e-mail é sinal de sourcing, jamais gatilho de ação.
 ADR 0008.

@@ -846,6 +846,73 @@ const mail = program
   .description("Ingest job alerts and ATS mail from your own inbox (ADR 0008)");
 
 mail
+  .command("auth")
+  .description("Conectar o Gmail (somente leitura) via OAuth")
+  .action(async () => {
+    const { authorize, credentialsFromEnv } = await import("./core/mail/gmail.ts");
+    const creds = credentialsFromEnv();
+    if (!creds) {
+      console.error(c.red("\n  GMAIL_CLIENT_ID e GMAIL_CLIENT_SECRET não estão definidos."));
+      console.log(c.dim("  Veja docs/email-ingestion.md — leva uns 5 minutos no Google Cloud.\n"));
+      process.exitCode = 1;
+      return;
+    }
+
+    console.log(c.dim("\n  Abra esta URL no navegador e autorize:\n"));
+    try {
+      const result = await authorize(creds, (url) => console.log(`  ${c.cyan(url)}\n`));
+      console.log(
+        `${c.green("\u2713")} Gmail conectado${result.email ? ` como ${c.bold(result.email)}` : ""}`,
+      );
+      console.log(c.dim(`  Token em ${result.savedTo} (modo 600, fora do Git)`));
+      console.log(c.dim("  Escopo: somente leitura. Não consegue enviar nem apagar nada.\n"));
+    } catch (error) {
+      console.error(c.red(`\n  ${(error as Error).message}\n`));
+      process.exitCode = 1;
+    }
+  });
+
+mail
+  .command("fetch")
+  .description("Baixar e-mails do Gmail como .eml (não importa — use `mail import` depois)")
+  .option("-q, --query <gmail>", "consulta na sintaxe do Gmail")
+  .option("-n, --max <n>", "teto de mensagens", "100")
+  .option("-o, --out <dir>", "destino", "data/mail")
+  .action(async (opts: { query?: string; max: string; out: string }) => {
+    const { credentialsFromEnv, fetchToDir, readToken } = await import("./core/mail/gmail.ts");
+    const creds = credentialsFromEnv();
+    if (!creds) {
+      console.error(c.red("\n  Credenciais ausentes. Ver docs/email-ingestion.md\n"));
+      process.exitCode = 1;
+      return;
+    }
+    const stored = await readToken();
+    if (!stored) {
+      console.error(c.red("\n  Gmail não conectado. Rode: jho mail auth\n"));
+      process.exitCode = 1;
+      return;
+    }
+
+    try {
+      const r = await fetchToDir(creds, stored, {
+        query: opts.query,
+        max: Number(opts.max),
+        outDir: opts.out,
+      });
+      console.log(
+        `\n${c.green("\u2713")} ${r.written} novo(s) · ${c.dim(`${r.skipped} já baixado(s) · ${r.found} encontrado(s)`)}`,
+      );
+      console.log(c.dim(`  Salvos em ${r.dir}`));
+      console.log(
+        c.dim(`  Nada entrou no banco ainda. Confira e rode: jho mail import ${opts.out} --dry-run\n`),
+      );
+    } catch (error) {
+      console.error(c.red(`\n  ${(error as Error).message}\n`));
+      process.exitCode = 1;
+    }
+  });
+
+mail
   .command("import <path>")
   .description("Parse .eml files from a directory or a single file")
   .option("--dry-run", "classify and report without writing anything")

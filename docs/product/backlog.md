@@ -68,7 +68,7 @@ no `jobs list`.
 
 ## P1 — Mudam a qualidade do dado do funil
 
-### F-01 · E-mail como fonte de dados ✅ decidido, 📋 a implementar
+### F-01 · E-mail como fonte de dados ✅
 
 > **Decisão tomada:** [ADR 0008](../adr/0008-ingestao-de-email-como-fonte-de-sourcing.md).
 > O caminho é legítimo e não aciona as cláusulas da §8.2 que mordem, sob três
