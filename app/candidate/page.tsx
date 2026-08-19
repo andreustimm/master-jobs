@@ -29,6 +29,9 @@ export default async function CandidateArea() {
         <Link href="/candidate/skills" className="text-sm text-primary hover:underline">
           skills →
         </Link>
+        <Link href="/candidate/vocabulary" className="text-sm text-primary hover:underline">
+          vocabulário →
+        </Link>
       </div>
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
         Cole o currículo aqui. Ele fica versionado — cada salvamento vira uma

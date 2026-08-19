@@ -3,11 +3,16 @@
  *
  * This is the only file in the context that knows SQL exists.
  */
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "../../../core/db/client.ts";
-import { candidateSkill, skill } from "../../../core/db/schema.ts";
+import { candidateSkill, job, jobScore, skill } from "../../../core/db/schema.ts";
 import type { Detection, SkillDefinition } from "../domain/types.ts";
-import type { CandidateSkillPort, PersistedSkill, SkillCatalogPort } from "../ports.ts";
+import type {
+  CandidateSkillPort,
+  PersistedSkill,
+  SkillCatalogPort,
+  TargetCorpusPort,
+} from "../ports.ts";
 
 export const drizzleCatalog: SkillCatalogPort = {
   async all(): Promise<SkillDefinition[]> {
@@ -68,5 +73,29 @@ export const drizzleCandidateSkills: CandidateSkillPort = {
       .where(
         and(eq(candidateSkill.candidateId, candidateId), eq(candidateSkill.skillId, skillId)),
       );
+  },
+};
+
+export const drizzleTargetCorpus: TargetCorpusPort = {
+  async targetTexts(opts) {
+    const db = getDb();
+    const rows = await db
+      .select({ title: job.title, text: job.descriptionText })
+      .from(job)
+      .innerJoin(jobScore, eq(jobScore.jobId, job.id))
+      .where(
+        and(
+          isNull(job.closedAt),
+          gte(jobScore.fit, opts.minFit),
+          // A posting too short to read would dilute every frequency count
+          // toward zero without carrying any vocabulary of its own.
+          sql`length(${job.descriptionText}) >= 400`,
+        ),
+      )
+      .orderBy(desc(jobScore.fit))
+      .limit(opts.limit);
+
+    // Title included: it carries the densest vocabulary in the whole posting.
+    return rows.map((r) => `${r.title}\n${r.text ?? ""}`);
   },
 };

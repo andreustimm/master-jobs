@@ -56,7 +56,7 @@ import {
   seedCatalog,
   skillDemand,
 } from "./core/skills.ts";
-import { skillExtraction } from "./contexts/skills/index.ts";
+import { skillExtraction, vocabularyGap } from "./contexts/skills/index.ts";
 import { buildReport, exportDossiers } from "./core/report/markdown.ts";
 import { seedPositioning } from "./core/positioning/seed.ts";
 import { scoreAll } from "./core/scoring/apply.ts";
@@ -1310,6 +1310,79 @@ skills
       await runMigrations();
       const r = await seedCatalog();
       console.log(`${c.green("\u2713")} ${r.inserted} skill(s) adicionada(s), ${r.updated} atualizada(s)`);
+    });
+  });
+
+skills
+  .command("gap")
+  .description("Palavras que o mercado usa e o seu CV não — a lacuna de vocabulário")
+  .option("--min-fit <n>", "só vagas com fit acima disso definem o mercado", "60")
+  .option("--limit <n>", "teto de vagas lidas", "400")
+  .option("--all", "mostrar também o que já está coberto")
+  .action(async (opts) => {
+    await withDb(async () => {
+      await runMigrations();
+      const candidateId = await syncCandidateFromProfile();
+      const doc = await currentDocument(candidateId, "cv");
+      if (!doc) {
+        console.log(c.dim("\n  Nenhum currículo salvo. jho cv set <arquivo>\n"));
+        return;
+      }
+
+      const report = await vocabularyGap({
+        cvText: doc.content,
+        minFit: Number(opts.minFit),
+        limit: Number(opts.limit),
+      });
+
+      if (report.totalJobs === 0) {
+        console.log(c.dim(`\n  Nenhuma vaga com fit >= ${opts.minFit}. Baixe o corte.\n`));
+        return;
+      }
+
+      const pct = (n: number) => `${Math.round(n * 100)}%`;
+      console.log(
+        `\n${c.bold("Lacuna de vocabulário")} ${c.dim(`· ${report.totalJobs} vagas com fit >= ${opts.minFit}`)}`,
+      );
+      console.log(
+        c.dim(
+          `  cobertura ponderada ${pct(report.coverage.weighted)} · ` +
+          `${report.coverage.covered} cobertas · ${report.coverage.vocabulary} de vocabulário · ` +
+          `${report.coverage.missing} lacunas reais`,
+        ),
+      );
+
+      if (report.quickWins.length > 0) {
+        console.log(`\n${c.bold("Ganho rápido")} ${c.dim("— você tem a experiência, falta a palavra")}`);
+        for (const item of report.quickWins) {
+          console.log(
+            `  ${c.green(item.marketTerm.padEnd(22))} ${c.dim(`${pct(item.demand)} das vagas`)}`,
+          );
+          console.log(c.dim(`    CV escreve: ${item.cvTerms.join(", ")}`));
+        }
+        console.log(
+          c.dim("\n  Trocar a palavra só vale se a evidência existir. Não invente."),
+        );
+      } else {
+        console.log(c.dim("\n  Nenhuma lacuna de vocabulário — o CV fala a língua do mercado."));
+      }
+
+      if (report.realGaps.length > 0) {
+        console.log(`\n${c.bold("Lacuna real")} ${c.dim("— o mercado pede, o CV não mostra")}`);
+        for (const item of report.realGaps.slice(0, 12)) {
+          console.log(
+            `  ${item.marketTerm.padEnd(22)} ${c.dim(`${pct(item.demand)} · ${item.jobCount} vagas`)}`,
+          );
+        }
+      }
+
+      if (opts.all) {
+        console.log(`\n${c.bold("Já coberto")}`);
+        for (const item of report.items.filter((i) => i.kind === "covered")) {
+          console.log(`  ${c.dim(item.marketTerm.padEnd(22))} ${c.dim(pct(item.demand))}`);
+        }
+      }
+      console.log();
     });
   });
 

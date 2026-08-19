@@ -1,12 +1,15 @@
 /**
  * Ports for the skills context.
  *
- * Two exist, and only two, because only two absorb a variation that is real:
+ * Three exist, and only three, because only three absorb a variation that is real:
  *
  *  - `SkillCatalogPort` — today the catalogue is seeded from a file into
  *    SQLite; it could come from a shared service once more than one candidate
  *    exists. The extractor must not care.
  *  - `CandidateSkillPort` — persistence of the audit state.
+ *  - `TargetCorpusPort` — the job texts that define "what the market says".
+ *    Today that is the local corpus filtered by fit; it could be a shared
+ *    market dataset, or one narrowed to a single employer before an interview.
  *
  * There is deliberately no port for "text source". The extractor takes a
  * string; where the string came from — pasted CV, extracted PDF, LinkedIn
@@ -30,4 +33,9 @@ export type CandidateSkillPort = {
   existing(candidateId: number): Promise<PersistedSkill[]>;
   add(candidateId: number, detection: Detection, source: string): Promise<void>;
   refresh(candidateId: number, detection: Detection): Promise<void>;
+};
+
+export type TargetCorpusPort = {
+  /** Descriptions of jobs worth imitating the vocabulary of. */
+  targetTexts(opts: { minFit: number; limit: number }): Promise<string[]>;
 };

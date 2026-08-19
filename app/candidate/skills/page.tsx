@@ -48,6 +48,9 @@ export default async function SkillsPage() {
         <Link href="/candidate" className="text-sm text-primary hover:underline">
           ← currículo
         </Link>
+        <Link href="/candidate/vocabulary" className="text-sm text-primary hover:underline">
+          vocabulário →
+        </Link>
       </div>
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
         Detectadas automaticamente no seu currículo, contra um catálogo global de

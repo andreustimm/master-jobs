@@ -95,6 +95,10 @@ pnpm jho contacts seed       # empresas onde já trabalhou
 pnpm jho contacts add "Nome" -c Empresa -k former
 pnpm jho referrals           # vagas onde já conhece alguém
 
+# vocabulário e skills
+pnpm jho skills gap          # o que o mercado escreve e o CV não — lacuna de vocabulário
+pnpm jho skills detect       # detecta skills no CV (detectada != confirmada)
+
 # posicionamento
 pnpm jho tasks list --horizon 24h
 pnpm jho tasks done PT-0001

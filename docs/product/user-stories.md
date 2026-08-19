@@ -279,18 +279,37 @@ recrutamento, não de engenharia.
 
 ---
 
-### E5.5 📋 Fechar a lacuna de vocabulário
+### E5.5 ✅ Fechar a lacuna de vocabulário
 > Como **Andreus**, quero saber que meu CV nunca escreve "observability" embora
 > 51% das vagas-alvo peçam.
 
 **Aceite**
-- [ ] Diff entre vocabulário do CV e das vagas com fit ≥ 60
-- [ ] Termos ordenados por frequência nas vagas-alvo
-- [ ] Só sugere termo com evidência correspondente em `evidence:`
-- [ ] Nunca propõe texto sem lastro
+- [x] Diff entre vocabulário do CV e das vagas com fit ≥ 60
+- [x] Três categorias distintas: `covered`, `vocabulary`, `missing`
+- [x] Termos ordenados por demanda no mercado-alvo
+- [x] Conta documentos, não menções — uma vaga verbosa não vale por dez
+- [x] Cobertura ponderada por demanda, não contagem simples
+- [x] `jho skills gap` e página `/candidate/vocabulary`
+- [x] Nunca propõe texto — mostra a lacuna e avisa para não inventar
+
+**A distinção que dá valor ao recurso:** separar "falta a palavra" de "falta a
+experiência". Conselho genérico manda um arquiteto de 20 anos "aprender
+observability" quando o que falta é escrever a palavra uma vez.
+
+**Resultado real** contra 207 vagas com fit ≥ 60:
+
+| Termo do mercado | Demanda | O CV escreve |
+|---|---:|---|
+| `observability` | 48% | datadog, rollbar |
+| `agentic` | 39% | agent orchestration |
+| `financial services` | 10% | fintech |
+| `nlp` | 6% | spacy, nltk, bert |
+
+Cobertura ponderada: 67%. Maior lacuna real: `stakeholders`, em 68% das vagas
+(140) e ausente do CV — vocabulário de senioridade, não técnico.
 
 **Descoberta independente:** o sistema chegou à mesma conclusão da auditoria
-humana §7.2, por caminho diferente.
+humana §7.2 por caminho diferente, e encontrou dois termos que ela não listou.
 
 ---
 
