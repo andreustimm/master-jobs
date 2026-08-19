@@ -83,3 +83,91 @@ export async function buildReport(opts: ReportOptions = {}): Promise<{ markdown:
 
   return { markdown, path: target };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Offline dossiers                                                            */
+/* -------------------------------------------------------------------------- */
+
+import { mkdir as mkdirp, writeFile as write } from "node:fs/promises";
+import { join as joinPath } from "node:path";
+import { getJobDetail } from "../db/repo.ts";
+import { slugifyCompany } from "../ingest/normalize.ts";
+
+/**
+ * Write one markdown file per job into the Obsidian vault.
+ *
+ * The descriptions are already offline — they have been in `job.description_text`
+ * since the first sync, which is why the database is 127 MB. What was missing is
+ * a way to *read* them where the user actually thinks. A dossier in the vault
+ * can be annotated, linked to the CV, and searched next to the positioning
+ * audit, none of which a terminal pager allows.
+ */
+export async function exportDossiers(opts: {
+  minFit?: number;
+  limit?: number;
+  outDir?: string;
+  onlyTracked?: boolean;
+} = {}): Promise<{ written: number; dir: string }> {
+  const vault = process.env.JHO_VAULT_PATH;
+  const reportDir = process.env.JHO_REPORT_DIR ?? "05_Interviews/LinkedIn";
+  const dir =
+    opts.outDir ?? (vault ? joinPath(vault, reportDir, "vagas") : joinPath(process.cwd(), "out", "vagas"));
+
+  await mkdirp(dir, { recursive: true });
+
+  let rows = await listBoard({ minFit: opts.minFit ?? 60, limit: opts.limit ?? 50 });
+  if (opts.onlyTracked) rows = rows.filter((r) => r.status !== null);
+
+  let written = 0;
+  for (const row of rows) {
+    const detail = await getJobDetail(row.jobId);
+    if (!detail) continue;
+    const { job, score, application } = detail;
+
+    const blockers = (score?.blockers as string[]) ?? [];
+    const matched = (score?.matchedKeywords as string[]) ?? [];
+    const reasons = (score?.reasons as string[]) ?? [];
+
+    // Obsidian reads frontmatter, so the numbers become queryable in the vault.
+    const front = [
+      "---",
+      `titulo: "${job.title.replace(/"/g, "'")}"`,
+      `empresa: "${job.companyName.replace(/"/g, "'")}"`,
+      `fit: ${score?.fit ?? ""}`,
+      `cluster: ${score?.cluster ?? ""}`,
+      `status: ${application?.status ?? "não triada"}`,
+      `local: "${(job.locationRaw ?? "").replace(/"/g, "'")}"`,
+      `fonte: ${job.sourceId}`,
+      `publicada: ${job.postedAt?.slice(0, 10) ?? ""}`,
+      `url: ${job.url}`,
+      blockers.length ? `bloqueios: [${blockers.map((b) => `"${b}"`).join(", ")}]` : "bloqueios: []",
+      "tags: [vaga]",
+      "---",
+      "",
+    ].join("\n");
+
+    const body = [
+      `# ${job.title}`,
+      "",
+      `**${job.companyName}**${job.locationRaw ? ` · ${job.locationRaw}` : ""}`,
+      "",
+      score ? `Fit **${score.fit.toFixed(1)}** · cluster \`${score.cluster}\`` : "",
+      "",
+      ...(reasons.length ? ["## Por que pontuou assim", "", ...reasons.map((r) => `- ${r}`), ""] : []),
+      ...(blockers.length ? [`> ⚠ **Bloqueios:** ${blockers.join("; ")}`, ""] : []),
+      ...(matched.length ? [`**Keywords casadas:** ${matched.join(", ")}`, ""] : []),
+      `[Ver vaga](${job.url})${job.applyUrl && job.applyUrl !== job.url ? ` · [Aplicar](${job.applyUrl})` : ""}`,
+      "",
+      "## Descrição",
+      "",
+      job.descriptionText ?? "_Sem descrição — esta vaga entrou por um ponteiro (job alert)._",
+      "",
+    ].join("\n");
+
+    const name = `${slugifyCompany(job.companyName)}-${job.id}.md`;
+    await write(joinPath(dir, name), front + body, "utf8");
+    written++;
+  }
+
+  return { written, dir };
+}

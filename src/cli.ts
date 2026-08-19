@@ -23,11 +23,24 @@ import {
   seedWorkHistory,
 } from "./core/contacts.ts";
 import { decideSuggestion, importMail, listSuggestions } from "./core/mail/run.ts";
+import {
+  ENGAGEMENT_KINDS,
+  PILLARS,
+  coldTargets,
+  draftPost,
+  listPosts,
+  markEngagement,
+  markPublished,
+  metricTrend,
+  pendingEngagements,
+  queueEngagement,
+  recordMetric,
+} from "./core/positioning/engage.ts";
 import { addJob } from "./core/ingest/manual.ts";
 import { syncAll, pruneClosed } from "./core/ingest/run.ts";
 import { verifyJobs } from "./core/ingest/verify.ts";
 import { loadProfile } from "./core/profile/load.ts";
-import { buildReport } from "./core/report/markdown.ts";
+import { buildReport, exportDossiers } from "./core/report/markdown.ts";
 import { seedPositioning } from "./core/positioning/seed.ts";
 import { scoreAll } from "./core/scoring/apply.ts";
 import { loadSources } from "./core/sources/config.ts";
@@ -547,7 +560,8 @@ jobs
 jobs
   .command("show <id>")
   .description("Full detail for one job, including why it scored the way it did")
-  .action(async (id: string) => {
+  .option("-f, --full", "print the entire description instead of the first 1200 chars")
+  .action(async (id: string, opts: { full?: boolean }) => {
     await withDb(async () => {
       const rows = await getDb()
         .select()
@@ -601,8 +615,13 @@ jobs
       }
 
       if (j.descriptionText) {
-        console.log(c.bold("\nDescription (first 1200 chars)"));
-        console.log(c.dim(j.descriptionText.slice(0, 1200)));
+        const full = opts.full === true;
+        const shown = full ? j.descriptionText : j.descriptionText.slice(0, 1200);
+        console.log(c.bold(`\nDescription${full ? "" : ` (1200 de ${j.descriptionText.length} chars)`}`));
+        console.log(c.dim(shown));
+        if (!full && j.descriptionText.length > 1200) {
+          console.log(c.dim(`\n  ... use --full para ver tudo (${j.descriptionText.length} chars, já offline)`));
+        }
       }
       console.log();
     });
@@ -902,6 +921,229 @@ mail
     });
   });
 
+/* --------------------------------- engage --------------------------------- */
+
+const engage = program
+  .command("engage")
+  .description("Assisted engagement queue — the agent drafts, you act (ADR 0001)");
+
+engage
+  .command("add <url>")
+  .description("Queue a comment, connection or message")
+  .option("-k, --kind <name>", ENGAGEMENT_KINDS.join(" | "), "comment")
+  .option("-n, --name <text>", "who")
+  .option("-r, --role <text>", "their role")
+  .option("-c, --company <text>", "their company")
+  .option("--why <text>", "why this target matters — keeps the queue intentional")
+  .option("-d, --draft <text>", "the text you will post")
+  .option("--for <date>", "queue for a specific day (YYYY-MM-DD)")
+  .action(async (url: string, opts: {
+    kind: string; name?: string; role?: string; company?: string;
+    why?: string; draft?: string; for?: string;
+  }) => {
+    if (!(ENGAGEMENT_KINDS as readonly string[]).includes(opts.kind)) {
+      console.error(c.red(`Tipo inválido. Use: ${ENGAGEMENT_KINDS.join(", ")}`));
+      process.exitCode = 1;
+      return;
+    }
+    await withDb(async () => {
+      await runMigrations();
+      const id = await queueEngagement({
+        kind: opts.kind as never,
+        targetUrl: url,
+        targetName: opts.name,
+        targetRole: opts.role,
+        targetCompany: opts.company,
+        rationale: opts.why,
+        draft: opts.draft,
+        queuedFor: opts.for,
+      });
+      console.log(`${c.green("\u2713")} #${id} na fila · ${c.cyan(opts.kind)}`);
+      if (!opts.draft) {
+        console.log(c.dim("  Sem rascunho — peça a um agente para redigir antes de abrir o link."));
+      }
+    });
+  });
+
+engage
+  .command("next")
+  .alias("today")
+  .description("What to act on now")
+  .option("--limit <n>", "how many", "10")
+  .action(async (opts: { limit: string }) => {
+    await withDb(async () => {
+      const rows = await pendingEngagements(Number(opts.limit));
+      if (rows.length === 0) {
+        console.log(c.dim("\n  Fila vazia. A auditoria pede 2 comentários substantivos por dia útil.\n"));
+        return;
+      }
+      console.log(c.bold(`\n  ${rows.length} na fila\n`));
+      for (const r of rows) {
+        console.log(
+          `  ${String(r.id).padStart(3)} ${c.cyan(truncate(r.kind, 9))} ` +
+          `${truncate(r.targetName ?? r.targetCompany ?? "—", 26)} ${c.dim(r.queuedFor ?? "")}`,
+        );
+        if (r.rationale) console.log(c.dim(`      por quê: ${r.rationale}`));
+        if (r.draft) {
+          console.log(`      ${c.dim("rascunho:")} ${truncate(r.draft, 96)}`);
+        } else {
+          console.log(c.yellow("      sem rascunho"));
+        }
+        console.log(c.dim(`      ${r.targetUrl}`));
+        console.log();
+      }
+      console.log(c.dim("  jho engage done <id> · jho engage skip <id>\n"));
+    });
+  });
+
+engage
+  .command("done <id>")
+  .description("Mark as acted on")
+  .option("-o, --outcome <text>", "what happened")
+  .action(async (id: string, opts: { outcome?: string }) => {
+    await withDb(async () => {
+      await markEngagement(Number(id), "done", opts.outcome);
+      console.log(`${c.green("\u2713")} #${id} feito`);
+    });
+  });
+
+engage
+  .command("skip <id>")
+  .description("Drop it without acting")
+  .action(async (id: string) => {
+    await withDb(async () => {
+      await markEngagement(Number(id), "skipped");
+      console.log(`${c.dim("\u2013")} #${id} pulado`);
+    });
+  });
+
+engage
+  .command("targets")
+  .description("Target accounts never engaged — the §2.2 gap")
+  .action(async () => {
+    await withDb(async () => {
+      const rows = await coldTargets();
+      if (rows.length === 0) {
+        console.log(c.dim("\n  Nenhuma conta-alvo com URL cadastrada ainda.\n"));
+        return;
+      }
+      for (const r of rows) {
+        console.log(`  ${truncate(r.category, 12)} ${truncate(r.name, 28)} ${c.dim(r.company ?? "")}`);
+      }
+      console.log();
+    });
+  });
+
+/* ---------------------------------- posts --------------------------------- */
+
+const posts = program.command("posts").description("Content drafts, by pillar");
+
+posts
+  .command("add <slug>")
+  .description("Draft a post")
+  .requiredOption("-t, --title <text>", "title")
+  .requiredOption("-p, --pillar <name>", Object.keys(PILLARS).join(" | "))
+  .requiredOption("-b, --body <text>", "the post text")
+  .option("--lang <code>", "en | pt", "en")
+  .action(async (slug: string, opts: { title: string; pillar: string; body: string; lang: string }) => {
+    if (!(opts.pillar in PILLARS)) {
+      console.error(c.red(`Pilar inválido. Use: ${Object.keys(PILLARS).join(", ")}`));
+      process.exitCode = 1;
+      return;
+    }
+    await withDb(async () => {
+      await runMigrations();
+      const id = await draftPost({
+        slug,
+        pillar: opts.pillar as never,
+        title: opts.title,
+        body: opts.body,
+        lang: opts.lang,
+      });
+      console.log(`${c.green("\u2713")} rascunho #${id} · ${c.cyan(opts.pillar)}`);
+      console.log(c.dim(`  ${PILLARS[opts.pillar as keyof typeof PILLARS]}`));
+    });
+  });
+
+posts
+  .command("list")
+  .alias("ls")
+  .description("Show drafts and published posts")
+  .action(async () => {
+    await withDb(async () => {
+      const rows = await listPosts();
+      if (rows.length === 0) {
+        console.log(c.dim("\n  Nenhum post. A auditoria pede 1 original por semana.\n"));
+        return;
+      }
+      for (const r of rows) {
+        const mark = r.status === "published" ? c.green("\u2713") : " ";
+        console.log(`  ${mark} ${truncate(r.slug, 26)} ${c.cyan(truncate(r.pillar, 15))} ${truncate(r.title, 44)}`);
+      }
+      console.log();
+    });
+  });
+
+posts
+  .command("published <slug>")
+  .description("Mark a draft as published")
+  .option("--urn <urn>", "LinkedIn URN, when published through the official API")
+  .action(async (slug: string, opts: { urn?: string }) => {
+    await withDb(async () => {
+      await markPublished(slug, opts.urn);
+      console.log(`${c.green("\u2713")} ${slug} publicado`);
+    });
+  });
+
+/* -------------------------------- metrics --------------------------------- */
+
+const metrics = program
+  .command("metrics")
+  .description("Funnel metrics — recorded by hand, because no API exposes them");
+
+metrics
+  .command("record <key> <value>")
+  .description("Record a reading, e.g. ssi_total 62")
+  .option("--at <date>", "reading date (YYYY-MM-DD)")
+  .option("-n, --note <text>", "context")
+  .action(async (key: string, value: string, opts: { at?: string; note?: string }) => {
+    await withDb(async () => {
+      await runMigrations();
+      await recordMetric(key, Number(value), { at: opts.at, note: opts.note });
+      console.log(`${c.green("\u2713")} ${key} = ${value}`);
+    });
+  });
+
+metrics
+  .command("trend")
+  .alias("show")
+  .description("Every metric against its baseline")
+  .action(async () => {
+    await withDb(async () => {
+      const rows = await metricTrend();
+      if (rows.length === 0) {
+        console.log(c.dim("\n  Nenhuma métrica. Rode: jho db seed\n"));
+        return;
+      }
+      console.log(c.bold("\n  MÉTRICA                    BASELINE    ATUAL   DELTA"));
+      for (const r of rows) {
+        const delta =
+          r.delta === null
+            ? c.dim("  —  ")
+            : r.delta > 0
+              ? c.green(`+${r.delta.toFixed(1)}`)
+              : r.delta < 0
+                ? c.red(r.delta.toFixed(1))
+                : c.dim("0");
+        console.log(
+          `  ${truncate(r.key, 26)} ${String(r.baseline).padStart(8)} ${String(r.latest).padStart(8)}   ${delta}` +
+          (r.readings === 1 ? c.dim("  (só baseline)") : ""),
+        );
+      }
+      console.log(c.dim("\n  jho metrics record ssi_total 62\n"));
+    });
+  });
+
 /* --------------------------------- report --------------------------------- */
 
 program
@@ -923,6 +1165,26 @@ program
         return;
       }
       console.log(`${c.green("✓")} wrote ${path}`);
+    });
+  });
+
+program
+  .command("dossiers")
+  .description("Write one markdown file per job into the Obsidian vault, descriptions included")
+  .option("--min-fit <n>", "minimum fit", "60")
+  .option("--limit <n>", "how many", "50")
+  .option("--tracked", "only jobs already in the funnel")
+  .option("--out <dir>", "write somewhere else")
+  .action(async (opts: { minFit: string; limit: string; tracked?: boolean; out?: string }) => {
+    await withDb(async () => {
+      const r = await exportDossiers({
+        minFit: Number(opts.minFit),
+        limit: Number(opts.limit),
+        onlyTracked: opts.tracked,
+        outDir: opts.out,
+      });
+      console.log(`${c.green("\u2713")} ${r.written} dossiê(s) em ${r.dir}`);
+      console.log(c.dim("  Frontmatter com fit, cluster e bloqueios — consultável no Obsidian.\n"));
     });
   });
 
