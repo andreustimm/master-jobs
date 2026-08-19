@@ -21,6 +21,18 @@
 import { chromium } from "playwright";
 
 const BASE = process.env.E2E_BASE ?? "http://127.0.0.1:3000";
+
+/**
+ * Credenciais da execução.
+ *
+ * Autenticação é o padrão desde que o modo aberto deixou de ser, então o e2e
+ * precisa entrar antes de olhar qualquer tela. Crie a conta uma vez:
+ *
+ *   pnpm jho auth add-user e2e@local --role owner
+ *   echo "senha-de-teste-e2e" | pnpm jho auth set-password e2e@local --stdin
+ */
+const E2E_EMAIL = process.env.E2E_EMAIL ?? "andreus@zorbit.com.br";
+const E2E_PASSWORD = process.env.E2E_PASSWORD ?? "senha-forte-de-teste";
 const results = [];
 let failed = 0;
 
@@ -39,6 +51,43 @@ page.on("console", (m) => {
 page.on("pageerror", (e) => consoleErrors.push("pageerror: " + String(e).slice(0, 200)));
 
 try {
+  /* ------------------------------ Autenticação ----------------------------- */
+
+  // Antes de qualquer coisa: nada deve responder sem sessão.
+  const anonymous = await page.goto(`${BASE}/jobs`, { waitUntil: "domcontentloaded" });
+  check("página protegida redireciona para login", page.url().includes("/login"), page.url());
+  void anonymous;
+
+  const exportResponse = await page.request.get(`${BASE}/api/export`, { maxRedirects: 0 });
+  // O export carrega o acervo inteiro em CSV; ele vazando é o pior caso.
+  check(
+    "API de export não responde sem sessão",
+    exportResponse.status() >= 300 && exportResponse.status() < 400,
+    String(exportResponse.status()),
+  );
+
+  await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+  await page.fill('input[name="email"]', E2E_EMAIL);
+  await page.fill('input[name="password"]', "senha-propositalmente-errada");
+  await page.click('button[type="submit"]');
+  await page.waitForTimeout(900);
+  check("senha errada não entra", page.url().includes("/login"), page.url());
+  check(
+    "erro aparece na tela",
+    (await page.locator("form").textContent())?.includes("incorretos") ?? false,
+  );
+
+  await page.fill('input[name="email"]', E2E_EMAIL);
+  await page.fill('input[name="password"]', E2E_PASSWORD);
+  await page.click('button[type="submit"]');
+  await page.waitForTimeout(1400);
+  check("senha correta entra", !page.url().includes("/login"), page.url());
+
+  const sessionCookie = (await page.context().cookies()).find((c) => c.name === "jho_session");
+  // httpOnly é o que impede um XSS de ler a sessão.
+  check("cookie de sessão é httpOnly", sessionCookie?.httpOnly === true);
+  check("cookie de sessão é sameSite lax", (sessionCookie?.sameSite ?? "").toLowerCase() === "lax");
+
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   await page.evaluate(() => document.fonts.ready);
 
@@ -242,6 +291,15 @@ try {
     { name: "jho_theme", value: "hp", url: BASE },
     { name: "jho_mode", value: "system", url: BASE },
   ]);
+
+  /* --------------------------------- Logout -------------------------------- */
+
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "sair" }).click();
+  await page.waitForTimeout(1000);
+  await page.goto(`${BASE}/jobs`, { waitUntil: "domcontentloaded" });
+  // Revogado no servidor, não só apagado do navegador.
+  check("logout encerra a sessão de verdade", page.url().includes("/login"), page.url());
 
   check("nenhum erro de console", consoleErrors.length === 0, consoleErrors.slice(0, 2).join(" | "));
 } finally {

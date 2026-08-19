@@ -19,12 +19,13 @@ import { NextResponse, type NextRequest } from "next/server";
 const SESSION_COOKIE = "jho_session";
 
 /** Reachable without a session, by necessity. */
-const PUBLIC = ["/login", "/logout"];
+const PUBLIC = ["/login"];
 
 export function middleware(request: NextRequest) {
-  // Single-user is the default and needs no login; the guard still runs on
-  // every action, it just authorises a synthesised session.
-  if ((process.env.JHO_AUTH_MODE ?? "single-user") === "single-user") {
+  // Autenticação é o padrão. O modo aberto precisa ser pedido explicitamente,
+  // porque "só roda em loopback" não é uma barreira — é uma suposição sobre
+  // como o servidor foi iniciado.
+  if (process.env.JHO_AUTH_MODE === "open") {
     return NextResponse.next();
   }
 

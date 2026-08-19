@@ -202,14 +202,19 @@ describe("login and logout", () => {
   });
 });
 
-describe("single-user mode", () => {
-  it("is the default, so running locally needs no login", () => {
-    expect(isSingleUser({})).toBe(true);
-    expect(isSingleUser({ JHO_AUTH_MODE: "single-user" })).toBe(true);
+describe("modo aberto", () => {
+  it("exige autenticação por omissão", () => {
+    // Era o contrário e estava errado: o padrão sintetizava uma sessão e
+    // deixava currículo, funil e export acessíveis a qualquer requisição.
+    // "Só roda em loopback" protege contra a internet, não contra outro
+    // processo, outra conta da máquina, ou um bind mal configurado.
+    expect(isSingleUser({})).toBe(false);
+    expect(isSingleUser({ JHO_AUTH_MODE: "multi" })).toBe(false);
+    expect(isSingleUser({ JHO_AUTH_MODE: "" })).toBe(false);
   });
 
-  it("is off for anything else, which any deploy must set", () => {
-    expect(isSingleUser({ JHO_AUTH_MODE: "multi" })).toBe(false);
+  it("só abre quando pedido explicitamente", () => {
+    expect(isSingleUser({ JHO_AUTH_MODE: "open" })).toBe(true);
   });
 
   it("synthesises a session that still passes through the same guard", () => {

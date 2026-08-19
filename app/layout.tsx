@@ -52,6 +52,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const jar = await cookies();
   const theme = resolveTheme(jar.get(THEME_COOKIE)?.value);
   const mode = resolveMode(jar.get(MODE_COOKIE)?.value);
+  const { currentSession } = await import("./auth");
+  const signedIn = Boolean(await currentSession());
 
   return (
     // `data-mode` fica ausente em `system` — é a ausência que devolve a decisão
@@ -93,10 +95,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 job-hunt-os
               </span>
 
+              {/* Sem sessão os links levariam de volta ao login; mostrar um
+                  menu que não vai a lugar nenhum é ruído. */}
               <nav
                 className={cn(
                   "flex min-w-0 flex-1 items-center gap-5 overflow-x-auto",
                   "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                  !signedIn && "invisible",
                 )}
               >
                 {/* Escritos um a um: `typedRoutes` valida cada href contra a

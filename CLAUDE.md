@@ -138,7 +138,18 @@ dashboard Next.js em `localhost:3000`.
 > a triagem estar calibrada acelera o gargalo errado, e candidatura enviada não
 > volta. ADR 0010 define as três condições para reavaliar.
 
-> **13. Autorização passa por `can()`, e o escopo vem da sessão.**
+> **13. Autenticação é exigida por omissão.**
+> Nenhuma página nem API responde sem sessão válida — inclusive `/api/export`,
+> que carrega o acervo inteiro. O modo aberto existe mas precisa ser pedido:
+> `JHO_AUTH_MODE=open`. "Só roda em loopback" protege contra a internet, não
+> contra outro processo, outra conta da máquina, nem contra um bind errado —
+> que já aconteceu aqui. Segurança por omissão é a omissão ser a opção segura.
+>
+> Primeiro acesso: `jho auth add-user <email> --role owner` e
+> `jho auth set-password <email>`. Sem conta cadastrada, `/login` mostra esses
+> dois comandos em vez de um formulário sem saída.
+
+> **14. Autorização passa por `can()`, e o escopo vem da sessão.**
 > Toda Server Action chama `guard(...)` **antes** de qualquer efeito, e **toda
 > página chama `requirePage(...)`** — guardar só as actions deixa o dado
 > legível por quem não tem sessão. `middleware.ts` é a rede grossa (existe
@@ -149,13 +160,13 @@ dashboard Next.js em `localhost:3000`.
 > A decisão mora em `src/contexts/auth/domain/policy.ts`, é pura, e nega por
 > padrão. Coberto por teste de arquitetura.
 
-> **14. Chave de API nunca vai para o banco.**
+> **15. Chave de API nunca vai para o banco.**
 > O cadastro de provedores guarda o **nome da variável de ambiente**, jamais a
 > chave. Banco é copiado, versionado em backup e aberto por outros processos —
 > chave dentro dele viaja junto. BYOK só é promessa cumprida se for estrutural.
 > Há teste asserindo que nenhuma coluna guarda chave e que nada a imprime.
 
-> **15. `??` não protege contra string vazia.**
+> **16. `??` não protege contra string vazia.**
 > Várias APIs devolvem `""` para campo não preenchido. Use `firstNonEmpty()`
 > de `src/core/sources/http.ts`. Esse bug já apagou 4.538 descrições uma vez.
 

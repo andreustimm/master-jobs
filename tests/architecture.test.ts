@@ -296,9 +296,23 @@ describe("authorisation (AUTH-01)", () => {
   });
 
   it("revokes server-side on logout, not just clears the cookie", () => {
-    // A cookie the client deletes is still valid to whoever copied it.
-    const logout = read("app/logout/route.ts");
+    // Cookie que o cliente apaga continua válido para quem o copiou.
+    // Server Action, não Route Handler: a CSP declara `form-action 'self'` e
+    // bloqueava o POST de formulário para outra rota — o logout não acontecia,
+    // com o erro apenas no console.
+    const logout = read("app/logout-action.ts");
     expect(logout).toContain("endSession");
+    expect(logout).toContain('"use server"');
+  });
+
+  it("protege por omissão", () => {
+    // O padrão era `single-user`, que sintetizava sessão e deixava currículo,
+    // funil e o export CSV inteiro acessíveis a qualquer requisição. Agora o
+    // modo aberto tem de ser pedido.
+    const session = read("src/contexts/auth/app/session.ts");
+    expect(session).toContain('env.JHO_AUTH_MODE === "open"');
+    const middleware = readFileSync("middleware.ts", "utf8");
+    expect(middleware).toContain('process.env.JHO_AUTH_MODE === "open"');
   });
 
   it("keeps the permission decision in one pure function", () => {

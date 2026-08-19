@@ -8,7 +8,7 @@ import { drizzleSessions, magicLink } from "./infra/drizzle-store.ts";
 import {
   beginLogin,
   completeLogin,
-  isSingleUser,
+  isOpenMode,
   logout,
   singleUserSession,
   type AuthDeps,
@@ -19,7 +19,7 @@ import type { Session } from "./domain/types.ts";
 export { can, authorize, candidateScope, AuthorizationError } from "./domain/policy.ts";
 export type { Action, Decision, Resource, Role, Session } from "./domain/types.ts";
 export { ACTIONS, ROLES } from "./domain/types.ts";
-export { isSingleUser, singleUserSession } from "./app/session.ts";
+export { isOpenMode, isSingleUser, singleUserSession } from "./app/session.ts";
 
 const deps: AuthDeps = { sessions: drizzleSessions, identity: magicLink };
 
@@ -47,7 +47,7 @@ export async function resolveSession(
   token: string | null,
   candidateId: number | null = null,
 ): Promise<Session | null> {
-  if (isSingleUser()) return singleUserSession(candidateId);
+  if (isOpenMode()) return singleUserSession(candidateId);
   if (!token) return null;
   return drizzleSessions.resolve(token);
 }

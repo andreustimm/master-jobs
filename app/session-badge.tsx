@@ -1,5 +1,6 @@
-import { isSingleUser } from "../src/contexts/auth/index.ts";
+import { isOpenMode } from "../src/contexts/auth/index.ts";
 import { currentSession } from "./auth";
+import { logoutAction } from "./logout-action";
 
 /**
  * Who you are, and under which mode.
@@ -9,16 +10,18 @@ import { currentSession } from "./auth";
  * indistinguishable from "no" unless the UI says so.
  */
 export async function SessionBadge() {
-  const single = isSingleUser();
+  const open = isOpenMode();
   const session = await currentSession();
 
-  if (single) {
+  if (open) {
+    // Avisa, e avisa em cor de alerta: o modo aberto expõe currículo, funil e
+    // export a qualquer requisição que alcance o servidor.
     return (
       <span
-        className="type-micro rounded-full border border-[var(--color-hairline)] px-2 py-0.5 text-muted-foreground"
-        title="Sem login por design: um usuário, em loopback. Toda ação ainda passa pelo guard. Defina JHO_AUTH_MODE=multi para exigir login."
+        className="type-micro rounded-full border border-[var(--bad)] px-2 py-0.5 text-[var(--bad)]"
+        title="JHO_AUTH_MODE=open — sem autenticação. Currículo, funil e export ficam acessíveis a qualquer requisição. Remova a variável para exigir login."
       >
-        single-user
+        sem proteção
       </span>
     );
   }
@@ -32,8 +35,11 @@ export async function SessionBadge() {
   }
 
   return (
-    <form action="/logout" method="post" className="flex items-center gap-2">
-      <span className="type-micro text-muted-foreground">{session.email}</span>
+    <form action={logoutAction} className="flex items-center gap-2">
+      {/* O endereço inteiro estoura uma tela de 375px junto com o botão de
+          aparência. Some no celular: quem está logado sabe quem é, e o botão
+          de sair é o que precisa estar ao alcance. */}
+      <span className="hidden type-micro text-muted-foreground sm:inline">{session.email}</span>
       <button type="submit" className="type-micro text-[var(--primary-text)] hover:underline">
         sair
       </button>

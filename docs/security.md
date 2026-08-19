@@ -124,6 +124,13 @@ deliberada e documentada. `jho security check` avisa.
 
 ## Riscos aceitos conscientemente
 
+**Autenticação exigida por omissão** — ✅ **19/08.** O padrão era `single-user`,
+que sintetizava uma sessão e deixava currículo, funil e o export CSV inteiro
+acessíveis a qualquer requisição que alcançasse o servidor. Invertido: nada
+responde sem sessão, e o modo aberto precisa ser pedido com
+`JHO_AUTH_MODE=open`. Verificado: `/`, `/jobs`, `/candidate`, `/pipeline`,
+`/referrals` e `/api/export` respondem 307 para `/login` sem sessão.
+
 **Server Actions sem autenticação** — ✅ **resolvido em 19/08.** Toda Server
 Action passa por `guard(...)` antes de qualquer efeito, e o escopo por candidato
 nasce da sessão em vez de vir da entrada. O modo `single-user` mantém o uso

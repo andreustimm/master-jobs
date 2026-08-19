@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { finishLogin, isSingleUser } from "../../../src/contexts/auth/index.ts";
+import { finishLogin, isOpenMode } from "../../../src/contexts/auth/index.ts";
 import { SESSION_COOKIE } from "../../auth";
 
 /**
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const token = url.searchParams.get("token");
 
-  if (isSingleUser()) {
+  if (isOpenMode()) {
     return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
   }
   if (!token) {

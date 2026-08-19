@@ -93,23 +93,33 @@ export async function logout(token: string, deps: AuthDeps): Promise<void> {
 /* ------------------------------ Single user ------------------------------- */
 
 /**
- * The mode this system runs in today.
+ * Autenticação é exigida por padrão.
  *
- * A login screen protecting one person from themselves, on loopback, is
- * theatre — and theatre that gets disabled in frustration is worse than no
- * theatre. So `single-user` is a real, supported mode: the guard still runs,
- * every call still asks `can()`, but the session is synthesised.
+ * Era o contrário, e estava errado: o padrão `single-user` sintetizava uma
+ * sessão e deixava currículo, funil e o export CSV inteiro acessíveis a
+ * qualquer requisição. "Só roda em loopback" protege contra a internet, não
+ * contra outro processo, outra conta da máquina, ou um bind mal configurado —
+ * que já aconteceu aqui uma vez.
  *
- * The moment `JHO_AUTH_MODE=multi` is set — which any deploy must set — nothing
- * is synthesised and a real session is required. The guard code is identical in
- * both, so the multi-user path is not a rarely-exercised branch.
+ * O modo aberto continua existindo, mas agora precisa ser pedido:
+ * `JHO_AUTH_MODE=open`. Explícito, e quem escreve isso sabe o que está
+ * abrindo. Segurança por omissão significa a omissão ser a opção segura.
+ *
+ * O guard é o mesmo código nos dois modos, então o caminho autenticado nunca
+ * foi um ramo pouco exercitado.
  */
+export function isOpenMode(env: Record<string, string | undefined> = process.env): boolean {
+  return env.JHO_AUTH_MODE === "open";
+}
+
+/** @deprecated Use `isOpenMode`. Mantido para não quebrar chamada antiga. */
 export function isSingleUser(env: Record<string, string | undefined> = process.env): boolean {
-  return (env.JHO_AUTH_MODE ?? "single-user") === "single-user";
+  return isOpenMode(env);
 }
 
 export const SINGLE_USER_ROLES: Role[] = ["owner", "admin"];
 
+/** Sessão sintetizada do modo aberto. Só existe quando `JHO_AUTH_MODE=open`. */
 export function singleUserSession(candidateId: number | null, now = clock().now()): Session {
   return {
     userId: 0,

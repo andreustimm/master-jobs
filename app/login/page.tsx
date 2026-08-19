@@ -4,7 +4,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { passwordLoginAction } from "./actions";
-import { isSingleUser } from "../../src/contexts/auth/index.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -22,29 +21,29 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   // In single-user mode there is nobody to authenticate against.
-  if (isSingleUser()) {
+  // Sem nenhuma conta cadastrada, um formulário de login é um beco sem saída:
+  // não há o que digitar e nada na tela diz como sair disso. Mostra o caminho.
+  const { getDb } = await import("../../src/core/db/client.ts");
+  const { authUser } = await import("../../src/core/db/schema.ts");
+  const accounts = await getDb().select({ id: authUser.id }).from(authUser).limit(1);
+
+  if (accounts.length === 0) {
     return (
-      <main className="pt-10 pb-16">
-        <h1 className="type-display-md chevron mb-3">Login</h1>
-        <Card className="max-w-[62ch]">
+      <main className="flex min-h-[70vh] flex-col items-center justify-center py-16">
+        <h1 className="type-display-md chevron mb-4">Primeiro acesso</h1>
+        <Card className="w-full max-w-[46ch]">
           <CardContent className="pt-0">
             <p className="type-body-md">
-              O sistema está em <strong>modo single-user</strong> — sem login, porque não há
-              contra quem autenticar: você, em loopback.
+              Nenhuma conta cadastrada ainda. Crie a sua no terminal:
             </p>
-            <p className="type-body-sm mt-3 text-muted-foreground">
-              Toda ação ainda passa pelo mesmo guard de autorização; a sessão é sintetizada em
-              vez de exigida. Para ativar o login de verdade, defina{" "}
-              <code className="type-mono-sm rounded bg-[var(--color-cloud)] px-1 py-0.5">
-                JHO_AUTH_MODE=multi
-              </code>{" "}
-              no <code className="type-mono-sm">.env</code> e crie uma conta com{" "}
-              <code className="type-mono-sm">pnpm jho auth add-user</code>.
-            </p>
-            <p className="type-body-sm mt-4">
-              <Link href="/" className="text-[var(--primary-text)] hover:underline">
-                ← voltar ao cockpit
-              </Link>
+            <pre className="type-mono-sm mt-3 overflow-x-auto rounded-[var(--radius-surface)] bg-[var(--muted)] p-3">
+{`pnpm jho auth add-user ${"seu@email.com"} --role owner
+pnpm jho auth set-password ${"seu@email.com"}`}
+            </pre>
+            <p className="type-body-sm mt-4 text-muted-foreground">
+              Depois recarregue esta página. A senha é lida do terminal, nunca de
+              argumento — argumento aparece no histórico do shell e em{" "}
+              <code className="type-mono-sm">ps</code>.
             </p>
           </CardContent>
         </Card>
@@ -64,10 +63,13 @@ export default async function LoginPage({
           : null;
 
   return (
-    <main className="pt-10 pb-16">
-      <h1 className="type-display-md chevron mb-3">Entrar</h1>
+    // Centrado nos dois eixos: a tela de login não tem navegação nem conteúdo
+    // ao redor, e um formulário encostado no canto de uma tela vazia parece
+    // um erro de layout.
+    <main className="flex min-h-[70vh] flex-col items-center justify-center py-16">
+      <h1 className="type-display-md chevron mb-4">Entrar</h1>
 
-      <Card className="max-w-[42ch]">
+      <Card className="w-full max-w-[42ch]">
         <CardContent className="pt-0">
           <form action={passwordLoginAction} className="grid gap-4">
             <div className="grid gap-1.5">

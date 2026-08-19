@@ -1447,18 +1447,18 @@ auth
   .action(async () => {
     await withDb(async () => {
       await runMigrations();
-      const { isSingleUser } = await import("./contexts/auth/index.ts");
+      const { isOpenMode } = await import("./contexts/auth/index.ts");
       const { authUser } = await import("./core/db/schema.ts");
       const users = await getDb().select().from(authUser);
 
-      const single = isSingleUser();
-      console.log(`\n${c.bold("Modo")} ${single ? c.yellow("single-user") : c.green("multi")}`);
+      const open = isOpenMode();
+      console.log(`\n${c.bold("Modo")} ${open ? c.red("SEM PROTEÇÃO") : c.green("autenticado")}`);
       console.log(
         c.dim(
-          single
-            ? "  Sem login: você em loopback. Toda ação ainda passa pelo mesmo guard.\n" +
-              "  Qualquer deploy DEVE definir JHO_AUTH_MODE=multi."
-            : "  Login obrigatório.",
+          open
+            ? "  JHO_AUTH_MODE=open — currículo, funil e export acessíveis sem login.\n" +
+              "  Remova a variável do .env para exigir autenticação."
+            : "  Login obrigatório. Nenhuma página ou API responde sem sessão válida.",
         ),
       );
 
