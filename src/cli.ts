@@ -1344,6 +1344,33 @@ cv.command("gap")
   });
 
 program
+  .command("security")
+  .description("Verificações de segurança específicas deste sistema")
+  .command("check", { isDefault: true })
+  .description("Bind do servidor, dado pessoal versionado, segredos e permissões")
+  .action(async () => {
+    const { runSecurityCheck } = await import("./core/security.ts");
+    const findings = await runSecurityCheck();
+
+    const icon = { critical: c.red("\u2717"), warning: c.yellow("!"), ok: c.green("\u2713") };
+    console.log();
+    for (const f of findings) {
+      console.log(`${icon[f.level]} ${c.bold(f.title)}`);
+      console.log(c.dim(`  ${f.detail}`));
+      if (f.fix) console.log(c.dim(`  → ${f.fix}`));
+    }
+
+    const critical = findings.filter((f) => f.level === "critical").length;
+    const warnings = findings.filter((f) => f.level === "warning").length;
+    console.log(
+      `\n${critical > 0 ? c.red(`${critical} crítico(s)`) : c.green("nenhum crítico")} · ` +
+      `${warnings} aviso(s)\n`,
+    );
+    console.log(c.dim("  Análise completa: docs/security.md\n"));
+    if (critical > 0) process.exitCode = 1;
+  });
+
+program
   .command("stats")
   .description("Diagnóstico estatístico do scorer e do funil")
   .option("--json", "saída em JSON")

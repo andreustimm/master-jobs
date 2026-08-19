@@ -49,7 +49,12 @@ dashboard Next.js em `localhost:3000`.
 > pela qualidade do emprego. `freshness` sem data vale 0,5; `benefits` em texto
 > curto vale 0,5 e **nunca** gera bloqueador.
 
-> **8. `??` não protege contra string vazia.**
+> **8. O dashboard nunca faz bind fora de `127.0.0.1`.**
+> Não há autenticação nenhuma, e ele serve CV, funil e piso salarial. Em rede
+> compartilhada isso é publicação. `--hostname 127.0.0.1` nos scripts `dev` e
+> `start`; travado por teste. Ver `docs/security.md`.
+
+> **9. `??` não protege contra string vazia.**
 > Várias APIs devolvem `""` para campo não preenchido. Use `firstNonEmpty()`
 > de `src/core/sources/http.ts`. Esse bug já apagou 4.538 descrições uma vez.
 
@@ -107,6 +112,9 @@ rtk pnpm jho skills detect       # detecta skills no CV (detectada != confirmada
 rtk pnpm jho tasks list --horizon 24h
 rtk pnpm jho tasks done PT-0001
 
+# segurança
+rtk pnpm jho security check      # bind, PII versionada, segredos, permissões do banco
+
 # análise
 rtk pnpm jho stats               # diagnóstico do scorer e do funil (--json)
 
@@ -137,6 +145,7 @@ src/core/          lógica pura, compartilhada entre CLI e UI
   positioning/     plano da auditoria como dados
   report/          export markdown
   analytics/       estatística: Wilson, Spearman, diagnóstico de componente
+  security.ts      autoverificações (bind, PII, segredos, permissões)
   money.ts         value object (amount + currency + period)
   pdf.ts           extração de PDF (unpdf, JS puro) + limpeza de texto
   fx.ts            cotações com cache
@@ -205,7 +214,7 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 | Melhor fit | 84,0 |
 | Vagas com bloqueador | 468 |
 | Candidaturas no funil | 1 |
-| Testes | 227 |
+| Testes | 242 |
 
 > A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
 > candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de
@@ -233,6 +242,7 @@ descreva como pronto o que não está**.
 | `docs/sources-autenticadas.md` | Revelo, BairesDev, marketplaces logados |
 | `docs/cli.md` | Referência de comandos |
 | `docs/operations.md` | Rotina diária e semanal |
+| `docs/security.md` | **Antes de expor a UI ou publicar o repositório** |
 | `docs/roadmap.md` | O que vem depois |
 | `docs/benchmark/` | Concorrentes e mercado |
 | `docs/product/` | **Visão, personas, user stories, backlog** |
