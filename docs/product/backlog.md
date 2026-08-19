@@ -1,4 +1,11 @@
-# Backlog de discovery — 2026-08-18
+# Backlog de discovery
+
+Status conferido em 18/08/2026 contra o código, não contra a intenção. Oito
+itens estavam marcados como pendentes tendo sido entregues — corrigidos nesta
+revisão. Um backlog que mente sobre o próprio estado é pior que backlog nenhum,
+porque orienta a próxima decisão para o lugar errado.
+
+Contexto de produto: `vision.md` · `personas.md` · `user-stories.md`.
 
 Captura de tudo que foi pedido na sessão de 18/08/2026, priorizado por impacto
 no objetivo real: **converter posicionamento em entrevistas qualificadas**.
@@ -24,7 +31,7 @@ item move a agulha num funil de contratação real.
 Estes não são recursos novos. São bugs que fazem o sistema **descartar vagas
 que serviriam**, e portanto custam entrevistas hoje.
 
-### B-01 · Moeda ignorada no scoring 🔨
+### B-01 · Moeda ignorada no scoring ✅
 
 `scoreComp()` compara o valor bruto contra um piso em USD sem olhar
 `comp_currency`. O banco contém vagas em **CAD, AUD, MXN e PHP**. Uma vaga de
@@ -35,7 +42,7 @@ unidade.
 tabela de câmbio, e recusa explícita de comparar quando não há taxa — em vez de
 tratar BRL como USD silenciosamente.
 
-### B-02 · Períodos não normalizados 🔨
+### B-02 · Períodos não normalizados ✅
 
 O corpus traz cinco grafias vindas de cinco APIs: `annual`, `1 YEAR`, `year`,
 `hourly`, `monthly`. O scorer só reconhecia `"hour"` e `"month"`, então:
@@ -48,7 +55,7 @@ O corpus traz cinco grafias vindas de cinco APIs: `annual`, `1 YEAR`, `year`,
 **Correção:** `parsePeriod()` com aliases, cobrindo hora, dia, semana, mês, ano
 e projeto.
 
-### B-03 · Frescor da vaga não é usado 📋
+### B-03 · Frescor da vaga não é usado ✅
 
 `postedAt` é armazenado e nunca consultado. Em recrutamento, vaga com menos de
 48–72h tem taxa de resposta muito maior: poucos candidatos ainda, recrutador
@@ -95,7 +102,7 @@ Sem essa separação, o candidato só sabe "não fechou", que é quase inútil.
 **(c) Recruiter inbound.** Quem procurou, por qual cargo, e se o posicionamento
 está atraindo o nível certo.
 
-### F-02 · Área do candidato dinâmica 📋
+### F-02 · Área do candidato dinâmica ✅
 
 Hoje o perfil é `profile/profile.yaml`, estático e único. Precisa virar entidade
 consultável e editável, explicitamente porque **pode virar produto** — ou seja,
@@ -135,7 +142,7 @@ ainda precisam ser adicionadas à mão.
 
 ## P2 — Ampliam o modelo de match
 
-### M-01 · Ranges de remuneração por moeda 🔨
+### M-01 · Ranges de remuneração por moeda ✅
 
 Aceitar faixas em USD, BRL e outras, dinâmico para novas moedas.
 
@@ -150,7 +157,7 @@ chave, sem cadastro, 30 moedas incluindo todas as que aparecem no corpus.
 Fallback: `open.er-api.com` para moedas fora do ECB. Taxas cacheadas com data,
 para que um score seja sempre reproduzível a partir da taxa que foi usada.
 
-### M-02 · Modelos de engajamento 🔨
+### M-02 · Modelos de engajamento ✅
 
 Suporte a **hora, mês, ano e projeto fechado**.
 
@@ -159,7 +166,7 @@ USD 30k em 2 meses equivale a USD 180k/ano; os mesmos 30k em 12 meses ficam
 abaixo do piso. Sem duração não há comparação — por isso `annualize()` de um
 projeto sem duração retorna null em vez de inventar um prazo.
 
-### M-03 · Benefícios como critério de match 📋
+### M-03 · Benefícios como critério de match ✅
 
 Cruzar o que a vaga oferece com o que o candidato exige. Flags opcionais.
 
@@ -182,7 +189,7 @@ Detecção na vaga por padrões de texto na descrição.
 **Custo:** os pesos do scorer somam 100. Adicionar benefícios exige rebalancear
 e subir `SCORER_VERSION`.
 
-### M-04 · Ordenação e filtros 📋
+### M-04 · Ordenação e filtros ✅
 
 Ordenar por score, por valor e outros critérios; filtros compostos.
 

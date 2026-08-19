@@ -30,23 +30,52 @@ Arquivos envolvidos:
 Verbatim de `src/core/scoring/score.ts`:
 
 ```ts
-/** Component weights. They sum to 100 before penalties are subtracted. */
-const WEIGHTS = {
-  title: 35,
-  keyword: 30,
-  seniority: 12,
+export const WEIGHTS = {
+  title: 30,
+  keyword: 27,
+  seniority: 10,
   geo: 15,
   comp: 8,
+  freshness: 6,
+  benefits: 4,
 } as const;
 ```
 
-35 + 30 + 12 + 15 + 8 = **100**. Esse é o teto antes das penalidades. Depois:
+30 + 27 + 10 + 15 + 8 + 6 + 4 = **100**. Esse é o teto antes das penalidades. Depois:
 
 ```ts
 const penalty = blockers.length * 12 + (keywords.negatives.length > 0 ? 5 : 0);
-const rawTotal = title.score + keywords.score + seniority.score + geo.score + comp.score;
+const rawTotal =
+  title.score + keywords.score + seniority.score + geo.score + comp.score +
+  freshnessScore + benefitScore;
 const fit = Math.max(0, Math.min(100, rawTotal - penalty));
 ```
+
+### Por que os pesos mudaram na 1.2.0
+
+Cinco dos sete componentes respondem "esta vaga é a certa". Dois — `freshness` e
+`benefits` — respondem outra pergunta: **"candidatar-se ainda serve para alguma
+coisa?"**. Uma vaga aberta há seis semanas normalmente já tem shortlist, e um fit
+de 80 nela vale menos que um fit de 70 numa vaga de ontem.
+
+A 1.2.0 tirou 10 pontos dos componentes de fit (title 35→30, keyword 30→27,
+seniority 12→10) para financiar os dois de conversão. `geo` e `comp` não foram
+tocados: elegibilidade é eliminatória para este candidato, e remuneração já
+estava subponderada.
+
+Ambos os pesos novos são pequenos de propósito. Somados dão 10 pontos — o
+suficiente para desempatar vagas próximas, insuficiente para uma vaga fraca e
+nova passar na frente de uma forte. Frescor máximo compra 6 pontos; a diferença
+entre `architect` e `senior_ic` no título compra 9.
+
+**Efeito medido** ao repontuar as 6.239 vagas abertas:
+
+| | 1.1.0 | 1.2.0 |
+|---|---:|---:|
+| fit ≥ 45 | 1.207 | **1.600** |
+| fit ≥ 60 | 175 | **207** |
+| fit ≥ 70 | 23 | 23 |
+| Melhor fit | 85,9 | 84,0 |
 
 > **Invariante:** os pesos somam 100 antes das penalidades. Se você mexer em `WEIGHTS`, mantenha a soma em 100 — todo o vocabulário do projeto (`--min-fit 45`, o corte verde/amarelo em 70/50 do `jobs list`, o `--min-fit` do `report`) assume uma escala 0–100.
 
@@ -76,7 +105,7 @@ Detalhes que importam na hora de escrever um termo em `profile.yaml`:
 
 ---
 
-## Componente: title (máx. 35)
+## Componente: title (máx. 30)
 
 `scoreTitle(title, profile)` — o único componente que também decide o `cluster` gravado em `job_score.cluster`.
 
@@ -112,13 +141,13 @@ Vence o **maior score**, não o maior `raw` — o `cluster.weight` participa da 
 
 Pesos de cluster atuais em `profile.yaml`, e o teto de título que cada um permite:
 
-| Cluster | `weight` | Teto de título (`weight × 35`) | `cv_variant` |
+| Cluster | `weight` | Teto de título (`weight × 30`) | `cv_variant` |
 | --- | --- | --- | --- |
-| `architect` | 1.0 | 35.0 | `architect` |
-| `staff` | 0.95 | 33.25 | `staff` |
-| `ai_lead` | 0.95 | 33.25 | `ai` |
-| `eng_lead` | 0.85 | 29.75 | `lead` |
-| `senior_ic` | 0.6 | 21.0 | `senior` |
+| `architect` | 1.0 | 30.0 | `architect` |
+| `staff` | 0.95 | 28.5 | `staff` |
+| `ai_lead` | 0.95 | 28.5 | `ai` |
+| `eng_lead` | 0.85 | 25.5 | `lead` |
+| `senior_ic` | 0.6 | 18.0 | `senior` |
 
 Default quando nada casa: `{ score: 0, cluster: "other", reason: "Title does not match any target cluster" }`. No banco atual, `other` são 2491 das 5021 vagas — metade do corpus não é do target, e isso é esperado: os agregadores (`himalayas`, `remoteok`, `arbeitnow`) puxam board inteiro.
 
@@ -137,7 +166,7 @@ Distribuição real por cluster (`data/jobs.db`):
 
 ---
 
-## Componente: keyword (máx. 30, pode ser reduzido pelos negativos)
+## Componente: keyword (máx. 27, pode ser reduzido pelos negativos)
 
 `scoreKeywords(text, profile)` roda sobre `${title}\n${descriptionText ?? ""}` — título e corpo juntos.
 
@@ -183,7 +212,7 @@ Com o perfil atual, `strong` tem peso máximo 6 e `stack` máximo 5 — então *
 
 ---
 
-## Componente: seniority (máx. 12)
+## Componente: seniority (máx. 10)
 
 `scoreSeniority()` sobre o mesmo texto completo (título + corpo). É **inferência por regex**, não por campo estruturado — `job.seniority_raw` existe no schema mas não é lido pelo scorer.
 
@@ -269,6 +298,95 @@ O 4.0 de "não divulgou" é intencional: a maioria dos boards não publica faixa
 (Contagens sobre `job` inteiro — 5021 linhas. Restrito ao subconjunto pontuado, `job join job_score`, os números caem para 4795 *(null)* e 15 `annual`; os demais são idênticos.)
 
 Efeito concreto: job `52`, `Lawyer`, `80–180 hourly` → `top = 180`, considerado "abaixo do floor", `comp_score = 0.0`. Se `hourly` fosse reconhecido, seriam 374 400/ano e 8.0. São 5 vagas de 5021 hoje: `50` `Technical Support Analyst (Fr-Tu 6a-2:30p)` (`eng_lead`), `52` `Lawyer` (`other`), `60` `QA Support…` (`other`), `62` `Data Engineer ( WestBend AMS )` (`ai_lead`) e `65` `Field Service Engineer (Texas)` (`ai_lead`). Três delas carregam cluster-alvo em `job_score.cluster`, mas nenhuma é do target de fato — suporte técnico, jurídico e field service —, e é por isso que a armadilha não foi corrigida. Quem mexer em `scoreComp()` deve **normalizar o período antes de comparar**, não acrescentar mais um `===`.
+
+---
+
+## Componente: freshness (máx. 6)
+
+`scoreFreshness(input)` — em `src/core/scoring/freshness.ts`. O único componente
+que não avalia a vaga: avalia se ainda vale agir sobre ela.
+
+```
+factor = 1                              se idade <= 3 dias
+factor = 2 ^ (-(idade - 3) / 14)        se idade > 3 dias
+factor = 0.5                            se a idade é desconhecida
+```
+
+Platô de 3 dias, depois meia-vida de 14. Valores da curva:
+
+| Idade | 0d | 3d | 7d | 14d | 30d | 60d | 120d | *desconhecida* |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `factor` | 1,00 | 1,00 | 0,82 | 0,58 | 0,26 | 0,06 | 0,00 | 0,50 |
+| pontos | 6,0 | 6,0 | 4,9 | 3,5 | 1,6 | 0,4 | 0,0 | 3,0 |
+
+**Origem da data.** `postedAt` primeiro; na falta dele, `firstSeenAt`, que é um
+**teto** da idade e não a idade real — a vaga pode ser mais velha que o dia em
+que o sistema a viu. O `reason` diz qual foi usada ("primeiro visto; pode ser
+mais antiga"), porque esconder isso transformaria um palpite em fato.
+
+**Três decisões que parecem detalhe e não são:**
+
+1. **Data ausente vale 0,5, não 0.** Vários boards nunca expõem data de
+   publicação. Punir isso rebaixaria fontes inteiras por uma propriedade da API
+   delas em vez de uma propriedade do emprego — exatamente o viés que o
+   invariante de qualidade de fonte no `CLAUDE.md` existe para evitar.
+2. **Data futura é clampada em idade 0, nunca premiada.** Data no futuro é bug
+   de fuso na fonte. Sem o clamp, um offset errado compraria rank de graça.
+3. **Data ilegível cai para `unknown`.** Sem exceção, sem parcial.
+
+No acervo atual: 100% das vagas abertas têm `postedAt`, 3.091 dentro da janela
+de 3 dias e 3.059 entre 4 e 14 dias — ou seja, o componente hoje discrimina
+principalmente **dentro** das duas primeiras semanas, que é onde a decisão
+realmente acontece.
+
+---
+
+## Componente: benefits (máx. 4)
+
+`scoreBenefits(text, prefs)` — em `src/core/scoring/benefits.ts`. Duas funções
+deliberadamente separadas:
+
+- `detectBenefits(text)` → o que a vaga **menciona**. Propriedade da vaga, vale
+  armazenar (`job_score.detected_benefits`).
+- `scoreBenefits(text, prefs)` → o quanto isso **importa para este candidato**.
+  Muda toda vez que o `profile.yaml` muda.
+
+Vocabulário canônico de 14 benefícios com aliases, casados por substring sobre o
+texto normalizado. As chaves batem com `compensation.benefits.*` do perfil.
+
+```
+factor = 0.5                                    texto < 400 chars (ilegível)
+factor = 0.25                                   legível, nenhum benefício citado
+factor = clamp(0.25, 1, 0.30·preferred + 0.12·nice)
+```
+
+### A regra que sustenta o componente: silêncio não é ausência
+
+Uma vaga que não menciona plano de saúde quase certamente tem plano de saúde —
+descrições públicas omitem a seção de benefícios o tempo todo. Tratar "não
+mencionado" como "não oferecido" rebaixaria vagas boas por serem escritas de
+forma enxuta, e castigaria mais forte justamente as fontes que truncam a
+descrição.
+
+Consequência direta: **vaga com menos de 400 caracteres pontua neutro e nunca
+gera bloqueador**, mesmo que o candidato tenha marcado um benefício como
+`required`. Só vaga legível pode ser dita "não oferece X".
+
+### Armadilha de alias
+
+`"office stipend"` é substring de `"home office stipend"` — usá-lo como alias de
+`coworking` fazia toda vaga com auxílio home office ser detectada como coworking.
+Alias precisa ser distintivo o bastante para não disparar dentro de outro. Há
+teste cobrindo esse caso específico.
+
+### O que o acervo mostra
+
+| Benefício mais citado | Vagas |
+|---|---:|
+| `async_first` | 536 |
+| `health_stipend` | 415 |
+| `equity` | 391 |
+| `paid_time_off` | 327 |
 
 ---
 

@@ -1,7 +1,5 @@
 # job-hunt-os — instruções para agentes (Codex / OpenCode)
 
-Espelho de `CLAUDE.md`. **Editou um, edite o outro.**
-
 Sistema de sourcing, scoring e gestão de candidaturas de **Andreus Timm**
 (Senior AI Software Architect, 20+ anos, São Paulo/Brasil, remoto B2B,
 **sem autorização de trabalho nos EUA**).
@@ -9,22 +7,6 @@ Sistema de sourcing, scoring e gestão de candidaturas de **Andreus Timm**
 Objetivo: encontrar vagas que dão match com o perfil, ranqueá-las de forma
 auditável, e gerenciar o funil de candidaturas. Roda **localmente** — CLI +
 dashboard Next.js em `localhost:3000`.
-
----
-
-## Diferença específica deste arquivo: prefixo `rtk`
-
-Codex e OpenCode devem prefixar **todo** comando de shell com `rtk` — o proxy
-que reduz a saída sem alterar o comando:
-
-```bash
-rtk pnpm jho jobs sync
-rtk pnpm check
-rtk git status
-```
-
-Use `rtk proxy <comando>` quando precisar da saída bruta que o filtro omite.
-No Claude Code isso é automático via hook — **não** duplique o prefixo lá.
 
 ---
 
@@ -53,7 +35,7 @@ No Claude Code isso é automático via hook — **não** duplique o prefixo lá.
 > é isso. Imports relativos carregam extensão `.ts` explícita.
 
 > **5. Mexeu no scorer ou em `profile.yaml`? Bump `SCORER_VERSION`.**
-> Fica em `src/core/scoring/score.ts` (hoje `1.1.0`). Depois
+> Fica em `src/core/scoring/score.ts` (hoje `1.2.0`). Depois
 > `pnpm jho jobs score --all`. Sem o bump, duas gerações de score convivem na
 > mesma coluna sem sinal visível.
 
@@ -61,7 +43,13 @@ No Claude Code isso é automático via hook — **não** duplique o prefixo lá.
 > Tailoring de CV só cita o que está em `evidence:` no `profile.yaml`.
 > O que está em `growth:` é lacuna assumida — sinalize, nunca maquie.
 
-> **7. `??` não protege contra string vazia.**
+> **7. Dado faltante pontua neutro, nunca punitivo.**
+> Vaga sem data de publicação não é vaga velha; vaga sem descrição não é vaga
+> sem benefício. Punir ausência rebaixa a fonte pela qualidade da API dela, não
+> pela qualidade do emprego. `freshness` sem data vale 0,5; `benefits` em texto
+> curto vale 0,5 e **nunca** gera bloqueador.
+
+> **8. `??` não protege contra string vazia.**
 > Várias APIs devolvem `""` para campo não preenchido. Use `firstNonEmpty()`
 > de `src/core/sources/http.ts`. Esse bug já apagou 4.538 descrições uma vez.
 
@@ -131,7 +119,8 @@ src/core/          lógica pura, compartilhada entre CLI e UI
   db/              schema Drizzle (14 tabelas), client libSQL, queries, migrations
   sources/         um adapter por board público + registry
   ingest/          normalização, fingerprint, upsert, import manual, verificação
-  scoring/         fit score determinístico + persistência
+  scoring/         fit score determinístico (7 componentes) + persistência
+                   score.ts · freshness.ts · benefits.ts · apply.ts
   profile/         carga e validação de profile.yaml (Zod)
   mail/            parser MIME, classificador, extrator de job alert
   positioning/     plano da auditoria como dados
@@ -196,12 +185,18 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 | Item | Número |
 |---|---:|
 | Vagas abertas | 6.239 |
-| Vagas pontuadas | 6.553 |
+| Vagas pontuadas | 6.239 |
 | Empresas | 1.031 |
 | Fontes ativas | 13 |
-| Acima de 45 / 60 / 70 | 1.207 / 175 / 23 |
-| Melhor fit | 85,9 |
-| Testes | 126 |
+| Acima de 45 / 60 / 70 | 1.600 / 207 / 23 |
+| Melhor fit | 84,0 |
+| Vagas com bloqueador | 468 |
+| Candidaturas no funil | 1 |
+| Testes | 176 |
+
+> A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
+> candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de
+> funcionalidade deve ser lida contra isso — ver `docs/product/vision.md`.
 
 Pronto: sourcing (10 adapters), scoring com moeda, funil, e-mail, referrals,
 verificação de links, dashboard Next.js, export CSV e markdown.
@@ -227,12 +222,18 @@ descreva como pronto o que não está**.
 | `docs/operations.md` | Rotina diária e semanal |
 | `docs/roadmap.md` | O que vem depois |
 | `docs/benchmark/` | Concorrentes e mercado |
-| `docs/product/` | Visão, backlog priorizado |
+| `docs/product/` | **Visão, personas, user stories, backlog** |
 | `docs/adr/` | Por que cada decisão |
+| `docs/product/vision.md` | **Antes de propor funcionalidade** |
+| `docs/product/personas.md` | Antes de mexer em score ou UI |
 | `MIGRATION.md` | **Antes de criar arquivo novo em `src/`** |
 
-`CLAUDE.md` é o espelho deste arquivo para Claude Code. **Editou um,
+Este arquivo é o espelho de `CLAUDE.md`, gerado a partir dele. **Editou um,
 edite o outro.**
+
+> Conforme `~/.claude/RTK.md`: no Codex e no OpenCode todo comando de shell vai
+> prefixado com `rtk`. No Claude Code **não** — lá o hook global já reescreve.
+
 
 <!-- BEGIN:nextjs-agent-rules -->
 
