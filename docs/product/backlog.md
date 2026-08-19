@@ -285,13 +285,39 @@ O cadastro por URL (✅ `jho jobs add`) é o primeiro degrau. Submissão automá
 exige preencher formulários de ATS, o que reabre questões de termos de uso por
 plataforma — avaliar caso a caso, com o mesmo rigor da ADR 0001.
 
-### E-04 · Scraper por perfil do candidato 📋
+### E-04 · Scraper por perfil do candidato ✅
 
 Encaixa como mais um adapter da porta de fontes — o domínio não muda.
 
 > **Invariante:** raspar career pages próprias e sites cujo `robots.txt`
 > permite é território tranquilo. O LinkedIn continua fora, e com os job alerts
 > por e-mail (F-01a) não há necessidade de cruzar esse limite.
+
+**Entregue (19/08):** adapter `careers`, mais uma implementação da porta de
+fontes — o domínio não mudou, como previsto. `handle` é a URL da listagem,
+`label` é o empregador. `robots.txt` verificado antes de cada requisição, tanto
+da listagem quanto de cada vaga.
+
+Vagas são encontradas pela **forma da URL**, não por seletor de CSS: cada site
+nomeia sua marcação de um jeito, e seletor para página que não podemos abrir
+apodrece no próximo deploy. O texto da âncora é dividido em título e local,
+porque link de career page costuma embrulhar cargo, escritório e "Read more"
+no mesmo elemento — e "Account Executive London Read more" não casa com cluster
+nenhum, zerando a nota por motivo de formatação.
+
+**Resultado que confirma a tese do acervo:**
+
+| Fonte | Vagas | Fit médio |
+|---|---:|---:|
+| **careers:vercel** | 40 | **50,4** |
+| careers:anthropic | 40 | 43,2 |
+| lever:jobgether (anônima) | ~4.500 | 38,4 |
+| himalayas | ~1.200 | 32,7 |
+
+Empregador nomeado tem o melhor fit médio do acervo inteiro.
+
+**Limite honesto:** só listagem renderizada no servidor. Página que monta a
+lista no navegador devolve zero e diz isso, sugerindo `jho sources snippet`.
 
 ---
 

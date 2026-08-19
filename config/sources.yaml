@@ -92,6 +92,24 @@ sources:
     label: RemoteOK
     rationale: "Free API, worldwide remote, salary data on many postings"
 
+  # --- Careers pages: named employer, direct from the company ---------------
+  # These exist because 73,6% of the corpus comes from one aggregator that
+  # hides the employer by design, which breaks referral matching, cross-source
+  # dedupe, and any research that makes a cover letter worth reading. The
+  # sourcing metric is not "how many jobs" — it is "how many jobs with a named
+  # employer". `handle` is the listing URL; `label` is the employer.
+  #
+  # Only server-rendered listings work. A page that builds its list in the
+  # browser returns zero and says so — use `jho sources snippet` for those.
+  - kind: careers
+    handle: "https://vercel.com/careers"
+    label: Vercel
+    rationale: "Named employer, hires remote, adjacent to the stack in the profile"
+  - kind: careers
+    handle: "https://www.anthropic.com/jobs"
+    label: Anthropic
+    rationale: "Named employer, AI platform work matching the architect cluster"
+
   # --- Optional, needs credentials -----------------------------------------
   # Uncomment after setting ADZUNA_APP_ID / ADZUNA_APP_KEY in .env.local
   # - kind: adzuna

@@ -9,6 +9,7 @@ import {
   smartrecruiters,
 } from "./ats.ts";
 import { braintrust } from "./braintrust.ts";
+import { careers } from "./careers.ts";
 import {
   adzuna,
   arbeitnow,
@@ -30,6 +31,7 @@ export const ADAPTERS: Partial<Record<SourceKind, SourceAdapter>> = {
   remoteok,
   adzuna,
   braintrust,
+  careers,
 };
 
 export function getAdapter(kind: SourceKind): SourceAdapter {

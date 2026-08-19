@@ -17,6 +17,7 @@ const KINDS = [
   "remoteok",
   "adzuna",
   "braintrust",
+  "careers",
   "manual",
 ] as const satisfies readonly SourceKind[];
 

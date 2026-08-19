@@ -168,7 +168,7 @@ Referência completa: `docs/cli.md`.
 ```
 src/core/          lógica pura, compartilhada entre CLI e UI
   db/              schema Drizzle (14 tabelas), client libSQL, queries, migrations
-  sources/         um adapter por board público + registry
+  sources/         um adapter por board público + registry + careers (página própria)
   ingest/          normalização, fingerprint, upsert, import manual, verificação
   scoring/         fit score determinístico (7 componentes) + persistência
                    score.ts · freshness.ts · benefits.ts · apply.ts

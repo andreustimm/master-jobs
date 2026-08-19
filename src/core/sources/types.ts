@@ -39,6 +39,7 @@ export type SourceKind =
   | "remoteok"
   | "adzuna"
   | "braintrust"
+  | "careers"
   | "manual";
 
 export type SourceConfig = {

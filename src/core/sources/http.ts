@@ -70,6 +70,37 @@ export async function getJson<T = unknown>(
 }
 
 /**
+ * Fetch HTML, returning null instead of throwing.
+ *
+ * A careers page that 404s or blocks us is a fact about that page, not a reason
+ * to fail the sync — the adapter records it as a warning and moves on. That is
+ * the same rule the rest of the pipeline follows: one source's problem never
+ * takes down a run.
+ */
+export async function getText(
+  url: string,
+  opts: { timeoutMs?: number; headers?: Record<string, string> } = {},
+): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+        "user-agent": userAgent(),
+        ...opts.headers,
+      },
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    // A response this large is not a job posting.
+    return html.length > 3_000_000 ? null : html;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * First value that is actually present.
  *
  * Exists because `??` only falls through on null/undefined, and several job
