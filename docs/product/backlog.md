@@ -68,7 +68,7 @@ no `jobs list`.
 
 ## P1 — Mudam a qualidade do dado do funil
 
-### F-01 · E-mail como fonte de dados ✅
+### F-01 · E-mail como fonte de dados ✅ (código completo; falta só a credencial do usuário)
 
 > **Decisão tomada:** [ADR 0008](../adr/0008-ingestao-de-email-como-fonte-de-sourcing.md).
 > O caminho é legítimo e não aciona as cláusulas da §8.2 que mordem, sob três
@@ -279,11 +279,30 @@ Medir a qualidade do match em vez de assumir que os pesos estão certos:
 - Distribuição salarial por cluster, como base de negociação
 - Quando houver resultado de candidatura: o score prediz avanço no funil?
 
-### E-03 · Submissão autônoma por agentes 📋
+### E-03 · Submissão autônoma por agentes ✅ decidido (ADR 0010) — preparar sim, enviar não
 
 O cadastro por URL (✅ `jho jobs add`) é o primeiro degrau. Submissão automática
 exige preencher formulários de ATS, o que reabre questões de termos de uso por
 plataforma — avaliar caso a caso, com o mesmo rigor da ADR 0001.
+
+**Decisão (ADR 0010): preparar é automatizado, enviar é do usuário.**
+
+O argumento não é técnico. Este produto foi construído sobre a medição de que o
+gargalo é a decisão, não o envio. Automatizar o envio antes de a triagem estar
+calibrada acelera o gargalo errado — é o que a categoria de auto-appliers faz,
+e é por isso que a taxa de resposta deles desaba. Some-se que `jho stats` mostra
+poder estatístico nulo no funil: submeter automaticamente hoje seria automatizar
+um critério que ninguém verificou.
+
+**Entregue:** `jho prep <id>` monta o dossiê — bloqueadores primeiro, rede na
+empresa, evidências do perfil cujo vocabulário aparece naquele anúncio, lacuna
+de vocabulário daquela vaga, e os requisitos declarados. Ataca o custo real:
+uma boa candidatura leva de 40 a 90 minutos, e a maior parte é remontar contexto
+que o sistema já tem. Preparar é reversível e não representa ninguém.
+
+**Reavaliar quando:** ≥30 candidaturas com desfecho, plataforma cujos termos
+permitam por escrito, e aprovação explícita por vaga. Faltando qualquer uma, a
+resposta segue sendo não.
 
 ### E-04 · Scraper por perfil do candidato ✅
 

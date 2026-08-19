@@ -1410,6 +1410,76 @@ cv.command("gap")
     });
   });
 
+program
+  .command("prep <id>")
+  .description("Dossiê para se candidatar a uma vaga: bloqueios, rede, evidências e vocabulário")
+  .action(async (id: string) => {
+    await withDb(async () => {
+      const { buildDossier } = await import("./core/apply/dossier.ts");
+      const candidateId = await syncCandidateFromProfile();
+      const doc = await currentDocument(candidateId, "cv");
+      const d = await buildDossier(Number(id), doc?.content ?? null);
+
+      if (!d) {
+        console.error(c.red(`\n  Vaga ${id} não encontrada.\n`));
+        process.exitCode = 1;
+        return;
+      }
+
+      console.log(`\n${c.bold(d.job.title)} ${c.dim(`· ${d.job.companyName}`)}`);
+      console.log(
+        c.dim(
+          `  fit ${d.fit ?? "—"} · ${d.cluster ?? "sem cluster"}` +
+          (d.job.ageDays === null ? "" : ` · ${d.job.ageDays}d`) +
+          (d.job.locationRaw ? ` · ${d.job.locationRaw.slice(0, 50)}` : ""),
+        ),
+      );
+
+      // Blockers first: the cheapest information here is "do not bother".
+      if (d.blockers.length > 0) {
+        console.log(`\n${c.red("Bloqueadores")}`);
+        for (const b of d.blockers) console.log(c.red(`  ✗ ${b}`));
+      }
+
+      if (d.contacts.length > 0) {
+        console.log(`\n${c.bold("Sua rede nesta empresa")} ${c.green("— peça indicação antes de aplicar")}`);
+        for (const person of d.contacts) console.log(`  · ${person}`);
+      }
+
+      if (d.evidence.length > 0) {
+        console.log(`\n${c.bold("Evidências que casam com este anúncio")}`);
+        for (const e of d.evidence) {
+          console.log(`  ${c.dim(`[${e.area}]`)} ${e.line.slice(0, 150)}${e.line.length > 150 ? "…" : ""}`);
+          console.log(c.dim(`    em comum: ${e.matched.slice(0, 8).join(", ")}`));
+        }
+      }
+
+      if (d.vocabularyGaps.length > 0) {
+        console.log(`\n${c.bold("Trocar a palavra")} ${c.dim("— você tem, mas escreve diferente")}`);
+        for (const g of d.vocabularyGaps) {
+          console.log(`  ${c.green(g.term.padEnd(24))} ${c.dim(`CV escreve: ${g.cvSays.join(", ")}`)}`);
+        }
+      }
+
+      if (d.missing.length > 0) {
+        console.log(`\n${c.bold("Pedem e o CV não mostra")}`);
+        console.log(c.dim(`  ${d.missing.slice(0, 12).join(" · ")}`));
+      }
+
+      if (d.requirements.length > 0) {
+        console.log(`\n${c.bold("Requisitos do anúncio")}`);
+        for (const r of d.requirements.slice(0, 10)) console.log(`  · ${r.slice(0, 130)}`);
+      }
+
+      for (const w of d.warnings) console.log(c.yellow(`\n  ! ${w}`));
+
+      console.log(c.dim(`\n  ${d.job.applyUrl ?? d.job.url}`));
+      console.log(
+        c.dim(`  Depois de aplicar: jho track ${d.job.id} applied --channel ${d.contacts.length > 0 ? "referral" : "direct"}\n`),
+      );
+    });
+  });
+
 const scrape = program
   .command("scrape")
   .description("Robô que captura e trata as descrições de vaga (fila com status)");
