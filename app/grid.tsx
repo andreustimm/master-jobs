@@ -148,7 +148,13 @@ export function Presets({ base }: { base: string }) {
           className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-auto py-1.5 type-caption-sm font-normal")}
         >
           {p.label}
-          <span className="ml-1 type-meta text-muted-foreground"> · {p.hint}</span>
+          {/* A explicação junta com o rótulo dá 459px numa linha que o
+              buttonVariants marca como `whitespace-nowrap` — estourava a tela
+              de 375px. Ela já está no `title`, então no celular fica só lá. */}
+          <span className="ml-1 hidden type-meta text-muted-foreground sm:inline">
+            {" "}
+            · {p.hint}
+          </span>
         </a>
       ))}
     </div>

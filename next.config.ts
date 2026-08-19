@@ -54,9 +54,14 @@ const config: NextConfig = {
               process.env.NODE_ENV === "production"
                 ? "script-src 'self' 'unsafe-inline'"
                 : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-              "style-src 'self' 'unsafe-inline'",
+              // Google Fonts serve a folha em googleapis e os arquivos em
+              // gstatic. Sem estas duas origens a CSP bloqueia a fonte do
+              // DESIGN.md e a página cai no fallback do sistema — foi o que
+              // aconteceu, silenciosamente, até um browser de verdade
+              // reportar o bloqueio no console.
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "img-src 'self' data:",
-              "font-src 'self' data:",
+              "font-src 'self' data: https://fonts.gstatic.com",
               "connect-src 'self'",
               "form-action 'self'",
               "frame-ancestors 'none'",

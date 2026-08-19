@@ -103,6 +103,9 @@ dashboard Next.js em `localhost:3000`.
 > (ver regra 10). Um layout que só existe no desktop não cumpriu o DESIGN.md.
 
 > **10. Toda tela funciona no celular.**
+> Verificado por `pnpm test:e2e`, que mede `scrollWidth` real em 375px. Teste
+> estático não pega estouro horizontal — os dois que existiam passavam por
+> todos os greps e só apareceram num browser.
 > `export const viewport` com `width: device-width` no layout raiz — sem isso o
 > telefone renderiza a 980px e todo o CSS responsivo vira código morto. Grid de
 > múltiplas colunas precisa de fallback de coluna única; nada de largura fixa
@@ -235,6 +238,7 @@ rtk pnpm jho profile             # valida profile.yaml
 
 # desenvolvimento
 rtk pnpm check                   # typecheck + testes — verde antes de qualquer entrega
+rtk pnpm test:e2e                # browser real: fonte, tooltip, mobile (precisa do dev no ar)
 rtk pnpm db:generate             # gera migration após editar schema.ts
 ```
 

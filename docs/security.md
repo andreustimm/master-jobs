@@ -66,6 +66,13 @@ Nenhum cabeçalho definido. Sem CSP, o dashboard podia ser embutido em iframe, e
 um `Referer` completo era enviado ao clicar numa vaga — o empregador via o
 caminho da página de origem.
 
+> **Correção posterior, 19/08:** a CSP escrita aqui bloqueava o Google Fonts —
+> `style-src` sem `fonts.googleapis.com` e `font-src` sem `fonts.gstatic.com`.
+> A fonte do DESIGN.md nunca carregava e a aplicação inteira caía no fallback
+> do sistema, sem nenhum sinal fora do console do navegador. As duas origens
+> foram liberadas. Lição registrada: **CSP quebra em silêncio** — só um browser
+> de verdade reporta, e é por isso que `pnpm test:e2e` existe.
+
 **Correção:** `next.config.ts` passa a definir CSP, `X-Frame-Options: DENY`,
 `nosniff`, `Referrer-Policy: no-referrer` e `Permissions-Policy`. O
 `form-action 'self'` é o que impede um formulário injetado de postar o CV para

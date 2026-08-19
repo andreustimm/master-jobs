@@ -53,23 +53,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-background text-foreground antialiased" suppressHydrationWarning>
         <TooltipProvider>
           <header className="border-b bg-card">
-            {/* The nav scrolls sideways on a narrow screen rather than wrapping
-                into a second row that pushes the content down, or collapsing
-                into a hamburger that hides five links behind a tap. Five items
-                fit in a swipe. */}
-            <nav
-              className={cn(
-                "mx-auto flex h-14 max-w-[1140px] items-center gap-5 overflow-x-auto px-4",
-                "sm:gap-7 sm:px-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-              )}
-            >
+            {/*
+              Três faixas: marca, links roláveis, e o estado da sessão.
+
+              A rolagem lateral fica SÓ nos links, e o `min-w-0` é o que a faz
+              funcionar — sem ele um flex item não encolhe abaixo do próprio
+              conteúdo, o container cresce e quem rola passa a ser a página
+              inteira. Era 100px de rolagem horizontal em 375px, invisível no
+              desktop e só detectável medindo `scrollWidth` num browser real.
+            */}
+            <div className="mx-auto flex h-14 max-w-[1140px] items-center gap-4 px-4 sm:gap-6 sm:px-6">
               <span className="shrink-0 font-mono text-sm font-medium tracking-tight">
                 job-hunt-os
               </span>
-              {/* Written out rather than mapped: `typedRoutes` validates each
-                  href against the real route tree, and a mapped union defeats
-                  exactly that check. */}
-              <div className="flex shrink-0 gap-5">
+
+              <nav
+                className={cn(
+                  "flex min-w-0 flex-1 items-center gap-5 overflow-x-auto",
+                  "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                )}
+              >
+                {/* Escritos um a um: `typedRoutes` valida cada href contra a
+                    árvore real de rotas, e uma união mapeada anula essa checagem. */}
                 <Link href="/" className={navClass}>
                   Cockpit
                 </Link>
@@ -85,13 +90,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Link href="/candidate" className={navClass}>
                   Candidato
                 </Link>
-              </div>
-              {/* Pushed right, so the mode is visible without hunting for it.
-                  An auth mode you cannot see is an auth mode you assume. */}
-              <div className="ml-auto shrink-0">
+              </nav>
+
+              <div className="shrink-0">
                 <SessionBadge />
               </div>
-            </nav>
+            </div>
           </header>
           <div className="mx-auto max-w-[1140px] px-4 pb-24 sm:px-6">{children}</div>
         </TooltipProvider>
