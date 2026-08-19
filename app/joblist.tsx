@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import type { LocaleId } from "../src/core/i18n/index.ts";
 import type { listBoard } from "../src/core/db/repo.ts";
 import { formatMoney, money, parseCurrency, parsePeriod } from "../src/core/money.ts";
-import { Fit, ScoreBar, StatusBadge } from "./ui";
+import { ACTION_BUTTON, ACTION_GROUP, Fit, ScoreBar, StatusBadge } from "./ui";
 
 type Row = Awaited<ReturnType<typeof listBoard>>[number];
 
@@ -118,14 +118,14 @@ export function JobList({
 
                 On mobile they sit in a row under the content; from `sm` up they
                 stack in the right-hand column. */}
-            <div className="col-span-2 flex flex-wrap gap-1.5 sm:col-span-1 sm:flex-col sm:pt-0.5">
+            <div className={cn("col-span-2 sm:col-span-1 sm:pt-0.5", ACTION_GROUP)}>
               <button
                 type="button"
                 popoverTarget={`job-modal-${r.jobId}`}
                 popoverTargetAction="show"
                 className={cn(
                   buttonVariants({ variant: "outline", size: "sm" }),
-                  "font-mono text-xs",
+                  ACTION_BUTTON,
                   !r.pageText && "opacity-60",
                 )}
                 title={r.pageText ? t("jobDetail.fullDescription") : t("jobDetail.notCaptured")}
@@ -136,7 +136,7 @@ export function JobList({
                 href={r.url}
                 target="_blank"
                 rel="noopener"
-                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "font-mono text-xs")}
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }), ACTION_BUTTON)}
               >
                 {t("jobs.site")} ↗
               </a>
@@ -145,7 +145,7 @@ export function JobList({
                   href={r.applyUrl}
                   target="_blank"
                   rel="noopener"
-                  className={cn(buttonVariants({ size: "sm" }), "font-mono text-xs")}
+                  className={cn(buttonVariants({ size: "sm" }), ACTION_BUTTON)}
                 >
                   {t("jobs.apply")} →
                 </a>

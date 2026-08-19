@@ -21,6 +21,31 @@ import { cn } from "@/lib/utils";
  * vazando para a interface em inglês: 72 ocorrências de 8 strings, quase todas
  * daqui.
  */
+/**
+ * Grupo de ações de um card, e os botões dentro dele.
+ *
+ * Duas correções, ambas visíveis só no celular:
+ *
+ * **Largura.** As ações ficavam em `flex flex-wrap`, então cada botão media o
+ * próprio texto: 54px para "vaga", 69px para "site ↗", 93px para "aplicar →".
+ * Lado a lado isso lê como um botão menor que os outros, e foi assim que o
+ * defeito foi reportado. No desktop o problema não existia porque a coluna
+ * `sm:flex-col` já estica todos para a mesma largura — a inconsistência era
+ * entre as duas telas, não dentro de uma.
+ *
+ * `auto-fit` com mínimo em vez de três colunas fixas: em 320px três colunas
+ * espremeriam "aplicar →" para fora da caixa, e aqui a terceira desce para a
+ * linha seguinte em vez de estourar.
+ *
+ * **Altura.** 28px é alvo de toque apertado para um dedo. Sobe para 40px no
+ * celular e volta a 28px de `sm` para cima, onde o ponteiro é preciso e a
+ * lista tem 50 linhas para caber.
+ */
+export const ACTION_GROUP =
+  "grid grid-cols-[repeat(auto-fit,minmax(5.5rem,1fr))] gap-1.5 sm:flex sm:flex-col";
+
+export const ACTION_BUTTON = "h-10 font-mono text-xs sm:h-7";
+
 export const COMPONENTS = [
   { key: "titleScore", label: "score.title", className: "bg-[var(--color-brand)]" },
   { key: "keywordScore", label: "score.keyword", className: "bg-[var(--color-brand-bright)]" },

@@ -3,7 +3,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { companiesWithContacts, referralOpportunities } from "../../src/core/contacts.ts";
-import { Fit, StatusBadge } from "../ui";
+import { ACTION_BUTTON, Fit, StatusBadge } from "../ui";
 import { requirePage } from "../auth";
 import { getTranslator } from "../i18n";
 
@@ -68,11 +68,12 @@ export default async function Referrals() {
                 rel="noopener"
                 className={cn(
                   buttonVariants({ size: "sm" }),
+                  ACTION_BUTTON,
                   // Own row on a phone; right-hand column from `sm` up.
-                  "col-span-2 justify-self-start font-mono text-xs sm:col-span-1 sm:justify-self-auto",
+                  "col-span-2 justify-self-start sm:col-span-1 sm:justify-self-auto",
                 )}
               >
-                aplicar →
+                {t("jobs.apply")} →
               </a>
             </div>
           ))}
