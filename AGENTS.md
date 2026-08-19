@@ -184,7 +184,7 @@ rtk pnpm dev                     # dashboard em localhost:3000
 
 # banco
 rtk pnpm jho db migrate          # cria/atualiza o schema
-rtk pnpm jho db seed             # plano de posicionamento + baseline de métricas
+rtk pnpm jho db seed             # conta do dono + skills + provedores + posicionamento
 rtk pnpm jho db prune --days 90  # remove vagas fechadas sem candidatura
 
 # sourcing
@@ -198,6 +198,7 @@ rtk pnpm jho sources probe ashby textlayer        # testa um handle sem gravar
 rtk pnpm jho sources snippet revelo               # extrator para plataforma logada
 
 # autenticação
+rtk pnpm jho auth seed <email>   # cria a conta do dono, senha gerada e mostrada uma vez
 rtk pnpm jho auth status         # modo e contas
 rtk pnpm jho auth add-user <email> --role owner
 rtk pnpm jho auth set-password <email>   # senha (entrada escondida ou --stdin)

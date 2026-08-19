@@ -20,6 +20,8 @@ export { can, authorize, candidateScope, AuthorizationError } from "./domain/pol
 export type { Action, Decision, Resource, Role, Session } from "./domain/types.ts";
 export { ACTIONS, ROLES } from "./domain/types.ts";
 export { isOpenMode, isSingleUser, singleUserSession } from "./app/session.ts";
+export { generatePassword, seedOwner } from "./app/seed.ts";
+export type { SeedResult } from "./app/seed.ts";
 
 const deps: AuthDeps = { sessions: drizzleSessions, identity: magicLink };
 

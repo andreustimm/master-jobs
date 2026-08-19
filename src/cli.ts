@@ -141,15 +141,45 @@ db.command("prune")
   });
 
 db.command("seed")
-  .description("Load the positioning action plan and the July 2026 metrics baseline")
-  .action(async () => {
+  .description("Semear o banco: conta do dono, catálogo de skills, provedores e plano de posicionamento")
+  .option("--skip-auth", "não criar a conta do dono")
+  .action(async (opts: { skipAuth?: boolean }) => {
     await withDb(async () => {
       await runMigrations();
+
+      // Ordem deliberada: primeiro o que destrava o uso do sistema (entrar),
+      // depois o que o enriquece. Um seed que falha no meio deve ter deixado o
+      // login funcionando.
+      if (!opts.skipAuth) {
+        const { seedOwner } = await import("./contexts/auth/index.ts");
+        try {
+          const a = await seedOwner();
+          if (a.passwordSet && a.password) {
+            console.log(`${c.green("\u2713")} conta ${c.bold(a.email)}`);
+            console.log(`  ${c.bold("Senha")}  ${c.cyan(a.password)}  ${c.dim("— anote, aparece só aqui")}`);
+          } else {
+            console.log(`${c.green("\u2713")} conta ${a.email} ${c.dim("(senha preservada)")}`);
+          }
+        } catch (error) {
+          // Perfil sem e-mail não deve impedir o resto do seed.
+          console.log(c.yellow(`!  conta não criada: ${(error as Error).message}`));
+        }
+      }
+
+      const { seedCatalog } = await import("./core/skills.ts");
+      const skills = await seedCatalog();
+      console.log(`${c.green("\u2713")} catálogo de skills · ${skills.inserted} nova(s)`);
+
+      const { seedProviders } = await import("./core/llm/registry.ts");
+      const llm = await seedProviders();
+      console.log(`${c.green("\u2713")} ${llm.providers} provedor(es) de LLM, ${llm.models} modelo(s)`);
+
       const r = await seedPositioning();
       console.log(
-        `${c.green("\u2713")} ${r.tasksInserted} task(s) inserted, ${r.tasksUpdated} refreshed, ` +
-        `${r.metricsInserted} baseline metric(s) recorded`,
+        `${c.green("\u2713")} posicionamento · ${r.tasksInserted} tarefa(s), ` +
+        `${r.metricsInserted} métrica(s) de baseline`,
       );
+      console.log(c.dim("\n  Tudo idempotente: rodar de novo não duplica nem sobrescreve.\n"));
     });
   });
 
@@ -1475,6 +1505,52 @@ auth
         );
       }
       console.log();
+    });
+  });
+
+auth
+  .command("seed [email]")
+  .description("Criar a conta do dono, com senha gerada e exibida uma vez")
+  .option("--password <senha>", "usar esta senha em vez de gerar uma")
+  .option("--force", "redefinir a senha mesmo se a conta já tiver uma")
+  .action(async (email: string | undefined, opts: { password?: string; force?: boolean }) => {
+    await withDb(async () => {
+      await runMigrations();
+      const { seedOwner } = await import("./contexts/auth/index.ts");
+
+      try {
+        const r = await seedOwner({ email, password: opts.password, force: opts.force });
+
+        console.log(
+          `\n${c.green("\u2713")} ${r.created ? "conta criada" : "conta já existia"}: ` +
+          `${c.bold(r.email)} ${c.dim(`(${r.roles.join(", ")})`)}`,
+        );
+
+        if (!r.passwordSet) {
+          console.log(c.dim("  A senha atual foi preservada. Para trocar: jho auth set-password <email>"));
+          console.log(c.dim("  Para redefinir agora: jho auth seed --force\n"));
+          return;
+        }
+
+        if (r.password && !opts.password) {
+          // Mostrada uma vez, e só aqui: o banco guarda apenas o hash, então
+          // nem este comando consegue recuperá-la depois.
+          console.log(`\n  ${c.bold("Senha")}  ${c.cyan(r.password)}`);
+          console.log(
+            c.dim(
+              "\n  Anote agora — o banco guarda só o hash e nem este comando a recupera.\n" +
+              "  Troque quando quiser: jho auth set-password " + r.email,
+            ),
+          );
+        } else {
+          console.log(c.dim("  Senha definida.\n"));
+        }
+
+        console.log(c.dim(`\n  Entrar em http://127.0.0.1:3000/login\n`));
+      } catch (error) {
+        console.error(c.red(`\n  ${(error as Error).message}\n`));
+        process.exitCode = 1;
+      }
     });
   });
 

@@ -184,7 +184,7 @@ pnpm dev                     # dashboard em localhost:3000
 
 # banco
 pnpm jho db migrate          # cria/atualiza o schema
-pnpm jho db seed             # plano de posicionamento + baseline de métricas
+pnpm jho db seed             # conta do dono + skills + provedores + posicionamento
 pnpm jho db prune --days 90  # remove vagas fechadas sem candidatura
 
 # sourcing
@@ -198,6 +198,7 @@ pnpm jho sources probe ashby textlayer        # testa um handle sem gravar
 pnpm jho sources snippet revelo               # extrator para plataforma logada
 
 # autenticação
+pnpm jho auth seed <email>   # cria a conta do dono, senha gerada e mostrada uma vez
 pnpm jho auth status         # modo e contas
 pnpm jho auth add-user <email> --role owner
 pnpm jho auth set-password <email>   # senha (entrada escondida ou --stdin)
