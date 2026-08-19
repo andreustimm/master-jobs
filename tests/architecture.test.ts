@@ -241,6 +241,32 @@ describe("authorisation (AUTH-01)", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("redeems the magic link in a Route Handler, never in a page", () => {
+    // Next only allows cookies to be MODIFIED in a Server Action or Route
+    // Handler. Doing it while rendering /login threw at runtime — the framework
+    // enforcing a boundary that is correct, since rendering should be
+    // replayable and starting a session is not.
+    const page = read("app/login/page.tsx");
+    expect(page).not.toMatch(/cookies\(\)/);
+    expect(page).not.toContain("finishLogin");
+
+    const handler = read("app/login/callback/route.ts");
+    expect(handler).toContain("finishLogin");
+    expect(handler).toContain("cookies()");
+  });
+
+  it("sets the session cookie httpOnly and never exposes it to script", () => {
+    const handler = read("app/login/callback/route.ts");
+    expect(handler).toContain("httpOnly: true");
+    expect(handler).toContain("sameSite:");
+  });
+
+  it("revokes server-side on logout, not just clears the cookie", () => {
+    // A cookie the client deletes is still valid to whoever copied it.
+    const logout = read("app/logout/route.ts");
+    expect(logout).toContain("endSession");
+  });
+
   it("keeps the permission decision in one pure function", () => {
     // Authorisation bugs come from a check that exists in four places and
     // disagrees with itself in one.

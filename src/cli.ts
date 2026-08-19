@@ -1521,7 +1521,7 @@ auth
       const { startLogin } = await import("./contexts/auth/index.ts");
       const { token, expiresAt } = await startLogin(email);
       console.log(`\n${c.bold("Link de acesso")} ${c.dim(`· válido até ${expiresAt.slice(11, 16)}`)}`);
-      console.log(`  ${c.cyan(`http://127.0.0.1:3000/login?token=${token}`)}`);
+      console.log(`  ${c.cyan(`http://127.0.0.1:3000/login/callback?token=${token}`)}`);
       console.log(
         c.dim(
           "\n  Uso único e curto. Se o e-mail não tiver conta, o link simplesmente\n" +
@@ -1897,7 +1897,15 @@ scrape
         refresh: opts.refresh,
       });
       console.log(`${c.green("\u2713")} ${r.queued} na fila`);
-      console.log(c.dim("  Capturar: jho scrape run\n"));
+      if (r.alreadyDescribed > 0) {
+        console.log(
+          c.dim(
+            `  ${r.alreadyDescribed} vaga(s) puladas — a fonte já entregou a descrição.\n` +
+            "  O robô preenche lacuna; buscar o que já temos só rende 403.",
+          ),
+        );
+      }
+      console.log(c.dim("  Capturar: pnpm jho scrape run\n"));
     });
   });
 

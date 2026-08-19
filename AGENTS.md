@@ -135,6 +135,10 @@ dashboard Next.js em `localhost:3000`.
 
 ## Comandos
 
+> **Os comandos abaixo usam `pnpm jho`.** Para digitar só `jho`, instale o
+> atalho uma vez: `ln -sf "$PWD/bin/jho" ~/bin/jho` (com `~/bin` no `PATH`).
+> Ele funciona de qualquer subdiretório do projeto.
+
 ```bash
 rtk pnpm install
 rtk pnpm dev                     # dashboard em localhost:3000
@@ -157,7 +161,7 @@ rtk pnpm jho sources snippet revelo               # extrator para plataforma log
 # autenticação
 rtk pnpm jho auth status         # modo e contas
 rtk pnpm jho auth add-user <email> --role owner
-rtk pnpm jho auth login <email>  # link de uso único
+rtk pnpm jho auth login <email>  # link de uso único → /login/callback
 
 # LLM opcional (BYOK — sua chave, seu custo)
 rtk pnpm jho llm seed            # cadastra provedores conhecidos
@@ -312,14 +316,15 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 
 | Item | Número |
 |---|---:|
-| Vagas abertas | 6.239 |
-| Vagas pontuadas | 6.239 |
+| Vagas abertas | 6.027 |
+| Vagas pontuadas | 6.027 |
 | Empresas | 1.031 |
 | Fontes ativas | 13 |
-| Acima de 45 / 60 / 70 | 1.600 / 207 / 23 |
-| Melhor fit | 84,0 |
+| Acima de 45 / 60 / 70 | 1.612 / 262 / 35 |
+| Melhor fit | 86,0 |
 | Vagas com bloqueador | 468 |
-| Candidaturas no funil | 1 |
+| Descrições offline | 207 |
+| Candidaturas no funil | 2 |
 | Testes | 242 |
 
 > A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# jho — atalho para `pnpm jho`, para o comando funcionar de qualquer diretório
+# do projeto sem o prefixo.
+#
+# Instale uma vez:
+#   ln -sf "$PWD/bin/jho" ~/bin/jho     # com ~/bin no PATH
+#
+# O CLI em si é `src/cli.ts`, rodado pelo type stripping nativo do Node 24.
+set -euo pipefail
+
+# Sobe até a raiz do projeto, de onde quer que o comando tenha sido chamado.
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec pnpm --dir "$root" jho "$@"

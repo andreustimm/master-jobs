@@ -148,9 +148,19 @@ export type EnqueueOptions = {
   limit?: number;
   /** Re-queue jobs whose page was already captured. */
   refresh?: boolean;
+  /**
+   * Skip jobs whose adapter already returned a usable description.
+   *
+   * The scraper exists to fill gaps, not to duplicate work the API already
+   * did. Ignoring this cost us 90 HTTP 403s in one run against himalayas.app —
+   * for jobs that already carried 6.609 characters of description on average.
+   * Hammering someone's server for text we hold is both wasteful and the
+   * fastest way to get an IP blocked for good.
+   */
+  minExistingChars?: number;
 };
 
-export type EnqueueResult = { queued: number; skipped: number };
+export type EnqueueResult = { queued: number; skipped: number; alreadyDescribed: number };
 
 /**
  * Fills the queue from the corpus.
@@ -163,6 +173,9 @@ export async function enqueuePending(opts: EnqueueOptions = {}): Promise<Enqueue
   const db = getDb();
   const minFit = opts.minFit ?? 45;
   const limit = opts.limit ?? 500;
+  // Above this many characters the description is already good enough to score
+  // and to read; fetching the page would add structured fields at best.
+  const minExisting = opts.minExistingChars ?? 2000;
 
   const candidates = await db
     .select({ id: job.id, url: job.url, fit: jobScore.fit })
@@ -176,10 +189,29 @@ export async function enqueuePending(opts: EnqueueOptions = {}): Promise<Enqueue
         sql`coalesce(${jobScore.fit}, 0) >= ${minFit}`,
         isNull(scrapeTask.id),
         opts.refresh ? sql`1 = 1` : isNull(jobPage.jobId),
+        // Gap-filling only. See `minExistingChars`.
+        opts.refresh
+          ? sql`1 = 1`
+          : sql`length(coalesce(${job.descriptionText}, '')) < ${minExisting}`,
       ),
     )
     .orderBy(desc(jobScore.fit))
     .limit(limit);
+
+  // Reported so a small queue does not look like a broken filter.
+  const [described] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(job)
+    .leftJoin(jobScore, eq(jobScore.jobId, job.id))
+    .leftJoin(scrapeTask, eq(scrapeTask.jobId, job.id))
+    .where(
+      and(
+        isNull(job.closedAt),
+        sql`coalesce(${jobScore.fit}, 0) >= ${minFit}`,
+        isNull(scrapeTask.id),
+        sql`length(coalesce(${job.descriptionText}, '')) >= ${minExisting}`,
+      ),
+    );
 
   let queued = 0;
   for (const candidate of candidates) {
@@ -191,7 +223,11 @@ export async function enqueuePending(opts: EnqueueOptions = {}): Promise<Enqueue
     queued++;
   }
 
-  return { queued, skipped: candidates.length - queued };
+  return {
+    queued,
+    skipped: candidates.length - queued,
+    alreadyDescribed: Number(described?.n ?? 0),
+  };
 }
 
 /** Puts failed tasks back in line, e.g. after fixing the parser. */

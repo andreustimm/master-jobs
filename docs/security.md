@@ -123,6 +123,12 @@ nasce da sessão em vez de vir da entrada. O modo `single-user` mantém o uso
 local sem login, e o guard é o mesmo código nos dois modos — o caminho
 multiusuário não é um ramo que ninguém exercita. Ver AUTH-01.
 
+**Fluxo verificado ponta a ponta em 19/08**, com `JHO_AUTH_MODE=multi`: sem
+sessão o cabeçalho oferece entrar; o link de uso único resgata em
+`/login/callback` e grava o cookie `httpOnly`; a sessão passa a aparecer no
+cabeçalho; **o mesmo link recusa o segundo uso**; e o logout revoga no servidor,
+deixando o cookie antigo inválido.
+
 **Sem criptografia em repouso.** O banco é um arquivo SQLite legível por
 qualquer processo do usuário. Quem tem acesso local à conta já tem acesso a
 tudo; criptografar aqui protegeria contra roubo do disco, o que o FileVault já

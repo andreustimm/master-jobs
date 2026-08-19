@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { SessionBadge } from "./session-badge";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -73,6 +74,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Link href="/candidate" className={navClass}>
                   Candidato
                 </Link>
+              </div>
+              {/* Pushed right, so the mode is visible without hunting for it.
+                  An auth mode you cannot see is an auth mode you assume. */}
+              <div className="ml-auto shrink-0">
+                <SessionBadge />
               </div>
             </nav>
           </header>

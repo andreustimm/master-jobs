@@ -1,6 +1,18 @@
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
+  /**
+   * Pin the workspace root.
+   *
+   * There is a stray `package-lock.json` in the home directory, above this
+   * repository. Turbopack walks upward looking for a lockfile to infer the
+   * root, finds that one, and warns that it is outside the Git repository —
+   * with an inferred root that is wrong. Saying it explicitly ends the guess.
+   */
+  turbopack: {
+    root: import.meta.dirname,
+  },
+
   // libSQL is a native-adjacent client and must not be bundled for the server.
   serverExternalPackages: ["@libsql/client"],
 
