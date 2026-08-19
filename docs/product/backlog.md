@@ -112,7 +112,7 @@ Decisão de fronteira que precisa ser acertada: o que é por candidato (perfil,
 alvos, restrições, ranges, benefícios, funil) e o que é compartilhado (corpus de
 vagas, registro de empresas, taxas de câmbio). Errar essa linha é caro.
 
-### F-04 · Fontes autenticadas: Revelo, BairesDev, marketplaces 📋
+### F-04 · Fontes autenticadas: Revelo, BairesDev, marketplaces ✅ (parte automatizável)
 
 Andreus já trabalhou via **Revelo** (MPC) e **BairesDev** (ADT Solar, Red
 Ventures), e mantém conta ativa nas duas. As vagas dessas plataformas só existem
@@ -125,6 +125,22 @@ leitura assistida via extensão do Chrome, com as vagas entrando por
 
 > **Invariante:** ausência de cláusula proibindo automação nos termos não é
 > permissão. Vale o mesmo rigor da ADR 0001.
+
+**Entregue (19/08):** `jho sources snippet <plataforma>` gera um extrator para
+o usuário colar no console do próprio navegador, na sessão dele. Lê a página
+que ele já está vendo, copia o JSON para a área de transferência, e
+`jho jobs import` faz o resto — o mesmo caminho que já existia.
+
+O extrator é genérico de propósito: heurística sobre o DOM, não seletor por
+site. Seletor para uma página que este projeto não consegue abrir seria palpite
+apresentado como conhecimento, e apodreceria no próximo deploy da plataforma
+sem ninguém perceber. Há teste garantindo que o código gerado é JavaScript
+válido e que **não contém nenhuma chamada de rede** — a premissa toda é que ele
+roda na sessão autenticada do usuário, então não pode ser capaz de mandar essa
+sessão para lugar nenhum.
+
+**O que continua fora de escopo, e permanece:** adapter automático dirigindo
+sessão autenticada. Exigiria ADR própria e o invariante acima diz não.
 
 ### F-03 · Referral não é rastreado ✅ implementado
 

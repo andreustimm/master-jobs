@@ -1520,6 +1520,33 @@ program
     });
   });
 
+sources
+  .command("snippet [platform]")
+  .description("Extrator para colar no console da plataforma logada (Revelo, BairesDev)")
+  .option("--match <substring>", "trecho que o href da vaga contém")
+  .action(async (platform = "generic", opts: { match?: string }) => {
+    const { buildSnippet, knownPlatforms, snippetNote } = await import("./core/sources/snippet.ts");
+
+    if (!knownPlatforms().includes(platform)) {
+      console.log(c.dim(`\n  Plataformas conhecidas: ${knownPlatforms().join(", ")}`));
+      console.log(c.dim(`  Usando o extrator genérico para "${platform}".`));
+    }
+
+    console.log(`\n${c.bold("1.")} ${snippetNote(platform)}`);
+    console.log(`${c.bold("2.")} Abra o console do navegador e cole:\n`);
+    console.log(buildSnippet(platform, { match: opts.match }));
+    console.log(
+      `\n${c.bold("3.")} Salve o JSON copiado e rode: ` +
+      c.cyan(`jho jobs import vagas.json --source ${platform}`),
+    );
+    console.log(
+      c.dim(
+        "\n  O extrator só lê a página que você já está vendo e copia para a área de\n" +
+        "  transferência. Não faz requisição nem envia nada. Confira o JSON antes de importar.\n",
+      ),
+    );
+  });
+
 const skills = program
   .command("skills")
   .description("Skill catalogue, detection from the CV, and market demand");

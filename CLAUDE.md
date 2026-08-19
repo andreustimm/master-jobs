@@ -79,6 +79,7 @@ pnpm jho jobs add <url>      # cadastra vaga por URL, resolvendo pelo ATS
 pnpm jho jobs import <file> --source revelo   # importa JSON de plataforma logada
 pnpm jho sources list        # saúde das fontes
 pnpm jho sources probe ashby textlayer        # testa um handle sem gravar
+pnpm jho sources snippet revelo               # extrator para plataforma logada
 
 # triagem e funil
 pnpm jho jobs list --min-fit 60
