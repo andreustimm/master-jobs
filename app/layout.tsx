@@ -43,6 +43,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Link href="/referrals" className={navClass}>
                   Referrals
                 </Link>
+                <Link href="/candidate" className={navClass}>
+                  Candidato
+                </Link>
               </div>
             </nav>
           </header>

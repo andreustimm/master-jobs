@@ -315,6 +315,80 @@ export const positioningTask = sqliteTable("positioning_task", {
 });
 
 /* -------------------------------------------------------------------------- */
+/* Candidate (ADR 0007 — the aggregate the product is built around)            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The candidate, as data rather than as a config file.
+ *
+ * `profile/profile.yaml` still owns the *scoring* parameters — target clusters,
+ * keyword weights, hard blockers — because those are tuning knobs that belong
+ * in version control where a diff is meaningful. What lives here is the
+ * candidate's own material: the CV text, the headline, the summary. That
+ * distinction matters because the CV is edited constantly and by a human, and
+ * because ADR 0007 anticipates more than one candidate.
+ *
+ * > **Invariante:** this table holds what the candidate *wrote*. It never holds
+ * > a claim the system inferred. Anything derived — extracted keywords, gap
+ * > analysis — is computed on read and is safe to discard.
+ */
+export const candidate = sqliteTable(
+  "candidate",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Stable handle so a future multi-candidate setup can scope by it. */
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    headline: text("headline"),
+    location: text("location"),
+    email: text("email"),
+    linkedinUrl: text("linkedin_url"),
+    githubUrl: text("github_url"),
+    /** Marks the profile the CLI and UI operate on when none is specified. */
+    isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("candidate_slug_idx").on(t.slug)],
+);
+
+/**
+ * A CV, cover letter or other document belonging to a candidate.
+ *
+ * Versioned rather than overwritten: a CV is edited often, and being able to
+ * see what was sent to a company three weeks ago is the difference between
+ * answering an interview question and guessing.
+ *
+ * `format` and `sourceBytes` exist for the PDF path that is not built yet —
+ * when it is, extraction fills `content` and the original stays recoverable.
+ */
+export const candidateDocument = sqliteTable(
+  "candidate_document",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    /** cv | cover_letter | portfolio | other */
+    kind: text("kind").notNull().default("cv"),
+    /** Free label: "ATS EN 2026-07", "variante architect". */
+    label: text("label").notNull(),
+    /** text | pdf | markdown — pdf means `content` came from extraction. */
+    format: text("format").notNull().default("text"),
+    content: text("content").notNull(),
+    /** Original file, when it was not typed in. Null for pasted text. */
+    sourceFilename: text("source_filename"),
+    /** Only one document per kind is current; the rest are history. */
+    isCurrent: integer("is_current", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [
+    index("candidate_document_candidate_idx").on(t.candidateId, t.kind),
+    index("candidate_document_current_idx").on(t.isCurrent),
+  ],
+);
+
+/* -------------------------------------------------------------------------- */
 /* Correspondence (ADR 0008)                                                   */
 /* -------------------------------------------------------------------------- */
 
@@ -443,6 +517,9 @@ export type Post = typeof post.$inferSelect;
 export type Engagement = typeof engagement.$inferSelect;
 export type PositioningTask = typeof positioningTask.$inferSelect;
 export type FxRate = typeof fxRate.$inferSelect;
+export type Candidate = typeof candidate.$inferSelect;
+export type NewCandidate = typeof candidate.$inferInsert;
+export type CandidateDocument = typeof candidateDocument.$inferSelect;
 export type MailMessage = typeof mailMessage.$inferSelect;
 export type NewMailMessage = typeof mailMessage.$inferInsert;
 export type MailSuggestion = typeof mailSuggestion.$inferSelect;

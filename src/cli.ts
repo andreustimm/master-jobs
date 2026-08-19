@@ -5,6 +5,8 @@
  * Everything the agent workflow needs is reachable from here, and every command
  * is safe to re-run. Run `pnpm jho --help` for the full list.
  */
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
 import { Command } from "commander";
 import { desc, eq } from "drizzle-orm";
 import { closeDb, getDb } from "./core/db/client.ts";
@@ -40,6 +42,13 @@ import { addJob } from "./core/ingest/manual.ts";
 import { syncAll, pruneClosed } from "./core/ingest/run.ts";
 import { verifyJobs } from "./core/ingest/verify.ts";
 import { loadProfile } from "./core/profile/load.ts";
+import {
+  analyseGap,
+  currentDocument,
+  documentHistory,
+  saveDocument,
+  syncCandidateFromProfile,
+} from "./core/candidate.ts";
 import { buildReport, exportDossiers } from "./core/report/markdown.ts";
 import { seedPositioning } from "./core/positioning/seed.ts";
 import { scoreAll } from "./core/scoring/apply.ts";
@@ -1185,6 +1194,98 @@ program
       });
       console.log(`${c.green("\u2713")} ${r.written} dossiê(s) em ${r.dir}`);
       console.log(c.dim("  Frontmatter com fit, cluster e bloqueios — consultável no Obsidian.\n"));
+    });
+  });
+
+const cv = program
+  .command("cv")
+  .description("The candidate's own material — CV text and what the market says about it");
+
+cv.command("set <file>")
+  .description("Store a CV from a text or markdown file")
+  .option("-l, --label <text>", "version label")
+  .action(async (file: string, opts: { label?: string }) => {
+    await withDb(async () => {
+      await runMigrations();
+      const content = await readFile(file, "utf8");
+      if (content.trim().length < 100) {
+        console.error(c.red("Arquivo curto demais para ser um currículo."));
+        process.exitCode = 1;
+        return;
+      }
+      const candidateId = await syncCandidateFromProfile();
+      const label = opts.label ?? basename(file);
+      const r = await saveDocument({ candidateId, kind: "cv", label, content, format: "text" });
+      console.log(
+        `${c.green("\u2713")} versão #${r.id} salva · ${content.length.toLocaleString("pt-BR")} caracteres` +
+        (r.previousRetired ? c.dim(" · versão anterior arquivada") : ""),
+      );
+    });
+  });
+
+cv.command("show")
+  .description("Print the current CV")
+  .action(async () => {
+    await withDb(async () => {
+      const candidateId = await syncCandidateFromProfile();
+      const doc = await currentDocument(candidateId, "cv");
+      if (!doc) {
+        console.log(c.dim("\n  Nenhum currículo salvo. jho cv set <arquivo>\n"));
+        return;
+      }
+      console.log(c.dim(`\n  ${doc.label} · ${doc.createdAt.slice(0, 10)}\n`));
+      console.log(doc.content);
+    });
+  });
+
+cv.command("versions")
+  .description("Every stored version")
+  .action(async () => {
+    await withDb(async () => {
+      const candidateId = await syncCandidateFromProfile();
+      const rows = await documentHistory(candidateId, "cv");
+      if (rows.length === 0) {
+        console.log(c.dim("\n  Nenhuma versão.\n"));
+        return;
+      }
+      for (const r of rows) {
+        const mark = r.isCurrent ? c.green("\u2713") : " ";
+        console.log(
+          `  ${mark} #${String(r.id).padStart(3)} ${truncate(r.label, 32)} ` +
+          `${String(Number(r.length).toLocaleString("pt-BR")).padStart(9)} chars  ${c.dim(r.createdAt.slice(0, 10))}`,
+        );
+      }
+      console.log();
+    });
+  });
+
+cv.command("gap")
+  .description("Terms the target jobs use that your CV never says")
+  .option("--min-fit <n>", "which jobs count as target", "60")
+  .action(async (opts: { minFit: string }) => {
+    await withDb(async () => {
+      const report = await analyseGap({ minFit: Number(opts.minFit) });
+      if (!report) {
+        console.log(c.dim("\n  Salve um currículo primeiro: jho cv set <arquivo>\n"));
+        return;
+      }
+      console.log(
+        `\n  CV de ${report.cvLength.toLocaleString("pt-BR")} caracteres contra ` +
+        `${report.jobsAnalysed} vagas acima de ${report.minFit}\n`,
+      );
+
+      if (report.missing.length === 0) {
+        console.log(c.green("  Nenhuma lacuna relevante.\n"));
+      } else {
+        console.log(c.bold("  AUSENTES NO CV, PRESENTES NAS VAGAS"));
+        for (const t of report.missing.slice(0, 15)) {
+          const pct = Math.round(t.coverage * 100);
+          const bar = "█".repeat(Math.max(1, Math.round(pct / 5)));
+          console.log(`    ${truncate(t.term, 30)} ${c.yellow(bar)} ${String(pct).padStart(3)}%`);
+        }
+      }
+
+      console.log(c.dim(`\n  ${report.confirmed.length} termo(s) já cobertos · ${report.unused.length} raros no alvo\n`));
     });
   });
 
