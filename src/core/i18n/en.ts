@@ -23,6 +23,8 @@ export const en: Dictionary = {
     signIn: "sign in",
     signOut: "sign out",
     unprotected: "unprotected",
+    unprotectedTitle:
+      "JHO_AUTH_MODE=open — no authentication. CV, pipeline and export are reachable by any request. Remove the variable to require sign-in.",
   },
   theme: {
     title: "theme",
@@ -30,6 +32,7 @@ export const en: Dictionary = {
     system: "System",
     light: "Light",
     dark: "Dark",
+    appearance: "Appearance",
   },
   login: {
     title: "Sign in",
@@ -47,6 +50,7 @@ export const en: Dictionary = {
     setPasswordHint: "Set a password:",
   },
   jobs: {
+    noneWithFilters: "No jobs match these filters. Loosen the cut or turn a criterion off.",
     title: "Jobs",
     matching: "match the filters",
     view: "posting",
@@ -112,6 +116,7 @@ export const en: Dictionary = {
     untriagedHint: "not in the pipeline yet",
   },
   grid: {
+    perPage: "per page",
     density: "density",
     comfortable: "comfortable",
     compact: "compact",
@@ -131,6 +136,9 @@ export const en: Dictionary = {
     paid: "Only jobs that disclose compensation",
   },
   candidate: {
+    toSkills: "skills →",
+    toVocabulary: "vocabulary →",
+    backToCv: "← CV",
     title: "Candidate",
     cvMarkdown: "CV in markdown",
     versionLabel: "Label for this version",
@@ -141,9 +149,17 @@ export const en: Dictionary = {
     split: "Split",
     preview: "Preview",
     nothingToShow: "Nothing to show yet.",
+    viewMode: "View mode",
+    vimHint: ":w saves",
+    versions: "Versions",
+    current: "current",
+    chars: "characters",
+    gapEmpty: "The gap analysis appears as soon as a CV is saved.",
     ofJobs: "of jobs",
   },
   skills: {
+    confirmedTitle: "Confirmed",
+    rejectedTitle: "Rejected",
     title: "Skills",
     marketWants: "Asked for by the market, not confirmed",
     toAudit: "To review",
@@ -156,6 +172,22 @@ export const en: Dictionary = {
     marketThreshold: "Present in at least 15% of jobs above a 60 fit.",
     absent: "absent",
   },
+  themeDescriptions: {
+    hp: "Corporate blue, restrained corners",
+    huly: "Two accents, pill geometry",
+    graphy: "Cobalt, hairline instead of shadow",
+  },
+  skillCategories: {
+    language: "Languages",
+    framework: "Frameworks",
+    ai: "AI",
+    cloud: "Cloud & infra",
+    data: "Data",
+    practice: "Practices",
+    domain: "Domains",
+    tool: "Tools",
+    soft: "Interpersonal",
+  },
   vocabulary: {
     title: "Vocabulary",
     quickWin: "Quick win",
@@ -163,6 +195,16 @@ export const en: Dictionary = {
     covered: "Already covered",
     doNotInvent: "Do not invent experience",
     cvWrites: "Your CV writes",
+    noCv: "No CV saved.",
+    pasteCv: "Paste your CV",
+    toCompare: "to compare it against the market's language.",
+    backToCv: "CV",
+    coverageNote: "of the market's vocabulary, weighted by demand",
+    covered_n: "covered",
+    vocabularyOf: "vocabulary only",
+    realGaps: "real gaps",
+    jobsWrite: "jobs write",
+    jobs: "jobs",
   },
   pipeline: {
     title: "Pipeline",
@@ -174,6 +216,8 @@ export const en: Dictionary = {
     companies: "company/companies",
   },
   jobDetail: {
+    fetchHint: "downloads and organises descriptions for offline reading.",
+    previewOf: "Preview of {shown} of {total} characters.",
     employmentType: "Employment",
     workplace: "Workplace",
     seniority: "Level",
@@ -188,6 +232,21 @@ export const en: Dictionary = {
     aboveCut: "Above the {cut} cut, across the whole corpus.",
   },
   copy: {
+    candidateLead:
+      "Paste your CV here. It gets versioned — every save becomes a version, and the previous one stays readable. Storing the text only pays off for what it unlocks:",
+    identityFrom: "identity comes from {file}, so the two sources cannot diverge",
+    pdfNewVersion: "Becomes a new version, like any other —",
+    pdfReviewFirst: "review before trusting it",
+    pdfCaveat:
+      "PDF extraction gets column layouts wrong, and a scanned CV has no text to read at all.",
+    pdfUploadTodo:
+      "PDF upload does not exist yet. When it does, the extracted text lands here and the original file stays recoverable — the schema already allows for it ({fields}).",
+    vocabularyWorking: "Vocabulary that is already working",
+    skillsLead:
+      "Detected automatically in your CV, against a global catalogue of 100 technologies and practices.",
+    skillsDetectedNotConfirmed: "Detected is not confirmed",
+    skillsLeadTail:
+      "— the system states that it found a skill, never that you have it. Only confirmed ones may be cited as experience.",
     referralsLead:
       "Open jobs where you already know someone. Referrals are ~7% of applicants and ~40% of hires — no other lever in this system comes close.",
     referralsEmpty:
@@ -201,6 +260,15 @@ export const en: Dictionary = {
     vocabularyCompared: "Compared against {jobs} jobs above a {cut} fit.",
     vocabularyRareNote:
       "Not a reason to remove them — it means those terms are not what is being searched for.",
+    vocabLead:
+      "An ATS filter does not infer synonyms: recruiters search for the literal terms in their own posting. This page compares your language against {jobs} jobs above {cut} fit, and separates a missing word from missing experience.",
+    quickWinNote:
+      "You have the experience and the CV proves it — under a different spelling. Changing the word is the cheapest item on this list.",
+    quickWinWarn: "Swapping the word only counts if the evidence is already there.",
+    quickWinWarnTail: "to match a term.",
+    auditNote: "Each one carries the CV sentence that produced it, for you to judge.",
+    realGapNote:
+      "The market asks and the CV does not show it, under any spelling. Not every gap needs closing — some belong to jobs you do not want.",
   },
   common: {
     loading: "Loading…",

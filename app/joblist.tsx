@@ -5,6 +5,7 @@ import { JobModal } from "./job-modal";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import type { LocaleId } from "../src/core/i18n/index.ts";
 import type { listBoard } from "../src/core/db/repo.ts";
 import { formatMoney, money, parseCurrency, parsePeriod } from "../src/core/money.ts";
 import { Fit, ScoreBar, StatusBadge } from "./ui";
@@ -22,16 +23,18 @@ function pay(r: Row): string | null {
 export function JobList({
   rows,
   dense = false,
+  locale,
   t,
 }: {
   rows: Row[];
   dense?: boolean;
+  locale: LocaleId;
   t: (key: string, values?: Record<string, string | number>) => string;
 }) {
   if (rows.length === 0) {
     return (
       <Card className="p-6 text-sm text-muted-foreground">
-        Nenhuma vaga com esses filtros. Afrouxe o corte ou desligue algum critério.
+        {t("jobs.noneWithFilters")}
       </Card>
     );
   }
@@ -148,7 +151,7 @@ export function JobList({
                 </a>
               )}
             </div>
-            <JobModal row={r} t={t} />
+            <JobModal row={r} t={t} locale={locale} />
           </article>
         );
       })}

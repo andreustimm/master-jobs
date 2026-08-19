@@ -289,6 +289,73 @@ try {
     lowContrast.slice(0, 3).join(" · "),
   );
 
+  /* --------------------- Sintaxe do editor de markdown --------------------- */
+
+  // O editor usava `defaultHighlightStyle` do CodeMirror: paleta de hex fixo
+  // feita para fundo branco, aplicada também nos três temas escuros. Link dava
+  // 1.44:1 e marcador 1.96:1 — não era "pouco contraste", era texto invisível,
+  // e a suíte inteira passava porque nenhum teste olhava dentro do editor.
+  //
+  // A verificação lê o estilo COMPUTADO dos spans que o CodeMirror pintou, e
+  // não os tokens do CSS. Um token correto com uma regra que não alcança o span
+  // dá o mesmo resultado na tela: ilegível.
+  const cmLow = [];
+  const cmColours = new Set();
+  const SAMPLE =
+    "# Título\n**forte** *ênfase* `código` [rótulo](https://exemplo.com)\n> citação\n- item\n";
+
+  for (const theme of ["hp", "huly", "graphy"]) {
+    for (const mode of ["light", "dark"]) {
+      await page.context().addCookies([
+        { name: "jho_theme", value: theme, url: BASE },
+        { name: "jho_mode", value: mode, url: BASE },
+      ]);
+      await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+      await page.waitForSelector(".cm-content");
+      // Digita em vez de confiar no currículo guardado: o teste precisa das
+      // mesmas construções em toda execução. Nada é salvo — o formulário só
+      // envia no clique em salvar.
+      await page.click(".cm-content");
+      await page.keyboard.type(SAMPLE, { delay: 0 });
+
+      const painted = await page.evaluate(() => {
+        const surface = getComputedStyle(document.querySelector(".cm-editor")).backgroundColor;
+        const out = [];
+        const seen = new Set();
+        for (const span of document.querySelectorAll(".cm-line span")) {
+          const text = (span.textContent ?? "").trim();
+          if (!text) continue;
+          const fg = getComputedStyle(span).color;
+          const key = `${fg}|${text.slice(0, 12)}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push({ text: text.slice(0, 18), fg, bg: surface });
+        }
+        return out;
+      });
+
+      for (const span of painted) {
+        cmColours.add(`${theme}/${mode}:${span.fg}`);
+        const ratio = contrast(toRgb(span.fg), toRgb(span.bg));
+        if (ratio < 4.5) cmLow.push(`${theme}/${mode} "${span.text}" ${ratio.toFixed(2)}:1`);
+      }
+    }
+  }
+
+  check(
+    "sintaxe do editor passa em 4.5:1 nos seis ambientes",
+    cmLow.length === 0,
+    cmLow.slice(0, 4).join(" | "),
+  );
+  // Um tom só em toda a amostra significaria realce desligado — legível, mas
+  // sem a estrutura que faz o editor valer a pena.
+  check(
+    "editor realça a estrutura do markdown",
+    cmColours.size >= 12,
+    `${cmColours.size} tons distintos`,
+  );
+
+
   // Volta ao padrão para não deixar o cookie sujo para a próxima execução.
   await page.context().addCookies([
     { name: "jho_theme", value: "hp", url: BASE },
@@ -298,34 +365,78 @@ try {
   /* --------------------------------- Idioma -------------------------------- */
 
   // Traduzir é fácil de começar e fácil de deixar pela metade: a interface fica
-  // 80% em inglês e ninguém percebe as 20% restantes até um usuário reclamar —
-  // que foi como estas 72 ocorrências apareceram.
-  const PORTUGUESE =
-    /\b(vagas?|empresas?|buscar|corte|qualidade|fonte|ordenar|aderência|salário|palavras-chave|elegibilidade|senioridade|remuneração|frescor|benefícios|correspondem|densidade|confortável|compacta|exportar|empregador oculto|nenhuma|você)\b/i;
+  // 80% em inglês e ninguém percebe as 20% restantes até um usuário reclamar.
+  //
+  // A PRIMEIRA versão deste teste procurava uma lista de palavras portuguesas
+  // escrita à mão. Ela passava com "Editar", "Dividido", "Visualizar",
+  // "Vocabulário" e "Práticas" na tela — nenhuma estava na lista, porque a
+  // lista era o inventário do que eu já tinha corrigido. Um teste assim
+  // confirma a correção anterior e não detecta a próxima.
+  //
+  // Agora o critério é estrutural, em duas frentes:
+  //
+  //   1. Texto que É um valor do dicionário português. Exato, sem falso
+  //      positivo, e cobre automaticamente toda string futura que passe pelo
+  //      dicionário — que é para onde toda string de interface deve ir.
+  //   2. Texto com marca gráfica que só o português tem (ã, õ, ç, acentos).
+  //      Pega o que nunca chegou a dicionário nenhum, que é justamente o caso
+  //      que a frente 1 não alcança.
+  //
+  // Conteúdo do usuário fica de fora: o currículo tem "São Paulo" e vai
+  // continuar tendo com a interface em inglês. É para isso que as regiões de
+  // dado do usuário carregam `data-user-content`.
+  const { ptBR } = await import("../../src/core/i18n/pt-BR.ts");
+  const { en } = await import("../../src/core/i18n/en.ts");
+
+  const flatten = (dict) => Object.values(dict).flatMap((section) => Object.values(section));
+  // Palavra igual nos dois idiomas ("Frameworks", "Referrals", "Cockpit") não é
+  // vazamento — é a mesma palavra.
+  const shared = new Set(flatten(en).map((v) => v.toLowerCase()));
+  const portuguese = new Set(
+    flatten(ptBR)
+      .map((v) => v.toLowerCase())
+      .filter((v) => v.length > 2 && !shared.has(v)),
+  );
 
   await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
   const leaks = [];
-  for (const path of ["/", "/jobs", "/pipeline", "/referrals", "/candidate", "/candidate/skills"]) {
+  for (const path of [
+    "/",
+    "/jobs",
+    "/pipeline",
+    "/referrals",
+    "/candidate",
+    "/candidate/skills",
+    "/candidate/vocabulary",
+  ]) {
     await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
-    const texts = await page.evaluate(() => {
+    const found = await page.evaluate((dictionary) => {
+      const known = new Set(dictionary);
+      const accented = /[ãõçáéíóúâêôàÃÕÇÁÉÍÓÚÂÊÔÀ]/;
       const out = [];
       const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       let node;
       while ((node = walk.nextNode())) {
         const text = (node.textContent ?? "").trim();
-        const tag = node.parentElement?.tagName;
-        if (text.length > 2 && tag && !["SCRIPT", "STYLE"].includes(tag)) out.push(text);
+        const parent = node.parentElement;
+        if (!parent || text.length < 3) continue;
+        if (["SCRIPT", "STYLE"].includes(parent.tagName)) continue;
+        if (parent.closest("[data-user-content]")) continue;
+        // `lang` explícito e diferente da página é declaração deliberada, não
+        // vazamento: o nome de um idioma se escreve no próprio idioma.
+        const declared = parent.closest("[lang]");
+        if (declared && declared !== document.documentElement) continue;
+        if (known.has(text.toLowerCase())) out.push(`dicionário: ${text}`);
+        else if (accented.test(text)) out.push(`acento: ${text}`);
       }
       return out;
-    });
-    for (const text of texts) {
-      if (PORTUGUESE.test(text)) leaks.push(`${path}: "${text.slice(0, 36)}"`);
-    }
+    }, [...portuguese]);
+    for (const text of found) leaks.push(`${path} · ${text.slice(0, 52)}`);
   }
   check(
     "interface em inglês não vaza português",
     leaks.length === 0,
-    [...new Set(leaks)].slice(0, 3).join(" · "),
+    [...new Set(leaks)].slice(0, 8).join(" | "),
   );
 
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);

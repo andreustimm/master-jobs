@@ -69,7 +69,7 @@ const HEADING_CLASS: Record<number, string> = {
   4: "type-body-md font-semibold mt-4 mb-1",
 };
 
-export function MarkdownPreview({ source }: { source: string }) {
+export function MarkdownPreview({ source, emptyLabel }: { source: string; emptyLabel: string }) {
   const lines = source.split("\n");
   const blocks: ReactNode[] = [];
 
@@ -202,7 +202,7 @@ export function MarkdownPreview({ source }: { source: string }) {
   }
 
   if (blocks.length === 0) {
-    return <p className="type-body-md text-muted-foreground">Nada para mostrar ainda.</p>;
+    return <p className="type-body-md text-muted-foreground">{emptyLabel}</p>;
   }
 
   return <Fragment>{blocks}</Fragment>;

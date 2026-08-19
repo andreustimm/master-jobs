@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { BoardRow } from "../src/core/db/repo.ts";
+import { formatNumber, type LocaleId } from "../src/core/i18n/index.ts";
 
 /**
  * The full job description, offline, in a modal.
@@ -32,8 +33,10 @@ type Extracted = {
 export function JobModal({
   row,
   t,
+  locale,
 }: {
   row: BoardRow;
+  locale: LocaleId;
   t: (key: string, values?: Record<string, string | number>) => string;
 }) {
   const id = `job-modal-${row.jobId}`;
@@ -97,7 +100,7 @@ export function JobModal({
           )}
           {row.pageFetchedAt && (
             <Badge variant="outline" className="type-micro text-muted-foreground">
-              capturada em {row.pageFetchedAt.slice(0, 10)}
+              {t("jobDetail.capturedOn")} {row.pageFetchedAt.slice(0, 10)}
             </Badge>
           )}
         </div>
@@ -105,7 +108,7 @@ export function JobModal({
         {requirements.length > 0 && (
           <section className="mb-5">
             <h3 className="type-body-sm mb-2 font-semibold uppercase tracking-wide text-muted-foreground">
-              Requisitos e responsabilidades
+              {t("jobDetail.requirements")}
             </h3>
             <ul className="space-y-1.5">
               {requirements.slice(0, 40).map((line, i) => (
@@ -120,7 +123,7 @@ export function JobModal({
 
         <section>
           <h3 className="type-body-sm mb-2 font-semibold uppercase tracking-wide text-muted-foreground">
-            Descrição completa
+            {t("jobDetail.fullDescription")}
           </h3>
           {text ? (
             <>
@@ -130,8 +133,10 @@ export function JobModal({
               <p className="type-body-sm whitespace-pre-wrap leading-relaxed">{text}</p>
               {truncated && (
                 <p className="type-body-sm mt-3 border-t border-[var(--color-hairline)] pt-3 text-muted-foreground">
-                  Prévia de {text.length.toLocaleString("pt-BR")} de{" "}
-                  {row.pageTextLength.toLocaleString("pt-BR")} caracteres.{" "}
+                  {t("jobDetail.previewOf", {
+                    shown: formatNumber(text.length, locale),
+                    total: formatNumber(row.pageTextLength, locale),
+                  })}{" "}
                   <a href={`/jobs/${row.jobId}`} className="text-[var(--primary-text)] hover:underline">
                     {t("jobDetail.openFull")}
                   </a>
@@ -140,11 +145,11 @@ export function JobModal({
             </>
           ) : (
             <p className="type-body-sm text-muted-foreground">
-              Ainda não capturada.{" "}
+              {t("jobDetail.notCaptured")}{" "}
               <code className="rounded bg-[var(--color-cloud)] px-1 py-0.5 font-mono text-xs">
                 jho scrape queue &amp;&amp; jho scrape run
               </code>{" "}
-              baixa e organiza as descrições para leitura offline.
+              {t("jobDetail.fetchHint")}
             </p>
           )}
         </section>

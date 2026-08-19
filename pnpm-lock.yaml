@@ -32,6 +32,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.9
         version: 6.43.9
+      '@lezer/highlight':
+        specifier: ^1.2.3
+        version: 1.2.3
       '@libsql/client':
         specifier: ^0.17.4
         version: 0.17.4

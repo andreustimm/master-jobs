@@ -8,10 +8,12 @@ import "./themes.css";
 import { cookies } from "next/headers";
 import {
   MODE_COOKIE,
+  MODES,
   modeAttribute,
   resolveMode,
   resolveTheme,
   THEME_COOKIE,
+  THEMES,
 } from "../src/core/theme.ts";
 import { AppearanceSwitch } from "./theme-switch";
 import { LocaleSwitch } from "./locale-switch";
@@ -142,7 +144,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
               <div className="flex shrink-0 items-center gap-2">
                 <LocaleSwitch current={locale} label={t("nav.language")} />
-                <AppearanceSwitch theme={theme} mode={mode} />
+                <AppearanceSwitch
+                  theme={theme}
+                  mode={mode}
+                  labels={{
+                    appearance: t("theme.appearance"),
+                    trigger: t("nav.appearance"),
+                    theme: t("theme.title"),
+                    environment: t("theme.environment"),
+                    themeDescription: Object.fromEntries(
+                      THEMES.map((item) => [item.id, t(item.description)]),
+                    ),
+                    modeLabel: Object.fromEntries(MODES.map((m) => [m.id, t(m.label)])),
+                  }}
+                />
                 <SessionBadge />
               </div>
             </div>

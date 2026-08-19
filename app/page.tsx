@@ -72,7 +72,7 @@ export default async function Cockpit({
         <div className="mt-3 mb-4">
           <Legend t={t} />
         </div>
-        <JobList rows={top} t={t} />
+        <JobList rows={top} t={t} locale={locale} />
       </section>
 
       {clusters.length > 0 && (

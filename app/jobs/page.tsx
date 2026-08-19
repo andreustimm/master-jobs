@@ -52,7 +52,7 @@ export default async function Jobs({
         <Legend t={t} />
       </div>
 
-      <JobList rows={rows} dense={dense} t={t} />
+      <JobList rows={rows} dense={dense} t={t} locale={locale} />
 
       <Pagination base="/jobs" state={state} page={page} pageSize={pageSize} total={total} t={t} />
     </main>

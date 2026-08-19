@@ -85,7 +85,13 @@ export function LocaleSwitch({ current, label }: { current: LocaleId; label: str
               aria-hidden
             />
             <span aria-hidden className="type-body-md leading-none">{locale.flag}</span>
-            <span className="type-caption-md">{locale.label}</span>
+            {/* `lang` é a marcação correta: o nome de um idioma se escreve nele
+                mesmo, e "Português" continua em português com a interface em
+                inglês. Sem isto o leitor de tela pronuncia o nome com a fonética
+                errada — e a verificação de vazamento o acusaria como defeito. */}
+            <span lang={locale.id} className="type-caption-md">
+              {locale.label}
+            </span>
           </button>
         ))}
       </div>

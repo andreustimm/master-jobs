@@ -82,12 +82,30 @@ dashboard Next.js em `localhost:3000`.
 > pela qualidade do emprego. `freshness` sem data vale 0,5; `benefits` em texto
 > curto vale 0,5 e **nunca** gera bloqueador.
 
+> **Token de UI não serve como cor de texto.** `--accent-2`, `--warn` e afins
+> são feitos para preenchimento, onde o mínimo é 3:1 — `--accent-2` no tema
+> graphy claro dá 2.53:1 contra o fundo do editor. Texto precisa de 4.5:1, e a
+> paleta de sintaxe do editor mora em `--cm-*`, verificada nos seis ambientes
+> por `pnpm test:e2e` lendo o estilo computado dos spans reais.
+
 > **9. Texto de interface vem do dicionário, nunca do JSX.**
-> Isto inclui **rótulo dentro de constante** — `COMPONENTS` em `app/ui.tsx` e
-> `FIELD_LABEL` no modal guardavam texto e produziram 72 das ocorrências de
-> português vazando para a interface em inglês. Constante guarda chave.
-> `pnpm test:e2e` varre as seis telas em inglês e reprova qualquer palavra
-> portuguesa.
+> Isto inclui **rótulo dentro de constante**: `COMPONENTS` em `app/ui.tsx`,
+> `FIELD_LABEL` no modal, `CATEGORY_LABEL` nas skills e `THEMES[].description`
+> guardavam texto pronto. Constante guarda **chave** — texto em constante não
+> aparece em busca por string no JSX e sobrevive a uma revisão de tradução
+> inteira.
+>
+> **Antes de criar chave, procure a existente.** `candidate.edit`,
+> `vocabulary.title` e `nav.appearance` já estavam no dicionário e sem uso: a
+> tradução existia e o componente a ignorava. Chave duplicada é erro de
+> compilação, o que ajuda, mas só depois do trabalho perdido.
+>
+> `pnpm test:e2e` percorre sete telas em inglês e reprova por dois critérios:
+> texto que **é** valor do dicionário português, e texto com acento. A primeira
+> versão desta verificação usava lista de palavras escrita à mão — ela passava
+> com "Editar", "Vocabulário" e "Práticas" na tela, porque a lista era o
+> inventário do que já tinha sido corrigido. Dado do usuário fica de fora por
+> `data-user-content`: o currículo tem "São Paulo" e continua tendo em inglês.
 > `pt-BR` e `en` em `src/core/i18n/`. As chaves são tipadas contra o dicionário
 > português, então tradução faltando é erro de compilação — e não espaço em
 > branco descoberto por um usuário. Página obtém o tradutor com
@@ -382,7 +400,7 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 | Vagas com bloqueador | 468 |
 | Descrições offline | 207 |
 | Candidaturas no funil | 2 |
-| Testes | 242 |
+| Testes | 476 + 30 e2e |
 
 > A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
 > candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de

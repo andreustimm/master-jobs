@@ -12,17 +12,24 @@ import { getTranslator } from "../../i18n";
 
 export const dynamic = "force-dynamic";
 
-const CATEGORY_LABEL: Record<string, string> = {
-  language: "Linguagens",
-  framework: "Frameworks",
-  ai: "IA",
-  cloud: "Cloud e infra",
-  data: "Dados",
-  practice: "Práticas",
-  domain: "Domínios",
-  tool: "Ferramentas",
-  soft: "Interpessoais",
-};
+/**
+ * Categorias, por CHAVE.
+ *
+ * Guardava o texto pronto, e é a mesma classe de defeito da legenda do score:
+ * rótulo dentro de constante não aparece em busca por string no JSX, então
+ * sobrevive a uma revisão de tradução inteira. Constante guarda chave.
+ */
+const CATEGORY_KEYS = [
+  "language",
+  "framework",
+  "ai",
+  "cloud",
+  "data",
+  "practice",
+  "domain",
+  "tool",
+  "soft",
+] as const;
 
 export default async function SkillsPage() {
   const { t, locale } = await getTranslator();
@@ -54,20 +61,16 @@ export default async function SkillsPage() {
       <div className="mb-2 flex items-baseline gap-3">
         <h1 className="type-display-md chevron">{t("skills.title")}</h1>
         <Link href="/candidate" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
-          ← currículo
+          {t("candidate.backToCv")}
         </Link>
         <Link href="/candidate/vocabulary" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
-          vocabulário →
+          {t("candidate.toVocabulary")}
         </Link>
       </div>
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
-        Detectadas automaticamente no seu currículo, contra um catálogo global de
-        100 tecnologias e práticas.{" "}
-        <strong className="text-foreground">
-          Detectada não é confirmada
-        </strong>{" "}
-        — o sistema afirma que <em>encontrou</em> uma skill, nunca que você a
-        tem. Só as confirmadas podem ser citadas como experiência.
+        {t("copy.skillsLead")}{" "}
+        <strong className="text-foreground">{t("copy.skillsDetectedNotConfirmed")}</strong>{" "}
+        {t("copy.skillsLeadTail")}
       </p>
 
       <div className="mb-8 flex flex-wrap items-center gap-3">
@@ -104,11 +107,11 @@ export default async function SkillsPage() {
                   </span>
                   <span className="w-24 text-right text-xs">
                     {g.candidateStatus === "detected" ? (
-                      <Badge variant="secondary" className="type-micro">a auditar</Badge>
+                      <Badge variant="secondary" className="type-micro">{t("skills.toAuditCount")}</Badge>
                     ) : g.candidateStatus === "rejected" ? (
                       <Badge variant="destructive" className="type-micro">rejeitada</Badge>
                     ) : (
-                      <span className="text-muted-foreground">ausente</span>
+                      <span className="text-muted-foreground">{t("skills.absent")}</span>
                     )}
                   </span>
                 </div>
@@ -122,19 +125,19 @@ export default async function SkillsPage() {
         <section className="mb-10">
           <h2 className="type-display-sm mb-2">{t("skills.toAudit")}</h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Cada uma traz a frase do currículo que a produziu, para você julgar.
+            {t("copy.auditNote")}
           </p>
 
           {Object.entries(byCategory).map(([cat, items]) => (
             <div key={cat} className="mb-6">
               <h3 className="mb-2 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
-                {CATEGORY_LABEL[cat] ?? cat}
+                {(CATEGORY_KEYS as readonly string[]).includes(cat) ? t(`skillCategories.${cat}`) : cat}
               </h3>
               <div className="divide-y overflow-hidden rounded-xl border">
                 {items.map((s) => (
                   <div key={s.id} className="grid gap-2 bg-card px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold">{s.name}</span>
+                      <span data-user-content className="font-semibold">{s.name}</span>
                       <Badge variant="outline" className="font-mono type-micro">
                         {s.occurrences}× no CV
                       </Badge>
@@ -143,20 +146,23 @@ export default async function SkillsPage() {
                           <input type="hidden" name="id" value={s.id} />
                           <input type="hidden" name="status" value="confirmed" />
                           <Button type="submit" size="sm" className="h-7">
-                            confirmar
+                            {t("skills.confirm")}
                           </Button>
                         </form>
                         <form action={auditAction}>
                           <input type="hidden" name="id" value={s.id} />
                           <input type="hidden" name="status" value="rejected" />
                           <Button type="submit" size="sm" variant="outline" className="h-7">
-                            rejeitar
+                            {t("skills.reject")}
                           </Button>
                         </form>
                       </span>
                     </div>
                     {s.evidence && (
-                      <p className="border-l-2 border-border pl-3 text-xs text-muted-foreground italic">
+                      <p
+                        data-user-content
+                        className="border-l-2 border-border pl-3 text-xs text-muted-foreground italic"
+                      >
                         {s.evidence}
                       </p>
                     )}
@@ -172,10 +178,10 @@ export default async function SkillsPage() {
         <>
           <Separator className="my-8" />
           <section>
-            <h2 className="type-display-sm mb-3">Confirmadas</h2>
+            <h2 className="type-display-sm mb-3">{t("skills.confirmedTitle")}</h2>
             <div className="flex flex-wrap gap-1.5">
               {confirmed.map((s) => (
-                <Badge key={s.id} className="font-mono type-meta">
+                <Badge key={s.id} data-user-content className="font-mono type-meta">
                   {s.name}
                   {s.level ? ` · ${s.level}` : ""}
                 </Badge>
@@ -188,11 +194,16 @@ export default async function SkillsPage() {
       {rejected.length > 0 && (
         <section className="mt-8">
           <h3 className="mb-2 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
-            Rejeitadas ({rejected.length})
+            {t("skills.rejectedTitle")} ({rejected.length})
           </h3>
           <div className="flex flex-wrap gap-1.5">
             {rejected.map((s) => (
-              <Badge key={s.id} variant="outline" className={cn("font-mono type-meta line-through opacity-60")}>
+              <Badge
+                key={s.id}
+                data-user-content
+                variant="outline"
+                className={cn("font-mono type-meta line-through opacity-60")}
+              >
                 {s.name}
               </Badge>
             ))}

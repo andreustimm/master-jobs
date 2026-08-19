@@ -36,9 +36,30 @@ const POPOVER_ID = "appearance-popover";
 export function AppearanceSwitch({
   theme,
   mode,
+  labels,
 }: {
   theme: ThemeId;
   mode: ModeId;
+  /**
+   * Rótulos já traduzidos: o tradutor tem métodos, e método não atravessa a
+   * fronteira do Server Component. `nav.appearance` e `theme.appearance` já
+   * existiam no dicionário — este componente só não os usava.
+   */
+  /**
+   * Rótulos já resolvidos, inclusive os de `THEMES` e `MODES`.
+   *
+   * Não recebe o tradutor: ele é um objeto com métodos, e função não atravessa
+   * a fronteira do Server Component — só dado serializável atravessa. O texto
+   * chega pronto, e o i18n fica onde deve, do lado servidor.
+   */
+  labels: {
+    appearance: string;
+    trigger: string;
+    theme: string;
+    environment: string;
+    themeDescription: Record<string, string>;
+    modeLabel: Record<string, string>;
+  };
 }) {
   const [pending, startTransition] = useTransition();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -94,7 +115,7 @@ export function AppearanceSwitch({
         type="button"
         popoverTarget={POPOVER_ID}
         onClick={place}
-        aria-label="Aparência"
+        aria-label={labels.appearance}
         data-testid="appearance"
         className={cn(
           "flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-action)]",
@@ -104,7 +125,7 @@ export function AppearanceSwitch({
         )}
       >
         <Palette className="size-3.5" aria-hidden />
-        <span className="hidden sm:inline">aparência</span>
+        <span className="hidden sm:inline">{labels.trigger}</span>
       </button>
 
       <div
@@ -121,34 +142,34 @@ export function AppearanceSwitch({
         )}
       >
         <div className="border-b border-[var(--hairline)] px-3 pt-2.5 pb-1">
-          <span className="type-micro text-muted-foreground">tema</span>
+          <span className="type-micro text-muted-foreground">{labels.theme}</span>
         </div>
-        {THEMES.map((t) => (
+        {THEMES.map((item) => (
           <button
-            key={t.id}
+            key={item.id}
             type="button"
-            onClick={() => apply(t.id, mode)}
+            onClick={() => apply(item.id, mode)}
             className={cn(
               "flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[var(--muted)]",
-              t.id === theme && "bg-[var(--muted)]",
+              item.id === theme && "bg-[var(--muted)]",
             )}
           >
             <Check
               className={cn(
                 "mt-0.5 size-3.5 shrink-0",
-                t.id === theme ? "text-[var(--primary)]" : "opacity-0",
+                item.id === theme ? "text-[var(--primary)]" : "opacity-0",
               )}
               aria-hidden
             />
             <span className="min-w-0">
-              <span className="type-caption-bold block">{t.label}</span>
-              <span className="type-caption-sm block text-muted-foreground">{t.description}</span>
+              <span className="type-caption-bold block">{item.label}</span>
+              <span className="type-caption-sm block text-muted-foreground">{labels.themeDescription[item.id]}</span>
             </span>
           </button>
         ))}
 
         <div className="border-t border-b border-[var(--hairline)] px-3 pt-2.5 pb-1">
-          <span className="type-micro text-muted-foreground">ambiente</span>
+          <span className="type-micro text-muted-foreground">{labels.environment}</span>
         </div>
         <div className="flex gap-1 p-2">
           {MODES.map((m) => {
@@ -167,7 +188,7 @@ export function AppearanceSwitch({
                 )}
               >
                 <Icon className="size-3.5" aria-hidden />
-                {m.label}
+                {labels.modeLabel[m.id]}
               </button>
             );
           })}

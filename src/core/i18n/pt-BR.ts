@@ -20,6 +20,8 @@ export const ptBR = {
     signIn: "entrar",
     signOut: "sair",
     unprotected: "sem proteção",
+    unprotectedTitle:
+      "JHO_AUTH_MODE=open — sem autenticação. Currículo, funil e export ficam acessíveis a qualquer requisição. Remova a variável para exigir login.",
   },
   theme: {
     title: "tema",
@@ -27,6 +29,7 @@ export const ptBR = {
     system: "Sistema",
     light: "Claro",
     dark: "Escuro",
+    appearance: "Aparência",
   },
   login: {
     title: "Entrar",
@@ -44,6 +47,7 @@ export const ptBR = {
     setPasswordHint: "Definir senha:",
   },
   jobs: {
+    noneWithFilters: "Nenhuma vaga com esses filtros. Afrouxe o corte ou desligue algum critério.",
     title: "Vagas",
     matching: "correspondem aos filtros",
     view: "vaga",
@@ -109,6 +113,7 @@ export const ptBR = {
     untriagedHint: "ainda fora do funil",
   },
   grid: {
+    perPage: "por página",
     density: "densidade",
     comfortable: "confortável",
     compact: "compacta",
@@ -129,6 +134,9 @@ export const ptBR = {
     paid: "Apenas vagas que divulgam remuneração",
   },
   candidate: {
+    toSkills: "skills →",
+    toVocabulary: "vocabulário →",
+    backToCv: "← currículo",
     title: "Área do candidato",
     cvMarkdown: "Currículo em markdown",
     versionLabel: "Rótulo desta versão",
@@ -139,9 +147,17 @@ export const ptBR = {
     split: "Dividido",
     preview: "Visualizar",
     nothingToShow: "Nada para mostrar ainda.",
+    viewMode: "Modo de visualização",
+    vimHint: ":w salva",
+    versions: "Versões",
+    current: "atual",
+    chars: "caracteres",
+    gapEmpty: "A análise de lacunas aparece assim que houver um currículo salvo.",
     ofJobs: "das vagas",
   },
   skills: {
+    confirmedTitle: "Confirmadas",
+    rejectedTitle: "Rejeitadas",
     title: "Skills",
     marketWants: "Pedidas pelo mercado, não confirmadas",
     toAudit: "A auditar",
@@ -154,6 +170,29 @@ export const ptBR = {
     marketThreshold: "Aparecem em pelo menos 15% das vagas acima de 60 de aderência.",
     absent: "ausente",
   },
+  /**
+   * Categorias de skill. Seção própria porque `Dictionary` tem exatamente dois
+   * níveis — e essa restrição é boa: uma chave é sempre `secao.chave`, sem
+   * caminho profundo que só se descobre errado em produção.
+   */
+  /** Descrição de cada tema, por chave — a constante em `src/core/theme.ts`
+   *  guarda o caminho, não a frase. */
+  themeDescriptions: {
+    hp: "Azul corporativo, cantos discretos",
+    huly: "Dois acentos, geometria de pílula",
+    graphy: "Cobalto, hairline no lugar de sombra",
+  },
+  skillCategories: {
+    language: "Linguagens",
+    framework: "Frameworks",
+    ai: "IA",
+    cloud: "Cloud e infra",
+    data: "Dados",
+    practice: "Práticas",
+    domain: "Domínios",
+    tool: "Ferramentas",
+    soft: "Interpessoais",
+  },
   vocabulary: {
     title: "Vocabulário",
     quickWin: "Ganho rápido",
@@ -161,6 +200,16 @@ export const ptBR = {
     covered: "Já coberto",
     doNotInvent: "Não invente experiência",
     cvWrites: "Seu CV escreve",
+    noCv: "Nenhum currículo salvo.",
+    pasteCv: "Cole o seu currículo",
+    toCompare: "para comparar com a linguagem do mercado.",
+    backToCv: "currículo",
+    coverageNote: "do vocabulário do mercado, ponderado por demanda",
+    covered_n: "cobertas",
+    vocabularyOf: "de vocabulário",
+    realGaps: "lacunas reais",
+    jobsWrite: "vagas escrevem",
+    jobs: "vagas",
   },
   pipeline: {
     title: "Funil",
@@ -172,6 +221,8 @@ export const ptBR = {
     companies: "empresa(s)",
   },
   jobDetail: {
+    fetchHint: "baixa e organiza as descrições para leitura offline.",
+    previewOf: "Prévia de {shown} de {total} caracteres.",
     employmentType: "Contratação",
     workplace: "Modelo",
     seniority: "Nível",
@@ -186,6 +237,21 @@ export const ptBR = {
     aboveCut: "Acima do corte de {cut}, no acervo inteiro.",
   },
   copy: {
+    candidateLead:
+      "Cole o currículo aqui. Ele fica versionado — cada salvamento vira uma versão, e a anterior continua consultável. Guardar o texto só vale a pena pelo que ele destrava:",
+    identityFrom: "identidade vem de {file}, para as duas fontes não divergirem",
+    pdfNewVersion: "Vira uma versão nova, como qualquer outra —",
+    pdfReviewFirst: "revise antes de confiar",
+    pdfCaveat:
+      "Extração de PDF erra com layout em colunas, e currículo digitalizado não tem texto nenhum para ler.",
+    pdfUploadTodo:
+      "Upload de PDF ainda não existe. Quando existir, o texto extraído entra aqui e o arquivo original fica recuperável — o schema já prevê ({fields}).",
+    vocabularyWorking: "Vocabulário que já está funcionando",
+    skillsLead:
+      "Detectadas automaticamente no seu currículo, contra um catálogo global de 100 tecnologias e práticas.",
+    skillsDetectedNotConfirmed: "Detectada não é confirmada",
+    skillsLeadTail:
+      "— o sistema afirma que encontrou uma skill, nunca que você a tem. Só as confirmadas podem ser citadas como experiência.",
     referralsLead:
       "Vagas abertas onde você já conhece alguém. Referrals são ~7% dos candidatos e ~40% das contratações — nenhuma outra alavanca do sistema chega perto.",
     referralsEmpty:
@@ -199,6 +265,15 @@ export const ptBR = {
     vocabularyCompared: "Comparado com {jobs} vagas acima de {cut} de aderência.",
     vocabularyRareNote:
       "Não significa remover — significa que esses termos não são o que está sendo buscado.",
+    vocabLead:
+      "Um filtro de ATS não infere sinônimo: quem recruta busca os termos literais do próprio anúncio. Esta página compara a sua linguagem com a de {jobs} vagas acima de {cut} de aderência, e separa falta de palavra de falta de experiência.",
+    quickWinNote:
+      "Você tem a experiência e o currículo comprova — sob outra grafia. Trocar a palavra é a coisa mais barata desta lista.",
+    quickWinWarn: "Trocar a palavra só vale se a evidência já estiver lá.",
+    quickWinWarnTail: "para casar com um termo.",
+    auditNote: "Cada uma traz a frase do currículo que a produziu, para você julgar.",
+    realGapNote:
+      "O mercado pede e o currículo não mostra, sob grafia nenhuma. Nem toda lacuna precisa ser fechada — algumas são de vagas que você não quer.",
   },
   common: {
     loading: "Carregando…",

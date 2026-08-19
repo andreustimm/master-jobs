@@ -3,9 +3,10 @@
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { EditorState } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
+import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+import { syntaxHighlighting } from "@codemirror/language";
+import { markdownHighlight } from "./highlight.ts";
 import { Vim, vim } from "@replit/codemirror-vim";
 import { useEffect, useRef, useState } from "react";
 import { Columns2, Eye, Pencil } from "lucide-react";
@@ -30,13 +31,32 @@ import { MarkdownPreview } from "./markdown-preview";
 
 const VIM_KEY = "jho:cv-editor:vim";
 
+/**
+ * Rótulos já traduzidos.
+ *
+ * Vêm prontos porque o tradutor é um objeto com métodos, e método não
+ * atravessa a fronteira do React Server Component — só dado serializável
+ * atravessa. Passar strings mantém o i18n na página, do lado servidor, e este
+ * componente sem plumbing de idioma.
+ */
+export type EditorLabels = {
+  edit: string;
+  split: string;
+  preview: string;
+  viewMode: string;
+  vimHint: string;
+  nothingToShow: string;
+};
+
 export function MarkdownEditor({
   name,
   defaultValue,
+  labels,
   minHeight = 460,
 }: {
   name: string;
   defaultValue: string;
+  labels: EditorLabels;
   minHeight?: number;
 }) {
   const host = useRef<HTMLDivElement>(null);
@@ -63,7 +83,8 @@ export function MarkdownEditor({
       lineNumbers(),
       highlightActiveLine(),
       history(),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      syntaxHighlighting(markdownHighlight, { fallback: true }),
+      drawSelection(),
       markdown({ base: markdownLanguage, codeLanguages: languages }),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       EditorView.lineWrapping,
@@ -75,33 +96,78 @@ export function MarkdownEditor({
       EditorView.theme({
         "&": {
           fontSize: "13px",
-          border: "1px solid var(--border)",
+          border: "1px solid var(--hairline)",
           borderRadius: "var(--radius-md)",
-          backgroundColor: "var(--background)",
+          // Superfície própria, não `--background`: um editor com a mesma cor
+          // da página só se distingue pela borda, e no escuro os três temas
+          // ficavam com a área de digitação diluída no resto da tela.
+          backgroundColor: "var(--cm-surface)",
           color: "var(--foreground)",
         },
         "&.cm-focused": { outline: "2px solid var(--ring)", outlineOffset: "1px" },
-        ".cm-content": {
+        ".cm-scroller": {
           fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+          lineHeight: "1.65",
+        },
+        ".cm-content": {
           minHeight: `${minHeight}px`,
-          caretColor: "var(--foreground)",
+          padding: "10px 0",
+          caretColor: "var(--cm-cursor)",
         },
         ".cm-gutters": {
-          backgroundColor: "var(--muted)",
-          color: "var(--muted-foreground)",
+          backgroundColor: "var(--cm-gutter)",
+          color: "var(--cm-marker)",
           border: "none",
+          borderRight: "1px solid var(--hairline)",
         },
-        ".cm-activeLine": { backgroundColor: "color-mix(in oklch, var(--accent) 35%, transparent)" },
-        ".cm-activeLineGutter": { backgroundColor: "transparent" },
-        // The vim command line, styled like the rest rather than left default.
+        ".cm-lineNumbers .cm-gutterElement": { padding: "0 10px 0 8px" },
+        ".cm-activeLine": { backgroundColor: "var(--cm-active-line)" },
+        // A linha ativa do gutter era transparente, então o número da linha em
+        // que o cursor está não se destacava de nenhum outro.
+        ".cm-activeLineGutter": {
+          backgroundColor: "var(--cm-active-line)",
+          color: "var(--foreground)",
+        },
+        // Seleção desenhada pelo CodeMirror em vez da nativa: a nativa não é
+        // estilizável por tema, e o vim a esconde para desenhar o cursor de
+        // bloco. Com `drawSelection` as duas seguem o mesmo token.
+        "& .cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+          backgroundColor: "var(--cm-selection)",
+        },
+        // O `&light`/`&dark` do CodeMirror decide por um facet que este editor
+        // nunca setou — logo o realce de busca ficava fixo no amarelo de tema
+        // claro, invisível no escuro. Resolvido por token, que não depende do
+        // facet e acompanha a troca de tema sem recriar o editor.
+        ".cm-searchMatch": {
+          backgroundColor: "var(--cm-search)",
+          outline: "1px solid var(--cm-marker)",
+        },
+        ".cm-searchMatch.cm-searchMatch-selected": {
+          backgroundColor: "var(--cm-selection)",
+        },
+        // Cursor de bloco do vim. O pacote traz um rosa fixo que ignora o tema,
+        // e o texto sob o bloco precisa do contraste invertido para continuar
+        // legível — daí a superfície do editor virar cor de texto aqui.
+        ".cm-fat-cursor": {
+          background: "var(--cm-cursor)",
+          color: "var(--cm-surface) !important",
+        },
+        "&:not(.cm-focused) .cm-fat-cursor": {
+          background: "none",
+          outline: "solid 1px var(--cm-cursor)",
+        },
         ".cm-vim-panel": {
-          backgroundColor: "var(--muted)",
+          backgroundColor: "var(--cm-gutter)",
           color: "var(--foreground)",
           fontFamily: '"IBM Plex Mono", monospace',
           fontSize: "12px",
           padding: "2px 8px",
         },
-        ".cm-panels": { borderTop: "1px solid var(--border)" },
+        ".cm-panels": {
+          borderTop: "1px solid var(--hairline)",
+          backgroundColor: "var(--cm-gutter)",
+          color: "var(--foreground)",
+        },
       }),
     ];
 
@@ -115,7 +181,7 @@ export function MarkdownEditor({
       Vim.defineEx("write", "w", () => {
         host.current?.closest("form")?.requestSubmit();
       });
-      setStatus("vim — :w salva");
+      setStatus(`vim — ${labels.vimHint}`);
     } else {
       setStatus("");
     }
@@ -124,7 +190,7 @@ export function MarkdownEditor({
       editor.destroy();
       view.current = null;
     };
-  }, [vimOn, defaultValue, minHeight]);
+  }, [vimOn, defaultValue, minHeight, labels.vimHint]);
 
   /**
    * Keeps the preview fed while typing.
@@ -134,6 +200,10 @@ export function MarkdownEditor({
    * the same source, on a small debounce, only while a preview is visible.
    */
   useEffect(() => {
+    // Voltar de "visualizar" reexibe um editor que estava em `display: none`,
+    // onde toda medida vale zero. Sem pedir nova medição, a primeira rolagem e
+    // o posicionamento do cursor saem errados.
+    view.current?.requestMeasure();
     if (mode === "edit" || !view.current) return;
     const tick = setInterval(() => {
       const next = view.current?.state.doc.toString() ?? "";
@@ -151,9 +221,9 @@ export function MarkdownEditor({
   }
 
   const MODES = [
-    { id: "edit" as const, label: "Editar", Icon: Pencil },
-    { id: "split" as const, label: "Dividido", Icon: Columns2 },
-    { id: "preview" as const, label: "Visualizar", Icon: Eye },
+    { id: "edit" as const, label: labels.edit, Icon: Pencil },
+    { id: "split" as const, label: labels.split, Icon: Columns2 },
+    { id: "preview" as const, label: labels.preview, Icon: Eye },
   ];
 
   return (
@@ -163,7 +233,7 @@ export function MarkdownEditor({
             alone is a guess, and this toolbar has room. */}
         <div
           role="group"
-          aria-label="Modo de visualização"
+          aria-label={labels.viewMode}
           className="inline-flex overflow-hidden rounded-lg border border-[var(--color-hairline)]"
         >
           {MODES.map(({ id, label, Icon }) => (
@@ -213,6 +283,7 @@ export function MarkdownEditor({
             instance and lose the cursor, the history and the vim state. */}
         <div
           ref={host}
+          data-user-content
           className={cn(
             "overflow-hidden",
             vimOn === null && "opacity-0",
@@ -222,16 +293,27 @@ export function MarkdownEditor({
 
         {mode !== "edit" && (
           <div
+            data-user-content
             className="overflow-y-auto rounded-lg border border-[var(--color-hairline)] bg-card p-4"
             style={{ minHeight }}
           >
-            <MarkdownPreview source={previewSource} />
+            <MarkdownPreview source={previewSource} emptyLabel={labels.nothingToShow} />
           </div>
         )}
       </div>
 
       {/* CodeMirror is not a form control, so the value travels through here. */}
-      <textarea ref={mirror} name={name} defaultValue={defaultValue} hidden readOnly />
+      {/* `data-user-content` também aqui: o textarea está oculto, mas o
+          currículo é filho de texto dele e a varredura de idioma percorre o DOM
+          inteiro, visível ou não. */}
+      <textarea
+        ref={mirror}
+        name={name}
+        defaultValue={defaultValue}
+        data-user-content
+        hidden
+        readOnly
+      />
     </div>
   );
 }

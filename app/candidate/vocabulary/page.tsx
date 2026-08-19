@@ -6,6 +6,7 @@ import { vocabularyGap } from "../../../src/contexts/skills/index.ts";
 import type { GapItem } from "../../../src/contexts/skills/index.ts";
 import { requirePage } from "../../auth";
 import { getTranslator } from "../../i18n";
+import { formatNumber, type Translator } from "../../../src/core/i18n/index.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,7 @@ function Demand({ value, tone }: { value: number; tone: "win" | "gap" | "ok" }) 
   );
 }
 
-function QuickWin({ item }: { item: GapItem }) {
+function QuickWin({ item, t }: { item: GapItem; t: Translator["t"] }) {
   return (
     <li className="border-b border-[var(--color-hairline)] py-4 last:border-0">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -49,14 +50,15 @@ function QuickWin({ item }: { item: GapItem }) {
         <Demand value={item.demand} tone="win" />
       </div>
       <p className="type-body-sm mt-1 text-muted-foreground">
-        Seu CV escreve{" "}
+        {t("vocabulary.cvWrites")}{" "}
         {item.cvTerms.map((t, i) => (
           <span key={t}>
             {i > 0 && ", "}
             <code className="type-mono-sm rounded bg-[var(--color-cloud)] px-1 py-0.5">{t}</code>
           </span>
         ))}{" "}
-        — {item.jobCount} vagas escrevem <strong className="text-foreground">{item.marketTerm}</strong>.
+        — {item.jobCount} {t("vocabulary.jobsWrite")}{" "}
+        <strong className="text-foreground">{item.marketTerm}</strong>.
       </p>
     </li>
   );
@@ -64,7 +66,6 @@ function QuickWin({ item }: { item: GapItem }) {
 
 export default async function VocabularyPage() {
   const { t, locale } = await getTranslator();
-  void locale;
   // Guard antes de ler qualquer dado. O escopo vem da sessão.
   const session = await requirePage("candidate:read");
   void session;
@@ -75,13 +76,13 @@ export default async function VocabularyPage() {
   if (!doc) {
     return (
       <main className="pt-10 pb-16">
-        <h1 className="type-display-md chevron mb-2">Vocabulário</h1>
+        <h1 className="type-display-md chevron mb-2">{t("vocabulary.title")}</h1>
         <p className="type-body-md text-muted-foreground">
-          Nenhum currículo salvo.{" "}
+          {t("vocabulary.noCv")}{" "}
           <Link href="/candidate" className="text-[var(--primary-text)] hover:underline">
-            Cole o seu currículo
+            {t("vocabulary.pasteCv")}
           </Link>{" "}
-          para comparar com a linguagem do mercado.
+          {t("vocabulary.toCompare")}
         </p>
       </main>
     );
@@ -94,7 +95,7 @@ export default async function VocabularyPage() {
       <div className="mb-2 flex items-baseline gap-3">
         <h1 className="type-display-md chevron">{t("vocabulary.title")}</h1>
         <Link href="/candidate" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
-          ← currículo
+          ← {t("vocabulary.backToCv")}
         </Link>
         <Link href="/candidate/skills" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           skills →
@@ -102,24 +103,20 @@ export default async function VocabularyPage() {
       </div>
 
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
-        Um filtro de ATS não infere sinônimo: quem recruta busca os termos
-        literais do próprio anúncio. Esta página compara a sua linguagem com a
-        de <strong className="text-foreground">{report.totalJobs} vagas</strong>{" "}
-        acima de {MIN_FIT} de aderência, e separa o que é{" "}
-        <strong className="text-foreground">falta de palavra</strong> do que é{" "}
-        <strong className="text-foreground">falta de experiência</strong>.
+        {t("copy.vocabLead", { jobs: formatNumber(report.totalJobs, locale), cut: MIN_FIT })}
       </p>
 
       <div className="mb-8 flex flex-wrap items-center gap-x-8 gap-y-2">
         <div>
           <div className="type-display-sm tabular-nums">{pct(report.coverage.weighted)}</div>
           <div className="type-body-sm text-muted-foreground">
-            do vocabulário do mercado, ponderado por demanda
+            {t("vocabulary.coverageNote")}
           </div>
         </div>
         <span className="type-body-sm text-muted-foreground">
-          {report.coverage.covered} cobertas · {report.coverage.vocabulary} de vocabulário ·{" "}
-          {report.coverage.missing} lacunas reais
+          {report.coverage.covered} {t("vocabulary.covered_n")} ·{" "}
+          {report.coverage.vocabulary} {t("vocabulary.vocabularyOf")} ·{" "}
+          {report.coverage.missing} {t("vocabulary.realGaps")}
         </span>
       </div>
 
@@ -128,18 +125,17 @@ export default async function VocabularyPage() {
           <CardContent className="pt-0">
             <h2 className="type-display-xs mb-1">{t("vocabulary.quickWin")}</h2>
             <p className="type-body-sm mb-2 text-muted-foreground">
-              Você tem a experiência e o currículo comprova — sob outra grafia.
-              Trocar a palavra é a coisa mais barata desta lista.
+              {t("copy.quickWinNote")}
             </p>
             <ul>
               {report.quickWins.map((item) => (
-                <QuickWin key={item.skill.slug} item={item} />
+                <QuickWin key={item.skill.slug} item={item} t={t} />
               ))}
             </ul>
             <p className="type-body-sm mt-4 border-t border-[var(--color-hairline)] pt-4 text-muted-foreground">
-              Trocar a palavra só vale se a evidência já estiver lá.{" "}
-              <strong className="text-foreground">Não invente experiência</strong> para
-              casar com um termo.
+              {t("copy.quickWinWarn")}{" "}
+              <strong className="text-foreground">{t("vocabulary.doNotInvent")}</strong>{" "}
+              {t("copy.quickWinWarnTail")}
             </p>
           </CardContent>
         </Card>
@@ -150,9 +146,7 @@ export default async function VocabularyPage() {
           <CardContent className="pt-0">
             <h2 className="type-display-xs mb-1">{t("vocabulary.realGap")}</h2>
             <p className="type-body-sm mb-4 text-muted-foreground">
-              O mercado pede e o currículo não mostra, sob grafia nenhuma. Nem
-              toda lacuna precisa ser fechada — algumas são de vagas que você não
-              quer.
+              {t("copy.realGapNote")}
             </p>
             <ul>
               {report.realGaps.map((item) => (
@@ -168,7 +162,7 @@ export default async function VocabularyPage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="type-body-sm tabular-nums text-muted-foreground">
-                      {item.jobCount} vagas
+                      {item.jobCount} {t("vocabulary.jobs")}
                     </span>
                     <Demand value={item.demand} tone="gap" />
                   </div>

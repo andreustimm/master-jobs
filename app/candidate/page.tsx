@@ -15,6 +15,7 @@ import { MarkdownEditor } from "./editor";
 import { importPdfAction, saveCvAction } from "./actions";
 import { requirePage } from "../auth";
 import { getTranslator } from "../i18n";
+import { formatNumber } from "../../src/core/i18n/index.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -35,16 +36,14 @@ export default async function CandidateArea() {
       <div className="mb-4 flex items-baseline gap-3">
         <h1 className="type-display-md chevron">{t("candidate.title")}</h1>
         <Link href="/candidate/skills" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
-          skills →
+          {t("candidate.toSkills")}
         </Link>
         <Link href="/candidate/vocabulary" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
-          vocabulário →
+          {t("candidate.toVocabulary")}
         </Link>
       </div>
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
-        Cole o currículo aqui. Ele fica versionado — cada salvamento vira uma
-        versão, e a anterior continua consultável. Guardar o texto só vale a pena
-        pelo que ele destrava:{" "}
+        {t("copy.candidateLead")}{" "}
         <strong className="text-foreground">
           {t("copy.vocabularyLead")}
         </strong>
@@ -57,12 +56,18 @@ export default async function CandidateArea() {
             <CardTitle className="text-lg">{person.name}</CardTitle>
           </CardHeader>
           <CardContent className="pt-0 text-sm text-muted-foreground">
-            {person.headline && <p className="text-foreground">{person.headline}</p>}
-            <p className="mt-1">
+            {/* Dado do usuário: `profile.yaml` está no idioma dele, e continua
+                assim com a interface em inglês. Ver a nota em `tests/e2e`. */}
+            {person.headline && (
+              <p data-user-content className="text-foreground">
+                {person.headline}
+              </p>
+            )}
+            <p data-user-content className="mt-1">
               {[person.location, person.email].filter(Boolean).join(" · ")}
             </p>
             <p className="mt-2 font-mono type-meta">
-              identidade vem de <code>profile/profile.yaml</code>, para as duas fontes não divergirem
+              {t("copy.identityFrom", { file: "profile/profile.yaml" })}
             </p>
           </CardContent>
         </Card>
@@ -87,10 +92,9 @@ export default async function CandidateArea() {
           {t("candidate.extractText")}
         </Button>
         <p className="type-body-sm w-full text-muted-foreground">
-          Vira uma versão nova, como qualquer outra —{" "}
-          <strong className="text-foreground">revise antes de confiar</strong>. Extração de
-          PDF erra com layout em colunas, e currículo digitalizado não tem texto
-          nenhum para ler.
+          {t("copy.pdfNewVersion")}{" "}
+          <strong className="text-foreground">{t("copy.pdfReviewFirst")}</strong>.{" "}
+          {t("copy.pdfCaveat")}
         </p>
       </form>
 
@@ -107,7 +111,18 @@ export default async function CandidateArea() {
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="content">{t("candidate.cvMarkdown")}</Label>
-          <MarkdownEditor name="content" defaultValue={doc?.content ?? ""} />
+          <MarkdownEditor
+            name="content"
+            defaultValue={doc?.content ?? ""}
+            labels={{
+              edit: t("candidate.edit"),
+              split: t("candidate.split"),
+              preview: t("candidate.preview"),
+              viewMode: t("candidate.viewMode"),
+              vimHint: t("candidate.vimHint"),
+              nothingToShow: t("candidate.nothingToShow"),
+            }}
+          />
         </div>
         <div className="flex items-center gap-3">
           <Button type="submit">{t("candidate.save")}</Button>
@@ -120,10 +135,7 @@ export default async function CandidateArea() {
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          Upload de PDF ainda não existe. Quando existir, o texto extraído entra
-          aqui e o arquivo original fica recuperável — o schema já prevê
-          (<code className="font-mono">format</code>,{" "}
-          <code className="font-mono">source_filename</code>).
+          {t("copy.pdfUploadTodo", { fields: "format, source_filename" })}
         </p>
       </form>
 
@@ -167,7 +179,7 @@ export default async function CandidateArea() {
 
             <details className="mb-6">
               <summary className="cursor-pointer text-sm font-medium">
-                Vocabulário que já está funcionando ({gap.confirmed.length})
+                {t("copy.vocabularyWorking")} ({gap.confirmed.length})
               </summary>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {gap.confirmed.map((term) => (
@@ -200,7 +212,7 @@ export default async function CandidateArea() {
 
       {!gap && (
         <Card className="p-5 text-sm text-muted-foreground">
-          A análise de lacunas aparece assim que houver um currículo salvo.
+          {t("candidate.gapEmpty")}
         </Card>
       )}
 
@@ -208,18 +220,18 @@ export default async function CandidateArea() {
         <>
           <Separator className="my-8" />
           <section>
-            <h2 className="type-display-xs mb-3">Versões</h2>
+            <h2 className="type-display-xs mb-3">{t("candidate.versions")}</h2>
             <div className="divide-y overflow-hidden rounded-xl border">
               {history.map((h) => (
                 <div key={h.id} className="flex items-center gap-3 bg-card px-4 py-2.5 text-sm">
                   {h.isCurrent ? (
-                    <Badge className="type-micro">atual</Badge>
+                    <Badge className="type-micro">{t("candidate.current")}</Badge>
                   ) : (
                     <span className="w-[46px]" />
                   )}
-                  <span className="flex-1">{h.label}</span>
+                  <span data-user-content className="flex-1">{h.label}</span>
                   <span className="font-mono text-xs text-muted-foreground">
-                    {Number(h.length).toLocaleString("pt-BR")} chars
+                    {formatNumber(h.length, locale)} {t("candidate.chars")}
                   </span>
                   <span className="font-mono text-xs text-muted-foreground">
                     {h.createdAt.slice(0, 10)}

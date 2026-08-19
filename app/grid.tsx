@@ -53,7 +53,7 @@ export function Pagination({
       <div className="flex flex-wrap items-center gap-1.5">
         {current > 1 && (
           <a href={link(current - 1)} className={box(false)}>
-            ← anterior
+            ← {t("grid.previous")}
           </a>
         )}
         {window.map((p, i) => (
@@ -68,14 +68,14 @@ export function Pagination({
         ))}
         {current < pages && (
           <a href={link(current + 1)} className={box(false)}>
-            próxima →
+            {t("grid.next")} →
           </a>
         )}
       </div>
 
       <div className="flex items-center gap-1.5">
         <span className="font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
-          por página
+          {t("grid.perPage")}
         </span>
         {PAGE_SIZES.map((n) => (
           <a

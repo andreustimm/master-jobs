@@ -257,6 +257,116 @@ desta UI por polimento.
 > `prefers-reduced-motion`. Uma grade de triagem que se move quando o usuário
 > pediu que não se movesse é uma falha de acessibilidade, não um detalhe.
 
+### UI-02 · Histórico de versões do currículo: modal, restaurar, renomear, excluir 📋
+
+Pedido em 19/08/2026. Hoje `/candidate` lista as versões no rodapé da página,
+somente leitura: rótulo, tamanho em caracteres e data. Não dá para voltar a
+uma, renomear nem apagar.
+
+**O que a lista de hoje mostra, e por que ela não serve.** Na captura enviada,
+três versões carregam o rótulo `ATS EN 2026-07` e medem 8.227, 8.228 e 8.166
+caracteres. Um caractere de diferença entre duas delas. O rótulo é a única
+alça humana da versão e ele não distingue nada — a lista existe, mas não
+responde à única pergunta que se faz a um histórico: *qual era esta?*
+
+Isto não é problema de layout. É a razão de as três operações pedidas serem uma
+tarefa só: restaurar sem saber o que se restaura é sorteio.
+
+---
+
+#### Decisões que a implementação precisa tomar
+
+**1. Restaurar acrescenta, não rebobina.**
+
+Restaurar a versão N deve gravar uma versão nova com o conteúdo de N, e não
+mover o ponteiro `is_current` de volta. As duas alternativas preservam as
+linhas, mas só a primeira mantém "a última linha" e "o currículo atual" como a
+mesma coisa. Mover o ponteiro faz o histórico deixar de ser cronológico, e todo
+código que hoje lê `history[0]` como o estado corrente passa a mentir em
+silêncio — inclusive a análise de vocabulário e a de skills, que comparam o
+mercado com o CV atual.
+
+O rótulo da versão criada deve dizer de onde veio (`restaurada de ATS EN
+2026-07`), senão o próximo histórico repete o problema deste.
+
+**2. Excluir esbarra em um vínculo que hoje não existe de verdade.**
+
+`application.cv_variant` é **texto livre**, não chave estrangeira para
+`candidate_document.id`. Ou seja: o funil registra qual variante do currículo
+foi enviada para cada vaga guardando o nome dela numa string solta.
+
+A consequência para quem recruta é concreta. Antes de uma entrevista a pergunta
+é *"que currículo essa empresa viu?"* — e ela precisa ser respondível meses
+depois. Apagar uma versão hoje não quebra nada tecnicamente, e é justamente o
+problema: o funil continua afirmando que enviou `ATS EN 2026-07` para uma vaga
+enquanto esse documento não existe mais. Auditoria que aponta para o vazio é
+pior que auditoria nenhuma, porque parece íntegra.
+
+Duas correções, e a segunda é a que importa:
+
+- Bloquear a exclusão de versão cujo rótulo apareça em `application.cv_variant`,
+  explicando na interface **quais** candidaturas a prendem.
+- Trocar `cv_variant` por referência ao `candidate_document.id`, com
+  `ON DELETE RESTRICT`. O banco passa a garantir o que a interface só pede.
+
+**3. A versão atual não se exclui.**
+
+O candidato precisa ter sempre um currículo corrente: `/candidate` renderiza a
+partir dele e as duas análises comparam contra ele. Excluir a atual deixaria
+três telas sem chão. Regra: excluir só quem não é a atual — para trocar a
+atual, restaura-se outra primeiro.
+
+**4. Renomear é o que torna a lista utilizável.**
+
+Não é cosmético: é a correção do defeito descrito acima. Junto disso, o rótulo
+padrão no salvamento precisa nascer distinguível — data mais um sinal do que
+mudou — senão a lista volta a encher de homônimos na semana seguinte.
+
+**5. Salvar sem mudança não deveria criar versão.**
+
+Os três `ATS EN 2026-07` provavelmente vieram de salvamentos repetidos. Comparar
+o conteúdo com o da versão atual e não gravar quando forem iguais elimina a
+maior fonte de lixo do histórico, e custa uma comparação de string.
+
+**6. Comparar duas versões.**
+
+Com 8.227 contra 8.228 caracteres, nenhuma coluna da tabela permite escolher.
+Um diff por linha entre duas versões selecionadas é o que transforma a lista em
+decisão. É também o que dá sentido a restaurar.
+
+---
+
+#### Forma
+
+Modal, e não expansão na página: o histórico já mora no rodapé de uma página
+longa, e as três operações são destrutivas ou quase — merecem foco e confirmação
+explícita, não um clique perdido no meio da rolagem.
+
+Ilha de cliente, como o editor. As ações são Server Actions sob
+`candidate:write`; a de exclusão exige confirmação que nomeie a versão, porque
+rótulos parecidos é exatamente o que esta tarefa existe para resolver.
+
+**Acessibilidade:** o modal precisa de foco preso, `Escape` para fechar e
+retorno do foco ao gatilho. Os botões de linha ficam sempre visíveis — apareceu
+no ajuste de A11Y de 19/08 que controle que só existe no hover é controle que
+não existe para quem navega por teclado.
+
+**i18n:** todo rótulo pelo dicionário, incluindo os de confirmação. O rótulo da
+versão em si é dado do usuário e leva `data-user-content`.
+
+---
+
+#### Ordem sugerida
+
+1. Renomear e o guard de salvamento sem mudança — barato, e sozinho já conserta
+   a lista ilegível de hoje.
+2. Modal com o diff entre duas versões.
+3. Restaurar (acrescentando).
+4. Migração de `cv_variant` para chave estrangeira, e então excluir.
+
+O item 4 vem por último de propósito: excluir antes de o vínculo existir é
+entregar a faca sem o cabo.
+
 ## P3 — Estrutura e futuro
 
 ### AUTH-01 · Autenticação e autorização ✅
@@ -395,3 +505,6 @@ lista no navegador devolve zero e diz isso, sugerindo `jho sources snippet`.
 5. **M-03** — benefícios, junto do rebalanceamento de pesos.
 6. **F-01** — e-mail, o maior salto de qualidade de dado.
 7. **E-02** — estatística, quando houver dado de resultado para correlacionar.
+8. **UI-02** — histórico de versões do currículo. Pedido em 19/08; a etapa de
+   exclusão depende de `cv_variant` virar chave estrangeira, então entra depois
+   da migração.

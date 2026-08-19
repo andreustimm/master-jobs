@@ -33,6 +33,7 @@
     "@codemirror/language-data": "^6.5.2",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.9",
+    "@lezer/highlight": "^1.2.3",
     "@libsql/client": "^0.17.4",
     "@replit/codemirror-vim": "^6.4.0",
     "class-variance-authority": "^0.7.1",

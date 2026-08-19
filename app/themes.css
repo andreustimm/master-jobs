@@ -427,3 +427,187 @@
     --bad: #e0655a;
   }
 }
+
+/* ===========================================================================
+   Paleta de sintaxe do editor de markdown.
+
+   Existe separada porque é um problema de design diferente do resto da
+   interface. Os tokens de UI (`--accent-2`, `--warn`) são feitos para
+   PREENCHIMENTO — barra, chip, borda — onde o mínimo é 3:1. Texto de código
+   precisa de 4.5:1, e medindo se vê que eles não chegam lá: `--accent-2` no
+   tema graphy claro dá 2.53:1 contra o fundo do editor. Reaproveitá-los teria
+   produzido exatamente o defeito que esta seção corrige.
+
+   O defeito, medido: o editor usava `defaultHighlightStyle` do CodeMirror, uma
+   paleta com hex fixo pensada para fundo branco — `#219` para link, `#404740`
+   para os marcadores. Contra os fundos escuros dos três temas isso dá 1.44:1 e
+   1.96:1. Nada ali era legível; o azul-marinho sobre preto e o cinza sobre
+   preto que apareciam na tela eram literalmente esses dois valores.
+
+   Hierarquia, e ela é a decisão de design: em um editor de currículo o texto é
+   o conteúdo, não o código. Então a prosa fica em `--foreground`, contraste
+   cheio, e a cor marca só ESTRUTURA. Marcadores (`#`, `**`, `[`, `]`) recuam
+   para o cinza do tema, mas continuam acima de 4.5:1 — recuar não é sumir, que
+   é onde a paleta antiga errava.
+
+   URL recua junto com os marcadores de propósito. Em um currículo cada empresa
+   carrega um link, e o endereço é máquina: quem lê quer o nome da empresa. A
+   paleta antiga fazia o oposto — pintava a URL de azul forte e apagava o nome.
+
+   Título e link usam matizes diferentes em todos os temas, porque
+   `### [Empresa](url) — Cargo` é a linha mais comum deste currículo e os dois
+   se sobrepõem nela.
+
+   Todos os 54 pares cor×fundo são verificados em `tests/e2e/ui.mjs`, lendo o
+   estilo computado dos spans reais nos seis ambientes.
+   =========================================================================== */
+
+[data-theme="hp"] {
+  --cm-surface: #ffffff;
+  --cm-gutter: #f7f7f7;
+  --cm-heading: #0e3191;
+  --cm-link: #2a5f6e;
+  --cm-url: #5f6b73;
+  --cm-code: #0e7c63;
+  --cm-quote: #636363;
+  --cm-marker: #6e6e6e;
+  --cm-invalid: #a33a2a;
+  --cm-active-line: #024ad80f;
+  --cm-selection: #024ad82e;
+  --cm-search: #9a6b1240;
+  --cm-cursor: #024ad8;
+}
+
+[data-theme="huly"] {
+  --cm-surface: #ffffff;
+  --cm-gutter: #f1f2f4;
+  --cm-heading: #2f4f8f;
+  --cm-link: #b34a28;
+  --cm-url: #5c626d;
+  --cm-code: #1f7a5c;
+  --cm-quote: #5c626d;
+  --cm-marker: #6b7280;
+  --cm-invalid: #c0453a;
+  --cm-active-line: #3a5fa80f;
+  --cm-selection: #3a5fa82e;
+  --cm-search: #d9603c33;
+  --cm-cursor: #3a5fa8;
+}
+
+[data-theme="graphy"] {
+  --cm-surface: #ffffff;
+  --cm-gutter: #eef1f7;
+  --cm-heading: #1e3fa8;
+  --cm-link: #0b6ea8;
+  --cm-url: #5b6280;
+  --cm-code: #1f7a5c;
+  --cm-quote: #5b6280;
+  --cm-marker: #6a7190;
+  --cm-invalid: #c0392b;
+  --cm-active-line: #2450d80f;
+  --cm-selection: #2450d82e;
+  --cm-search: #0099ff33;
+  --cm-cursor: #2450d8;
+}
+
+/* --- Escuro: escolha explícita ------------------------------------------- */
+
+[data-theme="hp"][data-mode="dark"] {
+  --cm-surface: #0d0f13;
+  --cm-gutter: #14171c;
+  --cm-heading: #7fb0ff;
+  --cm-link: #6fc6d8;
+  --cm-url: #949aa4;
+  --cm-code: #4ba585;
+  --cm-quote: #949aa4;
+  --cm-marker: #8b929c;
+  --cm-invalid: #e0655a;
+  --cm-active-line: #5b9bff14;
+  --cm-selection: #5b9bff33;
+  --cm-search: #d9a44140;
+  --cm-cursor: #7fb0ff;
+}
+
+[data-theme="huly"][data-mode="dark"] {
+  --cm-surface: #0c0e12;
+  --cm-gutter: #13161b;
+  --cm-heading: #8fb0f0;
+  --cm-link: #ff9a78;
+  --cm-url: #9599a3;
+  --cm-code: #4ba585;
+  --cm-quote: #9599a3;
+  --cm-marker: #8d919b;
+  --cm-invalid: #e0655a;
+  --cm-active-line: #7ba0e814;
+  --cm-selection: #7ba0e833;
+  --cm-search: #ff896440;
+  --cm-cursor: #8fb0f0;
+}
+
+[data-theme="graphy"][data-mode="dark"] {
+  --cm-surface: #0a0d1c;
+  --cm-gutter: #111530;
+  --cm-heading: #9fb6ff;
+  --cm-link: #4fb8ff;
+  --cm-url: #8b93af;
+  --cm-code: #57b894;
+  --cm-quote: #8b93af;
+  --cm-marker: #868ea9;
+  --cm-invalid: #e0655a;
+  --cm-active-line: #8fabff14;
+  --cm-selection: #8fabff33;
+  --cm-search: #33aaff40;
+  --cm-cursor: #9fb6ff;
+}
+
+/* --- Escuro: sistema, sem escolha ---------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="hp"]:not([data-mode="light"]) {
+    --cm-surface: #0d0f13;
+    --cm-gutter: #14171c;
+    --cm-heading: #7fb0ff;
+    --cm-link: #6fc6d8;
+    --cm-url: #949aa4;
+    --cm-code: #4ba585;
+    --cm-quote: #949aa4;
+    --cm-marker: #8b929c;
+    --cm-invalid: #e0655a;
+    --cm-active-line: #5b9bff14;
+    --cm-selection: #5b9bff33;
+    --cm-search: #d9a44140;
+    --cm-cursor: #7fb0ff;
+  }
+
+  [data-theme="huly"]:not([data-mode="light"]) {
+    --cm-surface: #0c0e12;
+    --cm-gutter: #13161b;
+    --cm-heading: #8fb0f0;
+    --cm-link: #ff9a78;
+    --cm-url: #9599a3;
+    --cm-code: #4ba585;
+    --cm-quote: #9599a3;
+    --cm-marker: #8d919b;
+    --cm-invalid: #e0655a;
+    --cm-active-line: #7ba0e814;
+    --cm-selection: #7ba0e833;
+    --cm-search: #ff896440;
+    --cm-cursor: #8fb0f0;
+  }
+
+  [data-theme="graphy"]:not([data-mode="light"]) {
+    --cm-surface: #0a0d1c;
+    --cm-gutter: #111530;
+    --cm-heading: #9fb6ff;
+    --cm-link: #4fb8ff;
+    --cm-url: #8b93af;
+    --cm-code: #57b894;
+    --cm-quote: #8b93af;
+    --cm-marker: #868ea9;
+    --cm-invalid: #e0655a;
+    --cm-active-line: #8fabff14;
+    --cm-selection: #8fabff33;
+    --cm-search: #33aaff40;
+    --cm-cursor: #9fb6ff;
+  }
+}

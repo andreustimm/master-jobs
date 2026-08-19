@@ -21,7 +21,7 @@ export async function SessionBadge() {
     return (
       <span
         className="type-micro rounded-full border border-[var(--bad)] px-2 py-0.5 text-[var(--bad)]"
-        title="JHO_AUTH_MODE=open — sem autenticação. Currículo, funil e export ficam acessíveis a qualquer requisição. Remova a variável para exigir login."
+        title={t("nav.unprotectedTitle")}
       >
         {t("nav.unprotected")}
       </span>

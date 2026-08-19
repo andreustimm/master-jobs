@@ -14,21 +14,29 @@
  * `app/themes.css`. Nada em `components/` muda, porque nenhum componente
  * conhece tema — todos leem token semântico.
  */
+/**
+ * `label` é nome próprio e não se traduz; `description` guarda CHAVE.
+ *
+ * Guardava a frase pronta, e é a mesma classe de defeito da legenda do score e
+ * das categorias de skill: texto dentro de constante não aparece em busca por
+ * string no JSX, então sobrevive a uma revisão de tradução inteira. Foi assim
+ * que "Dois acentos, geometria de pílula" ficou na interface em inglês.
+ */
 export const THEMES = [
   {
     id: "hp",
     label: "HP",
-    description: "Azul corporativo, cantos discretos",
+    description: "themeDescriptions.hp",
   },
   {
     id: "huly",
     label: "Huly",
-    description: "Dois acentos, geometria de pílula",
+    description: "themeDescriptions.huly",
   },
   {
     id: "graphy",
     label: "Graphy",
-    description: "Cobalto, hairline no lugar de sombra",
+    description: "themeDescriptions.graphy",
   },
 ] as const;
 
@@ -42,9 +50,9 @@ export type ThemeId = (typeof THEMES)[number]["id"];
  * explícita casarem por engano.
  */
 export const MODES = [
-  { id: "system", label: "Sistema" },
-  { id: "light", label: "Claro" },
-  { id: "dark", label: "Escuro" },
+  { id: "system", label: "theme.system" },
+  { id: "light", label: "theme.light" },
+  { id: "dark", label: "theme.dark" },
 ] as const;
 
 export type ModeId = (typeof MODES)[number]["id"];
