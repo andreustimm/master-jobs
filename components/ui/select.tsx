@@ -4,6 +4,7 @@ import * as React from "react"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
 
 import { cn } from "@/lib/utils"
+import { useBodyBoundary } from "@/lib/popup-boundary"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
 const Select = SelectPrimitive.Root
@@ -64,12 +65,22 @@ function SelectContent({
   align = "center",
   alignOffset = 0,
   alignItemWithTrigger = true,
+  collisionBoundary,
+  collisionPadding = 8,
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<
     SelectPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
+    | "align"
+    | "alignOffset"
+    | "side"
+    | "sideOffset"
+    | "alignItemWithTrigger"
+    | "collisionBoundary"
+    | "collisionPadding"
   >) {
+  const bodyBoundary = useBodyBoundary()
+
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Positioner
@@ -78,6 +89,10 @@ function SelectContent({
         align={align}
         alignOffset={alignOffset}
         alignItemWithTrigger={alignItemWithTrigger}
+        // See `useBodyBoundary`: the default boundary is the trigger's clipping
+        // ancestor, which clips the popup inside any `overflow-hidden` card.
+        collisionBoundary={collisionBoundary ?? bodyBoundary}
+        collisionPadding={collisionPadding}
         className="isolate z-50"
       >
         <SelectPrimitive.Popup

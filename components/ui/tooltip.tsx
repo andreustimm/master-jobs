@@ -1,8 +1,10 @@
 "use client"
 
+import * as React from "react"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
 import { cn } from "@/lib/utils"
+import { useBodyBoundary } from "@/lib/popup-boundary"
 
 function TooltipProvider({
   delay = 0,
@@ -31,13 +33,17 @@ function TooltipContent({
   sideOffset = 4,
   align = "center",
   alignOffset = 0,
+  collisionBoundary,
+  collisionPadding = 8,
   children,
   ...props
 }: TooltipPrimitive.Popup.Props &
   Pick<
     TooltipPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset"
+    "align" | "alignOffset" | "side" | "sideOffset" | "collisionBoundary" | "collisionPadding"
   >) {
+  const bodyBoundary = useBodyBoundary()
+
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner
@@ -45,6 +51,8 @@ function TooltipContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
+        collisionBoundary={collisionBoundary ?? bodyBoundary}
+        collisionPadding={collisionPadding}
         className="isolate z-50"
       >
         <TooltipPrimitive.Popup
