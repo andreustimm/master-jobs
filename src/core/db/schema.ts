@@ -399,6 +399,17 @@ export const candidate = sqliteTable(
      * Só o próprio candidato muda este valor. Nem admin nem recrutador.
      */
     visibility: text("visibility").notNull().default("private"),
+    /**
+     * Publicar o TEXTO do currículo no perfil público. Segundo consentimento.
+     *
+     * `visibility = public` significa "alcançável sem sessão"; publicar o
+     * currículo inteiro é outra decisão, e derivá-la da primeira seria
+     * surpresa. O CV é o dado que esta instalação inteira protege — foi o
+     * vazamento dele na rede local que motivou as regras de bind e de PII.
+     * Publicá-lo por escolha do dono é legítimo; publicá-lo como efeito
+     * colateral de marcar "público" não é.
+     */
+    publicCv: integer("public_cv", { mode: "boolean" }).notNull().default(false),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },

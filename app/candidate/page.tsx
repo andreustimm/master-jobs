@@ -36,9 +36,13 @@ export const dynamic = "force-dynamic";
  */
 function VisibilityCard({
   current,
+  publicCv,
+  slug,
   t,
 }: {
   current: string;
+  publicCv: boolean;
+  slug: string;
   t: Translator["t"];
 }) {
   const options = [
@@ -84,6 +88,34 @@ function VisibilityCard({
               </span>
             </label>
           ))}
+
+          {/* Segundo consentimento, separado do primeiro.
+              "Público" diz alcançável sem sessão; publicar o currículo inteiro
+              é outra decisão, e derivá-la da primeira é como se publica um CV
+              sem querer. */}
+          <label className="mt-1 flex cursor-pointer items-start gap-2.5">
+            <input
+              type="checkbox"
+              name="publicCv"
+              defaultChecked={publicCv}
+              className="mt-1 cursor-pointer"
+            />
+            <span className="min-w-0">
+              <span className="type-body-md block font-medium">{t("visibility.publishCv")}</span>
+              <span className="type-body-sm block text-muted-foreground">
+                {t("visibility.publishCvHint")}
+              </span>
+            </span>
+          </label>
+
+          {current === "public" && (
+            <p className="type-meta text-muted-foreground">
+              {t("visibility.publicLink")}:{" "}
+              <a href={`/p/${slug}`} className="font-mono text-[var(--primary-text)] hover:underline">
+                /p/{slug}
+              </a>
+            </p>
+          )}
 
           {/* O aviso fica sempre visível, e não só quando `public` está
               marcado: quem já está público precisa lê-lo mais do que quem está
@@ -150,7 +182,14 @@ export default async function CandidateArea() {
         .
       </p>
 
-      {person && <VisibilityCard current={person.visibility} t={t} />}
+      {person && (
+        <VisibilityCard
+          current={person.visibility}
+          publicCv={person.publicCv}
+          slug={person.slug}
+          t={t}
+        />
+      )}
 
       {person && (
         <Card className="mb-6">

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { guardOwnCandidate } from "../auth";
-import { setVisibility } from "../../src/core/candidate.ts";
+import { setPublicCv, setVisibility } from "../../src/core/candidate.ts";
 import {
   deleteDocument,
   documentById,
@@ -153,6 +153,12 @@ export async function setVisibilityAction(formData: FormData) {
 
   const result = await setVisibility(candidateId, String(formData.get("visibility") ?? ""));
   if (!result.ok) throw new Error("Visibilidade inválida.");
+
+  // O currículo só é publicado quando as DUAS coisas são verdade. Sem esta
+  // segunda condição, alguém que marcou "público" uma vez e depois voltou para
+  // privado deixaria o consentimento do CV pendurado, pronto para reabrir na
+  // próxima vez que marcasse público de novo.
+  await setPublicCv(candidateId, result.visibility === "public" && formData.get("publicCv") === "on");
 
   revalidatePath("/candidate");
 }

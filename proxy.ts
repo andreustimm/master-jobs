@@ -15,7 +15,10 @@ import { NextResponse, type NextRequest } from "next/server";
 const SESSION_COOKIE = "jho_session";
 
 /** Reachable without a session, by necessity. */
-const PUBLIC = ["/login"];
+// Cada entrada aqui é um furo deliberado na rede grossa, por isso a lista é
+// curta. `/p` é o portfólio: responde sem sessão, e o que ele mostra é decidido
+// por lista de permissão em `publicProfile()`, não por esta linha.
+const PUBLIC = ["/login", "/p"];
 
 export function proxy(request: NextRequest) {
   if (process.env.JHO_AUTH_MODE === "open") {

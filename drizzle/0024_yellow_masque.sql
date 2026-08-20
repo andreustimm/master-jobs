@@ -1,0 +1,1 @@
+ALTER TABLE `candidate` ADD `public_cv` integer DEFAULT false NOT NULL;

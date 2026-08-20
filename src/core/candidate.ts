@@ -126,6 +126,19 @@ export async function setVisibility(
   return { ok: true, visibility: value };
 }
 
+/**
+ * Publicar o texto do currículo no perfil público. Segundo consentimento.
+ *
+ * Separado de `setVisibility` de propósito: são duas decisões, e derivar a
+ * segunda da primeira é como se publica um currículo sem querer.
+ */
+export async function setPublicCv(candidateId: number, publish: boolean): Promise<void> {
+  await getDb()
+    .update(candidate)
+    .set({ publicCv: publish, updatedAt: new Date().toISOString() })
+    .where(eq(candidate.id, candidateId));
+}
+
 /* -------------------------------------------------------------------------- */
 /* Documents                                                                   */
 /* -------------------------------------------------------------------------- */

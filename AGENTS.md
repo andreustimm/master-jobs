@@ -96,6 +96,14 @@ dashboard Next.js em `localhost:3000`.
 > diria 0,91 de similaridade porque o texto de fato se parece. Similaridade não
 > distingue "combina" de "é possível". Detalhe em `docs/scoring.md`.
 
+> **`/p/[slug]` é a única rota sem sessão, e o que ela mostra é lista de
+> permissão.** `publicProfile()` enumera os campos que saem; a página não
+> alcança o registro do candidato. Nunca saem e-mail, telefone, funil,
+> candidaturas nem piso salarial — o piso é a posição de negociação, e
+> publicá-la é mostrar a carta antes da mesa. Perfil não público responde
+> **404, não 403**: 403 confirma que o slug existe, e existência é informação.
+> O texto do currículo exige um SEGUNDO consentimento.
+
 > **Admin não lê dado privado; ele assume a identidade, e isso fica registrado.**
 > Três papéis: `admin`, `candidate`, `recruiter`. A sessão emprestada perde TODA
 > ação de administração em bloco, por `impersonatedBy !== null` e não por papel
@@ -420,7 +428,7 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 | Vagas com bloqueador | 468 |
 | Descrições offline | 207 |
 | Candidaturas no funil | 2 |
-| Testes | 743 + 59 e2e |
+| Testes | 1.135 + 65 e2e |
 
 > A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
 > candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de

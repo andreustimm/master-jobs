@@ -741,94 +741,30 @@ a verificação de impersonação passava por falta de alvo em vez de por funcio
 O `setup.mjs` agora semeia contas por papel — candidato puro, recrutador sem
 vínculo e um alvo dedicado —, que é o primeiro passo do E-06.
 
-### AUTH-04 · Página pública de portfólio 📋
+### AUTH-04 · Página pública de portfólio ✅
 
-Rota sem autenticação que renderiza o perfil de um candidato marcado
-`visibility = public`.
+#### Entregue em 20/08/2026
 
-**Contexto que restringe a solução.** `canReadPublicProfile()` é o **único**
-caminho de leitura sem sessão do sistema, e está separado de `can()` de
-propósito — o comentário no arquivo diz que afrouxar a primeira linha de
-`can()` (que nega quem não tem sessão) abriria um buraco em todas as outras
-ações de uma vez. `proxy.ts` hoje libera apenas `/login`; a rota nova entra em
-`PUBLIC`, e essa lista é curta porque cada entrada é um furo deliberado na
-rede grossa. `candidate.slug` já existe com índice único.
+`/p/[slug]`, e as sete decisões do texto acima foram seguidas.
 
----
+`publicProfile()` monta o objeto por **lista de permissão** e a página não tem
+acesso ao registro do candidato — não é disciplina, é o tipo dizendo não. O
+teste afirma o conjunto exato de chaves por IGUALDADE, e não por "não contém":
+"não contém e-mail" passaria com um campo novo que ninguém previu; o conjunto
+exato falha na hora em que alguém acrescenta coluna ao schema, que é exatamente
+quando se quer ser avisado.
 
-#### Decisões que a implementação precisa tomar
+Segundo consentimento (`candidate.public_cv`) para o texto do currículo, e ele
+só vale enquanto o perfil for público — quem marcou o CV e depois voltou para
+privado não fica com consentimento pendurado, pronto para reabrir sozinho.
 
-**1. O que aparece é lista de permissão, nunca lista de exclusão.**
+404 para perfil não público, `noindex, nofollow` sempre, e só skills
+**confirmadas**. Verificado de um contexto anônimo de verdade: privado 404,
+público 200 sem e-mail e sem currículo, e volta a 404 ao fechar.
 
-A tentação é renderizar o perfil e esconder o que for sensível. Isso inverte o
-default: campo novo no schema nasce visível, e o vazamento chega por uma
-migration que ninguém leu sob essa ótica. A página enumera explicitamente os
-campos que mostra e ignora o resto do registro por não constar da lista —
-mesma lógica do `private` por default da coluna.
-
-**2. Nunca aparece: e-mail, telefone, funil, candidaturas, rede, piso salarial.**
-
-O piso é o pior deles. É a posição de negociação do candidato, e publicá-la é
-mostrar a carta antes da mesa — quem lê passa a saber o mínimo aceitável antes
-da primeira conversa. Vale um teste asserindo a ausência, no molde dos que já
-existem para chave de API (regra 16) e para o bind em `127.0.0.1` (regra 12):
-são as três coisas cuja exposição não tem desfazer.
-
-**3. O CV inteiro exige um segundo consentimento.**
-
-O currículo é o dado que a instalação inteira protege — foi o vazamento dele
-na rede local que motivou as regras 12 e 14. Publicá-lo por escolha do dono é
-legítimo; publicá-lo como efeito colateral de uma opção chamada "público" é
-surpresa. Recomendação: nome, headline, localização, skills confirmadas e
-links por padrão; o texto completo do CV atrás de um segundo controle,
-declarado ao lado do primeiro em AUTH-03. Se a implementação decidir o
-contrário, que registre aqui o porquê.
-
-**4. URL por slug. Id numérico em rota pública convida enumeração.**
-
-`/p/1`, `/p/2`, `/p/3` custa nada de varrer e revela quantos candidatos a
-instalação tem e quais ids respondem. O slug também é o que o candidato cola
-no LinkedIn, então precisa ser estável e legível — trocar de id nunca foi
-opção.
-
-**5. `noindex` por padrão; indexação é um segundo controle.**
-
-`visibility = public` significa "alcançável sem sessão", não "quero aparecer
-no Google". São decisões diferentes, e mandar o link para um recrutador não é
-publicar. Se a indexação for oferecida, `robots.txt` e
-`<meta name="robots">` precisam concordar — um permitindo e o outro negando é
-o pior estado possível, porque o comportamento passa a depender de qual
-buscador leu o quê.
-
-**6. Perfil não público responde 404, não 403.**
-
-403 confirma que o slug existe, e existência é informação. O sistema já se
-comporta assim onde importa: `magicLink.complete()` devolve null tanto para
-token inválido quanto para endereço desconhecido, e o comentário diz que o
-chamador não distingue os dois. A página pública mantém a mesma postura.
-
-**7. Rota pública é alvo, e não tem conta para limitar.**
-
-Sem sessão não existe limite por usuário, e um varredor de slugs custa uma
-consulta ao banco por requisição. Precisa de resposta cacheada e de limite por
-origem — decidir qual dos dois, e com que janela, faz parte da tarefa. É a
-primeira superfície deste sistema exposta a quem não foi convidado.
-
----
-
-#### O que fica de fora, e por quê
-
-**Formulário de contato no portfólio.** Abre superfície de spam e exige
-enviar e-mail, que é F-05. Enquanto não houver limite de envio testado, um
-formulário aberto é um gerador de mensagens com o domínio do usuário no
-remetente.
-
-**Analytics de visita.** Saber quem olhou é tentador e é rastreamento de
-terceiro sem consentimento, numa página que o próprio produto pediu para o
-candidato divulgar.
-
-**Personalização visual.** A página segue os três temas como todo o resto
-(regra 10). Tema por candidato é produto diferente.
+**Ficou de fora:** limite de requisição por IP e resposta cacheada (decisão 7).
+A rota abre uma consulta ao banco por requisição sem conta para limitar, e um
+varredor de slugs custa pouco. Item próprio no backlog.
 
 ### F-05 · Resend para e-mail transacional e recuperação de senha 📋
 
