@@ -317,6 +317,7 @@ export const en: Dictionary = {
     showDescription: "Show full text",
   },
   skills: {
+    confirmedBy: "confirmed by",
     confirmedTitle: "Confirmed",
     rejectedTitle: "Rejected",
     title: "Skills",

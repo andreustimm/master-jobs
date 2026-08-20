@@ -253,8 +253,9 @@ describe("createManualComparison: caminho feliz", () => {
     // A URL sintética existe só porque o schema exige origem estável. Renderizá-la
     // como link levaria o usuário a um endereço que não existe.
     //
-    // NOTA: apesar do nome, `externalUrl` é um SINALIZADOR booleano, não a URL
-    // — a tela usa `externalUrl && <a href={detail.job.url}>`. O nome é uma
+    // UI-06: `externalUrl` devolve a URL ou `null`, e o nome passou a dizer a
+    // verdade. Era um booleano sob um nome que promete endereço — quem
+    // escrevesse `href={detail.externalUrl}` geraria `href="true"`. A
     // armadilha para o próximo consumidor, ainda mais porque
     // `publicPostingUrl()` existe no mesmo código e devolve a URL ou null.
     const { jobId } = await createManualComparison(candidatoId, entrada());
@@ -262,7 +263,7 @@ describe("createManualComparison: caminho feliz", () => {
 
     expect(detalhe?.manualJob).toBe(true);
     expect(detalhe?.job.url).toMatch(/^manual:\/\/local\//);
-    expect(detalhe?.externalUrl).toBe(false);
+    expect(detalhe?.externalUrl).toBeNull();
   });
 
   it("sinaliza link externo quando o usuário informa uma URL pública", async () => {
@@ -271,7 +272,7 @@ describe("createManualComparison: caminho feliz", () => {
       entrada({ url: "https://jobs.exemplo.test/arquiteto-ia" }),
     );
     const detalhe = await getComparisonDetail(candidatoId, jobId);
-    expect(detalhe?.externalUrl).toBe(true);
+    expect(detalhe?.externalUrl).toBe("https://jobs.exemplo.test/arquiteto-ia");
     expect(detalhe?.job.url).toBe("https://jobs.exemplo.test/arquiteto-ia");
     // A vaga continua sendo observação do usuário, mesmo com URL pública: ela
     // nunca pode sobrescrever a observação canônica de um ATS.

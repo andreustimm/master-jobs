@@ -64,7 +64,7 @@ engajado. Esta é a maior alavanca de resposta disponível hoje, e custa pouco.
 **Proposta:** componente de frescor no score, ou no mínimo destaque de vaga nova
 no `jobs list`.
 
-### B-04 · `pick()` escolhe apelido por presença, não por conteúdo 📋
+### B-04 · `pick()` escolhe apelido por presença, não por conteúdo ✅
 
 `src/core/ingest/import.ts:42`. A função percorre os apelidos de um campo e
 para no **primeiro que existe** e não é `null`, `undefined` ou `""`. Um objeto
@@ -99,6 +99,17 @@ tem conteúdo — o defeito é chegar nele com `employer: "Acme"` no payload.
 ---
 
 ## P1 — Mudam a qualidade do dado do funil
+
+
+#### Entregue em 20/08/2026
+
+`pick()` virou `pickAs()`: normaliza cada candidato e fica com o **primeiro que
+sobrevive**, em vez de parar no primeiro que existe. É a forma que o item
+recomendou, e a que não tem como errar de novo — quem decide é o valor final, não
+a presença da chave.
+
+Confirmado contra o código antigo: seis dos nove casos reprovam lá. Um teste de
+caracterização que fixava o defeito foi convertido em teste da correção.
 
 ### F-01 · E-mail como fonte de dados ✅ (código completo; falta só a credencial do usuário)
 
@@ -974,7 +985,7 @@ quem não tem escopo de candidato, em vez de negar. Verificado por papel no e2e.
 Ícones gerados sem dependência (`scripts/make-icons.mjs` escreve o PNG chunk a
 chunk), com variante `maskable` na zona segura de 80%.
 
-### B-05 · `runFetchStage` ultrapassa o `--limit` com concorrência 📋
+### B-05 · `runFetchStage` ultrapassa o `--limit` com concorrência ✅
 
 `src/core/scrape/fetcher.ts:180`. O worker testa `result.processed >= limit`,
 **depois** faz `await queue.claim(...)`, e só então incrementa. Entre o teste e
@@ -992,6 +1003,19 @@ quando teste e reserva acontecem sem `await` no meio.
 
 **Fica de fora:** semáforo ou mutex de verdade. É um contador em memória, num
 processo só; a reserva otimista basta.
+
+
+#### Entregue em 20/08/2026
+
+A reserva do slot passou a acontecer de forma **síncrona**, antes do `await` do
+`claim` — e é isso que a torna atômica, porque o laço de eventos não interrompe
+código síncrono. O contador de reservas é separado de `processed`: a reserva é
+devolvida quando a fila esvazia, senão um worker que não achou nada consumiria
+um slot e a execução seguinte pararia antes do limite pedido.
+
+O teste afirma também que a RESERVA para, e não só a contagem: `claim` a mais
+seria trabalho extra contra site de terceiro mesmo com o número certo no fim.
+Confirmado que reprova com o código antigo.
 
 ### M-05 · `application.cv_variant` como chave estrangeira ✅ (já estava feito quando foi cadastrado)
 
@@ -1020,7 +1044,7 @@ audit trail". É a regra 8 aplicada a migração.
 **O que este item corrige de fato:** o cabeçalho de UI-02 e o "o que ficou de
 fora" dele, que ainda descreviam a migração como pendente. Anotado lá.
 
-### E-07 · `auth_event.user_id` perde a atribuição ao apagar a conta 📋
+### E-07 · `auth_event.user_id` perde a atribuição ao apagar a conta ✅
 
 `src/core/db/schema.ts:1018` declara `ON DELETE SET NULL`. Não existe exclusão
 de conta hoje — `setDisabled` desabilita, e nenhum caminho apaga `auth_user`.
@@ -1041,7 +1065,24 @@ explícita que registre que houve anonimização. As três são defensáveis; a 
 é a única que perde o dado sem dizer que perdeu. E pertence à mesma decisão de
 retenção que AUTH-02 adiou ao recusar a tela de log.
 
-### UI-06 · `externalUrl` devolve booleano e o nome promete URL 📋
+
+#### Entregue em 20/08/2026
+
+Escolhida a segunda das três opções: **`SET NULL` com o e-mail resolvido na
+escrita**. `record()` agora busca o endereço quando recebeu `userId` sem
+`email` — antes era opcional e dependia de quem chamou lembrar, ou seja, não era
+garantia, era acaso.
+
+`RESTRICT` foi considerado e recusado: tornaria impossível apagar qualquer conta
+que já tenha entrado uma vez — todas —, e um pedido legítimo de exclusão
+passaria a esbarrar na auditoria. Preservar o nome custa uma consulta; impedir a
+exclusão custa um direito.
+
+O e-mail informado pelo chamador é respeitado sem consulta: tentativa em
+endereço desconhecido grava o endereço TENTADO, e sobrescrevê-lo apagaria a
+informação que o evento existe para registrar.
+
+### UI-06 · `externalUrl` devolve booleano e o nome promete URL ✅
 
 `src/contexts/matching/app/manual-comparison.ts:188` —
 `externalUrl: isPublicJobUrl(detail.job.url)`. O consumidor de hoje
@@ -1058,7 +1099,15 @@ em vez de removê-la.
 por ele: `null` é falsy, então todo consumidor que hoje escreve `externalUrl &&`
 segue funcionando, e quem escrever `href=` passa a receber uma URL de verdade.
 
-### UI-07 · A auditoria de skills registra quando, nunca por quem 📋
+
+#### Entregue em 20/08/2026
+
+`externalUrl` passou a devolver a URL ou `null`, via `publicPostingUrl()`. `null`
+continua sendo falso, então quem usava como bandeira não muda de comportamento —
+e `app/compare/page.tsx` agora usa o próprio campo no `href`, em vez de voltar a
+`detail.job.url`.
+
+### UI-07 · A auditoria de skills registra quando, nunca por quem ✅
 
 `candidate_skill.audited_by` é escrita (`drizzle-adapters.ts:165`) e **não
 existe** em `CandidateSkillView` (`src/contexts/skills/domain/types.ts:73`), que
@@ -1078,6 +1127,17 @@ ser decidido é o **vocabulário** da coluna — hoje `"self"` e `null`, sem
 constante que os liste, do mesmo jeito que `auth_event.kind` era texto livre
 antes de AUTH-02. Fechar a lista antes de a tela ler é o que evita repetir
 aquele achado.
+
+
+#### Entregue em 20/08/2026
+
+`auditedBy` entrou em `CandidateSkillView` e na consulta, e a badge da skill
+confirmada mostra quem confirmou no `title`. A coluna sempre foi escrita e nunca
+lida.
+
+Com três papéis e impersonação, "confirmada" sem autor é afirmação de
+experiência sem responsável — e é justamente a afirmação que a regra 6 existe
+para o sistema nunca fazer sozinho.
 
 ### E-08 · Cobertura de `src/cli.ts`, hoje em zero 📋
 

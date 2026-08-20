@@ -315,6 +315,7 @@ export const ptBR = {
     showDescription: "Mostrar texto completo",
   },
   skills: {
+    confirmedBy: "confirmada por",
     confirmedTitle: "Confirmadas",
     rejectedTitle: "Rejeitadas",
     title: "Skills",

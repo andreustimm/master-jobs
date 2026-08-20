@@ -96,6 +96,16 @@ dashboard Next.js em `localhost:3000`.
 > diria 0,91 de similaridade porque o texto de fato se parece. Similaridade não
 > distingue "combina" de "é possível". Detalhe em `docs/scoring.md`.
 
+> **Escolha entre apelidos de campo decide pelo VALOR normalizado, nunca pela
+> presença da chave.** `{ company: { name: "  " }, employer: "Acme" }` entrava
+> como "Desconhecida" porque um objeto passa no teste de presença e `employer`
+> nunca era lido — e vaga sem nome de empresa some do `jho referrals`. É a regra
+> 17 um nível mais fundo.
+>
+> **Limite sob concorrência reserva o slot ANTES do `await`.** A reserva
+> síncrona é atômica porque o laço de eventos não interrompe código síncrono;
+> conferir depois do `await` deixava N−1 workers passarem juntos.
+
 > **O service worker não guarda nada autenticado, e a ausência é a política.**
 > Só `static-` e `shell-` (`/login`, `/offline`). Sem `pages-`, sem `api-`, e
 > `/p/` também fora — público por escolha revogável, e cópia em disco não
@@ -465,7 +475,7 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 | Vagas com bloqueador | 468 |
 | Descrições offline | 207 |
 | Candidaturas no funil | 2 |
-| Testes | 1.470 + 89 e2e · cobertura 97,6% (fora do CLI) |
+| Testes | 1.491 + 89 e2e · cobertura 97,6% (fora do CLI) |
 
 > A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
 > candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de

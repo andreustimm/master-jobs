@@ -175,11 +175,36 @@ export async function runFetchStage(
 
   const result: StageResult = { processed: 0, stored: 0, blocked: 0, failed: 0 };
 
+  /**
+   * Vagas reservadas, não vagas concluídas.
+   *
+   * `result.processed` só sobe depois do `claim`, e entre a checagem e o
+   * incremento há um `await`. Com N workers, todos passavam pela condição antes
+   * de qualquer um incrementar, e até N−1 tarefas extras eram processadas além
+   * do `--limit`.
+   *
+   * A reserva acontece de forma SÍNCRONA, antes do primeiro `await` — e é isso
+   * que a torna atômica: o laço de eventos não interrompe código síncrono, então
+   * nenhum outro worker roda entre ler e incrementar.
+   *
+   * O limite existe justamente para quem quer rodar um lote pequeno e
+   * controlado contra sites de terceiros. Ultrapassá-lo em silêncio é o oposto
+   * do que ele promete.
+   */
+  let claimed = 0;
+
   async function worker(name: string): Promise<void> {
     for (;;) {
-      if (result.processed >= limit) return;
+      if (claimed >= limit) return;
+      claimed++;
+
       const task = await queue.claim("pending", name);
-      if (!task) return;
+      if (!task) {
+        // Devolve o slot: a fila esvaziou, e segurar a reserva faria uma
+        // execução seguinte parar antes do limite pedido.
+        claimed--;
+        return;
+      }
 
       result.processed++;
       const outcome = await capture(task, { fetcher, lookupHost: opts.lookupHost });

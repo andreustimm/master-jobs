@@ -32,6 +32,7 @@ const candidateRows: CandidateSkillView[] = [
     occurrences: 3,
     level: null,
     auditedAt: "2026-08-19T12:00:00.000Z",
+    auditedBy: null,
   },
   {
     id: 8,
@@ -44,6 +45,7 @@ const candidateRows: CandidateSkillView[] = [
     occurrences: 1,
     level: null,
     auditedAt: null,
+    auditedBy: null,
   },
 ];
 

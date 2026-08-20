@@ -187,7 +187,20 @@ export default async function SkillsPage() {
             <h2 className="type-display-sm mb-3">{t("skills.confirmedTitle")}</h2>
             <div className="flex flex-wrap gap-1.5">
               {confirmed.map((s) => (
-                <Badge key={s.id} data-user-content className="font-mono type-meta">
+                <Badge
+                  key={s.id}
+                  data-user-content
+                  className="font-mono type-meta"
+                  // Quem confirmou, no título. "Confirmada" é afirmação de
+                  // experiência — a regra 6 existe para que o sistema nunca a
+                  // faça sozinho —, e afirmação sem autor não tem a quem
+                  // perguntar. A coluna sempre foi escrita e nunca lida.
+                  title={
+                    s.auditedBy
+                      ? `${t("skills.confirmedBy")}: ${s.auditedBy}`
+                      : undefined
+                  }
+                >
                   {s.name}
                   {s.level ? ` · ${s.level}` : ""}
                 </Badge>

@@ -39,16 +39,43 @@ const FIELDS = {
   period: ["salaryPeriod", "period", "compensationPeriod", "payPeriod", "rateType"],
 } as const;
 
-function pick(obj: Record<string, unknown>, keys: readonly string[]): unknown {
-  for (const k of keys) {
-    // Case-insensitive: APIs disagree on camelCase vs snake_case.
-    const match = Object.keys(obj).find((o) => o.toLowerCase() === k.toLowerCase());
-    if (match !== undefined) {
-      const v = obj[match];
-      if (v !== null && v !== undefined && v !== "") return v;
-    }
+/**
+ * O primeiro apelido cujo valor SOBREVIVE à normalização.
+ *
+ * A versão anterior parava no primeiro apelido que existisse e não fosse
+ * `null`, `undefined` ou `""` — e um objeto sempre passa nesse teste. Só depois
+ * `asString()` descia nele, encontrava `{ name: "  " }`, aparava e devolvia
+ * `null`. Aí não havia volta: o apelido seguinte já tinha sido descartado.
+ *
+ * O payload `{ company: { name: "  " }, employer: "Acme" }` entrava como
+ * "Desconhecida", e `employer` nunca chegava a ser lido. O efeito não é
+ * cosmético: `referralOpportunities()` casa vaga com contato por
+ * `job.companyName`, então uma vaga em empresa onde já se trabalhou, importada
+ * sem nome, **nunca aparece em `jho referrals`** — e este é justamente o
+ * caminho das plataformas logadas, a fonte que nomeia empregador.
+ *
+ * É a regra 17 um nível mais fundo: o teste antigo protegia contra a string
+ * vazia literal, não contra o valor que VIRA vazio depois de normalizado.
+ *
+ * Normalizar cada candidato custa mais chamadas e é a forma que não tem como
+ * errar de novo: quem decide é o valor final, não a presença da chave.
+ */
+function pickAs<T>(
+  obj: Record<string, unknown>,
+  keys: readonly string[],
+  normalise: (value: unknown) => T | null,
+): T | null {
+  const lowered = new Map(Object.keys(obj).map((k) => [k.toLowerCase(), k]));
+
+  for (const key of keys) {
+    // Case-insensitive: as APIs discordam entre camelCase e snake_case.
+    const match = lowered.get(key.toLowerCase());
+    if (match === undefined) continue;
+
+    const normalised = normalise(obj[match]);
+    if (normalised !== null) return normalised;
   }
-  return undefined;
+  return null;
 }
 
 function asString(v: unknown): string | null {
@@ -125,23 +152,23 @@ export function parsePayload(
   for (const entry of entries) {
     for (const k of Object.keys(entry)) seenFields.add(k);
 
-    const title = asString(pick(entry, FIELDS.title));
+    const title = pickAs(entry, FIELDS.title, asString);
     if (!title) {
       skipped++;
       continue;
     }
 
-    const id = asString(pick(entry, FIELDS.id)) ?? title;
-    const rawUrl = asString(pick(entry, FIELDS.url));
+    const id = pickAs(entry, FIELDS.id, asString) ?? title;
+    const rawUrl = pickAs(entry, FIELDS.url, asString);
     const url = rawUrl ?? (opts.baseUrl ? `${opts.baseUrl.replace(/\/$/, "")}/${id}` : null);
     if (!url) {
       skipped++;
       continue;
     }
 
-    const descRaw = asString(pick(entry, FIELDS.description));
+    const descRaw = pickAs(entry, FIELDS.description, asString);
     const company =
-      asString(pick(entry, FIELDS.company)) ?? opts.company ?? "Desconhecida";
+      pickAs(entry, FIELDS.company, asString) ?? opts.company ?? "Desconhecida";
 
     jobs.push({
       externalId: id,
@@ -149,15 +176,15 @@ export function parsePayload(
       title,
       url,
       applyUrl: url,
-      locationRaw: asString(pick(entry, FIELDS.location)),
+      locationRaw: pickAs(entry, FIELDS.location, asString),
       remote: null,
       descriptionHtml: descRaw && /<[a-z]/i.test(descRaw) ? descRaw : null,
       descriptionText: descRaw ? (htmlToText(descRaw) ?? descRaw) : null,
-      postedAt: asString(pick(entry, FIELDS.postedAt)),
-      compMin: asNumber(pick(entry, FIELDS.compMin)),
-      compMax: asNumber(pick(entry, FIELDS.compMax)),
-      compCurrency: asString(pick(entry, FIELDS.currency)),
-      compPeriod: asString(pick(entry, FIELDS.period)),
+      postedAt: pickAs(entry, FIELDS.postedAt, asString),
+      compMin: pickAs(entry, FIELDS.compMin, asNumber),
+      compMax: pickAs(entry, FIELDS.compMax, asNumber),
+      compCurrency: pickAs(entry, FIELDS.currency, asString),
+      compPeriod: pickAs(entry, FIELDS.period, asString),
       raw: entry,
     });
   }

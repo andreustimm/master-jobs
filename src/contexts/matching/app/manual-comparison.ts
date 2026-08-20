@@ -8,7 +8,7 @@ import {
   extractJobDocument,
 } from "../../../core/ingest/job-document.ts";
 import { addManualDescriptionJob } from "../../../core/ingest/manual.ts";
-import { isPublicJobUrl } from "../../../core/job-url.ts";
+import { publicPostingUrl } from "../../../core/job-url.ts";
 import { scoreOne } from "../../../core/scoring/apply.ts";
 import { jobVocabularyComparison } from "../../skills/index.ts";
 
@@ -185,6 +185,16 @@ export async function getComparisonDetail(candidateId: number, jobId: number) {
     vocabulary,
     metadata: metadataFrom(detail.job.raw),
     manualJob: detail.job.sourceId.startsWith("manual:"),
-    externalUrl: isPublicJobUrl(detail.job.url),
+    // A URL, e não um booleano dizendo que existe uma.
+    //
+    // O campo devolvia `isPublicJobUrl(...)` — um `true`/`false` sob um nome que
+    // promete endereço. O consumidor de hoje trata como bandeira e funciona,
+    // mas o nome é armadilha: quem escrever `href={detail.externalUrl}` gera
+    // `href="true"`, e o link leva a lugar nenhum sem quebrar nada. Pior, o
+    // mesmo nome já designa uma URL de verdade em `app/referrals/page.tsx`.
+    //
+    // `publicPostingUrl` devolve a URL ou `null`, e `null` continua sendo falso
+    // — quem usava como bandeira não muda de comportamento.
+    externalUrl: publicPostingUrl(detail.job),
   };
 }

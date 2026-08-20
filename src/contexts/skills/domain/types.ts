@@ -81,6 +81,16 @@ export type CandidateSkillView = {
   occurrences: number;
   level: string | null;
   auditedAt: string | null;
+  /**
+   * Quem confirmou ou rejeitou.
+   *
+   * A coluna sempre foi escrita e nunca lida: a tela mostrava QUANDO a decisão
+   * foi tomada e nunca POR QUEM. Numa instalação de um operador só isso é
+   * invisível; com três papéis e a possibilidade de um admin assumir a
+   * identidade de alguém, "confirmada" sem autor é uma afirmação de experiência
+   * sem responsável — e é justamente a afirmação que a regra 6 protege.
+   */
+  auditedBy: string | null;
 };
 
 export type MarketSkillDemand = {

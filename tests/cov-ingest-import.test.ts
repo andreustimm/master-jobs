@@ -97,12 +97,14 @@ describe("parsePayload: coerção de campos que chegam em qualquer tipo", () => 
     expect(r.jobs[0]!.locationRaw).toBeNull();
   });
 
-  it("não consulta o apelido seguinte quando o primeiro veio como objeto vazio", () => {
-    // Caracterização de uma limitação real: a escolha entre apelidos olha
-    // *presença* (`company` existe e não é string vazia), e só depois a
-    // normalização descobre que `{ name: "  " }` não tem conteúdo. `employer`
-    // logo abaixo nunca chega a ser lido, e a vaga sai como "Desconhecida"
-    // mesmo com o nome da empresa disponível ao lado.
+  it("consulta o apelido seguinte quando o primeiro não sobrevive à normalização", () => {
+    // Este caso caracterizava um DEFEITO (B-04) e agora afirma a correção: a
+    // escolha olhava *presença* — `company` existe e não é string vazia —, e só
+    // depois a normalização descobria que `{ name: "  " }` não tem conteúdo.
+    // `employer` logo abaixo nunca era lido, e a vaga saía como "Desconhecida"
+    // com o nome da empresa disponível ao lado.
+    //
+    // O detalhamento e os demais campos estão em `tests/import-field-alias.test.ts`.
     const r = parsePayload([
       {
         title: "Engenheiro",
@@ -112,7 +114,7 @@ describe("parsePayload: coerção de campos que chegam em qualquer tipo", () => 
       },
     ]);
 
-    expect(r.jobs[0]!.companyName).toBe("Desconhecida");
+    expect(r.jobs[0]!.companyName).toBe("Acme");
   });
 
   it("preserva o original quando o HTML não sobra texto nenhum", () => {

@@ -87,7 +87,7 @@ export default async function CompareJobPage({ searchParams }: { searchParams: S
   const vocabulary = detail?.vocabulary ?? null;
   const metadata = detail?.metadata ?? null;
   const manualJob = detail?.manualJob ?? false;
-  const externalUrl = detail?.externalUrl ?? false;
+  const externalUrl = detail?.externalUrl ?? null;
   const score = detail?.score ?? null;
   const blockers = scoreMessages(score?.blockers);
   const reasons = scoreMessages(score?.reasons);
@@ -239,7 +239,7 @@ export default async function CompareJobPage({ searchParams }: { searchParams: S
                   </Link>
                   {externalUrl && (
                     <a
-                      href={detail.job.url}
+                      href={externalUrl}
                       target="_blank"
                       rel="noopener"
                       className={buttonVariants({ variant: "outline" })}

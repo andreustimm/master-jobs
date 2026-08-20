@@ -44,6 +44,7 @@ function view(over: Partial<CandidateSkillView> & { id: number; slug: string }):
     occurrences: 1,
     level: null,
     auditedAt: null,
+    auditedBy: null,
     ...over,
   };
 }

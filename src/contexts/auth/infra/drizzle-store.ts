@@ -160,11 +160,42 @@ export function hashToken(raw: string): string {
 }
 
 export const drizzleAuthRepository: AuthRepository = {
+  /**
+   * Grava um evento de autenticação.
+   *
+   * **Quando há usuário, o e-mail é resolvido e gravado junto — sempre.**
+   *
+   * `auth_event.user_id` tem `ON DELETE SET NULL`: no dia em que existir
+   * exclusão de conta, a linha histórica continua existindo e para de dizer
+   * QUEM. Numa tabela cuja razão de existir é provar exatamente isso — quem
+   * entrou, quem falhou, quem assumiu a identidade de quem — a auditoria ficaria
+   * íntegra na aparência e vazia no conteúdo.
+   *
+   * O e-mail denormalizado é o que sobrevive à chave estrangeira. Antes ele era
+   * opcional e dependia de quem chamou lembrar de passá-lo: não era garantia,
+   * era acaso. Agora, se veio `userId` e não veio `email`, a função busca.
+   *
+   * `RESTRICT` foi considerado e recusado: tornaria impossível apagar qualquer
+   * conta que já tenha entrado uma vez — ou seja, todas —, e um pedido legítimo
+   * de exclusão passaria a esbarrar na auditoria. Preservar o nome custa uma
+   * consulta; impedir a exclusão custa um direito.
+   */
   async record(input): Promise<void> {
+    let email = input.email ?? null;
+
+    if (email === null && input.userId != null) {
+      const [user] = await getDb()
+        .select({ email: authUser.email })
+        .from(authUser)
+        .where(eq(authUser.id, input.userId))
+        .limit(1);
+      email = user?.email ?? null;
+    }
+
     await getDb().insert(authEvent).values({
       kind: input.kind,
       userId: input.userId ?? null,
-      email: input.email ?? null,
+      email,
       detail: input.detail ?? null,
       at: clock().iso(),
     });

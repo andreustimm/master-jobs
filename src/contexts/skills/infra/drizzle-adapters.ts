@@ -110,6 +110,7 @@ export const drizzleCandidateSkills: CandidateSkillPort = {
         occurrences: candidateSkill.occurrences,
         level: candidateSkill.level,
         auditedAt: candidateSkill.auditedAt,
+        auditedBy: candidateSkill.auditedBy,
       })
       .from(candidateSkill)
       .innerJoin(skill, eq(skill.id, candidateSkill.skillId))
