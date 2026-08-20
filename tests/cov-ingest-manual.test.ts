@@ -17,7 +17,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
-import { job, source } from "../src/core/db/schema.ts";
+import { authUser, job, source } from "../src/core/db/schema.ts";
 import { addJob, addManualDescriptionJob, upsertRawJob } from "../src/core/ingest/manual.ts";
 import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/http-port.ts";
 import "../src/core/sources/http.ts";
@@ -147,6 +147,29 @@ describe("addJob pelo caminho do ATS", () => {
     expect(r.warnings.join(" ")).toContain("pode ter sido fechada");
     const [linha] = await db.select().from(job).where(eq(job.id, r.jobId));
     expect(linha!.sourceId).toBe("manual:boards.greenhouse.io");
+  });
+
+  it("descreve falha que não é Error sem virar '[object Object]'", async () => {
+    // Adapter e porta HTTP podem rejeitar com string ou objeto simples. Um aviso
+    // ilegível é pior que nenhum: parece diagnóstico e não é.
+    setHttpPort({
+      async json(): Promise<never> {
+        throw "limite de requisições";
+      },
+      async text() {
+        return null;
+      },
+    });
+
+    const r = await addJob({
+      url: URL_GREENHOUSE,
+      title: "Staff AI Engineer",
+      companyName: "TextLayer",
+      description: "Descrição colada à mão.",
+    });
+
+    expect(r.warnings.join(" ")).toContain("limite de requisições");
+    expect(r.warnings.join(" ")).not.toContain("[object Object]");
   });
 
   it("não perde a vaga quando o board está fora do ar, e diz o motivo", async () => {
@@ -351,6 +374,82 @@ describe("addManualDescriptionJob", () => {
       documentFormat: "pdf",
       pages: 3,
     });
+  });
+});
+
+describe("addManualDescriptionJob por um recrutador", () => {
+  const base = {
+    title: "Staff AI Engineer",
+    companyName: "Acme",
+    description: "Vaga oferecida por um recrutador, com corpo suficiente.",
+    inputMethod: "paste" as const,
+  };
+
+  it("separa a fonte do recrutador da fonte manual do próprio candidato", async () => {
+    // O rótulo de origem — web · recrutador · manual — deriva de `source.kind`,
+    // e não de uma coluna denormalizada na vaga. Reaproveitar `manual:` para as
+    // duas faria a lista dizer "eu colei isto" sobre uma vaga que alguém ofereceu.
+    const r = await addManualDescriptionJob({ ...base, sourceKind: "recruiter" });
+
+    expect(r.kind).toBe("recruiter");
+    const [linha] = await db.select().from(job).where(eq(job.id, r.jobId));
+    expect(linha!.sourceId).toBe("recruiter:local");
+    expect(linha!.url).toMatch(/^recruiter:\/\/local\//);
+    const [fonte] = await db.select().from(source).where(eq(source.id, "recruiter:local"));
+    expect(fonte!.kind).toBe("recruiter");
+    expect(fonte!.enabled).toBe(false);
+  });
+
+  it("registra qual recrutador ofereceu a vaga", async () => {
+    // Atribuição, não rótulo: guarda a quem perguntar. Vem da sessão, nunca do
+    // formulário — id em entrada é pedido, não prova (regra 15).
+    const [conta] = await db
+      .insert(authUser)
+      .values({ email: "recrutador@exemplo.test", roles: ["recruiter"] })
+      .returning({ id: authUser.id });
+
+    const r = await addManualDescriptionJob({
+      ...base,
+      sourceKind: "recruiter",
+      postedByUserId: conta!.id,
+    });
+
+    const [linha] = await db.select().from(job).where(eq(job.id, r.jobId));
+    expect(linha!.postedByUserId).toBe(conta!.id);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("avisa em vez de perder a vaga quando a atribuição não resolve", async () => {
+    // O modo aberto sintetiza sessão com `userId: 0`, que não é linha nenhuma em
+    // `auth_user`. A ordem de importância decide o comportamento: a vaga é o
+    // dado, a atribuição é metadado — falhar aqui não pode custar o que a pessoa
+    // digitou.
+    const r = await addManualDescriptionJob({
+      ...base,
+      sourceKind: "recruiter",
+      postedByUserId: 999_999,
+    });
+
+    expect(r.jobId).toBeGreaterThan(0);
+    expect(r.warnings.join(" ")).toContain("Não foi possível registrar quem cadastrou");
+    const [linha] = await db.select().from(job).where(eq(job.id, r.jobId));
+    expect(linha!.postedByUserId).toBeNull();
+  });
+
+  it("ignora atribuição ausente ou sentinela zero sem tocar no banco", async () => {
+    // `0` é a sessão sintética do modo aberto, e `null` é "não veio de ninguém".
+    // Os dois têm que passar direto, não virar aviso.
+    const semAtribuicao = await addManualDescriptionJob({ ...base, postedByUserId: null });
+    const sentinela = await addManualDescriptionJob({
+      ...base,
+      title: "Outro cargo",
+      postedByUserId: 0,
+    });
+
+    expect(semAtribuicao.warnings).toEqual([]);
+    expect(sentinela.warnings).toEqual([]);
+    const linhas = await db.select().from(job);
+    expect(linhas.every((l) => l.postedByUserId === null)).toBe(true);
   });
 });
 

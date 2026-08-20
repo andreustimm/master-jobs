@@ -137,6 +137,22 @@ describe("runMigrations", () => {
     expect(nomes).toContain("job_score");
   });
 
+  it("cria o banco padrão quando não há variável de ambiente nenhuma", async () => {
+    // O primeiro comando de um clone: sem `.env`, sem diretório `data/`, sem
+    // nada. Este é o caminho que precisa funcionar antes de qualquer outro.
+    // A pasta de migrations vai absoluta só porque o teste trocou de diretório
+    // de trabalho — o que está sob prova aqui é a resolução do banco, não a dela.
+    process.chdir(temporario);
+
+    await runMigrations(join(raizDoProjeto, "drizzle"));
+
+    expect(existsSync(join(temporario, "data", "jobs.db"))).toBe(true);
+    const [linha] = await getDb().all<{ total: number }>(
+      sql.raw("select count(*) as total from sqlite_master where name = 'job'"),
+    );
+    expect(Number(linha!.total)).toBe(1);
+  });
+
   it("é idempotente e aceita uma pasta de migrations explícita", async () => {
     // A CLI, os testes e um hook de deploy chamam o mesmo bootstrap. Rodar duas
     // vezes tem que ser inofensivo, senão o segundo start derruba o serviço.

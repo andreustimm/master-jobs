@@ -85,6 +85,48 @@ describe("parsePayload: coerção de campos que chegam em qualquer tipo", () => 
     expect(r.jobs[0]!.companyName).toBe("Acme");
   });
 
+  it("trata campo só com espaço como ausente em vez de gravar branco", () => {
+    // Regra 17 aplicada onde ela nasceu: `"   "` não é `""`, então o `pick`
+    // aceita o campo e só a normalização descobre que não havia conteúdo. Sem
+    // isso a vaga ficaria com local em branco, que o scorer geográfico leria
+    // como declaração e não como ausência.
+    const r = parsePayload([
+      { title: "Engenheiro", url: "https://x.test/1", location: "   " },
+    ]);
+
+    expect(r.jobs[0]!.locationRaw).toBeNull();
+  });
+
+  it("não consulta o apelido seguinte quando o primeiro veio como objeto vazio", () => {
+    // Caracterização de uma limitação real: a escolha entre apelidos olha
+    // *presença* (`company` existe e não é string vazia), e só depois a
+    // normalização descobre que `{ name: "  " }` não tem conteúdo. `employer`
+    // logo abaixo nunca chega a ser lido, e a vaga sai como "Desconhecida"
+    // mesmo com o nome da empresa disponível ao lado.
+    const r = parsePayload([
+      {
+        title: "Engenheiro",
+        url: "https://x.test/1",
+        company: { name: "  " },
+        employer: "Acme",
+      },
+    ]);
+
+    expect(r.jobs[0]!.companyName).toBe("Desconhecida");
+  });
+
+  it("preserva o original quando o HTML não sobra texto nenhum", () => {
+    // `<br>` sozinho vira string vazia depois da limpeza. Gravar vazio apagaria
+    // a única pista de que havia *alguma coisa* ali — e é assim que 4.538
+    // descrições sumiram uma vez.
+    const r = parsePayload([
+      { title: "Engenheiro", url: "https://x.test/1", description: "<br>" },
+    ]);
+
+    expect(r.jobs[0]!.descriptionHtml).toBe("<br>");
+    expect(r.jobs[0]!.descriptionText).toBe("<br>");
+  });
+
   it("descarta entrada sem link e sem base para construir um", () => {
     // Vaga sem URL não é rastreável nem candidatável. Guardá-la encheria o
     // quadro de linhas em que clicar não leva a lugar nenhum.

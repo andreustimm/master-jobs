@@ -80,10 +80,20 @@ function declaredForeignKeys(): DeclaredFk[] {
  * vermelho o tempo todo e ser desligado. Entrada nova aqui exige nota no
  * relatório.
  */
-const DIVERGENCIAS_CONHECIDAS = new Set([
-  "job.posted_by_user_id",
-  "auth_session.impersonated_by",
-]);
+/**
+ * Chaves cuja aplicação diverge do que o schema declara.
+ *
+ * **Vazia, e o objetivo é que continue.** Teve duas: a migração 0021 acrescentou
+ * `job.posted_by_user_id` e `auth_session.impersonated_by` com
+ * `ALTER TABLE ... ADD ... REFERENCES` sem cláusula `ON DELETE`, e o SQLite
+ * assume `NO ACTION` em silêncio. O efeito ficou invertido nos dois casos —
+ * apagar a conta de um recrutador passava a ser recusado pelo banco em vez de a
+ * vaga esquecer quem a cadastrou. A 0025 reconstruiu as duas tabelas.
+ *
+ * Uma entrada nova aqui é dívida consciente, não conveniência: significa que o
+ * banco não faz o que o código diz que ele faz.
+ */
+const DIVERGENCIAS_CONHECIDAS = new Set<string>([]);
 
 describe("chaves estrangeiras declaradas", () => {
   it("aponta toda referência para uma tabela e uma coluna que existem", async () => {
@@ -133,58 +143,12 @@ describe("chaves estrangeiras declaradas", () => {
     }
   });
 
-  it("documenta as duas divergências vivas trazidas pela migration 0021", async () => {
-    // Caracterização, não aprovação. As duas colunas que a 0021 acrescentou por
-    // `ALTER TABLE ... ADD` saíram como `REFERENCES auth_user(id)` puro, sem a
-    // cláusula `ON DELETE` que `schema.ts` declara — NO ACTION no banco onde a
-    // declaração diz SET NULL (`job.posted_by_user_id`) e CASCADE
-    // (`auth_session.impersonated_by`).
-    //
-    // O efeito prático é o oposto do pretendido: em vez de esquecer a
-    // atribuição e derrubar a sessão emprestada, o banco **recusa** remover a
-    // conta enquanto qualquer uma das duas linhas apontar para ela. Quando a
-    // migration for corrigida, este caso falha — e é assim que ele avisa que o
-    // comportamento mudou.
-    const declaradas = declaredForeignKeys();
-    const declarado = (tabela: string, coluna: string) =>
-      declaradas.find((fk) => fk.table === tabela && fk.from.includes(coluna))!.onDelete;
-    const aplicado = async (tabela: string, coluna: string) =>
-      (
-        await db.all<{ from: string; on_delete: string }>(
-          sql.raw(`pragma foreign_key_list("${tabela}")`),
-        )
-      ).find((row) => row.from === coluna)!.on_delete;
-
-    expect(declarado("job", "posted_by_user_id")).toBe("SET NULL");
-    expect(await aplicado("job", "posted_by_user_id")).toBe("NO ACTION");
-    expect(declarado("auth_session", "impersonated_by")).toBe("CASCADE");
-    expect(await aplicado("auth_session", "impersonated_by")).toBe("NO ACTION");
-
-    const [user] = await db
-      .insert(schema.authUser)
-      .values({ email: "recrutador@exemplo.test", roles: ["owner"] })
-      .returning({ id: schema.authUser.id });
-    await db
-      .insert(schema.source)
-      .values({ id: "lever:posted", kind: "lever", handle: "posted", label: "Posted" });
-    await db.insert(schema.job).values({
-      sourceId: "lever:posted",
-      companyName: "Acme",
-      externalId: "ext-posted",
-      title: "Arquiteto",
-      url: "https://exemplo.test/posted",
-      fingerprint: "fp-posted",
-      contentHash: "ch-posted",
-      raw: "{}",
-      postedByUserId: user!.id,
-    });
-
-    await expect(
-      db.run(sql.raw(`delete from auth_user where id = ${user!.id}`)),
-    ).rejects.toThrow();
-    const [vaga] = await db.select().from(schema.job);
-    expect(vaga!.postedByUserId).toBe(user!.id);
-  });
+  // O caso que afirmava as duas divergências da migration 0021 saiu daqui: a
+  // 0025 reconstruiu as tabelas e o banco passou a aplicar `SET NULL` e
+  // `CASCADE` como o schema declara. O comportamento — apagar a conta e ver a
+  // vaga sobreviver sem atribuição, a sessão emprestada cair e a própria ficar
+  // — está em `tests/fk-on-delete.test.ts`, que apaga linha de verdade em vez
+  // de ler a definição da chave.
 
   it("preserva a auditoria e derruba a sessão quando uma conta é removida", async () => {
     // As duas metades da mesma decisão. Sessão é credencial: sobreviver ao dono

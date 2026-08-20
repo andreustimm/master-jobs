@@ -10,7 +10,7 @@
  * Fronteira FORA: a matemática em si, coberta por `cov-analytics-pure.test.ts`
  * e por `analytics.test.ts`.
  */
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { funnelAnalysis, scorerDiagnostics } from "../src/core/analytics/index.ts";
 import type { DB } from "../src/core/db/client.ts";
@@ -275,6 +275,28 @@ describe("funnelAnalysis", () => {
 
     expect((await funnelAnalysis(primeiro)).replied).toBe(0);
     expect((await funnelAnalysis(segundo)).replied).toBe(1);
+  });
+
+  it("não quebra quando a candidatura aponta para uma vaga que sumiu do banco", async () => {
+    // Não deveria acontecer — a chave estrangeira é `cascade` e a regra 3 proíbe
+    // deletar vaga. Mas `pragma foreign_keys` não vem ligado em toda instalação
+    // do libSQL, e banco restaurado de backup parcial chega assim. Análise que
+    // estoura nesse estado tira do usuário justamente a ferramenta de descobrir
+    // o estrago.
+    const candidateId = await seedCandidate("dono", true);
+    await db.run(sql.raw("pragma foreign_keys = off"));
+    await db.run(
+      sql.raw(`insert into application (candidate_id, job_id, status)
+               values (${candidateId}, 999999, 'applied')`),
+    );
+    await db.run(sql.raw("pragma foreign_keys = on"));
+
+    const r = await funnelAnalysis(candidateId);
+
+    expect(r.applied).toBe(1);
+    expect(r.replied).toBe(0);
+    // Sem vaga não há fonte: nulo, e não um grupo inventado.
+    expect(r.bySource).toEqual([]);
   });
 
   it("devolve funil vazio, com instrução, para quem nunca se candidatou", async () => {

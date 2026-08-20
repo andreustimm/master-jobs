@@ -96,6 +96,17 @@ dashboard Next.js em `localhost:3000`.
 > diria 0,91 de similaridade porque o texto de fato se parece. Similaridade não
 > distingue "combina" de "é possível". Detalhe em `docs/scoring.md`.
 
+> **Hash de senha com tamanho errado NEGA acesso.** `verifyPassword` derivava a
+> chave com o comprimento do valor **gravado** em vez da constante `KEYLEN`: um
+> `password_hash` truncado produzia buffers vazios e `timingSafeEqual(vazio,
+> vazio)` aceitava qualquer senha. Dado corrompido em coluna de senha nega,
+> nunca concede — e o parâmetro do verificador nunca sai do valor verificado.
+>
+> **`ALTER TABLE ... ADD ... REFERENCES` no SQLite ignora `ON DELETE`.** A
+> cláusula é aceita na sintaxe e vira `NO ACTION`. Coluna com chave estrangeira
+> exige reconstrução da tabela, e `tests/cov-db-schema.test.ts` compara o que o
+> schema declara com o que o `pragma` aplica.
+
 > **`/p/[slug]` é a única rota sem sessão, e o que ela mostra é lista de
 > permissão.** `publicProfile()` enumera os campos que saem; a página não
 > alcança o registro do candidato. Nunca saem e-mail, telefone, funil,
@@ -428,7 +439,7 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 | Vagas com bloqueador | 468 |
 | Descrições offline | 207 |
 | Candidaturas no funil | 2 |
-| Testes | 1.135 + 65 e2e |
+| Testes | 1.420 + 65 e2e · cobertura 98,1% (fora do CLI) |
 
 > A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
 > candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de

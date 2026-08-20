@@ -270,6 +270,13 @@ describe("openaiProvider", () => {
     expect([semUso.inputTokens, semUso.outputTokens]).toEqual([null, null]);
     // Modelo ausente na resposta cai para o pedido, nunca para string vazia.
     expect(semUso.model).toBe("gpt-5-mini");
+
+    // Serviço compatível pode devolver 200 com corpo praticamente vazio; isso é
+    // uma resposta sem conteúdo, não um erro — e não pode virar exceção.
+    responder(200, {});
+    const vazio = await openaiProvider("sk-x").complete(pedido);
+    expect(vazio.text).toBe("");
+    expect([vazio.inputTokens, vazio.outputTokens]).toEqual([null, null]);
   });
 
   it("transforma erro do provedor em LlmError com a chave já apagada", async () => {

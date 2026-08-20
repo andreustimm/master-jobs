@@ -234,6 +234,44 @@ describe("verifyJobs", () => {
     expect(visitadas).toEqual(["https://exemplo.test/real"]);
   });
 
+  it("descarta URL malformada que passou pelo filtro grosseiro de prefixo", async () => {
+    // O SQL só compara prefixo: `https://` sozinho casa com `like 'https://%'` e
+    // ainda assim não é URL. Por isso a análise acontece depois do filtro e
+    // antes do corte por limite — do contrário uma linha impossível de conferir
+    // ocuparia a vez de uma conferível, e o valor iria parar dentro de um fetch.
+    await seedVaga({ fit: 95, url: "https://" });
+    await seedVaga({ fit: 85, url: "https://exemplo.test/real" });
+    const visitadas: string[] = [];
+
+    const r = await verifyJobs({
+      ...opcoesBase,
+      limit: 1,
+      fetchImpl: (async (input: string | URL) => {
+        visitadas.push(String(input));
+        return new Response(null, { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    expect(r.checked).toBe(1);
+    expect(visitadas).toEqual(["https://exemplo.test/real"]);
+  });
+
+  it("espaça as requisições e limita a concorrência por padrão", async () => {
+    // Estes boards são serviços gratuitos de terceiros. Os padrões — quatro em
+    // paralelo, 250 ms entre uma e outra — são a diferença entre conferir links
+    // e ser confundido com um raspador.
+    await seedVaga({ fit: 90 });
+    const inicio = Date.now();
+
+    const r = await verifyJobs({
+      lookupHost: lookupPublico,
+      fetchImpl: fetchPorUrl({}, 200),
+    });
+
+    expect(r.checked).toBe(1);
+    expect(Date.now() - inicio).toBeGreaterThanOrEqual(200);
+  });
+
   it("confere o link de candidatura quando ele existe, não o do anúncio", async () => {
     // É o link que a pessoa vai abrir. O do anúncio pode continuar de pé num
     // agregador depois de o formulário do empregador sair do ar.
