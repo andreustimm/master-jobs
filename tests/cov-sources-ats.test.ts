@@ -399,3 +399,22 @@ describe("recruitee", () => {
     });
   });
 });
+
+describe("bordas de resposta", () => {
+  it("lever aceita corpo nulo sem derrubar a sincronização", async () => {
+    // Um board removido devolve `null` em vez de `[]`; deixar isso estourar
+    // custaria todas as outras fontes da mesma execução.
+    setHttpPort(fixtureHttp({ "api.lever.co": "null" }));
+    await expect(lever.fetchJobs(config("lever", "sumido"))).resolves.toEqual({
+      jobs: [],
+      warnings: [],
+    });
+  });
+
+  it("ashby avisa também quando o envelope vem sem o campo jobs", async () => {
+    setHttpPort(fixtureHttp({ "api.ashbyhq.com": {} }));
+    const result = await ashby.fetchJobs(config("ashby", "acme"));
+    expect(result.jobs).toEqual([]);
+    expect(result.warnings.join(" ")).toContain("no listed jobs");
+  });
+});

@@ -188,3 +188,21 @@ describe("htmlToText", () => {
     expect(htmlToText("<div><span>   </span></div>")).toBeNull();
   });
 });
+
+describe("tempo limite", () => {
+  it("aborta um endpoint que nunca responde, em vez de travar a sync", async () => {
+    // Serviço gratuito que pendura a conexão é comum. Sem o abort, um único host
+    // silencioso deixaria a varredura inteira presa até alguém matar o processo.
+    vi.stubGlobal(
+      "fetch",
+      (_input: string | URL, init: RequestInit = {}) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () =>
+            reject(new DOMException("The operation was aborted.", "AbortError")),
+          );
+        }),
+    );
+
+    await expect(getJson(URL_OK, { timeoutMs: 20, retries: 0 })).rejects.toThrow(/abort/i);
+  });
+});

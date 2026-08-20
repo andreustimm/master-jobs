@@ -345,7 +345,13 @@ export async function fetchToDir(
     const msg = (await res.json()) as { raw?: string };
     if (!msg.raw) continue;
 
-    await writeFile(path, Buffer.from(msg.raw, "base64url").toString("utf8"));
+    // O Buffer, não uma string.
+    //
+    // `.toString("utf8")` interpreta os bytes como UTF-8 e reescreve o
+    // resultado — o que estraga qualquer .eml em iso-8859-1 e é lossy para
+    // qualquer byte que não forme UTF-8 válido. Um .eml é formato de bytes; o
+    // charset é declarado dentro dele e quem decide é o parser.
+    await writeFile(path, Buffer.from(msg.raw, "base64url"));
     written++;
   }
 

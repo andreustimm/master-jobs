@@ -85,7 +85,7 @@ export const himalayas: SourceAdapter = {
 
     if (total && collected.length < total) {
       warnings.push(
-        `himalayas: ${collected.length} de ${total.toLocaleString()} vagas (as mais recentes). Aumente o handle para paginar mais.`,
+        `himalayas: ${collected.length} de ${total.toLocaleString("pt-BR")} vagas (as mais recentes). Aumente o handle para paginar mais.`,
       );
     }
 
@@ -267,7 +267,16 @@ export const adzuna: SourceAdapter = {
       return { jobs: [], warnings: ["adzuna skipped: ADZUNA_APP_ID/ADZUNA_APP_KEY not set"] };
     }
     // handle format: "<country>:<query>", e.g. "us:AI architect"
-    const [country = "us", ...rest] = config.handle.split(":");
+    //
+    // `|| "us"` e não default de destructuring: `"".split(":")` devolve `[""]`,
+    // não `[undefined]`, e default só vale para `undefined`. O país saía vazio
+    // e a URL virava `/jobs//search/1` — 404 silencioso.
+    //
+    // Não é hipotético: `config.ts` declara `handle: z.string().default("")`,
+    // então uma entrada `- kind: adzuna` sem handle PASSA na validação e chega
+    // aqui vazia.
+    const [rawCountry, ...rest] = config.handle.split(":");
+    const country = rawCountry || "us";
     const what = rest.join(":") || "software architect";
     const params = new URLSearchParams({
       app_id: appId,

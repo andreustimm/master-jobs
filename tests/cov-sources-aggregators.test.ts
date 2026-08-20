@@ -412,19 +412,61 @@ describe("adzuna", () => {
     expect(jobs[0]!.compMin).toBeNull();
   });
 
-  it("DEFEITO CONHECIDO: handle vazio produz URL sem país em vez de cair para us", async () => {
-    // `const [country = "us"] = "".split(":")` não cai no padrão: split de string
-    // vazia devolve [""] e default de destructuring só vale para `undefined`.
-    // O resultado é `/v1/api/jobs//search/1`, que a Adzuna recusa — e como
-    // `handle` tem `.default("")` no schema de sources.yaml, essa configuração é
-    // aceita pela validação. Teste caracteriza o comportamento atual; a correção
-    // é trocar o default por `|| "us"` em aggregators.ts.
+  it("handle vazio cai para o país padrão em vez de montar URL quebrada", async () => {
+    // Já produziu `/v1/api/jobs//search/1`, que a Adzuna recusa. A causa era
+    // `const [country = "us"] = "".split(":")`: split de string vazia devolve
+    // `[""]`, não `[undefined]`, e default de destructuring só vale para
+    // `undefined`.
+    //
+    // Não era hipotético: `handle` tem `.default("")` no schema, então uma
+    // entrada `- kind: adzuna` sem handle passa na validação e chega aqui vazia.
     process.env.ADZUNA_APP_ID = "id";
     process.env.ADZUNA_APP_KEY = "key";
     const port = fixtureHttp({ "api.adzuna.com": { results: [] } });
     setHttpPort(port);
 
     await adzuna.fetchJobs(config("adzuna"));
-    expect(port.calls[0]).toContain("/v1/api/jobs//search/1?");
+    expect(port.calls[0]).toContain("/v1/api/jobs/us/search/1?");
+    expect(port.calls[0]).not.toContain("/jobs//search");
+  });
+});
+
+describe("bordas de resposta", () => {
+  it("himalayas encerra a paginação ao esgotar as páginas pedidas", async () => {
+    // Página cheia com o teto de páginas atingido: não há próxima chamada, e
+    // também não há a pausa de cortesia entre páginas que não existem.
+    const jobs20 = Array.from({ length: 20 }, (_, i) => ({
+      guid: `g-${i}`,
+      title: `Vaga ${i}`,
+      companyName: "X",
+    }));
+    const port = fixtureHttp({ "offset=0": { jobs: jobs20 } });
+    setHttpPort(port);
+
+    const result = await himalayas.fetchJobs(config("himalayas", "1"));
+    expect(result.jobs).toHaveLength(20);
+    expect(port.calls).toHaveLength(1);
+  });
+
+  it("remotive, remoteok e adzuna aceitam corpo sem o campo esperado", async () => {
+    // Uma API que muda o envelope não pode virar exceção no meio da sync: as
+    // outras fontes do dia iriam junto.
+    process.env.ADZUNA_APP_ID = "id";
+    process.env.ADZUNA_APP_KEY = "key";
+    setHttpPort(
+      fixtureHttp({
+        "remotive.com/api/remote-jobs": {},
+        // `null` como corpo inteiro é o que a RemoteOK devolve sob manutenção.
+        "remoteok.com/api": "null",
+        "api.adzuna.com": {},
+      }),
+    );
+
+    await expect(remotive.fetchJobs(config("remotive"))).resolves.toEqual({ jobs: [], warnings: [] });
+    await expect(remoteok.fetchJobs(config("remoteok"))).resolves.toEqual({ jobs: [], warnings: [] });
+    await expect(adzuna.fetchJobs(config("adzuna", "us:x"))).resolves.toEqual({
+      jobs: [],
+      warnings: [],
+    });
   });
 });

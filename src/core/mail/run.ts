@@ -188,7 +188,24 @@ export async function importMail(
   let alertSourceReady = false;
 
   for (const file of files) {
-    const raw = await readFile(file, "utf8");
+    // `latin1`, e não `utf8`.
+    //
+    // Um .eml é um formato de BYTES cujo charset é declarado dentro dele. Lido
+    // como utf8, o corpo já chega decodificado — e `decodeBody` então tenta
+    // recuperar os bytes com `Buffer.from(body, "binary")`, que mapeia cada
+    // ponto de código para um byte só: "ã" (U+00E3) vira 0xE3 solto, UTF-8
+    // inválido, e o decodificador entrega U+FFFD.
+    //
+    // O efeito medido: "Infelizmente não seguiremos" virava "n�o seguiremos", e
+    // as regras de rejeição em português do `classify.ts` dependem justamente
+    // desses acentos. Passava despercebido porque os ATS mandam
+    // quoted-printable ou base64, que percorrem outro caminho — só o e-mail
+    // entregue em 8bit puro estragava.
+    //
+    // `latin1` mapeia byte↔ponto de código sem perda, então o buffer
+    // reconstruído é idêntico ao arquivo e `toText` decodifica pelo charset
+    // declarado. Vale para utf-8 e para iso-8859-1.
+    const raw = await readFile(file, "latin1");
     const mail = parseEml(raw);
     const bodyText = mail.text ?? htmlToText(mail.html) ?? "";
 
