@@ -103,6 +103,16 @@ pnpm jho auth set-password ${"seu@email.com"}`}
             <Button type="submit">{t("login.submit")}</Button>
           </form>
 
+          {/* Fora do formulário: dentro dele, Enter no campo de senha poderia
+              acionar o link em vez de entrar. */}
+          <Link
+            href="/login/forgot"
+            data-testid="forgot-password"
+            className="mt-4 inline-block type-body-sm text-[var(--primary-text)] hover:underline"
+          >
+            {t("login.forgot")}
+          </Link>
+
           <p className="type-body-sm mt-5 border-t border-[var(--color-hairline)] pt-4 text-muted-foreground">
             {t("login.magicLinkHint")}{" "}
             <code className="type-mono-sm rounded bg-[var(--color-cloud)] px-1 py-0.5">

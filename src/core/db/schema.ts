@@ -983,6 +983,17 @@ export const authLoginToken = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     tokenHash: text("token_hash").notNull(),
     email: text("email").notNull(),
+    /**
+     * `login` (padrão) ou `reset`.
+     *
+     * A mesma tabela serve aos dois porque a mecânica é idêntica: um segredo de
+     * uso único com validade. O que MUDA é o que o resgate faz — um abre sessão,
+     * o outro autoriza definir senha —, e por isso o propósito precisa estar
+     * gravado: sem ele, um token de recuperação aceito no caminho de login viraria
+     * uma entrada sem senha, e um token de login aceito no caminho de recuperação
+     * deixaria trocar a senha de quem só pediu para entrar.
+     */
+    purpose: text("purpose").notNull().default("login"),
     expiresAt: text("expires_at").notNull(),
     usedAt: text("used_at"),
     createdAt: text("created_at").notNull().default(now),

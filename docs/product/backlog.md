@@ -708,109 +708,43 @@ público 200 sem e-mail e sem currículo, e volta a 404 ao fechar.
 A rota abre uma consulta ao banco por requisição sem conta para limitar, e um
 varredor de slugs custa pouco. Item próprio no backlog.
 
-### F-05 · Resend para e-mail transacional e recuperação de senha 📋
+### F-05 · Resend para e-mail transacional e recuperação de senha ✅ (código completo; falta a credencial do usuário)
 
-**Contexto que restringe a solução.** O sistema não envia e-mail — nenhum.
-`magicLink.begin()` grava o hash do token e devolve o token cru ao chamador;
-quem entrega é `jho auth login <email>`, que **imprime a URL no terminal**.
-Isso funciona para uma pessoa no próprio computador e para mais ninguém: um
-candidato ou recrutador cadastrado por um admin (AUTH-02) não tem terminal,
-não tem repositório e não tem como receber o link. Enquanto for assim, a tela
-de administração cria contas que não conseguem entrar.
+#### Entregue em 20/08/2026
 
-Do outro lado do sistema já existe e-mail, e ele não serve aqui: F-01 lê a
-caixa do usuário pela API do Gmail, com escopo somente leitura, e
-`src/core/mail/` é parser MIME, classificador e extrator de job alert — tudo
-ingestão. Envio é a direção oposta e não compartilha nada com aquilo. Colocá-lo
-dentro do contexto de correspondência faria o contexto que **lê** passar a
-escrever para fora.
+Porta `Mailer`, adapter Resend, e queda para o terminal quando não há chave —
+como o link mágico já fazia. **Ausência de chave não é erro:** falhar o cadastro
+de conta porque não há provedor de e-mail configurado transformaria um detalhe
+de infraestrutura em bloqueio de produto.
 
----
+As duas variáveis são necessárias. Só a chave, sem remetente, não configura
+nada: o Resend recusa envio sem `from` de domínio verificado, e descobrir isso
+na hora do envio seria tarde.
 
-#### Decisões que a implementação precisa tomar
+**Três disciplinas no fluxo de recuperação, e nenhuma é opcional:**
 
-**1. Porta `Mailer`, adapter Resend, adapter de console.**
+A resposta nunca diz se o endereço existe — mesma URL, mesmo texto, redigido
+como "se existir uma conta com esse endereço". Um formulário que responde "não
+encontramos esta conta" é um oráculo de enumeração aberto ao mundo. Verificado
+no browser, de contexto anônimo: as duas respostas são idênticas byte a byte, e
+o token só é gerado para a conta que existe.
 
-Regra 4 com variação real: Resend hoje, SMTP ou SES depois, e um adapter que
-só imprime — usado em desenvolvimento e nos testes, e que preserva o
-comportamento de hoje como caso legítimo em vez de gambiarra. A porta é
-mínima (destinatário, assunto, corpo, resultado); o domínio não aprende o que
-é bounce nem o que é webhook.
+O token vale uma hora — não os quinze minutos do link de login, porque quem
+esqueceu a senha costuma buscar o e-mail em outro dispositivo — serve uma vez,
+e é queimado antes de a senha nova ser gravada. Token inexistente, expirado e
+usado dão a mesma resposta: cada distinção é pista para quem adivinha.
 
-**2. A chave de API é do usuário, e o agente não pode gerá-la.**
+Trocar a senha derruba **todas** as sessões. Quem recupera a senha costuma
+fazê-lo por suspeitar de acesso indevido; manter as antigas devolveria o acesso
+a quem já estava dentro.
 
-`RESEND_API_KEY` entra como **nome de variável de ambiente**, no padrão que
-`jho llm add-provider --key-env` já usa. Regra 16: o banco guarda o nome,
-jamais a chave — banco é copiado e versionado em backup, e chave dentro dele
-viaja junto. Registrado aqui de forma explícita porque é o tipo de passo que
-um agente "resolveria" sozinho: nenhum agente cria conta no Resend, aceita
-termos em nome do usuário nem emite credencial. O que o sistema faz é dizer
-qual variável falta.
+**Dois detalhes que o teste forçou:** o erro do provedor não carrega o
+destinatário (o corpo do Resend cita o e-mail; só o status sobe), e a tela
+confere o token **antes** de mostrar o campo de senha — senão a pessoa digita
+a senha nova e só então descobre que o link morreu.
 
-**3. "Esqueci minha senha" reusa o link mágico. Não é um token novo.**
-
-`auth_login_token` já é de uso único, hashado, com expiração e consumo atômico
-— o `UPDATE ... RETURNING` que impede duas redenções simultâneas de ganharem
-as duas. Um segundo tipo de token com o mesmo ciclo de vida seria uma segunda
-chance de errar a mesma coisa. O fluxo é entrar pelo link e cair na tela de
-definir senha, que já existe como `setPassword`.
-
-**4. A resposta é idêntica exista ou não a conta.**
-
-`magicLink.complete()` já devolve null tanto para token inválido quanto para
-endereço desconhecido, de propósito. O formulário de recuperação mantém a
-postura: sempre "se houver conta para este endereço, o e-mail saiu". Uma
-mensagem "e-mail não encontrado" transforma o formulário em oráculo de quem
-tem conta na instalação — e num produto de busca de emprego, saber quem está
-procurando já é informação sensível.
-
-**5. Falha de envio não vira sucesso silencioso nem denuncia o destinatário.**
-
-A entrega é assíncrona por natureza: o provedor aceita agora e devolve bounce
-depois. O erro é registrado em `auth_event` e visível ao admin em AUTH-02; ao
-anônimo, a mesma frase neutra de sempre. Se precisar de retentativa, o padrão
-da casa é tabela e não broker (ADR 0009) — uma `mail_task` no molde de
-`scrape_task` e `verify_task`, com claim atômico e backoff.
-
-**6. Limite de tentativas: o que existe protege a outra ponta.**
-
-`MAX_ATTEMPTS = 8` em `WINDOW_MINUTES = 15` conta `login_failed` em
-`auth_event` e protege a **verificação** de senha. Pedir recuperação não falha
-nunca, então nada é contado — sem limite próprio, o formulário vira gerador de
-e-mail contra qualquer endereço que o atacante escolher, saindo do domínio do
-usuário e queimando a reputação dele. Contar por endereço **e** por origem, e
-a recusa devolve a mesma frase neutra da decisão 4: um limite que responde
-"muitas tentativas" só para endereços existentes é o oráculo de volta.
-
-**7. Domínio verificado é pré-requisito, não detalhe de configuração.**
-
-Resend exige SPF e DKIM no domínio remetente; enviar de domínio não verificado
-cai em spam, e o usuário conclui que o produto não envia e-mail. O remetente é
-configuração dele, e `jho security check` é o lugar natural para conferir que
-a variável existe antes de a primeira recuperação ser pedida — o comando já
-faz autoverificação de bind, segredo e permissão.
-
----
-
-#### O que fica de fora, e por quê
-
-**E-mail periódico com vagas ou relatório.** É outro produto e outro
-consentimento. `jho report` escreve markdown no vault; empurrar isso para a
-caixa de entrada muda a relação com o usuário e merece decisão própria.
-
-**Webhooks de bounce e reclamação.** Exigem endpoint público recebendo POST de
-terceiro, com verificação de assinatura — superfície nova numa instalação que
-até aqui só abre uma rota anônima (AUTH-04), e sob escrutínio.
-
-**Template HTML.** Texto simples atravessa qualquer cliente, não carrega pixel
-de rastreio e não tem como quebrar layout. Um e-mail transacional que só
-precisa carregar um link não ganha nada com o resto.
-
-**Enviar candidatura por e-mail.** Regra 13. Ter um `Mailer` não muda a
-decisão da ADR 0010 — se muda, é sinal de que a trava era técnica quando
-deveria ser de produto.
-
----
+**A credencial é sua.** `RESEND_API_KEY` e `RESEND_FROM` em `.env.example`;
+nenhum agente pode gerá-las.
 
 ### E-01 · Arquitetura hexagonal, DDD, monolito modular ✅
 

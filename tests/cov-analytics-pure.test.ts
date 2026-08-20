@@ -136,7 +136,13 @@ describe("analyzeFunnel: o que acontece entre 'nada' e 'confiável'", () => {
     const r = analyzeFunnel(
       many(40, (i) => ({
         status: i % 3 === 0 ? "offer" : "applied",
-        components: i < 20 ? { Cargo: 20 } : { Cargo: 20, Benefícios: 4 },
+        // Anotado porque a ternária infere duas formas distintas e a união
+        // delas não satisfaz `Record<string, number>`: o ramo sem `Benefícios`
+        // ganha a propriedade como `undefined`.
+        components: (i < 20 ? { Cargo: 20 } : { Cargo: 20, Benefícios: 4 }) as Record<
+          string,
+          number
+        >,
       })),
     );
 

@@ -96,6 +96,13 @@ dashboard Next.js em `localhost:3000`.
 > diria 0,91 de similaridade porque o texto de fato se parece. Similaridade não
 > distingue "combina" de "é possível". Detalhe em `docs/scoring.md`.
 
+> **Recuperar senha não revela quem está cadastrado.** Endereço existente e
+> inexistente recebem a mesma URL e o mesmo texto, redigido como "se existir uma
+> conta". Token de uso único, uma hora, queimado antes de gravar a senha; e
+> trocar a senha derruba TODAS as sessões, porque quem recupera costuma
+> suspeitar de acesso indevido. Sem `RESEND_API_KEY` o link vai para o terminal
+> — ausência de provedor não bloqueia produto.
+
 > **Hash de senha com tamanho errado NEGA acesso.** `verifyPassword` derivava a
 > chave com o comprimento do valor **gravado** em vez da constante `KEYLEN`: um
 > `password_hash` truncado produzia buffers vazios e `timingSafeEqual(vazio,
@@ -439,7 +446,7 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 | Vagas com bloqueador | 468 |
 | Descrições offline | 207 |
 | Candidaturas no funil | 2 |
-| Testes | 1.420 + 65 e2e · cobertura 98,1% (fora do CLI) |
+| Testes | 1.445 + 74 e2e · cobertura 98% (fora do CLI) |
 
 > A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
 > candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de

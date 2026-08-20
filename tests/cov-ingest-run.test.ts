@@ -198,9 +198,11 @@ describe("syncAll", () => {
     // `jho sources list` mostrar, e o total de `failed` é o que diz se a
     // varredura foi completa.
     setHttpPort({
-      async json(url: string) {
+      // `<T>` explícito: a porta declara `json<T = unknown>`, e um dublê com
+      // retorno concreto não é atribuível à assinatura genérica.
+      async json<T>(url: string) {
         if (url.includes("quebrada")) throw new Error("GET -> 500");
-        return { jobs: [vaga(1)] };
+        return { jobs: [vaga(1)] } as T;
       },
       async text() {
         return null;

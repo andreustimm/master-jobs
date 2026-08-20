@@ -139,6 +139,26 @@ export const drizzleSessions: SessionStore = {
   },
 };
 
+/**
+ * Gera um token de recuperação e guarda apenas o hash.
+ *
+ * O valor cru sai daqui uma vez e o sistema não consegue recuperá-lo depois —
+ * a mesma regra do token de sessão. Um link de recuperação legível no banco
+ * seria uma senha em texto claro com outro nome.
+ */
+export async function issueResetToken(email: string, expiresAt: string): Promise<string> {
+  const token = newToken();
+  await getDb()
+    .insert(authLoginToken)
+    .values({ tokenHash: hash(token), email, purpose: "reset", expiresAt });
+  return token;
+}
+
+/** O mesmo hash que `issueResetToken` grava. Exportado para o resgate comparar. */
+export function hashToken(raw: string): string {
+  return hash(raw);
+}
+
 export const drizzleAuthRepository: AuthRepository = {
   async record(input): Promise<void> {
     await getDb().insert(authEvent).values({

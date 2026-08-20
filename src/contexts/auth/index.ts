@@ -31,13 +31,25 @@ export { isOpenMode, isSingleUser, singleUserSession, SESSION_DAYS } from "./app
 export { generatePassword, seedOwner } from "./app/seed.ts";
 export type { SeedResult } from "./app/seed.ts";
 export { setPassword, verifyLogin } from "./infra/password-login.ts";
+import { setPassword } from "./infra/password-login.ts";
 export { canReadPublicProfile } from "./domain/policy.ts";
 export { VISIBILITIES, isVisibility, ADMIN_ACTIONS } from "./domain/types.ts";
 export type { Visibility } from "./domain/types.ts";
 export type { UserSummary } from "./ports.ts";
 export { IMPERSONATION_HOURS } from "./app/impersonation.ts";
+export { RESET_MINUTES, RESET_MAX_PER_HOUR } from "./app/password-reset.ts";
+export type { Mailer, OutgoingMail, MailResult } from "./ports-mailer.ts";
+export { configuredMailer, consoleMailer, resendMailer } from "./infra/resend-mailer.ts";
 
 import { drizzleUserDirectory, otherActiveAdmins } from "./infra/drizzle-directory.ts";
+import { hashToken, issueResetToken } from "./infra/drizzle-store.ts";
+import { configuredMailer } from "./infra/resend-mailer.ts";
+import {
+  isResetTokenLive,
+  redeemPasswordReset,
+  requestPasswordReset,
+  type ResetDeps,
+} from "./app/password-reset.ts";
 import {
   startImpersonation,
   stopImpersonation,
@@ -129,6 +141,40 @@ export function adminsBesides(userId: number) {
 }
 
 /* ----------------------------- Impersonação ------------------------------- */
+
+/* --------------------------- Recuperar a senha ---------------------------- */
+
+function resetDeps(baseUrl: string): ResetDeps {
+  return {
+    mailer: configuredMailer(),
+    audit: drizzleAuthRepository,
+    sessions: drizzleSessions,
+    linkFor: (token) => `${baseUrl}/login/reset?token=${encodeURIComponent(token)}`,
+    setPassword,
+    issue: issueResetToken,
+  };
+}
+
+/**
+ * Pede a recuperação. **Sempre devolve `{ sent: true }`.**
+ *
+ * O retorno confirma que o pedido foi aceito, não que a conta existe. Quem
+ * chama não consegue distinguir os dois casos, e é assim de propósito: um
+ * formulário que responde "não encontramos esta conta" é um oráculo de
+ * enumeração aberto ao mundo.
+ */
+export function askPasswordReset(email: string, baseUrl: string) {
+  return requestPasswordReset(email, resetDeps(baseUrl));
+}
+
+/** O link ainda serve? Consulta sem consumir, para a tela avisar antes. */
+export function resetTokenIsLive(token: string) {
+  return isResetTokenLive(token, hashToken);
+}
+
+export function completePasswordReset(token: string, newPassword: string, baseUrl: string) {
+  return redeemPasswordReset(token, newPassword, hashToken, resetDeps(baseUrl));
+}
 
 export function beginImpersonation(actor: Session | null, targetUserId: number) {
   return startImpersonation(actor, targetUserId, directoryDeps);

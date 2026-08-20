@@ -334,11 +334,19 @@ describe("pluggability (rule 4)", () => {
   });
 
   it("handles the API key only where authentication happens", () => {
-    // `providers.ts` must touch the key — it is what signs the request. Nowhere
-    // else has any reason to, and a key that spreads is a key that leaks.
-    const allowed = "src/core/llm/providers.ts";
+    // A chave existe apenas onde a requisição é ASSINADA. Em qualquer outro
+    // lugar ela não tem uso, e chave que se espalha é chave que vaza.
+    //
+    // A lista é curta porque cada entrada é um lugar a mais onde uma chave pode
+    // acabar num log, num erro ou num commit. Acrescentar uma é decisão
+    // deliberada, não conveniência: precisa ser um adapter que fala com um
+    // provedor externo e assina a chamada.
+    const allowed = new Set([
+      "src/core/llm/providers.ts",
+      "src/contexts/auth/infra/resend-mailer.ts",
+    ]);
     const offenders = SRC.filter(
-      (f) => f !== allowed && /\bapiKey\b/.test(read(f)) && !/apiKeyEnv/.test(read(f)),
+      (f) => !allowed.has(f) && /\bapiKey\b/.test(read(f)) && !/apiKeyEnv/.test(read(f)),
     );
     expect(offenders).toEqual([]);
   });
@@ -378,6 +386,16 @@ describe("authorisation (AUTH-01)", () => {
     // interface. Mesma razão de `logoutAction`, que só não aparece aqui porque
     // o arquivo dele não termina em `actions.ts`.
     "stopImpersonatingAction",
+    // Recuperação de senha não pode exigir sessão: quem esqueceu a senha não
+    // tem uma. Exigir guard aqui seria pedir que a pessoa entrasse para poder
+    // recuperar o acesso de que não se lembra.
+    //
+    // O que substitui o guard nas duas: `requestResetAction` responde igual
+    // para conta existente e inexistente, e limita por endereço;
+    // `submitResetAction` trata o TOKEN como a autorização — uso único, uma
+    // hora de validade, e queimado antes de a senha ser gravada.
+    "requestResetAction",
+    "submitResetAction",
   ]);
 
   it("exposes Auth to production callers only through its public API", () => {

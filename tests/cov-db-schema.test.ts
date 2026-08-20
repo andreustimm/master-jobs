@@ -40,9 +40,12 @@ type DeclaredFk = {
 
 /** Toda tabela exportada pelo schema, na ordem em que o módulo as declara. */
 function allTables(): SQLiteTable[] {
-  return Object.values(schema).filter((value): value is SQLiteTable =>
-    is(value, SQLiteTable),
-  );
+  // `unknown[]` antes de filtrar: o módulo exporta tabelas E tuplas de
+  // constantes (`ROLES`, `APPLICATION_STATUSES`…), então `Object.values` produz
+  // uma união em que o predicado de tipo não é atribuível ao parâmetro. O
+  // estreitamento continua sendo feito por `is()`, em tempo de execução.
+  const exported: unknown[] = Object.values(schema);
+  return exported.filter((value): value is SQLiteTable => is(value, SQLiteTable));
 }
 
 /**

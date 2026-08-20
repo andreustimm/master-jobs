@@ -183,6 +183,13 @@
       "when": 1787238329635,
       "tag": "0025_fix_auth_user_fk_on_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1787240521109,
+      "tag": "0026_perpetual_polaris",
+      "breakpoints": true
     }
   ]
 }
