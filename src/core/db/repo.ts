@@ -340,6 +340,20 @@ export async function setApplicationStatusInTransaction(
   status: ApplicationStatus,
   detail?: string,
   stamp = new Date().toISOString(),
+  /**
+   * Por onde a candidatura foi. `direct` | `ats` | `referral` | `recruiter` |
+   * `agency`.
+   *
+   * É propriedade da CANDIDATURA e não da transição, e é por isso que a escrita
+   * dela não depende de o status ter mudado: registrar que uma candidatura já
+   * enviada saiu por referral é informação nova sobre um fato antigo.
+   *
+   * A coluna existe desde o começo, o funil a renderiza e o `jho prep` manda
+   * preenchê-la — e nada no sistema escrevia nela. Referral é ~7% dos
+   * candidatos e ~40% das contratações; sem esse campo o funil não consegue
+   * medir a única alavanca que o próprio produto diz ser a mais forte.
+   */
+  channel?: string,
 ): Promise<void> {
   const [previous] = await tx
       .select()
@@ -363,7 +377,17 @@ export async function setApplicationStatusInTransaction(
       transition.error.to,
     );
   }
-  if (!transition.changed) return;
+  if (!transition.changed) {
+    // Status igual, mas o canal pode ser novo. Sair aqui sem gravar descartaria
+    // em silêncio o que a pessoa acabou de informar.
+    if (channel && previous) {
+      await tx
+        .update(application)
+        .set({ channel, updatedAt: stamp })
+        .where(eq(application.id, previous.id));
+    }
+    return;
+  }
 
   let applicationId: number;
   if (previous) {
@@ -373,6 +397,9 @@ export async function setApplicationStatusInTransaction(
           status: transition.state.status,
           appliedAt: transition.state.appliedAt,
           updatedAt: stamp,
+          // Só sobrescreve quando veio um canal: um `track` sem `--channel` não
+          // pode apagar o que já estava registrado.
+          ...(channel ? { channel } : {}),
         })
         // The status is the aggregate's optimistic concurrency token. Two
         // commands may decide from the same snapshot, but only one can commit
@@ -397,6 +424,7 @@ export async function setApplicationStatusInTransaction(
           status: transition.state.status,
           appliedAt: transition.state.appliedAt,
           updatedAt: stamp,
+          channel: channel ?? null,
         })
         .returning({ id: application.id });
     if (!created) throw new Error("application insert returned no row");
@@ -419,10 +447,11 @@ export async function setApplicationStatus(
   jobId: number,
   status: ApplicationStatus,
   detail?: string,
+  channel?: string,
 ): Promise<void> {
   const db = getDb();
   await db.transaction((tx) =>
-    setApplicationStatusInTransaction(tx, candidateId, jobId, status, detail),
+    setApplicationStatusInTransaction(tx, candidateId, jobId, status, detail, undefined, channel),
   );
 }
 

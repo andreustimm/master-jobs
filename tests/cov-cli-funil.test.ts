@@ -181,15 +181,23 @@ describe("jho track <id> <status>", () => {
    * é este teste que vai falhar e apontar para a correção — que é o serviço que
    * um teste de caracterização presta.
    */
-  it("aceita `--channel` mas não o grava — coluna continua nula (defeito conhecido)", async () => {
+  it("grava o canal informado em `--channel`", async () => {
+    // Caracterizava um defeito e agora afirma a correção: a flag era aceita e
+    // descartada. A coluna existe, o funil a renderiza, o CLAUDE.md documenta o
+    // comando e o `jho prep` imprime essa linha como próximo passo — e nada
+    // escrevia nela. Referral é ~7% dos candidatos e ~40% das contratações.
     await semearCandidato();
     const vagaId = await semearVaga();
+    // `applied` exige o caminho legal: shortlisted → preparing → applied.
+    await rodar("track", String(vagaId), "shortlisted");
+    await rodar("track", String(vagaId), "preparing");
+    await rodar("track", String(vagaId), "applied", "--channel", "referral");
 
-    const r = await rodar("track", String(vagaId), "shortlisted", "--channel", "referral");
-
-    expect(r.code).toBeUndefined();
-    const [linha] = await banco().select().from(application);
-    expect(linha?.channel).toBeNull();
+    const [candidatura] = await banco()
+      .select()
+      .from(application)
+      .where(eq(application.jobId, vagaId));
+    expect(candidatura?.channel).toBe("referral");
   });
 
   it("propaga o erro quando não há candidato cadastrado", async () => {

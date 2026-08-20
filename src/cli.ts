@@ -864,7 +864,10 @@ program
     }
     await withDb(async () => {
       const candidateId = await activeCandidateId();
-      await setApplicationStatus(candidateId, Number(id), parsedStatus, opts.note);
+      // `opts.channel` era aceito pela flag e descartado aqui: a coluna existe,
+      // o funil a renderiza, o CLAUDE.md documenta o comando e o `jho prep`
+      // imprime essa linha como próximo passo — e nada escrevia nela.
+      await setApplicationStatus(candidateId, Number(id), parsedStatus, opts.note, opts.channel);
       console.log(`${c.green("✓")} job ${id} → ${c.cyan(parsedStatus)}`);
     });
   });
@@ -1733,7 +1736,7 @@ auth
 auth
   .command("add-user <email>")
   .description("Criar conta")
-  .option("--role <papel>", "owner | admin (repetível com vírgula)", "owner")
+  .option("--role <papel>", "admin | candidate | recruiter (repetível com vírgula)", "candidate")
   .option("--candidate <id>", "candidato que esta conta representa")
   .action(async (email: string, opts: { role: string; candidate?: string }) => {
     await withDb(async () => {
@@ -1747,9 +1750,22 @@ auth
         return;
       }
 
+      // `candidate`, e não `owner`.
+      //
+      // O papel `owner` foi renomeado para `candidate` quando os três papéis
+      // entraram, e esta linha ficou para trás — em duas frentes. O default de
+      // `--role` fazia `jho auth add-user <email>` falhar com "Papel inválido:
+      // owner", e é o comando que a regra 14 do CLAUDE.md manda rodar e que a
+      // tela de login mostra para quem ainda não tem conta: o primeiro acesso
+      // ao sistema estava quebrado.
+      //
+      // E esta derivação virou código morto, com efeito silencioso: toda conta
+      // criada sem `--candidate` nascia com `candidateId` nulo, inclusive uma
+      // de papel candidato — justamente a que precisa dele para ter currículo e
+      // funil.
       const candidateId = opts.candidate
         ? Number(opts.candidate)
-        : roles.includes("owner")
+        : roles.includes("candidate")
           ? await syncCandidateFromProfile()
           : null;
 

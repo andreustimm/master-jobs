@@ -40,7 +40,7 @@ export default async function LoginPage({
               {t("login.noAccounts")}
             </p>
             <pre className="type-mono-sm mt-3 overflow-x-auto rounded-[var(--radius-surface)] bg-[var(--muted)] p-3">
-{`pnpm jho auth add-user ${"seu@email.com"} --role owner
+{`pnpm jho auth add-user ${"seu@email.com"} --role admin,candidate
 pnpm jho auth set-password ${"seu@email.com"}`}
             </pre>
             <p className="type-body-sm mt-4 text-muted-foreground">

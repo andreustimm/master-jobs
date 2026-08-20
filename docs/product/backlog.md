@@ -1139,7 +1139,7 @@ Com três papéis e impersonação, "confirmada" sem autor é afirmação de
 experiência sem responsável — e é justamente a afirmação que a regra 6 existe
 para o sistema nunca fazer sozinho.
 
-### E-08 · Cobertura de `src/cli.ts`, hoje em zero 📋
+### E-08 · Cobertura de `src/cli.ts`, hoje em zero ✅
 
 2.696 linhas, 1.238 statements descobertos, 0%. O CLAUDE.md anuncia "97,6%
 (fora do CLI)", e o parêntese faz bastante trabalho.
@@ -1201,3 +1201,49 @@ cobre o que está aberto em 20/08/2026, e ordena por risco, não por esforço.
 
 **M-05** não entra na ordem: conferido contra o código, já estava entregue nas
 migrações 0015–0018.
+
+
+#### Entregue em 20/08/2026
+
+`src/cli.ts` de 0% para **39,3%** de statements, com 110 testes. O corte foi o
+que este item propôs: parsing de opções, validação de argumento, comandos que
+ESCREVEM e código de saída em falha. Ficaram de fora os que só imprimem
+relatório — asserir texto formatado congela a interface no formato de hoje — e
+os que só chegam à escrita depois de rede, já cobertos contra a mesma porta HTTP
+em outros arquivos.
+
+**O número global CAI de 97,5% para 83,5%, e isso é o esperado.** Sem estes
+testes o `cli.ts` nunca era carregado e nem entrava no denominador. É exatamente
+o motivo pelo qual este item pedia meta declarada por arquivo, e não número
+global. Fora do CLI a cobertura continua em 97,7%.
+
+`cli.ts` não exporta nada e termina em `program.parseAsync(process.argv)`:
+importá-lo executa a CLI com o argv do vitest. A bancada contorna com uma
+subclasse do `Command` real que captura o `program` e chama `exitOverride()` —
+sem isso, argumento inválido mata o worker. Subprocesso seria mais fiel e daria
+0% para sempre, porque a cobertura V8 instrumenta o worker e não os filhos.
+
+**Refatoração mínima que dispensaria a bancada, anotada e não feita:** exportar
+`buildProgram()` e proteger o entrypoint com uma guarda. Dez linhas, e o mock de
+`commander` desapareceria.
+
+#### Três defeitos que a cobertura revelou
+
+**`jho auth add-user` estava quebrado para o primeiro acesso** — o default de
+`--role` era `owner`, papel que saiu do vocabulário na renomeação. O comando que
+a regra 14 manda rodar e que `/login` mostra para quem não tem conta falhava com
+"Papel inválido: owner". E a derivação `roles.includes("owner")` virou código
+morto: toda conta nascia sem `candidateId`, inclusive uma de papel candidato.
+Corrigido, com teste de consistência entre CLAUDE.md, `/login` e `ROLES`.
+
+**`jho track --channel` era aceito e descartado** — a coluna existe, o funil a
+renderiza, o CLAUDE.md documenta o comando e o `jho prep` imprime essa linha como
+próximo passo, e nada escrevia nela. Referral é ~7% dos candidatos e ~40% das
+contratações: sem o campo, o funil não mede a alavanca que o próprio produto diz
+ser a mais forte. Agora grava — inclusive quando o status não muda, porque canal
+é propriedade da candidatura e não da transição, e um `track` sem a flag não
+apaga o que já estava lá.
+
+**`jho tasks done --status` não valida e id inexistente diz que deu certo** —
+caracterizado, não corrigido. Fica como item próprio.
+

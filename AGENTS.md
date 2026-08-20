@@ -254,7 +254,7 @@ dashboard Next.js em `localhost:3000`.
 > contra outro processo, outra conta da máquina, nem contra um bind errado —
 > que já aconteceu aqui. Segurança por omissão é a omissão ser a opção segura.
 >
-> Primeiro acesso: `jho auth add-user <email> --role owner` e
+> Primeiro acesso: `jho auth add-user <email> --role admin,candidate` e
 > `jho auth set-password <email>`. Sem conta cadastrada, `/login` mostra esses
 > dois comandos em vez de um formulário sem saída.
 
@@ -309,7 +309,7 @@ rtk pnpm jho sources snippet revelo               # extrator para plataforma log
 # autenticação
 rtk pnpm jho auth seed <email>   # cria a conta do dono, senha gerada e mostrada uma vez
 rtk pnpm jho auth status         # modo e contas
-rtk pnpm jho auth add-user <email> --role owner
+rtk pnpm jho auth add-user <email> --role admin,candidate
 rtk pnpm jho auth set-password <email>   # senha (entrada escondida ou --stdin)
 rtk pnpm jho auth login <email>          # link de uso único → /login/callback
 
@@ -475,7 +475,7 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 | Vagas com bloqueador | 468 |
 | Descrições offline | 207 |
 | Candidaturas no funil | 2 |
-| Testes | 1.491 + 89 e2e · cobertura 97,6% (fora do CLI) |
+| Testes | 1.609 + 89 e2e · cobertura 97,7% fora do CLI · `cli.ts` 39% |
 
 > A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
 > candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de

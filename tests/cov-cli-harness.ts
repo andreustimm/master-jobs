@@ -42,6 +42,7 @@
  * fazendo a análise.
  */
 import { vi } from "vitest";
+import type { Command } from "commander";
 import { getDb, type DB } from "../src/core/db/client.ts";
 
 type AnyCommand = {
@@ -93,14 +94,14 @@ export async function commanderMock(): Promise<Record<string, unknown>> {
     }
 
     /** Faz os subcomandos herdarem `exitOverride` e a captura de saída. */
-    override createCommand(name?: string): actual.Command {
+    override createCommand(name?: string): Command {
       return new TestCommand(name);
     }
 
     override parseAsync(
       argv?: readonly string[],
-      options?: Parameters<actual.Command["parseAsync"]>[1],
-    ): Promise<actual.Command> {
+      options?: Parameters<Command["parseAsync"]>[1],
+    ): Promise<this> {
       const promise = super.parseAsync(argv, options);
       // Só a primeira: é a do topo do módulo, e o teste precisa esperá-la
       // antes de disparar a próxima para não sobrepor dois parses.
@@ -221,17 +222,46 @@ export function banco(): DB {
   return getDb();
 }
 
-/** Substitui `process.stdin` por um conteúdo fixo enquanto `fn` roda. */
+/**
+ * Substitui `process.stdin` por um fluxo com linhas fixas enquanto `fn` roda.
+ *
+ * Uma linha por vez, cada uma empurrada de dentro de um `setTimeout`, e a razão
+ * é o modo interativo de `auth set-password`: ele faz duas perguntas seguidas
+ * com `readline`, e o `readline` só entrega uma linha a quem já está
+ * perguntando. Um `Readable.from("a\nb\n")` entrega as duas no mesmo pedaço —
+ * a segunda cai no vazio antes da segunda pergunta existir, e o fluxo termina
+ * antes dela, o que faz o comando estourar `ERR_USE_AFTER_CLOSE` em vez de
+ * comparar as senhas.
+ *
+ * O `setTimeout` não é espera: é ordenação. A continuação da promessa da
+ * primeira pergunta é microtarefa, e microtarefa roda antes de qualquer timer —
+ * então a segunda pergunta já está registrada quando a segunda linha chega.
+ * O `push(null)` no fim fecha o fluxo, que é o que o modo `--stdin` precisa
+ * para o `for await` terminar.
+ */
 export async function comStdin<T>(conteudo: string, fn: () => Promise<T>): Promise<T> {
   const { Readable } = await import("node:stream");
-  const descritorOriginal = Object.getOwnPropertyDescriptor(process, "stdin")!;
-  Object.defineProperty(process, "stdin", {
-    configurable: true,
-    value: Readable.from([Buffer.from(conteudo, "utf8")]),
+  const linhas = conteudo.split("\n").slice(0, -1).map((linha) => `${linha}\n`);
+  let proxima = 0;
+  const fluxo = new Readable({
+    read() {
+      setTimeout(() => {
+        if (proxima < linhas.length) this.push(linhas[proxima++]);
+        else this.push(null);
+      }, 0);
+    },
   });
+  const descritorOriginal = Object.getOwnPropertyDescriptor(process, "stdin")!;
+  Object.defineProperty(process, "stdin", { configurable: true, value: fluxo });
+  // O `readline` escreve o prompt direto em `process.stdout`, sem passar por
+  // `console.log` — sem engolir isto, "Senha: Repita:" aparece no meio do
+  // relatório do Vitest e vira ruído permanente na saída da suíte.
+  const escreverOriginal = process.stdout.write.bind(process.stdout);
+  process.stdout.write = (() => true) as typeof process.stdout.write;
   try {
     return await fn();
   } finally {
+    process.stdout.write = escreverOriginal;
     Object.defineProperty(process, "stdin", descritorOriginal);
   }
 }
