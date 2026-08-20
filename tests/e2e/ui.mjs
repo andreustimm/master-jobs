@@ -45,8 +45,26 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 
 const consoleErrors = [];
+
+/**
+ * Erros que ESTE arquivo provoca de propósito.
+ *
+ * A verificação de impersonação abre `/admin/users` com sessão emprestada para
+ * provar que a política nega — e o 403 que ela espera aparece no console como
+ * recurso que falhou. Contá-lo como defeito faria o teste reprovar justamente
+ * quando funciona.
+ *
+ * Estreito de propósito: só 403, e só de rede. Um `pageerror` continua contando,
+ * e um 500 também — que é o que apareceu aqui antes de `requirePage` passar a
+ * responder 403 em vez de deixar a exceção subir.
+ */
+const EXPECTED_CONSOLE = /Failed to load resource.*403/i;
+
 page.on("console", (m) => {
-  if (m.type() === "error") consoleErrors.push(m.text().slice(0, 200));
+  if (m.type() !== "error") return;
+  const text = m.text().slice(0, 200);
+  if (EXPECTED_CONSOLE.test(text)) return;
+  consoleErrors.push(text);
 });
 page.on("pageerror", (e) => consoleErrors.push("pageerror: " + String(e).slice(0, 200)));
 
@@ -471,6 +489,67 @@ try {
     recheckAfter.disabled === true,
     `${recheckAfter.label}`,
   );
+
+
+  /* -------------------- Administração e impersonação ----------------------- */
+
+  // O ciclo inteiro de assumir identidade, porque cada peça dele pode passar
+  // isolada e a combinação falhar. Foi o que aconteceu: o campo
+  // `impersonated_by` não estava no INSERT, então a sessão emprestada era
+  // indistinguível de uma normal — sem banner, com o menu de administração
+  // intacto e com poder de admin. A política estava certa; o dado que ela lê
+  // nunca chegava.
+  await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  const adminPage = await page.goto(`${BASE}/admin/users`, { waitUntil: "networkidle" });
+  check("admin alcança a administração de contas", adminPage?.status() === 200);
+
+  const accountRows = await page.locator("li").count();
+  check("administração lista as contas", accountRows > 0, `${accountRows} conta(s)`);
+
+  const target = page.locator("li").filter({ hasNotText: E2E_EMAIL }).first();
+  const assume = target.locator('button:has-text("ASSUMIR"), button:has-text("Assumir")').first();
+
+  if ((await assume.count()) > 0) {
+    await assume.click();
+    // Espera pelo RESULTADO, não por `networkidle`: uma Server Action com
+    // redirect termina depois que a rede sossega, e a verificação corria antes
+    // da página nova existir.
+    await page.waitForSelector('[data-testid="stop-impersonating"]', { timeout: 15_000 })
+      .catch(() => {});
+
+    const borrowed = await page.evaluate(() => ({
+      banner: Boolean(document.querySelector('[data-testid="stop-impersonating"]')),
+      adminLink: [...document.querySelectorAll("nav a")].some((a) =>
+        /usuários/i.test(a.textContent ?? ""),
+      ),
+    }));
+    check("sessão emprestada mostra o aviso", borrowed.banner);
+    // Operar como outra pessoa sem perceber é como se escreve no dado errado.
+    check("sessão emprestada esconde o menu de administração", borrowed.adminLink === false);
+
+    const denied = await page.goto(`${BASE}/admin/users`, { waitUntil: "domcontentloaded" });
+    // 403 e não 500: negação que parece crash mostra stack em desenvolvimento e
+    // não distingue "não pode" de "quebrou".
+    check("sessão emprestada recebe 403 na administração", denied?.status() === 403,
+      `${denied?.status()}`);
+
+    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await page.click('[data-testid="stop-impersonating"]');
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="stop-impersonating"]'),
+      { timeout: 15_000 },
+    ).catch(() => {});
+
+    const restored = await page.evaluate(() => ({
+      banner: Boolean(document.querySelector('[data-testid="stop-impersonating"]')),
+      adminLink: [...document.querySelectorAll("nav a")].some((a) =>
+        /usuários/i.test(a.textContent ?? ""),
+      ),
+    }));
+    check("sair devolve o admin à própria sessão", !restored.banner && restored.adminLink);
+  } else {
+    check("há uma conta para assumir", false, "nenhuma conta além da de teste");
+  }
 
 
   /* ------------------- Ações do card: largura e alvo de toque -------------- */

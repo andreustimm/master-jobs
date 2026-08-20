@@ -16,6 +16,7 @@ import {
   THEMES,
 } from "../src/core/theme.ts";
 import { AppearanceSwitch } from "./theme-switch";
+import { stopImpersonatingAction } from "./admin/actions";
 import { LocaleSwitch } from "./locale-switch";
 import { headers } from "next/headers";
 import {
@@ -66,6 +67,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const session = await currentSession();
   const signedIn = Boolean(session);
   const hasCandidateScope = session?.candidateId !== null && session?.roles.includes("candidate");
+  // Admin de verdade: papel `admin` E sessão própria. Numa sessão emprestada a
+  // política nega administração, e um link que leva a uma página que vai negar
+  // é pior que link nenhum.
+  const isAdmin = session?.roles.includes("admin") === true && session.impersonatedBy === null;
+  const borrowedAs = session && session.impersonatedBy !== null ? session.email : null;
 
   // Escolha gravada primeiro; sem ela, negocia pelo Accept-Language. Servir
   // português a quem pediu inglês no navegador é ignorar informação que já
@@ -156,6 +162,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     {t("nav.candidate")}
                   </Link>
                 )}
+                {isAdmin && (
+                  <Link href="/admin/users" className={navClass}>
+                    {t("admin.nav")}
+                  </Link>
+                )}
               </nav>
 
               <div className="flex shrink-0 items-center gap-2">
@@ -178,6 +189,32 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </div>
             </div>
           </header>
+
+          {/* Faixa de sessão emprestada.
+              Fica ACIMA de tudo e em cor de alerta de propósito: operar como
+              outra pessoa sem perceber é como se escreve no dado errado. O
+              texto nomeia quem, porque "modo admin" não diz de quem é a sessão. */}
+          {borrowedAs && (
+            <div className="border-b border-[var(--warn)] bg-[var(--warn)]/10">
+              <div className="mx-auto flex w-full max-w-[min(90vw,1760px)] flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2 sm:px-6">
+                <span className="type-body-sm font-medium text-[var(--warn)]">
+                  {t("impersonation.banner", { email: borrowedAs })}
+                </span>
+                <span className="type-meta text-muted-foreground">
+                  {t("impersonation.note")}
+                </span>
+                <form action={stopImpersonatingAction} className="ml-auto">
+                  <button
+                    type="submit"
+                    data-testid="stop-impersonating"
+                    className="cursor-pointer type-body-sm font-medium text-[var(--warn)] underline-offset-2 hover:underline"
+                  >
+                    {t("impersonation.exit")}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
           {/* 90% da largura da janela, com teto: acima de ~1760px a linha de texto
               fica longa demais para ler com conforto, e o ganho vira cansaço. */}
           <div className="mx-auto w-full max-w-[min(90vw,1760px)] px-4 pb-24 sm:px-6">

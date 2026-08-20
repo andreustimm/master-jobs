@@ -96,6 +96,13 @@ dashboard Next.js em `localhost:3000`.
 > diria 0,91 de similaridade porque o texto de fato se parece. Similaridade não
 > distingue "combina" de "é possível". Detalhe em `docs/scoring.md`.
 
+> **Admin não lê dado privado; ele assume a identidade, e isso fica registrado.**
+> Três papéis: `admin`, `candidate`, `recruiter`. A sessão emprestada perde TODA
+> ação de administração em bloco, por `impersonatedBy !== null` e não por papel
+> — o alvo pode ser outro admin. Ninguém além do próprio candidato cria vínculo
+> recrutador↔candidato, e nenhuma conta nova é apontada para candidato
+> existente: os dois seriam leitura de CV alheio por procuração.
+
 > **Só 404 e 410 fecham uma vaga.** 401/403/429 são bloqueio de robô, não prova
 > de ausência — o Himalayas devolve 403 em toda requisição, e fechar nele
 > apagaria uma fonte viva inteira. 5xx e falha de rede não decidem nada. A
@@ -413,7 +420,7 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 | Vagas com bloqueador | 468 |
 | Descrições offline | 207 |
 | Candidaturas no funil | 2 |
-| Testes | 613 + 50 e2e |
+| Testes | 638 + 56 e2e |
 
 > A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
 > candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de

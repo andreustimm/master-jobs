@@ -62,6 +62,10 @@ export const drizzleSessions: SessionStore = {
       tokenHash: hash(token),
       userId: input.userId,
       expiresAt: input.expiresAt,
+      // Sem esta linha a sessão emprestada é indistinguível de uma normal, e o
+      // admin opera com poder de admin dentro dela — a escalada exata que o
+      // desenho evita. `tests/auth-session.test.ts` cobre o campo.
+      impersonatedBy: input.impersonatedBy ?? null,
     });
     // Returned once. After this the system cannot recover it, by design.
     return token;

@@ -31,6 +31,19 @@ export { isOpenMode, isSingleUser, singleUserSession, SESSION_DAYS } from "./app
 export { generatePassword, seedOwner } from "./app/seed.ts";
 export type { SeedResult } from "./app/seed.ts";
 export { setPassword, verifyLogin } from "./infra/password-login.ts";
+export { canReadPublicProfile } from "./domain/policy.ts";
+export { VISIBILITIES, isVisibility, ADMIN_ACTIONS } from "./domain/types.ts";
+export type { Visibility } from "./domain/types.ts";
+export type { UserSummary } from "./ports.ts";
+export { IMPERSONATION_HOURS } from "./app/impersonation.ts";
+
+import { drizzleUserDirectory, otherActiveAdmins } from "./infra/drizzle-directory.ts";
+import {
+  startImpersonation,
+  stopImpersonation,
+  type ImpersonationDeps,
+} from "./app/impersonation.ts";
+import type { Role } from "./domain/types.ts";
 
 const deps: AuthDeps = {
   sessions: drizzleSessions,
@@ -57,6 +70,72 @@ export function passwordSignIn(email: string, password: string) {
 
 export function revokeUserSessions(email: string): Promise<number | null> {
   return revokeAllSessionsForEmail(email, deps);
+}
+
+/* ----------------------------- Gestão de contas --------------------------- */
+
+const directoryDeps: ImpersonationDeps = {
+  sessions: drizzleSessions,
+  users: drizzleUserDirectory,
+  audit: drizzleAuthRepository,
+};
+
+export function listUsers() {
+  return drizzleUserDirectory.list();
+}
+
+export function findUser(userId: number) {
+  return drizzleUserDirectory.find(userId);
+}
+
+export function createUser(input: { email: string; roles: Role[]; candidateId?: number | null }) {
+  return drizzleUserDirectory.create(input);
+}
+
+export function setUserRoles(userId: number, roles: Role[]) {
+  return drizzleUserDirectory.updateRoles(userId, roles);
+}
+
+export function setUserDisabled(userId: number, disabled: boolean) {
+  return drizzleUserDirectory.setDisabled(userId, disabled);
+}
+
+/** Vínculos de um recrutador, com id. Para a tela listar e remover. */
+export function recruiterLinks(recruiterUserId: number) {
+  return drizzleUserDirectory.linksOf(recruiterUserId);
+}
+
+/**
+ * Vincula um recrutador ao candidato.
+ *
+ * Só o próprio candidato chama — o vínculo dá leitura de currículo e funil, e
+ * admin criando um leria dado alheio por procuração.
+ */
+export function linkRecruiterToCandidate(recruiterUserId: number, candidateId: number, by: number) {
+  return drizzleUserDirectory.linkCandidate(recruiterUserId, candidateId, by);
+}
+
+/** Remove um vínculo. Revogar acesso é seguro vindo de admin ou do candidato. */
+export function removeRecruiterLink(linkId: number) {
+  return drizzleUserDirectory.unlinkById(linkId);
+}
+
+/**
+ * Admins ativos além deste. Zero significa que ele é o último — e a instalação
+ * não pode ficar sem ninguém capaz de criar contas.
+ */
+export function adminsBesides(userId: number) {
+  return otherActiveAdmins(userId);
+}
+
+/* ----------------------------- Impersonação ------------------------------- */
+
+export function beginImpersonation(actor: Session | null, targetUserId: number) {
+  return startImpersonation(actor, targetUserId, directoryDeps);
+}
+
+export function endImpersonation(borrowed: Session | null, token: string) {
+  return stopImpersonation(borrowed, token, directoryDeps);
 }
 
 /**

@@ -446,6 +446,90 @@ criado sem pedir é efeito colateral fora do escopo. A receita:
 resposta. "Pausada", "preenchida" e afins exigiriam ler a página, não só o
 código HTTP — outro problema.
 
+### UI-04 · Cadastro de vaga por recrutador, com rótulo de origem 📋
+
+Pedido em 20/08/2026, junto da entrega dos três papéis. `can()` já concede
+`job:write` a admin, candidato e recrutador — e o comentário daquele case já
+antecipa esta tarefa: *"a origem de cada uma fica registrada na `source`, para
+a tela poder dizer de onde veio"*. A permissão existe e não há por onde
+exercê-la: o dashboard não tem formulário de cadastro, só a CLI tem
+(`jho jobs add <url>` e `jho jobs import`), e a lista de vagas não diz de onde
+nenhuma delas veio.
+
+**Contexto que restringe a solução.** `src/core/sources/types.ts` já separa o
+que sincroniza do que não sincroniza: doze `FETCHABLE_SOURCE_KINDS` contra um
+único `MANUAL_SOURCE_KINDS`, e `SourceConfig.kind` aceita apenas o primeiro
+grupo — um kind manual não entra em `sources.yaml` nem aparece em
+`jho sources list` com "última sincronização: nunca" como se fosse defeito.
+`job.posted_by_user_id` já existe, referencia `auth_user` e o comentário dele
+já diz o que ele **não** é: atribuição (qual recrutador ofereceu), não rótulo.
+
+---
+
+#### Decisões que a implementação precisa tomar
+
+**1. O rótulo deriva de `source.kind` em tempo de leitura. Sempre.**
+
+A alternativa — uma coluna `origin` em `job`, escrita no cadastro — é mais
+rápida de consultar e começa a divergir na primeira reclassificação de fonte.
+O projeto já pagou por esse erro: `application.cv_variant` guarda o nome da
+variante numa string solta em vez de apontar para `candidate_document.id`, e o
+resultado é um funil que afirma ter enviado um documento que não existe mais
+(UI-02). Vínculo que não é vínculo mente com cara de íntegro. Aqui o dado
+canônico é a `source`, e o rótulo é uma função dela.
+
+**2. `recruiter` como `MANUAL_SOURCE_KIND` novo, e não mais um `manual`.**
+
+Hoje `jho jobs add` e `jho jobs import` caem os dois em `manual`, com
+`ensureImportSource` criando `manual:<host>`. Se a vaga do recrutador também
+for `manual`, o rótulo deixa de distinguir "eu colei esta URL" de "um
+recrutador ofereceu isto" — e a distinção é a razão de existir da tarefa. Vaga
+com um recrutador identificado do outro lado se lê mais como referral do que
+como anúncio: há contraparte humana, canal de resposta e um interlocutor a
+quem perguntar. É informação de triagem, não de catálogo.
+
+O custo é baixo e vale registrar por que: kind novo em `MANUAL_SOURCE_KINDS`
+não força migração de dado nenhum (as vagas antigas seguem `manual`), não
+entra no union de configuração e não toca o registry de adapters, porque não
+há nada a buscar.
+
+**3. O formulário resolve antes de perguntar.**
+
+`src/core/ingest/manual.ts` já resolve uma URL pelo ATS e só cai no caminho
+`manual` quando não consegue. O formulário deve chamar esse mesmo caminho —
+URL primeiro, campos à mão apenas para o que não voltou. Reimplementar a
+resolução dentro da Server Action quebraria a invariante de que a UI é
+adaptador sobre as mesmas APIs públicas que a CLI usa, e produziria duas
+versões da mesma normalização divergindo em silêncio.
+
+**4. `posted_by_user_id` vem da sessão, e o formulário não o menciona.**
+
+Regra 15 na letra: id em FormData é pedido, não prova. A ação obtém o usuário
+de `guard("job:write")` e ignora qualquer campo homônimo que chegue.
+
+**5. Vaga cadastrada à mão pontua com o que tem, e o que falta vale neutro.**
+
+Um recrutador cola título, empresa e faixa; descrição completa quase nunca vem.
+Regra 8: ausência de descrição não é ausência de benefício, e `benefits` em
+texto curto vale 0,5 sem gerar bloqueador. Rebaixar a vaga porque o formulário
+foi curto seria pontuar a digitação, não o emprego.
+
+---
+
+#### O que fica de fora, e por quê
+
+**Recrutador editar vaga que não cadastrou.** `job:write` é permissão de
+escrita no acervo global, que é compartilhado — não é posse. Edição
+retroativa por outro papel exigiria decidir precedência entre o que a fonte
+diz e o que a pessoa digitou, e isso é outra tarefa.
+
+**Oferecer a vaga a um candidato específico.** O vínculo recrutador→candidato
+já existe em `recruiter_candidate`, mas direcionar uma vaga a alguém cria
+notificação, e notificação sem canal de envio (F-05) não sai do banco.
+
+**Moderação por admin.** Fila de aprovação só faz sentido com volume vindo de
+fora e com mais de um recrutador. Antes disso é cerimônia.
+
 ## P3 — Estrutura e futuro
 
 ### AUTH-01 · Autenticação e autorização ✅
@@ -490,6 +574,416 @@ Decisões que valem registrar:
 **O que o teste de arquitetura trava:** toda Server Action tem guard, nenhuma
 aceita `candidateId` da própria entrada, e a política não importa banco, cookie
 nem Next.
+
+### AUTH-02 · Tela de administração de usuários ✅
+
+Pedido em 20/08/2026, na sequência dos três papéis. `UserDirectory` está
+declarada em `src/contexts/auth/ports.ts` com oito métodos — `list`, `find`,
+`create`, `updateRoles`, `setDisabled`, `linkedCandidates`, `linkCandidate`,
+`unlinkCandidate` — e é a **única porta do contexto sem adapter**. As outras
+quatro (`SessionStore`, `IdentityProvider`, `AuthRepository`,
+`PasswordVerifier`) já têm a sua em `infra/`.
+
+**Contexto que restringe a solução.** A parte difícil já foi decidida e está
+travada por teste: `admin:access`, `user:manage` e `user:impersonate` exigem
+papel admin; `ADMIN_ACTIONS` é negado **em bloco** quando
+`session.impersonatedBy !== null`, antes de olhar papel nenhum, justamente
+para o caso admin-assume-admin; e `auth_session.impersonated_by` existe no
+schema. O modelo está inteiro e a instalação não tem como exercitá-lo — hoje
+conta se cria pela CLI e papel se troca por SQL. É a distância entre a
+política estar certa e a política estar em uso.
+
+---
+
+#### Decisões que a implementação precisa tomar
+
+**1. Assumir identidade cria sessão nova; não muta a existente.**
+
+`startImpersonation` insere uma linha em `auth_session` com
+`impersonated_by = <id do admin>` e troca o cookie para ela. Mutar a sessão do
+admin apagaria o caminho de volta: sair da identidade emprestada precisa
+restaurar um estado anterior, e uma sessão mutada não tem estado anterior
+guardado em lugar nenhum. Também separa as revogações — derrubar a emprestada
+não pode derrubar a do admin, e vice-versa.
+
+A consequência a aceitar de olhos abertos: como o sistema guarda **hash** de
+token e nunca o token (AUTH-01), `stopImpersonation` não tem como devolver o
+cookie antigo. Ele revoga a emprestada e emite uma sessão nova para o admin.
+O admin perde a sessão original ao voltar. É o preço de não guardar
+credencial recuperável, e é o lado certo do trade-off.
+
+**2. `AUTH_EVENTS` precisa de dois kinds novos, e a coluna não vai avisar.**
+
+A lista hoje tem seis (`login`, `login_failed`, `logout`, `session_expired`,
+`denied`, `role_changed`) e nenhum descreve impersonação. `auth_event.kind` é
+`text` livre: gravar um kind fora da constante **funciona**, e é exatamente
+assim que um registro passa a mentir por omissão — a auditoria continua
+parecendo completa. `impersonation_started` e `impersonation_ended` entram na
+constante, com `detail` nomeando o alvo, e o par abre-fecha é o que torna a
+sessão emprestada auditável: sem o fim, não se sabe até quando durou.
+
+**3. A tela mostra `UserSummary` e nada além dele.**
+
+O tipo já decidiu o recorte: id, e-mail, papéis, `candidateId`, `disabledAt`,
+`createdAt` e `hasPassword` — booleano de propósito, dizendo que existe senha
+sem dizer nada sobre ela. E a linha do usuário **não pode virar atalho para o
+perfil**: a política nega `candidate:read` a admin de propósito, com o
+comentário explicando que curar a instalação não é ser superusuário. O
+caminho até o dado privado é assumir a identidade, e assumir deixa registro.
+Um link "ver currículo" na tela de admin desmontaria o desenho inteiro.
+
+**4. Desabilitar revoga na hora, ou a garantia de AUTH-01 é falsa.**
+
+`setDisabled(userId, true)` sem `revokeAllFor(userId)` deixa a sessão viva até
+vencer — e AUTH-01 entregou explicitamente "conta desabilitada perde acesso na
+hora, não no vencimento da sessão". As duas operações andam juntas no caso de
+uso, não na tela: quem chamar a porta por outro caminho precisa da mesma
+garantia.
+
+**5. Banner de sessão emprestada: persistente, no layout, sem como dispensar.**
+
+Derivado de `session.impersonatedBy`, em toda página, nomeando o alvo e com o
+botão de sair. Não é enfeite de segurança: um admin que esquece que está
+emprestado escreve como outra pessoa, e a única coisa que separa auditoria de
+falsificação é o operador saber em nome de quem age. Estado de cliente
+dispensável (um "×" que some) reintroduz exatamente o esquecimento que o
+banner existe para impedir.
+
+**6. Navegação de admin condicionada por `can()`, não por papel lido no JSX.**
+
+O item de nav aparece sob `admin:access`. Ler `session.roles.includes("admin")`
+dentro do componente cria uma segunda decisão de permissão fora de
+`policy.ts`, que é a origem do bug clássico: a nav esconde e a rota deixa
+entrar. E o rótulo vem do dicionário — regra 9, procurando a chave existente
+antes de criar (`nav.appearance` já existia sem uso quando foi procurada).
+
+**7. O último admin não se desabilita nem perde o papel.**
+
+`updateRoles` removendo `admin` do único admin restante deixa a instalação sem
+quem administre, e o conserto é SQL na mão. A recusa mora no caso de uso e não
+no formulário, porque a CLI chama a mesma porta.
+
+---
+
+#### O que fica de fora, e por quê
+
+**Convite por e-mail para a conta criada.** Depende de F-05. Até lá o admin
+cria a conta e entrega o acesso pelo caminho que já existe — `jho auth login`
+imprimindo o link no terminal, o que só serve para quem tem o terminal. É
+justamente essa limitação que faz F-05 vir logo em seguida.
+
+**Papéis customizados e permissão granular.** `ROLES` é uma tupla fechada de
+três de propósito: cada papel novo multiplica os casos de `can()`, que é onde
+bug de autorização vira vazamento. Papel novo entra por decisão, não por
+formulário.
+
+**Navegar a auditoria pela interface.** `auth_event` é gravado e consultável
+por SQL. Uma tela de log é útil e é outra tarefa — inclusive porque precisa
+decidir retenção, e retenção de registro de acesso é decisão de política.
+
+#### Entregue em 20/08/2026
+
+`/admin/users` lista contas, cria, edita papéis, desabilita e assume identidade.
+Adapter `drizzleUserDirectory`, casos de uso `startImpersonation` /
+`stopImpersonation` gravando em `auth_event`, banner de sessão emprestada e item
+de menu só para admin de sessão própria.
+
+**Duas portas dos fundos fechadas durante a implementação**, ambas apontadas
+pelos testes de arquitetura e nenhuma óbvia ao escrever:
+
+1. **Admin vinculando recrutador a candidato.** Bastaria vincular a si mesmo
+   como recrutador para ler qualquer currículo, desviando da impersonação
+   auditada. Criar vínculo saiu da administração: é ação do candidato, que
+   consente. Admin só **revoga**, e por id do vínculo — assim nenhuma tela de
+   administração passa id de candidato adiante.
+2. **Admin criando conta apontada para um candidato existente.** Mesmo efeito
+   por outro caminho: criar a conta, entrar nela, ler tudo. Agora conta com
+   papel de candidato provisiona um candidato PRÓPRIO, com slug derivado do
+   e-mail.
+
+**Um defeito de segurança que só o browser pegou:** `impersonated_by` não estava
+no INSERT da sessão. A política estava correta e o dado que ela lê nunca
+chegava, então a sessão emprestada era indistinguível de uma normal — sem
+banner, com menu de administração e com poder de admin. `tests/auth-session.test.ts`
+cobre o campo agora.
+
+`requirePage` passou a responder **403** em vez de deixar a exceção subir como
+500: negação que parece crash mostra stack em desenvolvimento e não distingue
+"não pode" de "quebrou".
+
+Rejeitar o rebaixamento ou a desabilitação do último admin ativo é regra
+explícita — sem ela a recuperação seria SQL na mão.
+
+### AUTH-03 · Visibilidade do perfil na área do candidato 📋
+
+A coluna `candidate.visibility` já existe, com `private` como default e um
+comentário no schema explicando que o default **é** a decisão de segurança.
+`can()` já a respeita em três ramos do case `candidate:read`: recrutador
+vinculado lê independentemente de visibilidade, recrutador autenticado alcança
+`recruiters`, e qualquer sessão alcança `public`. `Resource.visibility` é
+opcional com padrão `private` para que esquecer de carregar dê negativa, nunca
+permissão.
+
+**Contexto que restringe a solução.** Falta só a interface — e enquanto ela
+falta, o valor só muda por SQL, o que na prática significa que ninguém muda e
+todo perfil é privado. Isso não é defeito hoje; vira defeito no instante em
+que AUTH-04 existir, porque aí haverá uma página pública que nenhum candidato
+consegue ligar.
+
+---
+
+#### Decisões que a implementação precisa tomar
+
+**1. O controle mora em `/candidate`, e não existe variante com alvo.**
+
+`requireOwnCandidatePage` e `guardOwnCandidate` não aceitam id — por
+construção, não por disciplina. A ação de visibilidade usa esse par e ignora
+qualquer `candidateId` que chegue no FormData. Não é preciso criar ação nova
+na união `ACTIONS`: `candidate:write` já exige posse derivada da sessão, e
+acrescentar `visibility:write` só criaria mais um caso para `can()` decidir
+exatamente a mesma coisa.
+
+**2. Os três níveis são descritos pelo que expõem, não pelo nome.**
+
+"Público" não informa nada. "Seu currículo fica legível por qualquer pessoa na
+internet, sem login" informa. O aviso é parte do controle e fica ao lado da
+opção — não em tooltip, não em ajuda recolhida. Este é o único lugar do
+sistema onde um clique do usuário publica dado na internet aberta; a tela
+precisa carregar esse peso.
+
+**3. `recruiters` alcança recrutador que o candidato nunca viu.**
+
+Está no case `candidate:read`: qualquer recrutador **autenticado** da
+instalação lê um perfil marcado `recruiters`, vinculado ou não. O rótulo soa
+como "os recrutadores que eu escolhi" e a política diz outra coisa — a tela
+precisa desfazer essa leitura, senão o usuário escolhe uma exposição achando
+que escolheu outra.
+
+**4. Subir a exposição confirma; descer, não.**
+
+Assimetria deliberada. Confirmar nas duas direções treina o usuário a clicar
+"sim" sem ler, e aí a confirmação que importa não protege mais nada. A
+confirmação de `public` deve repetir o que `public` significa, em vez de
+perguntar "tem certeza?".
+
+**5. Voltar para `private` não desfaz o que já saiu.**
+
+Se a página pública chegou a ser indexada ou compartilhada, o cache do
+buscador e o link que alguém salvou sobrevivem à mudança. Dizer isso no
+momento de ligar é mais honesto do que deixar o usuário descobrir depois, e é
+o tipo de aviso que só é útil antes.
+
+**6. A mudança precisa deixar linha, e falta decidir onde.**
+
+`auth_event` registra acesso, não decisão de perfil; `candidate.updated_at` só
+diz que algo mudou. Uma mudança de visibilidade é a única ação do candidato
+que altera quem no mundo alcança o dado dele, e vale saber quando foi ligada e
+quando foi desligada. Decidir entre um kind novo em `auth_event` e uma coluna
+de carimbo no próprio candidato faz parte da tarefa.
+
+---
+
+#### O que fica de fora, e por quê
+
+**Visibilidade por campo.** Mostrar headline mas não o CV é decisão de *o que
+a página pública renderiza*, e isso é AUTH-04. Decidir a mesma coisa em duas
+telas garante que as duas discordem.
+
+**Lista nominal de recrutadores autorizados.** `recruiter_candidate` já existe
+e o vínculo já é criado por admin ou pelo próprio candidato. Transformar isso
+em tela de curadoria — convidar, revogar, ver quem olhou — é outra tarefa, com
+outro fluxo.
+
+### AUTH-04 · Página pública de portfólio 📋
+
+Rota sem autenticação que renderiza o perfil de um candidato marcado
+`visibility = public`.
+
+**Contexto que restringe a solução.** `canReadPublicProfile()` é o **único**
+caminho de leitura sem sessão do sistema, e está separado de `can()` de
+propósito — o comentário no arquivo diz que afrouxar a primeira linha de
+`can()` (que nega quem não tem sessão) abriria um buraco em todas as outras
+ações de uma vez. `proxy.ts` hoje libera apenas `/login`; a rota nova entra em
+`PUBLIC`, e essa lista é curta porque cada entrada é um furo deliberado na
+rede grossa. `candidate.slug` já existe com índice único.
+
+---
+
+#### Decisões que a implementação precisa tomar
+
+**1. O que aparece é lista de permissão, nunca lista de exclusão.**
+
+A tentação é renderizar o perfil e esconder o que for sensível. Isso inverte o
+default: campo novo no schema nasce visível, e o vazamento chega por uma
+migration que ninguém leu sob essa ótica. A página enumera explicitamente os
+campos que mostra e ignora o resto do registro por não constar da lista —
+mesma lógica do `private` por default da coluna.
+
+**2. Nunca aparece: e-mail, telefone, funil, candidaturas, rede, piso salarial.**
+
+O piso é o pior deles. É a posição de negociação do candidato, e publicá-la é
+mostrar a carta antes da mesa — quem lê passa a saber o mínimo aceitável antes
+da primeira conversa. Vale um teste asserindo a ausência, no molde dos que já
+existem para chave de API (regra 16) e para o bind em `127.0.0.1` (regra 12):
+são as três coisas cuja exposição não tem desfazer.
+
+**3. O CV inteiro exige um segundo consentimento.**
+
+O currículo é o dado que a instalação inteira protege — foi o vazamento dele
+na rede local que motivou as regras 12 e 14. Publicá-lo por escolha do dono é
+legítimo; publicá-lo como efeito colateral de uma opção chamada "público" é
+surpresa. Recomendação: nome, headline, localização, skills confirmadas e
+links por padrão; o texto completo do CV atrás de um segundo controle,
+declarado ao lado do primeiro em AUTH-03. Se a implementação decidir o
+contrário, que registre aqui o porquê.
+
+**4. URL por slug. Id numérico em rota pública convida enumeração.**
+
+`/p/1`, `/p/2`, `/p/3` custa nada de varrer e revela quantos candidatos a
+instalação tem e quais ids respondem. O slug também é o que o candidato cola
+no LinkedIn, então precisa ser estável e legível — trocar de id nunca foi
+opção.
+
+**5. `noindex` por padrão; indexação é um segundo controle.**
+
+`visibility = public` significa "alcançável sem sessão", não "quero aparecer
+no Google". São decisões diferentes, e mandar o link para um recrutador não é
+publicar. Se a indexação for oferecida, `robots.txt` e
+`<meta name="robots">` precisam concordar — um permitindo e o outro negando é
+o pior estado possível, porque o comportamento passa a depender de qual
+buscador leu o quê.
+
+**6. Perfil não público responde 404, não 403.**
+
+403 confirma que o slug existe, e existência é informação. O sistema já se
+comporta assim onde importa: `magicLink.complete()` devolve null tanto para
+token inválido quanto para endereço desconhecido, e o comentário diz que o
+chamador não distingue os dois. A página pública mantém a mesma postura.
+
+**7. Rota pública é alvo, e não tem conta para limitar.**
+
+Sem sessão não existe limite por usuário, e um varredor de slugs custa uma
+consulta ao banco por requisição. Precisa de resposta cacheada e de limite por
+origem — decidir qual dos dois, e com que janela, faz parte da tarefa. É a
+primeira superfície deste sistema exposta a quem não foi convidado.
+
+---
+
+#### O que fica de fora, e por quê
+
+**Formulário de contato no portfólio.** Abre superfície de spam e exige
+enviar e-mail, que é F-05. Enquanto não houver limite de envio testado, um
+formulário aberto é um gerador de mensagens com o domínio do usuário no
+remetente.
+
+**Analytics de visita.** Saber quem olhou é tentador e é rastreamento de
+terceiro sem consentimento, numa página que o próprio produto pediu para o
+candidato divulgar.
+
+**Personalização visual.** A página segue os três temas como todo o resto
+(regra 10). Tema por candidato é produto diferente.
+
+### F-05 · Resend para e-mail transacional e recuperação de senha 📋
+
+**Contexto que restringe a solução.** O sistema não envia e-mail — nenhum.
+`magicLink.begin()` grava o hash do token e devolve o token cru ao chamador;
+quem entrega é `jho auth login <email>`, que **imprime a URL no terminal**.
+Isso funciona para uma pessoa no próprio computador e para mais ninguém: um
+candidato ou recrutador cadastrado por um admin (AUTH-02) não tem terminal,
+não tem repositório e não tem como receber o link. Enquanto for assim, a tela
+de administração cria contas que não conseguem entrar.
+
+Do outro lado do sistema já existe e-mail, e ele não serve aqui: F-01 lê a
+caixa do usuário pela API do Gmail, com escopo somente leitura, e
+`src/core/mail/` é parser MIME, classificador e extrator de job alert — tudo
+ingestão. Envio é a direção oposta e não compartilha nada com aquilo. Colocá-lo
+dentro do contexto de correspondência faria o contexto que **lê** passar a
+escrever para fora.
+
+---
+
+#### Decisões que a implementação precisa tomar
+
+**1. Porta `Mailer`, adapter Resend, adapter de console.**
+
+Regra 4 com variação real: Resend hoje, SMTP ou SES depois, e um adapter que
+só imprime — usado em desenvolvimento e nos testes, e que preserva o
+comportamento de hoje como caso legítimo em vez de gambiarra. A porta é
+mínima (destinatário, assunto, corpo, resultado); o domínio não aprende o que
+é bounce nem o que é webhook.
+
+**2. A chave de API é do usuário, e o agente não pode gerá-la.**
+
+`RESEND_API_KEY` entra como **nome de variável de ambiente**, no padrão que
+`jho llm add-provider --key-env` já usa. Regra 16: o banco guarda o nome,
+jamais a chave — banco é copiado e versionado em backup, e chave dentro dele
+viaja junto. Registrado aqui de forma explícita porque é o tipo de passo que
+um agente "resolveria" sozinho: nenhum agente cria conta no Resend, aceita
+termos em nome do usuário nem emite credencial. O que o sistema faz é dizer
+qual variável falta.
+
+**3. "Esqueci minha senha" reusa o link mágico. Não é um token novo.**
+
+`auth_login_token` já é de uso único, hashado, com expiração e consumo atômico
+— o `UPDATE ... RETURNING` que impede duas redenções simultâneas de ganharem
+as duas. Um segundo tipo de token com o mesmo ciclo de vida seria uma segunda
+chance de errar a mesma coisa. O fluxo é entrar pelo link e cair na tela de
+definir senha, que já existe como `setPassword`.
+
+**4. A resposta é idêntica exista ou não a conta.**
+
+`magicLink.complete()` já devolve null tanto para token inválido quanto para
+endereço desconhecido, de propósito. O formulário de recuperação mantém a
+postura: sempre "se houver conta para este endereço, o e-mail saiu". Uma
+mensagem "e-mail não encontrado" transforma o formulário em oráculo de quem
+tem conta na instalação — e num produto de busca de emprego, saber quem está
+procurando já é informação sensível.
+
+**5. Falha de envio não vira sucesso silencioso nem denuncia o destinatário.**
+
+A entrega é assíncrona por natureza: o provedor aceita agora e devolve bounce
+depois. O erro é registrado em `auth_event` e visível ao admin em AUTH-02; ao
+anônimo, a mesma frase neutra de sempre. Se precisar de retentativa, o padrão
+da casa é tabela e não broker (ADR 0009) — uma `mail_task` no molde de
+`scrape_task` e `verify_task`, com claim atômico e backoff.
+
+**6. Limite de tentativas: o que existe protege a outra ponta.**
+
+`MAX_ATTEMPTS = 8` em `WINDOW_MINUTES = 15` conta `login_failed` em
+`auth_event` e protege a **verificação** de senha. Pedir recuperação não falha
+nunca, então nada é contado — sem limite próprio, o formulário vira gerador de
+e-mail contra qualquer endereço que o atacante escolher, saindo do domínio do
+usuário e queimando a reputação dele. Contar por endereço **e** por origem, e
+a recusa devolve a mesma frase neutra da decisão 4: um limite que responde
+"muitas tentativas" só para endereços existentes é o oráculo de volta.
+
+**7. Domínio verificado é pré-requisito, não detalhe de configuração.**
+
+Resend exige SPF e DKIM no domínio remetente; enviar de domínio não verificado
+cai em spam, e o usuário conclui que o produto não envia e-mail. O remetente é
+configuração dele, e `jho security check` é o lugar natural para conferir que
+a variável existe antes de a primeira recuperação ser pedida — o comando já
+faz autoverificação de bind, segredo e permissão.
+
+---
+
+#### O que fica de fora, e por quê
+
+**E-mail periódico com vagas ou relatório.** É outro produto e outro
+consentimento. `jho report` escreve markdown no vault; empurrar isso para a
+caixa de entrada muda a relação com o usuário e merece decisão própria.
+
+**Webhooks de bounce e reclamação.** Exigem endpoint público recebendo POST de
+terceiro, com verificação de assinatura — superfície nova numa instalação que
+até aqui só abre uma rota anônima (AUTH-04), e sob escrutínio.
+
+**Template HTML.** Texto simples atravessa qualquer cliente, não carrega pixel
+de rastreio e não tem como quebrar layout. Um e-mail transacional que só
+precisa carregar um link não ganha nada com o resto.
+
+**Enviar candidatura por e-mail.** Regra 13. Ter um `Mailer` não muda a
+decisão da ADR 0010 — se muda, é sinal de que a trava era técnica quando
+deveria ser de produto.
 
 ---
 
@@ -574,6 +1068,348 @@ lista no navegador devolve zero e diz isso, sugerindo `jho sources snippet`.
 
 ---
 
+### E-05 · Estrutura de documentação do CompozyOS: epic, PRD, techspec, ADR 📋
+
+Pedido em 20/08/2026: *"O ideal é utilizarmos a estrutura do compozy para os
+epics, prd, techspec, adrs, etc."*
+
+O repositório já tem um pé no CompozyOS — `compozy/loops/job-sweep.yaml` está
+escrito e validado contra o daemon 0.3, e `docs/engineering/COMPOZY-OS.md`
+documenta o ciclo inteiro contra a instalação real desta máquina. Mas esse pé é
+de **automação**: um Loop em YAML que sincroniza, pontua e propõe triagem. O que
+se pede aqui é outra coisa — adotar a **forma dos documentos**. As duas decisões
+são independentes, e confundi-las faria a segunda entrar de carona na primeira
+sem nunca ter sido discutida.
+
+#### O que a estrutura do CompozyOS de fato oferece
+
+Segundo o `COMPOZY-OS.md` (§4 e §5), a `cy-create-spec` produz, em
+`.compozy/tasks/<slug>/`:
+
+| Arquivo | Conteúdo |
+|---|---|
+| `_spec.md` | Spec unificado — parte de produto **e** parte técnica no mesmo arquivo |
+| `_user_stories.md` | Catálogo de histórias |
+| `_tests.md` | Contrato de testes |
+| `_dx.md` | Contrato de experiência de desenvolvimento |
+| `_uiux.md` | Mapa de mudança de UI, para feature com interface |
+
+A `cy-create-tasks` acrescenta `_tasks.md` (o grafo) e `task_01.md …
+task_NN.md`, com a garantia de que **cada caso de `_tests.md` cai em exatamente
+uma tarefa** — é o que impede caso órfão e caso contado duas vezes. As rodadas
+de revisão viram `reviews-NNN/`.
+
+Confrontando isso com o que foi pedido, quatro palavras e três destinos
+diferentes:
+
+- **PRD e techspec** existem, mas **fundidos** num `_spec.md` só. A 0.2 tinha
+  `cy-create-prd` e `cy-create-techspec` separadas; a 0.3 juntou as duas e
+  acrescentou `_dx.md` e `_uiux.md`, que não existiam. Quem pede "PRD e
+  techspec" recebe um arquivo, não dois.
+- **Epic não é um artefato.** A unidade é o `<slug>`, que é uma feature com
+  spec e tarefas. Agrupar slugs num tema maior é convenção de nome de
+  diretório, não estrutura que a ferramenta conheça ou verifique.
+- **ADR não existe.** Nenhuma das dez skills produz ADR, e nenhum dos arquivos
+  do spec guarda decisão com as alternativas descartadas. É a lacuna que mais
+  pesa aqui, porque é justamente o gênero que este repositório mais usa: dez
+  ADRs, uma delas com 1.112 linhas.
+
+A assimetria é a chave. O CompozyOS documenta **trabalho em execução**, com
+começo, meio e entrega. `docs/adr/` documenta **decisão que sobrevive à
+entrega** — e sobrevive de propósito, para que ninguém proponha reverter sem ler
+por que foi assim. `vision.md` e `personas.md` não pertencem a slug nenhum, e o
+`backlog.md` — este arquivo — é a fila que decide qual slug nasce em seguida.
+São gêneros com ciclo de vida diferente, e é aí que a decisão se decide.
+
+#### A decisão central, que não é minha
+
+Três respostas possíveis, e nenhuma está tomada:
+
+**1. Migrar tudo.** `docs/product/` e `docs/adr/` viram artefatos do CompozyOS.
+Uma estrutura só, uma ferramenta só, e nada de decidir toda vez onde escrever.
+Custa reescrever ADR como spec — gênero que ela não é — e aceitar que decisão
+estrutural passe a morar dentro do diretório de uma feature que um dia acaba.
+
+**2. Conviver por fronteira.** O CompozyOS manda no ciclo de uma feature
+(`_spec.md`, `_tests.md`, `_tasks.md`, `reviews-NNN/`); `docs/` continua dono do
+que atravessa features — ADR, visão, personas, backlog, mapa de contextos. O
+item do backlog vira o insumo do `/cy-create-spec`, e a ADR que a feature
+eventualmente produzir volta para `docs/adr/`. Custa manter duas convenções e
+escrever explicitamente qual vale para quê; sem isso a fronteira apodrece na
+terceira feature e passa a haver dois lugares plausíveis para a mesma coisa.
+
+**3. Não adotar agora.** Rodar a primeira jornada do §10 numa feature pequena e
+decidir depois, com um ciclo completo de evidência em vez de leitura de doc.
+
+O próprio `COMPOZY-OS.md` recomenda a terceira como precondição das outras duas:
+*"o objetivo da primeira jornada não é entregar a feature: é descobrir onde o
+ciclo atrita com este repositório"*. Decidir a forma de toda a documentação
+antes de a ferramenta ter fechado um ciclo aqui é decidir no escuro.
+
+Vale registrar a ironia, que é útil e não decorativa: **qualquer que seja a
+resposta, ela é uma ADR** — a 0011. E o CompozyOS não tem onde guardá-la. Isso
+já é, por si só, um argumento sobre onde a fronteira cai.
+
+#### Custo de migração, em números
+
+- **51 arquivos `.md`** em `docs/`. `docs/adr/` tem 10 (a 0007 sozinha tem 1.112
+  linhas) e `docs/product/` tem 6, somando cerca de 1.400 linhas entre backlog,
+  user stories, visão e personas.
+- **63 referências** a `docs/adr` ou `adr/00NN` espalhadas por **23 arquivos** —
+  incluindo `CLAUDE.md` e `AGENTS.md`, que todo agente lê no começo de toda
+  sessão e cujas regras invioláveis citam `docs/adr/0001`, `0008`, `0009` e
+  `0010` por caminho. Mover os arquivos sem reescrever esses ponteiros produz o
+  pior estado possível: a regra continua escrita e a justificativa dela some.
+- A tabela de ADRs em `docs/README.md` lista **0001 a 0006** — seis de dez.
+  Índice mantido à mão já apodreceu uma vez aqui, e uma migração multiplica as
+  tabelas a manter em vez de reduzi-las.
+- `tests/architecture.test.ts` abre `docs/engineering/context-map.md` **por
+  caminho literal**, em dois testes: um exige uma linha `| <contexto> |` para
+  cada diretório de `src/contexts/`, o outro compara o marcador
+  `<!-- schema-table-count: 29 -->` com a contagem de `sqliteTable` em
+  `src/core/db/schema.ts`. Mover ou renomear esse arquivo derruba `pnpm check`.
+  Aqui documentação não é decoração — parte dela é teste de fitness, e mexer
+  nela é mexer em código.
+
+Do outro lado, o ganho é real e merece ser nomeado para a proposta não parecer
+frívola: hoje um item deste backlog não tem contrato de testes, não tem grafo de
+tarefas com dependência declarada, e não tem `/cy-final-verify` exigindo
+evidência fresca antes de alguém dizer "pronto". UI-02 e UI-03 tiveram o "o que
+ficou de fora" escrito à mão **depois** da entrega; um `_tasks.md` derivado de
+`_tests.md` teria dito isso antes, e o backlog já foi pego mentindo sobre o
+próprio estado em oito itens numa revisão só.
+
+#### O risco de acoplar a documentação a uma beta
+
+A versão instalada é **0.3.0-beta.17**. O `COMPOZY-OS.md` registra que a
+extension `dev-cycle` 0.3.1 está em `error`, superada pela `spec-cycle` 0.4.1, e
+que `cy03 status` reporta `degraded`. Mais grave para esta decisão: a §4 lista
+**três pontos em que o `MIGRATION_GUIDE.md` oficial diverge da máquina** — e nos
+três a máquina venceu. Um deles é exatamente o formato em jogo aqui: o guia
+afirma que PRD e techspec "não têm sucessor", quando na prática a
+`cy-create-spec` entrega os dois fundidos.
+
+A divergência não é só entre documentação e máquina; é entre gerações no mesmo
+laptop. As skills carregadas numa sessão de agente vêm de `~/.claude/skills` e
+são as da **0.2** — `cy-create-prd` e `cy-create-techspec` separadas, sem
+`cy-create-spec` —, enquanto o daemon 0.3 espera o formato unificado. Um agente
+que rode a skill local hoje produz forma diferente da que a ferramenta consome.
+
+O que isso significa em concreto: uma release menor pode renomear `_spec.md`,
+fundir outro par de arquivos ou mudar `.compozy/tasks/` de lugar, e o
+repositório herda a mudança em toda a documentação de uma vez.
+
+A mitigação existe e vale registrar, porque muda o tamanho do risco: os
+artefatos são **Markdown puro**. Ler não depende de daemon, de licença nem de
+rede — se o CompozyOS sumir amanhã, os arquivos continuam abrindo. O que se
+compra da beta é a **convenção**, não o acesso. Isso rebaixa o risco de "perder
+a documentação" para "ficar com uma convenção órfã", que é sobrevivível. Não
+elimina, porém, o custo de reescrever 63 ponteiros duas vezes se a convenção
+mudar no meio do caminho.
+
+#### O que fica de fora
+
+**Agendar automação.** `cy03 automation` e o `job-sweep.yaml` são outro assunto,
+já descrito em `compozy/README.md` como fase 2. Este item é sobre forma de
+documento, não sobre quem dispara a varredura.
+
+**`auto_commit`.** Segue `false` pela razão já registrada no `COMPOZY-OS.md`: as
+mensagens de commit deste repositório carregam o porquê de cada decisão, e
+commit automático produz mensagem genérica — perde exatamente o que torna o
+histórico utilizável meses depois.
+
+**Migração retroativa.** Mesmo que a resposta seja "migrar tudo", reescrever as
+dez ADRs existentes é decisão separada de adotar o formato daqui para a frente.
+Documento antigo que ninguém vai reler não paga a própria migração.
+
+**Versionar `.compozy/tasks/`.** Hoje só `.compozy/workspace.toml` está no git.
+O §7 do `COMPOZY-OS.md` recomenda versionar as tarefas e ignorar apenas o
+runtime — mas isso passa a colocar spec e rodada de revisão no histórico do
+repositório, e essa consequência precisa ser querida, não herdada junto com o
+resto.
+
+### E-06 · Cenários de teste por papel, ponta a ponta 📋
+
+Pedido em 20/08/2026: *"crie cenarios de testes para todos os tipos de
+usuários, simulando todos os cenarios possíveis."*
+
+"Todos os cenários possíveis" são dois conjuntos com custos que diferem em
+ordem de grandeza, e tratá-los como um só é o erro que este item existe para
+evitar. **A matriz de decisão já está coberta; o percurso não está coberto de
+jeito nenhum.**
+
+**O que já existe, e existe bem.** `tests/auth-policy.test.ts` afirma 28 casos
+sobre papel × ação × posse × visibilidade, vários deles varrendo `ACTIONS` e
+`ADMIN_ACTIONS` inteiros em laço — o número de combinações asseridas é bem
+maior que o número de testes. `tests/impersonation.test.ts` acrescenta 10 sobre
+assumir identidade: cadeia negada, alvo desabilitado, alvo inexistente, assumir
+a si mesmo, TTL de uma hora, registro de início e de fim, revogação no
+servidor. Isso é barato porque `can()` é função pura: nada de banco, servidor
+nem browser. Reproduzir essa matriz em Playwright seria testar a **mesma**
+função através de seis camadas de framework, mais devagar e cobrindo menos —
+uma combinação que hoje custa microssegundos passaria a custar um login e uma
+navegação. Este item não deve encostar nisso.
+
+**O que não existe: percurso por papel.** `tests/e2e/ui.mjs` faz cerca de 60
+verificações em browser, todas com **uma conta só** — `e2e@local.test`, criada
+por `seedOwner`, que grava `roles: ["admin", "candidate"]` fixo no código e
+vincula ao candidato do `profile.yaml`. Toda a suíte roda como esse usuário
+composto. Não há cenário de recrutador nenhum, nem de candidato sem admin, nem
+de admin sem candidato, nem de conta desabilitada, nem de conta sem senha.
+
+**E o vazio já esconde um defeito de composição.** Onze páginas guardam com
+`requireOwnCandidatePage("candidate:read")` — inclusive `/` e `/jobs` — e esse
+guarda chama `forbidden()` quando `session.candidateId` é `null`. Um recrutador
+não tem `candidateId`; um admin puro também não. Como `passwordLoginAction`
+sempre redireciona para `/`, os dois entram com a senha certa e **caem em 403 na
+primeira tela**. A política diz o contrário: `job:read` e `job:write` são
+permitidos aos três papéis. A política está certa e a composição não a respeita
+— e nenhum teste puro pode ver isso, porque cada metade está correta sozinha.
+Só um browser entrando como recrutador vê.
+
+Não é acidente esquecido: `tests/architecture.test.ts` **fixa** esse guarda por
+caminho literal, em "uses candidate-scoped page guards wherever funnel or CV
+data is read", e `/jobs` está na lista porque a listagem carrega fit score e
+estado de candidatura junto. O acervo global sem o escoramento do candidato não
+existe como tela. Ou seja: o recrutador não tem superfície, e isso precisa ser
+**decidido**, não descoberto por um teste que congele o estado atual como
+especificação.
+
+---
+
+#### Decisões que a implementação precisa tomar
+
+**1. As contas semeadas, e por que `seedOwner` não serve para criá-las.**
+
+`seedOwner` tem `const roles: Role[] = ["admin", "candidate"]` embutido e amarra
+ao candidato do perfil — ele existe para a conta do dono, e mudá-lo para aceitar
+papel arbitrário seria mexer no caminho de instalação por causa de teste. As
+contas extras entram pela porta de diretório (`jho auth add-user --role`), que é
+a **mesma** API que o operador usa. Fixture escrita por `INSERT` à mão testa um
+estado que o produto talvez não saiba produzir.
+
+| Conta | Papéis | Vínculo | Existe para provar |
+|---|---|---|---|
+| `e2e@local.test` | admin + candidate | candidato do perfil | o percurso já coberto; não muda |
+| `admin@e2e.local` | admin | nenhum | administra a instalação e **não** lê currículo alheio |
+| `cand@e2e.local` | candidate | candidato próprio | percurso do candidato sem poder nenhum de admin |
+| `rec-vinc@e2e.local` | recruiter | vinculado a um candidato | lê quem acompanha; não edita nem move funil |
+| `rec-solto@e2e.local` | recruiter | nenhum | 403 em dado privado; vê o que é global |
+| `off@e2e.local` | candidate | — | `disabledAt` preenchido: não entra |
+| `sem-senha@e2e.local` | candidate | — | sem hash: não entra, e a tela não diz por quê |
+
+O `rec-vinc` precisa de um **segundo** candidato para acompanhar, senão
+"recrutador vinculado" e "candidato dono" olham a mesma linha e o teste deixa
+de distinguir posse de vínculo — que é exatamente a distinção em jogo.
+
+**2. O que cada conta vê, e o que recebe 403.** A tabela abaixo é o alvo, não o
+estado atual — as três colunas da direita hoje são 403 em tudo, pela razão da
+seção anterior:
+
+| Rota | admin puro | candidato puro | recrutador vinculado | recrutador solto |
+|---|---|---|---|---|
+| `/` cockpit | a decidir | 200 | a decidir | a decidir |
+| `/jobs`, `/jobs/[id]` | a decidir | 200 | 200 sem fit alheio | 200 sem fit alheio |
+| `/candidate*` | 403 | 200 (o próprio) | 200 leitura de quem acompanha | 403 |
+| `/pipeline` | 403 | 200 | 403 | 403 |
+| `/referrals` | 403 | 200 | 403 | 403 |
+| `/compare` | 403 | 200 | 403 | 403 |
+| `/admin/users` | 200 | 403 | 403 | 403 |
+| `/api/export` | 403 | 200 (só o próprio) | 403 | 403 |
+
+As células "a decidir" são o conteúdo real deste item. Escrever o cenário antes
+de decidi-las produz teste de caracterização — que passa a defender o defeito.
+
+**3. Conta desabilitada e conta sem senha são indistinguíveis na tela, de
+propósito.** `verifyLogin` devolve `{ ok: false, reason: "invalid" }` para os
+quatro motivos — conta inexistente, sem senha, desabilitada e senha errada — e
+grava o motivo verdadeiro só em `auth_event.detail`, para o operador. Enumerar
+conta pela mensagem de erro é o vazamento clássico, e a defesa está escrita.
+Consequência direta para o teste: **o oráculo desses dois cenários é o
+`auth_event`, não a tela**, e portanto eles não precisam de browser. O que
+merece uma checagem em browser é o inverso — que a mensagem renderizada seja
+**idêntica** nos quatro casos, porque a divergência nasceria de um mapa de erro
+bem-intencionado na página, que é código de UI.
+
+Detalhe operacional que morde: o limite é de 8 tentativas falhas em 15 minutos e
+o `setup.mjs` hoje limpa `login_failed` **apenas** de `EMAIL`. Quatro logins
+falhos de propósito em contas novas, somados entre execuções, bloqueiam a suíte
+com uma proteção que funcionou. A limpeza tem de cobrir todas as contas
+semeadas.
+
+**4. Impersonação é o único cenário que exige duas identidades no mesmo
+browser.** Entrar como admin, assumir um candidato, e verificar: a faixa de
+sessão emprestada aparece; `/admin/users` responde **403 renderizado** e não
+stack trace — o comentário em `app/auth.ts:100-104` registra que esse bug
+apareceu exatamente aí; sair devolve à identidade original; e o token some do
+servidor, não só do navegador. A decisão já é provada em teste puro. O que só o
+browser prova é a troca de cookie, o caminho de volta e a **forma** da negativa.
+
+**5. Cobertura alvo do projeto: >95%, definida em 20/08/2026.** Hoje esse número
+**não é mensurável**: `vitest.config.ts` não tem bloco `coverage`,
+`@vitest/coverage-v8` não está instalado e não existe limiar que reprove. 637
+testes em 54 arquivos mais ~60 checagens em browser é volume, e volume sem
+instrumento não responde a única pergunta que interessa — *o que não é executado
+por teste nenhum?*. A primeira tarefa deste item é também a mais barata: ligar o
+provedor, publicar o número real e só então negociar onde os 5% podem ficar de
+fora. E-06 ataca o buraco que a instrumentação vai apontar como maior: a
+composição de guarda por rota, que hoje é verificada por **grep** em
+`architecture.test.ts` — o teste confirma que a chamada está escrita no arquivo,
+nunca que ela nega quem deve negar.
+
+---
+
+#### O corte: o que vai para o browser e o que fica sem ele
+
+A regra é uma frase: **o browser recebe percurso, a matriz fica onde uma
+combinação custa microssegundos.**
+
+| Cenário | Onde | Por quê |
+|---|---|---|
+| papel × ação × posse × visibilidade | puro — já existe | 28 testes, sem I/O; nada a acrescentar |
+| regras de impersonação (cadeia, desabilitado, TTL, auditoria) | puro — já existe | 10 testes; o browser não veria mais |
+| 11 rotas × 6 contas → 200/403 | integração, sem browser | 66 combinações; sobe o app uma vez e pede as rotas, sem renderizar |
+| 4 motivos de login falho → `auth_event` correto | integração | o oráculo é uma linha de tabela |
+| percurso do candidato puro | browser | é o que a suíte já faz; muda só de conta |
+| percurso do recrutador vinculado | browser | o único papel sem cobertura visual nenhuma |
+| impersonação ponta a ponta | browser | cookie, faixa, 403 renderizado, revogação |
+| mensagem idêntica nos 4 motivos | browser, 1 checagem | o oráculo é o texto que a página desenha |
+| tipografia, tooltip, i18n, mobile | **não multiplicar por conta** | são propriedades do layout, não do papel |
+
+A última linha é a que segura o custo. O laço de idioma sozinho carrega 8 telas,
+o de mobile mede `scrollWidth` em mais um conjunto, e a suíte ainda constrói o
+Next e sobe servidor próprio a cada execução — já são minutos. Multiplicar isso
+por seis contas transforma `pnpm test:e2e` em algo que ninguém roda antes de
+commitar, e suíte que não roda custa mais cobertura do que acrescenta. O critério
+correto é por **tela**, não por conta: cada tela nova entra uma vez no laço de
+idioma e uma vez no de mobile, com a conta que consegue abri-la.
+
+Na prática o browser ganha **duas** contas além da atual — candidato puro e
+recrutador vinculado — e delas só o percurso específico. As outras quatro vivem
+inteiras em teste de integração.
+
+---
+
+#### O que fica de fora, e por quê
+
+**Corrigir o 403 do recrutador e do admin puro.** Este item **descobre e fixa**;
+consertar é UI-04 (cadastro por recrutador precisa de uma tela que o recrutador
+consiga abrir) e a decisão de home por papel. Misturar as duas coisas faria um
+item de teste virar refatoração de rota com teste junto, e a discussão sobre
+qual tela o recrutador vê merece acontecer sozinha.
+
+**Cenário de dois usuários simultâneos.** Duas sessões concorrendo pela mesma
+linha — recrutador lendo enquanto o candidato salva — é teste de concorrência,
+não de papel. O único lugar do sistema com claim atômico é a fila, e ele já tem
+o próprio teste.
+
+**Fuzz de permissão.** Gerar sessões aleatórias contra `can()` é atraente e
+seria redundante: a função é pequena, exaustivamente enumerável e já enumerada.
+Fuzz paga onde o espaço é grande demais para listar.
+
+**Conta com papel `recruiter` E `candidate`.** Combinação que a política aceita e
+que ninguém pediu. Cenário sem usuário é manutenção sem dono.
+
 ## Ordem de execução proposta
 
 1. **B-01, B-02** — corrigem descarte indevido de vagas. Em implementação.
@@ -587,3 +1423,25 @@ lista no navegador devolve zero e diz isso, sugerindo `jho sources snippet`.
 8. **UI-02** — histórico de versões do currículo. Pedido em 19/08; a etapa de
    exclusão depende de `cv_variant` virar chave estrangeira, então entra depois
    da migração.
+9. **AUTH-02** — administração de usuários. `UserDirectory` é a única porta do
+   contexto sem adapter, e sem ela papel se troca por SQL. Impersonação é o que
+   torna a política de três papéis operável em vez de só correta.
+10. **AUTH-03** — visibilidade do perfil. Precede AUTH-04: sem o controle, a
+    página pública existe e nenhum candidato consegue ligá-la.
+11. **AUTH-04** — portfólio público. A primeira rota anônima do sistema; entra
+    depois de AUTH-03 e com o teste de ausência de piso salarial, funil e
+    contato junto.
+12. **UI-04** — cadastro por recrutador. Independente dos três acima, mas só
+    faz sentido com recrutadores de verdade na instalação, o que depende de
+    AUTH-02 conseguir criá-los.
+13. **F-05** — Resend. Fecha a lacuna que AUTH-02 abre: conta criada pelo admin
+    hoje não recebe o link de acesso, porque ele sai no terminal. Depende de
+    uma chave que só o usuário pode emitir.
+14. **E-05** — estrutura de documentação do CompozyOS. Depende de uma primeira
+    jornada completa com a ferramenta: decidir a forma de todos os documentos
+    antes de a 0.3 ter fechado um ciclo aqui seria escolher no escuro.
+15. **E-06** — cenários por papel. A instrumentação de cobertura e a matriz de
+    rota × papel em integração podem entrar já; o percurso em browser depende de
+    AUTH-02 (criar as contas pela porta) e da decisão de UI-04 sobre que tela um
+    recrutador abre. Antes disso metade dos cenários só saberia afirmar 403 —
+    registrar o vazio não é testar percurso.

@@ -370,7 +370,15 @@ describe("authorisation (AUTH-01)", () => {
    * limit lives underneath it. Listed here explicitly so the exception is a
    * decision on the record rather than an omission nobody noticed.
    */
-  const UNGUARDED_BY_DESIGN = new Set(["passwordLoginAction"]);
+  const UNGUARDED_BY_DESIGN = new Set([
+    "passwordLoginAction",
+    // Encerrar uma sessão não pode exigir uma sessão válida. `guard` lançaria
+    // para quem está com sessão emprestada expirada ou quebrada, e a pessoa
+    // ficaria presa na identidade de outra — sem caminho de volta pela
+    // interface. Mesma razão de `logoutAction`, que só não aparece aqui porque
+    // o arquivo dele não termina em `actions.ts`.
+    "stopImpersonatingAction",
+  ]);
 
   it("exposes Auth to production callers only through its public API", () => {
     const callers = [...SRC.filter((file) => !file.includes("src/contexts/auth/")), ...walk("app")];

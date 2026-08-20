@@ -234,3 +234,32 @@ describe("modo aberto", () => {
     expect(session.roles).toContain("admin");
   });
 });
+
+describe("sessão emprestada", () => {
+  it("persiste e devolve quem assumiu a identidade", async () => {
+    // Já falhou: o campo não estava no INSERT, então a sessão emprestada era
+    // indistinguível de uma normal. Sem `impersonatedBy` a política não nega
+    // administração e o banner não aparece — o admin opera como outra pessoa
+    // com poder de admin e sem aviso.
+    const adminId = await seedUser("admin@local.test", 6);
+    const target = await seedUser("alvo@local.test", 7);
+    const token = await drizzleSessions.create({
+      userId: target,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      impersonatedBy: adminId,
+    });
+
+    const session = await drizzleSessions.resolve(token);
+    expect(session?.impersonatedBy).toBe(adminId);
+  });
+
+  it("sessão comum não é marcada como emprestada", async () => {
+    const user = await seedUser("comum@local.test", 8);
+    const token = await drizzleSessions.create({
+      userId: user,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+
+    expect((await drizzleSessions.resolve(token))?.impersonatedBy).toBeNull();
+  });
+});

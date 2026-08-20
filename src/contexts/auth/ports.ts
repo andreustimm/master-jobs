@@ -91,8 +91,17 @@ export type UserDirectory = {
   setDisabled(userId: number, disabled: boolean): Promise<void>;
   /** Candidatos que um recrutador acompanha. */
   linkedCandidates(recruiterUserId: number): Promise<number[]>;
+  /** Vínculos com id, para a tela poder removê-los sem citar o candidato. */
+  linksOf(recruiterUserId: number): Promise<{ id: number; candidateId: number }[]>;
+  /**
+   * Cria o vínculo.
+   *
+   * `candidateId` vem de quem CONSENTE, nunca do admin: ver a nota em
+   * `drizzle-directory.ts` sobre por que admin não vincula.
+   */
   linkCandidate(recruiterUserId: number, candidateId: number, by: number): Promise<void>;
-  unlinkCandidate(recruiterUserId: number, candidateId: number): Promise<void>;
+  /** Remove pelo id do vínculo. Revogar acesso é seguro em qualquer direção. */
+  unlinkById(linkId: number): Promise<void>;
 };
 
 export type PasswordResult =

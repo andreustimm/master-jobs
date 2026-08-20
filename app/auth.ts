@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { forbidden, redirect } from "next/navigation";
 import {
   authorize,
+  AuthorizationError,
   resolveSession,
   type Action,
   type Resource,
@@ -18,6 +19,19 @@ import { getCandidate } from "../src/core/candidate.ts";
  */
 
 export const SESSION_COOKIE = "jho_session";
+
+/**
+ * Onde a sessão do admin fica estacionada durante um empréstimo.
+ *
+ * Assumir identidade **substitui** o cookie de sessão pelo token emprestado e
+ * guarda o do admin aqui; a volta é restaurar. A alternativa — manter os dois e
+ * escolher qual vale — obrigaria todo leitor de sessão a saber da impersonação,
+ * e um leitor que esquecesse leria a sessão errada.
+ *
+ * Mora aqui, e não em `app/admin/actions.ts`, porque um arquivo `"use server"`
+ * só pode exportar função async.
+ */
+export const ADMIN_COOKIE = "jho_admin_session";
 
 async function sessionToken(): Promise<string | null> {
   const jar = await cookies();
@@ -80,7 +94,16 @@ export async function requireSession(): Promise<Session> {
 /** Requires a session AND authorisation for one action. */
 export async function requirePage(action: Action, resource?: Resource): Promise<Session> {
   const session = await requireSession();
-  authorize(session, action, resource ?? { kind: "global" });
+  try {
+    authorize(session, action, resource ?? { kind: "global" });
+  } catch (error) {
+    // 403, não 500. `authorize` lança, e uma exceção que sobe até o framework
+    // vira erro interno: a página nega corretamente e ainda assim parece um
+    // crash — em desenvolvimento com stack na tela. Apareceu ao abrir
+    // /admin/users com sessão emprestada, que a política nega de propósito.
+    if (error instanceof AuthorizationError) forbidden();
+    throw error;
+  }
   return session;
 }
 
