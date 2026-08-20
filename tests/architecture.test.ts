@@ -432,7 +432,15 @@ describe("authorisation (AUTH-01)", () => {
   it("validates sessions inside every protected Route Handler", () => {
     // Middleware checks cookie presence only. A forged cookie reaches the
     // handler, so the handler itself must resolve and authorise the session.
-    const publicByDesign = new Set(["app/login/callback/route.ts"]);
+    const publicByDesign = new Set([
+      "app/login/callback/route.ts",
+      // O cron não tem sessão para validar: a Vercel o chama sem cookie. Ele
+      // se autentica com `CRON_SECRET` em `authorization`, comparado em tempo
+      // constante — um `===` sobre segredo vaza o prefixo pelo tempo de
+      // resposta, e esta rota atende quem quiser chamá-la. Sem o segredo
+      // configurado responde 503: fechada por omissão, e não aberta.
+      "app/api/cron/recheck/route.ts",
+    ]);
     const offenders = ROUTES.filter(
       (file) =>
         !publicByDesign.has(file) &&

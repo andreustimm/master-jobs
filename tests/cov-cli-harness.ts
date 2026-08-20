@@ -7,110 +7,101 @@
  * aqui: a cobertura V8 do Vitest instrumenta o processo do worker, não os
  * filhos que ele gera. Um teste por subprocesso deixaria `src/cli.ts` em 0%
  * para sempre — que é o estado que o item E-08 do backlog existe para mudar.
- * Então o módulo roda DENTRO do worker, e o preço disso são os dois problemas
- * que este arquivo resolve.
+ * Então o módulo roda DENTRO do worker, e o preço disso são os problemas que
+ * este arquivo resolve.
  *
- * ## Problema 1: o módulo é o programa
+ * ## O que mudou: `buildProgram()` aposentou a subclasse
  *
- * `src/cli.ts` não exporta nada. A última linha é
- * `program.parseAsync(process.argv)`, ou seja, importar o arquivo **executa**
- * a CLI com os argumentos do processo — que, num worker do Vitest, são os
- * argumentos do Vitest. Sem um `process.argv` controlado, a primeira coisa que
- * o teste faria seria pedir ao Commander para interpretar `--run --coverage`.
+ * A versão anterior desta bancada dublava `commander` com uma subclasse de
+ * `Command` cujo construtor fazia três coisas: chamava `exitOverride()`,
+ * redirecionava a saída do Commander e guardava o primeiro `Command`
+ * construído — que era o `program`. Aquilo existia por falta de porta de
+ * entrada: `src/cli.ts` não exportava nada e terminava em
+ * `program.parseAsync(process.argv)`, então importá-lo executava a CLI com o
+ * argv do Vitest e não havia como pegar o `program` a não ser interceptando o
+ * construtor.
  *
- * A saída é capturar o objeto `program` no construtor e, dali em diante,
- * chamar `parseAsync` nós mesmos. O Commander 15 suporta reparse: veja
- * `_prepareForParse`/`restoreStateBeforeParse` em `commander/lib/command.js`,
- * que salvam o estado das opções na primeira passada e o restauram nas
- * seguintes. Sem esse suporte a bancada teria de recarregar o módulo inteiro a
- * cada caso, e o teste ficaria dominado pelo custo de `vi.resetModules()`.
+ * Hoje `src/cli.ts` exporta `buildProgram()` e só executa sob guarda de
+ * entrypoint (`import.meta.url` contra `process.argv[1]`). Com isso a terceira
+ * função da subclasse — recuperar o `program` — virou uma chamada, e as outras
+ * duas viraram um passeio pela árvore já montada. A subclasse saiu.
  *
- * ## Problema 2: erro de uso mata o worker
+ * ## Por que o passeio pela árvore, e não uma chamada na raiz
  *
- * Diante de argumento inválido, o Commander chama `process.exit()`. Num worker
- * do Vitest isso derruba a suíte inteira, não o caso. `exitOverride()` troca a
- * saída por uma exceção — é o mecanismo oficial da biblioteca para embutir uma
- * CLI, e não é um remendo de teste: o comportamento de análise de argumento
- * continua o mesmo, só o desfecho vira capturável.
+ * `exitOverride()` e `configureOutput()` são POR COMANDO. No Commander,
+ * `_exit()` consulta o `_exitCallback` do comando que falhou, e
+ * `configureOutput()` substitui `this._outputConfiguration` por um objeto novo
+ * só naquele nó. Os subcomandos herdam por `copyInheritedSettings`, mas isso
+ * acontece no momento da criação — e a árvore inteira já foi montada quando o
+ * módulo foi importado. Configurar só a raiz deixaria `jho track 1 xpto`
+ * chamando `process.exit()` de dentro do subcomando, que num worker do Vitest
+ * derruba a suíte inteira em vez do caso.
+ *
+ * ## Por que `exitOverride` não é um remendo de teste
+ *
+ * É o mecanismo oficial da biblioteca para embutir uma CLI: o comportamento de
+ * análise de argumento continua idêntico, só o desfecho — `process.exit` —
+ * vira exceção capturável.
  *
  * ## O que a bancada NÃO dubla
  *
- * Nada do produto. O banco é o SQLite real de `tests/support/db.ts`, as
- * migrações são as reais, `profile.yaml` é o de verdade e as funções de
- * domínio são as de produção. A única coisa trocada é `commander`, e por uma
- * subclasse que herda o comportamento inteiro — o `Command` real continua
- * fazendo a análise.
+ * Nada. O `commander` agora é o real, o banco é o SQLite de
+ * `tests/support/db.ts`, as migrações são as reais, `profile.yaml` é o de
+ * verdade e as funções de domínio são as de produção.
  */
 import { vi } from "vitest";
 import type { Command } from "commander";
 import { getDb, type DB } from "../src/core/db/client.ts";
 
-type AnyCommand = {
-  parseAsync(argv: readonly string[], options?: { from?: string }): Promise<unknown>;
-};
-
 /**
- * Estado compartilhado entre a fábrica do mock (que o Vitest iça para o topo do
- * arquivo de teste) e o corpo do teste. Precisa ser módulo, e não closure,
- * justamente por causa desse içamento.
+ * Estado compartilhado entre a bancada e o corpo dos testes.
+ *
+ * Continua sendo módulo, e não closure, porque `commanderMock()` é chamado de
+ * dentro de uma fábrica que o Vitest iça para o topo do arquivo de teste.
  */
 export const cli = {
-  /** O `program` de `src/cli.ts`: o primeiro `Command` construído no módulo. */
-  root: undefined as AnyCommand | undefined,
-  /** A promessa do parse disparado no topo do módulo, na importação. */
-  boot: undefined as Promise<unknown> | undefined,
+  /** O `program` de `src/cli.ts`, o mesmo objeto que o terminal executa. */
+  root: undefined as Command | undefined,
   /** O que o próprio Commander escreveu (ajuda, erro de uso). */
   commanderOut: [] as string[],
   commanderErr: [] as string[],
 };
 
 /**
- * Fábrica do mock de `commander`.
+ * Dublê vestigial de `commander`.
  *
- * Uso, no topo de cada arquivo de teste (o `vi.mock` é içado, então a
- * importação dinâmica aqui dentro é obrigatória):
+ * Não dubla mais nada: devolve o módulo real. Continua exportado porque os
+ * arquivos de teste anteriores ao `buildProgram()` trazem no topo a linha
  *
  * ```ts
  * vi.mock("commander", async () => (await import("./cov-cli-harness.ts")).commanderMock());
  * ```
+ *
+ * e removê-lo obrigaria a editar cada um deles para nada — o efeito de um
+ * `vi.mock` que devolve o módulo original é exatamente nenhum. Arquivo de teste
+ * novo não precisa da linha.
  */
 export async function commanderMock(): Promise<Record<string, unknown>> {
   const actual = await vi.importActual<typeof import("commander")>("commander");
+  return { ...actual };
+}
 
-  class TestCommand extends actual.Command {
-    constructor(name?: string) {
-      super(name);
-      // Sem isto, `jho track 1 inexistente` derruba o processo do worker.
-      this.exitOverride();
-      // A ajuda e os erros de uso do Commander não passam por console.log;
-      // vão por este canal, e o teste precisa deles para asserir validação.
-      this.configureOutput({
-        writeOut: (s: string) => void cli.commanderOut.push(s),
-        writeErr: (s: string) => void cli.commanderErr.push(s),
-      });
-      // O primeiro Command construído é o `program`. Todo o resto nasce de
-      // `.command()`, que passa por `createCommand` abaixo.
-      cli.root ??= this as unknown as AnyCommand;
-    }
-
-    /** Faz os subcomandos herdarem `exitOverride` e a captura de saída. */
-    override createCommand(name?: string): Command {
-      return new TestCommand(name);
-    }
-
-    override parseAsync(
-      argv?: readonly string[],
-      options?: Parameters<Command["parseAsync"]>[1],
-    ): Promise<this> {
-      const promise = super.parseAsync(argv, options);
-      // Só a primeira: é a do topo do módulo, e o teste precisa esperá-la
-      // antes de disparar a próxima para não sobrepor dois parses.
-      if ((this as unknown as AnyCommand) === cli.root) cli.boot ??= promise;
-      return promise;
-    }
-  }
-
-  return { ...actual, Command: TestCommand };
+/**
+ * Torna um comando — e todos os seus descendentes — testável no worker.
+ *
+ * Recursivo por necessidade, não por elegância: ver o bloco "Por que o passeio
+ * pela árvore" no topo do arquivo.
+ */
+function prepararArvore(comando: Command): void {
+  // Sem isto, `jho track 1 inexistente` derruba o processo do worker.
+  comando.exitOverride();
+  // A ajuda e os erros de uso do Commander não passam por console.log; vão por
+  // este canal, e o teste precisa deles para asserir validação.
+  comando.configureOutput({
+    writeOut: (s: string) => void cli.commanderOut.push(s),
+    writeErr: (s: string) => void cli.commanderErr.push(s),
+  });
+  for (const filho of comando.commands) prepararArvore(filho);
 }
 
 const ANSI = /\x1b\[[0-9;]*m/g;
@@ -133,41 +124,24 @@ export type Execucao = {
 };
 
 /**
- * Carrega `src/cli.ts` uma única vez, com `process.argv` sob controle.
+ * Carrega `src/cli.ts` e devolve o programa montado, pronto para `rodar()`.
  *
- * O argv de carga é `["node", "jho"]` de propósito: `jho` sem subcomando faz o
- * Commander imprimir a ajuda e sair com código 1, o que exercita — de graça e
- * uma vez só — o `catch` do topo do módulo, o único trecho que nenhum reparse
- * alcança, porque a partir daí é o teste, e não `src/cli.ts`, quem chama
- * `parseAsync`.
+ * O `code` devolvido é o `process.exitCode` logo depois da importação, e a
+ * expectativa é que seja `undefined`: importar o módulo NÃO deve executar a
+ * CLI. Vale a pena continuar medindo isso — é a garantia da guarda de
+ * entrypoint, e o dia em que ela sumir esta é a primeira asserção a cair.
  */
 export async function carregarCli(): Promise<{ code: number | string | undefined; err: string }> {
   if (cli.root) return { code: undefined, err: "" };
 
-  const argvOriginal = process.argv;
-  const errs: string[] = [];
-  const spyLog = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const spyErr = vi.spyOn(console, "error").mockImplementation((...a: unknown[]) => {
-    errs.push(a.map(String).join(" "));
-  });
   process.exitCode = undefined;
-  try {
-    process.argv = ["node", "jho"];
-    await import("../src/cli.ts");
-    // A importação resolve antes do parse terminar: a última linha do módulo
-    // não é aguardada. Esperar a promessa capturada é o que torna o `catch`
-    // do topo observável em vez de uma corrida.
-    await cli.boot?.catch(() => undefined);
-    // Um turno a mais para o `.catch` de `src/cli.ts` gravar o exitCode.
-    await new Promise((resolve) => setImmediate(resolve));
-  } finally {
-    process.argv = argvOriginal;
-    spyLog.mockRestore();
-    spyErr.mockRestore();
-  }
+  const { buildProgram } = await import("../src/cli.ts");
   const code = process.exitCode;
   process.exitCode = undefined;
-  return { code, err: semCor(errs.join("\n")) };
+
+  cli.root = buildProgram();
+  prepararArvore(cli.root);
+  return { code, err: "" };
 }
 
 /**
@@ -176,6 +150,12 @@ export async function carregarCli(): Promise<{ code: number | string | undefined
  * `from: "user"` diz ao Commander que o vetor já está sem `node` e sem o
  * caminho do script — é o mesmo caminho de análise, sem simular o argv do
  * processo.
+ *
+ * Reparse é suportado: `_prepareForParse`/`restoreStateBeforeParse` em
+ * `commander/lib/command.js` salvam o estado das opções na primeira passada e o
+ * restauram nas seguintes. Sem esse suporte a bancada teria de recarregar o
+ * módulo inteiro a cada caso, e o teste ficaria dominado pelo custo de
+ * `vi.resetModules()`.
  */
 export async function rodar(...args: string[]): Promise<Execucao> {
   if (!cli.root) throw new Error("carregarCli() antes de rodar()");

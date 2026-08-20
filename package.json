@@ -22,13 +22,14 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "pnpm typecheck && pnpm test",
+    "check": "pnpm typecheck && vitest run --coverage",
     "test:e2e": "node tests/e2e/run-isolated.mjs",
     "test:e2e:external": "node tests/e2e/setup.mjs && node tests/e2e/ui.mjs",
     "prebuild": "node scripts/sw-version.mjs",
     "icons": "node scripts/make-icons.mjs",
     "sw": "node scripts/sw-version.mjs",
-    "predev": "node scripts/sw-version.mjs"
+    "predev": "node scripts/sw-version.mjs",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

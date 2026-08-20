@@ -21,7 +21,20 @@ const SESSION_COOKIE = "jho_session";
 // por lista de permissão em `publicProfile()`, não por esta linha.
 // `/offline` é a tela que o service worker mostra quando a rede cai; exigir
 // sessão nela daria um redirect para o login sem rede para carregá-lo.
-const PUBLIC = ["/login", "/p", "/offline", "/manifest.json", "/icons", "/sw.js"];
+const PUBLIC = [
+  "/login",
+  "/p",
+  "/offline",
+  "/manifest.json",
+  "/icons",
+  "/sw.js",
+  // `/api/cron` passa por aqui porque a Vercel a chama SEM cookie — o guard de
+  // sessão a bloquearia sempre. Ela não fica desprotegida: autentica-se com
+  // `CRON_SECRET` em `authorization`, comparado em tempo constante, e responde
+  // 503 quando o segredo não está configurado. Fechada por omissão, e não
+  // aberta.
+  "/api/cron",
+];
 
 /**
  * Limite por IP no portfólio público.

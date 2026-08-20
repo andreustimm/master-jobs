@@ -82,17 +82,28 @@ async function semearVaga(opts: { id: string; fechadaEm?: string } = { id: "v1" 
   return row!.id;
 }
 
-describe("carga do módulo — `jho` sem subcomando", () => {
+describe("carga do módulo", () => {
   /**
-   * O `catch` da última linha de `cli.ts` é o único trecho que nenhum reparse
-   * alcança: a partir da carga é o teste, e não o módulo, quem chama
-   * `parseAsync`. Cobri-lo custa uma carga com `process.argv = ["node","jho"]`,
-   * que é o que uma pessoa digita ao errar o comando — e o contrato é que isso
-   * não sai com 0. Um script de operação que encadeia `jho ... && próximo`
-   * depende disso para não continuar em cima de um erro.
+   * Importar `cli.ts` NÃO executa a CLI.
+   *
+   * Este caso afirmava o contrário: que a carga rodava `parseAsync` e saía com
+   * 1. Era verdade e era o problema — qualquer import disparava a CLI com o
+   * argv de quem importou, e a única forma de testá-la seria por subprocesso,
+   * que daria 0% de cobertura para sempre porque a instrumentação do V8
+   * acompanha o worker e não os filhos.
+   *
+   * A guarda de entrypoint inverteu isso, e `buildProgram()` entrega o mesmo
+   * `program` que o terminal executa.
    */
-  it("imprime a ajuda e termina com código diferente de zero", () => {
-    expect(bootDaCli.code).toBe(1);
+  it("importar não dispara a CLI", () => {
+    expect(bootDaCli.code).toBeUndefined();
+  });
+
+  it("e entrega o programa montado", async () => {
+    const { buildProgram } = await import("../src/cli.ts");
+    // O mesmo objeto que a guarda executa: se este fosse outro, o teste
+    // exercitaria uma CLI paralela que ninguém roda.
+    expect(buildProgram().commands.length).toBeGreaterThan(10);
   });
 });
 

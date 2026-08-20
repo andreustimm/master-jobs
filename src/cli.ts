@@ -6,7 +6,8 @@
  * is safe to re-run. Run `pnpm jho --help` for the full list.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { and, desc, eq } from "drizzle-orm";
 import { closeDb, getDb } from "./core/db/client.ts";
@@ -2706,7 +2707,33 @@ program
     console.log();
   });
 
-program.parseAsync(process.argv).catch((error: unknown) => {
-  console.error(c.red(error instanceof Error ? error.message : String(error)));
-  process.exitCode = 1;
-});
+/**
+ * O programa montado, para quem quiser rodá-lo sem ser pelo terminal.
+ *
+ * Existe por uma razão só, e ela é de teste: sem isto o arquivo não exporta
+ * nada e termina executando `parseAsync(process.argv)`, então importá-lo de um
+ * teste executa a CLI com o argv do vitest. A bancada contornava com uma
+ * subclasse do `Command` real, e a subclasse existia só para recuperar o
+ * `program` que este `export` agora entrega.
+ *
+ * A CLI continua sendo a mesma: o `program` é o mesmo objeto que a guarda
+ * abaixo executa.
+ */
+export function buildProgram(): typeof program {
+  return program;
+}
+
+/**
+ * Só executa quando ESTE arquivo é o ponto de entrada.
+ *
+ * `import.meta.url` comparado ao caminho do processo. Sem a guarda, qualquer
+ * import dispara a CLI — e é o que impedia testá-la sem um subprocesso, que por
+ * sua vez daria 0% de cobertura para sempre, porque a instrumentação do V8
+ * acompanha o worker e não os filhos.
+ */
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  program.parseAsync(process.argv).catch((error: unknown) => {
+    console.error(c.red(error instanceof Error ? error.message : String(error)));
+    process.exitCode = 1;
+  });
+}
