@@ -13,12 +13,94 @@ import {
 } from "../../src/core/candidate.ts";
 import { MarkdownEditor } from "./editor";
 import { VersionHistory } from "./versions";
-import { importPdfAction, saveCvAction } from "./actions";
+import { importPdfAction, saveCvAction, setVisibilityAction } from "./actions";
 import { requireOwnCandidatePage } from "../auth";
 import { getTranslator } from "../i18n";
-import { formatNumber, type Translator } from "../../src/core/i18n/index.ts";
+import { formatNumber, type TranslationKey, type Translator } from "../../src/core/i18n/index.ts";
+import type { Visibility } from "../../src/contexts/auth/index.ts";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Quem alcança este perfil.
+ *
+ * Fica ACIMA do currículo de propósito: é a decisão que governa tudo o que vem
+ * depois, e enterrá-la no rodapé produziria o pior caso possível — alguém que
+ * tornou o perfil público sem perceber e não tem motivo para rolar até lá para
+ * descobrir.
+ *
+ * O estado corrente aparece marcado, e `public` carrega o aviso do que
+ * significa. "Público" soa inofensivo; "legível por qualquer um, buscadores
+ * inclusive" não.
+ */
+function VisibilityCard({
+  current,
+  t,
+}: {
+  current: string;
+  t: Translator["t"];
+}) {
+  const options = [
+    { id: "private" as const, label: "visibility.private", hint: "visibility.privateHint" },
+    { id: "recruiters" as const, label: "visibility.recruiters", hint: "visibility.recruitersHint" },
+    { id: "public" as const, label: "visibility.public", hint: "visibility.publicHint" },
+  ] satisfies { id: Visibility; label: TranslationKey; hint: TranslationKey }[];
+
+  return (
+    <Card className="mb-6">
+      <CardHeader>
+        <CardTitle className="text-lg">{t("visibility.title")}</CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <form action={setVisibilityAction} className="grid gap-2">
+          {options.map((option) => (
+            <label
+              key={option.id}
+              className={cn(
+                "flex cursor-pointer items-start gap-2.5 rounded-[var(--radius-action)] border p-3 transition-colors",
+                current === option.id
+                  ? "border-[var(--primary)] bg-[var(--muted)]"
+                  : "border-[var(--hairline)] hover:bg-[var(--muted)]",
+              )}
+            >
+              <input
+                type="radio"
+                name="visibility"
+                value={option.id}
+                defaultChecked={current === option.id}
+                className="mt-1 cursor-pointer"
+              />
+              <span className="min-w-0">
+                <span className="type-body-md block font-medium">
+                  {t(option.label)}
+                  {current === option.id && (
+                    <span className="ml-2 type-micro text-muted-foreground">
+                      ({t("visibility.current")})
+                    </span>
+                  )}
+                </span>
+                <span className="type-body-sm block text-muted-foreground">{t(option.hint)}</span>
+              </span>
+            </label>
+          ))}
+
+          {/* O aviso fica sempre visível, e não só quando `public` está
+              marcado: quem já está público precisa lê-lo mais do que quem está
+              prestes a ficar. */}
+          <p className="type-body-sm mt-1 text-[var(--warn)]">{t("visibility.publicWarning")}</p>
+          <p className="type-meta text-muted-foreground">{t("visibility.neverShown")}</p>
+
+          <div>
+            <Button type="submit" size="sm" variant="outline">
+              {t("visibility.save")}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
 
 /**
  * Rótulos do histórico, já traduzidos.
@@ -67,6 +149,8 @@ export default async function CandidateArea() {
         </strong>
         .
       </p>
+
+      {person && <VisibilityCard current={person.visibility} t={t} />}
 
       {person && (
         <Card className="mb-6">

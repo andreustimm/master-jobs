@@ -16,6 +16,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "./db/client.ts";
 import { application, candidate, candidateDocument, job, jobScore } from "./db/schema.ts";
 import { loadProfile } from "./profile/load.ts";
+import { isVisibility, type Visibility } from "../contexts/auth/index.ts";
 
 /* -------------------------------------------------------------------------- */
 /* Profile                                                                     */
@@ -99,6 +100,30 @@ export async function getCandidateById(candidateId: number) {
   const db = getDb();
   const rows = await db.select().from(candidate).where(eq(candidate.id, candidateId)).limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * Muda quem alcança este perfil.
+ *
+ * Só o próprio candidato chama — nem admin nem recrutador. É dado dele, e a
+ * decisão de expor o currículo à internet inteira não é de terceiro.
+ *
+ * O valor é validado contra a lista antes de gravar: `visibility` é uma coluna
+ * de texto, e a política decide com base nela. Uma string livre vinda do
+ * formulário seria a própria brecha — gravar `"publico"` com erro de grafia
+ * deixaria o perfil em estado que nenhum ramo da política reconhece, e o padrão
+ * de negar salvaria por acaso, não por desenho.
+ */
+export async function setVisibility(
+  candidateId: number,
+  value: string,
+): Promise<{ ok: true; visibility: Visibility } | { ok: false; error: "invalid" }> {
+  if (!isVisibility(value)) return { ok: false, error: "invalid" };
+  await getDb()
+    .update(candidate)
+    .set({ visibility: value, updatedAt: new Date().toISOString() })
+    .where(eq(candidate.id, candidateId));
+  return { ok: true, visibility: value };
 }
 
 /* -------------------------------------------------------------------------- */

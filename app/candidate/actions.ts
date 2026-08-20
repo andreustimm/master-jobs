@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { guardOwnCandidate } from "../auth";
+import { setVisibility } from "../../src/core/candidate.ts";
 import {
   deleteDocument,
   documentById,
@@ -133,4 +134,25 @@ export async function readVersionAction(
   const doc = await documentById(candidateId, id);
   if (!doc) return { ok: false, error: "not-found" };
   return { ok: true, label: doc.label, content: doc.content };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Visibilidade do perfil                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Muda quem alcança o perfil: privado, recrutadores ou público.
+ *
+ * `guardOwnCandidate` não aceita id por parâmetro — o escopo sai da sessão.
+ * É o que impede alguém de mudar a visibilidade do perfil de outra pessoa
+ * mandando um id à mão, que aqui seria especialmente grave: a mudança é para
+ * MAIS exposição, e a vítima não teria como perceber.
+ */
+export async function setVisibilityAction(formData: FormData) {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+
+  const result = await setVisibility(candidateId, String(formData.get("visibility") ?? ""));
+  if (!result.ok) throw new Error("Visibilidade inválida.");
+
+  revalidatePath("/candidate");
 }

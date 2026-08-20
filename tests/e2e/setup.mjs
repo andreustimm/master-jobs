@@ -12,10 +12,11 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { authEvent, job } from "../../src/core/db/schema.ts";
+import { authEvent, authUser, job } from "../../src/core/db/schema.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
 import {
   currentDocument,
+  ensureCandidate,
   saveDocument,
   syncCandidateFromProfile,
 } from "../../src/core/candidate.ts";
@@ -28,6 +29,28 @@ import { scoreOne } from "../../src/core/scoring/apply.ts";
 
 const EMAIL = process.env.E2E_EMAIL ?? "e2e@local.test";
 const PASSWORD = process.env.E2E_PASSWORD ?? "conta-de-teste-e2e-42";
+
+/**
+ * Contas por papel.
+ *
+ * A suíte rodava com uma conta só, que é admin **e** candidato — e uma conta
+ * assim não distingue o que cada papel enxerga. Pior: sem uma segunda conta não
+ * há quem assumir, e a verificação de impersonação passava por não ter alvo, em
+ * vez de por funcionar.
+ *
+ * Cada uma existe para um cenário específico:
+ *
+ *   candidato  — o que um candidato puro vê, sem menu de administração
+ *   recrutador — sem vínculo, para provar que ele NÃO alcança currículo alheio
+ *   alvo       — a conta que o admin assume no ciclo de impersonação
+ *
+ * Primeiro passo do E-06. O percurso completo por papel é o item inteiro.
+ */
+export const E2E_ROLES = {
+  candidate: { email: "e2e-candidato@local.test", roles: ["candidate"] },
+  recruiter: { email: "e2e-recrutador@local.test", roles: ["recruiter"] },
+  target: { email: "e2e-alvo@local.test", roles: ["candidate"] },
+};
 
 try {
   await runMigrations();
@@ -73,12 +96,32 @@ try {
     await scoreOne(candidateId, seeded.jobId);
   }
 
+  // Contas por papel, cada uma com o próprio candidato quando o papel pede um.
+  // O slug deriva do e-mail: apontar duas contas para o mesmo candidato seria
+  // dar a uma o dado da outra, que é justamente o que a política impede.
+  for (const { email, roles } of Object.values(E2E_ROLES)) {
+    const [existing] = await getDb()
+      .select({ id: authUser.id })
+      .from(authUser)
+      .where(eq(authUser.email, email))
+      .limit(1);
+    if (existing) continue;
+
+    const scoped = roles.includes("candidate")
+      ? await ensureCandidate({ slug: `e2e-${email.split("@")[0]}`, name: email })
+      : null;
+    await getDb().insert(authUser).values({ email, roles, candidateId: scoped });
+  }
+
   const cleared = await getDb()
     .delete(authEvent)
     .where(and(eq(authEvent.kind, "login_failed"), eq(authEvent.email, EMAIL)))
     .returning({ id: authEvent.id });
 
-  console.log(`e2e: conta ${EMAIL} pronta · ${cleared.length} tentativa(s) limpa(s)`);
+  console.log(
+    `e2e: ${EMAIL} + ${Object.keys(E2E_ROLES).length} conta(s) por papel · ` +
+      `${cleared.length} tentativa(s) limpa(s)`,
+  );
 } finally {
   closeDb();
 }

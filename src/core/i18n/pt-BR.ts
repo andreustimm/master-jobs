@@ -384,6 +384,20 @@ export const ptBR = {
     exit: "Voltar a ser você",
     note: "Sessão emprestada: as ações de administração estão desligadas e este acesso ficou registrado.",
   },
+  /** Visibilidade do perfil (AUTH-03). */
+  visibility: {
+    title: "Quem vê este perfil",
+    private: "Privado",
+    privateHint: "Só você. Nada sai daqui.",
+    recruiters: "Recrutadores",
+    recruitersHint: "Recrutadores autenticados neste sistema encontram e leem seu perfil.",
+    public: "Público",
+    publicHint: "Qualquer pessoa na internet, sem login. Vale como portfólio.",
+    publicWarning: "Perfil público é legível por qualquer um, inclusive por buscadores. Deixe assim só se for isso que você quer.",
+    save: "Salvar visibilidade",
+    current: "agora",
+    neverShown: "Nunca aparecem em perfil público: e-mail, telefone, funil e candidaturas.",
+  },
   skillCategories: {
     language: "Linguagens",
     framework: "Frameworks",

@@ -491,6 +491,43 @@ try {
   );
 
 
+  /* ------------------- Visibilidade do perfil do candidato ----------------- */
+
+  // A escolha que decide se um currículo é legível pela internet inteira. O
+  // teste vai e volta para não deixar o perfil exposto se falhar no meio.
+  await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+
+  const visibility = await page.evaluate(() => ({
+    options: [...document.querySelectorAll('input[name="visibility"]')].map((i) => i.value),
+    checked: document.querySelector('input[name="visibility"]:checked')?.value ?? null,
+    warned: /legível por qualquer um/.test(document.body.textContent ?? ""),
+  }));
+  check(
+    "candidato escolhe quem vê o perfil",
+    visibility.options.join(",") === "private,recruiters,public",
+    visibility.options.join(","),
+  );
+  // "Público" soa inofensivo; o que ele significa não. O aviso fica sempre
+  // visível, inclusive para quem JÁ está público — que é quem mais precisa lê-lo.
+  check("o que 'público' significa está escrito na tela", visibility.warned);
+
+  const original = visibility.checked ?? "private";
+  await page.check('input[name="visibility"][value="recruiters"]');
+  await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
+  await page.waitForTimeout(1200);
+  await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  const saved = await page.evaluate(
+    () => document.querySelector('input[name="visibility"]:checked')?.value ?? null,
+  );
+  check("a escolha persiste", saved === "recruiters", `${saved}`);
+
+  // Devolve ao estado anterior: um teste que deixa o perfil mais exposto do que
+  // encontrou é pior que teste nenhum.
+  await page.check(`input[name="visibility"][value="${original}"]`);
+  await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
+  await page.waitForTimeout(1200);
+
+
   /* -------------------- Administração e impersonação ----------------------- */
 
   // O ciclo inteiro de assumir identidade, porque cada peça dele pode passar
@@ -506,7 +543,10 @@ try {
   const accountRows = await page.locator("li").count();
   check("administração lista as contas", accountRows > 0, `${accountRows} conta(s)`);
 
-  const target = page.locator("li").filter({ hasNotText: E2E_EMAIL }).first();
+  // Conta-alvo dedicada, criada pelo setup. Antes era "a primeira que não é a
+  // de teste", e numa base recém-criada não havia nenhuma — a verificação
+  // passava por falta de alvo em vez de por funcionar.
+  const target = page.locator("li").filter({ hasText: "e2e-alvo@local.test" }).first();
   const assume = target.locator('button:has-text("ASSUMIR"), button:has-text("Assumir")').first();
 
   if ((await assume.count()) > 0) {

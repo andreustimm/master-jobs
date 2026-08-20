@@ -714,85 +714,32 @@ cobre o campo agora.
 Rejeitar o rebaixamento ou a desabilitação do último admin ativo é regra
 explícita — sem ela a recuperação seria SQL na mão.
 
-### AUTH-03 · Visibilidade do perfil na área do candidato 📋
+### AUTH-03 · Visibilidade do perfil na área do candidato ✅
 
-A coluna `candidate.visibility` já existe, com `private` como default e um
-comentário no schema explicando que o default **é** a decisão de segurança.
-`can()` já a respeita em três ramos do case `candidate:read`: recrutador
-vinculado lê independentemente de visibilidade, recrutador autenticado alcança
-`recruiters`, e qualquer sessão alcança `public`. `Resource.visibility` é
-opcional com padrão `private` para que esquecer de carregar dê negativa, nunca
-permissão.
+#### Entregue em 20/08/2026
 
-**Contexto que restringe a solução.** Falta só a interface — e enquanto ela
-falta, o valor só muda por SQL, o que na prática significa que ninguém muda e
-todo perfil é privado. Isso não é defeito hoje; vira defeito no instante em
-que AUTH-04 existir, porque aí haverá uma página pública que nenhum candidato
-consegue ligar.
+Cartão no topo de `/candidate`, acima do currículo: é a decisão que governa tudo
+o que vem depois, e enterrá-la no rodapé produziria o pior caso — alguém que
+tornou o perfil público sem perceber e não tem motivo para rolar até lá.
 
----
+O aviso do que "público" significa fica **sempre** visível, não só quando a
+opção está marcada: quem já está público precisa lê-lo mais do que quem está
+prestes a ficar. E a lista do que nunca aparece — e-mail, telefone, funil,
+candidaturas — está na tela, não só na documentação.
 
-#### Decisões que a implementação precisa tomar
+`setVisibility` valida contra a lista antes de gravar. A coluna é texto e a
+política decide com base nela: gravar `"publico"` com erro de grafia deixaria o
+perfil num estado que nenhum ramo reconhece, e o padrão de negar salvaria por
+acaso e não por desenho.
 
-**1. O controle mora em `/candidate`, e não existe variante com alvo.**
+O e2e vai e volta ao estado original — um teste que deixa o perfil mais exposto
+do que encontrou é pior que teste nenhum.
 
-`requireOwnCandidatePage` e `guardOwnCandidate` não aceitam id — por
-construção, não por disciplina. A ação de visibilidade usa esse par e ignora
-qualquer `candidateId` que chegue no FormData. Não é preciso criar ação nova
-na união `ACTIONS`: `candidate:write` já exige posse derivada da sessão, e
-acrescentar `visibility:write` só criaria mais um caso para `can()` decidir
-exatamente a mesma coisa.
-
-**2. Os três níveis são descritos pelo que expõem, não pelo nome.**
-
-"Público" não informa nada. "Seu currículo fica legível por qualquer pessoa na
-internet, sem login" informa. O aviso é parte do controle e fica ao lado da
-opção — não em tooltip, não em ajuda recolhida. Este é o único lugar do
-sistema onde um clique do usuário publica dado na internet aberta; a tela
-precisa carregar esse peso.
-
-**3. `recruiters` alcança recrutador que o candidato nunca viu.**
-
-Está no case `candidate:read`: qualquer recrutador **autenticado** da
-instalação lê um perfil marcado `recruiters`, vinculado ou não. O rótulo soa
-como "os recrutadores que eu escolhi" e a política diz outra coisa — a tela
-precisa desfazer essa leitura, senão o usuário escolhe uma exposição achando
-que escolheu outra.
-
-**4. Subir a exposição confirma; descer, não.**
-
-Assimetria deliberada. Confirmar nas duas direções treina o usuário a clicar
-"sim" sem ler, e aí a confirmação que importa não protege mais nada. A
-confirmação de `public` deve repetir o que `public` significa, em vez de
-perguntar "tem certeza?".
-
-**5. Voltar para `private` não desfaz o que já saiu.**
-
-Se a página pública chegou a ser indexada ou compartilhada, o cache do
-buscador e o link que alguém salvou sobrevivem à mudança. Dizer isso no
-momento de ligar é mais honesto do que deixar o usuário descobrir depois, e é
-o tipo de aviso que só é útil antes.
-
-**6. A mudança precisa deixar linha, e falta decidir onde.**
-
-`auth_event` registra acesso, não decisão de perfil; `candidate.updated_at` só
-diz que algo mudou. Uma mudança de visibilidade é a única ação do candidato
-que altera quem no mundo alcança o dado dele, e vale saber quando foi ligada e
-quando foi desligada. Decidir entre um kind novo em `auth_event` e uma coluna
-de carimbo no próprio candidato faz parte da tarefa.
-
----
-
-#### O que fica de fora, e por quê
-
-**Visibilidade por campo.** Mostrar headline mas não o CV é decisão de *o que
-a página pública renderiza*, e isso é AUTH-04. Decidir a mesma coisa em duas
-telas garante que as duas discordem.
-
-**Lista nominal de recrutadores autorizados.** `recruiter_candidate` já existe
-e o vínculo já é criado por admin ou pelo próprio candidato. Transformar isso
-em tela de curadoria — convidar, revogar, ver quem olhou — é outra tarefa, com
-outro fluxo.
+**De quebra, um defeito na própria suíte:** o e2e rodava com uma conta só, que é
+admin e candidato ao mesmo tempo. Sem uma segunda conta não havia quem assumir, e
+a verificação de impersonação passava por falta de alvo em vez de por funcionar.
+O `setup.mjs` agora semeia contas por papel — candidato puro, recrutador sem
+vínculo e um alvo dedicado —, que é o primeiro passo do E-06.
 
 ### AUTH-04 · Página pública de portfólio 📋
 
