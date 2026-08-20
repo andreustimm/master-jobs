@@ -12,6 +12,7 @@ import type { listBoard } from "../src/contexts/matching/index.ts";
 import { isPublicJobUrl } from "../src/core/job-url.ts";
 import { formatMoney, money, parseCurrency, parsePeriod } from "../src/core/money.ts";
 import { ACTION_BUTTON, ACTION_GROUP, Fit, ScoreBar, StatusBadge } from "./ui";
+import { jobOrigin, ORIGIN_LABEL } from "../src/core/job-origin.ts";
 
 type Row = Awaited<ReturnType<typeof listBoard>>[number];
 
@@ -92,6 +93,17 @@ export function JobList({
                 {r.cluster && (
                   <Badge variant="outline" className="font-mono type-micro text-[var(--primary-text)]">
                     {r.cluster}
+                  </Badge>
+                )}
+                {/* De onde a vaga veio. Derivado de `source.kind` na leitura,
+                    nunca de coluna denormalizada — esta é a mesma armadilha do
+                    `cv_variant`, que guarda um nome e não um vínculo.
+
+                    `web` fica sem rótulo: é a maioria esmagadora do acervo, e
+                    marcar o comum só faz o incomum desaparecer no meio. */}
+                {jobOrigin(r.sourceId) !== "web" && (
+                  <Badge variant="outline" className="type-micro">
+                    {t(ORIGIN_LABEL[jobOrigin(r.sourceId)])}
                   </Badge>
                 )}
                 {salary && <span className="font-mono text-foreground">{salary}</span>}

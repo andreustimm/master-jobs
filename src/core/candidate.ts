@@ -96,6 +96,11 @@ export async function getCandidate(slug = "default") {
   return rows[0] ?? null;
 }
 
+/** Todos os candidatos. O acervo é global; cada um recebe a própria nota. */
+export async function listCandidates(): Promise<{ id: number }[]> {
+  return getDb().select({ id: candidate.id }).from(candidate);
+}
+
 export async function getCandidateById(candidateId: number) {
   const db = getDb();
   const rows = await db.select().from(candidate).where(eq(candidate.id, candidateId)).limit(1);

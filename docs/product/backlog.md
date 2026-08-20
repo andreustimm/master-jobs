@@ -446,91 +446,33 @@ criado sem pedir é efeito colateral fora do escopo. A receita:
 resposta. "Pausada", "preenchida" e afins exigiriam ler a página, não só o
 código HTTP — outro problema.
 
-### UI-04 · Cadastro de vaga por recrutador, com rótulo de origem 📋
+### UI-04 · Cadastro de vaga por recrutador, com rótulo de origem ✅
 
-Pedido em 20/08/2026, junto da entrega dos três papéis. `can()` já concede
-`job:write` a admin, candidato e recrutador — e o comentário daquele case já
-antecipa esta tarefa: *"a origem de cada uma fica registrada na `source`, para
-a tela poder dizer de onde veio"*. A permissão existe e não há por onde
-exercê-la: o dashboard não tem formulário de cadastro, só a CLI tem
-(`jho jobs add <url>` e `jho jobs import`), e a lista de vagas não diz de onde
-nenhuma delas veio.
+#### Entregue em 20/08/2026
 
-**Contexto que restringe a solução.** `src/core/sources/types.ts` já separa o
-que sincroniza do que não sincroniza: doze `FETCHABLE_SOURCE_KINDS` contra um
-único `MANUAL_SOURCE_KINDS`, e `SourceConfig.kind` aceita apenas o primeiro
-grupo — um kind manual não entra em `sources.yaml` nem aparece em
-`jho sources list` com "última sincronização: nunca" como se fosse defeito.
-`job.posted_by_user_id` já existe, referencia `auth_user` e o comentário dele
-já diz o que ele **não** é: atribuição (qual recrutador ofereceu), não rótulo.
+`/jobs/new`, chamando o mesmo `addManualDescriptionJob` da CLI — a interface é
+adaptador, não segunda implementação. `recruiter` entrou em
+`MANUAL_SOURCE_KINDS`, e o rótulo deriva de `source.kind` na leitura, via
+`jobOrigin()`.
 
----
+`web` fica sem rótulo de propósito: é a maioria esmagadora do acervo, e marcar
+o comum faz o incomum desaparecer no meio.
 
-#### Decisões que a implementação precisa tomar
+**Dois ajustes que o teste em browser forçou:**
 
-**1. O rótulo deriva de `source.kind` em tempo de leitura. Sempre.**
+A atribuição virou melhor esforço. Uma chave estrangeira que não resolve
+derrubava o cadastro inteiro e a pessoa perdia o que digitou — e o caso não é
+hipotético, o modo aberto sintetiza sessão com `userId: 0`, que não é linha
+nenhuma em `auth_user`. Vaga sem atribuição é um campo vazio; vaga não
+cadastrada é trabalho perdido.
 
-A alternativa — uma coluna `origin` em `job`, escrita no cadastro — é mais
-rápida de consultar e começa a divergir na primeira reclassificação de fonte.
-O projeto já pagou por esse erro: `application.cv_variant` guarda o nome da
-variante numa string solta em vez de apontar para `candidate_document.id`, e o
-resultado é um funil que afirma ter enviado um documento que não existe mais
-(UI-02). Vínculo que não é vínculo mente com cara de íntegro. Aqui o dado
-canônico é a `source`, e o rótulo é uma função dela.
+A vaga é pontuada na hora, para todos os candidatos. A ingestão em lote só
+invalida e deixa o cálculo para `jho jobs score`, o que é certo para milhares
+vindos do sync — mas aqui alguém acabou de digitar e vai procurar: sem score ela
+não aparece em lista nenhuma e a pessoa conclui que falhou.
 
-**2. `recruiter` como `MANUAL_SOURCE_KIND` novo, e não mais um `manual`.**
-
-Hoje `jho jobs add` e `jho jobs import` caem os dois em `manual`, com
-`ensureImportSource` criando `manual:<host>`. Se a vaga do recrutador também
-for `manual`, o rótulo deixa de distinguir "eu colei esta URL" de "um
-recrutador ofereceu isto" — e a distinção é a razão de existir da tarefa. Vaga
-com um recrutador identificado do outro lado se lê mais como referral do que
-como anúncio: há contraparte humana, canal de resposta e um interlocutor a
-quem perguntar. É informação de triagem, não de catálogo.
-
-O custo é baixo e vale registrar por que: kind novo em `MANUAL_SOURCE_KINDS`
-não força migração de dado nenhum (as vagas antigas seguem `manual`), não
-entra no union de configuração e não toca o registry de adapters, porque não
-há nada a buscar.
-
-**3. O formulário resolve antes de perguntar.**
-
-`src/core/ingest/manual.ts` já resolve uma URL pelo ATS e só cai no caminho
-`manual` quando não consegue. O formulário deve chamar esse mesmo caminho —
-URL primeiro, campos à mão apenas para o que não voltou. Reimplementar a
-resolução dentro da Server Action quebraria a invariante de que a UI é
-adaptador sobre as mesmas APIs públicas que a CLI usa, e produziria duas
-versões da mesma normalização divergindo em silêncio.
-
-**4. `posted_by_user_id` vem da sessão, e o formulário não o menciona.**
-
-Regra 15 na letra: id em FormData é pedido, não prova. A ação obtém o usuário
-de `guard("job:write")` e ignora qualquer campo homônimo que chegue.
-
-**5. Vaga cadastrada à mão pontua com o que tem, e o que falta vale neutro.**
-
-Um recrutador cola título, empresa e faixa; descrição completa quase nunca vem.
-Regra 8: ausência de descrição não é ausência de benefício, e `benefits` em
-texto curto vale 0,5 sem gerar bloqueador. Rebaixar a vaga porque o formulário
-foi curto seria pontuar a digitação, não o emprego.
-
----
-
-#### O que fica de fora, e por quê
-
-**Recrutador editar vaga que não cadastrou.** `job:write` é permissão de
-escrita no acervo global, que é compartilhado — não é posse. Edição
-retroativa por outro papel exigiria decidir precedência entre o que a fonte
-diz e o que a pessoa digitou, e isso é outra tarefa.
-
-**Oferecer a vaga a um candidato específico.** O vínculo recrutador→candidato
-já existe em `recruiter_candidate`, mas direcionar uma vaga a alguém cria
-notificação, e notificação sem canal de envio (F-05) não sai do banco.
-
-**Moderação por admin.** Fila de aprovação só faz sentido com volume vindo de
-fora e com mais de um recrutador. Antes disso é cerimônia.
-
-## P3 — Estrutura e futuro
+**Fica de fora, como o texto acima previa:** recrutador editar vaga alheia,
+direcionar vaga a um candidato (precisa de F-05) e moderação por admin.
 
 ### AUTH-01 · Autenticação e autorização ✅
 

@@ -50,8 +50,21 @@ export const FETCHABLE_SOURCE_KINDS = [
 
 export type FetchableSourceKind = (typeof FETCHABLE_SOURCE_KINDS)[number];
 
-/** Persistence-only sources are created by imports and never swept by sync. */
-export const MANUAL_SOURCE_KINDS = ["manual"] as const;
+/**
+ * Fontes que só existem no banco: criadas por importação, nunca varridas pelo
+ * sync — e por isso fora do union de configuração.
+ *
+ * `recruiter` é kind próprio, e não mais um `manual`, porque a distinção é a
+ * razão de existir do rótulo de origem: "eu colei esta URL" e "um recrutador
+ * ofereceu isto" são coisas diferentes na triagem. Vaga com recrutador
+ * identificado do outro lado se lê mais como referral do que como anúncio — há
+ * contraparte humana, canal de resposta e alguém a quem perguntar.
+ *
+ * Kind novo aqui não força migração: as vagas antigas seguem `manual`, o union
+ * de `SourceConfig` não muda e o registry de adapters não é tocado, porque não
+ * há nada a buscar.
+ */
+export const MANUAL_SOURCE_KINDS = ["manual", "recruiter"] as const;
 
 export type ManualSourceKind = (typeof MANUAL_SOURCE_KINDS)[number];
 

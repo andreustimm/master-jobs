@@ -16,9 +16,9 @@
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
-import { source } from "../db/schema.ts";
+import { job, source } from "../db/schema.ts";
 import { getAdapter } from "../sources/registry.ts";
-import type { RawJob } from "../sources/types.ts";
+import type { ManualSourceKind, RawJob } from "../sources/types.ts";
 import { fingerprint } from "./normalize.ts";
 import { describeUnfetchable, detectJobUrl } from "./detect.ts";
 import {
@@ -46,6 +46,16 @@ export type ManualJobInput = {
  * content and may have no public URL at all.
  */
 export type ManualDescriptionJobInput = {
+  /**
+   * Fonte a criar: `manual` (padrão) ou `recruiter`.
+   *
+   * Existe para o rótulo de origem poder distinguir "eu colei esta URL" de "um
+   * recrutador ofereceu isto" — que é a razão de existir do rótulo. Não muda
+   * nada além da `source`: o mesmo caminho de ingestão, a mesma normalização.
+   */
+  sourceKind?: ManualSourceKind;
+  /** Quem cadastrou, quando não veio da internet. Vem da SESSÃO, nunca do form. */
+  postedByUserId?: number | null;
   title: string;
   companyName: string;
   description: string;
@@ -261,8 +271,9 @@ export async function addManualDescriptionJob(
     .update(`manual-comparison|${stableId}`)
     .digest("hex")
     .slice(0, 32);
-  const canonicalUrl = publicUrl ?? `manual://local/${stableId}`;
-  const sourceId = `manual:${handle}`;
+  const kind: ManualSourceKind = input.sourceKind ?? "manual";
+  const canonicalUrl = publicUrl ?? `${kind}://local/${stableId}`;
+  const sourceId = `${kind}:${handle}`;
 
   const warnings = input.extractionWarnings ?? [];
   const comparisonMetadata = {
@@ -283,16 +294,38 @@ export async function addManualDescriptionJob(
     raw: comparisonMetadata,
   };
 
-  await ensureImportSource(sourceId, "manual", handle, publicUrl ? handle : "Manual");
+  await ensureImportSource(sourceId, kind, handle, publicUrl ? handle : "Manual");
   const observation = await observeRawJob(raw, sourceId, {
     fingerprintOverride: comparisonFingerprint,
   });
+
+  // Atribuição, não rótulo: o rótulo deriva de `source.kind`. Isto guarda QUAL
+  // recrutador ofereceu, para haver a quem perguntar.
+  //
+  // **Melhor esforço, e a ordem de importância é a razão.** A vaga é o dado; a
+  // atribuição é metadado sobre ela. Uma chave estrangeira que não resolve
+  // derrubava o cadastro inteiro e a pessoa perdia o que digitou — e o caso não
+  // é hipotético: o modo aberto sintetiza uma sessão com `userId: 0`, que não é
+  // linha nenhuma em `auth_user`.
+  //
+  // Falhar aqui vira aviso, não exceção. Vaga sem atribuição é uma vaga com um
+  // campo vazio; vaga não cadastrada é trabalho perdido.
+  if (input.postedByUserId != null && input.postedByUserId > 0) {
+    try {
+      await getDb()
+        .update(job)
+        .set({ postedByUserId: input.postedByUserId })
+        .where(eq(job.id, observation.jobId));
+    } catch {
+      warnings.push("Não foi possível registrar quem cadastrou a vaga.");
+    }
+  }
   return {
     jobId: observation.jobId,
     created: observation.outcome === "inserted",
     outcome: observation.outcome,
     via: "manual",
-    kind: "manual",
+    kind,
     title,
     companyName,
     warnings,
