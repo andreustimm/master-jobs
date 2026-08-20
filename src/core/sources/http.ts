@@ -8,6 +8,7 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 import { http, registerRealPort, type HttpPort } from "./http-port.ts";
+import { safeRemoteFetch } from "../remote-url.ts";
 
 export class HttpError extends Error {
   readonly status: number;
@@ -53,7 +54,7 @@ async function realGetJson<T = unknown>(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
     try {
-      const res = await fetch(url, {
+      const res = await safeRemoteFetch(url, {
         signal: controller.signal,
         headers: {
           accept: "application/json",
@@ -105,8 +106,7 @@ async function realGetText(
   opts: { timeoutMs?: number; headers?: Record<string, string> } = {},
 ): Promise<string | null> {
   try {
-    const res = await fetch(url, {
-      redirect: "follow",
+    const res = await safeRemoteFetch(url, {
       signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
       headers: {
         accept: "text/html,application/xhtml+xml",

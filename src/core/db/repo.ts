@@ -5,15 +5,19 @@
  * query changes it once, and the CLI and dashboard can never disagree about
  * what "shortlisted" or "open" means.
  */
-import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
-import { getDb } from "./client.ts";
+import { and, desc, eq, gte, isNull, sql, type SQL } from "drizzle-orm";
+import {
+  IllegalApplicationTransitionError,
+  transitionApplication,
+} from "../../contexts/pursuit/domain/application.ts";
+import { getDb, type DB } from "./client.ts";
 import {
   application,
   jobPage,
   applicationEvent,
+  candidateDocument,
   job,
   jobScore,
-  positioningTask,
   source,
   type ApplicationStatus,
   verifyTask,
@@ -101,45 +105,41 @@ export type BoardFilters = {
   offset?: number;
 };
 
-/** The main board: open jobs joined with score and pipeline state. */
-export async function listBoard(opts: BoardFilters = {}): Promise<BoardRow[]> {
-  const db = getDb();
-  const conditions = [isNull(job.closedAt)];
-
+function boardConditions(opts: BoardFilters): SQL[] {
+  const conditions: SQL[] = [isNull(job.closedAt)];
   conditions.push(gte(sql`coalesce(${jobScore.fit}, 0)`, opts.minFit ?? 0));
 
   if (opts.cluster) conditions.push(eq(jobScore.cluster, opts.cluster));
-
   if (opts.q) {
     const needle = `%${opts.q.toLowerCase()}%`;
     conditions.push(
       sql`(lower(${job.title}) like ${needle} or lower(${job.companyName}) like ${needle})`,
     );
   }
-
-  if (opts.sourceKind) {
-    conditions.push(sql`${job.sourceId} like ${`${opts.sourceKind}:%`}`);
-  }
-
-  // An empty JSON array is how "no blockers" is stored.
+  if (opts.sourceKind) conditions.push(sql`${job.sourceId} like ${`${opts.sourceKind}:%`}`);
   if (opts.hideBlocked) conditions.push(sql`coalesce(${jobScore.blockers}, '[]') = '[]'`);
-
   if (opts.freshDays && opts.freshDays > 0) {
     const cutoff = new Date(Date.now() - opts.freshDays * 86_400_000).toISOString();
-    // Fall back to first_seen_at: several sources omit a publication date, and
-    // dropping those silently would hide fresh jobs rather than stale ones.
     conditions.push(sql`coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${cutoff}`);
   }
-
   if (opts.hasComp) conditions.push(sql`coalesce(${job.compMax}, ${job.compMin}, 0) > 0`);
-
   if (opts.hasDescription) {
     conditions.push(sql`length(coalesce(${job.descriptionText}, '')) >= 200`);
   }
-
   if (opts.namedEmployer) {
     conditions.push(sql`lower(${job.companyName}) <> lower(coalesce(${source.label}, ''))`);
   }
+  if (opts.status === "unfiled") conditions.push(isNull(application.id));
+  else if (opts.status && opts.status !== "any") {
+    conditions.push(eq(application.status, opts.status));
+  }
+  return conditions;
+}
+
+/** The main board: open jobs joined with score and pipeline state. */
+export async function listBoard(candidateId: number, opts: BoardFilters = {}): Promise<BoardRow[]> {
+  const db = getDb();
+  const conditions = boardConditions(opts);
 
   const order =
     opts.sort === "recent"
@@ -184,8 +184,12 @@ export async function listBoard(opts: BoardFilters = {}): Promise<BoardRow[]> {
       // full descriptions average 7.400 characters. Sending all of it would
       // cost a megabyte to render a list nobody reads in full. The job's own
       // page loads the complete text, where it is one row and free.
-      pageText: sql<string | null>`substr(${jobPage.text}, 1, ${PREVIEW_CHARS})`,
-      pageTextLength: sql<number>`length(coalesce(${jobPage.text}, ''))`,
+      // Manual comparisons already carry their complete description in the
+      // canonical job row; they never pass through the scraper. Falling back
+      // only for that source keeps them readable from the board without
+      // inflating every row with a second copy of an adapter description.
+      pageText: sql<string | null>`substr(coalesce(${jobPage.text}, case when ${job.sourceId} like 'manual:%' then ${job.descriptionText} end), 1, ${PREVIEW_CHARS})`,
+      pageTextLength: sql<number>`length(coalesce(${jobPage.text}, case when ${job.sourceId} like 'manual:%' then ${job.descriptionText} end, ''))`,
       pageExtracted: jobPage.extracted,
       pageFetchedAt: jobPage.fetchedAt,
       status: application.status,
@@ -196,8 +200,14 @@ export async function listBoard(opts: BoardFilters = {}): Promise<BoardRow[]> {
       checkQueue: verifyTask.status,
     })
     .from(job)
-    .leftJoin(jobScore, eq(jobScore.jobId, job.id))
-    .leftJoin(application, eq(application.jobId, job.id))
+    .leftJoin(
+      jobScore,
+      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+    )
+    .leftJoin(
+      application,
+      and(eq(application.jobId, job.id), eq(application.candidateId, candidateId)),
+    )
     .leftJoin(source, eq(source.id, job.sourceId))
     .leftJoin(verifyTask, eq(verifyTask.jobId, job.id))
     .leftJoin(jobPage, eq(jobPage.jobId, job.id))
@@ -206,11 +216,6 @@ export async function listBoard(opts: BoardFilters = {}): Promise<BoardRow[]> {
     .limit(opts.limit ?? 200)
     .offset(opts.offset ?? 0);
 
-  // Pipeline status has no index worth a SQL branch at this size.
-  if (opts.status === "unfiled") return rows.filter((r) => r.status === null);
-  if (opts.status && opts.status !== "any") {
-    return rows.filter((r) => r.status === opts.status);
-  }
   return rows;
 }
 
@@ -221,123 +226,255 @@ export async function listBoard(opts: BoardFilters = {}): Promise<BoardRow[]> {
  * page itself. Re-uses the same predicate builder so a filter can never mean
  * one thing in the list and another in the count.
  */
-export async function countBoard(opts: BoardFilters = {}): Promise<number> {
-  // Status lives outside SQL (see listBoard), so a status filter must count
-  // through the same path rather than a separate COUNT.
-  if (opts.status && opts.status !== "any") {
-    const rows = await listBoard({ ...opts, limit: 5000, offset: 0 });
-    return rows.length;
-  }
-  const rows = await listBoard({ ...opts, limit: 5000, offset: 0 });
-  return rows.length;
+export async function countBoard(candidateId: number, opts: BoardFilters = {}): Promise<number> {
+  const [row] = await getDb()
+    .select({ count: sql<number>`count(*)` })
+    .from(job)
+    .leftJoin(
+      jobScore,
+      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+    )
+    .leftJoin(
+      application,
+      and(eq(application.jobId, job.id), eq(application.candidateId, candidateId)),
+    )
+    .leftJoin(source, eq(source.id, job.sourceId))
+    .where(and(...boardConditions(opts)));
+  return Number(row?.count ?? 0);
 }
 
 /** Counts for the filter chips, so the UI can show what each option yields. */
-export async function boardFacets(base: BoardFilters = {}) {
-  const [all, blocked, fresh, withComp, named, described] = await Promise.all([
-    listBoard({ ...base, limit: 5000 }),
-    listBoard({ ...base, hideBlocked: true, limit: 5000 }),
-    listBoard({ ...base, freshDays: 3, limit: 5000 }),
-    listBoard({ ...base, hasComp: true, limit: 5000 }),
-    listBoard({ ...base, namedEmployer: true, limit: 5000 }),
-    listBoard({ ...base, hasDescription: true, limit: 5000 }),
+export async function boardFacets(candidateId: number, base: BoardFilters = {}) {
+  const sourceKind = sql<string>`case
+    when instr(${job.sourceId}, ':') > 0 then substr(${job.sourceId}, 1, instr(${job.sourceId}, ':') - 1)
+    else ${job.sourceId}
+  end`;
+  const dimensions = { ...base, limit: undefined, offset: undefined };
+  const [total, unblocked, fresh, withComp, named, described, clusterRows, sourceRows] = await Promise.all([
+    countBoard(candidateId, dimensions),
+    countBoard(candidateId, { ...dimensions, hideBlocked: true }),
+    countBoard(candidateId, { ...dimensions, freshDays: 3 }),
+    countBoard(candidateId, { ...dimensions, hasComp: true }),
+    countBoard(candidateId, { ...dimensions, namedEmployer: true }),
+    countBoard(candidateId, { ...dimensions, hasDescription: true }),
+    getDb()
+      .select({ cluster: jobScore.cluster })
+      .from(job)
+      .leftJoin(
+        jobScore,
+        and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+      )
+      .leftJoin(
+        application,
+        and(eq(application.jobId, job.id), eq(application.candidateId, candidateId)),
+      )
+      .leftJoin(source, eq(source.id, job.sourceId))
+      .where(and(...boardConditions(dimensions), sql`${jobScore.cluster} is not null`))
+      .groupBy(jobScore.cluster)
+      .then((rows) => rows.map((row) => row.cluster!).sort()),
+    getDb()
+      .select({ kind: sourceKind })
+      .from(job)
+      .leftJoin(
+        jobScore,
+        and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+      )
+      .leftJoin(
+        application,
+        and(eq(application.jobId, job.id), eq(application.candidateId, candidateId)),
+      )
+      .leftJoin(source, eq(source.id, job.sourceId))
+      .where(and(...boardConditions(dimensions)))
+      .groupBy(sourceKind)
+      .then((rows) => rows.map((row) => row.kind).sort()),
   ]);
   return {
-    total: all.length,
-    unblocked: blocked.length,
-    fresh: fresh.length,
-    withComp: withComp.length,
-    named: named.length,
-    described: described.length,
-    clusters: [...new Set(all.map((r) => r.cluster).filter(Boolean))] as string[],
-    sources: [...new Set(all.map((r) => r.sourceId.split(":")[0]))] as string[],
+    total,
+    unblocked,
+    fresh,
+    withComp,
+    named,
+    described,
+    clusters: clusterRows,
+    sources: sourceRows,
   };
 }
 
 /** Move a job through the pipeline and record the transition. */
+type DbTransaction = Parameters<Parameters<DB["transaction"]>[0]>[0];
+
+/**
+ * Persist one aggregate transition using the caller's transaction.
+ *
+ * Integration use cases that atomically update another context (for example,
+ * accepting a mail suggestion) use this entry point so the suggestion,
+ * application and event either all commit or all roll back.
+ */
+export async function setApplicationStatusInTransaction(
+  tx: DbTransaction,
+  candidateId: number,
+  jobId: number,
+  status: ApplicationStatus,
+  detail?: string,
+  stamp = new Date().toISOString(),
+): Promise<void> {
+  const [previous] = await tx
+      .select()
+      .from(application)
+      .where(
+        and(
+          eq(application.candidateId, candidateId),
+          eq(application.jobId, jobId),
+        ),
+      )
+      .limit(1);
+
+  const transition = transitionApplication(
+    previous ? { status: previous.status, appliedAt: previous.appliedAt } : null,
+    status,
+    stamp,
+  );
+  if (!transition.ok) {
+    throw new IllegalApplicationTransitionError(
+      transition.error.from,
+      transition.error.to,
+    );
+  }
+  if (!transition.changed) return;
+
+  let applicationId: number;
+  if (previous) {
+    const updated = await tx
+        .update(application)
+        .set({
+          status: transition.state.status,
+          appliedAt: transition.state.appliedAt,
+          updatedAt: stamp,
+        })
+        // The status is the aggregate's optimistic concurrency token. Two
+        // commands may decide from the same snapshot, but only one can commit
+        // that snapshot and append its matching event.
+        .where(
+          and(
+            eq(application.id, previous.id),
+            eq(application.status, previous.status),
+          ),
+        )
+        .returning({ id: application.id });
+    if (updated.length !== 1) {
+      throw new ApplicationTransitionConflictError(candidateId, jobId);
+    }
+    applicationId = previous.id;
+  } else {
+    const [created] = await tx
+        .insert(application)
+        .values({
+          candidateId,
+          jobId,
+          status: transition.state.status,
+          appliedAt: transition.state.appliedAt,
+          updatedAt: stamp,
+        })
+        .returning({ id: application.id });
+    if (!created) throw new Error("application insert returned no row");
+    applicationId = created.id;
+  }
+
+  await tx.insert(applicationEvent).values({
+    applicationId,
+    at: transition.event.at,
+    kind: transition.event.kind,
+    fromStatus: transition.event.fromStatus,
+    toStatus: transition.event.toStatus,
+    detail: detail ?? null,
+  });
+}
+
+/** Move a job through the pipeline and record the transition. */
 export async function setApplicationStatus(
+  candidateId: number,
   jobId: number,
   status: ApplicationStatus,
   detail?: string,
 ): Promise<void> {
   const db = getDb();
-  const existing = await db
-    .select()
-    .from(application)
-    .where(eq(application.jobId, jobId))
-    .limit(1);
+  await db.transaction((tx) =>
+    setApplicationStatusInTransaction(tx, candidateId, jobId, status, detail),
+  );
+}
 
-  const stamp = new Date().toISOString();
-  const previous = existing[0];
+export class ApplicationTransitionConflictError extends Error {
+  readonly code = "application_transition_conflict";
 
-  if (!previous) {
-    const inserted = await db
-      .insert(application)
-      .values({
-        jobId,
-        status,
-        appliedAt: status === "applied" ? stamp : null,
-        updatedAt: stamp,
-      })
-      .returning({ id: application.id });
-    const created = inserted[0];
-    if (created) {
-      await db.insert(applicationEvent).values({
-        applicationId: created.id,
-        kind: "status_change",
-        toStatus: status,
-        detail: detail ?? null,
-      });
-    }
-    return;
+  constructor(candidateId: number, jobId: number) {
+    super(`Application changed concurrently: candidate ${candidateId}, job ${jobId}`);
+    this.name = "ApplicationTransitionConflictError";
   }
+}
 
-  await db
-    .update(application)
-    .set({
-      status,
-      updatedAt: stamp,
-      // Stamp the application date the first time it reaches `applied`.
-      appliedAt: status === "applied" && !previous.appliedAt ? stamp : previous.appliedAt,
-    })
-    .where(eq(application.id, previous.id));
+/** Record the exact candidate-owned document sent with an application. */
+export async function setApplicationDocument(
+  candidateId: number,
+  jobId: number,
+  documentId: number | null,
+): Promise<void> {
+  const db = getDb();
+  await db.transaction(async (tx) => {
+    if (documentId !== null) {
+      const [owned] = await tx
+        .select({ id: candidateDocument.id })
+        .from(candidateDocument)
+        .where(
+          and(
+            eq(candidateDocument.id, documentId),
+            eq(candidateDocument.candidateId, candidateId),
+          ),
+        )
+        .limit(1);
+      if (!owned) throw new Error(`Documento ${documentId} não pertence ao candidato`);
+    }
 
-  await db.insert(applicationEvent).values({
-    applicationId: previous.id,
-    kind: "status_change",
-    fromStatus: previous.status,
-    toStatus: status,
-    detail: detail ?? null,
+    const updated = await tx
+      .update(application)
+      .set({ candidateDocumentId: documentId, updatedAt: new Date().toISOString() })
+      .where(
+        and(
+          eq(application.candidateId, candidateId),
+          eq(application.jobId, jobId),
+        ),
+      )
+      .returning({ id: application.id });
+    if (updated.length !== 1) {
+      throw new Error(`Candidatura não encontrada: candidato ${candidateId}, vaga ${jobId}`);
+    }
   });
 }
 
 /** Funnel counts for the dashboard header. */
-export async function pipelineCounts(): Promise<Record<string, number>> {
+export async function pipelineCounts(candidateId: number): Promise<Record<string, number>> {
   const db = getDb();
   const rows = await db
     .select({ status: application.status, n: sql<number>`count(*)` })
     .from(application)
+    .where(eq(application.candidateId, candidateId))
     .groupBy(application.status);
   return Object.fromEntries(rows.map((r) => [r.status, Number(r.n)]));
 }
 
-export async function openTasks() {
-  const db = getDb();
-  return db
-    .select()
-    .from(positioningTask)
-    .where(sql`${positioningTask.status} in ('todo','doing')`)
-    .orderBy(positioningTask.priority, positioningTask.horizon);
-}
-
 /** Everything the detail view needs, in one round trip. */
-export async function getJobDetail(jobId: number) {
+export async function getJobDetail(candidateId: number, jobId: number) {
   const db = getDb();
   const rows = await db
     .select()
     .from(job)
-    .leftJoin(jobScore, eq(jobScore.jobId, job.id))
-    .leftJoin(application, eq(application.jobId, job.id))
+    .leftJoin(
+      jobScore,
+      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+    )
+    .leftJoin(
+      application,
+      and(eq(application.jobId, job.id), eq(application.candidateId, candidateId)),
+    )
     .leftJoin(source, eq(source.id, job.sourceId))
     .where(eq(job.id, jobId))
     .limit(1);
@@ -352,25 +489,48 @@ export async function getJobDetail(jobId: number) {
   };
 }
 
+/** Global job and canonical score, deliberately excluding private funnel data. */
+export async function getJobScoringDetail(candidateId: number, jobId: number) {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(job)
+    .leftJoin(
+      jobScore,
+      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+    )
+    .leftJoin(source, eq(source.id, job.sourceId))
+    .where(eq(job.id, jobId))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    job: row.job,
+    score: row.job_score,
+    source: row.source,
+  };
+}
+
 /** Headline numbers for the cockpit. */
-export async function corpusStats() {
+export async function corpusStats(candidateId: number) {
   const db = getDb();
   const [row] = await db
     .select({
       open: sql<number>`(select count(*) from job where closed_at is null)`,
       companies: sql<number>`(select count(*) from company)`,
       sources: sql<number>`(select count(*) from source where enabled = 1)`,
-      above45: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where j.closed_at is null and s.fit >= 45)`,
-      above60: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where j.closed_at is null and s.fit >= 60)`,
-      above70: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where j.closed_at is null and s.fit >= 70)`,
-      best: sql<number>`(select coalesce(max(fit), 0) from job_score s join job j on j.id = s.job_id where j.closed_at is null)`,
+      above45: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 45)`,
+      above60: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 60)`,
+      above70: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 70)`,
+      best: sql<number>`(select coalesce(max(fit), 0) from job_score s join job j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null)`,
     })
     .from(sql`(select 1)`);
   return row;
 }
 
 /** Cluster distribution above a cut, for the cockpit chart. */
-export async function clusterBreakdown(minFit = 45) {
+export async function clusterBreakdown(candidateId: number, minFit = 45) {
   const db = getDb();
   return db
     .select({
@@ -380,13 +540,19 @@ export async function clusterBreakdown(minFit = 45) {
     })
     .from(jobScore)
     .innerJoin(job, eq(job.id, jobScore.jobId))
-    .where(and(isNull(job.closedAt), gte(jobScore.fit, minFit)))
+    .where(
+      and(
+        eq(jobScore.candidateId, candidateId),
+        isNull(job.closedAt),
+        gte(jobScore.fit, minFit),
+      ),
+    )
     .groupBy(jobScore.cluster)
     .orderBy(desc(sql`count(*)`));
 }
 
 /** The funnel, with the job each application points at. */
-export async function pipelineRows() {
+export async function pipelineRows(candidateId: number) {
   const db = getDb();
   return db
     .select({
@@ -404,6 +570,10 @@ export async function pipelineRows() {
     })
     .from(application)
     .innerJoin(job, eq(job.id, application.jobId))
-    .leftJoin(jobScore, eq(jobScore.jobId, job.id))
+    .leftJoin(
+      jobScore,
+      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+    )
+    .where(eq(application.candidateId, candidateId))
     .orderBy(desc(application.updatedAt));
 }

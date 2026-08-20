@@ -26,10 +26,24 @@ export function dictionary(locale: LocaleId = DEFAULT_LOCALE): Dictionary {
   return DICTIONARIES[locale] ?? DICTIONARIES[DEFAULT_LOCALE];
 }
 
+type LeafPaths<T> = {
+  [Key in keyof T & string]: T[Key] extends string
+    ? Key
+    : T[Key] extends Record<string, unknown>
+      ? `${Key}.${LeafPaths<T[Key]>}`
+      : never;
+}[keyof T & string];
+
+/** Every valid leaf in the reference dictionary, e.g. `nav.jobs`. */
+export type TranslationKey = LeafPaths<Dictionary>;
+
 export type Translator = {
   readonly locale: LocaleId;
   /** `t("nav.jobs")`, com interpolação opcional de `{chave}`. */
-  t(path: string, values?: Record<string, string | number>): string;
+  t<Key extends TranslationKey>(
+    path: Key,
+    values?: Record<string, string | number>,
+  ): string;
   /** O dicionário inteiro, para quem prefere acesso tipado. */
   readonly d: Dictionary;
 };
@@ -70,3 +84,5 @@ export function formatDate(iso: string, locale: LocaleId): string {
   if (Number.isNaN(date.getTime())) return iso;
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(date);
 }
+
+export { renderScoreMessage } from "./score-message.ts";

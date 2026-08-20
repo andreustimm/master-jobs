@@ -4,10 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { syncCandidateFromProfile } from "../../../src/core/candidate.ts";
-import { candidateSkills, skillDemand } from "../../../src/core/skills.ts";
+import {
+  SKILL_CATEGORIES,
+  candidateSkills,
+  skillDemand,
+  type SkillCategory,
+} from "../../../src/contexts/skills/index.ts";
+import type { TranslationKey } from "../../../src/core/i18n/index.ts";
 import { auditAction, detectAction } from "./actions";
-import { requirePage } from "../../auth";
+import { requireOwnCandidatePage } from "../../auth";
 import { getTranslator } from "../../i18n";
 
 export const dynamic = "force-dynamic";
@@ -19,26 +24,23 @@ export const dynamic = "force-dynamic";
  * rótulo dentro de constante não aparece em busca por string no JSX, então
  * sobrevive a uma revisão de tradução inteira. Constante guarda chave.
  */
-const CATEGORY_KEYS = [
-  "language",
-  "framework",
-  "ai",
-  "cloud",
-  "data",
-  "practice",
-  "domain",
-  "tool",
-  "soft",
-] as const;
+const CATEGORY_LABEL_KEYS = {
+  language: "skillCategories.language",
+  framework: "skillCategories.framework",
+  ai: "skillCategories.ai",
+  cloud: "skillCategories.cloud",
+  data: "skillCategories.data",
+  practice: "skillCategories.practice",
+  domain: "skillCategories.domain",
+  tool: "skillCategories.tool",
+  soft: "skillCategories.soft",
+} satisfies Record<SkillCategory, TranslationKey>;
 
 export default async function SkillsPage() {
   const { t, locale } = await getTranslator();
   void locale;
   // Guard antes de ler qualquer dado. O escopo vem da sessão.
-  const session = await requirePage("candidate:read");
-  void session;
-
-  const candidateId = await syncCandidateFromProfile();
+  const { candidateId } = await requireOwnCandidatePage("candidate:read");
   const [mine, demand] = await Promise.all([
     candidateSkills(candidateId),
     skillDemand({ minFit: 60, candidateId }),
@@ -51,7 +53,7 @@ export default async function SkillsPage() {
   // What the market asks for and the candidate does not have confirmed.
   const gaps = demand.filter((d) => d.demand >= 0.15 && d.candidateStatus !== "confirmed");
 
-  const byCategory = pending.reduce<Record<string, typeof pending>>((acc, s) => {
+  const byCategory = pending.reduce<Partial<Record<SkillCategory, typeof pending>>>((acc, s) => {
     (acc[s.category] ??= []).push(s);
     return acc;
   }, {});
@@ -128,49 +130,53 @@ export default async function SkillsPage() {
             {t("copy.auditNote")}
           </p>
 
-          {Object.entries(byCategory).map(([cat, items]) => (
-            <div key={cat} className="mb-6">
-              <h3 className="mb-2 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
-                {(CATEGORY_KEYS as readonly string[]).includes(cat) ? t(`skillCategories.${cat}`) : cat}
-              </h3>
-              <div className="divide-y overflow-hidden rounded-xl border">
-                {items.map((s) => (
-                  <div key={s.id} className="grid gap-2 bg-card px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span data-user-content className="font-semibold">{s.name}</span>
-                      <Badge variant="outline" className="font-mono type-micro">
-                        {s.occurrences}× no CV
-                      </Badge>
-                      <span className="ml-auto flex gap-2">
-                        <form action={auditAction}>
-                          <input type="hidden" name="id" value={s.id} />
-                          <input type="hidden" name="status" value="confirmed" />
-                          <Button type="submit" size="sm" className="h-7">
-                            {t("skills.confirm")}
-                          </Button>
-                        </form>
-                        <form action={auditAction}>
-                          <input type="hidden" name="id" value={s.id} />
-                          <input type="hidden" name="status" value="rejected" />
-                          <Button type="submit" size="sm" variant="outline" className="h-7">
-                            {t("skills.reject")}
-                          </Button>
-                        </form>
-                      </span>
+          {SKILL_CATEGORIES.map((category) => {
+            const items = byCategory[category];
+            if (!items?.length) return null;
+            return (
+              <div key={category} className="mb-6">
+                <h3 className="mb-2 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
+                  {t(CATEGORY_LABEL_KEYS[category])}
+                </h3>
+                <div className="divide-y overflow-hidden rounded-xl border">
+                  {items.map((s) => (
+                    <div key={s.id} className="grid gap-2 bg-card px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span data-user-content className="font-semibold">{s.name}</span>
+                        <Badge variant="outline" className="font-mono type-micro">
+                          {s.occurrences}× no CV
+                        </Badge>
+                        <span className="ml-auto flex gap-2">
+                          <form action={auditAction}>
+                            <input type="hidden" name="id" value={s.id} />
+                            <input type="hidden" name="status" value="confirmed" />
+                            <Button type="submit" size="sm" className="h-7">
+                              {t("skills.confirm")}
+                            </Button>
+                          </form>
+                          <form action={auditAction}>
+                            <input type="hidden" name="id" value={s.id} />
+                            <input type="hidden" name="status" value="rejected" />
+                            <Button type="submit" size="sm" variant="outline" className="h-7">
+                              {t("skills.reject")}
+                            </Button>
+                          </form>
+                        </span>
+                      </div>
+                      {s.evidence && (
+                        <p
+                          data-user-content
+                          className="border-l-2 border-border pl-3 text-xs text-muted-foreground italic"
+                        >
+                          {s.evidence}
+                        </p>
+                      )}
                     </div>
-                    {s.evidence && (
-                      <p
-                        data-user-content
-                        className="border-l-2 border-border pl-3 text-xs text-muted-foreground italic"
-                      >
-                        {s.evidence}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </section>
       )}
 
@@ -213,11 +219,11 @@ export default async function SkillsPage() {
 
       {mine.length === 0 && (
         <Card className="p-6 text-sm text-muted-foreground">
-          Nenhuma skill detectada ainda. Salve um currículo em{" "}
+          {t("skills.emptyBefore")} {" "}
           <Link href="/candidate" className="text-[var(--primary-text)] hover:underline">
             /candidate
           </Link>{" "}
-          e clique em “Redetectar do CV”.
+          {t("skills.emptyAfter")}
         </Card>
       )}
     </main>

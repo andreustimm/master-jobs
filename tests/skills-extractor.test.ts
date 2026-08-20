@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { extractSkills, groupByCategory } from "../src/contexts/skills/domain/extractor.ts";
+import { findSkillOccurrences } from "../src/contexts/skills/domain/matcher.ts";
 import { aliasStrategy, appliedStrategy, declaredStrategy } from "../src/contexts/skills/domain/strategies.ts";
-import { buildSectionMap, contextAt, findOccurrences } from "../src/contexts/skills/domain/text.ts";
+import { buildSectionMap, contextAt } from "../src/contexts/skills/domain/text.ts";
 import type { SkillDefinition } from "../src/contexts/skills/domain/types.ts";
 
 const CATALOG: SkillDefinition[] = [
@@ -15,25 +16,34 @@ const CATALOG: SkillDefinition[] = [
 
 /* --------------------------------------------------------------- text ---- */
 
-describe("findOccurrences", () => {
+describe("findSkillOccurrences", () => {
   it("respects word boundaries", () => {
     // The classic failure: "go" firing inside "going".
-    expect(findOccurrences("we are going forward", "go")).toHaveLength(0);
-    expect(findOccurrences("we use Go daily", "go")).toHaveLength(1);
+    expect(findSkillOccurrences("we are going forward", "go")).toHaveLength(0);
+    expect(findSkillOccurrences("we use Go daily", "go")).toHaveLength(1);
   });
 
   it("handles the characters real technology names contain", () => {
-    expect(findOccurrences("built in C# and F#", "c#")).toHaveLength(1);
-    expect(findOccurrences("Node.js backend", "node.js")).toHaveLength(1);
-    expect(findOccurrences("CI/CD pipeline", "ci/cd")).toHaveLength(1);
+    expect(findSkillOccurrences("built in C# and F#", "c#")).toHaveLength(1);
+    expect(findSkillOccurrences("Node.js backend", "node.js")).toHaveLength(1);
+    expect(findSkillOccurrences("CI/CD pipeline", "ci/cd")).toHaveLength(1);
   });
 
   it("is case-insensitive and finds every occurrence", () => {
-    expect(findOccurrences("Python, python and PYTHON", "python")).toHaveLength(3);
+    expect(findSkillOccurrences("Python, python and PYTHON", "python")).toHaveLength(3);
   });
 
   it("does not match inside a longer word", () => {
-    expect(findOccurrences("javascript", "java")).toHaveLength(0);
+    expect(findSkillOccurrences("javascript", "java")).toHaveLength(0);
+  });
+
+  it("finds adjacent terms without consuming their shared boundary", () => {
+    expect(findSkillOccurrences("Python Python", "python")).toEqual([0, 7]);
+  });
+
+  it("normalizes whitespace inside multi-word terms", () => {
+    expect(findSkillOccurrences("Built retrieval\n augmented generation", "retrieval augmented generation"))
+      .toHaveLength(1);
   });
 });
 

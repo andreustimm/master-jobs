@@ -13,13 +13,20 @@
  * scorer. That matters because it must dedupe against the same posting arriving
  * later through a sync.
  */
+import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
-import { company, job, source } from "../db/schema.ts";
+import { source } from "../db/schema.ts";
 import { getAdapter } from "../sources/registry.ts";
 import type { RawJob } from "../sources/types.ts";
-import { contentHash, fingerprint, slugifyCompany, toIsoDate } from "./normalize.ts";
+import { fingerprint } from "./normalize.ts";
 import { describeUnfetchable, detectJobUrl } from "./detect.ts";
+import {
+  observeRawJob,
+  type JobObservation,
+  type JobObservationOutcome,
+  type ObserveRawJobOptions,
+} from "./observe.ts";
 
 export type ManualJobInput = {
   url: string;
@@ -31,9 +38,30 @@ export type ManualJobInput = {
   notes?: string;
 };
 
+/**
+ * A job supplied as text rather than resolved from an ATS.
+ *
+ * This is separate from `ManualJobInput`: the CLI path starts from a required
+ * URL and tries a public adapter first, while the compare screen starts from
+ * content and may have no public URL at all.
+ */
+export type ManualDescriptionJobInput = {
+  title: string;
+  companyName: string;
+  description: string;
+  location?: string;
+  url?: string;
+  inputMethod: "paste" | "file";
+  sourceFilename?: string;
+  documentFormat?: "pdf" | "text" | "markdown";
+  pages?: number | null;
+  extractionWarnings?: string[];
+};
+
 export type AddJobResult = {
   jobId: number;
   created: boolean;
+  outcome: JobObservationOutcome;
   /** How the posting was resolved. */
   via: "ats" | "manual";
   kind: string;
@@ -54,74 +82,19 @@ export async function ensureImportSource(id: string, kind: string, handle: strin
       handle,
       label,
       enabled: false, // manual sources are not swept by `jobs sync`
-      rationale: "Criada automaticamente por `jho jobs add`",
+      rationale: "Criada automaticamente por ingestão manual",
     })
     .onConflictDoNothing({ target: source.id });
 }
 
-async function ensureCompany(name: string): Promise<number | null> {
-  const db = getDb();
-  const slug = slugifyCompany(name);
-  if (!slug) return null;
-  await db.insert(company).values({ slug, name }).onConflictDoNothing({ target: company.slug });
-  const found = await db.select({ id: company.id }).from(company).where(eq(company.slug, slug)).limit(1);
-  return found[0]?.id ?? null;
-}
-
+/** @deprecated Use `observeRawJob`; kept as a compatibility facade. */
 export async function upsertRawJob(
   raw: RawJob,
   sourceId: string,
-): Promise<{ jobId: number; created: boolean }> {
-  const db = getDb();
-  const fp = fingerprint(raw);
-  const stamp = new Date().toISOString();
-
-  const existing = await db
-    .select({ id: job.id })
-    .from(job)
-    .where(eq(job.fingerprint, fp))
-    .limit(1);
-
-  const companyId = await ensureCompany(raw.companyName);
-  const values = {
-    fingerprint: fp,
-    contentHash: contentHash(raw),
-    sourceId,
-    externalId: raw.externalId,
-    companyId,
-    companyName: raw.companyName,
-    title: raw.title,
-    descriptionHtml: raw.descriptionHtml ?? null,
-    descriptionText: raw.descriptionText ?? null,
-    locationRaw: raw.locationRaw ?? null,
-    remote: raw.remote ?? null,
-    employmentType: raw.employmentType ?? null,
-    seniorityRaw: raw.seniorityRaw ?? null,
-    compMin: raw.compMin ?? null,
-    compMax: raw.compMax ?? null,
-    compCurrency: raw.compCurrency ?? null,
-    compPeriod: raw.compPeriod ?? null,
-    url: raw.url,
-    applyUrl: raw.applyUrl ?? raw.url,
-    postedAt: toIsoDate(raw.postedAt),
-    lastSeenAt: stamp,
-    raw: raw.raw,
-  };
-
-  const found = existing[0];
-  if (found) {
-    // Re-adding a known posting reopens it rather than duplicating.
-    await db.update(job).set({ ...values, closedAt: null }).where(eq(job.id, found.id));
-    return { jobId: found.id, created: false };
-  }
-
-  const inserted = await db
-    .insert(job)
-    .values({ ...values, firstSeenAt: stamp })
-    .returning({ id: job.id });
-  const created = inserted[0];
-  if (!created) throw new Error("insert returned no row");
-  return { jobId: created.id, created: true };
+  options: ObserveRawJobOptions = {},
+): Promise<JobObservation & { created: boolean }> {
+  const observation = await observeRawJob(raw, sourceId, options);
+  return { ...observation, created: observation.outcome === "inserted" };
 }
 
 export async function addJob(input: ManualJobInput): Promise<AddJobResult> {
@@ -158,10 +131,11 @@ export async function addJob(input: ManualJobInput): Promise<AddJobResult> {
         jobs.find((j) => j.url === input.url || j.applyUrl === input.url);
 
       if (match) {
-        const { jobId, created } = await upsertRawJob(match, sourceId);
+        const observation = await observeRawJob(match, sourceId);
         return {
-          jobId,
-          created,
+          jobId: observation.jobId,
+          created: observation.outcome === "inserted",
+          outcome: observation.outcome,
           via: "ats",
           kind: detected.kind,
           title: match.title,
@@ -228,15 +202,99 @@ export async function addJob(input: ManualJobInput): Promise<AddJobResult> {
     );
   }
 
-  const { jobId, created } = await upsertRawJob(raw, sourceId);
+  const observation = await observeRawJob(raw, sourceId);
   return {
-    jobId,
-    created,
+    jobId: observation.jobId,
+    created: observation.outcome === "inserted",
+    outcome: observation.outcome,
     via: "manual",
     kind: "manual",
     title: raw.title,
     companyName: raw.companyName,
     unfetchableHost,
+    warnings,
+  };
+}
+
+/**
+ * Stores pasted or uploaded text as a first-class job.
+ *
+ * The synthetic URL exists only because the schema requires a stable origin.
+ * It is never rendered as an external link. Comparison jobs use an explicit
+ * fingerprint namespace: a user's pasted observation must never overwrite or
+ * reopen a canonical ATS observation that happens to share company/title/place.
+ */
+export async function addManualDescriptionJob(
+  input: ManualDescriptionJobInput,
+): Promise<AddJobResult> {
+  const title = input.title.trim();
+  const companyName = input.companyName.trim();
+  const description = input.description.trim();
+  const location = input.location?.trim() || null;
+
+  if (!title) throw new Error("Informe o cargo da vaga manual.");
+  if (!companyName) throw new Error("Informe a empresa da vaga manual.");
+  if (!description) throw new Error("Informe a descrição da vaga manual.");
+
+  let publicUrl: string | null = null;
+  let handle = "local";
+  if (input.url?.trim()) {
+    const parsed = new URL(input.url.trim());
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error("A URL pública precisa usar HTTP ou HTTPS.");
+    }
+    publicUrl = parsed.toString();
+    handle = parsed.hostname.replace(/^www\./, "");
+  }
+
+  const identity: RawJob = {
+    externalId: "pending",
+    companyName,
+    title,
+    url: "manual://pending",
+    locationRaw: location,
+    descriptionText: description,
+    raw: {},
+  };
+  const stableId = fingerprint(identity);
+  const comparisonFingerprint = createHash("sha256")
+    .update(`manual-comparison|${stableId}`)
+    .digest("hex")
+    .slice(0, 32);
+  const canonicalUrl = publicUrl ?? `manual://local/${stableId}`;
+  const sourceId = `manual:${handle}`;
+
+  const warnings = input.extractionWarnings ?? [];
+  const comparisonMetadata = {
+    manual: true,
+    addedAt: new Date().toISOString(),
+    inputMethod: input.inputMethod,
+    sourceFilename: input.sourceFilename ?? null,
+    documentFormat: input.documentFormat ?? null,
+    pages: input.pages ?? null,
+    extractionWarnings: warnings,
+    publicUrl,
+  };
+  const raw: RawJob = {
+    ...identity,
+    externalId: canonicalUrl,
+    url: canonicalUrl,
+    applyUrl: canonicalUrl,
+    raw: comparisonMetadata,
+  };
+
+  await ensureImportSource(sourceId, "manual", handle, publicUrl ? handle : "Manual");
+  const observation = await observeRawJob(raw, sourceId, {
+    fingerprintOverride: comparisonFingerprint,
+  });
+  return {
+    jobId: observation.jobId,
+    created: observation.outcome === "inserted",
+    outcome: observation.outcome,
+    via: "manual",
+    kind: "manual",
+    title,
+    companyName,
     warnings,
   };
 }

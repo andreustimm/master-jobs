@@ -26,6 +26,7 @@ export type Session = {
  */
 export const ACTIONS = [
   "job:read",
+  "job:write",
   "application:write",
   "candidate:read",
   "candidate:write",

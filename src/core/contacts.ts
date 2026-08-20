@@ -10,7 +10,7 @@
  * so that when a strong match appears the system says "you know someone here"
  * instead of leaving that connection in your memory.
  */
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "./db/client.ts";
 import { application, job, targetAccount } from "./db/schema.ts";
 import { slugifyCompany } from "./ingest/normalize.ts";
@@ -133,7 +133,10 @@ export type ReferralOpportunity = {
  * decent-fit company beats a cold application at a perfect-fit one, and until
  * now the funnel had no way of telling you that.
  */
-export async function referralOpportunities(minFit = 45): Promise<ReferralOpportunity[]> {
+export async function referralOpportunities(
+  candidateId: number,
+  minFit = 45,
+): Promise<ReferralOpportunity[]> {
   const db = getDb();
   const contacts = await companiesWithContacts();
   if (contacts.size === 0) return [];
@@ -145,12 +148,15 @@ export async function referralOpportunities(minFit = 45): Promise<ReferralOpport
       companyName: job.companyName,
       url: job.url,
       applyUrl: job.applyUrl,
-      fit: sql<number>`coalesce((select fit from job_score where job_id = ${job.id}), 0)`,
-      cluster: sql<string | null>`(select cluster from job_score where job_id = ${job.id})`,
+      fit: sql<number>`coalesce((select fit from job_score where candidate_id = ${candidateId} and job_id = ${job.id}), 0)`,
+      cluster: sql<string | null>`(select cluster from job_score where candidate_id = ${candidateId} and job_id = ${job.id})`,
       status: application.status,
     })
     .from(job)
-    .leftJoin(application, eq(application.jobId, job.id))
+    .leftJoin(
+      application,
+      and(eq(application.jobId, job.id), eq(application.candidateId, candidateId)),
+    )
     .where(sql`${job.closedAt} is null`);
 
   return rows

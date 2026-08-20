@@ -1,5 +1,9 @@
-import { listBoard } from "../../../src/core/db/repo.ts";
+import { listBoard } from "../../../src/contexts/matching/index.ts";
+import { scoreMessages } from "../../../src/contexts/matching/index.ts";
+import { renderScoreMessage } from "../../../src/core/i18n/index.ts";
+import { requireOwnCandidatePage } from "../../auth";
 import { readFilters, toBoardFilters } from "../../filters";
+import { getTranslator } from "../../i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -34,13 +38,18 @@ const COLUMNS = [
  * CSV can never disagree with the list the user was looking at.
  */
 export async function GET(request: Request) {
+  // Middleware only proves that a cookie exists. Resolve it here before this
+  // endpoint reads the complete corpus and the private funnel into one CSV.
+  const { candidateId } = await requireOwnCandidatePage("candidate:read");
+  const { t } = await getTranslator();
+
   const params = Object.fromEntries(new URL(request.url).searchParams.entries());
   const filters = toBoardFilters(readFilters(params));
-  const rows = await listBoard({ ...filters, limit: 5000 });
+  const rows = await listBoard(candidateId, { ...filters, limit: 5000 });
 
   const lines = [COLUMNS.join(",")];
   for (const r of rows) {
-    const blockers = Array.isArray(r.blockers) ? (r.blockers as string[]) : [];
+    const blockers = scoreMessages(r.blockers).map((blocker) => renderScoreMessage(blocker, t));
     lines.push(
       [
         r.jobId,

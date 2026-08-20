@@ -95,6 +95,12 @@ export async function getCandidate(slug = "default") {
   return rows[0] ?? null;
 }
 
+export async function getCandidateById(candidateId: number) {
+  const db = getDb();
+  const rows = await db.select().from(candidate).where(eq(candidate.id, candidateId)).limit(1);
+  return rows[0] ?? null;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Documents                                                                   */
 /* -------------------------------------------------------------------------- */
@@ -118,48 +124,53 @@ export async function saveDocument(input: {
 }): Promise<{ id: number; previousRetired: boolean; unchanged?: true }> {
   const db = getDb();
   const kind = input.kind ?? "cv";
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select()
+      .from(candidateDocument)
+      .where(
+        and(
+          eq(candidateDocument.candidateId, input.candidateId),
+          eq(candidateDocument.kind, kind),
+          eq(candidateDocument.isCurrent, true),
+        ),
+      )
+      .limit(1);
 
-  // Salvar sem mudar nada não deveria criar versão. Três "ATS EN 2026-07" com
-  // 8.227, 8.228 e 8.166 caracteres foi o que essa ausência produziu: um
-  // histórico onde o rótulo não distingue e o tamanho quase também não.
-  //
-  // Só o conteúdo conta. Trocar o rótulo de uma versão é `renameDocument`, que
-  // corrige a que existe em vez de criar outra igual com nome diferente.
-  if (!input.force) {
-    const current = await currentDocument(input.candidateId, kind);
-    if (current && current.content === input.content) {
-      return { id: current.id, previousRetired: false, unchanged: true };
+    // Só o conteúdo conta. Trocar o rótulo é uma operação própria; repetir um
+    // save não deve poluir o histórico com versões indistinguíveis.
+    if (!input.force && current?.content === input.content) {
+      return { id: current.id, previousRetired: false, unchanged: true as const };
     }
-  }
 
-  const retired = await db
-    .update(candidateDocument)
-    .set({ isCurrent: false })
-    .where(
-      and(
-        eq(candidateDocument.candidateId, input.candidateId),
-        eq(candidateDocument.kind, kind),
-        eq(candidateDocument.isCurrent, true),
-      ),
-    )
-    .returning({ id: candidateDocument.id });
+    const retired = await tx
+      .update(candidateDocument)
+      .set({ isCurrent: false })
+      .where(
+        and(
+          eq(candidateDocument.candidateId, input.candidateId),
+          eq(candidateDocument.kind, kind),
+          eq(candidateDocument.isCurrent, true),
+        ),
+      )
+      .returning({ id: candidateDocument.id });
 
-  const inserted = await db
-    .insert(candidateDocument)
-    .values({
-      candidateId: input.candidateId,
-      kind,
-      label: input.label,
-      content: input.content,
-      format: input.format ?? "text",
-      sourceFilename: input.sourceFilename ?? null,
-      isCurrent: true,
-    })
-    .returning({ id: candidateDocument.id });
+    const [inserted] = await tx
+      .insert(candidateDocument)
+      .values({
+        candidateId: input.candidateId,
+        kind,
+        label: input.label,
+        content: input.content,
+        format: input.format ?? "text",
+        sourceFilename: input.sourceFilename ?? null,
+        isCurrent: true,
+      })
+      .returning({ id: candidateDocument.id });
 
-  const row = inserted[0];
-  if (!row) throw new Error("insert returned no row");
-  return { id: row.id, previousRetired: retired.length > 0 };
+    if (!inserted) throw new Error("insert returned no row");
+    return { id: inserted.id, previousRetired: retired.length > 0 };
+  });
 }
 
 export async function currentDocument(candidateId: number, kind = "cv") {
@@ -257,20 +268,26 @@ export async function renameDocument(
 }
 
 /**
- * Candidaturas que dizem ter enviado esta versão.
+ * Candidaturas que referenciam exatamente esta versão imutável.
  *
- * `application.cv_variant` é **texto livre**, não chave estrangeira: o funil
- * registra qual currículo foi enviado guardando o nome dele numa string solta.
- * Enquanto for assim, a integridade tem de ser verificada aqui — o banco não a
- * garante. Ver UI-02 em `docs/product/backlog.md`.
+ * A chave estrangeira protege o histórico contra exclusão acidental; o filtro
+ * de candidato mantém a leitura no mesmo aggregate owner.
  */
-export async function applicationsUsingLabel(label: string): Promise<string[]> {
+export async function applicationsUsingDocument(
+  candidateId: number,
+  documentId: number,
+): Promise<string[]> {
   const db = getDb();
   const rows = await db
     .select({ title: job.title, company: job.companyName })
     .from(application)
     .innerJoin(job, eq(job.id, application.jobId))
-    .where(eq(application.cvVariant, label))
+    .where(
+      and(
+        eq(application.candidateId, candidateId),
+        eq(application.candidateDocumentId, documentId),
+      ),
+    )
     .limit(20);
   return rows.map((r) => [r.company, r.title].filter(Boolean).join(" · "));
 }
@@ -296,7 +313,7 @@ export async function deleteDocument(candidateId: number, id: number): Promise<V
   if (!doc) return { ok: false, error: "not-found" };
   if (doc.isCurrent) return { ok: false, error: "is-current" };
 
-  const used = await applicationsUsingLabel(doc.label);
+  const used = await applicationsUsingDocument(candidateId, doc.id);
   if (used.length > 0) {
     return { ok: false, error: "referenced", detail: used.join(" | ") };
   }
@@ -383,13 +400,13 @@ function mentions(haystack: string, term: string): boolean {
  * would surface the vocabulary of roles the candidate does not want, which is
  * how a CV gets diluted rather than sharpened.
  */
-export async function analyseGap(opts: { minFit?: number; limit?: number } = {}): Promise<GapReport | null> {
+export async function analyseGap(
+  opts: { candidateId: number; minFit?: number; limit?: number },
+): Promise<GapReport | null> {
   const db = getDb();
   const minFit = opts.minFit ?? 60;
 
-  const person = await getCandidate();
-  if (!person) return null;
-  const doc = await currentDocument(person.id, "cv");
+  const doc = await currentDocument(opts.candidateId, "cv");
   if (!doc) return null;
 
   const cv = doc.content.toLowerCase();
@@ -398,7 +415,10 @@ export async function analyseGap(opts: { minFit?: number; limit?: number } = {})
   const rows = await db
     .select({ text: sql<string>`lower(coalesce(${job.descriptionText}, '') || ' ' || ${job.title})` })
     .from(job)
-    .innerJoin(jobScore, eq(jobScore.jobId, job.id))
+    .innerJoin(
+      jobScore,
+      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, opts.candidateId)),
+    )
     .where(and(sql`${job.closedAt} is null`, sql`${jobScore.fit} >= ${minFit}`))
     .limit(opts.limit ?? 300);
 

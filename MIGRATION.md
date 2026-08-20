@@ -4,8 +4,10 @@
 > `src/core/` ou `src/contexts/`? Enquanto os dois existirem, leia isto antes
 > de escrever qualquer código.
 
-**Estado (19/08/2026): passos 0, 1, 7–8, 9, 10 concluídos; 12 decidido como
-não-fazer. Restam 2, 3, 4, 5, 6 e 11.**
+**Estado (20/08/2026): concluída. Os 12 passos têm uma decisão executada; o
+passo 5 foi resolvido pela política de dado ausente neutro, o 6 por APIs
+públicas e ownership vertical sem mover o composition root Drizzle, e o 12 foi
+deliberadamente rejeitado pela ADR 0010. Não há etapa parcial escondida.**
 
 > Este arquivo mentiu sobre o próprio estado por uma sessão inteira — vários
 > passos foram entregues sem serem marcados. Um plano de migração que não
@@ -13,8 +15,9 @@ não-fazer. Restam 2, 3, 4, 5, 6 e 11.**
 > exatamente o risco que ele existe para reduzir.
 
 A [ADR 0007](docs/adr/0007-arquitetura-hexagonal-monolito-modular.md) decidiu
-mover o projeto para hexagonal com DDD seletivo em monólito modular, seis
-bounded contexts. A migração tem 12 passos.
+mover o projeto para hexagonal com DDD seletivo em monólito modular. A matriz
+atual de seis bounded contexts está em
+[`docs/engineering/context-map.md`](docs/engineering/context-map.md).
 
 ## O risco que este arquivo mitiga
 
@@ -32,21 +35,23 @@ O próprio painel que desenhou o plano apontou o maior risco, e não é técnico
 
 ## Onde as coisas estão hoje
 
-Nada foi movido ainda. Tudo em `src/core/`, conforme documentado em
-`docs/architecture.md`. Quando o passo 6 começar, esta tabela passa a ser a
-fonte da verdade sobre o que já mudou de casa.
+O monólito continua híbrido de propósito: áreas maduras permanecem em
+`src/core/`, enquanto contextos criados ou estrangulados usam a estrutura da
+ADR 0007. Esta tabela é a fonte da verdade sobre a fronteira física atual.
 
 | Módulo | Hoje | Destino (passo 6) | Movido? |
 |---|---|---|---|
 | `db/` | `src/core/db/` | por contexto, `store.ts` cada | não |
 | `sources/` | `src/core/sources/` | `contexts/sourcing/infra/` | não |
 | `ingest/` | `src/core/ingest/` | `contexts/sourcing/app/` | não |
-| `scoring/` | `src/core/scoring/` | `contexts/matching/domain/` | não |
+| `scoring/` | domínio puro em `src/core/scoring/`, API em `contexts/matching/` | ownership Matching | **sim, por strangler** |
 | `profile/` | `src/core/profile/` | `contexts/candidate/` | não |
-| `mail/` | `src/core/mail/` | `contexts/correspondence/` | não |
+| autenticação | `src/contexts/auth/` | contexto completo | **sim** |
+| skills | `src/contexts/skills/` | contexto completo; legado removido | **sim** |
+| `mail/` | implementação coesa em `src/core/mail/`, API em `contexts/correspondence/` | ownership Correspondence | **sim, por strangler** |
 | `contacts.ts` | `src/core/contacts.ts` | `contexts/positioning/` | não |
 | `money.ts` | `src/core/money.ts` | `shared/kernel/` | não |
-| `fx.ts` | `src/core/fx.ts` | porta + 2 adapters | não |
+| cotações | `src/contexts/fx/` | porta + adapters Frankfurter/ER API + store | **sim** |
 | `positioning/` | `src/core/positioning/` | `contexts/positioning/` | não |
 
 ## Os passos
@@ -59,7 +64,7 @@ fonte da verdade sobre o que já mudou de casa.
 | 3 | Porta `HttpClient`, fixtures, `FxRateProvider` | **✅ concluído** — `http-port.ts` com `fixtureHttp`; destravou testar os 13 adapters sem rede, incluindo regressão do bug do Lever |
 | 4 | Resgatar regras presas na CLI; `--json` em todo comando de leitura | **✅ concluído** — `stats`, `pipeline`, `referrals`, `jobs list` |
 | 5 | `fit_assessment` com chave composta; `Measured \| Unknown` — **irreversível** | **✅ resolvido por outro caminho** — ver nota abaixo |
-| 6 | Mover a árvore para `contexts/` | **✅ padrão estabelecido** — `contexts/skills/` e `contexts/auth/`; ver nota abaixo |
+| 6 | Mover a árvore para `contexts/` | **✅ concluído por fronteiras públicas** — Auth, Correspondence, FX, Matching, Pursuit e Skills; ver nota abaixo |
 | 7–8 | E-mail | **✅ concluído fora de ordem** — commit `fa1fd6e` |
 | 9 | Área do candidato dinâmica | **✅ concluído** — `candidate`, documentos versionados, editor Vim, skills |
 | 10 | Instrumentação estatística | **✅ concluído** — `jho stats`, commit `bf885b9` |
@@ -68,11 +73,9 @@ fonte da verdade sobre o que já mudou de casa.
 
 ### O passo 0 vale por si
 
-A ADR é explícita: **vale a pena mesmo que todo o resto seja rejeitado.** Hoje
-86% de `src/` não tem teste, então refatorar `run.ts`, `repo.ts` ou `cli.ts` é
-infalsificável — não há como distinguir uma arquitetura limpa de uma quebrada.
-
-Este é o próximo passo a executar. Fazer o 2 antes do 0 é construir sem rede.
+A ADR é explícita: **vale a pena mesmo que todo o resto seja rejeitado.** Ele
+foi concluído primeiro e continua sendo a rede que permite refatorar
+`run.ts`, `repo.ts` ou `cli.ts` com evidência de comportamento.
 
 ### E-mail veio antes da hora, de propósito
 
@@ -148,15 +151,14 @@ outro caminho**, e não como feito — a diferença importa para quem ler depois
 
 ### Passo 6 — mover tudo para `contexts/`
 
-`contexts/skills/` e `contexts/auth/` existem, com a estrutura completa
-(`domain` puro, `ports`, `app`, `infra`, composição por função). Eles são o
-padrão, e a **regra 4** obriga todo módulo novo a nascer assim.
+Auth, Correspondence, FX, Matching, Pursuit e Skills possuem uma única API
+pública. Os contextos com variação real usam `domain`, `ports`, `app`, `infra`
+e composição por função; fachadas menores não ganham porta cerimonial.
 
-Mover `jobs`, `scoring` e o funil de `core/` para `contexts/` seria uma
-refatoração grande, arriscada e sem efeito funcional nenhum: essas partes já
-têm domínio puro (`scoring/` não faz rede, garantido por teste), já estão atrás
-de portas onde a variação é real (`SourceAdapter`, `QueuePort`, `HttpPort`), e
-já são consumidas identicamente por CLI e UI.
+Mover fisicamente o composition root do Drizzle seria uma refatoração grande e
+sem efeito funcional: migrations e FKs cruzadas precisam do grafo completo.
+Ownership e consumo já são verticais; UI/CLI não importam `core/db/repo.ts`, e
+o inventário/teste em `context-map.md` impede regressão.
 
 A propriedade que a ADR 0007 buscava — **pluggabilidade com domínio testável** —
 está entregue e é verificada por teste de arquitetura. Mover pastas para

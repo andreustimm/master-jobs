@@ -7,8 +7,8 @@ O banco do `job-hunt-os` guarda três coisas com naturezas muito diferentes, e a
 
 1. **Fato observado** — o que uma fonte pública disse sobre uma vaga (`source`,
    `company`, `job`). Reingestível, reconstruível, descartável em último caso.
-2. **Derivado** — o score calculado a partir do fato + `profile.yaml`
-   (`job_score`). Descartável por construção: apaga e recalcula.
+2. **Derivado** — o score calculado para o par candidato–vaga a partir do fato
+   + perfil (`job_score`). Descartável por construção: apaga e recalcula.
 3. **Decisão do usuário** — em quais vagas você se candidatou, em que estágio
    está, o que combinou de taxa (`application`, `application_event`). Isto **não
    é reconstruível**. Se sumir, sumiu.
@@ -19,9 +19,8 @@ ou deletando `job` em vez de fechá-la — destrói a única camada que não tem
 backup natural.
 
 O schema vive em [`src/core/db/schema.ts`](../src/core/db/schema.ts) (Drizzle,
-dialeto SQLite/libSQL) e a migração gerada em
-[`drizzle/0000_remarkable_solo.sql`](../drizzle/0000_remarkable_solo.sql).
-São 11 tabelas.
+dialeto SQLite/libSQL), com migrações incrementais em `drizzle/`. São 28
+tabelas; o diagrama abaixo destaca o núcleo de sourcing, matching e pursuit.
 
 Todo timestamp é `TEXT` em ISO-8601 UTC. O default é a constante `now` do
 schema:
@@ -38,8 +37,13 @@ const now = sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`;
 erDiagram
     source ||--o{ job : "source_id (cascade)"
     company ||--o{ job : "company_id"
-    job ||--o| job_score : "job_id PK (cascade)"
-    job ||--o| application : "job_id UNIQUE (cascade)"
+    candidate ||--o{ job_score : "candidate_id PK (cascade)"
+    job ||--o{ job_score : "job_id PK (cascade)"
+    candidate ||--o{ application : "candidate_id (cascade)"
+    candidate ||--o{ candidate_document : "candidate_id (cascade)"
+    candidate ||--|| candidate_matching_profile : "candidate_id (cascade)"
+    job ||--o{ application : "job_id (cascade)"
+    candidate_document ||--o{ application : "candidate_document_id (restrict)"
     application ||--o{ application_event : "application_id (cascade)"
 
     source {
@@ -95,6 +99,7 @@ erDiagram
         TEXT raw "json"
     }
     job_score {
+        INTEGER candidate_id PK "FK candidate.id"
         INTEGER job_id PK "FK job.id"
         REAL fit "0..100"
         REAL title_score
@@ -108,16 +113,20 @@ erDiagram
         TEXT missing_keywords "json"
         TEXT reasons "json"
         TEXT blockers "json"
+        TEXT eligibility_status
+        TEXT eligibility_reasons "json"
+        TEXT profile_hash
         TEXT scorer_version
         TEXT scored_at
     }
     application {
         INTEGER id PK
-        INTEGER job_id FK "UNIQUE"
+        INTEGER candidate_id FK "UNIQUE com job_id"
+        INTEGER job_id FK "UNIQUE com candidate_id"
         TEXT status "default backlog"
         TEXT channel
         TEXT applied_at
-        TEXT cv_variant
+        INTEGER candidate_document_id FK
         TEXT cover_letter_path
         TEXT contact_name
         TEXT contact_url
@@ -274,22 +283,36 @@ porque toda query de board filtra `closed_at IS NULL`.
 
 ### `job_score`
 
-Score derivado, 1:1 com `job` (`job_id` é a própria PK, `ON DELETE cascade`).
-O comentário de seção no schema é literal: *"Scoring (derived — safe to wipe and
+Score derivado, um por par candidato–vaga. A chave primária composta é
+`(candidate_id, job_id)`; ambas as FKs usam `ON DELETE cascade`. O comentário
+de seção no schema é literal: *"Scoring (derived — safe to wipe and
 recompute)"*.
 
 | Coluna | Notas |
 |---|---|
+| `candidate_id`, `job_id` | identidade composta do score; permite avaliações independentes da mesma vaga |
 | `fit` | 0..100, já com penalidade subtraída e clampada |
 | `title_score`, `keyword_score`, `seniority_score`, `geo_score`, `comp_score` | os cinco componentes, cujos pesos somam 100 antes das penalidades |
 | `penalty` | pontos negativos de blockers e keywords negativas |
 | `cluster` | chave de `targets.clusters` do `profile.yaml` — hoje `architect`, `staff`, `ai_lead`, `eng_lead`, `senior_ic` — ou `"other"`. É o que decide qual variante de CV usar. O comentário no schema (`architect \| staff \| ai-lead \| backend \| other`) está desatualizado em relação ao `profile.yaml` atual |
-| `matched_keywords`, `missing_keywords`, `reasons`, `blockers` | JSON. `missing_keywords` só lista termos com `weight >= 7` |
+| `matched_keywords`, `missing_keywords` | JSON. `missing_keywords` só lista termos com `weight >= 7` |
+| `reasons`, `blockers` | JSON de mensagens estruturadas `{ code, params }`; apresentação traduz os códigos |
+| `eligibility_status`, `eligibility_reasons` | resultado `eligible \| ineligible \| unverifiable` e códigos auditáveis |
+| `profile_hash` | hash da política/perfil efetivamente usados; mudança invalida a avaliação mesmo na mesma versão |
 | `scorer_version` | ver o invariante 3 |
 | `scored_at` | carimbado explicitamente por `scoreAll()`, não pelo default da coluna |
 
 Índice `job_score_fit_idx (fit)` — o board ordena por
 `coalesce(job_score.fit, 0) DESC`.
+
+### `candidate_matching_profile`
+
+Política persistida de matching por candidato. Guarda o JSON validado do
+perfil, seu `profile_hash` e timestamps. O `profile.yaml` permanece como
+fallback de bootstrap para o candidato padrão, não como estado global
+compartilhado. A combinação `(candidate_id, profile_hash, scorer_version)`
+torna avaliações independentes e auditáveis para dois candidatos na mesma
+vaga.
 
 ---
 
@@ -297,17 +320,19 @@ recompute)"*.
 
 ### `application`
 
-Estado do usuário. Uma linha por vaga (`application_job_idx` é UNIQUE em
-`job_id`). Criada sob demanda por `setApplicationStatus()` — vaga que você
-nunca tocou simplesmente não tem linha aqui, e o board a mostra com status
-`null` (o pseudo-status `unfiled` do `jho jobs list --status unfiled`).
+Estado do usuário. Uma linha por par candidato–vaga
+(`application_candidate_job_idx` é UNIQUE em `candidate_id, job_id`). Criada
+sob demanda por `setApplicationStatus(candidateId, jobId, ...)` — vaga que o
+candidato nunca tocou simplesmente não tem linha aqui, e o board a mostra com
+status `null` (o pseudo-status `unfiled` do `jho jobs list --status unfiled`).
 
 | Coluna | Notas |
 |---|---|
+| `candidate_id` | dono obrigatório da candidatura; FK `candidate.id` com cascade |
 | `status` | default `'backlog'`; valores em `APPLICATION_STATUSES` |
 | `channel` | `direct \| ats \| referral \| recruiter \| agency` — não escrito por nenhum comando hoje |
 | `applied_at` | carimbado **na primeira vez** que o status vira `applied`; transições posteriores preservam o valor original (`status === "applied" && !previous.appliedAt ? stamp : previous.appliedAt`) |
-| `cv_variant` | amarra de volta em `cv.variants` do `profile.yaml` |
+| `candidate_document_id` | documento exato enviado; FK composta com `candidate_id` impede referência cross-candidate e `ON DELETE restrict` preserva histórico mesmo após renomear label |
 | `next_action` / `next_action_at` | lidos pelo `jho pipeline` (linha `next:`) e indexados por `application_next_action_idx` |
 | `updated_at` | escrito à mão em cada transição; é a ordenação do `jho pipeline` |
 
@@ -320,6 +345,35 @@ criação), `to_status` e `detail` (o `-n/--note` do `jho track`).
 
 > **Invariante:** `application_event` nunca é atualizada nem deletada. É log.
 > Qualquer correção é um evento novo, não um `UPDATE`.
+
+`transitionApplication()` é a máquina de estados pura. Repetir o status atual
+é idempotente (não cria outro evento), estados terminais não reabrem por uma
+transição comum e `applied_at` é gravado somente na primeira entrada em
+`applied`. O repositório persiste a nova `application` e seu evento na mesma
+transação e usa o status anterior como token de concorrência otimista.
+
+### Migração do ownership por candidato
+
+A mudança é expand/backfill/contract para não reconstruir tabelas antes de os
+dados antigos terem dono:
+
+1. `0011_boring_vertigo.sql` adiciona `candidate_id` anulável e índices;
+2. `0012_backfill_candidate_scope.sql` escolhe, em ordem, o candidato marcado
+   como default, o slug `default` ou o mais antigo; só cria um placeholder se
+   houver linhas legadas e nenhum candidato;
+3. `0013_robust_jasper_sitwell.sql` torna a coluna obrigatória e aplica a chave
+   primária/índice único compostos.
+
+O backfill é restrito a `candidate_id IS NULL`, portanto é reiniciável. Antes
+do contract, instalações devem confirmar zero nulos em `application` e
+`job_score`.
+
+As migrations `0015`–`0018` fazem expand/backfill/contract da referência de
+documento: adicionam `candidate_document_id`, escolhem deterministicamente a
+versão legada pelo candidato/label, removem `cv_variant` e aplicam a FK composta
+de ownership. `candidate_document` possui índice parcial único que permite no
+máximo um documento atual por candidato/tipo; `saveDocument()` troca o atual na
+mesma transação.
 
 ### `APPLICATION_STATUSES` — a lista, verbatim
 
@@ -356,12 +410,13 @@ valida a string contra essa lista **antes de tocar o banco**, e aborta com
 | `withdrawn` | **Você** disse não — desistiu do processo |
 | `archived` | Encerrado sem desfecho relevante; tira da vista sem apagar histórico |
 
-Não existe máquina de estados: `setApplicationStatus()` aceita qualquer
-transição entre valores válidos. A auditoria de trajetória fica em
-`application_event`, não em restrições de transição.
+As transições permitidas ficam em
+`src/contexts/pursuit/domain/application.ts`. A função pura aceita a criação em
+qualquer etapa já observada, mas depois exige avanço legal; estados terminais
+recusam avanço. A auditoria da trajetória continua em `application_event`.
 
 > **Invariante:** para adicionar ou renomear um status, edite
-> `APPLICATION_STATUSES` em `src/core/db/schema.ts` — é `as const`, não `enum`,
+> `APPLICATION_STATUSES` no domínio de Pursuit — é `as const`, não `enum`,
 > porque o runtime é o type stripping do Node 24 (`erasableSyntaxOnly: true`).
 > Um `enum` quebra em runtime com `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`. Renomear
 > um valor exige migrar as linhas existentes de `application.status` e de
@@ -469,7 +524,7 @@ A versão é uma constante em
 [`src/core/scoring/score.ts`](../src/core/scoring/score.ts):
 
 ```ts
-export const SCORER_VERSION = "1.0.0";
+export const SCORER_VERSION = "1.3.0";
 ```
 
 Ela é persistida em `job_score.scorer_version` e é **o gatilho de
@@ -477,13 +532,21 @@ repontuação**. Sem `--all`, `scoreAll()` seleciona apenas:
 
 ```sql
 job.closed_at is null
-  and (job_score.job_id is null or job_score.scorer_version <> '1.0.0')
+  and job_score.candidate_id = :candidateId
+  and (
+    job_score.job_id is null
+    or job_score.scorer_version <> :scorerVersion
+    or job_score.profile_hash <> :profileHash
+    or job_score.scored_at < :freshnessCutoff
+  )
 ```
 
-Ou seja: vaga aberta sem score, ou com score de uma versão antiga. Com `--all`,
-o filtro vira só `job.closed_at IS NULL` e tudo é repontuado. A escrita é
-sempre `onConflictDoUpdate` em `job_score.jobId`, então rodar de novo é
-idempotente.
+Ou seja: vaga aberta sem score, com versão/perfil antigo ou cuja parcela
+temporal expirou. Com `--all`,
+o filtro vira `job.closed_at IS NULL` para aquele candidato e tudo é
+repontuado. A escrita usa `onConflictDoUpdate` no par
+`(job_score.candidateId, job_score.jobId)`, então rodar de novo é idempotente e
+não sobrescreve o score de outro candidato.
 
 > **Invariante:** mexeu nos pesos, na lógica do scorer ou em `profile.yaml`?
 > **Bump `SCORER_VERSION`** e rode `pnpm jho jobs score --all`. Sem o bump,
@@ -665,4 +728,3 @@ candidato já trabalhou ou entregou**, categoria `former` — o vínculo mais fo
 que existe, e que estava parado no currículo.
 
 Categorias: `recruiter`, `ai-leader`, `peer`, `former`, `company`.
-

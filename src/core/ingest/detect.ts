@@ -8,10 +8,10 @@
  *
  * Patterns verified against real URLs collected during sourcing.
  */
-import type { SourceKind } from "../sources/types.ts";
+import type { FetchableSourceKind } from "../sources/types.ts";
 
 export type DetectedJobUrl = {
-  kind: SourceKind;
+  kind: FetchableSourceKind;
   /** Board handle, e.g. "stackblitz" or "textlayer". */
   handle: string;
   /** Posting id within that board, when the URL carries one. */
@@ -21,7 +21,7 @@ export type DetectedJobUrl = {
 };
 
 type Pattern = {
-  kind: SourceKind;
+  kind: FetchableSourceKind;
   /** Must capture handle first, external id second when present. */
   regex: RegExp;
   handleGroup: number;

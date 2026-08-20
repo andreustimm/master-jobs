@@ -62,9 +62,10 @@ describe("translator", () => {
 
   it("devolve a chave quando a tradução não existe", () => {
     // Feio de propósito: espaço em branco passa despercebido numa revisão,
-    // `nav.inexistente` na tela não.
-    expect(t("nav.inexistente")).toBe("nav.inexistente");
-    expect(t("")).toBe("");
+    // `nav.inexistente` na tela não. Reflect reproduz entrada JavaScript não
+    // tipada sem enfraquecer o contrato TypeScript usado pela aplicação.
+    expect(Reflect.apply(t, undefined, ["nav.inexistente"])).toBe("nav.inexistente");
+    expect(Reflect.apply(t, undefined, [""])).toBe("");
   });
 
   it("interpola valores", () => {
@@ -73,7 +74,8 @@ describe("translator", () => {
   });
 
   it("cai no padrão para idioma desconhecido", () => {
-    expect(translator("xx" as never).t("nav.jobs")).toBe("Vagas");
+    const unknownLocale = Reflect.apply(translator, undefined, ["xx"]);
+    expect(unknownLocale.t("nav.jobs")).toBe("Vagas");
   });
 });
 

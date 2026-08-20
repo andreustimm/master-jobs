@@ -63,7 +63,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const theme = resolveTheme(jar.get(THEME_COOKIE)?.value);
   const mode = resolveMode(jar.get(MODE_COOKIE)?.value);
   const { currentSession } = await import("./auth");
-  const signedIn = Boolean(await currentSession());
+  const session = await currentSession();
+  const signedIn = Boolean(session);
+  const hasCandidateScope = session?.candidateId !== null && session?.roles.includes("owner");
 
   // Escolha gravada primeiro; sem ela, negocia pelo Accept-Language. Servir
   // português a quem pediu inglês no navegador é ignorar informação que já
@@ -123,23 +125,37 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   !signedIn && "invisible",
                 )}
               >
-                {/* Escritos um a um: `typedRoutes` valida cada href contra a
-                    árvore real de rotas, e uma união mapeada anula essa checagem. */}
-                <Link href="/" className={navClass}>
-                  {t("nav.cockpit")}
+                {/* Escritos um a um, inclusive a comparação manual:
+                    `typedRoutes` valida cada href contra a árvore real de rotas,
+                    e uma união mapeada anula essa checagem. */}
+                {hasCandidateScope && (
+                  <Link href="/" className={navClass}>
+                    {t("nav.cockpit")}
+                  </Link>
+                )}
+                {hasCandidateScope && (
+                  <Link href="/jobs" className={navClass}>
+                    {t("nav.jobs")}
+                  </Link>
+                )}
+                <Link href="/compare" className={navClass}>
+                  {t("nav.compareJob")}
                 </Link>
-                <Link href="/jobs" className={navClass}>
-                  {t("nav.jobs")}
-                </Link>
-                <Link href="/pipeline" className={navClass}>
-                  {t("nav.pipeline")}
-                </Link>
-                <Link href="/referrals" className={navClass}>
-                  {t("nav.referrals")}
-                </Link>
-                <Link href="/candidate" className={navClass}>
-                  {t("nav.candidate")}
-                </Link>
+                {hasCandidateScope && (
+                  <Link href="/pipeline" className={navClass}>
+                    {t("nav.pipeline")}
+                  </Link>
+                )}
+                {hasCandidateScope && (
+                  <Link href="/referrals" className={navClass}>
+                    {t("nav.referrals")}
+                  </Link>
+                )}
+                {hasCandidateScope && (
+                  <Link href="/candidate" className={navClass}>
+                    {t("nav.candidate")}
+                  </Link>
+                )}
               </nav>
 
               <div className="flex shrink-0 items-center gap-2">

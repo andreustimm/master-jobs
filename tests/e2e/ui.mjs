@@ -15,8 +15,9 @@
  * mouse. Hence Playwright, and hence this being separate from `pnpm check`:
  * it needs the dev server up.
  *
- *   pnpm dev            # noutro terminal
- *   pnpm test:e2e
+ * `pnpm test:e2e` owns an isolated build, server and database. To target an
+ * already-running environment deliberately, set E2E_BASE and
+ * TURSO_DATABASE_URL and run `pnpm test:e2e:external`.
  */
 import { chromium } from "playwright";
 
@@ -33,6 +34,7 @@ const E2E_EMAIL = process.env.E2E_EMAIL ?? "e2e@local.test";
 const E2E_PASSWORD = process.env.E2E_PASSWORD ?? "conta-de-teste-e2e-42";
 const results = [];
 let failed = 0;
+let comparisonJobId = null;
 
 function check(name, ok, detail = "") {
   results.push({ name, ok, detail });
@@ -68,6 +70,18 @@ try {
     exportResponse.status() >= 300 && exportResponse.status() < 400,
     String(exportResponse.status()),
   );
+
+  await page.context().addCookies([
+    { name: "jho_session", value: "cookie-forjado", url: BASE },
+  ]);
+  const forgedExport = await page.request.get(`${BASE}/api/export`, { maxRedirects: 0 });
+  check(
+    "API de export rejeita cookie forjado",
+    forgedExport.status() >= 300 && forgedExport.status() < 400,
+    String(forgedExport.status()),
+  );
+  await page.context().clearCookies();
+  await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
 
   await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
   await page.fill('input[name="email"]', E2E_EMAIL);
@@ -165,10 +179,60 @@ try {
 
   /* ------------------------------ Outras telas ----------------------------- */
 
-  for (const path of ["/", "/candidate", "/pipeline", "/referrals", "/login"]) {
+  for (const path of ["/", "/compare", "/candidate", "/pipeline", "/referrals", "/login"]) {
     const response = await page.goto(`${BASE}${path}`, { waitUntil: "domcontentloaded" });
     check(`${path} responde`, response?.status() === 200, String(response?.status()));
   }
+
+  await page.goto(`${BASE}/compare`, { waitUntil: "networkidle" });
+  check("comparar vaga oferece descrição", (await page.locator('textarea[name="description"]').count()) === 1);
+  check("comparar vaga oferece upload", (await page.locator('input[name="file"][type="file"]').count()) === 1);
+  check("comparar vaga envia pela ação", (await page.locator('[data-testid="compare-submit"]').count()) === 1);
+
+  const comparisonText =
+    "Senior AI Software Architect responsible for TypeScript and Python services, distributed systems, LLM products, cloud architecture, observability, technical leadership, and remote delivery for teams in Brazil and LATAM.";
+  const fillComparisonIdentity = async () => {
+    await page.fill('input[name="title"]', "Senior AI Software Architect E2E");
+    await page.fill('input[name="companyName"]', "E2E Comparison Lab");
+    await page.fill('input[name="location"]', "Remote · Brazil");
+    await page.fill('input[name="url"]', "https://e2e.invalid/comparison");
+  };
+
+  await fillComparisonIdentity();
+  await page.fill('textarea[name="description"]', comparisonText);
+  await Promise.all([
+    page.waitForURL(/\/compare\?job=\d+#comparison-result/, { timeout: 15_000 }),
+    page.locator('[data-testid="compare-submit"]').click(),
+  ]);
+  await page.locator('[data-testid="comparison-result"]').waitFor();
+  comparisonJobId = Number(new URL(page.url()).searchParams.get("job"));
+  check("comparação colada persiste e redireciona", /[?&]job=\d+/.test(page.url()), page.url());
+  check("comparação exibe score canônico", (await page.locator('[data-testid="comparison-score"]').count()) === 1);
+  check("comparação exibe cobertura do currículo", (await page.locator('[data-testid="comparison-cv-coverage"]').count()) === 1);
+
+  await page.goto(`${BASE}/compare`, { waitUntil: "networkidle" });
+  await fillComparisonIdentity();
+  await page.locator('input[name="file"]').setInputFiles({
+    name: "e2e-job.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from(`${comparisonText}\nUploaded through the real multipart form.`),
+  });
+  await Promise.all([
+    page.waitForURL(/\/compare\?job=\d+#comparison-result/, { timeout: 15_000 }),
+    page.locator('[data-testid="compare-submit"]').click(),
+  ]);
+  await page.locator('[data-testid="comparison-result"]').waitFor();
+  check(
+    "upload percorre extração, persistência e score",
+    (await page.locator('[data-testid="comparison-result"]').textContent())?.includes("e2e-job.txt") ?? false,
+  );
+
+  await page.setViewportSize({ width: 375, height: 812 });
+  const resultOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  check("resultado da comparação cabe no celular", resultOverflow <= 1, `${resultOverflow}px`);
+  await page.setViewportSize({ width: 1280, height: 900 });
 
   /* --------------------------------- Mobile -------------------------------- */
 
@@ -178,7 +242,7 @@ try {
   const overflows = [];
   for (const width of widths) {
     await page.setViewportSize({ width, height: 812 });
-    for (const path of ["/", "/jobs", "/candidate", "/candidate/skills", "/pipeline"]) {
+    for (const path of ["/", "/jobs", "/compare", "/candidate", "/candidate/skills", "/pipeline"]) {
       await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -366,27 +430,38 @@ try {
   // passa a dizer isso. As regras de classificação (só 404/410 fecham) estão em
   // `tests/verify-queue.test.ts`, onde não precisam de rede.
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
-  await page.locator("button[popovertarget^='job-modal']").first().click();
+  const recheckModalId = await page.evaluate(() => {
+    for (const trigger of document.querySelectorAll("button[popovertarget^='job-modal']")) {
+      const id = trigger.getAttribute("popovertarget");
+      if (id && document.getElementById(id)?.querySelector('[data-testid="recheck-job"]')) {
+        return id;
+      }
+    }
+    return null;
+  });
+  if (recheckModalId) {
+    await page.locator(`button[popovertarget="${recheckModalId}"]`).first().click();
+  }
   await page.waitForTimeout(300);
 
   const recheckBefore = await page.evaluate(() => {
-    const modal = document.querySelector("[id^=job-modal]");
-    const button = modal?.querySelector("form button[type=submit]");
+    const button = document.querySelector('[id^="job-modal"]:popover-open [data-testid="recheck-job"]');
     return { label: button?.textContent?.trim() ?? null, disabled: button?.disabled ?? null };
   });
   check("botão de reconferir presente no detalhe", recheckBefore.label !== null, `${recheckBefore.label}`);
 
   if (recheckBefore.label && !recheckBefore.disabled) {
-    await page.locator("[id^=job-modal] form button[type=submit]").first().click();
+    await page.locator('[id^="job-modal"]:popover-open [data-testid="recheck-job"]').click();
     await page.waitForTimeout(1200);
     await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
-    await page.locator("button[popovertarget^='job-modal']").first().click();
+    if (recheckModalId) {
+      await page.locator(`button[popovertarget="${recheckModalId}"]`).first().click();
+    }
     await page.waitForTimeout(300);
   }
 
   const recheckAfter = await page.evaluate(() => {
-    const modal = document.querySelector("[id^=job-modal]");
-    const button = modal?.querySelector("form button[type=submit]");
+    const button = document.querySelector('[id^="job-modal"]:popover-open [data-testid="recheck-job"]');
     return { label: button?.textContent?.trim() ?? null, disabled: button?.disabled ?? null };
   });
   // Enfileirado, o botão desabilita: clicar de novo só duplicaria trabalho
@@ -553,6 +628,7 @@ try {
   for (const path of [
     "/",
     "/jobs",
+    "/compare",
     "/pipeline",
     "/referrals",
     "/candidate",
@@ -608,6 +684,30 @@ try {
   check("suíte concluiu sem exceção", false, String(error).split("\n")[0].slice(0, 120));
 } finally {
   await browser.close();
+
+  // The browser flow intentionally creates a real first-class job. Remove only
+  // that exact fixture so running the E2E against the local database does not
+  // pollute the user's board. Production ingestion never uses this deletion.
+  if (Number.isInteger(comparisonJobId) && comparisonJobId > 0) {
+    const [{ and, eq }, { closeDb, getDb }, { job }] = await Promise.all([
+      import("drizzle-orm"),
+      import("../../src/core/db/client.ts"),
+      import("../../src/core/db/schema.ts"),
+    ]);
+    const [fixture] = await getDb()
+      .select({ id: job.id })
+      .from(job)
+      .where(
+        and(
+          eq(job.id, comparisonJobId),
+          eq(job.companyName, "E2E Comparison Lab"),
+          eq(job.sourceId, "manual:e2e.invalid"),
+        ),
+      )
+      .limit(1);
+    if (fixture) await getDb().delete(job).where(eq(job.id, fixture.id));
+    closeDb();
+  }
 }
 
 for (const r of results) {

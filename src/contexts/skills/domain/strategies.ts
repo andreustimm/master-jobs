@@ -6,7 +6,8 @@
  * specific CV template, a LinkedIn profile reader — is an added file rather
  * than a rewrite.
  */
-import { buildSectionMap, contextAt, findOccurrences, lineAt } from "./text.ts";
+import { findSkillOccurrences, skillTerms } from "./matcher.ts";
+import { buildSectionMap, contextAt, lineAt } from "./text.ts";
 import type { ExtractionStrategy, Mention, SkillDefinition, StrategyHit } from "./types.ts";
 
 /**
@@ -18,17 +19,14 @@ import type { ExtractionStrategy, Mention, SkillDefinition, StrategyHit } from "
  */
 export const aliasStrategy: ExtractionStrategy = {
   name: "alias",
-  weight: 1,
   extract(text, catalog): StrategyHit[] {
     const sections = buildSectionMap(text);
     const hits: StrategyHit[] = [];
 
     for (const skill of catalog) {
       const mentions: Mention[] = [];
-      const terms = [skill.name.toLowerCase(), ...skill.aliases];
-
-      for (const alias of [...new Set(terms)]) {
-        for (const offset of findOccurrences(text, alias)) {
+      for (const alias of skillTerms(skill)) {
+        for (const offset of findSkillOccurrences(text, alias)) {
           mentions.push({
             alias,
             offset,
@@ -54,15 +52,14 @@ export const aliasStrategy: ExtractionStrategy = {
  */
 export const declaredStrategy: ExtractionStrategy = {
   name: "declared",
-  weight: 0.8,
   extract(text, catalog): StrategyHit[] {
     const sections = buildSectionMap(text);
     const hits: StrategyHit[] = [];
 
     for (const skill of catalog) {
       const mentions: Mention[] = [];
-      for (const alias of [...new Set([skill.name.toLowerCase(), ...skill.aliases])]) {
-        for (const offset of findOccurrences(text, alias)) {
+      for (const alias of skillTerms(skill)) {
+        for (const offset of findSkillOccurrences(text, alias)) {
           if (contextAt(sections, offset) !== "skills-section") continue;
           mentions.push({
             alias,
@@ -86,15 +83,14 @@ export const declaredStrategy: ExtractionStrategy = {
  */
 export const appliedStrategy: ExtractionStrategy = {
   name: "applied",
-  weight: 1.3,
   extract(text, catalog): StrategyHit[] {
     const sections = buildSectionMap(text);
     const hits: StrategyHit[] = [];
 
     for (const skill of catalog) {
       const mentions: Mention[] = [];
-      for (const alias of [...new Set([skill.name.toLowerCase(), ...skill.aliases])]) {
-        for (const offset of findOccurrences(text, alias)) {
+      for (const alias of skillTerms(skill)) {
+        for (const offset of findSkillOccurrences(text, alias)) {
           if (contextAt(sections, offset) !== "experience") continue;
           const sentence = lineAt(text, offset);
           // A bullet describing work, not a stack list that happens to sit here.

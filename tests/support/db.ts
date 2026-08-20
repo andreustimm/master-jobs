@@ -9,10 +9,23 @@
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { closeDb, getDb, type DB } from "../../src/core/db/client.ts";
 import * as schema from "../../src/core/db/schema.ts";
 
 export type TestDb = ReturnType<typeof drizzle<typeof schema>>;
+
+let singletonTestPath: string | undefined;
+
+function removeTestDatabase(path: string | undefined): void {
+  if (!path) return;
+  for (const suffix of ["", "-shm", "-wal"]) {
+    rmSync(`${path}${suffix}`, { force: true });
+  }
+}
 
 /**
  * Fresh, migrated, isolated. `file::memory:` gives each call its own database,
@@ -35,8 +48,10 @@ export async function createTestDb(): Promise<{ db: TestDb; close: () => void }>
  * the client already reads.
  */
 export async function useTestDb(): Promise<DB> {
-  process.env.TURSO_DATABASE_URL = "file::memory:";
   closeDb();
+  removeTestDatabase(singletonTestPath);
+  singletonTestPath = join(tmpdir(), `jho-test-${randomUUID()}.db`);
+  process.env.TURSO_DATABASE_URL = `file:${singletonTestPath}`;
   const db = getDb();
   await migrate(db, { migrationsFolder: "./drizzle" });
   return db;
@@ -44,5 +59,7 @@ export async function useTestDb(): Promise<DB> {
 
 export function releaseTestDb(): void {
   closeDb();
+  removeTestDatabase(singletonTestPath);
+  singletonTestPath = undefined;
   delete process.env.TURSO_DATABASE_URL;
 }

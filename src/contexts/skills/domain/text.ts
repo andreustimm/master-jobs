@@ -7,22 +7,6 @@
  */
 import type { MentionContext } from "./types.ts";
 
-/**
- * Word-boundary match that understands the characters real technology names
- * contain — `c#`, `c++`, `node.js`, `ci/cd`.
- */
-export function findOccurrences(haystack: string, term: string): number[] {
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(`(^|[^a-z0-9+#.])${escaped}([^a-z0-9+#]|$)`, "gi");
-  const out: number[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(haystack)) !== null) {
-    out.push(m.index + m[1]!.length);
-    if (re.lastIndex === m.index) re.lastIndex++;
-  }
-  return out;
-}
-
 /** The line containing an offset, trimmed for display. */
 export function lineAt(text: string, offset: number, max = 240): string {
   const start = Math.max(0, text.lastIndexOf("\n", offset) + 1);

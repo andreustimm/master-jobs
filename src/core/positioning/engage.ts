@@ -79,21 +79,24 @@ export async function markEngagement(
     .where(eq(engagement.id, id));
 }
 
-/** Cadence check: the audit asks for 2 substantive comments per weekday. */
-export async function engagementStats(days = 7) {
-  const db = getDb();
-  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
-  const rows = await db
-    .select({ kind: engagement.kind, status: engagement.status, n: sql<number>`count(*)` })
-    .from(engagement)
-    .where(sql`${engagement.doneAt} >= ${cutoff} or ${engagement.status} = 'queued'`)
-    .groupBy(engagement.kind, engagement.status);
-  return rows;
-}
-
 /* -------------------------------------------------------------------------- */
 /* Content                                                                     */
 /* -------------------------------------------------------------------------- */
+
+export const PILLAR_KEYS = [
+  "production-ai",
+  "agentic",
+  "saas-arch",
+  "modernization",
+  "data-rag",
+  "leadership",
+] as const;
+
+export type Pillar = (typeof PILLAR_KEYS)[number];
+
+export function parsePillar(value: string): Pillar | null {
+  return PILLAR_KEYS.find((pillar) => pillar === value) ?? null;
+}
 
 /** Content pillars from §13.2 of the positioning audit. */
 export const PILLARS = {
@@ -103,7 +106,7 @@ export const PILLARS = {
   modernization: "Legado evolui sem big-bang rewrite",
   "data-rag": "Qualidade de retrieval depende do pipeline, não do modelo",
   leadership: "Staff+ transforma ambiguidade em direção",
-} as const;
+} as const satisfies Record<Pillar, string>;
 
 export async function draftPost(input: {
   slug: string;

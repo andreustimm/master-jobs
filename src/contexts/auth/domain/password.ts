@@ -14,13 +14,6 @@
  * the hash so they can be raised later without invalidating existing accounts.
  */
 import { randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
-
-const scrypt = promisify(scryptCb) as (
-  password: string,
-  salt: Buffer,
-  keylen: number,
-) => Promise<Buffer>;
 
 /** OWASP-aligned for interactive login: ~64 MB, well under a second. */
 const N = 2 ** 16;

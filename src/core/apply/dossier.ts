@@ -17,14 +17,15 @@
  * The last one is the difference between being read and being filtered, and it
  * is computed against *this* posting rather than the market average.
  */
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { job, jobPage, jobScore } from "../db/schema.ts";
 import { loadProfile } from "../profile/load.ts";
 import { companiesWithContacts } from "../contacts.ts";
 import { slugifyCompany } from "../ingest/normalize.ts";
-import { analyzeGap, measureDemand } from "../../contexts/skills/domain/gap.ts";
-import { drizzleCatalog } from "../../contexts/skills/infra/drizzle-adapters.ts";
+import { jobVocabularyComparison } from "../../contexts/skills/index.ts";
+import { scoreMessages } from "../../contexts/matching/index.ts";
+import { renderScoreMessage, translator } from "../i18n/index.ts";
 
 export type DossierEvidence = { area: string; line: string; matched: string[] };
 
@@ -89,7 +90,11 @@ export function matchEvidence(
   return out.sort((a, b) => b.matched.length - a.matched.length);
 }
 
-export async function buildDossier(jobId: number, cvText: string | null): Promise<Dossier | null> {
+export async function buildDossier(
+  candidateId: number,
+  jobId: number,
+  cvText: string | null,
+): Promise<Dossier | null> {
   const db = getDb();
 
   const [row] = await db
@@ -109,7 +114,10 @@ export async function buildDossier(jobId: number, cvText: string | null): Promis
       pageExtracted: jobPage.extracted,
     })
     .from(job)
-    .leftJoin(jobScore, eq(jobScore.jobId, job.id))
+    .leftJoin(
+      jobScore,
+      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+    )
     .leftJoin(jobPage, eq(jobPage.jobId, job.id))
     .where(eq(job.id, jobId))
     .limit(1);
@@ -140,9 +148,7 @@ export async function buildDossier(jobId: number, cvText: string | null): Promis
   if (hasDescription && cvText) {
     // One posting is the whole corpus here, so demand is binary: the term is
     // either in this job or it is not. That is exactly the question being asked.
-    const catalog = await drizzleCatalog.all();
-    const demand = measureDemand(catalog, [text]);
-    const report = analyzeGap(catalog, cvText, demand, 1, { minDemand: 0 });
+    const report = await jobVocabularyComparison({ cvText, jobText: text });
     vocabularyGaps = report.quickWins.map((item) => ({ term: item.marketTerm, cvSays: item.cvTerms }));
     missing = report.realGaps.map((item) => item.marketTerm);
   } else if (!cvText) {
@@ -161,7 +167,9 @@ export async function buildDossier(jobId: number, cvText: string | null): Promis
     },
     fit: row.fit,
     cluster: row.cluster,
-    blockers: Array.isArray(row.blockers) ? (row.blockers as string[]) : [],
+    blockers: scoreMessages(row.blockers).map((blocker) =>
+      renderScoreMessage(blocker, translator("pt-BR").t)
+    ),
     contacts,
     requirements: extracted.requirements ?? [],
     // Nothing outside `evidence:` is claimable — rule 6.

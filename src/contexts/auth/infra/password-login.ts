@@ -20,7 +20,7 @@ import { clock } from "../../../core/clock.ts";
 import { getDb } from "../../../core/db/client.ts";
 import { authEvent, authUser } from "../../../core/db/schema.ts";
 import { hashPassword, verifyPassword } from "../domain/password.ts";
-import type { Identity } from "../ports.ts";
+import type { PasswordResult, PasswordVerifier } from "../ports.ts";
 import type { Role } from "../domain/types.ts";
 
 /** Failures tolerated per address inside the window. */
@@ -53,10 +53,6 @@ export async function recentFailures(email: string): Promise<number> {
     );
   return Number(row?.n ?? 0);
 }
-
-export type PasswordResult =
-  | { ok: true; identity: Identity }
-  | { ok: false; reason: "invalid" | "rate_limited" };
 
 export async function verifyLogin(email: string, password: string): Promise<PasswordResult> {
   const normalised = email.toLowerCase().trim();
@@ -112,12 +108,15 @@ export async function verifyLogin(email: string, password: string): Promise<Pass
   return {
     ok: true,
     identity: {
+      userId: user.id,
       email: user.email,
       roles: (user.roles as Role[]) ?? [],
       candidateId: user.candidateId,
     },
   };
 }
+
+export const drizzlePasswords: PasswordVerifier = { verify: verifyLogin };
 
 /** Sets or replaces a password, and drops every live session for the account. */
 export async function setPassword(email: string, password: string): Promise<boolean> {

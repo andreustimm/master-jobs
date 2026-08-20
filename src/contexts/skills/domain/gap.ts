@@ -23,6 +23,7 @@
  * Pure: no database, no network, no clock.
  */
 import type { SkillDefinition } from "./types.ts";
+import { matchesSkillTerm, skillTerms } from "./matcher.ts";
 
 export type GapKind = "covered" | "vocabulary" | "missing";
 
@@ -68,16 +69,6 @@ export type GapReport = {
   };
 };
 
-/** Word-boundary match. Same rule as the scorer, so the two agree. */
-function mentions(haystack: string, term: string): boolean {
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(^|[^a-z0-9+#])${escaped}([^a-z0-9+#]|$)`, "i").test(haystack);
-}
-
-function normalize(text: string): string {
-  return text.toLowerCase().replace(/\s+/g, " ");
-}
-
 /**
  * How often the market uses each spelling of each skill.
  *
@@ -86,16 +77,14 @@ function normalize(text: string): string {
  * would let one verbose posting outweigh ten terse ones.
  */
 export function measureDemand(catalog: SkillDefinition[], jobTexts: string[]): SkillDemand[] {
-  const normalized = jobTexts.map(normalize);
-
   return catalog.map((skill) => {
     const counts = new Map<string, number>();
     let jobCount = 0;
 
-    for (const text of normalized) {
+    for (const text of jobTexts) {
       let hitThisJob = false;
-      for (const alias of skill.aliases) {
-        if (mentions(text, alias)) {
+      for (const alias of skillTerms(skill)) {
+        if (matchesSkillTerm(text, alias)) {
           counts.set(alias, (counts.get(alias) ?? 0) + 1);
           hitThisJob = true;
         }
@@ -124,7 +113,6 @@ export function analyzeGap(
   options: AnalyzeGapOptions = {},
 ): GapReport {
   const minDemand = options.minDemand ?? 0.05;
-  const cv = normalize(cvText);
   const bySlug = new Map(demand.map((d) => [d.slug, d]));
 
   const items: GapItem[] = [];
@@ -136,7 +124,7 @@ export function analyzeGap(
     const share = d.jobCount / totalJobs;
     if (share < minDemand) continue;
 
-    const cvTerms = skill.aliases.filter((a) => mentions(cv, a));
+    const cvTerms = skillTerms(skill).filter((term) => matchesSkillTerm(cvText, term));
     const marketTerm = d.termsByFrequency[0]?.term ?? skill.name.toLowerCase();
 
     let kind: GapKind;

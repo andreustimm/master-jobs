@@ -3,10 +3,11 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { pipelineCounts, pipelineRows } from "../../src/core/db/repo.ts";
+import { pipelineCounts, pipelineRows } from "../../src/contexts/pursuit/index.ts";
 import { APPLICATION_STATUSES } from "../../src/core/db/schema.ts";
+import { isPublicJobUrl } from "../../src/core/job-url.ts";
 import { ACTION_BUTTON, Fit, StatusBadge } from "../ui";
-import { requirePage } from "../auth";
+import { requireOwnCandidatePage } from "../auth";
 import { getTranslator } from "../i18n";
 
 export const dynamic = "force-dynamic";
@@ -14,9 +15,12 @@ export const dynamic = "force-dynamic";
 export default async function Pipeline() {
   const { t, locale } = await getTranslator();
   void locale;
-  await requirePage("job:read");
+  const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
-  const [counts, rows] = await Promise.all([pipelineCounts(), pipelineRows()]);
+  const [counts, rows] = await Promise.all([
+    pipelineCounts(candidateId),
+    pipelineRows(candidateId),
+  ]);
 
   return (
     <main className="pt-10">
@@ -76,19 +80,32 @@ export default async function Pipeline() {
                   </div>
                 )}
               </div>
-              <a
-                href={r.url}
-                target="_blank"
-                rel="noopener"
-                className={cn(
-                  buttonVariants({ variant: "outline", size: "sm" }),
-                  ACTION_BUTTON,
-                  // Own row on a phone; right-hand column from `sm` up.
-                  "col-span-2 justify-self-start sm:col-span-1 sm:justify-self-auto",
-                )}
-              >
-                {t("pipeline.open")} →
-              </a>
+              {isPublicJobUrl(r.url) ? (
+                <a
+                  href={r.url}
+                  target="_blank"
+                  rel="noopener"
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "sm" }),
+                    ACTION_BUTTON,
+                    // Own row on a phone; right-hand column from `sm` up.
+                    "col-span-2 justify-self-start sm:col-span-1 sm:justify-self-auto",
+                  )}
+                >
+                  {t("pipeline.open")} →
+                </a>
+              ) : (
+                <Link
+                  href={`/jobs/${r.jobId}`}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "sm" }),
+                    ACTION_BUTTON,
+                    "col-span-2 justify-self-start sm:col-span-1 sm:justify-self-auto",
+                  )}
+                >
+                  {t("pipeline.open")} →
+                </Link>
+              )}
             </div>
           ))}
         </div>

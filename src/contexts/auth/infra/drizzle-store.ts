@@ -3,12 +3,18 @@
  *
  * The only file in the context that knows SQL exists.
  */
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { clock } from "../../../core/clock.ts";
 import { getDb } from "../../../core/db/client.ts";
-import { authLoginToken, authSession, authUser } from "../../../core/db/schema.ts";
-import type { Identity, IdentityProvider, NewSession, SessionStore } from "../ports.ts";
+import { authEvent, authLoginToken, authSession, authUser } from "../../../core/db/schema.ts";
+import type {
+  AuthRepository,
+  Identity,
+  IdentityProvider,
+  NewSession,
+  SessionStore,
+} from "../ports.ts";
 import type { Role, Session } from "../domain/types.ts";
 
 /** 32 bytes of CSPRNG. Guessing is not a threat model at this width. */
@@ -26,16 +32,6 @@ function newToken(): string {
 function hash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
-
-/** Constant-time compare, so lookup latency cannot leak a prefix. */
-export function tokensMatch(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) return false;
-  return timingSafeEqual(bufA, bufB);
-}
-
-export const SESSION_DAYS = 30;
 
 export const drizzleSessions: SessionStore = {
   async create(input: NewSession): Promise<string> {
@@ -107,6 +103,27 @@ export const drizzleSessions: SessionStore = {
   },
 };
 
+export const drizzleAuthRepository: AuthRepository = {
+  async record(input): Promise<void> {
+    await getDb().insert(authEvent).values({
+      kind: input.kind,
+      userId: input.userId ?? null,
+      email: input.email ?? null,
+      detail: input.detail ?? null,
+      at: clock().iso(),
+    });
+  },
+
+  async findUserId(email): Promise<number | null> {
+    const [user] = await getDb()
+      .select({ id: authUser.id })
+      .from(authUser)
+      .where(eq(authUser.email, email.toLowerCase().trim()))
+      .limit(1);
+    return user?.id ?? null;
+  },
+};
+
 export const MAGIC_LINK_MINUTES = 15;
 
 /**
@@ -153,6 +170,7 @@ export const magicLink: IdentityProvider = {
 
     const [user] = await db
       .select({
+        id: authUser.id,
         email: authUser.email,
         roles: authUser.roles,
         candidateId: authUser.candidateId,
@@ -167,6 +185,7 @@ export const magicLink: IdentityProvider = {
     if (!user || user.disabledAt) return null;
 
     return {
+      userId: user.id,
       email: user.email,
       roles: (user.roles as Role[]) ?? [],
       candidateId: user.candidateId,

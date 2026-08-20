@@ -1,5 +1,5 @@
 /**
- * PDF text extraction for candidate documents.
+ * PDF text extraction for candidate documents and job descriptions.
  *
  * The extraction itself is one library call. Everything else in this file is
  * cleanup, and the cleanup is the part that matters: this text feeds skill
@@ -71,11 +71,11 @@ export function cleanPdfText(raw: string): string {
 }
 
 /** Heuristics for "this extraction produced something unusable". */
-function inspect(text: string, pages: number): string[] {
+function inspect(text: string, pages: number, documentKind: "cv" | "job"): string[] {
   const warnings: string[] = [];
 
   if (text.length < 200) {
-    // Almost always a scanned CV: the pages are images and carry no text layer.
+    // Almost always a scanned document: the pages are images and carry no text layer.
     warnings.push(
       "Quase nenhum texto extraído. O PDF provavelmente é digitalizado (imagem) — " +
         "não há camada de texto para ler. Cole o conteúdo manualmente.",
@@ -94,14 +94,17 @@ function inspect(text: string, pages: number): string[] {
     warnings.push("Linhas muito longas — o PDF pode ter layout em colunas e a ordem de leitura pode estar trocada.");
   }
 
-  if (pages > 6) {
+  if (documentKind === "cv" && pages > 6) {
     warnings.push(`${pages} páginas. Currículos longos diluem o vocabulário na análise de lacuna.`);
   }
 
   return warnings;
 }
 
-export async function extractPdfText(data: Uint8Array | ArrayBuffer): Promise<PdfExtraction> {
+export async function extractPdfText(
+  data: Uint8Array | ArrayBuffer,
+  options: { documentKind?: "cv" | "job" } = {},
+): Promise<PdfExtraction> {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
 
   const pdf = await getDocumentProxy(bytes);
@@ -112,5 +115,9 @@ export async function extractPdfText(data: Uint8Array | ArrayBuffer): Promise<Pd
   const pages = Array.isArray(text) ? text : [text];
   const cleaned = cleanPdfText(pages.join("\n\n"));
 
-  return { text: cleaned, pages: totalPages, warnings: inspect(cleaned, totalPages) };
+  return {
+    text: cleaned,
+    pages: totalPages,
+    warnings: inspect(cleaned, totalPages, options.documentKind ?? "cv"),
+  };
 }

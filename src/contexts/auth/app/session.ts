@@ -5,15 +5,22 @@
  * `infra/`, and this file just moves between them.
  */
 import { clock } from "../../../core/clock.ts";
-import { getDb } from "../../../core/db/client.ts";
-import { authEvent, authUser } from "../../../core/db/schema.ts";
-import { eq } from "drizzle-orm";
-import type { IdentityProvider, SessionStore } from "../ports.ts";
+import type {
+  AuthRepository,
+  IdentityProvider,
+  PasswordVerifier,
+  SessionStore,
+} from "../ports.ts";
 import type { Role, Session } from "../domain/types.ts";
 
-export type AuthDeps = { sessions: SessionStore; identity: IdentityProvider };
+export type AuthDeps = {
+  sessions: SessionStore;
+  identity: IdentityProvider;
+  passwords: PasswordVerifier;
+  repository: AuthRepository;
+};
 
-const SESSION_DAYS = 30;
+export const SESSION_DAYS = 30;
 
 /**
  * Records what happened, never how.
@@ -24,16 +31,9 @@ const SESSION_DAYS = 30;
 async function record(
   kind: string,
   input: { userId?: number | null; email?: string | null; detail?: string },
+  deps: AuthDeps,
 ): Promise<void> {
-  await getDb().insert(authEvent).values({
-    kind,
-    userId: input.userId ?? null,
-    email: input.email ?? null,
-    detail: input.detail ?? null,
-    // From the injected clock, so anything that reasons over a time window
-    // (rate limiting) measures against the same timeline it writes.
-    at: clock().iso(),
-  });
+  await deps.repository.record({ kind, ...input });
 }
 
 export async function beginLogin(
@@ -48,32 +48,21 @@ export type LoginResult = { token: string; session: Session } | null;
 export async function completeLogin(loginToken: string, deps: AuthDeps): Promise<LoginResult> {
   const identity = await deps.identity.complete(loginToken);
   if (!identity) {
-    await record("login_failed", { detail: "token inválido, usado ou expirado" });
-    return null;
-  }
-
-  const db = getDb();
-  const [user] = await db
-    .select({ id: authUser.id })
-    .from(authUser)
-    .where(eq(authUser.email, identity.email))
-    .limit(1);
-  if (!user) {
-    await record("login_failed", { email: identity.email, detail: "conta inexistente" });
+    await record("login_failed", { detail: "token inválido, usado ou expirado" }, deps);
     return null;
   }
 
   const expiresAt = new Date(clock().now() + SESSION_DAYS * 86_400_000).toISOString();
   // A fresh token on every login is what defeats session fixation: a value the
   // attacker planted before authentication is not the value that ends up valid.
-  const token = await deps.sessions.create({ userId: user.id, expiresAt });
+  const token = await deps.sessions.create({ userId: identity.userId, expiresAt });
 
-  await record("login", { userId: user.id, email: identity.email });
+  await record("login", { userId: identity.userId, email: identity.email }, deps);
 
   return {
     token,
     session: {
-      userId: user.id,
+      userId: identity.userId,
       candidateId: identity.candidateId,
       roles: identity.roles,
       email: identity.email,
@@ -82,12 +71,47 @@ export async function completeLogin(loginToken: string, deps: AuthDeps): Promise
   };
 }
 
+export type PasswordLoginResult =
+  | { ok: true; token: string; session: Session }
+  | { ok: false; reason: "invalid" | "rate_limited" };
+
+export async function loginWithPassword(
+  email: string,
+  password: string,
+  deps: AuthDeps,
+): Promise<PasswordLoginResult> {
+  const verified = await deps.passwords.verify(email, password);
+  if (!verified.ok) return verified;
+  const identity = verified.identity;
+  const expiresAt = new Date(clock().now() + SESSION_DAYS * 86_400_000).toISOString();
+  const token = await deps.sessions.create({ userId: identity.userId, expiresAt });
+  await record("login", {
+    userId: identity.userId,
+    email: identity.email,
+    detail: "senha",
+  }, deps);
+  return {
+    ok: true,
+    token,
+    session: { ...identity, expiresAt },
+  };
+}
+
 export async function logout(token: string, deps: AuthDeps): Promise<void> {
   const session = await deps.sessions.resolve(token);
   // Revoked server-side, not merely forgotten by the browser: a cookie the
   // client deletes is still a valid credential to anyone who copied it.
   await deps.sessions.revoke(token);
-  if (session) await record("logout", { userId: session.userId, email: session.email });
+  if (session) await record("logout", { userId: session.userId, email: session.email }, deps);
+}
+
+export async function revokeAllSessionsForEmail(
+  email: string,
+  deps: AuthDeps,
+): Promise<number | null> {
+  const userId = await deps.repository.findUserId(email);
+  if (userId === null) return null;
+  return deps.sessions.revokeAllFor(userId);
 }
 
 /* ------------------------------ Single user ------------------------------- */

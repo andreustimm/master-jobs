@@ -26,24 +26,39 @@ export type RawJob = {
   raw: unknown;
 };
 
-export type SourceKind =
-  | "greenhouse"
-  | "lever"
-  | "ashby"
-  | "smartrecruiters"
-  | "recruitee"
-  | "workable"
-  | "himalayas"
-  | "remotive"
-  | "arbeitnow"
-  | "remoteok"
-  | "adzuna"
-  | "braintrust"
-  | "careers"
-  | "manual";
+/**
+ * Source kinds that can participate in an automated sync.
+ *
+ * This runtime tuple is also consumed by the YAML validator. The adapter
+ * registry is checked exhaustively against the derived union, so a kind can
+ * never become configurable before its adapter exists.
+ */
+export const FETCHABLE_SOURCE_KINDS = [
+  "greenhouse",
+  "lever",
+  "ashby",
+  "smartrecruiters",
+  "recruitee",
+  "himalayas",
+  "remotive",
+  "arbeitnow",
+  "remoteok",
+  "adzuna",
+  "braintrust",
+  "careers",
+] as const;
+
+export type FetchableSourceKind = (typeof FETCHABLE_SOURCE_KINDS)[number];
+
+/** Persistence-only sources are created by imports and never swept by sync. */
+export const MANUAL_SOURCE_KINDS = ["manual"] as const;
+
+export type ManualSourceKind = (typeof MANUAL_SOURCE_KINDS)[number];
+
+export type SourceKind = FetchableSourceKind | ManualSourceKind;
 
 export type SourceConfig = {
-  kind: SourceKind;
+  kind: FetchableSourceKind;
   /** Board token, company slug, or a query string for aggregators. */
   handle: string;
   label: string;
@@ -57,7 +72,7 @@ export type FetchResult = {
 };
 
 export type SourceAdapter = {
-  kind: SourceKind;
+  kind: FetchableSourceKind;
   /** Human-facing docs URL, so the config file explains itself. */
   docs: string;
   fetchJobs(config: SourceConfig): Promise<FetchResult>;

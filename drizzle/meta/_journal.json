@@ -78,6 +78,76 @@
       "when": 1787185089898,
       "tag": "0010_smooth_thing",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1787193982584,
+      "tag": "0011_boring_vertigo",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1787193993462,
+      "tag": "0012_backfill_candidate_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1787194021218,
+      "tag": "0013_robust_jasper_sitwell",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1787221964864,
+      "tag": "0014_cleanup_orphan_auth_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1787222093635,
+      "tag": "0015_expand_candidate_document_reference",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1787222101398,
+      "tag": "0016_backfill_candidate_document_reference",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1787222148173,
+      "tag": "0017_contract_candidate_document_reference",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1787222173967,
+      "tag": "0018_enforce_candidate_document_ownership",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1787222417840,
+      "tag": "0019_candidate_matching_profile",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1787223301780,
+      "tag": "0020_persist_structured_eligibility",
+      "breakpoints": true
     }
   ]
 }

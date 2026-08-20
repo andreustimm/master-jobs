@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   deleteDocument,
@@ -10,6 +10,7 @@ import {
   saveDocument,
 } from "../src/core/candidate.ts";
 import type { DB } from "../src/core/db/client.ts";
+import { setApplicationDocument, setApplicationStatus } from "../src/core/db/repo.ts";
 import { application, candidateDocument, company, job, source } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
@@ -39,7 +40,7 @@ afterEach(() => {
   releaseTestDb();
 });
 
-async function seedJobWithVariant(variant: string): Promise<void> {
+async function seedJobWithDocument(candidateDocumentId: number): Promise<void> {
   await db
     .insert(source)
     .values({ id: "greenhouse:acme", kind: "greenhouse", handle: "acme", label: "Acme" });
@@ -61,7 +62,12 @@ async function seedJobWithVariant(variant: string): Promise<void> {
       raw: "{}",
     })
     .returning({ id: job.id });
-  await db.insert(application).values({ jobId: j!.id, status: "applied", cvVariant: variant });
+  await db.insert(application).values({
+    candidateId,
+    jobId: j!.id,
+    status: "applied",
+    candidateDocumentId,
+  });
 }
 
 describe("saveDocument", () => {
@@ -82,6 +88,99 @@ describe("saveDocument", () => {
     const history = await documentHistory(candidateId);
     expect(history).toHaveLength(2);
     expect(history.filter((h) => h.isCurrent)).toHaveLength(1);
+  });
+
+  it("restaura a versão anterior se a inserção da nova falhar", async () => {
+    const first = await saveDocument({ candidateId, label: "v1", content: CV });
+    await db.run(sql.raw(`
+      create trigger reject_current_document
+      before insert on candidate_document
+      when new.is_current = 1
+      begin
+        select raise(abort, 'forced document failure');
+      end
+    `));
+
+    await expect(
+      saveDocument({ candidateId, label: "v2", content: `${CV} mudou` }),
+    ).rejects.toThrow();
+
+    const current = await documentById(candidateId, first.id);
+    expect(current?.isCurrent).toBe(true);
+    expect((await documentHistory(candidateId)).filter((doc) => doc.isCurrent)).toHaveLength(1);
+  });
+
+  it("mantém exatamente um atual sob salvamentos concorrentes", async () => {
+    await saveDocument({ candidateId, label: "base", content: CV });
+
+    const outcomes = await Promise.allSettled([
+      saveDocument({ candidateId, label: "a", content: `${CV} a` }),
+      saveDocument({ candidateId, label: "b", content: `${CV} b` }),
+    ]);
+
+    expect(outcomes.some((outcome) => outcome.status === "fulfilled")).toBe(true);
+    const history = await documentHistory(candidateId);
+    expect(history.filter((doc) => doc.isCurrent)).toHaveLength(1);
+  });
+});
+
+describe("application document reference", () => {
+  it("survives a document rename because the application stores its id", async () => {
+    const first = await saveDocument({ candidateId, label: "ATS EN 2026-07", content: CV });
+    await saveDocument({ candidateId, label: "current", content: `${CV} atual` });
+    await seedJobWithDocument(first.id);
+
+    await renameDocument(candidateId, first.id, "renamed after sending");
+    const [tracked] = await db.select().from(application);
+    expect(tracked!.candidateDocumentId).toBe(first.id);
+    expect((await deleteDocument(candidateId, first.id)).ok).toBe(false);
+  });
+
+  it("refuses to attach a document owned by another candidate", async () => {
+    const other = await ensureCandidate({ slug: "outro", name: "Outra Pessoa" });
+    const foreign = await saveDocument({ candidateId: other, label: "foreign", content: CV });
+
+    await db
+      .insert(source)
+      .values({
+        id: "manual:ownership",
+        kind: "manual",
+        handle: "ownership",
+        label: "Ownership",
+      });
+    const [employer] = await db
+      .insert(company)
+      .values({ slug: "ownership", name: "Ownership" })
+      .returning({ id: company.id });
+    const [posting] = await db
+      .insert(job)
+      .values({
+        sourceId: "manual:ownership",
+        companyId: employer!.id,
+        companyName: "Ownership",
+        externalId: "ownership",
+        title: "Architect",
+        url: "manual://ownership",
+        fingerprint: "ownership",
+        contentHash: "ownership",
+        raw: "{}",
+      })
+      .returning({ id: job.id });
+    await setApplicationStatus(candidateId, posting!.id, "applied");
+
+    await expect(
+      setApplicationDocument(candidateId, posting!.id, foreign.id),
+    ).rejects.toThrow("não pertence ao candidato");
+    const [tracked] = await db
+      .select()
+      .from(application)
+      .where(
+        and(
+          eq(application.candidateId, candidateId),
+          eq(application.jobId, posting!.id),
+        ),
+      );
+    expect(tracked!.candidateDocumentId).toBeNull();
   });
 });
 
@@ -142,7 +241,7 @@ describe("deleteDocument", () => {
   it("recusa versão que o funil diz ter enviado", async () => {
     const first = await saveDocument({ candidateId, label: "ATS EN 2026-07", content: CV });
     await saveDocument({ candidateId, label: "ATS EN 2026-08", content: CV + " mudou" });
-    await seedJobWithVariant("ATS EN 2026-07");
+    await seedJobWithDocument(first.id);
 
     const result = await deleteDocument(candidateId, first.id);
     if (result.ok) throw new Error("esperava recusa");

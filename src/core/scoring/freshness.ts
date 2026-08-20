@@ -46,8 +46,6 @@ const UNKNOWN = 0.5;
 export type FreshnessInput = {
   /** When the employer says it was posted. Preferred — it is the real signal. */
   postedAt?: string | null;
-  /** When this system first saw it. A ceiling on age, not the true age. */
-  firstSeenAt?: string | null;
 };
 
 export type FreshnessResult = {
@@ -55,8 +53,8 @@ export type FreshnessResult = {
   factor: number;
   /** Null when the age could not be established. */
   ageDays: number | null;
-  /** Which field the age came from — surfaced so `reasons` can be honest. */
-  basis: "posted" | "first_seen" | "unknown";
+  /** Whether an employer-provided date was usable. */
+  basis: "posted" | "unknown";
   reason: string;
 };
 
@@ -72,26 +70,22 @@ function parseDays(iso: string | null | undefined, now: number): number | null {
 
 export function scoreFreshness(input: FreshnessInput, now: number = Date.now()): FreshnessResult {
   const posted = parseDays(input.postedAt, now);
-  const seen = parseDays(input.firstSeenAt, now);
 
-  const ageDays = posted ?? seen;
-  const basis: FreshnessResult["basis"] =
-    posted !== null ? "posted" : seen !== null ? "first_seen" : "unknown";
-
-  if (ageDays === null) {
+  // `firstSeenAt` measures crawler timing, not posting age. Using it would
+  // reward sources discovered today and punish otherwise identical sources
+  // found later, violating the neutral-missing-data scoring invariant.
+  if (posted === null) {
     return { factor: UNKNOWN, ageDays: null, basis: "unknown", reason: "Posting date unknown" };
   }
 
-  const decayDays = Math.max(0, ageDays - PLATEAU_DAYS);
+  const decayDays = Math.max(0, posted - PLATEAU_DAYS);
   const factor = Math.pow(2, -decayDays / HALF_LIFE_DAYS);
 
-  const rounded = Math.round(ageDays);
-  // `first_seen` is a ceiling: the job may be older than the day we noticed it.
-  const hedge = basis === "first_seen" ? " (first seen; may be older)" : "";
+  const rounded = Math.round(posted);
   const label =
     rounded <= PLATEAU_DAYS
-      ? `Posted ${rounded === 0 ? "today" : `${rounded}d ago`} — inside the hot window${hedge}`
-      : `Posted ${rounded}d ago${hedge}`;
+      ? `Posted ${rounded === 0 ? "today" : `${rounded}d ago`} — inside the hot window`
+      : `Posted ${rounded}d ago`;
 
-  return { factor, ageDays, basis, reason: label };
+  return { factor, ageDays: posted, basis: "posted", reason: label };
 }

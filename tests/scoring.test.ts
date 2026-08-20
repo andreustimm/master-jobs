@@ -173,7 +173,7 @@ describe("compensation", () => {
     // Treating a bare number as USD is exactly the bug this replaced: the
     // corpus contains CAD, AUD, MXN and PHP postings.
     const noCurrency = scoreJob(job({ compMax: 200000, compPeriod: "year" }), profile);
-    expect(noCurrency.reasons.some((r) => r.includes("sem moeda"))).toBe(true);
+    expect(noCurrency.reasons.some((r) => r.code === "comp.noCurrency")).toBe(true);
   });
 
   it("treats a zero amount as undisclosed, not as below floor", () => {
@@ -182,7 +182,7 @@ describe("compensation", () => {
       job({ compMax: 0, compMin: 0, compCurrency: "USD", compPeriod: "year" }),
       profile,
     );
-    expect(zero.reasons.some((r) => r.includes("não divulgada"))).toBe(true);
+    expect(zero.reasons.some((r) => r.code === "comp.undisclosed")).toBe(true);
   });
 
   it("converts a foreign currency before judging it", () => {
@@ -214,7 +214,7 @@ describe("compensation", () => {
       job({ compMax: 30000, compCurrency: "USD", compPeriod: "project" }),
       profile,
     );
-    expect(noDuration.reasons.some((r) => r.includes("sem duração"))).toBe(true);
+    expect(noDuration.reasons.some((r) => r.code === "comp.projectNoDuration")).toBe(true);
 
     const withDuration = scoreJob(
       job({

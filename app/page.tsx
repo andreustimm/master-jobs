@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { boardFacets, clusterBreakdown, corpusStats, listBoard, pipelineCounts } from "../src/core/db/repo.ts";
+import { boardFacets, clusterBreakdown, corpusStats, listBoard } from "../src/contexts/matching/index.ts";
+import { pipelineCounts } from "../src/contexts/pursuit/index.ts";
 import { FilterBar, readFilters, toBoardFilters } from "./filters";
 import { JobList } from "./joblist";
 import { Legend, Stat } from "./ui";
-import { requirePage } from "./auth";
+import { requireOwnCandidatePage } from "./auth";
 import { getTranslator } from "./i18n";
 
 export const dynamic = "force-dynamic";
@@ -14,17 +15,17 @@ export default async function Cockpit({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { t, locale } = await getTranslator();
-  await requirePage("job:read");
+  const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
   const state = readFilters(await searchParams);
   const filters = toBoardFilters(state);
 
   const [stats, counts, clusters, top, facets] = await Promise.all([
-    corpusStats(),
-    pipelineCounts(),
-    clusterBreakdown(45),
-    listBoard({ ...filters, limit: 12 }),
-    boardFacets({ minFit: state.fit, cluster: state.cluster, q: state.q, sourceKind: state.source }),
+    corpusStats(candidateId),
+    pipelineCounts(candidateId),
+    clusterBreakdown(candidateId, 45),
+    listBoard(candidateId, { ...filters, limit: 12 }),
+    boardFacets(candidateId, { minFit: state.fit, cluster: state.cluster, q: state.q, sourceKind: state.source }),
   ]);
 
   const tracked = Object.values(counts).reduce((a, b) => a + b, 0);

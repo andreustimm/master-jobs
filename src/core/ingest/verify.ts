@@ -20,9 +20,12 @@
  * > alone. A false close is unrecoverable from the user's point of view, since
  * > the job silently disappears from the board.
  */
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, like, or, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
-import { job, jobScore } from "../db/schema.ts";
+import { job } from "../db/schema.ts";
+import { publicApplyUrl } from "../job-url.ts";
+import type { LookupHost } from "../remote-url.ts";
+import { probe } from "./probe.ts";
 
 export type VerifyResult = {
   checked: number;
@@ -33,35 +36,6 @@ export type VerifyResult = {
   bySource: Record<string, { gone: number; alive: number; inconclusive: number }>;
 };
 
-const GONE = new Set([404, 410]);
-
-async function probe(url: string, timeoutMs: number): Promise<number | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    // HEAD first: cheaper for both sides. Some boards reject it, so fall back.
-    const head = await fetch(url, {
-      method: "HEAD",
-      redirect: "follow",
-      signal: controller.signal,
-      headers: { "user-agent": process.env.JHO_USER_AGENT ?? "job-hunt-os/0.1" },
-    });
-    if (head.status !== 405 && head.status !== 501) return head.status;
-
-    const get = await fetch(url, {
-      method: "GET",
-      redirect: "follow",
-      signal: controller.signal,
-      headers: { "user-agent": process.env.JHO_USER_AGENT ?? "job-hunt-os/0.1" },
-    });
-    return get.status;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 export async function verifyJobs(
   opts: {
     minFit?: number;
@@ -69,6 +43,8 @@ export async function verifyJobs(
     concurrency?: number;
     delayMs?: number;
     dryRun?: boolean;
+    fetchImpl?: typeof fetch;
+    lookupHost?: LookupHost;
     onProgress?: (done: number, total: number) => void;
   } = {},
 ): Promise<VerifyResult> {
@@ -78,17 +54,38 @@ export async function verifyJobs(
 
   // Verify what the user might actually click. Checking 6.000 links to police
   // rows nobody will ever see would be rude to the boards and pointless here.
-  const rows = await db
+  const candidates = await db
     .select({
       id: job.id,
-      url: sql<string>`coalesce(${job.applyUrl}, ${job.url})`,
+      url: job.url,
+      applyUrl: job.applyUrl,
       sourceId: job.sourceId,
     })
     .from(job)
-    .leftJoin(jobScore, eq(jobScore.jobId, job.id))
-    .where(and(isNull(job.closedAt), sql`coalesce(${jobScore.fit}, 0) >= ${minFit}`))
-    .orderBy(sql`coalesce(${jobScore.fit}, 0) desc`)
-    .limit(limit);
+    .where(
+      and(
+        isNull(job.closedAt),
+        sql`coalesce((select max(fit) from job_score where job_id = ${job.id}), 0) >= ${minFit}`,
+        or(
+          like(job.applyUrl, "http://%"),
+          like(job.applyUrl, "https://%"),
+          like(job.url, "http://%"),
+          like(job.url, "https://%"),
+        ),
+      ),
+    )
+    .orderBy(
+      sql`coalesce((select max(fit) from job_score where job_id = ${job.id}), 0) desc`,
+    );
+
+  // Parse after the coarse SQL prefix filter so malformed values cannot
+  // consume the requested limit or reach fetch().
+  const rows = candidates
+    .flatMap((candidate) => {
+      const url = publicApplyUrl(candidate);
+      return url ? [{ id: candidate.id, sourceId: candidate.sourceId, url }] : [];
+    })
+    .slice(0, limit);
 
   const result: VerifyResult = {
     checked: 0,
@@ -112,17 +109,21 @@ export async function verifyJobs(
       const next = queue.shift();
       if (!next) return;
 
-      const status = await probe(next.url, 15_000);
+      const { verdict, status } = await probe(next.url, {
+        timeoutMs: 15_000,
+        fetchImpl: opts.fetchImpl,
+        lookupHost: opts.lookupHost,
+      });
       result.checked++;
 
-      if (status !== null && GONE.has(status)) {
+      if (verdict === "gone") {
         result.gone++;
         bump(next.sourceId, "gone");
         if (!opts.dryRun) {
           // Closed, not deleted — ADR 0005: an application may point at it.
           await db.update(job).set({ closedAt: stamp }).where(eq(job.id, next.id));
         }
-      } else if (status !== null && status >= 200 && status < 400) {
+      } else if (verdict === "alive") {
         result.alive++;
         bump(next.sourceId, "alive");
       } else {

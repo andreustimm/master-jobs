@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { braintrust } from "../src/core/sources/braintrust.ts";
+import {
+  fixtureHttp,
+  resetHttpPort,
+  setHttpPort,
+} from "../src/core/sources/http-port.ts";
 
 /** Shapes copied from live responses on 2026-08-18. */
 const LIST_PAGE = {
@@ -46,20 +51,17 @@ const DETAILS: Record<number, unknown> = {
 };
 
 async function fetchAll() {
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (input: string | URL | Request) => {
-    const url = String(input);
-    const detail = /\/api\/jobs\/(\d+)\/$/.exec(url);
-    const body = detail ? DETAILS[Number(detail[1])] : LIST_PAGE;
-    return new Response(JSON.stringify(body), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
-  }) as typeof fetch;
+  setHttpPort(
+    fixtureHttp({
+      "https://app.usebraintrust.com/api/jobs/?limit=20": LIST_PAGE,
+      "https://app.usebraintrust.com/api/jobs/17694/": DETAILS[17694]!,
+      "https://app.usebraintrust.com/api/jobs/17728/": DETAILS[17728]!,
+    }),
+  );
   try {
     return await braintrust.fetchJobs({ kind: "braintrust", handle: "10", label: "Braintrust" });
   } finally {
-    globalThis.fetch = original;
+    resetHttpPort();
   }
 }
 

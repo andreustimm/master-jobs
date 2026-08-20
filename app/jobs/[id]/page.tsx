@@ -6,28 +6,33 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { getJobDetail } from "../../../src/core/db/repo.ts";
+import { getJobDetail } from "../../../src/contexts/pursuit/index.ts";
+import { scoreMessages } from "../../../src/contexts/matching/index.ts";
+import { renderScoreMessage } from "../../../src/core/i18n/index.ts";
 import { APPLICATION_STATUSES } from "../../../src/core/db/schema.ts";
+import { isPublicJobUrl } from "../../../src/core/job-url.ts";
 import { trackAction } from "../../actions";
 import { Fit, Legend, ScoreBar, StatusBadge } from "../../ui";
-import { requirePage } from "../../auth";
+import { requireOwnCandidatePage } from "../../auth";
 import { getTranslator } from "../../i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function JobDetail({ params }: { params: Promise<{ id: string }> }) {
   const { t } = await getTranslator();
-  await requirePage("job:read");
+  const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
   const { id } = await params;
-  const detail = await getJobDetail(Number(id));
+  const detail = await getJobDetail(candidateId, Number(id));
   if (!detail) notFound();
 
   const { job, score, application, source } = detail;
-  const blockers = (score?.blockers as string[]) ?? [];
+  const blockers = scoreMessages(score?.blockers);
   const matched = (score?.matchedKeywords as string[]) ?? [];
   const missing = (score?.missingKeywords as string[]) ?? [];
-  const reasons = (score?.reasons as string[]) ?? [];
+  const reasons = scoreMessages(score?.reasons);
+  const externalUrl = isPublicJobUrl(job.url);
+  const externalApplyUrl = isPublicJobUrl(job.applyUrl) ? job.applyUrl : null;
 
   return (
     <main className="pt-9 pb-16">
@@ -40,6 +45,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
           <h1 className="type-display-md text-balance">{job.title}</h1>
           {application && <StatusBadge status={application.status} />}
           {job.closedAt && <Badge variant="destructive">fechada</Badge>}
+          {!externalUrl && <Badge variant="secondary">{t("compare.manualJob")}</Badge>}
         </div>
         <p className="mt-2 text-muted-foreground">
           <strong className="text-foreground">{job.companyName}</strong>
@@ -52,22 +58,26 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
         {/* Two destinations: the bare URL shows the description, /apply opens
             the form. Sending someone to a form for a job they have not read is
             the wrong default. */}
-        <div className="mt-4 flex flex-wrap gap-2.5">
-          <a
-            href={job.url}
-            target="_blank"
-            rel="noopener"
-            className={buttonVariants({ variant: "outline" })}
-          >
-            Ver vaga na origem
-          </a>
-          {job.applyUrl && job.applyUrl !== job.url && (
-            <a href={job.applyUrl} target="_blank" rel="noopener" className={buttonVariants()}>
-              Aplicar →
-            </a>
-          )}
-        </div>
-        <p className="mt-2 font-mono type-meta break-all text-muted-foreground">{job.url}</p>
+        {externalUrl && (
+          <>
+            <div className="mt-4 flex flex-wrap gap-2.5">
+              <a
+                href={job.url}
+                target="_blank"
+                rel="noopener"
+                className={buttonVariants({ variant: "outline" })}
+              >
+                Ver vaga na origem
+              </a>
+              {externalApplyUrl && externalApplyUrl !== job.url && (
+                <a href={externalApplyUrl} target="_blank" rel="noopener" className={buttonVariants()}>
+                  Aplicar →
+                </a>
+              )}
+            </div>
+            <p className="mt-2 font-mono type-meta break-all text-muted-foreground">{job.url}</p>
+          </>
+        )}
       </header>
 
       {score && (
@@ -80,7 +90,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
               </span>
             </div>
 
-            <ScoreBar parts={score as unknown as Record<string, number | null>} t={t} />
+            <ScoreBar parts={score} t={t} />
             <div className="mt-3">
               <Legend t={t} />
             </div>
@@ -88,13 +98,15 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
             <ul className="mt-4 list-disc pl-5 type-caption-sm text-muted-foreground">
               {reasons.map((r, i) => (
                 <li key={i} className="mb-0.5">
-                  {r}
+                  {renderScoreMessage(r, t)}
                 </li>
               ))}
             </ul>
 
             {blockers.length > 0 && (
-              <p className="mt-3.5 type-caption-sm text-destructive">⚠ {blockers.join("; ")}</p>
+              <p className="mt-3.5 type-caption-sm text-destructive">
+                ⚠ {blockers.map((blocker) => renderScoreMessage(blocker, t)).join("; ")}
+              </p>
             )}
 
             {matched.length > 0 && (

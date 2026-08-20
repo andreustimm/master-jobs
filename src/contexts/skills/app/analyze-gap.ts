@@ -9,6 +9,7 @@ import { analyzeGap, measureDemand, type GapReport } from "../domain/gap.ts";
 import type { SkillCatalogPort, TargetCorpusPort } from "../ports.ts";
 
 export type AnalyzeGapInput = {
+  candidateId: number;
   /** The CV or profile text to compare against the market. */
   cvText: string;
   /**
@@ -24,7 +25,7 @@ export type AnalyzeGapInput = {
 };
 
 export type AnalyzeGapDeps = {
-  catalog: SkillCatalogPort;
+  catalog: Pick<SkillCatalogPort, "all">;
   corpus: TargetCorpusPort;
 };
 
@@ -34,6 +35,7 @@ export async function analyzeVocabularyGap(
 ): Promise<GapReport> {
   const catalog = await deps.catalog.all();
   const texts = await deps.corpus.targetTexts({
+    candidateId: input.candidateId,
     minFit: input.minFit ?? 60,
     limit: input.limit ?? 400,
   });

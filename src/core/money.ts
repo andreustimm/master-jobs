@@ -13,7 +13,7 @@
  * fell through to the annual branch and USD 100/hour was scored as USD 100/year,
  * i.e. discarded as below the floor.
  *
- * Everything here is pure. Conversion rates come from the caller (see fx.ts),
+ * Everything here is pure. Conversion rates come from the caller (see contexts/fx),
  * never from a network call inside a value object.
  */
 

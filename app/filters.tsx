@@ -5,6 +5,9 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import type { Translator } from "../src/core/i18n/index.ts";
+import { APPLICATION_STATUSES } from "../src/contexts/pursuit/domain/application.ts";
+import type { BoardFilters } from "../src/contexts/matching/index.ts";
 
 /**
  * Filter bar, shared by the cockpit and the job list.
@@ -83,7 +86,7 @@ export function FilterBar({
   facets: Facets;
   /** Tradutor da requisição. Recebido por prop porque este é Server Component
       e o chamador já o resolveu — buscar de novo aqui repetiria o trabalho. */
-  t: (key: string, values?: Record<string, string | number>) => string;
+  t: Translator["t"];
 }) {
   const CUTS = [0, 45, 55, 60, 70];
 
@@ -225,19 +228,22 @@ export function readFilters(params: Record<string, string | string[] | undefined
   };
 }
 
-export function toBoardFilters(state: FilterState) {
+const BOARD_STATUSES = [...APPLICATION_STATUSES, "unfiled", "any"] as const;
+const BOARD_SORTS = ["fit", "recent", "comp"] as const;
+
+export function toBoardFilters(state: FilterState): BoardFilters {
   return {
     minFit: state.fit,
     cluster: state.cluster,
     q: state.q,
     sourceKind: state.source,
-    status: state.status as never,
+    status: BOARD_STATUSES.find((status) => status === state.status),
     hideBlocked: state.unblocked,
     freshDays: state.fresh ? 3 : undefined,
     hasComp: state.paid,
     namedEmployer: state.named,
     hasDescription: state.described,
-    sort: (state.sort ?? "fit") as "fit" | "recent" | "comp",
+    sort: BOARD_SORTS.find((sort) => sort === state.sort) ?? "fit",
   };
 }
 

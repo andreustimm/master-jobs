@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { guard } from "./auth";
-import { setApplicationStatus } from "../src/core/db/repo.ts";
-import { APPLICATION_STATUSES } from "../src/core/db/schema.ts";
+import { guard, guardOwnCandidate } from "./auth";
+import { setApplicationStatus } from "../src/contexts/pursuit/index.ts";
+import { parseApplicationStatus } from "../src/contexts/pursuit/domain/application.ts";
 
 /**
  * Move a job through the funnel.
@@ -15,18 +15,19 @@ import { APPLICATION_STATUSES } from "../src/core/db/schema.ts";
 export async function trackAction(formData: FormData) {
   // Before any effect, never after: an action that validates late has already
   // written by the time it decides it should not have.
-  await guard("application:write");
+  const { candidateId } = await guardOwnCandidate("application:write");
 
   const jobId = Number(formData.get("jobId"));
-  const status = String(formData.get("status"));
+  const status = parseApplicationStatus(String(formData.get("status")));
   const note = formData.get("note");
 
   if (!Number.isFinite(jobId)) throw new Error("jobId inválido");
-  if (!(APPLICATION_STATUSES as readonly string[]).includes(status)) {
-    throw new Error(`Status inválido: ${status}`);
-  }
-
-  await setApplicationStatus(jobId, status as never, typeof note === "string" ? note : undefined);
+  await setApplicationStatus(
+    candidateId,
+    jobId,
+    status,
+    typeof note === "string" ? note : undefined,
+  );
 
   revalidatePath("/");
   revalidatePath("/jobs");
@@ -46,7 +47,9 @@ export async function trackAction(formData: FormData) {
  * tarefa. Trabalho duplicado contra site de terceiro é como se toma bloqueio.
  */
 export async function recheckAction(formData: FormData) {
-  await guard("application:write");
+  // Reconferir muta o corpus global, não o funil privado. Administradores podem
+  // curar vagas sem ganhar, por tabela, permissão sobre candidaturas.
+  await guard("job:write");
 
   const jobId = Number(formData.get("jobId"));
   if (!Number.isFinite(jobId)) throw new Error("jobId inválido");

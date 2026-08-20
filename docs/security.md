@@ -7,8 +7,10 @@ evidência, e o que foi corrigido.
 
 ## Modelo de ameaça
 
-Não é um SaaS. É uma aplicação local, de um usuário, sem autenticação, que
-guarda o material mais sensível de uma busca de emprego:
+Não é um SaaS. É uma aplicação local com autenticação exigida por padrão, que
+guarda o material mais sensível de uma busca de emprego. A persistência do
+funil e do score ainda assume um candidato por banco (ARCH-001/002), mesmo que
+Auth já permita mais de uma conta:
 
 | Ativo | Por que importa |
 |---|---|
@@ -23,10 +25,11 @@ cenários mundanos:
 1. Alguém na mesma rede — coworking, café, Wi-Fi de casa compartilhado.
 2. O repositório virando público com dado pessoal dentro.
 3. Um empregador correlacionando candidaturas por vazamento de referrer.
+4. Cookie forjado/revogado ou papel administrativo alcançando CV e funil.
 
-O que **não** é ameaça relevante hoje: multi-tenancy, escalonamento de
-privilégio, exfiltração por invasor remoto. Não há servidor exposto nem
-segundo usuário.
+O que **não** é ameaça relevante hoje: um invasor remoto alcançando diretamente
+um serviço público. O bind continua restrito a loopback. Isolamento entre
+candidatos, por outro lado, é dívida P0 antes de qualquer deploy compartilhado.
 
 ---
 
@@ -133,11 +136,10 @@ responde sem sessão, e o modo aberto precisa ser pedido com
 
 **Server Actions sem autenticação** — ✅ **resolvido em 19/08.** Toda Server
 Action passa por `guard(...)` antes de qualquer efeito, e o escopo por candidato
-nasce da sessão em vez de vir da entrada. O modo `single-user` mantém o uso
-local sem login, e o guard é o mesmo código nos dois modos — o caminho
-multiusuário não é um ramo que ninguém exercita. Ver AUTH-01.
+nasce da sessão em vez de vir da entrada. O modo aberto é somente opt-in por
+`JHO_AUTH_MODE=open`; o guard permanece no mesmo caminho. Ver AUTH-01.
 
-**Fluxo verificado ponta a ponta em 19/08**, com `JHO_AUTH_MODE=multi`: sem
+**Fluxo verificado ponta a ponta em 19/08**, no modo autenticado padrão: sem
 sessão o cabeçalho oferece entrar; o link de uso único resgata em
 `/login/callback` e grava o cookie `httpOnly`; a sessão passa a aparecer no
 cabeçalho; **o mesmo link recusa o segundo uso**; e o logout revoga no servidor,
@@ -152,12 +154,12 @@ faz melhor.
 
 ## Se um dia isto for para a Vercel
 
-Nesta ordem, e nada disso está feito:
+Nesta ordem; autenticação e guards já existem, os itens abaixo não:
 
-1. Autenticação de verdade — hoje qualquer URL pública é acesso total.
-2. `TURSO_AUTH_TOKEN` fora do repositório.
-3. Escopo por candidato em toda query (a coluna existe; o filtro não é enforçado).
-4. Rate limit nas Server Actions.
+1. ARCH-001/002: `candidateId` no funil e no score, com queries escopadas.
+2. `TURSO_AUTH_TOKEN` fora do repositório e rotação operacional.
+3. TLS, cookies `secure` e política de origem do ambiente publicado.
+4. Rate limit distribuído nas Server Actions sensíveis.
 5. `Strict-Transport-Security` e revisão da CSP sem `unsafe-eval`.
 
 ---

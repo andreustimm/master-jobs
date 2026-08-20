@@ -1,9 +1,9 @@
-import { boardFacets, countBoard, listBoard } from "../../src/core/db/repo.ts";
+import { boardFacets, countBoard, listBoard } from "../../src/contexts/matching/index.ts";
 import { FilterBar, readFilters, toBoardFilters } from "../filters";
 import { GridToolbar, Pagination, Presets } from "../grid";
 import { JobList } from "../joblist";
 import { Legend } from "../ui";
-import { requirePage } from "../auth";
+import { requireOwnCandidatePage } from "../auth";
 import { getTranslator } from "../i18n";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export default async function Jobs({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { t, locale } = await getTranslator();
-  await requirePage("job:read");
+  const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
   const params = await searchParams;
   const state = readFilters(params);
@@ -29,9 +29,9 @@ export default async function Jobs({
   const dense = one("dense") === "1";
 
   const [rows, total, facets] = await Promise.all([
-    listBoard({ ...filters, limit: pageSize, offset: (page - 1) * pageSize }),
-    countBoard(filters),
-    boardFacets({ minFit: state.fit, cluster: state.cluster, q: state.q, sourceKind: state.source }),
+    listBoard(candidateId, { ...filters, limit: pageSize, offset: (page - 1) * pageSize }),
+    countBoard(candidateId, filters),
+    boardFacets(candidateId, { minFit: state.fit, cluster: state.cluster, q: state.q, sourceKind: state.source }),
   ]);
 
   return (

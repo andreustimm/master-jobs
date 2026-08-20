@@ -9,6 +9,7 @@
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { href, type FilterState } from "./filters";
+import type { Translator } from "../src/core/i18n/index.ts";
 
 export const PAGE_SIZES = [25, 50, 100, 200] as const;
 
@@ -25,7 +26,7 @@ export function Pagination({
   page: number;
   pageSize: number;
   total: number;
-  t: (key: string, values?: Record<string, string | number>) => string;
+  t: Translator["t"];
 }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const current = Math.min(page, pages);
@@ -102,7 +103,7 @@ export function GridToolbar({
   state: FilterState;
   total: number;
   dense: boolean;
-  t: (key: string, values?: Record<string, string | number>) => string;
+  t: Translator["t"];
 }) {
   const exportHref = `/api/export${new URL(href(base, state, {}), "http://x").search}`;
   const box = (active: boolean) =>
@@ -147,7 +148,7 @@ export function Presets({
   base: string;
   /** Tradutor da requisição, por prop: estes são Server Components e o
       chamador já o resolveu. */
-  t: (key: string, values?: Record<string, string | number>) => string;
+  t: Translator["t"];
 }) {
   return (
     <div className="mb-4 flex flex-wrap gap-2">

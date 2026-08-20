@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { forbidden, redirect } from "next/navigation";
 import {
   authorize,
   resolveSession,
@@ -7,7 +7,7 @@ import {
   type Resource,
   type Session,
 } from "../src/contexts/auth/index.ts";
-import { syncCandidateFromProfile } from "../src/core/candidate.ts";
+import { getCandidate } from "../src/core/candidate.ts";
 
 /**
  * The guard every Server Action goes through.
@@ -25,10 +25,11 @@ async function sessionToken(): Promise<string | null> {
 }
 
 export async function currentSession(): Promise<Session | null> {
-  // In single-user mode the candidate comes from profile.yaml, which is the
-  // same identity the CLI uses; the two must never disagree about who this is.
-  const candidateId = await syncCandidateFromProfile().catch(() => null);
-  return resolveSession(await sessionToken(), candidateId);
+  // Resolving a session is a read path. Updating the candidate here made every
+  // page view contend for a database write and hid profile synchronisation
+  // inside authentication. Seeding/syncing remains an explicit command.
+  const defaultCandidate = await getCandidate().catch(() => null);
+  return resolveSession(await sessionToken(), defaultCandidate?.id ?? null);
 }
 
 /**
@@ -54,8 +55,7 @@ export async function guardOwnCandidate(action: Action): Promise<{ session: Sess
   const session = await currentSession();
   const candidateId = session?.candidateId ?? null;
   if (candidateId === null) {
-    authorize(null, action);
-    throw new Error("unreachable");
+    forbidden();
   }
   authorize(session, action, { kind: "candidate", candidateId });
   return { session: session as Session, candidateId };
@@ -64,7 +64,7 @@ export async function guardOwnCandidate(action: Action): Promise<{ session: Sess
 /**
  * Requires a real session for a page, or redirects to login.
  *
- * The authoritative half of the pair described in `middleware.ts`: middleware
+ * The authoritative half of the pair described in `proxy.ts`: Proxy
  * only sees whether a cookie exists, this resolves it against the database, so
  * a forged or revoked token dies here.
  *
@@ -82,4 +82,15 @@ export async function requirePage(action: Action, resource?: Resource): Promise<
   const session = await requireSession();
   authorize(session, action, resource ?? { kind: "global" });
   return session;
+}
+
+/** Requires a page to operate on exactly the candidate scoped by its session. */
+export async function requireOwnCandidatePage(
+  action: Action,
+): Promise<{ session: Session; candidateId: number }> {
+  const session = await requireSession();
+  const candidateId = session.candidateId;
+  if (candidateId === null) forbidden();
+  authorize(session, action, { kind: "candidate", candidateId });
+  return { session, candidateId };
 }

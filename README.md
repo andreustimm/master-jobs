@@ -64,6 +64,18 @@ presencial, W2-only — limitam a nota em vez de zerá-la.
 
 Hoje: 1.207 vagas acima de 45, 175 acima de 60, 23 acima de 70.
 
+### Compara uma vaga avulsa
+
+O menu **Comparar vaga** aceita uma descrição colada ou um arquivo PDF, TXT ou
+Markdown. O conteúdo vira uma vaga manual de primeira classe — entra no mesmo
+acervo, passa pelo mesmo scorer do cockpit e pode seguir para o funil — sem
+criar uma candidatura automaticamente.
+
+Além da nota canônica, a tela compara a linguagem da vaga com o currículo atual
+salvo em `/candidate`: separa termos já cobertos, experiência escrita sob outro
+sinônimo e requisitos ainda não evidenciados no documento. O arquivo original
+não é armazenado; só o texto extraído e a proveniência da extração.
+
 ### Filtra o que não vale seu tempo
 
 ```bash
@@ -128,8 +140,8 @@ sua correspondência e nada toca a plataforma.
 Node 24 com type stripping nativo — **sem build step**, só sintaxe TypeScript
 apagável ([ADR 0006](docs/adr/0006-typescript-apagavel-sem-build-step.md)).
 TypeScript 7 · Drizzle ORM · libSQL · Zod · Commander · Vitest.
-Dashboard em Next.js 16 com shadcn/ui e Tailwind v4, em Server Components —
-as páginas não enviam JavaScript de cliente.
+Dashboard em Next.js 16 com shadcn/ui e Tailwind v4, em Server Components por
+padrão; JavaScript de cliente fica restrito aos controles realmente interativos.
 
 libSQL roda como arquivo local hoje e aponta para Turso amanhã sem trocar uma
 linha de SQL ([ADR 0002](docs/adr/0002-libsql-em-vez-de-better-sqlite3.md)).

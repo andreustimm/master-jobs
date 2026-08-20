@@ -29,7 +29,12 @@ export type SessionStore = {
   purgeExpired(): Promise<number>;
 };
 
-export type Identity = { email: string; roles: Role[]; candidateId: number | null };
+export type Identity = {
+  userId: number;
+  email: string;
+  roles: Role[];
+  candidateId: number | null;
+};
 
 export type IdentityProvider = {
   readonly name: string;
@@ -37,4 +42,24 @@ export type IdentityProvider = {
   begin(email: string): Promise<{ token: string; expiresAt: string }>;
   /** Completes a login, or null when the token is invalid, used or expired. */
   complete(token: string): Promise<Identity | null>;
+};
+
+export type AuthAuditInput = {
+  kind: string;
+  userId?: number | null;
+  email?: string | null;
+  detail?: string;
+};
+
+export type AuthRepository = {
+  record(input: AuthAuditInput): Promise<void>;
+  findUserId(email: string): Promise<number | null>;
+};
+
+export type PasswordResult =
+  | { ok: true; identity: Identity }
+  | { ok: false; reason: "invalid" | "rate_limited" };
+
+export type PasswordVerifier = {
+  verify(email: string, password: string): Promise<PasswordResult>;
 };

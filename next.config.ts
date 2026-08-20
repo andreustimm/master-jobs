@@ -13,8 +13,22 @@ const config: NextConfig = {
     root: import.meta.dirname,
   },
 
-  // libSQL is a native-adjacent client and must not be bundled for the server.
-  serverExternalPackages: ["@libsql/client"],
+  // Both are server-only dependencies whose runtime resolution is intentional:
+  // libSQL is native-adjacent, while unpdf uses `import.meta.resolve` to locate
+  // its bundled PDF.js assets. Webpack cannot preserve that lookup when inlined.
+  serverExternalPackages: ["@libsql/client", "unpdf"],
+
+  // Both candidate CVs and manual job descriptions accept files up to 10 MB.
+  // Server Actions default to 1 MB and count multipart framing too, so leave a
+  // small envelope above the application-level limit enforced by each action.
+  experimental: {
+    // Authorization helpers map a valid-but-forbidden session to an actual
+    // HTTP 403 instead of leaking data or failing as a generic server error.
+    authInterrupts: true,
+    serverActions: {
+      bodySizeLimit: "11mb",
+    },
+  },
 
   // Cache Components (Next 16) is deliberately OFF. This dashboard reads a
   // local database whose contents change on every sync, so caching would only
@@ -25,10 +39,9 @@ const config: NextConfig = {
   /**
    * Defence in depth.
    *
-   * This dashboard has no authentication of any kind and serves the CV, the
-   * salary floor, and every application in the funnel. The real control is
-   * binding to 127.0.0.1 (see `dev`/`start` in package.json) — these headers
-   * are the second layer, and the one that survives someone deploying this.
+   * Authentication is required by default, and the dashboard also stays bound
+   * to 127.0.0.1 (see `dev`/`start` in package.json). These headers are another
+   * independent layer, including for the explicitly requested open mode.
    */
   async headers() {
     return [

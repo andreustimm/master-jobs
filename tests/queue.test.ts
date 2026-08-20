@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
-import { company, job, jobScore, scrapeTask, source } from "../src/core/db/schema.ts";
+import { candidate, company, job, jobScore, scrapeTask, source } from "../src/core/db/schema.ts";
 import { MAX_ATTEMPTS, dbQueue, enqueuePending, retryFailed } from "../src/core/scrape/queue.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
@@ -10,6 +10,10 @@ let db: DB;
 async function seed(count: number, fit = 80): Promise<void> {
   await db.insert(source).values({ id: "greenhouse:acme", kind: "greenhouse", handle: "acme", label: "Acme" });
   const [c] = await db.insert(company).values({ slug: "acme", name: "Acme" }).returning({ id: company.id });
+  const [person] = await db
+    .insert(candidate)
+    .values({ slug: "queue-test", name: "Queue Test" })
+    .returning({ id: candidate.id });
   for (let i = 0; i < count; i++) {
     const [j] = await db
       .insert(job)
@@ -26,6 +30,7 @@ async function seed(count: number, fit = 80): Promise<void> {
       })
       .returning({ id: job.id });
     await db.insert(jobScore).values({
+      candidateId: person!.id,
       jobId: j!.id,
       fit: fit - i,
       titleScore: 0, keywordScore: 0, seniorityScore: 0, geoScore: 0, compScore: 0,

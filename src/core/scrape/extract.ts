@@ -135,16 +135,6 @@ export function cleanBullets(lines: string[], max = 20): string[] {
   return out;
 }
 
-/** Bullet lines, which is where requirements almost always live. */
-export function extractRequirements(text: string): string[] {
-  return text
-    .split("\n")
-    .map((line) => line.replace(/^[-•*·]\s*/, "").trim())
-    .filter((line) => line.length > 12 && line.length < 400)
-    .filter((line) => /^[-•*·]/.test(line) === false)
-    .slice(0, 60);
-}
-
 export function extractPage(html: string): ExtractedPage {
   const scoped = mainContent(html);
   const text = stripHtml(scoped);

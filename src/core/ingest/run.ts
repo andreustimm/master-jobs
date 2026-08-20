@@ -9,17 +9,21 @@
  */
 import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
-import { company, job, jobScore, source } from "../db/schema.ts";
+import { job, source } from "../db/schema.ts";
 import { getAdapter, sourceId } from "../sources/registry.ts";
 import type { SourceConfig } from "../sources/types.ts";
-import { contentHash, fingerprint, slugifyCompany, toIsoDate } from "./normalize.ts";
+import { observeRawJob } from "./observe.ts";
 
 export type SyncSourceResult = {
   sourceId: string;
   ok: boolean;
   fetched: number;
   inserted: number;
+  unchanged: number;
+  changed: number;
+  /** Compatibility count: every observation whose scoring content changed. */
   updated: number;
+  reopened: number;
   closed: number;
   /** Scores invalidated because the posting's content changed. */
   rescored: number;
@@ -35,7 +39,10 @@ export type SyncResult = {
   totals: {
     fetched: number;
     inserted: number;
+    unchanged: number;
+    changed: number;
     updated: number;
+    reopened: number;
     closed: number;
     rescored: number;
     failed: number;
@@ -64,22 +71,6 @@ export async function ensureSources(configs: SourceConfig[]): Promise<void> {
   }
 }
 
-async function upsertCompany(name: string): Promise<number | null> {
-  const db = getDb();
-  const slug = slugifyCompany(name);
-  if (!slug) return null;
-  await db
-    .insert(company)
-    .values({ slug, name })
-    .onConflictDoNothing({ target: company.slug });
-  const found = await db
-    .select({ id: company.id })
-    .from(company)
-    .where(eq(company.slug, slug))
-    .limit(1);
-  return found[0]?.id ?? null;
-}
-
 async function syncOne(config: SourceConfig): Promise<SyncSourceResult> {
   const db = getDb();
   const id = sourceId(config.kind, config.handle);
@@ -89,7 +80,10 @@ async function syncOne(config: SourceConfig): Promise<SyncSourceResult> {
     ok: false,
     fetched: 0,
     inserted: 0,
+    unchanged: 0,
+    changed: 0,
     updated: 0,
+    reopened: 0,
     closed: 0,
     rescored: 0,
     warnings: [],
@@ -107,66 +101,14 @@ async function syncOne(config: SourceConfig): Promise<SyncSourceResult> {
 
     for (const raw of rawJobs) {
       if (!raw.title || !raw.url) continue;
-      const fp = fingerprint(raw);
-      const ch = contentHash(raw);
-      seenFingerprints.push(fp);
-
-      const existing = await db
-        .select({ id: job.id, contentHash: job.contentHash })
-        .from(job)
-        .where(eq(job.fingerprint, fp))
-        .limit(1);
-
-      const companyId = await upsertCompany(raw.companyName);
-      const values = {
-        fingerprint: fp,
-        contentHash: ch,
-        sourceId: id,
-        externalId: raw.externalId,
-        companyId,
-        companyName: raw.companyName,
-        title: raw.title,
-        descriptionHtml: raw.descriptionHtml ?? null,
-        descriptionText: raw.descriptionText ?? null,
-        locationRaw: raw.locationRaw ?? null,
-        remote: raw.remote ?? null,
-        employmentType: raw.employmentType ?? null,
-        seniorityRaw: raw.seniorityRaw ?? null,
-        compMin: raw.compMin ?? null,
-        compMax: raw.compMax ?? null,
-        compCurrency: raw.compCurrency ?? null,
-        compPeriod: raw.compPeriod ?? null,
-        url: raw.url,
-        applyUrl: raw.applyUrl ?? null,
-        postedAt: toIsoDate(raw.postedAt),
-        lastSeenAt: stamp,
-        raw: raw.raw,
-      };
-
-      const found = existing[0];
-      if (!found) {
-        await db.insert(job).values({ ...values, firstSeenAt: stamp });
-        result.inserted++;
-      } else {
-        // Reopen anything that came back, and refresh only when content moved.
-        const contentChanged = found.contentHash !== ch;
-        await db
-          .update(job)
-          .set(contentChanged ? { ...values, closedAt: null } : { lastSeenAt: stamp, closedAt: null })
-          .where(eq(job.id, found.id));
-
-        if (contentChanged) {
-          result.updated++;
-          // The score was computed from the OLD text, so it is now a lie.
-          // Dropping it makes `jobs score` pick the job up again — without
-          // this, an edited posting keeps a stale rank forever and nothing
-          // surfaces the discrepancy. This is exactly how 4.538 Lever
-          // postings kept a zero keyword score after their descriptions
-          // were finally parsed correctly.
-          await db.delete(jobScore).where(eq(jobScore.jobId, found.id));
-          result.rescored++;
-        }
-      }
+      const observation = await observeRawJob(raw, id, { observedAt: stamp });
+      seenFingerprints.push(observation.fingerprint);
+      if (observation.outcome === "inserted") result.inserted++;
+      if (observation.outcome === "unchanged") result.unchanged++;
+      if (observation.outcome === "changed") result.changed++;
+      if (observation.contentChanged) result.updated++;
+      if (observation.outcome === "reopened") result.reopened++;
+      result.rescored += observation.invalidatedScores;
     }
 
     // Anything this source used to carry but no longer lists is closed.
@@ -238,12 +180,25 @@ export async function syncAll(
     (acc, r) => ({
       fetched: acc.fetched + r.fetched,
       inserted: acc.inserted + r.inserted,
+      unchanged: acc.unchanged + r.unchanged,
+      changed: acc.changed + r.changed,
       updated: acc.updated + r.updated,
+      reopened: acc.reopened + r.reopened,
       closed: acc.closed + r.closed,
       rescored: acc.rescored + r.rescored,
       failed: acc.failed + (r.ok ? 0 : 1),
     }),
-    { fetched: 0, inserted: 0, updated: 0, closed: 0, rescored: 0, failed: 0 },
+    {
+      fetched: 0,
+      inserted: 0,
+      unchanged: 0,
+      changed: 0,
+      updated: 0,
+      reopened: 0,
+      closed: 0,
+      rescored: 0,
+      failed: 0,
+    },
   );
 
   return { startedAt, finishedAt: new Date().toISOString(), sources: results, totals };

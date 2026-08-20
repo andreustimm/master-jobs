@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import type { Translator } from "../src/core/i18n/index.ts";
 
 /**
  * Presentation pieces built on shadcn primitives.
@@ -56,7 +57,19 @@ export const COMPONENTS = [
   { key: "benefitScore", label: "score.benefits", className: "bg-[var(--color-signal-soft)]" },
 ] as const;
 
-export function Fit({ value, className }: { value: number | null; className?: string }) {
+export type ScoreParts = Partial<
+  Record<(typeof COMPONENTS)[number]["key"], number | null>
+>;
+
+export function Fit({
+  value,
+  className,
+  size = "default",
+}: {
+  value: number | null;
+  className?: string;
+  size?: "default" | "large";
+}) {
   const tone =
     value == null
       ? "text-muted-foreground"
@@ -66,7 +79,14 @@ export function Fit({ value, className }: { value: number | null; className?: st
           ? "text-[var(--color-mid)]"
           : "text-muted-foreground";
   return (
-    <span className={cn("font-mono type-display-xs font-bold leading-none tabular-nums", tone, className)}>
+    <span
+      className={cn(
+        "font-mono font-bold leading-none tabular-nums",
+        size === "large" ? "type-display-lg" : "type-display-xs",
+        tone,
+        className,
+      )}
+    >
       {value == null ? "—" : value.toFixed(0)}
     </span>
   );
@@ -76,8 +96,8 @@ export function ScoreBar({
   parts,
   t,
 }: {
-  parts: Record<string, number | null>;
-  t?: (key: string) => string;
+  parts: ScoreParts;
+  t?: Translator["t"];
 }) {
   const segments = COMPONENTS.map((c) => ({ ...c, value: Number(parts[c.key] ?? 0) })).filter(
     (s) => s.value > 0,
@@ -99,7 +119,7 @@ export function ScoreBar({
   );
 }
 
-export function Legend({ t }: { t: (key: string) => string }) {
+export function Legend({ t }: { t: Translator["t"] }) {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
       {COMPONENTS.map((c) => (

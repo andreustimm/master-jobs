@@ -20,10 +20,12 @@
  * um `UPDATE ... RETURNING` único cujo WHERE reconfere o status, então dois
  * workers concorrentes nunca pegam a mesma tarefa.
  */
-import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, like, lt, or, sql } from "drizzle-orm";
 import { clock } from "../clock.ts";
 import { getDb } from "../db/client.ts";
-import { job, jobScore, verifyTask, type VerifyStatus } from "../db/schema.ts";
+import { job, verifyTask, type VerifyStatus } from "../db/schema.ts";
+import { publicApplyUrl } from "../job-url.ts";
+import type { LookupHost } from "../remote-url.ts";
 import { probe, type ProbeVerdict } from "./probe.ts";
 
 export const MAX_ATTEMPTS = 3;
@@ -57,11 +59,12 @@ export type ClaimedCheck = { id: number; jobId: number; url: string; attempts: n
 export async function enqueueVerify(
   jobId: number,
   opts: { origin?: "user" | "periodic"; priority?: number } = {},
-): Promise<{ queued: boolean; reason?: "not-found" | "closed" }> {
+): Promise<{ queued: boolean; reason?: "not-found" | "closed" | "unsupported-url" }> {
   const db = getDb();
   const rows = await db
     .select({
-      url: sql<string>`coalesce(${job.applyUrl}, ${job.url})`,
+      url: job.url,
+      applyUrl: job.applyUrl,
       closedAt: job.closedAt,
     })
     .from(job)
@@ -70,6 +73,10 @@ export async function enqueueVerify(
 
   const found = rows[0];
   if (!found) return { queued: false, reason: "not-found" };
+  const url = publicApplyUrl(found);
+  if (!url) {
+    return { queued: false, reason: "unsupported-url" };
+  }
 
   const origin = opts.origin ?? "user";
   const priority = opts.priority ?? (origin === "user" ? USER_PRIORITY : 0);
@@ -77,12 +84,12 @@ export async function enqueueVerify(
 
   await db
     .insert(verifyTask)
-    .values({ jobId, url: found.url, origin, priority, status: "pending" })
+    .values({ jobId, url, origin, priority, status: "pending" })
     .onConflictDoUpdate({
       target: verifyTask.jobId,
       set: {
         status: "pending",
-        url: found.url,
+        url,
         origin,
         priority,
         attempts: 0,
@@ -115,16 +122,25 @@ export async function enqueueStale(
   const rows = await db
     .select({ id: job.id })
     .from(job)
-    .leftJoin(jobScore, eq(jobScore.jobId, job.id))
     .where(
       and(
         isNull(job.closedAt),
-        sql`coalesce(${jobScore.fit}, 0) >= ${minFit}`,
+        or(
+          like(job.applyUrl, "http://%"),
+          like(job.applyUrl, "https://%"),
+          like(job.url, "http://%"),
+          like(job.url, "https://%"),
+        ),
+        sql`coalesce((select max(fit) from job_score where job_id = ${job.id}), 0) >= ${minFit}`,
         or(isNull(job.checkedAt), lt(job.checkedAt, cutoff)),
       ),
     )
     // Nunca conferida vem antes; depois, a conferência mais antiga.
-    .orderBy(sql`${job.checkedAt} is not null`, job.checkedAt, desc(sql`coalesce(${jobScore.fit}, 0)`))
+    .orderBy(
+      sql`${job.checkedAt} is not null`,
+      job.checkedAt,
+      desc(sql`coalesce((select max(fit) from job_score where job_id = ${job.id}), 0)`),
+    )
     .limit(opts.limit ?? 200);
 
   for (const row of rows) await enqueueVerify(row.id, { origin: "periodic", priority: 0 });
@@ -260,6 +276,7 @@ export async function runVerifyQueue(
     max?: number;
     delayMs?: number;
     fetchImpl?: typeof fetch;
+    lookupHost?: LookupHost;
     onProgress?: (done: number, verdict: ProbeVerdict, url: string) => void;
   } = {},
 ): Promise<RunResult> {
@@ -272,7 +289,10 @@ export async function runVerifyQueue(
     if (!task) break;
 
     try {
-      const { verdict, status } = await probe(task.url, { fetchImpl: opts.fetchImpl });
+      const { verdict, status } = await probe(task.url, {
+        fetchImpl: opts.fetchImpl,
+        lookupHost: opts.lookupHost,
+      });
       await recordVerdict(task.id, task.jobId, verdict, status);
       result.checked++;
       result[verdict]++;

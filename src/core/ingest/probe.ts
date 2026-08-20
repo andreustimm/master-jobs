@@ -26,6 +26,8 @@
  * Duplicada, ela divergiria, e a divergência apareceria como vaga viva sumindo.
  */
 
+import { safeRemoteFetch, type LookupHost } from "../remote-url.ts";
+
 export type ProbeVerdict = "alive" | "gone" | "inconclusive";
 
 /** Códigos que provam ausência. Deliberadamente curto. */
@@ -48,9 +50,8 @@ export type ProbeResult = { verdict: ProbeVerdict; status: number | null };
 
 export async function probe(
   url: string,
-  opts: { timeoutMs?: number; fetchImpl?: typeof fetch } = {},
+  opts: { timeoutMs?: number; fetchImpl?: typeof fetch; lookupHost?: LookupHost } = {},
 ): Promise<ProbeResult> {
-  const doFetch = opts.fetchImpl ?? fetch;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 15_000);
   const headers = { "user-agent": process.env.JHO_USER_AGENT ?? "job-hunt-os/0.1" };
@@ -58,21 +59,25 @@ export async function probe(
   try {
     // HEAD primeiro: mais barato para os dois lados. Alguns quadros recusam,
     // e aí a recusa do método não diz nada sobre a vaga — tenta GET.
-    const head = await doFetch(url, {
+    const head = await safeRemoteFetch(url, {
       method: "HEAD",
-      redirect: "follow",
       signal: controller.signal,
       headers,
+    }, {
+      fetchImpl: opts.fetchImpl,
+      lookupHost: opts.lookupHost,
     });
     if (head.status !== 405 && head.status !== 501) {
       return { verdict: classify(head.status), status: head.status };
     }
 
-    const get = await doFetch(url, {
+    const get = await safeRemoteFetch(url, {
       method: "GET",
-      redirect: "follow",
       signal: controller.signal,
       headers,
+    }, {
+      fetchImpl: opts.fetchImpl,
+      lookupHost: opts.lookupHost,
     });
     return { verdict: classify(get.status), status: get.status };
   } catch {

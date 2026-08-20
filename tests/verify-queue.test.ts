@@ -1,8 +1,9 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
-import { company, job, jobScore, source, verifyTask } from "../src/core/db/schema.ts";
+import { candidate, company, job, jobScore, source, verifyTask } from "../src/core/db/schema.ts";
 import { classify } from "../src/core/ingest/probe.ts";
+import type { LookupHost } from "../src/core/remote-url.ts";
 import {
   claimCheck,
   enqueueStale,
@@ -26,6 +27,7 @@ import { releaseTestDb, useTestDb } from "./support/db.ts";
  */
 
 let db: DB;
+let candidateId: number;
 
 beforeEach(async () => {
   db = await useTestDb();
@@ -33,6 +35,11 @@ beforeEach(async () => {
     .insert(source)
     .values({ id: "lever:acme", kind: "lever", handle: "acme", label: "Acme" });
   await db.insert(company).values({ slug: "acme", name: "Acme" });
+  const [person] = await db
+    .insert(candidate)
+    .values({ slug: "verify-queue-test", name: "Verify Queue Test" })
+    .returning({ id: candidate.id });
+  candidateId = person!.id;
 });
 
 afterEach(() => {
@@ -59,6 +66,7 @@ async function seedJob(opts: { fit?: number; checkedAt?: string; closed?: boolea
     .returning({ id: job.id });
   if (opts.fit !== undefined) {
     await db.insert(jobScore).values({
+      candidateId,
       jobId: row!.id,
       fit: opts.fit,
       titleScore: 0,
@@ -81,6 +89,10 @@ async function seedJob(opts: { fit?: number; checkedAt?: string; closed?: boolea
 function fakeFetch(status: number): typeof fetch {
   return (async () => new Response(null, { status })) as unknown as typeof fetch;
 }
+
+const publicLookup: LookupHost = async () => [
+  { address: "93.184.216.34", family: 4 },
+];
 
 describe("classify", () => {
   it("só 404 e 410 provam ausência", () => {
@@ -126,6 +138,15 @@ describe("enqueueVerify", () => {
     expect(rows).toHaveLength(1);
   });
 
+  it("falls back to the posting when applyUrl is not a public URL", async () => {
+    const id = await seedJob();
+    await db.update(job).set({ applyUrl: "/apply" }).where(eq(job.id, id));
+
+    expect(await enqueueVerify(id)).toEqual({ queued: true });
+    const [task] = await db.select().from(verifyTask).where(eq(verifyTask.jobId, id));
+    expect(task?.url).toBe(`https://example.test/${seq}`);
+  });
+
   it("pedido do usuário tem prioridade sobre a varredura", async () => {
     const varredura = await seedJob();
     const pedido = await seedJob();
@@ -139,7 +160,7 @@ describe("enqueueVerify", () => {
   it("reenfileira uma tarefa já concluída", async () => {
     const id = await seedJob();
     await enqueueVerify(id);
-    await runVerifyQueue({ fetchImpl: fakeFetch(200) });
+    await runVerifyQueue({ fetchImpl: fakeFetch(200), lookupHost: publicLookup });
     expect(await pendingFor(id)).toBe("done");
 
     // Reconferir é operação que se repete: semanas depois a resposta muda.
@@ -174,6 +195,35 @@ describe("enqueueStale", () => {
     await seedJob({ fit: 80, checkedAt: new Date().toISOString() });
     expect(await enqueueStale({ minFit: 55, olderThanDays: 7 })).toBe(0);
   });
+
+  it("considera o maior score por vaga sem duplicar o lote entre candidatos", async () => {
+    const first = await seedJob({ fit: 80 });
+    const second = await seedJob({ fit: 70 });
+    const [other] = await db
+      .insert(candidate)
+      .values({ slug: "verify-queue-other", name: "Other candidate" })
+      .returning({ id: candidate.id });
+    await db.insert(jobScore).values({
+      candidateId: other!.id,
+      jobId: first,
+      fit: 90,
+      titleScore: 0,
+      keywordScore: 0,
+      seniorityScore: 0,
+      geoScore: 0,
+      compScore: 0,
+      cluster: "other",
+      matchedKeywords: [],
+      missingKeywords: [],
+      reasons: [],
+      blockers: [],
+      scorerVersion: "test",
+    });
+
+    expect(await enqueueStale({ minFit: 55, limit: 2 })).toBe(2);
+    expect(await pendingFor(first)).toBe("pending");
+    expect(await pendingFor(second)).toBe("pending");
+  });
 });
 
 describe("runVerifyQueue", () => {
@@ -181,7 +231,7 @@ describe("runVerifyQueue", () => {
     const id = await seedJob();
     await enqueueVerify(id);
 
-    const result = await runVerifyQueue({ fetchImpl: fakeFetch(404) });
+    const result = await runVerifyQueue({ fetchImpl: fakeFetch(404), lookupHost: publicLookup });
     expect(result).toMatchObject({ checked: 1, gone: 1 });
 
     const [row] = await db.select().from(job).where(eq(job.id, id));
@@ -194,7 +244,7 @@ describe("runVerifyQueue", () => {
     const id = await seedJob();
     await enqueueVerify(id);
 
-    const result = await runVerifyQueue({ fetchImpl: fakeFetch(403) });
+    const result = await runVerifyQueue({ fetchImpl: fakeFetch(403), lookupHost: publicLookup });
     expect(result).toMatchObject({ checked: 1, inconclusive: 1, gone: 0 });
 
     const [row] = await db.select().from(job).where(eq(job.id, id));
@@ -209,7 +259,7 @@ describe("runVerifyQueue", () => {
     const id = await seedJob({ closed: true });
     await enqueueVerify(id);
 
-    await runVerifyQueue({ fetchImpl: fakeFetch(200) });
+    await runVerifyQueue({ fetchImpl: fakeFetch(200), lookupHost: publicLookup });
 
     // Sem isto, um 404 transitório sumiria com a vaga para sempre.
     const [row] = await db.select().from(job).where(eq(job.id, id));
@@ -219,14 +269,21 @@ describe("runVerifyQueue", () => {
 
   it("respeita o limite por execução", async () => {
     for (let i = 0; i < 3; i++) await enqueueVerify(await seedJob());
-    const result = await runVerifyQueue({ fetchImpl: fakeFetch(200), max: 2 });
+    const result = await runVerifyQueue({
+      fetchImpl: fakeFetch(200),
+      lookupHost: publicLookup,
+      max: 2,
+    });
     expect(result.checked).toBe(2);
     expect((await verifyStats()).pending).toBe(1);
   });
 
   it("esvazia a fila e para", async () => {
     for (let i = 0; i < 3; i++) await enqueueVerify(await seedJob());
-    const result = await runVerifyQueue({ fetchImpl: fakeFetch(200) });
+    const result = await runVerifyQueue({
+      fetchImpl: fakeFetch(200),
+      lookupHost: publicLookup,
+    });
     expect(result.checked).toBe(3);
     expect(await claimCheck("w1")).toBeNull();
   });

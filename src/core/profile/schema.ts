@@ -47,7 +47,7 @@ export const ProfileSchema = z.object({
     contract_models: z.array(z.string()).default([]),
     remote_only: z.boolean().default(true),
     acceptable_regions: z.array(z.string()).default([]),
-    max_timezone_offset_hours: z.number().default(6),
+    max_timezone_offset_hours: z.number().nonnegative().max(14).default(6),
   }),
   keywords: z.object({
     critical: z.array(WeightedTerm).default([]),
@@ -106,6 +106,31 @@ export const ProfileSchema = z.object({
       variants: z.record(z.string(), z.string()).default({}),
     })
     .default({ variants: {} }),
+}).superRefine((profile, ctx) => {
+  for (const [index, range] of profile.compensation.ranges.entries()) {
+    if (range.target < range.floor) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["compensation", "ranges", index, "target"],
+        message: "target must be greater than or equal to floor",
+      });
+    }
+    if (range.ideal != null && range.ideal < range.target) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["compensation", "ranges", index, "ideal"],
+        message: "ideal must be greater than or equal to target",
+      });
+    }
+  }
+  const reference = profile.compensation.reference_currency.toUpperCase();
+  if (!profile.compensation.ranges.some((range) => range.currency.toUpperCase() === reference)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["compensation", "reference_currency"],
+      message: "reference currency must have at least one configured range",
+    });
+  }
 });
 
 export type Profile = z.infer<typeof ProfileSchema>;

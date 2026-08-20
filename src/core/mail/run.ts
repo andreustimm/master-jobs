@@ -14,7 +14,10 @@ import { extname, join } from "node:path";
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { application, job, mailMessage, mailSuggestion } from "../db/schema.ts";
-import { ensureImportSource, upsertRawJob } from "../ingest/manual.ts";
+import { setApplicationStatusInTransaction } from "../db/repo.ts";
+import { parseApplicationStatus } from "../../contexts/pursuit/domain/application.ts";
+import { ensureImportSource } from "../ingest/manual.ts";
+import { observeRawJob } from "../ingest/observe.ts";
 import { htmlToText } from "../sources/http.ts";
 import { classify } from "./classify.ts";
 import { parseEml } from "./eml.ts";
@@ -37,6 +40,9 @@ export type MailImportResult = {
   duplicates: number;
   byKind: Record<string, number>;
   jobsCreated: number;
+  jobsUnchanged: number;
+  jobsChanged: number;
+  jobsReopened: number;
   suggestions: number;
   unmatched: number;
   warnings: string[];
@@ -62,6 +68,7 @@ async function collectFiles(path: string): Promise<string[]> {
  * noise on every re-import.
  */
 async function matchApplication(
+  candidateId: number,
   candidates: string[],
 ): Promise<{ applicationId: number; jobId: number; company: string; via: string } | null> {
   if (candidates.length === 0) return null;
@@ -78,6 +85,7 @@ async function matchApplication(
     .innerJoin(job, eq(job.id, application.jobId))
     .where(
       and(
+        eq(application.candidateId, candidateId),
         ne(application.status, "rejected"),
         ne(application.status, "withdrawn"),
         ne(application.status, "archived"),
@@ -153,7 +161,7 @@ function companyCandidates(
 
 export async function importMail(
   path: string,
-  opts: { dryRun?: boolean } = {},
+  opts: { candidateId: number; dryRun?: boolean },
 ): Promise<MailImportResult> {
   const db = getDb();
   const files = await collectFiles(path);
@@ -164,6 +172,9 @@ export async function importMail(
     duplicates: 0,
     byKind: {},
     jobsCreated: 0,
+    jobsUnchanged: 0,
+    jobsChanged: 0,
+    jobsReopened: 0,
     suggestions: 0,
     unmatched: 0,
     warnings: [],
@@ -225,8 +236,11 @@ export async function importMail(
           alertSourceReady = true;
         }
         for (const rawJob of toRawJobs(extraction, mail.date)) {
-          const { created } = await upsertRawJob(rawJob, ALERT_SOURCE);
-          if (created) result.jobsCreated++;
+          const observation = await observeRawJob(rawJob, ALERT_SOURCE);
+          if (observation.outcome === "inserted") result.jobsCreated++;
+          if (observation.outcome === "unchanged") result.jobsUnchanged++;
+          if (observation.outcome === "changed") result.jobsChanged++;
+          if (observation.outcome === "reopened") result.jobsReopened++;
         }
       }
       extractedJobs = extraction.jobs.length;
@@ -256,7 +270,7 @@ export async function importMail(
     /* ---- ATS mail becomes a suggestion, never a mutation ------------- */
     const suggestedStatus = KIND_TO_STATUS[classification.kind];
     if (suggestedStatus) {
-      const match = await matchApplication(candidates);
+      const match = await matchApplication(opts.candidateId, candidates);
       if (!match) result.unmatched++;
 
       await db.insert(mailSuggestion).values({
@@ -303,27 +317,74 @@ export async function listSuggestions() {
 }
 
 export async function decideSuggestion(
+  candidateId: number,
   id: number,
   decision: "accepted" | "dismissed",
 ): Promise<{ jobId: number | null; status: string | null }> {
   const db = getDb();
-  const rows = await db
-    .select()
-    .from(mailSuggestion)
-    .where(eq(mailSuggestion.id, id))
-    .limit(1);
+  return db.transaction(async (tx) => {
+    const [suggestion] = await tx
+      .select()
+      .from(mailSuggestion)
+      .where(eq(mailSuggestion.id, id))
+      .limit(1);
 
-  const suggestion = rows[0];
-  if (!suggestion) throw new Error(`Sugestão ${id} não existe`);
+    if (!suggestion) throw new Error(`Sugestão ${id} não existe`);
+    if (suggestion.status === decision) {
+      return decision === "accepted"
+        ? { jobId: suggestion.jobId, status: suggestion.suggestedStatus }
+        : { jobId: null, status: null };
+    }
+    if (suggestion.status !== "pending") {
+      throw new Error(`Sugestão ${id} já foi decidida como ${suggestion.status}`);
+    }
 
-  await db
-    .update(mailSuggestion)
-    .set({ status: decision, decidedAt: new Date().toISOString() })
-    .where(eq(mailSuggestion.id, id));
+    const stamp = new Date().toISOString();
+    if (decision === "dismissed") {
+      await tx
+        .update(mailSuggestion)
+        .set({ status: decision, decidedAt: stamp })
+        .where(and(eq(mailSuggestion.id, id), eq(mailSuggestion.status, "pending")));
+      return { jobId: null, status: null };
+    }
 
-  // The caller applies the funnel change through setApplicationStatus, so the
-  // transition is recorded in application_event exactly like a manual one.
-  return decision === "accepted"
-    ? { jobId: suggestion.jobId, status: suggestion.suggestedStatus }
-    : { jobId: null, status: null };
+    if (
+      suggestion.applicationId === null ||
+      suggestion.jobId === null ||
+      suggestion.suggestedStatus === null
+    ) {
+      throw new Error(`Sugestão ${id} não possui candidatura correspondente`);
+    }
+
+    const [owned] = await tx
+      .select({ id: application.id })
+      .from(application)
+      .where(
+        and(
+          eq(application.id, suggestion.applicationId),
+          eq(application.candidateId, candidateId),
+          eq(application.jobId, suggestion.jobId),
+        ),
+      )
+      .limit(1);
+    if (!owned) throw new Error(`Sugestão ${id} pertence a outro candidato`);
+
+    const status = parseApplicationStatus(suggestion.suggestedStatus);
+    await setApplicationStatusInTransaction(
+      tx,
+      candidateId,
+      suggestion.jobId,
+      status,
+      `via e-mail (sugestão #${id})`,
+      stamp,
+    );
+    const updated = await tx
+      .update(mailSuggestion)
+      .set({ status: decision, decidedAt: stamp })
+      .where(and(eq(mailSuggestion.id, id), eq(mailSuggestion.status, "pending")))
+      .returning({ id: mailSuggestion.id });
+    if (updated.length !== 1) throw new Error(`Sugestão ${id} mudou concorrentemente`);
+
+    return { jobId: suggestion.jobId, status };
+  });
 }

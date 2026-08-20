@@ -6,16 +6,91 @@
  * it is a pure function of (text, catalogue) → detections.
  */
 
-export type SkillCategory =
-  | "language" | "framework" | "ai" | "cloud"
-  | "data" | "practice" | "domain" | "tool" | "soft";
+export const SKILL_CATEGORIES = [
+  "language",
+  "framework",
+  "ai",
+  "cloud",
+  "data",
+  "practice",
+  "domain",
+  "tool",
+  "soft",
+] as const;
+
+export type SkillCategory = (typeof SKILL_CATEGORIES)[number];
+
+export const SKILL_STATUSES = ["detected", "confirmed", "rejected"] as const;
+
+export type SkillStatus = (typeof SKILL_STATUSES)[number];
+
+export type SkillAuditStatus = Exclude<SkillStatus, "detected">;
+
+export const SKILL_SOURCES = ["cv", "profile", "manual", "inferred"] as const;
+
+export type SkillSource = (typeof SKILL_SOURCES)[number];
+
+const CATEGORY_SET: ReadonlySet<string> = new Set(SKILL_CATEGORIES);
+const STATUS_SET: ReadonlySet<string> = new Set(SKILL_STATUSES);
+const SOURCE_SET: ReadonlySet<string> = new Set(SKILL_SOURCES);
+
+export function isSkillCategory(value: string): value is SkillCategory {
+  return CATEGORY_SET.has(value);
+}
+
+export function parseSkillCategory(value: string): SkillCategory {
+  if (!isSkillCategory(value)) throw new Error(`Unknown skill category "${value}"`);
+  return value;
+}
+
+export function isSkillStatus(value: string): value is SkillStatus {
+  return STATUS_SET.has(value);
+}
+
+export function parseSkillStatus(value: string): SkillStatus {
+  if (!isSkillStatus(value)) throw new Error(`Unknown skill status "${value}"`);
+  return value;
+}
+
+export function isSkillSource(value: string): value is SkillSource {
+  return SOURCE_SET.has(value);
+}
+
+export function parseSkillSource(value: string): SkillSource {
+  if (!isSkillSource(value)) throw new Error(`Unknown skill source "${value}"`);
+  return value;
+}
 
 /** A canonical skill and every spelling it appears under. */
 export type SkillDefinition = {
   slug: string;
   name: string;
   category: SkillCategory;
-  aliases: string[];
+  aliases: readonly string[];
+};
+
+/** Candidate-facing projection; storage column names never escape the context. */
+export type CandidateSkillView = {
+  id: number;
+  slug: string;
+  name: string;
+  category: SkillCategory;
+  status: SkillStatus;
+  source: SkillSource;
+  evidence: string | null;
+  occurrences: number;
+  level: string | null;
+  auditedAt: string | null;
+};
+
+export type MarketSkillDemand = {
+  slug: string;
+  name: string;
+  category: SkillCategory;
+  /** Share of high-fit postings mentioning it, 0..1. */
+  demand: number;
+  postings: number;
+  candidateStatus: SkillStatus | null;
 };
 
 /** Where in a document a mention was found — this is what confidence is built on. */
@@ -54,10 +129,10 @@ export type StrategyHit = {
  * parser for a specific CV format, a LinkedIn profile reader — does not mean
  * rewriting the pipeline. It means adding a file and registering it.
  *
- * `weight` is how much this strategy's opinion counts when several agree.
+ * Strategies report evidence only. Confidence is calculated once by the
+ * canonical combiner from mention context and repetition.
  */
 export type ExtractionStrategy = {
   readonly name: string;
-  readonly weight: number;
   extract(text: string, catalog: SkillDefinition[]): StrategyHit[];
 };

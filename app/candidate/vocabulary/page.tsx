@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { syncCandidateFromProfile, currentDocument } from "../../../src/core/candidate.ts";
+import { currentDocument } from "../../../src/core/candidate.ts";
 import { vocabularyGap } from "../../../src/contexts/skills/index.ts";
 import type { GapItem } from "../../../src/contexts/skills/index.ts";
-import { requirePage } from "../../auth";
+import { requireOwnCandidatePage } from "../../auth";
 import { getTranslator } from "../../i18n";
 import { formatNumber, type Translator } from "../../../src/core/i18n/index.ts";
 
@@ -67,10 +67,7 @@ function QuickWin({ item, t }: { item: GapItem; t: Translator["t"] }) {
 export default async function VocabularyPage() {
   const { t, locale } = await getTranslator();
   // Guard antes de ler qualquer dado. O escopo vem da sessão.
-  const session = await requirePage("candidate:read");
-  void session;
-
-  const candidateId = await syncCandidateFromProfile();
+  const { candidateId } = await requireOwnCandidatePage("candidate:read");
   const doc = await currentDocument(candidateId, "cv");
 
   if (!doc) {
@@ -88,7 +85,7 @@ export default async function VocabularyPage() {
     );
   }
 
-  const report = await vocabularyGap({ cvText: doc.content, minFit: MIN_FIT });
+  const report = await vocabularyGap({ candidateId, cvText: doc.content, minFit: MIN_FIT });
 
   return (
     <main className="pt-10 pb-16">

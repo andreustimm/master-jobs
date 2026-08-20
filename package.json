@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "next dev --turbopack --hostname 127.0.0.1",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start --hostname 127.0.0.1",
     "jho": "node --experimental-strip-types --no-warnings --env-file-if-exists=.env src/cli.ts",
     "db:generate": "drizzle-kit generate",
@@ -23,7 +23,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "pnpm typecheck && pnpm test",
-    "test:e2e": "node tests/e2e/setup.mjs && node tests/e2e/ui.mjs"
+    "test:e2e": "node tests/e2e/run-isolated.mjs",
+    "test:e2e:external": "node tests/e2e/setup.mjs && node tests/e2e/ui.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -13,11 +13,19 @@ import { sql } from "drizzle-orm";
 import {
   index,
   integer,
+  foreignKey,
+  primaryKey,
   real,
   sqliteTable,
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import {
+  APPLICATION_STATUSES,
+  type ApplicationStatus,
+} from "../../contexts/pursuit/domain/application.ts";
+
+export { APPLICATION_STATUSES, type ApplicationStatus };
 
 const now = sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`;
 
@@ -70,7 +78,7 @@ export const job = sqliteTable(
   "job",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    /** sha256 over (companySlug, normalizedTitle, normalizedLocation). */
+    /** Stable dedupe key; manual comparisons use an isolated namespace. */
     fingerprint: text("fingerprint").notNull(),
     /** sha256 over the meaningful content — detects edits to a live posting. */
     contentHash: text("content_hash").notNull(),
@@ -123,8 +131,11 @@ export const job = sqliteTable(
 export const jobScore = sqliteTable(
   "job_score",
   {
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
     jobId: integer("job_id")
-      .primaryKey()
+      .notNull()
       .references(() => job.id, { onDelete: "cascade" }),
     /** 0..100 overall fit. */
     fit: real("fit").notNull(),
@@ -150,42 +161,42 @@ export const jobScore = sqliteTable(
     reasons: text("reasons", { mode: "json" }).notNull(),
     /** Hard blockers found in the text, e.g. "requires US work authorization". */
     blockers: text("blockers", { mode: "json" }).notNull(),
+    eligibilityStatus: text("eligibility_status").notNull().default("unverifiable"),
+    eligibilityReasons: text("eligibility_reasons", { mode: "json" })
+      .notNull()
+      .default(sql`'[]'`),
     scorerVersion: text("scorer_version").notNull(),
+    /** Hash of the candidate-owned scoring profile used for this result. */
+    profileHash: text("profile_hash").notNull().default("legacy"),
     scoredAt: text("scored_at").notNull().default(now),
   },
-  (t) => [index("job_score_fit_idx").on(t.fit)],
+  (t) => [
+    primaryKey({ columns: [t.candidateId, t.jobId], name: "job_score_candidate_job_pk" }),
+    index("job_score_fit_idx").on(t.fit),
+    index("job_score_candidate_idx").on(t.candidateId),
+  ],
 );
 
 /* -------------------------------------------------------------------------- */
 /* Application pipeline (user-owned state — never touched by ingestion)         */
 /* -------------------------------------------------------------------------- */
 
-export const APPLICATION_STATUSES = [
-  "backlog",
-  "shortlisted",
-  "preparing",
-  "applied",
-  "screening",
-  "interviewing",
-  "offer",
-  "rejected",
-  "withdrawn",
-  "archived",
-] as const;
-
 export const application = sqliteTable(
   "application",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
     jobId: integer("job_id")
       .notNull()
       .references(() => job.id, { onDelete: "cascade" }),
-    status: text("status").notNull().default("backlog"),
+    status: text("status", { enum: APPLICATION_STATUSES }).notNull().default("backlog"),
     /** direct | ats | referral | recruiter | agency */
     channel: text("channel"),
     appliedAt: text("applied_at"),
-    /** Which tailored CV went out — ties back to profile/variants. */
-    cvVariant: text("cv_variant"),
+    /** Exact immutable document version sent with this application. */
+    candidateDocumentId: integer("candidate_document_id"),
     coverLetterPath: text("cover_letter_path"),
     contactName: text("contact_name"),
     contactUrl: text("contact_url"),
@@ -198,7 +209,14 @@ export const application = sqliteTable(
     updatedAt: text("updated_at").notNull().default(now),
   },
   (t) => [
-    uniqueIndex("application_job_idx").on(t.jobId),
+    uniqueIndex("application_candidate_job_idx").on(t.candidateId, t.jobId),
+    foreignKey({
+      columns: [t.candidateDocumentId, t.candidateId],
+      foreignColumns: [candidateDocument.id, candidateDocument.candidateId],
+      name: "application_candidate_document_fk",
+    }).onDelete("restrict"),
+    index("application_candidate_idx").on(t.candidateId),
+    index("application_candidate_document_idx").on(t.candidateDocumentId),
     index("application_status_idx").on(t.status),
     index("application_next_action_idx").on(t.nextActionAt),
   ],
@@ -214,8 +232,8 @@ export const applicationEvent = sqliteTable(
       .references(() => application.id, { onDelete: "cascade" }),
     at: text("at").notNull().default(now),
     kind: text("kind").notNull(), // status_change | note | email | interview | followup
-    fromStatus: text("from_status"),
-    toStatus: text("to_status"),
+    fromStatus: text("from_status", { enum: APPLICATION_STATUSES }),
+    toStatus: text("to_status", { enum: APPLICATION_STATUSES }),
     detail: text("detail"),
   },
   (t) => [index("application_event_app_idx").on(t.applicationId)],
@@ -396,28 +414,29 @@ export const candidateDocument = sqliteTable(
     createdAt: text("created_at").notNull().default(now),
   },
   (t) => [
+    uniqueIndex("candidate_document_identity_idx").on(t.id, t.candidateId),
     index("candidate_document_candidate_idx").on(t.candidateId, t.kind),
-    index("candidate_document_current_idx").on(t.isCurrent),
+    uniqueIndex("candidate_document_one_current_idx")
+      .on(t.candidateId, t.kind)
+      .where(sql`${t.isCurrent} = 1`),
   ],
+);
+
+/** Candidate-owned scoring policy; profile.yaml is only the default seed. */
+export const candidateMatchingProfile = sqliteTable(
+  "candidate_matching_profile",
+  {
+    candidateId: integer("candidate_id")
+      .primaryKey()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    profileJson: text("profile_json").notNull(),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
 );
 
 /* -------------------------------------------------------------------------- */
 /* Skills                                                                      */
 /* -------------------------------------------------------------------------- */
-
-export const SKILL_CATEGORIES = [
-  "language",   // TypeScript, Python, Go
-  "framework",  // Next.js, FastAPI, Laravel
-  "ai",         // RAG, LangGraph, evals
-  "cloud",      // AWS, Kubernetes, Terraform
-  "data",       // Postgres, Kafka, dbt
-  "practice",   // TDD, DDD, observability
-  "domain",     // fintech, healthcare, ERP
-  "tool",       // Docker, Datadog
-  "soft",       // mentoring, stakeholder management
-] as const;
-
-export type SkillCategory = (typeof SKILL_CATEGORIES)[number];
 
 /**
  * The global skill catalogue.
@@ -449,9 +468,6 @@ export const skill = sqliteTable(
     index("skill_category_idx").on(t.category),
   ],
 );
-
-export const SKILL_SOURCES = ["cv", "profile", "manual", "inferred"] as const;
-export const SKILL_STATUSES = ["detected", "confirmed", "rejected"] as const;
 
 /**
  * A skill attributed to a candidate.
@@ -619,7 +635,6 @@ export type Job = typeof job.$inferSelect;
 export type NewJob = typeof job.$inferInsert;
 export type JobScore = typeof jobScore.$inferSelect;
 export type Application = typeof application.$inferSelect;
-export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
 export type Post = typeof post.$inferSelect;
 export type Engagement = typeof engagement.$inferSelect;
 export type PositioningTask = typeof positioningTask.$inferSelect;
@@ -641,17 +656,10 @@ export type MetricSnapshot = typeof metricSnapshot.$inferSelect;
 /* Scraping queue                                                             */
 /* -------------------------------------------------------------------------- */
 
-export const SCRAPE_STATUSES = [
-  "pending",
-  "fetching",
-  "fetched",
-  "parsing",
-  "done",
-  "failed",
-  "blocked",
-] as const;
-
-export type ScrapeStatus = (typeof SCRAPE_STATUSES)[number];
+// Compatibility exports: queue state belongs to the pure scrape domain, not
+// to its current Drizzle representation.
+export { SCRAPE_STATUSES } from "../scrape/domain/status.ts";
+export type { ScrapeStatus } from "../scrape/domain/status.ts";
 
 /**
  * One unit of scraping work.

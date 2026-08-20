@@ -22,10 +22,25 @@ import {
   type Period,
 } from "../money.ts";
 import type { Profile } from "../profile/schema.ts";
+import {
+  evaluateEligibility,
+  message,
+  type EligibilityResult,
+  type EligibilitySignals,
+  type MatchPolicy,
+  type ScoreMessage,
+} from "../../contexts/matching/index.ts";
 import { scoreBenefits } from "./benefits.ts";
-import { scoreFreshness } from "./freshness.ts";
+import { PLATEAU_DAYS, scoreFreshness } from "./freshness.ts";
 
-export const SCORER_VERSION = "1.2.1";
+export const SCORER_VERSION = "1.3.0";
+
+export type ScoringContext = {
+  profile: Profile;
+  fx: FxTable | null;
+  /** Fixed once per run so time-dependent rules remain reproducible. */
+  asOf: number;
+};
 
 export type ScoreInput = {
   title: string;
@@ -41,8 +56,8 @@ export type ScoreInput = {
   compDurationMonths?: number | null;
   /** Employer-stated posting date. The real freshness signal when present. */
   postedAt?: string | null;
-  /** When this system first saw it — a ceiling on age, used as fallback. */
-  firstSeenAt?: string | null;
+  /** Structured facts supplied when the source exposes them. */
+  eligibility?: EligibilitySignals;
 };
 
 export type ScoreResult = {
@@ -62,8 +77,9 @@ export type ScoreResult = {
   detectedBenefits: string[];
   /** Days since posting, or null when no date could be established. */
   ageDays: number | null;
-  reasons: string[];
-  blockers: string[];
+  reasons: ScoreMessage[];
+  blockers: ScoreMessage[];
+  eligibility: EligibilityResult;
 };
 
 /**
@@ -104,16 +120,16 @@ function containsTerm(haystack: string, term: string): boolean {
 function scoreTitle(
   title: string,
   profile: Profile,
-): { score: number; cluster: string; reason: string } {
+): { score: number; cluster: string; reason: ScoreMessage } {
   const t = normalize(title);
 
   for (const avoid of profile.targets.avoid_titles) {
     if (containsTerm(t, avoid.toLowerCase())) {
-      return { score: 0, cluster: "other", reason: `Title contains avoided term "${avoid}"` };
+      return { score: 0, cluster: "other", reason: message("title.avoided", { term: avoid }) };
     }
   }
 
-  let best = { score: 0, cluster: "other", reason: "Title does not match any target cluster" };
+  let best = { score: 0, cluster: "other", reason: message("title.noMatch") };
 
   for (const [name, cluster] of Object.entries(profile.targets.clusters)) {
     for (const target of cluster.titles) {
@@ -133,7 +149,7 @@ function scoreTitle(
         best = {
           score,
           cluster: name,
-          reason: `Title matches "${target}" (cluster ${name})`,
+          reason: message("title.match", { target, cluster: name }),
         };
       }
     }
@@ -192,25 +208,28 @@ function scoreKeywords(
 function scoreSeniority(
   text: string,
   profile: Profile,
-): { score: number; reason: string } {
+): { score: number; reason: ScoreMessage } {
   const t = normalize(text);
 
   // "8+ years", "5-7 years", "minimum of 10 years"
   const match = t.match(/(\d{1,2})\s*\+?\s*(?:-\s*\d{1,2}\s*)?(?:years|yrs)/);
   if (!match?.[1]) {
-    return { score: WEIGHTS.seniority * 0.6, reason: "No explicit years requirement" };
+    return { score: WEIGHTS.seniority * 0.6, reason: message("seniority.unknown") };
   }
   const years = Number(match[1]);
   if (years < profile.seniority.reject_below_years) {
-    return { score: 0, reason: `Asks for only ${years} years — under-levelled` };
+    return { score: 0, reason: message("seniority.under", { years }) };
   }
   if (years >= profile.seniority.min_years_expected) {
-    return { score: WEIGHTS.seniority, reason: `Asks for ${years}+ years — matches seniority` };
+    return { score: WEIGHTS.seniority, reason: message("seniority.match", { years }) };
   }
   const fraction = years / profile.seniority.min_years_expected;
   return {
     score: WEIGHTS.seniority * fraction,
-    reason: `Asks for ${years} years — below the ${profile.seniority.min_years_expected}+ target`,
+    reason: message("seniority.below", {
+      years,
+      target: profile.seniority.min_years_expected,
+    }),
   };
 }
 
@@ -219,10 +238,25 @@ function scoreSeniority(
 function scoreGeo(
   input: ScoreInput,
   profile: Profile,
-): { score: number; reason: string } {
+  eligibility: EligibilityResult,
+): { score: number; reason: ScoreMessage } {
   const location = normalize(input.locationRaw ?? "");
   const body = normalize(input.descriptionText ?? "");
   const combined = `${location} ${body}`;
+
+  if (eligibility.status === "ineligible") {
+    return { score: 0, reason: message("geo.ineligible") };
+  }
+  if (eligibility.status === "eligible") {
+    return { score: WEIGHTS.geo, reason: message("geo.eligible") };
+  }
+
+  // Restrictions win over generic "fully remote" wording. The former order
+  // awarded worldwide credit before noticing "US only" later in the body.
+  const restricted = /\b(us only|usa only|united states only|uk only|canada only|eu only|europe only|emea only)\b/.test(
+    combined,
+  );
+  if (restricted) return { score: 0, reason: message("geo.restricted") };
 
   const explicitLatam = /\b(latam|latin america|south america|brazil|brasil|americas)\b/.test(
     combined,
@@ -232,26 +266,27 @@ function scoreGeo(
   );
 
   if (explicitLatam) {
-    return { score: WEIGHTS.geo, reason: "Explicitly open to LATAM/Brazil" };
+    return { score: WEIGHTS.geo, reason: message("geo.latam") };
   }
   if (explicitWorldwide) {
-    return { score: WEIGHTS.geo * 0.9, reason: "Advertised as worldwide remote" };
+    return { score: WEIGHTS.geo * 0.9, reason: message("geo.worldwide") };
   }
 
   const isRemote =
     input.remote === true || /\bremote\b/.test(location) || /\bremote\b/.test(body);
 
-  if (!isRemote && profile.constraints.remote_only) {
-    return { score: 0, reason: "No remote signal found" };
+  if (
+    /\b(on[- ]?site|in[- ]?office|in (?:our|the) office)\b/.test(combined) &&
+    profile.constraints.remote_only
+  ) {
+    return { score: 0, reason: message("geo.physical") };
   }
 
-  // Remote but region-restricted to a place we cannot work from.
-  const restricted = /\b(us only|usa only|united states only|uk only|canada only|eu only|europe only|emea only)\b/.test(
-    combined,
-  );
-  if (restricted) return { score: 0, reason: "Remote but region-restricted away from Brazil" };
+  if (!isRemote && profile.constraints.remote_only) {
+    return { score: WEIGHTS.geo * 0.5, reason: message("geo.unknown") };
+  }
 
-  return { score: WEIGHTS.geo * 0.55, reason: "Remote, region not stated" };
+  return { score: WEIGHTS.geo * 0.55, reason: message("geo.remoteUnknown") };
 }
 
 /* ---------------------------- Compensation ------------------------------- */
@@ -275,7 +310,7 @@ function scoreComp(
   input: ScoreInput,
   profile: Profile,
   fx: FxTable | null,
-): { score: number; reason: string } {
+): { score: number; reason: ScoreMessage } {
   const { compMin, compMax } = input;
   const amount = compMax ?? compMin ?? 0;
 
@@ -283,7 +318,7 @@ function scoreComp(
   // that as a real figure would either score it as below-floor or, worse, hand
   // it the undisclosed consolation score — both wrong.
   if ((compMin == null && compMax == null) || amount <= 0) {
-    return { score: WEIGHTS.comp * 0.5, reason: "Remuneração não divulgada" };
+    return { score: WEIGHTS.comp * 0.5, reason: message("comp.undisclosed") };
   }
   const currency = parseCurrency(input.compCurrency);
   const period = parsePeriod(input.compPeriod);
@@ -293,13 +328,13 @@ function scoreComp(
   if (!currency) {
     return {
       score: WEIGHTS.comp * 0.5,
-      reason: `Valor ${amount.toLocaleString()} sem moeda declarada — não comparável`,
+      reason: message("comp.noCurrency", { amount }),
     };
   }
   if (!period) {
     return {
       score: WEIGHTS.comp * 0.5,
-      reason: `Período "${input.compPeriod}" não reconhecido — não comparável`,
+      reason: message("comp.badPeriod", { period: input.compPeriod ?? "" }),
     };
   }
 
@@ -314,18 +349,21 @@ function scoreComp(
   if (period === "project") {
     const project = profile.compensation.project;
     if (!project.accepted) {
-      return { score: 0, reason: "Projeto fechado — modalidade não aceita" };
+      return { score: 0, reason: message("comp.projectRejected") };
     }
     if (!input.compDurationMonths) {
       return {
         score: WEIGHTS.comp * 0.4,
-        reason: `${formatMoney(posted)} sem duração — não dá para comparar com salário`,
+        reason: message("comp.projectNoDuration", { label: formatMoney(posted) }),
       };
     }
     if (input.compDurationMonths > project.max_duration_months) {
       return {
         score: WEIGHTS.comp * 0.2,
-        reason: `Projeto de ${input.compDurationMonths} meses excede o máximo de ${project.max_duration_months}`,
+        reason: message("comp.projectTooLong", {
+          months: input.compDurationMonths,
+          maximum: project.max_duration_months,
+        }),
       };
     }
   }
@@ -367,7 +405,13 @@ function scoreComp(
           annualRefRange,
           `${formatMoney(posted)} \u2248 ${formatMoney(converted)}`,
         );
-        return { score: graded.score, reason: `${graded.reason} (câmbio de ${fx.date})` };
+        return {
+          score: graded.score,
+          reason: {
+            ...graded.reason,
+            params: { ...graded.reason.params, fxDate: fx.date },
+          },
+        };
       }
     }
   }
@@ -375,7 +419,7 @@ function scoreComp(
   /* --- 4. no basis for comparison -------------------------------------- */
   return {
     score: WEIGHTS.comp * 0.5,
-    reason: `${formatMoney(posted)} — sem faixa nem cotação para ${currency}; rode \`jho fx refresh\``,
+    reason: message("comp.noBasis", { label: formatMoney(posted), currency }),
   };
 }
 
@@ -407,18 +451,18 @@ function gradeAgainst(
   offer: Money,
   range: { floor: number; target: number; ideal?: number },
   label: string,
-): { score: number; reason: string } {
+): { score: number; reason: ScoreMessage } {
   const value = offer.amount;
 
   if (range.ideal != null && value >= range.ideal) {
-    return { score: WEIGHTS.comp, reason: `${label} — no topo da faixa desejada` };
+    return { score: WEIGHTS.comp, reason: message("comp.ideal", { label }) };
   }
   if (value >= range.target) {
     const span = (range.ideal ?? range.target * 1.4) - range.target;
     const bonus = span > 0 ? Math.min(1, (value - range.target) / span) : 1;
     return {
       score: WEIGHTS.comp * (0.85 + 0.15 * bonus),
-      reason: `${label} — no ou acima do alvo`,
+      reason: message("comp.target", { label }),
     };
   }
   if (value >= range.floor) {
@@ -426,51 +470,72 @@ function gradeAgainst(
     const fraction = span > 0 ? (value - range.floor) / span : 0;
     return {
       score: WEIGHTS.comp * (0.4 + 0.45 * fraction),
-      reason: `${label} — entre o piso e o alvo`,
+      reason: message("comp.range", { label }),
     };
   }
-  return { score: 0, reason: `${label} — abaixo do piso` };
+  return { score: 0, reason: message("comp.below", { label }) };
 }
 
 /* ------------------------------- Blockers -------------------------------- */
 
-function findBlockers(input: ScoreInput, profile: Profile): string[] {
+function findBlockers(input: ScoreInput, profile: Profile): ScoreMessage[] {
   const haystack = normalize(`${input.title} ${input.locationRaw ?? ""} ${input.descriptionText ?? ""}`);
-  const found: string[] = [];
+  const found: ScoreMessage[] = [];
   for (const b of profile.blockers) {
     try {
-      if (new RegExp(b.pattern, "i").test(haystack)) found.push(b.reason);
+      if (new RegExp(b.pattern, "i").test(haystack)) {
+        found.push(message("blocker.profile", { reason: b.reason }));
+      }
     } catch {
       // A malformed pattern must not take down the whole scoring run.
-      found.push(`(invalid blocker pattern: ${b.pattern})`);
+      found.push(message("blocker.invalidPattern", { pattern: b.pattern }));
     }
   }
-  return [...new Set(found)];
+  return [...new Map(found.map((item) => [JSON.stringify(item), item])).values()];
 }
 
 /* --------------------------------- Score --------------------------------- */
 
 export function scoreJob(
   input: ScoreInput,
-  profile: Profile,
-  fx: FxTable | null = null,
+  contextOrProfile: ScoringContext | Profile,
+  legacyFx: FxTable | null = null,
 ): ScoreResult {
+  const context: ScoringContext = "profile" in contextOrProfile
+    ? contextOrProfile
+    : { profile: contextOrProfile, fx: legacyFx, asOf: Date.now() };
+  const { profile, fx } = context;
   const fullText = `${input.title}\n${input.descriptionText ?? ""}`;
+
+  const policy: MatchPolicy = {
+    workAuthorization: profile.constraints.work_authorization,
+    needsVisaSponsorshipFor: profile.constraints.needs_visa_sponsorship_for,
+    contractModels: profile.constraints.contract_models,
+    remoteOnly: profile.constraints.remote_only,
+    acceptableRegions: profile.constraints.acceptable_regions,
+    maxTimezoneOffsetHours: profile.constraints.max_timezone_offset_hours,
+  };
+  const eligibility = evaluateEligibility(policy, input.eligibility);
 
   const title = scoreTitle(input.title, profile);
   const keywords = scoreKeywords(fullText, profile);
   const seniority = scoreSeniority(fullText, profile);
-  const geo = scoreGeo(input, profile);
+  const geo = scoreGeo(input, profile, eligibility);
   const comp = scoreComp(input, profile, fx);
-  const fresh = scoreFreshness(input);
+  const fresh = scoreFreshness(input, context.asOf);
   const benefits = scoreBenefits(input.descriptionText, profile.compensation.benefits);
   const blockers = findBlockers(input, profile);
+  if (eligibility.status === "ineligible") {
+    blockers.push(...eligibility.reasons.map((reason) =>
+      message("blocker.eligibility", { reason })
+    ));
+  }
 
   // A benefit the candidate marked `required` and a readable posting does not
   // offer is a real blocker. `scoreBenefits` only ever reports this for postings
   // long enough that silence actually means something.
   for (const missing of benefits.missingRequired) {
-    blockers.push(`Missing required benefit: ${missing.replace(/_/g, " ")}`);
+    blockers.push(message("blocker.missingBenefit", { benefit: missing.replace(/_/g, " ") }));
   }
 
   // Blockers cap the score rather than zeroing it: a great role that says
@@ -490,17 +555,35 @@ export function scoreJob(
     benefitScore;
   const fit = Math.max(0, Math.min(100, rawTotal - penalty));
 
-  const reasons = [
+  const roundedAge = fresh.ageDays === null ? null : Math.round(fresh.ageDays);
+  const freshnessReason = roundedAge === null
+    ? message("freshness.unknown")
+    : roundedAge <= PLATEAU_DAYS
+      ? message("freshness.hot", { days: roundedAge })
+      : message("freshness.aged", { days: roundedAge });
+  const wantedBenefits = benefits.detected.filter((benefit) =>
+    profile.compensation.benefits.preferred.includes(benefit) ||
+    profile.compensation.benefits.nice_to_have.includes(benefit)
+  );
+  const benefitReason = !benefits.readable
+    ? message("benefits.unknown")
+    : benefits.detected.length === 0
+      ? message("benefits.none")
+      : wantedBenefits.length > 0
+        ? message("benefits.offers", { benefits: wantedBenefits.join(", ").replace(/_/g, " ") })
+        : message("benefits.unwanted");
+
+  const reasons: ScoreMessage[] = [
     title.reason,
-    `Matched ${keywords.matched.length} profile keywords`,
+    message("keywords.matched", { count: keywords.matched.length }),
     seniority.reason,
     geo.reason,
     comp.reason,
-    fresh.reason,
-    benefits.reason,
+    freshnessReason,
+    benefitReason,
   ];
   if (keywords.negatives.length > 0) {
-    reasons.push(`Off-axis signals: ${keywords.negatives.join(", ")}`);
+    reasons.push(message("keywords.offAxis", { terms: keywords.negatives.join(", ") }));
   }
 
   return {
@@ -517,8 +600,9 @@ export function scoreJob(
     matchedKeywords: keywords.matched,
     missingKeywords: keywords.missing,
     detectedBenefits: benefits.detected,
-    ageDays: fresh.ageDays === null ? null : Math.round(fresh.ageDays),
+    ageDays: roundedAge,
     reasons,
     blockers,
+    eligibility,
   };
 }

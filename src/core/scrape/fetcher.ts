@@ -12,6 +12,11 @@ import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { jobPage } from "../db/schema.ts";
+import {
+  assertSafeRemoteUrl,
+  safeRemoteFetch,
+  type LookupHost,
+} from "../remote-url.ts";
 import { mayFetch, robotsFor } from "./robots.ts";
 import { dbQueue, type ClaimedTask, type QueuePort } from "./queue.ts";
 
@@ -58,13 +63,19 @@ export function retryable(status: number): boolean {
 
 export async function capture(
   task: ClaimedTask,
-  fetcher = fetch,
+  opts: { fetcher?: typeof fetch; lookupHost?: LookupHost } = {},
 ): Promise<FetchOutcome> {
   let url: URL;
   try {
     url = new URL(task.url);
   } catch {
     return { kind: "failed", reason: `URL inválida: ${task.url}`, retryable: false };
+  }
+
+  try {
+    await assertSafeRemoteUrl(url, { lookupHost: opts.lookupHost });
+  } catch {
+    return { kind: "blocked", reason: "destino de rede não permitido" };
   }
 
   if (!(await mayFetch(task.url))) {
@@ -77,14 +88,16 @@ export async function capture(
 
   let res: Response;
   try {
-    res = await fetcher(task.url, {
-      redirect: "follow",
+    res = await safeRemoteFetch(task.url, {
       signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: {
         "user-agent": process.env.JHO_USER_AGENT ?? "jho/1.0 (job search; +local)",
         accept: "text/html,application/xhtml+xml",
         "accept-language": "en,pt-BR;q=0.8",
       },
+    }, {
+      fetchImpl: opts.fetcher,
+      lookupHost: opts.lookupHost,
     });
   } catch (error) {
     return { kind: "failed", reason: (error as Error).message, retryable: true };
@@ -147,7 +160,13 @@ export type StageResult = { processed: number; stored: number; blocked: number; 
  * server seeing one request at a time.
  */
 export async function runFetchStage(
-  opts: { concurrency?: number; limit?: number; queue?: QueuePort; fetcher?: typeof fetch } = {},
+  opts: {
+    concurrency?: number;
+    limit?: number;
+    queue?: QueuePort;
+    fetcher?: typeof fetch;
+    lookupHost?: LookupHost;
+  } = {},
 ): Promise<StageResult> {
   const queue = opts.queue ?? dbQueue;
   const fetcher = opts.fetcher ?? fetch;
@@ -163,7 +182,7 @@ export async function runFetchStage(
       if (!task) return;
 
       result.processed++;
-      const outcome = await capture(task, fetcher);
+      const outcome = await capture(task, { fetcher, lookupHost: opts.lookupHost });
 
       if (outcome.kind === "stored") {
         result.stored++;

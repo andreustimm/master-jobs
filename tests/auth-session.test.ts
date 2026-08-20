@@ -3,14 +3,24 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { fixedClock, resetClock, setClock } from "../src/core/clock.ts";
 import type { DB } from "../src/core/db/client.ts";
 import { authEvent, authLoginToken, authSession, authUser, candidate } from "../src/core/db/schema.ts";
-import { drizzleSessions, magicLink } from "../src/contexts/auth/infra/drizzle-store.ts";
+import {
+  drizzleAuthRepository,
+  drizzleSessions,
+  magicLink,
+} from "../src/contexts/auth/infra/drizzle-store.ts";
+import { drizzlePasswords } from "../src/contexts/auth/infra/password-login.ts";
 import { completeLogin, isSingleUser, logout, singleUserSession } from "../src/contexts/auth/app/session.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
 let db: DB;
 let time: ReturnType<typeof fixedClock>;
 
-const deps = { sessions: drizzleSessions, identity: magicLink };
+const deps = {
+  sessions: drizzleSessions,
+  identity: magicLink,
+  passwords: drizzlePasswords,
+  repository: drizzleAuthRepository,
+};
 
 async function seedUser(email = "eu@test", candidateNumber: number | null = 1) {
   // The FK is real, so the candidate has to exist. Creating it here keeps the

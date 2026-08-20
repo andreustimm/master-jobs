@@ -5,8 +5,11 @@ import { JobModal } from "./job-modal";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import type { LocaleId } from "../src/core/i18n/index.ts";
-import type { listBoard } from "../src/core/db/repo.ts";
+import type { LocaleId, Translator } from "../src/core/i18n/index.ts";
+import { renderScoreMessage } from "../src/core/i18n/index.ts";
+import { scoreMessages } from "../src/contexts/matching/index.ts";
+import type { listBoard } from "../src/contexts/matching/index.ts";
+import { isPublicJobUrl } from "../src/core/job-url.ts";
 import { formatMoney, money, parseCurrency, parsePeriod } from "../src/core/money.ts";
 import { ACTION_BUTTON, ACTION_GROUP, Fit, ScoreBar, StatusBadge } from "./ui";
 
@@ -29,7 +32,7 @@ export function JobList({
   rows: Row[];
   dense?: boolean;
   locale: LocaleId;
-  t: (key: string, values?: Record<string, string | number>) => string;
+  t: Translator["t"];
 }) {
   if (rows.length === 0) {
     return (
@@ -42,8 +45,10 @@ export function JobList({
   return (
     <div className="divide-y overflow-hidden rounded-xl border">
       {rows.map((r, index) => {
-        const blockers = Array.isArray(r.blockers) ? (r.blockers as string[]) : [];
+        const blockers = scoreMessages(r.blockers);
         const salary = pay(r);
+        const externalUrl = isPublicJobUrl(r.url);
+        const externalApplyUrl = isPublicJobUrl(r.applyUrl) ? r.applyUrl : null;
         // Jobgether and other intermediaries publish under their own name, so
         // the employer is unknowable — worth saying, since you cannot research
         // the company or use your network on one of these.
@@ -95,7 +100,7 @@ export function JobList({
 
               {!dense && (
                 <div className="mt-2.5">
-                  <ScoreBar parts={r as unknown as Record<string, number | null>} t={t} />
+                  <ScoreBar parts={r} t={t} />
                 </div>
               )}
 
@@ -105,7 +110,9 @@ export function JobList({
                 </p>
               )}
               {blockers.length > 0 && (
-                <p className="mt-2 text-xs text-destructive">⚠ {blockers.join("; ")}</p>
+                <p className="mt-2 text-xs text-destructive">
+                  ⚠ {blockers.map((blocker) => renderScoreMessage(blocker, t)).join("; ")}
+                </p>
               )}
             </div>
 
@@ -132,17 +139,19 @@ export function JobList({
               >
                 {t("jobs.view")}
               </button>
-              <a
-                href={r.url}
-                target="_blank"
-                rel="noopener"
-                className={cn(buttonVariants({ variant: "outline", size: "sm" }), ACTION_BUTTON)}
-              >
-                {t("jobs.site")} ↗
-              </a>
-              {r.applyUrl && r.applyUrl !== r.url && (
+              {externalUrl && (
                 <a
-                  href={r.applyUrl}
+                  href={r.url}
+                  target="_blank"
+                  rel="noopener"
+                  className={cn(buttonVariants({ variant: "outline", size: "sm" }), ACTION_BUTTON)}
+                >
+                  {t("jobs.site")} ↗
+                </a>
+              )}
+              {externalApplyUrl && externalApplyUrl !== r.url && (
+                <a
+                  href={externalApplyUrl}
                   target="_blank"
                   rel="noopener"
                   className={cn(buttonVariants({ size: "sm" }), ACTION_BUTTON)}

@@ -68,7 +68,7 @@ dashboard Next.js em `localhost:3000`.
 > é isso. Imports relativos carregam extensão `.ts` explícita.
 
 > **6. Mexeu no scorer ou em `profile.yaml`? Bump `SCORER_VERSION`.**
-> Fica em `src/core/scoring/score.ts` (hoje `1.2.1`). Depois
+> Fica em `src/core/scoring/score.ts` (hoje `1.3.0`). Depois
 > `pnpm jho jobs score --all`. Sem o bump, duas gerações de score convivem na
 > mesma coluna sem sinal visível.
 
@@ -191,7 +191,7 @@ dashboard Next.js em `localhost:3000`.
 > **15. Autorização passa por `can()`, e o escopo vem da sessão.**
 > Toda Server Action chama `guard(...)` **antes** de qualquer efeito, e **toda
 > página chama `requirePage(...)`** — guardar só as actions deixa o dado
-> legível por quem não tem sessão. `middleware.ts` é a rede grossa (existe
+> legível por quem não tem sessão. `proxy.ts` é a rede grossa (existe
 > cookie?), a página é a checagem real (o cookie vale?). Nenhuma action aceita
 > `candidateId` da própria entrada — id em FormData é pedido, não prova.
 > Exceção única e registrada: `passwordLoginAction`, onde a sessão nasce; ela
@@ -306,7 +306,7 @@ pnpm jho profile             # valida profile.yaml
 
 # desenvolvimento
 pnpm check                   # typecheck + testes — verde antes de qualquer entrega
-pnpm test:e2e                # browser real: fonte, tooltip, mobile (precisa do dev no ar)
+pnpm test:e2e                # browser real isolado: build, SQLite e porta temporários
 pnpm db:generate             # gera migration após editar schema.ts
 ```
 
@@ -317,10 +317,10 @@ Referência completa: `docs/cli.md`.
 ## Arquitetura
 
 ```
-src/contexts/      bounded contexts (ADR 0007) — auth, skills
+src/contexts/      bounded contexts — auth, correspondence, fx, matching, pursuit, skills
   i18n/            pt-BR e en, chaves tipadas contra o dicionário português
 src/core/          lógica pura, compartilhada entre CLI e UI
-  db/              schema Drizzle (14 tabelas), client libSQL, queries, migrations
+  db/              composition root Drizzle (28 tabelas), client e migrations
   sources/         um adapter por board público + registry + careers (página própria)
   ingest/          normalização, fingerprint, upsert, import manual, verificação
   scoring/         fit score determinístico (7 componentes) + persistência
@@ -338,10 +338,9 @@ src/core/          lógica pura, compartilhada entre CLI e UI
   clock.ts         relógio injetável — só onde o tempo é decisão, não carimbo
   money.ts         value object (amount + currency + period)
   pdf.ts           extração de PDF (unpdf, JS puro) + limpeza de texto
-  fx.ts            cotações com cache
   contacts.ts      rede profissional e referrals
 src/cli.ts         Commander
-app/               dashboard Next.js 16 — Server Components sobre src/core
+app/               dashboard Next.js 16 — adapter sobre APIs públicas
 config/sources.yaml   quais boards buscar
 profile/profile.yaml  perfil do candidato — fonte da verdade do scoring
 data/jobs.db       banco local (gitignored)
@@ -350,15 +349,14 @@ data/jobs.db       banco local (gitignored)
 Fluxo: `sources → ingest → scoring → application → report/UI`.
 
 > **Invariante:** a UI é **adaptador**, não implementação paralela. Server
-> Components chamam as mesmas funções de `src/core` que a CLI chama, e a única
+> Components chamam as mesmas APIs públicas que a CLI chama, e a única
 > mutação passa por `setApplicationStatus`. Nunca duplique query entre as duas
-> superfícies — coloque em `src/core/db/repo.ts`.
+> superfícies — coloque-a atrás da API pública do contexto proprietário.
 
 Detalhes: `docs/architecture.md`, `docs/data-model.md`.
 A migração para hexagonal/DDD está decidida em `docs/adr/0007` e **concluída** —
-ver `MIGRATION.md`, inclusive as duas notas sobre passos resolvidos por outro
-caminho. `contexts/skills/` e `contexts/auth/` são o padrão para módulo novo
-(regra 4).
+ver `MIGRATION.md` e `docs/engineering/context-map.md`. Os seis contextos
+atuais seguem o padrão da regra 4.
 
 ---
 
@@ -407,7 +405,7 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 | Vagas com bloqueador | 468 |
 | Descrições offline | 207 |
 | Candidaturas no funil | 2 |
-| Testes | 511 + 40 e2e |
+| Testes | 613 + 50 e2e |
 
 > A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
 > candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de

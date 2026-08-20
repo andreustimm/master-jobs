@@ -38,16 +38,11 @@ describe("scoreFreshness", () => {
     expect(r.ageDays).toBeNull();
   });
 
-  it("falls back to firstSeenAt and says so", () => {
-    const r = scoreFreshness({ postedAt: null, firstSeenAt: daysAgo(10) }, NOW);
-    expect(r.basis).toBe("first_seen");
-    expect(r.reason).toContain("may be older");
-  });
-
-  it("prefers the employer's date over our own sighting", () => {
-    const r = scoreFreshness({ postedAt: daysAgo(40), firstSeenAt: daysAgo(1) }, NOW);
-    expect(r.basis).toBe("posted");
-    expect(r.ageDays).toBeCloseTo(40, 0);
+  it("does not treat crawler discovery time as posting age", () => {
+    const r = scoreFreshness({ postedAt: null }, NOW);
+    expect(r.basis).toBe("unknown");
+    expect(r.ageDays).toBeNull();
+    expect(r.factor).toBe(0.5);
   });
 
   it("clamps a future date instead of rewarding it", () => {

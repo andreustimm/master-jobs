@@ -2,8 +2,14 @@ import { RotateCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { recheckAction } from "./actions";
 import { cn } from "@/lib/utils";
-import type { BoardRow } from "../src/core/db/repo.ts";
-import { formatNumber, type LocaleId } from "../src/core/i18n/index.ts";
+import type { BoardRow } from "../src/contexts/matching/index.ts";
+import {
+  formatNumber,
+  type LocaleId,
+  type TranslationKey,
+  type Translator,
+} from "../src/core/i18n/index.ts";
+import { isPublicJobUrl } from "../src/core/job-url.ts";
 
 /**
  * The full job description, offline, in a modal.
@@ -18,7 +24,7 @@ import { formatNumber, type LocaleId } from "../src/core/i18n/index.ts";
  */
 
 /** Chaves de tradução, não texto — a mesma lição da legenda do score. */
-const FIELD_LABEL: Record<string, string> = {
+const FIELD_LABEL: Record<string, TranslationKey> = {
   employmentType: "jobDetail.employmentType",
   workplace: "jobDetail.workplace",
   seniority: "jobDetail.seniority",
@@ -39,13 +45,15 @@ export function JobModal({
 }: {
   row: BoardRow;
   locale: LocaleId;
-  t: (key: string, values?: Record<string, string | number>) => string;
+  t: Translator["t"];
 }) {
   const id = `job-modal-${row.jobId}`;
   const extracted = (row.pageExtracted ?? {}) as Extracted;
   const fields = extracted.fields ?? {};
   const requirements = extracted.requirements ?? [];
   const text = row.pageText;
+  const externalUrl = isPublicJobUrl(row.url);
+  const externalApplyUrl = isPublicJobUrl(row.applyUrl) ? row.applyUrl : null;
   // The list truncates in SQL so a page of rows does not weigh a megabyte.
   const truncated = row.pageTextLength > (text?.length ?? 0);
 
@@ -179,50 +187,53 @@ export function JobModal({
         </section>
       </div>
 
-      <footer className="sticky bottom-0 flex flex-wrap gap-2 border-t border-[var(--color-hairline)] bg-card px-5 py-3">
-        <a
-          href={row.url}
-          target="_blank"
-          rel="noopener"
-          className="type-body-sm text-[var(--primary-text)] hover:underline"
-        >
-          {t("jobDetail.openOnSite")} →
-        </a>
+      {externalUrl && (
+        <footer className="sticky bottom-0 flex flex-wrap gap-2 border-t border-[var(--color-hairline)] bg-card px-5 py-3">
+          <a
+            href={row.url}
+            target="_blank"
+            rel="noopener"
+            className="type-body-sm text-[var(--primary-text)] hover:underline"
+          >
+            {t("jobDetail.openOnSite")} →
+          </a>
 
         {/* Enfileira e volta. Sondar dentro do clique penduraria a página pelo
             tempo de rede de um site de terceiro — e é justamente no link morto
             que ele demora mais, até o timeout. */}
-        <form action={recheckAction} className="contents">
-          <input type="hidden" name="jobId" value={row.jobId} />
-          <button
-            type="submit"
-            disabled={row.checkQueue === "pending" || row.checkQueue === "checking"}
-            title={t("jobDetail.recheckHint")}
-            className={cn(
-              "inline-flex cursor-pointer items-center gap-1.5 type-body-sm",
-              "text-[var(--primary-text)] hover:underline",
-              "disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline",
-            )}
-          >
-            <RotateCw className="size-3.5" aria-hidden />
-            {row.checkQueue === "pending"
-              ? t("jobDetail.recheckQueued")
-              : row.checkQueue === "checking"
-                ? t("jobDetail.recheckChecking")
-                : t("jobDetail.recheck")}
-          </button>
-        </form>
-        {row.applyUrl && row.applyUrl !== row.url && (
-          <a
-            href={row.applyUrl}
-            target="_blank"
-            rel="noopener"
-            className="type-body-sm ml-auto font-medium text-[var(--primary-text)] hover:underline"
-          >
-            {t("jobs.apply")} →
-          </a>
-        )}
-      </footer>
+          <form action={recheckAction} className="contents">
+            <input type="hidden" name="jobId" value={row.jobId} />
+            <button
+              type="submit"
+              data-testid="recheck-job"
+              disabled={row.checkQueue === "pending" || row.checkQueue === "checking"}
+              title={t("jobDetail.recheckHint")}
+              className={cn(
+                "inline-flex cursor-pointer items-center gap-1.5 type-body-sm",
+                "text-[var(--primary-text)] hover:underline",
+                "disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline",
+              )}
+            >
+              <RotateCw className="size-3.5" aria-hidden />
+              {row.checkQueue === "pending"
+                ? t("jobDetail.recheckQueued")
+                : row.checkQueue === "checking"
+                  ? t("jobDetail.recheckChecking")
+                  : t("jobDetail.recheck")}
+            </button>
+          </form>
+          {externalApplyUrl && externalApplyUrl !== row.url && (
+            <a
+              href={externalApplyUrl}
+              target="_blank"
+              rel="noopener"
+              className="type-body-sm ml-auto font-medium text-[var(--primary-text)] hover:underline"
+            >
+              {t("jobs.apply")} →
+            </a>
+          )}
+        </footer>
+      )}
     </div>
   );
 }

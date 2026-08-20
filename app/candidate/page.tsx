@@ -9,14 +9,14 @@ import {
   analyseGap,
   currentDocument,
   documentHistory,
-  getCandidate,
+  getCandidateById,
 } from "../../src/core/candidate.ts";
 import { MarkdownEditor } from "./editor";
 import { VersionHistory } from "./versions";
 import { importPdfAction, saveCvAction } from "./actions";
-import { requirePage } from "../auth";
+import { requireOwnCandidatePage } from "../auth";
 import { getTranslator } from "../i18n";
-import { formatNumber } from "../../src/core/i18n/index.ts";
+import { formatNumber, type Translator } from "../../src/core/i18n/index.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -35,21 +35,19 @@ const VERSION_KEYS = [
   "errorLabelTooLong", "errorIsCurrent", "errorReferenced", "referencedBy",
 ] as const;
 
-function versionLabels(t: (key: string) => string): Record<string, string> {
+function versionLabels(t: Translator["t"]): Record<string, string> {
   return Object.fromEntries(VERSION_KEYS.map((key) => [key, t(`versions.${key}`)]));
 }
 
 export default async function CandidateArea() {
   const { t, locale } = await getTranslator();
-  void locale;
   // Guard antes de ler qualquer dado. O escopo vem da sessão.
-  const session = await requirePage("candidate:read");
-  void session;
+  const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
-  const person = await getCandidate();
+  const person = await getCandidateById(candidateId);
   const doc = person ? await currentDocument(person.id, "cv") : null;
   const history = person ? await documentHistory(person.id, "cv") : [];
-  const gap = await analyseGap({ minFit: 60 });
+  const gap = await analyseGap({ candidateId, minFit: 60 });
 
   return (
     <main className="pt-10 pb-16">
@@ -148,8 +146,10 @@ export default async function CandidateArea() {
           <Button type="submit">{t("candidate.save")}</Button>
           {doc && (
             <span className="text-xs text-muted-foreground">
-              atual: <strong className="text-foreground">{doc.label}</strong> ·{" "}
-              {doc.content.length.toLocaleString("pt-BR")} caracteres · salvo em{" "}
+              {t("candidate.current")}: {" "}
+              <strong data-user-content className="text-foreground">{doc.label}</strong> ·{" "}
+              {formatNumber(doc.content.length, locale)} {t("candidate.chars")} ·{" "}
+              {t("candidate.savedOn")} {" "}
               {doc.createdAt.slice(0, 10)}
             </span>
           )}
@@ -171,8 +171,7 @@ export default async function CandidateArea() {
 
             {gap.missing.length === 0 ? (
               <Card className="p-5 text-sm text-muted-foreground">
-                Nenhuma lacuna relevante. O vocabulário do CV cobre o que as vagas
-                do seu alvo pedem.
+                {t("candidate.noRelevantGap")}
               </Card>
             ) : (
               <div className="mb-8 grid gap-2">

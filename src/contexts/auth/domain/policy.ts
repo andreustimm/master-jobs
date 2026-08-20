@@ -2,7 +2,7 @@
  * The permission decision, as a pure function.
  *
  * `can(session, action, resource)` is the only place that decides. Everything
- * else — middleware, Server Actions, CLI — asks it. That concentration is
+ * else — Proxy, Server Actions, CLI — asks it. That concentration is
  * deliberate: authorisation bugs come from a check that exists in four places
  * and disagrees with itself in one.
  *
@@ -18,7 +18,15 @@
  *     UI filters correctly, and a hand-made request with someone else's id
  *     walks straight through.
  */
-import { ALLOW, deny, type Action, type Decision, type Resource, type Session } from "./types.ts";
+import {
+  ALLOW,
+  deny,
+  type Action,
+  type Decision,
+  type Resource,
+  type Role,
+  type Session,
+} from "./types.ts";
 
 export function isExpired(session: Session, now: number): boolean {
   const expiry = Date.parse(session.expiresAt);
@@ -27,8 +35,8 @@ export function isExpired(session: Session, now: number): boolean {
   return Number.isNaN(expiry) || expiry <= now;
 }
 
-export function hasRole(session: Session, role: string): boolean {
-  return session.roles.includes(role as never);
+export function hasRole(session: Session, role: Role): boolean {
+  return session.roles.includes(role);
 }
 
 export function can(
@@ -44,9 +52,10 @@ export function can(
   const isOwner = hasRole(session, "owner");
 
   // Ownership of the resource, derived from the session and nothing else.
-  const ownsResource =
-    resource.kind === "global" ||
-    (session.candidateId !== null && session.candidateId === resource.candidateId);
+  const ownsCandidate =
+    resource.kind === "candidate" &&
+    session.candidateId !== null &&
+    session.candidateId === resource.candidateId;
 
   switch (action) {
     case "admin:access":
@@ -55,17 +64,21 @@ export function can(
       return isAdmin ? ALLOW : deny("requer papel admin");
 
     case "job:read":
-      // The corpus is not per-candidate; anyone signed in may read it.
+    case "job:write":
+      // The corpus is not per-candidate. Owners may add a posting they are
+      // considering; admins may curate the same global catalogue.
       return isOwner || isAdmin ? ALLOW : deny("requer sessão válida");
 
     case "candidate:read":
     case "candidate:write":
     case "application:write":
-      if (!isOwner && !isAdmin) return deny("requer sessão válida");
-      // An admin curates the global catalogue; that does not extend to reading
-      // or writing someone's CV and funnel. Separating these is the difference
-      // between an administrator and a superuser.
-      if (!ownsResource) return deny("recurso de outro candidato");
+      if (!isOwner) return deny("requer papel owner");
+      // A global resource is never shorthand for private candidate data. Every
+      // caller must prove the candidate scope it derived from the session.
+      if (resource.kind !== "candidate") return deny("requer escopo de candidato");
+      // An admin curates the global catalogue; even an accidentally associated
+      // candidate id does not turn that role into a CV/funnel superuser.
+      if (!ownsCandidate) return deny("recurso de outro candidato");
       return ALLOW;
 
     default:

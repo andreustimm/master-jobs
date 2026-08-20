@@ -196,10 +196,15 @@ export async function parseFile(
 /* Persistence                                                                 */
 /* -------------------------------------------------------------------------- */
 
-import { ensureImportSource, upsertRawJob } from "./manual.ts";
+import { ensureImportSource } from "./manual.ts";
+import { observeRawJob } from "./observe.ts";
 
 export type ImportRunResult = ImportResult & {
   inserted: number;
+  unchanged: number;
+  changed: number;
+  reopened: number;
+  /** Compatibility aggregate: every observation that was not inserted. */
   updated: number;
   jobIds: number[];
 };
@@ -218,15 +223,21 @@ export async function importJobs(
   await ensureImportSource(sourceId, "manual", opts.sourceKey, opts.label);
 
   let inserted = 0;
+  let unchanged = 0;
+  let changed = 0;
+  let reopened = 0;
   let updated = 0;
   const jobIds: number[] = [];
 
   for (const raw of result.jobs) {
-    const { jobId, created } = await upsertRawJob(raw, sourceId);
-    jobIds.push(jobId);
-    if (created) inserted++;
+    const observation = await observeRawJob(raw, sourceId);
+    jobIds.push(observation.jobId);
+    if (observation.outcome === "inserted") inserted++;
     else updated++;
+    if (observation.outcome === "unchanged") unchanged++;
+    if (observation.outcome === "changed") changed++;
+    if (observation.outcome === "reopened") reopened++;
   }
 
-  return { ...result, inserted, updated, jobIds };
+  return { ...result, inserted, unchanged, changed, reopened, updated, jobIds };
 }

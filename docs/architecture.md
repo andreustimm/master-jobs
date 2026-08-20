@@ -1,5 +1,10 @@
 # Arquitetura
 
+> **Baseline de 20/08/2026:** a auditoria foi remediada. O inventário executável
+> de ownership, tabelas, APIs e dependências está no
+> [mapa de contextos](engineering/context-map.md); o histórico e as provas ficam
+> no [backlog de remediação](engineering/architecture-remediation.md).
+
 ## Por que isto existe
 
 `job-hunt-os` resolve um problema concreto: encontrar vagas compatíveis com o
@@ -25,16 +30,18 @@ Este documento é o mapa do sistema inteiro. Para o schema em detalhe veja
 
 ## As camadas
 
-O fluxo é linear e sem ciclos: `sources` → `ingest` → `scoring` → `pipeline` →
-`report/UI`. Cada camada só conhece a anterior.
+O fluxo principal é `Sourcing → Matching → Pursuit → report/UI`. Candidate,
+Skills e FX alimentam Matching; Correspondence observa fatos e solicita uma
+transição explícita de Pursuit.
 
 | Camada | Diretório | Responsabilidade | O que NÃO faz |
 |---|---|---|---|
 | **sources** | `src/core/sources/` | Um adapter por endpoint público. Fetch, mapear para `RawJob`, retornar `FetchResult { jobs, warnings }`. | Não normaliza, não deduplica, não pontua, não toca no banco. |
 | **ingest** | `src/core/ingest/` | Normalização (`slugifyCompany`, `normalizeTitle`, `normalizeLocation`), `fingerprint`/`contentHash`, upsert idempotente em `job`, fechamento do que sumiu, saúde da `source`. | Nunca escreve em `application`. |
 | **scoring** | `src/core/scoring/` | `score.ts` é um scorer **puro** (sem banco) que recebe `ScoreInput` + `Profile` e devolve `ScoreResult`. `apply.ts` persiste em `job_score`. | Não faz I/O de rede, não chama LLM. |
-| **pipeline** | `src/core/db/repo.ts` | Estado do usuário: `setApplicationStatus()`, `pipelineCounts()`, `listBoard()`. Toda transição vira um `application_event`. | Não é alcançável pela ingestão. |
-| **report / UI** | `src/core/report/`, `app/` (vazio) | `buildReport()` exporta um snapshot markdown pro vault Obsidian. A UI Next.js 16 é um consumidor futuro das mesmas queries de `repo.ts`. | Não recalcula nada — só lê. |
+| **matching** | `src/contexts/matching/` | Score candidato–vaga, elegibilidade, board/cockpit e comparação manual. | Não altera candidatura. |
+| **pursuit** | `src/contexts/pursuit/` | Estado do usuário e máquina de transições. Toda mudança grava `application_event` atomicamente. | Não é alcançável pela ingestão. |
+| **report / UI** | `src/core/report/`, `app/` | Renderers recebem DTOs e retornam texto; a CLI faz filesystem. A UI Next.js 16 consome APIs públicas dos contextos. | Não duplica SQL nem recalcula score. |
 
 Camadas transversais: `src/core/profile/` (carga e validação Zod do
 `profile.yaml`, insumo do scoring) e `src/core/db/` (client libSQL, schema
@@ -48,22 +55,17 @@ Drizzle, migrations).
 
 ---
 
-## Por que `core/` é separado de `cli.ts` (e da futura UI)
+## Por que domínio e casos de uso são separados da CLI/UI
 
-`src/cli.ts` tem 486 linhas e **nenhuma regra de negócio**. Ele é Commander +
-formatação ANSI (`c`, `fitColor()`, `truncate()`) + `withDb()`, um wrapper que
-garante `closeDb()` no `finally`. Todo o resto é chamada para `src/core/**`.
+`src/cli.ts` é composition root Commander e adaptador de terminal. Formata,
+lê/grava arquivos e chama APIs públicas; decisões ficam nos contextos ou em
+módulos coesos de `src/core`.
 
-O motivo está escrito no topo de `src/core/db/repo.ts`:
-
-> "Keeping them here (instead of inline in pages) means an agent changing a
-> query changes it once, and the CLI and dashboard can never disagree about
-> what 'shortlisted' or 'open' means."
-
-Concretamente: `listBoard()` define o que é "vaga aberta e relevante"
+Concretamente, a API pública de Matching expõe `listBoard()`, a única definição
+do que é "vaga aberta e relevante"
 (`closed_at IS NULL AND coalesce(fit,0) >= minFit`, ordenado por fit desc e
-`first_seen_at` desc). Hoje `jho jobs list` e `jho report` consomem essa mesma
-função. Amanhã o React Server Component do dashboard consome a mesma função.
+`first_seen_at` desc). `jho jobs list`, `jho report` e os React Server
+Components consomem essa mesma função.
 Se a definição estivesse duplicada, UI e CLI divergiriam na primeira mudança de
 critério — e o usuário passaria a decidir com duas verdades.
 
@@ -73,10 +75,11 @@ para que CLI, testes e um futuro deploy hook da Vercel inicializem o banco pelo
 mesmo caminho.
 
 Consequência prática para agentes: **não implemente lógica em `src/cli.ts`**.
-Se um comando precisa de uma query nova, ela nasce em `src/core/db/repo.ts`.
+Uma query nova nasce atrás da API pública do contexto proprietário.
 
 > **Invariante:** Uma definição de verdade por conceito. Se CLI e UI precisam da
-> mesma resposta, a função vive em `src/core/**` e as duas a importam.
+> mesma resposta, a função vive atrás da API pública do contexto e ambas a
+> importam.
 
 ---
 
@@ -120,7 +123,7 @@ flowchart TD
     PROF["profile/profile.yaml"] -->|"loadProfile(true) + Zod"| SC
     SC --> SJ["scoreJob() puro<br/>title 35 · keyword 30 · geo 15<br/>seniority 12 · comp 8 menos penalty"]
     SJ --> JS["upsert job_score<br/>onConflictDoUpdate(job_id)<br/>scorer_version"]
-    JS --> BOARD["listBoard() → jho jobs list<br/>jho report · futura UI"]
+    JS --> BOARD["listBoard() → jho jobs list<br/>jho report · UI Next.js"]
 ```
 
 Pontos do fluxo que costumam ser mal entendidos:
@@ -323,9 +326,9 @@ e o fit final é `Math.max(0, Math.min(100, rawTotal - penalty))`. Blockers
 role that says 'US preferred' is still worth seeing, just not at the top of the
 list". Detalhes componente a componente em `docs/scoring.md`.
 
-`SCORER_VERSION = "1.0.0"` é persistido em cada linha de `job_score` e é o
-gatilho de repontuação: sem `--all`, `scoreAll()` só processa jobs abertos onde
-`job_score.job_id IS NULL` **ou** `job_score.scorer_version <> SCORER_VERSION`.
+`SCORER_VERSION = "1.3.0"` e o `profile_hash` são persistidos em cada linha de
+`job_score`. Sem `--all`, `scoreAll()` processa jobs sem score, com geração ou
+perfil divergentes, e os que expiraram pela política de freshness.
 
 > **Invariante:** Mexeu em `profile.yaml` ou no scorer? Bump `SCORER_VERSION` em
 > `src/core/scoring/score.ts` e rode `pnpm jho jobs score --all`. Sem o bump,
@@ -379,10 +382,10 @@ account inside the LinkedIn User Agreement."
 
 | Arquivo | O que é |
 |---|---|
-| `src/core/db/schema.ts` | Modelo Drizzle/SQLite completo (11 tabelas), a const `APPLICATION_STATUSES` e os tipos inferidos (`$inferSelect` / `$inferInsert`). Define a constante `now` como `strftime('%Y-%m-%dT%H:%M:%fZ','now')`, usada como default de `created_at`, `updated_at`, `first_seen_at`, `last_seen_at`, `scored_at` e `application_event.at` — os demais timestamps (`source.last_synced_at`, `job.posted_at`, `job.closed_at`, `application.applied_at`, `application.next_action_at`, `post.scheduled_for`/`published_at`, `engagement.queued_for`/`done_at`, `target_account.last_touch_at`, `metric_snapshot.at`, `positioning_task.done_at`) são preenchidos pelo código. |
+| `src/core/db/schema.ts` | Composition root Drizzle/SQLite das 28 tabelas. Ownership lógico e APIs estão no mapa de contextos; a declaração física central preserva o grafo de FKs e migrations. |
 | `src/core/db/client.ts` | Cliente libSQL único e cacheado em módulo (`getDb` / `closeDb`), `resolveUrl()` com default `file:./data/jobs.db`, e a guarda que lança quando a URL é remota e `TURSO_AUTH_TOKEN` está vazio. Reexporta `schema`. |
 | `src/core/db/migrate.ts` | `runMigrations(folder = "./drizzle")` via `drizzle-orm/libsql/migrator`; cria o diretório do arquivo com `mkdir` recursivo quando a URL é `file:`, senão o libSQL não abre o banco. |
-| `src/core/db/repo.ts` | Queries compartilhadas entre CLI e futura UI: tipo `BoardRow`, `listBoard()`, `setApplicationStatus()`, `pipelineCounts()`, `openTasks()`. O filtro de status (incluindo o pseudo-status `unfiled`, que é `status === null`) é feito em memória, depois do SQL. |
+| `src/core/db/repo.ts` | Implementação SQL legada atrás das APIs públicas. Board filtra antes da paginação e agrega count/facets em SQL, sem teto artificial. UI/CLI não importam este arquivo. |
 
 ### Sourcing
 
@@ -410,7 +413,7 @@ account inside the LinkedIn User Agreement."
 |---|---|
 | `src/core/profile/schema.ts` | `ProfileSchema` (Zod v4) validando identity / targets / constraints / keywords / blockers / compensation / seniority / evidence / growth / cv. `WeightedTerm` faz `.transform(s => s.toLowerCase())` em `term`; `Cluster` exige `weight` entre 0 e 1. |
 | `src/core/profile/load.ts` | `profilePath()` (`JHO_PROFILE_PATH` ou `<cwd>/profile/profile.yaml`) e `loadProfile(force = false)` com cache em módulo; erro agregado listando cada issue como `path: message`. |
-| `src/core/report/markdown.ts` | `buildReport()`: monta o markdown em pt-BR, escapa pipes com `esc()`, separa `open` (sem status ou `backlog`) de `tracked`, e grava em `opts.outPath` ou em `<JHO_VAULT_PATH>/<JHO_REPORT_DIR>/vagas-match-<YYYY-MM-DD>.md`. |
+| `src/core/report/markdown.ts` | `renderBoardMarkdown()` é puro; `buildReport()`/`exportDossiers()` retornam DTO/texto. A CLI é responsável por diretórios e escrita. |
 
 ### Posicionamento
 
@@ -510,7 +513,7 @@ escrita: `seedPositioning()` insere/atualiza tarefas e insere o baseline com
 | Módulo | Papel | Por que existe separado |
 |---|---|---|
 | `src/core/money.ts` | Value object `Money` (amount + currency + period) | O scorer comparava número cru contra piso em USD, ignorando `comp_currency`. Puro e sem dependência — as taxas vêm do chamador |
-| `src/core/fx.ts` | Cotações com cache em `fx_rate` | Segundo cliente HTTP do repositório. Frankfurter (BCE) com fallback `open.er-api` |
+| `src/contexts/fx/` | Cotações com cache em `fx_rate` | `FxRateProvider` com adapters Frankfurter e ER API; application service controla fallback |
 | `src/core/contacts.ts` | Rede profissional e referrals | Referrals são ~40% das contratações e `application.channel` não era preenchido por nada |
 | `src/core/mail/` | Parser MIME, classificador, extrator de alerta | Implementa a ADR 0008 |
 | `src/core/ingest/detect.ts` | Reconhece o ATS por uma URL | Colar um link é o caminho mais rápido de cadastrar vaga |
@@ -557,10 +560,11 @@ app/
 Next.js 16 com shadcn/ui sobre Tailwind v4.
 
 > **Invariante:** a UI é **adaptador**, não implementação paralela. Server
-> Components chamam as mesmas funções de `src/core` que a CLI chama, e a única
+> Components chamam as mesmas APIs públicas que a CLI chama, e a única
 > mutação passa por `setApplicationStatus` — uma mudança de status feita no
 > navegador cai em `application_event` exatamente como uma feita no terminal.
-> Nunca duplique query entre as superfícies: coloque em `src/core/db/repo.ts`.
+> Nunca duplique query entre as superfícies: coloque-a atrás da API pública do
+> contexto proprietário.
 
 Três decisões que valem registro:
 
@@ -575,4 +579,3 @@ proíbe os route segment configs que expressam "sempre fresco" em uma linha.
 **`--primary` do shadcn resolve para o azul do `DESIGN.md`**, senão todo botão e
 anel de foco carregaria o cinza padrão da biblioteca. `--accent` **não** foi
 remapeado: no vocabulário do shadcn é superfície de hover, não cor de destaque.
-

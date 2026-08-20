@@ -3,8 +3,9 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { companiesWithContacts, referralOpportunities } from "../../src/core/contacts.ts";
+import { publicApplyUrl } from "../../src/core/job-url.ts";
 import { ACTION_BUTTON, Fit, StatusBadge } from "../ui";
-import { requirePage } from "../auth";
+import { requireOwnCandidatePage } from "../auth";
 import { getTranslator } from "../i18n";
 
 export const dynamic = "force-dynamic";
@@ -12,10 +13,10 @@ export const dynamic = "force-dynamic";
 export default async function Referrals() {
   const { t, locale } = await getTranslator();
   void locale;
-  await requirePage("job:read");
+  const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
   const [opps, network] = await Promise.all([
-    referralOpportunities(40),
+    referralOpportunities(candidateId, 40),
     companiesWithContacts(),
   ]);
 
@@ -42,8 +43,16 @@ export default async function Referrals() {
         </Card>
       ) : (
         <div className="divide-y overflow-hidden rounded-xl border">
-          {opps.map((o) => (
-            <div
+          {opps.map((o) => {
+            const externalUrl = publicApplyUrl(o);
+            const actionClass = cn(
+              buttonVariants({ size: "sm" }),
+              ACTION_BUTTON,
+              // Own row on a phone; right-hand column from `sm` up.
+              "col-span-2 justify-self-start sm:col-span-1 sm:justify-self-auto",
+            );
+            return (
+              <div
               key={o.jobId}
               className="grid grid-cols-[44px_1fr] items-center gap-3 bg-card px-4 py-3.5 sm:grid-cols-[52px_1fr_auto] sm:gap-4 sm:px-5"
             >
@@ -62,21 +71,18 @@ export default async function Referrals() {
                   via {o.contacts.join(", ")}
                 </div>
               </div>
-              <a
-                href={o.applyUrl ?? o.url}
-                target="_blank"
-                rel="noopener"
-                className={cn(
-                  buttonVariants({ size: "sm" }),
-                  ACTION_BUTTON,
-                  // Own row on a phone; right-hand column from `sm` up.
-                  "col-span-2 justify-self-start sm:col-span-1 sm:justify-self-auto",
+                {externalUrl ? (
+                  <a href={externalUrl} target="_blank" rel="noopener" className={actionClass}>
+                    {t("jobs.apply")} →
+                  </a>
+                ) : (
+                  <Link href={`/jobs/${o.jobId}`} className={actionClass}>
+                    {t("jobs.view")} →
+                  </Link>
                 )}
-              >
-                {t("jobs.apply")} →
-              </a>
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
     </main>

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { firstNonEmpty, htmlToText } from "../src/core/sources/http.ts";
+import {
+  fixtureHttp,
+  resetHttpPort,
+  setHttpPort,
+} from "../src/core/sources/http-port.ts";
 import { lever } from "../src/core/sources/ats.ts";
 
 describe("firstNonEmpty", () => {
@@ -77,16 +82,15 @@ describe("lever adapter description extraction", () => {
   };
 
   async function fetchOne() {
-    const original = globalThis.fetch;
-    globalThis.fetch = (async () =>
-      new Response(JSON.stringify([posting]), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      })) as typeof fetch;
+    setHttpPort(
+      fixtureHttp({
+        "https://api.lever.co/v0/postings/jobgether?mode=json": [posting],
+      }),
+    );
     try {
       return await lever.fetchJobs({ kind: "lever", handle: "jobgether", label: "Jobgether" });
     } finally {
-      globalThis.fetch = original;
+      resetHttpPort();
     }
   }
 

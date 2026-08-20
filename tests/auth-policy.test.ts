@@ -22,9 +22,9 @@ const owner = (candidateId: number | null = 1): Session => ({
   expiresAt: LATER,
 });
 
-const admin = (): Session => ({
+const admin = (candidateId: number | null = null): Session => ({
   userId: 2,
-  candidateId: null,
+  candidateId,
   roles: ["admin"],
   email: "admin@test",
   expiresAt: LATER,
@@ -85,6 +85,17 @@ describe("candidate isolation", () => {
     // salary expectations".
     expect(can(admin(), "candidate:read", { kind: "candidate", candidateId: 1 }, NOW).allowed).toBe(false);
     expect(can(admin(), "candidate:write", { kind: "candidate", candidateId: 1 }, NOW).allowed).toBe(false);
+    // The CLI can associate a candidate id with any account. The role remains
+    // authoritative: an accidental association must not promote an admin.
+    expect(can(admin(1), "candidate:read", { kind: "candidate", candidateId: 1 }, NOW).allowed).toBe(false);
+    expect(can(admin(1), "application:write", { kind: "candidate", candidateId: 1 }, NOW).allowed).toBe(false);
+  });
+
+  it("never treats a global resource as private candidate scope", () => {
+    for (const action of ["candidate:read", "candidate:write", "application:write"] as Action[]) {
+      expect(can(owner(1), action, { kind: "global" }, NOW).allowed, action).toBe(false);
+      expect(can(admin(), action, { kind: "global" }, NOW).allowed, action).toBe(false);
+    }
   });
 });
 
@@ -101,6 +112,11 @@ describe("job corpus", () => {
   it("is readable by any valid session — it is not per-candidate", () => {
     expect(can(owner(), "job:read", { kind: "global" }, NOW).allowed).toBe(true);
     expect(can(admin(), "job:read", { kind: "global" }, NOW).allowed).toBe(true);
+  });
+
+  it("lets owners and admins add jobs to the global corpus", () => {
+    expect(can(owner(), "job:write", { kind: "global" }, NOW).allowed).toBe(true);
+    expect(can(admin(), "job:write", { kind: "global" }, NOW).allowed).toBe(true);
   });
 });
 

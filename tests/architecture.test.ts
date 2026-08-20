@@ -77,9 +77,127 @@ describe("layering", () => {
     );
     expect(offenders).toEqual([]);
   });
+
+  it("exposes skills to production callers only through the context API", () => {
+    expect(SRC).not.toContain("src/core/skills.ts");
+
+    const callers = [...SRC, ...walk("app")].filter(
+      (file) => !file.includes("src/contexts/skills/"),
+    );
+    const offenders: string[] = [];
+    for (const file of callers) {
+      for (const match of read(file).matchAll(/["']([^"']*contexts\/skills\/[^"']+)["']/g)) {
+        if (!match[1]!.endsWith("contexts/skills/index.ts")) {
+          offenders.push(`${file}: ${match[1]}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("exposes Matching to production callers only through the context API", () => {
+    const callers = [...SRC, ...walk("app")].filter(
+      (file) => !file.includes("src/contexts/matching/"),
+    );
+    const offenders = callers.filter((file) =>
+      /contexts\/matching\/(?:app|domain|infra)\//.test(read(file)),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("keeps presentation adapters on bounded-context public APIs", () => {
+    const callers = ["src/cli.ts", ...walk("app")];
+    const offenders: string[] = [];
+    for (const file of callers) {
+      const code = read(file);
+      for (const forbidden of ["core/db/repo.ts", "core/mail/run.ts"]) {
+        if (code.includes(forbidden)) offenders.push(`${file}: ${forbidden}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("keeps report rendering pure and filesystem effects in the CLI", () => {
+    const report = read("src/core/report/markdown.ts");
+    expect(report).toContain("renderBoardMarkdown");
+    expect(report).not.toMatch(/from\s+"node:(?:fs|path)/);
+    const cli = read("src/cli.ts");
+    expect(cli).toContain("writeFile");
+    expect(cli).toContain("exportDossiers");
+  });
+
+  it("keeps comparison UI on the composed application service", () => {
+    const action = read("app/compare/actions.ts");
+    expect(action).toContain("createManualComparison");
+    for (const forbidden of ["addManualDescriptionJob", "extractJobDocument", "scoreOne", "getDb"] ) {
+      expect(action, forbidden).not.toContain(forbidden);
+    }
+    const page = read("app/compare/page.tsx");
+    expect(page).toContain("getComparisonDetail");
+    expect(page).not.toContain("manualMetadata");
+    expect(page).not.toContain("job.raw");
+  });
+
+  it("persists score explanations as codes and parameters", () => {
+    const scorer = read("src/core/scoring/score.ts");
+    expect(scorer).toContain('message("title.');
+    expect(scorer).toContain('message("blocker.');
+    expect(scorer).not.toMatch(/const reasons\s*=\s*\[\s*[`"']/);
+    const compare = read("app/compare/page.tsx");
+    expect(compare).toContain("renderScoreMessage");
+  });
+
+  it("uses one skill matcher and no ignored strategy weights", () => {
+    const strategies = read("src/contexts/skills/domain/strategies.ts");
+    const gap = read("src/contexts/skills/domain/gap.ts");
+    const text = read("src/contexts/skills/domain/text.ts");
+    const types = read("src/contexts/skills/domain/types.ts");
+
+    expect(strategies).toContain('from "./matcher.ts"');
+    expect(gap).toContain('from "./matcher.ts"');
+    expect(text).not.toContain("findOccurrences");
+    expect(types).not.toMatch(/\bweight\??\s*:/);
+    expect(strategies).not.toMatch(/\bweight\s*:/);
+  });
+});
+
+describe("architecture inventory", () => {
+  it("keeps every bounded context public and documented", () => {
+    const contexts = readdirSync("src/contexts")
+      .filter((name) => statSync(join("src/contexts", name)).isDirectory())
+      .sort();
+    const contextMap = read("docs/engineering/context-map.md");
+
+    for (const context of contexts) {
+      expect(readFileSync(join("src/contexts", context, "index.ts"), "utf8").length).toBeGreaterThan(0);
+      expect(contextMap).toContain(`| ${context} |`);
+    }
+  });
+
+  it("keeps the documented schema count derived from declarations", () => {
+    const schema = read("src/core/db/schema.ts");
+    const count = [...schema.matchAll(/export const \w+ = sqliteTable\b/g)].length;
+    const contextMap = read("docs/engineering/context-map.md");
+    expect(contextMap).toContain(`<!-- schema-table-count: ${count} -->`);
+  });
 });
 
 describe("write-path invariants (ADR 0005)", () => {
+  it("routes every RawJob ingestion channel through the canonical observer", () => {
+    const channels = [
+      "src/core/ingest/run.ts",
+      "src/core/ingest/manual.ts",
+      "src/core/ingest/import.ts",
+      "src/core/mail/run.ts",
+    ];
+
+    for (const file of channels) {
+      const code = read(file);
+      expect(code, file).toContain("observeRawJob");
+      expect(code, file).not.toMatch(/\.insert\(\s*job\s*\)/);
+    }
+  });
+
   it("routes every application status change through setApplicationStatus", () => {
     // Ingestion must never write the funnel. If a second write path appears,
     // this fails before anyone notices decisions being overwritten.
@@ -123,6 +241,23 @@ describe("scoring purity (ADR 0004)", () => {
   });
 });
 
+describe("outbound network boundary", () => {
+  it("routes untrusted job URLs through redirect-aware SSRF validation", () => {
+    for (const file of [
+      "src/core/ingest/probe.ts",
+      "src/core/scrape/fetcher.ts",
+      "src/core/sources/http.ts",
+    ]) {
+      expect(read(file), file).toContain("safeRemoteFetch");
+    }
+
+    const remote = read("src/core/remote-url.ts");
+    expect(remote).toContain("assertSafeRemoteUrl");
+    expect(remote).toContain('redirect: "manual"');
+    expect(remote).toContain("isGloballyRoutableAddress");
+  });
+});
+
 describe("floating layers", () => {
   // Base UI confines a popup to its anchor's clipping ancestors by default.
   // Every `Card` sets `overflow-hidden`, and filters, selects and buttons all
@@ -157,17 +292,36 @@ describe("pluggability (rule 4)", () => {
   // The system exists to receive modules: sources, queues, LLM providers. Each
   // is a port with adapters, and the value only survives if the boundary does.
   it("keeps every port free of a concrete implementation", () => {
-    const ports = SRC.filter((f) => f.endsWith("ports.ts") || f.endsWith("llm/port.ts"));
-    expect(ports.length).toBeGreaterThan(0);
+    // Detect the exported contract, not a filename convention. QueuePort used
+    // to live beside its Drizzle adapter in `queue.ts`, so the old
+    // `endsWith("ports.ts")` check silently ignored exactly the broken port.
+    const contracts = SRC.flatMap((file) =>
+      [...read(file).matchAll(/export\s+(?:type|interface)\s+(\w+(?:Port|Adapter))\b/g)]
+        .map((match) => ({ file, name: match[1]! })),
+    );
+    expect(contracts.map((contract) => contract.name)).toContain("QueuePort");
 
     const offenders: string[] = [];
-    for (const file of ports) {
-      const code = read(file);
-      for (const forbidden of ["drizzle-orm", "getDb", "node:fs"]) {
-        if (code.includes(forbidden)) offenders.push(`${file}: ${forbidden}`);
+    for (const contract of contracts) {
+      const code = read(contract.file);
+      for (const forbidden of ["drizzle-orm", "getDb", "db/schema", "node:fs", "/infra/"]) {
+        if (code.includes(forbidden)) {
+          offenders.push(`${contract.file} (${contract.name}): ${forbidden}`);
+        }
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it("keeps queue status independent of its Drizzle representation", () => {
+    const status = read("src/core/scrape/domain/status.ts");
+    for (const forbidden of ["drizzle-orm", "getDb", "db/schema", "node:fs"]) {
+      expect(status, forbidden).not.toContain(forbidden);
+    }
+
+    const schema = read("src/core/db/schema.ts");
+    expect(schema).toContain('from "../scrape/domain/status.ts"');
+    expect(schema).not.toMatch(/export const SCRAPE_STATUSES\s*=\s*\[/);
   });
 
   it("never hard-codes an LLM provider outside its adapter file", () => {
@@ -206,6 +360,7 @@ describe("pluggability (rule 4)", () => {
 
 describe("authorisation (AUTH-01)", () => {
   const APP = walk("app").filter((f) => f.endsWith("actions.ts"));
+  const ROUTES = walk("app").filter((f) => f.endsWith("route.ts"));
 
   /**
    * The one action that may not be guarded, and why.
@@ -216,6 +371,14 @@ describe("authorisation (AUTH-01)", () => {
    * decision on the record rather than an omission nobody noticed.
    */
   const UNGUARDED_BY_DESIGN = new Set(["passwordLoginAction"]);
+
+  it("exposes Auth to production callers only through its public API", () => {
+    const callers = [...SRC.filter((file) => !file.includes("src/contexts/auth/")), ...walk("app")];
+    const offenders = callers.filter((file) =>
+      /contexts\/auth\/(?:app|domain|infra)\//.test(read(file)),
+    );
+    expect(offenders).toEqual([]);
+  });
 
   it("guards every Server Action", () => {
     // A Server Action is a public HTTP endpoint. One that forgets the guard is
@@ -240,6 +403,56 @@ describe("authorisation (AUTH-01)", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("validates sessions inside every protected Route Handler", () => {
+    // Middleware checks cookie presence only. A forged cookie reaches the
+    // handler, so the handler itself must resolve and authorise the session.
+    const publicByDesign = new Set(["app/login/callback/route.ts"]);
+    const offenders = ROUTES.filter(
+      (file) =>
+        !publicByDesign.has(file) &&
+        !/await (require(?:OwnCandidatePage|Page|Session)|guard(?:OwnCandidate)?)\(/.test(read(file)),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("uses candidate-scoped page guards wherever funnel or CV data is read", () => {
+    const privatePages = [
+      "app/page.tsx",
+      "app/jobs/page.tsx",
+      "app/jobs/[id]/page.tsx",
+      "app/pipeline/page.tsx",
+      "app/referrals/page.tsx",
+      "app/candidate/page.tsx",
+      "app/candidate/skills/page.tsx",
+      "app/candidate/vocabulary/page.tsx",
+    ];
+    for (const file of privatePages) {
+      expect(read(file), file).toContain("await requireOwnCandidatePage(");
+    }
+  });
+
+  it("keeps session and active-candidate resolution read-only", () => {
+    // A resolver runs on every request/CLI read. Hiding profile sync here turns
+    // reads into writes, creates lock contention and couples Auth to Candidate.
+    const auth = read("app/auth.ts");
+    const cli = read("src/cli.ts");
+    expect(auth).not.toContain("syncCandidateFromProfile");
+    expect(auth).toContain("await getCandidate()");
+    const resolver = cli.slice(
+      cli.indexOf("async function activeCandidateId"),
+      cli.indexOf("function applicationStatus"),
+    );
+    expect(resolver).toContain("await getCandidate()");
+    expect(resolver).not.toContain("syncCandidateFromProfile");
+  });
+
+  it("scopes application writes to the candidate from the session", () => {
+    const actions = read("app/actions.ts");
+    const start = actions.indexOf("export async function trackAction");
+    const end = actions.indexOf("export async function recheckAction");
+    expect(actions.slice(start, end)).toContain('guardOwnCandidate("application:write")');
+  });
+
   it("rate-limits the one action that cannot be guarded", () => {
     // Sign-in is unauthenticated by necessity, so the protection has to be a
     // limit rather than a permission.
@@ -254,6 +467,16 @@ describe("authorisation (AUTH-01)", () => {
     expect(login).toContain("decoy");
     const action = read("app/login/actions.ts");
     expect(action).not.toMatch(/conta (não existe|inexistente)/i);
+  });
+
+  it("keeps password login SQL and adapters behind the Auth API", () => {
+    const action = read("app/login/actions.ts");
+    expect(action).toContain("passwordSignIn");
+    for (const forbidden of ["drizzle-orm", "getDb", "db/schema", "drizzleSessions"]) {
+      expect(action, forbidden).not.toContain(forbidden);
+    }
+    const api = read("src/contexts/auth/index.ts");
+    expect(api).not.toMatch(/export\s*\{\s*drizzleSessions\s*\}/);
   });
 
   it("hashes passwords with a memory-hard KDF, never a plain digest", () => {
@@ -311,8 +534,8 @@ describe("authorisation (AUTH-01)", () => {
     // modo aberto tem de ser pedido.
     const session = read("src/contexts/auth/app/session.ts");
     expect(session).toContain('env.JHO_AUTH_MODE === "open"');
-    const middleware = readFileSync("middleware.ts", "utf8");
-    expect(middleware).toContain('process.env.JHO_AUTH_MODE === "open"');
+    const proxy = readFileSync("proxy.ts", "utf8");
+    expect(proxy).toContain('process.env.JHO_AUTH_MODE === "open"');
   });
 
   it("keeps the permission decision in one pure function", () => {

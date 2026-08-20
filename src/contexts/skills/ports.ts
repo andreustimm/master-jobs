@@ -16,26 +16,41 @@
  * profile — is the caller's problem, and wrapping that in an interface would
  * add a layer with one implementation and no variation to absorb.
  */
-import type { Detection, SkillDefinition } from "./domain/types.ts";
+import type {
+  CandidateSkillView,
+  Detection,
+  SkillAuditStatus,
+  SkillDefinition,
+  SkillSource,
+  SkillStatus,
+} from "./domain/types.ts";
+
+export type CatalogSeedResult = { inserted: number; updated: number };
 
 export type SkillCatalogPort = {
   all(): Promise<SkillDefinition[]>;
-  /** Returns the catalogue id for a slug, so persistence can reference it. */
-  idOf(slug: string): Promise<number | null>;
+  sync(entries: readonly SkillDefinition[]): Promise<CatalogSeedResult>;
 };
 
 export type PersistedSkill = {
   skillSlug: string;
-  status: "detected" | "confirmed" | "rejected";
+  status: SkillStatus;
 };
 
 export type CandidateSkillPort = {
   existing(candidateId: number): Promise<PersistedSkill[]>;
-  add(candidateId: number, detection: Detection, source: string): Promise<void>;
+  list(candidateId: number): Promise<CandidateSkillView[]>;
+  add(candidateId: number, detection: Detection, source: SkillSource): Promise<void>;
   refresh(candidateId: number, detection: Detection): Promise<void>;
+  audit(
+    candidateId: number,
+    id: number,
+    status: SkillAuditStatus,
+    opts: { level?: string; by: string },
+  ): Promise<boolean>;
 };
 
 export type TargetCorpusPort = {
   /** Descriptions of jobs worth imitating the vocabulary of. */
-  targetTexts(opts: { minFit: number; limit: number }): Promise<string[]>;
+  targetTexts(opts: { candidateId: number; minFit: number; limit: number }): Promise<string[]>;
 };

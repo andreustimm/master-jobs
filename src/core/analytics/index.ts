@@ -4,7 +4,7 @@
  * The pure analysis lives in `stats.ts`, `scorer-diagnostics.ts` and
  * `funnel.ts`. This file only fetches and wires.
  */
-import { eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { application, job, jobScore } from "../db/schema.ts";
 import { WEIGHTS } from "../scoring/score.ts";
@@ -32,7 +32,7 @@ const COMPONENTS = [
   { key: "benefitScore", label: "Benefícios", weight: WEIGHTS.benefits },
 ] as const;
 
-export async function scorerDiagnostics(): Promise<ScorerDiagnostics> {
+export async function scorerDiagnostics(candidateId: number): Promise<ScorerDiagnostics> {
   const db = getDb();
   const rows = await db
     .select({
@@ -48,7 +48,7 @@ export async function scorerDiagnostics(): Promise<ScorerDiagnostics> {
     .from(jobScore)
     .innerJoin(job, eq(job.id, jobScore.jobId))
     // Closed jobs are history, not the corpus the ranking operates on.
-    .where(isNull(job.closedAt));
+    .where(and(eq(jobScore.candidateId, candidateId), isNull(job.closedAt)));
 
   const samples: ComponentSample[] = COMPONENTS.map((c) => ({
     key: c.key,
@@ -60,7 +60,7 @@ export async function scorerDiagnostics(): Promise<ScorerDiagnostics> {
   return diagnoseScorer(samples, rows.map((r) => Number(r.fit)));
 }
 
-export async function funnelAnalysis(): Promise<FunnelAnalysis> {
+export async function funnelAnalysis(candidateId: number): Promise<FunnelAnalysis> {
   const db = getDb();
   const rows = await db
     .select({
@@ -80,7 +80,14 @@ export async function funnelAnalysis(): Promise<FunnelAnalysis> {
     })
     .from(application)
     .leftJoin(job, eq(job.id, application.jobId))
-    .leftJoin(jobScore, eq(jobScore.jobId, application.jobId));
+    .leftJoin(
+      jobScore,
+      and(
+        eq(jobScore.jobId, application.jobId),
+        eq(jobScore.candidateId, candidateId),
+      ),
+    )
+    .where(eq(application.candidateId, candidateId));
 
   const outcomes: Outcome[] = rows.map((r) => ({
     jobId: r.jobId,

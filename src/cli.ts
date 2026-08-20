@@ -5,16 +5,17 @@
  * Everything the agent workflow needs is reachable from here, and every command
  * is safe to re-run. Run `pnpm jho --help` for the full list.
  */
-import { readFile } from "node:fs/promises";
-import { basename } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { Command } from "commander";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { closeDb, getDb } from "./core/db/client.ts";
 import { runMigrations } from "./core/db/migrate.ts";
-import { listBoard, pipelineCounts, setApplicationStatus } from "./core/db/repo.ts";
+import { listBoard } from "./contexts/matching/index.ts";
+import { pipelineCounts, setApplicationStatus } from "./contexts/pursuit/index.ts";
 import { application, job, jobScore, positioningTask, source } from "./core/db/schema.ts";
-import { APPLICATION_STATUSES } from "./core/db/schema.ts";
-import { ageInDays, loadRates, refreshRates, STALE_AFTER_DAYS } from "./core/fx.ts";
+import { APPLICATION_STATUSES, type ApplicationStatus } from "./core/db/schema.ts";
+import { ageInDays, loadRates, refreshRates, STALE_AFTER_DAYS } from "./contexts/fx/index.ts";
 import { importJobs, parseFile } from "./core/ingest/import.ts";
 import {
   CONTACT_CATEGORIES,
@@ -24,9 +25,10 @@ import {
   referralOpportunities,
   seedWorkHistory,
 } from "./core/contacts.ts";
-import { decideSuggestion, importMail, listSuggestions } from "./core/mail/run.ts";
+import { decideSuggestion, importMail, listSuggestions } from "./contexts/correspondence/index.ts";
 import {
   ENGAGEMENT_KINDS,
+  PILLAR_KEYS,
   PILLARS,
   coldTargets,
   draftPost,
@@ -35,6 +37,7 @@ import {
   markPublished,
   metricTrend,
   pendingEngagements,
+  parsePillar,
   queueEngagement,
   recordMetric,
 } from "./core/positioning/engage.ts";
@@ -46,6 +49,7 @@ import {
   analyseGap,
   currentDocument,
   documentHistory,
+  getCandidate,
   saveDocument,
   syncCandidateFromProfile,
 } from "./core/candidate.ts";
@@ -53,15 +57,24 @@ import {
   auditSkill,
   candidateSkills,
   listCatalog,
+  parseSkillCategory,
+  parseSkillStatus,
   seedCatalog,
   skillDemand,
-} from "./core/skills.ts";
-import { skillExtraction, vocabularyGap } from "./contexts/skills/index.ts";
+  skillExtraction,
+  vocabularyGap,
+} from "./contexts/skills/index.ts";
 import { buildReport, exportDossiers } from "./core/report/markdown.ts";
 import { seedPositioning } from "./core/positioning/seed.ts";
 import { scoreAll } from "./core/scoring/apply.ts";
+import { scoreMessages } from "./contexts/matching/index.ts";
+import { renderScoreMessage, translator } from "./core/i18n/index.ts";
 import { loadSources } from "./core/sources/config.ts";
-import { getAdapter } from "./core/sources/registry.ts";
+import { getAdapter, parseFetchableSourceKind } from "./core/sources/registry.ts";
+
+const cliTranslator = translator("pt-BR").t;
+const renderScoreMessages = (value: unknown): string[] =>
+  scoreMessages(value).map((item) => renderScoreMessage(item, cliTranslator));
 
 /**
  * One-line confirmation on stdin.
@@ -117,6 +130,18 @@ async function withDb<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+async function activeCandidateId(): Promise<number> {
+  const active = await getCandidate();
+  if (!active) {
+    throw new Error("Candidato padrão não cadastrado. Execute `jho db seed` primeiro.");
+  }
+  return active.id;
+}
+
+function applicationStatus(value: string): ApplicationStatus | null {
+  return APPLICATION_STATUSES.find((status) => status === value) ?? null;
+}
+
 /* ----------------------------------- db ----------------------------------- */
 
 const db = program.command("db").description("Database maintenance");
@@ -127,6 +152,36 @@ db.command("migrate")
     await withDb(async () => {
       await runMigrations();
       console.log(c.green("✓") + " schema is up to date");
+    });
+  });
+
+db.command("check")
+  .description("Check relational integrity without changing data")
+  .action(async () => {
+    await withDb(async () => {
+      const { foreignKeyViolations, orphanAuthSessionCount } = await import(
+        "./core/db/integrity.ts"
+      );
+      const [violations, orphanSessions] = await Promise.all([
+        foreignKeyViolations(),
+        orphanAuthSessionCount(),
+      ]);
+      if (violations.length === 0) {
+        console.log(`${c.green("✓")} foreign keys íntegros · nenhuma sessão órfã`);
+        return;
+      }
+      console.error(c.red(`${violations.length} violação(ões) de foreign key`));
+      for (const violation of violations) {
+        console.error(
+          c.dim(
+            `  ${violation.table} rowid=${violation.rowid} → ${violation.parent} fk=${violation.fkid}`,
+          ),
+        );
+      }
+      if (orphanSessions > 0) {
+        console.error(c.dim(`  ${orphanSessions} sessão(ões) órfã(s); execute jho db migrate`));
+      }
+      process.exitCode = 1;
     });
   });
 
@@ -166,7 +221,7 @@ db.command("seed")
         }
       }
 
-      const { seedCatalog } = await import("./core/skills.ts");
+      const { seedCatalog } = await import("./contexts/skills/index.ts");
       const skills = await seedCatalog();
       console.log(`${c.green("\u2713")} catálogo de skills · ${skills.inserted} nova(s)`);
 
@@ -344,8 +399,9 @@ sources
   .command("probe <kind> <handle>")
   .description("Test a source handle without writing anything to the database")
   .action(async (kind: string, handle: string) => {
-    const adapter = getAdapter(kind as never);
-    const result = await adapter.fetchJobs({ kind: kind as never, handle, label: handle });
+    const fetchableKind = parseFetchableSourceKind(kind);
+    const adapter = getAdapter(fetchableKind);
+    const result = await adapter.fetchJobs({ kind: fetchableKind, handle, label: handle });
     console.log(`${c.green("✓")} ${kind}:${handle} returned ${result.jobs.length} job(s)`);
     for (const w of result.warnings) console.log(c.yellow(`  ! ${w}`));
     for (const j of result.jobs.slice(0, 5)) {
@@ -389,7 +445,7 @@ jobs
       );
 
       if (opts.score !== false) {
-        const scored = await scoreAll();
+        const scored = await scoreAll(await activeCandidateId());
         if (scored.fxWarning) console.log(c.yellow(`  ! ${scored.fxWarning}`));
         console.log(`${c.bold("Scoring")} ${scored.scored} job(s) scored · best fit ${scored.topFit.toFixed(0)}`);
       }
@@ -403,7 +459,7 @@ jobs
   .option("--all", "rescore every open job, not just unscored ones")
   .action(async (opts: { all?: boolean }) => {
     await withDb(async () => {
-      const result = await scoreAll({ all: opts.all });
+      const result = await scoreAll(await activeCandidateId(), { all: opts.all });
       console.log(`${c.green("✓")} scored ${result.scored} job(s) · best fit ${result.topFit.toFixed(0)}`);
     });
   });
@@ -419,9 +475,18 @@ jobs
   .option("--json", "machine-readable output")
   .action(async (opts: { minFit: string; cluster?: string; status?: string; limit: string; json?: boolean }) => {
     await withDb(async () => {
-      let rows = await listBoard({
+      const candidateId = await activeCandidateId();
+      const status = opts.status === "unfiled" || opts.status === "any"
+        ? opts.status
+        : opts.status
+          ? applicationStatus(opts.status)
+          : undefined;
+      if (opts.status && !status) {
+        throw new Error(`Unknown status "${opts.status}". Valid: ${APPLICATION_STATUSES.join(", ")}, unfiled, any`);
+      }
+      let rows = await listBoard(candidateId, {
         minFit: Number(opts.minFit),
-        status: opts.status as never,
+        status: status ?? undefined,
         limit: Number(opts.limit) * 3,
       });
       if (opts.cluster) rows = rows.filter((r) => r.cluster === opts.cluster);
@@ -436,7 +501,7 @@ jobs
         c.bold("\n   ID  FIT  CLUSTER    COMPANY               ROLE                                     STATUS"),
       );
       for (const r of rows) {
-        const blockers = Array.isArray(r.blockers) ? (r.blockers as string[]) : [];
+        const blockers = renderScoreMessages(r.blockers);
         const status = r.status ? c.cyan(r.status) : c.dim("—");
         console.log(
           `  ${String(r.jobId).padStart(3)} ${fitColor(r.fit)}  ${truncate(r.cluster, 10)} ` +
@@ -484,29 +549,31 @@ jobs
       );
 
       // Score immediately so the new row is comparable with everything else.
-      const scored = await scoreAll();
+      const candidateId = await activeCandidateId();
+      const scored = await scoreAll(candidateId);
       if (scored.scored > 0) {
         const rows = await getDb()
           .select({ fit: jobScore.fit, cluster: jobScore.cluster, blockers: jobScore.blockers })
           .from(jobScore)
-          .where(eq(jobScore.jobId, result.jobId))
+          .where(and(eq(jobScore.candidateId, candidateId), eq(jobScore.jobId, result.jobId)))
           .limit(1);
         const s = rows[0];
         if (s) {
           console.log(`  fit ${c.bold(s.fit.toFixed(1))} ${c.dim(`(cluster: ${s.cluster})`)}`);
-          const blockers = s.blockers as string[];
+          const blockers = renderScoreMessages(s.blockers);
           if (blockers.length > 0) console.log(c.red(`  \u26a0 ${blockers.join("; ")}`));
         }
       }
 
       if (opts.status) {
-        if (!(APPLICATION_STATUSES as readonly string[]).includes(opts.status)) {
+        const status = applicationStatus(opts.status);
+        if (!status) {
           console.error(c.red(`Unknown status "${opts.status}"`));
           process.exitCode = 1;
           return;
         }
-        await setApplicationStatus(result.jobId, opts.status as never, opts.notes);
-        console.log(`  ${c.cyan(opts.status)} \u2014 tracked`);
+        await setApplicationStatus(candidateId, result.jobId, status, opts.notes);
+        console.log(`  ${c.cyan(status)} \u2014 tracked`);
       }
 
       console.log(c.dim(`\n  Detalhes: jho jobs show ${result.jobId}\n`));
@@ -563,7 +630,7 @@ jobs
         `\n${c.green("\u2713")} ${c.green(`${run.inserted} nova(s)`)} · ${run.updated} já conhecida(s)`,
       );
 
-      const scored = await scoreAll();
+      const scored = await scoreAll(await activeCandidateId());
       if (scored.fxWarning) console.log(c.yellow(`  ! ${scored.fxWarning}`));
       console.log(`${c.bold("Scoring")} ${scored.scored} pontuada(s)\n`);
     });
@@ -706,11 +773,18 @@ jobs
   .option("-f, --full", "print the entire description instead of the first 1200 chars")
   .action(async (id: string, opts: { full?: boolean }) => {
     await withDb(async () => {
+      const candidateId = await activeCandidateId();
       const rows = await getDb()
         .select()
         .from(job)
-        .leftJoin(jobScore, eq(jobScore.jobId, job.id))
-        .leftJoin(application, eq(application.jobId, job.id))
+        .leftJoin(
+          jobScore,
+          and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+        )
+        .leftJoin(
+          application,
+          and(eq(application.jobId, job.id), eq(application.candidateId, candidateId)),
+        )
         .where(eq(job.id, Number(id)))
         .limit(1);
 
@@ -739,8 +813,8 @@ jobs
             `benefits ${s.benefitScore} · penalty -${s.penalty}`,
           ),
         );
-        for (const reason of s.reasons as string[]) console.log(`  · ${reason}`);
-        const blockers = s.blockers as string[];
+        for (const reason of renderScoreMessages(s.reasons)) console.log(`  · ${reason}`);
+        const blockers = renderScoreMessages(s.blockers);
         if (blockers.length) {
           console.log(c.red(`\n  Blockers: ${blockers.join("; ")}`));
         }
@@ -782,14 +856,16 @@ program
     "direct | ats | referral | recruiter | agency — referral is worth recording",
   )
   .action(async (id: string, status: string, opts: { note?: string; channel?: string }) => {
-    if (!(APPLICATION_STATUSES as readonly string[]).includes(status)) {
+    const parsedStatus = applicationStatus(status);
+    if (!parsedStatus) {
       console.error(c.red(`Unknown status "${status}". Valid: ${APPLICATION_STATUSES.join(", ")}`));
       process.exitCode = 1;
       return;
     }
     await withDb(async () => {
-      await setApplicationStatus(Number(id), status as never, opts.note);
-      console.log(`${c.green("✓")} job ${id} → ${c.cyan(status)}`);
+      const candidateId = await activeCandidateId();
+      await setApplicationStatus(candidateId, Number(id), parsedStatus, opts.note);
+      console.log(`${c.green("✓")} job ${id} → ${c.cyan(parsedStatus)}`);
     });
   });
 
@@ -799,7 +875,8 @@ program
   .option("--json", "saída legível por máquina")
   .action(async (opts: { json?: boolean }) => {
     await withDb(async () => {
-      const counts = await pipelineCounts();
+      const candidateId = await activeCandidateId();
+      const counts = await pipelineCounts(candidateId);
       const rows = await getDb()
         .select({
           id: job.id,
@@ -811,6 +888,7 @@ program
         })
         .from(application)
         .innerJoin(job, eq(job.id, application.jobId))
+        .where(eq(application.candidateId, candidateId))
         .orderBy(desc(application.updatedAt));
 
       if (opts.json) {
@@ -861,7 +939,8 @@ contacts
     company: string; role?: string; url?: string; category: string;
     country?: string; notes?: string;
   }) => {
-    if (!(CONTACT_CATEGORIES as readonly string[]).includes(opts.category)) {
+    const category = CONTACT_CATEGORIES.find((candidate) => candidate === opts.category);
+    if (!category) {
       console.error(c.red(`Categoria inválida. Use: ${CONTACT_CATEGORIES.join(", ")}`));
       process.exitCode = 1;
       return;
@@ -873,7 +952,7 @@ contacts
         company: opts.company,
         role: opts.role,
         linkedinUrl: opts.url,
-        category: opts.category as never,
+        category,
         country: opts.country,
         notes: opts.notes,
       });
@@ -883,7 +962,7 @@ contacts
       );
 
       // Immediately useful: does this unlock anything already in the board?
-      const opps = await referralOpportunities(45);
+      const opps = await referralOpportunities(await activeCandidateId(), 45);
       const here = opps.filter((o) => o.contacts.some((x) => x.startsWith(name)));
       if (here.length > 0) {
         console.log(c.green(`\n  ${here.length} vaga(s) aberta(s) nessa empresa:`));
@@ -905,7 +984,7 @@ contacts
       console.log(
         `${c.green("\u2713")} ${r.inserted} empresa(s) adicionada(s), ${r.updated} atualizada(s)`,
       );
-      const opps = await referralOpportunities(45);
+      const opps = await referralOpportunities(await activeCandidateId(), 45);
       if (opps.length > 0) {
         console.log(c.green(`\n  ${opps.length} vaga(s) aberta(s) onde você já tem histórico:`));
         for (const o of opps.slice(0, 8)) {
@@ -947,7 +1026,10 @@ program
   .option("--json", "saída legível por máquina")
   .action(async (opts: { minFit: string; json?: boolean }) => {
     await withDb(async () => {
-      const opps = await referralOpportunities(Number(opts.minFit));
+      const opps = await referralOpportunities(
+        await activeCandidateId(),
+        Number(opts.minFit),
+      );
       if (opts.json) {
         console.log(JSON.stringify(opps, null, 2));
         return;
@@ -1056,7 +1138,8 @@ mail
   .action(async (path: string, opts: { dryRun?: boolean }) => {
     await withDb(async () => {
       await runMigrations();
-      const r = await importMail(path, { dryRun: opts.dryRun });
+      const candidateId = await activeCandidateId();
+      const r = await importMail(path, { candidateId, dryRun: opts.dryRun });
 
       for (const w of r.warnings.slice(0, 12)) console.log(c.yellow(`  ! ${w}`));
 
@@ -1086,7 +1169,7 @@ mail
       else console.log();
 
       if (!opts.dryRun && r.jobsCreated > 0) {
-        const scored = await scoreAll();
+        const scored = await scoreAll(await activeCandidateId());
         console.log(`${c.bold("Scoring")} ${scored.scored} pontuada(s)\n`);
       }
     });
@@ -1121,14 +1204,9 @@ mail
   .description("Apply a suggested funnel change")
   .action(async (id: string) => {
     await withDb(async () => {
-      const { jobId, status } = await decideSuggestion(Number(id), "accepted");
-      if (!jobId || !status) {
-        console.log(c.yellow("Sugestão sem candidatura correspondente — nada a aplicar."));
-        return;
-      }
-      // Routed through the normal path so the transition lands in
-      // application_event exactly like a manual one.
-      await setApplicationStatus(jobId, status as never, `via e-mail (sugestão #${id})`);
+      const candidateId = await activeCandidateId();
+      const { jobId, status } = await decideSuggestion(candidateId, Number(id), "accepted");
+      if (!jobId || !status) throw new Error(`Sugestão ${id} aceita sem candidatura`);
       console.log(`${c.green("\u2713")} vaga ${jobId} → ${c.cyan(status)}`);
     });
   });
@@ -1138,7 +1216,7 @@ mail
   .description("Reject a suggestion without touching the funnel")
   .action(async (id: string) => {
     await withDb(async () => {
-      await decideSuggestion(Number(id), "dismissed");
+      await decideSuggestion(await activeCandidateId(), Number(id), "dismissed");
       console.log(`${c.dim("\u2013")} sugestão ${id} descartada`);
     });
   });
@@ -1163,7 +1241,8 @@ engage
     kind: string; name?: string; role?: string; company?: string;
     why?: string; draft?: string; for?: string;
   }) => {
-    if (!(ENGAGEMENT_KINDS as readonly string[]).includes(opts.kind)) {
+    const kind = ENGAGEMENT_KINDS.find((candidate) => candidate === opts.kind);
+    if (!kind) {
       console.error(c.red(`Tipo inválido. Use: ${ENGAGEMENT_KINDS.join(", ")}`));
       process.exitCode = 1;
       return;
@@ -1171,7 +1250,7 @@ engage
     await withDb(async () => {
       await runMigrations();
       const id = await queueEngagement({
-        kind: opts.kind as never,
+        kind,
         targetUrl: url,
         targetName: opts.name,
         targetRole: opts.role,
@@ -1264,12 +1343,13 @@ posts
   .command("add <slug>")
   .description("Draft a post")
   .requiredOption("-t, --title <text>", "title")
-  .requiredOption("-p, --pillar <name>", Object.keys(PILLARS).join(" | "))
+  .requiredOption("-p, --pillar <name>", PILLAR_KEYS.join(" | "))
   .requiredOption("-b, --body <text>", "the post text")
   .option("--lang <code>", "en | pt", "en")
   .action(async (slug: string, opts: { title: string; pillar: string; body: string; lang: string }) => {
-    if (!(opts.pillar in PILLARS)) {
-      console.error(c.red(`Pilar inválido. Use: ${Object.keys(PILLARS).join(", ")}`));
+    const pillar = parsePillar(opts.pillar);
+    if (!pillar) {
+      console.error(c.red(`Pilar inválido. Use: ${PILLAR_KEYS.join(", ")}`));
       process.exitCode = 1;
       return;
     }
@@ -1277,13 +1357,13 @@ posts
       await runMigrations();
       const id = await draftPost({
         slug,
-        pillar: opts.pillar as never,
+        pillar,
         title: opts.title,
         body: opts.body,
         lang: opts.lang,
       });
       console.log(`${c.green("\u2713")} rascunho #${id} · ${c.cyan(opts.pillar)}`);
-      console.log(c.dim(`  ${PILLARS[opts.pillar as keyof typeof PILLARS]}`));
+      console.log(c.dim(`  ${PILLARS[pillar]}`));
     });
   });
 
@@ -1377,15 +1457,22 @@ program
   .option("--stdout", "print instead of writing")
   .action(async (opts: { minFit: string; limit: string; out?: string; stdout?: boolean }) => {
     await withDb(async () => {
-      const { markdown, path } = await buildReport({
+      const { markdown } = await buildReport(await activeCandidateId(), {
         minFit: Number(opts.minFit),
         limit: Number(opts.limit),
-        outPath: opts.stdout ? undefined : opts.out,
       });
-      if (opts.stdout || !path) {
+      const today = new Date().toISOString().slice(0, 10);
+      const vault = process.env.JHO_VAULT_PATH;
+      const reportDir = process.env.JHO_REPORT_DIR ?? "05_Interviews/LinkedIn";
+      const path = opts.stdout
+        ? null
+        : opts.out ?? (vault ? join(vault, reportDir, `vagas-match-${today}.md`) : null);
+      if (!path) {
         console.log(markdown);
         return;
       }
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, markdown, "utf8");
       console.log(`${c.green("✓")} wrote ${path}`);
     });
   });
@@ -1399,13 +1486,19 @@ program
   .option("--out <dir>", "write somewhere else")
   .action(async (opts: { minFit: string; limit: string; tracked?: boolean; out?: string }) => {
     await withDb(async () => {
-      const r = await exportDossiers({
+      const result = await exportDossiers(await activeCandidateId(), {
         minFit: Number(opts.minFit),
         limit: Number(opts.limit),
         onlyTracked: opts.tracked,
-        outDir: opts.out,
       });
-      console.log(`${c.green("\u2713")} ${r.written} dossiê(s) em ${r.dir}`);
+      const vault = process.env.JHO_VAULT_PATH;
+      const reportDir = process.env.JHO_REPORT_DIR ?? "05_Interviews/LinkedIn";
+      const dir = opts.out ?? (vault ? join(vault, reportDir, "vagas") : join(process.cwd(), "out", "vagas"));
+      await mkdir(dir, { recursive: true });
+      for (const document of result.documents) {
+        await writeFile(join(dir, document.name), document.markdown, "utf8");
+      }
+      console.log(`${c.green("\u2713")} ${result.documents.length} dossiê(s) em ${dir}`);
       console.log(c.dim("  Frontmatter com fit, cluster e bloqueios — consultável no Obsidian.\n"));
     });
   });
@@ -1522,7 +1615,10 @@ cv.command("gap")
   .option("--min-fit <n>", "which jobs count as target", "60")
   .action(async (opts: { minFit: string }) => {
     await withDb(async () => {
-      const report = await analyseGap({ minFit: Number(opts.minFit) });
+      const report = await analyseGap({
+        candidateId: await activeCandidateId(),
+        minFit: Number(opts.minFit),
+      });
       if (!report) {
         console.log(c.dim("\n  Salve um currículo primeiro: jho cv set <arquivo>\n"));
         return;
@@ -1675,8 +1771,7 @@ auth
   .action(async (email: string, opts: { stdin?: boolean }) => {
     await withDb(async () => {
       await runMigrations();
-      const { checkPassword, MIN_LENGTH } = await import("./contexts/auth/domain/password.ts");
-      const { setPassword } = await import("./contexts/auth/infra/password-login.ts");
+      const { checkPassword, MIN_LENGTH, setPassword } = await import("./contexts/auth/index.ts");
 
       // Never as an argument: argv shows up in shell history and in `ps`.
       let password: string;
@@ -1745,20 +1840,14 @@ auth
   .description("Encerrar todas as sessões de uma conta")
   .action(async (email: string) => {
     await withDb(async () => {
-      const { drizzleSessions } = await import("./contexts/auth/index.ts");
-      const { authUser } = await import("./core/db/schema.ts");
-      const [user] = await getDb()
-        .select({ id: authUser.id })
-        .from(authUser)
-        .where(eq(authUser.email, email.toLowerCase().trim()))
-        .limit(1);
-      if (!user) {
+      const { revokeUserSessions } = await import("./contexts/auth/index.ts");
+      const revoked = await revokeUserSessions(email);
+      if (revoked === null) {
         console.error(c.red(`\n  Conta ${email} não existe.\n`));
         process.exitCode = 1;
         return;
       }
-      const n = await drizzleSessions.revokeAllFor(user.id);
-      console.log(`${c.green("\u2713")} ${n} sessão(ões) encerrada(s)\n`);
+      console.log(`${c.green("\u2713")} ${revoked} sessão(ões) encerrada(s)\n`);
     });
   });
 
@@ -1950,7 +2039,7 @@ program
 
       const candidateId = await syncCandidateFromProfile();
       const doc = await currentDocument(candidateId, "cv");
-      const dossier = await buildDossier(Number(id), doc?.content ?? null);
+      const dossier = await buildDossier(candidateId, Number(id), doc?.content ?? null);
       if (!dossier) {
         console.error(c.red(`\n  Vaga ${id} não encontrada.\n`));
         process.exitCode = 1;
@@ -2024,7 +2113,7 @@ program
       const { buildDossier } = await import("./core/apply/dossier.ts");
       const candidateId = await syncCandidateFromProfile();
       const doc = await currentDocument(candidateId, "cv");
-      const d = await buildDossier(Number(id), doc?.content ?? null);
+      const d = await buildDossier(candidateId, Number(id), doc?.content ?? null);
 
       if (!d) {
         console.error(c.red(`\n  Vaga ${id} não encontrada.\n`));
@@ -2239,7 +2328,11 @@ program
   .action(async (opts: { json?: boolean }) => {
     await withDb(async () => {
       const { scorerDiagnostics, funnelAnalysis } = await import("./core/analytics/index.ts");
-      const [scorer, funnel] = await Promise.all([scorerDiagnostics(), funnelAnalysis()]);
+      const candidateId = await activeCandidateId();
+      const [scorer, funnel] = await Promise.all([
+        scorerDiagnostics(candidateId),
+        funnelAnalysis(candidateId),
+      ]);
 
       if (opts.json) {
         console.log(JSON.stringify({ scorer, funnel }, null, 2));
@@ -2374,6 +2467,7 @@ skills
       }
 
       const report = await vocabularyGap({
+        candidateId,
         cvText: doc.content,
         minFit: Number(opts.minFit),
         limit: Number(opts.limit),
@@ -2467,7 +2561,8 @@ skills
   .action(async (opts: { status?: string }) => {
     await withDb(async () => {
       const candidateId = await syncCandidateFromProfile();
-      const rows = await candidateSkills(candidateId, opts.status);
+      const status = opts.status === undefined ? undefined : parseSkillStatus(opts.status);
+      const rows = await candidateSkills(candidateId, status);
       if (rows.length === 0) {
         console.log(c.dim("\n  Nenhuma skill. Rode: jho skills seed && jho skills detect\n"));
         return;
@@ -2501,7 +2596,8 @@ skills
   .option("-l, --level <text>", "your own assessment")
   .action(async (id: string, opts: { level?: string }) => {
     await withDb(async () => {
-      await auditSkill(Number(id), "confirmed", { level: opts.level });
+      const candidateId = await syncCandidateFromProfile();
+      await auditSkill(candidateId, Number(id), "confirmed", { level: opts.level });
       console.log(`${c.green("\u2713")} #${id} confirmada`);
     });
   });
@@ -2511,7 +2607,8 @@ skills
   .description("Reject a false positive")
   .action(async (id: string) => {
     await withDb(async () => {
-      await auditSkill(Number(id), "rejected");
+      const candidateId = await syncCandidateFromProfile();
+      await auditSkill(candidateId, Number(id), "rejected");
       console.log(`${c.red("\u2717")} #${id} rejeitada`);
     });
   });
@@ -2549,15 +2646,15 @@ skills
   .option("-c, --category <name>", "filter")
   .action(async (opts: { category?: string }) => {
     await withDb(async () => {
-      const rows = await listCatalog(opts.category);
+      const category = opts.category === undefined ? undefined : parseSkillCategory(opts.category);
+      const rows = await listCatalog(category);
       let cat = "";
       for (const r of rows) {
         if (r.category !== cat) {
           cat = r.category;
           console.log(c.bold(`\n  ${cat.toUpperCase()}`));
         }
-        const aliases = (r.aliases as string[]) ?? [];
-        console.log(`    ${truncate(r.canonicalName, 26)} ${c.dim(aliases.slice(0, 4).join(", "))}`);
+        console.log(`    ${truncate(r.name, 26)} ${c.dim(r.aliases.slice(0, 4).join(", "))}`);
       }
       console.log(c.dim(`\n  ${rows.length} skill(s) no catálogo\n`));
     });

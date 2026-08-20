@@ -7,14 +7,13 @@
  * application service should be.
  */
 import { extractSkills, type ExtractOptions } from "../domain/extractor.ts";
-import type { Detection } from "../domain/types.ts";
+import type { Detection, SkillSource } from "../domain/types.ts";
 import type { CandidateSkillPort, SkillCatalogPort } from "../ports.ts";
 
 export type ExtractSkillsInput = {
   candidateId: number;
   text: string;
-  /** cv | profile | manual | inferred */
-  source?: string;
+  source?: SkillSource;
   options?: ExtractOptions;
 };
 
@@ -27,8 +26,8 @@ export type ExtractSkillsResult = {
 };
 
 export type ExtractSkillsDeps = {
-  catalog: SkillCatalogPort;
-  store: CandidateSkillPort;
+  catalog: Pick<SkillCatalogPort, "all">;
+  store: Pick<CandidateSkillPort, "existing" | "add" | "refresh">;
 };
 
 /**
