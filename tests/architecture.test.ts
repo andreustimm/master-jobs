@@ -582,3 +582,30 @@ describe("authorisation (AUTH-01)", () => {
     expect(policy).not.toMatch(/default:\s*\n?\s*return ALLOW/);
   });
 });
+
+describe("documentação que precisa acompanhar o código", () => {
+  // O índice de ADRs em `docs/README.md` já apodreceu uma vez: listava seis de
+  // dez, e as quatro faltantes incluíam justamente as citadas como invariantes
+  // em CLAUDE.md. Índice mantido à mão só funciona quando alguém o verifica.
+  it("lista toda ADR no índice do README", () => {
+    const listed = new Set(
+      [...read("docs/README.md").matchAll(/adr\/(\d{4})-/g)].map((m) => m[1]),
+    );
+    const onDisk = readdirSync("docs/adr")
+      .filter((f) => /^\d{4}-.*\.md$/.test(f))
+      .map((f) => f.slice(0, 4));
+
+    expect(onDisk.length).toBeGreaterThan(5);
+    expect(onDisk.filter((n) => !listed.has(n))).toEqual([]);
+  });
+
+  it("a fronteira entre CompozyOS e docs/ está escrita onde se procura por ela", () => {
+    // ADR 0011 decide que `.compozy/tasks/` é da feature e `docs/` é do que
+    // sobrevive a ela. Duas convenções sem a fronteira escrita apodrecem na
+    // terceira feature: passa a haver dois lugares plausíveis para a mesma coisa.
+    const adr = read("docs/adr/0011-fronteira-compozyos-e-docs.md");
+    expect(adr).toContain(".compozy/tasks/");
+    expect(adr).toContain("docs/adr/");
+    expect(read("docs/README.md")).toContain("0011");
+  });
+});

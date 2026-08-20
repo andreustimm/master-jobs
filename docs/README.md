@@ -55,6 +55,11 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`0004`](adr/0004-scoring-deterministico.md) | Scoring determinístico em vez de LLM |
 | [`0005`](adr/0005-separacao-entre-fato-observado-e-decisao-do-usuario.md) | Separação entre fato observado e decisão do usuário |
 | [`0006`](adr/0006-typescript-apagavel-sem-build-step.md) | TypeScript apagável, sem build step |
+| [`0007`](adr/0007-arquitetura-hexagonal-monolito-modular.md) | Arquitetura hexagonal, monólito modular |
+| [`0008`](adr/0008-ingestao-de-email-como-fonte-de-sourcing.md) | E-mail como fonte de sourcing |
+| [`0009`](adr/0009-fila-de-raspagem.md) | Fila de raspagem em tabela, não em broker |
+| [`0010`](adr/0010-submissao-autonoma.md) | Submissão autônoma: preparar sim, enviar não |
+| [`0011`](adr/0011-fronteira-compozyos-e-docs.md) | A fronteira entre o CompozyOS e `docs/` |
 
 ---
 

@@ -672,6 +672,7 @@ try {
   await lost.close();
 
 
+
   /* ------------------ Cadastro de vaga com rótulo de origem ---------------- */
 
   // O acervo é global e `job:write` é dos três papéis; o que distingue esta
@@ -1028,6 +1029,41 @@ try {
   await page.goto(`${BASE}/jobs`, { waitUntil: "domcontentloaded" });
   // Revogado no servidor, não só apagado do navegador.
   check("logout encerra a sessão de verdade", page.url().includes("/login"), page.url());
+
+  /* ------------- Limite de requisição no portfólio (E-05, jornada) --------- */
+
+  // T10 do contrato em `.compozy/tasks/perfil-publico-limite/_tests.md`.
+  //
+  // A barreira precisa ser invisível para quem chegou pelo link e cara para
+  // quem varre nomes. As duas metades são verificadas: primeiro que o acesso
+  // legítimo passa, depois que a rajada é recusada com 429 e `Retry-After`.
+  //
+  // **Por último na suíte, e é obrigatório.** Sem proxy, `clientKey` devolve
+  // "sem-proxy" para todo mundo e o balde é um só — a rajada esgota o limite
+  // para as demais verificações de `/p/`. Rodando antes, ela derrubava quatro
+  // checagens do portfólio com 429 em vez de 200. Não é defeito do teste: é a
+  // limitação real da degradação conservadora, registrada em `_spec.md`.
+  const burstCtx = await browser.newContext();
+  const burstPage = await burstCtx.newPage();
+
+  const first = await burstPage.goto(`${BASE}/p/nao-existe-este-slug`, {
+    waitUntil: "domcontentloaded",
+  });
+  // 404 e não 429: uma requisição está muito abaixo do limite.
+  check("acesso isolado ao portfólio não é barrado", first?.status() === 404, `${first?.status()}`);
+
+  let blocked = null;
+  for (let i = 0; i < 45 && !blocked; i++) {
+    const hit = await burstPage.goto(`${BASE}/p/varredura-${i}`, { waitUntil: "domcontentloaded" });
+    if (hit?.status() === 429) blocked = hit;
+  }
+  check("rajada no portfólio é recusada com 429", blocked !== null);
+  check(
+    "a recusa diz quando voltar",
+    Number(blocked?.headers()["retry-after"] ?? 0) > 0,
+    `retry-after=${blocked?.headers()["retry-after"]}`,
+  );
+  await burstCtx.close();
 
   check("nenhum erro de console", consoleErrors.length === 0, consoleErrors.slice(0, 2).join(" | "));
 } catch (error) {

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { clientKey, createRateLimiter } from "./src/core/rate-limit.ts";
 
 /**
  * First barrier: no session cookie, no page.
@@ -20,12 +21,44 @@ const SESSION_COOKIE = "jho_session";
 // por lista de permissão em `publicProfile()`, não por esta linha.
 const PUBLIC = ["/login", "/p"];
 
+/**
+ * Limite por IP no portfólio público.
+ *
+ * Mora AQUI e não na página por duas razões. A primeira é de camada: um Server
+ * Component não devolve 429 com `Retry-After` — `notFound()` e `forbidden()`
+ * existem, um equivalente para "excedeu" não. A segunda é de custo: limitar
+ * depois de renderizar pagaria exatamente o que o limite existe para evitar,
+ * porque a consulta ao banco já teria acontecido.
+ *
+ * 30 em 5 minutos: generoso para quem abriu o link que o candidato mandou —
+ * cabe recarregar, voltar e abrir em abas — e caro para quem varre nomes.
+ *
+ * Conta ANTES de saber se o perfil existe. Contar só o 404 diria ao varredor
+ * que ele foi detectado; contar só o 200 deixaria livre a varredura de nomes
+ * inexistentes, que é justamente a varredura.
+ */
+const publicProfileLimiter = createRateLimiter({ limit: 30, windowMs: 5 * 60_000 });
+
 export function proxy(request: NextRequest) {
   if (process.env.JHO_AUTH_MODE === "open") {
     return NextResponse.next();
   }
 
   const { pathname } = request.nextUrl;
+
+  if (pathname === "/p" || pathname.startsWith("/p/")) {
+    const decision = publicProfileLimiter.check(clientKey(request.headers));
+    if (!decision.allowed) {
+      return new NextResponse("Too Many Requests", {
+        status: 429,
+        // Sem `Retry-After` o cliente não sabe quando voltar e tenta em laço —
+        // o limite viraria mais tráfego, não menos.
+        headers: { "retry-after": String(decision.retryAfterSeconds) },
+      });
+    }
+    return NextResponse.next();
+  }
+
   if (PUBLIC.some((path) => pathname === path || pathname.startsWith(`${path}/`))) {
     return NextResponse.next();
   }

@@ -827,165 +827,44 @@ lista no navegador devolve zero e diz isso, sugerindo `jho sources snippet`.
 
 ---
 
-### E-05 · Estrutura de documentação do CompozyOS: epic, PRD, techspec, ADR 📋
+### E-05 · Estrutura de documentação do CompozyOS: epic, PRD, techspec, ADR ✅
 
-Pedido em 20/08/2026: *"O ideal é utilizarmos a estrutura do compozy para os
-epics, prd, techspec, adrs, etc."*
+#### Entregue em 20/08/2026 — opção 2, com a jornada junto
 
-O repositório já tem um pé no CompozyOS — `compozy/loops/job-sweep.yaml` está
-escrito e validado contra o daemon 0.3, e `docs/engineering/COMPOZY-OS.md`
-documenta o ciclo inteiro contra a instalação real desta máquina. Mas esse pé é
-de **automação**: um Loop em YAML que sincroniza, pontua e propõe triagem. O que
-se pede aqui é outra coisa — adotar a **forma dos documentos**. As duas decisões
-são independentes, e confundi-las faria a segunda entrar de carona na primeira
-sem nunca ter sido discutida.
+A decisão está em **[ADR 0011](../adr/0011-fronteira-compozyos-e-docs.md)**:
+conviver por fronteira, e a fronteira é o **ciclo de vida**. `.compozy/tasks/`
+guarda o que nasce e morre com a feature; `docs/` guarda o que sobrevive a ela.
 
-#### O que a estrutura do CompozyOS de fato oferece
+O argumento que fechou a questão é o que este próprio item levantou: **qualquer
+resposta é uma ADR, e o CompozyOS não teria onde guardá-la.** Isso não é
+retórica — é a demonstração de que os dois gêneros têm ciclo de vida diferente.
 
-Segundo o `COMPOZY-OS.md` (§4 e §5), a `cy-create-spec` produz, em
-`.compozy/tasks/<slug>/`:
+A opção 3 ("não adotar, rodar uma jornada primeiro") foi seguida pela metade e
+deliberadamente: a ADR vem **acompanhada** da primeira jornada, feita numa
+feature pequena e genuinamente pendente — o limite de requisição que a AUTH-04
+deixou de fora. O que aquela recomendação evita é decidir no escuro, não decidir.
 
-| Arquivo | Conteúdo |
-|---|---|
-| `_spec.md` | Spec unificado — parte de produto **e** parte técnica no mesmo arquivo |
-| `_user_stories.md` | Catálogo de histórias |
-| `_tests.md` | Contrato de testes |
-| `_dx.md` | Contrato de experiência de desenvolvimento |
-| `_uiux.md` | Mapa de mudança de UI, para feature com interface |
+**A jornada, em `.compozy/tasks/perfil-publico-limite/`:** `_spec.md` com parte
+de produto e parte técnica, `_tests.md` com dez casos numerados, `_tasks.md` com
+o grafo — e cada caso caindo em exatamente uma tarefa. Os testes carregam o
+identificador do contrato, para contrato e teste não divergirem em silêncio.
 
-A `cy-create-tasks` acrescenta `_tasks.md` (o grafo) e `task_01.md …
-task_NN.md`, com a garantia de que **cada caso de `_tests.md` cai em exatamente
-uma tarefa** — é o que impede caso órfão e caso contado duas vezes. As rodadas
-de revisão viram `reviews-NNN/`.
+**O ciclo achou o que era para achar.** Sem proxy, `clientKey` devolve
+`"sem-proxy"` para todo mundo e o balde é um só: a rajada de verificação
+derrubou quatro checagens do portfólio com 429. Não é defeito do teste — é a
+limitação real da degradação conservadora, agora escrita no `_spec.md` com a
+combinação a evitar (exposto direto, sem proxy à frente).
 
-Confrontando isso com o que foi pedido, quatro palavras e três destinos
-diferentes:
+Escrever o contrato **antes** mudou o resultado: UI-02 e UI-03 tiveram o "o que
+ficou de fora" redigido depois da entrega; aqui o atrito foi registrado enquanto
+acontecia.
 
-- **PRD e techspec** existem, mas **fundidos** num `_spec.md` só. A 0.2 tinha
-  `cy-create-prd` e `cy-create-techspec` separadas; a 0.3 juntou as duas e
-  acrescentou `_dx.md` e `_uiux.md`, que não existiam. Quem pede "PRD e
-  techspec" recebe um arquivo, não dois.
-- **Epic não é um artefato.** A unidade é o `<slug>`, que é uma feature com
-  spec e tarefas. Agrupar slugs num tema maior é convenção de nome de
-  diretório, não estrutura que a ferramenta conheça ou verifique.
-- **ADR não existe.** Nenhuma das dez skills produz ADR, e nenhum dos arquivos
-  do spec guarda decisão com as alternativas descartadas. É a lacuna que mais
-  pesa aqui, porque é justamente o gênero que este repositório mais usa: dez
-  ADRs, uma delas com 1.112 linhas.
+**Migrar tudo continua rejeitado**, com os números no ADR: 63 referências a
+`docs/adr` em 23 arquivos, incluindo as regras invioláveis de `CLAUDE.md`, e um
+`context-map.md` que `pnpm check` abre por caminho literal.
 
-A assimetria é a chave. O CompozyOS documenta **trabalho em execução**, com
-começo, meio e entrega. `docs/adr/` documenta **decisão que sobrevive à
-entrega** — e sobrevive de propósito, para que ninguém proponha reverter sem ler
-por que foi assim. `vision.md` e `personas.md` não pertencem a slug nenhum, e o
-`backlog.md` — este arquivo — é a fila que decide qual slug nasce em seguida.
-São gêneros com ciclo de vida diferente, e é aí que a decisão se decide.
-
-#### A decisão central, que não é minha
-
-Três respostas possíveis, e nenhuma está tomada:
-
-**1. Migrar tudo.** `docs/product/` e `docs/adr/` viram artefatos do CompozyOS.
-Uma estrutura só, uma ferramenta só, e nada de decidir toda vez onde escrever.
-Custa reescrever ADR como spec — gênero que ela não é — e aceitar que decisão
-estrutural passe a morar dentro do diretório de uma feature que um dia acaba.
-
-**2. Conviver por fronteira.** O CompozyOS manda no ciclo de uma feature
-(`_spec.md`, `_tests.md`, `_tasks.md`, `reviews-NNN/`); `docs/` continua dono do
-que atravessa features — ADR, visão, personas, backlog, mapa de contextos. O
-item do backlog vira o insumo do `/cy-create-spec`, e a ADR que a feature
-eventualmente produzir volta para `docs/adr/`. Custa manter duas convenções e
-escrever explicitamente qual vale para quê; sem isso a fronteira apodrece na
-terceira feature e passa a haver dois lugares plausíveis para a mesma coisa.
-
-**3. Não adotar agora.** Rodar a primeira jornada do §10 numa feature pequena e
-decidir depois, com um ciclo completo de evidência em vez de leitura de doc.
-
-O próprio `COMPOZY-OS.md` recomenda a terceira como precondição das outras duas:
-*"o objetivo da primeira jornada não é entregar a feature: é descobrir onde o
-ciclo atrita com este repositório"*. Decidir a forma de toda a documentação
-antes de a ferramenta ter fechado um ciclo aqui é decidir no escuro.
-
-Vale registrar a ironia, que é útil e não decorativa: **qualquer que seja a
-resposta, ela é uma ADR** — a 0011. E o CompozyOS não tem onde guardá-la. Isso
-já é, por si só, um argumento sobre onde a fronteira cai.
-
-#### Custo de migração, em números
-
-- **51 arquivos `.md`** em `docs/`. `docs/adr/` tem 10 (a 0007 sozinha tem 1.112
-  linhas) e `docs/product/` tem 6, somando cerca de 1.400 linhas entre backlog,
-  user stories, visão e personas.
-- **63 referências** a `docs/adr` ou `adr/00NN` espalhadas por **23 arquivos** —
-  incluindo `CLAUDE.md` e `AGENTS.md`, que todo agente lê no começo de toda
-  sessão e cujas regras invioláveis citam `docs/adr/0001`, `0008`, `0009` e
-  `0010` por caminho. Mover os arquivos sem reescrever esses ponteiros produz o
-  pior estado possível: a regra continua escrita e a justificativa dela some.
-- A tabela de ADRs em `docs/README.md` lista **0001 a 0006** — seis de dez.
-  Índice mantido à mão já apodreceu uma vez aqui, e uma migração multiplica as
-  tabelas a manter em vez de reduzi-las.
-- `tests/architecture.test.ts` abre `docs/engineering/context-map.md` **por
-  caminho literal**, em dois testes: um exige uma linha `| <contexto> |` para
-  cada diretório de `src/contexts/`, o outro compara o marcador
-  `<!-- schema-table-count: 29 -->` com a contagem de `sqliteTable` em
-  `src/core/db/schema.ts`. Mover ou renomear esse arquivo derruba `pnpm check`.
-  Aqui documentação não é decoração — parte dela é teste de fitness, e mexer
-  nela é mexer em código.
-
-Do outro lado, o ganho é real e merece ser nomeado para a proposta não parecer
-frívola: hoje um item deste backlog não tem contrato de testes, não tem grafo de
-tarefas com dependência declarada, e não tem `/cy-final-verify` exigindo
-evidência fresca antes de alguém dizer "pronto". UI-02 e UI-03 tiveram o "o que
-ficou de fora" escrito à mão **depois** da entrega; um `_tasks.md` derivado de
-`_tests.md` teria dito isso antes, e o backlog já foi pego mentindo sobre o
-próprio estado em oito itens numa revisão só.
-
-#### O risco de acoplar a documentação a uma beta
-
-A versão instalada é **0.3.0-beta.17**. O `COMPOZY-OS.md` registra que a
-extension `dev-cycle` 0.3.1 está em `error`, superada pela `spec-cycle` 0.4.1, e
-que `cy03 status` reporta `degraded`. Mais grave para esta decisão: a §4 lista
-**três pontos em que o `MIGRATION_GUIDE.md` oficial diverge da máquina** — e nos
-três a máquina venceu. Um deles é exatamente o formato em jogo aqui: o guia
-afirma que PRD e techspec "não têm sucessor", quando na prática a
-`cy-create-spec` entrega os dois fundidos.
-
-A divergência não é só entre documentação e máquina; é entre gerações no mesmo
-laptop. As skills carregadas numa sessão de agente vêm de `~/.claude/skills` e
-são as da **0.2** — `cy-create-prd` e `cy-create-techspec` separadas, sem
-`cy-create-spec` —, enquanto o daemon 0.3 espera o formato unificado. Um agente
-que rode a skill local hoje produz forma diferente da que a ferramenta consome.
-
-O que isso significa em concreto: uma release menor pode renomear `_spec.md`,
-fundir outro par de arquivos ou mudar `.compozy/tasks/` de lugar, e o
-repositório herda a mudança em toda a documentação de uma vez.
-
-A mitigação existe e vale registrar, porque muda o tamanho do risco: os
-artefatos são **Markdown puro**. Ler não depende de daemon, de licença nem de
-rede — se o CompozyOS sumir amanhã, os arquivos continuam abrindo. O que se
-compra da beta é a **convenção**, não o acesso. Isso rebaixa o risco de "perder
-a documentação" para "ficar com uma convenção órfã", que é sobrevivível. Não
-elimina, porém, o custo de reescrever 63 ponteiros duas vezes se a convenção
-mudar no meio do caminho.
-
-#### O que fica de fora
-
-**Agendar automação.** `cy03 automation` e o `job-sweep.yaml` são outro assunto,
-já descrito em `compozy/README.md` como fase 2. Este item é sobre forma de
-documento, não sobre quem dispara a varredura.
-
-**`auto_commit`.** Segue `false` pela razão já registrada no `COMPOZY-OS.md`: as
-mensagens de commit deste repositório carregam o porquê de cada decisão, e
-commit automático produz mensagem genérica — perde exatamente o que torna o
-histórico utilizável meses depois.
-
-**Migração retroativa.** Mesmo que a resposta seja "migrar tudo", reescrever as
-dez ADRs existentes é decisão separada de adotar o formato daqui para a frente.
-Documento antigo que ninguém vai reler não paga a própria migração.
-
-**Versionar `.compozy/tasks/`.** Hoje só `.compozy/workspace.toml` está no git.
-O §7 do `COMPOZY-OS.md` recomenda versionar as tarefas e ignorar apenas o
-runtime — mas isso passa a colocar spec e rodada de revisão no histórico do
-repositório, e essa consequência precisa ser querida, não herdada junto com o
-resto.
+Um teste de fitness novo mantém o índice de ADRs honesto — ele listava seis de
+dez, e as quatro faltantes eram justamente as citadas como invariantes.
 
 ### E-06 · Cenários de teste por papel, ponta a ponta ✅
 

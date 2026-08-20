@@ -96,6 +96,12 @@ dashboard Next.js em `localhost:3000`.
 > diria 0,91 de similaridade porque o texto de fato se parece. Similaridade não
 > distingue "combina" de "é possível". Detalhe em `docs/scoring.md`.
 
+> **Documento de feature em `.compozy/tasks/`; o que sobrevive à feature em
+> `docs/`.** A fronteira é o ciclo de vida, e está na ADR 0011: spec, contrato
+> de testes e grafo de tarefas nascem e morrem com o slug; ADR, visão, personas,
+> backlog e mapa de contextos atravessam features. Parte de `docs/` é teste de
+> fitness — `pnpm check` abre `context-map.md` por caminho literal.
+
 > **Política correta não basta: a composição precisa respeitá-la.** `job:read` é
 > dos três papéis, mas `/jobs` guardava por escopo de candidato e o login
 > mandava todo mundo para `/` — um recrutador entrava com a senha certa e
@@ -452,7 +458,7 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 | Vagas com bloqueador | 468 |
 | Descrições offline | 207 |
 | Candidaturas no funil | 2 |
-| Testes | 1.445 + 79 e2e · cobertura 98% (fora do CLI) |
+| Testes | 1.457 + 82 e2e · cobertura 97,6% (fora do CLI) |
 
 > A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
 > candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de

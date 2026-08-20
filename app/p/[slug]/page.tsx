@@ -39,6 +39,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 }
 
 export default async function PublicProfilePage({ params }: Params) {
+  // O limite por IP mora no `proxy.ts`, não aqui. Ver a nota lá: a página não
+  // consegue devolver 429 com `Retry-After`, e limitar depois de renderizar
+  // pagaria o custo que o limite existe para evitar.
   const profile = await publicProfile((await params).slug);
   if (!profile) notFound();
 
