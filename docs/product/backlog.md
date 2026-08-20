@@ -392,6 +392,60 @@ vez.
 resolve *escolher*; um diff por linha resolveria *entender o que mudou*, que é
 outra pergunta.
 
+### UI-03 · Reconferir se a vaga ainda existe ✅ (falta agendar o periódico)
+
+Pedido em 19/08/2026. Vaga não é permanente: o link expira, a empresa fecha a
+posição, o quadro remove o anúncio. Nada disso chegava até aqui sozinho — a
+sincronização só sabe o que a fonte ainda lista, e **várias fontes continuam
+listando anúncio morto**.
+
+**Medido ao ligar:** 300 conferidas, 35 mortas. Todas do Lever — **16% dos
+links** entre os melhores ranqueados devolviam 404 enquanto a API os dava como
+abertos. O Lever é a maior fonte do acervo (4.357 vagas abertas). Um em cada
+seis cliques ia para o vazio.
+
+#### Como ficou
+
+Dois caminhos alimentam a **mesma** fila:
+
+- **Botão** no detalhe da vaga, para quem está olhando e quer saber agora.
+  Enfileira e volta; sondar dentro do clique penduraria a página pelo tempo de
+  rede de um site de terceiro — e é justamente no link morto que ele demora
+  mais, até o timeout.
+- **`jho jobs recheck queue`**, que enfileira as há mais tempo sem conferência.
+
+Uma fila só porque o trabalho é idêntico e a diferença é apenas prioridade. Duas
+significariam dois backoffs, dois lugares para um claim vazar, e a chance de as
+duas discordarem sobre o que um 403 prova.
+
+Tabela `verify_task`, no mesmo padrão de `scrape_task` (ADR 0009): claim atômico
+por `UPDATE ... RETURNING`, backoff, e recuperação de claim abandonado.
+Separada de `scrape_task` porque o ciclo de vida é outro — captura acontece uma
+vez, reconferência **se repete**.
+
+Colunas novas em `job`: `checked_at`, `check_status`, `check_code`. Guardar
+quando foi a última conferência é o que torna a varredura progressiva: o lote
+antigo ordenava por fit e reconferia as mesmas 200 para sempre, sem nunca
+alcançar a cauda.
+
+**`alive` reabre uma vaga fechada.** Sem isso, um 404 transitório sumiria com
+ela para sempre.
+
+#### O que ficou de fora
+
+**Agendar o periódico.** Os comandos existem e funcionam; falta decidir quem os
+dispara. Não instalei nada no sistema do usuário — um `cron` ou `launchd`
+criado sem pedir é efeito colateral fora do escopo. A receita:
+
+```
+0 7 * * *  cd <repo> && pnpm jho jobs recheck queue --limit 300
+15 7 * * * cd <repo> && pnpm jho jobs recheck run --delay 300
+```
+
+**Status da vaga além de aberto/fechado.** Hoje o veredito é vivo, morto ou sem
+resposta. "Pausada", "preenchida" e afins exigiriam ler a página, não só o
+código HTTP — outro problema.
+
 ## P3 — Estrutura e futuro
 
 ### AUTH-01 · Autenticação e autorização ✅

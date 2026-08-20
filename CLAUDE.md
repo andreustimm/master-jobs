@@ -88,6 +88,13 @@ dashboard Next.js em `localhost:3000`.
 > paleta de sintaxe do editor mora em `--cm-*`, verificada nos seis ambientes
 > por `pnpm test:e2e` lendo o estilo computado dos spans reais.
 
+> **Só 404 e 410 fecham uma vaga.** 401/403/429 são bloqueio de robô, não prova
+> de ausência — o Himalayas devolve 403 em toda requisição, e fechar nele
+> apagaria uma fonte viva inteira. 5xx e falha de rede não decidem nada. A
+> regra é função pura em `src/core/ingest/probe.ts` justamente porque é a única
+> capaz de esconder uma vaga boa por engano. `alive` reabre: um 404 transitório
+> não pode sumir com a vaga para sempre.
+
 > **9. Texto de interface vem do dicionário, nunca do JSX.**
 > Isto inclui **rótulo dentro de constante**: `COMPONENTS` em `app/ui.tsx`,
 > `FIELD_LABEL` no modal, `CATEGORY_LABEL` nas skills e `THEMES[].description`
@@ -400,7 +407,7 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 | Vagas com bloqueador | 468 |
 | Descrições offline | 207 |
 | Candidaturas no funil | 2 |
-| Testes | 491 + 38 e2e |
+| Testes | 511 + 40 e2e |
 
 > A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
 > candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de

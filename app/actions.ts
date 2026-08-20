@@ -33,3 +33,28 @@ export async function trackAction(formData: FormData) {
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/pipeline");
 }
+
+/**
+ * Pede uma reconferência: "esta vaga ainda existe?".
+ *
+ * Enfileira e volta. Sondar o link dentro do clique deixaria a página pendurada
+ * pelo tempo de rede de um site de terceiro — que pode ser 15 segundos até o
+ * timeout, e é justamente nos links mortos que ele demora mais. O trabalho sai
+ * do pedido HTTP e o worker (`pnpm jho jobs recheck run`) o consome.
+ *
+ * Enfileirar é idempotente por índice único: clicar três vezes atualiza a mesma
+ * tarefa. Trabalho duplicado contra site de terceiro é como se toma bloqueio.
+ */
+export async function recheckAction(formData: FormData) {
+  await guard("application:write");
+
+  const jobId = Number(formData.get("jobId"));
+  if (!Number.isFinite(jobId)) throw new Error("jobId inválido");
+
+  const { enqueueVerify } = await import("../src/core/ingest/verify-queue.ts");
+  await enqueueVerify(jobId, { origin: "user" });
+
+  revalidatePath("/");
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${jobId}`);
+}

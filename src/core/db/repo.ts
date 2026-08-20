@@ -16,6 +16,7 @@ import {
   positioningTask,
   source,
   type ApplicationStatus,
+  verifyTask,
 } from "./schema.ts";
 
 export type BoardRow = {
@@ -52,6 +53,12 @@ export type BoardRow = {
   pageFetchedAt: string | null;
   status: string | null;
   appliedAt: string | null;
+  /** Última reconferência do link: quando, o veredito e o código HTTP. */
+  checkedAt: string | null;
+  checkStatus: string | null;
+  checkCode: number | null;
+  /** Estado na fila de reconferência, quando há tarefa. */
+  checkQueue: string | null;
 };
 
 /** How much captured description a list row carries. See the query below. */
@@ -183,11 +190,16 @@ export async function listBoard(opts: BoardFilters = {}): Promise<BoardRow[]> {
       pageFetchedAt: jobPage.fetchedAt,
       status: application.status,
       appliedAt: application.appliedAt,
+      checkedAt: job.checkedAt,
+      checkStatus: job.checkStatus,
+      checkCode: job.checkCode,
+      checkQueue: verifyTask.status,
     })
     .from(job)
     .leftJoin(jobScore, eq(jobScore.jobId, job.id))
     .leftJoin(application, eq(application.jobId, job.id))
     .leftJoin(source, eq(source.id, job.sourceId))
+    .leftJoin(verifyTask, eq(verifyTask.jobId, job.id))
     .leftJoin(jobPage, eq(jobPage.jobId, job.id))
     .where(and(...conditions))
     .orderBy(...order)

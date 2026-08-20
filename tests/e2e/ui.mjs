@@ -356,6 +356,48 @@ try {
   );
 
 
+  /* -------------------- Reconferência: botão e enfileiramento -------------- */
+
+  // Vaga não é permanente, e a sincronização não descobre isso sozinha: várias
+  // fontes seguem listando anúncio morto. Medido ao ligar esta fila: 16% dos
+  // links do Lever entre os melhores ranqueados devolviam 404.
+  //
+  // O que só o browser responde é se o clique enfileira de verdade e se o botão
+  // passa a dizer isso. As regras de classificação (só 404/410 fecham) estão em
+  // `tests/verify-queue.test.ts`, onde não precisam de rede.
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  await page.locator("button[popovertarget^='job-modal']").first().click();
+  await page.waitForTimeout(300);
+
+  const recheckBefore = await page.evaluate(() => {
+    const modal = document.querySelector("[id^=job-modal]");
+    const button = modal?.querySelector("form button[type=submit]");
+    return { label: button?.textContent?.trim() ?? null, disabled: button?.disabled ?? null };
+  });
+  check("botão de reconferir presente no detalhe", recheckBefore.label !== null, `${recheckBefore.label}`);
+
+  if (recheckBefore.label && !recheckBefore.disabled) {
+    await page.locator("[id^=job-modal] form button[type=submit]").first().click();
+    await page.waitForTimeout(1200);
+    await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+    await page.locator("button[popovertarget^='job-modal']").first().click();
+    await page.waitForTimeout(300);
+  }
+
+  const recheckAfter = await page.evaluate(() => {
+    const modal = document.querySelector("[id^=job-modal]");
+    const button = modal?.querySelector("form button[type=submit]");
+    return { label: button?.textContent?.trim() ?? null, disabled: button?.disabled ?? null };
+  });
+  // Enfileirado, o botão desabilita: clicar de novo só duplicaria trabalho
+  // contra site de terceiro, que é como se toma bloqueio.
+  check(
+    "reconferir enfileira e desabilita o botão",
+    recheckAfter.disabled === true,
+    `${recheckAfter.label}`,
+  );
+
+
   /* ------------------- Ações do card: largura e alvo de toque -------------- */
 
   // As três ações ficavam em `flex flex-wrap`, então cada botão media o próprio

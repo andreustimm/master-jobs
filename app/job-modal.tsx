@@ -1,4 +1,6 @@
+import { RotateCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { recheckAction } from "./actions";
 import { cn } from "@/lib/utils";
 import type { BoardRow } from "../src/core/db/repo.ts";
 import { formatNumber, type LocaleId } from "../src/core/i18n/index.ts";
@@ -98,6 +100,28 @@ export function JobModal({
               {row.locationRaw.slice(0, 70)}
             </Badge>
           )}
+          {/* Estado do link. Uma vaga não é permanente: o anúncio sai, o link
+              expira, e a sincronização não sabe disso porque várias fontes
+              continuam listando anúncio morto. Aqui se vê quando foi a última
+              conferência e o que ela achou. */}
+          <Badge
+            variant="outline"
+            className={cn(
+              "type-micro",
+              row.checkStatus === "gone" && "border-[var(--bad)] text-[var(--bad)]",
+              row.checkStatus === "alive" && "border-[var(--good)] text-[var(--good)]",
+              row.checkStatus !== "gone" && row.checkStatus !== "alive" && "text-muted-foreground",
+            )}
+          >
+            {row.checkStatus === "alive"
+              ? t("jobDetail.checkedAlive")
+              : row.checkStatus === "gone"
+                ? t("jobDetail.checkedGone")
+                : row.checkStatus === "inconclusive"
+                  ? t("jobDetail.checkedInconclusive")
+                  : t("jobDetail.checkedNever")}
+            {row.checkedAt ? ` · ${row.checkedAt.slice(0, 10)}` : ""}
+          </Badge>
           {row.pageFetchedAt && (
             <Badge variant="outline" className="type-micro text-muted-foreground">
               {t("jobDetail.capturedOn")} {row.pageFetchedAt.slice(0, 10)}
@@ -162,8 +186,32 @@ export function JobModal({
           rel="noopener"
           className="type-body-sm text-[var(--primary-text)] hover:underline"
         >
-          abrir no site →
+          {t("jobDetail.openOnSite")} →
         </a>
+
+        {/* Enfileira e volta. Sondar dentro do clique penduraria a página pelo
+            tempo de rede de um site de terceiro — e é justamente no link morto
+            que ele demora mais, até o timeout. */}
+        <form action={recheckAction} className="contents">
+          <input type="hidden" name="jobId" value={row.jobId} />
+          <button
+            type="submit"
+            disabled={row.checkQueue === "pending" || row.checkQueue === "checking"}
+            title={t("jobDetail.recheckHint")}
+            className={cn(
+              "inline-flex cursor-pointer items-center gap-1.5 type-body-sm",
+              "text-[var(--primary-text)] hover:underline",
+              "disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline",
+            )}
+          >
+            <RotateCw className="size-3.5" aria-hidden />
+            {row.checkQueue === "pending"
+              ? t("jobDetail.recheckQueued")
+              : row.checkQueue === "checking"
+                ? t("jobDetail.recheckChecking")
+                : t("jobDetail.recheck")}
+          </button>
+        </form>
         {row.applyUrl && row.applyUrl !== row.url && (
           <a
             href={row.applyUrl}
@@ -171,7 +219,7 @@ export function JobModal({
             rel="noopener"
             className="type-body-sm ml-auto font-medium text-[var(--primary-text)] hover:underline"
           >
-            aplicar →
+            {t("jobs.apply")} →
           </a>
         )}
       </footer>

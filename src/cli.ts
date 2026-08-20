@@ -620,6 +620,86 @@ jobs
     });
   });
 
+/* ------------------------------ Reconferência ----------------------------- */
+
+/**
+ * `jobs verify` continua sendo o lote de uma execução só. Estes comandos são a
+ * outra metade: a fila que o botão da interface alimenta, para a conferência
+ * acontecer fora do pedido HTTP. Sondar 200 links dentro de um clique deixaria
+ * a página pendurada por minutos.
+ */
+const recheck = jobs
+  .command("recheck")
+  .description("Fila de reconferência: a vaga ainda existe? (alimentada pelo botão e pela varredura)");
+
+recheck
+  .command("queue")
+  .description("Enfileira as vagas há mais tempo sem conferência")
+  .option("--min-fit <n>", "só acima deste fit", "55")
+  .option("--limit <n>", "quantas enfileirar", "200")
+  .option("--older-than <days>", "só as conferidas há mais de N dias", "7")
+  .action(async (opts: { minFit: string; limit: string; olderThan: string }) => {
+    await withDb(async () => {
+      const { enqueueStale, verifyStats } = await import("./core/ingest/verify-queue.ts");
+      const n = await enqueueStale({
+        minFit: Number(opts.minFit),
+        limit: Number(opts.limit),
+        olderThanDays: Number(opts.olderThan),
+      });
+      const stats = await verifyStats();
+      console.log(`\n${c.green("\u2713")} ${n} enfileirada(s)`);
+      console.log(c.dim(`  fila: ${JSON.stringify(stats)}`));
+      console.log(c.dim("  Processar: pnpm jho jobs recheck run\n"));
+    });
+  });
+
+recheck
+  .command("run")
+  .description("Consome a fila de reconferência até esvaziar")
+  .option("--max <n>", "para depois de N verificações")
+  .option("--delay <ms>", "pausa entre sondagens", "300")
+  .action(async (opts: { max?: string; delay: string }) => {
+    await withDb(async () => {
+      const { runVerifyQueue } = await import("./core/ingest/verify-queue.ts");
+      const r = await runVerifyQueue({
+        max: opts.max ? Number(opts.max) : undefined,
+        delayMs: Number(opts.delay),
+        onProgress: (done) => process.stdout.write(`\r  ${done} verificadas`),
+      });
+      process.stdout.write("\r\x1b[K");
+      console.log(
+        `\n${c.green("\u2713")} ${r.checked} verificadas · ` +
+        `${c.green(`${r.alive} vivas`)} · ${c.red(`${r.gone} mortas`)} · ` +
+        c.dim(`${r.inconclusive} inconclusivas`),
+      );
+      if (r.inconclusive > 0) {
+        console.log(
+          c.dim("  Inconclusiva é bloqueio de robô (403) ou erro de rede — nenhuma foi fechada."),
+        );
+      }
+      console.log();
+    });
+  });
+
+recheck
+  .command("status")
+  .description("Estado da fila de reconferência")
+  .action(async () => {
+    await withDb(async () => {
+      const { verifyStats } = await import("./core/ingest/verify-queue.ts");
+      const stats = await verifyStats();
+      if (Object.keys(stats).length === 0) {
+        console.log(c.dim("\n  vazia — pnpm jho jobs recheck queue\n"));
+        return;
+      }
+      console.log();
+      for (const [status, n] of Object.entries(stats)) {
+        console.log(`  ${status.padEnd(10)} ${String(n).padStart(5)}`);
+      }
+      console.log();
+    });
+  });
+
 jobs
   .command("show <id>")
   .description("Full detail for one job, including why it scored the way it did")

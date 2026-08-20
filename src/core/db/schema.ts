@@ -83,6 +83,12 @@ export const job = sqliteTable(
     title: text("title").notNull(),
     descriptionHtml: text("description_html"),
     descriptionText: text("description_text"),
+    /** Quando o link foi sondado pela última vez. Null = nunca. */
+    checkedAt: text("checked_at"),
+    /** `alive` | `gone` | `inconclusive` — o veredito da última sondagem. */
+    checkStatus: text("check_status"),
+    /** Código HTTP observado, para diagnóstico. Null em falha de rede. */
+    checkCode: integer("check_code"),
     locationRaw: text("location_raw"),
     /** null = the posting does not say. */
     remote: integer("remote", { mode: "boolean" }),
@@ -691,6 +697,50 @@ export const scrapeTask = sqliteTable(
  * guess that gets better: keeping the source means a parser fix is a reprocess,
  * not a re-crawl. This is also what makes the job description available offline.
  */
+/**
+ * Fila de verificação de vaga viva.
+ *
+ * Tabela separada de `scrape_task` porque o ciclo de vida é outro. A captura de
+ * página acontece uma vez por vaga — daí o índice único por `job_id` lá. Já a
+ * verificação **se repete**: a mesma vaga é reconferida semanas depois, e
+ * `closed_at` pode voltar a null se ela reabrir. Reaproveitar aquela tabela
+ * significaria escolher entre perder o histórico de capturas ou aceitar duas
+ * semânticas na mesma coluna de status.
+ *
+ * O índice único por `job_id` aqui existe por outro motivo: impedir que clicar
+ * três vezes no botão enfileire a mesma vaga três vezes.
+ */
+export const verifyTask = sqliteTable(
+  "verify_task",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    jobId: integer("job_id")
+      .notNull()
+      .references(() => job.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    /** pending | checking | done | failed */
+    status: text("status").notNull().default("pending"),
+    /** Maior roda antes. O pedido do usuário entra acima da varredura. */
+    priority: real("priority").notNull().default(0),
+    /** `user` | `periodic` — de onde veio o pedido, para a interface avisar. */
+    origin: text("origin").notNull().default("periodic"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    claimedAt: text("claimed_at"),
+    claimedBy: text("claimed_by"),
+    runAfter: text("run_after"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("verify_task_job_idx").on(t.jobId),
+    index("verify_task_claim_idx").on(t.status, t.priority),
+  ],
+);
+
+export type VerifyTask = typeof verifyTask.$inferSelect;
+export type VerifyStatus = "pending" | "checking" | "done" | "failed";
+
 export const jobPage = sqliteTable(
   "job_page",
   {
