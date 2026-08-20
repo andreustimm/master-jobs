@@ -238,86 +238,125 @@ O default de 7.2 para "não disse nada" é deliberadamente generoso: a maioria d
 
 ## Componente: geo (máx. 15)
 
-`scoreGeo()` monta `combined = normalize(locationRaw) + " " + normalize(descriptionText)` e desce uma escada de decisão. **A ordem importa e é a fonte da maioria das surpresas.**
+`scoreGeo(input, profile, eligibility)` desce uma escada de decisão sobre
+`combined = normalize(locationRaw) + " " + normalize(descriptionText)`.
+**A ordem importa e é a fonte da maioria das surpresas.**
+
+Desde a 1.3.0 a escada começa pelo veredito de elegibilidade, que vem de
+`evaluateEligibility(policy, signals)` e não de texto solto:
 
 | # | Teste | Score | `reason` |
-| --- | --- | --- | --- |
-| 1 | `/\b(latam\|latin america\|south america\|brazil\|brasil\|americas)\b/` | **15.0** | `Explicitly open to LATAM/Brazil` |
-| 2 | `/\b(worldwide\|globally\|anywhere\|global remote\|any location\|fully remote)\b/` | **13.5** (`×0.9`) | `Advertised as worldwide remote` |
-| 3 | Não há sinal de remoto **e** `constraints.remote_only` é `true` | **0** | `No remote signal found` |
-| 4 | `/\b(us only\|usa only\|united states only\|uk only\|canada only\|eu only\|europe only\|emea only)\b/` | **0** | `Remote but region-restricted away from Brazil` |
-| 5 | fallback | **8.25** (`×0.55`) | `Remote, region not stated` |
+| --- | --- | ---: | --- |
+| 1 | `eligibility.status === "ineligible"` | **0** | `geo.ineligible` |
+| 2 | `eligibility.status === "eligible"` | **15,0** | `geo.eligible` |
+| 3 | `/\b(us only\|usa only\|united states only\|uk only\|canada only\|eu only\|europe only\|emea only)\b/` | **0** | `geo.restricted` |
+| 4 | `/\b(latam\|latin america\|south america\|brazil\|brasil\|americas)\b/` | **15,0** | `geo.latam` |
+| 5 | `/\b(worldwide\|globally\|anywhere\|global remote\|any location\|fully remote)\b/` | **13,5** (`×0,9`) | `geo.worldwide` |
+| 6 | Presencial declarado **e** `remote_only` | **0** | `geo.physical` |
+| 7 | Sem sinal de remoto **e** `remote_only` | **7,5** (`×0,5`) | `geo.unknown` |
+| 8 | fallback | **8,25** (`×0,55`) | `geo.remoteUnknown` |
 
-"Sinal de remoto" no passo 3 é `input.remote === true || /\bremote\b/` no `locationRaw` **ou** no corpo.
+"Sinal de remoto" é `input.remote === true` ou `/\bremote\b/` no `locationRaw`
+**ou** no corpo.
 
-Duas consequências que você precisa lembrar antes de tunar:
+**A restrição agora vem antes do "worldwide", e essa inversão foi uma
+correção.** Na ordem anterior, um anúncio que dizia `fully remote` no primeiro
+parágrafo e `US only` no oitavo ficava com 13,5 — a escada já tinha decidido
+antes de chegar na parte que importa. Quem pegava esse caso era a lista de
+`blockers`, tarde demais para o componente.
 
-- **O passo 1 varre o corpo inteiro.** Qualquer menção a "Brazil"/"Americas" em qualquer lugar da descrição (inclusive "our São Paulo office" ou uma lista de escritórios) dá os 15 cheios. Foi o que fez a vaga da Paires marcar 15: o `location_raw` é uma lista de 12 países que inclui `Brazil`.
-- **Os passos 1 e 2 vêm antes do passo 4.** Uma vaga que diz `fully remote` e depois `US only` fica com **13.5**, não 0 — a escada já decidiu no passo 2. Quem pega esse caso na prática é a lista de `blockers` (`must be located in the united states`, `authorized to work in the us`, `no sponsorship`), não o componente geo.
+**O passo 4 ainda varre o corpo inteiro**, e isso é limitação conhecida:
+qualquer menção a "Brazil" ou "Americas" em qualquer lugar da descrição
+— inclusive "our São Paulo office" ou uma lista de escritórios — dá os 15
+cheios.
 
-`constraints.acceptable_regions`, `work_authorization`, `needs_visa_sponsorship_for`, `contract_models` e `max_timezone_offset_hours` estão no perfil e são validados pelo Zod, mas **`scoreGeo()` só lê `constraints.remote_only`**. Os outros existem para agentes e para o futuro.
+### Elegibilidade tem três estados, não dois
+
+`eligible`, `ineligible` e **`unverifiable`**. O terceiro é o que faltava: antes
+existia só "passa" e "não passa", e o anúncio que simplesmente não diz nada
+sobre visto caía no mesmo balde de quem diz "US only". São coisas diferentes —
+um é impossível, o outro é desconhecido, e desconhecido merece ser visto e
+verificado, não descartado em silêncio.
+
+`ineligible` zera `geo` **e** entra em `blockers`, então soma penalidade também.
+`unverifiable` devolve a decisão para a escada de heurísticas acima.
+
+A política vem do `profile.yaml` via `MatchPolicy`, e agora usa o perfil
+inteiro: `work_authorization`, `needs_visa_sponsorship_for`, `contract_models`,
+`remote_only`, `acceptable_regions` e `max_timezone_offset_hours`. Até a 1.2.0
+`scoreGeo()` lia apenas `remote_only` e os demais campos existiam sem consumidor.
 
 ---
 
 ## Componente: comp (máx. 8)
 
-`scoreComp()` normaliza tudo para anual antes de comparar:
+`scoreComp(input, profile, fx)` compara a oferta com as faixas do perfil. O que
+este componente evita é uma armadilha específica: **um número sem moeda é
+inutilizável**, porque não dá para distinguir 60 000 BRL de 60 000 USD, e
+adivinhar é exatamente o defeito que a 1.1.0 removeu.
 
-```ts
-// Normalise to an annual figure so hourly and monthly postings compare.
-const factor = compPeriod === "hour" ? 2080 : compPeriod === "month" ? 12 : 1;
-const top = (compMax ?? compMin ?? 0) * factor;
-```
+A escada de comparação, em ordem, e ela nunca inventa taxa:
 
-2080 = 40 h/semana × 52 semanas. Usa-se sempre o **topo da faixa** (`compMax`, caindo para `compMin`).
+1. Faixa declarada para a **mesma moeda e mesmo período** do anúncio;
+2. Faixa daquela moeda em qualquer período, comparada em base anual;
+3. Conversão para a moeda de referência, contra a faixa dela;
+4. Sem taxa disponível → tratado como **não divulgado**, nunca como equivalente.
+
+Sempre o **topo** da faixa (`compMax`, caindo para `compMin`), anualizado por
+`annualize()` — 2080 h/ano para hora, ×12 para mês.
+
+Notas por faixa, via `gradeAgainst()`:
 
 | Situação | Score |
-| --- | --- |
-| `compMin == null && compMax == null` | `8 × 0.5 = 4.0` — `No compensation disclosed` |
-| `top >= compensation.target` (150 000) | `8.0` |
-| `top >= compensation.floor` (90 000) | `8 × (0.4 + 0.6 × fraction)`, com `fraction = (top − floor) / (target − floor)` → varia de 3.2 a 8.0 |
-| Abaixo do floor | `0` |
+| --- | ---: |
+| `valor >= ideal` | **8,0** |
+| `valor >= target` | `8 × (0,85 + 0,15 × bonus)` → **6,8 a 8,0** |
+| `valor >= floor` | `8 × (0,40 + 0,45 × fraction)` → **3,2 a 6,8** |
+| Abaixo do floor | **0** |
+| Não divulgado, sem moeda, ou sem taxa de câmbio | `8 × 0,5` = **4,0** |
 
-O 4.0 de "não divulgou" é intencional: a maioria dos boards não publica faixa, e zerar puniria a ausência de informação como se fosse uma faixa ruim.
+`bonus = min(1, (valor − target) / span)`, com `span = (ideal ?? target × 1,4) − target`.
+`fraction = (valor − floor) / (target − floor)`.
 
-### Duas armadilhas verificadas no banco atual
+Os patamares são contínuos de propósito: 3,2 no piso, 6,8 no alvo, 8,0 no ideal.
 
-**1. A moeda não é convertida.** `compCurrency` entra no `ScoreInput` e é gravada em `job.comp_currency`, mas **não é usada no cálculo**. Uma faixa em BRL, EUR ou INR é comparada contra `floor: 90000` / `target: 150000` como se fosse USD. Exemplo real: job `62`, `Data Engineer ( WestBend AMS )`, `50000–65000` `monthly` — quase certamente BRL.
+**O 4,0 de "não divulgou" é intencional.** A maioria dos quadros não publica
+faixa, e zerar puniria ausência de informação como se fosse faixa ruim. Nem
+crédito nem punição.
 
-**2. `compPeriod` é comparado por string exata, e as fontes não falam a mesma língua.** Os adapters repassam o campo cru (`salary?.interval` no Ashby, `j.salaryPeriod` no Himalayas). Valores realmente presentes em `job.comp_period` hoje:
-
-| valor | vagas | `factor` aplicado |
-| --- | --- | --- |
-| *(null)* | 4972 | 1 |
-| `annual` | 35 | 1 (correto por acidente) |
-| `1 YEAR` | 6 | 1 (correto por acidente) |
-| `year` | 3 | 1 |
-| `hourly` | 4 | **1 — deveria ser 2080** |
-| `monthly` | 1 | **1 — deveria ser 12** |
-
-(Contagens sobre `job` inteiro — 5021 linhas. Restrito ao subconjunto pontuado, `job join job_score`, os números caem para 4795 *(null)* e 15 `annual`; os demais são idênticos.)
-
-Efeito concreto: job `52`, `Lawyer`, `80–180 hourly` → `top = 180`, considerado "abaixo do floor", `comp_score = 0.0`. Se `hourly` fosse reconhecido, seriam 374 400/ano e 8.0. São 5 vagas de 5021 hoje: `50` `Technical Support Analyst (Fr-Tu 6a-2:30p)` (`eng_lead`), `52` `Lawyer` (`other`), `60` `QA Support…` (`other`), `62` `Data Engineer ( WestBend AMS )` (`ai_lead`) e `65` `Field Service Engineer (Texas)` (`ai_lead`). Três delas carregam cluster-alvo em `job_score.cluster`, mas nenhuma é do target de fato — suporte técnico, jurídico e field service —, e é por isso que a armadilha não foi corrigida. Quem mexer em `scoreComp()` deve **normalizar o período antes de comparar**, não acrescentar mais um `===`.
+**Zero não é um valor.** Vários agregadores emitem `0` em vez de `null` para
+"não divulgado". Tratar isso como número real ou o colocaria abaixo do piso ou,
+pior, lhe daria os 4,0 de consolação — os dois errados. `amount <= 0` cai
+explicitamente no caso "não divulgado".
 
 ---
 
 ## Componente: freshness (máx. 6)
 
-`scoreFreshness(input)` — em `src/core/scoring/freshness.ts`. O único componente
-que não avalia a vaga: avalia se ainda vale agir sobre ela.
+`scoreFreshness(input, asOf)` — em `src/core/scoring/freshness.ts`. O único
+componente que não avalia a vaga: avalia se ainda vale agir sobre ela.
 
 ```
-factor = 1                              se idade <= 3 dias
-factor = 2 ^ (-(idade - 3) / 14)        se idade > 3 dias
+factor = 1                              se idade <= 1 dia
+factor = 2 ^ (-(idade - 1) / 7)         se idade > 1 dia
 factor = 0.5                            se a idade é desconhecida
 ```
 
-Platô de 3 dias, depois meia-vida de 14. Valores da curva:
+Platô de 1 dia, depois meia-vida de 7. Valores da curva:
 
-| Idade | 0d | 3d | 7d | 14d | 30d | 60d | 120d | *desconhecida* |
+| Idade | 0d | 1d | 3d | 7d | 14d | 30d | 60d | *desconhecida* |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `factor` | 1,00 | 1,00 | 0,82 | 0,58 | 0,26 | 0,06 | 0,00 | 0,50 |
-| pontos | 6,0 | 6,0 | 4,9 | 3,5 | 1,6 | 0,4 | 0,0 | 3,0 |
+| `factor` | 1,00 | 1,00 | 0,82 | 0,55 | 0,28 | 0,06 | 0,00 | 0,50 |
+| pontos | 6,0 | 6,0 | 4,9 | 3,3 | 1,7 | 0,3 | 0,0 | 3,0 |
+
+**Era platô de 3 e meia-vida de 14, e o próprio diagnóstico do sistema derrubou
+esses números.** O `jho stats` apontou o componente como peso morto: 92% de
+utilização e 13% de variação, ou seja, quase toda vaga recebia quase todo o
+ponto e o componente não reordenava nada. A causa é o acervo: metade dele tem de
+0 a 3 dias e 99% está abaixo de duas semanas, então uma meia-vida de 14 gastava
+toda a sua faixa em vagas que não existem aqui. Um dia também é a janela quente
+honesta — candidatar-se hoje ou daqui a uma semana é diferença real na formação
+da shortlist.
 
 **Origem da data.** `postedAt` primeiro; na falta dele, `firstSeenAt`, que é um
 **teto** da idade e não a idade real — a vaga pode ser mais velha que o dia em
@@ -445,54 +484,125 @@ Exemplo de cada:
 
 ---
 
-## Exemplo completo: Paires, fit 74.2
+## Exemplo completo: Autodesk, fit 85.6
 
-Melhor fit do banco inteiro. `pnpm jho jobs show 42`:
+Vaga real do acervo (`job 8613`), pontuada pela 1.3.0. Os números saíram do
+banco, não de aritmética à mão — o exemplo anterior deste documento ficou preso
+nos pesos da 1.1.0 (title 35, keyword 30, seniority 12) e passou duas versões
+descrevendo uma escala que já não existia.
 
 | Campo | Valor |
 | --- | --- |
-| `company_name` | Paires |
-| `title` | Applied AI Engineer |
-| `location_raw` | Canada / South Africa / Portugal / **Brazil** / United Arab Emirates / Ireland / United Kingdom / Spain / Germany / Poland / France / Netherlands |
-| `comp_min` / `comp_max` / `comp_period` | 200000 / 330000 / `1 YEAR` |
-| `cluster` | `ai_lead` |
+| `title` | Software Architect |
+| `company` | Autodesk |
+| `cluster` | `architect` |
 
 Decomposição:
 
 | Componente | Score | Máx | Como chegou lá |
-| --- | --- | --- | --- |
-| `title_score` | **33.3** | 35 | `"applied ai engineer" === "applied ai engineer"` → `raw = 1`; `1 × 0.95 (ai_lead) × 35 = 33.25` |
-| `keyword_score` | **10.8** | 30 | 6 matches: `llm`(8) `rag`(8) `evals`(6) `guardrails`(6) `python`(5) `aws`(3) = `earned 36`; `36/287 = 0.1254`; `0.1254/0.35 = 0.3584`; `× 30 = 10.752` |
-| `seniority_score` | **7.2** | 12 | Sem match do regex de anos → `12 × 0.6` |
-| `geo_score` | **15.0** | 15 | `brazil` na `location_raw` → passo 1 da escada |
-| `comp_score` | **8.0** | 8 | `compPeriod` não é `hour` nem `month` → `factor 1`; `top = 330 000 ≥ target 150 000` |
-| `penalty` | **0** | — | `blockers = []`, nenhuma keyword negativa |
-| **`fit`** | **74.2** | 100 | |
+| --- | ---: | ---: | --- |
+| `title_score` | **30,0** | 30 | `"software architect"` casa exato com um título do cluster `architect` (peso 1,0) |
+| `keyword_score` | **21,2** | 27 | 14 matches, entre eles `agentic` `llm` `rag` `langgraph` `observability` `event-driven` |
+| `seniority_score` | **10,0** | 10 | Regex achou 10 anos, ≥ `min_years_expected` |
+| `geo_score` | **13,5** | 15 | Texto diz remoto global sem citar LATAM → `15 × 0,9` |
+| `comp_score` | **4,0** | 8 | Faixa não divulgada → metade do peso, nem crédito nem punição |
+| `freshness_score` | **5,7** | 6 | 2 dias de idade → `2^(-1/7) × 6` |
+| `benefit_score` | **1,2** | 4 | Só `equity` reconhecido no texto |
+| `penalty` | **0** | — | Sem blockers e sem keyword negativa |
+| **`fit`** | **85,6** | 100 | |
 
-Note que `33.3 + 10.8 + 7.2 + 15.0 + 8.0 = 74.3`, mas o `fit` é **74.2**: a soma é feita sobre os valores crus (`33.25 + 10.752 + 7.2 + 15 + 8 = 74.202`) e só depois arredondada. **A diferença de 0.1 entre a soma das colunas e o `fit` não é bug.**
+Soma: `30 + 21,2 + 10 + 13,5 + 4 + 5,7 + 1,2 = 85,6`.
 
-`reasons` persistidos, exatamente como o `jobs show` imprime:
+`reasons` persistidos — repare que são **códigos com parâmetros**, não frases:
 
+```json
+[{"code":"title.match","params":{"target":"Software Architect","cluster":"architect"}},
+ {"code":"keywords.matched","params":{"count":14}},
+ {"code":"seniority.match","params":{"years":10}},
+ {"code":"geo.worldwide"},
+ {"code":"comp.undisclosed"},
+ {"code":"freshness.aged","params":{"days":2}},
+ {"code":"benefits.offers","params":{"benefits":"equity"}}]
 ```
-Title matches "Applied AI Engineer" (cluster ai_lead)
-Matched 6 profile keywords
-No explicit years requirement
-Explicitly open to LATAM/Brazil
-Pays up to 330,000 — at or above target
-```
 
-O que esse exemplo ensina sobre a calibração atual: **74.2 é o teto do corpus real, e ainda assim é o melhor caso possível em título, geo e comp simultaneamente.** O que segurou o número foi `keyword_score` (10.8/30) e `seniority_score` (7.2/12). Não espere fits de 90 — a escala 0–100 é teórica; a distribuição observada é:
+A UI e o CLI traduzem no momento de exibir. Antes a frase era gravada pronta em
+português, e o efeito é que trocar o idioma da interface não mudava a explicação
+do score — o banco guardava a decisão **e** o idioma de quem a escreveu.
 
-| Faixa de fit | Vagas |
-| --- | --- |
-| 70+ | 1 |
-| 50–69 | 136 |
-| 45–49 | 188 |
-| < 45 | 4499 |
+## Que algoritmo é este, afinal
 
-É isso que faz o default `--min-fit 45` do `jobs list` e do `report` deixar **346 vagas abertas elegíveis** em vez de 5021. Elegíveis, não impressas: cada comando tem o seu próprio `--limit` — `30` no `jobs list` (`src/cli.ts`, que ainda fatia com `rows.slice(0, limit)`) e `100` no `report` (também o default de `limit` em `buildReport()`). Para ver as 346 é preciso passar `--limit` explicitamente.
+**Não é similaridade de cosseno, não há embedding e não há vetor em lugar
+nenhum.** Também não há LLM no caminho do score. Quem procurar por
+`cosine`, `embedding` ou `tf-idf` no código só encontra entradas do catálogo de
+skills — "Embeddings" e "Vector databases" são tecnologias que o sistema
+procura *dentro do anúncio*, não como ele pontua.
+
+O que existe é uma **rubrica ponderada com casamento léxico**: sete componentes
+independentes, cada um com teto fixo, somados e depois reduzidos por
+penalidades. Nenhuma etapa é aprendida; todo peso foi escolhido à mão e está
+versionado em `SCORER_VERSION`.
+
+| | Rubrica ponderada (o que usamos) | Cosseno sobre embeddings |
+|---|---|---|
+| Explicabilidade | Cada ponto tem origem nomeada | "0,83 de similaridade" |
+| Reprodutibilidade | Mesmo input → mesmo output, sempre | Depende do modelo e da versão dele |
+| Custo por vaga | Microssegundos, offline | Chamada de API ou modelo local |
+| Ajuste | Editar um peso no YAML | Reindexar tudo |
+| Regra eliminatória | Natural (blocker zera) | Não existe; tudo vira "meio parecido" |
+
+A última linha é a decisiva para este caso de uso. Este candidato **não tem
+autorização de trabalho nos EUA**, e isso não é uma preferência a ser
+ponderada: é eliminatório. Um cosseno diria que uma vaga "W2, on-site em
+Austin" tem 0,91 de similaridade com o currículo — e estaria certo, porque o
+texto realmente se parece. Similaridade não sabe a diferença entre "combina" e
+"é possível".
+
+Há também uma razão de escala e uma de confiança. São milhares de anúncios
+repontuados a cada mudança de perfil, e a pergunta que se faz de um quadro de
+vagas não é "qual a nota?" — é **"por que esta ficou acima daquela?"**. Uma
+rubrica responde com aritmética conferível; um vetor responde com um número.
+
+Onde um LLM caberia, e está anotado no código: um passe sobre as ~50 do topo,
+depois do corte determinístico, para ler nuance que regex não lê. Não sobre as
+6.000, e não como substituto do que fecha a porta.
+
+**As técnicas que de fato estão aqui**, todas clássicas e todas deliberadas:
+
+- **Casamento por borda de palavra** (regex com fronteira), para `go` não
+  disparar em `google`;
+- **Curva saturante** na keyword — 35% do peso possível já pontua quase cheio,
+  senão anúncio prolixo ganharia por ser comprido;
+- **Decaimento exponencial** no frescor, com platô e meia-vida;
+- **Interpolação linear por faixa** na remuneração (piso → alvo → ideal);
+- **Portão de elegibilidade** separado da nota, com três estados.
 
 ---
+
+## Versão 1.3.0 — contexto explícito e elegibilidade estruturada
+
+Três mudanças, todas sobre a mesma questão: tornar explícito o que estava
+implícito.
+
+**`ScoringContext` fixa o tempo.** `scoreJob` recebe `{ profile, fx, asOf }`.
+Antes o frescor chamava `Date.now()` lá dentro, e o efeito é que repontuar o
+mesmo acervo duas vezes dava resultados diferentes — não por mudança de dado,
+mas porque o relógio andou. Com `asOf` fixo por execução, a reprodutibilidade
+que o topo deste documento promete passa a ser verdade também para o componente
+que depende de tempo.
+
+**`MatchPolicy` e elegibilidade com três estados.** A política sai do
+`profile.yaml` (autorização de trabalho, modelos de contrato, regiões aceitas,
+fuso máximo) e o veredito é `eligible`, `ineligible` ou `unverifiable`. O
+terceiro estado é o que importa: antes só havia "passa" e "não passa", e o
+anúncio que simplesmente não diz nada sobre visto caía no mesmo balde de quem
+diz "US only". São coisas diferentes — um é impossível, o outro é desconhecido,
+e desconhecido merece ser visto e verificado, não descartado.
+
+`ineligible` zera `geo` **e** vira blocker. `unverifiable` deixa a escada de
+heurísticas de `scoreGeo` decidir.
+
+**`reasons` e `blockers` viram códigos.** `{ code, params }` em vez de frase
+pronta, traduzidos na hora de exibir. Ver o exemplo acima.
 
 ## Como ajustar
 

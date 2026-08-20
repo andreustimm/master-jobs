@@ -88,6 +88,14 @@ dashboard Next.js em `localhost:3000`.
 > paleta de sintaxe do editor mora em `--cm-*`, verificada nos seis ambientes
 > por `pnpm test:e2e` lendo o estilo computado dos spans reais.
 
+> **O score é rubrica ponderada, não similaridade de cosseno.** Sete
+> componentes com teto fixo, casamento léxico por borda de palavra, curva
+> saturante na keyword e decaimento exponencial no frescor — nenhum embedding,
+> nenhum vetor, nenhum LLM no caminho. A razão é o caso de uso: sem autorização
+> de trabalho nos EUA, "W2 on-site em Austin" é **eliminatório**, e cosseno
+> diria 0,91 de similaridade porque o texto de fato se parece. Similaridade não
+> distingue "combina" de "é possível". Detalhe em `docs/scoring.md`.
+
 > **Só 404 e 410 fecham uma vaga.** 401/403/429 são bloqueio de robô, não prova
 > de ausência — o Himalayas devolve 403 em toda requisição, e fechar nele
 > apagaria uma fonte viva inteira. 5xx e falha de rede não decidem nada. A
