@@ -430,6 +430,19 @@ describe("jho skills gap", () => {
     // não compra nada e o próximo passo é estudar, não reformular.
     expect(r.out).toContain("Nenhuma lacuna de vocabulário");
     expect(r.out).toContain("kubernetes");
+
+    // E quando o CV também cobre o que faltava, os DOIS blocos somem: a tela
+    // fica com a cobertura e nada a fazer, que é o único desfecho em que o
+    // comando não pede ação nenhuma.
+    const dir = await pastaTemporaria("jho-cv-");
+    const caminho = join(dir, "cv.md");
+    await writeFile(caminho, `${CURRICULO}\nInfraestrutura em kubernetes desde 2019.`, "utf8");
+    await rodar("cv", "set", caminho);
+
+    const completo = await rodar("skills", "gap", "--min-fit", "0");
+    expect(completo.code).toBeUndefined();
+    expect(completo.out).toContain("Nenhuma lacuna de vocabulário");
+    expect(completo.out).not.toContain("Lacuna real");
   });
 
   it("`--limit` é aceito e não altera o resultado quando o acervo cabe nele", async () => {

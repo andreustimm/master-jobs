@@ -339,6 +339,18 @@ describe("jho jobs list", () => {
     expect(r.uso).toContain("--fit-minimo");
   });
 
+  it("na tabela, a vaga já triada mostra o estado ao lado", async () => {
+    const { forte } = await semearAcervoPontuado();
+    await rodar("track", String(forte), "shortlisted");
+
+    const r = await rodar("jobs", "list", "--min-fit", "0");
+    expect(r.code).toBeUndefined();
+    // A coluna de estado é o que evita candidatar-se duas vezes à mesma vaga:
+    // sem ela a lista de trabalho e o funil viram duas verdades separadas.
+    const linha = r.out.split("\n").find((l) => l.includes("AlfaCorp"))!;
+    expect(linha).toContain("shortlisted");
+  });
+
   it("vaga ainda não pontuada aparece com fit em branco, não com zero", async () => {
     await semearAcervoPontuado();
     // Inserida depois do `jobs score`: é o estado de toda vaga entre o `sync`
@@ -406,6 +418,35 @@ describe("jho jobs show <id>", () => {
     expect(r.out).toContain("enviado pelo site");
     expect(r.out).toContain("follow-up com a recrutadora");
     expect(r.out).toContain("2026-09-01");
+  });
+
+  it("nota sem palavras casadas nem faltantes não imprime as duas listas", async () => {
+    const { candidatoId } = await semearAcervoPontuado();
+    const nua = await semearVaga({ externo: "nua", empresa: "IotaCorp", titulo: "Staff Engineer" });
+    // Nota montada à mão com os vetores vazios: é o estado de uma vaga cuja
+    // descrição o `sync` não trouxe, e o comando não pode imprimir cabeçalho
+    // de lista para lista nenhuma.
+    await banco().insert(jobScore).values({
+      candidateId: candidatoId,
+      jobId: nua,
+      fit: 50, titleScore: 20, keywordScore: 10, seniorityScore: 5,
+      geoScore: 10, compScore: 0, cluster: "architect",
+      matchedKeywords: [], missingKeywords: [], reasons: [], blockers: [],
+      scorerVersion: "teste",
+    });
+    // Próximo passo SEM data: o prazo é opcional e a linha tem de sair mesmo
+    // assim — do contrário um lembrete sem data vira lembrete invisível.
+    await rodar("track", String(nua), "shortlisted");
+    await banco()
+      .update(application)
+      .set({ nextAction: "pedir indicação" })
+      .where(eq(application.jobId, nua));
+
+    const r = await rodar("jobs", "show", String(nua));
+    expect(r.code).toBeUndefined();
+    expect(r.out).toContain("pedir indicação");
+    expect(r.out).not.toContain("Matched:");
+    expect(r.out).not.toContain("Missing:");
   });
 
   it("corta a descrição em 1200 caracteres, e `--full` desliga o corte", async () => {
@@ -654,6 +695,23 @@ describe("jho prep <id>", () => {
     expect(r.out).toContain("Trocar a palavra");
     expect(r.out).toContain("Pedem e o CV não mostra");
     expect(r.out).toContain("8+ anos em arquitetura");
+  });
+
+  it("vaga sem local declarado não imprime local vazio", async () => {
+    await semearAcervoPontuado();
+    const semLocal = await semearVaga({
+      externo: "sem-local",
+      empresa: "KappaCorp",
+      titulo: "AI Solutions Architect",
+      descricao: DESCRICAO_FORTE,
+      local: null,
+    });
+    await rodar("jobs", "score");
+
+    const r = await rodar("prep", String(semLocal));
+    expect(r.erro).toBeUndefined();
+    expect(r.code).toBeUndefined();
+    expect(r.out).toContain("KappaCorp");
   });
 
   it("sem descrição suficiente, avisa em vez de inventar lacuna", async () => {

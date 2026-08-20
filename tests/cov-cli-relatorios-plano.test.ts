@@ -108,6 +108,22 @@ describe("jho tasks list", () => {
     expect(linha).not.toContain("✓");
   });
 
+  it("tarefa sem esforço estimado ainda ocupa uma linha inteira", async () => {
+    await rodar("db", "seed", "--skip-auth");
+    const [primeira] = await banco().select().from(positioningTask).orderBy(positioningTask.id);
+    // `effort` é opcional no plano. Uma tarefa sem estimativa não pode sumir
+    // nem quebrar a coluna — ela é justamente a que ninguém dimensionou
+    // ainda, e portanto a mais provável de ser esquecida.
+    await banco()
+      .update(positioningTask)
+      .set({ effort: null })
+      .where(eq(positioningTask.id, primeira!.id));
+
+    const r = await rodar("tasks", "list");
+    expect(r.code).toBeUndefined();
+    expect(r.out).toContain(primeira!.id);
+  });
+
   it("`--horizon` recorta o plano por prazo", async () => {
     await rodar("db", "seed", "--skip-auth");
     const linhas24h = await banco()
