@@ -75,7 +75,18 @@ describe("versão e limpeza", () => {
 
     const version = JSON.parse(readFileSync("package.json", "utf8")).version;
     expect(existsSync("public/sw.js")).toBe(true);
-    expect(readFileSync("public/sw.js", "utf8")).toContain(`CACHE_VERSION = "${version}"`);
+    const marca = readFileSync("public/sw.js", "utf8").match(/CACHE_VERSION = "([^"]+)"/)?.[1];
+
+    // A versão continua na marca porque é o que alguém lê para saber o que está
+    // no ar sem consultar o painel do provedor.
+    expect(marca).toContain(version);
+    // E não pode ser SÓ a versão. `package.json` está em 0.1.0 desde o primeiro
+    // commit e o projeto não faz release: marca igual à versão faz dois deploys
+    // produzirem `static-0.1.0` e `static-0.1.0`, o `activate` não ver diferença
+    // nenhuma, e o chunk velho ficar servido para sempre. Era exatamente esse o
+    // estado antes — o bug não aparecia porque nada aqui o media.
+    expect(marca).not.toBe(version);
+    expect(marca).toMatch(/^\d+\.\d+\.\d+\+[A-Za-z0-9]+$/);
   });
 
   it("os nomes de cache derivam da versão", () => {
