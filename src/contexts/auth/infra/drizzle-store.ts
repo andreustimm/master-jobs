@@ -7,7 +7,13 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { clock } from "../../../core/clock.ts";
 import { getDb } from "../../../core/db/client.ts";
-import { authEvent, authLoginToken, authSession, authUser } from "../../../core/db/schema.ts";
+import {
+  authEvent,
+  authLoginToken,
+  authSession,
+  authUser,
+  recruiterCandidate,
+} from "../../../core/db/schema.ts";
 import type {
   AuthRepository,
   Identity,
@@ -31,6 +37,22 @@ function newToken(): string {
  */
 function hash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
+}
+
+/**
+ * Candidatos que um recrutador acompanha.
+ *
+ * Uma consulta só, usada por todos os caminhos que montam uma `Identity` ou
+ * uma `Session`, para os vínculos não divergirem entre login por senha e por
+ * link — divergência aqui vira "o recrutador vê no login A e não vê no B".
+ */
+export async function linkedCandidatesFor(userId: number, roles: Role[]): Promise<number[]> {
+  if (!roles.includes("recruiter")) return [];
+  const rows = await getDb()
+    .select({ candidateId: recruiterCandidate.candidateId })
+    .from(recruiterCandidate)
+    .where(eq(recruiterCandidate.recruiterUserId, userId));
+  return rows.map((r) => r.candidateId);
 }
 
 export const drizzleSessions: SessionStore = {
@@ -57,6 +79,7 @@ export const drizzleSessions: SessionStore = {
         roles: authUser.roles,
         candidateId: authUser.candidateId,
         disabledAt: authUser.disabledAt,
+        impersonatedBy: authSession.impersonatedBy,
       })
       .from(authSession)
       .innerJoin(authUser, eq(authUser.id, authSession.userId))
@@ -69,12 +92,21 @@ export const drizzleSessions: SessionStore = {
     if (row.disabledAt) return null;
     if (Date.parse(row.expiresAt) <= clock().now()) return null;
 
+    const roles = (row.roles as Role[]) ?? [];
+
+    // Os vínculos são lidos aqui, na carga da sessão, e não no ponto de uso.
+    // É o que permite `policy.ts` continuar derivando posse da sessão: um id
+    // que chegasse por parâmetro seria afirmação do chamador, não prova.
+    const linkedCandidateIds = await linkedCandidatesFor(row.userId, roles);
+
     return {
       userId: row.userId,
       candidateId: row.candidateId,
-      roles: (row.roles as Role[]) ?? [],
+      roles,
       email: row.email,
       expiresAt: row.expiresAt,
+      linkedCandidateIds,
+      impersonatedBy: row.impersonatedBy ?? null,
     };
   },
 
@@ -184,11 +216,13 @@ export const magicLink: IdentityProvider = {
     // caller cannot tell it apart from a bad token.
     if (!user || user.disabledAt) return null;
 
+    const identityRoles = (user.roles as Role[]) ?? [];
     return {
       userId: user.id,
       email: user.email,
-      roles: (user.roles as Role[]) ?? [],
+      roles: identityRoles,
       candidateId: user.candidateId,
+      linkedCandidateIds: await linkedCandidatesFor(user.id, identityRoles),
     };
   },
 };

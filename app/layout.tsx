@@ -65,7 +65,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const { currentSession } = await import("./auth");
   const session = await currentSession();
   const signedIn = Boolean(session);
-  const hasCandidateScope = session?.candidateId !== null && session?.roles.includes("owner");
+  const hasCandidateScope = session?.candidateId !== null && session?.roles.includes("candidate");
 
   // Escolha gravada primeiro; sem ela, negocia pelo Accept-Language. Servir
   // português a quem pediu inglês no navegador é ignorar informação que já

@@ -67,6 +67,8 @@ export async function completeLogin(loginToken: string, deps: AuthDeps): Promise
       roles: identity.roles,
       email: identity.email,
       expiresAt,
+      linkedCandidateIds: identity.linkedCandidateIds,
+      impersonatedBy: null,
     },
   };
 }
@@ -93,7 +95,7 @@ export async function loginWithPassword(
   return {
     ok: true,
     token,
-    session: { ...identity, expiresAt },
+    session: { ...identity, expiresAt, impersonatedBy: null },
   };
 }
 
@@ -141,7 +143,7 @@ export function isSingleUser(env: Record<string, string | undefined> = process.e
   return isOpenMode(env);
 }
 
-export const SINGLE_USER_ROLES: Role[] = ["owner", "admin"];
+export const SINGLE_USER_ROLES: Role[] = ["admin", "candidate"];
 
 /** Sessão sintetizada do modo aberto. Só existe quando `JHO_AUTH_MODE=open`. */
 export function singleUserSession(candidateId: number | null, now = clock().now()): Session {
@@ -151,5 +153,7 @@ export function singleUserSession(candidateId: number | null, now = clock().now(
     roles: SINGLE_USER_ROLES,
     email: "local@single-user",
     expiresAt: new Date(now + 86_400_000).toISOString(),
+    linkedCandidateIds: [],
+    impersonatedBy: null,
   };
 }

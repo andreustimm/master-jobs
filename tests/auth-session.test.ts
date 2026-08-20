@@ -36,7 +36,7 @@ async function seedUser(email = "eu@test", candidateNumber: number | null = 1) {
 
   const [user] = await db
     .insert(authUser)
-    .values({ email, roles: ["owner"], candidateId })
+    .values({ email, roles: ["candidate"], candidateId })
     .returning({ id: authUser.id });
   return user!.id;
 }
@@ -73,7 +73,7 @@ describe("session store", () => {
 
     const session = await drizzleSessions.resolve(token);
     expect(session!.candidateId).not.toBeNull();
-    expect(session!.roles).toEqual(["owner"]);
+    expect(session!.roles).toEqual(["candidate"]);
   });
 
   it("refuses an unknown token", async () => {
@@ -230,7 +230,7 @@ describe("modo aberto", () => {
   it("synthesises a session that still passes through the same guard", () => {
     const session = singleUserSession(3, Date.parse("2026-08-19T12:00:00Z"));
     expect(session.candidateId).toBe(3);
-    expect(session.roles).toContain("owner");
+    expect(session.roles).toContain("candidate");
     expect(session.roles).toContain("admin");
   });
 });

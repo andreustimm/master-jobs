@@ -91,6 +91,16 @@ export const job = sqliteTable(
     title: text("title").notNull(),
     descriptionHtml: text("description_html"),
     descriptionText: text("description_text"),
+    /**
+     * Quem cadastrou a vaga, quando ela não veio da internet.
+     *
+     * O RÓTULO de origem (web · recrutador · manual) deriva de `source.kind` e
+     * não é duplicado aqui: coluna denormalizada diverge. Esta guarda outra
+     * coisa — a atribuição, para saber *qual* recrutador ofereceu.
+     */
+    postedByUserId: integer("posted_by_user_id").references(() => authUser.id, {
+      onDelete: "set null",
+    }),
     /** Quando o link foi sondado pela última vez. Null = nunca. */
     checkedAt: text("checked_at"),
     /** `alive` | `gone` | `inconclusive` — o veredito da última sondagem. */
@@ -377,6 +387,18 @@ export const candidate = sqliteTable(
     githubUrl: text("github_url"),
     /** Marks the profile the CLI and UI operate on when none is specified. */
     isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+    /**
+     * Quem pode ver este perfil: `private` | `recruiters` | `public`.
+     *
+     * **`private` é o padrão, e o padrão é a decisão de segurança.** `public`
+     * significa currículo legível sem sessão nenhuma, pela internet inteira —
+     * a mesma exposição que este projeto já corrigiu uma vez, quando o
+     * dashboard servia o CV para a rede local. Uma coluna cujo default fosse
+     * `public` transformaria "esqueci de configurar" em vazamento.
+     *
+     * Só o próprio candidato muda este valor. Nem admin nem recrutador.
+     */
+    visibility: text("visibility").notNull().default("private"),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },
@@ -894,6 +916,16 @@ export const authSession = sqliteTable(
       .notNull()
       .references(() => authUser.id, { onDelete: "cascade" }),
     expiresAt: text("expires_at").notNull(),
+    /**
+     * O admin que assumiu esta identidade, quando é o caso.
+     *
+     * Presente = sessão emprestada. `policy.ts` nega toda ação de administração
+     * quando isto não é nulo, sem consultar papel — porque o alvo pode ser
+     * outro admin.
+     */
+    impersonatedBy: integer("impersonated_by").references(() => authUser.id, {
+      onDelete: "cascade",
+    }),
     /** Set on logout. Kept rather than deleted, so the audit trail survives. */
     revokedAt: text("revoked_at"),
     createdAt: text("created_at").notNull().default(now),
@@ -905,6 +937,35 @@ export const authSession = sqliteTable(
 );
 
 /** Single-use magic link. Hashed for the same reason as a session token. */
+/**
+ * Quem um recrutador acompanha.
+ *
+ * O recrutador lê CV e funil apenas de candidatos vinculados a ele. O vínculo
+ * mora aqui e é resolvido na carga da sessão, para `policy.ts` continuar
+ * derivando posse da sessão e nunca de um id que o chamador mandou.
+ */
+export const recruiterCandidate = sqliteTable(
+  "recruiter_candidate",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    recruiterUserId: integer("recruiter_user_id")
+      .notNull()
+      .references(() => authUser.id, { onDelete: "cascade" }),
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    /** Quem criou o vínculo. Admin ou o próprio candidato. */
+    createdBy: integer("created_by").references(() => authUser.id, { onDelete: "set null" }),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("recruiter_candidate_idx").on(t.recruiterUserId, t.candidateId),
+    index("recruiter_candidate_candidate_idx").on(t.candidateId),
+  ],
+);
+
+export type RecruiterCandidate = typeof recruiterCandidate.$inferSelect;
+
 export const authLoginToken = sqliteTable(
   "auth_login_token",
   {

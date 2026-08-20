@@ -1,0 +1,1 @@
+ALTER TABLE `candidate` ADD `visibility` text DEFAULT 'private' NOT NULL;

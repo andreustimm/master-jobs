@@ -74,7 +74,8 @@ export async function seedOwner(
   }
 
   const db = getDb();
-  const roles: Role[] = ["owner", "admin"];
+  // Quem instala é as duas coisas: administra e é o candidato.
+  const roles: Role[] = ["admin", "candidate"];
 
   const [existing] = await db
     .select({ id: authUser.id, passwordHash: authUser.passwordHash })

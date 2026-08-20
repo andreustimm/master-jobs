@@ -4,11 +4,11 @@ Este inventário é a fonte de verdade das fronteiras do monólito modular. A
 contagem e a presença das APIs públicas são verificadas por
 `tests/architecture.test.ts`.
 
-<!-- schema-table-count: 28 -->
+<!-- schema-table-count: 29 -->
 
 | Contexto | Aggregate owner / responsabilidade | Tabelas próprias | API pública | Dependências permitidas |
 |---|---|---|---|---|
-| auth | identidade, sessão e autorização | `auth_user`, `auth_session`, `auth_login_token`, `auth_event` | `src/contexts/auth/index.ts` | Candidate por `candidate_id`; relógio e hash como portas |
+| auth | identidade, sessão e autorização | `auth_user`, `auth_session`, `auth_login_token`, `auth_event`, `recruiter_candidate` | `src/contexts/auth/index.ts` | Candidate por `candidate_id`; relógio e hash como portas |
 | correspondence | mensagem observada e sugestão de mudança | `mail_message`, `mail_suggestion` | `src/contexts/correspondence/index.ts` | Sourcing observa vagas; Pursuit aplica decisão na mesma transação |
 | fx | cotação e cache cambial | `fx_rate` | `src/contexts/fx/index.ts` | `HttpClient`, `Clock`; nenhum contexto de negócio |
 | matching | avaliação candidato–vaga e comparação manual | `candidate_matching_profile`, `job_score` | `src/contexts/matching/index.ts` | Candidate, Sourcing, Skills e FX; não escreve Pursuit |

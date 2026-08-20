@@ -41,7 +41,8 @@ describe("seedOwner", () => {
     expect(r.created).toBe(true);
     expect(r.passwordSet).toBe(true);
     expect(r.password).toBeTruthy();
-    expect(r.roles).toEqual(["owner", "admin"]);
+    // Quem instala é as duas coisas: administra e é o candidato.
+    expect(r.roles).toEqual(["admin", "candidate"]);
 
     // A senha devolvida é a que entra — não basta gravar um hash qualquer.
     expect((await verifyLogin("dono@test", r.password!)).ok).toBe(true);

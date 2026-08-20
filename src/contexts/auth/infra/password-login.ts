@@ -16,6 +16,7 @@
  *     makes a sustained campaign impossible.
  */
 import { and, eq, gte, sql } from "drizzle-orm";
+import { linkedCandidatesFor } from "./drizzle-store.ts";
 import { clock } from "../../../core/clock.ts";
 import { getDb } from "../../../core/db/client.ts";
 import { authEvent, authUser } from "../../../core/db/schema.ts";
@@ -105,13 +106,15 @@ export async function verifyLogin(email: string, password: string): Promise<Pass
     return { ok: false, reason: "invalid" };
   }
 
+  const roles = (user.roles as Role[]) ?? [];
   return {
     ok: true,
     identity: {
       userId: user.id,
       email: user.email,
-      roles: (user.roles as Role[]) ?? [],
+      roles,
       candidateId: user.candidateId,
+      linkedCandidateIds: await linkedCandidatesFor(user.id, roles),
     },
   };
 }
