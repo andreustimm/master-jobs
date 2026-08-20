@@ -987,220 +987,37 @@ runtime — mas isso passa a colocar spec e rodada de revisão no histórico do
 repositório, e essa consequência precisa ser querida, não herdada junto com o
 resto.
 
-### E-06 · Cenários de teste por papel, ponta a ponta 📋
+### E-06 · Cenários de teste por papel, ponta a ponta ✅
 
-Pedido em 20/08/2026: *"crie cenarios de testes para todos os tipos de
-usuários, simulando todos os cenarios possíveis."*
+#### Entregue em 20/08/2026
 
-"Todos os cenários possíveis" são dois conjuntos com custos que diferem em
-ordem de grandeza, e tratá-los como um só é o erro que este item existe para
-evitar. **A matriz de decisão já está coberta; o percurso não está coberto de
-jeito nenhum.**
+O corte proposto foi seguido: a matriz de permissão **não** foi reproduzida em
+browser. Ela já está em teste puro, e repeti-la aqui custaria um login e uma
+navegação por combinação que hoje leva microssegundos.
 
-**O que já existe, e existe bem.** `tests/auth-policy.test.ts` afirma 28 casos
-sobre papel × ação × posse × visibilidade, vários deles varrendo `ACTIONS` e
-`ADMIN_ACTIONS` inteiros em laço — o número de combinações asseridas é bem
-maior que o número de testes. `tests/impersonation.test.ts` acrescenta 10 sobre
-assumir identidade: cadeia negada, alvo desabilitado, alvo inexistente, assumir
-a si mesmo, TTL de uma hora, registro de início e de fim, revogação no
-servidor. Isso é barato porque `can()` é função pura: nada de banco, servidor
-nem browser. Reproduzir essa matriz em Playwright seria testar a **mesma**
-função através de seis camadas de framework, mais devagar e cobrindo menos —
-uma combinação que hoje custa microssegundos passaria a custar um login e uma
-navegação. Este item não deve encostar nisso.
+O que entrou é percurso: contas por papel semeadas pela mesma API que o operador
+usa, e para cada uma o que deve abrir e o que deve negar. Mais o caso da conta
+desabilitada, que não entra nem com a senha certa.
 
-**O que não existe: percurso por papel.** `tests/e2e/ui.mjs` faz cerca de 60
-verificações em browser, todas com **uma conta só** — `e2e@local.test`, criada
-por `seedOwner`, que grava `roles: ["admin", "candidate"]` fixo no código e
-vincula ao candidato do `profile.yaml`. Toda a suíte roda como esse usuário
-composto. Não há cenário de recrutador nenhum, nem de candidato sem admin, nem
-de admin sem candidato, nem de conta desabilitada, nem de conta sem senha.
+**O defeito que este item previu existia mesmo.** Verificado antes de corrigir:
 
-**E o vazio já esconde um defeito de composição.** Onze páginas guardam com
-`requireOwnCandidatePage("candidate:read")` — inclusive `/` e `/jobs` — e esse
-guarda chama `forbidden()` quando `session.candidateId` é `null`. Um recrutador
-não tem `candidateId`; um admin puro também não. Como `passwordLoginAction`
-sempre redireciona para `/`, os dois entram com a senha certa e **caem em 403 na
-primeira tela**. A política diz o contrário: `job:read` e `job:write` são
-permitidos aos três papéis. A política está certa e a composição não a respeita
-— e nenhum teste puro pode ver isso, porque cada metade está correta sozinha.
-Só um browser entrando como recrutador vê.
+    recrutador   login->/   / =403   /jobs=403   /compare=403
+    candidato    login->/   / =200   /jobs=200   /compare=200
 
-Não é acidente esquecido: `tests/architecture.test.ts` **fixa** esse guarda por
-caminho literal, em "uses candidate-scoped page guards wherever funnel or CV
-data is read", e `/jobs` está na lista porque a listagem carrega fit score e
-estado de candidatura junto. O acervo global sem o escoramento do candidato não
-existe como tela. Ou seja: o recrutador não tem superfície, e isso precisa ser
-**decidido**, não descoberto por um teste que congele o estado atual como
-especificação.
+Um recrutador entrava com a senha certa e recebia 403 em toda tela. Duas causas
+somadas: `passwordLoginAction` mandava todo mundo para `/`, e `/jobs` guardava
+com escopo de candidato embora a política conceda `job:read` aos três papéis.
+Cada metade estava correta sozinha — e é por isso que nenhum teste puro a via.
 
----
+Corrigido decidindo, não congelando: `/jobs` passou a guardar por `job:read`, e
+`listBoard`/`countBoard`/`boardFacets` aceitam escopo nulo. Nota de aderência e
+estado de candidatura continuam por candidato — são COLUNAS, e voltam nulas para
+quem não tem escopo. O predicado é `1 = 0` explícito, e não um id sentinela: um
+`-1` faria o mesmo e mentiria sobre a intenção.
 
-#### Decisões que a implementação precisa tomar
+O login passou a mandar cada papel para uma tela que é dele. E `/jobs` saiu da
+lista de páginas com guarda de candidato no teste de arquitetura, com o motivo
+escrito lá — a lista fixava o defeito como especificação.
 
-**1. As contas semeadas, e por que `seedOwner` não serve para criá-las.**
-
-`seedOwner` tem `const roles: Role[] = ["admin", "candidate"]` embutido e amarra
-ao candidato do perfil — ele existe para a conta do dono, e mudá-lo para aceitar
-papel arbitrário seria mexer no caminho de instalação por causa de teste. As
-contas extras entram pela porta de diretório (`jho auth add-user --role`), que é
-a **mesma** API que o operador usa. Fixture escrita por `INSERT` à mão testa um
-estado que o produto talvez não saiba produzir.
-
-| Conta | Papéis | Vínculo | Existe para provar |
-|---|---|---|---|
-| `e2e@local.test` | admin + candidate | candidato do perfil | o percurso já coberto; não muda |
-| `admin@e2e.local` | admin | nenhum | administra a instalação e **não** lê currículo alheio |
-| `cand@e2e.local` | candidate | candidato próprio | percurso do candidato sem poder nenhum de admin |
-| `rec-vinc@e2e.local` | recruiter | vinculado a um candidato | lê quem acompanha; não edita nem move funil |
-| `rec-solto@e2e.local` | recruiter | nenhum | 403 em dado privado; vê o que é global |
-| `off@e2e.local` | candidate | — | `disabledAt` preenchido: não entra |
-| `sem-senha@e2e.local` | candidate | — | sem hash: não entra, e a tela não diz por quê |
-
-O `rec-vinc` precisa de um **segundo** candidato para acompanhar, senão
-"recrutador vinculado" e "candidato dono" olham a mesma linha e o teste deixa
-de distinguir posse de vínculo — que é exatamente a distinção em jogo.
-
-**2. O que cada conta vê, e o que recebe 403.** A tabela abaixo é o alvo, não o
-estado atual — as três colunas da direita hoje são 403 em tudo, pela razão da
-seção anterior:
-
-| Rota | admin puro | candidato puro | recrutador vinculado | recrutador solto |
-|---|---|---|---|---|
-| `/` cockpit | a decidir | 200 | a decidir | a decidir |
-| `/jobs`, `/jobs/[id]` | a decidir | 200 | 200 sem fit alheio | 200 sem fit alheio |
-| `/candidate*` | 403 | 200 (o próprio) | 200 leitura de quem acompanha | 403 |
-| `/pipeline` | 403 | 200 | 403 | 403 |
-| `/referrals` | 403 | 200 | 403 | 403 |
-| `/compare` | 403 | 200 | 403 | 403 |
-| `/admin/users` | 200 | 403 | 403 | 403 |
-| `/api/export` | 403 | 200 (só o próprio) | 403 | 403 |
-
-As células "a decidir" são o conteúdo real deste item. Escrever o cenário antes
-de decidi-las produz teste de caracterização — que passa a defender o defeito.
-
-**3. Conta desabilitada e conta sem senha são indistinguíveis na tela, de
-propósito.** `verifyLogin` devolve `{ ok: false, reason: "invalid" }` para os
-quatro motivos — conta inexistente, sem senha, desabilitada e senha errada — e
-grava o motivo verdadeiro só em `auth_event.detail`, para o operador. Enumerar
-conta pela mensagem de erro é o vazamento clássico, e a defesa está escrita.
-Consequência direta para o teste: **o oráculo desses dois cenários é o
-`auth_event`, não a tela**, e portanto eles não precisam de browser. O que
-merece uma checagem em browser é o inverso — que a mensagem renderizada seja
-**idêntica** nos quatro casos, porque a divergência nasceria de um mapa de erro
-bem-intencionado na página, que é código de UI.
-
-Detalhe operacional que morde: o limite é de 8 tentativas falhas em 15 minutos e
-o `setup.mjs` hoje limpa `login_failed` **apenas** de `EMAIL`. Quatro logins
-falhos de propósito em contas novas, somados entre execuções, bloqueiam a suíte
-com uma proteção que funcionou. A limpeza tem de cobrir todas as contas
-semeadas.
-
-**4. Impersonação é o único cenário que exige duas identidades no mesmo
-browser.** Entrar como admin, assumir um candidato, e verificar: a faixa de
-sessão emprestada aparece; `/admin/users` responde **403 renderizado** e não
-stack trace — o comentário em `app/auth.ts:100-104` registra que esse bug
-apareceu exatamente aí; sair devolve à identidade original; e o token some do
-servidor, não só do navegador. A decisão já é provada em teste puro. O que só o
-browser prova é a troca de cookie, o caminho de volta e a **forma** da negativa.
-
-**5. Cobertura alvo do projeto: >95%, definida em 20/08/2026.** Hoje esse número
-**não é mensurável**: `vitest.config.ts` não tem bloco `coverage`,
-`@vitest/coverage-v8` não está instalado e não existe limiar que reprove. 637
-testes em 54 arquivos mais ~60 checagens em browser é volume, e volume sem
-instrumento não responde a única pergunta que interessa — *o que não é executado
-por teste nenhum?*. A primeira tarefa deste item é também a mais barata: ligar o
-provedor, publicar o número real e só então negociar onde os 5% podem ficar de
-fora. E-06 ataca o buraco que a instrumentação vai apontar como maior: a
-composição de guarda por rota, que hoje é verificada por **grep** em
-`architecture.test.ts` — o teste confirma que a chamada está escrita no arquivo,
-nunca que ela nega quem deve negar.
-
----
-
-#### O corte: o que vai para o browser e o que fica sem ele
-
-A regra é uma frase: **o browser recebe percurso, a matriz fica onde uma
-combinação custa microssegundos.**
-
-| Cenário | Onde | Por quê |
-|---|---|---|
-| papel × ação × posse × visibilidade | puro — já existe | 28 testes, sem I/O; nada a acrescentar |
-| regras de impersonação (cadeia, desabilitado, TTL, auditoria) | puro — já existe | 10 testes; o browser não veria mais |
-| 11 rotas × 6 contas → 200/403 | integração, sem browser | 66 combinações; sobe o app uma vez e pede as rotas, sem renderizar |
-| 4 motivos de login falho → `auth_event` correto | integração | o oráculo é uma linha de tabela |
-| percurso do candidato puro | browser | é o que a suíte já faz; muda só de conta |
-| percurso do recrutador vinculado | browser | o único papel sem cobertura visual nenhuma |
-| impersonação ponta a ponta | browser | cookie, faixa, 403 renderizado, revogação |
-| mensagem idêntica nos 4 motivos | browser, 1 checagem | o oráculo é o texto que a página desenha |
-| tipografia, tooltip, i18n, mobile | **não multiplicar por conta** | são propriedades do layout, não do papel |
-
-A última linha é a que segura o custo. O laço de idioma sozinho carrega 8 telas,
-o de mobile mede `scrollWidth` em mais um conjunto, e a suíte ainda constrói o
-Next e sobe servidor próprio a cada execução — já são minutos. Multiplicar isso
-por seis contas transforma `pnpm test:e2e` em algo que ninguém roda antes de
-commitar, e suíte que não roda custa mais cobertura do que acrescenta. O critério
-correto é por **tela**, não por conta: cada tela nova entra uma vez no laço de
-idioma e uma vez no de mobile, com a conta que consegue abri-la.
-
-Na prática o browser ganha **duas** contas além da atual — candidato puro e
-recrutador vinculado — e delas só o percurso específico. As outras quatro vivem
-inteiras em teste de integração.
-
----
-
-#### O que fica de fora, e por quê
-
-**Corrigir o 403 do recrutador e do admin puro.** Este item **descobre e fixa**;
-consertar é UI-04 (cadastro por recrutador precisa de uma tela que o recrutador
-consiga abrir) e a decisão de home por papel. Misturar as duas coisas faria um
-item de teste virar refatoração de rota com teste junto, e a discussão sobre
-qual tela o recrutador vê merece acontecer sozinha.
-
-**Cenário de dois usuários simultâneos.** Duas sessões concorrendo pela mesma
-linha — recrutador lendo enquanto o candidato salva — é teste de concorrência,
-não de papel. O único lugar do sistema com claim atômico é a fila, e ele já tem
-o próprio teste.
-
-**Fuzz de permissão.** Gerar sessões aleatórias contra `can()` é atraente e
-seria redundante: a função é pequena, exaustivamente enumerável e já enumerada.
-Fuzz paga onde o espaço é grande demais para listar.
-
-**Conta com papel `recruiter` E `candidate`.** Combinação que a política aceita e
-que ninguém pediu. Cenário sem usuário é manutenção sem dono.
-
-## Ordem de execução proposta
-
-1. **B-01, B-02** — corrigem descarte indevido de vagas. Em implementação.
-2. **E-01** — a arquitetura decide onde tudo abaixo mora. Não faz sentido
-   construir F-02 e M-03 sobre a estrutura que será refatorada.
-3. **M-04, B-03** — ganho de usabilidade imediato, custo baixo.
-4. **F-02** — área do candidato, já na estrutura nova.
-5. **M-03** — benefícios, junto do rebalanceamento de pesos.
-6. **F-01** — e-mail, o maior salto de qualidade de dado.
-7. **E-02** — estatística, quando houver dado de resultado para correlacionar.
-8. **UI-02** — histórico de versões do currículo. Pedido em 19/08; a etapa de
-   exclusão depende de `cv_variant` virar chave estrangeira, então entra depois
-   da migração.
-9. **AUTH-02** — administração de usuários. `UserDirectory` é a única porta do
-   contexto sem adapter, e sem ela papel se troca por SQL. Impersonação é o que
-   torna a política de três papéis operável em vez de só correta.
-10. **AUTH-03** — visibilidade do perfil. Precede AUTH-04: sem o controle, a
-    página pública existe e nenhum candidato consegue ligá-la.
-11. **AUTH-04** — portfólio público. A primeira rota anônima do sistema; entra
-    depois de AUTH-03 e com o teste de ausência de piso salarial, funil e
-    contato junto.
-12. **UI-04** — cadastro por recrutador. Independente dos três acima, mas só
-    faz sentido com recrutadores de verdade na instalação, o que depende de
-    AUTH-02 conseguir criá-los.
-13. **F-05** — Resend. Fecha a lacuna que AUTH-02 abre: conta criada pelo admin
-    hoje não recebe o link de acesso, porque ele sai no terminal. Depende de
-    uma chave que só o usuário pode emitir.
-14. **E-05** — estrutura de documentação do CompozyOS. Depende de uma primeira
-    jornada completa com a ferramenta: decidir a forma de todos os documentos
-    antes de a 0.3 ter fechado um ciclo aqui seria escolher no escuro.
-15. **E-06** — cenários por papel. A instrumentação de cobertura e a matriz de
-    rota × papel em integração podem entrar já; o percurso em browser depende de
-    AUTH-02 (criar as contas pela porta) e da decisão de UI-04 sobre que tela um
-    recrutador abre. Antes disso metade dos cenários só saberia afirmar 403 —
-    registrar o vazio não é testar percurso.
+Confirmado que o cenário detecta a volta do defeito: com o redirect antigo, ele
+reprova com "caiu em /, esperado /jobs".

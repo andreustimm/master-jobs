@@ -6,6 +6,7 @@
  * what "shortlisted" or "open" means.
  */
 import { and, desc, eq, gte, isNull, sql, type SQL } from "drizzle-orm";
+import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   IllegalApplicationTransitionError,
   transitionApplication,
@@ -137,7 +138,26 @@ function boardConditions(opts: BoardFilters): SQL[] {
 }
 
 /** The main board: open jobs joined with score and pipeline state. */
-export async function listBoard(candidateId: number, opts: BoardFilters = {}): Promise<BoardRow[]> {
+/**
+ * O predicado que amarra score e candidatura ao candidato da sessão.
+ *
+ * `null` significa sessão SEM escopo de candidato — um recrutador ou um admin
+ * puro. Para eles o acervo existe, mas nota de aderência e estado de
+ * candidatura não: são colunas de outra pessoa. `1 = 0` faz o `leftJoin` nunca
+ * casar, e as colunas voltam nulas, que é exatamente o que elas são.
+ *
+ * Um `-1` sentinela faria o mesmo e mentiria sobre a intenção; o dia em que
+ * alguém criasse um candidato com id negativo, o acervo dele vazaria para todo
+ * mundo sem escopo.
+ */
+function scopedTo(column: SQLiteColumn, candidateId: number | null) {
+  return candidateId === null ? sql`1 = 0` : eq(column, candidateId);
+}
+
+export async function listBoard(
+  candidateId: number | null,
+  opts: BoardFilters = {},
+): Promise<BoardRow[]> {
   const db = getDb();
   const conditions = boardConditions(opts);
 
@@ -202,11 +222,11 @@ export async function listBoard(candidateId: number, opts: BoardFilters = {}): P
     .from(job)
     .leftJoin(
       jobScore,
-      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
     )
     .leftJoin(
       application,
-      and(eq(application.jobId, job.id), eq(application.candidateId, candidateId)),
+      and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
     )
     .leftJoin(source, eq(source.id, job.sourceId))
     .leftJoin(verifyTask, eq(verifyTask.jobId, job.id))
@@ -226,17 +246,20 @@ export async function listBoard(candidateId: number, opts: BoardFilters = {}): P
  * page itself. Re-uses the same predicate builder so a filter can never mean
  * one thing in the list and another in the count.
  */
-export async function countBoard(candidateId: number, opts: BoardFilters = {}): Promise<number> {
+export async function countBoard(
+  candidateId: number | null,
+  opts: BoardFilters = {},
+): Promise<number> {
   const [row] = await getDb()
     .select({ count: sql<number>`count(*)` })
     .from(job)
     .leftJoin(
       jobScore,
-      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
     )
     .leftJoin(
       application,
-      and(eq(application.jobId, job.id), eq(application.candidateId, candidateId)),
+      and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
     )
     .leftJoin(source, eq(source.id, job.sourceId))
     .where(and(...boardConditions(opts)));
@@ -244,7 +267,7 @@ export async function countBoard(candidateId: number, opts: BoardFilters = {}): 
 }
 
 /** Counts for the filter chips, so the UI can show what each option yields. */
-export async function boardFacets(candidateId: number, base: BoardFilters = {}) {
+export async function boardFacets(candidateId: number | null, base: BoardFilters = {}) {
   const sourceKind = sql<string>`case
     when instr(${job.sourceId}, ':') > 0 then substr(${job.sourceId}, 1, instr(${job.sourceId}, ':') - 1)
     else ${job.sourceId}
@@ -262,11 +285,11 @@ export async function boardFacets(candidateId: number, base: BoardFilters = {}) 
       .from(job)
       .leftJoin(
         jobScore,
-        and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+        and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
       )
       .leftJoin(
         application,
-        and(eq(application.jobId, job.id), eq(application.candidateId, candidateId)),
+        and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
       )
       .leftJoin(source, eq(source.id, job.sourceId))
       .where(and(...boardConditions(dimensions), sql`${jobScore.cluster} is not null`))
@@ -277,11 +300,11 @@ export async function boardFacets(candidateId: number, base: BoardFilters = {}) 
       .from(job)
       .leftJoin(
         jobScore,
-        and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+        and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
       )
       .leftJoin(
         application,
-        and(eq(application.jobId, job.id), eq(application.candidateId, candidateId)),
+        and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
       )
       .leftJoin(source, eq(source.id, job.sourceId))
       .where(and(...boardConditions(dimensions)))
@@ -469,11 +492,11 @@ export async function getJobDetail(candidateId: number, jobId: number) {
     .from(job)
     .leftJoin(
       jobScore,
-      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
     )
     .leftJoin(
       application,
-      and(eq(application.jobId, job.id), eq(application.candidateId, candidateId)),
+      and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
     )
     .leftJoin(source, eq(source.id, job.sourceId))
     .where(eq(job.id, jobId))
@@ -497,7 +520,7 @@ export async function getJobScoringDetail(candidateId: number, jobId: number) {
     .from(job)
     .leftJoin(
       jobScore,
-      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
     )
     .leftJoin(source, eq(source.id, job.sourceId))
     .where(eq(job.id, jobId))
@@ -572,7 +595,7 @@ export async function pipelineRows(candidateId: number) {
     .innerJoin(job, eq(job.id, application.jobId))
     .leftJoin(
       jobScore,
-      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
     )
     .where(eq(application.candidateId, candidateId))
     .orderBy(desc(application.updatedAt));

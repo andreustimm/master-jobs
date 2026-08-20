@@ -3,7 +3,7 @@ import { FilterBar, readFilters, toBoardFilters } from "../filters";
 import { GridToolbar, Pagination, Presets } from "../grid";
 import { JobList } from "../joblist";
 import { Legend } from "../ui";
-import { requireOwnCandidatePage } from "../auth";
+import { requirePage } from "../auth";
 import { getTranslator } from "../i18n";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,19 @@ export default async function Jobs({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { t, locale } = await getTranslator();
-  const { candidateId } = await requireOwnCandidatePage("candidate:read");
+  // `job:read`, não `candidate:read`.
+  //
+  // O acervo é GLOBAL e a política concede leitura aos três papéis. A página
+  // pedia escopo de candidato, e o efeito era um recrutador entrar com a senha
+  // certa e receber 403 aqui — cada metade correta sozinha, a composição
+  // contradizendo a política. Nenhum teste puro vê isso; só um browser entrando
+  // como recrutador.
+  //
+  // `candidateId` pode ser null. Nota de aderência e estado de candidatura são
+  // colunas de UMA pessoa: para quem não é candidato elas simplesmente não
+  // existem, e voltam nulas.
+  const session = await requirePage("job:read");
+  const candidateId = session.candidateId;
 
   const params = await searchParams;
   const state = readFilters(params);

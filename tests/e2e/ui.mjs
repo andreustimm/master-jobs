@@ -528,6 +528,87 @@ try {
   await page.waitForTimeout(1200);
 
 
+  /* ------------------- Cenários por papel, ponta a ponta (E-06) ------------ */
+
+  // A matriz de PERMISSÃO já está coberta em teste puro — `auth-policy` afirma
+  // papel × ação × posse × visibilidade sem banco nem browser, e reproduzir isso
+  // aqui seria testar a mesma função através de seis camadas de framework.
+  //
+  // O que só o browser responde é a COMPOSIÇÃO: o que cada papel alcança depois
+  // de entrar de verdade. E foi aqui que apareceu o defeito — um recrutador
+  // entrava com a senha certa e recebia 403 em toda tela, porque
+  // `passwordLoginAction` mandava todo mundo para `/` e `/` exige escopo de
+  // candidato. Cada metade estava correta sozinha.
+  const ROLE_SCENARIOS = [
+    {
+      role: "recrutador",
+      email: "e2e-recrutador@local.test",
+      lands: "/jobs",
+      allowed: ["/jobs", "/jobs/new"],
+      // Sem escopo de candidato: currículo, funil e cockpit são de outra pessoa.
+      denied: ["/", "/candidate", "/pipeline", "/admin/users"],
+    },
+    {
+      role: "candidato",
+      email: "e2e-candidato@local.test",
+      lands: "/",
+      allowed: ["/", "/jobs", "/candidate", "/pipeline", "/jobs/new"],
+      // Candidato puro não administra contas.
+      denied: ["/admin/users"],
+    },
+  ];
+
+  for (const scenario of ROLE_SCENARIOS) {
+    const roleCtx = await browser.newContext();
+    const rolePage = await roleCtx.newPage();
+    await roleCtx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+
+    await rolePage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+    await rolePage.fill('input[name="email"]', scenario.email);
+    await rolePage.fill('input[name="password"]', E2E_PASSWORD);
+    await rolePage.locator('form button[type="submit"]').first().click();
+    await rolePage.waitForTimeout(2000);
+
+    const landed = rolePage.url().replace(BASE, "") || "/";
+    check(
+      `${scenario.role} entra e cai numa tela que é dele`,
+      landed === scenario.lands,
+      `caiu em ${landed}, esperado ${scenario.lands}`,
+    );
+
+    const wrong = [];
+    for (const path of scenario.allowed) {
+      const status = (await rolePage.goto(`${BASE}${path}`, { waitUntil: "domcontentloaded" }))?.status();
+      if (status !== 200) wrong.push(`${path}=${status} (deveria abrir)`);
+    }
+    for (const path of scenario.denied) {
+      const status = (await rolePage.goto(`${BASE}${path}`, { waitUntil: "domcontentloaded" }))?.status();
+      // 403 ou 404; o que não pode é 200. Um 500 aqui também reprova: negação
+      // que parece crash não distingue "não pode" de "quebrou".
+      if (status === 200 || (status ?? 500) >= 500) wrong.push(`${path}=${status} (deveria negar)`);
+    }
+    check(`${scenario.role} alcança o que é dele e só isso`, wrong.length === 0, wrong.join(" | "));
+
+    await roleCtx.close();
+  }
+
+  // Conta desabilitada não entra, mesmo com a senha certa.
+  const offCtx = await browser.newContext();
+  const offPage = await offCtx.newPage();
+  await offCtx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  await offPage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+  await offPage.fill('input[name="email"]', "e2e-desabilitada@local.test");
+  await offPage.fill('input[name="password"]', E2E_PASSWORD);
+  await offPage.locator('form button[type="submit"]').first().click();
+  await offPage.waitForTimeout(1500);
+  check(
+    "conta desabilitada não entra nem com a senha certa",
+    offPage.url().includes("/login"),
+    offPage.url().replace(BASE, ""),
+  );
+  await offCtx.close();
+
+
   /* --------------------- Recuperação de senha (F-05) ----------------------- */
 
   // Percorrido de um contexto ANÔNIMO: quem esqueceu a senha não tem sessão, e

@@ -442,9 +442,16 @@ describe("authorisation (AUTH-01)", () => {
   });
 
   it("uses candidate-scoped page guards wherever funnel or CV data is read", () => {
+    // `/jobs` NÃO está nesta lista, e a ausência é decisão.
+    //
+    // O acervo é global e a política concede `job:read` aos três papéis. A
+    // página guardava com escopo de candidato, e o efeito era um recrutador
+    // entrar com a senha certa e receber 403 — a composição contradizendo a
+    // política, com cada metade correta sozinha. Nota de aderência e estado de
+    // candidatura continuam sendo por candidato; são COLUNAS, e voltam nulas
+    // para quem não tem escopo.
     const privatePages = [
       "app/page.tsx",
-      "app/jobs/page.tsx",
       "app/jobs/[id]/page.tsx",
       "app/pipeline/page.tsx",
       "app/referrals/page.tsx",

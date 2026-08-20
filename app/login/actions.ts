@@ -40,5 +40,12 @@ export async function passwordLoginAction(formData: FormData) {
     expires: new Date(result.session.expiresAt),
   });
 
-  redirect("/");
+  // Para onde cada papel vai.
+  //
+  // O cockpit é a tela do candidato: funil, lacunas do currículo, nota de
+  // aderência. Quem não é candidato não tem nada lá — e mandar todo mundo para
+  // `/` era o que fazia um recrutador cair em 403 logo depois de acertar a
+  // senha.
+  if (result.session.candidateId !== null) redirect("/");
+  redirect("/jobs");
 }

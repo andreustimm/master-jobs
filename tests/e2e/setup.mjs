@@ -14,6 +14,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
 import { authEvent, authUser, job } from "../../src/core/db/schema.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
+import { setPassword } from "../../src/contexts/auth/infra/password-login.ts";
 import {
   currentDocument,
   ensureCandidate,
@@ -50,6 +51,8 @@ export const E2E_ROLES = {
   candidate: { email: "e2e-candidato@local.test", roles: ["candidate"] },
   recruiter: { email: "e2e-recrutador@local.test", roles: ["recruiter"] },
   target: { email: "e2e-alvo@local.test", roles: ["candidate"] },
+  // Existe para provar que senha certa em conta desabilitada não entra.
+  disabled: { email: "e2e-desabilitada@local.test", roles: ["candidate"], disabled: true },
 };
 
 try {
@@ -99,7 +102,7 @@ try {
   // Contas por papel, cada uma com o próprio candidato quando o papel pede um.
   // O slug deriva do e-mail: apontar duas contas para o mesmo candidato seria
   // dar a uma o dado da outra, que é justamente o que a política impede.
-  for (const { email, roles } of Object.values(E2E_ROLES)) {
+  for (const { email, roles, disabled } of Object.values(E2E_ROLES)) {
     const [existing] = await getDb()
       .select({ id: authUser.id })
       .from(authUser)
@@ -111,6 +114,15 @@ try {
       ? await ensureCandidate({ slug: `e2e-${email.split("@")[0]}`, name: email })
       : null;
     await getDb().insert(authUser).values({ email, roles, candidateId: scoped });
+    // Mesma senha da conta principal: o que muda entre os cenários é o PAPEL, e
+    // uma senha por conta só acrescentaria variável sem acrescentar cobertura.
+    await setPassword(email, PASSWORD);
+    if (disabled) {
+      await getDb()
+        .update(authUser)
+        .set({ disabledAt: new Date().toISOString() })
+        .where(eq(authUser.email, email));
+    }
   }
 
   const cleared = await getDb()
