@@ -3,7 +3,7 @@
 ## Por que isto existe
 
 Hoje a CLI **é** o produto. Não há UI: `src/cli.ts` é a superfície de uso inteira do
-`job-hunt-os` — buscar vagas em APIs públicas, pontuá-las de forma determinística,
+`master-jobs` — buscar vagas em APIs públicas, pontuá-las de forma determinística,
 mover candidaturas pelo funil e exportar um snapshot para o vault do Obsidian.
 
 Este documento existe para duas audiências:
@@ -704,7 +704,7 @@ pnpm jho report --min-fit 60 --limit 40 --stdout
 ```markdown
 # Vagas — match com o perfil (2026-08-18)
 
-> Gerado por `job-hunt-os`. Fontes: APIs públicas de ATS e agregadores remotos.
+> Gerado por `master-jobs`. Fontes: APIs públicas de ATS e agregadores remotos.
 > Corte de fit: 60. Vagas listadas: 38.
 
 ## Funil

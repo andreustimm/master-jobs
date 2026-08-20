@@ -36,7 +36,7 @@ documentação, e um diagrama envelheceria mais rápido do que seria lido.
 Vale mais atenção às **setas ausentes** do que às presentes. Três ausências
 carregam as decisões centrais do projeto:
 
-1. **Nada aponta de `job-hunt-os` para a plataforma do LinkedIn.** O sistema lê
+1. **Nada aponta de `master-jobs` para a plataforma do LinkedIn.** O sistema lê
    o que o LinkedIn envia por e-mail e nunca consulta a plataforma
    ([ADR 0001](../../adr/0001-nao-fazer-scraping-do-linkedin.md),
    [ADR 0008](../../adr/0008-ingestao-de-email-como-fonte-de-sourcing.md)).

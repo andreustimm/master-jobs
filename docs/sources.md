@@ -497,7 +497,7 @@ timeouts tight, retry only on transient failures, and never hammer on a 4xx."*
 
 | Regra | Implementação |
 |---|---|
-| Identificar-se | Header `user-agent` em toda requisição: `process.env.JHO_USER_AGENT` com fallback `"job-hunt-os/0.1 (personal job search)"` |
+| Identificar-se | Header `user-agent` em toda requisição: `process.env.JHO_USER_AGENT` com fallback `"master-jobs/0.1 (personal job search)"` |
 | Timeout curto | `AbortController` com `DEFAULT_TIMEOUT_MS = 20_000` |
 | Retry só em falha transitória | `RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504])`; no máximo 2 retries (`opts.retries ?? 2`) |
 | Não martelar em 4xx | Status fora de `RETRYABLE` faz `throw` imediato do `HttpError` — "a 404 means the board handle is wrong; retrying just wastes time" |

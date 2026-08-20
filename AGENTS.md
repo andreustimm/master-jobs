@@ -1,4 +1,4 @@
-# job-hunt-os — instruções para agentes (Codex / OpenCode)
+# master-jobs — instruções para agentes (Codex / OpenCode)
 
 Sistema de sourcing, scoring e gestão de candidaturas de **Andreus Timm**
 (Senior AI Software Architect, 20+ anos, São Paulo/Brasil, remoto B2B,

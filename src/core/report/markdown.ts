@@ -52,7 +52,7 @@ export function renderBoardMarkdown(input: {
   const tracked = rows.filter((r) => r.status && r.status !== "backlog");
   const lines: string[] = [];
   lines.push(`# Vagas — match com o perfil (${today})`, "");
-  lines.push("> Gerado por `job-hunt-os`. Fontes: APIs públicas de ATS e agregadores remotos.");
+  lines.push("> Gerado por `Master Jobs`. Fontes: APIs públicas de ATS e agregadores remotos.");
   lines.push(`> Corte de fit: ${minFit}. Vagas listadas: ${rows.length}.`, "");
   lines.push("## Funil", "", "| Status | Quantidade |", "|---|---:|");
   const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);

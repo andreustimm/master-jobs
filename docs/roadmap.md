@@ -3,7 +3,7 @@
 ## Por que isto existe
 
 Este arquivo separa **o que já roda** de **o que ainda é intenção**. O
-`job-hunt-os` tem muito scaffolding no repositório — `next.config.ts`
+`master-jobs` tem muito scaffolding no repositório — `next.config.ts`
 configurado, tabelas `post`/`engagement`/`target_account`/`positioning_task` já
 criadas na migration, variáveis de LinkedIn e `CRON_SECRET` no `.env.example` —
 e nada disso significa que a funcionalidade existe. Um agente (ou você, em três
@@ -254,7 +254,7 @@ O que já foi decidido para não travar depois:
 
 ### 3.1 Turso + Vercel
 
-**Primeiro passo concreto:** `turso db create job-hunt-os`, apontar
+**Primeiro passo concreto:** `turso db create master-jobs`, apontar
 `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` em um `.env.local` separado e rodar
 `pnpm db:migrate` contra ele. A migration `0000_remarkable_solo.sql` é a mesma —
 não há SQL específico de dialeto. Migrar os dados locais é um problema à parte:

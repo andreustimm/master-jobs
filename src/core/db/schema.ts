@@ -1,5 +1,5 @@
 /**
- * job-hunt-os data model.
+ * master-jobs data model.
  *
  * Design rules:
  *  - `job` rows are immutable facts observed from a source; anything the user

@@ -7,7 +7,7 @@
 
 ## Por que isto existe
 
-`job-hunt-os` resolve um problema concreto: encontrar vagas compatíveis com o
+`master-jobs` resolve um problema concreto: encontrar vagas compatíveis com o
 perfil do Andreus Timm (Senior AI Software Architect, 20+ anos, Brasil, remoto
 B2B, **sem autorização de trabalho nos EUA**), ranqueá-las de forma
 **determinística e auditável**, e acompanhar o funil de candidaturas — tudo a
@@ -441,7 +441,7 @@ account inside the LinkedIn User Agreement."
 
 | Arquivo | O que é |
 |---|---|
-| `package.json` | `job-hunt-os` 0.1.0, `type: module`, `engines.node >= 24.0.0`. Script `jho` = `node --experimental-strip-types --no-warnings --env-file-if-exists=.env src/cli.ts`. O script `db:seed` chama `pnpm jho db seed`, que carrega o plano de posicionamento e o baseline de métricas. |
+| `package.json` | `master-jobs` 0.1.0, `type: module`, `engines.node >= 24.0.0`. Script `jho` = `node --experimental-strip-types --no-warnings --env-file-if-exists=.env src/cli.ts`. O script `db:seed` chama `pnpm jho db seed`, que carrega o plano de posicionamento e o baseline de métricas. |
 | `tsconfig.json` | `target ES2023`, `module esnext`, `moduleResolution bundler`, `strict`, `noUncheckedIndexedAccess`, `isolatedModules`, **`erasableSyntaxOnly: true`**, `noEmit`, `jsx preserve`, plugin `next`, paths `@/*` e `@core/*`. |
 | `drizzle.config.ts` | `dialect: "turso"`, schema `./src/core/db/schema.ts`, out `./drizzle`, credenciais de `TURSO_DATABASE_URL` (default `file:./data/jobs.db`) + `TURSO_AUTH_TOKEN`, `verbose` e `strict`. |
 | `next.config.ts` | `serverExternalPackages: ["@libsql/client"]`, `experimental.cacheComponents: true` (Next 16 Cache Components), `typedRoutes: true`. Nenhuma rota ou página existe ainda. |
@@ -483,7 +483,7 @@ determinístico, não do CLI, da ingestão nem do repo.
 | `TURSO_AUTH_TOKEN` | `db/client.ts`, `drizzle.config.ts` | Obrigatório quando a URL não começa com `file:` — senão `getDb()` lança. |
 | `JHO_PROFILE_PATH` | `profile/load.ts` | Override do caminho de `profile.yaml`. |
 | `JHO_SOURCES_PATH` | `sources/config.ts` | Override do caminho de `sources.yaml`. |
-| `JHO_USER_AGENT` | `sources/http.ts` | Header `user-agent` em toda requisição; fallback `job-hunt-os/0.1 (personal job search)`. |
+| `JHO_USER_AGENT` | `sources/http.ts` | Header `user-agent` em toda requisição; fallback `master-jobs/0.1 (personal job search)`. |
 | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | `sources/aggregators.ts` | Sem elas o adapter `adzuna` retorna 0 jobs + warning, em vez de falhar. |
 | `JHO_VAULT_PATH` | `report/markdown.ts` | Raiz do vault Obsidian; ausente e sem `--out`, `buildReport()` retorna `path: null` e nada é escrito. |
 | `JHO_REPORT_DIR` | `report/markdown.ts` | Subdiretório dentro do vault; default `05_Interviews/LinkedIn`. |

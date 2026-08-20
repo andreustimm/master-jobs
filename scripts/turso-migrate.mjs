@@ -10,20 +10,27 @@
  * retomar depois de uma falha não exige limpar nada. O preço é sobrescrever o
  * que estiver no destino, e é por isso que a checagem de banco não-vazio existe.
  *
- * Ordem das tabelas segue a dependência de chave estrangeira. `foreign_keys` é
- * desligado durante a cópia mesmo assim: uma tabela que se referencia — como
+ * Ordem das tabelas segue a dependência de chave estrangeira. As FKs são
+ * desligadas durante a cópia mesmo assim: uma tabela que se referencia — como
  * `auth_event.user_id` apontando para `auth_user` — não tem ordem que resolva
  * sozinha, e o `pragma foreign_key_check` no fim confere o resultado.
+ *
+ * Desligar é feito por `client.migrate()`, não por `PRAGMA foreign_keys=OFF`:
+ * o pragma é ignorado dentro de transação, e `batch(…, "write")` abre uma.
  *
  *   node scripts/turso-migrate.mjs --dry-run
  *   node scripts/turso-migrate.mjs
  *   node scripts/turso-migrate.mjs --skip-html
+ *   node scripts/turso-migrate.mjs --skip-html --reset   # limpa o destino antes
  */
 import { createClient } from "@libsql/client";
 
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const skipHtml = args.has("--skip-html");
+// Retomada depois de falha no meio: `INSERT OR REPLACE` não remove o que sobrou
+// de uma tabela que encolheu, então a carga limpa é explícita, nunca implícita.
+const reset = args.has("--reset");
 
 const url = process.env.TURSO_DATABASE_URL;
 const authToken = process.env.TURSO_AUTH_TOKEN;
@@ -81,10 +88,14 @@ async function main() {
   // Destino com dado é sinal de que alguém já migrou, ou de que o banco não é o
   // que se pensa. `INSERT OR REPLACE` sobrescreveria em silêncio.
   const [{ n: jaTem }] = (await remote.execute("select count(*) n from job")).rows;
-  if (Number(jaTem) > 0 && !dryRun) {
+  if (Number(jaTem) > 0 && !dryRun && reset) {
+    const alvo = ORDER.filter((t) => remotas.has(t));
+    console.log(`\n  --reset: limpando ${alvo.length} tabela(s) no destino\n`);
+    await remote.migrate(alvo.map((t) => ({ sql: `delete from "${t}"` })));
+  } else if (Number(jaTem) > 0 && !dryRun) {
     console.error(
       `\nO destino já tem ${jaTem} vaga(s). Este script sobrescreve por chave primária.` +
-        `\nSe é uma retomada, apague a checagem à mão sabendo o que faz.\n`,
+        `\nSe a intenção é recarregar do zero, rode com --reset.\n`,
     );
     process.exit(1);
   }
@@ -95,8 +106,6 @@ async function main() {
     // Silêncio aqui seria perda de dado com cara de sucesso.
     console.warn(`\n  Fora da ordem declarada, NÃO copiadas: ${ignoradas.join(", ")}\n`);
   }
-
-  if (!dryRun) await remote.execute("PRAGMA foreign_keys=OFF");
 
   let total = 0;
   for (const tabela of ordenadas) {
@@ -120,12 +129,16 @@ async function main() {
         args: [BATCH, offset],
       });
       if (!dryRun && lote.rows.length > 0) {
-        await remote.batch(
+        // `batch(…, "write")` abre transação, e o SQLite ignora
+        // `PRAGMA foreign_keys` dentro de transação: a cópia quebrava ao
+        // inserir filho antes do pai. `migrate()` roda com as FKs desligadas,
+        // que é o modo correto para carga em massa. O `foreign_key_check` do
+        // fim continua sendo a rede de segurança.
+        await remote.migrate(
           lote.rows.map((row) => ({
             sql: `insert or replace into ${tabela} (${lista}) values (${marcadores})`,
             args: usadas.map((c) => row[c] ?? null),
           })),
-          "write",
         );
       }
       copiadas += lote.rows.length;

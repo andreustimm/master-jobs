@@ -1,6 +1,6 @@
 # Mercado de posicionamento, modelo de negócio e sinais de contratação
 
-> Pesquisa comercial para o `job-hunt-os`. Recorte: (A) ferramentas de posicionamento/personal
+> Pesquisa comercial para o `master-jobs`. Recorte: (A) ferramentas de posicionamento/personal
 > branding no LinkedIn, (B) onde está o dinheiro no mercado de carreira, (C) sinais que preveem
 > contratação bem-sucedida.
 >
@@ -70,7 +70,7 @@ Store ([getsocialkit](https://www.getsocialkit.com/post/shield-analytics-shutdow
 | **Sales Navigator Core / Advanced** | Busca avançada de leads, alertas, listas | Core US$ 119,99/mês (anual US$ 89,99/mês). Advanced US$ 159,99/mês ou US$ 1.799,88/ano ⚠️ ([business.linkedin.com](https://business.linkedin.com/sell/sales-navigator/compare-plans)) | É o LinkedIn | Nenhum |
 | **SSI (Social Selling Index)** | Nota 0–100 em 4 pilares de 25 pontos: marca profissional, encontrar as pessoas certas, engajar com insights, construir relacionamentos | **Grátis**, inclusive em conta free ✅ ([business.linkedin.com](https://business.linkedin.com/sales-solutions/social-selling/the-social-selling-index-ssi)) | É o LinkedIn | Nenhum |
 
-### 1.3 O que essa frente ensina ao job-hunt-os
+### 1.3 O que essa frente ensina ao master-jobs
 
 1. **Não fazer scraping não é conservadorismo — é a única arquitetura que sobrevive.** Shield morreu,
    Kleo levou C&D, Proxycurl fechou, Taplio foi bloqueado. Todos os que dependiam da sessão do
@@ -255,7 +255,7 @@ esta vaga é a minha #1". O problema é "estou há 5 meses sem trabalho". Explic
 pergunta que o usuário não fez, e educar mercado é o item de custo mais caro que existe para um
 produto de US$ 40/mês.
 
-**2. Explicar um ranking *seu* não muda o resultado.** Se o job-hunt-os me diz "esta vaga é #1 porque
+**2. Explicar um ranking *seu* não muda o resultado.** Se o master-jobs me diz "esta vaga é #1 porque
 casa 8 de 10 competências e paga na sua faixa", eu ainda me candidato por um formulário onde **o
 ranking que decide é o do outro lado**. O score explicável do candidato tem poder de **alocação de
 esforço** (onde gastar minhas próximas 3 horas), não poder de resultado. É valioso, mas é valor de
@@ -276,7 +276,7 @@ não atende, para 1,3 M de usuários diários —, o diferencial evapora.
 
 ### 4.4 Onde a explicabilidade realmente vale neste produto
 
-**Caso 1 — auditabilidade para operação por agente.** O job-hunt-os é operável por agentes de IA. Um
+**Caso 1 — auditabilidade para operação por agente.** O master-jobs é operável por agentes de IA. Um
 score determinístico e explicável não é feature de UX: é o que torna a saída **verificável**. Agente
 que devolve "esta é a #1" sem rastro é inauditável; um que devolve a decomposição pode ser conferido,
 versionado e testado em regressão. Isso importa para um comprador técnico, não para o candidato médio.
@@ -398,7 +398,7 @@ mercado, e usando-o antes da candidatura, não depois.
 18–22% dos anúncios são fantasmas e só 4 em 10 viram contratação. Um agregador que lê APIs públicas
 de ATS enxerga o que o candidato não enxerga: **idade da requisição, frequência de repostagem,
 persistência da req ao longo do tempo**. Isso é sinal derivado, determinístico, computável a partir
-de dados que o job-hunt-os já coleta, e **estruturalmente indisponível** para quem só lê a vaga no
+de dados que o master-jobs já coleta, e **estruturalmente indisponível** para quem só lê a vaga no
 LinkedIn. É o candidato a recurso mais defensável do produto inteiro, ao lado do bloqueio por
 autorização de trabalho — e pela mesma razão: economiza esforço que seria certamente desperdiçado.
 
@@ -406,7 +406,7 @@ autorização de trabalho — e pela mesma razão: economiza esforço que seria 
 
 A triagem dura 7,4 segundos e olha cargo, empresa e datas — não densidade de termos. "Skills-based
 hiring" moveu menos de 1 em 700 contratações. A premissa central do Jobscan e afins é
-sobrevendida. Se o job-hunt-os construir valor sobre "vencer o parser do ATS", está construindo sobre
+sobrevendida. Se o master-jobs construir valor sobre "vencer o parser do ATS", está construindo sobre
 um mecanismo fraco que a própria pesquisa desmente. **A inversão correta da regra dos 7,4 segundos é
 legibilidade de trajetória** — cargo, empresa, datas, progressão limpa —, não contagem de termos.
 
@@ -422,7 +422,7 @@ posiciona isso corretamente.
 
 Com 254 candidatos por vaga e o CEO da Greenhouse atacando publicamente as ferramentas de aplicação
 em massa, a posição comercial defensável é a **oposta** da do mercado: um produto que faz o candidato
-aplicar em **menos** vagas, melhor escolhidas, com justificativa auditável. Isso é o que o job-hunt-os
+aplicar em **menos** vagas, melhor escolhidas, com justificativa auditável. Isso é o que o master-jobs
 já faz por construção — e é uma história que sobrevive ao escrutínio de quem está do outro lado da
 mesa. As ferramentas de auto-apply estão do lado errado dessa narrativa e vão continuar apanhando.
 
@@ -455,7 +455,7 @@ de milhões de InMails ([LinkedIn Talent Blog](https://www.linkedin.com/business
 Não há declaração oficial de que o selo eleve o ranking — mas como o ranker otimiza resposta, o sinal
 entra pela função-objetivo, sem precisar de boost explícito.
 
-**Três implicações diretas para o job-hunt-os:**
+**Três implicações diretas para o master-jobs:**
 
 1. **Sinal de disponibilidade e velocidade de resposta valem mais do que refinamento de currículo.**
    Um produto que garante resposta rápida e presença legível bate um que reescreve bullet points.
@@ -485,7 +485,7 @@ usa 5 categorias e declara explicitamente "**assistive AI, not automated-decisio
 
 **Isto reforça a recomendação da §5.4, item 3:** a premissa comercial central do Jobscan e de toda a
 categoria de "otimização para ATS" repousa sobre um número inventado por uma empresa que vendia a
-solução e faliu. **O job-hunt-os não deve construir valor sobre "vencer o parser do ATS."**
+solução e faliu. **O master-jobs não deve construir valor sobre "vencer o parser do ATS."**
 
 > Nota de escopo: a auditoria de conformidade (LL144, EU AI Act) e os estudos de viés em triagem por
 > LLM foram levantados mas ficam fora deste documento, que é comercial. Ver os relatórios das outras
@@ -510,7 +510,7 @@ pagante numa reunião de conselho:
 3. **O teto comprovado da categoria é ~US$ 3 M de ARR** (Jobscan, 13 anos, bootstrapped) ou
    1 milhão de usuários com 7 funcionários e US$ 4,35 M levantados (Simplify). O capital de risco já
    precificou isso: recrutador levanta US$ 186–410 M, candidato levanta US$ 4–20 M.
-4. **As duas funções centrais do job-hunt-os já são gratuitas no mercado.** Agregação de vagas via
+4. **As duas funções centrais do master-jobs já são gratuitas no mercado.** Agregação de vagas via
    ATS público: hiring.cafe entrega 2,8 M vagas de 75 ATS de graça. Tracking: Teal dá ilimitado no
    free. Score de match: LinkedIn Job Match dá de graça a lista de qualificações atendidas e não
    atendidas, para 1,3 M de usuários por dia.
@@ -520,10 +520,10 @@ pagante numa reunião de conselho:
 
 ### 6.2 O que isso implica — e é uma implicação boa
 
-A conclusão acima **não é um argumento para abandonar o job-hunt-os.** É um argumento para parar de
+A conclusão acima **não é um argumento para abandonar o master-jobs.** É um argumento para parar de
 avaliá-lo como startup e começar a avaliá-lo pelo que ele é de fato:
 
-**O job-hunt-os já está pagando por si.** O dono está em busca ativa. O produto elimina uma classe
+**O master-jobs já está pagando por si.** O dono está em busca ativa. O produto elimina uma classe
 inteira de vagas impossíveis (sem autorização de trabalho nos EUA), normaliza faixas salariais entre
 moedas com câmbio real do BCE, e prioriza esforço com nota explicável. Se isso poupar 5 horas por
 semana durante 6 meses de busca e antecipar a contratação em **duas semanas**, o retorno já é de
@@ -569,7 +569,7 @@ fonte de receita direta. Serve para construir audiência, que depois se monetiza
 **3. Ferramenta de dados / API para quem tem dinheiro**
 
 Modelo Levels.fyi: o dado é grátis para o candidato, e a receita vem de vender o agregado para
-empresas e de parcerias com recrutamento. O job-hunt-os acumula, por construção, um dataset limpo de
+empresas e de parcerias com recrutamento. O master-jobs acumula, por construção, um dataset limpo de
 vagas normalizadas com faixas salariais convertidas por câmbio real — que é um ativo que empresa de
 comp & ben compra. Longo prazo, exige volume.
 
@@ -590,5 +590,5 @@ enxuto o suficiente para ser lucrativo com US$ 200 k de receita, não com US$ 20
 |---|---|---|
 | **Plataforma fecha a torneira** | Média | A decisão de não fazer scraping do LinkedIn já neutraliza o risco fatal. Mas as APIs públicas de ATS (Greenhouse, Lever, Ashby) são cortesia, não contrato — podem exigir chave, rate-limit ou fechar. Trate cada conector como descartável |
 | **Greenhouse entra no lado candidato** | **Alta** | O MyGreenhouse já é um portal gratuito de candidato, com badges "Greenhouse Verified" e 1,5 M+ candidatos ([Greenhouse](https://www.greenhouse.com/product-features/mygreenhouse-jobs)). O ATS tem os dados na fonte, o selo de vaga real e distribuição gratuita. Não dá para competir com isso vendendo agregação |
-| **A "AI doom loop" contamina a categoria** | **Alta** | O CEO da Greenhouse, Daniel Chait, denuncia publicamente candidatos "pagando US$ 20 para aplicar em massa" e chama o fenômeno de doom loop ([Fortune](https://fortune.com/2026/07/27/greenhouse-ceo-daniel-chait-ai-doom-loop-job-seekers-spam-interview-applications-unemployment/)). Qualquer ferramenta de candidato com IA corre risco de ser lida como parte do problema. **Posicionamento defensivo obrigatório: o job-hunt-os reduz candidaturas, não multiplica** — é o antídoto do doom loop, e essa mensagem precisa ser explícita |
+| **A "AI doom loop" contamina a categoria** | **Alta** | O CEO da Greenhouse, Daniel Chait, denuncia publicamente candidatos "pagando US$ 20 para aplicar em massa" e chama o fenômeno de doom loop ([Fortune](https://fortune.com/2026/07/27/greenhouse-ceo-daniel-chait-ai-doom-loop-job-seekers-spam-interview-applications-unemployment/)). Qualquer ferramenta de candidato com IA corre risco de ser lida como parte do problema. **Posicionamento defensivo obrigatório: o master-jobs reduz candidaturas, não multiplica** — é o antídoto do doom loop, e essa mensagem precisa ser explícita |
 | **Churn estrutural** | Certa | Não é risco, é característica. Só se contorna mudando de comprador |

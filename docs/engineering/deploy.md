@@ -67,19 +67,45 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 uma sessão e serve currículo, funil e export para qualquer requisição. É modo de
 desenvolvimento local e num endereço público é o vazamento inteiro.
 
+## Os três bancos
+
+Um banco por ambiente, no grupo `master-jobs` em `aws-us-east-1` — a mesma
+região das funções da Vercel (`iad1`), para o round-trip não atravessar o país.
+
+| Ambiente Vercel | Banco Turso | Branch |
+|---|---|---|
+| Production | `master-jobs` | `main` |
+| Preview | `master-jobs-staging` | `staging` |
+| Development | `master-jobs-dev` | local |
+
+Os três compartilham o schema; só o de produção carrega dado real. `dev` e
+`staging` nascem vazios de propósito: copiar produção para lá levaria junto
+`auth_user`, `auth_session` e `auth_login_token` — credenciais de gente de
+verdade num ambiente com menos cuidado. Para popular um deles, aponte o script
+para a URL correspondente e escolha à mão o que copiar.
+
 ## Migrar o banco
 
 ```bash
-turso db create job-hunt-os
-turso db tokens create job-hunt-os
+turso db tokens create master-jobs
 
-export TURSO_DATABASE_URL="libsql://..."
+export TURSO_DATABASE_URL="libsql://master-jobs-andreustimm.aws-us-east-1.turso.io"
 export TURSO_AUTH_TOKEN="..."
 
 pnpm jho db migrate          # cria o schema no banco remoto
-node scripts/turso-migrate.mjs --dry-run
-node scripts/turso-migrate.mjs
+node scripts/turso-migrate.mjs --dry-run --skip-html
+node scripts/turso-migrate.mjs --skip-html
 ```
+
+`--reset` limpa o destino antes de copiar. É o que se usa para refazer uma carga
+que morreu no meio: sem ele o script recusa destino não-vazio, porque
+`INSERT OR REPLACE` sobrescreveria em silêncio um banco que talvez não seja o
+que se pensa.
+
+As FKs ficam desligadas durante a cópia via `client.migrate()`, e **não** por
+`PRAGMA foreign_keys=OFF`: o pragma é ignorado dentro de transação, e
+`batch(…, "write")` abre uma. O `pragma foreign_key_check` no fim é o que
+confere o resultado.
 
 O banco local tem **529 MB**, e a maior parte não é o que parece:
 

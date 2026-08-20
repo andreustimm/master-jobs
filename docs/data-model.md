@@ -2,7 +2,7 @@
 
 ## Por que isto existe
 
-O banco do `job-hunt-os` guarda três coisas com naturezas muito diferentes, e a
+O banco do `master-jobs` guarda três coisas com naturezas muito diferentes, e a
 única razão de o schema ser desse jeito é manter essas três coisas separadas:
 
 1. **Fato observado** — o que uma fonte pública disse sobre uma vaga (`source`,

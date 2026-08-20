@@ -1,4 +1,4 @@
-# job-hunt-os
+# master-jobs
 
 Sourcing, ranqueamento e gestão de candidaturas para uma busca de vaga
 conduzida por IA.

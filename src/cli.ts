@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * job-hunt-os CLI.
+ * master-jobs CLI.
  *
  * Everything the agent workflow needs is reachable from here, and every command
  * is safe to re-run. Run `pnpm jho --help` for the full list.

@@ -54,7 +54,7 @@ export async function probe(
 ): Promise<ProbeResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 15_000);
-  const headers = { "user-agent": process.env.JHO_USER_AGENT ?? "job-hunt-os/0.1" };
+  const headers = { "user-agent": process.env.JHO_USER_AGENT ?? "master-jobs/0.1" };
 
   try {
     // HEAD primeiro: mais barato para os dois lados. Alguns quadros recusam,

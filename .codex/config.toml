@@ -1,10 +1,10 @@
-# Codex configuration for job-hunt-os.
+# Codex configuration for master-jobs.
 #
 # Instructions live in AGENTS.md at the repository root — that file is the
 # mirror of CLAUDE.md. Edit both together.
 
 [project]
-name = "job-hunt-os"
+name = "master-jobs"
 instructions = "AGENTS.md"
 
 # Every shell command must be prefixed with `rtk` in Codex (see AGENTS.md).

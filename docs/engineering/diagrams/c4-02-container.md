@@ -4,12 +4,12 @@ As unidades executáveis e onde o estado vive.
 
 ```mermaid
 C4Container
-  title Containers — job-hunt-os
+  title Containers — master-jobs
 
   Person(andreus, "Andreus Timm")
   Person_Ext(agente, "Agentes de IA")
 
-  Container_Boundary(sys, "job-hunt-os") {
+  Container_Boundary(sys, "master-jobs") {
     Container(cli, "CLI", "Node 24 + Commander", "33 comandos. Toda operação<br/>é acessível aqui.")
     Container(web, "Dashboard", "Next.js 16 + shadcn/ui", "Server Components.<br/>Nenhum JavaScript de cliente.")
     Container(core, "src/core", "TypeScript", "Toda a lógica. Compartilhada<br/>pelas duas interfaces.")

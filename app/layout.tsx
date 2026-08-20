@@ -28,12 +28,12 @@ import {
 } from "../src/core/i18n/index.ts";
 
 export const metadata: Metadata = {
-  title: "job-hunt-os",
+  title: "Master Jobs",
   description: "Sourcing, ranqueamento e funil de candidaturas",
   manifest: "/manifest.json",
   // Instalado no celular, a barra de status usa isto. `appleWebApp` porque o
   // iOS ignora o manifest para tela cheia e lê a meta própria dele.
-  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "job-hunt-os" },
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Master Jobs" },
   icons: {
     icon: [
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
@@ -150,7 +150,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             */}
             <div className="mx-auto flex h-14 w-full max-w-[min(90vw,1760px)] items-center gap-4 px-4 sm:gap-6 sm:px-6">
               <span className="shrink-0 font-mono text-sm font-medium tracking-tight">
-                job-hunt-os
+                Master Jobs
               </span>
 
               {/* Sem sessão os links levariam de volta ao login; mostrar um

@@ -25,7 +25,7 @@ export class HttpError extends Error {
 function userAgent(): string {
   return (
     process.env.JHO_USER_AGENT ??
-    "job-hunt-os/0.1 (personal job search)"
+    "master-jobs/0.1 (personal job search)"
   );
 }
 

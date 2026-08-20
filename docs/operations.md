@@ -2,7 +2,7 @@
 
 ## Por que isto existe
 
-O `job-hunt-os` não é um produto: é uma rotina. O banco só vale alguma coisa se
+O `master-jobs` não é um produto: é uma rotina. O banco só vale alguma coisa se
 duas coisas acontecerem com regularidade — o sync roda (o mundo muda) e você
 registra o que fez (o sistema não tem como adivinhar). Este documento é o
 runbook dessas duas coisas: o que rodar por dia, o que rodar por semana, como

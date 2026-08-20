@@ -1,6 +1,6 @@
 {
-  "name": "job-hunt-os",
-  "short_name": "job-hunt-os",
+  "name": "Master Jobs",
+  "short_name": "Master Jobs",
   "description": "Sourcing, ranqueamento e funil de candidaturas",
   "start_url": "/",
   "scope": "/",

@@ -1,4 +1,4 @@
-# CompozyOS 0.3 no fluxo do job-hunt-os
+# CompozyOS 0.3 no fluxo do master-jobs
 
 Como conduzir o ciclo **SDD + Loop Engineering** deste repositório com o
 CompozyOS 0.3: especificar, decompor em tarefas, executar, revisar e verificar.

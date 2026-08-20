@@ -1,6 +1,6 @@
 # C4 nível 1 — Contexto do sistema
 
-Quem usa o job-hunt-os e com que sistemas externos ele fala.
+Quem usa o master-jobs e com que sistemas externos ele fala.
 
 O ponto que o diagrama precisa deixar óbvio: **o LinkedIn aparece três vezes,
 com três naturezas diferentes**, e é isso que a [ADR 0001](../../adr/0001-nao-fazer-scraping-do-linkedin.md)
@@ -9,12 +9,12 @@ governam. Nenhuma seta sai do sistema **para** a plataforma do LinkedIn.
 
 ```mermaid
 C4Context
-  title Contexto — job-hunt-os
+  title Contexto — master-jobs
 
   Person(andreus, "Andreus Timm", "Arquiteto de IA sênior. Remoto B2B do Brasil,<br/>sem autorização de trabalho nos EUA.")
   Person_Ext(agente, "Agentes de IA", "Claude Code, Codex, OpenCode.<br/>Usuários de primeira classe: leem CLAUDE.md<br/>e operam a CLI.")
 
-  System(jho, "job-hunt-os", "Encontra vagas, pontua contra o perfil<br/>de forma auditável, e gerencia o funil.<br/>Roda localmente.")
+  System(jho, "master-jobs", "Encontra vagas, pontua contra o perfil<br/>de forma auditável, e gerencia o funil.<br/>Roda localmente.")
 
   System_Ext(ats, "APIs de ATS", "Greenhouse, Lever, Ashby,<br/>SmartRecruiters, Recruitee.<br/>Públicas, sem autenticação.")
   System_Ext(agreg, "Agregadores remotos", "Himalayas, Remotive, Arbeitnow,<br/>RemoteOK, Braintrust, Adzuna.")
@@ -41,7 +41,7 @@ C4Context
 
 ## O que o diagrama afirma
 
-**Não existe seta de `job-hunt-os` para `LinkedIn`.** O sistema lê o que o
+**Não existe seta de `master-jobs` para `LinkedIn`.** O sistema lê o que o
 LinkedIn **envia** — o job alert que chega na caixa de entrada — e nunca
 consulta a plataforma. Publicar, comentar e conectar são ações do humano, no
 navegador dele.

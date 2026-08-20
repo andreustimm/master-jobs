@@ -1,4 +1,4 @@
-# Benchmark competitivo — job-hunt-os
+# Benchmark competitivo — master-jobs
 
 **Data:** 18 de agosto de 2026
 **Escopo:** Frente A (agregadores e marketplaces de talento) + Frente B

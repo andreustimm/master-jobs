@@ -98,7 +98,7 @@ describe("getJson", () => {
     // permite ao operador do board nos contatar em vez de nos bloquear.
     const padrao = stubFetch(json({}));
     await getJson(URL_OK);
-    expect(String(new Headers(padrao[0]!.init.headers).get("user-agent"))).toContain("job-hunt-os");
+    expect(String(new Headers(padrao[0]!.init.headers).get("user-agent"))).toContain("master-jobs");
     expect(new Headers(padrao[0]!.init.headers).get("accept")).toBe("application/json");
 
     vi.unstubAllGlobals();

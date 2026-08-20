@@ -97,7 +97,7 @@ export async function requestPasswordReset(
 
       const result = await deps.mailer.send({
         to: normalised,
-        subject: "Recuperar o acesso ao job-hunt-os",
+        subject: "Recuperar o acesso ao Master Jobs",
         text: [
           "Alguém pediu para recuperar a senha desta conta.",
           "",

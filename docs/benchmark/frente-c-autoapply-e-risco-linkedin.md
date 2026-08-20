@@ -181,7 +181,7 @@ mas convergente entre fontes independentes]**:
   candidaturas submetidas rápido demais, uniformes demais ou do mesmo padrão de IP.
 - **Indeed** usa CAPTCHA que bloqueia boa parte das extensões.
 
-**Implicação direta para o job-hunt-os:** um agente rodando em Vercel/cron submete
+**Implicação direta para o master-jobs:** um agente rodando em Vercel/cron submete
 de **IP de datacenter**. Esse é o sinal exato que o IPQualityScore do Greenhouse
 procura. Se houver submissão autônoma, ela precisa sair de IP residencial.
 
@@ -302,7 +302,7 @@ contrato é a arma que o LinkedIn efetivamente usa.
 
 **Consequência exata para este projeto:** a defesa de scraping que sobreviveu em
 2024–2026 é **"eu estava deslogado"**. Ela é estruturalmente indisponível para
-qualquer automação de LinkedIn que sirva ao job-hunt-os, porque **tudo que
+qualquer automação de LinkedIn que sirva ao master-jobs, porque **tudo que
 interessa (vagas, perfis, comentários, Easy Apply) exige sessão autenticada**. A
 Camada 3 da `docs/linkedin-policy.md` está exatamente do lado errado da única
 linha que os tribunais reconheceram.
@@ -574,7 +574,7 @@ Ordenado por retorno esperado, do maior para o menor:
 
 1. **Customização por vaga (não volume).** Casar o título do CV ao título exato da
    vaga é o ganho isolado mais citado nas fontes. Isso é geração de conteúdo
-   determinística sobre dado que você já tem no scorer — **e o job-hunt-os já está
+   determinística sobre dado que você já tem no scorer — **e o master-jobs já está
    a meio caminho.**
 2. **A fila `engagement` — que ainda não foi implementada.** Nenhuma linha do repo
    escreve em `engagement` hoje. Ela é o motor de referral, e referral é o canal com

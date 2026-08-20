@@ -1,6 +1,6 @@
 # Integração com CompozyOS 0.3
 
-O `job-hunt-os` roda perfeitamente sozinho pela CLI. O Compozy entra quando
+O `master-jobs` roda perfeitamente sozinho pela CLI. O Compozy entra quando
 você quiser que a varredura aconteça **sem você pedir** — que é a fase 2 do
 roadmap.
 

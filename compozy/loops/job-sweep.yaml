@@ -5,7 +5,7 @@ meta:
   description: Varredura diária de vagas — sincroniza fontes, pontua e propõe triagem.
   catalog:
     use_when: >-
-      Você quer a varredura diária de vagas do job-hunt-os: sincronizar todas as
+      Você quer a varredura diária de vagas do Master Jobs: sincronizar todas as
       fontes públicas, repontuar e receber uma recomendação de triagem.
     keywords:
       - jobs
@@ -60,7 +60,7 @@ graph:
       params:
         agent: "{{ .inputs.analyst }}"
         prompt: |
-          Execute a varredura diária de vagas do job-hunt-os.
+          Execute a varredura diária de vagas do Master Jobs.
 
           Diretiva: esta execução já é a autorização do operador. Comece
           imediatamente, não peça confirmação e não responda com saudação.
