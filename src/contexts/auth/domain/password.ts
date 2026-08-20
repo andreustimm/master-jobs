@@ -65,9 +65,26 @@ export async function verifyPassword(password: string, stored: string | null): P
     return false;
   }
 
+  // Um hash com tamanho errado não é um hash. Rejeitar aqui, ANTES de derivar.
+  //
+  // Este é o defeito que esta linha corrige, e ele falhava ABERTO: o `keylen`
+  // do scrypt vinha de `expected.length` — o tamanho do que estava GRAVADO, não
+  // a constante. Um `password_hash` cujo campo final estivesse vazio ou com um
+  // caractere produzia um buffer de zero bytes, o KDF devolvia zero bytes, e
+  // `timingSafeEqual(vazio, vazio)` é verdadeiro: **qualquer senha entrava**.
+  // Com dois caracteres o KDF virava uma comparação de 1 em 256.
+  //
+  // Exige escrita na coluna — migração malfeita, importação, correção manual em
+  // SQL —, mas o modo de falha estava invertido. Dado corrompido numa coluna de
+  // senha tem de negar acesso, nunca concedê-lo.
+  if (expected.length !== KEYLEN) return false;
+
   try {
     const derived = await new Promise<Buffer>((resolve, reject) => {
-      scryptCb(password, salt, expected.length, { N: n, r, p, maxmem: 256 * 1024 * 1024 }, (err, key) =>
+      // `KEYLEN`, a constante, e não o tamanho do valor gravado. O que está no
+      // banco é a coisa que se está verificando; usá-lo como parâmetro do
+      // próprio verificador é deixar o atacante escolher a régua.
+      scryptCb(password, salt, KEYLEN, { N: n, r, p, maxmem: 256 * 1024 * 1024 }, (err, key) =>
         err ? reject(err) : resolve(key),
       );
     });
