@@ -24,5 +24,5 @@ export async function logoutAction() {
   // continua válido para quem o copiou.
   if (token) await endSession(token);
   jar.delete(SESSION_COOKIE);
-  redirect("/login");
+  redirect("/login?cleared=1");
 }

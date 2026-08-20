@@ -546,7 +546,7 @@ try {
       lands: "/jobs",
       allowed: ["/jobs", "/jobs/new"],
       // Sem escopo de candidato: currículo, funil e cockpit são de outra pessoa.
-      denied: ["/", "/candidate", "/pipeline", "/admin/users"],
+      denied: ["/candidate", "/pipeline", "/admin/users"],
     },
     {
       role: "candidato",
@@ -574,6 +574,16 @@ try {
       `${scenario.role} entra e cai numa tela que é dele`,
       landed === scenario.lands,
       `caiu em ${landed}, esperado ${scenario.lands}`,
+    );
+
+    // `start_url` do manifest é "/" e não pode variar por papel. Instalada, a
+    // PWA abre ali — então `/` precisa LEVAR cada papel a uma tela dele, e não
+    // negar. É o defeito da E-06 tentando voltar pela porta do manifest.
+    const fromStartUrl = await rolePage.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    check(
+      `${scenario.role}: abrir pelo start_url da PWA leva a uma tela dele`,
+      fromStartUrl?.status() === 200,
+      `${fromStartUrl?.status()} em ${rolePage.url().replace(BASE, "")}`,
     );
 
     const wrong = [];
@@ -1064,6 +1074,53 @@ try {
     `retry-after=${blocked?.headers()["retry-after"]}`,
   );
   await burstCtx.close();
+
+  /* ------------------------------ PWA (UI-05) ------------------------------ */
+
+  // O que a instalação exige precisa responder SEM sessão: um manifest atrás de
+  // login não é lido por navegador nenhum, e o app simplesmente não oferece
+  // instalar — sem erro, sem aviso.
+  const pwaCtx = await browser.newContext();
+  const pwaPage = await pwaCtx.newPage();
+
+  const missing = [];
+  for (const path of ["/manifest.json", "/sw.js", "/icons/icon-192.png", "/icons/icon-512.png", "/offline"]) {
+    const hit = await pwaPage.goto(`${BASE}${path}`, { waitUntil: "domcontentloaded" });
+    if (hit?.status() !== 200) missing.push(`${path}=${hit?.status()}`);
+  }
+  check("recursos da PWA respondem sem sessão", missing.length === 0, missing.join(" | "));
+
+  await pwaPage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+  const head = await pwaPage.evaluate(() => ({
+    manifest: document.querySelector('link[rel="manifest"]')?.getAttribute("href") ?? null,
+    themes: [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.getAttribute("media")),
+  }));
+  check("a página aponta para o manifest", head.manifest === "/manifest.json", `${head.manifest}`);
+  // Duas cores porque o sistema tem tema claro e escuro; uma só deixaria a
+  // barra do navegador escura sobre interface clara.
+  check(
+    "theme-color acompanha claro e escuro",
+    head.themes.length === 2 && head.themes.every((m) => m?.includes("prefers-color-scheme")),
+    head.themes.join(" | "),
+  );
+
+  // O service worker servido tem de trazer a VERSÃO, não o marcador. Com o
+  // marcador literal todo cache se chamaria `static-__APP_VERSION__` e nenhum
+  // deploy invalidaria coisa alguma.
+  const swBody = await (await pwaPage.request.get(`${BASE}/sw.js`)).text();
+  check(
+    "o service worker servido traz a versão resolvida",
+    !swBody.includes("__APP_VERSION__") && /CACHE_VERSION = "\d/.test(swBody),
+    swBody.match(/CACHE_VERSION = "[^"]*"/)?.[0] ?? "ausente",
+  );
+  // E não guarda rota privada. A lista vive no template; aqui se confere que o
+  // que foi servido é o que se pensa que foi.
+  check(
+    "o service worker servido exclui as rotas privadas",
+    ["/api/", "/candidate", "/pipeline", "/p/"].every((p) => swBody.includes(`"${p}"`)),
+  );
+
+  await pwaCtx.close();
 
   check("nenhum erro de console", consoleErrors.length === 0, consoleErrors.slice(0, 2).join(" | "));
 } catch (error) {

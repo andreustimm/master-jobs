@@ -61,10 +61,16 @@ describe("design tokens", () => {
   });
 
   it("uses no literal hex colour in a component", () => {
-    // Every colour must come from the scale. The two exceptions below are
-    // themselves tokens, declared in globals.css and referenced by value in a
-    // Tailwind arbitrary utility because Tailwind cannot resolve a var there.
-    const allowed = new Set(["#5b5fa8", "#356373", "#7fadbe"]);
+    // Toda cor sai da escala. As exceções abaixo são elas mesmas tokens,
+    // declaradas em `globals.css` e referenciadas por valor numa utilidade
+    // arbitrária do Tailwind, que não resolve `var()` ali.
+    //
+    // `#ffffff` e `#101215` entram por outro motivo, e é o mais forte: são o
+    // `theme-color` da barra do navegador, lido pelo SISTEMA OPERACIONAL antes
+    // de existir CSS. Nenhuma variável resolve num `<meta>`. Vivem numa
+    // constante nomeada em `app/layout.tsx`, com a ligação ao `--background` do
+    // tema escrita no comentário.
+    const allowed = new Set(["#5b5fa8", "#356373", "#7fadbe", "#ffffff", "#101215"]);
     const offenders: string[] = [];
     for (const file of COMPONENTS) {
       for (const match of read(file).matchAll(/#[0-9a-fA-F]{6}\b/g)) {

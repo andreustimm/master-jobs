@@ -4,7 +4,8 @@ import { pipelineCounts } from "../src/contexts/pursuit/index.ts";
 import { FilterBar, readFilters, toBoardFilters } from "./filters";
 import { JobList } from "./joblist";
 import { Legend, Stat } from "./ui";
-import { requireOwnCandidatePage } from "./auth";
+import { redirect } from "next/navigation";
+import { requireOwnCandidatePage, requireSession } from "./auth";
 import { getTranslator } from "./i18n";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,16 @@ export default async function Cockpit({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { t, locale } = await getTranslator();
+  // Sem escopo de candidato, o cockpit não é negado — é REDIRECIONADO.
+  //
+  // 403 aqui seria correto e inútil: o recrutador não tem funil nem currículo,
+  // e dizer "proibido" para quem nunca poderia ter aquilo é resposta certa para
+  // a pergunta errada. Pior com a PWA instalada: `start_url` é "/" e não pode
+  // variar por papel, então o app abriria numa tela de erro — reintroduzindo,
+  // pela porta do manifest, o defeito que a E-06 corrigiu.
+  const session = await requireSession();
+  if (session.candidateId === null) redirect("/jobs");
+
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
   const state = readFilters(await searchParams);

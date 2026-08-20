@@ -64,6 +64,38 @@ engajado. Esta é a maior alavanca de resposta disponível hoje, e custa pouco.
 **Proposta:** componente de frescor no score, ou no mínimo destaque de vaga nova
 no `jobs list`.
 
+### B-04 · `pick()` escolhe apelido por presença, não por conteúdo 📋
+
+`src/core/ingest/import.ts:42`. A função percorre os apelidos de um campo e
+para no **primeiro que existe** e não é `null`, `undefined` ou `""`. Um objeto
+sempre passa nesse teste. Só depois `asString()` desce nele, encontra
+`{ name: "  " }`, apara e devolve `null` — e aí não há mais volta, porque o
+apelido seguinte já foi descartado.
+
+O payload `{ company: { name: "  " }, employer: "Acme" }` entra como
+**"Desconhecida"**, e `employer` nunca chega a ser lido. Caracterizado em
+`tests/cov-ingest-import.test.ts`.
+
+É a regra 17 um nível mais fundo: `pick()` protege contra a string vazia
+literal, e não contra o valor que *vira* vazio depois de normalizado.
+
+Está em P0 porque o efeito não é cosmético. `referralOpportunities()` casa vaga
+com contato por `job.companyName` — uma vaga em empresa onde Andreus já
+trabalhou, importada como "Desconhecida", **nunca aparece em `jho referrals`**.
+E este caminho é justamente o das plataformas logadas (Revelo, BairesDev), que
+são a fonte com empregador nomeado: a que o invariante de qualidade de fonte
+diz valer mais que volume anônimo.
+
+**Correção que o defeito pede:** `pick()` decidir sobre o valor já normalizado,
+e não sobre a presença da chave. Ou o normalizador entra dentro dela, ou a
+ordem se inverte — normalizar cada candidato e ficar com o primeiro que
+sobreviver. A segunda forma custa mais chamadas e é a que não tem como errar de
+novo.
+
+**Fica de fora:** deduzir empresa da URL ou do domínio do e-mail.
+"Desconhecida" continua sendo o último recurso legítimo quando nenhum apelido
+tem conteúdo — o defeito é chegar nele com `employer: "Acme"` no payload.
+
 ---
 
 ## P1 — Mudam a qualidade do dado do funil
@@ -257,7 +289,7 @@ desta UI por polimento.
 > `prefers-reduced-motion`. Uma grade de triagem que se move quando o usuário
 > pediu que não se movesse é uma falha de acessibilidade, não um detalhe.
 
-### UI-02 · Histórico de versões do currículo: modal, restaurar, renomear, excluir ✅ (falta a migração de `cv_variant`)
+### UI-02 · Histórico de versões do currículo: modal, restaurar, renomear, excluir ✅
 
 Pedido em 19/08/2026. Hoje `/candidate` lista as versões no rodapé da página,
 somente leitura: rótulo, tamanho em caracteres e data. Não dá para voltar a
@@ -387,6 +419,10 @@ uma versão que o funil diz ter enviado está na camada de aplicação, e funcio
 — mas quem garante é o código, não o banco. Uma escrita por outro caminho
 (script, CLI, SQL direto) passa por cima. `ON DELETE RESTRICT` fecharia isso de
 vez.
+
+> **Este parágrafo ficou desatualizado — ver M-05.** A migração foi feita nas
+> 0015–0018, com chave composta `(candidate_document_id, candidate_id)` e
+> `ON DELETE RESTRICT`. Quem garante agora é o banco.
 
 **Diff entre duas versões.** Hoje se vê uma por vez. A diferença de tamanho
 resolve *escolher*; um diff por linha resolveria *entender o que mudou*, que é
@@ -900,3 +936,208 @@ escrito lá — a lista fixava o defeito como especificação.
 
 Confirmado que o cenário detecta a volta do defeito: com o redirect antigo, ele
 reprova com "caiu em /, esperado /jobs".
+
+### UI-05 · Transformar o dashboard em PWA ✅
+
+#### Entregue em 20/08/2026
+
+Desenho replicado do `contas_casal`: caches versionados por tipo, estratégia por
+tipo, limpeza das versões antigas no `activate`, lista de exclusão explícita e
+versão injetada a partir do `package.json`.
+
+**A decisão central foi respondida assim: não existe `pages-` nem `api-`, e a
+ausência É a política.** O `contas_casal` cacheia página autenticada porque tem
+a contrapartida — uma fronteira de sessão offline que apaga Dexie, Cache
+Storage, fila de uploads e outbox como operação observável, recusando renderizar
+a próxima conta se qualquer etapa falhar. Copiar o cache sem copiar essa máquina
+seria copiar o risco sem a mitigação. E o argumento levantado neste item é ainda
+mais forte: **limpar no logout não fecha o buraco**, porque `logoutAction` não
+roda em sessão vencida, aba fechada ou aparelho perdido.
+
+Cacheia `static-` (JS, CSS, fontes, ícones, manifest) e `shell-` (`/login`,
+`/offline`). Mais nada. `/p/` está na exclusão apesar de público: é público por
+escolha do candidato, e a escolha pode ser revogada — uma cópia em disco não
+obedeceria à revogação.
+
+**Uma melhoria sobre o original.** Lá, o `prebuild` injeta a versão e o
+`postbuild` devolve o placeholder; funciona porque a Vercel fotografa o
+artefato. Com `next start` lendo `public/` do disco, restaurar antes de servir
+entregaria `CACHE_VERSION = "__APP_VERSION__"` literal, e todo cache se chamaria
+`static-__APP_VERSION__` — nenhum deploy invalidaria nada. Aqui
+`scripts/sw-template.js` é a fonte e `public/sw.js` é gerado e ignorado pelo git.
+
+**O achado sobre `start_url` estava certo.** Um manifest não varia por papel, e
+com `start_url: "/"` o recrutador abriria o app instalado em 403 — a E-06 voltando
+pela porta do manifest. Corrigido onde a causa estava: `/` agora REDIRECIONA
+quem não tem escopo de candidato, em vez de negar. Verificado por papel no e2e.
+
+Ícones gerados sem dependência (`scripts/make-icons.mjs` escreve o PNG chunk a
+chunk), com variante `maskable` na zona segura de 80%.
+
+### B-05 · `runFetchStage` ultrapassa o `--limit` com concorrência 📋
+
+`src/core/scrape/fetcher.ts:180`. O worker testa `result.processed >= limit`,
+**depois** faz `await queue.claim(...)`, e só então incrementa. Entre o teste e
+o incremento há um `await`, e com N workers todos podem passar pelo teste no
+mesmo tick: até **N−1 tarefas além do limite** são capturadas.
+
+O padrão é `concurrency: 4`, então `--limit 300` pode virar 303 requisições a
+sites de terceiros. Não é catastrófico, e é exatamente o tipo de erro que fica
+anos sem ser notado porque o número está quase certo: o operador pede um lote e
+o relatório volta com um total que ele não pediu.
+
+**Correção:** reservar antes do `await` — incrementar `processed` no momento do
+teste e devolver a reserva se o `claim` vier vazio. Contador só é confiável
+quando teste e reserva acontecem sem `await` no meio.
+
+**Fica de fora:** semáforo ou mutex de verdade. É um contador em memória, num
+processo só; a reserva otimista basta.
+
+### M-05 · `application.cv_variant` como chave estrangeira ✅ (já estava feito quando foi cadastrado)
+
+Levantado no fim de UI-02 como o que faltava, virou item próprio em 20/08/2026
+— e **conferido contra o código, já está entregue**, de forma mais forte do que
+a proposta.
+
+As migrações `0015_expand` → `0016_backfill` → `0017_contract` →
+`0018_enforce_candidate_document_ownership` fizeram o ciclo inteiro: coluna
+nova, resolução dos rótulos antigos, remoção de `cv_variant`, e **reconstrução
+da tabela** — porque `ALTER TABLE ... ADD ... REFERENCES` no SQLite aceita a
+cláusula `ON DELETE` e a ignora, a mesma armadilha registrada no CLAUDE.md e o
+motivo do `0025_fix_auth_user_fk_on_delete.sql`.
+
+A chave que ficou é **composta**: `(candidate_document_id, candidate_id)` →
+`candidate_document(id, candidate_id)`, com `ON DELETE RESTRICT`. Garante mais
+do que se pediu — além de impedir apagar uma versão que o funil diz ter
+enviado, impede apontar para o documento de **outro** candidato. E
+`src/core/candidate.ts:331` já lê `application.candidateDocumentId`, não o
+rótulo.
+
+O detalhe de 0016 vale guardar: rótulo ambíguo ou sem dono exato ficou **nulo**,
+com o comentário dizendo por quê — "no document is better than a fabricated
+audit trail". É a regra 8 aplicada a migração.
+
+**O que este item corrige de fato:** o cabeçalho de UI-02 e o "o que ficou de
+fora" dele, que ainda descreviam a migração como pendente. Anotado lá.
+
+### E-07 · `auth_event.user_id` perde a atribuição ao apagar a conta 📋
+
+`src/core/db/schema.ts:1018` declara `ON DELETE SET NULL`. Não existe exclusão
+de conta hoje — `setDisabled` desabilita, e nenhum caminho apaga `auth_user`.
+Então isto é uma decisão tomada por antecipação, e tomada para o lado errado.
+
+No dia em que houver exclusão, as linhas históricas continuam existindo e param
+de dizer **quem**. Numa tabela cuja razão de existir é provar exatamente isso —
+quem entrou, quem falhou, quem assumiu a identidade de quem — a auditoria fica
+íntegra na aparência e vazia no conteúdo.
+
+Amortece um pouco: a linha guarda `email` denormalizado. Mas `record()` grava
+`input.email ?? null`, ou seja, é opcional e depende de quem chamou. Não é
+garantia, é acaso.
+
+**A decisão não é técnica, é de política:** `RESTRICT` (não se apaga conta com
+histórico), `SET NULL` com `email` **obrigatório** na escrita, ou anonimização
+explícita que registre que houve anonimização. As três são defensáveis; a atual
+é a única que perde o dado sem dizer que perdeu. E pertence à mesma decisão de
+retenção que AUTH-02 adiou ao recusar a tela de log.
+
+### UI-06 · `externalUrl` devolve booleano e o nome promete URL 📋
+
+`src/contexts/matching/app/manual-comparison.ts:188` —
+`externalUrl: isPublicJobUrl(detail.job.url)`. O consumidor de hoje
+(`app/compare/page.tsx:90`) trata como sinalizador, e funciona.
+
+O problema é o nome. `href={detail.externalUrl}` compila, passa por qualquer
+revisão apressada, e gera `href="true"` — um link para uma rota inexistente do
+próprio dashboard. Há teste em `tests/cov-matching-manual-comparison.test.ts`
+com um comentário avisando que o nome é armadilha, o que **congela a armadilha**
+em vez de removê-la.
+
+`publicPostingUrl()` já existe em `src/core/job-url.ts`, devolve a URL ou
+`null`, e é o que `src/core/report/markdown.ts` usa. A correção é trocar o campo
+por ele: `null` é falsy, então todo consumidor que hoje escreve `externalUrl &&`
+segue funcionando, e quem escrever `href=` passa a receber uma URL de verdade.
+
+### UI-07 · A auditoria de skills registra quando, nunca por quem 📋
+
+`candidate_skill.audited_by` é escrita (`drizzle-adapters.ts:165`) e **não
+existe** em `CandidateSkillView` (`src/contexts/skills/domain/types.ts:73`), que
+expõe `auditedAt` e para por aí. O dado entra no banco e não tem por onde sair.
+
+E já há duas procedências distintas na mesma coluna: a tela grava `by: "self"`
+(`app/candidate/skills/actions.ts:20`) e a CLI não passa nada, deixando `null`.
+Duas origens gravadas, nenhuma leitura que as distinga.
+
+Importa porque skill confirmada alimenta o match e o portfólio público — AUTH-04
+só publica skill **confirmada**. "Quem confirmou" é a diferença entre uma
+afirmação do candidato e uma leitura automática, e é a pergunta que aparece
+quando alguém questiona o perfil.
+
+**Decisão que vem junto:** expor `auditedBy` na view é uma linha; o que precisa
+ser decidido é o **vocabulário** da coluna — hoje `"self"` e `null`, sem
+constante que os liste, do mesmo jeito que `auth_event.kind` era texto livre
+antes de AUTH-02. Fechar a lista antes de a tela ler é o que evita repetir
+aquele achado.
+
+### E-08 · Cobertura de `src/cli.ts`, hoje em zero 📋
+
+2.696 linhas, 1.238 statements descobertos, 0%. O CLAUDE.md anuncia "97,6%
+(fora do CLI)", e o parêntese faz bastante trabalho.
+
+**O argumento para deixar como está é bom.** `cli.ts` é fiação do Commander
+sobre funções que já têm teste exaustivo; testar o wrapper mede uma biblioteca
+de terceiros. Teste de CLI é lento, acoplado a texto de saída, e quebra quando
+alguém melhora uma mensagem — vira pressão para congelar a interface no formato
+de hoje, que é o mesmo defeito que E-06 encontrou numa lista de exceções.
+
+**O argumento do outro lado é mais forte do que parece.** É a superfície que o
+operador usa todo dia, e é a única onde parte das operações existe — nem tudo
+que a CLI faz tem tela. Um `pnpm check` verde com 0% ali é um verde que não diz
+nada sobre o caminho mais usado do sistema. E E-06 acabou de demonstrar o gênero
+de defeito que só a composição revela: cada metade correta, o conjunto quebrado,
+nenhum teste puro vendo.
+
+**Corte proposto, a validar:** cobrir os comandos que **escrevem** — `track`,
+`jobs add`, `jobs import`, `cv set`, `auth set-password`, `mail accept/dismiss`,
+`skills confirm/reject` — porque efeito colateral errado não volta atrás, e o
+funil é o único dado que um sync não reconstrói (regra 2). Deixar de fora os que
+só imprimem — `list`, `show`, `stats`, `pipeline`, `report` —, cujo teste seria
+asserir texto. Meta de cobertura declarada **para o arquivo**, em vez de um
+número global que o esconde.
+
+**Fica de fora:** perseguir 100%. O objetivo é que nenhum comando que grava
+esteja sem uma passada, não que a métrica fique bonita.
+
+---
+
+## Ordem de execução proposta
+
+A lista anterior foi retirada quando o último item dela foi entregue. Esta
+cobre o que está aberto em 20/08/2026, e ordena por risco, não por esforço.
+
+1. **B-04** — `pick()` por presença. É P0 porque perde o nome do empregador
+   justamente na fonte que o nomeia, e vaga sem empresa não casa com contato:
+   sai do `jho referrals` sem que ninguém perceba. Correção contida em um
+   arquivo, com o teste de caracterização já escrito.
+2. **UI-06** — `externalUrl`. Troca de uma expressão por `publicPostingUrl()`,
+   compatível com todos os consumidores atuais, e desarma um `href="true"`
+   antes de alguém escrevê-lo. É a melhor razão entre risco e custo da lista.
+3. **B-05** — `--limit` ultrapassado. Reserva antes do `await`. Pequeno, e do
+   tipo que fica anos sem ser notado porque o número está quase certo.
+4. **UI-07** — `auditedBy`. Depende de fechar o vocabulário da coluna primeiro;
+   a leitura em si é uma linha.
+5. **E-07** — chave estrangeira do `auth_event`. Não é urgente porque exclusão
+   de conta não existe, e é **por isso** que agora é barato: decidir antes de
+   haver linha para migrar. Anda junto com a decisão de retenção que AUTH-02
+   adiou.
+6. **E-08** — cobertura do `cli.ts`. Precisa do corte acordado antes de virar
+   trabalho; sem ele vira perseguição de métrica.
+7. **UI-05** — PWA. Por último de propósito, e não por falta de valor: enquanto
+   a regra 12 mantiver o bind em loopback e não houver deploy com HTTPS, o
+   celular não alcança o dashboard e a parte instalável não tem onde ser usada.
+   O que dá para adiantar — manifest, ícones, `theme-color` — é pequeno e cabe
+   junto do deploy. A decisão sobre cache deve ser escrita **antes** de existir
+   qualquer service worker, não depois.
+
+**M-05** não entra na ordem: conferido contra o código, já estava entregue nas
+migrações 0015–0018.

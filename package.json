@@ -24,7 +24,11 @@
     "test:watch": "vitest",
     "check": "pnpm typecheck && pnpm test",
     "test:e2e": "node tests/e2e/run-isolated.mjs",
-    "test:e2e:external": "node tests/e2e/setup.mjs && node tests/e2e/ui.mjs"
+    "test:e2e:external": "node tests/e2e/setup.mjs && node tests/e2e/ui.mjs",
+    "prebuild": "node scripts/sw-version.mjs",
+    "icons": "node scripts/make-icons.mjs",
+    "sw": "node scripts/sw-version.mjs",
+    "predev": "node scripts/sw-version.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

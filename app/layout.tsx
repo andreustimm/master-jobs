@@ -16,6 +16,7 @@ import {
   THEMES,
 } from "../src/core/theme.ts";
 import { AppearanceSwitch } from "./theme-switch";
+import { ServiceWorkerRegister } from "./service-worker";
 import { stopImpersonatingAction } from "./admin/actions";
 import { LocaleSwitch } from "./locale-switch";
 import { headers } from "next/headers";
@@ -29,6 +30,17 @@ import {
 export const metadata: Metadata = {
   title: "job-hunt-os",
   description: "Sourcing, ranqueamento e funil de candidaturas",
+  manifest: "/manifest.json",
+  // Instalado no celular, a barra de status usa isto. `appleWebApp` porque o
+  // iOS ignora o manifest para tela cheia e lê a meta própria dele.
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "job-hunt-os" },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/icons/icon-192.png",
+  },
 };
 
 /**
@@ -40,10 +52,28 @@ export const metadata: Metadata = {
  * failure, and this app is read by someone who will be squinting at job
  * descriptions on a phone.
  */
+/**
+ * A cor da barra do navegador, em hexadecimal literal.
+ *
+ * Único lugar do projeto onde cor não vem de token, e não é descuido: uma
+ * `<meta>` é lida pelo sistema operacional antes de existir CSS, então `var()`
+ * não resolve ali. Os valores espelham `--background` do tema `hp` em cada
+ * modo, que é o padrão — e por isso vivem numa constante nomeada, para a
+ * ligação ficar escrita em vez de subentendida.
+ */
+const THEME_COLOR = [
+  { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+  { media: "(prefers-color-scheme: dark)", color: "#101215" },
+];
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // Duas, porque o sistema tem tema claro e escuro e a barra do navegador
+  // precisa acompanhar. Uma cor fixa deixaria a barra escura sobre uma
+  // interface clara — o oposto do que o eixo de aparência existe para fazer.
+  themeColor: THEME_COLOR,
 };
 
 /**
@@ -106,6 +136,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         verdade dentro da árvore.
       */}
       <body className="bg-background text-foreground antialiased" suppressHydrationWarning>
+        <ServiceWorkerRegister />
         <TooltipProvider>
           <header className="border-b bg-card">
             {/*

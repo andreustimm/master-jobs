@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ClearCachesOnLogout } from "./clear-caches";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getTranslator } from "../i18n";
@@ -19,7 +20,7 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; cleared?: string; reset?: string }>;
 }) {
   // In single-user mode there is nobody to authenticate against.
   // Sem nenhuma conta cadastrada, um formulário de login é um beco sem saída:
@@ -51,7 +52,7 @@ pnpm jho auth set-password ${"seu@email.com"}`}
     );
   }
 
-  const { error } = await searchParams;
+  const { error, cleared } = await searchParams;
 
   const message =
     error === "missing"
@@ -67,6 +68,10 @@ pnpm jho auth set-password ${"seu@email.com"}`}
     // ao redor, e um formulário encostado no canto de uma tela vazia parece
     // um erro de layout.
     <main className="flex min-h-[70vh] flex-col items-center justify-center py-16">
+      {/* Depois do logout: pede ao service worker para esvaziar o cache
+          privado. Ver a nota no componente sobre por que existe mesmo com o
+          service worker não guardando página autenticada. */}
+      {cleared === "1" && <ClearCachesOnLogout />}
       <h1 className="type-display-md chevron mb-4">{t("login.title")}</h1>
 
       <Card className="w-full max-w-[42ch]">
