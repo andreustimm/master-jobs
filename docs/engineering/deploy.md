@@ -67,22 +67,60 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 uma sessão e serve currículo, funil e export para qualquer requisição. É modo de
 desenvolvimento local e num endereço público é o vazamento inteiro.
 
-## Os três bancos
+## Os três ambientes
 
 Um banco por ambiente, no grupo `master-jobs` em `aws-us-east-1` — a mesma
 região das funções da Vercel (`iad1`), para o round-trip não atravessar o país.
 
-| Ambiente Vercel | Banco Turso | Branch |
-|---|---|---|
-| Production | `master-jobs` | `main` |
-| Preview | `master-jobs-staging` | `staging` |
-| Development | `master-jobs-dev` | local |
+| Branch | Endereço | Banco Turso | Ambiente Vercel |
+|---|---|---|---|
+| `main` | `jobs.mastertimm.com.br` | `master-jobs` | Production |
+| `staging` | `jobs-staging.mastertimm.com.br` | `master-jobs-staging` | Preview |
+| `dev` | `jobs-dev.mastertimm.com.br` | `master-jobs-dev` | Preview |
+| — | local | `file:./data/jobs.db` | Development |
 
 Os três compartilham o schema; só o de produção carrega dado real. `dev` e
 `staging` nascem vazios de propósito: copiar produção para lá levaria junto
 `auth_user`, `auth_session` e `auth_login_token` — credenciais de gente de
 verdade num ambiente com menos cuidado. Para popular um deles, aponte o script
 para a URL correspondente e escolha à mão o que copiar.
+
+As variáveis `TURSO_*` de `staging` e `dev` estão declaradas **por branch** no
+ambiente Preview da Vercel, e não só no Preview genérico. Sem isso as duas
+branches dividiriam o mesmo banco, e uma migração destrutiva testada em `dev`
+levaria `staging` junto.
+
+### DNS
+
+Os três são `CNAME` para `cname.vercel-dns.com` na Cloudflare, **sem proxy**
+(nuvem cinza). Com a nuvem laranja ligada a Vercel não consegue emitir o
+certificado, e o resultado são dois CDNs em série sem ninguém ganhar nada.
+
+### Quem enxerga o quê
+
+A proteção de deployment da Vercel está em `all_except_custom_domains`. Ela
+isenta **apenas o domínio de produção**: `jobs.mastertimm.com.br` responde a
+qualquer visitante, e é o que o portfólio público (`/p/…`) e o manifest da PWA
+exigem.
+
+`jobs-dev` e `jobs-staging` continuam atrás do SSO da Vercel, e isso é
+deliberado — ambiente de teste com dado de teste não precisa de plateia. Para
+abri-los seria preciso desligar a proteção do projeto inteiro, o que tornaria
+pública também toda URL de preview de PR.
+
+## O portão
+
+`.github/workflows/ci.yml` roda typecheck, testes com cobertura e build no PR e
+no push das três branches. `migrate.yml` aplica as migrações no banco da branch.
+
+**A Vercel implanta no push, independente do CI.** As duas coisas disparam do
+mesmo evento e não se conhecem: sem proteção de branch em `main` exigindo o CI
+verde, o workflow vermelho não impede o deploy. O portão existe, mas só fecha
+depois que alguém liga a proteção em Settings → Branches.
+
+Segredos que o `migrate.yml` precisa, um por ambiente para que um workflow de
+`dev` comprometido não alcance produção: `TURSO_TOKEN_PROD`,
+`TURSO_TOKEN_STAGING`, `TURSO_TOKEN_DEV`.
 
 ## Migrar o banco
 
