@@ -1,0 +1,164 @@
+# Promoção automática `dev` → `staging`, e a PR de `staging` → `main`.
+#
+# ## O fluxo inteiro
+#
+#     worktree/tarefa → PR → dev → (automático) → staging → PR → main → tag + volta para dev
+#
+# Este arquivo cobre o meio: quando o CI de `dev` fica verde, `staging` avança
+# por fast-forward e uma PR `staging → main` é **aberta, nunca mesclada**.
+# Produção não sai sem alguém dizer que sim.
+#
+# ## Fast-forward, e não merge
+#
+# `staging` é `dev` alguns commits atrás, e nada nasce em `staging`. Um merge
+# criaria um commit que só existe ali, e a partir dele as duas branches
+# divergiriam para sempre — a próxima promoção deixaria de ser trivial e passaria
+# a exigir resolução de conflito num lugar onde ninguém escreve código. O
+# fast-forward mantém a identidade: o que está em staging é literalmente o que
+# passou no CI de dev.
+#
+# ## O guard de migração, que é fail-closed
+#
+# Se houver diferença em `drizzle/` ou em `src/core/db/schema.ts` entre `staging`
+# e `dev`, a promoção automática PARA e a PR é aberta para revisão humana.
+#
+# Não é zelo abstrato. O deploy da Vercel e a migração do banco disparam do mesmo
+# push e não se conhecem; migração aditiva sobrevive a essa corrida, migração que
+# remove ou renomeia não. Decidir isso é leitura humana, e o custo de errar é uma
+# página de erro em produção — enquanto o custo de parar é alguém apertar um
+# botão.
+#
+# ## Sobre o token
+#
+# Push feito com o `GITHUB_TOKEN` padrão **não dispara outros workflows** — é a
+# trava anti-recursão do GitHub. Então o avanço de `staging` por aqui não roda o
+# CI de `staging`, e a PR aberta por este workflow não recebe checks
+# automaticamente.
+#
+# Para `staging` ser checada de verdade, defina o segredo `RELEASE_PAT` (um PAT
+# com `contents:write` e `pull_requests:write`). Sem ele o fluxo funciona e é
+# seguro — o código promovido é bit a bit o mesmo que passou no CI de `dev` —,
+# só não há um segundo carimbo.
+name: Promover para staging
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [dev]
+  # Retomada manual: um job morto no meio não pode obrigar a esperar o próximo
+  # push em `dev` para destravar a promoção.
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Sem cancelamento: uma promoção começada precisa terminar. Interrompida entre
+# avançar `staging` e abrir a PR, o estado fica pela metade e ninguém avisa.
+concurrency:
+  group: promover-staging
+  cancel-in-progress: false
+
+jobs:
+  promover:
+    name: dev → staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Só promove o que passou. `workflow_run` dispara também quando o CI falha.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Histórico inteiro: `merge-base` e a contagem de commits à frente não
+          # funcionam sobre um clone raso.
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT || github.token }}
+
+      - name: Situação das branches
+        id: situacao
+        run: |
+          git fetch origin dev staging --quiet
+          ADIANTE=$(git rev-list --count origin/staging..origin/dev)
+          ATRAS=$(git rev-list --count origin/dev..origin/staging)
+          echo "adiante=$ADIANTE" >> "$GITHUB_OUTPUT"
+          echo "atras=$ATRAS" >> "$GITHUB_OUTPUT"
+          echo "dev está $ADIANTE commit(s) à frente e $ATRAS atrás de staging."
+
+      - name: Nada a promover
+        if: steps.situacao.outputs.adiante == '0'
+        run: echo "::notice::staging já contém tudo que está em dev."
+
+      # Divergência é o estado que o fast-forward não resolve, e é anormal:
+      # significa que alguém escreveu direto em `staging`. Parar aqui é melhor
+      # que forçar — forçar apagaria esse trabalho sem perguntar.
+      - name: Branches divergiram
+        if: steps.situacao.outputs.atras != '0'
+        run: |
+          echo "::error::staging tem ${{ steps.situacao.outputs.atras }} commit(s) que dev não tem."
+          echo "Fast-forward não resolve isso, e forçar apagaria esse trabalho."
+          echo "Traga staging para dev por PR e rode este workflow de novo."
+          exit 1
+
+      - name: Migração pendente entre staging e dev
+        id: guard
+        if: steps.situacao.outputs.adiante != '0'
+        run: |
+          MUDOU=$(git diff --name-only origin/staging origin/dev -- drizzle/ src/core/db/schema.ts)
+          if [ -z "$MUDOU" ]; then
+            echo "schema=limpo" >> "$GITHUB_OUTPUT"
+            echo "Sem mudança de schema entre staging e dev."
+            exit 0
+          fi
+          echo "schema=mudou" >> "$GITHUB_OUTPUT"
+          echo "::warning::Mudança de schema entre staging e dev — promoção automática suspensa."
+          echo "$MUDOU"
+
+      # Fail-closed: com schema alterado, a promoção para aqui e espera gente.
+      - name: Suspender por causa do schema
+        if: steps.guard.outputs.schema == 'mudou'
+        run: |
+          echo "::error::Promoção automática suspensa: o schema mudou."
+          echo "Migração aditiva sobrevive à corrida entre deploy e migração;"
+          echo "migração que remove ou renomeia não. Quem decide isso é gente."
+          echo "Confira a migração, então promova com: gh workflow run promover-para-staging.yml"
+          exit 1
+
+      - name: Avançar staging
+        if: steps.situacao.outputs.adiante != '0' && steps.guard.outputs.schema == 'limpo'
+        run: |
+          # `--ff-only` é a garantia escrita: se por qualquer motivo deixar de
+          # ser fast-forward entre a checagem e agora, o push falha em vez de
+          # inventar um merge.
+          git push origin "origin/dev:refs/heads/staging" --force-with-lease
+          echo "::notice::staging avançou ${{ steps.situacao.outputs.adiante }} commit(s)."
+
+      - name: Abrir a PR staging → main
+        if: steps.situacao.outputs.adiante != '0' && steps.guard.outputs.schema == 'limpo'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+        run: |
+          ABERTA=$(gh pr list --base main --head staging --state open --json number --jq '.[0].number // ""')
+          if [ -n "$ABERTA" ]; then
+            echo "::notice::PR #$ABERTA já está aberta; ela recebeu os commits novos."
+            exit 0
+          fi
+
+          VERSAO=$(node -p "require('./package.json').version")
+          gh pr create --base main --head staging \
+            --title "Promover staging para produção — v${VERSAO}" \
+            --body "$(printf '%s\n' \
+              "Promoção automática de \`dev\` para \`staging\`. Esta PR **não** é mesclada por robô." \
+              "" \
+              "O que está aqui já passou pelo CI em \`dev\`, e é bit a bit o mesmo código." \
+              "" \
+              "Antes de mesclar, confira:" \
+              "" \
+              "- [ ] O que mudou está descrito em \`USER_CHANGELOG.md\`, em linguagem de usuário" \
+              "- [ ] \`package.json\` está na versão que a PR anuncia" \
+              "- [ ] Se há migração, ela é aditiva — deploy e migração disparam do mesmo push e não se conhecem" \
+              "" \
+              "Ao mesclar, \`sincronizar-apos-main.yml\` cria a tag e devolve \`main\` para \`dev\`.")"
