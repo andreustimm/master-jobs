@@ -12,6 +12,16 @@ import type { Dictionary } from "./pt-BR.ts";
  * "Funnel" would read as marketing.
  */
 export const en: Dictionary = {
+  /** Splash and footer. See `src/core/pwa/splash.ts`. */
+  splash: {
+    loading: "Loading Master Jobs",
+  },
+  changelog: {
+    link: "What's new",
+    title: "What's new",
+    lead: "What changed in each version.",
+    close: "Close",
+  },
   nav: {
     cockpit: "Cockpit",
     jobs: "Jobs",

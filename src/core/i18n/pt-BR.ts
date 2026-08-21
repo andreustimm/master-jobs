@@ -9,6 +9,16 @@
  * A chave é lida em revisão de código muito mais vezes do que é digitada.
  */
 export const ptBR = {
+  /** Tela de abertura e rodapé. Ver `src/core/pwa/splash.ts`. */
+  splash: {
+    loading: "Carregando o Master Jobs",
+  },
+  changelog: {
+    link: "Novidades",
+    title: "Novidades",
+    lead: "O que mudou no sistema a cada versão.",
+    close: "Fechar",
+  },
   nav: {
     cockpit: "Cockpit",
     jobs: "Vagas",
