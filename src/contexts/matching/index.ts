@@ -22,6 +22,14 @@ export {
 export const matchingProfile = loadCandidateMatchingProfile;
 export const setMatchingProfile = saveCandidateMatchingProfile;
 
+export {
+  CONFIANCA_FORTE,
+  CONFIANCA_MINIMA,
+  curriculoSustentaPerfil,
+  deriveMatchingProfile,
+} from "./domain/derive.ts";
+export { ensureMatchingProfile, type ResultadoPerfil } from "./app/ensure-profile.ts";
+
 // Matching owns the candidate-to-job board and cockpit projections. This
 // boundary keeps presentation adapters independent of the Drizzle composition
 // root without creating a second copy of the queries.

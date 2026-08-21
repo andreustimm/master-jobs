@@ -68,7 +68,7 @@ import {
 import { buildReport, exportDossiers } from "./core/report/markdown.ts";
 import { POSITIONING_STATUSES, positioningStatus } from "./core/positioning/plan.ts";
 import { seedPositioning } from "./core/positioning/seed.ts";
-import { scoreAll } from "./core/scoring/apply.ts";
+import { scoreAll, scoreEveryCandidate } from "./core/scoring/apply.ts";
 import { scoreMessages } from "./contexts/matching/index.ts";
 import { renderScoreMessage, translator } from "./core/i18n/index.ts";
 import { loadSources } from "./core/sources/config.ts";
@@ -512,10 +512,98 @@ jobs
   .command("score")
   .description("Recompute fit scores")
   .option("--all", "rescore every open job, not just unscored ones")
-  .action(async (opts: { all?: boolean }) => {
+  .option(
+    "--every-candidate",
+    "pontuar todos os candidatos, derivando o perfil de quem só tem currículo",
+  )
+  .action(async (opts: { all?: boolean; everyCandidate?: boolean }) => {
     await withDb(async () => {
-      const result = await scoreAll(await activeCandidateId(), { all: opts.all });
-      console.log(`${c.green("✓")} scored ${result.scored} job(s) · best fit ${result.topFit.toFixed(0)}`);
+      // O padrão continua sendo só o candidato ativo: quem acabou de subir um
+      // currículo quer o resultado agora, e não esperar pelo acervo dos outros.
+      if (!opts.everyCandidate) {
+        const result = await scoreAll(await activeCandidateId(), { all: opts.all });
+        console.log(`${c.green("✓")} scored ${result.scored} job(s) · best fit ${result.topFit.toFixed(0)}`);
+        return;
+      }
+
+      const ROTULO: Record<string, string> = {
+        "ja-tinha": "perfil próprio",
+        derivado: "derivado do CV",
+        "sem-curriculo": "sem currículo",
+        "curriculo-fraco": "CV sem skill reconhecida",
+      };
+
+      const linhas = await scoreEveryCandidate({ all: opts.all });
+      for (const l of linhas) {
+        const marca = l.scored > 0 ? c.green("✓") : c.dim("·");
+        console.log(
+          `  ${marca} ${truncate(l.slug, 24)} ${String(l.scored).padStart(6)} vaga(s) ` +
+          `${c.dim(`· melhor fit ${l.topFit.toFixed(0)} · ${ROTULO[l.perfil] ?? l.perfil}`)}`,
+        );
+      }
+      const total = linhas.reduce((soma, l) => soma + l.scored, 0);
+      console.log(c.dim(`\n  ${linhas.length} candidato(s) · ${total} pontuação(ões)\n`));
+    });
+  });
+
+/* Fila de repontuação — alimentada pelo salvamento de currículo (ADR 0009). */
+const rescore = jobs
+  .command("rescore")
+  .description("Fila de repontuação por candidato, acionada ao salvar currículo");
+
+rescore
+  .command("queue")
+  .description("Enfileirar a repontuação de um candidato")
+  .option("--candidate <id>", "candidato; o ativo por omissão")
+  .action(async (opts: { candidate?: string }) => {
+    await withDb(async () => {
+      const { enqueueScore } = await import("./core/scoring/queue.ts");
+      const alvo = opts.candidate
+        ? idNumerico(opts.candidate, "candidato")
+        : await activeCandidateId();
+      if (alvo === null) return;
+
+      await enqueueScore(alvo, { origin: "perfil" });
+      console.log(`${c.green("✓")} candidato ${alvo} na fila de repontuação`);
+      console.log(c.dim("  Consuma com: jho jobs rescore run\n"));
+    });
+  });
+
+rescore
+  .command("run")
+  .description("Consumir a fila até esvaziar")
+  .option("--max <n>", "parar depois de N candidatos")
+  .option("--worker <nome>", "quem está consumindo, para o registro do claim", "cli")
+  .action(async (opts: { max?: string; worker: string }) => {
+    await withDb(async () => {
+      const { runScoreQueue } = await import("./core/scoring/queue.ts");
+      const r = await runScoreQueue({
+        max: opts.max ? Number(opts.max) : undefined,
+        worker: opts.worker,
+      });
+      console.log(
+        `${c.green("✓")} ${r.processadas} candidato(s) · ${r.pontuadas} pontuação(ões)` +
+        (r.falhas > 0 ? c.red(` · ${r.falhas} falha(s)`) : ""),
+      );
+    });
+  });
+
+rescore
+  .command("status")
+  .description("O que há na fila")
+  .action(async () => {
+    await withDb(async () => {
+      const { scoreQueueStatus } = await import("./core/scoring/queue.ts");
+      const contagem = await scoreQueueStatus();
+      const total = Object.values(contagem).reduce((s, n) => s + n, 0);
+      if (total === 0) {
+        console.log(c.dim("\n  Fila vazia.\n"));
+        return;
+      }
+      for (const [estado, n] of Object.entries(contagem)) {
+        console.log(`  ${estado.padEnd(10)} ${String(n).padStart(4)}`);
+      }
+      console.log();
     });
   });
 

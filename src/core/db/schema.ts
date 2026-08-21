@@ -751,6 +751,58 @@ export const scrapeTask = sqliteTable(
  * O índice único por `job_id` aqui existe por outro motivo: impedir que clicar
  * três vezes no botão enfileire a mesma vaga três vezes.
  */
+/**
+ * Fila de repontuação por candidato.
+ *
+ * Existe porque salvar um currículo muda o que o ranking deveria dizer, e
+ * recalcular na hora não cabe no pedido: são milhares de gravações, e quem
+ * acabou de colar o CV ficaria olhando um formulário travado. A tela responde na
+ * hora e o trabalho acontece depois.
+ *
+ * Tabela, e não broker — ADR 0009, mesma decisão de `verify_task` e
+ * `scrape_task`. Um processo, um banco, e o estado da fila visível por `select`.
+ *
+ * **Índice único por candidato.** Salvar o currículo três vezes em dois minutos
+ * é comum — corrigir um erro de digitação, colar de novo, ajustar uma linha. Sem
+ * o índice, seriam três repontuações completas do acervo para produzir o mesmo
+ * resultado. Com ele, o segundo pedido atualiza o que já está pendente.
+ */
+export const scoreTask = sqliteTable(
+  "score_task",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    /** pending | scoring | done | failed */
+    status: text("status").notNull().default("pending"),
+    /**
+     * `cv` | `perfil` | `periodic` — o que pediu.
+     *
+     * Currículo salvo é pedido de gente esperando resultado; a varredura diária
+     * não é. A ordem da fila usa isto.
+     */
+    origin: text("origin").notNull().default("cv"),
+    /** Maior roda antes. Pedido de usuário entra acima da varredura. */
+    priority: real("priority").notNull().default(0),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    /** Quantas vagas a última execução pontuou. Para a tela poder dizer. */
+    scored: integer("scored"),
+    claimedAt: text("claimed_at"),
+    claimedBy: text("claimed_by"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("score_task_candidate_idx").on(t.candidateId),
+    index("score_task_claim_idx").on(t.status, t.priority),
+  ],
+);
+
+export type ScoreTask = typeof scoreTask.$inferSelect;
+export type ScoreTaskStatus = "pending" | "scoring" | "done" | "failed";
+
 export const verifyTask = sqliteTable(
   "verify_task",
   {
