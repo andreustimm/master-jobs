@@ -1,0 +1,159 @@
+# Depois que alguém mescla `staging` → `main`, o fechamento é mecânico:
+# criar a tag da versão e devolver `main` para `dev`.
+#
+# ## Por que devolver para `dev`
+#
+# Nem tudo entra por `dev`. Hotfix urgente nasce em `main`, e a correção de um
+# arquivo do próprio fluxo também — como este. Sem o retorno, `dev` fica sem
+# esses commits, a próxima promoção deixa de ser fast-forward, e o workflow ao
+# lado para com "as branches divergiram". O sintoma aparece dias depois do erro.
+#
+# ## Por PR, e não por push direto
+#
+# O retorno pode conflitar: `dev` seguiu andando enquanto a PR de produção
+# esperava aprovação. Um push forçado resolveria o conflito apagando o trabalho
+# de quem estava em `dev` — a PR o expõe para alguém decidir.
+#
+# Quando não há conflito, a PR é mesclada aqui mesmo: pedir revisão humana de um
+# merge que só recoloca em `dev` o que já foi aprovado para produção é cerimônia
+# sem conteúdo.
+#
+# ## A armadilha do token, que custa caro e é silenciosa
+#
+# A tag é criada pela **API** (`gh api`), e não por `git push`. `actions/checkout`
+# grava a credencial do token como `http.extraheader` no `.git/config`, escopado
+# por host — e trocar a URL do remote para incluir um PAT **não** remove esse
+# header. O push sairia autenticado pelo token padrão, e ref criada por ele não
+# dispara workflow nenhum: a trava anti-recursão do GitHub. A tag existiria e
+# nada aconteceria, sem erro em lugar algum.
+#
+# Ref criada por PAT via API dispara normalmente. Sem `RELEASE_PAT` a tag é
+# criada do mesmo jeito — apenas não aciona nada a jusante.
+name: Sincronizar após main
+
+on:
+  push:
+    branches: [main]
+  # Retomada: um job morto entre criar a PR e mesclá-la deixaria o sync pela
+  # metade, e sem este gatilho só o próximo push em `main` resolveria — o que
+  # pode levar dias.
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sincronizar-main
+  cancel-in-progress: false
+
+jobs:
+  marcar:
+    name: Criar a tag da versão
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      versao: ${{ steps.versao.outputs.versao }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Ler a versão
+        id: versao
+        run: |
+          VERSAO=$(node -p "require('./package.json').version")
+          echo "versao=$VERSAO" >> "$GITHUB_OUTPUT"
+          echo "package.json declara v$VERSAO."
+
+      - name: Criar a tag, se ainda não existir
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+          VERSAO: ${{ steps.versao.outputs.versao }}
+        run: |
+          # Idempotente: este workflow também roda por `workflow_dispatch`, e um
+          # segundo disparo não pode falhar só porque o primeiro funcionou.
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --silent 2>/dev/null; then
+            echo "::notice::A tag v${VERSAO} já existe."
+            exit 0
+          fi
+
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/tags/v${VERSAO}" \
+            -f sha="${GITHUB_SHA}" --silent
+          echo "::notice::Tag v${VERSAO} criada em ${GITHUB_SHA}."
+
+  devolver:
+    name: main → dev
+    needs: marcar
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT || github.token }}
+
+      - name: dev já tem tudo?
+        id: situacao
+        run: |
+          git fetch origin main dev --quiet
+          FALTA=$(git rev-list --count origin/dev..origin/main)
+          echo "falta=$FALTA" >> "$GITHUB_OUTPUT"
+          echo "dev está $FALTA commit(s) atrás de main."
+
+      - name: Nada a devolver
+        if: steps.situacao.outputs.falta == '0'
+        run: echo "::notice::dev já contém tudo que está em main."
+
+      # Caminho rápido: `dev` não andou desde a promoção, então o retorno é
+      # fast-forward e não há o que revisar.
+      - name: Devolver por fast-forward
+        id: rapido
+        if: steps.situacao.outputs.falta != '0'
+        run: |
+          if [ "$(git rev-list --count origin/main..origin/dev)" = "0" ]; then
+            git push origin "origin/main:refs/heads/dev"
+            echo "feito=sim" >> "$GITHUB_OUTPUT"
+            echo "::notice::dev avançou para main por fast-forward."
+          else
+            echo "feito=nao" >> "$GITHUB_OUTPUT"
+            echo "dev andou desde a promoção; o retorno vai por PR."
+          fi
+
+      - name: Devolver por PR
+        if: steps.situacao.outputs.falta != '0' && steps.rapido.outputs.feito == 'nao'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+          VERSAO: ${{ needs.marcar.outputs.versao }}
+        run: |
+          ABERTA=$(gh pr list --base dev --head main --state open --json number --jq '.[0].number // ""')
+          if [ -z "$ABERTA" ]; then
+            ABERTA=$(gh pr create --base dev --head main \
+              --title "Devolver main para dev — v${VERSAO}" \
+              --body "$(printf '%s\n' \
+                "Retorno automático depois da promoção para produção." \
+                "" \
+                "Existe porque nem tudo entra por \`dev\`: hotfix nasce em \`main\`, e" \
+                "correção nos próprios arquivos de fluxo também. Sem este retorno, \`dev\`" \
+                "fica sem esses commits e a próxima promoção deixa de ser fast-forward —" \
+                "com o sintoma aparecendo dias depois da causa." \
+                "" \
+                "Sem conflito, é mesclada automaticamente. Se você está lendo isto com a" \
+                "PR aberta, houve conflito: \`dev\` andou enquanto a promoção esperava" \
+                "aprovação, e resolver isso apagando trabalho não é decisão de robô.")" \
+              --json number --jq .number 2>/dev/null || echo "")
+          fi
+
+          if [ -z "$ABERTA" ]; then
+            echo "::error::Não consegui abrir nem encontrar a PR de retorno."
+            exit 1
+          fi
+
+          # Merge, e não rebase: `main` é história publicada e reescrevê-la faria
+          # `dev` divergir de todo clone que já a tem.
+          if gh pr merge "$ABERTA" --merge --delete-branch=false 2>/dev/null; then
+            echo "::notice::PR #$ABERTA mesclada: dev está em dia com main."
+          else
+            echo "::warning::PR #$ABERTA precisa de resolução manual de conflito."
+          fi

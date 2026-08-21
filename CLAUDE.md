@@ -279,6 +279,57 @@ dashboard Next.js em `localhost:3000`.
 > Várias APIs devolvem `""` para campo não preenchido. Use `firstNonEmpty()`
 > de `src/core/sources/http.ts`. Esse bug já apagou 4.538 descrições uma vez.
 
+> **18. Tarefa nasce em worktree a partir de `dev`, e a PR aponta para `dev`.**
+> Nunca comite direto em `dev`, `staging` ou `main`. A promoção para `staging` é
+> automática e a de `staging` para `main` é humana — ver **Fluxo de trabalho**
+> abaixo. Um commit direto em `staging` faz as branches divergirem e trava a
+> promoção seguinte, com o sintoma aparecendo dias depois da causa.
+
+---
+
+## Fluxo de trabalho
+
+```
+worktree/tarefa → PR → dev → (automático) → staging → PR humana → main → tag + volta para dev
+```
+
+| Etapa | Quem faz | Como |
+|---|---|---|
+| tarefa → `dev` | pessoa ou agente | worktree a partir de `dev`, PR com CI verde |
+| `dev` → `staging` | automático | `promover-para-staging.yml`, quando o CI de `dev` fica verde |
+| `staging` → `main` | **humano** | PR aberta pelo robô, mesclada por gente |
+| tag + `main` → `dev` | automático | `sincronizar-apos-main.yml` |
+
+**Fast-forward, não merge, de `dev` para `staging`.** Nada nasce em `staging`;
+um merge criaria ali um commit que não existe em `dev`, e a partir dele as duas
+divergiriam para sempre. O que está em `staging` é literalmente o que passou no
+CI de `dev`.
+
+**Produção não sai sem gente.** A PR `staging → main` é aberta e nunca mesclada
+por robô.
+
+**Migração suspende a promoção automática.** Diferença em `drizzle/` ou em
+`src/core/db/schema.ts` entre `staging` e `dev` para o fluxo: o deploy da Vercel
+e a migração disparam do mesmo push e não se conhecem. Migração aditiva
+sobrevive a essa corrida; migração que remove ou renomeia, não — e decidir qual
+é qual é leitura humana.
+
+**O retorno para `dev` não é opcional.** Hotfix nasce em `main`, e correção nos
+próprios arquivos de fluxo também. Sem devolver, `dev` fica sem esses commits e
+a promoção seguinte deixa de ser fast-forward.
+
+**Sobre o `RELEASE_PAT`.** Push feito com o token padrão da Action não dispara
+outros workflows — trava anti-recursão do GitHub. Sem o segredo o fluxo funciona
+e é seguro, porque o código promovido é bit a bit o que passou no CI de `dev`;
+com ele, `staging` e as PRs geradas também recebem checks próprios.
+
+| Ambiente | Branch | Banco Turso | Endereço |
+|---|---|---|---|
+| Produção | `main` | `master-jobs` | `jobs.mastertimm.com.br` |
+| Staging | `staging` | `master-jobs-staging` | `jobs-staging.mastertimm.com.br` |
+| Dev | `dev` | `master-jobs-dev` | `jobs-dev.mastertimm.com.br` |
+| Local | — | `file:./data/jobs.db` | `127.0.0.1:3000` |
+
 ---
 
 ## Comandos
