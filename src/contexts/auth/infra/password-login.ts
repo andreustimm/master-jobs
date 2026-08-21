@@ -20,7 +20,7 @@ import { linkedCandidatesFor } from "./drizzle-store.ts";
 import { clock } from "../../../core/clock.ts";
 import { getDb } from "../../../core/db/client.ts";
 import { authEvent, authUser } from "../../../core/db/schema.ts";
-import { hashPassword, verifyPassword } from "../domain/password.ts";
+import { hashPassword, KdfIndisponivelError, verifyPassword } from "../domain/password.ts";
 import type { PasswordResult, PasswordVerifier } from "../ports.ts";
 import type { Role } from "../domain/types.ts";
 
@@ -88,7 +88,28 @@ export async function verifyLogin(email: string, password: string): Promise<Pass
 
   // Verify against the decoy when there is no account, so the timing of a
   // miss matches the timing of a hit.
-  const ok = await verifyPassword(password, user?.passwordHash ?? (await decoy()));
+  let ok: boolean;
+  try {
+    ok = await verifyPassword(password, user?.passwordHash ?? (await decoy()));
+  } catch (erro) {
+    if (!(erro instanceof KdfIndisponivelError)) throw erro;
+
+    // O KDF não rodou, então não há veredito sobre a senha. Dizer "inválida"
+    // aqui mandaria embora quem digitou a certa, e o registro do sistema
+    // concordaria com o erro — o suporte procuraria um problema de senha que
+    // não existe.
+    //
+    // Registrado com `kind` próprio: `login_failed` alimenta o limite por
+    // tentativas, e uma falha de infraestrutura não pode ir bloqueando a conta
+    // de quem não errou nada.
+    await db.insert(authEvent).values({
+      kind: "login_unavailable",
+      email: normalised,
+      detail: erro.message.slice(0, 300),
+      at: clock().iso(),
+    });
+    return { ok: false, reason: "unavailable" };
+  }
 
   if (!user || !user.passwordHash || user.disabledAt || !ok) {
     await db.insert(authEvent).values({

@@ -1473,3 +1473,49 @@ Duas hipóteses, nenhuma verificada:
 Importa mais do que o número sugere: um teste de limite de autenticação que
 falha às vezes ensina a ignorar falha de CI, que é o começo de deixar passar a
 falha verdadeira.
+
+### B-10 · Falha do KDF era reportada como senha errada ✅
+
+Encontrado perseguindo o teste intermitente do B-09, e é bem maior que ele.
+
+`verifyPassword` envolvia a chamada do scrypt num `catch` que devolvia `false`
+para QUALQUER exceção. O comentário acima dele explica por que erro de formato
+tem de ler como "senha errada" — e está certo: ali o dado gravado É a resposta, e
+um `throw` viraria um 500 que confirma a existência da conta.
+
+Mas o mesmo `catch` engolia a falha de **recurso**. scrypt com os parâmetros
+deste sistema (N=65536, r=8) pede ~64 MB por chamada. Sob carga a alocação falha,
+e o efeito é:
+
+- quem digitou a senha **certa** é informado de que ela está errada;
+- o registro do sistema grava `login_failed`, concordando com o erro;
+- essa falha **conta para o limite por tentativas**, então uma indisponibilidade
+  do servidor vai trancando a conta de quem não errou nada;
+- nada em lugar nenhum diz que o verificador não chegou a rodar, e o suporte
+  procura um problema de senha que não existe.
+
+#### Entregue em 21/08/2026
+
+`KdfIndisponivelError` separa "não consegui verificar" de "está errada". Formato
+inválido continua devolvendo `false`, como sempre. Só a execução do KDF passou a
+propagar.
+
+`verifyLogin` traduz isso para `reason: "unavailable"`, com evento próprio
+(`login_unavailable`) — e não `login_failed`, que é o que alimenta o limite.
+A tela de login ganhou mensagem própria: "a sua pode estar certa".
+
+**Não vaza existência de conta.** `verifyLogin` roda o KDF contra um hash-isca
+quando a conta não existe, então a falha de recurso acontece igual nos dois casos
+e não distingue um do outro.
+
+Os testes provocam a falha REAL, sem dublê: um `N` alto o bastante para estourar
+o `maxmem` faz o próprio Node recusar com `ERR_CRYPTO_INVALID_SCRYPT_PARAMS`, que
+é o mesmo caminho de código que a pressão de memória percorre.
+
+#### Sobre o B-09
+
+A hipótese de contenção que o B-09 registra ganha um mecanismo concreto: sob a
+suíte inteira, scrypt paralelo pode falhar, e o `catch` transformava isso em
+"senha errada" — exatamente o sintoma observado. Não está provado que era essa a
+causa da intermitência, e o B-09 fica aberto até alguém reproduzi-la. O que
+mudou é que, se acontecer de novo, a falha agora se explica em vez de mentir.
