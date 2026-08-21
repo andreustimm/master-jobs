@@ -66,6 +66,7 @@ import {
   vocabularyGap,
 } from "./contexts/skills/index.ts";
 import { buildReport, exportDossiers } from "./core/report/markdown.ts";
+import { POSITIONING_STATUSES, positioningStatus } from "./core/positioning/plan.ts";
 import { seedPositioning } from "./core/positioning/seed.ts";
 import { scoreAll } from "./core/scoring/apply.ts";
 import { scoreMessages } from "./contexts/matching/index.ts";
@@ -141,6 +142,32 @@ async function activeCandidateId(): Promise<number> {
 
 function applicationStatus(value: string): ApplicationStatus | null {
   return APPLICATION_STATUSES.find((status) => status === value) ?? null;
+}
+
+/**
+ * Id numérico vindo do terminal, ou `null` — e a reclamação já impressa.
+ *
+ * `Number("abc")` é `NaN`, e `NaN` chega ao driver como bind inválido. O erro
+ * que sai não é "não achei": é um `DrizzleQueryError` cujo `message` é o SELECT
+ * inteiro, em vermelho, no terminal de quem só errou o id. E o ramo educado —
+ * `No job with id abc` — fica logo abaixo da consulta, inalcançável, porque a
+ * exceção acontece antes.
+ *
+ * Havia onze pontos assim. Os que consultam vazavam SQL; os que só escrevem
+ * (`markEngagement`, `auditSkill`) faziam pior: um `where id = NaN` não casa com
+ * linha nenhuma, então o comando terminava com sucesso sem ter feito nada.
+ *
+ * Inteiro e positivo porque todo id do sistema é `integer primary key
+ * autoincrement`, que começa em 1. `"1.5"` e `"-3"` não são id de nada, e
+ * aceitá-los só adiaria a mesma confusão para dentro da consulta.
+ */
+function idNumerico(bruto: string, oQue: string): number | null {
+  const n = Number(bruto);
+  if (Number.isInteger(n) && n > 0) return n;
+  console.error(c.red(`Id inválido: ${bruto}`));
+  console.log(c.dim(`  Esperado o número de ${oQue}, inteiro e positivo.`));
+  process.exitCode = 1;
+  return null;
 }
 
 /* ----------------------------------- db ----------------------------------- */
@@ -305,17 +332,44 @@ tasks
 tasks
   .command("done <id>")
   .description("Mark a plan item as done")
-  .option("--status <name>", "todo | doing | done | skipped", "done")
+  .option("--status <name>", POSITIONING_STATUSES.join(" | "), "done")
   .action(async (id: string, opts: { status: string }) => {
+    // Validado contra a lista, e n\u00e3o aceito como veio. `--status qualquer-coisa`
+    // gravava `qualquer-coisa`, e o item sumia da lista: o filtro padr\u00e3o mostra
+    // o que n\u00e3o est\u00e1 em `done` nem em `skipped`, e um estado desconhecido n\u00e3o \u00e9
+    // nenhum dos dois nem volta a ser `todo`. O plano perdia a tarefa em
+    // sil\u00eancio, que \u00e9 o pior desfecho para uma ferramenta de plano.
+    const status = positioningStatus(opts.status);
+    if (!status) {
+      console.error(c.red(`Status inv\u00e1lido: ${opts.status}`));
+      console.log(c.dim(`  Use um de: ${POSITIONING_STATUSES.join(", ")}`));
+      process.exitCode = 1;
+      return;
+    }
+
     await withDb(async () => {
-      await getDb()
+      const alvo = id.toUpperCase();
+      const alteradas = await getDb()
         .update(positioningTask)
         .set({
-          status: opts.status,
-          doneAt: opts.status === "done" ? new Date().toISOString() : null,
+          status,
+          // S\u00f3 `done` carimba a data. \u00c9 o que separa "conclu\u00ed" de "desisti".
+          doneAt: status === "done" ? new Date().toISOString() : null,
         })
-        .where(eq(positioningTask.id, id.toUpperCase()));
-      console.log(`${c.green("\u2713")} ${id.toUpperCase()} \u2192 ${c.cyan(opts.status)}`);
+        .where(eq(positioningTask.id, alvo))
+        .returning({ id: positioningTask.id });
+
+      // `UPDATE` que n\u00e3o casa com linha nenhuma \u00e9 sucesso para o SQL. Sem o
+      // `returning`, `jho tasks done TASK-9999` imprimia o \u2713 verde e sa\u00eda com
+      // zero \u2014 quem digitou o id errado seguia acreditando que fechou a tarefa.
+      if (alteradas.length === 0) {
+        console.error(c.red(`Nenhuma tarefa ${alvo}`));
+        console.log(c.dim("  Veja os ids com: jho tasks list --all"));
+        process.exitCode = 1;
+        return;
+      }
+
+      console.log(`${c.green("\u2713")} ${alvo} \u2192 ${c.cyan(status)}`);
     });
   });
 
@@ -773,6 +827,8 @@ jobs
   .description("Full detail for one job, including why it scored the way it did")
   .option("-f, --full", "print the entire description instead of the first 1200 chars")
   .action(async (id: string, opts: { full?: boolean }) => {
+    const jobId = idNumerico(id, "vaga");
+    if (jobId === null) return;
     await withDb(async () => {
       const candidateId = await activeCandidateId();
       const rows = await getDb()
@@ -786,7 +842,7 @@ jobs
           application,
           and(eq(application.jobId, job.id), eq(application.candidateId, candidateId)),
         )
-        .where(eq(job.id, Number(id)))
+        .where(eq(job.id, jobId))
         .limit(1);
 
       const row = rows[0];
@@ -857,6 +913,8 @@ program
     "direct | ats | referral | recruiter | agency — referral is worth recording",
   )
   .action(async (id: string, status: string, opts: { note?: string; channel?: string }) => {
+    const jobId = idNumerico(id, "vaga");
+    if (jobId === null) return;
     const parsedStatus = applicationStatus(status);
     if (!parsedStatus) {
       console.error(c.red(`Unknown status "${status}". Valid: ${APPLICATION_STATUSES.join(", ")}`));
@@ -868,7 +926,7 @@ program
       // `opts.channel` era aceito pela flag e descartado aqui: a coluna existe,
       // o funil a renderiza, o CLAUDE.md documenta o comando e o `jho prep`
       // imprime essa linha como próximo passo — e nada escrevia nela.
-      await setApplicationStatus(candidateId, Number(id), parsedStatus, opts.note, opts.channel);
+      await setApplicationStatus(candidateId, jobId, parsedStatus, opts.note, opts.channel);
       console.log(`${c.green("✓")} job ${id} → ${c.cyan(parsedStatus)}`);
     });
   });
@@ -1207,9 +1265,11 @@ mail
   .command("accept <id>")
   .description("Apply a suggested funnel change")
   .action(async (id: string) => {
+    const sugestaoId = idNumerico(id, "sugestão");
+    if (sugestaoId === null) return;
     await withDb(async () => {
       const candidateId = await activeCandidateId();
-      const { jobId, status } = await decideSuggestion(candidateId, Number(id), "accepted");
+      const { jobId, status } = await decideSuggestion(candidateId, sugestaoId, "accepted");
       if (!jobId || !status) throw new Error(`Sugestão ${id} aceita sem candidatura`);
       console.log(`${c.green("\u2713")} vaga ${jobId} → ${c.cyan(status)}`);
     });
@@ -1219,8 +1279,10 @@ mail
   .command("dismiss <id>")
   .description("Reject a suggestion without touching the funnel")
   .action(async (id: string) => {
+    const sugestaoId = idNumerico(id, "sugestão");
+    if (sugestaoId === null) return;
     await withDb(async () => {
-      await decideSuggestion(await activeCandidateId(), Number(id), "dismissed");
+      await decideSuggestion(await activeCandidateId(), sugestaoId, "dismissed");
       console.log(`${c.dim("\u2013")} sugestão ${id} descartada`);
     });
   });
@@ -1306,8 +1368,10 @@ engage
   .description("Mark as acted on")
   .option("-o, --outcome <text>", "what happened")
   .action(async (id: string, opts: { outcome?: string }) => {
+    const engajamentoId = idNumerico(id, "engajamento");
+    if (engajamentoId === null) return;
     await withDb(async () => {
-      await markEngagement(Number(id), "done", opts.outcome);
+      await markEngagement(engajamentoId, "done", opts.outcome);
       console.log(`${c.green("\u2713")} #${id} feito`);
     });
   });
@@ -1316,8 +1380,10 @@ engage
   .command("skip <id>")
   .description("Drop it without acting")
   .action(async (id: string) => {
+    const engajamentoId = idNumerico(id, "engajamento");
+    if (engajamentoId === null) return;
     await withDb(async () => {
-      await markEngagement(Number(id), "skipped");
+      await markEngagement(engajamentoId, "skipped");
       console.log(`${c.dim("\u2013")} #${id} pulado`);
     });
   });
@@ -1497,7 +1563,29 @@ program
       });
       const vault = process.env.JHO_VAULT_PATH;
       const reportDir = process.env.JHO_REPORT_DIR ?? "05_Interviews/LinkedIn";
-      const dir = opts.out ?? (vault ? join(vault, reportDir, "vagas") : join(process.cwd(), "out", "vagas"));
+      const dir = opts.out ?? (vault ? join(vault, reportDir, "vagas") : null);
+
+      // Sem destino declarado, o comando recusa em vez de escolher um.
+      //
+      // A versão anterior caía em `<cwd>/out/vagas`, e o problema não é o
+      // caminho: é ser relativo a de onde a pessoa rodou. Rodar de outro
+      // diretório espalhava dezenas de arquivos num lugar que ninguém procura
+      // depois, sem aviso. O `jho report` logo acima já resolve o mesmo dilema
+      // do jeito certo — sem destino, ele imprime. Aqui imprimir não serve,
+      // porque a saída é um arquivo por vaga.
+      if (!dir) {
+        console.error(c.red("\n  Sem destino para os dossiês."));
+        console.log(
+          c.dim(
+            "  Passe --out <dir>, ou defina JHO_VAULT_PATH para escrever no vault.\n" +
+            "  Antes isto caía em ./out/vagas, relativo ao diretório atual —\n" +
+            "  o que espalhava arquivo em lugar que ninguém procura depois.\n",
+          ),
+        );
+        process.exitCode = 1;
+        return;
+      }
+
       await mkdir(dir, { recursive: true });
       for (const document of result.documents) {
         await writeFile(join(dir, document.name), document.markdown, "utf8");
@@ -2032,6 +2120,8 @@ program
   .option("--yes", "não pedir confirmação antes de enviar")
   .option("--model <id>", "modelo específico (ver: jho llm list)")
   .action(async (id: string, opts: { yes?: boolean; model?: string }) => {
+    const jobId = idNumerico(id, "vaga");
+    if (jobId === null) return;
     await withDb(async () => {
       const { chooseModel, portFor } = await import("./core/llm/registry.ts");
       const { redactKey } = await import("./core/llm/port.ts");
@@ -2056,7 +2146,7 @@ program
 
       const candidateId = await syncCandidateFromProfile();
       const doc = await currentDocument(candidateId, "cv");
-      const dossier = await buildDossier(candidateId, Number(id), doc?.content ?? null);
+      const dossier = await buildDossier(candidateId, jobId, doc?.content ?? null);
       if (!dossier) {
         console.error(c.red(`\n  Vaga ${id} não encontrada.\n`));
         process.exitCode = 1;
@@ -2076,7 +2166,7 @@ program
         .select({ text: jobPage.text, fallback: job.descriptionText })
         .from(job)
         .leftJoin(jobPage, eq(jobPage.jobId, job.id))
-        .where(eq(job.id, Number(id)))
+        .where(eq(job.id, jobId))
         .limit(1);
       const description = page?.text ?? page?.fallback ?? "";
 
@@ -2126,11 +2216,13 @@ program
   .command("prep <id>")
   .description("Dossiê para se candidatar a uma vaga: bloqueios, rede, evidências e vocabulário")
   .action(async (id: string) => {
+    const jobId = idNumerico(id, "vaga");
+    if (jobId === null) return;
     await withDb(async () => {
       const { buildDossier } = await import("./core/apply/dossier.ts");
       const candidateId = await syncCandidateFromProfile();
       const doc = await currentDocument(candidateId, "cv");
-      const d = await buildDossier(candidateId, Number(id), doc?.content ?? null);
+      const d = await buildDossier(candidateId, jobId, doc?.content ?? null);
 
       if (!d) {
         console.error(c.red(`\n  Vaga ${id} não encontrada.\n`));
@@ -2612,9 +2704,11 @@ skills
   .description("Confirm a detected skill — only confirmed skills may be cited as experience")
   .option("-l, --level <text>", "your own assessment")
   .action(async (id: string, opts: { level?: string }) => {
+    const skillId = idNumerico(id, "skill");
+    if (skillId === null) return;
     await withDb(async () => {
       const candidateId = await syncCandidateFromProfile();
-      await auditSkill(candidateId, Number(id), "confirmed", { level: opts.level });
+      await auditSkill(candidateId, skillId, "confirmed", { level: opts.level });
       console.log(`${c.green("\u2713")} #${id} confirmada`);
     });
   });
@@ -2623,9 +2717,11 @@ skills
   .command("reject <id>")
   .description("Reject a false positive")
   .action(async (id: string) => {
+    const skillId = idNumerico(id, "skill");
+    if (skillId === null) return;
     await withDb(async () => {
       const candidateId = await syncCandidateFromProfile();
-      await auditSkill(candidateId, Number(id), "rejected");
+      await auditSkill(candidateId, skillId, "rejected");
       console.log(`${c.red("\u2717")} #${id} rejeitada`);
     });
   });

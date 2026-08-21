@@ -143,31 +143,40 @@ describe("jho tasks done <id>", () => {
   });
 
   /**
-   * CARACTERIZAÇÃO — `--status` não é validado, e id inexistente não reclama.
-   *
-   * O vocabulário da coluna é `todo | doing | done | skipped`, e é o que o
-   * texto de ajuda diz, mas o handler escreve a string crua. Um `--status
-   * feito` entra no banco e some das duas listagens, que filtram pelo
-   * vocabulário. E `jho tasks done PT-9999` imprime "✓ PT-9999 → done" mesmo
-   * sem ter atualizado linha nenhuma — `update ... where id = ?` que não casa
-   * é sucesso para o driver.
-   *
-   * Os dois são pequenos e nenhum destrói dado, mas nenhum tem teste que os
-   * segure; este caso é o registro de que hoje é assim.
+   * Os dois casos abaixo já foram uma caracterização de defeito só. Ambos
+   * foram corrigidos, e cada um virou o seu próprio caso — eram problemas
+   * diferentes que só dividiam o mesmo comando.
    */
-  it("aceita status fora do vocabulário e id inexistente sem reclamar (defeito conhecido)", async () => {
+  it("status fora do vocabulário é recusado, e o banco não muda", async () => {
     await semearPlano();
-    const [tarefa] = await banco().select().from(positioningTask).limit(1);
+    const [antes] = await banco().select().from(positioningTask).limit(1);
 
-    const invalido = await rodar("tasks", "done", tarefa!.id, "--status", "feito");
-    const inexistente = await rodar("tasks", "done", "PT-9999");
+    const r = await rodar("tasks", "done", antes!.id, "--status", "feito");
 
-    expect(invalido.code).toBeUndefined();
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("feito");
+    // A recusa precisa dizer o que serve; senão a pessoa tenta de novo no
+    // escuro. O vocabulário vem da constante, não de uma frase repetida aqui.
+    expect(r.out).toContain("skipped");
+
+    // O estado anterior sobrevive. Antes, `feito` entrava no banco e a tarefa
+    // sumia das duas listagens: o filtro padrão esconde `done` e `skipped`, e
+    // um estado desconhecido não é nenhum dos dois nem volta a ser `todo`.
     const [depois] = await banco().select().from(positioningTask).limit(1);
-    expect(depois?.status).toBe("feito");
+    expect(depois?.status).toBe(antes?.status);
+  });
 
-    expect(inexistente.code).toBeUndefined();
-    expect(inexistente.out).toContain("PT-9999 → done");
+  it("id inexistente sai com 1, em vez do ✓ verde de antes", async () => {
+    await semearPlano();
+
+    const r = await rodar("tasks", "done", "PT-9999");
+
+    // `update ... where id = ?` que não casa com linha nenhuma é sucesso para o
+    // SQL. Sem o `returning`, o comando imprimia "✓ PT-9999 → done" e saía com
+    // zero: quem digitou o id errado seguia acreditando que fechou a tarefa.
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("PT-9999");
+    expect(r.out).not.toContain("PT-9999 → done");
   });
 });
 
