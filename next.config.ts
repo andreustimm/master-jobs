@@ -18,6 +18,24 @@ const config: NextConfig = {
   // its bundled PDF.js assets. Webpack cannot preserve that lookup when inlined.
   serverExternalPackages: ["@libsql/client", "unpdf"],
 
+  /**
+   * O changelog do rodapé é lido do disco em runtime.
+   *
+   * `app/footer.tsx` faz `readFile(join(process.cwd(), "USER_CHANGELOG.md"))`, e
+   * o rastreador de dependências não segue caminho montado em tempo de
+   * execução: ele não tem como saber que aquela string vira este arquivo. Sem
+   * declarar, o markdown entraria no pacote por acaso — pelo mesmo rastreamento
+   * amplo que hoje carrega `profile.yaml` e `sources.yaml`, e que o próprio
+   * Turbopack avisa ser frágil.
+   *
+   * O modo de falhar é silencioso: o `catch` em `lerChangelog` devolve lista
+   * vazia, o rodapé mostra só a versão, e nada acusa que o recurso sumiu.
+   * Declarar é uma linha; descobrir isso em produção é uma tarde.
+   */
+  outputFileTracingIncludes: {
+    "/**": ["./USER_CHANGELOG.md"],
+  },
+
   // Both candidate CVs and manual job descriptions accept files up to 10 MB.
   // Server Actions default to 1 MB and count multipart framing too, so leave a
   // small envelope above the application-level limit enforced by each action.

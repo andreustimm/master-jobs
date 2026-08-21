@@ -414,3 +414,45 @@ label[for],
 select:not(:disabled) {
   cursor: pointer;
 }
+
+/* ===========================================================================
+   Modo instalado (PWA)
+
+   `viewportFit: "cover"` em `app/layout.tsx` manda o conteúdo ocupar a tela
+   inteira, inclusive ATRÁS do recorte da câmera e da barra de status. É o que
+   se quer num app instalado — o fundo vai até a borda em vez de deixar tarja.
+
+   A contrapartida é devolver o espaço ao conteúdo, e nada fazia isso: o relógio
+   do sistema ficava escrito por cima do nome do aplicativo, e o indicador de
+   bateria por cima do seletor de idioma.
+
+   As regras ficam sob `html.pwa-standalone`, classe posta pelo script inline de
+   `src/core/pwa/standalone.ts`. No navegador comum a classe não existe e nada
+   aqui se aplica — a barra do navegador já reserva o espaço, e um padding a
+   mais só produziria uma faixa vazia no topo.
+   =========================================================================== */
+html.pwa-standalone body {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* A barra do sistema fica sobre o CABEÇALHO, não sobre uma faixa vazia.
+
+   Empurrar o `body` inteiro para baixo funcionaria, e deixaria acima do
+   cabeçalho uma tira da cor do fundo — visualmente uma tarja, que é justo o que
+   `viewport-fit: cover` foi pedir para não ter. Reservando o espaço DENTRO do
+   cabeçalho, a cor dele sobe até o topo da tela e só o conteúdo desce. */
+html.pwa-standalone header {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Laterais no conteúdo, e não no `body`.
+
+   No `body` o padding lateral encolheria a faixa do cabeçalho, que vai de borda
+   a borda por desenho. Aplicado aqui, a cor continua sangrando e só o texto
+   recua do recorte. Importa em paisagem, onde o inset lateral deixa de ser
+   zero; `max()` preserva o respiro que a página já tinha em retrato. */
+html.pwa-standalone header > div,
+html.pwa-standalone body > div {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}

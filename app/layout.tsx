@@ -15,6 +15,11 @@ import {
   THEME_COOKIE,
   THEMES,
 } from "../src/core/theme.ts";
+import pkg from "../package.json" with { type: "json" };
+import { versaoAtual } from "../src/core/changelog.ts";
+import { renderSplashCSS, renderSplashHTML, renderSplashScript } from "../src/core/pwa/splash.ts";
+import { renderStandaloneScript } from "../src/core/pwa/standalone.ts";
+import { Footer } from "./footer";
 import { AppearanceSwitch } from "./theme-switch";
 import { ServiceWorkerRegister } from "./service-worker";
 import { stopImpersonatingAction } from "./admin/actions";
@@ -117,6 +122,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     // para a `prefers-color-scheme`.
     <html lang={locale} data-theme={theme} data-mode={modeAttribute(mode)}>
       <head>
+        {/* Antes de tudo: marca o modo instalado para o CSS de área segura
+            valer já na primeira pintura. Depois da primeira pintura, o
+            cabeçalho nasceria colado no topo e desceria — um salto visível. */}
+        <script dangerouslySetInnerHTML={{ __html: renderStandaloneScript() }} />
+        <style dangerouslySetInnerHTML={{ __html: renderSplashCSS() }} />
+
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
@@ -136,6 +147,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         verdade dentro da árvore.
       */}
       <body className="bg-background text-foreground antialiased" suppressHydrationWarning>
+        {/* Primeiro filho do body, e removida por script inline.
+
+            Cobre o intervalo entre o documento chegar e a folha de estilo e a
+            fonte ficarem prontas — que num app instalado é pior que no
+            navegador: a splash do sistema some, entrega tela vazia, e só então
+            o conteúdo aparece. Um componente React chegaria depois exatamente
+            do intervalo que deveria cobrir, além de exigir bundle de cliente
+            numa árvore que não tem nenhum. */}
+        <div dangerouslySetInnerHTML={{ __html: renderSplashHTML(t("splash.loading")) }} />
+        <script dangerouslySetInnerHTML={{ __html: renderSplashScript() }} />
+
         <ServiceWorkerRegister />
         <TooltipProvider>
           <header className="border-b bg-card">
@@ -248,9 +270,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           )}
           {/* 90% da largura da janela, com teto: acima de ~1760px a linha de texto
               fica longa demais para ler com conforto, e o ganho vira cansaço. */}
-          <div className="mx-auto w-full max-w-[min(90vw,1760px)] px-4 pb-24 sm:px-6">
+          <div className="mx-auto w-full max-w-[min(90vw,1760px)] px-4 pb-16 sm:px-6">
             {children}
           </div>
+          {/* `pb-16` acima em vez de `pb-24`: o rodapé passou a fechar a página,
+              e o respiro que aquele espaço dava agora vem dele. */}
+          <Footer versao={versaoAtual(pkg)} t={t} />
         </TooltipProvider>
       </body>
     </html>
