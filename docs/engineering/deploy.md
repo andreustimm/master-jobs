@@ -108,6 +108,39 @@ deliberado — ambiente de teste com dado de teste não precisa de plateia. Para
 abri-los seria preciso desligar a proteção do projeto inteiro, o que tornaria
 pública também toda URL de preview de PR.
 
+## A varredura diária
+
+`.github/workflows/varredura.yml` roda `jobs sync`, `scrape queue`+`run` e
+`jobs recheck queue`+`run` contra **produção**, todo dia às 06:00 UTC (03:00 em
+São Paulo), com `workflow_dispatch` para rodar à mão depois de mexer em
+`config/sources.yaml`.
+
+**Por que no GitHub e não na Vercel.** A Vercel tem `/api/cron/recheck`, e ele
+resolve um pedaço pequeno: 25 vagas por execução, porque o teto de função no
+plano gratuito é de 30 segundos. Com 427 vagas elegíveis (fit ≥ 55, abertas, com
+URL), o ciclo completo leva ~17 dias — enquanto `enqueueStale` declara a meta de
+reconferir a cada 7. O cron de lá entrega menos da metade do que promete, e não
+por defeito: por teto.
+
+E a **busca** não roda lá de jeito nenhum: `jobs sync` e `scrape run` não têm
+rota de API. Um runner do GitHub tem 6 horas por job, e é a mesma tarefa num
+lugar onde ela cabe. A rota da Vercel continua valendo como rede de segurança
+para quem não tiver o Actions.
+
+Só produção é varrida. `dev` e `staging` existem para exercitar código, não para
+acumular acervo — varrer os três triplicaria as requisições contra APIs de
+terceiros para produzir dois acervos que ninguém lê.
+
+O passo final confere `jho sources list`, porque `syncAll` **não aborta** quando
+uma fonte quebra (o que é certo: uma API fora do ar não pode zerar a varredura).
+O efeito colateral é a falha ficar silenciosa até alguém olhar — então o CI
+olha. Uma fonte fora é aviso; mais da metade é erro, porque aí a causa é comum e
+provavelmente daqui.
+
+Segredos opcionais: `ADZUNA_APP_ID` e `ADZUNA_APP_KEY`. Das 17 fontes só o Adzuna
+pede credencial; sem ela, ele aparece como `error` na conferência e as outras
+seguem.
+
 ## O portão
 
 `.github/workflows/ci.yml` roda typecheck, testes com cobertura e build no PR e

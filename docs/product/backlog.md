@@ -439,7 +439,7 @@ vez.
 resolve *escolher*; um diff por linha resolveria *entender o que mudou*, que é
 outra pergunta.
 
-### UI-03 · Reconferir se a vaga ainda existe ✅ (falta agendar o periódico)
+### UI-03 · Reconferir se a vaga ainda existe ✅
 
 Pedido em 19/08/2026. Vaga não é permanente: o link expira, a empresa fecha a
 posição, o quadro remove o anúncio. Nada disso chegava até aqui sozinho — a
@@ -478,16 +478,33 @@ alcançar a cauda.
 **`alive` reabre uma vaga fechada.** Sem isso, um 404 transitório sumiria com
 ela para sempre.
 
+#### Agendado em 21/08/2026
+
+`.github/workflows/varredura.yml`. Nada foi instalado na máquina de ninguém —
+era essa a objeção que deixou o item aberto —, e o disparo mora no mesmo lugar
+que já roda os testes.
+
+Roda contra **produção**, todo dia às 06:00 UTC, e faz a varredura inteira:
+buscar (`jobs sync`), capturar descrição (`scrape queue` + `run`) e reconferir
+(`jobs recheck queue` + `run`).
+
+**Por que não a rota da Vercel, que já existia.** `/api/cron/recheck` processa
+25 vagas por execução, porque o teto de função no plano gratuito é de 30
+segundos. Contadas as elegíveis — abertas, com URL, fit ≥ 55 — são **427**, o
+que dá um ciclo de ~17 dias contra a meta de 7 declarada no próprio
+`enqueueStale`. A rota entrega menos da metade do que promete, e não por
+defeito: por teto. Um runner do GitHub tem 6 horas por job. Ela continua no ar
+como rede de segurança.
+
+E a **busca** nunca teve onde rodar na Vercel: `jobs sync` e `scrape run` não têm
+rota de API. Até aqui, achar vaga nova dependia de alguém abrir o laptop.
+
+O passo final confere `jho sources list`, porque `syncAll` não aborta quando uma
+fonte quebra — decisão certa, e cujo efeito colateral é a falha ficar silenciosa
+até alguém olhar. Uma fonte fora é aviso; mais da metade é erro, porque aí a
+causa é comum.
+
 #### O que ficou de fora
-
-**Agendar o periódico.** Os comandos existem e funcionam; falta decidir quem os
-dispara. Não instalei nada no sistema do usuário — um `cron` ou `launchd`
-criado sem pedir é efeito colateral fora do escopo. A receita:
-
-```
-0 7 * * *  cd <repo> && pnpm jho jobs recheck queue --limit 300
-15 7 * * * cd <repo> && pnpm jho jobs recheck run --delay 300
-```
 
 **Status da vaga além de aberto/fechado.** Hoje o veredito é vivo, morto ou sem
 resposta. "Pausada", "preenchida" e afins exigiriam ler a página, não só o

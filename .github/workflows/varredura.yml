@@ -1,0 +1,132 @@
+# A varredura diária de vagas, sem depender de laptop ligado.
+#
+# ## Por que aqui e não na Vercel
+#
+# A Vercel tem `/api/cron/recheck`, e ele resolve um pedaço pequeno do problema:
+# reconfere se vagas que já estão no banco continuam abertas, 25 por execução,
+# porque o teto de função no plano gratuito é de 30 segundos. Com 427 vagas
+# elegíveis, o ciclo completo leva ~17 dias — enquanto o próprio código declara
+# a meta de reconferir a cada 7 (`olderThanDays: 7` em `enqueueStale`). O cron
+# de lá cumpre menos da metade do que promete, e não por defeito: por teto.
+#
+# E a BUSCA não roda lá de jeito nenhum. `jho jobs sync` e `jho scrape run` não
+# têm rota de API; são comandos de terminal que levam minutos. Até hoje, achar
+# vaga nova dependia de alguém abrir o laptop.
+#
+# Um runner do GitHub tem 6 horas por job. É a mesma tarefa num lugar onde ela
+# cabe.
+#
+# ## Só produção
+#
+# `dev` e `staging` existem para exercitar código, não para acumular acervo. Uma
+# varredura em três bancos triplicaria as requisições contra as APIs de terceiros
+# para produzir dois acervos que ninguém lê.
+name: Varredura de vagas
+
+on:
+  schedule:
+    # 06:00 UTC = 03:00 em São Paulo. Fora do horário comercial de quem hospeda
+    # as vagas, e o resultado está pronto quando o dia começa aqui.
+    - cron: "0 6 * * *"
+  # Para rodar à mão depois de mexer em `config/sources.yaml`, sem esperar o dia.
+  workflow_dispatch:
+
+# Duas varreduras simultâneas dobrariam a carga contra as APIs de terceiros e
+# disputariam as mesmas linhas da fila de captura. `cancel-in-progress: false`
+# porque varredura começada deve terminar: cancelar no meio deixa tarefas com
+# claim pendurado, e elas só voltam a ser elegíveis depois do timeout.
+concurrency:
+  group: varredura
+  cancel-in-progress: false
+
+jobs:
+  varrer:
+    runs-on: ubuntu-latest
+    # Generoso mas limitado. A varredura inteira leva minutos; uma hora só é
+    # alcançada se alguma fonte estiver pendurando a conexão.
+    timeout-minutes: 60
+
+    env:
+      TURSO_DATABASE_URL: libsql://master-jobs-andreustimm.aws-us-east-1.turso.io
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_TOKEN_PROD }}
+      # Das 17 fontes, só o Adzuna pede credencial. Ausente, ele falha sozinho e
+      # aparece como `error` na conferência do fim — as outras 16 não se importam.
+      ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+      ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+      # Identifica o tráfego como este projeto. Sem isto sairia o padrão do
+      # `undici`, e quem hospeda a vaga não teria como saber quem está lendo.
+      JHO_USER_AGENT: master-jobs/0.1 (+https://jobs.mastertimm.com.br)
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: O segredo existe?
+        run: |
+          if [ -z "$TURSO_AUTH_TOKEN" ]; then
+            echo "::error::TURSO_TOKEN_PROD ausente. A varredura escreveria no"
+            echo "banco local do runner, que é descartado ao fim do job — ou seja,"
+            echo "rodaria por minutos e não guardaria nada."
+            exit 1
+          fi
+
+      # 1. Buscar. `sync` já pontua ao final; `--no-score` existiria para pular.
+      - name: Sincronizar as fontes
+        run: pnpm jho jobs sync
+
+      # 2. Capturar a descrição das que valem a pena. O corte de fit evita gastar
+      #    requisição com vaga que não seria lida de todo jeito.
+      - name: Enfileirar captura
+        run: pnpm jho scrape queue --min-fit 45
+
+      - name: Capturar
+        run: pnpm jho scrape run --limit 300
+
+      # 3. Reconferir se o que já está no banco continua aberto. É o que o cron
+      #    da Vercel faz aos pedaços; aqui a fila inteira cabe numa rodada.
+      - name: Enfileirar reconferência
+        run: pnpm jho jobs recheck queue
+
+      - name: Reconferir
+        run: pnpm jho jobs recheck run --max 400
+
+      # 4. Olhar para as fontes.
+      #
+      # `syncAll` NÃO aborta quando uma fonte quebra — é a decisão certa, porque
+      # uma API fora do ar não pode zerar a varredura inteira. O efeito colateral
+      # é que a falha fica silenciosa até alguém rodar `sources list` e reparar.
+      # Aqui o CI repara por conta própria.
+      - name: Conferir o estado das fontes
+        if: always()
+        run: |
+          SAIDA=$(pnpm jho sources list 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
+          echo "$SAIDA"
+
+          TOTAL=$(echo "$SAIDA" | grep -cE "  (ok|error|never)$" || true)
+          QUEBRADAS=$(echo "$SAIDA" | grep -cE "  error$" || true)
+          echo "$QUEBRADAS de $TOTAL fonte(s) com erro."
+
+          if [ "$QUEBRADAS" -eq 0 ]; then
+            exit 0
+          fi
+
+          # Uma fonte fora do ar é rotina e não merece um alarme vermelho por
+          # dia. Metade delas fora significa que o problema é aqui — rede do
+          # runner, user-agent bloqueado, dependência quebrada — e aí o alarme
+          # é o ponto.
+          if [ "$((QUEBRADAS * 2))" -gt "$TOTAL" ]; then
+            echo "::error::Mais da metade das fontes falhou. Provável causa comum."
+            exit 1
+          fi
+          echo "::warning::$QUEBRADAS fonte(s) com erro. Veja o detalhe acima."
+
+      - name: Resumo do acervo
+        if: always()
+        # Fecha o log com o número que interessa a quem abrir a execução para
+        # saber se valeu a pena: quantas vagas existem e quantas estão abertas.
+        run: pnpm jho stats
