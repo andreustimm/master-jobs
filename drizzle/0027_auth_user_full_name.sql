@@ -1,0 +1,1 @@
+ALTER TABLE `auth_user` ADD `full_name` text;

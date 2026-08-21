@@ -22,6 +22,14 @@ export type Session = {
   candidateId: number | null;
   roles: Role[];
   email: string;
+  /**
+   * Nome de quem usa a conta, para a interface tratar a pessoa pelo nome.
+   *
+   * Nulo é estado normal, não defeito: conta criada antes desta coluna existir,
+   * ou criada sem o campo preenchido. Quem exibe cai para o e-mail — e é por
+   * isso que o e-mail continua na sessão em vez de ser substituído.
+   */
+  fullName: string | null;
   expiresAt: string;
   /**
    * Candidatos que este recrutador acompanha, resolvidos do banco na carga da

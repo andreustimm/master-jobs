@@ -17,10 +17,10 @@ import { getTranslator } from "../../i18n";
 import {
   createUserAction,
   impersonateAction,
-  setRolesAction,
   toggleDisabledAction,
   unlinkAction,
 } from "../actions";
+import { DeleteUserModal, EditUserModal } from "../user-modal";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +60,11 @@ export default async function AdminUsersPage() {
       <Card className="mb-8">
         <CardContent className="pt-0">
           <h2 className="type-display-xs mb-3">{t("admin.newUser")}</h2>
-          <form action={createUserAction} className="grid gap-3 sm:grid-cols-[1fr_auto]">
+          <form action={createUserAction} className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="fullName">{t("admin.fullName")}</Label>
+              <Input id="fullName" name="fullName" type="text" maxLength={120} autoComplete="off" />
+            </div>
             <div className="grid gap-1.5">
               <Label htmlFor="email">{t("admin.email")}</Label>
               <Input id="email" name="email" type="email" required autoComplete="off" />
@@ -123,10 +127,18 @@ function UserRow({
       <Card className={cn(disabled && "opacity-60")}>
         <CardContent className="grid gap-3 pt-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            {/* E-mail é dado do usuário, não texto de interface. */}
+            {/* Nome e e-mail são dado do usuário, não texto de interface. O
+                nome vem primeiro porque é como a pessoa se chama; o e-mail
+                continua visível ao lado porque é ele que identifica a conta de
+                forma única — dois "João Silva" só se distinguem por ele. */}
             <span data-user-content className="type-body-lg font-medium">
-              {user.email}
+              {user.fullName ?? user.email}
             </span>
+            {user.fullName !== null && (
+              <span data-user-content className="type-meta text-muted-foreground">
+                {user.email}
+              </span>
+            )}
             <Badge variant="outline" className="type-micro">
               {disabled ? t("admin.disabled") : t("admin.active")}
             </Badge>
@@ -164,30 +176,30 @@ function UserRow({
             </p>
           )}
 
-          <div className="flex flex-wrap items-end gap-3">
-            <form action={setRolesAction} className="flex flex-wrap items-center gap-3">
-              <input type="hidden" name="userId" value={user.id} />
-              {ROLES.map((role) => (
-                <label
-                  key={role}
-                  className="flex cursor-pointer items-center gap-1.5 type-body-sm"
-                >
-                  <input
-                    type="checkbox"
-                    name="roles"
-                    value={role}
-                    defaultChecked={user.roles.includes(role)}
-                    className="cursor-pointer"
-                  />
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Papéis viraram leitura aqui. Editar mora na modal desde que o
+                e-mail e o nome entraram: três campos abertos vezes o número de
+                contas seria uma tela impossível de ler. */}
+            <p className="type-body-sm flex flex-wrap items-center gap-1.5 text-muted-foreground">
+              {user.roles.map((role) => (
+                <Badge key={role} variant="outline" className="type-micro">
                   {t(ROLE_LABEL[role])}
-                </label>
+                </Badge>
               ))}
-              <Button type="submit" size="sm" variant="outline" className="h-7">
-                {t("admin.save")}
-              </Button>
-            </form>
+            </p>
 
-            <form action={toggleDisabledAction} className="ml-auto">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="ml-auto h-7"
+              popoverTarget={`user-edit-${user.id}`}
+              popoverTargetAction="show"
+            >
+              {t("admin.edit")}
+            </Button>
+
+            <form action={toggleDisabledAction}>
               <input type="hidden" name="userId" value={user.id} />
               <input type="hidden" name="disable" value={disabled ? "0" : "1"} />
               <Button type="submit" size="sm" variant="outline" className="h-7">
@@ -205,9 +217,28 @@ function UserRow({
                 </Button>
               </form>
             )}
+
+            {/* Apagar a si mesmo derrubaria a sessão que executa a ação. A
+                ação recusa de qualquer jeito; o botão some para não oferecer o
+                que não funciona, igual ao de assumir identidade. */}
+            {!isSelf && (
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                className="h-7"
+                popoverTarget={`user-delete-${user.id}`}
+                popoverTargetAction="show"
+              >
+                {t("admin.delete")}
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
+
+      <EditUserModal user={user} t={t} />
+      {!isSelf && <DeleteUserModal user={user} t={t} />}
     </li>
   );
 }

@@ -31,6 +31,7 @@ function session(over: Partial<Session> & { roles: Role[] }): Session {
     userId: 1,
     candidateId: null,
     email: "quem@local.test",
+    fullName: null,
     expiresAt: LATER,
     linkedCandidateIds: [],
     impersonatedBy: null,
