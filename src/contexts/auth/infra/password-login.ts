@@ -76,6 +76,7 @@ export async function verifyLogin(email: string, password: string): Promise<Pass
     .select({
       id: authUser.id,
       email: authUser.email,
+      fullName: authUser.fullName,
       roles: authUser.roles,
       candidateId: authUser.candidateId,
       passwordHash: authUser.passwordHash,
@@ -112,6 +113,7 @@ export async function verifyLogin(email: string, password: string): Promise<Pass
     identity: {
       userId: user.id,
       email: user.email,
+      fullName: user.fullName,
       roles,
       candidateId: user.candidateId,
       linkedCandidateIds: await linkedCandidatesFor(user.id, roles),

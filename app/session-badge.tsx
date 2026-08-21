@@ -38,10 +38,18 @@ export async function SessionBadge() {
 
   return (
     <form action={logoutAction} className="flex items-center gap-2">
-      {/* O endereço inteiro estoura uma tela de 375px junto com o botão de
+      {/* O nome, e o e-mail só quando não há nome.
+          Tratar a pessoa pelo nome é o padrão; o e-mail é a identificação da
+          conta, não como alguém se chama. A queda para o e-mail não é detalhe:
+          toda conta criada antes da coluna `full_name` existir tem nulo aqui, e
+          sem a queda o topo ficaria vazio para elas.
+
+          O endereço inteiro estoura uma tela de 375px junto com o botão de
           aparência. Some no celular: quem está logado sabe quem é, e o botão
           de sair é o que precisa estar ao alcance. */}
-      <span className="hidden type-micro text-muted-foreground sm:inline">{session.email}</span>
+      <span data-user-content className="hidden type-micro text-muted-foreground sm:inline">
+        {session.fullName ?? session.email}
+      </span>
       <button
         type="submit"
         data-testid="sign-out"

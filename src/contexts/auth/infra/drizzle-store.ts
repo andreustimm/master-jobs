@@ -80,6 +80,7 @@ export const drizzleSessions: SessionStore = {
         expiresAt: authSession.expiresAt,
         revokedAt: authSession.revokedAt,
         email: authUser.email,
+        fullName: authUser.fullName,
         roles: authUser.roles,
         candidateId: authUser.candidateId,
         disabledAt: authUser.disabledAt,
@@ -108,6 +109,7 @@ export const drizzleSessions: SessionStore = {
       candidateId: row.candidateId,
       roles,
       email: row.email,
+      fullName: row.fullName,
       expiresAt: row.expiresAt,
       linkedCandidateIds,
       impersonatedBy: row.impersonatedBy ?? null,
@@ -259,6 +261,7 @@ export const magicLink: IdentityProvider = {
       .select({
         id: authUser.id,
         email: authUser.email,
+        fullName: authUser.fullName,
         roles: authUser.roles,
         candidateId: authUser.candidateId,
         disabledAt: authUser.disabledAt,
@@ -275,6 +278,7 @@ export const magicLink: IdentityProvider = {
     return {
       userId: user.id,
       email: user.email,
+      fullName: user.fullName,
       roles: identityRoles,
       candidateId: user.candidateId,
       linkedCandidateIds: await linkedCandidatesFor(user.id, identityRoles),

@@ -100,12 +100,43 @@ export function findUser(userId: number) {
   return drizzleUserDirectory.find(userId);
 }
 
-export function createUser(input: { email: string; roles: Role[]; candidateId?: number | null }) {
+export function createUser(input: {
+  email: string;
+  fullName?: string | null;
+  roles: Role[];
+  candidateId?: number | null;
+}) {
   return drizzleUserDirectory.create(input);
 }
 
 export function setUserRoles(userId: number, roles: Role[]) {
   return drizzleUserDirectory.updateRoles(userId, roles);
+}
+
+/**
+ * Edita os dados da conta. Campo ausente fica como está.
+ *
+ * Não recebe `candidateId` de propósito, pela mesma razão que `createUser` não
+ * o aceita do formulário: apontar uma conta para o candidato de outra pessoa
+ * daria acesso ao currículo e ao funil dela sem passar pela impersonação
+ * auditada, que é o único caminho previsto.
+ */
+export function updateUser(
+  userId: number,
+  patch: { email?: string; fullName?: string | null; roles?: Role[] },
+) {
+  return drizzleUserDirectory.update(userId, patch);
+}
+
+/**
+ * Apaga a conta, de vez.
+ *
+ * Quem chama precisa ter checado antes que não é o último admin e que não é a
+ * própria conta — as duas regras moram na ação, junto do `guard`, porque são
+ * decisões sobre a sessão de quem pediu, e esta função não conhece sessão.
+ */
+export function deleteUser(userId: number) {
+  return drizzleUserDirectory.remove(userId);
 }
 
 export function setUserDisabled(userId: number, disabled: boolean) {

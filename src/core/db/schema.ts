@@ -895,7 +895,17 @@ export const authUser = sqliteTable(
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     email: text("email").notNull(),
-    /** JSON array of roles: owner | admin. */
+    /**
+     * Nome de quem usa a conta, como a pessoa escreve o próprio nome.
+     *
+     * Nulo é um estado real, não um defeito: toda conta criada antes desta
+     * coluna existir tem nulo aqui, e o primeiro acesso de uma conta nova
+     * também. Quem exibe cai para o e-mail nesse caso — ver `session-badge`.
+     * Por isso a coluna é anulável em vez de `not null default ''`: string
+     * vazia mentiria dizendo que alguém preencheu.
+     */
+    fullName: text("full_name"),
+    /** JSON array of roles: admin | candidate | recruiter. */
     roles: text("roles", { mode: "json" }).notNull(),
     /**
      * scrypt hash, as `scrypt$N$r$p$salt$hash`. Null when the account uses

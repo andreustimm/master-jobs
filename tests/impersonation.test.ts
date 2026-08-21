@@ -23,6 +23,7 @@ function session(over: Partial<Session> & { roles: Role[] }): Session {
     userId: 1,
     candidateId: null,
     email: "quem@local.test",
+    fullName: null,
     expiresAt: "2026-09-20T12:00:00Z",
     linkedCandidateIds: [],
     impersonatedBy: null,
@@ -35,6 +36,7 @@ const ADMIN = session({ roles: ["admin"], userId: 9, email: "admin@local.test" }
 function user(over: Partial<UserSummary> & { id: number }): UserSummary {
   return {
     email: `u${over.id}@local.test`,
+    fullName: null,
     roles: ["candidate"],
     candidateId: over.id,
     disabledAt: null,
@@ -73,6 +75,8 @@ function deps(users: UserSummary[]): ImpersonationDeps & {
       find: async (id) => users.find((u) => u.id === id) ?? null,
       create: async () => ({ id: 0 }),
       updateRoles: async () => {},
+      update: async () => {},
+      remove: async () => {},
       setDisabled: async () => {},
       linkedCandidates: async () => [],
       linksOf: async () => [],

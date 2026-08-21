@@ -7,10 +7,11 @@ import {
   adminsBesides,
   beginImpersonation,
   createUser,
+  deleteUser,
   endImpersonation,
   ROLES,
   setUserDisabled,
-  setUserRoles,
+  updateUser,
   removeRecruiterLink,
   type Role,
 } from "../../src/contexts/auth/index.ts";
@@ -35,11 +36,40 @@ function parseRoles(formData: FormData): Role[] {
   return ROLES.filter((role) => raw.includes(role));
 }
 
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+function parseEmail(formData: FormData): string {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!EMAIL.test(email)) throw new Error("E-mail inválido.");
+  return email;
+}
+
+/**
+ * Nome como veio do formulário.
+ *
+ * Limitado em 120 caracteres porque campo de texto livre sem teto vira o jeito
+ * mais fácil de encher a tabela; o número é folgado para qualquer nome real.
+ * Vazio vira `null`, e não `""`, para haver um único jeito de dizer "sem nome"
+ * — dois jeitos garantem que um fique sem tratamento em alguma tela.
+ */
+function parseFullName(formData: FormData): string | null {
+  const bruto = formData.get("fullName");
+  if (bruto === null) return null;
+  const nome = String(bruto).trim().slice(0, 120);
+  return nome === "" ? null : nome;
+}
+
+function parseUserId(formData: FormData): number {
+  const userId = Number(formData.get("userId"));
+  if (!Number.isFinite(userId)) throw new Error("userId inválido");
+  return userId;
+}
+
 export async function createUserAction(formData: FormData) {
   await guard("user:manage");
 
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("E-mail inválido.");
+  const email = parseEmail(formData);
+  const fullName = parseFullName(formData);
 
   const roles = parseRoles(formData);
   if (roles.length === 0) throw new Error("Escolha ao menos um papel.");
@@ -54,18 +84,51 @@ export async function createUserAction(formData: FormData) {
   // Conta com papel de candidato ganha um candidato PRÓPRIO, novo, cujo slug
   // deriva do e-mail e portanto é dela.
   const candidateId = roles.includes("candidate")
-    ? await ensureCandidate({ slug: `user-${email.replace(/[^a-z0-9]+/g, "-")}`, name: email })
+    ? await ensureCandidate({
+        slug: `user-${email.replace(/[^a-z0-9]+/g, "-")}`,
+        // O slug continua vindo do e-mail, que é único; só o nome exibido usa o
+        // que a pessoa escreveu. Derivar o slug do nome deixaria dois "João
+        // Silva" brigando pela mesma URL pública.
+        name: fullName ?? email,
+      })
     : null;
 
-  await createUser({ email, roles, candidateId });
+  await createUser({ email, fullName, roles, candidateId });
   revalidatePath("/admin/users");
 }
 
-export async function setRolesAction(formData: FormData) {
-  const session = await guard("user:manage");
+export async function toggleDisabledAction(formData: FormData) {
+  await guard("user:manage");
 
-  const userId = Number(formData.get("userId"));
-  if (!Number.isFinite(userId)) throw new Error("userId inválido");
+  const userId = parseUserId(formData);
+  const disable = String(formData.get("disable")) === "1";
+
+  if (disable && (await adminsBesides(userId)).length === 0) {
+    throw new Error("Este é o último admin ativo. Promova outro antes de desabilitá-lo.");
+  }
+
+  await setUserDisabled(userId, disable);
+  revalidatePath("/admin/users");
+}
+
+/**
+ * Edita e-mail, nome e papéis de uma conta, numa transação de tela só.
+ *
+ * Substituiu o antigo `setRolesAction`, que salvava só os papéis a partir de um
+ * formulário embutido na linha da lista. Uma ação por campo deixaria a tela num
+ * estado meio aplicado quando a segunda falhasse, e o admin não teria como
+ * saber qual parte pegou.
+ *
+ * NÃO aceita `candidateId`. Ver a nota em `createUserAction`: apontar uma conta
+ * para o candidato de outra pessoa daria leitura do currículo e do funil dela
+ * sem passar pela impersonação auditada.
+ */
+export async function updateUserAction(formData: FormData) {
+  await guard("user:manage");
+
+  const userId = parseUserId(formData);
+  const email = parseEmail(formData);
+  const fullName = parseFullName(formData);
 
   const roles = parseRoles(formData);
   if (roles.length === 0) throw new Error("Escolha ao menos um papel.");
@@ -76,24 +139,39 @@ export async function setRolesAction(formData: FormData) {
   if (!roles.includes("admin") && (await adminsBesides(userId)).length === 0) {
     throw new Error("Este é o último admin ativo. Promova outro antes de rebaixá-lo.");
   }
-  void session;
 
-  await setUserRoles(userId, roles);
+  await updateUser(userId, { email, fullName, roles });
   revalidatePath("/admin/users");
 }
 
-export async function toggleDisabledAction(formData: FormData) {
-  await guard("user:manage");
+/**
+ * Apaga a conta. Irreversível.
+ *
+ * Duas recusas antes de qualquer escrita, e nenhuma é conveniência de tela:
+ *
+ * 1. **A própria conta, não.** Apagar a si mesmo derrubaria a sessão que está
+ *    executando a ação; o efeito seria um erro no meio do caminho com a conta
+ *    já removida. Quem quer sair usa desabilitar, que é reversível.
+ * 2. **O último admin, não.** Mesma razão de sempre: sem admin, ninguém cria
+ *    conta nem desfaz nada, e a recuperação vira SQL na mão.
+ *
+ * O que sobrevive é decisão das chaves estrangeiras, e está documentado em
+ * `UserDirectory.remove`: sessão e token caem junto, auditoria e atribuição de
+ * vaga viram nulo, e o candidato continua existindo.
+ */
+export async function deleteUserAction(formData: FormData) {
+  const session = await guard("user:manage");
+  const userId = parseUserId(formData);
 
-  const userId = Number(formData.get("userId"));
-  const disable = String(formData.get("disable")) === "1";
-  if (!Number.isFinite(userId)) throw new Error("userId inválido");
-
-  if (disable && (await adminsBesides(userId)).length === 0) {
-    throw new Error("Este é o último admin ativo. Promova outro antes de desabilitá-lo.");
+  if (userId === session.userId) {
+    throw new Error("Não é possível apagar a própria conta. Desabilite, ou peça a outro admin.");
   }
 
-  await setUserDisabled(userId, disable);
+  if ((await adminsBesides(userId)).length === 0) {
+    throw new Error("Este é o último admin ativo. Promova outro antes de apagá-lo.");
+  }
+
+  await deleteUser(userId);
   revalidatePath("/admin/users");
 }
 

@@ -66,6 +66,7 @@ export async function completeLogin(loginToken: string, deps: AuthDeps): Promise
       candidateId: identity.candidateId,
       roles: identity.roles,
       email: identity.email,
+      fullName: identity.fullName,
       expiresAt,
       linkedCandidateIds: identity.linkedCandidateIds,
       impersonatedBy: null,
@@ -152,6 +153,9 @@ export function singleUserSession(candidateId: number | null, now = clock().now(
     candidateId,
     roles: SINGLE_USER_ROLES,
     email: "local@single-user",
+    // Sem nome de propósito: não há conta por trás desta sessão, e inventar um
+    // nome faria a interface tratar o modo aberto como se fosse alguém.
+    fullName: null,
     expiresAt: new Date(now + 86_400_000).toISOString(),
     linkedCandidateIds: [],
     impersonatedBy: null,

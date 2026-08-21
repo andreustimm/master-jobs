@@ -12,9 +12,23 @@ import { authUser, recruiterCandidate } from "../../../core/db/schema.ts";
 import type { UserDirectory, UserSummary } from "../ports.ts";
 import type { Role } from "../domain/types.ts";
 
+/**
+ * Nome como veio da tela, pronto para o banco.
+ *
+ * Espaço em volta some, e string vazia vira nulo. Guardar `""` faria a tela que
+ * "mostra o nome" exibir nada: nulo é o estado que quem exibe já trata, e ter
+ * dois jeitos de dizer "sem nome" garante que um deles fique sem tratamento em
+ * algum lugar.
+ */
+function normalizarNome(nome: string | null | undefined): string | null {
+  const limpo = nome?.trim();
+  return limpo ? limpo : null;
+}
+
 function toSummary(row: {
   id: number;
   email: string;
+  fullName: string | null;
   roles: unknown;
   candidateId: number | null;
   disabledAt: string | null;
@@ -24,6 +38,7 @@ function toSummary(row: {
   return {
     id: row.id,
     email: row.email,
+    fullName: row.fullName,
     roles: (row.roles as Role[]) ?? [],
     candidateId: row.candidateId,
     disabledAt: row.disabledAt,
@@ -37,6 +52,7 @@ function toSummary(row: {
 const COLUMNS = {
   id: authUser.id,
   email: authUser.email,
+  fullName: authUser.fullName,
   roles: authUser.roles,
   candidateId: authUser.candidateId,
   disabledAt: authUser.disabledAt,
@@ -61,6 +77,7 @@ export const drizzleUserDirectory: UserDirectory = {
       .insert(authUser)
       .values({
         email,
+        fullName: normalizarNome(input.fullName),
         roles: input.roles,
         candidateId: input.candidateId ?? null,
         // Sem senha: a conta existe mas não entra até alguém definir uma. É
@@ -75,6 +92,24 @@ export const drizzleUserDirectory: UserDirectory = {
 
   async updateRoles(userId, roles) {
     await getDb().update(authUser).set({ roles }).where(eq(authUser.id, userId));
+  },
+
+  async update(userId, patch) {
+    const set: { email?: string; fullName?: string | null; roles?: Role[] } = {};
+    if (patch.email !== undefined) set.email = patch.email.trim().toLowerCase();
+    if (patch.fullName !== undefined) set.fullName = normalizarNome(patch.fullName);
+    if (patch.roles !== undefined) set.roles = patch.roles;
+
+    // Drizzle recusa `set({})` com erro de SQL. Um patch vazio é entrada
+    // legítima — a modal aberta e fechada sem mudar nada — e o certo é não
+    // fazer nada, não estourar.
+    if (Object.keys(set).length === 0) return;
+
+    await getDb().update(authUser).set(set).where(eq(authUser.id, userId));
+  },
+
+  async remove(userId) {
+    await getDb().delete(authUser).where(eq(authUser.id, userId));
   },
 
   async setDisabled(userId, disabled) {

@@ -34,6 +34,8 @@ export type SessionStore = {
 export type Identity = {
   userId: number;
   email: string;
+  /** Nome de quem usa a conta. Nulo enquanto ninguém preencheu. */
+  fullName: string | null;
   roles: Role[];
   candidateId: number | null;
   /** Candidatos que este recrutador acompanha. Vazio para os outros papéis. */
@@ -64,6 +66,8 @@ export type AuthRepository = {
 export type UserSummary = {
   id: number;
   email: string;
+  /** Nome de quem usa a conta. Nulo enquanto ninguém preencheu. */
+  fullName: string | null;
   roles: Role[];
   candidateId: number | null;
   disabledAt: string | null;
@@ -84,11 +88,39 @@ export type UserDirectory = {
   find(userId: number): Promise<UserSummary | null>;
   create(input: {
     email: string;
+    fullName?: string | null;
     roles: Role[];
     candidateId?: number | null;
   }): Promise<{ id: number }>;
   updateRoles(userId: number, roles: Role[]): Promise<void>;
+  /**
+   * Edita os dados da conta.
+   *
+   * Campo ausente significa "não mexe", e é por isso que cada um é opcional em
+   * vez de a tela mandar o registro inteiro: mandar tudo faz duas edições
+   * simultâneas se sobrescreverem em silêncio, e aqui a edição vem de um admin
+   * que pode ter aberto a modal antes da última alteração.
+   *
+   * `fullName: null` é diferente de ausente — é a pessoa apagando o nome.
+   */
+  update(
+    userId: number,
+    patch: { email?: string; fullName?: string | null; roles?: Role[] },
+  ): Promise<void>;
   setDisabled(userId: number, disabled: boolean): Promise<void>;
+  /**
+   * Apaga a conta.
+   *
+   * Irreversível, e diferente de desabilitar: desabilitar preserva o histórico
+   * e permite voltar atrás. O que sobrevive à exclusão é decidido pelas chaves
+   * estrangeiras, e cada escolha é deliberada — sessão e token de login caem em
+   * cascata (não podem valer para conta que não existe), enquanto `auth_event`
+   * e a atribuição de vaga viram nulo, porque auditoria e vaga são fato
+   * ocorrido e não deixam de ter ocorrido. O candidato NÃO é apagado: conta e
+   * candidato são coisas distintas, e apagar o currículo de alguém por causa
+   * de uma conta removida seria dano colateral silencioso.
+   */
+  remove(userId: number): Promise<void>;
   /** Candidatos que um recrutador acompanha. */
   linkedCandidates(recruiterUserId: number): Promise<number[]>;
   /** Vínculos com id, para a tela poder removê-los sem citar o candidato. */
