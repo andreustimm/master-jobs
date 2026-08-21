@@ -49,7 +49,7 @@ concurrency:
 
 jobs:
   marcar:
-    name: Criar a tag da versão
+    name: Versionar e criar a tag
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -57,13 +57,38 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Histórico inteiro: o versionamento lê `últimaTag..main`, e sem as
+          # tags o clone raso nem conhece a tag anterior.
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.RELEASE_PAT || github.token }}
 
-      - name: Ler a versão
+      # O versionamento roda um `.ts` com o type stripping nativo do Node 24.
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+
+      # Hotfix nasce em `main` sem passar pelo caminho normal (dev → staging),
+      # então é AQUI que ele ganha versão. No fluxo comum a tag já nasceu na
+      # promoção de staging e isto devolve "no-release" — idempotente.
+      - name: Versionar
         id: versao
         run: |
-          VERSAO=$(node -p "require('./package.json').version")
+          git fetch origin main --tags --quiet
+          VERSAO=$(node --experimental-strip-types --no-warnings scripts/release/versionar.ts origin/main)
+          if [ "$VERSAO" = "no-release" ] || [ "$VERSAO" = "already-released" ]; then
+            VERSAO=$(node -p "require('./package.json').version")
+            echo "::notice::Sem bump nesta promoção — versão atual ${VERSAO}."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add package.json CHANGELOG.md USER_CHANGELOG.md
+            git commit -m "chore(release): ${VERSAO}"
+            git push origin HEAD:main
+            echo "::notice::Versão ${VERSAO} commitada em main."
+          fi
           echo "versao=$VERSAO" >> "$GITHUB_OUTPUT"
-          echo "package.json declara v$VERSAO."
 
       - name: Criar a tag, se ainda não existir
         env:
@@ -71,16 +96,18 @@ jobs:
           VERSAO: ${{ steps.versao.outputs.versao }}
         run: |
           # Idempotente: este workflow também roda por `workflow_dispatch`, e um
-          # segundo disparo não pode falhar só porque o primeiro funcionou.
+          # segundo disparo não pode falhar só porque o primeiro funcionou. No
+          # fluxo normal a tag já existe desde a promoção de staging.
           if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --silent 2>/dev/null; then
             echo "::notice::A tag v${VERSAO} já existe."
             exit 0
           fi
 
+          SHA=$(git rev-parse origin/main)
           gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
             -f ref="refs/tags/v${VERSAO}" \
-            -f sha="${GITHUB_SHA}" --silent
-          echo "::notice::Tag v${VERSAO} criada em ${GITHUB_SHA}."
+            -f sha="${SHA}" --silent
+          echo "::notice::Tag v${VERSAO} criada em ${SHA}."
 
   devolver:
     name: main → dev

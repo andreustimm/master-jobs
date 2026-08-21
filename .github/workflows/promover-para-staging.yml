@@ -98,6 +98,13 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PAT || github.token }}
 
+      # O versionamento roda um `.ts` com o type stripping nativo do Node 24 —
+      # a mesma sintaxe do restante do projeto. Sem isto, o runner viria com o
+      # Node pré-instalado da imagem, que não tem o flag.
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+
       - name: Situação das branches
         id: situacao
         run: |
@@ -156,6 +163,59 @@ jobs:
           echo "Confira a migração e, se for segura, promova com:"
           echo "  gh workflow run promover-para-staging.yml --field confirmar-migracao=true"
           exit 1
+
+      - name: Versionar
+        if: >-
+          steps.situacao.outputs.adiante != '0' &&
+          steps.guard.outputs.schema != 'mudou'
+        id: versao
+        run: |
+          # Decide o bump pelos commits `últimaTag..dev`, carimba os dois
+          # changelogs e o package.json, e devolve a versão nova. É o escritor
+          # único de versão do fluxo — só a promoção, serializada pelo
+          # concurrency, escreve versão. Uma promoção = uma versão.
+          git checkout origin/dev
+          VERSAO=$(node --experimental-strip-types --no-warnings scripts/release/versionar.ts origin/dev)
+          echo "versao=$VERSAO" >> "$GITHUB_OUTPUT"
+          echo "versionar devolveu: $VERSAO"
+
+          if [ "$VERSAO" = "no-release" ] || [ "$VERSAO" = "already-released" ]; then
+            echo "::notice::Nada a versionar nesta promoção."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json CHANGELOG.md USER_CHANGELOG.md
+          git commit -m "chore(release): ${VERSAO}"
+
+          # O commit do bump precisa estar em `dev` antes do fast-forward —
+          # staging é dev bit a bit, e sem isto a versão ficaria só no staging.
+          git push origin HEAD:dev
+          git fetch origin dev --quiet
+          echo "::notice::Versão ${VERSAO} commitada em dev."
+
+      - name: Criar a tag da versão
+        if: >-
+          steps.versao.outputs.versao != 'no-release' &&
+          steps.versao.outputs.versao != 'already-released' &&
+          steps.versao.outputs.versao != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+          VERSAO: ${{ steps.versao.outputs.versao }}
+        run: |
+          # Tag por API, não por `git push`: o checkout grava o token como
+          # `http.extraheader`, e o push sairia autenticado pelo token padrão —
+          # ref criada por ele não dispara workflow nenhum. A API cria a tag e
+          # o resto do fluxo a enxerga.
+          SHA=$(git rev-parse origin/dev)
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --silent 2>/dev/null; then
+            echo "::notice::Tag v${VERSAO} já existe."
+          else
+            gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/v${VERSAO}" -f sha="${SHA}" --silent
+            echo "::notice::Tag v${VERSAO} criada em ${SHA}."
+          fi
 
       - name: Avançar staging
         if: >-
