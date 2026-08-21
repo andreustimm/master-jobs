@@ -330,8 +330,45 @@ com ele, `staging` e as PRs geradas também recebem checks próprios.
 | Dev | `dev` | `master-jobs-dev` | `jobs-dev.mastertimm.com.br` |
 | Local | — | `file:./data/jobs.db` | `127.0.0.1:3000` |
 
+> **19. Antes de abrir PR, rode a revisão profunda.**
+> `/deep-review` (skill em `.claude/skills/deep-review/`) revisa o diff com
+> evidência causal, cobertura por hunk e veredito **SHIP / FIX_BEFORE_SHIP /
+> REWORK**. Rode ANTES de pedir revisão humana: o CI prova que o código roda, e
+> a revisão profunda diz se ele está certo — são perguntas diferentes.
+> Com `--publish` ela comenta na PR; sem a flag, fica local em `.deep-review/`.
+> Um `FIX_BEFORE_SHIP` ignorado é uma decisão, e vai escrita na descrição da PR.
+
 ---
 
+
+## Revisão profunda
+
+A skill `deep-review` roda o pipeline de revisão em seis etapas com artefatos
+idempotentes em `.deep-review/`. Instalada uma vez em `.claude/skills/` e
+alcançada pelos três harnesses por symlink — `.codex/skills` e
+`.opencode/skills` apontam para lá, e nada é duplicado.
+
+```bash
+/deep-review                      # diff contra a base, relatório local
+/deep-review --pr 7               # uma PR do GitHub
+/deep-review --worktree           # trabalho não commitado
+/deep-review --pr 7 --publish     # comenta na PR
+```
+
+**Onde entra no fluxo:** depois do CI verde e antes do merge em `dev`. O CI prova
+que o código roda; a revisão profunda diz se ele está certo. Uma coisa não
+substitui a outra, e o veredito não é conselho — `FIX_BEFORE_SHIP` ignorado vira
+uma linha na descrição da PR dizendo por quê.
+
+**O que ela recusa a fazer:** aplicar correção. Ela revisa e relata; quem
+corrige decide o que aceitar. É por isso que `disable-model-invocation` está
+ligado no frontmatter — a skill só roda quando alguém pede.
+
+Configuração opcional em `.deep-review.yaml` na raiz; sem ela, o padrão do
+repositório vale, e `path_instructions` do `.coderabbit.yaml` é lido como
+fallback para quem vier de lá.
+
+---
 ## Comandos
 
 > **Os comandos abaixo usam `pnpm jho`.** Para digitar só `jho`, instale o

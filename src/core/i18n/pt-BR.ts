@@ -20,6 +20,7 @@ export const ptBR = {
     close: "Fechar",
   },
   nav: {
+    menu: "Menu",
     cockpit: "Cockpit",
     jobs: "Vagas",
     pipeline: "Funil",
@@ -62,6 +63,8 @@ export const ptBR = {
     invalid: "E-mail ou senha incorretos.",
     missing: "Informe e-mail e senha.",
     rateLimited: "Tentativas demais. Espere alguns minutos.",
+    unavailable:
+      "Não conseguimos verificar a senha agora. A sua pode estar certa — tente de novo em instantes.",
     firstAccess: "Primeiro acesso",
     noAccounts: "Nenhuma conta cadastrada ainda. Crie a sua no terminal:",
     afterCreate:

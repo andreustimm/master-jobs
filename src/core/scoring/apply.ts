@@ -4,9 +4,13 @@
  */
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
-import { job, jobScore } from "../db/schema.ts";
+import { candidate, job, jobScore } from "../db/schema.ts";
 import { ageInDays, loadRates, STALE_AFTER_DAYS } from "../../contexts/fx/index.ts";
-import { matchingProfile } from "../../contexts/matching/index.ts";
+import {
+  ensureMatchingProfile,
+  matchingProfile,
+  type ResultadoPerfil,
+} from "../../contexts/matching/index.ts";
 import {
   SCORER_VERSION,
   scoreJob,
@@ -48,12 +52,30 @@ async function loadScoringContext(candidateId: number): Promise<LoadedScoringCon
   return { profile, profileHash: selected.hash, fx, fxWarning, asOf: Date.now() };
 }
 
-async function persistScore(
+/**
+ * Quantas gravações vão juntas num `batch`.
+ *
+ * Cem porque o ganho é quase todo nas primeiras dezenas — o custo dominante é a
+ * ida e volta, não o tamanho do corpo — e um lote grande demais aumenta o que se
+ * perde quando um estoura. Com 8.768 vagas, são 88 requisições em vez de 8.768.
+ */
+const LOTE = 100;
+
+/**
+ * Monta a gravação SEM executá-la.
+ *
+ * Devolver a consulta em vez de aguardá-la é o que permite mandar cem de uma
+ * vez. `scoreAll` percorria as vagas com um `await` por linha: contra o SQLite
+ * local isso é imperceptível, e contra a Turso são 8.768 idas e voltas HTTP em
+ * série — a varredura diária pagava minutos por isso, todo dia.
+ */
+function upsertScore(
+  db: ReturnType<typeof getDb>,
   candidateId: number,
   jobId: number,
   result: ScoreResult,
   context: LoadedScoringContext,
-): Promise<void> {
+) {
   const scoredAt = new Date(context.asOf).toISOString();
   const values = {
     fit: result.fit,
@@ -79,13 +101,23 @@ async function persistScore(
     scoredAt,
   };
 
-  await getDb()
+  return db
     .insert(jobScore)
     .values({ candidateId, jobId, ...values })
     .onConflictDoUpdate({
       target: [jobScore.candidateId, jobScore.jobId],
       set: values,
     });
+}
+
+/** Uma gravação só. `scoreOne` pontua uma vaga e não tem lote para formar. */
+async function persistScore(
+  candidateId: number,
+  jobId: number,
+  result: ScoreResult,
+  context: LoadedScoringContext,
+): Promise<void> {
+  await upsertScore(getDb(), candidateId, jobId, result, context);
 }
 
 /** Score one known job through the exact same profile and scorer as a full run. */
@@ -167,12 +199,26 @@ export async function scoreAll(
   let scored = 0;
   let topFit = 0;
 
+  // Acumula e descarrega de cem em cem. A pontuação em si é função pura e
+  // barata; o que custava era a gravação, uma por vaga, em série.
+  type Gravacao = ReturnType<typeof upsertScore>;
+  let pendentes: Gravacao[] = [];
+
+  const descarregar = async () => {
+    if (pendentes.length === 0) return;
+    // `batch` exige tupla não-vazia; o guard acima é o que a garante.
+    await db.batch(pendentes as [Gravacao, ...Gravacao[]]);
+    pendentes = [];
+  };
+
   for (const row of rows) {
     const result = scoreJob(row, context);
     topFit = Math.max(topFit, result.fit);
-    await persistScore(candidateId, row.id, result, context);
+    pendentes.push(upsertScore(db, candidateId, row.id, result, context));
     scored++;
+    if (pendentes.length >= LOTE) await descarregar();
   }
+  await descarregar();
 
   return {
     scored,
@@ -181,4 +227,83 @@ export async function scoreAll(
     fxDate: context.fx?.date,
     fxWarning: context.fxWarning,
   };
+}
+
+export type ResultadoPorCandidato = {
+  candidateId: number;
+  slug: string;
+  perfil: ResultadoPerfil["estado"];
+  scored: number;
+  topFit: number;
+};
+
+/**
+ * Pontua TODOS os candidatos, derivando o perfil de quem ainda não tem.
+ *
+ * ## Por que existe
+ *
+ * `scoreAll` recebe um candidato, e todo chamador passava `activeCandidateId()`
+ * — o candidato padrão. O resultado, no banco de produção: 8.768 pontuações,
+ * todas do candidato 1, e board sem ranking para qualquer outra pessoa que
+ * entrasse. A tabela sempre foi por candidato; o que faltava era alguém
+ * percorrer a lista.
+ *
+ * ## Por que aqui, e não no carregamento da página
+ *
+ * Mesmo em lote, pontuar um candidato novo contra o acervo inteiro é trabalho de
+ * segundos e milhares de escritas. Fazer isso enquanto alguém espera uma página
+ * seria trocar "board sem ranking" por "board que não carrega" — pior, porque o
+ * primeiro pelo menos explica o que fazer.
+ *
+ * A varredura diária já roda e já é o lugar onde o acervo muda. Quem acabou de
+ * subir um currículo não precisa esperar até amanhã: `jho jobs score` sem
+ * argumento continua pontuando só o candidato ativo, na hora.
+ *
+ * ## Por que um candidato quebrado não derruba os outros
+ *
+ * Perfil ilegível ou currículo corrompido é problema de uma pessoa. Abortar a
+ * varredura inteira por causa disso deixaria todo mundo sem pontuação nova, e o
+ * relatório no fim é o que expõe quem falhou.
+ */
+export async function scoreEveryCandidate(
+  opts: { all?: boolean } = {},
+): Promise<ResultadoPorCandidato[]> {
+  const candidatos = await getDb()
+    .select({ id: candidate.id, slug: candidate.slug })
+    .from(candidate)
+    .orderBy(candidate.id);
+
+  const resultados: ResultadoPorCandidato[] = [];
+
+  for (const c of candidatos) {
+    let perfil: ResultadoPerfil["estado"] = "sem-curriculo";
+    try {
+      perfil = (await ensureMatchingProfile(c.id)).estado;
+
+      // Sem perfil próprio, NÃO pontua.
+      //
+      // A alternativa seria pontuar com o perfil padrão da instalação, e foi o
+      // que esta função fazia até ser exercitada contra dados reais: o
+      // candidato 2 do banco de dev, que não tem currículo, começou a receber
+      // 2.757 pontuações calculadas com o perfil de outra pessoa. Seria
+      // reintroduzir, por outro caminho, exatamente o problema que o M-06
+      // existe para resolver — com o agravante de o ranking PARECER dele.
+      //
+      // Board sem ranking é o estado honesto: a tela convida a subir um
+      // currículo, e é disso que o perfil sai.
+      if (perfil !== "ja-tinha" && perfil !== "derivado") {
+        resultados.push({ candidateId: c.id, slug: c.slug, perfil, scored: 0, topFit: 0 });
+        continue;
+      }
+
+      const r = await scoreAll(c.id, opts);
+      resultados.push({ candidateId: c.id, slug: c.slug, perfil, scored: r.scored, topFit: r.topFit });
+    } catch {
+      // Registrado como zero e seguido adiante. O chamador vê a linha com
+      // `scored: 0` e sabe onde olhar.
+      resultados.push({ candidateId: c.id, slug: c.slug, perfil, scored: 0, topFit: 0 });
+    }
+  }
+
+  return resultados;
 }

@@ -23,6 +23,7 @@ export const en: Dictionary = {
     close: "Close",
   },
   nav: {
+    menu: "Menu",
     cockpit: "Cockpit",
     jobs: "Jobs",
     pipeline: "Pipeline",
@@ -65,6 +66,8 @@ export const en: Dictionary = {
     invalid: "Incorrect email or password.",
     missing: "Enter your email and password.",
     rateLimited: "Too many attempts. Wait a few minutes.",
+    unavailable:
+      "We could not check the password right now. Yours may be correct — try again shortly.",
     firstAccess: "First run",
     noAccounts: "No account yet. Create one in the terminal:",
     afterCreate:

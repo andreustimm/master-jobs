@@ -1387,3 +1387,188 @@ jeito certo: sem destino, imprime no stdout em vez de escolher um.
 Recusa com código 1, nomeando as duas saídas (`--out` ou `JHO_VAULT_PATH`).
 Imprimir não serviria aqui, porque a saída é um arquivo por vaga. É a regra 13
 aplicada onde ela ainda não estava: a omissão precisa ser a opção segura.
+
+
+### M-06 · O score não é recalculado para quem assume outra identidade ✅
+
+Revisão pedida em 21/08/2026: *"ao logar como outro usuário o score deve ser
+recalculado baseado no perfil atual dele"*. Conferido contra o banco, não contra
+a intenção.
+
+**O que está certo.** `job_score` tem chave `(candidate_id, job_id)`. O board usa
+`leftJoin` escopado ao candidato da sessão, então ninguém vê score de outro — o
+isolamento existe. `scoreAll` grava o `profileHash` junto e **recalcula quando o
+hash muda**, que é exatamente o mecanismo pedido; há teste provando dois
+candidatos com perfis diferentes recebendo `fit` diferente para a mesma vaga.
+
+**O que não está.** Três buracos, e o primeiro tranca os outros:
+
+1. **Nenhum caminho de produção grava perfil de candidato.**
+   `setMatchingProfile` só é chamado em teste. A tabela
+   `candidate_matching_profile` está vazia, e todos caem no `profile.yaml`
+   global. "O perfil atual dele" não existe como dado.
+2. **`scoreAll` só é chamado pela CLI, sempre com `activeCandidateId()`** — o
+   candidato padrão. No banco: 8.768 scores, **todos do candidato 1**; os outros
+   dois têm zero.
+3. **Assumir a identidade não dispara nada.** O efeito visível é board sem
+   ranking, e não ranking errado — o `leftJoin` protege disso.
+
+**Decisão de 21/08/2026: derivar do currículo.** Ao entrar, candidato com perfil
+pontua com ele; sem perfil e com CV, deriva do CV, salva e pontua; sem CV, board
+sem ranking e convite a subir um. `extractSkills` já faz a extração contra o
+catálogo, com `confidence` derivada de onde e quantas vezes — nunca de opinião de
+modelo.
+
+O que um currículo **não** diz, e portanto continua herdado até alguém editar:
+autorização de trabalho, regiões aceitáveis, modelo de contrato e faixa salarial.
+São preferência e restrição, não histórico.
+
+> **Entregue.** A derivação e a fila estão descritas em *M-06 · Score por
+> candidato, derivado do currículo*, mais abaixo neste arquivo.
+
+#### Pré-requisito entregue em 21/08/2026
+
+A gravação em lote. `scoreAll` percorria as vagas com um `await` por linha:
+contra o SQLite local é imperceptível, contra a Turso são 8.768 idas e voltas
+HTTP **em série**. Pontuar um candidato novo no carregamento da página era
+impossível, e a varredura diária pagava esse custo todo dia. Agora vai de cem em
+cem — 88 requisições em vez de 8.768.
+
+Sem isso, qualquer desenho de "pontua ao entrar" seria uma página que trava por
+minutos.
+
+#### O que falta
+
+Derivar o perfil do CV, e decidir o gatilho. Pontuar no carregamento continua
+sendo a opção errada mesmo em lote; o sistema já tem fila (`verify_task`,
+`scrape_task`) e a varredura diária já roda — pontuar todo candidato ali, com uma
+ação explícita para quem acabou de subir currículo, é o caminho que não faz
+ninguém esperar.
+
+### B-09 · `verifyLogin > limits per address` falha de forma intermitente 📋
+
+Observado em 21/08/2026, durante a instalação da skill `deep-review`. Não é
+regressão dessa mudança — apareceu numa execução da suíte que não tocava
+autenticação.
+
+**Medido, não suposto:**
+
+| | |
+|---|---|
+| Suíte completa | 1 falha em ~3 execuções |
+| `tests/password.test.ts` isolado | 0 falhas em 5 execuções |
+
+Passar isolado e falhar em conjunto aponta para contenção ou estado
+compartilhado, não para lógica errada. O caso cria um segundo usuário, esgota as
+tentativas de `eu@test`, e afirma que `outro@test` ainda entra — ou seja, que o
+limite é por endereço e não global.
+
+Duas hipóteses, nenhuma verificada:
+
+1. **Contenção de CPU.** `verifyLogin` chama `scrypt`, que é caro de propósito.
+   Sob a suíte inteira em paralelo, o laço de `MAX_ATTEMPTS` tentativas pode
+   atravessar a fronteira da janela deslizante e mudar o que o limite enxerga.
+2. **Estado compartilhado entre arquivos.** `createRateLimiter` guarda os
+   contadores na memória do processo (ADR 0009). Workers do Vitest reusam
+   processo, e um contador que sobreviva de outro arquivo de teste alcançaria
+   este caso.
+
+Importa mais do que o número sugere: um teste de limite de autenticação que
+falha às vezes ensina a ignorar falha de CI, que é o começo de deixar passar a
+falha verdadeira.
+
+### B-10 · Falha do KDF era reportada como senha errada ✅
+
+Encontrado perseguindo o teste intermitente do B-09, e é bem maior que ele.
+
+`verifyPassword` envolvia a chamada do scrypt num `catch` que devolvia `false`
+para QUALQUER exceção. O comentário acima dele explica por que erro de formato
+tem de ler como "senha errada" — e está certo: ali o dado gravado É a resposta, e
+um `throw` viraria um 500 que confirma a existência da conta.
+
+Mas o mesmo `catch` engolia a falha de **recurso**. scrypt com os parâmetros
+deste sistema (N=65536, r=8) pede ~64 MB por chamada. Sob carga a alocação falha,
+e o efeito é:
+
+- quem digitou a senha **certa** é informado de que ela está errada;
+- o registro do sistema grava `login_failed`, concordando com o erro;
+- essa falha **conta para o limite por tentativas**, então uma indisponibilidade
+  do servidor vai trancando a conta de quem não errou nada;
+- nada em lugar nenhum diz que o verificador não chegou a rodar, e o suporte
+  procura um problema de senha que não existe.
+
+#### Entregue em 21/08/2026
+
+`KdfIndisponivelError` separa "não consegui verificar" de "está errada". Formato
+inválido continua devolvendo `false`, como sempre. Só a execução do KDF passou a
+propagar.
+
+`verifyLogin` traduz isso para `reason: "unavailable"`, com evento próprio
+(`login_unavailable`) — e não `login_failed`, que é o que alimenta o limite.
+A tela de login ganhou mensagem própria: "a sua pode estar certa".
+
+**Não vaza existência de conta.** `verifyLogin` roda o KDF contra um hash-isca
+quando a conta não existe, então a falha de recurso acontece igual nos dois casos
+e não distingue um do outro.
+
+Os testes provocam a falha REAL, sem dublê: um `N` alto o bastante para estourar
+o `maxmem` faz o próprio Node recusar com `ERR_CRYPTO_INVALID_SCRYPT_PARAMS`, que
+é o mesmo caminho de código que a pressão de memória percorre.
+
+#### Sobre o B-09
+
+A hipótese de contenção que o B-09 registra ganha um mecanismo concreto: sob a
+suíte inteira, scrypt paralelo pode falhar, e o `catch` transformava isso em
+"senha errada" — exatamente o sintoma observado. Não está provado que era essa a
+causa da intermitência, e o B-09 fica aberto até alguém reproduzi-la. O que
+mudou é que, se acontecer de novo, a falha agora se explica em vez de mentir.
+
+### M-06 · Score por candidato, derivado do currículo ✅
+
+O item foi registrado no PR #6, junto com o pré-requisito de gravação em lote.
+Esta é a entrega.
+
+**A derivação.** `deriveMatchingProfile` troca as palavras-chave do perfil padrão
+pelo que o currículo evidencia, via `extractSkills`. O que se herda e o que não
+se herda foi a decisão que mais importou:
+
+| Campo | Vem de | Por quê |
+|---|---|---|
+| `keywords.strong` / `.stack` | currículo | capacidade, e é o que o CV prova |
+| `keywords.critical` | **vazio** | ninguém declarou o que é indispensável |
+| `keywords.negative` | **vazio** | a lista do padrão é gosto de quem instalou |
+| `targets`, `constraints`, `compensation` | padrão | preferência, que CV nenhum contém |
+
+`negative` vazio não é descuido: a lista do `profile.yaml` tem `wordpress`,
+`cobol`, `unity`. Herdá-la penalizaria outra pessoa exatamente pela stack que ela
+domina — e há teste afirmando isso, com um currículo de WordPress.
+
+**O gatilho é evento, não carregamento de página.** `saveDocument` enfileira em
+`score_task` e devolve; a tela responde na hora. Fila em tabela pela ADR 0009,
+igual a `verify_task` e `scrape_task`, com reivindicação atômica
+(`UPDATE ... WHERE id = (SELECT ... LIMIT 1) RETURNING`) e claim pendurado
+voltando à fila em 10 minutos.
+
+Índice único por candidato: salvar o currículo três vezes em dois minutos produz
+UMA repontuação, não três. E o `max` no upsert impede que uma varredura chegando
+entre o pedido e o trabalhador jogue a pessoa para o fim da fila.
+
+**Quem não tem currículo não é pontuado.** Foi defeito da primeira versão,
+descoberto rodando contra o banco de dev: o candidato 2 acumulou 2.757 pontuações
+calculadas com o perfil do dono da instalação, com a aparência de serem dele.
+Board sem ranking é o estado honesto — a tela convida a subir um currículo.
+
+**Catálogo vazio tem estado próprio.** `extractSkills` devolve nada quando o
+catálogo não foi semeado, e sem essa distinção todo candidato de uma instalação
+sem `jho skills seed` seria diagnosticado com "currículo fraco" — mandando as
+pessoas reescreverem textos que estão ótimos. Descoberto por um teste; o caminho
+feliz não mostrava.
+
+Comandos: `jho jobs rescore queue|run|status` e `jho jobs score --every-candidate`.
+A varredura diária drena a fila e pontua as vagas novas.
+
+#### O que ficou de fora
+
+A tela do candidato ainda não mostra o estado da fila. Hoje a repontuação
+acontece e a pessoa descobre pelo ranking mudar; dizer "estamos recalculando" é
+melhor, e depende de decidir onde na interface.

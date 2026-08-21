@@ -54,14 +54,20 @@ pnpm jho auth set-password ${"seu@email.com"}`}
 
   const { error, cleared } = await searchParams;
 
+  // `unavailable` tem mensagem própria porque descreve outra coisa: o
+  // verificador não rodou, e a senha digitada pode estar perfeitamente certa.
+  // Cair no "e-mail ou senha incorretos" mandaria a pessoa trocar uma senha que
+  // não tem problema nenhum — e o suporte procuraria junto.
   const message =
     error === "missing"
       ? t("login.missing")
       : error === "rate_limited"
         ? t("login.rateLimited")
-        : error
-          ? t("login.invalid")
-          : null;
+        : error === "unavailable"
+          ? t("login.unavailable")
+          : error
+            ? t("login.invalid")
+            : null;
 
   return (
     // Centrado nos dois eixos: a tela de login não tem navegação nem conteúdo

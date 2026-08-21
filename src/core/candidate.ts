@@ -167,7 +167,7 @@ export async function saveDocument(input: {
 }): Promise<{ id: number; previousRetired: boolean; unchanged?: true }> {
   const db = getDb();
   const kind = input.kind ?? "cv";
-  return db.transaction(async (tx) => {
+  const resultado = await db.transaction(async (tx) => {
     const [current] = await tx
       .select()
       .from(candidateDocument)
@@ -214,6 +214,30 @@ export async function saveDocument(input: {
     if (!inserted) throw new Error("insert returned no row");
     return { id: inserted.id, previousRetired: retired.length > 0 };
   });
+
+  // Currículo novo, ranking obsoleto.
+  //
+  // É dele que sai o perfil de matching, e do perfil sai a nota de cada vaga.
+  // Recalcular aqui dentro não cabe: são milhares de gravações, e quem acabou de
+  // colar o CV ficaria olhando um formulário travado. Enfileira e devolve.
+  //
+  // FORA da transação, e depois do commit: enfileirar lá dentro deixaria uma
+  // tarefa apontando para um documento que um rollback desfez. A fila é
+  // idempotente por candidato, então salvar três vezes seguidas produz uma
+  // repontuação, não três.
+  //
+  // Falha aqui não derruba o salvamento. O documento é o que a pessoa pediu para
+  // guardar; a repontuação é consequência, e a varredura diária a recupera.
+  if (kind === "cv" && !("unchanged" in resultado)) {
+    try {
+      const { enqueueScore } = await import("./scoring/queue.ts");
+      await enqueueScore(input.candidateId, { origin: "cv" });
+    } catch {
+      // Silêncio deliberado: ver o parágrafo acima.
+    }
+  }
+
+  return resultado;
 }
 
 export async function currentDocument(candidateId: number, kind = "cv") {

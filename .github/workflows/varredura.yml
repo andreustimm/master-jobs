@@ -95,6 +95,26 @@ jobs:
       - name: Reconferir
         run: pnpm jho jobs recheck run --max 400
 
+      # 4. Repontuar quem pediu.
+      #
+      # A fila é alimentada por evento: salvar um currículo enfileira, porque é
+      # dele que sai o perfil de matching e do perfil sai a nota de cada vaga.
+      # Recalcular dentro do pedido não cabe — são milhares de gravações, e quem
+      # acabou de colar o CV ficaria olhando um formulário travado.
+      #
+      # Aqui a fila é drenada de vez. Quem não quiser esperar até amanhã tem
+      # `jho jobs rescore run` na mão.
+      - name: Repontuar a fila
+        run: pnpm jho jobs rescore run
+
+      # 5. E garantir que ninguém ficou para trás.
+      #
+      # Vaga nova entrou no passo 1, e a nota dela não existe para candidato
+      # nenhum até alguém pontuar. Sem isto, o acervo cresceria e só quem
+      # salvasse um currículo veria as vagas do dia.
+      - name: Pontuar as vagas novas
+        run: pnpm jho jobs score --every-candidate
+
       # 4. Olhar para as fontes.
       #
       # `syncAll` NÃO aborta quando uma fonte quebra — é a decisão certa, porque
