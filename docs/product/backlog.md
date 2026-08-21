@@ -1063,9 +1063,16 @@ fora" dele, que ainda descreviam a migração como pendente. Anotado lá.
 
 ### E-07 · `auth_event.user_id` perde a atribuição ao apagar a conta ✅
 
-`src/core/db/schema.ts:1018` declara `ON DELETE SET NULL`. Não existe exclusão
-de conta hoje — `setDisabled` desabilita, e nenhum caminho apaga `auth_user`.
-Então isto é uma decisão tomada por antecipação, e tomada para o lado errado.
+`src/core/db/schema.ts:1018` declara `ON DELETE SET NULL`. Quando este item foi
+escrito não existia exclusão de conta — `setDisabled` desabilitava, e nenhum
+caminho apagava `auth_user`. Era uma decisão tomada por antecipação, e tomada
+para o lado errado.
+
+> **A antecipação se pagou.** AUTH-05 trouxe a exclusão em 21/08/2026, e o teste
+> `cov-auth-nome-e-exclusao` confirma no banco o que este item resolveu antes de
+> precisar: depois de apagar a conta, `user_id` fica nulo e o `email` continua
+> lá. Sem a correção de `record()`, a auditoria teria ficado íntegra na aparência
+> e vazia no conteúdo.
 
 No dia em que houver exclusão, as linhas históricas continuam existindo e param
 de dizer **quem**. Numa tabela cuja razão de existir é provar exatamente isso —
@@ -1264,3 +1271,50 @@ apaga o que já estava lá.
 **`jho tasks done --status` não valida e id inexistente diz que deu certo** —
 caracterizado, não corrigido. Fica como item próprio.
 
+
+
+### AUTH-05 · Nome da conta, edição em modal e exclusão de usuário ✅
+
+Três lacunas da tela de administração, pedidas juntas: não havia como alterar os
+dados de uma conta depois de criada, não havia como apagá-la, e o topo do sistema
+tratava a pessoa pelo e-mail.
+
+**Nome completo.** Coluna `full_name` anulável em `auth_user` — e não
+`not null default ''`, porque string vazia mentiria dizendo que alguém
+preencheu, e a interface precisa distinguir "sem nome" de "nome em branco" para
+saber quando cair para o e-mail. O nome atravessa `Identity` e `Session` até o
+`session-badge`, e o e-mail permanece na sessão justamente para ser a queda.
+
+Essa travessia é o que quase deu errado: declarar o campo como obrigatório no
+tipo fez o TypeScript apontar **quatro `select` de produção** que não traziam a
+coluna — resolvedor de sessão, link mágico, senha e identidade. Sem o campo no
+tipo, cada um devolveria `undefined` em silêncio e o nome nunca apareceria.
+
+**Edição em modal.** Popover nativo, mesmo padrão do modal de vaga: zero
+JavaScript enviado, a página segue Server Component. Substituiu o formulário de
+papéis embutido na linha — com e-mail e nome entrando, seriam três campos
+abertos vezes o número de contas. `setRolesAction` saiu junto, porque Server
+Action pública sem consumidor é endpoint que ninguém olha.
+
+**Exclusão.** Confirmação própria, com o que sobrevive escrito ANTES do botão —
+quem lê depois de clicar já não tem escolha. Duas recusas antes de qualquer
+escrita: a própria conta não (derrubaria a sessão que executa a ação; desabilitar
+é o que se quer ali, e é reversível), e o último admin não (sem admin ninguém
+cria conta nem desfaz nada).
+
+O que sobrevive é decisão das chaves estrangeiras, e cada uma foi conferida com
+teste: sessão e token de login caem em cascata, porque não podem valer para
+conta que não existe; `auth_event` e a atribuição de vaga viram nulo, porque
+auditoria e vaga são fato ocorrido; e o candidato **não** é apagado — conta e
+candidato são coisas distintas, e levar o currículo junto seria dano colateral
+silencioso.
+
+Fecha o ciclo de **E-07**, que previu esta exclusão e preparou a auditoria para
+ela um dia antes.
+
+#### O que ficou de fora
+
+A verificação visual da modal abrindo. A extensão do Chrome não estava conectada
+e abrir janela à parte atrapalharia quem pediu; a marcação renderizada foi
+conferida por HTTP, e o padrão de popover é o mesmo do modal de vaga, que já
+funciona.
