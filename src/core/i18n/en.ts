@@ -23,6 +23,7 @@ export const en: Dictionary = {
     close: "Close",
   },
   nav: {
+    menu: "Menu",
     cockpit: "Cockpit",
     jobs: "Jobs",
     pipeline: "Pipeline",
