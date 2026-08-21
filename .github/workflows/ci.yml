@@ -1,0 +1,94 @@
+# Portão de qualidade.
+#
+# Roda no PR e no push das três branches que viram ambiente. O deploy em si é da
+# integração Git da Vercel, que dispara no push — este arquivo NÃO implanta. A
+# consequência importante: sem proteção de branch, a Vercel implanta mesmo com
+# este workflow vermelho. Ver docs/engineering/deploy.md, seção "O portão".
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, staging, dev]
+
+# Um PR que recebe três pushes seguidos não precisa de três execuções: só a
+# última diz alguma coisa. As anteriores são canceladas.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualidade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # A versão vem de `engines` no package.json, e não de um número
+          # repetido aqui: duas fontes divergem, e a que quebra é sempre a que
+          # ninguém lembrou de atualizar.
+          node-version-file: package.json
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Tipos
+        run: pnpm typecheck
+
+      - name: Gerar o service worker
+        # ANTES dos testes, e a ordem não é estética.
+        #
+        # `public/sw.js` é derivado de `scripts/sw-template.js` e está no
+        # .gitignore, então um checkout limpo não o tem. `tests/pwa.test.ts`
+        # afirma que o arquivo existe e carrega a marca de versão — é o teste
+        # que garante que nenhum deploy sirva um service worker com o
+        # placeholder literal dentro. Rodar os testes antes desta etapa faz esse
+        # caso falhar em toda execução do CI, por ausência do arquivo e não por
+        # defeito. Na máquina de quem desenvolve ele passa, porque já houve um
+        # build antes — que é justamente como essa divergência se esconde.
+        run: node scripts/sw-version.mjs
+
+      - name: Testes e cobertura
+        # Os limiares moram em vitest.config.ts (95% statements, 95% lines, 95%
+        # funcs, 90% branches). O comando falha sozinho quando algum não é
+        # alcançado — não há número repetido aqui.
+        run: pnpm vitest run --coverage
+
+      - name: Build
+        run: pnpm build
+
+  schema-e-migracao:
+    # Separado do portão de qualidade porque responde outra pergunta: não é "o
+    # código funciona", é "o banco acompanha o código". Um schema.ts alterado
+    # sem migração correspondente passa em todos os testes — eles rodam sobre um
+    # banco recriado do zero — e quebra só no ambiente que já tem dado.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Schema e migrações estão em sincronia
+        # `drizzle-kit generate` só escreve arquivo quando encontra diferença
+        # entre o schema e as migrações. Se a árvore ficar suja depois de rodar,
+        # é porque alguém mexeu no schema e não gerou a migração.
+        run: |
+          pnpm drizzle-kit generate --name ci_verificacao_de_sincronia
+          if [ -n "$(git status --porcelain drizzle/)" ]; then
+            echo "::error::schema.ts mudou sem migração correspondente."
+            echo "Rode: pnpm db:generate --name <descricao> e comite o resultado."
+            git status --porcelain drizzle/
+            exit 1
+          fi
+          echo "Schema e migrações em sincronia."

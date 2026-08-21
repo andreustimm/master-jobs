@@ -1,0 +1,81 @@
+# Aplica as migrações no banco do ambiente correspondente à branch.
+#
+# ## Por que existe
+#
+# A Vercel implanta código, não schema. Sem este workflow, todo deploy que
+# dependesse de coluna nova exigiria alguém lembrar de rodar `jho db migrate` na
+# mão contra o banco certo — e o modo de falhar é o pior possível: a aplicação
+# sobe, responde, e quebra só na página que toca a coluna que não existe.
+#
+# ## A regra que este arquivo assume: migração é sempre aditiva
+#
+# A Vercel dispara o deploy no mesmo push, então **não há ordem garantida** entre
+# a migração e o código novo entrar no ar. Isso é seguro enquanto a migração só
+# ACRESCENTA — coluna anulável, tabela nova, índice. O código velho ignora o que
+# não conhece, e o código novo encontra o que precisa.
+#
+# Não é seguro para migração que remove ou renomeia: durante a janela, uma das
+# duas versões estaria olhando para algo que não existe mais. Remoção se faz em
+# dois deploys — primeiro o código para de usar, depois a coluna sai.
+#
+# ## Por que um passo por ambiente, e não uma expressão que escolhe o segredo
+#
+# A versão anterior deste arquivo resolvia o token com
+# `ref == 'main' && SEGREDO_PROD || ...`. Parece equivalente e não é: segredo
+# ausente é string vazia, que é falsa na expressão, então um `TURSO_TOKEN_PROD`
+# não configurado fazia a branch `main` cair silenciosamente no ramo seguinte e
+# tentar migrar produção com o token de dev. Falharia na autenticação — sem
+# estrago —, mas com uma mensagem que não aponta para a causa.
+#
+# Três passos, cada um com `if` da sua branch e só o seu segredo no ambiente.
+# Um workflow de `dev` comprometido não alcança o token de produção.
+name: Migrações
+
+on:
+  push:
+    branches: [main, staging, dev]
+
+# Duas migrações simultâneas no mesmo banco é a receita para um journal
+# inconsistente. `cancel-in-progress: false` porque migração começada precisa
+# terminar: cancelar no meio é pior que esperar.
+concurrency:
+  group: migrate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  migrar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          # A versão vem de `engines` no package.json, e não de um número
+          # repetido aqui: duas fontes divergem, e a que quebra é sempre a que
+          # ninguém lembrou de atualizar.
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Produção
+        if: github.ref_name == 'main'
+        env:
+          TURSO_DATABASE_URL: libsql://master-jobs-andreustimm.aws-us-east-1.turso.io
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_TOKEN_PROD }}
+        run: ./.github/scripts/migrar.sh
+
+      - name: Staging
+        if: github.ref_name == 'staging'
+        env:
+          TURSO_DATABASE_URL: libsql://master-jobs-staging-andreustimm.aws-us-east-1.turso.io
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_TOKEN_STAGING }}
+        run: ./.github/scripts/migrar.sh
+
+      - name: Dev
+        if: github.ref_name == 'dev'
+        env:
+          TURSO_DATABASE_URL: libsql://master-jobs-dev-andreustimm.aws-us-east-1.turso.io
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_TOKEN_DEV }}
+        run: ./.github/scripts/migrar.sh

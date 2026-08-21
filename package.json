@@ -1,6 +1,7 @@
 {
   "name": "master-jobs",
   "version": "0.1.0",
+  "packageManager": "pnpm@10.28.0",
   "private": true,
   "type": "module",
   "description": "Job sourcing, fit scoring, application pipeline and LinkedIn positioning cockpit.",
