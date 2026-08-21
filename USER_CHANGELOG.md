@@ -11,6 +11,26 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 > com acesso ao sistema, e descrever a implementação seria contar como ele é
 > montado por dentro. O que se descreve é o efeito.
 
+## [1.1.0] - 2026-08-21
+
+### Novidade
+
+- O ranking agora leva em conta **o currículo de quem está logado**. Antes todas
+  as vagas eram ordenadas pelo mesmo perfil; agora cada pessoa vê a lista
+  montada para o que ela sabe fazer.
+- No celular, o **menu deixou de rolar escondido**: um botão abre a lista inteira,
+  com os itens grandes o suficiente para tocar.
+
+### Correção
+
+- Com o sistema sob carga, digitar a **senha certa** podia ser recusado como se
+  estivesse errada — e ainda descontar da contagem de tentativas. Corrigido.
+
+### Mais rápido
+
+- A atualização diária das vagas ficou **muito mais rápida**: o que antes eram
+  milhares de conversas com o banco virou poucas.
+
 ## [1.0.0] - 2026-08-21
 
 ### Novidade

@@ -6,6 +6,41 @@ Histórico técnico, para quem mexe no código. O resumo em linguagem simples, q
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.1.0] - 2026-08-21
+
+### Adicionado
+
+- **Score por candidato, derivado do currículo** (`M-06`). `job_score` sempre foi
+  por candidato e o board sempre foi escopado, mas `candidate_matching_profile`
+  estava vazia — as 8.768 pontuações de produção eram todas do candidato 1.
+  `deriveMatchingProfile` troca as palavras-chave do perfil padrão pelo que o
+  currículo evidencia; `keywords.negative` e `keywords.critical` ficam vazios, e
+  restrição/remuneração/alvos continuam herdados.
+- **Fila de repontuação por candidato** (`score_task`, ADR 0009). Salvar currículo
+  enfileira a repontuação em vez de recalcular na hora. Índice único por
+  candidato evita repontuar o acervo inteiro por três salvamentos seguidos.
+  Comandos `jho jobs score --every-candidate` e `jho jobs rescore`.
+- **Menu do celular** em dropdown abaixo de `sm`, com a linha inteira clicável —
+  a fileira rolava na horizontal com scroll suprimido, sobrando um link visível.
+
+### Corrigido
+
+- **Falha do KDF** (`verifyPassword`) engolida pelo `catch` que tratava erro de
+  formato: scrypt sob carga falhava por recurso e era reportado como "senha
+  errada", contando para o limite de tentativas de quem digitou certo.
+
+### Melhorado
+
+- **Score em lote.** `scoreAll` fazia um `await` por vaga — 8.768 idas e voltas
+  HTTP em série contra a Turso. `upsertScore` acumula cem gravações por `batch`.
+
+### Infraestrutura
+
+- **Retomada manual do guard de migração** na promoção `dev → staging`
+  (`confirmar-migracao` no `workflow_dispatch`), documentando também o setting
+  "Allow GitHub Actions to create and approve pull requests".
+- **Skill deep-review** instalada nos três harnesses (symlink).
+
 ## [1.0.0] - 2026-08-21
 
 Primeira versão em produção, em `jobs.mastertimm.com.br`. O `package.json`
