@@ -20,6 +20,7 @@ export const ptBR = {
     close: "Fechar",
   },
   nav: {
+    menu: "Menu",
     cockpit: "Cockpit",
     jobs: "Vagas",
     pipeline: "Funil",

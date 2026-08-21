@@ -24,6 +24,7 @@ import { AppearanceSwitch } from "./theme-switch";
 import { ServiceWorkerRegister } from "./service-worker";
 import { stopImpersonatingAction } from "./admin/actions";
 import { LocaleSwitch } from "./locale-switch";
+import { MobileNav, NavLinks } from "./nav-links";
 import { headers } from "next/headers";
 import {
   LOCALE_COOKIE,
@@ -101,7 +102,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const { currentSession } = await import("./auth");
   const session = await currentSession();
   const signedIn = Boolean(session);
-  const hasCandidateScope = session?.candidateId !== null && session?.roles.includes("candidate");
+  // `=== true` porque `session?.roles.includes(...)` é `boolean | undefined`, e
+  // `undefined` num `&&` de JSX simplesmente não renderiza — o que funcionava.
+  // Agora o valor atravessa uma fronteira de componente, onde "ausente" e
+  // "falso" precisam ser a mesma coisa.
+  const hasCandidateScope =
+    session?.candidateId !== null && session?.roles.includes("candidate") === true;
   // Admin de verdade: papel `admin` E sessão própria. Numa sessão emprestada a
   // política nega administração, e um link que leva a uma página que vai negar
   // é pior que link nenhum.
@@ -177,50 +183,40 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
               {/* Sem sessão os links levariam de volta ao login; mostrar um
                   menu que não vai a lugar nenhum é ruído. */}
+              {/* A partir de `sm`, a fileira. Abaixo dela, o menu.
+
+                  A fileira rolava na horizontal com a barra de rolagem
+                  escondida, e num aparelho de 375px — depois da marca, do
+                  idioma, da aparência e do estado da sessão — sobrava espaço
+                  para UM link, sem nada indicando que havia mais. Quem olhava
+                  concluía que o menu tinha sumido. */}
               <nav
                 className={cn(
-                  "flex min-w-0 flex-1 items-center gap-5 overflow-x-auto",
+                  "hidden min-w-0 flex-1 items-center gap-5 overflow-x-auto sm:flex",
                   "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
                   !signedIn && "invisible",
                 )}
               >
-                {/* Escritos um a um, inclusive a comparação manual:
-                    `typedRoutes` valida cada href contra a árvore real de rotas,
-                    e uma união mapeada anula essa checagem. */}
-                {hasCandidateScope && (
-                  <Link href="/" className={navClass}>
-                    {t("nav.cockpit")}
-                  </Link>
-                )}
-                {hasCandidateScope && (
-                  <Link href="/jobs" className={navClass}>
-                    {t("nav.jobs")}
-                  </Link>
-                )}
-                <Link href="/compare" className={navClass}>
-                  {t("nav.compareJob")}
-                </Link>
-                {hasCandidateScope && (
-                  <Link href="/pipeline" className={navClass}>
-                    {t("nav.pipeline")}
-                  </Link>
-                )}
-                {hasCandidateScope && (
-                  <Link href="/referrals" className={navClass}>
-                    {t("nav.referrals")}
-                  </Link>
-                )}
-                {hasCandidateScope && (
-                  <Link href="/candidate" className={navClass}>
-                    {t("nav.candidate")}
-                  </Link>
-                )}
-                {isAdmin && (
-                  <Link href="/admin/users" className={navClass}>
-                    {t("admin.nav")}
-                  </Link>
-                )}
+                <NavLinks
+                  hasCandidateScope={hasCandidateScope}
+                  isAdmin={isAdmin}
+                  linkClass={navClass}
+                  t={t}
+                />
               </nav>
+
+              {/* Empurra o bloco da direita para a borda no celular, onde a
+                  fileira não está lá para fazer isso. */}
+              <div className="flex-1 sm:hidden" />
+
+              {signedIn && (
+                <MobileNav
+                  hasCandidateScope={hasCandidateScope}
+                  isAdmin={isAdmin}
+                  rotulo={t("nav.menu")}
+                  t={t}
+                />
+              )}
 
               <div className="flex shrink-0 items-center gap-2">
                 <LocaleSwitch current={locale} label={t("nav.language")} />
