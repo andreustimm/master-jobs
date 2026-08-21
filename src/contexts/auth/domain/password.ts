@@ -46,6 +46,22 @@ export async function hashPassword(password: string): Promise<string> {
  * error must read as "wrong password", not as a 500 that tells an attacker the
  * account exists.
  */
+/**
+ * O KDF não conseguiu rodar.
+ *
+ * Distinta de "senha errada" de propósito. scrypt com os parâmetros deste
+ * sistema pede ~64 MB por chamada, e sob carga a alocação falha — devolver
+ * `false` aí diria a alguém com a senha certa que ela está errada, e o registro
+ * do sistema concordaria. Erro operacional não é veredito sobre credencial.
+ */
+export class KdfIndisponivelError extends Error {
+  constructor(causa: unknown) {
+    super(`scrypt não pôde ser executado: ${causa instanceof Error ? causa.message : String(causa)}`);
+    this.name = "KdfIndisponivelError";
+    this.cause = causa;
+  }
+}
+
 export async function verifyPassword(password: string, stored: string | null): Promise<boolean> {
   if (!stored) return false;
   const parts = stored.split("$");
@@ -79,8 +95,24 @@ export async function verifyPassword(password: string, stored: string | null): P
   // senha tem de negar acesso, nunca concedê-lo.
   if (expected.length !== KEYLEN) return false;
 
+  // O KDF não rodou. Isso NÃO é senha errada.
+  //
+  // O `catch` que existia aqui devolvia `false` para qualquer exceção, e engolia
+  // junto a falha de RECURSO: scrypt com N=65536 pede ~64 MB por chamada, e sob
+  // carga a alocação pode falhar. O efeito é uma pessoa com a senha certa sendo
+  // informada de que ela está errada, sem nada registrando o motivo — e o
+  // suporte procurando um problema de senha que não existe.
+  //
+  // Formato inválido continua devolvendo `false`, como está documentado acima:
+  // ali o dado gravado É a resposta, e negar é o comportamento correto. Aqui o
+  // verificador não chegou a produzir resposta nenhuma.
+  //
+  // Não vaza existência de conta: `verifyLogin` roda o KDF contra um hash-isca
+  // quando a conta não existe, então a falha de recurso acontece igual nos dois
+  // casos e não distingue um do outro.
+  let derived: Buffer;
   try {
-    const derived = await new Promise<Buffer>((resolve, reject) => {
+    derived = await new Promise<Buffer>((resolve, reject) => {
       // `KEYLEN`, a constante, e não o tamanho do valor gravado. O que está no
       // banco é a coisa que se está verificando; usá-lo como parâmetro do
       // próprio verificador é deixar o atacante escolher a régua.
@@ -88,11 +120,12 @@ export async function verifyPassword(password: string, stored: string | null): P
         err ? reject(err) : resolve(key),
       );
     });
-    // Constant-time: a fast reject leaks how much of the hash matched.
-    return derived.length === expected.length && timingSafeEqual(derived, expected);
-  } catch {
-    return false;
+  } catch (causa) {
+    throw new KdfIndisponivelError(causa);
   }
+
+  // Constant-time: a fast reject leaks how much of the hash matched.
+  return derived.length === expected.length && timingSafeEqual(derived, expected);
 }
 
 export type PasswordProblem = { ok: false; reason: string } | { ok: true };

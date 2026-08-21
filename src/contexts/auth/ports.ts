@@ -138,7 +138,11 @@ export type UserDirectory = {
 
 export type PasswordResult =
   | { ok: true; identity: Identity }
-  | { ok: false; reason: "invalid" | "rate_limited" };
+  /**
+   * `unavailable`: o verificador não rodou — falha de recurso, não
+   * veredito sobre a senha. Ver `KdfIndisponivelError`.
+   */
+  | { ok: false; reason: "invalid" | "rate_limited" | "unavailable" };
 
 export type PasswordVerifier = {
   verify(email: string, password: string): Promise<PasswordResult>;
