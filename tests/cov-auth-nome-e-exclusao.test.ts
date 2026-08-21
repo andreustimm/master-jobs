@@ -218,7 +218,7 @@ describe("excluir a conta", () => {
     expect(restantes.map((c) => c.id)).toContain(cid);
   });
 
-  it("a auditoria sobrevive, sem apontar para a conta que não existe mais", async () => {
+  it("a auditoria sobrevive e continua dizendo QUEM, pelo e-mail", async () => {
     const { id } = await createUser({ email: "auditada@local.test", roles: ["admin"] });
     const { token: link } = await startLogin("auditada@local.test");
     await finishLogin(link);
@@ -228,11 +228,19 @@ describe("excluir a conta", () => {
 
     await deleteUser(id);
 
-    // O login ocorreu, e continua tendo ocorrido. `set null` no `user_id` é o
-    // que separa "auditoria preservada" de "auditoria apagada junto" — e uma
-    // trilha que some quando a conta some não serve para investigar nada.
     const depois = await db.select().from(authEvent);
+    // O login ocorreu, e continua tendo ocorrido. Trilha que some quando a
+    // conta some não serve para investigar nada.
     expect(depois.length).toBe(antes.length);
+    // `ON DELETE SET NULL` no `user_id`: o ponteiro morre com a conta.
     expect(depois.every((e) => e.userId === null)).toBe(true);
+
+    // E aqui está a razão de este caso existir. O item E-07 do backlog previu
+    // exatamente este dia — "no dia em que houver exclusão, as linhas param de
+    // dizer QUEM" — e resolveu antes dele chegar, fazendo `record()` resolver o
+    // endereço na escrita em vez de depender de quem chamou lembrar de passá-lo.
+    // Sem essa decisão, a auditoria ficaria íntegra na aparência e vazia no
+    // conteúdo: N linhas provando que algo aconteceu com ninguém.
+    expect(depois.some((e) => e.email === "auditada@local.test")).toBe(true);
   });
 });
