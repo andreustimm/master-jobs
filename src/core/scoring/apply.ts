@@ -4,9 +4,13 @@
  */
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
-import { job, jobScore } from "../db/schema.ts";
+import { candidate, job, jobScore } from "../db/schema.ts";
 import { ageInDays, loadRates, STALE_AFTER_DAYS } from "../../contexts/fx/index.ts";
-import { matchingProfile } from "../../contexts/matching/index.ts";
+import {
+  ensureMatchingProfile,
+  matchingProfile,
+  type ResultadoPerfil,
+} from "../../contexts/matching/index.ts";
 import {
   SCORER_VERSION,
   scoreJob,
@@ -223,4 +227,83 @@ export async function scoreAll(
     fxDate: context.fx?.date,
     fxWarning: context.fxWarning,
   };
+}
+
+export type ResultadoPorCandidato = {
+  candidateId: number;
+  slug: string;
+  perfil: ResultadoPerfil["estado"];
+  scored: number;
+  topFit: number;
+};
+
+/**
+ * Pontua TODOS os candidatos, derivando o perfil de quem ainda não tem.
+ *
+ * ## Por que existe
+ *
+ * `scoreAll` recebe um candidato, e todo chamador passava `activeCandidateId()`
+ * — o candidato padrão. O resultado, no banco de produção: 8.768 pontuações,
+ * todas do candidato 1, e board sem ranking para qualquer outra pessoa que
+ * entrasse. A tabela sempre foi por candidato; o que faltava era alguém
+ * percorrer a lista.
+ *
+ * ## Por que aqui, e não no carregamento da página
+ *
+ * Mesmo em lote, pontuar um candidato novo contra o acervo inteiro é trabalho de
+ * segundos e milhares de escritas. Fazer isso enquanto alguém espera uma página
+ * seria trocar "board sem ranking" por "board que não carrega" — pior, porque o
+ * primeiro pelo menos explica o que fazer.
+ *
+ * A varredura diária já roda e já é o lugar onde o acervo muda. Quem acabou de
+ * subir um currículo não precisa esperar até amanhã: `jho jobs score` sem
+ * argumento continua pontuando só o candidato ativo, na hora.
+ *
+ * ## Por que um candidato quebrado não derruba os outros
+ *
+ * Perfil ilegível ou currículo corrompido é problema de uma pessoa. Abortar a
+ * varredura inteira por causa disso deixaria todo mundo sem pontuação nova, e o
+ * relatório no fim é o que expõe quem falhou.
+ */
+export async function scoreEveryCandidate(
+  opts: { all?: boolean } = {},
+): Promise<ResultadoPorCandidato[]> {
+  const candidatos = await getDb()
+    .select({ id: candidate.id, slug: candidate.slug })
+    .from(candidate)
+    .orderBy(candidate.id);
+
+  const resultados: ResultadoPorCandidato[] = [];
+
+  for (const c of candidatos) {
+    let perfil: ResultadoPerfil["estado"] = "sem-curriculo";
+    try {
+      perfil = (await ensureMatchingProfile(c.id)).estado;
+
+      // Sem perfil próprio, NÃO pontua.
+      //
+      // A alternativa seria pontuar com o perfil padrão da instalação, e foi o
+      // que esta função fazia até ser exercitada contra dados reais: o
+      // candidato 2 do banco de dev, que não tem currículo, começou a receber
+      // 2.757 pontuações calculadas com o perfil de outra pessoa. Seria
+      // reintroduzir, por outro caminho, exatamente o problema que o M-06
+      // existe para resolver — com o agravante de o ranking PARECER dele.
+      //
+      // Board sem ranking é o estado honesto: a tela convida a subir um
+      // currículo, e é disso que o perfil sai.
+      if (perfil !== "ja-tinha" && perfil !== "derivado") {
+        resultados.push({ candidateId: c.id, slug: c.slug, perfil, scored: 0, topFit: 0 });
+        continue;
+      }
+
+      const r = await scoreAll(c.id, opts);
+      resultados.push({ candidateId: c.id, slug: c.slug, perfil, scored: r.scored, topFit: r.topFit });
+    } catch {
+      // Registrado como zero e seguido adiante. O chamador vê a linha com
+      // `scored: 0` e sabe onde olhar.
+      resultados.push({ candidateId: c.id, slug: c.slug, perfil, scored: 0, topFit: 0 });
+    }
+  }
+
+  return resultados;
 }

@@ -1519,3 +1519,53 @@ suíte inteira, scrypt paralelo pode falhar, e o `catch` transformava isso em
 "senha errada" — exatamente o sintoma observado. Não está provado que era essa a
 causa da intermitência, e o B-09 fica aberto até alguém reproduzi-la. O que
 mudou é que, se acontecer de novo, a falha agora se explica em vez de mentir.
+
+### M-06 · Score por candidato, derivado do currículo ✅
+
+O item foi registrado no PR #6, junto com o pré-requisito de gravação em lote.
+Esta é a entrega.
+
+**A derivação.** `deriveMatchingProfile` troca as palavras-chave do perfil padrão
+pelo que o currículo evidencia, via `extractSkills`. O que se herda e o que não
+se herda foi a decisão que mais importou:
+
+| Campo | Vem de | Por quê |
+|---|---|---|
+| `keywords.strong` / `.stack` | currículo | capacidade, e é o que o CV prova |
+| `keywords.critical` | **vazio** | ninguém declarou o que é indispensável |
+| `keywords.negative` | **vazio** | a lista do padrão é gosto de quem instalou |
+| `targets`, `constraints`, `compensation` | padrão | preferência, que CV nenhum contém |
+
+`negative` vazio não é descuido: a lista do `profile.yaml` tem `wordpress`,
+`cobol`, `unity`. Herdá-la penalizaria outra pessoa exatamente pela stack que ela
+domina — e há teste afirmando isso, com um currículo de WordPress.
+
+**O gatilho é evento, não carregamento de página.** `saveDocument` enfileira em
+`score_task` e devolve; a tela responde na hora. Fila em tabela pela ADR 0009,
+igual a `verify_task` e `scrape_task`, com reivindicação atômica
+(`UPDATE ... WHERE id = (SELECT ... LIMIT 1) RETURNING`) e claim pendurado
+voltando à fila em 10 minutos.
+
+Índice único por candidato: salvar o currículo três vezes em dois minutos produz
+UMA repontuação, não três. E o `max` no upsert impede que uma varredura chegando
+entre o pedido e o trabalhador jogue a pessoa para o fim da fila.
+
+**Quem não tem currículo não é pontuado.** Foi defeito da primeira versão,
+descoberto rodando contra o banco de dev: o candidato 2 acumulou 2.757 pontuações
+calculadas com o perfil do dono da instalação, com a aparência de serem dele.
+Board sem ranking é o estado honesto — a tela convida a subir um currículo.
+
+**Catálogo vazio tem estado próprio.** `extractSkills` devolve nada quando o
+catálogo não foi semeado, e sem essa distinção todo candidato de uma instalação
+sem `jho skills seed` seria diagnosticado com "currículo fraco" — mandando as
+pessoas reescreverem textos que estão ótimos. Descoberto por um teste; o caminho
+feliz não mostrava.
+
+Comandos: `jho jobs rescore queue|run|status` e `jho jobs score --every-candidate`.
+A varredura diária drena a fila e pontua as vagas novas.
+
+#### O que ficou de fora
+
+A tela do candidato ainda não mostra o estado da fila. Hoje a repontuação
+acontece e a pessoa descobre pelo ranking mudar; dizer "estamos recalculando" é
+melhor, e depende de decidir onde na interface.

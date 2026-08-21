@@ -4,7 +4,7 @@ Este inventário é a fonte de verdade das fronteiras do monólito modular. A
 contagem e a presença das APIs públicas são verificadas por
 `tests/architecture.test.ts`.
 
-<!-- schema-table-count: 29 -->
+<!-- schema-table-count: 30 -->
 
 | Contexto | Aggregate owner / responsabilidade | Tabelas próprias | API pública | Dependências permitidas |
 |---|---|---|---|---|
@@ -26,6 +26,7 @@ ganham API pública quando uma mudança funcional atravessa sua fronteira:
 | candidate | perfil e documentos em `candidate`, `candidate_document` |
 | positioning | `post`, `engagement`, `target_account`, `metric_snapshot`, `positioning_task` |
 | scrape | fila técnica `scrape_task` |
+| matching | perfil por candidato em `candidate_matching_profile`, notas em `job_score`, fila de repontuação em `score_task` |
 | llm | catálogo BYOK em `llm_provider`, `llm_model` |
 
 `src/core/db/schema.ts` é o único composition root físico do Drizzle: migrations
