@@ -35,6 +35,11 @@ dashboard.html
 # agent worktrees
 .claude/worktrees/
 
+# Artefatos da skill `deep-review`: gerados por execução e retomáveis, nunca
+# fonte. O relatório de cada rodada fica em `.deep-review/<alvo>/review.html`,
+# e o estado que permite a revisão incremental, em `.deep-review/state.json`.
+.deep-review/
+
 # Derivado de scripts/sw-template.js pelo prebuild — a versão entra no nome dos
 # caches, então o arquivo muda a cada release e não deve ser versionado.
 public/sw.js

@@ -1441,3 +1441,35 @@ sendo a opção errada mesmo em lote; o sistema já tem fila (`verify_task`,
 `scrape_task`) e a varredura diária já roda — pontuar todo candidato ali, com uma
 ação explícita para quem acabou de subir currículo, é o caminho que não faz
 ninguém esperar.
+
+### B-09 · `verifyLogin > limits per address` falha de forma intermitente 📋
+
+Observado em 21/08/2026, durante a instalação da skill `deep-review`. Não é
+regressão dessa mudança — apareceu numa execução da suíte que não tocava
+autenticação.
+
+**Medido, não suposto:**
+
+| | |
+|---|---|
+| Suíte completa | 1 falha em ~3 execuções |
+| `tests/password.test.ts` isolado | 0 falhas em 5 execuções |
+
+Passar isolado e falhar em conjunto aponta para contenção ou estado
+compartilhado, não para lógica errada. O caso cria um segundo usuário, esgota as
+tentativas de `eu@test`, e afirma que `outro@test` ainda entra — ou seja, que o
+limite é por endereço e não global.
+
+Duas hipóteses, nenhuma verificada:
+
+1. **Contenção de CPU.** `verifyLogin` chama `scrypt`, que é caro de propósito.
+   Sob a suíte inteira em paralelo, o laço de `MAX_ATTEMPTS` tentativas pode
+   atravessar a fronteira da janela deslizante e mudar o que o limite enxerga.
+2. **Estado compartilhado entre arquivos.** `createRateLimiter` guarda os
+   contadores na memória do processo (ADR 0009). Workers do Vitest reusam
+   processo, e um contador que sobreviva de outro arquivo de teste alcançaria
+   este caso.
+
+Importa mais do que o número sugere: um teste de limite de autenticação que
+falha às vezes ensina a ignorar falha de CI, que é o começo de deixar passar a
+falha verdadeira.
