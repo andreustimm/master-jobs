@@ -8,6 +8,26 @@
  */
 import type { NewPositioningTask } from "../db/schema.ts";
 
+/**
+ * Os estados que um item do plano pode ter.
+ *
+ * Existiam só como comentário ao lado da coluna em `schema.ts`, e comentário
+ * não valida nada: `jho tasks done T-1 --status qualquer-coisa` gravava
+ * `qualquer-coisa` e a lista passava a esconder o item, porque o filtro padrão
+ * mostra o que não está em `done` nem em `skipped` — e um estado desconhecido
+ * não é nenhum dos dois nem é `todo`.
+ *
+ * `doneAt` só é preenchido em `done`. É o que separa "concluí" de "desisti",
+ * e a diferença importa na hora de ler o histórico.
+ */
+export const POSITIONING_STATUSES = ["todo", "doing", "done", "skipped"] as const;
+
+export type PositioningStatus = (typeof POSITIONING_STATUSES)[number];
+
+export function positioningStatus(value: string): PositioningStatus | null {
+  return POSITIONING_STATUSES.find((status) => status === value) ?? null;
+}
+
 export const POSITIONING_PLAN: NewPositioningTask[] = [
   /* ---------------------------- primeiras 24h ---------------------------- */
   {

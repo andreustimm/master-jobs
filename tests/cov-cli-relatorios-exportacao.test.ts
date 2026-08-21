@@ -283,22 +283,29 @@ describe("jho dossiers", () => {
 
   /**
    * O último degrau da cadeia de destino: sem `--out` e sem vault, o comando
-   * cai em `<cwd>/out/vagas`.
+   * **recusa**.
    *
-   * O caso roda com `--min-fit 200` de propósito — nenhum documento é gerado,
-   * então o único efeito é o `mkdir`. `out/` é ignorado pelo Git (guarda kits
-   * de candidatura, que são pessoais), e a limpeza abaixo só remove a pasta
-   * se ela não existia antes do caso.
+   * Antes ele caía em `<cwd>/out/vagas`. O problema não era o caminho: era ser
+   * relativo a de onde a pessoa rodou. Rodar de outro diretório espalhava
+   * dezenas de arquivos num lugar que ninguém procura depois, sem aviso — e o
+   * `jho report`, logo acima no mesmo arquivo, já resolvia o mesmo dilema do
+   * jeito certo, caindo no stdout em vez de escolher um destino.
    */
-  it("sem vault e sem `--out`, usa `out/vagas` sob o diretório de trabalho", async () => {
+  it("sem vault e sem `--out`, recusa em vez de escolher um diretório", async () => {
     await semearAcervo();
     const raiz = join(process.cwd(), "out");
     const existiaAntes = await existe(raiz);
 
     try {
       const r = await rodar("dossiers", "--min-fit", "200");
-      expect(r.code).toBeUndefined();
-      expect(await existe(join(raiz, "vagas"))).toBe(true);
+
+      expect(r.code).toBe(1);
+      // A recusa precisa dizer as duas saídas, senão vira um beco sem saída.
+      expect(r.out).toContain("--out");
+      expect(r.out).toContain("JHO_VAULT_PATH");
+      // E não pode criar nada pelo caminho: o `mkdir` acontecia antes de
+      // qualquer verificação, então a pasta nascia mesmo sem dossiê nenhum.
+      if (!existiaAntes) expect(await existe(join(raiz, "vagas"))).toBe(false);
     } finally {
       if (!existiaAntes) await rm(raiz, { recursive: true, force: true });
     }

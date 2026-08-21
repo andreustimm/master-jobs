@@ -1269,7 +1269,7 @@ ser a mais forte. Agora grava — inclusive quando o status não muda, porque ca
 apaga o que já estava lá.
 
 **`jho tasks done --status` não valida e id inexistente diz que deu certo** —
-caracterizado, não corrigido. Fica como item próprio.
+caracterizado, não corrigido na ocasião. Virou o item **B-07**, entregue.
 
 
 
@@ -1318,3 +1318,72 @@ A verificação visual da modal abrindo. A extensão do Chrome não estava conec
 e abrir janela à parte atrapalharia quem pediu; a marcação renderizada foi
 conferida por HTTP, e o padrão de popover é o mesmo do modal de vaga, que já
 funciona.
+
+### B-06 · `Number(id)` sem validação vaza o SQL, ou finge que escreveu ✅
+
+Onze comandos convertiam o id posicional com `Number(id)` e entregavam o
+resultado à consulta sem olhar. `Number("abc")` é `NaN`, e `NaN` chega ao driver
+como bind inválido.
+
+Os que **consultam** — `jobs show`, `analyze`, `prep` — estouravam um
+`DrizzleQueryError` cujo `message` é o SELECT inteiro, impresso em vermelho no
+terminal de quem só errou o id. Pior: o ramo educado (`No job with id abc`,
+código 1) ficava logo abaixo da consulta e nunca era alcançado, porque a exceção
+acontecia antes.
+
+Os que só **escrevem** — `engage done`, `engage skip`, `skills confirm`,
+`skills reject`, `mail accept`, `mail dismiss`, `track` — falhavam pior, em
+silêncio: `where id = NaN` não casa com linha nenhuma, então o comando terminava
+com código zero sem ter feito coisa alguma.
+
+#### Entregue em 21/08/2026
+
+Um guard só, `idNumerico(bruto, oQue)`, aplicado nos onze pontos antes de abrir
+conexão com o banco — id inválido não precisa de banco. Inteiro e positivo,
+porque todo id do sistema é `integer primary key autoincrement`, que começa em 1:
+aceitar `"1.5"` ou `"-3"` só adiaria a mesma confusão para dentro da consulta.
+
+O teste que caracterizava o defeito em `cov-cli-relatorios-acervo` dizia "no dia
+em que a validação entrar, este é o teste que reprova". Entrou, reprovou, e agora
+afirma a correção — incluindo que nem `select` nem `Failed query` aparecem na
+saída.
+
+### B-07 · `jho tasks done` aceita status inventado e mente sobre id inexistente ✅
+
+Dois defeitos no mesmo comando, que só dividiam a linha.
+
+O vocabulário da coluna (`todo | doing | done | skipped`) existia **apenas como
+comentário** ao lado de `positioningTask.status` em `schema.ts`, e comentário não
+valida nada: `--status feito` gravava `feito`. O item então sumia das duas
+listagens — o filtro padrão esconde `done` e `skipped`, e um estado desconhecido
+não é nenhum dos dois nem volta a ser `todo`. O plano perdia a tarefa em
+silêncio, que é o pior desfecho possível para uma ferramenta de plano.
+
+E `jho tasks done PT-9999` imprimia `✓ PT-9999 → done` e saía com zero: `update
+... where id = ?` que não casa com linha nenhuma é sucesso para o SQL. Quem
+digitou o id errado seguia acreditando que fechou a tarefa.
+
+#### Entregue em 21/08/2026
+
+`POSITIONING_STATUSES` e `positioningStatus()` em `src/core/positioning/plan.ts`,
+ao lado do plano que os usa — mesmo formato de `APPLICATION_STATUSES`. O texto
+de ajuda da flag passou a derivar da constante, em vez de repetir a lista. O
+`update` ganhou `returning`, e zero linhas alteradas viraram código 1 com o
+comando que lista os ids válidos.
+
+### B-08 · `jho dossiers` sem destino espalha arquivo pelo diretório atual ✅
+
+Sem `--out` e sem `JHO_VAULT_PATH`, o comando caía em `<cwd>/out/vagas`. O
+problema não era o caminho: era ser **relativo a de onde a pessoa rodou**. Rodar
+de outro diretório espalhava dezenas de markdowns num lugar que ninguém procura
+depois, sem aviso, e o `mkdir` acontecia antes de qualquer verificação — então a
+pasta nascia mesmo quando nenhum dossiê era gerado.
+
+O `jho report`, dez linhas acima no mesmo arquivo, já resolvia o mesmo dilema do
+jeito certo: sem destino, imprime no stdout em vez de escolher um.
+
+#### Entregue em 21/08/2026
+
+Recusa com código 1, nomeando as duas saídas (`--out` ou `JHO_VAULT_PATH`).
+Imprimir não serviria aqui, porque a saída é um arquivo por vaga. É a regra 13
+aplicada onde ela ainda não estava: a omissão precisa ser a opção segura.

@@ -500,24 +500,38 @@ describe("jho jobs show <id>", () => {
   });
 
   /**
-   * CARACTERIZAÇÃO DE DEFEITO — o comportamento afirmado abaixo é o atual, e
-   * ele está errado.
+   * Este caso já foi uma caracterização de defeito, e a nota dizia: "no dia em
+   * que a validação entrar, este é o teste que reprova". Entrou, ele reprovou,
+   * e agora afirma a correção.
    *
-   * `jobs show abc` faz `Number("abc")` = NaN e entrega NaN ao driver, que
-   * recusa o bind. O resultado é um `DrizzleQueryError` cujo `message` é o SQL
-   * inteiro; no terminal, o `.catch` da guarda de entrypoint imprime esse SQL
-   * em vermelho. O ramo educado — "No job with id abc", código 1 — existe
-   * logo abaixo e nunca é alcançado.
-   *
-   * O caso fica aqui fixando o que ACONTECE, não o que deveria: mudar
-   * `src/cli.ts` está fora do escopo desta suíte. No dia em que a validação
-   * entrar, este é o teste que reprova e aponta para o lugar certo.
+   * O defeito era `Number("abc")` = NaN chegando ao driver como bind inválido.
+   * Saía um `DrizzleQueryError` cujo `message` é o SELECT inteiro, impresso em
+   * vermelho no terminal de quem só errou o id — enquanto o ramo educado ficava
+   * logo abaixo, inalcançável, porque a exceção acontecia antes da consulta.
    */
-  it("id não numérico vaza erro do driver em vez do aviso amigável (defeito)", async () => {
+  it("id não numérico é recusado sem vazar consulta nenhuma", async () => {
     await syncCandidateFromProfile();
     const r = await rodar("jobs", "show", "abc");
-    expect(r.erro).toBeInstanceOf(Error);
-    expect((r.erro as Error).message).toContain("Failed query");
+
+    // Sem exceção escapando: quem digita errado recebe uma frase, não um dump.
+    expect(r.erro).toBeUndefined();
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("abc");
+    // A asserção que dá o nome ao defeito. `select` viria do SQL vazado;
+    // `Failed query` é a moldura que o Drizzle põe em volta dele.
+    expect(`${r.err}${r.out}`.toLowerCase()).not.toContain("select");
+    expect(`${r.err}${r.out}`).not.toContain("Failed query");
+  });
+
+  it("id fracionário e negativo também são recusados", async () => {
+    await syncCandidateFromProfile();
+    // Todo id do sistema é `integer primary key autoincrement`, que começa em 1.
+    // Aceitar "1.5" ou "-3" só adiaria a mesma confusão para dentro da consulta.
+    for (const invalido of ["1.5", "-3", "0"]) {
+      const r = await rodar("jobs", "show", invalido);
+      expect(r.code).toBe(1);
+      expect(r.erro).toBeUndefined();
+    }
   });
 
   it("sem o argumento obrigatório, é erro de uso", async () => {

@@ -823,7 +823,13 @@ pnpm jho tasks done PT-0019 --status skipped
 |---|---|---|
 | `--status <name>` | `done` | `todo`, `doing`, `done` ou `skipped` |
 
-`done` carimba `doneAt`; qualquer outro status limpa o carimbo.
+`done` carimba `doneAt`; qualquer outro status limpa o carimbo — é o que separa
+"concluí" de "desisti" na hora de ler o histórico.
+
+Status fora dessa lista é recusado com código 1, e id que não existe também. Até
+20/08/2026 nenhum dos dois era: `--status feito` gravava `feito` e a tarefa sumia
+das listagens, e `tasks done PT-9999` imprimia o ✓ verde sem ter tocado em linha
+nenhuma. Ver B-07 no backlog.
 
 ## Área `fx` — câmbio
 
@@ -1087,6 +1093,29 @@ pnpm jho report --min-fit 50 --out ./out/vagas-hoje.md
 O arquivo é nomeado por data (`vagas-match-<YYYY-MM-DD>.md`), então rodar o comando duas
 vezes no mesmo dia **sobrescreve** o snapshot do dia — o que é o comportamento desejado:
 um arquivo por dia, sempre o estado mais recente.
+
+#### `jho dossiers` — um arquivo por vaga
+
+Onde o `report` produz um panorama, o `dossiers` produz um markdown por vaga, com
+a descrição inteira e frontmatter de `fit`, cluster e bloqueios — consultável
+como nota do Obsidian.
+
+```bash
+pnpm jho dossiers --min-fit 70 --limit 30
+pnpm jho dossiers --tracked --out ./out/vagas
+```
+
+| Flag | Padrão | Efeito |
+|---|---|---|
+| `--min-fit <n>` | `60` | piso de aderência |
+| `--limit <n>` | `50` | quantos gerar |
+| `--tracked` | — | só vagas já no funil |
+| `--out <dir>` | — | destino, quando não há vault |
+
+**Sem `--out` e sem `JHO_VAULT_PATH`, o comando recusa.** Ele não escolhe um
+destino por você. Até 20/08/2026 caía em `./out/vagas`, e o problema não era o
+caminho: era ser relativo a de onde a pessoa rodou, o que espalhava dezenas de
+arquivos num lugar que ninguém procura depois. Ver B-08 no backlog.
 
 ### 5. Debugar uma fonte que falha
 
