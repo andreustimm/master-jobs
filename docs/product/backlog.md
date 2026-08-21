@@ -1389,7 +1389,7 @@ Imprimir não serviria aqui, porque a saída é um arquivo por vaga. É a regra 
 aplicada onde ela ainda não estava: a omissão precisa ser a opção segura.
 
 
-### M-06 · O score não é recalculado para quem assume outra identidade 🔨
+### M-06 · O score não é recalculado para quem assume outra identidade ✅
 
 Revisão pedida em 21/08/2026: *"ao logar como outro usuário o score deve ser
 recalculado baseado no perfil atual dele"*. Conferido contra o banco, não contra
@@ -1422,6 +1422,9 @@ modelo.
 O que um currículo **não** diz, e portanto continua herdado até alguém editar:
 autorização de trabalho, regiões aceitáveis, modelo de contrato e faixa salarial.
 São preferência e restrição, não histórico.
+
+> **Entregue.** A derivação e a fila estão descritas em *M-06 · Score por
+> candidato, derivado do currículo*, mais abaixo neste arquivo.
 
 #### Pré-requisito entregue em 21/08/2026
 
