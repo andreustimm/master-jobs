@@ -28,17 +28,24 @@
 # página de erro em produção — enquanto o custo de parar é alguém apertar um
 # botão.
 #
-# ## Sobre o token
+# ## Sobre o token e a PR
 #
-# Push feito com o `GITHUB_TOKEN` padrão **não dispara outros workflows** — é a
-# trava anti-recursão do GitHub. Então o avanço de `staging` por aqui não roda o
-# CI de `staging`, e a PR aberta por este workflow não recebe checks
-# automaticamente.
+# Abrir a PR `staging → main` exige permissão de criar PR. O `GITHUB_TOKEN`
+# padrão **não** tem, por omissão: o repositório precisa do setting
+# **Settings → Actions → General → "Allow GitHub Actions to create and approve
+# pull requests"**, e o `permissions:` abaixo não substitui esse setting — os
+# dois são necessários. Sem nenhum dos dois, `gh pr create` falha com
+# `createPullRequest` negado e a promoção morre após avançar `staging`.
 #
-# Para `staging` ser checada de verdade, defina o segredo `RELEASE_PAT` (um PAT
-# com `contents:write` e `pull_requests:write`). Sem ele o fluxo funciona e é
-# seguro — o código promovido é bit a bit o mesmo que passou no CI de `dev` —,
-# só não há um segundo carimbo.
+# Alternativa: definir o segredo `RELEASE_PAT` (um PAT com `contents:write` e
+# `pull_requests:write`). Ele substitui o token padrão no checkout, no push de
+# `staging` e na abertura da PR, e tem uma vantagem extra: push feito com ele
+# dispara os workflows de `staging` e as PRs geradas recebem checks próprios —
+# o token padrão não dispara outros workflows, por trava anti-recursão.
+#
+# Sem o `RELEASE_PAT` **e** sem o setting acima, o fluxo ainda promove
+# `staging` por fast-forward, mas a PR não nasce e o run falha de propósito,
+# para ninguém achar que a PR existe quando não existe.
 name: Promover para staging
 
 on:
@@ -48,7 +55,20 @@ on:
     branches: [dev]
   # Retomada manual: um job morto no meio não pode obrigar a esperar o próximo
   # push em `dev` para destravar a promoção.
-  workflow_dispatch: {}
+  #
+  # O guard de migração é fail-closed e não conhece o `workflow_dispatch`:
+  # retomar manualmente com schema alterado voltaria a parar no mesmo lugar —
+  # deadlock. A confirmação abaixo é o carimbo humano de que a migração foi
+  # lida e decidida; sem ela, a retomada manual respeita o guard.
+  workflow_dispatch:
+    inputs:
+      confirmar-migracao:
+        description: >-
+          Confirma que a migração entre staging e dev foi revisada por gente e
+          é segura de promover (aditiva, sem remover ou renomear coluna).
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -113,22 +133,34 @@ jobs:
             echo "Sem mudança de schema entre staging e dev."
             exit 0
           fi
+          echo "$MUDOU"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.confirmar-migracao }}" = "true" ]; then
+            echo "schema=aprovado" >> "$GITHUB_OUTPUT"
+            echo "::notice::Migração confirmada por gente — promoção prossegue."
+            exit 0
+          fi
           echo "schema=mudou" >> "$GITHUB_OUTPUT"
           echo "::warning::Mudança de schema entre staging e dev — promoção automática suspensa."
-          echo "$MUDOU"
 
-      # Fail-closed: com schema alterado, a promoção para aqui e espera gente.
+      # Fail-closed: com schema alterado, a promoção automática para e espera
+      # gente. A exceção é o `workflow_dispatch` com `confirmar-migracao=true`:
+      # aí o humano já leu a migração e decidiu que ela é segura — retomar sem
+      # o input respeita o guard, e retomar com ele é a decisão que o guard
+      # existe para exigir.
       - name: Suspender por causa do schema
         if: steps.guard.outputs.schema == 'mudou'
         run: |
           echo "::error::Promoção automática suspensa: o schema mudou."
           echo "Migração aditiva sobrevive à corrida entre deploy e migração;"
           echo "migração que remove ou renomeia não. Quem decide isso é gente."
-          echo "Confira a migração, então promova com: gh workflow run promover-para-staging.yml"
+          echo "Confira a migração e, se for segura, promova com:"
+          echo "  gh workflow run promover-para-staging.yml --field confirmar-migracao=true"
           exit 1
 
       - name: Avançar staging
-        if: steps.situacao.outputs.adiante != '0' && steps.guard.outputs.schema == 'limpo'
+        if: >-
+          steps.situacao.outputs.adiante != '0' &&
+          steps.guard.outputs.schema != 'mudou'
         run: |
           # `--ff-only` é a garantia escrita: se por qualquer motivo deixar de
           # ser fast-forward entre a checagem e agora, o push falha em vez de
@@ -137,7 +169,9 @@ jobs:
           echo "::notice::staging avançou ${{ steps.situacao.outputs.adiante }} commit(s)."
 
       - name: Abrir a PR staging → main
-        if: steps.situacao.outputs.adiante != '0' && steps.guard.outputs.schema == 'limpo'
+        if: >-
+          steps.situacao.outputs.adiante != '0' &&
+          steps.guard.outputs.schema != 'mudou'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
         run: |
