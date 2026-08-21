@@ -48,12 +48,30 @@ async function loadScoringContext(candidateId: number): Promise<LoadedScoringCon
   return { profile, profileHash: selected.hash, fx, fxWarning, asOf: Date.now() };
 }
 
-async function persistScore(
+/**
+ * Quantas gravações vão juntas num `batch`.
+ *
+ * Cem porque o ganho é quase todo nas primeiras dezenas — o custo dominante é a
+ * ida e volta, não o tamanho do corpo — e um lote grande demais aumenta o que se
+ * perde quando um estoura. Com 8.768 vagas, são 88 requisições em vez de 8.768.
+ */
+const LOTE = 100;
+
+/**
+ * Monta a gravação SEM executá-la.
+ *
+ * Devolver a consulta em vez de aguardá-la é o que permite mandar cem de uma
+ * vez. `scoreAll` percorria as vagas com um `await` por linha: contra o SQLite
+ * local isso é imperceptível, e contra a Turso são 8.768 idas e voltas HTTP em
+ * série — a varredura diária pagava minutos por isso, todo dia.
+ */
+function upsertScore(
+  db: ReturnType<typeof getDb>,
   candidateId: number,
   jobId: number,
   result: ScoreResult,
   context: LoadedScoringContext,
-): Promise<void> {
+) {
   const scoredAt = new Date(context.asOf).toISOString();
   const values = {
     fit: result.fit,
@@ -79,13 +97,23 @@ async function persistScore(
     scoredAt,
   };
 
-  await getDb()
+  return db
     .insert(jobScore)
     .values({ candidateId, jobId, ...values })
     .onConflictDoUpdate({
       target: [jobScore.candidateId, jobScore.jobId],
       set: values,
     });
+}
+
+/** Uma gravação só. `scoreOne` pontua uma vaga e não tem lote para formar. */
+async function persistScore(
+  candidateId: number,
+  jobId: number,
+  result: ScoreResult,
+  context: LoadedScoringContext,
+): Promise<void> {
+  await upsertScore(getDb(), candidateId, jobId, result, context);
 }
 
 /** Score one known job through the exact same profile and scorer as a full run. */
@@ -167,12 +195,26 @@ export async function scoreAll(
   let scored = 0;
   let topFit = 0;
 
+  // Acumula e descarrega de cem em cem. A pontuação em si é função pura e
+  // barata; o que custava era a gravação, uma por vaga, em série.
+  type Gravacao = ReturnType<typeof upsertScore>;
+  let pendentes: Gravacao[] = [];
+
+  const descarregar = async () => {
+    if (pendentes.length === 0) return;
+    // `batch` exige tupla não-vazia; o guard acima é o que a garante.
+    await db.batch(pendentes as [Gravacao, ...Gravacao[]]);
+    pendentes = [];
+  };
+
   for (const row of rows) {
     const result = scoreJob(row, context);
     topFit = Math.max(topFit, result.fit);
-    await persistScore(candidateId, row.id, result, context);
+    pendentes.push(upsertScore(db, candidateId, row.id, result, context));
     scored++;
+    if (pendentes.length >= LOTE) await descarregar();
   }
+  await descarregar();
 
   return {
     scored,

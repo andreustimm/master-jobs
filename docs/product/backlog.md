@@ -1387,3 +1387,57 @@ jeito certo: sem destino, imprime no stdout em vez de escolher um.
 Recusa com código 1, nomeando as duas saídas (`--out` ou `JHO_VAULT_PATH`).
 Imprimir não serviria aqui, porque a saída é um arquivo por vaga. É a regra 13
 aplicada onde ela ainda não estava: a omissão precisa ser a opção segura.
+
+
+### M-06 · O score não é recalculado para quem assume outra identidade 🔨
+
+Revisão pedida em 21/08/2026: *"ao logar como outro usuário o score deve ser
+recalculado baseado no perfil atual dele"*. Conferido contra o banco, não contra
+a intenção.
+
+**O que está certo.** `job_score` tem chave `(candidate_id, job_id)`. O board usa
+`leftJoin` escopado ao candidato da sessão, então ninguém vê score de outro — o
+isolamento existe. `scoreAll` grava o `profileHash` junto e **recalcula quando o
+hash muda**, que é exatamente o mecanismo pedido; há teste provando dois
+candidatos com perfis diferentes recebendo `fit` diferente para a mesma vaga.
+
+**O que não está.** Três buracos, e o primeiro tranca os outros:
+
+1. **Nenhum caminho de produção grava perfil de candidato.**
+   `setMatchingProfile` só é chamado em teste. A tabela
+   `candidate_matching_profile` está vazia, e todos caem no `profile.yaml`
+   global. "O perfil atual dele" não existe como dado.
+2. **`scoreAll` só é chamado pela CLI, sempre com `activeCandidateId()`** — o
+   candidato padrão. No banco: 8.768 scores, **todos do candidato 1**; os outros
+   dois têm zero.
+3. **Assumir a identidade não dispara nada.** O efeito visível é board sem
+   ranking, e não ranking errado — o `leftJoin` protege disso.
+
+**Decisão de 21/08/2026: derivar do currículo.** Ao entrar, candidato com perfil
+pontua com ele; sem perfil e com CV, deriva do CV, salva e pontua; sem CV, board
+sem ranking e convite a subir um. `extractSkills` já faz a extração contra o
+catálogo, com `confidence` derivada de onde e quantas vezes — nunca de opinião de
+modelo.
+
+O que um currículo **não** diz, e portanto continua herdado até alguém editar:
+autorização de trabalho, regiões aceitáveis, modelo de contrato e faixa salarial.
+São preferência e restrição, não histórico.
+
+#### Pré-requisito entregue em 21/08/2026
+
+A gravação em lote. `scoreAll` percorria as vagas com um `await` por linha:
+contra o SQLite local é imperceptível, contra a Turso são 8.768 idas e voltas
+HTTP **em série**. Pontuar um candidato novo no carregamento da página era
+impossível, e a varredura diária pagava esse custo todo dia. Agora vai de cem em
+cem — 88 requisições em vez de 8.768.
+
+Sem isso, qualquer desenho de "pontua ao entrar" seria uma página que trava por
+minutos.
+
+#### O que falta
+
+Derivar o perfil do CV, e decidir o gatilho. Pontuar no carregamento continua
+sendo a opção errada mesmo em lote; o sistema já tem fila (`verify_task`,
+`scrape_task`) e a varredura diária já roda — pontuar todo candidato ali, com uma
+ação explícita para quem acabou de subir currículo, é o caminho que não faz
+ninguém esperar.
