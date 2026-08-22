@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Localized changelog domain and atomic bilingual release pipeline
 type: backend
 complexity: high
@@ -37,14 +37,14 @@ the technical changelog, both user changelogs, and `package.json`.
 
 ## Subtasks
 
-- [ ] 1.1 Establish the discriminated publication, release, parse-result, issue, parity, semantic-ordering, and exact-formatting contracts in the pure changelog domain.
-- [ ] 1.2 Migrate the Portuguese user changelog to its locale-specific source and add a reviewed English edition with equivalent visible history and metadata.
-- [ ] 1.3 Preserve current historical date precision and document any evidence-backed instant without treating lightweight tag commit time as tag-creation time.
-- [ ] 1.4 Extend the pure release domain to prepare and validate the technical and two localized documents as one coherent result.
-- [ ] 1.5 Wire the release shell to capture one UTC instant, update every required output only after successful preparation, and preserve retry/idempotency guarantees.
-- [ ] 1.6 Update promotion and synchronization workflow file lists, release checks, and standalone tracing for both localized sources.
-- [ ] 1.7 Add safe, prose-free diagnostics and the current-version fallback contract required by the runtime adapter.
-- [ ] 1.8 Implement the assigned unit and integration contract cases, including real-file coherence and temporary release-fixture coverage.
+- [x] 1.1 Establish the discriminated publication, release, parse-result, issue, parity, semantic-ordering, and exact-formatting contracts in the pure changelog domain.
+- [x] 1.2 Migrate the Portuguese user changelog to its locale-specific source and add a reviewed English edition with equivalent visible history and metadata.
+- [x] 1.3 Preserve current historical date precision and document any evidence-backed instant without treating lightweight tag commit time as tag-creation time.
+- [x] 1.4 Extend the pure release domain to prepare and validate the technical and two localized documents as one coherent result.
+- [x] 1.5 Wire the release shell to capture one UTC instant, update every required output only after successful preparation, and preserve retry/idempotency guarantees.
+- [x] 1.6 Update promotion and synchronization workflow file lists, release checks, and standalone tracing for both localized sources.
+- [x] 1.7 Add safe, prose-free diagnostics and the current-version fallback contract required by the runtime adapter.
+- [x] 1.8 Implement the assigned unit and integration contract cases, including real-file coherence and temporary release-fixture coverage.
 
 ## Implementation Details
 
@@ -99,14 +99,14 @@ pure. Start from the current `dev` behavior in `src/core/release.ts` and
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-001, UT-002, UT-003, UT-004, UT-005, UT-006, UT-007, UT-008, UT-009, UT-010, UT-011, UT-012 — complete-body parsing, publication validation, issue isolation, semantic ordering, and `Unreleased` preservation.
-- [ ] UT-013, UT-014, UT-015, UT-016, UT-017, UT-018, UT-019 — cross-locale version, publication, visibility, and content parity.
-- [ ] UT-020, UT-021, UT-022, UT-023, UT-024, UT-025, UT-026, UT-027, UT-028, UT-029 — atomic preparation, preconditions, partial-state failure, no-user-change handling, and idempotent retry.
-- [ ] UT-030, UT-031, UT-032, UT-033, UT-034, UT-035, UT-036 — exact locale formatting, device timezone conversion, date-only stability, calendar/DST boundaries, and invalid-input refusal.
-- [ ] UT-051, UT-052 — prose-free runtime diagnostics and current-version fallback.
-- [ ] IT-001, IT-002, IT-003 — real localized-file coherence, content boundary, and standalone tracing.
-- [ ] IT-005, IT-006, IT-007, IT-008, IT-009, IT-010 — successful, failed, retried, partial, no-user-change, and technical-content release fixtures.
-- [ ] IT-013, IT-014 — historical precision evidence and release-workflow staging coverage.
+- [x] UT-001, UT-002, UT-003, UT-004, UT-005, UT-006, UT-007, UT-008, UT-009, UT-010, UT-011, UT-012 — complete-body parsing, publication validation, issue isolation, semantic ordering, and `Unreleased` preservation.
+- [x] UT-013, UT-014, UT-015, UT-016, UT-017, UT-018, UT-019 — cross-locale version, publication, visibility, and content parity.
+- [x] UT-020, UT-021, UT-022, UT-023, UT-024, UT-025, UT-026, UT-027, UT-028, UT-029 — atomic preparation, preconditions, partial-state failure, no-user-change handling, and idempotent retry.
+- [x] UT-030, UT-031, UT-032, UT-033, UT-034, UT-035, UT-036 — exact locale formatting, device timezone conversion, date-only stability, calendar/DST boundaries, and invalid-input refusal.
+- [x] UT-051, UT-052 — prose-free runtime diagnostics and current-version fallback.
+- [x] IT-001, IT-002, IT-003 — real localized-file coherence, content boundary, and standalone tracing.
+- [x] IT-005, IT-006, IT-007, IT-008, IT-009, IT-010 — successful, failed, retried, partial, no-user-change, and technical-content release fixtures.
+- [x] IT-013, IT-014 — historical precision evidence and release-workflow staging coverage.
 
 ## Success Criteria
 

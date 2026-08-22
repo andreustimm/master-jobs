@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Safe Markdown client modal and full browser integration
 type: frontend
 complexity: high
@@ -37,14 +37,14 @@ theme-compatible design.
 
 ## Subtasks
 
-- [ ] 2.1 Add the safe Markdown rendering adapter and production dependency with semantic element mappings and restricted URL destinations.
-- [ ] 2.2 Add reusable, deterministic modal expansion and identifier behavior for newest-only initialization, independent toggles, and close-cycle reset.
-- [ ] 2.3 Implement the native dialog lifecycle, focus behavior, dismissal paths, disclosure semantics, internal scrolling, and responsive card presentation.
-- [ ] 2.4 Convert the footer into the active-locale server adapter and pass only serializable labels, version, locale, and release data to the client boundary.
-- [ ] 2.5 Wire root locale propagation and complete typed Portuguese/English interface labels without JSX literals or duplicate dictionary keys.
-- [ ] 2.6 Integrate client-local instant formatting and stable date-only display into semantic `<time>` elements.
-- [ ] 2.7 Cover safe Markdown, modal state, locale selection, and the Server-to-Client boundary with the assigned unit and integration cases.
-- [ ] 2.8 Extend the isolated Playwright journey across lifecycle, disclosures, locales, timezones, themes, mobile, zoom, roles, offline behavior, malformed content, and large histories.
+- [x] 2.1 Add the safe Markdown rendering adapter and production dependency with semantic element mappings and restricted URL destinations.
+- [x] 2.2 Add reusable, deterministic modal expansion and identifier behavior for newest-only initialization, independent toggles, and close-cycle reset.
+- [x] 2.3 Implement the native dialog lifecycle, focus behavior, dismissal paths, disclosure semantics, internal scrolling, and responsive card presentation.
+- [x] 2.4 Convert the footer into the active-locale server adapter and pass only serializable labels, version, locale, and release data to the client boundary.
+- [x] 2.5 Wire root locale propagation and complete typed Portuguese/English interface labels without JSX literals or duplicate dictionary keys.
+- [x] 2.6 Integrate client-local instant formatting and stable date-only display into semantic `<time>` elements.
+- [x] 2.7 Cover safe Markdown, modal state, locale selection, and the Server-to-Client boundary with the assigned unit and integration cases.
+- [x] 2.8 Extend the isolated Playwright journey across lifecycle, disclosures, locales, timezones, themes, mobile, zoom, roles, offline behavior, malformed content, and large histories.
 
 ## Implementation Details
 
@@ -105,16 +105,16 @@ before changing Server/Client boundaries.
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-037, UT-038, UT-039, UT-040, UT-041, UT-042, UT-043 — safe URL policy, raw-HTML inertness, complete semantic Markdown, and malformed-source readability.
-- [ ] UT-044, UT-045, UT-046, UT-047, UT-048, UT-049 — newest-only initialization, independent disclosure toggles, reset lifecycle, and stable accessible identifiers.
-- [ ] UT-050 — total active-locale file selection without arbitrary paths or silent cross-locale fallback.
-- [ ] IT-004 — production renderer dependency and hostile Markdown static-output boundary.
-- [ ] IT-011, IT-012, IT-015 — standalone locale delivery, typed locale/fallback contract, and serializable Server-to-Client props.
-- [ ] E2E-001, E2E-002, E2E-003, E2E-004, E2E-005, E2E-006, E2E-007, E2E-008, E2E-009 — modal open/close/focus/dismissal and accessible multi-disclosure lifecycle.
-- [ ] E2E-010, E2E-011 — complete Markdown semantics and hostile-content safety.
-- [ ] E2E-012, E2E-013, E2E-014, E2E-015, E2E-016, E2E-017, E2E-018 — active-locale prose, exact local-time display, date-only stability, timezone boundaries, and locale switching.
-- [ ] E2E-019, E2E-020, E2E-021, E2E-022 — narrow/large-content containment, all theme/mode variants, keyboard access, contrast, and zoom.
-- [ ] E2E-023, E2E-024, E2E-025, E2E-026 — role equivalence, offline/rapid interaction, hydration/runtime cleanliness, and malformed-or-empty source degradation.
+- [x] UT-037, UT-038, UT-039, UT-040, UT-041, UT-042, UT-043 — safe URL policy, raw-HTML inertness, complete semantic Markdown, and malformed-source readability.
+- [x] UT-044, UT-045, UT-046, UT-047, UT-048, UT-049 — newest-only initialization, independent disclosure toggles, reset lifecycle, and stable accessible identifiers.
+- [x] UT-050 — total active-locale file selection without arbitrary paths or silent cross-locale fallback.
+- [x] IT-004 — production renderer dependency and hostile Markdown static-output boundary.
+- [x] IT-011, IT-012, IT-015 — standalone locale delivery, typed locale/fallback contract, and serializable Server-to-Client props.
+- [x] E2E-001, E2E-002, E2E-003, E2E-004, E2E-005, E2E-006, E2E-007, E2E-008, E2E-009 — modal open/close/focus/dismissal and accessible multi-disclosure lifecycle.
+- [x] E2E-010, E2E-011 — complete Markdown semantics and hostile-content safety.
+- [x] E2E-012, E2E-013, E2E-014, E2E-015, E2E-016, E2E-017, E2E-018 — active-locale prose, exact local-time display, date-only stability, timezone boundaries, and locale switching.
+- [x] E2E-019, E2E-020, E2E-021, E2E-022 — narrow/large-content containment, all theme/mode variants, keyboard access, contrast, and zoom.
+- [x] E2E-023, E2E-024, E2E-025, E2E-026 — role equivalence, offline/rapid interaction, hydration/runtime cleanliness, and malformed-or-empty source degradation.
 
 ## Success Criteria
 
