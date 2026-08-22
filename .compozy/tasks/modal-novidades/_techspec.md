@@ -219,12 +219,18 @@ consistent in both locale documents.
 
 ### Changelog Parsing and Ordering
 
-The parser scans level-two headers rather than list-item lines. For every valid
-version header, it captures the untouched body until the next level-two header.
-It validates publication shape and actual calendar validity, excludes blank or
-malformed releases with a typed issue, and deduplicates by normalized version.
-Valid releases sort by numeric semantic-version parts, newest first; localized
-display strings never participate in ordering.
+The parser scans release-shaped level-two headers rather than list-item lines.
+It tracks CommonMark fenced-code boundaries, so header-shaped examples and
+omission markers inside code remain literal body content. For every valid
+version header, it captures the untouched body until the next release-shaped
+header; ordinary level-two headings, including linked headings, remain in the
+body. Malformed release-shaped headers still delimit their own entry and emit a
+typed issue instead of contaminating a sibling. The parser validates exact
+header delimiters, publication shape, and actual calendar validity, excludes
+blank or malformed releases, and deduplicates by normalized version. Valid
+releases sort by arbitrary-length numeric semantic-version parts without
+floating-point conversion, newest first; localized display strings never
+participate in ordering.
 
 The strict parity validator compares the visible normalized version sequence,
 publication kind, and publication value across both locales. It also rejects a
@@ -483,9 +489,9 @@ scoped diagnostics:
 
 ## Architecture Decision Records
 
-- [ADR-001: Present releases as independently expandable cards](adrs/adr-001.md) — Product interaction and reset behavior.
-- [ADR-002: Localize release instants without inventing historical time](adrs/adr-002.md) — Product timezone and historical-precision rules.
-- [ADR-003: Publish equivalent localized notes in safe editorial Markdown](adrs/adr-003.md) — Product localization and Markdown contract.
-- [ADR-004: Isolate browser-only behavior in a client modal](adrs/adr-004.md) — Narrow Client Component with native dialog.
-- [ADR-005: Store locale editions separately and render with react-markdown](adrs/adr-005.md) — Locale-per-file content and proven safe renderer.
-- [ADR-006: Model publication precision explicitly and stamp at version creation](adrs/adr-006.md) — UTC tag-time stamping and date-only type safety.
+- [ADR 0012: Present releases as independently expandable cards](../../../docs/adr/0012-novidades-cards-expansiveis-independentes.md) — Product interaction and reset behavior.
+- [ADR 0013: Localize release instants without inventing historical time](../../../docs/adr/0013-publicacao-local-sem-inventar-horario.md) — Product timezone and historical-precision rules.
+- [ADR 0014: Publish equivalent localized notes in safe editorial Markdown](../../../docs/adr/0014-notas-localizadas-em-markdown-seguro.md) — Product localization and Markdown contract.
+- [ADR 0015: Isolate browser-only behavior in a client modal](../../../docs/adr/0015-modal-nativo-com-ilha-cliente.md) — Narrow Client Component with native dialog.
+- [ADR 0016: Store locale editions separately and render with react-markdown](../../../docs/adr/0016-changelogs-localizados-e-react-markdown.md) — Locale-per-file content and proven safe renderer.
+- [ADR 0017: Model publication precision explicitly and stamp at version creation](../../../docs/adr/0017-precisao-publicacao-e-autoridade-da-versao.md) — UTC tag-time stamping and date-only type safety.

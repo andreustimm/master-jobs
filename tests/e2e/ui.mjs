@@ -430,7 +430,9 @@ try {
   const narrow = await page.evaluate(() => {
     const dialog = document.querySelector('[data-testid="changelog-dialog"]');
     const header = document.querySelector('[data-testid="changelog-release-1.1.0"]');
-    const longHeader = document.querySelectorAll('[data-testid^="changelog-release-"]')[1];
+    const longHeader = document
+      .querySelector('time[datetime="2027-01-01T01:30:00.000Z"]')
+      ?.closest("button");
     const code = dialog?.querySelector("pre");
     return {
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,

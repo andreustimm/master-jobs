@@ -74,6 +74,17 @@ describe("existing semantic version helpers", () => {
     expect(changelogTemVersao("## [1.2.0] - 2026-08-22\n", "1.2.0")).toBe(true);
     expect(changelogTemVersao("## [1.2.1]\n", "1.2.0")).toBe(false);
   });
+
+  it("sanitizes invalid version values before they reach release logs", () => {
+    const error = new ReleaseDomainError("invalid_release_version", {
+      version: "1.2.3\n::warning title=spoofed::forged\u001B[2J",
+    });
+    expect(error.message).toMatch(
+      /^invalid_release_version version=[A-Za-z0-9._+?-]{1,64}$/,
+    );
+    expect(error.message).not.toMatch(/[\r\n\u001B]/);
+    expect(error.version).toBe(error.message.replace("invalid_release_version version=", ""));
+  });
 });
 
 describe("prepareRelease", () => {

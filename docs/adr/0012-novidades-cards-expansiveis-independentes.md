@@ -1,4 +1,4 @@
-# ADR-001: Present releases as independently expandable cards
+# ADR 0012: Present releases as independently expandable cards
 
 ## Status
 
@@ -89,8 +89,8 @@ colors or typography.
 
 ## References
 
-- [PRD](../_prd.md)
-- [User stories](../_user_stories.md)
+- [PRD](../../.compozy/tasks/modal-novidades/_prd.md)
+- [User stories](../../.compozy/tasks/modal-novidades/_user_stories.md)
 - [Carbon accordion usage](https://carbondesignsystem.com/components/accordion/usage/)
 - [WAI-ARIA accordion pattern](https://www.w3.org/WAI/ARIA/apg/patterns/accordion/)
 - [WAI-ARIA modal dialog pattern](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)

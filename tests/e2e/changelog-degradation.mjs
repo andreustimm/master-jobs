@@ -5,7 +5,7 @@ const MODE = process.env.E2E_CHANGELOG_MODE;
 const EMAIL = process.env.E2E_EMAIL ?? "e2e@local.test";
 const PASSWORD = process.env.E2E_PASSWORD ?? "conta-de-teste-e2e-42";
 
-if (!BASE || !["malformed", "empty"].includes(MODE)) {
+if (!BASE || !["malformed", "empty", "missing"].includes(MODE)) {
   throw new Error("E2E_BASE and E2E_CHANGELOG_MODE are required");
 }
 
@@ -22,9 +22,13 @@ try {
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
 
   const trigger = page.locator('[data-testid="changelog-open"]');
-  if (MODE === "empty") {
+  if (MODE === "empty" || MODE === "missing") {
     if ((await trigger.count()) !== 0) throw new Error("empty changelog exposed a trigger");
-    console.log("✓ E2E-026 empty changelog omite o gatilho");
+    console.log(
+      MODE === "missing"
+        ? "✓ E2E-026 changelog ausente mantém a página e omite o gatilho"
+        : "✓ E2E-026 empty changelog omite o gatilho",
+    );
   } else {
     if ((await trigger.count()) !== 1) throw new Error("valid sibling did not preserve the trigger");
     await trigger.click();

@@ -236,6 +236,16 @@ try {
     cwd: appRoot,
     env: { ...env, E2E_CHANGELOG_MODE: "empty" },
   });
+
+  await stop(server);
+  server = undefined;
+  await rm(join(standaloneAppRoot, "USER_CHANGELOG.pt-BR.md"));
+  server = startStandalone();
+  await waitUntilReady(`${env.E2E_BASE}/login`, server);
+  await run(process.execPath, ["tests/e2e/changelog-degradation.mjs"], {
+    cwd: appRoot,
+    env: { ...env, E2E_CHANGELOG_MODE: "missing" },
+  });
 } finally {
   await stop(server);
   await rm(temporaryRoot, { recursive: true, force: true });

@@ -1,4 +1,4 @@
-# ADR-005: Store locale editions separately and render with react-markdown
+# ADR 0016: Store locale editions separately and render with react-markdown
 
 ## Status
 
@@ -86,6 +86,6 @@ physical source lines.
 
 ## References
 
-- [PRD](../_prd.md)
-- [TechSpec](../_techspec.md)
+- [PRD](../../.compozy/tasks/modal-novidades/_prd.md)
+- [TechSpec](../../.compozy/tasks/modal-novidades/_techspec.md)
 - [GitHub Flavored Markdown specification](https://github.github.com/gfm/)

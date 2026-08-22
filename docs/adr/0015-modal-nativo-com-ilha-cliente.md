@@ -1,4 +1,4 @@
-# ADR-004: Isolate browser-only behavior in a client modal
+# ADR 0015: Isolate browser-only behavior in a client modal
 
 ## Status
 
@@ -87,7 +87,7 @@ date formatting occurs inside this boundary after hydration.
 
 ## References
 
-- [PRD](../_prd.md)
-- [TechSpec](../_techspec.md)
-- [Next.js Server and Client Components](../../../../../node_modules/next/dist/docs/01-app/01-getting-started/05-server-and-client-components.md)
-- [Next.js `use client`](../../../../../node_modules/next/dist/docs/01-app/03-api-reference/01-directives/use-client.md)
+- [PRD](../../.compozy/tasks/modal-novidades/_prd.md)
+- [TechSpec](../../.compozy/tasks/modal-novidades/_techspec.md)
+- [Next.js Server and Client Components](../../node_modules/next/dist/docs/01-app/01-getting-started/05-server-and-client-components.md)
+- [Next.js `use client`](../../node_modules/next/dist/docs/01-app/03-api-reference/01-directives/use-client.md)

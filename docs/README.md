@@ -60,6 +60,12 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`0009`](adr/0009-fila-de-raspagem.md) | Fila de raspagem em tabela, não em broker |
 | [`0010`](adr/0010-submissao-autonoma.md) | Submissão autônoma: preparar sim, enviar não |
 | [`0011`](adr/0011-fronteira-compozyos-e-docs.md) | A fronteira entre o CompozyOS e `docs/` |
+| [`0012`](adr/0012-novidades-cards-expansiveis-independentes.md) | Versões em cards expansíveis independentes |
+| [`0013`](adr/0013-publicacao-local-sem-inventar-horario.md) | Hora de publicação local sem inventar precisão histórica |
+| [`0014`](adr/0014-notas-localizadas-em-markdown-seguro.md) | Notas localizadas em Markdown editorial seguro |
+| [`0015`](adr/0015-modal-nativo-com-ilha-cliente.md) | Modal nativo com uma ilha cliente estreita |
+| [`0016`](adr/0016-changelogs-localizados-e-react-markdown.md) | Changelogs localizados separados e react-markdown |
+| [`0017`](adr/0017-precisao-publicacao-e-autoridade-da-versao.md) | Precisão de publicação e autoridade de criação da versão |
 
 ---
 
@@ -106,4 +112,3 @@ O texto normativo está em `CLAUDE.md` (e no espelho `AGENTS.md`). Resumo, com o
 | Melhor fit | 85,9 |
 | Tabelas | 14 |
 | Testes | 126 |
-

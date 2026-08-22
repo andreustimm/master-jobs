@@ -324,12 +324,16 @@ export class ReleaseDomainError extends Error {
   ) {
     const fields: string[] = [code];
     if (details.locale) fields.push(`locale=${details.locale}`);
-    if (details.version) fields.push(`version=${details.version}`);
+    const version = details.version
+      ?.replace(/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/g, "?")
+      .replace(/[^A-Za-z0-9._+-]/g, "?")
+      .slice(0, 64);
+    if (version) fields.push(`version=${version}`);
     super(fields.join(" "));
     this.name = "ReleaseDomainError";
     this.code = code;
     this.locale = details.locale;
-    this.version = details.version;
+    this.version = version;
   }
 }
 

@@ -1,4 +1,4 @@
-# ADR-006: Model publication precision explicitly and stamp at version creation
+# ADR 0017: Model publication precision explicitly and stamp at version creation
 
 ## Status
 
@@ -105,6 +105,6 @@ checkout.
 
 ## References
 
-- [PRD](../_prd.md)
-- [TechSpec](../_techspec.md)
-- [Release workflow](../../../../../.github/workflows/promover-para-staging.yml)
+- [PRD](../../.compozy/tasks/modal-novidades/_prd.md)
+- [TechSpec](../../.compozy/tasks/modal-novidades/_techspec.md)
+- [Release workflow](../../.github/workflows/promover-para-staging.yml)

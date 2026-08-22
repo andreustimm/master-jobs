@@ -115,7 +115,7 @@ function ReleaseCard({
               expanded && "rotate-180",
             )}
           />
-          <span className="type-caption-bold shrink-0 rounded-[var(--radius-action)] bg-[var(--muted)] px-2 py-1 font-mono">
+          <span className="type-caption-bold min-w-0 break-all rounded-[var(--radius-action)] bg-[var(--muted)] px-2 py-1 font-mono">
             v{release.version}
           </span>
           <span className="ml-auto min-w-0 text-right">

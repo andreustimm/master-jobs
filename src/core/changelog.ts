@@ -73,7 +73,6 @@ export class ChangelogDomainError extends Error {
 }
 
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const VERSION_HEADER = /^##[ \t]*\[([^\]\r\n]+)\]([^\r\n]*)$/gm;
 const NO_USER_CHANGE = /<!--\s*sem-nota-usuario\b[^>]*-->/i;
 const OMITTED_MARKER =
   /<!--\s*sem-nota-usuario\s*:\s*((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(?:\s*-\s*(\S+?))?(?:\s+[^>]*?)?\s*-->/g;
@@ -84,7 +83,14 @@ type Header = {
   index: number;
   line: number;
   publication?: string;
+  publicationSyntaxValid: boolean;
   token: string;
+  versionSyntaxValid: boolean;
+};
+
+type Fence = {
+  marker: "`" | "~";
+  length: number;
 };
 
 function isValidCalendarDate(value: string): boolean {
@@ -116,26 +122,130 @@ export function parsePublication(value: string): Publication | null {
   return null;
 }
 
+function openingFence(line: string): Fence | null {
+  const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+  if (!match) return null;
+  const run = match[1]!;
+  if (run[0] === "`" && match[2]!.includes("`")) return null;
+  return { marker: run[0] as "`" | "~", length: run.length };
+}
+
+function closesFence(line: string, fence: Fence): boolean {
+  const candidate = line.replace(/^ {0,3}/, "");
+  let length = 0;
+  while (candidate[length] === fence.marker) length += 1;
+  return length >= fence.length && candidate.slice(length).trim() === "";
+}
+
+function releaseHeaderAt(line: string): Omit<Header, "bodyEnd" | "bodyStart" | "index" | "line"> | null {
+  const canonical = /^ {0,3}##[ \t]*\[(.*)\][ \t]+-[ \t]+(\S.*)$/.exec(line);
+  if (canonical) {
+    const token = canonical[1]!.trim();
+    const publication = canonical[2]!.trim();
+    const releaseLike =
+      VERSION.test(token) ||
+      /^[vV]?\d/.test(token) ||
+      /^\d{4}-/.test(publication);
+    if (!releaseLike) return null;
+    return {
+      token,
+      publication,
+      publicationSyntaxValid: true,
+      versionSyntaxValid: true,
+    };
+  }
+
+  const bracketed = /^ {0,3}##[ \t]*\[([^\]\r\n]+)\]([^\r\n]*)$/.exec(line);
+  if (bracketed) {
+    const token = bracketed[1]!.trim();
+    const suffix = bracketed[2]!.trim();
+    if (token === "Unreleased" && suffix === "") {
+      return { token, publicationSyntaxValid: true, versionSyntaxValid: true };
+    }
+    if (!VERSION.test(token) && !/^[vV]?\d/.test(token)) return null;
+    return {
+      token,
+      ...(suffix !== "" ? { publication: suffix } : {}),
+      publicationSyntaxValid: false,
+      versionSyntaxValid: true,
+    };
+  }
+
+  const unbracketed = /^ {0,3}##[ \t]+(\S+)[ \t]+-[ \t]+(\S.*)$/.exec(line);
+  if (!unbracketed || !/^[vV]?\d/.test(unbracketed[1]!)) return null;
+  return {
+    token: unbracketed[1]!.trim(),
+    publication: unbracketed[2]!.trim(),
+    publicationSyntaxValid: true,
+    versionSyntaxValid: false,
+  };
+}
+
 function headersIn(markdown: string): Header[] {
   const headers: Header[] = [];
-  for (const match of markdown.matchAll(VERSION_HEADER)) {
-    const index = match.index;
-    const suffix = match[2]!.trim();
-    const publication =
-      suffix === "" ? undefined : suffix.startsWith("-") ? suffix.slice(1).trim() : suffix;
-    headers.push({
-      index,
-      bodyStart: index + match[0].length,
-      bodyEnd: markdown.length,
-      line: markdown.slice(0, index).split("\n").length,
-      token: match[1]!.trim(),
-      ...(publication !== undefined ? { publication } : {}),
-    });
+  let fence: Fence | null = null;
+  let offset = 0;
+  let lineNumber = 1;
+
+  while (offset < markdown.length) {
+    const newline = markdown.indexOf("\n", offset);
+    const lineEnd = newline === -1 ? markdown.length : newline;
+    const rawLine = markdown.slice(offset, lineEnd);
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+
+    if (fence) {
+      if (closesFence(line, fence)) fence = null;
+    } else {
+      const opened = openingFence(line);
+      if (opened) {
+        fence = opened;
+      } else {
+        const parsed = releaseHeaderAt(line);
+        if (parsed) {
+          headers.push({
+            ...parsed,
+            index: offset,
+            bodyStart: lineEnd,
+            bodyEnd: markdown.length,
+            line: lineNumber,
+          });
+        }
+      }
+    }
+
+    if (newline === -1) break;
+    offset = newline + 1;
+    lineNumber += 1;
   }
+
   for (let index = 0; index < headers.length - 1; index += 1) {
     headers[index]!.bodyEnd = headers[index + 1]!.index;
   }
   return headers;
+}
+
+function maskFencedMarkdown(markdown: string): string {
+  let output = "";
+  let fence: Fence | null = null;
+  let offset = 0;
+
+  while (offset < markdown.length) {
+    const newline = markdown.indexOf("\n", offset);
+    const lineEnd = newline === -1 ? markdown.length : newline;
+    const rawLine = markdown.slice(offset, lineEnd);
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+    const opened: Fence | null = fence ? null : openingFence(line);
+    const masked = Boolean(fence || opened);
+    output += masked ? rawLine.replace(/[^\r]/g, " ") : rawLine;
+    if (newline !== -1) output += "\n";
+
+    if (fence && closesFence(line, fence)) fence = null;
+    else if (!fence && opened) fence = opened;
+
+    if (newline === -1) break;
+    offset = newline + 1;
+  }
+  return output;
 }
 
 function bodyHasUserContent(body: string): boolean {
@@ -151,11 +261,13 @@ function diagnosticVersion(value: string): string {
 }
 
 export function compareSemanticVersions(left: string, right: string): number {
-  const a = left.split(".").map(Number);
-  const b = right.split(".").map(Number);
+  const a = left.split(".");
+  const b = right.split(".");
   for (let index = 0; index < 3; index += 1) {
-    const difference = b[index]! - a[index]!;
-    if (difference !== 0) return difference;
+    const leftPart = a[index] ?? "0";
+    const rightPart = b[index] ?? "0";
+    if (leftPart.length !== rightPart.length) return rightPart.length - leftPart.length;
+    if (leftPart !== rightPart) return leftPart < rightPart ? 1 : -1;
   }
   return 0;
 }
@@ -170,7 +282,7 @@ export function parseUserChangelog(markdown: string): ChangelogParseResult {
 
   for (const header of headers) {
     if (header.token === "Unreleased") continue;
-    if (!VERSION.test(header.token)) {
+    if (!header.versionSyntaxValid || !VERSION.test(header.token)) {
       issues.push({
         code: "invalid_version",
         line: header.line,
@@ -182,14 +294,17 @@ export function parseUserChangelog(markdown: string): ChangelogParseResult {
       issues.push({ code: "duplicate_version", line: header.line, version: header.token });
       continue;
     }
-    const publication = header.publication ? parsePublication(header.publication) : null;
+    const publication =
+      header.publicationSyntaxValid && header.publication
+        ? parsePublication(header.publication)
+        : null;
     if (!publication) {
       issues.push({ code: "invalid_publication", line: header.line, version: header.token });
       continue;
     }
 
     const body = markdown.slice(header.bodyStart, header.bodyEnd).trim();
-    if (NO_USER_CHANGE.test(body)) {
+    if (NO_USER_CHANGE.test(maskFencedMarkdown(body))) {
       if (bodyHasUserContent(body)) {
         issues.push({ code: "invalid_omission", line: header.line, version: header.token });
         continue;
@@ -208,7 +323,8 @@ export function parseUserChangelog(markdown: string): ChangelogParseResult {
 
   const firstHeader = headers[0]?.index ?? markdown.length;
   const prefix = markdown.slice(0, firstHeader);
-  for (const match of prefix.matchAll(OMITTED_MARKER)) {
+  const visiblePrefix = maskFencedMarkdown(prefix);
+  for (const match of visiblePrefix.matchAll(OMITTED_MARKER)) {
     const version = match[1]!;
     if (seen.has(version)) {
       issues.push({

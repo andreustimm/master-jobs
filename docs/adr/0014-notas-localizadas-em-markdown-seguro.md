@@ -1,4 +1,4 @@
-# ADR-003: Publish equivalent localized notes in safe editorial Markdown
+# ADR 0014: Publish equivalent localized notes in safe editorial Markdown
 
 ## Status
 
@@ -88,6 +88,6 @@ about whether a visible version exists.
 
 ## References
 
-- [PRD](../_prd.md)
-- [User stories](../_user_stories.md)
+- [PRD](../../.compozy/tasks/modal-novidades/_prd.md)
+- [User stories](../../.compozy/tasks/modal-novidades/_user_stories.md)
 - [GitHub Flavored Markdown specification](https://github.github.com/gfm/)

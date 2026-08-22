@@ -59,6 +59,29 @@ describe("parseUserChangelog", () => {
     expect(result.releases[0]!.markdown).toBe(body);
   });
 
+  it("UT-003 preserves fenced release-like text and omission examples as body bytes", () => {
+    const body = `Before.
+
+\`\`\`md
+## [9.9.9] - 2026-08-22
+<!-- sem-nota-usuario -->
+\`\`\`
+
+After.`;
+    const result = parseUserChangelog(release("1.2.0", "2026-08-22", body));
+    expect(result).toMatchObject({ issues: [], omitted: [] });
+    expect(result.releases).toEqual([
+      expect.objectContaining({ version: "1.2.0", markdown: body }),
+    ]);
+  });
+
+  it("UT-003 preserves a linked level-two heading inside release Markdown", () => {
+    const body = "Before.\n\n## [Details](https://example.com)\n\nAfter.";
+    const result = parseUserChangelog(release("1.2.0", "2026-08-22", body));
+    expect(result.issues).toEqual([]);
+    expect(result.releases[0]!.markdown).toBe(body);
+  });
+
   it("UT-004 delimits complete bodies at version headers", () => {
     const result = parseUserChangelog(
       `${release("1.1.0", "2026-08-21", "First body")}${release("1.0.0", "2026-08-20", "Second body")}`,
@@ -72,6 +95,28 @@ describe("parseUserChangelog", () => {
       `${release("v1.2", "2026-08-22")}${release("1.1.0", "2026-08-21")}`,
     );
     expect(result.issues).toContainEqual(expect.objectContaining({ code: "invalid_version", version: "v1.2" }));
+    expect(result.releases.map((item) => item.version)).toEqual(["1.1.0"]);
+  });
+
+  it("UT-005 isolates a release heading with missing version brackets", () => {
+    const result = parseUserChangelog(
+      `## 1.2.0 - 2026-08-22\n\nMalformed\n\n${release("1.1.0", "2026-08-21", "Valid")}`,
+    );
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({ code: "invalid_version", version: "1.2.0" }),
+    );
+    expect(result.releases).toEqual([
+      expect.objectContaining({ version: "1.1.0", markdown: "Valid" }),
+    ]);
+  });
+
+  it("rejects a publication whose release header omits the delimiter", () => {
+    const result = parseUserChangelog(
+      `## [1.2.0] 2026-08-22\n\nMalformed\n\n${release("1.1.0", "2026-08-21", "Valid")}`,
+    );
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({ code: "invalid_publication", version: "1.2.0" }),
+    );
     expect(result.releases.map((item) => item.version)).toEqual(["1.1.0"]);
   });
 
@@ -122,6 +167,15 @@ describe("parseUserChangelog", () => {
       `${release("1.2.0", "2026-08-20")}${release("2.0.0", "2026-08-22")}${release("1.10.0", "2026-08-21")}`,
     );
     expect(result.releases.map((item) => item.version)).toEqual(["2.0.0", "1.10.0", "1.2.0"]);
+  });
+
+  it("UT-009 sorts arbitrary-length semantic components without precision loss", () => {
+    const lower = "1.0.9007199254740992";
+    const higher = "1.0.9007199254740993";
+    const result = parseUserChangelog(
+      `${release(lower, "2026-08-20")}${release(higher, "2026-08-21")}`,
+    );
+    expect(result.releases.map((item) => item.version)).toEqual([higher, lower]);
   });
 
   it("UT-010 reports a duplicate and exposes one release identity", () => {

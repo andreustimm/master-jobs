@@ -210,9 +210,9 @@ publication evidence is recovered as part of this feature.
 
 ## Architecture Decision Records
 
-- [ADR-001: Present releases as independently expandable cards](adrs/adr-001.md) — Uses scan-first release cards, newest-only initial state, independent multi-open disclosure, and reset on close.
-- [ADR-002: Localize release instants without inventing historical time](adrs/adr-002.md) — Converts real UTC instants to device-local time and keeps unrecoverable history honestly date-only.
-- [ADR-003: Publish equivalent localized notes in safe editorial Markdown](adrs/adr-003.md) — Requires bilingual user-facing notes and renders a safe, multiline editorial Markdown subset.
+- [ADR 0012: Present releases as independently expandable cards](../../../docs/adr/0012-novidades-cards-expansiveis-independentes.md) — Uses scan-first release cards, newest-only initial state, independent multi-open disclosure, and reset on close.
+- [ADR 0013: Localize release instants without inventing historical time](../../../docs/adr/0013-publicacao-local-sem-inventar-horario.md) — Converts real UTC instants to device-local time and keeps unrecoverable history honestly date-only.
+- [ADR 0014: Publish equivalent localized notes in safe editorial Markdown](../../../docs/adr/0014-notas-localizadas-em-markdown-seguro.md) — Requires bilingual user-facing notes and renders a safe, multiline editorial Markdown subset.
 
 ## Open Questions
 

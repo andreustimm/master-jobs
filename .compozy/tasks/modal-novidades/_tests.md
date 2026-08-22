@@ -116,13 +116,13 @@ components.
 
 - **UT-001** (happy): `parseUserChangelog` receives `## [1.2.0] - 2026-08-22T11:46:00.000Z` and returns version `1.2.0` with `publication={kind:"instant",value:"2026-08-22T11:46:00.000Z"}`.
 - **UT-002** (happy): the parser receives `## [1.1.0] - 2026-08-21` and returns `publication={kind:"date",value:"2026-08-21"}` without constructing an instant.
-- **UT-003** (boundary): a list item and paragraph wrapped over three physical lines remain byte-for-byte inside one release's returned `markdown` body.
-- **UT-004** (ordering): two level-two version headers delimit two complete bodies; the first body contains no bytes from the second.
-- **UT-005** (error): header `## [v1.2] - 2026-08-22` produces `invalid_version`, excludes that entry, and preserves the following valid release.
+- **UT-003** (boundary): wrapped text, a linked level-two heading, fenced code, and header/omission examples inside that fence remain byte-for-byte inside one release's returned `markdown` body.
+- **UT-004** (ordering): two actual version headers delimit two complete bodies; the first body contains no bytes from the second and ordinary level-two headings do not delimit releases.
+- **UT-005** (error): header `## [v1.2] - 2026-08-22` or the missing-bracket form `## 1.2.0 - 2026-08-22` produces `invalid_version`, excludes that entry, and preserves the following valid release.
 - **UT-006** (error): dates `2026-02-30` and `2026-13-01` produce `invalid_publication` and no fabricated release date.
 - **UT-007** (error): timestamp `2026-08-22T11:46:00-03:00` produces `invalid_publication` because canonical stored instants must end in `Z`.
 - **UT-008** (boundary): empty input and a title-only document return `releases=[]` without throwing.
-- **UT-009** (ordering): source versions `1.2.0`, `2.0.0`, `1.10.0` return in numeric order `2.0.0`, `1.10.0`, `1.2.0`.
+- **UT-009** (ordering): source versions `1.2.0`, `2.0.0`, `1.10.0` return in numeric order `2.0.0`, `1.10.0`, `1.2.0`, and distinct arbitrary-length numeric components retain exact ordering beyond `Number.MAX_SAFE_INTEGER`.
 - **UT-010** (error): duplicate `1.2.0` headers produce `duplicate_version` and only one normal release identity.
 - **UT-011** (error): a valid version header with whitespace/comments but no user content produces `empty_body` and no visible release.
 - **UT-012** (state): a populated `## [Unreleased]` section is excluded from runtime releases and preserved for release preparation.
@@ -182,7 +182,7 @@ components.
 ### Locale loader and diagnostics
 
 - **UT-050** (happy): the locale selector maps only `pt-BR` to `USER_CHANGELOG.pt-BR.md` and `en` to `USER_CHANGELOG.en.md`, returning no arbitrary path for an unsafe cast.
-- **UT-051** (error): formatting an `invalid_publication` diagnostic includes issue code, locale, and version token but excludes the Markdown body and surrounding source text.
+- **UT-051** (error): formatting an `invalid_publication` diagnostic includes issue code, locale, and version token but excludes the Markdown body and surrounding source text; invalid release/package versions are also control-free and bounded before reaching workflow logs.
 - **UT-052** (boundary): `versaoAtual` returns a non-empty package version and falls back to `0.0.0` for absent, blank, null, and non-string values.
 
 ## Integration Tests
@@ -249,4 +249,4 @@ components.
 - **E2E-023**: candidate, recruiter, administrator, and impersonated sessions open the same build → release identities, content, precision, and disclosure capabilities are identical and contain no private record data.
 - **E2E-024**: after initial page load, go offline and rapidly repeat open/close/toggle actions → rendered content remains readable, one dialog exists, and final visible/announced states agree.
 - **E2E-025**: open and interact in both locales/timezones while collecting browser console output → no hydration mismatch, React key warning, uncaught exception, or failed runtime changelog fetch occurs.
-- **E2E-026**: build with one malformed release plus one valid release, then with no valid releases → first run isolates the malformed entry and shows the valid card; second run omits the What's New trigger instead of opening an empty dialog.
+- **E2E-026**: build with one malformed release plus one valid release, then with no valid releases, then remove the active localized file from the standalone artifact → the first run isolates the malformed entry and shows the valid card; the latter runs keep the page available and omit the What's New trigger instead of opening an empty or broken dialog.
