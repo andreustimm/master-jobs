@@ -132,9 +132,25 @@ describe("coerência dos changelogs de release", () => {
     );
   });
 
+  it("versão duplicada falha mesmo quando aparece nos dois changelogs", () => {
+    const duplicado = `${comVersao}${comVersao}`;
+    expect(() => todosChangelogsTemVersao([duplicado, duplicado], "1.1.0")).toThrow(
+      "duplicada",
+    );
+    expect(() => todosChangelogsTemVersao([duplicado, comVersao], "1.1.0")).toThrow(
+      "duplicada",
+    );
+  });
+
   it("retry pré-tag retoma a versão atual em vez de criar a seguinte", () => {
     expect(releasePrecisaRetomarTag([comVersao, comVersao], "1.1.0", false)).toBe(true);
     expect(releasePrecisaRetomarTag([comVersao, comVersao], "1.1.0", true)).toBe(false);
+  });
+
+  it("tag existente não esconde divergência entre os changelogs", () => {
+    expect(() => releasePrecisaRetomarTag([comVersao, semVersao], "1.1.0", true)).toThrow(
+      "apenas parte",
+    );
   });
 
   it("os dois arquivos reais mantêm exatamente um Unreleased canônico", () => {
@@ -159,8 +175,18 @@ describe("retomada dos workflows de release", () => {
       ".github/workflows/sincronizar-apos-main.yml",
     ]) {
       expect(readFileSync(arquivo, "utf8"), arquivo).toContain(
-        'git log -1 --format=%H --fixed-strings --grep="chore(release): ${VERSAO}"',
+        'git log -1 --format=%H --grep="^chore(release): ${VERSAO}$"',
       );
     }
+  });
+
+  it("staging avança somente até o SHA publicado pela etapa da tag", () => {
+    const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
+    expect(workflow).toContain("id: tag");
+    expect(workflow).toContain('echo "sha=$SHA" >> "$GITHUB_OUTPUT"');
+    expect(workflow).toContain("RELEASE_SHA: ${{ steps.tag.outputs.sha }}");
+    expect(workflow).toContain('ALVO=${RELEASE_SHA:-origin/dev}');
+    expect(workflow).toContain('git push origin "${ALVO}:refs/heads/staging"');
+    expect(workflow).not.toContain('SHA=$(git rev-parse origin/dev)');
   });
 });

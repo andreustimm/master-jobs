@@ -206,6 +206,7 @@ jobs:
           echo "::notice::Versão ${VERSAO} commitada em dev."
 
       - name: Criar a tag da versão
+        id: tag
         if: >-
           steps.versao.outputs.versao != 'no-release' &&
           steps.versao.outputs.versao != ''
@@ -219,28 +220,42 @@ jobs:
           # o resto do fluxo a enxerga.
           # Num retry, `origin/dev` pode já ter avançado além do bump. A tag
           # pertence ao commit que gravou esta versão, não ao topo acidental.
-          SHA=$(git log -1 --format=%H --fixed-strings --grep="chore(release): ${VERSAO}" origin/dev)
+          SHA=$(git log -1 --format=%H --grep="^chore(release): ${VERSAO}$" origin/dev)
           if [ -z "$SHA" ]; then
-            SHA=$(git rev-parse origin/dev)
+            echo "::error::Commit chore(release): ${VERSAO} não encontrado em dev."
+            exit 1
           fi
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --silent 2>/dev/null; then
+          TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --jq '.object.sha' 2>/dev/null || true)
+          if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$SHA" ]; then
+            echo "::error::Tag v${VERSAO} aponta para ${TAG_SHA}, mas o bump está em ${SHA}."
+            exit 1
+          fi
+          if [ -n "$TAG_SHA" ]; then
             echo "::notice::Tag v${VERSAO} já existe."
           else
             gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
               -f ref="refs/tags/v${VERSAO}" -f sha="${SHA}" --silent
             echo "::notice::Tag v${VERSAO} criada em ${SHA}."
           fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       - name: Avançar staging
         if: >-
           steps.situacao.outputs.adiante != '0' &&
           steps.guard.outputs.schema != 'mudou'
+        env:
+          RELEASE_SHA: ${{ steps.tag.outputs.sha }}
         run: |
-          # `--ff-only` é a garantia escrita: se por qualquer motivo deixar de
-          # ser fast-forward entre a checagem e agora, o push falha em vez de
-          # inventar um merge.
-          git push origin "origin/dev:refs/heads/staging" --force-with-lease
-          echo "::notice::staging avançou ${{ steps.situacao.outputs.adiante }} commit(s)."
+          # Release usa o SHA tagueado como fronteira. Se dev avançou durante
+          # uma retomada, os commits posteriores ficam para a próxima promoção.
+          ALVO=${RELEASE_SHA:-origin/dev}
+          if ! git merge-base --is-ancestor origin/staging "$ALVO"; then
+            echo "::error::staging não pode avançar por fast-forward até ${ALVO}."
+            exit 1
+          fi
+          ADIANTE=$(git rev-list --count "origin/staging..${ALVO}")
+          git push origin "${ALVO}:refs/heads/staging"
+          echo "::notice::staging avançou ${ADIANTE} commit(s) até ${ALVO}."
 
       - name: Abrir a PR staging → main
         if: >-

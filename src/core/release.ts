@@ -138,8 +138,12 @@ export function carimbarUnreleased(
  * `## [1.1.0]` e `## [1.1.0] - 2026-08-21`.
  */
 export function changelogTemVersao(markdown: string, versao: string): boolean {
-  const re = new RegExp(`^##\\s*\\[${versao.replace(/\./g, "\\.")}\\]`, "m");
-  return re.test(markdown);
+  return contarVersaoNoChangelog(markdown, versao) > 0;
+}
+
+function contarVersaoNoChangelog(markdown: string, versao: string): number {
+  const segura = versao.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return markdown.match(new RegExp(`^##\\s*\\[${segura}\\]`, "gm"))?.length ?? 0;
 }
 
 /**
@@ -157,7 +161,12 @@ export function todosChangelogsTemVersao(
     throw new Error("nenhum changelog informado para validar o release");
   }
 
-  const presencas = changelogs.map((markdown) => changelogTemVersao(markdown, versao));
+  const contagens = changelogs.map((markdown) => contarVersaoNoChangelog(markdown, versao));
+  if (contagens.some((total) => total > 1)) {
+    throw new Error(`versão [${versao}] duplicada em um changelog`);
+  }
+
+  const presencas = contagens.map((total) => total === 1);
   if (presencas.some(Boolean) && !presencas.every(Boolean)) {
     throw new Error(`versão [${versao}] presente em apenas parte dos changelogs`);
   }
@@ -176,5 +185,6 @@ export function releasePrecisaRetomarTag(
   versaoAtual: string,
   tagAtualExiste: boolean,
 ): boolean {
-  return !tagAtualExiste && todosChangelogsTemVersao(changelogs, versaoAtual);
+  const persistida = todosChangelogsTemVersao(changelogs, versaoAtual);
+  return !tagAtualExiste && persistida;
 }
