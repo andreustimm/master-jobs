@@ -2,6 +2,16 @@
 
 export type ChangelogLocale = "pt-BR" | "en";
 
+const CHANGELOG_FILES: Record<ChangelogLocale, string> = {
+  "pt-BR": "USER_CHANGELOG.pt-BR.md",
+  en: "USER_CHANGELOG.en.md",
+};
+
+/** Keep runtime file selection total and independent from untrusted path input. */
+export function changelogFile(locale: unknown): string | null {
+  return locale === "pt-BR" || locale === "en" ? CHANGELOG_FILES[locale] : null;
+}
+
 export type Publication =
   | { kind: "instant"; value: string }
   | { kind: "date"; value: string };

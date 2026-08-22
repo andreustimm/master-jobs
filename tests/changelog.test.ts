@@ -1,8 +1,18 @@
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { ChangelogMarkdown, safeChangelogUrl } from "../app/changelog-markdown.tsx";
+import {
+  initialExpanded,
+  releaseIds,
+  toggleExpanded,
+  type ChangelogModalProps,
+} from "../app/changelog-modal.tsx";
 import {
   ChangelogDomainError,
+  changelogFile,
   formatChangelogDiagnostic,
   formatPublication,
   parseUserChangelog,
@@ -10,6 +20,9 @@ import {
   versaoAtual,
   type ChangelogParseResult,
 } from "../src/core/changelog.ts";
+import { en } from "../src/core/i18n/en.ts";
+import { DEFAULT_LOCALE, resolveLocale } from "../src/core/i18n/index.ts";
+import { ptBR } from "../src/core/i18n/pt-BR.ts";
 
 function release(version: string, publication: string, body = "### New\n\n- Visible change."): string {
   return `## [${version}] - ${publication}\n\n${body}\n`;
@@ -213,6 +226,168 @@ describe("formatPublication", () => {
   it("UT-036 refuses impossible values and non-UTC instants", () => {
     expect(formatPublication({ kind: "date", value: "2026-02-30" }, "en")).toBeNull();
     expect(formatPublication({ kind: "instant", value: "2026-08-22T11:46:00-03:00" }, "en")).toBeNull();
+  });
+});
+
+describe("safe changelog Markdown", () => {
+  const renderMarkdown = (markdown: string) =>
+    renderToStaticMarkup(createElement(ChangelogMarkdown, { markdown }));
+
+  it("UT-037 preserves HTTP and HTTPS destinations", () => {
+    expect(safeChangelogUrl("https://example.com/a")).toBe("https://example.com/a");
+    expect(safeChangelogUrl("http://example.com/a")).toBe("http://example.com/a");
+  });
+
+  it("UT-038 preserves approved relative destinations", () => {
+    for (const destination of ["/jobs/1", "./details", "#section"]) {
+      expect(safeChangelogUrl(destination)).toBe(destination);
+    }
+  });
+
+  it("UT-039 preserves mailto destinations", () => {
+    expect(safeChangelogUrl("mailto:person@example.com")).toBe("mailto:person@example.com");
+  });
+
+  it("UT-040 rejects unsafe protocols and malformed destinations", () => {
+    for (const destination of [
+      "javascript:alert(1)",
+      "data:text/html,unsafe",
+      "file:///tmp/secret",
+      "vbscript:msgbox(1)",
+      "https://[invalid",
+      "//example.com/protocol-relative",
+    ]) {
+      expect(safeChangelogUrl(destination), destination).toBe("");
+    }
+  });
+
+  it("UT-041 keeps raw script HTML inert", () => {
+    const html = renderMarkdown("Before\n\n<script>alert(1)</script>\n\nAfter");
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("onclick=");
+    expect(html).toContain("Before");
+    expect(html).toContain("After");
+  });
+
+  it("UT-042 renders the complete editorial element set semantically", () => {
+    const html = renderMarkdown(`# Heading
+
+Paragraph with **strong**, *emphasis*, \`inline code\`, and a [safe link](/jobs/1).
+
+- unordered
+
+1. ordered
+
+\`\`\`ts
+const safe = true;
+\`\`\`
+
+> quoted
+
+---`);
+
+    for (const element of ["h1", "p", "strong", "em", "code", "a", "ul", "ol", "li", "pre", "blockquote", "hr"]) {
+      expect(html, element).toMatch(new RegExp(`<${element}(?: |>)`));
+    }
+    expect(html).toContain('href="/jobs/1"');
+    expect(html).toContain("type-display-sm");
+    expect(html).toContain("type-body-md");
+  });
+
+  it("UT-043 keeps malformed Markdown readable", () => {
+    const html = renderMarkdown("Readable *unfinished emphasis\n\n```ts\nconst stillHere = true;");
+    expect(html).toContain("Readable *unfinished emphasis");
+    expect(html).toContain("const stillHere = true;");
+  });
+});
+
+describe("changelog modal state", () => {
+  it("UT-044 initializes with only the newest release", () => {
+    expect([...initialExpanded(["1.2.0", "1.1.0"])]).toEqual(["1.2.0"]);
+  });
+
+  it("UT-045 expands one release without closing its sibling", () => {
+    expect([...toggleExpanded(new Set(["1.2.0"]), "1.1.0")]).toEqual(["1.2.0", "1.1.0"]);
+  });
+
+  it("UT-046 collapses only the selected release", () => {
+    expect([...toggleExpanded(new Set(["1.2.0", "1.1.0"]), "1.2.0")]).toEqual(["1.1.0"]);
+  });
+
+  it("UT-047 resets prior choices on the next open cycle", () => {
+    const changed = toggleExpanded(new Set(["1.2.0"]), "1.1.0");
+    expect(changed.size).toBe(2);
+    expect([...initialExpanded(["1.2.0", "1.1.0"])]).toEqual(["1.2.0"]);
+  });
+
+  it("UT-048 handles an empty history without an invalid identifier", () => {
+    expect([...initialExpanded([])]).toEqual([]);
+    expect(releaseIds("")).toBeNull();
+  });
+
+  it("UT-049 derives stable distinct safe disclosure identifiers", () => {
+    const first = releaseIds("1.2.0");
+    expect(first).toEqual(releaseIds("1.2.0"));
+    expect(first?.headerId).not.toBe(first?.contentId);
+    expect(first?.headerId).toMatch(/^[a-zA-Z][a-zA-Z0-9_-]*$/);
+    expect(first?.contentId).toMatch(/^[a-zA-Z][a-zA-Z0-9_-]*$/);
+  });
+});
+
+describe("localized footer boundary", () => {
+  it("UT-050 selects only a supported locale file", () => {
+    expect(changelogFile("pt-BR")).toBe("USER_CHANGELOG.pt-BR.md");
+    expect(changelogFile("en")).toBe("USER_CHANGELOG.en.md");
+    expect(changelogFile("../../private.env")).toBeNull();
+    expect(changelogFile(null)).toBeNull();
+  });
+
+  it("IT-004 declares the safe production renderer and keeps hostile output inert", async () => {
+    const pkg = JSON.parse(await readFile("package.json", "utf8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    expect(pkg.dependencies?.["react-markdown"]).toBeTruthy();
+    expect(pkg.dependencies?.["rehype-raw"]).toBeUndefined();
+    expect(pkg.devDependencies?.["rehype-raw"]).toBeUndefined();
+
+    const html = renderToStaticMarkup(
+      createElement(ChangelogMarkdown, {
+        markdown: "[unsafe](javascript:alert(2))\n\n<script>alert(1)</script>",
+      }),
+    );
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain('href="javascript:');
+    expect(html).not.toContain("href=\"\"");
+    expect(html).toContain("unsafe");
+  });
+
+  it("IT-012 keeps changelog labels typed and locale fallback coherent", () => {
+    expect(Object.keys(en.changelog).sort()).toEqual(Object.keys(ptBR.changelog).sort());
+    expect(resolveLocale("unsupported")).toBe(DEFAULT_LOCALE);
+  });
+
+  it("IT-015 keeps Server-to-Client props JSON-serializable", async () => {
+    const props: ChangelogModalProps = {
+      currentVersion: "1.2.0",
+      locale: "en",
+      releases: [
+        {
+          version: "1.2.0",
+          publication: { kind: "date", value: "2026-08-22" },
+          markdown: "Visible change.",
+        },
+      ],
+      labels: { open: "Open", title: "Title", lead: "Lead", close: "Close" },
+    };
+    expect(JSON.parse(JSON.stringify(props))).toEqual(props);
+
+    const [footer, modal] = await Promise.all([
+      readFile("app/footer.tsx", "utf8"),
+      readFile("app/changelog-modal.tsx", "utf8"),
+    ]);
+    expect(footer).not.toContain('"use client"');
+    expect(modal).not.toMatch(/Translator|readFile|node:fs|Date\b/);
   });
 });
 

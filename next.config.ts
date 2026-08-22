@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
+// The isolated standalone build symlinks dependencies from a sibling worktree,
+// so its tracer receives their common ancestor. Normal builds stay repo-local.
+const tracingRoot = process.env.JHO_OUTPUT_TRACING_ROOT ?? import.meta.dirname;
+
 const config: NextConfig = {
+  output: "standalone",
+  outputFileTracingRoot: tracingRoot,
   /**
    * Pin the workspace root.
    *
@@ -10,7 +16,7 @@ const config: NextConfig = {
    * with an inferred root that is wrong. Saying it explicitly ends the guess.
    */
   turbopack: {
-    root: import.meta.dirname,
+    root: tracingRoot,
   },
 
   // Both are server-only dependencies whose runtime resolution is intentional:
