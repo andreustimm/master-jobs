@@ -47,16 +47,16 @@ function parseEmail(formData: FormData): string {
 /**
  * Nome como veio do formulário.
  *
- * Limitado em 120 caracteres porque campo de texto livre sem teto vira o jeito
- * mais fácil de encher a tabela; o número é folgado para qualquer nome real.
- * Vazio vira `null`, e não `""`, para haver um único jeito de dizer "sem nome"
- * — dois jeitos garantem que um fique sem tratamento em alguma tela.
+ * Obrigatório, e limitado em 120 caracteres porque campo de texto livre sem
+ * teto vira o jeito mais fácil de encher a tabela; o número é folgado para
+ * qualquer nome real. Vazio é erro, e não `null`: a interface trata a pessoa
+ * pelo nome, e deixar a conta sem ele a faz cair no e-mail em toda tela.
  */
-function parseFullName(formData: FormData): string | null {
+function parseFullName(formData: FormData): string {
   const bruto = formData.get("fullName");
-  if (bruto === null) return null;
-  const nome = String(bruto).trim().slice(0, 120);
-  return nome === "" ? null : nome;
+  const nome = String(bruto ?? "").trim().slice(0, 120);
+  if (nome === "") throw new Error("O nome é obrigatório.");
+  return nome;
 }
 
 function parseUserId(formData: FormData): number {
@@ -89,7 +89,7 @@ export async function createUserAction(formData: FormData) {
         // O slug continua vindo do e-mail, que é único; só o nome exibido usa o
         // que a pessoa escreveu. Derivar o slug do nome deixaria dois "João
         // Silva" brigando pela mesma URL pública.
-        name: fullName ?? email,
+        name: fullName,
       })
     : null;
 

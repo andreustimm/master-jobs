@@ -63,7 +63,7 @@ export default async function AdminUsersPage() {
           <form action={createUserAction} className="grid gap-3 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label htmlFor="fullName">{t("admin.fullName")}</Label>
-              <Input id="fullName" name="fullName" type="text" maxLength={120} autoComplete="off" />
+              <Input id="fullName" name="fullName" type="text" maxLength={120} required autoComplete="off" />
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="email">{t("admin.email")}</Label>

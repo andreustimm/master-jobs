@@ -86,6 +86,7 @@ export function EditUserModal({
             name="fullName"
             type="text"
             maxLength={120}
+            required
             autoComplete="off"
             defaultValue={user.fullName ?? ""}
           />
