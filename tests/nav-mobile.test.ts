@@ -19,10 +19,15 @@ import { describe, expect, it } from "vitest";
  * link novo entra nos dois ou em nenhum. Duplicar a lista era o desenho óbvio, e
  * o modo de falhar dele é silencioso: a rota nova aparece no desktop, some no
  * celular, e ninguém repara porque quem desenvolve olha no desktop.
+ *
+ * Também protege a separação feita em ADR-002: `MobileNav` é o único client
+ * component da navegação (fecha o popover ao navegar), e `NavLinks` — usado na
+ * fileira desktop — permanece server, sem `"use client"`.
  */
 
 const layout = readFileSync("app/layout.tsx", "utf8");
 const navLinks = readFileSync("app/nav-links.tsx", "utf8");
+const mobileNav = readFileSync("app/mobile-nav.tsx", "utf8");
 
 /**
  * O arquivo sem comentários.
@@ -37,6 +42,7 @@ function semComentarios(fonte: string): string {
 }
 
 const navLinksCodigo = semComentarios(navLinks);
+const mobileNavCodigo = semComentarios(mobileNav);
 
 /** As rotas que o menu oferece. */
 const ROTAS = ["/jobs", "/compare", "/pipeline", "/referrals", "/candidate", "/admin/users"];
@@ -58,11 +64,12 @@ describe("os links moram num lugar só", () => {
   });
 
   it("os dois menus usam o mesmo componente", () => {
-    // `NavLinks` na fileira, `MobileNav` no celular — e `MobileNav` também
-    // renderiza `NavLinks` por dentro.
+    // `NavLinks` na fileira, `MobileNav` no celular — e `MobileNav` renderiza
+    // `NavLinks` por dentro. O layout importa os dois de arquivos distintos
+    // desde a ADR-002.
     expect(layout).toContain("<NavLinks");
     expect(layout).toContain("<MobileNav");
-    expect(navLinks).toContain("<NavLinks");
+    expect(mobileNav).toContain("<NavLinks");
   });
 });
 
@@ -73,20 +80,36 @@ describe("cada menu aparece na sua largura", () => {
 
   it("o botão e o menu do celular somem a partir de `sm`", () => {
     // Sem isto, os dois menus apareceriam juntos no desktop.
-    const botao = navLinks.slice(navLinks.indexOf("popoverTargetAction=\"show\""));
+    const botao = mobileNav.slice(mobileNav.indexOf("popoverTargetAction=\"show\""));
     expect(botao).toContain("sm:hidden");
-    expect(navLinks.match(/sm:hidden/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(mobileNav.match(/sm:hidden/g)?.length).toBeGreaterThanOrEqual(2);
   });
 });
 
-describe("o menu não exige JavaScript da aplicação", () => {
+describe("o menu fecha ao navegar, e só ele vira client", () => {
   it("usa popover nativo, como o resto do sistema", () => {
     // Mesma escolha do modal de vaga e do rodapé: o navegador cuida de abrir,
-    // fechar no Escape, dispensar por clique fora e camada de topo. Um menu com
-    // estado em React exigiria bundle numa árvore que não tem nenhum.
-    expect(navLinks).toContain('popover="auto"');
-    expect(navLinks).toContain("popoverTarget=");
-    expect(navLinks).not.toContain('"use client"');
+    // fechar no Escape, dispensar por clique fora e camada de topo.
+    expect(mobileNav).toContain('popover="auto"');
+    expect(mobileNav).toContain("popoverTarget=");
+  });
+
+  it("fecha por event delegation no clique do `<nav>`", () => {
+    // ADR-002: um único `onClick` no wrapper fecha o popover com `hidePopover`,
+    // cobrindo todos os itens sem interceptar a navegação.
+    expect(mobileNav).toContain("onClick=");
+    expect(mobileNav).toContain("hidePopover");
+  });
+
+  it("não chama `preventDefault` — a navegação SPA segue intacta", () => {
+    expect(mobileNav).not.toContain("preventDefault");
+  });
+
+  it("`MobileNav` é client, mas `NavLinks` (fileira) continua server", () => {
+    // A separação da ADR-002: o fechamento exige script, e o custo fica
+    // isolado no menu. A fileira desktop não pode entrar no bundle de cliente.
+    expect(mobileNav).toContain('"use client"');
+    expect(navLinksCodigo).not.toContain('"use client"');
   });
 
   it("não usa `details`, que não fecha ao clicar fora", () => {
@@ -96,12 +119,12 @@ describe("o menu não exige JavaScript da aplicação", () => {
     // Sobre o CÓDIGO, não sobre o arquivo: o comentário que explica esta escolha
     // menciona `details`, e a primeira versão deste caso reprovou por causa
     // disso. Um teste que lê prosa se contorna apagando a explicação.
-    expect(navLinksCodigo).not.toContain("<details");
+    expect(mobileNavCodigo).not.toContain("<details");
   });
 
   it("o alvo de toque do botão não é só o ícone", () => {
     // `py-2.5`, igual aos links da fileira: o ícone sozinho daria uma área
     // menor que o mínimo confortável no celular.
-    expect(navLinks).toContain("py-2.5");
+    expect(mobileNav).toContain("py-2.5");
   });
 });

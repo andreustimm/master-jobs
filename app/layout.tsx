@@ -24,7 +24,8 @@ import { AppearanceSwitch } from "./theme-switch";
 import { ServiceWorkerRegister } from "./service-worker";
 import { stopImpersonatingAction } from "./admin/actions";
 import { LocaleSwitch } from "./locale-switch";
-import { MobileNav, NavLinks } from "./nav-links";
+import { NavLinks } from "./nav-links";
+import { MobileNav } from "./mobile-nav";
 import { headers } from "next/headers";
 import {
   LOCALE_COOKIE,
@@ -222,7 +223,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   hasCandidateScope={hasCandidateScope}
                   isAdmin={isAdmin}
                   rotulo={t("nav.menu")}
-                  t={t}
+                  locale={locale}
                 />
               )}
 
