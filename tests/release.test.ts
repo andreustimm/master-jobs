@@ -9,6 +9,7 @@ import {
   exigirTagAlvoAusente,
   proximaVersao,
   releasePrecisaRetomarTag,
+  shaDaTagRemota,
   todosChangelogsTemVersao,
 } from "../src/core/release.ts";
 
@@ -193,7 +194,7 @@ describe("retomada dos workflows de release", () => {
 
   it("main valida uma tag existente contra o commit resolvido", () => {
     const workflow = readFileSync(".github/workflows/sincronizar-apos-main.yml", "utf8");
-    expect(workflow).toContain('TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v${VERSAO}"');
+    expect(workflow).toContain('scripts/release/tag-remota.ts "$GITHUB_REPOSITORY" "$VERSAO"');
     expect(workflow).toContain('scripts/release/validar-tag.ts "$SHA" "$TAG_SHA"');
   });
 
@@ -233,6 +234,25 @@ describe("retomada dos workflows de release", () => {
       const commit = workflow.indexOf('git commit -m "chore(release): ${VERSAO}"');
       expect(preflight, arquivo).toBeGreaterThan(-1);
       expect(preflight, arquivo).toBeLessThan(commit);
+    }
+  });
+
+  it("matching-refs ignora tags que apenas compartilham o prefixo", () => {
+    const payload = [
+      { ref: "refs/tags/v1.10.0", object: { sha: "prefixo" } },
+      { ref: "refs/tags/v1.1.0", object: { sha: "exata" } },
+    ];
+    expect(shaDaTagRemota(payload, "1.1.0")).toBe("exata");
+    expect(shaDaTagRemota(payload, "2.0.0")).toBeNull();
+    expect(() => shaDaTagRemota({}, "1.1.0")).toThrow("não é uma lista");
+  });
+
+  it("os dois escritores compartilham o mesmo grupo de concorrência", () => {
+    for (const arquivo of [
+      ".github/workflows/promover-para-staging.yml",
+      ".github/workflows/sincronizar-apos-main.yml",
+    ]) {
+      expect(readFileSync(arquivo, "utf8"), arquivo).toContain("group: release-versionar");
     }
   });
 });

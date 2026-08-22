@@ -44,7 +44,9 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: sincronizar-main
+  # Compartilhado com `promover-para-staging.yml`: os dois workflows podem
+  # criar a próxima versão, portanto o preflight não pode correr em paralelo.
+  group: release-versionar
   cancel-in-progress: false
 
 jobs:
@@ -83,7 +85,7 @@ jobs:
             VERSAO=$(node -p "require('./package.json').version")
             echo "::notice::Sem bump nesta promoção — versão atual ${VERSAO}."
           else
-            TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v${VERSAO}" --jq '.[0].object.sha // ""')
+            TAG_SHA=$(node --experimental-strip-types --no-warnings scripts/release/tag-remota.ts "$GITHUB_REPOSITORY" "$VERSAO")
             node --experimental-strip-types --no-warnings \
               scripts/release/validar-tag.ts "" "$TAG_SHA" --must-be-missing
             git config user.name "github-actions[bot]"
@@ -103,7 +105,7 @@ jobs:
           # Uma retomada deve marcar o commit do bump, mesmo se `main` já tiver
           # avançado enquanto a primeira tentativa falhava antes da tag.
           SHA=$(node --experimental-strip-types --no-warnings scripts/release/commit-da-versao.ts origin/main "$VERSAO")
-          TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v${VERSAO}" --jq '.[0].object.sha // ""')
+          TAG_SHA=$(node --experimental-strip-types --no-warnings scripts/release/tag-remota.ts "$GITHUB_REPOSITORY" "$VERSAO")
           ESTADO=$(node --experimental-strip-types --no-warnings scripts/release/validar-tag.ts "$SHA" "$TAG_SHA")
           if [ "$ESTADO" = "current" ]; then
             echo "::notice::A tag v${VERSAO} já existe no commit correto."

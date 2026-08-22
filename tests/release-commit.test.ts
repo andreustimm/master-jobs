@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -8,6 +8,7 @@ const SCRIPT = resolve("scripts/release/commit-da-versao.ts");
 const VERSIONAR = resolve("scripts/release/versionar.ts");
 const PROMOVER = resolve("scripts/release/promover-staging.ts");
 const VALIDAR_TAG = resolve("scripts/release/validar-tag.ts");
+const TAG_REMOTA = resolve("scripts/release/tag-remota.ts");
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -135,6 +136,32 @@ describe("commit-da-versao", () => {
         { cwd: repo, encoding: "utf8" },
       );
       expect(alvoConflitante.status).not.toBe(0);
+
+      const bin = `${base}/bin`;
+      const gh = `${bin}/gh`;
+      mkdirSync(bin);
+      writeFileSync(
+        gh,
+        `#!/bin/sh\nprintf '%s' '[{"ref":"refs/tags/v1.10.0","object":{"sha":"prefixo"}},{"ref":"refs/tags/v1.1.0","object":{"sha":"${release}"}}]'\n`,
+      );
+      chmodSync(gh, 0o755);
+      const ambienteGh = { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}` };
+      expect(
+        execFileSync(
+          process.execPath,
+          ["--experimental-strip-types", "--no-warnings", TAG_REMOTA, "owner/repo", "1.1.0"],
+          { cwd: repo, encoding: "utf8", env: ambienteGh },
+        ).trim(),
+      ).toBe(release);
+
+      writeFileSync(gh, "#!/bin/sh\nexit 42\n");
+      chmodSync(gh, 0o755);
+      const consultaFalhou = spawnSync(
+        process.execPath,
+        ["--experimental-strip-types", "--no-warnings", TAG_REMOTA, "owner/repo", "1.1.0"],
+        { cwd: repo, encoding: "utf8", env: ambienteGh },
+      );
+      expect(consultaFalhou.status).not.toBe(0);
 
       git(repo, "tag", "v1.1.0", release);
       const manutencao = execFileSync(

@@ -243,3 +243,23 @@ export function exigirTagAlvoAusente(tagSha: string | null): "missing" {
   }
   return "missing";
 }
+
+/** Extrai somente a ref exata do retorno prefixado de `matching-refs`. */
+export function shaDaTagRemota(payload: unknown, versao: string): string | null {
+  if (!Array.isArray(payload)) {
+    throw new Error("resposta de matching-refs não é uma lista");
+  }
+
+  const refEsperada = `refs/tags/v${versao}`;
+  const candidatas = payload.filter((item): item is { ref: string; object: { sha: string } } => {
+    if (!item || typeof item !== "object") return false;
+    const ref = Reflect.get(item, "ref");
+    const objeto = Reflect.get(item, "object");
+    return ref === refEsperada && Boolean(objeto) && typeof Reflect.get(objeto, "sha") === "string";
+  });
+
+  if (candidatas.length > 1) {
+    throw new Error(`matching-refs devolveu ${candidatas.length} ocorrências para ${refEsperada}`);
+  }
+  return candidatas[0]?.object.sha ?? null;
+}

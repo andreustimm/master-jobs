@@ -77,7 +77,10 @@ permissions:
 # Sem cancelamento: uma promoção começada precisa terminar. Interrompida entre
 # avançar `staging` e abrir a PR, o estado fica pela metade e ninguém avisa.
 concurrency:
-  group: promover-staging
+  # `main` e `dev` escrevem a mesma sequência de versões/tags. O grupo é
+  # compartilhado com `sincronizar-apos-main.yml` para o preflight e o push
+  # formarem uma única transação global.
+  group: release-versionar
   cancel-in-progress: false
 
 jobs:
@@ -199,7 +202,7 @@ jobs:
           # A versão-alvo ainda não pode ter tag. Esta consulta devolve lista
           # vazia com HTTP 200 quando a ref não existe; erro de rede/autorização
           # aborta antes de qualquer commit ou push.
-          TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v${VERSAO}" --jq '.[0].object.sha // ""')
+          TAG_SHA=$(node --experimental-strip-types --no-warnings scripts/release/tag-remota.ts "$GITHUB_REPOSITORY" "$VERSAO")
           node --experimental-strip-types --no-warnings \
             scripts/release/validar-tag.ts "" "$TAG_SHA" --must-be-missing
 
@@ -224,7 +227,7 @@ jobs:
           # fronteira auditável do último release.
           VERSAO=$(node -p "require('./package.json').version")
           SHA=$(node --experimental-strip-types --no-warnings scripts/release/commit-da-versao.ts origin/dev "$VERSAO")
-          TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v${VERSAO}" --jq '.[0].object.sha // ""')
+          TAG_SHA=$(node --experimental-strip-types --no-warnings scripts/release/tag-remota.ts "$GITHUB_REPOSITORY" "$VERSAO")
           node --experimental-strip-types --no-warnings \
             scripts/release/validar-tag.ts "$SHA" "$TAG_SHA" --required
 
@@ -244,7 +247,7 @@ jobs:
           # Num retry, `origin/dev` pode já ter avançado além do bump. A tag
           # pertence ao commit que gravou esta versão, não ao topo acidental.
           SHA=$(node --experimental-strip-types --no-warnings scripts/release/commit-da-versao.ts origin/dev "$VERSAO")
-          TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v${VERSAO}" --jq '.[0].object.sha // ""')
+          TAG_SHA=$(node --experimental-strip-types --no-warnings scripts/release/tag-remota.ts "$GITHUB_REPOSITORY" "$VERSAO")
           ESTADO=$(node --experimental-strip-types --no-warnings scripts/release/validar-tag.ts "$SHA" "$TAG_SHA")
           if [ "$ESTADO" = "current" ]; then
             echo "::notice::Tag v${VERSAO} já existe."
