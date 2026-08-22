@@ -1092,7 +1092,7 @@ try {
     const rateLimitPublicHref = await rateLimitPublicLink.getAttribute("href");
 
     const nonce = crypto.randomUUID().replaceAll("-", "");
-    const rateLimitClient = `2001:db8:${nonce.slice(0, 4)}:${nonce.slice(4, 8)}:${nonce.slice(8, 12)}:${nonce.slice(12, 16)}`;
+    const rateLimitClient = `2001:db8:${nonce.slice(0, 4)}:${nonce.slice(4, 8)}:${nonce.slice(8, 12)}:${nonce.slice(12, 16)}::`;
     burstCtx = await browser.newContext({
       extraHTTPHeaders: { "x-forwarded-for": rateLimitClient },
     });
