@@ -798,8 +798,6 @@ try {
     check("a tela mostra o endereço público", false, "link ausente");
   }
 
-  // Devolve ao estado anterior. Um teste que deixa o perfil publicado é pior
-  // que teste nenhum.
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
   await page.check('input[name="visibility"][value="private"]');
   await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
@@ -1069,49 +1067,70 @@ try {
 
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
 
-  /* --------------------------------- Logout -------------------------------- */
-
-  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
-  await page.locator('[data-testid="sign-out"]').click();
-  await page.waitForTimeout(1000);
-  await page.goto(`${BASE}/jobs`, { waitUntil: "domcontentloaded" });
-  // Revogado no servidor, não só apagado do navegador.
-  check("logout encerra a sessão de verdade", page.url().includes("/login"), page.url());
-
   /* ------------- Limite de requisição no portfólio (E-05, jornada) --------- */
 
-  // T10 do contrato em `.compozy/tasks/perfil-publico-limite/_tests.md`.
+  // T5 e T10 do contrato em
+  // `.compozy/tasks/_archived/1787413356948-b5a25d70-perfil-publico-limite/_tests.md`.
   //
-  // A barreira precisa ser invisível para quem chegou pelo link e cara para
-  // quem varre nomes. As duas metades são verificadas: primeiro que o acesso
-  // legítimo passa, depois que a rajada é recusada com 429 e `Retry-After`.
-  //
-  // **Por último na suíte, e é obrigatório.** Sem proxy, `clientKey` devolve
-  // "sem-proxy" para todo mundo e o balde é um só — a rajada esgota o limite
-  // para as demais verificações de `/p/`. Rodando antes, ela derrubava quatro
-  // checagens do portfólio com 429 em vez de 200. Não é defeito do teste: é a
-  // limitação real da degradação conservadora, registrada em `_spec.md`.
-  const burstCtx = await browser.newContext();
+  // Um IP exclusivo isola esta prova das demais jornadas. O primeiro acesso
+  // retorna 200; os 29 seguintes retornam 404. Juntos eles esgotam exatamente
+  // o limite de 30, então a requisição seguinte só pode retornar 429 se 200 e
+  // 404 realmente consumirem o mesmo balde.
+  await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  await page.check('input[name="visibility"][value="public"]');
+  await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
+  await page.waitForTimeout(1200);
+
+  const burstCtx = await browser.newContext({
+    extraHTTPHeaders: { "x-forwarded-for": "203.0.113.55" },
+  });
   const burstPage = await burstCtx.newPage();
 
-  const first = await burstPage.goto(`${BASE}/p/nao-existe-este-slug`, {
-    waitUntil: "domcontentloaded",
-  });
-  // 404 e não 429: uma requisição está muito abaixo do limite.
-  check("acesso isolado ao portfólio não é barrado", first?.status() === 404, `${first?.status()}`);
-
+  let first = null;
   let blocked = null;
-  for (let i = 0; i < 45 && !blocked; i++) {
-    const hit = await burstPage.goto(`${BASE}/p/varredura-${i}`, { waitUntil: "domcontentloaded" });
-    if (hit?.status() === 429) blocked = hit;
+  const missingStatuses = [];
+  if (publicHref) {
+    first = await burstPage.goto(`${BASE}${publicHref}`, { waitUntil: "domcontentloaded" });
+    for (let i = 0; i < 29; i++) {
+      const hit = await burstPage.goto(`${BASE}/p/varredura-${i}`, {
+        waitUntil: "domcontentloaded",
+      });
+      missingStatuses.push(hit?.status());
+    }
+    blocked = await burstPage.goto(`${BASE}/p/varredura-bloqueada`, {
+      waitUntil: "domcontentloaded",
+    });
   }
-  check("rajada no portfólio é recusada com 429", blocked !== null);
+  check("acesso isolado ao portfólio não é barrado", first?.status() === 200, `${first?.status()}`);
+  check(
+    "T5 · respostas 200 e 404 consomem o mesmo balde",
+    missingStatuses.length === 29
+      && missingStatuses.every((status) => status === 404)
+      && blocked?.status() === 429,
+    `200=${first?.status()} · 404=${missingStatuses.join(",")} · final=${blocked?.status()}`,
+  );
+  check("rajada no portfólio é recusada com 429", blocked?.status() === 429);
   check(
     "a recusa diz quando voltar",
     Number(blocked?.headers()["retry-after"] ?? 0) > 0,
     `retry-after=${blocked?.headers()["retry-after"]}`,
   );
   await burstCtx.close();
+
+  // Devolve ao estado anterior. Um teste que deixa o perfil publicado é pior
+  // que teste nenhum.
+  await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  await page.check('input[name="visibility"][value="private"]');
+  await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
+
+  /* --------------------------------- Logout -------------------------------- */
+
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  await page.locator('[data-testid="sign-out"]').click();
+  await page.waitForTimeout(1000);
+  await page.goto(`${BASE}/jobs`, { waitUntil: "domcontentloaded" });
+  // Revogado no servidor, não só apagado no navegador.
+  check("logout encerra a sessão de verdade", page.url().includes("/login"), page.url());
 
   /* ------------------------------ PWA (UI-05) ------------------------------ */
 
