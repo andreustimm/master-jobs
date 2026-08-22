@@ -118,13 +118,14 @@ export function carimbarUnreleased(
   if (ocorrencias > 1) {
     throw new Error("changelog com mais de uma seção ## [Unreleased]");
   }
-
-  const carimbado = markdown.replace(cabecalho, `## [${versao}] - ${data}`);
+  if (changelogTemVersao(markdown, versao)) {
+    throw new Error(`changelog já contém a versão [${versao}]`);
+  }
 
   // O novo vazio abre antes da entrada recém-carimbada. `[Unreleased]` não
   // leva data: é a seção em construção, e a ausência é o que o parser entende.
-  return carimbado.replace(
-    `## [${versao}] - ${data}`,
+  return markdown.replace(
+    cabecalho,
     `## [Unreleased]\n\n## [${versao}] - ${data}`,
   );
 }
@@ -139,4 +140,41 @@ export function carimbarUnreleased(
 export function changelogTemVersao(markdown: string, versao: string): boolean {
   const re = new RegExp(`^##\\s*\\[${versao.replace(/\./g, "\\.")}\\]`, "m");
   return re.test(markdown);
+}
+
+/**
+ * Confere uma versão como estado único dos changelogs que formam o release.
+ *
+ * Presente em todos é um release já gravado; ausente em todos permite o bump.
+ * Presente em apenas parte deles é uma gravação interrompida ou manualmente
+ * corrompida, e continuar criaria duas histórias diferentes para a mesma tag.
+ */
+export function todosChangelogsTemVersao(
+  changelogs: string[],
+  versao: string,
+): boolean {
+  if (changelogs.length === 0) {
+    throw new Error("nenhum changelog informado para validar o release");
+  }
+
+  const presencas = changelogs.map((markdown) => changelogTemVersao(markdown, versao));
+  if (presencas.some(Boolean) && !presencas.every(Boolean)) {
+    throw new Error(`versão [${versao}] presente em apenas parte dos changelogs`);
+  }
+  return presencas.every(Boolean);
+}
+
+/**
+ * Reconhece o intervalo recuperável entre persistir o bump e criar sua tag.
+ *
+ * A tag é o último efeito remoto do release. Sem ela, package e changelogs já
+ * alinhados significam que o retry deve concluir a versão atual, não calcular
+ * a próxima sobre os mesmos commits.
+ */
+export function releasePrecisaRetomarTag(
+  changelogs: string[],
+  versaoAtual: string,
+  tagAtualExiste: boolean,
+): boolean {
+  return !tagAtualExiste && todosChangelogsTemVersao(changelogs, versaoAtual);
 }

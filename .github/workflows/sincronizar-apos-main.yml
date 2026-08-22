@@ -103,7 +103,12 @@ jobs:
             exit 0
           fi
 
-          SHA=$(git rev-parse origin/main)
+          # Uma retomada deve marcar o commit do bump, mesmo se `main` já tiver
+          # avançado enquanto a primeira tentativa falhava antes da tag.
+          SHA=$(git log -1 --format=%H --fixed-strings --grep="chore(release): ${VERSAO}" origin/main)
+          if [ -z "$SHA" ]; then
+            SHA=$(git rev-parse origin/main)
+          fi
           gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
             -f ref="refs/tags/v${VERSAO}" \
             -f sha="${SHA}" --silent

@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   carimbarUnreleased,
   changelogTemVersao,
   classificarBump,
   proximaVersao,
+  releasePrecisaRetomarTag,
+  todosChangelogsTemVersao,
 } from "../src/core/release.ts";
 
 describe("classificarBump", () => {
@@ -82,11 +85,8 @@ describe("carimbarUnreleased", () => {
     expect(carimbado).toContain("- Algo novo.");
     // A seção em construção reabre no topo: sem isto, a promoção seguinte
     // falharia por ausência de `[Unreleased]`.
-    expect(carimbado).toMatch(/^## \[Unreleased\]\s*$/m);
-    // A versão carimbada vem logo depois do novo vazio.
-    const posicaoVazio = carimbado.indexOf("## [Unreleased]");
-    const posicaoVersao = carimbado.indexOf("## [1.1.0] - 2026-08-22");
-    expect(posicaoVazio).toBeLessThan(posicaoVersao);
+    expect(carimbado).toContain("## [Unreleased]\n\n## [1.1.0] - 2026-08-22");
+    expect(carimbado.match(/^## \[Unreleased\]\s*$/gm)).toHaveLength(1);
   });
 
   it("sem Unreleased falha em vez de passar mudo", () => {
@@ -96,6 +96,13 @@ describe("carimbarUnreleased", () => {
   it("duas seções Unreleased falham", () => {
     const duplicado = `## [Unreleased]\n\n- a\n\n## [Unreleased]\n\n- b\n`;
     expect(() => carimbarUnreleased(duplicado, "1.1.0", "2026-08-22")).toThrow();
+  });
+
+  it("versão de destino já existente falha em vez de duplicar", () => {
+    const repetido = `${entrada}\n## [1.1.0] - 2026-08-20\n`;
+    expect(() => carimbarUnreleased(repetido, "1.1.0", "2026-08-22")).toThrow(
+      "já contém",
+    );
   });
 });
 
@@ -107,5 +114,53 @@ describe("changelogTemVersao", () => {
 
   it("não confunde 1.1.0 com 1.1.1", () => {
     expect(changelogTemVersao("## [1.1.1]\n", "1.1.0")).toBe(false);
+  });
+});
+
+describe("coerência dos changelogs de release", () => {
+  const comVersao = "## [1.1.0] - 2026-08-22\n";
+  const semVersao = "## [Unreleased]\n";
+
+  it("distingue versão persistida de versão ainda ausente", () => {
+    expect(todosChangelogsTemVersao([comVersao, comVersao], "1.1.0")).toBe(true);
+    expect(todosChangelogsTemVersao([semVersao, semVersao], "1.1.0")).toBe(false);
+  });
+
+  it("estado assimétrico falha antes de qualquer escrita", () => {
+    expect(() => todosChangelogsTemVersao([comVersao, semVersao], "1.1.0")).toThrow(
+      "apenas parte",
+    );
+  });
+
+  it("retry pré-tag retoma a versão atual em vez de criar a seguinte", () => {
+    expect(releasePrecisaRetomarTag([comVersao, comVersao], "1.1.0", false)).toBe(true);
+    expect(releasePrecisaRetomarTag([comVersao, comVersao], "1.1.0", true)).toBe(false);
+  });
+
+  it("os dois arquivos reais mantêm exatamente um Unreleased canônico", () => {
+    for (const arquivo of ["CHANGELOG.md", "USER_CHANGELOG.md"]) {
+      const markdown = readFileSync(arquivo, "utf8");
+      expect(markdown.match(/^## \[Unreleased\]\s*$/gm), arquivo).toHaveLength(1);
+    }
+  });
+});
+
+describe("retomada dos workflows de release", () => {
+  it("a promoção reutiliza a versão persistida e ainda cria sua tag", () => {
+    const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
+    expect(workflow).toContain('if [ "$RESULTADO" = "already-released" ]; then');
+    expect(workflow).toContain('VERSAO=$(node -p "require(\'./package.json\').version")');
+    expect(workflow).not.toContain("steps.versao.outputs.versao != 'already-released'");
+  });
+
+  it("ambos os fluxos ancoram a tag no commit do bump", () => {
+    for (const arquivo of [
+      ".github/workflows/promover-para-staging.yml",
+      ".github/workflows/sincronizar-apos-main.yml",
+    ]) {
+      expect(readFileSync(arquivo, "utf8"), arquivo).toContain(
+        'git log -1 --format=%H --fixed-strings --grep="chore(release): ${VERSAO}"',
+      );
+    }
   });
 });

@@ -175,14 +175,24 @@ jobs:
           # único de versão do fluxo — só a promoção, serializada pelo
           # concurrency, escreve versão. Uma promoção = uma versão.
           git checkout origin/dev
-          VERSAO=$(node --experimental-strip-types --no-warnings scripts/release/versionar.ts origin/dev)
-          echo "versao=$VERSAO" >> "$GITHUB_OUTPUT"
-          echo "versionar devolveu: $VERSAO"
+          RESULTADO=$(node --experimental-strip-types --no-warnings scripts/release/versionar.ts origin/dev)
+          echo "versionar devolveu: $RESULTADO"
 
-          if [ "$VERSAO" = "no-release" ] || [ "$VERSAO" = "already-released" ]; then
+          if [ "$RESULTADO" = "no-release" ]; then
+            echo "versao=no-release" >> "$GITHUB_OUTPUT"
             echo "::notice::Nada a versionar nesta promoção."
             exit 0
           fi
+
+          if [ "$RESULTADO" = "already-released" ]; then
+            VERSAO=$(node -p "require('./package.json').version")
+            echo "versao=$VERSAO" >> "$GITHUB_OUTPUT"
+            echo "::notice::Bump ${VERSAO} já persistido; retomando pela criação da tag."
+            exit 0
+          fi
+
+          VERSAO=$RESULTADO
+          echo "versao=$VERSAO" >> "$GITHUB_OUTPUT"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -198,7 +208,6 @@ jobs:
       - name: Criar a tag da versão
         if: >-
           steps.versao.outputs.versao != 'no-release' &&
-          steps.versao.outputs.versao != 'already-released' &&
           steps.versao.outputs.versao != ''
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
@@ -208,7 +217,12 @@ jobs:
           # `http.extraheader`, e o push sairia autenticado pelo token padrão —
           # ref criada por ele não dispara workflow nenhum. A API cria a tag e
           # o resto do fluxo a enxerga.
-          SHA=$(git rev-parse origin/dev)
+          # Num retry, `origin/dev` pode já ter avançado além do bump. A tag
+          # pertence ao commit que gravou esta versão, não ao topo acidental.
+          SHA=$(git log -1 --format=%H --fixed-strings --grep="chore(release): ${VERSAO}" origin/dev)
+          if [ -z "$SHA" ]; then
+            SHA=$(git rev-parse origin/dev)
+          fi
           if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --silent 2>/dev/null; then
             echo "::notice::Tag v${VERSAO} já existe."
           else
