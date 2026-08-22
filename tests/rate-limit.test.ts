@@ -5,9 +5,10 @@ import { clientKey, createRateLimiter } from "../src/core/rate-limit.ts";
 /**
  * Limite de requisição do perfil público.
  *
- * Contrato em `.compozy/tasks/perfil-publico-limite/_tests.md`; cada caso aqui
- * carrega o identificador de lá, para o contrato e o teste não divergirem em
- * silêncio.
+ * Contrato em
+ * `.compozy/tasks/_archived/1787413356948-b5a25d70-perfil-publico-limite/_tests.md`;
+ * cada caso aqui carrega o identificador de lá, para o contrato e o teste não
+ * divergirem em silêncio.
  */
 
 let now = Date.parse("2026-08-20T12:00:00.000Z");

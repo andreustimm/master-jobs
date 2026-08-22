@@ -124,7 +124,7 @@ function VisibilityCard({
           <p className="type-meta text-muted-foreground">{t("visibility.neverShown")}</p>
 
           <div>
-            <Button type="submit" size="sm" variant="outline">
+            <Button type="submit" size="sm" variant="outline" data-testid="save-visibility">
               {t("visibility.save")}
             </Button>
           </div>
