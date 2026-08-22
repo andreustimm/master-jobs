@@ -94,7 +94,7 @@ ${body}
 1. ${portuguese ? "item ordenado" : "ordered item"}
 
 \`\`\`ts
-const releaseFixture = true;
+const releaseFixture = "${"x".repeat(420)}";
 \`\`\`
 
 > ${portuguese ? "Citação segura." : "Safe quotation."}
@@ -105,6 +105,8 @@ const releaseFixture = true;
 
 [unsafe](javascript:alert(1)) [data](data:text/html,unsafe)
 
+![private export](/api/export)
+
 <span id="changelog-raw-html" onclick="alert(1)">raw html</span>
 
 <script>globalThis.__changelogScriptRan=true</script>
@@ -114,7 +116,8 @@ ${longBody}`;
   const older = [];
   for (let patch = 97; patch >= 0; patch -= 1) {
     const publication = patch === 97 ? "2027-01-01T01:30:00.000Z" : "2026-08-20";
-    older.push(`## [0.9.${patch}] - ${publication}\n\n### ${heading}\n\n${exclusive} ${patch}.`);
+    const version = patch === 97 ? `0.9.${"9".repeat(120)}` : `0.9.${patch}`;
+    older.push(`## [${version}] - ${publication}\n\n### ${heading}\n\n${exclusive} ${patch}.`);
   }
 
   return `# ${portuguese ? "Novidades" : "What's New"}

@@ -511,8 +511,10 @@ export function prepareRelease(input: {
     ? stampOmitted(input.documents.en, enSection, input.version, instant)
     : stampVisible(input.documents.en, enSection, input.version, instant);
   const candidate = { technical, ptBR, en };
+  const technicalAfter = parseUserChangelog(technical);
   const ptAfter = parseUserChangelog(ptBR);
   const enAfter = parseUserChangelog(en);
+  assertParseable(technicalAfter);
   assertParseable(ptAfter, "pt-BR");
   assertParseable(enAfter, "en");
   validateLocalizedChangelogs(ptAfter, enAfter);

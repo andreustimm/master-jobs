@@ -15,6 +15,22 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### New
+
+- The **What's New** window now separates each version into a card, opens only
+  the newest one initially, and lets you compare two or more open versions at
+  the same time.
+- New releases also show the **local time on your device**: Portuguese uses
+  `dd/mm/yyyy HH:mm`, while English uses `mm/dd/yyyy HH:mm`. Older dates without
+  a trustworthy time continue to show the date only.
+- Descriptions now render **bold text**, lists, headings, safe links, quotes,
+  and code blocks instead of showing Markdown markers.
+
+### Improved
+
+- More interior spacing, easier reading on mobile, scrolling inside the window,
+  and complete keyboard and screen-reader navigation.
+
 ## [1.1.0] - 2026-08-21
 
 ### New

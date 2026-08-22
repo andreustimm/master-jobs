@@ -1,18 +1,18 @@
 ---
 status: completed
-title: Localized changelog domain and atomic bilingual release pipeline
+title: Localized changelog domain and coherent bilingual release pipeline
 type: backend
 complexity: high
 ---
 
-# Task 1: Localized changelog domain and atomic bilingual release pipeline
+# Task 1: Localized changelog domain and coherent bilingual release pipeline
 
 ## Overview
 
 Deliver the pure changelog and release contracts that make localized release
 notes trustworthy before the UI consumes them. This slice migrates the
 user-facing history to two coherent locale editions, preserves historical
-precision, and makes version creation an atomic, idempotent operation across
+precision, and makes version creation a coherent, idempotent operation across
 the technical changelog, both user changelogs, and `package.json`.
 
 <critical>
@@ -29,7 +29,7 @@ the technical changelog, both user changelogs, and `package.json`.
 - Historical date-only entries MUST remain date-only unless trustworthy evidence proves an actual version-creation instant; no synthetic time may be inferred.
 - Publication formatting MUST convert stored UTC instants to the viewer's local timezone and produce exact `dd/mm/yyyy HH:mm` for `pt-BR` and `mm/dd/yyyy HH:mm` for `en`; date-only values MUST omit the time.
 - Release preparation MUST validate every input before returning any transformed output and MUST stamp both localized files with one captured UTC instant while retaining the technical changelog's UTC date.
-- Repeated or interrupted release attempts MUST be coherent and idempotent: complete retries preserve the original identity and instant, while partial pre-existing releases fail without additional writes.
+- Repeated release attempts MUST be coherent and idempotent: complete retries preserve the original identity and instant, while validation and partial pre-existing-release failures occur before writes. An operating-system I/O failure may leave only the ephemeral checkout dirty; the command exits non-zero so no commit, push, or tag can publish that state and a retry starts from a clean checkout.
 - Runtime diagnostics MUST identify issue code, locale, and version when available without exposing release prose, secrets, user data, or technical changelog content.
 - Runtime and release wiring MUST ship, stage, and validate both locale files and MUST not retain a live dependency on the deprecated `USER_CHANGELOG.md` path.
 - The implementation MUST use erasable TypeScript syntax, explicit `.ts` relative imports, pure domain functions, and existing repository conventions.
@@ -85,13 +85,13 @@ pure. Start from the current `dev` behavior in `src/core/release.ts` and
 - [ADR-002: Localize release instants without inventing historical time](adrs/adr-002.md) — Defines local timezone conversion and truthful legacy precision.
 - [ADR-003: Publish equivalent localized notes in safe editorial Markdown](adrs/adr-003.md) — Defines equivalent Portuguese and English editorial content.
 - [ADR-005: Store locale editions separately and render with react-markdown](adrs/adr-005.md) — Establishes two canonical locale files and their parity obligation.
-- [ADR-006: Model publication precision explicitly and stamp at version creation](adrs/adr-006.md) — Defines the discriminated type, UTC authority, and atomic stamping rules.
+- [ADR-006: Model publication precision explicitly and stamp at version creation](adrs/adr-006.md) — Defines the discriminated type, UTC authority, and coherent preparation rules.
 
 ## Deliverables
 
 - Pure localized changelog domain with explicit precision, safe diagnostics, complete-body parsing, semantic ordering, parity validation, and exact locale/timezone formatting.
 - Canonical, reviewed `pt-BR` and `en` user changelogs with coherent visible history and publication metadata.
-- Atomic and idempotent release preparation wired into the version shell and both release workflows.
+- Coherent and idempotent release preparation wired into the version shell and both release workflows.
 - Standalone tracing and repository checks updated for both localized runtime files.
 - Every test case assigned in `## Tests` implemented and passing **(REQUIRED)**.
 
@@ -101,7 +101,7 @@ Cases assigned from `_tests.md`, the test contract — read each ID's full defin
 
 - [x] UT-001, UT-002, UT-003, UT-004, UT-005, UT-006, UT-007, UT-008, UT-009, UT-010, UT-011, UT-012 — complete-body parsing, publication validation, issue isolation, semantic ordering, and `Unreleased` preservation.
 - [x] UT-013, UT-014, UT-015, UT-016, UT-017, UT-018, UT-019 — cross-locale version, publication, visibility, and content parity.
-- [x] UT-020, UT-021, UT-022, UT-023, UT-024, UT-025, UT-026, UT-027, UT-028, UT-029 — atomic preparation, preconditions, partial-state failure, no-user-change handling, and idempotent retry.
+- [x] UT-020, UT-021, UT-022, UT-023, UT-024, UT-025, UT-026, UT-027, UT-028, UT-029 — coherent preparation, preconditions, partial-state failure, no-user-change handling, and idempotent retry.
 - [x] UT-030, UT-031, UT-032, UT-033, UT-034, UT-035, UT-036 — exact locale formatting, device timezone conversion, date-only stability, calendar/DST boundaries, and invalid-input refusal.
 - [x] UT-051, UT-052 — prose-free runtime diagnostics and current-version fallback.
 - [x] IT-001, IT-002, IT-003 — real localized-file coherence, content boundary, and standalone tracing.
@@ -112,6 +112,6 @@ Cases assigned from `_tests.md`, the test contract — read each ID's full defin
 
 - Every assigned test case implemented and passing.
 - Both localized changelogs parse without issues, expose the same visible version/publication sequence, and match the current package version at the top.
-- One release invocation either prepares every required output coherently or leaves all files byte-identical; a coherent retry never changes the original instant.
+- Domain or validation failure leaves every required file byte-identical; a successful invocation prepares all outputs coherently, and a coherent retry never changes the original instant. An I/O failure exits before any release commit, push, or tag.
 - UTC instants display exactly in the active locale and injected viewer timezone, while historical dates never drift or gain invented time.
 - No active runtime, workflow, tracing, or release reference depends on the deprecated single changelog path.

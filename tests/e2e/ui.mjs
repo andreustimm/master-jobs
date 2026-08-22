@@ -73,9 +73,26 @@ async function changelogSnapshot(targetPage) {
   const { dialog } = await openChangelog(targetPage);
   const snapshot = await dialog.evaluate((element) => ({
     releases: [...element.querySelectorAll('[data-testid^="changelog-release-"]')].map(
-      (button) => button.textContent?.replace(/\s+/g, " ").trim() ?? "",
+      (button) => ({
+        id: button.getAttribute("data-testid"),
+        text: button.textContent?.replace(/\s+/g, " ").trim() ?? "",
+        expanded: button.getAttribute("aria-expanded"),
+        controls: button.getAttribute("aria-controls"),
+        publication: button.querySelector("time")
+          ? {
+              dateTime: button.querySelector("time")?.getAttribute("datetime"),
+              text: button.querySelector("time")?.textContent?.trim() ?? "",
+            }
+          : null,
+      }),
     ),
-    expanded: [...element.querySelectorAll('[aria-expanded="true"]')].length,
+    panels: [...element.querySelectorAll('[id^="changelog-release-"][id$="-content"]')].map(
+      (panel) => ({
+        id: panel.id,
+        hidden: panel.hasAttribute("hidden"),
+        text: panel.textContent?.replace(/\s+/g, " ").trim() ?? "",
+      }),
+    ),
   }));
   await targetPage.locator('[data-testid="changelog-close"]').click();
   return snapshot;
@@ -196,14 +213,24 @@ try {
 
   /* -------------------------- Modal de novidades -------------------------- */
 
+  const changelogImageRequests = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/export") {
+      changelogImageRequests.push(request.url());
+    }
+  });
   const changelogUrl = page.url();
+  const portugueseResponse = await page.content();
   let opened = await openChangelog(page);
+  const focusEntered = await opened.dialog.evaluate((dialog) =>
+    dialog.contains(document.activeElement),
+  );
   check(
     "E2E-001 abre diálogo nativo com título e versão sem navegar",
     (await opened.dialog.getAttribute("open")) !== null &&
       (await opened.dialog.locator("#changelog-dialog-title").isVisible()) &&
       ((await opened.dialog.textContent()) ?? "").includes(`v${PACKAGE_VERSION}`) &&
-      page.url() === changelogUrl,
+      page.url() === changelogUrl && focusEntered,
   );
 
   await page.locator('[data-testid="changelog-close"]').click();
@@ -267,6 +294,7 @@ try {
   );
 
   const keyboardHeader = releaseButtons.nth(1);
+  const keyboardChevron = keyboardHeader.locator("svg");
   await keyboardHeader.focus();
   await page.keyboard.press("Enter");
   const controls = await keyboardHeader.getAttribute("aria-controls");
@@ -274,12 +302,14 @@ try {
     (await keyboardHeader.getAttribute("aria-expanded")) === "true" &&
     Boolean(controls) &&
     (await opened.dialog.locator(`#${controls}`).isVisible()) &&
-    (await keyboardHeader.getAttribute("data-state")) === "open";
+    (await keyboardHeader.getAttribute("data-state")) === "open" &&
+    ((await keyboardChevron.getAttribute("class")) ?? "").includes("rotate-180");
   await page.keyboard.press("Space");
   const spaceState =
     (await keyboardHeader.getAttribute("aria-expanded")) === "false" &&
     !(await opened.dialog.locator(`#${controls}`).isVisible()) &&
-    (await keyboardHeader.getAttribute("data-state")) === "closed";
+    (await keyboardHeader.getAttribute("data-state")) === "closed" &&
+    !((await keyboardChevron.getAttribute("class")) ?? "").includes("rotate-180");
   check("E2E-009 teclado sincroniza ARIA, região e chevron", enterState && spaceState);
 
   const newestContent = opened.dialog.locator('[id="changelog-release-1-1-0-content"]');
@@ -301,30 +331,37 @@ try {
     unsafe: [...element.querySelectorAll("a")].some((anchor) =>
       /^(javascript|data):/i.test(anchor.getAttribute("href") ?? ""),
     ),
+    image: Boolean(element.querySelector("img")),
     executed: globalThis.__changelogScriptRan === true,
   }));
   check(
     "E2E-011 HTML e destinos hostis permanecem inertes",
-    !hostile.script && !hostile.raw && !hostile.unsafe && !hostile.executed,
-    JSON.stringify(hostile),
+    !hostile.script && !hostile.raw && !hostile.unsafe && !hostile.image &&
+      !hostile.executed && changelogImageRequests.length === 0,
+    JSON.stringify({ ...hostile, imageRequests: changelogImageRequests }),
   );
 
   check(
     "E2E-012 edição portuguesa não mistura prose inglesa",
     semantics.text.includes("CONTEUDO_PT_EXCLUSIVO") &&
       !semantics.text.includes("ENGLISH_RELEASE_ONLY") &&
+      portugueseResponse.includes("CONTEUDO_PT_EXCLUSIVO") &&
+      !portugueseResponse.includes("ENGLISH_RELEASE_ONLY") &&
       ((await opened.dialog.textContent()) ?? "").includes("Novidades"),
   );
   await page.locator('[data-testid="changelog-close"]').click();
 
   await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
   await page.reload({ waitUntil: "networkidle" });
+  const englishResponse = await page.content();
   opened = await openChangelog(page);
   const englishText = (await opened.dialog.textContent()) ?? "";
   check(
     "E2E-013 edição inglesa não mistura prose portuguesa",
     englishText.includes("ENGLISH_RELEASE_ONLY") &&
       !englishText.includes("CONTEUDO_PT_EXCLUSIVO") &&
+      englishResponse.includes("ENGLISH_RELEASE_ONLY") &&
+      !englishResponse.includes("CONTEUDO_PT_EXCLUSIVO") &&
       englishText.includes("What's new"),
   );
   await page.locator('[data-testid="changelog-close"]').click();
@@ -344,13 +381,13 @@ try {
     await target.waitForFunction(
       () => document.querySelector('[data-testid="changelog-release-1.1.0"] time')?.textContent?.trim(),
     );
-    const boundaryButton = dialog.locator('[data-testid="changelog-release-0.9.97"]');
-    await boundaryButton.click();
+    const boundaryTime = dialog.locator('time[datetime="2027-01-01T01:30:00.000Z"]');
+    await boundaryTime.waitFor();
     const result = {
       newest: (await newest.textContent())?.trim() ?? "",
       newestDateTime: await newest.getAttribute("datetime"),
-      boundary: (await boundaryButton.locator("time").textContent())?.trim() ?? "",
-      boundaryDateTime: await boundaryButton.locator("time").getAttribute("datetime"),
+      boundary: (await boundaryTime.textContent())?.trim() ?? "",
+      boundaryDateTime: await boundaryTime.getAttribute("datetime"),
       dateOnly: (await dialog.locator('[data-testid="changelog-release-1.0.0"] time').textContent())?.trim() ?? "",
     };
     await context.close();
@@ -393,17 +430,26 @@ try {
   const narrow = await page.evaluate(() => {
     const dialog = document.querySelector('[data-testid="changelog-dialog"]');
     const header = document.querySelector('[data-testid="changelog-release-1.1.0"]');
+    const longHeader = document.querySelectorAll('[data-testid^="changelog-release-"]')[1];
+    const code = dialog?.querySelector("pre");
     return {
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       dialogOverflow: dialog ? dialog.scrollWidth - dialog.clientWidth : 999,
       headerWidth: header?.getBoundingClientRect().width ?? 0,
+      longHeaderOverflow: longHeader ? longHeader.scrollWidth - longHeader.clientWidth : 999,
+      codeContained:
+        code && dialog
+          ? code.getBoundingClientRect().right <= dialog.getBoundingClientRect().right
+          : false,
+      codeScrolls: code ? code.scrollWidth > code.clientWidth : false,
       viewport: document.documentElement.clientWidth,
     };
   });
   check(
     "E2E-019 375px contém strings longas e mantém controles alcançáveis",
     narrow.overflow <= 1 && narrow.dialogOverflow <= 1 &&
-      narrow.headerWidth > 0 && narrow.headerWidth <= narrow.viewport,
+      narrow.headerWidth > 0 && narrow.headerWidth <= narrow.viewport &&
+      narrow.longHeaderOverflow <= 1 && narrow.codeContained && narrow.codeScrolls,
     JSON.stringify(narrow),
   );
 
@@ -437,18 +483,30 @@ try {
   await page.setViewportSize({ width: 640, height: 450 });
   await page.locator('[data-testid="changelog-close"]').focus();
   let focusEscaped = false;
-  for (let index = 0; index < 20; index += 1) {
+  const expectedReleaseControls = await releaseButtons.evaluateAll((buttons) =>
+    buttons.map((button) => button.getAttribute("data-testid")),
+  );
+  const reachedReleaseControls = new Set();
+  for (let index = 0; index < expectedReleaseControls.length + 2; index += 1) {
     await page.keyboard.press("Tab");
-    if (!(await opened.dialog.evaluate((element) => element.contains(document.activeElement)))) {
+    const focus = await opened.dialog.evaluate((element) => ({
+      inside: element.contains(document.activeElement),
+      testId: document.activeElement?.getAttribute("data-testid") ?? null,
+    }));
+    if (!focus.inside) {
       focusEscaped = true;
       break;
+    }
+    if (focus.testId?.startsWith("changelog-release-")) {
+      reachedReleaseControls.add(focus.testId);
     }
   }
   const closeAtZoom = await page.locator('[data-testid="changelog-close"]').boundingBox();
   check(
     "E2E-022 teclado e zoom mantêm foco e close alcançável",
-    !focusEscaped && Boolean(closeAtZoom) && closeAtZoom.y >= 0 && closeAtZoom.x >= 0,
-    JSON.stringify(closeAtZoom),
+    !focusEscaped && reachedReleaseControls.size === expectedReleaseControls.length &&
+      Boolean(closeAtZoom) && closeAtZoom.y >= 0 && closeAtZoom.x >= 0,
+    JSON.stringify({ closeAtZoom, reached: reachedReleaseControls.size }),
   );
   await page.locator('[data-testid="changelog-close"]').click();
   await page.setViewportSize({ width: 1280, height: 900 });

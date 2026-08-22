@@ -22,5 +22,5 @@ the graph frontmatter above.
 
 | ID | Title | Type | Complexity | Test cases |
 | --- | --- | --- | --- | ---: |
-| `task_01` | Localized changelog domain and atomic bilingual release pipeline | `backend` | `high` | 49 |
+| `task_01` | Localized changelog domain and coherent bilingual release pipeline | `backend` | `high` | 49 |
 | `task_02` | Safe Markdown client modal and full browser integration | `frontend` | `high` | 44 |

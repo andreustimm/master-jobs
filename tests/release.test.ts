@@ -117,6 +117,18 @@ describe("prepareRelease", () => {
     );
   });
 
+  it("rejects a stamped technical release whose Unreleased body is empty", () => {
+    const input = documents();
+    input.technical = input.technical.replace(
+      /## \[Unreleased\][\s\S]*?(?=## \[1\.1\.0\])/,
+      "## [Unreleased]\n\n",
+    );
+    expectReleaseCode(
+      () => prepareRelease({ documents: input, version: "1.2.0", publishedAt: NOW }),
+      "empty_body",
+    );
+  });
+
   it("UT-025 returns an explicit already-released result without changing bytes", () => {
     const first = prepareRelease({ documents: documents(), version: "1.2.0", publishedAt: NOW });
     const retry = prepareRelease({

@@ -138,7 +138,7 @@ Edge cases:
 - EC-5: Two users with different active locales open the same version concurrently → each receives the complete edition for their locale without altering the other's experience.
 - EC-6: The locale changes while the modal is open through an external page or session event → the open modal stays internally consistent; the next normal locale-rendering cycle uses the new language.
 - EC-7: The user alternates locales and reopens the modal → each opening uses one complete locale and the newest-only expansion default.
-- EC-8: Locale editions list changes or sections in a different order → publication validation treats the mismatch as content drift rather than presenting contradictory histories.
+- EC-8: Locale editions list changes or sections in a different order → editors remain responsible for equivalent meaning; structural publication validation compares version identity, visibility, and publication metadata without pretending to understand or reorder prose.
 - EC-9: A release is explicitly marked as having no user-visible change → it is absent from both localized histories rather than appearing in only one.
 - EC-10: The bilingual history grows to 100 times its current size → each user receives only the active edition in the modal and can still scan and dismiss the history.
 
@@ -161,7 +161,7 @@ Acceptance criteria:
 
 Edge cases:
 
-- EC-1: A publication value is malformed or impossible → it is not formatted into a plausible but false date; the release remains readable without a fabricated timestamp.
+- EC-1: A publication value is malformed or impossible → that malformed release is omitted rather than formatted into a plausible but false date, while valid sibling releases remain readable.
 - EC-2: A historical record has neither a trustworthy date nor instant → no empty time placeholder or invented date appears.
 - EC-3: The local conversion crosses midnight, month end, year end, or a leap day → the displayed calendar date reflects the actual local instant.
 - EC-4: Different account roles view the same release → timestamp visibility and precision do not vary by role or expose internal deployment metadata beyond the publication instant.

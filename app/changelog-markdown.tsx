@@ -3,6 +3,25 @@ import { cn } from "../lib/utils.ts";
 
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 const PROTOCOL = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
+const ALLOWED_ELEMENTS = [
+  "a",
+  "blockquote",
+  "code",
+  "em",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "hr",
+  "li",
+  "ol",
+  "p",
+  "pre",
+  "strong",
+  "ul",
+] as const;
 
 export function safeChangelogUrl(value: string): string {
   const destination = value.trim();
@@ -114,7 +133,12 @@ const components: Components = {
 export function ChangelogMarkdown({ markdown }: { markdown: string }) {
   return (
     <div className="grid min-w-0 gap-4 [&_blockquote>p]:text-inherit [&_li>p]:inline">
-      <ReactMarkdown components={components} urlTransform={safeChangelogUrl}>
+      <ReactMarkdown
+        allowedElements={[...ALLOWED_ELEMENTS]}
+        components={components}
+        skipHtml
+        urlTransform={safeChangelogUrl}
+      >
         {markdown}
       </ReactMarkdown>
     </div>

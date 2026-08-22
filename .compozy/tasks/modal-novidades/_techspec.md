@@ -13,8 +13,9 @@ Component tree.
 The content pipeline moves from one Portuguese line parser to two canonical
 locale documents, complete-version-body parsing, structural parity validation,
 and safe `react-markdown` rendering. Release creation captures one UTC instant
-during `dev → staging`, stamps both user changelogs with that same value, and
-keeps date-only history explicitly distinct. The main trade-offs are one small
+in the first serialized writer that creates the version—normally `dev → staging`,
+or post-`main` synchronization for a direct hotfix—stamps both user changelogs
+with that same value, and keeps date-only history explicitly distinct. The main trade-offs are one small
 hydrated global component, a production Markdown dependency, and mandatory
 bilingual editorial maintenance in exchange for exact interaction, security,
 and localization behavior.
@@ -99,6 +100,7 @@ export type UserRelease = {
 
 export type ChangelogParseResult = {
   releases: UserRelease[];
+  omitted: Array<{ version: string; publication?: Publication }>;
   issues: ChangelogIssue[];
 };
 ```
@@ -135,7 +137,9 @@ export function prepareRelease(input: {
   documents: ReleaseDocuments;
   version: string;
   publishedAt: Date;
-}): ReleaseDocuments;
+}):
+  | { status: "prepared"; documents: ReleaseDocuments }
+  | { status: "already-released"; documents: ReleaseDocuments };
 ```
 
 The Client Component receives only values that cross the React server/client
@@ -149,6 +153,7 @@ export type ChangelogModalProps = {
   labels: {
     open: string;
     title: string;
+    lead: string;
     close: string;
   };
 };
@@ -158,7 +163,9 @@ export type ChangelogModalProps = {
 
 - Runtime parsing is tolerant at the release-entry boundary. It returns valid
   releases plus typed issues such as `invalid_version`, `invalid_publication`,
-  `duplicate_version`, and `empty_body`; one bad entry cannot break the footer.
+  `invalid_omission`, `duplicate_version`, and `empty_body`; one bad entry
+  cannot break the footer. An omission marker is valid only when the release
+  body contains no other visible content.
 - If no valid releases remain, `Footer` renders only the application version and
   omits the What's New trigger.
 - Release preparation is strict. Any parse issue, missing locale version,
@@ -323,9 +330,11 @@ create an unnecessary public surface and a duplicate authorization boundary.
 There is no new runtime external service. The design integrates only with the
 existing Git/release workflow and Next.js standalone output:
 
-- **Git and release workflow** — the serialized `dev → staging` job remains the
-  version-creation authority. Existing workflow credentials and retry behavior
-  remain unchanged.
+- **Git and release workflow** — the first serialized writer that needs a bump
+  is the version-creation authority: normally `dev → staging`, or
+  `sincronizar-apos-main` for a hotfix born directly in `main`. Both share the
+  `release-versionar` concurrency group, preparation command, tag checks, and
+  retry contract.
 - **Next.js output tracing** — both localized Markdown files must ship with the
   runtime because `Footer` reads them by a computed path.
 - **Browser platform** — native dialog, `Intl.DateTimeFormat`, and device
@@ -340,7 +349,7 @@ existing Git/release workflow and Next.js standalone output:
 | `USER_CHANGELOG.pt-BR.md` | new | Canonical Portuguese user history | Preserve and migrate current content |
 | `USER_CHANGELOG.en.md` | new | Canonical English user history | Add reviewed equivalent history |
 | `src/core/changelog.ts` | modified | Parser contract changes from line items to complete bodies; medium compatibility risk | Add discriminated publication model, issues, ordering, parity, formatter |
-| `src/core/release.ts` | modified | Release transform becomes multi-document; high release-pipeline risk | Add atomic preparation and coherent retry rules |
+| `src/core/release.ts` | modified | Release transform becomes multi-document; high release-pipeline risk | Add all-document preflight and coherent retry rules |
 | `scripts/release/versionar.ts` | modified | Captures full UTC instant and writes two locale files; high workflow risk | Wire pure preparation and final validation |
 | `app/footer.tsx` | modified | Becomes server adapter for a serializable client boundary | Pass locale, labels, current version, releases |
 | `app/changelog-modal.tsx` | new | Owns dialog lifecycle, disclosure state, local time | Implement narrow Client Component |
@@ -390,8 +399,9 @@ Every concrete case and its stable ID is defined in [_tests.md](_tests.md).
    reviewed English edition, update real-file tests, and trace both files.
    Depends on step 1's parser/parity contract.
 3. **Release preparation** — extend the pure release domain and version shell to
-   stamp one UTC instant atomically across both localized files while preserving
-   technical date output and retry semantics. Depends on steps 1 and 2.
+   derive every candidate document from one UTC instant before any write while
+   preserving technical date output and retry semantics. Depends on steps 1 and
+   2.
 4. **Safe Markdown adapter** — add `react-markdown`, safe URL rules, and semantic
    component mappings. Can begin after step 1 and does not depend on release
    shell changes.
@@ -443,9 +453,10 @@ scoped diagnostics:
 - **Discriminated publication precision** — chosen so TypeScript prevents
   date-only timezone conversion. It adds a small domain type instead of generic
   string convenience.
-- **Version/tag creation timestamp** — chosen because `dev → staging` is the
-  serialized event that creates the version. It intentionally does not claim to
-  be production deployment time.
+- **Version/tag creation timestamp** — chosen from the first serialized writer
+  that creates the version: normally `dev → staging`, with
+  `sincronizar-apos-main` as the authority for a hotfix born directly in
+  `main`. It intentionally does not claim to be production deployment time.
 - **No API or database storage** — chosen because canonical Markdown is already
   the correct authoring and runtime source. An endpoint or table would add a
   second mutable truth without a real variation boundary.

@@ -9,7 +9,24 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Modal de novidades redesenhado como diálogo acessível com cards de versão,
+  rolagem interna, abertura independente de múltiplas releases e reset para a
+  versão mais recente a cada nova abertura.
+- Edições localizadas do changelog em `USER_CHANGELOG.pt-BR.md` e
+  `USER_CHANGELOG.en.md`, publicadas pelo mesmo instante UTC e exibidas no fuso
+  local do dispositivo conforme o idioma ativo.
+- Renderização de Markdown editorial por `react-markdown`, limitada a elementos
+  seguros e sem imagens, HTML bruto ou protocolos de link perigosos.
+
+### Corrigido
+
+- Pipeline de release bilíngue preserva retomada pré-tag, valida coerência dos
+  três changelogs e mantém o histórico legado sem inventar horários.
+
 ## [1.1.1] - 2026-08-22
+
 ## [1.1.0] - 2026-08-21
 
 ### Adicionado

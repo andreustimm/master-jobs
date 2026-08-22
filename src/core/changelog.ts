@@ -31,7 +31,8 @@ export type ChangelogIssueCode =
   | "invalid_version"
   | "invalid_publication"
   | "duplicate_version"
-  | "empty_body";
+  | "empty_body"
+  | "invalid_omission";
 
 export type ChangelogIssue = {
   code: ChangelogIssueCode;
@@ -72,7 +73,7 @@ export class ChangelogDomainError extends Error {
 }
 
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const VERSION_HEADER = /^##[ \t]*\[([^\]\r\n]+)\](?:[ \t]*-[ \t]*(\S+))?[ \t]*$/gm;
+const VERSION_HEADER = /^##[ \t]*\[([^\]\r\n]+)\]([^\r\n]*)$/gm;
 const NO_USER_CHANGE = /<!--\s*sem-nota-usuario\b[^>]*-->/i;
 const OMITTED_MARKER =
   /<!--\s*sem-nota-usuario\s*:\s*((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(?:\s*-\s*(\S+?))?(?:\s+[^>]*?)?\s*-->/g;
@@ -119,13 +120,16 @@ function headersIn(markdown: string): Header[] {
   const headers: Header[] = [];
   for (const match of markdown.matchAll(VERSION_HEADER)) {
     const index = match.index;
+    const suffix = match[2]!.trim();
+    const publication =
+      suffix === "" ? undefined : suffix.startsWith("-") ? suffix.slice(1).trim() : suffix;
     headers.push({
       index,
       bodyStart: index + match[0].length,
       bodyEnd: markdown.length,
       line: markdown.slice(0, index).split("\n").length,
       token: match[1]!.trim(),
-      publication: match[2],
+      ...(publication !== undefined ? { publication } : {}),
     });
   }
   for (let index = 0; index < headers.length - 1; index += 1) {
@@ -136,6 +140,14 @@ function headersIn(markdown: string): Header[] {
 
 function bodyHasUserContent(body: string): boolean {
   return body.replace(/<!--[\s\S]*?-->/g, "").trim() !== "";
+}
+
+function diagnosticVersion(value: string): string {
+  const safe = value
+    .replace(/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/g, "?")
+    .replace(/[^A-Za-z0-9._+-]/g, "?")
+    .slice(0, 64);
+  return safe || "invalid";
 }
 
 export function compareSemanticVersions(left: string, right: string): number {
@@ -159,7 +171,11 @@ export function parseUserChangelog(markdown: string): ChangelogParseResult {
   for (const header of headers) {
     if (header.token === "Unreleased") continue;
     if (!VERSION.test(header.token)) {
-      issues.push({ code: "invalid_version", line: header.line, version: header.token });
+      issues.push({
+        code: "invalid_version",
+        line: header.line,
+        version: diagnosticVersion(header.token),
+      });
       continue;
     }
     if (seen.has(header.token)) {
@@ -174,6 +190,10 @@ export function parseUserChangelog(markdown: string): ChangelogParseResult {
 
     const body = markdown.slice(header.bodyStart, header.bodyEnd).trim();
     if (NO_USER_CHANGE.test(body)) {
+      if (bodyHasUserContent(body)) {
+        issues.push({ code: "invalid_omission", line: header.line, version: header.token });
+        continue;
+      }
       seen.add(header.token);
       omitted.push({ version: header.token, publication });
       continue;

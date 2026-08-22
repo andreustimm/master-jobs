@@ -130,8 +130,6 @@ function ReleaseCard({
 
       <div
         id={ids.contentId}
-        role="region"
-        aria-labelledby={ids.headerId}
         hidden={!expanded}
         className="min-w-0 border-t border-[var(--hairline)] px-4 py-4"
       >

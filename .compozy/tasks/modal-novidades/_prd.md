@@ -10,7 +10,7 @@ of the information a release maintainer intended users to read.
 
 This feature redesigns the existing footer-triggered What's New modal for every
 Master Jobs user, including candidates, recruiters, and administrators. It
-adopts the scan-first hierarchy demonstrated by the supplied Zorbit reference:
+uses the supplied Zorbit screenshot as discovery inspiration for a scan-first hierarchy:
 a stable header, a current-version badge, individually bordered release cards,
 and independently expandable descriptions. It also turns the changelog into a
 truthful localized product surface by rendering safe editorial Markdown,
@@ -56,9 +56,11 @@ header remains available.
 
 Each collapsed card still communicates its release identity through an
 always-visible row containing a disclosure indicator, a version badge, and its
-localized publication value. The visual direction should be similar to the
-supplied Zorbit reference in hierarchy and spacing, while Master Jobs typography,
-colors, radii, and semantic theme tokens remain authoritative.
+localized publication value. The screenshot is non-normative discovery input,
+not a pixel-parity baseline. Acceptance comes from the measurable hierarchy,
+spacing, overflow, contrast, theme, viewport, zoom, and accessibility criteria
+in this PRD and its test contract; Master Jobs typography, colors, radii, and
+semantic theme tokens remain authoritative.
 
 ### 2. Independent release disclosure
 

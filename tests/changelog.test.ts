@@ -92,6 +92,25 @@ describe("parseUserChangelog", () => {
     expect(result.issues[0]!.code).toBe("invalid_publication");
   });
 
+  it("isolates a malformed publication header without consuming its sibling", () => {
+    const result = parseUserChangelog(
+      `${release("1.2.0", "2026-08-22 extra", "Malformed")}${release("1.1.0", "2026-08-21", "Valid")}`,
+    );
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({ code: "invalid_publication", version: "1.2.0" }),
+    );
+    expect(result.releases).toEqual([
+      expect.objectContaining({ version: "1.1.0", markdown: "Valid" }),
+    ]);
+  });
+
+  it("sanitizes invalid version tokens before diagnostics", () => {
+    const result = parseUserChangelog(release("\u001B[2J\u202Ebad version", "2026-08-22"));
+    expect(result.issues[0]).toMatchObject({ code: "invalid_version" });
+    expect(result.issues[0]!.version).toMatch(/^[A-Za-z0-9._+?-]{1,64}$/);
+    expect(result.issues[0]!.version).not.toMatch(/[\u001B\u202E]/);
+  });
+
   it("UT-008 returns an empty result for empty and title-only documents", () => {
     for (const source of ["", "# What's New\n"]) {
       expect(parseUserChangelog(source)).toEqual({ releases: [], omitted: [], issues: [] });
@@ -187,6 +206,17 @@ describe("validateLocalizedChangelogs", () => {
       "localized_visibility_mismatch",
     );
   });
+
+  it("rejects an omission marker that coexists with visible notes", () => {
+    const result = parseUserChangelog(
+      release("1.1.0", "2026-08-21", "<!-- sem-nota-usuario -->\n\n- Visible change."),
+    );
+    expect(result.releases).toEqual([]);
+    expect(result.omitted).toEqual([]);
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({ code: "invalid_omission", version: "1.1.0" }),
+    );
+  });
 });
 
 describe("formatPublication", () => {
@@ -269,8 +299,24 @@ describe("safe changelog Markdown", () => {
     expect(html).toContain("After");
   });
 
+  it("blocks Markdown images instead of issuing a resource request", () => {
+    const html = renderMarkdown("Before ![private export](/api/export) After");
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("/api/export");
+  });
+
   it("UT-042 renders the complete editorial element set semantically", () => {
-    const html = renderMarkdown(`# Heading
+    const html = renderMarkdown(`# Heading 1
+
+## Heading 2
+
+### Heading 3
+
+#### Heading 4
+
+##### Heading 5
+
+###### Heading 6
 
 Paragraph with **strong**, *emphasis*, \`inline code\`, and a [safe link](/jobs/1).
 
@@ -286,7 +332,7 @@ const safe = true;
 
 ---`);
 
-    for (const element of ["h1", "p", "strong", "em", "code", "a", "ul", "ol", "li", "pre", "blockquote", "hr"]) {
+    for (const element of ["h1", "h2", "h3", "h4", "h5", "h6", "p", "strong", "em", "code", "a", "ul", "ol", "li", "pre", "blockquote", "hr"]) {
       expect(html, element).toMatch(new RegExp(`<${element}(?: |>)`));
     }
     expect(html).toContain('href="/jobs/1"');
@@ -428,7 +474,17 @@ describe("localized repository integration", () => {
     expect(pt.releases.map(({ version, publication }) => ({ version, publication }))).toEqual(
       en.releases.map(({ version, publication }) => ({ version, publication })),
     );
-    expect(pt.releases[0]!.version).toBe(pkg.version);
+    const ptCurrent =
+      pt.releases.some(({ version }) => version === pkg.version) ||
+      pt.omitted.some(({ version }) => version === pkg.version);
+    const enCurrent =
+      en.releases.some(({ version }) => version === pkg.version) ||
+      en.omitted.some(({ version }) => version === pkg.version);
+    expect(ptCurrent).toBe(true);
+    expect(enCurrent).toBe(true);
+    expect(pt.releases.some(({ version }) => version === pkg.version)).toBe(
+      en.releases.some(({ version }) => version === pkg.version),
+    );
   });
 
   it("IT-002 keeps implementation terms outside complete user bodies", async () => {
@@ -448,7 +504,12 @@ describe("localized repository integration", () => {
 
   it("IT-013 preserves date-only history because lightweight tags prove no tag instant", async () => {
     const [pt, en] = await realParses();
-    expect([...pt.releases, ...en.releases].every((item) => item.publication.kind === "date")).toBe(true);
+    const historicalVersions = new Set(["1.1.0", "1.0.0"]);
+    for (const item of [...pt.releases, ...en.releases]) {
+      expect(item.publication.kind, item.version).toBe(
+        historicalVersions.has(item.version) ? "date" : "instant",
+      );
+    }
     const metadata = execFileSync(
       "git",
       ["tag", "--list", "v*", "--format=%(objecttype)"],
@@ -462,12 +523,14 @@ describe("localized repository integration", () => {
     const promotion = await readFile(".github/workflows/promover-para-staging.yml", "utf8");
     const sync = await readFile(".github/workflows/sincronizar-apos-main.yml", "utf8");
     const shell = await readFile("scripts/release/versionar.ts", "utf8");
-    for (const source of [promotion, sync, shell]) {
-      expect(source).toContain("USER_CHANGELOG.pt-BR.md");
-      expect(source).toContain("USER_CHANGELOG.en.md");
-      expect(source).not.toMatch(/["' ]USER_CHANGELOG\.md["' ]/);
+    for (const workflow of [promotion, sync]) {
+      expect(workflow).toMatch(
+        /git add package\.json CHANGELOG\.md USER_CHANGELOG\.pt-BR\.md USER_CHANGELOG\.en\.md/,
+      );
+      expect(workflow).not.toMatch(/["' ]USER_CHANGELOG\.md["' ]/);
     }
-    expect(promotion).toContain("CHANGELOG.md");
-    expect(sync).toContain("CHANGELOG.md");
+    for (const file of ["CHANGELOG.md", "USER_CHANGELOG.pt-BR.md", "USER_CHANGELOG.en.md"]) {
+      expect(shell).toContain(file);
+    }
   });
 });

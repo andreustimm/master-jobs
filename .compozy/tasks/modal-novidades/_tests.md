@@ -30,7 +30,7 @@ components.
 | US-001 | Open and scan the modal | UT-044, UT-049 | IT-011, IT-015 | E2E-001, E2E-002, E2E-003, E2E-004, E2E-021, E2E-022 |
 | US-001.EC-1 | Malformed version is isolated | UT-005 | — | E2E-026 |
 | US-001.EC-2 | No valid releases means no broken modal | UT-008, UT-048 | — | E2E-026 |
-| US-001.EC-3 | Long version/date header reflows | — | — | E2E-019 |
+| US-001.EC-3 | Long version/header content reflows | — | — | E2E-019 |
 | US-001.EC-4 | Changelog adds no private/technical leak | — | IT-002, IT-010 | E2E-023 |
 | US-001.EC-5 | Rapid duplicate open does not duplicate dialog | UT-044 | — | E2E-024 |
 | US-001.EC-6 | Already loaded modal works after network loss | — | — | E2E-024 |
@@ -189,10 +189,10 @@ components.
 
 ### Canonical localized content
 
-- **IT-001**: parse both real localized files, validate parity, and compare the newest visible version with real `package.json`; expect no issues, equal visible metadata, and exact top-version equality.
+- **IT-001**: parse both real localized files, validate parity, and compare the current package version's disposition; expect no issues, equal visible metadata, and the package version either visible in both locales or explicitly omitted in both.
 - **IT-002**: inspect the complete real Markdown bodies for both locales; expect none of `src/`, `app/`, `.ts`, `libsql://`, `auth_user`, `job_score`, `TURSO_`, or `process.env` in user-facing release content.
 - **IT-003**: read real `next.config.ts`; expect output tracing to include both localized paths and no reference to the deprecated single path.
-- **IT-004**: inspect production dependencies and statically render hostile Markdown; expect `react-markdown` declared, no raw-HTML plugin declared, no script element, and no actionable unsafe protocol.
+- **IT-004**: inspect production dependencies and statically render hostile Markdown; expect `react-markdown` declared, no raw-HTML plugin declared, no script or image element, and no actionable unsafe protocol or same-origin request vector.
 
 ### Release pipeline boundary
 
@@ -208,7 +208,7 @@ components.
 - **IT-011**: build the standalone application and inspect traced output; expect both locale Markdown files present at their runtime paths and the footer loader able to read each.
 - **IT-012**: typecheck the Portuguese and English changelog label dictionaries and exercise existing locale normalization; expect identical key contracts and the existing fallback for unsupported locale input.
 - **IT-013**: inspect real historical headers plus available tag metadata; expect a historical value to remain `kind:"date"` unless checked-in evidence records the actual version-creation instant.
-- **IT-014**: inspect the promotion workflow and release shell file lists; expect both locale files and the technical changelog included wherever release outputs are staged or validated.
+- **IT-014**: inspect the exact release staging commands in both version-authority workflows and the release shell file lists; expect both locale files and the technical changelog included wherever release outputs are staged or validated.
 - **IT-015**: build/typecheck the Server-to-Client boundary; expect `ChangelogModalProps` to contain only serializable strings, arrays, and discriminated records, with no translator or filesystem function.
 
 ## End-to-End Tests
@@ -228,7 +228,7 @@ components.
 ### Markdown security and semantics (US-003)
 
 - **E2E-010**: open the Markdown fixture release → paragraphs, headings, lists, bold, italic, inline/fenced code, quote, rule, and safe link are semantic elements; literal `**` is absent from bold text and wrapped source lines are complete.
-- **E2E-011**: open hostile Markdown fixture → no script executes, no raw HTML element appears, and `javascript:`/`data:` links are not actionable.
+- **E2E-011**: open hostile Markdown fixture → no script executes, no raw HTML or image element appears, `javascript:`/`data:` links are not actionable, and no authenticated same-origin request is issued from hostile Markdown.
 
 ### Locale and publication display (US-004, US-005)
 
@@ -242,7 +242,7 @@ components.
 
 ### Responsive, themed, authorized, and failure behavior
 
-- **E2E-019**: at 375 px with long version/date/link text → no page horizontal overflow, card header controls remain reachable, and content wraps or scrolls only within permitted boundaries.
+- **E2E-019**: at 375 px with an unusually long semantic-version token, long safe link, and long fenced-code line → no page horizontal overflow, temporal text retains its exact fixed-width locale format, card header controls remain reachable, and content wraps or scrolls only within permitted boundaries.
 - **E2E-020**: use a 100-release/long-body fixture → modal header remains visible, body scroll remains internal, close remains reachable, and all releases can be expanded without forced closure.
 - **E2E-021**: render the modal in HP, Huly, and Graphy light/dark combinations → computed release text/control contrast meets the repository thresholds and no component color bypasses semantic tokens.
 - **E2E-022**: with keyboard-only navigation and browser zoom → focus remains inside the open modal, every control is reachable, and no zoom level hides the close action or release content.
