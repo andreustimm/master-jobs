@@ -131,7 +131,14 @@ export function VersionHistory({
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" onClick={open} className="h-7 gap-1.5">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={open}
+        className="h-7 gap-1.5"
+        data-testid="version-history-open"
+      >
         <History className="size-3.5" aria-hidden />
         {t("open")}
       </Button>
@@ -216,12 +223,19 @@ export function VersionHistory({
                   {/* Sempre visíveis: controle que só existe no hover não existe
                       para quem navega por teclado. */}
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    <RowButton icon={Eye} label={t("view")} onClick={() => view(row)} busy={pending} />
+                    <RowButton
+                      icon={Eye}
+                      label={t("view")}
+                      onClick={() => view(row)}
+                      busy={pending}
+                      testId="version-view-action"
+                    />
                     {!row.isCurrent && (
                       <RowButton
                         icon={RotateCcw}
                         label={t("restore")}
                         busy={pending}
+                        testId="version-restore"
                         onClick={() =>
                           setPanel({ kind: "confirm", id: row.id, label: row.label, action: "restore" })
                         }
@@ -231,6 +245,7 @@ export function VersionHistory({
                       icon={Pencil}
                       label={t("rename")}
                       busy={pending}
+                      testId="version-rename"
                       onClick={() => setPanel({ kind: "rename", id: row.id, label: row.label })}
                     />
                     {!row.isCurrent && (
@@ -239,6 +254,7 @@ export function VersionHistory({
                         label={t("remove")}
                         busy={pending}
                         tone="danger"
+                        testId="version-delete"
                         onClick={() =>
                           setPanel({ kind: "confirm", id: row.id, label: row.label, action: "delete" })
                         }
@@ -307,18 +323,21 @@ function RowButton({
   onClick,
   busy,
   tone,
+  testId,
 }: {
   icon: typeof Eye;
   label: string;
   onClick: () => void;
   busy: boolean;
   tone?: "danger";
+  testId: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={busy}
+      data-testid={testId}
       className={cn(
         "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-action)]",
         "border border-[var(--hairline)] px-2.5 type-micro transition-colors",

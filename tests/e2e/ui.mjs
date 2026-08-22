@@ -551,7 +551,7 @@ try {
 
   const original = visibility.checked ?? "private";
   await page.check('input[name="visibility"][value="recruiters"]');
-  await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
+  await page.locator('[data-testid="save-visibility"]').click();
   await page.waitForTimeout(1200);
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
   const saved = await page.evaluate(
@@ -562,7 +562,7 @@ try {
   // Devolve ao estado anterior: um teste que deixa o perfil mais exposto do que
   // encontrou é pior que teste nenhum.
   await page.check(`input[name="visibility"][value="${original}"]`);
-  await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
+  await page.locator('[data-testid="save-visibility"]').click();
   await page.waitForTimeout(1200);
 
 
@@ -772,7 +772,7 @@ try {
 
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
   await page.check('input[name="visibility"][value="public"]');
-  await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
+  await page.locator('[data-testid="save-visibility"]').click();
   await page.waitForTimeout(1200);
   const publicHref = await page.evaluate(
     () => document.querySelector('a[href^="/p/"]')?.getAttribute("href") ?? null,
@@ -798,11 +798,9 @@ try {
     check("a tela mostra o endereço público", false, "link ausente");
   }
 
-  // Devolve ao estado anterior. Um teste que deixa o perfil publicado é pior
-  // que teste nenhum.
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
   await page.check('input[name="visibility"][value="private"]');
-  await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
+  await page.locator('[data-testid="save-visibility"]').click();
   await page.waitForTimeout(1200);
   if (publicHref) {
     const closed = await anonPage.goto(`${BASE}${publicHref}`, { waitUntil: "domcontentloaded" });
@@ -830,7 +828,7 @@ try {
   // de teste", e numa base recém-criada não havia nenhuma — a verificação
   // passava por falta de alvo em vez de por funcionar.
   const target = page.locator("li").filter({ hasText: "e2e-alvo@local.test" }).first();
-  const assume = target.locator('button:has-text("ASSUMIR"), button:has-text("Assumir")').first();
+  const assume = target.locator('[data-testid="impersonate-user"]').first();
 
   if ((await assume.count()) > 0) {
     await assume.click();
@@ -939,7 +937,7 @@ try {
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
 
-  const historyTrigger = page.locator('button:has-text("histórico")').first();
+  const historyTrigger = page.locator('[data-testid="version-history-open"]').first();
   check("botão de histórico presente", (await historyTrigger.count()) > 0);
 
   if ((await historyTrigger.count()) > 0) {
@@ -961,13 +959,13 @@ try {
     // A linha da versão atual não pode oferecer excluir nem restaurar.
     const currentRow = rows.filter({ hasText: "atual" }).first();
     if ((await currentRow.count()) > 0) {
-      const destructive = await currentRow.locator('button:has-text("Excluir")').count();
-      const restore = await currentRow.locator('button:has-text("Restaurar")').count();
+      const destructive = await currentRow.locator('[data-testid="version-delete"]').count();
+      const restore = await currentRow.locator('[data-testid="version-restore"]').count();
       check("versão atual não oferece excluir nem restaurar", destructive === 0 && restore === 0);
     }
 
     // Visualizar carrega o conteúdo pela ação de servidor.
-    await rows.first().locator('button:has-text("Ver")').first().click();
+    await rows.first().locator('[data-testid="version-view-action"]').first().click();
     // `data-testid` e não um seletor por atributo genérico: `data-user-content`
     // também marca o rótulo da versão, e a primeira medição pegou os 40
     // caracteres do rótulo achando que era o documento.
@@ -1069,49 +1067,96 @@ try {
 
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
 
+  /* ------------- Limite de requisição no portfólio (E-05, jornada) --------- */
+
+  // T5 e T10 do contrato em
+  // `.compozy/tasks/_archived/1787413356948-b5a25d70-perfil-publico-limite/_tests.md`.
+  //
+  // Um IP exclusivo isola esta prova das demais jornadas. O primeiro acesso
+  // retorna 200; os 29 seguintes retornam 404. Juntos eles esgotam exatamente
+  // o limite de 30, então a requisição seguinte só pode retornar 429 se 200 e
+  // 404 realmente consumirem o mesmo balde.
+  let burstCtx = null;
+  try {
+    await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+    await page.check('input[name="visibility"][value="public"]');
+    const publishResponse = page.waitForResponse((response) =>
+      response.request().method() === "POST"
+        && response.request().headers()["next-action"] !== undefined,
+    );
+    await page.locator('[data-testid="save-visibility"]').click();
+    await publishResponse;
+
+    const rateLimitPublicLink = page.locator('a[href^="/p/"]').first();
+    await rateLimitPublicLink.waitFor({ state: "visible", timeout: 5000 });
+    const rateLimitPublicHref = await rateLimitPublicLink.getAttribute("href");
+
+    const nonce = crypto.randomUUID().replaceAll("-", "");
+    const rateLimitClient = `2001:db8:${nonce.slice(0, 4)}:${nonce.slice(4, 8)}:${nonce.slice(8, 12)}:${nonce.slice(12, 16)}::`;
+    burstCtx = await browser.newContext({
+      extraHTTPHeaders: { "x-forwarded-for": rateLimitClient },
+    });
+    const burstPage = await burstCtx.newPage();
+
+    let first = null;
+    let blocked = null;
+    const missingStatuses = [];
+    if (rateLimitPublicHref) {
+      first = await burstPage.goto(`${BASE}${rateLimitPublicHref}`, {
+        waitUntil: "domcontentloaded",
+      });
+      for (let i = 0; i < 29; i++) {
+        const hit = await burstPage.goto(`${BASE}/p/varredura-${nonce}-${i}`, {
+          waitUntil: "domcontentloaded",
+        });
+        missingStatuses.push(hit?.status());
+      }
+      blocked = await burstPage.goto(`${BASE}/p/varredura-${nonce}-bloqueada`, {
+        waitUntil: "domcontentloaded",
+      });
+    }
+    check("acesso isolado ao portfólio não é barrado", first?.status() === 200, `${first?.status()}`);
+    check(
+      "T5 · respostas 200 e 404 consomem o mesmo balde",
+      missingStatuses.length === 29
+        && missingStatuses.every((status) => status === 404)
+        && blocked?.status() === 429,
+      `200=${first?.status()} · 404=${missingStatuses.join(",")} · final=${blocked?.status()}`,
+    );
+    check("rajada no portfólio é recusada com 429", blocked?.status() === 429);
+    check(
+      "a recusa diz quando voltar",
+      Number(blocked?.headers()["retry-after"] ?? 0) > 0,
+      `retry-after=${blocked?.headers()["retry-after"]}`,
+    );
+  } finally {
+    await burstCtx?.close();
+
+    // A restauração fica no `finally`: falha de rede durante a rajada não pode
+    // deixar mais público o perfil que o teste encontrou.
+    await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+    await page.check(`input[name="visibility"][value="${original}"]`);
+    const restoreResponse = page.waitForResponse((response) =>
+      response.request().method() === "POST"
+        && response.request().headers()["next-action"] !== undefined,
+    );
+    await page.locator('[data-testid="save-visibility"]').click();
+    await restoreResponse;
+    await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+    const restoredAfterLimit = await page
+      .locator(`input[name="visibility"][value="${original}"]`)
+      .isChecked();
+    check("prova do limite restaura a visibilidade original", restoredAfterLimit, `${original}`);
+  }
+
   /* --------------------------------- Logout -------------------------------- */
 
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   await page.locator('[data-testid="sign-out"]').click();
   await page.waitForTimeout(1000);
   await page.goto(`${BASE}/jobs`, { waitUntil: "domcontentloaded" });
-  // Revogado no servidor, não só apagado do navegador.
+  // Revogado no servidor, não só apagado no navegador.
   check("logout encerra a sessão de verdade", page.url().includes("/login"), page.url());
-
-  /* ------------- Limite de requisição no portfólio (E-05, jornada) --------- */
-
-  // T10 do contrato em `.compozy/tasks/perfil-publico-limite/_tests.md`.
-  //
-  // A barreira precisa ser invisível para quem chegou pelo link e cara para
-  // quem varre nomes. As duas metades são verificadas: primeiro que o acesso
-  // legítimo passa, depois que a rajada é recusada com 429 e `Retry-After`.
-  //
-  // **Por último na suíte, e é obrigatório.** Sem proxy, `clientKey` devolve
-  // "sem-proxy" para todo mundo e o balde é um só — a rajada esgota o limite
-  // para as demais verificações de `/p/`. Rodando antes, ela derrubava quatro
-  // checagens do portfólio com 429 em vez de 200. Não é defeito do teste: é a
-  // limitação real da degradação conservadora, registrada em `_spec.md`.
-  const burstCtx = await browser.newContext();
-  const burstPage = await burstCtx.newPage();
-
-  const first = await burstPage.goto(`${BASE}/p/nao-existe-este-slug`, {
-    waitUntil: "domcontentloaded",
-  });
-  // 404 e não 429: uma requisição está muito abaixo do limite.
-  check("acesso isolado ao portfólio não é barrado", first?.status() === 404, `${first?.status()}`);
-
-  let blocked = null;
-  for (let i = 0; i < 45 && !blocked; i++) {
-    const hit = await burstPage.goto(`${BASE}/p/varredura-${i}`, { waitUntil: "domcontentloaded" });
-    if (hit?.status() === 429) blocked = hit;
-  }
-  check("rajada no portfólio é recusada com 429", blocked !== null);
-  check(
-    "a recusa diz quando voltar",
-    Number(blocked?.headers()["retry-after"] ?? 0) > 0,
-    `retry-after=${blocked?.headers()["retry-after"]}`,
-  );
-  await burstCtx.close();
 
   /* ------------------------------ PWA (UI-05) ------------------------------ */
 

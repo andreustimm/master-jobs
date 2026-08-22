@@ -11,6 +11,9 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 > com acesso ao sistema, e descrever a implementação seria contar como ele é
 > montado por dentro. O que se descreve é o efeito.
 
+## [Unreleased]
+
+## [1.1.1] - 2026-08-22
 ## [1.1.0] - 2026-08-21
 
 ### Novidade

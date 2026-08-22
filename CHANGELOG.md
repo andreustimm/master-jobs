@@ -6,6 +6,9 @@ Histórico técnico, para quem mexe no código. O resumo em linguagem simples, q
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Unreleased]
+
+## [1.1.1] - 2026-08-22
 ## [1.1.0] - 2026-08-21
 
 ### Adicionado

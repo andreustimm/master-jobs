@@ -908,10 +908,12 @@ deliberadamente: a ADR vem **acompanhada** da primeira jornada, feita numa
 feature pequena e genuinamente pendente — o limite de requisição que a AUTH-04
 deixou de fora. O que aquela recomendação evita é decidir no escuro, não decidir.
 
-**A jornada, em `.compozy/tasks/perfil-publico-limite/`:** `_spec.md` com parte
-de produto e parte técnica, `_tests.md` com dez casos numerados, `_tasks.md` com
-o grafo — e cada caso caindo em exatamente uma tarefa. Os testes carregam o
-identificador do contrato, para contrato e teste não divergirem em silêncio.
+**A jornada, [arquivada em
+`.compozy/tasks/`](../../.compozy/tasks/_archived/1787413356948-b5a25d70-perfil-publico-limite/README.md):**
+`_spec.md` com parte de produto e parte técnica, `_tests.md` com dez casos
+numerados, `_tasks.md` com o grafo — e cada caso caindo em exatamente uma
+tarefa. Os testes carregam o identificador do contrato, para contrato e teste
+não divergirem em silêncio.
 
 **O ciclo achou o que era para achar.** Sem proxy, `clientKey` devolve
 `"sem-proxy"` para todo mundo e o balde é um só: a rajada de verificação
