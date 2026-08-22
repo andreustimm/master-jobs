@@ -130,6 +130,7 @@ jobs:
           ABERTA=$(gh pr list --base dev --head main --state open --json number --jq '.[0].number // ""')
           if [ -z "$ABERTA" ]; then
             ABERTA=$(gh pr create --base dev --head main \
+              --assignee andreustimm \
               --title "Devolver main para dev — v${VERSAO}" \
               --body "$(printf '%s\n' \
                 "Retorno automático depois da promoção para produção." \
