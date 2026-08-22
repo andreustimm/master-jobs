@@ -81,6 +81,7 @@ concurrency:
   # compartilhado com `sincronizar-apos-main.yml` para o preflight e o push
   # formarem uma única transação global.
   group: release-versionar
+  queue: max
   cancel-in-progress: false
 
 jobs:

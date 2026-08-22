@@ -252,7 +252,10 @@ describe("retomada dos workflows de release", () => {
       ".github/workflows/promover-para-staging.yml",
       ".github/workflows/sincronizar-apos-main.yml",
     ]) {
-      expect(readFileSync(arquivo, "utf8"), arquivo).toContain("group: release-versionar");
+      const workflow = readFileSync(arquivo, "utf8");
+      expect(workflow, arquivo).toContain("group: release-versionar");
+      expect(workflow, arquivo).toContain("queue: max");
+      expect(workflow, arquivo).toContain("cancel-in-progress: false");
     }
   });
 });

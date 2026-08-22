@@ -47,6 +47,7 @@ concurrency:
   # Compartilhado com `promover-para-staging.yml`: os dois workflows podem
   # criar a próxima versão, portanto o preflight não pode correr em paralelo.
   group: release-versionar
+  queue: max
   cancel-in-progress: false
 
 jobs:
