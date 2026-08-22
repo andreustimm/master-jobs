@@ -29,11 +29,14 @@ import {
   changelogTemVersao,
   classificarBump,
   proximaVersao,
+  releasePrecisaRetomarTag,
+  todosChangelogsTemVersao,
 } from "../../src/core/release.ts";
 
 // A ref que está sendo promovida (ex.: `origin/dev`), passada como argumento.
 // Default `HEAD` cobre o uso local, sem remote.
 const base = process.argv[2] ?? "HEAD";
+const ARQUIVOS_CHANGELOG = ["CHANGELOG.md", "USER_CHANGELOG.md"] as const;
 
 /** Assuntos dos commits desde a última tag `v*` até a ref base. */
 function assuntosDesdeUltimaTag(): string[] {
@@ -69,6 +72,14 @@ function tagMaisRecente(): string | null {
   }
 }
 
+function tagExiste(versao: string): boolean {
+  try {
+    return execFileSync("git", ["tag", "--list", `v${versao}`], { encoding: "utf8" }).trim() !== "";
+  } catch {
+    return false;
+  }
+}
+
 function lerPkg(): { version: string } {
   return JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
 }
@@ -87,26 +98,50 @@ function hoje(): string {
 }
 
 function main(): void {
-  const tipo = classificarBump(assuntosDesdeUltimaTag());
-  if (!tipo) {
-    console.log("no-release");
-    return;
-  }
-
   const atual = lerPkg().version;
-  const versao = proximaVersao(atual, tipo);
+  const changelogs = ARQUIVOS_CHANGELOG.map((arquivo) => ({
+    arquivo,
+    conteudo: readFileSync(arquivo, "utf8"),
+  }));
 
-  // Idempotência: se a versão já foi publicada (re-run do workflow), não
-  // carimbar de novo — o `[Unreleased]` já virou `[x.y.z]` e não há mais
-  // cabeçalho para substituir. Bump já feito = nada a fazer.
-  if (changelogTemVersao(readFileSync("CHANGELOG.md", "utf8"), versao)) {
+  // O commit do bump chega ao remoto antes da tag. Se a API da tag falhar,
+  // o retry encontra package e changelogs já avançados, mas ainda sem vX.Y.Z.
+  // Retomar esse mesmo release evita transformar a seção vazia recém-aberta
+  // numa segunda versão sem notas.
+  if (releasePrecisaRetomarTag(
+    changelogs.map(({ conteudo }) => conteudo),
+    atual,
+    tagExiste(atual),
+  )) {
     console.log("already-released");
     return;
   }
 
-  for (const arquivo of ["CHANGELOG.md", "USER_CHANGELOG.md"]) {
-    const conteudo = readFileSync(arquivo, "utf8");
-    writeFileSync(arquivo, carimbarUnreleased(conteudo, versao, hoje()));
+  const tipo = classificarBump(assuntosDesdeUltimaTag());
+  if (!tipo) {
+    // Neste ponto a versão atual já tem tag. Commits de manutenção não pedem
+    // versão nova e podem seguir para staging sob a tag vigente.
+    console.log("no-release");
+    return;
+  }
+
+  const versao = proximaVersao(atual, tipo);
+
+  if (todosChangelogsTemVersao(changelogs.map(({ conteudo }) => conteudo), versao)) {
+    throw new Error(
+      `changelogs já contêm [${versao}], mas package.json ainda declara ${atual}`,
+    );
+  }
+
+  // Calcula os dois resultados antes da primeira escrita. Se um arquivo estiver
+  // inválido, o processo falha sem deixar os changelogs em versões diferentes.
+  const data = hoje();
+  const carimbados = changelogs.map(({ arquivo, conteudo }) => ({
+    arquivo,
+    conteudo: carimbarUnreleased(conteudo, versao, data),
+  }));
+  for (const { arquivo, conteudo } of carimbados) {
+    writeFileSync(arquivo, conteudo);
   }
 
   gravarPkg(versao);

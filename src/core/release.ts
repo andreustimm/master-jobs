@@ -108,12 +108,18 @@ export function proximaVersao(atual: string, tipo: TipoBump): string {
 }
 
 /**
- * Carimba a seção `## [Unreleased]` de um changelog com a versão e a data.
+ * Carimba a seção `## [Unreleased]` de um changelog com a versão e a data, e
+ * cria um `## [Unreleased]` vazio no lugar — o changelog se sustenta sozinho.
+ *
+ * Sem recriar o vazio, a promoção seguinte sempre falharia por ausência de
+ * `[Unreleased]`: a versão anterior foi carimbada, ninguém lembrou de abrir uma
+ * seção nova, e o fluxo para. O carimbo é o momento em que a nova seção nasce.
  *
  * Só aceita uma ocorrência — zero é "ninguém escreveu a entrada" e mais de uma
  * é "alguém duplicou o cabeçalho"; ambos são estado que deve falhar a promoção,
  * não passar em silêncio. O texto da seção fica intacto: o que muda é o
- * cabeçalho, de `## [Unreleased]` para `## [1.1.0] - 2026-08-21`.
+ * cabeçalho, de `## [Unreleased]` para `## [1.1.0] - 2026-08-21`, e um novo
+ * `## [Unreleased]` vazio aparece imediatamente antes.
  */
 export function carimbarUnreleased(
   markdown: string,
@@ -129,8 +135,16 @@ export function carimbarUnreleased(
   if (ocorrencias > 1) {
     throw new Error("changelog com mais de uma seção ## [Unreleased]");
   }
+  if (changelogTemVersao(markdown, versao)) {
+    throw new Error(`changelog já contém a versão [${versao}]`);
+  }
 
-  return markdown.replace(cabecalho, `## [${versao}] - ${data}`);
+  // O novo vazio abre antes da entrada recém-carimbada. `[Unreleased]` não
+  // leva data: é a seção em construção, e a ausência é o que o parser entende.
+  return markdown.replace(
+    cabecalho,
+    `## [Unreleased]\n\n## [${versao}] - ${data}`,
+  );
 }
 
 /**
@@ -141,6 +155,128 @@ export function carimbarUnreleased(
  * `## [1.1.0]` e `## [1.1.0] - 2026-08-21`.
  */
 export function changelogTemVersao(markdown: string, versao: string): boolean {
-  const re = new RegExp(`^##\\s*\\[${versao.replace(/\./g, "\\.")}\\]`, "m");
-  return re.test(markdown);
+  return contarVersaoNoChangelog(markdown, versao) > 0;
+}
+
+function contarVersaoNoChangelog(markdown: string, versao: string): number {
+  const segura = versao.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return markdown.match(new RegExp(`^##\\s*\\[${segura}\\]`, "gm"))?.length ?? 0;
+}
+
+/**
+ * Confere uma versão como estado único dos changelogs que formam o release.
+ *
+ * Presente em todos é um release já gravado; ausente em todos permite o bump.
+ * Presente em apenas parte deles é uma gravação interrompida ou manualmente
+ * corrompida, e continuar criaria duas histórias diferentes para a mesma tag.
+ */
+export function todosChangelogsTemVersao(
+  changelogs: string[],
+  versao: string,
+): boolean {
+  if (changelogs.length === 0) {
+    throw new Error("nenhum changelog informado para validar o release");
+  }
+
+  const contagens = changelogs.map((markdown) => contarVersaoNoChangelog(markdown, versao));
+  if (contagens.some((total) => total > 1)) {
+    throw new Error(`versão [${versao}] duplicada em um changelog`);
+  }
+
+  const presencas = contagens.map((total) => total === 1);
+  if (presencas.some(Boolean) && !presencas.every(Boolean)) {
+    throw new Error(`versão [${versao}] presente em apenas parte dos changelogs`);
+  }
+  return presencas.every(Boolean);
+}
+
+/**
+ * Reconhece o intervalo recuperável entre persistir o bump e criar sua tag.
+ *
+ * A tag é o último efeito remoto do release. Sem ela, package e changelogs já
+ * alinhados significam que o retry deve concluir a versão atual, não calcular
+ * a próxima sobre os mesmos commits.
+ */
+export function releasePrecisaRetomarTag(
+  changelogs: string[],
+  versaoAtual: string,
+  tagAtualExiste: boolean,
+): boolean {
+  const persistida = todosChangelogsTemVersao(changelogs, versaoAtual);
+  return !tagAtualExiste && persistida;
+}
+
+/**
+ * Resolve o único commit cujo assunto carimba a versão pedida.
+ *
+ * O log vem como `SHA<TAB>assunto`, para a comparação não aceitar a frase no
+ * corpo de outro commit. Zero ou dois candidatos são estados ambíguos: escolher
+ * qualquer um poderia criar uma tag válida apontando para o código errado.
+ */
+export function commitDaVersao(log: string, versao: string): string {
+  const assuntoEsperado = `chore(release): ${versao}`;
+  const candidatos = log
+    .split("\n")
+    .map((linha) => {
+      const separador = linha.indexOf("\t");
+      if (separador < 1) return null;
+      return {
+        sha: linha.slice(0, separador),
+        assunto: linha.slice(separador + 1),
+      };
+    })
+    .filter((item): item is { sha: string; assunto: string } => item?.assunto === assuntoEsperado);
+
+  if (candidatos.length !== 1) {
+    throw new Error(
+      `esperado um commit "${assuntoEsperado}", encontrados ${candidatos.length}`,
+    );
+  }
+  return candidatos[0]!.sha;
+}
+
+/** Valida se uma tag ausente ou existente é coerente com o commit do release. */
+export function estadoDaTag(
+  releaseSha: string,
+  tagSha: string | null,
+  obrigatoria: boolean,
+): "missing" | "current" {
+  if (!tagSha) {
+    if (obrigatoria) {
+      throw new Error(`tag obrigatória ausente para o commit ${releaseSha}`);
+    }
+    return "missing";
+  }
+  if (tagSha !== releaseSha) {
+    throw new Error(`tag aponta para ${tagSha}, mas o bump está em ${releaseSha}`);
+  }
+  return "current";
+}
+
+/** Uma versão nova só pode nascer se sua ref remota ainda não existir. */
+export function exigirTagAlvoAusente(tagSha: string | null): "missing" {
+  if (tagSha) {
+    throw new Error(`tag da nova versão já existe e aponta para ${tagSha}`);
+  }
+  return "missing";
+}
+
+/** Extrai somente a ref exata do retorno prefixado de `matching-refs`. */
+export function shaDaTagRemota(payload: unknown, versao: string): string | null {
+  if (!Array.isArray(payload)) {
+    throw new Error("resposta de matching-refs não é uma lista");
+  }
+
+  const refEsperada = `refs/tags/v${versao}`;
+  const candidatas = payload.filter((item): item is { ref: string; object: { sha: string } } => {
+    if (!item || typeof item !== "object") return false;
+    const ref = Reflect.get(item, "ref");
+    const objeto = Reflect.get(item, "object");
+    return ref === refEsperada && Boolean(objeto) && typeof Reflect.get(objeto, "sha") === "string";
+  });
+
+  if (candidatas.length > 1) {
+    throw new Error(`matching-refs devolveu ${candidatas.length} ocorrências para ${refEsperada}`);
+  }
+  return candidatas[0]?.object.sha ?? null;
 }

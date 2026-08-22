@@ -44,7 +44,10 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: sincronizar-main
+  # Compartilhado com `promover-para-staging.yml`: os dois workflows podem
+  # criar a próxima versão, portanto o preflight não pode correr em paralelo.
+  group: release-versionar
+  queue: max
   cancel-in-progress: false
 
 jobs:
@@ -74,6 +77,8 @@ jobs:
       # promoção de staging e isto devolve "no-release" — idempotente.
       - name: Versionar
         id: versao
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
         run: |
           git fetch origin main --tags --quiet
           VERSAO=$(node --experimental-strip-types --no-warnings scripts/release/versionar.ts origin/main)
@@ -81,6 +86,9 @@ jobs:
             VERSAO=$(node -p "require('./package.json').version")
             echo "::notice::Sem bump nesta promoção — versão atual ${VERSAO}."
           else
+            TAG_SHA=$(node --experimental-strip-types --no-warnings scripts/release/tag-remota.ts "$GITHUB_REPOSITORY" "$VERSAO")
+            node --experimental-strip-types --no-warnings \
+              scripts/release/validar-tag.ts "" "$TAG_SHA" --must-be-missing
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add package.json CHANGELOG.md USER_CHANGELOG.md
@@ -95,15 +103,15 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
           VERSAO: ${{ steps.versao.outputs.versao }}
         run: |
-          # Idempotente: este workflow também roda por `workflow_dispatch`, e um
-          # segundo disparo não pode falhar só porque o primeiro funcionou. No
-          # fluxo normal a tag já existe desde a promoção de staging.
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --silent 2>/dev/null; then
-            echo "::notice::A tag v${VERSAO} já existe."
+          # Uma retomada deve marcar o commit do bump, mesmo se `main` já tiver
+          # avançado enquanto a primeira tentativa falhava antes da tag.
+          SHA=$(node --experimental-strip-types --no-warnings scripts/release/commit-da-versao.ts origin/main "$VERSAO")
+          TAG_SHA=$(node --experimental-strip-types --no-warnings scripts/release/tag-remota.ts "$GITHUB_REPOSITORY" "$VERSAO")
+          ESTADO=$(node --experimental-strip-types --no-warnings scripts/release/validar-tag.ts "$SHA" "$TAG_SHA")
+          if [ "$ESTADO" = "current" ]; then
+            echo "::notice::A tag v${VERSAO} já existe no commit correto."
             exit 0
           fi
-
-          SHA=$(git rev-parse origin/main)
           gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
             -f ref="refs/tags/v${VERSAO}" \
             -f sha="${SHA}" --silent
