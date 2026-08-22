@@ -235,3 +235,11 @@ export function estadoDaTag(
   }
   return "current";
 }
+
+/** Uma versão nova só pode nascer se sua ref remota ainda não existir. */
+export function exigirTagAlvoAusente(tagSha: string | null): "missing" {
+  if (tagSha) {
+    throw new Error(`tag da nova versão já existe e aponta para ${tagSha}`);
+  }
+  return "missing";
+}

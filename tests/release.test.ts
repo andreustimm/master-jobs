@@ -6,6 +6,7 @@ import {
   classificarBump,
   commitDaVersao,
   estadoDaTag,
+  exigirTagAlvoAusente,
   proximaVersao,
   releasePrecisaRetomarTag,
   todosChangelogsTemVersao,
@@ -192,7 +193,7 @@ describe("retomada dos workflows de release", () => {
 
   it("main valida uma tag existente contra o commit resolvido", () => {
     const workflow = readFileSync(".github/workflows/sincronizar-apos-main.yml", "utf8");
-    expect(workflow).toContain('TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}"');
+    expect(workflow).toContain('TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v${VERSAO}"');
     expect(workflow).toContain('scripts/release/validar-tag.ts "$SHA" "$TAG_SHA"');
   });
 
@@ -218,5 +219,20 @@ describe("retomada dos workflows de release", () => {
     expect(estadoDaTag("release", "release", true)).toBe("current");
     expect(() => estadoDaTag("release", null, true)).toThrow("obrigatória ausente");
     expect(() => estadoDaTag("release", "outro", false)).toThrow("aponta para");
+    expect(exigirTagAlvoAusente(null)).toBe("missing");
+    expect(() => exigirTagAlvoAusente("conflito")).toThrow("já existe");
+  });
+
+  it("a tag da versão nova é verificada antes do commit e do push", () => {
+    for (const arquivo of [
+      ".github/workflows/promover-para-staging.yml",
+      ".github/workflows/sincronizar-apos-main.yml",
+    ]) {
+      const workflow = readFileSync(arquivo, "utf8");
+      const preflight = workflow.indexOf("--must-be-missing");
+      const commit = workflow.indexOf('git commit -m "chore(release): ${VERSAO}"');
+      expect(preflight, arquivo).toBeGreaterThan(-1);
+      expect(preflight, arquivo).toBeLessThan(commit);
+    }
   });
 });

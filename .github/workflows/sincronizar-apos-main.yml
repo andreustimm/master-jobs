@@ -74,6 +74,8 @@ jobs:
       # promoção de staging e isto devolve "no-release" — idempotente.
       - name: Versionar
         id: versao
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
         run: |
           git fetch origin main --tags --quiet
           VERSAO=$(node --experimental-strip-types --no-warnings scripts/release/versionar.ts origin/main)
@@ -81,6 +83,9 @@ jobs:
             VERSAO=$(node -p "require('./package.json').version")
             echo "::notice::Sem bump nesta promoção — versão atual ${VERSAO}."
           else
+            TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v${VERSAO}" --jq '.[0].object.sha // ""')
+            node --experimental-strip-types --no-warnings \
+              scripts/release/validar-tag.ts "" "$TAG_SHA" --must-be-missing
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add package.json CHANGELOG.md USER_CHANGELOG.md
@@ -98,7 +103,7 @@ jobs:
           # Uma retomada deve marcar o commit do bump, mesmo se `main` já tiver
           # avançado enquanto a primeira tentativa falhava antes da tag.
           SHA=$(node --experimental-strip-types --no-warnings scripts/release/commit-da-versao.ts origin/main "$VERSAO")
-          TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --jq '.object.sha' 2>/dev/null || true)
+          TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v${VERSAO}" --jq '.[0].object.sha // ""')
           ESTADO=$(node --experimental-strip-types --no-warnings scripts/release/validar-tag.ts "$SHA" "$TAG_SHA")
           if [ "$ESTADO" = "current" ]; then
             echo "::notice::A tag v${VERSAO} já existe no commit correto."

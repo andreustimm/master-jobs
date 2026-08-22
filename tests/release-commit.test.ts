@@ -122,6 +122,19 @@ describe("commit-da-versao", () => {
         { cwd: repo, encoding: "utf8" },
       );
       expect(ausenteObrigatoria.status).not.toBe(0);
+      expect(
+        execFileSync(
+          process.execPath,
+          ["--experimental-strip-types", "--no-warnings", VALIDAR_TAG, "", "", "--must-be-missing"],
+          { cwd: repo, encoding: "utf8" },
+        ).trim(),
+      ).toBe("missing");
+      const alvoConflitante = spawnSync(
+        process.execPath,
+        ["--experimental-strip-types", "--no-warnings", VALIDAR_TAG, "", topo, "--must-be-missing"],
+        { cwd: repo, encoding: "utf8" },
+      );
+      expect(alvoConflitante.status).not.toBe(0);
 
       git(repo, "tag", "v1.1.0", release);
       const manutencao = execFileSync(

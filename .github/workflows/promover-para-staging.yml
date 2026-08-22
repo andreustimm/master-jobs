@@ -169,6 +169,8 @@ jobs:
           steps.situacao.outputs.adiante != '0' &&
           steps.guard.outputs.schema != 'mudou'
         id: versao
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
         run: |
           # Decide o bump pelos commits `últimaTag..dev`, carimba os dois
           # changelogs e o package.json, e devolve a versão nova. É o escritor
@@ -194,6 +196,13 @@ jobs:
           VERSAO=$RESULTADO
           echo "versao=$VERSAO" >> "$GITHUB_OUTPUT"
 
+          # A versão-alvo ainda não pode ter tag. Esta consulta devolve lista
+          # vazia com HTTP 200 quando a ref não existe; erro de rede/autorização
+          # aborta antes de qualquer commit ou push.
+          TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v${VERSAO}" --jq '.[0].object.sha // ""')
+          node --experimental-strip-types --no-warnings \
+            scripts/release/validar-tag.ts "" "$TAG_SHA" --must-be-missing
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json CHANGELOG.md USER_CHANGELOG.md
@@ -215,7 +224,7 @@ jobs:
           # fronteira auditável do último release.
           VERSAO=$(node -p "require('./package.json').version")
           SHA=$(node --experimental-strip-types --no-warnings scripts/release/commit-da-versao.ts origin/dev "$VERSAO")
-          TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --jq '.object.sha' 2>/dev/null || true)
+          TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v${VERSAO}" --jq '.[0].object.sha // ""')
           node --experimental-strip-types --no-warnings \
             scripts/release/validar-tag.ts "$SHA" "$TAG_SHA" --required
 
@@ -235,7 +244,7 @@ jobs:
           # Num retry, `origin/dev` pode já ter avançado além do bump. A tag
           # pertence ao commit que gravou esta versão, não ao topo acidental.
           SHA=$(node --experimental-strip-types --no-warnings scripts/release/commit-da-versao.ts origin/dev "$VERSAO")
-          TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --jq '.object.sha' 2>/dev/null || true)
+          TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v${VERSAO}" --jq '.[0].object.sha // ""')
           ESTADO=$(node --experimental-strip-types --no-warnings scripts/release/validar-tag.ts "$SHA" "$TAG_SHA")
           if [ "$ESTADO" = "current" ]; then
             echo "::notice::Tag v${VERSAO} já existe."
