@@ -202,4 +202,3 @@ Edge cases:
 - EC-8: Version metadata is prepared before both locale editions → the release does not become user-visible until all required user-facing information is coherent.
 - EC-9: A published release later receives a corrected translation → both locale histories continue to identify the same version and publication instant while the corrected wording becomes visible together.
 - EC-10: The release history grows to 100 times its current size → completeness checks still compare the full visible-version set across locales rather than only the newest entries.
-

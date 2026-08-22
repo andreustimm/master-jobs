@@ -24,4 +24,3 @@ the graph frontmatter above.
 | --- | --- | --- | --- | ---: |
 | `task_01` | Localized changelog domain and atomic bilingual release pipeline | `backend` | `high` | 49 |
 | `task_02` | Safe Markdown client modal and full browser integration | `frontend` | `high` | 44 |
-
