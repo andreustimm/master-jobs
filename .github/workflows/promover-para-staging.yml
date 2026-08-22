@@ -243,6 +243,7 @@ jobs:
 
           VERSAO=$(node -p "require('./package.json').version")
           gh pr create --base main --head staging \
+            --assignee andreustimm \
             --title "Promover staging para produção — v${VERSAO}" \
             --body "$(printf '%s\n' \
               "Promoção automática de \`dev\` para \`staging\`. Esta PR **não** é mesclada por robô." \
