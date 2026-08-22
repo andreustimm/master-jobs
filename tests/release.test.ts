@@ -75,12 +75,18 @@ describe("carimbarUnreleased", () => {
 ## [1.0.0] - 2026-08-21
 `;
 
-  it("troca o cabeçalho e preserva o texto", () => {
+  it("troca o cabeçalho, preserva o texto e reabre um Unreleased vazio", () => {
     const carimbado = carimbarUnreleased(entrada, "1.1.0", "2026-08-22");
     expect(carimbado).toContain("## [1.1.0] - 2026-08-22");
     expect(carimbado).toContain("### Adicionado");
     expect(carimbado).toContain("- Algo novo.");
-    expect(carimbado).not.toContain("[Unreleased]");
+    // A seção em construção reabre no topo: sem isto, a promoção seguinte
+    // falharia por ausência de `[Unreleased]`.
+    expect(carimbado).toMatch(/^## \[Unreleased\]\s*$/m);
+    // A versão carimbada vem logo depois do novo vazio.
+    const posicaoVazio = carimbado.indexOf("## [Unreleased]");
+    const posicaoVersao = carimbado.indexOf("## [1.1.0] - 2026-08-22");
+    expect(posicaoVazio).toBeLessThan(posicaoVersao);
   });
 
   it("sem Unreleased falha em vez de passar mudo", () => {

@@ -91,12 +91,18 @@ export function proximaVersao(atual: string, tipo: TipoBump): string {
 }
 
 /**
- * Carimba a seção `## [Unreleased]` de um changelog com a versão e a data.
+ * Carimba a seção `## [Unreleased]` de um changelog com a versão e a data, e
+ * cria um `## [Unreleased]` vazio no lugar — o changelog se sustenta sozinho.
+ *
+ * Sem recriar o vazio, a promoção seguinte sempre falharia por ausência de
+ * `[Unreleased]`: a versão anterior foi carimbada, ninguém lembrou de abrir uma
+ * seção nova, e o fluxo para. O carimbo é o momento em que a nova seção nasce.
  *
  * Só aceita uma ocorrência — zero é "ninguém escreveu a entrada" e mais de uma
  * é "alguém duplicou o cabeçalho"; ambos são estado que deve falhar a promoção,
  * não passar em silêncio. O texto da seção fica intacto: o que muda é o
- * cabeçalho, de `## [Unreleased]` para `## [1.1.0] - 2026-08-21`.
+ * cabeçalho, de `## [Unreleased]` para `## [1.1.0] - 2026-08-21`, e um novo
+ * `## [Unreleased]` vazio aparece imediatamente antes.
  */
 export function carimbarUnreleased(
   markdown: string,
@@ -113,7 +119,14 @@ export function carimbarUnreleased(
     throw new Error("changelog com mais de uma seção ## [Unreleased]");
   }
 
-  return markdown.replace(cabecalho, `## [${versao}] - ${data}`);
+  const carimbado = markdown.replace(cabecalho, `## [${versao}] - ${data}`);
+
+  // O novo vazio abre antes da entrada recém-carimbada. `[Unreleased]` não
+  // leva data: é a seção em construção, e a ausência é o que o parser entende.
+  return carimbado.replace(
+    `## [${versao}] - ${data}`,
+    `## [Unreleased]\n\n## [${versao}] - ${data}`,
+  );
 }
 
 /**
