@@ -38,11 +38,22 @@ describe("classificarBump", () => {
     expect(classificarBump(["fix: a", "feat: b"])).toBe("minor");
   });
 
-  it("chore, docs e mensagem livre não pedem release", () => {
+  it("manutenção explícita não pede release", () => {
     expect(classificarBump(["chore: bump de dependência"])).toBeNull();
     expect(classificarBump(["docs: atualiza o README"])).toBeNull();
-    expect(classificarBump(["Backlog: M-06 marcado como entregue"])).toBeNull();
     expect(classificarBump([])).toBeNull();
+  });
+
+  it("mensagem sem prefixo vira patch, nunca é ignorada", () => {
+    // O defeito que este fallback mata: a versão parava em 1.1.0 enquanto o
+    // código avançava, porque os commits não tinham `fix:`/`feat:` no título.
+    // Mensagem livre é, no pior caso, uma correção.
+    expect(classificarBump(["Menu mobile fecha ao navegar: client component dedicado"])).toBe("patch");
+    expect(classificarBump(["Backlog: M-06 marcado como entregue"])).toBe("patch");
+  });
+
+  it("manutenção explícita não abafa um commit sem rótulo na mesma leva", () => {
+    expect(classificarBump(["chore: bump", "Menu mobile fecha ao navegar"])).toBe("patch");
   });
 });
 

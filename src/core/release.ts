@@ -30,10 +30,16 @@ export type TipoBump = "patch" | "minor" | "major";
  * - `feat:` / `feat(escopo):` → minor;
  * - `fix:` / `fix(escopo):` → patch;
  * - `BREAKING CHANGE` no texto, ou `!` logo após o tipo (`feat!:`), → major;
- * - qualquer outra coisa (`chore`, `docs`, `refactor`, mensagem livre) → nada.
+ * - `chore:`, `docs:`, `refactor:`, `test:`, `ci:` → nada (manutenção interna).
  *
- * Devolve `null` quando nenhum assunto pede release — a leva é só manutenção
- * interna e não merece número novo.
+ * Mensagem **sem prefixo nenhum** cai no patch. É conservador na direção certa:
+ * um commit que mudou o produto e não foi rotulado é, no pior caso, uma
+ * correção — e ignorá-lo deixa a versão parada enquanto o código avança, que é
+ * exatamente o defeito que este módulo existe para matar. Devolver `null` aí
+ * faria o histórico mentir de novo.
+ *
+ * Devolve `null` só quando a leva é vazia ou composta inteiramente de commits
+ * explicitamente marcados como manutenção.
  */
 export function classificarBump(assuntos: string[]): TipoBump | null {
   let nivel: TipoBump | null = null;
@@ -49,8 +55,12 @@ export function classificarBump(assuntos: string[]): TipoBump | null {
   return nivel;
 }
 
+/** Prefixos que declaram manutenção — nunca pedem release. */
+const MANUTENCAO = new Set(["chore", "docs", "refactor", "test", "ci"]);
+
 function tipoDoAssunto(assunto: string): TipoBump | null {
   const linha = assunto.trim();
+  if (linha === "") return null;
 
   // Convenção antiga `BREAKING CHANGE` em qualquer ponto do texto.
   if (/BREAKING[ -]CHANGE/i.test(linha)) return "major";
@@ -66,11 +76,18 @@ function tipoDoAssunto(assunto: string): TipoBump | null {
   // `tipo:` ou `tipo(escopo):`.
   const comum = /^(\w+)(\([^)]*\))?:/.exec(linha);
   if (comum) {
-    if (comum[1] === "feat") return "minor";
-    if (comum[1] === "fix") return "patch";
+    const tipo = comum[1]!.toLowerCase();
+    if (tipo === "feat") return "minor";
+    if (tipo === "fix") return "patch";
+    // Prefixo explícito de manutenção. Só ele devolve null: quem escreveu
+    // `chore:` declarou que aquilo não muda o produto.
+    if (MANUTENCAO.has(tipo)) return null;
+    // Prefixo desconhecido (`Backlog:`, `M-06:`) cai no patch abaixo, junto
+    // com a mensagem sem prefixo — não rotulou como manutenção, então conta.
   }
 
-  return null;
+  // Sem prefixo convencional: mensagem livre. Trata como patch, não como nada.
+  return "patch";
 }
 
 /**
