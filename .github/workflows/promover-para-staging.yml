@@ -260,14 +260,9 @@ jobs:
         run: |
           # Release usa o SHA tagueado como fronteira. Se dev avançou durante
           # uma retomada, os commits posteriores ficam para a próxima promoção.
-          ALVO=${RELEASE_SHA:-origin/dev}
-          if ! git merge-base --is-ancestor origin/staging "$ALVO"; then
-            echo "::error::staging não pode avançar por fast-forward até ${ALVO}."
-            exit 1
-          fi
-          ADIANTE=$(git rev-list --count "origin/staging..${ALVO}")
-          git push origin "${ALVO}:refs/heads/staging"
-          echo "::notice::staging avançou ${ADIANTE} commit(s) até ${ALVO}."
+          node --experimental-strip-types --no-warnings \
+            scripts/release/promover-staging.ts \
+            origin origin/staging origin/dev "$RELEASE_SHA"
 
       - name: Abrir a PR staging → main
         if: >-

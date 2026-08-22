@@ -200,8 +200,8 @@ describe("retomada dos workflows de release", () => {
     expect(workflow).toContain("id: tag");
     expect(workflow).toContain('echo "sha=$SHA" >> "$GITHUB_OUTPUT"');
     expect(workflow).toContain("RELEASE_SHA: ${{ steps.tag.outputs.sha }}");
-    expect(workflow).toContain('ALVO=${RELEASE_SHA:-origin/dev}');
-    expect(workflow).toContain('git push origin "${ALVO}:refs/heads/staging"');
+    expect(workflow).toContain("scripts/release/promover-staging.ts");
+    expect(workflow).toContain('origin origin/staging origin/dev "$RELEASE_SHA"');
     expect(workflow).not.toContain('SHA=$(git rev-parse origin/dev)');
   });
 
