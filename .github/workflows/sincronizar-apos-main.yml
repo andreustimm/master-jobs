@@ -99,11 +99,8 @@ jobs:
           # avançado enquanto a primeira tentativa falhava antes da tag.
           SHA=$(node --experimental-strip-types --no-warnings scripts/release/commit-da-versao.ts origin/main "$VERSAO")
           TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --jq '.object.sha' 2>/dev/null || true)
-          if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$SHA" ]; then
-            echo "::error::Tag v${VERSAO} aponta para ${TAG_SHA}, mas o bump está em ${SHA}."
-            exit 1
-          fi
-          if [ -n "$TAG_SHA" ]; then
+          ESTADO=$(node --experimental-strip-types --no-warnings scripts/release/validar-tag.ts "$SHA" "$TAG_SHA")
+          if [ "$ESTADO" = "current" ]; then
             echo "::notice::A tag v${VERSAO} já existe no commit correto."
             exit 0
           fi

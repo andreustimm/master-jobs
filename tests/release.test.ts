@@ -5,6 +5,7 @@ import {
   changelogTemVersao,
   classificarBump,
   commitDaVersao,
+  estadoDaTag,
   proximaVersao,
   releasePrecisaRetomarTag,
   todosChangelogsTemVersao,
@@ -192,7 +193,7 @@ describe("retomada dos workflows de release", () => {
   it("main valida uma tag existente contra o commit resolvido", () => {
     const workflow = readFileSync(".github/workflows/sincronizar-apos-main.yml", "utf8");
     expect(workflow).toContain('TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}"');
-    expect(workflow).toContain('if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$SHA" ]; then');
+    expect(workflow).toContain('scripts/release/validar-tag.ts "$SHA" "$TAG_SHA"');
   });
 
   it("staging avança somente até o SHA publicado pela etapa da tag", () => {
@@ -209,6 +210,13 @@ describe("retomada dos workflows de release", () => {
     const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
     expect(workflow).toContain("name: Validar tag vigente quando não há bump");
     expect(workflow).toContain("if: steps.versao.outputs.versao == 'no-release'");
-    expect(workflow).toContain('if [ "$TAG_SHA" != "$SHA" ]; then');
+    expect(workflow).toContain('scripts/release/validar-tag.ts "$SHA" "$TAG_SHA" --required');
+  });
+
+  it("estado da tag distingue criação, existência e corrupção", () => {
+    expect(estadoDaTag("release", null, false)).toBe("missing");
+    expect(estadoDaTag("release", "release", true)).toBe("current");
+    expect(() => estadoDaTag("release", null, true)).toThrow("obrigatória ausente");
+    expect(() => estadoDaTag("release", "outro", false)).toThrow("aponta para");
   });
 });

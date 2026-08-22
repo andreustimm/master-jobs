@@ -217,3 +217,21 @@ export function commitDaVersao(log: string, versao: string): string {
   }
   return candidatos[0]!.sha;
 }
+
+/** Valida se uma tag ausente ou existente é coerente com o commit do release. */
+export function estadoDaTag(
+  releaseSha: string,
+  tagSha: string | null,
+  obrigatoria: boolean,
+): "missing" | "current" {
+  if (!tagSha) {
+    if (obrigatoria) {
+      throw new Error(`tag obrigatória ausente para o commit ${releaseSha}`);
+    }
+    return "missing";
+  }
+  if (tagSha !== releaseSha) {
+    throw new Error(`tag aponta para ${tagSha}, mas o bump está em ${releaseSha}`);
+  }
+  return "current";
+}

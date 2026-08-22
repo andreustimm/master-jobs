@@ -216,10 +216,8 @@ jobs:
           VERSAO=$(node -p "require('./package.json').version")
           SHA=$(node --experimental-strip-types --no-warnings scripts/release/commit-da-versao.ts origin/dev "$VERSAO")
           TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --jq '.object.sha' 2>/dev/null || true)
-          if [ "$TAG_SHA" != "$SHA" ]; then
-            echo "::error::Tag v${VERSAO} deveria apontar para ${SHA}, mas aponta para ${TAG_SHA:-nenhum commit}."
-            exit 1
-          fi
+          node --experimental-strip-types --no-warnings \
+            scripts/release/validar-tag.ts "$SHA" "$TAG_SHA" --required
 
       - name: Criar a tag da versão
         id: tag
@@ -238,11 +236,8 @@ jobs:
           # pertence ao commit que gravou esta versão, não ao topo acidental.
           SHA=$(node --experimental-strip-types --no-warnings scripts/release/commit-da-versao.ts origin/dev "$VERSAO")
           TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --jq '.object.sha' 2>/dev/null || true)
-          if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$SHA" ]; then
-            echo "::error::Tag v${VERSAO} aponta para ${TAG_SHA}, mas o bump está em ${SHA}."
-            exit 1
-          fi
-          if [ -n "$TAG_SHA" ]; then
+          ESTADO=$(node --experimental-strip-types --no-warnings scripts/release/validar-tag.ts "$SHA" "$TAG_SHA")
+          if [ "$ESTADO" = "current" ]; then
             echo "::notice::Tag v${VERSAO} já existe."
           else
             gh api "repos/${GITHUB_REPOSITORY}/git/refs" \

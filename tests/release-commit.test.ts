@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 const SCRIPT = resolve("scripts/release/commit-da-versao.ts");
 const VERSIONAR = resolve("scripts/release/versionar.ts");
 const PROMOVER = resolve("scripts/release/promover-staging.ts");
+const VALIDAR_TAG = resolve("scripts/release/validar-tag.ts");
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -102,6 +103,47 @@ describe("commit-da-versao", () => {
       );
       expect(git(remote, "rev-parse", "staging")).toBe(release);
       expect(git(remote, "rev-parse", "staging")).not.toBe(topo);
+
+      const ausente = execFileSync(
+        process.execPath,
+        ["--experimental-strip-types", "--no-warnings", VALIDAR_TAG, release, ""],
+        { cwd: repo, encoding: "utf8" },
+      ).trim();
+      expect(ausente).toBe("missing");
+      const divergente = spawnSync(
+        process.execPath,
+        ["--experimental-strip-types", "--no-warnings", VALIDAR_TAG, release, topo],
+        { cwd: repo, encoding: "utf8" },
+      );
+      expect(divergente.status).not.toBe(0);
+      const ausenteObrigatoria = spawnSync(
+        process.execPath,
+        ["--experimental-strip-types", "--no-warnings", VALIDAR_TAG, release, "", "--required"],
+        { cwd: repo, encoding: "utf8" },
+      );
+      expect(ausenteObrigatoria.status).not.toBe(0);
+
+      git(repo, "tag", "v1.1.0", release);
+      const manutencao = execFileSync(
+        process.execPath,
+        ["--experimental-strip-types", "--no-warnings", VERSIONAR, "HEAD"],
+        { cwd: repo, encoding: "utf8" },
+      ).trim();
+      expect(manutencao).toBe("no-release");
+      expect(
+        execFileSync(
+          process.execPath,
+          ["--experimental-strip-types", "--no-warnings", VALIDAR_TAG, release, release, "--required"],
+          { cwd: repo, encoding: "utf8" },
+        ).trim(),
+      ).toBe("current");
+
+      execFileSync(
+        process.execPath,
+        ["--experimental-strip-types", "--no-warnings", PROMOVER, "origin", "origin/staging", "origin/dev", ""],
+        { cwd: repo, stdio: "pipe" },
+      );
+      expect(git(remote, "rev-parse", "staging")).toBe(topo);
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
