@@ -116,9 +116,9 @@ components.
 
 - **UT-001** (happy): `parseUserChangelog` receives `## [1.2.0] - 2026-08-22T11:46:00.000Z` and returns version `1.2.0` with `publication={kind:"instant",value:"2026-08-22T11:46:00.000Z"}`.
 - **UT-002** (happy): the parser receives `## [1.1.0] - 2026-08-21` and returns `publication={kind:"date",value:"2026-08-21"}` without constructing an instant.
-- **UT-003** (boundary): wrapped text, a linked level-two heading, fenced code, and header/omission examples inside that fence remain byte-for-byte inside one release's returned `markdown` body.
+- **UT-003** (boundary): wrapped text, a digit-leading linked level-two heading, fenced and indented code, and omission-marker examples in fenced/indented/inline code remain byte-for-byte inside one release's returned `markdown` body.
 - **UT-004** (ordering): two actual version headers delimit two complete bodies; the first body contains no bytes from the second and ordinary level-two headings do not delimit releases.
-- **UT-005** (error): header `## [v1.2] - 2026-08-22` or the missing-bracket form `## 1.2.0 - 2026-08-22` produces `invalid_version`, excludes that entry, and preserves the following valid release.
+- **UT-005** (error): header `## [v1.2] - 2026-08-22`, an unbracketed release header, or one with an unmatched opening bracket produces `invalid_version`, excludes that entry, and preserves the following valid release.
 - **UT-006** (error): dates `2026-02-30` and `2026-13-01` produce `invalid_publication` and no fabricated release date.
 - **UT-007** (error): timestamp `2026-08-22T11:46:00-03:00` produces `invalid_publication` because canonical stored instants must end in `Z`.
 - **UT-008** (boundary): empty input and a title-only document return `releases=[]` without throwing.
@@ -142,7 +142,7 @@ components.
 - **UT-020** (happy): `prepareRelease` given version `1.2.0`, `publishedAt=2026-08-22T11:46:00.000Z`, and three valid `Unreleased` sections returns all three stamped documents.
 - **UT-021** (state): the prepared technical header contains `2026-08-22`, while both localized headers contain the exact full value `2026-08-22T11:46:00.000Z`.
 - **UT-022** (error): any required document with zero `Unreleased` sections throws `missing_unreleased` before returning outputs.
-- **UT-023** (error): any required document with two `Unreleased` sections throws `duplicate_unreleased`.
+- **UT-023** (error): any required document with two structural `Unreleased` sections throws `duplicate_unreleased`, while header-shaped examples inside fenced code never count as sections or target versions.
 - **UT-024** (error): a localized candidate output with malformed version/publication metadata throws its strict domain error instead of returning partial output.
 - **UT-025** (idempotency): coherent inputs already containing target `1.2.0` in all documents return the `already-released` result without changing any bytes.
 - **UT-026** (error): target `1.2.0` present only in the technical document throws `partial_existing_release`.

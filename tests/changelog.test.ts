@@ -62,6 +62,10 @@ describe("parseUserChangelog", () => {
   it("UT-003 preserves fenced release-like text and omission examples as body bytes", () => {
     const body = `Before.
 
+Use \`<!-- sem-nota-usuario -->\` only as documentation.
+
+    <!-- sem-nota-usuario -->
+
 \`\`\`md
 ## [9.9.9] - 2026-08-22
 <!-- sem-nota-usuario -->
@@ -76,7 +80,7 @@ After.`;
   });
 
   it("UT-003 preserves a linked level-two heading inside release Markdown", () => {
-    const body = "Before.\n\n## [Details](https://example.com)\n\nAfter.";
+    const body = "Before.\n\n## [2FA setup](https://example.com/2fa)\n\nAfter.";
     const result = parseUserChangelog(release("1.2.0", "2026-08-22", body));
     expect(result.issues).toEqual([]);
     expect(result.releases[0]!.markdown).toBe(body);
@@ -108,6 +112,17 @@ After.`;
     expect(result.releases).toEqual([
       expect.objectContaining({ version: "1.1.0", markdown: "Valid" }),
     ]);
+  });
+
+  it("UT-005 isolates a release heading with an unmatched opening bracket", () => {
+    const result = parseUserChangelog(
+      `${release("1.2.0", "2026-08-22", "First")}## [1.1.0 - 2026-08-21\n\nMalformed\n\n${release("1.0.0", "2026-08-20", "Valid")}`,
+    );
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({ code: "invalid_version", version: "1.1.0" }),
+    );
+    expect(result.releases.map((item) => item.version)).toEqual(["1.2.0", "1.0.0"]);
+    expect(result.releases[0]!.markdown).toBe("First");
   });
 
   it("rejects a publication whose release header omits the delimiter", () => {

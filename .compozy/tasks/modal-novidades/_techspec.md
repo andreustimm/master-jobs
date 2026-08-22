@@ -103,6 +103,17 @@ export type ChangelogParseResult = {
   omitted: Array<{ version: string; publication?: Publication }>;
   issues: ChangelogIssue[];
 };
+
+export type ChangelogSection = {
+  index: number;
+  bodyStart: number;
+  bodyEnd: number;
+  line: number;
+  token: string;
+  publication?: string;
+  publicationSyntaxValid: boolean;
+  versionSyntaxValid: boolean;
+};
 ```
 
 The pure parser and parity gate form the canonical content contract:
@@ -111,6 +122,14 @@ The pure parser and parity gate form the canonical content contract:
 export function parseUserChangelog(
   markdown: string,
 ): ChangelogParseResult;
+
+export function changelogSections(
+  markdown: string,
+): ChangelogSection[];
+
+export function hasNoUserChangeMarker(
+  markdown: string,
+): boolean;
 
 export function validateLocalizedChangelogs(
   ptBR: ChangelogParseResult,
@@ -220,8 +239,10 @@ consistent in both locale documents.
 ### Changelog Parsing and Ordering
 
 The parser scans release-shaped level-two headers rather than list-item lines.
-It tracks CommonMark fenced-code boundaries, so header-shaped examples and
-omission markers inside code remain literal body content. For every valid
+It tracks CommonMark fenced and indented code boundaries, while omission
+metadata is recognized only as a standalone comment line; header-shaped
+examples and marker text in fences, indented code, or code spans therefore
+remain literal body content. For every valid
 version header, it captures the untouched body until the next release-shaped
 header; ordinary level-two headings, including linked headings, remain in the
 body. Malformed release-shaped headers still delimit their own entry and emit a

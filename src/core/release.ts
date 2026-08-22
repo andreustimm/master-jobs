@@ -1,5 +1,7 @@
 import {
   ChangelogDomainError,
+  changelogSections,
+  hasNoUserChangeMarker,
   parseUserChangelog,
   validateLocalizedChangelogs,
   type ChangelogIssueCode,
@@ -21,11 +23,11 @@ import {
  * Um histórico que mente sobre a própria versão orienta a próxima decisão para
  * o lugar errado.
  *
- * O bump é decidido no `dev → staging` — o único ponto do fluxo que é
- * serializado (concurrency do workflow de promoção). Uma promoção = uma versão,
- * cobrindo todos os commits desde a última tag. A classificação vem do tipo de
- * commit: `fix:` → patch, `feat:` → minor, `BREAKING CHANGE` → major. O maior
- * vence entre os commits da leva.
+ * O bump é decidido pelo primeiro writer serializado: normalmente a promoção
+ * `dev → staging`, ou a sincronização pós-`main` para hotfix direto. Uma
+ * execução = uma versão, cobrindo todos os commits desde a última tag. A
+ * classificação vem do tipo de commit: `fix:` → patch, `feat:` → minor,
+ * `BREAKING CHANGE` → major. O maior vence entre os commits da leva.
  */
 
 /** Direção do bump. `null` quando nenhum commit pede release. */
@@ -111,10 +113,10 @@ export function proximaVersao(atual: string, tipo: TipoBump): string {
   const m = VERSAO_SEMANTICA.exec(atual.trim());
   if (!m) throw new Error(`versão inválida no package.json: "${atual}"`);
 
-  const [major, minor, patch] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  if (tipo === "major") return `${major + 1}.0.0`;
-  if (tipo === "minor") return `${major}.${minor + 1}.0`;
-  return `${major}.${minor}.${patch + 1}`;
+  const [major, minor, patch] = [BigInt(m[1]!), BigInt(m[2]!), BigInt(m[3]!)];
+  if (tipo === "major") return `${major + 1n}.0.0`;
+  if (tipo === "minor") return `${major}.${minor + 1n}.0`;
+  return `${major}.${minor}.${patch + 1n}`;
 }
 
 export function versaoSemanticaValida(value: string): boolean {
@@ -140,8 +142,10 @@ export function carimbarUnreleased(
   versao: string,
   data: string,
 ): string {
-  const cabecalho = /^##\s*\[Unreleased\]\s*$/gm;
-  const ocorrencias = markdown.match(cabecalho)?.length ?? 0;
+  const secoes = changelogSections(markdown).filter(
+    (section) => section.token === "Unreleased",
+  );
+  const ocorrencias = secoes.length;
 
   if (ocorrencias === 0) {
     throw new Error("changelog sem seção ## [Unreleased] — escreva a entrada antes de promover");
@@ -155,26 +159,26 @@ export function carimbarUnreleased(
 
   // O novo vazio abre antes da entrada recém-carimbada. `[Unreleased]` não
   // leva data: é a seção em construção, e a ausência é o que o parser entende.
-  return markdown.replace(
-    cabecalho,
-    `## [Unreleased]\n\n## [${versao}] - ${data}`,
-  );
+  const secao = secoes[0]!;
+  const cabecalho = `## [Unreleased]\n\n## [${versao}] - ${data}`;
+  return `${markdown.slice(0, secao.index)}${cabecalho}${markdown.slice(secao.bodyStart)}`;
 }
 
 /**
  * Garante que um changelog tem a entrada da versão publicada.
  *
  * É o gate de coerência do `package.json` com o changelog: bump sem entrada é
- * release mudo, e entrada sem bump é texto que ninguém vê. O regex aceita
- * `## [1.1.0]` e `## [1.1.0] - 2026-08-21`.
+ * release mudo, e entrada sem bump é texto que ninguém vê. A consulta usa as
+ * mesmas fronteiras Markdown do parser e ignora exemplos dentro de código.
  */
 export function changelogTemVersao(markdown: string, versao: string): boolean {
   return contarVersaoNoChangelog(markdown, versao) > 0;
 }
 
 function contarVersaoNoChangelog(markdown: string, versao: string): number {
-  const segura = versao.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return markdown.match(new RegExp(`^##\\s*\\[${segura}\\]`, "gm"))?.length ?? 0;
+  return changelogSections(markdown).filter(
+    (section) => section.versionSyntaxValid && section.token === versao,
+  ).length;
 }
 
 /**
@@ -343,25 +347,18 @@ type UnreleasedSection = {
   headerStart: number;
 };
 
-const UNRELEASED_HEADER = /^##[ \t]*\[Unreleased\][ \t]*$/gm;
-const NO_USER_CHANGE = /<!--\s*sem-nota-usuario\b[^>]*-->/i;
-
 function findUnreleased(markdown: string): UnreleasedSection {
-  const matches = [...markdown.matchAll(UNRELEASED_HEADER)];
+  const matches = changelogSections(markdown).filter(
+    (section) => section.token === "Unreleased",
+  );
   if (matches.length === 0) throw new ReleaseDomainError("missing_unreleased");
   if (matches.length > 1) throw new ReleaseDomainError("duplicate_unreleased");
 
   const match = matches[0]!;
-  const headerStart = match.index;
-  const bodyStart = headerStart + match[0].length;
-  const nextHeader = /^##(?:[ \t]|$)/gm;
-  nextHeader.lastIndex = bodyStart;
-  const next = nextHeader.exec(markdown);
-  const bodyEnd = next?.index ?? markdown.length;
   return {
-    body: markdown.slice(bodyStart, bodyEnd),
-    bodyEnd,
-    headerStart,
+    body: markdown.slice(match.bodyStart, match.bodyEnd),
+    bodyEnd: match.bodyEnd,
+    headerStart: match.index,
   };
 }
 
@@ -380,9 +377,13 @@ function hasTarget(result: ChangelogParseResult, version: string): boolean {
 }
 
 function technicalPublication(markdown: string, version: string): string | null {
-  const escaped = version.replace(/\./g, "\\.");
-  const match = new RegExp(`^##\\s*\\[${escaped}\\]\\s*-\\s*(\\S+)\\s*$`, "m").exec(markdown);
-  return match?.[1] ?? null;
+  const match = changelogSections(markdown).find(
+    (section) =>
+      section.versionSyntaxValid &&
+      section.publicationSyntaxValid &&
+      section.token === version,
+  );
+  return match?.publication ?? null;
 }
 
 function existingLocalizedInstant(
@@ -482,8 +483,10 @@ export function prepareRelease(input: {
   const technicalSection = findUnreleased(input.documents.technical);
   const ptSection = findUnreleased(input.documents.ptBR);
   const enSection = findUnreleased(input.documents.en);
-  const ptNoUserChange = NO_USER_CHANGE.test(ptSection.body) && userContent(ptSection.body) === "";
-  const enNoUserChange = NO_USER_CHANGE.test(enSection.body) && userContent(enSection.body) === "";
+  const ptNoUserChange =
+    hasNoUserChangeMarker(ptSection.body) && userContent(ptSection.body) === "";
+  const enNoUserChange =
+    hasNoUserChangeMarker(enSection.body) && userContent(enSection.body) === "";
   if (ptNoUserChange !== enNoUserChange) {
     throw new ChangelogDomainError("localized_visibility_mismatch", { version: input.version });
   }

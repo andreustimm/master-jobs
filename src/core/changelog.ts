@@ -73,11 +73,12 @@ export class ChangelogDomainError extends Error {
 }
 
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const NO_USER_CHANGE = /<!--\s*sem-nota-usuario\b[^>]*-->/i;
-const OMITTED_MARKER =
-  /<!--\s*sem-nota-usuario\s*:\s*((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(?:\s*-\s*(\S+?))?(?:\s+[^>]*?)?\s*-->/g;
+const VERSION_LIKE = /^[vV]?\d+(?:\.\d*){0,2}$/;
+const NO_USER_CHANGE_LINE = /^ {0,3}<!--\s*sem-nota-usuario\b[^>]*-->[ \t]*$/i;
+const OMITTED_MARKER_LINE =
+  /^ {0,3}<!--\s*sem-nota-usuario\s*:\s*((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(?:\s*-\s*(\S+?))?(?:\s+[^>]*?)?\s*-->[ \t]*$/;
 
-type Header = {
+export type ChangelogSection = {
   bodyEnd: number;
   bodyStart: number;
   index: number;
@@ -91,6 +92,14 @@ type Header = {
 type Fence = {
   marker: "`" | "~";
   length: number;
+};
+
+type MarkdownLine = {
+  code: boolean;
+  end: number;
+  line: number;
+  start: number;
+  text: string;
 };
 
 function isValidCalendarDate(value: string): boolean {
@@ -137,14 +146,16 @@ function closesFence(line: string, fence: Fence): boolean {
   return length >= fence.length && candidate.slice(length).trim() === "";
 }
 
-function releaseHeaderAt(line: string): Omit<Header, "bodyEnd" | "bodyStart" | "index" | "line"> | null {
+function releaseHeaderAt(
+  line: string,
+): Omit<ChangelogSection, "bodyEnd" | "bodyStart" | "index" | "line"> | null {
   const canonical = /^ {0,3}##[ \t]*\[(.*)\][ \t]+-[ \t]+(\S.*)$/.exec(line);
   if (canonical) {
     const token = canonical[1]!.trim();
     const publication = canonical[2]!.trim();
     const releaseLike =
       VERSION.test(token) ||
-      /^[vV]?\d/.test(token) ||
+      VERSION_LIKE.test(token) ||
       /^\d{4}-/.test(publication);
     if (!releaseLike) return null;
     return {
@@ -162,7 +173,8 @@ function releaseHeaderAt(line: string): Omit<Header, "bodyEnd" | "bodyStart" | "
     if (token === "Unreleased" && suffix === "") {
       return { token, publicationSyntaxValid: true, versionSyntaxValid: true };
     }
-    if (!VERSION.test(token) && !/^[vV]?\d/.test(token)) return null;
+    if (suffix.startsWith("(")) return null;
+    if (!VERSION.test(token) && !VERSION_LIKE.test(token)) return null;
     return {
       token,
       ...(suffix !== "" ? { publication: suffix } : {}),
@@ -171,8 +183,20 @@ function releaseHeaderAt(line: string): Omit<Header, "bodyEnd" | "bodyStart" | "
     };
   }
 
-  const unbracketed = /^ {0,3}##[ \t]+(\S+)[ \t]+-[ \t]+(\S.*)$/.exec(line);
-  if (!unbracketed || !/^[vV]?\d/.test(unbracketed[1]!)) return null;
+  const missingClose =
+    /^ {0,3}##[ \t]*\[([vV]?\d+(?:\.\d*){0,2})[ \t]+-[ \t]+(\S.*)$/.exec(line);
+  if (missingClose) {
+    return {
+      token: missingClose[1]!.trim(),
+      publication: missingClose[2]!.trim(),
+      publicationSyntaxValid: true,
+      versionSyntaxValid: false,
+    };
+  }
+
+  const unbracketed =
+    /^ {0,3}##[ \t]+([vV]?\d+(?:\.\d*){0,2})[ \t]+-[ \t]+(\S.*)$/.exec(line);
+  if (!unbracketed) return null;
   return {
     token: unbracketed[1]!.trim(),
     publication: unbracketed[2]!.trim(),
@@ -181,8 +205,8 @@ function releaseHeaderAt(line: string): Omit<Header, "bodyEnd" | "bodyStart" | "
   };
 }
 
-function headersIn(markdown: string): Header[] {
-  const headers: Header[] = [];
+function linesIn(markdown: string): MarkdownLine[] {
+  const lines: MarkdownLine[] = [];
   let fence: Fence | null = null;
   let offset = 0;
   let lineNumber = 1;
@@ -192,30 +216,37 @@ function headersIn(markdown: string): Header[] {
     const lineEnd = newline === -1 ? markdown.length : newline;
     const rawLine = markdown.slice(offset, lineEnd);
     const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-
-    if (fence) {
-      if (closesFence(line, fence)) fence = null;
-    } else {
-      const opened = openingFence(line);
-      if (opened) {
-        fence = opened;
-      } else {
-        const parsed = releaseHeaderAt(line);
-        if (parsed) {
-          headers.push({
-            ...parsed,
-            index: offset,
-            bodyStart: lineEnd,
-            bodyEnd: markdown.length,
-            line: lineNumber,
-          });
-        }
-      }
-    }
+    const opened: Fence | null = fence ? null : openingFence(line);
+    lines.push({
+      code: Boolean(fence || opened || /^(?: {4}|\t)/.test(line)),
+      start: offset,
+      end: lineEnd,
+      line: lineNumber,
+      text: line,
+    });
+    if (fence && closesFence(line, fence)) fence = null;
+    else if (!fence && opened) fence = opened;
 
     if (newline === -1) break;
     offset = newline + 1;
     lineNumber += 1;
+  }
+  return lines;
+}
+
+export function changelogSections(markdown: string): ChangelogSection[] {
+  const headers: ChangelogSection[] = [];
+  for (const line of linesIn(markdown)) {
+    if (line.code) continue;
+    const parsed = releaseHeaderAt(line.text);
+    if (!parsed) continue;
+    headers.push({
+      ...parsed,
+      index: line.start,
+      bodyStart: line.end,
+      bodyEnd: markdown.length,
+      line: line.line,
+    });
   }
 
   for (let index = 0; index < headers.length - 1; index += 1) {
@@ -224,28 +255,10 @@ function headersIn(markdown: string): Header[] {
   return headers;
 }
 
-function maskFencedMarkdown(markdown: string): string {
-  let output = "";
-  let fence: Fence | null = null;
-  let offset = 0;
-
-  while (offset < markdown.length) {
-    const newline = markdown.indexOf("\n", offset);
-    const lineEnd = newline === -1 ? markdown.length : newline;
-    const rawLine = markdown.slice(offset, lineEnd);
-    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-    const opened: Fence | null = fence ? null : openingFence(line);
-    const masked = Boolean(fence || opened);
-    output += masked ? rawLine.replace(/[^\r]/g, " ") : rawLine;
-    if (newline !== -1) output += "\n";
-
-    if (fence && closesFence(line, fence)) fence = null;
-    else if (!fence && opened) fence = opened;
-
-    if (newline === -1) break;
-    offset = newline + 1;
-  }
-  return output;
+export function hasNoUserChangeMarker(markdown: string): boolean {
+  return linesIn(markdown).some(
+    (line) => !line.code && NO_USER_CHANGE_LINE.test(line.text),
+  );
 }
 
 function bodyHasUserContent(body: string): boolean {
@@ -278,7 +291,7 @@ export function parseUserChangelog(markdown: string): ChangelogParseResult {
   const omitted: OmittedUserRelease[] = [];
   const issues: ChangelogIssue[] = [];
   const seen = new Set<string>();
-  const headers = headersIn(markdown);
+  const headers = changelogSections(markdown);
 
   for (const header of headers) {
     if (header.token === "Unreleased") continue;
@@ -304,7 +317,7 @@ export function parseUserChangelog(markdown: string): ChangelogParseResult {
     }
 
     const body = markdown.slice(header.bodyStart, header.bodyEnd).trim();
-    if (NO_USER_CHANGE.test(maskFencedMarkdown(body))) {
+    if (hasNoUserChangeMarker(body)) {
       if (bodyHasUserContent(body)) {
         issues.push({ code: "invalid_omission", line: header.line, version: header.token });
         continue;
@@ -323,13 +336,15 @@ export function parseUserChangelog(markdown: string): ChangelogParseResult {
 
   const firstHeader = headers[0]?.index ?? markdown.length;
   const prefix = markdown.slice(0, firstHeader);
-  const visiblePrefix = maskFencedMarkdown(prefix);
-  for (const match of visiblePrefix.matchAll(OMITTED_MARKER)) {
+  for (const line of linesIn(prefix)) {
+    if (line.code) continue;
+    const match = OMITTED_MARKER_LINE.exec(line.text);
+    if (!match) continue;
     const version = match[1]!;
     if (seen.has(version)) {
       issues.push({
         code: "duplicate_version",
-        line: prefix.slice(0, match.index).split("\n").length,
+        line: line.line,
         version,
       });
       continue;
@@ -340,7 +355,7 @@ export function parseUserChangelog(markdown: string): ChangelogParseResult {
     if (rawPublication && !publication) {
       issues.push({
         code: "invalid_publication",
-        line: prefix.slice(0, match.index).split("\n").length,
+        line: line.line,
         version,
       });
       continue;

@@ -62,6 +62,9 @@ describe("existing semantic version helpers", () => {
     expect(proximaVersao("1.2.3", "minor")).toBe("1.3.0");
     expect(proximaVersao("1.2.3", "major")).toBe("2.0.0");
     expect(() => proximaVersao("v1.2", "patch")).toThrow();
+    expect(proximaVersao("1.2.9007199254740993", "patch")).toBe(
+      "1.2.9007199254740994",
+    );
   });
 
   it("keeps the legacy single-header stamp strict", () => {
@@ -73,6 +76,20 @@ describe("existing semantic version helpers", () => {
     expect(() => carimbarUnreleased(`${source}${source}`, "1.2.0", "2026-08-22")).toThrow();
     expect(changelogTemVersao("## [1.2.0] - 2026-08-22\n", "1.2.0")).toBe(true);
     expect(changelogTemVersao("## [1.2.1]\n", "1.2.0")).toBe(false);
+
+    const documented = `## [Unreleased]
+
+\`\`\`md
+## [Unreleased]
+## [1.2.0] - 2026-08-22
+\`\`\`
+
+- Change.
+`;
+    expect(changelogTemVersao(documented, "1.2.0")).toBe(false);
+    expect(carimbarUnreleased(documented, "1.2.0", "2026-08-22")).toContain(
+      "## [1.2.0] - 2026-08-22",
+    );
   });
 
   it("sanitizes invalid version values before they reach release logs", () => {
@@ -117,6 +134,33 @@ describe("prepareRelease", () => {
       input[key] = input[key].replace("## [Unreleased]", "## [Unreleased]\n\n## [Unreleased]");
       expectReleaseCode(() => prepareRelease({ documents: input, version: "1.2.0", publishedAt: NOW }), "duplicate_unreleased");
     }
+  });
+
+  it("UT-023 ignores fenced release metadata during coherent preparation", () => {
+    const input = documents();
+    for (const key of ["technical", "ptBR", "en"] as const) {
+      input[key] = input[key].replace(
+        "## [Unreleased]\n\n",
+        `## [Unreleased]
+
+## Details
+
+\`\`\`md
+## [Unreleased]
+## [1.2.0] - 2026-08-22
+\`\`\`
+
+`,
+      );
+    }
+    const result = prepareRelease({
+      documents: input,
+      version: "1.2.0",
+      publishedAt: NOW,
+    });
+    expect(result.status).toBe("prepared");
+    expect(result.documents.ptBR).toContain("## Details");
+    expect(parseUserChangelog(result.documents.ptBR).issues).toEqual([]);
   });
 
   it("UT-024 rejects malformed localized metadata before returning output", () => {
