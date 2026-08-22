@@ -1,4 +1,4 @@
-# master-jobs — instruções para agentes (Codex / OpenCode)
+# master-jobs — instruções para agentes (Codex / OpenCode / Claude)
 
 Sistema de sourcing, scoring e gestão de candidaturas de **Andreus Timm**
 (Senior AI Software Architect, 20+ anos, São Paulo/Brasil, remoto B2B,
@@ -308,6 +308,13 @@ CI de `dev`.
 **Produção não sai sem gente.** A PR `staging → main` é aberta e nunca mesclada
 por robô.
 
+**Branch mesclada é excluída, sempre — local e remota.** Assim que a PR entra
+em `dev` (ou em `main`), a branch de trabalho e a worktree são removidas: `git
+worktree remove` (desbloqueando antes, se estiver locked), `git branch -d` e
+`git push origin --delete <branch>`. A remota é tão obrigatória quanto a local —
+deixar a remota cria uma floresta de branches mortas que ninguém sabe se ainda
+valem. Única exceção: branch ainda não mesclada, que fica até entrar.
+
 **Migração suspende a promoção automática.** Diferença em `drizzle/` ou em
 `src/core/db/schema.ts` entre `staging` e `dev` para o fluxo: o deploy da Vercel
 e a migração disparam do mesmo push e não se conhecem. Migração aditiva
@@ -605,11 +612,12 @@ descreva como pronto o que não está**.
 | `docs/product/personas.md` | Antes de mexer em score ou UI |
 | `MIGRATION.md` | **Antes de criar arquivo novo em `src/`** |
 
-Este arquivo é o espelho de `CLAUDE.md`, gerado a partir dele. **Editou um,
-edite o outro.**
+Este arquivo é a fonte única das instruções para os três harnesses. `CLAUDE.md`
+é um symlink para ele — **edite só aqui.**
 
 > Conforme `~/.claude/RTK.md`: no Codex e no OpenCode todo comando de shell vai
-> prefixado com `rtk`. No Claude Code **não** — lá o hook global já reescreve.
+> prefixado com `rtk`. No Claude Code o hook global reescreve e não duplica o
+> prefixo — o comando já vem com `rtk` e ele não acrescenta outro.
 
 
 <!-- BEGIN:nextjs-agent-rules -->

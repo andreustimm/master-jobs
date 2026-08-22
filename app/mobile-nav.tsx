@@ -1,0 +1,99 @@
+"use client";
+
+import { NavLinks } from "./nav-links";
+import { translator, type LocaleId } from "../src/core/i18n/index.ts";
+
+const id = "menu-mobile";
+
+/**
+ * O menu do celular.
+ *
+ * ## O defeito que isto corrige
+ *
+ * A barra de links rolava na horizontal com a barra de rolagem escondida. Num
+ * aparelho de 375px, depois da marca, do idioma, da aparência e do estado da
+ * sessão, sobrava espaço para **um** link — e nada indicava que havia mais.
+ * Quem olhava concluía que o menu tinha sumido, e estava certo do ponto de vista
+ * que importa: o que não se vê e não se anuncia não existe.
+ *
+ * ## Popover, como o resto do sistema
+ *
+ * Mesmo mecanismo do modal de vaga e do rodapé: o navegador cuida de abrir,
+ * fechar no Escape, dispensar por clique fora e camada de topo.
+ *
+ * ## Por que este é o ÚNICO client component da navegação
+ *
+ * O popover nativo não fecha quando um link dispara navegação SPA: o clique
+ * acontece dentro do popover, então não é light dismiss. Fechar ao navegar exige
+ * um script de cliente — a exceção mínima à invariante "zero JavaScript" desta
+ * árvore, decidida no ADR-001. O fechamento é por event delegation: um único
+ * `onClick` no `<nav>` fecha o popover, cobrindo todos os itens sem interceptar
+ * a navegação (o `Link` do Next.js segue fazendo SPA normalmente).
+ *
+ * `NavLinks` continua server em `nav-links.tsx` — a fileira do desktop não
+ * entra no bundle de cliente por causa deste menu.
+ */
+export function MobileNav({
+  hasCandidateScope,
+  isAdmin,
+  rotulo,
+  locale,
+}: {
+  hasCandidateScope: boolean;
+  isAdmin: boolean;
+  rotulo: string;
+  locale: LocaleId;
+}) {
+  // `t` nasce AQUI, no cliente. Uma função vinda do server como prop não
+  // serializa na fronteira server→client (500 na hidratação) — por isso o
+  // layout passa o `locale` (string) e o tradutor é construído deste lado.
+  const { t } = translator(locale);
+
+  // Fecha o popover no mesmo gesto do clique. `?.` porque um navegador sem a
+  // API não pode derrubar a navegação: sem fechamento, mas sem erro.
+  function fechar() {
+    document.getElementById(id)?.hidePopover?.();
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        popoverTarget={id}
+        popoverTargetAction="show"
+        aria-label={rotulo}
+        // `py-2.5` pelo alvo de toque, igual aos links da barra larga: o ícone
+        // sozinho daria uma área menor que o mínimo confortável no celular.
+        className="flex shrink-0 items-center gap-1.5 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground sm:hidden"
+      >
+        {/* Três traços desenhados em CSS. Um SVG aqui seria mais markup para o
+            mesmo desenho, e o ícone precisa acompanhar `currentColor`. */}
+        <span aria-hidden="true" className="relative flex h-4 w-5 flex-col justify-between">
+          <span className="block h-0.5 w-full rounded-full bg-current" />
+          <span className="block h-0.5 w-full rounded-full bg-current" />
+          <span className="block h-0.5 w-full rounded-full bg-current" />
+        </span>
+      </button>
+
+      <div
+        id={id}
+        popover="auto"
+        // Ancorado no topo e ocupando a largura: um menu estreito no canto
+        // obrigaria a mirar, e mirar num celular é o que produz toque errado.
+        className="m-0 mt-14 w-full max-w-none rounded-none border-b border-[var(--color-hairline)] bg-card p-0 text-card-foreground backdrop:bg-black/40 sm:hidden"
+      >
+        <nav className="grid px-4 py-2" onClick={fechar}>
+          <NavLinks
+            hasCandidateScope={hasCandidateScope}
+            isAdmin={isAdmin}
+            // Linha inteira clicável, e não só o texto: num menu vertical o alvo
+            // é a linha, e um `py-3` generoso é o que separa item de item no
+            // toque.
+            linkClass="flex items-center border-b border-[var(--color-hairline)] py-3 text-sm text-muted-foreground transition-colors last:border-b-0 hover:text-foreground"
+            t={t}
+          />
+        </nav>
+      </div>
+    </>
+  );
+}

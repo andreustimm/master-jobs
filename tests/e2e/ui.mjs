@@ -272,6 +272,44 @@ try {
 
   await page.setViewportSize({ width: 1280, height: 900 });
 
+  /* ------------------------- Menu mobile fecha ao navegar ------------------------ */
+
+  await page.setViewportSize({ width: 375, height: 812 });
+
+  // Abre pelo botão do hambúrguer. O popover nativo é `#menu-mobile`.
+  await page.locator('button[popovertarget="menu-mobile"]').click();
+  await page.waitForTimeout(250);
+  check("menu mobile abre ao tocar no botão", await page.locator("#menu-mobile").isVisible());
+
+  // Fecha com Escape — o light dismiss nativo não pode ter regredido.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(250);
+  check("menu mobile fecha com Escape", !(await page.locator("#menu-mobile").isVisible()));
+
+  // Fecha ao clicar fora — idem.
+  await page.locator('button[popovertarget="menu-mobile"]').click();
+  await page.waitForTimeout(250);
+  await page.mouse.click(200, 700);
+  await page.waitForTimeout(250);
+  check("menu mobile fecha ao tocar fora", !(await page.locator("#menu-mobile").isVisible()));
+
+  // O defeito em si: clicar num item navega e o menu precisa fechar.
+  await page.goto(`${BASE}/compare`, { waitUntil: "networkidle" });
+  await page.locator('button[popovertarget="menu-mobile"]').click();
+  await page.waitForTimeout(250);
+  await page.locator('#menu-mobile a[href="/jobs"]').click();
+  await page.waitForURL("**/jobs", { timeout: 10000 });
+  await page.waitForTimeout(250);
+  check("menu mobile fecha ao navegar por um item", !(await page.locator("#menu-mobile").isVisible()));
+
+  // Reabertura imediata: sem estado residual do fechamento por navegação.
+  await page.locator('button[popovertarget="menu-mobile"]').click();
+  await page.waitForTimeout(250);
+  check("menu mobile reabre sem estado residual", await page.locator("#menu-mobile").isVisible());
+  await page.keyboard.press("Escape");
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+
   /* ------------------------------- Aparência ------------------------------- */
 
   await page.setViewportSize({ width: 1280, height: 900 });

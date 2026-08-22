@@ -24,7 +24,8 @@ import { AppearanceSwitch } from "./theme-switch";
 import { ServiceWorkerRegister } from "./service-worker";
 import { stopImpersonatingAction } from "./admin/actions";
 import { LocaleSwitch } from "./locale-switch";
-import { MobileNav, NavLinks } from "./nav-links";
+import { NavLinks } from "./nav-links";
+import { MobileNav } from "./mobile-nav";
 import { headers } from "next/headers";
 import {
   LOCALE_COOKIE,
@@ -126,7 +127,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     // `data-mode` fica ausente em `system` — é a ausência que devolve a decisão
     // para a `prefers-color-scheme`.
-    <html lang={locale} data-theme={theme} data-mode={modeAttribute(mode)}>
+    //
+    // `suppressHydrationWarning` aqui pelo mesmo motivo do `<body>` lá embaixo,
+    // mas com uma fonte própria: o script inline de `renderStandaloneScript`
+    // adiciona `pwa-standalone` ao `document.documentElement` ANTES da
+    // hidratação quando o app roda instalado. O servidor não sabe que é PWA e
+    // renderiza sem a classe; o React hidrata e vê a diferença. É mutação
+    // intencional de atributo, não defeito — vale só para este elemento e não
+    // desce para os filhos.
+    <html lang={locale} data-theme={theme} data-mode={modeAttribute(mode)} suppressHydrationWarning>
       <head>
         {/* Antes de tudo: marca o modo instalado para o CSS de área segura
             valer já na primeira pintura. Depois da primeira pintura, o
@@ -214,7 +223,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   hasCandidateScope={hasCandidateScope}
                   isAdmin={isAdmin}
                   rotulo={t("nav.menu")}
-                  t={t}
+                  locale={locale}
                 />
               )}
 
