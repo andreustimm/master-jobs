@@ -551,7 +551,7 @@ try {
 
   const original = visibility.checked ?? "private";
   await page.check('input[name="visibility"][value="recruiters"]');
-  await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
+  await page.locator('[data-testid="save-visibility"]').click();
   await page.waitForTimeout(1200);
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
   const saved = await page.evaluate(
@@ -562,7 +562,7 @@ try {
   // Devolve ao estado anterior: um teste que deixa o perfil mais exposto do que
   // encontrou é pior que teste nenhum.
   await page.check(`input[name="visibility"][value="${original}"]`);
-  await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
+  await page.locator('[data-testid="save-visibility"]').click();
   await page.waitForTimeout(1200);
 
 
@@ -772,7 +772,7 @@ try {
 
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
   await page.check('input[name="visibility"][value="public"]');
-  await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
+  await page.locator('[data-testid="save-visibility"]').click();
   await page.waitForTimeout(1200);
   const publicHref = await page.evaluate(
     () => document.querySelector('a[href^="/p/"]')?.getAttribute("href") ?? null,
@@ -800,7 +800,7 @@ try {
 
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
   await page.check('input[name="visibility"][value="private"]');
-  await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
+  await page.locator('[data-testid="save-visibility"]').click();
   await page.waitForTimeout(1200);
   if (publicHref) {
     const closed = await anonPage.goto(`${BASE}${publicHref}`, { waitUntil: "domcontentloaded" });
@@ -1078,7 +1078,7 @@ try {
   // 404 realmente consumirem o mesmo balde.
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
   await page.check('input[name="visibility"][value="public"]');
-  await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
+  await page.locator('[data-testid="save-visibility"]').click();
   await page.waitForTimeout(1200);
 
   const burstCtx = await browser.newContext({
@@ -1121,7 +1121,7 @@ try {
   // que teste nenhum.
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
   await page.check('input[name="visibility"][value="private"]');
-  await page.click('button:has-text("SALVAR VISIBILIDADE"), button:has-text("SAVE VISIBILITY")');
+  await page.locator('[data-testid="save-visibility"]').click();
 
   /* --------------------------------- Logout -------------------------------- */
 
