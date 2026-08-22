@@ -8,6 +8,7 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-08-22
 ## [1.1.0] - 2026-08-21
 
 ### Adicionado

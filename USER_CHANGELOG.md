@@ -13,6 +13,7 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-08-22
 ## [1.1.0] - 2026-08-21
 
 ### Novidade
