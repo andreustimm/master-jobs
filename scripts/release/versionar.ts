@@ -40,7 +40,14 @@ function assuntosDesdeUltimaTag(): string[] {
   const ultimaTag = tagMaisRecente();
   const range = ultimaTag ? `${ultimaTag}..${base}` : base;
   try {
-    return execFileSync("git", ["log", "--format=%s", range], { encoding: "utf8" })
+    // `--no-merges` é obrigatório: o commit de merge ("Merge pull request
+    // #N") não tem prefixo convencional e cairia no fallback de patch — cada
+    // promoção staging→main bumpearia uma versão fantasma, em loop. Merge é
+    // invólucro, não mudança; o que muda são os commits que ele reúne, e esses
+    // já estão no range por si sós.
+    return execFileSync("git", ["log", "--format=%s", "--no-merges", range], {
+      encoding: "utf8",
+    })
       .split("\n")
       .map((l) => l.trim())
       .filter(Boolean);
