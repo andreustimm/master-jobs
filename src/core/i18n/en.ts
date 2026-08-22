@@ -387,7 +387,7 @@ export const en: Dictionary = {
     newUser: "New account",
     email: "Email",
     fullName: "Full name",
-    fullNameHint: "Optional. Shown at the top after signing in; without it, the email is shown instead.",
+    fullNameHint: "Required. Shown at the top after signing in.",
     noName: "no name",
     roles: "Roles",
     candidate: "Candidate",
