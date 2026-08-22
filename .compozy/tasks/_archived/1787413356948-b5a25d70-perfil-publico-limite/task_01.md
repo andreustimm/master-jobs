@@ -13,4 +13,3 @@ commit `ceb34dc`.
 ## Tests
 
 - [x] T1, T2, T3, T4, T8 — limite, janela, isolamento por IP e descarte de entradas antigas
-

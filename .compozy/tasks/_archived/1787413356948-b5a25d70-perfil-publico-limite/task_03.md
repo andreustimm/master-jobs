@@ -13,4 +13,3 @@ commit `ceb34dc`.
 ## Tests
 
 - [x] T5, T9 — contabilização uniforme de 200/404 e resposta 429 com `Retry-After`
-
