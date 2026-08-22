@@ -4,6 +4,7 @@ import {
   carimbarUnreleased,
   changelogTemVersao,
   classificarBump,
+  commitDaVersao,
   proximaVersao,
   releasePrecisaRetomarTag,
   todosChangelogsTemVersao,
@@ -175,9 +176,23 @@ describe("retomada dos workflows de release", () => {
       ".github/workflows/sincronizar-apos-main.yml",
     ]) {
       expect(readFileSync(arquivo, "utf8"), arquivo).toContain(
-        'git log -1 --format=%H --grep="^chore(release): ${VERSAO}$"',
+        'scripts/release/commit-da-versao.ts origin/',
       );
     }
+  });
+
+  it("resolve somente assunto exato e recusa commit ambíguo", () => {
+    const valido = "a1b2c3\tchore(release): 1.1.0\n";
+    const armadilha = "d4e5f6\tdocs: menciona chore(release): 1.1.0 no corpo\n";
+    expect(commitDaVersao(`${armadilha}${valido}`, "1.1.0")).toBe("a1b2c3");
+    expect(() => commitDaVersao(`${valido}${valido}`, "1.1.0")).toThrow("encontrados 2");
+    expect(() => commitDaVersao(armadilha, "1.1.0")).toThrow("encontrados 0");
+  });
+
+  it("main valida uma tag existente contra o commit resolvido", () => {
+    const workflow = readFileSync(".github/workflows/sincronizar-apos-main.yml", "utf8");
+    expect(workflow).toContain('TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}"');
+    expect(workflow).toContain('if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$SHA" ]; then');
   });
 
   it("staging avança somente até o SHA publicado pela etapa da tag", () => {
@@ -188,5 +203,12 @@ describe("retomada dos workflows de release", () => {
     expect(workflow).toContain('ALVO=${RELEASE_SHA:-origin/dev}');
     expect(workflow).toContain('git push origin "${ALVO}:refs/heads/staging"');
     expect(workflow).not.toContain('SHA=$(git rev-parse origin/dev)');
+  });
+
+  it("no-release valida a tag vigente antes de promover manutenção", () => {
+    const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
+    expect(workflow).toContain("name: Validar tag vigente quando não há bump");
+    expect(workflow).toContain("if: steps.versao.outputs.versao == 'no-release'");
+    expect(workflow).toContain('if [ "$TAG_SHA" != "$SHA" ]; then');
   });
 });

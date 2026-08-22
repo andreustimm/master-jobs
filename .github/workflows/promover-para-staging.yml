@@ -205,6 +205,22 @@ jobs:
           git fetch origin dev --quiet
           echo "::notice::Versão ${VERSAO} commitada em dev."
 
+      - name: Validar tag vigente quando não há bump
+        if: steps.versao.outputs.versao == 'no-release'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+        run: |
+          # `no-release` permite promover manutenção, mas não torna uma tag
+          # ausente ou deslocada aceitável. A versão vigente continua sendo a
+          # fronteira auditável do último release.
+          VERSAO=$(node -p "require('./package.json').version")
+          SHA=$(node --experimental-strip-types --no-warnings scripts/release/commit-da-versao.ts origin/dev "$VERSAO")
+          TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --jq '.object.sha' 2>/dev/null || true)
+          if [ "$TAG_SHA" != "$SHA" ]; then
+            echo "::error::Tag v${VERSAO} deveria apontar para ${SHA}, mas aponta para ${TAG_SHA:-nenhum commit}."
+            exit 1
+          fi
+
       - name: Criar a tag da versão
         id: tag
         if: >-
@@ -220,11 +236,7 @@ jobs:
           # o resto do fluxo a enxerga.
           # Num retry, `origin/dev` pode já ter avançado além do bump. A tag
           # pertence ao commit que gravou esta versão, não ao topo acidental.
-          SHA=$(git log -1 --format=%H --grep="^chore(release): ${VERSAO}$" origin/dev)
-          if [ -z "$SHA" ]; then
-            echo "::error::Commit chore(release): ${VERSAO} não encontrado em dev."
-            exit 1
-          fi
+          SHA=$(node --experimental-strip-types --no-warnings scripts/release/commit-da-versao.ts origin/dev "$VERSAO")
           TAG_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${VERSAO}" --jq '.object.sha' 2>/dev/null || true)
           if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$SHA" ]; then
             echo "::error::Tag v${VERSAO} aponta para ${TAG_SHA}, mas o bump está em ${SHA}."

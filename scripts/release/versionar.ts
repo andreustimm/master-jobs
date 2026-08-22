@@ -91,12 +91,6 @@ function hoje(): string {
 }
 
 function main(): void {
-  const tipo = classificarBump(assuntosDesdeUltimaTag());
-  if (!tipo) {
-    console.log("no-release");
-    return;
-  }
-
   const atual = lerPkg().version;
   const changelogs = ARQUIVOS_CHANGELOG.map((arquivo) => ({
     arquivo,
@@ -113,6 +107,14 @@ function main(): void {
     tagExiste(atual),
   )) {
     console.log("already-released");
+    return;
+  }
+
+  const tipo = classificarBump(assuntosDesdeUltimaTag());
+  if (!tipo) {
+    // Neste ponto a versão atual já tem tag. Commits de manutenção não pedem
+    // versão nova e podem seguir para staging sob a tag vigente.
+    console.log("no-release");
     return;
   }
 

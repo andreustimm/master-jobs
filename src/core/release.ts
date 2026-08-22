@@ -188,3 +188,32 @@ export function releasePrecisaRetomarTag(
   const persistida = todosChangelogsTemVersao(changelogs, versaoAtual);
   return !tagAtualExiste && persistida;
 }
+
+/**
+ * Resolve o único commit cujo assunto carimba a versão pedida.
+ *
+ * O log vem como `SHA<TAB>assunto`, para a comparação não aceitar a frase no
+ * corpo de outro commit. Zero ou dois candidatos são estados ambíguos: escolher
+ * qualquer um poderia criar uma tag válida apontando para o código errado.
+ */
+export function commitDaVersao(log: string, versao: string): string {
+  const assuntoEsperado = `chore(release): ${versao}`;
+  const candidatos = log
+    .split("\n")
+    .map((linha) => {
+      const separador = linha.indexOf("\t");
+      if (separador < 1) return null;
+      return {
+        sha: linha.slice(0, separador),
+        assunto: linha.slice(separador + 1),
+      };
+    })
+    .filter((item): item is { sha: string; assunto: string } => item?.assunto === assuntoEsperado);
+
+  if (candidatos.length !== 1) {
+    throw new Error(
+      `esperado um commit "${assuntoEsperado}", encontrados ${candidatos.length}`,
+    );
+  }
+  return candidatos[0]!.sha;
+}
