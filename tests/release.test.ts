@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 import {
   carimbarUnreleased,
   changelogTemVersao,
@@ -247,15 +248,19 @@ describe("retomada dos workflows de release", () => {
     expect(() => shaDaTagRemota({}, "1.1.0")).toThrow("não é uma lista");
   });
 
-  it("os dois escritores compartilham o mesmo grupo de concorrência", () => {
+  it("os dois escritores compartilham a mesma fila de concorrência", () => {
     for (const arquivo of [
       ".github/workflows/promover-para-staging.yml",
       ".github/workflows/sincronizar-apos-main.yml",
     ]) {
-      const workflow = readFileSync(arquivo, "utf8");
-      expect(workflow, arquivo).toContain("group: release-versionar");
-      expect(workflow, arquivo).toContain("queue: max");
-      expect(workflow, arquivo).toContain("cancel-in-progress: false");
+      const workflow = parse(readFileSync(arquivo, "utf8")) as {
+        concurrency?: unknown;
+      };
+      expect(workflow.concurrency, arquivo).toEqual({
+        group: "release-versionar",
+        queue: "max",
+        "cancel-in-progress": false,
+      });
     }
   });
 });
