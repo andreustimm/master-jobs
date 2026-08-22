@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { parseUserChangelog, type VersaoChangelog } from "../src/core/changelog.ts";
-import type { Translator } from "../src/core/i18n/index.ts";
+import { formatChangelogDiagnostic, parseUserChangelog } from "../src/core/changelog.ts";
+import type { LocaleId, Translator } from "../src/core/i18n/index.ts";
 
 /**
  * Rodapé com a versão no ar e o histórico de novidades.
@@ -26,19 +26,63 @@ const COR_SECAO: Record<string, string> = {
   Correção: "text-[var(--warn)]",
 };
 
-async function lerChangelog(): Promise<VersaoChangelog[]> {
+type LegacyRelease = {
+  versao: string;
+  data: string;
+  secoes: { titulo: string; itens: string[] }[];
+};
+
+const CHANGELOG_FILE: Record<LocaleId, string> = {
+  "pt-BR": "USER_CHANGELOG.pt-BR.md",
+  en: "USER_CHANGELOG.en.md",
+};
+
+function secoesDoMarkdown(markdown: string): LegacyRelease["secoes"] {
+  const secoes: LegacyRelease["secoes"] = [];
+  let atual: LegacyRelease["secoes"][number] | undefined;
+  for (const linha of markdown.split("\n")) {
+    const cabecalho = /^###\s+(.+?)\s*$/.exec(linha);
+    if (cabecalho) {
+      atual = { titulo: cabecalho[1]!, itens: [] };
+      secoes.push(atual);
+      continue;
+    }
+    const item = /^[-*]\s+(.+?)\s*$/.exec(linha);
+    if (item && atual) atual.itens.push(item[1]!);
+  }
+  return secoes.filter((secao) => secao.itens.length > 0);
+}
+
+async function lerChangelog(locale: LocaleId): Promise<LegacyRelease[]> {
   try {
-    const bruto = await readFile(join(process.cwd(), "USER_CHANGELOG.md"), "utf8");
-    return parseUserChangelog(bruto);
+    const bruto = await readFile(join(process.cwd(), CHANGELOG_FILE[locale]), "utf8");
+    const parsed = parseUserChangelog(bruto);
+    for (const issue of parsed.issues) {
+      console.warn(formatChangelogDiagnostic(issue, locale));
+    }
+    return parsed.releases.map((release) => ({
+      versao: release.version,
+      data: release.publication.value,
+      secoes: secoesDoMarkdown(release.markdown),
+    }));
   } catch {
     // Arquivo ausente ou ilegível não pode derrubar toda página do sistema —
     // o rodapé é global. Sem changelog, o rodapé mostra só a versão.
+    console.warn(`changelog:read_failed locale=${locale}`);
     return [];
   }
 }
 
-export async function Footer({ versao, t }: { versao: string; t: Translator["t"] }) {
-  const versoes = await lerChangelog();
+export async function Footer({
+  versao,
+  locale,
+  t,
+}: {
+  versao: string;
+  locale: LocaleId;
+  t: Translator["t"];
+}) {
+  const versoes = await lerChangelog(locale);
   const id = "changelog-modal";
 
   return (

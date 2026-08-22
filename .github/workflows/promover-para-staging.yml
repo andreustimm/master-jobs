@@ -176,8 +176,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
         run: |
-          # Decide o bump pelos commits `últimaTag..dev`, carimba os dois
-          # changelogs e o package.json, e devolve a versão nova. É o escritor
+          # Decide o bump pelos commits `últimaTag..dev`, carimba o changelog
+          # técnico, as duas edições de usuário e o package.json. É o escritor
           # único de versão do fluxo — só a promoção, serializada pelo
           # concurrency, escreve versão. Uma promoção = uma versão.
           git checkout origin/dev
@@ -209,7 +209,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json CHANGELOG.md USER_CHANGELOG.md
+          git add package.json CHANGELOG.md USER_CHANGELOG.pt-BR.md USER_CHANGELOG.en.md
           git commit -m "chore(release): ${VERSAO}"
 
           # O commit do bump precisa estar em `dev` antes do fast-forward —
@@ -296,7 +296,7 @@ jobs:
               "" \
               "Antes de mesclar, confira:" \
               "" \
-              "- [ ] O que mudou está descrito em \`USER_CHANGELOG.md\`, em linguagem de usuário" \
+              "- [ ] O que mudou está descrito em \`USER_CHANGELOG.pt-BR.md\` e \`USER_CHANGELOG.en.md\`, em linguagem de usuário" \
               "- [ ] \`package.json\` está na versão que a PR anuncia" \
               "- [ ] Se há migração, ela é aditiva — deploy e migração disparam do mesmo push e não se conhecem" \
               "" \

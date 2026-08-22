@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
+import { parseUserChangelog } from "../src/core/changelog.ts";
 import {
   carimbarUnreleased,
   changelogTemVersao,
@@ -8,128 +12,265 @@ import {
   commitDaVersao,
   estadoDaTag,
   exigirTagAlvoAusente,
+  prepareRelease,
   proximaVersao,
   releasePrecisaRetomarTag,
   shaDaTagRemota,
   todosChangelogsTemVersao,
+  ReleaseDomainError,
+  type ReleaseDocuments,
 } from "../src/core/release.ts";
+import { applyReleaseFiles } from "../scripts/release/versionar.ts";
 
-describe("classificarBump", () => {
-  it("fix puro pede patch", () => {
-    expect(classificarBump(["fix: corrige o KDF"])).toBe("patch");
+const NOW = new Date("2026-08-22T11:46:00.000Z");
+
+function documents(options: { noUserChange?: boolean; technicalTerm?: string } = {}): ReleaseDocuments {
+  const ptBody = options.noUserChange
+    ? "<!-- sem-nota-usuario -->"
+    : "### Novidade\n\n- Primeira linha\n  continuada sem truncar.";
+  const enBody = options.noUserChange
+    ? "<!-- sem-nota-usuario -->"
+    : "### New\n\n- First line\n  continued without truncation.";
+  return {
+    technical: `# Changelog\n\n## [Unreleased]\n\n### Added\n\n- ${options.technicalTerm ?? "Technical change."}\n\n## [1.1.0] - 2026-08-21\n\n- Previous technical release.\n`,
+    ptBR: `# Novidades\n\n## [Unreleased]\n\n${ptBody}\n\n## [1.1.0] - 2026-08-21\n\n- Versão anterior.\n`,
+    en: `# What's New\n\n## [Unreleased]\n\n${enBody}\n\n## [1.1.0] - 2026-08-21\n\n- Previous release.\n`,
+  };
+}
+
+function expectReleaseCode(action: () => unknown, code: string): void {
+  try {
+    action();
+  } catch (error) {
+    expect(error).toMatchObject({ code });
+    return;
+  }
+  throw new Error(`expected ${code}`);
+}
+
+describe("existing semantic version helpers", () => {
+  it("classifies the highest release bump", () => {
+    expect(classificarBump(["fix: one"])).toBe("patch");
+    expect(classificarBump(["fix: one", "feat: two"])).toBe("minor");
+    expect(classificarBump(["feat!: three"])).toBe("major");
+    expect(classificarBump(["chore: internal"])).toBeNull();
+    expect(classificarBump(["unlabelled product change"])).toBe("patch");
   });
 
-  it("feat puro pede minor", () => {
-    expect(classificarBump(["feat: score por candidato"])).toBe("minor");
+  it("increments canonical versions and rejects malformed input", () => {
+    expect(proximaVersao("1.2.3", "patch")).toBe("1.2.4");
+    expect(proximaVersao("1.2.3", "minor")).toBe("1.3.0");
+    expect(proximaVersao("1.2.3", "major")).toBe("2.0.0");
+    expect(() => proximaVersao("v1.2", "patch")).toThrow();
   });
 
-  it("com escopo continua valendo", () => {
-    expect(classificarBump(["fix(auth): corrige o KDF"])).toBe("patch");
-    expect(classificarBump(["feat(matching): deriva perfil do currículo"])).toBe("minor");
-  });
-
-  it("BREAKING CHANGE pede major, mesmo com feat e fix juntos", () => {
-    const leva = [
-      "fix: uma correção",
-      "feat: uma funcionalidade",
-      "feat!: removo a API antiga",
-    ];
-    expect(classificarBump(leva)).toBe("major");
-  });
-
-  it("`tipo!` sem escopo pede major", () => {
-    expect(classificarBump(["feat!: quebra a interface"])).toBe("major");
-    expect(classificarBump(["fix(auth)!: muda o formato da senha"])).toBe("major");
-  });
-
-  it("o maior nível vence: feat + fix → minor", () => {
-    expect(classificarBump(["fix: a", "feat: b"])).toBe("minor");
-  });
-
-  it("manutenção explícita não pede release", () => {
-    expect(classificarBump(["chore: bump de dependência"])).toBeNull();
-    expect(classificarBump(["docs: atualiza o README"])).toBeNull();
-    expect(classificarBump([])).toBeNull();
-  });
-
-  it("mensagem sem prefixo vira patch, nunca é ignorada", () => {
-    // O defeito que este fallback mata: a versão parava em 1.1.0 enquanto o
-    // código avançava, porque os commits não tinham `fix:`/`feat:` no título.
-    // Mensagem livre é, no pior caso, uma correção.
-    expect(classificarBump(["Menu mobile fecha ao navegar: client component dedicado"])).toBe("patch");
-    expect(classificarBump(["Backlog: M-06 marcado como entregue"])).toBe("patch");
-  });
-
-  it("manutenção explícita não abafa um commit sem rótulo na mesma leva", () => {
-    expect(classificarBump(["chore: bump", "Menu mobile fecha ao navegar"])).toBe("patch");
+  it("keeps the legacy single-header stamp strict", () => {
+    const source = "## [Unreleased]\n\n- Change.\n";
+    expect(carimbarUnreleased(source, "1.2.0", "2026-08-22")).toContain(
+      "## [1.2.0] - 2026-08-22",
+    );
+    expect(() => carimbarUnreleased("", "1.2.0", "2026-08-22")).toThrow();
+    expect(() => carimbarUnreleased(`${source}${source}`, "1.2.0", "2026-08-22")).toThrow();
+    expect(changelogTemVersao("## [1.2.0] - 2026-08-22\n", "1.2.0")).toBe(true);
+    expect(changelogTemVersao("## [1.2.1]\n", "1.2.0")).toBe(false);
   });
 });
 
-describe("proximaVersao", () => {
-  it("patch, minor e major andam uma casa cada um", () => {
-    expect(proximaVersao("1.0.0", "patch")).toBe("1.0.1");
-    expect(proximaVersao("1.0.0", "minor")).toBe("1.1.0");
-    expect(proximaVersao("1.0.0", "major")).toBe("2.0.0");
+describe("prepareRelease", () => {
+  it("UT-020 prepares all three documents coherently", () => {
+    const result = prepareRelease({ documents: documents(), version: "1.2.0", publishedAt: NOW });
+    expect(result.status).toBe("prepared");
+    expect(result.documents.technical).toContain("## [1.2.0] - 2026-08-22");
+    expect(result.documents.ptBR).toContain("## [1.2.0] - 2026-08-22T11:46:00.000Z");
+    expect(result.documents.en).toContain("## [1.2.0] - 2026-08-22T11:46:00.000Z");
   });
 
-  it("minor zera o patch e major zera tudo", () => {
-    expect(proximaVersao("1.2.3", "minor")).toBe("1.3.0");
-    expect(proximaVersao("1.2.3", "major")).toBe("2.0.0");
+  it("UT-021 keeps the technical date while localized editions retain the instant", () => {
+    const result = prepareRelease({ documents: documents(), version: "1.2.0", publishedAt: NOW });
+    expect(result.documents.technical).not.toContain("T11:46");
+    expect(result.documents.ptBR.match(/2026-08-22T11:46:00\.000Z/g)).toHaveLength(1);
+    expect(result.documents.en.match(/2026-08-22T11:46:00\.000Z/g)).toHaveLength(1);
   });
 
-  it("recusa versão que não é MAJOR.MINOR.PATCH", () => {
-    for (const torta of ["", "1.0", "v1.0.0", "um.dois.três", "1.0.0.0"]) {
-      expect(() => proximaVersao(torta, "patch")).toThrow();
+  it("UT-022 rejects any required document without Unreleased", () => {
+    for (const key of ["technical", "ptBR", "en"] as const) {
+      const input = documents();
+      input[key] = input[key].replace("## [Unreleased]", "## Draft");
+      expectReleaseCode(() => prepareRelease({ documents: input, version: "1.2.0", publishedAt: NOW }), "missing_unreleased");
+    }
+  });
+
+  it("UT-023 rejects duplicate Unreleased sections", () => {
+    for (const key of ["technical", "ptBR", "en"] as const) {
+      const input = documents();
+      input[key] = input[key].replace("## [Unreleased]", "## [Unreleased]\n\n## [Unreleased]");
+      expectReleaseCode(() => prepareRelease({ documents: input, version: "1.2.0", publishedAt: NOW }), "duplicate_unreleased");
+    }
+  });
+
+  it("UT-024 rejects malformed localized metadata before returning output", () => {
+    const input = documents();
+    input.en += "\n## [1.0.0] - 2026-02-30\n\n- Invalid history.\n";
+    expectReleaseCode(
+      () => prepareRelease({ documents: input, version: "1.2.0", publishedAt: NOW }),
+      "invalid_publication",
+    );
+  });
+
+  it("UT-025 returns an explicit already-released result without changing bytes", () => {
+    const first = prepareRelease({ documents: documents(), version: "1.2.0", publishedAt: NOW });
+    const retry = prepareRelease({
+      documents: first.documents,
+      version: "1.2.0",
+      publishedAt: new Date("2026-08-23T12:00:00.000Z"),
+    });
+    expect(retry).toEqual({ status: "already-released", documents: first.documents });
+  });
+
+  it("UT-026 rejects a target present only in the technical document", () => {
+    const input = documents();
+    input.technical = carimbarUnreleased(input.technical, "1.2.0", "2026-08-22");
+    expectReleaseCode(
+      () => prepareRelease({ documents: input, version: "1.2.0", publishedAt: NOW }),
+      "partial_existing_release",
+    );
+  });
+
+  it("UT-027 writes one captured instant as identical locale bytes", () => {
+    const result = prepareRelease({ documents: documents(), version: "1.2.0", publishedAt: NOW });
+    const pt = parseUserChangelog(result.documents.ptBR).releases[0]!.publication;
+    const en = parseUserChangelog(result.documents.en).releases[0]!.publication;
+    expect(pt).toEqual(en);
+    expect(pt).toEqual({ kind: "instant", value: NOW.toISOString() });
+  });
+
+  it("UT-028 preserves the first instant on a later retry", () => {
+    const first = prepareRelease({ documents: documents(), version: "1.2.0", publishedAt: NOW });
+    const retry = prepareRelease({
+      documents: first.documents,
+      version: "1.2.0",
+      publishedAt: new Date("2030-01-01T00:00:00.000Z"),
+    });
+    expect(retry.documents.ptBR).toContain(NOW.toISOString());
+    expect(retry.documents.ptBR).not.toContain("2030-01-01T00:00:00.000Z");
+  });
+
+  it("UT-029 advances technical history while symmetric no-user-change stays hidden", () => {
+    const result = prepareRelease({
+      documents: documents({ noUserChange: true }),
+      version: "1.2.0",
+      publishedAt: NOW,
+    });
+    expect(result.documents.technical).toContain("## [1.2.0] - 2026-08-22");
+    for (const localized of [result.documents.ptBR, result.documents.en]) {
+      const parsed = parseUserChangelog(localized);
+      expect(parsed.releases.some((release) => release.version === "1.2.0")).toBe(false);
+      expect(parsed.omitted).toContainEqual({
+        version: "1.2.0",
+        publication: { kind: "instant", value: NOW.toISOString() },
+      });
     }
   });
 });
 
-describe("carimbarUnreleased", () => {
-  const entrada = `## [Unreleased]
+async function withFixture(
+  source: ReleaseDocuments,
+  action: (directory: string) => Promise<void>,
+): Promise<void> {
+  const directory = await mkdtemp(join(tmpdir(), "jho-release-"));
+  try {
+    await Promise.all([
+      writeFile(join(directory, "CHANGELOG.md"), source.technical),
+      writeFile(join(directory, "USER_CHANGELOG.pt-BR.md"), source.ptBR),
+      writeFile(join(directory, "USER_CHANGELOG.en.md"), source.en),
+      writeFile(join(directory, "package.json"), '{\n  "name": "fixture",\n  "version": "1.1.0"\n}\n'),
+    ]);
+    await action(directory);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
 
-### Adicionado
+async function snapshot(directory: string): Promise<Record<string, string>> {
+  const files = ["CHANGELOG.md", "USER_CHANGELOG.pt-BR.md", "USER_CHANGELOG.en.md", "package.json"];
+  return Object.fromEntries(
+    await Promise.all(files.map(async (file) => [file, await readFile(join(directory, file), "utf8")])),
+  );
+}
 
-- Algo novo.
-
-## [1.0.0] - 2026-08-21
-`;
-
-  it("troca o cabeçalho, preserva o texto e reabre um Unreleased vazio", () => {
-    const carimbado = carimbarUnreleased(entrada, "1.1.0", "2026-08-22");
-    expect(carimbado).toContain("## [1.1.0] - 2026-08-22");
-    expect(carimbado).toContain("### Adicionado");
-    expect(carimbado).toContain("- Algo novo.");
-    // A seção em construção reabre no topo: sem isto, a promoção seguinte
-    // falharia por ausência de `[Unreleased]`.
-    expect(carimbado).toContain("## [Unreleased]\n\n## [1.1.0] - 2026-08-22");
-    expect(carimbado.match(/^## \[Unreleased\]\s*$/gm)).toHaveLength(1);
+describe("release filesystem boundary", () => {
+  it("IT-005 writes the successful fixture and preserves multiline bodies", async () => {
+    await withFixture(documents(), async (directory) => {
+      const result = applyReleaseFiles({ directory, version: "1.2.0", publishedAt: NOW });
+      expect(result.status).toBe("prepared");
+      const state = await snapshot(directory);
+      expect(state["CHANGELOG.md"]).toContain("## [1.2.0] - 2026-08-22");
+      expect(state["USER_CHANGELOG.pt-BR.md"]).toContain("Primeira linha\n  continuada");
+      expect(state["USER_CHANGELOG.en.md"]).toContain(NOW.toISOString());
+      expect(JSON.parse(state["package.json"]!).version).toBe("1.2.0");
+    });
   });
 
-  it("sem Unreleased falha em vez de passar mudo", () => {
-    expect(() => carimbarUnreleased("## [1.0.0] - 2026-08-21\n", "1.1.0", "2026-08-22")).toThrow();
-  });
-
-  it("duas seções Unreleased falham", () => {
-    const duplicado = `## [Unreleased]\n\n- a\n\n## [Unreleased]\n\n- b\n`;
-    expect(() => carimbarUnreleased(duplicado, "1.1.0", "2026-08-22")).toThrow();
-  });
-
-  it("versão de destino já existente falha em vez de duplicar", () => {
-    const repetido = `${entrada}\n## [1.1.0] - 2026-08-20\n`;
-    expect(() => carimbarUnreleased(repetido, "1.1.0", "2026-08-22")).toThrow(
-      "já contém",
+  it("IT-006 rejects missing English content with every file byte-identical", async () => {
+    const source = documents();
+    source.en = source.en.replace(
+      "### New\n\n- First line\n  continued without truncation.",
+      "<!-- translator note -->",
     );
-  });
-});
-
-describe("changelogTemVersao", () => {
-  it("aceita com e sem data", () => {
-    expect(changelogTemVersao("## [1.1.0]\n", "1.1.0")).toBe(true);
-    expect(changelogTemVersao("## [1.1.0] - 2026-08-22\n", "1.1.0")).toBe(true);
+    await withFixture(source, async (directory) => {
+      const before = await snapshot(directory);
+      expect(() => applyReleaseFiles({ directory, version: "1.2.0", publishedAt: NOW })).toThrow();
+      expect(await snapshot(directory)).toEqual(before);
+    });
   });
 
-  it("não confunde 1.1.0 com 1.1.1", () => {
-    expect(changelogTemVersao("## [1.1.1]\n", "1.1.0")).toBe(false);
+  it("IT-007 retries with a later clock without duplicating or restamping", async () => {
+    await withFixture(documents(), async (directory) => {
+      applyReleaseFiles({ directory, version: "1.2.0", publishedAt: NOW });
+      const beforeRetry = await snapshot(directory);
+      const retry = applyReleaseFiles({
+        directory,
+        version: "1.2.0",
+        publishedAt: new Date("2026-08-30T00:00:00.000Z"),
+      });
+      expect(retry.status).toBe("already-released");
+      expect(await snapshot(directory)).toEqual(beforeRetry);
+      expect(beforeRetry["USER_CHANGELOG.en.md"]!.match(/## \[1\.2\.0\]/g)).toHaveLength(1);
+    });
+  });
+
+  it("IT-008 rejects a partial target without additional writes", async () => {
+    const source = documents();
+    source.technical = carimbarUnreleased(source.technical, "1.2.0", "2026-08-22");
+    await withFixture(source, async (directory) => {
+      const before = await snapshot(directory);
+      expectReleaseCode(
+        () => applyReleaseFiles({ directory, version: "1.2.0", publishedAt: NOW }),
+        "partial_existing_release",
+      );
+      expect(await snapshot(directory)).toEqual(before);
+    });
+  });
+
+  it("IT-009 publishes no empty locale card for a no-user-change fixture", async () => {
+    await withFixture(documents({ noUserChange: true }), async (directory) => {
+      applyReleaseFiles({ directory, version: "1.2.0", publishedAt: NOW });
+      const state = await snapshot(directory);
+      expect(parseUserChangelog(state["USER_CHANGELOG.pt-BR.md"]!).releases.map((item) => item.version)).not.toContain("1.2.0");
+      expect(parseUserChangelog(state["USER_CHANGELOG.en.md"]!).releases.map((item) => item.version)).not.toContain("1.2.0");
+      expect(JSON.parse(state["package.json"]!).version).toBe("1.2.0");
+    });
+  });
+
+  it("IT-010 never copies technical implementation content into localized documents", async () => {
+    const internal = "src/core/release.ts uses process.env and auth_user";
+    await withFixture(documents({ technicalTerm: internal }), async (directory) => {
+      applyReleaseFiles({ directory, version: "1.2.0", publishedAt: NOW });
+      const state = await snapshot(directory);
+      expect(state["CHANGELOG.md"]).toContain(internal);
+      expect(state["USER_CHANGELOG.pt-BR.md"]).not.toContain(internal);
+      expect(state["USER_CHANGELOG.en.md"]).not.toContain(internal);
+    });
   });
 });
 
@@ -169,8 +310,12 @@ describe("coerência dos changelogs de release", () => {
     );
   });
 
-  it("os dois arquivos reais mantêm exatamente um Unreleased canônico", () => {
-    for (const arquivo of ["CHANGELOG.md", "USER_CHANGELOG.md"]) {
+  it("os três arquivos reais mantêm exatamente um Unreleased canônico", () => {
+    for (const arquivo of [
+      "CHANGELOG.md",
+      "USER_CHANGELOG.pt-BR.md",
+      "USER_CHANGELOG.en.md",
+    ]) {
       const markdown = readFileSync(arquivo, "utf8");
       expect(markdown.match(/^## \[Unreleased\]\s*$/gm), arquivo).toHaveLength(1);
     }

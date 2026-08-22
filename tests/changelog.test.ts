@@ -1,155 +1,298 @@
+import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { parseUserChangelog, versaoAtual } from "../src/core/changelog.ts";
+import {
+  ChangelogDomainError,
+  formatChangelogDiagnostic,
+  formatPublication,
+  parseUserChangelog,
+  validateLocalizedChangelogs,
+  versaoAtual,
+  type ChangelogParseResult,
+} from "../src/core/changelog.ts";
 
-/**
- * O changelog que o usuário lê.
- *
- * Dois tipos de caso aqui, e vale distinguir: os primeiros exercitam o parser
- * com markdown escrito à mão no próprio teste; o último lê o arquivo REAL do
- * repositório. O parser pode estar perfeito e o arquivo, errado — e é o arquivo
- * que aparece na tela.
- */
+function release(version: string, publication: string, body = "### New\n\n- Visible change."): string {
+  return `## [${version}] - ${publication}\n\n${body}\n`;
+}
 
-const EXEMPLO = `# Novidades
-
-Texto de introdução que não é versão nenhuma.
-
-<!-- sem-nota-usuario: 1.0.1 mudança interna, nada muda para quem usa -->
-
-## [1.1.0] - 2026-09-01
-
-### Novidade
-
-- A primeira coisa nova.
-- A segunda coisa nova.
-
-### Correção
-
-- Algo que estava errado parou de estar.
-
-## [1.0.0] - 2026-08-21
-
-### Novidade
-
-- O começo de tudo.
-`;
+function expectDomainCode(action: () => void, code: string): ChangelogDomainError {
+  try {
+    action();
+  } catch (error) {
+    expect(error).toBeInstanceOf(ChangelogDomainError);
+    expect((error as ChangelogDomainError).code).toBe(code);
+    return error as ChangelogDomainError;
+  }
+  throw new Error(`expected ${code}`);
+}
 
 describe("parseUserChangelog", () => {
-  it("lê versões e datas, da mais nova para a mais antiga", () => {
-    const versoes = parseUserChangelog(EXEMPLO);
-
-    expect(versoes.map((v) => v.versao)).toEqual(["1.1.0", "1.0.0"]);
-    expect(versoes[0]!.data).toBe("2026-09-01");
+  it("UT-001 parses a canonical UTC instant", () => {
+    const result = parseUserChangelog(release("1.2.0", "2026-08-22T11:46:00.000Z"));
+    expect(result.releases[0]).toMatchObject({
+      version: "1.2.0",
+      publication: { kind: "instant", value: "2026-08-22T11:46:00.000Z" },
+    });
   });
 
-  it("agrupa os itens sob a seção a que pertencem", () => {
-    const [nova] = parseUserChangelog(EXEMPLO);
-
-    expect(nova!.secoes.map((s) => s.titulo)).toEqual(["Novidade", "Correção"]);
-    expect(nova!.secoes[0]!.itens).toHaveLength(2);
-    // A seção seguinte não pode herdar os itens da anterior: seria o defeito
-    // mais discreto possível, com correções listadas como novidades.
-    expect(nova!.secoes[1]!.itens).toEqual(["Algo que estava errado parou de estar."]);
+  it("UT-002 preserves historical date-only precision", () => {
+    const result = parseUserChangelog(release("1.1.0", "2026-08-21"));
+    expect(result.releases[0]!.publication).toEqual({ kind: "date", value: "2026-08-21" });
   });
 
-  it("ignora os comentários de versão sem nota", () => {
-    const versoes = parseUserChangelog(EXEMPLO);
-
-    // `1.0.1` está no arquivo como registro de que a versão existiu e foi
-    // considerada — que não é a mesma coisa que ter sido esquecida. Mas ela não
-    // tem nada a dizer a quem usa, então não aparece.
-    expect(versoes.some((v) => v.versao === "1.0.1")).toBe(false);
+  it("UT-003 preserves wrapped Markdown body bytes", () => {
+    const body = "- First physical line\n  second physical line\n  third physical line\n\nA paragraph\nwrapped again.";
+    const result = parseUserChangelog(release("1.2.0", "2026-08-22", body));
+    expect(result.releases[0]!.markdown).toBe(body);
   });
 
-  it("texto fora de qualquer versão não vira item", () => {
-    // O parágrafo de introdução vem ANTES do primeiro cabeçalho de versão.
-    // Sem a guarda, ele seria atribuído a alguma coisa.
-    const total = parseUserChangelog(EXEMPLO).flatMap((v) => v.secoes).flatMap((s) => s.itens);
-    expect(total.some((i) => i.includes("introdução"))).toBe(false);
+  it("UT-004 delimits complete bodies at version headers", () => {
+    const result = parseUserChangelog(
+      `${release("1.1.0", "2026-08-21", "First body")}${release("1.0.0", "2026-08-20", "Second body")}`,
+    );
+    expect(result.releases.find((item) => item.version === "1.1.0")!.markdown).toBe("First body");
+    expect(result.releases.find((item) => item.version === "1.0.0")!.markdown).toBe("Second body");
   });
 
-  it("seção declarada e vazia é descartada", () => {
-    const versoes = parseUserChangelog("## [2.0.0] - 2026-10-01\n\n### Novidade\n\n### Correção\n\n- Só esta.\n");
-
-    // Um título sozinho na tela sugere que algo não carregou.
-    expect(versoes[0]!.secoes.map((s) => s.titulo)).toEqual(["Correção"]);
+  it("UT-005 isolates an invalid version and keeps the next release", () => {
+    const result = parseUserChangelog(
+      `${release("v1.2", "2026-08-22")}${release("1.1.0", "2026-08-21")}`,
+    );
+    expect(result.issues).toContainEqual(expect.objectContaining({ code: "invalid_version", version: "v1.2" }));
+    expect(result.releases.map((item) => item.version)).toEqual(["1.1.0"]);
   });
 
-  it("aceita `*` além de `-` como marcador", () => {
-    const versoes = parseUserChangelog("## [1.0.0] - 2026-01-01\n\n### Novidade\n\n* Com asterisco.\n");
-    expect(versoes[0]!.secoes[0]!.itens).toEqual(["Com asterisco."]);
+  it("UT-006 rejects impossible calendar dates", () => {
+    const result = parseUserChangelog(
+      `${release("1.2.0", "2026-02-30")}${release("1.1.0", "2026-13-01")}`,
+    );
+    expect(result.releases).toEqual([]);
+    expect(result.issues.map((issue) => issue.code)).toEqual([
+      "invalid_publication",
+      "invalid_publication",
+    ]);
   });
 
-  it("markdown vazio devolve lista vazia, e não estoura", () => {
-    // O rodapé é global: um arquivo vazio não pode derrubar toda página.
-    expect(parseUserChangelog("")).toEqual([]);
-    expect(parseUserChangelog("# Só um título\n")).toEqual([]);
+  it("UT-007 rejects timestamps with a numeric offset", () => {
+    const result = parseUserChangelog(release("1.2.0", "2026-08-22T11:46:00-03:00"));
+    expect(result.releases).toEqual([]);
+    expect(result.issues[0]!.code).toBe("invalid_publication");
   });
 
-  it("item antes de qualquer seção é ignorado, não inventado", () => {
-    // Tolerante com formato, mas não a ponto de criar seção que o autor não
-    // escreveu — o parser não pode adivinhar se aquilo é novidade ou correção.
-    const versoes = parseUserChangelog("## [1.0.0] - 2026-01-01\n\n- Solto.\n\n### Novidade\n\n- Dentro.\n");
-    expect(versoes[0]!.secoes).toHaveLength(1);
-    expect(versoes[0]!.secoes[0]!.itens).toEqual(["Dentro."]);
+  it("UT-008 returns an empty result for empty and title-only documents", () => {
+    for (const source of ["", "# What's New\n"]) {
+      expect(parseUserChangelog(source)).toEqual({ releases: [], omitted: [], issues: [] });
+    }
+  });
+
+  it("UT-009 sorts numeric semantic versions newest first", () => {
+    const result = parseUserChangelog(
+      `${release("1.2.0", "2026-08-20")}${release("2.0.0", "2026-08-22")}${release("1.10.0", "2026-08-21")}`,
+    );
+    expect(result.releases.map((item) => item.version)).toEqual(["2.0.0", "1.10.0", "1.2.0"]);
+  });
+
+  it("UT-010 reports a duplicate and exposes one release identity", () => {
+    const result = parseUserChangelog(
+      `${release("1.2.0", "2026-08-22", "First")}${release("1.2.0", "2026-08-22", "Second")}`,
+    );
+    expect(result.releases).toHaveLength(1);
+    expect(result.issues).toContainEqual(expect.objectContaining({ code: "duplicate_version", version: "1.2.0" }));
+  });
+
+  it("UT-011 rejects whitespace and ordinary comments as an empty body", () => {
+    const result = parseUserChangelog(release("1.2.0", "2026-08-22", "  \n<!-- editorial -->\n"));
+    expect(result.releases).toEqual([]);
+    expect(result.issues[0]!.code).toBe("empty_body");
+  });
+
+  it("UT-012 excludes Unreleased without consuming its body", () => {
+    const source = `## [Unreleased]\n\n- Future multiline\n  content stays here.\n\n${release("1.1.0", "2026-08-21")}`;
+    const result = parseUserChangelog(source);
+    expect(result.releases.map((item) => item.version)).toEqual(["1.1.0"]);
+    expect(source).toContain("- Future multiline\n  content stays here.");
   });
 });
 
-describe("versaoAtual", () => {
-  it("devolve a versão do package.json", () => {
+describe("validateLocalizedChangelogs", () => {
+  it("UT-013 accepts equal metadata with idiomatic prose", () => {
+    const pt = parseUserChangelog(`${release("1.2.0", "2026-08-22", "Mudou.")}${release("1.1.0", "2026-08-21", "Antes.")}`);
+    const en = parseUserChangelog(`${release("1.2.0", "2026-08-22", "Changed.")}${release("1.1.0", "2026-08-21", "Before.")}`);
+    expect(() => validateLocalizedChangelogs(pt, en)).not.toThrow();
+  });
+
+  it("UT-014 identifies a version missing from English", () => {
+    const pt = parseUserChangelog(`${release("1.2.0", "2026-08-22")}${release("1.1.0", "2026-08-21")}`);
+    const en = parseUserChangelog(release("1.2.0", "2026-08-22"));
+    const error = expectDomainCode(() => validateLocalizedChangelogs(pt, en), "localized_version_mismatch");
+    expect(error).toMatchObject({ locale: "en", version: "1.1.0" });
+    expect(error.message).not.toContain("Visible change");
+  });
+
+  it("UT-015 rejects instant-versus-date precision drift", () => {
+    expectDomainCode(
+      () => validateLocalizedChangelogs(
+        parseUserChangelog(release("1.1.0", "2026-08-21T11:46:00.000Z")),
+        parseUserChangelog(release("1.1.0", "2026-08-21")),
+      ),
+      "localized_publication_mismatch",
+    );
+  });
+
+  it("UT-016 rejects different UTC instants", () => {
+    expectDomainCode(
+      () => validateLocalizedChangelogs(
+        parseUserChangelog(release("1.1.0", "2026-08-21T11:46:00.000Z")),
+        parseUserChangelog(release("1.1.0", "2026-08-21T11:47:00.000Z")),
+      ),
+      "localized_publication_mismatch",
+    );
+  });
+
+  it("UT-017 reports a blank counterpart as localized content missing", () => {
+    const blank = parseUserChangelog(release("1.1.0", "2026-08-21", "<!-- translator note -->"));
+    expectDomainCode(
+      () => validateLocalizedChangelogs(parseUserChangelog(release("1.1.0", "2026-08-21")), blank),
+      "localized_content_missing",
+    );
+  });
+
+  it("UT-018 accepts symmetric no-user-change metadata", () => {
+    const omitted = release("1.1.0", "2026-08-21", "<!-- sem-nota-usuario -->");
+    const pt = parseUserChangelog(omitted);
+    const en = parseUserChangelog(omitted);
+    expect(pt.releases).toEqual([]);
+    expect(() => validateLocalizedChangelogs(pt, en)).not.toThrow();
+  });
+
+  it("UT-019 rejects hidden-versus-visible locale drift", () => {
+    expectDomainCode(
+      () => validateLocalizedChangelogs(
+        parseUserChangelog(release("1.1.0", "2026-08-21", "<!-- sem-nota-usuario -->")),
+        parseUserChangelog(release("1.1.0", "2026-08-21")),
+      ),
+      "localized_visibility_mismatch",
+    );
+  });
+});
+
+describe("formatPublication", () => {
+  const instant = { kind: "instant", value: "2026-08-22T11:46:00.000Z" } as const;
+
+  it("UT-030 formats exact Brazilian Portuguese local time", () => {
+    expect(formatPublication(instant, "pt-BR", "America/Sao_Paulo")).toBe("22/08/2026 08:46");
+  });
+
+  it("UT-031 formats exact English local time", () => {
+    expect(formatPublication(instant, "en", "America/Sao_Paulo")).toBe("08/22/2026 08:46");
+  });
+
+  it("UT-032 keeps a Portuguese date free of time", () => {
+    expect(formatPublication({ kind: "date", value: "2026-08-21" }, "pt-BR")).toBe("21/08/2026");
+  });
+
+  it("UT-033 keeps an English date free of time", () => {
+    expect(formatPublication({ kind: "date", value: "2026-08-21" }, "en")).toBe("08/21/2026");
+  });
+
+  it("UT-034 converts across the UTC year boundary", () => {
+    expect(
+      formatPublication(
+        { kind: "instant", value: "2027-01-01T01:30:00.000Z" },
+        "pt-BR",
+        "America/Sao_Paulo",
+      ),
+    ).toBe("31/12/2026 22:30");
+  });
+
+  it("UT-035 follows Intl on both sides of New York's DST jump", () => {
+    expect(formatPublication({ kind: "instant", value: "2026-03-08T06:30:00.000Z" }, "en", "America/New_York")).toBe("03/08/2026 01:30");
+    expect(formatPublication({ kind: "instant", value: "2026-03-08T07:30:00.000Z" }, "en", "America/New_York")).toBe("03/08/2026 03:30");
+  });
+
+  it("UT-036 refuses impossible values and non-UTC instants", () => {
+    expect(formatPublication({ kind: "date", value: "2026-02-30" }, "en")).toBeNull();
+    expect(formatPublication({ kind: "instant", value: "2026-08-22T11:46:00-03:00" }, "en")).toBeNull();
+  });
+});
+
+describe("diagnostics and current version", () => {
+  it("UT-051 emits code, locale, and version without source prose", () => {
+    const diagnostic = formatChangelogDiagnostic(
+      { code: "invalid_publication", version: "1.2.0", line: 9 },
+      "en",
+    );
+    expect(diagnostic).toContain("invalid_publication");
+    expect(diagnostic).toContain("locale=en");
+    expect(diagnostic).toContain("version=1.2.0");
+    expect(diagnostic).not.toContain("secret release prose");
+  });
+
+  it("UT-052 returns package version and falls back for unusable values", () => {
     expect(versaoAtual({ version: "1.2.3" })).toBe("1.2.3");
-  });
-
-  it("sem versão legível, devolve 0.0.0 em vez de quebrar o rodapé", () => {
-    for (const entrada of [{}, { version: "" }, { version: 42 }, { version: null }]) {
-      expect(versaoAtual(entrada as { version?: unknown })).toBe("0.0.0");
+    for (const input of [{}, { version: "" }, { version: "   " }, { version: null }, { version: 2 }]) {
+      expect(versaoAtual(input as { version?: unknown })).toBe("0.0.0");
     }
   });
 });
 
-describe("o arquivo real do repositório", () => {
-  it("é legível pelo parser e tem ao menos uma versão", async () => {
-    const bruto = await readFile("USER_CHANGELOG.md", "utf8");
-    const versoes = parseUserChangelog(bruto);
+describe("localized repository integration", () => {
+  async function realParses(): Promise<[ChangelogParseResult, ChangelogParseResult]> {
+    return [
+      parseUserChangelog(await readFile("USER_CHANGELOG.pt-BR.md", "utf8")),
+      parseUserChangelog(await readFile("USER_CHANGELOG.en.md", "utf8")),
+    ];
+  }
 
-    // O parser pode estar certo e o arquivo, errado — e é o arquivo que a
-    // pessoa vê. Este caso é o que segura um cabeçalho digitado torto.
-    expect(versoes.length).toBeGreaterThan(0);
-    expect(versoes[0]!.secoes.length).toBeGreaterThan(0);
+  it("IT-001 keeps both real histories coherent with package.json", async () => {
+    const [pt, en] = await realParses();
+    const pkg = JSON.parse(await readFile("package.json", "utf8")) as { version: string };
+    expect(pt.issues).toEqual([]);
+    expect(en.issues).toEqual([]);
+    expect(() => validateLocalizedChangelogs(pt, en)).not.toThrow();
+    expect(pt.releases.map(({ version, publication }) => ({ version, publication }))).toEqual(
+      en.releases.map(({ version, publication }) => ({ version, publication })),
+    );
+    expect(pt.releases[0]!.version).toBe(pkg.version);
   });
 
-  it("não vaza detalhe de implementação para a tela do usuário", async () => {
-    const bruto = await readFile("USER_CHANGELOG.md", "utf8");
-    const itens = parseUserChangelog(bruto)
-      .flatMap((v) => v.secoes)
-      .flatMap((s) => s.itens)
-      .join("\n");
-
-    // Esta tela é aberta por qualquer pessoa com acesso ao sistema. Caminho de
-    // arquivo, nome de tabela e endereço de banco descrevem como o sistema é
-    // montado por dentro, e não o que mudou para quem usa.
-    for (const vazamento of [
-      "src/",
-      "app/",
-      ".ts",
-      "libsql://",
-      "auth_user",
-      "job_score",
-      "TURSO_",
-      "process.env",
-    ]) {
-      expect(itens).not.toContain(vazamento);
+  it("IT-002 keeps implementation terms outside complete user bodies", async () => {
+    const [pt, en] = await realParses();
+    const bodies = [...pt.releases, ...en.releases].map((item) => item.markdown).join("\n");
+    for (const forbidden of ["src/", "app/", ".ts", "libsql://", "auth_user", "job_score", "TURSO_", "process.env"]) {
+      expect(bodies).not.toContain(forbidden);
     }
   });
 
-  it("a versão do topo é a mesma que o package.json declara", async () => {
-    const pkg = JSON.parse(await readFile("package.json", "utf8")) as { version: string };
-    const [topo] = parseUserChangelog(await readFile("USER_CHANGELOG.md", "utf8"));
+  it("IT-003 traces both locale files without the deprecated path", async () => {
+    const config = await readFile("next.config.ts", "utf8");
+    expect(config).toContain("./USER_CHANGELOG.pt-BR.md");
+    expect(config).toContain("./USER_CHANGELOG.en.md");
+    expect(config).not.toMatch(/["']\.\/USER_CHANGELOG\.md["']/);
+  });
 
-    // O rodapé mostra a versão do package.json ao lado do link para este
-    // arquivo. Divergirem faria o rodapé anunciar uma versão cujas novidades
-    // ninguém escreveu.
-    expect(topo!.versao).toBe(pkg.version);
+  it("IT-013 preserves date-only history because lightweight tags prove no tag instant", async () => {
+    const [pt, en] = await realParses();
+    expect([...pt.releases, ...en.releases].every((item) => item.publication.kind === "date")).toBe(true);
+    const metadata = execFileSync(
+      "git",
+      ["tag", "--list", "v*", "--format=%(objecttype)"],
+      { encoding: "utf8" },
+    ).trim().split("\n").filter(Boolean);
+    expect(metadata.length).toBeGreaterThan(0);
+    expect(metadata.every((kind) => kind === "commit")).toBe(true);
+  });
+
+  it("IT-014 stages and validates both localized release outputs", async () => {
+    const promotion = await readFile(".github/workflows/promover-para-staging.yml", "utf8");
+    const sync = await readFile(".github/workflows/sincronizar-apos-main.yml", "utf8");
+    const shell = await readFile("scripts/release/versionar.ts", "utf8");
+    for (const source of [promotion, sync, shell]) {
+      expect(source).toContain("USER_CHANGELOG.pt-BR.md");
+      expect(source).toContain("USER_CHANGELOG.en.md");
+      expect(source).not.toMatch(/["' ]USER_CHANGELOG\.md["' ]/);
+    }
+    expect(promotion).toContain("CHANGELOG.md");
+    expect(sync).toContain("CHANGELOG.md");
   });
 });

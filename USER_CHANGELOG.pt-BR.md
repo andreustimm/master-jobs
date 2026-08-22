@@ -1,7 +1,7 @@
 # Novidades
 
 O que muda no Master Jobs a cada versão, em linguagem simples. É este arquivo
-que aparece no rodapé do sistema.
+que aparece no rodapé do sistema quando a interface está em português.
 
 Para o histórico técnico completo — nomes de módulo, decisões de arquitetura,
 o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
@@ -10,6 +10,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 > banco, nome de variável de ambiente. Esta tela é aberta por qualquer pessoa
 > com acesso ao sistema, e descrever a implementação seria contar como ele é
 > montado por dentro. O que se descreve é o efeito.
+
+<!-- sem-nota-usuario: 1.0.1 mudança interna, nada muda para quem usa -->
 
 ## [Unreleased]
 

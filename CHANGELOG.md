@@ -1,7 +1,8 @@
 # Changelog
 
-Histórico técnico, para quem mexe no código. O resumo em linguagem simples, que
-é o exibido no rodapé do sistema, está em [`USER_CHANGELOG.md`](./USER_CHANGELOG.md).
+Histórico técnico, para quem mexe no código. Os resumos em linguagem simples
+exibidos no rodapé ficam em [`USER_CHANGELOG.pt-BR.md`](./USER_CHANGELOG.pt-BR.md)
+e [`USER_CHANGELOG.en.md`](./USER_CHANGELOG.en.md).
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 versionamento por [SemVer](https://semver.org/lang/pt-BR/).

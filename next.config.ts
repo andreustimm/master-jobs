@@ -21,7 +21,7 @@ const config: NextConfig = {
   /**
    * O changelog do rodapé é lido do disco em runtime.
    *
-   * `app/footer.tsx` faz `readFile(join(process.cwd(), "USER_CHANGELOG.md"))`, e
+   * `app/footer.tsx` seleciona um dos dois changelogs localizados em runtime, e
    * o rastreador de dependências não segue caminho montado em tempo de
    * execução: ele não tem como saber que aquela string vira este arquivo. Sem
    * declarar, o markdown entraria no pacote por acaso — pelo mesmo rastreamento
@@ -33,7 +33,7 @@ const config: NextConfig = {
    * Declarar é uma linha; descobrir isso em produção é uma tarde.
    */
   outputFileTracingIncludes: {
-    "/**": ["./USER_CHANGELOG.md"],
+    "/**": ["./USER_CHANGELOG.pt-BR.md", "./USER_CHANGELOG.en.md"],
   },
 
   // Both candidate CVs and manual job descriptions accept files up to 10 MB.

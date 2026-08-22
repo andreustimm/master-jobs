@@ -1,159 +1,181 @@
 /**
- * Orquestração do versionamento — o shell que decide o bump e grava os arquivos.
+ * Filesystem and Git boundary for release versioning.
  *
- * O NÚCLEO puro fica em `src/core/release.ts`, testável sem disco nem git. Aqui
- * mora só a fiação: ler os commits desde a última tag, ler/gravar `package.json`
- * e os dois changelogs, e imprimir a versão nova para quem chamou.
- *
- * Rodado pelo workflow de promoção (`promover-para-staging.yml`) — o ponto
- * serializado do fluxo — e pelo `sincronizar-apos-main.yml` quando um hotfix
- * nasce direto em `main` sem passar pelo caminho normal.
- *
- * ## Por que um script e não um passo inline no YAML
- *
- * A regra que mais quebra (classificar o commit e carimbar o changelog) precisa
- * de teste. YAML não tem teste; uma função pura tem. O workflow chama isto aqui,
- * e os casos vivem em `tests/release.test.ts`.
- *
- * ## Saída
- *
- * Imprime a versão nova (ex.: `1.1.0`) quando houve bump, ou `no-release` quando
- * a leva de commits não pede número novo. Sai com código 0 nos dois casos; só
- * falha (código 1) quando encontra estado que não deveria promover — changelog
- * sem `[Unreleased]`, `package.json` com versão torta.
+ * The pure transaction lives in `src/core/release.ts`. This module validates
+ * all three changelogs before the first write and is also imported by the
+ * integration tests, so the workflows do not hide release behavior in YAML.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { parseUserChangelog } from "../../src/core/changelog.ts";
 import {
-  carimbarUnreleased,
   changelogTemVersao,
   classificarBump,
+  prepareRelease,
   proximaVersao,
-  releasePrecisaRetomarTag,
-  todosChangelogsTemVersao,
+  ReleaseDomainError,
+  versaoSemanticaValida,
+  type PrepareReleaseResult,
+  type ReleaseDocuments,
 } from "../../src/core/release.ts";
 
-// A ref que está sendo promovida (ex.: `origin/dev`), passada como argumento.
-// Default `HEAD` cobre o uso local, sem remote.
-const base = process.argv[2] ?? "HEAD";
-const ARQUIVOS_CHANGELOG = ["CHANGELOG.md", "USER_CHANGELOG.md"] as const;
+export type ApplyReleaseFilesInput = {
+  directory: string;
+  version: string;
+  publishedAt: Date;
+};
 
-/** Assuntos dos commits desde a última tag `v*` até a ref base. */
-function assuntosDesdeUltimaTag(): string[] {
-  const ultimaTag = tagMaisRecente();
-  const range = ultimaTag ? `${ultimaTag}..${base}` : base;
+const RELEASE_FILES = {
+  technical: "CHANGELOG.md",
+  ptBR: "USER_CHANGELOG.pt-BR.md",
+  en: "USER_CHANGELOG.en.md",
+} as const;
+
+function readDocuments(directory: string): ReleaseDocuments {
+  return {
+    technical: readFileSync(resolve(directory, RELEASE_FILES.technical), "utf8"),
+    ptBR: readFileSync(resolve(directory, RELEASE_FILES.ptBR), "utf8"),
+    en: readFileSync(resolve(directory, RELEASE_FILES.en), "utf8"),
+  };
+}
+
+function readPackage(directory: string): { version: string; [key: string]: unknown } {
+  const parsed = JSON.parse(readFileSync(resolve(directory, "package.json"), "utf8")) as {
+    version?: unknown;
+    [key: string]: unknown;
+  };
+  if (typeof parsed.version !== "string" || !versaoSemanticaValida(parsed.version)) {
+    throw new ReleaseDomainError("invalid_release_version", {
+      version: typeof parsed.version === "string" ? parsed.version : undefined,
+    });
+  }
+  return { ...parsed, version: parsed.version };
+}
+
+/** Preflight all bytes before persisting the four-file release transaction. */
+export function applyReleaseFiles(input: ApplyReleaseFilesInput): PrepareReleaseResult {
+  const documents = readDocuments(input.directory);
+  const pkg = readPackage(input.directory);
+  const prepared = prepareRelease({
+    documents,
+    version: input.version,
+    publishedAt: input.publishedAt,
+  });
+
+  if (prepared.status === "already-released") {
+    if (pkg.version !== input.version) {
+      throw new ReleaseDomainError("partial_existing_release", { version: input.version });
+    }
+    return prepared;
+  }
+  if (pkg.version === input.version) {
+    throw new ReleaseDomainError("partial_existing_release", { version: input.version });
+  }
+
+  const nextPackage = `${JSON.stringify({ ...pkg, version: input.version }, null, 2)}\n`;
+  writeFileSync(resolve(input.directory, RELEASE_FILES.technical), prepared.documents.technical);
+  writeFileSync(resolve(input.directory, RELEASE_FILES.ptBR), prepared.documents.ptBR);
+  writeFileSync(resolve(input.directory, RELEASE_FILES.en), prepared.documents.en);
+  writeFileSync(resolve(input.directory, "package.json"), nextPackage);
+  return prepared;
+}
+
+function mostRecentTag(): string | null {
   try {
-    // `--no-merges` é obrigatório: o commit de merge ("Merge pull request
-    // #N") não tem prefixo convencional e cairia no fallback de patch — cada
-    // promoção staging→main bumpearia uma versão fantasma, em loop. Merge é
-    // invólucro, não mudança; o que muda são os commits que ele reúne, e esses
-    // já estão no range por si sós.
+    const output = execFileSync("git", ["tag", "--list", "v*", "--sort=-version:refname"], {
+      encoding: "utf8",
+    }).trim();
+    return output.split("\n").filter(Boolean)[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function commitSubjects(base: string): string[] {
+  const latest = mostRecentTag();
+  const range = latest ? `${latest}..${base}` : base;
+  try {
+    // Merge subjects have no conventional prefix and would create phantom patches.
     return execFileSync("git", ["log", "--format=%s", "--no-merges", range], {
       encoding: "utf8",
     })
       .split("\n")
-      .map((l) => l.trim())
+      .map((line) => line.trim())
       .filter(Boolean);
   } catch {
     return [];
   }
 }
 
-function tagMaisRecente(): string | null {
+function tagExists(version: string): boolean {
   try {
-    const saida = execFileSync(
-      "git",
-      ["tag", "--list", "v*", "--sort=-version:refname"],
-      { encoding: "utf8" },
-    ).trim();
-    return saida.split("\n").filter(Boolean)[0] ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function tagExiste(versao: string): boolean {
-  try {
-    return execFileSync("git", ["tag", "--list", `v${versao}`], { encoding: "utf8" }).trim() !== "";
+    execFileSync("git", ["rev-parse", "--verify", `refs/tags/v${version}`], {
+      stdio: "ignore",
+    });
+    return true;
   } catch {
     return false;
   }
 }
 
-function lerPkg(): { version: string } {
-  return JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
+function documentsContainVersion(documents: ReleaseDocuments, version: string): boolean[] {
+  const ptBR = parseUserChangelog(documents.ptBR);
+  const en = parseUserChangelog(documents.en);
+  return [
+    changelogTemVersao(documents.technical, version),
+    ptBR.releases.some((release) => release.version === version) ||
+      ptBR.omitted.some((release) => release.version === version),
+    en.releases.some((release) => release.version === version) ||
+      en.omitted.some((release) => release.version === version),
+  ];
 }
 
-function gravarPkg(versao: string): void {
-  const pkg = JSON.parse(readFileSync("package.json", "utf8")) as {
-    version: string;
-  };
-  pkg.version = versao;
-  writeFileSync("package.json", `${JSON.stringify(pkg, null, 2)}\n`);
+export function versionar(base = "HEAD", directory = process.cwd()): string {
+  const current = readPackage(directory).version;
+  const currentPresence = documentsContainVersion(readDocuments(directory), current);
+
+  // The version commit reaches the remote before its tag. A retry must finish
+  // that release even when the remaining commit subjects are only maintenance.
+  if (!tagExists(current) && currentPresence.some(Boolean)) {
+    if (!currentPresence.every(Boolean)) {
+      throw new ReleaseDomainError("partial_existing_release", { version: current });
+    }
+    applyReleaseFiles({ directory, version: current, publishedAt: new Date() });
+    return "already-released";
+  }
+
+  const bump = classificarBump(commitSubjects(base));
+  if (!bump) return "no-release";
+
+  const version = proximaVersao(current, bump);
+  const result = applyReleaseFiles({ directory, version, publishedAt: new Date() });
+  return result.status === "already-released" ? "already-released" : version;
 }
 
-/** `2026-08-21`, em UTC — a mesma fonte que o `carimbarUnreleased` imprime. */
-function hoje(): string {
-  return new Date().toISOString().slice(0, 10);
+function safeError(error: unknown): string {
+  if (error instanceof ReleaseDomainError) return error.message;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string"
+  ) {
+    return `release_failed code=${error.code}`;
+  }
+  return "release_failed";
 }
 
-function main(): void {
-  const atual = lerPkg().version;
-  const changelogs = ARQUIVOS_CHANGELOG.map((arquivo) => ({
-    arquivo,
-    conteudo: readFileSync(arquivo, "utf8"),
-  }));
+const direct = process.argv[1]
+  ? import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+  : false;
 
-  // O commit do bump chega ao remoto antes da tag. Se a API da tag falhar,
-  // o retry encontra package e changelogs já avançados, mas ainda sem vX.Y.Z.
-  // Retomar esse mesmo release evita transformar a seção vazia recém-aberta
-  // numa segunda versão sem notas.
-  if (releasePrecisaRetomarTag(
-    changelogs.map(({ conteudo }) => conteudo),
-    atual,
-    tagExiste(atual),
-  )) {
-    console.log("already-released");
-    return;
+if (direct) {
+  try {
+    console.log(versionar(process.argv[2] ?? "HEAD"));
+  } catch (error) {
+    console.error(safeError(error));
+    process.exitCode = 1;
   }
-
-  const tipo = classificarBump(assuntosDesdeUltimaTag());
-  if (!tipo) {
-    // Neste ponto a versão atual já tem tag. Commits de manutenção não pedem
-    // versão nova e podem seguir para staging sob a tag vigente.
-    console.log("no-release");
-    return;
-  }
-
-  const versao = proximaVersao(atual, tipo);
-
-  if (todosChangelogsTemVersao(changelogs.map(({ conteudo }) => conteudo), versao)) {
-    throw new Error(
-      `changelogs já contêm [${versao}], mas package.json ainda declara ${atual}`,
-    );
-  }
-
-  // Calcula os dois resultados antes da primeira escrita. Se um arquivo estiver
-  // inválido, o processo falha sem deixar os changelogs em versões diferentes.
-  const data = hoje();
-  const carimbados = changelogs.map(({ arquivo, conteudo }) => ({
-    arquivo,
-    conteudo: carimbarUnreleased(conteudo, versao, data),
-  }));
-  for (const { arquivo, conteudo } of carimbados) {
-    writeFileSync(arquivo, conteudo);
-  }
-
-  gravarPkg(versao);
-
-  // Coerência final: depois de gravar, a versão tem de estar no changelog
-  // técnico — o gate que impede release mudo.
-  const tecnico = readFileSync("CHANGELOG.md", "utf8");
-  if (!changelogTemVersao(tecnico, versao)) {
-    throw new Error(`CHANGELOG.md não tem a entrada [${versao}] após o bump`);
-  }
-
-  console.log(versao);
 }
-
-main();
