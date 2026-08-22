@@ -12,6 +12,7 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 > montado por dentro. O que se descreve é o efeito.
 
 <!-- sem-nota-usuario: 1.0.1 mudança interna, nada muda para quem usa -->
+<!-- sem-nota-usuario: 1.1.1 - 2026-08-22 mudança interna, nada muda para quem usa -->
 
 ## [Unreleased]
 
@@ -30,8 +31,6 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 - Mais espaço interno, melhor leitura no celular, rolagem dentro da janela e
   navegação completa por teclado e leitor de tela.
-
-## [1.1.1] - 2026-08-22
 
 ## [1.1.0] - 2026-08-21
 

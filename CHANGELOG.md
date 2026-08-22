@@ -27,6 +27,14 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [1.1.1] - 2026-08-22
 
+### Infraestrutura
+
+- O fluxo de execução do Compozy passou a isolar cada épico em worktree própria,
+  abrir PR para `dev` e arquivar integralmente os artefatos de features já
+  concluídas.
+- A promoção de releases passou a serializar a reserva da versão e a retomar
+  com segurança execuções interrompidas antes da criação da tag.
+
 ## [1.1.0] - 2026-08-21
 
 ### Adicionado

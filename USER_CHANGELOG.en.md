@@ -12,6 +12,7 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 > assembled internally.
 
 <!-- sem-nota-usuario: 1.0.1 internal change with no user-visible effect -->
+<!-- sem-nota-usuario: 1.1.1 - 2026-08-22 internal change with no user-visible effect -->
 
 ## [Unreleased]
 
