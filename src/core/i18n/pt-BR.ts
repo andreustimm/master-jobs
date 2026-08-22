@@ -390,11 +390,11 @@ export const ptBR = {
   /** Administração de contas (AUTH-02). */
   admin: {
     title: "Usuários",
-    nav: "usuários",
+    nav: "Usuários",
     newUser: "Nova conta",
     email: "E-mail",
     fullName: "Nome completo",
-    fullNameHint: "Opcional. É o nome que aparece no topo depois de entrar; sem ele, aparece o e-mail.",
+    fullNameHint: "Obrigatório. É o nome que aparece no topo depois de entrar.",
     noName: "sem nome",
     roles: "Papéis",
     candidate: "Candidato",
