@@ -206,7 +206,7 @@ export function ChangelogModal({
               <h2 id="changelog-dialog-title" className="type-display-xs break-words">
                 {labels.title}
               </h2>
-              <span className="type-caption-bold rounded-[var(--radius-action)] bg-[var(--muted)] px-2 py-1 font-mono">
+              <span className="type-caption-bold min-w-0 max-w-full break-all rounded-[var(--radius-action)] bg-[var(--muted)] px-2 py-1 font-mono">
                 v{currentVersion}
               </span>
             </div>

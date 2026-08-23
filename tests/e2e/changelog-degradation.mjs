@@ -17,7 +17,7 @@ try {
   await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
   await page.fill('input[name="email"]', EMAIL);
   await page.fill('input[name="password"]', PASSWORD);
-  await page.locator('form button[type="submit"]').first().click();
+  await page.locator('[data-testid="login-submit"]').click();
   await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 15_000 });
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
 

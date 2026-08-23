@@ -500,7 +500,7 @@ describe("retomada dos workflows de release", () => {
     expect(() => shaDaTagRemota({}, "1.1.0")).toThrow("não é uma lista");
   });
 
-  it("os dois escritores compartilham a mesma fila de concorrência", () => {
+  it("IT-016 mantém os dois escritores na mesma fila de concorrência", () => {
     for (const arquivo of [
       ".github/workflows/promover-para-staging.yml",
       ".github/workflows/sincronizar-apos-main.yml",

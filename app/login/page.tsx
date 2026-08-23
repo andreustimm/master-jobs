@@ -111,7 +111,9 @@ pnpm jho auth set-password ${"seu@email.com"}`}
               </p>
             )}
 
-            <Button type="submit">{t("login.submit")}</Button>
+            <Button type="submit" data-testid="login-submit">
+              {t("login.submit")}
+            </Button>
           </form>
 
           {/* Fora do formulário: dentro dele, Enter no campo de senha poderia

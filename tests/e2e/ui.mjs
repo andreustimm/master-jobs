@@ -150,7 +150,7 @@ try {
   await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
   await page.fill('input[name="email"]', E2E_EMAIL);
   await page.fill('input[name="password"]', "senha-propositalmente-errada");
-  await page.click('button[type="submit"]');
+  await page.click('[data-testid="login-submit"]');
   await page.waitForTimeout(900);
   check("senha errada não entra", page.url().includes("/login"), page.url());
   check(
@@ -160,7 +160,7 @@ try {
 
   await page.fill('input[name="email"]', E2E_EMAIL);
   await page.fill('input[name="password"]', E2E_PASSWORD);
-  await page.click('button[type="submit"]');
+  await page.click('[data-testid="login-submit"]');
   await page.waitForTimeout(1400);
   check("senha correta entra", !page.url().includes("/login"), page.url());
 
@@ -1014,7 +1014,7 @@ try {
     await rolePage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
     await rolePage.fill('input[name="email"]', scenario.email);
     await rolePage.fill('input[name="password"]', E2E_PASSWORD);
-    await rolePage.locator('form button[type="submit"]').first().click();
+    await rolePage.locator('[data-testid="login-submit"]').click();
     await rolePage.waitForTimeout(2000);
 
     const landed = rolePage.url().replace(BASE, "") || "/";
@@ -1063,7 +1063,7 @@ try {
   await offPage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
   await offPage.fill('input[name="email"]', "e2e-desabilitada@local.test");
   await offPage.fill('input[name="password"]', E2E_PASSWORD);
-  await offPage.locator('form button[type="submit"]').first().click();
+  await offPage.locator('[data-testid="login-submit"]').click();
   await offPage.waitForTimeout(1500);
   check(
     "conta desabilitada não entra nem com a senha certa",

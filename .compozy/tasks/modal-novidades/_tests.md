@@ -87,7 +87,7 @@ components.
 | US-006.EC-2 | Blank locale edition is incomplete | UT-017 | IT-006 | — |
 | US-006.EC-3 | Large source is not silently truncated | UT-003 | IT-005 | — |
 | US-006.EC-4 | Modal cannot publish content | — | IT-014 | E2E-023 |
-| US-006.EC-5 | Concurrent/repeated target cannot duplicate version | UT-025–UT-028 | IT-007, IT-008 | — |
+| US-006.EC-5 | Concurrent/repeated target cannot duplicate version | UT-025–UT-028 | IT-007, IT-008, IT-016 | — |
 | US-006.EC-6 | Interrupted preparation exposes no partial release | UT-022–UT-024 | IT-006, IT-008 | — |
 | US-006.EC-7 | Retry preserves the original instant | UT-025, UT-028 | IT-007 | — |
 | US-006.EC-8 | Metadata cannot publish before both locales | UT-014, UT-017 | IT-006 | — |
@@ -118,7 +118,7 @@ components.
 - **UT-002** (happy): the parser receives `## [1.1.0] - 2026-08-21` and returns `publication={kind:"date",value:"2026-08-21"}` without constructing an instant.
 - **UT-003** (boundary): wrapped text, digit-leading and date-suffixed editorial level-two headings, fenced and indented code, and omission-marker examples in fenced/indented/inline code remain byte-for-byte inside one release's returned `markdown` body.
 - **UT-004** (ordering): two actual version headers delimit two complete bodies; the first body contains no bytes from the second and ordinary level-two headings do not delimit releases.
-- **UT-005** (error): header `## [v1.2] - 2026-08-22`, a numeric candidate with both invalid version and publication, an unbracketed release header, or one with an unmatched opening bracket produces `invalid_version`, excludes that entry, and preserves the following valid release.
+- **UT-005** (error): header `## [v1.2] - 2026-08-22`, malformed prerelease/build/wildcard forms, a numeric candidate with both invalid version and publication, an unbracketed release header, or one with an unmatched opening bracket produces `invalid_version`, excludes that entry, and preserves the following valid release.
 - **UT-006** (error): dates `2026-02-30` and `2026-13-01` produce `invalid_publication` and no fabricated release date.
 - **UT-007** (error): timestamp `2026-08-22T11:46:00-03:00` produces `invalid_publication` because canonical stored instants must end in `Z`.
 - **UT-008** (boundary): empty input and a title-only document return `releases=[]` without throwing.
@@ -196,7 +196,7 @@ components.
 
 ### Release pipeline boundary
 
-- **IT-005**: in a temporary release fixture, run preparation/wiring for `1.2.0` at `2026-08-22T11:46:00.000Z`; expect technical date, identical localized instants, updated package version, and preserved multiline bodies.
+- **IT-005**: in a temporary release fixture, run preparation/wiring for `1.2.0` at `2026-08-22T11:46:00.000Z`; expect technical date, identical localized instants, updated package version, preserved multiline bodies, and successful post-write re-read/revalidation.
 - **IT-006**: remove or blank the English `Unreleased` content in a temporary fixture and run the release command; expect non-zero exit and all fixture files byte-identical to their pre-run state.
 - **IT-007**: run the same successful temporary release command twice with different clocks; expect one `1.2.0` entry and the original instant after the second run.
 - **IT-008**: seed a temporary fixture with `1.2.0` in only one document; expect `partial_existing_release`, non-zero exit, and no additional writes.
@@ -210,6 +210,7 @@ components.
 - **IT-013**: inspect real historical headers plus available tag metadata; expect a historical value to remain `kind:"date"` unless checked-in evidence records the actual version-creation instant.
 - **IT-014**: inspect the exact release staging commands in both version-authority workflows and the release shell file lists; expect both locale files and the technical changelog included wherever release outputs are staged or validated.
 - **IT-015**: build/typecheck the Server-to-Client boundary; expect `ChangelogModalProps` to contain only serializable strings, arrays, and discriminated records, with no translator or filesystem function.
+- **IT-016**: parse both version-authority workflows; expect the identical `release-versionar` concurrency group, queueing rather than cancellation, and no parallel version writer.
 
 ## End-to-End Tests
 

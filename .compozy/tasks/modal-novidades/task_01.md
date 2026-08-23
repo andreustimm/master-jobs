@@ -106,7 +106,7 @@ Cases assigned from `_tests.md`, the test contract — read each ID's full defin
 - [x] UT-051, UT-052 — prose-free runtime diagnostics and current-version fallback.
 - [x] IT-001, IT-002, IT-003 — real localized-file coherence, content boundary, and standalone tracing.
 - [x] IT-005, IT-006, IT-007, IT-008, IT-009, IT-010 — successful, failed, retried, partial, no-user-change, and technical-content release fixtures.
-- [x] IT-013, IT-014 — historical precision evidence and release-workflow staging coverage.
+- [x] IT-013, IT-014, IT-016 — historical precision evidence, release-workflow staging coverage, and serialized version-authority writers.
 
 ## Success Criteria
 

@@ -143,6 +143,19 @@ After.`;
     expect(result.releases[0]!.markdown).toBe("First");
   });
 
+  it("UT-005 isolates malformed semantic-version suffixes", () => {
+    for (const token of ["1.2.3-beta", "1.2.3+build.1", "1.2.x"]) {
+      const result = parseUserChangelog(
+        `${release("2.0.0", "2026-08-23", "First")}## [${token}] - 2026-08-22\n\nMalformed\n\n${release("1.0.0", "2026-08-21", "Valid")}`,
+      );
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({ code: "invalid_version", version: token }),
+      );
+      expect(result.releases.map((item) => item.version)).toEqual(["2.0.0", "1.0.0"]);
+      expect(result.releases[0]!.markdown).toBe("First");
+    }
+  });
+
   it("rejects a publication whose release header omits the delimiter", () => {
     const result = parseUserChangelog(
       `## [1.2.0] 2026-08-22\n\nMalformed\n\n${release("1.1.0", "2026-08-21", "Valid")}`,

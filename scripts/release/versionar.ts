@@ -79,6 +79,17 @@ export function applyReleaseFiles(input: ApplyReleaseFilesInput): PrepareRelease
   writeFileSync(resolve(input.directory, RELEASE_FILES.ptBR), prepared.documents.ptBR);
   writeFileSync(resolve(input.directory, RELEASE_FILES.en), prepared.documents.en);
   writeFileSync(resolve(input.directory, "package.json"), nextPackage);
+
+  const persistedDocuments = readDocuments(input.directory);
+  const persistedPackage = readPackage(input.directory);
+  const verified = prepareRelease({
+    documents: persistedDocuments,
+    version: input.version,
+    publishedAt: input.publishedAt,
+  });
+  if (persistedPackage.version !== input.version || verified.status !== "already-released") {
+    throw new ReleaseDomainError("partial_existing_release", { version: input.version });
+  }
   return prepared;
 }
 
