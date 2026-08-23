@@ -157,6 +157,9 @@ After.`;
       "1.2.3-beta",
       "1.2.3+build.1",
       "1.2.3-beta+build.1",
+      "1.2.3-alpha_beta",
+      "1.2.3-alpha@beta",
+      "1.2.3+build/meta",
       "1.2.3-",
       "1.2.3+",
       "1.2.3-alpha+",
@@ -166,7 +169,10 @@ After.`;
         `${release("2.0.0", "2026-08-23", "First")}## [${token}] - 2026-08-22\n\nMalformed\n\n${release("1.0.0", "2026-08-21", "Valid")}`,
       );
       expect(result.issues).toContainEqual(
-        expect.objectContaining({ code: "invalid_version", version: token }),
+        expect.objectContaining({
+          code: "invalid_version",
+          version: token.replace(/[@/]/g, "?"),
+        }),
       );
       expect(result.releases.map((item) => item.version)).toEqual(["2.0.0", "1.0.0"]);
       expect(result.releases[0]!.markdown).toBe("First");
@@ -177,8 +183,10 @@ After.`;
     for (const heading of [
       "## [1.2.3-beta - 2026-08-22",
       "## [1.2.3-beta+build.1 - 2026-08-22",
+      "## [1.2.3-alpha_beta - 2026-08-22",
       "## [1.2.3-alpha+ - 2026-08-22",
       "## 1.2.3+build.1 - 2026-08-22",
+      "## 1.2.3+build/meta - 2026-08-22",
       "## 1.2.3-beta+build.1 - 2026-08-22",
       "## 1.2.3+ - 2026-08-22",
     ]) {
