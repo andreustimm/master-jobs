@@ -7,6 +7,8 @@ import {
   type ChangelogIssueCode,
   type ChangelogLocale,
   type ChangelogParseResult,
+  type ChangelogSection,
+  type Publication,
 } from "./changelog.ts";
 
 /**
@@ -142,15 +144,15 @@ export function carimbarUnreleased(
   versao: string,
   data: string,
 ): string {
-  const secoes = changelogSections(markdown).filter(
+  const estruturais = changelogSections(markdown).filter(
     (section) => section.token === "Unreleased",
   );
-  const ocorrencias = secoes.length;
+  const secoes = estruturais.filter(isCanonicalUnreleased);
 
-  if (ocorrencias === 0) {
+  if (estruturais.length === 0 || secoes.length === 0) {
     throw new Error("changelog sem seção ## [Unreleased] — escreva a entrada antes de promover");
   }
-  if (ocorrencias > 1) {
+  if (estruturais.length > 1) {
     throw new Error("changelog com mais de uma seção ## [Unreleased]");
   }
   if (changelogTemVersao(markdown, versao)) {
@@ -347,12 +349,24 @@ type UnreleasedSection = {
   headerStart: number;
 };
 
+function isCanonicalUnreleased(section: ChangelogSection): boolean {
+  return (
+    section.token === "Unreleased" &&
+    section.publication === undefined &&
+    section.publicationSyntaxValid &&
+    section.versionSyntaxValid
+  );
+}
+
 function findUnreleased(markdown: string): UnreleasedSection {
-  const matches = changelogSections(markdown).filter(
+  const structural = changelogSections(markdown).filter(
     (section) => section.token === "Unreleased",
   );
-  if (matches.length === 0) throw new ReleaseDomainError("missing_unreleased");
-  if (matches.length > 1) throw new ReleaseDomainError("duplicate_unreleased");
+  const matches = structural.filter(isCanonicalUnreleased);
+  if (structural.length === 0 || matches.length === 0) {
+    throw new ReleaseDomainError("missing_unreleased");
+  }
+  if (structural.length > 1) throw new ReleaseDomainError("duplicate_unreleased");
 
   const match = matches[0]!;
   return {
@@ -386,14 +400,14 @@ function technicalPublication(markdown: string, version: string): string | null 
   return match?.publication ?? null;
 }
 
-function existingLocalizedInstant(
+function existingLocalizedPublication(
   result: ChangelogParseResult,
   version: string,
-): string | null {
+): Publication | null {
   const entry =
     result.releases.find((release) => release.version === version) ??
     result.omitted.find((release) => release.version === version);
-  return entry?.publication?.kind === "instant" ? entry.publication.value : null;
+  return entry?.publication ?? null;
 }
 
 function assertExistingRelease(
@@ -406,13 +420,18 @@ function assertExistingRelease(
   assertParseable(en, "en");
   validateLocalizedChangelogs(ptBR, en);
   const technicalDate = technicalPublication(documents.technical, version);
-  const ptInstant = existingLocalizedInstant(ptBR, version);
-  const enInstant = existingLocalizedInstant(en, version);
+  const ptPublication = existingLocalizedPublication(ptBR, version);
+  const enPublication = existingLocalizedPublication(en, version);
+  const localizedDate = ptPublication?.kind === "instant"
+    ? ptPublication.value.slice(0, 10)
+    : ptPublication?.value;
   if (
     !technicalDate ||
-    !ptInstant ||
-    ptInstant !== enInstant ||
-    technicalDate !== ptInstant.slice(0, 10)
+    !ptPublication ||
+    !enPublication ||
+    ptPublication.kind !== enPublication.kind ||
+    ptPublication.value !== enPublication.value ||
+    technicalDate !== localizedDate
   ) {
     throw new ChangelogDomainError("localized_publication_mismatch", { version });
   }

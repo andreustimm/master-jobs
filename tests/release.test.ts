@@ -136,6 +136,20 @@ describe("prepareRelease", () => {
     }
   });
 
+  it("UT-023 rejects a dated Unreleased placeholder", () => {
+    for (const key of ["technical", "ptBR", "en"] as const) {
+      const input = documents();
+      input[key] = input[key].replace(
+        "## [Unreleased]",
+        "## [Unreleased] - 2026-08-22",
+      );
+      expectReleaseCode(
+        () => prepareRelease({ documents: input, version: "1.2.0", publishedAt: NOW }),
+        "missing_unreleased",
+      );
+    }
+  });
+
   it("UT-023 ignores fenced release metadata during coherent preparation", () => {
     const input = documents();
     for (const key of ["technical", "ptBR", "en"] as const) {
@@ -192,6 +206,21 @@ describe("prepareRelease", () => {
       publishedAt: new Date("2026-08-23T12:00:00.000Z"),
     });
     expect(retry).toEqual({ status: "already-released", documents: first.documents });
+  });
+
+  it("UT-025 resumes the checked-in date-only release without rewriting history", () => {
+    const current = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
+    const realDocuments = {
+      technical: readFileSync("CHANGELOG.md", "utf8"),
+      ptBR: readFileSync("USER_CHANGELOG.pt-BR.md", "utf8"),
+      en: readFileSync("USER_CHANGELOG.en.md", "utf8"),
+    };
+    const retry = prepareRelease({
+      documents: realDocuments,
+      version: current.version,
+      publishedAt: new Date("2030-01-01T00:00:00.000Z"),
+    });
+    expect(retry).toEqual({ status: "already-released", documents: realDocuments });
   });
 
   it("UT-026 rejects a target present only in the technical document", () => {

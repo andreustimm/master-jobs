@@ -73,7 +73,8 @@ export class ChangelogDomainError extends Error {
 }
 
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const VERSION_LIKE = /^[vV]?\d+(?:\.\d*){0,2}$/;
+const VERSION_CANDIDATE = /^[vV]?\d+(?:\.\d*)*$/;
+const UNSAFE_METADATA = /[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/;
 const NO_USER_CHANGE_LINE = /^ {0,3}<!--\s*sem-nota-usuario\b[^>]*-->[ \t]*$/i;
 const OMITTED_MARKER_LINE =
   /^ {0,3}<!--\s*sem-nota-usuario\s*:\s*((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(?:\s*-\s*(\S+?))?(?:\s+[^>]*?)?\s*-->[ \t]*$/;
@@ -153,11 +154,15 @@ function releaseHeaderAt(
   if (canonical) {
     const token = canonical[1]!.trim();
     const publication = canonical[2]!.trim();
-    const releaseLike =
-      VERSION.test(token) ||
-      VERSION_LIKE.test(token) ||
-      /^\d{4}-/.test(publication);
-    if (!releaseLike) return null;
+    if (token === "Unreleased") {
+      return {
+        token,
+        publication,
+        publicationSyntaxValid: false,
+        versionSyntaxValid: true,
+      };
+    }
+    if (!VERSION_CANDIDATE.test(token) && !UNSAFE_METADATA.test(token)) return null;
     return {
       token,
       publication,
@@ -174,7 +179,7 @@ function releaseHeaderAt(
       return { token, publicationSyntaxValid: true, versionSyntaxValid: true };
     }
     if (suffix.startsWith("(")) return null;
-    if (!VERSION.test(token) && !VERSION_LIKE.test(token)) return null;
+    if (!VERSION.test(token) && !VERSION_CANDIDATE.test(token)) return null;
     return {
       token,
       ...(suffix !== "" ? { publication: suffix } : {}),
@@ -184,7 +189,7 @@ function releaseHeaderAt(
   }
 
   const missingClose =
-    /^ {0,3}##[ \t]*\[([vV]?\d+(?:\.\d*){0,2})[ \t]+-[ \t]+(\S.*)$/.exec(line);
+    /^ {0,3}##[ \t]*\[([vV]?\d+(?:\.\d*)*)[ \t]+-[ \t]+(\S.*)$/.exec(line);
   if (missingClose) {
     return {
       token: missingClose[1]!.trim(),
@@ -195,7 +200,7 @@ function releaseHeaderAt(
   }
 
   const unbracketed =
-    /^ {0,3}##[ \t]+([vV]?\d+(?:\.\d*){0,2})[ \t]+-[ \t]+(\S.*)$/.exec(line);
+    /^ {0,3}##[ \t]+([vV]?\d+(?:\.\d*)*)[ \t]+-[ \t]+(\S.*)$/.exec(line);
   if (!unbracketed) return null;
   return {
     token: unbracketed[1]!.trim(),

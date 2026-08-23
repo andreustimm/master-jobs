@@ -86,6 +86,13 @@ After.`;
     expect(result.releases[0]!.markdown).toBe(body);
   });
 
+  it("UT-003 preserves a date-suffixed editorial heading inside release Markdown", () => {
+    const body = "Before.\n\n## [Availability] - 2026-08-23\n\nAfter.";
+    const result = parseUserChangelog(release("1.2.0", "2026-08-22", body));
+    expect(result.issues).toEqual([]);
+    expect(result.releases[0]!.markdown).toBe(body);
+  });
+
   it("UT-004 delimits complete bodies at version headers", () => {
     const result = parseUserChangelog(
       `${release("1.1.0", "2026-08-21", "First body")}${release("1.0.0", "2026-08-20", "Second body")}`,
@@ -122,6 +129,17 @@ After.`;
       expect.objectContaining({ code: "invalid_version", version: "1.1.0" }),
     );
     expect(result.releases.map((item) => item.version)).toEqual(["1.2.0", "1.0.0"]);
+    expect(result.releases[0]!.markdown).toBe("First");
+  });
+
+  it("UT-005 isolates a release candidate with invalid version and publication", () => {
+    const result = parseUserChangelog(
+      `${release("1.3.0", "2026-08-22", "First")}## [1.2.3.4] - tomorrow\n\nMalformed\n\n${release("1.1.0", "2026-08-20", "Valid")}`,
+    );
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({ code: "invalid_version", version: "1.2.3.4" }),
+    );
+    expect(result.releases.map((item) => item.version)).toEqual(["1.3.0", "1.1.0"]);
     expect(result.releases[0]!.markdown).toBe("First");
   });
 

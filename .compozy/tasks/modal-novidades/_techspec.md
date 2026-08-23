@@ -244,9 +244,11 @@ metadata is recognized only as a standalone comment line; header-shaped
 examples and marker text in fences, indented code, or code spans therefore
 remain literal body content. For every valid
 version header, it captures the untouched body until the next release-shaped
-header; ordinary level-two headings, including linked headings, remain in the
-body. Malformed release-shaped headers still delimit their own entry and emit a
-typed issue instead of contaminating a sibling. The parser validates exact
+header; ordinary level-two headings, including linked headings whose suffix
+looks like a date, remain in the body. A bracketed numeric version candidate
+delimits a release even when both its semantic version and publication are
+malformed, so it emits a typed issue instead of contaminating a sibling. The
+parser validates exact
 header delimiters, publication shape, and actual calendar validity, excludes
 blank or malformed releases, and deduplicates by normalized version. Valid
 releases sort by arbitrary-length numeric semantic-version parts without
@@ -322,7 +324,7 @@ files are declared in `next.config.ts.outputFileTracingIncludes`.
 `versionar.ts` captures `const publishedAt = new Date()` exactly once after it
 has selected a bump and before preparation. `prepareRelease`:
 
-1. parses all three documents and checks exactly one `Unreleased` section where required;
+1. parses all three documents and checks exactly one canonical, undated `Unreleased` section where required;
 2. validates both locale documents are structurally publishable;
 3. stamps the technical changelog with the UTC date and both user changelogs with the same full ISO UTC instant;
 4. parses the candidate outputs and validates locale version/publication parity;
@@ -331,9 +333,12 @@ has selected a bump and before preparation. `prepareRelease`:
 The shell updates files and `package.json` only from that successful result. If
 the target version already exists coherently in the package and all three
 documents, the rerun reports `already-released` without modifying timestamp or
-content. If it exists in only a subset or metadata differs, the operation fails
-instead of declaring success. Workflow publication continues only after the
-script exits successfully, so a failed local write cannot reach users.
+content. Existing localized metadata may remain a matching historical `date` or
+a matching `instant`; the technical date must agree with that preserved source
+precision. If the target exists in only a subset or metadata differs, the
+operation fails instead of declaring success. Workflow publication continues
+only after the script exits successfully, so a failed local write cannot reach
+users.
 
 ### Historical Migration
 
