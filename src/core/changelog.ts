@@ -73,11 +73,22 @@ export class ChangelogDomainError extends Error {
 }
 
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const VERSION_CANDIDATE = /^[vV]?\d+(?:(?:\.\S*)+|(?:[-+]\S*)?)$/;
 const UNSAFE_METADATA = /[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/;
 const NO_USER_CHANGE_LINE = /^ {0,3}<!--\s*sem-nota-usuario\b[^>]*-->[ \t]*$/i;
 const OMITTED_MARKER_LINE =
   /^ {0,3}<!--\s*sem-nota-usuario\s*:\s*((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(?:\s*-\s*(\S+?))?(?:\s+[^>]*?)?\s*-->[ \t]*$/;
+
+function isVersionCandidate(token: string): boolean {
+  if (/\s/u.test(token)) return false;
+  const prefixed = token[0] === "v" || token[0] === "V";
+  const value = prefixed ? token.slice(1) : token;
+  const components = value.split(".");
+  if (!/^\d+$/u.test(components[0] ?? "")) return false;
+  if (prefixed) return true;
+  if (components.length < 3) return false;
+  const second = components[1] ?? "";
+  return second === "" || /^[0-9xX*]/u.test(second);
+}
 
 export type ChangelogSection = {
   bodyEnd: number;
@@ -162,7 +173,7 @@ function releaseHeaderAt(
         versionSyntaxValid: true,
       };
     }
-    if (!VERSION_CANDIDATE.test(token) && !UNSAFE_METADATA.test(token)) return null;
+    if (!isVersionCandidate(token) && !UNSAFE_METADATA.test(token)) return null;
     return {
       token,
       publication,
@@ -179,7 +190,7 @@ function releaseHeaderAt(
       return { token, publicationSyntaxValid: true, versionSyntaxValid: true };
     }
     if (suffix.startsWith("(")) return null;
-    if (!VERSION.test(token) && !VERSION_CANDIDATE.test(token)) return null;
+    if (!VERSION.test(token) && !isVersionCandidate(token)) return null;
     return {
       token,
       ...(suffix !== "" ? { publication: suffix } : {}),
@@ -189,7 +200,7 @@ function releaseHeaderAt(
   }
 
   const missingClose = /^ {0,3}##[ \t]*\[([^\]\s]+)[ \t]+-[ \t]+(\S.*)$/.exec(line);
-  if (missingClose && VERSION_CANDIDATE.test(missingClose[1]!.trim())) {
+  if (missingClose && isVersionCandidate(missingClose[1]!.trim())) {
     return {
       token: missingClose[1]!.trim(),
       publication: missingClose[2]!.trim(),
@@ -199,7 +210,7 @@ function releaseHeaderAt(
   }
 
   const unbracketed = /^ {0,3}##[ \t]+(\S+)[ \t]+-[ \t]+(\S.*)$/.exec(line);
-  if (!unbracketed || !VERSION_CANDIDATE.test(unbracketed[1]!.trim())) return null;
+  if (!unbracketed || !isVersionCandidate(unbracketed[1]!.trim())) return null;
   return {
     token: unbracketed[1]!.trim(),
     publication: unbracketed[2]!.trim(),

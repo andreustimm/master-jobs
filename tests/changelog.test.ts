@@ -102,6 +102,41 @@ After.`;
     expect(result.releases[0]!.markdown).toBe(body);
   });
 
+  it("UT-003 preserves compact digit-leading editorial headings", () => {
+    const body = `Before.
+
+## [2FA setup]
+
+Plain heading.
+
+## [2FA setup] - 2026-08-23
+
+Date-suffixed heading.
+
+## [2026-Q3] - Highlights
+
+Quarter heading.
+
+## [2026.Q3] - Roadmap
+
+Roadmap heading.
+
+## [42] - Answers
+
+After.`;
+    const result = parseUserChangelog(release("1.2.0", "2026-08-22", body));
+    expect(result.issues).toEqual([]);
+    expect(result.releases[0]!.markdown).toBe(body);
+  });
+
+  it("UT-003 rejects a long non-candidate heading in bounded linear work", () => {
+    const token = `1.${".".repeat(2_000)} X`;
+    const body = `Before.\n\n## [${token}] - Roadmap\n\nAfter.`;
+    const result = parseUserChangelog(release("1.2.0", "2026-08-22", body));
+    expect(result.issues).toEqual([]);
+    expect(result.releases[0]!.markdown).toBe(body);
+  });
+
   it("UT-004 delimits complete bodies at version headers", () => {
     const result = parseUserChangelog(
       `${release("1.1.0", "2026-08-21", "First body")}${release("1.0.0", "2026-08-20", "Second body")}`,
