@@ -14,7 +14,8 @@ produto como uma pessoa real e grava vereditos e relatórios aqui.
 - Build com paridade local: `rtk pnpm build` e `rtk pnpm start`
 - Driver de jornada: `rtk pnpm exec agent-browser <comando>`
 - Instalação inicial do Chrome do driver: `rtk pnpm qa:browser:install`
-- Gates automatizados: `rtk pnpm check` e `rtk pnpm test:e2e`
+- Gates automatizados: `rtk pnpm check` (inclui os conversores do tracker) e
+  `rtk pnpm test:e2e` (inclui axe cumulativo WCAG 2.0/2.1/2.2 AA em oito telas)
 
 O dashboard sempre usa loopback. Sessões autenticadas usam contas e papéis de
 teste reais; não use mocks para confirmar uma jornada.

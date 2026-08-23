@@ -154,18 +154,23 @@ linha de SQL ([ADR 0002](docs/adr/0002-libsql-em-vez-de-better-sqlite3.md)).
 | [ADRs](docs/adr/) | Por que cada decisão foi tomada |
 | [Produto](docs/product/) | Visão e backlog priorizado |
 | [Benchmark](docs/benchmark/) | Concorrentes, mercado e riscos |
+| [QA vivo](docs/qa/README.md) | Personas, jornadas, cenários, charters, bugs e relatórios |
+| [Skills de desenvolvimento](docs/engineering/skills-evaluation.md) | Catálogo instalado, origem e integração no fluxo |
 | [MIGRATION.md](MIGRATION.md) | **Antes de criar arquivo novo em `src/`** |
 
-Agentes de IA: `CLAUDE.md` (Claude Code) ou `AGENTS.md` (Codex, OpenCode).
+Agentes de IA leem `AGENTS.md`; `CLAUDE.md` é um symlink para essa fonte única.
 
 ## Desenvolvimento
 
 ```bash
-pnpm check          # typecheck + 126 testes
-pnpm db:generate    # após editar src/core/db/schema.ts
-pnpm db:studio      # inspeção visual do banco
+rtk pnpm check                   # typecheck + Vitest/cobertura + contratos das skills de QA
+rtk pnpm test:e2e                # browser isolado + axe WCAG 2.2 AA
+rtk pnpm qa:browser:install      # instala uma vez o Chrome do QA de jornada
+rtk pnpm db:generate             # após editar src/core/db/schema.ts
+rtk pnpm db:studio               # inspeção visual do banco
 ```
 
-Antes de considerar qualquer coisa pronta: `pnpm check` verde.
+Antes de considerar qualquer coisa pronta: `rtk pnpm check` verde e o E2E
+aplicável executado conforme `AGENTS.md`.
 Mexeu no scorer ou no `profile.yaml`? Suba o `SCORER_VERSION` e rode
-`pnpm jho jobs score --all`.
+`rtk pnpm jho jobs score --all`.

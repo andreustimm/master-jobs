@@ -23,11 +23,12 @@ contradizer as regras locais não entra só porque compartilha o stack.
 | `ship-pr` | Fecha o trabalho com impacto, descrição, commit e PR. | Regras locais têm precedência: worktree desde `dev`, `deep-review` antes da PR e base `dev`. |
 | `drizzle-safe-migrations` | Ordena backfill e alteração de schema com revisão explícita. | Adaptada a pnpm, SQLite/libSQL, `rtk pnpm db:generate` e à suspensão da promoção automática. |
 | `a11y-testing` | Acrescenta o gate automatizado de WCAG ao browser E2E. | `@axe-core/playwright` roda dentro do runner isolado existente, sem criar outra infraestrutura. |
-| `agent-output-audit` | Audita alegações e provas de tarefas implementadas por agente. | Instalada sob demanda; não substitui QA de jornada nem `deep-review`. |
+| `agent-output-audit` | Audita alegações e provas de tarefas implementadas por agente. | Invocada sob demanda; não substitui QA de jornada nem `deep-review`. |
 | `deslop` | Remove ruído introduzido no diff por agentes antes da revisão. | Compara a branch de tarefa contra `dev`, sem tocar arquivos fora do escopo. |
 | `documentation-writer` | Ajuda a separar tutorial, how-to, referência e explicação por Diátaxis. | A fronteira de ciclo de vida da ADR 0011 e o estilo local continuam soberanos. |
 
-As oito skills disponíveis na branch principal vieram dos caminhos
+As oito skills disponíveis na branch principal, somadas à instalação histórica
+de `agent-output-audit`, formam as nove skills desta PR. As atuais vieram dos caminhos
 [`skills/mine`](https://github.com/pedronauck/skills/tree/main/skills/mine),
 [`skills/curated`](https://github.com/pedronauck/skills/tree/main/skills/curated)
 e [`skills/community`](https://github.com/pedronauck/skills/tree/main/skills/community).

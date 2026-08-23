@@ -536,6 +536,7 @@ rtk pnpm jho profile             # valida profile.yaml
 
 # desenvolvimento
 rtk pnpm check                   # typecheck + testes — verde antes de qualquer entrega
+rtk pnpm test:qa-skills          # contratos dos conversores do tracker QA
 rtk pnpm test:e2e                # browser real isolado: build, SQLite e porta temporários
 rtk pnpm db:generate             # gera migration após editar schema.ts
 ```

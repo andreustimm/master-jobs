@@ -16,6 +16,13 @@ metadata:
 ---
 # Real-User QA Planner
 
+## Project binding: master-jobs
+
+For this repository, `docs/qa/README.md` is the only authority for cadence tier
+scope and timing. Use `references/session-charters.md` for charter anatomy,
+coverage inversion and session mechanics, but do not apply its generic cadence
+table when choosing Smoke, Targeted, Full or Sanity here.
+
 Plan QA as journeys real people walk, not test cases that accumulate. This skill owns the project's **living QA docs** — one committed tree (`<qa-docs-path>`, default `docs/qa/`) that every round appends to — and plans the persona-driven sessions `qa-execution` runs.
 
 Two rules anchor everything:
