@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   HEADLESS_UA,
   isHeadlessUA,
@@ -33,6 +34,17 @@ import { isStandalone, renderStandaloneScript, STANDALONE_CLASS } from "../src/c
  */
 
 describe("modo instalado", () => {
+  it("reserva a área segura só no cabeçalho da aplicação", () => {
+    const css = readFileSync("app/globals.css", "utf8");
+
+    // Um seletor global de `header` também zera o padding-top dos cabeçalhos
+    // de página e das modais quando o Android abre em `minimal-ui`.
+    expect(css).toContain("html.pwa-standalone body > header {");
+    expect(css).toContain("html.pwa-standalone body > header > div,");
+    expect(css).not.toMatch(/html\.pwa-standalone header\s*\{/);
+    expect(css).not.toMatch(/html\.pwa-standalone header\s*>\s*div/);
+  });
+
   it("iOS antigo é reconhecido por navigator.standalone", () => {
     // Aparelho da era em que `display-mode` ainda não existia. Sem este ramo,
     // o app instalado no iPhone antigo ficaria com o conteúdo sob a barra.

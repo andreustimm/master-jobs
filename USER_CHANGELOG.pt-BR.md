@@ -16,6 +16,15 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Correção
+
+- As telas de **Cockpit** e **Vagas**, a janela de **Novidades** e as janelas de
+  administração de contas voltaram a usar espaçamentos consistentes com as
+  demais telas.
+- Ao editar uma conta, **Salvar alterações** agora fecha a janela quando dá
+  certo e mostra uma confirmação. Se algo impedir o salvamento, a janela
+  permanece aberta e explica o problema.
+
 ## [1.1.3] - 2026-08-23T14:37:30.883Z
 
 ### Correção
