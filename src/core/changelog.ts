@@ -88,10 +88,11 @@ function isVersionCandidate(token: string): boolean {
   if (components.length < 3) return false;
   const second = components[1] ?? "";
   const third = components[2] ?? "";
-  return (
-    (second === "" || /^[0-9xX*]/u.test(second)) &&
-    (third === "" || /^[0-9xX*]/u.test(third))
-  );
+  const suffixAt = third.search(/[-+]/u);
+  const patch = suffixAt === -1 ? third : third.slice(0, suffixAt);
+  const coreComponent = (value: string): boolean =>
+    value === "" || /^\d+$/u.test(value) || /^[xX*]$/u.test(value);
+  return coreComponent(second) && coreComponent(patch);
 }
 
 export type ChangelogSection = {

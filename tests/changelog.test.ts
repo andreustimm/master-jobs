@@ -137,6 +137,22 @@ Numeric editorial heading.
 
 Version-like editorial heading.
 
+## [2026.08Roadmap.1] - Highlights
+
+Incomplete numeric minor heading.
+
+## [42.7Answers.1] - Index
+
+Incomplete compact minor heading.
+
+## [1.2Plan.3] - Plan
+
+Incomplete version-like minor heading.
+
+## [2026.xRoadmap.1] - Draft
+
+Incomplete wildcard minor heading.
+
 ## [42] - Answers
 
 After.`;
