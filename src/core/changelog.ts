@@ -83,8 +83,12 @@ function isVersionCandidate(token: string): boolean {
   const prefixed = token[0] === "v" || token[0] === "V";
   const value = prefixed ? token.slice(1) : token;
   const components = value.split(".");
-  if (!/^\d+$/u.test(components[0] ?? "")) return false;
+  const first = components[0] ?? "";
+  const majorSuffixAt = first.search(/[-+]/u);
+  const major = majorSuffixAt === -1 ? first : first.slice(0, majorSuffixAt);
+  if (!/^\d+$/u.test(major)) return false;
   if (prefixed) return true;
+  if (major !== first) return false;
   if (components.length < 3) return false;
   const second = components[1] ?? "";
   const third = components[2] ?? "";
