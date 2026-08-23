@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-23
+
 ### Adicionado
 
 - Fluxo de QA vivo compartilhado entre Claude Code, Codex e OpenCode, com
