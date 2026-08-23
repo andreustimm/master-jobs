@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-08-23T14:37:30.883Z
+
 ### Correção
 
 - A janela de **Novidades** agora ocupa a altura útil do celular. Em alguns

@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-08-23T14:37:30.883Z
+
 ### Fixed
 
 - The **What's New** window now uses the available phone height. On some

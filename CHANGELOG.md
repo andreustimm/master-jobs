@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-08-23
+
 ### Corrigido
 
 - O diálogo de novidades agora estabelece altura dinâmica explícita antes de
