@@ -105,6 +105,6 @@ checkout.
 
 ## References
 
-- [PRD](../../.compozy/tasks/modal-novidades/_prd.md)
-- [TechSpec](../../.compozy/tasks/modal-novidades/_techspec.md)
+- [PRD](../../.compozy/tasks/_archived/1787460825016-0a82e4d4-modal-novidades/_prd.md)
+- [TechSpec](../../.compozy/tasks/_archived/1787460825016-0a82e4d4-modal-novidades/_techspec.md)
 - [Release workflow](../../.github/workflows/promover-para-staging.yml)

@@ -83,6 +83,6 @@ an “unknown time” placeholder.
 
 ## References
 
-- [PRD](../../.compozy/tasks/modal-novidades/_prd.md)
-- [User stories](../../.compozy/tasks/modal-novidades/_user_stories.md)
+- [PRD](../../.compozy/tasks/_archived/1787460825016-0a82e4d4-modal-novidades/_prd.md)
+- [User stories](../../.compozy/tasks/_archived/1787460825016-0a82e4d4-modal-novidades/_user_stories.md)
 - [MDN `Intl.DateTimeFormat`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat)

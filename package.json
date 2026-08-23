@@ -68,8 +68,11 @@
     "@vitest/coverage-v8": "^4.1.11",
     "drizzle-kit": "^0.31.10",
     "playwright": "^1.62.1",
+    "remark-parse": "^11.0.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.1.0",
     "vitest": "^4.1.11"
   },
   "pnpm": {

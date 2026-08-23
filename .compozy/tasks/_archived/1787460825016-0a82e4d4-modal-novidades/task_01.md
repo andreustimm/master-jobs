@@ -82,10 +82,10 @@ pure. Start from the current `dev` behavior in `src/core/release.ts` and
 
 ### Related ADRs
 
-- [ADR 0013: Localize release instants without inventing historical time](../../../docs/adr/0013-publicacao-local-sem-inventar-horario.md) — Defines local timezone conversion and truthful legacy precision.
-- [ADR 0014: Publish equivalent localized notes in safe editorial Markdown](../../../docs/adr/0014-notas-localizadas-em-markdown-seguro.md) — Defines equivalent Portuguese and English editorial content.
-- [ADR 0016: Store locale editions separately and render with react-markdown](../../../docs/adr/0016-changelogs-localizados-e-react-markdown.md) — Establishes two canonical locale files and their parity obligation.
-- [ADR 0017: Model publication precision explicitly and stamp at version creation](../../../docs/adr/0017-precisao-publicacao-e-autoridade-da-versao.md) — Defines the discriminated type, UTC authority, and coherent preparation rules.
+- [ADR 0013: Localize release instants without inventing historical time](../../../../docs/adr/0013-publicacao-local-sem-inventar-horario.md) — Defines local timezone conversion and truthful legacy precision.
+- [ADR 0014: Publish equivalent localized notes in safe editorial Markdown](../../../../docs/adr/0014-notas-localizadas-em-markdown-seguro.md) — Defines equivalent Portuguese and English editorial content.
+- [ADR 0016: Store locale editions separately and render with react-markdown](../../../../docs/adr/0016-changelogs-localizados-e-react-markdown.md) — Establishes two canonical locale files and their parity obligation.
+- [ADR 0017: Model publication precision explicitly and stamp at version creation](../../../../docs/adr/0017-precisao-publicacao-e-autoridade-da-versao.md) — Defines the discriminated type, UTC authority, and coherent preparation rules.
 
 ## Deliverables
 
