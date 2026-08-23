@@ -1,3 +1,17 @@
+import {
+  ChangelogDomainError,
+  bodyHasUserContent,
+  changelogSections,
+  hasNoUserChangeMarker,
+  parseUserChangelog,
+  validateLocalizedChangelogs,
+  type ChangelogIssueCode,
+  type ChangelogLocale,
+  type ChangelogParseResult,
+  type ChangelogSection,
+  type Publication,
+} from "./changelog.ts";
+
 /**
  * Versionamento semântico — o núcleo PURO.
  *
@@ -12,11 +26,11 @@
  * Um histórico que mente sobre a própria versão orienta a próxima decisão para
  * o lugar errado.
  *
- * O bump é decidido no `dev → staging` — o único ponto do fluxo que é
- * serializado (concurrency do workflow de promoção). Uma promoção = uma versão,
- * cobrindo todos os commits desde a última tag. A classificação vem do tipo de
- * commit: `fix:` → patch, `feat:` → minor, `BREAKING CHANGE` → major. O maior
- * vence entre os commits da leva.
+ * O bump é decidido pelo primeiro writer serializado: normalmente a promoção
+ * `dev → staging`, ou a sincronização pós-`main` para hotfix direto. Uma
+ * execução = uma versão, cobrindo todos os commits desde a última tag. A
+ * classificação vem do tipo de commit: `fix:` → patch, `feat:` → minor,
+ * `BREAKING CHANGE` → major. O maior vence entre os commits da leva.
  */
 
 /** Direção do bump. `null` quando nenhum commit pede release. */
@@ -57,6 +71,7 @@ export function classificarBump(assuntos: string[]): TipoBump | null {
 
 /** Prefixos que declaram manutenção — nunca pedem release. */
 const MANUTENCAO = new Set(["chore", "docs", "refactor", "test", "ci"]);
+const VERSAO_SEMANTICA = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 function tipoDoAssunto(assunto: string): TipoBump | null {
   const linha = assunto.trim();
@@ -98,13 +113,17 @@ function tipoDoAssunto(assunto: string): TipoBump | null {
  * para tornar visível.
  */
 export function proximaVersao(atual: string, tipo: TipoBump): string {
-  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(atual.trim());
+  const m = VERSAO_SEMANTICA.exec(atual.trim());
   if (!m) throw new Error(`versão inválida no package.json: "${atual}"`);
 
-  const [major, minor, patch] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  if (tipo === "major") return `${major + 1}.0.0`;
-  if (tipo === "minor") return `${major}.${minor + 1}.0`;
-  return `${major}.${minor}.${patch + 1}`;
+  const [major, minor, patch] = [BigInt(m[1]!), BigInt(m[2]!), BigInt(m[3]!)];
+  if (tipo === "major") return `${major + 1n}.0.0`;
+  if (tipo === "minor") return `${major}.${minor + 1n}.0`;
+  return `${major}.${minor}.${patch + 1n}`;
+}
+
+export function versaoSemanticaValida(value: string): boolean {
+  return VERSAO_SEMANTICA.test(value.trim());
 }
 
 /**
@@ -126,13 +145,15 @@ export function carimbarUnreleased(
   versao: string,
   data: string,
 ): string {
-  const cabecalho = /^##\s*\[Unreleased\]\s*$/gm;
-  const ocorrencias = markdown.match(cabecalho)?.length ?? 0;
+  const estruturais = changelogSections(markdown).filter(
+    (section) => section.token === "Unreleased",
+  );
+  const secoes = estruturais.filter(isCanonicalUnreleased);
 
-  if (ocorrencias === 0) {
+  if (estruturais.length === 0 || secoes.length === 0) {
     throw new Error("changelog sem seção ## [Unreleased] — escreva a entrada antes de promover");
   }
-  if (ocorrencias > 1) {
+  if (estruturais.length > 1) {
     throw new Error("changelog com mais de uma seção ## [Unreleased]");
   }
   if (changelogTemVersao(markdown, versao)) {
@@ -141,26 +162,26 @@ export function carimbarUnreleased(
 
   // O novo vazio abre antes da entrada recém-carimbada. `[Unreleased]` não
   // leva data: é a seção em construção, e a ausência é o que o parser entende.
-  return markdown.replace(
-    cabecalho,
-    `## [Unreleased]\n\n## [${versao}] - ${data}`,
-  );
+  const secao = secoes[0]!;
+  const cabecalho = `## [Unreleased]\n\n## [${versao}] - ${data}`;
+  return `${markdown.slice(0, secao.index)}${cabecalho}${markdown.slice(secao.bodyStart)}`;
 }
 
 /**
  * Garante que um changelog tem a entrada da versão publicada.
  *
  * É o gate de coerência do `package.json` com o changelog: bump sem entrada é
- * release mudo, e entrada sem bump é texto que ninguém vê. O regex aceita
- * `## [1.1.0]` e `## [1.1.0] - 2026-08-21`.
+ * release mudo, e entrada sem bump é texto que ninguém vê. A consulta usa as
+ * mesmas fronteiras Markdown do parser e ignora exemplos dentro de código.
  */
 export function changelogTemVersao(markdown: string, versao: string): boolean {
   return contarVersaoNoChangelog(markdown, versao) > 0;
 }
 
 function contarVersaoNoChangelog(markdown: string, versao: string): number {
-  const segura = versao.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return markdown.match(new RegExp(`^##\\s*\\[${segura}\\]`, "gm"))?.length ?? 0;
+  return changelogSections(markdown).filter(
+    (section) => section.versionSyntaxValid && section.token === versao,
+  ).length;
 }
 
 /**
@@ -279,4 +300,254 @@ export function shaDaTagRemota(payload: unknown, versao: string): string | null 
     throw new Error(`matching-refs devolveu ${candidatas.length} ocorrências para ${refEsperada}`);
   }
   return candidatas[0]?.object.sha ?? null;
+}
+
+export type ReleaseDocuments = {
+  technical: string;
+  ptBR: string;
+  en: string;
+};
+
+export type PrepareReleaseResult =
+  | { status: "prepared"; documents: ReleaseDocuments }
+  | { status: "already-released"; documents: ReleaseDocuments };
+
+export type ReleaseDomainErrorCode =
+  | ChangelogIssueCode
+  | "invalid_release_version"
+  | "invalid_published_at"
+  | "missing_unreleased"
+  | "duplicate_unreleased"
+  | "partial_existing_release";
+
+export class ReleaseDomainError extends Error {
+  readonly code: ReleaseDomainErrorCode;
+  readonly locale?: ChangelogLocale;
+  readonly version?: string;
+
+  constructor(
+    code: ReleaseDomainErrorCode,
+    details: { locale?: ChangelogLocale; version?: string } = {},
+  ) {
+    const fields: string[] = [code];
+    if (details.locale) fields.push(`locale=${details.locale}`);
+    const version = details.version
+      ?.replace(/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/g, "?")
+      .replace(/[^A-Za-z0-9._+-]/g, "?")
+      .slice(0, 64);
+    if (version) fields.push(`version=${version}`);
+    super(fields.join(" "));
+    this.name = "ReleaseDomainError";
+    this.code = code;
+    this.locale = details.locale;
+    this.version = version;
+  }
+}
+
+type UnreleasedSection = {
+  body: string;
+  bodyEnd: number;
+  headerStart: number;
+};
+
+function isCanonicalUnreleased(section: ChangelogSection): boolean {
+  return (
+    section.token === "Unreleased" &&
+    section.publication === undefined &&
+    section.publicationSyntaxValid &&
+    section.versionSyntaxValid
+  );
+}
+
+function findUnreleased(markdown: string): UnreleasedSection {
+  const structural = changelogSections(markdown).filter(
+    (section) => section.token === "Unreleased",
+  );
+  const matches = structural.filter(isCanonicalUnreleased);
+  if (structural.length === 0 || matches.length === 0) {
+    throw new ReleaseDomainError("missing_unreleased");
+  }
+  if (structural.length > 1) throw new ReleaseDomainError("duplicate_unreleased");
+
+  const match = matches[0]!;
+  return {
+    body: markdown.slice(match.bodyStart, match.bodyEnd),
+    bodyEnd: match.bodyEnd,
+    headerStart: match.index,
+  };
+}
+
+function assertParseable(result: ChangelogParseResult, locale?: ChangelogLocale): void {
+  const issue = result.issues[0];
+  if (issue) {
+    throw new ReleaseDomainError(issue.code, { locale, version: issue.version });
+  }
+}
+
+function hasTarget(result: ChangelogParseResult, version: string): boolean {
+  return (
+    result.releases.some((release) => release.version === version) ||
+    result.omitted.some((release) => release.version === version)
+  );
+}
+
+function technicalPublication(markdown: string, version: string): string | null {
+  const match = changelogSections(markdown).find(
+    (section) =>
+      section.versionSyntaxValid &&
+      section.publicationSyntaxValid &&
+      section.token === version,
+  );
+  return match?.publication ?? null;
+}
+
+function existingLocalizedPublication(
+  result: ChangelogParseResult,
+  version: string,
+): Publication | null {
+  const entry =
+    result.releases.find((release) => release.version === version) ??
+    result.omitted.find((release) => release.version === version);
+  return entry?.publication ?? null;
+}
+
+function assertExistingRelease(
+  documents: ReleaseDocuments,
+  version: string,
+  ptBR: ChangelogParseResult,
+  en: ChangelogParseResult,
+): void {
+  assertParseable(ptBR, "pt-BR");
+  assertParseable(en, "en");
+  validateLocalizedChangelogs(ptBR, en);
+  const technicalDate = technicalPublication(documents.technical, version);
+  const ptPublication = existingLocalizedPublication(ptBR, version);
+  const enPublication = existingLocalizedPublication(en, version);
+  const localizedDate = ptPublication?.kind === "instant"
+    ? ptPublication.value.slice(0, 10)
+    : ptPublication?.value;
+  if (
+    !technicalDate ||
+    !ptPublication ||
+    !enPublication ||
+    ptPublication.kind !== enPublication.kind ||
+    ptPublication.value !== enPublication.value ||
+    technicalDate !== localizedDate
+  ) {
+    throw new ChangelogDomainError("localized_publication_mismatch", { version });
+  }
+}
+
+function stampVisible(
+  markdown: string,
+  section: UnreleasedSection,
+  version: string,
+  publication: string,
+): string {
+  const replacement = `## [Unreleased]\n\n## [${version}] - ${publication}${section.body}`;
+  return `${markdown.slice(0, section.headerStart)}${replacement}${markdown.slice(section.bodyEnd)}`;
+}
+
+function stampOmitted(
+  markdown: string,
+  section: UnreleasedSection,
+  version: string,
+  publication: string,
+): string {
+  const replacement = `<!-- sem-nota-usuario: ${version} - ${publication} -->\n\n## [Unreleased]\n\n`;
+  return `${markdown.slice(0, section.headerStart)}${replacement}${markdown.slice(section.bodyEnd)}`;
+}
+
+/**
+ * Prepare all release artifacts as one pure value. The caller writes only a
+ * successful result, so rejected input cannot expose a partial locale.
+ */
+export function prepareRelease(input: {
+  documents: ReleaseDocuments;
+  version: string;
+  publishedAt: Date;
+}): PrepareReleaseResult {
+  if (!versaoSemanticaValida(input.version)) {
+    throw new ReleaseDomainError("invalid_release_version", { version: input.version });
+  }
+  if (Number.isNaN(input.publishedAt.getTime())) {
+    throw new ReleaseDomainError("invalid_published_at", { version: input.version });
+  }
+
+  const technicalBefore = parseUserChangelog(input.documents.technical);
+  const ptBefore = parseUserChangelog(input.documents.ptBR);
+  const enBefore = parseUserChangelog(input.documents.en);
+  assertParseable(technicalBefore);
+  assertParseable(ptBefore, "pt-BR");
+  assertParseable(enBefore, "en");
+  const targetPresence = [
+    changelogTemVersao(input.documents.technical, input.version),
+    hasTarget(ptBefore, input.version),
+    hasTarget(enBefore, input.version),
+  ];
+  const presentCount = targetPresence.filter(Boolean).length;
+  if (presentCount > 0 && presentCount < targetPresence.length) {
+    throw new ReleaseDomainError("partial_existing_release", { version: input.version });
+  }
+  if (presentCount === targetPresence.length) {
+    assertExistingRelease(input.documents, input.version, ptBefore, enBefore);
+    return { status: "already-released", documents: input.documents };
+  }
+
+  validateLocalizedChangelogs(ptBefore, enBefore);
+
+  const technicalSection = findUnreleased(input.documents.technical);
+  const ptSection = findUnreleased(input.documents.ptBR);
+  const enSection = findUnreleased(input.documents.en);
+  const ptNoUserChange =
+    hasNoUserChangeMarker(ptSection.body) && !bodyHasUserContent(ptSection.body);
+  const enNoUserChange =
+    hasNoUserChangeMarker(enSection.body) && !bodyHasUserContent(enSection.body);
+  if (ptNoUserChange !== enNoUserChange) {
+    throw new ChangelogDomainError("localized_visibility_mismatch", { version: input.version });
+  }
+  if (!ptNoUserChange && !bodyHasUserContent(ptSection.body)) {
+    throw new ChangelogDomainError("localized_content_missing", {
+      locale: "pt-BR",
+      version: input.version,
+    });
+  }
+  if (!enNoUserChange && !bodyHasUserContent(enSection.body)) {
+    throw new ChangelogDomainError("localized_content_missing", {
+      locale: "en",
+      version: input.version,
+    });
+  }
+
+  const instant = input.publishedAt.toISOString();
+  const date = instant.slice(0, 10);
+  const technical = stampVisible(
+    input.documents.technical,
+    technicalSection,
+    input.version,
+    date,
+  );
+  const ptBR = ptNoUserChange
+    ? stampOmitted(input.documents.ptBR, ptSection, input.version, instant)
+    : stampVisible(input.documents.ptBR, ptSection, input.version, instant);
+  const en = enNoUserChange
+    ? stampOmitted(input.documents.en, enSection, input.version, instant)
+    : stampVisible(input.documents.en, enSection, input.version, instant);
+  const candidate = { technical, ptBR, en };
+  const technicalAfter = parseUserChangelog(technical);
+  const ptAfter = parseUserChangelog(ptBR);
+  const enAfter = parseUserChangelog(en);
+  assertParseable(technicalAfter);
+  assertParseable(ptAfter, "pt-BR");
+  assertParseable(enAfter, "en");
+  validateLocalizedChangelogs(ptAfter, enAfter);
+  if (
+    !changelogTemVersao(technical, input.version) ||
+    !hasTarget(ptAfter, input.version) ||
+    !hasTarget(enAfter, input.version)
+  ) {
+    throw new ReleaseDomainError("partial_existing_release", { version: input.version });
+  }
+
+  return { status: "prepared", documents: candidate };
 }

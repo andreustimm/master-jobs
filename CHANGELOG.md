@@ -1,14 +1,40 @@
 # Changelog
 
-Histórico técnico, para quem mexe no código. O resumo em linguagem simples, que
-é o exibido no rodapé do sistema, está em [`USER_CHANGELOG.md`](./USER_CHANGELOG.md).
+Histórico técnico, para quem mexe no código. Os resumos em linguagem simples
+exibidos no rodapé ficam em [`USER_CHANGELOG.pt-BR.md`](./USER_CHANGELOG.pt-BR.md)
+e [`USER_CHANGELOG.en.md`](./USER_CHANGELOG.en.md).
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Modal de novidades redesenhado como diálogo acessível com cards de versão,
+  rolagem interna, abertura independente de múltiplas releases e reset para a
+  versão mais recente a cada nova abertura.
+- Edições localizadas do changelog em `USER_CHANGELOG.pt-BR.md` e
+  `USER_CHANGELOG.en.md`, publicadas pelo mesmo instante UTC e exibidas no fuso
+  local do dispositivo conforme o idioma ativo.
+- Renderização de Markdown editorial por `react-markdown`, limitada a elementos
+  seguros e sem imagens, HTML bruto ou protocolos de link perigosos.
+
+### Corrigido
+
+- Pipeline de release bilíngue preserva retomada pré-tag, valida coerência dos
+  três changelogs e mantém o histórico legado sem inventar horários.
+
 ## [1.1.1] - 2026-08-22
+
+### Infraestrutura
+
+- O fluxo de execução do Compozy passou a isolar cada épico em worktree própria,
+  abrir PR para `dev` e arquivar integralmente os artefatos de features já
+  concluídas.
+- A promoção de releases passou a serializar a reserva da versão e a retomar
+  com segurança execuções interrompidas antes da criação da tag.
+
 ## [1.1.0] - 2026-08-21
 
 ### Adicionado

@@ -280,7 +280,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </div>
           {/* `pb-16` acima em vez de `pb-24`: o rodapé passou a fechar a página,
               e o respiro que aquele espaço dava agora vem dele. */}
-          <Footer versao={versaoAtual(pkg)} t={t} />
+          <Footer versao={versaoAtual(pkg)} locale={locale} t={t} />
         </TooltipProvider>
       </body>
     </html>

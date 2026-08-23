@@ -1,0 +1,88 @@
+# ADR 0013: Localize release instants without inventing historical time
+
+## Status
+
+Accepted
+
+## Date
+
+2026-08-22
+
+## Context
+
+The current user changelog stores publication values as UTC calendar dates such
+as `2026-08-21`; it does not preserve a time or timezone. The redesigned modal
+must show date and time using the active interface language and the viewer's
+local timezone. Treating a date-only historical value as midnight would invent
+an instant that was never recorded and could even shift the displayed day after
+timezone conversion.
+
+## Decision
+
+Every newly published release will preserve its real publication instant as an
+unambiguous UTC timestamp. At viewing time, the modal will convert that instant
+to the device's local timezone. The active interface language controls only the
+presentation:
+
+- Portuguese (`pt-BR`): `dd/mm/yyyy HH:mm`.
+- English (`en`): `mm/dd/yyyy HH:mm`.
+- Both locales use zero-padded fields and a 24-hour clock.
+
+For historical releases, the product will recover a real publication instant
+from reliable release evidence when available. If no trustworthy time exists,
+the card will show only the localized calendar date, never a fabricated time or
+an “unknown time” placeholder.
+
+## Alternatives Considered
+
+### Alternative 1: Use one fixed timezone for every viewer
+
+- **Description**: Always display UTC or America/Sao_Paulo time.
+- **Pros**: Deterministic output across devices and simple comparison with release logs.
+- **Cons**: Makes users mentally convert the time and contradicts the requested local-device behavior.
+- **Why rejected**: The user explicitly chose the viewer's local timezone.
+
+### Alternative 2: Interpret date-only history as midnight UTC
+
+- **Description**: Append `00:00Z` to every historical date and convert it locally.
+- **Pros**: Every card displays a date and time.
+- **Cons**: Invents publication precision and can display the preceding calendar day in western timezones.
+- **Why rejected**: The product must not present fabricated evidence as fact.
+
+### Alternative 3: Display “time unavailable” for all legacy releases
+
+- **Description**: Keep the date and add an explicit missing-time label.
+- **Pros**: Makes the limitation visible.
+- **Cons**: Adds repetitive noise and ignores recoverable publication evidence.
+- **Why rejected**: The user chose recovery when reliable evidence exists and date-only display otherwise.
+
+## Consequences
+
+### Positive
+
+- Users see publication times in the clock they currently use.
+- Portuguese and English date ordering is unambiguous.
+- Historical records remain truthful about their actual precision.
+- A UTC source prevents locale or timezone changes from altering the underlying release instant.
+
+### Negative
+
+- The same release can display different dates and times to users in different timezones.
+- Some historical cards will have a date but no time.
+
+### Risks
+
+- Incorrectly treating a date-only value as a timestamp would violate the historical fallback rule. Date-only and timestamped records must remain distinguishable.
+- Daylight-saving and calendar-boundary conversions can change the visible day. Acceptance coverage must include those boundaries.
+
+## Implementation Notes
+
+- New release metadata must retain an ISO-compatible UTC instant rather than a preformatted display string.
+- Locale formatting must follow the active Master Jobs locale, while timezone conversion follows the viewer device.
+- Historical recovery may use trustworthy version publication records; an inferred or guessed time does not qualify.
+
+## References
+
+- [PRD](../../.compozy/tasks/modal-novidades/_prd.md)
+- [User stories](../../.compozy/tasks/modal-novidades/_user_stories.md)
+- [MDN `Intl.DateTimeFormat`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat)

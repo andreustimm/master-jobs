@@ -1,7 +1,7 @@
 # Novidades
 
 O que muda no Master Jobs a cada versão, em linguagem simples. É este arquivo
-que aparece no rodapé do sistema.
+que aparece no rodapé do sistema quando a interface está em português.
 
 Para o histórico técnico completo — nomes de módulo, decisões de arquitetura,
 o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
@@ -11,9 +11,27 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 > com acesso ao sistema, e descrever a implementação seria contar como ele é
 > montado por dentro. O que se descreve é o efeito.
 
+<!-- sem-nota-usuario: 1.0.1 mudança interna, nada muda para quem usa -->
+<!-- sem-nota-usuario: 1.1.1 - 2026-08-22 mudança interna, nada muda para quem usa -->
+
 ## [Unreleased]
 
-## [1.1.1] - 2026-08-22
+### Novidade
+
+- A janela de **Novidades** agora separa cada versão em um card, mantém somente
+  a mais recente aberta no início e permite comparar duas ou mais versões
+  abertas ao mesmo tempo.
+- Datas novas mostram também a **hora local do seu dispositivo**: em português,
+  no formato `dd/mm/aaaa HH:mm`; em inglês, `mm/dd/aaaa HH:mm`. Datas antigas
+  que não possuem hora confiável continuam exibindo apenas o dia.
+- A descrição agora interpreta **negrito**, listas, títulos, links seguros,
+  citações e blocos de código sem mostrar os marcadores de Markdown.
+
+### Melhorado
+
+- Mais espaço interno, melhor leitura no celular, rolagem dentro da janela e
+  navegação completa por teclado e leitor de tela.
+
 ## [1.1.0] - 2026-08-21
 
 ### Novidade

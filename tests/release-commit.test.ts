@@ -61,7 +61,8 @@ describe("commit-da-versao", () => {
 
       writeFileSync(`${repo}/package.json`, '{"version":"1.0.0"}\n');
       writeFileSync(`${repo}/CHANGELOG.md`, "## [1.0.0] - 2026-08-21\n");
-      writeFileSync(`${repo}/USER_CHANGELOG.md`, "## [1.0.0] - 2026-08-21\n");
+      writeFileSync(`${repo}/USER_CHANGELOG.pt-BR.md`, "## [1.0.0] - 2026-08-21\n");
+      writeFileSync(`${repo}/USER_CHANGELOG.en.md`, "## [1.0.0] - 2026-08-21\n");
       git(repo, "add", ".");
       git(repo, "commit", "-m", "chore: base");
       const inicial = git(repo, "rev-parse", "HEAD");
@@ -69,9 +70,13 @@ describe("commit-da-versao", () => {
       git(repo, "branch", "staging");
 
       writeFileSync(`${repo}/package.json`, '{"version":"1.1.0"}\n');
-      const changelog = "## [Unreleased]\n\n## [1.1.0] - 2026-08-22\n\n## [1.0.0] - 2026-08-21\n";
-      writeFileSync(`${repo}/CHANGELOG.md`, changelog);
-      writeFileSync(`${repo}/USER_CHANGELOG.md`, changelog);
+      const technicalChangelog =
+        "## [Unreleased]\n\n## [1.1.0] - 2026-08-22\n\n- Mudança técnica.\n\n## [1.0.0] - 2026-08-21\n\n- Base.\n";
+      const localizedChangelog =
+        "## [Unreleased]\n\n## [1.1.0] - 2026-08-22T11:46:00.000Z\n\n- Mudança.\n\n## [1.0.0] - 2026-08-21\n\n- Base.\n";
+      writeFileSync(`${repo}/CHANGELOG.md`, technicalChangelog);
+      writeFileSync(`${repo}/USER_CHANGELOG.pt-BR.md`, localizedChangelog);
+      writeFileSync(`${repo}/USER_CHANGELOG.en.md`, localizedChangelog);
       git(repo, "add", ".");
       git(repo, "commit", "-m", "chore(release): 1.1.0");
       const release = git(repo, "rev-parse", "HEAD");
