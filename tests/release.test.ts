@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -177,6 +177,21 @@ describe("prepareRelease", () => {
     expect(parseUserChangelog(result.documents.ptBR).issues).toEqual([]);
   });
 
+  it("UT-023 publishes a leading indented omission example as visible content", () => {
+    const input = documents();
+    input.ptBR = input.ptBR.replace(
+      "### Novidade\n\n- Primeira linha\n  continuada sem truncar.",
+      "    <!-- sem-nota-usuario -->",
+    );
+    input.en = input.en.replace(
+      "### New\n\n- First line\n  continued without truncation.",
+      "    <!-- sem-nota-usuario -->",
+    );
+    const result = prepareRelease({ documents: input, version: "1.2.0", publishedAt: NOW });
+    expect(parseUserChangelog(result.documents.ptBR)).toMatchObject({ issues: [], omitted: [] });
+    expect(parseUserChangelog(result.documents.en)).toMatchObject({ issues: [], omitted: [] });
+  });
+
   it("UT-024 rejects malformed localized metadata before returning output", () => {
     const input = documents();
     input.en += "\n## [1.0.0] - 2026-02-30\n\n- Invalid history.\n";
@@ -304,6 +319,24 @@ describe("release filesystem boundary", () => {
       expect(state["USER_CHANGELOG.pt-BR.md"]).toContain("Primeira linha\n  continuada");
       expect(state["USER_CHANGELOG.en.md"]).toContain(NOW.toISOString());
       expect(JSON.parse(state["package.json"]!).version).toBe("1.2.0");
+    });
+  });
+
+  it("IT-005 rejects a persisted release corrupted before read-back", async () => {
+    await withFixture(documents(), async (directory) => {
+      const operations = {
+        read: (path: string) => readFileSync(path, "utf8"),
+        write: (path: string, content: string) => {
+          writeFileSync(path, content);
+          if (path === join(directory, "package.json")) {
+            writeFileSync(join(directory, "USER_CHANGELOG.en.md"), documents().en);
+          }
+        },
+      };
+      expectReleaseCode(
+        () => applyReleaseFiles({ directory, version: "1.2.0", publishedAt: NOW }, operations),
+        "partial_existing_release",
+      );
     });
   });
 

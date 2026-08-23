@@ -27,22 +27,38 @@ export type ApplyReleaseFilesInput = {
   publishedAt: Date;
 };
 
+export type ReleaseFileOperations = {
+  read(path: string): string;
+  write(path: string, content: string): void;
+};
+
+const DEFAULT_FILE_OPERATIONS: ReleaseFileOperations = {
+  read: (path) => readFileSync(path, "utf8"),
+  write: (path, content) => writeFileSync(path, content),
+};
+
 const RELEASE_FILES = {
   technical: "CHANGELOG.md",
   ptBR: "USER_CHANGELOG.pt-BR.md",
   en: "USER_CHANGELOG.en.md",
 } as const;
 
-function readDocuments(directory: string): ReleaseDocuments {
+function readDocuments(
+  directory: string,
+  operations: ReleaseFileOperations = DEFAULT_FILE_OPERATIONS,
+): ReleaseDocuments {
   return {
-    technical: readFileSync(resolve(directory, RELEASE_FILES.technical), "utf8"),
-    ptBR: readFileSync(resolve(directory, RELEASE_FILES.ptBR), "utf8"),
-    en: readFileSync(resolve(directory, RELEASE_FILES.en), "utf8"),
+    technical: operations.read(resolve(directory, RELEASE_FILES.technical)),
+    ptBR: operations.read(resolve(directory, RELEASE_FILES.ptBR)),
+    en: operations.read(resolve(directory, RELEASE_FILES.en)),
   };
 }
 
-function readPackage(directory: string): { version: string; [key: string]: unknown } {
-  const parsed = JSON.parse(readFileSync(resolve(directory, "package.json"), "utf8")) as {
+function readPackage(
+  directory: string,
+  operations: ReleaseFileOperations = DEFAULT_FILE_OPERATIONS,
+): { version: string; [key: string]: unknown } {
+  const parsed = JSON.parse(operations.read(resolve(directory, "package.json"))) as {
     version?: unknown;
     [key: string]: unknown;
   };
@@ -55,9 +71,12 @@ function readPackage(directory: string): { version: string; [key: string]: unkno
 }
 
 /** Preflight all bytes before persisting the four-file release transaction. */
-export function applyReleaseFiles(input: ApplyReleaseFilesInput): PrepareReleaseResult {
-  const documents = readDocuments(input.directory);
-  const pkg = readPackage(input.directory);
+export function applyReleaseFiles(
+  input: ApplyReleaseFilesInput,
+  operations: ReleaseFileOperations = DEFAULT_FILE_OPERATIONS,
+): PrepareReleaseResult {
+  const documents = readDocuments(input.directory, operations);
+  const pkg = readPackage(input.directory, operations);
   const prepared = prepareRelease({
     documents,
     version: input.version,
@@ -75,13 +94,13 @@ export function applyReleaseFiles(input: ApplyReleaseFilesInput): PrepareRelease
   }
 
   const nextPackage = `${JSON.stringify({ ...pkg, version: input.version }, null, 2)}\n`;
-  writeFileSync(resolve(input.directory, RELEASE_FILES.technical), prepared.documents.technical);
-  writeFileSync(resolve(input.directory, RELEASE_FILES.ptBR), prepared.documents.ptBR);
-  writeFileSync(resolve(input.directory, RELEASE_FILES.en), prepared.documents.en);
-  writeFileSync(resolve(input.directory, "package.json"), nextPackage);
+  operations.write(resolve(input.directory, RELEASE_FILES.technical), prepared.documents.technical);
+  operations.write(resolve(input.directory, RELEASE_FILES.ptBR), prepared.documents.ptBR);
+  operations.write(resolve(input.directory, RELEASE_FILES.en), prepared.documents.en);
+  operations.write(resolve(input.directory, "package.json"), nextPackage);
 
-  const persistedDocuments = readDocuments(input.directory);
-  const persistedPackage = readPackage(input.directory);
+  const persistedDocuments = readDocuments(input.directory, operations);
+  const persistedPackage = readPackage(input.directory, operations);
   const verified = prepareRelease({
     documents: persistedDocuments,
     version: input.version,

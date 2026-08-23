@@ -189,9 +189,8 @@ function releaseHeaderAt(
     };
   }
 
-  const missingClose =
-    /^ {0,3}##[ \t]*\[([vV]?\d+(?:\.\d*)*)[ \t]+-[ \t]+(\S.*)$/.exec(line);
-  if (missingClose) {
+  const missingClose = /^ {0,3}##[ \t]*\[([^\]\s]+)[ \t]+-[ \t]+(\S.*)$/.exec(line);
+  if (missingClose && VERSION_CANDIDATE.test(missingClose[1]!.trim())) {
     return {
       token: missingClose[1]!.trim(),
       publication: missingClose[2]!.trim(),
@@ -200,9 +199,8 @@ function releaseHeaderAt(
     };
   }
 
-  const unbracketed =
-    /^ {0,3}##[ \t]+([vV]?\d+(?:\.\d*)*)[ \t]+-[ \t]+(\S.*)$/.exec(line);
-  if (!unbracketed) return null;
+  const unbracketed = /^ {0,3}##[ \t]+(\S+)[ \t]+-[ \t]+(\S.*)$/.exec(line);
+  if (!unbracketed || !VERSION_CANDIDATE.test(unbracketed[1]!.trim())) return null;
   return {
     token: unbracketed[1]!.trim(),
     publication: unbracketed[2]!.trim(),
@@ -267,8 +265,23 @@ export function hasNoUserChangeMarker(markdown: string): boolean {
   );
 }
 
-function bodyHasUserContent(body: string): boolean {
-  return body.replace(/<!--[\s\S]*?-->/g, "").trim() !== "";
+export function bodyHasUserContent(body: string): boolean {
+  let cursor = 0;
+  let codeProtected = "";
+  for (const line of linesIn(body)) {
+    codeProtected += body.slice(cursor, line.start);
+    const content = body.slice(line.start, line.end);
+    codeProtected += line.code ? content.replace(/\S/g, "x") : content;
+    cursor = line.end;
+  }
+  codeProtected += body.slice(cursor);
+  return codeProtected.replace(/<!--[\s\S]*?-->/g, "").trim() !== "";
+}
+
+function trimBodyBoundaries(body: string): string {
+  return body
+    .replace(/^(?:[ \t]*\r?\n)+/, "")
+    .replace(/(?:\r?\n[ \t]*)+$/, "");
 }
 
 function diagnosticVersion(value: string): string {
@@ -322,9 +335,10 @@ export function parseUserChangelog(markdown: string): ChangelogParseResult {
       continue;
     }
 
-    const body = markdown.slice(header.bodyStart, header.bodyEnd).trim();
-    if (hasNoUserChangeMarker(body)) {
-      if (bodyHasUserContent(body)) {
+    const rawBody = markdown.slice(header.bodyStart, header.bodyEnd);
+    const body = trimBodyBoundaries(rawBody);
+    if (hasNoUserChangeMarker(rawBody)) {
+      if (bodyHasUserContent(rawBody)) {
         issues.push({ code: "invalid_omission", line: header.line, version: header.token });
         continue;
       }
@@ -332,7 +346,7 @@ export function parseUserChangelog(markdown: string): ChangelogParseResult {
       omitted.push({ version: header.token, publication });
       continue;
     }
-    if (!bodyHasUserContent(body)) {
+    if (!bodyHasUserContent(rawBody)) {
       issues.push({ code: "empty_body", line: header.line, version: header.token });
       continue;
     }

@@ -79,6 +79,15 @@ After.`;
     ]);
   });
 
+  it("UT-003 preserves a leading indented omission example as visible code", () => {
+    const body = "    <!-- sem-nota-usuario -->";
+    const result = parseUserChangelog(release("1.2.0", "2026-08-22", body));
+    expect(result).toMatchObject({ issues: [], omitted: [] });
+    expect(result.releases).toEqual([
+      expect.objectContaining({ version: "1.2.0", markdown: body }),
+    ]);
+  });
+
   it("UT-003 preserves a linked level-two heading inside release Markdown", () => {
     const body = "Before.\n\n## [2FA setup](https://example.com/2fa)\n\nAfter.";
     const result = parseUserChangelog(release("1.2.0", "2026-08-22", body));
@@ -151,6 +160,20 @@ After.`;
       expect(result.issues).toContainEqual(
         expect.objectContaining({ code: "invalid_version", version: token }),
       );
+      expect(result.releases.map((item) => item.version)).toEqual(["2.0.0", "1.0.0"]);
+      expect(result.releases[0]!.markdown).toBe("First");
+    }
+  });
+
+  it("UT-005 isolates suffix candidates with missing or absent brackets", () => {
+    for (const heading of [
+      "## [1.2.3-beta - 2026-08-22",
+      "## 1.2.3+build.1 - 2026-08-22",
+    ]) {
+      const result = parseUserChangelog(
+        `${release("2.0.0", "2026-08-23", "First")}${heading}\n\nMalformed\n\n${release("1.0.0", "2026-08-21", "Valid")}`,
+      );
+      expect(result.issues).toContainEqual(expect.objectContaining({ code: "invalid_version" }));
       expect(result.releases.map((item) => item.version)).toEqual(["2.0.0", "1.0.0"]);
       expect(result.releases[0]!.markdown).toBe("First");
     }

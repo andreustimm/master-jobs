@@ -1,5 +1,6 @@
 import {
   ChangelogDomainError,
+  bodyHasUserContent,
   changelogSections,
   hasNoUserChangeMarker,
   parseUserChangelog,
@@ -437,10 +438,6 @@ function assertExistingRelease(
   }
 }
 
-function userContent(body: string): string {
-  return body.replace(/<!--[\s\S]*?-->/g, "").trim();
-}
-
 function stampVisible(
   markdown: string,
   section: UnreleasedSection,
@@ -503,19 +500,19 @@ export function prepareRelease(input: {
   const ptSection = findUnreleased(input.documents.ptBR);
   const enSection = findUnreleased(input.documents.en);
   const ptNoUserChange =
-    hasNoUserChangeMarker(ptSection.body) && userContent(ptSection.body) === "";
+    hasNoUserChangeMarker(ptSection.body) && !bodyHasUserContent(ptSection.body);
   const enNoUserChange =
-    hasNoUserChangeMarker(enSection.body) && userContent(enSection.body) === "";
+    hasNoUserChangeMarker(enSection.body) && !bodyHasUserContent(enSection.body);
   if (ptNoUserChange !== enNoUserChange) {
     throw new ChangelogDomainError("localized_visibility_mismatch", { version: input.version });
   }
-  if (!ptNoUserChange && userContent(ptSection.body) === "") {
+  if (!ptNoUserChange && !bodyHasUserContent(ptSection.body)) {
     throw new ChangelogDomainError("localized_content_missing", {
       locale: "pt-BR",
       version: input.version,
     });
   }
-  if (!enNoUserChange && userContent(enSection.body) === "") {
+  if (!enNoUserChange && !bodyHasUserContent(enSection.body)) {
     throw new ChangelogDomainError("localized_content_missing", {
       locale: "en",
       version: input.version,
