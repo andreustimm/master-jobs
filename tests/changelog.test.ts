@@ -680,6 +680,12 @@ describe("localized footer boundary", () => {
     expect(footer).not.toContain('"use client"');
     expect(modal).not.toMatch(/Translator|readFile|node:fs|Date\b/);
   });
+
+  it("IT-017 gives the mobile flex scrollport a definite dialog height", async () => {
+    const modal = await readFile("app/changelog-modal.tsx", "utf8");
+    expect(modal).toMatch(/(?:^|[\s"])h-\[calc\(100dvh-2rem\)\](?=$|[\s"])/m);
+    expect(modal).toContain("min-h-0 flex-1 overflow-y-auto");
+  });
 });
 
 describe("diagnostics and current version", () => {

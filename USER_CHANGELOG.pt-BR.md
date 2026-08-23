@@ -16,6 +16,14 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-08-23T14:37:30.883Z
+
+### Correção
+
+- A janela de **Novidades** agora ocupa a altura útil do celular. Em alguns
+  iPhones, apenas o cabeçalho aparecia e os cards das versões ficavam
+  recortados, impedindo abrir e ler as descrições.
+
 ## [1.1.2] - 2026-08-23T04:48:48.209Z
 
 ### Novidade

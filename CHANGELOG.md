@@ -9,6 +9,14 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-08-23
+
+### Corrigido
+
+- O diálogo de novidades agora estabelece altura dinâmica explícita antes de
+  distribuir o espaço entre cabeçalho e lista rolável, evitando que o WebKit
+  móvel reduza a coleção de versões a uma faixa recortada.
+
 ## [1.1.2] - 2026-08-23
 
 ### Adicionado
