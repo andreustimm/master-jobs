@@ -153,6 +153,30 @@ Incomplete version-like minor heading.
 
 Incomplete wildcard minor heading.
 
+## [2026..1] - Draft
+
+Empty minor heading.
+
+## [2026.08.] - Draft
+
+Empty patch heading.
+
+## [42..7] - Index
+
+Compact empty minor heading.
+
+## [1..2] - Plan
+
+Version-like empty minor heading.
+
+## [1.2.3Plan] - Plan
+
+Incomplete numeric patch heading.
+
+## [1.2.xRoadmap] - Draft
+
+Incomplete wildcard patch heading.
+
 ## [42] - Answers
 
 After.`;

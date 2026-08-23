@@ -91,7 +91,7 @@ function isVersionCandidate(token: string): boolean {
   const suffixAt = third.search(/[-+]/u);
   const patch = suffixAt === -1 ? third : third.slice(0, suffixAt);
   const coreComponent = (value: string): boolean =>
-    value === "" || /^\d+$/u.test(value) || /^[xX*]$/u.test(value);
+    /^\d+$/u.test(value) || /^[xX*]$/u.test(value);
   return coreComponent(second) && coreComponent(patch);
 }
 
