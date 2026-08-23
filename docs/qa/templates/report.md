@@ -1,0 +1,1 @@
+../../../.claude/skills/qa-execution/assets/report-template.md

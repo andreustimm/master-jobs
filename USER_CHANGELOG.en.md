@@ -16,6 +16,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-23T20:57:34.519Z
+
+### Fixed
+
+- Screen readers now identify the résumé editor correctly, and disabled-account
+  details remain readable with sufficient contrast.
+
 ## [1.1.4] - 2026-08-23T19:19:40.742Z
 
 ### Fixed

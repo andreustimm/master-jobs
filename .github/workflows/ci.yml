@@ -65,6 +65,9 @@ jobs:
         # alcançado — não há número repetido aqui.
         run: pnpm vitest run --coverage
 
+      - name: Contratos das skills de QA
+        run: pnpm test:qa-skills
+
       - name: Build
         run: pnpm build
 

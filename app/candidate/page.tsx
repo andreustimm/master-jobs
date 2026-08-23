@@ -256,6 +256,7 @@ export default async function CandidateArea() {
             name="content"
             defaultValue={doc?.content ?? ""}
             labels={{
+              field: t("candidate.cvMarkdown"),
               edit: t("candidate.edit"),
               split: t("candidate.split"),
               preview: t("candidate.preview"),

@@ -9,6 +9,21 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-23
+
+### Adicionado
+
+- Fluxo de QA vivo compartilhado entre Claude Code, Codex e OpenCode, com
+  personas, jornadas, cenários, charters, bugs, relatórios e execução por
+  navegador real sem duplicar as skills entre os três harnesses.
+- Gate axe cumulativo WCAG 2.0/2.1/2.2 AA integrado ao E2E isolado e testes dos
+  conversores do tracker executados por `rtk pnpm check` e pelo CI.
+
+### Corrigido
+
+- O editor de currículo agora expõe um nome acessível, e contas desativadas não
+  perdem contraste por opacidade aplicada ao card inteiro.
+
 ## [1.1.4] - 2026-08-23
 
 ### Corrigido

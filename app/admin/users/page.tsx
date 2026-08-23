@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 import {
   listUsers,
   recruiterLinks,
@@ -124,7 +123,7 @@ function UserRow({
 
   return (
     <li>
-      <Card className={cn(disabled && "opacity-60")}>
+      <Card>
         <CardContent className="grid gap-3 pt-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
             {/* Nome e e-mail são dado do usuário, não texto de interface. O

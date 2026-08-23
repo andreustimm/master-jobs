@@ -42,6 +42,8 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`linkedin-policy.md`](linkedin-policy.md) | **Antes de qualquer coisa que envolva LinkedIn.** O que é publicação oficial via `w_member_social`, o que é assistido, e o que é proibido. |
 | [`cli.md`](cli.md) | Referência completa de comandos, flags e defaults de `jho`. |
 | [`operations.md`](operations.md) | A rotina diária/semanal: sincronizar, triar, mover o funil, exportar o relatório, podar vagas velhas. |
+| [`qa/README.md`](qa/README.md) | Planejar e executar QA vivo por personas, jornadas, cenários, charters, bugs e relatórios. |
+| [`engineering/skills-evaluation.md`](engineering/skills-evaluation.md) | Entender quais skills de desenvolvimento estão instaladas, sua origem e onde entram no fluxo. |
 | [`roadmap.md`](roadmap.md) | O que vem depois e em que ordem — e a lista explícita do que ainda não existe. |
 | [`adr/`](adr/) | Por que cada decisão estrutural foi tomada, com as alternativas descartadas. Leia antes de propor reverter qualquer uma delas. |
 
@@ -71,7 +73,9 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 
 ## As seis regras que um agente não pode quebrar
 
-O texto normativo está em `CLAUDE.md` (e no espelho `AGENTS.md`). Resumo, com o ponteiro para o documento que explica cada uma:
+O texto normativo está em `AGENTS.md`. `CLAUDE.md` é apenas um symlink para a
+mesma fonte, assim como Codex e OpenCode compartilham as skills canônicas.
+Resumo, com o ponteiro para o documento que explica cada uma:
 
 > **Invariante:** Nunca faça scraping do LinkedIn. Nada aqui pode ler `li_at`, dirigir sessão autenticada ou usar um "LinkedIn MCP" não oficial — viola a seção 8.2 do User Agreement e arrisca a conta que é o principal ativo de posicionamento. Publicação usa a API oficial (`w_member_social`); comentários, conexões e busca são **assistidos** — o agente redige, o humano executa. Ver [`linkedin-policy.md`](linkedin-policy.md) e [ADR 0001](adr/0001-nao-fazer-scraping-do-linkedin.md).
 
@@ -85,7 +89,7 @@ O texto normativo está em `CLAUDE.md` (e no espelho `AGENTS.md`). Resumo, com o
 
 > **Invariante:** Não invente evidência. O agente de tailoring de CV só pode citar o que está sob a chave `evidence` de `profile.yaml`. O que está em `growth` é lacuna assumida — sinalize, nunca maquie.
 
-> **Invariante:** `CLAUDE.md` e `AGENTS.md` devem dizer a mesma coisa. Editou um, edite o outro.
+> **Invariante:** edite somente `AGENTS.md`; nunca substitua nem edite o symlink `CLAUDE.md` como uma cópia independente.
 
 
 ## Documentos adicionados depois

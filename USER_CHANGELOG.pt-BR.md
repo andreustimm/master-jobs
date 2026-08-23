@@ -16,6 +16,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-23T20:57:34.519Z
+
+### Correção
+
+- Leitores de tela agora identificam corretamente o editor de currículo, e os
+  dados de contas desativadas permanecem legíveis com contraste adequado.
+
 ## [1.1.4] - 2026-08-23T19:19:40.742Z
 
 ### Correção
