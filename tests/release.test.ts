@@ -188,8 +188,17 @@ describe("prepareRelease", () => {
       "    <!-- sem-nota-usuario -->",
     );
     const result = prepareRelease({ documents: input, version: "1.2.0", publishedAt: NOW });
-    expect(parseUserChangelog(result.documents.ptBR)).toMatchObject({ issues: [], omitted: [] });
-    expect(parseUserChangelog(result.documents.en)).toMatchObject({ issues: [], omitted: [] });
+    expect(result.status).toBe("prepared");
+    for (const localized of [result.documents.ptBR, result.documents.en]) {
+      const parsed = parseUserChangelog(localized);
+      expect(parsed).toMatchObject({ issues: [], omitted: [] });
+      expect(parsed.releases).toContainEqual(
+        expect.objectContaining({
+          version: "1.2.0",
+          markdown: "    <!-- sem-nota-usuario -->",
+        }),
+      );
+    }
   });
 
   it("UT-024 rejects malformed localized metadata before returning output", () => {
@@ -329,7 +338,11 @@ describe("release filesystem boundary", () => {
         write: (path: string, content: string) => {
           writeFileSync(path, content);
           if (path === join(directory, "package.json")) {
-            writeFileSync(join(directory, "USER_CHANGELOG.en.md"), documents().en);
+            const enPath = join(directory, "USER_CHANGELOG.en.md");
+            writeFileSync(
+              enPath,
+              readFileSync(enPath, "utf8").replace("First line", "CORRUPTED persisted prose"),
+            );
           }
         },
       };

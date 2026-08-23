@@ -153,7 +153,12 @@ After.`;
   });
 
   it("UT-005 isolates malformed semantic-version suffixes", () => {
-    for (const token of ["1.2.3-beta", "1.2.3+build.1", "1.2.x"]) {
+    for (const token of [
+      "1.2.3-beta",
+      "1.2.3+build.1",
+      "1.2.3-beta+build.1",
+      "1.2.x",
+    ]) {
       const result = parseUserChangelog(
         `${release("2.0.0", "2026-08-23", "First")}## [${token}] - 2026-08-22\n\nMalformed\n\n${release("1.0.0", "2026-08-21", "Valid")}`,
       );
@@ -168,7 +173,9 @@ After.`;
   it("UT-005 isolates suffix candidates with missing or absent brackets", () => {
     for (const heading of [
       "## [1.2.3-beta - 2026-08-22",
+      "## [1.2.3-beta+build.1 - 2026-08-22",
       "## 1.2.3+build.1 - 2026-08-22",
+      "## 1.2.3-beta+build.1 - 2026-08-22",
     ]) {
       const result = parseUserChangelog(
         `${release("2.0.0", "2026-08-23", "First")}${heading}\n\nMalformed\n\n${release("1.0.0", "2026-08-21", "Valid")}`,

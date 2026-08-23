@@ -58,7 +58,11 @@ function readPackage(
   directory: string,
   operations: ReleaseFileOperations = DEFAULT_FILE_OPERATIONS,
 ): { version: string; [key: string]: unknown } {
-  const parsed = JSON.parse(operations.read(resolve(directory, "package.json"))) as {
+  return parsePackage(operations.read(resolve(directory, "package.json")));
+}
+
+function parsePackage(raw: string): { version: string; [key: string]: unknown } {
+  const parsed = JSON.parse(raw) as {
     version?: unknown;
     [key: string]: unknown;
   };
@@ -100,7 +104,16 @@ export function applyReleaseFiles(
   operations.write(resolve(input.directory, "package.json"), nextPackage);
 
   const persistedDocuments = readDocuments(input.directory, operations);
-  const persistedPackage = readPackage(input.directory, operations);
+  const persistedPackageBytes = operations.read(resolve(input.directory, "package.json"));
+  const persistedPackage = parsePackage(persistedPackageBytes);
+  if (
+    persistedDocuments.technical !== prepared.documents.technical ||
+    persistedDocuments.ptBR !== prepared.documents.ptBR ||
+    persistedDocuments.en !== prepared.documents.en ||
+    persistedPackageBytes !== nextPackage
+  ) {
+    throw new ReleaseDomainError("partial_existing_release", { version: input.version });
+  }
   const verified = prepareRelease({
     documents: persistedDocuments,
     version: input.version,

@@ -332,7 +332,8 @@ has selected a bump and before preparation. `prepareRelease`:
 5. returns all strings only after every check passes.
 
 The shell updates files and `package.json` only from that successful result,
-then re-reads and revalidates every persisted output before reporting success. If
+then re-reads every persisted output, compares its exact bytes with the prepared
+candidate, and revalidates structure before reporting success. If
 the target version already exists coherently in the package and all three
 documents, the rerun reports `already-released` without modifying timestamp or
 content. Existing localized metadata may remain a matching historical `date` or
