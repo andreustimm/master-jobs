@@ -117,6 +117,14 @@ Date-suffixed heading.
 
 Quarter heading.
 
+## [2026-Q3.2.3] - Highlights
+
+Complete trailing components after a quarter heading.
+
+## [1+build.2.3] - Plan
+
+Complete trailing components after a build-style editorial heading.
+
 ## [2026.Q3] - Roadmap
 
 Roadmap heading.
