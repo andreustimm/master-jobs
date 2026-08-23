@@ -194,7 +194,7 @@ export function ChangelogModal({
           if (event.target === event.currentTarget) closeModal();
         }}
         className={cn(
-          "m-auto max-h-[calc(100dvh-2rem)] w-[min(calc(100vw-2rem),48rem)] overflow-hidden",
+          "m-auto h-[calc(100dvh-2rem)] w-[min(calc(100vw-2rem),48rem)] overflow-hidden",
           "rounded-[var(--radius-surface)] border border-[var(--border)]",
           "bg-[var(--card)] p-0 text-[var(--card-foreground)] shadow-lg",
           "backdrop:bg-foreground/40 open:flex open:flex-col",

@@ -16,6 +16,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- The **What's New** window now uses the available phone height. On some
+  iPhones, only the header appeared while the release cards were clipped,
+  preventing users from opening and reading their descriptions.
+
 ## [1.1.2] - 2026-08-23T04:48:48.209Z
 
 ### New

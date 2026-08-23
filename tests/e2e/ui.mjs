@@ -19,7 +19,7 @@
  * already-running environment deliberately, set E2E_BASE and
  * TURSO_DATABASE_URL and run `pnpm test:e2e:external`.
  */
-import { chromium } from "playwright";
+import { chromium, webkit } from "playwright";
 import { readFile } from "node:fs/promises";
 
 const BASE = process.env.E2E_BASE ?? "http://127.0.0.1:3000";
@@ -429,11 +429,22 @@ try {
   opened = await openChangelog(page);
   const narrow = await page.evaluate(() => {
     const dialog = document.querySelector('[data-testid="changelog-dialog"]');
+    const scrollArea = dialog?.querySelector("div.min-h-0.flex-1");
     const header = document.querySelector('[data-testid="changelog-release-1.1.0"]');
     const longHeader = document
       .querySelector('time[datetime="2027-01-01T01:30:00.000Z"]')
       ?.closest("button");
     const code = dialog?.querySelector("pre");
+    const dialogRect = dialog?.getBoundingClientRect();
+    const scrollRect = scrollArea?.getBoundingClientRect();
+    const headerRect = header?.getBoundingClientRect();
+    const visibleHeaderHeight = scrollRect && headerRect
+      ? Math.max(
+          0,
+          Math.min(scrollRect.bottom, headerRect.bottom) -
+            Math.max(scrollRect.top, headerRect.top),
+        )
+      : 0;
     return {
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       dialogOverflow: dialog ? dialog.scrollWidth - dialog.clientWidth : 999,
@@ -445,6 +456,11 @@ try {
           : false,
       codeScrolls: code ? code.scrollWidth > code.clientWidth : false,
       viewport: document.documentElement.clientWidth,
+      viewportHeight: globalThis.visualViewport?.height ?? globalThis.innerHeight,
+      dialogHeight: dialogRect?.height ?? 0,
+      scrollAreaHeight: scrollRect?.height ?? 0,
+      firstHeaderHeight: headerRect?.height ?? 0,
+      visibleHeaderHeight,
     };
   });
   check(
@@ -454,6 +470,55 @@ try {
       narrow.longHeaderOverflow <= 1 && narrow.codeContained && narrow.codeScrolls,
     JSON.stringify(narrow),
   );
+  check(
+    "E2E-019b 375px reserva área vertical útil e mostra o primeiro card inteiro",
+    narrow.dialogHeight >= narrow.viewportHeight * 0.7 &&
+      narrow.scrollAreaHeight >= narrow.viewportHeight * 0.45 &&
+      narrow.firstHeaderHeight >= 44 &&
+      narrow.visibleHeaderHeight >= narrow.firstHeaderHeight - 1,
+    JSON.stringify(narrow),
+  );
+
+  const webkitBrowser = await webkit.launch();
+  try {
+    const webkitContext = await webkitBrowser.newContext({ viewport: { width: 375, height: 812 } });
+    const webkitPage = await webkitContext.newPage();
+    trackConsole(webkitPage);
+    if (sessionCookie) await webkitContext.addCookies([sessionCookie]);
+    await webkitContext.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+    await webkitPage.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+    const { dialog: webkitDialog } = await openChangelog(webkitPage);
+    const webkitVertical = await webkitDialog.evaluate((dialog) => {
+      const scrollArea = dialog.querySelector("div.min-h-0.flex-1");
+      const firstHeader = dialog.querySelector('[data-testid^="changelog-release-"]');
+      const dialogRect = dialog.getBoundingClientRect();
+      const scrollRect = scrollArea?.getBoundingClientRect();
+      const headerRect = firstHeader?.getBoundingClientRect();
+      return {
+        viewportHeight: globalThis.visualViewport?.height ?? globalThis.innerHeight,
+        dialogHeight: dialogRect.height,
+        scrollAreaHeight: scrollRect?.height ?? 0,
+        firstHeaderHeight: headerRect?.height ?? 0,
+        visibleHeaderHeight: scrollRect && headerRect
+          ? Math.max(
+              0,
+              Math.min(scrollRect.bottom, headerRect.bottom) -
+                Math.max(scrollRect.top, headerRect.top),
+            )
+          : 0,
+      };
+    });
+    check(
+      "E2E-019c WebKit móvel reserva área vertical útil e mostra o primeiro card inteiro",
+      webkitVertical.dialogHeight >= webkitVertical.viewportHeight * 0.7 &&
+        webkitVertical.scrollAreaHeight >= webkitVertical.viewportHeight * 0.45 &&
+        webkitVertical.firstHeaderHeight >= 44 &&
+        webkitVertical.visibleHeaderHeight >= webkitVertical.firstHeaderHeight - 1,
+      JSON.stringify(webkitVertical),
+    );
+  } finally {
+    await webkitBrowser.close();
+  }
 
   const scrollArea = opened.dialog.locator("div.min-h-0.flex-1");
   const headerTop = (await opened.dialog.locator("header").boundingBox())?.y;
