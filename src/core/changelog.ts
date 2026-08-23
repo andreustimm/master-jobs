@@ -87,7 +87,11 @@ function isVersionCandidate(token: string): boolean {
   if (prefixed) return true;
   if (components.length < 3) return false;
   const second = components[1] ?? "";
-  return second === "" || /^[0-9xX*]/u.test(second);
+  const third = components[2] ?? "";
+  return (
+    (second === "" || /^[0-9xX*]/u.test(second)) &&
+    (third === "" || /^[0-9xX*]/u.test(third))
+  );
 }
 
 export type ChangelogSection = {

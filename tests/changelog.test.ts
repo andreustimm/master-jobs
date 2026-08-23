@@ -121,6 +121,22 @@ Quarter heading.
 
 Roadmap heading.
 
+## [2026.08.Roadmap] - Highlights
+
+Three-component editorial heading.
+
+## [2026..Roadmap] - Draft
+
+Empty-middle editorial heading.
+
+## [42.7.Answers] - Index
+
+Numeric editorial heading.
+
+## [1.2.Roadmap] - Plan
+
+Version-like editorial heading.
+
 ## [42] - Answers
 
 After.`;
