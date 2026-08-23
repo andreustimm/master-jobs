@@ -9,6 +9,17 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-08-23
+
+### Corrigido
+
+- A área segura da PWA agora ajusta somente o cabeçalho global, preservando o
+  espaçamento vertical dos cabeçalhos internos, páginas e diálogos.
+- Cockpit, Vagas e modais administrativos passaram a reutilizar o ritmo de
+  espaçamento do `DESIGN.md`; o menu administrativo em inglês usa `Users`.
+- A edição de conta fecha a modal apenas depois de persistir, anuncia sucesso,
+  mantém a modal aberta em falhas esperadas e exibe o erro no idioma ativo.
+
 ## [1.1.3] - 2026-08-23
 
 ### Corrigido

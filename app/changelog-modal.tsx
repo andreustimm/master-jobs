@@ -193,14 +193,26 @@ export function ChangelogModal({
         onPointerDown={(event) => {
           if (event.target === event.currentTarget) closeModal();
         }}
+        style={{
+          // O dialog nativo centraliza contra o viewport inteiro. A meia
+          // diferença recentraliza dentro de safe areas assimétricas.
+          height:
+            "calc(100dvh - max(var(--spacing-xl), var(--safe-area-top)) - max(var(--spacing-xl), var(--safe-area-bottom)))",
+          width:
+            "min(calc(100vw - max(var(--spacing-md), var(--safe-area-left)) - max(var(--spacing-md), var(--safe-area-right))), 48rem)",
+          marginTop: "max(var(--spacing-xl), var(--safe-area-top))",
+          marginBottom: "max(var(--spacing-xl), var(--safe-area-bottom))",
+          transform:
+            "translateX(calc((max(var(--spacing-md), var(--safe-area-left)) - max(var(--spacing-md), var(--safe-area-right))) / 2))",
+        }}
         className={cn(
-          "m-auto h-[calc(100dvh-2rem)] w-[min(calc(100vw-2rem),48rem)] overflow-hidden",
+          "mx-auto box-border overflow-hidden",
           "rounded-[var(--radius-surface)] border border-[var(--border)]",
           "bg-[var(--card)] p-0 text-[var(--card-foreground)] shadow-lg",
           "backdrop:bg-foreground/40 open:flex open:flex-col",
         )}
       >
-        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--hairline)] bg-[var(--card)] px-4 py-4 sm:px-6">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--hairline)] bg-[var(--card)] px-4 py-6 sm:px-6">
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <h2 id="changelog-dialog-title" className="type-display-xs break-words">

@@ -1,19 +1,18 @@
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
-import { ROLES, type Role, type UserSummary } from "../../src/contexts/auth/index.ts";
-import type { TranslationKey, Translator } from "../../src/core/i18n/index.ts";
-import { deleteUserAction, updateUserAction } from "./actions";
+import { X } from "lucide-react";
+import type { UserSummary } from "../../src/contexts/auth/index.ts";
+import type { Translator } from "../../src/core/i18n/index.ts";
+import { deleteUserAction } from "./actions";
+import { EditUserForm, type UserEditLabels } from "./edit-user-form";
+import { USER_MODAL_BOX } from "./user-modal-styles";
 
 /**
  * Edição e exclusão de conta, em modal.
  *
- * **Popover nativo, como o modal de vaga.** Nenhum JavaScript é enviado: o
- * navegador cuida de abrir, fechar no Escape, dispensar por clique fora, foco e
- * camada de topo. É o que permite esta tela continuar sendo Server Component —
- * a alternativa seria um componente cliente com estado só para mostrar um
- * formulário, e o formulário já sabe se enviar sozinho.
+ * **Popover nativo, como o modal de vaga.** O navegador continua responsável
+ * por Escape, clique fora, foco e camada de topo. Só a edição é uma pequena
+ * ilha cliente: ela precisa esperar a Server Action, fechar apenas no sucesso e
+ * anunciar o resultado. A confirmação de exclusão permanece sem estado local.
  *
  * **Por que a edição vive numa modal e não na linha.** A linha já tinha os
  * papéis inline, e ficou desse jeito enquanto papel era a única coisa editável.
@@ -28,18 +27,6 @@ import { deleteUserAction, updateUserAction } from "./actions";
  * alguém precisa ler antes de decidir.
  */
 
-const ROLE_LABEL = {
-  admin: "admin.roleAdmin",
-  candidate: "admin.roleCandidate",
-  recruiter: "admin.roleRecruiter",
-} as const satisfies Record<Role, TranslationKey>;
-
-/** Mesma caixa do modal de vaga: divergir aqui faria duas modais diferentes. */
-const CAIXA = cn(
-  "m-auto max-h-[85dvh] w-[min(92vw,520px)] overflow-y-auto rounded-xl bg-card p-0 text-card-foreground",
-  "ring-1 ring-foreground/10 backdrop:bg-black/40",
-);
-
 function BotaoFechar({ alvo, rotulo }: { alvo: string; rotulo: string }) {
   return (
     <button
@@ -47,9 +34,9 @@ function BotaoFechar({ alvo, rotulo }: { alvo: string; rotulo: string }) {
       popoverTarget={alvo}
       popoverTargetAction="hide"
       aria-label={rotulo}
-      className="shrink-0 rounded-md px-2 py-1 text-lg leading-none text-muted-foreground hover:bg-muted"
+      className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-action)] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--primary-text)]"
     >
-      ×
+      <X aria-hidden="true" className="size-5" />
     </button>
   );
 }
@@ -61,77 +48,33 @@ export function EditUserModal({
   user: UserSummary;
   t: Translator["t"];
 }) {
-  const id = `user-edit-${user.id}`;
+  const labels: UserEditLabels = {
+    title: t("admin.editTitle"),
+    close: t("admin.close"),
+    email: t("admin.email"),
+    fullName: t("admin.fullName"),
+    fullNameHint: t("admin.fullNameHint"),
+    roles: t("admin.roles"),
+    roleLabels: {
+      admin: t("admin.roleAdmin"),
+      candidate: t("admin.roleCandidate"),
+      recruiter: t("admin.roleRecruiter"),
+    },
+    cancel: t("admin.cancel"),
+    save: t("admin.saveChanges"),
+    saving: t("admin.savingChanges"),
+    success: t("admin.saveSuccess"),
+    dismissNotification: t("admin.dismissNotification"),
+    errors: {
+      invalidEmail: t("admin.errorInvalidEmail"),
+      nameRequired: t("admin.errorNameRequired"),
+      rolesRequired: t("admin.errorRolesRequired"),
+      lastAdmin: t("admin.errorLastAdmin"),
+      unexpected: t("admin.errorUnexpected"),
+    },
+  };
 
-  return (
-    <div id={id} popover="auto" className={CAIXA}>
-      <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--color-hairline)] bg-card px-5 py-4">
-        <div className="min-w-0">
-          <h2 className="type-display-xs leading-tight">{t("admin.editTitle")}</h2>
-          {/* E-mail é dado do usuário, não texto de interface. */}
-          <p data-user-content className="type-body-sm mt-0.5 truncate text-muted-foreground">
-            {user.email}
-          </p>
-        </div>
-        <BotaoFechar alvo={id} rotulo={t("admin.close")} />
-      </header>
-
-      <form action={updateUserAction} className="grid gap-4 px-5 py-4">
-        <input type="hidden" name="userId" value={user.id} />
-
-        <div className="grid gap-1.5">
-          <Label htmlFor={`${id}-name`}>{t("admin.fullName")}</Label>
-          <Input
-            id={`${id}-name`}
-            name="fullName"
-            type="text"
-            maxLength={120}
-            required
-            autoComplete="off"
-            defaultValue={user.fullName ?? ""}
-          />
-          <p className="type-meta text-muted-foreground">{t("admin.fullNameHint")}</p>
-        </div>
-
-        <div className="grid gap-1.5">
-          <Label htmlFor={`${id}-email`}>{t("admin.email")}</Label>
-          <Input
-            id={`${id}-email`}
-            name="email"
-            type="email"
-            required
-            autoComplete="off"
-            defaultValue={user.email}
-          />
-        </div>
-
-        <fieldset>
-          <legend className="type-micro mb-1.5 text-muted-foreground">{t("admin.roles")}</legend>
-          <div className="flex flex-wrap gap-3">
-            {ROLES.map((role) => (
-              <label key={role} className="flex cursor-pointer items-center gap-1.5 type-body-sm">
-                <input
-                  type="checkbox"
-                  name="roles"
-                  value={role}
-                  defaultChecked={user.roles.includes(role)}
-                  className="cursor-pointer"
-                />
-                {t(ROLE_LABEL[role])}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-
-        <div className="mt-1 flex items-center justify-end gap-2">
-          <Button type="button" variant="outline" popoverTarget={id} popoverTargetAction="hide">
-            {t("admin.cancel")}
-          </Button>
-          <Button type="submit">{t("admin.saveChanges")}</Button>
-        </div>
-      </form>
-    </div>
-  );
+  return <EditUserForm user={user} labels={labels} />;
 }
 
 export function DeleteUserModal({
@@ -144,11 +87,11 @@ export function DeleteUserModal({
   const id = `user-delete-${user.id}`;
 
   return (
-    <div id={id} popover="auto" className={CAIXA}>
-      <header className="flex items-start justify-between gap-4 border-b border-[var(--color-hairline)] px-5 py-4">
+    <div id={id} popover="auto" className={USER_MODAL_BOX}>
+      <header className="flex items-start justify-between gap-4 border-b border-[var(--hairline)] px-5 py-6">
         <div className="min-w-0">
           <h2 className="type-display-xs leading-tight">{t("admin.deleteTitle")}</h2>
-          <p data-user-content className="type-body-sm mt-0.5 truncate text-muted-foreground">
+          <p data-user-content className="type-caption-sm mt-1 truncate text-muted-foreground">
             {user.fullName ?? user.email}
           </p>
         </div>
@@ -158,16 +101,16 @@ export function DeleteUserModal({
       <div className="grid gap-3 px-5 py-4">
         {/* O que sobrevive está escrito antes do botão, e não depois: quem lê
             depois de clicar já não tem escolha. */}
-        <p className="type-body-sm">{t("admin.deleteWarning")}</p>
+        <p className="type-caption-sm">{t("admin.deleteWarning")}</p>
         <p className="type-meta text-muted-foreground">{t("admin.deleteReversible")}</p>
 
         <div className="mt-1 flex items-center justify-end gap-2">
-          <Button type="button" variant="outline" popoverTarget={id} popoverTargetAction="hide">
+          <Button type="button" variant="outline" popoverTarget={id} popoverTargetAction="hide" className="min-h-11">
             {t("admin.cancel")}
           </Button>
           <form action={deleteUserAction}>
             <input type="hidden" name="userId" value={user.id} />
-            <Button type="submit" variant="destructive">
+            <Button type="submit" variant="destructive" className="min-h-11">
               {t("admin.deleteConfirm")}
             </Button>
           </form>

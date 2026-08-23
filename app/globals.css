@@ -115,6 +115,11 @@
    =========================================================================== */
 
 :root {
+  --safe-area-top: env(safe-area-inset-top);
+  --safe-area-right: env(safe-area-inset-right);
+  --safe-area-bottom: env(safe-area-inset-bottom);
+  --safe-area-left: env(safe-area-inset-left);
+
   /* Apelidos do sistema antigo → semântica do tema. */
   --bg: var(--background);
   --surface: var(--card);
@@ -238,6 +243,10 @@ body {
    markup asks for the scale by name instead of guessing sizes.
    ------------------------------------------------------------------------- */
 @layer components {
+  .page-content-top {
+    padding-top: calc(var(--spacing-xl) + var(--spacing-md));
+  }
+
   .display-xl {
     font-size: 56px;
     font-weight: 500;
@@ -441,7 +450,7 @@ html.pwa-standalone body {
    cabeçalho uma tira da cor do fundo — visualmente uma tarja, que é justo o que
    `viewport-fit: cover` foi pedir para não ter. Reservando o espaço DENTRO do
    cabeçalho, a cor dele sobe até o topo da tela e só o conteúdo desce. */
-html.pwa-standalone header {
+html.pwa-standalone body > header {
   padding-top: env(safe-area-inset-top);
 }
 
@@ -451,7 +460,7 @@ html.pwa-standalone header {
    a borda por desenho. Aplicado aqui, a cor continua sangrando e só o texto
    recua do recorte. Importa em paisagem, onde o inset lateral deixa de ser
    zero; `max()` preserva o respiro que a página já tinha em retrato. */
-html.pwa-standalone header > div,
+html.pwa-standalone body > header > div,
 html.pwa-standalone body > div {
   padding-left: max(1rem, env(safe-area-inset-left));
   padding-right: max(1rem, env(safe-area-inset-right));

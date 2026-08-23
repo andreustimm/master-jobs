@@ -16,6 +16,17 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-08-23T19:19:40.742Z
+
+### Fixed
+
+- The **Cockpit** and **Jobs** pages, the **What's New** window, and
+  account-management dialogs now use spacing consistent with the rest of the
+  interface.
+- When editing an account, **Save changes** now closes the dialog after a
+  successful save and shows a confirmation. If saving fails, the dialog stays
+  open and explains the problem.
+
 ## [1.1.3] - 2026-08-23T14:37:30.883Z
 
 ### Fixed

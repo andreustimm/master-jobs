@@ -42,8 +42,8 @@ export default async function Cockpit({
   const tracked = Object.values(counts).reduce((a, b) => a + b, 0);
 
   return (
-    <main>
-      <header className="pt-11 pb-6">
+    <main className="page-content-top">
+      <header className="pb-6">
         <p className="mb-3 font-mono type-meta tracking-[.14em] text-muted-foreground uppercase">
           {t("nav.cockpit")}
         </p>
