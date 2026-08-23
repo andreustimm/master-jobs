@@ -331,26 +331,47 @@ describe("release filesystem boundary", () => {
     });
   });
 
-  it("IT-005 rejects a persisted release corrupted before read-back", async () => {
-    await withFixture(documents(), async (directory) => {
-      const operations = {
-        read: (path: string) => readFileSync(path, "utf8"),
-        write: (path: string, content: string) => {
-          writeFileSync(path, content);
-          if (path === join(directory, "package.json")) {
-            const enPath = join(directory, "USER_CHANGELOG.en.md");
-            writeFileSync(
-              enPath,
-              readFileSync(enPath, "utf8").replace("First line", "CORRUPTED persisted prose"),
-            );
-          }
-        },
-      };
-      expectReleaseCode(
-        () => applyReleaseFiles({ directory, version: "1.2.0", publishedAt: NOW }, operations),
-        "partial_existing_release",
-      );
-    });
+  it("IT-005 rejects exact-byte corruption in every persisted release artifact", async () => {
+    const corruptions = [
+      {
+        file: "CHANGELOG.md",
+        mutate: (content: string) => content.replace("Technical change", "CORRUPTED technical prose"),
+      },
+      {
+        file: "USER_CHANGELOG.pt-BR.md",
+        mutate: (content: string) => content.replace("Primeira linha", "Prosa persistida CORROMPIDA"),
+      },
+      {
+        file: "USER_CHANGELOG.en.md",
+        mutate: (content: string) => content.replace("First line", "CORRUPTED persisted prose"),
+      },
+      {
+        file: "package.json",
+        mutate: (content: string) => content.replace(
+          '  "version":',
+          '  "corrupted": true,\n  "version":',
+        ),
+      },
+    ];
+
+    for (const corruption of corruptions) {
+      await withFixture(documents(), async (directory) => {
+        const operations = {
+          read: (path: string) => readFileSync(path, "utf8"),
+          write: (path: string, content: string) => {
+            writeFileSync(path, content);
+            if (path === join(directory, "package.json")) {
+              const target = join(directory, corruption.file);
+              writeFileSync(target, corruption.mutate(readFileSync(target, "utf8")));
+            }
+          },
+        };
+        expectReleaseCode(
+          () => applyReleaseFiles({ directory, version: "1.2.0", publishedAt: NOW }, operations),
+          "partial_existing_release",
+        );
+      });
+    }
   });
 
   it("IT-006 rejects missing English content with every file byte-identical", async () => {

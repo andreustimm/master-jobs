@@ -118,7 +118,7 @@ components.
 - **UT-002** (happy): the parser receives `## [1.1.0] - 2026-08-21` and returns `publication={kind:"date",value:"2026-08-21"}` without constructing an instant.
 - **UT-003** (boundary): wrapped text, digit-leading and date-suffixed editorial level-two headings, fenced and indented code, and omission-marker examples in fenced/indented/inline code — including an indented marker on the first body line — remain byte-for-byte inside one release's returned `markdown` body.
 - **UT-004** (ordering): two actual version headers delimit two complete bodies; the first body contains no bytes from the second and ordinary level-two headings do not delimit releases.
-- **UT-005** (error): header `## [v1.2] - 2026-08-22`, malformed prerelease/build/wildcard forms — including combined prerelease plus build metadata — with canonical, absent, or unmatched brackets, a numeric candidate with both invalid version and publication, or an unbracketed release header produces `invalid_version`, excludes that entry, and preserves the following valid release.
+- **UT-005** (error): header `## [v1.2] - 2026-08-22`, malformed prerelease/build/wildcard forms — including combined metadata and dangling `-`/`+` delimiters — with canonical, absent, or unmatched brackets, a numeric candidate with both invalid version and publication, or an unbracketed release header produces `invalid_version`, excludes that entry, and preserves the following valid release.
 - **UT-006** (error): dates `2026-02-30` and `2026-13-01` produce `invalid_publication` and no fabricated release date.
 - **UT-007** (error): timestamp `2026-08-22T11:46:00-03:00` produces `invalid_publication` because canonical stored instants must end in `Z`.
 - **UT-008** (boundary): empty input and a title-only document return `releases=[]` without throwing.
@@ -196,7 +196,7 @@ components.
 
 ### Release pipeline boundary
 
-- **IT-005**: in a temporary release fixture, run preparation/wiring for `1.2.0` at `2026-08-22T11:46:00.000Z`; expect technical date, identical localized instants, updated package version, preserved multiline bodies, and successful post-write exact-byte re-read/revalidation; corrupt only persisted locale prose before read-back and expect `partial_existing_release`.
+- **IT-005**: in a temporary release fixture, run preparation/wiring for `1.2.0` at `2026-08-22T11:46:00.000Z`; expect technical date, identical localized instants, updated package version, preserved multiline bodies, and successful post-write exact-byte re-read/revalidation; independently corrupt technical prose, Portuguese prose, English prose, and a non-version package byte before read-back and expect `partial_existing_release` in every case.
 - **IT-006**: remove or blank the English `Unreleased` content in a temporary fixture and run the release command; expect non-zero exit and all fixture files byte-identical to their pre-run state.
 - **IT-007**: run the same successful temporary release command twice with different clocks; expect one `1.2.0` entry and the original instant after the second run.
 - **IT-008**: seed a temporary fixture with `1.2.0` in only one document; expect `partial_existing_release`, non-zero exit, and no additional writes.

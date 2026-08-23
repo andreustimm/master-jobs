@@ -74,7 +74,7 @@ export class ChangelogDomainError extends Error {
 
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const VERSION_CANDIDATE =
-  /^[vV]?\d+(?:\.(?:\d*|[xX*]))*(?:-[0-9A-Za-z.*-]+)?(?:\+[0-9A-Za-z.*-]+)?$/;
+  /^[vV]?\d+(?:\.(?:\d*|[xX*]))*(?:-[0-9A-Za-z.*-]*)?(?:\+[0-9A-Za-z.*-]*)?$/;
 const UNSAFE_METADATA = /[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/;
 const NO_USER_CHANGE_LINE = /^ {0,3}<!--\s*sem-nota-usuario\b[^>]*-->[ \t]*$/i;
 const OMITTED_MARKER_LINE =
