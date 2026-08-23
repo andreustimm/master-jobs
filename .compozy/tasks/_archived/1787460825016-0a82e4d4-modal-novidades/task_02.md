@@ -86,11 +86,11 @@ before changing Server/Client boundaries.
 
 ### Related ADRs
 
-- [ADR 0012: Present releases as independently expandable cards](../../../docs/adr/0012-novidades-cards-expansiveis-independentes.md) — Defines newest-only initialization, multi-open behavior, and reset semantics.
-- [ADR 0013: Localize release instants without inventing historical time](../../../docs/adr/0013-publicacao-local-sem-inventar-horario.md) — Defines device-local formatting and date-only presentation.
-- [ADR 0014: Publish equivalent localized notes in safe editorial Markdown](../../../docs/adr/0014-notas-localizadas-em-markdown-seguro.md) — Defines supported editorial Markdown and security boundaries.
-- [ADR 0015: Isolate browser-only behavior in a client modal](../../../docs/adr/0015-modal-nativo-com-ilha-cliente.md) — Defines the narrow Client Component and native dialog lifecycle.
-- [ADR 0016: Store locale editions separately and render with react-markdown](../../../docs/adr/0016-changelogs-localizados-e-react-markdown.md) — Defines active-locale selection and the renderer choice.
+- [ADR 0012: Present releases as independently expandable cards](../../../../docs/adr/0012-novidades-cards-expansiveis-independentes.md) — Defines newest-only initialization, multi-open behavior, and reset semantics.
+- [ADR 0013: Localize release instants without inventing historical time](../../../../docs/adr/0013-publicacao-local-sem-inventar-horario.md) — Defines device-local formatting and date-only presentation.
+- [ADR 0014: Publish equivalent localized notes in safe editorial Markdown](../../../../docs/adr/0014-notas-localizadas-em-markdown-seguro.md) — Defines supported editorial Markdown and security boundaries.
+- [ADR 0015: Isolate browser-only behavior in a client modal](../../../../docs/adr/0015-modal-nativo-com-ilha-cliente.md) — Defines the narrow Client Component and native dialog lifecycle.
+- [ADR 0016: Store locale editions separately and render with react-markdown](../../../../docs/adr/0016-changelogs-localizados-e-react-markdown.md) — Defines active-locale selection and the renderer choice.
 
 ## Deliverables
 

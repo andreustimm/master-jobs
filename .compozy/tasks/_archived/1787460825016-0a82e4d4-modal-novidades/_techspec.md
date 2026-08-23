@@ -520,9 +520,9 @@ scoped diagnostics:
 
 ## Architecture Decision Records
 
-- [ADR 0012: Present releases as independently expandable cards](../../../docs/adr/0012-novidades-cards-expansiveis-independentes.md) — Product interaction and reset behavior.
-- [ADR 0013: Localize release instants without inventing historical time](../../../docs/adr/0013-publicacao-local-sem-inventar-horario.md) — Product timezone and historical-precision rules.
-- [ADR 0014: Publish equivalent localized notes in safe editorial Markdown](../../../docs/adr/0014-notas-localizadas-em-markdown-seguro.md) — Product localization and Markdown contract.
-- [ADR 0015: Isolate browser-only behavior in a client modal](../../../docs/adr/0015-modal-nativo-com-ilha-cliente.md) — Narrow Client Component with native dialog.
-- [ADR 0016: Store locale editions separately and render with react-markdown](../../../docs/adr/0016-changelogs-localizados-e-react-markdown.md) — Locale-per-file content and proven safe renderer.
-- [ADR 0017: Model publication precision explicitly and stamp at version creation](../../../docs/adr/0017-precisao-publicacao-e-autoridade-da-versao.md) — UTC tag-time stamping and date-only type safety.
+- [ADR 0012: Present releases as independently expandable cards](../../../../docs/adr/0012-novidades-cards-expansiveis-independentes.md) — Product interaction and reset behavior.
+- [ADR 0013: Localize release instants without inventing historical time](../../../../docs/adr/0013-publicacao-local-sem-inventar-horario.md) — Product timezone and historical-precision rules.
+- [ADR 0014: Publish equivalent localized notes in safe editorial Markdown](../../../../docs/adr/0014-notas-localizadas-em-markdown-seguro.md) — Product localization and Markdown contract.
+- [ADR 0015: Isolate browser-only behavior in a client modal](../../../../docs/adr/0015-modal-nativo-com-ilha-cliente.md) — Narrow Client Component with native dialog.
+- [ADR 0016: Store locale editions separately and render with react-markdown](../../../../docs/adr/0016-changelogs-localizados-e-react-markdown.md) — Locale-per-file content and proven safe renderer.
+- [ADR 0017: Model publication precision explicitly and stamp at version creation](../../../../docs/adr/0017-precisao-publicacao-e-autoridade-da-versao.md) — UTC tag-time stamping and date-only type safety.

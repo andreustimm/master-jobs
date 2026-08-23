@@ -1,5 +1,8 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
+import { visit } from "unist-util-visit";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -11,13 +14,31 @@ import { describe, expect, it } from "vitest";
  * side by side, which the panel named as its own biggest risk.
  */
 
-function walk(dir: string, out: string[] = []): string[] {
+function walk(
+  dir: string,
+  accepts: (file: string) => boolean = (file) =>
+    file.endsWith(".ts") || file.endsWith(".tsx"),
+  out: string[] = [],
+): string[] {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
-    if (statSync(full).isDirectory()) walk(full, out);
-    else if (full.endsWith(".ts") || full.endsWith(".tsx")) out.push(full);
+    if (statSync(full).isDirectory()) walk(full, accepts, out);
+    else if (accepts(full)) out.push(full);
   }
   return out;
+}
+
+const markdownParser = unified().use(remarkParse);
+
+function markdownTargets(markdown: string): string[] {
+  const tree = markdownParser.parse(markdown);
+  const targets: string[] = [];
+  visit(tree, (node) => {
+    if (!["link", "image", "definition"].includes(node.type)) return;
+    const url = (node as { url?: unknown }).url;
+    if (typeof url === "string") targets.push(url);
+  });
+  return targets;
 }
 
 const SRC = walk("src");
@@ -592,6 +613,26 @@ describe("authorisation (AUTH-01)", () => {
 });
 
 describe("documentação que precisa acompanhar o código", () => {
+  it("extrai destinos Markdown navegáveis sem interpretar exemplos cercados", () => {
+    const markdown = `[Inline](../inline.md)
+
+![Image](../image.png)
+
+[Reference][archive]
+
+[archive]: ../reference.md
+
+\`\`\`md
+[Ignored](../fenced.md)
+\`\`\``;
+
+    expect(markdownTargets(markdown)).toEqual([
+      "../inline.md",
+      "../image.png",
+      "../reference.md",
+    ]);
+  });
+
   // O índice de ADRs em `docs/README.md` já apodreceu uma vez: listava seis de
   // dez, e as quatro faltantes incluíam justamente as citadas como invariantes
   // em CLAUDE.md. Índice mantido à mão só funciona quando alguém o verifica.
@@ -615,5 +656,34 @@ describe("documentação que precisa acompanhar o código", () => {
     expect(adr).toContain(".compozy/tasks/");
     expect(adr).toContain("docs/adr/");
     expect(read("docs/README.md")).toContain("0011");
+  });
+
+  it("mantém navegáveis os links locais entre docs duráveis e workflows arquivados", () => {
+    const files = [
+      ...walk("docs", (file) => file.endsWith(".md")),
+      ...walk(".compozy/tasks/_archived", (file) => file.endsWith(".md")),
+    ];
+    const broken: string[] = [];
+
+    for (const file of files) {
+      for (const rawTarget of markdownTargets(read(file))) {
+        if (
+          rawTarget.startsWith("#") ||
+          rawTarget.startsWith("/") ||
+          /^[a-z][a-z\d+.-]*:/iu.test(rawTarget)
+        ) {
+          continue;
+        }
+        const target = decodeURI(rawTarget.split("#", 1)[0]!);
+        const crossesArchiveBoundary =
+          target.includes(".compozy/tasks/_archived/") ||
+          (file.startsWith(".compozy/tasks/_archived/") && target.includes("docs/"));
+        if (crossesArchiveBoundary && !existsSync(resolve(dirname(file), target))) {
+          broken.push(`${file}: ${rawTarget}`);
+        }
+      }
+    }
+
+    expect(broken).toEqual([]);
   });
 });

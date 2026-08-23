@@ -89,8 +89,8 @@ colors or typography.
 
 ## References
 
-- [PRD](../../.compozy/tasks/modal-novidades/_prd.md)
-- [User stories](../../.compozy/tasks/modal-novidades/_user_stories.md)
+- [PRD](../../.compozy/tasks/_archived/1787460825016-0a82e4d4-modal-novidades/_prd.md)
+- [User stories](../../.compozy/tasks/_archived/1787460825016-0a82e4d4-modal-novidades/_user_stories.md)
 - [Carbon accordion usage](https://carbondesignsystem.com/components/accordion/usage/)
 - [WAI-ARIA accordion pattern](https://www.w3.org/WAI/ARIA/apg/patterns/accordion/)
 - [WAI-ARIA modal dialog pattern](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)
