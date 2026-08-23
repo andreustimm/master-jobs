@@ -1,0 +1,1 @@
+../../../.claude/skills/qa-report/assets/bug-template.md

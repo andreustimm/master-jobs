@@ -40,6 +40,7 @@ const VIM_KEY = "jho:cv-editor:vim";
  * componente sem plumbing de idioma.
  */
 export type EditorLabels = {
+  field: string;
   edit: string;
   split: string;
   preview: string;
@@ -88,6 +89,7 @@ export function MarkdownEditor({
       markdown({ base: markdownLanguage, codeLanguages: languages }),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       EditorView.lineWrapping,
+      EditorView.contentAttributes.of({ "aria-label": labels.field }),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && mirror.current) {
           mirror.current.value = update.state.doc.toString();
@@ -190,7 +192,7 @@ export function MarkdownEditor({
       editor.destroy();
       view.current = null;
     };
-  }, [vimOn, defaultValue, minHeight, labels.vimHint]);
+  }, [vimOn, defaultValue, minHeight, labels.field, labels.vimHint]);
 
   /**
    * Keeps the preview fed while typing.

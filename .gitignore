@@ -40,6 +40,11 @@ dashboard.html
 # e o estado que permite a revisão incremental, em `.deep-review/state.json`.
 .deep-review/
 
+# QA living docs — generated views & bulky evidence (source of truth:
+# docs/qa/scenarios/ and the other authored files under docs/qa/).
+docs/qa/state.csv
+docs/qa/evidence/
+
 # Derivado de scripts/sw-template.js pelo prebuild — a versão entra no nome dos
 # caches, então o arquivo muda a cada release e não deve ser versionado.
 public/sw.js
