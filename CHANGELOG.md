@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-08-23
+
 ### Corrigido
 
 - A área segura da PWA agora ajusta somente o cabeçalho global, preservando o

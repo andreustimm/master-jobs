@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-08-23T19:19:40.742Z
+
 ### Fixed
 
 - The **Cockpit** and **Jobs** pages, the **What's New** window, and

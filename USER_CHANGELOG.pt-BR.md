@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-08-23T19:19:40.742Z
+
 ### Correção
 
 - As telas de **Cockpit** e **Vagas**, a janela de **Novidades** e as janelas de
