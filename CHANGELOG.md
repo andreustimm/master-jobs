@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-08-23
+
 ### Adicionado
 
 - Modal de novidades redesenhado como diálogo acessível com cards de versão,

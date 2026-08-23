@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-08-23T04:48:48.209Z
+
 ### Novidade
 
 - A janela de **Novidades** agora separa cada versão em um card, mantém somente

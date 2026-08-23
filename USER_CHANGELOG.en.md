@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-08-23T04:48:48.209Z
+
 ### New
 
 - The **What's New** window now separates each version into a card, opens only
