@@ -1,0 +1,110 @@
+# ADR 0017: Model publication precision explicitly and stamp at version creation
+
+## Status
+
+Accepted
+
+## Date
+
+2026-08-22
+
+## Context
+
+The release script currently calls `new Date().toISOString().slice(0, 10)` and
+writes only a UTC calendar date. A calendar date and a UTC instant have different
+semantics: only the instant may be converted to a device timezone. Treating both
+as generic strings would make it easy to recreate the historical midnight bug
+the PRD forbids.
+
+The repository's version number and tag are created by the first serialized
+writer that needs the version: normally the `dev → staging` promotion, or
+`sincronizar-apos-main` when a hotfix is born directly in `main`. The later
+production deployment is a different event and may occur much later.
+
+## Decision
+
+Define the publication timestamp as the UTC instant at which the first
+serialized version authority creates the version and tag. Capture one `Date`
+value for the release operation and reuse its ISO UTC value for both localized
+user changelogs. The normal authority is `dev → staging`; direct-main hotfixes
+use `sincronizar-apos-main`. Both workflows share the same concurrency group,
+preparation command, tag checks, and retry contract. Keep the technical
+changelog's existing date-only presentation unless its own requirements change.
+
+Represent parsed publication metadata as a discriminated union:
+
+```ts
+export type Publication =
+  | { kind: "instant"; value: string }
+  | { kind: "date"; value: string };
+```
+
+Only `kind: "instant"` enters timezone conversion. Historical `YYYY-MM-DD`
+headers remain `kind: "date"` unless trustworthy evidence identifies the
+actual version-creation instant. Lightweight Git tags do not themselves record
+a tagger timestamp, so the tagged commit time must not be promoted automatically
+without corroborating workflow evidence.
+
+Release preparation validates the technical changelog and both localized user
+changelogs before producing any transformed content. A retry that finds the
+target version everywhere returns the coherent existing result without changing
+its timestamp; a partial or mismatched target version fails visibly before any
+write. Sequential filesystem writes are not a multi-file transaction: an I/O
+failure may dirty the ephemeral checkout, but the non-zero exit prevents commit,
+push, and tag publication, and the next workflow retry begins from a clean
+checkout.
+
+## Alternatives Considered
+
+### Alternative 1: Use successful production deployment time
+
+- **Description**: Stamp the release only when production deployment finishes.
+- **Pros**: Closest to public availability.
+- **Cons**: Occurs after the source artifact was built, requires new deployment feedback, and gives staging no stable version time.
+- **Why rejected**: The user defined the version-creation event as the publication timestamp.
+
+### Alternative 2: Store every publication value as a string
+
+- **Description**: Let formatters infer date-only versus instant from string shape at each call site.
+- **Pros**: Smaller type definition.
+- **Cons**: Duplicates parsing rules and permits accidental timezone conversion of date-only history.
+- **Why rejected**: Precision is domain state and must be impossible to ignore accidentally.
+
+### Alternative 3: Backfill historical tags from commit time automatically
+
+- **Description**: Treat the commit referenced by every lightweight tag as the tag-creation instant.
+- **Pros**: Produces a time for all current releases from local Git data.
+- **Cons**: Lightweight tags have no creation timestamp and may be added after the commit.
+- **Why rejected**: It can fabricate the event time the UI claims to show.
+
+## Consequences
+
+### Positive
+
+- New releases have one auditable UTC instant across both languages.
+- Type narrowing prevents date-only values from entering timezone conversion.
+- Release retries cannot drift or duplicate publication time.
+- Historical precision remains truthful.
+
+### Negative
+
+- Some historical versions will continue to show only a date.
+- The release preparation contract becomes multi-document rather than a single-file transform.
+- Recovering an old instant may require workflow evidence outside the Git tag object.
+
+### Risks
+
+- Capturing separate clocks for separate files would create parity drift. The shell must capture once and pass the same value to the pure preparation function.
+- Sequential filesystem writes can leave a dirty local worktree after I/O failure. All validation and transformation must complete first, and CI must publish only after the command exits successfully.
+
+## Implementation Notes
+
+- Accept exact `YYYY-MM-DD` for date-only history and valid ISO UTC values ending in `Z` for instants.
+- Use a pure formatter with an injectable timezone in tests; production omits the timezone option so the browser uses the device setting.
+- Format with parts rather than locale punctuation to guarantee the exact required output.
+
+## References
+
+- [PRD](../../.compozy/tasks/_archived/1787460825016-0a82e4d4-modal-novidades/_prd.md)
+- [TechSpec](../../.compozy/tasks/_archived/1787460825016-0a82e4d4-modal-novidades/_techspec.md)
+- [Release workflow](../../.github/workflows/promover-para-staging.yml)

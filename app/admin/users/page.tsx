@@ -212,7 +212,7 @@ function UserRow({
             {!isSelf && !disabled && (
               <form action={impersonateAction}>
                 <input type="hidden" name="userId" value={user.id} />
-                <Button type="submit" size="sm" className="h-7">
+                <Button type="submit" size="sm" className="h-7" data-testid="impersonate-user">
                   {t("admin.impersonate")}
                 </Button>
               </form>
@@ -242,4 +242,3 @@ function UserRow({
     </li>
   );
 }
-

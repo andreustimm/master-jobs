@@ -1,117 +1,224 @@
 /**
- * Orquestração do versionamento — o shell que decide o bump e grava os arquivos.
+ * Filesystem and Git boundary for release versioning.
  *
- * O NÚCLEO puro fica em `src/core/release.ts`, testável sem disco nem git. Aqui
- * mora só a fiação: ler os commits desde a última tag, ler/gravar `package.json`
- * e os dois changelogs, e imprimir a versão nova para quem chamou.
- *
- * Rodado pelo workflow de promoção (`promover-para-staging.yml`) — o ponto
- * serializado do fluxo — e pelo `sincronizar-apos-main.yml` quando um hotfix
- * nasce direto em `main` sem passar pelo caminho normal.
- *
- * ## Por que um script e não um passo inline no YAML
- *
- * A regra que mais quebra (classificar o commit e carimbar o changelog) precisa
- * de teste. YAML não tem teste; uma função pura tem. O workflow chama isto aqui,
- * e os casos vivem em `tests/release.test.ts`.
- *
- * ## Saída
- *
- * Imprime a versão nova (ex.: `1.1.0`) quando houve bump, ou `no-release` quando
- * a leva de commits não pede número novo. Sai com código 0 nos dois casos; só
- * falha (código 1) quando encontra estado que não deveria promover — changelog
- * sem `[Unreleased]`, `package.json` com versão torta.
+ * The pure transaction lives in `src/core/release.ts`. This module validates
+ * all three changelogs before the first write and is also imported by the
+ * integration tests, so the workflows do not hide release behavior in YAML.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { parseUserChangelog } from "../../src/core/changelog.ts";
 import {
-  carimbarUnreleased,
   changelogTemVersao,
   classificarBump,
+  prepareRelease,
   proximaVersao,
+  ReleaseDomainError,
+  versaoSemanticaValida,
+  type PrepareReleaseResult,
+  type ReleaseDocuments,
 } from "../../src/core/release.ts";
 
-// A ref que está sendo promovida (ex.: `origin/dev`), passada como argumento.
-// Default `HEAD` cobre o uso local, sem remote.
-const base = process.argv[2] ?? "HEAD";
+export type ApplyReleaseFilesInput = {
+  directory: string;
+  version: string;
+  publishedAt: Date;
+};
 
-/** Assuntos dos commits desde a última tag `v*` até a ref base. */
-function assuntosDesdeUltimaTag(): string[] {
-  const ultimaTag = tagMaisRecente();
-  const range = ultimaTag ? `${ultimaTag}..${base}` : base;
+export type ReleaseFileOperations = {
+  read(path: string): string;
+  write(path: string, content: string): void;
+};
+
+const DEFAULT_FILE_OPERATIONS: ReleaseFileOperations = {
+  read: (path) => readFileSync(path, "utf8"),
+  write: (path, content) => writeFileSync(path, content),
+};
+
+const RELEASE_FILES = {
+  technical: "CHANGELOG.md",
+  ptBR: "USER_CHANGELOG.pt-BR.md",
+  en: "USER_CHANGELOG.en.md",
+} as const;
+
+function readDocuments(
+  directory: string,
+  operations: ReleaseFileOperations = DEFAULT_FILE_OPERATIONS,
+): ReleaseDocuments {
+  return {
+    technical: operations.read(resolve(directory, RELEASE_FILES.technical)),
+    ptBR: operations.read(resolve(directory, RELEASE_FILES.ptBR)),
+    en: operations.read(resolve(directory, RELEASE_FILES.en)),
+  };
+}
+
+function readPackage(
+  directory: string,
+  operations: ReleaseFileOperations = DEFAULT_FILE_OPERATIONS,
+): { version: string; [key: string]: unknown } {
+  return parsePackage(operations.read(resolve(directory, "package.json")));
+}
+
+function parsePackage(raw: string): { version: string; [key: string]: unknown } {
+  const parsed = JSON.parse(raw) as {
+    version?: unknown;
+    [key: string]: unknown;
+  };
+  if (typeof parsed.version !== "string" || !versaoSemanticaValida(parsed.version)) {
+    throw new ReleaseDomainError("invalid_release_version", {
+      version: typeof parsed.version === "string" ? parsed.version : undefined,
+    });
+  }
+  return { ...parsed, version: parsed.version };
+}
+
+/** Preflight all bytes before persisting the four-file release transaction. */
+export function applyReleaseFiles(
+  input: ApplyReleaseFilesInput,
+  operations: ReleaseFileOperations = DEFAULT_FILE_OPERATIONS,
+): PrepareReleaseResult {
+  const documents = readDocuments(input.directory, operations);
+  const pkg = readPackage(input.directory, operations);
+  const prepared = prepareRelease({
+    documents,
+    version: input.version,
+    publishedAt: input.publishedAt,
+  });
+
+  if (prepared.status === "already-released") {
+    if (pkg.version !== input.version) {
+      throw new ReleaseDomainError("partial_existing_release", { version: input.version });
+    }
+    return prepared;
+  }
+  if (pkg.version === input.version) {
+    throw new ReleaseDomainError("partial_existing_release", { version: input.version });
+  }
+
+  const nextPackage = `${JSON.stringify({ ...pkg, version: input.version }, null, 2)}\n`;
+  operations.write(resolve(input.directory, RELEASE_FILES.technical), prepared.documents.technical);
+  operations.write(resolve(input.directory, RELEASE_FILES.ptBR), prepared.documents.ptBR);
+  operations.write(resolve(input.directory, RELEASE_FILES.en), prepared.documents.en);
+  operations.write(resolve(input.directory, "package.json"), nextPackage);
+
+  const persistedDocuments = readDocuments(input.directory, operations);
+  const persistedPackageBytes = operations.read(resolve(input.directory, "package.json"));
+  const persistedPackage = parsePackage(persistedPackageBytes);
+  if (
+    persistedDocuments.technical !== prepared.documents.technical ||
+    persistedDocuments.ptBR !== prepared.documents.ptBR ||
+    persistedDocuments.en !== prepared.documents.en ||
+    persistedPackageBytes !== nextPackage
+  ) {
+    throw new ReleaseDomainError("partial_existing_release", { version: input.version });
+  }
+  const verified = prepareRelease({
+    documents: persistedDocuments,
+    version: input.version,
+    publishedAt: input.publishedAt,
+  });
+  if (persistedPackage.version !== input.version || verified.status !== "already-released") {
+    throw new ReleaseDomainError("partial_existing_release", { version: input.version });
+  }
+  return prepared;
+}
+
+function mostRecentTag(): string | null {
   try {
-    return execFileSync("git", ["log", "--format=%s", range], { encoding: "utf8" })
+    const output = execFileSync("git", ["tag", "--list", "v*", "--sort=-version:refname"], {
+      encoding: "utf8",
+    }).trim();
+    return output.split("\n").filter(Boolean)[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function commitSubjects(base: string): string[] {
+  const latest = mostRecentTag();
+  const range = latest ? `${latest}..${base}` : base;
+  try {
+    // Merge subjects have no conventional prefix and would create phantom patches.
+    return execFileSync("git", ["log", "--format=%s", "--no-merges", range], {
+      encoding: "utf8",
+    })
       .split("\n")
-      .map((l) => l.trim())
+      .map((line) => line.trim())
       .filter(Boolean);
   } catch {
     return [];
   }
 }
 
-function tagMaisRecente(): string | null {
+function tagExists(version: string): boolean {
   try {
-    const saida = execFileSync(
-      "git",
-      ["tag", "--list", "v*", "--sort=-version:refname"],
-      { encoding: "utf8" },
-    ).trim();
-    return saida.split("\n").filter(Boolean)[0] ?? null;
+    execFileSync("git", ["rev-parse", "--verify", `refs/tags/v${version}`], {
+      stdio: "ignore",
+    });
+    return true;
   } catch {
-    return null;
+    return false;
   }
 }
 
-function lerPkg(): { version: string } {
-  return JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
+function documentsContainVersion(documents: ReleaseDocuments, version: string): boolean[] {
+  const ptBR = parseUserChangelog(documents.ptBR);
+  const en = parseUserChangelog(documents.en);
+  return [
+    changelogTemVersao(documents.technical, version),
+    ptBR.releases.some((release) => release.version === version) ||
+      ptBR.omitted.some((release) => release.version === version),
+    en.releases.some((release) => release.version === version) ||
+      en.omitted.some((release) => release.version === version),
+  ];
 }
 
-function gravarPkg(versao: string): void {
-  const pkg = JSON.parse(readFileSync("package.json", "utf8")) as {
-    version: string;
-  };
-  pkg.version = versao;
-  writeFileSync("package.json", `${JSON.stringify(pkg, null, 2)}\n`);
+export function versionar(base = "HEAD", directory = process.cwd()): string {
+  const current = readPackage(directory).version;
+  const currentPresence = documentsContainVersion(readDocuments(directory), current);
+
+  // The version commit reaches the remote before its tag. A retry must finish
+  // that release even when the remaining commit subjects are only maintenance.
+  if (!tagExists(current) && currentPresence.some(Boolean)) {
+    if (!currentPresence.every(Boolean)) {
+      throw new ReleaseDomainError("partial_existing_release", { version: current });
+    }
+    applyReleaseFiles({ directory, version: current, publishedAt: new Date() });
+    return "already-released";
+  }
+
+  const bump = classificarBump(commitSubjects(base));
+  if (!bump) return "no-release";
+
+  const version = proximaVersao(current, bump);
+  const result = applyReleaseFiles({ directory, version, publishedAt: new Date() });
+  return result.status === "already-released" ? "already-released" : version;
 }
 
-/** `2026-08-21`, em UTC — a mesma fonte que o `carimbarUnreleased` imprime. */
-function hoje(): string {
-  return new Date().toISOString().slice(0, 10);
+function safeError(error: unknown): string {
+  if (error instanceof ReleaseDomainError) return error.message;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string"
+  ) {
+    return `release_failed code=${error.code}`;
+  }
+  return "release_failed";
 }
 
-function main(): void {
-  const tipo = classificarBump(assuntosDesdeUltimaTag());
-  if (!tipo) {
-    console.log("no-release");
-    return;
+const direct = process.argv[1]
+  ? import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+  : false;
+
+if (direct) {
+  try {
+    console.log(versionar(process.argv[2] ?? "HEAD"));
+  } catch (error) {
+    console.error(safeError(error));
+    process.exitCode = 1;
   }
-
-  const atual = lerPkg().version;
-  const versao = proximaVersao(atual, tipo);
-
-  // Idempotência: se a versão já foi publicada (re-run do workflow), não
-  // carimbar de novo — o `[Unreleased]` já virou `[x.y.z]` e não há mais
-  // cabeçalho para substituir. Bump já feito = nada a fazer.
-  if (changelogTemVersao(readFileSync("CHANGELOG.md", "utf8"), versao)) {
-    console.log("already-released");
-    return;
-  }
-
-  for (const arquivo of ["CHANGELOG.md", "USER_CHANGELOG.md"]) {
-    const conteudo = readFileSync(arquivo, "utf8");
-    writeFileSync(arquivo, carimbarUnreleased(conteudo, versao, hoje()));
-  }
-
-  gravarPkg(versao);
-
-  // Coerência final: depois de gravar, a versão tem de estar no changelog
-  // técnico — o gate que impede release mudo.
-  const tecnico = readFileSync("CHANGELOG.md", "utf8");
-  if (!changelogTemVersao(tecnico, versao)) {
-    throw new Error(`CHANGELOG.md não tem a entrada [${versao}] após o bump`);
-  }
-
-  console.log(versao);
 }
-
-main();

@@ -1,0 +1,96 @@
+# ADR 0012: Present releases as independently expandable cards
+
+## Status
+
+Accepted
+
+## Date
+
+2026-08-22
+
+## Context
+
+The current What's New modal renders every release as one continuously expanded
+document. Long notes have little separation, weak visual hierarchy, and limited
+interior spacing, so users cannot scan versions before deciding what to read.
+The Zorbit reference establishes the desired product pattern: a stable modal
+header followed by distinct release cards with their identity and publication
+date visible even while collapsed.
+
+The user also needs to compare changes across releases. A single-open accordion
+would force one release to close whenever another opens and would work against
+that comparison workflow.
+
+## Decision
+
+The What's New history will use individually bordered release cards. Each card
+will expose an always-visible toggle row containing a disclosure indicator, a
+version badge, and the localized publication date and time when available.
+
+Whenever the modal opens, only the newest release starts expanded. Each release
+then owns an independent open or closed state, so users may keep two or more
+releases open simultaneously. Closing the modal discards all expansion changes;
+reopening restores the newest-only default.
+
+The modal header will remain visible while release cards scroll and will show
+the localized title, the current application version, and an explicit close
+control. The composition will use generous spacing and preserve the existing
+theme, responsive, and accessibility contracts rather than copying Zorbit's
+colors or typography.
+
+## Alternatives Considered
+
+### Alternative 1: Keep all releases expanded
+
+- **Description**: Retain the continuous document and only increase margins and spacing.
+- **Pros**: Minimal interaction and all content immediately visible.
+- **Cons**: Poor scanability, excessive scrolling, and no meaningful separation between releases.
+- **Why rejected**: It preserves the core usability problem shown in the current modal.
+
+### Alternative 2: Allow only one release open at a time
+
+- **Description**: Use a traditional single-open accordion.
+- **Pros**: Keeps the viewport compact and makes state simple.
+- **Cons**: Prevents side-by-side reading and forces repeated toggling when comparing versions.
+- **Why rejected**: The user explicitly requires two or more releases to remain open when needed.
+
+### Alternative 3: Persist expansion state between modal visits
+
+- **Description**: Reopen the modal with the same releases expanded as during the previous visit.
+- **Pros**: Resumes unfinished reading.
+- **Cons**: Makes the initial state unpredictable and can reopen a very long collection.
+- **Why rejected**: The user chose a deterministic newest-only state for every opening.
+
+## Consequences
+
+### Positive
+
+- Users can scan the release history before reading details.
+- Users can compare any number of releases without losing previously opened content.
+- Every modal opening has a predictable starting state.
+- The visual hierarchy aligns with the supplied Zorbit reference while remaining native to Master Jobs themes.
+
+### Negative
+
+- Users who reopen the modal must expand older releases again.
+- Very many simultaneously expanded releases can create a long internal scroll region.
+
+### Risks
+
+- A visually correct card can still be inaccessible if only its chevron is interactive. The entire header row must be a keyboard-operable disclosure control with an announced expanded state.
+- Generous desktop spacing can overflow small screens. Mobile behavior and zoom must remain part of acceptance, not a later visual pass.
+
+## Implementation Notes
+
+- Preserve the existing footer entry point and modal dismissal behaviors.
+- Use semantic theme and design-system tokens across HP, Huly, and Graphy in light and dark modes.
+- The disclosure control must expose its relationship to the content region and respond to keyboard activation.
+- Keep the title area visible while the release-card collection scrolls.
+
+## References
+
+- [PRD](../../.compozy/tasks/_archived/1787460825016-0a82e4d4-modal-novidades/_prd.md)
+- [User stories](../../.compozy/tasks/_archived/1787460825016-0a82e4d4-modal-novidades/_user_stories.md)
+- [Carbon accordion usage](https://carbondesignsystem.com/components/accordion/usage/)
+- [WAI-ARIA accordion pattern](https://www.w3.org/WAI/ARIA/apg/patterns/accordion/)
+- [WAI-ARIA modal dialog pattern](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)

@@ -1,7 +1,7 @@
 # Limite de requisição no perfil público
 
 **Slug:** `perfil-publico-limite` · **Origem:** AUTH-04, "o que ficou de fora"
-· **ADR relacionada:** [0011](../../../docs/adr/0011-fronteira-compozyos-e-docs.md)
+· **ADR relacionada:** [0011](../../../../docs/adr/0011-fronteira-compozyos-e-docs.md)
 
 > Primeira jornada real do CompozyOS neste repositório. A feature foi escolhida
 > por ser pequena, verificável e genuinamente pendente — não por ser

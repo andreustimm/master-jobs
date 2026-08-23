@@ -24,6 +24,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # O teste de precisão histórica distingue tags leves de anotadas.
+          # Sem as refs, um clone raso parece não ter evidência nenhuma e o
+          # contrato passa localmente, mas falha no runner limpo.
+          fetch-depth: 0
+          fetch-tags: true
 
       - uses: pnpm/action-setup@v6
 

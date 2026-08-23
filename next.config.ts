@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
+// The isolated standalone build symlinks dependencies from a sibling worktree,
+// so its tracer receives their common ancestor. Normal builds stay repo-local.
+const tracingRoot = process.env.JHO_OUTPUT_TRACING_ROOT ?? import.meta.dirname;
+
 const config: NextConfig = {
+  output: "standalone",
+  outputFileTracingRoot: tracingRoot,
   /**
    * Pin the workspace root.
    *
@@ -10,7 +16,7 @@ const config: NextConfig = {
    * with an inferred root that is wrong. Saying it explicitly ends the guess.
    */
   turbopack: {
-    root: import.meta.dirname,
+    root: tracingRoot,
   },
 
   // Both are server-only dependencies whose runtime resolution is intentional:
@@ -21,7 +27,7 @@ const config: NextConfig = {
   /**
    * O changelog do rodapé é lido do disco em runtime.
    *
-   * `app/footer.tsx` faz `readFile(join(process.cwd(), "USER_CHANGELOG.md"))`, e
+   * `app/footer.tsx` seleciona um dos dois changelogs localizados em runtime, e
    * o rastreador de dependências não segue caminho montado em tempo de
    * execução: ele não tem como saber que aquela string vira este arquivo. Sem
    * declarar, o markdown entraria no pacote por acaso — pelo mesmo rastreamento
@@ -33,7 +39,7 @@ const config: NextConfig = {
    * Declarar é uma linha; descobrir isso em produção é uma tarde.
    */
   outputFileTracingIncludes: {
-    "/**": ["./USER_CHANGELOG.md"],
+    "/**": ["./USER_CHANGELOG.pt-BR.md", "./USER_CHANGELOG.en.md"],
   },
 
   // Both candidate CVs and manual job descriptions accept files up to 10 MB.

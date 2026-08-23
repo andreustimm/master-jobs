@@ -1,0 +1,93 @@
+# ADR 0014: Publish equivalent localized notes in safe editorial Markdown
+
+## Status
+
+Accepted
+
+## Date
+
+2026-08-22
+
+## Context
+
+The current modal treats user-facing changelog items as plain strings. Valid
+Markdown markers such as `**bold**` and backticks therefore appear literally,
+and wrapped bullet lines are truncated by the current interpretation. The app
+supports Portuguese and English interface locales, but the user-facing release
+notes currently exist only in Portuguese. Translating only the modal controls
+would leave English users reading Portuguese product content.
+
+## Decision
+
+User-facing release notes will be available in equivalent Portuguese and
+English editions. The modal will select the edition that matches the active
+interface language; it will not mix languages or silently fall back to the
+other edition. Existing visible history is included in this localization
+contract, not only future releases.
+
+Release descriptions will render a safe editorial Markdown set: paragraphs,
+headings, ordered and unordered lists, bold, italic, inline and fenced code,
+block quotes, thematic breaks, and links. Valid markup must render semantically
+without exposing its delimiters. Wrapped source lines must remain part of the
+same paragraph or list item. Raw HTML must never execute, and unsafe links must
+not become actionable.
+
+A user-visible release cannot be published with only one locale edition. A
+release explicitly classified as having no user-visible change may remain
+absent from both localized histories, but the two histories may not disagree
+about whether a visible version exists.
+
+## Alternatives Considered
+
+### Alternative 1: Keep notes in Portuguese for every locale
+
+- **Description**: Translate only modal controls and date formatting.
+- **Pros**: No additional editorial work and one content source.
+- **Cons**: Produces a partially translated experience and excludes English readers from the actual changes.
+- **Why rejected**: The user chose equivalent English release-note content.
+
+### Alternative 2: Support only inline emphasis
+
+- **Description**: Render bold, italic, and inline code but keep the current section/list structure bespoke.
+- **Pros**: Smaller content surface and fewer formatting cases.
+- **Cons**: Cannot faithfully express paragraphs, nested lists, quotes, links, or code blocks and risks further parser-specific truncation.
+- **Why rejected**: The user chose complete safe editorial Markdown.
+
+### Alternative 3: Render unrestricted Markdown and raw HTML
+
+- **Description**: Treat release notes as trusted documents with the full browser content surface.
+- **Pros**: Maximum authoring flexibility.
+- **Cons**: Allows unsafe or theme-breaking content and makes changelog review security-sensitive.
+- **Why rejected**: Editorial richness does not require executable HTML.
+
+## Consequences
+
+### Positive
+
+- Portuguese and English users receive the same product information in their active language.
+- Bold text, code, lists, paragraphs, and links render as authored.
+- Wrapped lines no longer lose user-facing content.
+- Unsafe markup cannot turn release notes into an execution channel.
+
+### Negative
+
+- Every user-visible release requires two reviewed language editions.
+- Historical Portuguese notes require an English edition before the redesigned experience is complete.
+- Advanced GFM constructs such as tables and task lists are not guaranteed by this editorial subset.
+
+### Risks
+
+- Independently edited locale editions can drift semantically. Publication must make missing or mismatched versions visible to maintainers.
+- Very large or deeply structured Markdown can damage readability. The modal must preserve wrapping and scroll containment without clipping content.
+
+## Implementation Notes
+
+- User-facing and technical changelogs remain separate products; technical notes must not leak into the modal.
+- Parsing must operate on complete Markdown blocks rather than individual physical lines.
+- Link handling must reject unsafe protocols and raw HTML must be escaped or omitted.
+
+## References
+
+- [PRD](../../.compozy/tasks/_archived/1787460825016-0a82e4d4-modal-novidades/_prd.md)
+- [User stories](../../.compozy/tasks/_archived/1787460825016-0a82e4d4-modal-novidades/_user_stories.md)
+- [GitHub Flavored Markdown specification](https://github.github.com/gfm/)
