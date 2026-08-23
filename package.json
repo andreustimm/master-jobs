@@ -26,6 +26,7 @@
     "check": "pnpm typecheck && vitest run --coverage",
     "test:e2e": "node tests/e2e/run-isolated.mjs",
     "test:e2e:external": "node tests/e2e/setup.mjs && node tests/e2e/ui.mjs",
+    "qa:browser:install": "agent-browser install",
     "prebuild": "node scripts/sw-version.mjs",
     "icons": "node scripts/make-icons.mjs",
     "sw": "node scripts/sw-version.mjs",
@@ -61,11 +62,13 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitest/coverage-v8": "^4.1.11",
+    "agent-browser": "0.26.0",
     "drizzle-kit": "^0.31.10",
     "playwright": "^1.62.1",
     "remark-parse": "^11.0.0",

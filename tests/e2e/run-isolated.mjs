@@ -196,6 +196,7 @@ try {
   server = startStandalone();
   await waitUntilReady(`${env.E2E_BASE}/login`, server);
   await run(process.execPath, ["tests/e2e/ui.mjs"], { cwd: appRoot, env });
+  await run(process.execPath, ["tests/e2e/a11y.mjs"], { cwd: appRoot, env });
 
   await stop(server);
   server = undefined;

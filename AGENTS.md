@@ -290,7 +290,7 @@ dashboard Next.js em `localhost:3000`.
 ## Fluxo de trabalho
 
 ```
-worktree/tarefa → PR → dev → (automático) → staging → PR humana → main → tag + volta para dev
+worktree/tarefa → check/e2e aplicável → QA de jornada aplicável → auditoria de agente aplicável → deslop → deep-review → ship-pr → PR → dev → (automático) → staging → PR humana → main → tag + volta para dev
 ```
 
 | Etapa | Quem faz | Como |
@@ -345,15 +345,79 @@ com ele, `staging` e as PRs geradas também recebem checks próprios.
 > Com `--publish` ela comenta na PR; sem a flag, fica local em `.deep-review/`.
 > Um `FIX_BEFORE_SHIP` ignorado é uma decisão, e vai escrita na descrição da PR.
 
+> **20. Mudança percebida por usuário atualiza e percorre o QA vivo.**
+> `qa-report` planeja em `docs/qa/`; `qa-execution` percorre essas jornadas pela
+> interface pública e escreve os resultados de volta na mesma árvore. Antes da
+> PR, mudança visível segue a cadência definida em `docs/qa/README.md`. Mudança
+> sem efeito visível declara isso no handoff e não inventa sessão. Antes da PR
+> humana `staging → main`, release candidate cumpre o tier **full**. QA de
+> jornada não substitui `rtk pnpm check`,
+> `rtk pnpm test:e2e` nem `deep-review`; são provas diferentes.
+>
+> **Implementador mantém o tracker vivo.** Comportamento novo cria cenário
+> `untested`; comportamento alterado reseta os cenários afetados para
+> `untested`; refactor puro declara "sem mudança visível". IDs, charters, bugs,
+> relatórios e evidências seguem o contrato de `docs/qa/README.md`.
+> PR apenas de Markdown ou metadados de skills, sem alteração de runtime, usa
+> validação estrutural proporcional e não precisa rodar suítes unitárias/E2E.
+
 ---
+
+
+## Skills compartilhadas pelos três harnesses
+
+Skill de projeto é instalada **uma vez** em `.claude/skills/<nome>/`.
+`.codex/skills` e `.opencode/skills` são links simbólicos para
+`../.claude/skills`, portanto Codex, Claude Code e OpenCode leem exatamente o
+mesmo conteúdo. Nunca copie uma skill para os três diretórios: atualização e
+remoção acontecem somente na cópia canônica.
+
+O conjunto instalado cobre o ciclo inteiro: `documentation-writer` na autoria,
+`drizzle-safe-migrations` em schema, `a11y-testing` no E2E,
+`agent-output-audit` para conferir tarefas de agentes, `deslop` antes da revisão
+e `ship-pr` depois do veredito de `deep-review`. Regras desta página sempre têm
+precedência sobre exemplos genéricos das skills — em especial RTK, base `dev`,
+worktree obrigatória, SQLite/libSQL e os gates deste repositório.
+
+
+## QA de jornada
+
+As skills `qa-report` e `qa-execution` formam um único ciclo, com estado
+durável e versionado em `docs/qa/`. Invoque `qa-report` com o argumento
+`docs/qa` para planejar; depois invoque `qa-execution` com o mesmo argumento
+para dogfooding e write-back. Essa formulação é intencionalmente neutra entre
+Codex, Claude Code e OpenCode.
+
+**Ordem para mudança visível:** implementação → `rtk pnpm check` e E2E aplicável →
+`qa-report` (tier targeted) → `qa-execution` → correções/reteste governados →
+suite completa → `deep-review` → PR para `dev`.
+
+`qa-execution` exige build alcançável com paridade de produção, autenticação
+real e suíte automatizada verde. Ela não usa mocks, banco, endpoints internos
+nem devtools para substituir interação ou verificação pela interface pública;
+devtools continuam permitidos para configurar e observar o ambiente da persona,
+como throttling de rede. O resultado só é `Pass` quando o observável sobrevive
+a refresh e é confirmado por uma leitura independente. Pernas que exigem ação humana ficam
+`Blocked (needs human verify)` com instruções exatas.
+
+O escopo de cada tier é definido uma única vez em `docs/qa/README.md`; esta
+seção define a ordem e os gates, não duplica a cadência.
+
+Artefatos autorais (`personas`, `journeys`, `scenarios`, `charters`, `bugs` e
+`reports`) são commitados. `docs/qa/state.csv` é uma visão gerada e
+`docs/qa/evidence/` guarda evidência volumosa local/CI; ambos ficam ignorados.
+Mudanças apenas na documentação ou nos metadados das skills validam estrutura,
+links e scripts afetados; não disparam a suíte do produto sem risco de runtime.
+O navegador de jornada é a dependência local fixada `agent-browser`; instale o
+Chrome uma vez com `rtk pnpm qa:browser:install` e invoque comandos com
+`rtk pnpm exec agent-browser`.
 
 
 ## Revisão profunda
 
 A skill `deep-review` roda o pipeline de revisão em seis etapas com artefatos
-idempotentes em `.deep-review/`. Instalada uma vez em `.claude/skills/` e
-alcançada pelos três harnesses por symlink — `.codex/skills` e
-`.opencode/skills` apontam para lá, e nada é duplicado.
+idempotentes em `.deep-review/`. Como toda skill do projeto, é alcançada pelos
+três harnesses a partir da única cópia canônica em `.claude/skills/`.
 
 ```bash
 /deep-review                      # diff contra a base, relatório local
@@ -384,6 +448,7 @@ fallback para quem vier de lá.
 
 ```bash
 rtk pnpm install
+rtk pnpm qa:browser:install       # Chrome usado pelo QA de jornada
 rtk pnpm dev                     # dashboard em localhost:3000
 
 # banco
