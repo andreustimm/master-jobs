@@ -755,6 +755,10 @@ describe("localized repository integration", () => {
         historicalVersions.has(item.version) ? "date" : "instant",
       );
     }
+    const ci = await readFile(".github/workflows/ci.yml", "utf8");
+    const qualityJob = ci.slice(ci.indexOf("  qualidade:"), ci.indexOf("  schema-e-migracao:"));
+    expect(qualityJob).toContain("fetch-depth: 0");
+    expect(qualityJob).toContain("fetch-tags: true");
     const metadata = execFileSync(
       "git",
       ["tag", "--list", "v*", "--format=%(objecttype)"],
