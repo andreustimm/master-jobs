@@ -47,8 +47,8 @@ export default async function Jobs({
   ]);
 
   return (
-    <main>
-      <header className="pt-10 pb-4">
+    <main className="page-content-top">
+      <header className="pb-4">
         <h1 className="type-display-md chevron mb-4">{t("jobs.title")}</h1>
         <p className="type-body-md text-muted-foreground">
           {total.toLocaleString(locale)} {t("jobs.matching")}

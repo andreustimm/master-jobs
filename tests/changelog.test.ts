@@ -682,8 +682,24 @@ describe("localized footer boundary", () => {
   });
 
   it("IT-017 gives the mobile flex scrollport a definite dialog height", async () => {
-    const modal = await readFile("app/changelog-modal.tsx", "utf8");
-    expect(modal).toMatch(/(?:^|[\s"])h-\[calc\(100dvh-2rem\)\](?=$|[\s"])/m);
+    const [modal, globals] = await Promise.all([
+      readFile("app/changelog-modal.tsx", "utf8"),
+      readFile("app/globals.css", "utf8"),
+    ]);
+    for (const side of ["top", "right", "bottom", "left"]) {
+      expect(globals).toContain(`--safe-area-${side}: env(safe-area-inset-${side})`);
+    }
+    expect(modal).toContain(
+      '"calc(100dvh - max(var(--spacing-xl), var(--safe-area-top)) - max(var(--spacing-xl), var(--safe-area-bottom)))"',
+    );
+    expect(modal).toContain(
+      '"min(calc(100vw - max(var(--spacing-md), var(--safe-area-left)) - max(var(--spacing-md), var(--safe-area-right))), 48rem)"',
+    );
+    expect(modal).toContain('marginTop: "max(var(--spacing-xl), var(--safe-area-top))"');
+    expect(modal).toContain('marginBottom: "max(var(--spacing-xl), var(--safe-area-bottom))"');
+    expect(modal).toContain(
+      '"translateX(calc((max(var(--spacing-md), var(--safe-area-left)) - max(var(--spacing-md), var(--safe-area-right))) / 2))"',
+    );
     expect(modal).toContain("min-h-0 flex-1 overflow-y-auto");
   });
 });

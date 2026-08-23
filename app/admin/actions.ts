@@ -17,6 +17,7 @@ import {
 } from "../../src/contexts/auth/index.ts";
 import { ensureCandidate } from "../../src/core/candidate.ts";
 import { ADMIN_COOKIE, currentSession, guard, SESSION_COOKIE } from "../auth";
+import type { UserEditActionState } from "./user-edit-state";
 
 /** Mesmas opções do cookie de sessão. Divergir aqui é como se perde httpOnly. */
 function cookieOptions(expires: Date) {
@@ -38,9 +39,14 @@ function parseRoles(formData: FormData): Role[] {
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
-function parseEmail(formData: FormData): string {
+function normalizedEmail(formData: FormData): string | null {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  if (!EMAIL.test(email)) throw new Error("E-mail inválido.");
+  return EMAIL.test(email) ? email : null;
+}
+
+function parseEmail(formData: FormData): string {
+  const email = normalizedEmail(formData);
+  if (email === null) throw new Error("E-mail inválido.");
   return email;
 }
 
@@ -52,10 +58,15 @@ function parseEmail(formData: FormData): string {
  * qualquer nome real. Vazio é erro, e não `null`: a interface trata a pessoa
  * pelo nome, e deixar a conta sem ele a faz cair no e-mail em toda tela.
  */
-function parseFullName(formData: FormData): string {
+function normalizedFullName(formData: FormData): string | null {
   const bruto = formData.get("fullName");
   const nome = String(bruto ?? "").trim().slice(0, 120);
-  if (nome === "") throw new Error("O nome é obrigatório.");
+  return nome === "" ? null : nome;
+}
+
+function parseFullName(formData: FormData): string {
+  const nome = normalizedFullName(formData);
+  if (nome === null) throw new Error("O nome é obrigatório.");
   return nome;
 }
 
@@ -123,25 +134,38 @@ export async function toggleDisabledAction(formData: FormData) {
  * para o candidato de outra pessoa daria leitura do currículo e do funil dela
  * sem passar pela impersonação auditada.
  */
-export async function updateUserAction(formData: FormData) {
+export async function updateUserAction(
+  _previousState: UserEditActionState,
+  formData: FormData,
+): Promise<UserEditActionState> {
   await guard("user:manage");
 
   const userId = parseUserId(formData);
-  const email = parseEmail(formData);
-  const fullName = parseFullName(formData);
+  const email = normalizedEmail(formData);
+  if (email === null) return { status: "error", code: "invalidEmail" };
+
+  const fullName = normalizedFullName(formData);
+  if (fullName === null) return { status: "error", code: "nameRequired" };
 
   const roles = parseRoles(formData);
-  if (roles.length === 0) throw new Error("Escolha ao menos um papel.");
+  if (roles.length === 0) return { status: "error", code: "rolesRequired" };
 
   // A instalação não pode ficar sem admin. Sem esta checagem, tirar o próprio
   // papel deixaria o sistema sem ninguém capaz de criar contas ou desfazer a
   // mudança, e a recuperação seria SQL na mão.
   if (!roles.includes("admin") && (await adminsBesides(userId)).length === 0) {
-    throw new Error("Este é o último admin ativo. Promova outro antes de rebaixá-lo.");
+    return { status: "error", code: "lastAdmin" };
   }
 
-  await updateUser(userId, { email, fullName, roles });
+  try {
+    await updateUser(userId, { email, fullName, roles });
+  } catch {
+    // Erro de persistência é anunciado sem vazar SQL, nomes de tabela ou
+    // detalhes de outra conta (por exemplo, numa colisão de e-mail).
+    return { status: "error", code: "unexpected" };
+  }
   revalidatePath("/admin/users");
+  return { status: "success" };
 }
 
 /**

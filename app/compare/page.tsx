@@ -96,7 +96,7 @@ export default async function CompareJobPage({ searchParams }: { searchParams: S
   const covered = vocabulary?.items.filter((item) => item.kind === "covered") ?? [];
 
   return (
-    <main className="pt-10 pb-16">
+    <main className="page-content-top pb-16">
       <header className="mb-6">
         <p className="font-mono type-micro tracking-[.12em] text-[var(--primary-text)] uppercase">
           {t("compare.eyebrow")}

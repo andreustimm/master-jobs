@@ -195,6 +195,7 @@ function UserRow({
               className="ml-auto h-7"
               popoverTarget={`user-edit-${user.id}`}
               popoverTargetAction="show"
+              data-testid="user-edit-open"
             >
               {t("admin.edit")}
             </Button>

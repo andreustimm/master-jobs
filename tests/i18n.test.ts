@@ -58,6 +58,7 @@ describe("translator", () => {
   it("resolve chave aninhada", () => {
     expect(t("nav.jobs")).toBe("Vagas");
     expect(translator("en").t("nav.jobs")).toBe("Jobs");
+    expect(translator("en").t("admin.nav")).toBe("Users");
   });
 
   it("devolve a chave quando a tradução não existe", () => {
