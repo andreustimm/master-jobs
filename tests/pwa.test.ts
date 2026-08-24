@@ -16,6 +16,22 @@ import { generatePwaArtifacts } from "../scripts/sw-version.mjs";
 const template = readFileSync("scripts/sw-template.js", "utf8");
 const manifest = JSON.parse(readFileSync("public/manifest.json", "utf8"));
 
+describe("real-browser PWA gate wiring", () => {
+  it("runs the privacy boundary explicitly after installing its pinned Chromium", () => {
+    const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+    const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
+
+    expect(packageJson.scripts?.["test:pwa-browser"]).toBe(
+      "JHO_PWA_BROWSER_TESTS=1 vitest run tests/pwa-chrome.test.ts",
+    );
+    expect(workflow).toMatch(
+      /pnpm exec playwright install --with-deps chromium[\s\S]+pnpm test:pwa-browser/,
+    );
+  });
+});
+
 type StoredResponse = { request: Request; response: Response };
 
 function memoryCaches(initialNames: string[] = []) {

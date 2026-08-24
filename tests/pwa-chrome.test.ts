@@ -290,19 +290,30 @@ async function startBrowserFixture(): Promise<BrowserFixture> {
   });
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("browser fixture has no port");
+  let browser: Browser;
+  try {
+    browser = await chromium.launch();
+  } catch (error) {
+    await closeFixtureServer(server);
+    throw error;
+  }
   return {
-    browser: await chromium.launch(),
+    browser,
     server,
     origin: `http://127.0.0.1:${address.port}`,
     offlineCookies,
   };
 }
 
+async function closeFixtureServer(server: ReturnType<typeof createServer>): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+  });
+}
+
 async function stopBrowserFixture(fixture: BrowserFixture): Promise<void> {
   await fixture.browser.close();
-  await new Promise<void>((resolve, reject) => {
-    fixture.server.close((error) => error ? reject(error) : resolve());
-  });
+  await closeFixtureServer(fixture.server);
 }
 
 async function controlledPage(context: BrowserContext, origin: string): Promise<Page> {
@@ -331,10 +342,12 @@ async function cacheAudit(page: Page) {
   });
 }
 
-// `pnpm check` runs 140+ coverage files in parallel. Chromium contracts belong
-// to the explicit browser gate; launching it inside coverage starves unrelated
-// short-timeout process tests without adding line-coverage evidence.
-const describeBrowser = process.argv.includes("--coverage") ? describe.skip : describe.sequential;
+// The browser contract is opt-in because `pnpm check` runs 140+ coverage files
+// in parallel. Reading `process.argv` here is not stable across Vitest workers;
+// the explicit CI/package gate owns both the environment flag and Chromium.
+const describeBrowser = process.env.JHO_PWA_BROWSER_TESTS === "1"
+  ? describe.sequential
+  : describe.skip;
 
 describeBrowser("real browser service-worker privacy boundary", () => {
   let fixture: BrowserFixture;
@@ -344,7 +357,7 @@ describeBrowser("real browser service-worker privacy boundary", () => {
   }, 20_000);
 
   afterAll(async () => {
-    await stopBrowserFixture(fixture);
+    if (fixture) await stopBrowserFixture(fixture);
   });
 
   it("IT-006 installs offline.html credentiallessly and storage refusal degrades to plain 503", async () => {
