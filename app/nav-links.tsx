@@ -34,14 +34,14 @@ export function NavLinks({
           {t("nav.cockpit")}
         </TransitionLink>
       )}
+      <TransitionLink href="/jobs" className={linkClass} data-testid="nav-jobs">
+        {t("nav.jobs")}
+      </TransitionLink>
       {hasCandidateScope && (
-        <TransitionLink href="/jobs" className={linkClass} data-testid="nav-jobs">
-          {t("nav.jobs")}
+        <TransitionLink href="/compare" className={linkClass} data-testid="nav-compare">
+          {t("nav.compareJob")}
         </TransitionLink>
       )}
-      <TransitionLink href="/compare" className={linkClass} data-testid="nav-compare">
-        {t("nav.compareJob")}
-      </TransitionLink>
       {hasCandidateScope && (
         <TransitionLink href="/pipeline" className={linkClass} data-testid="nav-pipeline">
           {t("nav.pipeline")}

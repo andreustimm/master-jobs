@@ -395,6 +395,16 @@ body {
   min-inline-size: 0;
 }
 
+/* A tela anterior continua montada para o App Router concluir a transição,
+   mas não pode ampliar o canvas por trás da superfície opaca. Em zoom alto,
+   uma tabela da rota anterior fazia o documento medir mais que o viewport e
+   permitia deslocamento lateral mesmo com o overlay perfeitamente contido. */
+#application-shell[inert] {
+  inline-size: 100%;
+  max-inline-size: 100%;
+  overflow: hidden;
+}
+
 .navigation-transition {
   position: fixed;
   inset: 0;

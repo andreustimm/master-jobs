@@ -503,6 +503,10 @@ export const ptBR = {
     title: "Funil",
     open: "abrir",
     noApplications: "Nada no funil ainda.",
+    startWith: "Comece pela",
+    jobsList: "lista de vagas",
+    appliedOn: "aplicado em {date}",
+    nextAction: "próximo: {action}",
   },
   referrals: {
     title: "Referrals",

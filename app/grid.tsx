@@ -116,10 +116,20 @@ export function GridToolbar({
       <span className="font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
         {t("grid.density")}
       </span>
-      <TransitionLink href={href(base, state, { dense: undefined })} className={box(!dense)} data-testid="density-comfortable">
+      <TransitionLink
+        href={href(base, state, { dense: undefined })}
+        className={box(!dense)}
+        data-testid="density-comfortable"
+        aria-current={!dense ? "page" : undefined}
+      >
         {t("grid.comfortable")}
       </TransitionLink>
-      <TransitionLink href={href(base, state, { dense: "1" })} className={box(dense)} data-testid="density-compact">
+      <TransitionLink
+        href={href(base, state, { dense: "1" })}
+        className={box(dense)}
+        data-testid="density-compact"
+        aria-current={dense ? "page" : undefined}
+      >
         {t("grid.compact")}
       </TransitionLink>
 

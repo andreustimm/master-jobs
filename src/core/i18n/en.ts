@@ -495,6 +495,10 @@ export const en: Dictionary = {
     title: "Pipeline",
     open: "open",
     noApplications: "Nothing in the pipeline yet.",
+    startWith: "Start with the",
+    jobsList: "job list",
+    appliedOn: "applied on {date}",
+    nextAction: "next: {action}",
   },
   referrals: {
     title: "Referrals",

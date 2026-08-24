@@ -42,9 +42,9 @@ export default async function Pipeline() {
 
       {rows.length === 0 ? (
         <Card className="p-6 text-sm text-muted-foreground">
-          Nada no funil ainda. Comece pela{" "}
+          {t("pipeline.noApplications")} {t("pipeline.startWith")}{" "}
           <TransitionLink href="/jobs" data-testid="pipeline-empty-jobs" className="text-[var(--primary-text)] hover:underline">
-            lista de vagas
+            {t("pipeline.jobsList")}
           </TransitionLink>
           .
         </Card>
@@ -72,11 +72,11 @@ export default async function Pipeline() {
                 </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">
                   {r.companyName}
-                  {r.appliedAt ? ` · aplicado em ${r.appliedAt.slice(0, 10)}` : ""}
+                  {r.appliedAt ? ` · ${t("pipeline.appliedOn", { date: r.appliedAt.slice(0, 10) })}` : ""}
                 </div>
                 {r.nextAction && (
                   <div className="mt-0.5 text-xs text-muted-foreground">
-                    próximo: {r.nextAction}
+                    {t("pipeline.nextAction", { action: r.nextAction })}
                   </div>
                 )}
               </div>

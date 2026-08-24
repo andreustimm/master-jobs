@@ -71,6 +71,7 @@ function trackConsole(targetPage) {
   targetPage.on("console", (message) => {
     if (message.type() !== "error") return;
     const value = message.text().slice(0, 200);
+    if (value === "{}" && targetPage.url().includes("/transition-test?error=unparseable-")) return;
     if (EXPECTED_CONSOLE.test(value)) return;
     consoleErrors.push(value);
   });
@@ -2087,13 +2088,14 @@ try {
 
   const transitionOverlay = page.locator('[data-testid="navigation-transition"]');
   const transitionError = page.locator('[data-testid="navigation-route-error"]');
-  const routerPush = async (href) => {
-    await page.evaluate((target) => {
+  const pushOn = async (targetPage, href) => {
+    await targetPage.evaluate((target) => {
       const router = window.next?.router;
       if (!router?.push) throw new Error("App Router client instance unavailable");
       router.push(target);
     }, href);
   };
+  const routerPush = (href) => pushOn(page, href);
   const waitForState = async (locator, state, label) => {
     try {
       await locator.waitFor({ state });
@@ -2107,10 +2109,41 @@ try {
     await waitForState(transitionOverlay, "detached", "transition reset did not detach overlay");
   };
 
-  const observeNavigation = async (targetPage, activate, destination, label = destination) => {
+  const observeNavigation = async (
+    targetPage,
+    activate,
+    destination,
+    label = destination,
+    captureAtAttach = async () => ({}),
+  ) => {
     const overlay = targetPage.locator('[data-testid="navigation-transition"]');
     try {
       await overlay.waitFor({ state: "detached" });
+      await targetPage.evaluate(() => {
+        globalThis.__e2eTransitionEvidence?.observer?.disconnect();
+        const states = [];
+        const record = () => {
+          const current = document.querySelector('[data-testid="navigation-transition"]');
+          if (!current) return;
+          const state = {
+            generation: Number(current.getAttribute("data-generation")),
+            phase: current.getAttribute("data-phase"),
+            status: current.querySelector('[role="status"]')?.textContent ?? "",
+          };
+          const previous = states.at(-1);
+          if (!previous || previous.generation !== state.generation || previous.phase !== state.phase) {
+            states.push(state);
+          }
+        };
+        const observer = new MutationObserver(record);
+        observer.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["data-generation", "data-phase"],
+          childList: true,
+          subtree: true,
+        });
+        globalThis.__e2eTransitionEvidence = { observer, states };
+      });
       const activation = activate();
       await overlay.waitFor({ state: "attached" });
       const snapshot = await overlay.evaluate((element) => ({
@@ -2121,10 +2154,17 @@ try {
         viewport: { width: window.innerWidth, height: window.innerHeight },
         text: element.textContent ?? "",
       }));
+      const attachedEvidence = await captureAtAttach();
       await activation;
       await targetPage.locator(destination).waitFor({ state: "visible", timeout: 20_000 });
       await overlay.waitFor({ state: "detached", timeout: 20_000 });
-      return snapshot;
+      const transitionEvidence = await targetPage.evaluate(() => {
+        const evidence = globalThis.__e2eTransitionEvidence;
+        evidence?.observer?.disconnect();
+        delete globalThis.__e2eTransitionEvidence;
+        return evidence?.states ?? [];
+      });
+      return { ...snapshot, ...attachedEvidence, transitionEvidence };
     } catch (error) {
       throw new Error(`${label}: ${String(error)}`);
     }
@@ -2132,17 +2172,51 @@ try {
 
   const observeRedirectAction = async (targetPage, activate, destination) => {
     let actionRequests = 0;
+    let actionResponses = 0;
+    let actionResponseSeen = false;
     const countAction = (request) => {
       if (request.method() === "POST" && request.headers()["next-action"]) actionRequests += 1;
     };
+    const countActionResponse = (response) => {
+      const request = response.request();
+      if (request.method() === "POST" && request.headers()["next-action"]) {
+        actionResponses += 1;
+        actionResponseSeen = true;
+      }
+    };
     targetPage.on("request", countAction);
+    targetPage.on("response", countActionResponse);
     try {
-      const snapshot = await observeNavigation(targetPage, activate, destination);
-      return { ...snapshot, actionRequests };
+      const snapshot = await observeNavigation(
+        targetPage,
+        activate,
+        destination,
+        destination,
+        async () => ({ actionResponseSeenAtAttach: actionResponseSeen }),
+      );
+      return { ...snapshot, actionRequests, actionResponses };
     } finally {
       targetPage.off("request", countAction);
+      targetPage.off("response", countActionResponse);
     }
   };
+
+  const readCacheStorage = async (targetPage) => targetPage.evaluate(async () => {
+    const names = await caches.keys();
+    const entries = [];
+    for (const name of names) {
+      const cache = await caches.open(name);
+      for (const request of await cache.keys()) {
+        const response = await cache.match(request);
+        entries.push({
+          cache: name,
+          url: request.url,
+          body: response ? await response.clone().text() : "",
+        });
+      }
+    }
+    return { names, entries };
+  });
 
   /* ------------ Task 04: first-party inventory and canonical flows -------- */
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -2184,10 +2258,20 @@ try {
   check(
     "task-04 IT-002 Link real e router hook coalescem em uma geração observável",
     desktopIntegrationEvidence.length === desktopDestinations.length
-      && desktopIntegrationEvidence.every(({ count, generation, phase }) =>
-        count === 1 && Number.isInteger(generation) && generation > 0 && phase === "loading"
+      && desktopIntegrationEvidence.every(({ count, generation, phase, transitionEvidence }) =>
+        count === 1
+          && generation === 1
+          && phase === "loading"
+          && transitionEvidence.filter((state) =>
+            state.generation === 1 && state.phase === "loading"
+          ).length === 1
       ),
-    JSON.stringify(desktopIntegrationEvidence.map(({ count, generation, phase }) => ({ count, generation, phase }))),
+    JSON.stringify(desktopIntegrationEvidence.map(({ count, generation, phase, transitionEvidence }) => ({
+      count,
+      generation,
+      phase,
+      transitionEvidence,
+    }))),
   );
 
   await page.setViewportSize({ width: 375, height: 812 });
@@ -2239,6 +2323,11 @@ try {
     () => page.locator('[data-testid="density-compact"]').click(),
     '[data-testid="route-jobs"]',
   )).phase);
+  const densityState = {
+    query: new URL(page.url()).searchParams.get("dense"),
+    current: await page.locator('[data-testid="density-compact"]').getAttribute("aria-current"),
+    layout: await page.locator('[data-density]').first().getAttribute("data-density"),
+  };
   await page.locator('[data-testid="filters-query"]').fill("Task 04 bulk fixture");
   contextualPhases.push((await observeNavigation(
     page,
@@ -2300,6 +2389,9 @@ try {
       && typicalCardinality.cards === 7
       && /^7\s/.test(typicalCardinality.summary ?? "")
       && typicalCardinality.next === 0
+      && densityState.query === "1"
+      && densityState.current === "page"
+      && densityState.layout === "compact"
       && bulkCardinality.cards === 200
       && /1[.,]001/.test(bulkCardinality.summary ?? "")
       && bulkCardinality.next === 1
@@ -2315,7 +2407,14 @@ try {
       && zeroCardinality.cards === 0
       && /^0\s/.test(zeroCardinality.summary ?? "")
       && zeroCardinality.next === 0,
-    JSON.stringify({ contextualPhases, typicalCardinality, bulkCardinality, contextualState, zeroCardinality }),
+    JSON.stringify({
+      contextualPhases,
+      typicalCardinality,
+      densityState,
+      bulkCardinality,
+      contextualState,
+      zeroCardinality,
+    }),
   );
 
   const contextualFamilyFailures = [];
@@ -2438,30 +2537,58 @@ try {
   ));
   rememberCreatedJob(page.url(), "Task 04 redirect fixture", "E2E Comparison Lab");
 
-  await page.goto(`${BASE}/jobs/new`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  const jobFormEntry = await observeNavigation(
+    page,
+    () => routerPush("/jobs/new"),
+    '[data-testid="route-jobs-new"]',
+  );
   const task04RecruiterCompany = `Task 04 ${crypto.randomUUID()}`;
-  await page.fill('input[name="title"]', "Task 04 one-shot job");
+  const task04OneShotTitle = `Task 04 one-shot ${crypto.randomUUID()}`;
+  await page.fill('input[name="title"]', task04OneShotTitle);
   await page.fill('input[name="companyName"]', task04RecruiterCompany);
   await page.fill('textarea[name="description"]', comparisonText);
-  redirectEvidence.push(await observeRedirectAction(
+  const oneShotRedirect = await observeRedirectAction(
     page,
     () => page.locator('[data-testid="post-job"]').click(),
     '[data-testid="route-job-detail"]',
-  ));
-  rememberCreatedJob(page.url(), "Task 04 one-shot job", task04RecruiterCompany);
+  );
+  redirectEvidence.push(oneShotRedirect);
+  rememberCreatedJob(page.url(), task04OneShotTitle, task04RecruiterCompany);
+  await page.goto(`${BASE}/jobs?q=${encodeURIComponent(task04OneShotTitle)}&size=200&fit=0`, {
+    waitUntil: "networkidle",
+  });
+  const oneShotMutationCount = await page
+    .locator('[data-testid^="job-link-"]')
+    .filter({ hasText: task04OneShotTitle })
+    .count();
 
-  await page.goto(`${BASE}/admin/users`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  const administratorTransition = await observeNavigation(
+    page,
+    () => page.locator('[data-testid="nav-admin-users"]:visible').click(),
+    '[data-testid="route-admin-users"]',
+  );
+  const administratorCache = await readCacheStorage(page);
   const task04Target = page.locator("li").filter({ hasText: "e2e-alvo@local.test" }).first();
-  redirectEvidence.push(await observeRedirectAction(
+  const impersonationEntry = await observeRedirectAction(
     page,
     () => task04Target.locator('[data-testid="impersonate-user"]').click(),
     '[data-testid="stop-impersonating"]',
-  ));
-  await observeRedirectAction(
+  );
+  redirectEvidence.push(impersonationEntry);
+  const impersonatedTransition = await observeNavigation(
+    page,
+    () => page.locator('[data-testid="nav-compare"]:visible').click(),
+    '[data-testid="route-compare"]',
+  );
+  const impersonatedCache = await readCacheStorage(page);
+  const impersonationExit = await observeRedirectAction(
     page,
     () => page.locator('[data-testid="stop-impersonating"]').click(),
     '[data-testid="route-admin-users"]',
   );
+  const restoredAdministratorCache = await readCacheStorage(page);
   check(
     "task-04 E2E-004 redirects de login, recovery, compare, vaga e impersonação mutam uma vez",
     redirectEvidence.length === 5 && redirectEvidence.every(({ count, actionRequests }) => count === 1 && actionRequests === 1),
@@ -2469,11 +2596,17 @@ try {
   );
   check(
     "task-04 IT-012 Server Actions reais mutam uma vez e iniciam somente o redirect aceito",
-    redirectEvidence.length === 5
-      && redirectEvidence.every(({ count, actionRequests, generation }) =>
-        count === 1 && actionRequests === 1 && Number.isInteger(generation) && generation > 0
-      ),
-    JSON.stringify(redirectEvidence.map(({ count, actionRequests, generation }) => ({ count, actionRequests, generation }))),
+    jobFormEntry.generation === 1
+      && oneShotRedirect.generation === jobFormEntry.generation + 1
+      && oneShotRedirect.count === 1
+      && oneShotRedirect.actionRequests === 1
+      && oneShotRedirect.actionResponses === 1
+      && oneShotRedirect.actionResponseSeenAtAttach
+      && oneShotRedirect.transitionEvidence.filter((state) =>
+        state.generation === oneShotRedirect.generation && state.phase === "loading"
+      ).length === 1
+      && oneShotMutationCount === 1,
+    JSON.stringify({ jobFormEntry, oneShotRedirect, oneShotMutationCount }),
   );
 
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
@@ -2526,11 +2659,25 @@ try {
   const publicCtx = await browser.newContext({ viewport: { width: 375, height: 812 } });
   const publicPage = await publicCtx.newPage();
   await publicCtx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  const directRouteLayers = [];
+  for (const path of [
+    "/login",
+    "/login/forgot",
+    "/login/reset?token=nunca-existiu-task04-direct",
+    `/login/callback?token=${E2E_LOGIN_EXPIRED_TOKEN}`,
+    task04PublicHref,
+  ].filter(Boolean)) {
+    const directPage = await publicCtx.newPage();
+    await directPage.goto(`${BASE}${path}`, { waitUntil: "commit" });
+    await directPage.locator("#app-splash").waitFor({ state: "attached", timeout: 10_000 });
+    directRouteLayers.push(await directPage.evaluate(() => ({
+      path: location.pathname + location.search,
+      startup: document.querySelectorAll("#app-splash").length,
+      transition: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+    })));
+    await directPage.close();
+  }
   await publicPage.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-  const directLayers = await publicPage.evaluate(() => ({
-    startup: document.querySelectorAll("#app-splash").length,
-    transition: document.querySelectorAll('[data-testid="navigation-transition"]').length,
-  }));
   await publicPage.locator("#app-splash").waitFor({ state: "detached" });
   const publicPhases = [];
   publicPhases.push(await observeNavigation(
@@ -2543,6 +2690,26 @@ try {
     () => publicPage.locator('[data-testid="login-back"]').click(),
     '[data-testid="route-login"]',
   ));
+  const resetSoftTransition = await observeNavigation(
+    publicPage,
+    () => publicPage.evaluate(() => window.next?.router?.push?.("/login/reset?token=nunca-existiu-task04-soft")),
+    '[data-testid="route-login-reset"]',
+  );
+  publicPhases.push(resetSoftTransition);
+  publicPhases.push(await observeNavigation(
+    publicPage,
+    () => publicPage.evaluate(() => window.next?.router?.push?.("/login")),
+    '[data-testid="route-login"]',
+  ));
+  const callbackSoftTransition = await observeNavigation(
+    publicPage,
+    () => publicPage.evaluate((token) => {
+      window.next?.router?.push?.(`/login/callback?token=${encodeURIComponent(token)}`);
+    }, E2E_LOGIN_EXPIRED_TOKEN),
+    '[data-testid="route-login"]',
+    "expired callback soft transition",
+  );
+  publicPhases.push(callbackSoftTransition);
   if (task04PublicHref) {
     publicPhases.push(await observeNavigation(
       publicPage,
@@ -2558,16 +2725,21 @@ try {
       .map((value) => value.trim())
       .filter((value) => value.length > 0 && value !== publicUserText)
     : [];
+  const publicLeakMarkers = [publicUserText, ...publicProfileMarkers]
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
   check(
     "task-04 E2E-013 startup direto e auth/public soft usam uma camada sem conteúdo do usuário",
-    directLayers.startup === 1
-      && directLayers.transition === 0
-      && publicPhases.length === 3
+    directRouteLayers.length === 5
+      && directRouteLayers.every(({ startup, transition }) => startup === 1 && transition === 0)
+      && publicPhases.length === 6
       && publicProfileMarkers.length > 0
       && publicPhases.every(({ count, text }) =>
-        count === 1 && privateMarkers.every((term) => !text.includes(term))
+        count === 1
+          && privateMarkers.every((term) => !text.includes(term))
+          && publicLeakMarkers.every((term) => !text.includes(term))
       ),
-    JSON.stringify({ directLayers, phases: publicPhases.length, publicUserText, publicProfileMarkers }),
+    JSON.stringify({ directRouteLayers, phases: publicPhases.length, publicLeakMarkers }),
   );
   await publicPage.goto(`${BASE}/login/reset?token=nunca-existiu-task04`, { waitUntil: "networkidle" });
   const invalidReset = await publicPage.locator('[data-testid="route-login-reset"]').textContent();
@@ -2595,6 +2767,26 @@ try {
     ]);
   }));
   const resetRaceUrls = resetRacePages.map((resetPage) => resetPage.url().replace(BASE, ""));
+  const resetWinnerIndex = resetRaceUrls.findIndex((url) => url === "/login?reset=1");
+  if (resetWinnerIndex === -1) throw new Error("reset race produced no successful consumer");
+  const resetReplayPage = resetRacePages[resetWinnerIndex];
+  const consumedResetPath = `/login/reset?token=${E2E_RESET_RACE_TOKEN}`;
+  await resetReplayPage.goto(`${BASE}${consumedResetPath}`, { waitUntil: "networkidle" });
+  const resetReplayAfterConsume = {
+    url: resetReplayPage.url().replace(BASE, ""),
+    forms: await resetReplayPage.locator('input[name="password"]').count(),
+  };
+  await resetReplayPage.reload({ waitUntil: "networkidle" });
+  const resetReplayAfterReload = {
+    url: resetReplayPage.url().replace(BASE, ""),
+    forms: await resetReplayPage.locator('input[name="password"]').count(),
+  };
+  await resetReplayPage.goto(`${BASE}/login/forgot`, { waitUntil: "networkidle" });
+  await resetReplayPage.goBack({ waitUntil: "networkidle" });
+  const resetReplayAfterHistory = {
+    url: resetReplayPage.url().replace(BASE, ""),
+    forms: await resetReplayPage.locator('input[name="password"]').count(),
+  };
   await Promise.all(resetRaceContexts.map((context) => context.close()));
   await publicPage.goto(`${BASE}/login/callback?token=${E2E_LOGIN_EXPIRED_TOKEN}`, { waitUntil: "networkidle" });
   const expiredCallback = new URL(publicPage.url());
@@ -2611,6 +2803,24 @@ try {
   const loginRaceSessions = await Promise.all(loginRaceContexts.map(async (context) =>
     (await context.cookies()).some((cookie) => cookie.name === "jho_session")
   ));
+  const loginWinnerIndex = loginRaceSessions.findIndex(Boolean);
+  if (loginWinnerIndex === -1) throw new Error("login race produced no successful consumer");
+  const loginReplayContext = loginRaceContexts[loginWinnerIndex];
+  const loginReplayPage = loginRacePages[loginWinnerIndex];
+  await loginReplayContext.clearCookies();
+  await loginReplayPage.goto(`${BASE}/login/forgot`, { waitUntil: "networkidle" });
+  await loginReplayPage.goto(`${BASE}/login/callback?token=${E2E_LOGIN_RACE_TOKEN}`, { waitUntil: "networkidle" });
+  const loginReplayAfterConsumeUrl = new URL(loginReplayPage.url());
+  const loginReplayAfterConsume = loginReplayAfterConsumeUrl.pathname + loginReplayAfterConsumeUrl.search;
+  await loginReplayPage.reload({ waitUntil: "networkidle" });
+  const loginReplayAfterReloadUrl = new URL(loginReplayPage.url());
+  const loginReplayAfterReload = loginReplayAfterReloadUrl.pathname + loginReplayAfterReloadUrl.search;
+  await loginReplayPage.goto(`${BASE}/login/forgot`, { waitUntil: "networkidle" });
+  await loginReplayPage.goBack({ waitUntil: "networkidle" });
+  const loginReplayAfterHistoryUrl = new URL(loginReplayPage.url());
+  const loginReplayAfterHistory = loginReplayAfterHistoryUrl.pathname + loginReplayAfterHistoryUrl.search;
+  const loginReplayRestoredSession = (await loginReplayContext.cookies())
+    .some((cookie) => cookie.name === "jho_session");
   await Promise.all(loginRaceContexts.map((context) => context.close()));
   await publicPage.goto(`${BASE}/login/callback?token=${E2E_LOGIN_RACE_TOKEN}`, { waitUntil: "networkidle" });
   const replayCallback = new URL(publicPage.url());
@@ -2643,6 +2853,12 @@ try {
       && loginRaceUrls.filter((url) => url === "/login?error=invalid").length === 1
       && loginRaceSessions.filter(Boolean).length === 1
       && replayCallbackUrl === "/login?error=invalid"
+      && [resetReplayAfterConsume, resetReplayAfterReload, resetReplayAfterHistory]
+        .every(({ url, forms }) => url === consumedResetPath && forms === 0)
+      && loginReplayAfterConsume === "/login?error=invalid"
+      && loginReplayAfterReload === "/login?error=invalid"
+      && loginReplayAfterHistory === "/login?error=invalid"
+      && !loginReplayRestoredSession
       && emptyProfileResponse?.status() === 200
       && emptyProfile.statusSurface
       && emptyProfile.heading === "e2e-alvo@local.test"
@@ -2660,6 +2876,13 @@ try {
       loginRaceUrls,
       loginRaceSessions,
       replayCallbackUrl,
+      resetReplayAfterConsume,
+      resetReplayAfterReload,
+      resetReplayAfterHistory,
+      loginReplayAfterConsume,
+      loginReplayAfterReload,
+      loginReplayAfterHistory,
+      loginReplayRestoredSession,
       emptyProfile,
     }),
   );
@@ -2677,46 +2900,49 @@ try {
     overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
     body: document.body.innerText,
   }));
-  const [missingJobPage] = await Promise.all([
-    page.waitForEvent("popup"),
-    page.evaluate((url) => window.open(url, "_blank"), `${BASE}/jobs/999999999`),
-  ]);
-  await missingJobPage.waitForLoadState("domcontentloaded");
-  const missingJobOutcome = await missingJobPage.evaluate(() => ({
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  const missingJobTransition = await observeNavigation(
+    page,
+    () => routerPush("/jobs/999999999"),
+    "body",
+    "missing job soft transition",
+  );
+  const missingJobOutcome = await page.evaluate(() => ({
     path: location.pathname,
     noIndex: document.querySelector('meta[name="robots"]')?.getAttribute("content")?.includes("noindex") ?? false,
     overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
     jobDetail: document.querySelectorAll('[data-testid="route-job-detail"]').length,
     body: document.body.innerText,
   }));
-  await missingJobPage.close();
 
-  const [closedJobPage] = await Promise.all([
-    page.waitForEvent("popup"),
-    page.evaluate((url) => window.open(url, "_blank"), `${BASE}/jobs/${E2E_CLOSED_JOB_ID}`),
-  ]);
-  await closedJobPage.waitForLoadState("domcontentloaded");
-  const closedJobOutcome = await closedJobPage.evaluate(() => ({
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  const closedJobTransition = await observeNavigation(
+    page,
+    () => routerPush(`/jobs/${E2E_CLOSED_JOB_ID}`),
+    '[data-testid="route-job-detail"]',
+    "closed job soft transition",
+  );
+  const closedJobOutcome = await page.evaluate(() => ({
     path: location.pathname,
     jobDetail: document.querySelectorAll('[data-testid="route-job-detail"]').length,
     body: document.querySelector('[data-testid="route-job-detail"]')?.textContent ?? "",
     overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
   }));
-  await closedJobPage.close();
 
-  const [deletedJobPage] = await Promise.all([
-    page.waitForEvent("popup"),
-    page.evaluate((url) => window.open(url, "_blank"), `${BASE}/jobs/${E2E_DELETED_JOB_ID}`),
-  ]);
-  await deletedJobPage.waitForLoadState("domcontentloaded");
-  const deletedJobOutcome = await deletedJobPage.evaluate(() => ({
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  const deletedJobTransition = await observeNavigation(
+    page,
+    () => routerPush(`/jobs/${E2E_DELETED_JOB_ID}`),
+    "body",
+    "deleted job soft transition",
+  );
+  const deletedJobOutcome = await page.evaluate(() => ({
     path: location.pathname,
     noIndex: document.querySelector('meta[name="robots"]')?.getAttribute("content")?.includes("noindex") ?? false,
     overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
     jobDetail: document.querySelectorAll('[data-testid="route-job-detail"]').length,
     body: document.body.innerText,
   }));
-  await deletedJobPage.close();
   if (!task04PublicHref) throw new Error("Task 04 public profile href unavailable for revocation race");
   const revocationCtx = await browser.newContext({
     viewport: { width: 375, height: 812 },
@@ -2838,7 +3064,9 @@ try {
   );
   check(
     "task-04 IT-014 entidades ausentes, fechadas e revogadas preservam resultado canônico sem cache privado",
-    missingJobOutcome.noIndex
+    [missingJobTransition, closedJobTransition, deletedJobTransition]
+      .every(({ count, generation }) => count === 1 && Number.isInteger(generation) && generation > 0)
+      && missingJobOutcome.noIndex
       && missingJobOutcome.jobDetail === 0
       && closedJobOutcome.jobDetail === 1
       && /fechada/i.test(closedJobOutcome.body)
@@ -2848,7 +3076,14 @@ try {
       && revokedProfileOutcome.publicProfile === 0
       && [missingJobOutcome, closedJobOutcome, deletedJobOutcome, revokedProfileOutcome]
         .every(({ overlays }) => overlays === 0),
-    JSON.stringify({ missingJobOutcome, closedJobOutcome, deletedJobOutcome, revokedProfileOutcome }),
+    JSON.stringify({
+      transitions: [missingJobTransition, closedJobTransition, deletedJobTransition]
+        .map(({ count, generation }) => ({ count, generation })),
+      missingJobOutcome,
+      closedJobOutcome,
+      deletedJobOutcome,
+      revokedProfileOutcome,
+    }),
   );
   await publicCtx.close();
 
@@ -2859,10 +3094,24 @@ try {
 
   const roleTransitionResults = [];
   for (const scenario of [
-    { email: "e2e-candidato@local.test", prepare: null, destination: "nav-compare", landmark: "route-compare" },
-    { email: "e2e-recrutador@local.test", prepare: "/login/forgot", destination: "login-back", landmark: "route-login" },
+    {
+      email: "e2e-candidato@local.test",
+      locale: "en",
+      prepare: "/jobs",
+      control: '[data-testid="nav-compare"]:visible',
+      landmark: '[data-testid="route-compare"]',
+    },
+    {
+      email: "e2e-recrutador@local.test",
+      prepare: `/jobs/${E2E_CLOSED_JOB_ID}`,
+      control: '[data-testid="nav-jobs"]:visible',
+      landmark: '[data-testid="route-jobs"]',
+    },
   ]) {
     const roleCtx = await browser.newContext();
+    if (scenario.locale) {
+      await roleCtx.addCookies([{ name: "jho_locale", value: scenario.locale, url: BASE }]);
+    }
     const rolePage = await roleCtx.newPage();
     await rolePage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
     await rolePage.fill('input[name="email"]', scenario.email);
@@ -2872,14 +3121,52 @@ try {
     if (scenario.prepare) await rolePage.goto(`${BASE}${scenario.prepare}`, { waitUntil: "networkidle" });
     const snapshot = await observeNavigation(
       rolePage,
-      () => rolePage.locator(`[data-testid="${scenario.destination}"]:visible`).click(),
-      `[data-testid="${scenario.landmark}"]`,
+      () => rolePage.locator(scenario.control).click(),
+      scenario.landmark,
       `task-04 E2E-020 ${scenario.email}`,
     );
-    const missingRoleStatus = scenario.email === "e2e-recrutador@local.test"
-      ? (await rolePage.goto(`${BASE}/candidate`, { waitUntil: "domcontentloaded" }))?.status() ?? null
-      : null;
-    roleTransitionResults.push({ email: scenario.email, snapshot, missingRoleStatus });
+    let emptyPipelineLocale = null;
+    if (scenario.email === "e2e-candidato@local.test") {
+      const pipelineTransition = await observeNavigation(
+        rolePage,
+        () => rolePage.locator('[data-testid="nav-pipeline"]:visible').click(),
+        '[data-testid="route-pipeline"]',
+        "task-04 empty pipeline locale",
+      );
+      emptyPipelineLocale = {
+        transition: pipelineTransition.count,
+        emptyLink: await rolePage.locator('[data-testid="pipeline-empty-jobs"]').count(),
+        text: (await rolePage.locator('[data-testid="route-pipeline"]').textContent()) ?? "",
+      };
+      await rolePage.reload({ waitUntil: "networkidle" });
+      emptyPipelineLocale.reloadedText =
+        (await rolePage.locator('[data-testid="route-pipeline"]').textContent()) ?? "";
+    }
+    let missingRoleSnapshot = null;
+    let missingRoleOutcome = null;
+    if (scenario.email === "e2e-recrutador@local.test") {
+      missingRoleSnapshot = await observeNavigation(
+        rolePage,
+        () => pushOn(rolePage, "/candidate"),
+        "body",
+        "task-04 missing-role soft transition",
+      );
+      missingRoleOutcome = await rolePage.evaluate(() => ({
+        path: location.pathname,
+        candidate: document.querySelectorAll('[data-testid="route-candidate"]').length,
+        overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+        body: document.body.innerText,
+      }));
+    }
+    const cache = await readCacheStorage(rolePage);
+    roleTransitionResults.push({
+      email: scenario.email,
+      snapshot,
+      missingRoleSnapshot,
+      missingRoleOutcome,
+      emptyPipelineLocale,
+      cache,
+    });
     await roleCtx.close();
   }
 
@@ -2898,21 +3185,86 @@ try {
     '[data-testid="route-login"]',
     "task-04 E2E-020 expired session",
   );
+  const expiredCache = await readCacheStorage(expiredPage);
   await expiredCtx.close();
 
-  const roleNeutral = [...roleTransitionResults.map(({ snapshot }) => snapshot.text), expiredSnapshot.text]
+  const recruiterMissingRole = roleTransitionResults
+    .find(({ email }) => email === "e2e-recrutador@local.test")?.missingRoleSnapshot;
+  const recruiterMissingRoleOutcome = roleTransitionResults
+    .find(({ email }) => email === "e2e-recrutador@local.test")?.missingRoleOutcome;
+  if (!recruiterMissingRole) throw new Error("missing-role transition evidence unavailable");
+  const namedRoleTransitions = [
+    ...roleTransitionResults.map(({ email, snapshot }) => ({ role: email, snapshot })),
+    { role: "administrator", snapshot: administratorTransition },
+    { role: "impersonated-administrator", snapshot: impersonatedTransition },
+    { role: "expired-session", snapshot: expiredSnapshot },
+    { role: "missing-role", snapshot: recruiterMissingRole },
+  ];
+  const roleNeutral = namedRoleTransitions.map(({ snapshot }) => snapshot.text)
     .every((text) => privateMarkers.every((term) => !text.includes(term)));
+  const roleCaches = [
+    ...roleTransitionResults.map(({ email, cache }) => ({ role: email, cache })),
+    { role: "administrator", cache: administratorCache },
+    { role: "impersonated-administrator", cache: impersonatedCache },
+    { role: "restored-administrator", cache: restoredAdministratorCache },
+    { role: "expired-session", cache: expiredCache },
+  ];
+  const roleCachePayload = JSON.stringify(roleCaches.map(({ cache }) => cache));
+  const roleCacheIsolated = roleCaches.every(({ cache }) =>
+    cache.names.every((name) => name.startsWith("static-") || name.startsWith("shell-"))
+      && cache.entries.every(({ url }) => {
+        const path = new URL(url).pathname;
+        return ![
+          "/admin/users",
+          "/candidate",
+          "/compare",
+          "/jobs",
+          "/pipeline",
+          "/referrals",
+          "/p/",
+          "/api/",
+        ].some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+      })
+  ) && privateMarkers.every((term) => !roleCachePayload.includes(term));
   check(
     "task-04 E2E-020 papéis e sessão expirada chegam ao destino canônico com copy neutra",
-    roleTransitionResults.length === 2
-      && roleTransitionResults.every(({ snapshot }) => snapshot.count === 1)
-      && roleTransitionResults.find(({ email }) => email === "e2e-recrutador@local.test")?.missingRoleStatus === 403
-      && expiredSnapshot.count === 1
-      && roleNeutral,
+    namedRoleTransitions.length === 6
+      && namedRoleTransitions.every(({ snapshot }) => snapshot.count === 1)
+      && roleTransitionResults.find(({ email }) => email === "e2e-recrutador@local.test")?.missingRoleSnapshot?.count === 1
+      && recruiterMissingRoleOutcome?.path === "/candidate"
+      && recruiterMissingRoleOutcome?.candidate === 0
+      && recruiterMissingRoleOutcome?.overlays === 0
+      && /forbidden|403|accessed|acesso|proibid/i.test(recruiterMissingRoleOutcome?.body ?? "")
+      && impersonationEntry.count === 1
+      && impersonationExit.count === 1
+      && roleNeutral
+      && roleCacheIsolated,
     JSON.stringify({
-      roles: roleTransitionResults.map(({ email, snapshot, missingRoleStatus }) => [email, snapshot.count, missingRoleStatus]),
+      roles: namedRoleTransitions.map(({ role, snapshot }) => [role, snapshot.count]),
+      missingRoleOutcome: recruiterMissingRoleOutcome,
       roleNeutral,
+      roleCacheIsolated,
     }),
+  );
+  const candidateEmptyPipeline = roleTransitionResults
+    .find(({ email }) => email === "e2e-candidato@local.test")?.emptyPipelineLocale;
+  check(
+    "BUG-20260823 funil vazio permanece integralmente em inglês após transição e recarga",
+    candidateEmptyPipeline?.transition === 1
+      && candidateEmptyPipeline?.emptyLink === 1
+      && candidateEmptyPipeline.text.includes(en.pipeline.noApplications)
+      && candidateEmptyPipeline.text.includes(en.pipeline.startWith)
+      && candidateEmptyPipeline.text.includes(en.pipeline.jobsList)
+      && candidateEmptyPipeline.reloadedText.includes(en.pipeline.noApplications)
+      && candidateEmptyPipeline.reloadedText.includes(en.pipeline.startWith)
+      && candidateEmptyPipeline.reloadedText.includes(en.pipeline.jobsList)
+      && !candidateEmptyPipeline.text.includes(ptBR.pipeline.noApplications)
+      && !candidateEmptyPipeline.text.includes(ptBR.pipeline.startWith)
+      && !candidateEmptyPipeline.text.includes(ptBR.pipeline.jobsList)
+      && !candidateEmptyPipeline.reloadedText.includes(ptBR.pipeline.noApplications)
+      && !candidateEmptyPipeline.reloadedText.includes(ptBR.pipeline.startWith)
+      && !candidateEmptyPipeline.reloadedText.includes(ptBR.pipeline.jobsList),
+    JSON.stringify(candidateEmptyPipeline),
   );
   check(
     "task-04 IT-013 tokens, papéis, sessão e impersonação chegam ao destino autorizado e liberam overlay",
@@ -2921,8 +3273,12 @@ try {
       && resetRacePosts.every((count) => count === 1)
       && expiredCallbackUrl === "/login?error=invalid"
       && replayCallbackUrl === "/login?error=invalid"
+      && resetSoftTransition.count === 1
+      && callbackSoftTransition.count === 1
       && roleTransitionResults.length === 2
       && roleTransitionResults.every(({ snapshot }) => snapshot.count === 1)
+      && roleTransitionResults.find(({ email }) => email === "e2e-recrutador@local.test")?.missingRoleSnapshot?.count === 1
+      && impersonationExit.count === 1
       && expiredSnapshot.count === 1
       && roleNeutral,
     JSON.stringify({
@@ -2931,7 +3287,11 @@ try {
       resetRacePosts,
       expiredCallbackUrl,
       replayCallbackUrl,
+      resetSoftTransition: resetSoftTransition.count,
+      callbackSoftTransition: callbackSoftTransition.count,
       roleTransitionResults: roleTransitionResults.map(({ email, snapshot }) => [email, snapshot.count]),
+      missingRoleTransition: roleTransitionResults.find(({ email }) => email === "e2e-recrutador@local.test")?.missingRoleSnapshot?.count,
+      impersonationExit: impersonationExit.count,
       expiredCount: expiredSnapshot.count,
       roleNeutral,
     }),
@@ -3009,29 +3369,44 @@ try {
     `${olderGeneration}→${newerGeneration}`,
   );
 
-  await resetTransitionDocument();
-  const portugueseErrorToken = crypto.randomUUID();
-  await routerPush(`/transition-test?error=${portugueseErrorToken}`);
-  await waitForState(transitionOverlay, "attached", "error navigation did not mount overlay");
-  await waitForState(transitionError, "visible", "error boundary did not become visible");
-  const portugueseFailure = await transitionError.textContent();
-  const releasedForError = await page.locator("#application-shell").evaluate((shell) => ({
-    inert: shell.hasAttribute("inert"),
-    busy: shell.getAttribute("aria-busy"),
-  }));
-  const rawFailureVisible = (await page.locator("body").textContent())?.includes("TRANSITION_TEST_ROUTE_FAILURE");
-  await page.locator('[data-testid="navigation-route-error-retry"]').click();
-  await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
+  const exerciseClientFailure = async (token) => {
+    await resetTransitionDocument();
+    await routerPush(`/transition-test?error=${encodeURIComponent(token)}`);
+    await waitForState(transitionOverlay, "attached", `${token}: error navigation did not mount overlay`);
+    await waitForState(transitionError, "visible", `${token}: error boundary did not become visible`);
+    const failure = await transitionError.textContent();
+    const released = await page.locator("#application-shell").evaluate((shell) => ({
+      inert: shell.hasAttribute("inert"),
+      busy: shell.getAttribute("aria-busy"),
+    }));
+    const body = (await page.locator("body").textContent()) ?? "";
+    await page.locator('[data-testid="navigation-route-error-retry"]').click();
+    await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
+    return {
+      token,
+      failure,
+      released,
+      rawVisible: ["TRANSITION_TEST_ROUTE_FAILURE", token, "[object Object]"]
+        .some((value) => body.includes(value)),
+      overlayAfterRetry: await transitionOverlay.count(),
+    };
+  };
+  const clientFailures = [
+    await exerciseClientFailure(`ordinary-${crypto.randomUUID()}`),
+    await exerciseClientFailure(`unparseable-${crypto.randomUUID()}`),
+  ];
   check(
-    "transition E2E-009 falha libera overlay, redige detalhe e retry funciona",
-    (await transitionOverlay.count()) === 0
-      && portugueseFailure?.includes(ptBR.transition.failedTitle) === true
-      && portugueseFailure?.includes(ptBR.transition.failedBody) === true
-      && portugueseFailure?.includes(ptBR.transition.retry) === true
-      && releasedForError.inert === false
-      && releasedForError.busy === null
-      && rawFailureVisible === false,
-    JSON.stringify(releasedForError),
+    "transition E2E-009 falha comum e valor não parseável liberam overlay, redigem detalhe e aceitam retry",
+    clientFailures.every(({ failure, released, rawVisible, overlayAfterRetry }) =>
+      failure?.includes(ptBR.transition.failedTitle) === true
+        && failure?.includes(ptBR.transition.failedBody) === true
+        && failure?.includes(ptBR.transition.retry) === true
+        && released.inert === false
+        && released.busy === null
+        && !rawVisible
+        && overlayAfterRetry === 0
+    ),
+    JSON.stringify(clientFailures),
   );
 
   await resetTransitionDocument();
@@ -3041,7 +3416,9 @@ try {
     inert: shell.hasAttribute("inert"),
     busy: shell.getAttribute("aria-busy"),
   }));
-  const statusCount = await transitionOverlay.locator('[role="status"][aria-live="polite"][aria-atomic="true"]').count();
+  const liveStatus = transitionOverlay.locator('[role="status"][aria-live="polite"][aria-atomic="true"]');
+  const statusCount = await liveStatus.count();
+  const accessibilitySnapshot = await liveStatus.ariaSnapshot();
   const focusOutsideStatus = await transitionOverlay.evaluate((overlay) =>
     !overlay.contains(document.activeElement),
   );
@@ -3051,28 +3428,49 @@ try {
   } catch {
     underlyingBlocked = true;
   }
+  await page.keyboard.press("Tab");
+  const keyboardFocusWhileBusy = await page.evaluate(() => ({
+    inApplicationShell: Boolean(document.activeElement?.closest("#application-shell")),
+    inStatus: document.activeElement?.getAttribute("role") === "status",
+  }));
   const generationBeforeTheme = Number(await transitionOverlay.getAttribute("data-generation"));
   const statusBeforeTheme = await transitionOverlay.locator('[role="status"]').textContent();
   const transitionContrastFailures = [];
+  const systemModeEvidence = [];
   for (const theme of ["hp", "huly", "graphy"]) {
-    for (const mode of ["light", "dark"]) {
+    for (const fixture of [
+      { mode: "light", colorScheme: "light", label: "light" },
+      { mode: "dark", colorScheme: "dark", label: "dark" },
+      { mode: "system", colorScheme: "light", label: "system-light" },
+      { mode: "system", colorScheme: "dark", label: "system-dark" },
+    ]) {
+      await page.emulateMedia({ colorScheme: fixture.colorScheme });
       const sample = await page.evaluate(({ theme, mode }) => {
         document.documentElement.dataset.theme = theme;
-        document.documentElement.dataset.mode = mode;
+        if (mode === "system") delete document.documentElement.dataset.mode;
+        else document.documentElement.dataset.mode = mode;
         const overlay = document.querySelector('[data-testid="navigation-transition"]');
         const status = overlay?.querySelector('[role="status"]');
         return {
           count: document.querySelectorAll('[data-testid="navigation-transition"]').length,
           foreground: status ? getComputedStyle(status).color : "",
           background: overlay ? getComputedStyle(overlay).backgroundColor : "",
+          modeAttribute: document.documentElement.getAttribute("data-mode"),
+          prefersDark: matchMedia("(prefers-color-scheme: dark)").matches,
+          generation: overlay?.getAttribute("data-generation") ?? null,
+          status: status?.textContent ?? "",
         };
-      }, { theme, mode });
+      }, { theme, mode: fixture.mode });
       const ratio = contrast(toRgb(sample.foreground), toRgb(sample.background));
       if (sample.count !== 1 || ratio < 4.5) {
-        transitionContrastFailures.push(`${theme}/${mode}:${ratio.toFixed(2)}`);
+        transitionContrastFailures.push(`${theme}/${fixture.label}:${ratio.toFixed(2)}`);
+      }
+      if (fixture.mode === "system") {
+        systemModeEvidence.push({ theme, ...fixture, ...sample, ratio });
       }
     }
   }
+  await page.emulateMedia({ colorScheme: null });
   await page.emulateMedia({ reducedMotion: "reduce" });
   const reducedMotion = await transitionOverlay.evaluate((overlay) => {
     const brand = overlay.querySelector(".app-splash__marca");
@@ -3087,23 +3485,21 @@ try {
   });
   await page.emulateMedia({ reducedMotion: "no-preference" });
   check(
-    "transition E2E-015 live region único, shell inerte e foco preservado",
-    shellWhileBusy.inert
-      && shellWhileBusy.busy === "true"
-      && statusCount === 1
-      && focusOutsideStatus
-      && underlyingBlocked,
-    JSON.stringify({ shellWhileBusy, statusCount, focusOutsideStatus, underlyingBlocked }),
-  );
-  check(
     "transition E2E-016 temas e movimento reduzido mudam sem reiniciar estado",
     transitionContrastFailures.length === 0
+      && systemModeEvidence.length === 6
+      && systemModeEvidence.every((sample) =>
+        sample.modeAttribute === null
+          && sample.prefersDark === (sample.colorScheme === "dark")
+          && Number(sample.generation) === generationBeforeTheme
+          && sample.status === statusBeforeTheme
+      )
       && reducedMotion.rootTransition === "0s"
       && reducedMotion.brandAnimation === "none"
       && reducedMotion.sweepAnimation === "none"
       && Number(reducedMotion.generation) === generationBeforeTheme
       && reducedMotion.status === statusBeforeTheme,
-    JSON.stringify({ transitionContrastFailures, reducedMotion }),
+    JSON.stringify({ transitionContrastFailures, systemModeEvidence, reducedMotion }),
   );
   await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
   await transitionOverlay.waitFor({ state: "detached" });
@@ -3117,99 +3513,235 @@ try {
     JSON.stringify(focusAfterTransition),
   );
 
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  const keyboardControl = page.locator('[data-testid="nav-compare"]:visible').first();
+  await keyboardControl.focus();
+  const keyboardTransition = await observeNavigation(
+    page,
+    () => page.keyboard.press("Enter"),
+    '[data-testid="route-compare"]',
+    "keyboard navigation transition",
+  );
+
+  const touchCtx = await browser.newContext({ hasTouch: true, viewport: { width: 375, height: 812 } });
+  const touchPage = await touchCtx.newPage();
+  await touchCtx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  await touchPage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+  await touchPage.fill('input[name="email"]', E2E_EMAIL);
+  await touchPage.fill('input[name="password"]', E2E_PASSWORD);
+  await touchPage.locator('[data-testid="login-submit"]').click();
+  await touchPage.waitForURL((url) => !url.pathname.startsWith("/login"));
+  await touchPage.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  const mobileTriggerBox = await touchPage.locator('[data-testid="mobile-nav-trigger"]').boundingBox();
+  if (!mobileTriggerBox) throw new Error("mobile navigation trigger has no touch target");
+  await touchPage.touchscreen.tap(
+    mobileTriggerBox.x + mobileTriggerBox.width / 2,
+    mobileTriggerBox.y + mobileTriggerBox.height / 2,
+  );
+  const touchControl = touchPage.locator('[data-testid="mobile-nav-popover"] [data-testid="nav-compare"]');
+  await touchControl.waitFor({ state: "visible" });
+  const touchControlBox = await touchControl.boundingBox();
+  if (!touchControlBox) throw new Error("mobile compare control has no touch target");
+  const touchTransition = await observeNavigation(
+    touchPage,
+    () => touchPage.touchscreen.tap(
+      touchControlBox.x + touchControlBox.width / 2,
+      touchControlBox.y + touchControlBox.height / 2,
+    ),
+    '[data-testid="route-compare"]',
+    "touch navigation transition",
+  );
+  const touchOverflow = await touchPage.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth
+  );
+  await touchCtx.close();
+
+  check(
+    "transition E2E-015 árvore acessível, pointer, teclado e toque preservam um status e bloqueiam o shell",
+    shellWhileBusy.inert
+      && shellWhileBusy.busy === "true"
+      && statusCount === 1
+      && /status/i.test(accessibilitySnapshot)
+      && accessibilitySnapshot.includes(statusBeforeTheme ?? "")
+      && focusOutsideStatus
+      && underlyingBlocked
+      && !keyboardFocusWhileBusy.inApplicationShell
+      && !keyboardFocusWhileBusy.inStatus
+      && keyboardTransition.count === 1
+      && touchTransition.count === 1
+      && touchOverflow <= 1,
+    JSON.stringify({
+      shellWhileBusy,
+      statusCount,
+      accessibilitySnapshot,
+      focusOutsideStatus,
+      underlyingBlocked,
+      keyboardFocusWhileBusy,
+      keyboardTransition: keyboardTransition.count,
+      touchTransition: touchTransition.count,
+      touchOverflow,
+    }),
+  );
+
   for (const locale of ["pt-BR", "en"]) {
     const dictionary = locale === "pt-BR" ? ptBR : en;
+    const opposite = locale === "pt-BR" ? en : ptBR;
     await resetTransitionDocument(locale);
     await routerPush("/transition-test?delay=race-new");
     await transitionOverlay.waitFor({ state: "attached" });
-    const localizedNormal = await transitionOverlay.locator('[role="status"]').textContent();
+    const localizedNormal = (await transitionOverlay.locator('[role="status"]').textContent())?.trim();
     await page.evaluate(() => window.dispatchEvent(new Event("offline")));
     await page.waitForFunction(
       () => document.querySelector('[data-testid="navigation-transition"]')?.getAttribute("data-phase") === "offline",
     );
-    const localizedOffline = await transitionOverlay.textContent();
+    const localizedOffline = (await transitionOverlay.textContent()) ?? "";
+
+    await resetTransitionDocument(locale);
+    await routerPush("/transition-test?delay=prolonged");
+    await transitionOverlay.waitFor({ state: "attached" });
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="navigation-transition"]')?.getAttribute("data-phase") === "prolonged",
+      undefined,
+      { timeout: 5000 },
+    );
+    const localizedProlonged = (await transitionOverlay.locator('[role="status"]').textContent())?.trim();
+    await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
+    await transitionOverlay.waitFor({ state: "detached" });
     check(
-      `transition E2E-014 ${locale} normal e offline usam o dicionário ativo`,
-      localizedNormal?.includes(dictionary.transition.loading) === true
+      `transition E2E-014 ${locale} normal, prolongado e offline usam só o dicionário ativo`,
+      localizedNormal === dictionary.transition.loading
+        && localizedProlonged === dictionary.transition.prolonged
         && localizedOffline?.includes(dictionary.transition.offlineTitle) === true
         && localizedOffline?.includes(dictionary.transition.offlineBody) === true
-        && localizedOffline?.includes(dictionary.transition.retry) === true,
-      localizedOffline ?? "",
+        && localizedOffline?.includes(dictionary.transition.retry) === true
+        && !localizedNormal?.includes(opposite.transition.loading)
+        && !localizedProlonged?.includes(opposite.transition.prolonged)
+        && !localizedOffline.includes(opposite.transition.offlineTitle)
+        && !localizedOffline.includes(opposite.transition.offlineBody)
+        && !localizedOffline.includes(opposite.transition.retry),
+      JSON.stringify({ localizedNormal, localizedProlonged, localizedOffline }),
     );
 
     await resetTransitionDocument(locale);
     const token = crypto.randomUUID();
     await routerPush(`/transition-test?error=${token}`);
     await transitionError.waitFor({ state: "visible" });
-    const localizedFailure = await transitionError.textContent();
+    const localizedFailure = (await transitionError.textContent()) ?? "";
     check(
-      `transition E2E-014 ${locale} falha usa o dicionário ativo`,
+      `transition E2E-014 ${locale} falha usa somente o dicionário ativo`,
       localizedFailure?.includes(dictionary.transition.failedTitle) === true
         && localizedFailure?.includes(dictionary.transition.failedBody) === true
-        && localizedFailure?.includes(dictionary.transition.retry) === true,
+        && localizedFailure?.includes(dictionary.transition.retry) === true
+        && !localizedFailure.includes(opposite.transition.failedTitle)
+        && !localizedFailure.includes(opposite.transition.failedBody)
+        && !localizedFailure.includes(opposite.transition.retry),
       localizedFailure ?? "",
     );
     await page.locator('[data-testid="navigation-route-error-retry"]').click();
     await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
   }
 
-  await resetTransitionDocument("en");
-  await page.setViewportSize({ width: 375, height: 812 });
-  await routerPush("/transition-test?delay=race-new");
-  await transitionOverlay.waitFor({ state: "attached" });
-  await page.evaluate(() => {
-    const root = document.documentElement.style;
-    root.setProperty("--safe-area-top", "47px");
-    root.setProperty("--safe-area-right", "20px");
-    root.setProperty("--safe-area-bottom", "34px");
-    root.setProperty("--safe-area-left", "44px");
-    window.dispatchEvent(new Event("offline"));
-  });
-  await page.waitForFunction(
-    () => document.querySelector('[data-testid="navigation-transition"]')?.getAttribute("data-phase") === "offline",
-  );
-  const mobileSplash = await transitionOverlay.evaluate((overlay) => {
-    const root = overlay.getBoundingClientRect();
-    const content = overlay.querySelector(".navigation-transition__content")?.getBoundingClientRect();
-    return {
-      root: { top: root.top, right: root.right, bottom: root.bottom, left: root.left },
-      content: content
-        ? { top: content.top, right: content.right, bottom: content.bottom, left: content.left }
-        : null,
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-      scrollWidth: document.documentElement.scrollWidth,
-    };
-  });
+  const zoomCdp = await page.context().newCDPSession(page);
+  const zoomEvidence = [];
+  for (const fixture of [
+    { label: "desktop", physicalWidth: 1280, physicalHeight: 900, safe: [0, 0, 0, 0] },
+    { label: "mobile", physicalWidth: 375, physicalHeight: 812, safe: [47, 20, 34, 44] },
+  ]) {
+    await page.setViewportSize({ width: fixture.physicalWidth, height: fixture.physicalHeight });
+    const cssWidth = Math.ceil(fixture.physicalWidth / 2);
+    const cssHeight = Math.ceil(fixture.physicalHeight / 2);
+    await zoomCdp.send("Emulation.setDeviceMetricsOverride", {
+      width: cssWidth,
+      height: cssHeight,
+      deviceScaleFactor: 2,
+      mobile: false,
+      screenWidth: fixture.physicalWidth,
+      screenHeight: fixture.physicalHeight,
+    });
+    await resetTransitionDocument("en");
+    await routerPush("/transition-test?delay=race-new");
+    await transitionOverlay.waitFor({ state: "attached" });
+    await page.evaluate(([top, right, bottom, left]) => {
+      const root = document.documentElement.style;
+      root.setProperty("--safe-area-top", `${top}px`);
+      root.setProperty("--safe-area-right", `${right}px`);
+      root.setProperty("--safe-area-bottom", `${bottom}px`);
+      root.setProperty("--safe-area-left", `${left}px`);
+      window.dispatchEvent(new Event("offline"));
+    }, fixture.safe);
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="navigation-transition"]')?.getAttribute("data-phase") === "offline",
+    );
+    await transitionOverlay.locator('[role="status"] p').evaluate((paragraph) => {
+      paragraph.textContent = `${paragraph.textContent} ${paragraph.textContent}`;
+    });
+    const sample = await transitionOverlay.evaluate((overlay) => {
+      const root = overlay.getBoundingClientRect();
+      const contentElement = overlay.querySelector(".navigation-transition__content");
+      const content = contentElement?.getBoundingClientRect();
+      const status = overlay.querySelector('[role="status"] p');
+      const style = getComputedStyle(overlay);
+      const statusStyle = status ? getComputedStyle(status) : null;
+      return {
+        devicePixelRatio: window.devicePixelRatio,
+        screen: { width: window.screen.width, height: window.screen.height },
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        visualViewport: window.visualViewport
+          ? {
+              width: window.visualViewport.width,
+              height: window.visualViewport.height,
+              scale: window.visualViewport.scale,
+            }
+          : null,
+        root: { top: root.top, right: root.right, bottom: root.bottom, left: root.left },
+        content: content
+          ? { top: content.top, right: content.right, bottom: content.bottom, left: content.left }
+          : null,
+        padding: {
+          top: Number.parseFloat(style.paddingTop),
+          right: Number.parseFloat(style.paddingRight),
+          bottom: Number.parseFloat(style.paddingBottom),
+          left: Number.parseFloat(style.paddingLeft),
+        },
+        status: status
+          ? {
+              clientWidth: status.clientWidth,
+              scrollWidth: status.scrollWidth,
+              scrollHeight: status.scrollHeight,
+              lineHeight: Number.parseFloat(statusStyle?.lineHeight ?? "0"),
+              text: status.textContent ?? "",
+            }
+          : null,
+        scrollWidth: document.documentElement.scrollWidth,
+      };
+    });
+    zoomEvidence.push({ ...fixture, cssWidth, cssHeight, sample });
+  }
+  await zoomCdp.send("Emulation.clearDeviceMetricsOverride");
   check(
-    "transition E2E-017 mobile, safe area e texto longo permanecem contidos",
-    mobileSplash.root.top === 0
-      && mobileSplash.root.left === 0
-      && mobileSplash.root.right === mobileSplash.viewport.width
-      && mobileSplash.root.bottom === mobileSplash.viewport.height
-      && mobileSplash.content?.top >= 47
-      && mobileSplash.content?.right <= 375 - 20
-      && mobileSplash.content?.bottom <= 812 - 34
-      && mobileSplash.content?.left >= 44
-      && mobileSplash.scrollWidth <= mobileSplash.viewport.width,
-    JSON.stringify(mobileSplash),
+    "transition E2E-017 desktop e mobile em zoom Chromium 200%, safe area e copy longa permanecem contidos",
+    zoomEvidence.length === 2
+      && zoomEvidence.every(({ cssWidth, cssHeight, safe, sample }) =>
+        sample.devicePixelRatio === 2
+          && sample.viewport.width === cssWidth
+          && sample.viewport.height === cssHeight
+          && sample.root.top === 0
+          && sample.root.left === 0
+          && sample.root.right === cssWidth
+          && sample.root.bottom === cssHeight
+          && sample.content?.left >= safe[3]
+          && sample.content?.right <= cssWidth - safe[1]
+          && sample.padding.top >= safe[0]
+          && sample.padding.right >= safe[1]
+          && sample.padding.bottom >= safe[2]
+          && sample.padding.left >= safe[3]
+          && sample.status?.text.split(" ").length > 12
+          && sample.status.scrollWidth <= sample.status.clientWidth
+          && sample.status.scrollHeight > sample.status.lineHeight
+          && sample.scrollWidth <= cssWidth
+      ),
+    JSON.stringify(zoomEvidence),
   );
-
-  await resetTransitionDocument("en");
-  await page.setViewportSize({ width: 640, height: 450 });
-  await routerPush("/transition-test?delay=race-new");
-  await transitionOverlay.waitFor({ state: "attached" });
-  const zoomContainment = await transitionOverlay.evaluate((overlay) => ({
-    overlayWidth: overlay.getBoundingClientRect().width,
-    viewportWidth: window.innerWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-  }));
-  check(
-    "transition E2E-017 viewport equivalente a zoom 200% não transborda",
-    zoomContainment.overlayWidth === zoomContainment.viewportWidth
-      && zoomContainment.scrollWidth <= zoomContainment.viewportWidth,
-    JSON.stringify(zoomContainment),
-  );
-  await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);

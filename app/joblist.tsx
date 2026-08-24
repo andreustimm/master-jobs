@@ -44,7 +44,10 @@ export function JobList({
   }
 
   return (
-    <div className="divide-y overflow-hidden rounded-xl border">
+    <div
+      className="divide-y overflow-hidden rounded-xl border"
+      data-density={dense ? "compact" : "comfortable"}
+    >
       {rows.map((r, index) => {
         const blockers = scoreMessages(r.blockers);
         const salary = pay(r);
