@@ -355,5 +355,8 @@ describe("deterministic generation and manifest", () => {
     const purposes = manifest.icons.map((icon: { purpose: string }) => icon.purpose);
     expect(purposes).toContain("maskable");
     expect(purposes).toContain("any");
+    const sizes = new Set(manifest.icons.map((icon: { sizes: string }) => icon.sizes));
+    expect(sizes.has("192x192")).toBe(true);
+    expect(sizes.has("512x512")).toBe(true);
   });
 });

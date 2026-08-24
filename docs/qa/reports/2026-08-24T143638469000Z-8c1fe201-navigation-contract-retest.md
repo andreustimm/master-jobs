@@ -23,10 +23,11 @@
 |---|---|---|---|---|---|---|---|
 | 1 | CH-keyboard-screen-transition | J-switch-workspace-screen / NAV-switch-screen-ready | Candidato por teclado | Accessibility Tour | Fixed | BUG-20260823-pipeline-empty-state-mixed-locale | bfd27a9 |
 | 2 | CH-keyboard-screen-transition | J-switch-workspace-screen / NAV-accessible-mobile-transition | Candidato por teclado | Accessibility Tour | Pass | | |
-| 3 | CH-first-party-navigation-inventory | J-switch-workspace-screen / NAV-first-party-navigation-contract; AUTH-canonical-transition-boundaries (adjacente, não terminal) | Andreus em triagem | Feature Tour | Pass | | |
-| 4 | CH-direct-startup-canary | J-open-dashboard-direct / PWA-direct-load-startup-singleton (adjacente, não terminal) | Andreus em triagem | Feature Tour | Pass | | |
+| 3 | CH-first-party-navigation-inventory | J-switch-workspace-screen / NAV-first-party-navigation-contract | Andreus em triagem | Feature Tour | Pass | | |
 
 Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human verify) | Blocked (human decision)`
+
+**Canários adjacentes, sem veredito de cenário:** a mesma sessão observou o 403 canônico do recrutador, sem encerrar `AUTH-canonical-transition-boundaries`; `CH-direct-startup-canary` observou abertura direta e recarga sem encerrar `PWA-direct-load-startup-singleton`, pois as personas planejadas eram outras.
 
 ## Session Debriefs
 
@@ -101,7 +102,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 ## Final Status
 
-- **Exit gate (full automated suite):** `rtk pnpm check` — exit 0, 148/148 arquivos, 2.082 testes aprovados, 6 pulados, 97,45% de cobertura de linhas e 13/13 contratos QA; `rtk pnpm test:e2e` — exit 0, 178/178 verificações e 8/8 páginas sem violações axe WCAG 2.2 AA; `rtk pnpm test:pwa-browser` — exit 0, 22/22.
+- **Exit gate (full automated suite):** `rtk pnpm check` — exit 0, 148/148 arquivos, 2.081 testes aprovados, 6 pulados, 97,45% de cobertura de linhas e 13/13 contratos QA; `rtk pnpm test:e2e` — exit 0, 178/178 verificações e 8/8 páginas sem violações axe WCAG 2.2 AA; `rtk pnpm test:pwa-browser` — exit 0, 22/22.
 - **Issues by user impact:** Blocks-Completion 0 · Data-Loss 0 · Trust-Damage 0 abertos (1 verificado) · Friction 0 · Cosmetic 0
-- **Coverage:** 2/2 jornadas exercitadas; 2/4 linhas terminais sob a persona planejada e 2 canários adjacentes não terminais, desktop Chromium 1280×900 e iPhone 15 emulado 393 px; WebKit móvel, zoom 200%, temas e reduced motion no E2E do mesmo build. Firefox, Safari físico, extensões reais e rede 3G ficaram como lacunas qualificadas.
+- **Coverage:** 2/2 jornadas exercitadas; 3/3 linhas da matriz terminais sob a persona planejada e 2 canários adjacentes sem veredito de cenário, desktop Chromium 1280×900 e iPhone 15 emulado 393 px; WebKit móvel, zoom 200%, temas e reduced motion no E2E do mesmo build. Firefox, Safari físico, extensões reais e rede 3G ficaram como lacunas qualificadas.
 - **Verdict:** ready para o escopo targeted — o bug conhecido foi verificado como corrigido e não há finding aberto; os dois canários executados sob persona distinta continuam `untested` no tracker até o Full QA de staging.

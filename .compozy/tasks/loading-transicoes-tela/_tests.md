@@ -69,7 +69,7 @@ Canonical test contract for the unified navigation splash and safe offline shell
 | US-005.EC-10 | Theme changes preserve contrast and singleton overlay | UT-031 | IT-010–IT-011 | E2E-016 |
 | Transition reducer/store | State, time, concurrency, and error paths | UT-004–UT-018, UT-029–UT-030 | IT-001–IT-005 | E2E-006–E2E-010 |
 | URL classifier/adapters | Internal acceptance and native exclusions | UT-001–UT-003, UT-035, UT-038 | IT-001–IT-002 | E2E-001–E2E-005, E2E-019 |
-| Router instrumentation contract | Next hook start bridge and failure isolation | UT-004, UT-037 | IT-001–IT-002 | E2E-004–E2E-005 |
+| Router instrumentation contract | Next hook start bridge and failure isolation | UT-004, UT-039 | IT-001–IT-002 | E2E-004–E2E-005 |
 | Presenter/loading/error components | Blocking, readiness, accessible phase, recovery | UT-009–UT-012, UT-016, UT-029–UT-033, UT-037 | IT-003–IT-005, IT-010–IT-011 | E2E-006–E2E-009, E2E-014–E2E-017 |
 | Offline renderer/generator | Deterministic localized credentialless document | UT-021–UT-024, UT-034 | IT-006, IT-008 | E2E-011–E2E-012, E2E-014 |
 | Service-worker message/cache contract | Deny-by-default cache and matching failure signal | UT-019–UT-020, UT-025–UT-028, UT-036 | IT-006–IT-009 | E2E-010–E2E-012 |
@@ -88,10 +88,10 @@ Canonical test contract for the unified navigation splash and safe offline shell
 
 - **UT-004** (happy): `start` from `idle` at `1000` creates generation `1`, phase `loading`, the normalized target, and `committed=false`.
 - **UT-005** (idempotency): a second `start` for the same active target returns unchanged generation and phase.
-- **UT-006** (concurrency): a `start` for a different target while pending increments generation and clears committed/fallback/prolonged state from the older target.
+- **UT-006** (concurrency): a `start` for a different target while pending increments generation and clears committed/prolonged state from the older target.
 - **UT-007** (ordering): `url-committed` with a mismatched URL leaves `committed=false`.
-- **UT-008** (ordering): `url-committed` for the active target sets `committed=true` but does not leave while `fallbackCount=1`.
-- **UT-009** (state): `fallback-unmounted` for the active committed generation makes completion eligible only when the count reaches zero.
+- **UT-008** (ordering): `url-committed` for the active target sets `committed=true`.
+- **UT-009** (state): the matching committed generation becomes eligible for completion.
 - **UT-010** (boundary): a ready transition at 179 ms remains visible and the same transition at 180 ms enters `leaving`.
 - **UT-011** (boundary): the phase is `loading` at 2,999 ms and `prolonged` at exactly 3,000 ms without scheduling dismissal.
 - **UT-012** (concurrency): prolonged, leave, and reset callbacks carrying an old generation cannot change the current snapshot.
@@ -102,7 +102,7 @@ Canonical test contract for the unified navigation splash and safe offline shell
 - **UT-017** (idempotency): two retry activations in one offline generation invoke one hard navigation to the active target.
 - **UT-018** (state): an `online` event while offline preserves the offline phase and does not invoke navigation automatically.
 - **UT-029** (state): a new transition after success, error, or offline retry begins with normal loading phase and no stale prolonged/error announcement state.
-- **UT-030** (ordering): two nested fallback mounts require two matching cleanups before a committed transition becomes ready.
+- **UT-030** (idempotency): repeated matching commits retain one generation and one readiness lifecycle.
 
 ### Service-worker messages and cache policy
 
@@ -124,7 +124,8 @@ Canonical test contract for the unified navigation splash and safe offline shell
 - **UT-032** (state): startup rendering retains `SPLASH_MIN_MS=900`, current root identity, headless bypass, and one startup node while transition constants remain separate.
 - **UT-033** (error): typed dictionary validation fails when any normal/prolonged/offline/failure/retry English leaf is missing or blank.
 - **UT-034** (idempotency): two generator runs for the same version/revision produce byte-identical `sw.js` and `offline.html`; a changed revision changes only the version marker-dependent output.
-- **UT-037** (error): `toPublicNavigationError()` maps arbitrary thrown values, Next digests, and unparseable objects to one generic dictionary key without returning raw content; the App Router instrumentation bridge also swallows a forced store exception so observability cannot abort navigation.
+- **UT-037** (error): `toPublicNavigationError()` maps arbitrary thrown values, Next digests, and unparseable objects to one generic dictionary key without returning raw content.
+- **UT-039** (error): the App Router instrumentation bridge swallows a forced store exception so observability cannot abort navigation.
 
 ## Integration Tests
 
@@ -132,7 +133,7 @@ Canonical test contract for the unified navigation splash and safe offline shell
 
 - **IT-001**: load the real `instrumentation-client.ts`, invoke `onRouterTransitionStart()` with `push`, `replace`, and `traverse`, and assert each valid target reaches the shared store with the corresponding current generation.
 - **IT-002**: activate a real `TransitionLink` whose router hook reports the same target in the same navigation; assert the store creates one generation and subscribers receive one loading phase announcement.
-- **IT-003**: begin a route, mount the root loading signal in the same React commit as the URL observer, commit the target, and assert leaving occurs only after the loading signal unmounts and the 180 ms boundary passes.
+- **IT-003**: begin a delayed route in the production browser and assert the overlay remains truthful until the URL commits; representative authorization, impersonation, rate-limit, and private-profile requests must retain canonical 403/404 status, proving no root streaming fallback masked them as 200.
 - **IT-004**: begin and commit an already-prefetched target without mounting root loading; assert the overlay observes the 180 ms minimum and then leaves.
 - **IT-005**: make a route render throw, mount real `app/error.tsx`, and assert the overlay releases before the localized error retry button becomes operable and no raw error/digest is rendered.
 

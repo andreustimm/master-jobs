@@ -35,7 +35,6 @@ export type TransitionStore = {
   subscribe(listener: Listener): () => void;
   begin(url: string, currentOverride?: string): number | null;
   commit(url: string, generation?: number): void;
-  mountFallback(generation?: number): () => void;
   failRoute(generation?: number): void;
   offline(target: string, generation?: number): void;
   reset(generation?: number): void;
@@ -163,19 +162,6 @@ export function createTransitionStore(options: TransitionStoreOptions = {}): Tra
     scheduleLeaveIfReady();
   };
 
-  const mountFallback = (generation = snapshot.generation): (() => void) => {
-    if (destroyed || generation !== snapshot.generation) return () => undefined;
-    const mounted = dispatch({ type: "fallback-mounted", generation });
-    if (mounted) leaveTimer = clearActiveTimer(leaveTimer);
-    let cleaned = false;
-    return () => {
-      if (cleaned || destroyed || !mounted) return;
-      cleaned = true;
-      dispatch({ type: "fallback-unmounted", generation });
-      scheduleLeaveIfReady();
-    };
-  };
-
   const failRoute = (generation = snapshot.generation): void => {
     if (destroyed || generation !== snapshot.generation) return;
     clearTimers();
@@ -245,7 +231,6 @@ export function createTransitionStore(options: TransitionStoreOptions = {}): Tra
     },
     begin,
     commit,
-    mountFallback,
     failRoute,
     offline,
     reset,

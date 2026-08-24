@@ -172,7 +172,6 @@ describe("pure transition reducer", () => {
       target: "/pipeline",
       startedAt: 1000,
       committed: false,
-      fallbackCount: 0,
     });
   });
 
@@ -183,7 +182,6 @@ describe("pure transition reducer", () => {
 
   it("UT-006 gives a different target a new clean generation", () => {
     let state = started();
-    state = reduceTransition(state, { type: "fallback-mounted", generation: 1 });
     state = reduceTransition(state, { type: "url-committed", url: "/pipeline", generation: 1 });
     state = reduceTransition(state, { type: "prolonged", generation: 1 });
     expect(reduceTransition(state, { type: "start", target: "/compare", at: 5000 })).toEqual({
@@ -192,7 +190,6 @@ describe("pure transition reducer", () => {
       target: "/compare",
       startedAt: 5000,
       committed: false,
-      fallbackCount: 0,
     });
   });
 
@@ -203,20 +200,13 @@ describe("pure transition reducer", () => {
     ).toBe(state);
   });
 
-  it("UT-008 records the matching commit without leaving through an active fallback", () => {
-    let state = started();
-    state = reduceTransition(state, { type: "fallback-mounted", generation: 1 });
-    state = reduceTransition(state, { type: "url-committed", url: "/pipeline", generation: 1 });
-    expect(state).toMatchObject({ phase: "loading", committed: true, fallbackCount: 1 });
-    expect(reduceTransition(state, { type: "leave", generation: 1 })).toBe(state);
+  it("UT-008 records the matching commit", () => {
+    const state = reduceTransition(started(), { type: "url-committed", url: "/pipeline", generation: 1 });
+    expect(state).toMatchObject({ phase: "loading", committed: true });
   });
 
-  it("UT-009 becomes ready only when the last fallback unmounts", () => {
-    let state = started();
-    state = reduceTransition(state, { type: "fallback-mounted", generation: 1 });
-    state = reduceTransition(state, { type: "url-committed", url: "/pipeline", generation: 1 });
-    expect(isTransitionReady(state)).toBe(false);
-    state = reduceTransition(state, { type: "fallback-unmounted", generation: 1 });
+  it("UT-009 becomes ready when the matching URL commits", () => {
+    const state = reduceTransition(started(), { type: "url-committed", url: "/pipeline", generation: 1 });
     expect(isTransitionReady(state)).toBe(true);
   });
 
@@ -302,8 +292,6 @@ describe("browser-local transition store", () => {
     fixture.store.offline("/pipeline", 1);
     fixture.store.failRoute(1);
     fixture.store.reset(1);
-    const staleFallbackCleanup = fixture.store.mountFallback(1);
-    staleFallbackCleanup();
     fixture.time.advance(3000);
     expect(fixture.store.getSnapshot()).toMatchObject({
       generation: 2,
@@ -365,24 +353,19 @@ describe("browser-local transition store", () => {
         phase: "loading",
         target: "/compare",
         committed: false,
-        fallbackCount: 0,
       });
     }
   });
 
-  it("UT-030 requires both nested fallback cleanups before readiness", () => {
+  it("UT-030 keeps repeated matching commits idempotent", () => {
     const fixture = storeFixture(1000);
     fixture.store.begin("/pipeline");
-    const unmountOuter = fixture.store.mountFallback();
-    const unmountInner = fixture.store.mountFallback();
     fixture.store.commit("/pipeline");
+    const generation = fixture.store.getSnapshot().generation;
+    fixture.store.commit("/pipeline");
+    expect(fixture.store.getSnapshot()).toMatchObject({ generation, phase: "loading", committed: true });
     fixture.time.advance(180);
-    unmountInner();
-    expect(fixture.store.getSnapshot()).toMatchObject({ phase: "loading", fallbackCount: 1 });
-    unmountInner();
-    expect(fixture.store.getSnapshot().fallbackCount).toBe(1);
-    unmountOuter();
-    expect(fixture.store.getSnapshot()).toMatchObject({ phase: "leaving", fallbackCount: 0 });
+    expect(fixture.store.getSnapshot().phase).toBe("leaving");
   });
 
   it("handles matching worker messages and ignores hostile message events", () => {

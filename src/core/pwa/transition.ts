@@ -9,14 +9,11 @@ export type NavigationTransition = {
   target: string | null;
   startedAt: number | null;
   committed: boolean;
-  fallbackCount: number;
 };
 
 export type TransitionEvent =
   | { type: "start"; target: string; at: number }
   | { type: "url-committed"; url: string; generation: number }
-  | { type: "fallback-mounted"; generation: number }
-  | { type: "fallback-unmounted"; generation: number }
   | { type: "prolonged"; generation: number }
   | { type: "offline"; target: string; generation: number }
   | { type: "leave"; generation: number }
@@ -57,7 +54,6 @@ export const INITIAL_NAVIGATION_TRANSITION: NavigationTransition = {
   target: null,
   startedAt: null,
   committed: false,
-  fallbackCount: 0,
 };
 
 const INVALID_PERCENT_ESCAPE = /%(?![0-9a-f]{2})/i;
@@ -129,7 +125,7 @@ function isPending(phase: TransitionPhase): boolean {
 }
 
 export function isTransitionReady(state: NavigationTransition): boolean {
-  return isPending(state.phase) && state.committed && state.fallbackCount === 0;
+  return isPending(state.phase) && state.committed;
 }
 
 function idleAtGeneration(generation: number): NavigationTransition {
@@ -149,7 +145,6 @@ export function reduceTransition(
       target: event.target,
       startedAt: event.at,
       committed: false,
-      fallbackCount: 0,
     };
   }
 
@@ -159,12 +154,6 @@ export function reduceTransition(
     case "url-committed":
       if (!isPending(state.phase) || event.url !== state.target || state.committed) return state;
       return { ...state, committed: true };
-    case "fallback-mounted":
-      if (!isPending(state.phase)) return state;
-      return { ...state, fallbackCount: state.fallbackCount + 1 };
-    case "fallback-unmounted":
-      if (!isPending(state.phase) || state.fallbackCount === 0) return state;
-      return { ...state, fallbackCount: state.fallbackCount - 1 };
     case "prolonged":
       if (state.phase !== "loading") return state;
       return { ...state, phase: "prolonged" };

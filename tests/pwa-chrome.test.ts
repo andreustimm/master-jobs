@@ -352,10 +352,16 @@ const describeBrowser = browserGateRequested
   ? describe.sequential
   : describe.skip;
 
+let browserSuiteStarted = false;
+afterAll(() => {
+  if (browserGateRequested) expect(browserSuiteStarted).toBe(true);
+});
+
 describeBrowser("real browser service-worker privacy boundary", () => {
   let fixture: BrowserFixture;
 
   beforeAll(async () => {
+    browserSuiteStarted = true;
     fixture = await startBrowserFixture();
   }, 20_000);
 

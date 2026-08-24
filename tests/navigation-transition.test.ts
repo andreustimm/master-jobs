@@ -81,30 +81,12 @@ describe("App Router transition integration", () => {
     expect(config).not.toContain("instrumentationClientRouterTransitionEvents");
   });
 
-  it("UT-037 isolates navigation from transition-store instrumentation failures", () => {
+  it("UT-039 isolates navigation from transition-store instrumentation failures", () => {
     vi.spyOn(transitionStore, "begin").mockImplementation(() => {
       throw new Error("instrumentation unavailable");
     });
 
     expect(() => onRouterTransitionStart("/pipeline", "push")).not.toThrow();
-  });
-
-  it("IT-003 orders root fallback lifecycle before URL readiness", () => {
-    const fixture = storeFixture();
-    const signalSource = readFileSync("app/navigation-transition-loading-signal.tsx", "utf8");
-    const presenterSource = readFileSync("app/navigation-transition.tsx", "utf8");
-
-    fixture.store.begin("/pipeline");
-    const unmount = fixture.store.mountFallback();
-    fixture.store.commit("/pipeline");
-    fixture.advance(180);
-    expect(fixture.store.getSnapshot()).toMatchObject({ phase: "loading", fallbackCount: 1 });
-    unmount();
-    expect(fixture.store.getSnapshot()).toMatchObject({ phase: "leaving", fallbackCount: 0 });
-    expect(signalSource).toContain("useSyncExternalStore");
-    expect(signalSource).toContain("transitionStore.mountFallback(generation)");
-    expect(signalSource).toContain("[generation]");
-    expect(presenterSource).toMatch(/useEffect\(\(\) => \{\s*transitionStore\.commit\(routeKey\)/);
   });
 
   it("IT-004 completes a prefetched target without a mounted fallback after 180 ms", () => {

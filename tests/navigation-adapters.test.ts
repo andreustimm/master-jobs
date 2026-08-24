@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TransitionStore } from "../src/core/pwa/transition-store.ts";
@@ -329,6 +329,7 @@ describe("stable navigation adapters", () => {
     expect(impersonation).toContain('if (adminToken) redirect("/admin/users")');
     expect(impersonation).toContain('redirect("/login")');
     expect(overlay).not.toMatch(/email|candidateName|token|protectedDestination/);
+    expect(existsSync("app/loading.tsx")).toBe(false);
   });
 
   it("supplements entity integration with canonical source invariants", () => {

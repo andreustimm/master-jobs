@@ -11,7 +11,7 @@ complexity: critical
 
 Wire the transition domain into the real Next.js App Router while preserving
 the server-rendered root and the established startup splash. This slice
-delivers exhaustive router-start observation, two-signal readiness, a
+delivers exhaustive router-start observation, canonical URL-commit readiness, a
 full-screen accessible presenter, canonical error recovery, and responsive
 visual parity across themes and input modes.
 
@@ -26,7 +26,7 @@ visual parity across themes and input modes.
 <requirements>
 - The implementation MUST install dependencies in the implementation worktree and revalidate the documented two-argument Next.js 16.3 `onRouterTransitionStart` contract before relying on it.
 - Router `push`, `replace`, and `traverse` starts MUST reach the project store without enabling the optional experimental metadata flag or performing asynchronous instrumentation work.
-- Root readiness MUST require a matching URL commit and zero mounted root fallbacks; fallback lifecycle MUST be reported before normal URL effects when both occur in one commit.
+- Root readiness MUST require a matching URL commit. A root `loading.tsx` MUST NOT be mounted because streaming before authorization resolves converts canonical 403/404 responses into HTTP 200.
 - The root layout MUST remain a Server Component and pass only serializable localized labels into one small always-mounted client island.
 - Startup and transition presentation MUST share visual primitives while retaining separate lifecycle, root identity, pointer behavior, and the startup 900 ms minimum.
 - While transition is active, the application shell MUST be inert and `aria-busy`; the overlay MUST block application pointer, touch, and keyboard actions while leaving native browser controls available.
@@ -39,7 +39,7 @@ visual parity across themes and input modes.
 ## Subtasks
 
 - [x] 2.1 Add and contract-test the root Next.js router-transition instrumentation bridge.
-- [x] 2.2 Add root URL-commit observation and loading-boundary lifecycle signaling with deterministic effect ordering.
+- [x] 2.2 Add deterministic root URL-commit observation while preserving canonical authorization and not-found HTTP status.
 - [x] 2.3 Build the single transition presenter and connect application-shell inert/`aria-busy` behavior.
 - [x] 2.4 Refactor reusable splash presentation primitives without changing startup timing or first-paint behavior.
 - [x] 2.5 Add normal, prolonged, leaving, and generic error UI using typed copy and stable test selectors.
@@ -49,19 +49,19 @@ visual parity across themes and input modes.
 
 ## Implementation Details
 
-Follow `_techspec.md` sections **Router instrumentation bridge**, **Root
-readiness signals**, **Transition presenter and observer**, **Shared splash
+Follow `_techspec.md` sections **Router instrumentation bridge**, **Canonical
+readiness**, **Transition presenter and observer**, **Shared splash
 presentation**, and **Route error surface**. `useSearchParams()` must remain
-inside `Suspense`. The loading signal uses layout-effect lifecycle while the URL
-observer uses a normal effect. Keep the inline startup renderer first in the
-body and outside transition-store startup.
+inside `Suspense`. Accepted-route reconciliation uses layout-effect lifecycle,
+while the URL observer reports the committed route in a normal effect. Keep
+the inline startup renderer first in the body and outside transition-store
+startup.
 
 ### Relevant Files
 
 - `instrumentation-client.ts` — documented App Router start bridge to create at repository root.
 - `app/navigation-transition.tsx` — client observer/presenter island to create.
-- `app/navigation-transition-loading-signal.tsx` — root fallback lifecycle signal to create.
-- `app/loading.tsx` — root Suspense fallback integration to create.
+- `app/loading.tsx` — deliberately absent at the root; E2E guards canonical 403/404 status against premature streaming.
 - `app/error.tsx` — localized canonical route error boundary to create.
 - `app/layout.tsx` — server-owned shell, startup splash injection, serializable labels, and application wrapper.
 - `src/core/pwa/splash.ts` — startup renderer and reusable brand presentation primitives.
@@ -97,9 +97,9 @@ body and outside transition-store startup.
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [x] UT-031, UT-032 — semantic/safe-area/reduced-motion CSS and unchanged startup lifecycle.
+- [x] UT-031, UT-032, UT-039 — semantic/safe-area/reduced-motion CSS, unchanged startup lifecycle, and router-hook failure isolation.
 - [x] IT-001 — real router instrumentation bridge for push, replace, and traverse.
-- [x] IT-003, IT-004 — URL/fallback readiness ordering and prefetched no-fallback completion.
+- [x] IT-003, IT-004 — delayed URL-commit readiness with canonical HTTP status and prefetched completion.
 - [x] IT-005 — route-error release, localized retry, and raw-error redaction.
 - [x] IT-010, IT-011 — startup/transition singleton hydration and dynamic motion/theme behavior.
 - [x] E2E-006, E2E-007, E2E-008, E2E-009 — 180 ms fast route, prolonged wait, supersession race, and operable failure.
@@ -108,7 +108,7 @@ Cases assigned from `_tests.md`, the test contract — read each ID's full defin
 ## Success Criteria
 
 - Every assigned test case implemented and passing.
-- Next.js starts, URL commits, and fallback lifecycles produce one observable generation with no orphan overlay.
+- Next.js starts and URL commits produce one observable generation with no orphan overlay or masked HTTP status.
 - Root pages remain Server Components and no unrelated page becomes client-rendered.
 - Startup remains visually and behaviorally unchanged while route transitions use the 180 ms/3,000 ms contract.
 - Real desktop and 375 px mobile browsers pass interaction, focus, announcement, contrast, motion, safe-area, zoom, and overflow assertions.

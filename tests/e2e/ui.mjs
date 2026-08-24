@@ -3337,7 +3337,7 @@ try {
   await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
   await transitionOverlay.waitFor({ state: "detached" });
   check(
-    "transition E2E-007 espera prolongada é verdadeira e indeterminada",
+    "transition IT-003 + E2E-007 espera prolongada aguarda commit sem root streaming",
     normalCopy?.includes(ptBR.transition.loading) === true
       && prolongedCopy?.includes(ptBR.transition.prolonged) === true
       && prolongedAt - prolongedStartedAt >= 2900
@@ -3703,6 +3703,7 @@ try {
           bottom: Number.parseFloat(style.paddingBottom),
           left: Number.parseFloat(style.paddingLeft),
         },
+        touchAction: style.touchAction,
         status: status
           ? {
               clientWidth: status.clientWidth,
@@ -3735,6 +3736,7 @@ try {
           && sample.padding.right >= safe[1]
           && sample.padding.bottom >= safe[2]
           && sample.padding.left >= safe[3]
+          && sample.touchAction === "auto"
           && sample.status?.text.split(" ").length > 12
           && sample.status.scrollWidth <= sample.status.clientWidth
           && sample.status.scrollHeight > sample.status.lineHeight
