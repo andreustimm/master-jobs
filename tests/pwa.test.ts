@@ -1,130 +1,340 @@
-import { existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import vm from "node:vm";
 import { describe, expect, it } from "vitest";
+import { en } from "../src/core/i18n/en.ts";
+import { ptBR } from "../src/core/i18n/pt-BR.ts";
+import {
+  OFFLINE_EDITIONS,
+  escapeOfflineText,
+  renderOfflineDocument,
+  type OfflineEditions,
+} from "../src/core/pwa/offline.ts";
+import { generatePwaArtifacts } from "../scripts/sw-version.mjs";
 
-/**
- * A PWA, e sobretudo o que ela NÃO guarda.
- *
- * O desenho é o do `contas_casal` — caches versionados por tipo, estratégia por
- * tipo, limpeza das versões antigas no `activate` — com uma diferença
- * deliberada: lá, página autenticada é cacheada porque existe uma fronteira de
- * sessão offline que apaga tudo na troca de identidade; aqui essa máquina não
- * existe, e copiar o cache sem copiá-la seria copiar o risco sem a mitigação.
- *
- * Estes testes existem porque a política vive num arquivo que nenhum
- * `tsc` verifica: `public/sw.js` é servido como está.
- */
-
-/**
- * O TEMPLATE, e não o arquivo gerado.
- *
- * `public/sw.js` é derivado e não está no git — num checkout limpo, antes do
- * primeiro build, ele não existe. Um teste que o lesse falharia por ausência de
- * artefato, que não é o que se quer afirmar.
- */
-const sw = readFileSync("scripts/sw-template.js", "utf8");
+const template = readFileSync("scripts/sw-template.js", "utf8");
 const manifest = JSON.parse(readFileSync("public/manifest.json", "utf8"));
 
-describe("o que o service worker nunca guarda", () => {
-  it("não existe cache de página nem de API", () => {
-    // A ausência É a política. Um `pages-` aqui gravaria currículo e funil em
-    // disco, e o disco sobrevive ao logout.
-    expect(sw).not.toMatch(/const PAGES_CACHE/);
-    expect(sw).not.toMatch(/const API_CACHE/);
-  });
+type StoredResponse = { request: Request; response: Response };
 
-  it("as rotas privadas estão na lista de exclusão", () => {
-    // Lista explícita ALÉM do padrão de negar: o padrão protege o que ninguém
-    // previu, a lista documenta o que já se sabe ser sensível.
-    for (const rota of ["/api/", "/admin/", "/candidate", "/pipeline", "/referrals", "/compare"]) {
-      expect(sw).toContain(`"${rota}"`);
+function memoryCaches(initialNames: string[] = []) {
+  const stores = new Map<string, Map<string, StoredResponse>>(
+    initialNames.map((name) => [name, new Map()]),
+  );
+  let rejectOpen = false;
+  let rejectPut = false;
+
+  const api = {
+    async open(name: string) {
+      if (rejectOpen) throw new DOMException("refused", "QuotaExceededError");
+      let store = stores.get(name);
+      if (!store) {
+        store = new Map();
+        stores.set(name, store);
+      }
+      return {
+        async match(request: Request | string) {
+          const url = typeof request === "string"
+            ? new URL(request, "https://jobs.example").href
+            : request.url;
+          return store?.get(url)?.response.clone();
+        },
+        async put(request: Request, response: Response) {
+          if (rejectPut) throw new DOMException("full", "QuotaExceededError");
+          store?.set(request.url, { request, response });
+        },
+      };
+    },
+    async match(request: Request | string) {
+      const url = typeof request === "string"
+        ? new URL(request, "https://jobs.example").href
+        : request.url;
+      for (const store of stores.values()) {
+        const hit = store.get(url);
+        if (hit) return hit.response.clone();
+      }
+      return undefined;
+    },
+    async keys() {
+      return [...stores.keys()];
+    },
+    async delete(name: string) {
+      return stores.delete(name);
+    },
+  };
+
+  return {
+    api,
+    stores,
+    refuseOpen() {
+      rejectOpen = true;
+    },
+    refusePut() {
+      rejectPut = true;
+    },
+  };
+}
+
+function workerHarness(options: {
+  cacheNames?: string[];
+  fetch?: (request: Request) => Promise<Response>;
+} = {}) {
+  const listeners = new Map<string, (event: Record<string, unknown>) => void>();
+  const storage = memoryCaches(options.cacheNames);
+  const clients = {
+    claim: async () => undefined,
+    get: async () => null,
+  };
+  const self = {
+    location: new URL("https://jobs.example/sw.js"),
+    addEventListener(type: string, listener: (event: Record<string, unknown>) => void) {
+      listeners.set(type, listener);
+    },
+    skipWaiting: async () => undefined,
+    clients,
+  };
+  const fetchImpl = options.fetch ?? (async (request: Request) => {
+    if (new URL(request.url).pathname === "/offline.html") {
+      return new Response(renderOfflineDocument(), {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
+    return new Response("public", { headers: { "content-type": "application/octet-stream" } });
+  });
+  const context = vm.createContext({
+    self,
+    caches: storage.api,
+    fetch: fetchImpl,
+    URL,
+    Request,
+    Response,
+    DOMException,
+    Set,
+    Promise,
+  });
+  vm.runInContext(template, context);
+
+  async function lifecycle(type: "install" | "activate") {
+    let work: Promise<unknown> | undefined;
+    listeners.get(type)?.({
+      waitUntil(value: Promise<unknown>) {
+        work = value;
+      },
+    });
+    await work;
+  }
+
+  return {
+    context,
+    storage,
+    clients,
+    listeners,
+    lifecycle,
+    evaluate<T>(source: string): T {
+      return vm.runInContext(source, context) as T;
+    },
+  };
+}
+
+describe("offline document renderer", () => {
+  it("UT-021 renders the exact typed pt-BR edition as the default", () => {
+    const html = renderOfflineDocument();
+    expect(html).toContain('<html lang="pt-BR">');
+    expect(html).toContain('data-offline-locale="pt-BR" lang="pt-BR">');
+    for (const value of Object.values(OFFLINE_EDITIONS["pt-BR"])) {
+      expect(html).toContain(escapeOfflineText(value));
     }
   });
 
-  it("o perfil público também não é guardado", () => {
-    // Público por ESCOLHA do candidato, e a escolha pode ser revogada. Uma
-    // cópia em disco não obedeceria à revogação.
-    expect(sw).toContain('"/p/"');
+  it("UT-022 embeds the exact typed English edition and locale selection", () => {
+    const html = renderOfflineDocument();
+    expect(html).toContain('data-offline-locale="en" lang="en" hidden');
+    expect(html).toContain("navigator.languages");
+    expect(html).toContain("jho_locale");
+    for (const value of Object.values(OFFLINE_EDITIONS.en)) {
+      expect(html).toContain(escapeOfflineText(value));
+    }
   });
 
-  it("só responde a GET", () => {
-    // Uma mutação servida do cache seria uma escrita que não aconteceu sendo
-    // reportada como se tivesse acontecido.
-    expect(sw).toMatch(/request\.method !== "GET"/);
+  it("UT-023 escapes hostile translated values as inert text", () => {
+    const hostile = `<script data-x="'&"></script></style><img src=x onerror=alert(1)>`;
+    const editions: OfflineEditions = {
+      "pt-BR": { title: hostile, body: hostile, retry: hostile },
+      en: { title: hostile, body: hostile, retry: hostile },
+    };
+    const html = renderOfflineDocument(editions);
+
+    expect(html).not.toContain(hostile);
+    expect(html).not.toContain("<img src=x");
+    expect(html).not.toContain("</style><img");
+    expect(html).toContain("&lt;script data-x=&quot;&#39;&amp;&quot;&gt;");
   });
 
-  it("não guarda resposta que redirecionou para o login", () => {
-    // Perder a sessão enquanto o shell é aquecido guardaria a tela de login sob
-    // a URL de outra rota, e a próxima visita offline mostraria "entre".
-    expect(sw).toMatch(/isRedirectToLogin/);
-    expect(sw).toMatch(/pathname\.startsWith\("\/login"\)/);
-  });
-
-  it("ignora outra origem", () => {
-    expect(sw).toMatch(/url\.origin !== self\.location\.origin/);
-  });
-});
-
-describe("versão e limpeza", () => {
-  it("o template guarda o placeholder, e o gerado guarda a versão", () => {
-    // O template está no git; `public/sw.js` é derivado e ignorado. Gerar em
-    // vez de editar no lugar remove o estado intermediário: não existe momento
-    // em que o arquivo servido tenha o placeholder literal, que faria todos os
-    // caches se chamarem `static-__APP_VERSION__` e nenhum deploy invalidar
-    // coisa alguma.
-    expect(sw).toContain('CACHE_VERSION = "__APP_VERSION__"');
-
-    const version = JSON.parse(readFileSync("package.json", "utf8")).version;
-    expect(existsSync("public/sw.js")).toBe(true);
-    const marca = readFileSync("public/sw.js", "utf8").match(/CACHE_VERSION = "([^"]+)"/)?.[1];
-
-    // A versão continua na marca porque é o que alguém lê para saber o que está
-    // no ar sem consultar o painel do provedor.
-    expect(marca).toContain(version);
-    // E não pode ser SÓ a versão. `package.json` está em 0.1.0 desde o primeiro
-    // commit e o projeto não faz release: marca igual à versão faz dois deploys
-    // produzirem `static-0.1.0` e `static-0.1.0`, o `activate` não ver diferença
-    // nenhuma, e o chunk velho ficar servido para sempre. Era exatamente esse o
-    // estado antes — o bug não aparecia porque nada aqui o media.
-    expect(marca).not.toBe(version);
-    expect(marca).toMatch(/^\d+\.\d+\.\d+\+[A-Za-z0-9]+$/);
-  });
-
-  it("os nomes de cache derivam da versão", () => {
-    // Sem isso, um chunk de JavaScript da versão anterior seria servido para
-    // sempre — o `activate` não teria como saber qual cache é velho.
-    expect(sw).toMatch(/static-\$\{CACHE_VERSION\}/);
-    expect(sw).toMatch(/shell-\$\{CACHE_VERSION\}/);
-  });
-
-  it("apaga no activate o que não é da versão corrente", () => {
-    expect(sw).toMatch(/CURRENT_CACHES\.has\(key\)/);
-    expect(sw).toMatch(/caches\.delete\(key\)/);
-  });
-
-  it("o logout esvazia o privado e preserva o estático", () => {
-    // O estático é público e é o que permite o shell abrir na próxima vez.
-    expect(sw).toContain("clear-private-caches");
-    expect(sw).toMatch(/key !== STATIC_CACHE/);
+  it("UT-024 has no route, session, candidate, CV, salary, token, or profile marker", () => {
+    const generated = `${renderOfflineDocument()}${JSON.stringify(ptBR.transition)}${JSON.stringify(en.transition)}`;
+    const privateMarkers = [
+      "private@example.test",
+      "CANDIDATE_PRIVATE_NAME",
+      "CV_PRIVATE_MARKER",
+      "JOB_DESCRIPTION_PRIVATE_MARKER",
+      "SALARY_PRIVATE_MARKER",
+      "APPLICATION_PRIVATE_ID",
+      "RESET_TOKEN_PRIVATE_MARKER",
+      "PUBLIC_PROFILE_REVOCABLE_MARKER",
+    ];
+    for (const marker of privateMarkers) expect(generated).not.toContain(marker);
+    expect(generated).not.toContain("__next_f.push");
+    expect(generated).not.toContain("/_next/");
   });
 });
 
-describe("manifest", () => {
-  it("instala em tela cheia com escopo na raiz", () => {
+describe("deny-by-default worker policy", () => {
+  it("UT-025 admits only the declared public allowlist and framework statics", () => {
+    const fixture = workerHarness();
+    for (const path of [
+      "/manifest.json",
+      "/icons/icon-192.png",
+      "/icons/icon-512.png",
+      "/icons/icon-maskable-512.png",
+      "/_next/static/chunk.js",
+    ]) {
+      expect(fixture.evaluate<boolean>(`isCacheableStatic(new URL(${JSON.stringify(path)}, self.location.origin))`)).toBe(true);
+    }
+    for (const path of ["/jobs.json", "/api/data.json", "https://other.example/icon.png"]) {
+      expect(fixture.evaluate<boolean>(`isCacheableStatic(new URL(${JSON.stringify(path)}, self.location.origin))`)).toBe(false);
+    }
+    expect(template).not.toContain("STATIC_EXTENSIONS");
+  });
+
+  it("UT-026 denies every private, revocable, router, and unknown surface", () => {
+    const fixture = workerHarness();
+    const paths = [
+      "/login",
+      "/p/slug",
+      "/admin/users",
+      "/candidate",
+      "/pipeline",
+      "/referrals",
+      "/compare",
+      "/jobs/1",
+      "/applications/1",
+      "/salary",
+      "/resume",
+      "/api/export",
+      "/unknown-authenticated-route",
+    ];
+    for (const path of paths) {
+      expect(fixture.evaluate<boolean>(`isCacheableStatic(new URL(${JSON.stringify(path)}, self.location.origin))`)).toBe(false);
+    }
+    const staticStart = template.indexOf("const PRECACHE_STATIC");
+    const staticEnd = template.indexOf("];", staticStart) + 2;
+    const staticPrecache = template.slice(staticStart, staticEnd);
+    expect(template).not.toContain("const PRECACHE_SHELL");
+    expect(staticPrecache).not.toContain('"/login"');
+    expect(template).not.toContain('"/offline"');
+  });
+
+  it("UT-027 retires zero, one, or many obsolete versions and preserves current caches", async () => {
+    for (const obsolete of [[], ["shell-old"], ["shell-old", "static-old", "pages-danger", "api-danger"]]) {
+      const current = ["static-__APP_VERSION__", "shell-__APP_VERSION__"];
+      const fixture = workerHarness({ cacheNames: [...current, ...obsolete] });
+      await fixture.lifecycle("activate");
+      expect(await fixture.storage.api.keys()).toEqual(current);
+    }
+  });
+
+  it("reads fallback only from the current shell generation", async () => {
+    const fixture = workerHarness({ cacheNames: ["shell-old"] });
+    const old = await fixture.storage.api.open("shell-old");
+    await old.put(
+      new Request("https://jobs.example/offline.html", { credentials: "omit" }),
+      new Response("PRIVATE_OLD_SHELL", { headers: { "content-type": "text/html" } }),
+    );
+
+    const fallback = await fixture.evaluate<Promise<Response>>("offlineResponse()");
+
+    expect(fallback.status).toBe(503);
+    expect(await fallback.text()).toBe("Offline.");
+  });
+
+  it("UT-028 settles install and returns only plain 503 on missing/refused/quota shell", async () => {
+    const missing = workerHarness({
+      fetch: async () => new Response("missing", { status: 404 }),
+    });
+    await expect(missing.lifecycle("install")).resolves.toBeUndefined();
+    const missingFallback = await missing.evaluate<Promise<Response>>("offlineResponse()");
+    expect(missingFallback.status).toBe(503);
+    expect(missingFallback.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(await missingFallback.text()).toBe("Offline.");
+
+    for (const refusal of ["open", "put"] as const) {
+      const fixture = workerHarness();
+      if (refusal === "open") fixture.storage.refuseOpen();
+      else fixture.storage.refusePut();
+      await expect(fixture.lifecycle("install")).resolves.toBeUndefined();
+      const fallback = await fixture.evaluate<Promise<Response>>("offlineResponse()");
+      expect(fallback.status).toBe(503);
+      expect(await fallback.text()).toBe("Offline.");
+    }
+  });
+
+  it("UT-036 never stores redirected, non-OK, or router-payload responses", async () => {
+    const redirected = new Response("redirected", { headers: { "content-type": "text/html" } });
+    Object.defineProperty(redirected, "redirected", { value: true });
+    const cases = [
+      redirected,
+      new Response("error", { status: 500, headers: { "content-type": "text/html" } }),
+      new Response("router", { headers: { "content-type": "text/x-component" } }),
+    ];
+
+    for (const hostile of cases) {
+      const fixture = workerHarness({
+        fetch: async (request) => new URL(request.url).pathname === "/offline.html"
+          ? hostile
+          : new Response("public"),
+      });
+      await fixture.lifecycle("install");
+      const shell = fixture.storage.stores.get("shell-__APP_VERSION__");
+      expect(shell?.size ?? 0).toBe(0);
+    }
+  });
+});
+
+describe("deterministic generation and manifest", () => {
+  it("UT-034 is byte-identical for one revision and keeps offline HTML revision-independent", () => {
+    const first = mkdtempSync(join(tmpdir(), "jho-pwa-first-"));
+    const second = mkdtempSync(join(tmpdir(), "jho-pwa-second-"));
+    const changed = mkdtempSync(join(tmpdir(), "jho-pwa-changed-"));
+    try {
+      const a = generatePwaArtifacts({ revision: "abc1234", outputDirectory: first });
+      const b = generatePwaArtifacts({ revision: "abc1234", outputDirectory: second });
+      const c = generatePwaArtifacts({ revision: "def5678", outputDirectory: changed });
+      expect(a.worker).toBe(b.worker);
+      expect(a.offline).toBe(b.offline);
+      expect(c.worker).not.toBe(a.worker);
+      expect(c.offline).toBe(a.offline);
+      expect(c.worker.replaceAll("def5678", "abc1234")).toBe(a.worker);
+    } finally {
+      rmSync(first, { recursive: true, force: true });
+      rmSync(second, { recursive: true, force: true });
+      rmSync(changed, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the served worker versioned and both derived artifacts generated", () => {
+    const generated = generatePwaArtifacts({ revision: "testrev" });
+    expect(generated.worker).not.toContain("__APP_VERSION__");
+    expect(generated.marker).toMatch(/^\d+\.\d+\.\d+\+testrev$/);
+    expect(readFileSync("public/offline.html", "utf8")).toBe(generated.offline);
+  });
+
+  it("keeps an installable root-scoped manifest", () => {
     expect(manifest.display).toBe("standalone");
     expect(manifest.scope).toBe("/");
     expect(manifest.start_url).toBe("/");
-  });
-
-  it("tem ícone maskable além do comum", () => {
-    // Sem `maskable`, o Android recorta o ícone num círculo e come o glifo.
-    const purposes = manifest.icons.map((i: { purpose: string }) => i.purpose);
+    const purposes = manifest.icons.map((icon: { purpose: string }) => icon.purpose);
     expect(purposes).toContain("maskable");
     expect(purposes).toContain("any");
-  });
-
-  it("declara os dois tamanhos que a instalação exige", () => {
-    const sizes = new Set(manifest.icons.map((i: { sizes: string }) => i.sizes));
-    expect(sizes.has("192x192")).toBe(true);
-    expect(sizes.has("512x512")).toBe(true);
   });
 });

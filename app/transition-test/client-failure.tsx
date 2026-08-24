@@ -1,15 +1,17 @@
 "use client";
 
 const retryableTokens = new Set<string>();
-const scheduledTokens = new Set<string>();
+const retryPreparations = new WeakMap<Error, () => void>();
+
+export function prepareTransitionTestRetry(error: Error): void {
+  retryPreparations.get(error)?.();
+}
 
 export function TransitionClientFailure({ token, title }: { token: string; title: string }) {
   if (!retryableTokens.has(token)) {
-    if (!scheduledTokens.has(token)) {
-      scheduledTokens.add(token);
-      queueMicrotask(() => retryableTokens.add(token));
-    }
-    throw new Error("TRANSITION_TEST_ROUTE_FAILURE");
+    const failure = new Error("TRANSITION_TEST_ROUTE_FAILURE");
+    retryPreparations.set(failure, () => retryableTokens.add(token));
+    throw failure;
   }
 
   return (

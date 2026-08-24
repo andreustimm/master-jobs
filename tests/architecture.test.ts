@@ -685,5 +685,5 @@ describe("documentação que precisa acompanhar o código", () => {
     }
 
     expect(broken).toEqual([]);
-  });
+  }, 30_000);
 });

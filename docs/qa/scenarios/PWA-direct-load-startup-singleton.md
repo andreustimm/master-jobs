@@ -12,10 +12,12 @@ fix_status:
 retest_status:
 fix_commits:
 evidence: docs/qa/evidence/2026-08-23-task-02-loading-transicoes/CH-direct-startup-canary-goal.png
-last_report: docs/qa/reports/2026-08-23-task-02-loading-transicoes.md
+last_report: docs/qa/reports/2026-08-24-task-03-offline-shell.md
 overlaps:
 ---
 
 Canário adjacente para regressões no renderer inline, hidratação, locale e shell responsivo.
 
 A URL direta e a recarga chegaram ao mesmo cockpit operável sem camada de transição residual.
+
+Revalidado como canário adjacente no build isolado da Task 03.

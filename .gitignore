@@ -48,6 +48,7 @@ docs/qa/evidence/
 # Derivado de scripts/sw-template.js pelo prebuild — a versão entra no nome dos
 # caches, então o arquivo muda a cada release e não deve ser versionado.
 public/sw.js
+public/offline.html
 .vercel
 .env*
 

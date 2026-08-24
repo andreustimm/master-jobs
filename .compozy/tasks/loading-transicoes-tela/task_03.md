@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Deliver the credentialless offline shell and deny-by-default cache
 type: infra
 complexity: critical
@@ -38,14 +38,14 @@ proves that persistent response bodies contain no private or revocable data.
 
 ## Subtasks
 
-- [ ] 3.1 Build the pure standalone offline-document renderer with both typed locale editions and safe escaping.
-- [ ] 3.2 Extend the existing prebuild/predev generator to emit deterministic `offline.html` beside the versioned service worker.
-- [ ] 3.3 Replace credentialed shell precaching with explicit credentialless offline-document installation and remove cached login.
-- [ ] 3.4 Narrow runtime static eligibility to the explicit public allowlist and framework static directory.
-- [ ] 3.5 Preserve network-only handling for every application/private/revocable surface and add typed RSC failure notification.
-- [ ] 3.6 Preserve safe full-navigation fallback, non-sensitive `503`, storage-failure tolerance, and old-cache retirement.
-- [ ] 3.7 Add static and real-browser cache-body audits with authenticated fixtures and hostile redirect/response cases.
-- [ ] 3.8 Implement full offline start, repeated reload, no-cache start, and refused-storage E2E journeys.
+- [x] 3.1 Build the pure standalone offline-document renderer with both typed locale editions and safe escaping.
+- [x] 3.2 Extend the existing prebuild/predev generator to emit deterministic `offline.html` beside the versioned service worker.
+- [x] 3.3 Replace credentialed shell precaching with explicit credentialless offline-document installation and remove cached login.
+- [x] 3.4 Narrow runtime static eligibility to the explicit public allowlist and framework static directory.
+- [x] 3.5 Preserve network-only handling for every application/private/revocable surface and add typed RSC failure notification.
+- [x] 3.6 Preserve safe full-navigation fallback, non-sensitive `503`, storage-failure tolerance, and old-cache retirement.
+- [x] 3.7 Add static and real-browser cache-body audits with authenticated fixtures and hostile redirect/response cases.
+- [x] 3.8 Implement full offline start, repeated reload, no-cache start, and refused-storage E2E journeys.
 
 ## Implementation Details
 
@@ -95,11 +95,11 @@ the cache.
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-021, UT-022, UT-023, UT-024 — bilingual offline rendering, hostile-value escaping, and private-marker absence.
-- [ ] UT-025, UT-026, UT-027, UT-028 — explicit cache eligibility, private denial, version retirement, and safe storage/shell failure.
-- [ ] UT-034, UT-036 — deterministic generation and rejection of redirected/non-OK/router payload responses.
-- [ ] IT-006, IT-007, IT-008, IT-009 — credentialless installation, typed RSC failure message, real private-body exclusion, and network-only request classes.
-- [ ] E2E-010, E2E-011, E2E-012 — soft offline/fresh retry, installed full offline start/cache audit, and no-cache/refused-storage degradation.
+- [x] UT-021, UT-022, UT-023, UT-024 — bilingual offline rendering, hostile-value escaping, and private-marker absence.
+- [x] UT-025, UT-026, UT-027, UT-028 — explicit cache eligibility, private denial, version retirement, and safe storage/shell failure.
+- [x] UT-034, UT-036 — deterministic generation and rejection of redirected/non-OK/router payload responses.
+- [x] IT-006, IT-007, IT-008, IT-009 — credentialless installation, typed RSC failure message, real private-body exclusion, and network-only request classes.
+- [x] E2E-010, E2E-011, E2E-012 — soft offline/fresh retry, installed full offline start/cache audit, and no-cache/refused-storage degradation.
 
 ## Success Criteria
 
@@ -108,4 +108,3 @@ Cases assigned from `_tests.md`, the test contract — read each ID's full defin
 - Cache Storage contains only the current eligible shell/static responses and no seeded private or revocable marker in any body.
 - Router payload failures never receive offline HTML as a successful component response.
 - Online use remains functional when service-worker registration, Cache Storage, or offline artifact installation fails.
-

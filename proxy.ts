@@ -19,12 +19,12 @@ const SESSION_COOKIE = "jho_session";
 // Cada entrada aqui é um furo deliberado na rede grossa, por isso a lista é
 // curta. `/p` é o portfólio: responde sem sessão, e o que ele mostra é decidido
 // por lista de permissão em `publicProfile()`, não por esta linha.
-// `/offline` é a tela que o service worker mostra quando a rede cai; exigir
-// sessão nela daria um redirect para o login sem rede para carregá-lo.
+// `/offline.html` é gerado sem layout ou sessão e instalado sem credenciais.
+// Exigir sessão aqui transformaria a entrada segura num redirect autenticado.
 const PUBLIC = [
   "/login",
   "/p",
-  "/offline",
+  "/offline.html",
   "/manifest.json",
   "/icons",
   "/sw.js",
