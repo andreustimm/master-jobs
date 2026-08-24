@@ -11,7 +11,9 @@ import {
   SPLASH_MAX_MS,
   SPLASH_MIN_MS,
   SPLASH_ROOT_ID,
+  TRANSITION_SPLASH_ROOT_ID,
 } from "../src/core/pwa/splash.ts";
+import { TRANSITION_MIN_MS, TRANSITION_PROLONGED_MS } from "../src/core/pwa/transition.ts";
 import { isStandalone, renderStandaloneScript, STANDALONE_CLASS } from "../src/core/pwa/standalone.ts";
 
 /**
@@ -39,8 +41,8 @@ describe("modo instalado", () => {
 
     // Um seletor global de `header` também zera o padding-top dos cabeçalhos
     // de página e das modais quando o Android abre em `minimal-ui`.
-    expect(css).toContain("html.pwa-standalone body > header {");
-    expect(css).toContain("html.pwa-standalone body > header > div,");
+    expect(css).toContain("html.pwa-standalone #application-shell > header {");
+    expect(css).toContain("html.pwa-standalone #application-shell > header > div,");
     expect(css).not.toMatch(/html\.pwa-standalone header\s*\{/);
     expect(css).not.toMatch(/html\.pwa-standalone header\s*>\s*div/);
   });
@@ -174,5 +176,32 @@ describe("tela de abertura", () => {
     // teria efeito — a aritmética some sem nenhum sintoma visível.
     expect(SPLASH_MIN_MS).toBeLessThan(SPLASH_MAX_MS);
     expect(SPLASH_FADE_MS).toBeLessThan(SPLASH_MIN_MS);
+  });
+
+  it("UT-031 compartilha semântica, safe areas, contenção e redução de movimento", () => {
+    const css = readFileSync("app/globals.css", "utf8");
+    const transition = css.slice(css.indexOf(".navigation-transition {"));
+
+    for (const token of ["--background", "--foreground", "--primary", "--safe-area-top"]) {
+      expect(transition).toContain(`var(${token})`);
+    }
+    expect(transition).toContain("overflow-wrap: anywhere");
+    expect(transition).toContain("min-block-size: 100dvh");
+    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(css).toMatch(/prefers-reduced-motion: reduce[\s\S]*navigation-transition[\s\S]*animation: none/);
+    expect(css).toMatch(/prefers-reduced-motion: reduce[\s\S]*navigation-transition[\s\S]*transition: none/);
+    expect(transition).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+  });
+
+  it("UT-032 preserva o ciclo e a raiz de startup separados da transição", () => {
+    const html = renderSplashHTML("x");
+    const rootMatches = html.match(new RegExp(`id="${SPLASH_ROOT_ID}"`, "g")) ?? [];
+
+    expect(SPLASH_MIN_MS).toBe(900);
+    expect(TRANSITION_MIN_MS).toBe(180);
+    expect(TRANSITION_PROLONGED_MS).toBe(3000);
+    expect(TRANSITION_SPLASH_ROOT_ID).not.toBe(SPLASH_ROOT_ID);
+    expect(rootMatches).toHaveLength(1);
+    expect(renderSplashScript()).toContain(HEADLESS_UA.toString());
   });
 });

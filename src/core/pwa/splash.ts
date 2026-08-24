@@ -38,6 +38,18 @@
 
 export const SPLASH_ROOT_ID = "app-splash";
 
+/** Separate identity for the client-side route transition surface. */
+export const TRANSITION_SPLASH_ROOT_ID = "navigation-transition-overlay";
+
+/** Brand primitives shared by startup HTML and the React presenter. */
+export const SPLASH_BRAND_CLASS = "app-splash__marca";
+export const SPLASH_ICON_CLASS = "app-splash__icone";
+export const SPLASH_NAME_CLASS = "app-splash__nome";
+export const SPLASH_PROGRESS_CLASS = "app-splash__barra";
+export const SPLASH_ICON_SRC = "/icons/icon-192.png";
+export const SPLASH_ICON_SIZE = 72;
+export const SPLASH_PRODUCT_NAME = "Master Jobs";
+
 /** Classe que dispara o fade-out. */
 export const SPLASH_HIDDEN_CLASS = "app-splash--saindo";
 
@@ -73,11 +85,11 @@ export function isHeadlessUA(userAgent: string): boolean {
  */
 export function renderSplashHTML(rotulo: string): string {
   return `<div id="${SPLASH_ROOT_ID}" role="status" aria-live="polite" aria-label="${rotulo}">
-<div class="app-splash__marca" aria-hidden="true">
-<img class="app-splash__icone" src="/icons/icon-192.png" alt="" width="72" height="72" decoding="async" />
-<span class="app-splash__nome">Master Jobs</span>
+<div class="${SPLASH_BRAND_CLASS}" aria-hidden="true">
+<img class="${SPLASH_ICON_CLASS}" src="${SPLASH_ICON_SRC}" alt="" width="${SPLASH_ICON_SIZE}" height="${SPLASH_ICON_SIZE}" decoding="async" />
+<span class="${SPLASH_NAME_CLASS}">${SPLASH_PRODUCT_NAME}</span>
 </div>
-<div class="app-splash__barra" aria-hidden="true"><span></span></div>
+<div class="${SPLASH_PROGRESS_CLASS}" aria-hidden="true"><span></span></div>
 </div>`;
 }
 

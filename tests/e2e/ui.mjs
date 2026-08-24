@@ -128,7 +128,7 @@ async function changelogSnapshot(targetPage) {
  * e um 500 também — que é o que apareceu aqui antes de `requirePage` passar a
  * responder 403 em vez de deixar a exceção subir.
  */
-const EXPECTED_CONSOLE = /Failed to load resource.*403/i;
+const EXPECTED_CONSOLE = /Failed to load resource.*403|TRANSITION_TEST_ROUTE_FAILURE/i;
 
 trackConsole(page);
 
@@ -2041,6 +2041,302 @@ try {
       .isChecked();
     check("prova do limite restaura a visibilidade original", restoredAfterLimit, `${original}`);
   }
+
+  /* ------------------ Splash de transição do App Router ------------------ */
+
+  const transitionOverlay = page.locator('[data-testid="navigation-transition"]');
+  const transitionError = page.locator('[data-testid="navigation-route-error"]');
+  const routerPush = async (href) => {
+    await page.evaluate((target) => {
+      const router = window.next?.router;
+      if (!router?.push) throw new Error("App Router client instance unavailable");
+      router.push(target);
+    }, href);
+  };
+  const resetTransitionDocument = async (locale = "pt-BR") => {
+    await page.context().addCookies([{ name: "jho_locale", value: locale, url: BASE }]);
+    await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+    await transitionOverlay.waitFor({ state: "detached" });
+  };
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await resetTransitionDocument();
+  await page.evaluate(() => window.next?.router?.prefetch?.("/transition-test"));
+  await page.waitForTimeout(700);
+  const fastStartedAt = await page.evaluate(() => performance.now());
+  await routerPush("/transition-test");
+  await transitionOverlay.waitFor({ state: "attached" });
+  const fastSingleton = await transitionOverlay.count();
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="navigation-transition"]')?.getAttribute("data-phase") === "leaving",
+  );
+  const fastLeavingAt = await page.evaluate(() => performance.now());
+  await transitionOverlay.waitFor({ state: "detached" });
+  const fastDuration = fastLeavingAt - fastStartedAt;
+  check(
+    "transition E2E-006 rota prefetched observa 180 ms sem herdar 900 ms",
+    fastSingleton === 1
+      && fastDuration >= 150
+      && fastDuration < 900
+      && (await page.locator('[data-testid="transition-test-destination"]').count()) === 1,
+    `${Math.round(fastDuration)}ms · overlays=${fastSingleton}`,
+  );
+
+  await resetTransitionDocument();
+  const prolongedStartedAt = await page.evaluate(() => performance.now());
+  await routerPush("/transition-test?delay=prolonged");
+  await transitionOverlay.waitFor({ state: "attached" });
+  const normalCopy = await transitionOverlay.locator('[role="status"]').textContent();
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="navigation-transition"]')?.getAttribute("data-phase") === "prolonged",
+    undefined,
+    { timeout: 5000 },
+  );
+  const prolongedAt = await page.evaluate(() => performance.now());
+  const prolongedCopy = await transitionOverlay.locator('[role="status"]').textContent();
+  const indeterminate =
+    (await transitionOverlay.locator(".app-splash__barra").getAttribute("aria-valuenow")) === null;
+  await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
+  await transitionOverlay.waitFor({ state: "detached" });
+  check(
+    "transition E2E-007 espera prolongada é verdadeira e indeterminada",
+    normalCopy?.includes(ptBR.transition.loading) === true
+      && prolongedCopy?.includes(ptBR.transition.prolonged) === true
+      && prolongedAt - prolongedStartedAt >= 2900
+      && indeterminate,
+    `${Math.round(prolongedAt - prolongedStartedAt)}ms · ${prolongedCopy}`,
+  );
+
+  await resetTransitionDocument();
+  await routerPush("/transition-test?delay=race-old");
+  await transitionOverlay.waitFor({ state: "attached" });
+  const olderGeneration = Number(await transitionOverlay.getAttribute("data-generation"));
+  await routerPush("/transition-test?delay=race-new");
+  await page.waitForFunction(
+    (generation) =>
+      Number(document.querySelector('[data-testid="navigation-transition"]')?.getAttribute("data-generation"))
+        > generation,
+    olderGeneration,
+  );
+  const newerGeneration = Number(await transitionOverlay.getAttribute("data-generation"));
+  await page.waitForTimeout(850);
+  const newerStillOwns =
+    (await transitionOverlay.count()) === 1
+    && Number(await transitionOverlay.getAttribute("data-generation")) === newerGeneration;
+  await page.waitForURL(/delay=race-new/);
+  await transitionOverlay.waitFor({ state: "detached" });
+  check(
+    "transition E2E-008 conclusão antiga não encerra a geração nova",
+    newerGeneration > olderGeneration && newerStillOwns,
+    `${olderGeneration}→${newerGeneration}`,
+  );
+
+  await resetTransitionDocument();
+  const portugueseErrorToken = crypto.randomUUID();
+  await routerPush(`/transition-test?error=${portugueseErrorToken}`);
+  await transitionOverlay.waitFor({ state: "attached" });
+  await transitionError.waitFor({ state: "visible" });
+  const portugueseFailure = await transitionError.textContent();
+  const releasedForError = await page.locator("#application-shell").evaluate((shell) => ({
+    inert: shell.hasAttribute("inert"),
+    busy: shell.getAttribute("aria-busy"),
+  }));
+  const rawFailureVisible = (await page.locator("body").textContent())?.includes("TRANSITION_TEST_ROUTE_FAILURE");
+  await page.locator('[data-testid="navigation-route-error-retry"]').click();
+  await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
+  check(
+    "transition E2E-009 falha libera overlay, redige detalhe e retry funciona",
+    (await transitionOverlay.count()) === 0
+      && portugueseFailure?.includes(ptBR.transition.failedTitle) === true
+      && portugueseFailure?.includes(ptBR.transition.failedBody) === true
+      && portugueseFailure?.includes(ptBR.transition.retry) === true
+      && releasedForError.inert === false
+      && releasedForError.busy === null
+      && rawFailureVisible === false,
+    JSON.stringify(releasedForError),
+  );
+
+  await resetTransitionDocument();
+  await routerPush("/transition-test?delay=prolonged");
+  await transitionOverlay.waitFor({ state: "attached" });
+  const shellWhileBusy = await page.locator("#application-shell").evaluate((shell) => ({
+    inert: shell.hasAttribute("inert"),
+    busy: shell.getAttribute("aria-busy"),
+  }));
+  const statusCount = await transitionOverlay.locator('[role="status"][aria-live="polite"][aria-atomic="true"]').count();
+  const focusOutsideStatus = await transitionOverlay.evaluate((overlay) =>
+    !overlay.contains(document.activeElement),
+  );
+  let underlyingBlocked = false;
+  try {
+    await page.locator('#application-shell a[href="/jobs"]').first().click({ timeout: 350 });
+  } catch {
+    underlyingBlocked = true;
+  }
+  const generationBeforeTheme = Number(await transitionOverlay.getAttribute("data-generation"));
+  const statusBeforeTheme = await transitionOverlay.locator('[role="status"]').textContent();
+  const transitionContrastFailures = [];
+  for (const theme of ["hp", "huly", "graphy"]) {
+    for (const mode of ["light", "dark"]) {
+      const sample = await page.evaluate(({ theme, mode }) => {
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.mode = mode;
+        const overlay = document.querySelector('[data-testid="navigation-transition"]');
+        const status = overlay?.querySelector('[role="status"]');
+        return {
+          count: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+          foreground: status ? getComputedStyle(status).color : "",
+          background: overlay ? getComputedStyle(overlay).backgroundColor : "",
+        };
+      }, { theme, mode });
+      const ratio = contrast(toRgb(sample.foreground), toRgb(sample.background));
+      if (sample.count !== 1 || ratio < 4.5) {
+        transitionContrastFailures.push(`${theme}/${mode}:${ratio.toFixed(2)}`);
+      }
+    }
+  }
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const reducedMotion = await transitionOverlay.evaluate((overlay) => {
+    const brand = overlay.querySelector(".app-splash__marca");
+    const sweep = overlay.querySelector(".app-splash__barra span");
+    return {
+      rootTransition: getComputedStyle(overlay).transitionDuration,
+      brandAnimation: brand ? getComputedStyle(brand).animationName : null,
+      sweepAnimation: sweep ? getComputedStyle(sweep).animationName : null,
+      generation: overlay.getAttribute("data-generation"),
+      status: overlay.querySelector('[role="status"]')?.textContent ?? "",
+    };
+  });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  check(
+    "transition E2E-015 live region único, shell inerte e foco preservado",
+    shellWhileBusy.inert
+      && shellWhileBusy.busy === "true"
+      && statusCount === 1
+      && focusOutsideStatus
+      && underlyingBlocked,
+    JSON.stringify({ shellWhileBusy, statusCount, focusOutsideStatus, underlyingBlocked }),
+  );
+  check(
+    "transition E2E-016 temas e movimento reduzido mudam sem reiniciar estado",
+    transitionContrastFailures.length === 0
+      && reducedMotion.rootTransition === "0s"
+      && reducedMotion.brandAnimation === "none"
+      && reducedMotion.sweepAnimation === "none"
+      && Number(reducedMotion.generation) === generationBeforeTheme
+      && reducedMotion.status === statusBeforeTheme,
+    JSON.stringify({ transitionContrastFailures, reducedMotion }),
+  );
+  await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
+  await transitionOverlay.waitFor({ state: "detached" });
+  const focusAfterTransition = await page.evaluate(() => ({
+    inOverlay: Boolean(document.activeElement?.closest('[data-testid="navigation-transition"]')),
+    role: document.activeElement?.getAttribute("role") ?? null,
+  }));
+  check(
+    "transition E2E-015 saída não prende foco no status removido",
+    !focusAfterTransition.inOverlay && focusAfterTransition.role !== "status",
+    JSON.stringify(focusAfterTransition),
+  );
+
+  for (const locale of ["pt-BR", "en"]) {
+    const dictionary = locale === "pt-BR" ? ptBR : en;
+    await resetTransitionDocument(locale);
+    await routerPush("/transition-test?delay=race-new");
+    await transitionOverlay.waitFor({ state: "attached" });
+    const localizedNormal = await transitionOverlay.locator('[role="status"]').textContent();
+    await page.evaluate(() => window.dispatchEvent(new Event("offline")));
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="navigation-transition"]')?.getAttribute("data-phase") === "offline",
+    );
+    const localizedOffline = await transitionOverlay.textContent();
+    check(
+      `transition E2E-014 ${locale} normal e offline usam o dicionário ativo`,
+      localizedNormal?.includes(dictionary.transition.loading) === true
+        && localizedOffline?.includes(dictionary.transition.offlineTitle) === true
+        && localizedOffline?.includes(dictionary.transition.offlineBody) === true
+        && localizedOffline?.includes(dictionary.transition.retry) === true,
+      localizedOffline ?? "",
+    );
+    await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
+
+    await resetTransitionDocument(locale);
+    const token = crypto.randomUUID();
+    await routerPush(`/transition-test?error=${token}`);
+    await transitionError.waitFor({ state: "visible" });
+    const localizedFailure = await transitionError.textContent();
+    check(
+      `transition E2E-014 ${locale} falha usa o dicionário ativo`,
+      localizedFailure?.includes(dictionary.transition.failedTitle) === true
+        && localizedFailure?.includes(dictionary.transition.failedBody) === true
+        && localizedFailure?.includes(dictionary.transition.retry) === true,
+      localizedFailure ?? "",
+    );
+    await page.locator('[data-testid="navigation-route-error-retry"]').click();
+    await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
+  }
+
+  await resetTransitionDocument("en");
+  await page.setViewportSize({ width: 375, height: 812 });
+  await routerPush("/transition-test?delay=race-new");
+  await transitionOverlay.waitFor({ state: "attached" });
+  await page.evaluate(() => {
+    const root = document.documentElement.style;
+    root.setProperty("--safe-area-top", "47px");
+    root.setProperty("--safe-area-right", "20px");
+    root.setProperty("--safe-area-bottom", "34px");
+    root.setProperty("--safe-area-left", "44px");
+    window.dispatchEvent(new Event("offline"));
+  });
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="navigation-transition"]')?.getAttribute("data-phase") === "offline",
+  );
+  const mobileSplash = await transitionOverlay.evaluate((overlay) => {
+    const root = overlay.getBoundingClientRect();
+    const content = overlay.querySelector(".navigation-transition__content")?.getBoundingClientRect();
+    return {
+      root: { top: root.top, right: root.right, bottom: root.bottom, left: root.left },
+      content: content
+        ? { top: content.top, right: content.right, bottom: content.bottom, left: content.left }
+        : null,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      scrollWidth: document.documentElement.scrollWidth,
+    };
+  });
+  check(
+    "transition E2E-017 mobile, safe area e texto longo permanecem contidos",
+    mobileSplash.root.top === 0
+      && mobileSplash.root.left === 0
+      && mobileSplash.root.right === mobileSplash.viewport.width
+      && mobileSplash.root.bottom === mobileSplash.viewport.height
+      && mobileSplash.content?.top >= 47
+      && mobileSplash.content?.right <= 375 - 20
+      && mobileSplash.content?.bottom <= 812 - 34
+      && mobileSplash.content?.left >= 44
+      && mobileSplash.scrollWidth <= mobileSplash.viewport.width,
+    JSON.stringify(mobileSplash),
+  );
+  await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
+
+  await resetTransitionDocument("en");
+  await page.setViewportSize({ width: 640, height: 450 });
+  await routerPush("/transition-test?delay=race-new");
+  await transitionOverlay.waitFor({ state: "attached" });
+  const zoomContainment = await transitionOverlay.evaluate((overlay) => ({
+    overlayWidth: overlay.getBoundingClientRect().width,
+    viewportWidth: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  check(
+    "transition E2E-017 viewport equivalente a zoom 200% não transborda",
+    zoomContainment.overlayWidth === zoomContainment.viewportWidth
+      && zoomContainment.scrollWidth <= zoomContainment.viewportWidth,
+    JSON.stringify(zoomContainment),
+  );
+  await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
 
   /* --------------------------------- Logout -------------------------------- */
 

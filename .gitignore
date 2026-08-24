@@ -50,3 +50,7 @@ docs/qa/evidence/
 public/sw.js
 .vercel
 .env*
+
+# QA living docs — generated views & bulky evidence (source of truth: docs/qa/scenarios/ etc.)
+docs/qa/state.csv
+docs/qa/evidence/

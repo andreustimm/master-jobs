@@ -26,6 +26,7 @@ import { stopImpersonatingAction } from "./admin/actions";
 import { LocaleSwitch } from "./locale-switch";
 import { NavLinks } from "./nav-links";
 import { MobileNav } from "./mobile-nav";
+import { NavigationTransition } from "./navigation-transition";
 import { headers } from "next/headers";
 import {
   LOCALE_COOKIE,
@@ -173,8 +174,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <div dangerouslySetInnerHTML={{ __html: renderSplashHTML(t("splash.loading")) }} />
         <script dangerouslySetInnerHTML={{ __html: renderSplashScript() }} />
 
-        <ServiceWorkerRegister />
-        <TooltipProvider>
+        <NavigationTransition
+          labels={{
+            loading: t("transition.loading"),
+            prolonged: t("transition.prolonged"),
+            offlineTitle: t("transition.offlineTitle"),
+            offlineBody: t("transition.offlineBody"),
+            retry: t("transition.retry"),
+            failedTitle: t("transition.failedTitle"),
+            failedBody: t("transition.failedBody"),
+          }}
+        />
+
+        <div id="application-shell">
+          <ServiceWorkerRegister />
+          <TooltipProvider>
           <header className="border-b bg-card">
             {/*
               Três faixas: marca, links roláveis, e o estado da sessão.
@@ -280,8 +294,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </div>
           {/* `pb-16` acima em vez de `pb-24`: o rodapé passou a fechar a página,
               e o respiro que aquele espaço dava agora vem dele. */}
-          <Footer versao={versaoAtual(pkg)} locale={locale} t={t} />
-        </TooltipProvider>
+            <Footer versao={versaoAtual(pkg)} locale={locale} t={t} />
+          </TooltipProvider>
+        </div>
       </body>
     </html>
   );

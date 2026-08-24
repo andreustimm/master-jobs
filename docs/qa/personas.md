@@ -73,3 +73,59 @@ persona:
   locale: pt-BR
   patience_seconds: 10
 ```
+
+## Andreus em triagem
+
+```yaml
+persona:
+  name: Andreus em triagem
+  base: Power User
+  goal: alternar rapidamente entre vagas, funil e detalhes sem perder contexto
+  device: laptop
+  network: wifi-fast
+  modality: mouse-keyboard
+  locale: pt-BR
+  patience_seconds: 3
+```
+
+## Candidato em trânsito
+
+```yaml
+persona:
+  name: Candidato em trânsito
+  base: Mobile User
+  goal: consultar uma vaga e voltar ao funil com uma mão e conexão variável
+  device: phone-small
+  network: 4g
+  modality: touch
+  locale: pt-BR
+  patience_seconds: 3
+```
+
+## Candidato por teclado
+
+```yaml
+persona:
+  name: Candidato por teclado
+  base: Accessibility-Reliant User
+  goal: navegar entre telas com anúncios coerentes e sem foco preso
+  device: laptop
+  network: wifi-fast
+  modality: keyboard-only
+  locale: en-US
+  patience_seconds: 5
+```
+
+## Candidato após falha
+
+```yaml
+persona:
+  name: Candidato após falha
+  base: Recovering User
+  goal: retomar uma tela que falhou sem detalhes técnicos nem estado residual
+  device: laptop
+  network: flaky
+  modality: mouse-keyboard
+  locale: pt-BR
+  patience_seconds: 5
+```
