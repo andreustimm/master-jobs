@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import vm from "node:vm";
+import { crc32 } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { en } from "../src/core/i18n/en.ts";
 import { ptBR } from "../src/core/i18n/pt-BR.ts";
@@ -16,6 +17,52 @@ import { generatePwaArtifacts } from "../scripts/sw-version.mjs";
 
 const template = readFileSync("scripts/sw-template.js", "utf8");
 const manifest = JSON.parse(readFileSync("public/manifest.json", "utf8"));
+
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+function inspectPng(bytes: Buffer): { width: number; height: number } {
+  if (bytes.length < PNG_SIGNATURE.length || !bytes.subarray(0, 8).equals(PNG_SIGNATURE)) {
+    throw new Error("Invalid PNG signature");
+  }
+
+  let offset = PNG_SIGNATURE.length;
+  let dimensions: { width: number; height: number } | null = null;
+  let complete = false;
+
+  while (offset < bytes.length) {
+    if (offset + 12 > bytes.length) throw new Error("Incomplete PNG chunk");
+    const dataLength = bytes.readUInt32BE(offset);
+    const typeStart = offset + 4;
+    const dataStart = typeStart + 4;
+    const dataEnd = dataStart + dataLength;
+    const chunkEnd = dataEnd + 4;
+    if (chunkEnd > bytes.length) throw new Error("Incomplete PNG chunk");
+
+    const type = bytes.toString("ascii", typeStart, dataStart);
+    const expectedCrc = bytes.readUInt32BE(dataEnd);
+    const actualCrc = crc32(bytes.subarray(typeStart, dataEnd)) >>> 0;
+    if (actualCrc !== expectedCrc) throw new Error(`Invalid PNG ${type} checksum`);
+
+    if (offset === PNG_SIGNATURE.length && (type !== "IHDR" || dataLength !== 13)) {
+      throw new Error("Invalid PNG IHDR");
+    }
+    if (type === "IHDR") {
+      dimensions = {
+        width: bytes.readUInt32BE(dataStart),
+        height: bytes.readUInt32BE(dataStart + 4),
+      };
+    }
+    if (type === "IEND") {
+      if (dataLength !== 0 || chunkEnd !== bytes.length) throw new Error("Invalid PNG IEND");
+      complete = true;
+      break;
+    }
+    offset = chunkEnd;
+  }
+
+  if (!dimensions || !complete) throw new Error("Incomplete PNG image");
+  return dimensions;
+}
 
 describe("real-browser PWA gate wiring", () => {
   it("runs the privacy boundary explicitly after installing its pinned Chromium", () => {
@@ -420,5 +467,18 @@ describe("deterministic generation and manifest", () => {
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
       { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ]);
+
+    for (const icon of manifest.icons as Array<{ src: string; sizes: string }>) {
+      const [width, height] = icon.sizes.split("x").map(Number);
+      const bytes = readFileSync(join("public", icon.src.replace(/^\//, "")));
+      expect(inspectPng(bytes), icon.src).toEqual({ width, height });
+    }
+  });
+
+  it("rejects bytes that are not a complete PNG", () => {
+    expect(() => inspectPng(Buffer.from("not-a-png"))).toThrow("Invalid PNG signature");
+    const corrupted = Buffer.from(readFileSync("public/icons/icon-192.png"));
+    corrupted[corrupted.length - 1] = corrupted[corrupted.length - 1]! ^ 0xff;
+    expect(() => inspectPng(corrupted)).toThrow("Invalid PNG IEND checksum");
   });
 });

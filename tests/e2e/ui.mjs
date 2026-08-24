@@ -2219,24 +2219,32 @@ try {
   });
 
   /* ------------ Task 04: first-party inventory and canonical flows -------- */
-  await page.setViewportSize({ width: 1280, height: 900 });
-  const desktopDestinations = [
+  const candidateMenuCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await candidateMenuCtx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  const candidateMenuPage = await candidateMenuCtx.newPage();
+  trackConsole(candidateMenuPage);
+  await candidateMenuPage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+  await candidateMenuPage.fill('input[name="email"]', "e2e-candidato@local.test");
+  await candidateMenuPage.fill('input[name="password"]', E2E_PASSWORD);
+  await candidateMenuPage.locator('[data-testid="login-submit"]').click();
+  await candidateMenuPage.waitForURL((url) => !url.pathname.startsWith("/login"));
+
+  const candidateDestinations = [
     ["nav-cockpit", "route-cockpit"],
     ["nav-jobs", "route-jobs"],
     ["nav-compare", "route-compare"],
     ["nav-pipeline", "route-pipeline"],
     ["nav-referrals", "route-referrals"],
     ["nav-candidate", "route-candidate"],
-    ["nav-admin-users", "route-admin-users"],
   ];
   const desktopFailures = [];
   const desktopIntegrationEvidence = [];
-  for (const [control, destination] of desktopDestinations) {
+  for (const [control, destination] of candidateDestinations) {
     const source = control === "nav-jobs" ? "/compare" : "/jobs";
-    await page.goto(`${BASE}${source}`, { waitUntil: "networkidle" });
+    await candidateMenuPage.goto(`${BASE}${source}`, { waitUntil: "networkidle" });
     const snapshot = await observeNavigation(
-      page,
-      () => page.locator(`[data-testid="${control}"]:visible`).first().click(),
+      candidateMenuPage,
+      () => candidateMenuPage.locator(`[data-testid="${control}"]:visible`).first().click(),
       `[data-testid="${destination}"]`,
     );
     desktopIntegrationEvidence.push(snapshot);
@@ -2251,13 +2259,14 @@ try {
     }
   }
   check(
-    "task-04 E2E-001 menu desktop cobre todos os destinos com um splash full-screen",
-    desktopFailures.length === 0,
+    "task-04 E2E-001 menu desktop do candidato cobre todos os destinos permitidos com um splash full-screen",
+    desktopFailures.length === 0
+      && (await candidateMenuPage.locator('[data-testid="nav-admin-users"]').count()) === 0,
     desktopFailures.slice(0, 2).join(" | "),
   );
   check(
     "task-04 IT-002 Link real e router hook coalescem em uma geração observável",
-    desktopIntegrationEvidence.length === desktopDestinations.length
+    desktopIntegrationEvidence.length === candidateDestinations.length
       && desktopIntegrationEvidence.every(({ count, generation, phase, transitionEvidence }) =>
         count === 1
           && generation === 1
@@ -2274,20 +2283,20 @@ try {
     }))),
   );
 
-  await page.setViewportSize({ width: 375, height: 812 });
+  await candidateMenuPage.setViewportSize({ width: 375, height: 812 });
   const mobileFailures = [];
-  for (const [control, destination] of desktopDestinations) {
+  for (const [control, destination] of candidateDestinations) {
     const source = control === "nav-jobs" ? "/compare" : "/jobs";
-    await page.goto(`${BASE}${source}`, { waitUntil: "networkidle" });
-    await page.locator('[data-testid="mobile-nav-trigger"]').click();
-    const popover = page.locator('[data-testid="mobile-nav-popover"]');
+    await candidateMenuPage.goto(`${BASE}${source}`, { waitUntil: "networkidle" });
+    await candidateMenuPage.locator('[data-testid="mobile-nav-trigger"]').click();
+    const popover = candidateMenuPage.locator('[data-testid="mobile-nav-popover"]');
     await popover.waitFor({ state: "visible" });
     const snapshot = await observeNavigation(
-      page,
+      candidateMenuPage,
       () => popover.locator(`[data-testid="${control}"]`).click(),
       `[data-testid="${destination}"]`,
     );
-    const result = await page.evaluate(() => ({
+    const result = await candidateMenuPage.evaluate(() => ({
       popoverOpen: document.querySelector('[data-testid="mobile-nav-popover"]')?.matches(":popover-open"),
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     }));
@@ -2300,6 +2309,7 @@ try {
     mobileFailures.length === 0,
     mobileFailures.slice(0, 2).join(" | "),
   );
+  await candidateMenuCtx.close();
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
@@ -3345,9 +3355,19 @@ try {
     { timeout: 5000 },
   );
   const prolongedAt = await page.evaluate(() => performance.now());
+  const prolongedGeneration = Number(await transitionOverlay.getAttribute("data-generation"));
   const prolongedCopy = await transitionOverlay.locator('[role="status"]').textContent();
   const indeterminate =
     (await transitionOverlay.locator(".app-splash__barra").getAttribute("aria-valuenow")) === null;
+  await page.waitForFunction(
+    ({ generation, observedAt }) =>
+      performance.now() - observedAt >= 400
+      && Number(document.querySelector('[data-testid="navigation-transition"]')?.getAttribute("data-generation"))
+        === generation,
+    { generation: prolongedGeneration, observedAt: prolongedAt },
+    { timeout: 2000 },
+  );
+  const prolongedStillAttached = (await transitionOverlay.count()) === 1;
   await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
   await transitionOverlay.waitFor({ state: "detached" });
   check(
@@ -3355,8 +3375,9 @@ try {
     normalCopy?.includes(ptBR.transition.loading) === true
       && prolongedCopy?.includes(ptBR.transition.prolonged) === true
       && prolongedAt - prolongedStartedAt >= 2900
-      && indeterminate,
-    `${Math.round(prolongedAt - prolongedStartedAt)}ms · ${prolongedCopy}`,
+      && indeterminate
+      && prolongedStillAttached,
+    `${Math.round(prolongedAt - prolongedStartedAt)}ms · attached=${prolongedStillAttached} · ${prolongedCopy}`,
   );
 
   await resetTransitionDocument();
@@ -3778,11 +3799,34 @@ try {
   const pwaPage = await pwaCtx.newPage();
 
   const missing = [];
-  for (const path of ["/manifest.json", "/sw.js", "/icons/icon-192.png", "/icons/icon-512.png", "/offline.html"]) {
+  const installIcons = [
+    { src: "/icons/icon-192.png", width: 192, height: 192 },
+    { src: "/icons/icon-512.png", width: 512, height: 512 },
+    { src: "/icons/icon-maskable-512.png", width: 512, height: 512 },
+  ];
+  for (const path of ["/manifest.json", "/sw.js", ...installIcons.map(({ src }) => src), "/offline.html"]) {
     const hit = await pwaPage.goto(`${BASE}${path}`, { waitUntil: "domcontentloaded" });
     if (hit?.status() !== 200) missing.push(`${path}=${hit?.status()}`);
   }
   check("recursos da PWA respondem sem sessão", missing.length === 0, missing.join(" | "));
+
+  const decodedIcons = await pwaPage.evaluate(async (icons) => Promise.all(icons.map(async (icon) => {
+    const image = new Image();
+    image.src = icon.src;
+    try {
+      await image.decode();
+      return { ...icon, decoded: true, actualWidth: image.naturalWidth, actualHeight: image.naturalHeight };
+    } catch {
+      return { ...icon, decoded: false, actualWidth: image.naturalWidth, actualHeight: image.naturalHeight };
+    }
+  })), installIcons);
+  check(
+    "ícones declarados da PWA decodificam nas dimensões exigidas",
+    decodedIcons.every(({ decoded, width, height, actualWidth, actualHeight }) =>
+      decoded && actualWidth === width && actualHeight === height
+    ),
+    JSON.stringify(decodedIcons),
+  );
 
   await pwaPage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
   const head = await pwaPage.evaluate(() => ({

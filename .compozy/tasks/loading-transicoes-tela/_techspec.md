@@ -141,9 +141,12 @@ export type TransitionStore = {
   getSnapshot(): NavigationTransition;
   subscribe(listener: () => void): () => void;
   begin(url: string, currentOverride?: string): number | null;
-  commit(url: string): void;
-  failRoute(): void;
+  commit(url: string, generation?: number): void;
+  failRoute(generation?: number): void;
+  offline(target: string, generation?: number): void;
+  reset(generation?: number): void;
   retry(): void;
+  destroy(): void;
 };
 ```
 
@@ -199,8 +202,8 @@ There is deliberately no transition maximum. Browser controls remain available i
 - Every timer closure captures its generation and becomes a no-op if the active generation changed.
 - `leave` is legal only after a matching commit, or after the generic route error has become operable.
 - Offline signals require both the active generation and matching normalized target.
-- A browser `online` event does not auto-retry; it only enables the explicit retry control. This prevents an action or redirect from replaying without user intent.
-- Repeated retry creates one hard navigation and disables the retry control after its first accepted activation.
+- A browser `online` event is intentionally a no-op: the explicit retry control remains available throughout the `offline` phase, and reconnect never navigates automatically.
+- The first accepted retry resets the offline generation, removes its control with the overlay, and performs one hard navigation; later callbacks from that generation are stale.
 
 ### Data Models
 
