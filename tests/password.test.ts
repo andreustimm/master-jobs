@@ -1,3 +1,4 @@
+import { scrypt as scryptCb } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   checkPassword,
@@ -16,6 +17,23 @@ import { fixedClock, resetClock, setClock } from "../src/core/clock.ts";
 import type { DB } from "../src/core/db/client.ts";
 import { authUser, candidate } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+
+/**
+ * Login-flow tests own address isolation, database events and account state.
+ * The production work factor is exercised above by hashPassword/verifyPassword;
+ * repeating its 64 MB allocation for every control-flow assertion makes those
+ * assertions depend on runner memory instead of the behavior they protect.
+ */
+async function loginFixtureHash(password: string): Promise<string> {
+  const salt = Buffer.alloc(16, 7);
+  const params = { N: 2 ** 10, r: 8, p: 1 } as const;
+  const derived = await new Promise<Buffer>((resolve, reject) => {
+    scryptCb(password, salt, 32, { ...params, maxmem: 8 * 1024 * 1024 }, (error, key) =>
+      error ? reject(error) : resolve(key),
+    );
+  });
+  return `scrypt$${params.N}$${params.r}$${params.p}$${salt.toString("base64url")}$${derived.toString("base64url")}`;
+}
 
 describe("hashPassword / verifyPassword", () => {
   it("round-trips", async () => {
@@ -84,7 +102,7 @@ describe("verifyLogin", () => {
       email: "eu@test",
       roles: ["owner"],
       candidateId: c!.id,
-      passwordHash: await hashPassword("senha-correta-longa"),
+      passwordHash: await loginFixtureHash("senha-correta-longa"),
     });
   });
 
@@ -200,7 +218,7 @@ describe("verifyLogin", () => {
       email: "outro@test",
       roles: ["owner"],
       candidateId: null,
-      passwordHash: await hashPassword("outra-senha-longa"),
+      passwordHash: await loginFixtureHash("outra-senha-longa"),
     });
     for (let i = 0; i < MAX_ATTEMPTS; i++) await verifyLogin("eu@test", `errada-${i}`);
 
