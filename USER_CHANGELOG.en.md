@@ -16,6 +16,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### New
+
+- When switching screens through menus, links, filters, or browser history,
+  Master Jobs now shows the same branded opening used at app startup.
+- If the installed app opens without internet access, a safe screen explains
+  the situation and lets you retry without storing account data on the device.
+
 ## [1.2.0] - 2026-08-23T20:57:34.519Z
 
 ### Fixed

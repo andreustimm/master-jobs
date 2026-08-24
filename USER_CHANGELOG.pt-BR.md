@@ -16,6 +16,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Novidade
+
+- Ao trocar de tela pelos menus, links, filtros ou histórico do navegador, o
+  Master Jobs agora mostra a mesma abertura visual do início do aplicativo.
+- Se o aplicativo instalado for aberto sem internet, uma tela segura informa
+  a situação e permite tentar novamente sem guardar dados da conta no aparelho.
+
 ## [1.2.0] - 2026-08-23T20:57:34.519Z
 
 ### Correção

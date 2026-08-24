@@ -28,7 +28,9 @@ The product is a responsive web application and installable PWA used on desktop 
 
 - Internal navigation spans global menus, contextual links and cards, URL-backed views, form redirects, and browser history.
 - Authentication is required by default; `/p/[slug]` is the only public data route and exposes only an explicit allowlist.
-- The service worker may cache static shell resources and dedicated login/offline surfaces, but must not cache authenticated pages, APIs, public profiles, or private user data.
+- The service worker may cache public static resources and the credentialless
+  `/offline.html` shell only. It must not cache `/login`, authenticated pages,
+  APIs, public profiles, RSC responses, or private user data.
 - Ingestion never mutates application decisions, jobs that disappear are closed rather than deleted, and no capability submits an application for the user.
 - Interface copy comes from the typed `pt-BR` and `en` dictionaries.
 

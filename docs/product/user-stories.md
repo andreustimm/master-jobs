@@ -394,7 +394,7 @@ E7.1 provar que a triagem está calibrada. Ver antivisão em `vision.md`.
 
 ## E8 — Interface
 
-### E8.1 ✅ Movimento que informa, sem custo de bundle
+### E8.1 ✅ Movimento que informa, sem custo de bundle (base anterior)
 > Como **Andreus**, quero que a interface tenha transições, sem que ela fique
 > pesada.
 
@@ -414,3 +414,24 @@ da UI por polimento.
 
 **Invariante de acessibilidade:** uma grade de triagem que se move depois de a
 pessoa ter pedido que não se movesse é falha de acessibilidade, não detalhe.
+
+### E8.2 ✅ Continuidade visual em toda troca de tela
+> Como **pessoa usando o Master Jobs**, quero reconhecer a mesma abertura visual
+> durante trocas de tela, para saber que o comando foi aceito sem perder o
+> contexto quando a rede estiver lenta ou indisponível.
+
+**Aceite**
+- [x] Menus, links internos, formulários GET, histórico e redirecionamentos
+      aceitos compartilham um único coordenador de transição.
+- [x] O splash usa os tokens do `DESIGN.md`, funciona em português e inglês e
+      respeita movimento reduzido, teclado, leitor de tela e áreas seguras.
+- [x] Transições duplicadas são coalescidas e falhas sempre devolvem o controle
+      à tela anterior com uma explicação útil.
+- [x] O app instalado oferece somente um shell offline sem credenciais; páginas
+      autenticadas, `/login`, APIs, perfis públicos e respostas RSC nunca são
+      persistidos pelo service worker.
+
+**Evolução da decisão:** E8.1 continua descrevendo o movimento nativo das
+próprias páginas. E8.2 adiciona JavaScript de cliente estritamente na fronteira
+de navegação porque o estado solicitado, concluído, prolongado e offline não
+pode ser observado de forma confiável apenas por `@view-transition`.

@@ -984,8 +984,9 @@ seria copiar o risco sem a mitigação. E o argumento levantado neste item é ai
 mais forte: **limpar no logout não fecha o buraco**, porque `logoutAction` não
 roda em sessão vencida, aba fechada ou aparelho perdido.
 
-Cacheia `static-` (JS, CSS, fontes, ícones, manifest) e `shell-` (`/login`,
-`/offline`). Mais nada. `/p/` está na exclusão apesar de público: é público por
+Cacheia `static-` (JS, CSS, fontes, ícones, manifest) e o shell sem credenciais
+`/offline.html`. Mais nada: `/login` também fica fora. `/p/` está na exclusão
+apesar de público: é público por
 escolha do candidato, e a escolha pode ser revogada — uma cópia em disco não
 obedeceria à revogação.
 
