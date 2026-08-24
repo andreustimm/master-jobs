@@ -6,13 +6,13 @@ persona: Candidato por teclado
 journey: J-switch-workspace-screen
 expected: Um live status atômico anuncia a fase, o shell fica inerte e o overlay não prende foco nem transborda
 entry_points: /jobs
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence: tests/e2e/ui.mjs; docs/qa/evidence/20260824T143638469000Z-8c1fe201/CH-keyboard-screen-transition-mobile-en.png
-last_report: docs/qa/reports/2026-08-24T143638469000Z-8c1fe201-navigation-contract-retest.md
+evidence: tests/e2e/ui.mjs; docs/qa/evidence/2026-08-24T162500000Z-a995803-navigation-final/mobile-pipeline.png; docs/qa/evidence/2026-08-24T162500000Z-a995803-navigation-final/desktop-pipeline.png
+last_report: docs/qa/reports/2026-08-24T162500000Z-a995803-navigation-final.md
 overlaps:
 ---
 
@@ -24,4 +24,4 @@ Revalidado na Task 04 com menu móvel, foco, live region, viewport de 375×812, 
 
 Revalidado em iPhone 15 emulado com menu por toque, fechamento no destino e `scrollWidth` igual a `innerWidth` (393 px); árvore acessível, zoom, temas e movimento reduzido passaram no E2E do mesmo commit.
 
-O ajuste posterior que restaurou pinch zoom no overlay reiniciou este cenário para `untested`. O navegador automatizado prova o `touch-action` computado e a contenção em 200%, mas a sessão da persona será repetida no Full QA de staging.
+O ajuste posterior que restaurou pinch zoom no overlay foi revalidado no build `a995803`: a persona repetiu a jornada em 393×852 e 1280×900 sem overflow ou overlay residual. O navegador automatizado do mesmo commit provou `touch-action: auto` computado e contenção em 200%; pinch e VoiceOver em iPhone físico permanecem no Full QA de staging.
