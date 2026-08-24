@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-24T20:02:56.775Z
+
 ### Novidade
 
 - Ao trocar de tela pelos menus, links, filtros ou histórico do navegador, o

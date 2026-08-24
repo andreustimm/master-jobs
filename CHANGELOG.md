@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-24
+
 ### Adicionado
 
 - Coordenador único de navegação para links, formulários GET, histórico do

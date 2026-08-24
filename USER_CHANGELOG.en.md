@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-24T20:02:56.775Z
+
 ### New
 
 - When switching screens through menus, links, filters, or browser history,
