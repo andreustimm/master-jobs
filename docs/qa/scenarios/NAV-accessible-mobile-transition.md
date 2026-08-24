@@ -6,13 +6,13 @@ persona: Candidato por teclado
 journey: J-switch-workspace-screen
 expected: Um live status atômico anuncia a fase, o shell fica inerte e o overlay não prende foco nem transborda
 entry_points: /jobs
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: tests/e2e/ui.mjs; docs/qa/evidence/2026-08-24-navigation-final-bf19bba-7c9e2a41/CH-keyboard-navigation-feature-focus.png; docs/qa/evidence/2026-08-24-navigation-final-bf19bba-7c9e2a41/CH-keyboard-navigation-feature-destination.png
+last_report: docs/qa/reports/2026-08-24-navigation-final-bf19bba-7c9e2a41.md
 overlaps:
 ---
 
@@ -24,4 +24,4 @@ Revalidado na Task 04 com menu móvel, foco, live region, viewport de 375×812, 
 
 Revalidado em iPhone 15 emulado com menu por toque, fechamento no destino e `scrollWidth` igual a `innerWidth` (393 px); árvore acessível, zoom, temas e movimento reduzido passaram no E2E do mesmo commit.
 
-O ajuste posterior que restaurou pinch zoom no overlay ainda precisa de uma nova sessão válida sob o charter e a persona atribuídos. O navegador automatizado do build `a995803` provou `touch-action: auto` computado e contenção em 200%; pinch e VoiceOver em iPhone físico permanecem no Full QA de staging.
+O build `bf19bba` foi percorrido sob o charter `CH-keyboard-navigation-feature` pela persona atribuída: foco visível em Pipeline, destino operável, continuação para Referrals, Voltar/Avançar e reload sem estado residual. O navegador automatizado do mesmo build prova `touch-action: auto` computado e contenção em 200%; pinch e VoiceOver em iPhone físico permanecem no Full QA de staging.
