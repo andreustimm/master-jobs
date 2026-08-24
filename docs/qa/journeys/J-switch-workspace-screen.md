@@ -2,15 +2,18 @@
 
 ```mermaid
 flowchart TD
-    A[Entrada: lista de vagas autenticada] --> B[Usuário ativa Funil ou outra tela global]
+    A[Entrada: tela autenticada, auth ou perfil público] --> B[Usuário ativa navegação global, contextual ou filtro GET]
     B --> C[Splash de transição único bloqueia a tela anterior]
     C -->|destino pronto| D[Splash sai e destino aparece]
+    C -->|redirect após ação única| D
+    C -->|papel, sessão ou entidade mudou| H[Resultado canônico autorizado, login, forbidden ou not-found]
     C -->|espera acima de 3 s| E[Mensagem de espera prolongada]
     E --> D
     C -->|falha de render| F[Erro localizado e operável]
     F -->|tentar novamente| D
     C -.->|usuário abandona| X[Controle nativo Voltar continua disponível]
     D --> G[True end: destino correto utilizável e foco não preso no splash]
+    H --> G
 ```
 
 ```yaml
@@ -22,6 +25,10 @@ journey:
   entry_points:
     - url: /jobs
       origin: in-app-nav
+    - url: /login
+      origin: direct
+    - url: /p/[slug]
+      origin: external-share
   actions:
     - step: 1
       verb: Ativar uma área interna pelo menu
@@ -29,6 +36,9 @@ journey:
     - step: 2
       verb: Aguardar o destino ou acionar a recuperação oferecida
       expected_observable: O status permanece verdadeiro e o destino final substitui o splash
+    - step: 3
+      verb: Voltar, avançar ou concluir uma ação que redireciona
+      expected_observable: Somente o destino aceito vence, sem repetir a mutação nem restaurar conteúdo obsoleto
   goal:
     observable: A área escolhida fica visível, operável e sem foco residual no overlay
     side_effects: []

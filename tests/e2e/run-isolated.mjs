@@ -10,6 +10,7 @@ import { createServer } from "node:net";
 import { access, cp, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const EXCLUDED_ROOTS = new Set([
@@ -166,6 +167,13 @@ try {
     JHO_AUTH_MODE: "secure",
     TURSO_DATABASE_URL: `file:${join(temporaryRoot, "jobs.db")}`,
     E2E_BASE: `http://127.0.0.1:${port}`,
+    E2E_RESET_EXPIRED_TOKEN: TASK04_FIXTURES.resetExpiredToken,
+    E2E_RESET_CONSUMED_TOKEN: TASK04_FIXTURES.resetConsumedToken,
+    E2E_RESET_RACE_TOKEN: TASK04_FIXTURES.resetRaceToken,
+    E2E_LOGIN_EXPIRED_TOKEN: TASK04_FIXTURES.loginExpiredToken,
+    E2E_LOGIN_RACE_TOKEN: TASK04_FIXTURES.loginRaceToken,
+    E2E_CLOSED_JOB_ID: String(TASK04_FIXTURES.closedJobId),
+    E2E_DELETED_JOB_ID: String(TASK04_FIXTURES.deletedJobId),
   };
 
   await run(process.execPath, ["scripts/sw-version.mjs"], { cwd: appRoot, env });

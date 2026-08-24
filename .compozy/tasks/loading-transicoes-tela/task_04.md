@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Migrate first-party navigation and close canonical route flows
 type: frontend
 complexity: high
@@ -38,15 +38,15 @@ mobile navigation all obey one transition and cache-isolation contract.
 
 ## Subtasks
 
-- [ ] 4.1 Create stable typed link and GET-form navigation adapters over the completed transition/store contracts.
-- [ ] 4.2 Inventory and migrate desktop/mobile global menus and all contextual first-party navigation surfaces.
-- [ ] 4.3 Preserve external, download, modifier, target, hash-only, modal, disclosure, and theme behavior outside transition state.
-- [ ] 4.4 Verify every redirecting POST Server Action starts only the accepted route change and never duplicates mutation work.
-- [ ] 4.5 Add an architecture guard for future raw same-origin navigation bypasses with a narrow explicit allowlist.
-- [ ] 4.6 Close candidate, recruiter, administrator, impersonation, login/recovery/callback, public-profile, and permission-expiry route journeys.
-- [ ] 4.7 Close missing/deleted/closed/revoked entity and long/malformed URL journeys without stale cached content or orphan overlays.
-- [ ] 4.8 Run targeted QA on desktop and mobile, repair regressions, and complete all assigned integration/E2E cases.
-- [ ] 4.9 Run full repository verification and required review/ship preparation gates for the completed workflow.
+- [x] 4.1 Create stable typed link and GET-form navigation adapters over the completed transition/store contracts.
+- [x] 4.2 Inventory and migrate desktop/mobile global menus and all contextual first-party navigation surfaces.
+- [x] 4.3 Preserve external, download, modifier, target, hash-only, modal, disclosure, and theme behavior outside transition state.
+- [x] 4.4 Verify every redirecting POST Server Action starts only the accepted route change and never duplicates mutation work.
+- [x] 4.5 Add an architecture guard for future raw same-origin navigation bypasses with a narrow explicit allowlist.
+- [x] 4.6 Close candidate, recruiter, administrator, impersonation, login/recovery/callback, public-profile, and permission-expiry route journeys.
+- [x] 4.7 Close missing/deleted/closed/revoked entity and long/malformed URL journeys without stale cached content or orphan overlays.
+- [x] 4.8 Run targeted QA on desktop and mobile, repair regressions, and complete all assigned integration/E2E cases.
+- [x] 4.9 Run full repository verification and required review/ship preparation gates for the completed workflow.
 
 ## Implementation Details
 
@@ -82,6 +82,7 @@ the root router bridge owns accepted redirects.
 - [ADR-001: Use One Full-Screen Splash Contract for First-Party Navigation](adrs/adr-001.md) — Requires full first-party coverage and native-control exclusions.
 - [ADR-002: Keep Offline Support Shell-Only and Free of Private Content](adrs/adr-002.md) — Constrains role/public-profile cache verification.
 - [ADR-003: Coordinate Navigation Transitions with a Next Router Hook and Typed Adapters](adrs/adr-003.md) — Defines the stable adapter plus authoritative router-hook relationship.
+- [ADR-005: Reconcile Accepted Server Action Redirects at Route Commit](adrs/adr-005.md) — Records the installed runtime gap without changing ordinary POST semantics.
 
 ## Deliverables
 
@@ -96,12 +97,12 @@ the root router bridge owns accepted redirects.
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-035 — native modifier/download/target exclusion and ordinary internal adapter acceptance.
-- [ ] IT-002 — stable adapter and router-hook duplicate coalescing.
-- [ ] IT-012, IT-013, IT-014 — one-shot Server Action redirect, canonical auth/role outcomes, and canonical missing/deleted/revoked outcomes.
-- [ ] E2E-001, E2E-002, E2E-003, E2E-004, E2E-005 — desktop menu, mobile menu, contextual/URL-backed navigation, redirecting actions, and multi-entry history.
-- [ ] E2E-013 — startup versus soft transition on login/recovery/callback/public routes without user content in the overlay.
-- [ ] E2E-018, E2E-019, E2E-020 — token/public edge cases, malformed/missing/revoked entities, and permission-neutral role/cache isolation.
+- [x] UT-035 — native modifier/download/target exclusion and ordinary internal adapter acceptance.
+- [x] IT-002 — stable adapter and router-hook duplicate coalescing.
+- [x] IT-012, IT-013, IT-014 — one-shot Server Action redirect, canonical auth/role outcomes, and canonical missing/deleted/revoked outcomes.
+- [x] E2E-001, E2E-002, E2E-003, E2E-004, E2E-005 — desktop menu, mobile menu, contextual/URL-backed navigation, redirecting actions, and multi-entry history.
+- [x] E2E-013 — startup versus soft transition on login/recovery/callback/public routes without user content in the overlay.
+- [x] E2E-018, E2E-019, E2E-020 — token/public edge cases, malformed/missing/revoked entities, and permission-neutral role/cache isolation.
 
 ## Success Criteria
 
@@ -111,4 +112,3 @@ Cases assigned from `_tests.md`, the test contract — read each ID's full defin
 - POST mutations occur exactly once and are never automatically retried by the loading/offline system.
 - Desktop and 375 px mobile journeys pass full interaction, focus, overflow, cache-isolation, and history assertions.
 - Repository checks, E2E, targeted QA, audit, deslop, deep-review, and ship preparation complete with fresh evidence.
-

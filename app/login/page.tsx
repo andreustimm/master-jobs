@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TransitionLink } from "../transition-link";
 import { ClearCachesOnLogout } from "./clear-caches";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,7 +32,7 @@ export default async function LoginPage({
 
   if (accounts.length === 0) {
     return (
-      <main className="flex min-h-[70vh] flex-col items-center justify-center py-16">
+      <main className="flex min-h-[70vh] flex-col items-center justify-center py-16" data-testid="route-login">
         <h1 className="type-display-md chevron mb-4">{t("login.firstAccess")}</h1>
         <Card className="w-full max-w-[46ch]">
           <CardContent className="pt-0">
@@ -73,7 +73,7 @@ pnpm jho auth set-password ${"seu@email.com"}`}
     // Centrado nos dois eixos: a tela de login não tem navegação nem conteúdo
     // ao redor, e um formulário encostado no canto de uma tela vazia parece
     // um erro de layout.
-    <main className="flex min-h-[70vh] flex-col items-center justify-center py-16">
+    <main className="flex min-h-[70vh] flex-col items-center justify-center py-16" data-testid="route-login">
       {/* Depois do logout: pede ao service worker para esvaziar o cache
           privado. Ver a nota no componente sobre por que existe mesmo com o
           service worker não guardando página autenticada. */}
@@ -118,13 +118,13 @@ pnpm jho auth set-password ${"seu@email.com"}`}
 
           {/* Fora do formulário: dentro dele, Enter no campo de senha poderia
               acionar o link em vez de entrar. */}
-          <Link
+          <TransitionLink
             href="/login/forgot"
             data-testid="forgot-password"
             className="mt-4 inline-block type-body-sm text-[var(--primary-text)] hover:underline"
           >
             {t("login.forgot")}
-          </Link>
+          </TransitionLink>
 
           <p className="type-body-sm mt-5 border-t border-[var(--color-hairline)] pt-4 text-muted-foreground">
             {t("login.magicLinkHint")}{" "}

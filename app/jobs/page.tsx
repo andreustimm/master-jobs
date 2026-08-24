@@ -47,7 +47,7 @@ export default async function Jobs({
   ]);
 
   return (
-    <main className="page-content-top">
+    <main className="page-content-top" data-testid="route-jobs">
       <header className="pb-4">
         <h1 className="type-display-md chevron mb-4">{t("jobs.title")}</h1>
         <p className="type-body-md text-muted-foreground">

@@ -8,8 +8,9 @@
  */
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { href, type FilterState } from "./filters";
+import { href, type BoardRoute, type FilterState } from "./filters";
 import type { Translator } from "../src/core/i18n/index.ts";
+import { TransitionLink } from "./transition-link";
 
 export const PAGE_SIZES = [25, 50, 100, 200] as const;
 
@@ -21,7 +22,7 @@ export function Pagination({
   total,
   t,
 }: {
-  base: string;
+  base: BoardRoute;
   state: FilterState;
   page: number;
   pageSize: number;
@@ -53,24 +54,24 @@ export function Pagination({
 
       <div className="flex flex-wrap items-center gap-1.5">
         {current > 1 && (
-          <a href={link(current - 1)} className={box(false)}>
+          <TransitionLink href={link(current - 1)} className={box(false)} data-testid="pagination-previous">
             ← {t("grid.previous")}
-          </a>
+          </TransitionLink>
         )}
         {window.map((p, i) => (
           <span key={p} className="flex items-center gap-1.5">
             {i > 0 && window[i - 1] !== undefined && p - window[i - 1]! > 1 && (
               <span className="text-xs text-muted-foreground">…</span>
             )}
-            <a href={link(p)} className={cn("font-mono", box(p === current))}>
+            <TransitionLink href={link(p)} className={cn("font-mono", box(p === current))}>
               {p}
-            </a>
+            </TransitionLink>
           </span>
         ))}
         {current < pages && (
-          <a href={link(current + 1)} className={box(false)}>
+          <TransitionLink href={link(current + 1)} className={box(false)} data-testid="pagination-next">
             {t("grid.next")} →
-          </a>
+          </TransitionLink>
         )}
       </div>
 
@@ -79,13 +80,14 @@ export function Pagination({
           {t("grid.perPage")}
         </span>
         {PAGE_SIZES.map((n) => (
-          <a
+          <TransitionLink
             key={n}
             href={href(base, state, { size: n === 50 ? undefined : String(n), page: undefined })}
+            data-testid={`page-size-${n}`}
             className={cn("font-mono", box(pageSize === n))}
           >
             {n}
-          </a>
+          </TransitionLink>
         ))}
       </div>
     </div>
@@ -99,7 +101,7 @@ export function GridToolbar({
   dense,
   t,
 }: {
-  base: string;
+  base: BoardRoute;
   state: FilterState;
   total: number;
   dense: boolean;
@@ -114,16 +116,16 @@ export function GridToolbar({
       <span className="font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
         {t("grid.density")}
       </span>
-      <a href={href(base, state, { dense: undefined })} className={box(!dense)}>
+      <TransitionLink href={href(base, state, { dense: undefined })} className={box(!dense)} data-testid="density-comfortable">
         {t("grid.comfortable")}
-      </a>
-      <a href={href(base, state, { dense: "1" })} className={box(dense)}>
+      </TransitionLink>
+      <TransitionLink href={href(base, state, { dense: "1" })} className={box(dense)} data-testid="density-compact">
         {t("grid.compact")}
-      </a>
+      </TransitionLink>
 
       <span className="flex-1" />
 
-      <a href={exportHref} className={box(false)} title={t("grid.exportHint", { count: total })}>
+      <a href={exportHref} download className={box(false)} title={t("grid.exportHint", { count: total })}>
         ↓ {t("grid.exportCsv")}
       </a>
     </div>
@@ -145,7 +147,7 @@ export function Presets({
   base,
   t,
 }: {
-  base: string;
+  base: BoardRoute;
   /** Tradutor da requisição, por prop: estes são Server Components e o
       chamador já o resolveu. */
   t: Translator["t"];
@@ -153,9 +155,10 @@ export function Presets({
   return (
     <div className="mb-4 flex flex-wrap gap-2">
       {PRESETS.map((p) => (
-        <a
+        <TransitionLink
           key={p.key}
           href={`${base}?${p.query}`}
+          data-testid={`preset-${p.key}`}
           title={t(`presets.${p.key}Hint`)}
           className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-auto py-1.5 type-caption-sm font-normal")}
         >
@@ -167,7 +170,7 @@ export function Presets({
             {" "}
             · {t(`presets.${p.key}Hint`)}
           </span>
-        </a>
+        </TransitionLink>
       ))}
     </div>
   );

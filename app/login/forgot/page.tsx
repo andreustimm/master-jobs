@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TransitionLink } from "../../transition-link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,7 +25,7 @@ export default async function ForgotPage({
   const sent = (await searchParams).sent === "1";
 
   return (
-    <main className="mx-auto flex min-h-[70vh] w-full max-w-[26rem] flex-col justify-center py-16">
+    <main className="mx-auto flex min-h-[70vh] w-full max-w-[26rem] flex-col justify-center py-16" data-testid="route-login-forgot">
       <h1 className="type-display-sm mb-2">{t("login.forgotTitle")}</h1>
       <p className="type-body-sm mb-6 text-muted-foreground">{t("login.forgotLead")}</p>
 
@@ -47,9 +47,13 @@ export default async function ForgotPage({
         </form>
       )}
 
-      <Link href="/login" className="mt-6 type-body-sm text-[var(--primary-text)] hover:underline">
+      <TransitionLink
+        href="/login"
+        className="mt-6 type-body-sm text-[var(--primary-text)] hover:underline"
+        data-testid="login-back"
+      >
         ← {t("nav.signIn")}
-      </Link>
+      </TransitionLink>
     </main>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useLayoutEffect, useSyncExternalStore } from "react";
+import { Suspense, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import {
   INITIAL_NAVIGATION_TRANSITION,
   type TransitionLabels,
@@ -24,6 +24,24 @@ function NavigationCommitObserver() {
   const searchParams = useSearchParams();
   const search = searchParams.toString();
   const routeKey = search ? `${pathname}?${search}` : pathname;
+  const previousRoute = useRef(routeKey);
+
+  useLayoutEffect(() => {
+    const previous = previousRoute.current;
+    previousRoute.current = routeKey;
+    const snapshot = transitionStore.getSnapshot();
+    if (previous === routeKey || (snapshot.phase !== "idle" && !snapshot.committed)) return;
+
+    // Next 16.3's public router hook does not run for a redirect already
+    // accepted inside the Server Action reducer. Detect that committed route
+    // before paint, using the previous screen only for classification. The
+    // action itself remains an ordinary one-shot POST and is never wrapped or
+    // retried by this lifecycle. A committed generation may yield ownership to
+    // a rapid history traversal, while a stale commit must not replace a newer
+    // target that is still pending. begin coalesces the ordinary Link case.
+    const previousUrl = new URL(previous, window.location.origin).href;
+    transitionStore.begin(routeKey, previousUrl);
+  }, [routeKey]);
 
   useEffect(() => {
     transitionStore.commit(routeKey);

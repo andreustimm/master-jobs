@@ -42,6 +42,7 @@ function markdownTargets(markdown: string): string[] {
 }
 
 const SRC = walk("src");
+const APP = walk("app");
 const read = (f: string) => readFileSync(f, "utf8");
 
 describe("erasable TypeScript (ADR 0006)", () => {
@@ -183,6 +184,41 @@ describe("layering", () => {
 });
 
 describe("architecture inventory", () => {
+  it("routes first-party anchors through the stable transition boundary", () => {
+    const allowedRawAnchors = new Map<string, Set<string>>([
+      ["app/candidate/markdown-preview.tsx", new Set(["href"])],
+      ["app/changelog-markdown.tsx", new Set(["href"])],
+      ["app/compare/page.tsx", new Set(["externalUrl"])],
+      ["app/grid.tsx", new Set(["exportHref"])],
+      ["app/job-modal.tsx", new Set(["row.url", "externalApplyUrl"])],
+      ["app/joblist.tsx", new Set(["r.url", "externalApplyUrl"])],
+      ["app/jobs/[id]/page.tsx", new Set(["job.url", "externalApplyUrl"])],
+      ["app/p/[slug]/page.tsx", new Set(["profile.linkedinUrl", "profile.githubUrl"])],
+      ["app/pipeline/page.tsx", new Set(["r.url"])],
+      ["app/referrals/page.tsx", new Set(["externalUrl"])],
+    ]);
+    const offenders: string[] = [];
+
+    for (const file of APP) {
+      for (const match of read(file).matchAll(/<a\b[\s\S]*?>/g)) {
+        const compact = match[0].replace(/\s+/g, " ").trim();
+        const href = /\bhref=\{([^}]+)\}/.exec(compact)?.[1]?.trim();
+        const contentAuthored = file === "app/changelog-markdown.tsx";
+        const nativeNavigation = /\bdownload(?:\s|=)/.test(compact) || /\btarget="_blank"/.test(compact);
+        if (!href || !allowedRawAnchors.get(file)?.has(href) || (!contentAuthored && !nativeNavigation)) {
+          offenders.push(`${file}:${compact}`);
+        }
+      }
+    }
+
+    const directNextLinkImports = APP.filter((file) =>
+      file !== "app/transition-link.tsx" && /from ["']next\/link["']/.test(read(file))
+    );
+
+    expect(offenders).toEqual([]);
+    expect(directNextLinkImports).toEqual([]);
+  });
+
   it("keeps every bounded context public and documented", () => {
     const contexts = readdirSync("src/contexts")
       .filter((name) => statSync(join("src/contexts", name)).isDirectory())

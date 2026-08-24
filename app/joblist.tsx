@@ -1,5 +1,5 @@
 import type * as React from "react";
-import Link from "next/link";
+import { TransitionLink } from "./transition-link";
 import { Badge } from "@/components/ui/badge";
 import { JobModal } from "./job-modal";
 import { buttonVariants } from "@/components/ui/button";
@@ -75,12 +75,13 @@ export function JobList({
 
             <div className="min-w-0">
               <div className="flex flex-wrap items-baseline gap-2.5">
-                <Link
+                <TransitionLink
                   href={`/jobs/${r.jobId}`}
+                  data-testid={`job-link-${r.jobId}`}
                   className="type-body-md font-semibold hover:underline"
                 >
                   {r.title}
-                </Link>
+                </TransitionLink>
                 {r.status && <StatusBadge status={r.status} />}
               </div>
 

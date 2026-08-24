@@ -144,7 +144,7 @@ describe("navigation URL contract", () => {
     expect(classifyNavigation("/p/%zz", "https://jobs.example/jobs")).toBeNull();
   });
 
-  it("preserves native activation behavior before classifying the target", () => {
+  it("UT-035 preserves native activation behavior before classifying the target", () => {
     const ordinary = { defaultPrevented: false, button: 0 };
     const current = "https://jobs.example/jobs";
     expect(shouldStartFromLinkEvent(ordinary, "/pipeline", current)).toBe(true);

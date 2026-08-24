@@ -3,6 +3,8 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
+import type { Route } from "next";
+import { TransitionLink } from "./transition-link";
 
 /**
  * A filter chip with an explanation on hover.
@@ -29,7 +31,7 @@ export function Toggle({
   hint,
   children,
 }: {
-  href: string;
+  href: Route;
   active: boolean;
   hint: string;
   children: React.ReactNode;
@@ -38,9 +40,9 @@ export function Toggle({
     <Tooltip>
       <TooltipTrigger
         render={
-          <a href={href} className={chipClass(active)}>
+          <TransitionLink href={href} className={chipClass(active)}>
             {children}
-          </a>
+          </TransitionLink>
         }
       />
       <TooltipContent side="bottom">{hint}</TooltipContent>

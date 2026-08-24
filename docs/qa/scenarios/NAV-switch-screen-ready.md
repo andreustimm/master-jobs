@@ -11,11 +11,13 @@ bug_ids: BUG-20260823-pipeline-empty-state-mixed-locale
 fix_status:
 retest_status:
 fix_commits:
-evidence: docs/qa/evidence/2026-08-23-task-02-loading-transicoes/CH-keyboard-screen-transition-goal.png
-last_report: docs/qa/reports/2026-08-23-task-02-loading-transicoes.md
+evidence: tests/e2e/ui.mjs
+last_report: docs/qa/reports/2026-08-24-task-04-first-party-navigation.md
 overlaps:
 ---
 
 Cobertura: jornada, comportamento funcional, percepção de velocidade e regressão do shell global.
 
 O destino ficou utilizável e persistiu após recarga. O bug ligado é um paper cut do conteúdo do destino, não uma falha do lifecycle de transição.
+
+Revalidado na Task 04 em menu global, links contextuais, filtros GET, paginação, densidade, redirects e histórico multi-entry.

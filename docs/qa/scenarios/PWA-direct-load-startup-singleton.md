@@ -11,8 +11,8 @@ bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence: docs/qa/evidence/2026-08-23-task-02-loading-transicoes/CH-direct-startup-canary-goal.png
-last_report: docs/qa/reports/2026-08-24-task-03-offline-shell.md
+evidence: tests/e2e/ui.mjs
+last_report: docs/qa/reports/2026-08-24-task-04-first-party-navigation.md
 overlaps:
 ---
 
@@ -21,3 +21,5 @@ Canário adjacente para regressões no renderer inline, hidratação, locale e s
 A URL direta e a recarga chegaram ao mesmo cockpit operável sem camada de transição residual.
 
 Revalidado como canário adjacente no build isolado da Task 03.
+
+Revalidado novamente na Task 04 contra login, recovery, callback e perfil público: carga direta manteve apenas o splash de startup e navegação suave manteve apenas a camada de transição.

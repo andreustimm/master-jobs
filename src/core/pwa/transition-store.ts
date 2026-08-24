@@ -33,7 +33,7 @@ export type TransitionStoreOptions = {
 export type TransitionStore = {
   getSnapshot(): NavigationTransition;
   subscribe(listener: Listener): () => void;
-  begin(url: string): number | null;
+  begin(url: string, currentOverride?: string): number | null;
   commit(url: string, generation?: number): void;
   mountFallback(generation?: number): () => void;
   failRoute(generation?: number): void;
@@ -128,9 +128,9 @@ export function createTransitionStore(options: TransitionStoreOptions = {}): Tra
     leaveTimer = { generation, handle: setTimer(() => leave(generation), delay) };
   };
 
-  const begin = (url: string): number | null => {
+  const begin = (url: string, currentOverride?: string): number | null => {
     if (destroyed) return null;
-    const base = currentUrl();
+    const base = currentOverride ?? currentUrl();
     if (!base) return null;
     const normalized = normalizeNavigationTarget(url, base);
     if (!normalized) return null;

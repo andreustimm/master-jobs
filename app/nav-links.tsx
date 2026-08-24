@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TransitionLink } from "./transition-link";
 import type { Translator } from "../src/core/i18n/index.ts";
 
 /**
@@ -30,37 +30,37 @@ export function NavLinks({
   return (
     <>
       {hasCandidateScope && (
-        <Link href="/" className={linkClass}>
+        <TransitionLink href="/" className={linkClass} data-testid="nav-cockpit">
           {t("nav.cockpit")}
-        </Link>
+        </TransitionLink>
       )}
       {hasCandidateScope && (
-        <Link href="/jobs" className={linkClass}>
+        <TransitionLink href="/jobs" className={linkClass} data-testid="nav-jobs">
           {t("nav.jobs")}
-        </Link>
+        </TransitionLink>
       )}
-      <Link href="/compare" className={linkClass}>
+      <TransitionLink href="/compare" className={linkClass} data-testid="nav-compare">
         {t("nav.compareJob")}
-      </Link>
+      </TransitionLink>
       {hasCandidateScope && (
-        <Link href="/pipeline" className={linkClass}>
+        <TransitionLink href="/pipeline" className={linkClass} data-testid="nav-pipeline">
           {t("nav.pipeline")}
-        </Link>
+        </TransitionLink>
       )}
       {hasCandidateScope && (
-        <Link href="/referrals" className={linkClass}>
+        <TransitionLink href="/referrals" className={linkClass} data-testid="nav-referrals">
           {t("nav.referrals")}
-        </Link>
+        </TransitionLink>
       )}
       {hasCandidateScope && (
-        <Link href="/candidate" className={linkClass}>
+        <TransitionLink href="/candidate" className={linkClass} data-testid="nav-candidate">
           {t("nav.candidate")}
-        </Link>
+        </TransitionLink>
       )}
       {isAdmin && (
-        <Link href="/admin/users" className={linkClass}>
+        <TransitionLink href="/admin/users" className={linkClass} data-testid="nav-admin-users">
           {t("admin.nav")}
-        </Link>
+        </TransitionLink>
       )}
     </>
   );

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TransitionLink } from "./transition-link";
 import { boardFacets, clusterBreakdown, corpusStats, listBoard } from "../src/contexts/matching/index.ts";
 import { pipelineCounts } from "../src/contexts/pursuit/index.ts";
 import { FilterBar, readFilters, toBoardFilters } from "./filters";
@@ -42,7 +42,7 @@ export default async function Cockpit({
   const tracked = Object.values(counts).reduce((a, b) => a + b, 0);
 
   return (
-    <main className="page-content-top">
+    <main className="page-content-top" data-testid="route-cockpit">
       <header className="pb-6">
         <p className="mb-3 font-mono type-meta tracking-[.14em] text-muted-foreground uppercase">
           {t("nav.cockpit")}
@@ -77,9 +77,9 @@ export default async function Cockpit({
               · {t("cockpit.matching", { count: facets.total.toLocaleString(locale) })}
             </span>
           </h2>
-          <Link href="/jobs" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
+          <TransitionLink href="/jobs" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
             {t("cockpit.seeAll")} →
-          </Link>
+          </TransitionLink>
         </div>
         <div className="mt-3 mb-4">
           <Legend t={t} />

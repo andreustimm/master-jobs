@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TransitionLink } from "../transition-link";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -96,7 +96,7 @@ export default async function CompareJobPage({ searchParams }: { searchParams: S
   const covered = vocabulary?.items.filter((item) => item.kind === "covered") ?? [];
 
   return (
-    <main className="page-content-top pb-16">
+    <main className="page-content-top pb-16" data-testid="route-compare">
       <header className="mb-6">
         <p className="font-mono type-micro tracking-[.12em] text-[var(--primary-text)] uppercase">
           {t("compare.eyebrow")}
@@ -126,9 +126,9 @@ export default async function CompareJobPage({ searchParams }: { searchParams: S
               </p>
             </div>
           )}
-          <Link href="/candidate" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <TransitionLink href="/candidate" data-testid="compare-candidate-link" className={buttonVariants({ variant: "outline", size: "sm" })}>
             {t("compare.openCandidate")}
-          </Link>
+          </TransitionLink>
         </CardContent>
       </Card>
 
@@ -234,9 +234,9 @@ export default async function CompareJobPage({ searchParams }: { searchParams: S
                 )}
 
                 <div className="mt-5 flex flex-wrap gap-2">
-                  <Link href={`/jobs/${detail.job.id}`} className={buttonVariants({ variant: "outline" })}>
+                  <TransitionLink href={`/jobs/${detail.job.id}`} data-testid="compare-job-link" className={buttonVariants({ variant: "outline" })}>
                     {t("compare.openJob")}
-                  </Link>
+                  </TransitionLink>
                   {externalUrl && (
                     <a
                       href={externalUrl}

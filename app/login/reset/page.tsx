@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TransitionLink } from "../../transition-link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,7 +35,7 @@ export default async function ResetPage({
   const dead = error === "invalid" || token === "" || !(await resetTokenIsLive(token));
 
   return (
-    <main className="mx-auto flex min-h-[70vh] w-full max-w-[26rem] flex-col justify-center py-16">
+    <main className="mx-auto flex min-h-[70vh] w-full max-w-[26rem] flex-col justify-center py-16" data-testid="route-login-reset">
       <h1 className="type-display-sm mb-2">{t("login.resetTitle")}</h1>
 
       {dead ? (
@@ -71,9 +71,9 @@ export default async function ResetPage({
         </>
       )}
 
-      <Link href="/login" className="mt-6 type-body-sm text-[var(--primary-text)] hover:underline">
+      <TransitionLink href="/login" className="mt-6 type-body-sm text-[var(--primary-text)] hover:underline">
         ← {t("nav.signIn")}
-      </Link>
+      </TransitionLink>
     </main>
   );
 }

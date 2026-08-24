@@ -21,6 +21,7 @@
  */
 import { chromium, webkit } from "playwright";
 import { readFile } from "node:fs/promises";
+import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 
 const BASE = process.env.E2E_BASE ?? "http://127.0.0.1:3000";
 
@@ -33,10 +34,27 @@ const BASE = process.env.E2E_BASE ?? "http://127.0.0.1:3000";
  */
 const E2E_EMAIL = process.env.E2E_EMAIL ?? "e2e@local.test";
 const E2E_PASSWORD = process.env.E2E_PASSWORD ?? "conta-de-teste-e2e-42";
+const E2E_RESET_EXPIRED_TOKEN = process.env.E2E_RESET_EXPIRED_TOKEN ?? TASK04_FIXTURES.resetExpiredToken;
+const E2E_RESET_CONSUMED_TOKEN = process.env.E2E_RESET_CONSUMED_TOKEN ?? TASK04_FIXTURES.resetConsumedToken;
+const E2E_RESET_RACE_TOKEN = process.env.E2E_RESET_RACE_TOKEN ?? TASK04_FIXTURES.resetRaceToken;
+const E2E_LOGIN_EXPIRED_TOKEN = process.env.E2E_LOGIN_EXPIRED_TOKEN ?? TASK04_FIXTURES.loginExpiredToken;
+const E2E_LOGIN_RACE_TOKEN = process.env.E2E_LOGIN_RACE_TOKEN ?? TASK04_FIXTURES.loginRaceToken;
+const E2E_CLOSED_JOB_ID = process.env.E2E_CLOSED_JOB_ID ?? String(TASK04_FIXTURES.closedJobId);
+const E2E_DELETED_JOB_ID = process.env.E2E_DELETED_JOB_ID ?? String(TASK04_FIXTURES.deletedJobId);
 const PACKAGE_VERSION = JSON.parse(await readFile("package.json", "utf8")).version;
 const results = [];
 let failed = 0;
 let comparisonJobId = null;
+const createdJobFixtures = new Map();
+
+function rememberCreatedJob(url, title, companyName) {
+  const parsed = new URL(url);
+  const pathId = parsed.pathname.match(/^\/jobs\/(\d+)$/)?.[1];
+  const id = Number(parsed.searchParams.get("job") ?? pathId);
+  if (!Number.isInteger(id) || id <= 0) throw new Error(`created job id missing from ${url}`);
+  createdJobFixtures.set(id, { title, companyName });
+  return id;
+}
 
 function check(name, ok, detail = "") {
   results.push({ name, ok, detail });
@@ -510,8 +528,10 @@ try {
   );
 
   await page.locator("#locale-popover-trigger").click();
-  await page.locator('#locale-popover [lang="pt-BR"]').click();
-  await page.waitForLoadState("networkidle");
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: "networkidle" }),
+    page.locator('#locale-popover [lang="pt-BR"]').click(),
+  ]);
   opened = await openChangelog(page);
   check(
     "E2E-018 troca de locale reabre edição coerente em newest-only",
@@ -756,7 +776,11 @@ try {
     page.locator('[data-testid="compare-submit"]').click(),
   ]);
   await page.locator('[data-testid="comparison-result"]').waitFor();
-  comparisonJobId = Number(new URL(page.url()).searchParams.get("job"));
+  comparisonJobId = rememberCreatedJob(
+    page.url(),
+    "Senior AI Software Architect E2E",
+    "E2E Comparison Lab",
+  );
   check("comparação colada persiste e redireciona", /[?&]job=\d+/.test(page.url()), page.url());
   check("comparação exibe score canônico", (await page.locator('[data-testid="comparison-score"]').count()) === 1);
   check("comparação exibe cobertura do currículo", (await page.locator('[data-testid="comparison-cv-coverage"]').count()) === 1);
@@ -773,6 +797,7 @@ try {
     page.locator('[data-testid="compare-submit"]').click(),
   ]);
   await page.locator('[data-testid="comparison-result"]').waitFor();
+  rememberCreatedJob(page.url(), "Senior AI Software Architect E2E", "E2E Comparison Lab");
   check(
     "upload percorre extração, persistência e score",
     (await page.locator('[data-testid="comparison-result"]').textContent())?.includes("e2e-job.txt") ?? false,
@@ -1306,6 +1331,21 @@ try {
   check("formulário de cadastro responde", newJob?.status() === 200, `${newJob?.status()}`);
 
   const marker = `Recrutador E2E ${Date.now()}`;
+  const privateMarkers = [
+    E2E_EMAIL,
+    E2E_PASSWORD,
+    E2E_RESET_EXPIRED_TOKEN,
+    E2E_RESET_CONSUMED_TOKEN,
+    E2E_RESET_RACE_TOKEN,
+    E2E_LOGIN_EXPIRED_TOKEN,
+    E2E_LOGIN_RACE_TOKEN,
+    "e2e-candidato@local.test",
+    "e2e-recrutador@local.test",
+    "e2e-alvo@local.test",
+    "e2e-desabilitada@local.test",
+    "E2E Candidate",
+    marker,
+  ];
   await page.fill('input[name="title"]', "Staff AI Engineer");
   await page.fill('input[name="companyName"]', marker);
   await page.fill('input[name="location"]', "Remote · Brazil");
@@ -1318,6 +1358,7 @@ try {
   // "sair" do cabeçalho, e o teste passou a fazer logout achando que cadastrava.
   await page.locator('[data-testid="post-job"]').click();
   await page.waitForURL(/\/jobs\/\d+/, { timeout: 20_000 }).catch(() => {});
+  rememberCreatedJob(page.url(), "Staff AI Engineer", marker);
   check("cadastrar leva à vaga criada", /\/jobs\/\d+/.test(page.url()), page.url());
 
   await page.goto(`${BASE}/jobs?q=${encodeURIComponent(marker)}`, { waitUntil: "networkidle" });
@@ -2066,6 +2107,781 @@ try {
     await waitForState(transitionOverlay, "detached", "transition reset did not detach overlay");
   };
 
+  const observeNavigation = async (targetPage, activate, destination, label = destination) => {
+    const overlay = targetPage.locator('[data-testid="navigation-transition"]');
+    try {
+      await overlay.waitFor({ state: "detached" });
+      const activation = activate();
+      await overlay.waitFor({ state: "attached" });
+      const snapshot = await overlay.evaluate((element) => ({
+        count: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+        phase: element.getAttribute("data-phase"),
+        rect: element.getBoundingClientRect().toJSON(),
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        text: element.textContent ?? "",
+      }));
+      await activation;
+      await targetPage.locator(destination).waitFor({ state: "visible", timeout: 20_000 });
+      await overlay.waitFor({ state: "detached", timeout: 20_000 });
+      return snapshot;
+    } catch (error) {
+      throw new Error(`${label}: ${String(error)}`);
+    }
+  };
+
+  const observeRedirectAction = async (targetPage, activate, destination) => {
+    let actionRequests = 0;
+    const countAction = (request) => {
+      if (request.method() === "POST" && request.headers()["next-action"]) actionRequests += 1;
+    };
+    targetPage.on("request", countAction);
+    try {
+      const snapshot = await observeNavigation(targetPage, activate, destination);
+      return { ...snapshot, actionRequests };
+    } finally {
+      targetPage.off("request", countAction);
+    }
+  };
+
+  /* ------------ Task 04: first-party inventory and canonical flows -------- */
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const desktopDestinations = [
+    ["nav-cockpit", "route-cockpit"],
+    ["nav-jobs", "route-jobs"],
+    ["nav-compare", "route-compare"],
+    ["nav-pipeline", "route-pipeline"],
+    ["nav-referrals", "route-referrals"],
+    ["nav-candidate", "route-candidate"],
+    ["nav-admin-users", "route-admin-users"],
+  ];
+  const desktopFailures = [];
+  for (const [control, destination] of desktopDestinations) {
+    const source = control === "nav-jobs" ? "/compare" : "/jobs";
+    await page.goto(`${BASE}${source}`, { waitUntil: "networkidle" });
+    const snapshot = await observeNavigation(
+      page,
+      () => page.locator(`[data-testid="${control}"]:visible`).first().click(),
+      `[data-testid="${destination}"]`,
+    );
+    if (
+      snapshot.count !== 1 ||
+      snapshot.rect.left !== 0 ||
+      snapshot.rect.top !== 0 ||
+      Math.round(snapshot.rect.width) !== snapshot.viewport.width ||
+      Math.round(snapshot.rect.height) !== snapshot.viewport.height
+    ) {
+      desktopFailures.push(`${control}:${JSON.stringify(snapshot)}`);
+    }
+  }
+  check(
+    "task-04 E2E-001 menu desktop cobre todos os destinos com um splash full-screen",
+    desktopFailures.length === 0,
+    desktopFailures.slice(0, 2).join(" | "),
+  );
+
+  await page.setViewportSize({ width: 375, height: 812 });
+  const mobileFailures = [];
+  for (const [control, destination] of desktopDestinations) {
+    const source = control === "nav-jobs" ? "/compare" : "/jobs";
+    await page.goto(`${BASE}${source}`, { waitUntil: "networkidle" });
+    await page.locator('[data-testid="mobile-nav-trigger"]').click();
+    const popover = page.locator('[data-testid="mobile-nav-popover"]');
+    await popover.waitFor({ state: "visible" });
+    const snapshot = await observeNavigation(
+      page,
+      () => popover.locator(`[data-testid="${control}"]`).click(),
+      `[data-testid="${destination}"]`,
+    );
+    const result = await page.evaluate(() => ({
+      popoverOpen: document.querySelector('[data-testid="mobile-nav-popover"]')?.matches(":popover-open"),
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    }));
+    if (snapshot.count !== 1 || result.popoverOpen || result.overflow > 1) {
+      mobileFailures.push(`${control}:${JSON.stringify({ snapshot, result })}`);
+    }
+  }
+  check(
+    "task-04 E2E-002 menu móvel fecha antes do destino e mantém paridade sem overflow",
+    mobileFailures.length === 0,
+    mobileFailures.slice(0, 2).join(" | "),
+  );
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  const firstJobLink = page.locator('[data-testid^="job-link-"]').first();
+  const contextualPhases = [];
+  contextualPhases.push((await observeNavigation(page, () => firstJobLink.click(), '[data-testid="route-job-detail"]')).phase);
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  await page.locator('[data-testid="filters-query"]').fill("Task 04 typical fixture");
+  contextualPhases.push((await observeNavigation(
+    page,
+    () => page.locator('[data-testid="filters-submit"]').click(),
+    '[data-testid="route-jobs"]',
+  )).phase);
+  const typicalCardinality = {
+    cards: await page.locator('[data-testid^="job-link-"]').count(),
+    summary: await page.locator('[data-testid="route-jobs"] > header > p').textContent(),
+    next: await page.locator('[data-testid="pagination-next"]').count(),
+  };
+  contextualPhases.push((await observeNavigation(
+    page,
+    () => page.locator('[data-testid="density-compact"]').click(),
+    '[data-testid="route-jobs"]',
+  )).phase);
+  await page.locator('[data-testid="filters-query"]').fill("Task 04 bulk fixture");
+  contextualPhases.push((await observeNavigation(
+    page,
+    () => page.locator('[data-testid="filters-submit"]').click(),
+    '[data-testid="route-jobs"]',
+  )).phase);
+  contextualPhases.push((await observeNavigation(
+    page,
+    () => page.locator('[data-testid="page-size-200"]').click(),
+    '[data-testid="route-jobs"]',
+  )).phase);
+  const bulkCardinality = {
+    cards: await page.locator('[data-testid^="job-link-"]').count(),
+    summary: await page.locator('[data-testid="route-jobs"] > header > p').textContent(),
+    next: await page.locator('[data-testid="pagination-next"]').count(),
+  };
+  contextualPhases.push((await observeNavigation(
+    page,
+    () => page.locator('[data-testid="pagination-next"]').click(),
+    '[data-testid="route-jobs"]',
+  )).phase);
+  const paginationUrl = new URL(page.url());
+  contextualPhases.push((await observeNavigation(
+    page,
+    () => page.locator('[data-testid="preset-applicableToday"]').click(),
+    '[data-testid="route-jobs"]',
+  )).phase);
+  const presetUrl = new URL(page.url());
+  const contextualState = {
+    pagination: {
+      path: paginationUrl.pathname,
+      query: paginationUrl.searchParams.get("q"),
+      size: paginationUrl.searchParams.get("size"),
+      page: paginationUrl.searchParams.get("page"),
+    },
+    preset: {
+      path: presetUrl.pathname,
+      fit: presetUrl.searchParams.get("fit"),
+      unblocked: presetUrl.searchParams.get("unblocked"),
+      named: presetUrl.searchParams.get("named"),
+      stalePage: presetUrl.searchParams.get("page"),
+    },
+  };
+  await page.locator('[data-testid="filters-query"]').fill(`zero-${crypto.randomUUID()}`);
+  contextualPhases.push((await observeNavigation(
+    page,
+    () => page.locator('[data-testid="filters-submit"]').click(),
+    '[data-testid="route-jobs"]',
+  )).phase);
+  const zeroCardinality = {
+    cards: await page.locator('[data-testid^="job-link-"]').count(),
+    summary: await page.locator('[data-testid="route-jobs"] > header > p').textContent(),
+    next: await page.locator('[data-testid="pagination-next"]').count(),
+  };
+  check(
+    "task-04 E2E-003 card, densidade, paginação e GET cobrem zero, típico e milhares",
+    contextualPhases.length === 8
+      && contextualPhases.every((phase) => phase === "loading")
+      && typicalCardinality.cards === 7
+      && /^7\s/.test(typicalCardinality.summary ?? "")
+      && typicalCardinality.next === 0
+      && bulkCardinality.cards === 200
+      && /1[.,]001/.test(bulkCardinality.summary ?? "")
+      && bulkCardinality.next === 1
+      && contextualState.pagination.path === "/jobs"
+      && contextualState.pagination.query === "Task 04 bulk fixture"
+      && contextualState.pagination.size === null
+      && contextualState.pagination.page === "2"
+      && contextualState.preset.path === "/jobs"
+      && contextualState.preset.fit === "60"
+      && contextualState.preset.unblocked === "1"
+      && contextualState.preset.named === "1"
+      && contextualState.preset.stalePage === null
+      && zeroCardinality.cards === 0
+      && /^0\s/.test(zeroCardinality.summary ?? "")
+      && zeroCardinality.next === 0,
+    JSON.stringify({ contextualPhases, typicalCardinality, bulkCardinality, contextualState, zeroCardinality }),
+  );
+
+  const contextualFamilyFailures = [];
+  const verifyContextualDestination = async (source, control, destination, expectedPath) => {
+    await page.goto(`${BASE}${source}`, { waitUntil: "networkidle" });
+    const link = page.locator(control).first();
+    const targetPath = expectedPath ?? new URL(await link.getAttribute("href"), BASE).pathname;
+    const snapshot = await observeNavigation(
+      page,
+      () => link.click(),
+      destination,
+      `${source} via ${control}`,
+    );
+    const actualPath = new URL(page.url()).pathname;
+    if (snapshot.count !== 1 || actualPath !== targetPath) {
+      contextualFamilyFailures.push(`${control}:${JSON.stringify({ count: snapshot.count, actualPath })}`);
+    }
+  };
+
+  await verifyContextualDestination(
+    "/candidate",
+    '[data-testid="candidate-skills-link"]',
+    '[data-testid="route-candidate-skills"]',
+    "/candidate/skills",
+  );
+  await verifyContextualDestination(
+    "/candidate/skills",
+    '[data-testid="skills-vocabulary-link"]',
+    '[data-testid="route-candidate-vocabulary"]',
+    "/candidate/vocabulary",
+  );
+  await verifyContextualDestination(
+    "/candidate/vocabulary",
+    '[data-testid="vocabulary-candidate-link"]',
+    '[data-testid="route-candidate"]',
+    "/candidate",
+  );
+  await verifyContextualDestination(
+    "/compare",
+    '[data-testid="compare-candidate-link"]',
+    '[data-testid="route-candidate"]',
+    "/candidate",
+  );
+  await verifyContextualDestination(
+    `/compare?job=${comparisonJobId}#comparison-result`,
+    '[data-testid="compare-job-link"]',
+    '[data-testid="route-job-detail"]',
+    `/jobs/${comparisonJobId}`,
+  );
+  await verifyContextualDestination(
+    `/jobs/${TASK04_FIXTURES.closedJobId}`,
+    '[data-testid="job-detail-back"]',
+    '[data-testid="route-jobs"]',
+    "/jobs",
+  );
+
+  await page.goto(`${BASE}/pipeline`, { waitUntil: "networkidle" });
+  const pipelineRow = page.locator('[data-testid^="pipeline-job-"]').first();
+  const pipelineHasRow = await pipelineRow.count() > 0;
+  const pipelineControl = pipelineHasRow ? pipelineRow : page.locator('[data-testid="pipeline-empty-jobs"]');
+  const pipelineExpected = pipelineHasRow
+    ? new URL(await pipelineControl.getAttribute("href"), BASE).pathname
+    : "/jobs";
+  const pipelineSnapshot = await observeNavigation(
+    page,
+    () => pipelineControl.click(),
+    pipelineHasRow ? '[data-testid="route-job-detail"]' : '[data-testid="route-jobs"]',
+    "pipeline contextual destination",
+  );
+  if (pipelineSnapshot.count !== 1 || new URL(page.url()).pathname !== pipelineExpected) {
+    contextualFamilyFailures.push(`pipeline:${page.url()}`);
+  }
+
+  await verifyContextualDestination(
+    "/referrals",
+    '[data-testid^="referral-job-"]',
+    '[data-testid="route-job-detail"]',
+    null,
+  );
+  check(
+    "task-04 E2E-003 famílias contextuais chegam ao destino e preservam estado",
+    contextualFamilyFailures.length === 0,
+    contextualFamilyFailures.join(" | "),
+  );
+
+  const redirectEvidence = [];
+  const actionLoginCtx = await browser.newContext();
+  const actionLoginPage = await actionLoginCtx.newPage();
+  await actionLoginCtx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  await actionLoginPage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+  await actionLoginPage.fill('input[name="email"]', E2E_EMAIL);
+  await actionLoginPage.fill('input[name="password"]', E2E_PASSWORD);
+  redirectEvidence.push(await observeRedirectAction(
+    actionLoginPage,
+    () => actionLoginPage.locator('[data-testid="login-submit"]').click(),
+    '[data-testid="route-cockpit"]',
+  ));
+  await actionLoginCtx.close();
+
+  const actionRecoveryCtx = await browser.newContext();
+  const actionRecoveryPage = await actionRecoveryCtx.newPage();
+  await actionRecoveryCtx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  await actionRecoveryPage.goto(`${BASE}/login/forgot`, { waitUntil: "networkidle" });
+  await actionRecoveryPage.fill('input[name="email"]', "nao-existe-task04@local.test");
+  redirectEvidence.push(await observeRedirectAction(
+    actionRecoveryPage,
+    () => actionRecoveryPage.locator('[data-testid="request-reset"]').click(),
+    '[data-testid="route-login-forgot"]',
+  ));
+  await actionRecoveryCtx.close();
+
+  await page.goto(`${BASE}/compare`, { waitUntil: "networkidle" });
+  await page.fill('input[name="title"]', "Task 04 redirect fixture");
+  await page.fill('input[name="companyName"]', "E2E Comparison Lab");
+  await page.fill('textarea[name="description"]', comparisonText);
+  redirectEvidence.push(await observeRedirectAction(
+    page,
+    () => page.locator('[data-testid="compare-submit"]').click(),
+    '[data-testid="comparison-result"]',
+  ));
+  rememberCreatedJob(page.url(), "Task 04 redirect fixture", "E2E Comparison Lab");
+
+  await page.goto(`${BASE}/jobs/new`, { waitUntil: "networkidle" });
+  const task04RecruiterCompany = `Task 04 ${crypto.randomUUID()}`;
+  await page.fill('input[name="title"]', "Task 04 one-shot job");
+  await page.fill('input[name="companyName"]', task04RecruiterCompany);
+  await page.fill('textarea[name="description"]', comparisonText);
+  redirectEvidence.push(await observeRedirectAction(
+    page,
+    () => page.locator('[data-testid="post-job"]').click(),
+    '[data-testid="route-job-detail"]',
+  ));
+  rememberCreatedJob(page.url(), "Task 04 one-shot job", task04RecruiterCompany);
+
+  await page.goto(`${BASE}/admin/users`, { waitUntil: "networkidle" });
+  const task04Target = page.locator("li").filter({ hasText: "e2e-alvo@local.test" }).first();
+  redirectEvidence.push(await observeRedirectAction(
+    page,
+    () => task04Target.locator('[data-testid="impersonate-user"]').click(),
+    '[data-testid="stop-impersonating"]',
+  ));
+  await observeRedirectAction(
+    page,
+    () => page.locator('[data-testid="stop-impersonating"]').click(),
+    '[data-testid="route-admin-users"]',
+  );
+  check(
+    "task-04 E2E-004 redirects de login, recovery, compare, vaga e impersonação mutam uma vez",
+    redirectEvidence.length === 5 && redirectEvidence.every(({ count, actionRequests }) => count === 1 && actionRequests === 1),
+    JSON.stringify(redirectEvidence.map(({ count, actionRequests }) => ({ count, actionRequests }))),
+  );
+
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  await observeNavigation(page, () => page.locator('[data-testid="nav-compare"]:visible').click(), '[data-testid="route-compare"]');
+  await observeNavigation(page, () => page.locator('[data-testid="nav-pipeline"]:visible').click(), '[data-testid="route-pipeline"]');
+  const backToCompare = page.goBack({ waitUntil: "commit" });
+  await transitionOverlay.waitFor({ state: "attached" });
+  const firstHistoryGeneration = Number(await transitionOverlay.getAttribute("data-generation"));
+  await backToCompare;
+  await page.locator('[data-testid="route-compare"]').waitFor({ state: "visible" });
+  const backToJobs = page.goBack({ waitUntil: "commit" });
+  await page.waitForFunction(
+    (generation) => Number(document.querySelector('[data-testid="navigation-transition"]')?.getAttribute("data-generation")) > generation,
+    firstHistoryGeneration,
+  );
+  const secondHistoryGeneration = Number(await transitionOverlay.getAttribute("data-generation"));
+  await backToJobs;
+  await page.locator('[data-testid="route-jobs"]').waitFor({ state: "visible" });
+  const forwardToCompare = page.goForward({ waitUntil: "commit" });
+  await page.waitForFunction(
+    (generation) => Number(document.querySelector('[data-testid="navigation-transition"]')?.getAttribute("data-generation")) > generation,
+    secondHistoryGeneration,
+  );
+  const finalHistoryGeneration = Number(await transitionOverlay.getAttribute("data-generation"));
+  await forwardToCompare;
+  await page.locator('[data-testid="route-compare"]').waitFor({ state: "visible" });
+  await transitionOverlay.waitFor({ state: "detached" });
+  const historyFocus = await page.evaluate(() => ({
+    path: location.pathname,
+    overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+    focusedOverlay: Boolean(document.activeElement?.closest('[data-testid="navigation-transition"]')),
+  }));
+  check(
+    "task-04 E2E-005 histórico rápido multi-entry termina no dono final sem foco removido",
+    firstHistoryGeneration < secondHistoryGeneration
+      && secondHistoryGeneration < finalHistoryGeneration
+      && historyFocus.path === "/compare"
+      && historyFocus.overlays === 0
+      && !historyFocus.focusedOverlay,
+    JSON.stringify({ firstHistoryGeneration, secondHistoryGeneration, finalHistoryGeneration, historyFocus }),
+  );
+  await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  const visibilityBeforeTask04 = await page.locator('input[name="visibility"]:checked').getAttribute("value") ?? "private";
+  await page.check('input[name="visibility"][value="public"]');
+  await page.locator('[data-testid="save-visibility"]').click();
+  await page.waitForTimeout(800);
+  await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  const task04PublicHref = await page.locator('a[href^="/p/"]').first().getAttribute("href");
+
+  const publicCtx = await browser.newContext({ viewport: { width: 375, height: 812 } });
+  const publicPage = await publicCtx.newPage();
+  await publicCtx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  await publicPage.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
+  const directLayers = await publicPage.evaluate(() => ({
+    startup: document.querySelectorAll("#app-splash").length,
+    transition: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+  }));
+  await publicPage.locator("#app-splash").waitFor({ state: "detached" });
+  const publicPhases = [];
+  publicPhases.push(await observeNavigation(
+    publicPage,
+    () => publicPage.locator('[data-testid="forgot-password"]').click(),
+    '[data-testid="route-login-forgot"]',
+  ));
+  publicPhases.push(await observeNavigation(
+    publicPage,
+    () => publicPage.locator('[data-testid="login-back"]').click(),
+    '[data-testid="route-login"]',
+  ));
+  if (task04PublicHref) {
+    publicPhases.push(await observeNavigation(
+      publicPage,
+      () => publicPage.evaluate((href) => window.next?.router?.push?.(href), task04PublicHref),
+      '[data-testid="route-public-profile"]',
+    ));
+  }
+  const publicUserText = task04PublicHref
+    ? (await publicPage.locator('[data-testid="route-public-profile"] h1').textContent()) ?? ""
+    : "missing-public-profile";
+  const publicProfileMarkers = task04PublicHref
+    ? (await publicPage.locator('[data-testid="route-public-profile"] [data-user-content]').allTextContents())
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0 && value !== publicUserText)
+    : [];
+  check(
+    "task-04 E2E-013 startup direto e auth/public soft usam uma camada sem conteúdo do usuário",
+    directLayers.startup === 1
+      && directLayers.transition === 0
+      && publicPhases.length === 3
+      && publicProfileMarkers.length > 0
+      && publicPhases.every(({ count, text }) =>
+        count === 1 && privateMarkers.every((term) => !text.includes(term))
+      ),
+    JSON.stringify({ directLayers, phases: publicPhases.length, publicUserText, publicProfileMarkers }),
+  );
+  await publicPage.goto(`${BASE}/login/reset?token=nunca-existiu-task04`, { waitUntil: "networkidle" });
+  const invalidReset = await publicPage.locator('[data-testid="route-login-reset"]').textContent();
+  await publicPage.goto(`${BASE}/login/reset?token=${E2E_RESET_EXPIRED_TOKEN}`, { waitUntil: "networkidle" });
+  const expiredReset = await publicPage.locator('[data-testid="route-login-reset"]').textContent();
+  const expiredResetForms = await publicPage.locator('input[name="password"]').count();
+  await publicPage.goto(`${BASE}/login/reset?token=${E2E_RESET_CONSUMED_TOKEN}`, { waitUntil: "networkidle" });
+  const consumedReset = await publicPage.locator('[data-testid="route-login-reset"]').textContent();
+  const consumedResetForms = await publicPage.locator('input[name="password"]').count();
+
+  const resetRaceContexts = await Promise.all([browser.newContext(), browser.newContext()]);
+  const resetRacePages = await Promise.all(resetRaceContexts.map((context) => context.newPage()));
+  const resetRacePosts = [0, 0];
+  for (const [index, resetPage] of resetRacePages.entries()) {
+    resetPage.on("request", (request) => {
+      if (request.method() === "POST" && request.headers()["next-action"]) resetRacePosts[index] += 1;
+    });
+    await resetPage.goto(`${BASE}/login/reset?token=${E2E_RESET_RACE_TOKEN}`, { waitUntil: "networkidle" });
+    await resetPage.fill('input[name="password"]', `task04-race-password-${index + 1}!`);
+  }
+  await Promise.all(resetRacePages.map(async (resetPage) => {
+    await Promise.all([
+      resetPage.waitForURL((url) => url.pathname === "/login" || url.searchParams.get("error") === "invalid"),
+      resetPage.locator('[data-testid="submit-reset"]').click(),
+    ]);
+  }));
+  const resetRaceUrls = resetRacePages.map((resetPage) => resetPage.url().replace(BASE, ""));
+  await Promise.all(resetRaceContexts.map((context) => context.close()));
+  await publicPage.goto(`${BASE}/login/callback?token=${E2E_LOGIN_EXPIRED_TOKEN}`, { waitUntil: "networkidle" });
+  const expiredCallback = new URL(publicPage.url());
+  const expiredCallbackUrl = expiredCallback.pathname + expiredCallback.search;
+  const loginRaceContexts = await Promise.all([browser.newContext(), browser.newContext()]);
+  const loginRacePages = await Promise.all(loginRaceContexts.map((context) => context.newPage()));
+  await Promise.all(loginRacePages.map((loginPage) =>
+    loginPage.goto(`${BASE}/login/callback?token=${E2E_LOGIN_RACE_TOKEN}`, { waitUntil: "networkidle" })
+  ));
+  const loginRaceUrls = loginRacePages.map((loginPage) => {
+    const url = new URL(loginPage.url());
+    return url.pathname + url.search;
+  });
+  const loginRaceSessions = await Promise.all(loginRaceContexts.map(async (context) =>
+    (await context.cookies()).some((cookie) => cookie.name === "jho_session")
+  ));
+  await Promise.all(loginRaceContexts.map((context) => context.close()));
+  await publicPage.goto(`${BASE}/login/callback?token=${E2E_LOGIN_RACE_TOKEN}`, { waitUntil: "networkidle" });
+  const replayCallback = new URL(publicPage.url());
+  const replayCallbackUrl = replayCallback.pathname + replayCallback.search;
+  const emptyProfileResponse = await publicPage.goto(`${BASE}/p/e2e-e2e-alvo`, { waitUntil: "networkidle" });
+  const emptyProfile = await publicPage.evaluate(() => {
+    const main = document.querySelector('[data-testid="route-public-profile"]');
+    return {
+      statusSurface: Boolean(main),
+      heading: main?.querySelector("h1")?.textContent?.trim() ?? "",
+      optionalParagraphs: main?.querySelectorAll("p").length ?? -1,
+      optionalSections: main?.querySelectorAll("section").length ?? -1,
+      optionalLinks: main?.querySelectorAll("a").length ?? -1,
+      overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  });
+  check(
+    "task-04 E2E-018 tokens inválidos, expirados, consumidos e raceados preservam resultado canônico",
+    /não vale mais/i.test(invalidReset ?? "")
+      && expiredReset === consumedReset
+      && /não vale mais/i.test(expiredReset ?? "")
+      && expiredResetForms === 0
+      && consumedResetForms === 0
+      && resetRacePosts.every((count) => count === 1)
+      && resetRaceUrls.filter((url) => url === "/login?reset=1").length === 1
+      && resetRaceUrls.filter((url) => url.includes("error=invalid")).length === 1
+      && expiredCallbackUrl === "/login?error=invalid"
+      && loginRaceUrls.filter((url) => url === "/login").length === 1
+      && loginRaceUrls.filter((url) => url === "/login?error=invalid").length === 1
+      && loginRaceSessions.filter(Boolean).length === 1
+      && replayCallbackUrl === "/login?error=invalid"
+      && emptyProfileResponse?.status() === 200
+      && emptyProfile.statusSurface
+      && emptyProfile.heading === "e2e-alvo@local.test"
+      && emptyProfile.optionalParagraphs === 0
+      && emptyProfile.optionalSections === 0
+      && emptyProfile.optionalLinks === 0
+      && emptyProfile.overlays === 0
+      && emptyProfile.overflow <= 1,
+    JSON.stringify({
+      expiredResetForms,
+      consumedResetForms,
+      resetRacePosts,
+      resetRaceUrls,
+      expiredCallbackUrl,
+      loginRaceUrls,
+      loginRaceSessions,
+      replayCallbackUrl,
+      emptyProfile,
+    }),
+  );
+
+  const longPublicPath = `/p/${"a".repeat(16 * 1024)}`;
+  const longResponse = await publicPage.goto(`${BASE}${longPublicPath}`, { waitUntil: "domcontentloaded", timeout: 20_000 });
+  const longOutcome = await publicPage.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+    body: document.body.innerText,
+  }));
+  const malformedResponse = await publicPage.goto(`${BASE}/p/%`, { waitUntil: "domcontentloaded", timeout: 20_000 });
+  const malformedOutcome = await publicPage.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+    body: document.body.innerText,
+  }));
+  const [missingJobPage] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.evaluate((url) => window.open(url, "_blank"), `${BASE}/jobs/999999999`),
+  ]);
+  await missingJobPage.waitForLoadState("domcontentloaded");
+  const missingJobOutcome = await missingJobPage.evaluate(() => ({
+    path: location.pathname,
+    noIndex: document.querySelector('meta[name="robots"]')?.getAttribute("content")?.includes("noindex") ?? false,
+    overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+    jobDetail: document.querySelectorAll('[data-testid="route-job-detail"]').length,
+    body: document.body.innerText,
+  }));
+  await missingJobPage.close();
+
+  const [closedJobPage] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.evaluate((url) => window.open(url, "_blank"), `${BASE}/jobs/${E2E_CLOSED_JOB_ID}`),
+  ]);
+  await closedJobPage.waitForLoadState("domcontentloaded");
+  const closedJobOutcome = await closedJobPage.evaluate(() => ({
+    path: location.pathname,
+    jobDetail: document.querySelectorAll('[data-testid="route-job-detail"]').length,
+    body: document.querySelector('[data-testid="route-job-detail"]')?.textContent ?? "",
+    overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+  }));
+  await closedJobPage.close();
+
+  const [deletedJobPage] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.evaluate((url) => window.open(url, "_blank"), `${BASE}/jobs/${E2E_DELETED_JOB_ID}`),
+  ]);
+  await deletedJobPage.waitForLoadState("domcontentloaded");
+  const deletedJobOutcome = await deletedJobPage.evaluate(() => ({
+    path: location.pathname,
+    noIndex: document.querySelector('meta[name="robots"]')?.getAttribute("content")?.includes("noindex") ?? false,
+    overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+    jobDetail: document.querySelectorAll('[data-testid="route-job-detail"]').length,
+    body: document.body.innerText,
+  }));
+  await deletedJobPage.close();
+  if (!task04PublicHref) throw new Error("Task 04 public profile href unavailable for revocation race");
+  const revocationCtx = await browser.newContext({
+    viewport: { width: 375, height: 812 },
+    serviceWorkers: "block",
+  });
+  const revocationPage = await revocationCtx.newPage();
+  trackConsole(revocationPage);
+  await revocationCtx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  await revocationPage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+  await revocationPage.fill('input[name="email"]', E2E_EMAIL);
+  await revocationPage.fill('input[name="password"]', E2E_PASSWORD);
+  await observeRedirectAction(
+    revocationPage,
+    () => revocationPage.locator('[data-testid="login-submit"]').click(),
+    '[data-testid="route-cockpit"]',
+  );
+  await revocationPage.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  const revocationLink = revocationPage.locator(`a[href="${task04PublicHref}"]`).first();
+  if (await revocationLink.count() !== 1) throw new Error("Public profile TransitionLink unavailable for revocation race");
+  const revocationTarget = task04PublicHref;
+  const revocationPath = new URL(revocationTarget, BASE).pathname;
+  let releaseRevocationRequest = () => {};
+  let markRevocationPending = () => {};
+  const revocationPending = new Promise((resolve) => { markRevocationPending = resolve; });
+  let heldRevocationRequest = false;
+  const holdRevocation = async (route) => {
+    const request = route.request();
+    const requestUrl = new URL(request.url());
+    const isNavigationTransport = request.method() === "GET";
+    if (!heldRevocationRequest && isNavigationTransport && requestUrl.pathname === revocationPath) {
+      heldRevocationRequest = true;
+      markRevocationPending();
+      await new Promise((resolve) => { releaseRevocationRequest = resolve; });
+    }
+    await route.continue();
+  };
+  await revocationPage.route("**/*", holdRevocation);
+  await revocationLink.click({ noWaitAfter: true });
+  let revocationTimeoutId;
+  const revocationTimeout = new Promise((_, reject) => {
+    revocationTimeoutId = setTimeout(() => reject(new Error("revocation request was not intercepted")), 20_000);
+  });
+  try {
+    await Promise.all([
+      Promise.race([revocationPending, revocationTimeout]),
+      revocationPage.locator('[data-testid="navigation-transition"]').waitFor({ state: "attached", timeout: 20_000 }),
+    ]);
+  } catch (error) {
+    releaseRevocationRequest();
+    throw error;
+  } finally {
+    clearTimeout(revocationTimeoutId);
+  }
+  await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  await page.check('input[name="visibility"][value="private"]');
+  await Promise.all([
+    page.waitForResponse((response) => response.request().method() === "POST" && Boolean(response.request().headers()["next-action"])),
+    page.locator('[data-testid="save-visibility"]').click(),
+  ]);
+  releaseRevocationRequest();
+  await revocationPage.waitForURL((url) => url.pathname === revocationPath, { timeout: 20_000 });
+  await revocationPage.locator('[data-testid="navigation-transition"]').waitFor({ state: "detached", timeout: 20_000 });
+  const revokedProfileOutcome = await revocationPage.evaluate(() => ({
+    path: location.pathname,
+    noIndex: document.querySelector('meta[name="robots"]')?.getAttribute("content")?.includes("noindex") ?? false,
+    overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+    publicProfile: document.querySelectorAll('[data-testid="route-public-profile"]').length,
+    body: document.body.innerText,
+  }));
+  await revocationPage.unroute("**/*", holdRevocation);
+  await revocationCtx.close();
+  const staleEntityMarkers = [
+    ...publicProfileMarkers,
+    "Task 04 deleted fixture",
+    "Task 04 Deleted Lab",
+  ];
+  check(
+    "task-04 E2E-019 URL hostil, vagas ausente/deletada/fechada e revogação pending ficam canônicas",
+    (longResponse?.status() ?? 0) >= 400
+      && longOutcome.overflow <= 1
+      && longOutcome.overlays === 0
+      && malformedOutcome.overflow <= 1
+      && malformedOutcome.overlays === 0
+      && (malformedResponse?.status() ?? 0) >= 400
+      && missingJobOutcome.path === "/jobs/999999999"
+      && missingJobOutcome.noIndex
+      && missingJobOutcome.overlays === 0
+      && missingJobOutcome.jobDetail === 0
+      && staleEntityMarkers.every((term) => !missingJobOutcome.body.includes(term))
+      && closedJobOutcome.path === `/jobs/${E2E_CLOSED_JOB_ID}`
+      && closedJobOutcome.jobDetail === 1
+      && /Task 04 closed fixture/.test(closedJobOutcome.body)
+      && /fechada/i.test(closedJobOutcome.body)
+      && closedJobOutcome.overlays === 0
+      && deletedJobOutcome.path === `/jobs/${E2E_DELETED_JOB_ID}`
+      && deletedJobOutcome.noIndex
+      && deletedJobOutcome.overlays === 0
+      && deletedJobOutcome.jobDetail === 0
+      && staleEntityMarkers.every((term) => !deletedJobOutcome.body.includes(term))
+      && heldRevocationRequest
+      && revokedProfileOutcome.path === task04PublicHref
+      && revokedProfileOutcome.noIndex
+      && revokedProfileOutcome.overlays === 0
+      && revokedProfileOutcome.publicProfile === 0
+      && publicProfileMarkers.every((term) => !revokedProfileOutcome.body.includes(term))
+      && privateMarkers.every((term) => !longOutcome.body.includes(term))
+      && privateMarkers.every((term) => !malformedOutcome.body.includes(term)),
+    JSON.stringify({
+      longStatus: longResponse?.status(),
+      longOutcome,
+      malformedStatus: malformedResponse?.status(),
+      malformedOutcome,
+      missingJobOutcome,
+      closedJobOutcome,
+      deletedJobOutcome,
+      heldRevocationRequest,
+      revokedProfileOutcome,
+    }),
+  );
+  await publicCtx.close();
+
+  await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  await page.check(`input[name="visibility"][value="${visibilityBeforeTask04}"]`);
+  await page.locator('[data-testid="save-visibility"]').click();
+  await page.waitForTimeout(700);
+
+  const roleTransitionResults = [];
+  for (const scenario of [
+    { email: "e2e-candidato@local.test", prepare: null, destination: "nav-compare", landmark: "route-compare" },
+    { email: "e2e-recrutador@local.test", prepare: "/login/forgot", destination: "login-back", landmark: "route-login" },
+  ]) {
+    const roleCtx = await browser.newContext();
+    const rolePage = await roleCtx.newPage();
+    await rolePage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+    await rolePage.fill('input[name="email"]', scenario.email);
+    await rolePage.fill('input[name="password"]', E2E_PASSWORD);
+    await rolePage.locator('[data-testid="login-submit"]').click();
+    await rolePage.waitForURL((url) => !url.pathname.startsWith("/login"));
+    if (scenario.prepare) await rolePage.goto(`${BASE}${scenario.prepare}`, { waitUntil: "networkidle" });
+    const snapshot = await observeNavigation(
+      rolePage,
+      () => rolePage.locator(`[data-testid="${scenario.destination}"]:visible`).click(),
+      `[data-testid="${scenario.landmark}"]`,
+      `task-04 E2E-020 ${scenario.email}`,
+    );
+    const missingRoleStatus = scenario.email === "e2e-recrutador@local.test"
+      ? (await rolePage.goto(`${BASE}/candidate`, { waitUntil: "domcontentloaded" }))?.status() ?? null
+      : null;
+    roleTransitionResults.push({ email: scenario.email, snapshot, missingRoleStatus });
+    await roleCtx.close();
+  }
+
+  const expiredCtx = await browser.newContext();
+  const expiredPage = await expiredCtx.newPage();
+  await expiredPage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+  await expiredPage.fill('input[name="email"]', "e2e-candidato@local.test");
+  await expiredPage.fill('input[name="password"]', E2E_PASSWORD);
+  await expiredPage.locator('[data-testid="login-submit"]').click();
+  await expiredPage.waitForURL((url) => !url.pathname.startsWith("/login"));
+  await expiredCtx.clearCookies();
+  await expiredCtx.addCookies([{ name: "jho_session", value: "expired-task04", url: BASE }]);
+  const expiredSnapshot = await observeNavigation(
+    expiredPage,
+    () => expiredPage.locator('[data-testid="nav-compare"]:visible').click(),
+    '[data-testid="route-login"]',
+    "task-04 E2E-020 expired session",
+  );
+  await expiredCtx.close();
+
+  const roleNeutral = [...roleTransitionResults.map(({ snapshot }) => snapshot.text), expiredSnapshot.text]
+    .every((text) => privateMarkers.every((term) => !text.includes(term)));
+  check(
+    "task-04 E2E-020 papéis e sessão expirada chegam ao destino canônico com copy neutra",
+    roleTransitionResults.length === 2
+      && roleTransitionResults.every(({ snapshot }) => snapshot.count === 1)
+      && roleTransitionResults.find(({ email }) => email === "e2e-recrutador@local.test")?.missingRoleStatus === 403
+      && expiredSnapshot.count === 1
+      && roleNeutral,
+    JSON.stringify({
+      roles: roleTransitionResults.map(({ email, snapshot, missingRoleStatus }) => [email, snapshot.count, missingRoleStatus]),
+      roleNeutral,
+    }),
+  );
+
   await page.setViewportSize({ width: 1280, height: 900 });
   await resetTransitionDocument();
   await page.evaluate(() => window.next?.router?.prefetch?.("/transition-test"));
@@ -2344,7 +3160,6 @@ try {
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
 
   /* --------------------------------- Logout -------------------------------- */
-
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   await page.locator('[data-testid="sign-out"]').click();
   await page.waitForTimeout(1000);
@@ -2353,7 +3168,6 @@ try {
   check("logout encerra a sessão de verdade", page.url().includes("/login"), page.url());
 
   /* ------------------------------ PWA (UI-05) ------------------------------ */
-
   // O que a instalação exige precisa responder SEM sessão: um manifest atrás de
   // login não é lido por navegador nenhum, e o app simplesmente não oferece
   // instalar — sem erro, sem aviso.
@@ -2470,13 +3284,6 @@ try {
     return entries;
   });
   await pwaCtx.setOffline(false);
-  const privateCacheMarkers = [
-    E2E_EMAIL,
-    "E2E Candidate",
-    "conta-de-teste-e2e-42",
-    "e2e-candidato@local.test",
-    "e2e-recrutador@local.test",
-  ];
   const persistedCache = JSON.stringify(realCacheAudit);
   const cachedPaths = realCacheAudit.map(({ url }) => new URL(url).pathname);
   check(
@@ -2488,7 +3295,7 @@ try {
         && first?.includes(ptBR.transition.retry)
         && repeated?.includes(ptBR.transition.offlineTitle)
     )
-      && privateCacheMarkers.every((marker) => !persistedCache.includes(marker))
+      && privateMarkers.every((marker) => !persistedCache.includes(marker))
       && realCacheAudit.every(({ cacheName }) => /^(?:static|shell)-/.test(cacheName))
       && !cachedPaths.some((path) => path === "/login" || path.startsWith("/p/") || path.startsWith("/jobs")),
     JSON.stringify({ offlineDocuments, cachedPaths }),
@@ -2525,7 +3332,7 @@ try {
   check(
     "offline E2E-012 sem cache e storage recusado degradam honestamente e recuperam online",
     freshOfflineFailed
-      && !privateCacheMarkers.some((marker) => freshOfflineBody?.includes(marker))
+      && !privateMarkers.some((marker) => freshOfflineBody?.includes(marker))
       && recovered?.status() === 200
       && refusedFallback?.status() === 503
       && refusedBody === "Offline."
@@ -2546,31 +3353,43 @@ try {
   // Um passo que estoura não pode apagar o relatório do que já passou: sem
   // isto, a suíte inteira vira um stack trace e some a informação de onde
   // exatamente parou.
-  check("suíte concluiu sem exceção", false, String(error).split("\n")[0].slice(0, 120));
+  const diagnostic = error instanceof Error ? error.stack ?? error.message : String(error);
+  check("suíte concluiu sem exceção", false, diagnostic.replace(/\s+/g, " ").slice(0, 600));
 } finally {
   await browser.close();
 
-  // The browser flow intentionally creates a real first-class job. Remove only
-  // that exact fixture so running the E2E against the local database does not
-  // pollute the user's board. Production ingestion never uses this deletion.
-  if (Number.isInteger(comparisonJobId) && comparisonJobId > 0) {
-    const [{ and, eq }, { closeDb, getDb }, { job }] = await Promise.all([
+  // Remove every job this browser flow created, but only when both identity
+  // fields still match the exact fixture recorded at creation time. This also
+  // keeps deliberate external runs from accumulating test data.
+  if (createdJobFixtures.size > 0) {
+    const [{ eq, inArray }, { closeDb, getDb }, { job }] = await Promise.all([
       import("drizzle-orm"),
       import("../../src/core/db/client.ts"),
       import("../../src/core/db/schema.ts"),
     ]);
-    const [fixture] = await getDb()
-      .select({ id: job.id })
+    const fixtures = await getDb()
+      .select({ id: job.id, title: job.title, companyName: job.companyName })
       .from(job)
-      .where(
-        and(
-          eq(job.id, comparisonJobId),
-          eq(job.companyName, "E2E Comparison Lab"),
-          eq(job.sourceId, "manual:e2e.invalid"),
-        ),
-      )
-      .limit(1);
-    if (fixture) await getDb().delete(job).where(eq(job.id, fixture.id));
+      .where(inArray(job.id, [...createdJobFixtures.keys()]));
+    for (const fixture of fixtures) {
+      const expected = createdJobFixtures.get(fixture.id);
+      if (expected?.title === fixture.title && expected.companyName === fixture.companyName) {
+        await getDb().delete(job).where(eq(job.id, fixture.id));
+      }
+    }
+    const remaining = await getDb()
+      .select({ id: job.id, title: job.title, companyName: job.companyName })
+      .from(job)
+      .where(inArray(job.id, [...createdJobFixtures.keys()]));
+    const leaked = remaining.filter((fixture) => {
+      const expected = createdJobFixtures.get(fixture.id);
+      return expected?.title === fixture.title && expected.companyName === fixture.companyName;
+    });
+    check(
+      "task-04 E2E-004 cleanup remove todos os jobs criados pela suíte",
+      leaked.length === 0,
+      JSON.stringify(leaked),
+    );
     closeDb();
   }
 }

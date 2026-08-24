@@ -52,7 +52,7 @@ export default async function AdminUsersPage() {
   }
 
   return (
-    <main className="pt-10 pb-16">
+    <main className="pt-10 pb-16" data-testid="route-admin-users">
       <h1 className="type-display-md chevron mb-2">{t("admin.title")}</h1>
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">{t("admin.lead")}</p>
 

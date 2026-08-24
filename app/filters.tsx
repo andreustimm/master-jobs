@@ -8,6 +8,9 @@ import { cn } from "@/lib/utils";
 import type { Translator } from "../src/core/i18n/index.ts";
 import { APPLICATION_STATUSES } from "../src/contexts/pursuit/domain/application.ts";
 import type { BoardFilters } from "../src/contexts/matching/index.ts";
+import type { Route } from "next";
+import { TransitionGetForm } from "./transition-get-form";
+import { TransitionLink } from "./transition-link";
 
 /**
  * Filter bar, shared by the cockpit and the job list.
@@ -45,7 +48,9 @@ export type Facets = {
   sources: string[];
 };
 
-export function href(base: string, state: FilterState, patch: Record<string, string | undefined>) {
+export type BoardRoute = "/" | "/jobs";
+
+export function href(base: BoardRoute, state: FilterState, patch: Record<string, string | undefined>): Route {
   const params = new URLSearchParams();
   const merged: Record<string, unknown> = { ...state, ...patch };
   for (const [k, v] of Object.entries(merged)) {
@@ -54,7 +59,7 @@ export function href(base: string, state: FilterState, patch: Record<string, str
     params.set(k, v === true ? "1" : String(v));
   }
   const qs = params.toString();
-  return qs ? `${base}?${qs}` : base;
+  return (qs ? `${base}?${qs}` : base) as Route;
 }
 
 const chipClass = (active: boolean) =>
@@ -81,7 +86,7 @@ export function FilterBar({
   facets,
   t,
 }: {
-  base: string;
+  base: BoardRoute;
   state: FilterState;
   facets: Facets;
   /** Tradutor da requisição. Recebido por prop porque este é Server Component
@@ -92,32 +97,32 @@ export function FilterBar({
 
   return (
     <Card className="mb-5 gap-3 p-4">
-      <form method="get" action={base} className="flex gap-2">
+      <TransitionGetForm action={base} className="flex gap-2" data-testid="filters-get-form">
         {Object.entries(state).map(([k, v]) =>
           k === "q" || v === undefined || v === false ? null : (
             <input key={k} type="hidden" name={k} value={v === true ? "1" : String(v)} />
           ),
         )}
-        <Input name="q" defaultValue={state.q ?? ""} placeholder={t("filters.search")} />
-        <Button type="submit">{t("filters.submit")}</Button>
+        <Input name="q" defaultValue={state.q ?? ""} placeholder={t("filters.search")} data-testid="filters-query" />
+        <Button type="submit" data-testid="filters-submit">{t("filters.submit")}</Button>
         {state.q && (
-          <a href={href(base, state, { q: undefined })} className={chipClass(false)}>
+          <TransitionLink href={href(base, state, { q: undefined })} className={chipClass(false)}>
             {t("filters.clear")}
-          </a>
+          </TransitionLink>
         )}
-      </form>
+      </TransitionGetForm>
 
       <Separator />
 
       <Group label={t("filters.cut")}>
         {CUTS.map((c) => (
-          <a
+          <TransitionLink
             key={c}
             href={href(base, state, { fit: String(c) })}
             className={cn(chipClass(state.fit === c), "font-mono")}
           >
             {c === 0 ? t("filters.all") : `${c}+`}
-          </a>
+          </TransitionLink>
         ))}
       </Group>
 
@@ -161,48 +166,48 @@ export function FilterBar({
 
       {facets.clusters.length > 0 && (
         <Group label={t("filters.cluster")}>
-          <a href={href(base, state, { cluster: undefined })} className={cn(chipClass(!state.cluster), "font-mono")}>
+          <TransitionLink href={href(base, state, { cluster: undefined })} className={cn(chipClass(!state.cluster), "font-mono")}>
             {t("filters.all")}
-          </a>
+          </TransitionLink>
           {facets.clusters.map((c) => (
-            <a
+            <TransitionLink
               key={c}
               href={href(base, state, { cluster: c })}
               className={cn(chipClass(state.cluster === c), "font-mono")}
             >
               {c}
-            </a>
+            </TransitionLink>
           ))}
         </Group>
       )}
 
       {facets.sources.length > 1 && (
         <Group label={t("filters.source")}>
-          <a href={href(base, state, { source: undefined })} className={cn(chipClass(!state.source), "font-mono")}>
+          <TransitionLink href={href(base, state, { source: undefined })} className={cn(chipClass(!state.source), "font-mono")}>
             {t("filters.all")}
-          </a>
+          </TransitionLink>
           {facets.sources.map((s) => (
-            <a
+            <TransitionLink
               key={s}
               href={href(base, state, { source: s })}
               className={cn(chipClass(state.source === s), "font-mono")}
             >
               {s}
-            </a>
+            </TransitionLink>
           ))}
         </Group>
       )}
 
       <Group label={t("filters.sort")}>
-        <a href={href(base, state, { sort: undefined })} className={chipClass(!state.sort || state.sort === "fit")}>
+        <TransitionLink href={href(base, state, { sort: undefined })} className={chipClass(!state.sort || state.sort === "fit")}>
           {t("filters.byFit")}
-        </a>
-        <a href={href(base, state, { sort: "recent" })} className={chipClass(state.sort === "recent")}>
+        </TransitionLink>
+        <TransitionLink href={href(base, state, { sort: "recent" })} className={chipClass(state.sort === "recent")}>
           {t("filters.byRecent")}
-        </a>
-        <a href={href(base, state, { sort: "comp" })} className={chipClass(state.sort === "comp")}>
+        </TransitionLink>
+        <TransitionLink href={href(base, state, { sort: "comp" })} className={chipClass(state.sort === "comp")}>
           {t("filters.byComp")}
-        </a>
+        </TransitionLink>
       </Group>
     </Card>
   );

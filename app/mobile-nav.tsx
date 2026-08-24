@@ -61,6 +61,7 @@ export function MobileNav({
         type="button"
         popoverTarget={id}
         popoverTargetAction="show"
+        data-testid="mobile-nav-trigger"
         aria-label={rotulo}
         // `py-2.5` pelo alvo de toque, igual aos links da barra larga: o ícone
         // sozinho daria uma área menor que o mínimo confortável no celular.
@@ -78,6 +79,7 @@ export function MobileNav({
       <div
         id={id}
         popover="auto"
+        data-testid="mobile-nav-popover"
         // Ancorado no topo e ocupando a largura: um menu estreito no canto
         // obrigaria a mirar, e mirar num celular é o que produz toque errado.
         className="m-0 mt-14 w-full max-w-none rounded-none border-b border-[var(--color-hairline)] bg-card p-0 text-card-foreground backdrop:bg-black/40 sm:hidden"

@@ -26,7 +26,7 @@ export default async function NewJobPage() {
   await requirePage("job:write");
 
   return (
-    <main className="mx-auto w-full max-w-[62ch] pt-10 pb-16">
+    <main className="mx-auto w-full max-w-[62ch] pt-10 pb-16" data-testid="route-jobs-new">
       <h1 className="type-display-md chevron mb-2">{t("jobs.newJob")}</h1>
       <p className="type-body-md mb-xxl text-muted-foreground">{t("jobs.newJobLead")}</p>
 

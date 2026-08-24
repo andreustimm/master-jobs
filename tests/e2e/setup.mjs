@@ -12,8 +12,9 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { authEvent, authUser, job } from "../../src/core/db/schema.ts";
+import { authEvent, authLoginToken, authUser, candidate, job, jobScore, targetAccount } from "../../src/core/db/schema.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
+import { hashToken } from "../../src/contexts/auth/infra/drizzle-store.ts";
 import { setPassword } from "../../src/contexts/auth/infra/password-login.ts";
 import {
   currentDocument,
@@ -27,9 +28,12 @@ import {
 } from "../../src/core/ingest/manual.ts";
 import { runMigrations } from "../../src/core/db/migrate.ts";
 import { scoreOne } from "../../src/core/scoring/apply.ts";
+import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 
 const EMAIL = process.env.E2E_EMAIL ?? "e2e@local.test";
 const PASSWORD = process.env.E2E_PASSWORD ?? "conta-de-teste-e2e-42";
+const CLOSED_JOB_ID = Number(process.env.E2E_CLOSED_JOB_ID ?? TASK04_FIXTURES.closedJobId);
+const DELETED_JOB_ID = Number(process.env.E2E_DELETED_JOB_ID ?? TASK04_FIXTURES.deletedJobId);
 
 /**
  * Contas por papel.
@@ -77,11 +81,11 @@ try {
     });
   }
 
+  await ensureImportSource("ashby:e2e", "ashby", "e2e", "E2E Public Jobs");
   const [{ count }] = await getDb()
     .select({ count: sql`count(*)` })
     .from(job);
   if (Number(count) === 0) {
-    await ensureImportSource("ashby:e2e", "ashby", "e2e", "E2E Public Jobs");
     const seeded = await upsertRawJob(
       {
         externalId: "public-role",
@@ -98,6 +102,98 @@ try {
     );
     await scoreOne(candidateId, seeded.jobId);
   }
+
+  const resultFixtures = [
+    ...Array.from({ length: 7 }, (_, index) => ({
+      id: 901000000 + index,
+      title: `Task 04 typical fixture ${index + 1}`,
+      companyName: "Task 04 Typical Lab",
+    })),
+    ...Array.from({ length: 1001 }, (_, index) => ({
+      id: 902000000 + index,
+      title: `Task 04 bulk fixture ${index + 1}`,
+      companyName: "Task 04 Bulk Lab",
+    })),
+  ];
+  for (let offset = 0; offset < resultFixtures.length; offset += 100) {
+    const batch = resultFixtures.slice(offset, offset + 100);
+    await getDb().insert(job).values(batch.map((fixture) => ({
+      id: fixture.id,
+      fingerprint: `e2e:${fixture.id}`,
+      contentHash: `e2e:${fixture.id}`,
+      sourceId: "ashby:e2e",
+      externalId: String(fixture.id),
+      companyName: fixture.companyName,
+      title: fixture.title,
+      descriptionText: "Task 04 deterministic result-cardinality fixture.",
+      url: `https://jobs.example.com/${fixture.id}`,
+      raw: { e2e: true },
+    }))).onConflictDoNothing({ target: job.id });
+    await getDb().insert(jobScore).values(batch.map((fixture) => ({
+      candidateId,
+      jobId: fixture.id,
+      fit: 60,
+      titleScore: 10,
+      keywordScore: 10,
+      seniorityScore: 10,
+      geoScore: 10,
+      compScore: 10,
+      freshnessScore: 5,
+      benefitScore: 5,
+      penalty: 0,
+      cluster: "other",
+      matchedKeywords: [],
+      missingKeywords: [],
+      reasons: [],
+      blockers: [],
+      scorerVersion: "e2e",
+      profileHash: "e2e",
+    }))).onConflictDoNothing({ target: [jobScore.candidateId, jobScore.jobId] });
+  }
+
+  await getDb().insert(targetAccount).values({
+    id: TASK04_FIXTURES.referralContactId,
+    name: "Task 04 referral contact",
+    company: TASK04_FIXTURES.referralCompany,
+    category: "former",
+    notes: "Deterministic E2E fixture for contextual referral navigation.",
+  }).onConflictDoUpdate({
+    target: targetAccount.id,
+    set: {
+      name: "Task 04 referral contact",
+      company: TASK04_FIXTURES.referralCompany,
+      category: "former",
+      notes: "Deterministic E2E fixture for contextual referral navigation.",
+    },
+  });
+
+  await getDb().insert(job).values([
+    {
+      id: CLOSED_JOB_ID,
+      fingerprint: "e2e:task04-closed",
+      contentHash: "e2e:task04-closed",
+      sourceId: "ashby:e2e",
+      externalId: "task04-closed",
+      companyName: "Task 04 Closed Lab",
+      title: "Task 04 closed fixture",
+      descriptionText: "Closed fixture remains readable as historical context.",
+      url: "https://jobs.example.com/task04-closed",
+      closedAt: "2026-08-24T00:00:00.000Z",
+      raw: { e2e: true },
+    },
+    {
+      id: DELETED_JOB_ID,
+      fingerprint: "e2e:task04-deleted",
+      contentHash: "e2e:task04-deleted",
+      sourceId: "ashby:e2e",
+      externalId: "task04-deleted",
+      companyName: "Task 04 Deleted Lab",
+      title: "Task 04 deleted fixture",
+      url: "https://jobs.example.com/task04-deleted",
+      raw: { e2e: true },
+    },
+  ]).onConflictDoNothing({ target: job.id });
+  await getDb().delete(job).where(eq(job.id, DELETED_JOB_ID));
 
   // Contas por papel, cada uma com o próprio candidato quando o papel pede um.
   // O slug deriva do e-mail: apontar duas contas para o mesmo candidato seria
@@ -123,6 +219,59 @@ try {
         .set({ disabledAt: new Date().toISOString() })
         .where(eq(authUser.email, email));
     }
+    if (email === E2E_ROLES.target.email && scoped !== null) {
+      await getDb()
+        .update(candidate)
+        .set({ visibility: "public", publicCv: false })
+        .where(eq(candidate.id, scoped));
+    }
+  }
+
+  const tokenFixtures = [
+    {
+      raw: process.env.E2E_RESET_EXPIRED_TOKEN ?? TASK04_FIXTURES.resetExpiredToken,
+      email: E2E_ROLES.target.email,
+      purpose: "reset",
+      expiresAt: "2000-01-01T00:00:00.000Z",
+      usedAt: null,
+    },
+    {
+      raw: process.env.E2E_RESET_CONSUMED_TOKEN ?? TASK04_FIXTURES.resetConsumedToken,
+      email: E2E_ROLES.target.email,
+      purpose: "reset",
+      expiresAt: "2100-01-01T00:00:00.000Z",
+      usedAt: "2026-08-24T00:00:00.000Z",
+    },
+    {
+      raw: process.env.E2E_RESET_RACE_TOKEN ?? TASK04_FIXTURES.resetRaceToken,
+      email: E2E_ROLES.target.email,
+      purpose: "reset",
+      expiresAt: "2100-01-01T00:00:00.000Z",
+      usedAt: null,
+    },
+    {
+      raw: process.env.E2E_LOGIN_EXPIRED_TOKEN ?? TASK04_FIXTURES.loginExpiredToken,
+      email: E2E_ROLES.candidate.email,
+      purpose: "login",
+      expiresAt: "2000-01-01T00:00:00.000Z",
+      usedAt: null,
+    },
+    {
+      raw: process.env.E2E_LOGIN_RACE_TOKEN ?? TASK04_FIXTURES.loginRaceToken,
+      email: E2E_ROLES.candidate.email,
+      purpose: "login",
+      expiresAt: "2100-01-01T00:00:00.000Z",
+      usedAt: null,
+    },
+  ];
+  for (const { raw, ...fixture } of tokenFixtures) {
+    await getDb().insert(authLoginToken).values({
+      ...fixture,
+      tokenHash: hashToken(raw),
+    }).onConflictDoUpdate({
+      target: authLoginToken.tokenHash,
+      set: fixture,
+    });
   }
 
   const cleared = await getDb()

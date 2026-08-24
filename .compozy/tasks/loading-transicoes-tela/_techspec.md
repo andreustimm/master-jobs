@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Master Jobs will add one generation-based navigation transition coordinator that starts before an App Router transition, waits for the destination URL and root loading boundary to settle, and presents the existing branded splash through a small client island. The root layout and route pages remain Server Components. A documented Next.js 16.3 `onRouterTransitionStart` bridge supplies exhaustive coverage for App Router links, programmatic redirects, and browser traversal; project-owned `TransitionLink` and `TransitionGetForm` components provide a stable, searchable integration surface and idempotent fallback for ordinary first-party navigation.
+Master Jobs will add one generation-based navigation transition coordinator that starts at accepted App Router intent—or reconciles before committed paint when the installed runtime omits that signal—waits for the destination URL and root loading boundary to settle, and presents the existing branded splash through a small client island. The root layout and route pages remain Server Components. A documented Next.js 16.3 `onRouterTransitionStart` bridge covers App Router push/replace/traverse starts; project-owned `TransitionLink` and `TransitionGetForm` components provide a stable, searchable integration surface and idempotent fallback for ordinary first-party navigation. Because the installed Server Action reducer bypasses that public hook, the committed-route observer performs the narrow compatibility reconciliation accepted in ADR-005.
 
 The existing service-worker privacy policy remains network-only for application content. Offline support is hardened around a generated, credentialless `/offline.html` document and an explicit same-origin router-payload failure message. Neither authenticated HTML nor RSC payloads, APIs, exports, public profiles, or user data enter Cache Storage. Normal transitions have a 180 ms perceptual minimum, change to prolonged copy at 3,000 ms, and never auto-dismiss while work remains.
 
@@ -21,7 +21,7 @@ The existing service-worker privacy policy remains network-only for application 
 
 - Owns one browser-local store shared by `instrumentation-client.ts` and the React presenter.
 - Wraps the pure reducer, `performance.now()`, short/prolonged timers, subscribers, online/offline listeners, and service-worker messages.
-- Exposes idempotent `begin`, `urlCommitted`, `loadingMounted`, `loadingUnmounted`, `routeError`, `offline`, and `reset` functions.
+- Exposes idempotent `begin`, `urlCommitted`, `loadingMounted`, `loadingUnmounted`, `routeError`, `offline`, and `reset` functions. The coordinator may supply the previous committed URL to `begin` only when reconciling a hook-less accepted redirect.
 - Records the normalized active target and monotonically increasing generation. Every asynchronous callback carries the generation it was created for.
 - Performs no fetch, mutation, authorization decision, or cache write.
 
@@ -38,7 +38,7 @@ The existing service-worker privacy policy remains network-only for application 
 - `TransitionGetForm` wraps `next/form` for URL-backed GET navigation and sends the same idempotent signal.
 - Internal raw anchors used by filters, pagination, density controls, cards, detail links, and public-profile links migrate to these adapters.
 - External links and downloads remain ordinary anchors.
-- POST Server Action forms remain ordinary `<form action={serverAction}>` elements. Their redirect is observed by the router hook only after Next accepts it, so the feature does not portray a background mutation as screen navigation or replay it.
+- POST Server Action forms remain ordinary `<form action={serverAction}>` elements. Their redirect is reconciled only after Next accepts and commits it when the installed runtime bypasses the hook, so the feature does not portray a background mutation as screen navigation or replay it.
 
 #### Root readiness signals — `app/loading.tsx` and `app/navigation-transition-loading-signal.tsx`
 
@@ -50,7 +50,7 @@ The existing service-worker privacy policy remains network-only for application 
 #### Transition presenter and observer — `app/navigation-transition.tsx`
 
 - A single client island subscribes through `useSyncExternalStore` and renders the transition overlay as a sibling of the server-rendered application shell.
-- A nested observer uses `usePathname()` and `useSearchParams()` inside `Suspense`, constructs the committed route key, and reports it with a normal effect. The loading signal's layout effect therefore runs first when both mount in one commit.
+- A nested observer uses `usePathname()` and `useSearchParams()` inside `Suspense` and constructs the committed route key. Its layout effect reconciles a missing accepted redirect/history generation without superseding an uncommitted target; its normal effect reports commit. The loading signal's layout effect therefore still runs before readiness is reported when both mount in one commit.
 - The presenter receives only serializable localized labels from `RootLayout`: normal loading, prolonged loading, offline title/body/retry, and generic failure/retry.
 - While active, it sets `inert` and `aria-busy="true"` on `#application-shell`; the overlay itself accepts pointer input only in retry/error phases.
 - It never moves focus into the overlay. One `role="status"`, `aria-live="polite"`, `aria-atomic="true"` node announces normal and prolonged phases. Offline/error content uses a heading and actionable button without raw error text.
@@ -89,7 +89,7 @@ The existing service-worker privacy policy remains network-only for application 
 ### Transition Data Flow
 
 1. A user activates `TransitionLink`, `TransitionGetForm`, browser history, or a redirect accepted by the App Router.
-2. The stable adapter and/or `onRouterTransitionStart` calls `begin()`. Same-target duplicate signals coalesce; a new target increments the generation.
+2. The stable adapter and/or `onRouterTransitionStart` calls `begin()`. When the installed Server Action reducer bypasses the hook, the route observer reconciles the accepted committed destination using the previous route as classification base. Same-target duplicate signals coalesce; a new target increments the generation.
 3. The store immediately exposes `loading`; the presenter covers the visual viewport and marks the application shell inert.
 4. Root `loading.tsx` reports any active Suspense fallback. The URL observer reports the committed pathname and search string.
 5. Once the target URL has committed and the fallback count is zero, the store schedules completion at `startedAt + 180 ms`.
@@ -143,7 +143,7 @@ export type TransitionEvent =
 export type TransitionStore = {
   getSnapshot(): NavigationTransition;
   subscribe(listener: () => void): () => void;
-  begin(url: string): number | null;
+  begin(url: string, currentOverride?: string): number | null;
   commit(url: string): void;
   mountFallback(): () => void;
   failRoute(): void;
@@ -194,6 +194,7 @@ There is deliberately no transition maximum. Browser controls remain available i
 - Preserve fragments on the actual Next destination but exclude them from screen-change identity.
 - A malformed candidate returns `null`; it never starts or conceals the router's normal validation/error behavior.
 - If a start targets the current active normalized destination while phase is non-idle, return the existing generation. Otherwise increment generation and reset all phase-local flags/timers.
+- A committed-route reconciliation may classify against the previous committed URL. It runs only while idle or after the active generation committed; an uncommitted newer target always keeps ownership.
 
 ### State and Concurrency Rules
 
@@ -225,6 +226,7 @@ No API endpoint is added or changed. `/offline.html` is a generated public stati
 ### Next.js App Router 16.3
 
 - `instrumentation-client.ts` uses the documented two-argument `onRouterTransitionStart` signature.
+- Installed Next 16.3.2 does not call that hook from its Server Action reducer; ADR-005's observer reconciliation is the only compatibility path for that accepted redirect.
 - `usePathname()` and `useSearchParams()` observe commit; the observer sits under `Suspense` to prevent a static-route client-rendering bailout.
 - Root `loading.tsx` supplies fallback lifecycle only, not presentation.
 - `app/error.tsx` is the canonical client error boundary and uses `reset()` for retry.
@@ -249,7 +251,7 @@ No API endpoint is added or changed. `/offline.html` is a generated public stati
 | `app/loading.tsx` | New | Root fallback lifecycle signal; medium ordering risk | Use layout-effect signal and integration-test commit/fallback ordering |
 | `app/error.tsx` | New | Localized canonical route failure | Never expose raw error/digest; release overlay before interaction |
 | Internal links/GET forms | Modified | Migrate to typed adapters; medium omission risk | Inventory imports/raw anchors and architecture-test remaining first-party anchors |
-| Server Action forms | Unchanged structurally | Redirects enter via router hook; high replay risk if wrapped incorrectly | Do not add generic submit interception or automatic retry |
+| Server Action forms | Unchanged structurally | Installed Next bypasses the hook and redirects reconcile at commit; high replay risk if wrapped incorrectly | Do not add generic submit interception or automatic retry |
 | `app/layout.tsx` | Modified | Adds shell wrapper, client island, serializable labels; medium hydration risk | Preserve server session/theme/locale resolution and startup splash order |
 | Typed dictionaries | Modified | Adds transition/offline/error/retry copy | Add `pt-BR` first and let English typecheck against it |
 | `src/core/pwa/offline.ts` | New | Generates standalone cacheable HTML; high privacy importance | Escape strings and prove response body contains no seeded private markers |
@@ -304,7 +306,7 @@ No API endpoint is added or changed. `/offline.html` is a generated public stati
 
 ### Key Decisions
 
-- **Hybrid start integration:** use `onRouterTransitionStart` for exhaustive router coverage and typed adapters for stable project ownership. This trades a guarded experimental dependency for correctness on redirects/history.
+- **Hybrid start integration:** use `onRouterTransitionStart` for router-owned push/replace/traverse coverage and typed adapters for stable project ownership, with ADR-005's commit reconciliation limited to accepted Server Action redirects and committed-history supersession.
 - **Two-signal readiness:** require URL commit plus absence of the root loading fallback. This prevents premature exposure of streamed routes while still supporting prefetched routes that skip fallback UI.
 - **Generation ownership:** latest target wins synchronously. This prevents old timers, errors, offline messages, or out-of-order completions from dismissing a newer overlay.
 - **180 ms minimum and no maximum:** align with the existing route motion token, change copy at 3 seconds, and never lie about completion.
@@ -327,4 +329,4 @@ No API endpoint is added or changed. `/offline.html` is a generated public stati
 - [ADR-002: Keep Offline Support Shell-Only and Free of Private Content](adrs/adr-002.md) — Defines the privacy boundary for offline support.
 - [ADR-003: Coordinate Navigation Transitions with a Next Router Hook and Typed Adapters](adrs/adr-003.md) — Chooses the hybrid App Router integration and generation-based coordinator.
 - [ADR-004: Generate a Credentialless Standalone Offline Document](adrs/adr-004.md) — Isolates cached offline HTML from sessions and private route data.
-
+- [ADR-005: Reconcile Accepted Server Action Redirects at Route Commit](adrs/adr-005.md) — Records the installed Next 16.3.2 hook gap and the bounded compatibility path.
