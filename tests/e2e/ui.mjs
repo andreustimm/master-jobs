@@ -2115,6 +2115,7 @@ try {
       await overlay.waitFor({ state: "attached" });
       const snapshot = await overlay.evaluate((element) => ({
         count: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+        generation: Number(element.getAttribute("data-generation")),
         phase: element.getAttribute("data-phase"),
         rect: element.getBoundingClientRect().toJSON(),
         viewport: { width: window.innerWidth, height: window.innerHeight },
@@ -2155,6 +2156,7 @@ try {
     ["nav-admin-users", "route-admin-users"],
   ];
   const desktopFailures = [];
+  const desktopIntegrationEvidence = [];
   for (const [control, destination] of desktopDestinations) {
     const source = control === "nav-jobs" ? "/compare" : "/jobs";
     await page.goto(`${BASE}${source}`, { waitUntil: "networkidle" });
@@ -2163,6 +2165,7 @@ try {
       () => page.locator(`[data-testid="${control}"]:visible`).first().click(),
       `[data-testid="${destination}"]`,
     );
+    desktopIntegrationEvidence.push(snapshot);
     if (
       snapshot.count !== 1 ||
       snapshot.rect.left !== 0 ||
@@ -2177,6 +2180,14 @@ try {
     "task-04 E2E-001 menu desktop cobre todos os destinos com um splash full-screen",
     desktopFailures.length === 0,
     desktopFailures.slice(0, 2).join(" | "),
+  );
+  check(
+    "task-04 IT-002 Link real e router hook coalescem em uma geração observável",
+    desktopIntegrationEvidence.length === desktopDestinations.length
+      && desktopIntegrationEvidence.every(({ count, generation, phase }) =>
+        count === 1 && Number.isInteger(generation) && generation > 0 && phase === "loading"
+      ),
+    JSON.stringify(desktopIntegrationEvidence.map(({ count, generation, phase }) => ({ count, generation, phase }))),
   );
 
   await page.setViewportSize({ width: 375, height: 812 });
@@ -2455,6 +2466,14 @@ try {
     "task-04 E2E-004 redirects de login, recovery, compare, vaga e impersonação mutam uma vez",
     redirectEvidence.length === 5 && redirectEvidence.every(({ count, actionRequests }) => count === 1 && actionRequests === 1),
     JSON.stringify(redirectEvidence.map(({ count, actionRequests }) => ({ count, actionRequests }))),
+  );
+  check(
+    "task-04 IT-012 Server Actions reais mutam uma vez e iniciam somente o redirect aceito",
+    redirectEvidence.length === 5
+      && redirectEvidence.every(({ count, actionRequests, generation }) =>
+        count === 1 && actionRequests === 1 && Number.isInteger(generation) && generation > 0
+      ),
+    JSON.stringify(redirectEvidence.map(({ count, actionRequests, generation }) => ({ count, actionRequests, generation }))),
   );
 
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
@@ -2817,6 +2836,20 @@ try {
       revokedProfileOutcome,
     }),
   );
+  check(
+    "task-04 IT-014 entidades ausentes, fechadas e revogadas preservam resultado canônico sem cache privado",
+    missingJobOutcome.noIndex
+      && missingJobOutcome.jobDetail === 0
+      && closedJobOutcome.jobDetail === 1
+      && /fechada/i.test(closedJobOutcome.body)
+      && deletedJobOutcome.noIndex
+      && deletedJobOutcome.jobDetail === 0
+      && revokedProfileOutcome.noIndex
+      && revokedProfileOutcome.publicProfile === 0
+      && [missingJobOutcome, closedJobOutcome, deletedJobOutcome, revokedProfileOutcome]
+        .every(({ overlays }) => overlays === 0),
+    JSON.stringify({ missingJobOutcome, closedJobOutcome, deletedJobOutcome, revokedProfileOutcome }),
+  );
   await publicCtx.close();
 
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
@@ -2878,6 +2911,28 @@ try {
       && roleNeutral,
     JSON.stringify({
       roles: roleTransitionResults.map(({ email, snapshot, missingRoleStatus }) => [email, snapshot.count, missingRoleStatus]),
+      roleNeutral,
+    }),
+  );
+  check(
+    "task-04 IT-013 tokens, papéis, sessão e impersonação chegam ao destino autorizado e liberam overlay",
+    expiredResetForms === 0
+      && consumedResetForms === 0
+      && resetRacePosts.every((count) => count === 1)
+      && expiredCallbackUrl === "/login?error=invalid"
+      && replayCallbackUrl === "/login?error=invalid"
+      && roleTransitionResults.length === 2
+      && roleTransitionResults.every(({ snapshot }) => snapshot.count === 1)
+      && expiredSnapshot.count === 1
+      && roleNeutral,
+    JSON.stringify({
+      expiredResetForms,
+      consumedResetForms,
+      resetRacePosts,
+      expiredCallbackUrl,
+      replayCallbackUrl,
+      roleTransitionResults: roleTransitionResults.map(({ email, snapshot }) => [email, snapshot.count]),
+      expiredCount: expiredSnapshot.count,
       roleNeutral,
     }),
   );

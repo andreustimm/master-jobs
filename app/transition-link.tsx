@@ -47,7 +47,7 @@ function formatHrefObject(href: UrlObject): string {
     host = `${auth}${hostname}${href.port ? `:${href.port}` : ""}`;
   }
 
-  let search = href.search ?? (query ? `?${query}` : "");
+  let search = href.search || (query ? `?${query}` : "");
   if (protocol && !protocol.endsWith(":")) protocol += ":";
   if (href.slashes || ((!protocol || SLASHED_PROTOCOL.test(protocol)) && host !== false)) {
     host = `//${host || ""}`;
@@ -62,7 +62,7 @@ function formatHrefObject(href: UrlObject): string {
   return `${protocol}${host}${pathname}${search}${hash}`;
 }
 
-function navigationCandidate<RouteType>(href: LinkProps<RouteType>["href"]): string | null {
+function navigationCandidate(href: string | UrlObject): string {
   if (typeof href === "string") return href;
   return formatHrefObject(href);
 }
@@ -74,15 +74,17 @@ export type TransitionLinkProps<RouteType> =
 /** Stable first-party Link boundary; the router hook remains authoritative. */
 export function TransitionLink<RouteType>({
   href,
+  as: asProp,
   onNavigate,
   download,
   target,
   ...props
 }: TransitionLinkProps<RouteType>) {
   return (
-    <Link<RouteType>
+    <Link
       {...props}
       href={href}
+      as={asProp}
       download={download}
       target={target}
       onNavigate={(event) => {
@@ -94,10 +96,9 @@ export function TransitionLink<RouteType>({
           },
         });
 
-        const candidate = navigationCandidate(href);
+        const candidate = navigationCandidate(asProp || href);
         if (
           prevented ||
-          candidate === null ||
           typeof window === "undefined" ||
           !shouldStartFromLinkEvent(
             { defaultPrevented: false },
