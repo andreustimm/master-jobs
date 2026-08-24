@@ -57,6 +57,12 @@ function isRouterRequest(request) {
     || url.searchParams.has("_rsc");
 }
 
+function navigationTarget(value) {
+  const url = new URL(asUrl(value).href);
+  url.searchParams.delete("_rsc");
+  return `${url.pathname}${url.search}`;
+}
+
 function isRouterPayloadResponse(response) {
   const contentType = response.headers.get("content-type") ?? "";
   const vary = response.headers.get("vary") ?? "";
@@ -178,8 +184,7 @@ async function notifyInitiatingClient(event, request) {
   try {
     const client = await self.clients.get(event.clientId);
     if (!client) return;
-    const url = asUrl(request);
-    client.postMessage({ type: "navigation-offline", url: `${url.pathname}${url.search}` });
+    client.postMessage({ type: "navigation-offline", url: navigationTarget(request) });
   } catch {
     // Notification failure must not turn a rejected route request into success.
   }

@@ -14,14 +14,14 @@ The existing service-worker privacy policy remains network-only for application 
 
 - Defines `NavigationTransition`, its phases, event union, URL classification, and the pure reducer.
 - Assigns no time and touches no browser API. Callers pass `generation`, normalized URLs, and timestamps.
-- Enforces latest-generation ownership, duplicate-start coalescing, the 180 ms readiness gate, prolonged state at 3,000 ms, and stale-event rejection.
+- Enforces latest-generation ownership, duplicate-start coalescing, URL-commit readiness, and stale-event rejection. The browser store owns the clock and schedules the 180 ms minimum and 3,000 ms prolonged boundary.
 - Classifies same-origin screen changes separately from same-route, hash-only, external, malformed, download, and new-context navigation.
 
 #### Browser transition store — `src/core/pwa/transition-store.ts`
 
 - Owns one browser-local store shared by `instrumentation-client.ts` and the React presenter.
 - Wraps the pure reducer, `performance.now()`, short/prolonged timers, subscribers, online/offline listeners, and service-worker messages.
-- Exposes idempotent `begin`, `urlCommitted`, `loadingMounted`, `loadingUnmounted`, `routeError`, `offline`, and `reset` functions. The coordinator may supply the previous committed URL to `begin` only when reconciling a hook-less accepted redirect.
+- Exposes idempotent `begin`, `commit`, `failRoute`, `offline`, `reset`, `retry`, and `destroy` functions. The coordinator may supply the previous committed URL to `begin` only when reconciling a hook-less accepted redirect.
 - Records the normalized active target and monotonically increasing generation. Every asynchronous callback carries the generation it was created for.
 - Performs no fetch, mutation, authorization decision, or cache write.
 
@@ -65,7 +65,7 @@ The existing service-worker privacy policy remains network-only for application 
 
 #### Route error surface — `app/error.tsx`
 
-- A localized client error boundary calls `routeError()` on mount so an active overlay cannot cover the canonical error surface.
+- A localized client error boundary calls `failRoute()` on mount so an active overlay cannot cover the canonical error surface.
 - It renders a generic localized explanation and `reset()` retry without exposing the exception message or digest.
 - `notFound()`, authorization redirects, and login redirects remain canonical successful destinations and do not use the generic error boundary.
 
@@ -83,7 +83,7 @@ The existing service-worker privacy policy remains network-only for application 
 - Install fetches `/offline.html` with `credentials: "omit"`. `/login` is no longer cached.
 - Cache-first applies only to the explicit static allowlist and `/_next/static/`; arbitrary same-origin file extensions are not enough.
 - Full navigation remains network-only and falls back to the standalone offline response.
-- App Router/RSC payload requests remain network-only. On fetch rejection, the worker posts `{ type: "navigation-offline", url }` to the initiating controlled client and rethrows the network failure; it never returns the offline HTML as RSC success.
+- App Router/RSC payload requests remain network-only. On fetch rejection, the worker removes Next's internal `_rsc` transport parameter, posts `{ type: "navigation-offline", url }` for the user-visible target to the initiating controlled client, and rethrows the network failure; it never returns the offline HTML as RSC success.
 - Versioned activation deletes obsolete cache generations. Storage or install failure does not block online operation.
 
 ### Transition Data Flow
@@ -101,7 +101,7 @@ The existing service-worker privacy policy remains network-only for application 
 
 1. The service worker installs only explicit public shell/static responses and never application content.
 2. A full navigation failure returns cached `/offline.html`; if absent, it returns a non-sensitive plain-text `503`.
-3. A soft RSC navigation failure posts a typed message to the initiating client and rejects the route request.
+3. A soft RSC navigation failure strips the internal `_rsc` query parameter, posts the typed user-visible target to the initiating client, and rejects the route request.
 4. The transition store accepts the message only when the normalized URL matches its current target, then renders the offline phase.
 5. Retry uses `window.location.assign(activeTarget)` to force a fresh authorized document request. It never replays a Server Action or cached route payload.
 

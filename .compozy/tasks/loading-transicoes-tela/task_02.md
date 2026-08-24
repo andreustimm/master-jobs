@@ -26,7 +26,7 @@ visual parity across themes and input modes.
 <requirements>
 - The implementation MUST install dependencies in the implementation worktree and revalidate the documented two-argument Next.js 16.3 `onRouterTransitionStart` contract before relying on it.
 - Router `push`, `replace`, and `traverse` starts MUST reach the project store without enabling the optional experimental metadata flag or performing asynchronous instrumentation work.
-- Root readiness MUST require a matching URL commit. A root `loading.tsx` MUST NOT be mounted because streaming before authorization resolves converts canonical 403/404 responses into HTTP 200.
+- Root readiness MUST require a matching URL commit. No `loading.tsx` may wrap a status-bearing route before its authorization or not-found decision, because early streaming converts canonical 403/404 responses into HTTP 200.
 - The root layout MUST remain a Server Component and pass only serializable localized labels into one small always-mounted client island.
 - Startup and transition presentation MUST share visual primitives while retaining separate lifecycle, root identity, pointer behavior, and the startup 900 ms minimum.
 - While transition is active, the application shell MUST be inert and `aria-busy`; the overlay MUST block application pointer, touch, and keyboard actions while leaving native browser controls available.
@@ -61,7 +61,7 @@ startup.
 
 - `instrumentation-client.ts` — documented App Router start bridge to create at repository root.
 - `app/navigation-transition.tsx` — client observer/presenter island to create.
-- `app/loading.tsx` — deliberately absent at the root; E2E guards canonical 403/404 status against premature streaming.
+- `app/loading.tsx` — deliberately absent at the root; direct production HTTP assertions guard missing/deleted job status as well as representative authorization paths against loading boundaries introduced at any ancestor segment.
 - `app/error.tsx` — localized canonical route error boundary to create.
 - `app/layout.tsx` — server-owned shell, startup splash injection, serializable labels, and application wrapper.
 - `src/core/pwa/splash.ts` — startup renderer and reusable brand presentation primitives.

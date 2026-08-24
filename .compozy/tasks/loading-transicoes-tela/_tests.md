@@ -133,14 +133,14 @@ Canonical test contract for the unified navigation splash and safe offline shell
 
 - **IT-001**: load the real `instrumentation-client.ts`, invoke `onRouterTransitionStart()` with `push`, `replace`, and `traverse`, and assert each valid target reaches the shared store with the corresponding current generation.
 - **IT-002**: activate a real `TransitionLink` whose router hook reports the same target in the same navigation; assert the store creates one generation and subscribers receive one loading phase announcement.
-- **IT-003**: begin a delayed route in the production browser and assert the overlay remains truthful until the URL commits; representative authorization, impersonation, rate-limit, and private-profile requests must retain canonical 403/404 status, proving no root streaming fallback masked them as 200.
+- **IT-003**: begin a delayed route in the production browser and assert the overlay remains truthful until the URL commits; authorization and impersonation retain 403, private absence retains 404, and rate limiting retains 429 with `Retry-After`, proving no loading boundary masked those canonical statuses as 200.
 - **IT-004**: begin and commit an already-prefetched target without mounting root loading; assert the overlay observes the 180 ms minimum and then leaves.
 - **IT-005**: make a route render throw, mount real `app/error.tsx`, and assert the overlay releases before the localized error retry button becomes operable and no raw error/digest is rendered.
 
 ### Service-worker and generated shell
 
 - **IT-006**: install the generated service worker with a request recorder; assert `/offline.html` is requested with `credentials:"omit"`, online navigation is network-only, and missing/storage-rejected shell degrades to non-sensitive `503`.
-- **IT-007**: reject a same-origin RSC request for the active target; assert the worker posts one typed message to the initiating client, the matching generation enters offline, and a later stale worker completion cannot replace a successful hard retry.
+- **IT-007**: reject a same-origin RSC request for the active target with Next's internal `_rsc` query parameter; assert the worker removes `_rsc`, posts one typed user-visible target to the initiating client, the matching store generation enters offline, and a later stale worker completion cannot replace a successful hard retry.
 - **IT-008**: seed authenticated pages and responses with unique email/CV/job/application/salary/token markers, exercise install and runtime fetching, and assert no Cache Storage key or response body contains any marker; `/login` and `/p/slug` are absent.
 - **IT-009**: request `/api/export`, an RSC payload, a same-origin `.json` private path, and an unknown navigation; assert all bypass cache admission and no offline HTML is returned as a successful router payload.
 

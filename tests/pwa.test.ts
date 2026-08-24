@@ -11,6 +11,7 @@ import {
   renderOfflineDocument,
   type OfflineEditions,
 } from "../src/core/pwa/offline.ts";
+import { createTransitionStore, type TransitionEventSource } from "../src/core/pwa/transition-store.ts";
 import { generatePwaArtifacts } from "../scripts/sw-version.mjs";
 
 const template = readFileSync("scripts/sw-template.js", "utf8");
@@ -101,7 +102,10 @@ function workerHarness(options: {
 } = {}) {
   const listeners = new Map<string, (event: Record<string, unknown>) => void>();
   const storage = memoryCaches(options.cacheNames);
-  const clients = {
+  const clients: {
+    claim(): Promise<void>;
+    get(id: string): Promise<{ postMessage(message: unknown): void } | null>;
+  } = {
     claim: async () => undefined,
     get: async () => null,
   };
@@ -136,11 +140,14 @@ function workerHarness(options: {
 
   async function lifecycle(type: "install" | "activate") {
     let work: Promise<unknown> | undefined;
-    listeners.get(type)?.({
+    const listener = listeners.get(type);
+    if (!listener) throw new Error(`Missing ${type} lifecycle listener`);
+    listener({
       waitUntil(value: Promise<unknown>) {
         work = value;
       },
     });
+    if (!work) throw new Error(`${type} lifecycle did not call waitUntil`);
     await work;
   }
 
@@ -209,6 +216,16 @@ describe("offline document renderer", () => {
 });
 
 describe("deny-by-default worker policy", () => {
+  it("rejects a lifecycle harness that never registered or retained install work", async () => {
+    const missing = workerHarness();
+    missing.listeners.delete("install");
+    await expect(missing.lifecycle("install")).rejects.toThrow("Missing install lifecycle listener");
+
+    const detached = workerHarness();
+    detached.listeners.set("install", () => undefined);
+    await expect(detached.lifecycle("install")).rejects.toThrow("install lifecycle did not call waitUntil");
+  });
+
   it("UT-025 admits only the declared public allowlist and framework statics", () => {
     const fixture = workerHarness();
     for (const path of [
@@ -318,6 +335,52 @@ describe("deny-by-default worker policy", () => {
       expect(shell?.size ?? 0).toBe(0);
     }
   });
+
+  it("IT-007 removes Next transport state before the worker message reaches the active store", async () => {
+    const messages: unknown[] = [];
+    const fixture = workerHarness({
+      fetch: async () => {
+        throw new TypeError("offline");
+      },
+    });
+    fixture.clients.get = async () => ({
+      postMessage(message: unknown) {
+        messages.push(message);
+      },
+    });
+
+    let response: Promise<Response> | undefined;
+    fixture.listeners.get("fetch")?.({
+      request: new Request("https://jobs.example/pipeline?stage=applied&_rsc=transport", {
+        headers: { RSC: "1" },
+      }),
+      clientId: "initiator",
+      respondWith(value: Promise<Response>) {
+        response = value;
+      },
+    });
+    await expect(response).rejects.toThrow("offline");
+    expect(messages).toEqual([{ type: "navigation-offline", url: "/pipeline?stage=applied" }]);
+
+    let onMessage: ((event: unknown) => void) | undefined;
+    const serviceWorker: TransitionEventSource = {
+      addEventListener(type, listener) {
+        if (type === "message") onMessage = listener;
+      },
+      removeEventListener() {
+        onMessage = undefined;
+      },
+    };
+    const store = createTransitionStore({
+      currentUrl: () => "https://jobs.example/jobs",
+      connectivity: null,
+      serviceWorker,
+    });
+    store.begin("/pipeline?stage=applied");
+    onMessage?.({ data: structuredClone(messages[0]) });
+    expect(store.getSnapshot().phase).toBe("offline");
+    store.destroy();
+  });
 });
 
 describe("deterministic generation and manifest", () => {
@@ -352,11 +415,10 @@ describe("deterministic generation and manifest", () => {
     expect(manifest.display).toBe("standalone");
     expect(manifest.scope).toBe("/");
     expect(manifest.start_url).toBe("/");
-    const purposes = manifest.icons.map((icon: { purpose: string }) => icon.purpose);
-    expect(purposes).toContain("maskable");
-    expect(purposes).toContain("any");
-    const sizes = new Set(manifest.icons.map((icon: { sizes: string }) => icon.sizes));
-    expect(sizes.has("192x192")).toBe(true);
-    expect(sizes.has("512x512")).toBe(true);
+    expect(manifest.icons).toEqual([
+      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+    ]);
   });
 });

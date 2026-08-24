@@ -420,7 +420,7 @@ describeBrowser("real browser service-worker privacy boundary", () => {
     }
     const rejected = await initiator.evaluate(async () => {
       try {
-        await fetch("/rsc-fail?screen=%2Fjobs%2F1", { headers: { RSC: "1" } });
+        await fetch("/rsc-fail?screen=%2Fjobs%2F1&_rsc=transport", { headers: { RSC: "1" } });
         return false;
       } catch {
         return true;

@@ -394,7 +394,7 @@ E7.1 provar que a triagem está calibrada. Ver antivisão em `vision.md`.
 
 ## E8 — Interface
 
-### E8.1 ✅ Movimento que informa, sem custo de bundle (base anterior)
+### E8.1 ✅ Movimento que informa, sem custo de bundle (base anterior à E8.2)
 > Como **Andreus**, quero que a interface tenha transições, sem que ela fique
 > pesada.
 
@@ -404,13 +404,14 @@ E7.1 provar que a triagem está calibrada. Ver antivisão em `vision.md`.
 - [x] Barra de score crescendo a partir do zero — o único movimento aqui que
       carrega informação, porque mostra a composição sendo somada
 - [x] **`prefers-reduced-motion` respeitado sem exceção**
-- [x] Zero dependências, zero JavaScript de cliente adicionado
+- [x] Nesta base, zero dependências e zero JavaScript de cliente adicionado
 
 **Decisão:** Motion (motion.dev) foi avaliado e não adicionado. A tarefa pedia
 medir antes de trazer dependência; o CSS nativo entregou o que ela descrevia.
-Este dashboard não envia bundle de cliente fora do editor de markdown, e gastar
-esse invariante em animação de entrada seria trocar a propriedade mais valiosa
-da UI por polimento.
+Nesta entrega anterior, o dashboard não enviava bundle de cliente fora do
+editor de markdown. A E8.2 adiciona deliberadamente um coordenador cliente
+pequeno para cobrir navegação, acessibilidade e recuperação offline; ela não
+altera a decisão de evitar uma biblioteca de animação.
 
 **Invariante de acessibilidade:** uma grade de triagem que se move depois de a
 pessoa ter pedido que não se movesse é falha de acessibilidade, não detalhe.

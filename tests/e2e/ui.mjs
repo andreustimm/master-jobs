@@ -2901,6 +2901,16 @@ try {
     body: document.body.innerText,
   }));
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  const statusContext = await browser.newContext();
+  await statusContext.addCookies(await page.context().cookies());
+  const statusPage = await statusContext.newPage();
+  const missingJobDocumentStatus = (await statusPage.goto(`${BASE}/jobs/999999999`, {
+    waitUntil: "networkidle",
+  }))?.status() ?? 0;
+  const deletedJobDocumentStatus = (await statusPage.goto(`${BASE}/jobs/${E2E_DELETED_JOB_ID}`, {
+    waitUntil: "networkidle",
+  }))?.status() ?? 0;
+  await statusContext.close();
   const missingJobTransition = await observeNavigation(
     page,
     () => routerPush("/jobs/999999999"),
@@ -3028,6 +3038,8 @@ try {
       && malformedOutcome.overlays === 0
       && (malformedResponse?.status() ?? 0) >= 400
       && missingJobOutcome.path === "/jobs/999999999"
+      && missingJobDocumentStatus === 404
+      && deletedJobDocumentStatus === 404
       && missingJobOutcome.noIndex
       && missingJobOutcome.overlays === 0
       && missingJobOutcome.jobDetail === 0
@@ -3052,6 +3064,8 @@ try {
       && privateMarkers.every((term) => !malformedOutcome.body.includes(term)),
     JSON.stringify({
       longStatus: longResponse?.status(),
+      missingJobDocumentStatus,
+      deletedJobDocumentStatus,
       longOutcome,
       malformedStatus: malformedResponse?.status(),
       malformedOutcome,
