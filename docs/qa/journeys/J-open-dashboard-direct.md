@@ -14,6 +14,7 @@ flowchart TD
 journey:
   id: J-open-dashboard-direct
   name: Abrir o dashboard diretamente
+  priority: P1
   value_statement: "O usuário recebe o startup branded existente e chega a uma superfície autorizada sem camadas duplicadas."
   personas: [Andreus em triagem, Candidato em trânsito]
   entry_points:

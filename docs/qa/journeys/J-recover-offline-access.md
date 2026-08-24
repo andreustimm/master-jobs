@@ -20,6 +20,7 @@ flowchart TD
 journey:
   id: J-recover-offline-access
   name: Recuperar o acesso após perder a conexão
+  priority: P0
   value_statement: "O usuário entende a falta de rede, não vê dados persistidos de outra sessão e retoma o destino atual quando a conexão volta."
   personas: [Candidato após falha, Candidato em trânsito]
   entry_points:

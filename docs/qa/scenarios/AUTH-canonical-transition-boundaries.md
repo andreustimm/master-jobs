@@ -11,11 +11,13 @@ bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence: tests/e2e/ui.mjs
-last_report: docs/qa/reports/2026-08-24-task-04-first-party-navigation.md
+evidence: tests/e2e/ui.mjs; docs/qa/evidence/20260824T143638469000Z-8c1fe201/CH-first-party-recruiter-jobs.png
+last_report: docs/qa/reports/2026-08-24T143638469000Z-8c1fe201-navigation-contract-retest.md
 overlaps:
 ---
 
 Cobertura: candidato, recrutador, administrador, impersonação, sessão expirada, token inválido/repetido, 404 e revogação durante navegação.
 
 Os resultados canônicos venceram em todos os papéis e falhas, sem conteúdo protegido na transição nem restauração de sucesso/token por cache.
+
+O replay público do recrutador confirmou Vagas como superfície autorizada e 403 canônico, sem conteúdo candidato, ao abrir `/candidate`; os demais papéis e tokens foram revalidados no E2E do mesmo build.

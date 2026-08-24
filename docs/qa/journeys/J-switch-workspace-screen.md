@@ -20,6 +20,7 @@ flowchart TD
 journey:
   id: J-switch-workspace-screen
   name: Trocar de tela de trabalho
+  priority: P0
   value_statement: "O usuário chega à próxima área com feedback verdadeiro sem operar conteúdo obsoleto."
   personas: [Andreus em triagem, Candidato em trânsito, Candidato por teclado, Candidato após falha]
   entry_points:

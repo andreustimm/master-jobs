@@ -11,8 +11,8 @@ bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence: tests/e2e/ui.mjs
-last_report: docs/qa/reports/2026-08-24-task-04-first-party-navigation.md
+evidence: tests/e2e/ui.mjs; docs/qa/evidence/20260824T143638469000Z-8c1fe201/CH-direct-startup-canary.webm; docs/qa/evidence/20260824T143638469000Z-8c1fe201/CH-direct-startup-canary-final.png
+last_report: docs/qa/reports/2026-08-24T143638469000Z-8c1fe201-navigation-contract-retest.md
 overlaps:
 ---
 
