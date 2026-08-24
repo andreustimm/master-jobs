@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Build the navigation transition domain and browser store
 type: backend
 complexity: high
@@ -37,14 +37,14 @@ domain to React or Next.js rendering.
 
 ## Subtasks
 
-- [ ] 1.1 Establish the pure transition state, event, URL-target, offline-message, label, and timing contracts.
-- [ ] 1.2 Implement same-origin screen-change classification and stable adapter-event eligibility rules.
-- [ ] 1.3 Implement generation-based reduction for start, commit, fallback, prolonged, offline, leave, reset, and supersession events.
-- [ ] 1.4 Build the browser-local external store with subscriptions, monotonic timing, exact timer boundaries, and lifecycle cleanup.
-- [ ] 1.5 Add validated service-worker connectivity message handling and explicit idempotent hard retry.
-- [ ] 1.6 Add complete typed transition/offline/error/retry copy to both locale dictionaries.
-- [ ] 1.7 Add generic public navigation-error mapping that redacts arbitrary thrown values and framework digests.
-- [ ] 1.8 Implement every assigned unit contract case with table-driven boundaries and fake time only at the clock interface.
+- [x] 1.1 Establish the pure transition state, event, URL-target, offline-message, label, and timing contracts.
+- [x] 1.2 Implement same-origin screen-change classification and stable adapter-event eligibility rules.
+- [x] 1.3 Implement generation-based reduction for start, commit, fallback, prolonged, offline, leave, reset, and supersession events.
+- [x] 1.4 Build the browser-local external store with subscriptions, monotonic timing, exact timer boundaries, and lifecycle cleanup.
+- [x] 1.5 Add validated service-worker connectivity message handling and explicit idempotent hard retry.
+- [x] 1.6 Add complete typed transition/offline/error/retry copy to both locale dictionaries.
+- [x] 1.7 Add generic public navigation-error mapping that redacts arbitrary thrown values and framework digests.
+- [x] 1.8 Implement every assigned unit contract case with table-driven boundaries and fake time only at the clock interface.
 
 ## Implementation Details
 
@@ -92,13 +92,13 @@ service worker and presenter.
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-001, UT-002, UT-003 — internal, same-screen, external, malformed, and unsafe URL classification.
-- [ ] UT-004, UT-005, UT-006, UT-007, UT-008, UT-009, UT-010, UT-011, UT-012 — generation creation/coalescing, commit/fallback ordering, 180 ms readiness, 3,000 ms prolonged state, and stale timers.
-- [ ] UT-013, UT-014, UT-015, UT-016, UT-017, UT-018 — offline matching, superseded signals, route-error release, one-shot retry, and no automatic replay.
-- [ ] UT-019, UT-020 — valid and hostile service-worker message parsing.
-- [ ] UT-029, UT-030 — clean repeated transitions and nested fallback ownership.
-- [ ] UT-033 — typed nonblank locale completeness.
-- [ ] UT-037, UT-038 — generic error redaction and long/malformed URL boundaries.
+- [x] UT-001, UT-002, UT-003 — internal, same-screen, external, malformed, and unsafe URL classification.
+- [x] UT-004, UT-005, UT-006, UT-007, UT-008, UT-009, UT-010, UT-011, UT-012 — generation creation/coalescing, commit/fallback ordering, 180 ms readiness, 3,000 ms prolonged state, and stale timers.
+- [x] UT-013, UT-014, UT-015, UT-016, UT-017, UT-018 — offline matching, superseded signals, route-error release, one-shot retry, and no automatic replay.
+- [x] UT-019, UT-020 — valid and hostile service-worker message parsing.
+- [x] UT-029, UT-030 — clean repeated transitions and nested fallback ownership.
+- [x] UT-033 — typed nonblank locale completeness.
+- [x] UT-037, UT-038 — generic error redaction and long/malformed URL boundaries.
 
 ## Success Criteria
 
@@ -107,4 +107,3 @@ Cases assigned from `_tests.md`, the test contract — read each ID's full defin
 - Duplicate and stale signals cannot create, mutate, announce, dismiss, or retry the wrong generation.
 - No supported URL/error/message input throws across the public boundaries.
 - Locale keys typecheck in both languages and never render blank transition states.
-

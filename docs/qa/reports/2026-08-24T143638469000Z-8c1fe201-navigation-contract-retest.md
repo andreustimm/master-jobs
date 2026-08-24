@@ -23,8 +23,8 @@
 |---|---|---|---|---|---|---|---|
 | 1 | CH-keyboard-screen-transition | J-switch-workspace-screen / NAV-switch-screen-ready | Candidato por teclado | Accessibility Tour | Fixed | BUG-20260823-pipeline-empty-state-mixed-locale | bfd27a9 |
 | 2 | CH-keyboard-screen-transition | J-switch-workspace-screen / NAV-accessible-mobile-transition | Candidato por teclado | Accessibility Tour | Pass | | |
-| 3 | CH-first-party-navigation-inventory | J-switch-workspace-screen / NAV-first-party-navigation-contract; AUTH-canonical-transition-boundaries | Andreus em triagem | Feature Tour | Pass | | |
-| 4 | CH-direct-startup-canary | J-open-dashboard-direct / PWA-direct-load-startup-singleton | Andreus em triagem | Feature Tour | Pass | | |
+| 3 | CH-first-party-navigation-inventory | J-switch-workspace-screen / NAV-first-party-navigation-contract; AUTH-canonical-transition-boundaries (adjacente, não terminal) | Andreus em triagem | Feature Tour | Pass | | |
+| 4 | CH-direct-startup-canary | J-open-dashboard-direct / PWA-direct-load-startup-singleton (adjacente, não terminal) | Andreus em triagem | Feature Tour | Pass | | |
 
 Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human verify) | Blocked (human decision)`
 
@@ -45,7 +45,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 - **Ran:** 2026-08-24T14:42:00Z → 2026-08-24T14:46:30Z (box respected: yes)
 - **Findings:** nenhum finding de produto. Cockpit, Vagas, Comparar vaga, Funil, Referrals, Candidato e Usuários chegaram às URLs canônicas; filtro `fit=45`, densidade `dense=1` e página 2 persistiram em URL.
 - **Bugs filed/updated:** nenhum novo.
-- **Scenarios settled:** NAV-first-party-navigation-contract → Pass; AUTH-canonical-transition-boundaries → Pass.
+- **Scenarios settled:** NAV-first-party-navigation-contract → Pass. AUTH-canonical-transition-boundaries permanece `untested` até ser percorrido por Candidato após falha.
 - **Paper cuts:** nenhum.
 - **Surprises:** um clique automatizado em “Próxima” não disparou enquanto o link estava fora da viewport; após `scrollintoview`, a mesma interface navegou corretamente para `page=2`, classificando o primeiro resultado como artefato do driver e não produto.
 - **Suggested next charter:** repetir o inventário completo no Full QA de staging com Safari/Firefox reais.
@@ -55,7 +55,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 - **Ran:** 2026-08-24T14:46:30Z → 2026-08-24T14:48:05Z (box respected: yes)
 - **Findings:** abertura direta e recarga em `/` terminaram no Cockpit utilizável, sem camada órfã, erro de página ou console.
 - **Bugs filed/updated:** nenhum.
-- **Scenarios settled:** PWA-direct-load-startup-singleton → Pass.
+- **Scenarios settled:** nenhum; PWA-direct-load-startup-singleton permanece `untested` até ser percorrido por Candidato em trânsito.
 - **Paper cuts:** nenhum.
 - **Surprises:** nenhuma.
 - **Suggested next charter:** smoke pós-deploy em staging pela `start_url` da PWA instalada.
@@ -101,7 +101,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 ## Final Status
 
-- **Exit gate (full automated suite):** `rtk pnpm check` — exit 0, 148/148 arquivos, 2.081 testes aprovados, 6 pulados, 97,45% de cobertura de linhas e 13/13 contratos QA; `rtk pnpm test:e2e` — exit 0, 178/178 verificações e 8/8 páginas sem violações axe WCAG 2.2 AA; `rtk pnpm test:pwa-browser` — exit 0, 22/22.
+- **Exit gate (full automated suite):** `rtk pnpm check` — exit 0, 148/148 arquivos, 2.082 testes aprovados, 6 pulados, 97,45% de cobertura de linhas e 13/13 contratos QA; `rtk pnpm test:e2e` — exit 0, 178/178 verificações e 8/8 páginas sem violações axe WCAG 2.2 AA; `rtk pnpm test:pwa-browser` — exit 0, 22/22.
 - **Issues by user impact:** Blocks-Completion 0 · Data-Loss 0 · Trust-Damage 0 abertos (1 verificado) · Friction 0 · Cosmetic 0
-- **Coverage:** 2/2 jornadas percorridas; 4/4 linhas terminais, desktop Chromium 1280×900 e iPhone 15 emulado 393 px; WebKit móvel, zoom 200%, temas e reduced motion no E2E do mesmo build. Firefox, Safari físico, extensões reais e rede 3G ficaram como lacunas qualificadas.
-- **Verdict:** ready — o bug conhecido foi verificado como corrigido e não há finding aberto neste escopo.
+- **Coverage:** 2/2 jornadas exercitadas; 2/4 linhas terminais sob a persona planejada e 2 canários adjacentes não terminais, desktop Chromium 1280×900 e iPhone 15 emulado 393 px; WebKit móvel, zoom 200%, temas e reduced motion no E2E do mesmo build. Firefox, Safari físico, extensões reais e rede 3G ficaram como lacunas qualificadas.
+- **Verdict:** ready para o escopo targeted — o bug conhecido foi verificado como corrigido e não há finding aberto; os dois canários executados sob persona distinta continuam `untested` no tracker até o Full QA de staging.

@@ -81,6 +81,14 @@ describe("App Router transition integration", () => {
     expect(config).not.toContain("instrumentationClientRouterTransitionEvents");
   });
 
+  it("UT-037 isolates navigation from transition-store instrumentation failures", () => {
+    vi.spyOn(transitionStore, "begin").mockImplementation(() => {
+      throw new Error("instrumentation unavailable");
+    });
+
+    expect(() => onRouterTransitionStart("/pipeline", "push")).not.toThrow();
+  });
+
   it("IT-003 orders root fallback lifecycle before URL readiness", () => {
     const fixture = storeFixture();
     const signalSource = readFileSync("app/navigation-transition-loading-signal.tsx", "utf8");

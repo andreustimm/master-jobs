@@ -4,7 +4,7 @@ Canonical test contract for the unified navigation splash and safe offline shell
 
 ## Strategy
 
-- **Frameworks and harnesses:** Vitest for pure/stateful modules with fake timers only at the clock boundary; the existing isolated Next.js production-build runner for integration; Playwright/real Chromium for service-worker behavior and desktop journeys; the repository's mobile browser harness at 375×812 for responsive parity. Network and storage are faked only in unit tests; integration and E2E use real router, service worker, Cache Storage, and rendered UI. When an integration contract requires that real browser runtime, its `IT-*` assertion runs inside the same production-build browser session as the adjacent `E2E-*` journey but remains a distinct named check with its own narrower predicate.
+- **Frameworks and harnesses:** Vitest for pure/stateful modules and composition-boundary integration with fake timers only at the clock boundary; the isolated Next.js production-build runner plus Playwright/real Chromium for runtime integration, service-worker behavior, and desktop journeys; the repository's mobile browser harness at 375×812 for responsive parity. Network and storage are faked only in unit tests. `IT-*` identifies a cross-module contract: IT-001–IT-005 and IT-010–IT-011 are composition checks corroborated by their adjacent production-browser `E2E-*` journeys, while IT-006–IT-009 and IT-012–IT-014 execute in real browser/runtime fixtures with their own narrower predicates.
 - **Execution:** task-scoped cases first, then `rtk pnpm check`, targeted browser tests, `rtk pnpm test:e2e`, targeted `qa-report`/`qa-execution`, and the repository's review/ship gates. Service-worker cases run against generated `public/sw.js` and `public/offline.html` from a production-equivalent build.
 - **Conventions:** table-driven cases for URL/state boundaries, fake timers advanced to exact milliseconds, stable `data-testid` selectors for controls and transition phases, no translated control lookup, and seeded private markers when inspecting cache bodies. Every asynchronous race asserts the active generation before and after the stale signal.
 
@@ -124,7 +124,7 @@ Canonical test contract for the unified navigation splash and safe offline shell
 - **UT-032** (state): startup rendering retains `SPLASH_MIN_MS=900`, current root identity, headless bypass, and one startup node while transition constants remain separate.
 - **UT-033** (error): typed dictionary validation fails when any normal/prolonged/offline/failure/retry English leaf is missing or blank.
 - **UT-034** (idempotency): two generator runs for the same version/revision produce byte-identical `sw.js` and `offline.html`; a changed revision changes only the version marker-dependent output.
-- **UT-037** (error): `toPublicNavigationError()` maps arbitrary thrown values, Next digests, and unparseable objects to one generic dictionary key without returning raw content.
+- **UT-037** (error): `toPublicNavigationError()` maps arbitrary thrown values, Next digests, and unparseable objects to one generic dictionary key without returning raw content; the App Router instrumentation bridge also swallows a forced store exception so observability cannot abort navigation.
 
 ## Integration Tests
 

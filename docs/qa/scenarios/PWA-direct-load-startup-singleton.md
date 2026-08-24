@@ -6,7 +6,7 @@ persona: Candidato em trânsito
 journey: J-open-dashboard-direct
 expected: A carga direta conserva o splash de 900 ms e nunca empilha um overlay de transição durante hidratação
 entry_points: /
-qa_status: pass
+qa_status: untested
 bug_ids:
 fix_status:
 retest_status:
@@ -18,7 +18,7 @@ overlaps:
 
 Canário adjacente para regressões no renderer inline, hidratação, locale e shell responsivo.
 
-A URL direta e a recarga chegaram ao mesmo cockpit operável sem camada de transição residual.
+A URL direta e a recarga chegaram ao mesmo cockpit operável como canário adjacente. A jornada pública ainda precisa ser repetida pela persona Candidato em trânsito antes de voltar a estado terminal.
 
 Revalidado como canário adjacente no build isolado da Task 03.
 

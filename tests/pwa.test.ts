@@ -26,6 +26,9 @@ describe("real-browser PWA gate wiring", () => {
     expect(packageJson.scripts?.["test:pwa-browser"]).toBe(
       "JHO_PWA_BROWSER_TESTS=1 vitest run tests/pwa-chrome.test.ts",
     );
+    expect(readFileSync("tests/pwa-chrome.test.ts", "utf8")).toContain(
+      'process.env.npm_lifecycle_event === "test:pwa-browser"',
+    );
     expect(workflow).toMatch(
       /pnpm exec playwright install --with-deps chromium[\s\S]+pnpm test:pwa-browser/,
     );

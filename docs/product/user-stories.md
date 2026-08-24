@@ -425,8 +425,8 @@ pessoa ter pedido que não se movesse é falha de acessibilidade, não detalhe.
       aceitos compartilham um único coordenador de transição.
 - [x] O splash usa os tokens do `DESIGN.md`, funciona em português e inglês e
       respeita movimento reduzido, teclado, leitor de tela e áreas seguras.
-- [x] Transições duplicadas são coalescidas e falhas sempre devolvem o controle
-      à tela anterior com uma explicação útil.
+- [x] Transições duplicadas são coalescidas e falhas sempre liberam o overlay
+      para uma superfície de erro operável, localizada e com nova tentativa.
 - [x] O app instalado oferece somente um shell offline sem credenciais; páginas
       autenticadas, `/login`, APIs, perfis públicos e respostas RSC nunca são
       persistidos pelo service worker.

@@ -423,7 +423,7 @@ body {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  touch-action: none;
+  touch-action: auto;
   transition:
     opacity 260ms var(--ease-out, ease-out),
     visibility 260ms var(--ease-out, ease-out);

@@ -2,7 +2,7 @@
 id: NAV-switch-screen-ready
 area: NAV
 title: Trocar para uma tela interna pronta
-persona: Andreus em triagem
+persona: Candidato por teclado
 journey: J-switch-workspace-screen
 expected: Um splash único e curto bloqueia a tela anterior e sai somente quando o destino correto está utilizável
 entry_points: /jobs

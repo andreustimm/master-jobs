@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Integrate the App Router coordinator and accessible branded splash
 type: frontend
 complexity: critical
@@ -38,14 +38,14 @@ visual parity across themes and input modes.
 
 ## Subtasks
 
-- [ ] 2.1 Add and contract-test the root Next.js router-transition instrumentation bridge.
-- [ ] 2.2 Add root URL-commit observation and loading-boundary lifecycle signaling with deterministic effect ordering.
-- [ ] 2.3 Build the single transition presenter and connect application-shell inert/`aria-busy` behavior.
-- [ ] 2.4 Refactor reusable splash presentation primitives without changing startup timing or first-paint behavior.
-- [ ] 2.5 Add normal, prolonged, leaving, and generic error UI using typed copy and stable test selectors.
-- [ ] 2.6 Add the localized root route-error surface and retry contract.
-- [ ] 2.7 Verify server/client serialization, hydration, Suspense placement, and one-layer startup behavior.
-- [ ] 2.8 Implement the assigned integration and real-browser cases across timing, failure, locale, theme, accessibility, safe area, zoom, desktop, and mobile.
+- [x] 2.1 Add and contract-test the root Next.js router-transition instrumentation bridge.
+- [x] 2.2 Add root URL-commit observation and loading-boundary lifecycle signaling with deterministic effect ordering.
+- [x] 2.3 Build the single transition presenter and connect application-shell inert/`aria-busy` behavior.
+- [x] 2.4 Refactor reusable splash presentation primitives without changing startup timing or first-paint behavior.
+- [x] 2.5 Add normal, prolonged, leaving, and generic error UI using typed copy and stable test selectors.
+- [x] 2.6 Add the localized root route-error surface and retry contract.
+- [x] 2.7 Verify server/client serialization, hydration, Suspense placement, and one-layer startup behavior.
+- [x] 2.8 Implement the assigned integration and real-browser cases across timing, failure, locale, theme, accessibility, safe area, zoom, desktop, and mobile.
 
 ## Implementation Details
 
@@ -97,13 +97,13 @@ body and outside transition-store startup.
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-031, UT-032 — semantic/safe-area/reduced-motion CSS and unchanged startup lifecycle.
-- [ ] IT-001 — real router instrumentation bridge for push, replace, and traverse.
-- [ ] IT-003, IT-004 — URL/fallback readiness ordering and prefetched no-fallback completion.
-- [ ] IT-005 — route-error release, localized retry, and raw-error redaction.
-- [ ] IT-010, IT-011 — startup/transition singleton hydration and dynamic motion/theme behavior.
-- [ ] E2E-006, E2E-007, E2E-008, E2E-009 — 180 ms fast route, prolonged wait, supersession race, and operable failure.
-- [ ] E2E-014, E2E-015, E2E-016, E2E-017 — locale, live-region/inert/focus, themes/reduced motion, and responsive safe-area/zoom parity.
+- [x] UT-031, UT-032 — semantic/safe-area/reduced-motion CSS and unchanged startup lifecycle.
+- [x] IT-001 — real router instrumentation bridge for push, replace, and traverse.
+- [x] IT-003, IT-004 — URL/fallback readiness ordering and prefetched no-fallback completion.
+- [x] IT-005 — route-error release, localized retry, and raw-error redaction.
+- [x] IT-010, IT-011 — startup/transition singleton hydration and dynamic motion/theme behavior.
+- [x] E2E-006, E2E-007, E2E-008, E2E-009 — 180 ms fast route, prolonged wait, supersession race, and operable failure.
+- [x] E2E-014, E2E-015, E2E-016, E2E-017 — locale, live-region/inert/focus, themes/reduced motion, and responsive safe-area/zoom parity.
 
 ## Success Criteria
 
@@ -112,4 +112,3 @@ Cases assigned from `_tests.md`, the test contract — read each ID's full defin
 - Root pages remain Server Components and no unrelated page becomes client-rendered.
 - Startup remains visually and behaviorally unchanged while route transitions use the 180 ms/3,000 ms contract.
 - Real desktop and 375 px mobile browsers pass interaction, focus, announcement, contrast, motion, safe-area, zoom, and overflow assertions.
-

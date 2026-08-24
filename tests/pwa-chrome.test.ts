@@ -345,7 +345,10 @@ async function cacheAudit(page: Page) {
 // The browser contract is opt-in because `pnpm check` runs 140+ coverage files
 // in parallel. Reading `process.argv` here is not stable across Vitest workers;
 // the explicit CI/package gate owns both the environment flag and Chromium.
-const describeBrowser = process.env.JHO_PWA_BROWSER_TESTS === "1"
+const browserGateRequested = process.env.npm_lifecycle_event === "test:pwa-browser"
+  || process.env.JHO_PWA_BROWSER_TESTS === "1";
+
+const describeBrowser = browserGateRequested
   ? describe.sequential
   : describe.skip;
 
