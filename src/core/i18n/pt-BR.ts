@@ -13,6 +13,15 @@ export const ptBR = {
   splash: {
     loading: "Carregando o Master Jobs",
   },
+  transition: {
+    loading: "Carregando a próxima tela",
+    prolonged: "Ainda estamos carregando. Isso está levando mais tempo que o normal.",
+    offlineTitle: "Sem conexão",
+    offlineBody: "Não foi possível carregar esta tela. Verifique sua conexão e tente novamente.",
+    retry: "Tentar novamente",
+    failedTitle: "Não foi possível abrir esta tela",
+    failedBody: "A navegação falhou. Tente novamente.",
+  },
   changelog: {
     link: "Novidades",
     title: "Novidades",
