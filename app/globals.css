@@ -374,6 +374,192 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+
+  .navigation-transition,
+  .navigation-transition .app-splash__marca,
+  .navigation-transition .app-splash__barra span {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ===========================================================================
+   Splash de transição entre rotas.
+
+   A splash de partida continua inline e nasce antes do CSS da aplicação. Esta
+   superfície usa as mesmas primitivas de marca, mas tem raiz e ciclo próprios:
+   o store decide quando ela entra e sai, sem herdar o mínimo de 900 ms.
+   =========================================================================== */
+
+#application-shell {
+  min-inline-size: 0;
+}
+
+/* A tela anterior continua montada para o App Router concluir a transição,
+   mas não pode ampliar o canvas por trás da superfície opaca. Em zoom alto,
+   uma tabela da rota anterior fazia o documento medir mais que o viewport e
+   permitia deslocamento lateral mesmo com o overlay perfeitamente contido. */
+#application-shell[inert] {
+  inline-size: 100%;
+  max-inline-size: 100%;
+  overflow: hidden;
+}
+
+.navigation-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: grid;
+  min-block-size: 100dvh;
+  place-items: center;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-block: max(var(--spacing-lg), var(--safe-area-top))
+    max(var(--spacing-lg), var(--safe-area-bottom));
+  padding-inline: max(var(--spacing-lg), var(--safe-area-left))
+    max(var(--spacing-lg), var(--safe-area-right));
+  background: var(--background);
+  color: var(--foreground);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  touch-action: auto;
+  transition:
+    opacity 260ms var(--ease-out, ease-out),
+    visibility 260ms var(--ease-out, ease-out);
+}
+
+.navigation-transition[data-phase="leaving"] {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.navigation-transition__content {
+  display: flex;
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-lg);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.navigation-transition .app-splash__marca {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+  animation: app-splash-entrada 420ms var(--ease-out, ease-out) both;
+}
+
+.navigation-transition .app-splash__icone {
+  display: block;
+  inline-size: 72px;
+  block-size: 72px;
+  border-radius: var(--radius-surface);
+}
+
+.navigation-transition .app-splash__nome {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  opacity: 0.85;
+}
+
+.navigation-transition .app-splash__barra {
+  position: relative;
+  inline-size: 120px;
+  block-size: 2px;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: color-mix(in oklab, currentColor 12%, transparent);
+}
+
+.navigation-transition .app-splash__barra span {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 40%;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0.55;
+  animation: app-splash-varre 1.1s ease-in-out infinite;
+}
+
+.navigation-transition__status {
+  display: grid;
+  max-inline-size: 100%;
+  gap: var(--spacing-xs);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.navigation-transition__status > * {
+  margin: 0;
+}
+
+.navigation-transition__retry,
+.navigation-route-error__retry {
+  min-block-size: 44px;
+  border: 0;
+  border-radius: var(--radius-action);
+  padding-inline: var(--spacing-lg);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  cursor: pointer;
+}
+
+.navigation-transition__retry:focus-visible,
+.navigation-route-error__retry:focus-visible {
+  outline: 2px solid var(--foreground);
+  outline-offset: var(--spacing-xxs);
+}
+
+.navigation-route-error {
+  display: grid;
+  min-block-size: calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom));
+  place-items: center;
+  padding-block: max(var(--spacing-xl), var(--safe-area-top))
+    max(var(--spacing-xl), var(--safe-area-bottom));
+  padding-inline: max(var(--spacing-lg), var(--safe-area-left))
+    max(var(--spacing-lg), var(--safe-area-right));
+}
+
+.navigation-route-error__panel {
+  display: grid;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  gap: var(--spacing-lg);
+  justify-items: start;
+  overflow-wrap: anywhere;
+}
+
+.navigation-route-error__panel h1,
+.navigation-route-error__panel p {
+  margin: 0;
+}
+
+@keyframes app-splash-entrada {
+  from {
+    opacity: 0;
+    transform: translateY(var(--spacing-xs)) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes app-splash-varre {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(350%);
+  }
 }
 
 
@@ -450,7 +636,7 @@ html.pwa-standalone body {
    cabeçalho uma tira da cor do fundo — visualmente uma tarja, que é justo o que
    `viewport-fit: cover` foi pedir para não ter. Reservando o espaço DENTRO do
    cabeçalho, a cor dele sobe até o topo da tela e só o conteúdo desce. */
-html.pwa-standalone body > header {
+html.pwa-standalone #application-shell > header {
   padding-top: env(safe-area-inset-top);
 }
 
@@ -460,8 +646,8 @@ html.pwa-standalone body > header {
    a borda por desenho. Aplicado aqui, a cor continua sangrando e só o texto
    recua do recorte. Importa em paisagem, onde o inset lateral deixa de ser
    zero; `max()` preserva o respiro que a página já tinha em retrato. */
-html.pwa-standalone body > header > div,
-html.pwa-standalone body > div {
+html.pwa-standalone #application-shell > header > div,
+html.pwa-standalone #application-shell > div {
   padding-left: max(1rem, env(safe-area-inset-left));
   padding-right: max(1rem, env(safe-area-inset-right));
 }

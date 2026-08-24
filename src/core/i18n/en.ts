@@ -16,6 +16,15 @@ export const en: Dictionary = {
   splash: {
     loading: "Loading Master Jobs",
   },
+  transition: {
+    loading: "Loading the next screen",
+    prolonged: "Still loading. This is taking longer than usual.",
+    offlineTitle: "You're offline",
+    offlineBody: "We couldn't load this screen. Check your connection and try again.",
+    retry: "Try again",
+    failedTitle: "We couldn't open this screen",
+    failedBody: "Navigation failed. Try again.",
+  },
   changelog: {
     link: "What's new",
     title: "What's new",
@@ -486,6 +495,10 @@ export const en: Dictionary = {
     title: "Pipeline",
     open: "open",
     noApplications: "Nothing in the pipeline yet.",
+    startWith: "Start with the",
+    jobsList: "job list",
+    appliedOn: "applied on {date}",
+    nextAction: "next: {action}",
   },
   referrals: {
     title: "Referrals",

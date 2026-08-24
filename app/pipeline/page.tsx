@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TransitionLink } from "../transition-link";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,7 +23,7 @@ export default async function Pipeline() {
   ]);
 
   return (
-    <main className="pt-10">
+    <main className="pt-10" data-testid="route-pipeline">
       <h1 className="type-display-md chevron mb-4">{t("pipeline.title")}</h1>
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
         {t("copy.pipelineLead")}
@@ -42,10 +42,10 @@ export default async function Pipeline() {
 
       {rows.length === 0 ? (
         <Card className="p-6 text-sm text-muted-foreground">
-          Nada no funil ainda. Comece pela{" "}
-          <Link href="/jobs" className="text-[var(--primary-text)] hover:underline">
-            lista de vagas
-          </Link>
+          {t("pipeline.noApplications")} {t("pipeline.startWith")}{" "}
+          <TransitionLink href="/jobs" data-testid="pipeline-empty-jobs" className="text-[var(--primary-text)] hover:underline">
+            {t("pipeline.jobsList")}
+          </TransitionLink>
           .
         </Card>
       ) : (
@@ -60,9 +60,9 @@ export default async function Pipeline() {
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-baseline gap-2.5">
-                  <Link href={`/jobs/${r.jobId}`} className="font-semibold hover:underline">
+                  <TransitionLink href={`/jobs/${r.jobId}`} data-testid={`pipeline-job-${r.jobId}`} className="font-semibold hover:underline">
                     {r.title}
-                  </Link>
+                  </TransitionLink>
                   <StatusBadge status={r.status} />
                   {r.channel && (
                     <Badge variant="outline" className="font-mono type-micro">
@@ -72,11 +72,11 @@ export default async function Pipeline() {
                 </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">
                   {r.companyName}
-                  {r.appliedAt ? ` · aplicado em ${r.appliedAt.slice(0, 10)}` : ""}
+                  {r.appliedAt ? ` · ${t("pipeline.appliedOn", { date: r.appliedAt.slice(0, 10) })}` : ""}
                 </div>
                 {r.nextAction && (
                   <div className="mt-0.5 text-xs text-muted-foreground">
-                    próximo: {r.nextAction}
+                    {t("pipeline.nextAction", { action: r.nextAction })}
                   </div>
                 )}
               </div>
@@ -95,7 +95,7 @@ export default async function Pipeline() {
                   {t("pipeline.open")} →
                 </a>
               ) : (
-                <Link
+                <TransitionLink
                   href={`/jobs/${r.jobId}`}
                   className={cn(
                     buttonVariants({ variant: "outline", size: "sm" }),
@@ -104,7 +104,7 @@ export default async function Pipeline() {
                   )}
                 >
                   {t("pipeline.open")} →
-                </Link>
+                </TransitionLink>
               )}
             </div>
           ))}

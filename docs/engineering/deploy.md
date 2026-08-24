@@ -199,4 +199,6 @@ ser digitada.
 1. `/login` responde e nenhuma outra rota responde sem sessão.
 2. `/p/<slug>` de um perfil privado devolve **404**, não 403.
 3. `jho jobs recheck status` a partir do laptop enxerga a mesma fila.
-4. `/manifest.json` e `/sw.js` respondem — sem eles a PWA não instala.
+4. `/manifest.json`, `/sw.js`, `/icons/icon-192.png`,
+   `/icons/icon-512.png` e `/icons/icon-maskable-512.png` respondem; os três PNGs
+   decodificam nas dimensões declaradas no manifest — sem isso a PWA não instala.

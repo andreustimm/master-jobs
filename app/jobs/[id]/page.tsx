@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TransitionLink } from "../../transition-link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -35,10 +35,10 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   const externalApplyUrl = isPublicJobUrl(job.applyUrl) ? job.applyUrl : null;
 
   return (
-    <main className="pt-9 pb-16">
-      <Link href="/jobs" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
+    <main className="pt-9 pb-16" data-testid="route-job-detail">
+      <TransitionLink href="/jobs" data-testid="job-detail-back" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
         ← vagas
-      </Link>
+      </TransitionLink>
 
       <header className="mt-4 mb-6">
         <div className="flex flex-wrap items-baseline gap-3">

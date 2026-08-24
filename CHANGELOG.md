@@ -9,6 +9,15 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Coordenador único de navegação para links, formulários GET, histórico do
+  navegador e redirecionamentos aceitos, exibindo o splash da marca durante a
+  troca de tela com recuperação para falhas e navegação prolongada.
+- Shell offline localizado e sem credenciais, com cache estritamente limitado
+  a recursos estáticos públicos e exclusão explícita de páginas autenticadas,
+  APIs, perfis públicos e respostas RSC.
+
 ## [1.2.0] - 2026-08-23
 
 ### Adicionado

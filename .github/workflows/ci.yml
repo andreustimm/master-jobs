@@ -59,6 +59,15 @@ jobs:
         # build antes — que é justamente como essa divergência se esconde.
         run: node scripts/sw-version.mjs
 
+      - name: Instalar Chromium do gate PWA
+        # O contrato de privacidade abre um Chromium real. Ele fica separado da
+        # cobertura para não concorrer com os testes curtos, mas continua sendo
+        # obrigatório no mesmo portão que autoriza a promoção.
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Fronteira PWA em navegador real
+        run: pnpm test:pwa-browser
+
       - name: Testes e cobertura
         # Os limiares moram em vitest.config.ts (95% statements, 95% lines, 95%
         # funcs, 90% branches). O comando falha sozinho quando algum não é

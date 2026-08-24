@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TransitionLink } from "../../transition-link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { currentDocument } from "../../../src/core/candidate.ts";
@@ -72,13 +72,13 @@ export default async function VocabularyPage() {
 
   if (!doc) {
     return (
-      <main className="pt-10 pb-16">
+      <main className="pt-10 pb-16" data-testid="route-candidate-vocabulary">
         <h1 className="type-display-md chevron mb-2">{t("vocabulary.title")}</h1>
         <p className="type-body-md text-muted-foreground">
           {t("vocabulary.noCv")}{" "}
-          <Link href="/candidate" className="text-[var(--primary-text)] hover:underline">
+          <TransitionLink href="/candidate" className="text-[var(--primary-text)] hover:underline">
             {t("vocabulary.pasteCv")}
-          </Link>{" "}
+          </TransitionLink>{" "}
           {t("vocabulary.toCompare")}
         </p>
       </main>
@@ -88,15 +88,15 @@ export default async function VocabularyPage() {
   const report = await vocabularyGap({ candidateId, cvText: doc.content, minFit: MIN_FIT });
 
   return (
-    <main className="pt-10 pb-16">
+    <main className="pt-10 pb-16" data-testid="route-candidate-vocabulary">
       <div className="mb-2 flex items-baseline gap-3">
         <h1 className="type-display-md chevron">{t("vocabulary.title")}</h1>
-        <Link href="/candidate" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
+        <TransitionLink href="/candidate" data-testid="vocabulary-candidate-link" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           ← {t("vocabulary.backToCv")}
-        </Link>
-        <Link href="/candidate/skills" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
+        </TransitionLink>
+        <TransitionLink href="/candidate/skills" data-testid="vocabulary-skills-link" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           skills →
-        </Link>
+        </TransitionLink>
       </div>
 
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">

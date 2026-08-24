@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TransitionLink } from "../../transition-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -59,15 +59,15 @@ export default async function SkillsPage() {
   }, {});
 
   return (
-    <main className="pt-10 pb-16">
+    <main className="pt-10 pb-16" data-testid="route-candidate-skills">
       <div className="mb-2 flex items-baseline gap-3">
         <h1 className="type-display-md chevron">{t("skills.title")}</h1>
-        <Link href="/candidate" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
+        <TransitionLink href="/candidate" data-testid="skills-candidate-link" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           {t("candidate.backToCv")}
-        </Link>
-        <Link href="/candidate/vocabulary" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
+        </TransitionLink>
+        <TransitionLink href="/candidate/vocabulary" data-testid="skills-vocabulary-link" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           {t("candidate.toVocabulary")}
-        </Link>
+        </TransitionLink>
       </div>
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
         {t("copy.skillsLead")}{" "}
@@ -233,9 +233,9 @@ export default async function SkillsPage() {
       {mine.length === 0 && (
         <Card className="p-6 text-sm text-muted-foreground">
           {t("skills.emptyBefore")} {" "}
-          <Link href="/candidate" className="text-[var(--primary-text)] hover:underline">
+          <TransitionLink href="/candidate" className="text-[var(--primary-text)] hover:underline">
             /candidate
-          </Link>{" "}
+          </TransitionLink>{" "}
           {t("skills.emptyAfter")}
         </Card>
       )}

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TransitionLink } from "../transition-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -111,9 +111,13 @@ function VisibilityCard({
           {current === "public" && (
             <p className="type-meta text-muted-foreground">
               {t("visibility.publicLink")}:{" "}
-              <a href={`/p/${slug}`} className="font-mono text-[var(--primary-text)] hover:underline">
+              <TransitionLink
+                href={`/p/${slug}`}
+                prefetch={false}
+                className="font-mono text-[var(--primary-text)] hover:underline"
+              >
                 /p/{slug}
-              </a>
+              </TransitionLink>
             </p>
           )}
 
@@ -164,15 +168,15 @@ export default async function CandidateArea() {
   const gap = await analyseGap({ candidateId, minFit: 60 });
 
   return (
-    <main className="pt-10 pb-16">
+    <main className="pt-10 pb-16" data-testid="route-candidate">
       <div className="mb-4 flex items-baseline gap-3">
         <h1 className="type-display-md chevron">{t("candidate.title")}</h1>
-        <Link href="/candidate/skills" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
+        <TransitionLink href="/candidate/skills" data-testid="candidate-skills-link" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           {t("candidate.toSkills")}
-        </Link>
-        <Link href="/candidate/vocabulary" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
+        </TransitionLink>
+        <TransitionLink href="/candidate/vocabulary" data-testid="candidate-vocabulary-link" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
           {t("candidate.toVocabulary")}
-        </Link>
+        </TransitionLink>
       </div>
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
         {t("copy.candidateLead")}{" "}
