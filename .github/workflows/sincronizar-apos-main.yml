@@ -192,8 +192,9 @@ jobs:
         run: |
           ABERTA=$(gh pr list --base dev --head main --state open --json number --jq '.[0].number // ""')
           if [ -z "$ABERTA" ]; then
-            ABERTA=$(gh pr create --base dev --head main \
-              --assignee andreustimm \
+            # `gh pr create` imprime a URL e não aceita `--json`; a consulta
+            # seguinte resolve o número sem depender da saída humana do CLI.
+            if ! gh pr create --base dev --head main \
               --title "Devolver main para dev — v${VERSAO}" \
               --body "$(printf '%s\n' \
                 "Retorno automático depois da promoção para produção." \
@@ -206,7 +207,10 @@ jobs:
                 "Sem conflito, é mesclada automaticamente. Se você está lendo isto com a" \
                 "PR aberta, houve conflito: \`dev\` andou enquanto a promoção esperava" \
                 "aprovação, e resolver isso apagando trabalho não é decisão de robô.")" \
-              --json number --jq .number 2>/dev/null || echo "")
+              >/dev/null 2>&1; then
+              echo "::warning::Não consegui criar a PR de retorno; vou tentar localizar uma já aberta."
+            fi
+            ABERTA=$(gh pr list --base dev --head main --state open --json number --jq '.[0].number // ""')
           fi
 
           if [ -z "$ABERTA" ]; then
