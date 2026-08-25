@@ -177,6 +177,7 @@ function workerHarness(options: {
     caches: storage.api,
     fetch: fetchImpl,
     URL,
+    Headers,
     Request,
     Response,
     DOMException,
@@ -427,6 +428,55 @@ describe("deny-by-default worker policy", () => {
     onMessage?.({ data: structuredClone(messages[0]) });
     expect(store.getSnapshot().phase).toBe("offline");
     store.destroy();
+  });
+
+  it("treats a document navigation as HTML even when stale RSC headers survive a reload", async () => {
+    const messages: unknown[] = [];
+    let forwarded: Request | undefined;
+    const fixture = workerHarness({
+      fetch: async (request: RequestInfo | URL) => {
+        forwarded = request as Request;
+        return new Response("<!doctype html><title>403</title>", {
+          status: 403,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      },
+    });
+    fixture.clients.get = async () => ({
+      postMessage(message: unknown) {
+        messages.push(message);
+      },
+    });
+
+    let response: Promise<Response> | undefined;
+    fixture.listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        mode: "navigate",
+        url: "https://jobs.example/candidate?_rsc=stale&tab=profile",
+        headers: new Headers({
+          RSC: "1",
+          "next-router-state-tree": "stale",
+          "next-router-prefetch": "1",
+          "next-url": "/jobs",
+        }),
+      },
+      clientId: "reload-client",
+      respondWith(value: Promise<Response>) {
+        response = value;
+      },
+    });
+
+    await expect(response).resolves.toMatchObject({ status: 403 });
+    expect(forwarded).toBeInstanceOf(Request);
+    const forwardedUrl = new URL(forwarded!.url);
+    expect(forwardedUrl.searchParams.has("_rsc")).toBe(false);
+    expect(forwardedUrl.searchParams.get("tab")).toBe("profile");
+    for (const header of ["rsc", "next-router-state-tree", "next-router-prefetch", "next-url"]) {
+      expect(forwarded!.headers.has(header)).toBe(false);
+    }
+    expect(forwarded!.headers.get("accept")).toContain("text/html");
+    expect(messages).toEqual([]);
   });
 });
 

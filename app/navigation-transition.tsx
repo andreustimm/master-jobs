@@ -16,7 +16,10 @@ import {
   SPLASH_NAME_CLASS,
   SPLASH_PRODUCT_NAME,
   SPLASH_PROGRESS_CLASS,
+  SPLASH_REFERENCE_KEY,
+  SPLASH_ROOT_ID,
   TRANSITION_SPLASH_ROOT_ID,
+  removeInertSplashDuplicates,
 } from "../src/core/pwa/splash.ts";
 
 function NavigationCommitObserver() {
@@ -27,6 +30,19 @@ function NavigationCommitObserver() {
   const previousRoute = useRef(routeKey);
 
   useLayoutEffect(() => {
+    const registeredSplash = (window as Window & {
+      [SPLASH_REFERENCE_KEY]?: HTMLElement | null;
+    })[SPLASH_REFERENCE_KEY];
+
+    // Canonical 403/404 documents can carry the root layout inside Flight.
+    // React inserts that HTML, but does not execute its inline removal script.
+    // Keep the parser-owned startup splash and remove every inert duplicate.
+    // Duplicate ids are invalid but can coexist briefly while Flight commits.
+    removeInertSplashDuplicates(
+      document.querySelectorAll<HTMLElement>(`#${SPLASH_ROOT_ID}`),
+      registeredSplash,
+    );
+
     const previous = previousRoute.current;
     previousRoute.current = routeKey;
     const snapshot = transitionStore.getSnapshot();

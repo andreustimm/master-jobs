@@ -13,6 +13,7 @@ import {
   SPLASH_MAX_MS,
   SPLASH_MIN_MS,
   SPLASH_ROOT_ID,
+  SPLASH_REFERENCE_KEY,
   TRANSITION_SPLASH_ROOT_ID,
 } from "../src/core/pwa/splash.ts";
 import { TRANSITION_MIN_MS, TRANSITION_PROLONGED_MS } from "../src/core/pwa/transition.ts";
@@ -148,6 +149,9 @@ describe("tela de abertura", () => {
     // Guarda contra os três dispararem juntos — o documento pode ficar pronto
     // no mesmo quadro em que o teto vence.
     expect(script).toContain("if(removida)return;removida=true");
+    expect(script).toContain(JSON.stringify(SPLASH_REFERENCE_KEY));
+    expect(script).toContain("var el=splash;if(!el)return");
+    expect(script).not.toContain("var el=document.getElementById(id)");
   });
 
   it("o script também remove a splash se ele próprio estourar", () => {

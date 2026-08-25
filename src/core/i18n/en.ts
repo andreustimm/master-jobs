@@ -25,6 +25,13 @@ export const en: Dictionary = {
     failedTitle: "We couldn't open this screen",
     failedBody: "Navigation failed. Try again.",
   },
+  routeStatus: {
+    forbiddenTitle: "Access denied",
+    forbiddenBody: "You don't have permission to open this screen.",
+    notFoundTitle: "Page not found",
+    notFoundBody: "This address doesn't exist or is no longer available.",
+    back: "Back to start",
+  },
   changelog: {
     link: "What's new",
     title: "What's new",
