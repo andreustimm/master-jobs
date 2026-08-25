@@ -2,7 +2,7 @@
 id: NAV-first-party-navigation-contract
 area: NAV
 title: Percorrer toda navegação interna por uma transição estável
-persona: Andreus no celular
+persona: Andreus em triagem
 journey: J-switch-workspace-screen
 expected: Menu, links contextuais, filtros, paginação e redirects chegam ao destino com um único splash e sem repetir ações
 entry_points: /; /jobs; /compare; /pipeline; /referrals; /candidate; /admin/users
@@ -11,8 +11,8 @@ bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence: tests/e2e/ui.mjs; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/triagem-pipeline.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/triagem-noturna-jobs.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/andreus-mobile-ranking.png; docs/qa/reports/2026-08-24T210158000000Z-71293d34-release-1.3.0-full.md; docs/qa/evidence/2026-08-25T101102000000Z-5f90e25a-mobile-header-safe-area-targeted/mobile-jobs-canary.png
-last_report: docs/qa/reports/2026-08-25T101102000000Z-5f90e25a-mobile-header-safe-area-targeted.md
+evidence: tests/e2e/ui.mjs; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/triagem-pipeline.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/triagem-noturna-jobs.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/andreus-mobile-ranking.png; docs/qa/reports/2026-08-24T210158000000Z-71293d34-release-1.3.0-full.md
+last_report: docs/qa/reports/2026-08-24T210158000000Z-71293d34-release-1.3.0-full.md
 overlaps: NAV-switch-screen-ready
 ---
 
@@ -23,5 +23,3 @@ O inventário completo passou com uma geração por navegação aceita; POSTs pe
 Revalidado no build `bfd27a9` em todos os destinos globais, filtro GET, densidade e paginação; o recrutador entrou diretamente em Vagas com apenas o destino autorizado visível.
 
 O Full QA repetiu a navegação e o reload com Andreus em triagem, Andreus em triagem noturna e Andreus no celular; a viewport 375×812 permaneceu sem overflow.
-
-Revalidado como canário adjacente da correção de safe area: o menu móvel chegou a Vagas em 375×812 e a rota permaneceu estável e sem overflow depois da recarga.

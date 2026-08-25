@@ -34,7 +34,7 @@ Ao abrir o Cockpit como PWA instalada, o relógio e os indicadores do sistema ap
 
 - **Root cause:** o shell instalado dependia apenas de `safe-area-inset-top`; alguns launchers móveis mantêm a barra do sistema sobre o viewport, mas reportam esse inset como zero.
 - **Fix commit:** `5f90e25`
-- **Regression test:** `tests/pwa-chrome.test.ts` falhou antes e passou depois; `tests/e2e/ui.mjs` confirma geometria e ausência de overflow em quatro viewports.
+- **Regression test:** `tests/pwa-chrome.test.ts` falhou antes e passou depois; `376d242` trava a ligação dos tokens aos insets do aparelho, e `tests/e2e/ui.mjs` confirma geometria e ausência de overflow em quatro viewports.
 
 ## Verification
 

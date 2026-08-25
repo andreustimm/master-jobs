@@ -2,7 +2,7 @@
 
 - **Scope:** regressão que permitia à barra do sistema cobrir marca e controles do cabeçalho em uma PWA instalada
 - **Cadence tier:** targeted
-- **Build:** `5f90e25` · **Environment:** build Next de produção local; Chromium; Safari/PWA físico exige verificação humana
+- **Build:** `376d242` (inclui a correção `5f90e25`) · **Environment:** build Next de produção local; Chromium; Safari/PWA físico exige verificação humana
 - **Started:** 2026-08-25T10:11:02Z · **Status:** closed
 
 ## Personas
@@ -22,7 +22,7 @@
 | # | Charter | Journey / Scenario | Persona | Tour | Status | Issue | Fix commit |
 |---|---|---|---|---|---|---|---|
 | 1 | CH-installed-header-safe-area | J-open-dashboard-direct / PWA-installed-header-safe-area | Candidato em trânsito | Feature Tour | Blocked (needs human verify) | BUG-20260825-pwa-header-status-bar-overlap | `5f90e25` |
-| 2 | CH-mobile-one-hand-ranking | J-switch-workspace-screen / NAV-first-party-navigation-contract | Andreus no celular | Feature Tour | Pass | | |
+| 2 | CH-mobile-one-hand-ranking | J-switch-workspace-screen / canário adjacente | Andreus no celular | Feature Tour | Pass | | |
 
 Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human verify) | Blocked (human decision)`
 
@@ -43,7 +43,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 - **Ran:** 2026-08-25T10:18:00Z → 2026-08-25T10:20:00Z (box respected: yes)
 - **Findings:** o menu móvel abriu, navegou para Vagas e permaneceu em `/jobs` após recarga, com `scrollWidth` menor que 375 px.
 - **Bugs filed/updated:** nenhum.
-- **Scenarios settled:** NAV-first-party-navigation-contract → Pass.
+- **Scenarios settled:** nenhum; o canário não substitui o contrato amplo de navegação.
 - **Paper cuts:** nenhum.
 - **Surprises:** nenhuma.
 - **Suggested next charter:** nenhum para esta mudança targeted.
@@ -61,7 +61,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 - **Symptom:** relógio e indicadores do aparelho se sobrepunham à marca e aos controles do cabeçalho instalado.
 - **Root cause:** alguns launchers mantêm a barra do sistema sobre o viewport mesmo reportando `safe-area-inset-top: 0`.
 - **Fix:** `5f90e25`, um piso de espaçamento do `DESIGN.md` apenas em contexto instalado com toque; o inset real continua prevalecendo e desktop não recebe faixa artificial.
-- **Regression test:** `tests/pwa-chrome.test.ts` falhou antes e passou depois; `tests/e2e/ui.mjs` mede a geometria em quatro viewports.
+- **Regression test:** `tests/pwa-chrome.test.ts` falhou antes e passou depois; `376d242` também trava a ligação dos tokens aos insets do aparelho, e `tests/e2e/ui.mjs` mede a geometria em quatro viewports.
 - **Retested:** J-open-dashboard-direct em quatro viewports e J-switch-workspace-screen em 375×812, sempre a partir de nova carga.
 
 ## Paper Cuts
@@ -86,7 +86,7 @@ Nenhuma.
 
 ## Final Status
 
-- **Exit gate (full automated suite):** `pnpm check` — 148 arquivos, 2.089 testes passados e 6 ignorados; cobertura 96,5% statements / 93,05% branches / 96,99% functions / 97,4% lines. `pnpm test:e2e` — 181/181 jornadas e 8/8 páginas axe WCAG 2.2 AA. `pnpm test:pwa-browser` — 24/24 testes passados.
+- **Exit gate (full automated suite):** `pnpm check` — 148 arquivos, 2.090 testes passados e 6 ignorados; cobertura 96,5% statements / 93,05% branches / 96,99% functions / 97,4% lines. `pnpm test:e2e` — 181/181 jornadas e 8/8 páginas axe WCAG 2.2 AA. `pnpm test:pwa-browser` — 25/25 testes passados.
 - **Issues by user impact:** Blocks-Completion 0 · Data-Loss 0 · Trust-Damage 0 · Friction 1 · Cosmetic 0
-- **Coverage:** 2/2 jornadas percorridas; a perna física de Safari/PWA está explicitamente bloqueada para verificação humana.
+- **Coverage:** jornada afetada percorrida e canário adjacente executado; a perna física de Safari/PWA está explicitamente bloqueada para verificação humana.
 - **Verdict:** ready-with-blocked-items — pronto para PR e staging; confirmar no aparelho físico antes de declarar o bug verificado em produção.
