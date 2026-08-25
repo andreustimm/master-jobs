@@ -9,7 +9,7 @@ charter:
     name: Recrutadora convidada
     device: laptop
     network: wifi-fast
-    locale: en-US
+    locale: pt-BR
   journey: J-switch-workspace-screen
   scenarios: [AUTH-canonical-transition-boundaries]
   tour: Feature Tour
