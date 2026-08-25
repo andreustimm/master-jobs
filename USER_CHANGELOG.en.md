@@ -16,6 +16,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-08-25T12:11:42.279Z
+
+### Fixed
+
+- In the installed mobile app, the brand, menu, and header controls now remain
+  below the system status bar in both portrait and landscape orientation.
+
 ## [1.3.1] - 2026-08-25T05:09:18.271Z
 
 ### Fixed
