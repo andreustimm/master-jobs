@@ -21,6 +21,8 @@ import { isStandalone, renderStandaloneScript, STANDALONE_CLASS } from "../src/c
 import { generatePwaArtifacts } from "../scripts/sw-version.mjs";
 import { ptBR } from "../src/core/i18n/pt-BR.ts";
 
+const GLOBAL_CSS = readFileSync("app/globals.css", "utf8");
+
 /**
  * A moldura de PWA: área segura e tela de abertura.
  *
@@ -42,37 +44,32 @@ import { ptBR } from "../src/core/i18n/pt-BR.ts";
 
 describe("modo instalado", () => {
   it("reserva a área segura só no cabeçalho da aplicação", () => {
-    const css = readFileSync("app/globals.css", "utf8");
-
     // Um seletor global de `header` também zera o padding-top dos cabeçalhos
     // de página e das modais quando o Android abre em `minimal-ui`.
-    expect(css).toContain("html.pwa-standalone #application-shell > header {");
-    expect(css).toContain("html.pwa-standalone #application-shell > header > div,");
-    expect(css).toContain(
+    expect(GLOBAL_CSS).toContain("html.pwa-standalone #application-shell > header {");
+    expect(GLOBAL_CSS).toContain("html.pwa-standalone #application-shell > header > div,");
+    expect(GLOBAL_CSS).toContain(
       "padding-left: max(var(--spacing-md), var(--safe-area-left));",
     );
-    expect(css).toContain(
+    expect(GLOBAL_CSS).toContain(
       "padding-right: max(var(--spacing-md), var(--safe-area-right));",
     );
-    expect(css).not.toMatch(/html\.pwa-standalone header\s*\{/);
-    expect(css).not.toMatch(/html\.pwa-standalone header\s*>\s*div/);
+    expect(GLOBAL_CSS).not.toMatch(/html\.pwa-standalone header\s*\{/);
+    expect(GLOBAL_CSS).not.toMatch(/html\.pwa-standalone header\s*>\s*div/);
   });
 
   it("liga os tokens de área segura aos insets informados pelo aparelho", () => {
-    const css = readFileSync("app/globals.css", "utf8");
-
     for (const edge of ["top", "right", "bottom", "left"]) {
-      expect(css).toContain(
+      expect(GLOBAL_CSS).toContain(
         `--safe-area-${edge}: env(safe-area-inset-${edge});`,
       );
     }
   });
 
   it("mantém o conteúdo do cabeçalho abaixo da barra do sistema quando o inset é zero", () => {
-    const css = readFileSync("app/globals.css", "utf8");
-    const cabecalho = css.indexOf("html.pwa-standalone #application-shell > header {");
-    const inicio = css.indexOf("@media (pointer: coarse)", cabecalho);
-    const regra = css.slice(inicio, css.indexOf("}\n}", inicio) + 3);
+    const cabecalho = GLOBAL_CSS.indexOf("html.pwa-standalone #application-shell > header {");
+    const inicio = GLOBAL_CSS.indexOf("@media (pointer: coarse)", cabecalho);
+    const regra = GLOBAL_CSS.slice(inicio, GLOBAL_CSS.indexOf("}\n}", inicio) + 3);
 
     // Alguns launchers instalados entregam `safe-area-inset-top: 0` mesmo
     // desenhando a barra de status sobre o viewport. O token deixa o caso
@@ -84,9 +81,8 @@ describe("modo instalado", () => {
   });
 
   it("não cria faixa de safe area na PWA instalada do desktop", () => {
-    const css = readFileSync("app/globals.css", "utf8");
-    const inicio = css.indexOf("html.pwa-standalone #application-shell > header {");
-    const regra = css.slice(inicio, css.indexOf("}", inicio) + 1);
+    const inicio = GLOBAL_CSS.indexOf("html.pwa-standalone #application-shell > header {");
+    const regra = GLOBAL_CSS.slice(inicio, GLOBAL_CSS.indexOf("}", inicio) + 1);
 
     expect(regra).toContain("padding-top: var(--safe-area-top);");
     expect(regra).not.toContain("--spacing-xxl");
@@ -227,17 +223,16 @@ describe("tela de abertura", () => {
   });
 
   it("UT-031 compartilha semântica, safe areas, contenção e redução de movimento", () => {
-    const css = readFileSync("app/globals.css", "utf8");
-    const transition = css.slice(css.indexOf(".navigation-transition {"));
+    const transition = GLOBAL_CSS.slice(GLOBAL_CSS.indexOf(".navigation-transition {"));
 
     for (const token of ["--background", "--foreground", "--primary", "--safe-area-top"]) {
       expect(transition).toContain(`var(${token})`);
     }
     expect(transition).toContain("overflow-wrap: anywhere");
     expect(transition).toContain("min-block-size: 100dvh");
-    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
-    expect(css).toMatch(/prefers-reduced-motion: reduce[\s\S]*navigation-transition[\s\S]*animation: none/);
-    expect(css).toMatch(/prefers-reduced-motion: reduce[\s\S]*navigation-transition[\s\S]*transition: none/);
+    expect(GLOBAL_CSS).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(GLOBAL_CSS).toMatch(/prefers-reduced-motion: reduce[\s\S]*navigation-transition[\s\S]*animation: none/);
+    expect(GLOBAL_CSS).toMatch(/prefers-reduced-motion: reduce[\s\S]*navigation-transition[\s\S]*transition: none/);
     expect(transition).not.toMatch(/#[0-9a-f]{3,8}\b/i);
   });
 

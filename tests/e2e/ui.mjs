@@ -323,7 +323,14 @@ try {
     JSON.stringify(asymmetricSpacing),
   );
 
-  const headerSafeAreaCdp = await page.context().newCDPSession(page);
+  const headerSafeAreaPage = await page.context().newPage();
+  await headerSafeAreaPage.addInitScript(() => {
+    Object.defineProperty(navigator, "standalone", {
+      configurable: true,
+      value: true,
+    });
+  });
+  const headerSafeAreaCdp = await page.context().newCDPSession(headerSafeAreaPage);
   const headerSafeAreaSnapshots = [];
   for (const fixture of [
     { label: "mobile retrato", width: 375, height: 812, touch: true, safe: { top: 47, right: 0, bottom: 34, left: 0 } },
@@ -343,9 +350,8 @@ try {
       enabled: fixture.touch,
       maxTouchPoints: fixture.touch ? 5 : 1,
     });
-    await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.evaluate(({ top, right, bottom, left }) => {
-      document.documentElement.classList.add("pwa-standalone");
+    await headerSafeAreaPage.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await headerSafeAreaPage.evaluate(({ top, right, bottom, left }) => {
       const root = document.documentElement.style;
       root.setProperty("--safe-area-top", `${top}px`);
       root.setProperty("--safe-area-right", `${right}px`);
@@ -353,13 +359,14 @@ try {
       root.setProperty("--safe-area-left", `${left}px`);
     }, fixture.safe);
 
-    const sample = await page.locator("#application-shell > header").evaluate((header) => {
+    const sample = await headerSafeAreaPage.locator("#application-shell > header").evaluate((header) => {
       const content = header.firstElementChild;
       const rootStyle = getComputedStyle(document.documentElement);
       const headerRect = header.getBoundingClientRect();
       const contentRect = content?.getBoundingClientRect();
       const contentStyle = content ? getComputedStyle(content) : null;
       return {
+        standaloneClass: document.documentElement.classList.contains("pwa-standalone"),
         pointerCoarse: matchMedia("(pointer: coarse)").matches,
         paddingTop: Number.parseFloat(getComputedStyle(header).paddingTop),
         spacingFloor: Number.parseFloat(rootStyle.getPropertyValue("--spacing-xxl")),
@@ -382,6 +389,7 @@ try {
   }
   await headerSafeAreaCdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
   await headerSafeAreaCdp.send("Emulation.clearDeviceMetricsOverride");
+  await headerSafeAreaPage.close();
 
   check(
     "cabeçalho PWA respeita a barra do sistema em mobile retrato, paisagem, tablet e desktop",
@@ -389,7 +397,8 @@ try {
       const expectedTop = sample.touch
         ? Math.max(sample.spacingFloor, sample.safeTop)
         : sample.safeTop;
-      return sample.pointerCoarse === sample.touch
+      return sample.standaloneClass
+        && sample.pointerCoarse === sample.touch
         && sample.paddingTop === expectedTop
         && sample.contentTop >= sample.headerTop + expectedTop
         && sample.contentLeft >= sample.headerLeft
