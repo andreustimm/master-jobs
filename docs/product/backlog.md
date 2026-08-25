@@ -117,6 +117,12 @@ caracterização que fixava o defeito foi convertido em teste da correção.
 > O caminho é legítimo e não aciona as cláusulas da §8.2 que mordem, sob três
 > travas. O acesso ao inbox é via Gmail API com escopo somente-leitura.
 
+O pipeline, o OAuth e a coleta estão implementados em `jho mail auth` e
+`jho mail fetch`. A etapa pendente é operacional: o usuário cria as próprias
+credenciais `GMAIL_CLIENT_ID` e `GMAIL_CLIENT_SECRET`, configura-as fora do Git
+e autoriza a conta. O sistema guarda o token local fora do repositório e limita
+o acesso a `gmail.readonly`.
+
 Três usos distintos, com valor decrescente de novidade e crescente de esforço:
 
 **(a) Job alerts do LinkedIn.** Fecha a única lacuna declarada na ADR 0001.
@@ -124,8 +130,9 @@ Os e-mails são correspondência do próprio usuário — lê-los não toca a
 plataforma nem viola a seção 8.2, ao contrário de dirigir o cookie `li_at`.
 
 **(b) E-mails de ATS → funil por evidência.** Confirmação, convite de triagem,
-agendamento, rejeição. Hoje o status é digitado de memória. Habilita três
-métricas que hoje não existem:
+agendamento e rejeição viram sugestões em `mail_suggestion`; só a aceitação
+explícita passa por `setApplicationStatus`. O histórico estruturado sustenta três
+métricas de produto:
 
 | Métrica | Por que importa em R&S |
 |---|---|
@@ -147,13 +154,14 @@ está atraindo o nível certo.
 
 ### F-02 · Área do candidato dinâmica ✅
 
-Hoje o perfil é `profile/profile.yaml`, estático e único. Precisa virar entidade
-consultável e editável, explicitamente porque **pode virar produto** — ou seja,
-multi-candidato.
+O perfil padrão continua em `profile/profile.yaml`, mas a área autenticada do
+candidato já permite consultar e editar currículo, vocabulário e skills com
+escopo por candidato. O dashboard usa as APIs dos contextos proprietários em
+vez de manter uma implementação paralela.
 
-Decisão de fronteira que precisa ser acertada: o que é por candidato (perfil,
-alvos, restrições, ranges, benefícios, funil) e o que é compartilhado (corpus de
-vagas, registro de empresas, taxas de câmbio). Errar essa linha é caro.
+A fronteira implementada mantém perfil, alvos, restrições, ranges, benefícios e
+funil por candidato; corpus de vagas, empresas e taxas de câmbio continuam
+compartilhados.
 
 ### F-04 · Fontes autenticadas: Revelo, BairesDev, marketplaces ✅ (parte automatizável)
 
@@ -807,8 +815,10 @@ destinatário (o corpo do Resend cita o e-mail; só o status sobe), e a tela
 confere o token **antes** de mostrar o campo de senha — senão a pessoa digita
 a senha nova e só então descobre que o link morreu.
 
-**A credencial é sua.** `RESEND_API_KEY` e `RESEND_FROM` em `.env.example`;
-nenhum agente pode gerá-las.
+**A credencial é sua.** O operador cria `RESEND_API_KEY`, verifica o domínio
+do remetente e configura `RESEND_FROM` conforme `.env.example`; nenhum agente
+pode gerar, ler ou versionar esses valores. Sem as duas, o adapter de console
+continua sendo o fallback documentado.
 
 ### E-01 · Arquitetura hexagonal, DDD, monolito modular ✅
 

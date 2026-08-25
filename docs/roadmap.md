@@ -39,6 +39,7 @@ Tudo nesta seção foi verificado contra `src/` e contra o banco em
 | Funil de candidaturas com histórico append-only | ✅ | `application` + `application_event`, `setApplicationStatus()` |
 | Export markdown para o vault Obsidian | ✅ | `src/core/report/markdown.ts` |
 | Perfil validado por Zod v4 | ✅ | `profile/profile.yaml`, `src/core/profile/schema.ts` |
+| Seed idempotente do banco | ✅ | `package.json` → `db:seed`; `src/cli.ts` → `db.command("seed")` |
 | Migrations Drizzle (11 tabelas, 1 migration) | ✅ | `drizzle/0000_remarkable_solo.sql` |
 | Skills de agente (triage, kit, perfil, posicionamento) | ✅ | `.claude/skills/*/SKILL.md` |
 | Suíte Vitest do scorer e do normalizador (14 `describe`, 31 `it()`) | ✅ | `tests/scoring.test.ts`, `tests/normalize.test.ts` |
@@ -84,7 +85,6 @@ arquitetura nova.
 | Dívida | Evidência | Primeiro passo |
 |---|---|---|
 | Cobertura de teste só cobre o núcleo puro | `tests/scoring.test.ts` e `tests/normalize.test.ts` não tocam banco; não há teste de `run.ts`, `apply.ts` nem dos adapters | Um teste de ingestão com fixture de payload por adapter, validando que o `fingerprint` não muda entre duas execuções |
-| `db:seed` aponta para um subcomando inexistente | `package.json` → `"db:seed": "pnpm jho db seed"`; não há `db.command("seed")` em `src/cli.ts` | Remover o script, ou implementar `db seed` para popular `positioning_task` (a única tabela com leitor pronto, `repo.openTasks()`) |
 | `smartrecruiters` e `recruitee` têm adapter mas nenhuma entrada em `config/sources.yaml` | `registry.ts` registra os dois | Validar um handle real com `pnpm jho sources probe` antes de adicionar |
 
 > **Invariante:** Mexeu em `profile.yaml` ou no scorer? Bump `SCORER_VERSION` em
@@ -95,25 +95,18 @@ arquitetura nova.
 
 ---
 
-## Fase 2 — Automação (planejado; só o Loop de 2.6 já existe em arquivo)
+## Fase 2 — Automação e interface
 
-Ordem proposta: os itens 1 e 2 destravam o uso diário; 3 e 4 melhoram a
+Os itens 1 e 2 já sustentam o uso diário; 3 e 4 continuam como melhorias da
 qualidade da decisão; 5 e 6 são o lado de posicionamento.
 
 ### 2.1 Dashboard Next.js 16
 
-**Estado: 🟡 scaffolding.** `next.config.ts` já define
-`serverExternalPackages: ["@libsql/client"]`, `experimental.cacheComponents: true`
-e `typedRoutes: true`; `next@16`, `react@19` e `tailwindcss@4` estão instalados;
-os scripts `dev`/`build`/`start` existem. `components/` e `lib/` estão
-**vazios** e `app/` contém apenas o subdiretório vazio `app/api/` — não há uma
-única rota, nenhum `page.tsx`, nenhum `route.ts`.
-
-**Primeiro passo concreto:** criar `app/layout.tsx` + `app/page.tsx` como Server
-Components que chamem `listBoard()` de `src/core/db/repo.ts` e rendam exatamente
-o `BoardRow` que a CLI já usa. Nenhuma query nova. Como `cacheComponents` está
-ligado, a leitura de banco precisa ficar atrás de um `<Suspense>`, senão o build
-reclama de dado não-cacheável em render estático.
+**Estado: ✅ entregue.** O dashboard Next.js tem board, detalhe da vaga,
+funil, referrals, comparação, área do candidato, administração e perfil
+público em `app/`. As páginas são Server Components por omissão e reutilizam
+as APIs dos contextos proprietários; autenticação e autorização são exigidas
+por padrão.
 
 > **Invariante:** A UI nunca escreve SQL próprio. Toda leitura compartilhada
 > entra em `src/core/db/repo.ts` — é essa a razão de o arquivo existir
@@ -123,17 +116,12 @@ reclama de dado não-cacheável em render estático.
 
 ### 2.2 Sync agendado
 
-**Estado: ⬜.** Hoje `pnpm jho jobs sync` é sempre manual. O comando já é
-seguro para rodar em loop: chama `runMigrations()` antes de tudo,
-`ensureSources()` faz `onConflictDoUpdate`, o upsert de `job` é decidido pelo
-`fingerprint` e o de `job_score` por `onConflictDoUpdate` em `job_id`.
-
-**Primeiro passo concreto:** um agendador **local** (launchd no macOS) chamando
-`pnpm jho jobs sync && pnpm jho report` uma vez por dia, com a saída em log. Não
-precisa de código novo — a idempotência já está garantida. Só depois que isso
-rodar por uma semana sem intervenção é que faz sentido a rota de cron da Fase 3.
-Checagem de saúde da rotina: `pnpm jho sources list` (coluna `STATUS` + a linha
-`↳ <lastError>` em vermelho).
+**Estado: ✅ entregue.** `.github/workflows/varredura.yml` executa diariamente
+em produção e também aceita `workflow_dispatch`. A rodada sincroniza fontes,
+captura descrições, reconfere vagas, drena a fila de repontuação por candidato,
+pontua vagas novas para todos os candidatos elegíveis e termina conferindo a
+saúde das fontes. A rota limitada da Vercel continua como rede de segurança;
+o workflow é quem comporta a varredura completa.
 
 > **Invariante:** Uma fonte que falha é registrada e pulada; nunca aborta a run
 > (`src/core/ingest/run.ts`, item 2). Um agendador que trate exit code != 0 como
@@ -226,14 +214,13 @@ kit de candidatura (2.4) e o de engajamento (2.5).
 
 ---
 
-## Fase 3 — Deploy (planejado; **não** é o modo atual)
+## Fase 3 — Deploy
 
-**O projeto roda localmente de propósito.** `data/jobs.db` é um arquivo SQLite
-comum e o default de `TURSO_DATABASE_URL` em `src/core/db/client.ts` é
-`file:./data/jobs.db`, o que mantém `pnpm jho` funcionando com zero
-configuração. Vercel + Turso é um caminho **preparado**, não trilhado: não há
-uma rota, um `vercel.json`, um projeto Turso ou uma leitura de `CRON_SECRET` em
-lugar nenhum do código.
+**Estado: ✅ implantado em Vercel + Turso, sem retirar o modo local.** O
+default de `TURSO_DATABASE_URL` continua sendo `file:./data/jobs.db`, portanto
+`pnpm jho` funciona com zero configuração local. Produção, staging e dev usam
+bancos Turso separados e seguem o fluxo de branches descrito em
+`docs/engineering/deploy.md`.
 
 O que já foi decidido para não travar depois:
 
@@ -254,24 +241,16 @@ O que já foi decidido para não travar depois:
 
 ### 3.1 Turso + Vercel
 
-**Primeiro passo concreto:** `turso db create master-jobs`, apontar
-`TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` em um `.env.local` separado e rodar
-`pnpm db:migrate` contra ele. A migration `0000_remarkable_solo.sql` é a mesma —
-não há SQL específico de dialeto. Migrar os dados locais é um problema à parte:
-o `fingerprint` é estável, então uma reingestão do zero reconstrói `job` e
-`job_score`, mas **`application` e `application_event` não são recriáveis por
-sync** e precisam ser copiados explicitamente.
+Os três ambientes remotos e o procedimento de migração estão documentados em
+`docs/engineering/deploy.md`. As credenciais Turso continuam pertencendo ao
+operador e ficam nos secrets de cada ambiente, nunca em arquivos versionados.
 
 ### 3.2 Rotas de cron protegidas por `CRON_SECRET`
 
-**Estado: 🟡 scaffolding.** `CRON_SECRET` está documentado no `.env.example`
-(*"Vercel Cron sends this as `Authorization: Bearer <CRON_SECRET>`"*), mas
-**nenhum código o lê** — não aparece em nenhum `process.env` de `src/`.
-
-**Primeiro passo concreto:** `app/api/cron/sync/route.ts` que compara o header
-`Authorization` com `process.env.CRON_SECRET` em tempo constante, retorna 401
-quando não bate, e só então chama o mesmo `syncAll()` + `scoreAll()` que a CLI
-chama. A rota é uma casca; a lógica continua em `src/core/`.
+**Estado: ✅ entregue para reconferência em lotes.**
+`app/api/cron/recheck/route.ts` valida `CRON_SECRET` e processa um lote compatível
+com o limite da Vercel. A varredura completa permanece no GitHub Actions, onde
+os comandos longos cabem.
 
 > **Invariante:** A rota de cron não pode virar um segundo pipeline. Se ela
 > precisar de lógica que a CLI não tem, a lógica está no lugar errado — vai para
@@ -324,7 +303,7 @@ mudou de estado:
 |---|---|---|
 | Dashboard Next.js | ⬜ planejado | ✅ 5 rotas, shadcn/ui, Server Components |
 | Remuneração com moeda | ⬜ não existia | ✅ `Money`, faixas por moeda, câmbio do BCE |
-| Ingestão de e-mail | ⬜ planejado | ✅ ADR 0008 + pipeline completo |
+| Ingestão de e-mail e OAuth do Gmail | ⬜ planejado | ✅ código completo; credenciais e autorização pertencem ao operador |
 | Referrals | ⬜ planejado | ✅ `contacts` + `referrals` |
 | Cadastro por URL | ⬜ planejado | ✅ `jobs add`, resolvendo pelo ATS |
 | Import de plataforma logada | ⬜ não existia | ✅ `jobs import` |
@@ -335,8 +314,6 @@ mudou de estado:
 
 ### O que continua não existindo
 
-- **Deploy.** Roda local por decisão. Turso + Vercel é caminho preparado.
-- **OAuth do Gmail.** E-mail hoje é exportação manual de `.eml`.
 - **Geração de CV e cover letter.** A skill `application-kit` descreve o
   processo; não há comando.
 - **Publicação no LinkedIn.** A API oficial permite; não foi integrada.
@@ -355,4 +332,3 @@ e adicionar boards diretos rende mais que qualquer refinamento de scorer.
 **Canal decide mais que ranqueamento.** Referrals são ~40% das contratações.
 O `contacts`/`referrals` existe, mas as 30 contas-alvo da auditoria §2.2 ainda
 precisam ser cadastradas — é pesquisa, não código.
-
