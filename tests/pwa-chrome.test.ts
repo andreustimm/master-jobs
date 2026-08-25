@@ -52,6 +52,30 @@ describe("modo instalado", () => {
     expect(css).not.toMatch(/html\.pwa-standalone header\s*>\s*div/);
   });
 
+  it("mantém o conteúdo do cabeçalho abaixo da barra do sistema quando o inset é zero", () => {
+    const css = readFileSync("app/globals.css", "utf8");
+    const cabecalho = css.indexOf("html.pwa-standalone #application-shell > header {");
+    const inicio = css.indexOf("@media (pointer: coarse)", cabecalho);
+    const regra = css.slice(inicio, css.indexOf("}\n}", inicio) + 3);
+
+    // Alguns launchers instalados entregam `safe-area-inset-top: 0` mesmo
+    // desenhando a barra de status sobre o viewport. O token deixa o caso
+    // simulável no browser e o espaçamento do DESIGN.md é o piso que impede o
+    // relógio de voltar a cobrir a marca.
+    expect(regra).toContain(
+      "padding-top: max(var(--spacing-xxl), var(--safe-area-top));",
+    );
+  });
+
+  it("não cria faixa de safe area na PWA instalada do desktop", () => {
+    const css = readFileSync("app/globals.css", "utf8");
+    const inicio = css.indexOf("html.pwa-standalone #application-shell > header {");
+    const regra = css.slice(inicio, css.indexOf("}", inicio) + 1);
+
+    expect(regra).toContain("padding-top: var(--safe-area-top);");
+    expect(regra).not.toContain("--spacing-xxl");
+  });
+
   it("iOS antigo é reconhecido por navigator.standalone", () => {
     // Aparelho da era em que `display-mode` ainda não existia. Sem este ramo,
     // o app instalado no iPhone antigo ficaria com o conteúdo sob a barra.

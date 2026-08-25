@@ -637,7 +637,17 @@ html.pwa-standalone body {
    `viewport-fit: cover` foi pedir para não ter. Reservando o espaço DENTRO do
    cabeçalho, a cor dele sobe até o topo da tela e só o conteúdo desce. */
 html.pwa-standalone #application-shell > header {
-  padding-top: env(safe-area-inset-top);
+  padding-top: var(--safe-area-top);
+}
+
+/* Em alguns launchers móveis a barra de status continua sobre o viewport, mas
+   `safe-area-inset-top` chega como zero. O aparelho da regressão faz exatamente
+   isso. O piso só vale para o contexto de toque: uma PWA instalada no desktop
+   não ganha uma faixa vazia que o sistema operacional não pede. */
+@media (pointer: coarse) {
+  html.pwa-standalone #application-shell > header {
+    padding-top: max(var(--spacing-xxl), var(--safe-area-top));
+  }
 }
 
 /* Laterais no conteúdo, e não no `body`.
