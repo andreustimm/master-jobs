@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-08-25T19:02:27.543Z
+
 ### Improved
 
 - Actions that save, change, delete, or update data now show a confirmation or

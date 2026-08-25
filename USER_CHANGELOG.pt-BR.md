@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-08-25T19:02:27.543Z
+
 ### Melhorado
 
 - Ações que salvam, alteram, excluem ou atualizam dados agora mostram uma

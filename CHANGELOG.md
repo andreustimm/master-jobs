@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-08-25
+
 ### Adicionado
 
 - Feedback global de mutações para ações da interface: operações de salvar,
