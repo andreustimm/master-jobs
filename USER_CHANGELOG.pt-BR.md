@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-08-25T12:11:42.279Z
+
 ### Correção
 
 - No aplicativo instalado no celular, a marca, o menu e os controles do topo

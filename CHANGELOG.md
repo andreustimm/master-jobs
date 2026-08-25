@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-08-25
+
 ### Corrigido
 
 - O cabeçalho da PWA instalada preserva uma área segura acima da marca e dos
