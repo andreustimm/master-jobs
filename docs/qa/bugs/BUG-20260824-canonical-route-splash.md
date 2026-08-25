@@ -36,7 +36,7 @@ Ao abrir ou recarregar uma rota que termina em 403 ou 404, o Next inseria novame
 ## Fix
 
 - **Root cause:** requisições de navegação reaproveitavam cabeçalhos internos do App Router, e respostas especiais inseridas por Flight não executavam o script inline que remove o splash de startup.
-- **Fix commit:** `ba0cd09`
+- **Fix commit:** `7ba2890`
 - **Resolution:** o service worker transforma navegações em requisições HTML limpas; os boundaries localizados preservam 403/404; o observador de commit remove somente um splash de startup reinserido sem timer ativo.
 - **Regression tests:** `tests/pwa.test.ts`, `tests/pwa-chrome.test.ts`, `tests/navigation-transition.test.ts` e `tests/e2e/ui.mjs` cobrem cabeçalhos limpos, singleton, reload, idiomas e viewports móveis.
 

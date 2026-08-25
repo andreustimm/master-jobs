@@ -10,7 +10,7 @@ qa_status: pass
 bug_ids: BUG-20260824-canonical-route-splash
 fix_status: fixed
 retest_status: pass
-fix_commits: ba0cd09
+fix_commits: 7ba2890
 evidence: tests/e2e/ui.mjs; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-repeated-reset-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-impersonated-target-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-impersonation-ended-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-candidate-forbidden-admin-goal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/recruiter-forbidden-candidate-goal.png; docs/qa/reports/2026-08-24T210158000000Z-71293d34-release-1.3.0-full.md
 last_report: docs/qa/reports/2026-08-24T210158000000Z-71293d34-release-1.3.0-full.md
 overlaps:
