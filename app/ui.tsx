@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Translator } from "../src/core/i18n/index.ts";
+import { applicationStatusLabel } from "./status.ts";
 
 /**
  * Presentation pieces built on shadcn primitives.
@@ -132,7 +133,7 @@ export function Legend({ t }: { t: Translator["t"] }) {
   );
 }
 
-export function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status, t }: { status: string; t: Translator["t"] }) {
   const variant =
     status === "rejected" || status === "withdrawn"
       ? "destructive"
@@ -141,7 +142,7 @@ export function StatusBadge({ status }: { status: string }) {
         : "secondary";
   return (
     <Badge variant={variant} className="font-mono type-micro tracking-wider uppercase">
-      {status}
+      {applicationStatusLabel(status, t)}
     </Badge>
   );
 }

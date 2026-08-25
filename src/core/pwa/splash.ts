@@ -62,6 +62,24 @@ export const SPLASH_ICON_SRC = "/icons/icon-192.png";
 export const SPLASH_ICON_SIZE = 72;
 export const SPLASH_PRODUCT_NAME = "Master Jobs";
 
+/**
+ * Critical positioning for the route-transition splash.
+ *
+ * The regular rules live in `app/globals.css`, but that stylesheet can still
+ * be in flight when a client navigation starts (especially from a cold PWA
+ * launch). Keep the geometry inline with the startup splash so the loading
+ * surface can never fall back to normal document flow above the navigation.
+ * The application stylesheet takes over the visual details after it arrives.
+ */
+export function renderNavigationTransitionCSS(): string {
+  const root = `#${TRANSITION_SPLASH_ROOT_ID}`;
+
+  return `${root}{position:fixed;inset:0;z-index:9998;display:flex;flex-direction:column;align-items:center;justify-content:safe center;box-sizing:border-box;min-height:100dvh;overflow:auto;overscroll-behavior:contain;background:var(--background,Canvas);color:var(--foreground,CanvasText);opacity:1;visibility:visible;pointer-events:auto}
+${root}[data-phase="leaving"]{opacity:0;visibility:hidden}
+${root} .navigation-transition__content{display:flex;inline-size:100%;min-inline-size:0;max-inline-size:100%;flex-direction:column;align-items:center;text-align:center;overflow-wrap:anywhere}
+@media(prefers-reduced-motion:reduce){${root}{transition:none}}`;
+}
+
 /** Classe que dispara o fade-out. */
 export const SPLASH_HIDDEN_CLASS = "app-splash--saindo";
 

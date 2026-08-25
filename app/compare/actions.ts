@@ -10,6 +10,7 @@ import { guard, guardOwnCandidate } from "../auth";
 import {
   type CompareActionState,
 } from "./form-state";
+import { setMutationFeedbackCookie } from "../mutation-feedback-server";
 
 /** Create, score and open a manually supplied posting. */
 export async function compareJobAction(
@@ -61,5 +62,6 @@ export async function compareJobAction(
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/compare");
+  await setMutationFeedbackCookie("success");
   redirect(`/compare?job=${jobId}#comparison-result`);
 }

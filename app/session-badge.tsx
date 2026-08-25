@@ -2,6 +2,7 @@ import { isOpenMode } from "../src/contexts/auth/index.ts";
 import { currentSession } from "./auth";
 import { getTranslator } from "./i18n";
 import { logoutAction } from "./logout-action";
+import { MutationFeedbackForm } from "./mutation-feedback";
 import { TransitionLink } from "./transition-link";
 
 /**
@@ -38,7 +39,13 @@ export async function SessionBadge() {
   }
 
   return (
-    <form action={logoutAction} className="flex items-center gap-2">
+    <MutationFeedbackForm
+      action={logoutAction}
+      successMessage={t("feedback.success")}
+      errorMessage={t("feedback.error")}
+      dismissLabel={t("feedback.dismiss")}
+      className="flex items-center gap-2"
+    >
       {/* O nome, e o e-mail só quando não há nome.
           Tratar a pessoa pelo nome é o padrão; o e-mail é a identificação da
           conta, não como alguém se chama. A queda para o e-mail não é detalhe:
@@ -58,6 +65,6 @@ export async function SessionBadge() {
       >
         {t("nav.signOut")}
       </button>
-    </form>
+    </MutationFeedbackForm>
   );
 }

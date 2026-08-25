@@ -13,6 +13,7 @@ import {
 import type { TranslationKey, Translator } from "../../../src/core/i18n/index.ts";
 import { requirePage } from "../../auth";
 import { getTranslator } from "../../i18n";
+import { MutationFeedbackForm } from "../../mutation-feedback";
 import {
   createUserAction,
   impersonateAction,
@@ -59,7 +60,13 @@ export default async function AdminUsersPage() {
       <Card className="mb-8">
         <CardContent className="pt-0">
           <h2 className="type-display-xs mb-3">{t("admin.newUser")}</h2>
-          <form action={createUserAction} className="grid gap-3 sm:grid-cols-2">
+          <MutationFeedbackForm
+            action={createUserAction}
+            successMessage={t("feedback.success")}
+            errorMessage={t("feedback.error")}
+            dismissLabel={t("feedback.dismiss")}
+            className="grid gap-3 sm:grid-cols-2"
+          >
             <div className="grid gap-1.5">
               <Label htmlFor="fullName">{t("admin.fullName")}</Label>
               <Input id="fullName" name="fullName" type="text" maxLength={120} required autoComplete="off" />
@@ -85,7 +92,7 @@ export default async function AdminUsersPage() {
             <div className="sm:col-span-2">
               <Button type="submit">{t("admin.create")}</Button>
             </div>
-          </form>
+          </MutationFeedbackForm>
         </CardContent>
       </Card>
 
@@ -164,12 +171,18 @@ function UserRow({
                   #{link.candidateId}
                   {/* Admin revoga, mas não concede: conceder mora na área do
                       candidato, porque o vínculo dá leitura do currículo. */}
-                  <form action={unlinkAction} className="inline">
+                  <MutationFeedbackForm
+                    action={unlinkAction}
+                    successMessage={t("feedback.success")}
+                    errorMessage={t("feedback.error")}
+                    dismissLabel={t("feedback.dismiss")}
+                    className="inline"
+                  >
                     <input type="hidden" name="linkId" value={link.id} />
                     <button type="submit" className="cursor-pointer underline-offset-2 hover:underline">
                       {t("admin.unlink")}
                     </button>
-                  </form>
+                  </MutationFeedbackForm>
                 </span>
               ))}
             </p>
@@ -199,23 +212,33 @@ function UserRow({
               {t("admin.edit")}
             </Button>
 
-            <form action={toggleDisabledAction}>
+            <MutationFeedbackForm
+              action={toggleDisabledAction}
+              successMessage={t("feedback.success")}
+              errorMessage={t("feedback.error")}
+              dismissLabel={t("feedback.dismiss")}
+            >
               <input type="hidden" name="userId" value={user.id} />
               <input type="hidden" name="disable" value={disabled ? "0" : "1"} />
               <Button type="submit" size="sm" variant="outline" className="h-7">
                 {disabled ? t("admin.enable") : t("admin.disable")}
               </Button>
-            </form>
+            </MutationFeedbackForm>
 
             {/* Assumir a si mesmo não faz sentido e o caso de uso recusa; o
                 botão some para não oferecer o que não funciona. */}
             {!isSelf && !disabled && (
-              <form action={impersonateAction}>
+              <MutationFeedbackForm
+                action={impersonateAction}
+                successMessage={t("feedback.success")}
+                errorMessage={t("feedback.error")}
+                dismissLabel={t("feedback.dismiss")}
+              >
                 <input type="hidden" name="userId" value={user.id} />
                 <Button type="submit" size="sm" className="h-7" data-testid="impersonate-user">
                   {t("admin.impersonate")}
                 </Button>
-              </form>
+              </MutationFeedbackForm>
             )}
 
             {/* Apagar a si mesmo derrubaria a sessão que executa a ação. A

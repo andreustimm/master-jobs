@@ -9,17 +9,18 @@ import { cn } from "@/lib/utils";
 import { getJobDetail } from "../../../src/contexts/pursuit/index.ts";
 import { scoreMessages } from "../../../src/contexts/matching/index.ts";
 import { renderScoreMessage } from "../../../src/core/i18n/index.ts";
-import { APPLICATION_STATUSES } from "../../../src/core/db/schema.ts";
 import { isPublicJobUrl } from "../../../src/core/job-url.ts";
 import { trackAction } from "../../actions";
 import { Fit, Legend, ScoreBar, StatusBadge } from "../../ui";
 import { requireOwnCandidatePage } from "../../auth";
 import { getTranslator } from "../../i18n";
+import { applicationStatusOptions } from "../../status.ts";
+import { MutationFeedbackForm } from "../../mutation-feedback";
 
 export const dynamic = "force-dynamic";
 
 export default async function JobDetail({ params }: { params: Promise<{ id: string }> }) {
-  const { t } = await getTranslator();
+  const { t, locale } = await getTranslator();
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
   const { id } = await params;
@@ -43,7 +44,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
       <header className="mt-4 mb-6">
         <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="type-display-md text-balance">{job.title}</h1>
-          {application && <StatusBadge status={application.status} />}
+          {application && <StatusBadge status={application.status} t={t} />}
           {job.closedAt && <Badge variant="destructive">fechada</Badge>}
           {!externalUrl && <Badge variant="secondary">{t("compare.manualJob")}</Badge>}
         </div>
@@ -126,7 +127,13 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
         </Card>
       )}
 
-      <form action={trackAction} className="mb-7 flex flex-wrap items-center gap-2">
+      <MutationFeedbackForm
+        action={trackAction}
+        successMessage={t("feedback.success")}
+        errorMessage={t("feedback.error")}
+        dismissLabel={t("feedback.dismiss")}
+        className="mb-7 flex flex-wrap items-center gap-2"
+      >
         <input type="hidden" name="jobId" value={job.id} />
         <span className="font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
           mover para
@@ -139,15 +146,15 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
             "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
           )}
         >
-          {APPLICATION_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
+          {applicationStatusOptions(t, locale).map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label}
             </option>
           ))}
         </select>
         <Input name="note" placeholder="nota (opcional)" className="max-w-[260px]" />
         <Button type="submit">Salvar</Button>
-      </form>
+      </MutationFeedbackForm>
 
       {job.descriptionText && (
         <section>

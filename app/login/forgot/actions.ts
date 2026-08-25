@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { askPasswordReset } from "../../../src/contexts/auth/index.ts";
+import { setMutationFeedbackCookie } from "../../mutation-feedback-server";
 
 /**
  * Pede o link de recuperação.
@@ -22,5 +23,6 @@ export async function requestResetAction(formData: FormData) {
   const proto = process.env.NODE_ENV === "production" ? "https" : "http";
   await askPasswordReset(email, `${proto}://${host}`);
 
+  await setMutationFeedbackCookie("success");
   redirect("/login/forgot?sent=1");
 }

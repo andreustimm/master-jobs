@@ -25,6 +25,11 @@ export const en: Dictionary = {
     failedTitle: "We couldn't open this screen",
     failedBody: "Navigation failed. Try again.",
   },
+  feedback: {
+    success: "Operation completed successfully.",
+    error: "The operation could not be completed. Try again.",
+    dismiss: "Dismiss notification",
+  },
   routeStatus: {
     forbiddenTitle: "Access denied",
     forbiddenBody: "You don't have permission to open this screen.",
@@ -111,6 +116,18 @@ export const en: Dictionary = {
     apply: "apply",
     noDescription: "no description — the score is understated, not low",
     anonymousEmployer: "employer hidden",
+  },
+  applicationStatus: {
+    backlog: "Backlog",
+    shortlisted: "Shortlisted",
+    preparing: "Preparing",
+    applied: "Applied",
+    screening: "Screening",
+    interviewing: "Interviewing",
+    offer: "Offer",
+    rejected: "Rejected",
+    withdrawn: "Withdrawn",
+    archived: "Archived",
   },
   filters: {
     search: "search by role or company…",
