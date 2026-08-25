@@ -530,6 +530,15 @@ describe("retomada dos workflows de release", () => {
     expect(workflow).toContain('scripts/release/validar-tag.ts "$SHA" "$TAG_SHA"');
   });
 
+  it("main confirma a tag vigente e não a recria durante uma promoção sem bump", () => {
+    const workflow = readFileSync(".github/workflows/sincronizar-apos-main.yml", "utf8");
+    expect(workflow).toContain('echo "tagar=nao" >> "$GITHUB_OUTPUT"');
+    expect(workflow).toContain("name: Confirmar tag vigente quando não há bump");
+    expect(workflow).toContain("if: steps.versao.outputs.tagar == 'nao'");
+    expect(workflow).toContain('if [ -z "$TAG_SHA" ]; then');
+    expect(workflow).toContain("if: steps.versao.outputs.tagar == 'sim'");
+  });
+
   it("staging avança somente até o SHA publicado pela etapa da tag", () => {
     const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
     expect(workflow).toContain("id: tag");
