@@ -119,6 +119,10 @@ describe("modo instalado", () => {
 
     expect(script).toContain(JSON.stringify(STANDALONE_CLASS));
     expect(script).toContain("document.documentElement.classList.add");
+    expect(script).toContain("navigator.standalone===true");
+    for (const mode of ["standalone", "minimal-ui", "fullscreen"]) {
+      expect(script).toContain(`(display-mode: ${mode})`);
+    }
     // Envolto em try: `matchMedia` ausente não pode derrubar o documento. O
     // custo de falhar aqui é o padding não aparecer; o de estourar é a página
     // em branco.
