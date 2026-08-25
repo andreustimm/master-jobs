@@ -323,14 +323,18 @@ try {
     JSON.stringify(asymmetricSpacing),
   );
 
-  const headerSafeAreaPage = await page.context().newPage();
-  await headerSafeAreaPage.addInitScript(() => {
+  const headerSafeAreaContext = await browser.newContext({
+    storageState: await page.context().storageState(),
+  });
+  await headerSafeAreaContext.addInitScript(() => {
     Object.defineProperty(navigator, "standalone", {
       configurable: true,
       value: true,
     });
   });
-  const headerSafeAreaCdp = await page.context().newCDPSession(headerSafeAreaPage);
+  const headerSafeAreaPage = await headerSafeAreaContext.newPage();
+  trackConsole(headerSafeAreaPage);
+  const headerSafeAreaCdp = await headerSafeAreaContext.newCDPSession(headerSafeAreaPage);
   const headerSafeAreaSnapshots = [];
   for (const fixture of [
     { label: "mobile retrato", width: 375, height: 812, touch: true, safe: { top: 47, right: 0, bottom: 34, left: 0 } },
@@ -389,7 +393,7 @@ try {
   }
   await headerSafeAreaCdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
   await headerSafeAreaCdp.send("Emulation.clearDeviceMetricsOverride");
-  await headerSafeAreaPage.close();
+  await headerSafeAreaContext.close();
 
   check(
     "cabeçalho PWA respeita a barra do sistema em mobile retrato, paisagem, tablet e desktop",
