@@ -82,10 +82,20 @@ jobs:
         run: |
           git fetch origin main --tags --quiet
           VERSAO=$(node --experimental-strip-types --no-warnings scripts/release/versionar.ts origin/main)
-          if [ "$VERSAO" = "no-release" ] || [ "$VERSAO" = "already-released" ]; then
+          if [ "$VERSAO" = "no-release" ]; then
+            # Uma promoção comum já tem a tag vigente. Não tente localizar um
+            # commit de release para recriá-la: manutenção não cria uma tag.
             VERSAO=$(node -p "require('./package.json').version")
+            echo "tagar=nao" >> "$GITHUB_OUTPUT"
             echo "::notice::Sem bump nesta promoção — versão atual ${VERSAO}."
+          elif [ "$VERSAO" = "already-released" ]; then
+            # O bump foi persistido antes de a tentativa anterior criar a tag;
+            # a retomada ainda precisa localizar e publicar essa tag.
+            VERSAO=$(node -p "require('./package.json').version")
+            echo "tagar=sim" >> "$GITHUB_OUTPUT"
+            echo "::notice::Bump ${VERSAO} já persistido; retomando pela criação da tag."
           else
+            echo "tagar=sim" >> "$GITHUB_OUTPUT"
             TAG_SHA=$(node --experimental-strip-types --no-warnings scripts/release/tag-remota.ts "$GITHUB_REPOSITORY" "$VERSAO")
             node --experimental-strip-types --no-warnings \
               scripts/release/validar-tag.ts "" "$TAG_SHA" --must-be-missing
@@ -98,7 +108,25 @@ jobs:
           fi
           echo "versao=$VERSAO" >> "$GITHUB_OUTPUT"
 
+      - name: Confirmar tag vigente quando não há bump
+        if: steps.versao.outputs.tagar == 'nao'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+        run: |
+          # O PR de staging para main é squash-merged: a tag vigente aponta
+          # para o commit publicado em staging, que não precisa existir como
+          # um commit de release na história já achatada de main. Manutenção
+          # não cria uma tag nova; apenas exige que a vigente exista.
+          VERSAO=$(node -p "require('./package.json').version")
+          TAG_SHA=$(node --experimental-strip-types --no-warnings scripts/release/tag-remota.ts "$GITHUB_REPOSITORY" "$VERSAO")
+          if [ -z "$TAG_SHA" ]; then
+            echo "::error::Tag v${VERSAO} ausente durante uma promoção sem bump."
+            exit 1
+          fi
+          echo "::notice::Tag v${VERSAO} já existe em ${TAG_SHA}; nenhuma tag nova será criada."
+
       - name: Criar a tag, se ainda não existir
+        if: steps.versao.outputs.tagar == 'sim'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
           VERSAO: ${{ steps.versao.outputs.versao }}
@@ -164,8 +192,9 @@ jobs:
         run: |
           ABERTA=$(gh pr list --base dev --head main --state open --json number --jq '.[0].number // ""')
           if [ -z "$ABERTA" ]; then
-            ABERTA=$(gh pr create --base dev --head main \
-              --assignee andreustimm \
+            # `gh pr create` imprime a URL e não aceita `--json`; a consulta
+            # seguinte resolve o número sem depender da saída humana do CLI.
+            if ! gh pr create --base dev --head main \
               --title "Devolver main para dev — v${VERSAO}" \
               --body "$(printf '%s\n' \
                 "Retorno automático depois da promoção para produção." \
@@ -178,7 +207,10 @@ jobs:
                 "Sem conflito, é mesclada automaticamente. Se você está lendo isto com a" \
                 "PR aberta, houve conflito: \`dev\` andou enquanto a promoção esperava" \
                 "aprovação, e resolver isso apagando trabalho não é decisão de robô.")" \
-              --json number --jq .number 2>/dev/null || echo "")
+              >/dev/null 2>&1; then
+              echo "::warning::Não consegui criar a PR de retorno; vou tentar localizar uma já aberta."
+            fi
+            ABERTA=$(gh pr list --base dev --head main --state open --json number --jq '.[0].number // ""')
           fi
 
           if [ -z "$ABERTA" ]; then

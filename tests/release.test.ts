@@ -51,10 +51,17 @@ function expectReleaseCode(action: () => unknown, code: string): void {
 describe("existing semantic version helpers", () => {
   it("classifies the highest release bump", () => {
     expect(classificarBump(["fix: one"])).toBe("patch");
+    expect(classificarBump(["fix(ui): one"])).toBe("patch");
+    expect(classificarBump(["fix(ci): repair workflow"])).toBeNull();
     expect(classificarBump(["fix: one", "feat: two"])).toBe("minor");
     expect(classificarBump(["feat!: three"])).toBe("major");
     expect(classificarBump(["chore: internal"])).toBeNull();
     expect(classificarBump(["unlabelled product change"])).toBe("patch");
+  });
+
+  it("ignores the squash subject generated when staging is promoted", () => {
+    expect(classificarBump(["Promover staging para produção — v1.3.3 (#44)"])).toBeNull();
+    expect(classificarBump(["Promover staging para produção — v1.3.3"])).toBeNull();
   });
 
   it("increments canonical versions and rejects malformed input", () => {
@@ -486,6 +493,13 @@ describe("coerência dos changelogs de release", () => {
 });
 
 describe("retomada dos workflows de release", () => {
+  it("marca a PR de promoção como manutenção para não abrir outra versão no retorno", () => {
+    const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
+    expect(workflow).toContain(
+      '--title "chore(release): Promover staging para produção — v${VERSAO}"',
+    );
+  });
+
   it("a promoção reutiliza a versão persistida e ainda cria sua tag", () => {
     const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
     expect(workflow).toContain('if [ "$RESULTADO" = "already-released" ]; then');
@@ -516,6 +530,24 @@ describe("retomada dos workflows de release", () => {
     const workflow = readFileSync(".github/workflows/sincronizar-apos-main.yml", "utf8");
     expect(workflow).toContain('scripts/release/tag-remota.ts "$GITHUB_REPOSITORY" "$VERSAO"');
     expect(workflow).toContain('scripts/release/validar-tag.ts "$SHA" "$TAG_SHA"');
+  });
+
+  it("main confirma a tag vigente e não a recria durante uma promoção sem bump", () => {
+    const workflow = readFileSync(".github/workflows/sincronizar-apos-main.yml", "utf8");
+    expect(workflow).toContain('echo "tagar=nao" >> "$GITHUB_OUTPUT"');
+    expect(workflow).toContain("name: Confirmar tag vigente quando não há bump");
+    expect(workflow).toContain("if: steps.versao.outputs.tagar == 'nao'");
+    expect(workflow).toContain('if [ -z "$TAG_SHA" ]; then');
+    expect(workflow).toContain("if: steps.versao.outputs.tagar == 'sim'");
+  });
+
+  it("retorno main→dev não usa --json em gh pr create", () => {
+    const workflow = readFileSync(".github/workflows/sincronizar-apos-main.yml", "utf8");
+    const inicio = workflow.indexOf("gh pr create --base dev --head main");
+    const fim = workflow.indexOf("ABERTA=$(gh pr list", inicio);
+    expect(inicio).toBeGreaterThan(-1);
+    expect(fim).toBeGreaterThan(inicio);
+    expect(workflow.slice(inicio, fim)).not.toContain("--json");
   });
 
   it("staging avança somente até o SHA publicado pela etapa da tag", () => {

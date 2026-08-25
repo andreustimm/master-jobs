@@ -309,12 +309,17 @@ CI de `dev`.
 **Produção não sai sem gente.** A PR `staging → main` é aberta e nunca mesclada
 por robô.
 
-**Branch mesclada é excluída, sempre — local e remota.** Assim que a PR entra
-em `dev` (ou em `main`), a branch de trabalho e a worktree são removidas: `git
-worktree remove` (desbloqueando antes, se estiver locked), `git branch -d` e
-`git push origin --delete <branch>`. A remota é tão obrigatória quanto a local —
-deixar a remota cria uma floresta de branches mortas que ninguém sabe se ainda
-valem. Única exceção: branch ainda não mesclada, que fica até entrar.
+**`dev`, `staging` e `main` são branches permanentes e nunca são apagadas.**
+Elas representam os ambientes e o caminho de promoção; permanecem no remoto e
+nos clones locais mesmo depois de qualquer promoção ou retorno.
+
+**Branch de trabalho mesclada é excluída — local e remota.** Assim que a PR de
+uma branch de trabalho entra em `dev` (ou em `main`), a branch `codex/*` e sua
+worktree são removidas: `git worktree remove` (desbloqueando antes, se estiver
+locked), `git branch -d` e `git push origin --delete <branch>`. A remota é tão
+obrigatória quanto a local — deixar branches de trabalho mortas cria uma
+floresta que ninguém sabe se ainda vale. Branch de trabalho ainda não mesclada
+fica até entrar.
 
 **Migração suspende a promoção automática.** Diferença em `drizzle/` ou em
 `src/core/db/schema.ts` entre `staging` e `dev` para o fluxo: o deploy da Vercel

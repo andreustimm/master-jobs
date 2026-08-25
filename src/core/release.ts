@@ -44,7 +44,8 @@ export type TipoBump = "patch" | "minor" | "major";
  * - `feat:` / `feat(escopo):` → minor;
  * - `fix:` / `fix(escopo):` → patch;
  * - `BREAKING CHANGE` no texto, ou `!` logo após o tipo (`feat!:`), → major;
- * - `chore:`, `docs:`, `refactor:`, `test:`, `ci:` → nada (manutenção interna).
+ * - `chore:`, `docs:`, `refactor:`, `test:`, `ci:` e `fix(ci):` → nada
+ *   (manutenção interna; `fix(ui):` continua sendo patch).
  *
  * Mensagem **sem prefixo nenhum** cai no patch. É conservador na direção certa:
  * um commit que mudou o produto e não foi rotulado é, no pior caso, uma
@@ -76,6 +77,18 @@ const VERSAO_SEMANTICA = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 function tipoDoAssunto(assunto: string): TipoBump | null {
   const linha = assunto.trim();
   if (linha === "") return null;
+
+  // A PR de `staging` para `main` é squash-merged pelo GitHub. O título
+  // gerado pelo workflow vira um commit comum (não um merge) e, sem este
+  // reconhecimento, seria interpretado como uma mudança de produto e abriria
+  // uma segunda versão durante o retorno de `main` para `dev`.
+  if (/^Promover staging para produção\s+—\s+v\d+\.\d+\.\d+(?:\s+\(#\d+\))?$/i.test(linha)) {
+    return null;
+  }
+
+  // Correção confinada ao workflow/CI não altera o produto publicado. O
+  // escopo explícito preserva o significado de `fix:` em qualquer outra área.
+  if (/^fix\(ci\)(?:!)?:/i.test(linha)) return null;
 
   // Convenção antiga `BREAKING CHANGE` em qualquer ponto do texto.
   if (/BREAKING[ -]CHANGE/i.test(linha)) return "major";
