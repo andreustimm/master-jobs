@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-08-25T05:09:18.271Z
+
 ### Correção
 
 - Ao abrir ou recarregar uma página inexistente ou sem permissão, a tela de

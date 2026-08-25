@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-08-25T05:09:18.271Z
+
 ### Fixed
 
 - When opening or reloading a missing or restricted page, the startup screen no
