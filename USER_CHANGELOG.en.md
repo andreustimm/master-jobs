@@ -16,6 +16,19 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Improved
+
+- Actions that save, change, delete, or update data now show a confirmation or
+  an error in the active language. The message disappears automatically after
+  five seconds.
+- When switching screens, loading stays centered across the full page,
+  including on mobile, and application statuses are translated and sorted
+  alphabetically.
+
+### Fixed
+
+- The account editing dialog now closes after changes are saved successfully.
+
 ## [1.3.2] - 2026-08-25T12:11:42.279Z
 
 ### Fixed
