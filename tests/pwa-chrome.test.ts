@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   HEADLESS_UA,
   isHeadlessUA,
+  renderNavigationTransitionCSS,
   renderSplashCSS,
   renderSplashHTML,
   renderSplashScript,
@@ -22,6 +23,7 @@ import { generatePwaArtifacts } from "../scripts/sw-version.mjs";
 import { ptBR } from "../src/core/i18n/pt-BR.ts";
 
 const GLOBAL_CSS = readFileSync("app/globals.css", "utf8");
+const DESIGN_TOKENS = readFileSync("app/design-tokens.css", "utf8");
 
 /**
  * A moldura de PWA: área segura e tela de abertura.
@@ -76,7 +78,20 @@ describe("modo instalado", () => {
     // simulável no browser e o espaçamento do DESIGN.md é o piso que impede o
     // relógio de voltar a cobrir a marca.
     expect(regra).toContain(
-      "padding-top: max(var(--spacing-xxl), var(--safe-area-top));",
+      "padding-top: max(var(--safe-area-top), var(--safe-area-top-floor));",
+    );
+  });
+
+  it("usa o piso de área segura no retrato quando o launcher omite o inset", () => {
+    // O iPhone da regressão desenha a barra de status sobre o viewport, mas
+    // entrega `safe-area-inset-top: 0`. O fallback precisa ser um token do
+    // sistema (e só no retrato), para não criar uma faixa extra em paisagem.
+    expect(DESIGN_TOKENS).toContain("--safe-area-top-floor: 48px;");
+    expect(GLOBAL_CSS).toContain(
+      "@media (pointer: coarse) and (orientation: portrait)",
+    );
+    expect(GLOBAL_CSS).toContain(
+      "padding-top: max(var(--safe-area-top), var(--safe-area-top-floor));",
     );
   });
 
@@ -250,6 +265,20 @@ describe("tela de abertura", () => {
     expect(TRANSITION_SPLASH_ROOT_ID).not.toBe(SPLASH_ROOT_ID);
     expect(rootMatches).toHaveLength(1);
     expect(renderSplashScript()).toContain(HEADLESS_UA.toString());
+  });
+});
+
+describe("loading de navegação", () => {
+  it("tem uma camada crítica inline fixa e centralizada enquanto o CSS da app chega", () => {
+    const css = renderNavigationTransitionCSS();
+    const layout = readFileSync("app/layout.tsx", "utf8");
+
+    expect(css).toContain(`#${TRANSITION_SPLASH_ROOT_ID}{position:fixed;inset:0`);
+    expect(css).toContain("display:flex;flex-direction:column;align-items:center;justify-content:safe center");
+    expect(css).toContain("min-height:100dvh");
+    expect(css).toContain("box-sizing:border-box");
+    expect(css).toContain(".navigation-transition__content{display:flex;inline-size:100%;min-inline-size:0;max-inline-size:100%;flex-direction:column;align-items:center;text-align:center");
+    expect(layout).toContain("renderNavigationTransitionCSS()");
   });
 });
 

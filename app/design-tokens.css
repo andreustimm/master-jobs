@@ -70,6 +70,8 @@
   --spacing-xl: 32px;
   --spacing-xxl: 48px;
   --spacing-section: 96px;
+  /* Piso para a barra de status quando um launcher instalado entrega inset 0. */
+  --safe-area-top-floor: 48px;
 
   /*
     ARMADILHA HERDADA, e ela continua valendo.

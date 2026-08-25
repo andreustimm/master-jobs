@@ -85,7 +85,7 @@ export function JobList({
                 >
                   {r.title}
                 </TransitionLink>
-                {r.status && <StatusBadge status={r.status} />}
+                {r.status && <StatusBadge status={r.status} t={t} />}
               </div>
 
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">

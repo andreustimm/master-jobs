@@ -9,6 +9,21 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-08-25
+
+### Adicionado
+
+- Feedback global de mutações para ações da interface: operações de salvar,
+  alterar, excluir e atualizar agora anunciam sucesso ou erro no idioma ativo,
+  com expiração automática após cinco segundos.
+
+### Corrigido
+
+- A janela de edição de conta agora fecha depois de um salvamento bem-sucedido.
+- O carregamento de navegação fica centralizado na área inteira da tela,
+  inclusive em dispositivos móveis, e os status de candidatura são traduzidos
+  e ordenados alfabeticamente.
+
 ## [1.3.2] - 2026-08-25
 
 ### Corrigido

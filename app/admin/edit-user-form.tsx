@@ -1,11 +1,12 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { CircleAlert, CheckCircle2, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { MUTATION_FEEDBACK_MS, MutationNotice } from "../mutation-feedback";
 import type { Role, UserSummary } from "../../src/contexts/auth/index.ts";
 import { updateUserAction } from "./actions";
 import {
@@ -50,6 +51,13 @@ export function EditUserForm({
   const [draftRoles, setDraftRoles] = useState<Role[]>(user.roles);
   const isOpen = useRef(false);
   const openGeneration = useRef(0);
+  const successNoticeTimer = useRef<number | null>(null);
+
+  function clearSuccessNoticeTimer() {
+    if (successNoticeTimer.current === null) return;
+    window.clearTimeout(successNoticeTimer.current);
+    successNoticeTimer.current = null;
+  }
 
   function resetDraft() {
     setDraftFullName(user.fullName ?? "");
@@ -60,12 +68,23 @@ export function EditUserForm({
   useEffect(() => {
     function selectNotice(event: Event) {
       const savedUserId = (event as CustomEvent<number>).detail;
-      setShowSuccess(savedUserId === user.id);
+      clearSuccessNoticeTimer();
+      const isThisUser = savedUserId === user.id;
+      setShowSuccess(isThisUser);
+      if (isThisUser) {
+        successNoticeTimer.current = window.setTimeout(() => {
+          successNoticeTimer.current = null;
+          setShowSuccess(false);
+        }, MUTATION_FEEDBACK_MS);
+      }
       setClosedError(null);
     }
 
     window.addEventListener(USER_EDIT_SAVED_EVENT, selectNotice);
-    return () => window.removeEventListener(USER_EDIT_SAVED_EVENT, selectNotice);
+    return () => {
+      window.removeEventListener(USER_EDIT_SAVED_EVENT, selectNotice);
+      clearSuccessNoticeTimer();
+    };
   }, [user.id]);
 
   useEffect(() => {
@@ -124,45 +143,17 @@ export function EditUserForm({
   return (
     <>
       {noticeMessage && (
-        <div
-          data-testid="user-edit-notice"
-          role={noticeIsError ? "alert" : "status"}
-          aria-live={noticeIsError ? "assertive" : "polite"}
-          style={{
-            top: "max(var(--spacing-md), env(safe-area-inset-top))",
-            right: "max(var(--spacing-md), env(safe-area-inset-right))",
-            width:
-              "min(calc(100vw - max(var(--spacing-md), env(safe-area-inset-left)) - max(var(--spacing-md), env(safe-area-inset-right))), 24rem)",
+        <MutationNotice
+          kind={noticeIsError ? "error" : "success"}
+          message={noticeMessage}
+          dismissLabel={labels.dismissNotification}
+          testId="user-edit-notice"
+          onDismiss={() => {
+            clearSuccessNoticeTimer();
+            setShowSuccess(false);
+            setClosedError(null);
           }}
-          className={cn(
-            "fixed z-50 flex items-start gap-3",
-            "rounded-xl border bg-card px-4 py-3 text-card-foreground shadow-lg",
-            noticeIsError ? "border-[var(--bad)]" : "border-[var(--good)]",
-          )}
-        >
-          {noticeIsError ? (
-            <CircleAlert aria-hidden="true" className="mt-1 size-5 shrink-0 text-destructive" />
-          ) : (
-            <CheckCircle2 aria-hidden="true" className="mt-1 size-5 shrink-0 text-[var(--good)]" />
-          )}
-          <p className="type-body-sm min-w-0 flex-1">{noticeMessage}</p>
-          <button
-            type="button"
-            data-testid="user-edit-notice-dismiss"
-            aria-label={labels.dismissNotification}
-            onClick={() => {
-              setShowSuccess(false);
-              setClosedError(null);
-            }}
-            className={cn(
-              "inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-action)]",
-              "text-muted-foreground hover:bg-muted hover:text-foreground",
-              "focus-visible:outline-2 focus-visible:outline-[var(--primary-text)]",
-            )}
-          >
-            <X aria-hidden="true" className="size-5" />
-          </button>
-        </div>
+        />
       )}
 
       <div

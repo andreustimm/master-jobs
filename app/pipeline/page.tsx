@@ -4,9 +4,9 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { pipelineCounts, pipelineRows } from "../../src/contexts/pursuit/index.ts";
-import { APPLICATION_STATUSES } from "../../src/core/db/schema.ts";
 import { isPublicJobUrl } from "../../src/core/job-url.ts";
 import { ACTION_BUTTON, Fit, StatusBadge } from "../ui";
+import { applicationStatusOptions } from "../status.ts";
 import { requireOwnCandidatePage } from "../auth";
 import { getTranslator } from "../i18n";
 
@@ -14,7 +14,6 @@ export const dynamic = "force-dynamic";
 
 export default async function Pipeline() {
   const { t, locale } = await getTranslator();
-  void locale;
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
   const [counts, rows] = await Promise.all([
@@ -30,14 +29,16 @@ export default async function Pipeline() {
       </p>
 
       <div className="mb-8 flex flex-wrap gap-2.5">
-        {APPLICATION_STATUSES.filter((s) => counts[s]).map((s) => (
-          <Card key={s} className="min-w-[96px] gap-0 px-4 py-2.5">
-            <div className="font-mono text-2xl font-bold tabular-nums">{counts[s]}</div>
-            <div className="mt-0.5 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
-              {s}
-            </div>
-          </Card>
-        ))}
+        {applicationStatusOptions(t, locale)
+          .filter(({ value }) => counts[value])
+          .map(({ value, label }) => (
+            <Card key={value} className="min-w-[96px] gap-0 px-4 py-2.5">
+              <div className="font-mono text-2xl font-bold tabular-nums">{counts[value]}</div>
+              <div className="mt-0.5 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
+                {label}
+              </div>
+            </Card>
+          ))}
       </div>
 
       {rows.length === 0 ? (
@@ -63,7 +64,7 @@ export default async function Pipeline() {
                   <TransitionLink href={`/jobs/${r.jobId}`} data-testid={`pipeline-job-${r.jobId}`} className="font-semibold hover:underline">
                     {r.title}
                   </TransitionLink>
-                  <StatusBadge status={r.status} />
+                  <StatusBadge status={r.status} t={t} />
                   {r.channel && (
                     <Badge variant="outline" className="font-mono type-micro">
                       {r.channel}

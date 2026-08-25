@@ -22,6 +22,11 @@ export const ptBR = {
     failedTitle: "Não foi possível abrir esta tela",
     failedBody: "A navegação falhou. Tente novamente.",
   },
+  feedback: {
+    success: "Operação concluída com sucesso.",
+    error: "Não foi possível concluir a operação. Tente novamente.",
+    dismiss: "Fechar notificação",
+  },
   routeStatus: {
     forbiddenTitle: "Acesso negado",
     forbiddenBody: "Você não tem permissão para abrir esta tela.",
@@ -108,6 +113,18 @@ export const ptBR = {
     apply: "aplicar",
     noDescription: "sem descrição — a nota está subestimada, não baixa",
     anonymousEmployer: "empregador oculto",
+  },
+  applicationStatus: {
+    backlog: "A fazer",
+    shortlisted: "Pré-selecionada",
+    preparing: "Preparando",
+    applied: "Candidatura enviada",
+    screening: "Triagem",
+    interviewing: "Em entrevista",
+    offer: "Oferta",
+    rejected: "Rejeitada",
+    withdrawn: "Retirada",
+    archived: "Arquivada",
   },
   filters: {
     search: "buscar por cargo ou empresa…",

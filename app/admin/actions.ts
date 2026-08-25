@@ -17,6 +17,7 @@ import {
 } from "../../src/contexts/auth/index.ts";
 import { ensureCandidate } from "../../src/core/candidate.ts";
 import { ADMIN_COOKIE, currentSession, guard, SESSION_COOKIE } from "../auth";
+import { setMutationFeedbackCookie } from "../mutation-feedback-server";
 import type { UserEditActionState } from "./user-edit-state";
 
 /** Mesmas opções do cookie de sessão. Divergir aqui é como se perde httpOnly. */
@@ -265,6 +266,8 @@ export async function stopImpersonatingAction() {
     jar.delete(SESSION_COOKIE);
   }
   jar.delete(ADMIN_COOKIE);
+
+  await setMutationFeedbackCookie("success");
 
   // Ramos separados porque o tipo de rota do Next 16 é literal: uma ternária
   // colapsa os dois em união e não casa com a assinatura.

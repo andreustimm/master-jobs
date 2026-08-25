@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { completePasswordReset } from "../../../src/contexts/auth/index.ts";
+import { setMutationFeedbackCookie } from "../../mutation-feedback-server";
 
 /**
  * Grava a senha nova.
@@ -18,7 +19,10 @@ export async function submitResetAction(formData: FormData) {
   const proto = process.env.NODE_ENV === "production" ? "https" : "http";
   const result = await completePasswordReset(token, password, `${proto}://${host}`);
 
-  if (result.ok) redirect("/login?reset=1");
+  if (result.ok) {
+    await setMutationFeedbackCookie("success");
+    redirect("/login?reset=1");
+  }
   // O motivo volta na URL porque a tela precisa distinguir "senha curta" de
   // "link morto": a primeira se corrige aqui mesmo, a segunda exige outro link.
   redirect(`/login/reset?token=${encodeURIComponent(token)}&error=${result.reason}`);

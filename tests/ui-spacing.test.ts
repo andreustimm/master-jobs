@@ -31,13 +31,17 @@ describe("ritmo vertical das superfícies principais", () => {
   });
 
   it("mantém a notificação dentro das áreas seguras da tela", async () => {
-    const editUser = await readFile("app/admin/edit-user-form.tsx", "utf8");
+    const [editUser, mutationFeedback] = await Promise.all([
+      readFile("app/admin/edit-user-form.tsx", "utf8"),
+      readFile("app/mutation-feedback.tsx", "utf8"),
+    ]);
 
-    expect(editUser).toContain('top: "max(var(--spacing-md), env(safe-area-inset-top))"');
-    expect(editUser).toContain('right: "max(var(--spacing-md), env(safe-area-inset-right))"');
-    expect(editUser).toContain(
+    expect(mutationFeedback).toContain('top: "max(var(--spacing-md), env(safe-area-inset-top))"');
+    expect(mutationFeedback).toContain('right: "max(var(--spacing-md), env(safe-area-inset-right))"');
+    expect(mutationFeedback).toContain(
       '"min(calc(100vw - max(var(--spacing-md), env(safe-area-inset-left)) - max(var(--spacing-md), env(safe-area-inset-right))), 24rem)"',
     );
+    expect(editUser).toContain("MutationNotice");
   });
 
 });

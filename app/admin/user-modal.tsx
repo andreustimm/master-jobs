@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
+import { MutationFeedbackForm } from "../mutation-feedback";
 import type { UserSummary } from "../../src/contexts/auth/index.ts";
 import type { Translator } from "../../src/core/i18n/index.ts";
 import { deleteUserAction } from "./actions";
@@ -108,12 +109,17 @@ export function DeleteUserModal({
           <Button type="button" variant="outline" popoverTarget={id} popoverTargetAction="hide" className="min-h-11">
             {t("admin.cancel")}
           </Button>
-          <form action={deleteUserAction}>
+          <MutationFeedbackForm
+            action={deleteUserAction}
+            successMessage={t("feedback.success")}
+            errorMessage={t("feedback.error")}
+            dismissLabel={t("feedback.dismiss")}
+          >
             <input type="hidden" name="userId" value={user.id} />
             <Button type="submit" variant="destructive" className="min-h-11">
               {t("admin.deleteConfirm")}
             </Button>
-          </form>
+          </MutationFeedbackForm>
         </div>
       </div>
     </div>

@@ -11,6 +11,7 @@ import {
 } from "../src/core/i18n/index.ts";
 import { isPublicJobUrl } from "../src/core/job-url.ts";
 import { TransitionLink } from "./transition-link";
+import { MutationFeedbackForm } from "./mutation-feedback";
 
 /**
  * The full job description, offline, in a modal.
@@ -202,7 +203,13 @@ export function JobModal({
         {/* Enfileira e volta. Sondar dentro do clique penduraria a página pelo
             tempo de rede de um site de terceiro — e é justamente no link morto
             que ele demora mais, até o timeout. */}
-          <form action={recheckAction} className="contents">
+          <MutationFeedbackForm
+            action={recheckAction}
+            successMessage={t("feedback.success")}
+            errorMessage={t("feedback.error")}
+            dismissLabel={t("feedback.dismiss")}
+            className="contents"
+          >
             <input type="hidden" name="jobId" value={row.jobId} />
             <button
               type="submit"
@@ -222,7 +229,7 @@ export function JobModal({
                   ? t("jobDetail.recheckChecking")
                   : t("jobDetail.recheck")}
             </button>
-          </form>
+          </MutationFeedbackForm>
           {externalApplyUrl && externalApplyUrl !== row.url && (
             <a
               href={externalApplyUrl}
