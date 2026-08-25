@@ -77,6 +77,14 @@ function tipoDoAssunto(assunto: string): TipoBump | null {
   const linha = assunto.trim();
   if (linha === "") return null;
 
+  // A PR de `staging` para `main` é squash-merged pelo GitHub. O título
+  // gerado pelo workflow vira um commit comum (não um merge) e, sem este
+  // reconhecimento, seria interpretado como uma mudança de produto e abriria
+  // uma segunda versão durante o retorno de `main` para `dev`.
+  if (/^Promover staging para produção\s+—\s+v\d+\.\d+\.\d+(?:\s+\(#\d+\))?$/i.test(linha)) {
+    return null;
+  }
+
   // Convenção antiga `BREAKING CHANGE` em qualquer ponto do texto.
   if (/BREAKING[ -]CHANGE/i.test(linha)) return "major";
 

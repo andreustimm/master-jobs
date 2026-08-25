@@ -57,6 +57,11 @@ describe("existing semantic version helpers", () => {
     expect(classificarBump(["unlabelled product change"])).toBe("patch");
   });
 
+  it("ignores the squash subject generated when staging is promoted", () => {
+    expect(classificarBump(["Promover staging para produção — v1.3.3 (#44)"])).toBeNull();
+    expect(classificarBump(["Promover staging para produção — v1.3.3"])).toBeNull();
+  });
+
   it("increments canonical versions and rejects malformed input", () => {
     expect(proximaVersao("1.2.3", "patch")).toBe("1.2.4");
     expect(proximaVersao("1.2.3", "minor")).toBe("1.3.0");
@@ -486,6 +491,13 @@ describe("coerência dos changelogs de release", () => {
 });
 
 describe("retomada dos workflows de release", () => {
+  it("marca a PR de promoção como manutenção para não abrir outra versão no retorno", () => {
+    const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
+    expect(workflow).toContain(
+      '--title "chore(release): Promover staging para produção — v${VERSAO}"',
+    );
+  });
+
   it("a promoção reutiliza a versão persistida e ainda cria sua tag", () => {
     const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
     expect(workflow).toContain('if [ "$RESULTADO" = "already-released" ]; then');
