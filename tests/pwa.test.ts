@@ -510,6 +510,7 @@ describe("deterministic generation and manifest", () => {
 
   it("keeps an installable root-scoped manifest", () => {
     expect(manifest.display).toBe("standalone");
+    expect(manifest.orientation).toBe("any");
     expect(manifest.scope).toBe("/");
     expect(manifest.start_url).toBe("/");
     expect(manifest.icons).toEqual([
