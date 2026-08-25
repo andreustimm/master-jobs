@@ -16,6 +16,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- When opening or reloading a missing or restricted page, the startup screen no
+  longer gets stuck. The correct message appears and lets you return to an
+  available area of the application.
+
 ## [1.3.0] - 2026-08-24T20:02:56.775Z
 
 ### New
