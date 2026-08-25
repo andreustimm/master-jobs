@@ -150,6 +150,8 @@ describe("tela de abertura", () => {
     // no mesmo quadro em que o teto vence.
     expect(script).toContain("if(removida)return;removida=true");
     expect(script).toContain(JSON.stringify(SPLASH_REFERENCE_KEY));
+    expect(script).toContain("var el=splash;if(!el)return");
+    expect(script).not.toContain("var el=document.getElementById(id)");
   });
 
   it("o script também remove a splash se ele próprio estourar", () => {

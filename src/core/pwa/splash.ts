@@ -41,6 +41,15 @@ export const SPLASH_ROOT_ID = "app-splash";
 /** Identifies the startup element whose parser-executed removal timer is live. */
 export const SPLASH_REFERENCE_KEY = "__masterJobsStartupSplash";
 
+export function removeInertSplashDuplicates(
+  splashes: Iterable<HTMLElement>,
+  registeredSplash: HTMLElement | null | undefined,
+): void {
+  for (const splash of splashes) {
+    if (splash !== registeredSplash) splash.remove();
+  }
+}
+
 /** Separate identity for the client-side route transition surface. */
 export const TRANSITION_SPLASH_ROOT_ID = "navigation-transition-overlay";
 
@@ -136,7 +145,7 @@ var inicio=Date.now(),removida=false;
 var splash=document.getElementById(id);window[${JSON.stringify(SPLASH_REFERENCE_KEY)}]=splash;
 function tirar(){
 if(removida)return;removida=true;
-var el=document.getElementById(id);if(!el)return;
+var el=splash;if(!el)return;
 el.classList.add(saindo);
 setTimeout(function(){if(el.parentNode)el.parentNode.removeChild(el);},fadeMs+50);
 }

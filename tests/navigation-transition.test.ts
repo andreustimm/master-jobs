@@ -7,6 +7,7 @@ import RouteError from "../app/error.tsx";
 import { CanonicalRouteError } from "../app/canonical-route-error.tsx";
 import { en } from "../src/core/i18n/en.ts";
 import { ptBR } from "../src/core/i18n/pt-BR.ts";
+import { removeInertSplashDuplicates } from "../src/core/pwa/splash.ts";
 import { createTransitionStore } from "../src/core/pwa/transition-store.ts";
 import { transitionStore } from "../src/core/pwa/transition-store.ts";
 
@@ -157,6 +158,21 @@ describe("App Router transition integration", () => {
     }
   });
 
+  it("keeps the parser-owned splash and removes every simultaneous inert duplicate", () => {
+    const registeredRemove = vi.fn();
+    const firstInertRemove = vi.fn();
+    const secondInertRemove = vi.fn();
+    const registered = { remove: registeredRemove } as unknown as HTMLElement;
+    const firstInert = { remove: firstInertRemove } as unknown as HTMLElement;
+    const secondInert = { remove: secondInertRemove } as unknown as HTMLElement;
+
+    removeInertSplashDuplicates([registered, firstInert, secondInert], registered);
+
+    expect(registeredRemove).not.toHaveBeenCalled();
+    expect(firstInertRemove).toHaveBeenCalledOnce();
+    expect(secondInertRemove).toHaveBeenCalledOnce();
+  });
+
   it.each([401, 403, 404])(
     "preserves the canonical %s interrupt outside the generic route boundary",
     (status) => {
@@ -184,8 +200,8 @@ describe("App Router transition integration", () => {
     expect(transition).toBeLessThan(shell);
     expect(presenter).toContain("snapshot.phase !== \"idle\"");
     expect(presenter).toContain("{active ? (");
-    expect(presenter).toContain("startupSplash !== registeredSplash");
-    expect(presenter).toContain("startupSplash.remove()");
+    expect(presenter).toContain("removeInertSplashDuplicates(");
+    expect(presenter).toContain("document.querySelectorAll<HTMLElement>");
     expect(layout).toContain("labels={{");
     expect(layout).not.toMatch(/<NavigationTransition[^>]*\b(on\w+|children)=/);
   });

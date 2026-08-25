@@ -2239,6 +2239,8 @@ try {
       locale: document.documentElement.lang,
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       body: document.body.innerText,
+      backText: document.querySelector('[data-testid="route-status-back"]')?.textContent?.trim() ?? "",
+      backHref: document.querySelector('[data-testid="route-status-back"]')?.getAttribute("href") ?? "",
     }), { expectedTestId: testId, status: response?.status() ?? 0 });
   };
 
@@ -2740,6 +2742,9 @@ try {
   await canonical404Page.locator("#app-splash").waitFor({ state: "detached", timeout: 5_000 });
   const canonical404Reload = await observeCanonicalReload(canonical404Page, "route-not-found");
   const canonical404Body = canonical404Reload.body;
+  await canonical404Page.locator('[data-testid="route-status-back"]').click();
+  await canonical404Page.waitForURL((url) => url.pathname === "/login");
+  const canonical404RecoveryPath = new URL(canonical404Page.url()).pathname;
   check(
     "BUG-20260824 recarga 404 termina na tela canônica sem splash inerte",
     canonical404Response?.status() === 404
@@ -2750,8 +2755,12 @@ try {
       && canonical404Reload.locale === "en"
       && canonical404Reload.overflow <= 1
       && canonical404Body.includes(en.routeStatus.notFoundTitle)
+      && canonical404Body.includes(en.routeStatus.notFoundBody)
+      && canonical404Reload.backText === en.routeStatus.back
+      && canonical404Reload.backHref === "/"
+      && canonical404RecoveryPath === "/login"
       && privateMarkers.every((term) => !canonical404Body.includes(term)),
-    JSON.stringify(canonical404Reload),
+    JSON.stringify({ ...canonical404Reload, recoveryPath: canonical404RecoveryPath }),
   );
   await canonical404Ctx.close();
   const publicPhases = [];
@@ -3258,6 +3267,9 @@ try {
         body: document.body.innerText,
       }));
       missingRoleReload = await observeCanonicalReload(rolePage, "route-forbidden");
+      await rolePage.locator('[data-testid="route-status-back"]').click();
+      await rolePage.waitForURL((url) => url.pathname === "/jobs");
+      missingRoleReload.recoveryPath = new URL(rolePage.url()).pathname;
     }
     const cache = await readCacheStorage(rolePage);
     roleTransitionResults.push({
@@ -3355,6 +3367,10 @@ try {
       && recruiterMissingRoleReload?.locale === "en"
       && recruiterMissingRoleReload?.overflow <= 1
       && recruiterMissingRoleReload?.body.includes(en.routeStatus.forbiddenTitle)
+      && recruiterMissingRoleReload?.body.includes(en.routeStatus.forbiddenBody)
+      && recruiterMissingRoleReload?.backText === en.routeStatus.back
+      && recruiterMissingRoleReload?.backHref === "/"
+      && recruiterMissingRoleReload?.recoveryPath === "/jobs"
       && impersonationEntry.count === 1
       && impersonationExit.count === 1
       && roleNeutral
