@@ -326,10 +326,10 @@ try {
   const headerSafeAreaCdp = await page.context().newCDPSession(page);
   const headerSafeAreaSnapshots = [];
   for (const fixture of [
-    { label: "mobile retrato", width: 375, height: 812, touch: true, safe: [47, 0, 34, 0] },
-    { label: "mobile paisagem", width: 812, height: 375, touch: true, safe: [0, 44, 21, 44] },
-    { label: "tablet", width: 768, height: 1024, touch: true, safe: [24, 0, 20, 0] },
-    { label: "desktop", width: 1280, height: 900, touch: false, safe: [0, 0, 0, 0] },
+    { label: "mobile retrato", width: 375, height: 812, touch: true, safe: { top: 47, right: 0, bottom: 34, left: 0 } },
+    { label: "mobile paisagem", width: 812, height: 375, touch: true, safe: { top: 0, right: 44, bottom: 21, left: 44 } },
+    { label: "tablet", width: 768, height: 1024, touch: true, safe: { top: 24, right: 0, bottom: 20, left: 0 } },
+    { label: "desktop", width: 1280, height: 900, touch: false, safe: { top: 0, right: 0, bottom: 0, left: 0 } },
   ]) {
     await headerSafeAreaCdp.send("Emulation.setDeviceMetricsOverride", {
       width: fixture.width,
@@ -344,7 +344,7 @@ try {
       maxTouchPoints: fixture.touch ? 5 : 1,
     });
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await page.evaluate(([top, right, bottom, left]) => {
+    await page.evaluate(({ top, right, bottom, left }) => {
       document.documentElement.classList.add("pwa-standalone");
       const root = document.documentElement.style;
       root.setProperty("--safe-area-top", `${top}px`);
@@ -358,13 +358,22 @@ try {
       const rootStyle = getComputedStyle(document.documentElement);
       const headerRect = header.getBoundingClientRect();
       const contentRect = content?.getBoundingClientRect();
+      const contentStyle = content ? getComputedStyle(content) : null;
       return {
         pointerCoarse: matchMedia("(pointer: coarse)").matches,
         paddingTop: Number.parseFloat(getComputedStyle(header).paddingTop),
         spacingFloor: Number.parseFloat(rootStyle.getPropertyValue("--spacing-xxl")),
         safeTop: Number.parseFloat(rootStyle.getPropertyValue("--safe-area-top")),
+        safeRight: Number.parseFloat(rootStyle.getPropertyValue("--safe-area-right")),
+        safeLeft: Number.parseFloat(rootStyle.getPropertyValue("--safe-area-left")),
         headerTop: headerRect.top,
+        headerRight: headerRect.right,
+        headerLeft: headerRect.left,
         contentTop: contentRect?.top ?? -1,
+        contentRight: contentRect?.right ?? -1,
+        contentLeft: contentRect?.left ?? -1,
+        contentPaddingRight: Number.parseFloat(contentStyle?.paddingRight ?? "0"),
+        contentPaddingLeft: Number.parseFloat(contentStyle?.paddingLeft ?? "0"),
         viewportWidth: innerWidth,
         scrollWidth: document.documentElement.scrollWidth,
       };
@@ -383,6 +392,10 @@ try {
       return sample.pointerCoarse === sample.touch
         && sample.paddingTop === expected
         && sample.contentTop >= sample.headerTop + expected
+        && sample.contentLeft >= sample.headerLeft
+        && sample.contentRight <= sample.headerRight
+        && sample.contentPaddingLeft >= sample.safeLeft
+        && sample.contentPaddingRight >= sample.safeRight
         && sample.scrollWidth <= sample.viewportWidth;
     }),
     JSON.stringify(headerSafeAreaSnapshots),

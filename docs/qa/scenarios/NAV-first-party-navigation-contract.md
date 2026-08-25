@@ -2,7 +2,7 @@
 id: NAV-first-party-navigation-contract
 area: NAV
 title: Percorrer toda navegação interna por uma transição estável
-persona: Andreus em triagem
+persona: Andreus no celular
 journey: J-switch-workspace-screen
 expected: Menu, links contextuais, filtros, paginação e redirects chegam ao destino com um único splash e sem repetir ações
 entry_points: /; /jobs; /compare; /pipeline; /referrals; /candidate; /admin/users

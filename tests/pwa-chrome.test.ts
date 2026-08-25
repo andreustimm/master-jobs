@@ -48,6 +48,8 @@ describe("modo instalado", () => {
     // de página e das modais quando o Android abre em `minimal-ui`.
     expect(css).toContain("html.pwa-standalone #application-shell > header {");
     expect(css).toContain("html.pwa-standalone #application-shell > header > div,");
+    expect(css).toContain("padding-left: max(1rem, var(--safe-area-left));");
+    expect(css).toContain("padding-right: max(1rem, var(--safe-area-right));");
     expect(css).not.toMatch(/html\.pwa-standalone header\s*\{/);
     expect(css).not.toMatch(/html\.pwa-standalone header\s*>\s*div/);
   });

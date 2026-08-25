@@ -52,7 +52,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 | Journey | Usability | Accessibility | Perceived performance | Compatibility | Error recoverability | Production parity | Evidence / findings |
 |---|---|---|---|---|---|---|---|
-| J-open-dashboard-direct | pass | pass | pass | pass | pass | friction | retrato, paisagem, tablet e desktop passaram; Safari/PWA físico pendente |
+| J-open-dashboard-direct | pass | pass | pass | friction | pass | friction | `header-portrait-touch.png`, `header-landscape-touch.png`, `header-tablet-touch.png` e `header-desktop.png`; Safari/PWA físico pendente |
 | J-switch-workspace-screen | pass | pass | pass | pass | pass | pass | `mobile-jobs-canary.png`; rota e contenção sobreviveram à recarga |
 
 ## What Was Fixed
