@@ -2,7 +2,7 @@
 
 - **Scope:** regressão que permitia à barra do sistema cobrir marca e controles do cabeçalho em uma PWA instalada
 - **Cadence tier:** targeted
-- **Build:** `376d242` (inclui a correção `5f90e25`) · **Environment:** build Next de produção local; Chromium; Safari/PWA físico exige verificação humana
+- **Build percorrido:** `5f90e25` · **Gate automatizado final:** `376d242` · **Environment:** build Next de produção local; Chromium; Safari/PWA físico exige verificação humana
 - **Started:** 2026-08-25T10:11:02Z · **Status:** closed
 
 ## Personas
@@ -52,8 +52,8 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 | Journey | Usability | Accessibility | Perceived performance | Compatibility | Error recoverability | Production parity | Evidence / findings |
 |---|---|---|---|---|---|---|---|
-| J-open-dashboard-direct | pass | pass | pass | friction | pass | friction | `header-portrait-touch.png`, `header-landscape-touch.png`, `header-tablet-touch.png` e `header-desktop.png`; Safari/PWA físico pendente |
-| J-switch-workspace-screen | pass | pass | pass | pass | pass | pass | `mobile-jobs-canary.png`; rota e contenção sobreviveram à recarga |
+| J-open-dashboard-direct | pass | pass | pass | friction | pass | friction | `docs/qa/evidence/2026-08-25T101102000000Z-5f90e25a-mobile-header-safe-area-targeted/header-portrait-touch.png`; `header-landscape-touch.png`, `header-tablet-touch.png` e `header-desktop.png` no mesmo diretório; Safari/PWA físico pendente |
+| J-switch-workspace-screen | pass | pass | pass | pass | pass | pass | `docs/qa/evidence/2026-08-25T101102000000Z-5f90e25a-mobile-header-safe-area-targeted/mobile-jobs-canary.png`; rota e contenção sobreviveram à recarga |
 
 ## What Was Fixed
 
@@ -62,7 +62,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 - **Root cause:** alguns launchers mantêm a barra do sistema sobre o viewport mesmo reportando `safe-area-inset-top: 0`.
 - **Fix:** `5f90e25`, um piso de espaçamento do `DESIGN.md` apenas em contexto instalado com toque; o inset real continua prevalecendo e desktop não recebe faixa artificial.
 - **Regression test:** `tests/pwa-chrome.test.ts` falhou antes e passou depois; `376d242` também trava a ligação dos tokens aos insets do aparelho, e `tests/e2e/ui.mjs` mede a geometria em quatro viewports.
-- **Retested:** J-open-dashboard-direct em quatro viewports e J-switch-workspace-screen em 375×812, sempre a partir de nova carga.
+- **Retested:** as sessões percorreram `5f90e25`; em `376d242`, o gate automatizado repetiu as quatro viewports e o canário móvel a partir de nova carga.
 
 ## Paper Cuts
 
@@ -86,7 +86,7 @@ Nenhuma.
 
 ## Final Status
 
-- **Exit gate (full automated suite):** `pnpm check` — 148 arquivos, 2.090 testes passados e 6 ignorados; cobertura 96,5% statements / 93,05% branches / 96,99% functions / 97,4% lines. `pnpm test:e2e` — 181/181 jornadas e 8/8 páginas axe WCAG 2.2 AA. `pnpm test:pwa-browser` — 25/25 testes passados.
+- **Exit gate (runtime `376d242`):** `pnpm check` — 148 arquivos, 2.090 testes passados e 6 ignorados; cobertura 96,5% statements / 93,05% branches / 96,99% functions / 97,4% lines. `pnpm test:e2e` — 181/181 jornadas e 8/8 páginas axe WCAG 2.2 AA. `pnpm test:pwa-browser` — 25/25 testes passados.
 - **Issues by user impact:** Blocks-Completion 0 · Data-Loss 0 · Trust-Damage 0 · Friction 1 · Cosmetic 0
 - **Coverage:** jornada afetada percorrida e canário adjacente executado; a perna física de Safari/PWA está explicitamente bloqueada para verificação humana.
 - **Verdict:** ready-with-blocked-items — pronto para PR e staging; confirmar no aparelho físico antes de declarar o bug verificado em produção.

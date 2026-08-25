@@ -9,6 +9,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- O cabeçalho da PWA instalada preserva uma área segura acima da marca e dos
+  controles em dispositivos de toque, inclusive quando o launcher sobrepõe a
+  barra do sistema mas reporta inset superior zero. Os insets laterais também
+  permanecem aplicados em paisagem, sem criar uma faixa artificial no desktop.
+
 ## [1.3.1] - 2026-08-25
 
 ### Corrigido

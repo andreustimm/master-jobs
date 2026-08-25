@@ -38,5 +38,5 @@ Ao abrir o Cockpit como PWA instalada, o relógio e os indicadores do sistema ap
 
 ## Verification
 
-- **Retested:** 2026-08-25, build de produção local em Chromium · retrato 375×812, paisagem 812×375, tablet 768×1024 e desktop 1280×900 · **Report:** docs/qa/reports/2026-08-25T101102000000Z-5f90e25a-mobile-header-safe-area-targeted.md
+- **Retested:** 2026-08-25, sessão no runtime `5f90e25` e gate automatizado final no runtime `376d242`, em build de produção local Chromium · retrato 375×812, paisagem 812×375, tablet 768×1024 e desktop 1280×900 · **Report:** docs/qa/reports/2026-08-25T101102000000Z-5f90e25a-mobile-header-safe-area-targeted.md
 - **Result:** o conteúdo ficou abaixo do piso seguro em todos os contextos de toque, sem overflow; o desktop não ganhou faixa artificial. A verificação no Safari/PWA físico continua pendente antes de mover o bug para `verified`.
