@@ -13,10 +13,12 @@ import {
 } from "../src/core/db/schema.ts";
 import { scoreEveryCandidate } from "../src/core/scoring/apply.ts";
 import {
+  candidateScoreQueueStatus,
   claimScore,
   enqueueScore,
   MINUTOS_CLAIM_MORTO,
   runScoreQueue,
+  scoreQueueDisplay,
   scoreQueueStatus,
 } from "../src/core/scoring/queue.ts";
 import { seedCatalog } from "../src/contexts/skills/index.ts";
@@ -133,6 +135,81 @@ describe("o evento: salvar currículo enfileira", () => {
     // `saveDocument` devolve `unchanged` quando o texto é idêntico. Repontuar aí
     // seria trabalho garantidamente sem efeito.
     expect(await db.select().from(scoreTask)).toHaveLength(0);
+  });
+});
+
+describe("status da fila por candidato", () => {
+  it("UT-004: mapeia pending sem erro bruto", async () => {
+    const id = await criarCandidato();
+    await enqueueScore(id);
+
+    expect(await candidateScoreQueueStatus(id)).toEqual({
+      pending: 1,
+      scoring: 0,
+      done: 0,
+      failed: 0,
+      scored: null,
+      lastError: null,
+    });
+  });
+
+  it.each([
+    ["scoring", 0, "falha transitória"],
+    ["done", 42, null],
+    ["failed", null, "segredo interno que nunca chega à interface"],
+  ] as const)("UT-005: mapeia %s e preserva metadados", async (status, scored, lastError) => {
+    const id = await criarCandidato(status);
+    await db.insert(scoreTask).values({ candidateId: id, status, scored, lastError });
+
+    const snapshot = await candidateScoreQueueStatus(id);
+
+    expect(snapshot).toMatchObject({
+      pending: 0,
+      scoring: status === "scoring" ? 1 : 0,
+      done: status === "done" ? 1 : 0,
+      failed: status === "failed" ? 1 : 0,
+      scored,
+      lastError,
+    });
+  });
+
+  it("UT-006: não inclui a fila de outro candidato", async () => {
+    const a = await criarCandidato("isolado-a");
+    const b = await criarCandidato("isolado-b");
+    await db.insert(scoreTask).values([
+      { candidateId: a, status: "pending" },
+      { candidateId: b, status: "failed", lastError: "erro de b" },
+    ]);
+
+    expect(await candidateScoreQueueStatus(a)).toMatchObject({
+      pending: 1,
+      failed: 0,
+      lastError: null,
+    });
+    expect(await scoreQueueStatus(a)).toEqual({ pending: 1 });
+  });
+
+  it("UT-007: candidato sem linha retorna idle explícito", async () => {
+    const id = await criarCandidato();
+
+    const snapshot = await candidateScoreQueueStatus(id);
+
+    expect(snapshot).toBeNull();
+    expect(scoreQueueDisplay(snapshot)).toEqual({ state: "idle", scored: null });
+  });
+
+  it("UT-008: mapper de apresentação descarta lastError", () => {
+    const display = scoreQueueDisplay({
+      pending: 0,
+      scoring: 0,
+      done: 0,
+      failed: 1,
+      scored: null,
+      lastError: "token=nao-pode-aparecer",
+    });
+
+    expect(display).toEqual({ state: "failed", scored: null });
+    expect(JSON.stringify(display)).not.toContain("nao-pode-aparecer");
   });
 });
 

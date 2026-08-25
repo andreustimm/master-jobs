@@ -191,11 +191,62 @@ export async function runScoreQueue(
 }
 
 /** O que a tela mostra sem precisar do trabalhador. */
-export async function scoreQueueStatus(): Promise<Record<string, number>> {
+export async function scoreQueueStatus(candidateId?: number): Promise<Record<string, number>> {
   const linhas = await getDb()
     .select({ status: scoreTask.status, n: sql<number>`count(*)` })
     .from(scoreTask)
+    .where(candidateId === undefined ? undefined : eq(scoreTask.candidateId, candidateId))
     .groupBy(scoreTask.status);
 
   return Object.fromEntries(linhas.map((l) => [l.status, Number(l.n)]));
+}
+
+export type ScoreQueueSnapshot = {
+  pending: number;
+  scoring: number;
+  done: number;
+  failed: number;
+  scored: number | null;
+  lastError: string | null;
+};
+
+export type ScoreQueueDisplay = {
+  state: "idle" | "pending" | "scoring" | "done" | "failed";
+  scored: number | null;
+};
+
+/** Leitura privada de uma única fila, filtrada antes de qualquer dado sair do banco. */
+export async function candidateScoreQueueStatus(
+  candidateId: number,
+): Promise<ScoreQueueSnapshot | null> {
+  const [row] = await getDb()
+    .select({
+      status: scoreTask.status,
+      scored: scoreTask.scored,
+      lastError: scoreTask.lastError,
+    })
+    .from(scoreTask)
+    .where(eq(scoreTask.candidateId, candidateId))
+    .limit(1);
+
+  if (!row) return null;
+
+  return {
+    pending: row.status === "pending" ? 1 : 0,
+    scoring: row.status === "scoring" ? 1 : 0,
+    done: row.status === "done" ? 1 : 0,
+    failed: row.status === "failed" ? 1 : 0,
+    scored: row.scored,
+    lastError: row.lastError,
+  };
+}
+
+/** Reduz o snapshot ao que a interface pode mostrar; erros internos não atravessam. */
+export function scoreQueueDisplay(snapshot: ScoreQueueSnapshot | null): ScoreQueueDisplay {
+  if (!snapshot) return { state: "idle", scored: null };
+  if (snapshot.failed > 0) return { state: "failed", scored: snapshot.scored };
+  if (snapshot.scoring > 0) return { state: "scoring", scored: snapshot.scored };
+  if (snapshot.pending > 0) return { state: "pending", scored: snapshot.scored };
+  if (snapshot.done > 0) return { state: "done", scored: snapshot.scored };
+  return { state: "idle", scored: null };
 }

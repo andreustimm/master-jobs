@@ -11,8 +11,8 @@ bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence: tests/e2e/ui.mjs; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/triagem-pipeline.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/triagem-noturna-jobs.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/andreus-mobile-ranking.png; docs/qa/reports/2026-08-24T210158000000Z-71293d34-release-1.3.0-full.md
-last_report: docs/qa/reports/2026-08-24T210158000000Z-71293d34-release-1.3.0-full.md
+evidence: tests/e2e/ui.mjs; docs/qa/evidence/2026-08-25T214402000000Z-fb9a9b34-rescore-status-targeted/navigation-canary-jobs.png; docs/qa/reports/2026-08-25T214402000000Z-fb9a9b34-rescore-status-targeted.md
+last_report: docs/qa/reports/2026-08-25T214402000000Z-fb9a9b34-rescore-status-targeted.md
 overlaps: NAV-switch-screen-ready
 ---
 

@@ -862,6 +862,97 @@ try {
     check(`${path} responde`, response?.status() === 200, String(response?.status()));
   }
 
+  /* ---------------- Estado da repontuação do candidato (task 03) --------- */
+
+  await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type("\n\nE2E queue visibility change.", { delay: 0 });
+  await page.fill('input[name="label"]', "E2E queue visibility");
+  await page.locator('[data-testid="save-cv"]').click();
+  await page.locator('[data-testid="mutation-feedback"][role="status"]').waitFor({
+    state: "visible",
+    timeout: 15_000,
+  });
+  const queuedStatus = page.locator('[data-testid="score-queue-status"]');
+  await queuedStatus.waitFor();
+  check(
+    "E2E-001 salvar CV mostra atualização enfileirada no próximo render",
+    (await queuedStatus.getAttribute("data-state")) === "pending" &&
+      ((await queuedStatus.textContent()) ?? "").includes("Na fila"),
+    `${await queuedStatus.getAttribute("data-state")}: ${await queuedStatus.textContent()}`,
+  );
+
+  await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
+  await page.reload({ waitUntil: "networkidle" });
+  const englishQueueText = (await queuedStatus.textContent()) ?? "";
+  check(
+    "E2E-001 estado da fila usa o locale selecionado",
+    englishQueueText.includes("Ranking refresh") && englishQueueText.includes("Queued") &&
+      !englishQueueText.includes("candidate.queue"),
+    englishQueueText,
+  );
+
+  async function queueStateView(email) {
+    const context = await browser.newContext();
+    const targetPage = await context.newPage();
+    trackConsole(targetPage);
+    await context.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+    await targetPage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+    await targetPage.fill('input[name="email"]', email);
+    await targetPage.fill('input[name="password"]', E2E_PASSWORD);
+    await targetPage.locator('[data-testid="login-submit"]').click();
+    await targetPage.waitForTimeout(1_500);
+
+    const samples = [];
+    for (const viewport of [
+      { width: 375, height: 812 },
+      { width: 812, height: 375 },
+      { width: 768, height: 1024 },
+      { width: 1280, height: 900 },
+    ]) {
+      await targetPage.setViewportSize(viewport);
+      await targetPage.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+      const status = targetPage.locator('[data-testid="score-queue-status"]');
+      samples.push({
+        viewport: `${viewport.width}x${viewport.height}`,
+        state: await status.getAttribute("data-state"),
+        text: (await status.textContent()) ?? "",
+        overflow: await targetPage.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        ),
+      });
+    }
+    await context.close();
+    return samples;
+  }
+
+  const idleQueue = await queueStateView("e2e-candidato@local.test");
+  const failedQueue = await queueStateView("e2e-alvo@local.test");
+  check(
+    "E2E-002 idle e failed ficam isolados por candidato em todos os viewports",
+    idleQueue.every((sample) => sample.state === "idle") &&
+      failedQueue.every((sample) => sample.state === "failed"),
+    JSON.stringify({ idleQueue, failedQueue }),
+  );
+  check(
+    "E2E-002 375 portrait, 812 landscape, tablet e desktop não transbordam",
+    [...idleQueue, ...failedQueue].every((sample) => sample.overflow <= 1),
+    JSON.stringify([...idleQueue, ...failedQueue].filter((sample) => sample.overflow > 1)),
+  );
+  check(
+    "E2E-002 falha é localizada e nunca expõe erro bruto ou chave literal",
+    failedQueue.every((sample) =>
+      sample.text.includes("Falha na atualização") &&
+      !sample.text.includes("RAW_E2E_QUEUE_ERROR_MUST_NOT_RENDER") &&
+      !sample.text.includes("candidate.queue")
+    ),
+    JSON.stringify(failedQueue),
+  );
+
+  await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+
   await page.goto(`${BASE}/compare`, { waitUntil: "networkidle" });
   check("comparar vaga oferece descrição", (await page.locator('textarea[name="description"]').count()) === 1);
   check("comparar vaga oferece upload", (await page.locator('input[name="file"][type="file"]').count()) === 1);

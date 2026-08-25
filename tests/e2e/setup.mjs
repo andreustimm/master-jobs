@@ -12,7 +12,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { authEvent, authLoginToken, authUser, candidate, job, jobScore, targetAccount } from "../../src/core/db/schema.ts";
+import { authEvent, authLoginToken, authUser, candidate, job, jobScore, scoreTask, targetAccount } from "../../src/core/db/schema.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
 import { hashToken } from "../../src/contexts/auth/infra/drizzle-store.ts";
 import { setPassword } from "../../src/contexts/auth/infra/password-login.ts";
@@ -225,6 +225,36 @@ try {
         .set({ visibility: "public", publicCv: false })
         .where(eq(candidate.id, scoped));
     }
+  }
+
+  const [failedQueueCandidate] = await getDb()
+    .select({ candidateId: authUser.candidateId })
+    .from(authUser)
+    .where(eq(authUser.email, E2E_ROLES.target.email))
+    .limit(1);
+  if (failedQueueCandidate?.candidateId !== null && failedQueueCandidate?.candidateId !== undefined) {
+    await saveDocument({
+      candidateId: failedQueueCandidate.candidateId,
+      kind: "cv",
+      label: "E2E failed queue CV",
+      format: "markdown",
+      content: "# Failed queue fixture\n\nA valid CV whose queue error must remain private.",
+    });
+    await getDb()
+      .insert(scoreTask)
+      .values({
+        candidateId: failedQueueCandidate.candidateId,
+        status: "failed",
+        lastError: "RAW_E2E_QUEUE_ERROR_MUST_NOT_RENDER token=private",
+      })
+      .onConflictDoUpdate({
+        target: scoreTask.candidateId,
+        set: {
+          status: "failed",
+          scored: null,
+          lastError: "RAW_E2E_QUEUE_ERROR_MUST_NOT_RENDER token=private",
+        },
+      });
   }
 
   const tokenFixtures = [
