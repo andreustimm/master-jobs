@@ -323,14 +323,23 @@ try {
     JSON.stringify(asymmetricSpacing),
   );
 
+  check(
+    "aba comum não ativa o modo instalado",
+    !(await page.evaluate(() => document.documentElement.classList.contains("pwa-standalone"))),
+  );
+
   const headerSafeAreaContext = await browser.newContext({
     storageState: await page.context().storageState(),
   });
   await headerSafeAreaContext.addInitScript(() => {
-    Object.defineProperty(navigator, "standalone", {
-      configurable: true,
-      value: true,
-    });
+    const nativeMatchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query) => {
+      const result = nativeMatchMedia(query);
+      if (query === "(display-mode: standalone)") {
+        Object.defineProperty(result, "matches", { configurable: true, value: true });
+      }
+      return result;
+    };
   });
   const headerSafeAreaPage = await headerSafeAreaContext.newPage();
   trackConsole(headerSafeAreaPage);
