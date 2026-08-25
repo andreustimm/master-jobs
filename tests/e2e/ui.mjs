@@ -2121,18 +2121,28 @@ try {
       await overlay.waitFor({ state: "detached" });
       await targetPage.evaluate(() => {
         globalThis.__e2eTransitionEvidence?.observer?.disconnect();
-        const states = [];
-        const record = () => {
-          const current = document.querySelector('[data-testid="navigation-transition"]');
+        const evidence = { states: [], maxCount: 0 };
+        const record = (mutations = []) => {
+          const overlays = document.querySelectorAll('[data-testid="navigation-transition"]');
+          let added = 0;
+          for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+              if (!(node instanceof Element)) continue;
+              if (node.matches('[data-testid="navigation-transition"]')) added += 1;
+              added += node.querySelectorAll('[data-testid="navigation-transition"]').length;
+            }
+          }
+          evidence.maxCount = Math.max(evidence.maxCount, overlays.length, added);
+          const current = overlays[0];
           if (!current) return;
           const state = {
             generation: Number(current.getAttribute("data-generation")),
             phase: current.getAttribute("data-phase"),
             status: current.querySelector('[role="status"]')?.textContent ?? "",
           };
-          const previous = states.at(-1);
+          const previous = evidence.states.at(-1);
           if (!previous || previous.generation !== state.generation || previous.phase !== state.phase) {
-            states.push(state);
+            evidence.states.push(state);
           }
         };
         const observer = new MutationObserver(record);
@@ -2142,18 +2152,28 @@ try {
           childList: true,
           subtree: true,
         });
-        globalThis.__e2eTransitionEvidence = { observer, states };
+        globalThis.__e2eTransitionEvidence = { observer, evidence };
       });
       const activation = activate();
       await overlay.waitFor({ state: "attached" });
-      const snapshot = await overlay.evaluate((element) => ({
-        count: document.querySelectorAll('[data-testid="navigation-transition"]').length,
-        generation: Number(element.getAttribute("data-generation")),
-        phase: element.getAttribute("data-phase"),
-        rect: element.getBoundingClientRect().toJSON(),
-        viewport: { width: window.innerWidth, height: window.innerHeight },
-        text: element.textContent ?? "",
-      }));
+      const attachedOverlay = await overlay.elementHandle();
+      const snapshot = attachedOverlay
+        ? await attachedOverlay.evaluate((element) => ({
+          count: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+          generation: Number(element.getAttribute("data-generation")),
+          phase: element.getAttribute("data-phase"),
+          rect: element.getBoundingClientRect().toJSON(),
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+          text: element.textContent ?? "",
+        }))
+        : {
+          count: 0,
+          generation: 0,
+          phase: null,
+          rect: null,
+          viewport: await targetPage.evaluate(() => ({ width: innerWidth, height: innerHeight })),
+          text: "",
+        };
       const attachedEvidence = await captureAtAttach();
       await activation;
       await targetPage.locator(destination).waitFor({ state: "visible", timeout: 20_000 });
@@ -2162,9 +2182,15 @@ try {
         const evidence = globalThis.__e2eTransitionEvidence;
         evidence?.observer?.disconnect();
         delete globalThis.__e2eTransitionEvidence;
-        return evidence?.states ?? [];
+        return evidence?.evidence ?? { states: [], maxCount: 0 };
       });
-      return { ...snapshot, ...attachedEvidence, transitionEvidence };
+      return {
+        ...snapshot,
+        generation: snapshot.generation || transitionEvidence.states[0]?.generation || 0,
+        ...attachedEvidence,
+        transitionEvidence: transitionEvidence.states,
+        maxOverlayCount: transitionEvidence.maxCount,
+      };
     } catch (error) {
       throw new Error(`${label}: ${String(error)}`);
     }
@@ -2199,6 +2225,21 @@ try {
       targetPage.off("request", countAction);
       targetPage.off("response", countActionResponse);
     }
+  };
+
+  const observeCanonicalReload = async (targetPage, testId) => {
+    const response = await targetPage.reload({ waitUntil: "domcontentloaded" });
+    await targetPage.locator(`[data-testid="${testId}"]`).waitFor({ state: "visible" });
+    await targetPage.locator("#app-splash").waitFor({ state: "detached", timeout: 5_000 });
+    return targetPage.evaluate(({ expectedTestId, status }) => ({
+      status,
+      terminal: document.querySelectorAll(`[data-testid="${expectedTestId}"]`).length,
+      startup: document.querySelectorAll("#app-splash").length,
+      transitions: document.querySelectorAll('[data-testid="navigation-transition"]').length,
+      locale: document.documentElement.lang,
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      body: document.body.innerText,
+    }), { expectedTestId: testId, status: response?.status() ?? 0 });
   };
 
   const readCacheStorage = async (targetPage) => targetPage.evaluate(async () => {
@@ -2689,6 +2730,30 @@ try {
   }
   await publicPage.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
   await publicPage.locator("#app-splash").waitFor({ state: "detached" });
+  const canonical404Ctx = await browser.newContext({ viewport: { width: 430, height: 932 } });
+  await canonical404Ctx.addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
+  const canonical404Page = await canonical404Ctx.newPage();
+  const canonical404Response = await canonical404Page.goto(`${BASE}/p/full-qa-not-published`, {
+    waitUntil: "domcontentloaded",
+  });
+  await canonical404Page.locator('[data-testid="route-not-found"]').waitFor({ state: "visible" });
+  await canonical404Page.locator("#app-splash").waitFor({ state: "detached", timeout: 5_000 });
+  const canonical404Reload = await observeCanonicalReload(canonical404Page, "route-not-found");
+  const canonical404Body = canonical404Reload.body;
+  check(
+    "BUG-20260824 recarga 404 termina na tela canônica sem splash inerte",
+    canonical404Response?.status() === 404
+      && canonical404Reload.status === 404
+      && canonical404Reload.terminal === 1
+      && canonical404Reload.startup === 0
+      && canonical404Reload.transitions === 0
+      && canonical404Reload.locale === "en"
+      && canonical404Reload.overflow <= 1
+      && canonical404Body.includes(en.routeStatus.notFoundTitle)
+      && privateMarkers.every((term) => !canonical404Body.includes(term)),
+    JSON.stringify(canonical404Reload),
+  );
+  await canonical404Ctx.close();
   const publicPhases = [];
   publicPhases.push(await observeNavigation(
     publicPage,
@@ -2932,6 +2997,7 @@ try {
     noIndex: document.querySelector('meta[name="robots"]')?.getAttribute("content")?.includes("noindex") ?? false,
     overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
     jobDetail: document.querySelectorAll('[data-testid="route-job-detail"]').length,
+    notFound: document.querySelectorAll('[data-testid="route-not-found"]').length,
     body: document.body.innerText,
   }));
 
@@ -2961,6 +3027,7 @@ try {
     noIndex: document.querySelector('meta[name="robots"]')?.getAttribute("content")?.includes("noindex") ?? false,
     overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
     jobDetail: document.querySelectorAll('[data-testid="route-job-detail"]').length,
+    notFound: document.querySelectorAll('[data-testid="route-not-found"]').length,
     body: document.body.innerText,
   }));
   if (!task04PublicHref) throw new Error("Task 04 public profile href unavailable for revocation race");
@@ -3030,6 +3097,7 @@ try {
     noIndex: document.querySelector('meta[name="robots"]')?.getAttribute("content")?.includes("noindex") ?? false,
     overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
     publicProfile: document.querySelectorAll('[data-testid="route-public-profile"]').length,
+    notFound: document.querySelectorAll('[data-testid="route-not-found"]').length,
     body: document.body.innerText,
   }));
   await revocationPage.unroute("**/*", holdRevocation);
@@ -3089,15 +3157,20 @@ try {
   check(
     "task-04 IT-014 entidades ausentes, fechadas e revogadas preservam resultado canônico sem cache privado",
     [missingJobTransition, closedJobTransition, deletedJobTransition]
-      .every(({ count, generation }) => count === 1 && Number.isInteger(generation) && generation > 0)
+      .every(({ generation, maxOverlayCount }) =>
+        Number.isInteger(generation) && generation > 0 && maxOverlayCount === 1
+      )
       && missingJobOutcome.noIndex
       && missingJobOutcome.jobDetail === 0
+      && missingJobOutcome.notFound === 1
       && closedJobOutcome.jobDetail === 1
       && /fechada/i.test(closedJobOutcome.body)
       && deletedJobOutcome.noIndex
       && deletedJobOutcome.jobDetail === 0
+      && deletedJobOutcome.notFound === 1
       && revokedProfileOutcome.noIndex
       && revokedProfileOutcome.publicProfile === 0
+      && revokedProfileOutcome.notFound === 1
       && [missingJobOutcome, closedJobOutcome, deletedJobOutcome, revokedProfileOutcome]
         .every(({ overlays }) => overlays === 0),
     JSON.stringify({
@@ -3127,6 +3200,7 @@ try {
     },
     {
       email: "e2e-recrutador@local.test",
+      locale: "en",
       prepare: `/jobs/${E2E_CLOSED_JOB_ID}`,
       control: '[data-testid="nav-jobs"]:visible',
       landmark: '[data-testid="route-jobs"]',
@@ -3168,6 +3242,7 @@ try {
     }
     let missingRoleSnapshot = null;
     let missingRoleOutcome = null;
+    let missingRoleReload = null;
     if (scenario.email === "e2e-recrutador@local.test") {
       missingRoleSnapshot = await observeNavigation(
         rolePage,
@@ -3178,9 +3253,11 @@ try {
       missingRoleOutcome = await rolePage.evaluate(() => ({
         path: location.pathname,
         candidate: document.querySelectorAll('[data-testid="route-candidate"]').length,
+        forbidden: document.querySelectorAll('[data-testid="route-forbidden"]').length,
         overlays: document.querySelectorAll('[data-testid="navigation-transition"]').length,
         body: document.body.innerText,
       }));
+      missingRoleReload = await observeCanonicalReload(rolePage, "route-forbidden");
     }
     const cache = await readCacheStorage(rolePage);
     roleTransitionResults.push({
@@ -3188,6 +3265,7 @@ try {
       snapshot,
       missingRoleSnapshot,
       missingRoleOutcome,
+      missingRoleReload,
       emptyPipelineLocale,
       cache,
     });
@@ -3216,6 +3294,8 @@ try {
     .find(({ email }) => email === "e2e-recrutador@local.test")?.missingRoleSnapshot;
   const recruiterMissingRoleOutcome = roleTransitionResults
     .find(({ email }) => email === "e2e-recrutador@local.test")?.missingRoleOutcome;
+  const recruiterMissingRoleReload = roleTransitionResults
+    .find(({ email }) => email === "e2e-recrutador@local.test")?.missingRoleReload;
   if (!recruiterMissingRole) throw new Error("missing-role transition evidence unavailable");
   const namedRoleTransitions = [
     ...roleTransitionResults.map(({ email, snapshot }) => ({ role: email, snapshot })),
@@ -3253,12 +3333,28 @@ try {
   check(
     "task-04 E2E-020 papéis e sessão expirada chegam ao destino canônico com copy neutra",
     namedRoleTransitions.length === 6
-      && namedRoleTransitions.every(({ snapshot }) => snapshot.count === 1)
-      && roleTransitionResults.find(({ email }) => email === "e2e-recrutador@local.test")?.missingRoleSnapshot?.count === 1
+      && namedRoleTransitions.every(({ role, snapshot }) =>
+        role === "missing-role"
+          ? Number.isInteger(snapshot.generation)
+            && snapshot.generation > 0
+            && snapshot.maxOverlayCount === 1
+          : snapshot.count === 1
+      )
+      && Number.isInteger(recruiterMissingRole.generation)
+      && recruiterMissingRole.generation > 0
+      && recruiterMissingRole.maxOverlayCount === 1
       && recruiterMissingRoleOutcome?.path === "/candidate"
       && recruiterMissingRoleOutcome?.candidate === 0
+      && recruiterMissingRoleOutcome?.forbidden === 1
       && recruiterMissingRoleOutcome?.overlays === 0
-      && /forbidden|403|accessed|acesso|proibid/i.test(recruiterMissingRoleOutcome?.body ?? "")
+      && /forbidden|403|access|acesso|proibid/i.test(recruiterMissingRoleOutcome?.body ?? "")
+      && recruiterMissingRoleReload?.status === 403
+      && recruiterMissingRoleReload?.terminal === 1
+      && recruiterMissingRoleReload?.startup === 0
+      && recruiterMissingRoleReload?.transitions === 0
+      && recruiterMissingRoleReload?.locale === "en"
+      && recruiterMissingRoleReload?.overflow <= 1
+      && recruiterMissingRoleReload?.body.includes(en.routeStatus.forbiddenTitle)
       && impersonationEntry.count === 1
       && impersonationExit.count === 1
       && roleNeutral
@@ -3266,6 +3362,7 @@ try {
     JSON.stringify({
       roles: namedRoleTransitions.map(({ role, snapshot }) => [role, snapshot.count]),
       missingRoleOutcome: recruiterMissingRoleOutcome,
+      missingRoleReload: recruiterMissingRoleReload,
       roleNeutral,
       roleCacheIsolated,
     }),
@@ -3301,7 +3398,9 @@ try {
       && callbackSoftTransition.count === 1
       && roleTransitionResults.length === 2
       && roleTransitionResults.every(({ snapshot }) => snapshot.count === 1)
-      && roleTransitionResults.find(({ email }) => email === "e2e-recrutador@local.test")?.missingRoleSnapshot?.count === 1
+      && Number.isInteger(recruiterMissingRole.generation)
+      && recruiterMissingRole.generation > 0
+      && recruiterMissingRole.maxOverlayCount === 1
       && impersonationExit.count === 1
       && expiredSnapshot.count === 1
       && roleNeutral,

@@ -31,6 +31,13 @@ const NEVER_CACHE = [
   "/login",
 ];
 
+const ROUTER_REQUEST_HEADERS = [
+  "rsc",
+  "next-router-state-tree",
+  "next-router-prefetch",
+  "next-url",
+];
+
 function asUrl(value) {
   if (value instanceof URL) return value;
   const candidate = typeof value === "string" ? value : value.url;
@@ -50,11 +57,22 @@ function isNeverCached(value) {
 
 function isRouterRequest(request) {
   const url = asUrl(request);
-  return request.headers.get("rsc") === "1"
-    || request.headers.has("next-router-state-tree")
-    || request.headers.has("next-router-prefetch")
-    || request.headers.has("next-url")
+  return ROUTER_REQUEST_HEADERS.some((header) => request.headers.has(header))
     || url.searchParams.has("_rsc");
+}
+
+function documentNavigationRequest(request) {
+  const url = new URL(asUrl(request).href);
+  url.searchParams.delete("_rsc");
+  const headers = new Headers(request.headers);
+  for (const header of ROUTER_REQUEST_HEADERS) headers.delete(header);
+  headers.set("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+  return new Request(url.href, {
+    method: "GET",
+    headers,
+    credentials: request.credentials || "include",
+    redirect: request.redirect || "follow",
+  });
 }
 
 function navigationTarget(value) {
@@ -130,6 +148,14 @@ self.addEventListener("fetch", (event) => {
   const url = asUrl(request);
   if (url.origin !== self.location.origin) return;
 
+  // A document reload is HTML even if Chromium preserves App Router headers
+  // from the screen that initiated it. Classifying RSC first would return a
+  // text/x-component payload as the top-level document after a 403/404.
+  if (request.mode === "navigate") {
+    event.respondWith(networkOnlyNavigation(request));
+    return;
+  }
+
   if (isRouterRequest(request)) {
     event.respondWith(networkOnlyRouter(event, request));
     return;
@@ -147,14 +173,7 @@ self.addEventListener("fetch", (event) => {
 
   // Explicit private prefixes and every unknown non-navigation request fall
   // through to the browser network without touching Cache Storage.
-  if (isNeverCached(url)) {
-    if (request.mode === "navigate") event.respondWith(networkOnlyNavigation(request));
-    return;
-  }
-
-  if (request.mode === "navigate") {
-    event.respondWith(networkOnlyNavigation(request));
-  }
+  if (isNeverCached(url)) return;
 });
 
 async function cacheFirstPublic(request, cacheName, expectedType) {
@@ -201,7 +220,7 @@ async function networkOnlyRouter(event, request) {
 
 async function networkOnlyNavigation(request) {
   try {
-    return await fetch(request);
+    return await fetch(documentNavigationRequest(request));
   } catch {
     return offlineResponse();
   }

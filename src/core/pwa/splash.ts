@@ -38,6 +38,9 @@
 
 export const SPLASH_ROOT_ID = "app-splash";
 
+/** Identifies the startup element whose parser-executed removal timer is live. */
+export const SPLASH_REFERENCE_KEY = "__masterJobsStartupSplash";
+
 /** Separate identity for the client-side route transition surface. */
 export const TRANSITION_SPLASH_ROOT_ID = "navigation-transition-overlay";
 
@@ -130,6 +133,7 @@ var saindo=${JSON.stringify(SPLASH_HIDDEN_CLASS)};
 var minMs=${SPLASH_MIN_MS},maxMs=${SPLASH_MAX_MS},fadeMs=${SPLASH_FADE_MS};
 var headless=${HEADLESS_UA.toString()};
 var inicio=Date.now(),removida=false;
+var splash=document.getElementById(id);window[${JSON.stringify(SPLASH_REFERENCE_KEY)}]=splash;
 function tirar(){
 if(removida)return;removida=true;
 var el=document.getElementById(id);if(!el)return;

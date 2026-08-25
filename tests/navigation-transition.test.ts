@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { onRouterTransitionStart } from "../instrumentation-client.ts";
 import RouteError from "../app/error.tsx";
+import { CanonicalRouteError } from "../app/canonical-route-error.tsx";
 import { en } from "../src/core/i18n/en.ts";
 import { ptBR } from "../src/core/i18n/pt-BR.ts";
 import { createTransitionStore } from "../src/core/pwa/transition-store.ts";
@@ -126,6 +127,36 @@ describe("App Router transition integration", () => {
     expect(source).not.toContain("error.digest");
   });
 
+  it("releases canonical 403 and 404 interrupts to localized operable UI", () => {
+    for (const [kind, testId, title, body] of [
+      ["forbidden", "route-forbidden", ptBR.routeStatus.forbiddenTitle, ptBR.routeStatus.forbiddenBody],
+      ["not-found", "route-not-found", ptBR.routeStatus.notFoundTitle, ptBR.routeStatus.notFoundBody],
+    ] as const) {
+      const markup = renderToStaticMarkup(createElement(CanonicalRouteError, {
+        kind,
+        title,
+        body,
+        back: ptBR.routeStatus.back,
+      }));
+      expect(markup).toContain(`data-testid="${testId}"`);
+      expect(markup).toContain('data-testid="route-status-back"');
+      expect(markup).toContain(title);
+      expect(markup).toContain(body);
+      expect(markup).toContain(ptBR.routeStatus.back);
+    }
+
+    const boundary = readFileSync("app/canonical-route-error.tsx", "utf8");
+    expect(boundary).toContain("transitionStore.failRoute()");
+    for (const [file, kind] of [
+      ["app/forbidden.tsx", "forbidden"],
+      ["app/not-found.tsx", "not-found"],
+    ] as const) {
+      const source = readFileSync(file, "utf8");
+      expect(source).toContain(`kind="${kind}"`);
+      expect(source).toContain("await getTranslator()");
+    }
+  });
+
   it.each([401, 403, 404])(
     "preserves the canonical %s interrupt outside the generic route boundary",
     (status) => {
@@ -153,6 +184,8 @@ describe("App Router transition integration", () => {
     expect(transition).toBeLessThan(shell);
     expect(presenter).toContain("snapshot.phase !== \"idle\"");
     expect(presenter).toContain("{active ? (");
+    expect(presenter).toContain("startupSplash !== registeredSplash");
+    expect(presenter).toContain("startupSplash.remove()");
     expect(layout).toContain("labels={{");
     expect(layout).not.toMatch(/<NavigationTransition[^>]*\b(on\w+|children)=/);
   });

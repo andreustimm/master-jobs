@@ -22,6 +22,13 @@ export const ptBR = {
     failedTitle: "Não foi possível abrir esta tela",
     failedBody: "A navegação falhou. Tente novamente.",
   },
+  routeStatus: {
+    forbiddenTitle: "Acesso negado",
+    forbiddenBody: "Você não tem permissão para abrir esta tela.",
+    notFoundTitle: "Página não encontrada",
+    notFoundBody: "Este endereço não existe ou não está mais disponível.",
+    back: "Voltar ao início",
+  },
   changelog: {
     link: "Novidades",
     title: "Novidades",
