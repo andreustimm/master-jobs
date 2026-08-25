@@ -48,10 +48,24 @@ describe("modo instalado", () => {
     // de página e das modais quando o Android abre em `minimal-ui`.
     expect(css).toContain("html.pwa-standalone #application-shell > header {");
     expect(css).toContain("html.pwa-standalone #application-shell > header > div,");
-    expect(css).toContain("padding-left: max(1rem, var(--safe-area-left));");
-    expect(css).toContain("padding-right: max(1rem, var(--safe-area-right));");
+    expect(css).toContain(
+      "padding-left: max(var(--spacing-md), var(--safe-area-left));",
+    );
+    expect(css).toContain(
+      "padding-right: max(var(--spacing-md), var(--safe-area-right));",
+    );
     expect(css).not.toMatch(/html\.pwa-standalone header\s*\{/);
     expect(css).not.toMatch(/html\.pwa-standalone header\s*>\s*div/);
+  });
+
+  it("liga os tokens de área segura aos insets informados pelo aparelho", () => {
+    const css = readFileSync("app/globals.css", "utf8");
+
+    for (const edge of ["top", "right", "bottom", "left"]) {
+      expect(css).toContain(
+        `--safe-area-${edge}: env(safe-area-inset-${edge});`,
+      );
+    }
   });
 
   it("mantém o conteúdo do cabeçalho abaixo da barra do sistema quando o inset é zero", () => {

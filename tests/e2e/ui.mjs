@@ -386,12 +386,12 @@ try {
   check(
     "cabeçalho PWA respeita a barra do sistema em mobile retrato, paisagem, tablet e desktop",
     headerSafeAreaSnapshots.every((sample) => {
-      const expected = sample.touch
+      const expectedTop = sample.touch
         ? Math.max(sample.spacingFloor, sample.safeTop)
         : sample.safeTop;
       return sample.pointerCoarse === sample.touch
-        && sample.paddingTop === expected
-        && sample.contentTop >= sample.headerTop + expected
+        && sample.paddingTop === expectedTop
+        && sample.contentTop >= sample.headerTop + expectedTop
         && sample.contentLeft >= sample.headerLeft
         && sample.contentRight <= sample.headerRight
         && sample.contentPaddingLeft >= sample.safeLeft
