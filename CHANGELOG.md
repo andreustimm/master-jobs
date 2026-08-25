@@ -9,6 +9,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- Recarregar respostas canônicas 403 e 404 não deixa mais uma camada de splash
+  inerte sobre a mensagem localizada. Navegações HTML removem cabeçalhos
+  internos do App Router, e duplicatas do splash são eliminadas por identidade
+  sem interromper a abertura original do documento.
+
 ## [1.3.0] - 2026-08-24
 
 ### Adicionado
