@@ -16,6 +16,20 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Melhorado
+
+- Ações que salvam, alteram, excluem ou atualizam dados agora mostram uma
+  confirmação ou um aviso de erro no idioma ativo. A mensagem desaparece
+  sozinha depois de cinco segundos.
+- Ao trocar de tela, o carregamento fica centralizado na página inteira,
+  inclusive no celular, e os status das candidaturas aparecem traduzidos e em
+  ordem alfabética.
+
+### Corrigido
+
+- A janela de edição de conta agora fecha depois que as alterações são salvas
+  com sucesso.
+
 ## [1.3.2] - 2026-08-25T12:11:42.279Z
 
 ### Correção
