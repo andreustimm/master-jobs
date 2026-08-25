@@ -19,6 +19,7 @@ import { getTranslator } from "../i18n";
 import { formatNumber, type TranslationKey, type Translator } from "../../src/core/i18n/index.ts";
 import type { Visibility } from "../../src/contexts/auth/index.ts";
 import { cn } from "@/lib/utils";
+import { MutationFeedbackForm } from "../mutation-feedback";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +58,13 @@ function VisibilityCard({
         <CardTitle className="text-lg">{t("visibility.title")}</CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
-        <form action={setVisibilityAction} className="grid gap-2">
+        <MutationFeedbackForm
+          action={setVisibilityAction}
+          successMessage={t("feedback.success")}
+          errorMessage={t("feedback.error")}
+          dismissLabel={t("feedback.dismiss")}
+          className="grid gap-2"
+        >
           {options.map((option) => (
             <label
               key={option.id}
@@ -132,7 +139,7 @@ function VisibilityCard({
               {t("visibility.save")}
             </Button>
           </div>
-        </form>
+        </MutationFeedbackForm>
       </CardContent>
     </Card>
   );
@@ -218,8 +225,11 @@ export default async function CandidateArea() {
         </Card>
       )}
 
-      <form
+      <MutationFeedbackForm
         action={importPdfAction}
+        successMessage={t("feedback.success")}
+        errorMessage={t("feedback.error")}
+        dismissLabel={t("feedback.dismiss")}
         className="mb-8 flex flex-wrap items-end gap-3 rounded-lg border border-[var(--color-hairline)] bg-[var(--color-cloud)] p-4"
       >
         <div className="grid gap-1.5">
@@ -241,9 +251,15 @@ export default async function CandidateArea() {
           <strong className="text-foreground">{t("copy.pdfReviewFirst")}</strong>.{" "}
           {t("copy.pdfCaveat")}
         </p>
-      </form>
+      </MutationFeedbackForm>
 
-      <form action={saveCvAction} className="mb-8 grid gap-3">
+      <MutationFeedbackForm
+        action={saveCvAction}
+        successMessage={t("feedback.success")}
+        errorMessage={t("feedback.error")}
+        dismissLabel={t("feedback.dismiss")}
+        className="mb-8 grid gap-3"
+      >
         <div className="grid gap-1.5">
           <Label htmlFor="label">{t("candidate.versionLabel")}</Label>
           <Input
@@ -285,7 +301,7 @@ export default async function CandidateArea() {
         <p className="text-xs text-muted-foreground">
           {t("copy.pdfUploadTodo", { fields: "format, source_filename" })}
         </p>
-      </form>
+      </MutationFeedbackForm>
 
       {gap && (
         <>
@@ -383,6 +399,10 @@ export default async function CandidateArea() {
                 currentLength={doc?.content.length ?? 0}
                 locale={locale}
                 labels={versionLabels(t)}
+                feedback={{
+                  success: t("feedback.success"),
+                  error: t("feedback.error"),
+                }}
               />
             </div>
             <div className="divide-y overflow-hidden rounded-xl border">

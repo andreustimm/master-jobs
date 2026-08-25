@@ -6,6 +6,7 @@ import { addManualDescriptionJob } from "../../../src/core/ingest/manual.ts";
 import { scoreOne } from "../../../src/core/scoring/apply.ts";
 import { listCandidates } from "../../../src/core/candidate.ts";
 import { guard } from "../../auth";
+import { setMutationFeedbackCookie } from "../../mutation-feedback-server";
 
 /**
  * Cadastra uma vaga oferecida por um recrutador.
@@ -53,5 +54,6 @@ export async function createRecruiterJobAction(formData: FormData) {
 
   revalidatePath("/jobs");
   revalidatePath("/");
+  await setMutationFeedbackCookie("success");
   redirect(`/jobs/${result.jobId}`);
 }

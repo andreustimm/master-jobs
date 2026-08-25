@@ -14,6 +14,7 @@ import type { TranslationKey } from "../../../src/core/i18n/index.ts";
 import { auditAction, detectAction } from "./actions";
 import { requireOwnCandidatePage } from "../../auth";
 import { getTranslator } from "../../i18n";
+import { MutationFeedbackForm } from "../../mutation-feedback";
 
 export const dynamic = "force-dynamic";
 
@@ -76,11 +77,16 @@ export default async function SkillsPage() {
       </p>
 
       <div className="mb-8 flex flex-wrap items-center gap-3">
-        <form action={detectAction}>
+        <MutationFeedbackForm
+          action={detectAction}
+          successMessage={t("feedback.success")}
+          errorMessage={t("feedback.error")}
+          dismissLabel={t("feedback.dismiss")}
+        >
           <Button type="submit" variant="outline" size="sm">
             {t("skills.redetect")}
           </Button>
-        </form>
+        </MutationFeedbackForm>
         <span className="text-xs text-muted-foreground">
           {pending.length} {t("skills.toAuditCount")} · {confirmed.length} {t("skills.confirmed")} ·{" "}
           {rejected.length} {t("skills.rejected")}
@@ -147,20 +153,30 @@ export default async function SkillsPage() {
                           {s.occurrences}× no CV
                         </Badge>
                         <span className="ml-auto flex gap-2">
-                          <form action={auditAction}>
+                          <MutationFeedbackForm
+                            action={auditAction}
+                            successMessage={t("feedback.success")}
+                            errorMessage={t("feedback.error")}
+                            dismissLabel={t("feedback.dismiss")}
+                          >
                             <input type="hidden" name="id" value={s.id} />
                             <input type="hidden" name="status" value="confirmed" />
                             <Button type="submit" size="sm" className="h-7">
                               {t("skills.confirm")}
                             </Button>
-                          </form>
-                          <form action={auditAction}>
+                          </MutationFeedbackForm>
+                          <MutationFeedbackForm
+                            action={auditAction}
+                            successMessage={t("feedback.success")}
+                            errorMessage={t("feedback.error")}
+                            dismissLabel={t("feedback.dismiss")}
+                          >
                             <input type="hidden" name="id" value={s.id} />
                             <input type="hidden" name="status" value="rejected" />
                             <Button type="submit" size="sm" variant="outline" className="h-7">
                               {t("skills.reject")}
                             </Button>
-                          </form>
+                          </MutationFeedbackForm>
                         </span>
                       </div>
                       {s.evidence && (

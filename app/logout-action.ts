@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { endSession } from "../src/contexts/auth/index.ts";
 import { SESSION_COOKIE } from "./auth";
+import { setMutationFeedbackCookie } from "./mutation-feedback-server";
 
 /**
  * Sair.
@@ -24,5 +25,6 @@ export async function logoutAction() {
   // continua válido para quem o copiou.
   if (token) await endSession(token);
   jar.delete(SESSION_COOKIE);
+  await setMutationFeedbackCookie("success");
   redirect("/login?cleared=1");
 }

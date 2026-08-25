@@ -42,6 +42,9 @@ const E2E_LOGIN_RACE_TOKEN = process.env.E2E_LOGIN_RACE_TOKEN ?? TASK04_FIXTURES
 const E2E_CLOSED_JOB_ID = process.env.E2E_CLOSED_JOB_ID ?? String(TASK04_FIXTURES.closedJobId);
 const E2E_DELETED_JOB_ID = process.env.E2E_DELETED_JOB_ID ?? String(TASK04_FIXTURES.deletedJobId);
 const PACKAGE_VERSION = JSON.parse(await readFile("package.json", "utf8")).version;
+// The brand entrance animation is sampled while the overlay is attached; its
+// transform can move the visible union a few pixels before settling.
+const TRANSITION_CENTER_TOLERANCE_PX = 8;
 const results = [];
 let failed = 0;
 let comparisonJobId = null;
@@ -347,6 +350,7 @@ try {
   const headerSafeAreaSnapshots = [];
   for (const fixture of [
     { label: "mobile retrato", width: 375, height: 812, touch: true, safe: { top: 47, right: 0, bottom: 34, left: 0 } },
+    { label: "mobile retrato sem inset", width: 390, height: 844, touch: true, safe: { top: 0, right: 0, bottom: 34, left: 0 } },
     { label: "mobile paisagem", width: 812, height: 375, touch: true, safe: { top: 0, right: 44, bottom: 21, left: 44 } },
     { label: "tablet", width: 768, height: 1024, touch: true, safe: { top: 24, right: 0, bottom: 20, left: 0 } },
     { label: "desktop", width: 1280, height: 900, touch: false, safe: { top: 0, right: 0, bottom: 0, left: 0 } },
@@ -382,7 +386,7 @@ try {
         standaloneClass: document.documentElement.classList.contains("pwa-standalone"),
         pointerCoarse: matchMedia("(pointer: coarse)").matches,
         paddingTop: Number.parseFloat(getComputedStyle(header).paddingTop),
-        spacingFloor: Number.parseFloat(rootStyle.getPropertyValue("--spacing-xxl")),
+        safeAreaFloor: Number.parseFloat(rootStyle.getPropertyValue("--safe-area-top-floor")),
         safeTop: Number.parseFloat(rootStyle.getPropertyValue("--safe-area-top")),
         safeRight: Number.parseFloat(rootStyle.getPropertyValue("--safe-area-right")),
         safeLeft: Number.parseFloat(rootStyle.getPropertyValue("--safe-area-left")),
@@ -407,8 +411,9 @@ try {
   check(
     "cabeçalho PWA respeita a barra do sistema em mobile retrato, paisagem, tablet e desktop",
     headerSafeAreaSnapshots.every((sample) => {
-      const expectedTop = sample.touch
-        ? Math.max(sample.spacingFloor, sample.safeTop)
+      const portrait = sample.height >= sample.width;
+      const expectedTop = sample.touch && portrait
+        ? Math.max(sample.safeAreaFloor, sample.safeTop)
         : sample.safeTop;
       return sample.standaloneClass
         && sample.pointerCoarse === sample.touch
@@ -1248,6 +1253,19 @@ try {
   const original = visibility.checked ?? "private";
   await page.check('input[name="visibility"][value="recruiters"]');
   await page.locator('[data-testid="save-visibility"]').click();
+  await page.locator('[data-testid="mutation-feedback"][role="status"]').waitFor({
+    state: "visible",
+    timeout: 15_000,
+  });
+  check(
+    "mutação de perfil anuncia sucesso com o feedback global",
+    (await page.locator('[data-testid="mutation-feedback"][role="status"]').count()) === 1,
+  );
+  await page.waitForTimeout(5_200);
+  check(
+    "feedback global desaparece sozinho depois de cinco segundos",
+    (await page.locator('[data-testid="mutation-feedback"]').count()) === 0,
+  );
   await page.waitForTimeout(1200);
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
   const saved = await page.evaluate(
@@ -1662,6 +1680,11 @@ try {
     check(
       "salvamento concluído depois de fechar ainda anuncia o sucesso",
       (await page.locator('[data-testid="user-edit-notice"][role="status"]').count()) === 1,
+    );
+    await page.waitForTimeout(5_200);
+    check(
+      "notificação de sucesso desaparece sozinha depois de cinco segundos",
+      (await page.locator('[data-testid="user-edit-notice"][role="status"]').count()) === 0,
     );
     await editModal.locator('[data-testid="user-edit-cancel"]').click();
 
@@ -2264,6 +2287,41 @@ try {
           generation: Number(element.getAttribute("data-generation")),
           phase: element.getAttribute("data-phase"),
           rect: element.getBoundingClientRect().toJSON(),
+          contentRect: element.querySelector(".navigation-transition__content")?.getBoundingClientRect().toJSON() ?? null,
+          visibleRect: (() => {
+            const content = element.querySelector(".navigation-transition__content");
+            const rects = content
+              ? Array.from(content.children)
+                .map((child) => child.getBoundingClientRect())
+                .filter((childRect) => childRect.width > 0 && childRect.height > 0)
+              : [];
+            if (rects.length === 0) return null;
+            const left = Math.min(...rects.map((childRect) => childRect.left));
+            const top = Math.min(...rects.map((childRect) => childRect.top));
+            const right = Math.max(...rects.map((childRect) => childRect.right));
+            const bottom = Math.max(...rects.map((childRect) => childRect.bottom));
+            return { left, top, right, bottom, width: right - left, height: bottom - top };
+          })(),
+          style: (() => {
+            const computed = getComputedStyle(element);
+            return {
+              position: computed.position,
+              display: computed.display,
+              alignItems: computed.alignItems,
+              justifyContent: computed.justifyContent,
+            };
+          })(),
+          contentStyle: (() => {
+            const content = element.querySelector(".navigation-transition__content");
+            if (!content) return null;
+            const computed = getComputedStyle(content);
+            return {
+              display: computed.display,
+              flexDirection: computed.flexDirection,
+              alignItems: computed.alignItems,
+              textAlign: computed.textAlign,
+            };
+          })(),
           viewport: { width: window.innerWidth, height: window.innerHeight },
           text: element.textContent ?? "",
         }))
@@ -2272,6 +2330,10 @@ try {
           generation: 0,
           phase: null,
           rect: null,
+          contentRect: null,
+          visibleRect: null,
+          style: null,
+          contentStyle: null,
           viewport: await targetPage.evaluate(() => ({ width: innerWidth, height: innerHeight })),
           text: "",
         };
@@ -2392,12 +2454,24 @@ try {
       `[data-testid="${destination}"]`,
     );
     desktopIntegrationEvidence.push(snapshot);
+    const centered = snapshot.visibleRect !== null
+      && Math.abs(snapshot.visibleRect.left + snapshot.visibleRect.width / 2 - snapshot.viewport.width / 2) <= TRANSITION_CENTER_TOLERANCE_PX
+      && Math.abs(snapshot.visibleRect.top + snapshot.visibleRect.height / 2 - snapshot.viewport.height / 2) <= TRANSITION_CENTER_TOLERANCE_PX;
     if (
       snapshot.count !== 1 ||
       snapshot.rect.left !== 0 ||
       snapshot.rect.top !== 0 ||
       Math.round(snapshot.rect.width) !== snapshot.viewport.width ||
-      Math.round(snapshot.rect.height) !== snapshot.viewport.height
+      Math.round(snapshot.rect.height) !== snapshot.viewport.height ||
+      snapshot.style?.position !== "fixed" ||
+      snapshot.style?.display !== "flex" ||
+      snapshot.style?.alignItems !== "center" ||
+      !snapshot.style?.justifyContent?.includes("center") ||
+      snapshot.contentStyle?.display !== "flex" ||
+      snapshot.contentStyle?.flexDirection !== "column" ||
+      snapshot.contentStyle?.alignItems !== "center" ||
+      snapshot.contentStyle?.textAlign !== "center" ||
+      !centered
     ) {
       desktopFailures.push(`${control}:${JSON.stringify(snapshot)}`);
     }
@@ -2444,7 +2518,23 @@ try {
       popoverOpen: document.querySelector('[data-testid="mobile-nav-popover"]')?.matches(":popover-open"),
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     }));
-    if (snapshot.count !== 1 || result.popoverOpen || result.overflow > 1) {
+    const centered = snapshot.visibleRect !== null
+      && Math.abs(snapshot.visibleRect.left + snapshot.visibleRect.width / 2 - snapshot.viewport.width / 2) <= TRANSITION_CENTER_TOLERANCE_PX
+      && Math.abs(snapshot.visibleRect.top + snapshot.visibleRect.height / 2 - snapshot.viewport.height / 2) <= TRANSITION_CENTER_TOLERANCE_PX;
+    if (
+      snapshot.count !== 1 ||
+      snapshot.style?.position !== "fixed" ||
+      snapshot.style?.display !== "flex" ||
+      snapshot.style?.alignItems !== "center" ||
+      !snapshot.style?.justifyContent?.includes("center") ||
+      snapshot.contentStyle?.display !== "flex" ||
+      snapshot.contentStyle?.flexDirection !== "column" ||
+      snapshot.contentStyle?.alignItems !== "center" ||
+      snapshot.contentStyle?.textAlign !== "center" ||
+      !centered ||
+      result.popoverOpen ||
+      result.overflow > 1
+    ) {
       mobileFailures.push(`${control}:${JSON.stringify({ snapshot, result })}`);
     }
   }

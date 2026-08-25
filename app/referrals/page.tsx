@@ -64,7 +64,7 @@ export default async function Referrals() {
                   <TransitionLink href={`/jobs/${o.jobId}`} data-testid={`referral-job-${o.jobId}`} className="font-semibold hover:underline">
                     {o.title}
                   </TransitionLink>
-                  {o.status && <StatusBadge status={o.status} />}
+                  {o.status && <StatusBadge status={o.status} t={t} />}
                 </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">{o.companyName}</div>
                 <div className="mt-1 text-xs text-[var(--color-strong)]">

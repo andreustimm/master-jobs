@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { requirePage } from "../../auth";
 import { getTranslator } from "../../i18n";
 import { createRecruiterJobAction } from "./actions";
+import { MutationFeedbackForm } from "../../mutation-feedback";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,13 @@ export default async function NewJobPage() {
 
       <Card>
         <CardContent className="pt-0">
-          <form action={createRecruiterJobAction} className="grid gap-4">
+          <MutationFeedbackForm
+            action={createRecruiterJobAction}
+            successMessage={t("feedback.success")}
+            errorMessage={t("feedback.error")}
+            dismissLabel={t("feedback.dismiss")}
+            className="grid gap-4"
+          >
             <div className="grid gap-1.5">
               <Label htmlFor="title">{t("jobs.jobTitle")}</Label>
               <Input id="title" name="title" required autoComplete="off" />
@@ -64,7 +71,7 @@ export default async function NewJobPage() {
                 {t("jobs.publish")}
               </Button>
             </div>
-          </form>
+          </MutationFeedbackForm>
         </CardContent>
       </Card>
     </main>

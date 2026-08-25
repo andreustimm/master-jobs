@@ -409,9 +409,11 @@ body {
   position: fixed;
   inset: 0;
   z-index: 9998;
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   min-block-size: 100dvh;
-  place-items: center;
+  justify-content: safe center;
   overflow: auto;
   overscroll-behavior: contain;
   padding-block: max(var(--spacing-lg), var(--safe-area-top))
@@ -644,9 +646,11 @@ html.pwa-standalone #application-shell > header {
    `safe-area-inset-top` chega como zero. O aparelho da regressão faz exatamente
    isso. O piso só vale para o contexto de toque: uma PWA instalada no desktop
    não ganha uma faixa vazia que o sistema operacional não pede. */
-@media (pointer: coarse) {
+@media (pointer: coarse) and (orientation: portrait) {
   html.pwa-standalone #application-shell > header {
-    padding-top: max(var(--spacing-xxl), var(--safe-area-top));
+    /* Paisagem já informa o inset superior/lateral real; o piso é só para
+       retrato, onde alguns launchers entregam zero apesar da barra sobreposta. */
+    padding-top: max(var(--safe-area-top), var(--safe-area-top-floor));
   }
 }
 

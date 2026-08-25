@@ -16,7 +16,12 @@ import {
 } from "../src/core/theme.ts";
 import pkg from "../package.json" with { type: "json" };
 import { versaoAtual } from "../src/core/changelog.ts";
-import { renderSplashCSS, renderSplashHTML, renderSplashScript } from "../src/core/pwa/splash.ts";
+import {
+  renderNavigationTransitionCSS,
+  renderSplashCSS,
+  renderSplashHTML,
+  renderSplashScript,
+} from "../src/core/pwa/splash.ts";
 import { renderStandaloneScript } from "../src/core/pwa/standalone.ts";
 import { Footer } from "./footer";
 import { AppearanceSwitch } from "./theme-switch";
@@ -26,6 +31,11 @@ import { LocaleSwitch } from "./locale-switch";
 import { NavLinks } from "./nav-links";
 import { MobileNav } from "./mobile-nav";
 import { NavigationTransition } from "./navigation-transition";
+import { MutationFeedbackForm, MutationFeedbackHost } from "./mutation-feedback";
+import {
+  MUTATION_FEEDBACK_COOKIE,
+  readMutationFeedbackCookie,
+} from "./mutation-feedback-server";
 import { headers } from "next/headers";
 import {
   LOCALE_COOKIE,
@@ -123,6 +133,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     ? saved
     : negotiateLocale((await headers()).get("accept-language"));
   const { t } = translator(locale);
+  const mutationFeedback = readMutationFeedbackCookie(jar.get(MUTATION_FEEDBACK_COOKIE)?.value);
 
   return (
     // `data-mode` fica ausente em `system` — é a ausência que devolve a decisão
@@ -141,7 +152,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             valer já na primeira pintura. Depois da primeira pintura, o
             cabeçalho nasceria colado no topo e desceria — um salto visível. */}
         <script dangerouslySetInnerHTML={{ __html: renderStandaloneScript() }} />
-        <style dangerouslySetInnerHTML={{ __html: renderSplashCSS() }} />
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `${renderSplashCSS()}${renderNavigationTransitionCSS()}`,
+          }}
+        />
 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -183,6 +198,22 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             failedTitle: t("transition.failedTitle"),
             failedBody: t("transition.failedBody"),
           }}
+        />
+
+        <MutationFeedbackHost
+          initial={
+            mutationFeedback
+              ? {
+                  id: mutationFeedback.id,
+                  kind: mutationFeedback.kind,
+                  message:
+                    mutationFeedback.message === "success"
+                      ? t("feedback.success")
+                      : t("feedback.error"),
+                }
+              : null
+          }
+          dismissLabel={t("feedback.dismiss")}
         />
 
         <div id="application-shell">
@@ -274,7 +305,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <span className="type-meta text-muted-foreground">
                   {t("impersonation.note")}
                 </span>
-                <form action={stopImpersonatingAction} className="ml-auto">
+                <MutationFeedbackForm
+                  action={stopImpersonatingAction}
+                  successMessage={t("feedback.success")}
+                  errorMessage={t("feedback.error")}
+                  dismissLabel={t("feedback.dismiss")}
+                  className="ml-auto"
+                >
                   <button
                     type="submit"
                     data-testid="stop-impersonating"
@@ -282,7 +319,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   >
                     {t("impersonation.exit")}
                   </button>
-                </form>
+                </MutationFeedbackForm>
               </div>
             </div>
           )}

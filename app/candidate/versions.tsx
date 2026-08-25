@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { publishMutationFeedback } from "../mutation-feedback";
 import { MarkdownPreview } from "./markdown-preview";
 import {
   deleteVersionAction,
@@ -60,12 +61,14 @@ export function VersionHistory({
   labels,
   currentLength,
   locale,
+  feedback,
 }: {
   rows: VersionRow[];
   labels: VersionLabels;
   /** Tamanho da versão atual, para a diferença por linha. */
   currentLength: number;
   locale: string;
+  feedback: { success: string; error: string };
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [panel, setPanel] = useState<Panel>({ kind: "none" });
@@ -94,9 +97,11 @@ export function VersionHistory({
     if (result.ok) {
       setPanel({ kind: "none" });
       setError(null);
+      publishMutationFeedback({ kind: "success", message: feedback.success });
       return;
     }
     setError({ message: t(ERROR_KEY[result.error] ?? "errorNotFound"), detail: result.detail });
+    publishMutationFeedback({ kind: "error", message: feedback.error });
   }
 
   function view(row: VersionRow) {

@@ -291,7 +291,9 @@ describe("stable navigation adapters", () => {
 
     for (const [file, action] of actionSurfaces) {
       const source = readFileSync(file, "utf8");
-      expect(source, file).toContain(`<form action={${action}}`);
+      expect(source, file).toMatch(
+        new RegExp(`(?:<form|<MutationFeedbackForm)[\\s\\S]*action=\\{${action}\\}`),
+      );
       expect(source, file).not.toContain("TransitionGetForm");
     }
 
