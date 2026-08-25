@@ -16,6 +16,12 @@ meta:
 
 concurrency: forbid
 
+start:
+  - kind: manual
+  - kind: cli
+  - kind: uds
+  - kind: schedule
+
 inputs:
   min_fit:
     type: number
