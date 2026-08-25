@@ -322,6 +322,107 @@ try {
       asymmetricSpacing.right === 375 - 20,
     JSON.stringify(asymmetricSpacing),
   );
+
+  check(
+    "aba comum não ativa o modo instalado",
+    !(await page.evaluate(() => document.documentElement.classList.contains("pwa-standalone"))),
+  );
+
+  const headerSafeAreaContext = await browser.newContext({
+    storageState: await page.context().storageState(),
+  });
+  await headerSafeAreaContext.addInitScript(() => {
+    const nativeMatchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query) => {
+      const result = nativeMatchMedia(query);
+      if (query === "(display-mode: standalone)") {
+        Object.defineProperty(result, "matches", { configurable: true, value: true });
+      }
+      return result;
+    };
+  });
+  const headerSafeAreaPage = await headerSafeAreaContext.newPage();
+  trackConsole(headerSafeAreaPage);
+  const headerSafeAreaCdp = await headerSafeAreaContext.newCDPSession(headerSafeAreaPage);
+  const headerSafeAreaSnapshots = [];
+  for (const fixture of [
+    { label: "mobile retrato", width: 375, height: 812, touch: true, safe: { top: 47, right: 0, bottom: 34, left: 0 } },
+    { label: "mobile paisagem", width: 812, height: 375, touch: true, safe: { top: 0, right: 44, bottom: 21, left: 44 } },
+    { label: "tablet", width: 768, height: 1024, touch: true, safe: { top: 24, right: 0, bottom: 20, left: 0 } },
+    { label: "desktop", width: 1280, height: 900, touch: false, safe: { top: 0, right: 0, bottom: 0, left: 0 } },
+  ]) {
+    await headerSafeAreaCdp.send("Emulation.setDeviceMetricsOverride", {
+      width: fixture.width,
+      height: fixture.height,
+      deviceScaleFactor: 1,
+      mobile: fixture.touch,
+      screenWidth: fixture.width,
+      screenHeight: fixture.height,
+    });
+    await headerSafeAreaCdp.send("Emulation.setTouchEmulationEnabled", {
+      enabled: fixture.touch,
+      maxTouchPoints: fixture.touch ? 5 : 1,
+    });
+    await headerSafeAreaPage.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await headerSafeAreaPage.evaluate(({ top, right, bottom, left }) => {
+      const root = document.documentElement.style;
+      root.setProperty("--safe-area-top", `${top}px`);
+      root.setProperty("--safe-area-right", `${right}px`);
+      root.setProperty("--safe-area-bottom", `${bottom}px`);
+      root.setProperty("--safe-area-left", `${left}px`);
+    }, fixture.safe);
+
+    const sample = await headerSafeAreaPage.locator("#application-shell > header").evaluate((header) => {
+      const content = header.firstElementChild;
+      const rootStyle = getComputedStyle(document.documentElement);
+      const headerRect = header.getBoundingClientRect();
+      const contentRect = content?.getBoundingClientRect();
+      const contentStyle = content ? getComputedStyle(content) : null;
+      return {
+        standaloneClass: document.documentElement.classList.contains("pwa-standalone"),
+        pointerCoarse: matchMedia("(pointer: coarse)").matches,
+        paddingTop: Number.parseFloat(getComputedStyle(header).paddingTop),
+        spacingFloor: Number.parseFloat(rootStyle.getPropertyValue("--spacing-xxl")),
+        safeTop: Number.parseFloat(rootStyle.getPropertyValue("--safe-area-top")),
+        safeRight: Number.parseFloat(rootStyle.getPropertyValue("--safe-area-right")),
+        safeLeft: Number.parseFloat(rootStyle.getPropertyValue("--safe-area-left")),
+        headerTop: headerRect.top,
+        headerRight: headerRect.right,
+        headerLeft: headerRect.left,
+        contentTop: contentRect?.top ?? -1,
+        contentRight: contentRect?.right ?? -1,
+        contentLeft: contentRect?.left ?? -1,
+        contentPaddingRight: Number.parseFloat(contentStyle?.paddingRight ?? "0"),
+        contentPaddingLeft: Number.parseFloat(contentStyle?.paddingLeft ?? "0"),
+        viewportWidth: innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      };
+    });
+    headerSafeAreaSnapshots.push({ ...fixture, ...sample });
+  }
+  await headerSafeAreaCdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
+  await headerSafeAreaCdp.send("Emulation.clearDeviceMetricsOverride");
+  await headerSafeAreaContext.close();
+
+  check(
+    "cabeçalho PWA respeita a barra do sistema em mobile retrato, paisagem, tablet e desktop",
+    headerSafeAreaSnapshots.every((sample) => {
+      const expectedTop = sample.touch
+        ? Math.max(sample.spacingFloor, sample.safeTop)
+        : sample.safeTop;
+      return sample.standaloneClass
+        && sample.pointerCoarse === sample.touch
+        && sample.paddingTop === expectedTop
+        && sample.contentTop >= sample.headerTop + expectedTop
+        && sample.contentLeft >= sample.headerLeft
+        && sample.contentRight <= sample.headerRight
+        && sample.contentPaddingLeft >= sample.safeLeft
+        && sample.contentPaddingRight >= sample.safeRight
+        && sample.scrollWidth <= sample.viewportWidth;
+    }),
+    JSON.stringify(headerSafeAreaSnapshots),
+  );
+
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
 
