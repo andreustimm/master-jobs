@@ -51,6 +51,8 @@ function expectReleaseCode(action: () => unknown, code: string): void {
 describe("existing semantic version helpers", () => {
   it("classifies the highest release bump", () => {
     expect(classificarBump(["fix: one"])).toBe("patch");
+    expect(classificarBump(["fix(ui): one"])).toBe("patch");
+    expect(classificarBump(["fix(ci): repair workflow"])).toBeNull();
     expect(classificarBump(["fix: one", "feat: two"])).toBe("minor");
     expect(classificarBump(["feat!: three"])).toBe("major");
     expect(classificarBump(["chore: internal"])).toBeNull();
