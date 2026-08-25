@@ -541,6 +541,15 @@ describe("retomada dos workflows de release", () => {
     expect(workflow).toContain("if: steps.versao.outputs.tagar == 'sim'");
   });
 
+  it("retorno main→dev não usa --json em gh pr create", () => {
+    const workflow = readFileSync(".github/workflows/sincronizar-apos-main.yml", "utf8");
+    const inicio = workflow.indexOf("gh pr create --base dev --head main");
+    const fim = workflow.indexOf("ABERTA=$(gh pr list", inicio);
+    expect(inicio).toBeGreaterThan(-1);
+    expect(fim).toBeGreaterThan(inicio);
+    expect(workflow.slice(inicio, fim)).not.toContain("--json");
+  });
+
   it("staging avança somente até o SHA publicado pela etapa da tag", () => {
     const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
     expect(workflow).toContain("id: tag");
