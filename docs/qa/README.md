@@ -30,6 +30,8 @@ persona→conta e as credenciais ficam em armazenamento privado, nunca em
 | Código | Área |
 |---|---|
 | `AUTH` | Login, sessão, recuperação e autorização |
+| `NAV` | Navegação, transições e recuperação entre telas |
+| `PWA` | Carregamento inicial e experiência instalada/offline |
 | `JOBS` | Descoberta, filtros, detalhe e explicação de vagas |
 | `PIPE` | Shortlist, candidatura e histórico do funil |
 | `PROF` | Perfil do candidato e currículo |

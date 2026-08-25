@@ -9,6 +9,26 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-08-25
+
+### Corrigido
+
+- Recarregar respostas canônicas 403 e 404 não deixa mais uma camada de splash
+  inerte sobre a mensagem localizada. Navegações HTML removem cabeçalhos
+  internos do App Router, e duplicatas do splash são eliminadas por identidade
+  sem interromper a abertura original do documento.
+
+## [1.3.0] - 2026-08-24
+
+### Adicionado
+
+- Coordenador único de navegação para links, formulários GET, histórico do
+  navegador e redirecionamentos aceitos, exibindo o splash da marca durante a
+  troca de tela com recuperação para falhas e navegação prolongada.
+- Shell offline localizado e sem credenciais, com cache estritamente limitado
+  a recursos estáticos públicos e exclusão explícita de páginas autenticadas,
+  APIs, perfis públicos e respostas RSC.
+
 ## [1.2.0] - 2026-08-23
 
 ### Adicionado

@@ -10,6 +10,7 @@ import {
   type Translator,
 } from "../src/core/i18n/index.ts";
 import { isPublicJobUrl } from "../src/core/job-url.ts";
+import { TransitionLink } from "./transition-link";
 
 /**
  * The full job description, offline, in a modal.
@@ -169,9 +170,9 @@ export function JobModal({
                     shown: formatNumber(text.length, locale),
                     total: formatNumber(row.pageTextLength, locale),
                   })}{" "}
-                  <a href={`/jobs/${row.jobId}`} className="text-[var(--primary-text)] hover:underline">
+                  <TransitionLink href={`/jobs/${row.jobId}`} className="text-[var(--primary-text)] hover:underline">
                     {t("jobDetail.openFull")}
-                  </a>
+                  </TransitionLink>
                 </p>
               )}
             </>

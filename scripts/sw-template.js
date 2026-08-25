@@ -1,41 +1,11 @@
-// ─── Arquitetura de cache ───────────────────────────────────────
-//
-// Desenho replicado do `contas_casal` — caches versionados por tipo de
-// recurso, estratégia por tipo, limpeza das versões antigas no `activate` — com
-// UMA diferença deliberada, e ela é a decisão central deste arquivo.
-//
-//   static-vX  → JS, CSS, fontes, ícones, manifest   (Cache First)
-//   shell-vX   → /login e /offline                    (Network First)
-//
-// **Não existe `pages-` nem `api-` aqui, e a ausência é a política.**
-//
-// O `contas_casal` cacheia página autenticada e resposta de API porque tem a
-// contrapartida: uma fronteira de sessão offline que, no logout, apaga Dexie,
-// Cache Storage privado, fila de uploads e outbox como uma operação observável,
-// e recusa renderizar a próxima conta se qualquer etapa falhar. Copiar o cache
-// sem copiar essa máquina seria copiar o risco sem a mitigação.
-//
-// Neste sistema tudo o que está atrás de sessão é privado — currículo, funil,
-// candidaturas, contatos — e o disco sobrevive à sessão. Uma página do
-// candidato gravada em cache continua legível depois do logout, para quem tiver
-// o aparelho. O ganho seria abrir uma tela que já se abre rápido; o custo é o
-// dado que este projeto inteiro existe para proteger.
-//
-// O que a PWA entrega aqui, então: instala como app, abre em tela cheia, e o
-// shell estático carrega instantaneamente. Offline de verdade exigiria o dado
-// local, e o dado mora em SQLite no servidor.
-// ────────────────────────────────────────────────────────────────
-
+// Persistent storage is public-by-admission. Application responses are never
+// candidates, so privacy does not depend on logout or a later cleanup action.
 const CACHE_VERSION = "__APP_VERSION__";
-
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
-
 const CURRENT_CACHES = new Set([STATIC_CACHE, SHELL_CACHE]);
 
-/** Só o que não é de ninguém. */
-const PRECACHE_SHELL = ["/offline", "/login"];
-
+const OFFLINE_DOCUMENT = "/offline.html";
 const PRECACHE_STATIC = [
   "/manifest.json",
   "/icons/icon-192.png",
@@ -43,158 +13,243 @@ const PRECACHE_STATIC = [
   "/icons/icon-maskable-512.png",
 ];
 
-/**
- * Nunca tocado pelo cache, em nenhuma circunstância.
- *
- * Lista de EXCLUSÃO explícita além do padrão de negar, porque as duas falham de
- * modos diferentes: o padrão protege o que ninguém previu, e a lista documenta
- * o que já se sabe ser sensível. `/p/` está aqui apesar de público — o perfil é
- * público por escolha do candidato, e essa escolha pode ser revogada; uma cópia
- * em disco não obedeceria à revogação.
- */
-const NEVER_CACHE = ["/api/", "/admin/", "/candidate", "/pipeline", "/referrals", "/compare", "/p/"];
+// Documentation as well as defence in depth. Unknown paths are denied by the
+// positive admission rules below even when they are absent from this list.
+const NEVER_CACHE = [
+  "/api/",
+  "/admin/",
+  "/candidate",
+  "/pipeline",
+  "/referrals",
+  "/compare",
+  "/p/",
+  "/jobs",
+  "/applications",
+  "/salary",
+  "/resume",
+  "/cv",
+  "/login",
+];
 
-const STATIC_EXTENSIONS = /\.(?:js|css|woff2?|ttf|otf|png|jpe?g|svg|webp|avif|ico|json)$/i;
+const ROUTER_REQUEST_HEADERS = [
+  "rsc",
+  "next-router-state-tree",
+  "next-router-prefetch",
+  "next-url",
+];
 
-function isStaticAsset(url) {
-  return url.pathname.startsWith("/_next/static/") || STATIC_EXTENSIONS.test(url.pathname);
+function asUrl(value) {
+  if (value instanceof URL) return value;
+  const candidate = typeof value === "string" ? value : value.url;
+  return new URL(candidate, self.location.origin);
 }
 
-function isShell(url) {
-  return PRECACHE_SHELL.includes(url.pathname);
+function isCacheableStatic(value) {
+  const url = asUrl(value);
+  if (url.origin !== self.location.origin || url.search || url.hash) return false;
+  return PRECACHE_STATIC.includes(url.pathname) || url.pathname.startsWith("/_next/static/");
 }
 
-function isNeverCached(url) {
-  return NEVER_CACHE.some((prefix) => url.pathname.startsWith(prefix));
+function isNeverCached(value) {
+  const url = asUrl(value);
+  return NEVER_CACHE.some((prefix) => url.pathname === prefix || url.pathname.startsWith(prefix));
+}
+
+function isRouterRequest(request) {
+  const url = asUrl(request);
+  return ROUTER_REQUEST_HEADERS.some((header) => request.headers.has(header))
+    || url.searchParams.has("_rsc");
+}
+
+function documentNavigationRequest(request) {
+  const url = new URL(asUrl(request).href);
+  url.searchParams.delete("_rsc");
+  const headers = new Headers(request.headers);
+  for (const header of ROUTER_REQUEST_HEADERS) headers.delete(header);
+  headers.set("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+  return new Request(url.href, {
+    method: "GET",
+    headers,
+    credentials: request.credentials || "include",
+    redirect: request.redirect || "follow",
+  });
+}
+
+function navigationTarget(value) {
+  const url = new URL(asUrl(value).href);
+  url.searchParams.delete("_rsc");
+  return `${url.pathname}${url.search}`;
+}
+
+function isRouterPayloadResponse(response) {
+  const contentType = response.headers.get("content-type") ?? "";
+  const vary = response.headers.get("vary") ?? "";
+  return contentType.toLowerCase().includes("text/x-component")
+    || /(?:^|,)\s*(?:rsc|next-router-state-tree|next-router-prefetch|next-url)\s*(?:,|$)/i.test(vary);
+}
+
+function isAdmissibleResponse(response, expectedType) {
+  if (!response.ok || response.redirected || response.type === "opaqueredirect") return false;
+  if (isRouterPayloadResponse(response)) return false;
+  if (expectedType === "html") {
+    return (response.headers.get("content-type") ?? "").toLowerCase().includes("text/html");
+  }
+  return true;
+}
+
+function publicRequest(value) {
+  const url = asUrl(value);
+  return new Request(url.href, { method: "GET", credentials: "omit", cache: "reload" });
+}
+
+async function installOne(path, cacheName, expectedType) {
+  const request = publicRequest(path);
+  const response = await fetch(request);
+  if (!isAdmissibleResponse(response, expectedType)) return false;
+  const cache = await caches.open(cacheName);
+  await cache.put(request, response.clone());
+  return true;
 }
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    (async () => {
-      const [shell, statics] = await Promise.all([
-        caches.open(SHELL_CACHE),
-        caches.open(STATIC_CACHE),
-      ]);
-      // `allSettled`: uma rota do shell que ainda não existe no deploy não pode
-      // impedir a instalação inteira e deixar o app sem service worker nenhum.
-      await Promise.allSettled([shell.addAll(PRECACHE_SHELL), statics.addAll(PRECACHE_STATIC)]);
+  event.waitUntil((async () => {
+    await Promise.allSettled([
+      installOne(OFFLINE_DOCUMENT, SHELL_CACHE, "html"),
+      ...PRECACHE_STATIC.map((path) => installOne(path, STATIC_CACHE, "static")),
+    ]);
+    try {
       await self.skipWaiting();
-    })(),
-  );
+    } catch {
+      // Registration is progressive enhancement; online operation remains valid.
+    }
+  })());
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    (async () => {
+  event.waitUntil((async () => {
+    try {
       const keys = await caches.keys();
       await Promise.all(keys.filter((key) => !CURRENT_CACHES.has(key)).map((key) => caches.delete(key)));
+    } catch {
+      // Refused storage cannot prevent this worker from serving the network.
+    }
+    try {
       await self.clients.claim();
-    })(),
-  );
+    } catch {
+      // A later online navigation can still register or update the worker.
+    }
+  })());
 });
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-
-  // Só GET. Uma mutação servida do cache seria uma escrita que não aconteceu
-  // sendo reportada como se tivesse acontecido.
   if (request.method !== "GET") return;
 
-  const url = new URL(request.url);
-
-  // Origem diferente não passa por aqui: cachear terceiro é assumir a política
-  // de cache dele.
+  const url = asUrl(request);
   if (url.origin !== self.location.origin) return;
 
-  if (isNeverCached(url)) return;
-
-  if (isStaticAsset(url)) {
-    event.respondWith(cacheFirst(request, STATIC_CACHE));
-    return;
-  }
-
-  if (isShell(url)) {
-    event.respondWith(networkFirst(request, SHELL_CACHE));
-    return;
-  }
-
-  // Navegação autenticada: rede, e só rede. Sem fallback stale — servir uma
-  // tela antiga com dado de sessão encerrada é pior que dizer que está offline.
+  // A document reload is HTML even if Chromium preserves App Router headers
+  // from the screen that initiated it. Classifying RSC first would return a
+  // text/x-component payload as the top-level document after a 403/404.
   if (request.mode === "navigate") {
-    event.respondWith(networkOnlyWithOfflinePage(request));
+    event.respondWith(networkOnlyNavigation(request));
+    return;
   }
+
+  if (isRouterRequest(request)) {
+    event.respondWith(networkOnlyRouter(event, request));
+    return;
+  }
+
+  if (isCacheableStatic(url)) {
+    event.respondWith(cacheFirstPublic(request, STATIC_CACHE, "static"));
+    return;
+  }
+
+  if (url.pathname === OFFLINE_DOCUMENT) {
+    event.respondWith(cacheFirstPublic(request, SHELL_CACHE, "html"));
+    return;
+  }
+
+  // Explicit private prefixes and every unknown non-navigation request fall
+  // through to the browser network without touching Cache Storage.
+  if (isNeverCached(url)) return;
 });
 
-async function cacheFirst(request, cacheName) {
-  const cached = await caches.match(request);
-  if (cached) return cached;
-
-  const response = await fetch(request);
-  if (response.ok) {
+async function cacheFirstPublic(request, cacheName, expectedType) {
+  const safeRequest = publicRequest(request);
+  try {
     const cache = await caches.open(cacheName);
-    cache.put(request, response.clone());
+    const cached = await cache.match(safeRequest);
+    if (cached && isAdmissibleResponse(cached, expectedType)) return cached;
+  } catch {
+    // Continue with a credentialless network request when storage is refused.
+  }
+
+  const response = await fetch(safeRequest);
+  if (isAdmissibleResponse(response, expectedType)) {
+    try {
+      const cache = await caches.open(cacheName);
+      await cache.put(safeRequest, response.clone());
+    } catch {
+      // The public response remains usable online even when it cannot persist.
+    }
   }
   return response;
 }
 
-async function networkFirst(request, cacheName) {
+async function notifyInitiatingClient(event, request) {
+  if (!event.clientId) return;
   try {
-    const response = await fetch(request);
-    if (response.ok && !isRedirectToLogin(response)) {
-      const cache = await caches.open(cacheName);
-      cache.put(request, response.clone());
-    }
-    return response;
+    const client = await self.clients.get(event.clientId);
+    if (!client) return;
+    client.postMessage({ type: "navigation-offline", url: navigationTarget(request) });
   } catch {
-    const cached = await caches.match(request);
-    if (cached) return cached;
-    return offlineResponse();
+    // Notification failure must not turn a rejected route request into success.
   }
 }
 
-async function networkOnlyWithOfflinePage(request) {
+async function networkOnlyRouter(event, request) {
   try {
     return await fetch(request);
-  } catch {
-    return offlineResponse();
+  } catch (error) {
+    await notifyInitiatingClient(event, request);
+    throw error;
   }
 }
 
-/**
- * Uma resposta que redirecionou para o login não pode ser gravada.
- *
- * Sem esta checagem, perder a sessão enquanto o shell é aquecido guardaria a
- * tela de login sob a URL de outra rota — e a próxima visita offline mostraria
- * "entre" onde deveria mostrar a página.
- */
-function isRedirectToLogin(response) {
-  return response.redirected && new URL(response.url).pathname.startsWith("/login");
+async function networkOnlyNavigation(request) {
+  try {
+    return await fetch(documentNavigationRequest(request));
+  } catch {
+    return offlineResponse();
+  }
 }
 
 async function offlineResponse() {
-  const cached = await caches.match("/offline");
-  if (cached) return cached;
-  return new Response("Sem conexão.", {
+  try {
+    const cache = await caches.open(SHELL_CACHE);
+    const cached = await cache.match(publicRequest(OFFLINE_DOCUMENT));
+    if (cached && isAdmissibleResponse(cached, "html")) return cached;
+  } catch {
+    // The last-resort response carries no route, session, or user content.
+  }
+  return new Response("Offline.", {
     status: 503,
     headers: { "content-type": "text/plain; charset=utf-8" },
   });
 }
 
-/**
- * Limpeza no logout, pedida pela aplicação.
- *
- * Os estáticos ficam: são públicos e é o que permite o shell abrir na próxima
- * vez. Tudo o mais some. A resposta confirma a conclusão para quem pediu poder
- * esperar antes de trocar de identidade.
- */
 self.addEventListener("message", (event) => {
   if (event.data?.type !== "clear-private-caches") return;
 
-  event.waitUntil(
-    (async () => {
+  event.waitUntil((async () => {
+    try {
       const keys = await caches.keys();
-      await Promise.all(keys.filter((key) => key !== STATIC_CACHE).map((key) => caches.delete(key)));
-      event.source?.postMessage({ type: "private-caches-cleared" });
-    })(),
-  );
+      await Promise.all(keys.filter((key) => !CURRENT_CACHES.has(key)).map((key) => caches.delete(key)));
+    } catch {
+      // Current caches contain only public resources; cleanup is not a privacy boundary.
+    }
+    event.source?.postMessage({ type: "private-caches-cleared" });
+  })());
 });

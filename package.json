@@ -1,6 +1,6 @@
 {
   "name": "master-jobs",
-  "version": "1.2.0",
+  "version": "1.3.1",
   "packageManager": "pnpm@10.28.0",
   "private": true,
   "type": "module",
@@ -27,6 +27,7 @@
     "test:qa-skills": "PYTHONDONTWRITEBYTECODE=1 python3 .claude/skills/qa-report/tests/test_scripts.py",
     "test:e2e": "node tests/e2e/run-isolated.mjs",
     "test:e2e:external": "node tests/e2e/setup.mjs && node tests/e2e/ui.mjs && node tests/e2e/a11y.mjs",
+    "test:pwa-browser": "JHO_PWA_BROWSER_TESTS=1 vitest run tests/pwa-chrome.test.ts",
     "qa:browser:install": "agent-browser install",
     "prebuild": "node scripts/sw-version.mjs",
     "icons": "node scripts/make-icons.mjs",

@@ -46,7 +46,7 @@ export default async function PublicProfilePage({ params }: Params) {
   if (!profile) notFound();
 
   return (
-    <main className="mx-auto w-full max-w-[62ch] pt-12 pb-16">
+    <main className="mx-auto w-full max-w-[62ch] pt-12 pb-16" data-testid="route-public-profile">
       <header className="mb-8">
         <h1 data-user-content className="type-display-md">
           {profile.name}

@@ -13,6 +13,22 @@ export const ptBR = {
   splash: {
     loading: "Carregando o Master Jobs",
   },
+  transition: {
+    loading: "Carregando a próxima tela",
+    prolonged: "Ainda estamos carregando. Isso está levando mais tempo que o normal.",
+    offlineTitle: "Sem conexão",
+    offlineBody: "Não foi possível carregar esta tela. Verifique sua conexão e tente novamente.",
+    retry: "Tentar novamente",
+    failedTitle: "Não foi possível abrir esta tela",
+    failedBody: "A navegação falhou. Tente novamente.",
+  },
+  routeStatus: {
+    forbiddenTitle: "Acesso negado",
+    forbiddenBody: "Você não tem permissão para abrir esta tela.",
+    notFoundTitle: "Página não encontrada",
+    notFoundBody: "Este endereço não existe ou não está mais disponível.",
+    back: "Voltar ao início",
+  },
   changelog: {
     link: "Novidades",
     title: "Novidades",
@@ -494,6 +510,10 @@ export const ptBR = {
     title: "Funil",
     open: "abrir",
     noApplications: "Nada no funil ainda.",
+    startWith: "Comece pela",
+    jobsList: "lista de vagas",
+    appliedOn: "aplicado em {date}",
+    nextAction: "próximo: {action}",
   },
   referrals: {
     title: "Referrals",

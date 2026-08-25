@@ -16,6 +16,23 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-08-25T05:09:18.271Z
+
+### Correção
+
+- Ao abrir ou recarregar uma página inexistente ou sem permissão, a tela de
+  abertura não fica mais presa. A mensagem correta aparece e permite voltar
+  para uma área disponível da aplicação.
+
+## [1.3.0] - 2026-08-24T20:02:56.775Z
+
+### Novidade
+
+- Ao trocar de tela pelos menus, links, filtros ou histórico do navegador, o
+  Master Jobs agora mostra a mesma abertura visual do início do aplicativo.
+- Se o aplicativo instalado for aberto sem internet, uma tela segura informa
+  a situação e permite tentar novamente sem guardar dados da conta no aparelho.
+
 ## [1.2.0] - 2026-08-23T20:57:34.519Z
 
 ### Correção

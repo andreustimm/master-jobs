@@ -107,7 +107,8 @@ dashboard Next.js em `localhost:3000`.
 > conferir depois do `await` deixava N−1 workers passarem juntos.
 
 > **O service worker não guarda nada autenticado, e a ausência é a política.**
-> Só `static-` e `shell-` (`/login`, `/offline`). Sem `pages-`, sem `api-`, e
+> Só `static-` e `shell-` (`/offline.html`, gerado e sem credenciais). `/login`
+> nunca entra no cache. Sem `pages-`, sem `api-`, e
 > `/p/` também fora — público por escolha revogável, e cópia em disco não
 > obedece a revogação. Limpar no logout não bastaria: `logoutAction` não roda em
 > sessão vencida nem em aparelho perdido. `scripts/sw-template.js` é a fonte;

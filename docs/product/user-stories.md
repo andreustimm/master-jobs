@@ -394,7 +394,7 @@ E7.1 provar que a triagem está calibrada. Ver antivisão em `vision.md`.
 
 ## E8 — Interface
 
-### E8.1 ✅ Movimento que informa, sem custo de bundle
+### E8.1 ✅ Movimento que informa, sem custo de bundle (base anterior à E8.2)
 > Como **Andreus**, quero que a interface tenha transições, sem que ela fique
 > pesada.
 
@@ -404,13 +404,35 @@ E7.1 provar que a triagem está calibrada. Ver antivisão em `vision.md`.
 - [x] Barra de score crescendo a partir do zero — o único movimento aqui que
       carrega informação, porque mostra a composição sendo somada
 - [x] **`prefers-reduced-motion` respeitado sem exceção**
-- [x] Zero dependências, zero JavaScript de cliente adicionado
+- [x] Nesta base, zero dependências e zero JavaScript de cliente adicionado
 
 **Decisão:** Motion (motion.dev) foi avaliado e não adicionado. A tarefa pedia
 medir antes de trazer dependência; o CSS nativo entregou o que ela descrevia.
-Este dashboard não envia bundle de cliente fora do editor de markdown, e gastar
-esse invariante em animação de entrada seria trocar a propriedade mais valiosa
-da UI por polimento.
+Nesta entrega anterior, o dashboard não enviava bundle de cliente fora do
+editor de markdown. A E8.2 adiciona deliberadamente um coordenador cliente
+pequeno para cobrir navegação, acessibilidade e recuperação offline; ela não
+altera a decisão de evitar uma biblioteca de animação.
 
 **Invariante de acessibilidade:** uma grade de triagem que se move depois de a
 pessoa ter pedido que não se movesse é falha de acessibilidade, não detalhe.
+
+### E8.2 ✅ Continuidade visual em toda troca de tela
+> Como **pessoa usando o Master Jobs**, quero reconhecer a mesma abertura visual
+> durante trocas de tela, para saber que o comando foi aceito sem perder o
+> contexto quando a rede estiver lenta ou indisponível.
+
+**Aceite**
+- [x] Menus, links internos, formulários GET, histórico e redirecionamentos
+      aceitos compartilham um único coordenador de transição.
+- [x] O splash usa os tokens do `DESIGN.md`, funciona em português e inglês e
+      respeita movimento reduzido, teclado, leitor de tela e áreas seguras.
+- [x] Transições duplicadas são coalescidas e falhas sempre liberam o overlay
+      para uma superfície de erro operável, localizada e com nova tentativa.
+- [x] O app instalado oferece somente um shell offline sem credenciais; páginas
+      autenticadas, `/login`, APIs, perfis públicos e respostas RSC nunca são
+      persistidos pelo service worker.
+
+**Evolução da decisão:** E8.1 continua descrevendo o movimento nativo das
+próprias páginas. E8.2 adiciona JavaScript de cliente estritamente na fronteira
+de navegação porque o estado solicitado, concluído, prolongado e offline não
+pode ser observado de forma confiável apenas por `@view-transition`.

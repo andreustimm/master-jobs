@@ -984,8 +984,10 @@ seria copiar o risco sem a mitigação. E o argumento levantado neste item é ai
 mais forte: **limpar no logout não fecha o buraco**, porque `logoutAction` não
 roda em sessão vencida, aba fechada ou aparelho perdido.
 
-Cacheia `static-` (JS, CSS, fontes, ícones, manifest) e `shell-` (`/login`,
-`/offline`). Mais nada. `/p/` está na exclusão apesar de público: é público por
+Cacheia em `static-` somente recursos same-origin admitidos: `/_next/static/`,
+os três ícones e o manifest; fontes externas não entram. O shell sem credenciais
+fica em `/offline.html`. Mais nada: `/login` também fica fora. `/p/` está na exclusão
+apesar de público: é público por
 escolha do candidato, e a escolha pode ser revogada — uma cópia em disco não
 obedeceria à revogação.
 
@@ -1447,7 +1449,7 @@ sendo a opção errada mesmo em lote; o sistema já tem fila (`verify_task`,
 ação explícita para quem acabou de subir currículo, é o caminho que não faz
 ninguém esperar.
 
-### B-09 · `verifyLogin > limits per address` falha de forma intermitente 📋
+### B-09 · `verifyLogin > limits per address` falha de forma intermitente ✅
 
 Observado em 21/08/2026, durante a instalação da skill `deep-review`. Não é
 regressão dessa mudança — apareceu numa execução da suíte que não tocava
@@ -1478,6 +1480,25 @@ Duas hipóteses, nenhuma verificada:
 Importa mais do que o número sugere: um teste de limite de autenticação que
 falha às vezes ensina a ignorar falha de CI, que é o começo de deixar passar a
 falha verdadeira.
+
+#### Resolvido em 24/08/2026
+
+A hipótese de estado compartilhado estava errada: `verifyLogin` não usa o
+limitador em memória. Ele conta eventos `login_failed` no banco, e o `beforeEach`
+desse arquivo cria um banco novo para cada caso.
+
+O teste misturava dois contratos. Para provar que o limite é por endereço, ele
+usava o scrypt de produção ao gerar as duas hashes e nas `MAX_ATTEMPTS + 1`
+verificações — hoje, onze execuções de cerca de 64 MB cada. Se a última
+verificação ficasse sem recurso, o resultado correto era
+`reason: "unavailable"`, mas a asserção olhava somente `ok: false` e reportava
+isso como se outro usuário tivesse sido bloqueado pelo limite global.
+
+Os casos de login agora usam como dado uma hash scrypt válida com custo baixo.
+Eles continuam atravessando o verificador, o banco e os eventos reais, mas não
+dependem da memória disponível no runner. O custo de produção permanece coberto
+separadamente pelos testes de `hashPassword`/`verifyPassword`, e a falha real do
+KDF continua coberta pelo caso com parâmetros que excedem `maxmem`.
 
 ### B-10 · Falha do KDF era reportada como senha errada ✅
 
@@ -1517,13 +1538,14 @@ Os testes provocam a falha REAL, sem dublê: um `N` alto o bastante para estoura
 o `maxmem` faz o próprio Node recusar com `ERR_CRYPTO_INVALID_SCRYPT_PARAMS`, que
 é o mesmo caminho de código que a pressão de memória percorre.
 
-#### Sobre o B-09
+#### Relação com o B-09
 
-A hipótese de contenção que o B-09 registra ganha um mecanismo concreto: sob a
-suíte inteira, scrypt paralelo pode falhar, e o `catch` transformava isso em
-"senha errada" — exatamente o sintoma observado. Não está provado que era essa a
-causa da intermitência, e o B-09 fica aberto até alguém reproduzi-la. O que
-mudou é que, se acontecer de novo, a falha agora se explica em vez de mentir.
+A causa exata da execução histórica não foi reproduzida, mas isso não mantém o
+B-09 aberto: o contrato daquele item é estabilizar o teste do limite por
+endereço. O fixture deixou de consumir o orçamento do KDF de produção, 16
+execuções concorrentes passaram e a suíte completa ficou verde. Se a pressão de
+memória voltar a afetar o KDF real, B-10 garante que ela apareça como
+`login_unavailable`, sem contaminar o limite nem fingir senha errada.
 
 ### M-06 · Score por candidato, derivado do currículo ✅
 

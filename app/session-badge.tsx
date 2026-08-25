@@ -2,6 +2,7 @@ import { isOpenMode } from "../src/contexts/auth/index.ts";
 import { currentSession } from "./auth";
 import { getTranslator } from "./i18n";
 import { logoutAction } from "./logout-action";
+import { TransitionLink } from "./transition-link";
 
 /**
  * Who you are, and under which mode.
@@ -30,9 +31,9 @@ export async function SessionBadge() {
 
   if (!session) {
     return (
-      <a href="/login" className="type-micro text-[var(--primary-text)] hover:underline">
+      <TransitionLink href="/login" className="type-micro text-[var(--primary-text)] hover:underline">
         {t("nav.signIn")}
-      </a>
+      </TransitionLink>
     );
   }
 

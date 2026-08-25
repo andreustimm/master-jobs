@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TransitionLink } from "../transition-link";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ export default async function Referrals() {
   ]);
 
   return (
-    <main className="pt-10">
+    <main className="pt-10" data-testid="route-referrals">
       <h1 className="type-display-md chevron mb-4">Referrals</h1>
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
         {t("copy.referralsLead")}</p>
@@ -61,9 +61,9 @@ export default async function Referrals() {
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-baseline gap-2.5">
-                  <Link href={`/jobs/${o.jobId}`} className="font-semibold hover:underline">
+                  <TransitionLink href={`/jobs/${o.jobId}`} data-testid={`referral-job-${o.jobId}`} className="font-semibold hover:underline">
                     {o.title}
-                  </Link>
+                  </TransitionLink>
                   {o.status && <StatusBadge status={o.status} />}
                 </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">{o.companyName}</div>
@@ -76,9 +76,9 @@ export default async function Referrals() {
                     {t("jobs.apply")} →
                   </a>
                 ) : (
-                  <Link href={`/jobs/${o.jobId}`} className={actionClass}>
+                  <TransitionLink href={`/jobs/${o.jobId}`} className={actionClass}>
                     {t("jobs.view")} →
-                  </Link>
+                  </TransitionLink>
                 )}
               </div>
             );

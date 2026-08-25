@@ -16,6 +16,23 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-08-25T05:09:18.271Z
+
+### Fixed
+
+- When opening or reloading a missing or restricted page, the startup screen no
+  longer gets stuck. The correct message appears and lets you return to an
+  available area of the application.
+
+## [1.3.0] - 2026-08-24T20:02:56.775Z
+
+### New
+
+- When switching screens through menus, links, filters, or browser history,
+  Master Jobs now shows the same branded opening used at app startup.
+- If the installed app opens without internet access, a safe screen explains
+  the situation and lets you retry without storing account data on the device.
+
 ## [1.2.0] - 2026-08-23T20:57:34.519Z
 
 ### Fixed
