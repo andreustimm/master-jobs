@@ -68,6 +68,7 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`0015`](adr/0015-modal-nativo-com-ilha-cliente.md) | Modal nativo com uma ilha cliente estreita |
 | [`0016`](adr/0016-changelogs-localizados-e-react-markdown.md) | Changelogs localizados separados e react-markdown |
 | [`0017`](adr/0017-precisao-publicacao-e-autoridade-da-versao.md) | Precisão de publicação e autoridade de criação da versão |
+| [`0018`](adr/0018-fronteira-de-confianca-da-varredura-compozy.md) | Fronteira de confiança da varredura Compozy |
 
 ---
 

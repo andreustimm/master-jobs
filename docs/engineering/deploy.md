@@ -63,6 +63,18 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |
 | `CRON_SECRET` | Vercel | protege a rota de cron; a Vercel a envia em `authorization` |
 
+`RESEND_API_KEY` e `RESEND_FROM` formam um par: se qualquer uma estiver ausente
+ou vazia, `configuredMailer` usa o adapter de console e nenhum e-mail é enviado.
+O operador cria a chave no Resend, verifica o domínio e cadastra os dois valores
+diretamente no ambiente da Vercel. Os valores reais não devem ser copiados para
+`.env.example`, documentação, logs ou commits.
+
+O suporte ao Gmail também está completo no código, mas a ativação pertence ao
+operador: criar `GMAIL_CLIENT_ID` e `GMAIL_CLIENT_SECRET` no Google Cloud,
+configurá-los fora do Git e executar `jho mail auth`. O escopo solicitado é
+somente `gmail.readonly`; a ausência dessas credenciais não desativa a importação
+manual de `.eml`.
+
 **`JHO_AUTH_MODE` não deve existir em produção.** Com `open`, o sistema sintetiza
 uma sessão e serve currículo, funil e export para qualquer requisição. É modo de
 desenvolvimento local e num endereço público é o vazamento inteiro.

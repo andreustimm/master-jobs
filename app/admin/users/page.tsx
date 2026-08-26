@@ -204,7 +204,7 @@ function UserRow({
               type="button"
               size="sm"
               variant="outline"
-              className="ml-auto h-7"
+              className="ml-auto min-h-11 xl:h-7 xl:min-h-0"
               popoverTarget={`user-edit-${user.id}`}
               popoverTargetAction="show"
               data-testid="user-edit-open"
@@ -220,7 +220,7 @@ function UserRow({
             >
               <input type="hidden" name="userId" value={user.id} />
               <input type="hidden" name="disable" value={disabled ? "0" : "1"} />
-              <Button type="submit" size="sm" variant="outline" className="h-7">
+              <Button type="submit" size="sm" variant="outline" className="min-h-11 xl:h-7 xl:min-h-0">
                 {disabled ? t("admin.enable") : t("admin.disable")}
               </Button>
             </MutationFeedbackForm>
@@ -235,7 +235,7 @@ function UserRow({
                 dismissLabel={t("feedback.dismiss")}
               >
                 <input type="hidden" name="userId" value={user.id} />
-                <Button type="submit" size="sm" className="h-7" data-testid="impersonate-user">
+                <Button type="submit" size="sm" className="min-h-11 xl:h-7 xl:min-h-0" data-testid="impersonate-user">
                   {t("admin.impersonate")}
                 </Button>
               </MutationFeedbackForm>
@@ -249,9 +249,10 @@ function UserRow({
                 type="button"
                 size="sm"
                 variant="destructive"
-                className="h-7"
+                className="min-h-11 xl:h-7 xl:min-h-0"
                 popoverTarget={`user-delete-${user.id}`}
                 popoverTargetAction="show"
+                data-testid="user-delete-open"
               >
                 {t("admin.delete")}
               </Button>

@@ -16,6 +16,14 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-08-26T03:36:26.414Z
+
+### Correção
+
+- Em celulares e tablets na horizontal, o topo agora mantém o menu compacto
+  até haver espaço para todos os links. O menu aberto também continua abaixo
+  do cabeçalho quando a tela gira, sem cortar conteúdo.
+
 ## [1.3.3] - 2026-08-25T19:02:27.543Z
 
 ### Melhorado

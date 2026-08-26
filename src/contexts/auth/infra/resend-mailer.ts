@@ -25,7 +25,7 @@ export const consoleMailer: Mailer = {
     console.log(
       [
         "",
-        "  ┌─ e-mail NÃO enviado (RESEND_API_KEY ausente)",
+        "  ┌─ e-mail NÃO enviado (configure RESEND_API_KEY e RESEND_FROM)",
         `  │  para: ${mail.to}`,
         `  │  assunto: ${mail.subject}`,
         "  │",

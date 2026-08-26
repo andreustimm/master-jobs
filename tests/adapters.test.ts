@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { fingerprint } from "../src/core/ingest/normalize.ts";
 import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/http-port.ts";
 import "../src/core/sources/http.ts";
 import { getAdapter } from "../src/core/sources/registry.ts";
@@ -101,6 +102,121 @@ describe("greenhouse", () => {
     expect(job.descriptionText).toContain("Build");
     // Left encoded, the scorer would read literal "&lt;p&gt;" as content.
     expect(job.descriptionText).not.toContain("&lt;");
+  });
+});
+
+describe("SmartRecruiters and Recruitee registry fixtures", () => {
+  it("normalizes a SmartRecruiters listing through the registry", async () => {
+    const fixtures = fixtureHttp({
+      "api.smartrecruiters.com": {
+        content: [
+          {
+            id: "principal-1",
+            name: " Principal Architect ",
+            location: { city: "São Paulo", region: "SP", country: "br" },
+          },
+        ],
+      },
+    });
+    setHttpPort(fixtures);
+
+    const result = await getAdapter("smartrecruiters").fetchJobs({
+      kind: "smartrecruiters",
+      handle: "verified-fixture",
+      label: "Acme",
+    });
+
+    expect(fixtures.calls).toHaveLength(1);
+    expect(result.jobs[0]).toMatchObject({
+      title: "Principal Architect",
+      url: "https://jobs.smartrecruiters.com/verified-fixture/principal-1",
+      locationRaw: "São Paulo, SP, br",
+      descriptionHtml: null,
+      descriptionText: null,
+    });
+  });
+
+  it("joins Recruitee description and requirements through the registry", async () => {
+    const fixtures = fixtureHttp({
+      "fixture.recruitee.com/api/offers": {
+        offers: [
+          {
+            id: 55,
+            title: "Staff Engineer",
+            slug: "staff-engineer",
+            careers_url: "https://fixture.recruitee.com/o/staff-engineer",
+            careers_apply_url: "https://fixture.recruitee.com/o/staff-engineer/c/new",
+            description: "<p>Build the platform.</p>",
+            requirements: "<ul><li>Run Kubernetes in production.</li></ul>",
+          },
+        ],
+      },
+    });
+    setHttpPort(fixtures);
+
+    const result = await getAdapter("recruitee").fetchJobs({
+      kind: "recruitee",
+      handle: "fixture",
+      label: "Acme",
+    });
+
+    expect(fixtures.calls).toHaveLength(1);
+    expect(result.jobs[0]!.descriptionText).toContain("Build the platform");
+    expect(result.jobs[0]!.descriptionText).toContain("Kubernetes in production");
+    expect(result.jobs[0]!.applyUrl).toBe(
+      "https://fixture.recruitee.com/o/staff-engineer/c/new",
+    );
+  });
+
+  it("keeps partial fields nullable and accepts an empty envelope", async () => {
+    setHttpPort(
+      fixtureHttp({
+        "api.smartrecruiters.com": { content: [{ id: "partial", name: "Partial role" }] },
+      }),
+    );
+    const partial = await getAdapter("smartrecruiters").fetchJobs({
+      kind: "smartrecruiters",
+      handle: "fixture",
+      label: "Acme",
+    });
+    expect(partial.jobs[0]).toMatchObject({
+      locationRaw: null,
+      remote: null,
+      descriptionHtml: null,
+      descriptionText: null,
+    });
+
+    setHttpPort(fixtureHttp({ "fixture.recruitee.com/api/offers": {} }));
+    await expect(
+      getAdapter("recruitee").fetchJobs({
+        kind: "recruitee",
+        handle: "fixture",
+        label: "Acme",
+      }),
+    ).resolves.toEqual({ jobs: [], warnings: [] });
+  });
+
+  it("keeps normalized fingerprints stable when listing order changes", async () => {
+    const postings = [
+      {
+        id: "one",
+        name: "Staff Engineer (Remote - LATAM)",
+        location: { city: "Remote", region: "LATAM" },
+      },
+      {
+        id: "two",
+        name: "Principal Architect",
+        location: { city: "São Paulo", country: "br" },
+      },
+    ];
+    const config = { kind: "smartrecruiters", handle: "fixture", label: "Acme" } as const;
+
+    setHttpPort(fixtureHttp({ "api.smartrecruiters.com": { content: postings } }));
+    const first = await getAdapter("smartrecruiters").fetchJobs(config);
+    setHttpPort(fixtureHttp({ "api.smartrecruiters.com": { content: [...postings].reverse() } }));
+    const second = await getAdapter("smartrecruiters").fetchJobs(config);
+
+    expect(first.jobs.map(fingerprint).sort()).toEqual(second.jobs.map(fingerprint).sort());
   });
 });
 
