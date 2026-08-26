@@ -415,6 +415,10 @@ try {
       const contentStyle = content ? getComputedStyle(content) : null;
       const brand = content?.querySelector(":scope > [data-nav-brand]");
       const brandRect = brand?.getBoundingClientRect();
+      const desktopNav = content?.querySelector(":scope > nav[data-responsive-nav]");
+      const mobileTrigger = content?.querySelector(":scope > [data-responsive-mobile-nav-trigger]");
+      const desktopNavStyle = desktopNav ? getComputedStyle(desktopNav) : null;
+      const mobileTriggerStyle = mobileTrigger ? getComputedStyle(mobileTrigger) : null;
       return {
         standaloneClass: document.documentElement.classList.contains("pwa-standalone"),
         pointerCoarse: matchMedia("(pointer: coarse)").matches,
@@ -435,6 +439,9 @@ try {
         contentWidth: contentRect?.width ?? -1,
         contentPaddingRight: Number.parseFloat(contentStyle?.paddingRight ?? "0"),
         contentPaddingLeft: Number.parseFloat(contentStyle?.paddingLeft ?? "0"),
+        desktopNavDisplay: desktopNavStyle?.display ?? "missing",
+        desktopNavDirection: desktopNavStyle?.flexDirection ?? "missing",
+        mobileTriggerDisplay: mobileTriggerStyle?.display ?? "missing",
         viewportWidth: innerWidth,
         scrollWidth: document.documentElement.scrollWidth,
       };
@@ -473,6 +480,7 @@ try {
         && sample.paddingTop === expectedTop
         && sample.contentTop >= sample.headerTop + expectedTop
         && sample.contentHeight >= 56
+        && sample.contentHeight <= 64
         && sample.brandTop >= sample.headerTop + expectedTop
         && sample.brandBottom <= sample.headerTop + sample.paddingTop + sample.contentHeight
         && sample.headerLeft <= 0.5
@@ -481,6 +489,8 @@ try {
         && sample.contentRight <= sample.headerRight
         && sample.contentPaddingLeft >= sample.safeLeft
         && sample.contentPaddingRight >= sample.safeRight
+        && (sample.desktopNavDisplay !== "none") !== (sample.mobileTriggerDisplay !== "none")
+        && (sample.desktopNavDisplay === "none" || sample.desktopNavDirection === "row")
         && sample.scrollWidth <= sample.viewportWidth;
     }),
     JSON.stringify(headerSafeAreaSnapshots),
@@ -1238,6 +1248,24 @@ try {
       visible && overflow <= 1 && clipped.length === 0),
     JSON.stringify(desktopNavigation),
   );
+
+  // Uma tela larga ainda pode precisar do modo compacto quando o nome da
+  // pessoa ou os controles ocupam mais espaço. Nesse caso o breakpoint visual
+  // não pode esconder o painel que o botão medido acabou de oferecer.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${BASE}/compare`, { waitUntil: "networkidle" });
+  await page.locator("#application-shell > header").evaluate((header) => {
+    header.dataset.navMode = "compact";
+  });
+  const wideCompactTrigger = page.locator('button[popovertarget="menu-mobile"]');
+  check("modo compacto pode mostrar o botão em tela larga", await wideCompactTrigger.isVisible());
+  await wideCompactTrigger.click();
+  await page.waitForTimeout(150);
+  check(
+    "modo compacto abre o painel também em tela larga",
+    await page.locator("#menu-mobile").isVisible(),
+  );
+  await page.keyboard.press("Escape");
 
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(`${BASE}/candidate/skills`, { waitUntil: "networkidle" });

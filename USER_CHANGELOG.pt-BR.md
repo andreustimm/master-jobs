@@ -16,6 +16,16 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-08-26T20:06:11.585Z
+
+### Correção
+
+- O topo não mostra mais os links empilhados junto com o botão de menu durante
+  uma atualização. Em qualquer tamanho de tela, apenas o menu adequado fica
+  visível.
+- Nomes de conta longos não alargam mais a página nem desalinham os controles
+  do topo.
+
 ## [1.3.6] - 2026-08-26T16:50:32.312Z
 
 ### Melhorado

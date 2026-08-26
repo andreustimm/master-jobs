@@ -16,6 +16,15 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-08-26T20:06:11.585Z
+
+### Fixed
+
+- The header no longer shows stacked links alongside the menu button during an
+  update. At every screen size, only the appropriate navigation mode remains
+  visible.
+- Long account names no longer widen the page or misalign the header controls.
+
 ## [1.3.6] - 2026-08-26T16:50:32.312Z
 
 ### Improved
