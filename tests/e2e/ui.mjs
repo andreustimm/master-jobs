@@ -331,6 +331,36 @@ try {
     !(await page.evaluate(() => document.documentElement.classList.contains("pwa-standalone"))),
   );
 
+  // Alguns WebViews e launchers expõem a área segura, mas não informam
+  // `display-mode` nem `navigator.standalone`. É exatamente o estado da
+  // regressão: o relógio do sistema continua sobre o viewport, enquanto a
+  // classe que habilitava o padding fica ausente.
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+    document.documentElement.style.setProperty("--safe-area-top", "47px");
+  });
+  const browserSafeAreaHeader = await page.locator("#application-shell > header").evaluate((header) => {
+    const brand = header.querySelector(":scope > div > span");
+    const headerRect = header.getBoundingClientRect();
+    const brandRect = brand?.getBoundingClientRect();
+    return {
+      standalone: document.documentElement.classList.contains("pwa-standalone"),
+      paddingTop: Number.parseFloat(getComputedStyle(header).paddingTop),
+      brandTop: brandRect?.top ?? -1,
+      headerTop: headerRect.top,
+    };
+  });
+  check(
+    "cabeçalho reserva o inset exposto mesmo sem sinal de modo instalado",
+    !browserSafeAreaHeader.standalone &&
+      browserSafeAreaHeader.paddingTop >= 47 &&
+      browserSafeAreaHeader.brandTop >= browserSafeAreaHeader.headerTop + 47,
+    JSON.stringify(browserSafeAreaHeader),
+  );
+  await page.evaluate(() => {
+    document.documentElement.style.removeProperty("--safe-area-top");
+  });
+
   const headerSafeAreaContext = await browser.newContext({
     storageState: await page.context().storageState(),
   });
@@ -402,6 +432,7 @@ try {
         brandBottom: brandRect?.bottom ?? -1,
         contentRight: contentRect?.right ?? -1,
         contentLeft: contentRect?.left ?? -1,
+        contentWidth: contentRect?.width ?? -1,
         contentPaddingRight: Number.parseFloat(contentStyle?.paddingRight ?? "0"),
         contentPaddingLeft: Number.parseFloat(contentStyle?.paddingLeft ?? "0"),
         viewportWidth: innerWidth,
@@ -434,8 +465,7 @@ try {
   check(
     "cabeçalho PWA respeita a barra do sistema em mobile retrato, paisagem, tablet e desktop",
     headerSafeAreaSnapshots.every((sample) => {
-      const portrait = sample.height >= sample.width;
-      const expectedTop = sample.touch && portrait
+      const expectedTop = sample.touch
         ? Math.max(sample.safeAreaFloor, sample.safeTop)
         : sample.safeTop;
       return sample.standaloneClass
@@ -445,12 +475,34 @@ try {
         && sample.contentHeight >= 56
         && sample.brandTop >= sample.headerTop + expectedTop
         && sample.brandBottom <= sample.headerTop + sample.paddingTop + sample.contentHeight
+        && sample.headerLeft <= 0.5
+        && sample.headerRight >= sample.viewportWidth - 0.5
         && sample.contentLeft >= sample.headerLeft
         && sample.contentRight <= sample.headerRight
         && sample.contentPaddingLeft >= sample.safeLeft
         && sample.contentPaddingRight >= sample.safeRight
         && sample.scrollWidth <= sample.viewportWidth;
     }),
+    JSON.stringify(headerSafeAreaSnapshots),
+  );
+  check(
+    "container do telefone preserva 95% da largura útil em retrato e paisagem",
+    headerSafeAreaSnapshots
+      .filter((sample) => sample.width <= 639 || (sample.height <= 500 && sample.width < 900))
+      .every((sample) => {
+        const shellWidth = Math.min(sample.viewportWidth * 0.95, 1760);
+        const usefulWidth = sample.contentWidth - sample.contentPaddingLeft - sample.contentPaddingRight;
+        const expectedUsefulWidth = shellWidth - sample.safeLeft - sample.safeRight;
+        const expectedOuterMargin = (sample.viewportWidth - shellWidth) / 2;
+        const leftMargin = sample.contentLeft;
+        const rightMargin = sample.viewportWidth - sample.contentRight;
+        return (
+          Math.abs(sample.contentWidth - shellWidth) <= 1 &&
+          Math.abs(usefulWidth - expectedUsefulWidth) <= 1 &&
+          Math.abs(leftMargin - expectedOuterMargin) <= 1 &&
+          Math.abs(rightMargin - expectedOuterMargin) <= 1
+        );
+      }),
     JSON.stringify(headerSafeAreaSnapshots),
   );
   check(
@@ -1151,28 +1203,36 @@ try {
   await page.keyboard.press("Escape");
   await page.waitForTimeout(150);
 
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto(`${BASE}/compare`, { waitUntil: "networkidle" });
-  const desktopNavigation = await page.evaluate(() => {
-    const header = document.querySelector("#application-shell > header");
-    const nav = header?.querySelector(":scope > div > nav");
-    if (!nav) return { visible: false, overflow: 0, clipped: [] };
-    const navRect = nav.getBoundingClientRect();
-    const links = [...nav.querySelectorAll("a")];
-    return {
-      visible: getComputedStyle(nav).display !== "none",
-      overflow: nav.scrollWidth - nav.clientWidth,
-      clipped: links
-        .filter((link) => {
-          const rect = link.getBoundingClientRect();
-          return rect.left < navRect.left - 1 || rect.right > navRect.right + 1;
-        })
-        .map((link) => link.textContent?.trim() ?? ""),
-    };
-  });
+  const desktopNavigation = [];
+  for (const viewport of [
+    { width: 1280, height: 900 },
+    { width: 1920, height: 1080 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto(`${BASE}/compare`, { waitUntil: "networkidle" });
+    desktopNavigation.push(await page.evaluate(() => {
+      const header = document.querySelector("#application-shell > header");
+      const nav = header?.querySelector(":scope > div > nav");
+      if (!nav) return { visible: false, overflow: 0, clipped: [] };
+      const navRect = nav.getBoundingClientRect();
+      const links = [...nav.querySelectorAll("a")];
+      return {
+        width: innerWidth,
+        visible: getComputedStyle(nav).display !== "none",
+        overflow: nav.scrollWidth - nav.clientWidth,
+        clipped: links
+          .filter((link) => {
+            const rect = link.getBoundingClientRect();
+            return rect.left < navRect.left - 1 || rect.right > navRect.right + 1;
+          })
+          .map((link) => link.textContent?.trim() ?? ""),
+      };
+    }));
+  }
   check(
-    "navegação completa cabe no desktop sem corte",
-    desktopNavigation.visible && desktopNavigation.overflow <= 1 && desktopNavigation.clipped.length === 0,
+    "navegação completa cabe em desktops sem corte",
+    desktopNavigation.every(({ visible, overflow, clipped }) =>
+      visible && overflow <= 1 && clipped.length === 0),
     JSON.stringify(desktopNavigation),
   );
 
@@ -2717,7 +2777,7 @@ try {
   });
 
   /* ------------ Task 04: first-party inventory and canonical flows -------- */
-  const candidateMenuCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const candidateMenuCtx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   await candidateMenuCtx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
   const candidateMenuPage = await candidateMenuCtx.newPage();
   trackConsole(candidateMenuPage);

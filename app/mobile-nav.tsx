@@ -5,6 +5,59 @@ import { NavLinks } from "./nav-links";
 import { translator, type LocaleId } from "../src/core/i18n/index.ts";
 
 const id = "menu-mobile";
+const HEADER_SELECTOR = "#application-shell > header";
+
+/**
+ * Escolhe a navegação pela largura que realmente sobra na barra. Um monitor
+ * estreito e uma janela de tablet podem cair no mesmo caso; um breakpoint pelo
+ * nome do dispositivo não consegue distinguir isso e cria um clique extra.
+ */
+function updateNavigationMode() {
+  const header = document.querySelector<HTMLElement>(HEADER_SELECTOR);
+  const row = header?.firstElementChild as HTMLElement | null;
+  const nav = row?.querySelector<HTMLElement>("[data-responsive-nav]");
+  const brand = row?.querySelector<HTMLElement>(":scope > span");
+  const controls = row?.querySelector<HTMLElement>("[data-header-controls]");
+  if (!header || !row || !nav || !brand || !controls) return;
+
+  // Quando o modo compacto está ativo, a fileira fica `display: none`. Um
+  // clone absoluto permite medir a largura natural de todos os links sem
+  // alternar o layout visível e sem causar um flash ao girar o aparelho.
+  const probe = nav.cloneNode(true) as HTMLElement;
+  probe.removeAttribute("data-responsive-nav");
+  Object.assign(probe.style, {
+    position: "absolute",
+    insetInlineStart: "0",
+    insetBlockStart: "0",
+    display: "flex",
+    flex: "none",
+    inlineSize: "max-content",
+    minInlineSize: "max-content",
+    maxInlineSize: "none",
+    overflow: "visible",
+    visibility: "hidden",
+    pointerEvents: "none",
+  });
+  row.append(probe);
+  const naturalNavWidth = probe.getBoundingClientRect().width;
+  probe.remove();
+
+  const rowStyle = getComputedStyle(row);
+  const rowPadding =
+    Number.parseFloat(rowStyle.paddingLeft) + Number.parseFloat(rowStyle.paddingRight);
+  const gap = Number.parseFloat(rowStyle.columnGap || rowStyle.gap || "0");
+  const availableNavWidth =
+    row.clientWidth -
+    rowPadding -
+    brand.getBoundingClientRect().width -
+    controls.getBoundingClientRect().width -
+    gap * 2;
+  const nextMode = naturalNavWidth <= availableNavWidth + 1 ? "full" : "compact";
+
+  if (header.dataset.navMode === nextMode) return;
+  header.dataset.navMode = nextMode;
+  if (nextMode === "full") document.getElementById(id)?.hidePopover?.();
+}
 
 /**
  * O menu do celular.
@@ -64,7 +117,7 @@ export function MobileNav({
    * real header in both browser and standalone mode.
    */
   function posicionar() {
-    const header = document.querySelector<HTMLElement>("#application-shell > header");
+    const header = document.querySelector<HTMLElement>(HEADER_SELECTOR);
     const panel = document.getElementById(id);
     if (!header || !panel) return;
 
@@ -76,6 +129,14 @@ export function MobileNav({
   // `orientationchange`. Recalcular enquanto o popover continua aberto evita
   // que ele fique preso à altura do cabeçalho da orientação anterior.
   useEffect(() => {
+    const header = document.querySelector<HTMLElement>(HEADER_SELECTOR);
+    const row = header?.firstElementChild;
+    if (!header || !row) return;
+
+    updateNavigationMode();
+    const observer = new ResizeObserver(updateNavigationMode);
+    observer.observe(row);
+    document.fonts?.ready.then(updateNavigationMode);
     const reposicionarSeAberto = () => {
       const panel = document.getElementById(id);
       if (panel?.matches(":popover-open")) posicionar();
@@ -83,10 +144,11 @@ export function MobileNav({
     window.addEventListener("resize", reposicionarSeAberto);
     window.addEventListener("orientationchange", reposicionarSeAberto);
     return () => {
+      observer.disconnect();
       window.removeEventListener("resize", reposicionarSeAberto);
       window.removeEventListener("orientationchange", reposicionarSeAberto);
     };
-  }, []);
+  }, [locale]);
 
   return (
     <>
@@ -96,10 +158,11 @@ export function MobileNav({
         popoverTargetAction="show"
         onClick={posicionar}
         data-testid="mobile-nav-trigger"
+        data-responsive-mobile-nav-trigger
         aria-label={rotulo}
         // `py-2.5` pelo alvo de toque, igual aos links da barra larga: o ícone
         // sozinho daria uma área menor que o mínimo confortável no celular.
-        className="flex shrink-0 items-center gap-1.5 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground xl:hidden"
+        className="responsive-mobile-nav-trigger flex shrink-0 items-center gap-1.5 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         {/* Três traços desenhados em CSS. Um SVG aqui seria mais markup para o
             mesmo desenho, e o ícone precisa acompanhar `currentColor`. */}
@@ -114,9 +177,10 @@ export function MobileNav({
         id={id}
         popover="auto"
         data-testid="mobile-nav-popover"
+        data-responsive-mobile-nav-popover
         // Ancorado no topo e ocupando a largura: um menu estreito no canto
         // obrigaria a mirar, e mirar num celular é o que produz toque errado.
-        className="m-0 mt-14 w-full max-w-none rounded-none border-b border-[var(--color-hairline)] bg-card p-0 text-card-foreground backdrop:bg-black/40 xl:hidden"
+        className="responsive-mobile-nav-popover m-0 mt-14 w-full max-w-none rounded-none border-b border-[var(--color-hairline)] bg-card p-0 text-card-foreground backdrop:bg-black/40"
       >
         <nav className="grid px-4 py-2" onClick={fechar}>
           <NavLinks
