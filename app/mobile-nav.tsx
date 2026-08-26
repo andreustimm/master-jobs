@@ -163,7 +163,7 @@ export function MobileNav({
         aria-label={rotulo}
         // `py-2.5` pelo alvo de toque, igual aos links da barra larga: o ícone
         // sozinho daria uma área menor que o mínimo confortável no celular.
-        className="responsive-mobile-nav-trigger flex shrink-0 items-center gap-1.5 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        className="responsive-mobile-nav-trigger flex shrink-0 items-center gap-1.5 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground xl:hidden"
       >
         {/* Três traços desenhados em CSS. Um SVG aqui seria mais markup para o
             mesmo desenho, e o ícone precisa acompanhar `currentColor`. */}

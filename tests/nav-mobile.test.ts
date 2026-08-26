@@ -28,6 +28,7 @@ import { describe, expect, it } from "vitest";
 const layout = readFileSync("app/layout.tsx", "utf8");
 const navLinks = readFileSync("app/nav-links.tsx", "utf8");
 const mobileNav = readFileSync("app/mobile-nav.tsx", "utf8");
+const sessionBadge = readFileSync("app/session-badge.tsx", "utf8");
 const globals = readFileSync("app/globals.css", "utf8");
 
 /**
@@ -44,6 +45,7 @@ function semComentarios(fonte: string): string {
 
 const navLinksCodigo = semComentarios(navLinks);
 const mobileNavCodigo = semComentarios(mobileNav);
+const sessionBadgeCodigo = semComentarios(sessionBadge);
 
 /** As rotas que o menu oferece. */
 const ROTAS = ["/jobs", "/compare", "/pipeline", "/referrals", "/candidate", "/admin/users"];
@@ -88,6 +90,32 @@ describe("cada menu aparece na sua largura", () => {
     expect(mobileNav).toContain('popoverTargetAction="toggle"');
     expect(mobileNav).toContain("responsive-mobile-nav-trigger");
     expect(mobileNav).toContain("dataset.navMode");
+  });
+
+  it("mantém um fallback responsivo no HTML quando a medição ainda não carregou", () => {
+    // A regra medida é um aprimoramento: ela pode liberar a fileira antes do
+    // breakpoint quando houver espaço. A estrutura inicial, porém, precisa ser
+    // segura sozinha. Sem estes guards, qualquer atraso ou desencontro entre
+    // HTML e CSS faz o `<nav>` voltar a `display: block`, empilha os links no
+    // cabeçalho e mostra a fileira junto com o hamburger.
+    expect(layout).toMatch(/"hidden min-w-0 flex-1[^"]*xl:flex"/);
+    expect(layout).toContain('data-responsive-nav-spacer className="flex-1 xl:hidden"');
+    expect(mobileNav).toMatch(/responsive-mobile-nav-trigger[^"]*xl:hidden/);
+    const popoverClass = mobileNav.match(
+      /data-responsive-mobile-nav-popover[\s\S]*?className="([^"]+)"/,
+    )?.[1];
+    expect(popoverClass?.split(/\s+/)).not.toContain("xl:hidden");
+  });
+
+  it("limita visualmente nomes de conta longos sem alterar o conteúdo", () => {
+    const accountClass = sessionBadgeCodigo.match(
+      /<span\s+data-user-content\s+className="([^"]+)"/,
+    )?.[1];
+    const tokens = accountClass?.split(/\s+/) ?? [];
+    expect(tokens).toEqual(
+      expect.arrayContaining(["max-w-[24ch]", "truncate", "sm:inline-block"]),
+    );
+    expect(tokens).not.toContain("sm:inline");
   });
 
   it("remove Cockpit da lista e leva a marca para a tela inicial", () => {
