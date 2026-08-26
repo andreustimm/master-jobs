@@ -28,6 +28,7 @@ import { describe, expect, it } from "vitest";
 const layout = readFileSync("app/layout.tsx", "utf8");
 const navLinks = readFileSync("app/nav-links.tsx", "utf8");
 const mobileNav = readFileSync("app/mobile-nav.tsx", "utf8");
+const sessionBadge = readFileSync("app/session-badge.tsx", "utf8");
 const globals = readFileSync("app/globals.css", "utf8");
 
 /**
@@ -44,6 +45,7 @@ function semComentarios(fonte: string): string {
 
 const navLinksCodigo = semComentarios(navLinks);
 const mobileNavCodigo = semComentarios(mobileNav);
+const sessionBadgeCodigo = semComentarios(sessionBadge);
 
 /** As rotas que o menu oferece. */
 const ROTAS = ["/jobs", "/compare", "/pipeline", "/referrals", "/candidate", "/admin/users"];
@@ -103,6 +105,14 @@ describe("cada menu aparece na sua largura", () => {
       /data-responsive-mobile-nav-popover[\s\S]*?className="([^"]+)"/,
     )?.[1];
     expect(popoverClass?.split(/\s+/)).not.toContain("xl:hidden");
+  });
+
+  it("limita visualmente nomes de conta longos sem alterar o conteúdo", () => {
+    const accountClass = sessionBadgeCodigo.match(
+      /<span\s+data-user-content\s+className="([^"]+)"/,
+    )?.[1];
+    const tokens = accountClass?.split(/\s+/) ?? [];
+    expect(tokens).toEqual(expect.arrayContaining(["max-w-[24ch]", "truncate"]));
   });
 
   it("remove Cockpit da lista e leva a marca para a tela inicial", () => {

@@ -55,7 +55,11 @@ export async function SessionBadge() {
           O endereço inteiro estoura uma tela de 375px junto com o botão de
           aparência. Some no celular: quem está logado sabe quem é, e o botão
           de sair é o que precisa estar ao alcance. */}
-      <span data-user-content className="hidden type-micro text-muted-foreground sm:inline">
+      <span
+        data-user-content
+        className="hidden max-w-[24ch] truncate type-micro text-muted-foreground sm:inline"
+        title={session.fullName ?? session.email}
+      >
         {session.fullName ?? session.email}
       </span>
       <button
