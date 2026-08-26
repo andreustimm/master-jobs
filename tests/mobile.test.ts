@@ -111,7 +111,7 @@ describe("layout", () => {
     expect(skills.match(/min-h-11 xl:h-7 xl:min-h-0/g)?.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("keeps the compact navigation through tablet landscape", () => {
+  it("keeps navigation responsive through tablet landscape", () => {
     const layout = read("app/layout.tsx");
     const mobileNav = read("app/mobile-nav.tsx");
     expect(layout).toContain("data-responsive-nav");

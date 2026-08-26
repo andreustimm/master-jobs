@@ -29,11 +29,6 @@ export function NavLinks({
 }) {
   return (
     <>
-      {hasCandidateScope && (
-        <TransitionLink href="/" className={linkClass} data-testid="nav-cockpit">
-          {t("nav.cockpit")}
-        </TransitionLink>
-      )}
       <TransitionLink href="/jobs" className={linkClass} data-testid="nav-jobs">
         {t("nav.jobs")}
       </TransitionLink>

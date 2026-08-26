@@ -16,7 +16,7 @@ function updateNavigationMode() {
   const header = document.querySelector<HTMLElement>(HEADER_SELECTOR);
   const row = header?.firstElementChild as HTMLElement | null;
   const nav = row?.querySelector<HTMLElement>("[data-responsive-nav]");
-  const brand = row?.querySelector<HTMLElement>(":scope > span");
+  const brand = row?.querySelector<HTMLElement>(":scope > [data-nav-brand]");
   const controls = row?.querySelector<HTMLElement>("[data-header-controls]");
   if (!header || !row || !nav || !brand || !controls) return;
 
@@ -110,18 +110,19 @@ export function MobileNav({
   }
 
   /**
-   * The header gains the safe-area inset when the app is installed. A fixed
-   * `mt-14` therefore opens the popover through the lower half of the header
-   * on portrait devices. Measuring the header (rather than the centered
-   * trigger, which is shorter than the row) keeps the menu directly below the
-   * real header in both browser and standalone mode.
+   * The header gains the safe-area inset when the app is installed. A hard-coded
+   * offset would therefore open the popover through the lower half of the header
+   * on portrait devices. Measuring the header (rather than the centered trigger,
+   * which is shorter than the row) keeps the menu directly below the real header
+   * in both browser and standalone mode.
    */
   function posicionar() {
     const header = document.querySelector<HTMLElement>(HEADER_SELECTOR);
     const panel = document.getElementById(id);
     if (!header || !panel) return;
 
-    panel.style.top = `${Math.ceil(header.getBoundingClientRect().bottom)}px`;
+    const top = Math.ceil(header.getBoundingClientRect().bottom);
+    panel.style.setProperty("--mobile-nav-top", `${top}px`);
     panel.style.marginTop = "0px";
   }
 
@@ -155,7 +156,7 @@ export function MobileNav({
       <button
         type="button"
         popoverTarget={id}
-        popoverTargetAction="show"
+        popoverTargetAction="toggle"
         onClick={posicionar}
         data-testid="mobile-nav-trigger"
         data-responsive-mobile-nav-trigger
@@ -180,7 +181,7 @@ export function MobileNav({
         data-responsive-mobile-nav-popover
         // Ancorado no topo e ocupando a largura: um menu estreito no canto
         // obrigaria a mirar, e mirar num celular é o que produz toque errado.
-        className="responsive-mobile-nav-popover m-0 mt-14 w-full max-w-none rounded-none border-b border-[var(--color-hairline)] bg-card p-0 text-card-foreground backdrop:bg-black/40"
+        className="responsive-mobile-nav-popover w-full max-w-none rounded-none border-b border-[var(--color-hairline)] bg-card p-0 text-card-foreground backdrop:bg-black/40"
       >
         <nav className="grid px-4 py-2" onClick={fechar}>
           <NavLinks
