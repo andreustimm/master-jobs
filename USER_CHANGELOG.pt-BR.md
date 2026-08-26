@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-08-26T03:36:26.414Z
+
 ### Correção
 
 - Em celulares e tablets na horizontal, o topo agora mantém o menu compacto

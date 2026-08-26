@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-08-26
+
 ### Corrigido
 
 - A navegação responsiva mantém o menu compacto em paisagem até existir espaço

@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-08-26T03:36:26.414Z
+
 ### Fixed
 
 - On phones and tablets in landscape, the header now keeps the compact menu
