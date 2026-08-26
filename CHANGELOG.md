@@ -9,6 +9,12 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- A navegação responsiva mantém o menu compacto em paisagem até existir espaço
+  para a linha completa, e o popover continua ancorado abaixo do cabeçalho com
+  área segura durante a rotação.
+
 ## [1.3.3] - 2026-08-25
 
 ### Adicionado
