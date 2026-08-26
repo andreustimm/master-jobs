@@ -77,6 +77,18 @@ describe("layout", () => {
     }
   });
 
+  it("keeps 95% of the viewport available on phone portrait and landscape", () => {
+    const layout = read("app/layout.tsx");
+    const footer = read("app/footer.tsx");
+    const globals = read("app/globals.css");
+    for (const source of [layout, footer]) {
+      expect(source).toContain("mobile-content-shell");
+    }
+    expect(globals).toMatch(
+      /@media \(max-width: 639px\), \(orientation: landscape\) and \(max-height: 500px\)[\s\S]*?\.mobile-content-shell\s*\{[\s\S]*?padding-left: 0;[\s\S]*?padding-right: 0;/,
+    );
+  });
+
   it("keeps the market-demand rows shrinkable on a narrow screen", () => {
     const skills = read("app/candidate/skills/page.tsx");
     expect(skills).toContain('data-testid="skills-market-list"');
@@ -102,8 +114,8 @@ describe("layout", () => {
   it("keeps the compact navigation through tablet landscape", () => {
     const layout = read("app/layout.tsx");
     const mobileNav = read("app/mobile-nav.tsx");
-    expect(layout).toContain("xl:flex");
-    expect(layout).toContain("flex-1 xl:hidden");
-    expect(mobileNav).toContain("xl:hidden");
+    expect(layout).toContain("data-responsive-nav");
+    expect(layout).toContain("data-responsive-nav-spacer");
+    expect(mobileNav).toContain("ResizeObserver");
   });
 });

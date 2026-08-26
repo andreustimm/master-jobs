@@ -91,14 +91,12 @@ describe("modo instalado", () => {
     );
   });
 
-  it("usa o piso de área segura no retrato quando o launcher omite o inset", () => {
-    // O iPhone da regressão desenha a barra de status sobre o viewport, mas
-    // entrega `safe-area-inset-top: 0`. O fallback precisa ser um token do
-    // sistema (e só no retrato), para não criar uma faixa extra em paisagem.
+  it("usa o piso de área segura em qualquer orientação quando o launcher omite o inset", () => {
+    // O aparelho da regressão desenha a barra de status sobre o viewport, mas
+    // entrega `safe-area-inset-top: 0`. O mesmo comportamento aparece em PWA
+    // horizontal, então o fallback vale para todo contexto de toque.
     expect(DESIGN_TOKENS).toContain("--safe-area-top-floor: 48px;");
-    expect(GLOBAL_CSS).toContain(
-      "@media (pointer: coarse) and (orientation: portrait)",
-    );
+    expect(GLOBAL_CSS).toContain("@media (pointer: coarse)");
     expect(GLOBAL_CSS).toContain(
       "padding-top: max(var(--safe-area-top), var(--safe-area-top-floor));",
     );

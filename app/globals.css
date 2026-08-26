@@ -395,6 +395,59 @@ body {
   min-inline-size: 0;
 }
 
+/* O conteúdo ocupa 95% da tela no celular: 2,5% de respiro de cada lado.
+   `sm` continua governando tablet e desktop, onde a medida confortável de 90%
+   já está correta. A segunda condição cobre telefone em paisagem sem mudar a
+   largura do tablet em paisagem (a altura curta é o sinal observável). */
+@media (max-width: 639px), (orientation: landscape) and (max-height: 500px) {
+  .mobile-content-shell {
+    max-width: min(95vw, 1760px);
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+/* A navegação compacta é a opção segura no primeiro paint. O componente mede
+   os links e troca para `full` quando a largura real comporta tudo; o fallback
+   de 1024px evita um hamburger transitório em telas largas enquanto o JS sobe. */
+#application-shell > header > div > nav[data-responsive-nav] {
+  display: none;
+}
+
+#application-shell > header > div > [data-responsive-nav-spacer],
+#application-shell > header > div > [data-responsive-mobile-nav-trigger] {
+  display: flex;
+}
+
+@media (min-width: 1024px) {
+  #application-shell > header > div > nav[data-responsive-nav] {
+    display: flex;
+  }
+
+  #application-shell > header > div > [data-responsive-nav-spacer],
+  #application-shell > header > div > [data-responsive-mobile-nav-trigger] {
+    display: none;
+  }
+}
+
+#application-shell > header[data-nav-mode="full"] > div > nav[data-responsive-nav] {
+  display: flex;
+}
+
+#application-shell > header[data-nav-mode="full"] > div > [data-responsive-nav-spacer],
+#application-shell > header[data-nav-mode="full"] > div > [data-responsive-mobile-nav-trigger] {
+  display: none;
+}
+
+#application-shell > header[data-nav-mode="compact"] > div > nav[data-responsive-nav] {
+  display: none;
+}
+
+#application-shell > header[data-nav-mode="compact"] > div > [data-responsive-nav-spacer],
+#application-shell > header[data-nav-mode="compact"] > div > [data-responsive-mobile-nav-trigger] {
+  display: flex;
+}
+
 /* A tela anterior continua montada para o App Router concluir a transição,
    mas não pode ampliar o canvas por trás da superfície opaca. Em zoom alto,
    uma tabela da rota anterior fazia o documento medir mais que o viewport e
@@ -642,14 +695,22 @@ html.pwa-standalone #application-shell > header {
   padding-top: var(--safe-area-top);
 }
 
+/* Alguns WebViews e navegadores móveis que escondem a barra de endereço
+   expõem `safe-area-inset-top` sem expor `display-mode: standalone` (nem o
+   `navigator.standalone` legado). Nesses casos o relógio do sistema continua
+   sobre o viewport, mas o seletor acima não casa e a marca nasce por baixo da
+   barra. O inset é zero no navegador comum, então esta ponte não cria uma
+   faixa extra; quando o aparelho informa espaço, ele protege o cabeçalho. */
+#application-shell > header {
+  padding-top: var(--safe-area-top);
+}
+
 /* Em alguns launchers móveis a barra de status continua sobre o viewport, mas
    `safe-area-inset-top` chega como zero. O aparelho da regressão faz exatamente
    isso. O piso só vale para o contexto de toque: uma PWA instalada no desktop
    não ganha uma faixa vazia que o sistema operacional não pede. */
-@media (pointer: coarse) and (orientation: portrait) {
+@media (pointer: coarse) {
   html.pwa-standalone #application-shell > header {
-    /* Paisagem já informa o inset superior/lateral real; o piso é só para
-       retrato, onde alguns launchers entregam zero apesar da barra sobreposta. */
     padding-top: max(var(--safe-area-top), var(--safe-area-top-floor));
   }
 }
@@ -664,4 +725,16 @@ html.pwa-standalone #application-shell > header > div,
 html.pwa-standalone #application-shell > div {
   padding-left: max(var(--spacing-md), var(--safe-area-left));
   padding-right: max(var(--spacing-md), var(--safe-area-right));
+}
+
+/* No celular, a margem de 2,5% já é o respiro do container. Reaplicar os
+   16px da moldura PWA aqui reduziria a área útil para ~90% e reintroduziria o
+   defeito que o `mobile-content-shell` corrige. Só os insets físicos do recorte
+   continuam reservados. */
+@media (max-width: 639px), (orientation: landscape) and (max-height: 500px) {
+  html.pwa-standalone #application-shell > header > div.mobile-content-shell,
+  html.pwa-standalone #application-shell > div.mobile-content-shell {
+    padding-left: var(--safe-area-left);
+    padding-right: var(--safe-area-right);
+  }
 }

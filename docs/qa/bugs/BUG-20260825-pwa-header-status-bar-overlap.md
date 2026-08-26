@@ -1,6 +1,6 @@
 # BUG-20260825-pwa-header-status-bar-overlap: barra do sistema cobre o cabeçalho da PWA
 
-- **Status:** fixed
+- **Status:** fixed (physical PWA verification pending)
 - **Impact (user-side):** Friction
 - **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Candidato em trânsito
@@ -33,10 +33,17 @@ Ao abrir o Cockpit como PWA instalada, o relógio e os indicadores do sistema ap
 ## Fix
 
 - **Root cause:** o shell instalado dependia apenas de `safe-area-inset-top`; alguns launchers móveis mantêm a barra do sistema sobre o viewport, mas reportam esse inset como zero.
-- **Fix commit:** `5f90e25`
+- **Fix commit:** `codex/header-top-fix` (PR pending)
 - **Regression test:** `tests/pwa-chrome.test.ts` falhou antes e passou depois; `376d242` trava a ligação dos tokens aos insets do aparelho, e `tests/e2e/ui.mjs` confirma geometria e ausência de overflow em quatro viewports.
 
 ## Verification
 
 - **Retested:** 2026-08-25, sessão no runtime `5f90e25` e gate automatizado final no runtime `c349672`, em build de produção local Chromium · retrato 375×812, paisagem 812×375, tablet 768×1024 e desktop 1280×900 · **Report:** docs/qa/reports/2026-08-25T101102000000Z-5f90e25a-mobile-header-safe-area-targeted.md
 - **Result:** o conteúdo ficou abaixo do piso seguro em todos os contextos de toque, sem overflow; o desktop não ganhou faixa artificial. A verificação no Safari/PWA físico continua pendente antes de mover o bug para `verified`.
+
+## Re-found — 2026-08-26
+
+A captura fornecida pelo usuário mostrou a mesma sobreposição no cabeçalho de uma PWA em paisagem: relógio e indicadores voltaram a ocupar a área da marca. A reprodução sintética confirmou que o fallback anterior só cobria retrato e que alguns WebViews expõem o inset sem a classe `pwa-standalone`. O bug foi reaberto para a correção desta branch; a verificação física no aparelho original continua sendo a última etapa.
+
+- **Report:** `docs/qa/reports/2026-08-26T083500000000Z-b7f3a1c9-header-top-fix.md`
+- **Evidence:** `docs/qa/evidence/2026-08-26T083500000000Z-b7f3a1c9-header-top-fix/header-pwa-safe-area.png`
