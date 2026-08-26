@@ -10,7 +10,7 @@ qa_status: pass
 bug_ids: BUG-20260826-responsive-header-artifact-skew
 fix_status: fixed
 retest_status: pass
-fix_commits: 062eb64
+fix_commits: 062eb64, cce67ae
 evidence: tests/e2e/ui.mjs; tests/nav-mobile.test.ts; docs/qa/reports/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew.md; docs/qa/evidence/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew/after-mobile-portrait.png; docs/qa/evidence/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew/after-mobile-landscape.png; docs/qa/evidence/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew/after-tablet.png; docs/qa/evidence/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew/after-desktop.png
 last_report: docs/qa/reports/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew.md
 overlaps: NAV-switch-screen-ready
@@ -28,4 +28,4 @@ Esta rodada revalidou o cabeçalho em 1280×800 e 1920×1080: os links completos
 
 Reaberto em 2026-08-26 depois que produção serviu o HTML novo junto de um CSS sem os seletores responsivos: a navegação completa ficou empilhada ao mesmo tempo que o botão do menu compacto. O contrato agora exige um fallback estrutural no próprio HTML e verifica altura, direção e exclusão mútua dos dois modos.
 
-Retestado no artefato `standalone` de `062eb64`: 375×812, 812×375 e 768×1024 mantiveram somente o menu compacto; 1280×900 manteve somente os links horizontais. O cabeçalho mediu 57px e a largura do documento não excedeu a área útil em nenhum perfil.
+Retestado no artefato `standalone` de `cce67ae`: 375×812, 812×375 e 768×1024 mantiveram somente o menu compacto; 1280×900 manteve somente os links horizontais. O cabeçalho mediu 57px e a largura do documento não excedeu a área útil em nenhum perfil. Um caso adicional força o modo compacto em 1280×900 e confirma que botão e painel continuam utilizáveis.

@@ -2,7 +2,7 @@
 
 - **Scope:** cabeçalho responsivo resiliente a HTML e CSS publicados fora de sincronia, sem links empilhados nem dois menus simultâneos
 - **Cadence tier:** targeted
-- **Build:** `062eb64` · **Environment:** build Next.js `standalone` de produção local isolado, banco temporário e navegador real; comparação de artefatos com `jobs.mastertimm.com.br`
+- **Build:** `cce67ae` · **Environment:** build Next.js `standalone` de produção local isolado, banco temporário e navegador real; comparação de artefatos com `jobs.mastertimm.com.br`
 - **Started:** 2026-08-26T17:42:27Z · **Status:** closed
 
 ## Personas
@@ -20,8 +20,8 @@
 
 | # | Charter | Journey / Scenario | Persona | Tour | Status | Issue | Fix commit |
 |---|---|---|---|---|---|---|---|
-| 1 | CH-mobile-responsive-regression | J-switch-workspace-screen / NAV-first-party-navigation-contract | Andreus no celular | Feature Tour | Fixed | BUG-20260826-responsive-header-artifact-skew | 062eb64 |
-| 2 | canário de navegação | J-switch-workspace-screen / NAV-first-party-navigation-contract | Andreus em triagem | Feature Tour | Pass | | 062eb64 |
+| 1 | CH-mobile-responsive-regression | J-switch-workspace-screen / NAV-first-party-navigation-contract | Andreus no celular | Feature Tour | Fixed | BUG-20260826-responsive-header-artifact-skew | cce67ae |
+| 2 | canário de navegação | J-switch-workspace-screen / NAV-first-party-navigation-contract | Andreus em triagem | Feature Tour | Pass | | cce67ae |
 
 Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human verify) | Blocked (human decision)`
 
@@ -57,8 +57,8 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 - **Symptom:** links globais apareciam empilhados dentro de um cabeçalho gigante ao mesmo tempo que o hambúrguer.
 - **Root cause:** o HTML dependia exclusivamente de seletores CSS novos e medição no cliente; quando produção combinou esse HTML com CSS anterior, o `nav` voltou ao `display: block` padrão.
-- **Fix:** `062eb64` restaura guards utilitários no HTML e mantém a medição como aprimoramento progressivo.
-- **Regression test:** `tests/nav-mobile.test.ts` falhou antes e passa depois; `tests/e2e/ui.mjs` verifica altura, direção e exclusão mútua.
+- **Fix:** `062eb64` restaura guards utilitários no HTML e mantém a medição como aprimoramento progressivo; `cce67ae` preserva o painel quando uma tela larga ainda precisa do modo compacto.
+- **Regression test:** `tests/nav-mobile.test.ts` falhou antes e passa depois; `tests/e2e/ui.mjs` verifica altura, direção, exclusão mútua e abertura do painel compacto em 1280px.
 - **Retested:** `J-switch-workspace-screen` desde `/admin/users`, `/jobs` e `/`, em retrato, paisagem, tablet e desktop, com sessões frescas no build `standalone`.
 
 ## Paper Cuts
@@ -68,7 +68,7 @@ Nenhum registrado antes da sessão.
 ## Runtime Errors Observed
 
 - A primeira tentativa de iniciar o traço `standalone` local respondeu 500 por ausência de `@libsql/darwin-arm64` no diretório traçado. O pacote já instalado pelo lockfile foi copiado para o traço e o servidor foi reiniciado antes das sessões; nenhum erro de aplicação ou console foi observado durante os percursos válidos.
-- O E2E registrou `The destination stream closed early` durante as sondas que abandonam navegações; as 203 verificações, inclusive as de recuperação dessas transições, terminaram verdes.
+- O E2E registrou `The destination stream closed early` durante as sondas que abandonam navegações; as 205 verificações, inclusive as de recuperação dessas transições, terminaram verdes.
 
 ## Human Verifications Needed
 
@@ -84,7 +84,7 @@ Nenhuma.
 
 ## Final Status
 
-- **Exit gate (full automated suite):** `rtk pnpm check` — 152 arquivos, 2.134 testes passaram, 6 ignorados; cobertura Statements 95,96%, Branches 92,75%, Functions 96,16%, Lines 96,85%. `rtk pnpm test:e2e` — 203/203 verificações e 8/8 páginas sem violações axe WCAG 2.2 AA.
+- **Exit gate (full automated suite):** `rtk pnpm check` — 152 arquivos, 2.134 testes passaram, 6 ignorados; cobertura Statements 95,96%, Branches 92,75%, Functions 96,16%, Lines 96,85%. `rtk pnpm test:e2e` — 205/205 verificações e 8/8 páginas sem violações axe WCAG 2.2 AA.
 - **Issues by user impact:** Blocks-Completion 0 · Data-Loss 0 · Trust-Damage 0 · Friction 0 · Cosmetic 0
 - **Coverage:** 1 / 1 jornada percorrida; quatro viewports, três rotas e alternância abrir/fechar
 - **Verdict:** ready — o fallback estrutural, o artefato `standalone`, os quatro viewports e os gates automatizados confirmam um único modo de navegação sem empilhamento.

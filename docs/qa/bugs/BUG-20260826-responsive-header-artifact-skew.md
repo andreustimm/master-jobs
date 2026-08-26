@@ -32,7 +32,7 @@ Ao abrir qualquer tela, Andreus encontra os links globais empilhados verticalmen
 ## Fix
 
 - **Root cause:** o HTML removeu as classes utilitárias de visibilidade e passou a depender exclusivamente de seletores CSS novos e medição no cliente. Produção combinou esse HTML com um artefato CSS anterior; o valor padrão de `nav` tornou a fileira visível e vertical antes e durante a hidratação.
-- **Fix commit:** `062eb64`
+- **Fix commits:** `062eb64`, `cce67ae`
 - **Regression test:** `tests/nav-mobile.test.ts` falhou antes e passa depois; `tests/e2e/ui.mjs` mede altura, direção e exclusão mútua nos quatro viewports.
 
 ## Verification
