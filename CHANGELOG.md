@@ -9,6 +9,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- O cabeçalho mantém apenas um modo de navegação visível mesmo durante uma
+  atualização em que o HTML e o CSS publicados ainda não estejam sincronizados.
+- Nomes de conta longos não aumentam mais a largura da página nem quebram a
+  linha de controles do cabeçalho.
+
 ## [1.3.6] - 2026-08-26
 
 ### Corrigido
