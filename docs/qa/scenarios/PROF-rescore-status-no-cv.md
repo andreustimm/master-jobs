@@ -9,7 +9,7 @@ entry_points: /candidate
 qa_status: pass
 bug_ids:
 fix_status:
-retest_status: pass
+retest_status:
 fix_commits:
 evidence: tests/e2e/ui.mjs; tests/scoring-queue.test.ts; tests/candidate-queue-status-ui.test.ts
 last_report: docs/qa/reports/2026-08-26T004639000000Z-pwa-header-safe-area-targeted.md

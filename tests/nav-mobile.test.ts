@@ -74,15 +74,19 @@ describe("os links moram num lugar só", () => {
 });
 
 describe("cada menu aparece na sua largura", () => {
-  it("a fileira é escondida até haver espaço de desktop (`xl`)", () => {
-    expect(layout).toContain("hidden min-w-0 flex-1 items-center gap-5 overflow-x-auto xl:flex");
+  it("a fileira e o botão têm seletores para o modo medido", () => {
+    expect(layout).toContain("data-responsive-nav");
+    expect(layout).toContain("data-responsive-nav-spacer");
+    expect(mobileNav).toContain("data-responsive-mobile-nav-trigger");
   });
 
-  it("o botão e o menu compacto somem a partir de `xl`", () => {
-    // Sem isto, os dois menus apareceriam juntos no desktop.
+  it("o modo compacto é decidido pela largura útil, não por `xl`", () => {
+    // O desktop só esconde o botão quando todos os links cabem de verdade.
     const botao = mobileNav.slice(mobileNav.indexOf("popoverTargetAction=\"show\""));
-    expect(botao).toContain("xl:hidden");
-    expect(mobileNav.match(/xl:hidden/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(mobileNav).toContain("updateNavigationMode");
+    expect(mobileNav).toContain("ResizeObserver");
+    expect(botao).toContain("responsive-mobile-nav-trigger");
+    expect(mobileNav).toContain("dataset.navMode");
   });
 });
 

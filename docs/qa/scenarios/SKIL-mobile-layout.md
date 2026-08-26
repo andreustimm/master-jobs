@@ -8,11 +8,11 @@ expected: A demanda de mercado e os controles de auditoria refluem em uma coluna
 entry_points: /candidate/skills
 qa_status: pass
 bug_ids:
-fix_status: fixed
-retest_status: pass
+fix_status:
+retest_status:
 fix_commits:
-evidence: tests/e2e/ui.mjs; tests/mobile.test.ts
-last_report: docs/qa/reports/2026-08-26T023000000000Z-mobile-responsive-targeted.md
+evidence: tests/e2e/ui.mjs; tests/mobile.test.ts; docs/qa/reports/2026-08-26T083500000000Z-b7f3a1c9-header-top-fix.md
+last_report: docs/qa/reports/2026-08-26T083500000000Z-b7f3a1c9-header-top-fix.md
 overlaps: NAV-first-party-navigation-contract
 ---
 
