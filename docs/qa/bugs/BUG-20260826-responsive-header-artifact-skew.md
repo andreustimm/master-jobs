@@ -1,6 +1,6 @@
 # BUG-20260826-responsive-header-artifact-skew: cabeçalho empilha os links e exibe os dois menus
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Trust-Damage
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Andreus no celular
@@ -32,10 +32,10 @@ Ao abrir qualquer tela, Andreus encontra os links globais empilhados verticalmen
 ## Fix
 
 - **Root cause:** o HTML removeu as classes utilitárias de visibilidade e passou a depender exclusivamente de seletores CSS novos e medição no cliente. Produção combinou esse HTML com um artefato CSS anterior; o valor padrão de `nav` tornou a fileira visível e vertical antes e durante a hidratação.
-- **Fix commit:** pending
+- **Fix commit:** `062eb64`
 - **Regression test:** `tests/nav-mobile.test.ts` falhou antes e passa depois; `tests/e2e/ui.mjs` mede altura, direção e exclusão mútua nos quatro viewports.
 
 ## Verification
 
-- **Retested:** pending
-- **Result:** pending
+- **Retested:** 2026-08-26, mesmas rotas e persona em build `standalone` de produção local · **Report:** docs/qa/reports/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew.md
+- **Result:** Em 375×812, 812×375 e 768×1024 somente o hambúrguer ficou visível; em 1280×900 somente a fileira horizontal ficou visível. A altura permaneceu em 57px, sem overflow, e o segundo toque fechou o menu.
