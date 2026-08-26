@@ -229,23 +229,24 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               inteira. Era 100px de rolagem horizontal em 375px, invisível no
               desktop e só detectável medindo `scrollWidth` num browser real.
             */}
-            <div className="mx-auto flex h-14 w-full max-w-[min(90vw,1760px)] items-center gap-4 px-4 sm:gap-6 sm:px-6">
+            <div className="mx-auto flex min-h-14 w-full max-w-[min(95vw,1760px)] sm:max-w-[min(90vw,1760px)] items-center gap-4 px-4 sm:gap-6 sm:px-6">
               <span className="shrink-0 font-mono text-sm font-medium tracking-tight">
                 Master Jobs
               </span>
 
               {/* Sem sessão os links levariam de volta ao login; mostrar um
                   menu que não vai a lugar nenhum é ruído. */}
-              {/* A partir de `sm`, a fileira. Abaixo dela, o menu.
+              {/* A partir de `xl`, a fileira. Abaixo dela, o menu.
 
                   A fileira rolava na horizontal com a barra de rolagem
-                  escondida, e num aparelho de 375px — depois da marca, do
-                  idioma, da aparência e do estado da sessão — sobrava espaço
-                  para UM link, sem nada indicando que havia mais. Quem olhava
-                  concluía que o menu tinha sumido. */}
+                  escondida, e em paisagem num aparelho de 1024px CSS ela ficava
+                  espremida entre a marca e os controles. O menu compacto fica
+                  ativo até haver espaço real para a fileira inteira — `xl`
+                  (1280px) é o primeiro breakpoint em que o conjunto pode
+                  respirar sem cortar links. */}
               <nav
                 className={cn(
-                  "hidden min-w-0 flex-1 items-center gap-5 overflow-x-auto sm:flex",
+                  "hidden min-w-0 flex-1 items-center gap-5 overflow-x-auto xl:flex",
                   "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
                   !signedIn && "invisible",
                 )}
@@ -260,7 +261,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
               {/* Empurra o bloco da direita para a borda no celular, onde a
                   fileira não está lá para fazer isso. */}
-              <div className="flex-1 sm:hidden" />
+              <div className="flex-1 xl:hidden" />
 
               {signedIn && (
                 <MobileNav
@@ -298,7 +299,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               texto nomeia quem, porque "modo admin" não diz de quem é a sessão. */}
           {borrowedAs && (
             <div className="border-b border-[var(--warn)] bg-[var(--warn)]/10">
-              <div className="mx-auto flex w-full max-w-[min(90vw,1760px)] flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2 sm:px-6">
+              <div className="mx-auto flex w-full max-w-[min(95vw,1760px)] sm:max-w-[min(90vw,1760px)] flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2 sm:px-6">
                 <span className="type-body-sm font-medium text-[var(--warn)]">
                   {t("impersonation.banner", { email: borrowedAs })}
                 </span>
@@ -323,9 +324,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </div>
             </div>
           )}
-          {/* 90% da largura da janela, com teto: acima de ~1760px a linha de texto
-              fica longa demais para ler com conforto, e o ganho vira cansaço. */}
-          <div className="mx-auto w-full max-w-[min(90vw,1760px)] px-4 pb-16 sm:px-6">
+          {/* 95% no celular aproveita a largura curta sem encostar no vidro;
+              em telas maiores, 90% preserva a medida confortável e o teto. */}
+          <div className="mx-auto w-full max-w-[min(95vw,1760px)] sm:max-w-[min(90vw,1760px)] px-4 pb-16 sm:px-6">
             {children}
           </div>
           {/* `pb-16` acima em vez de `pb-24`: o rodapé passou a fechar a página,

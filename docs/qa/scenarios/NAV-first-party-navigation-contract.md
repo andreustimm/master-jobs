@@ -8,11 +8,11 @@ expected: Menu, links contextuais, filtros, paginação e redirects chegam ao de
 entry_points: /; /jobs; /compare; /pipeline; /referrals; /candidate; /admin/users
 qa_status: pass
 bug_ids:
-fix_status:
-retest_status:
+fix_status: fixed
+retest_status: pass
 fix_commits:
-evidence: tests/e2e/ui.mjs; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/triagem-pipeline.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/triagem-noturna-jobs.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/andreus-mobile-ranking.png; docs/qa/reports/2026-08-24T210158000000Z-71293d34-release-1.3.0-full.md
-last_report: docs/qa/reports/2026-08-24T210158000000Z-71293d34-release-1.3.0-full.md
+evidence: tests/e2e/ui.mjs; tests/nav-mobile.test.ts; docs/qa/reports/2026-08-26T023000000000Z-mobile-responsive-targeted.md
+last_report: docs/qa/reports/2026-08-26T023000000000Z-mobile-responsive-targeted.md
 overlaps: NAV-switch-screen-ready
 ---
 

@@ -427,7 +427,7 @@ existem, sem tratar como pendência:
 
 | Comando | O que abre |
 |---|---|
-| `automation` | Jobs, gatilhos e sugestões — agendar sync e scrape aqui |
+| `automation` | Job `job-sweep-weekdays` registrado, mas pausado durante a migração; reabilitar após a execução manual da definição revisada |
 | `memory` | Memory v2, contexto durável consultável |
 | `network` | Delegação entre sessões, `compozy-network/v0` |
 | `spawn` | Sessão filha limitada |
@@ -437,8 +437,10 @@ existem, sem tratar como pendência:
 | `app` / `desktop` / `open` | App desktop e UI web |
 | `gateway` / `pair` / `device` | Acesso remoto |
 
-O candidato mais óbvio para este projeto é **`automation`**: `jho jobs sync` e
-`jho scrape run` são exatamente o tipo de trabalho recorrente que hoje é manual.
+O projeto já usa **`automation`** para o `job-sweep-weekdays`. O agendamento
+permanece pausado enquanto a definição com operador/revisor é publicada e
+executada manualmente; depois disso, `jho jobs sync` e `jho scrape run` continuam
+sendo os tipos de trabalho recorrente que podem ser habilitados com evidência.
 
 ---
 

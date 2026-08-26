@@ -74,15 +74,15 @@ describe("os links moram num lugar só", () => {
 });
 
 describe("cada menu aparece na sua largura", () => {
-  it("a fileira é escondida no celular e mostrada a partir de `sm`", () => {
-    expect(layout).toContain("hidden min-w-0 flex-1 items-center gap-5 overflow-x-auto sm:flex");
+  it("a fileira é escondida até haver espaço de desktop (`xl`)", () => {
+    expect(layout).toContain("hidden min-w-0 flex-1 items-center gap-5 overflow-x-auto xl:flex");
   });
 
-  it("o botão e o menu do celular somem a partir de `sm`", () => {
+  it("o botão e o menu compacto somem a partir de `xl`", () => {
     // Sem isto, os dois menus apareceriam juntos no desktop.
     const botao = mobileNav.slice(mobileNav.indexOf("popoverTargetAction=\"show\""));
-    expect(botao).toContain("sm:hidden");
-    expect(mobileNav.match(/sm:hidden/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(botao).toContain("xl:hidden");
+    expect(mobileNav.match(/xl:hidden/g)?.length).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -126,5 +126,13 @@ describe("o menu fecha ao navegar, e só ele vira client", () => {
     // `py-2.5`, igual aos links da fileira: o ícone sozinho daria uma área
     // menor que o mínimo confortável no celular.
     expect(mobileNav).toContain("py-2.5");
+  });
+
+  it("posiciona o popover abaixo do cabeçalho real", () => {
+    expect(mobileNav).toContain('"#application-shell > header"');
+    expect(mobileNav).toContain("header.getBoundingClientRect().bottom");
+    expect(mobileNav).toContain('panel.style.marginTop = "0px"');
+    expect(mobileNav).toContain('window.addEventListener("orientationchange"');
+    expect(mobileNav).toContain('window.addEventListener("resize"');
   });
 });

@@ -4,7 +4,7 @@
 // como fonte que parou de trazer vaga, semanas depois, sem ninguém notar.
 // Fronteira DENTRO: validação, filtro de `enabled`, resolução do caminho, leitura.
 // Fronteira FORA: os adapters em si e o executor da sync.
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -27,6 +27,16 @@ describe("sourcesPath", () => {
 });
 
 describe("parseSourcesConfig", () => {
+  it("mantém handles ATS não verificados fora da configuração de produção", () => {
+    const trackedConfig = readFileSync(resolve(process.cwd(), "config/sources.yaml"), "utf8");
+    const configs = parseSourcesConfig(trackedConfig);
+
+    expect(configs.some(({ kind }) => kind === "smartrecruiters" || kind === "recruitee")).toBe(
+      false,
+    );
+    expect(trackedConfig).toContain("pnpm jho sources probe <kind> <handle>");
+  });
+
   it("mantém a ordem e o racional escrito pelo usuário", () => {
     // `rationale` é o que faz o arquivo se explicar sozinho meses depois; perdê-lo
     // no parse transformaria a lista de fontes num amontoado sem justificativa.

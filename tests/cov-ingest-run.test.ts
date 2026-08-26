@@ -40,6 +40,12 @@ const config = (handle: string, label = "Acme"): SourceConfig => ({
   label,
 });
 
+const atsConfig = (
+  kind: "smartrecruiters" | "recruitee",
+  handle: string,
+  label = "Acme",
+): SourceConfig => ({ kind, handle, label });
+
 /** Uma vaga no formato que a API do Greenhouse devolve. */
 const vaga = (id: number, over: Record<string, unknown> = {}) => ({
   id,
@@ -90,6 +96,62 @@ describe("syncAll", () => {
     expect(linha!.lastError).toBeNull();
     expect(linha!.lastJobCount).toBe(2);
     expect(linha!.lastSyncedAt).toBeTruthy();
+  });
+
+  it("insere uma vaga normalizada de fixture ATS e registra a saúde da fonte", async () => {
+    const port = fixtureHttp({
+      "api.smartrecruiters.com/v1/companies/fixture/postings": {
+        content: [
+          {
+            id: "principal-1",
+            name: " Principal Architect ",
+            location: { city: "São Paulo", country: "br" },
+          },
+        ],
+      },
+    });
+    setHttpPort(port);
+
+    const result = await syncAll([atsConfig("smartrecruiters", "fixture")]);
+
+    expect(port.calls).toHaveLength(1);
+    expect(result.totals).toMatchObject({ fetched: 1, inserted: 1, failed: 0 });
+    const [storedJob] = await db.select().from(job);
+    expect(storedJob).toMatchObject({
+      title: "Principal Architect",
+      url: "https://jobs.smartrecruiters.com/fixture/principal-1",
+      locationRaw: "São Paulo, br",
+      descriptionText: null,
+    });
+    const [storedSource] = await db
+      .select()
+      .from(source)
+      .where(eq(source.id, "smartrecruiters:fixture"));
+    expect(storedSource).toMatchObject({ lastStatus: "ok", lastError: null, lastJobCount: 1 });
+  });
+
+  it("mantém fingerprint e uma única linha ao repetir a mesma fixture", async () => {
+    const fixture = {
+      content: [
+        {
+          id: "principal-1",
+          name: "Principal Architect",
+          location: { city: "Remote", region: "LATAM" },
+        },
+      ],
+    };
+    setHttpPort(fixtureHttp({ "api.smartrecruiters.com": fixture }));
+    const first = await syncAll([atsConfig("smartrecruiters", "fixture")]);
+    const [firstJob] = await db.select().from(job);
+
+    setHttpPort(fixtureHttp({ "api.smartrecruiters.com": fixture }));
+    const second = await syncAll([atsConfig("smartrecruiters", "fixture")]);
+    const storedJobs = await db.select().from(job);
+
+    expect(first.totals).toMatchObject({ inserted: 1, unchanged: 0 });
+    expect(second.totals).toMatchObject({ inserted: 0, unchanged: 1 });
+    expect(storedJobs).toHaveLength(1);
+    expect(storedJobs[0]!.fingerprint).toBe(firstJob!.fingerprint);
   });
 
   it("descarta item sem título ou sem link antes de tentar gravar", async () => {
@@ -197,30 +259,40 @@ describe("syncAll", () => {
     // Invariante 2. O erro fica gravado em `source.lastError` para
     // `jho sources list` mostrar, e o total de `failed` é o que diz se a
     // varredura foi completa.
-    setHttpPort({
-      // `<T>` explícito: a porta declara `json<T = unknown>`, e um dublê com
-      // retorno concreto não é atribuível à assinatura genérica.
-      async json<T>(url: string) {
-        if (url.includes("quebrada")) throw new Error("GET -> 500");
-        return { jobs: [vaga(1)] } as T;
-      },
-      async text() {
-        return null;
-      },
-    });
+    setHttpPort(
+      fixtureHttp({
+        "saudavel.recruitee.com/api/offers": {
+          offers: [
+            {
+              id: 1,
+              title: "Staff Engineer",
+              slug: "staff-engineer",
+              careers_url: "https://saudavel.recruitee.com/o/staff-engineer",
+            },
+          ],
+        },
+        "api.smartrecruiters.com/v1/companies/quebrada/postings": { status: 500 },
+      }),
+    );
 
-    const r = await syncAll([config("acme"), config("quebrada", "Quebrada")]);
+    const r = await syncAll([
+      atsConfig("recruitee", "saudavel", "Saudável"),
+      atsConfig("smartrecruiters", "quebrada", "Quebrada"),
+    ]);
 
     expect(r.totals.failed).toBe(1);
     expect(r.totals.inserted).toBe(1);
-    const boa = r.sources.find((s) => s.sourceId === "greenhouse:acme")!;
-    const ruim = r.sources.find((s) => s.sourceId === "greenhouse:quebrada")!;
+    const boa = r.sources.find((s) => s.sourceId === "recruitee:saudavel")!;
+    const ruim = r.sources.find((s) => s.sourceId === "smartrecruiters:quebrada")!;
     expect(boa.ok).toBe(true);
     expect(ruim.ok).toBe(false);
     expect(ruim.error).toContain("500");
-    const [linha] = await db.select().from(source).where(eq(source.id, "greenhouse:quebrada"));
-    expect(linha!.lastStatus).toBe("error");
-    expect(linha!.lastError).toContain("500");
+    const sourceRows = await db.select().from(source);
+    const healthyRow = sourceRows.find((row) => row.id === "recruitee:saudavel")!;
+    const failedRow = sourceRows.find((row) => row.id === "smartrecruiters:quebrada")!;
+    expect(healthyRow).toMatchObject({ lastStatus: "ok", lastError: null, lastJobCount: 1 });
+    expect(failedRow.lastStatus).toBe("error");
+    expect(failedRow.lastError).toContain("500");
   });
 
   it("descreve falha que não é Error sem virar '[object Object]'", async () => {
