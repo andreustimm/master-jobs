@@ -1249,6 +1249,24 @@ try {
     JSON.stringify(desktopNavigation),
   );
 
+  // Uma tela larga ainda pode precisar do modo compacto quando o nome da
+  // pessoa ou os controles ocupam mais espaço. Nesse caso o breakpoint visual
+  // não pode esconder o painel que o botão medido acabou de oferecer.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${BASE}/compare`, { waitUntil: "networkidle" });
+  await page.locator("#application-shell > header").evaluate((header) => {
+    header.dataset.navMode = "compact";
+  });
+  const wideCompactTrigger = page.locator('button[popovertarget="menu-mobile"]');
+  check("modo compacto pode mostrar o botão em tela larga", await wideCompactTrigger.isVisible());
+  await wideCompactTrigger.click();
+  await page.waitForTimeout(150);
+  check(
+    "modo compacto abre o painel também em tela larga",
+    await page.locator("#menu-mobile").isVisible(),
+  );
+  await page.keyboard.press("Escape");
+
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(`${BASE}/candidate/skills`, { waitUntil: "networkidle" });
   const skillsRows = await page.evaluate(() => [...document.querySelectorAll('[data-testid="skills-market-row"]')].map((row) => {

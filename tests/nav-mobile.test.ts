@@ -99,7 +99,10 @@ describe("cada menu aparece na sua largura", () => {
     expect(layout).toMatch(/"hidden min-w-0 flex-1[^"]*xl:flex"/);
     expect(layout).toContain('data-responsive-nav-spacer className="flex-1 xl:hidden"');
     expect(mobileNav).toMatch(/responsive-mobile-nav-trigger[^"]*xl:hidden/);
-    expect(mobileNav).toMatch(/responsive-mobile-nav-popover[^"]*xl:hidden/);
+    const popoverClass = mobileNav.match(
+      /data-responsive-mobile-nav-popover[\s\S]*?className="([^"]+)"/,
+    )?.[1];
+    expect(popoverClass?.split(/\s+/)).not.toContain("xl:hidden");
   });
 
   it("remove Cockpit da lista e leva a marca para a tela inicial", () => {

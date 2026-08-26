@@ -181,7 +181,7 @@ export function MobileNav({
         data-responsive-mobile-nav-popover
         // Ancorado no topo e ocupando a largura: um menu estreito no canto
         // obrigaria a mirar, e mirar num celular é o que produz toque errado.
-        className="responsive-mobile-nav-popover w-full max-w-none rounded-none border-b border-[var(--color-hairline)] bg-card p-0 text-card-foreground backdrop:bg-black/40 xl:hidden"
+        className="responsive-mobile-nav-popover w-full max-w-none rounded-none border-b border-[var(--color-hairline)] bg-card p-0 text-card-foreground backdrop:bg-black/40"
       >
         <nav className="grid px-4 py-2" onClick={fechar}>
           <NavLinks
