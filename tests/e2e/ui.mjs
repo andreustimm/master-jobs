@@ -340,7 +340,7 @@ try {
     document.documentElement.style.setProperty("--safe-area-top", "47px");
   });
   const browserSafeAreaHeader = await page.locator("#application-shell > header").evaluate((header) => {
-    const brand = header.querySelector(":scope > div > span");
+    const brand = header.querySelector(":scope > div > [data-nav-brand]");
     const headerRect = header.getBoundingClientRect();
     const brandRect = brand?.getBoundingClientRect();
     return {
@@ -413,7 +413,7 @@ try {
       const headerRect = header.getBoundingClientRect();
       const contentRect = content?.getBoundingClientRect();
       const contentStyle = content ? getComputedStyle(content) : null;
-      const brand = content?.querySelector(":scope > span");
+      const brand = content?.querySelector(":scope > [data-nav-brand]");
       const brandRect = brand?.getBoundingClientRect();
       return {
         standaloneClass: document.documentElement.classList.contains("pwa-standalone"),
@@ -1137,8 +1137,11 @@ try {
     }));
   }
   check(
-    "paisagem usa navegação compacta sem espremer os links",
-    landscapeNavigation.every(({ desktopVisible, mobileVisible }) => mobileVisible && !desktopVisible),
+    "paisagem escolhe a navegação pelo espaço disponível",
+    landscapeNavigation[0]?.mobileVisible === true
+      && landscapeNavigation[0]?.desktopVisible === false
+      && landscapeNavigation[1]?.desktopVisible === true
+      && landscapeNavigation[1]?.mobileVisible === false,
     JSON.stringify(landscapeNavigation),
   );
 
@@ -1265,6 +1268,47 @@ try {
   await page.locator('button[popovertarget="menu-mobile"]').click();
   await page.waitForTimeout(250);
   check("menu mobile abre ao tocar no botão", await page.locator("#menu-mobile").isVisible());
+
+  const mobileMenuGeometry = await page.locator("#menu-mobile").evaluate((panel) => {
+    const rect = panel.getBoundingClientRect();
+    const header = document.querySelector("#application-shell > header");
+    const headerBottom = header?.getBoundingClientRect().bottom ?? 0;
+    const style = getComputedStyle(panel);
+    return {
+      left: rect.left,
+      right: rect.right,
+      top: rect.top,
+      width: rect.width,
+      headerBottom,
+      viewportWidth: innerWidth,
+      viewportHeight: innerHeight,
+      bottom: rect.bottom,
+      overflowY: style.overflowY,
+      scrollWidth: panel.scrollWidth,
+      clientWidth: panel.clientWidth,
+    };
+  });
+  check(
+    "menu mobile ocupa a largura e começa abaixo do cabeçalho",
+    mobileMenuGeometry.left >= -1
+      && mobileMenuGeometry.right <= mobileMenuGeometry.viewportWidth + 1
+      && mobileMenuGeometry.width >= mobileMenuGeometry.viewportWidth - 1
+      && mobileMenuGeometry.top >= mobileMenuGeometry.headerBottom - 1
+      && mobileMenuGeometry.bottom <= mobileMenuGeometry.viewportHeight + 1
+      && mobileMenuGeometry.overflowY === "auto"
+      && mobileMenuGeometry.scrollWidth <= mobileMenuGeometry.clientWidth + 1,
+    JSON.stringify(mobileMenuGeometry),
+  );
+
+  // O mesmo botão é um toggle: o segundo toque fecha o painel e o terceiro
+  // reabre. `show` deixava o menu preso aberto, o que era especialmente ruim
+  // quando a pessoa queria voltar à tela sem escolher outro destino.
+  await page.locator('button[popovertarget="menu-mobile"]').click();
+  await page.waitForTimeout(250);
+  check("menu mobile fecha ao tocar novamente no botão", !(await page.locator("#menu-mobile").isVisible()));
+  await page.locator('button[popovertarget="menu-mobile"]').click();
+  await page.waitForTimeout(250);
+  check("menu mobile reabre após o toggle", await page.locator("#menu-mobile").isVisible());
 
   // Fecha com Escape — o light dismiss nativo não pode ter regredido.
   await page.keyboard.press("Escape");
@@ -2788,7 +2832,7 @@ try {
   await candidateMenuPage.waitForURL((url) => !url.pathname.startsWith("/login"));
 
   const candidateDestinations = [
-    ["nav-cockpit", "route-cockpit"],
+    ["nav-logo", "route-cockpit"],
     ["nav-jobs", "route-jobs"],
     ["nav-compare", "route-compare"],
     ["nav-pipeline", "route-pipeline"],
@@ -2855,7 +2899,7 @@ try {
 
   await candidateMenuPage.setViewportSize({ width: 375, height: 812 });
   const mobileFailures = [];
-  for (const [control, destination] of candidateDestinations) {
+  for (const [control, destination] of candidateDestinations.filter(([name]) => name !== "nav-logo")) {
     const source = control === "nav-jobs" ? "/compare" : "/jobs";
     await candidateMenuPage.goto(`${BASE}${source}`, { waitUntil: "networkidle" });
     await candidateMenuPage.locator('[data-testid="mobile-nav-trigger"]').click();

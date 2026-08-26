@@ -409,7 +409,9 @@ body {
 
 /* A navegação compacta é a opção segura no primeiro paint. O componente mede
    os links e troca para `full` quando a largura real comporta tudo; o fallback
-   de 1024px evita um hamburger transitório em telas largas enquanto o JS sobe. */
+   de 1280px evita um hamburger transitório em telas largas enquanto o JS sobe.
+   Até a medição terminar, nunca deixamos uma fileira estreita esmagar os
+   rótulos em uma coluna de uma letra. */
 #application-shell > header > div > nav[data-responsive-nav] {
   display: none;
 }
@@ -419,7 +421,7 @@ body {
   display: flex;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1280px) {
   #application-shell > header > div > nav[data-responsive-nav] {
     display: flex;
   }
@@ -446,6 +448,25 @@ body {
 #application-shell > header[data-nav-mode="compact"] > div > [data-responsive-nav-spacer],
 #application-shell > header[data-nav-mode="compact"] > div > [data-responsive-mobile-nav-trigger] {
   display: flex;
+}
+
+/* O user-agent do popover nativo começa com `inset: 0` e `margin: auto`,
+   portanto um painel sem geometria explícita cai no centro da página. O menu
+   global é uma faixa ancorada abaixo do cabeçalho: largura integral, altura
+   limitada ao viewport e rolagem interna para que nenhum link fique cortado.
+   `--mobile-nav-top` é medido contra o cabeçalho em runtime para respeitar a
+   área segura da PWA e a rotação do aparelho. */
+#menu-mobile.responsive-mobile-nav-popover {
+  position: fixed;
+  inset: var(--mobile-nav-top, 0px) 0 auto;
+  box-sizing: border-box;
+  inline-size: 100%;
+  max-inline-size: none;
+  max-block-size: calc(100vh - var(--mobile-nav-top, 0px));
+  max-block-size: calc(100dvh - var(--mobile-nav-top, 0px));
+  margin: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* A tela anterior continua montada para o App Router concluir a transição,

@@ -30,6 +30,7 @@ import { stopImpersonatingAction } from "./admin/actions";
 import { LocaleSwitch } from "./locale-switch";
 import { NavLinks } from "./nav-links";
 import { MobileNav } from "./mobile-nav";
+import { TransitionLink } from "./transition-link";
 import { NavigationTransition } from "./navigation-transition";
 import { MutationFeedbackForm, MutationFeedbackHost } from "./mutation-feedback";
 import {
@@ -229,10 +230,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               inteira. Era 100px de rolagem horizontal em 375px, invisível no
               desktop e só detectável medindo `scrollWidth` num browser real.
             */}
-            <div className="mobile-content-shell mx-auto flex min-h-14 w-full max-w-[min(95vw,1760px)] sm:max-w-[min(90vw,1760px)] items-center gap-4 px-4 sm:gap-6 sm:px-6">
-              <span className="shrink-0 font-mono text-sm font-medium tracking-tight">
+            <div className="mobile-content-shell mx-auto flex min-h-14 w-full max-w-[min(95vw,1760px)] sm:max-w-[min(90vw,1760px)] items-center gap-2 px-4 sm:gap-6 sm:px-6">
+              <TransitionLink
+                href="/"
+                data-testid="nav-logo"
+                data-nav-brand
+                className="shrink-0 font-mono text-sm font-medium tracking-tight transition-colors hover:text-foreground"
+              >
                 Master Jobs
-              </span>
+              </TransitionLink>
 
               {/* Sem sessão os links levariam de volta ao login; mostrar um
                   menu que não vai a lugar nenhum é ruído. */}
