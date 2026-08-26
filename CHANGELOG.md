@@ -9,6 +9,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- A navegação global agora usa o logotipo Master Jobs como link para a tela
+  inicial, sem repetir o Cockpit na lista de menus.
+- O menu compacto pode ser aberto e fechado pelo mesmo botão, inclusive depois
+  de uma segunda tentativa em dispositivos móveis.
+
 ## [1.3.5] - 2026-08-26
 
 ### Corrigido
