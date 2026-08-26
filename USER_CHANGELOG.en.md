@@ -16,6 +16,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- On mobile, the system clock and status indicators no longer cover the brand
+  or header controls, including in landscape. Content uses 95% of the screen,
+  and the full menu appears whenever there is room for every link.
+
 ## [1.3.4] - 2026-08-26T03:36:26.414Z
 
 ### Fixed

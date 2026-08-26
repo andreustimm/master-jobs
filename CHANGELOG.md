@@ -9,6 +9,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- O cabeçalho aplica a área segura em qualquer orientação de toque e preserva
+  a altura dos controles abaixo da barra do sistema. O shell móvel ocupa 95%
+  da tela, e a navegação alterna entre a fileira completa e o menu compacto
+  conforme a largura real disponível.
+
 ## [1.3.4] - 2026-08-26
 
 ### Corrigido
