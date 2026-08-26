@@ -309,6 +309,14 @@ CI de `dev`.
 **Produção não sai sem gente.** A PR `staging → main` é aberta e nunca mesclada
 por robô.
 
+**Toda PR tem responsável atribuído.** Antes de abrir ou mesclar uma PR,
+confira a identidade local com `git config user.name` e `git config user.email`,
+confirme o login da sessão com `gh api user --jq .login` e atribua a PR com
+`gh pr edit <número> --add-assignee @me` (neste projeto, `andreustimm`). Se o
+cliente GraphQL falhar por causa do recurso legado Projects, use o endpoint
+REST equivalente: `gh api --method POST repos/andreustimm/master-jobs/issues/<número>/assignees -f 'assignees[]=andreustimm'`.
+Nenhuma PR pode ser deixada sem assignee.
+
 **`dev`, `staging` e `main` são branches permanentes e nunca são apagadas.**
 Elas representam os ambientes e o caminho de promoção; permanecem no remoto e
 nos clones locais mesmo depois de qualquer promoção ou retorno.

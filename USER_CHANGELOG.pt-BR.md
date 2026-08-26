@@ -16,6 +16,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Correção
+
+- No celular, o relógio e os indicadores do sistema não cobrem mais a marca nem
+  os controles do topo, inclusive na horizontal. O conteúdo aproveita 95% da
+  tela, e o menu completo aparece sempre que houver espaço para todos os links.
+
 ## [1.3.4] - 2026-08-26T03:36:26.414Z
 
 ### Correção
