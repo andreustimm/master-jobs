@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-08-26T16:50:32.312Z
+
 ### Improved
 
 - The **Master Jobs** logo now links to the home screen, and the menu no longer

@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-08-26T16:50:32.312Z
+
 ### Melhorado
 
 - O logotipo **Master Jobs** agora leva para a tela inicial, e o menu não

@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-08-26
+
 ### Corrigido
 
 - A navegação global agora usa o logotipo Master Jobs como link para a tela
