@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.5] - 2026-08-26T13:25:10.198Z
+
 ### Correção
 
 - No celular, o relógio e os indicadores do sistema não cobrem mais a marca nem

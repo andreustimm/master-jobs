@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.5] - 2026-08-26T13:25:10.198Z
+
 ### Fixed
 
 - On mobile, the system clock and status indicators no longer cover the brand
