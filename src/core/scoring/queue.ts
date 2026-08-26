@@ -211,7 +211,7 @@ export type ScoreQueueSnapshot = {
 };
 
 export type ScoreQueueDisplay = {
-  state: "idle" | "pending" | "scoring" | "done" | "failed";
+  state: "idle" | "noCv" | "pending" | "scoring" | "done" | "failed";
   scored: number | null;
 };
 
@@ -242,9 +242,14 @@ export async function candidateScoreQueueStatus(
 }
 
 /** Reduz o snapshot ao que a interface pode mostrar; erros internos não atravessam. */
-export function scoreQueueDisplay(snapshot: ScoreQueueSnapshot | null): ScoreQueueDisplay {
-  if (!snapshot) return { state: "idle", scored: null };
-  if (snapshot.failed > 0) return { state: "failed", scored: snapshot.scored };
+export function scoreQueueDisplay(
+  snapshot: ScoreQueueSnapshot | null,
+  hasCv = true,
+): ScoreQueueDisplay {
+  if (!snapshot) return { state: hasCv ? "idle" : "noCv", scored: null };
+  if (snapshot.failed > 0 || (snapshot.done > 0 && snapshot.lastError)) {
+    return { state: "failed", scored: snapshot.scored };
+  }
   if (snapshot.scoring > 0) return { state: "scoring", scored: snapshot.scored };
   if (snapshot.pending > 0) return { state: "pending", scored: snapshot.scored };
   if (snapshot.done > 0) return { state: "done", scored: snapshot.scored };

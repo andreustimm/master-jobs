@@ -348,6 +348,7 @@ try {
   trackConsole(headerSafeAreaPage);
   const headerSafeAreaCdp = await headerSafeAreaContext.newCDPSession(headerSafeAreaPage);
   const headerSafeAreaSnapshots = [];
+  const mobileNavPopoverSnapshots = [];
   for (const fixture of [
     { label: "mobile retrato", width: 375, height: 812, touch: true, safe: { top: 47, right: 0, bottom: 34, left: 0 } },
     { label: "mobile retrato sem inset", width: 390, height: 844, touch: true, safe: { top: 0, right: 0, bottom: 34, left: 0 } },
@@ -382,6 +383,8 @@ try {
       const headerRect = header.getBoundingClientRect();
       const contentRect = content?.getBoundingClientRect();
       const contentStyle = content ? getComputedStyle(content) : null;
+      const brand = content?.querySelector(":scope > span");
+      const brandRect = brand?.getBoundingClientRect();
       return {
         standaloneClass: document.documentElement.classList.contains("pwa-standalone"),
         pointerCoarse: matchMedia("(pointer: coarse)").matches,
@@ -394,6 +397,9 @@ try {
         headerRight: headerRect.right,
         headerLeft: headerRect.left,
         contentTop: contentRect?.top ?? -1,
+        contentHeight: contentRect?.height ?? -1,
+        brandTop: brandRect?.top ?? -1,
+        brandBottom: brandRect?.bottom ?? -1,
         contentRight: contentRect?.right ?? -1,
         contentLeft: contentRect?.left ?? -1,
         contentPaddingRight: Number.parseFloat(contentStyle?.paddingRight ?? "0"),
@@ -403,6 +409,23 @@ try {
       };
     });
     headerSafeAreaSnapshots.push({ ...fixture, ...sample });
+
+    if (fixture.touch) {
+      const trigger = headerSafeAreaPage.locator('[data-testid="mobile-nav-trigger"]');
+      if ((await trigger.count()) > 0) {
+        await trigger.click();
+        const popover = await headerSafeAreaPage.locator('[data-testid="mobile-nav-popover"]').evaluate((panel) => {
+          const header = document.querySelector("#application-shell > header");
+          return {
+            headerBottom: header?.getBoundingClientRect().bottom ?? -1,
+            popoverTop: panel.getBoundingClientRect().top,
+            open: panel.matches(":popover-open"),
+          };
+        });
+        mobileNavPopoverSnapshots.push({ ...fixture, ...popover });
+        await headerSafeAreaPage.keyboard.press("Escape");
+      }
+    }
   }
   await headerSafeAreaCdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
   await headerSafeAreaCdp.send("Emulation.clearDeviceMetricsOverride");
@@ -419,6 +442,9 @@ try {
         && sample.pointerCoarse === sample.touch
         && sample.paddingTop === expectedTop
         && sample.contentTop >= sample.headerTop + expectedTop
+        && sample.contentHeight >= 56
+        && sample.brandTop >= sample.headerTop + expectedTop
+        && sample.brandBottom <= sample.headerTop + sample.paddingTop + sample.contentHeight
         && sample.contentLeft >= sample.headerLeft
         && sample.contentRight <= sample.headerRight
         && sample.contentPaddingLeft >= sample.safeLeft
@@ -426,6 +452,12 @@ try {
         && sample.scrollWidth <= sample.viewportWidth;
     }),
     JSON.stringify(headerSafeAreaSnapshots),
+  );
+  check(
+    "menu PWA abre abaixo do cabeçalho completo, inclusive com área segura",
+    mobileNavPopoverSnapshots.length > 0 &&
+      mobileNavPopoverSnapshots.every(({ headerBottom, popoverTop, open }) => open && popoverTop >= headerBottom - 1),
+    JSON.stringify(mobileNavPopoverSnapshots),
   );
 
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -930,6 +962,7 @@ try {
 
   const idleQueue = await queueStateView("e2e-candidato@local.test");
   const failedQueue = await queueStateView("e2e-alvo@local.test");
+  const noCvQueue = await queueStateView("e2e-sem-cv@local.test");
   check(
     "E2E-002 idle e failed ficam isolados por candidato em todos os viewports",
     idleQueue.every((sample) => sample.state === "idle") &&
@@ -938,8 +971,8 @@ try {
   );
   check(
     "E2E-002 375 portrait, 812 landscape, tablet e desktop não transbordam",
-    [...idleQueue, ...failedQueue].every((sample) => sample.overflow <= 1),
-    JSON.stringify([...idleQueue, ...failedQueue].filter((sample) => sample.overflow > 1)),
+    [...idleQueue, ...failedQueue, ...noCvQueue].every((sample) => sample.overflow <= 1),
+    JSON.stringify([...idleQueue, ...failedQueue, ...noCvQueue].filter((sample) => sample.overflow > 1)),
   );
   check(
     "E2E-002 falha é localizada e nunca expõe erro bruto ou chave literal",
@@ -949,6 +982,16 @@ try {
       !sample.text.includes("candidate.queue")
     ),
     JSON.stringify(failedQueue),
+  );
+  check(
+    "E2E-003 candidato sem CV recebe estado neutro localizado",
+    noCvQueue.every((sample) => sample.state === "noCv") &&
+      noCvQueue.every((sample) =>
+        sample.text.includes("Aguardando currículo") &&
+        !sample.text.includes("candidate.queue") &&
+        !sample.text.includes("Ranking refresh")
+      ),
+    JSON.stringify(noCvQueue),
   );
 
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
@@ -1012,10 +1055,10 @@ try {
 
   // Rolagem horizontal é a falha que passa despercebida no desktop, porque só
   // aparece quando a janela é estreita o bastante para o conteúdo não caber.
-  const widths = [375, 390, 412, 768];
+  const widths = [375, 390, 412, 768, 812, 1024];
   const overflows = [];
   for (const width of widths) {
-    await page.setViewportSize({ width, height: 812 });
+    await page.setViewportSize({ width, height: width >= 812 ? 375 : 812 });
     for (const path of ["/", "/jobs", "/compare", "/candidate", "/candidate/skills", "/pipeline"]) {
       await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
       const overflow = await page.evaluate(
@@ -1025,6 +1068,132 @@ try {
     }
   }
   check("sem rolagem horizontal em nenhuma largura", overflows.length === 0, overflows.slice(0, 3).join(" · "));
+
+  // Paisagem de telefone/tablet pequeno passa de `sm`, mas ainda não tem
+  // largura suficiente para a fileira completa. O breakpoint do menu precisa
+  // acompanhar o espaço disponível, não a orientação do aparelho.
+  const landscapeNavigation = [];
+  for (const width of [812, 1024]) {
+    await page.setViewportSize({ width, height: 375 });
+    await page.goto(`${BASE}/compare`, { waitUntil: "networkidle" });
+    landscapeNavigation.push(await page.evaluate(() => {
+      const header = document.querySelector("#application-shell > header");
+      const desktopNav = header?.querySelector(":scope > div > nav");
+      const mobileTrigger = header?.querySelector('[data-testid="mobile-nav-trigger"]');
+      const visible = (node) => Boolean(node && getComputedStyle(node).display !== "none");
+      return { width: innerWidth, desktopVisible: visible(desktopNav), mobileVisible: visible(mobileTrigger) };
+    }));
+  }
+  check(
+    "paisagem usa navegação compacta sem espremer os links",
+    landscapeNavigation.every(({ desktopVisible, mobileVisible }) => mobileVisible && !desktopVisible),
+    JSON.stringify(landscapeNavigation),
+  );
+
+  // O defeito de rotação só aparece quando o popover continua aberto: fechar e
+  // abrir depois da mudança de orientação recalcula pelo clique e mascara um
+  // listener ausente. Aumentamos o cabeçalho para simular a área segura que o
+  // WebKit troca ao girar e disparamos o evento que os aparelhos emitem.
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(`${BASE}/compare`, { waitUntil: "networkidle" });
+  await page.locator('button[popovertarget="menu-mobile"]').click();
+  await page.waitForTimeout(150);
+  const beforeRotation = await page.evaluate(() => {
+    const header = document.querySelector("#application-shell > header");
+    const panel = document.querySelector("#menu-mobile");
+    return {
+      headerBottom: header?.getBoundingClientRect().bottom ?? -1,
+      popoverTop: panel?.getBoundingClientRect().top ?? -1,
+      open: panel?.matches(":popover-open") ?? false,
+    };
+  });
+  await page.setViewportSize({ width: 812, height: 375 });
+  const afterLandscape = await page.evaluate(async () => {
+    const header = document.querySelector("#application-shell > header");
+    if (!header) return { headerBottom: -1, popoverTop: -1, open: false };
+    header.style.paddingTop = "48px";
+    window.dispatchEvent(new Event("orientationchange"));
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const panel = document.querySelector("#menu-mobile");
+    return {
+      headerBottom: header.getBoundingClientRect().bottom,
+      popoverTop: panel?.getBoundingClientRect().top ?? -1,
+      open: panel?.matches(":popover-open") ?? false,
+    };
+  });
+  await page.setViewportSize({ width: 375, height: 812 });
+  const afterPortrait = await page.evaluate(async () => {
+    const header = document.querySelector("#application-shell > header");
+    if (!header) return { headerBottom: -1, popoverTop: -1, open: false };
+    header.style.paddingTop = "32px";
+    window.dispatchEvent(new Event("orientationchange"));
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const panel = document.querySelector("#menu-mobile");
+    return {
+      headerBottom: header.getBoundingClientRect().bottom,
+      popoverTop: panel?.getBoundingClientRect().top ?? -1,
+      open: panel?.matches(":popover-open") ?? false,
+    };
+  });
+  check(
+    "menu aberto permanece ancorado após rotação",
+    beforeRotation.open &&
+      afterLandscape.open &&
+      afterLandscape.popoverTop >= afterLandscape.headerBottom - 1 &&
+      afterPortrait.open &&
+      afterPortrait.popoverTop >= afterPortrait.headerBottom - 1,
+    JSON.stringify({ beforeRotation, afterLandscape, afterPortrait }),
+  );
+  await page.evaluate(() => {
+    const header = document.querySelector("#application-shell > header");
+    if (header) header.style.paddingTop = "";
+  });
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${BASE}/compare`, { waitUntil: "networkidle" });
+  const desktopNavigation = await page.evaluate(() => {
+    const header = document.querySelector("#application-shell > header");
+    const nav = header?.querySelector(":scope > div > nav");
+    if (!nav) return { visible: false, overflow: 0, clipped: [] };
+    const navRect = nav.getBoundingClientRect();
+    const links = [...nav.querySelectorAll("a")];
+    return {
+      visible: getComputedStyle(nav).display !== "none",
+      overflow: nav.scrollWidth - nav.clientWidth,
+      clipped: links
+        .filter((link) => {
+          const rect = link.getBoundingClientRect();
+          return rect.left < navRect.left - 1 || rect.right > navRect.right + 1;
+        })
+        .map((link) => link.textContent?.trim() ?? ""),
+    };
+  });
+  check(
+    "navegação completa cabe no desktop sem corte",
+    desktopNavigation.visible && desktopNavigation.overflow <= 1 && desktopNavigation.clipped.length === 0,
+    JSON.stringify(desktopNavigation),
+  );
+
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(`${BASE}/candidate/skills`, { waitUntil: "networkidle" });
+  const skillsRows = await page.evaluate(() => [...document.querySelectorAll('[data-testid="skills-market-row"]')].map((row) => {
+    const rect = row.getBoundingClientRect();
+    const children = [...row.children].map((child) => child.getBoundingClientRect());
+    return {
+      rowWidth: row.clientWidth,
+      rowScrollWidth: row.scrollWidth,
+      right: rect.right,
+      childRight: Math.max(...children.map((child) => child.right), rect.left),
+    };
+  }));
+  check(
+    "skills refluem sem cortar percentual, status ou barra no celular",
+    skillsRows.length > 0 && skillsRows.every((row) =>
+      row.rowScrollWidth <= row.rowWidth + 1 && row.childRight <= row.right + 1),
+    JSON.stringify(skillsRows.slice(0, 3)),
+  );
 
   await page.setViewportSize({ width: 1280, height: 900 });
 
@@ -1652,6 +1821,28 @@ try {
   const accountRows = await page.locator("li").count();
   check("administração lista as contas", accountRows > 0, `${accountRows} conta(s)`);
 
+  const adminDeleteSnapshots = [];
+  for (const width of [375, 812]) {
+    await page.setViewportSize({ width, height: width === 375 ? 812 : 375 });
+    await page.goto(`${BASE}/admin/users`, { waitUntil: "networkidle" });
+    const buttons = await page.locator('[data-testid="user-delete-open"]').evaluateAll((items) =>
+      items.map((item) => {
+        const rect = item.getBoundingClientRect();
+        return { height: rect.height, right: rect.right, viewport: innerWidth };
+      }),
+    );
+    adminDeleteSnapshots.push({ width, buttons });
+  }
+  check(
+    "ação excluir administrativa mantém alvo e largura no mobile retrato e paisagem",
+    adminDeleteSnapshots.every(({ buttons }) =>
+      buttons.length > 0 && buttons.every(({ height, right, viewport }) => height >= 44 && right <= viewport + 1),
+    ),
+    JSON.stringify(adminDeleteSnapshots),
+  );
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${BASE}/admin/users`, { waitUntil: "networkidle" });
+
   // Conta-alvo dedicada, criada pelo setup. Antes era "a primeira que não é a
   // de teste", e numa base recém-criada não havia nenhuma — a verificação
   // passava por falta de alvo em vez de por funcionar.
@@ -2105,6 +2296,16 @@ try {
     const rows = dialog.locator("li");
     const rowCount = await rows.count();
     check("modal lista as versões", rowCount > 0, `${rowCount} versão(ões)`);
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    const deleteButton = dialog.locator('[data-testid="version-delete"]').first();
+    const deleteBox = await deleteButton.boundingBox();
+    check(
+      "ação excluir mantém alvo de toque confortável no celular",
+      Boolean(deleteBox) && deleteBox.height >= 44,
+      deleteBox ? `${Math.round(deleteBox.width)}x${Math.round(deleteBox.height)}` : "não encontrada",
+    );
+    await page.setViewportSize({ width: 1280, height: 900 });
 
     // A linha da versão atual não pode oferecer excluir nem restaurar.
     const currentRow = rows.filter({ hasText: "atual" }).first();

@@ -17,6 +17,7 @@ describe("candidate queue status page wiring", () => {
   it("keeps every queue state translated in both locales", () => {
     const keys = [
       "candidate.queueIdleLabel",
+      "candidate.queueNoCvLabel",
       "candidate.queuePendingLabel",
       "candidate.queueScoringLabel",
       "candidate.queueDoneLabel",

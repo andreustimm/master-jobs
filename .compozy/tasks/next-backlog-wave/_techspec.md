@@ -20,8 +20,9 @@ read into tracked artifacts; the code and example agree on variable names only.
   `docs/product/backlog.md`, `docs/engineering/deploy.md`, and `.env.example`
   describe current state and environment contracts.
 - **Compozy loop** — `compozy/loops/job-sweep.yaml` remains the source loop;
-  `compozy/README.md` records registration, manual validation, scheduling, and
-  no-funnel-mutation evidence.
+  its fixed operator/reviewer agents form a trust boundary around public job
+  descriptions. `compozy/README.md` records registration, manual validation,
+  scheduling, and no-funnel-mutation evidence.
 - **Score queue read model** — `src/core/scoring/queue.ts` queries
   `score_task` by candidate id and returns an explicit status map.
 - **Candidate page** — `app/candidate/page.tsx` obtains the authenticated
@@ -75,12 +76,21 @@ The existing Compozy commands remain canonical:
 
 ```text
 ~/bin/cy03 daemon start
-~/bin/cy03 workspaces add <repo>
+~/bin/cy03 workspace add <repo>
 ~/bin/cy03 loop validate --file compozy/loops/job-sweep.yaml
 ~/bin/cy03 loop create --file compozy/loops/job-sweep.yaml
 ~/bin/cy03 loop run --name job-sweep
 ~/bin/cy03 automation jobs create --loop job-sweep --schedule "0 9 * * 1-5"
 ```
+
+The Loop invokes the fixed `pnpm jho jobs sweep` preparation command and the
+workspace-local `job-sweep-operator`/`job-sweep-reviewer` agents. The former
+writes `.compozy/runtime/job-sweep-snapshot.json` with aggregate-only stdout;
+the snapshot carries the failed source ids from the same sync, so the reviewer
+can report degraded coverage without relying on the operator's shell output;
+the latter is `deny-all` and receives the JSON through a `file-import` node, so
+it has no filesystem, shell, network, Compozy, or MCP tools. It is not valid to
+replace either agent with `general`.
 
 The runbook must record the manual run id/state before the final scheduling
 command. Existing `workflow_dispatch` on `.github/workflows/varredura.yml`
@@ -152,6 +162,10 @@ the Compozy run is validated by its CLI and recorded as operational evidence.
 - Existing tables and ports are reused; no migration or broker is introduced.
 - Documentation updates remove stale debt rather than creating replacement
   feature claims.
+- Public posting text never reaches a shell-capable reviewer: the deterministic
+  `jho jobs sweep` command writes an ignored snapshot, then a separate
+  `deny-all` agent evaluates the imported JSON without filesystem, shell,
+  network, Compozy, or MCP tools (ADR 0018).
 
 ### Known Risks
 
@@ -167,3 +181,4 @@ the Compozy run is validated by its CLI and recorded as operational evidence.
 - [ADR-001: Candidate-scoped rescore status read model](adrs/adr-001.md)
 - [ADR-002: Register Compozy automation only after a manual run](adrs/adr-002.md)
 - [ADR-003: One canonical Resend sender variable](adrs/adr-003.md)
+- [ADR-0018: Fronteira de confiança da varredura Compozy](../../../docs/adr/0018-fronteira-de-confianca-da-varredura-compozy.md)

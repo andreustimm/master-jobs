@@ -62,7 +62,7 @@ Do not add a source entry without an operator-provided, verified handle.
 
 ### Related ADRs
 
-- [ADR-0011: Fronteira CompozyOS e docs](../../../../docs/adr/0011-fronteira-compozyos-e-docs.md)
+- [ADR-0011: Fronteira CompozyOS e docs](../../../docs/adr/0011-fronteira-compozyos-e-docs.md)
 
 ## Deliverables
 

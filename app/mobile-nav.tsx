@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { NavLinks } from "./nav-links";
 import { translator, type LocaleId } from "../src/core/i18n/index.ts";
 
@@ -55,17 +56,50 @@ export function MobileNav({
     document.getElementById(id)?.hidePopover?.();
   }
 
+  /**
+   * The header gains the safe-area inset when the app is installed. A fixed
+   * `mt-14` therefore opens the popover through the lower half of the header
+   * on portrait devices. Measuring the header (rather than the centered
+   * trigger, which is shorter than the row) keeps the menu directly below the
+   * real header in both browser and standalone mode.
+   */
+  function posicionar() {
+    const header = document.querySelector<HTMLElement>("#application-shell > header");
+    const panel = document.getElementById(id);
+    if (!header || !panel) return;
+
+    panel.style.top = `${Math.ceil(header.getBoundingClientRect().bottom)}px`;
+    panel.style.marginTop = "0px";
+  }
+
+  // A rotação dispara `resize`, mas alguns WebKit antigos só emitem
+  // `orientationchange`. Recalcular enquanto o popover continua aberto evita
+  // que ele fique preso à altura do cabeçalho da orientação anterior.
+  useEffect(() => {
+    const reposicionarSeAberto = () => {
+      const panel = document.getElementById(id);
+      if (panel?.matches(":popover-open")) posicionar();
+    };
+    window.addEventListener("resize", reposicionarSeAberto);
+    window.addEventListener("orientationchange", reposicionarSeAberto);
+    return () => {
+      window.removeEventListener("resize", reposicionarSeAberto);
+      window.removeEventListener("orientationchange", reposicionarSeAberto);
+    };
+  }, []);
+
   return (
     <>
       <button
         type="button"
         popoverTarget={id}
         popoverTargetAction="show"
+        onClick={posicionar}
         data-testid="mobile-nav-trigger"
         aria-label={rotulo}
         // `py-2.5` pelo alvo de toque, igual aos links da barra larga: o ícone
         // sozinho daria uma área menor que o mínimo confortável no celular.
-        className="flex shrink-0 items-center gap-1.5 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground sm:hidden"
+        className="flex shrink-0 items-center gap-1.5 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground xl:hidden"
       >
         {/* Três traços desenhados em CSS. Um SVG aqui seria mais markup para o
             mesmo desenho, e o ícone precisa acompanhar `currentColor`. */}
@@ -82,7 +116,7 @@ export function MobileNav({
         data-testid="mobile-nav-popover"
         // Ancorado no topo e ocupando a largura: um menu estreito no canto
         // obrigaria a mirar, e mirar num celular é o que produz toque errado.
-        className="m-0 mt-14 w-full max-w-none rounded-none border-b border-[var(--color-hairline)] bg-card p-0 text-card-foreground backdrop:bg-black/40 sm:hidden"
+        className="m-0 mt-14 w-full max-w-none rounded-none border-b border-[var(--color-hairline)] bg-card p-0 text-card-foreground backdrop:bg-black/40 xl:hidden"
       >
         <nav className="grid px-4 py-2" onClick={fechar}>
           <NavLinks

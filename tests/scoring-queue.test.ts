@@ -198,7 +198,7 @@ describe("status da fila por candidato", () => {
     expect(scoreQueueDisplay(snapshot)).toEqual({ state: "idle", scored: null });
   });
 
-  it("UT-008: mapper de apresentação descarta lastError", () => {
+  it("UT-008: mapper de apresentação descarta lastError e falha com erro persistido", () => {
     const display = scoreQueueDisplay({
       pending: 0,
       scoring: 0,
@@ -210,6 +210,38 @@ describe("status da fila por candidato", () => {
 
     expect(display).toEqual({ state: "failed", scored: null });
     expect(JSON.stringify(display)).not.toContain("nao-pode-aparecer");
+
+    expect(scoreQueueDisplay({
+      pending: 0,
+      scoring: 0,
+      done: 1,
+      failed: 0,
+      scored: 0,
+      lastError: "catalogo-vazio",
+    })).toEqual({ state: "failed", scored: 0 });
+
+    expect(scoreQueueDisplay({
+      pending: 1,
+      scoring: 0,
+      done: 0,
+      failed: 0,
+      scored: null,
+      lastError: "falha-transitoria",
+    })).toEqual({ state: "pending", scored: null });
+
+    expect(scoreQueueDisplay({
+      pending: 0,
+      scoring: 1,
+      done: 0,
+      failed: 0,
+      scored: null,
+      lastError: "falha-transitoria",
+    })).toEqual({ state: "scoring", scored: null });
+  });
+
+  it("distingue candidato sem CV de candidato com CV sem tarefa", () => {
+    expect(scoreQueueDisplay(null, false)).toEqual({ state: "noCv", scored: null });
+    expect(scoreQueueDisplay(null, true)).toEqual({ state: "idle", scored: null });
   });
 });
 

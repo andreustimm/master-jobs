@@ -61,12 +61,12 @@ export default async function SkillsPage() {
 
   return (
     <main className="pt-10 pb-16" data-testid="route-candidate-skills">
-      <div className="mb-2 flex items-baseline gap-3">
+      <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-2">
         <h1 className="type-display-md chevron">{t("skills.title")}</h1>
-        <TransitionLink href="/candidate" data-testid="skills-candidate-link" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
+        <TransitionLink href="/candidate" data-testid="skills-candidate-link" className="inline-flex min-h-11 items-center whitespace-nowrap py-1.5 text-sm text-[var(--primary-text)] hover:underline sm:min-h-0">
           {t("candidate.backToCv")}
         </TransitionLink>
-        <TransitionLink href="/candidate/vocabulary" data-testid="skills-vocabulary-link" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
+        <TransitionLink href="/candidate/vocabulary" data-testid="skills-vocabulary-link" className="inline-flex min-h-11 items-center whitespace-nowrap py-1.5 text-sm text-[var(--primary-text)] hover:underline sm:min-h-0">
           {t("candidate.toVocabulary")}
         </TransitionLink>
       </div>
@@ -100,24 +100,24 @@ export default async function SkillsPage() {
             <p className="mb-4 text-sm text-muted-foreground">
               {t("skills.marketThreshold")}
             </p>
-            <div className="grid gap-2">
+            <div className="grid gap-2" data-testid="skills-market-list">
               {gaps.slice(0, 12).map((g) => (
-                <div key={g.slug} className="flex items-center gap-3">
-                  <span className="min-w-[180px] font-mono text-sm">{g.name}</span>
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-sm bg-border">
+                <div key={g.slug} className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5" data-testid="skills-market-row">
+                  <span className="min-w-0 flex-1 basis-32 break-words font-mono text-sm">{g.name}</span>
+                  <div className="order-4 h-1.5 basis-full overflow-hidden rounded-sm bg-border sm:order-none sm:min-w-0 sm:flex-1">
                     <span
                       className="block h-full rounded-sm bg-[var(--color-mid)]"
                       style={{ width: `${Math.round(g.demand * 100)}%` }}
                     />
                   </div>
-                  <span className="w-16 text-right font-mono text-xs text-muted-foreground">
+                  <span className="w-16 shrink-0 text-right font-mono text-xs text-muted-foreground">
                     {Math.round(g.demand * 100)}%
                   </span>
-                  <span className="w-24 text-right text-xs">
+                  <span className="w-auto shrink-0 text-right text-xs sm:w-24">
                     {g.candidateStatus === "detected" ? (
                       <Badge variant="secondary" className="type-micro">{t("skills.toAuditCount")}</Badge>
                     ) : g.candidateStatus === "rejected" ? (
-                      <Badge variant="destructive" className="type-micro">rejeitada</Badge>
+                      <Badge variant="destructive" className="type-micro">{t("skills.rejectedOne")}</Badge>
                     ) : (
                       <span className="text-muted-foreground">{t("skills.absent")}</span>
                     )}
@@ -146,13 +146,13 @@ export default async function SkillsPage() {
                 </h3>
                 <div className="divide-y overflow-hidden rounded-xl border">
                   {items.map((s) => (
-                    <div key={s.id} className="grid gap-2 bg-card px-4 py-3">
+                    <div key={s.id} className="grid min-w-0 gap-2 bg-card px-4 py-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span data-user-content className="font-semibold">{s.name}</span>
+                        <span data-user-content className="min-w-0 break-words font-semibold">{s.name}</span>
                         <Badge variant="outline" className="font-mono type-micro">
-                          {s.occurrences}× no CV
+                          {t("skills.occurrencesInCv", { count: s.occurrences })}
                         </Badge>
-                        <span className="ml-auto flex gap-2">
+                        <div className="flex w-full flex-wrap gap-2 sm:ml-auto sm:w-auto">
                           <MutationFeedbackForm
                             action={auditAction}
                             successMessage={t("feedback.success")}
@@ -161,7 +161,7 @@ export default async function SkillsPage() {
                           >
                             <input type="hidden" name="id" value={s.id} />
                             <input type="hidden" name="status" value="confirmed" />
-                            <Button type="submit" size="sm" className="h-7">
+                            <Button type="submit" size="sm" className="min-h-11 xl:h-7 xl:min-h-0">
                               {t("skills.confirm")}
                             </Button>
                           </MutationFeedbackForm>
@@ -173,11 +173,11 @@ export default async function SkillsPage() {
                           >
                             <input type="hidden" name="id" value={s.id} />
                             <input type="hidden" name="status" value="rejected" />
-                            <Button type="submit" size="sm" variant="outline" className="h-7">
+                            <Button type="submit" size="sm" variant="outline" className="min-h-11 xl:h-7 xl:min-h-0">
                               {t("skills.reject")}
                             </Button>
                           </MutationFeedbackForm>
-                        </span>
+                        </div>
                       </div>
                       {s.evidence && (
                         <p

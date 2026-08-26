@@ -39,9 +39,11 @@ Canonical test contract for the maintenance and visibility follow-up.
   counts and preserve `scored`/safe error metadata.
 - **UT-006** (isolation): a snapshot for candidate A never includes candidate B's
   queue row.
-- **UT-007** (boundary): no row returns the explicit idle/null state.
+- **UT-007** (boundary): no row returns the explicit idle/null state for a
+  candidate with a saved CV and the no-CV state for a candidate without one.
 - **UT-008** (error): raw `lastError` content is not rendered by the UI status
-  mapper; it yields the localized generic failure state.
+  mapper; it yields the localized generic failure state, including a `done` row
+  that carries a persisted error reason.
 - **UT-009** (happy): SmartRecruiters fixture through `getAdapter` yields a
   normalized title, URL, location, and null body where the API omits it.
 - **UT-010** (happy): Recruitee fixture through `getAdapter` joins description
@@ -69,6 +71,9 @@ Canonical test contract for the maintenance and visibility follow-up.
   and keeps the fingerprint stable.
 - **IT-008**: one failing source and one healthy source complete in the same
   `syncAll` run, with the failure isolated in source status.
+- **IT-009**: the Compozy loop fixes the operator/reviewer agents, the operator
+  invokes only `jho jobs sweep`, and the reviewer uses `deny-all` while the
+  snapshot is imported as data; no posting description reaches shell stdout.
 
 ## End-to-End Tests
 
@@ -76,3 +81,6 @@ Canonical test contract for the maintenance and visibility follow-up.
   page, and sees pending/scoring or completion status in the selected locale.
 - **E2E-002**: candidate page at 375px portrait and 812px landscape shows idle and
   failed queue states without horizontal overflow or untranslated literal keys.
+- **E2E-003**: a candidate without a saved CV sees the localized neutral queue
+  state (not idle, pending, or a raw dictionary key) in portrait, landscape,
+  tablet, and desktop viewports.

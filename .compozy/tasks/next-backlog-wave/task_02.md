@@ -26,6 +26,9 @@ run from a scheduled job and keeps the user’s application funnel untouched.
 - A manual run MUST reach a documented terminal state and expose `status`, `summary`, and `candidates`.
 - Registration and scheduling MUST be idempotent; existing resources must be reused or reported.
 - The loop MUST NOT call `jho track` or write to `application`.
+- Public posting descriptions MUST NOT be printed to a shell-capable agent;
+  the scheduled flow MUST use the fixed operator/reviewer trust boundary in
+  ADR 0018, with the reviewer session set to `deny-all`.
 - If the daemon or credentials are unavailable, the task MUST leave a precise blocked note and MUST NOT claim activation.
 </requirements>
 
@@ -68,6 +71,7 @@ new application API or alter the production GitHub Actions scan.
 
 - [x] IT-002 — task graph and loop definition validation.
 - [x] IT-003, IT-004 — ordered runbook and idempotent operational behavior.
+- [x] IT-009 — fixed operator/reviewer trust boundary for untrusted postings.
 
 ## Success Criteria
 

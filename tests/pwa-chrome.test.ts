@@ -24,6 +24,7 @@ import { ptBR } from "../src/core/i18n/pt-BR.ts";
 
 const GLOBAL_CSS = readFileSync("app/globals.css", "utf8");
 const DESIGN_TOKENS = readFileSync("app/design-tokens.css", "utf8");
+const LAYOUT = readFileSync("app/layout.tsx", "utf8");
 
 /**
  * A moldura de PWA: área segura e tela de abertura.
@@ -45,6 +46,14 @@ const DESIGN_TOKENS = readFileSync("app/design-tokens.css", "utf8");
  */
 
 describe("modo instalado", () => {
+  it("deixa o conteúdo do cabeçalho crescer depois da área segura", () => {
+    // `h-14` inclui o padding de safe area no próprio box. Com um inset de
+    // 48px, sobravam só 8px para os controles e o texto flexível transbordava
+    // para cima, sobre o relógio. Altura mínima preserva os 56px de conteúdo.
+    expect(LAYOUT).toContain("flex min-h-14 w-full");
+    expect(LAYOUT).not.toContain("flex h-14 w-full");
+  });
+
   it("reserva a área segura só no cabeçalho da aplicação", () => {
     // Um seletor global de `header` também zera o padding-top dos cabeçalhos
     // de página e das modais quando o Android abre em `minimal-ui`.

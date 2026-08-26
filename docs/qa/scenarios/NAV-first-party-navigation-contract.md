@@ -8,11 +8,11 @@ expected: Menu, links contextuais, filtros, paginação e redirects chegam ao de
 entry_points: /; /jobs; /compare; /pipeline; /referrals; /candidate; /admin/users
 qa_status: pass
 bug_ids:
-fix_status:
-retest_status:
+fix_status: fixed
+retest_status: pass
 fix_commits:
-evidence: tests/e2e/ui.mjs; docs/qa/evidence/2026-08-25T214402000000Z-fb9a9b34-rescore-status-targeted/navigation-canary-jobs.png; docs/qa/reports/2026-08-25T214402000000Z-fb9a9b34-rescore-status-targeted.md
-last_report: docs/qa/reports/2026-08-25T214402000000Z-fb9a9b34-rescore-status-targeted.md
+evidence: tests/e2e/ui.mjs; tests/nav-mobile.test.ts; docs/qa/reports/2026-08-26T023000000000Z-mobile-responsive-targeted.md
+last_report: docs/qa/reports/2026-08-26T023000000000Z-mobile-responsive-targeted.md
 overlaps: NAV-switch-screen-ready
 ---
 

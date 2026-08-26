@@ -1601,8 +1601,8 @@ feliz não mostrava.
 Comandos: `jho jobs rescore queue|run|status` e `jho jobs score --every-candidate`.
 A varredura diária drena a fila e pontua as vagas novas.
 
-#### O que ficou de fora
+#### Entregue nesta onda
 
-A tela do candidato ainda não mostra o estado da fila. Hoje a repontuação
-acontece e a pessoa descobre pelo ranking mudar; dizer "estamos recalculando" é
-melhor, e depende de decidir onde na interface.
+A tela do candidato mostra o estado da fila de repontuação, com estados
+localizados para ausência de tarefa, pendente, em processamento, concluído e
+falho. O acompanhamento histórico detalhado continua fora desta onda.

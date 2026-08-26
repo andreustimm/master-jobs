@@ -172,6 +172,7 @@ function versionLabels(t: Translator["t"]): Record<string, string> {
 
 const QUEUE_STATE_KEYS = {
   idle: { label: "candidate.queueIdleLabel", detail: "candidate.queueIdle" },
+  noCv: { label: "candidate.queueNoCvLabel", detail: "candidate.queueNoCv" },
   pending: { label: "candidate.queuePendingLabel", detail: "candidate.queuePending" },
   scoring: { label: "candidate.queueScoringLabel", detail: "candidate.queueScoring" },
   done: { label: "candidate.queueDoneLabel", detail: "candidate.queueDone" },
@@ -180,6 +181,7 @@ const QUEUE_STATE_KEYS = {
 
 const QUEUE_BADGE_VARIANT = {
   idle: "outline",
+  noCv: "outline",
   pending: "secondary",
   scoring: "secondary",
   done: "default",
@@ -197,7 +199,7 @@ function ScoreQueueCard({
   locale: Translator["locale"];
   t: Translator["t"];
 }) {
-  const display = scoreQueueDisplay(hasCv ? snapshot : null);
+  const display = scoreQueueDisplay(snapshot, hasCv);
   const keys = QUEUE_STATE_KEYS[display.state];
   const values = display.state === "done"
     ? { count: formatNumber(display.scored ?? 0, locale) }
@@ -232,8 +234,10 @@ export default async function CandidateArea() {
   // Guard antes de ler qualquer dado. O escopo vem da sessão.
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
-  const person = await getCandidateById(candidateId);
-  const queueSnapshot = await candidateScoreQueueStatus(candidateId);
+  const [person, queueSnapshot] = await Promise.all([
+    getCandidateById(candidateId),
+    candidateScoreQueueStatus(candidateId),
+  ]);
   const doc = person ? await currentDocument(person.id, "cv") : null;
   const history = person ? await documentHistory(person.id, "cv") : [];
   const gap = await analyseGap({ candidateId, minFit: 60 });

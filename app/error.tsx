@@ -1,7 +1,7 @@
 "use client";
 
 import { unstable_rethrow } from "next/navigation";
-import { useCallback, useLayoutEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import {
   DEFAULT_LOCALE,
   dictionary,
@@ -37,7 +37,7 @@ export default function RouteError({
   );
   const labels = dictionary(locale).transition;
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     transitionStore.failRoute();
   }, []);
 

@@ -68,4 +68,42 @@ describe("layout", () => {
     }
     expect(offenders).toEqual([]);
   });
+
+  it("uses the wide shell only after the mobile-safe breakpoint", () => {
+    const layout = read("app/layout.tsx");
+    const footer = read("app/footer.tsx");
+    for (const source of [layout, footer]) {
+      expect(source).toContain("max-w-[min(95vw,1760px)] sm:max-w-[min(90vw,1760px)]");
+    }
+  });
+
+  it("keeps the market-demand rows shrinkable on a narrow screen", () => {
+    const skills = read("app/candidate/skills/page.tsx");
+    expect(skills).toContain('data-testid="skills-market-list"');
+    expect(skills).toContain("flex min-w-0 flex-wrap items-center");
+    expect(skills).toContain("order-4 h-1.5 basis-full");
+    expect(skills).not.toContain("min-w-[180px]");
+  });
+
+  it("keeps version actions touchable on mobile and compact on desktop", () => {
+    const versions = read("app/candidate/versions.tsx");
+    expect(versions).toContain("inline-flex min-h-11");
+    expect(versions).toContain("xl:h-7 xl:min-h-0");
+  });
+
+  it("keeps administrative row actions touchable on mobile", () => {
+    const users = read("app/admin/users/page.tsx");
+    expect(users.match(/min-h-11 xl:h-7 xl:min-h-0/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(users).toContain('data-testid="user-delete-open"');
+    const skills = read("app/candidate/skills/page.tsx");
+    expect(skills.match(/min-h-11 xl:h-7 xl:min-h-0/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("keeps the compact navigation through tablet landscape", () => {
+    const layout = read("app/layout.tsx");
+    const mobileNav = read("app/mobile-nav.tsx");
+    expect(layout).toContain("xl:flex");
+    expect(layout).toContain("flex-1 xl:hidden");
+    expect(mobileNav).toContain("xl:hidden");
+  });
 });

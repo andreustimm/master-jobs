@@ -84,7 +84,7 @@ arquitetura nova.
 
 | Dívida | Evidência | Primeiro passo |
 |---|---|---|
-| Cobertura de teste só cobre o núcleo puro | `tests/scoring.test.ts` e `tests/normalize.test.ts` não tocam banco; não há teste de `run.ts`, `apply.ts` nem dos adapters | Um teste de ingestão com fixture de payload por adapter, validando que o `fingerprint` não muda entre duas execuções |
+| Cobertura de ingestão e adapters | ✅ | Fixtures de adapters e do pipeline em `tests/adapters.test.ts` e `tests/cov-ingest-run.test.ts`, incluindo idempotência e falhas de fonte |
 | `smartrecruiters` e `recruitee` têm adapter mas nenhuma entrada em `config/sources.yaml` | `registry.ts` registra os dois | Validar um handle real com `pnpm jho sources probe` antes de adicionar |
 
 > **Invariante:** Mexeu em `profile.yaml` ou no scorer? Bump `SCORER_VERSION` em
@@ -190,22 +190,21 @@ o LinkedIn nesse caminho de código.
 
 ### 2.6 Loops Compozy para as rodadas recorrentes
 
-**Estado: 🟡 escrito, não registrado.** O loop de triagem diária existe:
-`compozy/loops/job-sweep.yaml` (`apiVersion: compozy.loop/v1`, `kind: Loop`,
-`meta.name: job-sweep`) roda `pnpm jho jobs sync`, depois
-`pnpm jho jobs list --min-fit {{ .inputs.min_fit }} --limit 25` e um
-`pnpm jho jobs show <id>` por vaga nova acima de 60 de fit, com
-`output_schema` exigindo `status`/`summary`/`candidates`. O `compozy/README.md`
-registra o estado exato: o arquivo está **validado** contra o daemon 0.3
-(`Loop validation passed`), mas o workspace **não** está registrado no daemon e
-não há automation job agendado.
+**Estado: 🟡 registrado, agendamento pausado durante a migração.** O loop de
+triagem diária existe em `compozy/loops/job-sweep.yaml`
+(`apiVersion: compozy.loop/v1`, `kind: Loop`, `meta.name: job-sweep`) e separa
+um operador, que executa `pnpm jho jobs sweep` e grava apenas agregados, de um
+revisor `deny-all`, que recebe o snapshot por `file-import` e devolve
+`status`/`summary`/`candidates`. O `compozy/README.md` registra o estado exato:
+a definição local aguarda publicação após a migração segura, o workspace está
+registrado e há uma única automation job de dias úteis (`0 9 * * 1-5`),
+desabilitada até a execução manual da definição revisada. A última execução
+manual documentada (`looprun-a066b558ff6b112d`) concluiu sem falhas de fonte e
+sem mutar o funil.
 
-**Primeiro passo concreto:** os dois comandos que faltam, ambos no
-`compozy/README.md`: `~/bin/cy03 workspaces add "<repo>"` e
-`~/bin/cy03 loop create --file compozy/loops/job-sweep.yaml`. Só depois de o
-`job-sweep` rodar à mão algumas vezes é que entram o agendamento
-(`automation jobs create --loop job-sweep --schedule "0 9 * * 1-5"`), o loop de
-kit de candidatura (2.4) e o de engajamento (2.5).
+O próximo passo operacional é publicar a definição revisada, executar e
+inspecionar as duas sessões, e só então reabilitar o agendamento. Os loops de
+kit de candidatura (2.4) e de engajamento (2.5) permanecem fora desta onda.
 
 > **Invariante:** O Loop recomenda, não move o funil. `job-sweep` não pode
 > chamar `jho track` — a tabela `application` é a única coisa que o sistema não

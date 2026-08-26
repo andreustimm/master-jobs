@@ -2,7 +2,7 @@
 
 - **Scope:** Candidate-scoped, localized and responsive ranking-refresh status on `/candidate`, plus adjacent navigation canary
 - **Cadence tier:** targeted
-- **Build:** b0bb989 + working-tree task_03 diff · **Environment:** isolated Next.js standalone production build on loopback with real SQLite auth and deterministic identities
+- **Build:** b0bb989 + working-tree next-backlog wave · **Environment:** isolated Next.js standalone production build on loopback with real SQLite auth and deterministic identities
 - **Started:** 2026-08-25T21:44:02Z · **Status:** closed
 
 ## Personas
@@ -42,7 +42,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 ### CH-failed-ranking-refresh — Candidato após falha
 
 - **Ran:** 2026-08-25T21:48Z → 2026-08-25T21:51Z (box respected: yes)
-- **Findings:** Failed and idle identities remained distinct after reload; Portuguese failure copy exposed no technical detail and both portrait/landscape layouts stayed contained; no finding.
+- **Findings:** Failed and neutral-idle identities (the latter has a saved CV but no queue task) remained distinct after reload; Portuguese failure copy exposed no technical detail, and both portrait/landscape layouts stayed contained; no finding. The no-CV copy split was added after this session and is covered by the current unit/automated checks, not claimed as a live-session observation here.
 - **Bugs filed/updated:** none
 - **Scenarios settled:** PROF-rescore-status-privacy → pass
 - **Paper cuts:** none
@@ -68,7 +68,8 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 ## What Was Fixed
 
-No QA-discovered fixes yet.
+- The candidate card now distinguishes no-CV, neutral idle, retryable pending/scoring, done, and terminal failure states without exposing `lastError`.
+- The Compozy runbook, roadmap, backlog, environment contract, and queue tests were reconciled with the active implementation and operational evidence.
 
 ## Paper Cuts
 
@@ -94,7 +95,7 @@ None identified yet.
 
 ## Final Status
 
-- **Exit gate (full automated suite):** `rtk pnpm check` — 150 files passed, 2,107 tests passed, 6 skipped, QA tracker contracts 13/13; `rtk pnpm test:e2e` — 190/190 browser checks and 8/8 pages without axe WCAG 2.2 AA violations
+- **Exit gate (full automated suite):** `rtk pnpm check` — 152 files passed, 2,122 tests passed, 6 skipped, QA tracker contracts 13/13; `rtk pnpm test:e2e` — 190/190 browser checks and 8/8 pages without axe WCAG 2.2 AA violations
 - **Issues by user impact:** Blocks-Completion 0 · Data-Loss 0 · Trust-Damage 0 · Friction 0 · Cosmetic 0
 - **Coverage:** 2/2 journeys walked; no skips
 - **Verdict:** ready — both in-scope journeys and the complete automated exit gate are green with no open finding.

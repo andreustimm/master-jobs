@@ -12,7 +12,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { authEvent, authLoginToken, authUser, candidate, job, jobScore, scoreTask, targetAccount } from "../../src/core/db/schema.ts";
+import { authEvent, authLoginToken, authUser, candidate, candidateDocument, job, jobScore, scoreTask, targetAccount } from "../../src/core/db/schema.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
 import { hashToken } from "../../src/contexts/auth/infra/drizzle-store.ts";
 import { setPassword } from "../../src/contexts/auth/infra/password-login.ts";
@@ -26,6 +26,7 @@ import {
   ensureImportSource,
   upsertRawJob,
 } from "../../src/core/ingest/manual.ts";
+import { seedCatalog } from "../../src/contexts/skills/index.ts";
 import { runMigrations } from "../../src/core/db/migrate.ts";
 import { scoreOne } from "../../src/core/scoring/apply.ts";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
@@ -55,6 +56,7 @@ export const E2E_ROLES = {
   candidate: { email: "e2e-candidato@local.test", roles: ["candidate"] },
   recruiter: { email: "e2e-recrutador@local.test", roles: ["recruiter"] },
   target: { email: "e2e-alvo@local.test", roles: ["candidate"] },
+  noCv: { email: "e2e-sem-cv@local.test", roles: ["candidate"] },
   // Existe para provar que senha certa em conta desabilitada não entra.
   disabled: { email: "e2e-desabilitada@local.test", roles: ["candidate"], disabled: true },
 };
@@ -93,7 +95,7 @@ try {
         title: "Senior AI Software Architect",
         locationRaw: "Remote · Brazil",
         descriptionText:
-          "Senior AI Software Architect for TypeScript, Python, distributed systems, LLM products, cloud architecture, observability, and technical leadership. Remote in Brazil and LATAM.",
+          "Senior AI Software Architect for TypeScript, Python, distributed systems, LLM products, cloud architecture, observability, and technical leadership. Remote in Brazil and LATAM. The role designs reliable services, collaborates with product and engineering partners, documents trade-offs, improves delivery practices, and owns production quality across the full lifecycle. Experience with AWS, Docker, Kubernetes, CI/CD, security, testing, and data systems is valuable for the team and its customers.",
         url: "https://jobs.example.com/e2e-public-role",
         applyUrl: "https://jobs.example.com/e2e-public-role/apply",
         raw: { e2e: true },
@@ -102,6 +104,11 @@ try {
     );
     await scoreOne(candidateId, seeded.jobId);
   }
+
+  // The skills route needs the same catalog a real installation seeds with
+  // `jho skills seed`; keeping it here makes the responsive market rows a
+  // deterministic browser fixture instead of an empty-state accident.
+  await seedCatalog();
 
   const resultFixtures = [
     ...Array.from({ length: 7 }, (_, index) => ({
@@ -225,6 +232,42 @@ try {
         .set({ visibility: "public", publicCv: false })
         .where(eq(candidate.id, scoped));
     }
+  }
+
+  const [noCvQueueCandidate] = await getDb()
+    .select({ candidateId: authUser.candidateId })
+    .from(authUser)
+    .where(eq(authUser.email, E2E_ROLES.noCv.email))
+    .limit(1);
+  if (noCvQueueCandidate?.candidateId !== null && noCvQueueCandidate?.candidateId !== undefined) {
+    // Keep this account in the first-use branch on every isolated run. A
+    // previous attempt must not turn the no-CV contract into idle silently.
+    await getDb().delete(candidateDocument).where(eq(candidateDocument.candidateId, noCvQueueCandidate.candidateId));
+    await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, noCvQueueCandidate.candidateId));
+  }
+
+  // O cenário idle precisa representar um candidato que já tem CV, mas não
+  // possui uma tarefa de repontuação pendente. `saveDocument` enfileira por
+  // design; removemos somente a tarefa desta fixture para manter o estado
+  // neutro que o teste quer observar.
+  const [idleQueueCandidate] = await getDb()
+    .select({ candidateId: authUser.candidateId })
+    .from(authUser)
+    .where(eq(authUser.email, E2E_ROLES.candidate.email))
+    .limit(1);
+  if (idleQueueCandidate?.candidateId !== null && idleQueueCandidate?.candidateId !== undefined) {
+    if (!(await currentDocument(idleQueueCandidate.candidateId, "cv"))) {
+      await saveDocument({
+        candidateId: idleQueueCandidate.candidateId,
+        kind: "cv",
+        label: "E2E idle queue CV",
+        format: "markdown",
+        content: "# Idle queue fixture\n\nA valid CV without a pending ranking refresh.",
+      });
+    }
+    await getDb()
+      .delete(scoreTask)
+      .where(eq(scoreTask.candidateId, idleQueueCandidate.candidateId));
   }
 
   const [failedQueueCandidate] = await getDb()

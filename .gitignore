@@ -14,6 +14,7 @@ data/
 # generated application kits (contain tailored personal documents)
 out/
 data/mail/
+.compozy/runtime/
 
 # node
 node_modules/

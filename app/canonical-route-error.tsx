@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect } from "react";
+import { useEffect } from "react";
 import { transitionStore } from "../src/core/pwa/transition-store.ts";
 import { TransitionLink } from "./transition-link.tsx";
 
@@ -19,7 +19,7 @@ export function CanonicalRouteError({
 }) {
   const forbidden = kind === "forbidden";
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     transitionStore.failRoute();
   }, []);
 

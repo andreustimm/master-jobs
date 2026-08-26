@@ -344,8 +344,8 @@ function RowButton({
       disabled={busy}
       data-testid={testId}
       className={cn(
-        "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[var(--radius-action)]",
-        "border border-[var(--hairline)] px-2.5 type-micro transition-colors",
+        "inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-[var(--radius-action)]",
+        "border border-[var(--hairline)] px-3 type-micro transition-colors xl:h-7 xl:min-h-0 xl:px-2.5",
         "disabled:cursor-not-allowed disabled:opacity-50",
         tone === "danger"
           ? "text-[var(--bad)] hover:bg-[var(--bad)]/10"

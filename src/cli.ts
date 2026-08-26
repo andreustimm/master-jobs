@@ -73,6 +73,7 @@ import { scoreMessages } from "./contexts/matching/index.ts";
 import { renderScoreMessage, translator } from "./core/i18n/index.ts";
 import { loadSources } from "./core/sources/config.ts";
 import { getAdapter, parseFetchableSourceKind } from "./core/sources/registry.ts";
+import { buildJobSweepSnapshot } from "./core/triage/job-sweep.ts";
 
 const cliTranslator = translator("pt-BR").t;
 const renderScoreMessages = (value: unknown): string[] =>
@@ -505,6 +506,47 @@ jobs
         console.log(`${c.bold("Scoring")} ${scored.scored} job(s) scored · best fit ${scored.topFit.toFixed(0)}`);
       }
       console.log();
+    });
+  });
+
+/**
+ * Prepare a Compozy sweep without exposing source-controlled text to the
+ * command-capable operator agent. The JSON written under .compozy/runtime is
+ * imported as data by a separate deny-all reviewer session.
+ */
+jobs
+  .command("sweep")
+  .description("Sync, score and write a private snapshot for the Compozy reviewer")
+  .option("--min-fit <n>", "minimum fit score", "55")
+  .option("--limit <n>", "maximum candidates in the snapshot", "25")
+  .option("--concurrency <n>", "parallel sources", "4")
+  .action(async (opts: { minFit: string; limit: string; concurrency: string }) => {
+    await withDb(async () => {
+      await runMigrations();
+      const configs = await loadSources();
+      const result = await syncAll(configs, { concurrency: Number(opts.concurrency) });
+      const candidateId = await activeCandidateId();
+      await scoreAll(candidateId);
+      const minFit = Number(opts.minFit);
+      const limit = Number(opts.limit);
+      const sourcesFailed = result.sources
+        .filter((source) => !source.ok)
+        .map((source) => source.sourceId);
+      const snapshot = await buildJobSweepSnapshot(candidateId, minFit, limit, sourcesFailed);
+      const snapshotPath = resolve(".compozy/runtime/job-sweep-snapshot.json");
+      await mkdir(dirname(snapshotPath), { recursive: true });
+      await writeFile(snapshotPath, `${JSON.stringify(snapshot, null, 2)}\n`, "utf8");
+
+      // Keep stdout aggregate-only. In particular, never print a posting title,
+      // URL or description: those fields are untrusted prompt content.
+      console.log(JSON.stringify({
+        status: "prepared",
+        snapshotPath: ".compozy/runtime/job-sweep-snapshot.json",
+        sources: configs.length,
+        sourcesFailed,
+        totals: result.totals,
+        candidates: snapshot.candidates.length,
+      }));
     });
   });
 

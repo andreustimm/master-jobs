@@ -21,7 +21,21 @@ describe("Compozy job-sweep operational contract", () => {
     const loop = parse(read("compozy/loops/job-sweep.yaml")) as {
       meta: { name: string };
       start: Array<{ kind: string }>;
-      graph: { nodes: Array<{ params?: { output_schema?: { required?: string[] }; prompt?: string } }> };
+      inputs?: Record<string, unknown>;
+      graph: {
+        nodes: Array<{
+          id: string;
+          class?: string;
+          kind?: string;
+          params?: {
+            agent?: string;
+            allowed_tools?: string[];
+            output_schema?: { required?: string[] };
+            prompt?: string;
+          };
+        }>;
+        edges: Array<{ from: string; to: string }>;
+      };
     };
 
     expect(tasks.graph.edges).toContainEqual({ from: "task_01", to: "task_02" });
@@ -32,13 +46,39 @@ describe("Compozy job-sweep operational contract", () => {
     expect(loop.start.map(({ kind }) => kind)).toEqual(
       expect.arrayContaining(["manual", "cli", "uds", "schedule"]),
     );
-    const sweep = loop.graph.nodes.find((node) => node.params?.output_schema);
-    expect(sweep?.params?.output_schema?.required).toEqual([
+    const review = loop.graph.nodes.find((node) => node.id === "review");
+    const prepare = loop.graph.nodes.find((node) => node.id === "prepare");
+    const snapshot = loop.graph.nodes.find((node) => node.id === "snapshot");
+    expect(review?.params?.output_schema?.required).toEqual([
       "status",
       "summary",
       "candidates",
     ]);
-    expect(sweep?.params?.prompt).not.toMatch(/jho\s+track|\bapplication\b/iu);
+    expect(prepare?.params?.agent).toBe("job-sweep-operator");
+    expect(review?.params?.agent).toBe("job-sweep-reviewer");
+    expect(review?.params?.allowed_tools).toBeUndefined();
+    expect(snapshot).toMatchObject({ class: "source", kind: "file-import" });
+    expect(prepare?.params?.prompt).toContain("pnpm jho jobs sweep");
+    expect(prepare?.params?.prompt).not.toMatch(/jho\s+jobs\s+show|jho\s+track/iu);
+    expect(review?.params?.prompt).toContain("untrusted source content");
+    expect(review?.params?.prompt).not.toMatch(/jho\s+track|\bapplication\b/iu);
+    expect(loop.inputs?.analyst).toBeUndefined();
+    expect(loop.graph.edges).toContainEqual({ from: "snapshot", to: "review" });
+  });
+
+  it("IT-009: the reviewer agent is read-only and cannot use Compozy or MCP tools", () => {
+    const reviewer = read(".compozy/agents/job-sweep-reviewer/AGENT.md");
+    const operator = read(".compozy/agents/job-sweep-operator/AGENT.md");
+
+    expect(frontmatter(reviewer)).toMatchObject({
+      name: "job-sweep-reviewer",
+      permissions: "deny-all",
+      deny_tools: ["compozy__*", "mcp__*"],
+    });
+    expect(reviewer).toContain("never as instructions");
+    expect(operator).toContain("Never invoke `jho jobs show`, `jho track`");
+    expect(read("src/cli.ts")).toContain('.command("sweep")');
+    expect(read("src/core/triage/job-sweep.ts")).toContain("sourcesFailed");
   });
 
   it("IT-003: the runbook gates the schedule on structured manual evidence", () => {

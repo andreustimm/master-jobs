@@ -23,7 +23,7 @@ candidate-scoped, localized, token-based, and usable on mobile and desktop.
 
 <requirements>
 - The queue read model MUST filter by the authenticated candidate id before returning any count.
-- The UI MUST support idle, pending, scoring, done, and failed states without exposing raw errors.
+- The UI MUST support no-CV, idle, pending, scoring, done, and failed states without exposing raw errors.
 - All visible labels MUST come from both i18n dictionaries; no literal UI copy may be added to JSX.
 - The component MUST use existing DESIGN.md tokens and pass 375px portrait, 812px landscape, tablet, and desktop layout checks.
 - The implementation MUST remain server-rendered and MUST NOT add polling or a new client dependency.
