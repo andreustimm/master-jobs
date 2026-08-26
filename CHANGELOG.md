@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-08-26
+
 ### Corrigido
 
 - O cabeçalho mantém apenas um modo de navegação visível mesmo durante uma

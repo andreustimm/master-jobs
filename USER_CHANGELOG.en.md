@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-08-26T20:06:11.585Z
+
 ### Fixed
 
 - The header no longer shows stacked links alongside the menu button during an

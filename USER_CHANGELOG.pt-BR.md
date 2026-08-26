@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-08-26T20:06:11.585Z
+
 ### Correção
 
 - O topo não mostra mais os links empilhados junto com o botão de menu durante
