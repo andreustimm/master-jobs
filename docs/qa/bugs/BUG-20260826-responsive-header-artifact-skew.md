@@ -32,10 +32,10 @@ Ao abrir qualquer tela, Andreus encontra os links globais empilhados verticalmen
 ## Fix
 
 - **Root cause:** o HTML removeu as classes utilitárias de visibilidade e passou a depender exclusivamente de seletores CSS novos e medição no cliente. Produção combinou esse HTML com um artefato CSS anterior; o valor padrão de `nav` tornou a fileira visível e vertical antes e durante a hidratação.
-- **Fix commits:** `062eb64`, `cce67ae`
-- **Regression test:** `tests/nav-mobile.test.ts` falhou antes e passa depois; `tests/e2e/ui.mjs` mede altura, direção e exclusão mútua nos quatro viewports.
+- **Fix commits:** `062eb64`, `cce67ae`, `055af8a`, `a56a0c1`
+- **Regression tests:** `tests/nav-mobile.test.ts` falhou antes e passa depois para o fallback, o painel compacto largo e o nome truncado aplicável; `tests/e2e/ui.mjs` mede altura, direção, exclusão mútua e abertura do painel compacto em 1280px.
 
 ## Verification
 
-- **Retested:** 2026-08-26, mesmas rotas e persona em build `standalone` de produção local · **Report:** docs/qa/reports/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew.md
-- **Result:** Em 375×812, 812×375 e 768×1024 somente o hambúrguer ficou visível; em 1280×900 somente a fileira horizontal ficou visível. A altura permaneceu em 57px, sem overflow, e o segundo toque fechou o menu.
+- **Retested:** 2026-08-26T19:11Z–19:18Z, mesmas rotas e persona em build limpo `a56a0c1` de produção local · **Report:** docs/qa/reports/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew.md
+- **Result:** Em 375×812, 812×375 e 768×1024 somente o hambúrguer ficou visível; em 1280×900 somente a fileira horizontal ficou visível. A altura permaneceu em 57px, sem overflow, o segundo toque fechou o menu e um nome no limite permitido foi truncado sem perder o valor completo.
