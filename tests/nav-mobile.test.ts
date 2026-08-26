@@ -112,7 +112,10 @@ describe("cada menu aparece na sua largura", () => {
       /<span\s+data-user-content\s+className="([^"]+)"/,
     )?.[1];
     const tokens = accountClass?.split(/\s+/) ?? [];
-    expect(tokens).toEqual(expect.arrayContaining(["max-w-[24ch]", "truncate"]));
+    expect(tokens).toEqual(
+      expect.arrayContaining(["max-w-[24ch]", "truncate", "sm:inline-block"]),
+    );
+    expect(tokens).not.toContain("sm:inline");
   });
 
   it("remove Cockpit da lista e leva a marca para a tela inicial", () => {

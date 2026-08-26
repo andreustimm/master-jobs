@@ -57,7 +57,7 @@ export async function SessionBadge() {
           de sair é o que precisa estar ao alcance. */}
       <span
         data-user-content
-        className="hidden max-w-[24ch] truncate type-micro text-muted-foreground sm:inline"
+        className="hidden max-w-[24ch] truncate type-micro text-muted-foreground sm:inline-block"
         title={session.fullName ?? session.email}
       >
         {session.fullName ?? session.email}
