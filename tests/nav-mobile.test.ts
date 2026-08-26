@@ -28,6 +28,7 @@ import { describe, expect, it } from "vitest";
 const layout = readFileSync("app/layout.tsx", "utf8");
 const navLinks = readFileSync("app/nav-links.tsx", "utf8");
 const mobileNav = readFileSync("app/mobile-nav.tsx", "utf8");
+const globals = readFileSync("app/globals.css", "utf8");
 
 /**
  * O arquivo sem comentários.
@@ -54,7 +55,7 @@ describe("os links moram num lugar só", () => {
     }
   });
 
-  it("o layout NÃO tem link de navegação próprio", () => {
+  it("o layout não duplica os links do menu", () => {
     // A garantia de que os dois menus não podem divergir. Se alguém acrescentar
     // uma rota direto no layout, ela aparece na fileira e não no menu do
     // celular — e este caso reprova antes disso chegar em alguém.
@@ -82,11 +83,18 @@ describe("cada menu aparece na sua largura", () => {
 
   it("o modo compacto é decidido pela largura útil, não por `xl`", () => {
     // O desktop só esconde o botão quando todos os links cabem de verdade.
-    const botao = mobileNav.slice(mobileNav.indexOf("popoverTargetAction=\"show\""));
     expect(mobileNav).toContain("updateNavigationMode");
     expect(mobileNav).toContain("ResizeObserver");
-    expect(botao).toContain("responsive-mobile-nav-trigger");
+    expect(mobileNav).toContain('popoverTargetAction="toggle"');
+    expect(mobileNav).toContain("responsive-mobile-nav-trigger");
     expect(mobileNav).toContain("dataset.navMode");
+  });
+
+  it("remove Cockpit da lista e leva a marca para a tela inicial", () => {
+    expect(navLinksCodigo).not.toContain('data-testid="nav-cockpit"');
+    expect(layout).toContain('data-testid="nav-logo"');
+    expect(layout).toContain('data-nav-brand');
+    expect(layout).toMatch(/<TransitionLink\s+href="\/"/);
   });
 });
 
@@ -96,6 +104,7 @@ describe("o menu fecha ao navegar, e só ele vira client", () => {
     // fechar no Escape, dispensar por clique fora e camada de topo.
     expect(mobileNav).toContain('popover="auto"');
     expect(mobileNav).toContain("popoverTarget=");
+    expect(mobileNav).toContain('popoverTargetAction="toggle"');
   });
 
   it("fecha por event delegation no clique do `<nav>`", () => {
@@ -138,5 +147,12 @@ describe("o menu fecha ao navegar, e só ele vira client", () => {
     expect(mobileNav).toContain('panel.style.marginTop = "0px"');
     expect(mobileNav).toContain('window.addEventListener("orientationchange"');
     expect(mobileNav).toContain('window.addEventListener("resize"');
+  });
+
+  it("define a geometria do popover em vez de aceitar o centro do user-agent", () => {
+    expect(globals).toContain("#menu-mobile.responsive-mobile-nav-popover");
+    expect(globals).toMatch(/#menu-mobile\.responsive-mobile-nav-popover[\s\S]*?position: fixed;/);
+    expect(globals).toMatch(/#menu-mobile\.responsive-mobile-nav-popover[\s\S]*?inline-size: 100%;/);
+    expect(globals).toMatch(/#menu-mobile\.responsive-mobile-nav-popover[\s\S]*?overflow-y: auto;/);
   });
 });

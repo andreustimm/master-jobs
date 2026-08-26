@@ -16,6 +16,15 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-08-26T16:50:32.312Z
+
+### Improved
+
+- The **Master Jobs** logo now links to the home screen, and the menu no longer
+  repeats the **Cockpit** option.
+- On mobile, the menu button opens and closes the list every time it is tapped,
+  without getting stuck open.
+
 ## [1.3.5] - 2026-08-26T13:25:10.198Z
 
 ### Fixed
