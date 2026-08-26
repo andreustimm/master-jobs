@@ -163,7 +163,7 @@ export function MobileNav({
         aria-label={rotulo}
         // `py-2.5` pelo alvo de toque, igual aos links da barra larga: o ícone
         // sozinho daria uma área menor que o mínimo confortável no celular.
-        className="responsive-mobile-nav-trigger flex shrink-0 items-center gap-1.5 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        className="responsive-mobile-nav-trigger flex shrink-0 items-center gap-1.5 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground xl:hidden"
       >
         {/* Três traços desenhados em CSS. Um SVG aqui seria mais markup para o
             mesmo desenho, e o ícone precisa acompanhar `currentColor`. */}
@@ -181,7 +181,7 @@ export function MobileNav({
         data-responsive-mobile-nav-popover
         // Ancorado no topo e ocupando a largura: um menu estreito no canto
         // obrigaria a mirar, e mirar num celular é o que produz toque errado.
-        className="responsive-mobile-nav-popover w-full max-w-none rounded-none border-b border-[var(--color-hairline)] bg-card p-0 text-card-foreground backdrop:bg-black/40"
+        className="responsive-mobile-nav-popover w-full max-w-none rounded-none border-b border-[var(--color-hairline)] bg-card p-0 text-card-foreground backdrop:bg-black/40 xl:hidden"
       >
         <nav className="grid px-4 py-2" onClick={fechar}>
           <NavLinks

@@ -415,6 +415,10 @@ try {
       const contentStyle = content ? getComputedStyle(content) : null;
       const brand = content?.querySelector(":scope > [data-nav-brand]");
       const brandRect = brand?.getBoundingClientRect();
+      const desktopNav = content?.querySelector(":scope > nav[data-responsive-nav]");
+      const mobileTrigger = content?.querySelector(":scope > [data-responsive-mobile-nav-trigger]");
+      const desktopNavStyle = desktopNav ? getComputedStyle(desktopNav) : null;
+      const mobileTriggerStyle = mobileTrigger ? getComputedStyle(mobileTrigger) : null;
       return {
         standaloneClass: document.documentElement.classList.contains("pwa-standalone"),
         pointerCoarse: matchMedia("(pointer: coarse)").matches,
@@ -435,6 +439,9 @@ try {
         contentWidth: contentRect?.width ?? -1,
         contentPaddingRight: Number.parseFloat(contentStyle?.paddingRight ?? "0"),
         contentPaddingLeft: Number.parseFloat(contentStyle?.paddingLeft ?? "0"),
+        desktopNavDisplay: desktopNavStyle?.display ?? "missing",
+        desktopNavDirection: desktopNavStyle?.flexDirection ?? "missing",
+        mobileTriggerDisplay: mobileTriggerStyle?.display ?? "missing",
         viewportWidth: innerWidth,
         scrollWidth: document.documentElement.scrollWidth,
       };
@@ -473,6 +480,7 @@ try {
         && sample.paddingTop === expectedTop
         && sample.contentTop >= sample.headerTop + expectedTop
         && sample.contentHeight >= 56
+        && sample.contentHeight <= 64
         && sample.brandTop >= sample.headerTop + expectedTop
         && sample.brandBottom <= sample.headerTop + sample.paddingTop + sample.contentHeight
         && sample.headerLeft <= 0.5
@@ -481,6 +489,8 @@ try {
         && sample.contentRight <= sample.headerRight
         && sample.contentPaddingLeft >= sample.safeLeft
         && sample.contentPaddingRight >= sample.safeRight
+        && (sample.desktopNavDisplay !== "none") !== (sample.mobileTriggerDisplay !== "none")
+        && (sample.desktopNavDisplay === "none" || sample.desktopNavDirection === "row")
         && sample.scrollWidth <= sample.viewportWidth;
     }),
     JSON.stringify(headerSafeAreaSnapshots),

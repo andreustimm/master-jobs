@@ -249,7 +249,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <nav
                 data-responsive-nav
                 className={cn(
-                  "min-w-0 flex-1 items-center gap-5 overflow-x-auto",
+                  "hidden min-w-0 flex-1 items-center gap-5 overflow-x-auto xl:flex",
                   "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
                   !signedIn && "invisible",
                 )}
@@ -264,7 +264,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
               {/* No modo compacto, ocupa o espaço entre a marca e os controles;
                   no modo completo, o CSS remove este spacer. */}
-              <div data-responsive-nav-spacer className="flex-1" />
+              <div data-responsive-nav-spacer className="flex-1 xl:hidden" />
 
               {signedIn && (
                 <MobileNav

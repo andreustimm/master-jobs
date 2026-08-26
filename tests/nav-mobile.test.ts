@@ -90,6 +90,18 @@ describe("cada menu aparece na sua largura", () => {
     expect(mobileNav).toContain("dataset.navMode");
   });
 
+  it("mantém um fallback responsivo no HTML quando a medição ainda não carregou", () => {
+    // A regra medida é um aprimoramento: ela pode liberar a fileira antes do
+    // breakpoint quando houver espaço. A estrutura inicial, porém, precisa ser
+    // segura sozinha. Sem estes guards, qualquer atraso ou desencontro entre
+    // HTML e CSS faz o `<nav>` voltar a `display: block`, empilha os links no
+    // cabeçalho e mostra a fileira junto com o hamburger.
+    expect(layout).toMatch(/"hidden min-w-0 flex-1[^"]*xl:flex"/);
+    expect(layout).toContain('data-responsive-nav-spacer className="flex-1 xl:hidden"');
+    expect(mobileNav).toMatch(/responsive-mobile-nav-trigger[^"]*xl:hidden/);
+    expect(mobileNav).toMatch(/responsive-mobile-nav-popover[^"]*xl:hidden/);
+  });
+
   it("remove Cockpit da lista e leva a marca para a tela inicial", () => {
     expect(navLinksCodigo).not.toContain('data-testid="nav-cockpit"');
     expect(layout).toContain('data-testid="nav-logo"');
