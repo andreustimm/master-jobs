@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.9] - 2026-08-27T20:34:24.046Z
+
 ### Fixed
 
 - The installed app now checks for updates when it returns to the foreground

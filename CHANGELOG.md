@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.3.9] - 2026-08-27
+
 ### Corrigido
 
 - A PWA verifica uma nova geração do service worker ao voltar do background,

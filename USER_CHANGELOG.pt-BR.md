@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.9] - 2026-08-27T20:34:24.046Z
+
 ### Correção
 
 - O aplicativo instalado passa a buscar atualizações quando volta ao primeiro
