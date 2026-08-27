@@ -76,7 +76,10 @@ jobs:
           # workflow: enquanto o build não termina, o CSS no ar é o anterior —
           # que pode ser legítimo. O polling espera a troca; se depois do teto
           # os marcadores ainda faltam, o deploy serviu CSS velho de novo.
-          for tentativa in $(seq 1 20); do
+          # 18 tentativas × (30s de espera + até 20s de fetch) ≈ 15 min no
+          # pior caso patológico — dentro do orçamento do job, para o erro
+          # designado ser o que aparece em vez do timeout genérico do runner.
+          for tentativa in $(seq 1 18); do
             if node scripts/check-deployed-css.mjs "https://jobs.mastertimm.com.br"; then
               exit 0
             fi

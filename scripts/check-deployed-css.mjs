@@ -22,29 +22,20 @@
  *      (padrão: produção; DEPLOY_URL para staging/dev)
  */
 
+import { DEPLOYED_CSS_MARKERS as MARKERS } from "./deployed-css-markers.mjs";
+
 const BASE = (
   process.argv[2] ??
   process.env.DEPLOY_URL ??
   "https://jobs.mastertimm.com.br"
 ).replace(/\/$/, "");
 
-const MARKERS = [
-  // Piso de safe-area para launcher que entrega inset 0 (BUG-20260825).
-  "--safe-area-top-floor",
-  // Padrão de área segura ligado aos insets informados pelo aparelho.
-  "safe-area-inset-top",
-  // Navegação responsiva medida (PRs #58 e #61).
-  "data-responsive-nav",
-  // Shell determinístico de largura integral com calha fixa (issue-topo).
-  "1760px",
-];
-
 const page = await fetch(`${BASE}/login`, {
   redirect: "follow",
   // Timeout explícito: sem ele, o undici só aborta após 300s e o loop de
   // polling do workflow morre no timeout genérico do runner antes de imprimir
   // a mensagem de erro que existe para instruir.
-  signal: AbortSignal.timeout(15_000),
+  signal: AbortSignal.timeout(10_000),
 });
 if (!page.ok) {
   console.error(`check-deployed-css: ${BASE}/login respondeu ${page.status}`);
@@ -62,7 +53,7 @@ try {
   css = (
     await Promise.all(
       hrefs.map(async (href) => {
-        const res = await fetch(`${BASE}${href}`, { signal: AbortSignal.timeout(15_000) });
+        const res = await fetch(`${BASE}${href}`, { signal: AbortSignal.timeout(10_000) });
         if (!res.ok) throw new Error(`CSS ${href} respondeu ${res.status}`);
         return res.text();
       }),
@@ -79,6 +70,9 @@ if (missing.length > 0) {
     `check-deployed-css: CSS de produção é de outra geração. Faltando: ${missing.join(", ")}`,
   );
   console.error(`Folhas verificadas: ${hrefs.join(", ")}`);
+  console.error(
+    "Confira primeiro se o deploy da Vercel completou; se completou, o build serviu CSS de cache velho — reimplante com cache de build limpo.",
+  );
   process.exit(1);
 }
 console.log(
