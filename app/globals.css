@@ -757,15 +757,15 @@ html.pwa-standalone .app-shell-content {
 
 @media (min-width: 640px) {
   html.pwa-standalone .app-shell-content {
-    padding-left: max(var(--spacing-lg), var(--safe-area-left));
-    padding-right: max(var(--spacing-lg), var(--safe-area-right));
+    padding-left: max(var(--spacing-xl), var(--safe-area-left));
+    padding-right: max(var(--spacing-xl), var(--safe-area-right));
   }
 }
 
 @media (min-width: 1024px) {
   html.pwa-standalone .app-shell-content {
-    padding-left: max(var(--spacing-xl), var(--safe-area-left));
-    padding-right: max(var(--spacing-xl), var(--safe-area-right));
+    padding-left: max(var(--spacing-xxl), var(--safe-area-left));
+    padding-right: max(var(--spacing-xxl), var(--safe-area-right));
   }
 }
 

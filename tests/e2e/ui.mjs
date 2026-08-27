@@ -493,6 +493,10 @@ try {
         && sample.contentRight <= sample.headerRight
         && sample.contentPaddingLeft >= sample.safeLeft
         && sample.contentPaddingRight >= sample.safeRight
+        && (sample.label !== "tablet"
+          || (sample.contentPaddingLeft === 24 && sample.contentPaddingRight === 24))
+        && (sample.label !== "desktop"
+          || (sample.contentPaddingLeft === 32 && sample.contentPaddingRight === 32))
         && (sample.desktopNavDisplay !== "none") !== (sample.mobileTriggerDisplay !== "none")
         && (sample.desktopNavDisplay === "none" || sample.desktopNavDirection === "row")
         && sample.scrollWidth <= sample.viewportWidth;

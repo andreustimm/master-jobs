@@ -87,6 +87,7 @@ describe("modo instalado", () => {
     for (const marker of FORBIDDEN_DEPLOYED_CSS_MARKERS) {
       expect(GLOBAL_CSS, `marcador obsoleto ${marker} não pode voltar`).not.toContain(marker);
     }
+    expect(GLOBAL_CSS).not.toMatch(/html\.pwa-standalone\s+body\s*>\s*div/);
   });
 
   it("rejeita uma folha completa que ainda contém o seletor obsoleto", () => {
@@ -109,6 +110,12 @@ describe("modo instalado", () => {
     );
     expect(GLOBAL_CSS).toContain(
       "padding-right: max(var(--spacing-md), var(--safe-area-right));",
+    );
+    expect(GLOBAL_CSS).toContain(
+      "padding-left: max(var(--spacing-xl), var(--safe-area-left));",
+    );
+    expect(GLOBAL_CSS).toContain(
+      "padding-left: max(var(--spacing-xxl), var(--safe-area-left));",
     );
     expect(GLOBAL_CSS).not.toMatch(/html\.pwa-standalone header\s*\{/);
     expect(GLOBAL_CSS).not.toMatch(/html\.pwa-standalone header\s*>\s*div/);
