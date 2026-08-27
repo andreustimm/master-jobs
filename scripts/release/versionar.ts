@@ -20,6 +20,7 @@ import {
   type PrepareReleaseResult,
   type ReleaseDocuments,
 } from "../../src/core/release.ts";
+import { commitSubjectsSinceLatestTag } from "./git-context.ts";
 
 export type ApplyReleaseFilesInput = {
   directory: string;
@@ -125,33 +126,6 @@ export function applyReleaseFiles(
   return prepared;
 }
 
-function mostRecentTag(): string | null {
-  try {
-    const output = execFileSync("git", ["tag", "--list", "v*", "--sort=-version:refname"], {
-      encoding: "utf8",
-    }).trim();
-    return output.split("\n").filter(Boolean)[0] ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function commitSubjects(base: string): string[] {
-  const latest = mostRecentTag();
-  const range = latest ? `${latest}..${base}` : base;
-  try {
-    // Merge subjects have no conventional prefix and would create phantom patches.
-    return execFileSync("git", ["log", "--format=%s", "--no-merges", range], {
-      encoding: "utf8",
-    })
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
 function tagExists(version: string): boolean {
   try {
     execFileSync("git", ["rev-parse", "--verify", `refs/tags/v${version}`], {
@@ -189,7 +163,7 @@ export function versionar(base = "HEAD", directory = process.cwd()): string {
     return "already-released";
   }
 
-  const bump = classificarBump(commitSubjects(base));
+  const bump = classificarBump(commitSubjectsSinceLatestTag(base));
   if (!bump) return "no-release";
 
   const version = proximaVersao(current, bump);

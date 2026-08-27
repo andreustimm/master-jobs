@@ -9,6 +9,24 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- Na PWA instalada, o cabeçalho respeita a área segura do sistema em retrato e
+  paisagem, preserva a altura prevista pelo design e mantém os controles fora
+  da barra de status.
+- O shell responsivo usa a largura disponível com calhas simétricas e mantém
+  o conteúdo limitado a 1760px em monitores largos.
+
+### Adicionado
+
+- A sincronização pós-produção verifica marcadores do CSS realmente servido e
+  sinaliza falha quando o deploy entrega um artefato de estilo antigo, sem
+  bloquear a sincronização de versão e branches.
+- O hook versionado e o CI agora validam os três changelogs quando a leva pede
+  bump, antecipando a falha que antes aparecia só na promoção.
+- A sincronização pós-produção cria, de forma idempotente, uma GitHub Release
+  para cada tag SemVer e repara automaticamente as ausentes no histórico.
+
 ## [1.3.7] - 2026-08-26
 
 ### Corrigido

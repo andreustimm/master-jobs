@@ -375,6 +375,26 @@ com ele, `staging` e as PRs geradas também recebem checks próprios.
 > PR apenas de Markdown ou metadados de skills, sem alteração de runtime, usa
 > validação estrutural proporcional e não precisa rodar suítes unitárias/E2E.
 
+> **21. Commit releaseável carrega os três changelogs no mesmo estado pronto.**
+> Se a leva desde a última tag contém `fix:`, `feat:` ou outro commit que pede
+> bump, `CHANGELOG.md`, `USER_CHANGELOG.pt-BR.md` e `USER_CHANGELOG.en.md`
+> precisam ter conteúdo válido em `## [Unreleased]` antes do commit. Não deixe
+> para a promoção descobrir isso: `.githooks/commit-msg` valida o índice, e o
+> CI repete o mesmo gate com `pnpm check:release-ready`. `pnpm install` ativa
+> os hooks versionados via `core.hooksPath=.githooks`. O commit automático
+> `chore(release): X.Y.Z` é a única exceção, porque ele vem depois do preflight
+> e recria intencionalmente o próximo `Unreleased` vazio.
+
+> **22. Toda tag SemVer tem uma GitHub Release.**
+> A tag `vX.Y.Z` e a entrada `## [X.Y.Z]` do changelog técnico são a fonte da
+> release. Tags anteriores à primeira versão documentada recebem somente a
+> nota histórica padrão; qualquer lacuna posterior interrompe a sincronização.
+> Não publique
+> texto paralelo manualmente. O workflow pós-`main` roda
+> `scripts/release/github-releases.ts --apply`, cria somente as releases
+> ausentes e preserva as existentes. Isso inclui backfill: uma tag histórica
+> sem release é dívida detectável e reparada na próxima sincronização.
+
 ---
 
 

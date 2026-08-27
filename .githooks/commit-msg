@@ -1,0 +1,5 @@
+#!/bin/sh
+
+node --experimental-strip-types --no-warnings \
+  scripts/release/validar-changelogs.ts \
+  --staged --commit-message-file "$1"
