@@ -9,6 +9,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- A PWA verifica uma nova geração do service worker ao voltar do background,
+  ignora o cache HTTP nessa verificação e recarrega uma única vez quando o
+  worker atualizado assume o controle, evitando manter o CSS do documento
+  anterior depois de um deploy.
+
 ## [1.3.8] - 2026-08-27
 
 ### Corrigido

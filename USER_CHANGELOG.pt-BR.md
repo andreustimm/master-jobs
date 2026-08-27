@@ -16,6 +16,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Correção
+
+- O aplicativo instalado passa a buscar atualizações quando volta ao primeiro
+  plano e troca automaticamente para a versão nova, sem continuar mostrando o
+  visual da versão anterior.
+
 ## [1.3.8] - 2026-08-27T14:52:18.260Z
 
 ### Correção
