@@ -10,9 +10,9 @@ qa_status: untested
 bug_ids: BUG-20260825-pwa-header-status-bar-overlap
 fix_status: fixed
 retest_status: untested
-fix_commits: codex/header-top-fix (PR pending); codex/header-safe-area-web
-evidence: tests/e2e/ui.mjs; tests/pwa-chrome.test.ts; docs/qa/evidence/2026-08-26T083500000000Z-b7f3a1c9-header-top-fix/header-pwa-safe-area.png; docs/qa/evidence/2026-08-26T083500000000Z-b7f3a1c9-header-top-fix/header-portrait.png; docs/qa/evidence/2026-08-26T083500000000Z-b7f3a1c9-header-top-fix/header-landscape.png; docs/qa/evidence/2026-08-26T083500000000Z-b7f3a1c9-header-top-fix/header-tablet.png; docs/qa/evidence/2026-08-26T083500000000Z-b7f3a1c9-header-top-fix/header-wide.png
-last_report: docs/qa/reports/2026-08-26T083500000000Z-b7f3a1c9-header-top-fix.md
+fix_commits: 1570ccd; b05f949; 79d9cf3
+evidence: tests/e2e/ui.mjs; tests/pwa-chrome.test.ts; docs/qa/evidence/2026-08-27-responsive-shell-final/mobile-portrait-375x812.png; docs/qa/evidence/2026-08-27-responsive-shell-final/mobile-landscape-812x375.png; docs/qa/evidence/2026-08-27-responsive-shell-final/tablet-768x1024.png; docs/qa/evidence/2026-08-27-responsive-shell-final/desktop-1280x900.png; docs/qa/evidence/2026-08-27-responsive-shell-final/widescreen-1920x1080.png
+last_report: docs/qa/reports/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh.md
 overlaps: PWA-direct-load-startup-singleton; NAV-first-party-navigation-contract
 ---
 
