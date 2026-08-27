@@ -25,6 +25,7 @@
 import {
   DEPLOYED_CSS_MARKERS as MARKERS,
   FORBIDDEN_DEPLOYED_CSS_MARKERS as FORBIDDEN_MARKERS,
+  inspectDeployedCss,
 } from "./deployed-css-markers.mjs";
 
 const BASE = (
@@ -67,12 +68,10 @@ try {
   process.exit(1);
 }
 
-const missing = MARKERS.filter((marker) => !css.includes(marker));
-const forbidden = FORBIDDEN_MARKERS.filter((marker) => css.includes(marker));
+const { missing, forbidden } = inspectDeployedCss(css);
 if (missing.length > 0 || forbidden.length > 0) {
-  console.error(
-    `check-deployed-css: CSS de produção é de outra geração. Faltando: ${missing.join(", ")}`,
-  );
+  console.error("check-deployed-css: CSS de produção é de outra geração.");
+  if (missing.length > 0) console.error(`Marcadores ausentes: ${missing.join(", ")}`);
   if (forbidden.length > 0) {
     console.error(`Marcadores obsoletos presentes: ${forbidden.join(", ")}`);
   }

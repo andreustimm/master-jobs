@@ -31,15 +31,17 @@ export async function Footer({
   locale,
   t,
   signedIn,
+  loadReleases = loadChangelog,
 }: {
   versao: string;
   locale: LocaleId;
   t: Translator["t"];
   signedIn: boolean;
+  loadReleases?: (locale: LocaleId) => Promise<UserRelease[]>;
 }) {
   // O changelog é conteúdo interno do produto. Além de não renderizar o
   // gatilho no login, evitamos até ler o arquivo quando não há sessão válida.
-  const releases = signedIn ? await loadChangelog(locale) : [];
+  const releases = signedIn ? await loadReleases(locale) : [];
 
   return (
     <footer className="mt-auto border-t border-[var(--hairline)]">

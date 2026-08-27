@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { readFileSync } from "node:fs";
+import { stripTypeScriptTypes } from "node:module";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -23,6 +24,7 @@ import { generatePwaArtifacts } from "../scripts/sw-version.mjs";
 import {
   DEPLOYED_CSS_MARKERS,
   FORBIDDEN_DEPLOYED_CSS_MARKERS,
+  inspectDeployedCss,
 } from "../scripts/deployed-css-markers.mjs";
 import { ptBR } from "../src/core/i18n/pt-BR.ts";
 
@@ -85,6 +87,16 @@ describe("modo instalado", () => {
     for (const marker of FORBIDDEN_DEPLOYED_CSS_MARKERS) {
       expect(GLOBAL_CSS, `marcador obsoleto ${marker} não pode voltar`).not.toContain(marker);
     }
+  });
+
+  it("rejeita uma folha completa que ainda contém o seletor obsoleto", () => {
+    const currentCss = DEPLOYED_CSS_MARKERS.join("\n");
+    const result = inspectDeployedCss(
+      `${currentCss}\n${FORBIDDEN_DEPLOYED_CSS_MARKERS[0]}`,
+    );
+
+    expect(result.missing).toEqual([]);
+    expect(result.forbidden).toEqual(FORBIDDEN_DEPLOYED_CSS_MARKERS);
   });
 
   it("reserva a área segura só no cabeçalho da aplicação", () => {
@@ -351,12 +363,17 @@ type BrowserFixture = {
   server: Server;
   origin: string;
   offlineCookies: string[];
+  setWorkerRevision(revision: string): void;
 };
 
 async function startBrowserFixture(): Promise<BrowserFixture> {
   generatePwaArtifacts({ revision: "browser-contract" });
-  const worker = readFileSync("public/sw.js");
+  let worker = readFileSync("public/sw.js");
   const offline = readFileSync("public/offline.html");
+  const lifecycleModule = stripTypeScriptTypes(
+    readFileSync("src/core/pwa/service-worker-update.ts", "utf8"),
+    { mode: "transform" },
+  );
   const offlineCookies: string[] = [];
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -371,6 +388,40 @@ async function startBrowserFixture(): Promise<BrowserFixture> {
         "service-worker-allowed": "/",
       });
       response.end(worker);
+      return;
+    }
+    if (url.pathname === "/service-worker-update.js") {
+      response.writeHead(200, {
+        "content-type": "application/javascript; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      response.end(lifecycleModule);
+      return;
+    }
+    if (url.pathname === "/lifecycle") {
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      response.end(`<!doctype html>
+        <title>service worker lifecycle</title>
+        <main>online</main>
+        <script>
+          sessionStorage.setItem(
+            "lifecycle-loads",
+            String(Number(sessionStorage.getItem("lifecycle-loads") ?? "0") + 1),
+          );
+        </script>
+        <script type="module">
+          import { startServiceWorkerUpdateLifecycle } from "/service-worker-update.js";
+          startServiceWorkerUpdateLifecycle({
+            container: navigator.serviceWorker,
+            visibility: document,
+            reload: () => location.reload(),
+            report: (error) => { window.__lifecycleError = String(error); },
+          });
+          window.__lifecycleReady = true;
+        </script>`);
       return;
     }
     if (url.pathname === "/offline.html") {
@@ -428,6 +479,10 @@ async function startBrowserFixture(): Promise<BrowserFixture> {
     server,
     origin: `http://127.0.0.1:${address.port}`,
     offlineCookies,
+    setWorkerRevision(revision: string) {
+      generatePwaArtifacts({ revision });
+      worker = readFileSync("public/sw.js");
+    },
   };
 }
 
@@ -627,4 +682,32 @@ describeBrowser("real browser service-worker privacy boundary", () => {
     expect(paths).not.toContain("/rsc-fail");
     await context.close();
   }, 20_000);
+
+  it("IT-010 activates a new worker revision and reloads the controlled page once", async () => {
+    fixture.setWorkerRevision("revision-a-browser");
+    const context = await fixture.browser.newContext();
+    const page = await context.newPage();
+
+    await page.goto(`${fixture.origin}/lifecycle`);
+    await page.waitForFunction(() => Boolean((window as typeof window & {
+      __lifecycleReady?: boolean;
+    }).__lifecycleReady));
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload();
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+    expect(await page.evaluate(() => sessionStorage.getItem("lifecycle-loads"))).toBe("2");
+
+    fixture.setWorkerRevision("revision-b-browser");
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await page.waitForFunction(() => sessionStorage.getItem("lifecycle-loads") === "3");
+
+    expect(await page.evaluate(() => sessionStorage.getItem("lifecycle-loads"))).toBe("3");
+    expect(await page.evaluate(() => (window as typeof window & {
+      __lifecycleError?: string;
+    }).__lifecycleError)).toBeUndefined();
+    expect(await page.evaluate(() => caches.keys())).toEqual(
+      expect.arrayContaining([expect.stringContaining("revisionbbro")]),
+    );
+    await context.close();
+  }, 30_000);
 });

@@ -629,10 +629,21 @@ describe("changelog modal state", () => {
 describe("localized footer boundary", () => {
   it("does not expose What's new without an authenticated session", async () => {
     const { t } = translator("en");
+    let changelogReads = 0;
     const html = renderToStaticMarkup(
-      await Footer({ versao: "1.3.8", locale: "en", t, signedIn: false }),
+      await Footer({
+        versao: "1.3.8",
+        locale: "en",
+        t,
+        signedIn: false,
+        loadReleases: async () => {
+          changelogReads += 1;
+          return [];
+        },
+      }),
     );
 
+    expect(changelogReads).toBe(0);
     expect(html).toContain("Master Jobs v1.3.8");
     expect(html).not.toContain("What's new");
     expect(html).not.toContain('data-testid="changelog-trigger"');

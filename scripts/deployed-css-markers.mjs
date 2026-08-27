@@ -40,3 +40,10 @@ export const DEPLOYED_CSS_MARKERS = [
  * 2026-08-27: ele aplica a área segura no wrapper externo e encolhe o topo.
  */
 export const FORBIDDEN_DEPLOYED_CSS_MARKERS = ["html.pwa-standalone body>div"];
+
+export function inspectDeployedCss(css) {
+  return {
+    missing: DEPLOYED_CSS_MARKERS.filter((marker) => !css.includes(marker)),
+    forbidden: FORBIDDEN_DEPLOYED_CSS_MARKERS.filter((marker) => css.includes(marker)),
+  };
+}
