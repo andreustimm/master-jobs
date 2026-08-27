@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.8] - 2026-08-27T14:52:18.260Z
+
 ### Correção
 
 - No aplicativo instalado no celular, o topo voltou a nascer abaixo da barra

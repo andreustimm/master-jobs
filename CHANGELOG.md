@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.3.8] - 2026-08-27
+
 ### Corrigido
 
 - Na PWA instalada, o cabeçalho respeita a área segura do sistema em retrato e

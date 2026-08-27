@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.8] - 2026-08-27T14:52:18.260Z
+
 ### Fixed
 
 - In the app installed on a phone, the header now starts below the system
