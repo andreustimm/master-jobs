@@ -2,7 +2,10 @@
 
 ```mermaid
 flowchart TD
-    A[Entrada: URL direta ou start_url da PWA] --> B[Splash de startup único]
+    A[Entrada: URL direta, retomada ou start_url da PWA] --> U[Checagem da geração do aplicativo]
+    U -->|geração atual| B[Splash de startup único]
+    U -->|nova geração assume| R[Uma recarga controlada]
+    R --> B
     B -->|sessão válida| C[Dashboard autorizado]
     B -->|sessão ausente| D[Login canônico]
     B -.->|usuário fecha a aba| X[Abandono sem estado persistente de transição]
@@ -28,15 +31,21 @@ journey:
     - step: 2
       verb: Usar o cabeçalho no modo instalado
       expected_observable: Marca, menu, idioma e aparência permanecem abaixo da barra do sistema em retrato e paisagem
+    - step: 3
+      verb: Retomar o aplicativo instalado depois de uma atualização
+      expected_observable: A versão atual assume o controle com uma única recarga e sem manter o visual anterior
   goal:
     observable: A tela autorizada aparece sem overlay de transição durante hidratação
     side_effects: []
-  true_end_state: A página permanece utilizável depois da hidratação e da recarga, sem a barra do sistema cobrir o cabeçalho instalado
+  true_end_state: A página permanece utilizável depois da hidratação e da atualização, usando a geração atual sem a barra do sistema cobrir o cabeçalho instalado
   exit:
     natural: Dashboard ou login autorizado
   abandonment:
     - at_step: 1
       how: Fechar a aba antes da hidratação
       resume: Uma nova carga começa somente o lifecycle de startup
-  crosses: [startup renderer, App Router hydration, auth policy, PWA display mode, CSS safe areas]
+    - at_step: 3
+      how: Colocar o aplicativo em segundo plano durante a atualização
+      resume: Ao voltar ao primeiro plano, uma nova checagem busca a geração atual
+  crosses: [startup renderer, App Router hydration, auth policy, PWA display mode, service worker lifecycle, CSS safe areas]
 ```

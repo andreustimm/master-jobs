@@ -188,6 +188,10 @@ try {
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
 
   await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+  check(
+    "modal de novidades não aparece sem sessão",
+    (await page.locator('[data-testid="changelog-open"]').count()) === 0,
+  );
   await page.fill('input[name="email"]', E2E_EMAIL);
   await page.fill('input[name="password"]', "senha-propositalmente-errada");
   await page.click('[data-testid="login-submit"]');
@@ -489,6 +493,10 @@ try {
         && sample.contentRight <= sample.headerRight
         && sample.contentPaddingLeft >= sample.safeLeft
         && sample.contentPaddingRight >= sample.safeRight
+        && (sample.label !== "tablet"
+          || (sample.contentPaddingLeft === 24 && sample.contentPaddingRight === 24))
+        && (sample.label !== "desktop"
+          || (sample.contentPaddingLeft === 32 && sample.contentPaddingRight === 32))
         && (sample.desktopNavDisplay !== "none") !== (sample.mobileTriggerDisplay !== "none")
         && (sample.desktopNavDisplay === "none" || sample.desktopNavDirection === "row")
         && sample.scrollWidth <= sample.viewportWidth;
@@ -500,11 +508,10 @@ try {
     headerSafeAreaSnapshots
       .filter((sample) => sample.width <= 639 || (sample.height <= 500 && sample.width < 900))
       .every((sample) => {
-        // Shell determinístico: 100% da largura, teto de 1760px, calha fixa
-        // de 16px no celular. No modo instalado a calha vira o inset físico
-        // quando ele é maior — substitui, nunca soma.
-        const expectedLeftPad = Math.max(16, sample.safeLeft);
-        const expectedRightPad = Math.max(16, sample.safeRight);
+        // A superfície do topo é full-bleed; o conteúdo usa 95% da viewport
+        // móvel. Um recorte físico maior substitui a calha percentual.
+        const expectedLeftPad = Math.max(sample.viewportWidth * 0.025, sample.safeLeft);
+        const expectedRightPad = Math.max(sample.viewportWidth * 0.025, sample.safeRight);
         const usefulWidth = sample.contentWidth - sample.contentPaddingLeft - sample.contentPaddingRight;
         const expectedUsefulWidth =
           sample.viewportWidth - expectedLeftPad - expectedRightPad;
@@ -820,8 +827,21 @@ try {
     const webkitContext = await webkitBrowser.newContext({ viewport: { width: 375, height: 812 } });
     const webkitPage = await webkitContext.newPage();
     trackConsole(webkitPage);
-    if (sessionCookie) await webkitContext.addCookies([sessionCookie]);
     await webkitContext.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+    // O servidor E2E é HTTP. O WebKit não reenvia nesse transporte o cookie
+    // `Secure` capturado no Chromium, embora produção seja HTTPS. Preserve o
+    // token real e ajuste somente o atributo de transporte da fixture local.
+    if (!sessionCookie) throw new Error("sessão E2E ausente para o cenário WebKit");
+    await webkitContext.addCookies([
+      {
+        name: "jho_session",
+        value: sessionCookie.value,
+        url: BASE,
+        httpOnly: true,
+        secure: false,
+        sameSite: "Lax",
+      },
+    ]);
     await webkitPage.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
     const { dialog: webkitDialog } = await openChangelog(webkitPage);
     const webkitVertical = await webkitDialog.evaluate((dialog) => {
@@ -2398,9 +2418,11 @@ try {
     });
     if (!group) continue;
 
-    const widths = new Set(group.map((g) => g.w));
-    if (widths.size !== 1) {
-      actionProblems.push(`${label}: larguras ${[...widths].join("/")}`);
+    const widths = group.map((g) => g.w);
+    // Um container que não é divisível por três entrega o pixel físico
+    // residual a um track. Diferença maior que isso é layout desigual de fato.
+    if (Math.max(...widths) - Math.min(...widths) > 1) {
+      actionProblems.push(`${label}: larguras ${[...new Set(widths)].join("/")}`);
     }
     for (const item of group) {
       if (item.clipped) actionProblems.push(`${label}: "${item.text}" cortado`);

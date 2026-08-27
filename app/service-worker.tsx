@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
+import { startServiceWorkerUpdateLifecycle } from "../src/core/pwa/service-worker-update.ts";
 
 /**
- * Registra o service worker, e nada mais.
- *
  * Client Component minúsculo porque `navigator.serviceWorker` não existe no
  * servidor. Não renderiza nada: a PWA não deve mudar a aparência de quem abre
  * pelo navegador comum.
@@ -20,17 +19,27 @@ export function ServiceWorkerRegister() {
 
     // Depois do `load`: registrar durante a hidratação disputa banda com o
     // conteúdo que a pessoa está esperando ver.
+    let stopUpdateLifecycle: () => void = () => undefined;
     const register = () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {
-        // Falhar em registrar não pode quebrar o app. Sem service worker ele
-        // continua sendo um site que funciona.
+      stopUpdateLifecycle = startServiceWorkerUpdateLifecycle({
+        container: navigator.serviceWorker,
+        visibility: document,
+        reload: () => window.location.reload(),
+        report: (error) => {
+          // A PWA é melhoria progressiva: a falha fica observável no console,
+          // enquanto o site continua funcionando pela rede.
+          console.warn("Service worker update failed.", error);
+        },
       });
     };
 
     if (document.readyState === "complete") register();
     else window.addEventListener("load", register, { once: true });
 
-    return () => window.removeEventListener("load", register);
+    return () => {
+      window.removeEventListener("load", register);
+      stopUpdateLifecycle();
+    };
   }, []);
 
   return null;

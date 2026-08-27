@@ -9,6 +9,20 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- A PWA verifica uma nova geração do service worker ao voltar do background,
+  ignora o cache HTTP nessa verificação e recarrega uma única vez quando o
+  worker atualizado assume o controle, evitando manter o CSS do documento
+  anterior depois de um deploy.
+- O cabeçalho volta a ocupar 100% da viewport em navegador, PWA, tablet e
+  desktop, enquanto somente o conteúdo móvel recebe calhas de 2,5%; a
+  navegação completa permanece visível sempre que a medição comprova espaço.
+- O changelog deixa de ser lido e renderizado na tela de login; o gatilho da
+  modal passa a existir somente com uma sessão válida.
+- O gate pós-deploy agora exige os marcadores da geometria atual e rejeita
+  explicitamente o seletor obsoleto que aplicava safe area ao wrapper externo.
+
 ## [1.3.8] - 2026-08-27
 
 ### Corrigido

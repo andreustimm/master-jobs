@@ -541,6 +541,25 @@ describe("retomada dos workflows de release", () => {
     expect(workflow).toContain("if: steps.versao.outputs.tagar == 'sim'");
   });
 
+  it("o gate de CSS reserva folga e não espera depois da última tentativa", () => {
+    const workflow = readFileSync(".github/workflows/sincronizar-apos-main.yml", "utf8");
+    const inicio = workflow.indexOf("  gate-css:");
+    const fim = workflow.indexOf("\n  marcar:", inicio);
+    const gate = workflow.slice(inicio, fim);
+
+    expect(inicio).toBeGreaterThan(-1);
+    expect(fim).toBeGreaterThan(inicio);
+    expect(gate).toContain("timeout-minutes: 20");
+    expect(gate).toContain("MAX_ATTEMPTS=18");
+    expect(gate).toContain('for tentativa in $(seq 1 "$MAX_ATTEMPTS"); do');
+    expect(gate).toContain('if [ "$tentativa" -lt "$MAX_ATTEMPTS" ]; then');
+    expect(gate.match(/sleep 30/g) ?? []).toHaveLength(1);
+    expect(gate).toMatch(
+      /if \[ "\$tentativa" -lt "\$MAX_ATTEMPTS" \]; then[\s\S]*?sleep 30\s*fi\s*done/,
+    );
+    expect(gate).toContain("após ${MAX_ATTEMPTS} tentativas");
+  });
+
   it("retorno main→dev não usa --json em gh pr create", () => {
     const workflow = readFileSync(".github/workflows/sincronizar-apos-main.yml", "utf8");
     const inicio = workflow.indexOf("gh pr create --base dev --head main");

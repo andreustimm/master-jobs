@@ -16,6 +16,16 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Correção
+
+- O aplicativo instalado passa a buscar atualizações quando volta ao primeiro
+  plano e troca automaticamente para a versão nova, sem continuar mostrando o
+  visual da versão anterior.
+- O topo volta a ocupar toda a largura da tela em celular, tablet e computador.
+  No celular, o conteúdo aproveita 95% da tela, e os links aparecem diretamente
+  no topo sempre que houver espaço para eles.
+- A janela de **Novidades** agora aparece somente depois de entrar no sistema.
+
 ## [1.3.8] - 2026-08-27T14:52:18.260Z
 
 ### Correção
