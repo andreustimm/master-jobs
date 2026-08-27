@@ -20,6 +20,7 @@ import {
 import { TRANSITION_MIN_MS, TRANSITION_PROLONGED_MS } from "../src/core/pwa/transition.ts";
 import { isStandalone, renderStandaloneScript, STANDALONE_CLASS } from "../src/core/pwa/standalone.ts";
 import { generatePwaArtifacts } from "../scripts/sw-version.mjs";
+import { DEPLOYED_CSS_MARKERS } from "../scripts/deployed-css-markers.mjs";
 import { ptBR } from "../src/core/i18n/pt-BR.ts";
 
 const GLOBAL_CSS = readFileSync("app/globals.css", "utf8");
@@ -47,11 +48,37 @@ const LAYOUT = readFileSync("app/layout.tsx", "utf8");
 
 describe("modo instalado", () => {
   it("deixa o conteúdo do cabeçalho crescer depois da área segura", () => {
-    // `h-14` inclui o padding de safe area no próprio box. Com um inset de
-    // 48px, sobravam só 8px para os controles e o texto flexível transbordava
-    // para cima, sobre o relógio. Altura mínima preserva os 56px de conteúdo.
-    expect(LAYOUT).toContain("flex min-h-14 w-full");
+    // `min-h-14` incluía o padding de safe area no próprio box. Com um inset
+    // de 48px, sobravam só 8px para os controles e o texto flexível
+    // transbordava para cima, sobre o relógio. Altura mínima de 64px mais o
+    // `py-3` preserva o respiro em qualquer inset. O regex trava a fileira
+    // inteira de uma vez — a mesma className não pode perder altura nem calha.
     expect(LAYOUT).not.toContain("flex h-14 w-full");
+    expect(LAYOUT).not.toContain("flex h-16 w-full");
+    expect(LAYOUT).toMatch(/min-h-16 w-full max-w-\[1760px\] items-center gap-2 px-4 py-3/);
+  });
+
+  it("nenhuma regra de área segura mira um cabeçalho fora do shell", () => {
+    // O CSS que a produção chegou a servir tinha `body > header` — seletor da
+    // era em que o `<header>` era filho direto do `<body>`. Ele parou de casar
+    // quando o header entrou no `#application-shell`, e a PWA ficou sem
+    // padding de topo sem nenhum teste reprovar, porque o seletor podre não
+    // conflitava com nada. O verso dessa regressão fica travado aqui.
+    expect(GLOBAL_CSS).not.toMatch(/html\.pwa-standalone\s+body\s*>\s*header/);
+    expect(GLOBAL_CSS).not.toMatch(/pwa-standalone\s+body\s+header/);
+  });
+
+  it("marcadores do gate de deploy existem nas fontes que os alimentam", () => {
+    // O gate pós-deploy (`scripts/check-deployed-css.mjs`) é a última linha de
+    // defesa do incidente do CSS velho — mas sem este contrato, um marcador
+    // digitado errado ou removido numa refatoração legítima só explode no job
+    // pós-deploy, dez minutos depois do merge. Aqui ele falha no `pnpm check`.
+    // O match é por fonte, não por build minificado: cobre typo e remoção, os
+    // riscos reais; o build em si é o que o gate confere em produção.
+    const sources = GLOBAL_CSS + DESIGN_TOKENS + LAYOUT;
+    for (const marker of DEPLOYED_CSS_MARKERS) {
+      expect(sources, `marcador ${marker} deveria existir nas fontes`).toContain(marker);
+    }
   });
 
   it("reserva a área segura só no cabeçalho da aplicação", () => {

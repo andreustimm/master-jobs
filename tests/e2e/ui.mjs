@@ -496,21 +496,22 @@ try {
     JSON.stringify(headerSafeAreaSnapshots),
   );
   check(
-    "container do telefone preserva 95% da largura útil em retrato e paisagem",
+    "container ocupa a largura integral com calha fixa em retrato e paisagem",
     headerSafeAreaSnapshots
       .filter((sample) => sample.width <= 639 || (sample.height <= 500 && sample.width < 900))
       .every((sample) => {
-        const shellWidth = Math.min(sample.viewportWidth * 0.95, 1760);
+        // Shell determinístico: 100% da largura, teto de 1760px, calha fixa
+        // de 16px no celular. No modo instalado a calha vira o inset físico
+        // quando ele é maior — substitui, nunca soma.
+        const expectedLeftPad = Math.max(16, sample.safeLeft);
+        const expectedRightPad = Math.max(16, sample.safeRight);
         const usefulWidth = sample.contentWidth - sample.contentPaddingLeft - sample.contentPaddingRight;
-        const expectedUsefulWidth = shellWidth - sample.safeLeft - sample.safeRight;
-        const expectedOuterMargin = (sample.viewportWidth - shellWidth) / 2;
-        const leftMargin = sample.contentLeft;
-        const rightMargin = sample.viewportWidth - sample.contentRight;
+        const expectedUsefulWidth =
+          sample.viewportWidth - expectedLeftPad - expectedRightPad;
         return (
-          Math.abs(sample.contentWidth - shellWidth) <= 1 &&
-          Math.abs(usefulWidth - expectedUsefulWidth) <= 1 &&
-          Math.abs(leftMargin - expectedOuterMargin) <= 1 &&
-          Math.abs(rightMargin - expectedOuterMargin) <= 1
+          Math.abs(sample.contentWidth - sample.viewportWidth) <= 1 &&
+          Math.abs(sample.contentLeft) <= 1 &&
+          Math.abs(usefulWidth - expectedUsefulWidth) <= 1
         );
       }),
     JSON.stringify(headerSafeAreaSnapshots),
@@ -520,6 +521,25 @@ try {
     mobileNavPopoverSnapshots.length > 0 &&
       mobileNavPopoverSnapshots.every(({ headerBottom, popoverTop, open }) => open && popoverTop >= headerBottom - 1),
     JSON.stringify(mobileNavPopoverSnapshots),
+  );
+
+  /* O teto do shell: nenhuma fixture acima chega a 1760px, e é a única parte
+     do container determinístico que só existe acima disso. Uma regressão no
+     teto (percentual de volta, cap perdido) passaria por todos os viewports
+     amostrados até aqui. */
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  const wideShell = await page
+    .locator("#application-shell > header > div")
+    .evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      return { width: rect.width, left: rect.left };
+    });
+  check(
+    "teto do shell: 1760px em viewport larga, centrado",
+    Math.abs(wideShell.width - 1760) <= 1 &&
+      Math.abs(wideShell.left - (1920 - 1760) / 2) <= 1,
+    JSON.stringify(wideShell),
   );
 
   await page.setViewportSize({ width: 1280, height: 900 });

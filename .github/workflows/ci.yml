@@ -43,6 +43,16 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Changelogs prontos para release
+        # O hook local bloqueia commits releaseáveis com changelogs incompletos;
+        # este gate cobre commits feitos sem hooks e integrações remotas. A
+        # validação usa a mesma função pura do versionamento e falha antes de a
+        # promoção tocar em `staging`.
+        run: |
+          git log -1 --format=%B > "$RUNNER_TEMP/release-commit-message"
+          pnpm check:release-ready \
+            --commit-message-file "$RUNNER_TEMP/release-commit-message"
+
       - name: Tipos
         run: pnpm typecheck
 
