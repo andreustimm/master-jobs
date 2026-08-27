@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ChangelogMarkdown, safeChangelogUrl } from "../app/changelog-markdown.tsx";
+import { Footer } from "../app/footer.tsx";
 import {
   initialExpanded,
   releaseIds,
@@ -21,7 +22,7 @@ import {
   type ChangelogParseResult,
 } from "../src/core/changelog.ts";
 import { en } from "../src/core/i18n/en.ts";
-import { DEFAULT_LOCALE, resolveLocale } from "../src/core/i18n/index.ts";
+import { DEFAULT_LOCALE, resolveLocale, translator } from "../src/core/i18n/index.ts";
 import { ptBR } from "../src/core/i18n/pt-BR.ts";
 
 function release(version: string, publication: string, body = "### New\n\n- Visible change."): string {
@@ -626,6 +627,17 @@ describe("changelog modal state", () => {
 });
 
 describe("localized footer boundary", () => {
+  it("does not expose What's new without an authenticated session", async () => {
+    const { t } = translator("en");
+    const html = renderToStaticMarkup(
+      await Footer({ versao: "1.3.8", locale: "en", t, signedIn: false }),
+    );
+
+    expect(html).toContain("Master Jobs v1.3.8");
+    expect(html).not.toContain("What's new");
+    expect(html).not.toContain('data-testid="changelog-trigger"');
+  });
+
   it("UT-050 selects only a supported locale file", () => {
     expect(changelogFile("pt-BR")).toBe("USER_CHANGELOG.pt-BR.md");
     expect(changelogFile("en")).toBe("USER_CHANGELOG.en.md");

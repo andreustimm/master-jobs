@@ -30,22 +30,26 @@ export async function Footer({
   versao,
   locale,
   t,
+  signedIn,
 }: {
   versao: string;
   locale: LocaleId;
   t: Translator["t"];
+  signedIn: boolean;
 }) {
-  const releases = await loadChangelog(locale);
+  // O changelog é conteúdo interno do produto. Além de não renderizar o
+  // gatilho no login, evitamos até ler o arquivo quando não há sessão válida.
+  const releases = signedIn ? await loadChangelog(locale) : [];
 
   return (
     <footer className="mt-auto border-t border-[var(--hairline)]">
-      {/* Mesmo shell do cabeçalho e do conteúdo: uma regra só, calha fixa. */}
-      <div className="mx-auto flex w-full max-w-[1760px] flex-wrap items-center gap-x-4 gap-y-1 px-4 py-4 sm:px-6 lg:px-8">
+      {/* Mesmo shell do conteúdo: 95% úteis no celular, calha fixa acima. */}
+      <div className="app-shell-content mx-auto flex w-full max-w-[1760px] flex-wrap items-center gap-x-4 gap-y-1 px-4 py-4 sm:px-6 lg:px-8">
         <span className="type-meta font-mono text-muted-foreground">
           Master Jobs v{versao}
         </span>
 
-        {releases.length > 0 ? (
+        {signedIn && releases.length > 0 ? (
           <ChangelogModal
             currentVersion={versao}
             locale={locale}

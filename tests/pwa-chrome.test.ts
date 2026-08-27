@@ -20,7 +20,10 @@ import {
 import { TRANSITION_MIN_MS, TRANSITION_PROLONGED_MS } from "../src/core/pwa/transition.ts";
 import { isStandalone, renderStandaloneScript, STANDALONE_CLASS } from "../src/core/pwa/standalone.ts";
 import { generatePwaArtifacts } from "../scripts/sw-version.mjs";
-import { DEPLOYED_CSS_MARKERS } from "../scripts/deployed-css-markers.mjs";
+import {
+  DEPLOYED_CSS_MARKERS,
+  FORBIDDEN_DEPLOYED_CSS_MARKERS,
+} from "../scripts/deployed-css-markers.mjs";
 import { ptBR } from "../src/core/i18n/pt-BR.ts";
 
 const GLOBAL_CSS = readFileSync("app/globals.css", "utf8");
@@ -79,13 +82,16 @@ describe("modo instalado", () => {
     for (const marker of DEPLOYED_CSS_MARKERS) {
       expect(sources, `marcador ${marker} deveria existir nas fontes`).toContain(marker);
     }
+    for (const marker of FORBIDDEN_DEPLOYED_CSS_MARKERS) {
+      expect(GLOBAL_CSS, `marcador obsoleto ${marker} não pode voltar`).not.toContain(marker);
+    }
   });
 
   it("reserva a área segura só no cabeçalho da aplicação", () => {
     // Um seletor global de `header` também zera o padding-top dos cabeçalhos
     // de página e das modais quando o Android abre em `minimal-ui`.
     expect(GLOBAL_CSS).toContain("html.pwa-standalone #application-shell > header {");
-    expect(GLOBAL_CSS).toContain("html.pwa-standalone #application-shell > header > div,");
+    expect(GLOBAL_CSS).toContain("html.pwa-standalone .app-shell-content {");
     expect(GLOBAL_CSS).toContain(
       "padding-left: max(var(--spacing-md), var(--safe-area-left));",
     );
@@ -94,6 +100,20 @@ describe("modo instalado", () => {
     );
     expect(GLOBAL_CSS).not.toMatch(/html\.pwa-standalone header\s*\{/);
     expect(GLOBAL_CSS).not.toMatch(/html\.pwa-standalone header\s*>\s*div/);
+  });
+
+  it("mantém a faixa do topo full bleed e só recua o conteúdo móvel", () => {
+    expect(GLOBAL_CSS).toMatch(
+      /#application-shell\s*>\s*header\s*\{[\s\S]*?inline-size:\s*100%/,
+    );
+    expect(GLOBAL_CSS).toContain(".app-shell-content {");
+    expect(GLOBAL_CSS).toContain("padding-inline: 2.5vw;");
+    expect(GLOBAL_CSS).toContain(
+      "padding-left: max(2.5vw, var(--safe-area-left));",
+    );
+    expect(GLOBAL_CSS).toContain(
+      "padding-right: max(2.5vw, var(--safe-area-right));",
+    );
   });
 
   it("liga os tokens de área segura aos insets informados pelo aparelho", () => {

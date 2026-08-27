@@ -21,6 +21,10 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 - The installed app now checks for updates when it returns to the foreground
   and automatically switches to the new version instead of continuing to show
   the previous release's styling.
+- The header once again spans the full screen on phones, tablets, and desktops.
+  Mobile content uses 95% of the screen, and navigation links stay visible in
+  the header whenever they fit.
+- The **What's New** window now appears only after signing in.
 
 ## [1.3.8] - 2026-08-27T14:52:18.260Z
 

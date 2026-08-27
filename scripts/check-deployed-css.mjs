@@ -22,7 +22,10 @@
  *      (padrão: produção; DEPLOY_URL para staging/dev)
  */
 
-import { DEPLOYED_CSS_MARKERS as MARKERS } from "./deployed-css-markers.mjs";
+import {
+  DEPLOYED_CSS_MARKERS as MARKERS,
+  FORBIDDEN_DEPLOYED_CSS_MARKERS as FORBIDDEN_MARKERS,
+} from "./deployed-css-markers.mjs";
 
 const BASE = (
   process.argv[2] ??
@@ -65,10 +68,14 @@ try {
 }
 
 const missing = MARKERS.filter((marker) => !css.includes(marker));
-if (missing.length > 0) {
+const forbidden = FORBIDDEN_MARKERS.filter((marker) => css.includes(marker));
+if (missing.length > 0 || forbidden.length > 0) {
   console.error(
     `check-deployed-css: CSS de produção é de outra geração. Faltando: ${missing.join(", ")}`,
   );
+  if (forbidden.length > 0) {
+    console.error(`Marcadores obsoletos presentes: ${forbidden.join(", ")}`);
+  }
   console.error(`Folhas verificadas: ${hrefs.join(", ")}`);
   console.error(
     "Confira primeiro se o deploy da Vercel completou; se completou, o build serviu CSS de cache velho — reimplante com cache de build limpo.",
@@ -76,5 +83,5 @@ if (missing.length > 0) {
   process.exit(1);
 }
 console.log(
-  `check-deployed-css: ok — ${hrefs.length} folha(s) em ${BASE}, todos os ${MARKERS.length} marcadores presentes.`,
+  `check-deployed-css: ok — ${hrefs.length} folha(s) em ${BASE}, ${MARKERS.length} marcadores presentes e nenhum marcador obsoleto.`,
 );
