@@ -31,6 +31,11 @@ The product is a responsive web application and installable PWA used on desktop 
 - The service worker may cache public static resources and the credentialless
   `/offline.html` shell only. It must not cache `/login`, authenticated pages,
   APIs, public profiles, RSC responses, or private user data.
+- An installed client checks for a new service-worker generation when returning
+  to the foreground and reloads exactly once after controller replacement; the
+  first installation does not trigger that reload.
+- What's New is an authenticated surface: anonymous layouts neither render its
+  trigger nor load release content.
 - Ingestion never mutates application decisions, jobs that disappear are closed rather than deleted, and no capability submits an application for the user.
 - Interface copy comes from the typed `pt-BR` and `en` dictionaries.
 
@@ -45,6 +50,7 @@ The product name is **Master Jobs**. Its interface voice is direct, precise, and
 - Canonical product stories: `docs/product/user-stories.md`
 - Visual system: `DESIGN.md` and `app/design-tokens.css`
 - Existing startup splash behavior: `src/core/pwa/splash.ts`
+- Installed-app update lifecycle: `src/core/pwa/service-worker-update.ts`
 - Existing security and offline policy: `AGENTS.md`, `docs/security.md`, and `scripts/sw-template.js`
 
 No testimonials, external customer claims, or usage benchmarks beyond repository-owned product data should be fabricated.

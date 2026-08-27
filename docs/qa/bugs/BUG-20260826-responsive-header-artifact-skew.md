@@ -44,7 +44,7 @@ larga mostra o hambúrguer apesar de haver espaço para a navegação completa.
   disso, o gate aceitava apenas marcadores positivos genéricos que também
   existiam na folha antiga; por isso o seletor comprovadamente quebrado não
   tornava o deploy vermelho.
-- **Fix commits:** `1570ccd`
+- **Fix commits:** `1570ccd`, `b05f949`, `79d9cf3`
 - **Regression tests:** `tests/mobile.test.ts` e `tests/pwa-chrome.test.ts`
   travam a superfície full-bleed e as calhas móveis; `tests/e2e/ui.mjs` mede a
   largura real e exige a navegação completa em desktop; o gate pós-deploy

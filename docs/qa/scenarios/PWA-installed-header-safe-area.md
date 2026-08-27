@@ -22,4 +22,8 @@ Chromium emulado passou nos quatro viewports, mas a confirmação do Safari/PWA 
 
 Esta rodada também cobriu o caso horizontal e WebViews que expõem o inset sem a classe de modo instalado; o piso tokenizado agora vale para qualquer orientação de toque. O resultado automatizado passou, mas a captura física ainda é necessária para fechar o reteste.
 
-**Reset 2026-08-27:** a fileira do cabeçalho mudou de `min-h-14` para `min-h-16 py-3` e o shell trocou de percentual por calha fixa (`codex/header-safe-area-web`). A geometria que os retestes anteriores mediram não é mais a que está no ar — os cenários voltam para `untested` até nova rodada automatizada + confirmação física, desta vez contra produção com o gate de CSS verificando que o build servido é o novo.
+**Reset 2026-08-27:** a fileira do cabeçalho usa `min-h-16 py-3`. A superfície
+do topo continua full-bleed; no celular, o conteúdo usa 95% da viewport
+(2,5% por lado), enquanto tablet e desktop mantêm as calhas de 24px/32px do
+DESIGN.md. Os cenários voltam para `untested` até a confirmação física contra
+produção, com o gate de CSS provando que o build servido é o novo.

@@ -214,3 +214,8 @@ ser digitada.
 4. `/manifest.json`, `/sw.js`, `/icons/icon-192.png`,
    `/icons/icon-512.png` e `/icons/icon-maskable-512.png` respondem; os três PNGs
    decodificam nas dimensões declaradas no manifest — sem isso a PWA não instala.
+5. `rtk pnpm check:deployed-css` passa contra produção: todos os marcadores da
+   geração atual estão presentes e nenhuma assinatura obsoleta permanece.
+6. Com uma PWA que já estava aberta antes do deploy, voltar do segundo plano
+   com rede disponível provoca no máximo uma recarga e adota o visual novo sem
+   limpar cache nem reinstalar. Conferir retrato e paisagem no aparelho físico.

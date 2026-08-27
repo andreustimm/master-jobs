@@ -24,7 +24,6 @@
 
 import {
   DEPLOYED_CSS_MARKERS as MARKERS,
-  FORBIDDEN_DEPLOYED_CSS_MARKERS as FORBIDDEN_MARKERS,
   inspectDeployedCss,
 } from "./deployed-css-markers.mjs";
 
