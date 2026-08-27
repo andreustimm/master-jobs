@@ -523,6 +523,25 @@ try {
     JSON.stringify(mobileNavPopoverSnapshots),
   );
 
+  /* O teto do shell: nenhuma fixture acima chega a 1760px, e é a única parte
+     do container determinístico que só existe acima disso. Uma regressão no
+     teto (percentual de volta, cap perdido) passaria por todos os viewports
+     amostrados até aqui. */
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  const wideShell = await page
+    .locator("#application-shell > header > div")
+    .evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      return { width: rect.width, left: rect.left };
+    });
+  check(
+    "teto do shell: 1760px em viewport larga, centrado",
+    Math.abs(wideShell.width - 1760) <= 1 &&
+      Math.abs(wideShell.left - (1920 - 1760) / 2) <= 1,
+    JSON.stringify(wideShell),
+  );
+
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
 

@@ -78,10 +78,11 @@ describe("layout", () => {
     const layout = read("app/layout.tsx");
     const footer = read("app/footer.tsx");
     for (const source of [layout, footer]) {
-      expect(source).toContain("max-w-[1760px]");
-      expect(source).toContain("px-4");
-      expect(source).toContain("sm:px-6");
-      expect(source).toContain("lg:px-8");
+      // Anchored to the shell className, not bare substrings: a stray px-4 on
+      // an unrelated element must not satisfy the gutter contract.
+      expect(source).toMatch(/max-w-\[1760px\][^"]*?\bpx-4\b/);
+      expect(source).toMatch(/max-w-\[1760px\][^"]*?\bsm:px-6\b/);
+      expect(source).toMatch(/max-w-\[1760px\][^"]*?\blg:px-8\b/);
       expect(source).not.toMatch(/\d+vw/);
     }
   });

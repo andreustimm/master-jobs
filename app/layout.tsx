@@ -340,7 +340,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <div className="mx-auto w-full max-w-[1760px] px-4 pb-20 sm:px-6 lg:px-8">
             {children}
           </div>
-          {/* `pb-16` acima em vez de `pb-24`: o rodapé passou a fechar a página,
+          {/* `pb-20` acima em vez de `pb-24`: o rodapé passou a fechar a página,
               e o respiro que aquele espaço dava agora vem dele. */}
             <Footer versao={versaoAtual(pkg)} locale={locale} t={t} />
           </TooltipProvider>

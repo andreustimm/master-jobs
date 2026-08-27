@@ -39,7 +39,13 @@ const MARKERS = [
   "1760px",
 ];
 
-const page = await fetch(`${BASE}/login`, { redirect: "follow" });
+const page = await fetch(`${BASE}/login`, {
+  redirect: "follow",
+  // Timeout explícito: sem ele, o undici só aborta após 300s e o loop de
+  // polling do workflow morre no timeout genérico do runner antes de imprimir
+  // a mensagem de erro que existe para instruir.
+  signal: AbortSignal.timeout(15_000),
+});
 if (!page.ok) {
   console.error(`check-deployed-css: ${BASE}/login respondeu ${page.status}`);
   process.exit(1);
@@ -56,7 +62,7 @@ try {
   css = (
     await Promise.all(
       hrefs.map(async (href) => {
-        const res = await fetch(`${BASE}${href}`);
+        const res = await fetch(`${BASE}${href}`, { signal: AbortSignal.timeout(15_000) });
         if (!res.ok) throw new Error(`CSS ${href} respondeu ${res.status}`);
         return res.text();
       }),

@@ -68,7 +68,7 @@ O código vinha sendo corrigido corretamente (PRs #50, #54, #58, #61 — todos c
 1. **Redeploy de produção com cache de build limpo.** Vercel → Deployments → último deploy de `main` → "Redeploy" com **"Use existing build cache" DESMARCADO**. (Se a infra permitir, invalidar o cache do projeto inteiro.)
 2. **Gate de verificação pós-deploy** (novo, permanente). Script (ex.: `scripts/check-deployed-css.mjs`, chamado pelo CI após promoção ou manualmente no runbook de release):
    - `fetch` do HTML de `/login` → extrair a URL do CSS;
-   - `fetch` do CSS → **asser que o conteúdo contém os marcadores**: `--safe-area-top-floor`, `.mobile-content-shell`, `#application-shell>header` (ou a forma minificada equivalente), `[data-responsive-nav]`;
+   - `fetch` do CSS → **asser que o conteúdo contém os marcadores** — os mesmos que `scripts/check-deployed-css.mjs` implementa: `--safe-area-top-floor`, `safe-area-inset-top`, `data-responsive-nav`, `1760px` (a `.mobile-content-shell` citada no rascunho original saiu junto com o tripé na Fase 1);
    - falhar o job se qualquer marcador faltar. Isso torna impossível um deploy "verde" com CSS velho passar batido de novo.
 3. **Descarte de cache no aparelho** (checklist humano, uma vez): fechar e remover a PWA instalada, limpar dados do Safari para o domínio, reinstalar por "Adicionar à Tela de Início". O service worker atual não guarda páginas (`shell-` só tem `/offline.html`), mas um aparelho que passou por 4 versões em 2 dias é o ambiente mais sujo possível — isole a variável antes de re-testar.
 

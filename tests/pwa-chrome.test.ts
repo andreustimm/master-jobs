@@ -50,11 +50,10 @@ describe("modo instalado", () => {
     // `min-h-14` incluía o padding de safe area no próprio box. Com um inset
     // de 48px, sobravam só 8px para os controles e o texto flexível
     // transbordava para cima, sobre o relógio. Altura mínima de 64px mais o
-    // `py-3` preserva o respiro em qualquer inset.
-    expect(LAYOUT).toContain("flex min-h-16 w-full");
+    // `py-3` preserva o respiro em qualquer inset. O regex trava a fileira
+    // inteira de uma vez — a mesma className não pode perder altura nem calha.
     expect(LAYOUT).not.toContain("flex h-14 w-full");
     expect(LAYOUT).not.toContain("flex h-16 w-full");
-    // Respiro vertical da fileira: o "grudado" reportado no topo e na base.
     expect(LAYOUT).toMatch(/min-h-16 w-full max-w-\[1760px\] items-center gap-2 px-4 py-3/);
   });
 
