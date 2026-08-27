@@ -47,11 +47,25 @@ const LAYOUT = readFileSync("app/layout.tsx", "utf8");
 
 describe("modo instalado", () => {
   it("deixa o conteúdo do cabeçalho crescer depois da área segura", () => {
-    // `h-14` inclui o padding de safe area no próprio box. Com um inset de
-    // 48px, sobravam só 8px para os controles e o texto flexível transbordava
-    // para cima, sobre o relógio. Altura mínima preserva os 56px de conteúdo.
-    expect(LAYOUT).toContain("flex min-h-14 w-full");
+    // `min-h-14` incluía o padding de safe area no próprio box. Com um inset
+    // de 48px, sobravam só 8px para os controles e o texto flexível
+    // transbordava para cima, sobre o relógio. Altura mínima de 64px mais o
+    // `py-3` preserva o respiro em qualquer inset.
+    expect(LAYOUT).toContain("flex min-h-16 w-full");
     expect(LAYOUT).not.toContain("flex h-14 w-full");
+    expect(LAYOUT).not.toContain("flex h-16 w-full");
+    // Respiro vertical da fileira: o "grudado" reportado no topo e na base.
+    expect(LAYOUT).toMatch(/min-h-16 w-full max-w-\[1760px\] items-center gap-2 px-4 py-3/);
+  });
+
+  it("nenhuma regra de área segura mira um cabeçalho fora do shell", () => {
+    // O CSS que a produção chegou a servir tinha `body > header` — seletor da
+    // era em que o `<header>` era filho direto do `<body>`. Ele parou de casar
+    // quando o header entrou no `#application-shell`, e a PWA ficou sem
+    // padding de topo sem nenhum teste reprovar, porque o seletor podre não
+    // conflitava com nada. O verso dessa regressão fica travado aqui.
+    expect(GLOBAL_CSS).not.toMatch(/html\.pwa-standalone\s+body\s*>\s*header/);
+    expect(GLOBAL_CSS).not.toMatch(/pwa-standalone\s+body\s+header/);
   });
 
   it("reserva a área segura só no cabeçalho da aplicação", () => {

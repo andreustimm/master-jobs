@@ -16,6 +16,19 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Correção
+
+- No aplicativo instalado no celular, o topo voltou a nascer abaixo da barra
+  do sistema: relógio, sinal e bateria não ficam mais por cima do nome
+  **Master Jobs** nem dos botões, em retrato ou paisagem.
+
+### Melhorado
+
+- O topo ganhou respiro: ficou mais alto e com margem interna em cima e em
+  baixo, em qualquer tamanho de tela.
+- O conteúdo usa agora a largura inteira da tela com margens iguais dos dois
+  lados, do celular ao monitor.
+
 ## [1.3.7] - 2026-08-26T20:06:11.585Z
 
 ### Correção

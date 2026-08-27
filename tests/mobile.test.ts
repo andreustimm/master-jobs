@@ -69,23 +69,33 @@ describe("layout", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("uses the wide shell only after the mobile-safe breakpoint", () => {
+  it("uses one deterministic shell: full width, capped, fixed gutters", () => {
+    // The old shell was a tripod — 95vw on phone, 90vw after `sm`, and a CSS
+    // class that zeroed padding on top. Three synchronized rules meant one
+    // stale stylesheet in a build left the header with no gutter and no
+    // height, which is exactly what production served. One rule now: 100%
+    // width capped at 1760px, gutters from the DESIGN.md spacing scale.
     const layout = read("app/layout.tsx");
     const footer = read("app/footer.tsx");
     for (const source of [layout, footer]) {
-      expect(source).toContain("max-w-[min(95vw,1760px)] sm:max-w-[min(90vw,1760px)]");
+      expect(source).toContain("max-w-[1760px]");
+      expect(source).toContain("px-4");
+      expect(source).toContain("sm:px-6");
+      expect(source).toContain("lg:px-8");
+      expect(source).not.toMatch(/\d+vw/);
     }
   });
 
-  it("keeps 95% of the viewport available on phone portrait and landscape", () => {
-    const layout = read("app/layout.tsx");
-    const footer = read("app/footer.tsx");
+  it("does not depend on a mobile-only shell class for its gutters", () => {
     const globals = read("app/globals.css");
-    for (const source of [layout, footer]) {
-      expect(source).toContain("mobile-content-shell");
-    }
-    expect(globals).toMatch(
-      /@media \(max-width: 639px\), \(orientation: landscape\) and \(max-height: 500px\)[\s\S]*?\.mobile-content-shell\s*\{[\s\S]*?padding-left: 0;[\s\S]*?padding-right: 0;/,
+    expect(globals).not.toContain("mobile-content-shell");
+    // The installed shell keeps the physical notch reserved — replacing the
+    // fixed gutter, never stacking on top of it.
+    expect(globals).toContain(
+      "padding-left: max(var(--spacing-md), var(--safe-area-left));",
+    );
+    expect(globals).toContain(
+      "padding-right: max(var(--spacing-md), var(--safe-area-right));",
     );
   });
 

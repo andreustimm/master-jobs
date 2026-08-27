@@ -51,6 +51,41 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gate pós-deploy: prova que o CSS servido em produção é da mesma geração
+  # do HTML. Em 2026-08-26 a produção ficou dias com HTML novo e CSS velho —
+  # o deploy completava verde, mas o cache de build devolvia a folha de estilo
+  # de uma geração passada, e a PWA no celular nascia com o conteúdo sob a
+  # barra de status. O CI roda contra o build local, onde o defeito é
+  # invisível; só olhar o que está no ar vê. Falhar aqui não trava o sync —
+  # deixa o X vermelho que ninguém pode ignorar antes de avisar "em produção".
+  gate-css:
+    name: CSS de produção é do build novo
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+
+      - name: Conferir marcadores no CSS servido
+        run: |
+          # O deploy da Vercel dispara do mesmo push e não conhece este
+          # workflow: enquanto o build não termina, o CSS no ar é o anterior —
+          # que pode ser legítimo. O polling espera a troca; se depois do teto
+          # os marcadores ainda faltam, o deploy serviu CSS velho de novo.
+          for tentativa in $(seq 1 20); do
+            if node scripts/check-deployed-css.mjs "https://jobs.mastertimm.com.br"; then
+              exit 0
+            fi
+            echo "tentativa ${tentativa}/20 — CSS novo ainda não no ar; aguardando 30s."
+            sleep 30
+          done
+          echo "::error::Produção segue servindo CSS de outra geração após 10 minutos. Reimplemente com cache de build limpo antes de avisar usuários."
+          exit 1
+
   marcar:
     name: Versionar e criar a tag
     runs-on: ubuntu-latest
