@@ -21,10 +21,29 @@
  * (app/design-tokens.css, BUG-20260825).
  * "data-responsive-nav" — a navegação responsiva medida (app/layout.tsx).
  * "1760px" — o teto do shell determinístico (app/layout.tsx, app/footer.tsx).
+ * "app-shell-content" + "2.5vw" — a geração que mantém a superfície do
+ * cabeçalho full-bleed e limita somente o conteúdo móvel a 95%.
  */
 export const DEPLOYED_CSS_MARKERS = [
   "--safe-area-top-floor",
   "safe-area-inset-top",
   "data-responsive-nav",
   "1760px",
+  "app-shell-content",
+  "2.5vw",
 ];
+
+/**
+ * Marcadores que identificam gerações sabidamente quebradas. Um gate apenas
+ * positivo aceitava a folha antiga porque ela também continha os tokens novos
+ * genéricos. Este seletor é exatamente o observado no CSS publicado em
+ * 2026-08-27: ele aplica a área segura no wrapper externo e encolhe o topo.
+ */
+export const FORBIDDEN_DEPLOYED_CSS_MARKERS = ["html.pwa-standalone body>div"];
+
+export function inspectDeployedCss(css) {
+  return {
+    missing: DEPLOYED_CSS_MARKERS.filter((marker) => !css.includes(marker)),
+    forbidden: FORBIDDEN_DEPLOYED_CSS_MARKERS.filter((marker) => css.includes(marker)),
+  };
+}

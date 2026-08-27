@@ -69,22 +69,18 @@ describe("layout", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("uses one deterministic shell: full width, capped, fixed gutters", () => {
-    // The old shell was a tripod — 95vw on phone, 90vw after `sm`, and a CSS
-    // class that zeroed padding on top. Three synchronized rules meant one
-    // stale stylesheet in a build left the header with no gutter and no
-    // height, which is exactly what production served. One rule now: 100%
-    // width capped at 1760px, gutters from the DESIGN.md spacing scale.
+  it("keeps the header surface full bleed and mobile content at 95%", () => {
     const layout = read("app/layout.tsx");
     const footer = read("app/footer.tsx");
     for (const source of [layout, footer]) {
-      // Anchored to the shell className, not bare substrings: a stray px-4 on
-      // an unrelated element must not satisfy the gutter contract.
-      expect(source).toMatch(/max-w-\[1760px\][^"]*?\bpx-4\b/);
+      expect(source).toMatch(/app-shell-content[^"]*?max-w-\[1760px\]/);
       expect(source).toMatch(/max-w-\[1760px\][^"]*?\bsm:px-6\b/);
       expect(source).toMatch(/max-w-\[1760px\][^"]*?\blg:px-8\b/);
-      expect(source).not.toMatch(/\d+vw/);
     }
+
+    const globals = read("app/globals.css");
+    expect(globals).toMatch(/#application-shell\s*>\s*header\s*\{[\s\S]*?inline-size:\s*100%/);
+    expect(globals).toMatch(/\.app-shell-content\s*\{[\s\S]*?padding-inline:\s*2\.5vw/);
   });
 
   it("does not depend on a mobile-only shell class for its gutters", () => {

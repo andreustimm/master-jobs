@@ -35,16 +35,16 @@ import { applicationStatusLabel } from "./status.ts";
  * `sm:flex-col` já estica todos para a mesma largura — a inconsistência era
  * entre as duas telas, não dentro de uma.
  *
- * `auto-fit` com mínimo em vez de três colunas fixas: em 320px três colunas
- * espremeriam "aplicar →" para fora da caixa, e aqui a terceira desce para a
- * linha seguinte em vez de estourar.
+ * Três tracks explícitos mantêm as ações na mesma linha a partir de 320px. O
+ * navegador pode entregar um pixel físico residual a um dos tracks quando a
+ * largura não é divisível por três; isso é rasterização, não uma ação menor.
  *
  * **Altura.** 28px é alvo de toque apertado para um dedo. Sobe para 40px no
  * celular e volta a 28px de `sm` para cima, onde o ponteiro é preciso e a
  * lista tem 50 linhas para caber.
  */
 export const ACTION_GROUP =
-  "grid grid-cols-[repeat(auto-fit,minmax(5.5rem,1fr))] gap-1.5 sm:flex sm:flex-col";
+  "grid grid-cols-3 gap-xxs sm:flex sm:flex-col";
 
 export const ACTION_BUTTON = "h-10 font-mono text-xs sm:h-7";
 

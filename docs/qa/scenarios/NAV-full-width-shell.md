@@ -1,27 +1,28 @@
 ---
 id: NAV-full-width-shell
 area: NAV
-title: Conteúdo ocupa a largura integral com calha fixa do celular ao monitor
+title: Visualizar topo full-bleed e conteúdo móvel com 95% da viewport
 persona: Candidato em trânsito
 journey: J-open-dashboard-direct
-expected: Em 375px o conteúdo usa 100% da largura menos calhas de 16px; no tablet 24px; acima de lg, 32px; acima de 1760px o shell para de crescer e centra. Nenhuma margem percentual, nenhum overflow horizontal.
+expected: O topo ocupa 100% da viewport; no celular somente o conteúdo usa 95% com 2,5% por lado; tablet e desktop preservam as calhas do design; os links do menu aparecem sempre que couberem.
 entry_points: /
 qa_status: untested
-fix_commits: codex/header-safe-area-web
-evidence: tests/e2e/ui.mjs; tests/mobile.test.ts
+bug_ids: BUG-20260826-responsive-header-artifact-skew
+fix_status: fixed
+retest_status: pending
+fix_commits: 1570ccd; b05f949; 79d9cf3
+evidence: tests/e2e/ui.mjs; tests/mobile.test.ts; tests/pwa-chrome.test.ts; docs/qa/evidence/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh/production-obsolete-safe-area-selector.png; docs/qa/evidence/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh/production-wide-compact-menu.png
+last_report: docs/qa/reports/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh.md
 overlaps: PWA-installed-header-safe-area; SKIL-mobile-layout
 ---
 
-O container da página era um tripé: 95vw no celular, 90% depois de `sm`, e uma
-classe CSS que zerava o padding para o percentual dominar. Três regras
-sincronizadas eram três chances de um CSS de geração errada no build deixar a
-página sem margem — foi o que a produção serviu em 2026-08-26, com o HTML novo
-e o CSS da geração anterior.
+A superfície do cabeçalho pertence à viewport e não recebe margem lateral.
+Somente sua linha interna, o conteúdo, o banner e o rodapé recebem calhas. No
+celular a regra de produto é literal: 2,5% de cada lado; acima dele, as calhas
+continuam na escala do DESIGN.md. A navegação escolhe fileira ou hambúrguer pela
+largura medida, não pelo nome do dispositivo.
 
-O shell agora é uma regra só: `max-w-[1760px]` com calha fixa da escala do
-DESIGN.md (`px-4` / `sm:px-6` / `lg:px-8`) nas quatro superfícies — cabeçalho,
-banner de sessão emprestada, conteúdo e rodapé. No modo instalado, o recorte
-físico substitui a calha quando é maior, nunca soma a ela.
-
-Cenário novo; aguarda rodada targeted de QA (celular, tablet, desktop e uma
-janela acima de 1760px conferindo o teto e o centramento).
+Produção falhou novamente em 2026-08-27 porque serviu a folha antiga com
+`html.pwa-standalone body>div`. A correção só poderá ser marcada como verificada
+quando o gate pós-deploy rejeitar essa folha e uma sessão publicada confirmar
+topo, conteúdo e menu nas quatro classes de viewport.
