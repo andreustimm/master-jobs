@@ -80,16 +80,17 @@ jobs:
           # 18 tentativas × até 20s de fetch + 17 esperas de 30s < 15 min no
           # pior caso patológico — com folga no orçamento do job, para o erro
           # designado ser o que aparece em vez do timeout genérico do runner.
-          for tentativa in $(seq 1 18); do
+          MAX_ATTEMPTS=18
+          for tentativa in $(seq 1 "$MAX_ATTEMPTS"); do
             if node scripts/check-deployed-css.mjs "https://jobs.mastertimm.com.br"; then
               exit 0
             fi
-            if [ "$tentativa" -lt 18 ]; then
-              echo "tentativa ${tentativa}/18 — CSS novo ainda não no ar; aguardando 30s."
+            if [ "$tentativa" -lt "$MAX_ATTEMPTS" ]; then
+              echo "tentativa ${tentativa}/${MAX_ATTEMPTS} — CSS novo ainda não no ar; aguardando 30s."
               sleep 30
             fi
           done
-          echo "::error::Produção segue servindo CSS de outra geração após cerca de 15 minutos. Reimplemente com cache de build limpo antes de avisar usuários."
+          echo "::error::Produção segue servindo CSS de outra geração após ${MAX_ATTEMPTS} tentativas. Reimplemente com cache de build limpo antes de avisar usuários."
           exit 1
 
   marcar:
