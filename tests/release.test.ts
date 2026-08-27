@@ -553,8 +553,9 @@ describe("retomada dos workflows de release", () => {
     expect(gate).toContain("MAX_ATTEMPTS=18");
     expect(gate).toContain('for tentativa in $(seq 1 "$MAX_ATTEMPTS"); do');
     expect(gate).toContain('if [ "$tentativa" -lt "$MAX_ATTEMPTS" ]; then');
+    expect(gate.match(/sleep 30/g) ?? []).toHaveLength(1);
     expect(gate).toMatch(
-      /if \[ "\$tentativa" -lt "\$MAX_ATTEMPTS" \]; then[\s\S]*?sleep 30[\s\S]*?fi[\s\S]*?done/,
+      /if \[ "\$tentativa" -lt "\$MAX_ATTEMPTS" \]; then[\s\S]*?sleep 30\s*fi\s*done/,
     );
     expect(gate).toContain("após ${MAX_ATTEMPTS} tentativas");
   });
