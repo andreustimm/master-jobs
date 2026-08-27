@@ -39,7 +39,8 @@ export async function Footer({
 
   return (
     <footer className="mt-auto border-t border-[var(--hairline)]">
-      <div className="mobile-content-shell mx-auto flex w-full max-w-[min(95vw,1760px)] sm:max-w-[min(90vw,1760px)] flex-wrap items-center gap-x-4 gap-y-1 px-4 py-4 sm:px-6">
+      {/* Mesmo shell do cabeçalho e do conteúdo: uma regra só, calha fixa. */}
+      <div className="mx-auto flex w-full max-w-[1760px] flex-wrap items-center gap-x-4 gap-y-1 px-4 py-4 sm:px-6 lg:px-8">
         <span className="type-meta font-mono text-muted-foreground">
           Master Jobs v{versao}
         </span>

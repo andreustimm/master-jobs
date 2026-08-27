@@ -230,7 +230,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               inteira. Era 100px de rolagem horizontal em 375px, invisível no
               desktop e só detectável medindo `scrollWidth` num browser real.
             */}
-            <div className="mobile-content-shell mx-auto flex min-h-14 w-full max-w-[min(95vw,1760px)] sm:max-w-[min(90vw,1760px)] items-center gap-2 px-4 sm:gap-6 sm:px-6">
+            {/* Margem lateral fixa em vez de percentual: 16px no celular,
+                24px no tablet, 32px no desktop — a mesma escala do DESIGN.md.
+                O tripé antigo (percentual por breakpoint mais uma classe que
+                zerava padding) exigia TRÊS regras sincronizadas para existir
+                respiro; basta uma regra de CSS velho faltando no build para o
+                cabeçalho nascer sem margem e sem altura — foi o que a produção
+                serviu. */}
+            <div className="mx-auto flex min-h-16 w-full max-w-[1760px] items-center gap-2 px-4 py-3 sm:gap-6 sm:px-6 lg:px-8">
               <TransitionLink
                 href="/"
                 data-testid="nav-logo"
@@ -302,7 +309,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               texto nomeia quem, porque "modo admin" não diz de quem é a sessão. */}
           {borrowedAs && (
             <div className="border-b border-[var(--warn)] bg-[var(--warn)]/10">
-              <div className="mobile-content-shell mx-auto flex w-full max-w-[min(95vw,1760px)] sm:max-w-[min(90vw,1760px)] flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2 sm:px-6">
+              <div className="mx-auto flex w-full max-w-[1760px] flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2 sm:px-6 lg:px-8">
                 <span className="type-body-sm font-medium text-[var(--warn)]">
                   {t("impersonation.banner", { email: borrowedAs })}
                 </span>
@@ -327,12 +334,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </div>
             </div>
           )}
-          {/* 95% no celular aproveita a largura curta sem encostar no vidro;
-              em telas maiores, 90% preserva a medida confortável e o teto. */}
-          <div className="mobile-content-shell mx-auto w-full max-w-[min(95vw,1760px)] sm:max-w-[min(90vw,1760px)] px-4 pb-16 sm:px-6">
+          {/* Mesmo shell do cabeçalho: largura integral com teto, calha fixa.
+              `pb-20` dá o respiro final — o rodapé fecha a página, e o espaço
+              entre conteúdo e rodapé vem daqui, não dos dois lugares. */}
+          <div className="mx-auto w-full max-w-[1760px] px-4 pb-20 sm:px-6 lg:px-8">
             {children}
           </div>
-          {/* `pb-16` acima em vez de `pb-24`: o rodapé passou a fechar a página,
+          {/* `pb-20` acima em vez de `pb-24`: o rodapé passou a fechar a página,
               e o respiro que aquele espaço dava agora vem dele. */}
             <Footer versao={versaoAtual(pkg)} locale={locale} t={t} />
           </TooltipProvider>

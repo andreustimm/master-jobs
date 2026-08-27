@@ -395,17 +395,11 @@ body {
   min-inline-size: 0;
 }
 
-/* O conteúdo ocupa 95% da tela no celular: 2,5% de respiro de cada lado.
-   `sm` continua governando tablet e desktop, onde a medida confortável de 90%
-   já está correta. A segunda condição cobre telefone em paisagem sem mudar a
-   largura do tablet em paisagem (a altura curta é o sinal observável). */
-@media (max-width: 639px), (orientation: landscape) and (max-height: 500px) {
-  .mobile-content-shell {
-    max-width: min(95vw, 1760px);
-    padding-left: 0;
-    padding-right: 0;
-  }
-}
+/* O container da página é um só, em todas as larguras: 100% com teto de
+   1760px e calha lateral fixa (px-4 / sm:px-6 / lg:px-8 no markup). Não há
+   mais uma regra mobile que zera padding e um percentual que varia com o
+   breakpoint — três regras sincronizadas eram três chances de um CSS velho
+   no build deixar a página sem margem nenhuma. */
 
 /* A navegação compacta é a opção segura no primeiro paint. O componente mede
    os links e troca para `full` quando a largura real comporta tudo; o fallback
@@ -740,22 +734,11 @@ html.pwa-standalone #application-shell > header {
 
    No `body` o padding lateral encolheria a faixa do cabeçalho, que vai de borda
    a borda por desenho. Aplicado aqui, a cor continua sangrando e só o texto
-   recua do recorte. Importa em paisagem, onde o inset lateral deixa de ser
-   zero; `max()` preserva o respiro que a página já tinha em retrato. */
+   recua do recorte. `max()` garante que o recorte físico nunca coma a calha
+   fixa de 16px — em paisagem, onde o inset lateral deixa de ser zero, ele
+   substitui a calha em vez de somar a ela. */
 html.pwa-standalone #application-shell > header > div,
 html.pwa-standalone #application-shell > div {
   padding-left: max(var(--spacing-md), var(--safe-area-left));
   padding-right: max(var(--spacing-md), var(--safe-area-right));
-}
-
-/* No celular, a margem de 2,5% já é o respiro do container. Reaplicar os
-   16px da moldura PWA aqui reduziria a área útil para ~90% e reintroduziria o
-   defeito que o `mobile-content-shell` corrige. Só os insets físicos do recorte
-   continuam reservados. */
-@media (max-width: 639px), (orientation: landscape) and (max-height: 500px) {
-  html.pwa-standalone #application-shell > header > div.mobile-content-shell,
-  html.pwa-standalone #application-shell > div.mobile-content-shell {
-    padding-left: var(--safe-area-left);
-    padding-right: var(--safe-area-right);
-  }
 }

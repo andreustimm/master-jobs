@@ -16,6 +16,19 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- In the app installed on a phone, the header now starts below the system
+  bar: clock, signal, and battery no longer sit on top of the **Master Jobs**
+  name or its buttons, in portrait or landscape.
+
+### Improved
+
+- The header has breathing room again: slightly taller, with inner margin at
+  the top and bottom at every screen size.
+- Content now spans the full screen width with equal side margins, from phone
+  to desktop.
+
 ## [1.3.7] - 2026-08-26T20:06:11.585Z
 
 ### Fixed
