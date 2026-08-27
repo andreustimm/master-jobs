@@ -10,7 +10,7 @@
 
 ## Summary
 
-Ao voltar para uma PWA que permaneceu aberta durante um deploy, o usuário continua vendo o CSS da geração anterior. No caso observado, o relógio, o sinal e a bateria do iOS ficam sobre a marca e os controles do cabeçalho, embora a mesma versão aberta como página web já esteja correta.
+Ao voltar para uma PWA que permaneceu aberta durante um deploy, o usuário continua vendo o CSS da geração anterior. No iOS observado, relógio, sinal e bateria ficam sobre a marca e os controles. A mesma versão aberta como página web já está correta.
 
 Este defeito é distinto de `BUG-20260826-responsive-header-artifact-skew`: aquele combinava HTML e CSS incompatíveis no artefato servido; este mantém no documento já aberto os estilos válidos, porém antigos, mesmo depois que um worker novo assume o cliente.
 
@@ -23,7 +23,7 @@ Este defeito é distinto de `BUG-20260826-responsive-header-artifact-skew`: aque
 2. Publicar uma geração com CSS novo.
 3. Voltar à PWA sem limpar caches nem reinstalar.
 
-**Expected:** A PWA detecta a geração nova, recarrega uma única vez e passa a usar o CSS atual.
+**Expected:** A PWA detecta a geração nova, recarrega uma única vez e passa a usar o CSS atual, com o topo cobrindo a viewport inteira e os controles protegidos da barra do sistema.
 **Actual:** O worker novo pode assumir o cliente, mas o documento permanece carregado com os estilos antigos até uma recarga manual.
 
 ## Evidence
@@ -35,7 +35,7 @@ Este defeito é distinto de `BUG-20260826-responsive-header-artifact-skew`: aque
 
 - **Root cause:** o registro não pedia uma atualização ao retomar o aplicativo e não escutava `controllerchange`. `skipWaiting()` e `clients.claim()` trocavam o controlador, mas não substituíam o documento e o CSS já carregados.
 - **Fix commit:** `8d55f90`
-- **Regression test:** `tests/service-worker-update.test.ts` falhou antes e passa depois, cobrindo `updateViaCache: "none"`, atualização ao voltar ao primeiro plano, uma única recarga ao trocar o controlador e ausência de recarga na primeira instalação.
+- **Regression test:** `tests/service-worker-update.test.ts` falhou antes e passa depois, cobrindo `updateViaCache: "none"`, atualização ao voltar ao primeiro plano, uma única recarga ao trocar o controlador e ausência de recarga na primeira instalação. `tests/e2e/ui.mjs` confirma que a geração atual mede o topo de borda a borda em retrato, paisagem, tablet e desktop.
 
 ## Verification
 

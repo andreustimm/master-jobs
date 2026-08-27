@@ -4,15 +4,15 @@ area: AUTH
 title: Resolver transições de autenticação e autorização sem conteúdo residual
 persona: Candidato após falha
 journey: J-switch-workspace-screen
-expected: Login, recovery, callback, papéis, sessão expirada e recursos revogados terminam no resultado canônico sem revelar conteúdo anterior
+expected: Login, recovery, callback, papéis, sessão expirada e recursos revogados terminam no resultado canônico sem revelar conteúdo anterior nem a modal de Novidades antes de uma sessão válida
 entry_points: /login; /login/forgot; /login/reset; /login/callback; /p/[slug]
 qa_status: pass
-bug_ids: BUG-20260824-canonical-route-splash
+bug_ids: BUG-20260824-canonical-route-splash; BUG-20260827-changelog-visible-before-login
 fix_status: fixed
 retest_status: pass
-fix_commits: 7ba2890; fe5cdbf
-evidence: tests/e2e/ui.mjs; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-repeated-reset-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-impersonated-target-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-impersonation-ended-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-candidate-forbidden-admin.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-candidate-forbidden-admin-goal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/recruiter-forbidden-candidate.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/recruiter-forbidden-candidate-goal.png; docs/qa/reports/2026-08-24T210158000000Z-71293d34-release-1.3.0-full.md
-last_report: docs/qa/reports/2026-08-24T210158000000Z-71293d34-release-1.3.0-full.md
+fix_commits: 7ba2890; fe5cdbf; 1570ccd
+evidence: tests/e2e/ui.mjs; tests/changelog.test.ts; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-repeated-reset-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-impersonated-target-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-impersonation-ended-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-candidate-forbidden-admin.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-candidate-forbidden-admin-goal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/recruiter-forbidden-candidate.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/recruiter-forbidden-candidate-goal.png; docs/qa/reports/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh.md
+last_report: docs/qa/reports/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh.md
 overlaps:
 ---
 

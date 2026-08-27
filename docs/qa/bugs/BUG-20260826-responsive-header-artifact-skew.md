@@ -1,16 +1,20 @@
 # BUG-20260826-responsive-header-artifact-skew: cabeçalho empilha os links e exibe os dois menus
 
-- **Status:** verified
+- **Status:** fixed
 - **Impact (user-side):** Trust-Damage
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Andreus no celular
 - **Journey Step:** J-switch-workspace-screen — Trocar de tela de trabalho, step 1
-- **Scenarios:** NAV-first-party-navigation-contract
+- **Scenarios:** NAV-first-party-navigation-contract; NAV-full-width-shell
 - **Found:** 2026-08-26 · **Report:** docs/qa/reports/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew.md
 
 ## Summary
 
 Ao abrir qualquer tela, Andreus encontra os links globais empilhados verticalmente dentro de um cabeçalho de centenas de pixels. O botão de menu compacto aparece ao mesmo tempo, e abrir o menu escurece uma interface que já está quebrada.
+
+**Regressão reencontrada em 2026-08-27:** produção continua servindo a folha
+antiga. O topo fica recuado nas laterais inclusive em desktop, e uma janela
+larga mostra o hambúrguer apesar de haver espaço para a navegação completa.
 
 ## Reproduction
 
@@ -28,14 +32,25 @@ Ao abrir qualquer tela, Andreus encontra os links globais empilhados verticalmen
 
 - Capturas de produção fornecidas pelo usuário em 2026-08-26, nas rotas `/`, `/jobs` e `/admin/users`, em retrato e paisagem.
 - O HTML de produção contém `data-responsive-nav`, mas o CSS referenciado não contém `data-responsive-nav`, `#application-shell` nem `#menu-mobile`; sem um guard estrutural o navegador aplica `display: block` ao elemento `nav`.
+- Capturas de 2026-08-27 mostram o seletor publicado
+  `html.pwa-standalone body>div` e o menu compacto numa viewport desktop larga.
+- `pnpm check:deployed-css` reproduziu a divergência: faltavam
+  `--safe-area-top-floor`, `data-responsive-nav`, `app-shell-content` e
+  `2.5vw`, enquanto o seletor obsoleto permanecia presente.
 
 ## Fix
 
-- **Root cause:** o HTML removeu as classes utilitárias de visibilidade e passou a depender exclusivamente de seletores CSS novos e medição no cliente. Produção combinou esse HTML com um artefato CSS anterior; o valor padrão de `nav` tornou a fileira visível e vertical antes e durante a hidratação.
-- **Fix commits:** `062eb64`, `cce67ae`, `055af8a`, `a56a0c1`
-- **Regression tests:** `tests/nav-mobile.test.ts` falhou antes e passa depois para o fallback, o painel compacto largo e o nome truncado aplicável; `tests/e2e/ui.mjs` mede altura, direção, exclusão mútua e abertura do painel compacto em 1280px.
+- **Root cause:** o HTML e o CSS publicados são de gerações diferentes. Além
+  disso, o gate aceitava apenas marcadores positivos genéricos que também
+  existiam na folha antiga; por isso o seletor comprovadamente quebrado não
+  tornava o deploy vermelho.
+- **Fix commits:** `1570ccd`
+- **Regression tests:** `tests/mobile.test.ts` e `tests/pwa-chrome.test.ts`
+  travam a superfície full-bleed e as calhas móveis; `tests/e2e/ui.mjs` mede a
+  largura real e exige a navegação completa em desktop; o gate pós-deploy
+  rejeita `html.pwa-standalone body>div`.
 
 ## Verification
 
-- **Retested:** 2026-08-26T19:11Z–19:18Z, mesmas rotas e persona em build limpo `a56a0c1` de produção local · **Report:** docs/qa/reports/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew.md
-- **Result:** Em 375×812, 812×375 e 768×1024 somente o hambúrguer ficou visível; em 1280×900 somente a fileira horizontal ficou visível. A altura permaneceu em 57px, sem overflow, o segundo toque fechou o menu e um nome no limite permitido foi truncado sem perder o valor completo.
+- **Retested:** 2026-08-27, build de produção isolado em Chromium e WebKit · **Report:** docs/qa/reports/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh.md
+- **Result:** 207/207 verificações passaram: topo full-bleed, 95% úteis no celular, navegação completa em 1280px/1920px e ausência de overflow. Produção permanece na geração antiga até este commit percorrer o deploy.
