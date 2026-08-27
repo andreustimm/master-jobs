@@ -183,6 +183,18 @@ jobs:
             -f sha="${SHA}" --silent
           echo "::notice::Tag v${VERSAO} criada em ${SHA}."
 
+      - name: Criar GitHub Releases ausentes
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+        run: |
+          # Uma release publicada corresponde a uma tag existente. O sync é
+          # idempotente e também repara tags históricas que nunca receberam
+          # uma GitHub Release, sem reescrever releases já publicadas. O script
+          # busca as tags remotas para incluir a criada na etapa anterior.
+          node --experimental-strip-types --no-warnings \
+            scripts/release/github-releases.ts \
+            --repo "$GITHUB_REPOSITORY" --apply
+
   devolver:
     name: main → dev
     needs: marcar

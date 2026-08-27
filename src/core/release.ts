@@ -2,6 +2,7 @@ import {
   ChangelogDomainError,
   bodyHasUserContent,
   changelogSections,
+  compareSemanticVersions,
   hasNoUserChangeMarker,
   parseUserChangelog,
   validateLocalizedChangelogs,
@@ -325,11 +326,22 @@ export type PrepareReleaseResult =
   | { status: "prepared"; documents: ReleaseDocuments }
   | { status: "already-released"; documents: ReleaseDocuments };
 
+export type PendingReleaseValidationResult =
+  | { status: "no-release" }
+  | { status: "ready"; version: string };
+
+export type GitHubReleasePlan = {
+  tag: string;
+  name: string;
+  body: string;
+};
+
 export type ReleaseDomainErrorCode =
   | ChangelogIssueCode
   | "invalid_release_version"
   | "invalid_published_at"
   | "missing_unreleased"
+  | "missing_release_notes"
   | "duplicate_unreleased"
   | "partial_existing_release";
 
@@ -563,4 +575,75 @@ export function prepareRelease(input: {
   }
 
   return { status: "prepared", documents: candidate };
+}
+
+/**
+ * Valida, sem tocar em Git ou disco, se a leva que pede bump pode virar release.
+ *
+ * O hook de commit e o CI usam esta mesma decisão. Assim, o erro aparece no
+ * primeiro commit releaseável, em vez de dias depois na promoção para staging.
+ */
+export function validarReleasePendente(input: {
+  subjects: string[];
+  currentVersion: string;
+  documents: ReleaseDocuments;
+  publishedAt: Date;
+}): PendingReleaseValidationResult {
+  const bump = classificarBump(input.subjects);
+  if (!bump) return { status: "no-release" };
+
+  const version = proximaVersao(input.currentVersion, bump);
+  prepareRelease({
+    documents: input.documents,
+    version,
+    publishedAt: input.publishedAt,
+  });
+  return { status: "ready", version };
+}
+
+/**
+ * Planeja somente as GitHub Releases ausentes para as tags versionadas.
+ *
+ * O corpo vem da seção técnica da mesma versão. Tags anteriores ao changelog
+ * versionado recebem uma nota explícita, em vez de conteúdo inventado.
+ */
+export function planejarGithubReleases(input: {
+  tags: string[];
+  existingReleaseTags: string[];
+  technicalChangelog: string;
+}): GitHubReleasePlan[] {
+  const parsed = parseUserChangelog(input.technicalChangelog);
+  assertParseable(parsed);
+  const existing = new Set(input.existingReleaseTags);
+  const notesByVersion = new Map(
+    parsed.releases.map((release) => [release.version, release.markdown.trim()]),
+  );
+  const earliestRecordedVersion = [...notesByVersion.keys()]
+    .sort((left, right) => -compareSemanticVersions(left, right))[0] ?? null;
+  const seen = new Set<string>();
+  const plan: GitHubReleasePlan[] = [];
+
+  for (const rawTag of input.tags) {
+    const tag = rawTag.trim();
+    if (tag === "" || seen.has(tag)) continue;
+    seen.add(tag);
+    if (!tag.startsWith("v") || !versaoSemanticaValida(tag.slice(1))) {
+      throw new Error(`tag de release inválida: ${tag}`);
+    }
+    if (existing.has(tag)) continue;
+
+    const version = tag.slice(1);
+    const notes = notesByVersion.get(version);
+    if (!notes && (
+      earliestRecordedVersion === null ||
+      compareSemanticVersions(version, earliestRecordedVersion) <= 0
+    )) {
+      throw new ReleaseDomainError("missing_release_notes", { version });
+    }
+    const body = notes ??
+      `Versão histórica correspondente à tag \`${tag}\`. Esta tag antecede as entradas disponíveis no changelog técnico.`;
+    plan.push({ tag, name: tag, body });
+  }
+
+  return plan;
 }
