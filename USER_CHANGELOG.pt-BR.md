@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.3.10] - 2026-08-28T03:09:49.668Z
+
 ### Correção
 
 - Ao girar o aplicativo instalado para a horizontal, o topo volta à altura normal sem
