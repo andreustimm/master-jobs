@@ -23,6 +23,8 @@
  * "1760px" — o teto do shell determinístico (app/layout.tsx, app/footer.tsx).
  * "app-shell-content" + "2.5vw" — a geração que mantém a superfície do
  * cabeçalho full-bleed e limita somente o conteúdo móvel a 95%.
+ * A media query completa — a geração que remove o piso artificial somente na
+ * paisagem baixa de telefone, preservando retrato e tablet.
  */
 export const DEPLOYED_CSS_MARKERS = [
   "--safe-area-top-floor",
@@ -31,6 +33,7 @@ export const DEPLOYED_CSS_MARKERS = [
   "1760px",
   "app-shell-content",
   "2.5vw",
+  "@media (pointer:coarse) and (orientation:landscape) and (max-width:1023px) and (max-height:500px)",
 ];
 
 /**

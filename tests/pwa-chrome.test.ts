@@ -81,8 +81,12 @@ describe("modo instalado", () => {
     // O match é por fonte, não por build minificado: cobre typo e remoção, os
     // riscos reais; o build em si é o que o gate confere em produção.
     const sources = GLOBAL_CSS + DESIGN_TOKENS + LAYOUT;
+    // O compilador remove o espaço depois de `:` nas media queries. Normalizar
+    // só esse detalhe permite usar no contrato o mesmo marcador exato que o
+    // gate procura no CSS publicado.
+    const deployShape = sources.replace(/:\s+/g, ":");
     for (const marker of DEPLOYED_CSS_MARKERS) {
-      expect(sources, `marcador ${marker} deveria existir nas fontes`).toContain(marker);
+      expect(deployShape, `marcador ${marker} deveria existir nas fontes`).toContain(marker);
     }
     for (const marker of FORBIDDEN_DEPLOYED_CSS_MARKERS) {
       expect(GLOBAL_CSS, `marcador obsoleto ${marker} não pode voltar`).not.toContain(marker);
@@ -157,15 +161,18 @@ describe("modo instalado", () => {
     );
   });
 
-  it("usa o piso de área segura em qualquer orientação quando o launcher omite o inset", () => {
-    // O aparelho da regressão desenha a barra de status sobre o viewport, mas
-    // entrega `safe-area-inset-top: 0`. O mesmo comportamento aparece em PWA
-    // horizontal, então o fallback vale para todo contexto de toque.
+  it("remove o piso artificial em paisagem baixa e preserva o inset real", () => {
+    // Em retrato alguns launchers desenham a barra de status sobre o viewport
+    // mesmo entregando inset zero, por isso o piso continua necessário. Em
+    // paisagem de telefone a barra desaparece: manter 48px ali transforma a
+    // proteção do retrato numa faixa vazia desproporcional.
     expect(DESIGN_TOKENS).toContain("--safe-area-top-floor: 48px;");
-    expect(GLOBAL_CSS).toContain("@media (pointer: coarse)");
-    expect(GLOBAL_CSS).toContain(
-      "padding-top: max(var(--safe-area-top), var(--safe-area-top-floor));",
-    );
+    const media = "@media (pointer: coarse) and (orientation: landscape) and (max-width: 1023px) and (max-height: 500px) {";
+    const inicio = GLOBAL_CSS.indexOf(media);
+    const regra = GLOBAL_CSS.slice(inicio, GLOBAL_CSS.indexOf("\n}\n", inicio) + 3);
+    expect(inicio).toBeGreaterThanOrEqual(0);
+    expect(regra).toContain("html.pwa-standalone #application-shell > header {");
+    expect(regra).toContain("padding-top: var(--safe-area-top);");
   });
 
   it("não cria faixa de safe area na PWA instalada do desktop", () => {

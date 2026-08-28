@@ -218,4 +218,6 @@ ser digitada.
    geração atual estão presentes e nenhuma assinatura obsoleta permanece.
 6. Com uma PWA que já estava aberta antes do deploy, voltar do segundo plano
    com rede disponível provoca no máximo uma recarga e adota o visual novo sem
-   limpar cache nem reinstalar. Conferir retrato e paisagem no aparelho físico.
+   limpar cache nem reinstalar. No aparelho físico, confirmar o piso protetor
+   em retrato e, em paisagem baixa de telefone, a ausência da faixa artificial
+   de 48px sem perder o inset real informado pelo sistema.

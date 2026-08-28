@@ -16,6 +16,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- When the installed app rotates to landscape, the header returns to its normal height
+  while keeping the portrait protection from the clock, signal, and battery.
+
 ## [1.3.9] - 2026-08-27T20:34:24.046Z
 
 ### Fixed
