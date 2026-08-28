@@ -743,6 +743,16 @@ html.pwa-standalone #application-shell > header {
   }
 }
 
+/* O piso acima compensa launchers que omitem o inset enquanto mantêm a barra
+   de status sobre o app em retrato. Em paisagem baixa essa barra desaparece e
+   o mesmo piso vira uma faixa vazia de 48px. Voltar ao inset real preserva um
+   eventual recorte físico sem aumentar artificialmente o cabeçalho. */
+@media (pointer: coarse) and (orientation: landscape) and (max-width: 1023px) and (max-height: 500px) {
+  html.pwa-standalone #application-shell > header {
+    padding-top: var(--safe-area-top);
+  }
+}
+
 /* Laterais no conteúdo, e não no `body`.
 
    No `body` o padding lateral encolheria a faixa do cabeçalho, que vai de borda

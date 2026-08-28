@@ -1,8 +1,9 @@
 # Issue resolvida: cabeçalho quebrado no mobile/PWA e CSS antigo em produção
 
-**Encontrada:** 2026-08-26 · **Implementada:** 2026-08-27  
+**Encontrada:** 2026-08-26 · **Atualizada:** 2026-08-28  
 **Status:** corrigida no build; confirmação física final depende do deploy  
-**Relatório:** `docs/qa/reports/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh.md`
+**Relatórios:** `docs/qa/reports/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh.md`;
+`docs/qa/reports/2026-08-28T002708793000Z-b25bc373-landscape-header-targeted.md`
 
 Este documento preserva a investigação que levou à correção. Ele não é mais
 um plano de execução; o contrato vigente está nos testes, cenários de QA e no
@@ -44,7 +45,9 @@ tela até uma navegação ou reinício manual.
 - Tablet e desktop usam as calhas de 24px e 32px do `DESIGN.md`.
 - A navegação completa aparece sempre que a medição real indicar espaço; o
   hambúrguer é apenas o fallback compacto.
-- A fileira do cabeçalho mantém `min-h-16 py-3` e respeita a safe area da PWA.
+- A fileira do cabeçalho mantém `min-h-16 py-3`; no retrato instalado, aplica o
+  piso protetor da safe area e, na paisagem baixa de telefone, usa somente o
+  inset real para não criar uma faixa artificial.
 - A modal Novidades não é renderizada nem carrega releases sem sessão válida.
 
 ## Provas automatizadas
@@ -56,8 +59,9 @@ tela até uma navegação ou reinício manual.
 - `tests/mobile.test.ts`: superfície full-bleed e largura útil móvel.
 - `tests/nav-mobile.test.ts`: menu por espaço medido.
 - `tests/changelog.test.ts`: o carregador de releases não é chamado anonimamente.
-- `tests/e2e/ui.mjs`: 375×812, 812×375, 768×1024, 1280×900 e 1920×1080,
-  incluindo geometria computada, navegação e ausência do changelog no login.
+- `tests/e2e/ui.mjs`: 375×812, 390×844, 812×375, 932×430, 1024×375,
+  768×1024, 1280×900 e 1920×1080, incluindo geometria computada, navegação e
+  ausência do changelog no login.
 
 ## Contrato visual vigente
 
@@ -77,8 +81,9 @@ segundo plano e retomá-la após o deploy, em retrato e paisagem.
 1. O deploy conclui e `rtk pnpm check:deployed-css` passa contra produção.
 2. Uma PWA já instalada adota a geração nova com no máximo uma recarga, sem
    limpeza de cache nem reinstalação.
-3. Cabeçalho e controles ficam abaixo da barra do sistema em retrato e
-   paisagem.
+3. Em retrato, cabeçalho e controles ficam abaixo da barra do sistema; em
+   paisagem baixa de telefone, o topo usa somente o inset físico, sem a faixa
+   artificial de 48px.
 4. O topo ocupa 100% da largura e o conteúdo móvel preserva 2,5% por lado.
 5. Desktop e widescreen exibem o menu completo quando ele cabe.
 
