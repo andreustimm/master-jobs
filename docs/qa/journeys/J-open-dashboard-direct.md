@@ -30,7 +30,7 @@ journey:
       expected_observable: Apenas o splash de startup aparece antes da tela
     - step: 2
       verb: Usar o cabeçalho no modo instalado
-      expected_observable: Marca, menu, idioma e aparência permanecem abaixo da barra do sistema em retrato e paisagem
+      expected_observable: Em retrato, marca e controles permanecem abaixo da barra do sistema; em paisagem baixa de telefone, o topo usa somente o inset físico e não mantém uma faixa artificial
     - step: 3
       verb: Retomar o aplicativo instalado depois de uma atualização
       expected_observable: A versão atual assume o controle com uma única recarga e sem manter o visual anterior

@@ -17,8 +17,9 @@ charter:
   guidance:
     must_try:
       - "Abrir a raiz instalada em 375×812 e recarregar"
-      - "Girar para 812×375 sem perder marca, menu, idioma ou aparência"
-      - "Repetir em 768×1024 e usar 1280×900 como canário sem faixa vazia"
+      - "Girar para 812×375 e 932×430 sem perder controles nem manter o piso artificial do retrato"
+      - "Usar 1024×375 como canário do limite: tablet preserva o piso e exibe a navegação completa"
+      - "Repetir em 768×1024 e 1280×900 como canários sem faixa vazia"
       - "Procurar overflow horizontal em cada orientação"
     must_avoid:
       - "Contar emulação Chromium como confirmação física do Safari instalado"

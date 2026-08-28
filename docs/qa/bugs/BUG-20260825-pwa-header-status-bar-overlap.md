@@ -47,3 +47,20 @@ A captura fornecida pelo usuário mostrou a mesma sobreposição no cabeçalho d
 
 - **Report:** `docs/qa/reports/2026-08-26T083500000000Z-b7f3a1c9-header-top-fix.md`
 - **Evidence:** `docs/qa/evidence/2026-08-26T083500000000Z-b7f3a1c9-header-top-fix/header-pwa-safe-area.png`
+
+## Regressed — 2026-08-27, altura excessiva em paisagem
+
+A PWA física na versão 1.3.9 confirmou que o piso de 48px resolveu a
+sobreposição em retrato. Ao girar o mesmo telefone, porém, a barra do sistema
+desaparece e o piso continua somado ao cabeçalho, produzindo uma faixa superior
+desproporcional. A correção preserva o piso em retrato e, somente em paisagem
+baixa de telefone com toque, recalcula o topo a partir do inset físico real;
+tablet continua no contrato anterior.
+
+- **Report:** `docs/qa/reports/2026-08-28T002708793000Z-b25bc373-landscape-header-targeted.md`
+- **Evidence:** foto física fornecida pelo usuário em 2026-08-27;
+  `docs/qa/evidence/2026-08-28T002708793000Z-b25bc373-landscape-header-targeted/pwa-landscape-812x375.png`;
+  `docs/qa/evidence/2026-08-28T002708793000Z-b25bc373-landscape-header-targeted/pwa-wide-phone-landscape-932x430.png`;
+  `docs/qa/evidence/2026-08-28T002708793000Z-b25bc373-landscape-header-targeted/pwa-tablet-landscape-1024x375.png`;
+  reprodução automatizada em `tests/pwa-chrome.test.ts` e geometria em
+  `tests/e2e/ui.mjs`.

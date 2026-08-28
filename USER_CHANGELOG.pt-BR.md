@@ -16,6 +16,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Correção
+
+- Ao girar o aplicativo instalado para a horizontal, o topo volta à altura normal sem
+  perder a proteção contra relógio, sinal e bateria no modo retrato.
+
 ## [1.3.9] - 2026-08-27T20:34:24.046Z
 
 ### Correção

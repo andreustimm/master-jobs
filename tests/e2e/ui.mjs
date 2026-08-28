@@ -387,6 +387,8 @@ try {
     { label: "mobile retrato", width: 375, height: 812, touch: true, safe: { top: 47, right: 0, bottom: 34, left: 0 } },
     { label: "mobile retrato sem inset", width: 390, height: 844, touch: true, safe: { top: 0, right: 0, bottom: 34, left: 0 } },
     { label: "mobile paisagem", width: 812, height: 375, touch: true, safe: { top: 0, right: 44, bottom: 21, left: 44 } },
+    { label: "mobile paisagem larga", width: 932, height: 430, touch: true, safe: { top: 0, right: 0, bottom: 21, left: 0 } },
+    { label: "tablet paisagem baixa", width: 1024, height: 375, touch: true, safe: { top: 0, right: 0, bottom: 20, left: 0 } },
     { label: "tablet", width: 768, height: 1024, touch: true, safe: { top: 24, right: 0, bottom: 20, left: 0 } },
     { label: "desktop", width: 1280, height: 900, touch: false, safe: { top: 0, right: 0, bottom: 0, left: 0 } },
   ]) {
@@ -426,12 +428,14 @@ try {
       return {
         standaloneClass: document.documentElement.classList.contains("pwa-standalone"),
         pointerCoarse: matchMedia("(pointer: coarse)").matches,
+        lowPhoneLandscape: matchMedia("(pointer: coarse) and (orientation: landscape) and (max-width: 1023px) and (max-height: 500px)").matches,
         paddingTop: Number.parseFloat(getComputedStyle(header).paddingTop),
         safeAreaFloor: Number.parseFloat(rootStyle.getPropertyValue("--safe-area-top-floor")),
         safeTop: Number.parseFloat(rootStyle.getPropertyValue("--safe-area-top")),
         safeRight: Number.parseFloat(rootStyle.getPropertyValue("--safe-area-right")),
         safeLeft: Number.parseFloat(rootStyle.getPropertyValue("--safe-area-left")),
         headerTop: headerRect.top,
+        headerHeight: headerRect.height,
         headerRight: headerRect.right,
         headerLeft: headerRect.left,
         contentTop: contentRect?.top ?? -1,
@@ -454,7 +458,7 @@ try {
 
     if (fixture.touch) {
       const trigger = headerSafeAreaPage.locator('[data-testid="mobile-nav-trigger"]');
-      if ((await trigger.count()) > 0) {
+      if ((await trigger.count()) > 0 && await trigger.isVisible()) {
         await trigger.click();
         const popover = await headerSafeAreaPage.locator('[data-testid="mobile-nav-popover"]').evaluate((panel) => {
           const header = document.querySelector("#application-shell > header");
@@ -476,7 +480,8 @@ try {
   check(
     "cabeçalho PWA respeita a barra do sistema em mobile retrato, paisagem, tablet e desktop",
     headerSafeAreaSnapshots.every((sample) => {
-      const expectedTop = sample.touch
+      const isLowPhoneLandscape = sample.lowPhoneLandscape;
+      const expectedTop = sample.touch && !isLowPhoneLandscape
         ? Math.max(sample.safeAreaFloor, sample.safeTop)
         : sample.safeTop;
       return sample.standaloneClass
@@ -487,6 +492,8 @@ try {
         && sample.contentHeight <= 64
         && sample.brandTop >= sample.headerTop + expectedTop
         && sample.brandBottom <= sample.headerTop + sample.paddingTop + sample.contentHeight
+        && (!isLowPhoneLandscape
+          || sample.headerHeight <= sample.contentHeight + sample.safeTop + 2)
         && sample.headerLeft <= 0.5
         && sample.headerRight >= sample.viewportWidth - 0.5
         && sample.contentLeft >= sample.headerLeft
@@ -1175,7 +1182,7 @@ try {
   // largura suficiente para a fileira completa. O breakpoint do menu precisa
   // acompanhar o espaço disponível, não a orientação do aparelho.
   const landscapeNavigation = [];
-  for (const width of [812, 1024]) {
+  for (const width of [812, 932, 1024]) {
     await page.setViewportSize({ width, height: 375 });
     await page.goto(`${BASE}/compare`, { waitUntil: "networkidle" });
     landscapeNavigation.push(await page.evaluate(() => {
@@ -1190,8 +1197,10 @@ try {
     "paisagem escolhe a navegação pelo espaço disponível",
     landscapeNavigation[0]?.mobileVisible === true
       && landscapeNavigation[0]?.desktopVisible === false
-      && landscapeNavigation[1]?.desktopVisible === true
-      && landscapeNavigation[1]?.mobileVisible === false,
+      && landscapeNavigation[1]?.mobileVisible === true
+      && landscapeNavigation[1]?.desktopVisible === false
+      && landscapeNavigation[2]?.desktopVisible === true
+      && landscapeNavigation[2]?.mobileVisible === false,
     JSON.stringify(landscapeNavigation),
   );
 

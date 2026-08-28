@@ -9,6 +9,12 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- Em telefones com a PWA instalada, o cabeçalho mantém o piso de proteção da
+  barra de status no retrato e usa apenas o inset físico real em paisagem
+  baixa, evitando uma faixa superior artificial de 48px após girar o aparelho.
+
 ## [1.3.9] - 2026-08-27
 
 ### Corrigido
