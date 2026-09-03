@@ -116,12 +116,14 @@ por padrão.
 
 ### 2.2 Sync agendado
 
-**Estado: ✅ entregue.** `.github/workflows/varredura.yml` executa diariamente
-em produção e também aceita `workflow_dispatch`. A rodada sincroniza fontes,
+**Estado: ⏸️ entregue, temporariamente pausado.** `.github/workflows/varredura.yml`
+foi configurado para executar diariamente em produção e também aceitar
+`workflow_dispatch`. A rodada sincroniza fontes,
 captura descrições, reconfere vagas, drena a fila de repontuação por candidato,
 pontua vagas novas para todos os candidatos elegíveis e termina conferindo a
-saúde das fontes. A rota limitada da Vercel continua como rede de segurança;
-o workflow é quem comporta a varredura completa.
+saúde das fontes. Desde 03/09/2026, workflow e cron da Vercel estão desligados
+pelo [incidente de cota do Turso](operations/turso-quota-incident-2026-09-03.md);
+a reativação depende dos gates registrados ali.
 
 > **Invariante:** Uma fonte que falha é registrada e pulada; nunca aborta a run
 > (`src/core/ingest/run.ts`, item 2). Um agendador que trate exit code != 0 como
@@ -248,8 +250,9 @@ operador e ficam nos secrets de cada ambiente, nunca em arquivos versionados.
 
 **Estado: ✅ entregue para reconferência em lotes.**
 `app/api/cron/recheck/route.ts` valida `CRON_SECRET` e processa um lote compatível
-com o limite da Vercel. A varredura completa permanece no GitHub Actions, onde
-os comandos longos cabem.
+com o limite da Vercel. A varredura completa pertence ao GitHub Actions, onde
+os comandos longos cabem, mas os dois agendadores estão temporariamente
+desligados desde 03/09/2026.
 
 > **Invariante:** A rota de cron não pode virar um segundo pipeline. Se ela
 > precisar de lógica que a CLI não tem, a lógica está no lugar errado — vai para

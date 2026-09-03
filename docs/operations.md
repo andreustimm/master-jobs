@@ -1,5 +1,11 @@
 # Operação diária
 
+> **Incidente ativo — 03/09/2026:** a varredura automática está temporariamente
+> desligada no GitHub Actions e no Vercel Cron para proteger a cota compartilhada
+> do Turso. Não reative antes de cumprir os gates da tarefa B-11. Diagnóstico,
+> estado verificável e runbook de reativação:
+> [`operations/turso-quota-incident-2026-09-03.md`](operations/turso-quota-incident-2026-09-03.md).
+
 ## Por que isto existe
 
 O `master-jobs` não é um produto: é uma rotina. O banco só vale alguma coisa se
