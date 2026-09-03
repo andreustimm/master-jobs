@@ -111,6 +111,50 @@ Somente JSON bruto em `job` ocupava 125,26 MB; HTML e texto de descrição,
 aproximadamente 133,41 MB; 206 páginas já parseadas ainda retinham 136,75 MB de
 HTML bruto.
 
+## Snapshot local para continuar a busca
+
+Rodar o dashboard e as análises contra `file:./data/jobs.db` evita que testes,
+filtros e investigação do scorer consumam linhas no Turso. O snapshot deve ser
+uma cópia isolada: o `.env` local não recebe `TURSO_DATABASE_URL` nem
+`TURSO_AUTH_TOKEN`, e nenhum sync/recheck é disparado durante a atualização.
+
+O mecanismo preferido é `turso db export master-jobs`, que baixa um snapshot
+SQLite em vez de reconstruir a base com consultas SQL por tabela. O export pode
+vir acompanhado de WAL; ambos precisam ser consolidados antes da validação.
+
+### Dados sensíveis e sanitização obrigatória
+
+O arquivo bruto contém currículo, candidaturas, contatos, e-mails, hashes de
+senha e hashes de sessão. Ele deve nascer com permissão `0600`, permanecer
+somente na máquina do operador e ser sanitizado antes de substituir o banco
+local:
+
+- apagar todas as linhas de `auth_session` e `auth_login_token`;
+- apagar `auth_event`, porque registra identidade e histórico de acesso;
+- apagar `mail_message` e `mail_suggestion`, que podem conter corpos de e-mail;
+- definir `auth_user.password_hash` como `null` e cadastrar uma senha somente
+  local com `jho auth set-password`;
+- nunca versionar o snapshot, o WAL, o backup ou uma credencial temporária.
+
+Currículo, perfil, vagas, scores e candidaturas permanecem porque são o conjunto
+que a busca local precisa reproduzir. A cópia desses dados pessoais exige
+autorização explícita do operador.
+
+### Troca segura
+
+1. exportar para um nome temporário dentro de `data/`, com `umask 077`;
+2. consolidar o WAL e executar `pragma integrity_check`;
+3. executar `pragma foreign_key_check` e exigir resultado vazio;
+4. comparar contagens das tabelas essenciais com a origem;
+5. aplicar a sanitização acima e repetir as duas verificações;
+6. mover o `data/jobs.db` atual para um backup datado;
+7. renomear o snapshot validado para `data/jobs.db` e confirmar modo `0600`;
+8. iniciar a aplicação sem variáveis Turso e comprovar que a URL resolvida é
+   `file:./data/jobs.db`.
+
+O `data/jobs.db` anterior não deve ser apagado até o novo snapshot abrir, o
+login local funcionar e as telas de vagas, cockpit e funil serem conferidas.
+
 ## Regra de reativação
 
 **Não reative nenhum agendador apenas porque a cota virou.** Primeiro conclua
@@ -151,4 +195,3 @@ leituras separado para cada rotina.
 - configuração do workflow: `.github/workflows/varredura.yml`;
 - configuração do cron: `vercel.json`;
 - schema e índices: `src/core/db/schema.ts`.
-

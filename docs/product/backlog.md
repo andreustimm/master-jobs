@@ -1666,3 +1666,34 @@ antes de concluir os critérios abaixo.
 6. crescimento de armazenamento explicado antes/depois e retenção ativa;
 7. somente o agendador escolhido é reativado;
 8. monitoramento por 24 horas sem estouro do orçamento.
+
+### B-12 · Atualizar o snapshot local com dados de produção 🔨
+
+**Objetivo:** permitir desenvolvimento, QA e análise do ranking contra o corpus
+real sem apontar a aplicação local para o Turso e sem consumir a cota por cada
+consulta. Procedimento de segurança em
+[`../operations/turso-quota-incident-2026-09-03.md`](../operations/turso-quota-incident-2026-09-03.md#snapshot-local-para-continuar-a-busca).
+
+#### Escopo
+
+- exportar `master-jobs` pelo snapshot nativo do Turso, nunca por `select` em
+  loop nem `.dump` HTTP;
+- gravar o arquivo temporário e o banco final com permissão `0600`;
+- consolidar o WAL e validar integridade e chaves estrangeiras;
+- limpar sessões, tokens, eventos de autenticação e mensagens de e-mail;
+- invalidar a senha copiada e exigir uma senha local nova;
+- preservar o `data/jobs.db` atual como backup datado e recuperável;
+- garantir que execução local use `file:./data/jobs.db`, sem credenciais Turso;
+- documentar data do snapshot, contagens essenciais e itens sanitizados sem
+  registrar PII nos logs.
+
+#### Critérios de aceite
+
+1. `pragma integrity_check` retorna `ok`;
+2. `pragma foreign_key_check` não retorna linhas;
+3. `auth_session`, `auth_login_token`, `auth_event`, `mail_message` e
+   `mail_suggestion` estão vazias;
+4. nenhum `auth_user.password_hash` de produção permanece;
+5. o banco final e seus arquivos auxiliares têm modo `0600`;
+6. a aplicação local abre cockpit, vagas e funil sem acesso ao Turso;
+7. o banco anterior continua disponível até o smoke test terminar.
