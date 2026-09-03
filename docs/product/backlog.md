@@ -488,21 +488,26 @@ ela para sempre.
 
 #### Agendado em 21/08/2026
 
+> **Estado em 03/09/2026:** os dois agendadores estão temporariamente
+> desligados por causa do [incidente de cota do Turso](../operations/turso-quota-incident-2026-09-03.md).
+> O restante desta seção registra a configuração histórica, não o estado
+> operacional atual.
+
 `.github/workflows/varredura.yml`. Nada foi instalado na máquina de ninguém —
 era essa a objeção que deixou o item aberto —, e o disparo mora no mesmo lugar
 que já roda os testes.
 
-Roda contra **produção**, todo dia às 06:00 UTC, e faz a varredura inteira:
-buscar (`jobs sync`), capturar descrição (`scrape queue` + `run`) e reconferir
-(`jobs recheck queue` + `run`).
+Foi configurado para rodar contra **produção**, todo dia às 06:00 UTC, e fazer
+a varredura inteira: buscar (`jobs sync`), capturar descrição (`scrape queue` +
+`run`) e reconferir (`jobs recheck queue` + `run`).
 
 **Por que não a rota da Vercel, que já existia.** `/api/cron/recheck` processa
 25 vagas por execução, porque o teto de função no plano gratuito é de 30
 segundos. Contadas as elegíveis — abertas, com URL, fit ≥ 55 — são **427**, o
 que dá um ciclo de ~17 dias contra a meta de 7 declarada no próprio
-`enqueueStale`. A rota entrega menos da metade do que promete, e não por
-defeito: por teto. Um runner do GitHub tem 6 horas por job. Ela continua no ar
-como rede de segurança.
+`enqueueStale`. A rota entregava menos da metade do que prometia, e não por
+defeito: por teto. Um runner do GitHub tem 6 horas por job. Ela foi mantida
+como rede de segurança até a contenção de 03/09/2026.
 
 E a **busca** nunca teve onde rodar na Vercel: `jobs sync` e `scrape run` não têm
 rota de API. Até aqui, achar vaga nova dependia de alguém abrir o laptop.
@@ -1606,3 +1611,58 @@ A varredura diária drena a fila e pontua as vagas novas.
 A tela do candidato mostra o estado da fila de repontuação, com estados
 localizados para ausência de tarefa, pendente, em processamento, concluído e
 falho. O acompanhamento histórico detalhado continua fora desta onda.
+
+### B-11 · Conter e corrigir o consumo de cota do Turso 🔨
+
+**Incidente:** [`../operations/turso-quota-incident-2026-09-03.md`](../operations/turso-quota-incident-2026-09-03.md).
+
+**Contenção já aplicada:** workflow `Varredura de vagas` desabilitado
+manualmente no GitHub e todos os crons do projeto `master-jobs` desabilitados na
+Vercel. A aplicação continua disponível. Nenhuma automação deve ser reativada
+antes de concluir os critérios abaixo.
+
+#### Escopo obrigatório
+
+- reescrever `enqueueStale()` para calcular o melhor score uma vez por vaga,
+  sem subconsultas correlacionadas;
+- criar migração segura com índice iniciado por `job_score.job_id` e provar o
+  plano de consulta resultante;
+- eleger um único agendador responsável pelo recheck e remover a sobreposição
+  GitHub Actions/Vercel;
+- acrescentar ao contrato de fonte a diferença entre fotografia completa e
+  janela parcial; ausência só fecha vaga quando a fonte provar completude;
+- para feeds parciais, fechar somente por verificação explícita de 404/410,
+  preservando a regra do domínio;
+- preferir a identidade estável `(source_id, external_id)` ao detectar a mesma
+  vaga e manter a deduplicação entre fontes como etapa separada;
+- adicionar um circuito de orçamento que interrompa rotinas pesadas antes de
+  consumir a cota diária definida;
+- publicar a limpeza de payloads brutos e HTML já parseado, com retenção
+  documentada e sem apagar vagas com candidatura;
+- agregar as facetas do dashboard e eliminar leituras repetidas evitáveis;
+- criar telemetria diária por rotina: invocações, linhas lidas, linhas escritas,
+  duração, vagas abertas/atualizadas/fechadas e motivo da interrupção.
+
+#### Testes obrigatórios
+
+- o plano de `enqueueStale()` usa índice iniciado por `job_id` e não contém
+  subconsulta correlacionada por vaga;
+- uma janela parcial nunca fecha uma vaga apenas por ausência;
+- somente 404 e 410 fecham a vaga durante verificação;
+- duas execuções concorrentes respeitam o orçamento compartilhado;
+- a configuração final contém exatamente um dono do recheck agendado;
+- a limpeza preserva `application` e todos os dados necessários à auditoria;
+- o runbook consegue desligar, verificar e reativar o agendador sem revelar
+  segredos.
+
+#### Critérios de aceite para reativação
+
+1. `rtk pnpm check` e E2E aplicável verdes;
+2. migração validada pelo fluxo `drizzle-safe-migrations`;
+3. canário manual em produção, com uma única execução;
+4. redução de pelo menos 99% sobre a linha de base de 77,4 milhões de leituras
+   por `enqueueStale()`;
+5. nenhuma consulta individual do canário acima de 1 milhão de linhas lidas;
+6. crescimento de armazenamento explicado antes/depois e retenção ativa;
+7. somente o agendador escolhido é reativado;
+8. monitoramento por 24 horas sem estouro do orçamento.
