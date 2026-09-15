@@ -156,16 +156,18 @@ seguem.
 ## O portão
 
 `.github/workflows/ci.yml` roda typecheck, testes com cobertura e build no PR e
-no push das três branches. `migrate.yml` aplica as migrações no banco da branch.
+no push das três branches. `migrate.yml` aplica migrações somente em produção,
+no push de `main`. As migrações de `dev` e `staging` estão desativadas porque
+seus bancos Turso foram excluídos para reduzir consumo. A reativação exige
+provisionar os bancos, configurar seus tokens e restaurar os gatilhos e passos
+correspondentes no workflow. Esta configuração não pausa os deployments da Vercel.
 
 **A Vercel implanta no push, independente do CI.** As duas coisas disparam do
 mesmo evento e não se conhecem: sem proteção de branch em `main` exigindo o CI
 verde, o workflow vermelho não impede o deploy. O portão existe, mas só fecha
 depois que alguém liga a proteção em Settings → Branches.
 
-Segredos que o `migrate.yml` precisa, um por ambiente para que um workflow de
-`dev` comprometido não alcance produção: `TURSO_TOKEN_PROD`,
-`TURSO_TOKEN_STAGING`, `TURSO_TOKEN_DEV`.
+O único segredo usado por `migrate.yml` é `TURSO_TOKEN_PROD`.
 
 ## Migrar o banco
 
