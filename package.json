@@ -22,6 +22,7 @@
     "sync": "pnpm jho jobs sync",
     "score": "pnpm jho jobs score",
     "typecheck": "tsc --noEmit",
+    "worktrees": "node scripts/worktree-status.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "pnpm check:release-ready && pnpm typecheck && vitest run --coverage && pnpm test:qa-skills",
