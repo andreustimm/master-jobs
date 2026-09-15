@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-15
+
 ### Adicionado
 
 - Filtro de modalidade (remoto, híbrido e presencial) no cockpit e na lista,

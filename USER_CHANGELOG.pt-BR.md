@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-15T18:14:00.754Z
+
 ### Novidade
 
 - Filtre as vagas por Remoto, Híbrido ou Presencial no painel e na lista de vagas.

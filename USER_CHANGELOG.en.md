@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-15T18:14:00.754Z
+
 ### Fixed
 
 - Clearing search now empties the field; browser history restores the text that
