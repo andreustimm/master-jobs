@@ -91,14 +91,20 @@ export const drizzleUserDirectory: UserDirectory = {
   },
 
   async updateRoles(userId, roles) {
-    await getDb().update(authUser).set({ roles }).where(eq(authUser.id, userId));
+    await getDb()
+      .update(authUser)
+      .set({ roles, candidateId: roles.includes("candidate") ? undefined : null })
+      .where(eq(authUser.id, userId));
   },
 
   async update(userId, patch) {
-    const set: { email?: string; fullName?: string | null; roles?: Role[] } = {};
+    const set: { email?: string; fullName?: string | null; roles?: Role[]; candidateId?: number | null } = {};
     if (patch.email !== undefined) set.email = patch.email.trim().toLowerCase();
     if (patch.fullName !== undefined) set.fullName = normalizarNome(patch.fullName);
-    if (patch.roles !== undefined) set.roles = patch.roles;
+    if (patch.roles !== undefined) {
+      set.roles = patch.roles;
+      if (!patch.roles.includes("candidate")) set.candidateId = null;
+    }
 
     // Drizzle recusa `set({})` com erro de SQL. Um patch vazio é entrada
     // legítima — a modal aberta e fechada sem mudar nada — e o certo é não

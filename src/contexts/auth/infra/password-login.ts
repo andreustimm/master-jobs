@@ -136,7 +136,7 @@ export async function verifyLogin(email: string, password: string): Promise<Pass
       email: user.email,
       fullName: user.fullName,
       roles,
-      candidateId: user.candidateId,
+      candidateId: roles.includes("candidate") ? user.candidateId : null,
       linkedCandidateIds: await linkedCandidatesFor(user.id, roles),
     },
   };

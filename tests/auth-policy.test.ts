@@ -242,4 +242,9 @@ describe("candidateScope", () => {
     expect(candidateScope(null)).toBeNull();
     expect(candidateScope(admin())).toBeNull();
   });
+
+  it("ignora vínculo antigo quando a conta não tem papel candidate", () => {
+    expect(candidateScope(session({ roles: ["admin"], candidateId: 7 }))).toBeNull();
+    expect(candidateScope(session({ roles: ["recruiter"], candidateId: 7 }))).toBeNull();
+  });
 });

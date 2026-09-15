@@ -161,6 +161,19 @@ describe("UserDirectory: papéis e desativação", () => {
     expect((await drizzleUserDirectory.find(id))!.roles).toEqual(["candidate"]);
   });
 
+  it("remove o vínculo de candidato ao retirar o papel candidate", async () => {
+    const candidateId = await makeCandidate(91);
+    const { id } = await drizzleUserDirectory.create({
+      email: "reclassificado@local.test",
+      roles: ["admin", "candidate"],
+      candidateId,
+    });
+
+    await drizzleUserDirectory.updateRoles(id, ["admin"]);
+
+    expect((await drizzleUserDirectory.find(id))!.candidateId).toBeNull();
+  });
+
   it("updateRoles em id inexistente não cria nada nem falha", async () => {
     await drizzleUserDirectory.updateRoles(9999, ["admin"]);
     expect(await drizzleUserDirectory.list()).toEqual([]);

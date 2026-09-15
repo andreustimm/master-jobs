@@ -16,6 +16,9 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   a visibilidade do acervo sem expor score ou funil de outra pessoa. O detalhe
   e a exportação CSV seguem a mesma regra, e o formulário de candidatura só
   aparece quando há candidato associado.
+- O escopo de candidato agora exige o papel `candidate` em cada fronteira de
+  sessão; ao remover esse papel, o vínculo antigo é limpo e não pode reabrir
+  score ou funil privado por uma conta administrativa.
 
 ## [1.4.0] - 2026-09-15
 

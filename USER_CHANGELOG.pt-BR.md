@@ -21,6 +21,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 - Recrutadores e administradores agora encontram as vagas abertas no quadro,
   mesmo sem um perfil de candidato associado, e podem abrir o detalhe e
   exportar a lista sem acessar o funil de outra pessoa.
+- Uma conta que deixa de ser candidata não mantém acesso ao seu funil privado
+  ao entrar novamente.
 
 ## [1.4.0] - 2026-09-15T18:14:00.754Z
 

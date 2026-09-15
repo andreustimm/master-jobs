@@ -5,7 +5,7 @@ import { FilterBar, href, readFilters, toBoardFilters } from "./filters";
 import { JobList } from "./joblist";
 import { Legend, Stat } from "./ui";
 import { redirect } from "next/navigation";
-import { requireOwnCandidatePage, requireSession } from "./auth";
+import { candidateScope, requireOwnCandidatePage, requireSession } from "./auth";
 import { getTranslator } from "./i18n";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export default async function Cockpit({
   // variar por papel, então o app abriria numa tela de erro — reintroduzindo,
   // pela porta do manifest, o defeito que a E-06 corrigiu.
   const session = await requireSession();
-  if (session.candidateId === null) redirect("/jobs");
+  if (candidateScope(session) === null) redirect("/jobs");
 
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
 

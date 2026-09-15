@@ -12,7 +12,7 @@ import { renderScoreMessage } from "../../../src/core/i18n/index.ts";
 import { isPublicJobUrl } from "../../../src/core/job-url.ts";
 import { trackAction } from "../../actions";
 import { Fit, Legend, ScoreBar, StatusBadge } from "../../ui";
-import { requirePage } from "../../auth";
+import { candidateScope, requirePage } from "../../auth";
 import { getTranslator } from "../../i18n";
 import { applicationStatusOptions } from "../../status.ts";
 import { MutationFeedbackForm } from "../../mutation-feedback";
@@ -21,7 +21,8 @@ export const dynamic = "force-dynamic";
 
 export default async function JobDetail({ params }: { params: Promise<{ id: string }> }) {
   const { t, locale } = await getTranslator();
-  const { candidateId } = await requirePage("job:read");
+  const session = await requirePage("job:read");
+  const candidateId = candidateScope(session);
 
   const { id } = await params;
   const detail = await getJobDetail(candidateId, Number(id));

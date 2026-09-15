@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
 import { boardFacets, countBoard, getJobDetail, listBoard } from "../src/core/db/repo.ts";
-import { candidate, company, job, source } from "../src/core/db/schema.ts";
+import { application, candidate, company, job, jobScore, source } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
 let db: DB;
@@ -96,8 +96,26 @@ describe("Board SQL read model", () => {
   });
 
   it("lê o detalhe global sem anexar score ou funil de um candidato", async () => {
-    await seedBoard(1);
+    const candidateId = await seedBoard(1);
     const [row] = await db.select({ id: job.id }).from(job).limit(1);
+    await db.insert(jobScore).values({
+      candidateId,
+      jobId: row!.id,
+      fit: 88,
+      titleScore: 88,
+      keywordScore: 88,
+      seniorityScore: 88,
+      geoScore: 88,
+      compScore: 88,
+      cluster: "architect",
+      matchedKeywords: ["typescript"],
+      missingKeywords: [],
+      reasons: ["score privado"],
+      blockers: [],
+      scorerVersion: "teste",
+    });
+    await db.insert(application).values({ candidateId, jobId: row!.id, status: "applied" });
+
     const detail = await getJobDetail(null, row!.id);
 
     expect(detail?.job.id).toBe(row!.id);
