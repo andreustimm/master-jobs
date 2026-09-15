@@ -1,4 +1,5 @@
-# Aplica as migrações no banco do ambiente correspondente à branch.
+# Aplica as migrações no banco de produção.
+# Dev e staging estão desativados: seus bancos Turso foram excluídos para reduzir consumo.
 #
 # ## Por que existe
 #
@@ -18,22 +19,11 @@
 # duas versões estaria olhando para algo que não existe mais. Remoção se faz em
 # dois deploys — primeiro o código para de usar, depois a coluna sai.
 #
-# ## Por que um passo por ambiente, e não uma expressão que escolhe o segredo
-#
-# A versão anterior deste arquivo resolvia o token com
-# `ref == 'main' && SEGREDO_PROD || ...`. Parece equivalente e não é: segredo
-# ausente é string vazia, que é falsa na expressão, então um `TURSO_TOKEN_PROD`
-# não configurado fazia a branch `main` cair silenciosamente no ramo seguinte e
-# tentar migrar produção com o token de dev. Falharia na autenticação — sem
-# estrago —, mas com uma mensagem que não aponta para a causa.
-#
-# Três passos, cada um com `if` da sua branch e só o seu segredo no ambiente.
-# Um workflow de `dev` comprometido não alcança o token de produção.
 name: Migrações
 
 on:
   push:
-    branches: [main, staging, dev]
+    branches: [main]
 
 # Duas migrações simultâneas no mesmo banco é a receita para um journal
 # inconsistente. `cancel-in-progress: false` porque migração começada precisa
@@ -64,18 +54,4 @@ jobs:
         env:
           TURSO_DATABASE_URL: libsql://master-jobs-andreustimm.aws-us-east-1.turso.io
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_TOKEN_PROD }}
-        run: ./.github/scripts/migrar.sh
-
-      - name: Staging
-        if: github.ref_name == 'staging'
-        env:
-          TURSO_DATABASE_URL: libsql://master-jobs-staging-andreustimm.aws-us-east-1.turso.io
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_TOKEN_STAGING }}
-        run: ./.github/scripts/migrar.sh
-
-      - name: Dev
-        if: github.ref_name == 'dev'
-        env:
-          TURSO_DATABASE_URL: libsql://master-jobs-dev-andreustimm.aws-us-east-1.turso.io
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_TOKEN_DEV }}
         run: ./.github/scripts/migrar.sh
