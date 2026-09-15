@@ -109,6 +109,12 @@ export type BoardFilters = {
   offset?: number;
 };
 
+const DAY_MS = 86_400_000;
+
+function freshnessCutoff(days: number): string {
+  return new Date(Date.now() - days * DAY_MS).toISOString();
+}
+
 function boardConditions(opts: BoardFilters, candidateId: number | null): SQL[] {
   const conditions: SQL[] = [isNull(job.closedAt)];
   // Fit, cluster, blockers and application status are candidate-scoped. A
@@ -134,8 +140,9 @@ function boardConditions(opts: BoardFilters, candidateId: number | null): SQL[] 
   if (opts.sourceKind) conditions.push(sql`${job.sourceId} like ${`${opts.sourceKind}:%`}`);
   if (opts.workMode) conditions.push(eq(workModeSql(), opts.workMode));
   if (opts.freshDays && opts.freshDays > 0) {
-    const cutoff = new Date(Date.now() - opts.freshDays * 86_400_000).toISOString();
-    conditions.push(sql`coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${cutoff}`);
+    conditions.push(
+      sql`coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${freshnessCutoff(opts.freshDays)}`,
+    );
   }
   if (opts.hasComp) conditions.push(sql`coalesce(${job.compMax}, ${job.compMin}, 0) > 0`);
   if (opts.hasDescription) {
@@ -283,13 +290,33 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
     else ${job.sourceId}
   end`;
   const dimensions = { ...base, limit: undefined, offset: undefined };
-  const [total, unblocked, fresh, withComp, named, described, clusterRows, sourceRows] = await Promise.all([
-    countBoard(candidateId, dimensions),
-    countBoard(candidateId, { ...dimensions, hideBlocked: true }),
-    countBoard(candidateId, { ...dimensions, freshDays: 3 }),
-    countBoard(candidateId, { ...dimensions, hasComp: true }),
-    countBoard(candidateId, { ...dimensions, namedEmployer: true }),
-    countBoard(candidateId, { ...dimensions, hasDescription: true }),
+  const freshCutoff = freshnessCutoff(3);
+
+  // These six counters used to call `countBoard` independently. Each call
+  // scanned the complete open corpus and its candidate-scoped joins, so one
+  // cockpit render paid six full scans before loading a single card. Conditional
+  // aggregation produces the same facets with one corpus scan.
+  const [summaryRows, clusterRows, sourceRows] = await Promise.all([
+    getDb()
+      .select({
+        total: sql<number>`count(*)`,
+        unblocked: sql<number>`coalesce(sum(case when coalesce(${jobScore.blockers}, '[]') = '[]' then 1 else 0 end), 0)`,
+        fresh: sql<number>`coalesce(sum(case when coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${freshCutoff} then 1 else 0 end), 0)`,
+        withComp: sql<number>`coalesce(sum(case when coalesce(${job.compMax}, ${job.compMin}, 0) > 0 then 1 else 0 end), 0)`,
+        named: sql<number>`coalesce(sum(case when lower(${job.companyName}) <> lower(coalesce(${source.label}, '')) then 1 else 0 end), 0)`,
+        described: sql<number>`coalesce(sum(case when length(coalesce(${job.descriptionText}, '')) >= 200 then 1 else 0 end), 0)`,
+      })
+      .from(job)
+      .leftJoin(
+        jobScore,
+        and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
+      )
+      .leftJoin(
+        application,
+        and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
+      )
+      .leftJoin(source, eq(source.id, job.sourceId))
+      .where(and(...boardConditions(dimensions, candidateId))),
     getDb()
       .select({ cluster: jobScore.cluster })
       .from(job)
@@ -321,13 +348,14 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
       .groupBy(sourceKind)
       .then((rows) => rows.map((row) => row.kind).sort()),
   ]);
+  const summary = summaryRows[0];
   return {
-    total,
-    unblocked,
-    fresh,
-    withComp,
-    named,
-    described,
+    total: Number(summary?.total ?? 0),
+    unblocked: Number(summary?.unblocked ?? 0),
+    fresh: Number(summary?.fresh ?? 0),
+    withComp: Number(summary?.withComp ?? 0),
+    named: Number(summary?.named ?? 0),
+    described: Number(summary?.described ?? 0),
     clusters: clusterRows,
     sources: sourceRows,
   };

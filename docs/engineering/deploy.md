@@ -196,21 +196,29 @@ As FKs ficam desligadas durante a cópia via `client.migrate()`, e **não** por
 `batch(…, "write")` abre uma. O `pragma foreign_key_check` no fim é o que
 confere o resultado.
 
-O banco local tem **529 MB**, e a maior parte não é o que parece:
+Uma cópia real do banco tinha **525,7 MiB**, e a maior parte era entrada
+reconstruível duplicada:
 
 | | tamanho | linhas |
 |---|---:|---:|
-| `job_page.html` + `text` | 145 MB | 220 |
-| `job.description_text` + `raw` | 130 MB | 8.768 |
+| `job_page.html` | 137,1 MiB | 220 |
+| `job.raw` | 125,3 MiB | 13.384 |
+| `job.description_html` | 67,7 MiB | 13.384 |
+| `job.description_text` | 65,7 MiB | 13.384 |
 
-`job_page.html` é HTML bruto guardado para o `jho scrape reparse` — reextrair
-quando o parser melhora, sem tornar a buscar a página. São 660 KB por linha, e
-é o único dado do sistema que existe apenas para ser reprocessado.
+Desde a ADR 0019, `job_page.html` é apagado após extração bem-sucedida; fontes
+de rede também deixam de persistir o payload integral em `raw` e
+`description_html` (o `workplaceType` mínimo permanece quando declarado). Uma cópia real
+passou a aproximadamente 108 MiB usados após:
 
-`--skip-html` deixa esses 145 MB para trás. O custo é que um reparse futuro
-precisará rebuscar as páginas; o ganho é migrar menos de um terço do volume. A
-escolha é de quem implanta, e por isso não tem padrão implícito: a flag precisa
-ser digitada.
+```bash
+pnpm jho db cleanup
+pnpm jho db cleanup --apply
+```
+
+`--skip-html` continua útil ao migrar snapshots antigos. Páginas cuja extração
+falhou preservam HTML; páginas tratadas exigem `scrape queue --refresh` para um
+novo processamento.
 
 ## O que confirmar depois de subir
 

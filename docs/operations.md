@@ -620,6 +620,8 @@ pnpm jho tasks done <PT-XXXX>            # diário: fechar item do plano
 pnpm jho profile                         # semanal: validar profile.yaml
 pnpm jho jobs score --all                # semanal: após bump de SCORER_VERSION
 pnpm jho db prune --days 90              # semanal: limpar fechadas sem candidatura
+pnpm jho db cleanup                      # semanal: inventário sem alterar
+pnpm jho db cleanup --apply              # semanal: descartar payload reconstruível
 pnpm jho report                          # semanal: snapshot no vault
 pnpm jho pipeline                        # semanal: estado do funil
 pnpm jho sources list                    # semanal: saúde das fontes
@@ -651,7 +653,7 @@ pnpm jho jobs verify --min-fit 55 --limit 250   # fecha o que morreu
 pnpm jho mail import ~/mail              # alertas e e-mails de ATS
 pnpm jho mail suggestions                # revisa o que o e-mail sugere
 pnpm jho referrals                       # onde você já conhece alguém
-pnpm jho db prune --days 90
+pnpm jho db cleanup --apply --closed-days 90
 pnpm jho report                          # snapshot pro vault
 ```
 

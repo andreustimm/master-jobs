@@ -252,6 +252,9 @@ describe("jho scrape run", () => {
     const [pagina] = await banco().select().from(jobPage).where(eq(jobPage.jobId, vagaId));
     expect(pagina?.text).toContain("retrieval augmented generation");
     expect(pagina?.parsedAt).not.toBeNull();
+    // HTML bruto é matéria-prima temporária. Depois que texto e metadados
+    // úteis foram extraídos, mantê-lo duplicaria centenas de KB por vaga.
+    expect(pagina?.html).toBeNull();
     const [vaga] = await banco().select().from(job).where(eq(job.id, vagaId));
     // O texto raspado preenche a lacuna da fonte. Sem isso a captura seria
     // trabalho guardado num canto que o scorer nunca lê.
@@ -366,16 +369,22 @@ describe("jho scrape run", () => {
 /* -------------------------------- reparse --------------------------------- */
 
 describe("jho scrape reparse", () => {
-  it("reprocessa toda página guardada sem baixar de novo", async () => {
+  it("reprocessa página bruta ainda não tratada sem baixar de novo", async () => {
     const vagaId = await semearVaga();
-    await rodar("scrape", "queue", "--min-fit", "0");
-    const { impl, calls } = fetcherFixo();
-    vi.stubGlobal("fetch", impl);
-    await rodar("scrape", "run");
-    // Apaga o resultado do tratamento para o reprocessamento ter o que fazer —
-    // é o estado em que um extrator novo encontraria o acervo.
-    await banco().update(jobPage).set({ text: null, parsedAt: null }).where(eq(jobPage.jobId, vagaId));
-    calls.length = 0;
+    await banco().insert(jobPage).values({
+      jobId: vagaId,
+      finalUrl: `https://${IP_PUBLICO}/vaga/1`,
+      httpStatus: 200,
+      html: PAGINA,
+      contentHash: "hash",
+      bytes: PAGINA.length,
+      fetchedAt: new Date().toISOString(),
+    });
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      calls.push(String(input));
+      throw new Error("reparse não deveria acessar a rede");
+    });
 
     const r = await rodar("scrape", "reparse");
 
@@ -385,6 +394,7 @@ describe("jho scrape reparse", () => {
     expect(calls).toEqual([]);
     const [pagina] = await banco().select().from(jobPage).where(eq(jobPage.jobId, vagaId));
     expect(pagina?.text).toContain("retrieval augmented generation");
+    expect(pagina?.html).toBeNull();
   });
 
   it("página sem texto utilizável é contada como falha, não reprocessada em silêncio", async () => {

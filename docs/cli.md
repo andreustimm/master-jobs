@@ -116,6 +116,30 @@ pnpm jho db prune --days 120
 
 ---
 
+### `jho db cleanup`
+
+Inventaria payloads reconstruíveis e vagas fechadas elegíveis para poda. Sem
+`--apply` é somente leitura; isso torna seguro medir produção antes de alterar.
+
+| Flag | Default | Descrição |
+|---|---|---|
+| `--apply` | ausente | aplica a limpeza inventariada |
+| `--closed-days <n>` | `90` | poda vaga fechada sem candidatura após N dias |
+| `--page-html-days <n>` | `0` | retenção do HTML bruto já tratado |
+
+```bash
+pnpm jho db cleanup
+pnpm jho db cleanup --apply
+```
+
+O comando compacta `job.raw` e `job.description_html` apenas para fontes de
+rede, preservando o `workplaceType` mínimo quando existe. Ele limpa
+`job_page.html` apenas após extração bem-sucedida e protege toda vaga ligada a
+`application`. Turso não oferece `VACUUM`; a medição de storage
+usa páginas ocupadas via `dbstat`, que são liberadas pela atualização.
+
+---
+
 ### `jho db seed`
 
 Carrega o plano de ação da auditoria de posicionamento (§14) na tabela
@@ -1174,12 +1198,12 @@ some de `sources list` e do sync sem precisar apagar a entrada nem o `rationale`
 
 ```bash
 pnpm jho db migrate
-pnpm jho db prune --days 120
+pnpm jho db cleanup --apply --closed-days 120
 pnpm jho jobs score
 pnpm jho pipeline
 ```
 
-`db prune` só remove vagas fechadas há mais de `--days` dias **e** sem nenhuma
+`db cleanup` só remove vagas fechadas há mais de `--closed-days` dias **e** sem nenhuma
 `application` associada, então rodar isso nunca apaga histórico de candidatura. O
 `jobs score` no final recupera qualquer vaga que tenha ficado sem score (por exemplo
 depois de um `jobs sync --no-score`).
