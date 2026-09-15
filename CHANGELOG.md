@@ -9,6 +9,20 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Filtro de modalidade (remoto, híbrido e presencial) no cockpit e na lista,
+  aplicado em SQL antes da paginação e compartilhado por contagem, facetas e CSV.
+  A classificação usa metadados declarados pela fonte e localização explícita;
+  heurísticas extraídas de palavras da descrição não decidem a modalidade.
+  A ausência de modalidade permanece no recorte Todas, sem migração nem novo score.
+
+### Corrigido
+
+- Ver todas preserva o recorte do cockpit, inclusive o corte Todas (`fit=0`);
+  avançar na paginação mantém o tamanho de página escolhido.
+- O campo de busca acompanha a URL ao limpar o texto e percorrer o histórico.
+
 ## [1.3.10] - 2026-08-28
 
 ### Corrigido

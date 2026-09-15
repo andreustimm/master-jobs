@@ -16,6 +16,18 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Novidade
+
+- Filtre as vagas por Remoto, Híbrido ou Presencial no painel e na lista de vagas.
+  Escolha Todas para incluir também vagas sem modalidade informada.
+- A opção ver todas mantém seus filtros, e a paginação preserva a quantidade de
+  vagas por página.
+
+### Correção
+
+- Limpar a busca agora esvazia o campo; voltar pelo histórico recupera o texto
+  correspondente aos resultados.
+
 ## [1.3.10] - 2026-08-28T03:09:49.668Z
 
 ### Correção

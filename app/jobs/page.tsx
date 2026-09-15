@@ -43,7 +43,7 @@ export default async function Jobs({
   const [rows, total, facets] = await Promise.all([
     listBoard(candidateId, { ...filters, limit: pageSize, offset: (page - 1) * pageSize }),
     countBoard(candidateId, filters),
-    boardFacets(candidateId, { minFit: state.fit, cluster: state.cluster, q: state.q, sourceKind: state.source }),
+    boardFacets(candidateId, { minFit: state.fit, cluster: state.cluster, q: state.q, sourceKind: state.source, workMode: state.workMode }),
   ]);
 
   return (

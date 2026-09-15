@@ -16,6 +16,17 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Clearing search now empties the field; browser history restores the text that
+  matches the results.
+
+### New
+
+- Filter jobs by Remote, Hybrid or On-site in the dashboard and job list.
+  Choose All to include jobs with no stated work mode.
+- View all keeps your filters, and pagination preserves your selected page size.
+
 ## [1.3.10] - 2026-08-28T03:09:49.668Z
 
 ### Fixed

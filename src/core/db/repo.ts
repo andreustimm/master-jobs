@@ -7,6 +7,8 @@
  */
 import { and, desc, eq, gte, isNull, sql, type SQL } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import type { WorkMode } from "../../contexts/matching/index.ts";
+import { workModeSql } from "./work-mode.ts";
 import {
   IllegalApplicationTransitionError,
   transitionApplication,
@@ -76,6 +78,7 @@ export type BoardFilters = {
   /** Free text over title and company. */
   q?: string;
   sourceKind?: string;
+  workMode?: WorkMode;
   /** Hide anything with a hard blocker — work authorisation, on-site, W2. */
   hideBlocked?: boolean;
   /** Only postings published within N days. */
@@ -118,6 +121,7 @@ function boardConditions(opts: BoardFilters): SQL[] {
     );
   }
   if (opts.sourceKind) conditions.push(sql`${job.sourceId} like ${`${opts.sourceKind}:%`}`);
+  if (opts.workMode) conditions.push(eq(workModeSql(), opts.workMode));
   if (opts.hideBlocked) conditions.push(sql`coalesce(${jobScore.blockers}, '[]') = '[]'`);
   if (opts.freshDays && opts.freshDays > 0) {
     const cutoff = new Date(Date.now() - opts.freshDays * 86_400_000).toISOString();

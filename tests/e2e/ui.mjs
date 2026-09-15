@@ -22,6 +22,7 @@
 import { chromium, webkit } from "playwright";
 import { readFile } from "node:fs/promises";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
+import { checkWorkModes } from "./work-mode.mjs";
 
 const BASE = process.env.E2E_BASE ?? "http://127.0.0.1:3000";
 
@@ -3021,6 +3022,7 @@ try {
   await candidateMenuCtx.close();
 
   await page.setViewportSize({ width: 1280, height: 900 });
+  await checkWorkModes(page, BASE, check);
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   const firstJobLink = page.locator('[data-testid^="job-link-"]').first();
   const contextualPhases = [];
@@ -3116,7 +3118,7 @@ try {
       && bulkCardinality.next === 1
       && contextualState.pagination.path === "/jobs"
       && contextualState.pagination.query === "Task 04 bulk fixture"
-      && contextualState.pagination.size === null
+      && contextualState.pagination.size === "200"
       && contextualState.pagination.page === "2"
       && contextualState.preset.path === "/jobs"
       && contextualState.preset.fit === "60"

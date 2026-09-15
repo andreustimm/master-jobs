@@ -111,6 +111,13 @@ try {
   await seedCatalog();
 
   const resultFixtures = [
+    ...Array.from({ length: 16 }, (_, index) => ({
+      id: 903000000 + index,
+      title: `Work mode fixture ${index + 1}`,
+      companyName: "Work Mode QA",
+      locationRaw: index < 13 ? "Remote · Brazil" : index === 13 ? "São Paulo · Hybrid" : index === 14 ? "São Paulo · On-site" : "São Paulo",
+      remote: index < 13 ? true : null,
+    })),
     ...Array.from({ length: 7 }, (_, index) => ({
       id: 901000000 + index,
       title: `Task 04 typical fixture ${index + 1}`,
@@ -131,6 +138,8 @@ try {
       sourceId: "ashby:e2e",
       externalId: String(fixture.id),
       companyName: fixture.companyName,
+      locationRaw: fixture.locationRaw,
+      remote: fixture.remote,
       title: fixture.title,
       descriptionText: "Task 04 deterministic result-cardinality fixture.",
       url: `https://jobs.example.com/${fixture.id}`,
