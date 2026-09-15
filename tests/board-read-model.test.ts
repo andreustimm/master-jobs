@@ -79,4 +79,19 @@ describe("Board SQL read model", () => {
     await expect(countBoard(candidateId, { status: "applied" })).resolves.toBe(10);
     await expect(countBoard(candidateId, { status: "unfiled" })).resolves.toBe(20);
   });
+
+  it("mantém o acervo global para quem não tem candidato, mesmo com o corte padrão", async () => {
+    await seedBoard(2);
+
+    const rows = await listBoard(null, { minFit: 45 });
+
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.fit === null && row.status === null)).toBe(true);
+    await expect(countBoard(null, { minFit: 45 })).resolves.toBe(2);
+    await expect(boardFacets(null, { minFit: 45 })).resolves.toMatchObject({
+      total: 2,
+      clusters: [],
+      sources: ["manual"],
+    });
+  });
 });

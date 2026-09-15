@@ -109,11 +109,22 @@ export type BoardFilters = {
   offset?: number;
 };
 
-function boardConditions(opts: BoardFilters): SQL[] {
+function boardConditions(opts: BoardFilters, candidateId: number | null): SQL[] {
   const conditions: SQL[] = [isNull(job.closedAt)];
-  conditions.push(gte(sql`coalesce(${jobScore.fit}, 0)`, opts.minFit ?? 0));
-
-  if (opts.cluster) conditions.push(eq(jobScore.cluster, opts.cluster));
+  // Fit, cluster, blockers and application status are candidate-scoped. A
+  // recruiter or admin without a candidate identity must still see the
+  // global corpus when the board's default cut is 45+; joining with a
+  // deliberate `1 = 0` predicate makes those columns null, so applying the
+  // cut here would hide every open job from the global board.
+  if (candidateId !== null) {
+    conditions.push(gte(sql`coalesce(${jobScore.fit}, 0)`, opts.minFit ?? 0));
+    if (opts.cluster) conditions.push(eq(jobScore.cluster, opts.cluster));
+    if (opts.hideBlocked) conditions.push(sql`coalesce(${jobScore.blockers}, '[]') = '[]'`);
+    if (opts.status === "unfiled") conditions.push(isNull(application.id));
+    else if (opts.status && opts.status !== "any") {
+      conditions.push(eq(application.status, opts.status));
+    }
+  }
   if (opts.q) {
     const needle = `%${opts.q.toLowerCase()}%`;
     conditions.push(
@@ -122,7 +133,6 @@ function boardConditions(opts: BoardFilters): SQL[] {
   }
   if (opts.sourceKind) conditions.push(sql`${job.sourceId} like ${`${opts.sourceKind}:%`}`);
   if (opts.workMode) conditions.push(eq(workModeSql(), opts.workMode));
-  if (opts.hideBlocked) conditions.push(sql`coalesce(${jobScore.blockers}, '[]') = '[]'`);
   if (opts.freshDays && opts.freshDays > 0) {
     const cutoff = new Date(Date.now() - opts.freshDays * 86_400_000).toISOString();
     conditions.push(sql`coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${cutoff}`);
@@ -133,10 +143,6 @@ function boardConditions(opts: BoardFilters): SQL[] {
   }
   if (opts.namedEmployer) {
     conditions.push(sql`lower(${job.companyName}) <> lower(coalesce(${source.label}, ''))`);
-  }
-  if (opts.status === "unfiled") conditions.push(isNull(application.id));
-  else if (opts.status && opts.status !== "any") {
-    conditions.push(eq(application.status, opts.status));
   }
   return conditions;
 }
@@ -163,7 +169,7 @@ export async function listBoard(
   opts: BoardFilters = {},
 ): Promise<BoardRow[]> {
   const db = getDb();
-  const conditions = boardConditions(opts);
+  const conditions = boardConditions(opts, candidateId);
 
   const order =
     opts.sort === "recent"
@@ -266,7 +272,7 @@ export async function countBoard(
       and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
     )
     .leftJoin(source, eq(source.id, job.sourceId))
-    .where(and(...boardConditions(opts)));
+    .where(and(...boardConditions(opts, candidateId)));
   return Number(row?.count ?? 0);
 }
 
@@ -296,7 +302,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
         and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
       )
       .leftJoin(source, eq(source.id, job.sourceId))
-      .where(and(...boardConditions(dimensions), sql`${jobScore.cluster} is not null`))
+      .where(and(...boardConditions(dimensions, candidateId), sql`${jobScore.cluster} is not null`))
       .groupBy(jobScore.cluster)
       .then((rows) => rows.map((row) => row.cluster!).sort()),
     getDb()
@@ -311,7 +317,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
         and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
       )
       .leftJoin(source, eq(source.id, job.sourceId))
-      .where(and(...boardConditions(dimensions)))
+      .where(and(...boardConditions(dimensions, candidateId)))
       .groupBy(sourceKind)
       .then((rows) => rows.map((row) => row.kind).sort()),
   ]);

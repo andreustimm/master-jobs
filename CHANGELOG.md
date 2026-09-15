@@ -9,6 +9,12 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- O quadro global agora ignora cortes de aderência, cluster, bloqueios e status
+  quando a sessão não tem candidato (recrutador ou administrador), preservando
+  a visibilidade do acervo sem expor score ou funil de outra pessoa.
+
 ## [1.4.0] - 2026-09-15
 
 ### Adicionado

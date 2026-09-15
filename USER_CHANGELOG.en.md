@@ -16,6 +16,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Recruiters and administrators can now find open jobs on the board even when
+  no candidate profile is linked to their account.
+
 ## [1.4.0] - 2026-09-15T18:14:00.754Z
 
 ### Fixed
