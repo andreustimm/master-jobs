@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
-import { boardFacets, countBoard, listBoard } from "../src/core/db/repo.ts";
-import { candidate, company, source } from "../src/core/db/schema.ts";
+import { boardFacets, countBoard, getJobDetail, listBoard } from "../src/core/db/repo.ts";
+import { candidate, company, job, source } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
 let db: DB;
@@ -93,5 +93,15 @@ describe("Board SQL read model", () => {
       clusters: [],
       sources: ["manual"],
     });
+  });
+
+  it("lê o detalhe global sem anexar score ou funil de um candidato", async () => {
+    await seedBoard(1);
+    const [row] = await db.select({ id: job.id }).from(job).limit(1);
+    const detail = await getJobDetail(null, row!.id);
+
+    expect(detail?.job.id).toBe(row!.id);
+    expect(detail?.score).toBeNull();
+    expect(detail?.application).toBeNull();
   });
 });

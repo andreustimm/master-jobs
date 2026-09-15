@@ -1782,6 +1782,28 @@ try {
         visibleJobs > 0,
         `a tela de vagas exibiu ${visibleJobs} linhas`,
       );
+
+      const firstJobHref = await rolePage.locator('[data-testid^="job-link-"]').first().getAttribute("href");
+      const detailResponse = await rolePage.goto(`${BASE}${firstJobHref}`, { waitUntil: "networkidle" });
+      check(
+        "recrutador abre o detalhe global sem funil privado",
+        detailResponse?.status() === 200 && (await rolePage.locator('[data-testid="route-job-detail"]').count()) === 1,
+        `${detailResponse?.status()} em ${rolePage.url().replace(BASE, "")}`,
+      );
+      check(
+        "detalhe global não oferece mutação de candidatura ao recrutador",
+        (await rolePage.locator('input[name="jobId"]').count()) === 0,
+        "formulário de funil presente",
+      );
+      await rolePage.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+      const downloadPromise = rolePage.waitForEvent("download");
+      await rolePage.locator('a[download]').click();
+      const exportDownload = await downloadPromise;
+      check(
+        "recrutador exporta o acervo global",
+        exportDownload.suggestedFilename().startsWith("vagas-"),
+        exportDownload.suggestedFilename(),
+      );
     }
 
     // `start_url` do manifest é "/" e não pode variar por papel. Instalada, a

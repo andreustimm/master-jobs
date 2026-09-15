@@ -524,7 +524,7 @@ export async function pipelineCounts(candidateId: number): Promise<Record<string
 }
 
 /** Everything the detail view needs, in one round trip. */
-export async function getJobDetail(candidateId: number, jobId: number) {
+export async function getJobDetail(candidateId: number | null, jobId: number) {
   const db = getDb();
   const rows = await db
     .select()

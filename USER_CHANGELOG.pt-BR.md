@@ -19,7 +19,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 ### Correção
 
 - Recrutadores e administradores agora encontram as vagas abertas no quadro,
-  mesmo sem um perfil de candidato associado.
+  mesmo sem um perfil de candidato associado, e podem abrir o detalhe e
+  exportar a lista sem acessar o funil de outra pessoa.
 
 ## [1.4.0] - 2026-09-15T18:14:00.754Z
 

@@ -19,7 +19,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 ### Fixed
 
 - Recruiters and administrators can now find open jobs on the board even when
-  no candidate profile is linked to their account.
+  no candidate profile is linked to their account, open their details, and
+  export the list without accessing another person's pipeline.
 
 ## [1.4.0] - 2026-09-15T18:14:00.754Z
 
