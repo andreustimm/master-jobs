@@ -213,7 +213,7 @@ export async function pruneClosed(olderThanDays = 90): Promise<number> {
     .where(
       and(
         lt(job.closedAt, cutoff),
-        sql`${job.id} not in (select job_id from application)`,
+        sql`${job.id} not in (select job_id from production.application)`,
       ),
     )
     .returning({ id: job.id });

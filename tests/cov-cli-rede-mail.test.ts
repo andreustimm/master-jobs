@@ -94,12 +94,12 @@ beforeEach(async () => {
   gmail.token = null;
 });
 
-afterEach(() => {
+afterEach(async () => {
   for (const chave of CREDENCIAIS) {
     if (originais[chave] === undefined) delete process.env[chave];
     else process.env[chave] = originais[chave];
   }
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 function comCredenciais(): void {

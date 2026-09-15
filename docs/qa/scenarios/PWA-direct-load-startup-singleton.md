@@ -6,7 +6,7 @@ persona: Candidato em trânsito
 journey: J-open-dashboard-direct
 expected: A carga direta conserva o splash de 900 ms e nunca empilha um overlay de transição durante hidratação
 entry_points: /
-qa_status: pass
+qa_status: untested
 bug_ids:
 fix_status:
 retest_status:
@@ -17,6 +17,14 @@ overlaps:
 ---
 
 Canário adjacente para regressões no renderer inline, hidratação, locale e shell responsivo.
+
+10/09/2026: canária desktop PostgreSQL percorreu abertura direta, reload,
+busca e navegação Candidato com back/forward e nova leitura. Sem overlay residual
+nas capturas finais da rodada supabase-production. Não mediu os 900 ms nem
+repetiu a persona móvel; cenário completo permanece untested.
+
+Migração PostgreSQL: repetir como canária do novo runtime; os relatos abaixo
+registram versões anteriores, não o resultado desta branch.
 
 A URL direta e a recarga chegaram ao mesmo cockpit operável. O Full QA repetiu o percurso em 375×812 pela persona Candidato em trânsito, sem overflow nem camada residual.
 

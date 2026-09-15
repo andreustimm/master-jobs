@@ -11,8 +11,8 @@ beforeEach(async () => {
   db = await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 async function seedBoard(size: number): Promise<number> {
@@ -31,13 +31,13 @@ async function seedBoard(size: number): Promise<number> {
     .values({ slug: "board-company", name: "Board company" })
     .returning({ id: company.id });
 
-  await db.run(sql.raw(`
+  await db.execute(sql.raw(`
     with recursive n(x) as (
       values(1)
       union all
       select x + 1 from n where x < ${size}
     )
-    insert into job (
+    insert into production.job (
       source_id, company_id, company_name, external_id, title, url,
       fingerprint, content_hash, raw
     )
@@ -65,10 +65,10 @@ describe("Board SQL read model", () => {
 
   it("applies status before limit/offset and gives count the same predicate", async () => {
     const candidateId = await seedBoard(30);
-    await db.run(sql.raw(`
-      insert into application (candidate_id, job_id, status)
+    await db.execute(sql.raw(`
+      insert into production.application (candidate_id, job_id, status)
       select ${candidateId}, id, 'applied'
-      from job
+      from production.job
       order by id desc
       limit 10
     `));

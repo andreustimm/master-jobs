@@ -102,10 +102,10 @@ beforeEach(async () => {
   db = await useTestDb();
 });
 
-afterEach(() => {
+afterEach(async () => {
   resetHttpPort();
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 describe("observeRawJob", () => {

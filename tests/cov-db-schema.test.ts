@@ -14,7 +14,7 @@
  * Fronteira FORA: a lógica que decide quando apagar, que mora nos casos de uso.
  */
 import { is, sql } from "drizzle-orm";
-import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
+import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
 import * as schema from "../src/core/db/schema.ts";
@@ -26,8 +26,8 @@ beforeEach(async () => {
   db = await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 type DeclaredFk = {
@@ -39,13 +39,13 @@ type DeclaredFk = {
 };
 
 /** Toda tabela exportada pelo schema, na ordem em que o módulo as declara. */
-function allTables(): SQLiteTable[] {
+function allTables(): PgTable[] {
   // `unknown[]` antes de filtrar: o módulo exporta tabelas E tuplas de
   // constantes (`ROLES`, `APPLICATION_STATUSES`…), então `Object.values` produz
   // uma união em que o predicado de tipo não é atribuível ao parâmetro. O
   // estreitamento continua sendo feito por `is()`, em tempo de execução.
   const exported: unknown[] = Object.values(schema);
-  return exported.filter((value): value is SQLiteTable => is(value, SQLiteTable));
+  return exported.filter((value): value is PgTable => is(value, PgTable));
 }
 
 /**
@@ -120,30 +120,25 @@ describe("chaves estrangeiras declaradas", () => {
     // ORM: o TypeScript continua compilando, as queries continuam passando, e a
     // política de exclusão em produção é a antiga.
     const declared = declaredForeignKeys();
-    const aplicadas = new Set<string>();
-
-    for (const table of new Set(declared.map((fk) => fk.table))) {
-      const rows = await db.all<{
-        table: string;
-        from: string;
-        to: string | null;
-        on_delete: string;
-      }>(sql.raw(`pragma foreign_key_list("${table}")`));
-      for (const row of rows) {
-        aplicadas.add(`${table}.${row.from}->${row.table}.${row.to ?? "id"}:${row.on_delete}`);
-      }
-    }
-
-    for (const fk of declared) {
-      for (const [i, coluna] of fk.from.entries()) {
-        const chave = `${fk.table}.${coluna}`;
-        if (DIVERGENCIAS_CONHECIDAS.has(chave)) continue;
-        expect(
-          aplicadas,
-          `${chave} deveria referenciar ${fk.to}.${fk.toColumns[i]} com ${fk.onDelete}`,
-        ).toContain(`${chave}->${fk.to}.${fk.toColumns[i]}:${fk.onDelete}`);
-      }
-    }
+    const rows = await db.execute<{
+      table: string; from: string[]; to: string; toColumns: string[]; onDelete: string; validated: boolean;
+    }>(sql`
+      select child.relname as "table", parent.relname as "to",
+        array(select a.attname from unnest(c.conkey) with ordinality k(attnum, position)
+          join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum order by k.position) as "from",
+        array(select a.attname from unnest(c.confkey) with ordinality k(attnum, position)
+          join pg_attribute a on a.attrelid = c.confrelid and a.attnum = k.attnum order by k.position) as "toColumns",
+        case c.confdeltype when 'a' then 'NO ACTION' when 'r' then 'RESTRICT'
+          when 'c' then 'CASCADE' when 'n' then 'SET NULL' when 'd' then 'SET DEFAULT' end as "onDelete",
+        c.convalidated as validated
+      from pg_constraint c
+      join pg_class child on child.oid = c.conrelid
+      join pg_class parent on parent.oid = c.confrelid
+      where c.contype = 'f' and c.connamespace = 'production'::regnamespace
+    `);
+    expect(rows.every((row) => row.validated)).toBe(true);
+    const normalize = (fk: DeclaredFk) => JSON.stringify([fk.table, fk.from, fk.to, fk.toColumns, fk.onDelete]);
+    expect(rows.map(normalize).sort()).toEqual(declared.map(normalize).sort());
   });
 
   // O caso que afirmava as duas divergências da migration 0021 saiu daqui: a
@@ -182,7 +177,7 @@ describe("chaves estrangeiras declaradas", () => {
       detail: "precisa sobreviver",
     });
 
-    await db.run(sql.raw(`delete from auth_user where id = ${user!.id}`));
+    await db.execute(sql.raw(`delete from production.auth_user where id = ${user!.id}`));
 
     const sessoes = await db.select().from(schema.authSession);
     const eventos = await db.select().from(schema.authEvent);
@@ -226,7 +221,7 @@ describe("chaves estrangeiras declaradas", () => {
       .insert(schema.application)
       .values({ candidateId: dono!.id, jobId: vaga!.id, status: "applied" });
 
-    await db.run(sql.raw(`delete from job where id = ${vaga!.id}`));
+    await db.execute(sql.raw(`delete from production.job where id = ${vaga!.id}`));
 
     await expect(db.select().from(schema.application)).resolves.toHaveLength(0);
   });

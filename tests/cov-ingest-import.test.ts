@@ -32,8 +32,8 @@ beforeEach(async () => {
   temporario = mkdtempSync(join(tmpdir(), "jho-import-"));
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
   rmSync(temporario, { recursive: true, force: true });
 });
 

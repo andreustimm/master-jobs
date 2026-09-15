@@ -45,8 +45,8 @@ beforeEach(async () => {
   await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 /**

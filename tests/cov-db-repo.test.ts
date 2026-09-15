@@ -46,8 +46,8 @@ beforeEach(async () => {
   db = await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 async function seedCandidato(slug: string, isDefault = false): Promise<number> {
@@ -457,12 +457,11 @@ describe("concorrência otimista na transição", () => {
     const candidateId = await seedCandidato("dono", true);
     const jobId = await seedVaga({ n: 1 });
     await setApplicationStatus(candidateId, jobId, "shortlisted");
-    await db.run(sql.raw(`
-      create trigger perde_update
-      before update on application
-      begin
-        select raise(ignore);
-      end
+    await db.execute(sql.raw(`
+      create function production.perde_update() returns trigger language plpgsql
+      as $$ begin return null; end $$;
+      create trigger perde_update before update on production.application
+      for each row execute function production.perde_update()
     `));
 
     await expect(
@@ -470,7 +469,7 @@ describe("concorrência otimista na transição", () => {
     ).rejects.toBeInstanceOf(ApplicationTransitionConflictError);
 
     // Nada foi gravado pela metade: nem status novo, nem evento órfão.
-    await db.run(sql.raw("drop trigger perde_update"));
+    await db.execute(sql.raw("drop trigger perde_update on production.application"));
     const [linha] = await db.select().from(application).where(eq(application.jobId, jobId));
     expect(linha!.status).toBe("shortlisted");
     const eventos = await db

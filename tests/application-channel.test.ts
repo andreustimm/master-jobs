@@ -45,8 +45,8 @@ beforeEach(async () => {
   jobId = row!.id;
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 async function candidatura() {

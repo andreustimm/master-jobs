@@ -30,8 +30,8 @@ beforeEach(async () => {
   db = await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 async function seedCandidate(slug: string, isDefault = false): Promise<number> {
@@ -284,12 +284,13 @@ describe("funnelAnalysis", () => {
     // estoura nesse estado tira do usuário justamente a ferramenta de descobrir
     // o estrago.
     const candidateId = await seedCandidate("dono", true);
-    await db.run(sql.raw("pragma foreign_keys = off"));
-    await db.run(
-      sql.raw(`insert into application (candidate_id, job_id, status)
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL session_replication_role = 'replica'`);
+    await tx.execute(
+      sql.raw(`insert into production.application (candidate_id, job_id, status)
                values (${candidateId}, 999999, 'applied')`),
     );
-    await db.run(sql.raw("pragma foreign_keys = on"));
+    });
 
     const r = await funnelAnalysis(candidateId);
 

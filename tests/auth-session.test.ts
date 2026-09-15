@@ -47,9 +47,9 @@ beforeEach(async () => {
   setClock(time);
 });
 
-afterEach(() => {
+afterEach(async () => {
   resetClock();
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 describe("session store", () => {

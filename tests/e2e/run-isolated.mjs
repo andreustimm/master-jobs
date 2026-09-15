@@ -10,9 +10,14 @@ import { createServer } from "node:net";
 import { access, cp, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createInterface } from "node:readline/promises";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
+import setupPostgres from "../support/postgres-global.ts";
+import { provisionTestDatabase } from "../support/db.ts";
+import { provisionRuntimeLogin } from "../support/runtime-login.ts";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+const manual = process.argv.includes("--manual");
 const EXCLUDED_ROOTS = new Set([
   ".git",
   ".next",
@@ -144,8 +149,13 @@ const temporaryRoot = await mkdtemp(join(tracingRoot, ".jho-e2e-"));
 const appRoot = join(temporaryRoot, "app");
 const nextCli = join(ROOT, "node_modules", "next", "dist", "bin", "next");
 let server;
+let stopPostgres;
+let testDatabase;
+let runtimeLogin;
 
 try {
+  stopPostgres = await setupPostgres();
+  testDatabase = await provisionTestDatabase();
   await cp(ROOT, appRoot, {
     recursive: true,
     filter(source) {
@@ -155,7 +165,7 @@ try {
     },
   });
   await symlink(join(ROOT, "node_modules"), join(appRoot, "node_modules"), "dir");
-  await Promise.all([
+  if (!manual) await Promise.all([
     writeFile(join(appRoot, "USER_CHANGELOG.pt-BR.md"), changelogFixture("pt-BR")),
     writeFile(join(appRoot, "USER_CHANGELOG.en.md"), changelogFixture("en")),
   ]);
@@ -165,7 +175,8 @@ try {
     ...process.env,
     JHO_OUTPUT_TRACING_ROOT: tracingRoot,
     JHO_AUTH_MODE: "secure",
-    TURSO_DATABASE_URL: `file:${join(temporaryRoot, "jobs.db")}`,
+    DATABASE_URL: testDatabase.url,
+    DATABASE_MIGRATION_URL: testDatabase.url,
     E2E_BASE: `http://127.0.0.1:${port}`,
     E2E_RESET_EXPIRED_TOKEN: TASK04_FIXTURES.resetExpiredToken,
     E2E_RESET_CONSUMED_TOKEN: TASK04_FIXTURES.resetConsumedToken,
@@ -182,6 +193,7 @@ try {
   await Promise.all([
     access(join(standaloneAppRoot, "USER_CHANGELOG.pt-BR.md")),
     access(join(standaloneAppRoot, "USER_CHANGELOG.en.md")),
+    access(join(standaloneAppRoot, "config", "certs", "supabase-ca.crt")),
   ]);
   await Promise.all([
     cp(join(appRoot, "public"), join(standaloneAppRoot, "public"), { recursive: true }),
@@ -190,19 +202,34 @@ try {
     }),
   ]);
   console.log("✓ IT-011 standalone inclui os dois changelogs localizados");
-  await run(process.execPath, ["tests/e2e/setup.mjs"], { cwd: appRoot, env });
+  await run(process.execPath, [manual ? "tests/e2e/setup-manual.ts" : "tests/e2e/setup.mjs"], { cwd: appRoot, env });
+  runtimeLogin = await provisionRuntimeLogin(testDatabase.url);
+  const runtimeEnv = { ...env, DATABASE_URL: runtimeLogin.url };
+  delete runtimeEnv.DATABASE_MIGRATION_URL;
+  delete runtimeEnv.JHO_TEST_POSTGRES_URL;
 
   const startStandalone = () => spawn(
     process.execPath,
     [join(standaloneAppRoot, "server.js")],
     {
       cwd: standaloneAppRoot,
-      env: { ...env, HOSTNAME: "127.0.0.1", PORT: String(port) },
+      env: { ...runtimeEnv, HOSTNAME: "127.0.0.1", PORT: String(port) },
       stdio: "inherit",
     },
   );
   server = startStandalone();
   await waitUntilReady(`${env.E2E_BASE}/login`, server);
+  if (manual) {
+    // Generated, private local credentials let the operator use the same
+    // restricted runtime from the public CLI during journey verification.
+    const runtimeFile = join(temporaryRoot, "runtime.env");
+    await writeFile(runtimeFile, `DATABASE_URL=${runtimeLogin.url}\nJHO_AUTH_MODE=secure\n`, { mode: 0o600 });
+    console.log(`QA manual ready: ${env.E2E_BASE}`);
+    console.log(`Private CLI environment: ${runtimeFile}`);
+    const terminal = createInterface({ input: process.stdin, output: process.stdout });
+    try { await terminal.question("Press Enter to stop and remove this isolated QA environment.\n"); }
+    finally { terminal.close(); }
+  } else {
   await run(process.execPath, ["tests/e2e/ui.mjs"], { cwd: appRoot, env });
   await run(process.execPath, ["tests/e2e/a11y.mjs"], { cwd: appRoot, env });
 
@@ -255,7 +282,12 @@ try {
     cwd: appRoot,
     env: { ...env, E2E_CHANGELOG_MODE: "missing" },
   });
+  }
 } finally {
   await stop(server);
-  await rm(temporaryRoot, { recursive: true, force: true });
+  try { await runtimeLogin?.drop(); await testDatabase?.drop(); }
+  finally {
+    stopPostgres?.();
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
 }

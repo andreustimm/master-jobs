@@ -100,9 +100,9 @@ beforeEach(async () => {
   setClock(fixedClock("2026-08-20T12:00:00.000Z"));
 });
 
-afterEach(() => {
+afterEach(async () => {
   resetClock();
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 describe("pedir recuperação não revela quem está cadastrado", () => {

@@ -41,7 +41,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  releaseTestDb();
+  await releaseTestDb();
   await rm(dir, { recursive: true, force: true });
 });
 

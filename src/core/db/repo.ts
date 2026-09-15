@@ -6,7 +6,7 @@
  * what "shortlisted" or "open" means.
  */
 import { and, desc, eq, gte, isNull, sql, type SQL } from "drizzle-orm";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import type { WorkMode } from "../../contexts/matching/index.ts";
 import { workModeSql } from "./work-mode.ts";
 import {
@@ -22,6 +22,7 @@ import {
   job,
   jobScore,
   source,
+  company,
   type ApplicationStatus,
   verifyTask,
 } from "./schema.ts";
@@ -125,7 +126,9 @@ function boardConditions(opts: BoardFilters, candidateId: number | null): SQL[] 
   if (candidateId !== null) {
     conditions.push(gte(sql`coalesce(${jobScore.fit}, 0)`, opts.minFit ?? 0));
     if (opts.cluster) conditions.push(eq(jobScore.cluster, opts.cluster));
-    if (opts.hideBlocked) conditions.push(sql`coalesce(${jobScore.blockers}, '[]') = '[]'`);
+    if (opts.hideBlocked) {
+      conditions.push(sql`coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb`);
+    }
     if (opts.status === "unfiled") conditions.push(isNull(application.id));
     else if (opts.status && opts.status !== "any") {
       conditions.push(eq(application.status, opts.status));
@@ -167,7 +170,7 @@ function boardConditions(opts: BoardFilters, candidateId: number | null): SQL[] 
  * alguém criasse um candidato com id negativo, o acervo dele vazaria para todo
  * mundo sem escopo.
  */
-function scopedTo(column: SQLiteColumn, candidateId: number | null) {
+function scopedTo(column: PgColumn, candidateId: number | null) {
   return candidateId === null ? sql`1 = 0` : eq(column, candidateId);
 }
 
@@ -285,10 +288,7 @@ export async function countBoard(
 
 /** Counts for the filter chips, so the UI can show what each option yields. */
 export async function boardFacets(candidateId: number | null, base: BoardFilters = {}) {
-  const sourceKind = sql<string>`case
-    when instr(${job.sourceId}, ':') > 0 then substr(${job.sourceId}, 1, instr(${job.sourceId}, ':') - 1)
-    else ${job.sourceId}
-  end`;
+  const sourceKind = sql<string>`split_part(${job.sourceId}, ':', 1)`;
   const dimensions = { ...base, limit: undefined, offset: undefined };
   const freshCutoff = freshnessCutoff(3);
 
@@ -607,15 +607,15 @@ export async function corpusStats(candidateId: number) {
   const db = getDb();
   const [row] = await db
     .select({
-      open: sql<number>`(select count(*) from job where closed_at is null)`,
-      companies: sql<number>`(select count(*) from company)`,
-      sources: sql<number>`(select count(*) from source where enabled = 1)`,
-      above45: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 45)`,
-      above60: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 60)`,
-      above70: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 70)`,
-      best: sql<number>`(select coalesce(max(fit), 0) from job_score s join job j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null)`,
+      open: sql<number>`(select count(*) from ${job} where ${job.closedAt} is null)`.mapWith(Number),
+      companies: sql<number>`(select count(*) from ${company})`.mapWith(Number),
+      sources: sql<number>`(select count(*) from ${source} where ${source.enabled} = true)`.mapWith(Number),
+      above45: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 45)`.mapWith(Number),
+      above60: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 60)`.mapWith(Number),
+      above70: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 70)`.mapWith(Number),
+      best: sql<number>`(select coalesce(max(fit), 0) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null)`.mapWith(Number),
     })
-    .from(sql`(select 1)`);
+    .from(sql`(select 1) as singleton`);
   return row;
 }
 
@@ -625,7 +625,7 @@ export async function clusterBreakdown(candidateId: number, minFit = 45) {
   return db
     .select({
       cluster: jobScore.cluster,
-      n: sql<number>`count(*)`,
+      n: sql<number>`count(*)`.mapWith(Number),
       best: sql<number>`max(${jobScore.fit})`,
     })
     .from(jobScore)

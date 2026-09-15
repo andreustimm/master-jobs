@@ -36,8 +36,8 @@ beforeEach(async () => {
   db = await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 describe("fila de engajamento: rascunho + URL, nunca execução", () => {

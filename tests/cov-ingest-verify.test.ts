@@ -51,8 +51,8 @@ beforeEach(async () => {
   candidateId = pessoa!.id;
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 async function seedVaga(opts: {

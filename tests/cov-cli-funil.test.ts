@@ -49,8 +49,8 @@ beforeEach(async () => {
   await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 /** Candidato "default", derivado do `profile.yaml` real — como no uso normal. */

@@ -27,6 +27,7 @@
  * Fronteira FORA: rede.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
 import { syncCandidateFromProfile } from "../src/core/candidate.ts";
 import {
   engagement,
@@ -57,7 +58,7 @@ beforeAll(async () => {
 
 // O worker do Vitest pode reaproveitar o processo para outro arquivo; deixar a
 // variável apagada seria contaminar suíte alheia com o estado desta.
-afterAll(() => {
+afterAll(async () => {
   if (emailOriginal !== undefined) process.env.JHO_CANDIDATE_EMAIL = emailOriginal;
 });
 
@@ -65,8 +66,8 @@ beforeEach(async () => {
   await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 describe("jho db seed", () => {
@@ -121,7 +122,7 @@ describe("jho tasks done <id>", () => {
     const r = await rodar("tasks", "done", tarefa!.id.toLowerCase());
 
     expect(r.code).toBeUndefined();
-    const [depois] = await banco().select().from(positioningTask).limit(1);
+    const [depois] = await banco().select().from(positioningTask).where(eq(positioningTask.id, tarefa!.id));
     // `id.toUpperCase()` no handler: quem digita `pt-0001` não deveria precisar
     // saber que a chave é maiúscula.
     expect(depois?.status).toBe("done");
@@ -135,7 +136,7 @@ describe("jho tasks done <id>", () => {
 
     await rodar("tasks", "done", tarefa!.id, "--status", "doing");
 
-    const [depois] = await banco().select().from(positioningTask).limit(1);
+    const [depois] = await banco().select().from(positioningTask).where(eq(positioningTask.id, tarefa!.id));
     expect(depois?.status).toBe("doing");
     // Uma tarefa "doing" com `doneAt` preenchido apareceria como concluída em
     // qualquer contagem que olhe a data em vez do status.

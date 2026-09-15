@@ -106,9 +106,9 @@ describe("verifyLogin", () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     resetClock();
-    releaseTestDb();
+    await releaseTestDb();
   });
 
   it("accepts the right password", async () => {

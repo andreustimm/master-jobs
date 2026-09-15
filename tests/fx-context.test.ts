@@ -145,7 +145,7 @@ describe("FX Drizzle store", () => {
         rates: { BRL: 5.4, EUR: 0.91 },
       });
     } finally {
-      releaseTestDb();
+      await releaseTestDb();
     }
   });
 });

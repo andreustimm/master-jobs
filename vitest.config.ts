@@ -5,6 +5,8 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     environment: "node",
     globals: false,
+    globalSetup: ["./tests/support/postgres-global.ts"],
+    maxWorkers: 4,
 
     /**
      * Cobertura com PISO, e o piso é o que garante — não o número de hoje.

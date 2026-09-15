@@ -148,8 +148,8 @@ export async function referralOpportunities(
       companyName: job.companyName,
       url: job.url,
       applyUrl: job.applyUrl,
-      fit: sql<number>`coalesce((select fit from job_score where candidate_id = ${candidateId} and job_id = ${job.id}), 0)`,
-      cluster: sql<string | null>`(select cluster from job_score where candidate_id = ${candidateId} and job_id = ${job.id})`,
+      fit: sql<number>`coalesce((select fit from production.job_score where candidate_id = ${candidateId} and job_id = ${job.id}), 0)`,
+      cluster: sql<string | null>`(select cluster from production.job_score where candidate_id = ${candidateId} and job_id = ${job.id})`,
       status: application.status,
     })
     .from(job)

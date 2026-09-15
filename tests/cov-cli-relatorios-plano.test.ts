@@ -48,13 +48,13 @@ beforeEach(async () => {
   await useTestDb();
 });
 
-afterEach(() => {
+afterEach(async () => {
   for (const chave of AMBIENTE_TOCADO) {
     const valor = ambienteOriginal[chave];
     if (valor === undefined) delete process.env[chave];
     else process.env[chave] = valor;
   }
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 /** Data ISO deslocada em dias — usada para envelhecer cotação de propósito. */

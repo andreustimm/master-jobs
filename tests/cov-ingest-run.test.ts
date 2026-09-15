@@ -29,9 +29,9 @@ beforeEach(async () => {
   db = await useTestDb();
 });
 
-afterEach(() => {
+afterEach(async () => {
   resetHttpPort();
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 const config = (handle: string, label = "Acme"): SourceConfig => ({
@@ -425,8 +425,8 @@ describe("pruneClosed", () => {
 
     const [linha] = await db.select().from(job);
     expect(linha!.externalId).toBe("aberta");
-    const [contagem] = await db.all<{ total: number }>(
-      sql.raw("select count(*) as total from job"),
+    const [contagem] = await db.execute<{ total: number }>(
+      sql.raw("select count(*) as total from production.job"),
     );
     expect(Number(contagem!.total)).toBe(1);
   });

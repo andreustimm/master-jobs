@@ -49,7 +49,7 @@ beforeAll(async () => {
   await carregarCli();
 });
 
-afterAll(() => {
+afterAll(async () => {
   if (emailOriginal === undefined) delete process.env.JHO_CANDIDATE_EMAIL;
   else process.env.JHO_CANDIDATE_EMAIL = emailOriginal;
 });
@@ -58,9 +58,9 @@ beforeEach(async () => {
   await useTestDb();
 });
 
-afterEach(() => {
+afterEach(async () => {
   resetHttpPort();
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 const COTACAO_FRANKFURTER = {
@@ -203,14 +203,15 @@ describe("jho db check", () => {
     // Só dá para criar a violação com a checagem desligada — que é exatamente
     // como ela nasce de verdade: por migração aplicada com o pragma em off, ou
     // por um cliente que nunca o ligou.
-    await db.run(sql.raw("pragma foreign_keys=off"));
-    await db.run(
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL session_replication_role = 'replica'`);
+    await tx.execute(
       sql.raw(
-        "insert into auth_session (token_hash, user_id, expires_at) " +
+        "insert into production.auth_session (token_hash, user_id, expires_at) " +
         "values ('orfa', 999999, '2030-01-01T00:00:00.000Z')",
       ),
     );
-    await db.run(sql.raw("pragma foreign_keys=on"));
+    });
 
     const r = await rodar("db", "check");
 

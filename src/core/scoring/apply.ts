@@ -52,25 +52,12 @@ async function loadScoringContext(candidateId: number): Promise<LoadedScoringCon
   return { profile, profileHash: selected.hash, fx, fxWarning, asOf: Date.now() };
 }
 
-/**
- * Quantas gravações vão juntas num `batch`.
- *
- * Cem porque o ganho é quase todo nas primeiras dezenas — o custo dominante é a
- * ida e volta, não o tamanho do corpo — e um lote grande demais aumenta o que se
- * perde quando um estoura. Com 8.768 vagas, são 88 requisições em vez de 8.768.
- */
+/** Limita cada transação a cem scores para não manter uma transação longa. */
 const LOTE = 100;
 
-/**
- * Monta a gravação SEM executá-la.
- *
- * Devolver a consulta em vez de aguardá-la é o que permite mandar cem de uma
- * vez. `scoreAll` percorria as vagas com um `await` por linha: contra o SQLite
- * local isso é imperceptível, e contra a Turso são 8.768 idas e voltas HTTP em
- * série — a varredura diária pagava minutos por isso, todo dia.
- */
+/** Monta o upsert no cliente ou na transação fornecida pelo chamador. */
 function upsertScore(
-  db: ReturnType<typeof getDb>,
+  db: Pick<ReturnType<typeof getDb>, "insert">,
   candidateId: number,
   jobId: number,
   result: ScoreResult,
@@ -199,22 +186,24 @@ export async function scoreAll(
   let scored = 0;
   let topFit = 0;
 
-  // Acumula e descarrega de cem em cem. A pontuação em si é função pura e
-  // barata; o que custava era a gravação, uma por vaga, em série.
-  type Gravacao = ReturnType<typeof upsertScore>;
+  // Calcula fora da transação e persiste em lotes com rollback independente.
+  type Gravacao = { jobId: number; result: ScoreResult };
   let pendentes: Gravacao[] = [];
 
   const descarregar = async () => {
     if (pendentes.length === 0) return;
-    // `batch` exige tupla não-vazia; o guard acima é o que a garante.
-    await db.batch(pendentes as [Gravacao, ...Gravacao[]]);
+    await db.transaction(async (tx) => {
+      for (const pending of pendentes) {
+        await upsertScore(tx, candidateId, pending.jobId, pending.result, context);
+      }
+    });
     pendentes = [];
   };
 
   for (const row of rows) {
     const result = scoreJob(row, context);
     topFit = Math.max(topFit, result.fit);
-    pendentes.push(upsertScore(db, candidateId, row.id, result, context));
+    pendentes.push({ jobId: row.id, result });
     scored++;
     if (pendentes.length >= LOTE) await descarregar();
   }

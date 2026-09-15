@@ -34,6 +34,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   sessão; ao remover esse papel, o vínculo antigo fica inativo e não pode
   reabrir score ou funil privado por uma conta administrativa. A associação é
   preservada para uma restauração posterior do papel.
+
+### Adicionado
+
+- Preparado o caminho PostgreSQL para o Supabase: schema privado, roles separadas
+  para runtime e migration, importação seletiva com rehearsal local e controles
+  explícitos para o corte. Nenhum banco remoto foi alterado.
+
 ## [1.4.0] - 2026-09-15
 
 ### Adicionado

@@ -36,8 +36,8 @@ beforeEach(async () => {
   candidateId = await ensureCandidate({ name: "Andreus Timm" });
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 async function seedJobWithDocument(candidateDocumentId: number): Promise<void> {
@@ -92,13 +92,11 @@ describe("saveDocument", () => {
 
   it("restaura a versão anterior se a inserção da nova falhar", async () => {
     const first = await saveDocument({ candidateId, label: "v1", content: CV });
-    await db.run(sql.raw(`
-      create trigger reject_current_document
-      before insert on candidate_document
-      when new.is_current = 1
-      begin
-        select raise(abort, 'forced document failure');
-      end
+    await db.execute(sql.raw(`
+      create function production.reject_current_document() returns trigger language plpgsql as $$
+      begin raise exception 'forced document failure'; end $$;
+      create trigger reject_current_document before insert on production.candidate_document
+      for each row when (new.is_current = true) execute function production.reject_current_document()
     `));
 
     await expect(

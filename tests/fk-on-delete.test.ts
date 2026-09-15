@@ -24,8 +24,8 @@ beforeEach(async () => {
   await db.insert(company).values({ slug: "acme", name: "Acme" });
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 async function seedUser(email: string): Promise<number> {

@@ -35,6 +35,7 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   export the list without accessing another person's pipeline.
 - An account that is no longer a candidate cannot regain its private pipeline
   by signing in again.
+
 ## [1.4.0] - 2026-09-15T18:14:00.754Z
 
 ### Fixed

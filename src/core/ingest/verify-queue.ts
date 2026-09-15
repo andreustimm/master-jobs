@@ -131,7 +131,7 @@ export async function enqueueStale(
           like(job.url, "http://%"),
           like(job.url, "https://%"),
         ),
-        sql`coalesce((select max(fit) from job_score where job_id = ${job.id}), 0) >= ${minFit}`,
+        sql`coalesce((select max(fit) from production.job_score where job_id = ${job.id}), 0) >= ${minFit}`,
         or(isNull(job.checkedAt), lt(job.checkedAt, cutoff)),
       ),
     )
@@ -139,7 +139,7 @@ export async function enqueueStale(
     .orderBy(
       sql`${job.checkedAt} is not null`,
       job.checkedAt,
-      desc(sql`coalesce((select max(fit) from job_score where job_id = ${job.id}), 0)`),
+      desc(sql`coalesce((select max(fit) from production.job_score where job_id = ${job.id}), 0)`),
     )
     .limit(opts.limit ?? 200);
 
@@ -157,14 +157,14 @@ export async function claimCheck(worker: string): Promise<ClaimedCheck | null> {
     .set({ status: "checking", claimedAt: nowIso, claimedBy: worker, updatedAt: nowIso })
     .where(
       sql`${verifyTask.id} = (
-        select id from verify_task
+        select id from production.verify_task
         where (
           status = 'pending'
           or (status = 'checking' and claimed_at < ${staleBefore})
         )
         and (run_after is null or run_after <= ${nowIso})
         order by priority desc, id asc
-        limit 1
+        limit 1 for update skip locked
       )`,
     )
     .returning({

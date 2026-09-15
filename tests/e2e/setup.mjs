@@ -366,5 +366,5 @@ try {
       `${cleared.length} tentativa(s) limpa(s)`,
   );
 } finally {
-  closeDb();
+  await closeDb();
 }

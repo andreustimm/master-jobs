@@ -84,8 +84,8 @@ beforeEach(async () => {
   setHttpPort(fixtureHttp({ "/robots.txt": "User-agent: *\nCrawl-delay: 0\nDisallow: /admin" }));
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
   resetHttpPort();
 });
 

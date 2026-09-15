@@ -17,22 +17,24 @@ beforeEach(async () => {
   db = await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 describe("database integrity", () => {
   it("removes invalid sessions, preserves audit events and is idempotent", async () => {
-    await db.run(sql.raw("pragma foreign_keys = off"));
-    await db.run(sql.raw(`
-      insert into auth_session (token_hash, user_id, expires_at)
+    // Corrupt only the isolated fixture, on one transaction-local connection.
+    await db.transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL session_replication_role = 'replica'`);
+    await tx.execute(sql.raw(`
+      insert into production.auth_session (token_hash, user_id, expires_at)
       values ('orphan-token', 999999, '2099-01-01T00:00:00.000Z')
     `));
-    await db.run(sql.raw(`
-      insert into auth_event (user_id, email, kind, detail)
+    await tx.execute(sql.raw(`
+      insert into production.auth_event (user_id, email, kind, detail)
       values (999999, 'former@example.test', 'logout', 'preserve me')
     `));
-    await db.run(sql.raw("pragma foreign_keys = on"));
+    });
 
     expect(await orphanAuthSessionCount(db)).toBe(1);
     expect(await orphanAuthEventCount(db)).toBe(1);
@@ -42,8 +44,8 @@ describe("database integrity", () => {
     await expect(detachOrphanAuthEvents(db)).resolves.toBe(1);
     await expect(detachOrphanAuthEvents(db)).resolves.toBe(0);
     expect(await foreignKeyViolations(db)).toEqual([]);
-    const [event] = await db.all<{ userId: number | null; detail: string }>(sql.raw(`
-      select user_id as userId, detail from auth_event
+    const [event] = await db.execute<{ userId: number | null; detail: string }>(sql.raw(`
+      select user_id as "userId", detail from production.auth_event
       where email = 'former@example.test'
     `));
     expect(event).toEqual({ userId: null, detail: "preserve me" });

@@ -11,9 +11,13 @@ bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence: docs/qa/evidence/2026-08-25T214402000000Z-fb9a9b34-rescore-status-targeted/save-cv-pending.png; tests/e2e/ui.mjs
-last_report: docs/qa/reports/2026-08-25T214402000000Z-fb9a9b34-rescore-status-targeted.md
+evidence: docs/qa/evidence/2026-09-10T011143000000Z-8bd417c2-supabase-production/CH-save-cv-ranking-refresh-baseline-queued.png; docs/qa/evidence/2026-09-10T011143000000Z-8bd417c2-supabase-production/CH-save-cv-ranking-refresh-baseline-version-read.png
+last_report: docs/qa/reports/2026-09-10T011143000000Z-8bd417c2-supabase-production.md
 overlaps:
 ---
 
 Cobertura funcional e experiencial do caminho principal, incluindo locale e leitura independente após refresh.
+
+Migração PostgreSQL: percurso local confirmado em 10/09. Texto e rótulo novos
+persistiram após refresh e no histórico; estado Na fila permaneceu verdadeiro.
+Não é prova de processamento concluído pelo worker nem de configuração remota.

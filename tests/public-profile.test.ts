@@ -38,8 +38,8 @@ beforeEach(async () => {
   await saveDocument({ candidateId, kind: "cv", label: "CV", content: CV });
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 async function confirmarSkill(name: string, status = "confirmed") {

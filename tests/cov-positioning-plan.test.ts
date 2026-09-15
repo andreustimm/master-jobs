@@ -19,8 +19,8 @@ beforeEach(async () => {
   db = await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 describe("POSITIONING_PLAN: o plano precisa continuar consultável", () => {

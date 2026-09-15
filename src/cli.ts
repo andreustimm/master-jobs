@@ -130,7 +130,7 @@ async function withDb<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } finally {
-    closeDb();
+    await closeDb();
   }
 }
 
@@ -204,7 +204,7 @@ db.command("check")
       for (const violation of violations) {
         console.error(
           c.dim(
-            `  ${violation.table} rowid=${violation.rowid} → ${violation.parent} fk=${violation.fkid}`,
+            `  ${violation.table} key=${JSON.stringify(violation.key)} → ${violation.parent} fk=${violation.constraint}`,
           ),
         );
       }
@@ -262,7 +262,6 @@ db.command("seed")
   .option("--skip-auth", "não criar a conta do dono")
   .action(async (opts: { skipAuth?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
 
       // Ordem deliberada: primeiro o que destrava o uso do sistema (entrar),
       // depois o que o enriquece. Um seed que falha no meio deve ter deixado o
@@ -418,7 +417,6 @@ fx.command("refresh")
   .option("--base <currency>", "base currency", "USD")
   .action(async (opts: { base: string }) => {
     await withDb(async () => {
-      await runMigrations();
       const r = await refreshRates(opts.base.toUpperCase());
       console.log(
         `${c.green("\u2713")} ${r.count} cotações de ${c.bold(r.date)} ` +
@@ -509,7 +507,6 @@ jobs
   .option("--no-score", "skip scoring after the sync")
   .action(async (opts: { concurrency: string; score: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const configs = await loadSources();
       console.log(`Syncing ${configs.length} source(s)…\n`);
 
@@ -555,7 +552,6 @@ jobs
   .option("--concurrency <n>", "parallel sources", "4")
   .action(async (opts: { minFit: string; limit: string; concurrency: string }) => {
     await withDb(async () => {
-      await runMigrations();
       const configs = await loadSources();
       const result = await syncAll(configs, { concurrency: Number(opts.concurrency) });
       const candidateId = await activeCandidateId();
@@ -746,7 +742,6 @@ jobs
     description?: string; posted?: string; notes?: string; status?: string;
   }) => {
     await withDb(async () => {
-      await runMigrations();
       const result = await addJob({
         url,
         title: opts.title,
@@ -810,7 +805,6 @@ jobs
     source: string; label?: string; company?: string; baseUrl?: string; dryRun?: boolean;
   }) => {
     await withDb(async () => {
-      await runMigrations();
       const parsed = await parseFile(file, { company: opts.company, baseUrl: opts.baseUrl });
 
       for (const w of parsed.warnings) console.log(c.yellow(`  ! ${w}`));
@@ -1171,7 +1165,6 @@ contacts
       return;
     }
     await withDb(async () => {
-      await runMigrations();
       const r = await addContact({
         name,
         company: opts.company,
@@ -1204,7 +1197,6 @@ contacts
   .description("Seed companies you have worked with — your strongest referral surface")
   .action(async () => {
     await withDb(async () => {
-      await runMigrations();
       const r = await seedWorkHistory();
       console.log(
         `${c.green("\u2713")} ${r.inserted} empresa(s) adicionada(s), ${r.updated} atualizada(s)`,
@@ -1362,7 +1354,6 @@ mail
   .option("--dry-run", "classify and report without writing anything")
   .action(async (path: string, opts: { dryRun?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const candidateId = await activeCandidateId();
       const r = await importMail(path, { candidateId, dryRun: opts.dryRun });
 
@@ -1477,7 +1468,6 @@ engage
       return;
     }
     await withDb(async () => {
-      await runMigrations();
       const id = await queueEngagement({
         kind,
         targetUrl: url,
@@ -1587,7 +1577,6 @@ posts
       return;
     }
     await withDb(async () => {
-      await runMigrations();
       const id = await draftPost({
         slug,
         pillar,
@@ -1643,7 +1632,6 @@ metrics
   .option("-n, --note <text>", "context")
   .action(async (key: string, value: string, opts: { at?: string; note?: string }) => {
     await withDb(async () => {
-      await runMigrations();
       await recordMetric(key, Number(value), { at: opts.at, note: opts.note });
       console.log(`${c.green("\u2713")} ${key} = ${value}`);
     });
@@ -1767,7 +1755,6 @@ cv.command("set <file>")
   .option("-l, --label <text>", "version label")
   .action(async (file: string, opts: { label?: string }) => {
     await withDb(async () => {
-      await runMigrations();
       const content = await readFile(file, "utf8");
       if (content.trim().length < 100) {
         console.error(c.red("Arquivo curto demais para ser um currículo."));
@@ -1790,7 +1777,6 @@ cv.command("import <file>")
   .option("--dry-run", "mostrar o que seria extraído sem salvar")
   .action(async (file: string, opts: { label?: string; dryRun?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const bytes = await readFile(file);
       const { extractPdfText } = await import("./core/pdf.ts");
       const r = await extractPdfText(new Uint8Array(bytes));
@@ -1907,7 +1893,6 @@ auth
   .description("Modo de autenticação e contas cadastradas")
   .action(async () => {
     await withDb(async () => {
-      await runMigrations();
       const { isOpenMode } = await import("./contexts/auth/index.ts");
       const { authUser } = await import("./core/db/schema.ts");
       const users = await getDb().select().from(authUser);
@@ -1946,7 +1931,6 @@ auth
   .option("--force", "redefinir a senha mesmo se a conta já tiver uma")
   .action(async (email: string | undefined, opts: { password?: string; force?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const { seedOwner } = await import("./contexts/auth/index.ts");
 
       try {
@@ -1992,7 +1976,6 @@ auth
   .option("--candidate <id>", "candidato que esta conta representa")
   .action(async (email: string, opts: { role: string; candidate?: string }) => {
     await withDb(async () => {
-      await runMigrations();
       const { ROLES } = await import("./contexts/auth/index.ts");
       const roles = opts.role.split(",").map((r) => r.trim());
       const invalid = roles.filter((r) => !(ROLES as readonly string[]).includes(r));
@@ -2038,7 +2021,6 @@ auth
   .option("--stdin", "ler a senha de stdin, uma linha — para automação")
   .action(async (email: string, opts: { stdin?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const { checkPassword, MIN_LENGTH, setPassword } = await import("./contexts/auth/index.ts");
 
       // Never as an argument: argv shows up in shell history and in `ps`.
@@ -2089,7 +2071,6 @@ auth
   .description("Gerar um link de acesso de uso único")
   .action(async (email: string) => {
     await withDb(async () => {
-      await runMigrations();
       const { startLogin } = await import("./contexts/auth/index.ts");
       const { token, expiresAt } = await startLogin(email);
       console.log(`\n${c.bold("Link de acesso")} ${c.dim(`· válido até ${expiresAt.slice(11, 16)}`)}`);
@@ -2128,7 +2109,6 @@ llm
   .description("Cadastrar os provedores conhecidos")
   .action(async () => {
     await withDb(async () => {
-      await runMigrations();
       const { seedProviders } = await import("./core/llm/registry.ts");
       const r = await seedProviders();
       console.log(`${c.green("\u2713")} ${r.providers} provedor(es), ${r.models} modelo(s)`);
@@ -2142,7 +2122,6 @@ llm
   .option("--all", "incluir desabilitados")
   .action(async (opts: { all?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const { chooseModel, listModels } = await import("./core/llm/registry.ts");
       const models = await listModels(!opts.all);
 
@@ -2201,7 +2180,6 @@ llm
   .option("--base-url <url>", "endpoint, para serviço compatível ou self-hosted")
   .action(async (slug: string, opts: { label: string; keyEnv: string; kind: string; baseUrl?: string }) => {
     await withDb(async () => {
-      await runMigrations();
       const { isKind } = await import("./core/llm/registry.ts");
       if (!isKind(opts.kind)) {
         console.error(c.red(`\n  Tipo inválido: ${opts.kind}. Use anthropic, openai ou compatible.\n`));
@@ -2238,7 +2216,6 @@ llm
   .option("--out-cost <usd>", "custo de saída por milhão de tokens")
   .action(async (providerSlug: string, modelId: string, opts: Record<string, string | boolean>) => {
     await withDb(async () => {
-      await runMigrations();
       const { isEffort } = await import("./core/llm/registry.ts");
       const effort = typeof opts.effort === "string" ? opts.effort : null;
       if (effort && !isEffort(effort)) {
@@ -2459,7 +2436,6 @@ scrape
   .option("--refresh", "recapturar vagas que já têm página")
   .action(async (opts: { minFit: string; limit: string; refresh?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const { enqueuePending } = await import("./core/scrape/queue.ts");
       const r = await enqueuePending({
         minFit: Number(opts.minFit),
@@ -2488,7 +2464,6 @@ scrape
   .option("--parse-only", "só tratar o que já foi capturado")
   .action(async (opts: { concurrency: string; limit?: string; fetchOnly?: boolean; parseOnly?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const concurrency = Number(opts.concurrency);
       const limit = opts.limit ? Number(opts.limit) : undefined;
 
@@ -2716,7 +2691,6 @@ skills
   .description("Load the global skill catalogue")
   .action(async () => {
     await withDb(async () => {
-      await runMigrations();
       const r = await seedCatalog();
       console.log(`${c.green("\u2713")} ${r.inserted} skill(s) adicionada(s), ${r.updated} atualizada(s)`);
     });
@@ -2730,7 +2704,6 @@ skills
   .option("--all", "mostrar também o que já está coberto")
   .action(async (opts) => {
     await withDb(async () => {
-      await runMigrations();
       const candidateId = await syncCandidateFromProfile();
       const doc = await currentDocument(candidateId, "cv");
       if (!doc) {
@@ -2801,7 +2774,6 @@ skills
   .description("Detect skills in the current CV — produces candidates for audit, not claims")
   .action(async () => {
     await withDb(async () => {
-      await runMigrations();
       const candidateId = await syncCandidateFromProfile();
       const doc = await currentDocument(candidateId, "cv");
       if (!doc) {
