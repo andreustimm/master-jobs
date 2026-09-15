@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-15T23:55:25.383Z
+
 ### Fixed
 
 - Recruiters and administrators can now find open jobs on the board even when

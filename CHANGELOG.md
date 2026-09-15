@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-15
+
 ### Corrigido
 
 - O quadro global agora ignora cortes de aderência, cluster, bloqueios e status

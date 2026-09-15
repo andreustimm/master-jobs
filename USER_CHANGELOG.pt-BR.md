@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-15T23:55:25.383Z
+
 ### Correção
 
 - Recrutadores e administradores agora encontram as vagas abertas no quadro,
