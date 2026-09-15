@@ -170,7 +170,8 @@ rtk pnpm db:generate             # após editar src/core/db/schema.ts
 rtk pnpm db:studio               # inspeção visual do banco
 ```
 
-Antes de considerar qualquer coisa pronta: `rtk pnpm check` verde e o E2E
-aplicável executado conforme `AGENTS.md`.
+Mudança de runtime exige `rtk pnpm check` verde e o E2E aplicável conforme
+`AGENTS.md`. Documentação e ferramentas de desenvolvimento seguem a
+[validação proporcional ao risco](docs/engineering/workflow.md).
 Mexeu no scorer ou no `profile.yaml`? Suba o `SCORER_VERSION` e rode
 `rtk pnpm jho jobs score --all`.

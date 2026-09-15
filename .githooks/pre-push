@@ -1,0 +1,10 @@
+#!/bin/sh
+# Confere o destino: estar em uma feature não autoriza feature:dev.
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/dev|refs/heads/staging|refs/heads/main)
+      echo "Push direto para $remote_ref bloqueado. Use o fluxo de PR e promoção." >&2
+      exit 1
+      ;;
+  esac
+done
