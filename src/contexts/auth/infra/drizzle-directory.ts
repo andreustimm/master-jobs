@@ -91,7 +91,10 @@ export const drizzleUserDirectory: UserDirectory = {
   },
 
   async updateRoles(userId, roles) {
-    await getDb().update(authUser).set({ roles }).where(eq(authUser.id, userId));
+    await getDb()
+      .update(authUser)
+      .set({ roles })
+      .where(eq(authUser.id, userId));
   },
 
   async update(userId, patch) {

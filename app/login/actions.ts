@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { passwordSignIn } from "../../src/contexts/auth/index.ts";
+import { candidateScope, passwordSignIn } from "../../src/contexts/auth/index.ts";
 import { SESSION_COOKIE } from "../auth";
 
 /**
@@ -46,6 +46,6 @@ export async function passwordLoginAction(formData: FormData) {
   // aderência. Quem não é candidato não tem nada lá — e mandar todo mundo para
   // `/` era o que fazia um recrutador cair em 403 logo depois de acertar a
   // senha.
-  if (result.session.candidateId !== null) redirect("/");
+  if (candidateScope(result.session) !== null) redirect("/");
   redirect("/jobs");
 }

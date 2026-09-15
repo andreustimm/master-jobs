@@ -1771,6 +1771,41 @@ try {
       `caiu em ${landed}, esperado ${scenario.lands}`,
     );
 
+    if (scenario.role === "recrutador") {
+      // A board is global for a recruiter. The default 45+ cut belongs to a
+      // candidate score and must not turn the recruiter's unscoped board into
+      // an empty result when every score column is intentionally null.
+      await rolePage.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+      const visibleJobs = await rolePage.locator('[data-testid^="job-link-"]').count();
+      check(
+        "recrutador vê vagas no acervo global",
+        visibleJobs > 0,
+        `a tela de vagas exibiu ${visibleJobs} linhas`,
+      );
+
+      const firstJobHref = await rolePage.locator('[data-testid^="job-link-"]').first().getAttribute("href");
+      const detailResponse = await rolePage.goto(`${BASE}${firstJobHref}`, { waitUntil: "networkidle" });
+      check(
+        "recrutador abre o detalhe global sem funil privado",
+        detailResponse?.status() === 200 && (await rolePage.locator('[data-testid="route-job-detail"]').count()) === 1,
+        `${detailResponse?.status()} em ${rolePage.url().replace(BASE, "")}`,
+      );
+      check(
+        "detalhe global não oferece mutação de candidatura ao recrutador",
+        (await rolePage.locator('input[name="jobId"]').count()) === 0,
+        "formulário de funil presente",
+      );
+      await rolePage.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+      const downloadPromise = rolePage.waitForEvent("download");
+      await rolePage.locator('a[download]').click();
+      const exportDownload = await downloadPromise;
+      check(
+        "recrutador exporta o acervo global",
+        exportDownload.suggestedFilename().startsWith("vagas-"),
+        exportDownload.suggestedFilename(),
+      );
+    }
+
     // `start_url` do manifest é "/" e não pode variar por papel. Instalada, a
     // PWA abre ali — então `/` precisa LEVAR cada papel a uma tela dele, e não
     // negar. É o defeito da E-06 tentando voltar pela porta do manifest.

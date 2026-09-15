@@ -3,7 +3,7 @@ import { FilterBar, readFilters, toBoardFilters } from "../filters";
 import { GridToolbar, Pagination, Presets } from "../grid";
 import { JobList } from "../joblist";
 import { Legend } from "../ui";
-import { requirePage } from "../auth";
+import { candidateScope, requirePage } from "../auth";
 import { getTranslator } from "../i18n";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +26,7 @@ export default async function Jobs({
   // colunas de UMA pessoa: para quem não é candidato elas simplesmente não
   // existem, e voltam nulas.
   const session = await requirePage("job:read");
-  const candidateId = session.candidateId;
+  const candidateId = candidateScope(session);
 
   const params = await searchParams;
   const state = readFilters(params);

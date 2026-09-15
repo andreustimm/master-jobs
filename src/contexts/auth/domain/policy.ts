@@ -174,5 +174,8 @@ export class AuthorizationError extends Error {
  * makes "filter by candidate" impossible to forget or forge.
  */
 export function candidateScope(session: Session | null): number | null {
-  return session?.candidateId ?? null;
+  // `candidateId` is a foreign-key association, not a role. Older rows can
+  // retain it after an account is reclassified; the candidate role is the
+  // authority that makes the association active for this request.
+  return session?.roles.includes("candidate") ? (session.candidateId ?? null) : null;
 }

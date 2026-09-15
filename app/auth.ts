@@ -3,6 +3,7 @@ import { forbidden, redirect } from "next/navigation";
 import {
   authorize,
   AuthorizationError,
+  candidateScope,
   resolveSession,
   type Action,
   type Resource,
@@ -19,6 +20,7 @@ import { getCandidate } from "../src/core/candidate.ts";
  */
 
 export const SESSION_COOKIE = "jho_session";
+export { candidateScope };
 
 /**
  * Onde a sessão do admin fica estacionada durante um empréstimo.
@@ -67,7 +69,7 @@ export async function guard(action: Action, resource?: Resource): Promise<Sessio
  */
 export async function guardOwnCandidate(action: Action): Promise<{ session: Session; candidateId: number }> {
   const session = await currentSession();
-  const candidateId = session?.candidateId ?? null;
+  const candidateId = candidateScope(session);
   if (candidateId === null) {
     forbidden();
   }
@@ -112,7 +114,7 @@ export async function requireOwnCandidatePage(
   action: Action,
 ): Promise<{ session: Session; candidateId: number }> {
   const session = await requireSession();
-  const candidateId = session.candidateId;
+  const candidateId = candidateScope(session);
   if (candidateId === null) forbidden();
   authorize(session, action, { kind: "candidate", candidateId });
   return { session, candidateId };

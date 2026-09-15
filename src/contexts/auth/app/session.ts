@@ -63,7 +63,7 @@ export async function completeLogin(loginToken: string, deps: AuthDeps): Promise
     token,
     session: {
       userId: identity.userId,
-      candidateId: identity.candidateId,
+      candidateId: identity.roles.includes("candidate") ? identity.candidateId : null,
       roles: identity.roles,
       email: identity.email,
       fullName: identity.fullName,
@@ -100,7 +100,12 @@ export async function loginWithPassword(
   return {
     ok: true,
     token,
-    session: { ...identity, expiresAt, impersonatedBy: null },
+    session: {
+      ...identity,
+      candidateId: identity.roles.includes("candidate") ? identity.candidateId : null,
+      expiresAt,
+      impersonatedBy: null,
+    },
   };
 }
 

@@ -1,7 +1,7 @@
 import { listBoard } from "../../../src/contexts/matching/index.ts";
 import { scoreMessages } from "../../../src/contexts/matching/index.ts";
 import { renderScoreMessage } from "../../../src/core/i18n/index.ts";
-import { requireOwnCandidatePage } from "../../auth";
+import { candidateScope, requirePage } from "../../auth";
 import { readFilters, toBoardFilters } from "../../filters";
 import { getTranslator } from "../../i18n";
 
@@ -40,7 +40,8 @@ const COLUMNS = [
 export async function GET(request: Request) {
   // Middleware only proves that a cookie exists. Resolve it here before this
   // endpoint reads the complete corpus and the private funnel into one CSV.
-  const { candidateId } = await requireOwnCandidatePage("candidate:read");
+  const session = await requirePage("job:read");
+  const candidateId = candidateScope(session);
   const { t } = await getTranslator();
 
   const params = Object.fromEntries(new URL(request.url).searchParams.entries());

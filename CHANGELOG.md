@@ -9,6 +9,18 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- O quadro global agora ignora cortes de aderência, cluster, bloqueios e status
+  quando a sessão não tem candidato (recrutador ou administrador), preservando
+  a visibilidade do acervo sem expor score ou funil de outra pessoa. O detalhe
+  e a exportação CSV seguem a mesma regra, e o formulário de candidatura só
+  aparece quando há candidato associado.
+- O escopo de candidato agora exige o papel `candidate` em cada fronteira de
+  sessão; ao remover esse papel, o vínculo antigo fica inativo e não pode
+  reabrir score ou funil privado por uma conta administrativa. A associação é
+  preservada para uma restauração posterior do papel.
+
 ## [1.4.0] - 2026-09-15
 
 ### Adicionado

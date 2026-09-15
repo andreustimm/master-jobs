@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
-import { boardFacets, countBoard, listBoard } from "../src/core/db/repo.ts";
-import { candidate, company, source } from "../src/core/db/schema.ts";
+import { boardFacets, countBoard, getJobDetail, listBoard } from "../src/core/db/repo.ts";
+import { application, candidate, company, job, jobScore, source } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
 let db: DB;
@@ -78,5 +78,48 @@ describe("Board SQL read model", () => {
     expect(page.every((row) => row.status === "applied")).toBe(true);
     await expect(countBoard(candidateId, { status: "applied" })).resolves.toBe(10);
     await expect(countBoard(candidateId, { status: "unfiled" })).resolves.toBe(20);
+  });
+
+  it("mantém o acervo global para quem não tem candidato, mesmo com o corte padrão", async () => {
+    await seedBoard(2);
+
+    const rows = await listBoard(null, { minFit: 45 });
+
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.fit === null && row.status === null)).toBe(true);
+    await expect(countBoard(null, { minFit: 45 })).resolves.toBe(2);
+    await expect(boardFacets(null, { minFit: 45 })).resolves.toMatchObject({
+      total: 2,
+      clusters: [],
+      sources: ["manual"],
+    });
+  });
+
+  it("lê o detalhe global sem anexar score ou funil de um candidato", async () => {
+    const candidateId = await seedBoard(1);
+    const [row] = await db.select({ id: job.id }).from(job).limit(1);
+    await db.insert(jobScore).values({
+      candidateId,
+      jobId: row!.id,
+      fit: 88,
+      titleScore: 88,
+      keywordScore: 88,
+      seniorityScore: 88,
+      geoScore: 88,
+      compScore: 88,
+      cluster: "architect",
+      matchedKeywords: ["typescript"],
+      missingKeywords: [],
+      reasons: ["score privado"],
+      blockers: [],
+      scorerVersion: "teste",
+    });
+    await db.insert(application).values({ candidateId, jobId: row!.id, status: "applied" });
+
+    const detail = await getJobDetail(null, row!.id);
+
+    expect(detail?.job.id).toBe(row!.id);
+    expect(detail?.score).toBeNull();
+    expect(detail?.application).toBeNull();
   });
 });

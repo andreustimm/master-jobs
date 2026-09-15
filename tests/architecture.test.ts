@@ -517,7 +517,6 @@ describe("authorisation (AUTH-01)", () => {
     // para quem não tem escopo.
     const privatePages = [
       "app/page.tsx",
-      "app/jobs/[id]/page.tsx",
       "app/pipeline/page.tsx",
       "app/referrals/page.tsx",
       "app/candidate/page.tsx",
@@ -527,6 +526,11 @@ describe("authorisation (AUTH-01)", () => {
     for (const file of privatePages) {
       expect(read(file), file).toContain("await requireOwnCandidatePage(");
     }
+
+    const jobDetail = read("app/jobs/[id]/page.tsx");
+    expect(jobDetail).toContain('await requirePage("job:read")');
+    expect(jobDetail).toContain("candidateId !== null");
+    expect(jobDetail).toContain("action={trackAction}");
   });
 
   it("keeps session and active-candidate resolution read-only", () => {
