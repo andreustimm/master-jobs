@@ -103,7 +103,7 @@ export function FilterBar({
             <input key={k} type="hidden" name={k} value={v === true ? "1" : String(v)} />
           ),
         )}
-        <Input name="q" defaultValue={state.q ?? ""} placeholder={t("filters.search")} data-testid="filters-query" />
+        <Input key={state.q ?? ""} name="q" defaultValue={state.q ?? ""} placeholder={t("filters.search")} data-testid="filters-query" />
         <Button type="submit" data-testid="filters-submit">{t("filters.submit")}</Button>
         {state.q && (
           <TransitionLink href={href(base, state, { q: undefined })} className={chipClass(false)}>

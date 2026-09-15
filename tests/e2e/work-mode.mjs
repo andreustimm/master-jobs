@@ -1,10 +1,23 @@
+const waitForFilters = (page) => page.waitForFunction(() => {
+  const input = document.querySelector('[data-testid="filters-query"]');
+  return input && !input.closest("[inert]");
+});
+
+export async function checkClearingSearch(page, check) {
+  const query = new URL(page.url()).searchParams.get("q");
+  await page.getByTestId("filters-get-form").getByRole("link").click();
+  await page.waitForURL((url) => !url.searchParams.has("q"));
+  await waitForFilters(page);
+  check("busca: limpar esvazia o campo junto com a URL", await page.getByTestId("filters-query").inputValue() === "");
+  await page.goBack({ waitUntil: "networkidle" });
+  await waitForFilters(page);
+  check("busca: voltar restaura o texto do recorte", await page.getByTestId("filters-query").inputValue() === query);
+}
+
 export async function checkWorkModes(page, base, check) {
   const query = "Work mode fixture";
   const cards = () => page.locator('[data-testid^="job-link-"]');
-  const ready = () => page.waitForFunction(() => {
-    const input = document.querySelector('[data-testid="filters-query"]');
-    return input && !input.closest("[inert]");
-  });
+  const ready = () => waitForFilters(page);
   const select = async (mode) => {
     await page.getByTestId(`filter-work-mode-${mode}`).click();
     await page.waitForURL((url) => url.searchParams.get("workMode") === (mode === "all" ? null : mode));
@@ -60,6 +73,7 @@ export async function checkWorkModes(page, base, check) {
   await page.waitForURL((url) => url.searchParams.get("q") === "no-work-mode-result");
   await ready();
   check("modalidade: recorte sem resultado fica vazio", await cards().count() === 0);
+  await checkClearingSearch(page, check);
 
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(`${base}/jobs?workMode=remote&q=${encodeURIComponent(query)}`, { waitUntil: "networkidle" });

@@ -20,6 +20,7 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 - Ver todas preserva o recorte do cockpit, inclusive o corte Todas (`fit=0`);
   avançar na paginação mantém o tamanho de página escolhido.
+- O campo de busca acompanha a URL ao limpar o texto e percorrer o histórico.
 
 ## [1.3.10] - 2026-08-28
 
