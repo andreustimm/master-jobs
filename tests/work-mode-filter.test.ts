@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { boardFacets, countBoard, listBoard } from "../src/contexts/matching/index.ts";
 import { readWorkMode } from "../src/contexts/matching/domain/work-mode.ts";
 import { candidate, job, jobPage, jobScore, source } from "../src/core/db/schema.ts";
+import { extractPage } from "../src/core/scrape/extract.ts";
+import { clearRobotsCache } from "../src/core/scrape/robots.ts";
+import { careersAdapter } from "../src/core/sources/careers.ts";
+import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/http-port.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
 let db: Awaited<ReturnType<typeof useTestDb>>;
@@ -10,7 +14,11 @@ beforeEach(async () => {
   db = await useTestDb();
   await db.insert(source).values({ id: "manual:modes", kind: "manual", handle: "modes", label: "Modes" });
 });
-afterEach(releaseTestDb);
+afterEach(() => {
+  resetHttpPort();
+  clearRobotsCache();
+  releaseTestDb();
+});
 
 async function seed(id: number, values: Partial<typeof job.$inferInsert> = {}) {
   await db.insert(job).values({
@@ -31,8 +39,8 @@ describe("work-mode filters", () => {
     await seed(7, { remote: null });
     await seed(8, { remote: false });
     await seed(9, { title: "Hybrid cloud architect", descriptionText: "Remote sensing and hybrid cloud systems" });
-    await seed(10, { raw: { workplaceType: " ", fields: { workplace: "fully remote" } } });
-    await seed(11, { raw: { workplaceType: "unknown", fields: { workplace: "Híbrido" } } });
+    await seed(10, { raw: { workplaceType: " " }, locationRaw: "fully remote" });
+    await seed(11, { raw: { workplaceType: "unknown" }, locationRaw: "Híbrido" });
     await seed(12);
     await db.insert(jobPage).values({
       jobId: 12, finalUrl: "https://example.test/12", httpStatus: 200,
@@ -43,7 +51,7 @@ describe("work-mode filters", () => {
     await seed(15, { raw: { workplaceType: "Remote" }, locationRaw: "Hybrid", remote: false });
 
     for (const [workMode, ids] of [
-      ["remote", [1, 4, 10, 15]], ["hybrid", [2, 5, 11]], ["onsite", [3, 6, 12]],
+      ["remote", [1, 4, 10, 15]], ["hybrid", [2, 5, 11]], ["onsite", [3, 6]],
     ] as const) {
       const rows = await listBoard(null, { workMode });
       expect(rows.map((row) => row.jobId).sort((a, b) => a - b)).toEqual(ids);
@@ -55,6 +63,36 @@ describe("work-mode filters", () => {
       expect(facets.clusters).toEqual([]);
     }
     await expect(countBoard(null)).resolves.toBe(14);
+  });
+
+  it("ignores description guesses from captured pages and the careers adapter", async () => {
+    const body = "We build dependable systems with engineers and product teams. ".repeat(5);
+    const html = (text: string) => `<main><h1>Software engineer</h1><p>${text}. ${body}</p></main>`;
+    for (const [id, text] of [[20, "Build hybrid cloud systems"], [21, "Develop remote sensing systems"], [22, "Maintain on-site customer hardware"]] as const) {
+      await seed(id);
+      const extracted = extractPage(html(text));
+      expect(extracted.fields.workplace).toBeTruthy();
+      await db.insert(jobPage).values({ jobId: id, finalUrl: `https://example.test/${id}`, httpStatus: 200, contentHash: String(id), extracted });
+    }
+    setHttpPort(fixtureHttp({
+      "mode-careers.test/robots.txt": "",
+      "mode-careers.test/careers": '<a href="/vagas/cloud">Cloud engineer\nRemote — Brazil</a><a href="/vagas/sensing">Sensing engineer\nSão Paulo</a>',
+      "mode-careers.test/vagas/cloud": html("Build hybrid cloud systems"),
+      "mode-careers.test/vagas/sensing": html("Develop remote sensing systems"),
+    }));
+    const { jobs } = await careersAdapter().fetchJobs({ kind: "careers", handle: "https://mode-careers.test/careers", label: "Modes" });
+    expect(jobs).toHaveLength(2);
+    expect(jobs[1]!.remote).toBe(true);
+    await db.insert(source).values({ id: "careers:modes", kind: "careers", handle: "modes", label: "Modes" });
+    for (const [index, incoming] of jobs.entries()) {
+      await seed(30 + index, { sourceId: "careers:modes", locationRaw: incoming.locationRaw, remote: incoming.remote, raw: incoming.raw, descriptionText: incoming.descriptionText });
+    }
+    for (const [workMode, ids] of [["remote", [30]], ["hybrid", []], ["onsite", []]] as const) {
+      expect((await listBoard(null, { workMode })).map((row) => row.jobId)).toEqual(ids);
+      await expect(countBoard(null, { workMode })).resolves.toBe(ids.length);
+      expect((await boardFacets(null, { workMode })).total).toBe(ids.length);
+    }
+    await expect(countBoard(null)).resolves.toBe(5);
   });
 
   it("filters before pagination and composes with candidate score, search and source", async () => {

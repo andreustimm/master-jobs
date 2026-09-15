@@ -266,7 +266,6 @@ export async function countBoard(
       and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
     )
     .leftJoin(source, eq(source.id, job.sourceId))
-    .leftJoin(jobPage, eq(jobPage.jobId, job.id))
     .where(and(...boardConditions(opts)));
   return Number(row?.count ?? 0);
 }
@@ -297,7 +296,6 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
         and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
       )
       .leftJoin(source, eq(source.id, job.sourceId))
-      .leftJoin(jobPage, eq(jobPage.jobId, job.id))
       .where(and(...boardConditions(dimensions), sql`${jobScore.cluster} is not null`))
       .groupBy(jobScore.cluster)
       .then((rows) => rows.map((row) => row.cluster!).sort()),
@@ -313,7 +311,6 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
         and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
       )
       .leftJoin(source, eq(source.id, job.sourceId))
-      .leftJoin(jobPage, eq(jobPage.jobId, job.id))
       .where(and(...boardConditions(dimensions)))
       .groupBy(sourceKind)
       .then((rows) => rows.map((row) => row.kind).sort()),

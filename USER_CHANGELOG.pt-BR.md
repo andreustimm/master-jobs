@@ -22,6 +22,9 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   Escolha Todas para incluir também vagas sem modalidade informada.
 - A opção ver todas mantém seus filtros, e a paginação preserva a quantidade de
   vagas por página.
+
+### Correção
+
 - Limpar a busca agora esvazia o campo; voltar pelo histórico recupera o texto
   correspondente aos resultados.
 

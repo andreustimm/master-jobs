@@ -13,8 +13,9 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 - Filtro de modalidade (remoto, híbrido e presencial) no cockpit e na lista,
   aplicado em SQL antes da paginação e compartilhado por contagem, facetas e CSV.
-  A classificação usa sinais existentes da fonte, localização e página capturada;
-  ausência de modalidade permanece no recorte Todas, sem migração nem novo score.
+  A classificação usa metadados declarados pela fonte e localização explícita;
+  heurísticas extraídas de palavras da descrição não decidem a modalidade.
+  A ausência de modalidade permanece no recorte Todas, sem migração nem novo score.
 
 ### Corrigido
 

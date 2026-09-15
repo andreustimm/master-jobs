@@ -1,6 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { WORK_MODE_ALIASES, WORK_MODES, type WorkMode } from "../../contexts/matching/index.ts";
-import { job, jobPage } from "./schema.ts";
+import { job, source } from "./schema.ts";
 
 function declaredMode(value: SQL): SQL<WorkMode | null> {
   const normalized = sql`lower(trim(replace(${value}, 'Í', 'í')))`;
@@ -11,6 +11,7 @@ function declaredMode(value: SQL): SQL<WorkMode | null> {
 
 // Keep filtering in SQL, before LIMIT/OFFSET, and share it with counts/facets.
 // A false remote flag can mean hybrid as well as onsite; alone it is unknown.
+// Parser fields and the careers remote flag are guesses from description words.
 export function workModeSql(): SQL<WorkMode | null> {
   const location = sql`' ' || lower(replace(coalesce(${job.locationRaw}, ''), 'Í', 'í')) || ' '`;
   const locationMode = sql`case ${sql.join(
@@ -20,9 +21,7 @@ export function workModeSql(): SQL<WorkMode | null> {
     `), sql` `)} end`;
   return sql`coalesce(
     ${declaredMode(sql`json_extract(${job.raw}, '$.workplaceType')`)},
-    ${declaredMode(sql`json_extract(${job.raw}, '$.fields.workplace')`)},
     ${locationMode},
-    case when ${job.remote} = 1 then 'remote' end,
-    ${declaredMode(sql`json_extract(${jobPage.extracted}, '$.fields.workplace')`)}
+    case when ${job.remote} = 1 and ${source.kind} <> 'careers' then 'remote' end
   )`;
 }

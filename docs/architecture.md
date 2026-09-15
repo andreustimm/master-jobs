@@ -574,11 +574,13 @@ compartilhável, o botão voltar funciona, e toda página continua Server Compon
 
 O recorte `workMode=remote|hybrid|onsite` usa a mesma expressão SQL na lista,
 contagem, facetas e exportação, antes de `LIMIT/OFFSET`. Modalidade reconhecida
-em `raw.workplaceType` ou `raw.fields.workplace` prevalece; localização explícita
-vem depois, seguida de `remote=true` e do campo extraído da página capturada.
-Não se infere modalidade de menções soltas no corpo da descrição, como
-“hybrid cloud”. `remote=false` sozinho não distingue híbrido de presencial;
-sem um sinal reconhecido a vaga fica apenas em Todas. Nenhum dado é regravado.
+em `raw.workplaceType` prevalece; localização explícita vem depois, seguida de
+`remote=true` das fontes estruturadas. `raw.fields.workplace`, os campos da
+página capturada e a flag remota de `careers` são heurísticas sobre palavras da
+descrição e não decidem esse filtro: “hybrid cloud” e “remote sensing” não são
+declarações de modalidade. `remote=false` sozinho não distingue híbrido de
+presencial; sem um sinal reconhecido a vaga fica apenas em Todas. Nenhum dado
+é regravado.
 
 **`cacheComponents` do Next 16 está desligado.** Este dashboard lê um banco que
 muda a cada sync, então cache só adiciona uma classe de bug de dado velho — e
