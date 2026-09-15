@@ -1,6 +1,6 @@
 # BUG-20260915-clear-search-text: Limpar deixa a busca antiga no campo
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Friction
 - **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Andreus em triagem
@@ -28,15 +28,15 @@ continua mostrando a busca anterior. Ao buscar novamente, o texto antigo retorna
 
 ## Evidence
 
-- ../evidence/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter/CH-work-mode-continuity-baseline-clear-stale.png
+- [Campo com texto antigo após Limpar](../evidence/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter/CH-work-mode-continuity-baseline-clear-stale.png)
 - Recarga da mesma URL limpa o campo, confirmando que a divergência é da navegação.
 
 ## Fix
 
 - **Root cause:** Campo não controlado com `defaultValue` conserva a edição local quando a URL muda por navegação.
-- **Fix commit:** pendente
+- **Fix commit:** cf20630
 - **Regression test:** tests/e2e/work-mode.mjs, checkClearingSearch.
 
 ## Verification
 
-Pendente de correção e nova sessão da mesma persona.
+Verificado em 2026-09-15 pela mesma persona, em sessão nova, e pela canária de navegação: Limpar esvazia campo e URL; Voltar recupera o texto. checkClearingSearch falhou antes e passou depois da correção.
