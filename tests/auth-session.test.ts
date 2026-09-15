@@ -84,6 +84,17 @@ describe("session store", () => {
     expect((await drizzleSessions.resolve(token))!.candidateId).toBeNull();
   });
 
+  it("reativa o vínculo preservado quando o papel candidate volta", async () => {
+    const userId = await seedUser("restaura@test", 1);
+    await db.update(authUser).set({ roles: ["admin"] }).where(eq(authUser.id, userId));
+    const adminToken = await drizzleSessions.create({ userId, expiresAt: "2026-09-19T12:00:00.000Z" });
+    expect((await drizzleSessions.resolve(adminToken))!.candidateId).toBeNull();
+
+    await db.update(authUser).set({ roles: ["admin", "candidate"] }).where(eq(authUser.id, userId));
+    const candidateToken = await drizzleSessions.create({ userId, expiresAt: "2026-09-19T12:00:00.000Z" });
+    expect((await drizzleSessions.resolve(candidateToken))!.candidateId).not.toBeNull();
+  });
+
   it("refuses an unknown token", async () => {
     expect(await drizzleSessions.resolve("inventado")).toBeNull();
     expect(await drizzleSessions.resolve("")).toBeNull();
