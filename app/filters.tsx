@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import type { Translator } from "../src/core/i18n/index.ts";
 import { APPLICATION_STATUSES } from "../src/contexts/pursuit/domain/application.ts";
-import type { BoardFilters } from "../src/contexts/matching/index.ts";
+import { WORK_MODES, readWorkMode, type BoardFilters, type WorkMode } from "../src/contexts/matching/index.ts";
 import type { Route } from "next";
 import { TransitionGetForm } from "./transition-get-form";
 import { TransitionLink } from "./transition-link";
@@ -28,6 +28,7 @@ export type FilterState = {
   cluster?: string;
   q?: string;
   source?: string;
+  workMode?: WorkMode;
   unblocked?: boolean;
   fresh?: boolean;
   paid?: boolean;
@@ -55,7 +56,6 @@ export function href(base: BoardRoute, state: FilterState, patch: Record<string,
   const merged: Record<string, unknown> = { ...state, ...patch };
   for (const [k, v] of Object.entries(merged)) {
     if (v === undefined || v === "" || v === false) continue;
-    if (k === "fit" && Number(v) === 0) continue;
     params.set(k, v === true ? "1" : String(v));
   }
   const qs = params.toString();
@@ -114,10 +114,33 @@ export function FilterBar({
 
       <Separator />
 
+      <Group label={t("filters.workMode")}>
+        <TransitionLink
+          href={href(base, state, { workMode: undefined })}
+          className={chipClass(!state.workMode)}
+          aria-current={!state.workMode ? "true" : undefined}
+          data-testid="filter-work-mode-all"
+        >
+          {t("filters.all")}
+        </TransitionLink>
+        {WORK_MODES.map((mode) => (
+          <TransitionLink
+            key={mode}
+            href={href(base, state, { workMode: mode })}
+            className={chipClass(state.workMode === mode)}
+            aria-current={state.workMode === mode ? "true" : undefined}
+            data-testid={`filter-work-mode-${mode}`}
+          >
+            {t(`filters.${mode}`)}
+          </TransitionLink>
+        ))}
+      </Group>
+
       <Group label={t("filters.cut")}>
         {CUTS.map((c) => (
           <TransitionLink
             key={c}
+            data-testid={`filter-cut-${c}`}
             href={href(base, state, { fit: String(c) })}
             className={cn(chipClass(state.fit === c), "font-mono")}
           >
@@ -223,6 +246,7 @@ export function readFilters(params: Record<string, string | string[] | undefined
     cluster: one("cluster"),
     q: one("q"),
     source: one("source"),
+    workMode: readWorkMode(one("workMode")),
     status: one("status"),
     sort: one("sort"),
     unblocked: one("unblocked") === "1",
@@ -242,6 +266,7 @@ export function toBoardFilters(state: FilterState): BoardFilters {
     cluster: state.cluster,
     q: state.q,
     sourceKind: state.source,
+    workMode: state.workMode,
     status: BOARD_STATUSES.find((status) => status === state.status),
     hideBlocked: state.unblocked,
     freshDays: state.fresh ? 3 : undefined,

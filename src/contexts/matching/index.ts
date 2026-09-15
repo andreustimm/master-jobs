@@ -22,6 +22,8 @@ export {
 export const matchingProfile = loadCandidateMatchingProfile;
 export const setMatchingProfile = saveCandidateMatchingProfile;
 
+export { WORK_MODES, WORK_MODE_ALIASES, readWorkMode, type WorkMode } from "./domain/work-mode.ts";
+
 export {
   CONFIANCA_FORTE,
   CONFIANCA_MINIMA,

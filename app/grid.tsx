@@ -40,7 +40,10 @@ export function Pagination({
   if (!window.includes(1)) window.unshift(1);
   if (!window.includes(pages)) window.push(pages);
 
-  const link = (p: number) => href(base, state, { page: p === 1 ? undefined : String(p) });
+  const link = (p: number) => href(base, state, {
+    page: p === 1 ? undefined : String(p),
+    size: pageSize === 50 ? undefined : String(pageSize),
+  });
 
   const box = (active: boolean) =>
     cn(buttonVariants({ variant: active ? "default" : "outline", size: "sm" }), "h-8 px-3 text-xs");

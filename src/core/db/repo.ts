@@ -7,6 +7,8 @@
  */
 import { and, desc, eq, gte, isNull, sql, type SQL } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import type { WorkMode } from "../../contexts/matching/index.ts";
+import { workModeSql } from "./work-mode.ts";
 import {
   IllegalApplicationTransitionError,
   transitionApplication,
@@ -76,6 +78,7 @@ export type BoardFilters = {
   /** Free text over title and company. */
   q?: string;
   sourceKind?: string;
+  workMode?: WorkMode;
   /** Hide anything with a hard blocker — work authorisation, on-site, W2. */
   hideBlocked?: boolean;
   /** Only postings published within N days. */
@@ -118,6 +121,7 @@ function boardConditions(opts: BoardFilters): SQL[] {
     );
   }
   if (opts.sourceKind) conditions.push(sql`${job.sourceId} like ${`${opts.sourceKind}:%`}`);
+  if (opts.workMode) conditions.push(eq(workModeSql(), opts.workMode));
   if (opts.hideBlocked) conditions.push(sql`coalesce(${jobScore.blockers}, '[]') = '[]'`);
   if (opts.freshDays && opts.freshDays > 0) {
     const cutoff = new Date(Date.now() - opts.freshDays * 86_400_000).toISOString();
@@ -262,6 +266,7 @@ export async function countBoard(
       and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
     )
     .leftJoin(source, eq(source.id, job.sourceId))
+    .leftJoin(jobPage, eq(jobPage.jobId, job.id))
     .where(and(...boardConditions(opts)));
   return Number(row?.count ?? 0);
 }
@@ -292,6 +297,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
         and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
       )
       .leftJoin(source, eq(source.id, job.sourceId))
+      .leftJoin(jobPage, eq(jobPage.jobId, job.id))
       .where(and(...boardConditions(dimensions), sql`${jobScore.cluster} is not null`))
       .groupBy(jobScore.cluster)
       .then((rows) => rows.map((row) => row.cluster!).sort()),
@@ -307,6 +313,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
         and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
       )
       .leftJoin(source, eq(source.id, job.sourceId))
+      .leftJoin(jobPage, eq(jobPage.jobId, job.id))
       .where(and(...boardConditions(dimensions)))
       .groupBy(sourceKind)
       .then((rows) => rows.map((row) => row.kind).sort()),

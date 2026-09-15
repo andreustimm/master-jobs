@@ -572,6 +572,14 @@ Três decisões que valem registro:
 compartilhável, o botão voltar funciona, e toda página continua Server Component
 — o dashboard não envia JavaScript de cliente.
 
+O recorte `workMode=remote|hybrid|onsite` usa a mesma expressão SQL na lista,
+contagem, facetas e exportação, antes de `LIMIT/OFFSET`. Modalidade reconhecida
+em `raw.workplaceType` ou `raw.fields.workplace` prevalece; localização explícita
+vem depois, seguida de `remote=true` e do campo extraído da página capturada.
+Não se infere modalidade de menções soltas no corpo da descrição, como
+“hybrid cloud”. `remote=false` sozinho não distingue híbrido de presencial;
+sem um sinal reconhecido a vaga fica apenas em Todas. Nenhum dado é regravado.
+
 **`cacheComponents` do Next 16 está desligado.** Este dashboard lê um banco que
 muda a cada sync, então cache só adiciona uma classe de bug de dado velho — e
 proíbe os route segment configs que expressam "sempre fresco" em uma linha.
