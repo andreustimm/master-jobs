@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-09-16
+
 ### Corrigido
 
 - A ingestão local agora preserva valores salariais com centavos e o comando de

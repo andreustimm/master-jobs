@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-09-16T22:56:50.789Z
+
 ### Fixed
 
 - Compensation values with cents are now imported correctly.
