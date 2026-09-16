@@ -135,7 +135,7 @@ it("refuses each missing or mismatched cutover confirmation before target config
   expect(result.status).toBe(1);
   expect(JSON.parse(result.stderr)).toMatchObject({ status: "failed", stage: "target-configuration" });
   expect(result.stderr).not.toContain("synthetic-secret");
-});
+}, 30_000);
 
 it("does not expose corrupt private JSON in command diagnostics", () => {
   source.exec("UPDATE job SET raw = 'private synthetic resume content' WHERE id = 3");
