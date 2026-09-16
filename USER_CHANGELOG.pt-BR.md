@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-16T02:16:17.210Z
+
 ### Melhorado
 
 - A busca de vagas passa a descartar automaticamente cópias técnicas que não

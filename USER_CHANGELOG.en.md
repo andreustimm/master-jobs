@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-16T02:16:17.210Z
+
 ### Improved
 
 - Job sourcing now automatically discards technical copies that are no longer

@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-16
+
 ### Alterado
 
 - A ingestão passa a guardar apenas texto e metadados úteis das vagas: HTML
