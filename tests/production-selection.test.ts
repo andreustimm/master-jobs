@@ -59,6 +59,13 @@ it("imports the selected snapshot into PostgreSQL and verifies the committed row
   try {
     await migratePostgres(db, { migrationsFolder: "./drizzle/postgres" });
     const selection = selectProduction(path);
+    const corrupt = structuredClone(selection);
+    corrupt.manifest[0]!.sha256 = "0".repeat(64);
+    await expect(importProduction(client, corrupt)).rejects.toThrow("Target data verification failed");
+    for (const table of Object.keys(selection.rows)) {
+      const rows = await client.unsafe(`SELECT count(*) AS n FROM production."${table.replaceAll('"', '""')}"`);
+      expect(Number(rows[0]!.n)).toBe(0);
+    }
     const result = await importProduction(client, selection);
     expect(result.importedRows).toBeGreaterThan(0);
     const [job] = await client`SELECT raw->>'workplaceType' AS workplace_type FROM production.job WHERE id = 1`;
