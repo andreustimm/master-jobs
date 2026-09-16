@@ -25,6 +25,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   risco de indisponibilidade por cota.
 - Os contadores do cockpit consultam o acervo com menos leituras, sem alterar
   os filtros nem os resultados mostrados.
+- A próxima atualização passa por verificações extras para manter o acervo
+  íntegro durante manutenções.
 
 ## [1.4.1] - 2026-09-15T23:55:25.383Z
 

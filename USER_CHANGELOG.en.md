@@ -25,6 +25,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   outage risk.
 - Cockpit counters now query the corpus with fewer reads without changing the
   filters or displayed results.
+- The next update now runs extra checks to keep the job corpus intact during
+  maintenance.
 
 ## [1.4.1] - 2026-09-15T23:55:25.383Z
 
