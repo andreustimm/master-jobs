@@ -72,9 +72,9 @@ um subcomando.
 ### `jho db migrate`
 
 `"Create or upgrade the database schema"`. Chama `runMigrations()`
-(`drizzle-orm/libsql/migrator` sobre a pasta `./drizzle`). Quando a URL do banco começa
-com `file:`, `runMigrations()` cria o diretório do arquivo com `mkdir` recursivo antes —
-sem isso o libSQL não abre o banco.
+(`drizzle-orm/postgres-js/migrator` sobre a pasta `./drizzle/postgres`). O comando
+usa `DATABASE_MIGRATION_URL`, separado da URL de runtime, e não cria banco de
+arquivo nem faz fallback para SQLite/Turso.
 
 Sem flags.
 
@@ -662,7 +662,7 @@ O funil só imprime status com contagem maior que zero, respeitando a ordem de
 `application.next_action` está preenchido — e **nada no projeto escreve esse campo**:
 `setApplicationStatus()` (`src/core/db/repo.ts`) não o toca, e as únicas referências em
 `src/` são leituras (`src/cli.ts`) mais a definição da coluna
-(`src/core/db/schema.ts:181`). Hoje só um `UPDATE` manual no SQLite preenche
+(`src/core/db/schema.ts:181`). Hoje só um `UPDATE` manual no PostgreSQL preenche
 `next_action` / `next_action_at`.
 
 Funil vazio:
@@ -1002,8 +1002,9 @@ Carregadas de `.env` pelo `--env-file-if-exists=.env` do script `jho`.
 
 | Variável | Lida em | Efeito |
 |---|---|---|
-| `TURSO_DATABASE_URL` | `src/core/db/client.ts`, `src/core/db/migrate.ts` | URL do banco; default `file:./data/jobs.db` |
-| `TURSO_AUTH_TOKEN` | `src/core/db/client.ts` | Obrigatório quando a URL **não** começa com `file:` |
+| `DATABASE_URL` | `src/core/db/client.ts` | URL PostgreSQL do runtime; obrigatória |
+| `DATABASE_MIGRATION_URL` | `src/core/db/migrate.ts` | URL PostgreSQL para migrations; obrigatória em `db migrate` |
+| `DATABASE_CA_CERT` | `src/core/db/client.ts` | CA opcional para PostgreSQL gerenciado |
 | `JHO_PROFILE_PATH` | `src/core/profile/load.ts` | Override de `profile/profile.yaml` |
 | `JHO_SOURCES_PATH` | `src/core/sources/config.ts` | Override de `config/sources.yaml` |
 | `JHO_USER_AGENT` | `src/core/sources/http.ts` | Header `user-agent` de toda chamada pública |
@@ -1011,9 +1012,9 @@ Carregadas de `.env` pelo `--env-file-if-exists=.env` do script `jho`.
 | `JHO_REPORT_DIR` | `src/core/report/markdown.ts` | Subdiretório do relatório; default `05_Interviews/LinkedIn` |
 | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | `src/core/sources/aggregators.ts` | Sem eles o adapter `adzuna` retorna 0 jobs + warning, sem falhar |
 
-> **Invariante:** URL remota sem token falha alto e cedo. `getDb()` lança quando
-> `TURSO_DATABASE_URL` não começa com `file:` e `TURSO_AUTH_TOKEN` está vazio — falhar
-> aqui é melhor que um 401 confuso no meio de uma run.
+> **Invariante:** URL ausente ou que não seja PostgreSQL falha alto e cedo.
+> `getDb()` não escolhe um banco local silenciosamente, porque isso faria a run
+> parecer bem-sucedida enquanto grava no lugar errado.
 
 ---
 

@@ -19,14 +19,15 @@ ou deletando `job` em vez de fechá-la — destrói a única camada que não tem
 backup natural.
 
 O schema vive em [`src/core/db/schema.ts`](../src/core/db/schema.ts) (Drizzle,
-dialeto SQLite/libSQL), com migrações incrementais em `drizzle/`. São 28
-tabelas; o diagrama abaixo destaca o núcleo de sourcing, matching e pursuit.
+dialeto PostgreSQL, no schema `production`), com migrações incrementais em
+`drizzle/postgres/`. São 28 tabelas; o diagrama abaixo destaca o núcleo de
+sourcing, matching e pursuit.
 
 Todo timestamp é `TEXT` em ISO-8601 UTC. O default é a constante `now` do
 schema:
 
 ```ts
-const now = sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`;
+const now = sql`to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 ```
 
 ---
@@ -277,9 +278,18 @@ fato imutável: reingestão atualiza conteúdo e `last_seen_at`, reabre
 | `closed_at` | `null` = aberta. Ver o invariante 2 |
 | `raw` (json) | fontes de rede preservam somente `{ workplaceType }` quando declarado e descartam o restante. Fontes `manual` e `recruiter` preservam notas e proveniência autorais; ver ADR 0019 |
 
+`archived_at` ainda não existe no schema atual. A decisão aceita para a próxima
+migration é adicionar essa coluna nullable como estado operacional separado de
+`closed_at`: arquivar tira a vaga do board ativo, mas não apaga a vaga nem suas
+candidaturas. O contrato está em [ADR 0020](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md).
+
 Índices: `job_fingerprint_idx` (único), `job_source_idx`, `job_company_idx`
 (por `company_name`), `job_last_seen_idx`, `job_closed_idx`. O último importa
 porque toda query de board filtra `closed_at IS NULL`.
+
+A migration que adicionar `archived_at` também deve manter um índice que suporte
+as varreduras por corte de `closed_at`/`archived_at`, conforme o TechSpec de
+retenção; a coluna sem esse índice não atende ao contrato de lote.
 
 ### `job_score`
 
@@ -345,6 +355,11 @@ criação), `to_status` e `detail` (o `-n/--note` do `jho track`).
 
 > **Invariante:** `application_event` nunca é atualizada nem deletada. É log.
 > Qualquer correção é um evento novo, não um `UPDATE`.
+
+**Regra de retenção:** `application` é a unidade de contagem de candidaturas;
+`application_event` é a unidade de etapas/auditoria. Fechar ou arquivar o `job`
+não altera nenhuma das duas tabelas. Read models de candidato e recrutador
+devem aplicar o escopo de autorização antes de agregar.
 
 `transitionApplication()` é a máquina de estados pura. Repetir o status atual
 é idempotente (não cria outro evento), estados terminais não reabrem por uma
@@ -653,16 +668,16 @@ considerar ao mexer no pipeline.
 
 ## Migrations
 
-Existe **uma** migração hoje: `drizzle/0000_remarkable_solo.sql` (193 linhas),
-que cria as 11 tabelas e todos os índices. O fluxo é:
+As migrações PostgreSQL ficam em `drizzle/postgres/` e criam o schema
+`production` e seus índices. O fluxo é:
 
 ```bash
 pnpm db:generate        # drizzle-kit gera o SQL a partir de schema.ts
 pnpm jho db migrate     # aplica; roda tambem no inicio de `jho jobs sync`
 ```
 
-`runMigrations()` cria o diretório do arquivo (`mkdir` recursivo) quando a URL é
-`file:`, senão o libSQL não consegue abrir o banco.
+`runMigrations()` usa `DATABASE_MIGRATION_URL`, uma conexão PostgreSQL separada
+da URL de runtime. O snapshot SQLite legado não participa do bootstrap normal.
 
 > **Invariante:** `schema.ts` é a fonte da verdade; o SQL em `drizzle/` é
 > **gerado**. Editar o `.sql` à mão desincroniza o snapshot de `drizzle/meta/` e

@@ -2,19 +2,27 @@
 
 `master-jobs` é o cockpit de busca de vagas de **Andreus Timm** (Senior AI Software Architect, 20+ anos, Brasil, remoto B2B, **sem autorização de trabalho nos EUA**). Ele resolve três problemas que o LinkedIn não resolve: (1) as vagas boas estão espalhadas por dezenas de boards ATS públicos que ninguém consegue varrer à mão todo dia, (2) 90% do que aparece é ruído — júnior demais, restrito a `US only`, ou fora do stack — e (3) sem um registro próprio, o funil de candidaturas vira memória e planilha morta.
 
-O sistema busca vagas em APIs **públicas e não autenticadas** de ATS e agregadores. O sourcing ativo são as **15 fontes de `config/sources.yaml`, cobrindo 9 `kind`s**: `greenhouse` (1), `ashby` (5), `lever` (1), `braintrust` (1), `himalayas` (1), `remotive` (2), `arbeitnow` (1), `remoteok` (1) e `careers` (2). `src/core/sources/registry.ts` também registra adapters para `smartrecruiters`, `recruitee` e `adzuna`; `adzuna` continua comentado no YAML e, por isso, não está entre as fontes ativas. O pipeline deduplica por `fingerprint`, aplica um **fit score determinístico** derivado de `profile/profile.yaml` — sem LLM, sem aleatoriedade, sempre auditável via `jho jobs show <id>` — e mantém o funil de candidaturas em tabelas separadas do fato observado. O modo local usa libSQL em `data/jobs.db`; os ambientes remotos usam Turso + Vercel. A varredura remota está temporariamente desligada pelo [incidente de cota de 03/09/2026](operations/turso-quota-incident-2026-09-03.md).
+O sistema busca vagas em APIs **públicas e não autenticadas** de ATS e agregadores. O sourcing ativo são as **15 fontes de `config/sources.yaml`, cobrindo 9 `kind`s**: `greenhouse` (1), `ashby` (5), `lever` (1), `braintrust` (1), `himalayas` (1), `remotive` (2), `arbeitnow` (1), `remoteok` (1) e `careers` (2). `src/core/sources/registry.ts` também registra adapters para `smartrecruiters`, `recruitee` e `adzuna`; `adzuna` continua comentado no YAML e, por isso, não está entre as fontes ativas. O pipeline deduplica por `fingerprint`, aplica um **fit score determinístico** derivado de `profile/profile.yaml` — sem LLM, sem aleatoriedade, sempre auditável via `jho jobs show <id>` — e mantém o funil de candidaturas em tabelas separadas do fato observado. O runtime atual usa PostgreSQL por `DATABASE_URL`; local roda em uma instância isolada e o snapshot SQLite legado fica fora do fluxo normal. A migração Supabase e a reativação da varredura remota seguem os gates do [incidente de cota de 03/09/2026](operations/turso-quota-incident-2026-09-03.md).
 
-> **Invariante:** Não descreva como pronto o que ainda não está. Pronto e validado: UI Next.js em Vercel + Turso, 15 fontes configuradas, 4.824 vagas ingeridas num sync real, scoring auditável, funil e export markdown para o vault Obsidian (dependente de `JHO_VAULT_PATH`). **Ainda não existe:** geração de CV/cover letter, integração de publicação no LinkedIn e a migração Turso → Supabase, que está em preparação separada.
+> **Invariante:** Não descreva como pronto o que ainda não está. O histórico
+> validado do **snapshot pré-corte** inclui UI Next.js em Vercel + Turso, 15
+> fontes configuradas, 4.824 vagas ingeridas num sync real, scoring auditável,
+> funil e export markdown para o vault Obsidian (dependente de
+> `JHO_VAULT_PATH`). O runtime atual já está preparado para PostgreSQL; o corte
+> Turso → Supabase e a reativação da ingestão continuam pendentes. **Ainda não
+> existe:** geração de CV/cover letter e integração de publicação no LinkedIn.
 
 ---
 
 ## Comece por aqui
 
-Quatro comandos levam um clone limpo até uma lista de vagas pontuada:
+Com uma instância PostgreSQL local isolada em `DATABASE_URL` (e
+`DATABASE_MIGRATION_URL` apenas para migrations), quatro comandos levam um clone
+limpo até uma lista de vagas pontuada:
 
 ```bash
 pnpm install
-pnpm jho db migrate                  # cria/atualiza o schema em data/jobs.db
+pnpm jho db migrate                  # cria/atualiza o schema PostgreSQL local
 pnpm jho jobs sync                   # busca as 15 fontes e pontua ao final
 pnpm jho jobs list --min-fit 60      # as vagas que valem seu tempo, melhor fit primeiro
 ```
@@ -23,7 +31,7 @@ Notas que economizam confusão:
 
 - `pnpm jho ...` é `node --experimental-strip-types --no-warnings --env-file-if-exists=.env src/cli.ts`. Exige **Node >= 24**.
 - `jobs sync` já chama `runMigrations()` no início e `scoreAll()` no final — `db migrate` acima é redundante na prática, mas é a forma explícita de verificar que o banco abre antes de fazer rede. Use `--no-score` para pular a pontuação.
-- Nenhuma variável de ambiente é obrigatória para sincronizar e pontuar. `TURSO_DATABASE_URL` tem default `file:./data/jobs.db`; o adapter `adzuna` (comentado em `config/sources.yaml`) precisa de `ADZUNA_APP_ID`/`ADZUNA_APP_KEY`, e sem elas retorna 0 vagas com warning em vez de falhar.
+- `DATABASE_URL` é obrigatória para o runtime; `DATABASE_MIGRATION_URL` fica restrita a migrations. O adapter `adzuna` (comentado em `config/sources.yaml`) precisa de `ADZUNA_APP_ID`/`ADZUNA_APP_KEY`, e sem elas retorna 0 vagas com warning em vez de falhar.
 - **`jho report` só grava arquivo se você disser onde.** `buildReport()` resolve o destino como `opts.outPath ?? (JHO_VAULT_PATH ? join(JHO_VAULT_PATH, JHO_REPORT_DIR, ...) : null)` (`JHO_REPORT_DIR` default `05_Interviews/LinkedIn`). Sem `JHO_VAULT_PATH` e sem `--out`, `target` é `null`, nada é escrito e a CLI cai no ramo `if (opts.stdout || !path)`, que apenas imprime o markdown. O repositório não versiona `.env` (está no `.gitignore`; existe só `.env.example`), então **na configuração default o export para o vault não acontece** — copie `.env.example` para `.env` e preencha `JHO_VAULT_PATH`.
 - Todo comando é idempotente. Rodar de novo nunca estraga nada.
 
@@ -42,10 +50,15 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`linkedin-policy.md`](linkedin-policy.md) | **Antes de qualquer coisa que envolva LinkedIn.** O que é publicação oficial via `w_member_social`, o que é assistido, e o que é proibido. |
 | [`cli.md`](cli.md) | Referência completa de comandos, flags e defaults de `jho`. |
 | [`operations.md`](operations.md) | A rotina diária/semanal: sincronizar, triar, mover o funil, exportar o relatório, podar vagas velhas. |
+| [`product/job-lifecycle-and-application-history.md`](product/job-lifecycle-and-application-history.md) | Regras de fechamento, arquivamento e leitura do histórico para candidato e recrutador. |
+| [`engineering/session-2026-09-16.md`](engineering/session-2026-09-16.md) | Registro durável das decisões, bloqueios e próximos passos discutidos na sessão. |
+| [`.compozy/tasks/job-lifecycle-retention/`](../.compozy/tasks/job-lifecycle-retention/) | PRD, especificação e testes para arquivar vagas preservando candidaturas. |
+| [`.compozy/tasks/environment-sample-only/`](../.compozy/tasks/environment-sample-only/) | Tarefa desta semana para manter dev/staging pequenos e sem ingestão externa. |
 | [`operations/turso-quota-incident-2026-09-03.md`](operations/turso-quota-incident-2026-09-03.md) | Incidente ativo: contenção dos agendadores, diagnóstico do consumo Turso e gates obrigatórios antes da reativação. |
 | [`qa/README.md`](qa/README.md) | Planejar e executar QA vivo por personas, jornadas, cenários, charters, bugs e relatórios. |
 | [`engineering/skills-evaluation.md`](engineering/skills-evaluation.md) | Entender quais skills de desenvolvimento estão instaladas, sua origem e onde entram no fluxo. |
 | [`engineering/workflow.md`](engineering/workflow.md) | Começar, retomar e limpar worktrees com validação proporcional. |
+| [`engineering/compozy-backlog-map.md`](engineering/compozy-backlog-map.md) | Ordem de decomposição do backlog e ponte entre discovery e tarefas Compozy. |
 | [`roadmap.md`](roadmap.md) | O que vem depois e em que ordem — e a lista explícita do que ainda não existe. |
 | [`adr/`](adr/) | Por que cada decisão estrutural foi tomada, com as alternativas descartadas. Leia antes de propor reverter qualquer uma delas. |
 
@@ -72,6 +85,8 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`0017`](adr/0017-precisao-publicacao-e-autoridade-da-versao.md) | Precisão de publicação e autoridade de criação da versão |
 | [`0018`](adr/0018-fronteira-de-confianca-da-varredura-compozy.md) | Fronteira de confiança da varredura Compozy |
 | [`0019`](adr/0019-retencao-de-payloads-de-ingestao.md) | Payload de ingestão temporário e texto normalizado durável |
+| [`0020`](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md) | Arquivamento de vagas preserva candidaturas |
+| [`0021`](adr/0021-ambientes-nao-produtivos-com-dados-sinteticos.md) | Dev e staging usam fixtures, não ingestão real |
 
 ---
 

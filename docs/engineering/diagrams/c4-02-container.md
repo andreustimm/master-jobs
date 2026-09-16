@@ -13,7 +13,7 @@ C4Container
     Container(cli, "CLI", "Node 24 + Commander", "33 comandos. Toda operação<br/>é acessível aqui.")
     Container(web, "Dashboard", "Next.js 16 + shadcn/ui", "Server Components.<br/>Nenhum JavaScript de cliente.")
     Container(core, "src/core", "TypeScript", "Toda a lógica. Compartilhada<br/>pelas duas interfaces.")
-    ContainerDb(db, "data/jobs.db", "libSQL / SQLite", "14 tabelas. 127 MB —<br/>as descrições ficam offline.")
+    ContainerDb(db, "PostgreSQL production", "PostgreSQL / Supabase", "Schema `production`.<br/>Local usa Docker isolado.")
     Container(config, "Configuração", "YAML + Zod", "profile.yaml e sources.yaml.<br/>Editados à mão, validados na carga.")
   }
 
@@ -45,11 +45,12 @@ Quando uma query é necessária às duas, ela vai para `src/core/db/repo.ts`.
 Nunca é duplicada — foi por isso que `getJobDetail`, `corpusStats`,
 `clusterBreakdown` e `pipelineRows` nasceram lá quando o dashboard precisou.
 
-## Por que libSQL, e não um servidor
+## Por que PostgreSQL explícito
 
-O mesmo driver serve arquivo local hoje e Turso amanhã, com o mesmo SQL e as
-mesmas migrations — muda a URL de conexão. Ver
-[ADR 0002](../../adr/0002-libsql-em-vez-de-better-sqlite3.md).
+O runtime precisa de um banco persistente compartilhado entre CLI, dashboard e
+workers. `DATABASE_URL` aponta para PostgreSQL; `DATABASE_MIGRATION_URL` mantém
+DDL separado. O snapshot SQLite anterior ao corte Turso → Supabase só aparece
+no fluxo de importação documentado em [`deploy.md`](../deploy.md).
 
 ## Por que sem build step
 

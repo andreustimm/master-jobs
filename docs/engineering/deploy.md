@@ -2,12 +2,16 @@
 
 ---
 
-# Implantar na Vercel com Turso
+# Implantar na Vercel com PostgreSQL/Supabase
 
-O código já fala Turso: `src/core/db/client.ts` lê `TURSO_DATABASE_URL` e
-`TURSO_AUTH_TOKEN` e cai para `file:./data/jobs.db` quando não há nenhum. Não há
-adaptador a escrever — o que existe é migração de dado, configuração e três
-decisões que a mudança de forma de execução força.
+O runtime atual exige PostgreSQL explícito: `src/core/db/client.ts` lê
+`DATABASE_URL`, e `src/core/db/migrate.ts` usa `DATABASE_MIGRATION_URL` para
+migrations. Não há fallback para SQLite/Turso. O snapshot SQLite legado só pode
+ser lido pelo harness de seleção/importação revisado em
+`scripts/migration/`; ele não é uma base de runtime.
+
+O procedimento Turso que existia antes do corte está preservado apenas como
+contexto histórico no [incidente de cota](../operations/turso-quota-incident-2026-09-03.md).
 
 ## O que muda ao sair do laptop
 
@@ -38,10 +42,10 @@ Duas saídas, e a escolha é de custo:
 - **Cron da Vercel chamando uma rota que processa um lote pequeno.** É o que o
   `vercel.json` prevê: uma chamada por dia que consome parte da fila. Simples,
   cabe no plano gratuito, e leva dias para vencer uma fila grande.
-- **Continuar rodando no laptop, contra a Turso.** O `jho` aponta para o banco
-  remoto pelas mesmas variáveis, e a máquina que já roda a sincronização
-  continua rodando. Zero infraestrutura nova, e é o caminho recomendado
-  enquanto o operador for um.
+- **Continuar rodando o runner fora da Vercel.** O GitHub Actions aponta para o
+  PostgreSQL de produção por secret e tem até seis horas por job; localmente,
+  o mesmo worker aponta para a instância Docker isolada. Nenhuma captura longa
+  deve ficar presa ao limite de uma função Edge.
 
 ### 3. `profile.yaml` e `sources.yaml` são lidos do disco em runtime
 
@@ -57,8 +61,10 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 
 | Variável | Onde | Para quê |
 |---|---|---|
-| `TURSO_DATABASE_URL` | Vercel + local | `libsql://<banco>-<org>.turso.io` |
-| `TURSO_AUTH_TOKEN` | Vercel + local | token do banco |
+| `DATABASE_URL` | aplicação | URL PostgreSQL de runtime |
+| `DATABASE_MIGRATION_URL` | migration/CI | URL PostgreSQL com privilégio de DDL |
+| `DATABASE_CA_CERT` | CI/Vercel | CA do PostgreSQL gerenciado, quando exigido |
+| `SUPABASE_CRAWL_ENABLED` | Actions produção | `true` somente após os gates de quota/retensão |
 | `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela o link vai para o log |
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |
 | `CRON_SECRET` | Vercel | protege a rota de cron; a Vercel a envia em `authorization` |
@@ -84,12 +90,12 @@ desenvolvimento local e num endereço público é o vazamento inteiro.
 Um banco por ambiente, no grupo `master-jobs` em `aws-us-east-1` — a mesma
 região das funções da Vercel (`iad1`), para o round-trip não atravessar o país.
 
-| Branch | Endereço | Banco Turso | Ambiente Vercel |
+| Branch | Endereço | Banco | Ambiente Vercel |
 |---|---|---|---|
-| `main` | `jobs.mastertimm.com.br` | `master-jobs` | Production |
-| `staging` | `jobs-staging.mastertimm.com.br` | `master-jobs-staging` | Preview |
-| `dev` | `jobs-dev.mastertimm.com.br` | `master-jobs-dev` | Preview |
-| — | local | `file:./data/jobs.db` | Development |
+| `main` | `jobs.mastertimm.com.br` | Supabase produção (`production`) | Production |
+| `staging` | `jobs-staging.mastertimm.com.br` | fixture PostgreSQL isolada (provisionamento pendente) | Preview |
+| `dev` | `jobs-dev.mastertimm.com.br` | fixture PostgreSQL isolada (provisionamento pendente) | Preview |
+| — | local | PostgreSQL Docker isolado (`127.0.0.1:5432`) | Development |
 
 Os três compartilham o schema; só o de produção carrega dado real. `dev` e
 `staging` nascem vazios de propósito: copiar produção para lá levaria junto
@@ -97,10 +103,12 @@ Os três compartilham o schema; só o de produção carrega dado real. `dev` e
 verdade num ambiente com menos cuidado. Para popular um deles, aponte o script
 para a URL correspondente e escolha à mão o que copiar.
 
-As variáveis `TURSO_*` de `staging` e `dev` estão declaradas **por branch** no
-ambiente Preview da Vercel, e não só no Preview genérico. Sem isso as duas
-branches dividiriam o mesmo banco, e uma migração destrutiva testada em `dev`
-levaria `staging` junto.
+`staging` e `dev` não recebem a URL, o certificado ou os secrets de produção.
+Enquanto as fixtures remotas não forem provisionadas, esses deployments ficam
+sem ingestão externa e usam somente dados sintéticos versionados. Um eventual
+ambiente compartilhado precisa de uma ADR própria sobre quota, roles,
+`search_path` e migrations; criar schemas no projeto de produção não é um
+atalho seguro.
 
 ### DNS
 
@@ -122,9 +130,10 @@ pública também toda URL de preview de PR.
 
 ## A varredura diária
 
-> **Pausa operacional — 03/09/2026:** o workflow e o cron da Vercel estão
-> temporariamente desabilitados para proteger a cota compartilhada do Turso.
-> Consulte o [diagnóstico e os gates de reativação](../operations/turso-quota-incident-2026-09-03.md).
+> **Pausa operacional:** o workflow permanece opt-in até concluir o corte para
+> Supabase, a importação seletiva e os gates de retenção. O incidente Turso de
+> 03/09/2026 é apenas o diagnóstico histórico; consulte os
+> [gates documentados](../operations/turso-quota-incident-2026-09-03.md).
 
 Quando habilitado, `.github/workflows/varredura.yml` roda `jobs sync`, `scrape
 queue`+`run` e `jobs recheck queue`+`run` contra **produção**, todo dia às
@@ -161,42 +170,42 @@ com aviso e as outras fontes seguem.
 
 `.github/workflows/ci.yml` roda typecheck, testes com cobertura e build no PR e
 no push das três branches. `migrate.yml` aplica migrações somente em produção,
-no push de `main`. As migrações de `dev` e `staging` estão desativadas porque
-seus bancos Turso foram excluídos para reduzir consumo. A reativação exige
-provisionar os bancos, configurar seus tokens e restaurar os gatilhos e passos
-correspondentes no workflow. Esta configuração não pausa os deployments da Vercel.
+por `workflow_dispatch`, depois de confirmar o project ref do Supabase. As
+migrations de `dev` e `staging` ficam desativadas até existirem bancos de
+fixture isolados. Esta configuração não pausa os deployments da Vercel.
 
 **A Vercel implanta no push, independente do CI.** As duas coisas disparam do
 mesmo evento e não se conhecem: sem proteção de branch em `main` exigindo o CI
 verde, o workflow vermelho não impede o deploy. O portão existe, mas só fecha
 depois que alguém liga a proteção em Settings → Branches.
 
-O único segredo usado por `migrate.yml` é `TURSO_TOKEN_PROD`.
+O segredo usado por `migrate.yml` é `SUPABASE_MIGRATION_URL`; o workflow valida o
+project ref antes de abrir a conexão.
 
 ## Migrar o banco
 
 ```bash
-turso db tokens create master-jobs
-
-export TURSO_DATABASE_URL="libsql://master-jobs-andreustimm.aws-us-east-1.turso.io"
-export TURSO_AUTH_TOKEN="..."
-
-pnpm jho db migrate          # cria o schema no banco remoto
-node scripts/turso-migrate.mjs --dry-run --skip-html
-node scripts/turso-migrate.mjs --skip-html
+export DATABASE_MIGRATION_URL="postgresql://..."
+pnpm jho db migrate
+DATABASE_URL="$DATABASE_MIGRATION_URL" pnpm jho db check
 ```
 
-`--reset` limpa o destino antes de copiar. É o que se usa para refazer uma carga
-que morreu no meio: sem ele o script recusa destino não-vazio, porque
-`INSERT OR REPLACE` sobrescreveria em silêncio um banco que talvez não seja o
-que se pensa.
+Em produção, o caminho aprovado é o workflow manual `migrate.yml`, com
+`confirm_project=bujawvnxwtmneiggizje`. A migration deve ser aplicada e
+verificada antes da importação de dados; o workflow recusa outro project ref.
 
-As FKs ficam desligadas durante a cópia via `client.migrate()`, e **não** por
-`PRAGMA foreign_keys=OFF`: o pragma é ignorado dentro de transação, e
-`batch(…, "write")` abre uma. O `pragma foreign_key_check` no fim é o que
-confere o resultado.
+Para o snapshot legado, `scripts/migration/select-production.ts` aplica a
+allowlist de tabelas e exclui sessões, tokens, filas e HTML de crawler. O
+`scripts/migration/import-production.ts` importa somente a seleção verificada,
+exige destino vazio, mantém as FKs ativas e aborta acima de 400 MiB. Não há
+comando de reset destrutivo implícito: uma nova carga deve usar uma instância
+local vazia ou um destino explicitamente provisionado.
 
-Uma cópia real do banco tinha **525,7 MiB**, e a maior parte era entrada
+As FKs não são desligadas durante a cópia PostgreSQL. A transação trava as
+tabelas, verifica o schema esperado, importa em ordem de dependência e compara
+um hash normalizado de cada tabela antes de ajustar as identities.
+
+O snapshot SQLite legado tinha **525,7 MiB**, e a maior parte era entrada
 reconstruível duplicada:
 
 | | tamanho | linhas |
@@ -206,19 +215,20 @@ reconstruível duplicada:
 | `job.description_html` | 67,7 MiB | 13.384 |
 | `job.description_text` | 65,7 MiB | 13.384 |
 
-Desde a ADR 0019, `job_page.html` é apagado após extração bem-sucedida; fontes
-de rede também deixam de persistir o payload integral em `raw` e
-`description_html` (o `workplaceType` mínimo permanece quando declarado). Uma cópia real
-passou a aproximadamente 108 MiB usados após:
+Esses números são históricos, não uma meta para o Supabase. Desde a ADR 0019,
+`job_page.html` é apagado após extração bem-sucedida; fontes de rede também
+deixam de persistir o payload integral em `raw` e `description_html` (o
+`workplaceType` mínimo permanece quando declarado). O limite de importação atual
+é 400 MiB, e a limpeza semanal remove somente dados reconstruíveis e vagas
+fechadas sem candidatura:
 
 ```bash
 pnpm jho db cleanup
 pnpm jho db cleanup --apply
 ```
 
-`--skip-html` continua útil ao migrar snapshots antigos. Páginas cuja extração
-falhou preservam HTML; páginas tratadas exigem `scrape queue --refresh` para um
-novo processamento.
+Páginas cuja extração falhou preservam HTML para reprocessamento; páginas
+tratadas não devem acumular o HTML bruto indefinidamente.
 
 ## O que confirmar depois de subir
 

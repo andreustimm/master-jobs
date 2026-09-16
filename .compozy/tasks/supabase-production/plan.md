@@ -333,7 +333,8 @@ tabela, sem imprimir valores privados. Tamanho JSON não é tamanho físico Post
   continua sendo um teste separado pendente.
 - Ajustes de compatibilidade feitos no schema, com SQL regenerado: UNIQUE
   composto do documento antes da FK de ownership; predicate booleano `true`.
-- Nenhuma tabela/dado foi criado no Supabase nesta etapa; runtime ainda SQLite.
+- Nenhuma tabela/dado foi criado no Supabase nesta etapa; o runtime local já é
+  PostgreSQL, mas o corte remoto e a importação seletiva continuam pendentes.
 - Arquivo local tem 13.384 vagas, 2 candidaturas, 2 eventos, 3 candidatos,
   4 documentos e 4 usuários. Não há prova de que represente produção atual.
   Payloads brutos medidos: job.raw 131.627.194 bytes, job.description_html
