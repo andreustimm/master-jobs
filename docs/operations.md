@@ -181,6 +181,38 @@ bastante para ser recolhida ainda.
 > timestamp e a linha fica. `pruneClosed()` é a única exclusão permitida, e ela
 > se protege sozinha com `job.id not in (select job_id from application)`.
 
+### Arquivar sem perder o funil (tarefa futura)
+
+O arquivamento será uma operação diferente de `prune`: marca `archived_at` em
+vagas confirmadamente fechadas e antigas, mas preserva `job`, `application` e
+`application_event`. O candidato continua vendo a candidatura e o recrutador
+autorizado continua vendo o registro dentro do seu escopo. Fechar a vaga não
+muda `application.status`.
+
+O comando planejado é:
+
+```bash
+pnpm jho jobs archive --closed-days 90 --dry-run
+pnpm jho jobs archive --closed-days 90 --apply
+```
+
+O padrão é dry-run. `404`/`410` ou uma reconciliação completa podem sustentar o
+fechamento; `401`, `403`, `429`, `5xx`, timeout e falha parcial são
+inconclusivos. A implementação e os critérios estão em
+[`job-lifecycle-retention`](../.compozy/tasks/job-lifecycle-retention/) e na
+[ADR 0020](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md).
+
+### Dev e staging: somente fixtures
+
+Os ambientes remotos de dev e staging não devem executar `jobs sync`, download
+de descrição, scraping, recheck, probe agendado ou busca de novas vagas. Eles
+usam uma amostra sintética com as modalidades e estados necessários para UI,
+scoring, arquivamento e autorização. O bloqueio deve existir no scheduler e no
+caso de uso, com falha explícita; local continua SQLite/libSQL e pode fazer
+sync apenas por opt-in de diagnóstico. Ver
+[`environment-sample-only`](../.compozy/tasks/environment-sample-only/) e a
+[ADR 0021](adr/0021-ambientes-nao-produtivos-com-dados-sinteticos.md).
+
 ### Exportar o snapshot pro vault
 
 ```bash

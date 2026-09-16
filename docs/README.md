@@ -42,10 +42,15 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`linkedin-policy.md`](linkedin-policy.md) | **Antes de qualquer coisa que envolva LinkedIn.** O que é publicação oficial via `w_member_social`, o que é assistido, e o que é proibido. |
 | [`cli.md`](cli.md) | Referência completa de comandos, flags e defaults de `jho`. |
 | [`operations.md`](operations.md) | A rotina diária/semanal: sincronizar, triar, mover o funil, exportar o relatório, podar vagas velhas. |
+| [`product/job-lifecycle-and-application-history.md`](product/job-lifecycle-and-application-history.md) | Regras de fechamento, arquivamento e leitura do histórico para candidato e recrutador. |
+| [`engineering/session-2026-09-16.md`](engineering/session-2026-09-16.md) | Registro durável das decisões, bloqueios e próximos passos discutidos na sessão. |
+| [`.compozy/tasks/job-lifecycle-retention/`](../.compozy/tasks/job-lifecycle-retention/) | PRD, especificação e testes para arquivar vagas preservando candidaturas. |
+| [`.compozy/tasks/environment-sample-only/`](../.compozy/tasks/environment-sample-only/) | Tarefa desta semana para manter dev/staging pequenos e sem ingestão externa. |
 | [`operations/turso-quota-incident-2026-09-03.md`](operations/turso-quota-incident-2026-09-03.md) | Incidente ativo: contenção dos agendadores, diagnóstico do consumo Turso e gates obrigatórios antes da reativação. |
 | [`qa/README.md`](qa/README.md) | Planejar e executar QA vivo por personas, jornadas, cenários, charters, bugs e relatórios. |
 | [`engineering/skills-evaluation.md`](engineering/skills-evaluation.md) | Entender quais skills de desenvolvimento estão instaladas, sua origem e onde entram no fluxo. |
 | [`engineering/workflow.md`](engineering/workflow.md) | Começar, retomar e limpar worktrees com validação proporcional. |
+| [`engineering/compozy-backlog-map.md`](engineering/compozy-backlog-map.md) | Ordem de decomposição do backlog e ponte entre discovery e tarefas Compozy. |
 | [`roadmap.md`](roadmap.md) | O que vem depois e em que ordem — e a lista explícita do que ainda não existe. |
 | [`adr/`](adr/) | Por que cada decisão estrutural foi tomada, com as alternativas descartadas. Leia antes de propor reverter qualquer uma delas. |
 
@@ -72,6 +77,8 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`0017`](adr/0017-precisao-publicacao-e-autoridade-da-versao.md) | Precisão de publicação e autoridade de criação da versão |
 | [`0018`](adr/0018-fronteira-de-confianca-da-varredura-compozy.md) | Fronteira de confiança da varredura Compozy |
 | [`0019`](adr/0019-retencao-de-payloads-de-ingestao.md) | Payload de ingestão temporário e texto normalizado durável |
+| [`0020`](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md) | Arquivamento de vagas preserva candidaturas |
+| [`0021`](adr/0021-ambientes-nao-produtivos-com-dados-sinteticos.md) | Dev e staging usam fixtures, não ingestão real |
 
 ---
 

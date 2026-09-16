@@ -277,6 +277,11 @@ fato imutável: reingestão atualiza conteúdo e `last_seen_at`, reabre
 | `closed_at` | `null` = aberta. Ver o invariante 2 |
 | `raw` (json) | fontes de rede preservam somente `{ workplaceType }` quando declarado e descartam o restante. Fontes `manual` e `recruiter` preservam notas e proveniência autorais; ver ADR 0019 |
 
+`archived_at` ainda não existe no schema atual. A decisão aceita para a próxima
+migration é adicionar essa coluna nullable como estado operacional separado de
+`closed_at`: arquivar tira a vaga do board ativo, mas não apaga a vaga nem suas
+candidaturas. O contrato está em [ADR 0020](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md).
+
 Índices: `job_fingerprint_idx` (único), `job_source_idx`, `job_company_idx`
 (por `company_name`), `job_last_seen_idx`, `job_closed_idx`. O último importa
 porque toda query de board filtra `closed_at IS NULL`.
@@ -345,6 +350,11 @@ criação), `to_status` e `detail` (o `-n/--note` do `jho track`).
 
 > **Invariante:** `application_event` nunca é atualizada nem deletada. É log.
 > Qualquer correção é um evento novo, não um `UPDATE`.
+
+**Regra de retenção:** `application` é a unidade de contagem de candidaturas;
+`application_event` é a unidade de etapas/auditoria. Fechar ou arquivar o `job`
+não altera nenhuma das duas tabelas. Read models de candidato e recrutador
+devem aplicar o escopo de autorização antes de agregar.
 
 `transitionApplication()` é a máquina de estados pura. Repetir o status atual
 é idempotente (não cria outro evento), estados terminais não reabrem por uma

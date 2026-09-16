@@ -215,6 +215,21 @@ kit de candidatura (2.4) e de engajamento (2.5) permanecem fora desta onda.
 
 ---
 
+### 2.7 Ciclo de vida e ambientes baratos
+
+**Estado: 📋 capturado para esta semana.** O produto precisa arquivar vagas
+fechadas antigas sem remover candidaturas e precisa impedir que dev/staging
+baixem dados reais. O plano está dividido em duas tarefas Compozy:
+
+- [`job-lifecycle-retention`](../.compozy/tasks/job-lifecycle-retention/) —
+  `archived_at`, rotina dry-run, histórico do candidato e visão escopada do
+  recrutador;
+- [`environment-sample-only`](../.compozy/tasks/environment-sample-only/) —
+  fixtures pequenas, guard fail-closed e cron/Actions de ingestão somente em
+  produção.
+
+As regras duráveis estão nas [ADR 0020](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md) e [ADR 0021](adr/0021-ambientes-nao-produtivos-com-dados-sinteticos.md). Não há código implementado por esta documentação.
+
 ## Fase 3 — Deploy
 
 **Estado: ✅ implantado em Vercel + Turso, sem retirar o modo local.** O

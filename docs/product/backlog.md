@@ -24,6 +24,25 @@ item move a agulha num funil de contratação real.
 | 🔄 | Decisão em andamento |
 | 📋 | Capturado, não iniciado |
 
+## Captura de 16/09/2026 — próxima semana de trabalho
+
+### F-07 · Arquivar vagas sem perder candidaturas 📋
+
+Fechamento é fato da fonte; arquivamento é estado operacional; candidatura é
+histórico protegido. Implementar `archived_at`, dry-run de 90 dias e leituras
+escopadas para candidato/recrutador. O contrato completo está no
+[`PRD`](../../.compozy/tasks/job-lifecycle-retention/_prd.md), na
+[ADR 0020](../adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md) e no
+[documento de produto](job-lifecycle-and-application-history.md).
+
+### F-08 · Dev/staging amostrais e sem ingestão externa 📋
+
+Remote dev/staging devem ter somente fixtures/mocks pequenos. Sync, download,
+scrape, recheck e busca de novas vagas ficam bloqueados fora de produção; local
+continua SQLite/libSQL e opt-in para diagnóstico. Ver a
+[`tarefa desta semana`](../../.compozy/tasks/environment-sample-only/) e a
+[ADR 0021](../adr/0021-ambientes-nao-produtivos-com-dados-sinteticos.md).
+
 ---
 
 ## P0 — Corrigem defeito ativo que esconde vagas boas
