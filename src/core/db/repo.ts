@@ -300,7 +300,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
     getDb()
       .select({
         total: sql<number>`count(*)`,
-        unblocked: sql<number>`coalesce(sum(case when coalesce(${jobScore.blockers}, '[]') = '[]' then 1 else 0 end), 0)`,
+        unblocked: sql<number>`coalesce(sum(case when coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb then 1 else 0 end), 0)`,
         fresh: sql<number>`coalesce(sum(case when coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${freshCutoff} then 1 else 0 end), 0)`,
         withComp: sql<number>`coalesce(sum(case when coalesce(${job.compMax}, ${job.compMin}, 0) > 0 then 1 else 0 end), 0)`,
         named: sql<number>`coalesce(sum(case when lower(${job.companyName}) <> lower(coalesce(${source.label}, '')) then 1 else 0 end), 0)`,
