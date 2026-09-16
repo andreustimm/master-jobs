@@ -10,7 +10,7 @@
 Você é arquiteto de software sênior escolhendo infraestrutura para uma
 aplicação que hoje roda localmente e pode ir para a Vercel depois.
 
-Restrições: rodar offline é requisito, não conveniência; o volume é de centenas
+Restrições: o ambiente local precisa ser reproduzível; o volume é de centenas
 de itens por dia, não milhares por segundo; e cada serviço externo adicionado é
 um servidor a mais que precisa estar de pé antes de a aplicação funcionar.
 
@@ -27,18 +27,21 @@ popularidade.
 
 | Serviço | Free tier | Modelo |
 |---|---|---|
+| Tabelas PostgreSQL | já incluídas no banco do runtime | transacional, `SKIP LOCKED`, sem serviço novo |
+| Supabase Queues/PGMQ | quota do projeto Supabase | fila durável no mesmo PostgreSQL |
 | Upstash Redis | 256 MB, 500 mil comandos/mês, 10 GB banda | REST — funciona em serverless e edge |
+| Upstash QStash | 1.000 mensagens/dia no Free | callbacks HTTP, não crawler principal |
 | Vercel Queues | por operação de API; BETA desde jul/2026 | nativo, mas produto novo |
 | CloudAMQP (RabbitMQ) | plano gratuito existe | TCP persistente |
 
 ## Decisão, e por que contraria o pedido original
 
-O pedido citava Redis ou RabbitMQ. A resposta foi **nenhum dos dois, por
-enquanto**: a fila é uma tabela no libSQL que o projeto já usa.
+O pedido citava Redis ou RabbitMQ. A resposta continua sendo **nenhum dos dois,
+por enquanto**: a fila é uma tabela no PostgreSQL que o projeto já usa.
 
-O raciocínio está inteiro na ADR 0009. Em resumo: o `UPDATE ... WHERE status = ?
-... RETURNING` do SQLite dá claim atômico numa instrução — a propriedade que faz
-uma fila ser uma fila — e o volume não exige mais que isso. Subir um broker
+O raciocínio está inteiro na ADR 0009. Em resumo: `FOR UPDATE SKIP LOCKED`
+reserva o item atomicamente — a propriedade que faz uma fila ser uma fila — e o
+volume não exige mais que isso. Subir um broker
 significaria um segundo servidor no ar antes de o dashboard abrir, trocando
 operação offline por vazão que ninguém precisa.
 
@@ -46,6 +49,6 @@ operação offline por vazão que ninguém precisa.
 modelo errado para funções serverless, que é para onde o projeto pode ir.
 
 A fila fica atrás de uma porta (`QueuePort`) justamente para isso continuar
-sendo decisão e não suposição. Quando for para a web, o adapter é o Upstash —
-parceiro do marketplace da Vercel, REST resolve o problema de conexão, e 500 mil
-comandos/mês cobrem com folga o volume projetado (≈150 mil).
+sendo decisão e não suposição. Quando houver fan-out real, o primeiro adapter a
+avaliar é Supabase Queues/PGMQ; Upstash Redis/QStash fica reservado para
+serverless e callbacks HTTP.

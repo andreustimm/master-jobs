@@ -19,14 +19,15 @@ ou deletando `job` em vez de fechá-la — destrói a única camada que não tem
 backup natural.
 
 O schema vive em [`src/core/db/schema.ts`](../src/core/db/schema.ts) (Drizzle,
-dialeto SQLite/libSQL), com migrações incrementais em `drizzle/`. São 28
-tabelas; o diagrama abaixo destaca o núcleo de sourcing, matching e pursuit.
+dialeto PostgreSQL, no schema `production`), com migrações incrementais em
+`drizzle/postgres/`. São 28 tabelas; o diagrama abaixo destaca o núcleo de
+sourcing, matching e pursuit.
 
 Todo timestamp é `TEXT` em ISO-8601 UTC. O default é a constante `now` do
 schema:
 
 ```ts
-const now = sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`;
+const now = sql`to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 ```
 
 ---
@@ -667,16 +668,16 @@ considerar ao mexer no pipeline.
 
 ## Migrations
 
-Existe **uma** migração hoje: `drizzle/0000_remarkable_solo.sql` (193 linhas),
-que cria as 11 tabelas e todos os índices. O fluxo é:
+As migrações PostgreSQL ficam em `drizzle/postgres/` e criam o schema
+`production` e seus índices. O fluxo é:
 
 ```bash
 pnpm db:generate        # drizzle-kit gera o SQL a partir de schema.ts
 pnpm jho db migrate     # aplica; roda tambem no inicio de `jho jobs sync`
 ```
 
-`runMigrations()` cria o diretório do arquivo (`mkdir` recursivo) quando a URL é
-`file:`, senão o libSQL não consegue abrir o banco.
+`runMigrations()` usa `DATABASE_MIGRATION_URL`, uma conexão PostgreSQL separada
+da URL de runtime. O snapshot SQLite legado não participa do bootstrap normal.
 
 > **Invariante:** `schema.ts` é a fonte da verdade; o SQL em `drizzle/` é
 > **gerado**. Editar o `.sql` à mão desincroniza o snapshot de `drizzle/meta/` e

@@ -7,7 +7,9 @@ Encontra vagas em APIs públicas de ATS e agregadores, pontua cada uma contra um
 perfil estruturado de forma **determinística e auditável**, e gerencia o funil —
 do backlog à proposta.
 
-Roda **localmente**: CLI + dashboard. Sem servidor, sem conta, sem token.
+Roda localmente e na Vercel: CLI + dashboard Next.js. O runtime usa
+PostgreSQL explícito; localmente, o caminho suportado é uma instância Docker.
+O snapshot SQLite legado só entra pelo harness de migração/importação.
 
 ---
 
@@ -15,14 +17,18 @@ Roda **localmente**: CLI + dashboard. Sem servidor, sem conta, sem token.
 
 ```bash
 pnpm install
-pnpm jho db migrate       # cria o schema em data/jobs.db
+export DATABASE_URL=postgresql://postgres:senha@127.0.0.1:5432/master_jobs_local
+export DATABASE_MIGRATION_URL="$DATABASE_URL"
+pnpm jho db migrate       # cria o schema PostgreSQL
 pnpm jho db seed          # plano de posicionamento + baseline
 pnpm jho fx refresh       # cotações do BCE, para comparar salário entre moedas
 pnpm jho jobs sync        # busca todas as fontes e pontua
 pnpm dev                  # dashboard em localhost:3000
 ```
 
-Nenhuma variável de ambiente é obrigatória.
+`DATABASE_URL` é obrigatória para o runtime e `DATABASE_MIGRATION_URL` para
+aplicar migrations. Um `.env` local pode guardar os dois valores; não versione
+credenciais.
 
 ## O que ele faz
 
@@ -139,12 +145,13 @@ sua correspondência e nada toca a plataforma.
 
 Node 24 com type stripping nativo — **sem build step**, só sintaxe TypeScript
 apagável ([ADR 0006](docs/adr/0006-typescript-apagavel-sem-build-step.md)).
-TypeScript 7 · Drizzle ORM · libSQL · Zod · Commander · Vitest.
+TypeScript 7 · Drizzle ORM · PostgreSQL · Zod · Commander · Vitest.
 Dashboard em Next.js 16 com shadcn/ui e Tailwind v4, em Server Components por
 padrão; JavaScript de cliente fica restrito aos controles realmente interativos.
 
-libSQL roda como arquivo local hoje e aponta para Turso amanhã sem trocar uma
-linha de SQL ([ADR 0002](docs/adr/0002-libsql-em-vez-de-better-sqlite3.md)).
+PostgreSQL é o banco de runtime em todos os ambientes. O snapshot SQLite que
+existia antes do corte Turso → Supabase é uma fonte de importação controlada,
+não um fallback silencioso ([guia de deploy](docs/engineering/deploy.md)).
 
 ## Documentação
 

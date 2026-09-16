@@ -16,8 +16,8 @@
  * it needs the dev server up.
  *
  * `pnpm test:e2e` owns an isolated build, server and database. To target an
- * already-running environment deliberately, set E2E_BASE and
- * TURSO_DATABASE_URL and run `pnpm test:e2e:external`.
+ * already-running environment deliberately, set E2E_BASE, DATABASE_URL and
+ * DATABASE_MIGRATION_URL, then run `pnpm test:e2e:external`.
  */
 import { chromium, webkit } from "playwright";
 import { readFile } from "node:fs/promises";

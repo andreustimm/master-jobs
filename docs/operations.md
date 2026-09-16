@@ -6,6 +6,12 @@
 > estado verificável e runbook de reativação:
 > [`operations/turso-quota-incident-2026-09-03.md`](operations/turso-quota-incident-2026-09-03.md).
 
+> **Banco atual:** o runtime usa PostgreSQL (`DATABASE_URL`) e migrations usam
+> `DATABASE_MIGRATION_URL`. Alguns diagnósticos SQL mais abaixo preservam a
+> fotografia do snapshot SQLite pré-corte; trate-os como referência histórica e
+> não os execute literalmente. Para a operação atual, prefira os comandos
+> `jho` e as rotinas de `docs/engineering/deploy.md`.
+
 ## Por que isto existe
 
 O `master-jobs` não é um produto: é uma rotina. O banco só vale alguma coisa se

@@ -82,7 +82,7 @@ for the first release; refresh/navigation is the consistency boundary.
 
 - Next.js Server Components remain the default; shared reads go through core
   APIs, not SQL inside JSX.
-- Use existing libSQL/Drizzle schema and queue table; no new broker.
+- Use the existing PostgreSQL/Drizzle schema and queue tables; no new broker.
 - Use existing Vitest, test database, HTTP port fixtures, and isolated E2E
   harness.
 - Follow `DESIGN.md`, semantic tokens, locale dictionaries, and the mobile
