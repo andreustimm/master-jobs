@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+<!-- sem-nota-usuario: 1.6.1 local environment and operational documentation -->
+
 ## [1.6.0] - 2026-09-16T05:24:04.621Z
 
 ### Improved

@@ -17,7 +17,8 @@ O snapshot SQLite legado só entra pelo harness de migração/importação.
 
 ```bash
 pnpm install
-export DATABASE_URL=postgresql://postgres:senha@127.0.0.1:5432/master_jobs_local
+docker compose -f docker-compose.local.yml up -d
+export DATABASE_URL=postgresql://supabase_admin:master_jobs_local_only@127.0.0.1:5433/master_jobs_local
 export DATABASE_MIGRATION_URL="$DATABASE_URL"
 pnpm jho db migrate       # cria o schema PostgreSQL
 pnpm jho db seed          # plano de posicionamento + baseline
@@ -29,6 +30,11 @@ pnpm dev                  # dashboard em localhost:3000
 `DATABASE_URL` é obrigatória para o runtime e `DATABASE_MIGRATION_URL` para
 aplicar migrations. Um `.env` local pode guardar os dois valores; não versione
 credenciais.
+
+O Compose local usa a imagem oficial `supabase/postgres` com `pgmq` e
+`pgvector` habilitados. Ele sobe somente o banco; o stack completo do Supabase
+continua sendo uma escolha separada. Consulte o [guia do PostgreSQL local](docs/engineering/local-postgres.md)
+para verificar as extensões e resetar o volume.
 
 ## O que ele faz
 

@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+<!-- sem-nota-usuario: 1.6.1 ambiente local e documentação operacional -->
+
 ## [1.6.0] - 2026-09-16T05:24:04.621Z
 
 ### Melhorado
