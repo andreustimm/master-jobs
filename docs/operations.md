@@ -63,7 +63,7 @@ sinais:
 > **Invariante:** Uma fonte que falha é registrada e pulada, nunca aborta a run.
 > O `try/catch` de `syncOne()` grava `source.lastStatus = 'error'` e
 > `source.lastError` e segue para a próxima. Nenhum handle errado pode custar as
-> outras 11 fontes.
+> outras 14 fontes ativas.
 
 ### 2. Revisar o topo da lista
 

@@ -32,7 +32,7 @@ Tudo nesta seção foi verificado contra `src/` e contra o banco em
 | Capacidade | Estado | Onde vive |
 |---|---|---|
 | CLI Commander completa (`jho`) | ✅ | `src/cli.ts` |
-| 10 adapters registrados / 12 fontes configuradas | ✅ | `src/core/sources/registry.ts`, `config/sources.yaml` |
+| 12 adapters registrados / 15 fontes configuradas | ✅ | `src/core/sources/registry.ts`, `config/sources.yaml` |
 | Ingestão idempotente com `fingerprint` + `contentHash` | ✅ | `src/core/ingest/normalize.ts`, `src/core/ingest/run.ts` |
 | Scoring determinístico versionado | ✅ | `src/core/scoring/score.ts` (`SCORER_VERSION = "1.0.0"`) |
 | Persistência do score com upsert | ✅ | `src/core/scoring/apply.ts` |

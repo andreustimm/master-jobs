@@ -153,9 +153,9 @@ O efeito colateral é a falha ficar silenciosa até alguém olhar — então o C
 olha. Uma fonte fora é aviso; mais da metade é erro, porque aí a causa é comum e
 provavelmente daqui.
 
-Segredos opcionais: `ADZUNA_APP_ID` e `ADZUNA_APP_KEY`. Das 17 fontes só o Adzuna
-pede credencial; sem ela, ele aparece como `error` na conferência e as outras
-seguem.
+Segredos opcionais: `ADZUNA_APP_ID` e `ADZUNA_APP_KEY`. Das 15 fontes ativas,
+nenhuma exige Adzuna; se ele for habilitado, aparece como `error` sem essas
+credenciais e as outras seguem.
 
 ## O portão
 
