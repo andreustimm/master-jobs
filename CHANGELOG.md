@@ -9,6 +9,17 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Preparado o caminho PostgreSQL para o Supabase: schema privado, roles separadas
+  para runtime e migration, importação seletiva com rehearsal local e controles
+  explícitos para o corte. Nenhum banco remoto foi alterado.
+
+### Alterado
+
+- A preparação da migração agora verifica a preservação do acervo e o rollback
+  transacional antes de qualquer corte de produção.
+
 ## [1.5.0] - 2026-09-16
 
 ### Alterado
@@ -20,8 +31,6 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   aplica a retenção em produção.
 - As seis contagens de filtros do cockpit agora usam uma única agregação
   condicional, reduzindo leituras completas do acervo nessa jornada.
-- A preparação da migração agora verifica a preservação do acervo e o rollback
-  transacional antes de qualquer corte de produção.
 
 ## [1.4.1] - 2026-09-15
 
@@ -36,12 +45,6 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   sessão; ao remover esse papel, o vínculo antigo fica inativo e não pode
   reabrir score ou funil privado por uma conta administrativa. A associação é
   preservada para uma restauração posterior do papel.
-
-### Adicionado
-
-- Preparado o caminho PostgreSQL para o Supabase: schema privado, roles separadas
-  para runtime e migration, importação seletiva com rehearsal local e controles
-  explícitos para o corte. Nenhum banco remoto foi alterado.
 
 ## [1.4.0] - 2026-09-15
 
