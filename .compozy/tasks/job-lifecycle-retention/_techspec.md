@@ -69,8 +69,9 @@ returns a safe error/zero-change result and does not mutate applications.
 
 ## Integration Points
 
-- **SQLite/libSQL and PostgreSQL** — additive migration, transactional writes,
-  no schema-specific behavior outside the repository adapter.
+- **PostgreSQL** — additive migration and transactional writes through the
+  current runtime adapter. The legacy SQLite snapshot is an import/test input,
+  not a second runtime dialect.
 - **Auth policy** — `guard`, `requirePage`, `can`, and existing recruiter scope.
 - **Probe/verify queue** — consumes existing `alive`/`gone` verdicts; network
   failures remain inconclusive.

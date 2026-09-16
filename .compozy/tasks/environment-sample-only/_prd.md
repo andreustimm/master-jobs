@@ -57,8 +57,8 @@ tokens, or production cron secrets.
 5. Read-only commands continue to work against fixtures.
 6. The fixture seed is idempotent and contains no production dump, secret, CV,
    email, phone, or raw external payload.
-7. The first Supabase project uses only `production`; dev/staging are local or
-   ephemeral Postgres/SQLite fixtures rather than extra remote schemas.
+7. The first Supabase project uses only `production`; dev/staging use bounded
+   fixtures in isolated PostgreSQL instances rather than extra remote schemas.
 8. Expected blocks are observable as aggregate environment events without
    logging URLs, descriptions, or PII.
 
@@ -72,7 +72,10 @@ external sources are unavailable.
 ## High-Level Technical Constraints
 
 - Preserve the existing adapter, queue, auth, and scheduler boundaries.
-- Keep the default local database SQLite/libSQL.
+- Use the isolated local PostgreSQL instance through `DATABASE_URL`; use
+  `DATABASE_MIGRATION_URL` only for migrations. The legacy SQLite snapshot is
+  outside the runtime and may be used only by a test/import harness that
+  explicitly supports it.
 - Use existing test harnesses and fakes at I/O boundaries only.
 - Do not copy production data or secrets into tracked fixtures or previews.
 - Do not create a second database solely for raw payloads.
