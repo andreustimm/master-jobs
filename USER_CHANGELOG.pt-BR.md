@@ -14,9 +14,9 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 <!-- sem-nota-usuario: 1.0.1 mudança interna, nada muda para quem usa -->
 <!-- sem-nota-usuario: 1.1.1 - 2026-08-22 mudança interna, nada muda para quem usa -->
 
-## [Unreleased]
+<!-- sem-nota-usuario: 1.7.0 - 2026-09-16T17:56:44.121Z -->
 
-<!-- sem-nota-usuario: 1.6.1 ambiente local e documentação operacional -->
+## [Unreleased]
 
 ## [1.6.0] - 2026-09-16T05:24:04.621Z
 

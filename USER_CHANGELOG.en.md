@@ -14,9 +14,9 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 <!-- sem-nota-usuario: 1.0.1 internal change with no user-visible effect -->
 <!-- sem-nota-usuario: 1.1.1 - 2026-08-22 internal change with no user-visible effect -->
 
-## [Unreleased]
+<!-- sem-nota-usuario: 1.7.0 - 2026-09-16T17:56:44.121Z -->
 
-<!-- sem-nota-usuario: 1.6.1 local environment and operational documentation -->
+## [Unreleased]
 
 ## [1.6.0] - 2026-09-16T05:24:04.621Z
 

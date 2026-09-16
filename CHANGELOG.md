@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-09-16
+
 ### Adicionado
 
 - O ambiente local agora usa a mesma linha PostgreSQL 17 do Supabase, com
