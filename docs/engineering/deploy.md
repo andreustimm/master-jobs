@@ -154,8 +154,8 @@ olha. Uma fonte fora é aviso; mais da metade é erro, porque aí a causa é com
 provavelmente daqui.
 
 Segredos opcionais: `ADZUNA_APP_ID` e `ADZUNA_APP_KEY`. Das 15 fontes ativas,
-nenhuma exige Adzuna; se ele for habilitado, aparece como `error` sem essas
-credenciais e as outras seguem.
+nenhuma exige Adzuna; se ele for habilitado sem essas credenciais, é ignorado
+com aviso e as outras fontes seguem.
 
 ## O portão
 
