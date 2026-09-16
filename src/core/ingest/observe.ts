@@ -8,7 +8,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { company, job, jobScore } from "../db/schema.ts";
-import type { RawJob } from "../sources/types.ts";
+import { MANUAL_SOURCE_KINDS, type RawJob } from "../sources/types.ts";
 import { contentHash, fingerprint, slugifyCompany, toIsoDate } from "./normalize.ts";
 
 export type JobObservationOutcome =
@@ -34,6 +34,28 @@ export type JobObservation = {
 function resolveApplyUrl(raw: RawJob): string {
   const explicit = raw.applyUrl?.trim();
   return explicit ? explicit : raw.url;
+}
+
+/**
+ * Payload authored by a person can contain notes and extraction provenance.
+ * Network adapter payloads are reconstructable and commonly duplicate the
+ * entire description, sometimes more than once. Keep the former, discard the
+ * latter after normalization.
+ */
+function retainedRawPayload(sourceId: string, payload: unknown): unknown {
+  const kind = sourceId.split(":", 1)[0] ?? "";
+  if ((MANUAL_SOURCE_KINDS as readonly string[]).includes(kind)) return payload;
+
+  // The work-mode filter needs the declared workplace type after the large
+  // adapter response is discarded. Keep that one normalized signal; location
+  // and `remote` alone cannot distinguish hybrid from on-site.
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const workplaceType = (payload as Record<string, unknown>).workplaceType;
+    if (typeof workplaceType === "string" && workplaceType.trim()) {
+      return { workplaceType };
+    }
+  }
+  return {};
 }
 
 async function resolveCompany(name: string): Promise<number | null> {
@@ -91,7 +113,9 @@ export async function observeRawJob(
     companyId,
     companyName: raw.companyName,
     title: raw.title,
-    descriptionHtml: raw.descriptionHtml ?? null,
+    // HTML is only an input to the adapter's text extraction. The normalized
+    // text below is the canonical description used by scoring and UI.
+    descriptionHtml: null,
     descriptionText: raw.descriptionText ?? null,
     locationRaw: raw.locationRaw ?? null,
     remote: raw.remote ?? null,
@@ -106,7 +130,7 @@ export async function observeRawJob(
     applyUrl: resolveApplyUrl(raw),
     postedAt: toIsoDate(raw.postedAt),
     lastSeenAt: observedAt,
-    raw: raw.raw,
+    raw: retainedRawPayload(sourceId, raw.raw),
   };
 
   if (!existing) {

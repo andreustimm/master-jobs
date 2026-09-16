@@ -1,0 +1,46 @@
+# Retenção semanal do banco de produção.
+#
+# A captura já descarta HTML bruto assim que extrai texto e metadados. Esta
+# rotina recolhe payloads legados, páginas de versões antigas e vagas fechadas
+# sem candidatura. Nunca toca no histórico de application.
+name: Manutenção do banco
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # Domingo 07:30 UTC, depois da varredura diária das 06:00 UTC.
+    - cron: "30 7 * * 0"
+  workflow_dispatch:
+
+concurrency:
+  group: manutencao-banco-producao
+  cancel-in-progress: false
+
+jobs:
+  limpar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TURSO_DATABASE_URL: libsql://master-jobs-andreustimm.aws-us-east-1.turso.io
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_TOKEN_PROD }}
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Validar credencial
+        run: |
+          if [ -z "$TURSO_AUTH_TOKEN" ]; then
+            echo "::error::TURSO_TOKEN_PROD ausente."
+            exit 1
+          fi
+
+      - name: Limpar payloads reconstruíveis
+        run: pnpm jho db cleanup --apply --closed-days 90 --page-html-days 0

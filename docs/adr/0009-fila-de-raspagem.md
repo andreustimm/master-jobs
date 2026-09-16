@@ -1,6 +1,6 @@
 # ADR 0009 — A fila de raspagem é uma tabela, não um broker
 
-**Status:** aceita · 2026-08-19
+**Status:** aceita, com retenção do HTML substituída pela ADR 0019 · 2026-08-19
 
 ## Contexto
 
@@ -77,5 +77,5 @@ desaparecem no dia em que o adapter Upstash entrar.
    um host as requisições são serializadas e respeitam `Crawl-delay`.
 3. **O texto raspado não sobrescreve o do adapter.** A fonte oficial veio da API
    do empregador; a página é preenchimento de lacuna, nunca substituição.
-4. **HTML bruto é guardado.** É o que torna a melhoria do extrator um
-   reprocessamento em vez de um novo crawl.
+4. **Substituído pela ADR 0019.** HTML bruto é temporário: fica retido quando a
+   extração falha e é descartado quando texto e metadados úteis são gravados.

@@ -393,3 +393,41 @@ describe("jho db prune", () => {
     expect(await banco().select().from(job)).toHaveLength(1);
   });
 });
+
+describe("jho db cleanup", () => {
+  it("é dry-run por padrão e exige --apply para alterar dados", async () => {
+    await banco().insert(source).values({
+      id: "lever:cleanup",
+      kind: "lever",
+      handle: "cleanup",
+      label: "Cleanup",
+    });
+    const [stored] = await banco()
+      .insert(job)
+      .values({
+        fingerprint: "cleanup-fp",
+        contentHash: "cleanup-hash",
+        sourceId: "lever:cleanup",
+        externalId: "cleanup",
+        companyName: "Acme",
+        title: "Legacy",
+        url: "https://jobs.example/cleanup",
+        descriptionHtml: "<p>duplicada</p>",
+        descriptionText: "Descrição útil",
+        raw: { payload: "duplicado" },
+      })
+      .returning({ id: job.id });
+
+    const dryRun = await rodar("db", "cleanup");
+    const [beforeApply] = await banco().select().from(job).where(eq(job.id, stored!.id));
+    expect(dryRun.out).toContain("dry-run");
+    expect(dryRun.out).toContain("Nothing changed");
+    expect(beforeApply?.descriptionHtml).toBe("<p>duplicada</p>");
+
+    const applied = await rodar("db", "cleanup", "--apply");
+    const [afterApply] = await banco().select().from(job).where(eq(job.id, stored!.id));
+    expect(applied.out).toContain("compacted 1 job(s)");
+    expect(afterApply?.descriptionHtml).toBeNull();
+    expect(afterApply?.raw).toEqual({});
+  });
+});

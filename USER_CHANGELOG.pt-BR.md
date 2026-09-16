@@ -16,6 +16,14 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Melhorado
+
+- A busca de vagas passa a descartar automaticamente cópias técnicas que não
+  são usadas depois do processamento, mantendo o banco menor e reduzindo o
+  risco de indisponibilidade por cota.
+- Os contadores do cockpit consultam o acervo com menos leituras, sem alterar
+  os filtros nem os resultados mostrados.
+
 ## [1.4.1] - 2026-09-15T23:55:25.383Z
 
 ### Correção
@@ -25,7 +33,6 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   exportar a lista sem acessar o funil de outra pessoa.
 - Uma conta que deixa de ser candidata não mantém acesso ao seu funil privado
   ao entrar novamente.
-
 ## [1.4.0] - 2026-09-15T18:14:00.754Z
 
 ### Novidade

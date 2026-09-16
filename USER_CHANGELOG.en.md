@@ -16,6 +16,14 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Improved
+
+- Job sourcing now automatically discards technical copies that are no longer
+  needed after processing, keeping the database smaller and reducing quota
+  outage risk.
+- Cockpit counters now query the corpus with fewer reads without changing the
+  filters or displayed results.
+
 ## [1.4.1] - 2026-09-15T23:55:25.383Z
 
 ### Fixed
@@ -25,7 +33,6 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   export the list without accessing another person's pipeline.
 - An account that is no longer a candidate cannot regain its private pipeline
   by signing in again.
-
 ## [1.4.0] - 2026-09-15T18:14:00.754Z
 
 ### Fixed

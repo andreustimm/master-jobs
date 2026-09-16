@@ -204,6 +204,36 @@ describe("filtros e ordenação do quadro", () => {
     expect(facetas.sources).toEqual(["lever"]);
     expect(semScore).toBeGreaterThan(0);
   });
+
+  it("mantém as cinco facetas equivalentes às contagens filtradas", async () => {
+    const candidateId = await seedCandidato("facetas", true);
+    const blocked = await seedVaga({ n: 1, postedAt: "2020-01-01T00:00:00.000Z", compMax: null, descriptionText: "curta" });
+    const recent = await seedVaga({
+      n: 2,
+      postedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      compMax: 120_000,
+      descriptionText: "Descrição longa ".repeat(30),
+    });
+    const anonymous = await seedVaga({
+      n: 3,
+      postedAt: "2020-01-01T00:00:00.000Z",
+      compMax: null,
+      descriptionText: "Descrição longa ".repeat(30),
+      companyName: "Rótulo lever:acme",
+    });
+    await seedScore(candidateId, blocked, 80);
+    await seedScore(candidateId, recent, 80);
+    await seedScore(candidateId, anonymous, 80);
+    await db.update(jobScore).set({ blockers: ["visa"] }).where(eq(jobScore.jobId, blocked));
+
+    const facets = await boardFacets(candidateId);
+    expect(facets.total).toBe(await countBoard(candidateId));
+    expect(facets.unblocked).toBe(await countBoard(candidateId, { hideBlocked: true }));
+    expect(facets.fresh).toBe(await countBoard(candidateId, { freshDays: 3 }));
+    expect(facets.withComp).toBe(await countBoard(candidateId, { hasComp: true }));
+    expect(facets.named).toBe(await countBoard(candidateId, { namedEmployer: true }));
+    expect(facets.described).toBe(await countBoard(candidateId, { hasDescription: true }));
+  });
 });
 
 describe("detalhe de vaga", () => {

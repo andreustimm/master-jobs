@@ -268,14 +268,14 @@ fato imutável: reingestão atualiza conteúdo e `last_seen_at`, reabre
 | `external_id` | id estável dentro da fonte; **não** participa da deduplicação |
 | `company_id` -> `company.id` | sem cascade (`ON DELETE no action`) |
 | `company_name` | denormalizado de propósito: existe mesmo quando `slugifyCompany()` devolve string vazia e `company_id` fica `null` |
-| `description_html` / `description_text` | o `text` é o que o scorer lê. Fontes como `smartrecruiters` não trazem corpo e deixam ambos `null` |
+| `description_html` / `description_text` | `description_text` é o dado durável que scorer e UI leem. `description_html` permanece por compatibilidade de schema, mas ingestão nova grava `null`; `jho db cleanup` remove o legado |
 | `remote` | `null` = a vaga não diz. Diferente de `false` |
 | `comp_min`, `comp_max`, `comp_currency`, `comp_period` | `comp_period` em `year \| month \| hour`. A moeda **não** é convertida pelo scorer |
 | `url`, `apply_url` | `apply_url` pode ser `null`; a CLI mostra `applyUrl ?? url` |
 | `posted_at` | normalizado por `toIsoDate()`; `null` quando a fonte não dá data parseável |
 | `first_seen_at` / `last_seen_at` | `first_seen_at` só é escrito no insert. `last_seen_at` é carimbado em todo sync que reencontra a vaga |
 | `closed_at` | `null` = aberta. Ver o invariante 2 |
-| `raw` (json) | payload original do adapter, guardado inteiro — é o que permite reprocessar um mapeamento errado sem refazer o fetch |
+| `raw` (json) | fontes de rede preservam somente `{ workplaceType }` quando declarado e descartam o restante. Fontes `manual` e `recruiter` preservam notas e proveniência autorais; ver ADR 0019 |
 
 Índices: `job_fingerprint_idx` (único), `job_source_idx`, `job_company_idx`
 (por `company_name`), `job_last_seen_idx`, `job_closed_idx`. O último importa

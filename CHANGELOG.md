@@ -9,6 +9,16 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Alterado
+
+- A ingestão passa a guardar apenas texto e metadados úteis das vagas: HTML
+  bruto e payload integral de fontes de rede são descartados após normalização.
+- O comando `jho db cleanup` inventaria por padrão e, com `--apply`, compacta
+  payloads legados e poda vagas fechadas sem candidatura; uma Action semanal
+  aplica a retenção em produção.
+- As seis contagens de filtros do cockpit agora usam uma única agregação
+  condicional, reduzindo leituras completas do acervo nessa jornada.
+
 ## [1.4.1] - 2026-09-15
 
 ### Corrigido
@@ -22,7 +32,6 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   sessão; ao remover esse papel, o vínculo antigo fica inativo e não pode
   reabrir score ou funil privado por uma conta administrativa. A associação é
   preservada para uma restauração posterior do papel.
-
 ## [1.4.0] - 2026-09-15
 
 ### Adicionado

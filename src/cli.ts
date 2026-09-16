@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { and, desc, eq } from "drizzle-orm";
 import { closeDb, getDb } from "./core/db/client.ts";
+import { runDatabaseCleanup } from "./core/db/retention.ts";
 import { runMigrations } from "./core/db/migrate.ts";
 import { listBoard } from "./contexts/matching/index.ts";
 import { pipelineCounts, setApplicationStatus } from "./contexts/pursuit/index.ts";
@@ -221,6 +222,38 @@ db.command("prune")
     await withDb(async () => {
       const removed = await pruneClosed(Number(opts.days));
       console.log(`${c.green("✓")} pruned ${removed} closed job(s)`);
+    });
+  });
+
+db.command("cleanup")
+  .description("Inventory or remove reconstructable database payloads")
+  .option("--apply", "apply the cleanup; without this flag the command is read-only")
+  .option("--closed-days <n>", "delete untracked jobs closed longer than N days", "90")
+  .option("--page-html-days <n>", "retain parsed raw page HTML for N days", "0")
+  .action(async (opts: { apply?: boolean; closedDays: string; pageHtmlDays: string }) => {
+    await withDb(async () => {
+      const result = await runDatabaseCleanup({
+        apply: opts.apply === true,
+        closedJobDays: Number(opts.closedDays),
+        pageHtmlDays: Number(opts.pageHtmlDays),
+      });
+      const mib = (result.candidates.reclaimableBytes / 1_048_576).toFixed(1);
+      console.log(
+        `${c.bold(opts.apply ? "Database cleanup" : "Database cleanup · dry-run")}\n` +
+          `  ${result.candidates.onlineJobs} online job payload(s) compactable\n` +
+          `  ${result.candidates.parsedPages} parsed page HTML payload(s) removable\n` +
+          `  ${result.candidates.closedJobs} closed untracked job(s) prunable\n` +
+          `  ${mib} MiB of reconstructable payload identified`,
+      );
+      if (!result.applied) {
+        console.log(c.dim("  Nothing changed. Run again with --apply to persist."));
+        return;
+      }
+      console.log(
+        `${c.green("✓")} compacted ${result.applied.compactedJobs} job(s), ` +
+          `cleared ${result.applied.clearedPages} page(s), ` +
+          `pruned ${result.applied.prunedJobs} job(s)`,
+      );
     });
   });
 
