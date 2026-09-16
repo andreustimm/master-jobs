@@ -16,6 +16,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-16T05:24:04.621Z
+
 ### Improved
 
 - Maintenance now checks that your jobs and decisions remain preserved before a

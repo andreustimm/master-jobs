@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-16
+
 ### Adicionado
 
 - Preparado o caminho PostgreSQL para o Supabase: schema privado, roles separadas

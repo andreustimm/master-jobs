@@ -16,6 +16,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-16T05:24:04.621Z
+
 ### Melhorado
 
 - As manutenções agora verificam se suas vagas e decisões continuam preservadas
