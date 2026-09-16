@@ -1,5 +1,11 @@
 # Operação diária
 
+> **Incidente ativo — 03/09/2026:** a varredura automática está temporariamente
+> desligada no GitHub Actions e no Vercel Cron para proteger a cota compartilhada
+> do Turso. Não reative antes de cumprir os gates da tarefa B-11. Diagnóstico,
+> estado verificável e runbook de reativação:
+> [`operations/turso-quota-incident-2026-09-03.md`](operations/turso-quota-incident-2026-09-03.md).
+
 ## Por que isto existe
 
 O `master-jobs` não é um produto: é uma rotina. O banco só vale alguma coisa se
@@ -57,7 +63,7 @@ sinais:
 > **Invariante:** Uma fonte que falha é registrada e pulada, nunca aborta a run.
 > O `try/catch` de `syncOne()` grava `source.lastStatus = 'error'` e
 > `source.lastError` e segue para a próxima. Nenhum handle errado pode custar as
-> outras 11 fontes.
+> outras 14 fontes ativas.
 
 ### 2. Revisar o topo da lista
 
