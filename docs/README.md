@@ -10,11 +10,13 @@ O sistema busca vagas em APIs **públicas e não autenticadas** de ATS e agregad
 
 ## Comece por aqui
 
-Quatro comandos levam um clone limpo até uma lista de vagas pontuada:
+Com uma instância PostgreSQL local isolada em `DATABASE_URL` (e
+`DATABASE_MIGRATION_URL` apenas para migrations), quatro comandos levam um clone
+limpo até uma lista de vagas pontuada:
 
 ```bash
 pnpm install
-pnpm jho db migrate                  # cria/atualiza o schema em data/jobs.db
+pnpm jho db migrate                  # cria/atualiza o schema PostgreSQL local
 pnpm jho jobs sync                   # busca as 15 fontes e pontua ao final
 pnpm jho jobs list --min-fit 60      # as vagas que valem seu tempo, melhor fit primeiro
 ```
