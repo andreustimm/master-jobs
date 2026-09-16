@@ -122,10 +122,14 @@ pública também toda URL de preview de PR.
 
 ## A varredura diária
 
-`.github/workflows/varredura.yml` roda `jobs sync`, `scrape queue`+`run` e
-`jobs recheck queue`+`run` contra **produção**, todo dia às 06:00 UTC (03:00 em
-São Paulo), com `workflow_dispatch` para rodar à mão depois de mexer em
-`config/sources.yaml`.
+> **Pausa operacional — 03/09/2026:** o workflow e o cron da Vercel estão
+> temporariamente desabilitados para proteger a cota compartilhada do Turso.
+> Consulte o [diagnóstico e os gates de reativação](../operations/turso-quota-incident-2026-09-03.md).
+
+Quando habilitado, `.github/workflows/varredura.yml` roda `jobs sync`, `scrape
+queue`+`run` e `jobs recheck queue`+`run` contra **produção**, todo dia às
+06:00 UTC (03:00 em São Paulo), com `workflow_dispatch` para rodar à mão depois
+de mexer em `config/sources.yaml`.
 
 **Por que no GitHub e não na Vercel.** A Vercel tem `/api/cron/recheck`, e ele
 resolve um pedaço pequeno: 25 vagas por execução, porque o teto de função no
@@ -136,8 +140,8 @@ por defeito: por teto.
 
 E a **busca** não roda lá de jeito nenhum: `jobs sync` e `scrape run` não têm
 rota de API. Um runner do GitHub tem 6 horas por job, e é a mesma tarefa num
-lugar onde ela cabe. A rota da Vercel continua valendo como rede de segurança
-para quem não tiver o Actions.
+lugar onde ela cabe. A rota da Vercel servia como rede de segurança, mas não
+deve voltar junto com o Actions sem orçamento e responsabilidade distintos.
 
 Só produção é varrida. `dev` e `staging` existem para exercitar código, não para
 acumular acervo — varrer os três triplicaria as requisições contra APIs de
@@ -149,9 +153,9 @@ O efeito colateral é a falha ficar silenciosa até alguém olhar — então o C
 olha. Uma fonte fora é aviso; mais da metade é erro, porque aí a causa é comum e
 provavelmente daqui.
 
-Segredos opcionais: `ADZUNA_APP_ID` e `ADZUNA_APP_KEY`. Das 17 fontes só o Adzuna
-pede credencial; sem ela, ele aparece como `error` na conferência e as outras
-seguem.
+Segredos opcionais: `ADZUNA_APP_ID` e `ADZUNA_APP_KEY`. Das 15 fontes ativas,
+nenhuma exige Adzuna; se ele for habilitado sem essas credenciais, é ignorado
+com aviso e as outras fontes seguem.
 
 ## O portão
 

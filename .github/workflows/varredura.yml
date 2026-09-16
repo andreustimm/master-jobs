@@ -49,8 +49,8 @@ jobs:
     env:
       TURSO_DATABASE_URL: libsql://master-jobs-andreustimm.aws-us-east-1.turso.io
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_TOKEN_PROD }}
-      # Das 17 fontes, só o Adzuna pede credencial. Ausente, ele falha sozinho e
-      # aparece como `error` na conferência do fim — as outras 16 não se importam.
+      # Das 15 fontes ativas, nenhuma exige Adzuna. Se ele for habilitado sem
+      # credenciais, é ignorado com aviso; as outras fontes seguem.
       ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
       ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
       # Identifica o tráfego como este projeto. Sem isto sairia o padrão do
