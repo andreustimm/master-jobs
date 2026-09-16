@@ -9,6 +9,14 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- O ambiente local agora usa a mesma linha PostgreSQL 17 do Supabase, com
+  `pgmq` e `pgvector`, e oferece importação segura de uma fixture sanitizada
+  de produção sem HTML, filas ou payloads de crawler.
+- A proposta de upgrade LTS registra a matriz de versões e os gates para
+  manter local, CI, Vercel e Supabase coerentes.
+
 ## [1.6.0] - 2026-09-16
 
 ### Adicionado

@@ -52,6 +52,8 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`operations.md`](operations.md) | A rotina diária/semanal: sincronizar, triar, mover o funil, exportar o relatório, podar vagas velhas. |
 | [`product/job-lifecycle-and-application-history.md`](product/job-lifecycle-and-application-history.md) | Regras de fechamento, arquivamento e leitura do histórico para candidato e recrutador. |
 | [`engineering/session-2026-09-16.md`](engineering/session-2026-09-16.md) | Registro durável das decisões, bloqueios e próximos passos discutidos na sessão. |
+| [`engineering/local-postgres.md`](engineering/local-postgres.md) | Compose local com imagem Supabase Postgres, PGMQ, pgvector e limites de paridade. |
+| [`engineering/stack-lts-upgrade-proposal.md`](engineering/stack-lts-upgrade-proposal.md) | Proposta de upgrade LTS e matriz de paridade entre local, CI, Vercel e Supabase. |
 | [`.compozy/tasks/job-lifecycle-retention/`](../.compozy/tasks/job-lifecycle-retention/) | PRD, especificação e testes para arquivar vagas preservando candidaturas. |
 | [`.compozy/tasks/environment-sample-only/`](../.compozy/tasks/environment-sample-only/) | Tarefa desta semana para manter dev/staging pequenos e sem ingestão externa. |
 | [`operations/turso-quota-incident-2026-09-03.md`](operations/turso-quota-incident-2026-09-03.md) | Incidente ativo: contenção dos agendadores, diagnóstico do consumo Turso e gates obrigatórios antes da reativação. |
