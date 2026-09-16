@@ -290,6 +290,11 @@ dashboard Next.js em `localhost:3000`.
 
 ## Fluxo de trabalho
 
+Guia operacional curto: [começar, retomar, validar e limpar](docs/engineering/workflow.md).
+Antes de iniciar ou retomar, confira `rtk git status --short --branch` e
+`rtk pnpm worktrees`. Preserve alterações pendentes antes de reconciliar a raiz;
+HEAD já presente em `dev` não prova que uma worktree com WIP pode ser removida.
+
 ```
 worktree/tarefa → check/e2e aplicável → QA de jornada aplicável → auditoria de agente aplicável → deslop → deep-review → ship-pr → PR → dev → (automático) → staging → PR humana → main → tag + volta para dev
 ```

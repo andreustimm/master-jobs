@@ -106,7 +106,7 @@ export const drizzleSessions: SessionStore = {
 
     return {
       userId: row.userId,
-      candidateId: row.candidateId,
+      candidateId: roles.includes("candidate") ? row.candidateId : null,
       roles,
       email: row.email,
       fullName: row.fullName,
@@ -280,7 +280,7 @@ export const magicLink: IdentityProvider = {
       email: user.email,
       fullName: user.fullName,
       roles: identityRoles,
-      candidateId: user.candidateId,
+      candidateId: identityRoles.includes("candidate") ? user.candidateId : null,
       linkedCandidateIds: await linkedCandidatesFor(user.id, identityRoles),
     };
   },

@@ -2,12 +2,8 @@
 #
 # Aplica as migrações e confere o resultado.
 #
-# Um arquivo, chamado pelos três passos de `migrate.yml`, porque a alternativa é
-# o mesmo bloco copiado três vezes — e bloco copiado é o que diverge quando
-# alguém corrige um só.
-#
-# O ambiente (`TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`) vem do passo que chama:
-# assim cada branch enxerga apenas o segredo do seu banco.
+# Chamado pelo passo de produção de `migrate.yml`.
+# O ambiente (`TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`) vem desse passo.
 set -euo pipefail
 
 if [ -z "${TURSO_DATABASE_URL:-}" ]; then
@@ -17,7 +13,7 @@ fi
 
 if [ -z "${TURSO_AUTH_TOKEN:-}" ]; then
   echo "::error::Segredo do token ausente para a branch ${GITHUB_REF_NAME:-?}."
-  echo "Defina TURSO_TOKEN_PROD, TURSO_TOKEN_STAGING e TURSO_TOKEN_DEV nos"
+  echo "Defina TURSO_TOKEN_PROD nos"
   echo "segredos do repositório. Sem isto a migração não roda — e o deploy da"
   echo "Vercel acontece de qualquer jeito, contra um banco desatualizado."
   exit 1

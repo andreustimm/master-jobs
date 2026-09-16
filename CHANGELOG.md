@@ -9,6 +9,36 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-15
+
+### Corrigido
+
+- O quadro global agora ignora cortes de aderência, cluster, bloqueios e status
+  quando a sessão não tem candidato (recrutador ou administrador), preservando
+  a visibilidade do acervo sem expor score ou funil de outra pessoa. O detalhe
+  e a exportação CSV seguem a mesma regra, e o formulário de candidatura só
+  aparece quando há candidato associado.
+- O escopo de candidato agora exige o papel `candidate` em cada fronteira de
+  sessão; ao remover esse papel, o vínculo antigo fica inativo e não pode
+  reabrir score ou funil privado por uma conta administrativa. A associação é
+  preservada para uma restauração posterior do papel.
+
+## [1.4.0] - 2026-09-15
+
+### Adicionado
+
+- Filtro de modalidade (remoto, híbrido e presencial) no cockpit e na lista,
+  aplicado em SQL antes da paginação e compartilhado por contagem, facetas e CSV.
+  A classificação usa metadados declarados pela fonte e localização explícita;
+  heurísticas extraídas de palavras da descrição não decidem a modalidade.
+  A ausência de modalidade permanece no recorte Todas, sem migração nem novo score.
+
+### Corrigido
+
+- Ver todas preserva o recorte do cockpit, inclusive o corte Todas (`fit=0`);
+  avançar na paginação mantém o tamanho de página escolhido.
+- O campo de busca acompanha a URL ao limpar o texto e percorrer o histórico.
+
 ## [1.3.10] - 2026-08-28
 
 ### Corrigido

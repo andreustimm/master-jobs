@@ -1,11 +1,11 @@
 import { TransitionLink } from "./transition-link";
 import { boardFacets, clusterBreakdown, corpusStats, listBoard } from "../src/contexts/matching/index.ts";
 import { pipelineCounts } from "../src/contexts/pursuit/index.ts";
-import { FilterBar, readFilters, toBoardFilters } from "./filters";
+import { FilterBar, href, readFilters, toBoardFilters } from "./filters";
 import { JobList } from "./joblist";
 import { Legend, Stat } from "./ui";
 import { redirect } from "next/navigation";
-import { requireOwnCandidatePage, requireSession } from "./auth";
+import { candidateScope, requireOwnCandidatePage, requireSession } from "./auth";
 import { getTranslator } from "./i18n";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export default async function Cockpit({
   // variar por papel, então o app abriria numa tela de erro — reintroduzindo,
   // pela porta do manifest, o defeito que a E-06 corrigiu.
   const session = await requireSession();
-  if (session.candidateId === null) redirect("/jobs");
+  if (candidateScope(session) === null) redirect("/jobs");
 
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
@@ -36,7 +36,7 @@ export default async function Cockpit({
     pipelineCounts(candidateId),
     clusterBreakdown(candidateId, 45),
     listBoard(candidateId, { ...filters, limit: 12 }),
-    boardFacets(candidateId, { minFit: state.fit, cluster: state.cluster, q: state.q, sourceKind: state.source }),
+    boardFacets(candidateId, { minFit: state.fit, cluster: state.cluster, q: state.q, sourceKind: state.source, workMode: state.workMode }),
   ]);
 
   const tracked = Object.values(counts).reduce((a, b) => a + b, 0);
@@ -77,7 +77,7 @@ export default async function Cockpit({
               · {t("cockpit.matching", { count: facets.total.toLocaleString(locale) })}
             </span>
           </h2>
-          <TransitionLink href="/jobs" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
+          <TransitionLink href={href("/jobs", state, {})} data-testid="cockpit-see-all" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
             {t("cockpit.seeAll")} →
           </TransitionLink>
         </div>

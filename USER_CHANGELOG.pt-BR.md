@@ -16,6 +16,30 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-15T23:55:25.383Z
+
+### Correção
+
+- Recrutadores e administradores agora encontram as vagas abertas no quadro,
+  mesmo sem um perfil de candidato associado, e podem abrir o detalhe e
+  exportar a lista sem acessar o funil de outra pessoa.
+- Uma conta que deixa de ser candidata não mantém acesso ao seu funil privado
+  ao entrar novamente.
+
+## [1.4.0] - 2026-09-15T18:14:00.754Z
+
+### Novidade
+
+- Filtre as vagas por Remoto, Híbrido ou Presencial no painel e na lista de vagas.
+  Escolha Todas para incluir também vagas sem modalidade informada.
+- A opção ver todas mantém seus filtros, e a paginação preserva a quantidade de
+  vagas por página.
+
+### Correção
+
+- Limpar a busca agora esvazia o campo; voltar pelo histórico recupera o texto
+  correspondente aos resultados.
+
 ## [1.3.10] - 2026-08-28T03:09:49.668Z
 
 ### Correção

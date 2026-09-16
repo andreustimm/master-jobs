@@ -16,6 +16,29 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-15T23:55:25.383Z
+
+### Fixed
+
+- Recruiters and administrators can now find open jobs on the board even when
+  no candidate profile is linked to their account, open their details, and
+  export the list without accessing another person's pipeline.
+- An account that is no longer a candidate cannot regain its private pipeline
+  by signing in again.
+
+## [1.4.0] - 2026-09-15T18:14:00.754Z
+
+### Fixed
+
+- Clearing search now empties the field; browser history restores the text that
+  matches the results.
+
+### New
+
+- Filter jobs by Remote, Hybrid or On-site in the dashboard and job list.
+  Choose All to include jobs with no stated work mode.
+- View all keeps your filters, and pagination preserves your selected page size.
+
 ## [1.3.10] - 2026-08-28T03:09:49.668Z
 
 ### Fixed

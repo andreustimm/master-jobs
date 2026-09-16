@@ -11,8 +11,8 @@ bug_ids: BUG-20260826-responsive-header-artifact-skew
 fix_status: fixed
 retest_status: pass
 fix_commits: 062eb64, cce67ae, 055af8a, a56a0c1
-evidence: tests/e2e/ui.mjs; tests/nav-mobile.test.ts; docs/qa/reports/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew.md; docs/qa/evidence/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew/after-mobile-portrait.png; docs/qa/evidence/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew/after-mobile-landscape.png; docs/qa/evidence/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew/after-tablet.png; docs/qa/evidence/2026-08-26T174227129000Z-c759d603-responsive-header-artifact-skew/after-desktop.png; docs/qa/evidence/2026-08-28T002708793000Z-b25bc373-landscape-header-targeted/pwa-landscape-812x375.png
-last_report: docs/qa/reports/2026-08-28T002708793000Z-b25bc373-landscape-header-targeted.md
+evidence: evidence/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter/CH-night-ranking-navigation-baseline-jobs.png
+last_report: reports/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter.md
 overlaps: NAV-switch-screen-ready
 ---
 
