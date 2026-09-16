@@ -14,7 +14,7 @@ candidate applications. This slice makes the permission boundary observable and
 keeps closed/archived jobs useful without exposing unrelated candidate data.
 
 <critical>
-- ALWAYS READ the PRD, the TechSpec, and their catalogs (`_user_stories.md`, `_tests.md`) before starting
+- ALWAYS READ [`_prd.md`](_prd.md), [`_techspec.md`](_techspec.md), [`_user_stories.md`](_user_stories.md), and [`_tests.md`](_tests.md) before starting
 - REFERENCE TECHSPEC for implementation details — do not duplicate here
 - FOCUS ON "WHAT" — describe what needs to be accomplished, not how
 - MINIMIZE CODE — show code only to illustrate current structure or problem areas
@@ -39,7 +39,8 @@ keeps closed/archived jobs useful without exposing unrelated candidate data.
 
 ## Implementation Details
 
-Follow `_techspec.md` “Recruiter history” and “Authorization”. The query must
+Follow `_techspec.md` [Data Models](_techspec.md#data-models), [API Endpoints](_techspec.md#api-endpoints),
+and [Integration Points](_techspec.md#integration-points). The query must
 apply scope in SQL/repository boundaries, not filter a global result in memory.
 
 ### Relevant Files

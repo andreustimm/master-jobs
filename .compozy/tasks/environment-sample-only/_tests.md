@@ -51,7 +51,10 @@ Canonical test contract for `environment-sample-only`. Derived from
 
 - **UT-001** (error/boundary): `canRunIngestion` denies unknown/absent input, dev, staging, preview, local-without-opt-in, and production with `productionAllowlistSatisfied: false`; allows production only when the normalized allowlist result is true.
 - **UT-002** (ordering/idempotency): blocked entrypoints do not construct adapters/queues and emit redacted bounded diagnostics on repeat.
-- **UT-003** (boundary): fixture seed validates profiles, missing DB initialization, workplace/lifecycle coverage, and bounded payloads.
+- **UT-003** (boundary): fixture seed validates profiles, missing DB
+  initialization, workplace/lifecycle coverage supported by the current schema,
+  and bounded payloads; archived coverage is asserted after the lifecycle
+  migration.
 - **UT-004** (idempotency/concurrency): repeated/concurrent seed converges to stable identities and counts.
 
 ## Integration Tests

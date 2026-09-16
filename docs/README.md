@@ -4,7 +4,13 @@
 
 O sistema busca vagas em APIs **públicas e não autenticadas** de ATS e agregadores. O sourcing ativo são as **15 fontes de `config/sources.yaml`, cobrindo 9 `kind`s**: `greenhouse` (1), `ashby` (5), `lever` (1), `braintrust` (1), `himalayas` (1), `remotive` (2), `arbeitnow` (1), `remoteok` (1) e `careers` (2). `src/core/sources/registry.ts` também registra adapters para `smartrecruiters`, `recruitee` e `adzuna`; `adzuna` continua comentado no YAML e, por isso, não está entre as fontes ativas. O pipeline deduplica por `fingerprint`, aplica um **fit score determinístico** derivado de `profile/profile.yaml` — sem LLM, sem aleatoriedade, sempre auditável via `jho jobs show <id>` — e mantém o funil de candidaturas em tabelas separadas do fato observado. O runtime atual usa PostgreSQL por `DATABASE_URL`; local roda em uma instância isolada e o snapshot SQLite legado fica fora do fluxo normal. A migração Supabase e a reativação da varredura remota seguem os gates do [incidente de cota de 03/09/2026](operations/turso-quota-incident-2026-09-03.md).
 
-> **Invariante:** Não descreva como pronto o que ainda não está. O histórico validado inclui UI Next.js em Vercel + Turso, 15 fontes configuradas, 4.824 vagas ingeridas num sync real, scoring auditável, funil e export markdown para o vault Obsidian (dependente de `JHO_VAULT_PATH`). O runtime atual já está preparado para PostgreSQL; o corte Turso → Supabase e a reativação da ingestão continuam pendentes. **Ainda não existe:** geração de CV/cover letter e integração de publicação no LinkedIn.
+> **Invariante:** Não descreva como pronto o que ainda não está. O histórico
+> validado do **snapshot pré-corte** inclui UI Next.js em Vercel + Turso, 15
+> fontes configuradas, 4.824 vagas ingeridas num sync real, scoring auditável,
+> funil e export markdown para o vault Obsidian (dependente de
+> `JHO_VAULT_PATH`). O runtime atual já está preparado para PostgreSQL; o corte
+> Turso → Supabase e a reativação da ingestão continuam pendentes. **Ainda não
+> existe:** geração de CV/cover letter e integração de publicação no LinkedIn.
 
 ---
 

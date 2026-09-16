@@ -26,7 +26,9 @@ Canonical behavior catalog for `environment-sample-only`. Companion to
 
 Acceptance criteria:
 
-- AC-1: Given a reset request, when the fixture seed runs, then the four workplace types and lifecycle states exist.
+- AC-1: Given a reset request, when the fixture seed runs, then the four
+  workplace types and the lifecycle states supported by the current schema
+  exist; archived fixtures are added after the lifecycle migration lands.
 - AC-2: Given a second reset, when the seed runs again, then counts and identities remain stable.
 - AC-3: Given a fixture database, when UI/read commands run, then no public-source request is needed.
 

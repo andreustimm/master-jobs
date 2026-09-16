@@ -14,7 +14,7 @@ the durable application tables into counts and rows that remain useful after a
 job closes or archives.
 
 <critical>
-- ALWAYS READ the PRD, the TechSpec, and their catalogs (`_user_stories.md`, `_tests.md`) before starting
+- ALWAYS READ [`_prd.md`](_prd.md), [`_techspec.md`](_techspec.md), [`_user_stories.md`](_user_stories.md), and [`_tests.md`](_tests.md) before starting
 - REFERENCE TECHSPEC for implementation details — do not duplicate here
 - FOCUS ON "WHAT" — describe what needs to be accomplished, not how
 - MINIMIZE CODE — show code only to illustrate current structure or problem areas
@@ -39,7 +39,7 @@ job closes or archives.
 
 ## Implementation Details
 
-Follow `_techspec.md` “Candidate history” and “API Endpoints”. Use the existing
+Follow `_techspec.md` [Data Models](_techspec.md#data-models) and [API Endpoints](_techspec.md#api-endpoints). Use the existing
 Server Component and context composition patterns; do not put SQL in JSX.
 
 ### Relevant Files

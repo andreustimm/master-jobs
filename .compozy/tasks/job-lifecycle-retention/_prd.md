@@ -87,7 +87,9 @@ horizontal scrolling. No automatic application submission is introduced.
 - Preserve the existing `job`, `application`, and `application_event` boundary.
 - Use the existing auth policy (`can`, `guard`, and page guards) for scope.
 - Keep domain decisions pure and adapters responsible for SQL/HTTP.
-- Keep application history queryable in SQLite/libSQL and PostgreSQL.
+- Keep application history queryable in PostgreSQL through the current runtime;
+  use the legacy SQLite snapshot only in an import/test harness that explicitly
+  supports it.
 - Keep payload retention and physical pruning separate from archive state.
 - Do not introduce MongoDB or a second queue for this feature.
 - Dev and staging use the fixtures defined by

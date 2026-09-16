@@ -24,7 +24,9 @@ isolation and can be repeated safely.
 <requirements>
 - Fixtures MUST contain no production PII, secrets, or raw scrape payload.
 - Seed MUST run after migrations and be idempotent under repetition/concurrency.
-- Corpus MUST cover remote, hybrid, onsite, unknown, open, closed, archived, and reopened states.
+- Corpus MUST cover remote, hybrid, onsite, unknown, open, closed, and reopened
+  states. Archived fixtures are added after the lifecycle migration supplies
+  `archived_at`.
 - Candidate/recruiter fixtures MUST exercise existing authorization boundaries.
 - Size and counts MUST be bounded and observable.
 </requirements>

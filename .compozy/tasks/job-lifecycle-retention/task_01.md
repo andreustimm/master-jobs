@@ -15,7 +15,7 @@ history views and keeps source closure, archive, and application decisions
 separate.
 
 <critical>
-- ALWAYS READ the PRD, the TechSpec, and their catalogs (`_user_stories.md`, `_tests.md`) before starting
+- ALWAYS READ [`_prd.md`](_prd.md), [`_techspec.md`](_techspec.md), [`_user_stories.md`](_user_stories.md), and [`_tests.md`](_tests.md) before starting
 - REFERENCE TECHSPEC for implementation details — do not duplicate here
 - FOCUS ON "WHAT" — describe what needs to be accomplished, not how
 - MINIMIZE CODE — show code only to illustrate current structure or problem areas
@@ -41,8 +41,9 @@ separate.
 
 ## Implementation Details
 
-Follow `_techspec.md` sections “Core Interfaces”, “Data Models”, and
-“Integration Points”. Keep SQL in the repository/infra layer and keep timestamps
+Follow `_techspec.md` sections [Core Interfaces](_techspec.md#core-interfaces),
+[Data Models](_techspec.md#data-models), and [Integration Points](_techspec.md#integration-points).
+Keep SQL in the repository/infra layer and keep timestamps
 as explicit inputs to pure functions.
 
 ### Relevant Files

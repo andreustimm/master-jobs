@@ -41,8 +41,10 @@ queue client, or probe worker.
 
 ### Data Models
 
-Fixtures reuse the existing schema. Seed at least four workplace types, four
-job lifecycle states, two candidates, two recruiters, and application events.
+Fixtures reuse the existing schema. Seed at least four workplace types, the
+open/closed/reopened lifecycle states currently available, two candidates, two
+recruiters, and application events. Add the archived state after the lifecycle
+migration supplies `archived_at`.
 Keep descriptions short, synthetic, and stable. Do not introduce a production
 dump table or a second raw-payload store.
 

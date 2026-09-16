@@ -107,7 +107,8 @@ test points at Turso, Supabase, or a public board.
 
 ### Technical Dependencies
 
-- Existing schema/migration composition for both supported databases.
+- Existing PostgreSQL schema/migration composition; the SQLite snapshot remains
+  an explicit import/test input only.
 - Existing auth policy and recruiter relationship contract.
 - Fixture task `environment-sample-only` for non-production testing.
 - A human-approved production window before applying a migration or schedule.

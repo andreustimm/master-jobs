@@ -196,9 +196,10 @@ pnpm jho jobs archive --closed-days 90 --dry-run
 pnpm jho jobs archive --closed-days 90 --apply
 ```
 
-O padrão é dry-run. `404`/`410` ou uma reconciliação completa podem sustentar o
-fechamento; `401`, `403`, `429`, `5xx`, timeout e falha parcial são
-inconclusivos. A implementação e os critérios estão em
+O padrão é dry-run. O comando de arquivamento **não faz rede nem descobre
+evidência**: ele consome o `closedAt` já confirmado pelo sync/probe. `404`/`410`
+ou uma reconciliação completa podem sustentar esse fechamento; `401`, `403`,
+`429`, `5xx`, timeout e falha parcial são inconclusivos. A implementação e os critérios estão em
 [`job-lifecycle-retention`](../.compozy/tasks/job-lifecycle-retention/) e na
 [ADR 0020](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md).
 

@@ -29,9 +29,10 @@ The canonical stories and edge cases are in [_user_stories.md](_user_stories.md)
 ### Sample data set
 
 Provide a small fixture corpus covering remote, hybrid, onsite, and unknown
-workplace type; open, closed, archived, and reopened jobs; application statuses;
-events; and two isolated candidate/recruiter personas. Fixtures contain no real
-PII or raw scrape payloads.
+workplace type; open, closed, and reopened jobs; application statuses; events;
+and two isolated candidate/recruiter personas. Add archived-job fixtures after
+the lifecycle migration supplies `archived_at`. Fixtures contain no real PII or
+raw scrape payloads.
 
 ### Ingestion guard
 
