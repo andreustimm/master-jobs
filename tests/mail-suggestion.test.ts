@@ -21,8 +21,8 @@ beforeEach(async () => {
   db = await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 async function seedTrackedSuggestion(options: { matched?: boolean } = {}) {
@@ -130,12 +130,11 @@ describe("decideSuggestion", () => {
 
   it("rolls the suggestion back when the application event cannot be written", async () => {
     const seeded = await seedTrackedSuggestion();
-    await db.run(sql.raw(`
-      create trigger reject_mail_application_event
-      before insert on application_event
-      begin
-        select raise(abort, 'forced event failure');
-      end
+    await db.execute(sql.raw(`
+      create function production.reject_mail_application_event() returns trigger language plpgsql as $$
+      begin raise exception 'forced event failure'; end $$;
+      create trigger reject_mail_application_event before insert on production.application_event
+      for each row execute function production.reject_mail_application_event()
     `));
 
     await expect(

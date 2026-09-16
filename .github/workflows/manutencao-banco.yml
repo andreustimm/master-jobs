@@ -20,11 +20,13 @@ concurrency:
 
 jobs:
   limpar:
+    if: github.ref == 'refs/heads/main'
+    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      TURSO_DATABASE_URL: libsql://master-jobs-andreustimm.aws-us-east-1.turso.io
-      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_TOKEN_PROD }}
+      DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+      DATABASE_CA_CERT: config/certs/supabase-ca.crt
 
     steps:
       - uses: actions/checkout@v7
@@ -37,8 +39,8 @@ jobs:
 
       - name: Validar credencial
         run: |
-          if [ -z "$TURSO_AUTH_TOKEN" ]; then
-            echo "::error::TURSO_TOKEN_PROD ausente."
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::SUPABASE_DATABASE_URL ausente. Nenhuma limpeza executada."
             exit 1
           fi
 

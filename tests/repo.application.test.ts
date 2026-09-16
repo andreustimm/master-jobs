@@ -90,8 +90,8 @@ beforeEach(async () => {
   db = await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 describe("setApplicationStatus", () => {
@@ -216,12 +216,11 @@ describe("setApplicationStatus", () => {
     const jobId = await seedJob();
     await setApplicationStatus(candidateId, jobId, "shortlisted");
 
-    await db.run(sql.raw(`
-      create trigger reject_application_event
-      before insert on application_event
-      begin
-        select raise(abort, 'forced event failure');
-      end
+    await db.execute(sql.raw(`
+      create function production.reject_application_event() returns trigger language plpgsql as $$
+      begin raise exception 'forced event failure'; end $$;
+      create trigger reject_application_event before insert on production.application_event
+      for each row execute function production.reject_application_event()
     `));
 
     await expect(

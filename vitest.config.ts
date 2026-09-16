@@ -1,10 +1,17 @@
 import { defineConfig } from "vitest/config";
 
+// `node:sqlite` is still marked experimental by the Node 23 runner used in
+// local CI. Child migration commands emit machine-readable JSON, so keep that
+// runner warning out of their stderr; Node 24 is the supported runtime.
+process.env.NODE_NO_WARNINGS ??= "1";
+
 export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",
     globals: false,
+    globalSetup: ["./tests/support/postgres-global.ts"],
+    maxWorkers: 4,
 
     /**
      * Cobertura com PISO, e o piso é o que garante — não o número de hoje.

@@ -70,9 +70,9 @@ function cutoff(now: Date, days: number): string {
 function payloadNeedsCompaction(descriptionHtml: SQLWrapper, raw: SQLWrapper): SQL {
   return sql`(
     ${descriptionHtml} is not null or (
-      ${raw} <> '{}' and not (
-        json_type(${raw}, '$.workplaceType') = 'text'
-        and ${raw} = json_object('workplaceType', json_extract(${raw}, '$.workplaceType'))
+      ${raw}::jsonb <> '{}'::jsonb and not (
+        coalesce(jsonb_typeof(${raw}::jsonb -> 'workplaceType') = 'string', false)
+        and ${raw}::jsonb = jsonb_build_object('workplaceType', ${raw}::jsonb -> 'workplaceType')
       )
     )
   )`;
@@ -105,7 +105,7 @@ export async function runDatabaseCleanup(
     sql`, `,
   );
   const onlineSourceCondition = sql`s.kind not in (${manualKindsSql})`;
-  const [inventory] = await db.all<{
+  const [inventory] = await db.execute<{
     online_jobs: number;
     online_payload_bytes: number;
     parsed_pages: number;
@@ -114,34 +114,34 @@ export async function runDatabaseCleanup(
   }>(sql`
     select
       (
-        select count(*) from job j
-        join source s on s.id = j.source_id
+        select count(*) from production.job j
+        join production.source s on s.id = j.source_id
         where ${onlineSourceCondition}
           and ${payloadNeedsCompaction(sql`j.description_html`, sql`j.raw`)}
       ) as online_jobs,
       (
         select coalesce(sum(
-          coalesce(length(j.description_html), 0) + coalesce(length(j.raw), 0)
+          coalesce(octet_length(j.description_html), 0) + coalesce(octet_length(j.raw::text), 0)
         ), 0)
-        from job j
-        join source s on s.id = j.source_id
+        from production.job j
+        join production.source s on s.id = j.source_id
         where ${onlineSourceCondition}
           and ${payloadNeedsCompaction(sql`j.description_html`, sql`j.raw`)}
       ) as online_payload_bytes,
       (
-        select count(*) from job_page p
+        select count(*) from production.job_page p
         where p.parsed_at is not null and p.parsed_at <= ${pageBefore}
           and p.html is not null
       ) as parsed_pages,
       (
-        select coalesce(sum(length(p.html)), 0) from job_page p
+        select coalesce(sum(length(p.html)), 0) from production.job_page p
         where p.parsed_at is not null and p.parsed_at <= ${pageBefore}
           and p.html is not null
       ) as parsed_page_html_bytes,
       (
-        select count(*) from job j
+        select count(*) from production.job j
         where j.closed_at < ${closedBefore}
-          and not exists (select 1 from application a where a.job_id = j.id)
+        and not exists (select 1 from production.application a where a.job_id = j.id)
       ) as closed_jobs
   `);
 
@@ -177,9 +177,9 @@ export async function runDatabaseCleanup(
         // Keep the one declared workplace signal needed by the durable board
         // filter while dropping the rest of the adapter response.
         raw: sql`case
-          when json_type(${job.raw}, '$.workplaceType') = 'text'
-            then json_object('workplaceType', json_extract(${job.raw}, '$.workplaceType'))
-          else '{}'
+          when coalesce(jsonb_typeof(${job.raw}::jsonb -> 'workplaceType') = 'string', false)
+            then jsonb_build_object('workplaceType', ${job.raw}::jsonb -> 'workplaceType')::json
+          else '{}'::json
         end`,
       })
       .where(

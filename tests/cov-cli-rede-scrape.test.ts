@@ -81,10 +81,10 @@ beforeEach(async () => {
   setHttpPort(fixtureHttp({}));
 });
 
-afterEach(() => {
+afterEach(async () => {
   resetHttpPort();
   vi.unstubAllGlobals();
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 /** `fetch` dublê que devolve sempre a mesma página e registra o que pediram. */

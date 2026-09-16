@@ -1,3 +1,4 @@
+// Application tables live in the private PostgreSQL production schema.
 /**
  * master-jobs data model.
  *
@@ -15,11 +16,14 @@ import {
   integer,
   foreignKey,
   primaryKey,
-  real,
-  sqliteTable,
+  doublePrecision,
+  pgSchema,
+  boolean,
+  json,
   text,
   uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+  unique,
+} from "drizzle-orm/pg-core";
 import {
   APPLICATION_STATUSES,
   type ApplicationStatus,
@@ -27,21 +31,22 @@ import {
 
 export { APPLICATION_STATUSES, type ApplicationStatus };
 
-const now = sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`;
+export const production = pgSchema("production");
+const now = sql`to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
 /* -------------------------------------------------------------------------- */
 /* Sourcing                                                                    */
 /* -------------------------------------------------------------------------- */
 
 /** One configured feed: an ATS board, an aggregator, or a manual import. */
-export const source = sqliteTable(
+export const source = production.table(
   "source",
   {
     id: text("id").primaryKey(), // "greenhouse:stripe"
     kind: text("kind").notNull(), // greenhouse | lever | ashby | smartrecruiters | workable | himalayas | remotive | arbeitnow | remoteok | adzuna | manual
     handle: text("handle").notNull(), // board token / company slug / query
     label: text("label").notNull(),
-    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    enabled: boolean("enabled").notNull().default(true),
     /** Why this source is on the list — keeps the config self-documenting. */
     rationale: text("rationale"),
     lastSyncedAt: text("last_synced_at"),
@@ -54,17 +59,17 @@ export const source = sqliteTable(
 );
 
 /** Companies, deduplicated across sources, plus contractor-eligibility facts. */
-export const company = sqliteTable(
+export const company = production.table(
   "company",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     slug: text("slug").notNull(),
     name: text("name").notNull(),
     website: text("website"),
     careersUrl: text("careers_url"),
     /** null = unknown. Set by research, never guessed by the ingester. */
-    hiresContractors: integer("hires_contractors", { mode: "boolean" }),
-    hiresLatam: integer("hires_latam", { mode: "boolean" }),
+    hiresContractors: boolean("hires_contractors"),
+    hiresLatam: boolean("hires_latam"),
     /** Was this company reached through BairesDev? Feeds the markup hypothesis. */
     viaAgency: text("via_agency"),
     notes: text("notes"),
@@ -74,10 +79,10 @@ export const company = sqliteTable(
 );
 
 /** A job posting as observed. Re-ingest updates lastSeenAt, never user state. */
-export const job = sqliteTable(
+export const job = production.table(
   "job",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     /** Stable dedupe key; manual comparisons use an isolated namespace. */
     fingerprint: text("fingerprint").notNull(),
     /** sha256 over the meaningful content — detects edits to a live posting. */
@@ -109,7 +114,7 @@ export const job = sqliteTable(
     checkCode: integer("check_code"),
     locationRaw: text("location_raw"),
     /** null = the posting does not say. */
-    remote: integer("remote", { mode: "boolean" }),
+    remote: boolean("remote"),
     employmentType: text("employment_type"), // full-time | contract | ...
     seniorityRaw: text("seniority_raw"),
     compMin: integer("comp_min"),
@@ -123,7 +128,7 @@ export const job = sqliteTable(
     lastSeenAt: text("last_seen_at").notNull().default(now),
     /** Set when a previously seen posting disappears from its source. */
     closedAt: text("closed_at"),
-    raw: text("raw", { mode: "json" }).notNull(),
+    raw: json("raw").notNull(),
   },
   (t) => [
     uniqueIndex("job_fingerprint_idx").on(t.fingerprint),
@@ -138,7 +143,7 @@ export const job = sqliteTable(
 /* Scoring (derived — safe to wipe and recompute)                              */
 /* -------------------------------------------------------------------------- */
 
-export const jobScore = sqliteTable(
+export const jobScore = production.table(
   "job_score",
   {
     candidateId: integer("candidate_id")
@@ -148,31 +153,31 @@ export const jobScore = sqliteTable(
       .notNull()
       .references(() => job.id, { onDelete: "cascade" }),
     /** 0..100 overall fit. */
-    fit: real("fit").notNull(),
-    titleScore: real("title_score").notNull(),
-    keywordScore: real("keyword_score").notNull(),
-    seniorityScore: real("seniority_score").notNull(),
-    geoScore: real("geo_score").notNull(),
-    compScore: real("comp_score").notNull(),
+    fit: doublePrecision("fit").notNull(),
+    titleScore: doublePrecision("title_score").notNull(),
+    keywordScore: doublePrecision("keyword_score").notNull(),
+    seniorityScore: doublePrecision("seniority_score").notNull(),
+    geoScore: doublePrecision("geo_score").notNull(),
+    compScore: doublePrecision("comp_score").notNull(),
     /** Conversion signal, not fit: how likely applying still does anything. */
-    freshnessScore: real("freshness_score").notNull().default(0),
-    benefitScore: real("benefit_score").notNull().default(0),
+    freshnessScore: doublePrecision("freshness_score").notNull().default(0),
+    benefitScore: doublePrecision("benefit_score").notNull().default(0),
     /** Negative points from disqualifiers (on-site only, visa required, ...). */
-    penalty: real("penalty").notNull().default(0),
+    penalty: doublePrecision("penalty").notNull().default(0),
     /** architect | staff | ai-lead | backend | other — drives CV variant choice. */
     cluster: text("cluster").notNull(),
-    matchedKeywords: text("matched_keywords", { mode: "json" }).notNull(),
-    missingKeywords: text("missing_keywords", { mode: "json" }).notNull(),
+    matchedKeywords: json("matched_keywords").notNull(),
+    missingKeywords: json("missing_keywords").notNull(),
     /** Canonical benefit keys the posting mentions, independent of the profile. */
-    detectedBenefits: text("detected_benefits", { mode: "json" }),
+    detectedBenefits: json("detected_benefits"),
     /** Age in days at scoring time; null when no date was available. */
     ageDays: integer("age_days"),
     /** Human-readable justification lines, for the UI and for agent review. */
-    reasons: text("reasons", { mode: "json" }).notNull(),
+    reasons: json("reasons").notNull(),
     /** Hard blockers found in the text, e.g. "requires US work authorization". */
-    blockers: text("blockers", { mode: "json" }).notNull(),
+    blockers: json("blockers").notNull(),
     eligibilityStatus: text("eligibility_status").notNull().default("unverifiable"),
-    eligibilityReasons: text("eligibility_reasons", { mode: "json" })
+    eligibilityReasons: json("eligibility_reasons")
       .notNull()
       .default(sql`'[]'`),
     scorerVersion: text("scorer_version").notNull(),
@@ -191,10 +196,10 @@ export const jobScore = sqliteTable(
 /* Application pipeline (user-owned state — never touched by ingestion)         */
 /* -------------------------------------------------------------------------- */
 
-export const application = sqliteTable(
+export const application = production.table(
   "application",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     candidateId: integer("candidate_id")
       .notNull()
       .references(() => candidate.id, { onDelete: "cascade" }),
@@ -233,10 +238,10 @@ export const application = sqliteTable(
 );
 
 /** Append-only history so the funnel metrics are reconstructable. */
-export const applicationEvent = sqliteTable(
+export const applicationEvent = production.table(
   "application_event",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     applicationId: integer("application_id")
       .notNull()
       .references(() => application.id, { onDelete: "cascade" }),
@@ -254,10 +259,10 @@ export const applicationEvent = sqliteTable(
 /* -------------------------------------------------------------------------- */
 
 /** Content drafts. Published through the official w_member_social API only. */
-export const post = sqliteTable(
+export const post = production.table(
   "post",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     slug: text("slug").notNull(),
     /** Maps to the content pillars in section 13.2 of the positioning audit. */
     pillar: text("pillar").notNull(),
@@ -285,10 +290,10 @@ export const post = sqliteTable(
  * opens the URL and acts. This is the deliberate boundary that keeps the
  * account inside the LinkedIn User Agreement.
  */
-export const engagement = sqliteTable(
+export const engagement = production.table(
   "engagement",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     kind: text("kind").notNull(), // comment | connect | follow | message | endorse
     targetUrl: text("target_url").notNull(),
     targetName: text("target_name"),
@@ -307,10 +312,10 @@ export const engagement = sqliteTable(
 );
 
 /** The 30 target accounts from section 2.2 of the audit. */
-export const targetAccount = sqliteTable(
+export const targetAccount = production.table(
   "target_account",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     name: text("name").notNull(),
     linkedinUrl: text("linkedin_url"),
     category: text("category").notNull(), // recruiter | ai-leader | peer | company
@@ -326,20 +331,20 @@ export const targetAccount = sqliteTable(
 );
 
 /** Manually recorded funnel metrics — SSI, search appearances, profile views. */
-export const metricSnapshot = sqliteTable(
+export const metricSnapshot = production.table(
   "metric_snapshot",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     at: text("at").notNull(),
     key: text("key").notNull(),
-    value: real("value").notNull(),
+    value: doublePrecision("value").notNull(),
     note: text("note"),
   },
   (t) => [uniqueIndex("metric_at_key_idx").on(t.at, t.key)],
 );
 
 /** The action plan from section 14, as executable rows. */
-export const positioningTask = sqliteTable("positioning_task", {
+export const positioningTask = production.table("positioning_task", {
   id: text("id").primaryKey(), // PT-0001
   horizon: text("horizon").notNull(), // 24h | week | 30d | 60d | 90d
   title: text("title").notNull(),
@@ -373,10 +378,10 @@ export const positioningTask = sqliteTable("positioning_task", {
  * > a claim the system inferred. Anything derived — extracted keywords, gap
  * > analysis — is computed on read and is safe to discard.
  */
-export const candidate = sqliteTable(
+export const candidate = production.table(
   "candidate",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     /** Stable handle so a future multi-candidate setup can scope by it. */
     slug: text("slug").notNull(),
     name: text("name").notNull(),
@@ -386,7 +391,7 @@ export const candidate = sqliteTable(
     linkedinUrl: text("linkedin_url"),
     githubUrl: text("github_url"),
     /** Marks the profile the CLI and UI operate on when none is specified. */
-    isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+    isDefault: boolean("is_default").notNull().default(false),
     /**
      * Quem pode ver este perfil: `private` | `recruiters` | `public`.
      *
@@ -409,7 +414,7 @@ export const candidate = sqliteTable(
      * Publicá-lo por escolha do dono é legítimo; publicá-lo como efeito
      * colateral de marcar "público" não é.
      */
-    publicCv: integer("public_cv", { mode: "boolean" }).notNull().default(false),
+    publicCv: boolean("public_cv").notNull().default(false),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },
@@ -426,10 +431,10 @@ export const candidate = sqliteTable(
  * `format` and `sourceBytes` exist for the PDF path that is not built yet —
  * when it is, extraction fills `content` and the original stays recoverable.
  */
-export const candidateDocument = sqliteTable(
+export const candidateDocument = production.table(
   "candidate_document",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     candidateId: integer("candidate_id")
       .notNull()
       .references(() => candidate.id, { onDelete: "cascade" }),
@@ -443,20 +448,20 @@ export const candidateDocument = sqliteTable(
     /** Original file, when it was not typed in. Null for pasted text. */
     sourceFilename: text("source_filename"),
     /** Only one document per kind is current; the rest are history. */
-    isCurrent: integer("is_current", { mode: "boolean" }).notNull().default(true),
+    isCurrent: boolean("is_current").notNull().default(true),
     createdAt: text("created_at").notNull().default(now),
   },
   (t) => [
-    uniqueIndex("candidate_document_identity_idx").on(t.id, t.candidateId),
+    unique("candidate_document_identity_idx").on(t.id, t.candidateId),
     index("candidate_document_candidate_idx").on(t.candidateId, t.kind),
     uniqueIndex("candidate_document_one_current_idx")
       .on(t.candidateId, t.kind)
-      .where(sql`${t.isCurrent} = 1`),
+      .where(sql`${t.isCurrent} = true`),
   ],
 );
 
 /** Candidate-owned scoring policy; profile.yaml is only the default seed. */
-export const candidateMatchingProfile = sqliteTable(
+export const candidateMatchingProfile = production.table(
   "candidate_matching_profile",
   {
     candidateId: integer("candidate_id")
@@ -482,16 +487,16 @@ export const candidateMatchingProfile = sqliteTable(
  * `aliases` is what makes detection work on real CVs and real job postings,
  * which never agree on spelling.
  */
-export const skill = sqliteTable(
+export const skill = production.table(
   "skill",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     slug: text("slug").notNull(),
     /** How it should be written when the system displays it. */
     canonicalName: text("canonical_name").notNull(),
     category: text("category").notNull(),
     /** Every spelling seen in the wild, as JSON. Drives detection. */
-    aliases: text("aliases", { mode: "json" }).notNull(),
+    aliases: json("aliases").notNull(),
     /** Set when a human vetted this catalogue entry — the admin audit hook. */
     verifiedAt: text("verified_at"),
     createdAt: text("created_at").notNull().default(now),
@@ -516,10 +521,10 @@ export const skill = sqliteTable(
  * > "migrating away from Kafka" and lets an agent claim Kafka experience is
  * > exactly the failure mode this column prevents.
  */
-export const candidateSkill = sqliteTable(
+export const candidateSkill = production.table(
   "candidate_skill",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     candidateId: integer("candidate_id")
       .notNull()
       .references(() => candidate.id, { onDelete: "cascade" }),
@@ -572,10 +577,10 @@ export type MailKind = (typeof MAIL_KINDS)[number];
  * only the user moves the funnel. That keeps ADR 0005 intact — ingestion of any
  * kind never overwrites a decision.
  */
-export const mailMessage = sqliteTable(
+export const mailMessage = production.table(
   "mail_message",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     /** RFC 5322 Message-ID; the natural dedupe key across re-imports. */
     messageId: text("message_id").notNull(),
     fromAddress: text("from_address"),
@@ -606,10 +611,10 @@ export const mailMessage = sqliteTable(
  * > and the user accepts or dismisses. An automated rejection parser that is
  * > wrong once and silently archives a live opportunity is worse than no parser.
  */
-export const mailSuggestion = sqliteTable(
+export const mailSuggestion = production.table(
   "mail_suggestion",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     mailId: integer("mail_id")
       .notNull()
       .references(() => mailMessage.id, { onDelete: "cascade" }),
@@ -622,7 +627,7 @@ export const mailSuggestion = sqliteTable(
     /** Why we think so — shown to the user before they accept. */
     rationale: text("rationale"),
     /** 0..1, from how unambiguous the signal was. */
-    confidence: real("confidence").notNull().default(0),
+    confidence: doublePrecision("confidence").notNull().default(0),
     status: text("status").notNull().default("pending"), // pending | accepted | dismissed
     decidedAt: text("decided_at"),
     createdAt: text("created_at").notNull().default(now),
@@ -642,16 +647,16 @@ export const mailSuggestion = sqliteTable(
  * only that a job "was above the floor" is useless without the rate that made
  * it so.
  */
-export const fxRate = sqliteTable(
+export const fxRate = production.table(
   "fx_rate",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     /** Quote date as published by the provider, not the fetch time. */
     date: text("date").notNull(),
     base: text("base").notNull(),
     currency: text("currency").notNull(),
     /** 1 unit of `base` buys `rate` units of `currency`. */
-    rate: real("rate").notNull(),
+    rate: doublePrecision("rate").notNull(),
     provider: text("provider").notNull(), // frankfurter | erapi | manual
     fetchedAt: text("fetched_at").notNull().default(now),
   },
@@ -704,17 +709,17 @@ export type { ScrapeStatus } from "../scrape/domain/status.ts";
  * better parser reprocesses the whole corpus without re-downloading a byte, and
  * a site that blocks us never costs us the pages we already have.
  */
-export const scrapeTask = sqliteTable(
+export const scrapeTask = production.table(
   "scrape_task",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     jobId: integer("job_id")
       .notNull()
       .references(() => job.id, { onDelete: "cascade" }),
     url: text("url").notNull(),
     status: text("status").notNull().default("pending"),
     /** Higher runs first. Derived from fit, so good jobs get pages first. */
-    priority: real("priority").notNull().default(0),
+    priority: doublePrecision("priority").notNull().default(0),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error"),
     /** Set while a worker holds the task; lets a crashed claim be reclaimed. */
@@ -767,10 +772,10 @@ export const scrapeTask = sqliteTable(
  * o índice, seriam três repontuações completas do acervo para produzir o mesmo
  * resultado. Com ele, o segundo pedido atualiza o que já está pendente.
  */
-export const scoreTask = sqliteTable(
+export const scoreTask = production.table(
   "score_task",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     candidateId: integer("candidate_id")
       .notNull()
       .references(() => candidate.id, { onDelete: "cascade" }),
@@ -784,7 +789,7 @@ export const scoreTask = sqliteTable(
      */
     origin: text("origin").notNull().default("cv"),
     /** Maior roda antes. Pedido de usuário entra acima da varredura. */
-    priority: real("priority").notNull().default(0),
+    priority: doublePrecision("priority").notNull().default(0),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error"),
     /** Quantas vagas a última execução pontuou. Para a tela poder dizer. */
@@ -803,10 +808,10 @@ export const scoreTask = sqliteTable(
 export type ScoreTask = typeof scoreTask.$inferSelect;
 export type ScoreTaskStatus = "pending" | "scoring" | "done" | "failed";
 
-export const verifyTask = sqliteTable(
+export const verifyTask = production.table(
   "verify_task",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     jobId: integer("job_id")
       .notNull()
       .references(() => job.id, { onDelete: "cascade" }),
@@ -814,7 +819,7 @@ export const verifyTask = sqliteTable(
     /** pending | checking | done | failed */
     status: text("status").notNull().default("pending"),
     /** Maior roda antes. O pedido do usuário entra acima da varredura. */
-    priority: real("priority").notNull().default(0),
+    priority: doublePrecision("priority").notNull().default(0),
     /** `user` | `periodic` — de onde veio o pedido, para a interface avisar. */
     origin: text("origin").notNull().default("periodic"),
     attempts: integer("attempts").notNull().default(0),
@@ -834,7 +839,7 @@ export const verifyTask = sqliteTable(
 export type VerifyTask = typeof verifyTask.$inferSelect;
 export type VerifyStatus = "pending" | "checking" | "done" | "failed";
 
-export const jobPage = sqliteTable(
+export const jobPage = production.table(
   "job_page",
   {
     jobId: integer("job_id")
@@ -847,7 +852,7 @@ export const jobPage = sqliteTable(
     /** Extracted, readable description. Null until the parser has run. */
     text: text("text"),
     /** Structured fields the parser recovered, as JSON. */
-    extracted: text("extracted", { mode: "json" }),
+    extracted: json("extracted"),
     contentHash: text("content_hash").notNull(),
     bytes: integer("bytes").notNull().default(0),
     fetchedAt: text("fetched_at").notNull().default(now),
@@ -882,10 +887,10 @@ export type EffortLevel = (typeof EFFORT_LEVELS)[number];
  * service that speaks the OpenAI shape (Groq, Together, OpenRouter, Ollama),
  * which is most of them.
  */
-export const llmProvider = sqliteTable(
+export const llmProvider = production.table(
   "llm_provider",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     slug: text("slug").notNull(),
     label: text("label").notNull(),
     kind: text("kind").notNull(),
@@ -893,7 +898,7 @@ export const llmProvider = sqliteTable(
     baseUrl: text("base_url"),
     /** Name of the env var holding the key — never the key itself. */
     apiKeyEnv: text("api_key_env").notNull(),
-    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    enabled: boolean("enabled").notNull().default(true),
     notes: text("notes"),
     createdAt: text("created_at").notNull().default(now),
   },
@@ -907,10 +912,10 @@ export const llmProvider = sqliteTable(
  * and a number they can see before a call is the difference between an informed
  * choice and a surprise invoice.
  */
-export const llmModel = sqliteTable(
+export const llmModel = production.table(
   "llm_model",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     providerId: integer("provider_id")
       .notNull()
       .references(() => llmProvider.id, { onDelete: "cascade" }),
@@ -918,15 +923,15 @@ export const llmModel = sqliteTable(
     modelId: text("model_id").notNull(),
     label: text("label").notNull(),
     /** Whether the model exposes a reasoning/effort control at all. */
-    supportsReasoning: integer("supports_reasoning", { mode: "boolean" }).notNull().default(false),
+    supportsReasoning: boolean("supports_reasoning").notNull().default(false),
     /** low | medium | high | xhigh | max. Null when unsupported. */
     defaultEffort: text("default_effort"),
     maxOutputTokens: integer("max_output_tokens").notNull().default(4096),
-    inputCostPerMTok: real("input_cost_per_mtok"),
-    outputCostPerMTok: real("output_cost_per_mtok"),
-    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    inputCostPerMTok: doublePrecision("input_cost_per_mtok"),
+    outputCostPerMTok: doublePrecision("output_cost_per_mtok"),
+    enabled: boolean("enabled").notNull().default(true),
     /** Exactly one model should carry this; the resolver enforces it. */
-    isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+    isDefault: boolean("is_default").notNull().default(false),
     createdAt: text("created_at").notNull().default(now),
   },
   (t) => [
@@ -942,10 +947,10 @@ export type LlmModel = typeof llmModel.$inferSelect;
 /* Authentication (AUTH-01)                                                   */
 /* -------------------------------------------------------------------------- */
 
-export const authUser = sqliteTable(
+export const authUser = production.table(
   "auth_user",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     email: text("email").notNull(),
     /**
      * Nome de quem usa a conta, como a pessoa escreve o próprio nome.
@@ -958,7 +963,7 @@ export const authUser = sqliteTable(
      */
     fullName: text("full_name"),
     /** JSON array of roles: admin | candidate | recruiter. */
-    roles: text("roles", { mode: "json" }).notNull(),
+    roles: json("roles").notNull(),
     /**
      * scrypt hash, as `scrypt$N$r$p$salt$hash`. Null when the account uses
      * only magic links — both methods are supported and neither is required.
@@ -980,10 +985,10 @@ export const authUser = sqliteTable(
  * the database is a copy of every user's credentials, which is the same
  * reasoning that keeps API keys out (regra 13).
  */
-export const authSession = sqliteTable(
+export const authSession = production.table(
   "auth_session",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     tokenHash: text("token_hash").notNull(),
     userId: integer("user_id")
       .notNull()
@@ -1017,10 +1022,10 @@ export const authSession = sqliteTable(
  * mora aqui e é resolvido na carga da sessão, para `policy.ts` continuar
  * derivando posse da sessão e nunca de um id que o chamador mandou.
  */
-export const recruiterCandidate = sqliteTable(
+export const recruiterCandidate = production.table(
   "recruiter_candidate",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     recruiterUserId: integer("recruiter_user_id")
       .notNull()
       .references(() => authUser.id, { onDelete: "cascade" }),
@@ -1039,10 +1044,10 @@ export const recruiterCandidate = sqliteTable(
 
 export type RecruiterCandidate = typeof recruiterCandidate.$inferSelect;
 
-export const authLoginToken = sqliteTable(
+export const authLoginToken = production.table(
   "auth_login_token",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     tokenHash: text("token_hash").notNull(),
     email: text("email").notNull(),
     /**
@@ -1073,10 +1078,10 @@ export const AUTH_EVENTS = [
 ] as const;
 
 /** Audit trail. Never records a token, a cookie or a key. */
-export const authEvent = sqliteTable(
+export const authEvent = production.table(
   "auth_event",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     userId: integer("user_id").references(() => authUser.id, { onDelete: "set null" }),
     email: text("email"),
     kind: text("kind").notNull(),

@@ -79,7 +79,7 @@ export async function enqueueScore(
         origin,
         // `max` para o pedido do usuário não ser rebaixado por uma varredura
         // que chegue depois dele e antes do trabalhador.
-        priority: sql`max(${scoreTask.priority}, ${priority})`,
+        priority: sql`greatest(${scoreTask.priority}, ${priority})`,
         attempts: 0,
         lastError: null,
         claimedAt: null,
@@ -100,11 +100,11 @@ export async function claimScore(worker: string): Promise<TarefaReivindicada | n
     .set({ status: "scoring", claimedAt: agora, claimedBy: worker, updatedAt: agora })
     .where(
       sql`${scoreTask.id} = (
-        select id from score_task
+        select id from production.score_task
         where status = 'pending'
            or (status = 'scoring' and claimed_at < ${morto})
         order by priority desc, id asc
-        limit 1
+        limit 1 for update skip locked
       )`,
     )
     .returning({

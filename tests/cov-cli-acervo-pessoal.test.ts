@@ -61,13 +61,13 @@ beforeEach(async () => {
   await useTestDb();
 });
 
-afterEach(() => {
+afterEach(async () => {
   for (const chave of AMBIENTE_TOCADO) {
     const valor = ambienteOriginal[chave];
     if (valor === undefined) delete process.env[chave];
     else process.env[chave] = valor;
   }
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 async function arquivoTemporario(conteudo: string, nome: string): Promise<string> {

@@ -42,8 +42,8 @@ beforeEach(async () => {
   candidateId = person!.id;
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 let seq = 0;

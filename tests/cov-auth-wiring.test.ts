@@ -61,11 +61,11 @@ beforeEach(async () => {
   delete process.env.JHO_AUTH_MODE;
 });
 
-afterEach(() => {
+afterEach(async () => {
   if (modoAnterior === undefined) delete process.env.JHO_AUTH_MODE;
   else process.env.JHO_AUTH_MODE = modoAnterior;
   resetClock();
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 describe("ciclo de vida da sessão pela fachada", () => {

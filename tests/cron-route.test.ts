@@ -24,10 +24,10 @@ beforeEach(async () => {
   delete process.env.CRON_SECRET;
 });
 
-afterEach(() => {
+afterEach(async () => {
   if (ORIGINAL === undefined) delete process.env.CRON_SECRET;
   else process.env.CRON_SECRET = ORIGINAL;
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 describe("autorização", () => {

@@ -192,18 +192,24 @@ describe("parseStored", () => {
     // transação desfaz também a limpeza do HTML.
     const jobId = await seedJob(null);
     await seedPage(jobId, PAGINA);
-    await db.run(sql.raw(`
-      create trigger falha_descricao
-      before update of description_text on job
-      when new.id = ${jobId}
+    await db.execute(sql.raw(`
+      create function production.falha_descricao() returns trigger
+      language plpgsql as $$
       begin
-        select raise(abort, 'falha injetada');
-      end
+        raise exception 'falha injetada';
+      end;
+      $$;
+      create trigger falha_descricao
+      before update of description_text on production.job
+      for each row
+      when (new.id = ${jobId})
+      execute function production.falha_descricao();
     `));
 
     await expect(parseStored(jobId)).rejects.toThrow();
 
-    await db.run(sql.raw("drop trigger falha_descricao"));
+    await db.execute(sql.raw("drop trigger falha_descricao on production.job"));
+    await db.execute(sql.raw("drop function production.falha_descricao()"));
     const [page] = await db.select().from(jobPage).where(eq(jobPage.jobId, jobId));
     const [row] = await db.select().from(job).where(eq(job.id, jobId));
     expect(page!.html).toBe(PAGINA);

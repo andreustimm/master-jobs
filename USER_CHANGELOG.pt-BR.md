@@ -16,6 +16,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Melhorado
+
+- As manutenções agora verificam se suas vagas e decisões continuam preservadas
+  antes de uma mudança de banco.
+
 ## [1.5.0] - 2026-09-16T02:16:17.210Z
 
 ### Melhorado

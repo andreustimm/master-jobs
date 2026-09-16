@@ -65,7 +65,7 @@ export async function verifyJobs(
     .where(
       and(
         isNull(job.closedAt),
-        sql`coalesce((select max(fit) from job_score where job_id = ${job.id}), 0) >= ${minFit}`,
+        sql`coalesce((select max(fit) from production.job_score where job_id = ${job.id}), 0) >= ${minFit}`,
         or(
           like(job.applyUrl, "http://%"),
           like(job.applyUrl, "https://%"),
@@ -75,7 +75,7 @@ export async function verifyJobs(
       ),
     )
     .orderBy(
-      sql`coalesce((select max(fit) from job_score where job_id = ${job.id}), 0) desc`,
+      sql`coalesce((select max(fit) from production.job_score where job_id = ${job.id}), 0) desc`,
     );
 
   // Parse after the coarse SQL prefix filter so malformed values cannot

@@ -65,11 +65,11 @@ beforeEach(async () => {
   delete process.env[VAR_CHAVE];
 });
 
-afterEach(() => {
+afterEach(async () => {
   if (chaveOriginal === undefined) delete process.env[VAR_CHAVE];
   else process.env[VAR_CHAVE] = chaveOriginal;
   vi.unstubAllGlobals();
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 /** Cadastra um provedor compatível apontando para um IP literal, e um modelo. */

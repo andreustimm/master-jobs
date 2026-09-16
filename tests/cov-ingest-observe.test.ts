@@ -29,8 +29,8 @@ beforeEach(async () => {
     .values({ id: "lever:acme", kind: "lever", handle: "acme", label: "Acme" });
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 const cru = (over: Partial<RawJob> = {}): RawJob => ({

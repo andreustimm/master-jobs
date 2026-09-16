@@ -21,8 +21,8 @@ beforeEach(async () => {
   candidateId = await ensureCandidate({ name: "Andreus Timm" });
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 describe("setVisibility", () => {

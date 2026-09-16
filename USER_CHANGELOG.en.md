@@ -16,6 +16,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Improved
+
+- Maintenance now checks that your jobs and decisions remain preserved before a
+  database change.
+
 ## [1.5.0] - 2026-09-16T02:16:17.210Z
 
 ### Improved
@@ -35,6 +40,7 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   export the list without accessing another person's pipeline.
 - An account that is no longer a candidate cannot regain its private pipeline
   by signing in again.
+
 ## [1.4.0] - 2026-09-15T18:14:00.754Z
 
 ### Fixed

@@ -1,7 +1,7 @@
 /**
  * Drizzle implementation of the scraping queue ports.
  *
- * SQLite is the right local adapter for the measured workload (ADR 0009).
+ * PostgreSQL owns the queue rows and locks claims with SKIP LOCKED.
  * Atomic claiming stays here because it is a persistence mechanism; retry
  * policy and queue vocabulary live in the pure domain layer.
  */
@@ -27,21 +27,21 @@ export const drizzleQueue: QueuePort = {
     const staleBefore = isoIn(-STALE_CLAIM_MINUTES);
     const working: ScrapeStatus = status === "pending" ? "fetching" : "parsing";
 
-    // One statement: the WHERE re-checks the status the UPDATE is predicated on,
-    // so a racing worker's update finds no row and returns nothing.
+    // One statement locks the selected row before updating it; competing
+    // workers skip it rather than claiming the same snapshot twice.
     const rows = await db
       .update(scrapeTask)
       .set({ status: working, claimedAt: nowIso, claimedBy: worker, updatedAt: nowIso })
       .where(
         sql`${scrapeTask.id} = (
-          select id from scrape_task
+          select id from production.scrape_task
           where (
             status = ${status}
             or (status = ${working} and claimed_at < ${staleBefore})
           )
           and (run_after is null or run_after <= ${nowIso})
           order by priority desc, id asc
-          limit 1
+          limit 1 for update skip locked
         )`,
       )
       .returning({
