@@ -117,8 +117,10 @@ export const job = production.table(
     remote: boolean("remote"),
     employmentType: text("employment_type"), // full-time | contract | ...
     seniorityRaw: text("seniority_raw"),
-    compMin: integer("comp_min"),
-    compMax: integer("comp_max"),
+    // Hourly and project rates commonly include cents (e.g. 27.02 USD).
+    // Keep the source value instead of making ingestion fail on an integer cast.
+    compMin: doublePrecision("comp_min"),
+    compMax: doublePrecision("comp_max"),
     compCurrency: text("comp_currency"),
     compPeriod: text("comp_period"), // year | month | hour
     url: text("url").notNull(),

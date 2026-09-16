@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
 import { application, candidate, job, jobScore, source } from "../src/core/db/schema.ts";
 import { ensureSources, pruneClosed, syncAll } from "../src/core/ingest/run.ts";
+import { observeRawJob } from "../src/core/ingest/observe.ts";
 import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/http-port.ts";
 import "../src/core/sources/http.ts";
 import type { SourceConfig } from "../src/core/sources/types.ts";
@@ -83,6 +84,29 @@ describe("ensureSources", () => {
 });
 
 describe("syncAll", () => {
+  it("persiste tarifas salariais decimais sem truncar nem falhar", async () => {
+    await db.insert(source).values({
+      id: "manual:decimal-test",
+      kind: "manual",
+      handle: "decimal-test",
+      label: "Decimal test",
+    });
+    await observeRawJob({
+      externalId: "decimal-rate",
+      companyName: "Decimal Corp",
+      title: "Hourly Architect",
+      url: "https://example.com/jobs/decimal-rate",
+      compMin: 27.02,
+      compMax: 48.55,
+      compCurrency: "USD",
+      compPeriod: "hour",
+      raw: {},
+    }, "manual:decimal-test");
+
+    const [stored] = await db.select().from(job);
+    expect(stored).toMatchObject({ compMin: 27.02, compMax: 48.55, compCurrency: "USD" });
+  });
+
   it("registra sucesso na fonte com contagem e data da última varredura", async () => {
     // `jho sources list` lê exatamente essas colunas. Sem elas, "a fonte está
     // saudável?" só se responde rodando o sync de novo.

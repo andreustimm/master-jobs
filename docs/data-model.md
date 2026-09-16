@@ -271,7 +271,7 @@ fato imutável: reingestão atualiza conteúdo e `last_seen_at`, reabre
 | `company_name` | denormalizado de propósito: existe mesmo quando `slugifyCompany()` devolve string vazia e `company_id` fica `null` |
 | `description_html` / `description_text` | `description_text` é o dado durável que scorer e UI leem. `description_html` permanece por compatibilidade de schema, mas ingestão nova grava `null`; `jho db cleanup` remove o legado |
 | `remote` | `null` = a vaga não diz. Diferente de `false` |
-| `comp_min`, `comp_max`, `comp_currency`, `comp_period` | `comp_period` em `year \| month \| hour`. A moeda **não** é convertida pelo scorer |
+| `comp_min`, `comp_max`, `comp_currency`, `comp_period` | `comp_min`/`comp_max` aceitam centavos para tarifas por hora ou projeto; `comp_period` em `year \| month \| hour`. A moeda **não** é convertida pelo scorer |
 | `url`, `apply_url` | `apply_url` pode ser `null`; a CLI mostra `applyUrl ?? url` |
 | `posted_at` | normalizado por `toIsoDate()`; `null` quando a fonte não dá data parseável |
 | `first_seen_at` / `last_seen_at` | `first_seen_at` só é escrito no insert. `last_seen_at` é carimbado em todo sync que reencontra a vaga |
