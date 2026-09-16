@@ -16,7 +16,8 @@ let url: URL;
 try { url = new URL(process.env.DATABASE_URL ?? ""); }
 catch { throw new Error(refusal); }
 if (url.hostname !== "127.0.0.1" || !/^\/jho_test_[a-f0-9]{32}$/.test(url.pathname) ||
-    process.env.DATABASE_MIGRATION_URL !== process.env.DATABASE_URL) {
+    process.env.DATABASE_MIGRATION_URL !== process.env.DATABASE_URL ||
+    process.env.JHO_TEST_DATABASE_URL !== process.env.DATABASE_URL) {
   throw new Error(refusal);
 }
 

@@ -177,6 +177,7 @@ try {
     JHO_AUTH_MODE: "secure",
     DATABASE_URL: testDatabase.url,
     DATABASE_MIGRATION_URL: testDatabase.url,
+    JHO_TEST_DATABASE_URL: testDatabase.url,
     E2E_BASE: `http://127.0.0.1:${port}`,
     E2E_RESET_EXPIRED_TOKEN: TASK04_FIXTURES.resetExpiredToken,
     E2E_RESET_CONSUMED_TOKEN: TASK04_FIXTURES.resetConsumedToken,
@@ -207,6 +208,7 @@ try {
   const runtimeEnv = { ...env, DATABASE_URL: runtimeLogin.url };
   delete runtimeEnv.DATABASE_MIGRATION_URL;
   delete runtimeEnv.JHO_TEST_POSTGRES_URL;
+  delete runtimeEnv.JHO_TEST_DATABASE_URL;
 
   const startStandalone = () => spawn(
     process.execPath,

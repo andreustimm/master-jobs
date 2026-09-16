@@ -19,19 +19,27 @@ async function digest(path: string) {
   return hash.digest("hex");
 }
 
-async function main() {
-  const { values } = parseArgs({ options });
-  const path = values.source;
-  if (!path) throw new Error("Informe --source com o snapshot final exportado do Turso");
-  stage = "snapshot";
+function assertNoPendingJournal(path: string) {
   for (const suffix of ["-wal", "-journal"]) {
     if (existsSync(path + suffix) && statSync(path + suffix).size > 0) {
       throw new Error("Snapshot contém journal pendente; exporte e faça checkpoint antes da carga");
     }
   }
+}
+
+async function main() {
+  const { values } = parseArgs({ options });
+  const path = values.source;
+  if (!path) throw new Error("Informe --source com o snapshot final exportado do Turso");
+  stage = "snapshot";
+  assertNoPendingJournal(path);
   const sourceSha256 = await digest(path);
   stage = "selection";
   const selection = selectProduction(path);
+  // The selector held a read transaction, so a concurrent writer could not
+  // produce a mixed view. Check both sidecars and the main file after it
+  // commits; apply mode additionally requires the human writer pause.
+  assertNoPendingJournal(path);
   if (await digest(path) !== sourceSha256) throw new Error("Snapshot mudou durante a seleção");
   if (!values.apply) {
     console.log(JSON.stringify({ mode: "plan-only", project: PRODUCTION_PROJECT_REF, sourceSha256,

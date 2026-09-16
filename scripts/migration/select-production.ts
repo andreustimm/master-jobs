@@ -28,7 +28,13 @@ const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
 
 export function selectProduction(path: string) {
   const db = new DatabaseSync(path, { readOnly: true });
+  let transaction = false;
   try {
+    // Keep one consistent SQLite snapshot for every table. A WAL writer may
+    // append while we read, but it cannot turn the selected rows into a mix of
+    // pre- and post-write values inside this transaction.
+    db.exec("BEGIN");
+    transaction = true;
     if (db.prepare("PRAGMA integrity_check").all().some((r) => r.integrity_check !== "ok")) {
       throw new Error("Source integrity check failed");
     }
@@ -75,7 +81,14 @@ export function selectProduction(path: string) {
         if (name === "job") {
           result.description_html = null;
           const manual = db.prepare("SELECT kind FROM source WHERE id = ?").get(String(row.source_id));
-          if (!["manual", "recruiter"].includes(String(manual?.kind))) result.raw = {};
+          if (!["manual", "recruiter"].includes(String(manual?.kind))) {
+            const workplaceType = result.raw && typeof result.raw === "object" && !Array.isArray(result.raw)
+              ? (result.raw as Record<string, unknown>).workplaceType
+              : undefined;
+            result.raw = typeof workplaceType === "string" && workplaceType.trim()
+              ? { workplaceType: workplaceType.trim() }
+              : {};
+          }
         }
         return result;
       });
@@ -101,8 +114,13 @@ export function selectProduction(path: string) {
         }
       }
     }
+    db.exec("COMMIT");
+    transaction = false;
     return { rows, manifest };
   } finally {
+    if (transaction) {
+      try { db.exec("ROLLBACK"); } catch { /* close below is the final guard */ }
+    }
     db.close();
   }
 }

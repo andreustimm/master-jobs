@@ -24,6 +24,18 @@ it("keeps crawlers opt-in and gives them only runtime credentials", () => {
   expect(workflow.jobs.varrer.env.DATABASE_MIGRATION_URL).toBeUndefined();
 });
 
+it("keeps scheduled retention on the PostgreSQL runtime contract", () => {
+  const workflow = parse(readFileSync(".github/workflows/manutencao-banco.yml", "utf8"));
+  expect(workflow.jobs.limpar.if).toContain("github.ref == 'refs/heads/main'");
+  expect(workflow.jobs.limpar.environment).toBe("production");
+  expect(workflow.jobs.limpar.env.DATABASE_URL).toBe("${{ secrets.SUPABASE_DATABASE_URL }}");
+  expect(workflow.jobs.limpar.env.DATABASE_CA_CERT).toBe("config/certs/supabase-ca.crt");
+  expect(workflow.jobs.limpar.env.TURSO_DATABASE_URL).toBeUndefined();
+  expect(workflow.jobs.limpar.env.TURSO_AUTH_TOKEN).toBeUndefined();
+  const validation = workflow.jobs.limpar.steps.find((s: { name?: string }) => s.name === "Validar credencial");
+  expect(validation.run).toContain("DATABASE_URL");
+});
+
 it("rejects missing, malformed, other-project and insecure migration destinations without leaking secrets", () => {
   for (const url of ["", "secret-invalid-url", "postgres://postgres:secret-password@localhost/postgres",
     "postgres://postgres.other:secret-password@aws-0-sa-east-1.pooler.supabase.com/postgres",

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 if [ -z "${DATABASE_MIGRATION_URL:-}" ]; then
-  echo "::error::SUPABASE_MIGRATION_URL ausente. Migração não executada."
+  echo "::error::DATABASE_MIGRATION_URL ausente. Migração não executada."
   exit 1
 fi
 

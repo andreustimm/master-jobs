@@ -1,6 +1,6 @@
 # Migração de produção para Supabase
 
-Data: 2026-09-15 (atualização). Branch: `codex/supabase-production`, base `origin/dev` (`8a258a7`).
+Data: 2026-09-16 (atualização). Branch: `codex/supabase-production`, base `origin/dev` (`bb1a6b4781e9122ed9a8bc647e2e04fbdcf8bf78`).
 
 ## Escopo decidido
 
@@ -26,13 +26,16 @@ Data: 2026-09-15 (atualização). Branch: `codex/supabase-production`, base `ori
 
 ### Atualização de validação — 15/09
 
-- A branch foi rebaseada sobre `dev` em `8a258a7` antes da validação; o filtro de
-  modalidade foi adaptado para PostgreSQL (`json ->>`, regex `~*` e booleano).
-- `pnpm check` com Docker PostgreSQL 17: 162 arquivos, 2.184 testes passados,
-  7 skips; statements 95,93%, branches 92,64%, functions 96,16% e lines 96,84%.
-- `pnpm test:e2e`: 220/220 verificações funcionais, 8/8 páginas sem violações
+- A branch foi rebaseada sobre `dev` em `bb1a6b4` antes da validação; o filtro de
+  modalidade foi adaptado para PostgreSQL (`json ->>`, regex `~*` e booleano),
+  e a seleção preserva o `workplaceType` mínimo no snapshot.
+- `pnpm check` com Docker PostgreSQL 17: 163 arquivos, 2.201 testes passados,
+  7 skips; statements 95,95%, branches 92,31%, functions 96,2% e lines 96,85%.
+- `pnpm test:e2e`: 224/224 verificações funcionais, 8/8 páginas sem violações
   axe WCAG 2.2 AA; os cenários de remoto, híbrido, presencial, busca, GET,
   paginação e volta passaram.
+- O caminho de importação bem-sucedida foi exercitado em PostgreSQL 17 local,
+  verificando linhas gravadas, `workplaceType` e rejeição de um segundo import.
 - `pnpm db:rehearse-production data/migration/production-20260909.db`:
   30 tabelas, 520 registros, 1.851.392 bytes de relações, replay inalterado,
   rollback, destino ocupado e identity verificados.

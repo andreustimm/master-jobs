@@ -6,9 +6,13 @@ import { spawnSync } from "node:child_process";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
+import { migrate as migratePostgres } from "drizzle-orm/postgres-js/migrator";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { connectDatabase } from "../src/core/db/client.ts";
+import { importProduction } from "../scripts/migration/import-production.ts";
 import { selectProduction } from "../scripts/migration/select-production.ts";
 import { PRODUCTION_PROJECT_REF } from "../scripts/migration/production-target.ts";
+import { provisionTestDatabase } from "./support/db.ts";
 
 let directory: string;
 let path: string;
@@ -25,7 +29,7 @@ beforeEach(async () => {
       ('web','ashby','fixture','Web','crawler diagnostic'),
       ('manual','manual','fixture','Manual',NULL);
     INSERT INTO job(id,fingerprint,content_hash,source_id,external_id,company_name,title,url,raw,description_html,description_text)
-    VALUES (1,'one','hash','web','one','Fixture','One','https://example.com/1','{"crawler":"raw"}','<p>Useful</p>','Useful'),
+    VALUES (1,'one','hash','web','one','Fixture','One','https://example.com/1','{"crawler":"raw","workplaceType":"Remote"}','<p>Useful</p>','Useful'),
       (2,'two','hash','web','two','Fixture','Two','https://example.com/2','{}',NULL,'Unselected'),
       (3,'three','hash','manual','three','Fixture','Three','https://example.com/3','{"comparison":true}',NULL,'Manual');
     INSERT INTO candidate(id,slug,name) VALUES (50,'fixture','Fixture');
@@ -39,14 +43,31 @@ afterEach(() => { source?.close(); rmSync(directory, { recursive: true, force: t
 it("preserves business references and manual metadata, excluding crawler payload and queues", () => {
   const result = selectProduction(path);
   expect(result.rows.job!.map((r) => r.id)).toEqual([1, 3]);
-  expect(result.rows.job![0]).toMatchObject({ raw: {}, description_html: null, description_text: "Useful" });
+  expect(result.rows.job![0]).toMatchObject({ raw: { workplaceType: "Remote" }, description_html: null, description_text: "Useful" });
   expect(result.rows.job![1]!.raw).toEqual({ comparison: true });
   expect(result.rows.application![0]!.notes).toBe("Business history");
   expect(result.rows.application_event).toHaveLength(1);
   expect(result.rows.scrape_task).toEqual([]);
   expect(result.rows.source!.every((r) => r.last_error === null)).toBe(true);
-  expect(source.prepare("SELECT raw FROM job WHERE id = 1").get()!.raw).toBe('{"crawler":"raw"}');
+  expect(source.prepare("SELECT raw FROM job WHERE id = 1").get()!.raw).toBe('{"crawler":"raw","workplaceType":"Remote"}');
   expect(selectProduction(path).manifest).toEqual(result.manifest);
+});
+
+it("imports the selected snapshot into PostgreSQL and verifies the committed rows", async () => {
+  const target = await provisionTestDatabase();
+  const { client, db } = connectDatabase(target.url);
+  try {
+    await migratePostgres(db, { migrationsFolder: "./drizzle/postgres" });
+    const selection = selectProduction(path);
+    const result = await importProduction(client, selection);
+    expect(result.importedRows).toBeGreaterThan(0);
+    const [job] = await client`SELECT raw->>'workplaceType' AS workplace_type FROM production.job WHERE id = 1`;
+    expect(job!.workplace_type).toBe("Remote");
+    await expect(importProduction(client, selection)).rejects.toThrow("Target is not empty");
+  } finally {
+    await client.end({ timeout: 5 });
+    await target.drop();
+  }
 });
 
 it("refuses new tables and columns until transfer policy is reviewed", () => {
