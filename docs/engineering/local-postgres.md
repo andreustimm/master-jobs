@@ -45,7 +45,7 @@ docker compose -f docker-compose.local.yml down -v
 docker compose -f docker-compose.local.yml up -d
 export DATABASE_URL=postgresql://supabase_admin:master_jobs_local_only@127.0.0.1:5433/master_jobs_local
 export DATABASE_MIGRATION_URL="$DATABASE_URL"
-pnpm db:import-local -- --source data/migration/production-YYYYMMDD.db
+pnpm db:import-local --source data/migration/production-YYYYMMDD.db
 ```
 
 O comando calcula o hash do arquivo, seleciona os dados dentro de uma
@@ -54,6 +54,25 @@ valida contagens e hashes no PostgreSQL antes de confirmar a carga. Ele recusa
 URLs remotas, portanto não é um mecanismo de sincronização com produção. A
 fonte Turso original continua sendo o backup de corte; gere uma nova fixture
 quando precisar reproduzir outro estado.
+
+## Recomeçar o acervo local
+
+Depois de `down -v`, escolha uma única fonte para preencher o banco vazio:
+
+```bash
+# Opção A: fixture sanitizada do snapshot de produção
+pnpm db:import-local --source data/migration/production-YYYYMMDD.db
+
+# Opção B: buscar novamente as fontes públicas e pontuar as vagas
+pnpm jho jobs sync
+```
+
+O reset do volume é deliberadamente amplo: remove também contas, candidaturas
+e tarefas locais. Se essas decisões ainda forem necessárias, não apague vagas
+com SQL; preserve o histórico ou importe novamente a fixture que as contém.
+O `jobs sync` é permitido somente no ambiente local e consulta as fontes
+públicas configuradas; ele não faz scraping de LinkedIn nem é executado por
+dev/staging.
 
 ## Verificar PGMQ e pgvector
 
