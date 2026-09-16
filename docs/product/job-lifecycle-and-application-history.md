@@ -107,9 +107,10 @@ brutos permanece separada e segue a [ADR 0019](../adr/0019-retencao-de-payloads-
 novas vagas. Usam apenas amostras sintéticas e mocks; a rotina de arquivamento
 é validada contra fixtures, nunca contra fonte externa.
 
-**Local:** SQLite/libSQL continua sendo o padrão. Um sync local pode ser
-executado explicitamente para diagnóstico, com dados descartáveis e sem
-credenciais de produção.
+**Local:** o runtime atual usa PostgreSQL isolado por `DATABASE_URL`; migrations
+usam `DATABASE_MIGRATION_URL`. Um diagnóstico local pode ser executado
+explicitamente contra essa instância, com dados descartáveis e sem credenciais
+de produção. O SQLite legado não é carregado automaticamente.
 
 ## Fora do escopo desta primeira entrega
 

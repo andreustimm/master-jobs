@@ -286,6 +286,10 @@ candidaturas. O contrato está em [ADR 0020](adr/0020-ciclo-de-vida-e-historico-
 (por `company_name`), `job_last_seen_idx`, `job_closed_idx`. O último importa
 porque toda query de board filtra `closed_at IS NULL`.
 
+A migration que adicionar `archived_at` também deve manter um índice que suporte
+as varreduras por corte de `closed_at`/`archived_at`, conforme o TechSpec de
+retenção; a coluna sem esse índice não atende ao contrato de lote.
+
 ### `job_score`
 
 Score derivado, um por par candidato–vaga. A chave primária composta é

@@ -24,7 +24,7 @@ an explicit diagnostic choice.
 <requirements>
 - The policy MUST fail closed for absent or unknown environments.
 - Dev, staging, and preview MUST never resolve source adapters or create ingest queues.
-- Local MUST require explicit diagnostic opt-in; production MUST require the configured allowlist.
+- Local MUST require explicit diagnostic opt-in; production MUST require `productionAllowlistSatisfied: true` from the normalized configured allowlist.
 - Blocked attempts MUST be side-effect free and redact diagnostics.
 - Every ingestion entrypoint MUST use the same policy.
 </requirements>
@@ -67,7 +67,7 @@ checks as defense in depth; the core guard is authoritative.
 ## Tests
 
 - [ ] UT-001, UT-002 — policy branches, ordering, no-I/O and redaction.
-- [ ] IT-002, IT-003 — blocked entrypoints and production-only workflow contract.
+- [ ] IT-002 — blocked entrypoints and no-I/O contract.
 
 ## Success Criteria
 

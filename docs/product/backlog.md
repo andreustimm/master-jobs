@@ -39,7 +39,7 @@ escopadas para candidato/recrutador. O contrato completo está no
 
 Remote dev/staging devem ter somente fixtures/mocks pequenos. Sync, download,
 scrape, recheck e busca de novas vagas ficam bloqueados fora de produção; local
-continua SQLite/libSQL e opt-in para diagnóstico. Ver a
+usa PostgreSQL isolado por `DATABASE_URL` e é opt-in para diagnóstico. Ver a
 [`tarefa desta semana`](../../.compozy/tasks/environment-sample-only/) e a
 [ADR 0021](../adr/0021-ambientes-nao-produtivos-com-dados-sinteticos.md).
 

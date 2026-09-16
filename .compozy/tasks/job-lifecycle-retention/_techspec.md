@@ -36,9 +36,12 @@ export function decideArchive(input: {
   archivedAt: string | null;
   hasApplication: boolean;
   cutoff: string;
-  sourceKind: string;
+  sourceKind: SourceKind;
 }): ArchiveDecision;
 ```
+
+`SourceKind` is the existing closed union from `src/core/sources/types.ts`;
+the pure rule rejects `manual` and `recruiter` before applying any cutoff.
 
 The use case accepts `{ cutoff, dryRun, limit }`, returns aggregate counts, and
 never accepts a candidate id from the client as an authorization proof.

@@ -205,11 +205,14 @@ inconclusivos. A implementação e os critérios estão em
 ### Dev e staging: somente fixtures
 
 Os ambientes remotos de dev e staging não devem executar `jobs sync`, download
-de descrição, scraping, recheck, probe agendado ou busca de novas vagas. Eles
+de descrição, scraping, recheck, probe ou busca de novas vagas. Eles
 usam uma amostra sintética com as modalidades e estados necessários para UI,
 scoring, arquivamento e autorização. O bloqueio deve existir no scheduler e no
-caso de uso, com falha explícita; local continua SQLite/libSQL e pode fazer
-sync apenas por opt-in de diagnóstico. Ver
+caso de uso, com falha explícita, antes de qualquer chamada HTTP ou criação de
+fila. Qualquer exceção diagnóstica deve ser um modo local explicitamente
+allowlisted; não há probe remoto em dev/staging. O runtime local usa PostgreSQL
+por `DATABASE_URL` (e `DATABASE_MIGRATION_URL` somente para migrations) e pode
+fazer diagnóstico apenas contra essa instância isolada. Ver
 [`environment-sample-only`](../.compozy/tasks/environment-sample-only/) e a
 [ADR 0021](adr/0021-ambientes-nao-produtivos-com-dados-sinteticos.md).
 

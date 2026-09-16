@@ -14,15 +14,16 @@ externo em um ambiente que deveria ser previsível.
 
 1. Dev e staging remotos recebem apenas uma amostra sintética/versionada e
    mocks/fixtures gerados localmente. Nunca recebem dump bruto de produção.
-2. `jobs sync`, `scrape queue/run`, `jobs recheck queue/run`, probes agendados e
+2. `jobs sync`, `scrape queue/run`, `jobs recheck queue/run`, probes e
    a busca automática de novas vagas ficam bloqueados nesses ambientes.
 3. O bloqueio deve existir no scheduler **e** no caso de uso/CLI, por uma
    allowlist explícita de ambiente. Ausência da autorização é fail-closed.
 4. Testes de UI, scoring, arquivamento e autorização usam fixtures que cobrem
    vagas abertas, fechadas, arquivadas, reabertas e candidaturas em todos os
    estágios.
-5. Local continua usando SQLite/libSQL e pode executar sync somente por ação
-   explícita de diagnóstico. Credenciais de produção nunca entram nesse modo.
+5. Local usa PostgreSQL por `DATABASE_URL`; migrations usam
+   `DATABASE_MIGRATION_URL`. Diagnóstico local é uma ação explícita contra a
+   instância isolada, e credenciais de produção nunca entram nesse modo.
 6. O primeiro projeto Supabase continua com um único schema `production`.
    Dev/staging não serão schemas adicionais no mesmo projeto sem ADR específica
    sobre quota, roles, `search_path` e migrations.

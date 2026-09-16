@@ -23,6 +23,8 @@ explicit opt-in; recurring ingestion is production-only.
 export type IngestionContext = {
   environment: "production" | "staging" | "dev" | "local" | "preview";
   explicitOptIn: boolean;
+  /** Normalized by the deployment boundary; false when missing or malformed. */
+  productionAllowlistSatisfied: boolean;
 };
 
 export function canRunIngestion(context: IngestionContext):
@@ -30,7 +32,10 @@ export function canRunIngestion(context: IngestionContext):
   | { allowed: false; reason: string };
 ```
 
-The policy is pure and fail-closed for unknown/absent environment values. The
+The raw deployment configuration is normalized before this pure policy is
+called. Missing or unknown environment values and a missing/malformed
+production allowlist normalize to a denied context. The policy is fail-closed:
+production is allowed only when `productionAllowlistSatisfied` is true, and the
 entrypoint raises a typed operational error before constructing an HTTP adapter,
 queue client, or probe worker.
 

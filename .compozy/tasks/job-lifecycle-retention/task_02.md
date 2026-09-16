@@ -69,7 +69,7 @@ Server Component and context composition patterns; do not put SQL in JSX.
 
 ## Tests
 
-- [ ] UT-005, UT-006 — application count and candidate-scope validation.
+- [ ] UT-006 — candidate-scope validation and invalid status input.
 - [ ] IT-003 — candidate query, pagination, events, and errors.
 - [ ] E2E-001 — candidate history through refresh.
 
