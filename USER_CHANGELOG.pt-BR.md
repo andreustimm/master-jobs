@@ -18,6 +18,10 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- Valores de remuneração com centavos agora são importados corretamente.
+
 ## [1.6.0] - 2026-09-16T05:24:04.621Z
 
 ### Melhorado

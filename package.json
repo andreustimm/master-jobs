@@ -17,7 +17,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:rehearse-production": "node --no-warnings scripts/migration/rehearse-production.ts",
-    "db:import-local": "node --no-warnings scripts/migration/import-local.ts",
+    "db:import-local": "node --no-warnings --env-file-if-exists=.env scripts/migration/import-local.ts",
     "db:import-production": "node --no-warnings scripts/migration/production.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",

@@ -9,6 +9,11 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- A ingestão local agora preserva valores salariais com centavos e o comando de
+  importação carrega automaticamente o `.env` do projeto.
+
 ## [1.7.0] - 2026-09-16
 
 ### Adicionado
