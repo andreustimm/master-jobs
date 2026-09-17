@@ -61,13 +61,25 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 
 | Variável | Onde | Para quê |
 |---|---|---|
-| `DATABASE_URL` | aplicação | URL PostgreSQL de runtime |
+| `DATABASE_URL` | aplicação | URL PostgreSQL de runtime — **sem query string** |
 | `DATABASE_MIGRATION_URL` | migration/CI | URL PostgreSQL com privilégio de DDL |
-| `DATABASE_CA_CERT` | CI/Vercel | CA do PostgreSQL gerenciado, quando exigido |
+| `DATABASE_CA_CERT` | CI/Vercel | **caminho** do arquivo da CA, não o PEM |
 | `SUPABASE_CRAWL_ENABLED` | Actions produção | `true` somente após os gates de quota/retensão |
 | `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela o link vai para o log |
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |
 | `CRON_SECRET` | Vercel | protege a rota de cron; a Vercel a envia em `authorization` |
+
+**Os dois nomes são literais, e é fácil errar os dois.** O runtime lê
+`process.env.DATABASE_URL` e mais nada: a integração do Supabase com a Vercel
+cadastra `POSTGRES_URL`, `POSTGRES_PRISMA_URL` e `POSTGRES_URL_NON_POOLING`, e
+nenhum deles é lido — não existe fallback, para o runtime nunca conectar no
+banco errado por acaso. `connectDatabase()` também recusa qualquer query string
+na URL, inclusive `?sslmode=require` e `?pgbouncer=true`: a política de TLS é do
+cliente e não pode ser afrouxada pela string de conexão, então os parâmetros que
+o painel da Supabase anexa precisam sair. E `DATABASE_CA_CERT` é lido com
+`readFileSync`: o valor é o caminho `config/certs/supabase-ca.crt`, que o
+repositório versiona e o `next.config.ts` declara em `outputFileTracingIncludes`
+para viajar no bundle. Com o PEM dentro da variável, a conexão falha ao abrir.
 
 `RESEND_API_KEY` e `RESEND_FROM` formam um par: se qualquer uma estiver ausente
 ou vazia, `configuredMailer` usa o adapter de console e nenhum e-mail é enviado.
