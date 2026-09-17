@@ -81,6 +81,12 @@ houve divergência transitória entre o selo Preparando e o seletor Pré-selecio
 - **Observação:** a nota gravada continua sem caminho de leitura em superfície
   pública alguma. Isso não é este defeito — foi registrado em
   BUG-20260917-transition-note-never-readable e aguarda decisão humana.
+- **Presente no release candidate:** o Full de 17/09 percorreu `676d5e0`, o
+  código que está em `staging` e é o objeto da PR #80, e o defeito reproduz ali
+  com a nota descartada e o aviso genérico. `verified` descreve a branch de
+  correção, não o RC: enquanto a PR #87 não promover, o corte para produção leva
+  este defeito junto. Relatório:
+  docs/qa/reports/2026-09-17T232350685065Z-1cb4e9bd-release-candidate-1.7.1-full.md
 
 ## Diagnóstico refinado (2026-09-10)
 

@@ -16,6 +16,11 @@ last_report: docs/qa/reports/2026-09-17T222310262016Z-5e419094-application-draft
 overlaps:
 ---
 
+Full do release candidate 1.7.1 (`676d5e0`, o que está em `staging`): este
+cenário FALHA ali. O status deste arquivo descreve a branch de correção; o RC
+ainda descarta o rascunho numa transição recusada. Relatório:
+docs/qa/reports/2026-09-17T232350685065Z-1cb4e9bd-release-candidate-1.7.1-full.md
+
 Reteste de 17/09: a metade do STATUS está confirmada ponta a ponta — gravado no
 detalhe, relido após refresh, presente no funil, mantido depois de sair e
 entrar de novo, e igual na CLI pública da mesma identidade. A metade da NOTA

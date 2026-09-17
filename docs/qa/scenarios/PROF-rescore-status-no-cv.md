@@ -12,7 +12,7 @@ fix_status:
 retest_status:
 fix_commits:
 evidence: docs/qa/evidence/2026-09-10T011143000000Z-8bd417c2-supabase-production/CH-no-cv-ranking-state-baseline-mobile.png; docs/qa/evidence/2026-09-10T011143000000Z-8bd417c2-supabase-production/CH-no-cv-ranking-state-baseline-landscape.png; docs/qa/evidence/2026-09-10T011143000000Z-8bd417c2-supabase-production/CH-no-cv-ranking-state-baseline-return.png
-last_report: docs/qa/reports/2026-09-10T011143000000Z-8bd417c2-supabase-production.md
+last_report: docs/qa/reports/2026-09-17T232350685065Z-1cb4e9bd-release-candidate-1.7.1-full.md
 overlaps: PROF-rescore-status-visibility; PROF-rescore-status-privacy
 ---
 
