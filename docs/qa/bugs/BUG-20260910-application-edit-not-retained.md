@@ -1,6 +1,6 @@
 # BUG-20260910-application-edit-not-retained: edição da candidatura não é relida como enviada
 
-- **Status:** open
+- **Status:** fixed (reteste de jornada pendente)
 - **Impact (user-side):** Data-Loss
 - **Severity:** Critical · **Priority:** P0
 - **Persona Affected:** Andreus em triagem noturna
@@ -56,8 +56,17 @@ houve divergência transitória entre o selo Preparando e o seletor Pré-selecio
   Sua ausência na CLI não prova perda da nota de transição. Essa parte da
   expectativa de QA estava errada; a preservação do evento continua coberta
   pela carga com hash por tabela, não por essa CLI.
-- **Fix commit:** nenhum.
-- **Regression test:** ainda pendente. As capturas constituem reprodução inicial.
+- **Fix commit:** f16c2b4. O seletor passa a ser derivado de
+  `allowedTransitions()`, que lê o mesmo `LEGAL_TRANSITIONS` da política de
+  transição, então a recusa deixa de ser alcançável por clique. Ela continua
+  possível quando outra aba move a candidatura primeiro, e por isso
+  `trackAction` devolve a recusa como dado tipado: o formulário guarda o estado
+  em React, o rascunho sobrevive e a mensagem nomeia os dois estágios.
+- **Regression test:** `tests/repo.application.test.ts` afirma que o que
+  `allowedTransitions` oferece é exatamente o que `transitionApplication`
+  aceita, status a status; `tests/application-status-ui.test.ts` cobre a lista
+  traduzida; e `tests/e2e/ui.mjs` reproduz a recusa com duas abas e verifica que
+  a nota digitada continua na tela depois dela.
 
 ## Verification
 
