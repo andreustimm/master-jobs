@@ -24,6 +24,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   a partir de onde está.
 - Se a mudança for recusada, a nota que você digitou continua na tela, e o aviso
   diz de qual estágio para qual não é possível ir.
+- Depois de uma recusa, a tela passa a mostrar o estágio atual da candidatura e
+  as opções que realmente levam a algum lugar, sem precisar recarregar.
 
 ## [1.7.1] - 2026-09-16T22:56:50.789Z
 

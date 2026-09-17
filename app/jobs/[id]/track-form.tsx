@@ -59,6 +59,10 @@ export function TrackForm({
         setNote("");
         return null;
       }
+      // O servidor acabou de dizer qual é o estágio gravado. Apontar o seletor
+      // para ele deixa a tela coerente com a lista que a revalidação traz; sem
+      // isso a escolha recusada continuaria selecionada sobre uma lista nova.
+      if (result.code === "illegal_transition") setStatus(result.from);
       publishMutationFeedback({ kind: "error", message: messageFor(result, labels, statusLabels) });
     } catch (error) {
       // Redirect e notFound viajam como exceção; engoli-los deixaria a sessão

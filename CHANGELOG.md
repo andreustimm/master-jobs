@@ -16,6 +16,10 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   uma transição recusada pelo servidor preserva a nota digitada em vez de
   descartá-la com o formulário. `trackAction` devolve a recusa como dado
   tipado, e a mensagem nomeia os dois estágios (BUG-20260910).
+- A recusa também revalida o detalhe da vaga e devolve o seletor ao estágio
+  gravado, então a lista oferecida deixa de ser a de quando a página abriu.
+  Sem isso, o aviso mandava escolher um estágio alcançável enquanto só oferecia
+  estágios que seriam recusados de novo (BUG-20260917-stale-stages-after-refusal).
 
 ## [1.7.1] - 2026-09-16
 

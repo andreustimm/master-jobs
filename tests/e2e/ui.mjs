@@ -1790,6 +1790,38 @@ try {
     rejection.slice(0, 120),
   );
 
+  // BUG-20260917-stale-stages-after-refusal. O aviso manda escolher um estágio
+  // alcançável; antes da correção a lista continuava a de quando a página
+  // abriu, e as duas opções restantes eram recusadas de novo — instrução que a
+  // própria tela impedia de cumprir.
+  // A revalidação chega pela resposta da própria action; esperar o efeito, e não
+  // um tempo fixo, é o que separa "atualizou" de "ainda não atualizou".
+  await page.waitForFunction(
+    () => document.querySelectorAll('[data-testid="track-status"] option').length === 1,
+    undefined,
+    { timeout: 15_000 },
+  );
+  const afterRejection = await page.evaluate(() => ({
+    offered: [...document.querySelectorAll('[data-testid="track-status"] option')].map((o) => o.value),
+    selected: document.querySelector('[data-testid="track-status"]')?.value ?? "",
+    note: document.querySelector('[data-testid="track-note"]')?.value ?? "",
+  }));
+  check(
+    "depois da recusa a lista acompanha o estágio realmente gravado",
+    afterRejection.offered.length === 1 && afterRejection.offered[0] === "archived",
+    afterRejection.offered.join(","),
+  );
+  check(
+    "depois da recusa o seletor aponta para o estágio gravado",
+    afterRejection.selected === "archived",
+    afterRejection.selected,
+  );
+  check(
+    "a revalidação da recusa não apaga a nota digitada",
+    afterRejection.note === draft,
+    afterRejection.note.slice(0, 40),
+  );
+
 
   /* ------------------- Cenários por papel, ponta a ponta (E-06) ------------ */
 

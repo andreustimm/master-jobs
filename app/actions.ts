@@ -51,10 +51,16 @@ export async function trackAction(formData: FormData): Promise<TrackResult> {
     // para a tela explicar o motivo e PRESERVAR o que a pessoa digitou. Lançar
     // aqui deixava a nota da transição recusada ser descartada com o resto do
     // formulário, e a mensagem genérica não dizia de onde para onde não dá.
+    // A recusa prova que esta tela está atrasada: alguém moveu a candidatura
+    // desde que ela foi renderizada. Revalidar aqui, mesmo sem escrita, é o que
+    // faz a próxima renderização trazer o estágio real e os alcançáveis a partir
+    // dele — sem isso a pessoa relê a lista velha e é recusada de novo.
     if (error instanceof IllegalApplicationTransitionError) {
+      revalidatePath(`/jobs/${jobId}`);
       return { status: "error", code: "illegal_transition", from: error.from, to: error.to };
     }
     if (error instanceof ApplicationTransitionConflictError) {
+      revalidatePath(`/jobs/${jobId}`);
       return { status: "error", code: "conflict" };
     }
     throw error;

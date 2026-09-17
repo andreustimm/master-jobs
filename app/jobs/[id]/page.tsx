@@ -127,10 +127,10 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
       )}
 
       {candidateId !== null && (
-        // `key` pelo status gravado: depois de uma mudança aceita, o formulário
-        // volta a nascer do estado novo em vez de guardar o anterior no cliente.
+        // Sem `key` pelo status: remontar a cada mudança de estágio apagaria a
+        // nota digitada justamente quando a recusa revalida a página. O reset do
+        // que precisa ser resetado é explícito dentro do componente.
         <TrackForm
-          key={application?.status ?? "none"}
           action={trackAction}
           jobId={job.id}
           currentStatus={application?.status ?? null}
