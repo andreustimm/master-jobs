@@ -1,6 +1,6 @@
 # BUG-20260910-application-edit-not-retained: edição da candidatura não é relida como enviada
 
-- **Status:** fixed (reteste de jornada pendente)
+- **Status:** verified
 - **Impact (user-side):** Data-Loss
 - **Severity:** Critical · **Priority:** P0
 - **Persona Affected:** Andreus em triagem noturna
@@ -71,7 +71,16 @@ houve divergência transitória entre o selo Preparando e o seletor Pré-selecio
 
 ## Verification
 
-Não corrigido nem retestado. Não usar este achado como evidência de perda em produção.
+- **Retested:** 2026-09-17, Andreus em triagem noturna, J-preserve-application-decision, build standalone com PostgreSQL isolado · **Report:** docs/qa/reports/2026-09-17T222310262016Z-5e419094-application-draft-on-rejected-transition.md
+- **Result:** com a candidatura em "Preparando", o seletor oferece apenas
+  "Preparando" e "Candidatura enviada" — "Em entrevista" deixou de ser
+  escolhível, então a recusa não é mais alcançável por clique. Provocada pela
+  via pública (outra aba arquivou a candidatura), a recusa mantém
+  "Entrevista técnica marcada para sexta-feira às 14h." no campo e avisa
+  "O funil não vai de Arquivada para Candidatura enviada".
+- **Observação:** a nota gravada continua sem caminho de leitura em superfície
+  pública alguma. Isso não é este defeito — foi registrado em
+  BUG-20260917-transition-note-never-readable e aguarda decisão humana.
 
 ## Diagnóstico refinado (2026-09-10)
 
