@@ -44,7 +44,9 @@ export function TrackForm({
   labels: TrackFormLabels;
   statusLabels: Record<ApplicationStatus, string>;
 }) {
-  const [status, setStatus] = useState<string>(currentStatus ?? options[0]?.value ?? "shortlisted");
+  // Sem candidatura, o seletor abre em `shortlisted`: o primeiro movimento útil
+  // é encurtar a lista, não registrar que a vaga existe.
+  const [status, setStatus] = useState<string>(currentStatus ?? "shortlisted");
   const [note, setNote] = useState("");
 
   const [, formAction, pending] = useActionState(async (_previous: null, formData: FormData) => {
