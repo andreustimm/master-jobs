@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  allowedTransitions,
   APPLICATION_STATUSES,
   transitionApplication,
   type ApplicationStatus,
@@ -319,6 +320,33 @@ describe("transitionApplication", () => {
         );
         expect(result.ok, `${from} -> ${to}`).toBe(from === to || legal[from].includes(to));
       }
+    }
+  });
+
+  it("offers exactly the statuses the transition policy accepts", () => {
+    // A lista da interface é derivada, nunca uma segunda cópia da regra: o que
+    // `allowedTransitions` oferece é o que `transitionApplication` aceita. Se as
+    // duas divergirem, o seletor volta a levar alguém a uma recusa.
+    for (const from of APPLICATION_STATUSES) {
+      const accepted = APPLICATION_STATUSES.filter(
+        (to) =>
+          transitionApplication({ status: from, appliedAt: null }, to, "2026-08-20T01:00:00.000Z").ok,
+      );
+
+      expect(allowedTransitions(from), from).toEqual(accepted);
+      expect(allowedTransitions(from), from).toContain(from);
+    }
+  });
+
+  it("offers every status before the first observation", () => {
+    // Sem candidatura gravada, a pessoa pode registrar uma que já existe fora
+    // deste sistema — inclusive uma que nasce em entrevista.
+    expect(allowedTransitions(null)).toEqual(APPLICATION_STATUSES);
+  });
+
+  it("leaves a terminal state with itself as the only option", () => {
+    for (const terminal of ["rejected", "withdrawn", "archived"] as const) {
+      expect(allowedTransitions(terminal), terminal).toEqual([terminal]);
     }
   });
 });

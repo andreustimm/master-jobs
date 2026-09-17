@@ -9,6 +9,14 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- O seletor de estágio do funil passa a oferecer somente os status alcançáveis
+  a partir do atual, derivados de `allowedTransitions` no domínio de Pursuit, e
+  uma transição recusada pelo servidor preserva a nota digitada em vez de
+  descartá-la com o formulário. `trackAction` devolve a recusa como dado
+  tipado, e a mensagem nomeia os dois estágios (BUG-20260910).
+
 ## [1.7.1] - 2026-09-16
 
 ### Corrigido

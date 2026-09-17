@@ -18,6 +18,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- Ao mover uma candidatura, a lista mostra só os estágios para onde ela pode ir
+  a partir de onde está.
+- Se a mudança for recusada, a nota que você digitou continua na tela, e o aviso
+  diz de qual estágio para qual não é possível ir.
+
 ## [1.7.1] - 2026-09-16T22:56:50.789Z
 
 ### Corrigido

@@ -106,6 +106,26 @@ export function transitionApplication(
   };
 }
 
+/**
+ * Os status alcançáveis a partir do atual, o próprio incluído.
+ *
+ * A interface oferecia os dez status sempre: de `preparing` o seletor listava
+ * `interviewing`, o domínio recusava, e a pessoa descobria a regra pela
+ * mensagem de erro — depois de digitar a nota. A lista sai de
+ * `LEGAL_TRANSITIONS`, então oferecer só o possível é a mesma regra lida uma
+ * vez, e não uma segunda cópia dela que envelhece sozinha.
+ *
+ * Sem candidatura, tudo é alcançável: a primeira observação pode registrar uma
+ * candidatura que já existe fora deste sistema.
+ */
+export function allowedTransitions(
+  current: ApplicationStatus | null,
+): readonly ApplicationStatus[] {
+  if (!current) return APPLICATION_STATUSES;
+  const reachable = new Set<ApplicationStatus>([current, ...LEGAL_TRANSITIONS[current]]);
+  return APPLICATION_STATUSES.filter((status) => reachable.has(status));
+}
+
 export class IllegalApplicationTransitionError extends Error {
   readonly code = "illegal_transition";
   readonly from: ApplicationStatus;

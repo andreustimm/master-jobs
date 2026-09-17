@@ -2,8 +2,25 @@
 
 import { revalidatePath } from "next/cache";
 import { guard, guardOwnCandidate } from "./auth";
-import { setApplicationStatus } from "../src/contexts/pursuit/index.ts";
-import { parseApplicationStatus } from "../src/contexts/pursuit/domain/application.ts";
+import {
+  ApplicationTransitionConflictError,
+  setApplicationStatus,
+} from "../src/contexts/pursuit/index.ts";
+import {
+  IllegalApplicationTransitionError,
+  parseApplicationStatus,
+  type ApplicationStatus,
+} from "../src/contexts/pursuit/domain/application.ts";
+
+/**
+ * O que a tela precisa saber para explicar a recusa sem perder o rascunho.
+ * `from`/`to` viajam porque a mensagem nomeia os dois status, e o cliente não
+ * tem como recalcular o `from`: ele é o estado gravado, não o da página.
+ */
+export type TrackResult =
+  | { status: "ok" }
+  | { status: "error"; code: "illegal_transition"; from: ApplicationStatus; to: ApplicationStatus }
+  | { status: "error"; code: "conflict" };
 
 /**
  * Move a job through the funnel.
@@ -12,7 +29,7 @@ import { parseApplicationStatus } from "../src/contexts/pursuit/domain/applicati
  * transition lands in `application_event` identically. There is deliberately
  * no second write path — the UI is an adapter, not a parallel implementation.
  */
-export async function trackAction(formData: FormData) {
+export async function trackAction(formData: FormData): Promise<TrackResult> {
   // Before any effect, never after: an action that validates late has already
   // written by the time it decides it should not have.
   const { candidateId } = await guardOwnCandidate("application:write");
@@ -22,17 +39,32 @@ export async function trackAction(formData: FormData) {
   const note = formData.get("note");
 
   if (!Number.isFinite(jobId)) throw new Error("jobId inválido");
-  await setApplicationStatus(
-    candidateId,
-    jobId,
-    status,
-    typeof note === "string" ? note : undefined,
-  );
+  try {
+    await setApplicationStatus(
+      candidateId,
+      jobId,
+      status,
+      typeof note === "string" ? note : undefined,
+    );
+  } catch (error) {
+    // Recusa prevista do domínio não é falha do sistema: ela volta como dado
+    // para a tela explicar o motivo e PRESERVAR o que a pessoa digitou. Lançar
+    // aqui deixava a nota da transição recusada ser descartada com o resto do
+    // formulário, e a mensagem genérica não dizia de onde para onde não dá.
+    if (error instanceof IllegalApplicationTransitionError) {
+      return { status: "error", code: "illegal_transition", from: error.from, to: error.to };
+    }
+    if (error instanceof ApplicationTransitionConflictError) {
+      return { status: "error", code: "conflict" };
+    }
+    throw error;
+  }
 
   revalidatePath("/");
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/pipeline");
+  return { status: "ok" };
 }
 
 /**

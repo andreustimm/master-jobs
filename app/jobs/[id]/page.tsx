@@ -1,12 +1,10 @@
 import { TransitionLink } from "../../transition-link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
-import { getJobDetail } from "../../../src/contexts/pursuit/index.ts";
+import { allowedTransitions, getJobDetail } from "../../../src/contexts/pursuit/index.ts";
 import { scoreMessages } from "../../../src/contexts/matching/index.ts";
 import { renderScoreMessage } from "../../../src/core/i18n/index.ts";
 import { isPublicJobUrl } from "../../../src/core/job-url.ts";
@@ -14,8 +12,8 @@ import { trackAction } from "../../actions";
 import { Fit, Legend, ScoreBar, StatusBadge } from "../../ui";
 import { candidateScope, requirePage } from "../../auth";
 import { getTranslator } from "../../i18n";
-import { applicationStatusOptions } from "../../status.ts";
-import { MutationFeedbackForm } from "../../mutation-feedback";
+import { applicationStatusLabels, applicationStatusOptions } from "../../status.ts";
+import { TrackForm } from "./track-form";
 
 export const dynamic = "force-dynamic";
 
@@ -129,34 +127,25 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
       )}
 
       {candidateId !== null && (
-        <MutationFeedbackForm
+        // `key` pelo status gravado: depois de uma mudança aceita, o formulário
+        // volta a nascer do estado novo em vez de guardar o anterior no cliente.
+        <TrackForm
+          key={application?.status ?? "none"}
           action={trackAction}
-          successMessage={t("feedback.success")}
-          errorMessage={t("feedback.error")}
-          dismissLabel={t("feedback.dismiss")}
-          className="mb-7 flex flex-wrap items-center gap-2"
-        >
-          <input type="hidden" name="jobId" value={job.id} />
-          <span className="font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
-            mover para
-          </span>
-          <select
-            name="status"
-            defaultValue={application?.status ?? "shortlisted"}
-            className={cn(
-              "h-9 rounded-lg border border-input bg-background px-3 text-sm",
-              "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-            )}
-          >
-            {applicationStatusOptions(t, locale).map(({ value, label }) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <Input name="note" placeholder="nota (opcional)" className="max-w-[260px]" />
-          <Button type="submit">Salvar</Button>
-        </MutationFeedbackForm>
+          jobId={job.id}
+          currentStatus={application?.status ?? null}
+          options={applicationStatusOptions(t, locale, allowedTransitions(application?.status ?? null))}
+          statusLabels={applicationStatusLabels(t)}
+          labels={{
+            moveTo: t("jobDetail.moveTo"),
+            notePlaceholder: t("jobDetail.notePlaceholder"),
+            save: t("jobDetail.saveStatus"),
+            success: t("feedback.success"),
+            error: t("feedback.error"),
+            rejected: t("jobDetail.transitionRejected"),
+            conflict: t("jobDetail.transitionConflict"),
+          }}
+        />
       )}
 
       {job.descriptionText && (
