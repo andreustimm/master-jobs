@@ -56,7 +56,8 @@ houve divergência transitória entre o selo Preparando e o seletor Pré-selecio
   Sua ausência na CLI não prova perda da nota de transição. Essa parte da
   expectativa de QA estava errada; a preservação do evento continua coberta
   pela carga com hash por tabela, não por essa CLI.
-- **Fix commit:** f16c2b4. O seletor passa a ser derivado de
+- **Fix commit:** f16c2b4, com 916c531 preservando o padrão `shortlisted` de uma
+  candidatura ainda não registrada. O seletor passa a ser derivado de
   `allowedTransitions()`, que lê o mesmo `LEGAL_TRANSITIONS` da política de
   transição, então a recusa deixa de ser alcançável por clique. Ela continua
   possível quando outra aba move a candidatura primeiro, e por isso

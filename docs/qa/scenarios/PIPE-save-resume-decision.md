@@ -10,7 +10,7 @@ qa_status: untested
 bug_ids: BUG-20260910-application-edit-not-retained
 fix_status: fixed
 retest_status: pending
-fix_commits: f16c2b4
+fix_commits: f16c2b4; 916c531
 evidence: docs/qa/evidence/2026-09-10T011143000000Z-8bd417c2-supabase-production/CH-save-resume-application-baseline-before-save.png; docs/qa/evidence/2026-09-10T011143000000Z-8bd417c2-supabase-production/CH-save-resume-application-baseline-after-save.png
 last_report: docs/qa/reports/2026-09-10T011143000000Z-8bd417c2-supabase-production.md
 overlaps:
