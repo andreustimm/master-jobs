@@ -20,6 +20,14 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ### Novidade
 
+- O funil agora mostra quando a vaga foi encerrada ou saiu do quadro, ao lado do
+  estágio da sua candidatura. Uma coisa não mexe na outra: a vaga encerrar não
+  move você de estágio.
+- Dá para filtrar o funil por estágio e percorrer o histórico em páginas. O
+  total continua sendo o mesmo enquanto você navega, e o filtro fica no endereço
+  — recarregar ou voltar não perde o que você estava vendo.
+### Novidade
+
 - A limpeza do acervo ganhou um passo reversível: vagas encerradas há muito
   tempo podem sair da lista ativa sem serem apagadas, e voltam sozinhas se a
   vaga reabrir. Nada do que você registrou sobre uma candidatura — o estágio, as

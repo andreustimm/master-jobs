@@ -542,6 +542,11 @@ export const en: Dictionary = {
     jobsList: "job list",
     appliedOn: "applied on {date}",
     nextAction: "next: {action}",
+    jobClosed: "job closed",
+    jobArchived: "job archived",
+    allStages: "all",
+    unknownStage: "Unknown stage; showing the whole pipeline.",
+    noneInStage: "No applications in this stage.",
   },
   referrals: {
     title: "Referrals",

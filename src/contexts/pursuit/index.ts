@@ -21,6 +21,7 @@ export {
   applicationTimeline,
   ApplicationTransitionConflictError,
   getJobDetail,
+  PIPELINE_PAGE_SIZE,
   pipelineCounts,
   pipelineRows,
   setApplicationDocument,
