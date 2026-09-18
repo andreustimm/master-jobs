@@ -226,6 +226,21 @@ pnpm jho sources probe remotive "ai engineer"
 pnpm jho sources probe himalayas ""
 ```
 
+**Zero vagas não prova handle errado — e em algumas fontes não prova nada.**
+Handles conferidos contra a API real em 2026-09-18, úteis para separar "o
+adapter está quebrado" de "escrevi o identificador errado":
+
+```bash
+pnpm jho sources probe smartrecruiters BoschGroup   # 500 vagas
+pnpm jho sources probe recruitee grip               # 3 vagas
+```
+
+A SmartRecruiters devolve `totalFound: 0` com HTTP 200 tanto para identificador
+inexistente quanto para empresa sem vaga aberta — `Visa` e `Bosch` parecem
+certos e são os dois zero. O Recruitee separa os casos: subdomínio inexistente
+responde `Not Found`, board vazio responde lista vazia. Detalhe por fonte em
+[`docs/sources.md`](sources.md).
+
 Um `kind` sem adapter registrado em `src/core/sources/registry.ts` faz `getAdapter()`
 lançar:
 
