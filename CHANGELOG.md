@@ -20,6 +20,12 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   gravado, então a lista oferecida deixa de ser a de quando a página abriu.
   Sem isso, o aviso mandava escolher um estágio alcançável enquanto só oferecia
   estágios que seriam recusados de novo (BUG-20260917-stale-stages-after-refusal).
+- A nota escrita sobre um estágio que não muda passa a ser gravada como evento
+  `note` em vez de descartada em silêncio — caminho que a lista restrita tornou
+  o único possível a partir de um estado terminal. `allowedTransitions` degrada
+  para um status fora do funil em vez de lançar durante a renderização, e o
+  seletor deriva o valor da lista oferecida, então um conflito de concorrência
+  não deixa o formulário enviar sem `status`.
 
 ## [1.7.1] - 2026-09-16
 

@@ -189,6 +189,33 @@ describe("setApplicationStatus", () => {
     expect(events).toHaveLength(1);
   });
 
+  it("keeps a note written on a stage that does not move", async () => {
+    // De um estado terminal a única transição oferecida é a atual, então salvar
+    // uma nota cai sempre no caminho de no-op. Descartar ali era anunciar
+    // sucesso sem gravar nada — o mesmo silêncio que o canal já não sofre.
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "applied");
+    await setApplicationStatus(candidateId, jobId, "archived");
+
+    await setApplicationStatus(candidateId, jobId, "archived", "Recrutador pediu para tentar de novo no Q3.");
+
+    const [app] = await db.select().from(application).where(eq(application.jobId, jobId));
+    const events = await db
+      .select()
+      .from(applicationEvent)
+      .where(eq(applicationEvent.applicationId, app!.id));
+
+    expect(app!.status).toBe("archived");
+    const notes = events.filter((event) => event.kind === "note");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.detail).toBe("Recrutador pediu para tentar de novo no Q3.");
+    expect(notes[0]!.fromStatus).toBeNull();
+    expect(notes[0]!.toStatus).toBeNull();
+    // Nenhuma transição inventada: os dois `status_change` são os reais.
+    expect(events.filter((event) => event.kind === "status_change")).toHaveLength(2);
+  });
+
   it("rejects an illegal backwards transition without changing history", async () => {
     const candidateId = await seedCandidate("one", true);
     const jobId = await seedJob();
@@ -336,6 +363,16 @@ describe("transitionApplication", () => {
       expect(allowedTransitions(from), from).toEqual(accepted);
       expect(allowedTransitions(from), from).toContain(from);
     }
+  });
+
+  it("degrades instead of crashing on a status outside the funnel", () => {
+    // A coluna é `text` sem CHECK no banco, e a função roda ao renderizar a
+    // tela. Uma linha estranha vinda do snapshot legado não pode virar página
+    // quebrada — antes desta guarda, o spread de `undefined` lançava.
+    const unknown = "triaging" as ApplicationStatus;
+
+    expect(() => allowedTransitions(unknown)).not.toThrow();
+    expect(allowedTransitions(unknown)).toEqual([unknown]);
   });
 
   it("offers every status before the first observation", () => {

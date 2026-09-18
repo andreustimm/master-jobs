@@ -48,6 +48,9 @@ export function TrackForm({
   // é encurtar a lista, não registrar que a vaga existe.
   const [status, setStatus] = useState<string>(currentStatus ?? "shortlisted");
   const [note, setNote] = useState("");
+  const selected = options.some((option) => option.value === status)
+    ? status
+    : options[0]?.value ?? status;
 
   const [, formAction, pending] = useActionState(async (_previous: null, formData: FormData) => {
     try {
@@ -88,7 +91,11 @@ export function TrackForm({
       <select
         name="status"
         data-testid="track-status"
-        value={status}
+        // O valor sai da lista oferecida, nunca do estado cru. Num conflito de
+        // concorrência a revalidação traz opções novas e a escolha anterior
+        // pode não estar entre elas: um `select` controlado com valor ausente
+        // renderiza vazio e envia SEM `status`, e o servidor recebe "null".
+        value={selected}
         onChange={(event) => setStatus(event.target.value)}
         className={cn(
           "h-9 rounded-lg border border-input bg-background px-3 text-sm",
