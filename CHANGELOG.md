@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-09-18
+
 ### Alterado
 
 - A varredura diária declara `JHO_ENV=production` e exige `JHO_SOURCE_ALLOWLIST`

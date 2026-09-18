@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-09-18T15:58:18.484Z
+
 ### Melhorado
 
 - A busca automática de vagas só roda no sistema publicado. Versões de teste

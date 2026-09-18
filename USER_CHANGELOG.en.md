@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-09-18T15:58:18.484Z
+
 ### Improved
 
 - Automatic job fetching now runs only on the published system. Test versions no
