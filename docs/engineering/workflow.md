@@ -12,7 +12,11 @@ Quem usa nvm pode executar `nvm use` antes dos comandos.
    O segundo comando só consulta o estado local; atualize as referências com
    `rtk git fetch origin --prune` antes de decidir sobre integração.
 2. Reuse a worktree da demanda se ela já existir. Para trabalho novo, crie
-   `codex/<descricao>` a partir de `origin/dev` em uma worktree própria.
+   `<tipo>/<slug>` a partir de `origin/dev` em uma worktree própria. O tipo é
+   o do Conventional Commits (`feat`, `fix`, `docs`, `chore`, `refactor`,
+   `test`, `perf`, `ci`, `build`, `style`, `revert`) e o slug é kebab-case
+   minúsculo: `feat/busca-por-tecnologia`. `.githooks/pre-push` recusa outro
+   formato; `codex/*` é legado aceito para as branches já abertas.
 3. Se houver alterações na raiz em `dev`, identifique a origem antes de editar.
    Preserve patch **e arquivos não rastreados** em `data/workspace-recovery/`
    ou na worktree responsável. Compare a cópia antes de limpar. Nunca use
@@ -69,6 +73,6 @@ feitas diretamente pela API: as regras de PR continuam necessárias.
 Adotamos isolamento por demanda, proteção local das branches permanentes,
 preservação antes de reconciliar a raiz, evidência atual e limpeza após merge.
 A inspeção usa Git e um script pequeno; o registro usa os diretórios existentes.
-O master-jobs mantém seus slugs, prefixo `codex/`, pnpm, E2E local isolado e
+O master-jobs mantém seus slugs, branches `<tipo>/<slug>`, pnpm, E2E local isolado e
 QA vivo. Não exige IDs sequenciais, métricas por execução, recibos de gates,
 sincronização com GitHub Project ou um motor de orquestração para uma correção.
