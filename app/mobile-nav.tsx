@@ -90,11 +90,13 @@ function updateNavigationMode() {
 export function MobileNav({
   hasCandidateScope,
   isAdmin,
+  isRecruiter,
   rotulo,
   locale,
 }: {
   hasCandidateScope: boolean;
   isAdmin: boolean;
+  isRecruiter: boolean;
   rotulo: string;
   locale: LocaleId;
 }) {
@@ -187,6 +189,7 @@ export function MobileNav({
           <NavLinks
             hasCandidateScope={hasCandidateScope}
             isAdmin={isAdmin}
+            isRecruiter={isRecruiter}
             // Linha inteira clicável, e não só o texto: num menu vertical o alvo
             // é a linha, e um `py-3` generoso é o que separa item de item no
             // toque.

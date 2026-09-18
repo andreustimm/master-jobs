@@ -9,19 +9,19 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-09-18
+
 ### Adicionado
 
-- O funil passa a dizer o estado da VAGA ao lado do estágio da candidatura —
-  encerrada ou arquivada —, derivado de `jobLifecycleState` no domínio de ciclo
-  de vida. Os dois nunca se confundem: a vaga fecha sozinha, o estágio só muda
-  por decisão do usuário, e era justamente a candidatura de vaga encerrada que
-  ficava sem contexto na tela (F-07, US-001).
-- Filtro por estágio e paginação no funil, ambos na URL. O total vem das
-  contagens e não da página, então paginar não faz o número piscar; a ordem
-  desempata por `id`, senão duas candidaturas salvas no mesmo instante trocam
-  de lugar entre páginas e uma some. Estágio desconhecido na URL mostra o funil
-  inteiro com um aviso, em vez de uma tela vazia sem explicação.
-
+- Área do recrutador em `/recruiter`: os candidatos que o autorizaram, com o
+  funil de cada um, e `/recruiter/[candidateId]` com o histórico daquele
+  candidato. O escopo vem de `session.linkedCandidateIds`, resolvido na carga da
+  sessão, e entra em SQL como `inArray` — o banco não chega a ler linha de quem
+  está fora, em vez de ler tudo e filtrar depois.
+- Candidato inexistente e candidato que existe mas não é acompanhado recebem a
+  MESMA resposta, 404. Distinguir os dois contaria que aquela pessoa está
+  cadastrada, e existência é informação — mesmo raciocínio de `/p/[slug]`. Id
+  malformado cai no mesmo 404, antes de qualquer consulta (F-07, US-002).
 ## [1.12.0] - 2026-09-18
 
 ### Alterado
@@ -58,6 +58,18 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   também sem concorrência nenhuma, bastando um currículo anterior com outro
   rótulo. O caminho virou upsert no índice parcial, com a mesma retentativa dos
   demais.
+### Adicionado
+
+- O funil passa a dizer o estado da VAGA ao lado do estágio da candidatura —
+  encerrada ou arquivada —, derivado de `jobLifecycleState` no domínio de ciclo
+  de vida. Os dois nunca se confundem: a vaga fecha sozinha, o estágio só muda
+  por decisão do usuário, e era justamente a candidatura de vaga encerrada que
+  ficava sem contexto na tela (F-07, US-001).
+- Filtro por estágio e paginação no funil, ambos na URL. O total vem das
+  contagens e não da página, então paginar não faz o número piscar; a ordem
+  desempata por `id`, senão duas candidaturas salvas no mesmo instante trocam
+  de lugar entre páginas e uma some. Estágio desconhecido na URL mostra o funil
+  inteiro com um aviso, em vez de uma tela vazia sem explicação.
 ### Adicionado
 
 - Estado de arquivamento (`job.archived_at`) separado do fechamento da fonte, e

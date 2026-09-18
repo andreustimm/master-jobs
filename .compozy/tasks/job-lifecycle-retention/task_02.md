@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Candidate application history
 type: frontend
 complexity: medium
@@ -31,11 +31,11 @@ job closes or archives.
 
 ## Subtasks
 
-- [ ] Add candidate-scoped history query and typed view model.
-- [ ] Add status counts, pagination, job-state labels, next action, and events.
-- [ ] Add localized empty/error/closed/archived content.
-- [ ] Wire page guard and refresh-safe navigation.
-- [ ] Add assigned unit, integration, and E2E coverage.
+- [x] Add candidate-scoped history query and typed view model.
+- [x] Add status counts, pagination, job-state labels, next action, and events.
+- [x] Add localized empty/error/closed/archived content.
+- [x] Wire page guard and refresh-safe navigation.
+- [x] Add assigned unit, integration, and E2E coverage.
 
 ## Implementation Details
 
@@ -69,9 +69,9 @@ Server Component and context composition patterns; do not put SQL in JSX.
 
 ## Tests
 
-- [ ] UT-006 — candidate-scope validation and invalid status input.
-- [ ] IT-003 — candidate query, pagination, events, and errors.
-- [ ] E2E-001 — candidate history through refresh.
+- [x] UT-006 — candidate-scope validation and invalid status input.
+- [x] IT-003 — candidate query, pagination, events, and errors.
+- [x] E2E-001 — candidate history through refresh.
 
 ## Success Criteria
 

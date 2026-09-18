@@ -124,6 +124,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // política nega administração, e um link que leva a uma página que vai negar
   // é pior que link nenhum.
   const isAdmin = session?.roles.includes("admin") === true && session.impersonatedBy === null;
+  // O link do recrutador segue o PAPEL, e a página confere o vínculo. Mostrar
+  // um link que leva a uma lista vazia é melhor que esconder a área de quem
+  // ainda não foi autorizado por ninguém: a ausência ali é explicada na tela.
+  const isRecruiter = session?.roles.includes("recruiter") === true;
   const borrowedAs = session && session.impersonatedBy !== null ? session.email : null;
 
   // Escolha gravada primeiro; sem ela, negocia pelo Accept-Language. Servir
@@ -260,6 +264,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <NavLinks
                   hasCandidateScope={hasCandidateScope}
                   isAdmin={isAdmin}
+                  isRecruiter={isRecruiter}
                   linkClass={navClass}
                   t={t}
                 />
@@ -273,6 +278,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <MobileNav
                   hasCandidateScope={hasCandidateScope}
                   isAdmin={isAdmin}
+                  isRecruiter={isRecruiter}
                   rotulo={t("nav.menu")}
                   locale={locale}
                 />

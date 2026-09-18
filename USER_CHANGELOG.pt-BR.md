@@ -18,14 +18,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-09-18T19:00:08.565Z
+
 ### Novidade
 
-- O funil agora mostra quando a vaga foi encerrada ou saiu do quadro, ao lado do
-  estágio da sua candidatura. Uma coisa não mexe na outra: a vaga encerrar não
-  move você de estágio.
-- Dá para filtrar o funil por estágio e percorrer o histórico em páginas. O
-  total continua sendo o mesmo enquanto você navega, e o filtro fica no endereço
-  — recarregar ou voltar não perde o que você estava vendo.
+- Recrutadores passam a ter uma área própria, com as pessoas que os autorizaram
+  a acompanhar o funil. Quem cria essa autorização é o próprio candidato, e o
+  recrutador vê apenas o andamento — nunca o funil de quem não o autorizou.
 
 ## [1.12.0] - 2026-09-18T18:01:07.970Z
 
@@ -40,6 +39,14 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 - Preparar uma versão de teste falhava quando já existia um currículo de exemplo
   gravado com outro nome. Agora a preparação atualiza o currículo que está lá em
   vez de tentar criar um segundo.
+### Novidade
+
+- O funil agora mostra quando a vaga foi encerrada ou saiu do quadro, ao lado do
+  estágio da sua candidatura. Uma coisa não mexe na outra: a vaga encerrar não
+  move você de estágio.
+- Dá para filtrar o funil por estágio e percorrer o histórico em páginas. O
+  total continua sendo o mesmo enquanto você navega, e o filtro fica no endereço
+  — recarregar ou voltar não perde o que você estava vendo.
 ### Novidade
 
 - A limpeza do acervo ganhou um passo reversível: vagas encerradas há muito

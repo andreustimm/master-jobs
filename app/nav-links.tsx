@@ -19,11 +19,13 @@ import type { Translator } from "../src/core/i18n/index.ts";
 export function NavLinks({
   hasCandidateScope,
   isAdmin,
+  isRecruiter,
   linkClass,
   t,
 }: {
   hasCandidateScope: boolean;
   isAdmin: boolean;
+  isRecruiter: boolean;
   linkClass: string;
   t: Translator["t"];
 }) {
@@ -50,6 +52,11 @@ export function NavLinks({
       {hasCandidateScope && (
         <TransitionLink href="/candidate" className={linkClass} data-testid="nav-candidate">
           {t("nav.candidate")}
+        </TransitionLink>
+      )}
+      {isRecruiter && (
+        <TransitionLink href="/recruiter" className={linkClass} data-testid="nav-recruiter">
+          {t("recruiter.title")}
         </TransitionLink>
       )}
       {isAdmin && (

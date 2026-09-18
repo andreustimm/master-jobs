@@ -18,14 +18,14 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-09-18T19:00:08.565Z
+
 ### New
 
-- The pipeline now shows when a job was closed or left the board, next to your
-  application's stage. One does not touch the other: a job closing does not move
-  you to another stage.
-- You can filter the pipeline by stage and page through the history. The total
-  stays the same while you navigate, and the filter lives in the address — a
-  reload or a back button does not lose what you were looking at.
+- Recruiters now have an area of their own, listing the people who authorised
+  them to follow a pipeline. That authorisation is created by the candidate, and
+  a recruiter sees only the progress — never the pipeline of someone who did not
+  authorise them.
 
 ## [1.12.0] - 2026-09-18T18:01:07.970Z
 
@@ -40,6 +40,14 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 - Preparing a test version failed when a sample résumé was already stored under
   a different name. The preparation now updates the résumé that is there instead
   of trying to create a second one.
+### New
+
+- The pipeline now shows when a job was closed or left the board, next to your
+  application's stage. One does not touch the other: a job closing does not move
+  you to another stage.
+- You can filter the pipeline by stage and page through the history. The total
+  stays the same while you navigate, and the filter lives in the address — a
+  reload or a back button does not lose what you were looking at.
 ### New
 
 - Corpus cleanup gained a reversible step: jobs closed long ago can leave the

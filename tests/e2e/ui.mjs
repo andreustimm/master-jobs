@@ -1914,6 +1914,55 @@ try {
         exportDownload.suggestedFilename().startsWith("vagas-"),
         exportDownload.suggestedFilename(),
       );
+
+      // F-07 E2E-002 — o escopo do recrutador vem do vínculo, e o endereço não
+      // o alarga. A fixture não cria vínculo nenhum para esta conta, então a
+      // área existe, explica o vazio, e qualquer id na URL responde 404 — o
+      // mesmo 404 de um candidato que não existe, para não contar quem existe.
+      const scopeFailures = [];
+      const followed = await rolePage.goto(`${BASE}/recruiter`, { waitUntil: "networkidle" });
+      if (followed?.status() !== 200) scopeFailures.push(`/recruiter deu ${followed?.status()}`);
+      if ((await rolePage.locator('[data-testid="recruiter-empty"]').count()) !== 1) {
+        scopeFailures.push("sem vínculo, a área não explica o vazio");
+      }
+      if ((await rolePage.locator('[data-testid^="recruiter-candidate-"]').count()) !== 0) {
+        scopeFailures.push("lista trouxe candidato sem vínculo");
+      }
+
+      // Requisição direta, e não navegação: o que se mede aqui é o STATUS, e
+      // um 404 navegado entra no coletor de erros de console da E2E-025 como
+      // se a aplicação tivesse quebrado. O contexto é o mesmo, então a sessão
+      // do recrutador vai junto — é ela que está sendo testada.
+      // As sondas de 404 navegam num contexto PRÓPRIO, com sessão própria. Num
+      // 404 o navegador registra "Failed to load resource" no console, e a
+      // E2E-025 coleta o console de `rolePage` para a suíte inteira: sondar
+      // ali reprovaria aquela verificação com um 404 que este teste pediu.
+      // Requisição direta também não serve — ela não leva o cookie de sessão e
+      // o proxy devolve 307, que mede o login e não o escopo.
+      const probeCtx = await browser.newContext();
+      const probePage = await probeCtx.newPage();
+      await probeCtx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+      await probePage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+      await probePage.fill('input[name="email"]', scenario.email);
+      await probePage.fill('input[name="password"]', E2E_PASSWORD);
+      await probePage.locator('[data-testid="login-submit"]').click();
+      await probePage.waitForTimeout(2000);
+
+      for (const probe of ["1", "999999", "abc"]) {
+        const denied = await probePage.goto(`${BASE}/recruiter/${probe}`, {
+          waitUntil: "networkidle",
+        });
+        if (denied?.status() !== 404) {
+          scopeFailures.push(`/recruiter/${probe} respondeu ${denied?.status()}, esperado 404`);
+        }
+      }
+      await probeCtx.close();
+
+      check(
+        "F-07 E2E-002 recrutador sem vínculo não alcança funil por deep link",
+        scopeFailures.length === 0,
+        scopeFailures.join(" | "),
+      );
     }
 
     // `start_url` do manifest é "/" e não pode variar por papel. Instalada, a
