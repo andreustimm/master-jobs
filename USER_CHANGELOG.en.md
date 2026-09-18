@@ -18,6 +18,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preparing a test version with sample data could fail when two releases
+  happened at the same time. The preparation now settles on its own and ends
+  with the same set of samples, with nothing duplicated.
+
 ## [1.11.0] - 2026-09-18T15:58:18.484Z
 
 ### Improved

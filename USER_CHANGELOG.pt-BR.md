@@ -18,6 +18,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- Preparar uma versão de teste com dados de exemplo podia falhar quando duas
+  publicações aconteciam ao mesmo tempo. Agora a preparação se acerta sozinha e
+  termina com o mesmo conjunto de exemplos, sem repetir nada.
+
 ## [1.11.0] - 2026-09-18T15:58:18.484Z
 
 ### Melhorado
