@@ -29,10 +29,11 @@ screen. It introduces:
   descriptions, a "brought by my term" filter and a minimum-pay filter that
   compares normalized amounts.
 
-The product's bottleneck is the decision, not discovery (`docs/product/
-vision.md`). This feature respects that: captures only add jobs to the corpus,
-and every job still reaches the candidate through the Jobs screen's fit cut and
-filters, now measured against the target the job actually fits.
+The product's bottleneck is the decision, not discovery
+(`docs/product/vision.md`). This feature respects that: captures only add jobs
+to the corpus, and every job still reaches the candidate through the Jobs
+screen's fit cut and filters, now measured against the target the job actually
+fits.
 
 It is for candidates. Administrators get aggregate health of term captures;
 recruiters see none of it.
@@ -139,8 +140,10 @@ they are constrained (ADR-004):
 
 ### 4. Fit per track
 
-Every open job receives one fit per active track of the candidate. Blockers
-and eligibility are evaluated once and apply to every track. Each track's pay
+Every open job receives a fit on the primary track; on each accepted track, the
+jobs that mention one of its target titles or positive keywords receive a fit
+(rule 26). Blockers and eligibility are evaluated once and apply to every
+track. Each track's pay
 component compares with that track's compensation ranges, and its seniority
 component with that track's target seniority. Editing a track recalculates only
 that track.
@@ -296,8 +299,13 @@ to what is new (6).
 
 ### Fit per track
 
-26. Every open job has one fit per active track. Blockers and eligibility are
-    evaluated once and apply to every track's fit.
+26. Every open job has a fit on the primary track. On an accepted track, a job
+    has a fit only when at least one of the track's target titles or positive
+    keywords appears as a whole word in its title or description; any other job
+    is outside that track and does not appear under it (the job detail still
+    computes that track's fit on demand). Blockers and eligibility are
+    evaluated once and apply to every track's fit. *(Amended by TechSpec
+    ADR-009: relevance gate chosen to bound storage.)*
 27. A track's pay component compares with that track's compensation ranges;
     its seniority component with that track's target seniority. Missing job
     data scores neutral, never punitive, as today.

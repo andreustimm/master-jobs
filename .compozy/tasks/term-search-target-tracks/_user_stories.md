@@ -535,10 +535,14 @@ Edge cases:
 
 Acceptance criteria:
 
-- AC-1: For every open job, the candidate has one fit per active track.
+- AC-1: For every open job, the candidate has a fit on the primary track; on
+  each accepted track, every open job whose title or description mentions one
+  of the track's target titles or positive keywords (whole word) has a fit, and
+  no other job does.
 - AC-2: Blockers (for example, US-only work authorization) are evaluated once
   and apply to every track's fit.
-- AC-3: The job detail shows each track's fit with its component breakdown.
+- AC-3: The job detail shows each active track's fit with its component
+  breakdown, computing on demand the fit of a track the job is outside of.
 
 Edge cases:
 
@@ -547,8 +551,11 @@ Edge cases:
   versions is shown.
 - EC-3: Scale — 6 tracks and 10,000 open jobs → all fits are available within
   the recalculation notice period; the Jobs screen stays usable meanwhile.
-- EC-4: Job without description → scored as today (neutral where data is
-  missing) under every track.
+- EC-4: Job without description → scored as today on the primary track; on an
+  accepted track it is scored only when its title matches the track.
+- EC-5: An accepted track's keywords change → jobs that stop matching lose
+  their row on that track at the next recalculation; jobs that start matching
+  gain one.
 
 ### US-019: Track pay ranges and seniority shape its fit
 
@@ -569,8 +576,9 @@ Edge cases:
 
 - EC-1: Job without disclosed pay → neutral pay component under every track,
   as today.
-- EC-2: Track without compensation ranges → the pay component behaves as today
-  with no ranges.
+- EC-2: New track whose ranges the candidate never edited → it starts with the
+  primary track's ranges (from the suggestion); the editor refuses to save a
+  track with no range, as the profile requires today.
 
 ## Jobs Screen
 
@@ -584,7 +592,7 @@ Acceptance criteria:
 - AC-1: Without a track in the URL, the screen shows fits of the primary track.
 - AC-2: Selecting a track shows that track's fit; the choice lives in the URL.
 - AC-3: Selecting "all tracks" shows each job once, with the fit and label of
-  the track where it fits best.
+  the track where it fits best among the tracks that scored it.
 - AC-4: The minimum-fit cut applies to the fit displayed.
 - AC-5: The title cluster filter lists only the selected track's clusters and
   narrows within that track.
