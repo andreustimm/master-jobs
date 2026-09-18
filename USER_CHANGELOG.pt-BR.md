@@ -18,6 +18,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Melhorado
+
+- Os ambientes de teste do sistema deixam de buscar vagas de verdade: eles
+  passam a trabalhar só sobre dados de exemplo. Quem usa o sistema publicado não
+  vê diferença; quem experimenta uma versão de teste não consome mais a cota
+  dos sites de vagas nem mistura dados reais com ensaio.
+
 ## [1.8.0] - 2026-09-18T02:18:09.098Z
 
 ### Adicionado

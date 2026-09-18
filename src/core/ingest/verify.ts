@@ -25,6 +25,7 @@ import { getDb } from "../db/client.ts";
 import { job } from "../db/schema.ts";
 import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
+import { guardIngestion } from "./guard.ts";
 import { probe } from "./probe.ts";
 
 export type VerifyResult = {
@@ -48,6 +49,10 @@ export async function verifyJobs(
     onProgress?: (done: number, total: number) => void;
   } = {},
 ): Promise<VerifyResult> {
+  // Reconferir é rede de terceiro como qualquer outra: bloqueia antes de abrir
+  // conexão com o banco para montar a fila de candidatos.
+  guardIngestion();
+
   const db = getDb();
   const limit = opts.limit ?? 200;
   const minFit = opts.minFit ?? 55;
