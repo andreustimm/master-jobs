@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-09-18T19:54:03.273Z
+
 ### Fixed
 
 - Opening the pipeline on a page that does not exist no longer claims you have

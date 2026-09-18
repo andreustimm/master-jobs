@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-09-18
+
 ### Corrigido
 
 - O funil pedido numa página além do fim mostrava "nada no funil ainda" para

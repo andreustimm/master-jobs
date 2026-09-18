@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-09-18T19:54:03.273Z
+
 ### Corrigido
 
 - Abrir o funil numa página que não existe deixa de dizer que você não tem
