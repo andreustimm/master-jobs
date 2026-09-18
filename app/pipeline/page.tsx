@@ -44,22 +44,25 @@ export default async function Pipeline({
     return Array.isArray(value) ? value[0] : value;
   };
   const { stage, invalid } = readStage(one("stage"));
-  const page = Math.max(1, Number(one("page") ?? 1) || 1);
+  const asked = Math.max(1, Number(one("page") ?? 1) || 1);
 
-  const [counts, rows] = await Promise.all([
-    pipelineCounts(candidateId),
-    pipelineRows(candidateId, {
-      status: stage,
-      limit: PIPELINE_PAGE_SIZE,
-      offset: (page - 1) * PIPELINE_PAGE_SIZE,
-    }),
-  ]);
-
+  // As contagens vêm antes das linhas porque é delas que sai a última página.
+  // Pedir uma página além do fim devolvia zero linhas, e a tela dizia "nada no
+  // funil ainda" para quem TEM candidatura — a mesma mentira que a lista vazia
+  // contaria num estágio desconhecido.
+  const counts = await pipelineCounts(candidateId);
   // O total vem das contagens, não da página: paginar não muda quantas
   // candidaturas existem, e recontar por página faria o número piscar.
   const everything = Object.values(counts).reduce((sum, n) => sum + n, 0);
   const total = stage ? (counts[stage] ?? 0) : everything;
   const lastPage = Math.max(1, Math.ceil(total / PIPELINE_PAGE_SIZE));
+  const page = Math.min(asked, lastPage);
+
+  const rows = await pipelineRows(candidateId, {
+    status: stage,
+    limit: PIPELINE_PAGE_SIZE,
+    offset: (page - 1) * PIPELINE_PAGE_SIZE,
+  });
   const href = (next: { stage?: string | null; page?: number }): Route => {
     const query = new URLSearchParams();
     const wanted = next.stage === undefined ? stage : next.stage;

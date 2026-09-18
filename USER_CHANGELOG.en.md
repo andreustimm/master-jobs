@@ -18,6 +18,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-09-18T19:54:03.273Z
+
+### Fixed
+
+- Opening the pipeline on a page that does not exist no longer claims you have
+  no applications. The list now falls back to the last page with content.
+
 ## [1.13.0] - 2026-09-18T19:00:08.565Z
 
 ### New

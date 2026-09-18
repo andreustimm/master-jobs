@@ -12,9 +12,29 @@ fix_status: fixed
 retest_status: verified
 fix_commits: f16c2b4; 916c531; fa1269d; 03ac0f6; 9bb7fc0
 evidence: docs/qa/evidence/2026-09-17T222310262016Z-5e419094-application-draft-on-rejected-transition/CH-save-resume-application-step3-reachable-stages.png
-last_report: docs/qa/reports/2026-09-18T022259704434Z-6535cca7-release-candidate-1.8.0-promovido.md
+last_report: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md
 overlaps:
 ---
+
+Re-andado em 18/09 sobre `71d450c` depois que a SUPERFÍCIE do passo 3 mudou: o funil
+passou a filtrar por estágio, paginar e mostrar o estado da vaga ao lado do
+estágio da candidatura. Nada regrediu: gravar com nota confirma na hora, a nota
+aparece no histórico da candidatura, o funil mostra a vaga no estágio salvo,
+filtrar por estágio mantém a linha e leva o recorte para a URL, e tudo isso
+sobrevive a refresh e a sair e entrar de novo. A CLI pública, com credencial
+restrita própria, mostra o mesmo estágio.
+
+Um defeito apareceu na superfície nova e foi corrigido nesta mesma rodada:
+pedir uma página além do fim (`?page=999`) esvaziava a lista e a tela dizia
+"nada no funil ainda" para quem TEM candidatura. Era a mesma mentira que a
+lista vazia contaria num estágio desconhecido. O pedido passa a ser limitado à
+última página real.
+
+O passo 4 entrega o ESTÁGIO pela CLI, não a nota — `jho jobs show` imprime
+`Pipeline applied · applied <data>` e nada sobre a nota. A nota é legível na
+interface, no histórico da candidatura, e é assim desde a 1.8.0; a lacuna é de
+paridade entre superfícies, não de dado perdido. Registrada como paper cut no
+relatório.
 
 Full do release candidate 1.7.1 (`676d5e0`, o que está em `staging`): este
 cenário FALHA ali. O status deste arquivo descreve a branch de correção; o RC

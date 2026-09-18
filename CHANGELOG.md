@@ -9,6 +9,17 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-09-18
+
+### Corrigido
+
+- O funil pedido numa página além do fim mostrava "nada no funil ainda" para
+  quem TEM candidatura: o número vinha da URL e virava `offset` sem ser
+  confrontado com o total, e o branch de lista vazia não distingue "não há
+  nada" de "não há nada AQUI". As contagens passam a ser lidas antes das
+  linhas, e o pedido é limitado à última página real. Encontrado em jornada de
+  QA sobre a superfície nova do funil, não por teste automatizado.
+
 ## [1.13.0] - 2026-09-18
 
 ### Adicionado
