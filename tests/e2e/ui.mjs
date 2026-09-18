@@ -3458,6 +3458,14 @@ try {
     historyFailures.push("estágio inválido esconde o funil em vez de mostrá-lo inteiro");
   }
 
+  // Página além do fim mostrava "nada no funil ainda" para quem TEM
+  // candidatura — a lista vazia contando a mesma mentira que o estágio
+  // desconhecido contaria. Agora o pedido é limitado à última página real.
+  await page.goto(`${BASE}/pipeline?page=999`, { waitUntil: "networkidle" });
+  if ((await archivedRow.count()) !== 1) {
+    historyFailures.push("página além do fim esvazia o funil de quem tem candidatura");
+  }
+
   check(
     "F-07 E2E-001 histórico mantém candidatura de vaga arquivada após filtro e refresh",
     historyFailures.length === 0,
