@@ -9,6 +9,16 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- O detalhe da vaga exibe o histórico da candidatura lido de
+  `application_event` — data, transição e a nota escrita em cada uma —, por uma
+  query escopada ao candidato da sessão. Fecha a lacuna registrada em
+  BUG-20260917-transition-note-never-readable, onde a nota era aceita e não
+  voltava em superfície pública nenhuma. Implementa a opção recomendada no
+  relatório de QA; as alternativas eram gravar em `application.notes`, que
+  sobrescreve a nota anterior a cada salvamento, ou retirar o campo.
+
 ## [1.7.2] - 2026-09-18
 
 ### Corrigido

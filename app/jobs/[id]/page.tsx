@@ -4,7 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { allowedTransitions, getJobDetail } from "../../../src/contexts/pursuit/index.ts";
+import {
+  allowedTransitions,
+  applicationTimeline,
+  getJobDetail,
+} from "../../../src/contexts/pursuit/index.ts";
 import { scoreMessages } from "../../../src/contexts/matching/index.ts";
 import { renderScoreMessage } from "../../../src/core/i18n/index.ts";
 import { isPublicJobUrl } from "../../../src/core/job-url.ts";
@@ -12,7 +16,11 @@ import { trackAction } from "../../actions";
 import { Fit, Legend, ScoreBar, StatusBadge } from "../../ui";
 import { candidateScope, requirePage } from "../../auth";
 import { getTranslator } from "../../i18n";
-import { applicationStatusLabels, applicationStatusOptions } from "../../status.ts";
+import {
+  applicationStatusLabel,
+  applicationStatusLabels,
+  applicationStatusOptions,
+} from "../../status.ts";
 import { TrackForm } from "./track-form";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +35,9 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   if (!detail) notFound();
 
   const { job, score, application, source } = detail;
+  // Só quem tem candidatura tem histórico, e a query já nega fora do escopo:
+  // pedir aqui sem candidato devolveria vazio, mas nem a consulta é feita.
+  const timeline = application ? await applicationTimeline(candidateId, job.id) : [];
   const blockers = scoreMessages(score?.blockers);
   const matched = (score?.matchedKeywords as string[]) ?? [];
   const missing = (score?.missingKeywords as string[]) ?? [];
@@ -146,6 +157,41 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
             conflict: t("jobDetail.transitionConflict"),
           }}
         />
+      )}
+
+      {timeline.length > 0 && (
+        <section className="mb-7" data-testid="application-timeline">
+          <h2 className="type-display-xs mb-3">{t("jobDetail.history")}</h2>
+          <Card>
+            <CardContent className="pt-0">
+              <ul className="divide-y divide-[var(--hairline)]">
+                {timeline.map((event, index) => (
+                  <li key={`${event.at}-${index}`} className="py-3">
+                    <p className="type-caption-sm text-muted-foreground">
+                      {event.at.slice(0, 10)}
+                      {" · "}
+                      {event.toStatus
+                        ? event.fromStatus
+                          ? t("jobDetail.historyMoved", {
+                              from: applicationStatusLabel(event.fromStatus, t),
+                              to: applicationStatusLabel(event.toStatus, t),
+                            })
+                          : t("jobDetail.historyStarted", {
+                              to: applicationStatusLabel(event.toStatus, t),
+                            })
+                        : t("jobDetail.historyNote")}
+                    </p>
+                    {event.detail && (
+                      <p className="type-body-sm mt-1" data-user-content>
+                        {event.detail}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        </section>
       )}
 
       {job.descriptionText && (
