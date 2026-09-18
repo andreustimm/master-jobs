@@ -65,8 +65,8 @@ it("checks every push destination, including feature-to-dev and deletions", () =
 });
 
 it("names work branches <type>/<slug> with Conventional Commits types", () => {
-  const push = (branch: string) =>
-    spawnSync("sh", [join(hooks, "pre-push")], { input: `refs/heads/x a refs/heads/${branch} b\n`, encoding: "utf8", env: gitEnv });
+  const run = (input: string) => spawnSync("sh", [join(hooks, "pre-push")], { input, encoding: "utf8", env: gitEnv });
+  const push = (branch: string) => run(`refs/heads/x a refs/heads/${branch} b\n`);
   for (const branch of ["feat/busca-por-tecnologia", "fix/node-24.19", "docs/prd-on-demand-job-search", "chore/branch-naming", "revert/x1"]) {
     expect(push(branch).status, branch).toBe(0);
   }
@@ -75,12 +75,9 @@ it("names work branches <type>/<slug> with Conventional Commits types", () => {
     expect(result.status, branch).toBe(1);
     expect(result.stderr).toContain("<tipo>/<slug>");
   }
-  // Branches abertas antes da convenção continuam publicáveis.
   expect(push("codex/f07-recruiter-history").status).toBe(0);
-  // Apagar e publicar tag não passam pela regra de nome.
-  const raw = (input: string) => spawnSync("sh", [join(hooks, "pre-push")], { input, encoding: "utf8", env: gitEnv });
-  expect(raw("(delete) 0000 refs/heads/old_name b\n").status).toBe(0);
-  expect(raw("refs/tags/v1.13.0 a refs/tags/v1.13.0 b\n").status).toBe(0);
+  expect(run("(delete) 0000 refs/heads/old_name b\n").status).toBe(0);
+  expect(run("refs/tags/v1.13.0 a refs/tags/v1.13.0 b\n").status).toBe(0);
 });
 
 it("allows a task rebase to replay commits in detached HEAD", () => {
