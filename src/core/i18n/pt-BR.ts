@@ -560,6 +560,15 @@ export const ptBR = {
     title: "Referrals",
     companies: "empresa(s)",
   },
+  recruiter: {
+    title: "Acompanhados",
+    lead:
+      "Os candidatos que autorizaram você a acompanhar o funil deles. Quem cria o vínculo é a própria pessoa — você vê o andamento, e nada além disso.",
+    noCandidates: "Ninguém autorizou você a acompanhar um funil ainda.",
+    noApplications: "Esta pessoa ainda não tem candidaturas.",
+    applications: "{count} candidatura(s)",
+    candidateHistory: "Histórico · {count} candidatura(s)",
+  },
   jobDetail: {
     recheck: "reconferir",
     recheckQueued: "na fila",
