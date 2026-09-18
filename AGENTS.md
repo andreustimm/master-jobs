@@ -328,11 +328,11 @@ nos clones locais mesmo depois de qualquer promoção ou retorno.
 
 **Branch de trabalho é `<tipo>/<slug>`, com os tipos do Conventional Commits.**
 `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`, `ci`, `build`,
-`style` ou `revert`, e slug em kebab-case minúsculo:
-`feat/busca-por-tecnologia`, `fix/filtro-de-estagio`,
-`docs/prd-on-demand-job-search`. O prefixo da branch diz o mesmo que o prefixo
-do commit que ela entrega — e é esse prefixo que decide o bump de versão. O
-nome nunca carrega a ferramenta que abriu a branch. `.githooks/pre-push` recusa
+`style` ou `revert`, e slug minúsculo, com letras e números separados por `-`
+ou `.`: `feat/busca-por-tecnologia`, `fix/filtro-de-estagio`, `fix/node-24.19`.
+O prefixo da branch anuncia o tipo dos commits que ela entrega; quem decide o
+bump de versão continua sendo o prefixo de cada commit, não o nome da branch.
+O nome nunca carrega a ferramenta que abriu a branch. `.githooks/pre-push` recusa
 nome fora do padrão; `codex/*` é legado aceito, para que branches abertas antes
 da convenção sigam publicáveis sem renomear.
 

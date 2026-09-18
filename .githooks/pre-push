@@ -20,7 +20,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   esac
   branch=${remote_ref#refs/heads/}
   if ! printf '%s\n' "$branch" | grep -Eq "^($tipos)/[a-z0-9]+([.-][a-z0-9]+)*$"; then
-    echo "Branch $branch fora do padrão <tipo>/<slug>: tipo em $tipos, slug em kebab-case minúsculo." >&2
+    echo "Branch $branch fora do padrão <tipo>/<slug> (ex.: feat/busca-por-tecnologia): tipo em $tipos; slug minúsculo, com letras e números separados por - ou ." >&2
     exit 1
   fi
 done

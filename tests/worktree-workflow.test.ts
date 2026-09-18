@@ -12,6 +12,9 @@ let repo: string;
 function git(...args: string[]) {
   return execFileSync("git", args, { cwd: repo, encoding: "utf8", env: gitEnv });
 }
+function prePush(input: string) {
+  return spawnSync("sh", [join(hooks, "pre-push")], { input, encoding: "utf8", env: gitEnv });
+}
 const gitEnv = { ...process.env };
 for (const key of Object.keys(gitEnv)) {
   if (key.startsWith("GIT_")) delete gitEnv[key];
@@ -55,29 +58,30 @@ it("blocks commits on permanent branches and permits task branches", () => {
 });
 
 it("checks every push destination, including feature-to-dev and deletions", () => {
-  const run = (input: string) => spawnSync("sh", [join(hooks, "pre-push")], { input, encoding: "utf8", env: gitEnv });
   for (const branch of ["dev", "staging", "main"]) {
-    expect(run(`refs/heads/feat/example a refs/heads/${branch} b\n`).status).toBe(1);
-    expect(run(`(delete) 0000 refs/heads/${branch} b\n`).status).toBe(1);
+    expect(prePush(`refs/heads/feat/example a refs/heads/${branch} b\n`).status).toBe(1);
+    expect(prePush(`(delete) 0000 refs/heads/${branch} b\n`).status).toBe(1);
   }
-  expect(run("refs/heads/feat/example a refs/heads/feat/example b\n").status).toBe(0);
-  expect(run("refs/heads/feat/example a refs/heads/feat/example b\nrefs/heads/feat/second a refs/heads/dev b\n").status).toBe(1);
+  expect(prePush("refs/heads/feat/example a refs/heads/feat/example b\n").status).toBe(0);
+  expect(prePush("refs/heads/feat/example a refs/heads/feat/example b\nrefs/heads/feat/second a refs/heads/dev b\n").status).toBe(1);
 });
 
-it("names work branches <type>/<slug> with Conventional Commits types", () => {
-  const run = (input: string) => spawnSync("sh", [join(hooks, "pre-push")], { input, encoding: "utf8", env: gitEnv });
-  const push = (branch: string) => run(`refs/heads/x a refs/heads/${branch} b\n`);
-  for (const branch of ["feat/busca-por-tecnologia", "fix/node-24.19", "docs/prd-on-demand-job-search", "chore/branch-naming", "revert/x1"]) {
+it("refuses work branches outside <type>/<slug> and exempts legacy, deletions and tags", () => {
+  const push = (branch: string) => prePush(`refs/heads/x a refs/heads/${branch} b\n`);
+  for (const type of ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "revert", "style", "test"]) {
+    expect(push(`${type}/example`).status, type).toBe(0);
+  }
+  for (const branch of ["feat/busca-por-tecnologia", "fix/node-24.19", "docs/prd-on-demand-job-search", "revert/x1"]) {
     expect(push(branch).status, branch).toBe(0);
   }
   for (const branch of ["feature/foo", "Feat/foo", "feat/Foo", "feat/foo_bar", "feat/", "feat/-foo", "feat/foo--bar", "wip/foo", "foo", "feat/a/b"]) {
     const result = push(branch);
     expect(result.status, branch).toBe(1);
-    expect(result.stderr).toContain("<tipo>/<slug>");
+    expect(result.stderr, branch).toContain("<tipo>/<slug>");
   }
   expect(push("codex/f07-recruiter-history").status).toBe(0);
-  expect(run("(delete) 0000 refs/heads/old_name b\n").status).toBe(0);
-  expect(run("refs/tags/v1.13.0 a refs/tags/v1.13.0 b\n").status).toBe(0);
+  expect(prePush("(delete) 0000 refs/heads/old_name b\n").status).toBe(0);
+  expect(prePush("refs/tags/v1.13.0 a refs/tags/v1.13.0 b\n").status).toBe(0);
 });
 
 it("allows a task rebase to replay commits in detached HEAD", () => {
