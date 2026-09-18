@@ -10,7 +10,7 @@ qa_status: blocked-decision
 bug_ids: BUG-20260910-application-edit-not-retained; BUG-20260917-transition-note-never-readable
 fix_status: fixed
 retest_status: verified
-fix_commits: f16c2b4; 916c531; fa1269d
+fix_commits: f16c2b4; 916c531; fa1269d; 03ac0f6; 9bb7fc0
 evidence: docs/qa/evidence/2026-09-17T222310262016Z-5e419094-application-draft-on-rejected-transition/CH-save-resume-application-step3-reachable-stages.png
 last_report: docs/qa/reports/2026-09-17T222310262016Z-5e419094-application-draft-on-rejected-transition.md
 overlaps:
@@ -20,6 +20,14 @@ Full do release candidate 1.7.1 (`676d5e0`, o que está em `staging`): este
 cenário FALHA ali. O status deste arquivo descreve a branch de correção; o RC
 ainda descarta o rascunho numa transição recusada. Relatório:
 docs/qa/reports/2026-09-17T232350685065Z-1cb4e9bd-release-candidate-1.7.1-full.md
+
+Re-andado sobre o head final (`9bb7fc0`) depois que o caminho de ESCRITA mudou
+— a nota deixou de ser descartada no no-op —, porque um veredito obtido antes
+dessa mudança não descreveria mais o produto. Nada regrediu: salvar com nota
+grava, a decisão sobrevive a refresh, aparece no funil, resiste a sair e entrar
+de novo, e a CLI pública mostra o mesmo estágio. Salvar uma nota sem mudar de
+estágio conclui sem erro; que ela agora fique gravada é afirmado por teste de
+unidade, já que continua sem leitura pública.
 
 Reteste de 17/09: a metade do STATUS está confirmada ponta a ponta — gravado no
 detalhe, relido após refresh, presente no funil, mantido depois de sair e
