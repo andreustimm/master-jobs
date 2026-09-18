@@ -299,6 +299,23 @@ db.command("seed")
     });
   });
 
+db.command("seed-fixtures")
+  .description("Semear o acervo de exemplo de dev/staging — sem rede, sem dado de produção")
+  .action(async () => {
+    await withDb(async () => {
+      const { seedFixtures } = await import("./core/db/seed-fixtures.ts");
+      const r = await seedFixtures();
+
+      console.log(
+        `${c.green("✓")} ${r.jobs.inserted} vaga(s) criada(s), ${r.jobs.updated} atualizada(s)`,
+      );
+      console.log(
+        `${c.green("✓")} ${r.candidates.inserted} candidato(s) criado(s), ${r.candidates.updated} atualizado(s)`,
+      );
+      console.log(c.dim("\n  Corpus declarado em src/core/db/fixtures.ts — ADR 0021.\n"));
+    });
+  });
+
 /* --------------------------------- tasks ---------------------------------- */
 
 const tasks = program

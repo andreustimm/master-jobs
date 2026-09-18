@@ -18,6 +18,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Melhorado
+
+- As versões de teste do sistema passam a vir com um conjunto pequeno de vagas
+  e contas de exemplo, cobrindo remoto, híbrido, presencial e vagas já
+  encerradas. Quem experimenta uma dessas versões vê as telas funcionando sem
+  depender de dados reais.
+
 ## [1.9.0] - 2026-09-18T15:01:18.066Z
 
 ### Melhorado

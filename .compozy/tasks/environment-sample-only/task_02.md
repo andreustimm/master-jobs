@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Deterministic fixture corpus and seed
 type: backend
 complexity: medium

@@ -9,6 +9,17 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Acervo de exemplo declarado em `src/core/db/fixtures.ts` e semeado por
+  `jho db seed-fixtures`: dez vagas cobrindo remoto, híbrido, presencial,
+  modalidade não declarada, aberta, fechada e reaberta, mais quatro contas que
+  exercitam as fronteiras de autorização existentes. O seed é idempotente por
+  identidade declarada — reexecutar atualiza, nunca duplica, inclusive sob
+  execução concorrente — e valida o corpus antes de escrever, então fixture
+  inválida vira erro de configuração em vez de meia carga. Sem PII, sem
+  segredo, sem payload bruto, e todas as URLs em `example.test` (F-08, ADR 0021).
+
 ## [1.9.0] - 2026-09-18
 
 ### Adicionado

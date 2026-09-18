@@ -18,6 +18,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Improved
+
+- Test versions of the system now ship with a small set of sample jobs and
+  accounts, covering remote, hybrid, on-site and already-closed postings. Anyone
+  trying one of those versions sees the screens working without depending on
+  real data.
+
 ## [1.9.0] - 2026-09-18T15:01:18.066Z
 
 ### Improved
