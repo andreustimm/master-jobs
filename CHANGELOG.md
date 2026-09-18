@@ -19,6 +19,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   aquele deployment pode gastar cota, e um preview com o segredo herdado
   continuaria autenticado (F-08).
 
+## [1.10.0] - 2026-09-18
+
 ### Adicionado
 
 - Acervo de exemplo declarado em `src/core/db/fixtures.ts` e semeado por
