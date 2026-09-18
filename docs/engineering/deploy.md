@@ -61,25 +61,45 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 
 | Variável | Onde | Para quê |
 |---|---|---|
-| `DATABASE_URL` | aplicação | URL PostgreSQL de runtime — **sem query string** |
+| `DATABASE_URL` | aplicação | URL PostgreSQL de runtime; vence as demais |
+| `POSTGRES_URL` | Vercel (integração) | usada no runtime quando não há `DATABASE_URL` |
 | `DATABASE_MIGRATION_URL` | migration/CI | URL PostgreSQL com privilégio de DDL |
-| `DATABASE_CA_CERT` | CI/Vercel | **caminho** do arquivo da CA, não o PEM |
+| `POSTGRES_URL_NON_POOLING` | Vercel (integração) | usada na migration quando não há a de cima |
+| `DATABASE_CA_CERT` | CI/Vercel | o PEM da CA **ou** o caminho de um arquivo |
 | `SUPABASE_CRAWL_ENABLED` | Actions produção | `true` somente após os gates de quota/retensão |
 | `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela o link vai para o log |
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |
 | `CRON_SECRET` | Vercel | protege a rota de cron; a Vercel a envia em `authorization` |
 
-**Os dois nomes são literais, e é fácil errar os dois.** O runtime lê
-`process.env.DATABASE_URL` e mais nada: a integração do Supabase com a Vercel
-cadastra `POSTGRES_URL`, `POSTGRES_PRISMA_URL` e `POSTGRES_URL_NON_POOLING`, e
-nenhum deles é lido — não existe fallback, para o runtime nunca conectar no
-banco errado por acaso. `connectDatabase()` também recusa qualquer query string
-na URL, inclusive `?sslmode=require` e `?pgbouncer=true`: a política de TLS é do
-cliente e não pode ser afrouxada pela string de conexão, então os parâmetros que
-o painel da Supabase anexa precisam sair. E `DATABASE_CA_CERT` é lido com
-`readFileSync`: o valor é o caminho `config/certs/supabase-ca.crt`, que o
-repositório versiona e o `next.config.ts` declara em `outputFileTracingIncludes`
-para viajar no bundle. Com o PEM dentro da variável, a conexão falha ao abrir.
+**A URL pode vir de mais de um nome, e a ordem é declarada.** A integração do
+Supabase com a Vercel cadastra `POSTGRES_URL` e `POSTGRES_URL_NON_POOLING` e as
+**mantém** — rotação de senha acontece do lado do provedor e chega sozinha.
+Exigir que alguém copiasse aquele valor para uma `DATABASE_URL` genérica criaria
+duas fontes da verdade que divergem no dia da rotação, e o sintoma apareceria
+como produção fora do ar. Então os nomes com prefixo valem, nesta ordem:
+
+| Papel | Ordem de resolução |
+|---|---|
+| runtime | `DATABASE_URL` → `POSTGRES_URL` → `POSTGRES_URL_NON_POOLING` |
+| migration | `DATABASE_MIGRATION_URL` → `POSTGRES_URL_NON_POOLING` → `POSTGRES_URL` |
+
+A diferença entre as duas listas não é enfeite: DDL não deve atravessar o pooler
+em modo transação, e o runtime serverless quer justamente o pooler.
+`DATABASE_URL` vence as duas porque é ela que o ambiente local, o Docker e o CI
+configuram explicitamente. Variável em branco conta como ausente, e o erro de
+configuração **nomeia a variável** de onde a URL veio — nunca o valor.
+
+**Query string:** parâmetros de pool (`pgbouncer`, `connection_limit`) são
+descartados, porque a configuração do cliente já é explícita. Parâmetros de TLS
+(`sslmode`, `ssl`, `sslrootcert`…) são **recusados** com erro, e não apagados em
+silêncio: a política de TLS é do cliente, e apagar `sslmode=disable` deixaria
+quem escreveu convencido de que desligou a verificação.
+
+**`DATABASE_CA_CERT` aceita as duas formas:** o PEM colado direto na variável
+(o gesto natural num painel serverless, onde não há onde pôr arquivo) ou o
+caminho de um arquivo. O repositório versiona `config/certs/supabase-ca.crt` e o
+`next.config.ts` o declara em `outputFileTracingIncludes` para ele viajar no
+bundle. Valor que não é nenhum dos dois falha nomeando a variável.
 
 `RESEND_API_KEY` e `RESEND_FROM` formam um par: se qualquer uma estiver ausente
 ou vazia, `configuredMailer` usa o adapter de console e nenhum e-mail é enviado.

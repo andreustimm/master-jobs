@@ -18,6 +18,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Improved
+
+- Publishing the system now uses the database configuration the provider
+  already maintains, instead of requiring a manual copy that goes stale. When
+  the database password is rotated on the provider's side, the system stays up
+  without anyone updating anything by hand.
 ### Fixed
 
 - Preparing a test version failed when a sample résumé was already stored under

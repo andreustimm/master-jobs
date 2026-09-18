@@ -9,6 +9,28 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Alterado
+
+- A URL do banco passa a ser resolvida por uma ordem declarada em
+  `src/core/db/config.ts`, e os nomes que a integração do Supabase com a Vercel
+  cadastra valem de primeira classe: runtime lê `DATABASE_URL` → `POSTGRES_URL`
+  → `POSTGRES_URL_NON_POOLING`, e migration lê `DATABASE_MIGRATION_URL` →
+  `POSTGRES_URL_NON_POOLING` → `POSTGRES_URL`. A diferença entre as listas é
+  deliberada: DDL não atravessa pooler em modo transação, e o runtime serverless
+  quer o pooler. Exigir a cópia para uma variável genérica criava duas fontes da
+  verdade que divergem no dia em que o provedor rotaciona a senha — e o sintoma
+  disso é produção fora do ar.
+- Parâmetro de pool na URL (`pgbouncer`, `connection_limit`) passa a ser
+  descartado em vez de recusado; parâmetro de TLS (`sslmode`, `ssl`,
+  `sslrootcert`) continua **recusado**, e agora com erro que nomeia a variável.
+  Apagar `sslmode=disable` em silêncio deixaria quem escreveu convencido de que
+  havia desligado a verificação de certificado.
+- `DATABASE_CA_CERT` aceita o PEM colado na variável, além do caminho de
+  arquivo. Num painel serverless não há onde pôr arquivo, e o PEM colado virava
+  `ENOENT` com o certificado inteiro no lugar do nome — um erro que não conta o
+  que houve. Certificado é chave pública, então aceitar as duas formas não
+  afrouxa nada; desligar a verificação continua impossível.
+- Erro de configuração de banco nomeia a variável de origem e nunca o valor.
 ### Corrigido
 
 - O currículo de exemplo passa a ser escrito pela identidade que o banco já
