@@ -19,6 +19,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   relatório de QA; as alternativas eram gravar em `application.notes`, que
   sobrescreve a nota anterior a cada salvamento, ou retirar o campo.
 
+## [1.7.2] - 2026-09-18
+
 ### Corrigido
 
 - O seletor de estágio do funil passa a oferecer somente os status alcançáveis

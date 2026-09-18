@@ -23,6 +23,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 - The job detail now shows the application's history: every stage change with
   its date and the note you wrote at that moment.
 
+## [1.7.2] - 2026-09-18T02:01:07.561Z
+
 ### Fixed
 
 - When you move an application, the list now shows only the stages it can reach
