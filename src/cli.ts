@@ -43,6 +43,7 @@ import {
   queueEngagement,
   recordMetric,
 } from "./core/positioning/engage.ts";
+import { archiveClosedJobs } from "./core/ingest/archive.ts";
 import { addJob } from "./core/ingest/manual.ts";
 import { syncAll, pruneClosed } from "./core/ingest/run.ts";
 import { verifyJobs } from "./core/ingest/verify.ts";
@@ -912,6 +913,51 @@ jobs
         );
       }
       if (opts.dryRun) console.log(c.dim("  --dry-run: nada foi fechado."));
+      console.log();
+    });
+  });
+
+jobs
+  .command("archive")
+  .description("Tira do quadro ativo vagas fechadas há tempo — sem apagar candidatura")
+  .option("--closed-days <n>", "arquivar fechamentos anteriores a N dias", "90")
+  .option("--limit <n>", "teto de vagas examinadas por execução", "500")
+  .option("--apply", "aplicar; sem esta flag o comando é somente leitura")
+  .action(async (opts: { closedDays: string; limit: string; apply?: boolean }) => {
+    await withDb(async () => {
+      const r = await archiveClosedJobs({
+        apply: opts.apply === true,
+        closedDays: Number(opts.closedDays),
+        limit: Number(opts.limit),
+      });
+
+      console.log(
+        `${c.bold(opts.apply ? "Arquivamento" : "Arquivamento · dry-run")}\n` +
+        `  corte: fechadas até ${r.policy.cutoff.slice(0, 10)} (${r.policy.closedDays} dias)\n` +
+        `  ${r.scanned} examinada(s) · ${c.green(`${r.eligible} elegível(is)`)}` +
+        (r.preservedByApplication > 0
+          ? ` · ${r.preservedByApplication} com candidatura preservada`
+          : ""),
+      );
+
+      const kept = Object.entries(r.kept).filter(([, n]) => n > 0);
+      if (kept.length > 0) {
+        console.log(c.dim(`  mantidas: ${kept.map(([k, n]) => `${n} ${k}`).join(" · ")}`));
+      }
+
+      if (!r.applied) {
+        console.log(c.dim("  Nada mudou. Rode de novo com --apply para persistir."));
+      } else {
+        console.log(`${c.green("✓")} ${r.applied.archived} arquivada(s)`);
+        if (r.applied.claimedByAnotherRun > 0) {
+          console.log(
+            c.dim(`  ${r.applied.claimedByAnotherRun} já tinham sido arquivadas por outra execução.`),
+          );
+        }
+      }
+      if (r.hasMore) {
+        console.log(c.dim("  Há mais elegíveis além do teto — rode de novo para continuar."));
+      }
       console.log();
     });
   });

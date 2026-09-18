@@ -18,6 +18,19 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- Preparar uma versão de teste falhava quando já existia um currículo de exemplo
+  gravado com outro nome. Agora a preparação atualiza o currículo que está lá em
+  vez de tentar criar um segundo.
+### Novidade
+
+- A limpeza do acervo ganhou um passo reversível: vagas encerradas há muito
+  tempo podem sair da lista ativa sem serem apagadas, e voltam sozinhas se a
+  vaga reabrir. Nada do que você registrou sobre uma candidatura — o estágio, as
+  anotações, as datas — é tocado nesse passo. Antes de mudar qualquer coisa, o
+  comando mostra o que faria.
+
 ## [1.11.1] - 2026-09-18T16:55:28.948Z
 
 ### Corrigido

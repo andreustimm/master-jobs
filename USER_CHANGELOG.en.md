@@ -18,6 +18,19 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preparing a test version failed when a sample résumé was already stored under
+  a different name. The preparation now updates the résumé that is there instead
+  of trying to create a second one.
+### New
+
+- Corpus cleanup gained a reversible step: jobs closed long ago can leave the
+  active list without being deleted, and they come back on their own if the
+  posting reopens. Nothing you recorded about an application — the stage, the
+  notes, the dates — is touched by that step. The command shows what it would
+  do before changing anything.
+
 ## [1.11.1] - 2026-09-18T16:55:28.948Z
 
 ### Fixed

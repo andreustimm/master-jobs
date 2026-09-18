@@ -9,6 +9,30 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- O currículo de exemplo passa a ser escrito pela identidade que o banco já
+  impõe — `(candidate_id, kind)` onde `is_current` —, e não por rótulo. Procurar
+  pelo rótulo não enxergava um currículo corrente gravado com outro nome, e o
+  seed tentava inserir por cima: `23505` em
+  `candidate_document_one_current_idx`. O `SELECT ... FOR UPDATE` que devia
+  fechar a corrida não fechava nada, porque não existe linha para travar quando
+  ainda não há currículo — o bug aparecia sob concorrência e, por isso mesmo,
+  também sem concorrência nenhuma, bastando um currículo anterior com outro
+  rótulo. O caminho virou upsert no índice parcial, com a mesma retentativa dos
+  demais.
+### Adicionado
+
+- Estado de arquivamento (`job.archived_at`) separado do fechamento da fonte, e
+  `jho jobs archive` para inventariar e aplicar. A decisão é pura em
+  `src/core/ingest/lifecycle.ts`: fonte manual fica fora, sondagem inconclusiva
+  nunca arquiva e fechamento recente espera o corte — a mesma disciplina de
+  `probe.ts`, porque as duas escondem vaga boa quando erram. O comando é
+  somente leitura por omissão, pagina com teto e reclama cada linha uma vez só
+  (`archived_at is null` também na escrita), e não toca em `application` nem em
+  `application_event`. Um `alive` posterior desfaz o arquivamento junto com o
+  fechamento, na mesma linha, sem duplicar fingerprint (F-07, ADR 0020).
+
 ## [1.11.1] - 2026-09-18
 
 ### Corrigido

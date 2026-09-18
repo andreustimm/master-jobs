@@ -3,6 +3,7 @@ import { is } from "drizzle-orm";
 import { PgTable, getTableConfig as pgConfig } from "drizzle-orm/pg-core";
 import { SQLiteTable, getTableConfig as sqliteConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
+import { postSnapshotColumns } from "../scripts/migration/select-production.ts";
 import * as source from "../scripts/migration/schema.sqlite.ts";
 import * as target from "../src/core/db/schema.ts";
 
@@ -18,9 +19,18 @@ describe("PostgreSQL migration contract", () => {
       const before = sqliteConfig(table);
       const after = pgConfig(pgTables.find((t) => pgConfig(t).name === before.name)!);
       expect(after.schema).toBe("production");
-      expect(after.columns.map((c) => [c.name, c.notNull, c.primary])).toEqual(
-        before.columns.map((c) => [c.name, c.notNull, c.primary]),
-      );
+      // O contrato é "nada do snapshot se perde", não "o alvo parou no tempo".
+      // Coluna que o alvo ganhou depois entra na mesma lista revisada que a
+      // importação usa para declarar o valor que escreve — sem declaração, a
+      // diferença continua reprovando aqui.
+      const added = postSnapshotColumns[before.name] ?? {};
+      expect(
+        after.columns.filter((c) => !(c.name in added)).map((c) => [c.name, c.notNull, c.primary]),
+      ).toEqual(before.columns.map((c) => [c.name, c.notNull, c.primary]));
+      for (const column of after.columns.filter((c) => c.name in added)) {
+        // Coluna nova é sempre opcional: o snapshot não tem valor para ela.
+        expect([column.name, column.notNull, column.primary]).toEqual([column.name, false, false]);
+      }
       expect(after.foreignKeys.map((fk) => {
         const ref = fk.reference();
         return [ref.columns.map((c) => c.name), pgConfig(ref.foreignTable).name,

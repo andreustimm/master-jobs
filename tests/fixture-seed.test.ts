@@ -9,7 +9,7 @@ import {
 } from "../src/core/db/fixtures.ts";
 import { countFixtures, FIXTURE_SOURCE_ID, seedFixtures } from "../src/core/db/seed-fixtures.ts";
 import type { DB } from "../src/core/db/client.ts";
-import { candidateDocument, job } from "../src/core/db/schema.ts";
+import { candidate, candidateDocument, job } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
 /**
@@ -110,6 +110,34 @@ describe("UT-004 — semear de novo converge", () => {
       .where(eq(candidateDocument.label, "Currículo de exemplo"));
 
     expect(documents).toHaveLength(CANDIDATE_FIXTURES.filter((fixture) => fixture.cv).length);
+  });
+
+  it("converge sobre um currículo corrente que já existe com outro rótulo", async () => {
+    // A identidade do currículo corrente pertence ao banco: só pode haver um
+    // `(candidato, cv)` com `is_current`. Procurar pelo RÓTULO não enxergava um
+    // currículo gravado com outro nome, e o seed tentava inserir por cima — o
+    // mesmo erro que a corrida produzia, aqui sem precisar de concorrência.
+    const [person] = await db
+      .insert(candidate)
+      .values({ slug: CANDIDATE_FIXTURES[0]!.slug, name: "Nome anterior" })
+      .returning({ id: candidate.id });
+    await db.insert(candidateDocument).values({
+      candidateId: person!.id,
+      kind: "cv",
+      label: "Currículo escrito à mão",
+      format: "markdown",
+      content: "# Outro currículo",
+    });
+
+    await seedFixtures();
+
+    const documents = await db
+      .select({ label: candidateDocument.label, content: candidateDocument.content })
+      .from(candidateDocument)
+      .where(eq(candidateDocument.candidateId, person!.id));
+
+    expect(documents).toHaveLength(1);
+    expect(documents[0]!.label).toBe("Currículo de exemplo");
   });
 });
 
