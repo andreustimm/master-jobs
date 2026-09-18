@@ -9,10 +9,10 @@ entry_points: /jobs
 qa_status: pass
 bug_ids: BUG-20260823-pipeline-empty-state-mixed-locale
 fix_status: fixed
-retest_status: pass
+retest_status: verified
 fix_commits: bfd27a9
 evidence: tests/e2e/ui.mjs; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/triagem-pipeline.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/keyboard-pipeline-goal.png; docs/qa/reports/2026-08-24T210158000000Z-71293d34-release-1.3.0-full.md
-last_report: docs/qa/reports/2026-08-24T210158000000Z-71293d34-release-1.3.0-full.md
+last_report: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md
 overlaps:
 ---
 

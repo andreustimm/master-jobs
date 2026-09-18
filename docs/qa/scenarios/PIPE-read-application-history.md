@@ -12,7 +12,7 @@ fix_status: fixed
 retest_status: verified
 fix_commits: cb00cbb
 evidence:
-last_report: docs/qa/reports/2026-09-18T022259704434Z-6535cca7-release-candidate-1.8.0-promovido.md
+last_report: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md
 overlaps: PIPE-save-resume-decision; PIPE-note-on-unchanged-stage
 ---
 

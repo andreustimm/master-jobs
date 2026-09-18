@@ -12,7 +12,7 @@ fix_status:
 retest_status:
 fix_commits:
 evidence: docs/qa/evidence/2026-09-10T011143000000Z-8bd417c2-supabase-production/CH-save-cv-ranking-refresh-baseline-queued.png; docs/qa/evidence/2026-09-10T011143000000Z-8bd417c2-supabase-production/CH-save-cv-ranking-refresh-baseline-version-read.png
-last_report: docs/qa/reports/2026-09-17T232350685065Z-1cb4e9bd-release-candidate-1.7.1-full.md
+last_report: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md
 overlaps:
 ---
 
