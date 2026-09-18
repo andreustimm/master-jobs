@@ -9,7 +9,7 @@
  * O seed não liga ingestão: ele escreve direto no acervo, sem adapter e sem
  * rede, e é por isso que roda em ambiente onde a política de ingestão nega.
  */
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb } from "./client.ts";
 import { withDuplicateKeyRetry } from "./retry.ts";
 import { candidate, candidateDocument, job, source } from "./schema.ts";
@@ -106,37 +106,27 @@ async function seedCandidate(fixture: CandidateFixture): Promise<"inserted" | "u
   const outcome = row!.inserted ? "inserted" : "updated";
 
   if (fixture.cv) {
-    // Documento por rótulo fixo: reexecutar não empilha versões de currículo.
-    // O schema não tem índice único para (candidato, rótulo), então a corrida
-    // é fechada por uma transação que serializa a leitura com a escrita — sem
-    // ela, dois seeds simultâneos criariam duas versões do mesmo currículo.
-    await db.transaction(async (tx) => {
-      const [document] = await tx
-        .select({ id: candidateDocument.id })
-        .from(candidateDocument)
-        .where(and(
-          eq(candidateDocument.candidateId, candidateId),
-          eq(candidateDocument.label, FIXTURE_CV_LABEL),
-        ))
-        .limit(1)
-        .for("update");
-
-      if (document) {
-        await tx
-          .update(candidateDocument)
-          .set({ content: fixture.cv! })
-          .where(eq(candidateDocument.id, document.id));
-        return;
-      }
-
-      await tx.insert(candidateDocument).values({
-        candidateId,
-        kind: "cv",
-        label: FIXTURE_CV_LABEL,
-        format: "markdown",
-        content: fixture.cv!,
-      });
-    });
+    // A identidade do currículo corrente é a que o banco já impõe:
+    // `(candidate_id, kind) where is_current`. A versão anterior procurava por
+    // rótulo e, quando não achava, inseria — duas execuções simultâneas não
+    // achavam nada e inseriam as duas. `FOR UPDATE` não segurava isso porque
+    // não existe linha para travar; quem resolve é o conflito no índice.
+    await withDuplicateKeyRetry(() =>
+      db
+        .insert(candidateDocument)
+        .values({
+          candidateId,
+          kind: "cv",
+          label: FIXTURE_CV_LABEL,
+          format: "markdown",
+          content: fixture.cv!,
+        })
+        .onConflictDoUpdate({
+          target: [candidateDocument.candidateId, candidateDocument.kind],
+          targetWhere: sql`${candidateDocument.isCurrent} = true`,
+          set: { label: FIXTURE_CV_LABEL, format: "markdown", content: fixture.cv! },
+        }),
+    );
   }
 
   return outcome;

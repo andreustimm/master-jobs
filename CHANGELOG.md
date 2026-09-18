@@ -9,6 +9,18 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- O currículo de exemplo passa a ser escrito pela identidade que o banco já
+  impõe — `(candidate_id, kind)` onde `is_current` —, e não por rótulo. Procurar
+  pelo rótulo não enxergava um currículo corrente gravado com outro nome, e o
+  seed tentava inserir por cima: `23505` em
+  `candidate_document_one_current_idx`. O `SELECT ... FOR UPDATE` que devia
+  fechar a corrida não fechava nada, porque não existe linha para travar quando
+  ainda não há currículo — o bug aparecia sob concorrência e, por isso mesmo,
+  também sem concorrência nenhuma, bastando um currículo anterior com outro
+  rótulo. O caminho virou upsert no índice parcial, com a mesma retentativa dos
+  demais.
 ### Adicionado
 
 - Estado de arquivamento (`job.archived_at`) separado do fechamento da fonte, e
