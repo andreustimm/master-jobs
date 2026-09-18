@@ -1738,6 +1738,15 @@ try {
     timeout: 15_000,
   });
 
+  // Depois de uma gravação aceita, o React limpa o formulário e o `select`
+  // controlado volta à primeira opção sem que o estado mude — a tela passava a
+  // exibir um estágio que não é o gravado, com Salvar ao lado pronto para
+  // mover a candidatura para onde ninguém pediu.
+  const afterSave = await page.evaluate(
+    () => document.querySelector('[data-testid="track-status"]')?.value ?? "",
+  );
+  check("depois de salvar, o seletor mostra o estágio gravado", afterSave === "shortlisted", afterSave);
+
   await page.goto(funnelUrl, { waitUntil: "networkidle" });
   const offered = await page.evaluate(() =>
     [...document.querySelectorAll('[data-testid="track-status"] option')].map((o) => o.value),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -52,6 +52,20 @@ export function TrackForm({
     ? status
     : options[0]?.value ?? status;
 
+  /**
+   * O React limpa o formulário quando a action conclui, e a limpeza é do DOM:
+   * o `select` volta para a primeira opção. Como o estado não mudou, não há
+   * re-renderização que o corrija, e a tela passa a mostrar um estágio que não
+   * é o gravado — com o botão Salvar ali do lado, pronto para mover a
+   * candidatura para onde ninguém pediu. Reescrever o valor depois de cada
+   * render devolve o DOM ao que o estado diz.
+   */
+  const selectRef = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    const element = selectRef.current;
+    if (element && element.value !== selected) element.value = selected;
+  });
+
   const [, formAction, pending] = useActionState(async (_previous: null, formData: FormData) => {
     try {
       const result = await action(formData);
@@ -89,6 +103,7 @@ export function TrackForm({
         {labels.moveTo}
       </span>
       <select
+        ref={selectRef}
         name="status"
         data-testid="track-status"
         // O valor sai da lista oferecida, nunca do estado cru. Num conflito de
