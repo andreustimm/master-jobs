@@ -26,6 +26,14 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   notes, the dates — is touched by that step. The command shows what it would
   do before changing anything.
 
+## [1.11.0] - 2026-09-18T15:58:18.484Z
+
+### Improved
+
+- Automatic job fetching now runs only on the published system. Test versions no
+  longer trigger fetches or consume the job boards' quota, even if they share
+  some configuration by mistake.
+
 ## [1.10.0] - 2026-09-18T15:23:04.431Z
 
 ### Improved

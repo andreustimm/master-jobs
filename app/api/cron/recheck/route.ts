@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { canRunIngestion } from "../../../../src/core/ingest/environment.ts";
+import { currentIngestionContext } from "../../../../src/core/ingest/guard.ts";
 import { enqueueStale, runVerifyQueue } from "../../../../src/core/ingest/verify-queue.ts";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +43,15 @@ export async function GET(request: NextRequest) {
   const enviado = request.headers.get("authorization") ?? "";
   if (!seguroIgual(enviado, `Bearer ${esperado}`)) {
     return NextResponse.json({ error: "não autorizado" }, { status: 401 });
+  }
+
+  // O segredo prova quem chama; a política diz se ESTE deployment pode gastar
+  // cota. Um preview com o mesmo segredo herdado por engano continuaria
+  // autenticado — e é exatamente o caso que a ADR 0021 fecha. Responder aqui
+  // dá 503 com motivo em vez de deixar o erro subir do meio da fila.
+  const decisao = canRunIngestion(currentIngestionContext());
+  if (!decisao.allowed) {
+    return NextResponse.json({ error: "ingestão bloqueada", motivo: decisao.reason }, { status: 503 });
   }
 
   // Enfileira antes de consumir: sem isto, o primeiro dia processaria a fila
