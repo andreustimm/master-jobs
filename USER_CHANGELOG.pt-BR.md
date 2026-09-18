@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-09-18T18:01:07.970Z
+
 ### Melhorado
 
 - A publicação do sistema passa a aproveitar a configuração de banco que o

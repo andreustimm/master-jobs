@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-09-18T18:01:07.970Z
+
 ### Improved
 
 - Publishing the system now uses the database configuration the provider

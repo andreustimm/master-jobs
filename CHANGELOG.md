@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-09-18
+
 ### Alterado
 
 - A URL do banco passa a ser resolvida por uma ordem declarada em
