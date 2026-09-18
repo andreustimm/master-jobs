@@ -6,13 +6,13 @@ persona: Andreus em triagem noturna
 journey: J-preserve-application-decision
 expected: O detalhe da vaga mostra cada mudança de estágio com data e a nota escrita naquele momento, e só do próprio candidato
 entry_points: /jobs/<id>
-qa_status: untested
+qa_status: pass
 bug_ids: BUG-20260917-transition-note-never-readable
 fix_status: fixed
-retest_status: pending
-fix_commits:
+retest_status: verified
+fix_commits: cb00cbb
 evidence:
-last_report:
+last_report: docs/qa/reports/2026-09-18T022259704434Z-6535cca7-release-candidate-1.8.0-promovido.md
 overlaps: PIPE-save-resume-decision; PIPE-note-on-unchanged-stage
 ---
 
