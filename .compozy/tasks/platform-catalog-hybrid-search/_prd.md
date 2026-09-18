@@ -115,6 +115,10 @@ common punctuation variation can be shown together without weakening a strict
 remote or status filter. Relevance is explained with matching fields or a
 semantic-match label, so a candidate can understand why a result appeared.
 
+*(Amended — see A4 and A5: the whole-word term filter and the minimum-pay
+filter are defined by `term-search-target-tracks`; this section extends fields
+and ordering on top of them.)*
+
 ### 5. Optional semantic ordering
 
 When a configured embedding adapter is available, normalized job text and a
@@ -158,8 +162,10 @@ outside the first release.
    delete a platform definition, start a source/global capture, start a status
    refresh, or inspect operational run details. An impersonated session cannot
    perform these actions, even when the target account is an admin.
+   *(Amended — see "Amendments from term-search-target-tracks", A1 and A3.)*
 2. `candidate` and `recruiter` may read jobs according to existing scope rules
    and use search. They cannot mutate the platform catalog or run ingestion.
+   *(Amended — see A1: a candidate's saved term may cause a term capture.)*
 3. A platform handle is unique within its adapter kind. A disabled platform is
    not selected by an all-platform run.
 4. Catalog writes validate the adapter kind, handle, URL, capability settings,
@@ -172,7 +178,8 @@ outside the first release.
 
 6. Every run has one scope: a complete source snapshot, one configured search
    profile, one platform, or all enabled platforms. Only a complete snapshot
-   may reconcile missing jobs for that source.
+   may reconcile missing jobs for that source. *(Amended — see A2: term capture
+   is a fifth scope, partial, never closes.)*
 7. Repeating the same action while an equivalent run is queued or running
    returns the existing run. Retrying a failed platform creates a new attempt
    linked to the original run, not duplicate jobs.
@@ -281,6 +288,43 @@ explain that job history is retained.
   slice.
 - Building a general-purpose prompt editor, a billing system, or a recruiter
   multi-tenant workspace.
+
+## Amendments from term-search-target-tracks (2026-09-18)
+
+[`term-search-target-tracks`](../term-search-target-tracks/_prd.md) was
+specified after this PRD and overlaps it. These amendments keep the two
+consistent; where they conflict, the amendment wins.
+
+- **A1 — Candidate term captures.** A candidate's own saved term may cause a
+  bounded capture on registered, validated term-capable platforms (its
+  ADR-004). Rules 1 and 2 still hold for everything else: candidates never
+  mutate the catalog nor start source or global captures.
+- **A2 — Term-capture run scope.** Rule 6 gains a fifth scope, *term capture*:
+  one normalized term on one platform, partial by definition, never closes,
+  archives or reassigns a job. A candidate's private saved term resolves to a
+  system capture profile per platform and normalized term (ADR-002 here owns
+  the profile concept). Run states reuse US-009's vocabulary plus **waiting for
+  quota** and **skipped**; the closed count of a term capture is always 0. The
+  per-platform quota ledger belongs to `term-search-target-tracks` and counts
+  every platform call, including the runs defined here.
+- **A3 — Privacy of term captures.** Run inspection (rule 1, US-009 links,
+  US-031) shows term captures only in aggregate — never the term text or the
+  candidate who caused them. Term text never reaches logs or snapshots.
+  Impersonation never starts a run of any scope, consistent with US-029.
+- **A4 — Search semantics.** The Jobs screen term filter (title, company,
+  description, whole-word with the scorer's term boundary, case and
+  space/hyphen equivalence) is defined there. US-017 extends it to location and
+  skills; US-018 proximity and US-020 semantic matching only reorder results or
+  appear in a separately labeled group and never change what the whole-word
+  filter returns. ADR-001's full-text parsing, which drops `#` and `+`, is an
+  ordering signal only. US-021's match explanation complements the term
+  attribution recorded there.
+- **A5 — Pay filter.** The "salary" exact filter in Core Feature 4 is replaced
+  by the minimum-pay filter defined there, which keeps undisclosed pay visible
+  and marked.
+- **A6 — Local database.** The constraint to preserve the local SQLite/libSQL
+  path is obsolete: the runtime is PostgreSQL-only (ADR 0021 item 5). Review it
+  before this PRD's TechSpec.
 
 ## Architecture Decision Records
 
