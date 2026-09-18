@@ -526,6 +526,34 @@ pnpm jho jobs verify --min-fit 55 --limit 250
 > 403 apagaria vagas vivas. Timeout e 5xx não provam nada e entram como
 > inconclusivos.
 
+### `jho jobs archive`
+
+Tira do quadro ativo vagas fechadas há muito tempo, sem apagar linha nenhuma.
+
+```bash
+pnpm jho jobs archive --closed-days 90            # dry-run
+pnpm jho jobs archive --closed-days 90 --apply
+```
+
+| Flag | Padrão | Efeito |
+|---|---|---|
+| `--closed-days <n>` | `90` | Arquivar fechamentos anteriores a N dias |
+| `--limit <n>` | `500` | Teto de vagas examinadas por execução |
+| `--apply` | — | Sem esta flag o comando é somente leitura |
+
+```
+Arquivamento · dry-run
+  corte: fechadas até 2026-06-20 (90 dias)
+  412 examinada(s) · 380 elegível(is) · 2 com candidatura preservada
+  mantidas: 21 recent-closure · 8 inconclusive-probe · 3 manual-source
+  Nada mudou. Rode de novo com --apply para persistir.
+```
+
+> **Invariante:** arquivar **não** toca em `application` nem em
+> `application_event`, e não apaga vaga — quem apaga é `db prune`, e só o que
+> nunca teve candidatura. Sondagem inconclusiva nunca arquiva, fonte manual
+> fica fora, e um `alive` posterior desfaz o arquivamento na mesma linha.
+
 Verifica só o topo de propósito: checar 6.000 links para policiar linhas que
 ninguém vai abrir seria indelicado com os boards e inútil aqui.
 

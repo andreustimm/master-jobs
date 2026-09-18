@@ -187,25 +187,33 @@ bastante para ser recolhida ainda.
 > timestamp e a linha fica. `pruneClosed()` é a única exclusão permitida, e ela
 > se protege sozinha com `job.id not in (select job_id from application)`.
 
-### Arquivar sem perder o funil (tarefa futura)
+### Arquivar sem perder o funil
 
-O arquivamento será uma operação diferente de `prune`: marca `archived_at` em
+O arquivamento é uma operação diferente de `prune`: marca `archived_at` em
 vagas confirmadamente fechadas e antigas, mas preserva `job`, `application` e
 `application_event`. O candidato continua vendo a candidatura e o recrutador
 autorizado continua vendo o registro dentro do seu escopo. Fechar a vaga não
 muda `application.status`.
 
-O comando planejado é:
-
 ```bash
-pnpm jho jobs archive --closed-days 90 --dry-run
-pnpm jho jobs archive --closed-days 90 --apply
+pnpm jho jobs archive --closed-days 90            # dry-run: inventário
+pnpm jho jobs archive --closed-days 90 --apply    # aplica
 ```
 
-O padrão é dry-run. O comando de arquivamento **não faz rede nem descobre
-evidência**: ele consome o `closedAt` já confirmado pelo sync/probe. `404`/`410`
-ou uma reconciliação completa podem sustentar esse fechamento; `401`, `403`,
-`429`, `5xx`, timeout e falha parcial são inconclusivos. A implementação e os critérios estão em
+O padrão é dry-run: sem `--apply` nada muda. Cada execução examina até
+`--limit` vagas (500 por omissão) e avisa quando sobrou trabalho — rodar de
+novo continua de onde parou. Rodar duas vezes não arquiva duas vezes, e duas
+execuções simultâneas reclamam cada linha uma só vez.
+
+Um `alive` posterior na fila de reconferência **desfaz** o arquivamento junto
+com o fechamento, na mesma linha: vaga que volta a responder volta ao quadro.
+
+O comando **não faz rede nem descobre evidência**: ele consome o `closedAt` já
+confirmado pelo sync/probe. `404`/`410` ou uma reconciliação completa podem
+sustentar esse fechamento; `401`, `403`, `429`, `5xx`, timeout e falha parcial
+são inconclusivos — e vaga cuja última sondagem foi inconclusiva nunca é
+arquivada. Fonte manual e de recrutador ficam de fora: ali "fechada" é
+digitação de alguém, não ausência observada. A implementação e os critérios estão em
 [`job-lifecycle-retention`](../.compozy/tasks/job-lifecycle-retention/) e na
 [ADR 0020](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md).
 

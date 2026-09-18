@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Lifecycle domain, schema, and archive CLI
 type: backend
 complexity: high
@@ -32,12 +32,12 @@ separate.
 
 ## Subtasks
 
-- [ ] Add the additive schema migration and verified indexes.
-- [ ] Implement pure archive eligibility and reopen decisions.
-- [ ] Wire repository selection with application-preservation predicate.
-- [ ] Add `jho jobs archive` dry-run/apply and safe error output.
-- [ ] Integrate alive/reopen behavior with existing verify queue.
-- [ ] Add unit and integration coverage assigned below.
+- [x] Add the additive schema migration and verified indexes.
+- [x] Implement pure archive eligibility and reopen decisions.
+- [x] Wire repository selection with application-preservation predicate.
+- [x] Add `jho jobs archive` dry-run/apply and safe error output.
+- [x] Integrate alive/reopen behavior with existing verify queue.
+- [x] Add unit and integration coverage assigned below.
 
 ## Implementation Details
 
@@ -74,9 +74,9 @@ as explicit inputs to pure functions.
 
 ## Tests
 
-- [ ] UT-001, UT-002, UT-003, UT-004, UT-005, UT-008 — domain, idempotency, preservation, and CLI validation.
-- [ ] IT-001, IT-002, IT-005 — migration, prune interaction, and atomic replay/reopen.
-- [ ] E2E-003 — operator dry-run/apply/replay journey.
+- [x] UT-001, UT-002, UT-003, UT-004, UT-005, UT-008 — domain, idempotency, preservation, and CLI validation.
+- [x] IT-001, IT-002, IT-005 — migration, prune interaction, and atomic replay/reopen.
+- [x] E2E-003 — operator dry-run/apply/replay journey.
 
 ## Success Criteria
 
