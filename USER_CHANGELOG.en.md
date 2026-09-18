@@ -18,6 +18,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preparing a test version failed when a sample résumé was already stored under
+  a different name. The preparation now updates the résumé that is there instead
+  of trying to create a second one.
 ### New
 
 - Corpus cleanup gained a reversible step: jobs closed long ago can leave the
