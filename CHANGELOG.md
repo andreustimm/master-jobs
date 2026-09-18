@@ -20,6 +20,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   inválida vira erro de configuração em vez de meia carga. Sem PII, sem
   segredo, sem payload bruto, e todas as URLs em `example.test` (F-08, ADR 0021).
 
+## [1.9.0] - 2026-09-18
+
 ### Adicionado
 
 - Política de ingestão por ambiente que nega por omissão: `canRunIngestion` é

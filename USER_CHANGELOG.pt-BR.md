@@ -25,6 +25,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   encerradas. Quem experimenta uma dessas versões vê as telas funcionando sem
   depender de dados reais.
 
+## [1.9.0] - 2026-09-18T15:01:18.066Z
+
 ### Melhorado
 
 - Os ambientes de teste do sistema deixam de buscar vagas de verdade: eles
