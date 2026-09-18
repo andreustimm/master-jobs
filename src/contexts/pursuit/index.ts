@@ -17,6 +17,7 @@ export {
 } from "./domain/application.ts";
 
 export {
+  applicationTimeline,
   ApplicationTransitionConflictError,
   getJobDetail,
   pipelineCounts,

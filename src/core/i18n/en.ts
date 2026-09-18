@@ -571,6 +571,10 @@ export const en: Dictionary = {
     capturedOn: "captured on",
     openFull: "Open the full posting →",
     aboveCut: "Above the {cut} cut, across the whole corpus.",
+    history: "Application history",
+    historyMoved: "from {from} to {to}",
+    historyStarted: "registered at {to}",
+    historyNote: "note",
   },
   copy: {
     candidateLead:

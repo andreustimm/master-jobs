@@ -579,6 +579,10 @@ export const ptBR = {
     capturedOn: "capturada em",
     openFull: "Abrir a vaga completa →",
     aboveCut: "Acima do corte de {cut}, no acervo inteiro.",
+    history: "Histórico da candidatura",
+    historyMoved: "de {from} para {to}",
+    historyStarted: "registrada em {to}",
+    historyNote: "nota",
   },
   copy: {
     candidateLead:

@@ -579,6 +579,39 @@ export async function getJobDetail(candidateId: number | null, jobId: number) {
   };
 }
 
+/**
+ * O histórico da candidatura, do mais recente para o mais antigo.
+ *
+ * `application_event` era escrito e lido por ninguém: a nota que a pessoa
+ * digita ao mover a candidatura ia para `detail` e não voltava em superfície
+ * alguma — nem na tela, nem em `jobs show`, que lê `application.notes`, outro
+ * campo. Um texto aceito e irrecuperável é indistinguível de perdido.
+ *
+ * O escopo vem do candidato, não do id do evento: a junção exige que a
+ * candidatura seja dele, então pedir o histórico de outra pessoa devolve vazio
+ * em vez de devolver o dela.
+ */
+export async function applicationTimeline(candidateId: number | null, jobId: number) {
+  const db = getDb();
+  return db
+    .select({
+      at: applicationEvent.at,
+      kind: applicationEvent.kind,
+      fromStatus: applicationEvent.fromStatus,
+      toStatus: applicationEvent.toStatus,
+      detail: applicationEvent.detail,
+    })
+    .from(applicationEvent)
+    .innerJoin(application, eq(application.id, applicationEvent.applicationId))
+    .where(
+      and(
+        eq(application.jobId, jobId),
+        scopedTo(application.candidateId, candidateId),
+      ),
+    )
+    .orderBy(desc(applicationEvent.at), desc(applicationEvent.id));
+}
+
 /** Global job and canonical score, deliberately excluding private funnel data. */
 export async function getJobScoringDetail(candidateId: number, jobId: number) {
   const db = getDb();

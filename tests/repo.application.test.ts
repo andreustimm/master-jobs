@@ -6,7 +6,7 @@ import {
   type ApplicationStatus,
 } from "../src/contexts/pursuit/domain/application.ts";
 import type { DB } from "../src/core/db/client.ts";
-import { listBoard, pipelineCounts, setApplicationStatus } from "../src/core/db/repo.ts";
+import { applicationTimeline, listBoard, pipelineCounts, setApplicationStatus } from "../src/core/db/repo.ts";
 import {
   application,
   applicationEvent,
@@ -320,6 +320,38 @@ describe("transitionApplication", () => {
         expect(result.ok, `${from} -> ${to}`).toBe(from === to || legal[from].includes(to));
       }
     }
+  });
+});
+
+describe("histórico da candidatura", () => {
+  it("devolve os eventos do próprio candidato, do mais recente para o mais antigo", async () => {
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "shortlisted", "Vale olhar com calma.");
+    await setApplicationStatus(candidateId, jobId, "preparing", "Revisar arquitetura antes de aplicar.");
+
+    const timeline = await applicationTimeline(candidateId, jobId);
+
+    expect(timeline).toHaveLength(2);
+    expect(timeline[0]).toMatchObject({
+      kind: "status_change",
+      fromStatus: "shortlisted",
+      toStatus: "preparing",
+      detail: "Revisar arquitetura antes de aplicar.",
+    });
+    expect(timeline[1]).toMatchObject({ fromStatus: null, toStatus: "shortlisted" });
+  });
+
+  it("não devolve o histórico de outro candidato nem de quem não tem escopo", async () => {
+    // A nota é texto que a pessoa escreveu sobre a própria candidatura: ler a
+    // de outra conta seria o mesmo que ler o funil alheio.
+    const owner = await seedCandidate("owner", true);
+    const other = await seedCandidate("other");
+    const jobId = await seedJob();
+    await setApplicationStatus(owner, jobId, "shortlisted", "Nota privada do dono.");
+
+    expect(await applicationTimeline(other, jobId)).toEqual([]);
+    expect(await applicationTimeline(null, jobId)).toEqual([]);
   });
 });
 
