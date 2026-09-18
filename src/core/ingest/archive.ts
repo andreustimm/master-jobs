@@ -85,12 +85,10 @@ function emptyKept(): Record<ArchiveKeepReason, number> {
  * prova ausência. Filtro de SQL é otimização; regra é domínio.
  */
 export async function archiveClosedJobs(options: ArchiveOptions = {}): Promise<ArchiveReport> {
-  const closedDays = wholeNonNegative(
-    options.closedDays ?? DEFAULT_ARCHIVE_CLOSED_DAYS,
-    "closedDays",
-  );
+  const closedDays = options.closedDays ?? DEFAULT_ARCHIVE_CLOSED_DAYS;
   const limit = wholeNonNegative(options.limit ?? DEFAULT_ARCHIVE_LIMIT, "limit");
   const now = options.now ?? new Date();
+  // Valida o corte: recusa antes de abrir conexão, nunca a meio caminho.
   const cutoff = archiveCutoff(now, closedDays);
   const db = getDb();
 
@@ -125,7 +123,7 @@ export async function archiveClosedJobs(options: ArchiveOptions = {}): Promise<A
     const decision = decideArchive({
       closedAt: row.closedAt,
       archivedAt: row.archivedAt,
-      hasApplication: row.hasApplication === true,
+      hasApplication: row.hasApplication,
       cutoff,
       // `source.kind` e `check_status` são texto no banco: valor fora do union
       // cai nas regras de "não sei", que é o comportamento seguro.
@@ -142,19 +140,18 @@ export async function archiveClosedJobs(options: ArchiveOptions = {}): Promise<A
     if (decision.preservesApplication) preservedByApplication += 1;
   }
 
-  const report: ArchiveReport = {
+  const inventory = {
     policy: { closedDays, limit, cutoff },
     scanned: page.length,
     eligible: eligibleIds.length,
     preservedByApplication,
     kept,
-    applied: null,
     hasMore,
   };
 
-  if (!options.apply || eligibleIds.length === 0) {
-    if (options.apply) report.applied = { archived: 0, claimedByAnotherRun: 0 };
-    return report;
+  if (!options.apply) return { ...inventory, applied: null };
+  if (eligibleIds.length === 0) {
+    return { ...inventory, applied: { archived: 0, claimedByAnotherRun: 0 } };
   }
 
   const archivedAt = now.toISOString();
@@ -169,9 +166,11 @@ export async function archiveClosedJobs(options: ArchiveOptions = {}): Promise<A
       .returning({ id: job.id }),
   );
 
-  report.applied = {
-    archived: updated.length,
-    claimedByAnotherRun: eligibleIds.length - updated.length,
+  return {
+    ...inventory,
+    applied: {
+      archived: updated.length,
+      claimedByAnotherRun: eligibleIds.length - updated.length,
+    },
   };
-  return report;
 }
