@@ -21,6 +21,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   `application_event`. Um `alive` posterior desfaz o arquivamento junto com o
   fechamento, na mesma linha, sem duplicar fingerprint (F-07, ADR 0020).
 
+## [1.11.1] - 2026-09-18
+
 ### Corrigido
 
 - O seed de fixtures deixa de estourar quando duas execuções se cruzam.

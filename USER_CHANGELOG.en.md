@@ -26,6 +26,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   notes, the dates — is touched by that step. The command shows what it would
   do before changing anything.
 
+## [1.11.1] - 2026-09-18T16:55:28.948Z
+
 ### Fixed
 
 - Preparing a test version with sample data could fail when two releases

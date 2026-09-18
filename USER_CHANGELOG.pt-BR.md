@@ -26,6 +26,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   anotações, as datas — é tocado nesse passo. Antes de mudar qualquer coisa, o
   comando mostra o que faria.
 
+## [1.11.1] - 2026-09-18T16:55:28.948Z
+
 ### Corrigido
 
 - Preparar uma versão de teste com dados de exemplo podia falhar quando duas
