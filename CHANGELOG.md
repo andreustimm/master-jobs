@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-09-18
+
 ### Corrigido
 
 - O seed de fixtures deixa de estourar quando duas execuções se cruzam.
