@@ -18,6 +18,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Adicionado
+
+- O detalhe da vaga passa a mostrar o histórico da candidatura: cada mudança de
+  estágio com a data e a nota que você escreveu naquele momento.
+
 ### Corrigido
 
 - Ao mover uma candidatura, a lista mostra só os estágios para onde ela pode ir

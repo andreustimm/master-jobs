@@ -586,6 +586,10 @@ export const ptBR = {
       "O funil não vai de {from} para {to}. Sua nota continua aqui; escolha um estágio alcançável.",
     transitionConflict:
       "Esta candidatura mudou em outra tela. Recarregue para ver o estágio atual e tente de novo.",
+    history: "Histórico da candidatura",
+    historyMoved: "de {from} para {to}",
+    historyStarted: "registrada em {to}",
+    historyNote: "nota",
   },
   copy: {
     candidateLead:
