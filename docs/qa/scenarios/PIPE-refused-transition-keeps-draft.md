@@ -10,7 +10,7 @@ qa_status: pass
 bug_ids: BUG-20260910-application-edit-not-retained; BUG-20260917-stale-stages-after-refusal
 fix_status: fixed
 retest_status: verified
-fix_commits: f16c2b4; 916c531; fa1269d
+fix_commits: f16c2b4; 916c531; fa1269d; 03ac0f6; 9bb7fc0
 evidence: docs/qa/evidence/2026-09-17T222310262016Z-5e419094-application-draft-on-rejected-transition/CH-refused-transition-draft-step3-note-kept.png; docs/qa/evidence/2026-09-17T222310262016Z-5e419094-application-draft-on-rejected-transition/CH-refused-transition-draft-retest-fresh-stages.png
 last_report: docs/qa/reports/2026-09-17T222310262016Z-5e419094-application-draft-on-rejected-transition.md
 overlaps: PIPE-save-resume-decision
@@ -30,3 +30,10 @@ mais curto: dele nenhum estágio é alcançável.
 O veredito exige as duas metades na mesma tentativa: a nota digitada ainda
 visível no campo depois do aviso, e o aviso citando o estágio gravado e o
 pretendido pelo nome traduzido.
+
+Re-andado em 17/09 sobre o head final (`9bb7fc0`), porque o formulário mudou
+duas vezes depois do primeiro veredito — as correções que a revisão
+independente pediu. As três propriedades se sustentam: o aviso diz "The funnel
+does not go from Archived to Applied", a nota continua no campo, e o seletor
+aponta para `archived`, o estágio realmente gravado. Evidência:
+`CH-refused-transition-draft-final-head.png`.
