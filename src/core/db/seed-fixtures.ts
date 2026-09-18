@@ -11,6 +11,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "./client.ts";
+import { withDuplicateKeyRetry } from "./retry.ts";
 import { candidate, candidateDocument, job, source } from "./schema.ts";
 import {
   CANDIDATE_FIXTURES,
@@ -40,16 +41,18 @@ function fingerprintFor(fixture: JobFixture): string {
 }
 
 async function ensureFixtureSource(): Promise<void> {
-  await getDb()
-    .insert(source)
-    .values({
-      id: FIXTURE_SOURCE_ID,
-      kind: "manual",
-      handle: "sample",
-      label: "Acervo de exemplo",
-      rationale: "Fixtures de dev/staging — ADR 0021. Nenhuma rede envolvida.",
-    })
-    .onConflictDoNothing({ target: source.id });
+  await withDuplicateKeyRetry(async () => {
+    await getDb()
+      .insert(source)
+      .values({
+        id: FIXTURE_SOURCE_ID,
+        kind: "manual",
+        handle: "sample",
+        label: "Acervo de exemplo",
+        rationale: "Fixtures de dev/staging — ADR 0021. Nenhuma rede envolvida.",
+      })
+      .onConflictDoNothing({ target: source.id });
+  });
 }
 
 async function seedJob(fixture: JobFixture): Promise<"inserted" | "updated"> {
@@ -75,25 +78,29 @@ async function seedJob(fixture: JobFixture): Promise<"inserted" | "updated"> {
   // vezes. Quem garante a identidade é o índice único, não a janela de tempo.
   // Reescreve só o conteúdo declarado: `firstSeenAt` e o que a aplicação tiver
   // produzido em cima da vaga não são da fixture.
-  const [row] = await db
-    .insert(job)
-    .values(values)
-    .onConflictDoUpdate({ target: job.fingerprint, set: values })
-    // `xmax` é zero na linha recém-inserida e carrega a transação que a
-    // atualizou quando o conflito disparou — é a resposta do próprio
-    // PostgreSQL para "isto nasceu agora?", sem segunda consulta.
-    .returning({ inserted: sql<boolean>`(xmax = 0)` });
+  const [row] = await withDuplicateKeyRetry(() =>
+    db
+      .insert(job)
+      .values(values)
+      .onConflictDoUpdate({ target: job.fingerprint, set: values })
+      // `xmax` é zero na linha recém-inserida e carrega a transação que a
+      // atualizou quando o conflito disparou — é a resposta do próprio
+      // PostgreSQL para "isto nasceu agora?", sem segunda consulta.
+      .returning({ inserted: sql<boolean>`(xmax = 0)` }),
+  );
 
   return row!.inserted ? "inserted" : "updated";
 }
 
 async function seedCandidate(fixture: CandidateFixture): Promise<"inserted" | "updated"> {
   const db = getDb();
-  const [row] = await db
-    .insert(candidate)
-    .values({ slug: fixture.slug, name: fixture.name })
-    .onConflictDoUpdate({ target: candidate.slug, set: { name: fixture.name } })
-    .returning({ id: candidate.id, inserted: sql<boolean>`(xmax = 0)` });
+  const [row] = await withDuplicateKeyRetry(() =>
+    db
+      .insert(candidate)
+      .values({ slug: fixture.slug, name: fixture.name })
+      .onConflictDoUpdate({ target: candidate.slug, set: { name: fixture.name } })
+      .returning({ id: candidate.id, inserted: sql<boolean>`(xmax = 0)` }),
+  );
 
   const candidateId = row!.id;
   const outcome = row!.inserted ? "inserted" : "updated";
