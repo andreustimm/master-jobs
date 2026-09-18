@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-18
+
 ### Adicionado
 
 - Acervo de exemplo declarado em `src/core/db/fixtures.ts` e semeado por

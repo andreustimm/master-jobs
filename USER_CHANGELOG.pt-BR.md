@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-18T15:23:04.431Z
+
 ### Melhorado
 
 - As versões de teste do sistema passam a vir com um conjunto pequeno de vagas

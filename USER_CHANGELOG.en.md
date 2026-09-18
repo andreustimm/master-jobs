@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-18T15:23:04.431Z
+
 ### Improved
 
 - Test versions of the system now ship with a small set of sample jobs and
