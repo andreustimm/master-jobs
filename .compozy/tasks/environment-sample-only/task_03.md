@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Workflow, secrets, and QA isolation
 type: infra
 complexity: high

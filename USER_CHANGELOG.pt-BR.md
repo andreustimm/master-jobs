@@ -18,6 +18,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Melhorado
+
+- A busca automática de vagas só roda no sistema publicado. Versões de teste
+  não disparam mais buscas nem consomem a cota dos sites de vagas, mesmo que
+  compartilhem alguma configuração por engano.
+
 ## [1.10.0] - 2026-09-18T15:23:04.431Z
 
 ### Melhorado

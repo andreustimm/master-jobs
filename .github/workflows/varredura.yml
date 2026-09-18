@@ -53,6 +53,12 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
       DATABASE_CA_CERT: config/certs/supabase-ca.crt
+      # A política de ingestão (ADR 0021) nega por omissão: sem declarar o
+      # ambiente, este job normalizaria para `preview` e seria bloqueado. A
+      # allowlist é a segunda metade — produção só gasta cota das fontes que
+      # alguém listou de propósito, e listar é decisão de operação, não de CI.
+      JHO_ENV: production
+      JHO_SOURCE_ALLOWLIST: ${{ vars.JHO_SOURCE_ALLOWLIST }}
       # Das 15 fontes ativas, nenhuma exige Adzuna. Se ele for habilitado sem
       # credenciais, é ignorado com aviso; as outras fontes seguem.
       ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
@@ -74,6 +80,10 @@ jobs:
         run: |
           if [ -z "$DATABASE_URL" ]; then
             echo "::error::SUPABASE_DATABASE_URL ausente. Nenhuma varredura executada."
+            exit 1
+          fi
+          if [ -z "$JHO_SOURCE_ALLOWLIST" ]; then
+            echo "::error::JHO_SOURCE_ALLOWLIST ausente. A política de ingestão exige a lista declarada; nenhuma varredura executada."
             exit 1
           fi
 

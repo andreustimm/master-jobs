@@ -9,7 +9,7 @@
  * O seed não liga ingestão: ele escreve direto no acervo, sem adapter e sem
  * rede, e é por isso que roda em ambiente onde a política de ingestão nega.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "./client.ts";
 import { candidate, candidateDocument, job, source } from "./schema.ts";
 import {
@@ -21,6 +21,9 @@ import {
 } from "./fixtures.ts";
 
 export const FIXTURE_SOURCE_ID = "fixture:sample";
+
+/** Rótulo fixo: é ele que dá identidade ao currículo de exemplo entre execuções. */
+export const FIXTURE_CV_LABEL = "Currículo de exemplo";
 
 export type FixtureSeedResult = {
   jobs: { inserted: number; updated: number };
@@ -67,71 +70,69 @@ async function seedJob(fixture: JobFixture): Promise<"inserted" | "updated"> {
     raw: { fixture: true },
   };
 
-  const [existing] = await db
-    .select({ id: job.id })
-    .from(job)
-    .where(eq(job.fingerprint, fingerprint))
-    .limit(1);
+  // Upsert, não ler-depois-escrever: entre o SELECT e o INSERT cabe outra
+  // execução do seed, e três deploys simultâneos inseririam a mesma vaga três
+  // vezes. Quem garante a identidade é o índice único, não a janela de tempo.
+  // Reescreve só o conteúdo declarado: `firstSeenAt` e o que a aplicação tiver
+  // produzido em cima da vaga não são da fixture.
+  const [row] = await db
+    .insert(job)
+    .values(values)
+    .onConflictDoUpdate({ target: job.fingerprint, set: values })
+    // `xmax` é zero na linha recém-inserida e carrega a transação que a
+    // atualizou quando o conflito disparou — é a resposta do próprio
+    // PostgreSQL para "isto nasceu agora?", sem segunda consulta.
+    .returning({ inserted: sql<boolean>`(xmax = 0)` });
 
-  if (!existing) {
-    await db.insert(job).values(values);
-    return "inserted";
-  }
-
-  // Reescreve o conteúdo declarado — e só ele. `firstSeenAt` e o que a
-  // aplicação tiver produzido em cima da vaga não são da fixture.
-  await db.update(job).set(values).where(eq(job.id, existing.id));
-  return "updated";
+  return row!.inserted ? "inserted" : "updated";
 }
 
 async function seedCandidate(fixture: CandidateFixture): Promise<"inserted" | "updated"> {
   const db = getDb();
-  const [existing] = await db
-    .select({ id: candidate.id })
-    .from(candidate)
-    .where(eq(candidate.slug, fixture.slug))
-    .limit(1);
+  const [row] = await db
+    .insert(candidate)
+    .values({ slug: fixture.slug, name: fixture.name })
+    .onConflictDoUpdate({ target: candidate.slug, set: { name: fixture.name } })
+    .returning({ id: candidate.id, inserted: sql<boolean>`(xmax = 0)` });
 
-  const candidateId = existing?.id ?? (
-    await db
-      .insert(candidate)
-      .values({ slug: fixture.slug, name: fixture.name })
-      .returning({ id: candidate.id })
-  )[0]!.id;
-
-  if (existing) {
-    await db.update(candidate).set({ name: fixture.name }).where(eq(candidate.id, candidateId));
-  }
+  const candidateId = row!.id;
+  const outcome = row!.inserted ? "inserted" : "updated";
 
   if (fixture.cv) {
-    // Documento por rótulo fixo: reexecutar não empilha versões de currículo,
-    // que é o que aconteceria com um insert cego a cada seed.
-    const [document] = await db
-      .select({ id: candidateDocument.id })
-      .from(candidateDocument)
-      .where(and(
-        eq(candidateDocument.candidateId, candidateId),
-        eq(candidateDocument.label, "Currículo de exemplo"),
-      ))
-      .limit(1);
+    // Documento por rótulo fixo: reexecutar não empilha versões de currículo.
+    // O schema não tem índice único para (candidato, rótulo), então a corrida
+    // é fechada por uma transação que serializa a leitura com a escrita — sem
+    // ela, dois seeds simultâneos criariam duas versões do mesmo currículo.
+    await db.transaction(async (tx) => {
+      const [document] = await tx
+        .select({ id: candidateDocument.id })
+        .from(candidateDocument)
+        .where(and(
+          eq(candidateDocument.candidateId, candidateId),
+          eq(candidateDocument.label, FIXTURE_CV_LABEL),
+        ))
+        .limit(1)
+        .for("update");
 
-    if (document) {
-      await db
-        .update(candidateDocument)
-        .set({ content: fixture.cv })
-        .where(eq(candidateDocument.id, document.id));
-    } else {
-      await db.insert(candidateDocument).values({
+      if (document) {
+        await tx
+          .update(candidateDocument)
+          .set({ content: fixture.cv! })
+          .where(eq(candidateDocument.id, document.id));
+        return;
+      }
+
+      await tx.insert(candidateDocument).values({
         candidateId,
         kind: "cv",
-        label: "Currículo de exemplo",
+        label: FIXTURE_CV_LABEL,
         format: "markdown",
-        content: fixture.cv,
+        content: fixture.cv!,
       });
-    }
+    });
   }
 
-  return existing ? "updated" : "inserted";
+  return outcome;
 }
 
 /**
