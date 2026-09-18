@@ -21,6 +21,18 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   `application_event`. Um `alive` posterior desfaz o arquivamento junto com o
   fechamento, na mesma linha, sem duplicar fingerprint (F-07, ADR 0020).
 
+### Corrigido
+
+- O seed de fixtures deixa de estourar quando duas execuções se cruzam.
+  `ON CONFLICT DO UPDATE` promete resultado atômico para uma sessão, não
+  imunidade a corrida: a inserção especulativa escreve no índice único antes de
+  descobrir o conflito, e duas sessões que chegam ali recebem `23505` em vez do
+  UPDATE. Medido com três seeds simultâneos — falhava em cerca de metade das
+  execuções da suíte completa e nunca isolado, que é o formato de defeito que
+  passa por revisão. `withDuplicateKeyRetry` reexecuta só escrita idempotente e
+  só nesse código; qualquer outro erro, e a chave duplicada que insiste, sobem
+  na hora.
+
 ## [1.11.0] - 2026-09-18
 
 ### Alterado
