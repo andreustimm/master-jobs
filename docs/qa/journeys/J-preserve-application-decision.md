@@ -9,7 +9,7 @@ flowchart TD
     D --> E[Escolher status e registrar nota]
     E --> F[Salvar a decisão]
     F -->|confirmado| G[Efeito: candidatura e evento de histórico persistidos]
-    F -->|falha| H[Feedback de erro sem confirmação falsa]
+    F -->|recusado| H[Aviso nomeia os dois estágios e a nota digitada continua no formulário]
     H --> E
     G --> I[Abrir funil e recarregar]
     I --> J[Sair e entrar novamente]
@@ -36,7 +36,7 @@ journey:
       expected_observable: Empresa e título identificam a vaga escolhida
     - step: 2
       verb: Escolher o próximo status e salvar uma nota
-      expected_observable: A interface confirma a gravação ou informa a falha
+      expected_observable: O seletor oferece só estágios alcançáveis, e a interface confirma a gravação ou nomeia a recusa sem apagar a nota
     - step: 3
       verb: Consultar o funil após refresh e um novo login
       expected_observable: A mesma vaga continua no status salvo
@@ -53,6 +53,9 @@ journey:
     - at_step: 2
       how: Sair do detalhe sem enviar o formulário
       resume: O último status e a nota confirmados permanecem
+    - at_step: 2
+      how: Ter a mudança recusada porque outra aba moveu a candidatura antes
+      resume: A nota digitada continua no formulário e o aviso diz qual estágio não leva a qual
   crosses: [autenticação, escopo do candidato, candidatura, histórico, CLI, PostgreSQL]
 ```
 

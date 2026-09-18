@@ -6,13 +6,13 @@ persona: Candidato em trânsito
 journey: J-open-dashboard-direct
 expected: O topo ocupa 100% da viewport; no celular somente o conteúdo usa 95% com 2,5% por lado; tablet e desktop preservam as calhas do design; os links do menu aparecem sempre que couberem.
 entry_points: /
-qa_status: untested
+qa_status: pass
 bug_ids: BUG-20260826-responsive-header-artifact-skew
 fix_status: fixed
-retest_status: pending
+retest_status: verified
 fix_commits: 1570ccd; b05f949; 79d9cf3
-evidence: tests/e2e/ui.mjs; tests/mobile.test.ts; tests/pwa-chrome.test.ts; docs/qa/evidence/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh/production-obsolete-safe-area-selector.png; docs/qa/evidence/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh/production-wide-compact-menu.png
-last_report: docs/qa/reports/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh.md
+evidence: tests/e2e/ui.mjs; tests/mobile.test.ts; tests/pwa-chrome.test.ts; docs/qa/evidence/2026-09-17T222310262016Z-5e419094-application-draft-on-rejected-transition/NAV-full-width-shell-mobile.png
+last_report: docs/qa/reports/2026-09-17T230607949478Z-796f372b-pre-varredura-cenarios-nao-testados.md
 overlaps: PWA-installed-header-safe-area; SKIL-mobile-layout
 ---
 

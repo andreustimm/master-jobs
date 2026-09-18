@@ -424,6 +424,22 @@ export async function setApplicationStatusInTransaction(
         .set({ channel, updatedAt: stamp })
         .where(eq(application.id, previous.id));
     }
+    // A nota tem a mesma natureza que o canal, e por muito tempo não teve o
+    // mesmo tratamento: ela era descartada aqui. Isso ficou alcançável demais
+    // quando a interface passou a oferecer só transições legais — de um estado
+    // terminal a única opção É a atual, então salvar uma nota caía sempre neste
+    // caminho, com a tela anunciando sucesso e nada gravado. Não é transição:
+    // vai como evento `note`, sem `from`/`to`.
+    if (detail?.trim() && previous) {
+      await tx.insert(applicationEvent).values({
+        applicationId: previous.id,
+        at: stamp,
+        kind: "note",
+        fromStatus: null,
+        toStatus: null,
+        detail,
+      });
+    }
     return;
   }
 

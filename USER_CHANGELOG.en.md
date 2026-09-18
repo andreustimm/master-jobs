@@ -18,6 +18,16 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- When you move an application, the list now shows only the stages it can reach
+  from where it is.
+- If the change is refused, the note you typed stays on screen, and the message
+  says which stage cannot lead to which.
+- After a refusal, the screen now shows the application's current stage and the
+  options that actually lead somewhere, with no reload needed.
+- A note written without changing the stage is no longer discarded on save.
+
 ## [1.7.1] - 2026-09-16T22:56:50.789Z
 
 ### Fixed

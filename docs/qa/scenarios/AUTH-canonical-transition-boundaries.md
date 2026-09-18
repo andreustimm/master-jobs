@@ -32,4 +32,13 @@ seguido de acesso privado redirecionado ao login. Essas pernas passaram;
 callback válido, impersonação, expiração por relógio e rede flaky continuam
 sem cobertura manual atual. Não converter o cenário inteiro para pass.
 
+17/09/2026, pré-varredura sem sessão em 375×812: `/candidate` e `/api/export`
+terminam em `/login` sem conteúdo do candidato, `/p/alex` devolve 404 — e não
+403, que confirmaria a existência do slug —, e o gatilho de Novidades não existe
+antes de uma sessão válida, nos dois idiomas. As pernas de recovery, callback e
+token expirado/consumido/disputado não foram andadas: o seed manual não cria
+esses tokens e forjá-los sairia da via pública. O cenário segue `untested` até o
+Full rodar com o seed que os cria. Relatório:
+docs/qa/reports/2026-09-17T230607949478Z-796f372b-pre-varredura-cenarios-nao-testados.md
+
 O Full QA confirmou token consumido, impersonação e as respostas canônicas. O primeiro percurso revelou que o layout inserido por Flight deixava o splash inerte sobre 403/404 após reload. A correção passou a remover somente esse splash sem timer ativo; candidato e recrutador foram retestados em build de produção local, com HTTP 403 preservado, tela localizada visível e nenhuma camada residual.

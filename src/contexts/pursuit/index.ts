@@ -7,6 +7,7 @@
  */
 export {
   APPLICATION_STATUSES,
+  allowedTransitions,
   IllegalApplicationTransitionError,
   parseApplicationStatus,
   transitionApplication,

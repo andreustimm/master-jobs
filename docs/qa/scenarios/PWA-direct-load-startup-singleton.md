@@ -23,6 +23,14 @@ busca e navegação Candidato com back/forward e nova leitura. Sem overlay resid
 nas capturas finais da rodada supabase-production. Não mediu os 900 ms nem
 repetiu a persona móvel; cenário completo permanece untested.
 
+17/09/2026, pré-varredura em 375×812: a carga direta não empilha overlay de
+transição durante a hidratação — a metade de camada única do `expected` se
+sustenta pela observação, e a suíte automatizada a afirma em `task-04 E2E-013`.
+Os 900 ms continuam sem medição: o driver de jornada não expõe cronometragem, e
+"pareceu curto" não é veredito. Enquanto as duas metades viverem no mesmo
+`expected`, este cenário não assenta por sessão de persona. Relatório:
+docs/qa/reports/2026-09-17T230607949478Z-796f372b-pre-varredura-cenarios-nao-testados.md
+
 Migração PostgreSQL: repetir como canária do novo runtime; os relatos abaixo
 registram versões anteriores, não o resultado desta branch.
 

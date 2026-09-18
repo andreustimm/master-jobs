@@ -12,7 +12,7 @@ fix_status:
 retest_status:
 fix_commits:
 evidence: docs/qa/evidence/2026-08-25T214402000000Z-fb9a9b34-rescore-status-targeted/failed-safe-mobile.png; docs/qa/evidence/2026-08-25T214402000000Z-fb9a9b34-rescore-status-targeted/failed-safe-landscape.png; docs/qa/evidence/2026-08-25T214402000000Z-fb9a9b34-rescore-status-targeted/idle-private-mobile.png; tests/e2e/ui.mjs
-last_report: docs/qa/reports/2026-09-10T011143000000Z-8bd417c2-supabase-production.md
+last_report: docs/qa/reports/2026-09-17T232350685065Z-1cb4e9bd-release-candidate-1.7.1-full.md
 overlaps:
 ---
 

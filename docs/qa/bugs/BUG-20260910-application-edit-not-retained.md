@@ -1,6 +1,6 @@
 # BUG-20260910-application-edit-not-retained: edição da candidatura não é relida como enviada
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Data-Loss
 - **Severity:** Critical · **Priority:** P0
 - **Persona Affected:** Andreus em triagem noturna
@@ -56,12 +56,37 @@ houve divergência transitória entre o selo Preparando e o seletor Pré-selecio
   Sua ausência na CLI não prova perda da nota de transição. Essa parte da
   expectativa de QA estava errada; a preservação do evento continua coberta
   pela carga com hash por tabela, não por essa CLI.
-- **Fix commit:** nenhum.
-- **Regression test:** ainda pendente. As capturas constituem reprodução inicial.
+- **Fix commit:** f16c2b4, com 916c531 preservando o padrão `shortlisted` de uma
+  candidatura ainda não registrada. O seletor passa a ser derivado de
+  `allowedTransitions()`, que lê o mesmo `LEGAL_TRANSITIONS` da política de
+  transição, então a recusa deixa de ser alcançável por clique. Ela continua
+  possível quando outra aba move a candidatura primeiro, e por isso
+  `trackAction` devolve a recusa como dado tipado: o formulário guarda o estado
+  em React, o rascunho sobrevive e a mensagem nomeia os dois estágios.
+- **Regression test:** `tests/repo.application.test.ts` afirma que o que
+  `allowedTransitions` oferece é exatamente o que `transitionApplication`
+  aceita, status a status; `tests/application-status-ui.test.ts` cobre a lista
+  traduzida; e `tests/e2e/ui.mjs` reproduz a recusa com duas abas e verifica que
+  a nota digitada continua na tela depois dela.
 
 ## Verification
 
-Não corrigido nem retestado. Não usar este achado como evidência de perda em produção.
+- **Retested:** 2026-09-17, Andreus em triagem noturna, J-preserve-application-decision, build standalone com PostgreSQL isolado · **Report:** docs/qa/reports/2026-09-17T222310262016Z-5e419094-application-draft-on-rejected-transition.md
+- **Result:** com a candidatura em "Preparando", o seletor oferece apenas
+  "Preparando" e "Candidatura enviada" — "Em entrevista" deixou de ser
+  escolhível, então a recusa não é mais alcançável por clique. Provocada pela
+  via pública (outra aba arquivou a candidatura), a recusa mantém
+  "Entrevista técnica marcada para sexta-feira às 14h." no campo e avisa
+  "O funil não vai de Arquivada para Candidatura enviada".
+- **Observação:** a nota gravada continua sem caminho de leitura em superfície
+  pública alguma. Isso não é este defeito — foi registrado em
+  BUG-20260917-transition-note-never-readable e aguarda decisão humana.
+- **Presente no release candidate:** o Full de 17/09 percorreu `676d5e0`, o
+  código que está em `staging` e é o objeto da PR #80, e o defeito reproduz ali
+  com a nota descartada e o aviso genérico. `verified` descreve a branch de
+  correção, não o RC: enquanto a PR #87 não promover, o corte para produção leva
+  este defeito junto. Relatório:
+  docs/qa/reports/2026-09-17T232350685065Z-1cb4e9bd-release-candidate-1.7.1-full.md
 
 ## Diagnóstico refinado (2026-09-10)
 
