@@ -9,6 +9,18 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Estado de arquivamento (`job.archived_at`) separado do fechamento da fonte, e
+  `jho jobs archive` para inventariar e aplicar. A decisão é pura em
+  `src/core/ingest/lifecycle.ts`: fonte manual fica fora, sondagem inconclusiva
+  nunca arquiva e fechamento recente espera o corte — a mesma disciplina de
+  `probe.ts`, porque as duas escondem vaga boa quando erram. O comando é
+  somente leitura por omissão, pagina com teto e reclama cada linha uma vez só
+  (`archived_at is null` também na escrita), e não toca em `application` nem em
+  `application_event`. Um `alive` posterior desfaz o arquivamento junto com o
+  fechamento, na mesma linha, sem duplicar fingerprint (F-07, ADR 0020).
+
 ## [1.10.0] - 2026-09-18
 
 ### Adicionado

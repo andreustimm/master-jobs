@@ -130,6 +130,13 @@ export const job = production.table(
     lastSeenAt: text("last_seen_at").notNull().default(now),
     /** Set when a previously seen posting disappears from its source. */
     closedAt: text("closed_at"),
+    /**
+     * Quando a vaga saiu do quadro ativo — decisão de apresentação, não fato da
+     * fonte. Separado de `closedAt` porque um é observação e o outro é
+     * política: o corte de retenção muda sem que o anúncio mude. Null = ativa.
+     * Reversível: um `alive` posterior limpa esta coluna (ADR 0020).
+     */
+    archivedAt: text("archived_at"),
     raw: json("raw").notNull(),
   },
   (t) => [
@@ -138,6 +145,10 @@ export const job = production.table(
     index("job_company_idx").on(t.companyName),
     index("job_last_seen_idx").on(t.lastSeenAt),
     index("job_closed_idx").on(t.closedAt),
+    // A varredura de arquivamento pergunta sempre a mesma coisa: fechada antes
+    // do corte e ainda não arquivada. Índice composto nessa ordem serve à
+    // varredura e ao filtro do quadro ativo com a mesma estrutura.
+    index("job_archive_scan_idx").on(t.closedAt, t.archivedAt),
   ],
 );
 

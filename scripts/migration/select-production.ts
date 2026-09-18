@@ -20,6 +20,18 @@ const policies: Record<string, string> = {
   score_task: "exclude-queue", verify_task: "exclude-crawler",
 };
 
+/**
+ * Colunas que o alvo ganhou depois que o snapshot legado foi congelado.
+ *
+ * A trava de drift existe para que coluna nova não atravesse a importação sem
+ * decisão; por isso cada uma entra aqui com o valor que a importação escreve,
+ * em vez de a comparação passar a tolerar diferença em silêncio. O snapshot não
+ * tem conceito de arquivamento — tudo que vem dele chega ao alvo ativo.
+ */
+export const postSnapshotColumns: Record<string, Record<string, unknown>> = {
+  job: { archived_at: null },
+};
+
 const selectedJobs = `SELECT id FROM job WHERE
   id IN (SELECT job_id FROM application UNION SELECT job_id FROM mail_suggestion WHERE job_id IS NOT NULL)
   OR posted_by_user_id IS NOT NULL
@@ -50,8 +62,10 @@ export function selectProduction(path: string) {
     const manifest = [];
     for (const table of tables.sort((a, b) => a.name.localeCompare(b.name))) {
       const name = table.name;
+      const added = postSnapshotColumns[name] ?? {};
       const actual = db.prepare(`PRAGMA table_info(${quote(name)})`).all().map((c) => String(c.name)).sort();
-      if (JSON.stringify(actual) !== JSON.stringify(table.columns.map((c) => c.name).sort())) {
+      const expected = table.columns.map((c) => c.name).filter((c) => !(c in added)).sort();
+      if (JSON.stringify(actual) !== JSON.stringify(expected)) {
         throw new Error(`Unreviewed column drift: ${name}`);
       }
       const policy = policies[name]!;
@@ -67,6 +81,12 @@ export function selectProduction(path: string) {
       rows[name] = db.prepare(`SELECT * FROM ${quote(name)} WHERE ${predicate} ORDER BY ${keys.map(quote).join(",")}`).all().map((row) => {
         const result: Record<string, unknown> = {};
         for (const col of table.columns) {
+          // Na posição da coluna, não antes: a verificação do alvo compara o
+          // hash do JSON, e chave fora de ordem muda o hash sem mudar o dado.
+          if (col.name in added) {
+            result[col.name] = added[col.name];
+            continue;
+          }
           let value: unknown = row[col.name];
           if (value !== null && col.dataType === "boolean") {
             if (value !== 0 && value !== 1) throw new Error(`Invalid boolean: ${name}.${col.name}`);

@@ -18,6 +18,14 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Novidade
+
+- A limpeza do acervo ganhou um passo reversível: vagas encerradas há muito
+  tempo podem sair da lista ativa sem serem apagadas, e voltam sozinhas se a
+  vaga reabrir. Nada do que você registrou sobre uma candidatura — o estágio, as
+  anotações, as datas — é tocado nesse passo. Antes de mudar qualquer coisa, o
+  comando mostra o que faria.
+
 ## [1.10.0] - 2026-09-18T15:23:04.431Z
 
 ### Melhorado
