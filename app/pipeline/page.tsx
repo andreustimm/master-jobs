@@ -1,9 +1,17 @@
+import type { Route } from "next";
 import { TransitionLink } from "../transition-link";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { pipelineCounts, pipelineRows } from "../../src/contexts/pursuit/index.ts";
+import {
+  APPLICATION_STATUSES,
+  PIPELINE_PAGE_SIZE,
+  pipelineCounts,
+  pipelineRows,
+  type ApplicationStatus,
+} from "../../src/contexts/pursuit/index.ts";
+import { jobLifecycleState } from "../../src/core/ingest/lifecycle.ts";
 import { isPublicJobUrl } from "../../src/core/job-url.ts";
 import { ACTION_BUTTON, Fit, StatusBadge } from "../ui";
 import { applicationStatusOptions } from "../status.ts";
@@ -12,14 +20,57 @@ import { getTranslator } from "../i18n";
 
 export const dynamic = "force-dynamic";
 
-export default async function Pipeline() {
+/** Estágio da URL: desconhecido não quebra a página, mostra o funil inteiro. */
+function readStage(value: string | undefined): {
+  stage: ApplicationStatus | null;
+  invalid: boolean;
+} {
+  if (!value) return { stage: null, invalid: false };
+  const stage = APPLICATION_STATUSES.find((status) => status === value);
+  return stage ? { stage, invalid: false } : { stage: null, invalid: true };
+}
+
+export default async function Pipeline({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { t, locale } = await getTranslator();
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
+  const params = await searchParams;
+  const one = (key: string) => {
+    const value = params[key];
+    return Array.isArray(value) ? value[0] : value;
+  };
+  const { stage, invalid } = readStage(one("stage"));
+  const page = Math.max(1, Number(one("page") ?? 1) || 1);
+
   const [counts, rows] = await Promise.all([
     pipelineCounts(candidateId),
-    pipelineRows(candidateId),
+    pipelineRows(candidateId, {
+      status: stage,
+      limit: PIPELINE_PAGE_SIZE,
+      offset: (page - 1) * PIPELINE_PAGE_SIZE,
+    }),
   ]);
+
+  // O total vem das contagens, não da página: paginar não muda quantas
+  // candidaturas existem, e recontar por página faria o número piscar.
+  const everything = Object.values(counts).reduce((sum, n) => sum + n, 0);
+  const total = stage ? (counts[stage] ?? 0) : everything;
+  const lastPage = Math.max(1, Math.ceil(total / PIPELINE_PAGE_SIZE));
+  const href = (next: { stage?: string | null; page?: number }): Route => {
+    const query = new URLSearchParams();
+    const wanted = next.stage === undefined ? stage : next.stage;
+    if (wanted) query.set("stage", wanted);
+    const wantedPage = next.page ?? 1;
+    if (wantedPage > 1) query.set("page", String(wantedPage));
+    const search = query.toString();
+    // Mesma saída das demais telas com filtro na URL: o Next tipa rota, e um
+    // `string` montado em tempo de execução não passa por esse tipo.
+    return (search ? `/pipeline?${search}` : "/pipeline") as Route;
+  };
 
   return (
     <main className="pt-10" data-testid="route-pipeline">
@@ -28,20 +79,62 @@ export default async function Pipeline() {
         {t("copy.pipelineLead")}
       </p>
 
+      {invalid && (
+        <Card className="mb-4 p-4 text-sm text-muted-foreground" data-testid="pipeline-unknown-stage">
+          {t("pipeline.unknownStage")}
+        </Card>
+      )}
+
       <div className="mb-8 flex flex-wrap gap-2.5">
+        <TransitionLink href={href({ stage: null })} data-testid="pipeline-filter-all">
+          <Card
+            className={cn(
+              "min-w-[96px] gap-0 px-4 py-2.5",
+              stage === null && "border-[var(--primary)]",
+            )}
+          >
+            <div className="font-mono text-2xl font-bold tabular-nums">{everything}</div>
+            <div className="mt-0.5 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
+              {t("pipeline.allStages")}
+            </div>
+          </Card>
+        </TransitionLink>
         {applicationStatusOptions(t, locale)
           .filter(({ value }) => counts[value])
           .map(({ value, label }) => (
-            <Card key={value} className="min-w-[96px] gap-0 px-4 py-2.5">
-              <div className="font-mono text-2xl font-bold tabular-nums">{counts[value]}</div>
-              <div className="mt-0.5 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
-                {label}
-              </div>
-            </Card>
+            <TransitionLink
+              key={value}
+              href={href({ stage: value })}
+              data-testid={`pipeline-filter-${value}`}
+            >
+              <Card
+                className={cn(
+                  "min-w-[96px] gap-0 px-4 py-2.5",
+                  stage === value && "border-[var(--primary)]",
+                )}
+              >
+                <div className="font-mono text-2xl font-bold tabular-nums">{counts[value]}</div>
+                <div className="mt-0.5 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
+                  {label}
+                </div>
+              </Card>
+            </TransitionLink>
           ))}
       </div>
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && stage ? (
+        <Card className="p-6 text-sm text-muted-foreground" data-testid="pipeline-empty-stage">
+          {t("pipeline.noneInStage")}{" "}
+          <TransitionLink
+            href={href({ stage: null })}
+            data-testid="pipeline-empty-stage-all"
+            className="text-[var(--primary-text)] hover:underline"
+          >
+            {t("pipeline.allStages")}
+          </TransitionLink>
+          .
+        </Card>
+      ) : rows.length === 0 ? (
         <Card className="p-6 text-sm text-muted-foreground">
           {t("pipeline.noApplications")} {t("pipeline.startWith")}{" "}
           <TransitionLink href="/jobs" data-testid="pipeline-empty-jobs" className="text-[var(--primary-text)] hover:underline">
@@ -65,6 +158,18 @@ export default async function Pipeline() {
                     {r.title}
                   </TransitionLink>
                   <StatusBadge status={r.status} t={t} />
+                  {jobLifecycleState({ closedAt: r.jobClosedAt, archivedAt: r.jobArchivedAt }) !==
+                    "active" && (
+                    // Estado da VAGA, ao lado do estágio da candidatura e nunca
+                    // no lugar dele: a vaga encerrar não move ninguém no funil.
+                    <Badge
+                      variant="outline"
+                      className="font-mono type-micro text-muted-foreground"
+                      data-testid={`pipeline-job-state-${r.jobId}`}
+                    >
+                      {t(r.jobArchivedAt ? "pipeline.jobArchived" : "pipeline.jobClosed")}
+                    </Badge>
+                  )}
                   {r.channel && (
                     <Badge variant="outline" className="font-mono type-micro">
                       {r.channel}
@@ -110,6 +215,35 @@ export default async function Pipeline() {
             </div>
           ))}
         </div>
+      )}
+
+      {lastPage > 1 && (
+        <nav
+          className="mt-6 flex flex-wrap items-center gap-3 text-sm"
+          data-testid="pipeline-pagination"
+        >
+          {page > 1 ? (
+            <TransitionLink
+              href={href({ page: page - 1 })}
+              data-testid="pipeline-previous"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }), ACTION_BUTTON)}
+            >
+              ← {t("grid.previous")}
+            </TransitionLink>
+          ) : null}
+          <span className="text-muted-foreground">
+            {t("grid.page")} {page} {t("grid.of")} {lastPage}
+          </span>
+          {page < lastPage ? (
+            <TransitionLink
+              href={href({ page: page + 1 })}
+              data-testid="pipeline-next"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }), ACTION_BUTTON)}
+            >
+              {t("grid.next")} →
+            </TransitionLink>
+          ) : null}
+        </nav>
       )}
     </main>
   );

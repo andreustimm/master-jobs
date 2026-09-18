@@ -691,8 +691,24 @@ export async function clusterBreakdown(candidateId: number, minFit = 45) {
 }
 
 /** The funnel, with the job each application points at. */
-export async function pipelineRows(candidateId: number) {
+/** Teto de linhas por página. Histórico grande não vira consulta sem fim. */
+export const PIPELINE_PAGE_SIZE = 25;
+
+export type PipelineQuery = {
+  /** Já validado pela borda; `null` é "todos os estágios". */
+  status?: ApplicationStatus | null;
+  limit?: number;
+  offset?: number;
+};
+
+export async function pipelineRows(candidateId: number, query: PipelineQuery = {}) {
   const db = getDb();
+  const limit = query.limit ?? PIPELINE_PAGE_SIZE;
+  const offset = query.offset ?? 0;
+  const scope = query.status
+    ? and(eq(application.candidateId, candidateId), eq(application.status, query.status))
+    : eq(application.candidateId, candidateId);
+
   return db
     .select({
       jobId: job.id,
@@ -706,6 +722,10 @@ export async function pipelineRows(candidateId: number) {
       notes: application.notes,
       fit: jobScore.fit,
       updatedAt: application.updatedAt,
+      // Estado da vaga, não da candidatura: a vaga fecha sozinha e a
+      // candidatura só muda por decisão do usuário.
+      jobClosedAt: job.closedAt,
+      jobArchivedAt: job.archivedAt,
     })
     .from(application)
     .innerJoin(job, eq(job.id, application.jobId))
@@ -713,6 +733,10 @@ export async function pipelineRows(candidateId: number) {
       jobScore,
       and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
     )
-    .where(eq(application.candidateId, candidateId))
-    .orderBy(desc(application.updatedAt));
+    .where(scope)
+    // `id` desempata: sem ele, duas candidaturas salvas no mesmo instante podem
+    // trocar de lugar entre páginas e uma delas some da listagem.
+    .orderBy(desc(application.updatedAt), desc(application.id))
+    .limit(limit)
+    .offset(offset);
 }

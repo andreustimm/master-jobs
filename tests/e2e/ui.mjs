@@ -3366,6 +3366,55 @@ try {
     contextualFamilyFailures.join(" | "),
   );
 
+  // F-07 E2E-001 — o histórico sobrevive ao fim do anúncio. A vaga da fixture
+  // está fechada E arquivada; a candidatura tem de continuar na tela, com o
+  // estado da vaga dito em algum lugar, depois de filtrar e depois de recarregar.
+  const historyFailures = [];
+  await page.goto(`${BASE}/pipeline`, { waitUntil: "networkidle" });
+  const archivedBadge = page.locator(
+    `[data-testid="pipeline-job-state-${TASK04_FIXTURES.archivedJobId}"]`,
+  );
+  const archivedRow = page.locator(
+    `[data-testid="pipeline-job-${TASK04_FIXTURES.archivedJobId}"]`,
+  );
+  if ((await archivedRow.count()) !== 1) historyFailures.push("linha da vaga arquivada ausente");
+  if ((await archivedBadge.count()) !== 1) {
+    historyFailures.push("estado da vaga não aparece na linha");
+  } else if (!(await archivedBadge.innerText()).trim()) {
+    historyFailures.push("estado da vaga vazio");
+  }
+
+  await page.locator('[data-testid="pipeline-filter-applied"]').click();
+  await page.waitForURL(/stage=applied/, { timeout: 15000 }).catch(() => {});
+  await page.waitForLoadState("networkidle");
+  const filteredUrl = page.url();
+  if (!filteredUrl.includes("stage=applied")) {
+    historyFailures.push(`filtro não entrou na URL: ${new URL(filteredUrl).search || "(vazia)"}`);
+  }
+  if ((await archivedRow.count()) !== 1) {
+    historyFailures.push("filtro por estágio esconde a candidatura arquivada");
+  }
+
+  await page.reload({ waitUntil: "networkidle" });
+  if ((await archivedRow.count()) !== 1) historyFailures.push("recarregar perde a linha");
+  if (!page.url().includes("stage=applied")) {
+    historyFailures.push(`recarregar perde o filtro: ${new URL(page.url()).search || "(vazia)"}`);
+  }
+
+  await page.goto(`${BASE}/pipeline?stage=nao-existe`, { waitUntil: "networkidle" });
+  if ((await page.locator('[data-testid="pipeline-unknown-stage"]').count()) !== 1) {
+    historyFailures.push("estágio inválido não é explicado");
+  }
+  if ((await archivedRow.count()) !== 1) {
+    historyFailures.push("estágio inválido esconde o funil em vez de mostrá-lo inteiro");
+  }
+
+  check(
+    "F-07 E2E-001 histórico mantém candidatura de vaga arquivada após filtro e refresh",
+    historyFailures.length === 0,
+    historyFailures.join(" | "),
+  );
+
   const redirectEvidence = [];
   const actionLoginCtx = await browser.newContext();
   const actionLoginPage = await actionLoginCtx.newPage();

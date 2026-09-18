@@ -12,7 +12,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { authEvent, authLoginToken, authUser, candidate, candidateDocument, job, jobScore, scoreTask, targetAccount } from "../../src/core/db/schema.ts";
+import { application, authEvent, authLoginToken, authUser, candidate, candidateDocument, job, jobScore, scoreTask, targetAccount } from "../../src/core/db/schema.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
 import { hashToken } from "../../src/contexts/auth/infra/drizzle-store.ts";
 import { setPassword } from "../../src/contexts/auth/infra/password-login.ts";
@@ -36,6 +36,7 @@ const PASSWORD = process.env.E2E_PASSWORD ?? "conta-de-teste-e2e-42";
 const CLOSED_JOB_ID = Number(process.env.E2E_CLOSED_JOB_ID ?? TASK04_FIXTURES.closedJobId);
 const DELETED_JOB_ID = Number(process.env.E2E_DELETED_JOB_ID ?? TASK04_FIXTURES.deletedJobId);
 const FUNNEL_JOB_ID = Number(process.env.E2E_FUNNEL_JOB_ID ?? TASK04_FIXTURES.funnelJobId);
+const ARCHIVED_JOB_ID = Number(process.env.E2E_ARCHIVED_JOB_ID ?? TASK04_FIXTURES.archivedJobId);
 
 /**
  * Contas por papel.
@@ -211,6 +212,20 @@ try {
       raw: { e2e: true },
     },
     {
+      id: ARCHIVED_JOB_ID,
+      fingerprint: "e2e:task04-archived",
+      contentHash: "e2e:task04-archived",
+      sourceId: "ashby:e2e",
+      externalId: "task04-archived",
+      companyName: "Task 04 Archived Lab",
+      title: "Task 04 archived fixture",
+      descriptionText: "Archived fixture proves the application survives the posting.",
+      url: "https://jobs.example.com/task04-archived",
+      closedAt: "2026-03-01T00:00:00.000Z",
+      archivedAt: "2026-07-01T00:00:00.000Z",
+      raw: { e2e: true },
+    },
+    {
       id: DELETED_JOB_ID,
       fingerprint: "e2e:task04-deleted",
       contentHash: "e2e:task04-deleted",
@@ -290,6 +305,27 @@ try {
     await getDb()
       .delete(scoreTask)
       .where(eq(scoreTask.candidateId, idleQueueCandidate.candidateId));
+
+  }
+
+  // Candidatura numa vaga já arquivada, para a conta que a suíte usa na sessão
+  // principal. É estado de partida do cenário, não atalho de verificação: o
+  // teste continua lendo o histórico pela tela.
+  const [sessionCandidate] = await getDb()
+    .select({ candidateId: authUser.candidateId })
+    .from(authUser)
+    .where(eq(authUser.email, EMAIL))
+    .limit(1);
+  if (sessionCandidate?.candidateId) {
+    await getDb()
+      .insert(application)
+      .values({
+        candidateId: sessionCandidate.candidateId,
+        jobId: ARCHIVED_JOB_ID,
+        status: "applied",
+        appliedAt: "2026-02-10T00:00:00.000Z",
+      })
+      .onConflictDoNothing();
   }
 
   const [failedQueueCandidate] = await getDb()

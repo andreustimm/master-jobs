@@ -105,6 +105,25 @@ export function decideReopen(input: ReopenInput): ReopenDecision {
   return { kind: "reopen", clearsArchive: input.archivedAt !== null };
 }
 
+/**
+ * Em que estado a vaga está, do ponto de vista de quem olha uma candidatura.
+ *
+ * São três, e a ordem importa: arquivada é fechada há tempo, então o rótulo
+ * mais específico vence. Isto é estado da VAGA e nunca se confunde com o
+ * estágio da candidatura — a vaga fecha sozinha, o estágio só muda por decisão
+ * do usuário (ADR 0020).
+ */
+export type JobLifecycleState = "active" | "closed" | "archived";
+
+export function jobLifecycleState(input: {
+  closedAt: string | null;
+  archivedAt: string | null;
+}): JobLifecycleState {
+  if (input.archivedAt) return "archived";
+  if (input.closedAt) return "closed";
+  return "active";
+}
+
 /** Instante ISO a partir do qual um fechamento é velho o bastante para arquivar. */
 export function archiveCutoff(now: Date, days: number): string {
   if (!Number.isInteger(days) || days < 0) {

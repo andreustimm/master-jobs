@@ -550,6 +550,11 @@ export const ptBR = {
     jobsList: "lista de vagas",
     appliedOn: "aplicado em {date}",
     nextAction: "próximo: {action}",
+    jobClosed: "vaga encerrada",
+    jobArchived: "vaga arquivada",
+    allStages: "todos",
+    unknownStage: "Estágio desconhecido; mostrando o funil inteiro.",
+    noneInStage: "Nenhuma candidatura neste estágio.",
   },
   referrals: {
     title: "Referrals",
