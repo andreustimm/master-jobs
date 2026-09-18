@@ -24,10 +24,14 @@ afterEach(async () => {
 
 describe("PostgreSQL client and migrations", () => {
   it("requires an explicit runtime destination instead of opening SQLite", () => {
+    // Os nomes aceitos são três, e nenhum deles é um arquivo local. A mensagem
+    // mudou quando `POSTGRES_URL` passou a valer; o que não mudou é a recusa.
     delete process.env.DATABASE_URL;
-    expect(() => getDb()).toThrow("DATABASE_URL is required");
+    delete process.env.POSTGRES_URL;
+    delete process.env.POSTGRES_URL_NON_POOLING;
+    expect(() => getDb()).toThrow(/Nenhuma URL de banco configurada/);
     process.env.DATABASE_URL = " ";
-    expect(() => getDb()).toThrow("DATABASE_URL is required");
+    expect(() => getDb()).toThrow(/Nenhuma URL de banco configurada/);
   });
   it("rejects malformed, legacy or TLS-weakening connection strings without leaking them", () => {
     for (const url of ["not-a-url", "file:./private.db", "libsql://legacy.test", target.url + "?sslmode=disable"]) {
@@ -43,8 +47,12 @@ describe("PostgreSQL client and migrations", () => {
     await expect(getDb().execute(sql`select 1`)).resolves.toBeDefined();
   });
   it("does not use runtime credentials for DDL when migration configuration is absent", async () => {
+    // A credencial de runtime não vira credencial de DDL por omissão: com
+    // `DATABASE_URL` configurada e nenhuma das de migration, a migration recusa.
     delete process.env.DATABASE_MIGRATION_URL;
-    await expect(runMigrations()).rejects.toThrow("DATABASE_MIGRATION_URL is required");
+    delete process.env.POSTGRES_URL;
+    delete process.env.POSTGRES_URL_NON_POOLING;
+    await expect(runMigrations()).rejects.toThrow(/Nenhuma URL de banco configurada para migration/);
   });
   it("applies versioned migrations idempotently through a separate connection", async () => {
     await runMigrations();

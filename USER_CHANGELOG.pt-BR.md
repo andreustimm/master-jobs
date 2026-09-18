@@ -18,6 +18,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Melhorado
+
+- A publicação do sistema passa a aproveitar a configuração de banco que o
+  provedor já mantém, em vez de exigir uma cópia manual que envelhece. Quando a
+  senha do banco é trocada do lado do provedor, o sistema continua no ar sem
+  ninguém precisar atualizar nada à mão.
 ### Corrigido
 
 - Preparar uma versão de teste falhava quando já existia um currículo de exemplo
