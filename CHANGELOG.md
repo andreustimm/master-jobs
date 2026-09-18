@@ -9,6 +9,16 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Política de ingestão por ambiente que nega por omissão: `canRunIngestion` é
+  pura, produção só passa com allowlist declarada, local exige opt-in explícito
+  e dev, staging e preview nunca gastam cota de fonte externa. Ambiente ausente
+  ou ilegível normaliza para `preview` — o mais restrito — em vez de virar
+  produção por engano. Sync, recheck, probe e captura chamam o mesmo guarda
+  antes de resolver adapter ou abrir fila, e o erro operacional nomeia ambiente
+  e motivo sem citar host, credencial ou segredo (F-08, ADR 0021).
+
 ## [1.8.0] - 2026-09-18
 
 ### Adicionado

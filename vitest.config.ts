@@ -11,6 +11,9 @@ export default defineConfig({
     environment: "node",
     globals: false,
     globalSetup: ["./tests/support/postgres-global.ts"],
+    // Roda dentro de cada worker, ao contrário do `globalSetup`, que vive em
+    // outro processo: a política de ingestão é lida do ambiente do worker.
+    setupFiles: ["./tests/support/ingestion-env.ts"],
     maxWorkers: 4,
 
     /**

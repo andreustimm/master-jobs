@@ -12,6 +12,7 @@ import { getDb } from "../db/client.ts";
 import { job, source } from "../db/schema.ts";
 import { getAdapter, sourceId } from "../sources/registry.ts";
 import type { SourceConfig } from "../sources/types.ts";
+import { guardIngestion } from "./guard.ts";
 import { observeRawJob } from "./observe.ts";
 
 export type SyncSourceResult = {
@@ -157,6 +158,11 @@ export async function syncAll(
   configs: SourceConfig[],
   opts: { concurrency?: number; onProgress?: (r: SyncSourceResult) => void } = {},
 ): Promise<SyncResult> {
+  // Antes de `ensureSources`, que já escreve, e muito antes do primeiro
+  // adapter: o que se protege aqui é a conexão com o board de terceiro, não o
+  // registro dela.
+  guardIngestion();
+
   const startedAt = new Date().toISOString();
   await ensureSources(configs);
 

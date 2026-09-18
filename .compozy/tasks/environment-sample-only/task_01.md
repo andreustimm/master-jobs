@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Fail-closed ingestion policy and entrypoints
 type: backend
 complexity: high

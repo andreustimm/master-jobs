@@ -18,6 +18,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Improved
+
+- The system's test environments no longer fetch real jobs: they work on sample
+  data only. Anyone using the published system sees no difference; anyone trying
+  a test version no longer consumes the job boards' quota or mixes real data
+  into a rehearsal.
+
 ## [1.8.0] - 2026-09-18T02:18:09.098Z
 
 ### Added
