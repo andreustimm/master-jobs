@@ -1,6 +1,6 @@
 # BUG-20260917-transition-note-never-readable: a nota da candidatura é aceita e nunca mais pode ser lida
 
-- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
+- **Status:** verified <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Data-Loss
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Andreus em triagem noturna
@@ -46,8 +46,21 @@ recusada, já corrigido; este é a nota gravada que nenhuma leitura alcança.
 
 ## Fix
 
-<!-- filled when status moves to fixed -->
+- **Root cause:** o sintoma é a nota irrecuperável; a causa é que
+  `application_event` era escrito e lido por ninguém. `jobs show` lê
+  `application.notes`, outra coluna, e nenhuma tela alcançava o evento.
+- **Fix commit:** `cb00cbb` (PR #89) — `applicationTimeline()`, escopada pelo
+  candidato da sessão, e a seção de histórico no detalhe da vaga. Antes dela,
+  `03ac0f6` fechou a outra metade: a nota escrita sobre um estágio que não muda
+  deixou de ser descartada no caminho de no-op.
+- **Regression test:** `tests/repo.application.test.ts` — conteúdo e ordem do
+  histórico, mais a fronteira contra outro candidato e contra sessão sem escopo.
 
 ## Verification
 
-<!-- filled when status moves to verified -->
+- **Retested:** 2026-09-18, sobre o release candidate promovido (`db5b993`, v1.8.0 em `dev` e `staging`) · **Report:** docs/qa/reports/2026-09-18T022259704434Z-6535cca7-release-candidate-1.8.0-promovido.md
+- **Result:** a nota escrita ao mover a candidatura aparece no histórico
+  (`2026-09-18 · registered at Shortlisted`, seguida do texto), sobrevive a
+  refresh e a um novo login. A nota escrita sem mudar de estágio aparece como
+  `2026-09-18 · note`. Uma segunda conta de candidato e a sessão de recrutadora
+  não veem histórico nenhum.
