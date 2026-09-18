@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-18T02:18:09.098Z
+
 ### Adicionado
 
 - O detalhe da vaga passa a mostrar o histórico da candidatura: cada mudança de

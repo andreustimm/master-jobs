@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-18
+
 ### Adicionado
 
 - O detalhe da vaga exibe o histórico da candidatura lido de

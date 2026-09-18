@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-18T02:18:09.098Z
+
 ### Added
 
 - The job detail now shows the application's history: every stage change with
