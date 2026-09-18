@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-09-18T15:01:18.066Z
+
 ### Improved
 
 - The system's test environments no longer fetch real jobs: they work on sample

@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-09-18
+
 ### Adicionado
 
 - Política de ingestão por ambiente que nega por omissão: `canRunIngestion` é
