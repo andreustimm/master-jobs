@@ -9,6 +9,16 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Alterado
+
+- A varredura diária declara `JHO_ENV=production` e exige `JHO_SOURCE_ALLOWLIST`
+  não vazia, falhando cedo com mensagem própria em vez de morrer no meio do
+  primeiro adapter — sem isso, a política da ADR 0021 bloquearia o próprio job
+  de produção. A rota de cron da Vercel passa a consultar a política além do
+  `CRON_SECRET` e responde 503 com motivo: o segredo prova quem chama, não que
+  aquele deployment pode gastar cota, e um preview com o segredo herdado
+  continuaria autenticado (F-08).
+
 ### Adicionado
 
 - Acervo de exemplo declarado em `src/core/db/fixtures.ts` e semeado por

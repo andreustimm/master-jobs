@@ -20,6 +20,9 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ### Improved
 
+- Automatic job fetching now runs only on the published system. Test versions no
+  longer trigger fetches or consume the job boards' quota, even if they share
+  some configuration by mistake.
 - Test versions of the system now ship with a small set of sample jobs and
   accounts, covering remote, hybrid, on-site and already-closed postings. Anyone
   trying one of those versions sees the screens working without depending on

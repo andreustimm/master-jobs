@@ -20,6 +20,9 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ### Melhorado
 
+- A busca automática de vagas só roda no sistema publicado. Versões de teste
+  não disparam mais buscas nem consomem a cota dos sites de vagas, mesmo que
+  compartilhem alguma configuração por engano.
 - As versões de teste do sistema passam a vir com um conjunto pequeno de vagas
   e contas de exemplo, cobrindo remoto, híbrido, presencial e vagas já
   encerradas. Quem experimenta uma dessas versões vê as telas funcionando sem
