@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-09-18T02:01:07.561Z
+
 ### Fixed
 
 - When you move an application, the list now shows only the stages it can reach

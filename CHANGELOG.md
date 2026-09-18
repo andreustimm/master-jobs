@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-09-18
+
 ### Corrigido
 
 - O seletor de estágio do funil passa a oferecer somente os status alcançáveis
