@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-09-18
+
 ### Adicionado
 
 - Área do recrutador em `/recruiter`: os candidatos que o autorizaram, com o

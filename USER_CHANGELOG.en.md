@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-09-18T19:00:08.565Z
+
 ### New
 
 - Recruiters now have an area of their own, listing the people who authorised

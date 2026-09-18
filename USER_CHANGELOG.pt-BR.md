@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-09-18T19:00:08.565Z
+
 ### Novidade
 
 - Recrutadores passam a ter uma área própria, com as pessoas que os autorizaram
