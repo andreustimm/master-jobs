@@ -20,6 +20,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ### Improved
 
+- Test versions of the system now ship with a small set of sample jobs and
+  accounts, covering remote, hybrid, on-site and already-closed postings. Anyone
+  trying one of those versions sees the screens working without depending on
+  real data.
+
+### Improved
+
 - The system's test environments no longer fetch real jobs: they work on sample
   data only. Anyone using the published system sees no difference; anyone trying
   a test version no longer consumes the job boards' quota or mixes real data

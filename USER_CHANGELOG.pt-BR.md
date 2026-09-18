@@ -20,6 +20,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ### Melhorado
 
+- As versões de teste do sistema passam a vir com um conjunto pequeno de vagas
+  e contas de exemplo, cobrindo remoto, híbrido, presencial e vagas já
+  encerradas. Quem experimenta uma dessas versões vê as telas funcionando sem
+  depender de dados reais.
+
+### Melhorado
+
 - Os ambientes de teste do sistema deixam de buscar vagas de verdade: eles
   passam a trabalhar só sobre dados de exemplo. Quem usa o sistema publicado não
   vê diferença; quem experimenta uma versão de teste não consome mais a cota
