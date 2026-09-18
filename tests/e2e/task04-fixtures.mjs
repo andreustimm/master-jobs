@@ -6,6 +6,12 @@ export const TASK04_FIXTURES = Object.freeze({
   loginRaceToken: "task04-login-race",
   closedJobId: 900000004,
   deletedJobId: 900000005,
+  /**
+   * Vaga exclusiva do funil. Mover status é irreversível quando o destino é
+   * terminal, então este cenário não pode emprestar uma vaga que outra
+   * verificação lê depois.
+   */
+  funnelJobId: 900000006,
   referralContactId: 903000000,
   referralCompany: "Task 04 Typical Lab",
 });

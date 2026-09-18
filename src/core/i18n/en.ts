@@ -571,6 +571,13 @@ export const en: Dictionary = {
     capturedOn: "captured on",
     openFull: "Open the full posting →",
     aboveCut: "Above the {cut} cut, across the whole corpus.",
+    moveTo: "move to",
+    notePlaceholder: "note (optional)",
+    saveStatus: "Save",
+    transitionRejected:
+      "The funnel does not go from {from} to {to}. Your note is still here; pick a reachable stage.",
+    transitionConflict:
+      "This application changed in another screen. Reload to see the current stage and try again.",
     history: "Application history",
     historyMoved: "from {from} to {to}",
     historyStarted: "registered at {to}",

@@ -474,7 +474,10 @@ describe("authorisation (AUTH-01)", () => {
       const code = read(file);
       if (!code.includes('"use server"')) continue;
 
-      for (const match of code.matchAll(/export async function (\w+)\s*\([^)]*\)\s*\{/g)) {
+      // O tipo de retorno é opcional na sintaxe e invisível para esta rede se
+      // não for previsto: `): Promise<TrackResult> {` deixou de casar quando
+      // `trackAction` ganhou um, e a action saiu do teste sem ninguém notar.
+      for (const match of code.matchAll(/export async function (\w+)\s*\([^)]*\)\s*(?::[^{]+)?\{/g)) {
         const name = match[1]!;
         if (UNGUARDED_BY_DESIGN.has(name)) continue;
         const body = code.slice(match.index, code.indexOf("\n}", match.index));

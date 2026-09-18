@@ -579,6 +579,13 @@ export const ptBR = {
     capturedOn: "capturada em",
     openFull: "Abrir a vaga completa →",
     aboveCut: "Acima do corte de {cut}, no acervo inteiro.",
+    moveTo: "mover para",
+    notePlaceholder: "nota (opcional)",
+    saveStatus: "Salvar",
+    transitionRejected:
+      "O funil não vai de {from} para {to}. Sua nota continua aqui; escolha um estágio alcançável.",
+    transitionConflict:
+      "Esta candidatura mudou em outra tela. Recarregue para ver o estágio atual e tente de novo.",
     history: "Histórico da candidatura",
     historyMoved: "de {from} para {to}",
     historyStarted: "registrada em {to}",

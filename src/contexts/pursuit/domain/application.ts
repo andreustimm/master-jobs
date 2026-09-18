@@ -106,6 +106,33 @@ export function transitionApplication(
   };
 }
 
+/**
+ * Os status alcançáveis a partir do atual, o próprio incluído.
+ *
+ * A interface oferecia os dez status sempre: de `preparing` o seletor listava
+ * `interviewing`, o domínio recusava, e a pessoa descobria a regra pela
+ * mensagem de erro — depois de digitar a nota. A lista sai de
+ * `LEGAL_TRANSITIONS`, então oferecer só o possível é a mesma regra lida uma
+ * vez, e não uma segunda cópia dela que envelhece sozinha.
+ *
+ * Sem candidatura, tudo é alcançável: a primeira observação pode registrar uma
+ * candidatura que já existe fora deste sistema.
+ */
+export function allowedTransitions(
+  current: ApplicationStatus | null,
+): readonly ApplicationStatus[] {
+  if (!current) return APPLICATION_STATUSES;
+  // Status gravado fora da lista não existe em teoria — o tipo diz isso — e
+  // existe na prática: a coluna é `text` com enum só no Drizzle, sem CHECK no
+  // banco, e o acervo veio de um snapshot legado. Esta função roda em LEITURA,
+  // ao renderizar a tela; espalhar `undefined` aqui trocaria uma linha estranha
+  // por uma página quebrada. O resto da interface já degrada assim.
+  const legal = LEGAL_TRANSITIONS[current];
+  if (!legal) return [current];
+  const reachable = new Set<ApplicationStatus>([current, ...legal]);
+  return APPLICATION_STATUSES.filter((status) => reachable.has(status));
+}
+
 export class IllegalApplicationTransitionError extends Error {
   readonly code = "illegal_transition";
   readonly from: ApplicationStatus;

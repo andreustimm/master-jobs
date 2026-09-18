@@ -35,6 +35,7 @@ const EMAIL = process.env.E2E_EMAIL ?? "e2e@local.test";
 const PASSWORD = process.env.E2E_PASSWORD ?? "conta-de-teste-e2e-42";
 const CLOSED_JOB_ID = Number(process.env.E2E_CLOSED_JOB_ID ?? TASK04_FIXTURES.closedJobId);
 const DELETED_JOB_ID = Number(process.env.E2E_DELETED_JOB_ID ?? TASK04_FIXTURES.deletedJobId);
+const FUNNEL_JOB_ID = Number(process.env.E2E_FUNNEL_JOB_ID ?? TASK04_FIXTURES.funnelJobId);
 
 /**
  * Contas por papel.
@@ -195,6 +196,18 @@ try {
       descriptionText: "Closed fixture remains readable as historical context.",
       url: "https://jobs.example.com/task04-closed",
       closedAt: "2026-08-24T00:00:00.000Z",
+      raw: { e2e: true },
+    },
+    {
+      id: FUNNEL_JOB_ID,
+      fingerprint: "e2e:task04-funnel",
+      contentHash: "e2e:task04-funnel",
+      sourceId: "ashby:e2e",
+      externalId: "task04-funnel",
+      companyName: "Task 04 Funnel Lab",
+      title: "Task 04 funnel fixture",
+      descriptionText: "Funnel fixture exists to be moved through the pipeline.",
+      url: "https://jobs.example.com/task04-funnel",
       raw: { e2e: true },
     },
     {

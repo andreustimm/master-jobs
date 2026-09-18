@@ -28,7 +28,7 @@ function isFailedResult(result: unknown): boolean {
   return "ok" in result && result.ok === false;
 }
 
-function isNavigationSignal(error: unknown): boolean {
+export function isNavigationSignal(error: unknown): boolean {
   if (!error || typeof error !== "object" || !("digest" in error)) return false;
   return String(error.digest).startsWith("NEXT_");
 }

@@ -21,7 +21,7 @@ Data: 2026-09-16 (atualização). Branch: `codex/supabase-production`, base `ori
 | 4 | Implementar importação e conferência | dry-run, destino vazio, hashes por tabela, transação/retomada segura e sequences ajustadas | Concluída no rehearsal; importação remota ainda pendente |
 | 5 | Ensaiar em PostgreSQL local | aplicação das migrations do zero e reaplicação sem efeito; carga e verificação | Concluída novamente em 15/09 após o alinhamento com `dev` |
 | 6 | Validar aplicação | check, E2E e jornadas login/papéis/CV/funil/importação/filas/export | Gates locais verdes; QA targeted ainda not-ready por bug preexistente |
-| 7 | Preparar infraestrutura e deploy | credenciais separadas runtime/migração; schema privado; deploy após migrations | Pendente |
+| 7 | Preparar infraestrutura e deploy | credenciais separadas runtime/migração; schema privado; deploy após migrations | Pendente — inventário verificado em 17/09, ver "Preflight do corte" |
 | 8 | Carga final e corte | fonte congelada, backup final, igualdade dos dados, smoke e retorno documentado | Pendente |
 
 ### Atualização de validação — 15/09
@@ -190,6 +190,34 @@ Ensaios locais usam PostgreSQL em Docker ligado apenas a 127.0.0.1, sem terceiro
   `postgres.bujawvnxwtmneiggizje`, database `postgres`. Nenhuma escrita remota feita.
 - A criação anterior usou senha aleatória não persistida. Conexão SQL precisa de credencial válida;
   se não estiver disponível, o operador deverá fornecer/configurar a conexão de migração.
+
+## Preflight do corte — inventário verificado em 17/09
+
+Conferência somente de leitura do ambiente real: nomes de variáveis no Vercel
+Production, segredos do repositório e dos ambientes GitHub, e o que o runtime
+exige no código. Nenhum valor foi lido ou alterado.
+
+| Item | Estado em 17/09 | Consequência |
+|---|---|---|
+| `DATABASE_URL` no Vercel Production | **Ausente** | `getDb()` lança `DATABASE_URL is required` na primeira consulta. A integração do Supabase criou `POSTGRES_URL`, `POSTGRES_PRISMA_URL` e `POSTGRES_URL_NON_POOLING`; o código não lê nenhum desses nomes, por desenho. Configurar **antes** de promover `main`, não depois. |
+| Formato da URL | — | `connectDatabase()` recusa qualquer query string (`?sslmode=`, `?pgbouncer=`), para a política de TLS não ser enfraquecida pela string de conexão. |
+| `DATABASE_CA_CERT` | Cadastrada em 16/09 | É **caminho de arquivo**: `readFileSync(ca, "utf8")`. O repositório versiona `config/certs/supabase-ca.crt` e `next.config.ts` o declara em `outputFileTracingIncludes`, então ele viaja no bundle. Confirmar que o valor é o caminho, não o PEM. |
+| `SUPABASE_MIGRATION_URL` | **Ausente** no repositório e nos ambientes `Production`/`Preview` | `migrate.yml` — a via aprovada, com `confirm_project=bujawvnxwtmneiggizje` — não tem credencial. É `workflow_dispatch`, então não bloqueia deploy; bloqueia migrar pela via documentada. |
+| `RESEND_API_KEY` / `RESEND_FROM` | Ausentes | `configuredMailer` cai no adapter de console: o link de recuperação de senha vai para o log. Com autenticação exigida por omissão, é a única porta de volta de quem perde a senha. |
+| Promoção automática | Sã | A única execução vermelha recente de `promover-para-staging.yml` parou em "Suspender por causa do schema" — o guarda de migração agindo como projetado quando a migração PostgreSQL entrou. |
+| Produção hoje | `200` em `/login`, tag `v1.4.1` | O corte substitui um runtime Turso saudável por um runtime PostgreSQL; sem `DATABASE_URL` a troca é uma queda, não uma degradação. |
+
+O QA Full do release candidate 1.7.1 correu em 17/09 sobre `676d5e0` e voltou
+**not-ready**: BUG-20260910 reproduz no RC, com a nota digitada descartada numa
+transição recusada. Relatório em
+`docs/qa/reports/2026-09-17T232350685065Z-1cb4e9bd-release-candidate-1.7.1-full.md`.
+A correção está na PR #87 e não toca `drizzle/` nem `src/core/db/schema.ts`,
+então promovê-la não suspende a promoção automática.
+
+Ordem que sai disso: configurar `DATABASE_URL` → mesclar a correção em `dev` e
+deixar promover → repetir a sessão de funil do Full sobre o RC novo → só então
+a PR humana `staging → main`, seguida do smoke test de
+`docs/engineering/deploy.md`.
 
 ## Corte e retorno
 
