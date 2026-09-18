@@ -18,6 +18,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### New
+
+- Recruiters now have an area of their own, listing the people who authorised
+  them to follow a pipeline. That authorisation is created by the candidate, and
+  a recruiter sees only the progress — never the pipeline of someone who did not
+  authorise them.
+
 ## [1.12.0] - 2026-09-18T18:01:07.970Z
 
 ### Improved

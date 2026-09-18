@@ -18,6 +18,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Novidade
+
+- Recrutadores passam a ter uma área própria, com as pessoas que os autorizaram
+  a acompanhar o funil. Quem cria essa autorização é o próprio candidato, e o
+  recrutador vê apenas o andamento — nunca o funil de quem não o autorizou.
+
 ## [1.12.0] - 2026-09-18T18:01:07.970Z
 
 ### Melhorado

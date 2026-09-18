@@ -1,5 +1,5 @@
 ---
-status: pending
+status: in_progress
 title: Recruiter-scoped application history
 type: backend
 complexity: high
@@ -31,10 +31,10 @@ keeps closed/archived jobs useful without exposing unrelated candidate data.
 
 ## Subtasks
 
-- [ ] Map the existing recruiter relationship and policy to a read-side scope.
-- [ ] Add scoped counts, pagination, and row/event loading.
-- [ ] Add page/action guards and safe not-found/empty behavior.
-- [ ] Add localized recruiter labels and closed/archived state.
+- [x] Map the existing recruiter relationship and policy to a read-side scope.
+- [x] Add scoped counts, pagination, and row/event loading.
+- [x] Add page/action guards and safe not-found/empty behavior.
+- [x] Add localized recruiter labels and closed/archived state.
 - [ ] Add assigned unit, integration, and E2E coverage.
 
 ## Implementation Details

@@ -5,7 +5,7 @@
  * query changes it once, and the CLI and dashboard can never disagree about
  * what "shortlisted" or "open" means.
  */
-import { and, desc, eq, gte, isNull, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { WorkMode } from "../../contexts/matching/index.ts";
 import { workModeSql } from "./work-mode.ts";
@@ -16,6 +16,7 @@ import {
 import { getDb, type DB } from "./client.ts";
 import {
   application,
+  candidate,
   jobPage,
   applicationEvent,
   candidateDocument,
@@ -565,6 +566,70 @@ export async function pipelineCounts(candidateId: number): Promise<Record<string
     .where(eq(application.candidateId, candidateId))
     .groupBy(application.status);
   return Object.fromEntries(rows.map((r) => [r.status, Number(r.n)]));
+}
+
+export type RecruiterCandidateSummary = {
+  candidateId: number;
+  name: string;
+  slug: string;
+  counts: Record<string, number>;
+  total: number;
+};
+
+/**
+ * Resumo do funil de cada candidato que o recrutador acompanha.
+ *
+ * O escopo entra em SQL, como `inArray`, e não como filtro sobre um resultado
+ * global: o banco nunca chega a ler linha de quem não está na lista. Filtrar
+ * depois daria o mesmo resultado na tela e um risco diferente no dia em que
+ * alguém esquecer o filtro — e uma consulta que carrega o funil inteiro para
+ * descartar 99% dele é cara justamente onde o acervo é grande.
+ *
+ * Lista vazia devolve vazio sem consultar: recrutador sem vínculo nenhum não
+ * tem o que ver, e `inArray` com lista vazia é SQL inválido em alguns dialetos.
+ */
+export async function recruiterCandidateSummaries(
+  candidateIds: readonly number[],
+): Promise<RecruiterCandidateSummary[]> {
+  if (candidateIds.length === 0) return [];
+  const db = getDb();
+  const scope = [...candidateIds];
+
+  const [people, counted] = await Promise.all([
+    db
+      .select({ id: candidate.id, name: candidate.name, slug: candidate.slug })
+      .from(candidate)
+      .where(inArray(candidate.id, scope)),
+    db
+      .select({
+        candidateId: application.candidateId,
+        status: application.status,
+        n: sql<number>`count(*)`,
+      })
+      .from(application)
+      .where(inArray(application.candidateId, scope))
+      .groupBy(application.candidateId, application.status),
+  ]);
+
+  const byCandidate = new Map<number, Record<string, number>>();
+  for (const row of counted) {
+    const counts = byCandidate.get(row.candidateId) ?? {};
+    counts[row.status] = Number(row.n);
+    byCandidate.set(row.candidateId, counts);
+  }
+
+  return people
+    .map((person) => {
+      const counts = byCandidate.get(person.id) ?? {};
+      return {
+        candidateId: person.id,
+        name: person.name,
+        slug: person.slug,
+        counts,
+        total: Object.values(counts).reduce((sum, n) => sum + n, 0),
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Everything the detail view needs, in one round trip. */

@@ -552,6 +552,15 @@ export const en: Dictionary = {
     title: "Referrals",
     companies: "company/companies",
   },
+  recruiter: {
+    title: "Followed",
+    lead:
+      "The candidates who authorised you to follow their pipeline. The link is created by the person themselves — you see the progress, and nothing beyond it.",
+    noCandidates: "Nobody has authorised you to follow a pipeline yet.",
+    noApplications: "This person has no applications yet.",
+    applications: "{count} application(s)",
+    candidateHistory: "History · {count} application(s)",
+  },
   jobDetail: {
     recheck: "re-check",
     recheckQueued: "queued",

@@ -24,6 +24,8 @@ export {
   PIPELINE_PAGE_SIZE,
   pipelineCounts,
   pipelineRows,
+  recruiterCandidateSummaries,
+  type RecruiterCandidateSummary,
   setApplicationDocument,
   setApplicationStatus,
 } from "../../core/db/repo.ts";
