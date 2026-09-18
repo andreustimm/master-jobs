@@ -61,8 +61,8 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 
 | Variável | Onde | Para quê |
 |---|---|---|
-| `DATABASE_URL` | aplicação | URL PostgreSQL de runtime; vence as demais |
-| `POSTGRES_URL` | Vercel (integração) | usada no runtime quando não há `DATABASE_URL` |
+| `DATABASE_URL` | aplicação | URL PostgreSQL de runtime, de **role restrita** ([como criar](#dar-login-à-role-de-runtime)); vence as demais |
+| `POSTGRES_URL` | Vercel (integração) | usada no runtime quando não há `DATABASE_URL` — conecta como **superusuário**, então é rede de segurança e não destino |
 | `DATABASE_MIGRATION_URL` | migration/CI | URL PostgreSQL com privilégio de DDL |
 | `POSTGRES_URL_NON_POOLING` | Vercel (integração) | usada na migration quando não há a de cima |
 | `DATABASE_CA_CERT` | CI/Vercel | o PEM da CA **ou** o caminho de um arquivo |
@@ -261,6 +261,58 @@ pnpm jho db cleanup --apply
 
 Páginas cuja extração falhou preservam HTML para reprocessamento; páginas
 tratadas não devem acumular o HTML bruto indefinidamente.
+
+## Dar login à role de runtime
+
+A migration `0001_production_access` cria `master_jobs_runtime` **sem login e
+sem privilégio administrativo**, e concede a ela exatamente o que a aplicação
+usa: `USAGE` no schema, `SELECT/INSERT/UPDATE/DELETE` nas tabelas e
+`USAGE/SELECT` nas sequências — com `ALTER DEFAULT PRIVILEGES` para que tabela
+nova nasça acessível. O que ela **não** tem: criar tabela, criar role, replicar,
+ignorar RLS.
+
+Dar senha a ela é passo de operador, e é por isso que a migration não o faz:
+senha dentro de migration vira segredo versionado, copiado em backup e lido por
+quem abrir o repositório.
+
+O papel de grupo existe para que a credencial seja trocável sem mexer em
+permissão. Criar o login, uma vez, com a conexão privilegiada:
+
+```sql
+-- Senha forte gerada localmente; ela nunca entra no repositório.
+CREATE ROLE master_jobs_app LOGIN PASSWORD '<gerada>' NOSUPERUSER NOCREATEDB
+  NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+GRANT master_jobs_runtime TO master_jobs_app;
+```
+
+E então cadastrar na Vercel, em Production:
+
+```
+DATABASE_URL=postgresql://master_jobs_app:<senha>@<host>:5432/postgres
+```
+
+**Sem query string** — a política de TLS é do cliente, e `?sslmode=...` é
+recusado com erro que nomeia a variável.
+
+**Por que isto importa mesmo com o fallback.** O runtime aceita `POSTGRES_URL`
+quando `DATABASE_URL` falta, e é isso que faz o deploy subir sem configuração
+manual. Só que a variável que a integração do Supabase cadastra conecta como
+`postgres`, **o superusuário**: funciona, e joga fora a separação de privilégio
+que esta seção descreve. O fallback é rede de segurança contra indisponibilidade,
+não o destino.
+
+Para conferir que a role ficou com o alcance certo, sem adivinhar:
+
+```sql
+SELECT rolsuper, rolcreatedb, rolcreaterole, rolbypassrls
+  FROM pg_roles WHERE rolname = 'master_jobs_app';       -- tudo false
+SELECT has_table_privilege('master_jobs_app', 'production.job', 'SELECT'),
+       has_schema_privilege('master_jobs_app', 'production', 'CREATE');
+                                                          -- true, false
+```
+
+A rotação é trocar a senha de `master_jobs_app` e atualizar `DATABASE_URL`: as
+permissões ficam no papel de grupo e não são reescritas.
 
 ## O que confirmar depois de subir
 
