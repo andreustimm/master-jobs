@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.15.3] - 2026-09-19T23:26:18.891Z
+
 ### Fixed
 
 - On narrow screens, a job with a very long title no longer pushes the page

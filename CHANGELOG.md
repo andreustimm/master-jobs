@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.15.3] - 2026-09-19
+
 ### Corrigido
 
 - Celular: em 320px, título de vaga sem ponto de quebra ("Werkstudent*in
