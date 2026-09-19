@@ -84,11 +84,37 @@ describe("normalizeConnectionUrl", () => {
   it("recusa parâmetro de TLS em vez de apagá-lo em silêncio", () => {
     // Apagar deixaria quem escreveu `sslmode=disable` convencido de que
     // desligou a verificação — o engano mais caro possível aqui.
-    expect(() => normalizeConnectionUrl(`${REMOTE}?sslmode=require`, "POSTGRES_URL")).toThrow(
-      /POSTGRES_URL traz sslmode/,
-    );
     expect(() => normalizeConnectionUrl(`${REMOTE}?sslmode=disable`, "DATABASE_URL")).toThrow(
       /política de TLS é do cliente/,
+    );
+    for (const modo of ["allow", "prefer"]) {
+      expect(() => normalizeConnectionUrl(`${REMOTE}?sslmode=${modo}`, "POSTGRES_URL")).toThrow(
+        /POSTGRES_URL traz sslmode/,
+      );
+    }
+    // Trocar a CA ou a identidade do cliente também é mudar a política.
+    expect(() => normalizeConnectionUrl(`${REMOTE}?sslrootcert=/tmp/ca.crt`, "POSTGRES_URL"))
+      .toThrow(/POSTGRES_URL traz sslrootcert/);
+  });
+
+  it("aceita o sslmode que o provedor cadastra, porque ele não afrouxa nada", () => {
+    // `POSTGRES_URL` chega da integração Supabase↔Vercel com `sslmode=require`.
+    // Recusar isso derrubou a produção inteira: o cliente já exige verificação
+    // de cadeia, que é MAIS estrito que `require`. A regra é recusar quem pede
+    // menos, não quem pede o mesmo ou mais.
+    for (const modo of ["require", "verify-ca", "verify-full", "REQUIRE"]) {
+      expect(normalizeConnectionUrl(`${POOLER}?sslmode=${modo}`, "POSTGRES_URL")).toBe(POOLER);
+    }
+    // E continua saindo sem query string, junto com os parâmetros de pool.
+    expect(normalizeConnectionUrl(`${POOLER}?sslmode=require&pgbouncer=true`, "POSTGRES_URL"))
+      .toBe(POOLER);
+  });
+
+  it("sslmode com valor desconhecido recusa, em vez de deixar passar", () => {
+    // Lista de permissão: um valor que ninguém previu pode ser afrouxamento
+    // inventado depois, e diante do desconhecido a escolha segura é parar.
+    expect(() => normalizeConnectionUrl(`${REMOTE}?sslmode=talvez`, "POSTGRES_URL")).toThrow(
+      /POSTGRES_URL traz sslmode/,
     );
   });
 

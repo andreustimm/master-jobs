@@ -36,8 +36,27 @@ const SOURCES: Record<DatabaseRole, readonly string[]> = {
  * deixaria quem escreveu convencido de que desligou a verificação. Os demais
  * parâmetros (`pgbouncer`, limites de pool, o que o painel anexar amanhã) são
  * descartados: eles pertencem à configuração do cliente, que já é explícita.
+ *
+ * `sslmode` é a exceção, e ela custou uma queda de produção para aparecer. A
+ * integração do Supabase com a Vercel cadastra `POSTGRES_URL` COM
+ * `sslmode=require`, e recusar esse valor derrubava toda página que toca o
+ * banco — com a mensagem certa, apontando a variável certa, e ainda assim
+ * derrubava. Pedir `require` não afrouxa nada: o cliente já exige verificação
+ * de cadeia, que é mais estrito. Recusar quem pede MENOS segurança é a regra;
+ * recusar quem pede o mesmo ou mais é só impedir o provedor de configurar o
+ * próprio serviço.
  */
-const TLS_PARAMETERS = ["sslmode", "ssl", "sslcert", "sslkey", "sslrootcert"];
+const TLS_PARAMETERS = ["ssl", "sslcert", "sslkey", "sslrootcert"];
+
+/**
+ * Valores de `sslmode` que não pedem menos do que o cliente já impõe.
+ *
+ * A lista é de permissão, não de negação: `sslmode` com valor desconhecido é
+ * recusado junto com `disable`. Um valor que ninguém previu pode ser um
+ * afrouxamento inventado depois, e a escolha segura diante do desconhecido é
+ * parar, não deixar passar.
+ */
+const SSLMODE_AT_LEAST_AS_STRICT = ["require", "verify-ca", "verify-full"];
 
 export type ResolvedDatabaseUrl = {
   /** URL já sem query string, pronta para o driver. */
@@ -57,6 +76,10 @@ export function normalizeConnectionUrl(raw: string, source: string): string {
     throw new Error(`${source} não é uma URL PostgreSQL válida (valor omitido)`);
   }
   const tls = TLS_PARAMETERS.filter((name) => parsed.searchParams.has(name));
+  const sslmode = parsed.searchParams.get("sslmode")?.trim().toLowerCase();
+  if (sslmode !== undefined && !SSLMODE_AT_LEAST_AS_STRICT.includes(sslmode)) {
+    tls.unshift("sslmode");
+  }
   if (tls.length > 0) {
     throw new Error(
       `${source} traz ${tls.join(", ")} na URL: a política de TLS é do cliente e não pode ser mudada pela string de conexão — remova o parâmetro`,
