@@ -26,7 +26,23 @@ export type TrackFields = {
   referenceCurrency: string;
 };
 
-export type TrackFormError = "track_titles_required" | "keyword_weight_invalid" | "range_invalid" | "range_required";
+export type TrackFormError =
+  | "track_titles_required"
+  | "keyword_weight_invalid"
+  | "range_invalid"
+  | "range_required"
+  | "track_too_large";
+
+/**
+ * Nenhum campo chega ao parser acima disto. A action aceita corpos de 11 MB, e
+ * o que o domínio limita depois (títulos, palavras, tamanho de cada uma) não
+ * protege o trabalho de ler um campo desse tamanho.
+ */
+const FIELD_CHARS_MAX = 20_000;
+/** Uma linha de palavra maior que isto não é palavra-chave: é colagem. */
+const KEYWORD_LINE_MAX = 200;
+/** `30.000` em pt-BR é trinta mil, e `Number` leria 30. */
+const DOT_GROUPED = /^\d{1,3}(\.\d{3})+$/;
 
 const PERIODS = ["year", "month", "week", "day", "hour"] as const;
 type Period = (typeof PERIODS)[number];
@@ -72,10 +88,15 @@ export function targetToFields(name: string, target: TrackTarget): TrackFields {
   };
 }
 
+/**
+ * `laravel 10` → termo e peso. A busca pelo peso no fim falha em tempo
+ * constante a cada posição: a versão com prefixo preguiçoso voltava sobre cada
+ * espaço de uma sequência longa e levava tempo quadrático na thread da action.
+ */
 function weightedLine(line: string): { term: string; weight: number } | null {
-  const match = /^(.*?)\s+(-?\d+)$/.exec(line);
-  if (!match) return null;
-  return { term: match[1]!.trim().toLowerCase(), weight: Number(match[2]) };
+  const at = line.search(/\s-?\d+$/);
+  if (at < 0) return null;
+  return { term: line.slice(0, at).trim().toLowerCase(), weight: Number(line.slice(at + 1)) };
 }
 
 /**
@@ -88,15 +109,20 @@ export function fieldsToTarget(
   fields: TrackFields,
   base: TrackTarget,
 ): { ok: true; target: TrackTarget } | { ok: false; code: TrackFormError } {
+  if (Object.values(fields).some((value) => value.length > FIELD_CHARS_MAX)) {
+    return { ok: false, code: "track_too_large" };
+  }
   const defaultCluster = Object.keys(base.targets.clusters).length === 1
     ? Object.keys(base.targets.clusters)[0]!
     : slug(fields.name);
-  const clusters: TrackTarget["targets"]["clusters"] = {};
+  // O nome do cluster é texto da pessoa: `constructor` ou `__proto__` num
+  // objeto comum achariam o protótipo e derrubariam a action.
+  const clusters: TrackTarget["targets"]["clusters"] = Object.create(null);
   for (const line of lines(fields.titles)) {
     const prefixed = /^([a-z0-9_]+):\s*(.+)$/i.exec(line);
     const cluster = prefixed ? prefixed[1]!.toLowerCase() : defaultCluster;
     const title = prefixed ? prefixed[2]!.trim() : line;
-    const existing = base.targets.clusters[cluster];
+    const existing = Object.hasOwn(base.targets.clusters, cluster) ? base.targets.clusters[cluster] : undefined;
     clusters[cluster] ??= { weight: existing?.weight ?? 1, titles: [], cv_variant: existing?.cv_variant ?? cluster };
     clusters[cluster].titles.push(title);
   }
@@ -107,6 +133,9 @@ export function fieldsToTarget(
     for (const keyword of base.keywords[bucket]) bucketOf.set(keyword.term, bucket);
   }
   const keywords: TrackTarget["keywords"] = { critical: [], strong: [], stack: [], negative: [] };
+  if ([...lines(fields.positives), ...lines(fields.negatives)].some((line) => line.length > KEYWORD_LINE_MAX)) {
+    return { ok: false, code: "track_too_large" };
+  }
   for (const line of lines(fields.positives)) {
     const keyword = weightedLine(line);
     if (!keyword || keyword.weight < 1) return { ok: false, code: "keyword_weight_invalid" };
@@ -121,7 +150,9 @@ export function fieldsToTarget(
   const ranges: TrackTarget["compensation"]["ranges"] = [];
   for (const line of lines(fields.ranges)) {
     const [currency, period, floor, target, ideal, ...rest] = line.split(/\s+/);
-    const numbers = [floor, target, ideal].filter((v) => v !== undefined).map(Number);
+    const numbers = [floor, target, ideal]
+      .filter((v): v is string => v !== undefined)
+      .map((v) => (DOT_GROUPED.test(v) ? Number.NaN : Number(v)));
     if (
       rest.length > 0 ||
       !currency ||
@@ -147,7 +178,7 @@ export function fieldsToTarget(
   return {
     ok: true,
     target: {
-      targets: { clusters, avoid_titles: base.targets.avoid_titles },
+      targets: { clusters: { ...clusters }, avoid_titles: base.targets.avoid_titles },
       keywords,
       seniority: {
         min_years_expected: Number.isFinite(minYears) ? minYears : base.seniority.min_years_expected,

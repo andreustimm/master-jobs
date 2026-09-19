@@ -29,6 +29,7 @@ export const TRACK_CODES = [
   "range_duplicate",
   "range_currency_unknown",
   "range_reference_missing",
+  "track_too_large",
   "track_name_duplicate",
   "track_limit",
   "primary_pending",

@@ -254,6 +254,8 @@ export const ptBR = {
     track_titles_required: "A trilha precisa de pelo menos um título-alvo.",
     track_keywords_required: "A trilha precisa de pelo menos uma palavra que conta.",
     keyword_weight_invalid: "Peso fora da escala: de 1 a 10 nas palavras que contam, de -1 a -10 nas que tiram nota.",
+    track_too_large:
+      "A trilha passou do tamanho: até 60 títulos de 120 caracteres, 200 palavras que contam e 60 que tiram nota, cada uma com até 60 caracteres.",
     range_required: "A trilha precisa de pelo menos uma faixa salarial.",
     range_invalid: "Faixa salarial inválida: piso maior que zero, piso ≤ alvo ≤ ideal, até 10.000.000.",
     range_duplicate: "Duas faixas com a mesma moeda e período.",

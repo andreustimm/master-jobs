@@ -251,6 +251,8 @@ export const en: Dictionary = {
     track_titles_required: "The track needs at least one target title.",
     track_keywords_required: "The track needs at least one keyword that counts.",
     keyword_weight_invalid: "Weight out of scale: 1 to 10 for keywords that count, -1 to -10 for those that lower the score.",
+    track_too_large:
+      "The track is too large: up to 60 titles of 120 characters, 200 keywords that count and 60 that lower the score, each up to 60 characters.",
     range_required: "The track needs at least one pay range.",
     range_invalid: "Invalid pay range: floor above zero, floor ≤ target ≤ ideal, up to 10,000,000.",
     range_duplicate: "Two ranges with the same currency and period.",

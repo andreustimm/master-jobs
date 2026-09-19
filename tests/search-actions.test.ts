@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createTrack,
+  listCandidateTracks,
   setMatchingProfile,
   suggestTrack,
   targetOf,
@@ -44,7 +45,7 @@ vi.mock("../src/contexts/sourcing/index.ts", async (importOriginal) => {
   };
 });
 
-const { rerunTermAction, saveTermAction } = await import("../app/searches/actions.ts");
+const { createTrackAction, rerunTermAction, saveTermAction } = await import("../app/searches/actions.ts");
 
 let db: DB;
 let port: ReturnType<typeof fixtureHttp>;
@@ -121,6 +122,30 @@ describe("term Server Actions", () => {
     expect(state.drains).toEqual([{ budgetMs: 25_000, worker: "web" }]);
     expect(port.calls.length).toBeGreaterThan(0);
     expect((await db.select().from(termCapture)).some((row) => row.status === "succeeded")).toBe(true);
+  });
+
+  it("a new track starts with no avoided titles, whatever the primary avoids", async () => {
+    const outcome = await createTrackAction(
+      form({ name: "Customer Success", titles: "Customer Success Manager", positives: "customer success 8", ranges: "USD month 5000 8000", referenceCurrency: "USD" }),
+    ).catch((error: Error) => error.message);
+
+    expect(outcome).toBe("NEXT_REDIRECT;/searches");
+    const created = (await listCandidateTracks(state.candidateId)).find((track) => track.name === "Customer Success");
+    expect(created?.target?.targets.avoid_titles).toEqual([]);
+    const primary = (await listCandidateTracks(state.candidateId)).find((track) => track.isPrimary);
+    expect(primary?.target?.targets.avoid_titles.length).toBeGreaterThan(0);
+  });
+
+  it("a term already saved is refused before the track exists, so no orphan track is left", async () => {
+    const saved = await saveTermAction(form({ term: "Laravel", trackId: php }));
+    const tracksBefore = await listCandidateTracks(state.candidateId);
+
+    const result = await createTrackAction(
+      form({ name: "Laravel Two", term: "Laravel", titles: "Laravel Developer", positives: "laravel 10", ranges: "USD month 5000 8000", referenceCurrency: "USD" }),
+    );
+
+    expect(result).toMatchObject({ ok: false, code: "term_duplicate", href: `/searches#term-${saved.ok ? saved.termId : 0}` });
+    expect(await listCandidateTracks(state.candidateId)).toHaveLength(tracksBefore.length);
   });
 
   it("IT-088 a borrowed session's re-run waits for the sweep", async () => {

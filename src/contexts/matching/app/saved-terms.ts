@@ -56,6 +56,25 @@ export type SaveTermResult =
 
 type RunRequest = { termKey: string; query: string; now: Date };
 
+export type TermAvailability =
+  | { ok: true }
+  | { ok: false; code: "term_duplicate"; termId: number }
+  | { ok: false; code: TermError | "term_limit" };
+
+/**
+ * O termo poderia ser salvo agora? A criação de trilha comita sozinha; conferir
+ * antes é o que impede uma recusa do termo de deixar uma trilha órfã e um
+ * formulário que só responde "nome já existe".
+ */
+export async function termAvailability(scope: CandidateScope, rawTerm: string): Promise<TermAvailability> {
+  const valid = validateTerm(rawTerm);
+  if (!valid.ok) return { ok: false, code: valid.code };
+  const existing = await findTermByKey(scope.candidateId, valid.value.key);
+  if (existing) return { ok: false, code: "term_duplicate", termId: existing.id };
+  if ((await countActiveTerms(getDb(), scope.candidateId)) >= MAX_ACTIVE_TERMS) return { ok: false, code: "term_limit" };
+  return { ok: true };
+}
+
 async function startRun(
   request: RunRequest,
   writer?: Parameters<typeof requestTermCaptures>[1],

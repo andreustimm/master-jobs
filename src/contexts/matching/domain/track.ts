@@ -51,9 +51,22 @@ export type TrackError =
   | "range_invalid"
   | "range_duplicate"
   | "range_currency_unknown"
-  | "range_reference_missing";
+  | "range_reference_missing"
+  | "track_too_large";
 
 export const TRACK_NAME_MAX = 40;
+/**
+ * Tetos de tamanho. O scorer compila uma expressão por palavra por vaga e grava
+ * as ausentes em cada linha de `job_score`, e a varredura diária pontua um
+ * candidato por vez num job de 60 minutos: sem teto, uma trilha de 100 mil
+ * palavras parava a varredura de todo mundo. O perfil do dono usa 27 títulos,
+ * 59 palavras positivas e 9 negativas; os tetos deixam folga larga.
+ */
+export const TRACK_TITLES_MAX = 60;
+export const TRACK_TITLE_LENGTH_MAX = 120;
+export const TRACK_POSITIVES_MAX = 200;
+export const TRACK_NEGATIVES_MAX = 60;
+export const TRACK_KEYWORD_LENGTH_MAX = 60;
 export const MAX_ACTIVE_TRACKS = 6;
 export const KEYWORD_WEIGHT_MAX = 10;
 export const PAY_AMOUNT_MAX = 10_000_000;
@@ -139,6 +152,14 @@ export function validateTrackTarget(
   }
   const positives = positiveKeywords(target);
   if (positives.length === 0) return { ok: false, code: "track_keywords_required" };
+  const titles = titlesOf(target);
+  const oversized =
+    titles.length > TRACK_TITLES_MAX ||
+    titles.some((title) => title.length > TRACK_TITLE_LENGTH_MAX) ||
+    positives.length > TRACK_POSITIVES_MAX ||
+    target.keywords.negative.length > TRACK_NEGATIVES_MAX ||
+    [...positives, ...target.keywords.negative].some((keyword) => keyword.term.length > TRACK_KEYWORD_LENGTH_MAX);
+  if (oversized) return { ok: false, code: "track_too_large" };
   const positiveOk = positives.every(
     (keyword) => Number.isInteger(keyword.weight) && keyword.weight >= 1 && keyword.weight <= KEYWORD_WEIGHT_MAX,
   );

@@ -187,6 +187,9 @@ export function FilterBar({
           <label className="flex flex-col gap-1 type-caption-sm text-muted-foreground">
             {t("filters.payAmount")}
             <Input
+              // Sem chave, o campo não controlado guardava o valor depois de
+              // "limpar", e o próximo Aplicar devolvia o mínimo sem ninguém pedir.
+              key={state.pay?.min ?? ""}
               type="number"
               name="pay"
               min={1}

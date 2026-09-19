@@ -17,6 +17,7 @@ import {
   saveTerm,
   setPrimaryTrack,
   setTermStatus,
+  termAvailability,
   updateTrack,
   type LifecycleResult,
   type RerunResult,
@@ -130,17 +131,33 @@ type FormFailure = { ok: false; code: TrackFormError };
  * A trilha parte da principal (faixas e senioridade vêm dela, ADR-002) e só
  * existe depois que a pessoa confirma. Com o termo salvo, volta para Buscas.
  */
-export async function createTrackAction(formData: FormData): Promise<TrackResult | FormFailure | SaveTermResult> {
+export async function createTrackAction(
+  formData: FormData,
+): Promise<TrackResult | FormFailure | (SaveTermResult & { href?: string })> {
   const { session, candidateId } = await guardOwnCandidate("candidate:write");
   const primary = await ensurePrimaryTrack(candidateId);
   if (!primary?.target) return { ok: false, code: "primary_pending" };
   const fields = fieldsFrom(formData);
-  const parsed = fieldsToTarget(fields, primary.target);
+  // A lista de títulos evitados não aparece no editor: herdá-la da principal
+  // zerava o título justo das vagas que a trilha nova persegue.
+  const parsed = fieldsToTarget(fields, {
+    ...primary.target,
+    targets: { ...primary.target.targets, avoid_titles: [] },
+  });
   if (!parsed.ok) return parsed;
+
+  // A trilha comita sozinha: o termo é conferido antes, para que uma recusa
+  // dele não deixe trilha órfã nem um formulário que só responde "nome já existe".
+  const term = String(formData.get("term") ?? "").trim();
+  if (term) {
+    const available = await termAvailability({ candidateId }, term);
+    if (!available.ok) {
+      return available.code === "term_duplicate" ? { ...available, href: `/searches#term-${available.termId}` } : available;
+    }
+  }
   const created = await createTrack(candidateId, { name: fields.name, target: parsed.target });
   if (!created.ok) return created;
 
-  const term = String(formData.get("term") ?? "").trim();
   if (term) {
     const saved = await saveTerm(
       { candidateId },
@@ -149,8 +166,11 @@ export async function createTrackAction(formData: FormData): Promise<TrackResult
     );
     if (saved.ok && saved.run === "started") drainAfterResponse(candidateId);
     if (!saved.ok) {
+      // Corrida com outra aba entre a conferência e o salvamento: a trilha já
+      // existe, então a pessoa vai para ela em vez de reenviar a criação.
       refresh();
-      return saved;
+      await setMutationFeedbackCookie("error");
+      redirect(`/searches/tracks/${created.track.id}`);
     }
   }
   refresh();
