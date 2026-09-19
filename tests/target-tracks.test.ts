@@ -4,6 +4,7 @@ import {
   archiveTrack,
   createTrack,
   ensureMatchingProfile,
+  ensurePrimaryTrack,
   restoreTrack,
   setMatchingProfile,
   setPrimaryTrack,
@@ -266,5 +267,64 @@ describe("target track lifecycle", () => {
     const after = (await trackOverview(id)).tracks.find((t) => t.name === "Frontend")!;
     expect(after.support.supported).toContain("vue");
     expect(await tracksOf(id)).toHaveLength(2);
+  });
+});
+
+describe("the primary track after the migration and the first CV", () => {
+  async function ownerWithoutProfile(): Promise<number> {
+    const [row] = await db
+      .insert(candidate)
+      .values({ slug: "owner", name: "Owner", isDefault: true })
+      .returning({ id: candidate.id });
+    return row!.id;
+  }
+
+  it("the Searches overview fills the owner's NULL-target primary that 0005 leaves behind", async () => {
+    const id = await ownerWithoutProfile();
+    await db.insert(targetTrack).values({ candidateId: id, name: "Principal", nameKey: "principal", isPrimary: true, position: 1 });
+
+    const overview = await trackOverview(id);
+
+    expect(overview.pending).toBe(false);
+    expect(overview.tracks.find((track) => track.isPrimary)?.target).toEqual(targetOf(base));
+  });
+
+  it("the first CV derivation never replaces a primary the owner edited", async () => {
+    await seedCatalog();
+    const id = await ownerWithoutProfile();
+    const primary = await ensurePrimaryTrack(id);
+    const edited: TrackTarget = {
+      ...primary!.target!,
+      keywords: { ...primary!.target!.keywords, critical: [{ term: "owner edit", weight: 10 }] },
+    };
+    expect(await updateTrack(id, primary!.id, { target: edited, expectedUpdatedAt: primary!.updatedAt })).toMatchObject({ ok: true });
+    await saveDocument({
+      candidateId: id,
+      label: "CV",
+      content: "Senior data engineer. Python, Spark, Airflow, Kubernetes and PostgreSQL in production for years.",
+    });
+
+    expect((await ensureMatchingProfile(id)).estado).toBe("derivado");
+
+    const [row] = (await tracksOf(id)).filter((t) => t.isPrimary);
+    expect(JSON.parse(row!.targetJson!).keywords.critical).toEqual([{ term: "owner edit", weight: 10 }]);
+  });
+});
+
+describe("restoring a track within the active-term ceiling", () => {
+  it("resumes only as many archived terms as there are free slots", async () => {
+    const { id, primary } = await owner();
+    const primaryTrack = (await tracksOf(id)).find((t) => t.isPrimary)!;
+    const php = await accepted(id, primary);
+    for (let n = 1; n <= 15; n++) await term(id, primaryTrack.id, `own${n}`);
+    for (let n = 1; n <= 5; n++) await term(id, php.id, `php${n}`);
+    await archiveTrack(id, php.id);
+    for (let n = 16; n <= 20; n++) await term(id, primaryTrack.id, `own${n}`);
+
+    expect(await restoreTrack(id, php.id)).toMatchObject({ ok: true, track: { status: "active" } });
+
+    const terms = await db.select().from(savedTerm).where(eq(savedTerm.candidateId, id));
+    expect(terms.filter((t) => t.status === "active")).toHaveLength(20);
+    expect(terms.filter((t) => t.trackId === php.id).every((t) => t.pausedReason === "track_archived")).toBe(true);
   });
 });

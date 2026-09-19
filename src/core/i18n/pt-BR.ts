@@ -177,6 +177,7 @@ export const ptBR = {
     skipped: "pulada",
     captures_off: "capturas desligadas neste ambiente",
     waiting_sweep: "aguardando a varredura diária",
+    paused: "pausado: fora da varredura",
   },
   /** Por que uma captura falhou ou foi pulada. */
   captureReason: {
@@ -268,6 +269,11 @@ export const ptBR = {
     primary_cannot_archive: "A trilha principal não pode ser arquivada. Promova outra antes.",
     cooldown: "Uma busca manual por dia: este termo pode buscar de novo mais tarde.",
     running: "A busca deste termo ainda está rodando.",
+    paused: "Termo pausado não busca, nem pela mão. Retome-o antes.",
+    rerun_started: "A busca começou e as vagas chegam em instantes.",
+    rerun_waiting_sweep: "A busca espera a próxima varredura diária.",
+    rerun_captures_off: "As capturas estão desligadas neste ambiente.",
+    rerun_no_platform: "Nenhuma plataforma de busca está disponível; o termo pode buscar de novo quando houver.",
     run_started: "Salvo. A busca começou e as vagas chegam em instantes.",
     run_waiting_sweep: "Salvo. A busca espera a próxima varredura diária.",
     run_captures_off: "Salvo. As capturas estão desligadas neste ambiente.",

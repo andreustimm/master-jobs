@@ -67,7 +67,7 @@ export async function ensureMatchingProfile(candidateId: number): Promise<Result
   const derivado = deriveMatchingProfile(atual.profile, deteccoes);
   // Grava o perfil e a trilha principal juntos. Alvos e faixas vieram do padrão
   // e saem marcados como "não revisados" até a pessoa salvar a trilha.
-  await saveMatchingProfile(candidateId, derivado);
+  await saveMatchingProfile(candidateId, derivado, { primary: "fill" });
 
   return {
     estado: "derivado",

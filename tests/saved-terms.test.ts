@@ -506,3 +506,47 @@ describe("counts, sharing and the daily sweep", () => {
     expect(await db.select().from(termCapture).where(and(eq(termCapture.termKey, "laravel")))).toHaveLength(6);
   });
 });
+
+describe("rules a paused term or an archived track must keep", () => {
+  it("a paused term is refused a manual run and nothing is enqueued", async () => {
+    const id = await person("owner", true);
+    const termId = await saved(id, "Laravel", (await track(id, "PHP")).id);
+    await runTermCaptures({ worker: "test" });
+    await setTermStatus({ candidateId: id }, termId, "paused");
+    clock.advance(25 * HOUR);
+    const before = (await captures("laravel")).length;
+
+    expect(await rerunTerm({ candidateId: id }, termId, ctx())).toEqual({ ok: false, code: "paused" });
+    expect(await captures("laravel")).toHaveLength(before);
+  });
+
+  it("a re-run outside the cooldown also retries a platform that failed today", async () => {
+    const id = await person("owner", true);
+    const termId = await saved(id, "Laravel", (await track(id, "PHP")).id);
+    await runTermCaptures({ worker: "test" });
+    clock.advance(25 * HOUR);
+    await sweep();
+    await db
+      .update(termCapture)
+      .set({ status: "failed", reasonCode: "http_error" })
+      .where(and(eq(termCapture.platform, "remoteok"), eq(termCapture.windowDay, day(1))));
+
+    expect(await rerunTerm({ candidateId: id }, termId, ctx())).toEqual({ ok: true, run: "started" });
+
+    const today = (await captures("laravel")).filter((row) => row.windowDay === day(1));
+    expect(today.find((row) => row.platform === "remoteok")?.status).toBe("queued");
+  });
+
+  it("resuming a term of an archived track is refused and the term keeps its archive pause", async () => {
+    const id = await person("owner", true);
+    const php = await track(id, "PHP");
+    const termId = await saved(id, "Laravel", php.id);
+    await archiveTrack(id, php.id);
+
+    expect(await setTermStatus({ candidateId: id }, termId, "active")).toEqual({ ok: false, code: "track_archived" });
+    expect((await db.select().from(savedTerm).where(eq(savedTerm.id, termId)))[0]).toMatchObject({
+      status: "paused",
+      pausedReason: "track_archived",
+    });
+  });
+});

@@ -39,10 +39,18 @@ export const TRACK_CODES = [
   "track_archived",
 ] as const;
 
-export const RERUN_CODES = ["cooldown", "running", "not_found"] as const;
+export const RERUN_CODES = ["cooldown", "running", "not_found", "paused"] as const;
 
-/** Successful saves and re-runs say which way the search went. */
+/** Successful saves say which way the search went. */
 export const RUN_OUTCOMES = ["started", "waiting_sweep", "captures_off", "no_platform"] as const;
+
+/** A re-run reports the same outcomes, without the save's "Saved." */
+export const RERUN_OUTCOME_KEYS: Record<(typeof RUN_OUTCOMES)[number], TranslationKey> = {
+  started: "searchFeedback.rerun_started",
+  waiting_sweep: "searchFeedback.rerun_waiting_sweep",
+  captures_off: "searchFeedback.rerun_captures_off",
+  no_platform: "searchFeedback.rerun_no_platform",
+};
 
 export const FEEDBACK_KEYS: Record<string, TranslationKey> = {
   ...Object.fromEntries(
@@ -54,4 +62,12 @@ export const FEEDBACK_KEYS: Record<string, TranslationKey> = {
 /** The messages a `MutationFeedbackForm` shows, by result code or run. */
 export function feedbackMessages(t: Translator["t"]): Record<string, string> {
   return Object.fromEntries(Object.entries(FEEDBACK_KEYS).map(([code, key]) => [code, t(key)]));
+}
+
+/** The re-run form's messages: the refusals of any action, the outcomes of a re-run. */
+export function rerunMessages(t: Translator["t"]): Record<string, string> {
+  return {
+    ...feedbackMessages(t),
+    ...Object.fromEntries(Object.entries(RERUN_OUTCOME_KEYS).map(([run, key]) => [run, t(key)])),
+  };
 }

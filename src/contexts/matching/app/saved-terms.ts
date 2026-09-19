@@ -140,9 +140,9 @@ export async function saveTerm(
 }
 
 export type RerunResult =
-  | { ok: true; run: "started" | "waiting_sweep" | "captures_off" }
+  | { ok: true; run: "started" | "waiting_sweep" | "captures_off" | "no_platform" }
   | { ok: false; code: "cooldown"; availableAt: string }
-  | { ok: false; code: "not_found" | "running" };
+  | { ok: false; code: "not_found" | "running" | "paused" };
 
 /**
  * Busca de novo, a pedido. Uma vez a cada 24 horas; dentro da janela, só a
@@ -152,6 +152,8 @@ export type RerunResult =
 export async function rerunTerm(scope: CandidateScope, termId: number, ctx: ActionContext): Promise<RerunResult> {
   const term = await findTerm(scope.candidateId, termId);
   if (!term) return { ok: false, code: "not_found" };
+  // Pausar é "nem sozinho, nem pela mão" (US-011); arquivar a trilha também pausa.
+  if (term.status === "paused") return { ok: false, code: "paused" };
   if (ctx.impersonated) return { ok: true, run: "waiting_sweep" };
   if (!capturesAllowed()) return { ok: true, run: "captures_off" };
 
@@ -179,23 +181,42 @@ export async function rerunTerm(scope: CandidateScope, termId: number, ctx: Acti
     .returning({ id: savedTerm.id });
   if (claimed.length === 0) return { ok: true, run: "started" };
   const run = await startRun({ termKey: term.termKey, query: term.term, now: ctx.now });
-  return { ok: true, run: run === "captures_off" ? "captures_off" : "started" };
+  if (run === "no_platform") {
+    // Nada foi buscado: a âncora de 24 horas volta para quem a tinha.
+    await getDb()
+      .update(savedTerm)
+      .set({ lastRunRequestedAt: term.lastRunRequestedAt })
+      .where(eq(savedTerm.id, term.id));
+    return { ok: true, run: "no_platform" };
+  }
+  // O enfileiramento só reaproveita a captura bem-sucedida de hoje; a que
+  // falhou hoje precisa voltar para a fila explicitamente.
+  if (run === "started") await retryFailedCaptures(term.termKey, ctx.now);
+  return { ok: true, run };
 }
 
-/** Pausar tira o termo da varredura; retomar respeita o limite de ativos. */
+/**
+ * Pausar tira o termo da varredura; retomar respeita o limite de ativos e recusa
+ * trilha arquivada — a varredura só lê termos de trilha ativa, então um termo
+ * "ativo" ali ocuparia vaga sem nunca rodar.
+ */
 export async function setTermStatus(
   scope: CandidateScope,
   termId: number,
   status: "active" | "paused",
   now = new Date(),
-): Promise<{ ok: boolean; code?: "not_found" | "term_limit" }> {
+): Promise<{ ok: boolean; code?: "not_found" | "term_limit" | "track_archived" }> {
   return getDb().transaction(async (tx) => {
     await lockCandidateTracks(tx, scope.candidateId);
     const term = await findTerm(scope.candidateId, termId, tx);
     if (!term) return { ok: false, code: "not_found" as const };
     if (term.status === status) return { ok: true };
-    if (status === "active" && (await countActiveTerms(tx, scope.candidateId)) >= MAX_ACTIVE_TERMS) {
-      return { ok: false, code: "term_limit" as const };
+    if (status === "active") {
+      const track = await findTrack(scope.candidateId, term.trackId, tx);
+      if (!track || track.status === "archived") return { ok: false, code: "track_archived" as const };
+      if ((await countActiveTerms(tx, scope.candidateId)) >= MAX_ACTIVE_TERMS) {
+        return { ok: false, code: "term_limit" as const };
+      }
     }
     await tx
       .update(savedTerm)

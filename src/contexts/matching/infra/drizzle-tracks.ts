@@ -2,7 +2,7 @@
  * Armazenamento das trilhas. Adapter burro: lê, grava e mapeia colunas para o
  * tipo do domínio. As regras moram em `domain/track.ts`.
  */
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { getDb, type DB } from "../../../core/db/client.ts";
 import { candidate, savedTerm, targetTrack } from "../../../core/db/schema.ts";
 import type { Track, TrackStatus, TrackTarget, UnreviewedField } from "../domain/track.ts";
@@ -91,10 +91,22 @@ export async function pauseTermsOf(db: Executor, trackId: number, now: string): 
     .where(and(eq(savedTerm.trackId, trackId), eq(savedTerm.status, "active")));
 }
 
-/** Retoma só o que o arquivamento pausou; pausa manual continua pausa. */
-export async function resumeTermsOf(db: Executor, trackId: number, now: string): Promise<void> {
+/**
+ * Retoma só o que o arquivamento pausou — pausa manual continua pausa — e só
+ * até `limit`: as vagas que o arquivamento liberou podem ter sido ocupadas. Os
+ * que sobram ficam pausados com o mesmo motivo, na ordem em que foram salvos.
+ */
+export async function resumeTermsOf(db: Executor, trackId: number, now: string, limit: number): Promise<void> {
+  if (limit <= 0) return;
+  const rows = await db
+    .select({ id: savedTerm.id })
+    .from(savedTerm)
+    .where(and(eq(savedTerm.trackId, trackId), eq(savedTerm.pausedReason, "track_archived")))
+    .orderBy(asc(savedTerm.id))
+    .limit(limit);
+  if (rows.length === 0) return;
   await db
     .update(savedTerm)
     .set({ status: "active", pausedReason: null, updatedAt: now })
-    .where(and(eq(savedTerm.trackId, trackId), eq(savedTerm.pausedReason, "track_archived")));
+    .where(inArray(savedTerm.id, rows.map((row) => row.id)));
 }

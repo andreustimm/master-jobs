@@ -26,7 +26,7 @@ import {
   saveTermAction,
   setPrimaryTrackAction,
 } from "./actions";
-import { feedbackMessages } from "./feedback";
+import { feedbackMessages, rerunMessages } from "./feedback";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +43,7 @@ type PlatformLine = { platform: string; label: string; detail?: string };
 
 function platformLines(
   term: TermView,
-  fallback: "captures_off" | "waiting_sweep",
+  fallback: "captures_off" | "waiting_sweep" | "paused",
   platforms: readonly string[],
   t: Translator["t"],
   locale: string,
@@ -230,7 +230,11 @@ export default async function SearchesPage() {
                 )}
                 {own.length === 0 && <p className="type-body-md text-muted-foreground">{t("searches.noTerms")}</p>}
                 {own.map((term) => {
-                  const lines = platformLines(term, fallback, platforms, t, locale);
+                  // A varredura lê só termo ativo de trilha ativa: o resto não
+                  // promete busca, nem oferece "rodar de novo" ou "retomar".
+                  const trackArchived = track.status === "archived";
+                  const sweeps = term.status === "active" && !trackArchived;
+                  const lines = platformLines(term, sweeps ? fallback : "paused", platforms, t, locale);
                   const lastRun = term.platforms
                     .map((state) => state.finishedAt)
                     .filter((value): value is string => value !== null)
@@ -278,26 +282,30 @@ export default async function SearchesPage() {
                       <p className="type-caption-md text-muted-foreground">
                         {lastRun ? `${t("searches.lastRun", { when: when(lastRun, locale) })} · ` : ""}
                         {term.reused ? `${t("searches.reused")} · ` : ""}
-                        {t("searches.nextRunSweep")}
+                        {sweeps ? t("searches.nextRunSweep") : t("captureState.paused")}
                       </p>
                       <div className="flex flex-wrap items-center gap-2">
-                        <MutationFeedbackForm action={rerunTermAction} {...feedback}>
-                          <input type="hidden" name="termId" value={term.id} />
-                          <Button type="submit" variant="outline" size="sm" data-testid={`term-rerun-${term.id}`}>
-                            {term.rerun.allowed
-                              ? t("searches.rerun")
-                              : t("searches.rerunAt", { when: when(term.rerun.availableAt, locale) })}
-                          </Button>
-                        </MutationFeedbackForm>
-                        <MutationFeedbackForm
-                          action={term.status === "paused" ? resumeTermAction : pauseTermAction}
-                          {...feedback}
-                        >
-                          <input type="hidden" name="termId" value={term.id} />
-                          <Button type="submit" variant="outline" size="sm" data-testid={`term-toggle-${term.id}`}>
-                            {term.status === "paused" ? t("searches.resume") : t("searches.pause")}
-                          </Button>
-                        </MutationFeedbackForm>
+                        {sweeps && (
+                          <MutationFeedbackForm action={rerunTermAction} {...feedback} resultMessages={rerunMessages(t)}>
+                            <input type="hidden" name="termId" value={term.id} />
+                            <Button type="submit" variant="outline" size="sm" data-testid={`term-rerun-${term.id}`}>
+                              {term.rerun.allowed
+                                ? t("searches.rerun")
+                                : t("searches.rerunAt", { when: when(term.rerun.availableAt, locale) })}
+                            </Button>
+                          </MutationFeedbackForm>
+                        )}
+                        {!trackArchived && (
+                          <MutationFeedbackForm
+                            action={term.status === "paused" ? resumeTermAction : pauseTermAction}
+                            {...feedback}
+                          >
+                            <input type="hidden" name="termId" value={term.id} />
+                            <Button type="submit" variant="outline" size="sm" data-testid={`term-toggle-${term.id}`}>
+                              {term.status === "paused" ? t("searches.resume") : t("searches.pause")}
+                            </Button>
+                          </MutationFeedbackForm>
+                        )}
                         {active.length > 1 && (
                           <MutationFeedbackForm action={moveTermAction} {...feedback} className="flex flex-wrap items-center gap-2">
                             <input type="hidden" name="termId" value={term.id} />

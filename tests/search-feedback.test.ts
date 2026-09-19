@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FEEDBACK_KEYS, RERUN_CODES, RUN_OUTCOMES, TERM_CODES, TRACK_CODES } from "../app/searches/feedback.ts";
+import { FEEDBACK_KEYS, RERUN_CODES, RERUN_OUTCOME_KEYS, RUN_OUTCOMES, TERM_CODES, TRACK_CODES } from "../app/searches/feedback.ts";
 import type { FilterNotice } from "../app/filter-state.ts";
 import { en } from "../src/core/i18n/en.ts";
 import { ptBR } from "../src/core/i18n/pt-BR.ts";
@@ -28,6 +28,11 @@ describe("action feedback in both languages", () => {
         missing.push(`${code}: no key`);
         continue;
       }
+      for (const [locale, dictionary] of [["pt-BR", ptBR], ["en", en]] as const) {
+        if (typeof lookup(dictionary, key) !== "string") missing.push(`${locale}: ${key}`);
+      }
+    }
+    for (const key of Object.values(RERUN_OUTCOME_KEYS)) {
       for (const [locale, dictionary] of [["pt-BR", ptBR], ["en", en]] as const) {
         if (typeof lookup(dictionary, key) !== "string") missing.push(`${locale}: ${key}`);
       }

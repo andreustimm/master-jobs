@@ -47,6 +47,8 @@ import {
   resumeTermsOf,
   toTrack,
 } from "../infra/drizzle-tracks.ts";
+import { MAX_ACTIVE_TERMS } from "../domain/saved-term.ts";
+import { countActiveTerms } from "../infra/drizzle-saved-terms.ts";
 
 /** Nome da trilha principal criada a partir do perfil existente. */
 export const PRIMARY_TRACK_NAME = "Principal";
@@ -125,12 +127,20 @@ export async function ensurePrimaryTrack(candidateId: number): Promise<Track | n
  * Grava o perfil de matching e alinha a trilha principal a ele.
  *
  * O perfil gravado continua sendo o da pessoa; a parte-alvo dele passa a morar
- * na principal. Gravar os dois juntos mantém `setMatchingProfile` — o caminho
- * da derivação por currículo — com o efeito de sempre.
+ * na principal. `replace` é quem grava um perfil de propósito; `fill` é a
+ * derivação por currículo, que completa uma principal pendente e nunca
+ * sobrescreve uma que já tem alvo — o dono edita a principal que o
+ * `profile.yaml` preencheu, e o primeiro currículo apagaria essas edições.
  */
-export async function saveMatchingProfile(candidateId: number, input: unknown): Promise<{ hash: string }> {
+export async function saveMatchingProfile(
+  candidateId: number,
+  input: unknown,
+  opts: { primary: "replace" | "fill" } = { primary: "replace" },
+): Promise<{ hash: string }> {
   const profile = ProfileSchema.parse(input);
   const saved = await saveCandidateMatchingProfile(candidateId, profile);
+  const primary = (await listTracks(candidateId)).find((track) => track.isPrimary);
+  if (opts.primary === "fill" && primary?.target) return saved;
   await writePrimary(candidateId, targetOf(profile), await unreviewedFor(candidateId, profile));
   return saved;
 }
@@ -301,7 +311,7 @@ export async function restoreTrack(candidateId: number, trackId: number): Promis
       .set({ status: "active", updatedAt: now })
       .where(eq(targetTrack.id, trackId))
       .returning();
-    await resumeTermsOf(tx, trackId, now);
+    await resumeTermsOf(tx, trackId, now, MAX_ACTIVE_TERMS - (await countActiveTerms(tx, candidateId)));
     return { ok: true, track: toTrack(row!) };
   });
   if (result.ok) await enqueueScore(candidateId, { origin: "perfil" });
@@ -329,8 +339,15 @@ async function ownEvidence(candidateId: number): Promise<OwnEvidence> {
   };
 }
 
-/** As trilhas do candidato com o marcador de evidência de cada uma. */
+/**
+ * As trilhas do candidato com o marcador de evidência de cada uma.
+ *
+ * A migração 0005 deixa a principal do dono sem perfil gravado com alvo nulo,
+ * para a aplicação copiar o `profile.yaml` no primeiro uso: esta leitura é o
+ * primeiro uso da tela Buscas.
+ */
 export async function trackOverview(candidateId: number): Promise<TrackOverview> {
+  await ensurePrimaryTrack(candidateId);
   const [tracks, evidence] = await Promise.all([listTracks(candidateId), ownEvidence(candidateId)]);
   return {
     pending: !tracks.find((track) => track.isPrimary)?.target,
