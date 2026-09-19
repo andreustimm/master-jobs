@@ -272,11 +272,12 @@ describe("running a term again", () => {
       rerunTerm({ candidateId: id }, termId, ctx()),
     ]);
 
-    // Um pede a busca; o outro vê a busca pedida — já enfileirada ("running")
-    // ou com a âncora já movida ("started"), nunca uma segunda busca.
+    // Um pede a busca; o outro vê a busca pedida — já enfileirada ("running"),
+    // com a âncora movida depois de ele lê-la ("started") ou antes ("cooldown",
+    // que diz quando pode buscar de novo). Nunca uma segunda busca.
     const outcomes = results.map((result) => (result.ok ? result.run : result.code));
     expect(outcomes).toContain("started");
-    expect(outcomes.every((outcome) => outcome === "started" || outcome === "running")).toBe(true);
+    expect(outcomes.every((outcome) => ["started", "running", "cooldown"].includes(outcome))).toBe(true);
     expect((await captures("laravel")).filter((row) => row.windowDay === day(1))).toHaveLength(3);
     const [row] = await db.select().from(savedTerm);
     expect(row!.lastRunRequestedAt).toBe(now().toISOString());

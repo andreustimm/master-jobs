@@ -94,13 +94,15 @@ afterEach(async () => {
 
 describe("target-track migrations 0004–0006", () => {
   it("gives an owner without a stored profile a NULL-target primary and keeps the owner's scores", async () => {
-    const [{ id: owner }] = (await db.execute<{ id: number }>(
+    const candidates = await db.execute<{ id: number }>(
       sql`insert into production.candidate (slug, name, is_default) values ('owner', 'Owner', true) returning id`,
-    )) as [{ id: number }];
+    );
+    const owner = candidates[0]!.id;
     await db.execute(sql`insert into production.source (id, kind, handle, label) values ('manual:m', 'manual', 'm', 'M')`);
-    const [{ id: jobId }] = (await db.execute<{ id: number }>(sql`
+    const jobs = await db.execute<{ id: number }>(sql`
       insert into production.job (fingerprint, content_hash, source_id, external_id, company_name, title, url, raw)
-      values ('f1', 'h1', 'manual:m', '1', 'Acme', 'Architect', 'https://a/1', '{}') returning id`)) as [{ id: number }];
+      values ('f1', 'h1', 'manual:m', '1', 'Acme', 'Architect', 'https://a/1', '{}') returning id`);
+    const jobId = jobs[0]!.id;
     await db.execute(sql`
       insert into production.job_score
         (candidate_id, job_id, fit, title_score, keyword_score, seniority_score, geo_score, comp_score,
