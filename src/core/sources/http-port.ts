@@ -31,6 +31,23 @@ export type HttpOptions = {
   headers?: Record<string, string>;
 };
 
+/**
+ * A non-2xx answer. Lives beside the port so the test double throws exactly
+ * what the network does: callers branch on `status` (429 spends the day's
+ * quota, 404 means the endpoint is gone), not on message text.
+ */
+export class HttpError extends Error {
+  readonly status: number;
+  readonly url: string;
+
+  constructor(status: number, url: string, message: string) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+    this.url = url;
+  }
+}
+
 let current: HttpPort | null = null;
 
 /** The port in force. Falls back to the real implementation. */
@@ -65,8 +82,11 @@ export type Fixture = string | object | { status: number; body?: string | object
  * Matching is by substring so a test can key on the distinctive part of an
  * endpoint without reproducing every query parameter the adapter appends.
  */
-export function fixtureHttp(fixtures: Record<string, Fixture>): HttpPort & { calls: string[] } {
+export function fixtureHttp(
+  fixtures: Record<string, Fixture>,
+): HttpPort & { calls: string[]; options: Array<HttpOptions | undefined> } {
   const calls: string[] = [];
+  const options: Array<HttpOptions | undefined> = [];
 
   function find(url: string): Fixture | undefined {
     if (fixtures[url] !== undefined) return fixtures[url];
@@ -78,19 +98,22 @@ export function fixtureHttp(fixtures: Record<string, Fixture>): HttpPort & { cal
 
   return {
     calls,
-    async json<T>(url: string): Promise<T> {
+    options,
+    async json<T>(url: string, opts?: HttpOptions): Promise<T> {
       calls.push(url);
+      options.push(opts);
       const fixture = find(url);
       if (fixture === undefined) throw new Error(`Sem fixture para ${url}`);
       if (typeof fixture === "object" && fixture !== null && "status" in fixture) {
         const typed = fixture as { status: number; body?: string | object };
-        if (typed.status >= 400) throw new Error(`HTTP ${typed.status} em ${url}`);
+        if (typed.status >= 400) throw new HttpError(typed.status, url, `HTTP ${typed.status} em ${url}`);
         return (typeof typed.body === "string" ? JSON.parse(typed.body) : typed.body) as T;
       }
       return (typeof fixture === "string" ? JSON.parse(fixture) : fixture) as T;
     },
-    async text(url: string): Promise<string | null> {
+    async text(url: string, opts?: HttpOptions): Promise<string | null> {
       calls.push(url);
+      options.push(opts);
       const fixture = find(url);
       if (fixture === undefined) return null;
       if (typeof fixture === "object" && fixture !== null && "status" in fixture) {

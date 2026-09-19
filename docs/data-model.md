@@ -746,6 +746,21 @@ chave nova). O migrator aplica as pendentes numa transação só.
 
 ## Tabelas adicionadas depois da primeira versão
 
+### Captura por termo — `term_capture`, `term_attribution`, `platform_quota`
+
+Do contexto `sourcing` (`src/contexts/sourcing/`). Nenhuma das três nomeia
+candidato: a captura é por termo, e quem salvou o termo fica em `saved_term`.
+Regras de negócio em [`docs/sources.md`](sources.md#busca-por-termo).
+
+| Tabela | Chave | O que guarda |
+|---|---|---|
+| `term_capture` | `id`; único `(platform, term_key, window_day)` | fila e registro de uma busca por termo numa plataforma num dia UTC: estado, lease, contagens (`fetched`, `created`, `known`, `attributed`), `total_hint` |
+| `term_attribution` | `(term_key, job_id)`; `job_id` com `ON DELETE cascade` | a vaga que a captura trouxe e que cita o termo — base do filtro "trazida por" |
+| `platform_quota` | `(platform, window_kind, window_start)` | unidades gastas por plataforma em cada janela `day`/`minute`, sincronização incluída |
+
+Vaga nova de captura entra numa fonte `<kind>:~terms` criada com
+`enabled = false`: a sincronização nunca a fecha.
+
 ### `fx_rate` — cotações em cache
 
 | Coluna | Papel |

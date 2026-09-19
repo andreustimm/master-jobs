@@ -527,7 +527,7 @@ timeouts tight, retry only on transient failures, and never hammer on a 4xx."*
 |---|---|
 | Identificar-se | Header `user-agent` em toda requisição: `process.env.JHO_USER_AGENT` com fallback `"master-jobs/0.1 (personal job search)"` |
 | Timeout curto | `AbortController` com `DEFAULT_TIMEOUT_MS = 20_000` |
-| Retry só em falha transitória | `RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504])`; no máximo 2 retries (`opts.retries ?? 2`) |
+| Retry só em falha transitória | `RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504])`; no máximo 2 retries (`opts.retries ?? 2`). Plataforma com orçamento (Remotive, RemoteOK, Himalayas) chama com `retries: 0` — ver "Busca por termo" |
 | Não martelar em 4xx | Status fora de `RETRYABLE` faz `throw` imediato do `HttpError` — "a 404 means the board handle is wrong; retrying just wastes time" |
 | Backoff | `500 * 2 ** attempt` ms, ou seja 500 ms e depois 1000 ms |
 | Concorrência limitada | `syncAll()` usa uma fila com `concurrency` workers, default 4 (`--concurrency <n>`) |
@@ -541,6 +541,97 @@ Se você precisa de mais volume de uma fonte, prefira **mais queries
 específicas** (como as duas entradas `remotive`) a subir `limit` /
 `results_per_page` acima do que o adapter já usa. Query específica melhora o
 sinal; página maior só aumenta a conta de quem hospeda.
+
+---
+
+## Busca por termo
+
+O candidato salva um termo ("php", "Tech Lead") e o sistema busca vagas desse
+termo nas plataformas cadastradas que buscam por termo (ADR-004 da feature
+`term-search-target-tracks`). O código mora no contexto `src/contexts/sourcing/`.
+
+### Quais plataformas, e com que orçamento
+
+A capacidade é opcional no adapter: `termSearch = { budget, validatedOn, search }`.
+
+| Plataforma | Endpoint | Orçamento declarado | Validada |
+|---|---|---|---|
+| `remotive` | `GET https://remotive.com/api/remote-jobs?search=<q>&limit=100` | 4/dia, 2/min, 1 chamada por captura | 2026-09-19 |
+| `remoteok` | `GET https://remoteok.com/api?tag=<termo-com-hífen>` | 1/min, 1 chamada por captura | 2026-09-19 |
+| `himalayas` | `GET https://himalayas.app/jobs/api/search?q=<q>&page=<n>` | 1/min, 20 por página, até 5 páginas | 2026-09-19 |
+
+- **`validatedOn`** é a data em que a integração passou por
+  `jho sources probe <kind> --term <t>` contra a API real. Com `null`, a
+  plataforma fica fora das capturas. O parâmetro `tag` do RemoteOK não é
+  documentado; a busca da Himalayas é outro endpoint, e não o feed que a
+  sincronização usa (o feed ignora `q`).
+- **A Himalayas pagina a busca por `page`**, a partir de 1 — `offset` é
+  ignorado ali — e uma página pode vir incompleta no meio dos resultados (19 na
+  página 3 de 296). Só página vazia ou o total encerram a busca.
+- **O orçamento é do sistema inteiro.** A sincronização regular também reserva
+  antes de chamar uma plataforma orçada: as duas entradas `remotive` do
+  `sources.yaml` gastam 2 das 4 chamadas diárias, e as capturas por termo
+  disputam as outras 2. A sincronização conta uma unidade por fonte sincronizada
+  (as páginas do feed da Himalayas são uma execução só).
+- Com 1 chamada por minuto, uma captura da Himalayas que já reservou a primeira
+  página não consegue a segunda no mesmo minuto: ela termina com o que coube e
+  marca `stoppedByQuota`. O limite de 5 páginas só se aproxima com um orçamento
+  por minuto maior — decisão aberta, anotada no follow-up da feature.
+
+### O livro de cota (`platform_quota`)
+
+Uma linha por (plataforma, janela, início da janela), com janela `day` (dia
+UTC) ou `minute`. A reserva é um upsert condicional — soma 1 só se o uso está
+abaixo do limite, e devolve a linha só quando somou —, então dez trabalhadores
+concorrentes nunca passam do limite. Janela de minuto cheia devolve a unidade do
+dia. Um **429** leva o dia da plataforma ao teto: nada mais sai para ela até a
+meia-noite UTC. Sincronização barrada pela cota registra `source.last_error =
+"quota"` e não faz chamada.
+
+### A fonte `~terms` e o que a captura nunca faz
+
+Vaga nova trazida por captura entra na fonte `<kind>:~terms` (rótulo
+"Remotive — termos"), criada na primeira captura com `enabled = false`. Como a
+sincronização lê só o `sources.yaml`, ela nunca sincroniza nem fecha essa fonte;
+só a verificação (404/410) fecha suas vagas. Por isso o YAML **recusa handle que
+começa com `~`**.
+
+Vaga que já existe é observada com `keepExistingSource`: continua com a fonte,
+o id externo, as URLs e o payload de quem a trouxe primeiro, e só o conteúdo é
+atualizado. A captura nunca fecha, arquiva, apaga nem reatribui vaga. Vaga
+fechada ou arquivada que reaparece — por captura ou sincronização — reabre
+inteira: `closedAt` e `archivedAt` voltam a nulo.
+
+### Atribuição
+
+A busca da plataforma devolve vaga que não cita o termo (a Remotive devolveu 16
+para "Laravel"; 6 citavam). A captura observa todas, mas só grava
+`term_attribution(term_key, job_id)` quando o termo aparece, com a borda de
+palavra do scorer, no título, na empresa, na descrição ou nas tags da
+plataforma. As tags só existem no payload, que a observação descarta; por isso a
+decisão é tomada durante a captura. No máximo 100 vagas por plataforma por
+captura, as mais recentes primeiro.
+
+### Fila e falhas
+
+Uma linha de `term_capture` por (plataforma, termo normalizado, dia UTC): o mesmo
+termo é buscado no máximo uma vez por dia por plataforma, e serve a todos que o
+salvaram. A reivindicação é `FOR UPDATE SKIP LOCKED` com lease de 5 minutos.
+
+| Resposta da plataforma | Desfecho |
+|---|---|
+| 200 | `succeeded`, com `fetched`, `created`, `known`, `attributed` e `total_hint` |
+| cota recusada | `waiting_quota`, com `run_after` na próxima janela |
+| 429 | `waiting_quota` até a meia-noite UTC, dia da plataforma esgotado |
+| 404/410 no endpoint | `failed` com `endpoint_gone`, não repete; plataforma vermelha na saúde |
+| 5xx, rede | `failed` com `http_error`/`network`, repete na captura do dia seguinte |
+| JSON inválido | `failed` com `parse` |
+| plataforma desligada no YAML | `skipped` com `platform_disabled` |
+
+A saúde agregada (`captureHealth`) mostra, por plataforma, uso das janelas,
+capturas por estado nas últimas 24 horas, último código de erro, dias seguidos
+de falha e se a repetição diária parou — sem nenhum termo, consulta ou
+candidato.
 
 ---
 

@@ -300,6 +300,18 @@ describe("fit per target track (ADR-008)", () => {
   });
 });
 
+describe("term captures (ADR-004, ADR-006)", () => {
+  it("keeps sourcing blind to who saved a term", () => {
+    // Capture is per term; who saved it is matching's private data. A sourcing
+    // file reading a matching table or the matching API could leak it into a
+    // log or into the aggregate health an admin sees.
+    const offenders = SRC.filter((file) => file.includes("src/contexts/sourcing/")).filter((file) =>
+      /contexts\/matching\/|\b(savedTerm|targetTrack|jobScore|candidate)\b/.test(read(file)),
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe("scoring purity (ADR 0004)", () => {
   it("never reaches the network", () => {
     for (const file of SRC.filter((f) => f.includes("src/core/scoring"))) {

@@ -24,6 +24,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   yardstick. Fit scores are recalculated once in this version; the score you
   see is still the one for your main goal.
 
+### Fixed
+
+- An archived job that is posted again shows up in the job list again. Before,
+  it counted as open but stayed hidden.
+
 ## [1.14.2] - 2026-09-19T13:44:44.288Z
 
 ### Fixed

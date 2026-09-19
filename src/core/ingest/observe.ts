@@ -10,6 +10,7 @@ import { getDb } from "../db/client.ts";
 import { company, job } from "../db/schema.ts";
 import { deleteJobScores } from "../scoring/apply.ts";
 import { MANUAL_SOURCE_KINDS, type RawJob } from "../sources/types.ts";
+import { decideReopen } from "./lifecycle.ts";
 import { contentHash, fingerprint, slugifyCompany, toIsoDate } from "./normalize.ts";
 
 export type JobObservationOutcome =
@@ -21,6 +22,12 @@ export type JobObservationOutcome =
 export type ObserveRawJobOptions = {
   fingerprintOverride?: string;
   observedAt?: string;
+  /**
+   * Term captures observe jobs other sources own (ADR-011). An existing job
+   * keeps its source, external id and links — the capture only refreshes the
+   * posting — so the regular sync that lists it keeps closing it correctly.
+   */
+  keepExistingSource?: boolean;
 };
 
 export type JobObservation = {
@@ -96,17 +103,26 @@ export async function observeRawJob(
   const nextContentHash = contentHash(raw);
 
   let [existing] = await db
-    .select({ id: job.id, contentHash: job.contentHash, closedAt: job.closedAt })
+    .select({ id: job.id, contentHash: job.contentHash, closedAt: job.closedAt, archivedAt: job.archivedAt })
     .from(job)
     .where(eq(job.fingerprint, identity))
     .limit(1);
 
   const companyId = await resolveCompany(raw.companyName);
-  const values = {
-    fingerprint: identity,
-    contentHash: nextContentHash,
+  // Who owns the posting, where it lives and the owner's payload (a manual
+  // job keeps the person's notes there). A term capture refreshing a job
+  // another source owns leaves these alone.
+  const ownership = {
     sourceId,
     externalId: raw.externalId,
+    url: raw.url,
+    // Empty strings are missing data too; `??` alone would preserve them.
+    applyUrl: resolveApplyUrl(raw),
+    raw: retainedRawPayload(sourceId, raw.raw),
+  };
+  const content = {
+    fingerprint: identity,
+    contentHash: nextContentHash,
     companyId,
     companyName: raw.companyName,
     title: raw.title,
@@ -122,13 +138,10 @@ export async function observeRawJob(
     compMax: raw.compMax ?? null,
     compCurrency: raw.compCurrency ?? null,
     compPeriod: raw.compPeriod ?? null,
-    url: raw.url,
-    // Empty strings are missing data too; `??` alone would preserve them.
-    applyUrl: resolveApplyUrl(raw),
     postedAt: toIsoDate(raw.postedAt),
     lastSeenAt: observedAt,
-    raw: retainedRawPayload(sourceId, raw.raw),
   };
+  const values = { ...content, ...ownership };
 
   if (!existing) {
     const [inserted] = await db
@@ -150,7 +163,7 @@ export async function observeRawJob(
     }
 
     [existing] = await db
-      .select({ id: job.id, contentHash: job.contentHash, closedAt: job.closedAt })
+      .select({ id: job.id, contentHash: job.contentHash, closedAt: job.closedAt, archivedAt: job.archivedAt })
       .from(job)
       .where(eq(job.fingerprint, identity))
       .limit(1);
@@ -158,13 +171,26 @@ export async function observeRawJob(
   }
 
   const contentChanged = existing.contentHash !== nextContentHash;
-  const wasClosed = existing.closedAt !== null;
+  // Seen again means alive: the same rule the link check applies. Reopening
+  // also undoes archiving, or the job would come back half hidden (ADR 0020).
+  const reopen = decideReopen({
+    verdict: "alive",
+    closedAt: existing.closedAt,
+    archivedAt: existing.archivedAt,
+  });
+  const wasClosed = reopen.kind === "reopen";
+
+  const observed = options.keepExistingSource ? content : values;
 
   // Store the latest complete observation even when scoring content stayed the
   // same: apply URLs and source metadata can change independently of the text.
   await db
     .update(job)
-    .set({ ...values, closedAt: null })
+    .set({
+      ...observed,
+      closedAt: null,
+      ...(reopen.kind === "reopen" && reopen.clearsArchive ? { archivedAt: null } : {}),
+    })
     .where(eq(job.id, existing.id));
 
   const invalidatedScores = contentChanged

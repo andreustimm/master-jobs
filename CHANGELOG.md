@@ -31,12 +31,32 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 - `trackFitsForJob` calcula sob demanda, sem gravar, a nota de uma trilha que
   não tem linha para a vaga — base do detalhe por trilha.
 - Tabela `saved_term`, que a busca por termo vai usar.
+- Contexto `sourcing` com a captura por termo: `requestTermCaptures`,
+  `runTermCaptures`, `captureStatusFor`, `attributedJobIds` e `captureHealth`,
+  sobre as tabelas `term_capture`, `term_attribution` e `platform_quota`
+  (migração `0007`). Uma busca por (plataforma, termo, dia UTC) serve a todos;
+  no máximo 100 vagas por plataforma, as mais recentes; atribuição por borda de
+  palavra em título, empresa, descrição e tags (ADR-004, ADR-007).
+- Busca por termo na Remotive, no RemoteOK (`tag`) e na Himalayas (endpoint de
+  busca, paginado por `page`), validadas em 2026-09-19 por
+  `jho sources probe <kind> --term <t>`, com fixtures reais em
+  `tests/fixtures/term-search/`. `RawJob.tags` carrega as tags da plataforma.
+- Livro de cota por plataforma com reserva atômica, respeitado também pela
+  sincronização regular: chamada orçada usa `retries: 0`, janela cheia registra
+  `quota` na fonte e 429 esgota o dia da plataforma (ADR-010).
+- Vaga trazida por captura entra na fonte `<kind>:~terms`, desligada; vaga
+  existente mantém fonte, id externo, URLs e payload (`keepExistingSource`).
+  `sources.yaml` recusa handle que começa com `~` (ADR-011).
+- `jho sources probe` ganha `--term` e passa pela guarda de ingestão.
 
 ### Corrigido
 
 - A conclusão da fila de repontuação só grava `done` se a tarefa ainda estiver
   em `scoring`: um pedido novo feito durante a execução voltava a `pending` e
   era apagado pela conclusão da execução anterior.
+- Vaga fechada e arquivada que reaparecia na sincronização voltava só meio
+  aberta: `closedAt` ia a nulo e `archivedAt` ficava, escondendo-a do quadro.
+  Reabrir agora limpa os dois, como a verificação de link já fazia (ADR 0020).
 
 ## [1.14.2] - 2026-09-19
 

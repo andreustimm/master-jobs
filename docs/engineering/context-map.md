@@ -4,7 +4,7 @@ Este inventário é a fonte de verdade das fronteiras do monólito modular. A
 contagem e a presença das APIs públicas são verificadas por
 `tests/architecture.test.ts`.
 
-<!-- schema-table-count: 32 -->
+<!-- schema-table-count: 35 -->
 
 | Contexto | Aggregate owner / responsabilidade | Tabelas próprias | API pública | Dependências permitidas |
 |---|---|---|---|---|
@@ -14,6 +14,7 @@ contagem e a presença das APIs públicas são verificadas por
 | matching | avaliação candidato–vaga, trilhas de alvo e comparação manual | `candidate_matching_profile`, `target_track`, `saved_term`, `job_score` | `src/contexts/matching/index.ts` | Candidate, Sourcing, Skills e FX; não escreve Pursuit |
 | pursuit | candidatura e histórico de transições | `application`, `application_event` | `src/contexts/pursuit/index.ts` | Candidate e Sourcing por identidade; Matching somente como projeção de leitura |
 | skills | catálogo, evidência e demanda de competências | `skill`, `candidate_skill` | `src/contexts/skills/index.ts` | Candidate e corpus de Sourcing por portas |
+| sourcing | captura por termo nas plataformas cadastradas, atribuição de vaga a termo e cota por plataforma | `term_capture`, `term_attribution`, `platform_quota` | `src/contexts/sourcing/index.ts` | Ingestão canônica (`observeRawJob`), adapters de fonte e guarda de ingestão; nunca lê tabelas de Matching |
 
 ## Módulos ainda físicos em `src/core`
 
@@ -22,7 +23,7 @@ ganham API pública quando uma mudança funcional atravessa sua fronteira:
 
 | Módulo | Ownership / tabelas |
 |---|---|
-| sourcing | observação global de `source`, `company`, `job`, `job_page`, `verify_task` |
+| sourcing | observação global de `source`, `company`, `job`, `job_page`, `verify_task` (a captura por termo já é contexto) |
 | candidate | perfil e documentos em `candidate`, `candidate_document` |
 | positioning | `post`, `engagement`, `target_account`, `metric_snapshot`, `positioning_task` |
 | scrape | fila técnica `scrape_task` |

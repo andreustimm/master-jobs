@@ -7,20 +7,10 @@
 const DEFAULT_TIMEOUT_MS = 20_000;
 const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
 
-import { http, registerRealPort, type HttpPort } from "./http-port.ts";
+import { HttpError, http, registerRealPort, type HttpPort } from "./http-port.ts";
 import { safeRemoteFetch } from "../remote-url.ts";
 
-export class HttpError extends Error {
-  readonly status: number;
-  readonly url: string;
-
-  constructor(status: number, url: string, message: string) {
-    super(message);
-    this.name = "HttpError";
-    this.status = status;
-    this.url = url;
-  }
-}
+export { HttpError };
 
 function userAgent(): string {
   return (

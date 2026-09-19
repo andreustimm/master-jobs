@@ -75,6 +75,8 @@ import { scoreMessages } from "./contexts/matching/index.ts";
 import { renderScoreMessage, translator } from "./core/i18n/index.ts";
 import { loadSources } from "./core/sources/config.ts";
 import { getAdapter, parseFetchableSourceKind } from "./core/sources/registry.ts";
+import { guardIngestion } from "./core/ingest/guard.ts";
+import { CAPTURE_LIMIT } from "./contexts/sourcing/index.ts";
 import { buildJobSweepSnapshot } from "./core/triage/job-sweep.ts";
 
 const cliTranslator = translator("pt-BR").t;
@@ -501,11 +503,39 @@ sources
   });
 
 sources
-  .command("probe <kind> <handle>")
-  .description("Test a source handle without writing anything to the database")
-  .action(async (kind: string, handle: string) => {
+  .command("probe <kind> [handle]")
+  .description("Test a source handle, or its term search with --term, without writing anything to the database")
+  .option("--term <term>", "exercise the platform's term search instead of its feed")
+  .action(async (kind: string, handle: string | undefined, opts: { term?: string }) => {
+    // Rede de terceiro como sync e recheck: a mesma guarda, antes de tudo.
+    guardIngestion();
     const fetchableKind = parseFetchableSourceKind(kind);
     const adapter = getAdapter(fetchableKind);
+    if (opts.term !== undefined) {
+      const search = adapter.termSearch;
+      if (!search) {
+        console.error(c.red(`${kind} does not search by term`));
+        process.exitCode = 1;
+        return;
+      }
+      // Sem reserva no livro de cota: o probe valida a integração ANTES de ela
+      // entrar nas capturas, e promete não gravar nada.
+      const found = await search.search(opts.term, { limit: CAPTURE_LIMIT, reserve: async () => true });
+      const about = found.totalHint !== null ? ` of about ${found.totalHint}` : "";
+      console.log(`${c.green("✓")} ${kind} term search returned ${found.jobs.length} job(s)${about}`);
+      console.log(
+        c.dim(search.validatedOn ? `  validated on ${search.validatedOn}` : "  not validated: stays out of term runs"),
+      );
+      for (const j of found.jobs.slice(0, 5)) {
+        console.log(`  ${c.dim("·")} ${j.title} ${c.dim(`— ${j.companyName}`)}`);
+      }
+      return;
+    }
+    if (handle === undefined) {
+      console.error(c.red("probe needs a <handle>, or --term <term>"));
+      process.exitCode = 1;
+      return;
+    }
     const result = await adapter.fetchJobs({ kind: fetchableKind, handle, label: handle });
     console.log(`${c.green("✓")} ${kind}:${handle} returned ${result.jobs.length} job(s)`);
     for (const w of result.warnings) console.log(c.yellow(`  ! ${w}`));

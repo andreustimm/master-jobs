@@ -196,17 +196,35 @@ Detalhes que importam na leitura:
 - Fonte com `enabled: false` no YAML **não aparece** aqui: `loadSources()` a descarta
   antes.
 
-### `jho sources probe <kind> <handle>`
+### `jho sources probe <kind> [handle] [--term <termo>]`
 
-`"Test a source handle without writing anything to the database"`. Chama
-`getAdapter(kind).fetchJobs({ kind, handle, label: handle })` e imprime a contagem, os
-warnings do adapter e os 5 primeiros títulos.
+`"Test a source handle, or its term search with --term, without writing anything to
+the database"`. Sem `--term`, chama `getAdapter(kind).fetchJobs({ kind, handle, label:
+handle })` e imprime a contagem, os warnings do adapter e os 5 primeiros títulos.
 
 Este é um dos dois comandos que **não** passam por `withDb()` — o outro é `jho profile`.
 Ele não abre o banco, então é seguro
 rodar contra um handle que você acabou de descobrir, antes de tocar `sources.yaml`.
 
-Sem flags.
+Passa pela guarda de ingestão como `jobs sync` e `jobs recheck`: em `preview`,
+`staging` ou `dev` sai com `IngestionBlockedError` antes de abrir conexão.
+
+| Flag | Efeito |
+|---|---|
+| `--term <termo>` | Exercita a busca por termo da plataforma em vez do feed. Imprime o total, se a plataforma está validada e os 5 primeiros títulos. Não reserva cota nem grava vaga, fila ou atribuição — é o probe que valida a integração antes de ela entrar nas capturas (`validatedOn`) |
+
+```bash
+pnpm jho sources probe remoteok --term "tech lead"
+```
+
+```
+✓ remoteok term search returned 3 job(s) of about 3
+  validated on 2026-09-19
+  · Tech Lead — Zensurance
+```
+
+Plataforma sem busca por termo sai com código 1 (`greenhouse does not search by
+term`); sem handle e sem `--term`, também.
 
 ```bash
 pnpm jho sources probe greenhouse stackblitz

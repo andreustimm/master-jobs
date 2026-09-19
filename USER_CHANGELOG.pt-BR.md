@@ -24,6 +24,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   um. As notas de aderência são recalculadas uma vez nesta versão; a nota que
   aparece continua sendo a do seu objetivo principal.
 
+### Corrigido
+
+- Uma vaga arquivada que volta a ser anunciada reaparece na lista de vagas. Antes
+  ela voltava a contar como aberta, mas continuava escondida.
+
 ## [1.14.2] - 2026-09-19T13:44:44.288Z
 
 ### Corrigido

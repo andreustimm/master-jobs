@@ -37,9 +37,16 @@ export const postSnapshotColumns: Record<string, Record<string, unknown>> = {
 
 /**
  * Tabelas que o alvo ganhou depois do snapshot. Chegam vazias: trilhas e termos
- * salvos nascem da aplicação (a trilha principal sai do perfil no primeiro uso).
+ * salvos nascem da aplicação (a trilha principal sai do perfil no primeiro uso),
+ * e fila, atribuição e cota de captura por termo são estado operacional.
  */
-export const postSnapshotTables = new Set(["target_track", "saved_term"]);
+export const postSnapshotTables = new Set([
+  "target_track",
+  "saved_term",
+  "term_capture",
+  "term_attribution",
+  "platform_quota",
+]);
 
 const selectedJobs = `SELECT id FROM job WHERE
   id IN (SELECT job_id FROM application UNION SELECT job_id FROM mail_suggestion WHERE job_id IS NOT NULL)
