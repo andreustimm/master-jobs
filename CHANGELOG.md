@@ -9,6 +9,21 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- `register` e `onRequestError` em `instrumentation.ts` passam a nunca propagar
+  exceção. `register` roda **antes** de o servidor atender a primeira
+  requisição e o Next espera que ela conclua: uma falha ali — SDK que não
+  carrega, bug numa atualização — não degradava o relato de erro, impedia o
+  servidor de subir. Trocava "não sei o que quebrou" por "quebrou tudo", que é
+  pior que não ter relato nenhum, e é o mesmo modo de falha do corte da 1.13.1:
+  uma verificação correta em posição de bloquear o processo inteiro. É a guarda
+  que `instrumentation-client.ts` já tinha na navegação.
+- O teste da guarda simula o SDK estourando, em vez de usar DSN inválido:
+  verificado que `Sentry.init` **não** estoura com DSN quebrado — ele registra
+  "Invalid Sentry Dsn" e se desativa —, então um teste assim passaria com ou sem
+  a guarda e não provaria nada. Com a simulação, remover o `try/catch` reprova.
+
 ## [1.14.0] - 2026-09-19
 
 ### Adicionado
