@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-09-19T20:46:57.557Z
+
 ### Fixed
 
 - On a phone, the Searches screen no longer cuts off terms or buttons, and

@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-09-19T20:46:57.557Z
+
 ### Corrigido
 
 - No celular, a tela Buscas não corta mais os termos nem os botões, e tocar num

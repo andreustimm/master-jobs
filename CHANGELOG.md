@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-09-19
+
 ### Corrigido
 
 - Celular: a tela Buscas cortava os cartões de termo — o conteúdo da trilha é
