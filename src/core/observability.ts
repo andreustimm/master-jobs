@@ -134,3 +134,73 @@ export function safeRequest(
     headers: safeHeaders(request?.headers ?? {}),
   };
 }
+
+/**
+ * O formato mínimo do evento do Sentry que esta peneira toca.
+ *
+ * Deliberadamente estrutural em vez de importar o tipo do SDK: o que importa
+ * aqui é o formato dos campos perigosos, e amarrar o teste ao tipo de uma
+ * dependência faria uma atualização dela silenciar a verificação.
+ */
+export type ScrubbableEvent = {
+  message?: string;
+  exception?: { values?: Array<{ value?: string }> };
+  request?: {
+    cookies?: unknown;
+    data?: unknown;
+    headers?: Record<string, string | string[] | undefined>;
+    query_string?: unknown;
+    url?: string;
+  };
+  user?: unknown;
+};
+
+/**
+ * Última peneira, depois de tudo que o SDK montou.
+ *
+ * Roda como `beforeSend`. Ela existe porque o evento não é montado só pelo
+ * nosso código: o SDK enriquece com o que encontra no ambiente, e uma
+ * atualização dele pode passar a anexar um campo que ninguém previu. Então a
+ * peneira é explícita sobre os campos perigosos e roda por último.
+ *
+ * É pura e exportada para poder ser TESTADA. Enquanto viveu inline na
+ * configuração do `init`, nenhum teste a exercitava — justamente a função que
+ * carrega a promessa de privacidade inteira.
+ *
+ * Nunca estoura: devolver o evento sem peneirar seria pior que não relatar, e
+ * estourar dentro do `beforeSend` faz o SDK descartar o evento inteiro. Em
+ * caso de dúvida, descarta — `null` significa "não envie".
+ */
+export function scrubEvent<T extends ScrubbableEvent>(event: T): T | null {
+  try {
+    if (!event || typeof event !== "object") return null;
+
+    if (typeof event.message === "string") {
+      event.message = redactSecrets(event.message);
+    }
+    for (const entrada of event.exception?.values ?? []) {
+      if (typeof entrada?.value === "string") entrada.value = redactSecrets(entrada.value);
+    }
+
+    if (event.request && typeof event.request === "object") {
+      // Apagados por nome, e não filtrados: são os campos que carregam sessão,
+      // corpo e busca, e nenhum deles tem uso em diagnóstico.
+      delete event.request.cookies;
+      delete event.request.data;
+      delete event.request.query_string;
+      if (typeof event.request.url === "string") {
+        event.request.url = redactPath(event.request.url);
+      }
+      if (event.request.headers) {
+        event.request.headers = safeHeaders(event.request.headers);
+      }
+    }
+
+    // Identidade nunca acompanha o erro, mesmo que `sendDefaultPii` mude de
+    // padrão numa atualização do SDK.
+    delete event.user;
+    return event;
+  } catch {
+    return null;
+  }
+}

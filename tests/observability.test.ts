@@ -14,6 +14,7 @@ import {
   redactSecrets,
   safeHeaders,
   safeRequest,
+  scrubEvent,
 } from "../src/core/observability.ts";
 
 describe("redactPath", () => {
@@ -146,5 +147,76 @@ describe("safeRequest", () => {
 
   it("requisição vazia não estoura e assume o mais restrito", () => {
     expect(safeRequest({})).toEqual({ path: "/", method: "GET", headers: {} });
+  });
+});
+
+describe("scrubEvent", () => {
+  /** Um evento com a cara do que o SDK monta de verdade. */
+  function eventoRealista() {
+    return {
+      message: "connect falhou em postgres://app:s3nh4@db.exemplo.com:5432/postgres",
+      exception: {
+        values: [{ value: "Authorization: Bearer tok-secreto-do-usuario" }, { value: "sem segredo" }],
+      },
+      request: {
+        url: "https://jobs.exemplo.com/pipeline?stage=applied&q=rust",
+        method: "POST",
+        cookies: { jho_session: "valor-de-sessao-real" },
+        data: { curriculo: "texto inteiro do CV", senha: "abc123" },
+        query_string: "stage=applied&q=rust",
+        headers: {
+          cookie: "jho_session=valor-de-sessao-real",
+          "x-forwarded-for": "201.10.20.30",
+          "content-type": "application/json",
+        },
+      },
+      user: { id: "7", email: "andreus@exemplo.com", ip_address: "201.10.20.30" },
+      tags: { runtime: "nodejs" },
+    };
+  }
+
+  it("apaga sessão, corpo, busca e identidade de um evento realista", () => {
+    const limpo = scrubEvent(eventoRealista());
+    const texto = JSON.stringify(limpo);
+    for (const proibido of [
+      "valor-de-sessao-real",
+      "texto inteiro do CV",
+      "abc123",
+      "201.10.20.30",
+      "andreus@exemplo.com",
+      "s3nh4",
+      "tok-secreto-do-usuario",
+      "stage=applied",
+    ]) {
+      expect(texto).not.toContain(proibido);
+    }
+  });
+
+  it("preserva o que serve para diagnosticar", () => {
+    const limpo = scrubEvent(eventoRealista());
+    expect(limpo?.request?.url).toBe("https://jobs.exemplo.com/pipeline");
+    expect(limpo?.request?.headers).toEqual({ "content-type": "application/json" });
+    expect(limpo?.exception?.values?.[1]?.value).toBe("sem segredo");
+    expect(limpo?.tags).toEqual({ runtime: "nodejs" });
+  });
+
+  it("na dúvida, descarta o evento em vez de mandá-lo sem peneirar", () => {
+    // Estourar dentro do beforeSend faz o SDK descartar; devolver o evento
+    // cru seria pior que não relatar. `null` diz explicitamente "não envie".
+    expect(scrubEvent(null as never)).toBeNull();
+    const armadilha = {
+      get message(): string {
+        throw new Error("campo hostil");
+      },
+    };
+    expect(scrubEvent(armadilha as never)).toBeNull();
+  });
+
+  it("evento sem os campos perigosos passa intacto", () => {
+    // Fora do literal na chamada, para o TypeScript não recusar o campo extra
+    // por excesso de propriedade — o ponto do teste é justamente que campo
+    // que a peneira não conhece atravessa sem ser tocado.
+    const evento = { message: "falha sem nada sensível", tags: { a: "b" } };
+    expect(scrubEvent(evento)).toEqual({ message: "falha sem nada sensível", tags: { a: "b" } });
   });
 });
