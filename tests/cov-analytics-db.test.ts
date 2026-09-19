@@ -23,6 +23,7 @@ import {
   source,
 } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 let db: DB;
 
@@ -93,6 +94,7 @@ async function seedScore(
 ): Promise<void> {
   await db.insert(jobScore).values({
     candidateId,
+    trackId: await primaryTrackId(db, candidateId),
     jobId,
     fit: values.fit,
     titleScore: values.titleScore ?? 0,

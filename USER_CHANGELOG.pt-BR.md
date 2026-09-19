@@ -18,6 +18,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Melhorado
+
+- Preparação para buscar vagas de mais de um tipo, com régua própria para cada
+  um. As notas de aderência são recalculadas uma vez nesta versão; a nota que
+  aparece continua sendo a do seu objetivo principal.
+
 ## [1.14.2] - 2026-09-19T13:44:44.288Z
 
 ### Corrigido

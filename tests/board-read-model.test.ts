@@ -4,6 +4,7 @@ import type { DB } from "../src/core/db/client.ts";
 import { boardFacets, countBoard, getJobDetail, listBoard } from "../src/core/db/repo.ts";
 import { application, candidate, company, job, jobScore, source } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 let db: DB;
 
@@ -100,6 +101,7 @@ describe("Board SQL read model", () => {
     const [row] = await db.select({ id: job.id }).from(job).limit(1);
     await db.insert(jobScore).values({
       candidateId,
+      trackId: await primaryTrackId(db, candidateId),
       jobId: row!.id,
       fit: 88,
       titleScore: 88,

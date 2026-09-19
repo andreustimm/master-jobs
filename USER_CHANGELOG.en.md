@@ -18,6 +18,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Improved
+
+- Groundwork for searching more than one kind of job, each with its own
+  yardstick. Fit scores are recalculated once in this version; the score you
+  see is still the one for your main goal.
+
 ## [1.14.2] - 2026-09-19T13:44:44.288Z
 
 ### Fixed

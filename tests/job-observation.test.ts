@@ -23,6 +23,7 @@ import {
 import "../src/core/sources/http.ts";
 import type { RawJob } from "../src/core/sources/types.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 let db: DB;
 const tempDirs: string[] = [];
@@ -52,9 +53,11 @@ async function seedCandidateScores(jobId: number): Promise<number[]> {
     ])
     .returning({ id: candidate.id });
 
+  const tracks = await Promise.all(people.map((person) => primaryTrackId(db, person.id)));
   await db.insert(jobScore).values(
     people.map((person, index) => ({
       candidateId: person.id,
+      trackId: tracks[index]!,
       jobId,
       fit: 70 + index,
       titleScore: 70,

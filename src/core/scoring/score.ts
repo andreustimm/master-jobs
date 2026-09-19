@@ -22,6 +22,7 @@ import {
   type Period,
 } from "../money.ts";
 import type { Profile } from "../profile/schema.ts";
+import { TERM_BOUNDARY } from "../term.ts";
 import {
   evaluateEligibility,
   message,
@@ -33,7 +34,12 @@ import {
 import { scoreBenefits } from "./benefits.ts";
 import { PLATEAU_DAYS, scoreFreshness } from "./freshness.ts";
 
-export const SCORER_VERSION = "1.3.0";
+/**
+ * 1.4.0: the score is per target track (ADR-008/009). The rubric did not
+ * change, but every stored row gains a track and a per-track profile hash, so
+ * all rows are recalculated once.
+ */
+export const SCORER_VERSION = "1.4.0";
 
 export type ScoringContext = {
   profile: Profile;
@@ -109,10 +115,15 @@ function normalize(text: string): string {
     .replace(/\s+/g, " ");
 }
 
-/** Word-boundary match so "go" does not fire on "google" or "category". */
-function containsTerm(haystack: string, term: string): boolean {
+/**
+ * Word-boundary match so "go" does not fire on "google" or "category".
+ *
+ * The boundary is `TERM_BOUNDARY`, shared with the Jobs screen filter and term
+ * attribution: one definition of "whole word" everywhere (ADR-012).
+ */
+export function containsTerm(haystack: string, term: string): boolean {
   const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(^|[^a-z0-9+#])${escaped}([^a-z0-9+#]|$)`, "i").test(haystack);
+  return new RegExp(`(^|${TERM_BOUNDARY})${escaped}(${TERM_BOUNDARY}|$)`, "i").test(haystack);
 }
 
 /* ------------------------------ Title matching ---------------------------- */

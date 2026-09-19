@@ -4,6 +4,7 @@ import type { DB } from "../src/core/db/client.ts";
 import { candidate, company, job, jobScore, scrapeTask, source } from "../src/core/db/schema.ts";
 import { MAX_ATTEMPTS, dbQueue, enqueuePending, retryFailed } from "../src/core/scrape/queue.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 let db: DB;
 
@@ -31,6 +32,7 @@ async function seed(count: number, fit = 80): Promise<void> {
       .returning({ id: job.id });
     await db.insert(jobScore).values({
       candidateId: person!.id,
+      trackId: await primaryTrackId(db, person!.id),
       jobId: j!.id,
       fit: fit - i,
       titleScore: 0, keywordScore: 0, seniorityScore: 0, geoScore: 0, compScore: 0,

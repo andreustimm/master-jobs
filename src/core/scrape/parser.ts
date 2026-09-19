@@ -7,9 +7,11 @@
  * adapter got its text from the employer's own API; a scraped page is a good
  * fallback, not an upgrade.
  */
-import { eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { job, jobPage, jobScore } from "../db/schema.ts";
+import { primaryScoreFilter } from "../../contexts/matching/index.ts";
+import { deleteJobScores } from "../scoring/apply.ts";
 import { extractPage } from "./extract.ts";
 import { dbQueue, type QueuePort } from "./queue.ts";
 
@@ -62,7 +64,7 @@ export async function parseStored(jobId: number): Promise<ParseOutcome> {
     // A job that just gained a description has a stale score: the keyword
     // component was computed against nothing.
     if (filled.length > 0) {
-      await tx.delete(jobScore).where(eq(jobScore.jobId, jobId));
+      await deleteJobScores(tx, jobId);
     }
   });
 
@@ -112,7 +114,7 @@ export async function runParseStage(
   const [pending] = await db
     .select({ n: sql<number>`count(*)` })
     .from(job)
-    .leftJoin(jobScore, eq(jobScore.jobId, job.id))
+    .leftJoin(jobScore, and(eq(jobScore.jobId, job.id), primaryScoreFilter()))
     .where(isNull(jobScore.jobId));
   result.rescored = Number(pending?.n ?? 0);
 

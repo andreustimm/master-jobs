@@ -1,7 +1,5 @@
-import {
-  loadCandidateMatchingProfile,
-  saveCandidateMatchingProfile,
-} from "./infra/drizzle-profile.ts";
+import { loadCandidateMatchingProfile } from "./infra/drizzle-profile.ts";
+import { saveMatchingProfile } from "./app/tracks.ts";
 
 export {
   evaluateEligibility,
@@ -20,7 +18,55 @@ export {
 } from "./domain/score-message.ts";
 
 export const matchingProfile = loadCandidateMatchingProfile;
-export const setMatchingProfile = saveCandidateMatchingProfile;
+/** Grava o perfil da pessoa e alinha o alvo da trilha principal a ele. */
+export const setMatchingProfile = saveMatchingProfile;
+
+export {
+  KEYWORD_WEIGHT_MAX,
+  MAX_ACTIVE_TRACKS,
+  PAY_AMOUNT_MAX,
+  TRACK_NAME_MAX,
+  effectiveProfile,
+  evidenceSupport,
+  isRelevant,
+  preselectTrack,
+  suggestTrack,
+  targetOf,
+  validateTrackName,
+  validateTrackTarget,
+  type OwnEvidence,
+  type Track,
+  type TrackError,
+  type TrackStatus,
+  type TrackTarget,
+  type UnreviewedField,
+} from "./domain/track.ts";
+export {
+  PRIMARY_TRACK_NAME,
+  archiveTrack,
+  createTrack,
+  ensurePrimaryTrack,
+  personProfile,
+  restoreTrack,
+  setPrimaryTrack,
+  trackOverview,
+  trackScoringProfiles,
+  updateTrack,
+  type LifecycleResult,
+  type TrackOverview,
+  type TrackResult,
+  type TrackScoringProfile,
+  type UpdateTrackResult,
+} from "./app/tracks.ts";
+export {
+  primaryScoreFilter,
+  resolveClusterFilter,
+  scoreTrackFilter,
+  trackScope,
+  type TrackChoice,
+  type TrackScope,
+} from "./app/track-scope.ts";
+export { listTracks as listCandidateTracks } from "./infra/drizzle-tracks.ts";
 
 export { WORK_MODES, WORK_MODE_ALIASES, readWorkMode, type WorkMode } from "./domain/work-mode.ts";
 

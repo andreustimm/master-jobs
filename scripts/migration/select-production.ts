@@ -5,7 +5,7 @@ import { PgTable, getTableConfig } from "drizzle-orm/pg-core";
 import * as schema from "../../src/core/db/schema.ts";
 
 // Explicit allowlist: new tables require a reviewed transfer policy.
-const policies: Record<string, string> = {
+export const policies: Record<string, string> = {
   application: "all", application_event: "all", auth_event: "all",
   auth_user: "all", candidate: "all", candidate_document: "all",
   candidate_matching_profile: "all", candidate_skill: "all",
@@ -14,7 +14,9 @@ const policies: Record<string, string> = {
   positioning_task: "all", post: "all", recruiter_candidate: "all",
   skill: "all", source: "configuration", target_account: "all",
   company: "referenced-or-researched", job: "business-references-or-manual",
-  job_score: "selected-jobs",
+  // Derivada e agora por trilha (ADR-008): o snapshot não tem trilha, e a
+  // versão 1.4.0 do scorer recalcula tudo no alvo de qualquer forma.
+  job_score: "exclude-derived",
   auth_login_token: "exclude-ephemeral", auth_session: "exclude-ephemeral",
   job_page: "exclude-crawler", scrape_task: "exclude-crawler",
   score_task: "exclude-queue", verify_task: "exclude-crawler",
@@ -30,7 +32,14 @@ const policies: Record<string, string> = {
  */
 export const postSnapshotColumns: Record<string, Record<string, unknown>> = {
   job: { archived_at: null },
+  job_score: { track_id: null },
 };
+
+/**
+ * Tabelas que o alvo ganhou depois do snapshot. Chegam vazias: trilhas e termos
+ * salvos nascem da aplicação (a trilha principal sai do perfil no primeiro uso).
+ */
+export const postSnapshotTables = new Set(["target_track", "saved_term"]);
 
 const selectedJobs = `SELECT id FROM job WHERE
   id IN (SELECT job_id FROM application UNION SELECT job_id FROM mail_suggestion WHERE job_id IS NOT NULL)
@@ -51,7 +60,10 @@ export function selectProduction(path: string) {
       throw new Error("Source integrity check failed");
     }
     if (db.prepare("PRAGMA foreign_key_check").all().length) throw new Error("Source has invalid foreign keys");
-    const tables = Object.values(schema).filter((value) => is(value, PgTable)).map(getTableConfig);
+    const tables = Object.values(schema)
+      .filter((value) => is(value, PgTable))
+      .map(getTableConfig)
+      .filter((table) => !postSnapshotTables.has(table.name));
     const names = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()
       .map((r) => String(r.name)).filter((name) => !["sqlite_sequence", "__drizzle_migrations"].includes(name)).sort();
     if (JSON.stringify(names) !== JSON.stringify(Object.keys(policies).sort()) ||
@@ -72,13 +84,14 @@ export function selectProduction(path: string) {
       let predicate = "1";
       if (policy.startsWith("exclude-")) predicate = "0";
       if (name === "job") predicate = `id IN (${selectedJobs})`;
-      if (name === "job_score") predicate = `job_id IN (${selectedJobs})`;
       if (name === "company") predicate = `id IN (SELECT company_id FROM job WHERE id IN (${selectedJobs}))
         OR notes IS NOT NULL OR hires_contractors IS NOT NULL OR hires_latam IS NOT NULL OR via_agency IS NOT NULL`;
       const keys = table.columns.filter((c) => c.primary).map((c) => c.name);
       for (const pk of table.primaryKeys) keys.push(...pk.columns.map((c) => c.name));
       if (!keys.length) throw new Error(`Missing primary key: ${name}`);
-      rows[name] = db.prepare(`SELECT * FROM ${quote(name)} WHERE ${predicate} ORDER BY ${keys.map(quote).join(",")}`).all().map((row) => {
+      // Coluna posterior ao snapshot não existe na origem, nem para ordenar.
+      const order = keys.filter((key) => !(key in added));
+      rows[name] = db.prepare(`SELECT * FROM ${quote(name)} WHERE ${predicate} ORDER BY ${order.map(quote).join(",")}`).all().map((row) => {
         const result: Record<string, unknown> = {};
         for (const col of table.columns) {
           // Na posição da coluna, não antes: a verificação do alvo compara o
@@ -123,6 +136,9 @@ export function selectProduction(path: string) {
       for (const fk of table.foreignKeys) {
         const ref = fk.reference();
         const parent = getTableConfig(ref.foreignTable).name;
+        // Tabela posterior ao snapshot chega vazia; a coluna que aponta para ela
+        // também é posterior e vem nula.
+        if (postSnapshotTables.has(parent)) continue;
         const available = new Set(rows[parent]!.map((row) =>
           JSON.stringify(ref.foreignColumns.map((col) => row[col.name]))));
         for (const row of rows[table.name]!) {

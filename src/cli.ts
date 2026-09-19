@@ -13,7 +13,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { closeDb, getDb } from "./core/db/client.ts";
 import { runDatabaseCleanup } from "./core/db/retention.ts";
 import { runMigrations } from "./core/db/migrate.ts";
-import { listBoard } from "./contexts/matching/index.ts";
+import { listBoard, primaryScoreFilter } from "./contexts/matching/index.ts";
 import { pipelineCounts, setApplicationStatus } from "./contexts/pursuit/index.ts";
 import { application, job, jobScore, positioningTask, source } from "./core/db/schema.ts";
 import { APPLICATION_STATUSES, type ApplicationStatus } from "./core/db/schema.ts";
@@ -786,7 +786,7 @@ jobs
         const rows = await getDb()
           .select({ fit: jobScore.fit, cluster: jobScore.cluster, blockers: jobScore.blockers })
           .from(jobScore)
-          .where(and(eq(jobScore.candidateId, candidateId), eq(jobScore.jobId, result.jobId)))
+          .where(and(eq(jobScore.candidateId, candidateId), eq(jobScore.jobId, result.jobId), primaryScoreFilter()))
           .limit(1);
         const s = rows[0];
         if (s) {
@@ -1056,7 +1056,7 @@ jobs
         .from(job)
         .leftJoin(
           jobScore,
-          and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+          and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId), primaryScoreFilter()),
         )
         .leftJoin(
           application,

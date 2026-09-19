@@ -7,6 +7,7 @@ import { loadProfile } from "../src/core/profile/load.ts";
 import { scoreAll, scoreOne } from "../src/core/scoring/apply.ts";
 import { SCORER_VERSION, scoreJob } from "../src/core/scoring/score.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 let db: DB;
 
@@ -95,6 +96,7 @@ describe("candidate-owned matching context", () => {
     const selected = await matchingProfile(seeded.first);
     await db.insert(jobScore).values({
       candidateId: seeded.first,
+      trackId: await primaryTrackId(db, seeded.first),
       jobId: seeded.jobId,
       fit: 1,
       titleScore: 0,

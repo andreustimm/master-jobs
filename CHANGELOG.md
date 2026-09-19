@@ -9,6 +9,35 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Trilhas de alvo (`target_track`): cada candidato tem uma trilha principal e
+  até seis ativas, cada uma com títulos, keywords, senioridade e faixas de
+  remuneração próprias. A pessoa (restrições, blockers, evidências) continua no
+  perfil de matching e é somada ao alvo por `effectiveProfile` antes de
+  pontuar (ADR-002, ADR-009).
+- `job_score` passa a ter chave `(candidate_id, track_id, job_id)`, com
+  migração em três passos: expandir (`0004`), preencher a trilha principal a
+  partir do perfil gravado (`0005`) e contrair (`0006`). Candidato sem perfil
+  próprio perde as notas herdadas e não é pontuado (M-06).
+- Scorer `1.4.0`: a trilha principal pontua toda vaga aberta; trilha aceita só
+  as vagas em que um título ou keyword positiva dela aparece com borda de
+  palavra. A borda é `TERM_BOUNDARY`, em `src/core/term.ts`, a mesma do filtro
+  de termo (ADR-012).
+- Todo leitor de `job_score` escolhe a trilha por `scoreTrackFilter` ou
+  `primaryScoreFilter`; teste de arquitetura reprova quem lê a tabela sem um dos
+  dois. Board aceita trilha escolhida ou "todas"; dossiê, relatório, exportação,
+  cockpit e o `max(fit)` de verificação e captura leem a principal.
+- `trackFitsForJob` calcula sob demanda, sem gravar, a nota de uma trilha que
+  não tem linha para a vaga — base do detalhe por trilha.
+- Tabela `saved_term`, que a busca por termo vai usar.
+
+### Corrigido
+
+- A conclusão da fila de repontuação só grava `done` se a tarefa ainda estiver
+  em `scoring`: um pedido novo feito durante a execução voltava a `pending` e
+  era apagado pela conclusão da execução anterior.
+
 ## [1.14.2] - 2026-09-19
 
 ### Corrigido

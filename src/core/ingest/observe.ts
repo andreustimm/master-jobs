@@ -7,7 +7,8 @@
  */
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
-import { company, job, jobScore } from "../db/schema.ts";
+import { company, job } from "../db/schema.ts";
+import { deleteJobScores } from "../scoring/apply.ts";
 import { MANUAL_SOURCE_KINDS, type RawJob } from "../sources/types.ts";
 import { contentHash, fingerprint, slugifyCompany, toIsoDate } from "./normalize.ts";
 
@@ -81,11 +82,7 @@ async function resolveCompany(name: string): Promise<number | null> {
  * would leave every other ranking stale.
  */
 async function invalidateScores(jobId: number): Promise<number> {
-  const deleted = await getDb()
-    .delete(jobScore)
-    .where(eq(jobScore.jobId, jobId))
-    .returning({ candidateId: jobScore.candidateId });
-  return deleted.length;
+  return deleteJobScores(getDb(), jobId);
 }
 
 export async function observeRawJob(

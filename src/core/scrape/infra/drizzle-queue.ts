@@ -9,6 +9,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { clock } from "../../clock.ts";
 import { getDb } from "../../db/client.ts";
 import { job, jobPage, jobScore, scrapeTask } from "../../db/schema.ts";
+import { primaryScoreFilter } from "../../../contexts/matching/index.ts";
 import { decideQueueFailure } from "../domain/retry-policy.ts";
 import type { ScrapeStatus } from "../domain/status.ts";
 import type { QueueAdminPort, QueuePort } from "../ports.ts";
@@ -112,6 +113,9 @@ export const drizzleQueueAdmin: QueueAdminPort = {
         fit: sql<number>`max(${jobScore.fit})`.as("fit"),
       })
       .from(jobScore)
+      // Primary tracks only: an accepted track's higher fit on its own slice
+      // must not jump the capture queue ahead of everyone's main target.
+      .where(primaryScoreFilter())
       .groupBy(jobScore.jobId)
       .as("best_job_score");
 

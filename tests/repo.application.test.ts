@@ -18,6 +18,7 @@ import {
   source,
 } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 /**
  * Suite: candidate-scoped Pursuit aggregate
@@ -66,6 +67,7 @@ async function seedCandidate(slug: string, isDefault = false): Promise<number> {
 async function seedScore(candidateId: number, jobId: number, fit: number): Promise<void> {
   await db.insert(jobScore).values({
     candidateId,
+    trackId: await primaryTrackId(db, candidateId),
     jobId,
     fit,
     titleScore: fit,

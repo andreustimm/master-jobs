@@ -48,6 +48,7 @@ import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/htt
 import "../src/core/sources/http.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 import { banco, carregarCli, rodar, type Execucao } from "./cov-cli-harness.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 vi.mock("commander", async () => (await import("./cov-cli-harness.ts")).commanderMock());
 
@@ -161,6 +162,7 @@ async function semearVaga(
   if (opts.fit !== undefined) {
     await db.insert(jobScore).values({
       candidateId: candidatoId,
+      trackId: await primaryTrackId(db, candidatoId),
       jobId: linha!.id,
       fit: opts.fit,
       titleScore: opts.fit,

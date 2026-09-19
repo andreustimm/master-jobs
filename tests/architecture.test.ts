@@ -283,6 +283,23 @@ describe("write-path invariants (ADR 0005)", () => {
   });
 });
 
+describe("fit per target track (ADR-008)", () => {
+  it("IT-037 routes every job_score reader through a track filter", () => {
+    // `job_score` has one row per (candidate, track, job). A reader that picks
+    // no track mixes tracks in one list, and the job shows up twice or with a
+    // fit from a track nobody chose. Raw SQL counts as much as the builder.
+    const exempt = new Set(["src/core/db/schema.ts", "src/core/scoring/apply.ts"]);
+    const readers = [...SRC, ...APP].filter(
+      (file) => !exempt.has(file) && /\bjobScore\b|production\.job_score\b/.test(read(file)),
+    );
+    const offenders = readers.filter(
+      (file) => !/\b(scoreTrackFilter|primaryScoreFilter)\b/.test(read(file)),
+    );
+    expect(readers.length).toBeGreaterThan(10);
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe("scoring purity (ADR 0004)", () => {
   it("never reaches the network", () => {
     for (const file of SRC.filter((f) => f.includes("src/core/scoring"))) {

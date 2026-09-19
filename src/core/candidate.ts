@@ -17,6 +17,7 @@ import { getDb } from "./db/client.ts";
 import { application, candidate, candidateDocument, job, jobScore } from "./db/schema.ts";
 import { loadProfile } from "./profile/load.ts";
 import { isVisibility, type Visibility } from "../contexts/auth/index.ts";
+import { primaryScoreFilter } from "../contexts/matching/index.ts";
 
 /* -------------------------------------------------------------------------- */
 /* Profile                                                                     */
@@ -484,7 +485,7 @@ export async function analyseGap(
     .from(job)
     .innerJoin(
       jobScore,
-      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, opts.candidateId)),
+      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, opts.candidateId), primaryScoreFilter()),
     )
     .where(and(sql`${job.closedAt} is null`, sql`${jobScore.fit} >= ${minFit}`))
     .limit(opts.limit ?? 300);

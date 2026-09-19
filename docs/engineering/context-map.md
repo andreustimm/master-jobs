@@ -4,14 +4,14 @@ Este inventário é a fonte de verdade das fronteiras do monólito modular. A
 contagem e a presença das APIs públicas são verificadas por
 `tests/architecture.test.ts`.
 
-<!-- schema-table-count: 30 -->
+<!-- schema-table-count: 32 -->
 
 | Contexto | Aggregate owner / responsabilidade | Tabelas próprias | API pública | Dependências permitidas |
 |---|---|---|---|---|
 | auth | identidade, sessão e autorização | `auth_user`, `auth_session`, `auth_login_token`, `auth_event`, `recruiter_candidate` | `src/contexts/auth/index.ts` | Candidate por `candidate_id`; relógio e hash como portas |
 | correspondence | mensagem observada e sugestão de mudança | `mail_message`, `mail_suggestion` | `src/contexts/correspondence/index.ts` | Sourcing observa vagas; Pursuit aplica decisão na mesma transação |
 | fx | cotação e cache cambial | `fx_rate` | `src/contexts/fx/index.ts` | `HttpClient`, `Clock`; nenhum contexto de negócio |
-| matching | avaliação candidato–vaga e comparação manual | `candidate_matching_profile`, `job_score` | `src/contexts/matching/index.ts` | Candidate, Sourcing, Skills e FX; não escreve Pursuit |
+| matching | avaliação candidato–vaga, trilhas de alvo e comparação manual | `candidate_matching_profile`, `target_track`, `saved_term`, `job_score` | `src/contexts/matching/index.ts` | Candidate, Sourcing, Skills e FX; não escreve Pursuit |
 | pursuit | candidatura e histórico de transições | `application`, `application_event` | `src/contexts/pursuit/index.ts` | Candidate e Sourcing por identidade; Matching somente como projeção de leitura |
 | skills | catálogo, evidência e demanda de competências | `skill`, `candidate_skill` | `src/contexts/skills/index.ts` | Candidate e corpus de Sourcing por portas |
 
@@ -26,7 +26,7 @@ ganham API pública quando uma mudança funcional atravessa sua fronteira:
 | candidate | perfil e documentos em `candidate`, `candidate_document` |
 | positioning | `post`, `engagement`, `target_account`, `metric_snapshot`, `positioning_task` |
 | scrape | fila técnica `scrape_task` |
-| matching | perfil por candidato em `candidate_matching_profile`, notas em `job_score`, fila de repontuação em `score_task` |
+| matching | perfil da pessoa em `candidate_matching_profile`, trilhas de alvo em `target_track`, termos salvos em `saved_term`, notas por trilha em `job_score`, fila de repontuação em `score_task` |
 | llm | catálogo BYOK em `llm_provider`, `llm_model` |
 
 `src/core/db/schema.ts` é o único composition root físico do Drizzle: migrations

@@ -7,7 +7,12 @@
  */
 import { and, desc, eq, gte, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
-import type { WorkMode } from "../../contexts/matching/index.ts";
+import {
+  primaryScoreFilter,
+  scoreTrackFilter,
+  type TrackScope,
+  type WorkMode,
+} from "../../contexts/matching/index.ts";
 import { workModeSql } from "./work-mode.ts";
 import {
   IllegalApplicationTransitionError,
@@ -44,6 +49,8 @@ export type BoardRow = {
   compCurrency: string | null;
   compPeriod: string | null;
   fit: number | null;
+  /** The track the fit comes from — in "all", the track where the job scores best. */
+  trackId: number | null;
   cluster: string | null;
   titleScore: number | null;
   keywordScore: number | null;
@@ -107,6 +114,11 @@ export type BoardFilters = {
    */
   hasDescription?: boolean;
   sort?: "fit" | "recent" | "comp";
+  /**
+   * Which track's fit the board ranks by (ADR-008). Absent means the primary:
+   * a reader that did not choose must not mix tracks in one list.
+   */
+  track?: TrackScope;
   limit?: number;
   offset?: number;
 };
@@ -175,6 +187,15 @@ function scopedTo(column: PgColumn, candidateId: number | null) {
   return candidateId === null ? sql`1 = 0` : eq(column, candidateId);
 }
 
+/** The score row a job joins to: the candidate's, on the chosen track or the primary. */
+function scoreJoin(candidateId: number | null, track?: TrackScope): SQL {
+  return and(
+    eq(jobScore.jobId, job.id),
+    scopedTo(jobScore.candidateId, candidateId),
+    track ? scoreTrackFilter(track) : primaryScoreFilter(),
+  )!;
+}
+
 export async function listBoard(
   candidateId: number | null,
   opts: BoardFilters = {},
@@ -206,6 +227,7 @@ export async function listBoard(
       compCurrency: job.compCurrency,
       compPeriod: job.compPeriod,
       fit: jobScore.fit,
+      trackId: jobScore.trackId,
       cluster: jobScore.cluster,
       titleScore: jobScore.titleScore,
       keywordScore: jobScore.keywordScore,
@@ -241,10 +263,7 @@ export async function listBoard(
       checkQueue: verifyTask.status,
     })
     .from(job)
-    .leftJoin(
-      jobScore,
-      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-    )
+    .leftJoin(jobScore, scoreJoin(candidateId, opts.track))
     .leftJoin(
       application,
       and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
@@ -274,10 +293,7 @@ export async function countBoard(
   const [row] = await getDb()
     .select({ count: sql<number>`count(*)` })
     .from(job)
-    .leftJoin(
-      jobScore,
-      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-    )
+    .leftJoin(jobScore, scoreJoin(candidateId, opts.track))
     .leftJoin(
       application,
       and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
@@ -308,10 +324,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
         described: sql<number>`coalesce(sum(case when length(coalesce(${job.descriptionText}, '')) >= 200 then 1 else 0 end), 0)`,
       })
       .from(job)
-      .leftJoin(
-        jobScore,
-        and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-      )
+      .leftJoin(jobScore, scoreJoin(candidateId, base.track))
       .leftJoin(
         application,
         and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
@@ -321,10 +334,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
     getDb()
       .select({ cluster: jobScore.cluster })
       .from(job)
-      .leftJoin(
-        jobScore,
-        and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-      )
+      .leftJoin(jobScore, scoreJoin(candidateId, base.track))
       .leftJoin(
         application,
         and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
@@ -336,10 +346,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
     getDb()
       .select({ kind: sourceKind })
       .from(job)
-      .leftJoin(
-        jobScore,
-        and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-      )
+      .leftJoin(jobScore, scoreJoin(candidateId, base.track))
       .leftJoin(
         application,
         and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
@@ -632,16 +639,16 @@ export async function recruiterCandidateSummaries(
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Everything the detail view needs, in one round trip. */
+/**
+ * Everything the detail view needs, in one round trip. The score is the
+ * primary track's; the other tracks' fits come from `trackFitsForJob`.
+ */
 export async function getJobDetail(candidateId: number | null, jobId: number) {
   const db = getDb();
   const rows = await db
     .select()
     .from(job)
-    .leftJoin(
-      jobScore,
-      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-    )
+    .leftJoin(jobScore, scoreJoin(candidateId))
     .leftJoin(
       application,
       and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
@@ -699,10 +706,7 @@ export async function getJobScoringDetail(candidateId: number, jobId: number) {
   const rows = await db
     .select()
     .from(job)
-    .leftJoin(
-      jobScore,
-      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-    )
+    .leftJoin(jobScore, scoreJoin(candidateId))
     .leftJoin(source, eq(source.id, job.sourceId))
     .where(eq(job.id, jobId))
     .limit(1);
@@ -716,7 +720,7 @@ export async function getJobScoringDetail(candidateId: number, jobId: number) {
   };
 }
 
-/** Headline numbers for the cockpit. */
+/** Headline numbers for the cockpit — primary-track fits, one per job. */
 export async function corpusStats(candidateId: number) {
   const db = getDb();
   const [row] = await db
@@ -724,16 +728,16 @@ export async function corpusStats(candidateId: number) {
       open: sql<number>`(select count(*) from ${job} where ${job.closedAt} is null)`.mapWith(Number),
       companies: sql<number>`(select count(*) from ${company})`.mapWith(Number),
       sources: sql<number>`(select count(*) from ${source} where ${source.enabled} = true)`.mapWith(Number),
-      above45: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 45)`.mapWith(Number),
-      above60: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 60)`.mapWith(Number),
-      above70: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 70)`.mapWith(Number),
-      best: sql<number>`(select coalesce(max(fit), 0) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null)`.mapWith(Number),
+      above45: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and ${primaryScoreFilter("s")} and j.closed_at is null and s.fit >= 45)`.mapWith(Number),
+      above60: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and ${primaryScoreFilter("s")} and j.closed_at is null and s.fit >= 60)`.mapWith(Number),
+      above70: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and ${primaryScoreFilter("s")} and j.closed_at is null and s.fit >= 70)`.mapWith(Number),
+      best: sql<number>`(select coalesce(max(fit), 0) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and ${primaryScoreFilter("s")} and j.closed_at is null)`.mapWith(Number),
     })
     .from(sql`(select 1) as singleton`);
   return row;
 }
 
-/** Cluster distribution above a cut, for the cockpit chart. */
+/** Cluster distribution above a cut, for the cockpit chart (primary track). */
 export async function clusterBreakdown(candidateId: number, minFit = 45) {
   const db = getDb();
   return db
@@ -747,6 +751,7 @@ export async function clusterBreakdown(candidateId: number, minFit = 45) {
     .where(
       and(
         eq(jobScore.candidateId, candidateId),
+        primaryScoreFilter(),
         isNull(job.closedAt),
         gte(jobScore.fit, minFit),
       ),
@@ -794,10 +799,7 @@ export async function pipelineRows(candidateId: number, query: PipelineQuery = {
     })
     .from(application)
     .innerJoin(job, eq(job.id, application.jobId))
-    .leftJoin(
-      jobScore,
-      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-    )
+    .leftJoin(jobScore, scoreJoin(candidateId))
     .where(scope)
     // `id` desempata: sem ele, duas candidaturas salvas no mesmo instante podem
     // trocar de lugar entre páginas e uma delas some da listagem.

@@ -23,6 +23,7 @@ import { candidate, company, job, jobScore, source } from "../src/core/db/schema
 import { verifyJobs } from "../src/core/ingest/verify.ts";
 import type { LookupHost } from "../src/core/remote-url.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 let db: DB;
 let candidateId: number;
@@ -89,6 +90,7 @@ async function seedVaga(opts: {
   if (opts.fit !== undefined) {
     await db.insert(jobScore).values({
       candidateId,
+      trackId: await primaryTrackId(db, candidateId),
       jobId: linha!.id,
       fit: opts.fit,
       titleScore: opts.fit,

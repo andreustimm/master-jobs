@@ -27,6 +27,7 @@ import {
   upsertRawJob,
 } from "../../src/core/ingest/manual.ts";
 import { seedCatalog } from "../../src/contexts/skills/index.ts";
+import { ensurePrimaryTrack } from "../../src/contexts/matching/index.ts";
 import { runMigrations } from "../../src/core/db/migrate.ts";
 import { scoreOne } from "../../src/core/scoring/apply.ts";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
@@ -131,6 +132,10 @@ try {
       companyName: "Task 04 Bulk Lab",
     })),
   ];
+  // Notas são por trilha (ADR-008): as fixtures entram na trilha principal do
+  // dono, que o profile.yaml define.
+  const primaryTrack = await ensurePrimaryTrack(candidateId);
+  if (!primaryTrack) throw new Error("E2E owner has no primary track");
   for (let offset = 0; offset < resultFixtures.length; offset += 100) {
     const batch = resultFixtures.slice(offset, offset + 100);
     await getDb().insert(job).values(batch.map((fixture) => ({
@@ -149,6 +154,7 @@ try {
     }))).onConflictDoNothing({ target: job.id });
     await getDb().insert(jobScore).values(batch.map((fixture) => ({
       candidateId,
+      trackId: primaryTrack.id,
       jobId: fixture.id,
       fit: 60,
       titleScore: 10,
@@ -166,7 +172,7 @@ try {
       blockers: [],
       scorerVersion: "e2e",
       profileHash: "e2e",
-    }))).onConflictDoNothing({ target: [jobScore.candidateId, jobScore.jobId] });
+    }))).onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
   }
 
   await getDb().insert(targetAccount).values({

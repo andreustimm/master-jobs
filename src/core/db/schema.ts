@@ -162,6 +162,13 @@ export const jobScore = production.table(
     candidateId: integer("candidate_id")
       .notNull()
       .references(() => candidate.id, { onDelete: "cascade" }),
+    /**
+     * The target track this fit measures against (ADR-008). The primary track
+     * scores every open job; an accepted track only the jobs relevant to it.
+     */
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => targetTrack.id, { onDelete: "cascade" }),
     jobId: integer("job_id")
       .notNull()
       .references(() => job.id, { onDelete: "cascade" }),
@@ -199,9 +206,13 @@ export const jobScore = production.table(
     scoredAt: text("scored_at").notNull().default(now),
   },
   (t) => [
-    primaryKey({ columns: [t.candidateId, t.jobId], name: "job_score_candidate_job_pk" }),
+    primaryKey({
+      columns: [t.candidateId, t.trackId, t.jobId],
+      name: "job_score_candidate_track_job_pk",
+    }),
     index("job_score_fit_idx").on(t.fit),
     index("job_score_candidate_idx").on(t.candidateId),
+    index("job_score_candidate_track_fit_idx").on(t.candidateId, t.trackId, t.fit),
   ],
 );
 
@@ -483,6 +494,79 @@ export const candidateMatchingProfile = production.table(
     profileJson: text("profile_json").notNull(),
     updatedAt: text("updated_at").notNull().default(now),
   },
+);
+
+/**
+ * A target the candidate pursues: one primary and several accepted tracks.
+ *
+ * `target_json` holds only the target-level part of the profile — clusters,
+ * keywords, seniority thresholds, compensation ranges. Eligibility, blockers and
+ * evidence stay person-level in `candidate_matching_profile`; the scorer reads
+ * the merge of the two (ADR-009). A null target is a pending primary: the
+ * candidate has no own profile and is not scored (M-06).
+ */
+export const targetTrack = production.table(
+  "target_track",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** `lower(trim(name))`: names are unique per candidate ignoring case. */
+    nameKey: text("name_key").notNull(),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    /** active | archived — tracks are archived, never deleted. */
+    status: text("status").notNull().default("active"),
+    /** Display order; also breaks ties between tracks with the same fit. */
+    position: integer("position").notNull(),
+    targetJson: text("target_json"),
+    /** Target fields inherited from the default profile and not saved since. */
+    unreviewedJson: text("unreviewed_json").notNull().default("[]"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("target_track_name_idx").on(t.candidateId, t.nameKey),
+    uniqueIndex("target_track_one_primary_idx")
+      .on(t.candidateId)
+      .where(sql`${t.isPrimary} = true`),
+  ],
+);
+
+/**
+ * A term the candidate wants more jobs about, linked to exactly one track
+ * (ADR-003). Private to the candidate; captures are shared per term key.
+ */
+export const savedTerm = production.table(
+  "saved_term",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => targetTrack.id, { onDelete: "cascade" }),
+    /** Trimmed display form, as the candidate typed it. */
+    term: text("term").notNull(),
+    /** Equivalence key: case, spaces and hyphens removed (`src/core/term.ts`). */
+    termKey: text("term_key").notNull(),
+    /** active | paused */
+    status: text("status").notNull().default("active"),
+    /** manual | track_archived — restoring a track resumes only its own pauses. */
+    pausedReason: text("paused_reason"),
+    /** Anchor of the 24-hour manual re-run cooldown; the first run counts. */
+    lastRunRequestedAt: text("last_run_requested_at"),
+    /** Anchor of "new since your last visit". */
+    lastVisitAt: text("last_visit_at"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("saved_term_candidate_key_idx").on(t.candidateId, t.termKey),
+    index("saved_term_key_status_idx").on(t.termKey, t.status),
+  ],
 );
 
 /* -------------------------------------------------------------------------- */

@@ -24,6 +24,7 @@ import {
   type ReportRow,
 } from "../src/core/report/markdown.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 /* ------------------------------------------------------- renderizador puro */
 
@@ -288,6 +289,7 @@ async function seedJob(input: SeedJob): Promise<number> {
   if (input.fit != null) {
     await db.insert(jobScore).values({
       candidateId,
+      trackId: await primaryTrackId(db, candidateId),
       jobId: inserted!.id,
       fit: input.fit,
       titleScore: 1,

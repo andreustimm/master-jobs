@@ -11,6 +11,7 @@ import type { DB } from "../src/core/db/client.ts";
 import { company, job, jobScore, source } from "../src/core/db/schema.ts";
 import { SCORER_VERSION } from "../src/core/scoring/score.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 /**
  * A análise de lacuna responde a pergunta que nada mais aqui responde: quais
@@ -80,6 +81,7 @@ async function criarVagaPontuada(input: {
 
   await db.insert(jobScore).values({
     candidateId: input.paraCandidato ?? candidatoId,
+    trackId: await primaryTrackId(db, input.paraCandidato ?? candidatoId),
     jobId: vaga!.id,
     fit: input.fit,
     titleScore: 0,

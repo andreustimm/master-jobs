@@ -12,6 +12,7 @@ import type { DB } from "../src/core/db/client.ts";
 import { candidate, job, jobPage, jobScore, scrapeTask, source } from "../src/core/db/schema.ts";
 import { drizzleQueue, drizzleQueueAdmin } from "../src/core/scrape/infra/drizzle-queue.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 const PADRAO = { minFit: 45, limit: 500, refresh: false, minExistingChars: 2_000 };
 
@@ -53,6 +54,7 @@ async function seedJob(
   if (options.fit !== undefined) {
     await db.insert(jobScore).values({
       candidateId,
+      trackId: await primaryTrackId(db, candidateId),
       jobId,
       fit: options.fit,
       titleScore: 0, keywordScore: 0, seniorityScore: 0, geoScore: 0, compScore: 0,

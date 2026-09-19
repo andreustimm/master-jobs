@@ -3,10 +3,12 @@ import { is } from "drizzle-orm";
 import { PgTable, getTableConfig } from "drizzle-orm/pg-core";
 import type postgres from "postgres";
 import * as schema from "../../src/core/db/schema.ts";
-import type { selectProduction } from "./select-production.ts";
+import { postSnapshotTables, type selectProduction } from "./select-production.ts";
 
 const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
-const tables = Object.values(schema).filter((value) => is(value, PgTable)).map(getTableConfig);
+const schemaTables = Object.values(schema).filter((value) => is(value, PgTable)).map(getTableConfig);
+// Tabela posterior ao snapshot não tem seleção: nasce vazia no alvo.
+const tables = schemaTables.filter((table) => !postSnapshotTables.has(table.name));
 const qualified = (name: string) => `"production".${quote(name)}`;
 
 function dependencyOrder() {
@@ -28,7 +30,7 @@ export async function importProduction(sql: postgres.Sql, selection: ReturnType<
     await tx`SET LOCAL lock_timeout = '10s'`;
     await tx`SET LOCAL statement_timeout = '60s'`;
     const actual = await tx<{ tablename: string }[]>`SELECT tablename FROM pg_tables WHERE schemaname = 'production' ORDER BY tablename`;
-    if (JSON.stringify(actual.map((row) => row.tablename)) !== JSON.stringify(tables.map((t) => t.name).sort())) {
+    if (JSON.stringify(actual.map((row) => row.tablename)) !== JSON.stringify(schemaTables.map((t) => t.name).sort())) {
       throw new Error("Target table drift: apply and verify migrations before importing");
     }
     // Locks cover the empty-target check and the entire load, preventing races

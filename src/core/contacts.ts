@@ -14,6 +14,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "./db/client.ts";
 import { application, job, targetAccount } from "./db/schema.ts";
 import { slugifyCompany } from "./ingest/normalize.ts";
+import { primaryScoreFilter } from "../contexts/matching/index.ts";
 
 export const CONTACT_CATEGORIES = [
   "recruiter",  // recrutador interno ou de agência
@@ -148,8 +149,8 @@ export async function referralOpportunities(
       companyName: job.companyName,
       url: job.url,
       applyUrl: job.applyUrl,
-      fit: sql<number>`coalesce((select fit from production.job_score where candidate_id = ${candidateId} and job_id = ${job.id}), 0)`,
-      cluster: sql<string | null>`(select cluster from production.job_score where candidate_id = ${candidateId} and job_id = ${job.id})`,
+      fit: sql<number>`coalesce((select s.fit from production.job_score s where s.candidate_id = ${candidateId} and s.job_id = ${job.id} and ${primaryScoreFilter("s")}), 0)`,
+      cluster: sql<string | null>`(select s.cluster from production.job_score s where s.candidate_id = ${candidateId} and s.job_id = ${job.id} and ${primaryScoreFilter("s")})`,
       status: application.status,
     })
     .from(job)

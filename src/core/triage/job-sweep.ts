@@ -11,6 +11,7 @@ import { inArray, and, eq } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { application, job, jobScore } from "../db/schema.ts";
 import { listBoard } from "../db/repo.ts";
+import { primaryScoreFilter } from "../../contexts/matching/index.ts";
 import { loadProfile } from "../profile/load.ts";
 
 export type JobSweepSnapshotCandidate = {
@@ -116,7 +117,7 @@ export async function buildJobSweepSnapshot(
     .from(job)
     .leftJoin(
       jobScore,
-      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId), primaryScoreFilter()),
     )
     .leftJoin(
       application,
