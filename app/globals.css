@@ -235,6 +235,20 @@ body {
   }
 }
 
+/* O Safari do iPhone dá zoom ao focar um campo com fonte abaixo de 16px e não
+   desfaz: a página fica cortada nas bordas, com o "Sair" do cabeçalho fora da
+   tela. Os selects usam a escala do DESIGN.md (15px), então em tela de toque
+   todo campo recebe ao menos a fonte raiz. Fora de camada de propósito: vence
+   as classes da escala e os utilitários sem `!important`, e o desktop, que não
+   tem esse zoom, continua exatamente na escala. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: max(1rem, 1em);
+  }
+}
+
 /* -------------------------------------------------------------------------
    DESIGN.md type scale.
 

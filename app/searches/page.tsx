@@ -33,6 +33,14 @@ export const dynamic = "force-dynamic";
 /** Native select dressed as the design system's input: no client JS needed. */
 const SELECT = "h-9 rounded-md border border-input bg-background px-2 type-body-md text-foreground";
 
+/**
+ * Alvo de toque de 44px até `xl`, o mesmo padrão das versões do currículo e da
+ * administração: tablet também é tela de toque. No celular as ações do termo
+ * ocupam a largura da célula; a partir de `sm` ficam lado a lado.
+ */
+const TOUCH = "h-auto min-h-11 xl:h-7 xl:min-h-0";
+const TERM_ACTION = "h-auto min-h-11 w-full sm:w-auto xl:h-7 xl:min-h-0";
+
 function when(iso: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short", timeZone: "UTC" }).format(
     new Date(iso),
@@ -131,7 +139,7 @@ export default async function SearchesPage() {
               action={saveTermAction}
               {...feedback}
               resultLinkLabel={t("searchFeedback.viewExisting")}
-              className="flex flex-wrap items-end gap-2"
+              className="grid gap-2 sm:flex sm:flex-wrap sm:items-end"
               data-testid="searches-save-form"
             >
               <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1 type-caption-sm text-muted-foreground">
@@ -140,7 +148,7 @@ export default async function SearchesPage() {
               </label>
               <label className="flex flex-col gap-1 type-caption-sm text-muted-foreground">
                 {t("searches.track")}
-                <select name="trackId" className={SELECT} data-testid="searches-term-track">
+                <select name="trackId" className={cn(SELECT, "w-full sm:w-auto")} data-testid="searches-term-track">
                   {active.map((track) => (
                     <option key={track.id} value={track.id} data-user-content>
                       {track.name}
@@ -148,7 +156,9 @@ export default async function SearchesPage() {
                   ))}
                 </select>
               </label>
-              <Button type="submit" data-testid="searches-term-save">{t("searches.save")}</Button>
+              <Button type="submit" className="h-auto min-h-11 w-full sm:w-auto xl:h-8 xl:min-h-0" data-testid="searches-term-save">
+                {t("searches.save")}
+              </Button>
             </MutationFeedbackForm>
           </CardContent>
         </Card>
@@ -158,7 +168,7 @@ export default async function SearchesPage() {
         <h2 className="type-display-xs">{t("searches.tracksTitle")}</h2>
         <TransitionLink
           href="/searches/tracks/new"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }), TOUCH)}
           data-testid="searches-new-track"
         >
           {t("searches.newTrack")}
@@ -182,7 +192,7 @@ export default async function SearchesPage() {
                   {track.target && (
                     <TransitionLink
                       href={`/searches/tracks/${track.id}` as Route}
-                      className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                      className={cn(buttonVariants({ variant: "outline", size: "sm" }), TOUCH)}
                       data-testid={`track-edit-${track.id}`}
                     >
                       {t("searches.edit")}
@@ -191,7 +201,7 @@ export default async function SearchesPage() {
                   {track.status === "active" && !track.isPrimary && (
                     <MutationFeedbackForm action={setPrimaryTrackAction} {...feedback}>
                       <input type="hidden" name="trackId" value={track.id} />
-                      <Button type="submit" variant="outline" size="sm" data-testid={`track-set-primary-${track.id}`}>
+                      <Button type="submit" variant="outline" size="sm" className={TOUCH} data-testid={`track-set-primary-${track.id}`}>
                         {t("searches.setPrimary")}
                       </Button>
                     </MutationFeedbackForm>
@@ -199,7 +209,7 @@ export default async function SearchesPage() {
                   {track.status === "active" && !track.isPrimary && (
                     <MutationFeedbackForm action={archiveTrackAction} {...feedback}>
                       <input type="hidden" name="trackId" value={track.id} />
-                      <Button type="submit" variant="outline" size="sm" data-testid={`track-archive-${track.id}`}>
+                      <Button type="submit" variant="outline" size="sm" className={TOUCH} data-testid={`track-archive-${track.id}`}>
                         {t("searches.archive")}
                       </Button>
                     </MutationFeedbackForm>
@@ -207,14 +217,14 @@ export default async function SearchesPage() {
                   {track.status === "archived" && (
                     <MutationFeedbackForm action={restoreTrackAction} {...feedback}>
                       <input type="hidden" name="trackId" value={track.id} />
-                      <Button type="submit" variant="outline" size="sm" data-testid={`track-restore-${track.id}`}>
+                      <Button type="submit" variant="outline" size="sm" className={TOUCH} data-testid={`track-restore-${track.id}`}>
                         {t("searches.restore")}
                       </Button>
                     </MutationFeedbackForm>
                   )}
                 </div>
               </CardHeader>
-              <CardContent className="grid gap-3 pt-0">
+              <CardContent className="grid grid-cols-1 gap-3 pt-0">
                 {track.target && (
                   <p className="type-caption-md text-muted-foreground" data-testid={`track-evidence-${track.id}`}>
                     {track.support.supported.length > 0
@@ -285,11 +295,22 @@ export default async function SearchesPage() {
                         {term.reused ? `${t("searches.reused")} · ` : ""}
                         {sweeps ? t("searches.nextRunSweep") : t("captureState.paused")}
                       </p>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
                         {sweeps && (
-                          <MutationFeedbackForm action={rerunTermAction} {...feedback} resultMessages={rerunMessages(t)}>
+                          <MutationFeedbackForm
+                            action={rerunTermAction}
+                            {...feedback}
+                            resultMessages={rerunMessages(t)}
+                            className="col-span-2 sm:col-span-1"
+                          >
                             <input type="hidden" name="termId" value={term.id} />
-                            <Button type="submit" variant="outline" size="sm" data-testid={`term-rerun-${term.id}`}>
+                            <Button
+                              type="submit"
+                              variant="outline"
+                              size="sm"
+                              className={cn(TERM_ACTION, "whitespace-normal sm:whitespace-nowrap")}
+                              data-testid={`term-rerun-${term.id}`}
+                            >
                               {term.rerun.allowed
                                 ? t("searches.rerun")
                                 : t("searches.rerunAt", { when: when(term.rerun.availableAt, locale) })}
@@ -302,20 +323,24 @@ export default async function SearchesPage() {
                             {...feedback}
                           >
                             <input type="hidden" name="termId" value={term.id} />
-                            <Button type="submit" variant="outline" size="sm" data-testid={`term-toggle-${term.id}`}>
+                            <Button type="submit" variant="outline" size="sm" className={TERM_ACTION} data-testid={`term-toggle-${term.id}`}>
                               {term.status === "paused" ? t("searches.resume") : t("searches.pause")}
                             </Button>
                           </MutationFeedbackForm>
                         )}
                         {active.length > 1 && (
-                          <MutationFeedbackForm action={moveTermAction} {...feedback} className="flex flex-wrap items-center gap-2">
+                          <MutationFeedbackForm
+                            action={moveTermAction}
+                            {...feedback}
+                            className="order-last col-span-2 flex items-center gap-2 sm:order-none sm:col-span-1"
+                          >
                             <input type="hidden" name="termId" value={term.id} />
-                            <label className="flex items-center gap-2 type-caption-sm text-muted-foreground">
+                            <label className="flex min-w-0 flex-1 items-center gap-2 type-caption-sm text-muted-foreground">
                               {t("searches.moveTo")}
                               <select
                                 name="trackId"
                                 defaultValue={term.trackId}
-                                className={SELECT}
+                                className={cn(SELECT, "h-11 min-w-0 flex-1 sm:flex-none xl:h-9")}
                                 data-testid={`term-move-track-${term.id}`}
                               >
                                 {active.map((option) => (
@@ -325,14 +350,14 @@ export default async function SearchesPage() {
                                 ))}
                               </select>
                             </label>
-                            <Button type="submit" variant="outline" size="sm" data-testid={`term-move-${term.id}`}>
+                            <Button type="submit" variant="outline" size="sm" className={TOUCH} data-testid={`term-move-${term.id}`}>
                               {t("searches.move")}
                             </Button>
                           </MutationFeedbackForm>
                         )}
                         <MutationFeedbackForm action={deleteTermAction} {...feedback}>
                           <input type="hidden" name="termId" value={term.id} />
-                          <Button type="submit" variant="outline" size="sm" data-testid={`term-delete-${term.id}`}>
+                          <Button type="submit" variant="outline" size="sm" className={TERM_ACTION} data-testid={`term-delete-${term.id}`}>
                             {t("searches.delete")}
                           </Button>
                         </MutationFeedbackForm>

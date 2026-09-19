@@ -18,6 +18,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- On a phone, the Searches screen no longer cuts off terms or buttons, and
+  tapping a picker no longer zooms in and leaves the screen cut off — on
+  Searches and on Jobs.
+
 ## [1.15.0] - 2026-09-19T18:03:52.117Z
 
 ### New

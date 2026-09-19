@@ -18,6 +18,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- No celular, a tela Buscas não corta mais os termos nem os botões, e tocar num
+  campo de escolha não dá mais zoom deixando a tela cortada — em Buscas e em
+  Vagas.
+
 ## [1.15.0] - 2026-09-19T18:03:52.117Z
 
 ### Novidade

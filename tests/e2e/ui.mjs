@@ -1168,17 +1168,45 @@ try {
   // aparece quando a janela é estreita o bastante para o conteúdo não caber.
   const widths = [375, 390, 412, 768, 812, 1024];
   const overflows = [];
+  const clipped = [];
   for (const width of widths) {
     await page.setViewportSize({ width, height: width >= 812 ? 375 : 812 });
-    for (const path of ["/", "/jobs", "/compare", "/candidate", "/candidate/skills", "/pipeline"]) {
+    for (const path of ["/", "/jobs", "/jobs?track=all", "/searches", "/compare", "/candidate", "/candidate/skills", "/pipeline"]) {
       await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
       if (overflow > 1) overflows.push(`${width}px ${path}: ${overflow}px`);
+      // `scrollWidth` não vê o que um cartão com `overflow: hidden` corta: o
+      // botão "de novo a partir de…" passava da borda da tela dentro do cartão
+      // de Buscas e a página continuava medindo a largura da janela. Conteúdo
+      // que passa da borda só é aceitável dentro de um contêiner feito para rolar.
+      const beyond = await page.evaluate(() => {
+        const viewport = document.documentElement.clientWidth;
+        const scrollsSideways = (node) => {
+          for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+            const overflowX = getComputedStyle(parent).overflowX;
+            if (overflowX === "auto" || overflowX === "scroll") return true;
+          }
+          return false;
+        };
+        return [...document.querySelectorAll("main *")]
+          .filter((node) => {
+            const box = node.getBoundingClientRect();
+            return box.width > 1 && box.right > viewport + 1 && !scrollsSideways(node);
+          })
+          .slice(0, 2)
+          .map((node) => node.getAttribute("data-testid") || node.tagName.toLowerCase());
+      });
+      if (beyond.length > 0) clipped.push(`${width}px ${path}: ${beyond.join(", ")}`);
     }
   }
   check("sem rolagem horizontal em nenhuma largura", overflows.length === 0, overflows.slice(0, 3).join(" · "));
+  check(
+    "nenhum elemento passa da borda da tela, nem cortado dentro de um cartão",
+    clipped.length === 0,
+    clipped.slice(0, 3).join(" · "),
+  );
 
   // Paisagem de telefone/tablet pequeno passa de `sm`, mas ainda não tem
   // largura suficiente para a fileira completa. O breakpoint do menu precisa
