@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-09-19T03:29:37.809Z
+
 ### Adicionado
 
 - Quando uma tela falha, o sistema passa a avisar sozinho quem cuida dele. Antes,

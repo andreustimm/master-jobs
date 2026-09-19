@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-09-19T03:29:37.809Z
+
 ### Added
 
 - When a screen fails, the system now alerts the people who maintain it on its

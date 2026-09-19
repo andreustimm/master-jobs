@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-09-19
+
 ### Adicionado
 
 - Relato de erro do servidor para o Sentry, em `instrumentation.ts`, pelos
