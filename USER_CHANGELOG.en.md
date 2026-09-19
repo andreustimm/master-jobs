@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-09-19T18:03:52.117Z
+
 ### New
 
 - On the jobs screen, choose which track the scores come from — the primary,

@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-09-19
+
 As ADRs citadas como `ADR-0NN` nesta versão são as da feature, em
 `.compozy/tasks/term-search-target-tracks/adrs/`; as de `docs/adr/` aparecem
 como `ADR 00NN`.

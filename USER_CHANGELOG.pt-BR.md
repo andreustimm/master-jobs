@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-09-19T18:03:52.117Z
+
 ### Novidade
 
 - Na tela de vagas, escolha a trilha pela qual as notas aparecem — a
