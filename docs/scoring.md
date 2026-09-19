@@ -305,13 +305,27 @@ de países (`United States`), o passo 3 da escada só conhecia seis grafias fixa
 e "Spain only" ou "Germany only" passavam como vaga remota qualquer: 8,25 no
 `geo` e nenhum bloqueador, para uma vaga em que o candidato nunca seria aceito.
 
-Desde a 1.4.1 o adapter grava `"<países> only"` e `locationRestriction()` lê
-qualquer `locationRaw` de forma `X only` (ou `X, Y only`) como os sinais
-`regions` de `evaluateEligibility`. Lista sem nenhuma região de
+Desde a 1.4.1 `locationRestriction()` lê duas formas como os sinais `regions`
+de `evaluateEligibility`: um `locationRaw` de forma `X only` (ou `X, Y only`),
+como a Braintrust já escreve, e a frase `Location restricted to: X only.` que o
+adapter da Himalayas acrescenta à descrição. Lista sem nenhuma região de
 `acceptable_regions` fica `ineligible`: `geo` zero, bloqueador e a vaga some do
 preset "Aplicáveis hoje". Lista que inclui Brasil, LATAM ou Americas fica
 `eligible`. Sinal explícito de elegibilidade da fonte continua tendo
 precedência sobre essa leitura.
+
+**Por que a Himalayas escreve na descrição e não na localização.** A localização
+normalizada faz parte do `fingerprint`, a identidade da vaga, e não há índice
+único por fonte e id externo. Trocar `United States` por `United States only`
+faria a próxima sincronização inserir de novo cada vaga restrita, com a antiga
+órfã e o histórico de candidatura preso a ela. A descrição entra no
+`contentHash`: mudar a descrição só invalida a nota, e a vaga é repontuada.
+Vaga gravada antes da 1.4.1 ganha a frase quando a sincronização a vê de novo.
+
+As duas leituras cortam o sufixo ` only` em vez de capturar o que vem antes
+dele: é texto de provedor, e um grupo preguiçoso antes de `\s+only` retrocede
+em tempo quadrático sobre uma sequência longa de espaços. A lista em si não tem
+teto — a Himalayas publica vagas abertas a 73 países.
 
 Localização sem "only" e "Remote only" continuam neutras: `United States`
 sozinho pode ser só a sede da empresa, e dado ausente não vira bloqueador

@@ -79,21 +79,34 @@ const HIMALAYAS_DEFAULT_PAGES = 50;
  */
 const HIMALAYAS_BUDGET: PlatformBudget = { pageSize: HIMALAYAS_PAGE, maxRequestsPerRun: 5 };
 
+/**
+ * The site shows `locationRestrictions` as "United States only": who may
+ * apply, not where the team sits. Stated as a sentence in the description, the
+ * way Braintrust states its eligibility, which the scorer reads
+ * (`locationRestriction` in score.ts).
+ */
+function withRestriction(text: string | null, countries: string[]): string | null {
+  if (countries.length === 0) return text;
+  const line = `Location restricted to: ${countries.join(", ")} only.`;
+  return text ? `${text}\n\n${line}` : line;
+}
+
 function mapHimalayas(j: HimalayasJob): RawJob {
+  const restrictions = toList(j.locationRestrictions);
   return {
     externalId: j.guid,
     companyName: j.companyName,
     title: j.title.trim(),
     url: j.applicationLink ?? `https://himalayas.app/companies/${j.companySlug ?? ""}`,
     applyUrl: j.applicationLink ?? null,
-    // The site shows these as "United States only": they are who may apply,
-    // not where the team sits, and the scorer reads "X only" as eligibility.
-    locationRaw: toList(j.locationRestrictions).length > 0 ? `${toList(j.locationRestrictions).join(", ")} only` : "Remote",
+    // Part of the posting's identity (the fingerprint), so it stays the bare
+    // list: rewriting it would insert every restricted job a second time.
+    locationRaw: restrictions.join(", ") || "Remote",
     remote: true,
     employmentType: j.employmentType ?? null,
     seniorityRaw: Array.isArray(j.seniority) ? j.seniority.join(", ") : (j.seniority ?? null),
     descriptionHtml: j.description ?? null,
-    descriptionText: firstNonEmpty(htmlToText(j.description), j.excerpt),
+    descriptionText: withRestriction(firstNonEmpty(htmlToText(j.description), j.excerpt), restrictions),
     postedAt: toIso(j.pubDate),
     compMin: j.minSalary ?? null,
     compMax: j.maxSalary ?? null,
