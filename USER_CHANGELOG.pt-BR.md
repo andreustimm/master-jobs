@@ -18,6 +18,16 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-09-19T03:29:37.809Z
+
+### Adicionado
+
+- Quando uma tela falha, o sistema passa a avisar sozinho quem cuida dele. Antes,
+  uma falha só era descoberta quando alguém tentava usar o produto e não
+  conseguia. O aviso leva o necessário para achar o problema — a tela onde
+  ocorreu e o erro técnico — e **não** leva o que você digitou, o que você
+  pesquisou, seus dados de acesso nem o conteúdo do seu currículo.
+
 ## [1.13.2] - 2026-09-19T02:38:58.911Z
 
 ### Corrigido
