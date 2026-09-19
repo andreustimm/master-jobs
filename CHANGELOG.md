@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-09-19
+
 ### Corrigido
 
 - `register` e `onRequestError` em `instrumentation.ts` passam a nunca propagar

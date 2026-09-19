@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-09-19T13:22:18.417Z
+
 ### Corrigido
 
 - Endurecimento interno do aviso de falha que entrou nesta versão: um problema
