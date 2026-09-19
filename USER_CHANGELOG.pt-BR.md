@@ -48,6 +48,10 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 - Cada pessoa pede até 40 buscas por dia pela tela; passado isso, o termo é
   salvo e busca na varredura diária. Termo pausado não busca, nem pela mão.
 
+- Botão "não me interessa" em cada vaga da lista e no detalhe: a vaga sai das
+  suas listas e fica em "Arquivadas". Enquanto você não tiver aplicado, dá para
+  restaurá-la de lá.
+
 ### Melhorado
 
 - Preparação para buscar vagas de mais de um tipo, com régua própria para cada

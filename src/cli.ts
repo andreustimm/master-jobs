@@ -821,7 +821,7 @@ jobs
   .description("Browse matching jobs, best fit first")
   .option("--min-fit <n>", "minimum fit score", "45")
   .option("--cluster <name>", "filter by target cluster")
-  .option("--status <name>", "filter by pipeline status, or 'unfiled'")
+  .option("--status <name>", "filter by pipeline status, 'unfiled' or 'any' (archived jobs are hidden otherwise)")
   .option("--limit <n>", "maximum rows", "30")
   .option("--json", "machine-readable output")
   .action(async (opts: { minFit: string; cluster?: string; status?: string; limit: string; json?: boolean }) => {

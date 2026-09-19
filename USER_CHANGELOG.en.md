@@ -48,6 +48,10 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   term is saved and searches in the daily sweep. A paused term does not search,
   not even by hand.
 
+- A "not interested" button on every job in the list and on the job page: the
+  job leaves your lists and stays under "Archived". As long as you have not
+  applied, you can restore it from there.
+
 ### Improved
 
 - Groundwork for searching more than one kind of job, each with its own

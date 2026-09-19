@@ -337,7 +337,7 @@ describe("transitionApplication", () => {
       offer: ["withdrawn", "archived"],
       rejected: [],
       withdrawn: [],
-      archived: [],
+      archived: ["backlog"],
     };
 
     for (const from of APPLICATION_STATUSES) {
@@ -356,15 +356,32 @@ describe("transitionApplication", () => {
     // A lista da interface é derivada, nunca uma segunda cópia da regra: o que
     // `allowedTransitions` oferece é o que `transitionApplication` aceita. Se as
     // duas divergirem, o seletor volta a levar alguém a uma recusa.
-    for (const from of APPLICATION_STATUSES) {
-      const accepted = APPLICATION_STATUSES.filter(
-        (to) =>
-          transitionApplication({ status: from, appliedAt: null }, to, "2026-08-20T01:00:00.000Z").ok,
-      );
+    for (const appliedAt of [null, "2026-08-01T00:00:00.000Z"]) {
+      for (const from of APPLICATION_STATUSES) {
+        const accepted = APPLICATION_STATUSES.filter(
+          (to) => transitionApplication({ status: from, appliedAt }, to, "2026-08-20T01:00:00.000Z").ok,
+        );
 
-      expect(allowedTransitions(from), from).toEqual(accepted);
-      expect(allowedTransitions(from), from).toContain(from);
+        expect(allowedTransitions(from, appliedAt), `${from} ${appliedAt}`).toEqual(accepted);
+        expect(allowedTransitions(from, appliedAt), `${from} ${appliedAt}`).toContain(from);
+      }
     }
+  });
+
+  it("restores an archive that never applied, and only that one", () => {
+    // "Não me interessa" arquiva com um clique; o clique errado precisa de volta.
+    expect(allowedTransitions("archived")).toEqual(["backlog", "archived"]);
+    expect(
+      transitionApplication({ status: "archived", appliedAt: null }, "backlog", "2026-08-20T01:00:00.000Z"),
+    ).toMatchObject({ ok: true, changed: true, state: { status: "backlog", appliedAt: null } });
+
+    // Arquivada depois de aplicar é história: voltar ao começo do funil apagaria a ordem dos fatos.
+    const applied = "2026-08-01T00:00:00.000Z";
+    expect(allowedTransitions("archived", applied)).toEqual(["archived"]);
+    expect(transitionApplication({ status: "archived", appliedAt: applied }, "backlog", "2026-08-20T01:00:00.000Z")).toEqual({
+      ok: false,
+      error: { code: "illegal_transition", from: "archived", to: "backlog" },
+    });
   });
 
   it("degrades instead of crashing on a status outside the funnel", () => {
@@ -384,7 +401,7 @@ describe("transitionApplication", () => {
   });
 
   it("leaves a terminal state with itself as the only option", () => {
-    for (const terminal of ["rejected", "withdrawn", "archived"] as const) {
+    for (const terminal of ["rejected", "withdrawn"] as const) {
       expect(allowedTransitions(terminal), terminal).toEqual([terminal]);
     }
   });

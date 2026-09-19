@@ -256,6 +256,8 @@ try {
     },
     { id: 905000011, title: "Seeded term fixture one", companyName: "Seeded Term Lab", descriptionText: "Brought in by a saved term." },
     { id: 905000012, title: "Seeded term fixture two", companyName: "Seeded Term Lab", descriptionText: "Brought in by a saved term." },
+    // "Não me interessa": sem candidatura, para o fluxo arquivar e restaurar.
+    { id: 905000021, title: "Platform Engineer", companyName: "Quokkaverse Labs", descriptionText: "Remote platform role for the dismiss flow." },
   ];
   await getDb().insert(job).values(searchFixtures.map((fixture) => ({
     ...fixture,

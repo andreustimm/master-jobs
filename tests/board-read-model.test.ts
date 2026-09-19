@@ -81,6 +81,31 @@ describe("Board SQL read model", () => {
     await expect(countBoard(candidateId, { status: "unfiled" })).resolves.toBe(20);
   });
 
+  it("esconde a vaga arquivada (\"não me interessa\") de toda lista que não a pediu", async () => {
+    const candidateId = await seedBoard(6);
+    await db.execute(sql.raw(`
+      insert into production.application (candidate_id, job_id, status)
+      select ${candidateId}, id, case when rn <= 2 then 'archived' else 'shortlisted' end
+      from (select id, row_number() over (order by id) as rn from production.job) ranked
+      where rn <= 3
+    `));
+
+    const rows = await listBoard(candidateId);
+    expect(rows).toHaveLength(4);
+    expect(rows.some((row) => row.status === "archived")).toBe(false);
+    await expect(countBoard(candidateId)).resolves.toBe(4);
+    await expect(boardFacets(candidateId)).resolves.toMatchObject({ total: 4 });
+
+    await expect(countBoard(candidateId, { status: "archived" })).resolves.toBe(2);
+    await expect(countBoard(candidateId, { status: "any" })).resolves.toBe(6);
+    await expect(countBoard(candidateId, { status: "unfiled" })).resolves.toBe(3);
+
+    // A decisão é de quem arquivou: outra pessoa continua vendo a vaga.
+    const [other] = await db.insert(candidate).values({ slug: "other", name: "Other" }).returning({ id: candidate.id });
+    await expect(countBoard(other!.id)).resolves.toBe(6);
+    await expect(countBoard(null)).resolves.toBe(6);
+  });
+
   it("mantém o acervo global para quem não tem candidato, mesmo com o corte padrão", async () => {
     await seedBoard(2);
 

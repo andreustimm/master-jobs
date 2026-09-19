@@ -116,6 +116,16 @@ como `ADR 00NN`.
   são aplicadas pela CLI antes do merge em `main`, com a varredura desligada, e
   não há rollback para 1.14.x depois da 0006.
 
+- "Não me interessa" (`dismissJobAction`) e "restaurar" (`restoreJobAction`)
+  em `app/actions.ts`, pelo mesmo `setApplicationStatus` do seletor: arquivam a
+  candidatura e devolvem a `backlog`. Botão em cada linha da lista
+  (`TriageButton`), no cockpit e no detalhe da vaga, e preset "Arquivadas"
+  (`status=archived`). `archived → backlog` passa a ser transição legal só
+  quando não há `applied_at`; `allowedTransitions` recebe `appliedAt`.
+- `listBoard`, `countBoard` e `boardFacets` sem `status` escondem a vaga com
+  candidatura `archived`; `status=any` mostra tudo. Vale para a tela Vagas, o
+  cockpit, o CSV exportado, o relatório e `jho jobs list`.
+
 ### Alterado
 
 - A busca da tela Vagas deixou de ser substring em cargo e empresa: é o termo

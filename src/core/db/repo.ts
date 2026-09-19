@@ -96,6 +96,7 @@ export const PREVIEW_CHARS = 2500;
 export type BoardFilters = {
   minFit?: number;
   cluster?: string;
+  /** Absent hides archived jobs ("não me interessa"); `any` shows every job. */
   status?: ApplicationStatus | "unfiled" | "any";
   /**
    * A whole-word term over title, company and description (ADR-005, ADR-012):
@@ -235,7 +236,11 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
       conditions.push(sql`coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb`);
     }
     if (opts.status === "unfiled") conditions.push(isNull(application.id));
-    else if (opts.status && opts.status !== "any") {
+    else if (opts.status === undefined) {
+      // Arquivar é "não me interessa": a vaga sai de toda lista que não pediu
+      // as arquivadas pelo nome (`status=archived`) ou tudo (`any`).
+      conditions.push(sql`(${application.id} is null or ${application.status} <> 'archived')`);
+    } else if (opts.status !== "any") {
       conditions.push(eq(application.status, opts.status));
     }
   }

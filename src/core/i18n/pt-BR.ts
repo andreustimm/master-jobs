@@ -125,6 +125,10 @@ export const ptBR = {
     offerSearchLead: "Salvar o termo busca vagas novas com ele nas plataformas cadastradas, todo dia.",
     emptyTerm: "Nenhuma vaga do acervo menciona “{term}”.",
     broughtByEmpty: "O termo “{term}” ainda não trouxe vagas. Última busca: {state}.",
+    notInterested: "não me interessa",
+    notInterestedHint: "Tira a vaga das suas listas. Ela fica em “Arquivadas”, e dá para restaurar enquanto você não tiver aplicado.",
+    restore: "restaurar",
+    restoreHint: "Devolve a vaga às suas listas, no começo do funil.",
   },
   /** Tela Buscas: termos salvos e trilhas (term-search-target-tracks). */
   searches: {
@@ -445,6 +449,8 @@ export const ptBR = {
     withSalaryHint: "remuneração divulgada, maior primeiro",
     untriaged: "Não triadas",
     untriagedHint: "ainda fora do funil",
+    archived: "Arquivadas",
+    archivedHint: "vagas que você tirou das listas",
   },
   grid: {
     perPage: "por página",
@@ -804,6 +810,8 @@ export const ptBR = {
     moveTo: "mover para",
     notePlaceholder: "nota (opcional)",
     saveStatus: "Salvar",
+    notInterested: "Não me interessa",
+    restore: "Restaurar",
     transitionRejected:
       "O funil não vai de {from} para {to}. Sua nota continua aqui; escolha um estágio alcançável.",
     transitionConflict:

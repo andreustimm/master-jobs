@@ -74,6 +74,40 @@ export async function trackAction(formData: FormData): Promise<TrackResult> {
 }
 
 /**
+ * "Não me interessa" e o seu desfazer: um clique, sem nota, pelo mesmo
+ * `setApplicationStatus` do seletor de estágio — arquivar é a decisão, e o
+ * leitor do board esconde a arquivada de toda lista que não a pediu.
+ *
+ * Recusa ou corrida só revalidam: a próxima renderização traz o estágio real e
+ * o botão que ele permite. Não há rascunho para preservar.
+ */
+async function moveFromList(candidateId: number, formData: FormData, status: "archived" | "backlog"): Promise<void> {
+  const jobId = Number(formData.get("jobId"));
+  if (!Number.isInteger(jobId) || jobId <= 0) throw new Error("jobId inválido");
+  try {
+    await setApplicationStatus(candidateId, jobId, status);
+  } catch (error) {
+    if (!(error instanceof IllegalApplicationTransitionError || error instanceof ApplicationTransitionConflictError)) {
+      throw error;
+    }
+  }
+  revalidatePath("/");
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/pipeline");
+}
+
+export async function dismissJobAction(formData: FormData): Promise<void> {
+  const { candidateId } = await guardOwnCandidate("application:write");
+  await moveFromList(candidateId, formData, "archived");
+}
+
+export async function restoreJobAction(formData: FormData): Promise<void> {
+  const { candidateId } = await guardOwnCandidate("application:write");
+  await moveFromList(candidateId, formData, "backlog");
+}
+
+/**
  * Pede uma reconferência: "esta vaga ainda existe?".
  *
  * Enfileira e volta. Sondar o link dentro do clique deixaria a página pendurada

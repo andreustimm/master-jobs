@@ -1808,8 +1808,10 @@ try {
   // própria tela impedia de cumprir.
   // A revalidação chega pela resposta da própria action; esperar o efeito, e não
   // um tempo fixo, é o que separa "atualizou" de "ainda não atualizou".
+  // Arquivada sem ter aplicado, a vaga ainda pode ser restaurada: `archived`
+  // e `backlog` são os dois estágios alcançáveis.
   await page.waitForFunction(
-    () => document.querySelectorAll('[data-testid="track-status"] option').length === 1,
+    () => document.querySelectorAll('[data-testid="track-status"] option').length === 2,
     undefined,
     { timeout: 15_000 },
   );
@@ -1820,7 +1822,8 @@ try {
   }));
   check(
     "depois da recusa a lista acompanha o estágio realmente gravado",
-    afterRejection.offered.length === 1 && afterRejection.offered[0] === "archived",
+    afterRejection.offered.length === 2
+      && ["archived", "backlog"].every((status) => afterRejection.offered.includes(status)),
     afterRejection.offered.join(","),
   );
   check(
@@ -5001,6 +5004,9 @@ try {
       name: card.querySelector("[data-user-content]")?.textContent?.trim() ?? "",
     })));
   const saveTermOnPage = (term) => feedbackOf(async () => {
+    // After a redirect the shell stays inert until the transition commits, and
+    // `fill` on it is silently lost: the save goes out empty and no notice comes.
+    await page.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
     await page.locator('[data-testid="searches-term-input"]').fill(term);
     await page.locator('[data-testid="searches-term-save"]').click();
   });
@@ -5372,6 +5378,54 @@ try {
     "term-search E2E-016 sessão vencida na sugestão de trilha volta ao login e, depois de entrar, nada foi gravado",
     expiredLanded === "/login" && !afterExpired.includes("Expired Probe"),
     JSON.stringify({ expiredLanded }),
+  );
+
+  /* ------------- "Não me interessa": arquivar, esconder e restaurar ------------- */
+  const dismissId = 905000021;
+  const dismissRow = `[data-testid="job-link-${dismissId}"]`;
+  const rowGone = (selector) => !document.querySelector(selector);
+  const rowShown = (selector) => Boolean(document.querySelector(selector));
+  await page.goto(`${BASE}/jobs?q=Quokkaverse`, { waitUntil: "networkidle" });
+  const listedBefore = await page.locator(dismissRow).count();
+  const dismissLabel = ((await page.locator(`[data-testid="job-dismiss-${dismissId}"]`).textContent()) ?? "").trim();
+  await page.locator(`[data-testid="job-dismiss-${dismissId}"]`).click();
+  const hiddenAfterClick = await eventually(rowGone, dismissRow);
+  await page.reload({ waitUntil: "networkidle" });
+  const hiddenAfterReload = (await page.locator(dismissRow).count()) === 0;
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  await page.locator('[data-testid="preset-archived"]').click();
+  await settle(/status=archived/);
+  const listedArchived = await eventually(rowShown, dismissRow);
+  await page.locator(`[data-testid="job-restore-${dismissId}"]`).click();
+  const leftArchived = await eventually(rowGone, dismissRow);
+  await page.goto(`${BASE}/jobs?q=Quokkaverse`, { waitUntil: "networkidle" });
+  const restored = (await page.locator(dismissRow).count()) === 1
+    && (await page.locator(`[data-testid="job-dismiss-${dismissId}"]`).count()) === 1;
+  check(
+    "não me interessa: some da lista, sobrevive à recarga, fica em Arquivadas e volta ao restaurar",
+    listedBefore === 1
+      && dismissLabel === ptBR.jobs.notInterested
+      && hiddenAfterClick
+      && hiddenAfterReload
+      && listedArchived
+      && leftArchived
+      && restored,
+    JSON.stringify({ listedBefore, dismissLabel, hiddenAfterClick, hiddenAfterReload, listedArchived, leftArchived, restored }),
+  );
+
+  // No detalhe: quem abriu a vaga na origem e viu "US only" decide ali mesmo.
+  await page.goto(`${BASE}/jobs/${dismissId}`, { waitUntil: "networkidle" });
+  await page.locator(`[data-testid="job-dismiss-${dismissId}"]`).click();
+  const detailRestorable = await eventually(rowShown, `[data-testid="job-restore-${dismissId}"]`);
+  const detailArchived = await eventually(
+    () => document.querySelector('[data-testid="track-status"]')?.value === "archived",
+  );
+  await page.locator(`[data-testid="job-restore-${dismissId}"]`).click();
+  const detailBack = await eventually(rowShown, `[data-testid="job-dismiss-${dismissId}"]`);
+  check(
+    "não me interessa no detalhe arquiva e oferece restaurar, e restaurar devolve a vaga ao funil",
+    detailRestorable && detailArchived && detailBack,
+    JSON.stringify({ detailRestorable, detailArchived, detailBack }),
   );
 
   /* --------------------------------- Logout -------------------------------- */
