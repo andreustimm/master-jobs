@@ -8,6 +8,7 @@ import {
   targetOf,
 } from "../src/contexts/matching/index.ts";
 import type { DB } from "../src/core/db/client.ts";
+import { inArray } from "drizzle-orm";
 import { candidate, savedTerm, termCapture } from "../src/core/db/schema.ts";
 import { loadProfile } from "../src/core/profile/load.ts";
 import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/http-port.ts";
@@ -62,6 +63,7 @@ beforeEach(async () => {
     "himalayas.app": { jobs: [], totalCount: 0 },
   });
   setHttpPort(port);
+  process.env.JHO_SOURCES_PATH = "tests/fixtures/term-search/sources-three-platforms.yaml";
   const [row] = await db.insert(candidate).values({ slug: "owner", name: "Owner", isDefault: true }).returning();
   state.candidateId = row!.id;
   const profile = await loadProfile(true);
@@ -75,9 +77,19 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  delete process.env.JHO_SOURCES_PATH;
   resetHttpPort();
   await releaseTestDb();
 });
+
+/**
+ * The platforms with HTTP fixtures here. Every other validated platform is off
+ * in the pinned `sources.yaml` and gets a `skipped` row, which another test
+ * covers; the lifecycle under test is these three.
+ */
+const FIXTURE_PLATFORMS = ["himalayas", "remoteok", "remotive"];
+
+const fixtureCaptures = () => db.select().from(termCapture).where(inArray(termCapture.platform, FIXTURE_PLATFORMS));
 
 function form(fields: Record<string, string | number>): FormData {
   const data = new FormData();
@@ -95,7 +107,7 @@ describe("term Server Actions", () => {
     expect(results.filter((result) => result.ok)).toHaveLength(1);
     expect(results.find((result) => !result.ok)).toMatchObject({ ok: false, code: "term_duplicate" });
     expect(await db.select().from(savedTerm)).toHaveLength(1);
-    expect(await db.select().from(termCapture)).toHaveLength(3);
+    expect(await fixtureCaptures()).toHaveLength(3);
   });
 
   it("IT-081 a borrowed session saves the term and leaves the search to the sweep", async () => {
@@ -114,7 +126,7 @@ describe("term Server Actions", () => {
 
     expect(result).toMatchObject({ ok: true, run: "started" });
     expect(port.calls).toHaveLength(0);
-    expect((await db.select().from(termCapture)).every((row) => row.status === "queued")).toBe(true);
+    expect((await fixtureCaptures()).every((row) => row.status === "queued")).toBe(true);
     expect(state.after).toHaveLength(1);
 
     await state.after[0]!();

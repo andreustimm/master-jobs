@@ -79,6 +79,7 @@ beforeEach(async () => {
   db = await useTestDb();
   clock = fixedClock(NOW.toISOString());
   setClock(clock);
+  process.env.JHO_SOURCES_PATH = "tests/fixtures/term-search/sources-three-platforms.yaml";
 });
 
 afterEach(async () => {
@@ -235,7 +236,10 @@ describe("capture requests", () => {
 
   it("IT-072 an unvalidated platform never gets a capture row", async () => {
     const unvalidated = { ...himalayas, termSearch: { ...himalayas.termSearch!, validatedOn: null } };
-    const adapters = [...Object.values(ADAPTERS).filter((adapter) => adapter.kind !== "himalayas"), unvalidated];
+    // The three configured platforms, one of them not validated: any other
+    // validated adapter would add a `skipped` row and blur what is asserted.
+    const configured = Object.values(ADAPTERS).filter((adapter) => adapter.kind === "remotive" || adapter.kind === "remoteok");
+    const adapters = [...configured, unvalidated];
     const all = { adapters, sources: async () => [REMOTIVE_CONFIG, REMOTEOK_CONFIG, HIMALAYAS_CONFIG] };
 
     await request("laravel", "Laravel", all);

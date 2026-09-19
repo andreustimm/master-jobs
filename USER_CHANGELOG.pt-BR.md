@@ -52,6 +52,10 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   suas listas e fica em "Arquivadas". Enquanto você não tiver aplicado, dá para
   restaurá-la de lá.
 
+- Vagas de três plataformas novas: Jobicy, Workable (vagas remotas no Brasil) e
+  o fio mensal "Who is hiring?" do Hacker News, escrito pelas próprias empresas.
+  Os termos salvos em Buscas também procuram nelas.
+
 ### Melhorado
 
 - Preparação para buscar vagas de mais de um tipo, com régua própria para cada

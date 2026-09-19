@@ -19,11 +19,11 @@ import type {
  * Budgeted platforms never retry inside a call (ADR-010): a retry would spend
  * a unit the ledger did not reserve. A failed call waits for the next window.
  */
-const BUDGETED = { retries: 0 } as const;
+export const BUDGETED = { retries: 0 } as const;
 
-const QUOTA_STOP: TermSearchResult = { jobs: [], warnings: [], totalHint: null, stoppedByQuota: true };
+export const QUOTA_STOP: TermSearchResult = { jobs: [], warnings: [], totalHint: null, stoppedByQuota: true };
 
-function cleanTags(tags: unknown): string[] | null {
+export function cleanTags(tags: unknown): string[] | null {
   if (!Array.isArray(tags)) return null;
   const clean = tags.filter((tag): tag is string => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean);
   return clean.length > 0 ? clean : null;
@@ -52,7 +52,7 @@ type HimalayasJob = {
 };
 
 /** Aggregators are inconsistent: a field is sometimes a string, sometimes a list. */
-function toList(value: unknown): string[] {
+export function toList(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string");
   if (typeof value === "string" && value.length > 0) return [value];
   return [];
@@ -85,7 +85,7 @@ const HIMALAYAS_BUDGET: PlatformBudget = { pageSize: HIMALAYAS_PAGE, maxRequests
  * way Braintrust states its eligibility, which the scorer reads
  * (`locationRestriction` in score.ts).
  */
-function withRestriction(text: string | null, countries: string[]): string | null {
+export function withRestriction(text: string | null, countries: string[]): string | null {
   if (countries.length === 0) return text;
   const line = `Location restricted to: ${countries.join(", ")} only.`;
   return text ? `${text}\n\n${line}` : line;

@@ -51,6 +51,9 @@ export const FETCHABLE_SOURCE_KINDS = [
   "adzuna",
   "braintrust",
   "careers",
+  "jobicy",
+  "workable",
+  "hackernews",
 ] as const;
 
 export type FetchableSourceKind = (typeof FETCHABLE_SOURCE_KINDS)[number];

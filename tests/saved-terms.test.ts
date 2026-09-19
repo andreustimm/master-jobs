@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { consoleMailer } from "../src/contexts/auth/index.ts";
 import {
@@ -65,6 +65,7 @@ beforeEach(async () => {
     "himalayas.app": fixture("himalayas-laravel-page1.json"),
   });
   setHttpPort(port);
+  process.env.JHO_SOURCES_PATH = "tests/fixtures/term-search/sources-three-platforms.yaml";
 });
 
 afterEach(async () => {
@@ -106,11 +107,18 @@ async function sweep() {
   return runTermCaptures({ worker: "cli" });
 }
 
+/**
+ * The platforms with HTTP fixtures here. Every other validated platform is off
+ * in the pinned `sources.yaml` and gets a `skipped` row, which another test
+ * covers; the lifecycle under test is these three.
+ */
+const FIXTURE_PLATFORMS = ["himalayas", "remoteok", "remotive"];
+
 async function captures(termKey?: string) {
   return db
     .select()
     .from(termCapture)
-    .where(termKey ? eq(termCapture.termKey, termKey) : undefined)
+    .where(and(inArray(termCapture.platform, FIXTURE_PLATFORMS), termKey ? eq(termCapture.termKey, termKey) : undefined))
     .orderBy(termCapture.platform, termCapture.windowDay);
 }
 
@@ -451,7 +459,8 @@ describe("counts, sharing and the daily sweep", () => {
     const second = await termOverview({ candidateId: id }, now());
 
     expect(second).toEqual(first);
-    expect(first.terms[0]!.platforms.map((p) => p.status).sort()).toEqual(["failed", "succeeded", "waiting_quota"]);
+    const tested = first.terms[0]!.platforms.filter((p) => FIXTURE_PLATFORMS.includes(p.platform));
+    expect(tested.map((p) => p.status).sort()).toEqual(["failed", "succeeded", "waiting_quota"]);
   });
 
   it("IT-100 fourteen empty days show a notice and keep the term active", async () => {
@@ -508,7 +517,7 @@ describe("counts, sharing and the daily sweep", () => {
 
     expect(send).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(await db.select().from(termCapture).where(and(eq(termCapture.termKey, "laravel")))).toHaveLength(6);
+    expect(await captures("laravel")).toHaveLength(6);
   });
 });
 

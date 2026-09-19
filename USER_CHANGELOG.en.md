@@ -52,6 +52,10 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   job leaves your lists and stays under "Archived". As long as you have not
   applied, you can restore it from there.
 
+- Jobs from three new platforms: Jobicy, Workable (remote jobs in Brazil) and
+  Hacker News' monthly "Who is hiring?" thread, written by the companies
+  themselves. The terms saved in Searches look there too.
+
 ### Improved
 
 - Groundwork for searching more than one kind of job, each with its own

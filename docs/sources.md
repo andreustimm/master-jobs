@@ -75,6 +75,9 @@ em amarelo abaixo da linha da fonte, tanto em `jobs sync` quanto em
 | `arbeitnow` | `aggregators.ts` | Sim (`description`) | Não | — |
 | `remoteok` | `aggregators.ts` | Sim (`description`) | Não | — |
 | `adzuna` | `aggregators.ts` | Parcial (`description`, sem HTML) | Não, `results_per_page=50` | `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` |
+| `jobicy` | `jobicy.ts` | Sim (`jobDescription`) | Não, `count=100` | — |
+| `workable` | `workable.ts` | Sim (`description` + seções) | `pageToken`, 20/página, até 5 páginas | — |
+| `hackernews` | `hackernews.ts` | Sim (o próprio comentário) | Não, o fio inteiro numa chamada | — |
 
 ### ATS — `src/core/sources/ats.ts`
 
@@ -320,21 +323,45 @@ https://api.adzuna.com/v1/api/jobs/{country}/search/1
 - Está **comentado** em `config/sources.yaml`; descomente depois de setar as
   chaves em `.env.local`.
 
-### Declarados mas não implementados
+### Jobicy, Workable e Hacker News — `jobicy.ts`, `workable.ts`, `hackernews.ts`
 
-`workable` e `manual` existem no type `SourceKind` (`types.ts`) e na lista
-`KINDS` de `config.ts` — portanto **passam na validação Zod do
-`sources.yaml`** — mas não estão em `ADAPTERS` (`registry.ts`).
+Entraram em 2026-09-19, escolhidos numa pesquisa que conferiu cada endpoint por
+chamada real, ToS e robots.txt (Torre, Remotar, Landing.jobs e outros ficaram
+de fora por proibirem robô). Os três buscam por termo e nomeiam o empregador.
 
-Usar qualquer um dos dois faz `getAdapter()` lançar:
+**Jobicy** (`GET https://jobicy.com/api/v2/remote-jobs?count=100&geo=<slug>`).
+API documentada e sem chave, com três condições no README: creditar a Jobicy
+com link para a origem, mandar a candidatura para a URL original do feed
+(`applyUrl = url`) e não varrer mais que uma vez por hora. O livro de cota não
+tem janela de hora, então o orçamento é 24/dia e 1/min. `handle` é o slug de
+geografia; vazio vale `latam`, que também devolve toda vaga "Anywhere".
+`jobGeo` é quem pode se candidatar ("Geographic employment restriction, or
+`Anywhere`"): vira a frase `Location restricted to: X only.` da descrição, como
+na Himalayas, e "Argentina" sozinha bloqueia. `tag` aceita 3–50 caracteres;
+fora disso a busca não gasta chamada. As chaves de salário **somem** quando a
+vaga não informa pagamento, em vez de virem `null`.
 
-```
-No adapter registered for source kind "workable"
-```
+**Workable** (`GET https://jobs.workable.com/api/v1/jobs?query=<q>&location=Brazil&workplace=remote`).
+A busca global da Workable: todas as empresas do ATS, com país e modalidade
+estruturados por vaga. API não documentada; o robots.txt proíbe as páginas
+HTML de busca (`/search*?*`), não `/api/`, e os termos de uso não têm cláusula
+de raspagem. A mesma vaga aparece uma vez por país em que contrata — filtrar
+pelo Brasil é também o que tira as cópias. Pagina com `pageToken` (o
+`nextPageToken` da resposta), 20 por página. O widget por empresa
+(`apply.workable.com/api/v1/widget/accounts/<conta>`) existe, mas lista títulos
+sem descrição, a mesma armadilha da SmartRecruiters. `handle` é o texto da
+busca.
 
-Em `jobs sync` isso não derruba a run: vira `lastStatus = 'error'` apenas para
-aquela fonte. Em `sources probe`, o erro sobe até o `catch` do `parseAsync` e o
-processo sai com `exitCode = 1`.
+**Hacker News** (`GET https://hn.algolia.com/api/v1/search?tags=comment,story_<id>`).
+O fio mensal "Ask HN: Who is hiring?" pela API oficial da Algolia: o mais
+recente de `search_by_date?tags=story,author_whoishiring`, que também publica
+"Who wants to be hired?". Só comentário de topo (`parent_id` igual ao fio) é
+vaga, e só se a primeira linha seguir a convenção "Empresa | Cargo | Local",
+com pelo menos três partes — isso descarta respostas, quem procura emprego no
+fio errado ("Location: London…") e também os anúncios em prosa, uma perda
+aceita (26 de 261 em setembro de 2026). O HN separa parágrafos com `<p>` sem
+fechamento e escapa `/` e `'` como entidade hexadecimal, que `htmlToText` não
+decodifica; o adapter trata as duas coisas depois de tirar as tags.
 
 ---
 
@@ -396,7 +423,7 @@ export const ADAPTERS: Partial<Record<SourceKind, SourceAdapter>> = {
 ```
 
 Sem esta linha, `getAdapter()` lança em runtime mesmo com o YAML válido — foi
-exatamente o que aconteceu com `workable` e `manual`.
+o que aconteceu com `workable` antes de ele ganhar adapter.
 
 ### 3. Adicione em `config/sources.yaml` com um `rationale`
 
@@ -527,7 +554,7 @@ timeouts tight, retry only on transient failures, and never hammer on a 4xx."*
 |---|---|
 | Identificar-se | Header `user-agent` em toda requisição: `process.env.JHO_USER_AGENT` com fallback `"master-jobs/0.1 (personal job search)"` |
 | Timeout curto | `AbortController` com `DEFAULT_TIMEOUT_MS = 20_000` |
-| Retry só em falha transitória | `RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504])`; no máximo 2 retries (`opts.retries ?? 2`). Plataforma com orçamento (Remotive, RemoteOK, Himalayas) chama com `retries: 0` — ver "Busca por termo" |
+| Retry só em falha transitória | `RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504])`; no máximo 2 retries (`opts.retries ?? 2`). Plataforma com orçamento (Remotive, RemoteOK, Himalayas, Jobicy, Workable, Hacker News) chama com `retries: 0` — ver "Busca por termo" |
 | Não martelar em 4xx | Status fora de `RETRYABLE` faz `throw` imediato do `HttpError` — "a 404 means the board handle is wrong; retrying just wastes time" |
 | Backoff | `500 * 2 ** attempt` ms, ou seja 500 ms e depois 1000 ms |
 | Concorrência limitada | `syncAll()` usa uma fila com `concurrency` workers, default 4 (`--concurrency <n>`) |
@@ -559,6 +586,9 @@ A capacidade é opcional no adapter: `termSearch = { budget, validatedOn, search
 | `remotive` | `GET https://remotive.com/api/remote-jobs?search=<q>&limit=100` | 4/dia, 2/min, 1 chamada por captura | 2026-09-19 |
 | `remoteok` | `GET https://remoteok.com/api?tag=<termo-com-hífen>` | 1/min, 1 chamada por captura | 2026-09-19 |
 | `himalayas` | `GET https://himalayas.app/jobs/api/search?q=<q>&page=<n>` | 20 por página, até 5 páginas; 429 esgota o dia | 2026-09-19 |
+| `jobicy` | `GET https://jobicy.com/api/v2/remote-jobs?tag=<q>&geo=latam&count=100` | 24/dia, 1/min, 1 chamada por captura | 2026-09-19 |
+| `workable` | `GET https://jobs.workable.com/api/v1/jobs?query=<q>&location=Brazil&workplace=remote` | 10/min, 20 por página, até 5 páginas | 2026-09-19 |
+| `hackernews` | `GET https://hn.algolia.com/api/v1/search?tags=comment,story_<fio>&query=<q>` | 30/min, 2 chamadas por captura (achar o fio, buscar nele) | 2026-09-19 |
 
 - **`validatedOn`** é a data em que a integração passou por
   `jho sources probe <kind> --term <t>` contra a API real. Com `null`, a

@@ -94,9 +94,12 @@ export function reachablePlatforms(
 }
 
 const PLATFORM_NAMES: Partial<Record<FetchableSourceKind, string>> = {
+  hackernews: "Hacker News",
   himalayas: "Himalayas",
+  jobicy: "Jobicy",
   remoteok: "RemoteOK",
   remotive: "Remotive",
+  workable: "Workable",
 };
 
 /** A fonte das capturas por termo: nunca sincronizada, nunca no YAML (ADR-011). */

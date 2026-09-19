@@ -41,7 +41,7 @@ describe("source registry", () => {
   });
 
   it("rejects persistence-only and unknown kinds at runtime", () => {
-    for (const kind of ["manual", "workable", "unknown"]) {
+    for (const kind of ["manual", "recruiter", "unknown"]) {
       expect(isFetchableSourceKind(kind)).toBe(false);
       expect(() => parseFetchableSourceKind(kind)).toThrow(
         `No adapter registered for source kind "${kind}"`,
@@ -56,7 +56,7 @@ describe("source config", () => {
     expect(configs.map((config) => config.kind)).toEqual(FETCHABLE_SOURCE_KINDS);
   });
 
-  it.each(["manual", "workable", "unknown"])(
+  it.each(["manual", "recruiter", "unknown"])(
     "rejects the non-fetchable kind %s before sync",
     (kind) => {
       expect(() => parseSourcesConfig(yamlForKinds([kind]))).toThrow("sources.yaml is invalid");

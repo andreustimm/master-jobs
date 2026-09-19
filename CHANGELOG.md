@@ -126,6 +126,15 @@ como `ADR 00NN`.
   candidatura `archived`; `status=any` mostra tudo. Vale para a tela Vagas, o
   cockpit, o CSV exportado, o relatório e `jho jobs list`.
 
+- Três fontes novas com busca por termo, validadas contra a API real em
+  2026-09-19 (`jho sources probe`): `jobicy` (API documentada; `jobGeo` vira a
+  frase de restrição de país), `workable` (busca global com
+  `location=Brazil&workplace=remote`, paginada por `pageToken`) e `hackernews`
+  (fio mensal "Who is hiring?" pela Algolia, só comentário de topo no formato
+  "Empresa | Cargo | Local"). Orçamentos no livro de cota: Jobicy 24/dia e
+  1/min, Workable 10/min, HN 30/min. `config/sources.yaml` ganha quatro
+  entradas; fixtures de resposta real em `tests/fixtures/term-search/`.
+
 ### Alterado
 
 - A busca da tela Vagas deixou de ser substring em cargo e empresa: é o termo
