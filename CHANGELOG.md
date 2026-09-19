@@ -9,6 +9,30 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Relato de erro do servidor para o Sentry, em `instrumentation.ts`, pelos
+  ganchos `register` e `onRequestError` do Next. Motivado por um caso concreto:
+  o corte da 1.13.1 devolveu 500 em toda página que toca o banco por 28
+  minutos, e quem descobriu foi uma pessoa abrindo o site — nenhuma linha do
+  sistema avisou. **Sem `SENTRY_DSN` nada é enviado**, e o SDK nem chega a ser
+  importado: ausência de provedor não bloqueia produto, como no
+  `RESEND_API_KEY`.
+- `src/core/observability.ts` decide o que pode acompanhar um erro, em funções
+  puras e sob lista de **permissão**. Sai o caminho da rota; **não sai** a query
+  string (termo de busca, faixa salarial e estágio do funil são uso, não
+  diagnóstico), nem `cookie`, `authorization`, `x-forwarded-for` ou corpo da
+  requisição. `redactSecrets` apaga credencial de URL, esquema `Bearer`, chave
+  nomeada e e-mail da mensagem e da pilha — o driver `postgres` traz a URL de
+  conexão inteira, com senha, no texto da exceção. A decisão é pura e testada
+  porque configuração de SDK some numa atualização de dependência e teste não.
+- Não há SDK de browser, e a razão é a CSP: `connect-src 'self'` bloquearia o
+  envio **em silêncio**, como já aconteceu com a fonte do Google. `tracesSampleRate`
+  fica em zero, porque transação carrega a URL completa com a query string que
+  acabou de ser excluída de propósito. Mapas de origem exigem `withSentryConfig`
+  e token no build, e ficaram para quando houver conta — registrado em
+  `docs/engineering/deploy.md`.
+
 ## [1.13.2] - 2026-09-19
 
 ### Corrigido

@@ -70,6 +70,7 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 | `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela o link vai para o log |
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |
 | `CRON_SECRET` | Vercel | protege a rota de cron; a Vercel a envia em `authorization` |
+| `SENTRY_DSN` | Vercel | relato de erro do servidor; **sem ela nada é enviado** ([detalhe](#relato-de-erro)) |
 
 **A URL pode vir de mais de um nome, e a ordem é declarada.** A integração do
 Supabase com a Vercel cadastra `POSTGRES_URL` e `POSTGRES_URL_NON_POOLING` e as
@@ -313,6 +314,65 @@ SELECT has_table_privilege('master_jobs_app', 'production.job', 'SELECT'),
 
 A rotação é trocar a senha de `master_jobs_app` e atualizar `DATABASE_URL`: as
 permissões ficam no papel de grupo e não são reescritas.
+
+## Relato de erro
+
+Existe por um caso concreto: **o corte de produção da 1.13.1 devolveu 500 em
+toda página que toca o banco por 28 minutos, e quem descobriu foi uma pessoa
+abrindo o site.** Nenhuma linha deste sistema avisou.
+
+Cadastre `SENTRY_DSN` na Vercel (Production) com o DSN do projeto Sentry.
+**Sem ela, nada é enviado** — a mesma regra do `RESEND_API_KEY`: ausência de
+provedor não bloqueia produto, e o desenvolvimento local segue sem conta, sem
+rede e sem ruído. O DSN não é segredo (ele só permite *enviar* evento), mas
+cadastre como variável, nunca no código.
+
+### O que sai daqui, e o que não sai
+
+A decisão mora em `src/core/observability.ts`, é função pura, e é testada em
+`tests/observability.test.ts` — porque configuração de SDK some numa
+atualização de dependência e teste não.
+
+| Dado | Vai? | Por quê |
+|---|---|---|
+| Caminho da rota | sim | é onde quebrou, e é preciso para reproduzir |
+| **Query string** | **não** | termo de busca, faixa salarial e estágio do funil são uso, não diagnóstico |
+| `content-type`, `accept`, `accept-language`, `x-vercel-*` | sim | não identificam pessoa |
+| **`cookie`** | **não** | é a sessão inteira |
+| **`authorization`** | **não** | é a credencial |
+| **`x-forwarded-for`, `x-real-ip`** | **não** | IP é dado pessoal |
+| Corpo da requisição | não | carrega CV, nota de funil e senha |
+| Identidade do usuário | não | `sendDefaultPii: false`, e `event.user` é apagado |
+
+A lista de cabeçalhos é de **permissão**: cabeçalho novo não vai até alguém
+decidir que pode. Cabeçalho fora da lista some por inteiro, em vez de aparecer
+redigido — dizer que ele existe já conta algo sobre a requisição.
+
+Antes de enviar, a mensagem e a pilha passam por `redactSecrets`, que apaga
+credencial de URL, esquema `Bearer`, chave nomeada e e-mail. Isso não é zelo
+abstrato: **uma falha de conexão do driver `postgres` traz a URL inteira, com
+senha, no texto da exceção.**
+
+### Só servidor, e a CSP é a razão
+
+Não há SDK de browser. A CSP em `next.config.ts` declara `connect-src 'self'`,
+então o SDK de browser seria **bloqueado ao enviar, em silêncio** — foi o que
+já aconteceu com a fonte do Google até um browser de verdade reportar. Ligá-lo
+exigiria abrir a CSP para um terceiro e passar a mandar JS de cliente que estas
+páginas hoje não mandam. O erro que motivou isto era do servidor.
+
+Também não há `tracesSampleRate` acima de zero: transação carrega a URL
+completa, com a query string que acabou de ser excluída de propósito.
+
+### O que falta, quando houver conta
+
+Mapas de origem. Sem eles a pilha chega minificada
+(`chunks/5303.js:1:1963`), que foi exatamente como o erro da 1.13.1 apareceu no
+log da Vercel. Para ligá-los, envolva a configuração com `withSentryConfig` em
+`next.config.ts` e cadastre `SENTRY_AUTH_TOKEN`, `SENTRY_ORG` e
+`SENTRY_PROJECT` no ambiente de build. Ficou de fora desta entrega porque
+exige conta e token no momento do build, e adicionar risco de build sem
+benefício imediato logo depois de uma queda não se justifica.
 
 ## O que confirmar depois de subir
 
