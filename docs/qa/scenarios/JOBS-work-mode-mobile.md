@@ -7,8 +7,8 @@ journey: J-find-jobs-by-work-mode
 expected: As quatro opções ficam legíveis e operáveis em 375px e o recorte sobrevive à recarga
 entry_points: /; /jobs
 qa_status: untested
-bug_ids:
-fix_status:
+bug_ids: BUG-20260919-mobile-searches-overflow
+fix_status: fixed
 retest_status:
 fix_commits:
 evidence: evidence/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter/CH-work-mode-mobile-post-review-filters.png; evidence/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter/CH-work-mode-mobile-post-review-return.png; evidence/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter/CH-work-mode-mobile-post-review-job.png

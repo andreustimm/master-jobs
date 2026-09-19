@@ -277,9 +277,11 @@ try {
   );
   if (!seededTerm.ok && seededTerm.code !== "term_duplicate") throw new Error(`E2E term: ${seededTerm.code}`);
   // "Novas desde a última visita" parte do zero a cada execução.
+  // Busca pedida agora: o termo mostra "de novo a partir de…", o rótulo mais
+  // longo da tela Buscas, que é o que estourava o cartão no celular.
   const [seededRow] = await getDb()
     .update(savedTerm)
-    .set({ lastVisitAt: null })
+    .set({ lastVisitAt: null, lastRunRequestedAt: new Date().toISOString() })
     .where(eq(savedTerm.id, seededTerm.termId))
     .returning({ termKey: savedTerm.termKey });
   await getDb().insert(termAttribution).values(

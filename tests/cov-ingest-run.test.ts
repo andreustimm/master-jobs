@@ -14,7 +14,7 @@
  * Fronteira FORA: rede — a porta HTTP é dublê.
  */
 import { eq, sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
 import { application, candidate, job, jobScore, source } from "../src/core/db/schema.ts";
 import { ensureSources, pruneClosed, syncAll } from "../src/core/ingest/run.ts";
@@ -257,6 +257,42 @@ describe("syncAll", () => {
     expect(r.totals.closed).toBe(0);
     const linhas = await db.select().from(job);
     expect(linhas.every((l) => l.closedAt === null)).toBe(true);
+  });
+
+  it("grava um board inteiro com menos de duas idas ao banco por vaga", async () => {
+    // A varredura roda no GitHub, longe do banco em São Paulo: cada consulta é
+    // uma ida e volta de rede. Com quatro por vaga (buscar a vaga, inserir e
+    // reler a empresa, gravar), um board de 4.000 anúncios passou da hora da
+    // varredura e nada depois do sync chegou a rodar.
+    const board = Array.from({ length: 50 }, (_, i) => vaga(i + 1));
+    boardCom(board);
+    const enviados = vi.spyOn(db.$client, "unsafe");
+
+    const primeira = await syncAll([config("acme")]);
+    const naPrimeira = enviados.mock.calls.length;
+    const segunda = await syncAll([config("acme")]);
+    const naSegunda = enviados.mock.calls.length - naPrimeira;
+    enviados.mockRestore();
+
+    expect(primeira.totals.inserted).toBe(50);
+    expect(segunda.totals.unchanged).toBe(50);
+    expect(naPrimeira).toBeLessThan(board.length * 2);
+    expect(naSegunda).toBeLessThan(board.length * 2);
+  });
+
+  it("a mesma vaga repetida na listagem muda uma vez, não duas", async () => {
+    // A linha é lida em lote antes de gravar. A segunda aparição não pode
+    // comparar com a leitura velha: veria a edição que a primeira já gravou
+    // como se fosse nova e invalidaria as notas de novo.
+    boardCom([vaga(1)]);
+    await syncAll([config("acme")]);
+
+    const editada = vaga(1, { content: "&lt;p&gt;Escopo completamente outro.&lt;/p&gt;" });
+    boardCom([editada, editada]);
+    const r = await syncAll([config("acme")]);
+
+    expect(r.totals).toMatchObject({ changed: 1, unchanged: 1, updated: 1, inserted: 0 });
+    await expect(db.select().from(job)).resolves.toHaveLength(1);
   });
 
   it("não encosta na candidatura ao reprocessar a mesma vaga", async () => {

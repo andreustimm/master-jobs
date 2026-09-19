@@ -146,7 +146,7 @@ export default async function SkillsPage() {
                 </h3>
                 <div className="divide-y overflow-hidden rounded-xl border">
                   {items.map((s) => (
-                    <div key={s.id} className="grid min-w-0 gap-2 bg-card px-4 py-3">
+                    <div key={s.id} className="grid min-w-0 grid-cols-1 gap-2 bg-card px-4 py-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <span data-user-content className="min-w-0 break-words font-semibold">{s.name}</span>
                         <Badge variant="outline" className="font-mono type-micro">
@@ -182,7 +182,7 @@ export default async function SkillsPage() {
                       {s.evidence && (
                         <p
                           data-user-content
-                          className="border-l-2 border-border pl-3 text-xs text-muted-foreground italic"
+                          className="min-w-0 border-l-2 border-border pl-3 text-xs text-muted-foreground italic wrap-anywhere"
                         >
                           {s.evidence}
                         </p>

@@ -9,6 +9,38 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.15.2] - 2026-09-19
+
+### Corrigido
+
+- Varredura diária: o sync passou de uma hora na 1.15.0 e a execução foi
+  cancelada antes de buscar os termos, capturar e pontuar. O runner fica nos
+  EUA e o banco em São Paulo, e cada vaga custava quatro idas ao banco. Agora a
+  observação lê as vagas conhecidas em blocos de cem (`observeRawJobs`, usada
+  pelo sync e pela captura de termos), guarda o id da empresa por rodada e
+  grava cada lote de notas num único `INSERT … ON CONFLICT` com `excluded.*`:
+  menos de duas consultas por vaga e três comandos para 250 notas. O sync ganha
+  teto próprio de 45 minutos com `continue-on-error`, os passos seguintes rodam
+  com o que já foi gravado e a execução termina vermelha se o sync falhar.
+
+## [1.15.1] - 2026-09-19
+
+### Corrigido
+
+- Celular: a tela Buscas cortava os cartões de termo — o conteúdo da trilha é
+  uma grade e o botão "de novo a partir de…" (`whitespace-nowrap`) alargava a
+  coluna além do cartão. `grid-cols-1` no conteúdo, ações do termo em grade de
+  duas colunas com alvo de 44px até `xl`, e o rótulo do intervalo quebra linha.
+  Em tela de toque todo campo tem ao menos `1rem`: o Safari do iPhone dava zoom
+  ao focar os selects de 15px e cortava a tela, inclusive em Vagas. A varredura
+  de larguras do E2E cobre Buscas e acusa elemento cortado dentro de cartão
+  (BUG-20260919-mobile-searches-overflow).
+- Celular: em Skills, a evidência de uma skill a auditar com link longo do CV
+  em markdown ia a 480px numa tela de 375. A grade do cartão ganha
+  `grid-cols-1` e o parágrafo quebra em qualquer ponto (`wrap-anywhere`).
+  Revisão logada de 23 telas em 6 tamanhos, retrato e paisagem: nenhuma rolagem
+  horizontal e nenhum elemento além da borda.
+
 ## [1.15.0] - 2026-09-19
 
 As ADRs citadas como `ADR-0NN` nesta versão são as da feature, em

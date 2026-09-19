@@ -46,9 +46,11 @@ jobs:
     if: github.ref == 'refs/heads/main' && vars.SUPABASE_CRAWL_ENABLED == 'true'
     environment: production
     runs-on: ubuntu-latest
-    # Generoso mas limitado. A varredura inteira leva minutos; uma hora só é
-    # alcançada se alguma fonte estiver pendurando a conexão.
-    timeout-minutes: 60
+    # Generoso mas limitado. O runner fica nos EUA e o banco em São Paulo, e a
+    # 1.15.0 mostrou o que isso custa: com uma consulta por vaga, o sync sozinho
+    # passou de uma hora e a execução foi cancelada antes de buscar os termos e
+    # pontuar. O sync tem teto próprio abaixo; este é o de segurança.
+    timeout-minutes: 90
 
     env:
       DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
@@ -88,7 +90,15 @@ jobs:
           fi
 
       # 1. Buscar. `sync` já pontua ao final; `--no-score` existiria para pular.
+      #
+      #    Teto próprio e `continue-on-error`: um sync que não termina não pode
+      #    levar junto os termos, a captura e a nota do dia, que dependem só do
+      #    que já está no banco. Cada fonte grava ao terminar, então o que foi
+      #    sincronizado até o corte fica. O alarme vermelho sai no último passo.
       - name: Sincronizar as fontes
+        id: sync
+        continue-on-error: true
+        timeout-minutes: 45
         run: pnpm jho jobs sync
 
       # 1b. Repetir as buscas por termo salvas. Depois do sync, que já gastou a
@@ -173,6 +183,12 @@ jobs:
         # Fecha o log com o número que interessa a quem abrir a execução para
         # saber se valeu a pena: quantas vagas existem e quantas estão abertas.
         run: pnpm jho stats
+
+      - name: Conferir o sync
+        if: always() && steps.sync.outcome == 'failure'
+        run: |
+          echo "::error::O sync das fontes falhou ou passou de 45 minutos; os passos seguintes rodaram com o que já estava no banco."
+          exit 1
 
       - name: Conferir a busca por termo
         if: always() && steps.termos.outcome == 'failure'

@@ -18,6 +18,23 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.15.2] - 2026-09-19T21:10:15.298Z
+
+### Corrigido
+
+- A busca diária de vagas volta a terminar: as vagas novas, as buscas por termo
+  salvas e as notas das trilhas passam a ser atualizadas todo dia.
+
+## [1.15.1] - 2026-09-19T20:46:57.557Z
+
+### Corrigido
+
+- No celular, a tela Buscas não corta mais os termos nem os botões, e tocar num
+  campo de escolha não dá mais zoom deixando a tela cortada — em Buscas e em
+  Vagas.
+- No celular, a lista de skills a auditar não corta mais a evidência quando ela
+  traz um link longo do currículo.
+
 ## [1.15.0] - 2026-09-19T18:03:52.117Z
 
 ### Novidade

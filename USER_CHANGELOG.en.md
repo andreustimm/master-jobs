@@ -18,6 +18,23 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.15.2] - 2026-09-19T21:10:15.298Z
+
+### Fixed
+
+- The daily job search finishes again: new jobs, saved term searches and track
+  scores are refreshed every day.
+
+## [1.15.1] - 2026-09-19T20:46:57.557Z
+
+### Fixed
+
+- On a phone, the Searches screen no longer cuts off terms or buttons, and
+  tapping a picker no longer zooms in and leaves the screen cut off — on
+  Searches and on Jobs.
+- On a phone, the skills to review no longer cut off the evidence when it
+  carries a long link from the CV.
+
 ## [1.15.0] - 2026-09-19T18:03:52.117Z
 
 ### New
