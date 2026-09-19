@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.14.2] - 2026-09-19T13:44:44.288Z
+
 ### Fixed
 
 - Hardening of failure alerting: the filter that keeps your data out of an

@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.14.2] - 2026-09-19T13:44:44.288Z
+
 ### Corrigido
 
 - Endurecimento do aviso de falha: o filtro que impede seus dados de

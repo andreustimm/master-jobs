@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.14.2] - 2026-09-19
+
 ### Corrigido
 
 - A peneira final do relato de erro (`beforeSend`) sai da configuração do SDK
