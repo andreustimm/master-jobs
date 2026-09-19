@@ -19,10 +19,8 @@ const config: NextConfig = {
     root: tracingRoot,
   },
 
-  // Both are server-only dependencies whose runtime resolution is intentional:
-  // libSQL is native-adjacent, while unpdf uses `import.meta.resolve` to locate
-  // its bundled PDF.js assets. Webpack cannot preserve that lookup when inlined.
-  serverExternalPackages: ["@libsql/client", "unpdf"],
+  // Server-only PostgreSQL driver; unpdf resolves its bundled PDF.js assets.
+  serverExternalPackages: ["postgres", "unpdf"],
 
   /**
    * O changelog do rodapé é lido do disco em runtime.
@@ -39,7 +37,7 @@ const config: NextConfig = {
    * Declarar é uma linha; descobrir isso em produção é uma tarde.
    */
   outputFileTracingIncludes: {
-    "/**": ["./USER_CHANGELOG.pt-BR.md", "./USER_CHANGELOG.en.md"],
+    "/**": ["./USER_CHANGELOG.pt-BR.md", "./USER_CHANGELOG.en.md", "./config/certs/supabase-ca.crt"],
   },
 
   // Both candidate CVs and manual job descriptions accept files up to 10 MB.

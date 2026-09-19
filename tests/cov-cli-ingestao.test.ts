@@ -58,7 +58,7 @@ beforeAll(async () => {
   await carregarCli();
 });
 
-afterAll(() => {
+afterAll(async () => {
   if (emailOriginal !== undefined) process.env.JHO_CANDIDATE_EMAIL = emailOriginal;
 });
 
@@ -66,8 +66,8 @@ beforeEach(async () => {
   await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 /** Vaga sem descrição: é a que interessa ao robô de raspagem. */

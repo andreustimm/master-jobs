@@ -37,8 +37,8 @@ beforeEach(async () => {
   });
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 async function criarVaga(input: {

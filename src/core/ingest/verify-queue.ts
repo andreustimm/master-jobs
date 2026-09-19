@@ -26,6 +26,7 @@ import { getDb } from "../db/client.ts";
 import { job, verifyTask, type VerifyStatus } from "../db/schema.ts";
 import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
+import { decideReopen, type ReopenDecision } from "./lifecycle.ts";
 import { probe, type ProbeVerdict } from "./probe.ts";
 
 export const MAX_ATTEMPTS = 3;
@@ -131,7 +132,7 @@ export async function enqueueStale(
           like(job.url, "http://%"),
           like(job.url, "https://%"),
         ),
-        sql`coalesce((select max(fit) from job_score where job_id = ${job.id}), 0) >= ${minFit}`,
+        sql`coalesce((select max(fit) from production.job_score where job_id = ${job.id}), 0) >= ${minFit}`,
         or(isNull(job.checkedAt), lt(job.checkedAt, cutoff)),
       ),
     )
@@ -139,7 +140,7 @@ export async function enqueueStale(
     .orderBy(
       sql`${job.checkedAt} is not null`,
       job.checkedAt,
-      desc(sql`coalesce((select max(fit) from job_score where job_id = ${job.id}), 0)`),
+      desc(sql`coalesce((select max(fit) from production.job_score where job_id = ${job.id}), 0)`),
     )
     .limit(opts.limit ?? 200);
 
@@ -157,14 +158,14 @@ export async function claimCheck(worker: string): Promise<ClaimedCheck | null> {
     .set({ status: "checking", claimedAt: nowIso, claimedBy: worker, updatedAt: nowIso })
     .where(
       sql`${verifyTask.id} = (
-        select id from verify_task
+        select id from production.verify_task
         where (
           status = 'pending'
           or (status = 'checking' and claimed_at < ${staleBefore})
         )
         and (run_after is null or run_after <= ${nowIso})
         order by priority desc, id asc
-        limit 1
+        limit 1 for update skip locked
       )`,
     )
     .returning({
@@ -190,9 +191,21 @@ export async function recordVerdict(
   jobId: number,
   verdict: ProbeVerdict,
   status: number | null,
-): Promise<void> {
+): Promise<ReopenDecision> {
   const db = getDb();
   const nowIso = clock().iso();
+
+  const [current] = await db
+    .select({ closedAt: job.closedAt, archivedAt: job.archivedAt })
+    .from(job)
+    .where(eq(job.id, jobId))
+    .limit(1);
+
+  const reopen = decideReopen({
+    verdict,
+    closedAt: current?.closedAt ?? null,
+    archivedAt: current?.archivedAt ?? null,
+  });
 
   const patch: Record<string, unknown> = {
     checkedAt: nowIso,
@@ -201,7 +214,12 @@ export async function recordVerdict(
   };
   // Fechada, não apagada — ADR 0005: uma candidatura pode apontar para ela.
   if (verdict === "gone") patch.closedAt = nowIso;
-  if (verdict === "alive") patch.closedAt = null;
+  if (reopen.kind === "reopen") {
+    patch.closedAt = null;
+    // Um `alive` desfaz também o arquivamento automático: a vaga que voltou a
+    // responder volta ao quadro inteira, não meio escondida.
+    if (reopen.clearsArchive) patch.archivedAt = null;
+  }
 
   await db.update(job).set(patch).where(eq(job.id, jobId));
   await db
@@ -214,6 +232,8 @@ export async function recordVerdict(
       updatedAt: nowIso,
     })
     .where(eq(verifyTask.id, taskId));
+
+  return reopen;
 }
 
 export async function failCheck(taskId: number, error: string): Promise<void> {

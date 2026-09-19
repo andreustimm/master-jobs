@@ -5,6 +5,12 @@
 > [mapa de contextos](engineering/context-map.md); o histórico e as provas ficam
 > no [backlog de remediação](engineering/architecture-remediation.md).
 
+> **Runtime atual (corte Turso → Supabase):** a aplicação conecta somente em
+> PostgreSQL por `DATABASE_URL`; migrations usam `DATABASE_MIGRATION_URL`.
+> Referências a libSQL/Turso mais abaixo são o desenho histórico anterior ao
+> corte e não descrevem um fallback disponível. O snapshot SQLite legado só é
+> lido pelos scripts de seleção/importação em `scripts/migration/`.
+
 ## Por que isto existe
 
 `master-jobs` resolve um problema concreto: encontrar vagas compatíveis com o
@@ -44,8 +50,8 @@ transição explícita de Pursuit.
 | **report / UI** | `src/core/report/`, `app/` | Renderers recebem DTOs e retornam texto; a CLI faz filesystem. A UI Next.js 16 consome APIs públicas dos contextos. | Não duplica SQL nem recalcula score. |
 
 Camadas transversais: `src/core/profile/` (carga e validação Zod do
-`profile.yaml`, insumo do scoring) e `src/core/db/` (client libSQL, schema
-Drizzle, migrations).
+`profile.yaml`, insumo do scoring) e `src/core/db/` (cliente PostgreSQL,
+schema Drizzle, migrations).
 
 > **Invariante:** Adapters são burros — fetch, mapear, retornar. Normalização,
 > deduplicação e scoring acontecem downstream. É isso que faz "adicionar uma
@@ -71,8 +77,8 @@ critério — e o usuário passaria a decidir com duas verdades.
 
 A mesma lógica vale para o bootstrap: `runMigrations()` existe como código
 (`src/core/db/migrate.ts`) e não apenas como `drizzle-kit migrate`, justamente
-para que CLI, testes e um futuro deploy hook da Vercel inicializem o banco pelo
-mesmo caminho.
+para que CLI, testes e o workflow de migration inicializem o banco pelo mesmo
+caminho.
 
 Consequência prática para agentes: **não implemente lógica em `src/cli.ts`**.
 Uma query nova nasce atrás da API pública do contexto proprietário.
@@ -195,8 +201,8 @@ Propriedades que importam:
 
 Dentro de `syncOne()` o processamento é **serial por vaga** — um `SELECT` por
 fingerprint, depois insert/update. É lento por design: paralelizar escritas numa
-mesma conexão libSQL trocaria previsibilidade por pouco ganho, e o gargalo real
-é a rede das APIs públicas, não o SQLite local.
+mesma conexão PostgreSQL troca previsibilidade por pouco ganho, e o gargalo real
+é a rede das APIs públicas.
 
 A contenção de rede é tratada em `src/core/sources/http.ts`: `AbortController`
 com timeout de 20 000 ms, no máximo 2 retries e **apenas** para status em
@@ -210,52 +216,22 @@ wastes time."
 
 ---
 
-## libSQL, não `better-sqlite3`
+## PostgreSQL explícito no runtime
 
-O comentário no topo de `src/core/db/client.ts` é a decisão inteira:
+`src/core/db/client.ts` valida que `DATABASE_URL` é uma URL PostgreSQL e falha
+cedo quando ela não existe. `src/core/db/migrate.ts` abre uma conexão separada
+com `DATABASE_MIGRATION_URL`, que pode ter privilégio de DDL sem concedê-lo ao
+runtime. A composição continua simples e cacheada (`getDb()` / `closeDb()`),
+mas não há fallback para arquivo local ou para Turso.
 
-> "Same driver, same SQL, same migrations. That is the whole reason this project
-> uses libSQL instead of better-sqlite3: Vercel's filesystem is ephemeral, so a
-> local-file-only database would silently lose every application you tracked."
+O ambiente local usa PostgreSQL em Docker, com o mesmo schema e migrations da
+produção. O arquivo SQLite de `data/` e as tabelas de HTML bruto pertencem ao
+snapshot pré-corte e só podem ser processados pela allowlist em
+`scripts/migration/`; eles não são carregados pelo CLI normal.
 
-Estado real hoje e caminho futuro:
-
-| | Hoje (local) | Amanhã (Vercel + Turso) |
-|---|---|---|
-| `TURSO_DATABASE_URL` | ausente → default `file:./data/jobs.db` | `libsql://<db>.turso.io` |
-| `TURSO_AUTH_TOKEN` | não usado | obrigatório |
-| Driver | `@libsql/client` | `@libsql/client` |
-| Migrations | `drizzle/0000_remarkable_solo.sql` via `drizzle-orm/libsql/migrator` | as mesmas |
-| `dialect` do drizzle-kit | `turso` | `turso` |
-
-O que isso compra:
-
-- **Zero dependência nativa.** Nada de `node-gyp`, nada de binário pré-compilado
-  por plataforma, nada de rebuild ao trocar de versão do Node. `pnpm install`
-  funciona igual no macOS do usuário e no builder da Vercel.
-- **Zero reescrita na migração.** Trocar de local para Turso é mudar duas
-  variáveis de ambiente. Nenhuma query, nenhum schema, nenhuma migration muda.
-- **Um único cliente cacheado em módulo** (`getDb()` / `closeDb()`). Hoje quem
-  o usa é o CLI, que fecha no `finally` do `withDb()`; quando a UI existir, o
-  runtime do Next.js manterá o mesmo cliente quente entre requisições — é o
-  cenário que o comentário sobre `closeDb()` em `src/core/db/client.ts`
-  antecipa.
-
-Guarda explícita em `getDb()`: se a URL **não** começa com `file:` e
-`TURSO_AUTH_TOKEN` está vazio, ele lança — "failing loudly here beats a
-confusing 401 deep inside a cron run".
-
-`runMigrations()` complementa: quando a URL é `file:`, ele faz `mkdir` recursivo
-do diretório antes de migrar, senão o libSQL não abre o banco.
-`next.config.ts` declara `serverExternalPackages: ["@libsql/client"]`, mantendo
-o driver fora do bundle do cliente.
-
-> **Invariante:** Sem dependência nativa. libSQL, nunca `better-sqlite3`. Ver
-> `docs/adr/0002-libsql-em-vez-de-better-sqlite3.md`.
-
-> **Invariante:** URL remota sem token falha alto e cedo. Não "degrade
-> graciosamente" para o arquivo local nesse caso — isso produziria um banco
-> paralelo silencioso.
+> **Invariante:** uma URL de banco ausente ou com protocolo errado interrompe a
+> execução antes da primeira query. Conectar acidentalmente em outro banco é
+> pior que falhar alto.
 
 ---
 
@@ -382,9 +358,9 @@ account inside the LinkedIn User Agreement."
 
 | Arquivo | O que é |
 |---|---|
-| `src/core/db/schema.ts` | Composition root Drizzle/SQLite das 28 tabelas. Ownership lógico e APIs estão no mapa de contextos; a declaração física central preserva o grafo de FKs e migrations. |
-| `src/core/db/client.ts` | Cliente libSQL único e cacheado em módulo (`getDb` / `closeDb`), `resolveUrl()` com default `file:./data/jobs.db`, e a guarda que lança quando a URL é remota e `TURSO_AUTH_TOKEN` está vazio. Reexporta `schema`. |
-| `src/core/db/migrate.ts` | `runMigrations(folder = "./drizzle")` via `drizzle-orm/libsql/migrator`; cria o diretório do arquivo com `mkdir` recursivo quando a URL é `file:`, senão o libSQL não abre o banco. |
+| `src/core/db/schema.ts` | Composition root Drizzle/PostgreSQL das 28 tabelas no schema `production`. Ownership lógico e APIs estão no mapa de contextos; a declaração física central preserva o grafo de FKs e migrations. |
+| `src/core/db/client.ts` | Cliente PostgreSQL único e cacheado em módulo (`getDb` / `closeDb`); exige `DATABASE_URL` e rejeita protocolos que não sejam PostgreSQL. Reexporta `schema`. |
+| `src/core/db/migrate.ts` | `runMigrations(folder = "./drizzle/postgres")` via `drizzle-orm/postgres-js/migrator`, usando `DATABASE_MIGRATION_URL` separado do runtime. |
 | `src/core/db/repo.ts` | Implementação SQL legada atrás das APIs públicas. Board filtra antes da paginação e agrega count/facets em SQL, sem teto artificial. UI/CLI não importam este arquivo. |
 
 ### Sourcing
@@ -433,8 +409,8 @@ account inside the LinkedIn User Agreement."
 | `config/sources.yaml` | 12 fontes ativas + 1 entrada `adzuna` comentada. O cabeçalho do arquivo documenta o significado de `handle` por kind. |
 | `drizzle/0000_remarkable_solo.sql` | Única migração; cria as 11 tabelas e todos os índices. |
 | `drizzle/meta/_journal.json`, `drizzle/meta/0000_snapshot.json` | Metadados do drizzle-kit. |
-| `data/jobs.db` | Banco libSQL/SQLite local, gitignored. |
-| `.env.example` | Template comentado das variáveis (banco, `CRON_SECRET`, LinkedIn oficial, Adzuna, user agent, export Obsidian). |
+| `data/jobs.db` | Snapshot SQLite legado, gitignored; não é runtime. |
+| `.env.example` | Template comentado das variáveis (PostgreSQL, `CRON_SECRET`, LinkedIn oficial, Adzuna, user agent, export Obsidian). |
 | `.gitignore` | Ignora `data/`, `*.db*`, `.env` / `.env.local`, `*.token.json`, `.linkedin-session.json`, `out/`, `node_modules/`, `.next/`, `.vercel/`. |
 
 ### Build e ferramental
@@ -443,14 +419,14 @@ account inside the LinkedIn User Agreement."
 |---|---|
 | `package.json` | `master-jobs` 0.1.0, `type: module`, `engines.node >= 24.0.0`. Script `jho` = `node --experimental-strip-types --no-warnings --env-file-if-exists=.env src/cli.ts`. O script `db:seed` chama `pnpm jho db seed`, que carrega o plano de posicionamento e o baseline de métricas. |
 | `tsconfig.json` | `target ES2023`, `module esnext`, `moduleResolution bundler`, `strict`, `noUncheckedIndexedAccess`, `isolatedModules`, **`erasableSyntaxOnly: true`**, `noEmit`, `jsx preserve`, plugin `next`, paths `@/*` e `@core/*`. |
-| `drizzle.config.ts` | `dialect: "turso"`, schema `./src/core/db/schema.ts`, out `./drizzle`, credenciais de `TURSO_DATABASE_URL` (default `file:./data/jobs.db`) + `TURSO_AUTH_TOKEN`, `verbose` e `strict`. |
-| `next.config.ts` | `serverExternalPackages: ["@libsql/client"]`, `experimental.cacheComponents: true` (Next 16 Cache Components), `typedRoutes: true`. Nenhuma rota ou página existe ainda. |
+| `drizzle.config.ts` | Configuração PostgreSQL, schema `./src/core/db/schema.ts`, migrations em `./drizzle/postgres`, e conexão por `DATABASE_MIGRATION_URL`. |
+| `next.config.ts` | `experimental.cacheComponents: true` (Next 16 Cache Components) e `typedRoutes: true`. O dashboard existe e roda localmente em loopback. |
 | `vitest.config.ts` | `include: ["tests/**/*.test.ts"]`, `environment: "node"`, `globals: false`. |
 | `CLAUDE.md` / `AGENTS.md` | Instruções para agentes. São espelhos um do outro. |
 | `.claude/agents/fit-analyst.md`, `.claude/commands/{aplicar,fonte-nova,funil,vagas}.md` | Agente e slash-commands do Claude Code para triagem e funil. |
 | `.claude/skills/{application-kit,candidate-profile,job-triage,linkedin-positioning}/SKILL.md` | As quatro skills que empacotam o procedimento de cada frente. |
 | `.codex/config.toml`, `compozy/loops/job-sweep.yaml`, `compozy/README.md` | Configuração do Codex e o loop de varredura periódica de vagas. |
-| `docs/adr/0001..0006` | As seis decisões arquiteturais registradas: não fazer scraping do LinkedIn, libSQL em vez de better-sqlite3, sourcing via ATS públicos, scoring determinístico, separação entre fato observado e decisão do usuário, TypeScript apagável sem build step. |
+| `docs/adr/0001..0006` | Decisões históricas e ainda válidas: não fazer scraping do LinkedIn, sourcing via ATS públicos, scoring determinístico, separação entre fato observado e decisão do usuário e TypeScript apagável. A ADR 0002 registra o período libSQL anterior ao corte. |
 
 ### Scaffolding vazio
 
@@ -479,8 +455,9 @@ determinístico, não do CLI, da ingestão nem do repo.
 
 | Variável | Lida em | Efeito |
 |---|---|---|
-| `TURSO_DATABASE_URL` | `db/client.ts`, `db/migrate.ts`, `drizzle.config.ts` | Default `file:./data/jobs.db`. Também decide se `runMigrations()` precisa criar o diretório. |
-| `TURSO_AUTH_TOKEN` | `db/client.ts`, `drizzle.config.ts` | Obrigatório quando a URL não começa com `file:` — senão `getDb()` lança. |
+| `DATABASE_URL` | `db/client.ts` | URL PostgreSQL do runtime; obrigatória e sem fallback. |
+| `DATABASE_MIGRATION_URL` | `db/migrate.ts`, `drizzle.config.ts` | URL PostgreSQL com privilégio de migration; obrigatória para `db migrate`. |
+| `DATABASE_CA_CERT` | `db/client.ts` | CA opcional para PostgreSQL gerenciado. |
 | `JHO_PROFILE_PATH` | `profile/load.ts` | Override do caminho de `profile.yaml`. |
 | `JHO_SOURCES_PATH` | `sources/config.ts` | Override do caminho de `sources.yaml`. |
 | `JHO_USER_AGENT` | `sources/http.ts` | Header `user-agent` em toda requisição; fallback `master-jobs/0.1 (personal job search)`. |
@@ -496,8 +473,9 @@ determinístico, não do CLI, da ingestão nem do repo.
 Fase 1 está pronta e validada: 12 fontes configuradas, 4.824 vagas ingeridas num
 sync real, scoring auditável, funil funcionando, export pro Obsidian.
 
-**Não existe ainda**: UI Next.js (nenhuma rota ou página em `app/`), deploy na
-Vercel, geração de CV/cover letter e a integração de publicação no LinkedIn. As
+O dashboard Next.js existe e roda localmente; o corte de produção para Supabase
+e a reativação da ingestão remota continuam pendentes. Ainda não existe geração
+de CV/cover letter nem a integração de publicação no LinkedIn. As
 tabelas `post`, `engagement` e `target_account` estão no schema, mas nenhum
 código escreve nelas hoje. `positioning_task` e `metric_snapshot` já têm
 escrita: `seedPositioning()` insere/atualiza tarefas e insere o baseline com

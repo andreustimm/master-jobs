@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { and, desc, eq } from "drizzle-orm";
 import { closeDb, getDb } from "./core/db/client.ts";
+import { runDatabaseCleanup } from "./core/db/retention.ts";
 import { runMigrations } from "./core/db/migrate.ts";
 import { listBoard } from "./contexts/matching/index.ts";
 import { pipelineCounts, setApplicationStatus } from "./contexts/pursuit/index.ts";
@@ -42,6 +43,7 @@ import {
   queueEngagement,
   recordMetric,
 } from "./core/positioning/engage.ts";
+import { archiveClosedJobs } from "./core/ingest/archive.ts";
 import { addJob } from "./core/ingest/manual.ts";
 import { syncAll, pruneClosed } from "./core/ingest/run.ts";
 import { verifyJobs } from "./core/ingest/verify.ts";
@@ -129,7 +131,7 @@ async function withDb<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } finally {
-    closeDb();
+    await closeDb();
   }
 }
 
@@ -203,7 +205,7 @@ db.command("check")
       for (const violation of violations) {
         console.error(
           c.dim(
-            `  ${violation.table} rowid=${violation.rowid} → ${violation.parent} fk=${violation.fkid}`,
+            `  ${violation.table} key=${JSON.stringify(violation.key)} → ${violation.parent} fk=${violation.constraint}`,
           ),
         );
       }
@@ -224,12 +226,43 @@ db.command("prune")
     });
   });
 
+db.command("cleanup")
+  .description("Inventory or remove reconstructable database payloads")
+  .option("--apply", "apply the cleanup; without this flag the command is read-only")
+  .option("--closed-days <n>", "delete untracked jobs closed longer than N days", "90")
+  .option("--page-html-days <n>", "retain parsed raw page HTML for N days", "0")
+  .action(async (opts: { apply?: boolean; closedDays: string; pageHtmlDays: string }) => {
+    await withDb(async () => {
+      const result = await runDatabaseCleanup({
+        apply: opts.apply === true,
+        closedJobDays: Number(opts.closedDays),
+        pageHtmlDays: Number(opts.pageHtmlDays),
+      });
+      const mib = (result.candidates.reclaimableBytes / 1_048_576).toFixed(1);
+      console.log(
+        `${c.bold(opts.apply ? "Database cleanup" : "Database cleanup · dry-run")}\n` +
+          `  ${result.candidates.onlineJobs} online job payload(s) compactable\n` +
+          `  ${result.candidates.parsedPages} parsed page HTML payload(s) removable\n` +
+          `  ${result.candidates.closedJobs} closed untracked job(s) prunable\n` +
+          `  ${mib} MiB of reconstructable payload identified`,
+      );
+      if (!result.applied) {
+        console.log(c.dim("  Nothing changed. Run again with --apply to persist."));
+        return;
+      }
+      console.log(
+        `${c.green("✓")} compacted ${result.applied.compactedJobs} job(s), ` +
+          `cleared ${result.applied.clearedPages} page(s), ` +
+          `pruned ${result.applied.prunedJobs} job(s)`,
+      );
+    });
+  });
+
 db.command("seed")
   .description("Semear o banco: conta do dono, catálogo de skills, provedores e plano de posicionamento")
   .option("--skip-auth", "não criar a conta do dono")
   .action(async (opts: { skipAuth?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
 
       // Ordem deliberada: primeiro o que destrava o uso do sistema (entrar),
       // depois o que o enriquece. Um seed que falha no meio deve ter deixado o
@@ -264,6 +297,23 @@ db.command("seed")
         `${r.metricsInserted} métrica(s) de baseline`,
       );
       console.log(c.dim("\n  Tudo idempotente: rodar de novo não duplica nem sobrescreve.\n"));
+    });
+  });
+
+db.command("seed-fixtures")
+  .description("Semear o acervo de exemplo de dev/staging — sem rede, sem dado de produção")
+  .action(async () => {
+    await withDb(async () => {
+      const { seedFixtures } = await import("./core/db/seed-fixtures.ts");
+      const r = await seedFixtures();
+
+      console.log(
+        `${c.green("✓")} ${r.jobs.inserted} vaga(s) criada(s), ${r.jobs.updated} atualizada(s)`,
+      );
+      console.log(
+        `${c.green("✓")} ${r.candidates.inserted} candidato(s) criado(s), ${r.candidates.updated} atualizado(s)`,
+      );
+      console.log(c.dim("\n  Corpus declarado em src/core/db/fixtures.ts — ADR 0021.\n"));
     });
   });
 
@@ -385,7 +435,6 @@ fx.command("refresh")
   .option("--base <currency>", "base currency", "USD")
   .action(async (opts: { base: string }) => {
     await withDb(async () => {
-      await runMigrations();
       const r = await refreshRates(opts.base.toUpperCase());
       console.log(
         `${c.green("\u2713")} ${r.count} cotações de ${c.bold(r.date)} ` +
@@ -476,7 +525,6 @@ jobs
   .option("--no-score", "skip scoring after the sync")
   .action(async (opts: { concurrency: string; score: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const configs = await loadSources();
       console.log(`Syncing ${configs.length} source(s)…\n`);
 
@@ -522,7 +570,6 @@ jobs
   .option("--concurrency <n>", "parallel sources", "4")
   .action(async (opts: { minFit: string; limit: string; concurrency: string }) => {
     await withDb(async () => {
-      await runMigrations();
       const configs = await loadSources();
       const result = await syncAll(configs, { concurrency: Number(opts.concurrency) });
       const candidateId = await activeCandidateId();
@@ -713,7 +760,6 @@ jobs
     description?: string; posted?: string; notes?: string; status?: string;
   }) => {
     await withDb(async () => {
-      await runMigrations();
       const result = await addJob({
         url,
         title: opts.title,
@@ -777,7 +823,6 @@ jobs
     source: string; label?: string; company?: string; baseUrl?: string; dryRun?: boolean;
   }) => {
     await withDb(async () => {
-      await runMigrations();
       const parsed = await parseFile(file, { company: opts.company, baseUrl: opts.baseUrl });
 
       for (const w of parsed.warnings) console.log(c.yellow(`  ! ${w}`));
@@ -868,6 +913,51 @@ jobs
         );
       }
       if (opts.dryRun) console.log(c.dim("  --dry-run: nada foi fechado."));
+      console.log();
+    });
+  });
+
+jobs
+  .command("archive")
+  .description("Tira do quadro ativo vagas fechadas há tempo — sem apagar candidatura")
+  .option("--closed-days <n>", "arquivar fechamentos anteriores a N dias", "90")
+  .option("--limit <n>", "teto de vagas examinadas por execução", "500")
+  .option("--apply", "aplicar; sem esta flag o comando é somente leitura")
+  .action(async (opts: { closedDays: string; limit: string; apply?: boolean }) => {
+    await withDb(async () => {
+      const r = await archiveClosedJobs({
+        apply: opts.apply === true,
+        closedDays: Number(opts.closedDays),
+        limit: Number(opts.limit),
+      });
+
+      console.log(
+        `${c.bold(opts.apply ? "Arquivamento" : "Arquivamento · dry-run")}\n` +
+        `  corte: fechadas até ${r.policy.cutoff.slice(0, 10)} (${r.policy.closedDays} dias)\n` +
+        `  ${r.scanned} examinada(s) · ${c.green(`${r.eligible} elegível(is)`)}` +
+        (r.preservedByApplication > 0
+          ? ` · ${r.preservedByApplication} com candidatura preservada`
+          : ""),
+      );
+
+      const kept = Object.entries(r.kept).filter(([, n]) => n > 0);
+      if (kept.length > 0) {
+        console.log(c.dim(`  mantidas: ${kept.map(([k, n]) => `${n} ${k}`).join(" · ")}`));
+      }
+
+      if (!r.applied) {
+        console.log(c.dim("  Nada mudou. Rode de novo com --apply para persistir."));
+      } else {
+        console.log(`${c.green("✓")} ${r.applied.archived} arquivada(s)`);
+        if (r.applied.claimedByAnotherRun > 0) {
+          console.log(
+            c.dim(`  ${r.applied.claimedByAnotherRun} já tinham sido arquivadas por outra execução.`),
+          );
+        }
+      }
+      if (r.hasMore) {
+        console.log(c.dim("  Há mais elegíveis além do teto — rode de novo para continuar."));
+      }
       console.log();
     });
   });
@@ -1138,7 +1228,6 @@ contacts
       return;
     }
     await withDb(async () => {
-      await runMigrations();
       const r = await addContact({
         name,
         company: opts.company,
@@ -1171,7 +1260,6 @@ contacts
   .description("Seed companies you have worked with — your strongest referral surface")
   .action(async () => {
     await withDb(async () => {
-      await runMigrations();
       const r = await seedWorkHistory();
       console.log(
         `${c.green("\u2713")} ${r.inserted} empresa(s) adicionada(s), ${r.updated} atualizada(s)`,
@@ -1329,7 +1417,6 @@ mail
   .option("--dry-run", "classify and report without writing anything")
   .action(async (path: string, opts: { dryRun?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const candidateId = await activeCandidateId();
       const r = await importMail(path, { candidateId, dryRun: opts.dryRun });
 
@@ -1444,7 +1531,6 @@ engage
       return;
     }
     await withDb(async () => {
-      await runMigrations();
       const id = await queueEngagement({
         kind,
         targetUrl: url,
@@ -1554,7 +1640,6 @@ posts
       return;
     }
     await withDb(async () => {
-      await runMigrations();
       const id = await draftPost({
         slug,
         pillar,
@@ -1610,7 +1695,6 @@ metrics
   .option("-n, --note <text>", "context")
   .action(async (key: string, value: string, opts: { at?: string; note?: string }) => {
     await withDb(async () => {
-      await runMigrations();
       await recordMetric(key, Number(value), { at: opts.at, note: opts.note });
       console.log(`${c.green("\u2713")} ${key} = ${value}`);
     });
@@ -1734,7 +1818,6 @@ cv.command("set <file>")
   .option("-l, --label <text>", "version label")
   .action(async (file: string, opts: { label?: string }) => {
     await withDb(async () => {
-      await runMigrations();
       const content = await readFile(file, "utf8");
       if (content.trim().length < 100) {
         console.error(c.red("Arquivo curto demais para ser um currículo."));
@@ -1757,7 +1840,6 @@ cv.command("import <file>")
   .option("--dry-run", "mostrar o que seria extraído sem salvar")
   .action(async (file: string, opts: { label?: string; dryRun?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const bytes = await readFile(file);
       const { extractPdfText } = await import("./core/pdf.ts");
       const r = await extractPdfText(new Uint8Array(bytes));
@@ -1874,7 +1956,6 @@ auth
   .description("Modo de autenticação e contas cadastradas")
   .action(async () => {
     await withDb(async () => {
-      await runMigrations();
       const { isOpenMode } = await import("./contexts/auth/index.ts");
       const { authUser } = await import("./core/db/schema.ts");
       const users = await getDb().select().from(authUser);
@@ -1913,7 +1994,6 @@ auth
   .option("--force", "redefinir a senha mesmo se a conta já tiver uma")
   .action(async (email: string | undefined, opts: { password?: string; force?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const { seedOwner } = await import("./contexts/auth/index.ts");
 
       try {
@@ -1959,7 +2039,6 @@ auth
   .option("--candidate <id>", "candidato que esta conta representa")
   .action(async (email: string, opts: { role: string; candidate?: string }) => {
     await withDb(async () => {
-      await runMigrations();
       const { ROLES } = await import("./contexts/auth/index.ts");
       const roles = opts.role.split(",").map((r) => r.trim());
       const invalid = roles.filter((r) => !(ROLES as readonly string[]).includes(r));
@@ -2005,7 +2084,6 @@ auth
   .option("--stdin", "ler a senha de stdin, uma linha — para automação")
   .action(async (email: string, opts: { stdin?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const { checkPassword, MIN_LENGTH, setPassword } = await import("./contexts/auth/index.ts");
 
       // Never as an argument: argv shows up in shell history and in `ps`.
@@ -2056,7 +2134,6 @@ auth
   .description("Gerar um link de acesso de uso único")
   .action(async (email: string) => {
     await withDb(async () => {
-      await runMigrations();
       const { startLogin } = await import("./contexts/auth/index.ts");
       const { token, expiresAt } = await startLogin(email);
       console.log(`\n${c.bold("Link de acesso")} ${c.dim(`· válido até ${expiresAt.slice(11, 16)}`)}`);
@@ -2095,7 +2172,6 @@ llm
   .description("Cadastrar os provedores conhecidos")
   .action(async () => {
     await withDb(async () => {
-      await runMigrations();
       const { seedProviders } = await import("./core/llm/registry.ts");
       const r = await seedProviders();
       console.log(`${c.green("\u2713")} ${r.providers} provedor(es), ${r.models} modelo(s)`);
@@ -2109,7 +2185,6 @@ llm
   .option("--all", "incluir desabilitados")
   .action(async (opts: { all?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const { chooseModel, listModels } = await import("./core/llm/registry.ts");
       const models = await listModels(!opts.all);
 
@@ -2168,7 +2243,6 @@ llm
   .option("--base-url <url>", "endpoint, para serviço compatível ou self-hosted")
   .action(async (slug: string, opts: { label: string; keyEnv: string; kind: string; baseUrl?: string }) => {
     await withDb(async () => {
-      await runMigrations();
       const { isKind } = await import("./core/llm/registry.ts");
       if (!isKind(opts.kind)) {
         console.error(c.red(`\n  Tipo inválido: ${opts.kind}. Use anthropic, openai ou compatible.\n`));
@@ -2205,7 +2279,6 @@ llm
   .option("--out-cost <usd>", "custo de saída por milhão de tokens")
   .action(async (providerSlug: string, modelId: string, opts: Record<string, string | boolean>) => {
     await withDb(async () => {
-      await runMigrations();
       const { isEffort } = await import("./core/llm/registry.ts");
       const effort = typeof opts.effort === "string" ? opts.effort : null;
       if (effort && !isEffort(effort)) {
@@ -2426,7 +2499,6 @@ scrape
   .option("--refresh", "recapturar vagas que já têm página")
   .action(async (opts: { minFit: string; limit: string; refresh?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const { enqueuePending } = await import("./core/scrape/queue.ts");
       const r = await enqueuePending({
         minFit: Number(opts.minFit),
@@ -2455,7 +2527,6 @@ scrape
   .option("--parse-only", "só tratar o que já foi capturado")
   .action(async (opts: { concurrency: string; limit?: string; fetchOnly?: boolean; parseOnly?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
       const concurrency = Number(opts.concurrency);
       const limit = opts.limit ? Number(opts.limit) : undefined;
 
@@ -2683,7 +2754,6 @@ skills
   .description("Load the global skill catalogue")
   .action(async () => {
     await withDb(async () => {
-      await runMigrations();
       const r = await seedCatalog();
       console.log(`${c.green("\u2713")} ${r.inserted} skill(s) adicionada(s), ${r.updated} atualizada(s)`);
     });
@@ -2697,7 +2767,6 @@ skills
   .option("--all", "mostrar também o que já está coberto")
   .action(async (opts) => {
     await withDb(async () => {
-      await runMigrations();
       const candidateId = await syncCandidateFromProfile();
       const doc = await currentDocument(candidateId, "cv");
       if (!doc) {
@@ -2768,7 +2837,6 @@ skills
   .description("Detect skills in the current CV — produces candidates for audit, not claims")
   .action(async () => {
     await withDb(async () => {
-      await runMigrations();
       const candidateId = await syncCandidateFromProfile();
       const doc = await currentDocument(candidateId, "cv");
       if (!doc) {

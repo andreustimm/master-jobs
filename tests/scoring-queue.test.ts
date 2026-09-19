@@ -56,9 +56,9 @@ beforeEach(async () => {
   setClock(relogio);
 });
 
-afterEach(() => {
+afterEach(async () => {
   resetClock();
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 async function criarCandidato(slug = "dono"): Promise<number> {

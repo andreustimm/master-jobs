@@ -245,8 +245,8 @@ beforeEach(async () => {
   });
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 type SeedJob = {

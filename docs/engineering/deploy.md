@@ -2,12 +2,16 @@
 
 ---
 
-# Implantar na Vercel com Turso
+# Implantar na Vercel com PostgreSQL/Supabase
 
-O código já fala Turso: `src/core/db/client.ts` lê `TURSO_DATABASE_URL` e
-`TURSO_AUTH_TOKEN` e cai para `file:./data/jobs.db` quando não há nenhum. Não há
-adaptador a escrever — o que existe é migração de dado, configuração e três
-decisões que a mudança de forma de execução força.
+O runtime atual exige PostgreSQL explícito: `src/core/db/client.ts` lê
+`DATABASE_URL`, e `src/core/db/migrate.ts` usa `DATABASE_MIGRATION_URL` para
+migrations. Não há fallback para SQLite/Turso. O snapshot SQLite legado só pode
+ser lido pelo harness de seleção/importação revisado em
+`scripts/migration/`; ele não é uma base de runtime.
+
+O procedimento Turso que existia antes do corte está preservado apenas como
+contexto histórico no [incidente de cota](../operations/turso-quota-incident-2026-09-03.md).
 
 ## O que muda ao sair do laptop
 
@@ -38,10 +42,10 @@ Duas saídas, e a escolha é de custo:
 - **Cron da Vercel chamando uma rota que processa um lote pequeno.** É o que o
   `vercel.json` prevê: uma chamada por dia que consome parte da fila. Simples,
   cabe no plano gratuito, e leva dias para vencer uma fila grande.
-- **Continuar rodando no laptop, contra a Turso.** O `jho` aponta para o banco
-  remoto pelas mesmas variáveis, e a máquina que já roda a sincronização
-  continua rodando. Zero infraestrutura nova, e é o caminho recomendado
-  enquanto o operador for um.
+- **Continuar rodando o runner fora da Vercel.** O GitHub Actions aponta para o
+  PostgreSQL de produção por secret e tem até seis horas por job; localmente,
+  o mesmo worker aponta para a instância Docker isolada. Nenhuma captura longa
+  deve ficar presa ao limite de uma função Edge.
 
 ### 3. `profile.yaml` e `sources.yaml` são lidos do disco em runtime
 
@@ -57,11 +61,45 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 
 | Variável | Onde | Para quê |
 |---|---|---|
-| `TURSO_DATABASE_URL` | Vercel + local | `libsql://<banco>-<org>.turso.io` |
-| `TURSO_AUTH_TOKEN` | Vercel + local | token do banco |
+| `DATABASE_URL` | aplicação | URL PostgreSQL de runtime, de **role restrita** ([como criar](#dar-login-à-role-de-runtime)); vence as demais |
+| `POSTGRES_URL` | Vercel (integração) | usada no runtime quando não há `DATABASE_URL` — conecta como **superusuário**, então é rede de segurança e não destino |
+| `DATABASE_MIGRATION_URL` | migration/CI | URL PostgreSQL com privilégio de DDL |
+| `POSTGRES_URL_NON_POOLING` | Vercel (integração) | usada na migration quando não há a de cima |
+| `DATABASE_CA_CERT` | CI/Vercel | o PEM da CA **ou** o caminho de um arquivo |
+| `SUPABASE_CRAWL_ENABLED` | Actions produção | `true` somente após os gates de quota/retensão |
 | `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela o link vai para o log |
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |
 | `CRON_SECRET` | Vercel | protege a rota de cron; a Vercel a envia em `authorization` |
+
+**A URL pode vir de mais de um nome, e a ordem é declarada.** A integração do
+Supabase com a Vercel cadastra `POSTGRES_URL` e `POSTGRES_URL_NON_POOLING` e as
+**mantém** — rotação de senha acontece do lado do provedor e chega sozinha.
+Exigir que alguém copiasse aquele valor para uma `DATABASE_URL` genérica criaria
+duas fontes da verdade que divergem no dia da rotação, e o sintoma apareceria
+como produção fora do ar. Então os nomes com prefixo valem, nesta ordem:
+
+| Papel | Ordem de resolução |
+|---|---|
+| runtime | `DATABASE_URL` → `POSTGRES_URL` → `POSTGRES_URL_NON_POOLING` |
+| migration | `DATABASE_MIGRATION_URL` → `POSTGRES_URL_NON_POOLING` → `POSTGRES_URL` |
+
+A diferença entre as duas listas não é enfeite: DDL não deve atravessar o pooler
+em modo transação, e o runtime serverless quer justamente o pooler.
+`DATABASE_URL` vence as duas porque é ela que o ambiente local, o Docker e o CI
+configuram explicitamente. Variável em branco conta como ausente, e o erro de
+configuração **nomeia a variável** de onde a URL veio — nunca o valor.
+
+**Query string:** parâmetros de pool (`pgbouncer`, `connection_limit`) são
+descartados, porque a configuração do cliente já é explícita. Parâmetros de TLS
+(`sslmode`, `ssl`, `sslrootcert`…) são **recusados** com erro, e não apagados em
+silêncio: a política de TLS é do cliente, e apagar `sslmode=disable` deixaria
+quem escreveu convencido de que desligou a verificação.
+
+**`DATABASE_CA_CERT` aceita as duas formas:** o PEM colado direto na variável
+(o gesto natural num painel serverless, onde não há onde pôr arquivo) ou o
+caminho de um arquivo. O repositório versiona `config/certs/supabase-ca.crt` e o
+`next.config.ts` o declara em `outputFileTracingIncludes` para ele viajar no
+bundle. Valor que não é nenhum dos dois falha nomeando a variável.
 
 `RESEND_API_KEY` e `RESEND_FROM` formam um par: se qualquer uma estiver ausente
 ou vazia, `configuredMailer` usa o adapter de console e nenhum e-mail é enviado.
@@ -84,12 +122,12 @@ desenvolvimento local e num endereço público é o vazamento inteiro.
 Um banco por ambiente, no grupo `master-jobs` em `aws-us-east-1` — a mesma
 região das funções da Vercel (`iad1`), para o round-trip não atravessar o país.
 
-| Branch | Endereço | Banco Turso | Ambiente Vercel |
+| Branch | Endereço | Banco | Ambiente Vercel |
 |---|---|---|---|
-| `main` | `jobs.mastertimm.com.br` | `master-jobs` | Production |
-| `staging` | `jobs-staging.mastertimm.com.br` | `master-jobs-staging` | Preview |
-| `dev` | `jobs-dev.mastertimm.com.br` | `master-jobs-dev` | Preview |
-| — | local | `file:./data/jobs.db` | Development |
+| `main` | `jobs.mastertimm.com.br` | Supabase produção (`production`) | Production |
+| `staging` | `jobs-staging.mastertimm.com.br` | fixture PostgreSQL isolada (provisionamento pendente) | Preview |
+| `dev` | `jobs-dev.mastertimm.com.br` | fixture PostgreSQL isolada (provisionamento pendente) | Preview |
+| — | local | PostgreSQL Docker isolado (`127.0.0.1:5432`) | Development |
 
 Os três compartilham o schema; só o de produção carrega dado real. `dev` e
 `staging` nascem vazios de propósito: copiar produção para lá levaria junto
@@ -97,10 +135,12 @@ Os três compartilham o schema; só o de produção carrega dado real. `dev` e
 verdade num ambiente com menos cuidado. Para popular um deles, aponte o script
 para a URL correspondente e escolha à mão o que copiar.
 
-As variáveis `TURSO_*` de `staging` e `dev` estão declaradas **por branch** no
-ambiente Preview da Vercel, e não só no Preview genérico. Sem isso as duas
-branches dividiriam o mesmo banco, e uma migração destrutiva testada em `dev`
-levaria `staging` junto.
+`staging` e `dev` não recebem a URL, o certificado ou os secrets de produção.
+Enquanto as fixtures remotas não forem provisionadas, esses deployments ficam
+sem ingestão externa e usam somente dados sintéticos versionados. Um eventual
+ambiente compartilhado precisa de uma ADR própria sobre quota, roles,
+`search_path` e migrations; criar schemas no projeto de produção não é um
+atalho seguro.
 
 ### DNS
 
@@ -122,9 +162,10 @@ pública também toda URL de preview de PR.
 
 ## A varredura diária
 
-> **Pausa operacional — 03/09/2026:** o workflow e o cron da Vercel estão
-> temporariamente desabilitados para proteger a cota compartilhada do Turso.
-> Consulte o [diagnóstico e os gates de reativação](../operations/turso-quota-incident-2026-09-03.md).
+> **Pausa operacional:** o workflow permanece opt-in até concluir o corte para
+> Supabase, a importação seletiva e os gates de retenção. O incidente Turso de
+> 03/09/2026 é apenas o diagnóstico histórico; consulte os
+> [gates documentados](../operations/turso-quota-incident-2026-09-03.md).
 
 Quando habilitado, `.github/workflows/varredura.yml` roda `jobs sync`, `scrape
 queue`+`run` e `jobs recheck queue`+`run` contra **produção**, todo dia às
@@ -161,56 +202,117 @@ com aviso e as outras fontes seguem.
 
 `.github/workflows/ci.yml` roda typecheck, testes com cobertura e build no PR e
 no push das três branches. `migrate.yml` aplica migrações somente em produção,
-no push de `main`. As migrações de `dev` e `staging` estão desativadas porque
-seus bancos Turso foram excluídos para reduzir consumo. A reativação exige
-provisionar os bancos, configurar seus tokens e restaurar os gatilhos e passos
-correspondentes no workflow. Esta configuração não pausa os deployments da Vercel.
+por `workflow_dispatch`, depois de confirmar o project ref do Supabase. As
+migrations de `dev` e `staging` ficam desativadas até existirem bancos de
+fixture isolados. Esta configuração não pausa os deployments da Vercel.
 
 **A Vercel implanta no push, independente do CI.** As duas coisas disparam do
 mesmo evento e não se conhecem: sem proteção de branch em `main` exigindo o CI
 verde, o workflow vermelho não impede o deploy. O portão existe, mas só fecha
 depois que alguém liga a proteção em Settings → Branches.
 
-O único segredo usado por `migrate.yml` é `TURSO_TOKEN_PROD`.
+O segredo usado por `migrate.yml` é `SUPABASE_MIGRATION_URL`; o workflow valida o
+project ref antes de abrir a conexão.
 
 ## Migrar o banco
 
 ```bash
-turso db tokens create master-jobs
-
-export TURSO_DATABASE_URL="libsql://master-jobs-andreustimm.aws-us-east-1.turso.io"
-export TURSO_AUTH_TOKEN="..."
-
-pnpm jho db migrate          # cria o schema no banco remoto
-node scripts/turso-migrate.mjs --dry-run --skip-html
-node scripts/turso-migrate.mjs --skip-html
+export DATABASE_MIGRATION_URL="postgresql://..."
+pnpm jho db migrate
+DATABASE_URL="$DATABASE_MIGRATION_URL" pnpm jho db check
 ```
 
-`--reset` limpa o destino antes de copiar. É o que se usa para refazer uma carga
-que morreu no meio: sem ele o script recusa destino não-vazio, porque
-`INSERT OR REPLACE` sobrescreveria em silêncio um banco que talvez não seja o
-que se pensa.
+Em produção, o caminho aprovado é o workflow manual `migrate.yml`, com
+`confirm_project=bujawvnxwtmneiggizje`. A migration deve ser aplicada e
+verificada antes da importação de dados; o workflow recusa outro project ref.
 
-As FKs ficam desligadas durante a cópia via `client.migrate()`, e **não** por
-`PRAGMA foreign_keys=OFF`: o pragma é ignorado dentro de transação, e
-`batch(…, "write")` abre uma. O `pragma foreign_key_check` no fim é o que
-confere o resultado.
+Para o snapshot legado, `scripts/migration/select-production.ts` aplica a
+allowlist de tabelas e exclui sessões, tokens, filas e HTML de crawler. O
+`scripts/migration/import-production.ts` importa somente a seleção verificada,
+exige destino vazio, mantém as FKs ativas e aborta acima de 400 MiB. Não há
+comando de reset destrutivo implícito: uma nova carga deve usar uma instância
+local vazia ou um destino explicitamente provisionado.
 
-O banco local tem **529 MB**, e a maior parte não é o que parece:
+As FKs não são desligadas durante a cópia PostgreSQL. A transação trava as
+tabelas, verifica o schema esperado, importa em ordem de dependência e compara
+um hash normalizado de cada tabela antes de ajustar as identities.
+
+O snapshot SQLite legado tinha **525,7 MiB**, e a maior parte era entrada
+reconstruível duplicada:
 
 | | tamanho | linhas |
 |---|---:|---:|
-| `job_page.html` + `text` | 145 MB | 220 |
-| `job.description_text` + `raw` | 130 MB | 8.768 |
+| `job_page.html` | 137,1 MiB | 220 |
+| `job.raw` | 125,3 MiB | 13.384 |
+| `job.description_html` | 67,7 MiB | 13.384 |
+| `job.description_text` | 65,7 MiB | 13.384 |
 
-`job_page.html` é HTML bruto guardado para o `jho scrape reparse` — reextrair
-quando o parser melhora, sem tornar a buscar a página. São 660 KB por linha, e
-é o único dado do sistema que existe apenas para ser reprocessado.
+Esses números são históricos, não uma meta para o Supabase. Desde a ADR 0019,
+`job_page.html` é apagado após extração bem-sucedida; fontes de rede também
+deixam de persistir o payload integral em `raw` e `description_html` (o
+`workplaceType` mínimo permanece quando declarado). O limite de importação atual
+é 400 MiB, e a limpeza semanal remove somente dados reconstruíveis e vagas
+fechadas sem candidatura:
 
-`--skip-html` deixa esses 145 MB para trás. O custo é que um reparse futuro
-precisará rebuscar as páginas; o ganho é migrar menos de um terço do volume. A
-escolha é de quem implanta, e por isso não tem padrão implícito: a flag precisa
-ser digitada.
+```bash
+pnpm jho db cleanup
+pnpm jho db cleanup --apply
+```
+
+Páginas cuja extração falhou preservam HTML para reprocessamento; páginas
+tratadas não devem acumular o HTML bruto indefinidamente.
+
+## Dar login à role de runtime
+
+A migration `0001_production_access` cria `master_jobs_runtime` **sem login e
+sem privilégio administrativo**, e concede a ela exatamente o que a aplicação
+usa: `USAGE` no schema, `SELECT/INSERT/UPDATE/DELETE` nas tabelas e
+`USAGE/SELECT` nas sequências — com `ALTER DEFAULT PRIVILEGES` para que tabela
+nova nasça acessível. O que ela **não** tem: criar tabela, criar role, replicar,
+ignorar RLS.
+
+Dar senha a ela é passo de operador, e é por isso que a migration não o faz:
+senha dentro de migration vira segredo versionado, copiado em backup e lido por
+quem abrir o repositório.
+
+O papel de grupo existe para que a credencial seja trocável sem mexer em
+permissão. Criar o login, uma vez, com a conexão privilegiada:
+
+```sql
+-- Senha forte gerada localmente; ela nunca entra no repositório.
+CREATE ROLE master_jobs_app LOGIN PASSWORD '<gerada>' NOSUPERUSER NOCREATEDB
+  NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+GRANT master_jobs_runtime TO master_jobs_app;
+```
+
+E então cadastrar na Vercel, em Production:
+
+```
+DATABASE_URL=postgresql://master_jobs_app:<senha>@<host>:5432/postgres
+```
+
+**Sem query string** — a política de TLS é do cliente, e `?sslmode=...` é
+recusado com erro que nomeia a variável.
+
+**Por que isto importa mesmo com o fallback.** O runtime aceita `POSTGRES_URL`
+quando `DATABASE_URL` falta, e é isso que faz o deploy subir sem configuração
+manual. Só que a variável que a integração do Supabase cadastra conecta como
+`postgres`, **o superusuário**: funciona, e joga fora a separação de privilégio
+que esta seção descreve. O fallback é rede de segurança contra indisponibilidade,
+não o destino.
+
+Para conferir que a role ficou com o alcance certo, sem adivinhar:
+
+```sql
+SELECT rolsuper, rolcreatedb, rolcreaterole, rolbypassrls
+  FROM pg_roles WHERE rolname = 'master_jobs_app';       -- tudo false
+SELECT has_table_privilege('master_jobs_app', 'production.job', 'SELECT'),
+       has_schema_privilege('master_jobs_app', 'production', 'CREATE');
+                                                          -- true, false
+```
+
+A rotação é trocar a senha de `master_jobs_app` e atualizar `DATABASE_URL`: as
+permissões ficam no papel de grupo e não são reescritas.
 
 ## O que confirmar depois de subir
 

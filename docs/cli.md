@@ -72,9 +72,9 @@ um subcomando.
 ### `jho db migrate`
 
 `"Create or upgrade the database schema"`. Chama `runMigrations()`
-(`drizzle-orm/libsql/migrator` sobre a pasta `./drizzle`). Quando a URL do banco começa
-com `file:`, `runMigrations()` cria o diretório do arquivo com `mkdir` recursivo antes —
-sem isso o libSQL não abre o banco.
+(`drizzle-orm/postgres-js/migrator` sobre a pasta `./drizzle/postgres`). O comando
+usa `DATABASE_MIGRATION_URL`, separado da URL de runtime, e não cria banco de
+arquivo nem faz fallback para SQLite/Turso.
 
 Sem flags.
 
@@ -113,6 +113,30 @@ pnpm jho db prune --days 120
 > ela protege explicitamente tudo que tem candidatura registrada
 > (`job.id not in (select job_id from application)`). Remover esse `not in` apaga
 > histórico irrecuperável.
+
+---
+
+### `jho db cleanup`
+
+Inventaria payloads reconstruíveis e vagas fechadas elegíveis para poda. Sem
+`--apply` é somente leitura; isso torna seguro medir produção antes de alterar.
+
+| Flag | Default | Descrição |
+|---|---|---|
+| `--apply` | ausente | aplica a limpeza inventariada |
+| `--closed-days <n>` | `90` | poda vaga fechada sem candidatura após N dias |
+| `--page-html-days <n>` | `0` | retenção do HTML bruto já tratado |
+
+```bash
+pnpm jho db cleanup
+pnpm jho db cleanup --apply
+```
+
+O comando compacta `job.raw` e `job.description_html` apenas para fontes de
+rede, preservando o `workplaceType` mínimo quando existe. Ele limpa
+`job_page.html` apenas após extração bem-sucedida e protege toda vaga ligada a
+`application`. Turso não oferece `VACUUM`; a medição de storage
+usa páginas ocupadas via `dbstat`, que são liberadas pela atualização.
 
 ---
 
@@ -201,6 +225,21 @@ Handle com espaço ou vazio precisa de aspas:
 pnpm jho sources probe remotive "ai engineer"
 pnpm jho sources probe himalayas ""
 ```
+
+**Zero vagas não prova handle errado — e em algumas fontes não prova nada.**
+Handles conferidos contra a API real em 2026-09-18, úteis para separar "o
+adapter está quebrado" de "escrevi o identificador errado":
+
+```bash
+pnpm jho sources probe smartrecruiters BoschGroup   # 500 vagas
+pnpm jho sources probe recruitee grip               # 3 vagas
+```
+
+A SmartRecruiters devolve `totalFound: 0` com HTTP 200 tanto para identificador
+inexistente quanto para empresa sem vaga aberta — `Visa` e `Bosch` parecem
+certos e são os dois zero. O Recruitee separa os casos: subdomínio inexistente
+responde `Not Found`, board vazio responde lista vazia. Detalhe por fonte em
+[`docs/sources.md`](sources.md).
 
 Um `kind` sem adapter registrado em `src/core/sources/registry.ts` faz `getAdapter()`
 lançar:
@@ -487,6 +526,34 @@ pnpm jho jobs verify --min-fit 55 --limit 250
 > 403 apagaria vagas vivas. Timeout e 5xx não provam nada e entram como
 > inconclusivos.
 
+### `jho jobs archive`
+
+Tira do quadro ativo vagas fechadas há muito tempo, sem apagar linha nenhuma.
+
+```bash
+pnpm jho jobs archive --closed-days 90            # dry-run
+pnpm jho jobs archive --closed-days 90 --apply
+```
+
+| Flag | Padrão | Efeito |
+|---|---|---|
+| `--closed-days <n>` | `90` | Arquivar fechamentos anteriores a N dias |
+| `--limit <n>` | `500` | Teto de vagas examinadas por execução |
+| `--apply` | — | Sem esta flag o comando é somente leitura |
+
+```
+Arquivamento · dry-run
+  corte: fechadas até 2026-06-20 (90 dias)
+  412 examinada(s) · 380 elegível(is) · 2 com candidatura preservada
+  mantidas: 21 recent-closure · 8 inconclusive-probe · 3 manual-source
+  Nada mudou. Rode de novo com --apply para persistir.
+```
+
+> **Invariante:** arquivar **não** toca em `application` nem em
+> `application_event`, e não apaga vaga — quem apaga é `db prune`, e só o que
+> nunca teve candidatura. Sondagem inconclusiva nunca arquiva, fonte manual
+> fica fora, e um `alive` posterior desfaz o arquivamento na mesma linha.
+
 Verifica só o topo de propósito: checar 6.000 links para policiar linhas que
 ninguém vai abrir seria indelicado com os boards e inútil aqui.
 
@@ -638,7 +705,7 @@ O funil só imprime status com contagem maior que zero, respeitando a ordem de
 `application.next_action` está preenchido — e **nada no projeto escreve esse campo**:
 `setApplicationStatus()` (`src/core/db/repo.ts`) não o toca, e as únicas referências em
 `src/` são leituras (`src/cli.ts`) mais a definição da coluna
-(`src/core/db/schema.ts:181`). Hoje só um `UPDATE` manual no SQLite preenche
+(`src/core/db/schema.ts:181`). Hoje só um `UPDATE` manual no PostgreSQL preenche
 `next_action` / `next_action_at`.
 
 Funil vazio:
@@ -978,8 +1045,9 @@ Carregadas de `.env` pelo `--env-file-if-exists=.env` do script `jho`.
 
 | Variável | Lida em | Efeito |
 |---|---|---|
-| `TURSO_DATABASE_URL` | `src/core/db/client.ts`, `src/core/db/migrate.ts` | URL do banco; default `file:./data/jobs.db` |
-| `TURSO_AUTH_TOKEN` | `src/core/db/client.ts` | Obrigatório quando a URL **não** começa com `file:` |
+| `DATABASE_URL` | `src/core/db/client.ts` | URL PostgreSQL do runtime; obrigatória |
+| `DATABASE_MIGRATION_URL` | `src/core/db/migrate.ts` | URL PostgreSQL para migrations; obrigatória em `db migrate` |
+| `DATABASE_CA_CERT` | `src/core/db/client.ts` | CA opcional para PostgreSQL gerenciado |
 | `JHO_PROFILE_PATH` | `src/core/profile/load.ts` | Override de `profile/profile.yaml` |
 | `JHO_SOURCES_PATH` | `src/core/sources/config.ts` | Override de `config/sources.yaml` |
 | `JHO_USER_AGENT` | `src/core/sources/http.ts` | Header `user-agent` de toda chamada pública |
@@ -987,9 +1055,9 @@ Carregadas de `.env` pelo `--env-file-if-exists=.env` do script `jho`.
 | `JHO_REPORT_DIR` | `src/core/report/markdown.ts` | Subdiretório do relatório; default `05_Interviews/LinkedIn` |
 | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | `src/core/sources/aggregators.ts` | Sem eles o adapter `adzuna` retorna 0 jobs + warning, sem falhar |
 
-> **Invariante:** URL remota sem token falha alto e cedo. `getDb()` lança quando
-> `TURSO_DATABASE_URL` não começa com `file:` e `TURSO_AUTH_TOKEN` está vazio — falhar
-> aqui é melhor que um 401 confuso no meio de uma run.
+> **Invariante:** URL ausente ou que não seja PostgreSQL falha alto e cedo.
+> `getDb()` não escolhe um banco local silenciosamente, porque isso faria a run
+> parecer bem-sucedida enquanto grava no lugar errado.
 
 ---
 
@@ -1174,12 +1242,12 @@ some de `sources list` e do sync sem precisar apagar a entrada nem o `rationale`
 
 ```bash
 pnpm jho db migrate
-pnpm jho db prune --days 120
+pnpm jho db cleanup --apply --closed-days 120
 pnpm jho jobs score
 pnpm jho pipeline
 ```
 
-`db prune` só remove vagas fechadas há mais de `--days` dias **e** sem nenhuma
+`db cleanup` só remove vagas fechadas há mais de `--closed-days` dias **e** sem nenhuma
 `application` associada, então rodar isso nunca apaga histórico de candidatura. O
 `jobs score` no final recupera qualquer vaga que tenha ficado sem score (por exemplo
 depois de um `jobs sync --no-score`).

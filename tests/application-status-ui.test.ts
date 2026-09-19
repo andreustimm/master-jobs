@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { applicationStatusLabel, applicationStatusOptions } from "../app/status.ts";
+import {
+  applicationStatusLabel,
+  applicationStatusLabels,
+  applicationStatusOptions,
+} from "../app/status.ts";
 import { translator } from "../src/core/i18n/index.ts";
-import type { ApplicationStatus } from "../src/contexts/pursuit/domain/application.ts";
+import {
+  allowedTransitions,
+  type ApplicationStatus,
+} from "../src/contexts/pursuit/domain/application.ts";
 
 const expectedLabels = {
   "pt-BR": {
@@ -50,6 +57,25 @@ describe("status de candidatura na interface", () => {
       expect(labels).not.toContain("shortlisted");
       expect(options).toHaveLength(10);
       expect(Object.fromEntries(options.map((option) => [option.value, option.label]))).toEqual(expectedLabels[locale]);
+    }
+  });
+
+  it("oferece só os estágios alcançáveis quando recebe a lista do domínio", () => {
+    // De `preparing` o seletor listava `interviewing`; o domínio recusava, e o
+    // rascunho ia junto. O que a tela oferece passa a sair de
+    // `allowedTransitions`, então a recusa deixa de ser alcançável por clique.
+    const current = translator("pt-BR");
+    const options = applicationStatusOptions(current.t, "pt-BR", allowedTransitions("preparing"));
+
+    // Ordenado pelo rótulo traduzido: "Candidatura enviada" antes de "Preparando".
+    expect(options.map((option) => option.value)).toEqual(["applied", "preparing"]);
+    expect(options.map((option) => option.value)).not.toContain("interviewing");
+  });
+
+  it("traduz todos os status para a mensagem de recusa, inclusive os não oferecidos", () => {
+    for (const locale of ["pt-BR", "en"] as const) {
+      const current = translator(locale);
+      expect(applicationStatusLabels(current.t)).toEqual(expectedLabels[locale]);
     }
   });
 });

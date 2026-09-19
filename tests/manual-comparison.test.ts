@@ -28,9 +28,9 @@ describe("manual comparison job", () => {
     candidateId = await ensureCandidate({ name: "Comparison Candidate" });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllGlobals();
-    releaseTestDb();
+    await releaseTestDb();
   });
 
   it("stores uploaded provenance without creating an application", async () => {

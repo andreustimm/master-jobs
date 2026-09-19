@@ -9,19 +9,29 @@ function declaredMode(value: SQL): SQL<WorkMode | null> {
   `), sql` `)} end`;
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+}
+
 // Keep filtering in SQL, before LIMIT/OFFSET, and share it with counts/facets.
 // A false remote flag can mean hybrid as well as onsite; alone it is unknown.
 // Parser fields and the careers remote flag are guesses from description words.
 export function workModeSql(): SQL<WorkMode | null> {
-  const location = sql`' ' || lower(replace(coalesce(${job.locationRaw}, ''), 'Í', 'í')) || ' '`;
+  const location = sql`lower(coalesce(${job.locationRaw}, ''))`;
   const locationMode = sql`case ${sql.join(
-    (["hybrid", "onsite", "remote"] as const).map((mode) => sql`
-      when ${sql.join(WORK_MODE_ALIASES[mode].map((alias) =>
-        sql`${location} glob ${`*[^a-zÀ-ÿ]${alias}[^a-zÀ-ÿ]*`}`), sql` or `)} then ${mode}
-    `), sql` `)} end`;
+    (["hybrid", "onsite", "remote"] as const).map((mode) => {
+      const matches = sql.join(
+        WORK_MODE_ALIASES[mode].map((alias) =>
+          sql`${location} ~* ${`(^|[^[:alnum:]])${escapeRegex(alias)}([^[:alnum:]]|$)`}`),
+        sql` or `,
+      );
+      return sql`when ${matches} then ${mode}`;
+    }),
+    sql` `,
+  )} end`;
   return sql`coalesce(
-    ${declaredMode(sql`json_extract(${job.raw}, '$.workplaceType')`)},
+    ${declaredMode(sql`${job.raw}->>'workplaceType'`)},
     ${locationMode},
-    case when ${job.remote} = 1 and ${source.kind} <> 'careers' then 'remote' end
+    case when ${job.remote} = true and ${source.kind} <> 'careers' then 'remote' end
   )`;
 }

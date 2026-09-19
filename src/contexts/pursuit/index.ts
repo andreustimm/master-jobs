@@ -7,6 +7,7 @@
  */
 export {
   APPLICATION_STATUSES,
+  allowedTransitions,
   IllegalApplicationTransitionError,
   parseApplicationStatus,
   transitionApplication,
@@ -17,10 +18,14 @@ export {
 } from "./domain/application.ts";
 
 export {
+  applicationTimeline,
   ApplicationTransitionConflictError,
   getJobDetail,
+  PIPELINE_PAGE_SIZE,
   pipelineCounts,
   pipelineRows,
+  recruiterCandidateSummaries,
+  type RecruiterCandidateSummary,
   setApplicationDocument,
   setApplicationStatus,
 } from "../../core/db/repo.ts";

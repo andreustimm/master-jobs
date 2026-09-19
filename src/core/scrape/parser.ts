@@ -7,7 +7,7 @@
  * adapter got its text from the employer's own API; a scraped page is a good
  * fallback, not an upgrade.
  */
-import { eq, isNull, sql } from "drizzle-orm";
+import { eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { job, jobPage, jobScore } from "../db/schema.ts";
 import { extractPage } from "./extract.ts";
@@ -31,34 +31,40 @@ export async function parseStored(jobId: number): Promise<ParseOutcome> {
 
   const now = new Date().toISOString();
 
-  await db
-    .update(jobPage)
-    .set({
-      text: extracted.text,
-      extracted: {
-        title: extracted.title,
-        fields: extracted.fields,
-        requirements: extracted.requirements,
-      },
-      parsedAt: now,
-    })
-    .where(eq(jobPage.jobId, jobId));
+  // HTML is staging input. Commit its removal together with the canonical text
+  // and score invalidation: a failure between these writes must leave the page
+  // reprocessable instead of losing the only local copy of the capture.
+  await db.transaction(async (tx) => {
+    await tx
+      .update(jobPage)
+      .set({
+        text: extracted.text,
+        extracted: {
+          title: extracted.title,
+          fields: extracted.fields,
+          requirements: extracted.requirements,
+        },
+        parsedAt: now,
+        html: null,
+      })
+      .where(eq(jobPage.jobId, jobId));
 
-  // Only fill a gap. Text from the employer's own API beats anything scraped
-  // off the rendered page, so it is never replaced.
-  const filled = await db
-    .update(job)
-    .set({ descriptionText: extracted.text })
-    .where(
-      sql`${job.id} = ${jobId} and (${job.descriptionText} is null or length(${job.descriptionText}) < 200)`,
-    )
-    .returning({ id: job.id });
+    // Only fill a gap. Text from the employer's own API beats anything scraped
+    // off the rendered page, so it is never replaced.
+    const filled = await tx
+      .update(job)
+      .set({ descriptionText: extracted.text })
+      .where(
+        sql`${job.id} = ${jobId} and (${job.descriptionText} is null or length(${job.descriptionText}) < 200)`,
+      )
+      .returning({ id: job.id });
 
-  // A job that just gained a description has a stale score: the keyword
-  // component was computed against nothing.
-  if (filled.length > 0) {
-    await db.delete(jobScore).where(eq(jobScore.jobId, jobId));
-  }
+    // A job that just gained a description has a stale score: the keyword
+    // component was computed against nothing.
+    if (filled.length > 0) {
+      await tx.delete(jobScore).where(eq(jobScore.jobId, jobId));
+    }
+  });
 
   return {
     kind: "parsed",
@@ -113,10 +119,13 @@ export async function runParseStage(
   return result;
 }
 
-/** Re-runs extraction over every captured page, without re-fetching. */
+/** Re-runs extraction over retained, not-yet-successful captures. */
 export async function reparseAll(): Promise<ParseStageResult> {
   const db = getDb();
-  const pages = await db.select({ jobId: jobPage.jobId }).from(jobPage);
+  const pages = await db
+    .select({ jobId: jobPage.jobId })
+    .from(jobPage)
+    .where(isNotNull(jobPage.html));
 
   const result: ParseStageResult = { processed: 0, parsed: 0, failed: 0, rescored: 0 };
   for (const page of pages) {

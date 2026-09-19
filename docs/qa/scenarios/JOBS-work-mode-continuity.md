@@ -9,10 +9,10 @@ entry_points: /; /jobs
 qa_status: pass
 bug_ids: BUG-20260915-clear-search-text
 fix_status: fixed
-retest_status: pass
+retest_status: verified
 fix_commits: cf20630
 evidence: evidence/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter/CH-work-mode-continuity-post-review-all.png; evidence/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter/orion-remote.csv; evidence/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter/CH-work-mode-continuity-post-review-clear.png
-last_report: reports/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter.md
+last_report: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md
 overlaps: NAV-first-party-navigation-contract
 ---
 

@@ -49,21 +49,16 @@ beforeEach(async () => {
   await useTestDb();
 });
 
-afterEach(() => {
+afterEach(async () => {
   process.argv = argvOriginal;
   process.exitCode = undefined;
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 /** Espera o `parseAsync` do topo do módulo terminar, sem dormir por tempo. */
 async function aguardarFimDoParse(): Promise<void> {
-  // A importação resolve antes do parse: a última linha do módulo não é
-  // aguardada por ninguém. Ceder o laço algumas vezes é o suficiente — cada
-  // turno drena as microtarefas pendentes da consulta ao SQLite.
-  for (let i = 0; i < 50; i++) {
-    if (process.exitCode !== undefined) return;
-    await new Promise((resolve) => setImmediate(resolve));
-  }
+  // PostgreSQL requires socket I/O; count neither microtasks nor event-loop turns.
+  await vi.waitFor(() => expect(process.exitCode).toBeDefined(), { timeout: 2000, interval: 10 });
 }
 
 describe("guarda de entrypoint de src/cli.ts", () => {

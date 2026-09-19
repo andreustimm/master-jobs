@@ -233,7 +233,7 @@ describe("architecture inventory", () => {
 
   it("keeps the documented schema count derived from declarations", () => {
     const schema = read("src/core/db/schema.ts");
-    const count = [...schema.matchAll(/export const \w+ = sqliteTable\b/g)].length;
+    const count = [...schema.matchAll(/export const \w+ = production\.table\b/g)].length;
     const contextMap = read("docs/engineering/context-map.md");
     expect(contextMap).toContain(`<!-- schema-table-count: ${count} -->`);
   });
@@ -279,7 +279,7 @@ describe("write-path invariants (ADR 0005)", () => {
     expect(run).toContain("closedAt");
     // The only delete in the sync path is pruneClosed, and it is guarded.
     const prune = run.slice(run.indexOf("pruneClosed"));
-    expect(prune).toContain("not in (select job_id from application)");
+    expect(prune).toContain("not in (select job_id from production.application)");
   });
 });
 
@@ -474,7 +474,10 @@ describe("authorisation (AUTH-01)", () => {
       const code = read(file);
       if (!code.includes('"use server"')) continue;
 
-      for (const match of code.matchAll(/export async function (\w+)\s*\([^)]*\)\s*\{/g)) {
+      // O tipo de retorno é opcional na sintaxe e invisível para esta rede se
+      // não for previsto: `): Promise<TrackResult> {` deixou de casar quando
+      // `trackAction` ganhou um, e a action saiu do teste sem ninguém notar.
+      for (const match of code.matchAll(/export async function (\w+)\s*\([^)]*\)\s*(?::[^{]+)?\{/g)) {
         const name = match[1]!;
         if (UNGUARDED_BY_DESIGN.has(name)) continue;
         const body = code.slice(match.index, code.indexOf("\n}", match.index));

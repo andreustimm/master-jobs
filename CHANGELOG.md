@@ -9,6 +9,215 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-09-18
+
+### Corrigido
+
+- O funil pedido numa página além do fim mostrava "nada no funil ainda" para
+  quem TEM candidatura: o número vinha da URL e virava `offset` sem ser
+  confrontado com o total, e o branch de lista vazia não distingue "não há
+  nada" de "não há nada AQUI". As contagens passam a ser lidas antes das
+  linhas, e o pedido é limitado à última página real. Encontrado em jornada de
+  QA sobre a superfície nova do funil, não por teste automatizado.
+
+## [1.13.0] - 2026-09-18
+
+### Adicionado
+
+- Área do recrutador em `/recruiter`: os candidatos que o autorizaram, com o
+  funil de cada um, e `/recruiter/[candidateId]` com o histórico daquele
+  candidato. O escopo vem de `session.linkedCandidateIds`, resolvido na carga da
+  sessão, e entra em SQL como `inArray` — o banco não chega a ler linha de quem
+  está fora, em vez de ler tudo e filtrar depois.
+- Candidato inexistente e candidato que existe mas não é acompanhado recebem a
+  MESMA resposta, 404. Distinguir os dois contaria que aquela pessoa está
+  cadastrada, e existência é informação — mesmo raciocínio de `/p/[slug]`. Id
+  malformado cai no mesmo 404, antes de qualquer consulta (F-07, US-002).
+## [1.12.0] - 2026-09-18
+
+### Alterado
+
+- A URL do banco passa a ser resolvida por uma ordem declarada em
+  `src/core/db/config.ts`, e os nomes que a integração do Supabase com a Vercel
+  cadastra valem de primeira classe: runtime lê `DATABASE_URL` → `POSTGRES_URL`
+  → `POSTGRES_URL_NON_POOLING`, e migration lê `DATABASE_MIGRATION_URL` →
+  `POSTGRES_URL_NON_POOLING` → `POSTGRES_URL`. A diferença entre as listas é
+  deliberada: DDL não atravessa pooler em modo transação, e o runtime serverless
+  quer o pooler. Exigir a cópia para uma variável genérica criava duas fontes da
+  verdade que divergem no dia em que o provedor rotaciona a senha — e o sintoma
+  disso é produção fora do ar.
+- Parâmetro de pool na URL (`pgbouncer`, `connection_limit`) passa a ser
+  descartado em vez de recusado; parâmetro de TLS (`sslmode`, `ssl`,
+  `sslrootcert`) continua **recusado**, e agora com erro que nomeia a variável.
+  Apagar `sslmode=disable` em silêncio deixaria quem escreveu convencido de que
+  havia desligado a verificação de certificado.
+- `DATABASE_CA_CERT` aceita o PEM colado na variável, além do caminho de
+  arquivo. Num painel serverless não há onde pôr arquivo, e o PEM colado virava
+  `ENOENT` com o certificado inteiro no lugar do nome — um erro que não conta o
+  que houve. Certificado é chave pública, então aceitar as duas formas não
+  afrouxa nada; desligar a verificação continua impossível.
+- Erro de configuração de banco nomeia a variável de origem e nunca o valor.
+### Corrigido
+
+- O currículo de exemplo passa a ser escrito pela identidade que o banco já
+  impõe — `(candidate_id, kind)` onde `is_current` —, e não por rótulo. Procurar
+  pelo rótulo não enxergava um currículo corrente gravado com outro nome, e o
+  seed tentava inserir por cima: `23505` em
+  `candidate_document_one_current_idx`. O `SELECT ... FOR UPDATE` que devia
+  fechar a corrida não fechava nada, porque não existe linha para travar quando
+  ainda não há currículo — o bug aparecia sob concorrência e, por isso mesmo,
+  também sem concorrência nenhuma, bastando um currículo anterior com outro
+  rótulo. O caminho virou upsert no índice parcial, com a mesma retentativa dos
+  demais.
+### Adicionado
+
+- O funil passa a dizer o estado da VAGA ao lado do estágio da candidatura —
+  encerrada ou arquivada —, derivado de `jobLifecycleState` no domínio de ciclo
+  de vida. Os dois nunca se confundem: a vaga fecha sozinha, o estágio só muda
+  por decisão do usuário, e era justamente a candidatura de vaga encerrada que
+  ficava sem contexto na tela (F-07, US-001).
+- Filtro por estágio e paginação no funil, ambos na URL. O total vem das
+  contagens e não da página, então paginar não faz o número piscar; a ordem
+  desempata por `id`, senão duas candidaturas salvas no mesmo instante trocam
+  de lugar entre páginas e uma some. Estágio desconhecido na URL mostra o funil
+  inteiro com um aviso, em vez de uma tela vazia sem explicação.
+### Adicionado
+
+- Estado de arquivamento (`job.archived_at`) separado do fechamento da fonte, e
+  `jho jobs archive` para inventariar e aplicar. A decisão é pura em
+  `src/core/ingest/lifecycle.ts`: fonte manual fica fora, sondagem inconclusiva
+  nunca arquiva e fechamento recente espera o corte — a mesma disciplina de
+  `probe.ts`, porque as duas escondem vaga boa quando erram. O comando é
+  somente leitura por omissão, pagina com teto e reclama cada linha uma vez só
+  (`archived_at is null` também na escrita), e não toca em `application` nem em
+  `application_event`. Um `alive` posterior desfaz o arquivamento junto com o
+  fechamento, na mesma linha, sem duplicar fingerprint (F-07, ADR 0020).
+
+## [1.11.1] - 2026-09-18
+
+### Corrigido
+
+- O seed de fixtures deixa de estourar quando duas execuções se cruzam.
+  `ON CONFLICT DO UPDATE` promete resultado atômico para uma sessão, não
+  imunidade a corrida: a inserção especulativa escreve no índice único antes de
+  descobrir o conflito, e duas sessões que chegam ali recebem `23505` em vez do
+  UPDATE. Medido com três seeds simultâneos — falhava em cerca de metade das
+  execuções da suíte completa e nunca isolado, que é o formato de defeito que
+  passa por revisão. `withDuplicateKeyRetry` reexecuta só escrita idempotente e
+  só nesse código; qualquer outro erro, e a chave duplicada que insiste, sobem
+  na hora.
+
+## [1.11.0] - 2026-09-18
+
+### Alterado
+
+- A varredura diária declara `JHO_ENV=production` e exige `JHO_SOURCE_ALLOWLIST`
+  não vazia, falhando cedo com mensagem própria em vez de morrer no meio do
+  primeiro adapter — sem isso, a política da ADR 0021 bloquearia o próprio job
+  de produção. A rota de cron da Vercel passa a consultar a política além do
+  `CRON_SECRET` e responde 503 com motivo: o segredo prova quem chama, não que
+  aquele deployment pode gastar cota, e um preview com o segredo herdado
+  continuaria autenticado (F-08).
+
+## [1.10.0] - 2026-09-18
+
+### Adicionado
+
+- Acervo de exemplo declarado em `src/core/db/fixtures.ts` e semeado por
+  `jho db seed-fixtures`: dez vagas cobrindo remoto, híbrido, presencial,
+  modalidade não declarada, aberta, fechada e reaberta, mais quatro contas que
+  exercitam as fronteiras de autorização existentes. O seed é idempotente por
+  identidade declarada — reexecutar atualiza, nunca duplica, inclusive sob
+  execução concorrente — e valida o corpus antes de escrever, então fixture
+  inválida vira erro de configuração em vez de meia carga. Sem PII, sem
+  segredo, sem payload bruto, e todas as URLs em `example.test` (F-08, ADR 0021).
+
+## [1.9.0] - 2026-09-18
+
+### Adicionado
+
+- Política de ingestão por ambiente que nega por omissão: `canRunIngestion` é
+  pura, produção só passa com allowlist declarada, local exige opt-in explícito
+  e dev, staging e preview nunca gastam cota de fonte externa. Ambiente ausente
+  ou ilegível normaliza para `preview` — o mais restrito — em vez de virar
+  produção por engano. Sync, recheck, probe e captura chamam o mesmo guarda
+  antes de resolver adapter ou abrir fila, e o erro operacional nomeia ambiente
+  e motivo sem citar host, credencial ou segredo (F-08, ADR 0021).
+
+## [1.8.0] - 2026-09-18
+
+### Adicionado
+
+- O detalhe da vaga exibe o histórico da candidatura lido de
+  `application_event` — data, transição e a nota escrita em cada uma —, por uma
+  query escopada ao candidato da sessão. Fecha a lacuna registrada em
+  BUG-20260917-transition-note-never-readable, onde a nota era aceita e não
+  voltava em superfície pública nenhuma. Implementa a opção recomendada no
+  relatório de QA; as alternativas eram gravar em `application.notes`, que
+  sobrescreve a nota anterior a cada salvamento, ou retirar o campo.
+
+## [1.7.2] - 2026-09-18
+
+### Corrigido
+
+- O seletor de estágio do funil passa a oferecer somente os status alcançáveis
+  a partir do atual, derivados de `allowedTransitions` no domínio de Pursuit, e
+  uma transição recusada pelo servidor preserva a nota digitada em vez de
+  descartá-la com o formulário. `trackAction` devolve a recusa como dado
+  tipado, e a mensagem nomeia os dois estágios (BUG-20260910).
+- A recusa também revalida o detalhe da vaga e devolve o seletor ao estágio
+  gravado, então a lista oferecida deixa de ser a de quando a página abriu.
+  Sem isso, o aviso mandava escolher um estágio alcançável enquanto só oferecia
+  estágios que seriam recusados de novo (BUG-20260917-stale-stages-after-refusal).
+- A nota escrita sobre um estágio que não muda passa a ser gravada como evento
+  `note` em vez de descartada em silêncio — caminho que a lista restrita tornou
+  o único possível a partir de um estado terminal. `allowedTransitions` degrada
+  para um status fora do funil em vez de lançar durante a renderização, e o
+  seletor deriva o valor da lista oferecida, então um conflito de concorrência
+  não deixa o formulário enviar sem `status`.
+
+## [1.7.1] - 2026-09-16
+
+### Corrigido
+
+- A ingestão local agora preserva valores salariais com centavos e o comando de
+  importação carrega automaticamente o `.env` do projeto.
+
+## [1.7.0] - 2026-09-16
+
+### Adicionado
+
+- O ambiente local agora usa a mesma linha PostgreSQL 17 do Supabase, com
+  `pgmq` e `pgvector`, e oferece importação segura de uma fixture sanitizada
+  de produção sem HTML, filas ou payloads de crawler.
+- A proposta de upgrade LTS registra a matriz de versões e os gates para
+  manter local, CI, Vercel e Supabase coerentes.
+
+## [1.6.0] - 2026-09-16
+
+### Adicionado
+
+- Preparado o caminho PostgreSQL para o Supabase: schema privado, roles separadas
+  para runtime e migration, importação seletiva com rehearsal local e controles
+  explícitos para o corte. Nenhum banco remoto foi alterado.
+
+### Alterado
+
+- A preparação da migração agora verifica a preservação do acervo e o rollback
+  transacional antes de qualquer corte de produção.
+
+## [1.5.0] - 2026-09-16
+
+### Alterado
+
+- A ingestão passa a guardar apenas texto e metadados úteis das vagas: HTML
+  bruto e payload integral de fontes de rede são descartados após normalização.
+- O comando `jho db cleanup` inventaria por padrão e, com `--apply`, compacta
+  payloads legados e poda vagas fechadas sem candidatura; uma Action semanal
+  aplica a retenção em produção.
+- As seis contagens de filtros do cockpit agora usam uma única agregação
+  condicional, reduzindo leituras completas do acervo nessa jornada.
+
 ## [1.4.1] - 2026-09-15
 
 ### Corrigido

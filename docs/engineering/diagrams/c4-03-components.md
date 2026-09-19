@@ -21,7 +21,7 @@ C4Component
     Component(contacts, "contacts.ts", "rede", "Referrals por slug de empresa.")
     Component(positioning, "positioning/", "plan, seed, engage", "Plano da auditoria,<br/>fila assistida, métricas.")
     Component(report, "report/markdown.ts", "export", "Relatório e dossiês pro vault.")
-    ComponentDb(db, "db/", "Drizzle + libSQL", "schema, client, repo, migrate.")
+    ComponentDb(db, "db/", "Drizzle + PostgreSQL", "schema, client, repo, migrate.")
   }
 
   System_Ext(apis, "APIs públicas")

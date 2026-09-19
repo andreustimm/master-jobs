@@ -62,8 +62,8 @@ beforeEach(async () => {
   candidatoId = await ensureCandidate({ name: "Candidato da Comparação" });
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 describe("createManualComparison: validação por campo, com código estável", () => {

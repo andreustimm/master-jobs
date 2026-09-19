@@ -154,9 +154,9 @@ flowchart TB
   style derivado fill:#eef,stroke:#024ad8
 ```
 
-> **Invariante:** apagar `data/jobs.db` custa as decisões, e só elas. Todo o
-> resto volta com um `jobs sync`. É por isso que backup dessa tabela é a única
-> operação de banco que importa de verdade.
+> **Invariante:** apagar as tabelas de `application` custa as decisões, e só
+> elas. O runtime PostgreSQL permite reconstruir fatos com `jobs sync`, mas
+> candidaturas e eventos devem sempre ter backup próprio.
 
 `job_score` é tabela separada em vez de colunas em `job` justamente para ser
 descartável: pode ser apagada e recomputada a qualquer momento, e a ingestão faz

@@ -1,52 +1,79 @@
-/**
- * Single libSQL client for both runtimes.
- *
- * Local dev  -> file:./data/jobs.db   (a plain SQLite file, no server)
- * Vercel     -> libsql://<db>.turso.io with an auth token
- *
- * Same driver, same SQL, same migrations. That is the whole reason this project
- * uses libSQL instead of better-sqlite3: Vercel's filesystem is ephemeral, so a
- * local-file-only database would silently lose every application you tracked.
- */
-import { createClient, type Client } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
+import { readFileSync } from "node:fs";
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
 import * as schema from "./schema.ts";
+import { normalizeConnectionUrl, resolveDatabaseUrl } from "./config.ts";
 
 export type DB = ReturnType<typeof drizzle<typeof schema>>;
+let cached: { client: postgres.Sql; db: DB } | undefined;
 
-let cached: { client: Client; db: DB } | undefined;
+/**
+ * A CA pode chegar como caminho ou como o próprio PEM.
+ *
+ * O painel de variáveis de um serviço serverless é uma caixa de texto, e colar
+ * o certificado nela é o gesto natural — não há onde pôr um arquivo. Só que o
+ * valor era lido com `readFileSync` sempre, e o PEM colado virava um `ENOENT`
+ * com o certificado inteiro no lugar do nome do arquivo: um erro que não conta
+ * o que houve, no meio de um corte de produção.
+ *
+ * Certificado não é segredo — é a chave pública que prova o servidor —, então
+ * aceitar as duas formas não afrouxa nada. O que continuaria inaceitável é
+ * desligar a verificação, e isso segue impossível por aqui.
+ */
+function certificateAuthority(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.includes("BEGIN CERTIFICATE")) return trimmed;
+  try {
+    return readFileSync(trimmed, "utf8");
+  } catch {
+    // Nomear a variável e a forma esperada; nunca o valor, que num engano de
+    // configuração pode ser qualquer coisa que o operador colou ali.
+    throw new Error(
+      "DATABASE_CA_CERT não é um PEM nem um arquivo legível: use o conteúdo do certificado ou o caminho de um arquivo existente",
+    );
+  }
+}
 
-function resolveUrl(): string {
-  const url = process.env.TURSO_DATABASE_URL;
-  if (url && url.length > 0) return url;
-  // Default keeps `pnpm jho` working with zero configuration.
-  return "file:./data/jobs.db";
+/**
+ * Conexão PostgreSQL explícita; nunca cai para um arquivo local em silêncio.
+ *
+ * `source` nomeia a variável de onde a URL veio. Ele existe para o erro poder
+ * dizer QUAL configuração está errada num ambiente que tem três nomes
+ * possíveis — e nunca carrega o valor, que é credencial.
+ */
+export function connectDatabase(
+  url: string,
+  source = "DATABASE_URL",
+): { client: postgres.Sql; db: DB } {
+  const normalized = normalizeConnectionUrl(url, source);
+  const parsed = new URL(normalized);
+  const local = ["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname);
+  const ca = certificateAuthority(process.env.DATABASE_CA_CERT);
+  const client = postgres(normalized, {
+    ssl: local ? false : { rejectUnauthorized: true, ...(ca ? { ca } : {}) },
+    prepare: false,
+    max: 3,
+    idle_timeout: 20,
+    connect_timeout: 10,
+    onnotice: () => {},
+  });
+  return { client, db: drizzle(client, { schema }) };
 }
 
 export function getDb(): DB {
-  if (cached) return cached.db;
-
-  const url = resolveUrl();
-  const authToken = process.env.TURSO_AUTH_TOKEN;
-
-  // A remote URL without a token is almost always a misconfigured deploy, and
-  // failing loudly here beats a confusing 401 deep inside a cron run.
-  if (!url.startsWith("file:") && !authToken) {
-    throw new Error(
-      `TURSO_DATABASE_URL points at a remote database (${url}) but TURSO_AUTH_TOKEN is empty.`,
-    );
+  if (!cached) {
+    const { url, source } = resolveDatabaseUrl("runtime");
+    cached = connectDatabase(url, source);
   }
-
-  const client = createClient(authToken ? { url, authToken } : { url });
-  const db = drizzle(client, { schema });
-  cached = { client, db };
-  return db;
+  return cached.db;
 }
 
-/** Only for tests and CLI teardown; the Next.js runtime keeps the client warm. */
-export function closeDb(): void {
-  cached?.client.close();
+/** Await in CLI/tests so pending work drains before teardown. */
+export async function closeDb(): Promise<void> {
+  const previous = cached;
   cached = undefined;
+  await previous?.client.end({ timeout: 5 });
 }
 
 export { schema };

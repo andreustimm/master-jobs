@@ -1,5 +1,9 @@
 #!/bin/sh
 # Confere o destino: estar em uma feature não autoriza feature:dev.
+# Branch de trabalho é <tipo>/<slug>, com os tipos do Conventional Commits:
+# o prefixo da branch diz o mesmo que o prefixo do commit que ela entrega.
+# codex/* é legado — branches abertas antes da convenção seguem publicáveis.
+tipos='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test'
 while read -r local_ref local_sha remote_ref remote_sha; do
   case "$remote_ref" in
     refs/heads/dev|refs/heads/staging|refs/heads/main)
@@ -7,4 +11,16 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       exit 1
       ;;
   esac
+  # Apagar uma branch antiga precisa continuar possível, qualquer que seja o nome.
+  [ "$local_ref" = "(delete)" ] && continue
+  case "$remote_ref" in
+    refs/heads/codex/*) continue ;;
+    refs/heads/*) ;;
+    *) continue ;;
+  esac
+  branch=${remote_ref#refs/heads/}
+  if ! printf '%s\n' "$branch" | grep -Eq "^($tipos)/[a-z0-9]+([.-][a-z0-9]+)*$"; then
+    echo "Branch $branch fora do padrão <tipo>/<slug> (ex.: feat/busca-por-tecnologia): tipo em $tipos; slug minúsculo, com letras e números separados por - ou ." >&2
+    exit 1
+  fi
 done

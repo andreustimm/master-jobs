@@ -29,9 +29,9 @@ beforeEach(async () => {
   db = await useTestDb();
 });
 
-afterEach(() => {
+afterEach(async () => {
   resetHttpPort();
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 const URL_GREENHOUSE = "https://boards.greenhouse.io/textlayer/jobs/4111216009";

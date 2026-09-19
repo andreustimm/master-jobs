@@ -6,6 +6,12 @@
 > estado verificável e runbook de reativação:
 > [`operations/turso-quota-incident-2026-09-03.md`](operations/turso-quota-incident-2026-09-03.md).
 
+> **Banco atual:** o runtime usa PostgreSQL (`DATABASE_URL`) e migrations usam
+> `DATABASE_MIGRATION_URL`. Alguns diagnósticos SQL mais abaixo preservam a
+> fotografia do snapshot SQLite pré-corte; trate-os como referência histórica e
+> não os execute literalmente. Para a operação atual, prefira os comandos
+> `jho` e as rotinas de `docs/engineering/deploy.md`.
+
 ## Por que isto existe
 
 O `master-jobs` não é um produto: é uma rotina. O banco só vale alguma coisa se
@@ -180,6 +186,50 @@ bastante para ser recolhida ainda.
 > **Invariante:** Vaga que some é fechada, não deletada — `closedAt` recebe
 > timestamp e a linha fica. `pruneClosed()` é a única exclusão permitida, e ela
 > se protege sozinha com `job.id not in (select job_id from application)`.
+
+### Arquivar sem perder o funil
+
+O arquivamento é uma operação diferente de `prune`: marca `archived_at` em
+vagas confirmadamente fechadas e antigas, mas preserva `job`, `application` e
+`application_event`. O candidato continua vendo a candidatura e o recrutador
+autorizado continua vendo o registro dentro do seu escopo. Fechar a vaga não
+muda `application.status`.
+
+```bash
+pnpm jho jobs archive --closed-days 90            # dry-run: inventário
+pnpm jho jobs archive --closed-days 90 --apply    # aplica
+```
+
+O padrão é dry-run: sem `--apply` nada muda. Cada execução examina até
+`--limit` vagas (500 por omissão) e avisa quando sobrou trabalho — rodar de
+novo continua de onde parou. Rodar duas vezes não arquiva duas vezes, e duas
+execuções simultâneas reclamam cada linha uma só vez.
+
+Um `alive` posterior na fila de reconferência **desfaz** o arquivamento junto
+com o fechamento, na mesma linha: vaga que volta a responder volta ao quadro.
+
+O comando **não faz rede nem descobre evidência**: ele consome o `closedAt` já
+confirmado pelo sync/probe. `404`/`410` ou uma reconciliação completa podem
+sustentar esse fechamento; `401`, `403`, `429`, `5xx`, timeout e falha parcial
+são inconclusivos — e vaga cuja última sondagem foi inconclusiva nunca é
+arquivada. Fonte manual e de recrutador ficam de fora: ali "fechada" é
+digitação de alguém, não ausência observada. A implementação e os critérios estão em
+[`job-lifecycle-retention`](../.compozy/tasks/job-lifecycle-retention/) e na
+[ADR 0020](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md).
+
+### Dev e staging: somente fixtures
+
+Os ambientes remotos de dev e staging não devem executar `jobs sync`, download
+de descrição, scraping, recheck, probe ou busca de novas vagas. Eles
+usam uma amostra sintética com as modalidades e estados necessários para UI,
+scoring, arquivamento e autorização. O bloqueio deve existir no scheduler e no
+caso de uso, com falha explícita, antes de qualquer chamada HTTP ou criação de
+fila. Qualquer exceção diagnóstica deve ser um modo local explicitamente
+allowlisted; não há probe remoto em dev/staging. O runtime local usa PostgreSQL
+por `DATABASE_URL` (e `DATABASE_MIGRATION_URL` somente para migrations) e pode
+fazer diagnóstico apenas contra essa instância isolada. Ver
+[`environment-sample-only`](../.compozy/tasks/environment-sample-only/) e a
+[ADR 0021](adr/0021-ambientes-nao-produtivos-com-dados-sinteticos.md).
 
 ### Exportar o snapshot pro vault
 
@@ -620,6 +670,8 @@ pnpm jho tasks done <PT-XXXX>            # diário: fechar item do plano
 pnpm jho profile                         # semanal: validar profile.yaml
 pnpm jho jobs score --all                # semanal: após bump de SCORER_VERSION
 pnpm jho db prune --days 90              # semanal: limpar fechadas sem candidatura
+pnpm jho db cleanup                      # semanal: inventário sem alterar
+pnpm jho db cleanup --apply              # semanal: descartar payload reconstruível
 pnpm jho report                          # semanal: snapshot no vault
 pnpm jho pipeline                        # semanal: estado do funil
 pnpm jho sources list                    # semanal: saúde das fontes
@@ -651,7 +703,7 @@ pnpm jho jobs verify --min-fit 55 --limit 250   # fecha o que morreu
 pnpm jho mail import ~/mail              # alertas e e-mails de ATS
 pnpm jho mail suggestions                # revisa o que o e-mail sugere
 pnpm jho referrals                       # onde você já conhece alguém
-pnpm jho db prune --days 90
+pnpm jho db cleanup --apply --closed-days 90
 pnpm jho report                          # snapshot pro vault
 ```
 

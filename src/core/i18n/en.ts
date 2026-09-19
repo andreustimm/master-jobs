@@ -542,10 +542,24 @@ export const en: Dictionary = {
     jobsList: "job list",
     appliedOn: "applied on {date}",
     nextAction: "next: {action}",
+    jobClosed: "job closed",
+    jobArchived: "job archived",
+    allStages: "all",
+    unknownStage: "Unknown stage; showing the whole pipeline.",
+    noneInStage: "No applications in this stage.",
   },
   referrals: {
     title: "Referrals",
     companies: "company/companies",
+  },
+  recruiter: {
+    title: "Followed",
+    lead:
+      "The candidates who authorised you to follow their pipeline. The link is created by the person themselves — you see the progress, and nothing beyond it.",
+    noCandidates: "Nobody has authorised you to follow a pipeline yet.",
+    noApplications: "This person has no applications yet.",
+    applications: "{count} application(s)",
+    candidateHistory: "History · {count} application(s)",
   },
   jobDetail: {
     recheck: "re-check",
@@ -571,6 +585,17 @@ export const en: Dictionary = {
     capturedOn: "captured on",
     openFull: "Open the full posting →",
     aboveCut: "Above the {cut} cut, across the whole corpus.",
+    moveTo: "move to",
+    notePlaceholder: "note (optional)",
+    saveStatus: "Save",
+    transitionRejected:
+      "The funnel does not go from {from} to {to}. Your note is still here; pick a reachable stage.",
+    transitionConflict:
+      "This application changed in another screen. Reload to see the current stage and try again.",
+    history: "Application history",
+    historyMoved: "from {from} to {to}",
+    historyStarted: "registered at {to}",
+    historyNote: "note",
   },
   copy: {
     candidateLead:

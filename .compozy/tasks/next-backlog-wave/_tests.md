@@ -4,7 +4,7 @@ Canonical test contract for the maintenance and visibility follow-up.
 
 ## Strategy
 
-- Frameworks: Vitest with the existing libSQL test database and `fixtureHttp`;
+- Frameworks: Vitest with the existing isolated PostgreSQL test database and `fixtureHttp`;
   Playwright isolated E2E for public UI; Compozy CLI validation for operations.
 - Fakes: only HTTP and environment boundaries; database integration uses the
   existing temporary test database.

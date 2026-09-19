@@ -4,7 +4,7 @@
 branch=$(git symbolic-ref --quiet --short HEAD) || exit 0
 case "$branch" in
   dev|staging|main)
-    echo "Commit direto em $branch bloqueado. Use uma branch codex/* em worktree e PR para dev." >&2
+    echo "Commit direto em $branch bloqueado. Use uma branch <tipo>/<slug> (ex.: feat/busca-por-tecnologia) em worktree e PR para dev." >&2
     exit 1
     ;;
 esac

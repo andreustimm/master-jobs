@@ -1,12 +1,13 @@
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  allowedTransitions,
   APPLICATION_STATUSES,
   transitionApplication,
   type ApplicationStatus,
 } from "../src/contexts/pursuit/domain/application.ts";
 import type { DB } from "../src/core/db/client.ts";
-import { listBoard, pipelineCounts, setApplicationStatus } from "../src/core/db/repo.ts";
+import { applicationTimeline, listBoard, pipelineCounts, setApplicationStatus } from "../src/core/db/repo.ts";
 import {
   application,
   applicationEvent,
@@ -90,8 +91,8 @@ beforeEach(async () => {
   db = await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 describe("setApplicationStatus", () => {
@@ -188,6 +189,33 @@ describe("setApplicationStatus", () => {
     expect(events).toHaveLength(1);
   });
 
+  it("keeps a note written on a stage that does not move", async () => {
+    // De um estado terminal a única transição oferecida é a atual, então salvar
+    // uma nota cai sempre no caminho de no-op. Descartar ali era anunciar
+    // sucesso sem gravar nada — o mesmo silêncio que o canal já não sofre.
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "applied");
+    await setApplicationStatus(candidateId, jobId, "archived");
+
+    await setApplicationStatus(candidateId, jobId, "archived", "Recrutador pediu para tentar de novo no Q3.");
+
+    const [app] = await db.select().from(application).where(eq(application.jobId, jobId));
+    const events = await db
+      .select()
+      .from(applicationEvent)
+      .where(eq(applicationEvent.applicationId, app!.id));
+
+    expect(app!.status).toBe("archived");
+    const notes = events.filter((event) => event.kind === "note");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.detail).toBe("Recrutador pediu para tentar de novo no Q3.");
+    expect(notes[0]!.fromStatus).toBeNull();
+    expect(notes[0]!.toStatus).toBeNull();
+    // Nenhuma transição inventada: os dois `status_change` são os reais.
+    expect(events.filter((event) => event.kind === "status_change")).toHaveLength(2);
+  });
+
   it("rejects an illegal backwards transition without changing history", async () => {
     const candidateId = await seedCandidate("one", true);
     const jobId = await seedJob();
@@ -216,12 +244,11 @@ describe("setApplicationStatus", () => {
     const jobId = await seedJob();
     await setApplicationStatus(candidateId, jobId, "shortlisted");
 
-    await db.run(sql.raw(`
-      create trigger reject_application_event
-      before insert on application_event
-      begin
-        select raise(abort, 'forced event failure');
-      end
+    await db.execute(sql.raw(`
+      create function production.reject_application_event() returns trigger language plpgsql as $$
+      begin raise exception 'forced event failure'; end $$;
+      create trigger reject_application_event before insert on production.application_event
+      for each row execute function production.reject_application_event()
     `));
 
     await expect(
@@ -321,6 +348,75 @@ describe("transitionApplication", () => {
         expect(result.ok, `${from} -> ${to}`).toBe(from === to || legal[from].includes(to));
       }
     }
+  });
+
+  it("offers exactly the statuses the transition policy accepts", () => {
+    // A lista da interface é derivada, nunca uma segunda cópia da regra: o que
+    // `allowedTransitions` oferece é o que `transitionApplication` aceita. Se as
+    // duas divergirem, o seletor volta a levar alguém a uma recusa.
+    for (const from of APPLICATION_STATUSES) {
+      const accepted = APPLICATION_STATUSES.filter(
+        (to) =>
+          transitionApplication({ status: from, appliedAt: null }, to, "2026-08-20T01:00:00.000Z").ok,
+      );
+
+      expect(allowedTransitions(from), from).toEqual(accepted);
+      expect(allowedTransitions(from), from).toContain(from);
+    }
+  });
+
+  it("degrades instead of crashing on a status outside the funnel", () => {
+    // A coluna é `text` sem CHECK no banco, e a função roda ao renderizar a
+    // tela. Uma linha estranha vinda do snapshot legado não pode virar página
+    // quebrada — antes desta guarda, o spread de `undefined` lançava.
+    const unknown = "triaging" as ApplicationStatus;
+
+    expect(() => allowedTransitions(unknown)).not.toThrow();
+    expect(allowedTransitions(unknown)).toEqual([unknown]);
+  });
+
+  it("offers every status before the first observation", () => {
+    // Sem candidatura gravada, a pessoa pode registrar uma que já existe fora
+    // deste sistema — inclusive uma que nasce em entrevista.
+    expect(allowedTransitions(null)).toEqual(APPLICATION_STATUSES);
+  });
+
+  it("leaves a terminal state with itself as the only option", () => {
+    for (const terminal of ["rejected", "withdrawn", "archived"] as const) {
+      expect(allowedTransitions(terminal), terminal).toEqual([terminal]);
+    }
+  });
+});
+
+describe("histórico da candidatura", () => {
+  it("devolve os eventos do próprio candidato, do mais recente para o mais antigo", async () => {
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "shortlisted", "Vale olhar com calma.");
+    await setApplicationStatus(candidateId, jobId, "preparing", "Revisar arquitetura antes de aplicar.");
+
+    const timeline = await applicationTimeline(candidateId, jobId);
+
+    expect(timeline).toHaveLength(2);
+    expect(timeline[0]).toMatchObject({
+      kind: "status_change",
+      fromStatus: "shortlisted",
+      toStatus: "preparing",
+      detail: "Revisar arquitetura antes de aplicar.",
+    });
+    expect(timeline[1]).toMatchObject({ fromStatus: null, toStatus: "shortlisted" });
+  });
+
+  it("não devolve o histórico de outro candidato nem de quem não tem escopo", async () => {
+    // A nota é texto que a pessoa escreveu sobre a própria candidatura: ler a
+    // de outra conta seria o mesmo que ler o funil alheio.
+    const owner = await seedCandidate("owner", true);
+    const other = await seedCandidate("other");
+    const jobId = await seedJob();
+    await setApplicationStatus(owner, jobId, "shortlisted", "Nota privada do dono.");
+
+    expect(await applicationTimeline(other, jobId)).toEqual([]);
+    expect(await applicationTimeline(null, jobId)).toEqual([]);
   });
 });
 

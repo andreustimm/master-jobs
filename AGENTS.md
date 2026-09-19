@@ -139,10 +139,10 @@ dashboard Next.js em `localhost:3000`.
 > vazio)` aceitava qualquer senha. Dado corrompido em coluna de senha nega,
 > nunca concede — e o parâmetro do verificador nunca sai do valor verificado.
 >
-> **`ALTER TABLE ... ADD ... REFERENCES` no SQLite ignora `ON DELETE`.** A
-> cláusula é aceita na sintaxe e vira `NO ACTION`. Coluna com chave estrangeira
-> exige reconstrução da tabela, e `tests/cov-db-schema.test.ts` compara o que o
-> schema declara com o que o `pragma` aplica.
+> **FKs são contrato de dados, não detalhe de migration.** Toda alteração em
+> `REFERENCES` precisa declarar a ação `ON DELETE` no schema e no DDL aplicado;
+> `tests/cov-db-schema.test.ts` compara as duas camadas no PostgreSQL. Uma
+> divergência deixa a migration incompleta, mesmo que a sintaxe aceite a tabela.
 
 > **`/p/[slug]` é a única rota sem sessão, e o que ela mostra é lista de
 > permissão.** `publicProfile()` enumera os campos que saem; a página não
@@ -326,8 +326,18 @@ Nenhuma PR pode ser deixada sem assignee.
 Elas representam os ambientes e o caminho de promoção; permanecem no remoto e
 nos clones locais mesmo depois de qualquer promoção ou retorno.
 
+**Branch de trabalho é `<tipo>/<slug>`, com os tipos do Conventional Commits.**
+`feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`, `ci`, `build`,
+`style` ou `revert`, e slug minúsculo, com letras e números separados por `-`
+ou `.`: `feat/busca-por-tecnologia`, `fix/filtro-de-estagio`, `fix/node-24.19`.
+O prefixo da branch anuncia o tipo dos commits que ela entrega; quem decide o
+bump de versão continua sendo o prefixo de cada commit, não o nome da branch.
+O nome nunca carrega a ferramenta que abriu a branch. `.githooks/pre-push` recusa
+nome fora do padrão; `codex/*` é legado aceito, para que branches abertas antes
+da convenção sigam publicáveis sem renomear.
+
 **Branch de trabalho mesclada é excluída — local e remota.** Assim que a PR de
-uma branch de trabalho entra em `dev` (ou em `main`), a branch `codex/*` e sua
+uma branch de trabalho entra em `dev` (ou em `main`), a branch e sua
 worktree são removidas: `git worktree remove` (desbloqueando antes, se estiver
 locked), `git branch -d` e `git push origin --delete <branch>`. A remota é tão
 obrigatória quanto a local — deixar branches de trabalho mortas cria uma
@@ -349,12 +359,12 @@ outros workflows — trava anti-recursão do GitHub. Sem o segredo o fluxo funci
 e é seguro, porque o código promovido é bit a bit o que passou no CI de `dev`;
 com ele, `staging` e as PRs geradas também recebem checks próprios.
 
-| Ambiente | Branch | Banco Turso | Endereço |
+| Ambiente | Branch | Banco PostgreSQL | Endereço |
 |---|---|---|---|
-| Produção | `main` | `master-jobs` | `jobs.mastertimm.com.br` |
-| Staging | `staging` | `master-jobs-staging` | `jobs-staging.mastertimm.com.br` |
-| Dev | `dev` | `master-jobs-dev` | `jobs-dev.mastertimm.com.br` |
-| Local | — | `file:./data/jobs.db` | `127.0.0.1:3000` |
+| Produção | `main` | Supabase (`production`) | `jobs.mastertimm.com.br` |
+| Staging | `staging` | fixture isolada (pendente) | `jobs-staging.mastertimm.com.br` |
+| Dev | `dev` | fixture isolada (pendente) | `jobs-dev.mastertimm.com.br` |
+| Local | — | PostgreSQL Docker (`127.0.0.1:5432`) | `127.0.0.1:3000` |
 
 > **19. Antes de abrir PR, rode a revisão profunda.**
 > `/deep-review` (skill em `.claude/skills/deep-review/`) revisa o diff com
@@ -416,7 +426,7 @@ O conjunto instalado cobre o ciclo inteiro: `documentation-writer` na autoria,
 `agent-output-audit` para conferir tarefas de agentes, `deslop` antes da revisão
 e `ship-pr` depois do veredito de `deep-review`. Regras desta página sempre têm
 precedência sobre exemplos genéricos das skills — em especial RTK, base `dev`,
-worktree obrigatória, SQLite/libSQL e os gates deste repositório.
+worktree obrigatória, PostgreSQL/Supabase e os gates deste repositório.
 
 
 ## QA de jornada
@@ -576,7 +586,7 @@ rtk pnpm jho profile             # valida profile.yaml
 # desenvolvimento
 rtk pnpm check                   # typecheck + testes — verde antes de qualquer entrega
 rtk pnpm test:qa-skills          # contratos dos conversores do tracker QA
-rtk pnpm test:e2e                # browser real isolado: build, SQLite e porta temporários
+rtk pnpm test:e2e                # browser real isolado: build, PostgreSQL e porta temporários
 rtk pnpm db:generate             # gera migration após editar schema.ts
 ```
 
@@ -613,7 +623,7 @@ src/cli.ts         Commander
 app/               dashboard Next.js 16 — adapter sobre APIs públicas
 config/sources.yaml   quais boards buscar
 profile/profile.yaml  perfil do candidato — fonte da verdade do scoring
-data/jobs.db       banco local (gitignored)
+data/jobs.db       snapshot SQLite legado (gitignored; não é runtime)
 ```
 
 Fluxo: `sources → ingest → scoring → application → report/UI`.
@@ -639,7 +649,9 @@ atuais seguem o padrão da regra 4.
 - **Erro de uma fonte não derruba o sync.** Registra em `source.lastError`.
 - **Tudo idempotente.**
 - **Zod valida o que é editado à mão** (`profile.yaml`, `sources.yaml`).
-- **Sem dependência nativa.** libSQL, não `better-sqlite3`.
+- **PostgreSQL explícito.** `DATABASE_URL` é o runtime; `DATABASE_MIGRATION_URL`
+  é a conexão privilegiada de migrations. SQLite/Turso só aparecem no fluxo de
+  importação do snapshot legado.
 - **UI:** shadcn/ui sobre Tailwind v4. `--primary` é o azul do `DESIGN.md`.
   Estado de filtro vive na URL, não em React — as páginas não enviam JS de
   cliente.
@@ -684,9 +696,10 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 Pronto: sourcing (10 adapters), scoring com moeda, funil, e-mail, referrals,
 verificação de links, dashboard Next.js, export CSV e markdown.
 
-Não existe ainda: deploy, OAuth do Gmail, geração de CV/cover letter,
-publicação no LinkedIn, submissão autônoma. Ver `docs/roadmap.md` — e **não
-descreva como pronto o que não está**.
+O dashboard local e o preparo de deploy existem; o corte de produção para
+Supabase, OAuth do Gmail, geração de CV/cover letter, publicação no LinkedIn e
+submissão autônoma ainda não estão concluídos. Ver `docs/roadmap.md` — e
+**não descreva como pronto o que não está**.
 
 ---
 

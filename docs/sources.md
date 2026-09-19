@@ -170,8 +170,23 @@ https://api.smartrecruiters.com/v1/companies/{handle}/postings?limit=100&offset=
   de mão amarrada. Trate o score dela como piso, nunca como veredicto.
 - `url` e `applyUrl` são **montados**, não vêm da API:
   `https://jobs.smartrecruiters.com/{handle}/{postingId}`.
+- **Validado contra a API real** em 2026-09-18 com `BoschGroup`: 4.819 vagas na
+  fonte, 500 trazidas pelo teto de paginação, título e localização mapeados, e o
+  warning de corpo ausente emitido como descrito acima.
+
+  ```bash
+  pnpm jho sources probe smartrecruiters BoschGroup
+  ```
+
+- **Handle errado é indistinguível de empresa sem vaga.** A API devolve
+  `{"offset":0,"limit":1,"totalFound":0,"content":[]}` — HTTP 200 — tanto para
+  `BoschGroup` grafado errado quanto para uma empresa que fechou todas as vagas.
+  `Visa` e `Bosch`, que parecem certos, são dos dois casos os primeiros. Não
+  existe resposta que prove o handle; a confirmação vem de abrir
+  `https://jobs.smartrecruiters.com/{handle}` no navegador.
 - Não há nenhuma entrada `smartrecruiters` em `config/sources.yaml` hoje. O
-  adapter está pronto e registrado, mas nunca rodou num sync real.
+  adapter está pronto, registrado e conferido por probe, mas nunca rodou num
+  sync real.
 
 #### `recruitee`
 
@@ -185,6 +200,19 @@ https://{handle}.recruitee.com/api/offers/
   keywords que o scorer procura.
 - `url = careers_url ?? https://{handle}.recruitee.com/o/{slug}`.
 - `companyName = config.label`.
+- **Validado contra a API real** em 2026-09-18 com `grip`: três vagas, e a
+  resposta traz `description`, `requirements`, `remote` como booleano,
+  `location` e `published_at` — tudo que o adapter mapeia, sem campo inventado.
+
+  ```bash
+  pnpm jho sources probe recruitee grip
+  ```
+
+- **Aqui o handle errado se denuncia**, ao contrário da SmartRecruiters:
+  subdomínio inexistente devolve `{"error":"Not Found"}`, e um que existe sem
+  vaga aberta devolve `{"offers":[]}`. Um probe com zero vagas nesta fonte
+  significa board vazio, não handle errado — a distinção vale porque é ela que
+  decide entre corrigir a configuração e esperar a empresa publicar.
 - Também sem entrada em `config/sources.yaml` hoje.
 
 ### Agregadores — `src/core/sources/aggregators.ts`

@@ -215,36 +215,48 @@ kit de candidatura (2.4) e de engajamento (2.5) permanecem fora desta onda.
 
 ---
 
+### 2.7 Ciclo de vida e ambientes baratos
+
+**Estado: 📋 capturado para esta semana.** O produto precisa arquivar vagas
+fechadas antigas sem remover candidaturas e precisa impedir que dev/staging
+baixem dados reais. O plano está dividido em duas tarefas Compozy:
+
+- [`job-lifecycle-retention`](../.compozy/tasks/job-lifecycle-retention/) —
+  `archived_at`, rotina dry-run, histórico do candidato e visão escopada do
+  recrutador;
+- [`environment-sample-only`](../.compozy/tasks/environment-sample-only/) —
+  fixtures pequenas, guard fail-closed e cron/Actions de ingestão somente em
+  produção.
+
+As regras duráveis estão nas [ADR 0020](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md) e [ADR 0021](adr/0021-ambientes-nao-produtivos-com-dados-sinteticos.md). Não há código implementado por esta documentação.
+
 ## Fase 3 — Deploy
 
-**Estado: ✅ implantado em Vercel + Turso, sem retirar o modo local.** O
-default de `TURSO_DATABASE_URL` continua sendo `file:./data/jobs.db`, portanto
-`pnpm jho` funciona com zero configuração local. Produção, staging e dev usam
-bancos Turso separados e seguem o fluxo de branches descrito em
-`docs/engineering/deploy.md`.
+**Estado: 🟡 runtime PostgreSQL preparado; corte Supabase pendente.** O
+runtime exige `DATABASE_URL`, e migrations exigem `DATABASE_MIGRATION_URL`.
+Local usa uma instância PostgreSQL isolada; o arquivo SQLite legado é apenas
+fonte de importação/teste e não é carregado automaticamente. O corte para o
+projeto Supabase, os ambientes remotos e a reativação de ingestão seguem os
+gates de migração e o fluxo de branches descrito em `docs/engineering/deploy.md`.
 
 O que já foi decidido para não travar depois:
 
 | Decisão | Onde |
 |---|---|
-| libSQL em vez de `better-sqlite3` — mesmo driver para arquivo local e Turso | `src/core/db/client.ts`, `docs/adr/0002-libsql-em-vez-de-better-sqlite3.md` |
-| `drizzle.config.ts` já usa `dialect: "turso"` | `drizzle.config.ts` |
-| `@libsql/client` fora do bundle do Next | `next.config.ts` → `serverExternalPackages` |
-| Falha alta quando a URL é remota e o token está vazio | `getDb()` lança antes de qualquer query |
+| PostgreSQL explícito no runtime; SQLite legado somente em import/test harness | `src/core/db/client.ts`, `scripts/migration/schema.sqlite.ts` |
+| Migrations PostgreSQL separadas do runtime | `src/core/db/migrate.ts`, `drizzle/postgres/` |
+| Falha alta quando `DATABASE_URL` ou `DATABASE_MIGRATION_URL` está ausente | `getDb()`/`runMigrations()` lançam antes de qualquer query |
 
-> **Invariante:** Sem dependência nativa. libSQL, nunca `better-sqlite3`. O
-> filesystem da Vercel é efêmero — um banco só-arquivo lá perderia silenciosamente
-> cada candidatura registrada. Essa é a única razão de a escolha existir.
+> **Invariante:** o runtime não faz fallback silencioso entre PostgreSQL e
+> SQLite/Turso. A URL e as migrations são explícitas por ambiente; falha alta
+> cedo é preferível a conectar no banco errado.
 
-> **Invariante:** URL remota sem token falha alto e cedo. `getDb()` lança se
-> `TURSO_DATABASE_URL` não começa com `file:` e `TURSO_AUTH_TOKEN` está vazio —
-> *"failing loudly here beats a confusing 401 deep inside a cron run."*
-
-### 3.1 Turso + Vercel
+### 3.1 Turso legado + Vercel / corte Supabase
 
 Os três ambientes remotos e o procedimento de migração estão documentados em
-`docs/engineering/deploy.md`. As credenciais Turso continuam pertencendo ao
-operador e ficam nos secrets de cada ambiente, nunca em arquivos versionados.
+`docs/engineering/deploy.md`. Turso permanece como legado até o corte humano;
+as credenciais de qualquer ambiente pertencem ao operador e ficam nos secrets,
+nunca em arquivos versionados.
 
 ### 3.2 Rotas de cron protegidas por `CRON_SECRET`
 

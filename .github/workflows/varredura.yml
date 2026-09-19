@@ -41,14 +41,24 @@ concurrency:
 
 jobs:
   varrer:
+    # Opt-in somente depois de definir retenção/orçamento. A migração seletiva
+    # não autoriza recarregar automaticamente todo o corpus no plano Free.
+    if: github.ref == 'refs/heads/main' && vars.SUPABASE_CRAWL_ENABLED == 'true'
+    environment: production
     runs-on: ubuntu-latest
     # Generoso mas limitado. A varredura inteira leva minutos; uma hora só é
     # alcançada se alguma fonte estiver pendurando a conexão.
     timeout-minutes: 60
 
     env:
-      TURSO_DATABASE_URL: libsql://master-jobs-andreustimm.aws-us-east-1.turso.io
-      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_TOKEN_PROD }}
+      DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+      DATABASE_CA_CERT: config/certs/supabase-ca.crt
+      # A política de ingestão (ADR 0021) nega por omissão: sem declarar o
+      # ambiente, este job normalizaria para `preview` e seria bloqueado. A
+      # allowlist é a segunda metade — produção só gasta cota das fontes que
+      # alguém listou de propósito, e listar é decisão de operação, não de CI.
+      JHO_ENV: production
+      JHO_SOURCE_ALLOWLIST: ${{ vars.JHO_SOURCE_ALLOWLIST }}
       # Das 15 fontes ativas, nenhuma exige Adzuna. Se ele for habilitado sem
       # credenciais, é ignorado com aviso; as outras fontes seguem.
       ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
@@ -68,10 +78,12 @@ jobs:
 
       - name: O segredo existe?
         run: |
-          if [ -z "$TURSO_AUTH_TOKEN" ]; then
-            echo "::error::TURSO_TOKEN_PROD ausente. A varredura escreveria no"
-            echo "banco local do runner, que é descartado ao fim do job — ou seja,"
-            echo "rodaria por minutos e não guardaria nada."
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::SUPABASE_DATABASE_URL ausente. Nenhuma varredura executada."
+            exit 1
+          fi
+          if [ -z "$JHO_SOURCE_ALLOWLIST" ]; then
+            echo "::error::JHO_SOURCE_ALLOWLIST ausente. A política de ingestão exige a lista declarada; nenhuma varredura executada."
             exit 1
           fi
 

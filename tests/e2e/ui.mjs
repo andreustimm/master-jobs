@@ -16,8 +16,8 @@
  * it needs the dev server up.
  *
  * `pnpm test:e2e` owns an isolated build, server and database. To target an
- * already-running environment deliberately, set E2E_BASE and
- * TURSO_DATABASE_URL and run `pnpm test:e2e:external`.
+ * already-running environment deliberately, set E2E_BASE, DATABASE_URL and
+ * DATABASE_MIGRATION_URL, then run `pnpm test:e2e:external`.
  */
 import { chromium, webkit } from "playwright";
 import { readFile } from "node:fs/promises";
@@ -1722,6 +1722,116 @@ try {
   await page.waitForTimeout(1200);
 
 
+  /* ------------- Funil: recusa não pode levar o rascunho junto ------------- */
+
+  // BUG-20260910. O seletor oferecia os dez status; de `preparing` alguém
+  // escolhia `interviewing`, o domínio recusava, e o formulário limpava a nota
+  // digitada junto com a tentativa. Duas afirmações separadas: o que a tela
+  // OFERECE só contém o alcançável, e quando o servidor recusa mesmo assim —
+  // outra aba mudou o estágio no meio — o texto digitado continua na tela.
+  const funnelUrl = `${BASE}/jobs/${TASK04_FIXTURES.funnelJobId}`;
+  await page.goto(funnelUrl, { waitUntil: "networkidle" });
+  await page.selectOption('[data-testid="track-status"]', "shortlisted");
+  await page.locator('[data-testid="track-submit"]').click();
+  await page.locator('[data-testid="mutation-feedback"][role="status"]').waitFor({
+    state: "visible",
+    timeout: 15_000,
+  });
+
+  // Depois de uma gravação aceita, o React limpa o formulário e o `select`
+  // controlado volta à primeira opção sem que o estado mude — a tela passava a
+  // exibir um estágio que não é o gravado, com Salvar ao lado pronto para
+  // mover a candidatura para onde ninguém pediu.
+  const afterSave = await page.evaluate(
+    () => document.querySelector('[data-testid="track-status"]')?.value ?? "",
+  );
+  check("depois de salvar, o seletor mostra o estágio gravado", afterSave === "shortlisted", afterSave);
+
+  await page.goto(funnelUrl, { waitUntil: "networkidle" });
+  const offered = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid="track-status"] option')].map((o) => o.value),
+  );
+  check(
+    "o seletor oferece só os estágios alcançáveis a partir do atual",
+    offered.length === 3 && ["archived", "preparing", "shortlisted"].every((s) => offered.includes(s)),
+    offered.join(","),
+  );
+  check(
+    "estágio inalcançável não é oferecido",
+    !offered.includes("interviewing") && !offered.includes("offer"),
+    offered.join(","),
+  );
+
+  // A outra aba leva a candidatura a um estado terminal. A primeira continua
+  // aberta e desatualizada — é exatamente assim que a recusa ainda acontece
+  // depois de a lista passar a ser derivada.
+  const funnelCtx = await browser.newContext();
+  await funnelCtx.addCookies(await page.context().cookies());
+  const funnelOther = await funnelCtx.newPage();
+  await funnelOther.goto(funnelUrl, { waitUntil: "networkidle" });
+  await funnelOther.selectOption('[data-testid="track-status"]', "archived");
+  await funnelOther.locator('[data-testid="track-submit"]').click();
+  await funnelOther.locator('[data-testid="mutation-feedback"][role="status"]').waitFor({
+    state: "visible",
+    timeout: 15_000,
+  });
+  await funnelOther.close();
+  await funnelCtx.close();
+
+  const draft = "Entrevista técnica marcada para sexta-feira às 14h.";
+  await page.fill('[data-testid="track-note"]', draft);
+  await page.selectOption('[data-testid="track-status"]', "preparing");
+  await page.locator('[data-testid="track-submit"]').click();
+  await page.locator('[data-testid="mutation-feedback"][role="alert"]').waitFor({
+    state: "visible",
+    timeout: 15_000,
+  });
+  const rejection = (await page.locator('[data-testid="mutation-feedback"]').textContent()) ?? "";
+  const keptDraft = await page.inputValue('[data-testid="track-note"]');
+  check(
+    "transição recusada preserva a nota digitada",
+    keptDraft === draft,
+    `${keptDraft.slice(0, 40)}`,
+  );
+  check(
+    "a recusa nomeia os dois estágios em vez de falhar em geral",
+    rejection.includes("Arquivada") && rejection.includes("Preparando"),
+    rejection.slice(0, 120),
+  );
+
+  // BUG-20260917-stale-stages-after-refusal. O aviso manda escolher um estágio
+  // alcançável; antes da correção a lista continuava a de quando a página
+  // abriu, e as duas opções restantes eram recusadas de novo — instrução que a
+  // própria tela impedia de cumprir.
+  // A revalidação chega pela resposta da própria action; esperar o efeito, e não
+  // um tempo fixo, é o que separa "atualizou" de "ainda não atualizou".
+  await page.waitForFunction(
+    () => document.querySelectorAll('[data-testid="track-status"] option').length === 1,
+    undefined,
+    { timeout: 15_000 },
+  );
+  const afterRejection = await page.evaluate(() => ({
+    offered: [...document.querySelectorAll('[data-testid="track-status"] option')].map((o) => o.value),
+    selected: document.querySelector('[data-testid="track-status"]')?.value ?? "",
+    note: document.querySelector('[data-testid="track-note"]')?.value ?? "",
+  }));
+  check(
+    "depois da recusa a lista acompanha o estágio realmente gravado",
+    afterRejection.offered.length === 1 && afterRejection.offered[0] === "archived",
+    afterRejection.offered.join(","),
+  );
+  check(
+    "depois da recusa o seletor aponta para o estágio gravado",
+    afterRejection.selected === "archived",
+    afterRejection.selected,
+  );
+  check(
+    "a revalidação da recusa não apaga a nota digitada",
+    afterRejection.note === draft,
+    afterRejection.note.slice(0, 40),
+  );
+
+
   /* ------------------- Cenários por papel, ponta a ponta (E-06) ------------ */
 
   // A matriz de PERMISSÃO já está coberta em teste puro — `auth-policy` afirma
@@ -1803,6 +1913,55 @@ try {
         "recrutador exporta o acervo global",
         exportDownload.suggestedFilename().startsWith("vagas-"),
         exportDownload.suggestedFilename(),
+      );
+
+      // F-07 E2E-002 — o escopo do recrutador vem do vínculo, e o endereço não
+      // o alarga. A fixture não cria vínculo nenhum para esta conta, então a
+      // área existe, explica o vazio, e qualquer id na URL responde 404 — o
+      // mesmo 404 de um candidato que não existe, para não contar quem existe.
+      const scopeFailures = [];
+      const followed = await rolePage.goto(`${BASE}/recruiter`, { waitUntil: "networkidle" });
+      if (followed?.status() !== 200) scopeFailures.push(`/recruiter deu ${followed?.status()}`);
+      if ((await rolePage.locator('[data-testid="recruiter-empty"]').count()) !== 1) {
+        scopeFailures.push("sem vínculo, a área não explica o vazio");
+      }
+      if ((await rolePage.locator('[data-testid^="recruiter-candidate-"]').count()) !== 0) {
+        scopeFailures.push("lista trouxe candidato sem vínculo");
+      }
+
+      // Requisição direta, e não navegação: o que se mede aqui é o STATUS, e
+      // um 404 navegado entra no coletor de erros de console da E2E-025 como
+      // se a aplicação tivesse quebrado. O contexto é o mesmo, então a sessão
+      // do recrutador vai junto — é ela que está sendo testada.
+      // As sondas de 404 navegam num contexto PRÓPRIO, com sessão própria. Num
+      // 404 o navegador registra "Failed to load resource" no console, e a
+      // E2E-025 coleta o console de `rolePage` para a suíte inteira: sondar
+      // ali reprovaria aquela verificação com um 404 que este teste pediu.
+      // Requisição direta também não serve — ela não leva o cookie de sessão e
+      // o proxy devolve 307, que mede o login e não o escopo.
+      const probeCtx = await browser.newContext();
+      const probePage = await probeCtx.newPage();
+      await probeCtx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+      await probePage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+      await probePage.fill('input[name="email"]', scenario.email);
+      await probePage.fill('input[name="password"]', E2E_PASSWORD);
+      await probePage.locator('[data-testid="login-submit"]').click();
+      await probePage.waitForTimeout(2000);
+
+      for (const probe of ["1", "999999", "abc"]) {
+        const denied = await probePage.goto(`${BASE}/recruiter/${probe}`, {
+          waitUntil: "networkidle",
+        });
+        if (denied?.status() !== 404) {
+          scopeFailures.push(`/recruiter/${probe} respondeu ${denied?.status()}, esperado 404`);
+        }
+      }
+      await probeCtx.close();
+
+      check(
+        "F-07 E2E-002 recrutador sem vínculo não alcança funil por deep link",
+        scopeFailures.length === 0,
+        scopeFailures.join(" | "),
       );
     }
 
@@ -3254,6 +3413,63 @@ try {
     "task-04 E2E-003 famílias contextuais chegam ao destino e preservam estado",
     contextualFamilyFailures.length === 0,
     contextualFamilyFailures.join(" | "),
+  );
+
+  // F-07 E2E-001 — o histórico sobrevive ao fim do anúncio. A vaga da fixture
+  // está fechada E arquivada; a candidatura tem de continuar na tela, com o
+  // estado da vaga dito em algum lugar, depois de filtrar e depois de recarregar.
+  const historyFailures = [];
+  await page.goto(`${BASE}/pipeline`, { waitUntil: "networkidle" });
+  const archivedBadge = page.locator(
+    `[data-testid="pipeline-job-state-${TASK04_FIXTURES.archivedJobId}"]`,
+  );
+  const archivedRow = page.locator(
+    `[data-testid="pipeline-job-${TASK04_FIXTURES.archivedJobId}"]`,
+  );
+  if ((await archivedRow.count()) !== 1) historyFailures.push("linha da vaga arquivada ausente");
+  if ((await archivedBadge.count()) !== 1) {
+    historyFailures.push("estado da vaga não aparece na linha");
+  } else if (!(await archivedBadge.innerText()).trim()) {
+    historyFailures.push("estado da vaga vazio");
+  }
+
+  await page.locator('[data-testid="pipeline-filter-applied"]').click();
+  await page.waitForURL(/stage=applied/, { timeout: 15000 }).catch(() => {});
+  await page.waitForLoadState("networkidle");
+  const filteredUrl = page.url();
+  if (!filteredUrl.includes("stage=applied")) {
+    historyFailures.push(`filtro não entrou na URL: ${new URL(filteredUrl).search || "(vazia)"}`);
+  }
+  if ((await archivedRow.count()) !== 1) {
+    historyFailures.push("filtro por estágio esconde a candidatura arquivada");
+  }
+
+  await page.reload({ waitUntil: "networkidle" });
+  if ((await archivedRow.count()) !== 1) historyFailures.push("recarregar perde a linha");
+  if (!page.url().includes("stage=applied")) {
+    historyFailures.push(`recarregar perde o filtro: ${new URL(page.url()).search || "(vazia)"}`);
+  }
+
+  await page.goto(`${BASE}/pipeline?stage=nao-existe`, { waitUntil: "networkidle" });
+  if ((await page.locator('[data-testid="pipeline-unknown-stage"]').count()) !== 1) {
+    historyFailures.push("estágio inválido não é explicado");
+  }
+  if ((await archivedRow.count()) !== 1) {
+    historyFailures.push("estágio inválido esconde o funil em vez de mostrá-lo inteiro");
+  }
+
+  // Página além do fim mostrava "nada no funil ainda" para quem TEM
+  // candidatura — a lista vazia contando a mesma mentira que o estágio
+  // desconhecido contaria. Agora o pedido é limitado à última página real.
+  await page.goto(`${BASE}/pipeline?page=999`, { waitUntil: "networkidle" });
+  if ((await archivedRow.count()) !== 1) {
+    historyFailures.push("página além do fim esvazia o funil de quem tem candidatura");
+  }
+
+  check(
+    "F-07 E2E-001 histórico mantém candidatura de vaga arquivada após filtro e refresh",
+    historyFailures.length === 0,
+    historyFailures.join(" | "),
   );
 
   const redirectEvidence = [];

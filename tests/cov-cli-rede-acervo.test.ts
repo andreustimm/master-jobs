@@ -72,7 +72,7 @@ beforeAll(async () => {
 
 // O worker do Vitest reaproveita o processo entre arquivos; deixar a variável
 // apontando para um YAML temporário contaminaria suíte alheia.
-afterAll(() => {
+afterAll(async () => {
   if (sourcesPathOriginal === undefined) delete process.env.JHO_SOURCES_PATH;
   else process.env.JHO_SOURCES_PATH = sourcesPathOriginal;
 });
@@ -82,10 +82,10 @@ beforeEach(async () => {
   candidatoId = await syncCandidateFromProfile();
 });
 
-afterEach(() => {
+afterEach(async () => {
   resetHttpPort();
   vi.unstubAllGlobals();
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 /**

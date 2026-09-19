@@ -99,7 +99,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  releaseTestDb();
+  await releaseTestDb();
   delete process.env.JHO_PROFILE_PATH;
   await rm(profileDir, { recursive: true, force: true });
 });

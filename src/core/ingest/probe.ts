@@ -27,6 +27,7 @@
  */
 
 import { safeRemoteFetch, type LookupHost } from "../remote-url.ts";
+import { guardIngestion } from "./guard.ts";
 
 export type ProbeVerdict = "alive" | "gone" | "inconclusive";
 
@@ -52,6 +53,11 @@ export async function probe(
   url: string,
   opts: { timeoutMs?: number; fetchImpl?: typeof fetch; lookupHost?: LookupHost } = {},
 ): Promise<ProbeResult> {
+  // A sonda é o menor pedaço de rede do sistema, e por isso o mais fácil de
+  // esquecer: sem guarda aqui, um worker de recheck em staging sangraria
+  // requisição a requisição sem nunca passar por `verifyJobs`.
+  guardIngestion();
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 15_000);
   const headers = { "user-agent": process.env.JHO_USER_AGENT ?? "master-jobs/0.1" };

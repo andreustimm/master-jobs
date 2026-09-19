@@ -550,10 +550,24 @@ export const ptBR = {
     jobsList: "lista de vagas",
     appliedOn: "aplicado em {date}",
     nextAction: "próximo: {action}",
+    jobClosed: "vaga encerrada",
+    jobArchived: "vaga arquivada",
+    allStages: "todos",
+    unknownStage: "Estágio desconhecido; mostrando o funil inteiro.",
+    noneInStage: "Nenhuma candidatura neste estágio.",
   },
   referrals: {
     title: "Referrals",
     companies: "empresa(s)",
+  },
+  recruiter: {
+    title: "Acompanhados",
+    lead:
+      "Os candidatos que autorizaram você a acompanhar o funil deles. Quem cria o vínculo é a própria pessoa — você vê o andamento, e nada além disso.",
+    noCandidates: "Ninguém autorizou você a acompanhar um funil ainda.",
+    noApplications: "Esta pessoa ainda não tem candidaturas.",
+    applications: "{count} candidatura(s)",
+    candidateHistory: "Histórico · {count} candidatura(s)",
   },
   jobDetail: {
     recheck: "reconferir",
@@ -579,6 +593,17 @@ export const ptBR = {
     capturedOn: "capturada em",
     openFull: "Abrir a vaga completa →",
     aboveCut: "Acima do corte de {cut}, no acervo inteiro.",
+    moveTo: "mover para",
+    notePlaceholder: "nota (opcional)",
+    saveStatus: "Salvar",
+    transitionRejected:
+      "O funil não vai de {from} para {to}. Sua nota continua aqui; escolha um estágio alcançável.",
+    transitionConflict:
+      "Esta candidatura mudou em outra tela. Recarregue para ver o estágio atual e tente de novo.",
+    history: "Histórico da candidatura",
+    historyMoved: "de {from} para {to}",
+    historyStarted: "registrada em {to}",
+    historyNote: "nota",
   },
   copy: {
     candidateLead:

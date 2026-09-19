@@ -14,7 +14,130 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 <!-- sem-nota-usuario: 1.0.1 internal change with no user-visible effect -->
 <!-- sem-nota-usuario: 1.1.1 - 2026-08-22 internal change with no user-visible effect -->
 
+<!-- sem-nota-usuario: 1.7.0 - 2026-09-16T17:56:44.121Z -->
+
 ## [Unreleased]
+
+## [1.13.1] - 2026-09-18T19:54:03.273Z
+
+### Fixed
+
+- Opening the pipeline on a page that does not exist no longer claims you have
+  no applications. The list now falls back to the last page with content.
+
+## [1.13.0] - 2026-09-18T19:00:08.565Z
+
+### New
+
+- Recruiters now have an area of their own, listing the people who authorised
+  them to follow a pipeline. That authorisation is created by the candidate, and
+  a recruiter sees only the progress — never the pipeline of someone who did not
+  authorise them.
+
+## [1.12.0] - 2026-09-18T18:01:07.970Z
+
+### Improved
+
+- Publishing the system now uses the database configuration the provider
+  already maintains, instead of requiring a manual copy that goes stale. When
+  the database password is rotated on the provider's side, the system stays up
+  without anyone updating anything by hand.
+### Fixed
+
+- Preparing a test version failed when a sample résumé was already stored under
+  a different name. The preparation now updates the résumé that is there instead
+  of trying to create a second one.
+### New
+
+- The pipeline now shows when a job was closed or left the board, next to your
+  application's stage. One does not touch the other: a job closing does not move
+  you to another stage.
+- You can filter the pipeline by stage and page through the history. The total
+  stays the same while you navigate, and the filter lives in the address — a
+  reload or a back button does not lose what you were looking at.
+### New
+
+- Corpus cleanup gained a reversible step: jobs closed long ago can leave the
+  active list without being deleted, and they come back on their own if the
+  posting reopens. Nothing you recorded about an application — the stage, the
+  notes, the dates — is touched by that step. The command shows what it would
+  do before changing anything.
+
+## [1.11.1] - 2026-09-18T16:55:28.948Z
+
+### Fixed
+
+- Preparing a test version with sample data could fail when two releases
+  happened at the same time. The preparation now settles on its own and ends
+  with the same set of samples, with nothing duplicated.
+
+## [1.11.0] - 2026-09-18T15:58:18.484Z
+
+### Improved
+
+- Automatic job fetching now runs only on the published system. Test versions no
+  longer trigger fetches or consume the job boards' quota, even if they share
+  some configuration by mistake.
+
+## [1.10.0] - 2026-09-18T15:23:04.431Z
+
+### Improved
+
+- Test versions of the system now ship with a small set of sample jobs and
+  accounts, covering remote, hybrid, on-site and already-closed postings. Anyone
+  trying one of those versions sees the screens working without depending on
+  real data.
+
+## [1.9.0] - 2026-09-18T15:01:18.066Z
+
+### Improved
+
+- The system's test environments no longer fetch real jobs: they work on sample
+  data only. Anyone using the published system sees no difference; anyone trying
+  a test version no longer consumes the job boards' quota or mixes real data
+  into a rehearsal.
+
+## [1.8.0] - 2026-09-18T02:18:09.098Z
+
+### Added
+
+- The job detail now shows the application's history: every stage change with
+  its date and the note you wrote at that moment.
+
+## [1.7.2] - 2026-09-18T02:01:07.561Z
+
+### Fixed
+
+- When you move an application, the list now shows only the stages it can reach
+  from where it is.
+- If the change is refused, the note you typed stays on screen, and the message
+  says which stage cannot lead to which.
+- After a refusal, the screen now shows the application's current stage and the
+  options that actually lead somewhere, with no reload needed.
+- A note written without changing the stage is no longer discarded on save.
+
+## [1.7.1] - 2026-09-16T22:56:50.789Z
+
+### Fixed
+
+- Compensation values with cents are now imported correctly.
+
+## [1.6.0] - 2026-09-16T05:24:04.621Z
+
+### Improved
+
+- Maintenance now checks that your jobs and decisions remain preserved before a
+  database change.
+
+## [1.5.0] - 2026-09-16T02:16:17.210Z
+
+### Improved
+
+- Job sourcing now automatically discards technical copies that are no longer
+  needed after processing, keeping the database smaller and reducing quota
+  outage risk.
+- Cockpit counters now query the corpus with fewer reads without changing the
+  filters or displayed results.
 
 ## [1.4.1] - 2026-09-15T23:55:25.383Z
 

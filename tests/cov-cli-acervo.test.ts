@@ -44,8 +44,8 @@ beforeEach(async () => {
   await useTestDb();
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
 });
 
 /** Domínio propositalmente desconhecido: garante o caminho manual, sem rede. */

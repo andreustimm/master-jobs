@@ -7,7 +7,7 @@
 // Fronteira DENTRO: leitura da página capturada, gravação do texto extraído,
 // preenchimento condicional e invalidação de score.
 // Fronteira FORA: a extração pura (extract.ts) e a captura (fetcher.ts).
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
 import { candidate, job, jobPage, jobScore, source } from "../src/core/db/schema.ts";
@@ -126,6 +126,7 @@ describe("parseStored", () => {
 
     const [page] = await db.select().from(jobPage).where(eq(jobPage.jobId, jobId));
     expect(page!.parsedAt).toBeTruthy();
+    expect(page!.html).toBeNull();
     expect(page!.text).toContain("infraestrutura de agentes");
     const extracted = page!.extracted as {
       title: string;
@@ -183,6 +184,37 @@ describe("parseStored", () => {
 
     await parseStored(preenchida);
     expect(await db.select().from(jobScore).where(eq(jobScore.jobId, preenchida))).toEqual([]);
+  });
+
+  it("mantém o HTML quando uma gravação posterior falha", async () => {
+    // O HTML é a última cópia local que permite reprocessar uma captura sem
+    // baixar de novo. O gatilho força a falha entre as escritas e prova que a
+    // transação desfaz também a limpeza do HTML.
+    const jobId = await seedJob(null);
+    await seedPage(jobId, PAGINA);
+    await db.execute(sql.raw(`
+      create function production.falha_descricao() returns trigger
+      language plpgsql as $$
+      begin
+        raise exception 'falha injetada';
+      end;
+      $$;
+      create trigger falha_descricao
+      before update of description_text on production.job
+      for each row
+      when (new.id = ${jobId})
+      execute function production.falha_descricao();
+    `));
+
+    await expect(parseStored(jobId)).rejects.toThrow();
+
+    await db.execute(sql.raw("drop trigger falha_descricao on production.job"));
+    await db.execute(sql.raw("drop function production.falha_descricao()"));
+    const [page] = await db.select().from(jobPage).where(eq(jobPage.jobId, jobId));
+    const [row] = await db.select().from(job).where(eq(job.id, jobId));
+    expect(page!.html).toBe(PAGINA);
+    expect(page!.text).toBeNull();
+    expect(row!.descriptionText).toBeNull();
   });
 
   it("preserva o score quando a descrição não mudou", async () => {
@@ -301,6 +333,19 @@ describe("reparseAll", () => {
   });
 
   it("não faz nada quando ainda não há página capturada", async () => {
+    await expect(reparseAll()).resolves.toEqual({
+      processed: 0,
+      parsed: 0,
+      failed: 0,
+      rescored: 0,
+    });
+  });
+
+  it("pula páginas cujo HTML já foi liberado após o parse", async () => {
+    const jobId = await seedJob();
+    await seedPage(jobId, PAGINA);
+    await parseStored(jobId);
+
     await expect(reparseAll()).resolves.toEqual({
       processed: 0,
       parsed: 0,

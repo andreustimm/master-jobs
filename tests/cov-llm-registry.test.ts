@@ -49,8 +49,8 @@ beforeEach(async () => {
   for (const k of VARIAVEIS) delete process.env[k];
 });
 
-afterEach(() => {
-  releaseTestDb();
+afterEach(async () => {
+  await releaseTestDb();
   for (const [k, v] of Object.entries(salvas)) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;

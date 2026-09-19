@@ -14,7 +14,129 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 <!-- sem-nota-usuario: 1.0.1 mudança interna, nada muda para quem usa -->
 <!-- sem-nota-usuario: 1.1.1 - 2026-08-22 mudança interna, nada muda para quem usa -->
 
+<!-- sem-nota-usuario: 1.7.0 - 2026-09-16T17:56:44.121Z -->
+
 ## [Unreleased]
+
+## [1.13.1] - 2026-09-18T19:54:03.273Z
+
+### Corrigido
+
+- Abrir o funil numa página que não existe deixa de dizer que você não tem
+  candidatura nenhuma. Agora a lista volta para a última página com conteúdo.
+
+## [1.13.0] - 2026-09-18T19:00:08.565Z
+
+### Novidade
+
+- Recrutadores passam a ter uma área própria, com as pessoas que os autorizaram
+  a acompanhar o funil. Quem cria essa autorização é o próprio candidato, e o
+  recrutador vê apenas o andamento — nunca o funil de quem não o autorizou.
+
+## [1.12.0] - 2026-09-18T18:01:07.970Z
+
+### Melhorado
+
+- A publicação do sistema passa a aproveitar a configuração de banco que o
+  provedor já mantém, em vez de exigir uma cópia manual que envelhece. Quando a
+  senha do banco é trocada do lado do provedor, o sistema continua no ar sem
+  ninguém precisar atualizar nada à mão.
+### Corrigido
+
+- Preparar uma versão de teste falhava quando já existia um currículo de exemplo
+  gravado com outro nome. Agora a preparação atualiza o currículo que está lá em
+  vez de tentar criar um segundo.
+### Novidade
+
+- O funil agora mostra quando a vaga foi encerrada ou saiu do quadro, ao lado do
+  estágio da sua candidatura. Uma coisa não mexe na outra: a vaga encerrar não
+  move você de estágio.
+- Dá para filtrar o funil por estágio e percorrer o histórico em páginas. O
+  total continua sendo o mesmo enquanto você navega, e o filtro fica no endereço
+  — recarregar ou voltar não perde o que você estava vendo.
+### Novidade
+
+- A limpeza do acervo ganhou um passo reversível: vagas encerradas há muito
+  tempo podem sair da lista ativa sem serem apagadas, e voltam sozinhas se a
+  vaga reabrir. Nada do que você registrou sobre uma candidatura — o estágio, as
+  anotações, as datas — é tocado nesse passo. Antes de mudar qualquer coisa, o
+  comando mostra o que faria.
+
+## [1.11.1] - 2026-09-18T16:55:28.948Z
+
+### Corrigido
+
+- Preparar uma versão de teste com dados de exemplo podia falhar quando duas
+  publicações aconteciam ao mesmo tempo. Agora a preparação se acerta sozinha e
+  termina com o mesmo conjunto de exemplos, sem repetir nada.
+
+## [1.11.0] - 2026-09-18T15:58:18.484Z
+
+### Melhorado
+
+- A busca automática de vagas só roda no sistema publicado. Versões de teste
+  não disparam mais buscas nem consomem a cota dos sites de vagas, mesmo que
+  compartilhem alguma configuração por engano.
+
+## [1.10.0] - 2026-09-18T15:23:04.431Z
+
+### Melhorado
+
+- As versões de teste do sistema passam a vir com um conjunto pequeno de vagas
+  e contas de exemplo, cobrindo remoto, híbrido, presencial e vagas já
+  encerradas. Quem experimenta uma dessas versões vê as telas funcionando sem
+  depender de dados reais.
+
+## [1.9.0] - 2026-09-18T15:01:18.066Z
+
+### Melhorado
+
+- Os ambientes de teste do sistema deixam de buscar vagas de verdade: eles
+  passam a trabalhar só sobre dados de exemplo. Quem usa o sistema publicado não
+  vê diferença; quem experimenta uma versão de teste não consome mais a cota
+  dos sites de vagas nem mistura dados reais com ensaio.
+
+## [1.8.0] - 2026-09-18T02:18:09.098Z
+
+### Adicionado
+
+- O detalhe da vaga passa a mostrar o histórico da candidatura: cada mudança de
+  estágio com a data e a nota que você escreveu naquele momento.
+
+## [1.7.2] - 2026-09-18T02:01:07.561Z
+
+### Corrigido
+
+- Ao mover uma candidatura, a lista mostra só os estágios para onde ela pode ir
+  a partir de onde está.
+- Se a mudança for recusada, a nota que você digitou continua na tela, e o aviso
+  diz de qual estágio para qual não é possível ir.
+- Depois de uma recusa, a tela passa a mostrar o estágio atual da candidatura e
+  as opções que realmente levam a algum lugar, sem precisar recarregar.
+- Uma nota escrita sem mudar o estágio deixa de ser descartada ao salvar.
+
+## [1.7.1] - 2026-09-16T22:56:50.789Z
+
+### Corrigido
+
+- Valores de remuneração com centavos agora são importados corretamente.
+
+## [1.6.0] - 2026-09-16T05:24:04.621Z
+
+### Melhorado
+
+- As manutenções agora verificam se suas vagas e decisões continuam preservadas
+  antes de uma mudança de banco.
+
+## [1.5.0] - 2026-09-16T02:16:17.210Z
+
+### Melhorado
+
+- A busca de vagas passa a descartar automaticamente cópias técnicas que não
+  são usadas depois do processamento, mantendo o banco menor e reduzindo o
+  risco de indisponibilidade por cota.
+- Os contadores do cockpit consultam o acervo com menos leituras, sem alterar
+  os filtros nem os resultados mostrados.
 
 ## [1.4.1] - 2026-09-15T23:55:25.383Z
 
@@ -25,7 +147,6 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   exportar a lista sem acessar o funil de outra pessoa.
 - Uma conta que deixa de ser candidata não mantém acesso ao seu funil privado
   ao entrar novamente.
-
 ## [1.4.0] - 2026-09-15T18:14:00.754Z
 
 ### Novidade

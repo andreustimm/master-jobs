@@ -46,13 +46,13 @@ beforeEach(async () => {
   await useTestDb();
 });
 
-afterEach(() => {
+afterEach(async () => {
   for (const chave of AMBIENTE_TOCADO) {
     const valor = ambienteOriginal[chave];
     if (valor === undefined) delete process.env[chave];
     else process.env[chave] = valor;
   }
-  releaseTestDb();
+  await releaseTestDb();
 });
 
 /** Primeiro item do plano semeado, que é o alvo estável dos casos de `show`. */

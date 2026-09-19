@@ -1,0 +1,35 @@
+name: master-jobs-local
+
+services:
+  db:
+    # Production is PostgreSQL 17.6.1.x. Keep the same major/minor locally;
+    # the patch is pinned so a fresh extension install remains reproducible.
+    image: ${LOCAL_POSTGRES_IMAGE:-supabase/postgres:17.6.1.171}
+    container_name: master-jobs-local-supabase-db
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+    environment:
+      # Supabase's image uses this superuser for extension initialization.
+      POSTGRES_USER: ${LOCAL_POSTGRES_USER:-supabase_admin}
+      POSTGRES_PASSWORD: ${LOCAL_POSTGRES_PASSWORD:-master_jobs_local_only}
+      POSTGRES_DB: ${LOCAL_POSTGRES_DB:-master_jobs_local}
+    ports:
+      - "127.0.0.1:${LOCAL_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - master_jobs_local_pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./docker/postgres/verify.sql:/docker/verify.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+
+volumes:
+  master_jobs_local_pgdata:

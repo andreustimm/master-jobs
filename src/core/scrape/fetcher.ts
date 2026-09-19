@@ -17,6 +17,7 @@ import {
   safeRemoteFetch,
   type LookupHost,
 } from "../remote-url.ts";
+import { guardIngestion } from "../ingest/guard.ts";
 import { mayFetch, robotsFor } from "./robots.ts";
 import { dbQueue, type ClaimedTask, type QueuePort } from "./queue.ts";
 
@@ -168,6 +169,11 @@ export async function runFetchStage(
     lookupHost?: LookupHost;
   } = {},
 ): Promise<StageResult> {
+  // Antes de `opts.queue ?? dbQueue`: o padrão resolve a fila do banco, e o
+  // contrato desta feature é que contexto bloqueado não constrói nem adapter
+  // nem fila.
+  guardIngestion();
+
   const queue = opts.queue ?? dbQueue;
   const fetcher = opts.fetcher ?? fetch;
   const concurrency = Math.max(1, opts.concurrency ?? 4);

@@ -25,6 +25,7 @@ import { getDb } from "../db/client.ts";
 import { job } from "../db/schema.ts";
 import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
+import { guardIngestion } from "./guard.ts";
 import { probe } from "./probe.ts";
 
 export type VerifyResult = {
@@ -48,6 +49,10 @@ export async function verifyJobs(
     onProgress?: (done: number, total: number) => void;
   } = {},
 ): Promise<VerifyResult> {
+  // Reconferir é rede de terceiro como qualquer outra: bloqueia antes de abrir
+  // conexão com o banco para montar a fila de candidatos.
+  guardIngestion();
+
   const db = getDb();
   const limit = opts.limit ?? 200;
   const minFit = opts.minFit ?? 55;
@@ -65,7 +70,7 @@ export async function verifyJobs(
     .where(
       and(
         isNull(job.closedAt),
-        sql`coalesce((select max(fit) from job_score where job_id = ${job.id}), 0) >= ${minFit}`,
+        sql`coalesce((select max(fit) from production.job_score where job_id = ${job.id}), 0) >= ${minFit}`,
         or(
           like(job.applyUrl, "http://%"),
           like(job.applyUrl, "https://%"),
@@ -75,7 +80,7 @@ export async function verifyJobs(
       ),
     )
     .orderBy(
-      sql`coalesce((select max(fit) from job_score where job_id = ${job.id}), 0) desc`,
+      sql`coalesce((select max(fit) from production.job_score where job_id = ${job.id}), 0) desc`,
     );
 
   // Parse after the coarse SQL prefix filter so malformed values cannot

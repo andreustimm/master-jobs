@@ -5,8 +5,8 @@
  * query changes it once, and the CLI and dashboard can never disagree about
  * what "shortlisted" or "open" means.
  */
-import { and, desc, eq, gte, isNull, sql, type SQL } from "drizzle-orm";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import { and, desc, eq, gte, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import type { WorkMode } from "../../contexts/matching/index.ts";
 import { workModeSql } from "./work-mode.ts";
 import {
@@ -16,12 +16,14 @@ import {
 import { getDb, type DB } from "./client.ts";
 import {
   application,
+  candidate,
   jobPage,
   applicationEvent,
   candidateDocument,
   job,
   jobScore,
   source,
+  company,
   type ApplicationStatus,
   verifyTask,
 } from "./schema.ts";
@@ -109,6 +111,12 @@ export type BoardFilters = {
   offset?: number;
 };
 
+const DAY_MS = 86_400_000;
+
+function freshnessCutoff(days: number): string {
+  return new Date(Date.now() - days * DAY_MS).toISOString();
+}
+
 function boardConditions(opts: BoardFilters, candidateId: number | null): SQL[] {
   const conditions: SQL[] = [isNull(job.closedAt)];
   // Fit, cluster, blockers and application status are candidate-scoped. A
@@ -119,7 +127,9 @@ function boardConditions(opts: BoardFilters, candidateId: number | null): SQL[] 
   if (candidateId !== null) {
     conditions.push(gte(sql`coalesce(${jobScore.fit}, 0)`, opts.minFit ?? 0));
     if (opts.cluster) conditions.push(eq(jobScore.cluster, opts.cluster));
-    if (opts.hideBlocked) conditions.push(sql`coalesce(${jobScore.blockers}, '[]') = '[]'`);
+    if (opts.hideBlocked) {
+      conditions.push(sql`coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb`);
+    }
     if (opts.status === "unfiled") conditions.push(isNull(application.id));
     else if (opts.status && opts.status !== "any") {
       conditions.push(eq(application.status, opts.status));
@@ -134,8 +144,9 @@ function boardConditions(opts: BoardFilters, candidateId: number | null): SQL[] 
   if (opts.sourceKind) conditions.push(sql`${job.sourceId} like ${`${opts.sourceKind}:%`}`);
   if (opts.workMode) conditions.push(eq(workModeSql(), opts.workMode));
   if (opts.freshDays && opts.freshDays > 0) {
-    const cutoff = new Date(Date.now() - opts.freshDays * 86_400_000).toISOString();
-    conditions.push(sql`coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${cutoff}`);
+    conditions.push(
+      sql`coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${freshnessCutoff(opts.freshDays)}`,
+    );
   }
   if (opts.hasComp) conditions.push(sql`coalesce(${job.compMax}, ${job.compMin}, 0) > 0`);
   if (opts.hasDescription) {
@@ -160,7 +171,7 @@ function boardConditions(opts: BoardFilters, candidateId: number | null): SQL[] 
  * alguém criasse um candidato com id negativo, o acervo dele vazaria para todo
  * mundo sem escopo.
  */
-function scopedTo(column: SQLiteColumn, candidateId: number | null) {
+function scopedTo(column: PgColumn, candidateId: number | null) {
   return candidateId === null ? sql`1 = 0` : eq(column, candidateId);
 }
 
@@ -278,18 +289,35 @@ export async function countBoard(
 
 /** Counts for the filter chips, so the UI can show what each option yields. */
 export async function boardFacets(candidateId: number | null, base: BoardFilters = {}) {
-  const sourceKind = sql<string>`case
-    when instr(${job.sourceId}, ':') > 0 then substr(${job.sourceId}, 1, instr(${job.sourceId}, ':') - 1)
-    else ${job.sourceId}
-  end`;
+  const sourceKind = sql<string>`split_part(${job.sourceId}, ':', 1)`;
   const dimensions = { ...base, limit: undefined, offset: undefined };
-  const [total, unblocked, fresh, withComp, named, described, clusterRows, sourceRows] = await Promise.all([
-    countBoard(candidateId, dimensions),
-    countBoard(candidateId, { ...dimensions, hideBlocked: true }),
-    countBoard(candidateId, { ...dimensions, freshDays: 3 }),
-    countBoard(candidateId, { ...dimensions, hasComp: true }),
-    countBoard(candidateId, { ...dimensions, namedEmployer: true }),
-    countBoard(candidateId, { ...dimensions, hasDescription: true }),
+  const freshCutoff = freshnessCutoff(3);
+
+  // These six counters used to call `countBoard` independently. Each call
+  // scanned the complete open corpus and its candidate-scoped joins, so one
+  // cockpit render paid six full scans before loading a single card. Conditional
+  // aggregation produces the same facets with one corpus scan.
+  const [summaryRows, clusterRows, sourceRows] = await Promise.all([
+    getDb()
+      .select({
+        total: sql<number>`count(*)`,
+        unblocked: sql<number>`coalesce(sum(case when coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb then 1 else 0 end), 0)`,
+        fresh: sql<number>`coalesce(sum(case when coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${freshCutoff} then 1 else 0 end), 0)`,
+        withComp: sql<number>`coalesce(sum(case when coalesce(${job.compMax}, ${job.compMin}, 0) > 0 then 1 else 0 end), 0)`,
+        named: sql<number>`coalesce(sum(case when lower(${job.companyName}) <> lower(coalesce(${source.label}, '')) then 1 else 0 end), 0)`,
+        described: sql<number>`coalesce(sum(case when length(coalesce(${job.descriptionText}, '')) >= 200 then 1 else 0 end), 0)`,
+      })
+      .from(job)
+      .leftJoin(
+        jobScore,
+        and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
+      )
+      .leftJoin(
+        application,
+        and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
+      )
+      .leftJoin(source, eq(source.id, job.sourceId))
+      .where(and(...boardConditions(dimensions, candidateId))),
     getDb()
       .select({ cluster: jobScore.cluster })
       .from(job)
@@ -321,13 +349,14 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
       .groupBy(sourceKind)
       .then((rows) => rows.map((row) => row.kind).sort()),
   ]);
+  const summary = summaryRows[0];
   return {
-    total,
-    unblocked,
-    fresh,
-    withComp,
-    named,
-    described,
+    total: Number(summary?.total ?? 0),
+    unblocked: Number(summary?.unblocked ?? 0),
+    fresh: Number(summary?.fresh ?? 0),
+    withComp: Number(summary?.withComp ?? 0),
+    named: Number(summary?.named ?? 0),
+    described: Number(summary?.described ?? 0),
     clusters: clusterRows,
     sources: sourceRows,
   };
@@ -395,6 +424,22 @@ export async function setApplicationStatusInTransaction(
         .update(application)
         .set({ channel, updatedAt: stamp })
         .where(eq(application.id, previous.id));
+    }
+    // A nota tem a mesma natureza que o canal, e por muito tempo não teve o
+    // mesmo tratamento: ela era descartada aqui. Isso ficou alcançável demais
+    // quando a interface passou a oferecer só transições legais — de um estado
+    // terminal a única opção É a atual, então salvar uma nota caía sempre neste
+    // caminho, com a tela anunciando sucesso e nada gravado. Não é transição:
+    // vai como evento `note`, sem `from`/`to`.
+    if (detail?.trim() && previous) {
+      await tx.insert(applicationEvent).values({
+        applicationId: previous.id,
+        at: stamp,
+        kind: "note",
+        fromStatus: null,
+        toStatus: null,
+        detail,
+      });
     }
     return;
   }
@@ -523,6 +568,70 @@ export async function pipelineCounts(candidateId: number): Promise<Record<string
   return Object.fromEntries(rows.map((r) => [r.status, Number(r.n)]));
 }
 
+export type RecruiterCandidateSummary = {
+  candidateId: number;
+  name: string;
+  slug: string;
+  counts: Record<string, number>;
+  total: number;
+};
+
+/**
+ * Resumo do funil de cada candidato que o recrutador acompanha.
+ *
+ * O escopo entra em SQL, como `inArray`, e não como filtro sobre um resultado
+ * global: o banco nunca chega a ler linha de quem não está na lista. Filtrar
+ * depois daria o mesmo resultado na tela e um risco diferente no dia em que
+ * alguém esquecer o filtro — e uma consulta que carrega o funil inteiro para
+ * descartar 99% dele é cara justamente onde o acervo é grande.
+ *
+ * Lista vazia devolve vazio sem consultar: recrutador sem vínculo nenhum não
+ * tem o que ver, e `inArray` com lista vazia é SQL inválido em alguns dialetos.
+ */
+export async function recruiterCandidateSummaries(
+  candidateIds: readonly number[],
+): Promise<RecruiterCandidateSummary[]> {
+  if (candidateIds.length === 0) return [];
+  const db = getDb();
+  const scope = [...candidateIds];
+
+  const [people, counted] = await Promise.all([
+    db
+      .select({ id: candidate.id, name: candidate.name, slug: candidate.slug })
+      .from(candidate)
+      .where(inArray(candidate.id, scope)),
+    db
+      .select({
+        candidateId: application.candidateId,
+        status: application.status,
+        n: sql<number>`count(*)`,
+      })
+      .from(application)
+      .where(inArray(application.candidateId, scope))
+      .groupBy(application.candidateId, application.status),
+  ]);
+
+  const byCandidate = new Map<number, Record<string, number>>();
+  for (const row of counted) {
+    const counts = byCandidate.get(row.candidateId) ?? {};
+    counts[row.status] = Number(row.n);
+    byCandidate.set(row.candidateId, counts);
+  }
+
+  return people
+    .map((person) => {
+      const counts = byCandidate.get(person.id) ?? {};
+      return {
+        candidateId: person.id,
+        name: person.name,
+        slug: person.slug,
+        counts,
+        total: Object.values(counts).reduce((sum, n) => sum + n, 0),
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** Everything the detail view needs, in one round trip. */
 export async function getJobDetail(candidateId: number | null, jobId: number) {
   const db = getDb();
@@ -549,6 +658,39 @@ export async function getJobDetail(candidateId: number | null, jobId: number) {
     application: row.application,
     source: row.source,
   };
+}
+
+/**
+ * O histórico da candidatura, do mais recente para o mais antigo.
+ *
+ * `application_event` era escrito e lido por ninguém: a nota que a pessoa
+ * digita ao mover a candidatura ia para `detail` e não voltava em superfície
+ * alguma — nem na tela, nem em `jobs show`, que lê `application.notes`, outro
+ * campo. Um texto aceito e irrecuperável é indistinguível de perdido.
+ *
+ * O escopo vem do candidato, não do id do evento: a junção exige que a
+ * candidatura seja dele, então pedir o histórico de outra pessoa devolve vazio
+ * em vez de devolver o dela.
+ */
+export async function applicationTimeline(candidateId: number | null, jobId: number) {
+  const db = getDb();
+  return db
+    .select({
+      at: applicationEvent.at,
+      kind: applicationEvent.kind,
+      fromStatus: applicationEvent.fromStatus,
+      toStatus: applicationEvent.toStatus,
+      detail: applicationEvent.detail,
+    })
+    .from(applicationEvent)
+    .innerJoin(application, eq(application.id, applicationEvent.applicationId))
+    .where(
+      and(
+        eq(application.jobId, jobId),
+        scopedTo(application.candidateId, candidateId),
+      ),
+    )
+    .orderBy(desc(applicationEvent.at), desc(applicationEvent.id));
 }
 
 /** Global job and canonical score, deliberately excluding private funnel data. */
@@ -579,15 +721,15 @@ export async function corpusStats(candidateId: number) {
   const db = getDb();
   const [row] = await db
     .select({
-      open: sql<number>`(select count(*) from job where closed_at is null)`,
-      companies: sql<number>`(select count(*) from company)`,
-      sources: sql<number>`(select count(*) from source where enabled = 1)`,
-      above45: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 45)`,
-      above60: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 60)`,
-      above70: sql<number>`(select count(*) from job_score s join job j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 70)`,
-      best: sql<number>`(select coalesce(max(fit), 0) from job_score s join job j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null)`,
+      open: sql<number>`(select count(*) from ${job} where ${job.closedAt} is null)`.mapWith(Number),
+      companies: sql<number>`(select count(*) from ${company})`.mapWith(Number),
+      sources: sql<number>`(select count(*) from ${source} where ${source.enabled} = true)`.mapWith(Number),
+      above45: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 45)`.mapWith(Number),
+      above60: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 60)`.mapWith(Number),
+      above70: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 70)`.mapWith(Number),
+      best: sql<number>`(select coalesce(max(fit), 0) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null)`.mapWith(Number),
     })
-    .from(sql`(select 1)`);
+    .from(sql`(select 1) as singleton`);
   return row;
 }
 
@@ -597,7 +739,7 @@ export async function clusterBreakdown(candidateId: number, minFit = 45) {
   return db
     .select({
       cluster: jobScore.cluster,
-      n: sql<number>`count(*)`,
+      n: sql<number>`count(*)`.mapWith(Number),
       best: sql<number>`max(${jobScore.fit})`,
     })
     .from(jobScore)
@@ -614,8 +756,24 @@ export async function clusterBreakdown(candidateId: number, minFit = 45) {
 }
 
 /** The funnel, with the job each application points at. */
-export async function pipelineRows(candidateId: number) {
+/** Teto de linhas por página. Histórico grande não vira consulta sem fim. */
+export const PIPELINE_PAGE_SIZE = 25;
+
+export type PipelineQuery = {
+  /** Já validado pela borda; `null` é "todos os estágios". */
+  status?: ApplicationStatus | null;
+  limit?: number;
+  offset?: number;
+};
+
+export async function pipelineRows(candidateId: number, query: PipelineQuery = {}) {
   const db = getDb();
+  const limit = query.limit ?? PIPELINE_PAGE_SIZE;
+  const offset = query.offset ?? 0;
+  const scope = query.status
+    ? and(eq(application.candidateId, candidateId), eq(application.status, query.status))
+    : eq(application.candidateId, candidateId);
+
   return db
     .select({
       jobId: job.id,
@@ -629,6 +787,10 @@ export async function pipelineRows(candidateId: number) {
       notes: application.notes,
       fit: jobScore.fit,
       updatedAt: application.updatedAt,
+      // Estado da vaga, não da candidatura: a vaga fecha sozinha e a
+      // candidatura só muda por decisão do usuário.
+      jobClosedAt: job.closedAt,
+      jobArchivedAt: job.archivedAt,
     })
     .from(application)
     .innerJoin(job, eq(job.id, application.jobId))
@@ -636,6 +798,10 @@ export async function pipelineRows(candidateId: number) {
       jobScore,
       and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
     )
-    .where(eq(application.candidateId, candidateId))
-    .orderBy(desc(application.updatedAt));
+    .where(scope)
+    // `id` desempata: sem ele, duas candidaturas salvas no mesmo instante podem
+    // trocar de lugar entre páginas e uma delas some da listagem.
+    .orderBy(desc(application.updatedAt), desc(application.id))
+    .limit(limit)
+    .offset(offset);
 }
