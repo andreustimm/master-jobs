@@ -19,7 +19,7 @@
  */
 
 import type { Instrumentation } from "next";
-import { redactSecrets, safeRequest } from "./src/core/observability.ts";
+import { safeRequest, scrubEvent } from "./src/core/observability.ts";
 
 /** Nome do ambiente para o Sentry, com o mais restrito como padrão. */
 function environment(): string {
@@ -72,23 +72,14 @@ async function iniciarRelato(): Promise<void> {
     /**
      * Última peneira, depois de tudo que o SDK montou.
      *
-     * A pilha atravessa driver e biblioteca de terceiro, e nenhum deles
-     * prometeu não carregar valor na mensagem — o driver do PostgreSQL traz a
-     * URL de conexão inteira, com senha, no texto da exceção.
+     * A implementação mora em `src/core/observability.ts`, pura, porque aqui
+     * dentro nenhum teste a alcançava — e é ela que carrega a promessa de
+     * privacidade inteira. A pilha atravessa driver e biblioteca de terceiro,
+     * e nenhum deles prometeu não carregar valor na mensagem: o driver do
+     * PostgreSQL traz a URL de conexão inteira, com senha, no texto da
+     * exceção.
      */
-    beforeSend(event) {
-      if (event.message) event.message = redactSecrets(event.message);
-      for (const entry of event.exception?.values ?? []) {
-        if (entry.value) entry.value = redactSecrets(entry.value);
-      }
-      // Cookie e IP não passam nem por engano de configuração.
-      if (event.request) {
-        delete event.request.cookies;
-        delete event.request.data;
-      }
-      delete event.user;
-      return event;
-    },
+    beforeSend: (event) => scrubEvent(event),
   });
 }
 

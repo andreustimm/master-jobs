@@ -18,6 +18,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Hardening of failure alerting: the filter that keeps your data out of an
+  error report now covers three fields that previously slipped through.
+  Nothing changes on screen.
+
 ## [1.14.1] - 2026-09-19T13:22:18.417Z
 
 ### Fixed

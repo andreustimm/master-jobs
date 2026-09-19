@@ -18,6 +18,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- Endurecimento do aviso de falha: o filtro que impede seus dados de
+  acompanharem um relatório de erro passou a cobrir três campos que antes
+  escapavam. Nada muda na tela.
+
 ## [1.14.1] - 2026-09-19T13:22:18.417Z
 
 ### Corrigido
