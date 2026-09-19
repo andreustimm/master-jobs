@@ -57,6 +57,13 @@
       "when": 1789788460221,
       "tag": "0007_term_captures",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789827583534,
+      "tag": "0008_term_requests",
+      "breakpoints": true
     }
   ]
 }

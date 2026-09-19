@@ -67,8 +67,15 @@ export interface TermCaptureQueuePort {
    * request that finds today's capture already done marks it as reused.
    */
   enqueue(rows: CaptureRequest[], writer?: CaptureWriter): Promise<{ created: number; existing: number }>;
+  /**
+   * Retires non-terminal rows of earlier UTC days, then claims one of today's:
+   * a row left over from yesterday is superseded by today's, never run next to it.
+   */
   claim(worker: string, now: Date): Promise<ClaimedCapture | null>;
-  finish(id: number, outcome: CaptureOutcome, now: Date): Promise<void>;
+  /** Only the worker that still holds the claim finishes it. */
+  finish(id: number, worker: string, outcome: CaptureOutcome, now: Date): Promise<void>;
+  /** The earliest `run_after` among today's rows waiting for a quota window. */
+  nextRunAfter(now: Date): Promise<string | null>;
 }
 
 export interface PlatformQuotaPort {

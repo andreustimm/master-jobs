@@ -569,6 +569,24 @@ export const savedTerm = production.table(
   ],
 );
 
+/**
+ * Searches a candidate started from the screen, per UTC day. Deleting a term
+ * does not delete the count: it is the daily ceiling that keeps a save/delete
+ * loop from taking every tenant's per-minute platform slots.
+ */
+export const savedTermRequest = production.table(
+  "saved_term_request",
+  {
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    windowDay: text("window_day").notNull(),
+    requested: integer("requested").notNull().default(0),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.candidateId, t.windowDay], name: "saved_term_request_pk" })],
+);
+
 /* -------------------------------------------------------------------------- */
 /* Skills                                                                      */
 /* -------------------------------------------------------------------------- */

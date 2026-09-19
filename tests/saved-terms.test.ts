@@ -338,11 +338,15 @@ describe("pause, resume, move, delete", () => {
     const [attributed] = await db.select().from(termAttribution);
     await setApplicationStatus(id, attributed!.jobId, "applied");
     const [inFlight] = await captures("laravel");
-    await db.update(termCapture).set({ status: "running", claimedAt: now().toISOString() }).where(eq(termCapture.id, inFlight!.id));
+    await db
+      .update(termCapture)
+      .set({ status: "running", claimedAt: now().toISOString(), claimedBy: "test" })
+      .where(eq(termCapture.id, inFlight!.id));
 
     expect(await deleteTerm({ candidateId: id }, termId)).toEqual({ ok: true });
     await drizzleCaptureQueue.finish(
       inFlight!.id,
+      "test",
       { status: "succeeded", fetched: 1, created: 0, known: 1, attributed: 1, totalHint: 1 },
       now(),
     );
@@ -548,5 +552,103 @@ describe("rules a paused term or an archived track must keep", () => {
       status: "paused",
       pausedReason: "track_archived",
     });
+  });
+});
+
+describe("the capture queue under per-minute budgets and leftovers", () => {
+  it("the sweep waits for per-minute windows instead of leaving later terms parked", async () => {
+    const id = await person("owner", true);
+    const php = await track(id, "PHP");
+    await saved(id, "Laravel", php.id);
+    await saved(id, "Symfony", php.id);
+
+    await runTermCaptures({ worker: "cli", waitMs: 10 * 60_000, sleep: async (ms) => clock.advance(ms) });
+
+    const rows = await captures();
+    expect(rows.filter((row) => row.platform === "remoteok").map((row) => row.status)).toEqual(["succeeded", "succeeded"]);
+    expect(rows.every((row) => row.status === "succeeded")).toBe(true);
+  });
+
+  it("without a wait budget the drain still stops at the first empty claim (web after())", async () => {
+    const id = await person("owner", true);
+    const php = await track(id, "PHP");
+    await saved(id, "Laravel", php.id);
+    await saved(id, "Symfony", php.id);
+
+    await runTermCaptures({ worker: "web" });
+
+    expect((await captures()).filter((row) => row.status === "waiting_quota").length).toBeGreaterThan(0);
+  });
+
+  it("a Himalayas capture pages past the first 20 with the real ledger", async () => {
+    const id = await person("owner", true);
+    await saved(id, "Laravel", (await track(id, "PHP")).id);
+
+    await runTermCaptures({ worker: "test" });
+
+    expect(port.calls.filter((url) => url.includes("himalayas.app")).length).toBeGreaterThan(1);
+    const himalayas = (await captures("laravel")).find((row) => row.platform === "himalayas");
+    expect(himalayas?.status).toBe("succeeded");
+  });
+
+  it("a row left from an earlier day is retired, never claimed next to today's", async () => {
+    await db.insert(termCapture).values({
+      platform: "remotive",
+      termKey: "laravel",
+      query: "Laravel",
+      windowDay: day(-1),
+      origin: "web",
+      priority: 10,
+      status: "queued",
+    });
+
+    expect(await drizzleCaptureQueue.claim("test", now())).toBeNull();
+    expect((await captures("laravel"))[0]).toMatchObject({ windowDay: day(-1), status: "skipped", reasonCode: "stale" });
+  });
+
+  it("a worker whose lease was taken over cannot overwrite the new holder's result", async () => {
+    const id = await person("owner", true);
+    await saved(id, "Laravel", (await track(id, "PHP")).id);
+    const first = await drizzleCaptureQueue.claim("worker-a", now());
+    clock.advance(6 * 60_000);
+    const second = await drizzleCaptureQueue.claim("worker-b", now());
+    expect(second?.id).toBe(first?.id);
+
+    await drizzleCaptureQueue.finish(first!.id, "worker-a", { status: "failed", code: "network", retryable: true }, now());
+    await drizzleCaptureQueue.finish(
+      first!.id,
+      "worker-b",
+      { status: "succeeded", fetched: 3, created: 3, known: 0, attributed: 3, totalHint: 3 },
+      now(),
+    );
+
+    expect((await db.select().from(termCapture).where(eq(termCapture.id, first!.id)))[0]).toMatchObject({
+      status: "succeeded",
+      fetched: 3,
+    });
+  });
+});
+
+describe("the daily ceiling on screen-started searches", () => {
+  it("deleting and saving again cannot pass 40 searches a day; the 41st waits for the sweep", async () => {
+    const id = await person("owner", true);
+    const php = await track(id, "PHP");
+    for (let n = 1; n <= 40; n++) {
+      const result = await saveTerm({ candidateId: id }, { term: `stack${n}`, trackId: php.id }, ctx());
+      if (!result.ok) throw new Error(result.code);
+      await deleteTerm({ candidateId: id }, result.termId);
+    }
+
+    const over = await saveTerm({ candidateId: id }, { term: "Laravel", trackId: php.id }, ctx());
+
+    expect(over).toMatchObject({ ok: true, run: "daily_limit" });
+    expect(await captures("laravel")).toHaveLength(0);
+    expect(await rerunTerm({ candidateId: id }, over.ok ? over.termId : 0, ctx())).toEqual({
+      ok: false,
+      code: "request_limit",
+    });
+
+    clock.advance(24 * HOUR);
+    expect(await rerunTerm({ candidateId: id }, over.ok ? over.termId : 0, ctx())).toMatchObject({ ok: true, run: "started" });
   });
 });

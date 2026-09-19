@@ -573,10 +573,18 @@ A capacidade é opcional no adapter: `termSearch = { budget, validatedOn, search
   `sources.yaml` gastam 2 das 4 chamadas diárias, e as capturas por termo
   disputam as outras 2. A sincronização conta uma unidade por fonte sincronizada
   (as páginas do feed da Himalayas são uma execução só).
-- Com 1 chamada por minuto, uma captura da Himalayas que já reservou a primeira
-  página não consegue a segunda no mesmo minuto: ela termina com o que coube e
-  marca `stoppedByQuota`. O limite de 5 páginas só se aproxima com um orçamento
-  por minuto maior — decisão aberta, anotada no follow-up da feature.
+- A Himalayas não tem limite por minuto — o orçamento dela é o do PRD: 20 por
+  página, no máximo 5 páginas por execução, e o 429 esgota o dia. Com 1 por
+  minuto a captura parava na primeira página, com 20 das 100 vagas.
+- RemoteOK aceita 1 chamada por minuto. `jho terms run` espera essas janelas
+  (até 40 minutos) em vez de sair com a fila parada: cada termo ativo roda uma
+  vez no dia, não só o primeiro da ordem alfabética.
+- Linha de captura de um dia anterior que ficou na fila é aposentada
+  (`skipped`, motivo `stale`) na próxima reivindicação: a busca de hoje a
+  substitui, e a plataforma não é chamada duas vezes para o mesmo termo no dia.
+- Cada candidato pede no máximo 40 buscas por dia pela tela
+  (`saved_term_request`). Apagar o termo não zera a conta; passado o teto, o
+  termo é salvo e espera a varredura diária.
 
 ### O livro de cota (`platform_quota`)
 

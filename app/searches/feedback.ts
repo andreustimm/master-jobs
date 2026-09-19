@@ -39,13 +39,16 @@ export const TRACK_CODES = [
   "track_archived",
 ] as const;
 
-export const RERUN_CODES = ["cooldown", "running", "not_found", "paused"] as const;
+export const RERUN_CODES = ["cooldown", "running", "not_found", "paused", "request_limit"] as const;
 
 /** Successful saves say which way the search went. */
-export const RUN_OUTCOMES = ["started", "waiting_sweep", "captures_off", "no_platform"] as const;
+export const RUN_OUTCOMES = ["started", "waiting_sweep", "captures_off", "no_platform", "daily_limit"] as const;
 
-/** A re-run reports the same outcomes, without the save's "Saved." */
-export const RERUN_OUTCOME_KEYS: Record<(typeof RUN_OUTCOMES)[number], TranslationKey> = {
+/**
+ * A re-run reports the same outcomes, without the save's "Saved." — except the
+ * daily ceiling, which a re-run answers as a refusal (`request_limit`).
+ */
+export const RERUN_OUTCOME_KEYS: Record<Exclude<(typeof RUN_OUTCOMES)[number], "daily_limit">, TranslationKey> = {
   started: "searchFeedback.rerun_started",
   waiting_sweep: "searchFeedback.rerun_waiting_sweep",
   captures_off: "searchFeedback.rerun_captures_off",

@@ -43,6 +43,7 @@ export const postSnapshotColumns: Record<string, Record<string, unknown>> = {
 export const postSnapshotTables = new Set([
   "target_track",
   "saved_term",
+  "saved_term_request",
   "term_capture",
   "term_attribution",
   "platform_quota",

@@ -147,6 +147,7 @@ describe("jho terms run", () => {
     await archiveTrack(candidateId, php.id);
     await drizzleCaptureQueue.finish(
       claimed!.id,
+      "web",
       { status: "succeeded", fetched: 0, created: 0, known: 0, attributed: 0, totalHint: 0 },
       new Date(clock.now()),
     );

@@ -72,7 +72,12 @@ function toIso(value: number | string | undefined | null): string | null {
 const HIMALAYAS_PAGE = 20;
 const HIMALAYAS_DEFAULT_PAGES = 50;
 
-const HIMALAYAS_BUDGET: PlatformBudget = { perMinute: 1, pageSize: HIMALAYAS_PAGE, maxRequestsPerRun: 5 };
+/**
+ * Sem limite por minuto (PRD, orçamento da Himalayas): a busca faz até 5 páginas
+ * seguidas numa execução, e um teto de 1 por minuto parava toda captura na
+ * primeira página, com 20 das 100 vagas prometidas. O 429 continua esgotando o dia.
+ */
+const HIMALAYAS_BUDGET: PlatformBudget = { pageSize: HIMALAYAS_PAGE, maxRequestsPerRun: 5 };
 
 function mapHimalayas(j: HimalayasJob): RawJob {
   return {
@@ -120,9 +125,11 @@ export const himalayas: SourceAdapter = {
 
     for (let page = 0; page < pages; page++) {
       const offset = page * HIMALAYAS_PAGE;
+      // Retentativa padrão nas páginas do feed: a sincronização reserva uma
+      // unidade por execução, não por página, e sem retentativa um 5xx
+      // passageiro numa das 60 páginas jogava fora o feed inteiro.
       const data = await getJson<{ jobs?: HimalayasJob[]; totalCount?: number }>(
         `https://himalayas.app/jobs/api?limit=${HIMALAYAS_PAGE}&offset=${offset}`,
-        BUDGETED,
       );
       total = data.totalCount ?? total;
       const batch = data.jobs ?? [];

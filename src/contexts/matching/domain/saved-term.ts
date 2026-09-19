@@ -5,6 +5,12 @@ import type { CaptureStatus } from "../../sourcing/index.ts";
 
 /** Termos ativos por candidato. */
 export const MAX_ACTIVE_TERMS = 20;
+/**
+ * Buscas pedidas pela tela por candidato, por dia UTC. O dobro do teto de
+ * termos ativos: apagar e salvar de novo não zera a conta, então um ciclo de
+ * salvar-apagar não ocupa as janelas por minuto de todo mundo.
+ */
+export const MAX_TERM_REQUESTS_PER_DAY = 40;
 
 /** Uma busca manual por termo a cada 24 horas; a primeira conta (ADR-001). */
 export const RERUN_COOLDOWN_MS = 24 * 3_600_000;

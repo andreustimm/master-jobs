@@ -188,6 +188,7 @@ export const en: Dictionary = {
     platform_disabled: "platform switched off in the configuration",
     ingestion_blocked: "captures off in this environment",
     quota: "quota spent",
+    stale: "left over from an earlier day and replaced by today's search",
   },
   tracks: {
     newTitle: "New track",
@@ -275,6 +276,8 @@ export const en: Dictionary = {
     run_waiting_sweep: "Saved. The search waits for the next daily sweep.",
     run_captures_off: "Saved. Captures are off in this environment.",
     run_no_platform: "Saved, but no search platform is available.",
+    run_daily_limit: "Saved. You already asked for 40 searches today: this one waits for the daily sweep.",
+    request_limit: "You already asked for 40 searches today. The term searches again in the daily sweep.",
     viewExisting: "view the term",
   },
   filterNotices: {

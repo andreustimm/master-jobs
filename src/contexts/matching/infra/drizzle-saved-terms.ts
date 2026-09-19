@@ -3,7 +3,7 @@
  */
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { getDb, type DB } from "../../../core/db/client.ts";
-import { job, savedTerm, targetTrack } from "../../../core/db/schema.ts";
+import { job, savedTerm, savedTermRequest, targetTrack } from "../../../core/db/schema.ts";
 import { attributedJobIds } from "../../sourcing/index.ts";
 
 type Executor = Pick<DB, "select" | "insert" | "update" | "delete">;
@@ -26,6 +26,19 @@ export async function findTermByKey(candidateId: number, termKey: string, db: Ex
     .where(and(eq(savedTerm.candidateId, candidateId), eq(savedTerm.termKey, termKey)))
     .limit(1);
   return row ?? null;
+}
+
+/** Soma um pedido de busca do dia e devolve quantos o candidato já fez nele. */
+export async function recordTermRequest(db: Executor, candidateId: number, windowDay: string, now: string): Promise<number> {
+  const [row] = await db
+    .insert(savedTermRequest)
+    .values({ candidateId, windowDay, requested: 1, updatedAt: now })
+    .onConflictDoUpdate({
+      target: [savedTermRequest.candidateId, savedTermRequest.windowDay],
+      set: { requested: sql`${savedTermRequest.requested} + 1`, updatedAt: now },
+    })
+    .returning({ requested: savedTermRequest.requested });
+  return row!.requested;
 }
 
 export async function countActiveTerms(db: Executor, candidateId: number): Promise<number> {

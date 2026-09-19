@@ -24,6 +24,7 @@ import {
 } from "../../sourcing/index.ts";
 import {
   MAX_ACTIVE_TERMS,
+  MAX_TERM_REQUESTS_PER_DAY,
   ZERO_STREAK_DAYS,
   cooldownState,
   termStatus,
@@ -37,6 +38,7 @@ import {
   findTerm,
   findTermByKey,
   listTerms,
+  recordTermRequest,
 } from "../infra/drizzle-saved-terms.ts";
 import { findTrack, lockCandidateTracks } from "../infra/drizzle-tracks.ts";
 import { ensurePrimaryTrack } from "./tracks.ts";
@@ -47,7 +49,7 @@ export type CandidateScope = { candidateId: number };
 export type ActionContext = { now: Date; impersonated: boolean };
 
 export type SaveTermResult =
-  | { ok: true; termId: number; run: "started" | "waiting_sweep" | "captures_off" | "no_platform" }
+  | { ok: true; termId: number; run: "started" | "waiting_sweep" | "captures_off" | "no_platform" | "daily_limit" }
   | { ok: false; code: "term_duplicate"; termId: number }
   | {
       ok: false;
@@ -103,7 +105,7 @@ export async function saveTerm(
   if (input.trackId === null || !Number.isInteger(input.trackId)) return { ok: false, code: "track_required" };
   const trackId = input.trackId;
   const { term, key } = valid.value;
-  const runs = !ctx.impersonated && capturesAllowed();
+  const wantsRun = !ctx.impersonated && capturesAllowed();
   const stamp = ctx.now.toISOString();
 
   try {
@@ -115,6 +117,10 @@ export async function saveTerm(
       const existing = await findTermByKey(scope.candidateId, key, tx);
       if (existing) return { ok: false, code: "term_duplicate", termId: existing.id };
       if ((await countActiveTerms(tx, scope.candidateId)) >= MAX_ACTIVE_TERMS) return { ok: false, code: "term_limit" };
+      const overDailyLimit =
+        wantsRun &&
+        (await recordTermRequest(tx, scope.candidateId, windowStarts(ctx.now).day, stamp)) > MAX_TERM_REQUESTS_PER_DAY;
+      const runs = wantsRun && !overDailyLimit;
 
       const [row] = await tx
         .insert(savedTerm)
@@ -129,6 +135,7 @@ export async function saveTerm(
         })
         .returning({ id: savedTerm.id });
       if (ctx.impersonated) return { ok: true, termId: row!.id, run: "waiting_sweep" };
+      if (overDailyLimit) return { ok: true, termId: row!.id, run: "daily_limit" };
       return { ok: true, termId: row!.id, run: await startRun({ termKey: key, query: term, now: ctx.now }, tx) };
     });
   } catch (error) {
@@ -142,7 +149,7 @@ export async function saveTerm(
 export type RerunResult =
   | { ok: true; run: "started" | "waiting_sweep" | "captures_off" | "no_platform" }
   | { ok: false; code: "cooldown"; availableAt: string }
-  | { ok: false; code: "not_found" | "running" | "paused" };
+  | { ok: false; code: "not_found" | "running" | "paused" | "request_limit" };
 
 /**
  * Busca de novo, a pedido. Uma vez a cada 24 horas; dentro da janela, só a
@@ -165,6 +172,13 @@ export async function rerunTerm(scope: CandidateScope, termId: number, ctx: Acti
   if (!cooldown.allowed) {
     if ((await retryFailedCaptures(term.termKey, ctx.now)) > 0) return { ok: true, run: "started" };
     return { ok: false, code: "cooldown", availableAt: cooldown.availableAt };
+  }
+
+  if (
+    (await recordTermRequest(getDb(), scope.candidateId, windowStarts(ctx.now).day, ctx.now.toISOString())) >
+    MAX_TERM_REQUESTS_PER_DAY
+  ) {
+    return { ok: false, code: "request_limit" };
   }
 
   // A âncora avança só para quem a leu: de dois cliques simultâneos, um pede

@@ -117,6 +117,9 @@ export function runTermCaptures(opts: {
   budgetMs?: number;
   worker: string;
   max?: number;
+  /** Keep waiting for today's quota windows up to this long (the daily sweep). */
+  waitMs?: number;
+  sleep?: (ms: number) => Promise<void>;
 }): Promise<Record<string, PlatformRunSummary>> {
   return runCaptures(opts, deps);
 }

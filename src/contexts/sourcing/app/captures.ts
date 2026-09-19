@@ -184,15 +184,26 @@ function tally(summary: Record<string, PlatformRunSummary>, platform: string, ou
   if (outcome.status === "failed") entry.failed++;
 }
 
+/** Menor espera entre duas tentativas: evita girar sobre uma linha travada por outro trabalhador. */
+const MIN_WAIT_MS = 1_000;
+
+const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 /**
  * Drena a fila até esvaziar, até `max` capturas, ou até o orçamento de tempo.
  *
  * O `after()` de uma Server Action morre em 30 segundos. Antes de reivindicar a
  * próxima, supõe que ela demora tanto quanto a mais lenta até aqui: começar uma
  * captura que não cabe deixaria a linha `running` até o lease vencer.
+ *
+ * Com `waitMs`, a fila vazia não encerra enquanto houver linha de hoje
+ * esperando uma janela de cota que abre dentro desse prazo. RemoteOK e
+ * Himalayas aceitam uma chamada por minuto: sair na primeira fila vazia deixava
+ * todo termo depois do primeiro sem rodar no dia, e os mesmos termos perdiam
+ * todo dia.
  */
 export async function runCaptures(
-  opts: { budgetMs?: number; worker: string; max?: number },
+  opts: { budgetMs?: number; worker: string; max?: number; waitMs?: number; sleep?: (ms: number) => Promise<void> },
   deps: CaptureDeps,
 ): Promise<Record<string, PlatformRunSummary>> {
   guardIngestion();
@@ -207,10 +218,18 @@ export async function runCaptures(
     const elapsed = clock().now() - started;
     if (opts.budgetMs !== undefined && processed > 0 && elapsed + slowest > opts.budgetMs) break;
     const claimed = await deps.queue.claim(opts.worker, new Date(clock().now()));
-    if (!claimed) break;
+    if (!claimed) {
+      if (opts.waitMs === undefined) break;
+      const next = await deps.queue.nextRunAfter(new Date(clock().now()));
+      if (next === null) break;
+      const wait = Math.max(MIN_WAIT_MS, Date.parse(next) - clock().now());
+      if (clock().now() + wait - started > opts.waitMs) break;
+      await (opts.sleep ?? realSleep)(wait);
+      continue;
+    }
     const begin = clock().now();
     const outcome = await capture(claimed, enabled, deps);
-    await deps.queue.finish(claimed.id, outcome, new Date(clock().now()));
+    await deps.queue.finish(claimed.id, opts.worker, outcome, new Date(clock().now()));
     slowest = Math.max(slowest, clock().now() - begin);
     processed++;
     tally(summary, claimed.platform, outcome);

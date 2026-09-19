@@ -76,6 +76,7 @@ const REASON_KEYS = {
   platform_disabled: "captureReason.platform_disabled",
   ingestion_blocked: "captureReason.ingestion_blocked",
   quota: "captureReason.quota",
+  stale: "captureReason.stale",
 } as const satisfies Record<string, TranslationKey>;
 
 export default async function SearchesPage() {

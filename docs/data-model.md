@@ -44,6 +44,7 @@ erDiagram
     target_track ||--o{ job_score : "track_id PK (cascade)"
     target_track ||--o{ saved_term : "track_id (cascade)"
     candidate ||--o{ saved_term : "candidate_id (cascade)"
+    candidate ||--o{ saved_term_request : "candidate_id (cascade)"
     candidate ||--o{ application : "candidate_id (cascade)"
     candidate ||--o{ candidate_document : "candidate_id (cascade)"
     candidate ||--|| candidate_matching_profile : "candidate_id (cascade)"
@@ -373,6 +374,19 @@ busca que o usa vem com a captura por termo.
 | `term`, `term_key` | o texto e a chave sem caixa, espaço e hífen (`termKey`); único por candidato |
 | `status`, `paused_reason` | `active` ou `paused`; `track_archived` marca a pausa que a restauração desfaz |
 | `last_run_requested_at`, `last_visit_at` | quando a busca foi pedida e quando a pessoa olhou o resultado |
+
+### `saved_term_request`
+
+Quantas buscas o candidato pediu pela tela em cada dia UTC (migração `0008`).
+Salvar um termo e "rodar de novo" somam um; passado o teto de 40, o termo é
+salvo e espera a varredura, e o "rodar de novo" é recusado. A conta mora fora de
+`saved_term` de propósito: apagar o termo não pode zerá-la, senão um ciclo de
+salvar-apagar ocuparia as janelas por minuto das plataformas de todo mundo.
+
+| Coluna | Notas |
+|---|---|
+| `candidate_id`, `window_day` | chave primária; `candidate_id` com `ON DELETE cascade` |
+| `requested` | pedidos no dia, somados por upsert atômico |
 
 ---
 

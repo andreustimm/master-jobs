@@ -56,6 +56,18 @@ export const drizzleCaptureQueue: TermCaptureQueuePort = {
     const at = now.toISOString();
     const expired = new Date(now.getTime() - CAPTURE_LEASE_MS).toISOString();
     const today = windowStarts(now).day;
+    // Uma drenagem que parou no orçamento deixa linhas de ontem na fila. Rodá-las
+    // junto com as de hoje chamaria a plataforma duas vezes para o mesmo termo
+    // no dia — e buscaria termo pausado ou apagado desde então.
+    await getDb()
+      .update(termCapture)
+      .set({ status: "skipped", reasonCode: "stale", claimedAt: null, claimedBy: null, runAfter: null, finishedAt: at, updatedAt: at })
+      .where(
+        sql`${termCapture.windowDay} < ${today} and (
+          ${termCapture.status} in ('queued', 'waiting_quota')
+          or (${termCapture.status} = 'running' and ${termCapture.claimedAt} < ${expired})
+        )`,
+      );
     const rows = await getDb()
       .update(termCapture)
       .set({
@@ -69,9 +81,12 @@ export const drizzleCaptureQueue: TermCaptureQueuePort = {
       .where(
         sql`${termCapture.id} = (
           select id from production.term_capture
-          where status = 'queued'
-             or (status = 'waiting_quota' and run_after <= ${at} and window_day = ${today})
-             or (status = 'running' and claimed_at < ${expired})
+          where window_day = ${today}
+            and (
+              status = 'queued'
+              or (status = 'waiting_quota' and run_after <= ${at})
+              or (status = 'running' and claimed_at < ${expired})
+            )
           order by priority desc, id asc
           limit 1 for update skip locked
         )`,
@@ -87,7 +102,7 @@ export const drizzleCaptureQueue: TermCaptureQueuePort = {
     return row ? { ...row, platform: row.platform as FetchableSourceKind } satisfies ClaimedCapture : null;
   },
 
-  async finish(id, outcome, now) {
+  async finish(id, worker, outcome, now) {
     const at = now.toISOString();
     const base = { status: outcome.status, claimedAt: null, claimedBy: null, updatedAt: at };
     const patch =
@@ -111,7 +126,15 @@ export const drizzleCaptureQueue: TermCaptureQueuePort = {
     await getDb()
       .update(termCapture)
       .set(patch)
-      .where(and(eq(termCapture.id, id), eq(termCapture.status, "running")));
+      .where(and(eq(termCapture.id, id), eq(termCapture.status, "running"), eq(termCapture.claimedBy, worker)));
+  },
+
+  async nextRunAfter(now) {
+    const [row] = await getDb()
+      .select({ at: sql<string | null>`min(${termCapture.runAfter})` })
+      .from(termCapture)
+      .where(and(eq(termCapture.status, "waiting_quota"), eq(termCapture.windowDay, windowStarts(now).day)));
+    return row?.at ?? null;
   },
 };
 

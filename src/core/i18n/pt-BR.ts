@@ -188,6 +188,7 @@ export const ptBR = {
     platform_disabled: "plataforma desligada na configuração",
     ingestion_blocked: "capturas desligadas neste ambiente",
     quota: "cota esgotada",
+    stale: "ficou de um dia anterior e foi substituída pela busca de hoje",
   },
   /** Editor de trilha de alvo. */
   tracks: {
@@ -278,6 +279,8 @@ export const ptBR = {
     run_waiting_sweep: "Salvo. A busca espera a próxima varredura diária.",
     run_captures_off: "Salvo. As capturas estão desligadas neste ambiente.",
     run_no_platform: "Salvo, mas nenhuma plataforma de busca está disponível.",
+    run_daily_limit: "Salvo. Você já pediu 40 buscas hoje: esta espera a varredura diária.",
+    request_limit: "Você já pediu 40 buscas hoje. O termo busca de novo na varredura diária.",
     viewExisting: "ver o termo",
   },
   /** Por que um filtro da URL foi ignorado. Chave = código do aviso. */
