@@ -59,6 +59,10 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 - Uma vaga arquivada que volta a ser anunciada reaparece na lista de vagas. Antes
   ela voltava a contar como aberta, mas continuava escondida.
 
+- Vagas que só aceitam candidatos de certos países, como "United States only" ou
+  "Spain only", agora aparecem com bloqueio e saem de "Aplicáveis hoje". Vagas
+  que incluem o Brasil ou a América Latina na lista continuam normais.
+
 ## [1.14.2] - 2026-09-19T13:44:44.288Z
 
 ### Corrigido

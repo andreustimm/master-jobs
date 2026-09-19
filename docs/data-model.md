@@ -603,7 +603,7 @@ A versão é uma constante em
 [`src/core/scoring/score.ts`](../src/core/scoring/score.ts):
 
 ```ts
-export const SCORER_VERSION = "1.4.0";
+export const SCORER_VERSION = "1.4.1";
 ```
 
 Ela é persistida em `job_score.scorer_version` e é **o gatilho de

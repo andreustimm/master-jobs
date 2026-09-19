@@ -38,8 +38,12 @@ import { PLATEAU_DAYS, scoreFreshness } from "./freshness.ts";
  * 1.4.0: the score is per target track (ADR-008/009). The rubric did not
  * change, but every stored row gains a track and a per-track profile hash, so
  * all rows are recalculated once.
+ *
+ * 1.4.1: "X only" in the location, or the restriction sentence Himalayas
+ * postings carry, is read as eligibility regions, so a posting restricted to
+ * countries outside the acceptable regions is blocked.
  */
-export const SCORER_VERSION = "1.4.0";
+export const SCORER_VERSION = "1.4.1";
 
 export type ScoringContext = {
   profile: Profile;
@@ -505,6 +509,54 @@ function findBlockers(input: ScoreInput, profile: Profile): ScoreMessage[] {
   return [...new Map(found.map((item) => [JSON.stringify(item), item])).values()];
 }
 
+/* --------------------------- Location restriction ------------------------- */
+
+/** Spellings the acceptable-region list knows under another name. */
+const REGION_ALIASES: Record<string, string> = {
+  "latin america": "latam",
+  "south america": "latam",
+  anywhere: "worldwide",
+};
+
+/** The sentence the Himalayas adapter writes (`withRestriction`). */
+const RESTRICTION_LINE = /^location restricted to:([^\n]*)$/im;
+
+/**
+ * "X, Y only" → "X, Y". A suffix cut, not a capture: this reads provider text,
+ * and a lazy group before `\s+only` backtracks quadratically over a long run of
+ * spaces. `\sonly$` has a fixed length, so the search stays linear.
+ */
+function onlyList(text: string): string | undefined {
+  const trimmed = text.trim().replace(/\.$/, "");
+  const suffix = /\sonly$/i.exec(trimmed);
+  return suffix ? trimmed.slice(0, suffix.index).trim() || undefined : undefined;
+}
+
+/**
+ * "United States only", "Spain, Portugal only": the only places that may apply.
+ * Braintrust writes it in the location; Himalayas states `locationRestrictions`
+ * as a sentence in the description, because its location is part of the
+ * posting's identity. Read as eligibility regions, a list without one of the
+ * candidate's acceptable regions makes the posting ineligible — a real barrier,
+ * not a weaker geo score. A location without "only", or "Remote only", stays
+ * neutral: missing data never becomes a blocker (rule 8).
+ */
+export function locationRestriction(
+  locationRaw: string | null | undefined,
+  descriptionText?: string | null,
+): EligibilitySignals | undefined {
+  const sentence = RESTRICTION_LINE.exec(descriptionText ?? "")?.[1];
+  const stated = onlyList(locationRaw ?? "") ?? (sentence === undefined ? undefined : onlyList(sentence));
+  if (!stated) return undefined;
+  const regions = stated
+    .split(/\s*[,;/]\s*|\s+(?:and|or|&)\s+/i)
+    .map((region) => region.trim().toLowerCase())
+    .filter(Boolean)
+    .map((region) => REGION_ALIASES[region] ?? region);
+  if (regions.length === 0 || regions.every((region) => region === "remote")) return undefined;
+  return { regions };
+}
+
 /* --------------------------------- Score --------------------------------- */
 
 export function scoreJob(
@@ -526,7 +578,10 @@ export function scoreJob(
     acceptableRegions: profile.constraints.acceptable_regions,
     maxTimezoneOffsetHours: profile.constraints.max_timezone_offset_hours,
   };
-  const eligibility = evaluateEligibility(policy, input.eligibility);
+  const eligibility = evaluateEligibility(
+    policy,
+    input.eligibility ?? locationRestriction(input.locationRaw, input.descriptionText),
+  );
 
   const title = scoreTitle(input.title, profile);
   const keywords = scoreKeywords(fullText, profile);
