@@ -135,6 +135,13 @@ como `ADR 00NN`.
   aberta: `closedAt` ia a nulo e `archivedAt` ficava, escondendo-a do quadro.
   Reabrir agora limpa os dois, como a verificação de link já fazia (ADR 0020).
 
+- Localização `X only` passa a ser elegibilidade (scorer `1.4.1`): a Himalayas
+  grava `locationRestrictions` como `"<países> only"`, e `locationRestriction()`
+  lê essa forma como sinais `regions` de `evaluateEligibility`. Vaga restrita a
+  países fora de `acceptable_regions` ("United States only", "Spain only") fica
+  `ineligible`, com `geo` zero e bloqueador; antes pontuava como remota
+  qualquer. Localização sem "only" continua neutra.
+
 ## [1.14.2] - 2026-09-19
 
 ### Corrigido

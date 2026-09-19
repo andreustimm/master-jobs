@@ -142,7 +142,7 @@ describe("per-track effective profile (pure scorer)", () => {
   });
 
   it("UT-076 scorer 1.4.0 matches terms on the shared boundary", () => {
-    expect(SCORER_VERSION).toBe("1.4.0");
+    expect(SCORER_VERSION).toBe("1.4.1");
     expect(containsTerm("C# developer", "c#")).toBe(true);
     expect(containsTerm("C# developer", "c")).toBe(false);
   });
@@ -320,7 +320,7 @@ describe("per-track persistence", () => {
 
     const all = await db.select({ version: jobScore.scorerVersion, trackId: jobScore.trackId }).from(jobScore);
     expect(all).toHaveLength(3);
-    expect(all.every((r) => r.version === "1.4.0")).toBe(true);
+    expect(all.every((r) => r.version === SCORER_VERSION)).toBe(true);
     expect(all.some((r) => r.trackId === php.id)).toBe(true);
   });
 

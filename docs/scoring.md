@@ -297,6 +297,26 @@ inteiro: `work_authorization`, `needs_visa_sponsorship_for`, `contract_models`,
 `remote_only`, `acceptable_regions` e `max_timezone_offset_hours`. Até a 1.2.0
 `scoreGeo()` lia apenas `remote_only` e os demais campos existiam sem consumidor.
 
+### "X only" na localização é elegibilidade (1.4.1)
+
+A Himalayas publica quem pode se candidatar em `locationRestrictions`, e o site
+mostra isso como "United States only". Até a 1.4.0 o adapter gravava só a lista
+de países (`United States`), o passo 3 da escada só conhecia seis grafias fixas,
+e "Spain only" ou "Germany only" passavam como vaga remota qualquer: 8,25 no
+`geo` e nenhum bloqueador, para uma vaga em que o candidato nunca seria aceito.
+
+Desde a 1.4.1 o adapter grava `"<países> only"` e `locationRestriction()` lê
+qualquer `locationRaw` de forma `X only` (ou `X, Y only`) como os sinais
+`regions` de `evaluateEligibility`. Lista sem nenhuma região de
+`acceptable_regions` fica `ineligible`: `geo` zero, bloqueador e a vaga some do
+preset "Aplicáveis hoje". Lista que inclui Brasil, LATAM ou Americas fica
+`eligible`. Sinal explícito de elegibilidade da fonte continua tendo
+precedência sobre essa leitura.
+
+Localização sem "only" e "Remote only" continuam neutras: `United States`
+sozinho pode ser só a sede da empresa, e dado ausente não vira bloqueador
+(regra 8).
+
 ---
 
 ## Componente: comp (máx. 8)

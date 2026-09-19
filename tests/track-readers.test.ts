@@ -128,7 +128,7 @@ async function score(candidateId: number, trackId: number, jobId: number, fit: n
       titleScore: fit, keywordScore: 0, seniorityScore: 0, geoScore: 0, compScore: 0,
       freshnessScore: 0, benefitScore: 0, penalty: 0, cluster,
       matchedKeywords: [], missingKeywords: [], detectedBenefits: [], ageDays: null,
-      reasons: [], blockers: [], scorerVersion: "1.4.0", profileHash: `hash-${trackId}`,
+      reasons: [], blockers: [], scorerVersion: "1.4.1", profileHash: `hash-${trackId}`,
     })
     .onConflictDoUpdate({
       target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId],

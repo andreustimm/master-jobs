@@ -59,6 +59,10 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 - An archived job that is posted again shows up in the job list again. Before,
   it counted as open but stayed hidden.
 
+- Jobs that only accept applicants from certain countries, such as "United
+  States only" or "Spain only", now show a blocker and leave "Worth applying
+  today". Jobs whose list includes Brazil or Latin America stay as they were.
+
 ## [1.14.2] - 2026-09-19T13:44:44.288Z
 
 ### Fixed

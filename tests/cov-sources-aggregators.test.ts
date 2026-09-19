@@ -106,9 +106,9 @@ describe("himalayas", () => {
     const { jobs } = await himalayas.fetchJobs(config("himalayas", "1"));
     expect(jobs[0]!.seniorityRaw).toBe("Senior, Staff");
     // O 42 não é string e não pode virar "42" na lista de restrições.
-    expect(jobs[0]!.locationRaw).toBe("Brazil, LATAM");
+    expect(jobs[0]!.locationRaw).toBe("Brazil, LATAM only");
     expect(jobs[1]!.seniorityRaw).toBe("Principal");
-    expect(jobs[1]!.locationRaw).toBe("Worldwide");
+    expect(jobs[1]!.locationRaw).toBe("Worldwide only");
     // Sem restrição declarada a vaga é remota irrestrita, não uma vaga sem lugar.
     expect(jobs[2]!.locationRaw).toBe("Remote");
   });

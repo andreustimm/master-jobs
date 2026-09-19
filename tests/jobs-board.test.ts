@@ -109,7 +109,7 @@ async function score(jobId: number, fit: number, trackId?: number) {
     titleScore: fit, keywordScore: 0, seniorityScore: 0, geoScore: 0, compScore: 0,
     freshnessScore: 0, benefitScore: 0, penalty: 0, cluster: "architect",
     matchedKeywords: [], missingKeywords: [], detectedBenefits: [], ageDays: null,
-    reasons: [], blockers: [], scorerVersion: "1.4.0",
+    reasons: [], blockers: [], scorerVersion: "1.4.1",
   });
 }
 

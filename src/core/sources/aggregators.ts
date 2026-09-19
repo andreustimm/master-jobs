@@ -86,7 +86,9 @@ function mapHimalayas(j: HimalayasJob): RawJob {
     title: j.title.trim(),
     url: j.applicationLink ?? `https://himalayas.app/companies/${j.companySlug ?? ""}`,
     applyUrl: j.applicationLink ?? null,
-    locationRaw: toList(j.locationRestrictions).join(", ") || "Remote",
+    // The site shows these as "United States only": they are who may apply,
+    // not where the team sits, and the scorer reads "X only" as eligibility.
+    locationRaw: toList(j.locationRestrictions).length > 0 ? `${toList(j.locationRestrictions).join(", ")} only` : "Remote",
     remote: true,
     employmentType: j.employmentType ?? null,
     seniorityRaw: Array.isArray(j.seniority) ? j.seniority.join(", ") : (j.seniority ?? null),
