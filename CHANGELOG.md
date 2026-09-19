@@ -9,6 +9,22 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.14.2] - 2026-09-19
+
+### Corrigido
+
+- A peneira final do relato de erro (`beforeSend`) sai da configuração do SDK
+  para `scrubEvent` em `src/core/observability.ts`, pura e testada. Enquanto
+  viveu inline no `init`, nenhum teste a exercitava — justamente a função que
+  carrega a promessa de privacidade inteira. Ao testá-la, apareceram três
+  lacunas reais da versão anterior: `request.headers` não era filtrado (e é
+  onde `cookie` aparece), `request.query_string` não era apagado, e
+  `request.url` ia com a query string completa. Os três passam a ser tratados,
+  e a identidade (`event.user`) é apagada mesmo que `sendDefaultPii` mude de
+  padrão numa atualização.
+- `scrubEvent` devolve `null` em caso de erro, o que faz o SDK descartar o
+  evento. Mandar um evento sem peneirar seria pior que não relatar.
+
 ## [1.14.1] - 2026-09-19
 
 ### Corrigido
