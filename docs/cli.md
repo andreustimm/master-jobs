@@ -291,7 +291,8 @@ mas não estão em `ADAPTERS` — logo passam no load e quebram no fetch.
 ## Área `terms` — buscas por termo salvas
 
 O candidato salva termos ("php", "Tech Lead") na tela Buscas; cada termo busca
-vagas nas plataformas que buscam por termo (Remotive, RemoteOK, Himalayas) e é
+vagas nas plataformas que buscam por termo (Remotive, RemoteOK, Himalayas,
+Jobicy, Workable, Hacker News) e é
 repetido todo dia pela varredura. Regras de plataforma, cota e atribuição em
 [`docs/sources.md`](sources.md#busca-por-termo).
 

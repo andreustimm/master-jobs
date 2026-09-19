@@ -134,7 +134,7 @@ export const ptBR = {
   searches: {
     title: "Buscas",
     lead: "Termos que buscam vagas novas nas plataformas cadastradas todo dia, e as trilhas que dão nota a elas. As vagas aparecem na tela Vagas.",
-    coverage: "A busca por termo roda na Remotive, no RemoteOK e na Himalayas. As demais fontes entram pela sincronização diária — o filtro da tela Vagas encontra o termo nelas também.",
+    coverage: "A busca por termo roda na Remotive, no RemoteOK, na Himalayas, na Jobicy, na Workable e no Hacker News. As demais fontes entram pela sincronização diária — o filtro da tela Vagas encontra o termo nelas também.",
     capturesOff: "Capturas desligadas neste ambiente: os termos ficam salvos e nada é buscado.",
     dailyRepeatPaused: "A repetição diária está parada: nenhuma busca da varredura nas últimas 36 horas.",
     pendingPrimary: "Você ainda não tem perfil próprio. Salve o currículo para criar a trilha principal; até lá, nada recebe nota.",

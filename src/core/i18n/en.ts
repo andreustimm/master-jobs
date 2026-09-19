@@ -136,7 +136,7 @@ export const en: Dictionary = {
   searches: {
     title: "Searches",
     lead: "Terms that search the registered platforms for new jobs every day, and the tracks that score them. The jobs show up on the Jobs screen.",
-    coverage: "Term search runs on Remotive, RemoteOK and Himalayas. The other sources come in through the daily sync — the Jobs screen filter finds the term there too.",
+    coverage: "Term search runs on Remotive, RemoteOK, Himalayas, Jobicy, Workable and Hacker News. The other sources come in through the daily sync — the Jobs screen filter finds the term there too.",
     capturesOff: "Captures are off in this environment: terms are saved and nothing is fetched.",
     dailyRepeatPaused: "The daily repeat is paused: no sweep search in the last 36 hours.",
     pendingPrimary: "You have no own profile yet. Save your CV to create the primary track; until then nothing is scored.",

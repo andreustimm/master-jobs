@@ -91,6 +91,29 @@ sources:
     handle: ""
     label: RemoteOK
     rationale: "Free API, worldwide remote, salary data on many postings"
+  - kind: jobicy
+    handle: latam
+    label: Jobicy
+    rationale: >-
+      API documentada e sem chave. `latam` traz as vagas abertas à América
+      Latina e as "Anywhere"; `jobGeo` diz quem pode se candidatar e bloqueia
+      a vaga restrita a outro país. 100 vagas em 2026-09-19.
+  - kind: workable
+    handle: software
+    label: Workable (software)
+    rationale: >-
+      Busca global da Workable, só vagas remotas com local Brasil e empresa
+      nomeada. 242 resultados em 2026-09-19; o feed lê as 5 primeiras páginas.
+  - kind: workable
+    handle: developer
+    label: Workable (developer)
+    rationale: "Segunda passada na busca global da Workable: 123 resultados em 2026-09-19"
+  - kind: hackernews
+    handle: who-is-hiring
+    label: Hacker News (Who is hiring)
+    rationale: >-
+      Fio mensal escrito pelas próprias empresas, empresa sempre nomeada. 235
+      vagas no fio de setembro de 2026. O handle não é lido: é sempre o fio do mês.
 
   # --- Careers pages: named employer, direct from the company ---------------
   # These exist because 73,6% of the corpus comes from one aggregator that

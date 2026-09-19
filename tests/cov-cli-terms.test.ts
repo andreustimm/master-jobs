@@ -59,6 +59,7 @@ beforeEach(async () => {
   await useTestDb();
   clock = fixedClock(START);
   setClock(clock);
+  process.env.JHO_SOURCES_PATH = "tests/fixtures/term-search/sources-three-platforms.yaml";
   candidateId = await syncCandidateFromProfile();
   await ensurePrimaryTrack(candidateId);
   const created = await createTrack(candidateId, {
