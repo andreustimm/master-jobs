@@ -9,6 +9,22 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- Celular: a tela Buscas cortava os cartões de termo — o conteúdo da trilha é
+  uma grade e o botão "de novo a partir de…" (`whitespace-nowrap`) alargava a
+  coluna além do cartão. `grid-cols-1` no conteúdo, ações do termo em grade de
+  duas colunas com alvo de 44px até `xl`, e o rótulo do intervalo quebra linha.
+  Em tela de toque todo campo tem ao menos `1rem`: o Safari do iPhone dava zoom
+  ao focar os selects de 15px e cortava a tela, inclusive em Vagas. A varredura
+  de larguras do E2E cobre Buscas e acusa elemento cortado dentro de cartão
+  (BUG-20260919-mobile-searches-overflow).
+- Celular: em Skills, a evidência de uma skill a auditar com link longo do CV
+  em markdown ia a 480px numa tela de 375. A grade do cartão ganha
+  `grid-cols-1` e o parágrafo quebra em qualquer ponto (`wrap-anywhere`).
+  Revisão logada de 23 telas em 6 tamanhos, retrato e paisagem: nenhuma rolagem
+  horizontal e nenhum elemento além da borda.
+
 ## [1.15.0] - 2026-09-19
 
 As ADRs citadas como `ADR-0NN` nesta versão são as da feature, em

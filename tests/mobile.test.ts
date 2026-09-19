@@ -104,10 +104,41 @@ describe("layout", () => {
     expect(skills).not.toContain("min-w-[180px]");
   });
 
+  it("wraps a long link inside the skill evidence instead of widening the card", () => {
+    // A evidência vem do CV em markdown, com URL de dezenas de caracteres sem
+    // espaço: o parágrafo ia a 480px numa tela de 375 e o cartão o cortava.
+    const skills = read("app/candidate/skills/page.tsx");
+    expect(skills).toContain('className="grid min-w-0 grid-cols-1 gap-2 bg-card px-4 py-3"');
+    expect(skills).toMatch(/className="min-w-0 border-l-2[^"]*wrap-anywhere"/);
+  });
+
   it("keeps version actions touchable on mobile and compact on desktop", () => {
     const versions = read("app/candidate/versions.tsx");
     expect(versions).toContain("inline-flex min-h-11");
     expect(versions).toContain("xl:h-7 xl:min-h-0");
+  });
+
+  it("keeps form controls at 16px on touch screens so iOS never zooms in", () => {
+    // O Safari do iPhone dá zoom ao focar campo abaixo de 16px e não desfaz: a
+    // tela ficava cortada, com o "Sair" fora do cabeçalho. Os selects usam a
+    // escala (15px), então a regra tem de valer para todo campo em toque.
+    const globals = read("app/globals.css");
+    const rule = /@media \(pointer: coarse\) \{\s*input,\s*select,\s*textarea \{\s*font-size: max\(1rem, 1em\);/.exec(globals);
+    expect(rule).not.toBeNull();
+    // Fora de qualquer @layer: dentro de uma camada, a classe da escala venceria.
+    const before = globals.slice(0, rule!.index);
+    const depth = (before.match(/\{/g)?.length ?? 0) - (before.match(/\}/g)?.length ?? 0);
+    expect(depth).toBe(0);
+  });
+
+  it("keeps the searches term actions inside the card and touchable on mobile", () => {
+    // O rótulo "de novo a partir de…" não quebrava linha e a grade do cartão
+    // crescia até ele: o texto saía cortado na borda da tela.
+    const searches = read("app/searches/page.tsx");
+    expect(searches).toContain('CardContent className="grid grid-cols-1 gap-3 pt-0"');
+    expect(searches).toContain("whitespace-normal sm:whitespace-nowrap");
+    expect(searches).toContain('const TERM_ACTION = "h-auto min-h-11 w-full sm:w-auto xl:h-7 xl:min-h-0"');
+    expect(searches.match(/className=\{TERM_ACTION\}/g)?.length).toBeGreaterThanOrEqual(2);
   });
 
   it("keeps administrative row actions touchable on mobile", () => {
