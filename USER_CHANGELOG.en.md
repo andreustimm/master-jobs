@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.15.2] - 2026-09-19T21:10:15.298Z
+
 ### Fixed
 
 - The daily job search finishes again: new jobs, saved term searches and track

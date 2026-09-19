@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.15.2] - 2026-09-19T21:10:15.298Z
+
 ### Corrigido
 
 - A busca diária de vagas volta a terminar: as vagas novas, as buscas por termo

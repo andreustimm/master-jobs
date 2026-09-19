@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.15.2] - 2026-09-19
+
 ### Corrigido
 
 - Varredura diária: o sync passou de uma hora na 1.15.0 e a execução foi
