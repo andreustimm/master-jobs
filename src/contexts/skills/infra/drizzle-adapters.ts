@@ -6,6 +6,7 @@
 import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "../../../core/db/client.ts";
 import { candidateSkill, job, jobScore, skill } from "../../../core/db/schema.ts";
+import { primaryScoreFilter } from "../../matching/index.ts";
 import {
   parseSkillCategory,
   parseSkillSource,
@@ -179,7 +180,8 @@ export const drizzleTargetCorpus: TargetCorpusPort = {
       .from(job)
       .innerJoin(
         jobScore,
-        and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, opts.candidateId)),
+        // The market's vocabulary for the primary target; one row per job.
+        and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, opts.candidateId), primaryScoreFilter()),
       )
       .where(
         and(

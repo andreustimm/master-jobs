@@ -5,13 +5,16 @@ import { translator } from "../src/core/i18n/index.ts";
 describe("candidate queue status page wiring", () => {
   it("IT-005: derives scope from the page guard and renders dictionary-backed status", () => {
     const page = readFileSync("app/candidate/page.tsx", "utf8");
+    // The card is shared with Jobs and the track editor since the tracks feature.
+    const card = readFileSync("app/score-queue-card.tsx", "utf8");
     const guard = page.indexOf('requireOwnCandidatePage("candidate:read")');
     const read = page.indexOf("candidateScoreQueueStatus(candidateId)");
 
     expect(guard).toBeGreaterThan(-1);
     expect(read).toBeGreaterThan(guard);
-    expect(page).toContain('data-testid="score-queue-status"');
-    expect(page).not.toMatch(/snapshot\.lastError|queueSnapshot\.lastError/);
+    expect(page).toContain("<ScoreQueueCard");
+    expect(card).toContain('data-testid="score-queue-status"');
+    for (const source of [page, card]) expect(source).not.toMatch(/snapshot\.lastError|queueSnapshot\.lastError/);
   });
 
   it("keeps every queue state translated in both locales", () => {

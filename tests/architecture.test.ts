@@ -283,6 +283,74 @@ describe("write-path invariants (ADR 0005)", () => {
   });
 });
 
+describe("fit per target track (ADR-008)", () => {
+  it("IT-037 routes every job_score reader through a track filter", () => {
+    // `job_score` has one row per (candidate, track, job). A reader that picks
+    // no track mixes tracks in one list, and the job shows up twice or with a
+    // fit from a track nobody chose. Raw SQL counts as much as the builder.
+    const exempt = new Set(["src/core/db/schema.ts", "src/core/scoring/apply.ts"]);
+    const readers = [...SRC, ...APP].filter(
+      (file) => !exempt.has(file) && /\bjobScore\b|production\.job_score\b/.test(read(file)),
+    );
+    const offenders = readers.filter(
+      (file) => !/\b(scoreTrackFilter|primaryScoreFilter)\b/.test(read(file)),
+    );
+    expect(readers.length).toBeGreaterThan(10);
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("searches and tracks are the candidate's own (ADR-006)", () => {
+  it("IT-121 every Searches action awaits the candidate guard before anything else", () => {
+    const files = walk("app/searches", (file) => file.endsWith("actions.ts"));
+    expect(files.length).toBeGreaterThan(0);
+    const offenders: string[] = [];
+    for (const file of files) {
+      const code = read(file);
+      const exported = [...code.matchAll(/export async function (\w+)/g)].map((m) => m[1]);
+      // The first statement of the body, whatever the return type spells.
+      const guarded = [
+        ...code.matchAll(/export async function (\w+)\([^)]*\)[^\n]*\{\n\s*const [^=]+= await guardOwnCandidate\("candidate:write"\)/g),
+      ].map((m) => m[1]);
+      for (const name of exported) if (!guarded.includes(name)) offenders.push(`${file}: ${name} does not start with the guard`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("IT-122 a track id from the URL is looked up among the session's tracks only", () => {
+    const page = read("app/searches/tracks/[id]/page.tsx");
+    expect(page).toContain("await listCandidateTracks(candidateId)");
+    expect(page).toContain("notFound()");
+    expect(page).not.toMatch(/searchParams|candidateId\s*=\s*Number/);
+  });
+
+  it("IT-123 capture health is an admin page that reads aggregates only", () => {
+    const page = read("app/admin/captures/page.tsx");
+    expect(page).toContain('await requirePage("admin:access")');
+    expect(page).toContain("captureHealth(");
+    expect(page).not.toMatch(/termOverview|listSavedTerms|saved_term|savedTerm/);
+  });
+
+  it("IT-130 no admin route reads a candidate's tracks or terms", () => {
+    const offenders = walk("app/admin").filter((file) =>
+      /trackOverview|termOverview|listSavedTerms|listCandidateTracks|savedTermForBoard/.test(read(file)),
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("term captures (ADR-004, ADR-006)", () => {
+  it("keeps sourcing blind to who saved a term", () => {
+    // Capture is per term; who saved it is matching's private data. A sourcing
+    // file reading a matching table or the matching API could leak it into a
+    // log or into the aggregate health an admin sees.
+    const offenders = SRC.filter((file) => file.includes("src/contexts/sourcing/")).filter((file) =>
+      /contexts\/matching\/|\b(savedTerm|targetTrack|jobScore|candidate)\b/.test(read(file)),
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe("scoring purity (ADR 0004)", () => {
   it("never reaches the network", () => {
     for (const file of SRC.filter((f) => f.includes("src/core/scoring"))) {
@@ -525,6 +593,10 @@ describe("authorisation (AUTH-01)", () => {
       "app/candidate/page.tsx",
       "app/candidate/skills/page.tsx",
       "app/candidate/vocabulary/page.tsx",
+      // Termos e trilhas são privados (ADR-006): só o próprio candidato.
+      "app/searches/page.tsx",
+      "app/searches/tracks/new/page.tsx",
+      "app/searches/tracks/[id]/page.tsx",
     ];
     for (const file of privatePages) {
       expect(read(file), file).toContain("await requireOwnCandidatePage(");

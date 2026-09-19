@@ -40,6 +40,11 @@ erDiagram
     company ||--o{ job : "company_id"
     candidate ||--o{ job_score : "candidate_id PK (cascade)"
     job ||--o{ job_score : "job_id PK (cascade)"
+    candidate ||--o{ target_track : "candidate_id (cascade)"
+    target_track ||--o{ job_score : "track_id PK (cascade)"
+    target_track ||--o{ saved_term : "track_id (cascade)"
+    candidate ||--o{ saved_term : "candidate_id (cascade)"
+    candidate ||--o{ saved_term_request : "candidate_id (cascade)"
     candidate ||--o{ application : "candidate_id (cascade)"
     candidate ||--o{ candidate_document : "candidate_id (cascade)"
     candidate ||--|| candidate_matching_profile : "candidate_id (cascade)"
@@ -101,6 +106,7 @@ erDiagram
     }
     job_score {
         INTEGER candidate_id PK "FK candidate.id"
+        INTEGER track_id PK "FK target_track.id"
         INTEGER job_id PK "FK job.id"
         REAL fit "0..100"
         REAL title_score
@@ -293,14 +299,21 @@ retenção; a coluna sem esse índice não atende ao contrato de lote.
 
 ### `job_score`
 
-Score derivado, um por par candidato–vaga. A chave primária composta é
-`(candidate_id, job_id)`; ambas as FKs usam `ON DELETE cascade`. O comentário
-de seção no schema é literal: *"Scoring (derived — safe to wipe and
-recompute)"*.
+Score derivado, um por (candidato, trilha de alvo, vaga). A chave primária
+composta é `(candidate_id, track_id, job_id)`; as três FKs usam
+`ON DELETE cascade`. O comentário de seção no schema é literal: *"Scoring
+(derived — safe to wipe and recompute)"*.
+
+A trilha entrou na chave na versão 1.4.0 do scorer (ADR-008 da feature `term-search-target-tracks`). A trilha
+principal tem linha para toda vaga aberta; uma trilha aceita só para as vagas
+relevantes a ela. Todo leitor escolhe a trilha por `scoreTrackFilter` (board)
+ou `primaryScoreFilter` (quem mostra uma nota só: dossiê, relatório,
+exportação, cockpit, e o `max(fit)` que ordena verificação e captura) — um
+teste de arquitetura reprova arquivo que lê `jobScore` sem um dos dois.
 
 | Coluna | Notas |
 |---|---|
-| `candidate_id`, `job_id` | identidade composta do score; permite avaliações independentes da mesma vaga |
+| `candidate_id`, `track_id`, `job_id` | identidade composta do score; permite avaliações independentes da mesma vaga por pessoa e por trilha |
 | `fit` | 0..100, já com penalidade subtraída e clampada |
 | `title_score`, `keyword_score`, `seniority_score`, `geo_score`, `comp_score` | os cinco componentes, cujos pesos somam 100 antes das penalidades |
 | `penalty` | pontos negativos de blockers e keywords negativas |
@@ -308,12 +321,13 @@ recompute)"*.
 | `matched_keywords`, `missing_keywords` | JSON. `missing_keywords` só lista termos com `weight >= 7` |
 | `reasons`, `blockers` | JSON de mensagens estruturadas `{ code, params }`; apresentação traduz os códigos |
 | `eligibility_status`, `eligibility_reasons` | resultado `eligible \| ineligible \| unverifiable` e códigos auditáveis |
-| `profile_hash` | hash da política/perfil efetivamente usados; mudança invalida a avaliação mesmo na mesma versão |
+| `profile_hash` | hash do perfil efetivo (pessoa + alvo da trilha); mudança invalida a avaliação daquela trilha mesmo na mesma versão |
 | `scorer_version` | ver o invariante 3 |
 | `scored_at` | carimbado explicitamente por `scoreAll()`, não pelo default da coluna |
 
-Índice `job_score_fit_idx (fit)` — o board ordena por
-`coalesce(job_score.fit, 0) DESC`.
+Índices `job_score_fit_idx (fit)` e
+`job_score_candidate_track_fit_idx (candidate_id, track_id, fit)` — o board
+ordena por `coalesce(job_score.fit, 0) DESC` dentro de uma trilha.
 
 ### `candidate_matching_profile`
 
@@ -323,6 +337,56 @@ fallback de bootstrap para o candidato padrão, não como estado global
 compartilhado. A combinação `(candidate_id, profile_hash, scorer_version)`
 torna avaliações independentes e auditáveis para dois candidatos na mesma
 vaga.
+
+Guarda a metade **pessoa** do perfil. A metade **alvo** — `targets`,
+`keywords`, os dois limiares de senioridade e as faixas de remuneração — é da
+trilha principal em `target_track`, e `effectiveProfile` junta as duas antes de
+pontuar (ADR-009 da feature `term-search-target-tracks`). Salvar o perfil sincroniza o alvo da principal.
+
+### `target_track`
+
+Trilha de alvo: um tipo de vaga que a pessoa aceita, com a própria régua. Uma
+principal por candidato e até seis ativas.
+
+| Coluna | Notas |
+|---|---|
+| `candidate_id` | dono; `ON DELETE cascade` |
+| `name`, `name_key` | nome exibido e a chave sem caixa; único por candidato (`target_track_name_idx`) |
+| `is_primary` | no máximo uma por candidato — índice parcial `target_track_one_primary_idx` |
+| `status` | `active` ou `archived`. Arquivar pausa os termos da trilha; restaurar retoma só os que o arquivamento pausou |
+| `position` | ordem de exibição e desempate em "todas as trilhas" |
+| `target_json` | o alvo (`TrackTarget`). **Nulo é principal pendente**: candidato sem perfil próprio, que não é pontuado (M-06) |
+| `unreviewed_json` | campos herdados do perfil padrão que a pessoa ainda não revisou |
+
+Mutação de trilha serializa por candidato com
+`pg_advisory_xact_lock(hashtext('target_track'), candidate_id)`: limite de seis
+ativas e nome único não resistiriam a duas requisições simultâneas só com
+leitura antes da escrita.
+
+### `saved_term`
+
+Termo salvo ("php", "Tech Lead") ligado a uma trilha. Criado nesta versão; a
+busca que o usa vem com a captura por termo.
+
+| Coluna | Notas |
+|---|---|
+| `candidate_id`, `track_id` | dono e trilha; ambos `ON DELETE cascade` |
+| `term`, `term_key` | o texto e a chave sem caixa, espaço e hífen (`termKey`); único por candidato |
+| `status`, `paused_reason` | `active` ou `paused`; `track_archived` marca a pausa que a restauração desfaz |
+| `last_run_requested_at`, `last_visit_at` | quando a busca foi pedida e quando a pessoa olhou o resultado |
+
+### `saved_term_request`
+
+Quantas buscas o candidato pediu pela tela em cada dia UTC (migração `0008`).
+Salvar um termo e "rodar de novo" somam um; passado o teto de 40, o termo é
+salvo e espera a varredura, e o "rodar de novo" é recusado. A conta mora fora de
+`saved_term` de propósito: apagar o termo não pode zerá-la, senão um ciclo de
+salvar-apagar ocuparia as janelas por minuto das plataformas de todo mundo.
+
+| Coluna | Notas |
+|---|---|
+| `candidate_id`, `window_day` | chave primária; `candidate_id` com `ON DELETE cascade` |
+| `requested` | pedidos no dia, somados por upsert atômico |
 
 ---
 
@@ -363,8 +427,9 @@ devem aplicar o escopo de autorização antes de agregar.
 
 `transitionApplication()` é a máquina de estados pura. Repetir o status atual
 é idempotente (não cria outro evento), estados terminais não reabrem por uma
-transição comum e `applied_at` é gravado somente na primeira entrada em
-`applied`. O repositório persiste a nova `application` e seu evento na mesma
+transição comum — a exceção é `archived` sem `applied_at`, que volta a
+`backlog` para desfazer um "não me interessa" — e `applied_at` é gravado
+somente na primeira entrada em `applied`. O repositório persiste a nova `application` e seu evento na mesma
 transação e usa o status anterior como token de concorrência otimista.
 
 ### Migração do ownership por candidato
@@ -423,12 +488,13 @@ valida a string contra essa lista **antes de tocar o banco**, e aborta com
 | `offer` | Proposta na mesa |
 | `rejected` | Eles disseram não (ou pararam de responder) |
 | `withdrawn` | **Você** disse não — desistiu do processo |
-| `archived` | Encerrado sem desfecho relevante; tira da vista sem apagar histórico |
+| `archived` | Encerrado sem desfecho relevante ou marcado "não me interessa"; some das listas de vagas por padrão sem apagar histórico. Sem `applied_at`, pode voltar a `backlog` |
 
 As transições permitidas ficam em
 `src/contexts/pursuit/domain/application.ts`. A função pura aceita a criação em
 qualquer etapa já observada, mas depois exige avanço legal; estados terminais
-recusam avanço. A auditoria da trajetória continua em `application_event`.
+recusam avanço, salvo a restauração de `archived` sem `applied_at` para
+`backlog`. A auditoria da trajetória continua em `application_event`.
 
 > **Invariante:** para adicionar ou renomear um status, edite
 > `APPLICATION_STATUSES` no domínio de Pursuit — é `as const`, não `enum`,
@@ -539,15 +605,16 @@ A versão é uma constante em
 [`src/core/scoring/score.ts`](../src/core/scoring/score.ts):
 
 ```ts
-export const SCORER_VERSION = "1.3.0";
+export const SCORER_VERSION = "1.4.1";
 ```
 
 Ela é persistida em `job_score.scorer_version` e é **o gatilho de
-repontuação**. Sem `--all`, `scoreAll()` seleciona apenas:
+repontuação**. Sem `--all`, `scoreAll()` seleciona, para cada trilha ativa:
 
 ```sql
 job.closed_at is null
   and job_score.candidate_id = :candidateId
+  and job_score.track_id = :trackId
   and (
     job_score.job_id is null
     or job_score.scorer_version <> :scorerVersion
@@ -559,9 +626,10 @@ job.closed_at is null
 Ou seja: vaga aberta sem score, com versão/perfil antigo ou cuja parcela
 temporal expirou. Com `--all`,
 o filtro vira `job.closed_at IS NULL` para aquele candidato e tudo é
-repontuado. A escrita usa `onConflictDoUpdate` no par
-`(job_score.candidateId, job_score.jobId)`, então rodar de novo é idempotente e
-não sobrescreve o score de outro candidato.
+repontuado. A escrita usa `onConflictDoUpdate` na chave
+`(candidate_id, track_id, job_id)`, então rodar de novo é idempotente e não
+sobrescreve o score de outro candidato nem de outra trilha. Numa trilha aceita,
+vaga que deixou de ser relevante perde a linha.
 
 > **Invariante:** mexeu nos pesos, na lógica do scorer ou em `profile.yaml`?
 > **Bump `SCORER_VERSION`** e rode `pnpm jho jobs score --all`. Sem o bump,
@@ -684,8 +752,30 @@ da URL de runtime. O snapshot SQLite legado não participa do bootstrap normal.
 > a próxima geração produz um diff errado. Mexeu no schema, rode
 > `pnpm db:generate` e commite os dois.
 
+Migração de dados é a exceção declarada: nasce vazia com
+`drizzle-kit generate --custom` e recebe o SQL escrito à mão, com snapshot e
+journal gerados pelo kit. A troca de chave de `job_score` é o exemplo —
+expandir (`0004`, trilha anulável), preencher (`0005`, trilha principal por
+candidato e `track_id` nas notas existentes) e contrair (`0006`, `NOT NULL` e a
+chave nova). O migrator aplica as pendentes numa transação só.
+
 
 ## Tabelas adicionadas depois da primeira versão
+
+### Captura por termo — `term_capture`, `term_attribution`, `platform_quota`
+
+Do contexto `sourcing` (`src/contexts/sourcing/`). Nenhuma das três nomeia
+candidato: a captura é por termo, e quem salvou o termo fica em `saved_term`.
+Regras de negócio em [`docs/sources.md`](sources.md#busca-por-termo).
+
+| Tabela | Chave | O que guarda |
+|---|---|---|
+| `term_capture` | `id`; único `(platform, term_key, window_day)` | fila e registro de uma busca por termo numa plataforma num dia UTC: estado, lease, contagens (`fetched`, `created`, `known`, `attributed`), `total_hint` |
+| `term_attribution` | `(term_key, job_id)`; `job_id` com `ON DELETE cascade` | a vaga que a captura trouxe e que cita o termo — base do filtro "trazida por" |
+| `platform_quota` | `(platform, window_kind, window_start)` | unidades gastas por plataforma em cada janela `day`/`minute`, sincronização incluída |
+
+Vaga nova de captura entra numa fonte `<kind>:~terms` criada com
+`enabled = false`: a sincronização nunca a fecha.
 
 ### `fx_rate` — cotações em cache
 

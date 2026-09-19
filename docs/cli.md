@@ -196,17 +196,42 @@ Detalhes que importam na leitura:
 - Fonte com `enabled: false` no YAML **não aparece** aqui: `loadSources()` a descarta
   antes.
 
-### `jho sources probe <kind> <handle>`
+### `jho sources probe <kind> [handle] [--term <termo>]`
 
-`"Test a source handle without writing anything to the database"`. Chama
-`getAdapter(kind).fetchJobs({ kind, handle, label: handle })` e imprime a contagem, os
-warnings do adapter e os 5 primeiros títulos.
+`"Test a source handle, or its term search with --term, without writing anything to
+the database"`. Sem `--term`, chama `getAdapter(kind).fetchJobs({ kind, handle, label:
+handle })` e imprime a contagem, os warnings do adapter e os 5 primeiros títulos.
 
 Este é um dos dois comandos que **não** passam por `withDb()` — o outro é `jho profile`.
 Ele não abre o banco, então é seguro
 rodar contra um handle que você acabou de descobrir, antes de tocar `sources.yaml`.
 
-Sem flags.
+Passa pela guarda de ingestão como `jobs sync` e `jobs recheck`. Sem `JHO_ENV`
+(e sem `VERCEL_ENV`) o ambiente é tratado como `preview` e nega; `preview`,
+`staging` e `dev` sempre negam; `local` só roda com `JHO_ENV=local` e
+`JHO_INGESTION_OPT_IN=true`. A recusa sai com `IngestionBlockedError` antes de
+abrir conexão:
+
+```bash
+JHO_ENV=local JHO_INGESTION_OPT_IN=true pnpm jho sources probe greenhouse stackblitz
+```
+
+| Flag | Efeito |
+|---|---|
+| `--term <termo>` | Exercita a busca por termo da plataforma em vez do feed. Imprime o total, se a plataforma está validada e os 5 primeiros títulos. Não reserva cota nem grava vaga, fila ou atribuição — é o probe que valida a integração antes de ela entrar nas capturas (`validatedOn`) |
+
+```bash
+pnpm jho sources probe remoteok --term "tech lead"
+```
+
+```
+✓ remoteok term search returned 3 job(s) of about 3
+  validated on 2026-09-19
+  · Tech Lead — Zensurance
+```
+
+Plataforma sem busca por termo sai com código 1 (`greenhouse does not search by
+term`); sem handle e sem `--term`, também.
 
 ```bash
 pnpm jho sources probe greenhouse stackblitz
@@ -262,6 +287,60 @@ mas não estão em `ADAPTERS` — logo passam no load e quebram no fetch.
 > uma resposta real.
 
 ---
+
+## Área `terms` — buscas por termo salvas
+
+O candidato salva termos ("php", "Tech Lead") na tela Buscas; cada termo busca
+vagas nas plataformas que buscam por termo (Remotive, RemoteOK, Himalayas,
+Jobicy, Workable, Hacker News) e é
+repetido todo dia pela varredura. Regras de plataforma, cota e atribuição em
+[`docs/sources.md`](sources.md#busca-por-termo).
+
+### `jho terms run [--max <n>]`
+
+Enfileira a captura de hoje de cada termo ativo — uma vez por chave, entre
+todos os candidatos, sem termo pausado nem termo de trilha arquivada — e drena a
+fila com o mesmo executor que a tela usa. É o passo "Buscar os termos salvos"
+da varredura diária.
+
+- Passa pela guarda de ingestão: onde ela nega, imprime o motivo e sai com 1,
+  sem abrir banco nem rede.
+- Captura já feita hoje (pela tela ou por outro candidato) é reaproveitada: não
+  há segunda chamada à plataforma.
+- Imprime uma linha JSON por plataforma, e nada mais — termo e consulta nunca
+  vão para o log:
+
+```
+{"platform":"remotive","claimed":2,"succeeded":2,"waiting":0,"failed":0,"created":14,"known":3}
+{"platform":"remoteok","claimed":2,"succeeded":1,"waiting":1,"failed":0,"created":2,"known":0}
+```
+
+- Sai com 1 quando todas as plataformas falharam na execução (a varredura
+  quebra e alguém olha); falha parcial não quebra.
+
+| Flag | Efeito |
+|---|---|
+| `--max <n>` | Para depois de `n` capturas |
+
+### `jho terms status`
+
+A saúde agregada por plataforma, a mesma da tela `/admin/captures`: uso das
+janelas de cota, capturas por estado nas últimas 24 horas, último erro, dias
+seguidos de falha, se a repetição diária parou e se a plataforma está vermelha.
+Uma linha JSON por plataforma, sem termo, consulta nem candidato.
+
+## Área `tracks` — trilhas de alvo
+
+### `jho tracks list [--candidate <id>]`
+
+As trilhas de um candidato (o ativo, por padrão), com estado e quantas vagas
+cada uma tem pontuadas. A principal leva `★`. Candidato sem perfil próprio não
+tem trilha: a principal fica pendente e ninguém pontua para ele.
+
+```
+★ Principal                    active     4122 scored
+  PHP                          active      318 scored
+```
 
 ## Área `jobs` — sync, score e navegação
 
@@ -370,7 +449,7 @@ o corte final em `--limit` acontece por último.
 |---|---|---|
 | `--min-fit <n>` | `"45"` | minimum fit score |
 | `--cluster <name>` | — | filter by target cluster |
-| `--status <name>` | — | filter by pipeline status, or `'unfiled'` |
+| `--status <name>` | — | filter by pipeline status, `'unfiled'` or `'any'`; without it, archived jobs ("não me interessa") are hidden |
 | `--limit <n>` | `"30"` | maximum rows |
 | `--json` | — | machine-readable output |
 
@@ -1071,11 +1150,16 @@ O ciclo padrão: ingerir, ver o que subiu no topo, exportar para o vault.
 
 ```bash
 pnpm jho jobs sync
+pnpm jho terms run
+pnpm jho jobs score
 pnpm jho jobs list --min-fit 55 --status unfiled --limit 20
 pnpm jho report
 ```
 
-`jobs sync` já pontua ao final, então `jobs score` é redundante aqui. O
+`jobs sync` já pontua ao final, mas as vagas que `terms run` trouxer entram sem
+nota: `jobs score` pontua as que faltam (a varredura usa `--every-candidate`).
+`jobs rescore run` não serve aqui — ele só drena a fila de repontuação, e
+`terms run` não enfileira nada nela. O
 `--status unfiled` esconde o que você já triou em dias anteriores, evitando reler as
 mesmas 30 linhas toda manhã.
 

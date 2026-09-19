@@ -36,7 +36,7 @@ export default async function Cockpit({
     pipelineCounts(candidateId),
     clusterBreakdown(candidateId, 45),
     listBoard(candidateId, { ...filters, limit: 12 }),
-    boardFacets(candidateId, { minFit: state.fit, cluster: state.cluster, q: state.q, sourceKind: state.source, workMode: state.workMode }),
+    boardFacets(candidateId, { minFit: state.fit, cluster: state.cluster, term: state.term, sourceKind: state.source, workMode: state.workMode }),
   ]);
 
   const tracked = Object.values(counts).reduce((a, b) => a + b, 0);
@@ -84,7 +84,7 @@ export default async function Cockpit({
         <div className="mt-3 mb-4">
           <Legend t={t} />
         </div>
-        <JobList rows={top} t={t} locale={locale} />
+        <JobList rows={top} t={t} locale={locale} context={{ triage: true }} />
       </section>
 
       {clusters.length > 0 && (

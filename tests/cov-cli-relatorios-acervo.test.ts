@@ -36,6 +36,7 @@ import { syncCandidateFromProfile } from "../src/core/candidate.ts";
 import { application, job, jobPage, jobScore, source } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 import { banco, carregarCli, rodar } from "./cov-cli-harness.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 beforeAll(async () => {
   await carregarCli();
@@ -428,6 +429,7 @@ describe("jho jobs show <id>", () => {
     // de lista para lista nenhuma.
     await banco().insert(jobScore).values({
       candidateId: candidatoId,
+      trackId: await primaryTrackId(banco(), candidatoId),
       jobId: nua,
       fit: 50, titleScore: 20, keywordScore: 10, seniorityScore: 5,
       geoScore: 10, compScore: 0, cluster: "architect",

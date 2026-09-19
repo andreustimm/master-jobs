@@ -1,9 +1,11 @@
 "use client";
 
-import type { FormHTMLAttributes, ReactNode } from "react";
-import { useActionState, useEffect, useRef, useState } from "react";
+import type { FormEvent, FormHTMLAttributes, ReactNode } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { CircleAlert, CheckCircle2, X } from "lucide-react";
+import type { Route } from "next";
 import { cn } from "@/lib/utils";
+import { TransitionLink } from "./transition-link";
 
 export const MUTATION_FEEDBACK_MS = 5_000;
 export const MUTATION_FEEDBACK_EVENT = "master-jobs:mutation-feedback";
@@ -12,6 +14,8 @@ export type MutationFeedbackPayload = {
   id?: string;
   kind: "success" | "error";
   message: string;
+  /** Somewhere the notice points to, e.g. the term that already exists. */
+  link?: { href: string; label: string };
 };
 
 type MutationFeedbackState = {
@@ -21,6 +25,22 @@ type MutationFeedbackState = {
 const INITIAL_MUTATION_FEEDBACK: MutationFeedbackState = { status: "idle" };
 
 type MutationAction = (formData: FormData) => Promise<unknown>;
+
+/**
+ * The message for a specific result, when the form was given one: the
+ * result's `code` (a refusal) or `run` (how a save went). Falls back to the
+ * form's generic messages.
+ */
+function specificMessage(result: unknown, messages: Record<string, string> | undefined): string | undefined {
+  if (!messages || !result || typeof result !== "object") return undefined;
+  const code = "code" in result ? result.code : "run" in result ? result.run : undefined;
+  return typeof code === "string" ? messages[code] : undefined;
+}
+
+function resultLink(result: unknown, label: string | undefined): MutationFeedbackPayload["link"] {
+  if (!label || !result || typeof result !== "object" || !("href" in result)) return undefined;
+  return typeof result.href === "string" ? { href: result.href, label } : undefined;
+}
 
 function isFailedResult(result: unknown): boolean {
   if (!result || typeof result !== "object") return false;
@@ -90,6 +110,7 @@ export function MutationFeedbackHost({
     <MutationNotice
       kind={feedback.kind}
       message={feedback.message}
+      link={feedback.link}
       dismissLabel={dismissLabel}
       onDismiss={() => {
         if (timer.current !== null) window.clearTimeout(timer.current);
@@ -103,12 +124,14 @@ export function MutationFeedbackHost({
 export function MutationNotice({
   kind,
   message,
+  link,
   dismissLabel,
   onDismiss,
   testId = "mutation-feedback",
 }: {
   kind: "success" | "error";
   message: string;
+  link?: MutationFeedbackPayload["link"];
   dismissLabel: string;
   onDismiss: () => void;
   testId?: string;
@@ -137,7 +160,21 @@ export function MutationNotice({
       ) : (
         <CheckCircle2 aria-hidden="true" className="mt-1 size-5 shrink-0 text-[var(--good)]" />
       )}
-      <p className="type-body-sm min-w-0 flex-1">{message}</p>
+      <p className="type-body-sm min-w-0 flex-1">
+        {message}
+        {link && (
+          <>
+            {" "}
+            <TransitionLink
+              href={link.href as Route}
+              className="text-[var(--primary-text)] underline"
+              data-testid={`${testId}-link`}
+            >
+              {link.label}
+            </TransitionLink>
+          </>
+        )}
+      </p>
       <button
         type="button"
         data-testid={`${testId}-dismiss`}
@@ -159,14 +196,27 @@ export function MutationFeedbackForm({
   action,
   successMessage,
   errorMessage,
+  resultMessages,
+  resultLinkLabel,
   dismissLabel,
+  keepFields,
   children,
   ...props
 }: Omit<FormHTMLAttributes<HTMLFormElement>, "action"> & {
   action: MutationAction;
   successMessage: string;
   errorMessage: string;
+  /** Messages by result `code` or `run`, so a refusal says why. */
+  resultMessages?: Record<string, string>;
+  /** Label of the link a result may carry in `href`. */
+  resultLinkLabel?: string;
   dismissLabel: string;
+  /**
+   * Never clear the fields after the action. React resets an uncontrolled
+   * form when its action settles — a refusal included —, and a long form
+   * refused for one field would lose everything typed in the others.
+   */
+  keepFields?: boolean;
   children: ReactNode;
 }) {
   const [, formAction, pending] = useActionState(
@@ -176,7 +226,8 @@ export function MutationFeedbackForm({
         const kind = isFailedResult(result) ? "error" : "success";
         publishMutationFeedback({
           kind,
-          message: kind === "success" ? successMessage : errorMessage,
+          message: specificMessage(result, resultMessages) ?? (kind === "success" ? successMessage : errorMessage),
+          link: resultLink(result, resultLinkLabel),
         });
         return { status: kind };
       } catch (error) {
@@ -190,8 +241,22 @@ export function MutationFeedbackForm({
     INITIAL_MUTATION_FEEDBACK,
   );
 
+  // With the default prevented, React leaves the action to us and skips its
+  // reset. `action` stays on the form so a submit before hydration still posts.
+  const submitKeepingFields = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    const formData = new FormData(event.currentTarget, submitter);
+    startTransition(() => formAction(formData));
+  };
+
   return (
-    <form {...props} action={formAction} aria-busy={pending || undefined}>
+    <form
+      {...props}
+      {...(keepFields ? { onSubmit: submitKeepingFields } : {})}
+      action={formAction}
+      aria-busy={pending || undefined}
+    >
       {children}
     </form>
   );

@@ -8,6 +8,7 @@ import { clearRobotsCache } from "../src/core/scrape/robots.ts";
 import { careersAdapter } from "../src/core/sources/careers.ts";
 import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/http-port.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 let db: Awaited<ReturnType<typeof useTestDb>>;
 beforeEach(async () => {
@@ -101,6 +102,7 @@ describe("work-mode filters", () => {
       await seed(id, { remote: id % 2 === 0 });
       await db.insert(jobScore).values({
         candidateId: 1, jobId: id, fit: id > 4 ? 70 : 30,
+        trackId: await primaryTrackId(db, 1),
         titleScore: 10, keywordScore: 10, seniorityScore: 10, geoScore: 10,
         compScore: 10, freshnessScore: 10, benefitScore: 10, penalty: 0,
         cluster: "architect", matchedKeywords: [], missingKeywords: [],
@@ -118,7 +120,7 @@ describe("work-mode filters", () => {
     expect((await boardFacets(1, filters)).clusters).toEqual(["architect"]);
     await db.update(job).set({ closedAt: "2026-01-01" }).where(eq(job.id, 24));
     await expect(countBoard(1, filters)).resolves.toBe(9);
-    await expect(countBoard(1, { ...filters, q: "does not exist" })).resolves.toBe(0);
+    await expect(countBoard(1, { ...filters, term: { term: "does not exist", key: "doesnotexist" } })).resolves.toBe(0);
   });
 
   it("ignores unsupported URL values instead of accepting arbitrary SQL input", () => {

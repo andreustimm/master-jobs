@@ -40,6 +40,11 @@ export function NavLinks({
         </TransitionLink>
       )}
       {hasCandidateScope && (
+        <TransitionLink href="/searches" className={linkClass} data-testid="nav-searches">
+          {t("nav.searches")}
+        </TransitionLink>
+      )}
+      {hasCandidateScope && (
         <TransitionLink href="/pipeline" className={linkClass} data-testid="nav-pipeline">
           {t("nav.pipeline")}
         </TransitionLink>

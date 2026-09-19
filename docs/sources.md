@@ -75,6 +75,9 @@ em amarelo abaixo da linha da fonte, tanto em `jobs sync` quanto em
 | `arbeitnow` | `aggregators.ts` | Sim (`description`) | Não | — |
 | `remoteok` | `aggregators.ts` | Sim (`description`) | Não | — |
 | `adzuna` | `aggregators.ts` | Parcial (`description`, sem HTML) | Não, `results_per_page=50` | `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` |
+| `jobicy` | `jobicy.ts` | Sim (`jobDescription`) | Não, `count=100` | — |
+| `workable` | `workable.ts` | Sim (`description` + seções) | `pageToken`, 20/página, até 5 páginas | — |
+| `hackernews` | `hackernews.ts` | Sim (o próprio comentário) | Não, o fio inteiro numa chamada | — |
 
 ### ATS — `src/core/sources/ats.ts`
 
@@ -320,21 +323,45 @@ https://api.adzuna.com/v1/api/jobs/{country}/search/1
 - Está **comentado** em `config/sources.yaml`; descomente depois de setar as
   chaves em `.env.local`.
 
-### Declarados mas não implementados
+### Jobicy, Workable e Hacker News — `jobicy.ts`, `workable.ts`, `hackernews.ts`
 
-`workable` e `manual` existem no type `SourceKind` (`types.ts`) e na lista
-`KINDS` de `config.ts` — portanto **passam na validação Zod do
-`sources.yaml`** — mas não estão em `ADAPTERS` (`registry.ts`).
+Entraram em 2026-09-19, escolhidos numa pesquisa que conferiu cada endpoint por
+chamada real, ToS e robots.txt (Torre, Remotar, Landing.jobs e outros ficaram
+de fora por proibirem robô). Os três buscam por termo e nomeiam o empregador.
 
-Usar qualquer um dos dois faz `getAdapter()` lançar:
+**Jobicy** (`GET https://jobicy.com/api/v2/remote-jobs?count=100&geo=<slug>`).
+API documentada e sem chave, com três condições no README: creditar a Jobicy
+com link para a origem, mandar a candidatura para a URL original do feed
+(`applyUrl = url`) e não varrer mais que uma vez por hora. O livro de cota não
+tem janela de hora, então o orçamento é 24/dia e 1/min. `handle` é o slug de
+geografia; vazio vale `latam`, que também devolve toda vaga "Anywhere".
+`jobGeo` é quem pode se candidatar ("Geographic employment restriction, or
+`Anywhere`"): vira a frase `Location restricted to: X only.` da descrição, como
+na Himalayas, e "Argentina" sozinha bloqueia. `tag` aceita 3–50 caracteres;
+fora disso a busca não gasta chamada. As chaves de salário **somem** quando a
+vaga não informa pagamento, em vez de virem `null`.
 
-```
-No adapter registered for source kind "workable"
-```
+**Workable** (`GET https://jobs.workable.com/api/v1/jobs?query=<q>&location=Brazil&workplace=remote`).
+A busca global da Workable: todas as empresas do ATS, com país e modalidade
+estruturados por vaga. API não documentada; o robots.txt proíbe as páginas
+HTML de busca (`/search*?*`), não `/api/`, e os termos de uso não têm cláusula
+de raspagem. A mesma vaga aparece uma vez por país em que contrata — filtrar
+pelo Brasil é também o que tira as cópias. Pagina com `pageToken` (o
+`nextPageToken` da resposta), 20 por página. O widget por empresa
+(`apply.workable.com/api/v1/widget/accounts/<conta>`) existe, mas lista títulos
+sem descrição, a mesma armadilha da SmartRecruiters. `handle` é o texto da
+busca.
 
-Em `jobs sync` isso não derruba a run: vira `lastStatus = 'error'` apenas para
-aquela fonte. Em `sources probe`, o erro sobe até o `catch` do `parseAsync` e o
-processo sai com `exitCode = 1`.
+**Hacker News** (`GET https://hn.algolia.com/api/v1/search?tags=comment,story_<id>`).
+O fio mensal "Ask HN: Who is hiring?" pela API oficial da Algolia: o mais
+recente de `search_by_date?tags=story,author_whoishiring`, que também publica
+"Who wants to be hired?". Só comentário de topo (`parent_id` igual ao fio) é
+vaga, e só se a primeira linha seguir a convenção "Empresa | Cargo | Local",
+com pelo menos três partes — isso descarta respostas, quem procura emprego no
+fio errado ("Location: London…") e também os anúncios em prosa, uma perda
+aceita (26 de 261 em setembro de 2026). O HN separa parágrafos com `<p>` sem
+fechamento e escapa `/` e `'` como entidade hexadecimal, que `htmlToText` não
+decodifica; o adapter trata as duas coisas depois de tirar as tags.
 
 ---
 
@@ -396,7 +423,7 @@ export const ADAPTERS: Partial<Record<SourceKind, SourceAdapter>> = {
 ```
 
 Sem esta linha, `getAdapter()` lança em runtime mesmo com o YAML válido — foi
-exatamente o que aconteceu com `workable` e `manual`.
+o que aconteceu com `workable` antes de ele ganhar adapter.
 
 ### 3. Adicione em `config/sources.yaml` com um `rationale`
 
@@ -527,7 +554,7 @@ timeouts tight, retry only on transient failures, and never hammer on a 4xx."*
 |---|---|
 | Identificar-se | Header `user-agent` em toda requisição: `process.env.JHO_USER_AGENT` com fallback `"master-jobs/0.1 (personal job search)"` |
 | Timeout curto | `AbortController` com `DEFAULT_TIMEOUT_MS = 20_000` |
-| Retry só em falha transitória | `RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504])`; no máximo 2 retries (`opts.retries ?? 2`) |
+| Retry só em falha transitória | `RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504])`; no máximo 2 retries (`opts.retries ?? 2`). Plataforma com orçamento (Remotive, RemoteOK, Himalayas, Jobicy, Workable, Hacker News) chama com `retries: 0` — ver "Busca por termo" |
 | Não martelar em 4xx | Status fora de `RETRYABLE` faz `throw` imediato do `HttpError` — "a 404 means the board handle is wrong; retrying just wastes time" |
 | Backoff | `500 * 2 ** attempt` ms, ou seja 500 ms e depois 1000 ms |
 | Concorrência limitada | `syncAll()` usa uma fila com `concurrency` workers, default 4 (`--concurrency <n>`) |
@@ -541,6 +568,109 @@ Se você precisa de mais volume de uma fonte, prefira **mais queries
 específicas** (como as duas entradas `remotive`) a subir `limit` /
 `results_per_page` acima do que o adapter já usa. Query específica melhora o
 sinal; página maior só aumenta a conta de quem hospeda.
+
+---
+
+## Busca por termo
+
+O candidato salva um termo ("php", "Tech Lead") e o sistema busca vagas desse
+termo nas plataformas cadastradas que buscam por termo (ADR-004 da feature
+`term-search-target-tracks`). O código mora no contexto `src/contexts/sourcing/`.
+
+### Quais plataformas, e com que orçamento
+
+A capacidade é opcional no adapter: `termSearch = { budget, validatedOn, search }`.
+
+| Plataforma | Endpoint | Orçamento declarado | Validada |
+|---|---|---|---|
+| `remotive` | `GET https://remotive.com/api/remote-jobs?search=<q>&limit=100` | 4/dia, 2/min, 1 chamada por captura | 2026-09-19 |
+| `remoteok` | `GET https://remoteok.com/api?tag=<termo-com-hífen>` | 1/min, 1 chamada por captura | 2026-09-19 |
+| `himalayas` | `GET https://himalayas.app/jobs/api/search?q=<q>&page=<n>` | 20 por página, até 5 páginas; 429 esgota o dia | 2026-09-19 |
+| `jobicy` | `GET https://jobicy.com/api/v2/remote-jobs?tag=<q>&geo=latam&count=100` | 24/dia, 1/min, 1 chamada por captura | 2026-09-19 |
+| `workable` | `GET https://jobs.workable.com/api/v1/jobs?query=<q>&location=Brazil&workplace=remote` | 10/min, 20 por página, até 5 páginas | 2026-09-19 |
+| `hackernews` | `GET https://hn.algolia.com/api/v1/search?tags=comment,story_<fio>&query=<q>` | 30/min, 2 chamadas por captura (achar o fio, buscar nele) | 2026-09-19 |
+
+- **`validatedOn`** é a data em que a integração passou por
+  `jho sources probe <kind> --term <t>` contra a API real. Com `null`, a
+  plataforma fica fora das capturas. O parâmetro `tag` do RemoteOK não é
+  documentado; a busca da Himalayas é outro endpoint, e não o feed que a
+  sincronização usa (o feed ignora `q`).
+- **A Himalayas pagina a busca por `page`**, a partir de 1 — `offset` é
+  ignorado ali — e uma página pode vir incompleta no meio dos resultados (19 na
+  página 3 de 296). Só página vazia ou o total encerram a busca.
+- **O orçamento é do sistema inteiro.** A sincronização regular também reserva
+  antes de chamar uma plataforma orçada: as duas entradas `remotive` do
+  `sources.yaml` gastam 2 das 4 chamadas diárias, e as capturas por termo
+  disputam as outras 2. A sincronização conta uma unidade por fonte sincronizada
+  (as páginas do feed da Himalayas são uma execução só).
+- A Himalayas não tem limite por minuto — o orçamento dela é o do PRD: 20 por
+  página, no máximo 5 páginas por execução, e o 429 esgota o dia. Com 1 por
+  minuto a captura parava na primeira página, com 20 das 100 vagas.
+- RemoteOK aceita 1 chamada por minuto. `jho terms run` espera essas janelas
+  (até 20 minutos, dentro do job de 60 da varredura) em vez de sair com a fila
+  parada: cada termo ativo roda uma vez no dia, não só o primeiro da ordem
+  alfabética.
+- Linha de captura de um dia anterior que ficou na fila é aposentada
+  (`skipped`, motivo `stale`) na próxima reivindicação: a busca de hoje a
+  substitui, e a plataforma não é chamada duas vezes para o mesmo termo no dia.
+- Cada candidato pede no máximo 40 buscas por dia pela tela
+  (`saved_term_request`). Apagar o termo não zera a conta; passado o teto, o
+  termo é salvo e espera a varredura diária.
+
+### O livro de cota (`platform_quota`)
+
+Uma linha por (plataforma, janela, início da janela), com janela `day` (dia
+UTC) ou `minute`. A reserva é um upsert condicional — soma 1 só se o uso está
+abaixo do limite, e devolve a linha só quando somou —, então dez trabalhadores
+concorrentes nunca passam do limite. Janela de minuto cheia devolve a unidade do
+dia. Um **429** leva o dia da plataforma ao teto: nada mais sai para ela até a
+meia-noite UTC. Sincronização barrada pela cota registra `source.last_error =
+"quota"` e não faz chamada.
+
+### A fonte `~terms` e o que a captura nunca faz
+
+Vaga nova trazida por captura entra na fonte `<kind>:~terms` (rótulo
+"Remotive — termos"), criada na primeira captura com `enabled = false`. Como a
+sincronização lê só o `sources.yaml`, ela nunca sincroniza nem fecha essa fonte;
+só a verificação (404/410) fecha suas vagas. Por isso o YAML **recusa handle que
+começa com `~`**.
+
+Vaga que já existe é observada com `keepExistingSource`: continua com a fonte,
+o id externo, as URLs e o payload de quem a trouxe primeiro, e só o conteúdo é
+atualizado. A captura nunca fecha, arquiva, apaga nem reatribui vaga. Vaga
+fechada ou arquivada que reaparece — por captura ou sincronização — reabre
+inteira: `closedAt` e `archivedAt` voltam a nulo.
+
+### Atribuição
+
+A busca da plataforma devolve vaga que não cita o termo (a Remotive devolveu 16
+para "Laravel"; 6 citavam). A captura observa todas, mas só grava
+`term_attribution(term_key, job_id)` quando o termo aparece, com a borda de
+palavra do scorer, no título, na empresa, na descrição ou nas tags da
+plataforma. As tags só existem no payload, que a observação descarta; por isso a
+decisão é tomada durante a captura. No máximo 100 vagas por plataforma por
+captura, as mais recentes primeiro.
+
+### Fila e falhas
+
+Uma linha de `term_capture` por (plataforma, termo normalizado, dia UTC): o mesmo
+termo é buscado no máximo uma vez por dia por plataforma, e serve a todos que o
+salvaram. A reivindicação é `FOR UPDATE SKIP LOCKED` com lease de 5 minutos.
+
+| Resposta da plataforma | Desfecho |
+|---|---|
+| 200 | `succeeded`, com `fetched`, `created`, `known`, `attributed` e `total_hint` |
+| cota recusada | `waiting_quota`, com `run_after` na próxima janela |
+| 429 | `waiting_quota` até a meia-noite UTC, dia da plataforma esgotado |
+| 404/410 no endpoint | `failed` com `endpoint_gone`, não repete; plataforma vermelha na saúde |
+| 5xx, rede | `failed` com `http_error`/`network`, repete na captura do dia seguinte |
+| JSON inválido | `failed` com `parse` |
+| plataforma desligada no YAML | `skipped` com `platform_disabled` |
+
+A saúde agregada (`captureHealth`) mostra, por plataforma, uso das janelas,
+capturas por estado nas últimas 24 horas, último código de erro, dias seguidos
+de falha e se a repetição diária parou — sem nenhum termo, consulta ou
+candidato.
 
 ---
 

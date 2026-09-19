@@ -1,0 +1,16 @@
+# The platforms these term-search tests exercise, with their HTTP fixtures.
+# Pinned here so adding a platform to config/sources.yaml does not change
+# what the tests are about.
+sources:
+  - kind: himalayas
+    handle: "60"
+    label: Himalayas (recentes)
+  - kind: remotive
+    handle: "architect"
+    label: Remotive (architect)
+  - kind: remotive
+    handle: "ai engineer"
+    label: Remotive (AI engineer)
+  - kind: remoteok
+    handle: ""
+    label: RemoteOK

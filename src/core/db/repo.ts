@@ -5,10 +5,19 @@
  * query changes it once, and the CLI and dashboard can never disagree about
  * what "shortlisted" or "open" means.
  */
-import { and, desc, eq, gte, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
-import type { WorkMode } from "../../contexts/matching/index.ts";
+import {
+  primaryScoreFilter,
+  scoreTrackFilter,
+  type TrackScope,
+  type WorkMode,
+} from "../../contexts/matching/index.ts";
 import { workModeSql } from "./work-mode.ts";
+import { attributedJobIds } from "../../contexts/sourcing/index.ts";
+import { loadRates } from "../../contexts/fx/index.ts";
+import { PERIODS_PER_YEAR, annualFactorSql, type Currency, type FxTable } from "../money.ts";
+import { termRegexSql, type ValidTerm } from "../term.ts";
 import {
   IllegalApplicationTransitionError,
   transitionApplication,
@@ -44,6 +53,8 @@ export type BoardRow = {
   compCurrency: string | null;
   compPeriod: string | null;
   fit: number | null;
+  /** The track the fit comes from — in "all", the track where the job scores best. */
+  trackId: number | null;
   cluster: string | null;
   titleScore: number | null;
   keywordScore: number | null;
@@ -62,6 +73,15 @@ export type BoardRow = {
   pageFetchedAt: string | null;
   status: string | null;
   appliedAt: string | null;
+  /** First seen after the viewer's last visit to the "brought by" filter. */
+  isNew: boolean;
+  /**
+   * Top of the pay range in the viewer's currency and period (ADR-013), or
+   * null. `payState` says why it is null: nothing disclosed, or something we
+   * cannot compare. Both null when the view asked for no pay normalization.
+   */
+  payAmount: number | null;
+  payState: "amount" | "undisclosed" | "not_comparable" | null;
   /** Última reconferência do link: quando, o veredito e o código HTTP. */
   checkedAt: string | null;
   checkStatus: string | null;
@@ -76,9 +96,14 @@ export const PREVIEW_CHARS = 2500;
 export type BoardFilters = {
   minFit?: number;
   cluster?: string;
+  /** Absent hides archived jobs ("não me interessa"); `any` shows every job. */
   status?: ApplicationStatus | "unfiled" | "any";
-  /** Free text over title and company. */
-  q?: string;
+  /**
+   * A whole-word term over title, company and description (ADR-005, ADR-012):
+   * `java` does not find "JavaScript", `Lara` does not find "Laravel". The
+   * captured page text stands in for the description when there is one.
+   */
+  term?: ValidTerm;
   sourceKind?: string;
   workMode?: WorkMode;
   /** Hide anything with a hard blocker — work authorisation, on-site, W2. */
@@ -107,9 +132,89 @@ export type BoardFilters = {
    */
   hasDescription?: boolean;
   sort?: "fit" | "recent" | "comp";
+  /**
+   * Which track's fit the board ranks by (ADR-008). Absent means the primary:
+   * a reader that did not choose must not mix tracks in one list.
+   */
+  track?: TrackScope;
+  /**
+   * Only jobs a saved term brought (ADR-005). The key comes from the viewer's
+   * own saved term, resolved server-side; the capture that attributed the job
+   * never knew who saved the term.
+   */
+  broughtBy?: { termKey: string };
+  /** Marks rows first seen after this instant as new (`isNew`). */
+  newSince?: string;
+  /**
+   * Minimum pay and the currency/period to compare in (ADR-013). Only a
+   * filter: it never reaches the scorer or a compensation range.
+   */
+  pay?: PayFilter;
   limit?: number;
   offset?: number;
 };
+
+export type PayFilter = {
+  /** Minimum top of the range; absent means normalize and sort only. */
+  min?: number;
+  currency: Currency;
+  period: "month" | "year";
+  /** Hide rows whose pay is not disclosed or cannot be compared. */
+  disclosedOnly?: boolean;
+};
+
+type PaySql = { amount: SQL; state: SQL };
+
+/**
+ * The normalized top of the pay range, in SQL.
+ *
+ * `top × per-year factor ÷ rate(currency)` gives the amount per year in the
+ * table's base currency; `× rate(target) ÷ periods` puts it in the viewer's
+ * currency and period — the same arithmetic as `normalizePayTop`, with the
+ * same factor table. Rates travel as a bound `VALUES` list from the latest
+ * stored quote. A currency without a rate, an unknown period or a project
+ * gives NULL: not comparable.
+ */
+function paySql(pay: PayFilter, fx: FxTable | null): PaySql {
+  const target = pay.currency.toUpperCase();
+  // Without a stored quote only the viewer's own currency compares.
+  const rates = new Map<string, number>(
+    fx
+      ? [[fx.base.toUpperCase(), 1], ...Object.entries(fx.rates).map(([code, rate]) => [code.toUpperCase(), rate] as const)]
+      : [[target, 1]],
+  );
+  const targetRate = rates.get(target);
+  const top = sql`coalesce(nullif(greatest(${job.compMax}, 0), 0), nullif(greatest(${job.compMin}, 0), 0))`;
+  const values = sql.join(
+    [...rates].map(([code, rate]) => sql`(${code}::text, ${rate}::float8)`),
+    sql`, `,
+  );
+  const rateOf = sql`(select r.rate from (values ${values}) as r(code, rate) where r.code = upper(trim(${job.compCurrency})))`;
+  const factor = sql.raw(annualFactorSql(`"job"."comp_period"`));
+  const amount =
+    targetRate === undefined
+      ? sql`null::float8`
+      : sql`round((${top} * ${factor} / nullif(${rateOf}, 0) * ${targetRate}::float8 / ${PERIODS_PER_YEAR[pay.period]})::numeric, 2)::float8`;
+  const state = sql`(case when ${top} is null then 'undisclosed' when ${amount} is null then 'not_comparable' else 'amount' end)`;
+  return { amount, state };
+}
+
+async function payContext(opts: BoardFilters): Promise<PaySql | undefined> {
+  return opts.pay ? paySql(opts.pay, await loadRates()) : undefined;
+}
+
+/**
+ * Keeps a job whose normalized top reaches the minimum; undisclosed and not
+ * comparable ones stay unless the viewer hid them. Below the minimum is
+ * hidden — and counted, so the screen can say how many.
+ */
+function payCondition(pay: PayFilter | undefined, amount: SQL | undefined): SQL | undefined {
+  if (!pay || !amount) return undefined;
+  if (pay.min === undefined) return pay.disclosedOnly ? sql`${amount} is not null` : undefined;
+  return pay.disclosedOnly
+    ? sql`${amount} >= ${pay.min}`
+    : sql`(${amount} >= ${pay.min} or ${amount} is null)`;
+}
 
 const DAY_MS = 86_400_000;
 
@@ -117,7 +222,7 @@ function freshnessCutoff(days: number): string {
   return new Date(Date.now() - days * DAY_MS).toISOString();
 }
 
-function boardConditions(opts: BoardFilters, candidateId: number | null): SQL[] {
+function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: PaySql): SQL[] {
   const conditions: SQL[] = [isNull(job.closedAt)];
   // Fit, cluster, blockers and application status are candidate-scoped. A
   // recruiter or admin without a candidate identity must still see the
@@ -131,17 +236,24 @@ function boardConditions(opts: BoardFilters, candidateId: number | null): SQL[] 
       conditions.push(sql`coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb`);
     }
     if (opts.status === "unfiled") conditions.push(isNull(application.id));
-    else if (opts.status && opts.status !== "any") {
+    else if (opts.status === undefined) {
+      // Arquivar é "não me interessa": a vaga sai de toda lista que não pediu
+      // as arquivadas pelo nome (`status=archived`) ou tudo (`any`).
+      conditions.push(sql`(${application.id} is null or ${application.status} <> 'archived')`);
+    } else if (opts.status !== "any") {
       conditions.push(eq(application.status, opts.status));
     }
   }
-  if (opts.q) {
-    const needle = `%${opts.q.toLowerCase()}%`;
+  if (opts.term) {
+    // Bound as a parameter, never spliced: the pattern is escaped by the term
+    // kernel and still travels as data (`O'Reilly%_` is just text here).
+    const pattern = termRegexSql(opts.term.term);
     conditions.push(
-      sql`(lower(${job.title}) like ${needle} or lower(${job.companyName}) like ${needle})`,
+      sql`(${job.title} ~* ${pattern} or ${job.companyName} ~* ${pattern} or coalesce(${jobPage.text}, ${job.descriptionText}, '') ~* ${pattern})`,
     );
   }
   if (opts.sourceKind) conditions.push(sql`${job.sourceId} like ${`${opts.sourceKind}:%`}`);
+  if (opts.broughtBy) conditions.push(sql`${job.id} in ${attributedJobIds(opts.broughtBy.termKey)}`);
   if (opts.workMode) conditions.push(eq(workModeSql(), opts.workMode));
   if (opts.freshDays && opts.freshDays > 0) {
     conditions.push(
@@ -155,7 +267,30 @@ function boardConditions(opts: BoardFilters, candidateId: number | null): SQL[] 
   if (opts.namedEmployer) {
     conditions.push(sql`lower(${job.companyName}) <> lower(coalesce(${source.label}, ''))`);
   }
+  const payFilter = payCondition(opts.pay, pay?.amount);
+  if (payFilter) conditions.push(payFilter);
   return conditions;
+}
+
+/**
+ * Every sort ends in fit and then `job.id`: two rows that tie on the chosen
+ * key must keep the same order between page 1 and page 2, or a job appears on
+ * both pages and another on neither. With a pay filter, rows whose pay cannot
+ * be compared come after the ones that qualify, whatever the sort.
+ */
+function boardOrder(opts: BoardFilters, pay?: PaySql): SQL[] {
+  const fit = desc(sql`coalesce(${jobScore.fit}, 0)`);
+  const payLast = pay && opts.pay?.min !== undefined ? [asc(sql`(${pay.amount} is null)`)] : [];
+  if (opts.sort === "comp") {
+    const byPay = pay
+      ? [asc(sql`(${pay.amount} is null)`), desc(sql`coalesce(${pay.amount}, 0)`)]
+      : [desc(sql`coalesce(${job.compMax}, ${job.compMin}, 0)`)];
+    return [...byPay, fit, asc(job.id)];
+  }
+  if (opts.sort === "recent") {
+    return [...payLast, desc(sql`coalesce(${job.postedAt}, ${job.firstSeenAt})`), fit, asc(job.id)];
+  }
+  return [...payLast, fit, desc(job.firstSeenAt), asc(job.id)];
 }
 
 /** The main board: open jobs joined with score and pipeline state. */
@@ -175,19 +310,23 @@ function scopedTo(column: PgColumn, candidateId: number | null) {
   return candidateId === null ? sql`1 = 0` : eq(column, candidateId);
 }
 
+/** The score row a job joins to: the candidate's, on the chosen track or the primary. */
+function scoreJoin(candidateId: number | null, track?: TrackScope): SQL {
+  return and(
+    eq(jobScore.jobId, job.id),
+    scopedTo(jobScore.candidateId, candidateId),
+    track ? scoreTrackFilter(track) : primaryScoreFilter(),
+  )!;
+}
+
 export async function listBoard(
   candidateId: number | null,
   opts: BoardFilters = {},
 ): Promise<BoardRow[]> {
   const db = getDb();
-  const conditions = boardConditions(opts, candidateId);
-
-  const order =
-    opts.sort === "recent"
-      ? [desc(sql`coalesce(${job.postedAt}, ${job.firstSeenAt})`)]
-      : opts.sort === "comp"
-        ? [desc(sql`coalesce(${job.compMax}, ${job.compMin}, 0)`), desc(sql`coalesce(${jobScore.fit}, 0)`)]
-        : [desc(sql`coalesce(${jobScore.fit}, 0)`), desc(job.firstSeenAt)];
+  const pay = await payContext(opts);
+  const conditions = boardConditions(opts, candidateId, pay);
+  const order = boardOrder(opts, pay);
 
   const rows = await db
     .select({
@@ -206,6 +345,7 @@ export async function listBoard(
       compCurrency: job.compCurrency,
       compPeriod: job.compPeriod,
       fit: jobScore.fit,
+      trackId: jobScore.trackId,
       cluster: jobScore.cluster,
       titleScore: jobScore.titleScore,
       keywordScore: jobScore.keywordScore,
@@ -239,12 +379,17 @@ export async function listBoard(
       checkStatus: job.checkStatus,
       checkCode: job.checkCode,
       checkQueue: verifyTask.status,
+      // `""` is "never visited": every row is new. Only absence means no marker.
+      isNew: opts.newSince !== undefined
+        ? sql<boolean>`${job.firstSeenAt} > ${opts.newSince}`
+        : sql<boolean>`false`,
+      payAmount: pay ? sql<number | null>`${pay.amount}` : sql<number | null>`null::float8`,
+      payState: pay
+        ? sql<BoardRow["payState"]>`${pay.state}`
+        : sql<BoardRow["payState"]>`null::text`,
     })
     .from(job)
-    .leftJoin(
-      jobScore,
-      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-    )
+    .leftJoin(jobScore, scoreJoin(candidateId, opts.track))
     .leftJoin(
       application,
       and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
@@ -271,20 +416,38 @@ export async function countBoard(
   candidateId: number | null,
   opts: BoardFilters = {},
 ): Promise<number> {
+  const pay = await payContext(opts);
+  return countWhere(candidateId, opts, boardConditions(opts, candidateId, pay));
+}
+
+async function countWhere(candidateId: number | null, opts: BoardFilters, conditions: SQL[]): Promise<number> {
   const [row] = await getDb()
     .select({ count: sql<number>`count(*)` })
     .from(job)
-    .leftJoin(
-      jobScore,
-      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-    )
+    .leftJoin(jobScore, scoreJoin(candidateId, opts.track))
     .leftJoin(
       application,
       and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
     )
     .leftJoin(source, eq(source.id, job.sourceId))
-    .where(and(...boardConditions(opts, candidateId)));
+    .leftJoin(jobPage, eq(jobPage.jobId, job.id))
+    .where(and(...conditions));
   return Number(row?.count ?? 0);
+}
+
+/**
+ * How many jobs the pay minimum hid: everything else matches, the pay is
+ * disclosed and comparable, and it falls short. The screen says the number so
+ * a minimum never silently empties the list.
+ */
+export async function countHiddenBelowMinimum(
+  candidateId: number | null,
+  opts: BoardFilters = {},
+): Promise<number> {
+  if (!opts.pay || opts.pay.min === undefined) return 0;
+  const pay = await payContext(opts);
+  const conditions = boardConditions({ ...opts, pay: undefined }, candidateId);
+  return countWhere(candidateId, opts, [...conditions, sql`${pay!.amount} < ${opts.pay.min}`]);
 }
 
 /** Counts for the filter chips, so the UI can show what each option yields. */
@@ -308,43 +471,37 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
         described: sql<number>`coalesce(sum(case when length(coalesce(${job.descriptionText}, '')) >= 200 then 1 else 0 end), 0)`,
       })
       .from(job)
-      .leftJoin(
-        jobScore,
-        and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-      )
+      .leftJoin(jobScore, scoreJoin(candidateId, base.track))
       .leftJoin(
         application,
         and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
       )
       .leftJoin(source, eq(source.id, job.sourceId))
+      .leftJoin(jobPage, eq(jobPage.jobId, job.id))
       .where(and(...boardConditions(dimensions, candidateId))),
     getDb()
       .select({ cluster: jobScore.cluster })
       .from(job)
-      .leftJoin(
-        jobScore,
-        and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-      )
+      .leftJoin(jobScore, scoreJoin(candidateId, base.track))
       .leftJoin(
         application,
         and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
       )
       .leftJoin(source, eq(source.id, job.sourceId))
+      .leftJoin(jobPage, eq(jobPage.jobId, job.id))
       .where(and(...boardConditions(dimensions, candidateId), sql`${jobScore.cluster} is not null`))
       .groupBy(jobScore.cluster)
       .then((rows) => rows.map((row) => row.cluster!).sort()),
     getDb()
       .select({ kind: sourceKind })
       .from(job)
-      .leftJoin(
-        jobScore,
-        and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-      )
+      .leftJoin(jobScore, scoreJoin(candidateId, base.track))
       .leftJoin(
         application,
         and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
       )
       .leftJoin(source, eq(source.id, job.sourceId))
+      .leftJoin(jobPage, eq(jobPage.jobId, job.id))
       .where(and(...boardConditions(dimensions, candidateId)))
       .groupBy(sourceKind)
       .then((rows) => rows.map((row) => row.kind).sort()),
@@ -632,16 +789,16 @@ export async function recruiterCandidateSummaries(
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Everything the detail view needs, in one round trip. */
+/**
+ * Everything the detail view needs, in one round trip. The score is the
+ * primary track's; the other tracks' fits come from `trackFitsForJob`.
+ */
 export async function getJobDetail(candidateId: number | null, jobId: number) {
   const db = getDb();
   const rows = await db
     .select()
     .from(job)
-    .leftJoin(
-      jobScore,
-      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-    )
+    .leftJoin(jobScore, scoreJoin(candidateId))
     .leftJoin(
       application,
       and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
@@ -699,10 +856,7 @@ export async function getJobScoringDetail(candidateId: number, jobId: number) {
   const rows = await db
     .select()
     .from(job)
-    .leftJoin(
-      jobScore,
-      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-    )
+    .leftJoin(jobScore, scoreJoin(candidateId))
     .leftJoin(source, eq(source.id, job.sourceId))
     .where(eq(job.id, jobId))
     .limit(1);
@@ -716,7 +870,7 @@ export async function getJobScoringDetail(candidateId: number, jobId: number) {
   };
 }
 
-/** Headline numbers for the cockpit. */
+/** Headline numbers for the cockpit — primary-track fits, one per job. */
 export async function corpusStats(candidateId: number) {
   const db = getDb();
   const [row] = await db
@@ -724,16 +878,16 @@ export async function corpusStats(candidateId: number) {
       open: sql<number>`(select count(*) from ${job} where ${job.closedAt} is null)`.mapWith(Number),
       companies: sql<number>`(select count(*) from ${company})`.mapWith(Number),
       sources: sql<number>`(select count(*) from ${source} where ${source.enabled} = true)`.mapWith(Number),
-      above45: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 45)`.mapWith(Number),
-      above60: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 60)`.mapWith(Number),
-      above70: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null and s.fit >= 70)`.mapWith(Number),
-      best: sql<number>`(select coalesce(max(fit), 0) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and j.closed_at is null)`.mapWith(Number),
+      above45: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and ${primaryScoreFilter("s")} and j.closed_at is null and s.fit >= 45)`.mapWith(Number),
+      above60: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and ${primaryScoreFilter("s")} and j.closed_at is null and s.fit >= 60)`.mapWith(Number),
+      above70: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and ${primaryScoreFilter("s")} and j.closed_at is null and s.fit >= 70)`.mapWith(Number),
+      best: sql<number>`(select coalesce(max(fit), 0) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and ${primaryScoreFilter("s")} and j.closed_at is null)`.mapWith(Number),
     })
     .from(sql`(select 1) as singleton`);
   return row;
 }
 
-/** Cluster distribution above a cut, for the cockpit chart. */
+/** Cluster distribution above a cut, for the cockpit chart (primary track). */
 export async function clusterBreakdown(candidateId: number, minFit = 45) {
   const db = getDb();
   return db
@@ -747,6 +901,7 @@ export async function clusterBreakdown(candidateId: number, minFit = 45) {
     .where(
       and(
         eq(jobScore.candidateId, candidateId),
+        primaryScoreFilter(),
         isNull(job.closedAt),
         gte(jobScore.fit, minFit),
       ),
@@ -794,10 +949,7 @@ export async function pipelineRows(candidateId: number, query: PipelineQuery = {
     })
     .from(application)
     .innerJoin(job, eq(job.id, application.jobId))
-    .leftJoin(
-      jobScore,
-      and(eq(jobScore.jobId, job.id), scopedTo(jobScore.candidateId, candidateId)),
-    )
+    .leftJoin(jobScore, scoreJoin(candidateId))
     .where(scope)
     // `id` desempata: sem ele, duas candidaturas salvas no mesmo instante podem
     // trocar de lugar entre páginas e uma delas some da listagem.

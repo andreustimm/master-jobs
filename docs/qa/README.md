@@ -33,6 +33,7 @@ persona→conta e as credenciais ficam em armazenamento privado, nunca em
 | `NAV` | Navegação, transições e recuperação entre telas |
 | `PWA` | Carregamento inicial e experiência instalada/offline |
 | `JOBS` | Descoberta, filtros, detalhe e explicação de vagas |
+| `SRCH` | Buscas por termo salvas e trilhas-alvo |
 | `PIPE` | Shortlist, candidatura e histórico do funil |
 | `PROF` | Perfil do candidato e currículo |
 | `SKIL` | Vocabulário e catálogo de skills |

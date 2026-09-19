@@ -6,11 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import type { Translator } from "../src/core/i18n/index.ts";
-import { APPLICATION_STATUSES } from "../src/contexts/pursuit/domain/application.ts";
-import { WORK_MODES, readWorkMode, type BoardFilters, type WorkMode } from "../src/contexts/matching/index.ts";
-import type { Route } from "next";
+import { WORK_MODES, type SavedTermSummary, type Track } from "../src/contexts/matching/index.ts";
+import { href, toParams, type BoardRoute, type FilterState } from "./filter-state";
 import { TransitionGetForm } from "./transition-get-form";
 import { TransitionLink } from "./transition-link";
+
+export { href, readFilters, toBoardFilters, toParams, type BoardRoute, type FilterState } from "./filter-state";
 
 /**
  * Filter bar, shared by the cockpit and the job list.
@@ -23,21 +24,6 @@ import { TransitionLink } from "./transition-link";
  * nothing is indistinguishable from a broken page.
  */
 
-export type FilterState = {
-  fit: number;
-  cluster?: string;
-  q?: string;
-  source?: string;
-  workMode?: WorkMode;
-  unblocked?: boolean;
-  fresh?: boolean;
-  paid?: boolean;
-  named?: boolean;
-  described?: boolean;
-  sort?: string;
-  status?: string;
-};
-
 export type Facets = {
   total: number;
   unblocked: number;
@@ -49,18 +35,8 @@ export type Facets = {
   sources: string[];
 };
 
-export type BoardRoute = "/" | "/jobs";
-
-export function href(base: BoardRoute, state: FilterState, patch: Record<string, string | undefined>): Route {
-  const params = new URLSearchParams();
-  const merged: Record<string, unknown> = { ...state, ...patch };
-  for (const [k, v] of Object.entries(merged)) {
-    if (v === undefined || v === "" || v === false) continue;
-    params.set(k, v === true ? "1" : String(v));
-  }
-  const qs = params.toString();
-  return (qs ? `${base}?${qs}` : base) as Route;
-}
+/** Native select dressed as the design system's input: no client JS needed. */
+const SELECT = "h-9 rounded-md border border-input bg-background px-2 type-body-md text-foreground";
 
 const chipClass = (active: boolean) =>
   cn(
@@ -80,39 +56,184 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+/** Hidden inputs that carry the rest of the state through a GET form. */
+function Carry({ state, except }: { state: FilterState; except: string[] }) {
+  return (
+    <>
+      {Object.entries(toParams(state))
+        .filter(([key]) => !except.includes(key))
+        .map(([key, value]) => (
+          <input key={key} type="hidden" name={key} value={value} />
+        ))}
+    </>
+  );
+}
+
+/** What the Jobs screen adds to the shared bar: tracks, saved terms and pay. */
+export type BoardExtras = {
+  tracks: Track[];
+  savedTerms: SavedTermSummary[];
+  currencies: string[];
+  pay: { currency: string; period: "month" | "year" };
+};
+
 export function FilterBar({
   base,
   state,
   facets,
+  extras,
   t,
 }: {
   base: BoardRoute;
   state: FilterState;
   facets: Facets;
+  extras?: BoardExtras;
   /** Tradutor da requisição. Recebido por prop porque este é Server Component
       e o chamador já o resolveu — buscar de novo aqui repetiria o trabalho. */
   t: Translator["t"];
 }) {
   const CUTS = [0, 45, 55, 60, 70];
+  const accepted = extras?.tracks.filter((track) => !track.isPrimary) ?? [];
 
   return (
     <Card className="mb-5 gap-3 p-4">
-      <TransitionGetForm action={base} className="flex gap-2" data-testid="filters-get-form">
-        {Object.entries(state).map(([k, v]) =>
-          k === "q" || v === undefined || v === false ? null : (
-            <input key={k} type="hidden" name={k} value={v === true ? "1" : String(v)} />
-          ),
-        )}
-        <Input key={state.q ?? ""} name="q" defaultValue={state.q ?? ""} placeholder={t("filters.search")} data-testid="filters-query" />
+      <TransitionGetForm action={base} className="flex flex-wrap gap-2" data-testid="filters-get-form">
+        <Carry state={state} except={["q", "page"]} />
+        <Input
+          key={state.term?.term ?? ""}
+          name="q"
+          defaultValue={state.term?.term ?? ""}
+          placeholder={t("filters.search")}
+          aria-describedby="filters-query-hint"
+          className="min-w-0 flex-1"
+          data-testid="filters-query"
+        />
         <Button type="submit" data-testid="filters-submit">{t("filters.submit")}</Button>
-        {state.q && (
+        {state.term && (
           <TransitionLink href={href(base, state, { q: undefined })} className={chipClass(false)}>
             {t("filters.clear")}
           </TransitionLink>
         )}
+        <p id="filters-query-hint" className="w-full type-caption-sm text-muted-foreground" data-testid="filters-query-hint">
+          {t("filters.searchHint")}
+        </p>
       </TransitionGetForm>
 
       <Separator />
+
+      {extras && extras.tracks.length > 0 && (
+        <Group label={t("filters.track")}>
+          <TransitionLink
+            href={href(base, state, { track: undefined, cluster: undefined })}
+            className={chipClass(state.track === undefined)}
+            aria-current={state.track === undefined ? "true" : undefined}
+            data-testid="filter-track-primary"
+          >
+            {t("filters.trackPrimary")}
+          </TransitionLink>
+          {accepted.map((track) => (
+            <TransitionLink
+              key={track.id}
+              href={href(base, state, { track: String(track.id), cluster: undefined })}
+              className={chipClass(state.track === track.id)}
+              aria-current={state.track === track.id ? "true" : undefined}
+              data-testid={`filter-track-${track.id}`}
+              data-user-content
+            >
+              {track.name}
+            </TransitionLink>
+          ))}
+          {accepted.length > 0 && (
+            <TransitionLink
+              href={href(base, state, { track: "all", cluster: undefined })}
+              className={chipClass(state.track === "all")}
+              aria-current={state.track === "all" ? "true" : undefined}
+              data-testid="filter-track-all"
+            >
+              {t("filters.trackAll")}
+            </TransitionLink>
+          )}
+        </Group>
+      )}
+
+      {extras && extras.savedTerms.length > 0 && (
+        <Group label={t("filters.broughtBy")}>
+          <TransitionLink
+            href={href(base, state, { by: undefined })}
+            className={chipClass(state.by === undefined)}
+            aria-current={state.by === undefined ? "true" : undefined}
+            data-testid="filter-by-any"
+          >
+            {t("filters.broughtByAny")}
+          </TransitionLink>
+          {extras.savedTerms.map((term) => (
+            <TransitionLink
+              key={term.id}
+              href={href(base, state, { by: String(term.id) })}
+              className={chipClass(state.by === term.id)}
+              aria-current={state.by === term.id ? "true" : undefined}
+              data-testid={`filter-by-${term.id}`}
+              data-user-content
+            >
+              {term.term}
+            </TransitionLink>
+          ))}
+        </Group>
+      )}
+
+      {extras && (
+        <TransitionGetForm action={base} className="flex flex-wrap items-end gap-2" data-testid="filters-pay-form">
+          <Carry state={state} except={["pay", "cur", "per", "page"]} />
+          <label className="flex flex-col gap-1 type-caption-sm text-muted-foreground">
+            {t("filters.payAmount")}
+            <Input
+              // Sem chave, o campo não controlado guardava o valor depois de
+              // "limpar", e o próximo Aplicar devolvia o mínimo sem ninguém pedir.
+              key={state.pay?.min ?? ""}
+              type="number"
+              name="pay"
+              min={1}
+              step={1}
+              inputMode="numeric"
+              defaultValue={state.pay?.min ?? ""}
+              className="w-32"
+              data-testid="filters-pay"
+            />
+          </label>
+          <label className="flex flex-col gap-1 type-caption-sm text-muted-foreground">
+            {t("filters.payCurrency")}
+            <select name="cur" defaultValue={extras.pay.currency} className={SELECT} data-testid="filters-pay-currency">
+              {extras.currencies.map((code) => (
+                <option key={code} value={code}>{code}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 type-caption-sm text-muted-foreground">
+            {t("filters.payPeriod")}
+            <select name="per" defaultValue={extras.pay.period} className={SELECT} data-testid="filters-pay-period">
+              <option value="month">{t("filters.perMonth")}</option>
+              <option value="year">{t("filters.perYear")}</option>
+            </select>
+          </label>
+          <Button type="submit" variant="outline" data-testid="filters-pay-submit">{t("filters.payApply")}</Button>
+          <Toggle
+            href={href(base, state, { disclosed: state.pay?.disclosedOnly ? undefined : "1" })}
+            active={Boolean(state.pay?.disclosedOnly)}
+            hint={t("filters.disclosedOnly")}
+          >
+            {t("filters.disclosedOnly")}
+          </Toggle>
+          {state.pay && (
+            <TransitionLink
+              href={href(base, state, { pay: undefined, cur: undefined, per: undefined, disclosed: undefined })}
+              className={chipClass(false)}
+              data-testid="filters-pay-clear"
+            >
+              {t("filters.clear")}
+            </TransitionLink>
+          )}
+        </TransitionGetForm>
+      )}
 
       <Group label={t("filters.workMode")}>
         <TransitionLink
@@ -234,47 +355,6 @@ export function FilterBar({
       </Group>
     </Card>
   );
-}
-
-export function readFilters(params: Record<string, string | string[] | undefined>): FilterState {
-  const one = (k: string) => {
-    const v = params[k];
-    return Array.isArray(v) ? v[0] : v;
-  };
-  return {
-    fit: Number(one("fit") ?? 45),
-    cluster: one("cluster"),
-    q: one("q"),
-    source: one("source"),
-    workMode: readWorkMode(one("workMode")),
-    status: one("status"),
-    sort: one("sort"),
-    unblocked: one("unblocked") === "1",
-    fresh: one("fresh") === "1",
-    paid: one("paid") === "1",
-    named: one("named") === "1",
-    described: one("described") === "1",
-  };
-}
-
-const BOARD_STATUSES = [...APPLICATION_STATUSES, "unfiled", "any"] as const;
-const BOARD_SORTS = ["fit", "recent", "comp"] as const;
-
-export function toBoardFilters(state: FilterState): BoardFilters {
-  return {
-    minFit: state.fit,
-    cluster: state.cluster,
-    q: state.q,
-    sourceKind: state.source,
-    workMode: state.workMode,
-    status: BOARD_STATUSES.find((status) => status === state.status),
-    hideBlocked: state.unblocked,
-    freshDays: state.fresh ? 3 : undefined,
-    hasComp: state.paid,
-    namedEmployer: state.named,
-    hasDescription: state.described,
-    sort: BOARD_SORTS.find((sort) => sort === state.sort) ?? "fit",
-  };
 }
 
 export { Badge };

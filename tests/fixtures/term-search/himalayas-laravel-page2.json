@@ -1,0 +1,766 @@
+{
+  "comments": "21/08/2026: Cursor pagination is now available and is the preferred way to page through the feed. Pass the nextCursor value from each response back as ?cursor=. It is faster than offset and will never…",
+  "updatedAt": 1788867221,
+  "offset": 20,
+  "limit": 20,
+  "totalCount": 296,
+  "jobs": [
+    {
+      "title": "Full Stack Laravel + React Developer - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Bolivia"
+      ],
+      "timezoneRestrictions": [
+        -4
+      ],
+      "categories": [
+        "Fullstack-Development",
+        "Laravel-Development",
+        "React",
+        "Web-Development",
+        "Software-Development",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Remote-Web-Developer-Latin-America",
+        "Remote-Full-Stack-Developer",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788070729,
+      "expiryDate": 1793254728,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-751932764",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-751932764"
+    },
+    {
+      "title": "Full Stack Laravel + React Developer - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Honduras"
+      ],
+      "timezoneRestrictions": [
+        -6
+      ],
+      "categories": [
+        "Engineering",
+        "Software-Development",
+        "Fullstack-Development",
+        "Backend-Development",
+        "Laravel-Development",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Remote-Web-Developer-Latin-America",
+        "Remote-Full-Stack-Developer",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788087893,
+      "expiryDate": 1793271892,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-2298197550",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-2298197550"
+    },
+    {
+      "title": "Full Stack Laravel + React Developer - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Peru"
+      ],
+      "timezoneRestrictions": [
+        -5
+      ],
+      "categories": [
+        "Engineering",
+        "Software-Development",
+        "Fullstack-Development",
+        "Laravel-Development",
+        "Backend-Development",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Remote-Web-Developer-Latin-America",
+        "Remote-Full-Stack-Developer",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788059482,
+      "expiryDate": 1793243481,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-110396717",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-110396717"
+    },
+    {
+      "title": "Laravel Developer",
+      "excerpt": "WHO WE ARE LOOKING FOR:An experienced PHP Laravel Developer to work on an application that allows you to benefit from psychological help.",
+      "companyName": "ASPER BROTHERS",
+      "companySlug": "asper-brothers",
+      "companyLogo": null,
+      "employmentType": "Contractor",
+      "minSalary": 15000,
+      "maxSalary": 20000,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Senior"
+      ],
+      "currency": "PLN",
+      "locationRestrictions": [
+        "Poland"
+      ],
+      "timezoneRestrictions": [
+        1
+      ],
+      "categories": [
+        "Laravel-Development",
+        "PHP-Development",
+        "Backend-Development",
+        "Web-Development",
+        "Software-Development",
+        "Senior-Laravel-Developer",
+        "Senior-Full-Stack-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<h3>WHO WE ARE LOOKING FOR:</h3><p>An experienced <strong>PHP Laravel Developer</strong> to work on an application that allows you to benefit from psychological help. It offers online access to therapists – individual, couples and child therapy. The app is sold as a benefit for companies, but you can also use it individually.</p><h3>Tech stack: </h3><ul>\n<li>PHP 7 &amp; 8</li>\n<li>Laravel (Laravel Nova – nice to have)</li>\n<li>Docker</li>\n<li>follow SOLID, KISS, DRY rules</li>\n<li>GIT</li>\n<li>REST API</li>\n<li>Working proficiency and communication skills in verbal and written English</li>\n</u…",
+      "pubDate": 1786767895,
+      "expiryDate": 1791951895,
+      "applicationLink": "https://himalayas.app/companies/asper-brothers/jobs/laravel-developer",
+      "guid": "https://himalayas.app/companies/asper-brothers/jobs/laravel-developer"
+    },
+    {
+      "title": "Full Stack Laravel + React Developer - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Argentina"
+      ],
+      "timezoneRestrictions": [
+        -3
+      ],
+      "categories": [
+        "Fullstack-Development",
+        "Laravel-Development",
+        "React",
+        "Backend-Development",
+        "Frontend-Development",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Remote-Web-Developer-Latin-America",
+        "Remote-Full-Stack-Developer",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788067696,
+      "expiryDate": 1793251695,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-5597627734",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-5597627734"
+    },
+    {
+      "title": "Full Stack Laravel + React Developer - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Nicaragua"
+      ],
+      "timezoneRestrictions": [
+        -6
+      ],
+      "categories": [
+        "Full-Stack-Developer",
+        "Laravel-Developer",
+        "React-Developer",
+        "Software-Engineer",
+        "Backend-Engineer",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Remote-Web-Developer-Latin-America",
+        "Remote-Full-Stack-Developer",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [
+        "Developer"
+      ],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788061188,
+      "expiryDate": 1793245187,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-8947901830",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-8947901830"
+    },
+    {
+      "title": "Full Stack Laravel + React Developer - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Brazil"
+      ],
+      "timezoneRestrictions": [
+        -5,
+        -4,
+        -3,
+        -2
+      ],
+      "categories": [
+        "Fullstack-Development",
+        "Laravel-Development",
+        "React",
+        "Backend-Development",
+        "Frontend-Development",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Remote-Web-Developer-Latin-America",
+        "Remote-Full-Stack-Developer",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788059721,
+      "expiryDate": 1793243720,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-1225271465",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-1225271465"
+    },
+    {
+      "title": "Full Stack Laravel + React Developer - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Panama"
+      ],
+      "timezoneRestrictions": [
+        -5
+      ],
+      "categories": [
+        "Fullstack-Development",
+        "Backend-Development",
+        "Frontend-Development",
+        "Laravel-Development",
+        "Software-Development",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Remote-Web-Developer-Latin-America",
+        "Remote-Full-Stack-Developer",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788069199,
+      "expiryDate": 1793253198,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-9933629135",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-9933629135"
+    },
+    {
+      "title": "Laravel Developer + React - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Senior"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Argentina"
+      ],
+      "timezoneRestrictions": [
+        -3
+      ],
+      "categories": [
+        "Software-Development",
+        "Engineering",
+        "Backend-Development",
+        "Fullstack-Development",
+        "Frontend-Development",
+        "Senior-Full-Stack-Laravel-React-Developer",
+        "Senior-Laravel-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788014435,
+      "expiryDate": 1793198435,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-84631270",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-84631270"
+    },
+    {
+      "title": "Laravel Developer + React - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Mexico"
+      ],
+      "timezoneRestrictions": [
+        -8,
+        -7,
+        -6,
+        -5
+      ],
+      "categories": [
+        "Software-Development",
+        "Engineering",
+        "PHP-Development",
+        "Web-Development",
+        "Backend-Development",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788014527,
+      "expiryDate": 1793198526,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-4053147379",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-4053147379"
+    },
+    {
+      "title": "FULL Stack Laravel Developer (Full Time Remote)",
+      "excerpt": "Job briefWe are looking for a Full-stack PHP Developer that is dedicated to the craft, writes code that they are proud of, and can hit the ground running.",
+      "companyName": "SOFTAB",
+      "companySlug": "softab",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Senior"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "United States"
+      ],
+      "timezoneRestrictions": [
+        -10,
+        -9,
+        -8,
+        -7,
+        -6,
+        -5,
+        14
+      ],
+      "categories": [
+        "Full-Stack-Developer",
+        "Laravel-Developer",
+        "PHP-Developer",
+        "Backend-Engineer",
+        "Web-Developer",
+        "Senior-Full-Stack-Laravel-React-Developer",
+        "Senior-Full-Stack-Engineer-(Laravel-Vue)",
+        "Remote-Senior-Full-Stack-Developer",
+        "Senior-Laravel-Developer"
+      ],
+      "parentCategories": [
+        "Developer"
+      ],
+      "description": "<div class=\"description\">\n<h3><strong>Job brief</strong></h3>\n<p>We are looking for a Full-stack PHP Developer that is dedicated to the craft, writes code that they are proud of, and can hit the ground running. You will work as a part of a team responsible for all aspects of the ongoing software and web development from the initial specification to developing, testing, and launching.</p>\n<h3><strong>Responsibilities</strong></h3>\n<ul>\n<li>Write “clean,” well-designed code</li>\n<li>Document requirements with detailed specifications</li>\n<li>Troubleshoot, test, and maintain software and database…",
+      "pubDate": 1788867221,
+      "expiryDate": 1794051219,
+      "applicationLink": "https://himalayas.app/companies/softab/jobs/full-stack-laravel-developer-full-time-remote",
+      "guid": "https://himalayas.app/companies/softab/jobs/full-stack-laravel-developer-full-time-remote"
+    },
+    {
+      "title": "Laravel Developer + React - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Suriname"
+      ],
+      "timezoneRestrictions": [
+        -3
+      ],
+      "categories": [
+        "Software-Development",
+        "Engineering",
+        "Backend-Development",
+        "Fullstack-Development",
+        "Web-Development",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788046725,
+      "expiryDate": 1793230725,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-1623970477",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-1623970477"
+    },
+    {
+      "title": "Laravel Developer + React - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "El Salvador"
+      ],
+      "timezoneRestrictions": [
+        -6
+      ],
+      "categories": [
+        "Backend-Development",
+        "Fullstack-Development",
+        "Software-Development",
+        "Engineering",
+        "Web-Development",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788033202,
+      "expiryDate": 1793217202,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-2389075688",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-2389075688"
+    },
+    {
+      "title": "Laravel Developer + React - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Panama"
+      ],
+      "timezoneRestrictions": [
+        -5
+      ],
+      "categories": [
+        "Software-Development",
+        "Engineering",
+        "Web-Development",
+        "Backend-Development",
+        "Fullstack-Development",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788022024,
+      "expiryDate": 1793206024,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-2592673864",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-2592673864"
+    },
+    {
+      "title": "Laravel Developer + React - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Brazil"
+      ],
+      "timezoneRestrictions": [
+        -5,
+        -4,
+        -3,
+        -2
+      ],
+      "categories": [
+        "Software-Development",
+        "Engineering",
+        "Fullstack-Development",
+        "Web-Development",
+        "Backend-Development",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788021565,
+      "expiryDate": 1793205564,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-4497335463",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-4497335463"
+    },
+    {
+      "title": "Laravel Developer + React - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Guatemala"
+      ],
+      "timezoneRestrictions": [
+        -6
+      ],
+      "categories": [
+        "Software-Development",
+        "Engineering",
+        "Web-Development",
+        "Backend-Development",
+        "Fullstack-Development",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788014899,
+      "expiryDate": 1793198899,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-3206168374",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-3206168374"
+    },
+    {
+      "title": "Laravel Developer + React - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Paraguay"
+      ],
+      "timezoneRestrictions": [
+        -3
+      ],
+      "categories": [
+        "Backend-Development",
+        "Fullstack-Development",
+        "Web-Development",
+        "PHP-Development",
+        "Software-Engineer",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [
+        "Developer"
+      ],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788055014,
+      "expiryDate": 1793239014,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-4340102727",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/laravel-developer-react-remote-latin-america-4340102727"
+    },
+    {
+      "title": "Full Stack Laravel + React Developer - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Senior"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "El Salvador"
+      ],
+      "timezoneRestrictions": [
+        -6
+      ],
+      "categories": [
+        "Fullstack-Development",
+        "Backend-Development",
+        "Frontend-Development",
+        "Laravel-Development",
+        "React",
+        "Senior-Full-Stack-Laravel-React-Developer",
+        "Remote-Senior-Full-Stack-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788055159,
+      "expiryDate": 1793239158,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-440851469",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-440851469"
+    },
+    {
+      "title": "Full Stack Laravel + React Developer - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Costa Rica"
+      ],
+      "timezoneRestrictions": [
+        -6
+      ],
+      "categories": [
+        "Fullstack-Development",
+        "Backend-Development",
+        "Frontend-Development",
+        "Software-Development",
+        "Engineering",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788067341,
+      "expiryDate": 1793251337,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-5267361215",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-5267361215"
+    },
+    {
+      "title": "Full Stack Laravel + React Developer - Remote, Latin America",
+      "excerpt": "Bluelight Consulting is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives.",
+      "companyName": "Bluelight Consulting",
+      "companySlug": "bluelight-consulting",
+      "companyLogo": null,
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Mid-level"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Belize"
+      ],
+      "timezoneRestrictions": [
+        -6
+      ],
+      "categories": [
+        "Fullstack-Development",
+        "Backend-Development",
+        "Frontend-Development",
+        "Web-Development",
+        "Software-Development",
+        "Remote-Mid-Level-Full-Stack-Developer-(Laravel-React)",
+        "Mid-Level-Laravel-React-Developer"
+      ],
+      "parentCategories": [],
+      "description": "<div>\n<a href=\"https://himalayas.app/companies/bluelight-consulting\">Bluelight Consulting</a> is a leading software consultancy dedicated to designing and developing innovative technology that enhances users' lives. With a steadfast commitment to delivering exceptional service to our clients, Bluelight excels in its focus on quality and customer satisfaction. Our mission is not only to create cutting-edge applications but also to foster a collaborative and enriching work environment where each team member can grow and thrive. With a presence across the United States and Central/South America, …",
+      "pubDate": 1788059583,
+      "expiryDate": 1793243582,
+      "applicationLink": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-2672575837",
+      "guid": "https://himalayas.app/companies/bluelight-consulting/jobs/full-stack-laravel-react-developer-remote-latin-america-2672575837"
+    }
+  ]
+}

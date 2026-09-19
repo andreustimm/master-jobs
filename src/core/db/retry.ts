@@ -19,7 +19,7 @@
 /** `unique_violation`. */
 const DUPLICATE_KEY = "23505";
 
-function isDuplicateKey(error: unknown): boolean {
+export function isDuplicateKey(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const { code, cause } = error as { code?: unknown; cause?: unknown };
   if (code === DUPLICATE_KEY) return true;

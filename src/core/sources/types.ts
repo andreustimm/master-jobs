@@ -23,6 +23,11 @@ export type RawJob = {
   compMax?: number | null;
   compCurrency?: string | null;
   compPeriod?: string | null;
+  /**
+   * Tags the platform attached to the posting. Only term attribution reads
+   * them, and only during the capture: observation keeps no platform payload.
+   */
+  tags?: string[] | null;
   raw: unknown;
 };
 
@@ -46,6 +51,9 @@ export const FETCHABLE_SOURCE_KINDS = [
   "adzuna",
   "braintrust",
   "careers",
+  "jobicy",
+  "workable",
+  "hackernews",
 ] as const;
 
 export type FetchableSourceKind = (typeof FETCHABLE_SOURCE_KINDS)[number];
@@ -84,9 +92,42 @@ export type FetchResult = {
   warnings: string[];
 };
 
+/**
+ * What a platform lets us spend, declared by its adapter as data (ADR-010).
+ *
+ * The limits apply to the whole system — sync included — and are enforced by
+ * the durable ledger, never by an in-memory counter.
+ */
+export type PlatformBudget = {
+  perDay?: number;
+  perMinute?: number;
+  pageSize: number;
+  maxRequestsPerRun: number;
+};
+
+export type TermSearchResult = FetchResult & {
+  /** What the platform said it had, for "100 of about N". */
+  totalHint: number | null;
+  /** A reservation was refused: the result is what fit in the budget. */
+  stoppedByQuota: boolean;
+};
+
+export type TermSearch = {
+  budget: PlatformBudget;
+  /**
+   * Date the integration last passed `jho sources probe --term` against the
+   * real API. Null keeps the platform out of term runs.
+   */
+  validatedOn: string | null;
+  /** Calls `reserve()` before every HTTP request and stops when it returns false. */
+  search(query: string, opts: { limit: number; reserve: () => Promise<boolean> }): Promise<TermSearchResult>;
+};
+
 export type SourceAdapter = {
   kind: FetchableSourceKind;
   /** Human-facing docs URL, so the config file explains itself. */
   docs: string;
   fetchJobs(config: SourceConfig): Promise<FetchResult>;
+  /** Present only on platforms that search by term (ADR-004). */
+  termSearch?: TermSearch;
 };

@@ -24,7 +24,7 @@ import { loadProfile } from "../profile/load.ts";
 import { companiesWithContacts } from "../contacts.ts";
 import { slugifyCompany } from "../ingest/normalize.ts";
 import { jobVocabularyComparison } from "../../contexts/skills/index.ts";
-import { scoreMessages } from "../../contexts/matching/index.ts";
+import { primaryScoreFilter, scoreMessages } from "../../contexts/matching/index.ts";
 import { renderScoreMessage, translator } from "../i18n/index.ts";
 
 export type DossierEvidence = { area: string; line: string; matched: string[] };
@@ -114,9 +114,10 @@ export async function buildDossier(
       pageExtracted: jobPage.extracted,
     })
     .from(job)
+    // O dossiê fala de uma nota só: a da trilha principal (ADR-008).
     .leftJoin(
       jobScore,
-      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId), primaryScoreFilter()),
     )
     .leftJoin(jobPage, eq(jobPage.jobId, job.id))
     .where(eq(job.id, jobId))

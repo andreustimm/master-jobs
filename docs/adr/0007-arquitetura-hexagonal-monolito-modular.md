@@ -189,6 +189,15 @@ cotações que produziram um score.
 **Aggregate root:** `FitAssessment`, identidade `(CandidateId, JobPostingId,
 CalibrationVersion)`.
 
+> **Nota (scorer 1.4.0, feature `term-search-target-tracks`):** a identidade
+> ganhou a trilha de alvo — `(CandidateId, TrackId, JobPostingId,
+> CalibrationVersion)`, e `job_score` tem chave `(candidate_id, track_id,
+> job_id)`. Quem aceita mais de um tipo de vaga tem uma régua por tipo; a
+> pessoa (restrições, blockers, evidências) continua uma só e é somada ao alvo
+> da trilha antes de pontuar. Leitor de `job_score` escolhe a trilha por
+> `scoreTrackFilter` ou `primaryScoreFilter`, e a regra é executável em
+> `tests/architecture.test.ts`. Ver ADR-002, ADR-008 e ADR-009 da feature.
+
 **Fronteira, por quê:** é o único lugar onde Sourcing e Candidate se
 encontram, e sua identidade é **inerentemente um par**. Nomear essa fronteira
 é o que força a correção da chave primária de `job_score` — de bloqueio

@@ -9,6 +9,170 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-09-19
+
+As ADRs citadas como `ADR-0NN` nesta versão são as da feature, em
+`.compozy/tasks/term-search-target-tracks/adrs/`; as de `docs/adr/` aparecem
+como `ADR 00NN`.
+
+### Adicionado
+
+- Trilhas de alvo (`target_track`): cada candidato tem uma trilha principal e
+  até seis ativas, cada uma com títulos, keywords, senioridade e faixas de
+  remuneração próprias. A pessoa (restrições, blockers, evidências) continua no
+  perfil de matching e é somada ao alvo por `effectiveProfile` antes de
+  pontuar (ADR-002, ADR-009).
+- `job_score` passa a ter chave `(candidate_id, track_id, job_id)`, com
+  migração em três passos: expandir (`0004`), preencher a trilha principal a
+  partir do perfil gravado (`0005`) e contrair (`0006`). Candidato sem perfil
+  próprio perde as notas herdadas e não é pontuado (M-06).
+- Scorer `1.4.0`: a trilha principal pontua toda vaga aberta; trilha aceita só
+  as vagas em que um título ou keyword positiva dela aparece com borda de
+  palavra. A borda é `TERM_BOUNDARY`, em `src/core/term.ts`, a mesma do filtro
+  de termo (ADR-012).
+- Todo leitor de `job_score` escolhe a trilha por `scoreTrackFilter` ou
+  `primaryScoreFilter`; teste de arquitetura reprova quem lê a tabela sem um dos
+  dois. Board aceita trilha escolhida ou "todas"; dossiê, relatório, exportação,
+  cockpit e o `max(fit)` de verificação e captura leem a principal.
+- `trackFitsForJob` calcula sob demanda, sem gravar, a nota de uma trilha que
+  não tem linha para a vaga — base do detalhe por trilha.
+- Tabela `saved_term`, que a busca por termo vai usar.
+- Contexto `sourcing` com a captura por termo: `requestTermCaptures`,
+  `runTermCaptures`, `captureStatusFor`, `attributedJobIds` e `captureHealth`,
+  sobre as tabelas `term_capture`, `term_attribution` e `platform_quota`
+  (migração `0007`). Uma busca por (plataforma, termo, dia UTC) serve a todos;
+  no máximo 100 vagas por plataforma, as mais recentes; atribuição por borda de
+  palavra em título, empresa, descrição e tags (ADR-004, ADR-007).
+- Busca por termo na Remotive, no RemoteOK (`tag`) e na Himalayas (endpoint de
+  busca, paginado por `page`), validadas em 2026-09-19 por
+  `jho sources probe <kind> --term <t>`, com fixtures reais em
+  `tests/fixtures/term-search/`. `RawJob.tags` carrega as tags da plataforma.
+- Livro de cota por plataforma com reserva atômica, respeitado também pela
+  sincronização regular: chamada orçada usa `retries: 0`, janela cheia registra
+  `quota` na fonte e 429 esgota o dia da plataforma (ADR-010).
+- Vaga trazida por captura entra na fonte `<kind>:~terms`, desligada; vaga
+  existente mantém fonte, id externo, URLs e payload (`keepExistingSource`).
+  `sources.yaml` recusa handle que começa com `~` (ADR-011).
+- `jho sources probe` ganha `--term` e passa pela guarda de ingestão.
+- Termos salvos no contexto `matching`: `saveTerm` (termo e primeiras
+  capturas na mesma transação), `rerunTerm` (uma busca manual a cada 24 horas;
+  dentro da janela, só a plataforma que falhou hoje é tentada de novo),
+  pausar, retomar, mover, apagar, contagem de vagas novas e `termOverview` com
+  o estado de cada plataforma, "sem resultado há 14 dias" e "repetição diária
+  parada". Até 20 termos ativos por candidato, um por chave normalizada, cada
+  um numa trilha ativa.
+- Server Actions de termo em `app/searches/actions.ts`: sessão emprestada salva
+  mas não dispara busca (`waiting_sweep`); onde a ingestão não é permitida o
+  termo é salvo com `captures_off`; a busca roda depois da resposta, em
+  `after()`, com 25 segundos de orçamento.
+- `jho terms run`, `jho terms status` e `jho tracks list`; a varredura diária
+  ganha o passo "Buscar os termos salvos" entre a sincronização e a
+  repontuação. Captura já feita hoje é reaproveitada sem nova chamada.
+- Filtro `broughtBy` no leitor do board: vagas que um termo salvo trouxe.
+- Tela Vagas: seletor de trilha (principal, aceita ou todas, com rótulo por
+  vaga), filtro "trazida pelo termo" com marcador de vaga nova desde a última
+  visita (gravada em `after()`, nunca num prefetch), salário mínimo com moeda e
+  período, ordenação por salário normalizado e avisos para parâmetro inválido
+  (`track_unknown`, `term_*`, `term_unknown`, `pay_invalid`, `cluster_unknown`)
+  em vez de erro. O estado continua todo na URL (`app/filter-state.ts`), e o
+  trabalho de dados saiu da página para `app/jobs/jobs-data.ts`.
+- `annualFactorSql()` e `normalizePayTop` em `src/core/money.ts`: filtro e
+  ordenação por salário em SQL com a mesma tabela de fatores do TypeScript e a
+  cotação mais recente como lista `VALUES` ligada (ADR-013). Moeda sem
+  cotação, período desconhecido ou projeto sem duração ficam "não
+  comparáveis"; nada disso chega ao scorer.
+
+- Tela Buscas (`/searches`): trilhas com seus termos e o estado de cada
+  plataforma, e as ações de termo (salvar, rodar de novo, pausar, retomar,
+  mover, apagar). Editor de trilha em `/searches/tracks/new` — com a sugestão
+  para o termo vindo da oferta da tela Vagas — e em `/searches/tracks/<id>`,
+  mais tornar principal, arquivar e restaurar. Toda action passa por
+  `guardOwnCandidate`; recrutador e admin sem impersonação não alcançam nada
+  disso, e `/searches` fica fora do cache do service worker.
+- Saúde das capturas em `/admin/captures`: cota do dia e do minuto, capturas
+  das últimas 24 horas, último erro e dias seguidos com falha, por plataforma e
+  só em agregado (`admin:access`, recusada em sessão emprestada).
+- Detalhe da vaga mostra o fit de cada trilha ativa, calculado na hora por
+  `trackFitsForJob` quando a trilha ainda não tem linha para a vaga. Vagas e o
+  editor de trilha avisam enquanto a repontuação da trilha está na fila
+  (`app/score-queue-card.tsx`, extraído da tela do candidato).
+- `MutationFeedbackForm` ganha mensagem por código de resultado
+  (`resultMessages`), link opcional no aviso (`href` no resultado) e
+  `keepFields`, que impede o React de limpar o formulário quando a action
+  recusa — o editor de trilha perdia tudo o que fora digitado por uma faixa
+  inválida.
+- QA vivo: área `SRCH`, jornadas `J-save-term-search`,
+  `J-manage-target-tracks` e `J-monitor-term-capture-health`, cenários novos em
+  `untested` e `JOBS-work-mode-continuity` de volta a `untested`, porque a
+  busca mudou para palavra inteira.
+
+- Teto de 40 buscas por dia por candidato pela tela (`saved_term_request`,
+  migração `0008`, aditiva): apagar e salvar de novo não zera a conta; passado o
+  teto, o termo salvo espera a varredura (`daily_limit`) e o "rodar de novo" é
+  recusado (`request_limit`). Trilha tem teto de tamanho (`track_too_large`:
+  60 títulos, 200 palavras positivas e 60 negativas).
+- `jho terms run` espera as janelas por minuto do dia (até 20 minutos) em vez de
+  sair com termos parados; a varredura segue quando a busca por termo falha em
+  todas as plataformas e acusa no último passo.
+- Runbook da release em `docs/engineering/deploy.md`: as migrations 0004–0008
+  são aplicadas pela CLI antes do merge em `main`, com a varredura desligada, e
+  não há rollback para 1.14.x depois da 0006.
+
+- "Não me interessa" (`dismissJobAction`) e "restaurar" (`restoreJobAction`)
+  em `app/actions.ts`, pelo mesmo `setApplicationStatus` do seletor: arquivam a
+  candidatura e devolvem a `backlog`. Botão em cada linha da lista
+  (`TriageButton`), no cockpit e no detalhe da vaga, e preset "Arquivadas"
+  (`status=archived`). `archived → backlog` passa a ser transição legal só
+  quando não há `applied_at`; `allowedTransitions` recebe `appliedAt`.
+- `listBoard`, `countBoard` e `boardFacets` sem `status` escondem a vaga com
+  candidatura `archived`; `status=any` mostra tudo. Vale para a tela Vagas, o
+  cockpit, o CSV exportado, o relatório e `jho jobs list`.
+
+- Três fontes novas com busca por termo, validadas contra a API real em
+  2026-09-19 (`jho sources probe`): `jobicy` (API documentada; `jobGeo` vira a
+  frase de restrição de país), `workable` (busca global com
+  `location=Brazil&workplace=remote`, paginada por `pageToken`) e `hackernews`
+  (fio mensal "Who is hiring?" pela Algolia, só comentário de topo no formato
+  "Empresa | Cargo | Local"). Orçamentos no livro de cota: Jobicy 24/dia e
+  1/min, Workable 10/min, HN 30/min. `config/sources.yaml` ganha quatro
+  entradas; fixtures de resposta real em `tests/fixtures/term-search/`.
+
+- 28 boards Lever de empresas com vaga remota da stack aberta ao Brasil em
+  `config/sources.yaml` (CI&T, Oowlish, BriteCore, Ubiminds, Jeeves, RYZ
+  Labs, Yuno, VRChat, JetBridge e outras), cada um confirmado com
+  `jho sources probe lever <handle>` em 2026-09-19. A Bluelight Consulting
+  ficou de fora: 1.321 postagens repetindo 10 cargos, uma por cidade, e a
+  cidade entra no `fingerprint`.
+
+### Alterado
+
+- A busca da tela Vagas deixou de ser substring em cargo e empresa: é o termo
+  por palavra inteira (`termRegexSql`, ligado como parâmetro) em cargo, empresa
+  e texto capturado ou descrição (ADR-005, ADR-012). Toda ordenação termina em
+  nota e `job.id`, para a paginação não repetir nem perder vaga.
+
+### Corrigido
+
+- `/admin/users` falhava na hidratação sempre que um recrutador tinha
+  vínculo: o formulário de desvincular ficava dentro de um `<p>`, que o parser
+  HTML fecha antes do `<form>`.
+- A conclusão da fila de repontuação só grava `done` se a tarefa ainda estiver
+  em `scoring`: um pedido novo feito durante a execução voltava a `pending` e
+  era apagado pela conclusão da execução anterior.
+- Vaga fechada e arquivada que reaparecia na sincronização voltava só meio
+  aberta: `closedAt` ia a nulo e `archivedAt` ficava, escondendo-a do quadro.
+  Reabrir agora limpa os dois, como a verificação de link já fazia (ADR 0020).
+
+- Restrição de país passa a ser elegibilidade (scorer `1.4.1`):
+  `locationRestriction()` lê `X only` na localização (Braintrust) e a frase
+  `Location restricted to: X only.` que a Himalayas agora acrescenta à descrição
+  a partir de `locationRestrictions`, como sinais `regions` de
+  `evaluateEligibility`. Vaga restrita a países fora de `acceptable_regions`
+  ("United States only", "Spain only") fica `ineligible`, com `geo` zero e
+  bloqueador; antes pontuava como remota qualquer. A localização da Himalayas
+  continua a lista pura, porque ela compõe o `fingerprint`. Localização sem
+  "only" continua neutra.
+
 ## [1.14.2] - 2026-09-19
 
 ### Corrigido

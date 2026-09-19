@@ -6,7 +6,7 @@ persona: Andreus em triagem
 journey: J-find-jobs-by-work-mode
 expected: Remoto, Híbrido e Presencial filtram a lista e permanecem após busca, ver todas, paginação, Voltar e recarga
 entry_points: /; /jobs
-qa_status: pass
+qa_status: untested
 bug_ids: BUG-20260915-clear-search-text
 fix_status: fixed
 retest_status: verified

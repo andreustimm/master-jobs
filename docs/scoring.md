@@ -2,7 +2,7 @@
 
 ## Por que isto existe
 
-O `jobs sync` traz milhares de vagas por rodada (hoje: **5021 linhas em `job`** e **5021 em `job_score`**; a igualdade não é garantida — `jobs sync --no-score` deixa as vagas novas pendentes até o próximo `jobs score`). Ler isso na mão é inviável, e mandar cada descrição para um LLM seria caro, lento e — o problema real — **irreprodutível**: a mesma vaga poderia ranquear diferente amanhã, e não haveria como escrever teste de regressão nem explicar por que a vaga #42 ficou na frente da #41.
+O `jobs sync` traz milhares de vagas por rodada (hoje: **5021 linhas em `job`** e **5021 notas da trilha principal em `job_score`**; a igualdade não é garantida — `jobs sync --no-score` deixa as vagas novas pendentes até o próximo `jobs score`). Ler isso na mão é inviável, e mandar cada descrição para um LLM seria caro, lento e — o problema real — **irreprodutível**: a mesma vaga poderia ranquear diferente amanhã, e não haveria como escrever teste de regressão nem explicar por que a vaga #42 ficou na frente da #41.
 
 O scorer é determinístico e puro por três motivos, escritos no cabeçalho de `src/core/scoring/score.ts`:
 
@@ -17,7 +17,10 @@ Arquivos envolvidos:
 | Arquivo | Papel |
 | --- | --- |
 | `src/core/scoring/score.ts` | Scorer **puro**, sem banco. `SCORER_VERSION`, `WEIGHTS`, `scoreJob()`. |
-| `src/core/scoring/apply.ts` | `scoreAll({ all })` — seleciona, chama `scoreJob()`, faz upsert em `job_score`. |
+| `src/core/scoring/apply.ts` | `scoreAll({ all })` — para cada trilha ativa, seleciona, chama `scoreJob()`, faz upsert em `job_score`. Único escritor da tabela. |
+| `src/core/term.ts` | Borda de palavra (`TERM_BOUNDARY`) compartilhada pelo scorer, pelo filtro de termo e pela atribuição de termo (ADR-012 da feature `term-search-target-tracks`). |
+| `src/contexts/matching/domain/track.ts` | Trilha de alvo: `effectiveProfile` (pessoa + alvo) e o portão de relevância `isRelevant`. |
+| `src/contexts/matching/app/track-scope.ts` | Qual trilha um leitor de `job_score` enxerga: `scoreTrackFilter` e `primaryScoreFilter`. |
 | `profile/profile.yaml` | Todos os dados de entrada do scorer: clusters, keywords, blockers, faixas salariais, senioridade. |
 | `src/core/profile/schema.ts` | `ProfileSchema` (Zod v4) — valida o YAML e faz `.toLowerCase()` em todo `term`. |
 
@@ -88,12 +91,20 @@ Arredondamento: cada componente e o `fit` vão para 1 casa decimal (`Math.round(
 Todo match textual passa por `containsTerm()`:
 
 ```ts
-/** Word-boundary match so "go" does not fire on "google" or "category". */
-function containsTerm(haystack: string, term: string): boolean {
+// src/core/term.ts
+export const TERM_BOUNDARY = "[^a-z0-9+#]";
+
+// src/core/scoring/score.ts
+export function containsTerm(haystack: string, term: string): boolean {
   const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(^|[^a-z0-9+#])${escaped}([^a-z0-9+#]|$)`, "i").test(haystack);
+  return new RegExp(`(^|${TERM_BOUNDARY})${escaped}(${TERM_BOUNDARY}|$)`, "i").test(haystack);
 }
 ```
+
+A classe de borda mora em `src/core/term.ts` desde a 1.4.0 e é a mesma que o
+filtro de termo da tela de vagas e o portão de relevância das trilhas usam. Uma
+definição só de "palavra inteira": se o scorer e o filtro discordassem, `c` no
+filtro traria vagas de `C#` que o scorer nunca contou como `c` (ADR-012 da feature `term-search-target-tracks`).
 
 Detalhes que importam na hora de escrever um termo em `profile.yaml`:
 
@@ -285,6 +296,40 @@ A política vem do `profile.yaml` via `MatchPolicy`, e agora usa o perfil
 inteiro: `work_authorization`, `needs_visa_sponsorship_for`, `contract_models`,
 `remote_only`, `acceptable_regions` e `max_timezone_offset_hours`. Até a 1.2.0
 `scoreGeo()` lia apenas `remote_only` e os demais campos existiam sem consumidor.
+
+### "X only" na localização é elegibilidade (1.4.1)
+
+A Himalayas publica quem pode se candidatar em `locationRestrictions`, e o site
+mostra isso como "United States only". Até a 1.4.0 o adapter gravava só a lista
+de países (`United States`), o passo 3 da escada só conhecia seis grafias fixas,
+e "Spain only" ou "Germany only" passavam como vaga remota qualquer: 8,25 no
+`geo` e nenhum bloqueador, para uma vaga em que o candidato nunca seria aceito.
+
+Desde a 1.4.1 `locationRestriction()` lê duas formas como os sinais `regions`
+de `evaluateEligibility`: um `locationRaw` de forma `X only` (ou `X, Y only`),
+como a Braintrust já escreve, e a frase `Location restricted to: X only.` que o
+adapter da Himalayas acrescenta à descrição. Lista sem nenhuma região de
+`acceptable_regions` fica `ineligible`: `geo` zero, bloqueador e a vaga some do
+preset "Aplicáveis hoje". Lista que inclui Brasil, LATAM ou Americas fica
+`eligible`. Sinal explícito de elegibilidade da fonte continua tendo
+precedência sobre essa leitura.
+
+**Por que a Himalayas escreve na descrição e não na localização.** A localização
+normalizada faz parte do `fingerprint`, a identidade da vaga, e não há índice
+único por fonte e id externo. Trocar `United States` por `United States only`
+faria a próxima sincronização inserir de novo cada vaga restrita, com a antiga
+órfã e o histórico de candidatura preso a ela. A descrição entra no
+`contentHash`: mudar a descrição só invalida a nota, e a vaga é repontuada.
+Vaga gravada antes da 1.4.1 ganha a frase quando a sincronização a vê de novo.
+
+As duas leituras cortam o sufixo ` only` em vez de capturar o que vem antes
+dele: é texto de provedor, e um grupo preguiçoso antes de `\s+only` retrocede
+em tempo quadrático sobre uma sequência longa de espaços. A lista em si não tem
+teto — a Himalayas publica vagas abertas a 73 países.
+
+Localização sem "only" e "Remote only" continuam neutras: `United States`
+sozinho pode ser só a sede da empresa, e dado ausente não vira bloqueador
+(regra 8).
 
 ---
 
@@ -604,6 +649,55 @@ heurísticas de `scoreGeo` decidir.
 **`reasons` e `blockers` viram códigos.** `{ code, params }` em vez de frase
 pronta, traduzidos na hora de exibir. Ver o exemplo acima.
 
+## Versão 1.4.0 — uma nota por trilha de alvo
+
+A nota deixou de ser "a aderência da vaga ao candidato" e passou a ser "a
+aderência da vaga a uma **trilha de alvo** do candidato" (ADR-002, ADR-008,
+ADR-009 da feature `term-search-target-tracks`). Quem mira IA mas aceita vaga de PHP para trabalhar logo tem duas
+réguas, e uma nota só não servia a nenhuma das duas.
+
+**A trilha guarda só o alvo.** `targets`, `keywords`, `seniority.min_years_expected`,
+`seniority.reject_below_years`, `compensation.reference_currency` e
+`compensation.ranges`. O resto — restrições, blockers, anos de experiência,
+evidências — é fato sobre a pessoa e vem do perfil de matching.
+`effectiveProfile(pessoa, alvo)` junta as duas metades e o scorer recebe um
+`Profile` comum: `score.ts` não sabe que trilha existe.
+
+**Principal pontua tudo; aceita pontua só o relevante.** A trilha principal
+pontua toda vaga aberta. Uma trilha aceita só grava linha para vaga em que um
+título dela ou uma keyword positiva aparece, com borda de palavra, no título ou
+na descrição (`isRelevant`). Sem o portão, seis trilhas multiplicariam por seis
+as linhas de `job_score`, e a trilha "PHP" daria nota a vaga de Data Science.
+Vaga que deixa de ser relevante perde a linha daquela trilha no próximo
+`scoreAll`.
+
+**Blocker é da pessoa.** "Sem autorização de trabalho nos EUA" bloqueia a mesma
+vaga em todas as trilhas; o que muda entre trilhas é título, keyword,
+senioridade e remuneração.
+
+**Sem perfil próprio, sem nota.** Candidato cuja trilha principal está pendente
+não é pontuado por nenhum caminho (`scoreAll`, `scoreOne`, fila). Pontuar com o
+perfil da instalação daria a essa pessoa o ranking de outra (M-06). O dono da
+instalação (`candidate.is_default`) usa o `profile.yaml` enquanto não tem perfil
+gravado.
+
+**Staleness por trilha.** A linha é refeita quando muda a versão do scorer, o
+hash do perfil efetivo daquela trilha ou o frescor passa da janela. Editar a
+trilha PHP recalcula só a PHP; mudar a pessoa recalcula todas.
+
+**Todo leitor escolhe a trilha.** O board lê a principal por padrão, uma trilha
+escolhida, ou "todas" — a melhor linha de cada vaga, empate para a principal e
+depois para a trilha listada primeiro. Dossiê, relatório, exportação, análise
+de funil, gap e cockpit leem a principal. O `max(fit)` entre candidatos que
+ordena a verificação de links e a captura de descrições também usa só linhas
+principais: trilha aceita não fura fila. Um teste de arquitetura reprova arquivo
+que lê `jobScore` sem `scoreTrackFilter` ou `primaryScoreFilter`.
+
+**Nota sob demanda no detalhe.** `trackFitsForJob` mostra a nota da vaga em
+cada trilha ativa. Trilha sem linha (vaga fora do portão, ou trilha recém-criada)
+ganha a nota calculada na hora, marcada como `computed`, e nada é gravado —
+gravar poria no ranking da trilha uma vaga que o portão deixa de fora.
+
 ## Como ajustar
 
 ### Mapa: quero X → edito Y
@@ -642,22 +736,27 @@ pnpm jho jobs list --min-fit 60
 pnpm jho jobs show 42
 ```
 
-Por que o bump não é opcional — a query de seleção em `apply.ts`:
+Por que o bump não é opcional — a query de seleção em `apply.ts`, rodada uma vez por trilha ativa:
 
 ```ts
 opts.all
   ? isNull(job.closedAt)
-  : sql`${job.closedAt} is null and (${jobScore.jobId} is null or ${jobScore.scorerVersion} <> ${SCORER_VERSION})`
+  : sql`${job.closedAt} is null and (
+      ${jobScore.jobId} is null
+      or ${jobScore.scorerVersion} <> ${SCORER_VERSION}
+      or ${jobScore.profileHash} <> ${context.profileHash}
+      or ${jobScore.scoredAt} < ${freshnessCutoff}
+    )`
 ```
 
-Sem `--all`, `scoreAll()` só toca em jobs **sem score** ou com `scorer_version` **diferente** do atual. Se você editar o `profile.yaml` e não bumpar, o próximo `jobs sync` vai pontuar só as vagas novas com as regras novas e deixar as 5021 antigas com as regras velhas — **duas gerações de score misturadas na mesma coluna `fit`, ordenadas juntas, sem nenhum sinal visível de que isso aconteceu**. O `scorer_version` é justamente o mecanismo que torna essa mistura detectável.
+Sem `--all`, `scoreAll()` só toca em jobs **sem score** naquela trilha, com `scorer_version` **diferente** do atual, com perfil efetivo diferente ou com a nota mais velha que a janela de frescor. Mudança em `score.ts` não muda o hash do perfil — só a versão denuncia regra nova. Se você editar o `profile.yaml` e não bumpar, o próximo `jobs sync` vai pontuar só as vagas novas com as regras novas e deixar as 5021 antigas com as regras velhas — **duas gerações de score misturadas na mesma coluna `fit`, ordenadas juntas, sem nenhum sinal visível de que isso aconteceu**. O `scorer_version` é justamente o mecanismo que torna essa mistura detectável.
 
 Notas de execução:
 
 - **Nem `--all` toca vaga fechada.** Os dois ramos da query filtram `job.closedAt is null`. Uma vaga fechada mantém o score que tinha quando ainda estava aberta — hoje são 24 linhas nessa condição. Consequência prática: `count(*) from job_score` pode divergir de `count(*) from job` nas duas direções — para menos, quando há vagas novas ainda não pontuadas; e com scores obsoletos, para as já fechadas.
 - `scoreAll()` chama `loadProfile(true)` — força releitura do YAML, ignorando o cache de módulo. Não é preciso reiniciar nada entre edições.
-- Após um rescore, `job_score` continua com uma linha por job (`onConflictDoUpdate` em `job_id`). Score é derivado e descartável: `job_score` pode ser truncada e reconstruída a qualquer momento a partir de `job` + `profile.yaml`.
-- `skipped` no retorno de `scoreAll()` é **sempre 0** hoje; não é métrica útil.
+- `job_score` tem uma linha por (candidato, trilha, vaga) — a chave primária é `(candidate_id, track_id, job_id)`. Score é derivado e descartável: a tabela pode ser truncada e reconstruída a qualquer momento a partir de `job`, das trilhas e do perfil.
+- `skipped` no retorno de `scoreAll()` conta as vagas que uma trilha aceita deixou de fora pelo portão de relevância.
 - O cabeçalho de `score.ts` menciona `jobs score --rescore`, mas a flag implementada em `src/cli.ts` é **`--all`**. O comentário está desatualizado; a flag é `--all`.
 
 > **Invariante:** `SCORER_VERSION` é um identificador de compatibilidade de score, não um número de release do projeto. Ele muda quando o **output do scorer** muda para o mesmo input. Refatorar `score.ts` sem alterar resultado não pede bump; mudar um peso no `profile.yaml` pede.

@@ -16,6 +16,7 @@ import {
   verifyStats,
 } from "../src/core/ingest/verify-queue.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 /**
  * Reconferência de vaga viva.
@@ -67,6 +68,7 @@ async function seedJob(opts: { fit?: number; checkedAt?: string; closed?: boolea
   if (opts.fit !== undefined) {
     await db.insert(jobScore).values({
       candidateId,
+      trackId: await primaryTrackId(db, candidateId),
       jobId: row!.id,
       fit: opts.fit,
       titleScore: 0,
@@ -205,6 +207,7 @@ describe("enqueueStale", () => {
       .returning({ id: candidate.id });
     await db.insert(jobScore).values({
       candidateId: other!.id,
+      trackId: await primaryTrackId(db, other!.id),
       jobId: first,
       fit: 90,
       titleScore: 0,

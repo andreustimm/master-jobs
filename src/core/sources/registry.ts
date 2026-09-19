@@ -10,6 +10,9 @@ import {
 } from "./ats.ts";
 import { braintrust } from "./braintrust.ts";
 import { careers } from "./careers.ts";
+import { hackernews } from "./hackernews.ts";
+import { jobicy } from "./jobicy.ts";
+import { workable } from "./workable.ts";
 import {
   adzuna,
   arbeitnow,
@@ -37,6 +40,9 @@ export const ADAPTERS = {
   adzuna,
   braintrust,
   careers,
+  jobicy,
+  workable,
+  hackernews,
 } satisfies Record<FetchableSourceKind, SourceAdapter>;
 
 const FETCHABLE_SOURCE_KIND_SET: ReadonlySet<string> = new Set(FETCHABLE_SOURCE_KINDS);

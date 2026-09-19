@@ -23,10 +23,22 @@
 import { and, eq, isNull, like, or, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { job } from "../db/schema.ts";
+import { primaryScoreFilter } from "../../contexts/matching/index.ts";
 import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
 import { guardIngestion } from "./guard.ts";
 import { probe } from "./probe.ts";
+
+/**
+ * A melhor nota da vaga entre candidatos, só nas trilhas principais.
+ *
+ * Trilha aceita pontua o recorte relevante para ela e costuma dar nota maior
+ * nele; somada ao `max`, furaria a fila de quem só tem o alvo principal
+ * (ADR-008).
+ */
+function bestPrimaryFit() {
+  return sql`coalesce((select max(s.fit) from production.job_score s where s.job_id = ${job.id} and ${primaryScoreFilter("s")}), 0)`;
+}
 
 export type VerifyResult = {
   checked: number;
@@ -70,7 +82,7 @@ export async function verifyJobs(
     .where(
       and(
         isNull(job.closedAt),
-        sql`coalesce((select max(fit) from production.job_score where job_id = ${job.id}), 0) >= ${minFit}`,
+        sql`${bestPrimaryFit()} >= ${minFit}`,
         or(
           like(job.applyUrl, "http://%"),
           like(job.applyUrl, "https://%"),
@@ -80,7 +92,7 @@ export async function verifyJobs(
       ),
     )
     .orderBy(
-      sql`coalesce((select max(fit) from production.job_score where job_id = ${job.id}), 0) desc`,
+      sql`${bestPrimaryFit()} desc`,
     );
 
   // Parse after the coarse SQL prefix filter so malformed values cannot

@@ -10,7 +10,15 @@ const SourcesFile = z.object({
     .array(
       z.object({
         kind: z.enum(FETCHABLE_SOURCE_KINDS),
-        handle: z.string().default(""),
+        // `<kind>:~terms` is the non-synced source of term captures (ADR-011).
+        // A YAML entry with that handle would make the sync own it — and close
+        // every job a term brought that the regular feed does not list.
+        handle: z
+          .string()
+          .default("")
+          .refine((handle) => !handle.startsWith("~"), {
+            message: "handles starting with ~ are reserved for term captures",
+          }),
         label: z.string().min(1),
         rationale: z.string().optional(),
         enabled: z.boolean().default(true),

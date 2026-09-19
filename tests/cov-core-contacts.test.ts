@@ -12,6 +12,7 @@ import type { DB } from "../src/core/db/client.ts";
 import { application, company, job, jobScore, source, targetAccount } from "../src/core/db/schema.ts";
 import { SCORER_VERSION } from "../src/core/scoring/score.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 /**
  * A rede profissional existe por causa de um número: indicação é ~7% dos
@@ -73,6 +74,7 @@ async function criarVaga(input: {
   if (input.fit != null) {
     await db.insert(jobScore).values({
       candidateId: candidatoId,
+      trackId: await primaryTrackId(db, candidatoId),
       jobId: vaga!.id,
       fit: input.fit,
       titleScore: 0,

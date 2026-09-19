@@ -18,6 +18,7 @@ import {
   drizzleQueueAdmin,
 } from "../src/core/scrape/infra/drizzle-queue.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 let db: DB;
 
@@ -72,6 +73,7 @@ async function seedPosting(
 async function seedScore(candidateId: number, jobId: number, fit: number): Promise<void> {
   await db.insert(jobScore).values({
     candidateId,
+    trackId: await primaryTrackId(db, candidateId),
     jobId,
     fit,
     titleScore: fit,

@@ -6,7 +6,7 @@ persona: Andreus em triagem noturna
 journey: J-preserve-application-decision
 expected: O seletor oferece só estágios alcançáveis, e uma recusa do servidor mantém a nota no formulário e nomeia os dois estágios
 entry_points: /jobs/<id>; /pipeline
-qa_status: pass
+qa_status: untested
 bug_ids: BUG-20260910-application-edit-not-retained; BUG-20260917-stale-stages-after-refusal
 fix_status: fixed
 retest_status: verified
@@ -24,8 +24,9 @@ A recusa não é mais alcançável por clique — a lista de estágios sai de
 `allowedTransitions`, então de `preparing` não existe opção `interviewing` para
 escolher. Ela continua alcançável quando a candidatura muda por outra aba ou
 outra sessão entre a abertura da tela e o envio, e é assim que a sessão deve
-provocá-la. Estado terminal (`rejected`, `withdrawn`, `archived`) é o caminho
-mais curto: dele nenhum estágio é alcançável.
+provocá-la. Estado terminal (`rejected`, `withdrawn`, ou `archived` depois de
+aplicar) é o caminho mais curto: dele nenhum estágio é alcançável. Arquivada sem
+ter aplicado, a vaga ainda oferece `backlog` (restaurar o "não me interessa").
 
 O veredito exige as duas metades na mesma tentativa: a nota digitada ainda
 visível no campo depois do aviso, e o aviso citando o estágio gravado e o

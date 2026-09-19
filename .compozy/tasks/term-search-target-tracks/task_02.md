@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Term capture pipeline on registered platforms
 type: backend
 complexity: high
@@ -36,14 +36,14 @@ saved terms and the Jobs screen consume next.
 </requirements>
 
 ## Subtasks
-- [ ] 2.1 Sourcing context skeleton, ports and migration for capture, attribution and quota tables.
-- [ ] 2.2 Quota ledger with atomic reservation, day exhaustion and quota in the regular sync.
-- [ ] 2.3 Term-search capability on the adapter port, Remotive search, RemoteOK and Himalayas search behind validation, platform tags.
-- [ ] 2.4 Non-reassigning observation mode, archive cleared on reopen, `~terms` source and handle refinement.
-- [ ] 2.5 Capture queue with lease and idempotent daily rows; capture runner with budget, failure classes and attribution.
-- [ ] 2.6 Public API for requesting captures, capture state, attributed job ids and aggregate health.
-- [ ] 2.7 Probe with `--term`, ingestion guard on every new entry point, fixtures captured from real probes.
-- [ ] 2.8 `docs/sources.md` and the context map updated.
+- [x] 2.1 Sourcing context skeleton, ports and migration for capture, attribution and quota tables.
+- [x] 2.2 Quota ledger with atomic reservation, day exhaustion and quota in the regular sync.
+- [x] 2.3 Term-search capability on the adapter port, Remotive search, RemoteOK and Himalayas search behind validation, platform tags.
+- [x] 2.4 Non-reassigning observation mode, archive cleared on reopen, `~terms` source and handle refinement.
+- [x] 2.5 Capture queue with lease and idempotent daily rows; capture runner with budget, failure classes and attribution.
+- [x] 2.6 Public API for requesting captures, capture state, attributed job ids and aggregate health.
+- [x] 2.7 Probe with `--term`, ingestion guard on every new entry point, fixtures captured from real probes.
+- [x] 2.8 `docs/sources.md` and the context map updated.
 
 ## Implementation Details
 
@@ -92,14 +92,14 @@ claim pattern of the existing table queues.
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-050–UT-056 — sourcing domain: windows, failure classes, attribution, cap, reachability.
-- [ ] UT-057–UT-062 — term-search adapters.
-- [ ] UT-063 — sources YAML handle refinement.
-- [ ] IT-042–IT-047 — ingestion changes.
-- [ ] IT-048–IT-055 — quota ledger.
-- [ ] IT-056–IT-059, IT-061–IT-070, IT-072 — capture requests and runner.
-- [ ] IT-124 — aggregate health without private data.
-- [ ] IT-133 — `jho sources probe --term`.
+- [x] UT-050–UT-056 — sourcing domain: windows, failure classes, attribution, cap, reachability.
+- [x] UT-057–UT-062 — term-search adapters.
+- [x] UT-063 — sources YAML handle refinement.
+- [x] IT-042–IT-047 — ingestion changes.
+- [x] IT-048–IT-055 — quota ledger.
+- [x] IT-056–IT-059, IT-061–IT-070, IT-072 — capture requests and runner.
+- [x] IT-124 — aggregate health without private data.
+- [x] IT-133 — `jho sources probe --term`.
 
 ## Success Criteria
 - Every assigned test case implemented and passing

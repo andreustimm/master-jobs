@@ -162,6 +162,13 @@ export const jobScore = production.table(
     candidateId: integer("candidate_id")
       .notNull()
       .references(() => candidate.id, { onDelete: "cascade" }),
+    /**
+     * The target track this fit measures against (ADR-008). The primary track
+     * scores every open job; an accepted track only the jobs relevant to it.
+     */
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => targetTrack.id, { onDelete: "cascade" }),
     jobId: integer("job_id")
       .notNull()
       .references(() => job.id, { onDelete: "cascade" }),
@@ -199,9 +206,13 @@ export const jobScore = production.table(
     scoredAt: text("scored_at").notNull().default(now),
   },
   (t) => [
-    primaryKey({ columns: [t.candidateId, t.jobId], name: "job_score_candidate_job_pk" }),
+    primaryKey({
+      columns: [t.candidateId, t.trackId, t.jobId],
+      name: "job_score_candidate_track_job_pk",
+    }),
     index("job_score_fit_idx").on(t.fit),
     index("job_score_candidate_idx").on(t.candidateId),
+    index("job_score_candidate_track_fit_idx").on(t.candidateId, t.trackId, t.fit),
   ],
 );
 
@@ -483,6 +494,97 @@ export const candidateMatchingProfile = production.table(
     profileJson: text("profile_json").notNull(),
     updatedAt: text("updated_at").notNull().default(now),
   },
+);
+
+/**
+ * A target the candidate pursues: one primary and several accepted tracks.
+ *
+ * `target_json` holds only the target-level part of the profile — clusters,
+ * keywords, seniority thresholds, compensation ranges. Eligibility, blockers and
+ * evidence stay person-level in `candidate_matching_profile`; the scorer reads
+ * the merge of the two (ADR-009). A null target is a pending primary: the
+ * candidate has no own profile and is not scored (M-06).
+ */
+export const targetTrack = production.table(
+  "target_track",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** `lower(trim(name))`: names are unique per candidate ignoring case. */
+    nameKey: text("name_key").notNull(),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    /** active | archived — tracks are archived, never deleted. */
+    status: text("status").notNull().default("active"),
+    /** Display order; also breaks ties between tracks with the same fit. */
+    position: integer("position").notNull(),
+    targetJson: text("target_json"),
+    /** Target fields inherited from the default profile and not saved since. */
+    unreviewedJson: text("unreviewed_json").notNull().default("[]"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("target_track_name_idx").on(t.candidateId, t.nameKey),
+    uniqueIndex("target_track_one_primary_idx")
+      .on(t.candidateId)
+      .where(sql`${t.isPrimary} = true`),
+  ],
+);
+
+/**
+ * A term the candidate wants more jobs about, linked to exactly one track
+ * (ADR-003). Private to the candidate; captures are shared per term key.
+ */
+export const savedTerm = production.table(
+  "saved_term",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => targetTrack.id, { onDelete: "cascade" }),
+    /** Trimmed display form, as the candidate typed it. */
+    term: text("term").notNull(),
+    /** Equivalence key: case, spaces and hyphens removed (`src/core/term.ts`). */
+    termKey: text("term_key").notNull(),
+    /** active | paused */
+    status: text("status").notNull().default("active"),
+    /** manual | track_archived — restoring a track resumes only its own pauses. */
+    pausedReason: text("paused_reason"),
+    /** Anchor of the 24-hour manual re-run cooldown; the first run counts. */
+    lastRunRequestedAt: text("last_run_requested_at"),
+    /** Anchor of "new since your last visit". */
+    lastVisitAt: text("last_visit_at"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("saved_term_candidate_key_idx").on(t.candidateId, t.termKey),
+    index("saved_term_key_status_idx").on(t.termKey, t.status),
+  ],
+);
+
+/**
+ * Searches a candidate started from the screen, per UTC day. Deleting a term
+ * does not delete the count: it is the daily ceiling that keeps a save/delete
+ * loop from taking every tenant's per-minute platform slots.
+ */
+export const savedTermRequest = production.table(
+  "saved_term_request",
+  {
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    windowDay: text("window_day").notNull(),
+    requested: integer("requested").notNull().default(0),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.candidateId, t.windowDay], name: "saved_term_request_pk" })],
 );
 
 /* -------------------------------------------------------------------------- */
@@ -1106,3 +1208,102 @@ export const authEvent = production.table(
 
 export type AuthUser = typeof authUser.$inferSelect;
 export type AuthSession = typeof authSession.$inferSelect;
+
+/* -------------------------------------------------------------------------- */
+/* Term captures (sourcing)                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One term search on one platform on one UTC day — queue row and run record.
+ *
+ * The unique key is what makes one call serve everyone who saved the term:
+ * the same normalized term is fetched at most once per platform per day
+ * (ADR-004, ADR-007). The row never names a candidate.
+ */
+export const termCapture = production.table(
+  "term_capture",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    /** Source kind of the platform searched. */
+    platform: text("platform").notNull(),
+    termKey: text("term_key").notNull(),
+    /** Display form of the first request; what is sent to the platform. */
+    query: text("query").notNull(),
+    /** UTC `YYYY-MM-DD`. */
+    windowDay: text("window_day").notNull(),
+    /** web | sweep | cli */
+    origin: text("origin").notNull(),
+    /** queued | running | succeeded | waiting_quota | failed | skipped */
+    status: text("status").notNull().default("queued"),
+    reasonCode: text("reason_code"),
+    priority: doublePrecision("priority").notNull().default(0),
+    attempts: integer("attempts").notNull().default(0),
+    /** Next window for `waiting_quota`. */
+    runAfter: text("run_after"),
+    /** Lease: a claim older than five minutes is reclaimable. */
+    claimedAt: text("claimed_at"),
+    claimedBy: text("claimed_by"),
+    fetched: integer("fetched").notNull().default(0),
+    created: integer("created").notNull().default(0),
+    known: integer("known").notNull().default(0),
+    attributed: integer("attributed").notNull().default(0),
+    /** "100 of about N": what the platform said it had. */
+    totalHint: integer("total_hint"),
+    startedAt: text("started_at"),
+    finishedAt: text("finished_at"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("term_capture_window_idx").on(t.platform, t.termKey, t.windowDay),
+    index("term_capture_claim_idx").on(t.status, t.priority),
+  ],
+);
+
+/**
+ * A job that a term capture brought and that actually mentions the term.
+ *
+ * Decided at capture time, before observation discards the platform payload
+ * (tags live only there). Keyed by term, never by candidate: who saved the
+ * term stays in matching.
+ */
+export const termAttribution = production.table(
+  "term_attribution",
+  {
+    termKey: text("term_key").notNull(),
+    jobId: integer("job_id")
+      .notNull()
+      .references(() => job.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(),
+    attributedAt: text("attributed_at").notNull().default(now),
+  },
+  (t) => [
+    primaryKey({ columns: [t.termKey, t.jobId], name: "term_attribution_pk" }),
+    index("term_attribution_job_idx").on(t.jobId),
+  ],
+);
+
+/**
+ * Durable per-platform call ledger (ADR-010).
+ *
+ * Every call to a budgeted platform reserves a unit here first — sync and term
+ * captures alike — with one conditional upsert per window, so concurrent
+ * workers on different runtimes can never spend past the platform's limit.
+ */
+export const platformQuota = production.table(
+  "platform_quota",
+  {
+    platform: text("platform").notNull(),
+    /** day | minute */
+    windowKind: text("window_kind").notNull(),
+    /** UTC `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`. */
+    windowStart: text("window_start").notNull(),
+    used: integer("used").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.platform, t.windowKind, t.windowStart],
+      name: "platform_quota_pk",
+    }),
+  ],
+);

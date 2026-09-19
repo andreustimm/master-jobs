@@ -1,15 +1,21 @@
 /**
  * Persisting scores. Separated from the pure scorer so the scoring logic stays
  * trivially unit-testable with no database in the picture.
+ *
+ * Scores are per target track (ADR-008, ADR-009): the primary track scores
+ * every open job; an accepted track scores only the jobs relevant to it. This
+ * module is the only writer of `job_score`.
  */
-import { and, eq, isNull, sql } from "drizzle-orm";
-import { getDb } from "../db/client.ts";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { getDb, type DB } from "../db/client.ts";
 import { candidate, job, jobScore } from "../db/schema.ts";
 import { ageInDays, loadRates, STALE_AFTER_DAYS } from "../../contexts/fx/index.ts";
 import {
   ensureMatchingProfile,
-  matchingProfile,
+  isRelevant,
+  trackScoringProfiles,
   type ResultadoPerfil,
+  type Track,
 } from "../../contexts/matching/index.ts";
 import {
   SCORER_VERSION,
@@ -27,7 +33,8 @@ export type ScoreRunResult = {
   fxWarning?: string;
 };
 
-type LoadedScoringContext = ScoringContext & {
+type TrackContext = ScoringContext & {
+  track: Track;
   profileHash: string;
   fx: Awaited<ReturnType<typeof loadRates>>;
   fxWarning?: string;
@@ -35,33 +42,48 @@ type LoadedScoringContext = ScoringContext & {
 
 export const FRESHNESS_RESCORE_AFTER_HOURS = 24;
 
-async function loadScoringContext(candidateId: number): Promise<LoadedScoringContext> {
-  const selected = await matchingProfile(candidateId);
-  const profile = selected.profile;
+/**
+ * The scoring context of every active track, or null for a pending primary.
+ *
+ * Without an own profile there is nothing to score against: using the default
+ * profile would give this person another person's ranking (M-06).
+ */
+async function loadTrackContexts(candidateId: number): Promise<TrackContext[] | null> {
+  const profiles = await trackScoringProfiles(candidateId);
+  if (!profiles) return null;
+  const asOf = Date.now();
+  const rates = new Map<string, Awaited<ReturnType<typeof loadRates>>>();
 
-  // Loaded once per run: scoring stays pure and offline, and every job in a
-  // run is graded against the same quote.
-  const fx = await loadRates(profile.compensation.reference_currency);
-  let fxWarning: string | undefined;
-  if (!fx) {
-    fxWarning = "Sem cotações em cache — vagas em outras moedas não serão comparadas. Rode `jho fx refresh`.";
-  } else if (ageInDays(fx) > STALE_AFTER_DAYS) {
-    fxWarning = `Cotações de ${fx.date} têm mais de ${STALE_AFTER_DAYS} dias. Rode \`jho fx refresh\`.`;
+  const contexts: TrackContext[] = [];
+  for (const { track, profile, hash } of profiles) {
+    const reference = profile.compensation.reference_currency;
+    // Loaded once per run: scoring stays pure and offline, and every job in a
+    // run is graded against the same quote.
+    if (!rates.has(reference)) rates.set(reference, await loadRates(reference));
+    const fx = rates.get(reference) ?? null;
+    let fxWarning: string | undefined;
+    if (!fx) {
+      fxWarning = "Sem cotações em cache — vagas em outras moedas não serão comparadas. Rode `jho fx refresh`.";
+    } else if (ageInDays(fx) > STALE_AFTER_DAYS) {
+      fxWarning = `Cotações de ${fx.date} têm mais de ${STALE_AFTER_DAYS} dias. Rode \`jho fx refresh\`.`;
+    }
+    contexts.push({ track, profile, profileHash: hash, fx, fxWarning, asOf });
   }
-
-  return { profile, profileHash: selected.hash, fx, fxWarning, asOf: Date.now() };
+  return contexts;
 }
 
 /** Limita cada transação a cem scores para não manter uma transação longa. */
 const LOTE = 100;
 
+type Writer = Pick<DB, "insert">;
+
 /** Monta o upsert no cliente ou na transação fornecida pelo chamador. */
 function upsertScore(
-  db: Pick<ReturnType<typeof getDb>, "insert">,
+  db: Writer,
   candidateId: number,
   jobId: number,
   result: ScoreResult,
-  context: LoadedScoringContext,
+  context: TrackContext,
 ) {
   const scoredAt = new Date(context.asOf).toISOString();
   const values = {
@@ -90,131 +112,249 @@ function upsertScore(
 
   return db
     .insert(jobScore)
-    .values({ candidateId, jobId, ...values })
+    .values({ candidateId, trackId: context.track.id, jobId, ...values })
     .onConflictDoUpdate({
-      target: [jobScore.candidateId, jobScore.jobId],
+      target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId],
       set: values,
     });
 }
 
-/** Uma gravação só. `scoreOne` pontua uma vaga e não tem lote para formar. */
-async function persistScore(
-  candidateId: number,
-  jobId: number,
-  result: ScoreResult,
-  context: LoadedScoringContext,
-): Promise<void> {
-  await upsertScore(getDb(), candidateId, jobId, result, context);
+/**
+ * Drop every score of a job, for every candidate and track.
+ *
+ * Called when the posting's content changes: the old notes graded a text that
+ * no longer exists, and keeping any track's row would leave that ranking stale.
+ * Returns how many rows were dropped.
+ */
+export async function deleteJobScores(db: Pick<DB, "delete">, jobId: number): Promise<number> {
+  const rows = await db
+    .delete(jobScore)
+    .where(eq(jobScore.jobId, jobId))
+    .returning({ candidateId: jobScore.candidateId });
+  return rows.length;
 }
 
-/** Score one known job through the exact same profile and scorer as a full run. */
-export async function scoreOne(candidateId: number, jobId: number): Promise<ScoreResult | null> {
-  const db = getDb();
-  const context = await loadScoringContext(candidateId);
-  const rows = await db
-    .select({
-      id: job.id,
-      title: job.title,
-      companyName: job.companyName,
-      descriptionText: job.descriptionText,
-      locationRaw: job.locationRaw,
-      remote: job.remote,
-      compMin: job.compMin,
-      compMax: job.compMax,
-      compCurrency: job.compCurrency,
-      compPeriod: job.compPeriod,
-      postedAt: job.postedAt,
-    })
-    .from(job)
-    .where(eq(job.id, jobId))
-    .limit(1);
+const JOB_COLUMNS = {
+  id: job.id,
+  title: job.title,
+  companyName: job.companyName,
+  descriptionText: job.descriptionText,
+  locationRaw: job.locationRaw,
+  remote: job.remote,
+  compMin: job.compMin,
+  compMax: job.compMax,
+  compCurrency: job.compCurrency,
+  compPeriod: job.compPeriod,
+  postedAt: job.postedAt,
+};
 
-  const row = rows[0];
-  if (!row) return null;
-  const result = scoreJob(row, context);
-  await persistScore(candidateId, row.id, result, context);
-  return result;
+/** Does this track score this job? The primary always does; accepted tracks only when relevant. */
+function scores(context: TrackContext, row: { title: string; descriptionText: string | null }): boolean {
+  return (
+    context.track.isPrimary ||
+    isRelevant(context.track.target!, { title: row.title, description: row.descriptionText })
+  );
 }
 
 /**
- * Score every open job that has no current score.
- * `all: true` rescores everything — use after editing profile.yaml.
+ * Score one known job through the exact same profiles and scorer as a full run.
+ *
+ * Returns the primary track's result, which is what single-fit callers show;
+ * `null` when the job does not exist or the candidate has a pending primary.
+ */
+export async function scoreOne(candidateId: number, jobId: number): Promise<ScoreResult | null> {
+  const db = getDb();
+  const contexts = await loadTrackContexts(candidateId);
+  if (!contexts) return null;
+  const [row] = await db.select(JOB_COLUMNS).from(job).where(eq(job.id, jobId)).limit(1);
+  if (!row) return null;
+
+  let primary: ScoreResult | null = null;
+  for (const context of contexts) {
+    if (!scores(context, row)) {
+      await db
+        .delete(jobScore)
+        .where(
+          and(
+            eq(jobScore.candidateId, candidateId),
+            eq(jobScore.trackId, context.track.id),
+            eq(jobScore.jobId, jobId),
+          ),
+        );
+      continue;
+    }
+    const result = scoreJob(row, context);
+    await upsertScore(db, candidateId, row.id, result, context);
+    if (context.track.isPrimary) primary = result;
+  }
+  return primary;
+}
+
+export type TrackFit = {
+  trackId: number;
+  name: string;
+  isPrimary: boolean;
+  /** No stored row for this track: the fit was computed now and not persisted. */
+  computed: boolean;
+  fit: number;
+  cluster: string;
+  titleScore: number;
+  keywordScore: number;
+  seniorityScore: number;
+  geoScore: number;
+  compScore: number;
+  freshnessScore: number;
+  benefitScore: number;
+  penalty: number;
+  matchedKeywords: unknown;
+  missingKeywords: unknown;
+  reasons: unknown;
+  blockers: unknown;
+};
+
+/**
+ * The job's fit under every active track, for the job detail.
+ *
+ * An accepted track has no row for a job outside its relevance gate, and a
+ * track created a minute ago has none yet. The detail still shows that fit,
+ * computed here with the same scorer — but writing it would put a job into a
+ * track's ranking that the gate keeps out, so nothing is persisted.
+ * `null` for a missing job or a pending primary.
+ */
+export async function trackFitsForJob(candidateId: number, jobId: number): Promise<TrackFit[] | null> {
+  const db = getDb();
+  const contexts = await loadTrackContexts(candidateId);
+  if (!contexts) return null;
+  const [row] = await db.select(JOB_COLUMNS).from(job).where(eq(job.id, jobId)).limit(1);
+  if (!row) return null;
+  const stored = new Map(
+    (
+      await db
+        .select()
+        .from(jobScore)
+        .where(and(eq(jobScore.candidateId, candidateId), eq(jobScore.jobId, jobId)))
+    ).map((score) => [score.trackId, score]),
+  );
+
+  return contexts.map((context) => {
+    const track = { trackId: context.track.id, name: context.track.name, isPrimary: context.track.isPrimary };
+    const saved = stored.get(context.track.id);
+    const score = saved ?? scoreJob(row, context);
+    return {
+      ...track,
+      computed: saved === undefined,
+      fit: score.fit,
+      cluster: score.cluster,
+      titleScore: score.titleScore,
+      keywordScore: score.keywordScore,
+      seniorityScore: score.seniorityScore,
+      geoScore: score.geoScore,
+      compScore: score.compScore,
+      freshnessScore: score.freshnessScore,
+      benefitScore: score.benefitScore,
+      penalty: score.penalty,
+      matchedKeywords: score.matchedKeywords,
+      missingKeywords: score.missingKeywords,
+      reasons: score.reasons,
+      blockers: score.blockers,
+    };
+  });
+}
+
+/**
+ * Score every open job whose score is missing or stale, on every active track.
+ *
+ * Stale means another scorer version, another effective profile (the track or
+ * the person changed) or older than the freshness window. `all: true` rescores
+ * everything. On an accepted track, a job that stopped being relevant loses its
+ * row: it is outside that track now.
  */
 export async function scoreAll(
   candidateId: number,
   opts: { all?: boolean } = {},
 ): Promise<ScoreRunResult> {
   const db = getDb();
-  const context = await loadScoringContext(candidateId);
-  const freshnessCutoff = new Date(
-    context.asOf - FRESHNESS_RESCORE_AFTER_HOURS * 3_600_000,
-  ).toISOString();
-
-  const rows = await db
-    .select({
-      id: job.id,
-      title: job.title,
-      companyName: job.companyName,
-      descriptionText: job.descriptionText,
-      locationRaw: job.locationRaw,
-      remote: job.remote,
-      compMin: job.compMin,
-      compMax: job.compMax,
-      compCurrency: job.compCurrency,
-      compPeriod: job.compPeriod,
-      postedAt: job.postedAt,
-      existingVersion: jobScore.scorerVersion,
-      existingProfileHash: jobScore.profileHash,
-      existingScoredAt: jobScore.scoredAt,
-    })
-    .from(job)
-    .leftJoin(
-      jobScore,
-      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
-    )
-    .where(
-      opts.all
-        ? isNull(job.closedAt)
-        : sql`${job.closedAt} is null and (
-            ${jobScore.jobId} is null
-            or ${jobScore.scorerVersion} <> ${SCORER_VERSION}
-            or ${jobScore.profileHash} <> ${context.profileHash}
-            or ${jobScore.scoredAt} < ${freshnessCutoff}
-          )`,
-    );
+  const contexts = await loadTrackContexts(candidateId);
+  if (!contexts) return { scored: 0, skipped: 0, topFit: 0 };
 
   let scored = 0;
+  let skipped = 0;
   let topFit = 0;
 
-  // Calcula fora da transação e persiste em lotes com rollback independente.
-  type Gravacao = { jobId: number; result: ScoreResult };
-  let pendentes: Gravacao[] = [];
+  for (const context of contexts) {
+    const freshnessCutoff = new Date(
+      context.asOf - FRESHNESS_RESCORE_AFTER_HOURS * 3_600_000,
+    ).toISOString();
+    const rows = await db
+      .select({ ...JOB_COLUMNS, existing: jobScore.jobId })
+      .from(job)
+      .leftJoin(
+        jobScore,
+        and(
+          eq(jobScore.jobId, job.id),
+          eq(jobScore.candidateId, candidateId),
+          eq(jobScore.trackId, context.track.id),
+        ),
+      )
+      .where(
+        opts.all
+          ? isNull(job.closedAt)
+          : sql`${job.closedAt} is null and (
+              ${jobScore.jobId} is null
+              or ${jobScore.scorerVersion} <> ${SCORER_VERSION}
+              or ${jobScore.profileHash} <> ${context.profileHash}
+              or ${jobScore.scoredAt} < ${freshnessCutoff}
+            )`,
+      );
 
-  const descarregar = async () => {
-    if (pendentes.length === 0) return;
-    await db.transaction(async (tx) => {
-      for (const pending of pendentes) {
-        await upsertScore(tx, candidateId, pending.jobId, pending.result, context);
+    // Calcula fora da transação e persiste em lotes com rollback independente.
+    type Gravacao = { jobId: number; result: ScoreResult };
+    let pendentes: Gravacao[] = [];
+    const descarregar = async () => {
+      if (pendentes.length === 0) return;
+      await db.transaction(async (tx) => {
+        for (const pending of pendentes) {
+          await upsertScore(tx, candidateId, pending.jobId, pending.result, context);
+        }
+      });
+      pendentes = [];
+    };
+
+    const outside: number[] = [];
+    for (const row of rows) {
+      if (!scores(context, row)) {
+        if (row.existing !== null) outside.push(row.id);
+        skipped++;
+        continue;
       }
-    });
-    pendentes = [];
-  };
+      const result = scoreJob(row, context);
+      if (context.track.isPrimary) topFit = Math.max(topFit, result.fit);
+      pendentes.push({ jobId: row.id, result });
+      scored++;
+      if (pendentes.length >= LOTE) await descarregar();
+    }
+    await descarregar();
 
-  for (const row of rows) {
-    const result = scoreJob(row, context);
-    topFit = Math.max(topFit, result.fit);
-    pendentes.push({ jobId: row.id, result });
-    scored++;
-    if (pendentes.length >= LOTE) await descarregar();
+    for (let offset = 0; offset < outside.length; offset += LOTE) {
+      await db
+        .delete(jobScore)
+        .where(
+          and(
+            eq(jobScore.candidateId, candidateId),
+            eq(jobScore.trackId, context.track.id),
+            inArray(jobScore.jobId, outside.slice(offset, offset + LOTE)),
+          ),
+        );
+    }
   }
-  await descarregar();
 
+  const primary = contexts.find((context) => context.track.isPrimary);
   return {
     scored,
-    skipped: 0,
+    skipped,
     topFit,
-    fxDate: context.fx?.date,
-    fxWarning: context.fxWarning,
+    fxDate: primary?.fx?.date,
+    fxWarning: primary?.fxWarning,
   };
 }
 

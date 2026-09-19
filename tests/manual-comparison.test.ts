@@ -165,7 +165,7 @@ describe("manual comparison job", () => {
     expect(storedScore?.fit).toBe(result?.fit);
     expect(storedScore?.scorerVersion).toBe(SCORER_VERSION);
 
-    const board = await listBoard(candidateId, { q: "Manual Score Co" });
+    const board = await listBoard(candidateId, { term: { term: "Manual Score Co", key: "manualscoreco" } });
     expect(board).toHaveLength(1);
     expect(board[0]?.pageText).toContain("Senior AI Software Architect");
     expect(board[0]?.pageTextLength).toBe(DESCRIPTION.length);

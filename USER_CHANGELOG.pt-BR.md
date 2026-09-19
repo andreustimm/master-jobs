@@ -18,6 +18,64 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-09-19T18:03:52.117Z
+
+### Novidade
+
+- Na tela de vagas, escolha a trilha pela qual as notas aparecem — a
+  principal, uma trilha aceita ou todas juntas, com o nome da trilha em cada
+  vaga.
+- Filtro de salário mínimo em qualquer moeda e período, com a conversão ao
+  lado do valor original. Vagas sem salário informado ou impossíveis de
+  comparar aparecem marcadas, depois das que atingem o mínimo, e podem ser
+  escondidas; a tela diz quantas ficaram abaixo do mínimo.
+- A busca da tela de vagas procura a palavra inteira no cargo, na empresa e na
+  descrição: "java" não traz mais "JavaScript". Quando a busca traz pouco, a
+  tela oferece buscar o termo nas plataformas.
+- Filtro "trazida pelo termo", que mostra as vagas que um termo salvo trouxe
+  e marca as novas desde a última visita.
+
+- Nova tela Buscas: salve um termo, como "Laravel", numa trilha, e o sistema
+  procura vagas com ele nas plataformas cadastradas e repete a busca todo dia.
+  A tela mostra o que cada plataforma trouxe e quantas vagas são novas; pause,
+  mova, rode de novo ou apague o termo quando quiser.
+- Crie uma trilha a partir da sugestão para um termo e ajuste títulos,
+  palavras, senioridade e faixas de pagamento. Se algum campo for recusado, o
+  que você digitou nos outros continua no formulário. Qualquer trilha pode virar
+  a principal, e uma trilha arquivada pode ser restaurada.
+- No detalhe da vaga, a nota de cada trilha aparece lado a lado.
+- Administradores acompanham a saúde das buscas por plataforma sem ver termos
+  nem candidatos.
+
+- Cada pessoa pede até 40 buscas por dia pela tela; passado isso, o termo é
+  salvo e busca na varredura diária. Termo pausado não busca, nem pela mão.
+
+- Botão "não me interessa" em cada vaga da lista e no detalhe: a vaga sai das
+  suas listas e fica em "Arquivadas". Enquanto você não tiver aplicado, dá para
+  restaurá-la de lá.
+
+- Vagas de três plataformas novas: Jobicy, Workable (vagas remotas no Brasil) e
+  o fio mensal "Who is hiring?" do Hacker News, escrito pelas próprias empresas.
+  Os termos salvos em Buscas também procuram nelas.
+
+- Vagas direto de 28 empresas que publicam na Lever e contratam remoto do
+  Brasil, como CI&T, Oowlish, BriteCore, Ubiminds e Yuno.
+
+### Melhorado
+
+- Preparação para buscar vagas de mais de um tipo, com régua própria para cada
+  um. As notas de aderência são recalculadas uma vez nesta versão; a nota que
+  aparece continua sendo a do seu objetivo principal.
+
+### Corrigido
+
+- Uma vaga arquivada que volta a ser anunciada reaparece na lista de vagas. Antes
+  ela voltava a contar como aberta, mas continuava escondida.
+
+- Vagas que só aceitam candidatos de certos países, como "United States only" ou
+  "Spain only", agora aparecem com bloqueio e saem de "Aplicáveis hoje". Vagas
+  que incluem o Brasil ou a América Latina na lista continuam normais.
+
 ## [1.14.2] - 2026-09-19T13:44:44.288Z
 
 ### Corrigido

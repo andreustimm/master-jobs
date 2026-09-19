@@ -79,8 +79,9 @@ function trackConsole(targetPage) {
     if (EXPECTED_CONSOLE.test(value)) return;
     consoleErrors.push(value);
   });
+  // The route is what makes a minified React error actionable.
   targetPage.on("pageerror", (error) =>
-    consoleErrors.push("pageerror: " + String(error).slice(0, 200)),
+    consoleErrors.push(`pageerror ${new URL(targetPage.url()).pathname}: ${String(error).slice(0, 200)}`),
   );
 }
 
@@ -1183,8 +1184,10 @@ try {
   // largura suficiente para a fileira completa. O breakpoint do menu precisa
   // acompanhar o espaço disponível, não a orientação do aparelho.
   const landscapeNavigation = [];
-  for (const width of [812, 932, 1024]) {
-    await page.setViewportSize({ width, height: 375 });
+  // The admin-candidate row needs 527px of free bar since the Searches entry;
+  // 1024 leaves 501, so the wide sample is a laptop width.
+  for (const width of [812, 932, 1280]) {
+    await page.setViewportSize({ width, height: width === 1280 ? 800 : 375 });
     await page.goto(`${BASE}/compare`, { waitUntil: "networkidle" });
     landscapeNavigation.push(await page.evaluate(() => {
       const header = document.querySelector("#application-shell > header");
@@ -1805,8 +1808,10 @@ try {
   // própria tela impedia de cumprir.
   // A revalidação chega pela resposta da própria action; esperar o efeito, e não
   // um tempo fixo, é o que separa "atualizou" de "ainda não atualizou".
+  // Arquivada sem ter aplicado, a vaga ainda pode ser restaurada: `archived`
+  // e `backlog` são os dois estágios alcançáveis.
   await page.waitForFunction(
-    () => document.querySelectorAll('[data-testid="track-status"] option').length === 1,
+    () => document.querySelectorAll('[data-testid="track-status"] option').length === 2,
     undefined,
     { timeout: 15_000 },
   );
@@ -1817,7 +1822,8 @@ try {
   }));
   check(
     "depois da recusa a lista acompanha o estágio realmente gravado",
-    afterRejection.offered.length === 1 && afterRejection.offered[0] === "archived",
+    afterRejection.offered.length === 2
+      && ["archived", "backlog"].every((status) => afterRejection.offered.includes(status)),
     afterRejection.offered.join(","),
   );
   check(
@@ -2752,9 +2758,38 @@ try {
       .filter((v) => v.length > 2 && !shared.has(v)),
   );
 
+  const portugueseLeaks = async (paths) => {
+    const leaks = [];
+    for (const path of paths) {
+      await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+      const found = await page.evaluate((dictionary) => {
+        const known = new Set(dictionary);
+        const accented = /[ãõçáéíóúâêôàÃÕÇÁÉÍÓÚÂÊÔÀ]/;
+        const out = [];
+        const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walk.nextNode())) {
+          const text = (node.textContent ?? "").trim();
+          const parent = node.parentElement;
+          if (!parent || text.length < 3) continue;
+          if (["SCRIPT", "STYLE"].includes(parent.tagName)) continue;
+          if (parent.closest("[data-user-content]")) continue;
+          // `lang` explícito e diferente da página é declaração deliberada, não
+          // vazamento: o nome de um idioma se escreve no próprio idioma.
+          const declared = parent.closest("[lang]");
+          if (declared && declared !== document.documentElement) continue;
+          if (known.has(text.toLowerCase())) out.push(`dicionário: ${text}`);
+          else if (accented.test(text)) out.push(`acento: ${text}`);
+        }
+        return out;
+      }, [...portuguese]);
+      for (const text of found) leaks.push(`${path} · ${text.slice(0, 52)}`);
+    }
+    return [...new Set(leaks)];
+  };
+
   await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
-  const leaks = [];
-  for (const path of [
+  const leaks = await portugueseLeaks([
     "/",
     "/jobs",
     "/compare",
@@ -2763,35 +2798,11 @@ try {
     "/candidate",
     "/candidate/skills",
     "/candidate/vocabulary",
-  ]) {
-    await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
-    const found = await page.evaluate((dictionary) => {
-      const known = new Set(dictionary);
-      const accented = /[ãõçáéíóúâêôàÃÕÇÁÉÍÓÚÂÊÔÀ]/;
-      const out = [];
-      const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-      let node;
-      while ((node = walk.nextNode())) {
-        const text = (node.textContent ?? "").trim();
-        const parent = node.parentElement;
-        if (!parent || text.length < 3) continue;
-        if (["SCRIPT", "STYLE"].includes(parent.tagName)) continue;
-        if (parent.closest("[data-user-content]")) continue;
-        // `lang` explícito e diferente da página é declaração deliberada, não
-        // vazamento: o nome de um idioma se escreve no próprio idioma.
-        const declared = parent.closest("[lang]");
-        if (declared && declared !== document.documentElement) continue;
-        if (known.has(text.toLowerCase())) out.push(`dicionário: ${text}`);
-        else if (accented.test(text)) out.push(`acento: ${text}`);
-      }
-      return out;
-    }, [...portuguese]);
-    for (const text of found) leaks.push(`${path} · ${text.slice(0, 52)}`);
-  }
+  ]);
   check(
     "interface em inglês não vaza português",
     leaks.length === 0,
-    [...new Set(leaks)].slice(0, 8).join(" | "),
+    leaks.slice(0, 8).join(" | "),
   );
 
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
@@ -4816,6 +4827,606 @@ try {
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+
+  /* ------- term-search task_04: trilha, termo e salário na tela Vagas ------- */
+  const payBase = `${BASE}/jobs?q=${encodeURIComponent("Pay fixture")}&fit=0`;
+  const payIds = () => page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid^="job-link-904"]')].map((link) =>
+      link.getAttribute("data-testid").slice("job-link-".length)));
+  const payFits = () => page.evaluate(() => Object.fromEntries(
+    [...document.querySelectorAll('[data-testid^="job-link-904"]')].map((link) => [
+      link.getAttribute("data-testid").slice("job-link-".length),
+      link.closest("article")?.querySelector("div span")?.textContent?.trim() ?? "",
+    ]),
+  ));
+  const settle = async (pattern) => {
+    await page.waitForURL(pattern, { timeout: 20_000 });
+    await page.waitForLoadState("networkidle");
+    // A soft navigation keeps the shell inert until the transition commits;
+    // typing before that is lost, for a person and for `fill` alike.
+    await page.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
+  };
+
+  await page.goto(payBase, { waitUntil: "networkidle" });
+  const primaryFits = await payFits();
+  await page.locator('[data-testid^="filter-track-"]').filter({ hasText: "PHP E2E" }).click();
+  await settle(/track=\d+/);
+  const trackUrl = page.url();
+  const phpFits = await payFits();
+  await page.locator('[data-testid="filter-track-all"]').click();
+  await settle(/track=all/);
+  const trackLabels = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid^="job-link-904"]')].map((link) =>
+      link.closest("article")?.querySelectorAll('[data-testid^="job-track-"]').length ?? 0));
+  await page.reload({ waitUntil: "networkidle" });
+  const allKept = await page.locator('[data-testid="filter-track-all"]').getAttribute("aria-current");
+  check(
+    "term-search E2E-003 trilha principal por padrão, trilha escolhida na URL, todas com rótulo, recarga mantém",
+    primaryFits["904000001"] === "60"
+      && phpFits["904000001"] === "85"
+      && /track=\d+/.test(trackUrl)
+      && trackLabels.length === 6
+      && trackLabels.every((count) => count === 1)
+      && allKept === "true",
+    JSON.stringify({ primaryFits, phpFits, trackUrl, trackLabels, allKept }),
+  );
+
+  await page.goto(payBase, { waitUntil: "networkidle" });
+  await page.locator('[data-testid="filters-pay"]').fill("6000");
+  await page.locator('[data-testid="filters-pay-currency"]').selectOption("USD");
+  await page.locator('[data-testid="filters-pay-period"]').selectOption("month");
+  await page.locator('[data-testid="filters-pay-submit"]').click();
+  await settle(/pay=6000/);
+  const payMarkers = () => page.evaluate(() => ({
+    converted: document.querySelectorAll('[data-testid^="job-pay-904"]').length,
+    undisclosed: document.querySelectorAll('[data-testid^="job-pay-undisclosed-"]').length,
+    notComparable: document.querySelectorAll('[data-testid^="job-pay-not-comparable-"]').length,
+    hidden: document.querySelector('[data-testid="jobs-hidden-below-minimum"]')?.textContent ?? "",
+  }));
+  const withMinimum = { order: await payIds(), ...(await payMarkers()) };
+  await page.locator('[data-testid="filters-pay-form"] a[href*="disclosed=1"]').click();
+  await settle(/disclosed=1/);
+  const disclosedOnly = { order: await payIds(), ...(await payMarkers()) };
+  await page.reload({ waitUntil: "networkidle" });
+  const reloaded = { url: page.url(), order: await payIds() };
+  const qualifying = new Set(["904000001", "904000002", "904000003"]);
+  check(
+    "term-search E2E-007 mínimo em USD por mês: qualificadas primeiro e convertidas, marcadas depois, abaixo do mínimo contado; só informado some com as marcadas; recarga mantém",
+    withMinimum.order.length === 5
+      && withMinimum.order.slice(0, 3).every((id) => qualifying.has(id))
+      && withMinimum.converted === 3
+      && withMinimum.undisclosed === 1
+      && withMinimum.notComparable === 1
+      && /\b1\b/.test(withMinimum.hidden)
+      && disclosedOnly.order.length === 3
+      && disclosedOnly.undisclosed + disclosedOnly.notComparable === 0
+      && /pay=6000/.test(reloaded.url)
+      && /disclosed=1/.test(reloaded.url)
+      && reloaded.order.length === 3,
+    JSON.stringify({ withMinimum, disclosedOnly, reloaded }),
+  );
+
+  await page.goto(payBase, { waitUntil: "networkidle" });
+  await page.locator('a[href*="sort=comp"]').first().click();
+  await settle(/sort=comp/);
+  const byPay = await payIds();
+  check(
+    "term-search E2E-008 ordenar por salário segue o valor normalizado entre USD/ano, BRL/mês e USD/hora",
+    JSON.stringify(byPay.slice(0, 4)) === JSON.stringify(["904000003", "904000002", "904000001", "904000004"]),
+    JSON.stringify(byPay),
+  );
+
+  let hostileDialog = false;
+  const onDialog = async (dialog) => {
+    hostileDialog = true;
+    await dialog.dismiss();
+  };
+  page.on("dialog", onDialog);
+  await page.goto(`${BASE}/jobs?q=${encodeURIComponent("<script>alert(1)</script>")}`, { waitUntil: "networkidle" });
+  const hostileTerm = await page.evaluate(() => ({
+    notice: Boolean(document.querySelector('[data-testid="jobs-notice-term_invalid_char"]')),
+    // O payload RSC carrega a URL como string JSON num <script> de dados; o
+    // que provaria injeção é um script cujo CÓDIGO seja o do parâmetro.
+    injected: [...document.querySelectorAll("script")].some((node) => (node.textContent ?? "").trim() === "alert(1)"),
+    field: document.querySelector('[data-testid="filters-query"]')?.value ?? null,
+  }));
+  await page.goto(`${BASE}/jobs?pay=0`, { waitUntil: "networkidle" });
+  const payNotice = await page.locator('[data-testid="jobs-notice-pay_invalid"]').count();
+  await page.goto(`${payBase}&track=999`, { waitUntil: "networkidle" });
+  const unknownTrack = {
+    notice: await page.locator('[data-testid="jobs-notice-track_unknown"]').count(),
+    fits: await payFits(),
+  };
+  page.off("dialog", onDialog);
+  check(
+    "term-search E2E-015 entrada hostil vira aviso: termo inválido, salário 0 e trilha inexistente caem na principal",
+    hostileTerm.notice
+      && !hostileTerm.injected
+      && !hostileDialog
+      && hostileTerm.field === ""
+      && payNotice === 1
+      && unknownTrack.notice === 1
+      && unknownTrack.fits["904000001"] === "60",
+    JSON.stringify({ hostileTerm, hostileDialog, payNotice, unknownTrack }),
+  );
+
+  await page.goto(`${BASE}/jobs?q=zzqxunmatched`, { waitUntil: "networkidle" });
+  const emptyTerm = await page.evaluate(() => ({
+    empty: document.querySelector('[data-testid="jobs-empty"]')?.textContent ?? "",
+    offer: document.querySelector('[data-testid="jobs-offer-search-link"]')?.getAttribute("href") ?? "",
+    emphasized: document.querySelector('[data-testid="jobs-offer-search"]')?.getAttribute("data-emphasized"),
+  }));
+  check(
+    "term-search E2E-020 termo sem vaga: o vazio nomeia o termo e oferece buscar nas plataformas",
+    emptyTerm.empty.includes("zzqxunmatched")
+      && emptyTerm.offer === "/searches/tracks/new?term=zzqxunmatched"
+      && emptyTerm.emphasized === "true",
+    JSON.stringify(emptyTerm),
+  );
+
+  /* ------ term-search task_05: Buscas, trilhas, saúde das capturas e papéis ------ */
+  const notice = page.locator('[data-testid="mutation-feedback"]');
+  /** Runs an action and reads the notice it leaves, then clears it for the next one. */
+  const feedbackOf = async (act) => {
+    await act();
+    await notice.waitFor({ timeout: 20_000 });
+    const link = page.locator('[data-testid="mutation-feedback-link"]');
+    const read = {
+      role: await notice.getAttribute("role"),
+      text: ((await notice.textContent()) ?? "").trim(),
+      link: (await link.count()) > 0 ? await link.getAttribute("href") : null,
+    };
+    await page.locator('[data-testid="mutation-feedback-dismiss"]').click();
+    await notice.waitFor({ state: "detached" });
+    await page.waitForLoadState("networkidle");
+    return read;
+  };
+  // The notice arrives with the action's answer; the revalidated tree
+  // commits a moment later. Reads after an action wait for the state they
+  // expect instead of racing that commit, and report `false` on timeout.
+  const eventually = (predicate, arg) =>
+    page.waitForFunction(predicate, arg, { timeout: 10_000 }).then(() => true, () => false);
+  // By the term's own name: every row's "move to" select lists every track
+  // name, so a text filter on the row matches the wrong term.
+  const findTerm = (wanted) => {
+    const row = [...document.querySelectorAll('div[data-state][data-testid^="term-"]')]
+      .find((node) => node.querySelector("span[data-user-content]")?.textContent?.trim() === wanted);
+    return row ? Number(row.getAttribute("data-testid").slice("term-".length)) : null;
+  };
+  const termIdOf = (text) =>
+    page.waitForFunction(findTerm, text, { timeout: 10_000 }).then((handle) => handle.jsonValue(), () => null);
+  const termStateIs = ([id, state]) =>
+    document.querySelector(`[data-testid="term-${id}"]`)?.getAttribute("data-state") === state;
+  const trackCards = () => page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid^="track-"][data-primary]')].map((card) => ({
+      id: Number(card.getAttribute("data-testid").slice("track-".length)),
+      primary: card.getAttribute("data-primary") === "true",
+      name: card.querySelector("[data-user-content]")?.textContent?.trim() ?? "",
+    })));
+  const saveTermOnPage = (term) => feedbackOf(async () => {
+    // After a redirect the shell stays inert until the transition commits, and
+    // `fill` on it is silently lost: the save goes out empty and no notice comes.
+    await page.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
+    await page.locator('[data-testid="searches-term-input"]').fill(term);
+    await page.locator('[data-testid="searches-term-save"]').click();
+  });
+
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  await page.locator('[data-testid="filters-query"]').fill("Laravel");
+  await page.locator('[data-testid="filters-submit"]').click();
+  await settle(/q=Laravel/);
+  const laravelBoard = await page.evaluate(() => ({
+    descriptionOnly: Boolean(document.querySelector('[data-testid="job-link-905000001"]')),
+    hint: document.querySelector('[data-testid="filters-query-hint"]')?.textContent?.trim() ?? "",
+    offer: document.querySelector('[data-testid="jobs-offer-search-link"]')?.getAttribute("href") ?? "",
+  }));
+  await page.locator('[data-testid="jobs-offer-search-link"]').click();
+  await settle(/\/searches\/tracks\/new\?term=Laravel/);
+  const suggested = await page.evaluate(() => ({
+    titles: document.querySelector('[data-testid="track-titles"]')?.value ?? "",
+    evidence: document.querySelector('[data-testid="track-suggestion-evidence"]')?.textContent?.trim() ?? "",
+  }));
+  const laravelCreated = await feedbackOf(async () => {
+    await page.locator('[data-testid="track-create"]').click();
+    await settle(/\/searches$/);
+  });
+  const laravelTrack = (await trackCards()).find((card) => card.name === "Laravel");
+  const laravelTermId = await termIdOf("Laravel");
+  const laravelTerm = {
+    inTrack: await page.locator(`[data-testid="track-${laravelTrack?.id}"] [data-testid="term-${laravelTermId}"]`).count(),
+    platforms: await page.locator(`[data-testid="term-platforms-${laravelTermId}"] li`).allTextContents(),
+    coverage: ((await page.locator('[data-testid="searches-coverage"]').textContent()) ?? "").trim(),
+  };
+  check(
+    "term-search E2E-001 Laravel só na descrição aparece, a oferta sugere a trilha e o termo salvo mostra capturas desligadas por plataforma",
+    laravelBoard.descriptionOnly
+      && laravelBoard.hint === ptBR.filters.searchHint
+      && laravelBoard.offer === "/searches/tracks/new?term=Laravel"
+      && suggested.titles.length > 0
+      && suggested.evidence.length > 0
+      && laravelCreated.role === "status"
+      && laravelTerm.inTrack === 1
+      && laravelTerm.platforms.length > 0
+      && laravelTerm.platforms.every((line) => line.includes(ptBR.captureState.captures_off))
+      && laravelTerm.coverage === ptBR.searches.coverage,
+    JSON.stringify({ laravelBoard, suggested, laravelCreated, laravelTrack, laravelTerm }),
+  );
+
+  const tooShort = await saveTermOnPage("a");
+  const techleadSaved = await saveTermOnPage("techlead");
+  const techleadId = await termIdOf("techlead");
+  const duplicate = await saveTermOnPage("Tech Lead");
+  check(
+    "term-search E2E-017 termo curto é recusado com o limite e a grafia equivalente aponta o termo existente",
+    tooShort.role === "alert"
+      && tooShort.text.includes(ptBR.searchFeedback.term_too_short)
+      && techleadSaved.role === "status"
+      && techleadSaved.text.includes(ptBR.searchFeedback.run_captures_off)
+      && duplicate.role === "alert"
+      && duplicate.text.includes(ptBR.searchFeedback.term_duplicate)
+      && duplicate.link === `/searches#term-${techleadId}`
+      && (await page.evaluate(findTerm, "Tech Lead")) === null,
+    JSON.stringify({ tooShort, techleadSaved, duplicate, techleadId }),
+  );
+
+  const pausedResult = await feedbackOf(() => page.locator(`[data-testid="term-toggle-${techleadId}"]`).click());
+  const paused = {
+    state: await eventually(termStateIs, [techleadId, "paused"]),
+    badge: await page.locator(`[data-testid="term-paused-${techleadId}"]`).count(),
+  };
+  await feedbackOf(() => page.locator(`[data-testid="term-toggle-${techleadId}"]`).click());
+  const resumed = await eventually(termStateIs, [techleadId, "active"]);
+  await page.locator(`[data-testid="term-move-track-${techleadId}"]`).selectOption(String(laravelTrack?.id));
+  const moved = await feedbackOf(() => page.locator(`[data-testid="term-move-${techleadId}"]`).click());
+  const movedInto = await eventually(
+    ([track, term]) => Boolean(document.querySelector(`[data-testid="track-${track}"] [data-testid="term-${term}"]`)),
+    [laravelTrack?.id, techleadId],
+  );
+  // Same session, second window: the page created by `browser.newPage()`
+  // owns its context and cannot open another page in it.
+  const staleCtx = await browser.newContext({ storageState: await page.context().storageState() });
+  const stalePage = await staleCtx.newPage();
+  await stalePage.goto(`${BASE}/searches`, { waitUntil: "networkidle" });
+  const deleted = await feedbackOf(() => page.locator(`[data-testid="term-delete-${techleadId}"]`).click());
+  const gone = await eventually((id) => !document.querySelector(`[data-testid="term-${id}"]`), techleadId);
+  await stalePage.locator(`[data-testid="term-delete-${techleadId}"]`).click();
+  const staleNotice = stalePage.locator('[data-testid="mutation-feedback"]');
+  await staleNotice.waitFor({ timeout: 20_000 });
+  const staleRole = await staleNotice.getAttribute("role");
+  await staleCtx.close();
+  check(
+    "term-search E2E-006 pausar, retomar, mover e excluir um termo; excluir de novo numa página velha não é erro",
+    pausedResult.role === "status"
+      && paused.state
+      && paused.badge === 1
+      && resumed
+      && moved.role === "status"
+      && movedInto
+      && deleted.role === "status"
+      && gone
+      && staleRole === "status",
+    JSON.stringify({ pausedResult, paused, resumed, moved, movedInto, deleted, gone, staleRole }),
+  );
+
+  const seededId = await termIdOf("E2E Seeded Stack");
+  const seededNew = page.locator(`[data-testid="term-new-${seededId}"]`);
+  const newBefore = await seededNew.getAttribute("data-count");
+  await seededNew.click();
+  await settle(new RegExp(`by=${seededId}`));
+  const markedNew = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid^="job-new-"]')].map((node) => node.getAttribute("data-testid")).sort());
+  await page.goto(`${BASE}/searches`, { waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "networkidle" });
+  const newAfter = await page.locator(`[data-testid="term-new-${seededId}"]`).getAttribute("data-count");
+  check(
+    "term-search E2E-009 o termo mostra 2 novas, a lista marca as duas e a contagem zera depois da visita",
+    newBefore === "2"
+      && JSON.stringify(markedNew) === JSON.stringify(["job-new-905000011", "job-new-905000012"])
+      && newAfter === "0",
+    JSON.stringify({ newBefore, markedNew, newAfter }),
+  );
+
+  const tracksBefore = await trackCards();
+  const originalPrimary = tracksBefore.find((card) => card.primary);
+  const phpTrackCard = tracksBefore.find((card) => card.name === "PHP E2E");
+  await page.locator(`[data-testid="track-edit-${phpTrackCard?.id}"]`).click();
+  await settle(new RegExp(`/searches/tracks/${phpTrackCard?.id}$`));
+  const evidence = await page.evaluate(() => ({
+    supported: document.querySelector('[data-testid="track-evidence-supported"]')?.textContent?.trim() ?? "",
+    gaps: document.querySelector('[data-testid="track-evidence-gaps"]')?.textContent?.trim() ?? "",
+  }));
+  const positives = page.locator('[data-testid="track-positives"]');
+  const ranges = page.locator('[data-testid="track-ranges"]');
+  const savedRanges = await ranges.inputValue();
+  const editedPositives = `${await positives.inputValue()}\nsymfony 6`;
+  await positives.fill(editedPositives);
+  await ranges.fill("USD month 9000 5000");
+  const refusedEdit = await feedbackOf(() => page.locator('[data-testid="track-save"]').click());
+  const keptAfterRefusal = { positives: await positives.inputValue(), ranges: await ranges.inputValue() };
+  await ranges.fill(savedRanges);
+  const savedEdit = await feedbackOf(() => page.locator('[data-testid="track-save"]').click());
+  await page.reload({ waitUntil: "networkidle" });
+  const persistedPositives = await positives.inputValue();
+  const gapsAfterSave = (await page.locator('[data-testid="track-evidence-gaps"]').textContent()) ?? "";
+  await page.goto(`${payBase}&track=${phpTrackCard?.id}`, { waitUntil: "networkidle" });
+  const recalculating = {
+    notice: await page.locator('[data-testid="track-recalculating"]').count(),
+    fits: await payFits(),
+  };
+  check(
+    "term-search E2E-002 principal primeiro; a trilha aceita salva a palavra nova, a recusa mantém o digitado e Vagas avisa o recálculo com as notas anteriores",
+    tracksBefore[0]?.primary === true
+      && /php/i.test(evidence.supported)
+      && /symfony/i.test(gapsAfterSave)
+      && refusedEdit.role === "alert"
+      && refusedEdit.text.includes(ptBR.searchFeedback.range_invalid)
+      && keptAfterRefusal.positives === editedPositives
+      && keptAfterRefusal.ranges === "USD month 9000 5000"
+      && savedEdit.role === "status"
+      && persistedPositives.includes("symfony 6")
+      && recalculating.notice === 1
+      && recalculating.fits["904000001"] === "85",
+    JSON.stringify({ tracksBefore, evidence, gapsAfterSave, refusedEdit, keptAfterRefusal, savedEdit, recalculating }),
+  );
+
+  await page.goto(`${BASE}/searches`, { waitUntil: "networkidle" });
+  const promoted = await feedbackOf(() =>
+    page.locator(`[data-testid="track-set-primary-${phpTrackCard?.id}"]`).click());
+  const promotedFirst = await eventually(
+    (id) => document.querySelector('[data-testid^="track-"][data-primary]')?.getAttribute("data-testid") === `track-${id}`,
+    phpTrackCard?.id,
+  );
+  await page.goto(payBase, { waitUntil: "networkidle" });
+  const onPromoted = await payFits();
+  await page.goto(`${BASE}/searches`, { waitUntil: "networkidle" });
+  await feedbackOf(() => page.locator(`[data-testid="track-set-primary-${originalPrimary?.id}"]`).click());
+  await page.goto(payBase, { waitUntil: "networkidle" });
+  const onOriginal = await payFits();
+  check(
+    "term-search E2E-004 promover a trilha aceita faz Vagas abrir nela, e devolver a principal restaura as notas",
+    promoted.role === "status"
+      && promotedFirst
+      && onPromoted["904000001"] === "85"
+      && onOriginal["904000001"] === "60",
+    JSON.stringify({ promoted, promotedFirst, onPromoted, onOriginal }),
+  );
+
+  await page.goto(`${BASE}/searches`, { waitUntil: "networkidle" });
+  const archivedTrack = await feedbackOf(() =>
+    page.locator(`[data-testid="track-archive-${phpTrackCard?.id}"]`).click());
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  const chipWhileArchived = await page.locator(`[data-testid="filter-track-${phpTrackCard?.id}"]`).count();
+  await page.goto(`${BASE}/searches`, { waitUntil: "networkidle" });
+  const restoredTrack = await feedbackOf(() =>
+    page.locator(`[data-testid="track-restore-${phpTrackCard?.id}"]`).click());
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  const chipAfterRestore = await page.locator(`[data-testid="filter-track-${phpTrackCard?.id}"]`).count();
+  check(
+    "term-search E2E-005 arquivar tira a trilha do seletor de Vagas e restaurar a devolve",
+    archivedTrack.role === "status"
+      && chipWhileArchived === 0
+      && restoredTrack.role === "status"
+      && chipAfterRestore === 1,
+    JSON.stringify({ archivedTrack, chipWhileArchived, restoredTrack, chipAfterRestore }),
+  );
+
+  await page.goto(`${BASE}/jobs/905000001`, { waitUntil: "networkidle" });
+  const detailFits = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid^="job-track-fit-"][data-computed]')].map((card) => ({
+      id: Number(card.getAttribute("data-testid").slice("job-track-fit-".length)),
+      computed: card.getAttribute("data-computed") === "true",
+      parts: card.querySelectorAll(".jho-bar span[title]").length,
+    })));
+  const primaryDetail = detailFits.find((fit) => fit.id === originalPrimary?.id);
+  const phpDetail = detailFits.find((fit) => fit.id === phpTrackCard?.id);
+  check(
+    "term-search E2E-010 vaga sem nota da trilha PHP mostra o fit da principal e o da PHP, cada um com a quebra",
+    primaryDetail?.computed === false
+      && phpDetail?.computed === true
+      && primaryDetail.parts > 0
+      && phpDetail.parts > 0,
+    JSON.stringify(detailFits),
+  );
+
+  const hostileTrackName = "<img src=x onerror=alert(1)>";
+  let trackDialog = false;
+  const onTrackDialog = async (dialog) => {
+    trackDialog = true;
+    await dialog.dismiss();
+  };
+  page.on("dialog", onTrackDialog);
+  await page.goto(`${BASE}/searches/tracks/new`, { waitUntil: "networkidle" });
+  await page.locator('[data-testid="track-name"]').fill(hostileTrackName);
+  await page.locator('[data-testid="track-titles"]').fill("Hostile Name Engineer");
+  await page.locator('[data-testid="track-positives"]').fill("hostile 5");
+  const hostileCreated = await feedbackOf(async () => {
+    await page.locator('[data-testid="track-create"]').click();
+    await settle(/\/searches$/);
+  });
+  const hostileTrack = (await trackCards()).find((card) => card.name === hostileTrackName);
+  const injectedImages = await page.locator('img[src="x"]').count();
+  page.off("dialog", onTrackDialog);
+  check(
+    "term-search E2E-018 nome de trilha hostil aparece como texto e não abre diálogo",
+    hostileCreated.role === "status" && Boolean(hostileTrack) && injectedImages === 0 && !trackDialog,
+    JSON.stringify({ hostileCreated, hostileTrack, injectedImages, trackDialog }),
+  );
+
+  const searchRoutes = [
+    "/searches",
+    "/searches/tracks/new",
+    `/searches/tracks/${phpTrackCard?.id}`,
+    `/jobs?track=all&by=${seededId}&pay=6000&cur=USD&per=month&fit=0`,
+    "/admin/captures",
+  ];
+  const searchOverflows = [];
+  for (const [width, height] of [[375, 812], [768, 1024], [1024, 768]]) {
+    await page.setViewportSize({ width, height });
+    for (const path of searchRoutes) {
+      await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      if (overflow > 1) searchOverflows.push(`${width}px ${path}: ${overflow}px`);
+    }
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  check(
+    "term-search E2E-013 Buscas, trilhas, Vagas com os controles novos e saúde das capturas cabem em 375, 768 e 1024 px",
+    searchOverflows.length === 0,
+    searchOverflows.slice(0, 4).join(" · "),
+  );
+
+  await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
+  const searchLeaks = await portugueseLeaks([
+    "/searches",
+    `/searches/tracks/${phpTrackCard?.id}`,
+    "/jobs",
+    "/admin/captures",
+  ]);
+  await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  check(
+    "term-search E2E-014 Buscas, editor de trilha, Vagas e saúde das capturas em inglês não vazam português",
+    searchLeaks.length === 0,
+    searchLeaks.slice(0, 8).join(" | "),
+  );
+
+  const capturesResponse = await page.goto(`${BASE}/admin/captures`, { waitUntil: "networkidle" });
+  const captureHealth = await page.evaluate(() => ({
+    cards: document.querySelectorAll('[data-testid^="capture-health-"][data-red]').length,
+    text: document.querySelector('[data-testid="route-admin-captures"]')?.innerText ?? "",
+  }));
+  await page.goto(`${BASE}/admin/users`, { waitUntil: "networkidle" });
+  await page
+    .locator("li")
+    .filter({ hasText: "e2e-alvo@local.test" })
+    .first()
+    .locator('[data-testid="impersonate-user"]')
+    .click();
+  await page.waitForSelector('[data-testid="stop-impersonating"]', { timeout: 15_000 });
+  const borrowedCaptures = await page.goto(`${BASE}/admin/captures`, { waitUntil: "domcontentloaded" });
+  check(
+    "term-search E2E-012 saúde das capturas mostra agregados por plataforma sem termo e recusa a sessão emprestada",
+    capturesResponse?.status() === 200
+      && captureHealth.cards > 0
+      && captureHealth.text.includes(ptBR.captures.dayQuota)
+      && captureHealth.text.includes(ptBR.captures.lastError)
+      && !/Laravel|techlead|E2E Seeded Stack/i.test(captureHealth.text)
+      && borrowedCaptures?.status() === 403,
+    JSON.stringify({ status: capturesResponse?.status(), cards: captureHealth.cards, borrowed: borrowedCaptures?.status() }),
+  );
+
+  await page.goto(`${BASE}/searches`, { waitUntil: "networkidle" });
+  const borrowedSave = await saveTermOnPage("E2E Borrowed");
+  const borrowedId = await termIdOf("E2E Borrowed");
+  const borrowedPlatforms = await page.locator(`[data-testid="term-platforms-${borrowedId}"] li`).allTextContents();
+  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  await page.click('[data-testid="stop-impersonating"]');
+  await page.waitForFunction(() => !document.querySelector('[data-testid="stop-impersonating"]'), { timeout: 15_000 });
+  check(
+    "term-search E2E-019 sessão emprestada salva o termo e deixa a busca para a varredura diária",
+    borrowedSave.role === "status"
+      && borrowedSave.text.includes(ptBR.searchFeedback.run_waiting_sweep)
+      && borrowedPlatforms.length > 0
+      && borrowedPlatforms.every((line) => line.includes(ptBR.captureState.waiting_sweep)),
+    JSON.stringify({ borrowedSave, borrowedPlatforms }),
+  );
+
+  const linkedCtx = await browser.newContext();
+  const linkedPage = await linkedCtx.newPage();
+  await linkedCtx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  await linkedPage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+  await linkedPage.fill('input[name="email"]', "e2e-recrutador-vinculado@local.test");
+  await linkedPage.fill('input[name="password"]', E2E_PASSWORD);
+  await linkedPage.locator('[data-testid="login-submit"]').click();
+  await linkedPage.waitForURL((url) => !url.pathname.startsWith("/login"));
+  const recruiterSearches = await linkedPage.goto(`${BASE}/searches`, { waitUntil: "domcontentloaded" });
+  await linkedPage.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  const recruiterTrackChips = await linkedPage.locator('[data-testid^="filter-track-"]').count();
+  await linkedPage.goto(`${BASE}/recruiter`, { waitUntil: "networkidle" });
+  const followedHref = await linkedPage.locator('[data-testid^="recruiter-candidate-"]').first().getAttribute("href");
+  await linkedPage.goto(`${BASE}${followedHref}`, { waitUntil: "networkidle" });
+  const followedText = await linkedPage.evaluate(() => document.body.innerText);
+  await linkedCtx.close();
+  check(
+    "term-search E2E-011 recrutador vinculado: Buscas proibida, Vagas sem seletor de trilha e funil sem trilha nem termo",
+    recruiterSearches?.status() === 403
+      && recruiterTrackChips === 0
+      && Boolean(followedHref)
+      && !/PHP E2E|Laravel|techlead|E2E Seeded Stack|E2E Borrowed/.test(followedText),
+    JSON.stringify({ status: recruiterSearches?.status(), recruiterTrackChips, followedHref }),
+  );
+
+  const expiredSearchCtx = await browser.newContext();
+  const expiredSearch = await expiredSearchCtx.newPage();
+  await expiredSearchCtx.addCookies([
+    { name: "jho_locale", value: "pt-BR", url: BASE },
+    { name: "jho_session", value: "expired-task05", url: BASE },
+  ]);
+  await expiredSearch.goto(`${BASE}/searches/tracks/new?term=${encodeURIComponent("Expired Probe")}`, {
+    waitUntil: "networkidle",
+  });
+  const expiredLanded = new URL(expiredSearch.url()).pathname;
+  await expiredSearch.fill('input[name="email"]', E2E_EMAIL);
+  await expiredSearch.fill('input[name="password"]', E2E_PASSWORD);
+  await expiredSearch.locator('[data-testid="login-submit"]').click();
+  await expiredSearch.waitForURL((url) => !url.pathname.startsWith("/login"));
+  await expiredSearch.goto(`${BASE}/searches`, { waitUntil: "networkidle" });
+  const afterExpired = await expiredSearch.evaluate(() => document.body.innerText);
+  await expiredSearchCtx.close();
+  check(
+    "term-search E2E-016 sessão vencida na sugestão de trilha volta ao login e, depois de entrar, nada foi gravado",
+    expiredLanded === "/login" && !afterExpired.includes("Expired Probe"),
+    JSON.stringify({ expiredLanded }),
+  );
+
+  /* ------------- "Não me interessa": arquivar, esconder e restaurar ------------- */
+  const dismissId = 905000021;
+  const dismissRow = `[data-testid="job-link-${dismissId}"]`;
+  const rowGone = (selector) => !document.querySelector(selector);
+  const rowShown = (selector) => Boolean(document.querySelector(selector));
+  await page.goto(`${BASE}/jobs?q=Quokkaverse`, { waitUntil: "networkidle" });
+  const listedBefore = await page.locator(dismissRow).count();
+  const dismissLabel = ((await page.locator(`[data-testid="job-dismiss-${dismissId}"]`).textContent()) ?? "").trim();
+  await page.locator(`[data-testid="job-dismiss-${dismissId}"]`).click();
+  const hiddenAfterClick = await eventually(rowGone, dismissRow);
+  await page.reload({ waitUntil: "networkidle" });
+  const hiddenAfterReload = (await page.locator(dismissRow).count()) === 0;
+  await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+  await page.locator('[data-testid="preset-archived"]').click();
+  await settle(/status=archived/);
+  const listedArchived = await eventually(rowShown, dismissRow);
+  await page.locator(`[data-testid="job-restore-${dismissId}"]`).click();
+  const leftArchived = await eventually(rowGone, dismissRow);
+  await page.goto(`${BASE}/jobs?q=Quokkaverse`, { waitUntil: "networkidle" });
+  const restored = (await page.locator(dismissRow).count()) === 1
+    && (await page.locator(`[data-testid="job-dismiss-${dismissId}"]`).count()) === 1;
+  check(
+    "não me interessa: some da lista, sobrevive à recarga, fica em Arquivadas e volta ao restaurar",
+    listedBefore === 1
+      && dismissLabel === ptBR.jobs.notInterested
+      && hiddenAfterClick
+      && hiddenAfterReload
+      && listedArchived
+      && leftArchived
+      && restored,
+    JSON.stringify({ listedBefore, dismissLabel, hiddenAfterClick, hiddenAfterReload, listedArchived, leftArchived, restored }),
+  );
+
+  // No detalhe: quem abriu a vaga na origem e viu "US only" decide ali mesmo.
+  await page.goto(`${BASE}/jobs/${dismissId}`, { waitUntil: "networkidle" });
+  await page.locator(`[data-testid="job-dismiss-${dismissId}"]`).click();
+  const detailRestorable = await eventually(rowShown, `[data-testid="job-restore-${dismissId}"]`);
+  const detailArchived = await eventually(
+    () => document.querySelector('[data-testid="track-status"]')?.value === "archived",
+  );
+  await page.locator(`[data-testid="job-restore-${dismissId}"]`).click();
+  const detailBack = await eventually(rowShown, `[data-testid="job-dismiss-${dismissId}"]`);
+  check(
+    "não me interessa no detalhe arquiva e oferece restaurar, e restaurar devolve a vaga ao funil",
+    detailRestorable && detailArchived && detailBack,
+    JSON.stringify({ detailRestorable, detailArchived, detailBack }),
+  );
 
   /* --------------------------------- Logout -------------------------------- */
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });

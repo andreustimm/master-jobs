@@ -107,6 +107,7 @@ describe("himalayas", () => {
     expect(jobs[0]!.seniorityRaw).toBe("Senior, Staff");
     // O 42 não é string e não pode virar "42" na lista de restrições.
     expect(jobs[0]!.locationRaw).toBe("Brazil, LATAM");
+    expect(jobs[0]!.descriptionText).toBe("Location restricted to: Brazil, LATAM only.");
     expect(jobs[1]!.seniorityRaw).toBe("Principal");
     expect(jobs[1]!.locationRaw).toBe("Worldwide");
     // Sem restrição declarada a vaga é remota irrestrita, não uma vaga sem lugar.

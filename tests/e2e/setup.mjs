@@ -12,7 +12,8 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { application, authEvent, authLoginToken, authUser, candidate, candidateDocument, job, jobScore, scoreTask, targetAccount } from "../../src/core/db/schema.ts";
+import { application, authEvent, authLoginToken, authUser, candidate, candidateDocument, fxRate, job, jobScore, savedTerm, scoreTask, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
+import { linkRecruiterToCandidate } from "../../src/contexts/auth/index.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
 import { hashToken } from "../../src/contexts/auth/infra/drizzle-store.ts";
 import { setPassword } from "../../src/contexts/auth/infra/password-login.ts";
@@ -27,7 +28,16 @@ import {
   upsertRawJob,
 } from "../../src/core/ingest/manual.ts";
 import { seedCatalog } from "../../src/contexts/skills/index.ts";
+import {
+  createTrack,
+  ensurePrimaryTrack,
+  listCandidateTracks,
+  saveTerm,
+  setMatchingProfile,
+  suggestTrack,
+} from "../../src/contexts/matching/index.ts";
 import { runMigrations } from "../../src/core/db/migrate.ts";
+import { loadProfile } from "../../src/core/profile/load.ts";
 import { scoreOne } from "../../src/core/scoring/apply.ts";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 
@@ -61,6 +71,8 @@ export const E2E_ROLES = {
   noCv: { email: "e2e-sem-cv@local.test", roles: ["candidate"] },
   // Existe para provar que senha certa em conta desabilitada não entra.
   disabled: { email: "e2e-desabilitada@local.test", roles: ["candidate"], disabled: true },
+  // Vinculado ao dono: lê o funil dele e nunca as trilhas nem os termos.
+  linkedRecruiter: { email: "e2e-recrutador-vinculado@local.test", roles: ["recruiter"] },
 };
 
 try {
@@ -131,6 +143,10 @@ try {
       companyName: "Task 04 Bulk Lab",
     })),
   ];
+  // Notas são por trilha (ADR-008): as fixtures entram na trilha principal do
+  // dono, que o profile.yaml define.
+  const primaryTrack = await ensurePrimaryTrack(candidateId);
+  if (!primaryTrack) throw new Error("E2E owner has no primary track");
   for (let offset = 0; offset < resultFixtures.length; offset += 100) {
     const batch = resultFixtures.slice(offset, offset + 100);
     await getDb().insert(job).values(batch.map((fixture) => ({
@@ -149,6 +165,7 @@ try {
     }))).onConflictDoNothing({ target: job.id });
     await getDb().insert(jobScore).values(batch.map((fixture) => ({
       candidateId,
+      trackId: primaryTrack.id,
       jobId: fixture.id,
       fit: 60,
       titleScore: 10,
@@ -166,8 +183,108 @@ try {
       blockers: [],
       scorerVersion: "e2e",
       profileHash: "e2e",
-    }))).onConflictDoNothing({ target: [jobScore.candidateId, jobScore.jobId] });
+    }))).onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
   }
+
+  // Busca por termo e trilhas (term-search-target-tracks, task_04): uma trilha
+  // aceita, cotações para converter salário e vagas com pagamento em várias
+  // moedas e períodos. Ids fixos, para os percursos lerem a mesma vaga sempre.
+  await getDb().insert(fxRate).values(
+    Object.entries({ BRL: 5, EUR: 0.9 }).map(([currency, rate]) => ({
+      date: "2026-09-18",
+      base: "USD",
+      currency,
+      rate,
+      provider: "manual",
+    })),
+  ).onConflictDoNothing();
+  let phpTrack = (await listCandidateTracks(candidateId)).find((track) => track.name === "PHP E2E");
+  if (!phpTrack) {
+    const created = await createTrack(candidateId, {
+      name: "PHP E2E",
+      target: suggestTrack({ term: "PHP", catalog: [], primary: primaryTrack.target }).target,
+    });
+    if (!created.ok) throw new Error(`E2E track: ${created.code}`);
+    phpTrack = created.track;
+    // As notas das fixtures são fixas; a repontuação que criar a trilha pede
+    // não pode rodar por cima delas nem aparecer como pendente na tela.
+    await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, candidateId));
+  }
+  const payFixtures = [
+    { id: 904000001, title: "Pay fixture USD year", compMax: 120000, compCurrency: "USD", compPeriod: "year", php: 85 },
+    { id: 904000002, title: "Pay fixture BRL month", compMax: 60000, compCurrency: "BRL", compPeriod: "month", php: 80 },
+    { id: 904000003, title: "Pay fixture USD hour", compMax: 80, compCurrency: "USD", compPeriod: "hour", php: 75 },
+    { id: 904000004, title: "Pay fixture USD low", compMax: 4000, compCurrency: "USD", compPeriod: "month" },
+    { id: 904000005, title: "Pay fixture undisclosed" },
+    { id: 904000006, title: "Pay fixture ARS", compMax: 900000, compCurrency: "ARS", compPeriod: "month" },
+  ];
+  await getDb().insert(job).values(payFixtures.map((fixture) => ({
+    id: fixture.id,
+    fingerprint: `e2e:${fixture.id}`,
+    contentHash: `e2e:${fixture.id}`,
+    sourceId: "ashby:e2e",
+    externalId: String(fixture.id),
+    companyName: "Pay Fixture Lab",
+    title: fixture.title,
+    descriptionText: "Pay normalization fixture for the Jobs screen.",
+    url: `https://jobs.example.com/${fixture.id}`,
+    compMax: fixture.compMax ?? null,
+    compCurrency: fixture.compCurrency ?? null,
+    compPeriod: fixture.compPeriod ?? null,
+    raw: { e2e: true },
+  }))).onConflictDoNothing({ target: job.id });
+  const fixtureScore = (jobId, trackId, fit) => ({
+    candidateId, trackId, jobId, fit,
+    titleScore: 10, keywordScore: 10, seniorityScore: 10, geoScore: 10, compScore: 4,
+    freshnessScore: 5, benefitScore: 5, penalty: 0, cluster: "other",
+    matchedKeywords: [], missingKeywords: [], reasons: [], blockers: [],
+    scorerVersion: "e2e", profileHash: "e2e",
+  });
+  await getDb().insert(jobScore).values([
+    ...payFixtures.map((fixture) => fixtureScore(fixture.id, primaryTrack.id, 60)),
+    ...payFixtures.filter((fixture) => fixture.php).map((fixture) => fixtureScore(fixture.id, phpTrack.id, fixture.php)),
+  ]).onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
+
+  // Tela Buscas (task_05): uma vaga que cita "Laravel" só na descrição e um
+  // termo salvo que já trouxe duas vagas que o dono ainda não viu.
+  const searchFixtures = [
+    {
+      id: 905000001,
+      title: "Backend Platform Engineer",
+      companyName: "Description Only Lab",
+      descriptionText: "Owns the billing services, written in Laravel on PostgreSQL.",
+    },
+    { id: 905000011, title: "Seeded term fixture one", companyName: "Seeded Term Lab", descriptionText: "Brought in by a saved term." },
+    { id: 905000012, title: "Seeded term fixture two", companyName: "Seeded Term Lab", descriptionText: "Brought in by a saved term." },
+    // "Não me interessa": sem candidatura, para o fluxo arquivar e restaurar.
+    { id: 905000021, title: "Platform Engineer", companyName: "Quokkaverse Labs", descriptionText: "Remote platform role for the dismiss flow." },
+  ];
+  await getDb().insert(job).values(searchFixtures.map((fixture) => ({
+    ...fixture,
+    fingerprint: `e2e:${fixture.id}`,
+    contentHash: `e2e:${fixture.id}`,
+    sourceId: "ashby:e2e",
+    externalId: String(fixture.id),
+    url: `https://jobs.example.com/${fixture.id}`,
+    raw: { e2e: true },
+  }))).onConflictDoNothing({ target: job.id });
+  await getDb().insert(jobScore).values(searchFixtures.map((fixture) => fixtureScore(fixture.id, primaryTrack.id, 60)))
+    .onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
+  const seededTerm = await saveTerm(
+    { candidateId },
+    { term: "E2E Seeded Stack", trackId: primaryTrack.id },
+    { now: new Date(), impersonated: false },
+  );
+  if (!seededTerm.ok && seededTerm.code !== "term_duplicate") throw new Error(`E2E term: ${seededTerm.code}`);
+  // "Novas desde a última visita" parte do zero a cada execução.
+  const [seededRow] = await getDb()
+    .update(savedTerm)
+    .set({ lastVisitAt: null })
+    .where(eq(savedTerm.id, seededTerm.termId))
+    .returning({ termKey: savedTerm.termKey });
+  await getDb().insert(termAttribution).values(
+    [905000011, 905000012].map((jobId) => ({ termKey: seededRow.termKey, jobId, platform: "remotive" })),
+  ).onConflictDoNothing();
 
   await getDb().insert(targetAccount).values({
     id: TASK04_FIXTURES.referralContactId,
@@ -271,6 +388,14 @@ try {
     }
   }
 
+  const [ownerUser] = await getDb().select({ id: authUser.id }).from(authUser).where(eq(authUser.email, EMAIL)).limit(1);
+  const [linkedRecruiter] = await getDb()
+    .select({ id: authUser.id })
+    .from(authUser)
+    .where(eq(authUser.email, E2E_ROLES.linkedRecruiter.email))
+    .limit(1);
+  await linkRecruiterToCandidate(linkedRecruiter.id, candidateId, ownerUser.id);
+
   const [noCvQueueCandidate] = await getDb()
     .select({ candidateId: authUser.candidateId })
     .from(authUser)
@@ -356,6 +481,9 @@ try {
           lastError: "RAW_E2E_QUEUE_ERROR_MUST_NOT_RENDER token=private",
         },
       });
+    // Salvar termo pede trilha principal, e a sessão emprestada (E2E-019)
+    // assume esta conta: ela recebe o perfil de matching do dono.
+    await setMatchingProfile(failedQueueCandidate.candidateId, await loadProfile(true));
   }
 
   const tokenFixtures = [
