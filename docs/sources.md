@@ -558,7 +558,7 @@ A capacidade é opcional no adapter: `termSearch = { budget, validatedOn, search
 |---|---|---|---|
 | `remotive` | `GET https://remotive.com/api/remote-jobs?search=<q>&limit=100` | 4/dia, 2/min, 1 chamada por captura | 2026-09-19 |
 | `remoteok` | `GET https://remoteok.com/api?tag=<termo-com-hífen>` | 1/min, 1 chamada por captura | 2026-09-19 |
-| `himalayas` | `GET https://himalayas.app/jobs/api/search?q=<q>&page=<n>` | 1/min, 20 por página, até 5 páginas | 2026-09-19 |
+| `himalayas` | `GET https://himalayas.app/jobs/api/search?q=<q>&page=<n>` | 20 por página, até 5 páginas; 429 esgota o dia | 2026-09-19 |
 
 - **`validatedOn`** é a data em que a integração passou por
   `jho sources probe <kind> --term <t>` contra a API real. Com `null`, a

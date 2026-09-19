@@ -6,7 +6,7 @@ persona: Andreus em triagem
 journey: J-switch-workspace-screen
 expected: Menu, links contextuais, filtros, paginação e redirects chegam ao destino com um único splash e sem repetir ações
 entry_points: /; /jobs; /compare; /pipeline; /referrals; /candidate; /admin/users
-qa_status: pass
+qa_status: untested
 bug_ids: BUG-20260826-responsive-header-artifact-skew
 fix_status: fixed
 retest_status: pass

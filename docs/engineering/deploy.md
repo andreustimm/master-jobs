@@ -254,8 +254,14 @@ Nesta versão a migração vem antes, pela CLI, e o merge logo depois:
    cadastrar vaga pela tela ou comparar uma vaga à mão. Faça os dois passos em
    sequência.
 3. Mescle `staging → main` imediatamente e espere o deploy da Vercel terminar.
-4. Pontue e religue: `pnpm jho jobs score --every-candidate`, depois
-   `vars.SUPABASE_CRAWL_ENABLED=true`.
+4. Pontue produção e religue a varredura. O CLI lê `DATABASE_URL` do `.env`
+   primeiro — sem apontá-la para produção, a nota iria para o banco local:
+
+   ```bash
+   DATABASE_URL="$DATABASE_MIGRATION_URL" pnpm jho jobs score --every-candidate
+   ```
+
+   Depois, `vars.SUPABASE_CRAWL_ENABLED=true`.
 
 **Sem rollback para 1.14.x.** Depois da 0006 o código antigo duplica linha de
 nota por trilha na leitura e falha na gravação, e a 0005 apaga notas sem trilha.
