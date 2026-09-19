@@ -37,9 +37,17 @@ Duas causas, independentes:
 - E2E: a varredura de larguras inclui `/searches` e `/jobs?track=all` e acusa
   elemento que passa da borda mesmo quando um cartão o corta; a semente deixa um
   termo com busca pedida agora, para o rótulo longo aparecer.
+- Skills (achado na revisão de todas as telas): evidência com link markdown
+  longo ia a 480px em 375. `grid-cols-1` no cartão e `wrap-anywhere` no
+  parágrafo.
 
 ## Evidence
 
 Medição com Playwright em 375 e 390px, logado no clone local, antes e depois:
 `term-N` e `track-evidence-N` terminavam em 388px; depois, nenhum elemento
 passa da borda e a menor fonte de campo é 16px em todas as telas autenticadas.
+
+Revisão de todas as telas, logado, 23 rotas (19 autenticadas, 4 públicas) em
+320×700, 375×812, 390×844, 412×915, 667×375 e 812×375: antes, 4 de 138
+combinações falhavam, todas em `/candidate/skills` (evidência a 482px); depois,
+138 de 138 sem rolagem horizontal e sem elemento além da borda.

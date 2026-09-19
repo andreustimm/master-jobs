@@ -104,6 +104,14 @@ describe("layout", () => {
     expect(skills).not.toContain("min-w-[180px]");
   });
 
+  it("wraps a long link inside the skill evidence instead of widening the card", () => {
+    // A evidência vem do CV em markdown, com URL de dezenas de caracteres sem
+    // espaço: o parágrafo ia a 480px numa tela de 375 e o cartão o cortava.
+    const skills = read("app/candidate/skills/page.tsx");
+    expect(skills).toContain('className="grid min-w-0 grid-cols-1 gap-2 bg-card px-4 py-3"');
+    expect(skills).toMatch(/className="min-w-0 border-l-2[^"]*wrap-anywhere"/);
+  });
+
   it("keeps version actions touchable on mobile and compact on desktop", () => {
     const versions = read("app/candidate/versions.tsx");
     expect(versions).toContain("inline-flex min-h-11");

@@ -19,6 +19,11 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   ao focar os selects de 15px e cortava a tela, inclusive em Vagas. A varredura
   de larguras do E2E cobre Buscas e acusa elemento cortado dentro de cartão
   (BUG-20260919-mobile-searches-overflow).
+- Celular: em Skills, a evidência de uma skill a auditar com link longo do CV
+  em markdown ia a 480px numa tela de 375. A grade do cartão ganha
+  `grid-cols-1` e o parágrafo quebra em qualquer ponto (`wrap-anywhere`).
+  Revisão logada de 23 telas em 6 tamanhos, retrato e paisagem: nenhuma rolagem
+  horizontal e nenhum elemento além da borda.
 
 ## [1.15.0] - 2026-09-19
 
