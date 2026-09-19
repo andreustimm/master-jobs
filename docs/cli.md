@@ -448,7 +448,7 @@ o corte final em `--limit` acontece por último.
 |---|---|---|
 | `--min-fit <n>` | `"45"` | minimum fit score |
 | `--cluster <name>` | — | filter by target cluster |
-| `--status <name>` | — | filter by pipeline status, or `'unfiled'` |
+| `--status <name>` | — | filter by pipeline status, `'unfiled'` or `'any'`; without it, archived jobs ("não me interessa") are hidden |
 | `--limit <n>` | `"30"` | maximum rows |
 | `--json` | — | machine-readable output |
 

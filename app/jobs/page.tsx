@@ -144,6 +144,7 @@ export default async function Jobs({
           trackNames: showTrack ? trackNames : undefined,
           pay: state.pay || state.sort === "comp" ? view.pay : undefined,
           empty,
+          triage: candidateId !== null,
         }}
       />
 

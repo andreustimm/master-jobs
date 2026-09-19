@@ -427,8 +427,9 @@ devem aplicar o escopo de autorização antes de agregar.
 
 `transitionApplication()` é a máquina de estados pura. Repetir o status atual
 é idempotente (não cria outro evento), estados terminais não reabrem por uma
-transição comum e `applied_at` é gravado somente na primeira entrada em
-`applied`. O repositório persiste a nova `application` e seu evento na mesma
+transição comum — a exceção é `archived` sem `applied_at`, que volta a
+`backlog` para desfazer um "não me interessa" — e `applied_at` é gravado
+somente na primeira entrada em `applied`. O repositório persiste a nova `application` e seu evento na mesma
 transação e usa o status anterior como token de concorrência otimista.
 
 ### Migração do ownership por candidato
@@ -487,12 +488,13 @@ valida a string contra essa lista **antes de tocar o banco**, e aborta com
 | `offer` | Proposta na mesa |
 | `rejected` | Eles disseram não (ou pararam de responder) |
 | `withdrawn` | **Você** disse não — desistiu do processo |
-| `archived` | Encerrado sem desfecho relevante; tira da vista sem apagar histórico |
+| `archived` | Encerrado sem desfecho relevante ou marcado "não me interessa"; some das listas de vagas por padrão sem apagar histórico. Sem `applied_at`, pode voltar a `backlog` |
 
 As transições permitidas ficam em
 `src/contexts/pursuit/domain/application.ts`. A função pura aceita a criação em
 qualquer etapa já observada, mas depois exige avanço legal; estados terminais
-recusam avanço. A auditoria da trajetória continua em `application_event`.
+recusam avanço, salvo a restauração de `archived` sem `applied_at` para
+`backlog`. A auditoria da trajetória continua em `application_event`.
 
 > **Invariante:** para adicionar ou renomear um status, edite
 > `APPLICATION_STATUSES` no domínio de Pursuit — é `as const`, não `enum`,

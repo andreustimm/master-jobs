@@ -23,6 +23,7 @@ import {
   applicationStatusOptions,
 } from "../../status.ts";
 import { TrackForm } from "./track-form";
+import { TriageButton } from "../../triage-button";
 
 export const dynamic = "force-dynamic";
 
@@ -73,9 +74,9 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
         {/* Two destinations: the bare URL shows the description, /apply opens
             the form. Sending someone to a form for a job they have not read is
             the wrong default. */}
-        {externalUrl && (
-          <>
-            <div className="mt-4 flex flex-wrap gap-2.5">
+        {(externalUrl || candidateId !== null) && (
+          <div className="mt-4 flex flex-wrap gap-2.5">
+            {externalUrl && (
               <a
                 href={job.url}
                 target="_blank"
@@ -84,15 +85,25 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
               >
                 Ver vaga na origem
               </a>
-              {externalApplyUrl && externalApplyUrl !== job.url && (
-                <a href={externalApplyUrl} target="_blank" rel="noopener" className={buttonVariants()}>
-                  Aplicar →
-                </a>
-              )}
-            </div>
-            <p className="mt-2 font-mono type-meta break-all text-muted-foreground">{job.url}</p>
-          </>
+            )}
+            {externalUrl && externalApplyUrl && externalApplyUrl !== job.url && (
+              <a href={externalApplyUrl} target="_blank" rel="noopener" className={buttonVariants()}>
+                Aplicar →
+              </a>
+            )}
+            {/* Quem abriu a vaga na origem e viu "US only" decide aqui mesmo. */}
+            {candidateId !== null && (
+              <TriageButton
+                jobId={job.id}
+                status={application?.status ?? null}
+                appliedAt={application?.appliedAt ?? null}
+                place="page"
+                t={t}
+              />
+            )}
+          </div>
         )}
+        {externalUrl && <p className="mt-2 font-mono type-meta break-all text-muted-foreground">{job.url}</p>}
       </header>
 
       {score && (
@@ -175,7 +186,11 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
           action={trackAction}
           jobId={job.id}
           currentStatus={application?.status ?? null}
-          options={applicationStatusOptions(t, locale, allowedTransitions(application?.status ?? null))}
+          options={applicationStatusOptions(
+            t,
+            locale,
+            allowedTransitions(application?.status ?? null, application?.appliedAt ?? null),
+          )}
           statusLabels={applicationStatusLabels(t)}
           labels={{
             moveTo: t("jobDetail.moveTo"),

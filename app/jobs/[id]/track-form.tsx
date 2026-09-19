@@ -48,6 +48,15 @@ export function TrackForm({
   // é encurtar a lista, não registrar que a vaga existe.
   const [status, setStatus] = useState<string>(currentStatus ?? "shortlisted");
   const [note, setNote] = useState("");
+  // O estágio pode mudar fora deste formulário — "não me interessa", outra aba.
+  // Sem acompanhar, o seletor ficava na escolha anterior e caía na primeira
+  // opção da lista nova: arquivada, a tela mostrava `backlog`, e Salvar
+  // desfazia o arquivamento. A nota digitada não é tocada.
+  const [seenStatus, setSeenStatus] = useState(currentStatus);
+  if (currentStatus !== seenStatus) {
+    setSeenStatus(currentStatus);
+    setStatus(currentStatus ?? "shortlisted");
+  }
   const selected = options.some((option) => option.value === status)
     ? status
     : options[0]?.value ?? status;

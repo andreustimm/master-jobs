@@ -154,6 +154,8 @@ export const PRESETS = [
   { key: "recent", query: "fit=45&fresh=1&unblocked=1" },
   { key: "withSalary", query: "fit=45&paid=1&sort=comp" },
   { key: "untriaged", query: "fit=55&status=unfiled" },
+  // Onde a vaga marcada "não me interessa" continua achável, e restaurável.
+  { key: "archived", query: "fit=0&status=archived" },
 ] as const;
 
 export function Presets({

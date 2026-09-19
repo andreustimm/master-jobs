@@ -13,6 +13,7 @@ import { isPublicJobUrl } from "../src/core/job-url.ts";
 import { formatMoney, money, parseCurrency, parsePeriod } from "../src/core/money.ts";
 import { ACTION_BUTTON, ACTION_GROUP, Fit, ScoreBar, StatusBadge } from "./ui";
 import { jobOrigin, ORIGIN_LABEL } from "../src/core/job-origin.ts";
+import { TriageButton } from "./triage-button";
 
 type Row = Awaited<ReturnType<typeof listBoard>>[number];
 
@@ -32,6 +33,8 @@ export type ListContext = {
   pay?: { currency: string; period: "month" | "year" };
   /** Replaces the generic empty state (a term, a saved term). */
   empty?: React.ReactNode;
+  /** The viewer is the candidate: each row offers "não me interessa" / "restaurar". */
+  triage?: boolean;
 };
 
 export function JobList({
@@ -168,6 +171,21 @@ export function JobList({
                 <p className="mt-2 text-xs text-destructive">
                   ⚠ {blockers.map((blocker) => renderScoreMessage(blocker, t)).join("; ")}
                 </p>
+              )}
+              {/* Fora do grupo de ações, que exige três botões de largura
+                  igual: "não me interessa" não cabe num terço da tela de 320px.
+                  Aqui fica ao lado do bloqueio que costuma motivar o clique. */}
+              {context.triage && (
+                <div className="mt-2 flex">
+                  <TriageButton
+                    jobId={r.jobId}
+                    status={r.status}
+                    appliedAt={r.appliedAt}
+                    place="row"
+                    t={t}
+                    className={cn(ACTION_BUTTON, "text-muted-foreground")}
+                  />
+                </div>
               )}
             </div>
 

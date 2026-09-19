@@ -6,7 +6,7 @@ persona: Andreus em triagem noturna
 journey: J-preserve-application-decision
 expected: A nota escrita com o estágio inalterado é gravada como evento, e a tela não anuncia sucesso sobre uma gravação que não aconteceu
 entry_points: /jobs/<id>; jho track <id> <status> --notes
-qa_status: pass
+qa_status: untested
 bug_ids: BUG-20260917-transition-note-never-readable
 fix_status: fixed
 retest_status: verified
@@ -17,7 +17,7 @@ overlaps: PIPE-save-resume-decision
 ---
 
 Nasceu de uma revisão independente do diff, não de uma sessão: de um estado
-terminal (`rejected`, `withdrawn`, `archived`) a única opção oferecida é o
+terminal (`rejected`, `withdrawn`, ou `archived` depois de aplicar) a única opção oferecida é o
 próprio estágio atual, então salvar uma nota cai SEMPRE no caminho de no-op —
 onde a nota era descartada enquanto a tela anunciava sucesso. Antes de a lista
 ser restringida esse caminho era escapável; depois, virou o único.

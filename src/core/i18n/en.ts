@@ -128,6 +128,10 @@ export const en: Dictionary = {
     offerSearchLead: "Saving the term searches the registered platforms for new jobs with it, every day.",
     emptyTerm: "No job in the corpus mentions “{term}”.",
     broughtByEmpty: "The term “{term}” has not brought any jobs yet. Last search: {state}.",
+    notInterested: "not interested",
+    notInterestedHint: "Takes the job off your lists. It stays under “Archived”, and you can restore it while you have not applied.",
+    restore: "restore",
+    restoreHint: "Puts the job back on your lists, at the start of the pipeline.",
   },
   searches: {
     title: "Searches",
@@ -440,6 +444,8 @@ export const en: Dictionary = {
     withSalaryHint: "compensation disclosed, highest first",
     untriaged: "Untriaged",
     untriagedHint: "not in the pipeline yet",
+    archived: "Archived",
+    archivedHint: "jobs you took off your lists",
   },
   grid: {
     perPage: "per page",
@@ -788,6 +794,8 @@ export const en: Dictionary = {
     moveTo: "move to",
     notePlaceholder: "note (optional)",
     saveStatus: "Save",
+    notInterested: "Not interested",
+    restore: "Restore",
     transitionRejected:
       "The funnel does not go from {from} to {to}. Your note is still here; pick a reachable stage.",
     transitionConflict:

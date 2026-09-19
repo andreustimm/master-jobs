@@ -63,13 +63,25 @@ const LEGAL_TRANSITIONS: Readonly<Record<ApplicationStatus, readonly Application
   offer: ["withdrawn", "archived"],
   rejected: [],
   withdrawn: [],
-  archived: [],
+  archived: ["backlog"],
 };
+
+/**
+ * "Não me interessa" arquiva sem aplicar, e um clique errado não pode ser
+ * definitivo: `archived → backlog` devolve a vaga às listas. Só para quem nunca
+ * aplicou — a candidatura enviada e depois arquivada é história, e voltar com
+ * ela para o começo do funil apagaria a ordem dos fatos.
+ */
+function isLegal(current: ApplicationState, next: ApplicationStatus): boolean {
+  if (!LEGAL_TRANSITIONS[current.status]?.includes(next)) return false;
+  return !(current.status === "archived" && current.appliedAt !== null);
+}
 
 /**
  * A first observation may start at any known stage: the user can register an
  * application that already exists outside this system. Once persisted, every
- * subsequent move follows the explicit funnel and terminal states stay final.
+ * subsequent move follows the explicit funnel and terminal states stay final —
+ * except an archive that never applied, which can be restored (`isLegal`).
  */
 export function transitionApplication(
   current: ApplicationState | null,
@@ -82,7 +94,7 @@ export function transitionApplication(
     return { ok: true, changed: false, state: current };
   }
 
-  if (current && !LEGAL_TRANSITIONS[current.status].includes(next)) {
+  if (current && !isLegal(current, next)) {
     return {
       ok: false,
       error: { code: "illegal_transition", from: current.status, to: next },
@@ -116,10 +128,12 @@ export function transitionApplication(
  * vez, e não uma segunda cópia dela que envelhece sozinha.
  *
  * Sem candidatura, tudo é alcançável: a primeira observação pode registrar uma
- * candidatura que já existe fora deste sistema.
+ * candidatura que já existe fora deste sistema. `appliedAt` decide se um
+ * arquivamento pode ser desfeito, então vem junto com o status.
  */
 export function allowedTransitions(
   current: ApplicationStatus | null,
+  appliedAt: string | null = null,
 ): readonly ApplicationStatus[] {
   if (!current) return APPLICATION_STATUSES;
   // Status gravado fora da lista não existe em teoria — o tipo diz isso — e
@@ -129,7 +143,8 @@ export function allowedTransitions(
   // por uma página quebrada. O resto da interface já degrada assim.
   const legal = LEGAL_TRANSITIONS[current];
   if (!legal) return [current];
-  const reachable = new Set<ApplicationStatus>([current, ...legal]);
+  const state = { status: current, appliedAt };
+  const reachable = new Set<ApplicationStatus>([current, ...legal.filter((next) => isLegal(state, next))]);
   return APPLICATION_STATUSES.filter((status) => reachable.has(status));
 }
 
