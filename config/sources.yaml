@@ -115,6 +115,127 @@ sources:
       Fio mensal escrito pelas próprias empresas, empresa sempre nomeada. 235
       vagas no fio de setembro de 2026. O handle não é lido: é sempre o fio do mês.
 
+  # --- Lever: empresas com vaga remota da stack aberta ao Brasil ------------
+  # Descobertas em 2026-09-19 por busca web e pelas listas públicas de
+  # empresas remotas, e confirmadas uma a uma com chamada real a
+  # api.lever.co/v0/postings/<handle>. Ficaram de fora: Bluelight Consulting
+  # (1.321 postagens repetindo 10 cargos, uma por cidade — a cidade entra na
+  # identidade da vaga, então viravam 1.321 vagas; ela já chega pela
+  # Himalayas e pelo RemoteOK) e três com elegibilidade incerta para o Brasil
+  # (Canary Technologies, Mutt Data, CSC Generation).
+  - kind: lever
+    handle: oowlish
+    label: Oowlish Technology
+    rationale: "Lever — 5 remotas relevantes em 2026-09-19; Brasil/LATAM (SP, RJ, BSB listados); ex.: Senior AI Solutions Engineer (Python & AWS Bedrock)"
+  - kind: lever
+    handle: ciandt
+    label: CI&T
+    rationale: "Lever — 38 remotas relevantes em 2026-09-19; Brasil (regime não declarado no anúncio); ex.: Tech Lead AI Engineer | Agentic SDLC, Brazil"
+  - kind: lever
+    handle: britecore
+    label: BriteCore
+    rationale: "Lever — 3 remotas relevantes em 2026-09-19; Brasil ou Argentina, Independent Contractor; ex.: Senior Forward Deployed Engineer"
+  - kind: lever
+    handle: Ubiminds
+    label: Ubiminds
+    rationale: "Lever — 1 remota relevante em 2026-09-19; Brasil/LATAM (EOR para clientes EUA/Canadá); ex.: Senior AI Software Architect (553)"
+  - kind: lever
+    handle: distru
+    label: Distru
+    rationale: "Lever — 1 remota relevante em 2026-09-19; mundial (Remote, Worldwide); ex.: AI Product Engineer (multi-agente, React/TS/Node/LangGraph)"
+  - kind: lever
+    handle: tryjeeves
+    label: Jeeves
+    rationale: "Lever — 2 remotas relevantes em 2026-09-19; Brasil (vaga por país); ex.: Senior AI Engineer (Brazil)"
+  - kind: lever
+    handle: RyzLabs
+    label: RYZ Labs
+    rationale: "Lever — 1 remota relevante em 2026-09-19; LATAM ('Must be located in LATAM'), contrato; ex.: Principal AI Engineer"
+  - kind: lever
+    handle: terrific-innovation
+    label: Terrific
+    rationale: "Lever — 1 remota relevante em 2026-09-19; LATAM com São Paulo listado, contrato; ex.: Principal Engineer (LATAM)"
+  - kind: lever
+    handle: futureof-life
+    label: Future of Life Institute (CARMA)
+    rationale: "Lever — 2 remotas relevantes em 2026-09-19; mundial (Anywhere, Open Globally), contractor fora dos EUA; ex.: AI Safety Argumentation Platform Research Engineer"
+  - kind: lever
+    handle: yuno
+    label: Yuno
+    rationale: "Lever — 2 remotas relevantes em 2026-09-19; Brasil entre os países listados; ex.: Senior AI Engineer"
+  - kind: lever
+    handle: vrchat
+    label: VRChat
+    rationale: "Lever — 2 remotas relevantes em 2026-09-19; mundial (Anywhere, 'work from anywhere'); ex.: Senior / Staff Backend Engineer (API) – Economy"
+  - kind: lever
+    handle: JetBridge
+    label: JetBridge
+    rationale: "Lever — 1 remota relevante em 2026-09-19; LATAM; ex.: Senior Fullstack Engineer (TypeScript)"
+  - kind: lever
+    handle: luxurypresence
+    label: Luxury Presence
+    rationale: "Lever — 1 remota relevante em 2026-09-19; LATAM; ex.: Product Engineer, Internal Tools - LATAM (Remote)"
+  - kind: lever
+    handle: Anovium
+    label: Anovium
+    rationale: "Lever — 3 remotas relevantes em 2026-09-19; mundial declarado (REMOTE - GLOBAL), confirmar; ex.: Senior Full Stack Python/FastApi/React Engineer [REMOTE]"
+  - kind: lever
+    handle: coderio
+    label: Coderio
+    rationale: "Lever — 2 remotas relevantes em 2026-09-19; Argentina/Uruguai/Brasil, contrato; ex.: Senior Machine Learning Engineer"
+  - kind: lever
+    handle: TalentusGlobal
+    label: Talentus Global
+    rationale: "Lever — 1 remota relevante em 2026-09-19; LATAM com Brasil listado; ex.: Generative AI Engineer (LATAM candidates only)"
+  - kind: lever
+    handle: airtm
+    label: Airtm
+    rationale: "Lever — 1 remota relevante em 2026-09-19; LATAM; ex.: Senior Software Engineer (Full-stack Node + React)"
+  - kind: lever
+    handle: Flex
+    label: Flex
+    rationale: "Lever — 2 remotas relevantes em 2026-09-19; Brasil (Remote / Brazil); ex.: Senior Software Engineer, Backend"
+  - kind: lever
+    handle: remedyproductstudio
+    label: Remedy Product Studio
+    rationale: "Lever — 2 remotas relevantes em 2026-09-19; Brasil listado; ex.: Backend Engineer (Python)"
+  - kind: lever
+    handle: marketer-hire
+    label: MarketerHire
+    rationale: "Lever — 1 remota relevante em 2026-09-19; LATAM (Remote - South America), contrato; ex.: Internal Tools Developer (TypeScript)"
+  - kind: lever
+    handle: bluecoding
+    label: Blue Coding
+    rationale: "Lever — 2 remotas relevantes em 2026-09-19; LATAM; ex.: Senior Front-end Developer (A)"
+  - kind: lever
+    handle: metabase
+    label: Metabase
+    rationale: "Lever — 2 remotas relevantes em 2026-09-19; mundial (Global Remote; backend em Clojure); ex.: Software Engineer (Frontend)"
+  - kind: lever
+    handle: epoch-ai
+    label: Epoch AI
+    rationale: "Lever — 1 remota relevante em 2026-09-19; mundial ('able to hire in many countries'); ex.: Software Engineer, Benchmarking"
+  - kind: lever
+    handle: brafton
+    label: Brafton
+    rationale: "Lever — 1 remota relevante em 2026-09-19; Brasil, Contractor Full-Time; ex.: Remote Full Stack Developer (Frontend-Focused) - Brazil"
+  - kind: lever
+    handle: idt
+    label: IDT
+    rationale: "Lever — 1 remota relevante em 2026-09-19; LATAM com Brasília listada; ex.: Data & Machine Learning Engineer"
+  - kind: lever
+    handle: dlocal
+    label: dLocal
+    rationale: "Lever — 1 remota relevante em 2026-09-19; Brasil listado (demais vagas híbridas em SP); ex.: Head of Platform Engineering"
+  - kind: lever
+    handle: zerion
+    label: Zerion
+    rationale: "Lever — 1 remota relevante em 2026-09-19; mundial com fuso próximo da Europa (Go + Python); ex.: Senior Backend Engineer"
+  - kind: lever
+    handle: megaport
+    label: Megaport (Latitude.sh)
+    rationale: "Lever — 1 remota relevante em 2026-09-19; Brasil (Ruby/Go com Python); ex.: Backend Software Engineer"
+
   # --- Careers pages: named employer, direct from the company ---------------
   # These exist because 73,6% of the corpus comes from one aggregator that
   # hides the employer by design, which breaks referral matching, cross-source

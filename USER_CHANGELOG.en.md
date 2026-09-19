@@ -56,6 +56,9 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   Hacker News' monthly "Who is hiring?" thread, written by the companies
   themselves. The terms saved in Searches look there too.
 
+- Jobs straight from 28 companies that post on Lever and hire remotely from
+  Brazil, such as CI&T, Oowlish, BriteCore, Ubiminds and Yuno.
+
 ### Improved
 
 - Groundwork for searching more than one kind of job, each with its own
