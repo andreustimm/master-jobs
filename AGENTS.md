@@ -166,6 +166,26 @@ dashboard Next.js em `localhost:3000`.
 > capaz de esconder uma vaga boa por engano. `alive` reabre: um 404 transitório
 > não pode sumir com a vaga para sempre.
 
+> **Guarda de configuração recusa quem pede MENOS, nunca quem pede o mesmo ou
+> mais.** A validação da URL do banco recusava qualquer `sslmode`, e a
+> integração do Supabase com a Vercel cadastra `POSTGRES_URL` **com**
+> `sslmode=require`: o corte de produção da 1.13.1 subiu e devolveu 500 em toda
+> página que toca o banco, por 28 minutos. A guarda existe para impedir
+> `sslmode=disable` — quem afrouxa. `require` pede exatamente o que o cliente já
+> impõe, e recusá-lo só impedia o provedor de configurar o próprio serviço.
+> A regra geral: valide contra o que a política **perde**, não contra a
+> presença do parâmetro. E use lista de permissão, para que valor desconhecido
+> recuse — afrouxamento inventado depois não passa por omissão.
+>
+> **Variável de provedor não é legível: teste com o valor que ele cadastra.**
+> `POSTGRES_URL`, `POSTGRES_PASSWORD` e `DATABASE_CA_CERT` estão marcadas
+> **Sensitive** na Vercel, e Sensitive é *write-only* — não volta pela API, pelo
+> painel, nem pelo `vercel env pull`, que devolve `[SENSITIVE]`. Ninguém, nem o
+> dono da conta, confere aquele valor antes de mesclar. Então a única defesa
+> possível é o teste usar a forma REAL que o provedor cadastra, query string
+> inclusive. A suíte inteira montava URL limpa aqui dentro, e por isso a única
+> combinação capaz de quebrar era exatamente a que nunca era exercitada.
+
 > **9. Texto de interface vem do dicionário, nunca do JSX.**
 > Isto inclui **rótulo dentro de constante**: `COMPONENTS` em `app/ui.tsx`,
 > `FIELD_LABEL` no modal, `CATEGORY_LABEL` nas skills e `THEMES[].description`
@@ -696,10 +716,16 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 Pronto: sourcing (10 adapters), scoring com moeda, funil, e-mail, referrals,
 verificação de links, dashboard Next.js, export CSV e markdown.
 
-O dashboard local e o preparo de deploy existem; o corte de produção para
-Supabase, OAuth do Gmail, geração de CV/cover letter, publicação no LinkedIn e
-submissão autônoma ainda não estão concluídos. Ver `docs/roadmap.md` — e
-**não descreva como pronto o que não está**.
+**O corte de produção para o Supabase foi feito em 2026-09-19**, na v1.13.1:
+`jobs.mastertimm.com.br` serve do PostgreSQL do Supabase, com o schema
+`production`, quatro migrations aplicadas e o acervo preservado. O runtime
+ainda conecta pela `POSTGRES_URL`, que é o **superusuário** — cadastrar
+`DATABASE_URL` com a role restrita `master_jobs_app` segue pendente, e até lá a
+separação de privilégio que a migration `0001` desenhou não está em vigor.
+
+OAuth do Gmail, geração de CV/cover letter, publicação no LinkedIn e submissão
+autônoma continuam não concluídos. Ver `docs/roadmap.md` — e **não descreva
+como pronto o que não está**.
 
 ---
 
