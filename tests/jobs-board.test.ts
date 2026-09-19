@@ -306,6 +306,12 @@ describe("minimum pay and pay sort (ADR-013)", () => {
       { compMax: 150_000, per: "year" },
       { compMin: 90_000, compMax: null, per: "year" },
       { compMax: 60_000, per: "annual" },
+      // Spellings only parsePeriod's fallback reads: whole word inside, `annum`.
+      { compMax: 45, per: "USD/hour" },
+      { compMax: 2000, per: "1 WEEK" },
+      { compMax: 80_000, per: "per annum" },
+      { compMax: 70_000, per: "salary (annual)" },
+      { compMax: 5000, per: "fixed-price" },
     ];
     const seeded = [];
     for (const [n, entry] of cases.entries()) {

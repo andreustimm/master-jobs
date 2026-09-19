@@ -419,6 +419,10 @@ export async function trackScoringProfiles(candidateId: number): Promise<TrackSc
     .filter((track) => track.status === "active" && track.target)
     .map((track) => {
       const profile = effectiveProfile(person.profile, track.target!);
-      return { track, profile, hash: profileHash(profile) };
+      // O papel entra no hash: trocar a principal muda o que a trilha pontua (a
+      // aceita só o relevante), e sem isso as linhas da antiga principal
+      // continuavam "frescas" e o portão de relevância nunca era reaplicado.
+      const hash = profileHash(profile);
+      return { track, profile, hash: track.isPrimary ? hash : `${hash}:accepted` };
     });
 }

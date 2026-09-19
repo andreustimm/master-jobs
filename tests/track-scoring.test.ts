@@ -6,6 +6,7 @@ import {
   effectiveProfile,
   isRelevant,
   setMatchingProfile,
+  setPrimaryTrack,
   suggestTrack,
   targetOf,
   trackScoringProfiles,
@@ -264,6 +265,29 @@ describe("per-track persistence", () => {
     expect((await rowsOf(id, php.id)).map((r) => r.jobId)).toEqual([symfonyJob]);
     const primaryAfter = await rowsOf(id, primaryId);
     expect(primaryAfter.map((r) => r.hash).sort()).toEqual(primaryBefore.map((r) => r.hash).sort());
+  });
+
+  it("a primary swap re-applies the relevance gate to the demoted track on the next incremental run", async () => {
+    const { id, primary } = await owner();
+    const php = await track(id, "Dev PHP", phpTarget(primary));
+    const jobs = [
+      { title: "Laravel Developer", description: null },
+      { title: "Platform Engineer", description: "Legacy PHP monolith." },
+      { title: "Florist", description: "Arranges flowers for weddings." },
+      { title: "Staff AI Engineer", description: "LLM platform in Python and TypeScript." },
+    ];
+    const ids = await seedJobs(jobs);
+    await scoreAll(id);
+    const oldPrimaryId = await primaryIdOf(id);
+    expect(await rowsOf(id, oldPrimaryId)).toHaveLength(jobs.length);
+
+    expect((await setPrimaryTrack(id, php.id)).ok).toBe(true);
+    await scoreAll(id);
+
+    const expected = ids.filter((_, n) => isRelevant(primary, jobs[n]!)).sort();
+    expect(expected.length).toBeLessThan(jobs.length);
+    expect((await rowsOf(id, oldPrimaryId)).map((r) => r.jobId).sort()).toEqual(expected);
+    expect(await rowsOf(id, php.id)).toHaveLength(jobs.length);
   });
 
   it("IT-025 a pending primary writes no score through any path", async () => {

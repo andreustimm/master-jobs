@@ -211,19 +211,21 @@ export function formatMoney(m: Money, locale = "en-US"): string {
 /**
  * The per-year factor of a period, as a SQL `CASE` over a column expression.
  *
- * Built from `PERIODS_PER_YEAR` and the same aliases `parsePeriod` reads, so the
- * Jobs screen's pay filter and sort can never disagree with the amount shown
- * beside each job. `project` and anything unrecognised give NULL: "not
- * comparable", never a guess. Every literal comes from the tables above; the
- * expression is the only input, and it is a column name chosen by the caller.
+ * Mirrors `parsePeriod` step by step — exact alias, then the alias as a whole
+ * word in `PERIOD_ALIASES` order, then `annum` — so the Jobs screen's pay filter
+ * and sort can never disagree with the amount shown beside each job (`USD/hour`
+ * and `1 WEEK` reach only the fallback). `project` and anything unrecognised
+ * give NULL: "not comparable", never a guess. Every literal comes from the
+ * tables above; the expression is the only input, and it is a column name
+ * chosen by the caller.
  */
 export function annualFactorSql(period = "comp_period"): string {
   const key = `regexp_replace(regexp_replace(lower(trim(${period})), '[_-]+', ' ', 'g'), '\\s+', ' ', 'g')`;
-  const branches = Object.entries(PERIOD_ALIASES)
-    .filter(([, value]) => value !== "project")
-    .map(([alias, value]) => `when '${alias}' then ${PERIODS_PER_YEAR[value as Exclude<Period, "project">]}`)
-    .join(" ");
-  return `(case ${key} ${branches} else null end)`;
+  const factor = (value: Period) => (value === "project" ? "null" : String(PERIODS_PER_YEAR[value]));
+  const aliases = Object.entries(PERIOD_ALIASES);
+  const exact = aliases.map(([alias, value]) => `when ${key} = '${alias}' then ${factor(value)}`);
+  const word = aliases.map(([alias, value]) => `when ${key} ~ '(^|[^a-z])${alias}([^a-z]|$)' then ${factor(value)}`);
+  return `(case ${[...exact, ...word].join(" ")} when ${key} ~ 'annum' then 1 else null end)`;
 }
 
 export type NormalizedPay =

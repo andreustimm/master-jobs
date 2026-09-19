@@ -8,9 +8,10 @@ describe("pay normalization (ADR-013)", () => {
   it("UT-013 the SQL factor comes from the same table as TypeScript", () => {
     const sql = annualFactorSql("p");
     for (const [period, factor] of [["hour", 2080], ["day", 260], ["week", 52], ["month", 12], ["year", 1]] as const) {
-      expect(sql).toContain(`when '${period}' then ${factor}`);
+      expect(sql).toContain(`= '${period}' then ${factor}`);
     }
-    expect(sql).not.toMatch(/'project' then/);
+    // `project` answers NULL, in the exact and in the whole-word branch alike.
+    expect(sql).toContain(`= 'project' then null`);
     expect(sql).toMatch(/else null end\)$/);
   });
 
