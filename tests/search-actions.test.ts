@@ -31,6 +31,8 @@ vi.mock("../app/auth", () => ({
 }));
 vi.mock("next/server", () => ({ after: (callback: () => Promise<void> | void) => state.after.push(callback) }));
 vi.mock("next/cache", () => ({ revalidatePath: () => undefined }));
+vi.mock("next/navigation", () => ({ redirect: (to: string) => { throw new Error(`NEXT_REDIRECT;${to}`); } }));
+vi.mock("../app/mutation-feedback-server", () => ({ setMutationFeedbackCookie: async () => undefined }));
 vi.mock("../src/contexts/sourcing/index.ts", async (importOriginal) => {
   const original = await importOriginal<typeof import("../src/contexts/sourcing/index.ts")>();
   return {

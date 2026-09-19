@@ -164,7 +164,10 @@ function UserRow({
           </div>
 
           {linked.length > 0 && (
-            <p className="type-meta flex flex-wrap items-center gap-x-2 text-muted-foreground">
+            // `div`, não `p`: cada vínculo carrega um `form`, e o parser HTML
+            // fecha o `p` antes dele — o servidor e o React montavam árvores
+            // diferentes e a hidratação falhava.
+            <div className="type-meta flex flex-wrap items-center gap-x-2 text-muted-foreground">
               <span>{t("admin.linked")}:</span>
               {linked.map((link) => (
                 <span key={link.id} className="inline-flex items-center gap-1">
@@ -185,7 +188,7 @@ function UserRow({
                   </MutationFeedbackForm>
                 </span>
               ))}
-            </p>
+            </div>
           )}
 
           <div className="flex flex-wrap items-center gap-3">

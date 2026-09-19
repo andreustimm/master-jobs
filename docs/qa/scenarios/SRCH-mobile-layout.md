@@ -1,0 +1,20 @@
+---
+id: SRCH-mobile-layout
+area: SRCH
+title: Usar Buscas e o editor de trilha no celular
+persona: Andreus no celular
+journey: J-save-term-search
+expected: Buscas, nova trilha, editor de trilha e saúde das capturas não rolam na horizontal em 375px e os controles são tocáveis
+entry_points: /searches; /searches/tracks/new; /searches/tracks/<id>; /admin/captures
+qa_status: untested
+bug_ids:
+fix_status:
+retest_status:
+fix_commits:
+evidence:
+last_report:
+overlaps: NAV-full-width-shell
+---
+
+Salvar um termo e editar uma faixa de pagamento com toque, em retrato e
+paisagem. Os estados por plataforma quebram linha em vez de estourar.

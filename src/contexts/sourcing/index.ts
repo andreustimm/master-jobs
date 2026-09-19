@@ -11,6 +11,8 @@ import { IngestionBlockedError } from "../../core/ingest/environment.ts";
 import { guardIngestion } from "../../core/ingest/guard.ts";
 import { loadSources } from "../../core/sources/config.ts";
 import { ADAPTERS } from "../../core/sources/registry.ts";
+import type { FetchableSourceKind } from "../../core/sources/types.ts";
+import { validatedPlatforms } from "./domain/capture.ts";
 import {
   captureHealthReport,
   captureStatus,
@@ -72,6 +74,11 @@ const deps: CaptureDeps = {
   termSource: ensureTermSource,
   attribute: recordAttribution,
 };
+
+/** As plataformas cuja busca por termo passou pelo probe, em ordem estável. */
+export function termSearchPlatforms(): FetchableSourceKind[] {
+  return validatedPlatforms(deps.adapters).sort();
+}
 
 /** O livro de cota compartilhado: a sincronização regular também reserva aqui. */
 export const platformQuota = drizzleQuota;

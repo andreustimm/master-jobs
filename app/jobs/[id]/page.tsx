@@ -12,6 +12,7 @@ import {
 import { scoreMessages } from "../../../src/contexts/matching/index.ts";
 import { renderScoreMessage } from "../../../src/core/i18n/index.ts";
 import { isPublicJobUrl } from "../../../src/core/job-url.ts";
+import { trackFitsForJob } from "../../../src/core/scoring/apply.ts";
 import { trackAction } from "../../actions";
 import { Fit, Legend, ScoreBar, StatusBadge } from "../../ui";
 import { candidateScope, requirePage } from "../../auth";
@@ -38,6 +39,9 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   // Só quem tem candidatura tem histórico, e a query já nega fora do escopo:
   // pedir aqui sem candidato devolveria vazio, mas nem a consulta é feita.
   const timeline = application ? await applicationTimeline(candidateId, job.id) : [];
+  // Nota em cada trilha ativa; a que não tem linha é calculada agora e não é
+  // gravada (fora do portão de relevância, ou trilha recém-criada).
+  const trackFits = candidateId !== null ? await trackFitsForJob(candidateId, job.id) : null;
   const blockers = scoreMessages(score?.blockers);
   const matched = (score?.matchedKeywords as string[]) ?? [];
   const missing = (score?.missingKeywords as string[]) ?? [];
@@ -135,6 +139,32 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
             )}
           </CardContent>
         </Card>
+      )}
+
+      {trackFits && trackFits.length > 1 && (
+        <section className="mb-7" data-testid="job-track-fits">
+          <h2 className="type-display-xs mb-1">{t("jobDetail.trackFits")}</h2>
+          <p className="mb-3 type-caption-md text-muted-foreground">{t("jobDetail.trackFitsLead")}</p>
+          <div className="grid gap-3 md:grid-cols-2">
+            {trackFits.map((fit) => (
+              <Card key={fit.trackId} data-testid={`job-track-fit-${fit.trackId}`} data-computed={fit.computed ? "true" : "false"}>
+                <CardContent className="grid gap-3 pt-0">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Fit value={fit.fit} />
+                    <span className="type-body-emphasis break-words" data-user-content>{fit.name}</span>
+                    {fit.isPrimary && <Badge>{t("tracks.primaryBadge")}</Badge>}
+                  </div>
+                  <ScoreBar parts={fit} t={t} />
+                  {fit.computed && (
+                    <p className="type-caption-sm text-muted-foreground" data-testid={`job-track-fit-computed-${fit.trackId}`}>
+                      {t("jobDetail.computedFit")}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
       )}
 
       {candidateId !== null && (

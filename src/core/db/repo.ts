@@ -374,7 +374,8 @@ export async function listBoard(
       checkStatus: job.checkStatus,
       checkCode: job.checkCode,
       checkQueue: verifyTask.status,
-      isNew: opts.newSince
+      // `""` is "never visited": every row is new. Only absence means no marker.
+      isNew: opts.newSince !== undefined
         ? sql<boolean>`${job.firstSeenAt} > ${opts.newSince}`
         : sql<boolean>`false`,
       payAmount: pay ? sql<number | null>`${pay.amount}` : sql<number | null>`null::float8`,

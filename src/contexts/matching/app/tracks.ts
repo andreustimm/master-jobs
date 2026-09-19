@@ -13,7 +13,8 @@ import { loadProfile } from "../../../core/profile/load.ts";
 import { ProfileSchema, type Profile } from "../../../core/profile/schema.ts";
 import { enqueueScore } from "../../../core/scoring/queue.ts";
 import { loadRates } from "../../fx/index.ts";
-import { candidateSkills } from "../../skills/index.ts";
+import { candidateSkills, listCatalog } from "../../skills/index.ts";
+import { validateTerm, type TermError, type ValidTerm } from "../../../core/term.ts";
 import {
   effectiveProfile,
   evidenceInherited,
@@ -21,6 +22,7 @@ import {
   inheritedFields,
   MAX_ACTIVE_TRACKS,
   nameKey,
+  suggestTrack,
   targetOf,
   validateTrackName,
   validateTrackTarget,
@@ -312,20 +314,24 @@ export type TrackOverview = {
   tracks: Array<Track & { support: { supported: string[]; gaps: string[] } }>;
 };
 
-/** As trilhas do candidato com o marcador de evidência de cada uma. */
-export async function trackOverview(candidateId: number): Promise<TrackOverview> {
-  const [tracks, person, owner, confirmed, defaultProfile] = await Promise.all([
-    listTracks(candidateId),
+/** A evidência que é da pessoa: linhas do currículo e competências confirmadas. */
+async function ownEvidence(candidateId: number): Promise<OwnEvidence> {
+  const [person, owner, confirmed, defaultProfile] = await Promise.all([
     personProfile(candidateId),
     isOwner(candidateId),
     candidateSkills(candidateId, "confirmed"),
     loadProfile(true),
   ]);
-  const evidence: OwnEvidence = {
+  return {
     lines: person ? Object.values(person.profile.evidence).flat() : [],
     confirmedSkills: confirmed.map((skill) => skill.name),
     inherited: person ? evidenceInherited(person.profile, defaultProfile, { isOwner: owner }) : false,
   };
+}
+
+/** As trilhas do candidato com o marcador de evidência de cada uma. */
+export async function trackOverview(candidateId: number): Promise<TrackOverview> {
+  const [tracks, evidence] = await Promise.all([listTracks(candidateId), ownEvidence(candidateId)]);
   return {
     pending: !tracks.find((track) => track.isPrimary)?.target,
     tracks: tracks.map((track) => ({
@@ -333,6 +339,51 @@ export async function trackOverview(candidateId: number): Promise<TrackOverview>
       support: track.target ? evidenceSupport(track.target, evidence) : { supported: [], gaps: [] },
     })),
   };
+}
+
+export type TrackSuggestion =
+  | {
+      ok: true;
+      term: ValidTerm;
+      target: TrackTarget;
+      /** The term is not in the skill catalog: the suggestion is thin. */
+      thin: boolean;
+      support: { supported: string[]; gaps: string[] };
+      /** The CV the evidence came from is the default profile's. */
+      inherited: boolean;
+    }
+  | { ok: false; code: TermError | "primary_pending" };
+
+/**
+ * A track to start from for a term: catalog titles and the term as the key
+ * keyword, the primary's pay ranges and seniority, and how much of it the
+ * candidate's own evidence supports. Nothing is saved — the candidate edits
+ * and confirms (ADR-002, ADR-009).
+ */
+export async function trackSuggestion(candidateId: number, rawTerm: string): Promise<TrackSuggestion> {
+  const valid = validateTerm(rawTerm);
+  if (!valid.ok) return { ok: false, code: valid.code };
+  const primary = await ensurePrimaryTrack(candidateId);
+  if (!primary?.target) return { ok: false, code: "primary_pending" };
+  const [catalog, evidence] = await Promise.all([listCatalog(), ownEvidence(candidateId)]);
+  const suggestion = suggestTrack({ term: valid.value, catalog, primary: primary.target });
+  return {
+    ok: true,
+    term: valid.value,
+    target: suggestion.target,
+    thin: suggestion.thin,
+    support: evidenceSupport(suggestion.target, evidence),
+    inherited: evidence.inherited,
+  };
+}
+
+/** Evidence support for a target the candidate is editing. */
+export async function trackSupport(
+  candidateId: number,
+  target: TrackTarget,
+): Promise<{ supported: string[]; gaps: string[]; inherited: boolean }> {
+  const evidence = await ownEvidence(candidateId);
+  return { ...evidenceSupport(target, evidence), inherited: evidence.inherited };
 }
 
 export type TrackScoringProfile = { track: Track; profile: Profile; hash: string };

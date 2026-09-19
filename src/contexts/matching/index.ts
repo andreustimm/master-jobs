@@ -51,11 +51,14 @@ export {
   setPrimaryTrack,
   trackOverview,
   trackScoringProfiles,
+  trackSuggestion,
+  trackSupport,
   updateTrack,
   type LifecycleResult,
   type TrackOverview,
   type TrackResult,
   type TrackScoringProfile,
+  type TrackSuggestion,
   type UpdateTrackResult,
 } from "./app/tracks.ts";
 export {

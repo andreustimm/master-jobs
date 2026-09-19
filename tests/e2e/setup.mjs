@@ -12,7 +12,8 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { application, authEvent, authLoginToken, authUser, candidate, candidateDocument, fxRate, job, jobScore, scoreTask, targetAccount } from "../../src/core/db/schema.ts";
+import { application, authEvent, authLoginToken, authUser, candidate, candidateDocument, fxRate, job, jobScore, savedTerm, scoreTask, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
+import { linkRecruiterToCandidate } from "../../src/contexts/auth/index.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
 import { hashToken } from "../../src/contexts/auth/infra/drizzle-store.ts";
 import { setPassword } from "../../src/contexts/auth/infra/password-login.ts";
@@ -31,9 +32,12 @@ import {
   createTrack,
   ensurePrimaryTrack,
   listCandidateTracks,
+  saveTerm,
+  setMatchingProfile,
   suggestTrack,
 } from "../../src/contexts/matching/index.ts";
 import { runMigrations } from "../../src/core/db/migrate.ts";
+import { loadProfile } from "../../src/core/profile/load.ts";
 import { scoreOne } from "../../src/core/scoring/apply.ts";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 
@@ -67,6 +71,8 @@ export const E2E_ROLES = {
   noCv: { email: "e2e-sem-cv@local.test", roles: ["candidate"] },
   // Existe para provar que senha certa em conta desabilitada não entra.
   disabled: { email: "e2e-desabilitada@local.test", roles: ["candidate"], disabled: true },
+  // Vinculado ao dono: lê o funil dele e nunca as trilhas nem os termos.
+  linkedRecruiter: { email: "e2e-recrutador-vinculado@local.test", roles: ["recruiter"] },
 };
 
 try {
@@ -239,6 +245,45 @@ try {
     ...payFixtures.filter((fixture) => fixture.php).map((fixture) => fixtureScore(fixture.id, phpTrack.id, fixture.php)),
   ]).onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
 
+  // Tela Buscas (task_05): uma vaga que cita "Laravel" só na descrição e um
+  // termo salvo que já trouxe duas vagas que o dono ainda não viu.
+  const searchFixtures = [
+    {
+      id: 905000001,
+      title: "Backend Platform Engineer",
+      companyName: "Description Only Lab",
+      descriptionText: "Owns the billing services, written in Laravel on PostgreSQL.",
+    },
+    { id: 905000011, title: "Seeded term fixture one", companyName: "Seeded Term Lab", descriptionText: "Brought in by a saved term." },
+    { id: 905000012, title: "Seeded term fixture two", companyName: "Seeded Term Lab", descriptionText: "Brought in by a saved term." },
+  ];
+  await getDb().insert(job).values(searchFixtures.map((fixture) => ({
+    ...fixture,
+    fingerprint: `e2e:${fixture.id}`,
+    contentHash: `e2e:${fixture.id}`,
+    sourceId: "ashby:e2e",
+    externalId: String(fixture.id),
+    url: `https://jobs.example.com/${fixture.id}`,
+    raw: { e2e: true },
+  }))).onConflictDoNothing({ target: job.id });
+  await getDb().insert(jobScore).values(searchFixtures.map((fixture) => fixtureScore(fixture.id, primaryTrack.id, 60)))
+    .onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
+  const seededTerm = await saveTerm(
+    { candidateId },
+    { term: "E2E Seeded Stack", trackId: primaryTrack.id },
+    { now: new Date(), impersonated: false },
+  );
+  if (!seededTerm.ok && seededTerm.code !== "term_duplicate") throw new Error(`E2E term: ${seededTerm.code}`);
+  // "Novas desde a última visita" parte do zero a cada execução.
+  const [seededRow] = await getDb()
+    .update(savedTerm)
+    .set({ lastVisitAt: null })
+    .where(eq(savedTerm.id, seededTerm.termId))
+    .returning({ termKey: savedTerm.termKey });
+  await getDb().insert(termAttribution).values(
+    [905000011, 905000012].map((jobId) => ({ termKey: seededRow.termKey, jobId, platform: "remotive" })),
+  ).onConflictDoNothing();
+
   await getDb().insert(targetAccount).values({
     id: TASK04_FIXTURES.referralContactId,
     name: "Task 04 referral contact",
@@ -341,6 +386,14 @@ try {
     }
   }
 
+  const [ownerUser] = await getDb().select({ id: authUser.id }).from(authUser).where(eq(authUser.email, EMAIL)).limit(1);
+  const [linkedRecruiter] = await getDb()
+    .select({ id: authUser.id })
+    .from(authUser)
+    .where(eq(authUser.email, E2E_ROLES.linkedRecruiter.email))
+    .limit(1);
+  await linkRecruiterToCandidate(linkedRecruiter.id, candidateId, ownerUser.id);
+
   const [noCvQueueCandidate] = await getDb()
     .select({ candidateId: authUser.candidateId })
     .from(authUser)
@@ -426,6 +479,9 @@ try {
           lastError: "RAW_E2E_QUEUE_ERROR_MUST_NOT_RENDER token=private",
         },
       });
+    // Salvar termo pede trilha principal, e a sessão emprestada (E2E-019)
+    // assume esta conta: ela recebe o perfil de matching do dono.
+    await setMatchingProfile(failedQueueCandidate.candidateId, await loadProfile(true));
   }
 
   const tokenFixtures = [

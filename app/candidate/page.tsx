@@ -20,12 +20,8 @@ import { formatNumber, type TranslationKey, type Translator } from "../../src/co
 import type { Visibility } from "../../src/contexts/auth/index.ts";
 import { cn } from "@/lib/utils";
 import { MutationFeedbackForm } from "../mutation-feedback";
-import {
-  candidateScoreQueueStatus,
-  scoreQueueDisplay,
-  type ScoreQueueDisplay,
-  type ScoreQueueSnapshot,
-} from "../../src/core/scoring/queue.ts";
+import { candidateScoreQueueStatus } from "../../src/core/scoring/queue.ts";
+import { ScoreQueueCard } from "../score-queue-card";
 
 export const dynamic = "force-dynamic";
 
@@ -168,65 +164,6 @@ const VERSION_KEYS = [
 
 function versionLabels(t: Translator["t"]): Record<string, string> {
   return Object.fromEntries(VERSION_KEYS.map((key) => [key, t(`versions.${key}`)]));
-}
-
-const QUEUE_STATE_KEYS = {
-  idle: { label: "candidate.queueIdleLabel", detail: "candidate.queueIdle" },
-  noCv: { label: "candidate.queueNoCvLabel", detail: "candidate.queueNoCv" },
-  pending: { label: "candidate.queuePendingLabel", detail: "candidate.queuePending" },
-  scoring: { label: "candidate.queueScoringLabel", detail: "candidate.queueScoring" },
-  done: { label: "candidate.queueDoneLabel", detail: "candidate.queueDone" },
-  failed: { label: "candidate.queueFailedLabel", detail: "candidate.queueFailed" },
-} satisfies Record<ScoreQueueDisplay["state"], { label: TranslationKey; detail: TranslationKey }>;
-
-const QUEUE_BADGE_VARIANT = {
-  idle: "outline",
-  noCv: "outline",
-  pending: "secondary",
-  scoring: "secondary",
-  done: "default",
-  failed: "destructive",
-} as const satisfies Record<ScoreQueueDisplay["state"], "outline" | "secondary" | "default" | "destructive">;
-
-function ScoreQueueCard({
-  snapshot,
-  hasCv,
-  locale,
-  t,
-}: {
-  snapshot: ScoreQueueSnapshot | null;
-  hasCv: boolean;
-  locale: Translator["locale"];
-  t: Translator["t"];
-}) {
-  const display = scoreQueueDisplay(snapshot, hasCv);
-  const keys = QUEUE_STATE_KEYS[display.state];
-  const values = display.state === "done"
-    ? { count: formatNumber(display.scored ?? 0, locale) }
-    : undefined;
-
-  return (
-    <Card
-      className="mb-6"
-      data-testid="score-queue-status"
-      data-state={display.state}
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-    >
-      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-        <CardTitle className="type-body-emphasis" role="heading" aria-level={2}>
-          {t("candidate.queueTitle")}
-        </CardTitle>
-        <Badge variant={QUEUE_BADGE_VARIANT[display.state]}>{t(keys.label)}</Badge>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <p className="type-body-sm max-w-[62ch] text-muted-foreground">
-          {t(keys.detail, values)}
-        </p>
-      </CardContent>
-    </Card>
-  );
 }
 
 export default async function CandidateArea() {

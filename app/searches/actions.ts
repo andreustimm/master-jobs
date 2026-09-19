@@ -1,17 +1,30 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { guardOwnCandidate } from "../auth";
+import { setMutationFeedbackCookie } from "../mutation-feedback-server";
 import {
+  archiveTrack,
+  createTrack,
   deleteTerm,
+  ensurePrimaryTrack,
+  listCandidateTracks,
   moveTerm,
+  restoreTrack,
   rerunTerm,
   saveTerm,
+  setPrimaryTrack,
   setTermStatus,
+  updateTrack,
+  type LifecycleResult,
   type RerunResult,
   type SaveTermResult,
+  type TrackResult,
+  type UpdateTrackResult,
 } from "../../src/contexts/matching/index.ts";
+import { fieldsFrom, fieldsToTarget, type TrackFormError } from "./track-form";
 import { runTermCaptures } from "../../src/contexts/sourcing/index.ts";
 import { enqueueScore } from "../../src/core/scoring/queue.ts";
 
@@ -43,7 +56,7 @@ function refresh(): void {
   revalidatePath("/jobs");
 }
 
-export async function saveTermAction(formData: FormData): Promise<SaveTermResult> {
+export async function saveTermAction(formData: FormData): Promise<SaveTermResult & { href?: string }> {
   const { session, candidateId } = await guardOwnCandidate("candidate:write");
   const result = await saveTerm(
     { candidateId },
@@ -52,6 +65,8 @@ export async function saveTermAction(formData: FormData): Promise<SaveTermResult
   );
   if (result.ok && result.run === "started") drainAfterResponse(candidateId);
   refresh();
+  // A duplicata aponta para o termo que já existe, em vez de só recusar.
+  if (!result.ok && result.code === "term_duplicate") return { ...result, href: `/searches#term-${result.termId}` };
   return result;
 }
 
@@ -103,4 +118,88 @@ export async function deleteTermAction(formData: FormData) {
   const result = await deleteTerm({ candidateId }, termId);
   refresh();
   return result;
+}
+
+/* ------------------------------- Tracks -------------------------------- */
+
+type FormFailure = { ok: false; code: TrackFormError };
+
+/**
+ * Cria a trilha e, quando veio da oferta da tela Vagas, salva o termo nela.
+ *
+ * A trilha parte da principal (faixas e senioridade vêm dela, ADR-002) e só
+ * existe depois que a pessoa confirma. Com o termo salvo, volta para Buscas.
+ */
+export async function createTrackAction(formData: FormData): Promise<TrackResult | FormFailure | SaveTermResult> {
+  const { session, candidateId } = await guardOwnCandidate("candidate:write");
+  const primary = await ensurePrimaryTrack(candidateId);
+  if (!primary?.target) return { ok: false, code: "primary_pending" };
+  const fields = fieldsFrom(formData);
+  const parsed = fieldsToTarget(fields, primary.target);
+  if (!parsed.ok) return parsed;
+  const created = await createTrack(candidateId, { name: fields.name, target: parsed.target });
+  if (!created.ok) return created;
+
+  const term = String(formData.get("term") ?? "").trim();
+  if (term) {
+    const saved = await saveTerm(
+      { candidateId },
+      { term, trackId: created.track.id },
+      { now: new Date(), impersonated: session.impersonatedBy !== null },
+    );
+    if (saved.ok && saved.run === "started") drainAfterResponse(candidateId);
+    if (!saved.ok) {
+      refresh();
+      return saved;
+    }
+  }
+  refresh();
+  await setMutationFeedbackCookie("success");
+  redirect("/searches");
+}
+
+export async function updateTrackAction(formData: FormData): Promise<UpdateTrackResult | FormFailure> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  const trackId = idFrom(formData, "trackId");
+  const track = trackId === null ? undefined : (await listCandidateTracks(candidateId)).find((t) => t.id === trackId);
+  if (!track?.target) return { ok: false, code: "not_found" };
+  const fields = fieldsFrom(formData);
+  const parsed = fieldsToTarget(fields, track.target);
+  if (!parsed.ok) return parsed;
+  const result = await updateTrack(candidateId, track.id, {
+    name: track.isPrimary ? undefined : fields.name,
+    target: parsed.target,
+    expectedUpdatedAt: String(formData.get("expectedUpdatedAt") ?? ""),
+  });
+  refresh();
+  revalidatePath(`/searches/tracks/${track.id}`);
+  return result;
+}
+
+async function lifecycle(
+  formData: FormData,
+  candidateId: number,
+  change: (candidateId: number, trackId: number) => Promise<LifecycleResult>,
+): Promise<LifecycleResult> {
+  const trackId = idFrom(formData, "trackId");
+  if (trackId === null) return { ok: false, code: "not_found" };
+  const result = await change(candidateId, trackId);
+  refresh();
+  revalidatePath(`/searches/tracks/${trackId}`);
+  return result;
+}
+
+export async function setPrimaryTrackAction(formData: FormData): Promise<LifecycleResult> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  return lifecycle(formData, candidateId, setPrimaryTrack);
+}
+
+export async function archiveTrackAction(formData: FormData): Promise<LifecycleResult> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  return lifecycle(formData, candidateId, archiveTrack);
+}
+
+export async function restoreTrackAction(formData: FormData): Promise<LifecycleResult> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  return lifecycle(formData, candidateId, restoreTrack);
 }

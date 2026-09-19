@@ -32,6 +32,18 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 - A "brought by term" filter that shows the jobs a saved term brought and
   marks the new ones since your last visit.
 
+- A new Searches screen: save a term, such as "Laravel", under a track, and
+  the system looks for jobs with it on the registered platforms and repeats the
+  search every day. The screen shows what each platform brought and how many
+  jobs are new; pause, move, re-run or delete the term whenever you like.
+- Create a track from the suggestion for a term and adjust its titles,
+  keywords, seniority and pay ranges. If one field is refused, what you typed in
+  the others stays in the form. Any track can become the primary, and an
+  archived track can be restored.
+- On a job's page, the score for each track appears side by side.
+- Administrators follow the health of the searches per platform without seeing
+  terms or candidates.
+
 ### Improved
 
 - Groundwork for searching more than one kind of job, each with its own

@@ -33,6 +33,18 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 - Filtro "trazida pelo termo", que mostra as vagas que um termo salvo trouxe
   e marca as novas desde a última visita.
 
+- Nova tela Buscas: salve um termo, como "Laravel", numa trilha, e o sistema
+  procura vagas com ele nas plataformas cadastradas e repete a busca todo dia.
+  A tela mostra o que cada plataforma trouxe e quantas vagas são novas; pause,
+  mova, rode de novo ou apague o termo quando quiser.
+- Crie uma trilha a partir da sugestão para um termo e ajuste títulos,
+  palavras, senioridade e faixas de pagamento. Se algum campo for recusado, o
+  que você digitou nos outros continua no formulário. Qualquer trilha pode virar
+  a principal, e uma trilha arquivada pode ser restaurada.
+- No detalhe da vaga, a nota de cada trilha aparece lado a lado.
+- Administradores acompanham a saúde das buscas por plataforma sem ver termos
+  nem candidatos.
+
 ### Melhorado
 
 - Preparação para buscar vagas de mais de um tipo, com régua própria para cada

@@ -76,6 +76,30 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   cotação, período desconhecido ou projeto sem duração ficam "não
   comparáveis"; nada disso chega ao scorer.
 
+- Tela Buscas (`/searches`): trilhas com seus termos e o estado de cada
+  plataforma, e as ações de termo (salvar, rodar de novo, pausar, retomar,
+  mover, apagar). Editor de trilha em `/searches/tracks/new` — com a sugestão
+  para o termo vindo da oferta da tela Vagas — e em `/searches/tracks/<id>`,
+  mais tornar principal, arquivar e restaurar. Toda action passa por
+  `guardOwnCandidate`; recrutador e admin sem impersonação não alcançam nada
+  disso, e `/searches` fica fora do cache do service worker.
+- Saúde das capturas em `/admin/captures`: cota do dia e do minuto, capturas
+  das últimas 24 horas, último erro e dias seguidos com falha, por plataforma e
+  só em agregado (`admin:access`, recusada em sessão emprestada).
+- Detalhe da vaga mostra o fit de cada trilha ativa, calculado na hora por
+  `trackFitsForJob` quando a trilha ainda não tem linha para a vaga. Vagas e o
+  editor de trilha avisam enquanto a repontuação da trilha está na fila
+  (`app/score-queue-card.tsx`, extraído da tela do candidato).
+- `MutationFeedbackForm` ganha mensagem por código de resultado
+  (`resultMessages`), link opcional no aviso (`href` no resultado) e
+  `keepFields`, que impede o React de limpar o formulário quando a action
+  recusa — o editor de trilha perdia tudo o que fora digitado por uma faixa
+  inválida.
+- QA vivo: área `SRCH`, jornadas `J-save-term-search`,
+  `J-manage-target-tracks` e `J-monitor-term-capture-health`, cenários novos em
+  `untested` e `JOBS-work-mode-continuity` de volta a `untested`, porque a
+  busca mudou para palavra inteira.
+
 ### Alterado
 
 - A busca da tela Vagas deixou de ser substring em cargo e empresa: é o termo
@@ -85,6 +109,9 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Corrigido
 
+- `/admin/users` falhava na hidratação sempre que um recrutador tinha
+  vínculo: o formulário de desvincular ficava dentro de um `<p>`, que o parser
+  HTML fecha antes do `<form>`.
 - A conclusão da fila de repontuação só grava `done` se a tarefa ainda estiver
   em `scoring`: um pedido novo feito durante a execução voltava a `pending` e
   era apagado pela conclusão da execução anterior.

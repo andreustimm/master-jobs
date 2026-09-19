@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Searches, track editor, admin health and job detail screens
 type: frontend
 complexity: high
@@ -38,14 +38,14 @@ product.
 </requirements>
 
 ## Subtasks
-- [ ] 5.1 Searches screen with tracks, terms, states, counts and labels.
-- [ ] 5.2 Suggested-track form and track editor with their Server Actions and feedback.
-- [ ] 5.3 Job detail per-track fits.
-- [ ] 5.4 Administrator capture health page.
-- [ ] 5.5 Navigation entry, dictionary keys, service worker list.
-- [ ] 5.6 Authorization and privacy checks for recruiters, admins, impersonation and the public profile.
-- [ ] 5.7 E2E journeys, route lists, mobile and English checks.
-- [ ] 5.8 Living QA area and scenario resets.
+- [x] 5.1 Searches screen with tracks, terms, states, counts and labels.
+- [x] 5.2 Suggested-track form and track editor with their Server Actions and feedback.
+- [x] 5.3 Job detail per-track fits.
+- [x] 5.4 Administrator capture health page.
+- [x] 5.5 Navigation entry, dictionary keys, service worker list.
+- [x] 5.6 Authorization and privacy checks for recruiters, admins, impersonation and the public profile.
+- [x] 5.7 E2E journeys, route lists, mobile and English checks.
+- [x] 5.8 Living QA area and scenario resets.
 
 ## Implementation Details
 
@@ -89,16 +89,16 @@ component.
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-070 — every failure code mapped to dictionary keys in both locales.
-- [ ] IT-103 — job brought by two terms: counts and a single marker.
-- [ ] IT-121–IT-123 — action guards, page guards, admin page access.
-- [ ] IT-126, IT-128–IT-130 — public profile, linked recruiter, impersonation, admin without impersonation.
-- [ ] E2E-001 — journey from a failed search to a saved term.
-- [ ] E2E-002, E2E-004, E2E-005 — tracks.
-- [ ] E2E-006, E2E-009 — terms and new counts.
-- [ ] E2E-010 — job detail per-track fits.
-- [ ] E2E-011, E2E-012, E2E-019 — recruiter, admin, impersonation.
-- [ ] E2E-013, E2E-014, E2E-016, E2E-017, E2E-018 — layout, English, session, validation, hostile input.
+- [x] UT-070 — every failure code mapped to dictionary keys in both locales.
+- [x] IT-103 — job brought by two terms: counts and a single marker.
+- [x] IT-121–IT-123 — action guards, page guards, admin page access.
+- [x] IT-126, IT-128–IT-130 — public profile, linked recruiter, impersonation, admin without impersonation.
+- [x] E2E-001 — journey from a failed search to a saved term.
+- [x] E2E-002, E2E-004, E2E-005 — tracks.
+- [x] E2E-006, E2E-009 — terms and new counts.
+- [x] E2E-010 — job detail per-track fits.
+- [x] E2E-011, E2E-012, E2E-019 — recruiter, admin, impersonation.
+- [x] E2E-013, E2E-014, E2E-016, E2E-017, E2E-018 — layout, English, session, validation, hostile input.
 
 ## Success Criteria
 - Every assigned test case implemented and passing

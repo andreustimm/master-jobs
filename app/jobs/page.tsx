@@ -12,6 +12,8 @@ import { candidateScope, requirePage } from "../auth";
 import { getTranslator } from "../i18n";
 import { TransitionLink } from "../transition-link";
 import { loadJobsView } from "./jobs-data";
+import { ScoreQueueCard, isRecalculating } from "../score-queue-card";
+import { candidateScoreQueueStatus } from "../../src/core/scoring/queue.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +56,9 @@ export default async function Jobs({
     now: new Date(),
   });
   const { state, total, offer, broughtBy } = view;
+  // Com uma trilha escolhida e a fila pendente, as notas na tela são as
+  // anteriores: dizer isso é o que evita ler a edição como ignorada.
+  const queue = candidateId !== null && state.track !== undefined ? await candidateScoreQueueStatus(candidateId) : null;
   const showTrack = view.scope?.mode === "best";
   const trackNames = Object.fromEntries(view.tracks.map((track) => [track.id, track.name]));
 
@@ -77,6 +82,10 @@ export default async function Jobs({
           </p>
         )}
       </header>
+
+      {queue && isRecalculating(queue) && (
+        <ScoreQueueCard snapshot={queue} hasCv locale={locale} t={t} recalculating />
+      )}
 
       {view.notices.length > 0 && (
         <Card className="mb-4 gap-1 p-4" role="status" data-testid="jobs-notices">

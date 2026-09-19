@@ -22,6 +22,8 @@ const NEVER_CACHE = [
   "/pipeline",
   "/referrals",
   "/compare",
+  // Termos salvos e trilhas são privados (ADR-006): nada disso vai para disco.
+  "/searches",
   "/p/",
   "/jobs",
   "/applications",
