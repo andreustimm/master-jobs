@@ -18,6 +18,15 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Added
+
+- When a screen fails, the system now alerts the people who maintain it on its
+  own. Until now a failure was only discovered when someone tried to use the
+  product and could not. The alert carries what is needed to find the problem —
+  the screen where it happened and the technical error — and does **not** carry
+  what you typed, what you searched for, your sign-in details, or the contents
+  of your résumé.
+
 ## [1.13.2] - 2026-09-19T02:38:58.911Z
 
 ### Fixed
