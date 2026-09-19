@@ -326,8 +326,18 @@ Nenhuma PR pode ser deixada sem assignee.
 Elas representam os ambientes e o caminho de promoção; permanecem no remoto e
 nos clones locais mesmo depois de qualquer promoção ou retorno.
 
+**Branch de trabalho é `<tipo>/<slug>`, com os tipos do Conventional Commits.**
+`feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`, `ci`, `build`,
+`style` ou `revert`, e slug minúsculo, com letras e números separados por `-`
+ou `.`: `feat/busca-por-tecnologia`, `fix/filtro-de-estagio`, `fix/node-24.19`.
+O prefixo da branch anuncia o tipo dos commits que ela entrega; quem decide o
+bump de versão continua sendo o prefixo de cada commit, não o nome da branch.
+O nome nunca carrega a ferramenta que abriu a branch. `.githooks/pre-push` recusa
+nome fora do padrão; `codex/*` é legado aceito, para que branches abertas antes
+da convenção sigam publicáveis sem renomear.
+
 **Branch de trabalho mesclada é excluída — local e remota.** Assim que a PR de
-uma branch de trabalho entra em `dev` (ou em `main`), a branch `codex/*` e sua
+uma branch de trabalho entra em `dev` (ou em `main`), a branch e sua
 worktree são removidas: `git worktree remove` (desbloqueando antes, se estiver
 locked), `git branch -d` e `git push origin --delete <branch>`. A remota é tão
 obrigatória quanto a local — deixar branches de trabalho mortas cria uma
