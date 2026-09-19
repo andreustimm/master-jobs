@@ -26,6 +26,15 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   `grid-cols-1` e o parágrafo quebra em qualquer ponto (`wrap-anywhere`).
   Revisão logada de 23 telas em 6 tamanhos, retrato e paisagem: nenhuma rolagem
   horizontal e nenhum elemento além da borda.
+- Varredura diária: o sync passou de uma hora na 1.15.0 e a execução foi
+  cancelada antes de buscar os termos, capturar e pontuar. O runner fica nos
+  EUA e o banco em São Paulo, e cada vaga custava quatro idas ao banco. Agora a
+  observação lê as vagas conhecidas em blocos de cem (`observeRawJobs`, usada
+  pelo sync e pela captura de termos), guarda o id da empresa por rodada e
+  grava cada lote de notas num único `INSERT … ON CONFLICT` com `excluded.*`:
+  menos de duas consultas por vaga e três comandos para 250 notas. O sync ganha
+  teto próprio de 45 minutos com `continue-on-error`, os passos seguintes rodam
+  com o que já foi gravado e a execução termina vermelha se o sync falhar.
 
 ## [1.15.0] - 2026-09-19
 

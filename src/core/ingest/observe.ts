@@ -5,7 +5,7 @@
  * resolution, application-link fallback, reopening and score invalidation from
  * drifting as new import paths are added.
  */
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { company, job } from "../db/schema.ts";
 import { deleteJobScores } from "../scoring/apply.ts";
@@ -28,7 +28,89 @@ export type ObserveRawJobOptions = {
    * posting — so the regular sync that lists it keeps closing it correctly.
    */
   keepExistingSource?: boolean;
+  /**
+   * The stored row for this fingerprint, read in bulk by the caller with
+   * `loadKnownJobs`; `null` means the batch read found none. Omitted, the
+   * observation reads it itself. A sync run from far away pays one network
+   * round trip per query, so the per-job read is what made a board of 4.000
+   * postings outlast the sweep's hour.
+   */
+  known?: KnownJob | null;
+  /**
+   * Company ids already resolved in this run, by slug. A slug never changes
+   * owner and companies are never deleted, so the cache cannot go stale.
+   */
+  companies?: Map<string, number>;
 };
+
+export type KnownJob = {
+  id: number;
+  contentHash: string;
+  closedAt: string | null;
+  archivedAt: string | null;
+};
+
+const KNOWN_COLUMNS = {
+  id: job.id,
+  contentHash: job.contentHash,
+  closedAt: job.closedAt,
+  archivedAt: job.archivedAt,
+};
+
+/** The stored rows for these fingerprints, in one query. */
+export async function loadKnownJobs(fingerprints: string[]): Promise<Map<string, KnownJob>> {
+  const known = new Map<string, KnownJob>();
+  if (fingerprints.length === 0) return known;
+  const rows = await getDb()
+    .select({ ...KNOWN_COLUMNS, fingerprint: job.fingerprint })
+    .from(job)
+    .where(inArray(job.fingerprint, [...new Set(fingerprints)]));
+  for (const { fingerprint: key, ...row } of rows) known.set(key, row);
+  return known;
+}
+
+/**
+ * Postings looked up per query. Large enough that the lookup is noise next to
+ * the writes, small enough that a row read at the start of a block is still
+ * current when its turn comes.
+ */
+const KNOWN_BLOCK = 100;
+
+/**
+ * Observe a channel's postings in order, reading the stored rows in blocks.
+ *
+ * Same outcomes as calling `observeRawJob` one by one; only the reads are
+ * batched. Results come back in input order.
+ */
+export async function observeRawJobs(
+  raws: RawJob[],
+  sourceId: string,
+  options: Pick<ObserveRawJobOptions, "observedAt" | "keepExistingSource" | "companies"> = {},
+): Promise<JobObservation[]> {
+  const companies = options.companies ?? new Map<string, number>();
+  const observations: JobObservation[] = [];
+  for (let start = 0; start < raws.length; start += KNOWN_BLOCK) {
+    const block = raws.slice(start, start + KNOWN_BLOCK);
+    const identities = block.map((raw) => fingerprint(raw));
+    const known = await loadKnownJobs(identities);
+    for (const [index, raw] of block.entries()) {
+      const identity = identities[index]!;
+      observations.push(
+        await observeRawJob(raw, sourceId, { ...options, companies, known: known.get(identity) ?? null }),
+      );
+      // A listing can repeat a posting. The second sighting must not trust
+      // the row read before the first one wrote: without the entry it tries
+      // an insert, loses to the unique key and reads the current row.
+      known.delete(identity);
+    }
+  }
+  return observations;
+}
+
+async function findKnownJob(identity: string): Promise<KnownJob | undefined> {
+  const [row] = await getDb().select(KNOWN_COLUMNS).from(job).where(eq(job.fingerprint, identity)).limit(1);
+  return row;
+}
 
 export type JobObservation = {
   jobId: number;
@@ -66,9 +148,11 @@ function retainedRawPayload(sourceId: string, payload: unknown): unknown {
   return {};
 }
 
-async function resolveCompany(name: string): Promise<number | null> {
+async function resolveCompany(name: string, cache?: Map<string, number>): Promise<number | null> {
   const slug = slugifyCompany(name);
   if (!slug) return null;
+  const cached = cache?.get(slug);
+  if (cached !== undefined) return cached;
 
   const db = getDb();
   await db
@@ -80,6 +164,7 @@ async function resolveCompany(name: string): Promise<number | null> {
     .from(company)
     .where(eq(company.slug, slug))
     .limit(1);
+  if (stored) cache?.set(slug, stored.id);
   return stored?.id ?? null;
 }
 
@@ -102,13 +187,9 @@ export async function observeRawJob(
   const identity = options.fingerprintOverride ?? fingerprint(raw);
   const nextContentHash = contentHash(raw);
 
-  let [existing] = await db
-    .select({ id: job.id, contentHash: job.contentHash, closedAt: job.closedAt, archivedAt: job.archivedAt })
-    .from(job)
-    .where(eq(job.fingerprint, identity))
-    .limit(1);
+  let existing = options.known === undefined ? await findKnownJob(identity) : (options.known ?? undefined);
 
-  const companyId = await resolveCompany(raw.companyName);
+  const companyId = await resolveCompany(raw.companyName, options.companies);
   // Who owns the posting, where it lives and the owner's payload (a manual
   // job keeps the person's notes there). A term capture refreshing a job
   // another source owns leaves these alone.
@@ -162,11 +243,7 @@ export async function observeRawJob(
       };
     }
 
-    [existing] = await db
-      .select({ id: job.id, contentHash: job.contentHash, closedAt: job.closedAt, archivedAt: job.archivedAt })
-      .from(job)
-      .where(eq(job.fingerprint, identity))
-      .limit(1);
+    existing = await findKnownJob(identity);
     if (!existing) throw new Error("job fingerprint conflict returned no row");
   }
 

@@ -24,6 +24,25 @@ it("keeps crawlers opt-in and gives them only runtime credentials", () => {
   expect(workflow.jobs.varrer.env.DATABASE_MIGRATION_URL).toBeUndefined();
 });
 
+it("lets a slow sync time out without taking the day's terms and scores with it", () => {
+  // The 1.15.0 sweep spent its whole hour syncing and was cancelled before the
+  // saved terms, captures and scores ran. The sync gets its own ceiling, the
+  // later steps run on what it stored, and the run still ends red.
+  const workflow = parse(readFileSync(".github/workflows/varredura.yml", "utf8"));
+  const steps: { id?: string; name?: string; if?: string; run?: string; "continue-on-error"?: boolean; "timeout-minutes"?: number }[] =
+    workflow.jobs.varrer.steps;
+  const sync = steps.find((s) => s.run === "pnpm jho jobs sync");
+  expect(sync?.id).toBe("sync");
+  expect(sync?.["continue-on-error"]).toBe(true);
+  expect(sync?.["timeout-minutes"]).toBeLessThan(workflow.jobs.varrer["timeout-minutes"]);
+  const after = steps.slice(steps.indexOf(sync!) + 1);
+  expect(after.some((s) => s.run === "pnpm jho terms run")).toBe(true);
+  expect(after.some((s) => s.run === "pnpm jho jobs score --every-candidate" && !s.if)).toBe(true);
+  const alarm = after.find((s) => s.if?.includes("steps.sync.outcome == 'failure'"));
+  expect(alarm?.if).toContain("always()");
+  expect(alarm?.run).toContain("exit 1");
+});
+
 it("keeps scheduled retention on the PostgreSQL runtime contract", () => {
   const workflow = parse(readFileSync(".github/workflows/manutencao-banco.yml", "utf8"));
   expect(workflow.jobs.limpar.if).toContain("github.ref == 'refs/heads/main'");

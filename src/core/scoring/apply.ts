@@ -6,7 +6,7 @@
  * every open job; an accepted track scores only the jobs relevant to it. This
  * module is the only writer of `job_score`.
  */
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { getDb, type DB } from "../db/client.ts";
 import { candidate, job, jobScore } from "../db/schema.ts";
 import { ageInDays, loadRates, STALE_AFTER_DAYS } from "../../contexts/fx/index.ts";
@@ -72,21 +72,14 @@ async function loadTrackContexts(candidateId: number): Promise<TrackContext[] | 
   return contexts;
 }
 
-/** Limita cada transação a cem scores para não manter uma transação longa. */
+/** Cem scores por comando: poucas idas ao banco, parâmetros bem abaixo do limite do protocolo. */
 const LOTE = 100;
 
 type Writer = Pick<DB, "insert">;
 
-/** Monta o upsert no cliente ou na transação fornecida pelo chamador. */
-function upsertScore(
-  db: Writer,
-  candidateId: number,
-  jobId: number,
-  result: ScoreResult,
-  context: TrackContext,
-) {
+function scoreValues(result: ScoreResult, context: TrackContext) {
   const scoredAt = new Date(context.asOf).toISOString();
-  const values = {
+  return {
     fit: result.fit,
     titleScore: result.titleScore,
     keywordScore: result.keywordScore,
@@ -109,13 +102,45 @@ function upsertScore(
     profileHash: context.profileHash,
     scoredAt,
   };
+}
 
+type ScoreField = keyof ReturnType<typeof scoreValues>;
+
+const SCORE_COLUMNS = getTableColumns(jobScore);
+
+/** Each rewritten field taken from the row the insert proposed. */
+function fromExcluded(fields: ScoreField[]): Record<ScoreField, SQL> {
+  return Object.fromEntries(
+    fields.map((field) => [field, sql`excluded.${sql.identifier(SCORE_COLUMNS[field].name)}`]),
+  ) as Record<ScoreField, SQL>;
+}
+
+/**
+ * Upsert a batch of one track's scores in a single statement.
+ *
+ * One statement per score cost a network round trip each, and the daily sweep
+ * runs far from the database: re-grading every open posting for freshness took
+ * longer than the sweep's whole hour.
+ */
+function upsertScores(
+  db: Writer,
+  candidateId: number,
+  rows: { jobId: number; result: ScoreResult }[],
+  context: TrackContext,
+) {
+  const values = rows.map(({ jobId, result }) => ({
+    candidateId,
+    trackId: context.track.id,
+    jobId,
+    ...scoreValues(result, context),
+  }));
+  const fields = Object.keys(scoreValues(rows[0]!.result, context)) as ScoreField[];
   return db
     .insert(jobScore)
-    .values({ candidateId, trackId: context.track.id, jobId, ...values })
+    .values(values)
     .onConflictDoUpdate({
       target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId],
-      set: values,
+      set: fromExcluded(fields),
     });
 }
 
@@ -184,7 +209,7 @@ export async function scoreOne(candidateId: number, jobId: number): Promise<Scor
       continue;
     }
     const result = scoreJob(row, context);
-    await upsertScore(db, candidateId, row.id, result, context);
+    await upsertScores(db, candidateId, [{ jobId: row.id, result }], context);
     if (context.track.isPrimary) primary = result;
   }
   return primary;
@@ -307,16 +332,12 @@ export async function scoreAll(
             )`,
       );
 
-    // Calcula fora da transação e persiste em lotes com rollback independente.
+    // Calcula antes e persiste em lotes: cada lote é um único comando, atômico.
     type Gravacao = { jobId: number; result: ScoreResult };
     let pendentes: Gravacao[] = [];
     const descarregar = async () => {
       if (pendentes.length === 0) return;
-      await db.transaction(async (tx) => {
-        for (const pending of pendentes) {
-          await upsertScore(tx, candidateId, pending.jobId, pending.result, context);
-        }
-      });
+      await upsertScores(db, candidateId, pendentes, context);
       pendentes = [];
     };
 

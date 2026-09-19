@@ -27,6 +27,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   Searches and on Jobs.
 - On a phone, the skills to review no longer cut off the evidence when it
   carries a long link from the CV.
+- The daily job search finishes again: new jobs, saved term searches and track
+  scores are refreshed every day.
 
 ## [1.15.0] - 2026-09-19T18:03:52.117Z
 

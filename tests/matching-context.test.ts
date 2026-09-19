@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { matchingProfile, setMatchingProfile } from "../src/contexts/matching/index.ts";
 import type { DB } from "../src/core/db/client.ts";
 import { candidate, company, job, jobScore, source } from "../src/core/db/schema.ts";
@@ -198,6 +198,39 @@ describe("scoreAll grava em lote", () => {
     await expect(scoreAll(dono)).resolves.toMatchObject({ scored: 100 });
     const gravadas = await db.select().from(jobScore).where(eq(jobScore.candidateId, dono));
     expect(gravadas).toHaveLength(100);
+  });
+
+  it("grava cada lote num único comando, não uma ida ao banco por vaga", async () => {
+    // Na passagem para o PostgreSQL o lote virou uma transação com um INSERT
+    // por linha: continuava uma ida e volta por vaga, e a varredura, que roda
+    // longe do banco, repontuava o acervo inteiro por frescor e não cabia na
+    // hora.
+    const dono = await semearVagas(250);
+    const enviados = vi.spyOn(db.$client, "unsafe");
+
+    await scoreAll(dono);
+
+    const upserts = enviados.mock.calls.filter(([query]) => /^insert into (?:"\w+"\.)?"job_score"/i.test(String(query)));
+    enviados.mockRestore();
+    const gravadas = await db.select().from(jobScore).where(eq(jobScore.candidateId, dono));
+    const trilhas = new Set(gravadas.map((g) => g.trackId)).size;
+    expect(trilhas).toBeGreaterThan(0);
+    expect(upserts).toHaveLength(3 * trilhas);
+  });
+
+  it("o lote reescreve a nota existente com os valores recalculados", async () => {
+    // O comando único troca `set: valores` por `excluded.<coluna>`: um nome de
+    // coluna errado ali gravaria a nota velha por cima da nova sem erro.
+    const dono = await semearVagas(3);
+    await scoreAll(dono);
+    await db.update(jobScore).set({ fit: -1, scorerVersion: "0.0.0" }).where(eq(jobScore.candidateId, dono));
+
+    await expect(scoreAll(dono)).resolves.toMatchObject({ scored: 3 });
+
+    const gravadas = await db.select().from(jobScore).where(eq(jobScore.candidateId, dono));
+    expect(gravadas).toHaveLength(3);
+    expect(gravadas.map((g) => g.scorerVersion)).toEqual([SCORER_VERSION, SCORER_VERSION, SCORER_VERSION]);
+    expect(gravadas.every((g) => g.fit >= 0)).toBe(true);
   });
 
   it("nenhuma vaga não chama o driver com lista vazia", async () => {
