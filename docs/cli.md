@@ -206,8 +206,15 @@ Este é um dos dois comandos que **não** passam por `withDb()` — o outro é `
 Ele não abre o banco, então é seguro
 rodar contra um handle que você acabou de descobrir, antes de tocar `sources.yaml`.
 
-Passa pela guarda de ingestão como `jobs sync` e `jobs recheck`: em `preview`,
-`staging` ou `dev` sai com `IngestionBlockedError` antes de abrir conexão.
+Passa pela guarda de ingestão como `jobs sync` e `jobs recheck`. Sem `JHO_ENV`
+(e sem `VERCEL_ENV`) o ambiente é tratado como `preview` e nega; `preview`,
+`staging` e `dev` sempre negam; `local` só roda com `JHO_ENV=local` e
+`JHO_INGESTION_OPT_IN=true`. A recusa sai com `IngestionBlockedError` antes de
+abrir conexão:
+
+```bash
+JHO_ENV=local JHO_INGESTION_OPT_IN=true pnpm jho sources probe greenhouse stackblitz
+```
 
 | Flag | Efeito |
 |---|---|
@@ -1143,13 +1150,15 @@ O ciclo padrão: ingerir, ver o que subiu no topo, exportar para o vault.
 ```bash
 pnpm jho jobs sync
 pnpm jho terms run
+pnpm jho jobs score
 pnpm jho jobs list --min-fit 55 --status unfiled --limit 20
 pnpm jho report
 ```
 
-`jobs sync` já pontua ao final, então `jobs score` é redundante aqui. `terms
-run` repete as buscas por termo salvas; as vagas que elas trouxerem entram sem
-nota até a repontuação (`jobs rescore run`). O
+`jobs sync` já pontua ao final, mas as vagas que `terms run` trouxer entram sem
+nota: `jobs score` pontua as que faltam (a varredura usa `--every-candidate`).
+`jobs rescore run` não serve aqui — ele só drena a fila de repontuação, e
+`terms run` não enfileira nada nela. O
 `--status unfiled` esconde o que você já triou em dias anteriores, evitando reler as
 mesmas 30 linhas toda manhã.
 

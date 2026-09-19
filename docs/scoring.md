@@ -18,7 +18,7 @@ Arquivos envolvidos:
 | --- | --- |
 | `src/core/scoring/score.ts` | Scorer **puro**, sem banco. `SCORER_VERSION`, `WEIGHTS`, `scoreJob()`. |
 | `src/core/scoring/apply.ts` | `scoreAll({ all })` — para cada trilha ativa, seleciona, chama `scoreJob()`, faz upsert em `job_score`. Único escritor da tabela. |
-| `src/core/term.ts` | Borda de palavra (`TERM_BOUNDARY`) compartilhada pelo scorer, pelo filtro de termo e pela atribuição de termo (ADR-012). |
+| `src/core/term.ts` | Borda de palavra (`TERM_BOUNDARY`) compartilhada pelo scorer, pelo filtro de termo e pela atribuição de termo (ADR-012 da feature `term-search-target-tracks`). |
 | `src/contexts/matching/domain/track.ts` | Trilha de alvo: `effectiveProfile` (pessoa + alvo) e o portão de relevância `isRelevant`. |
 | `src/contexts/matching/app/track-scope.ts` | Qual trilha um leitor de `job_score` enxerga: `scoreTrackFilter` e `primaryScoreFilter`. |
 | `profile/profile.yaml` | Todos os dados de entrada do scorer: clusters, keywords, blockers, faixas salariais, senioridade. |
@@ -104,7 +104,7 @@ export function containsTerm(haystack: string, term: string): boolean {
 A classe de borda mora em `src/core/term.ts` desde a 1.4.0 e é a mesma que o
 filtro de termo da tela de vagas e o portão de relevância das trilhas usam. Uma
 definição só de "palavra inteira": se o scorer e o filtro discordassem, `c` no
-filtro traria vagas de `C#` que o scorer nunca contou como `c` (ADR-012).
+filtro traria vagas de `C#` que o scorer nunca contou como `c` (ADR-012 da feature `term-search-target-tracks`).
 
 Detalhes que importam na hora de escrever um termo em `profile.yaml`:
 
@@ -619,7 +619,7 @@ pronta, traduzidos na hora de exibir. Ver o exemplo acima.
 
 A nota deixou de ser "a aderência da vaga ao candidato" e passou a ser "a
 aderência da vaga a uma **trilha de alvo** do candidato" (ADR-002, ADR-008,
-ADR-009). Quem mira IA mas aceita vaga de PHP para trabalhar logo tem duas
+ADR-009 da feature `term-search-target-tracks`). Quem mira IA mas aceita vaga de PHP para trabalhar logo tem duas
 réguas, e uma nota só não servia a nenhuma das duas.
 
 **A trilha guarda só o alvo.** `targets`, `keywords`, `seniority.min_years_expected`,

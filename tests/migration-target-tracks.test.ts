@@ -93,6 +93,33 @@ afterEach(async () => {
 });
 
 describe("target-track migrations 0004–0006", () => {
+  it("gives an owner without a stored profile a NULL-target primary and keeps the owner's scores", async () => {
+    const [{ id: owner }] = (await db.execute<{ id: number }>(
+      sql`insert into production.candidate (slug, name, is_default) values ('owner', 'Owner', true) returning id`,
+    )) as [{ id: number }];
+    await db.execute(sql`insert into production.source (id, kind, handle, label) values ('manual:m', 'manual', 'm', 'M')`);
+    const [{ id: jobId }] = (await db.execute<{ id: number }>(sql`
+      insert into production.job (fingerprint, content_hash, source_id, external_id, company_name, title, url, raw)
+      values ('f1', 'h1', 'manual:m', '1', 'Acme', 'Architect', 'https://a/1', '{}') returning id`)) as [{ id: number }];
+    await db.execute(sql`
+      insert into production.job_score
+        (candidate_id, job_id, fit, title_score, keyword_score, seniority_score, geo_score, comp_score,
+         cluster, matched_keywords, missing_keywords, reasons, blockers, scorer_version)
+      values (${owner}, ${jobId}, 50, 1, 1, 1, 1, 1, 'other', '[]', '[]', '[]', '[]', '1.3.0')`);
+
+    await migrate(db, { migrationsFolder: SOURCE });
+
+    const tracks = await db.execute<{ id: number; target_json: string | null; unreviewed_json: string; is_primary: boolean }>(
+      sql`select id, target_json, unreviewed_json, is_primary from production.target_track where candidate_id = ${owner}`,
+    );
+    expect(tracks).toHaveLength(1);
+    expect(tracks[0]).toMatchObject({ target_json: null, unreviewed_json: "[]", is_primary: true });
+    const scores = await db.execute<{ track_id: number }>(
+      sql`select track_id from production.job_score where candidate_id = ${owner}`,
+    );
+    expect(scores.map((s) => s.track_id)).toEqual([tracks[0]!.id]);
+  });
+
   it("IT-001 gives each profiled candidate one primary and keys job_score by track", async () => {
     const seeded = await seedAtVersion3();
     await migrate(db, { migrationsFolder: SOURCE });

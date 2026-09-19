@@ -9,6 +9,10 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+As ADRs citadas como `ADR-0NN` nesta versão são as da feature, em
+`.compozy/tasks/term-search-target-tracks/adrs/`; as de `docs/adr/` aparecem
+como `ADR 00NN`.
+
 ### Adicionado
 
 - Trilhas de alvo (`target_track`): cada candidato tem uma trilha principal e
@@ -99,6 +103,18 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   `J-manage-target-tracks` e `J-monitor-term-capture-health`, cenários novos em
   `untested` e `JOBS-work-mode-continuity` de volta a `untested`, porque a
   busca mudou para palavra inteira.
+
+- Teto de 40 buscas por dia por candidato pela tela (`saved_term_request`,
+  migração `0008`, aditiva): apagar e salvar de novo não zera a conta; passado o
+  teto, o termo salvo espera a varredura (`daily_limit`) e o "rodar de novo" é
+  recusado (`request_limit`). Trilha tem teto de tamanho (`track_too_large`:
+  60 títulos, 200 palavras positivas e 60 negativas).
+- `jho terms run` espera as janelas por minuto do dia (até 20 minutos) em vez de
+  sair com termos parados; a varredura segue quando a busca por termo falha em
+  todas as plataformas e acusa no último passo.
+- Runbook da release em `docs/engineering/deploy.md`: as migrations 0004–0008
+  são aplicadas pela CLI antes do merge em `main`, com a varredura desligada, e
+  não há rollback para 1.14.x depois da 0006.
 
 ### Alterado
 

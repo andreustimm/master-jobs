@@ -712,6 +712,7 @@ pnpm check                               # semanal: tsc --noEmit + vitest
 ```bash
 pnpm jho jobs sync                       # busca e pontua
 pnpm jho terms run                       # repete as buscas por termo salvas
+pnpm jho jobs score                      # dá nota ao que os termos trouxeram
 pnpm jho jobs list --min-fit 60          # ou abra localhost:3000
 pnpm jho track <id> shortlisted -n "motivo"
 ```

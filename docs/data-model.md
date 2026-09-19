@@ -304,7 +304,7 @@ composta é `(candidate_id, track_id, job_id)`; as três FKs usam
 `ON DELETE cascade`. O comentário de seção no schema é literal: *"Scoring
 (derived — safe to wipe and recompute)"*.
 
-A trilha entrou na chave na versão 1.4.0 do scorer (ADR-008). A trilha
+A trilha entrou na chave na versão 1.4.0 do scorer (ADR-008 da feature `term-search-target-tracks`). A trilha
 principal tem linha para toda vaga aberta; uma trilha aceita só para as vagas
 relevantes a ela. Todo leitor escolhe a trilha por `scoreTrackFilter` (board)
 ou `primaryScoreFilter` (quem mostra uma nota só: dossiê, relatório,
@@ -341,7 +341,7 @@ vaga.
 Guarda a metade **pessoa** do perfil. A metade **alvo** — `targets`,
 `keywords`, os dois limiares de senioridade e as faixas de remuneração — é da
 trilha principal em `target_track`, e `effectiveProfile` junta as duas antes de
-pontuar (ADR-009). Salvar o perfil sincroniza o alvo da principal.
+pontuar (ADR-009 da feature `term-search-target-tracks`). Salvar o perfil sincroniza o alvo da principal.
 
 ### `target_track`
 

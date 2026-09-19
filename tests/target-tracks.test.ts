@@ -12,6 +12,7 @@ import {
   targetOf,
   trackOverview,
   trackScope,
+  trackSupport,
   updateTrack,
   type Track,
   type TrackTarget,
@@ -326,5 +327,26 @@ describe("restoring a track within the active-term ceiling", () => {
     const terms = await db.select().from(savedTerm).where(eq(savedTerm.candidateId, id));
     expect(terms.filter((t) => t.status === "active")).toHaveLength(20);
     expect(terms.filter((t) => t.trackId === php.id).every((t) => t.pausedReason === "track_archived")).toBe(true);
+  });
+});
+
+describe("evidence support from the stored profile", () => {
+  it("UT-038 a keyword only in growth is a gap, never support", async () => {
+    const profile = structuredClone(base);
+    profile.growth = [...profile.growth, "kubernetes"];
+    for (const key of Object.keys(profile.evidence)) {
+      profile.evidence[key] = profile.evidence[key]!.filter((line) => !/kubernetes/i.test(line));
+    }
+    const [row] = await db.insert(candidate).values({ slug: "renata", name: "Renata" }).returning({ id: candidate.id });
+    await setMatchingProfile(row!.id, profile);
+    const target: TrackTarget = {
+      ...targetOf(profile),
+      keywords: { critical: [{ term: "kubernetes", weight: 8 }], strong: [], stack: [], negative: [] },
+    };
+
+    const support = await trackSupport(row!.id, target);
+
+    expect(support.gaps).toContain("kubernetes");
+    expect(support.supported).not.toContain("kubernetes");
   });
 });

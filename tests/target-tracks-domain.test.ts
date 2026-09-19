@@ -205,7 +205,7 @@ describe("track domain", () => {
     expect(result).toEqual({ supported: ["laravel"], gaps: ["vue"] });
   });
 
-  it("UT-038 never counts growth as support", () => {
+  it("an empty evidence list supports nothing (UT-038 lives in the integration suite)", () => {
     const result = evidenceSupport(trackOf(["kubernetes"]), { lines: [], confirmedSkills: [], inherited: false });
     expect(result.gaps).toEqual(["kubernetes"]);
   });

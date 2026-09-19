@@ -577,8 +577,9 @@ A capacidade é opcional no adapter: `termSearch = { budget, validatedOn, search
   página, no máximo 5 páginas por execução, e o 429 esgota o dia. Com 1 por
   minuto a captura parava na primeira página, com 20 das 100 vagas.
 - RemoteOK aceita 1 chamada por minuto. `jho terms run` espera essas janelas
-  (até 40 minutos) em vez de sair com a fila parada: cada termo ativo roda uma
-  vez no dia, não só o primeiro da ordem alfabética.
+  (até 20 minutos, dentro do job de 60 da varredura) em vez de sair com a fila
+  parada: cada termo ativo roda uma vez no dia, não só o primeiro da ordem
+  alfabética.
 - Linha de captura de um dia anterior que ficou na fila é aposentada
   (`skipped`, motivo `stale`) na próxima reivindicação: a busca de hoje a
   substitui, e a plataforma não é chamada duas vezes para o mesmo termo no dia.

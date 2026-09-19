@@ -227,6 +227,40 @@ Em produção, o caminho aprovado é o workflow manual `migrate.yml`, com
 `confirm_project=bujawvnxwtmneiggizje`. A migration deve ser aplicada e
 verificada antes da importação de dados; o workflow recusa outro project ref.
 
+### Release 1.15.0: migrar antes, pela CLI
+
+As migrations 0004–0008 trocam a chave de `job_score` (expandir, preencher,
+contrair) e criam as tabelas da busca por termo. Nenhuma ordem entre migrar e
+publicar deixa a versão no ar funcionando sozinha: o código novo lê
+`target_track` em toda consulta de nota, e o antigo grava nota com
+`ON CONFLICT (candidate_id, job_id)`, a chave que a 0006 remove. O `migrate.yml`
+só roda a partir de `main`, e a Vercel publica `main` no mesmo push — seguir o
+caminho aprovado daria 500 em toda tela com nota até alguém disparar o workflow.
+Nesta versão a migração vem antes, pela CLI, e o merge logo depois:
+
+1. Desligue a varredura: `vars.SUPABASE_CRAWL_ENABLED=false`. Ela grava nota com
+   o código antigo e disputa a janela.
+2. Com a PR `staging → main` aprovada e pronta, aplique as migrations a partir
+   do commit que vai ser mesclado:
+
+   ```bash
+   export DATABASE_MIGRATION_URL="postgresql://..."   # SUPABASE_MIGRATION_URL
+   pnpm jho db migrate
+   DATABASE_URL="$DATABASE_MIGRATION_URL" pnpm jho db check
+   ```
+
+   Até o passo seguinte, a leitura continua funcionando (só existe a linha da
+   trilha principal por vaga). O que falha com o código antigo é gravar nota:
+   cadastrar vaga pela tela ou comparar uma vaga à mão. Faça os dois passos em
+   sequência.
+3. Mescle `staging → main` imediatamente e espere o deploy da Vercel terminar.
+4. Pontue e religue: `pnpm jho jobs score --every-candidate`, depois
+   `vars.SUPABASE_CRAWL_ENABLED=true`.
+
+**Sem rollback para 1.14.x.** Depois da 0006 o código antigo duplica linha de
+nota por trilha na leitura e falha na gravação, e a 0005 apaga notas sem trilha.
+Correção desta versão vai para frente, numa versão nova.
+
 Para o snapshot legado, `scripts/migration/select-production.ts` aplica a
 allowlist de tabelas e exclui sessões, tokens, filas e HTML de crawler. O
 `scripts/migration/import-production.ts` importa somente a seleção verificada,

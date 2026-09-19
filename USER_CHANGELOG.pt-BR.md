@@ -45,6 +45,9 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 - Administradores acompanham a saúde das buscas por plataforma sem ver termos
   nem candidatos.
 
+- Cada pessoa pede até 40 buscas por dia pela tela; passado isso, o termo é
+  salvo e busca na varredura diária. Termo pausado não busca, nem pela mão.
+
 ### Melhorado
 
 - Preparação para buscar vagas de mais de um tipo, com régua própria para cada

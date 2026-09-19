@@ -44,6 +44,10 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 - Administrators follow the health of the searches per platform without seeing
   terms or candidates.
 
+- Each person asks for up to 40 searches a day from the screen; past that, the
+  term is saved and searches in the daily sweep. A paused term does not search,
+  not even by hand.
+
 ### Improved
 
 - Groundwork for searching more than one kind of job, each with its own

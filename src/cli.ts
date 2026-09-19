@@ -556,8 +556,12 @@ sources
 
 const terms = program.command("terms").description("Saved term searches: daily capture and platform health");
 
-/** Quanto `terms run` espera por janelas de cota do dia antes de sair. */
-const TERMS_RUN_WAIT_MS = 40 * 60_000;
+/**
+ * Quanto `terms run` espera por janelas de cota do dia antes de sair. O job da
+ * varredura tem 60 minutos para sincronizar, capturar, reconferir e pontuar;
+ * 20 deles cabem para vinte termos numa plataforma de uma chamada por minuto.
+ */
+const TERMS_RUN_WAIT_MS = 20 * 60_000;
 
 terms
   .command("run")
@@ -581,8 +585,7 @@ terms
       for (const { termKey, query } of await activeTermKeys()) {
         await requestTermCaptures({ termKey, query, origin: "sweep", now });
       }
-      // Espera as janelas por minuto do dia: RemoteOK e Himalayas aceitam uma
-      // chamada por minuto, e o job da varredura tem 60 minutos no total.
+      // Espera as janelas por minuto do dia: o RemoteOK aceita uma chamada por minuto.
       const summary = await runTermCaptures({ worker: "cli", max, waitMs: TERMS_RUN_WAIT_MS });
       // Só agregados por plataforma: termo e consulta nunca vão para o log.
       for (const [platform, counts] of Object.entries(summary)) {
