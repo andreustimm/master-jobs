@@ -9,6 +9,22 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- `sslmode` com valor que não afrouxa nada — `require`, `verify-ca`,
+  `verify-full` — passa a ser descartado da URL como qualquer parâmetro de
+  pool, em vez de recusado. A integração do Supabase com a Vercel cadastra
+  `POSTGRES_URL` com `sslmode=require`, e a recusa derrubou toda página que
+  toca o banco no corte de produção da 1.13.1: o erro nomeava a variável certa
+  e ainda assim era erro. Pedir `require` não pede menos do que o cliente já
+  impõe — verificação de cadeia com CA declarada é mais estrito —, então
+  recusar só impedia o provedor de configurar o próprio serviço.
+  `disable`, `allow`, `prefer` e qualquer valor fora da lista de permissão
+  continuam recusados, e `ssl`, `sslcert`, `sslkey` e `sslrootcert` também:
+  trocar a CA ou a identidade do cliente é mudar a política, não declará-la.
+  O que o teste não pegava é que nenhuma suíte jamais viu o valor real da
+  variável de produção — a URL de teste era montada sem query string.
+
 ## [1.13.1] - 2026-09-18
 
 ### Corrigido

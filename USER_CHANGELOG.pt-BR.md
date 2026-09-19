@@ -18,6 +18,15 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- Depois da última atualização, todas as telas que mostram vagas, funil ou
+  login pararam de abrir e devolviam erro. A conexão com o banco era recusada
+  por uma exigência de segurança que estava rígida demais: ela também barrava
+  configurações que **aumentam** a proteção, não só as que diminuem. Agora só
+  barra o que de fato enfraquece. As telas voltaram, e nenhum dado foi perdido
+  nem alterado durante a queda.
+
 ## [1.13.1] - 2026-09-18T19:54:03.273Z
 
 ### Corrigido

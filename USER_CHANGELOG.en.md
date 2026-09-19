@@ -18,6 +18,15 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- After the latest update, every screen showing jobs, the pipeline, or the
+  sign-in form stopped opening and returned an error. The database connection
+  was being refused by a safety requirement that was too rigid: it also
+  rejected settings that **raise** protection, not only those that lower it.
+  It now rejects only what genuinely weakens security. The screens are back,
+  and no data was lost or changed during the outage.
+
 ## [1.13.1] - 2026-09-18T19:54:03.273Z
 
 ### Fixed

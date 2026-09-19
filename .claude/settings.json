@@ -16,6 +16,7 @@
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
+      "Bash(gh:*)",
       "Bash(curl -s:*)",
       "Bash(python3:*)",
       "Bash(rg:*)",
@@ -23,6 +24,7 @@
       "Bash(ls:*)",
       "Bash(cat:*)",
       "Bash(head:*)",
+      "Bash(supabase db query:*)",
       "Bash(tail:*)"
     ],
     "deny": [
