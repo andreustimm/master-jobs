@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: "Jobs screen: track selector, term, brought-by and pay filters"
 type: frontend
 complexity: high
@@ -35,13 +35,13 @@ search (`Laravel`) starts to work, and where every captured job is triaged.
 </requirements>
 
 ## Subtasks
-- [ ] 4.1 Pay normalization helpers shared by SQL and TypeScript.
-- [ ] 4.2 Board query: term, brought-by, pay filter, pay sort, stable tie-break, new marker, hidden-below count.
-- [ ] 4.3 URL parsing and building for the new parameters, with notices and defaults.
-- [ ] 4.4 Jobs screen controls: track selector, term hint and save offer, brought-by, pay, toggle, notices, markers.
-- [ ] 4.5 Visit recording on render without prefetch side effects.
-- [ ] 4.6 Dictionary keys (pt-BR and en) for every new text; the existing literal fixed.
-- [ ] 4.7 E2E seeds (FX rates, pay variety, attributions) and the Jobs screen journeys; the existing company-substring check moved to whole words.
+- [x] 4.1 Pay normalization helpers shared by SQL and TypeScript.
+- [x] 4.2 Board query: term, brought-by, pay filter, pay sort, stable tie-break, new marker, hidden-below count.
+- [x] 4.3 URL parsing and building for the new parameters, with notices and defaults.
+- [x] 4.4 Jobs screen controls: track selector, term hint and save offer, brought-by, pay, toggle, notices, markers.
+- [x] 4.5 Visit recording on render without prefetch side effects.
+- [x] 4.6 Dictionary keys (pt-BR and en) for every new text; the existing literal fixed.
+- [x] 4.7 E2E seeds (FX rates, pay variety, attributions) and the Jobs screen journeys; the existing company-substring check moved to whole words.
 
 ## Implementation Details
 
@@ -84,11 +84,11 @@ the UI and the remaining filters.
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-013–UT-019 — pay normalization.
-- [ ] UT-064–UT-069 — filter parsing, URL round trip, pay defaults.
-- [ ] IT-095 — visit recording and prefetch.
-- [ ] IT-105–IT-115, IT-117–IT-120 — board query: term, brought-by, pay, sort, performance, markers, hostile input, currencies.
-- [ ] E2E-003, E2E-007, E2E-008, E2E-015, E2E-020 — Jobs screen journeys.
+- [x] UT-013–UT-019 — pay normalization.
+- [x] UT-064–UT-069 — filter parsing, URL round trip, pay defaults.
+- [x] IT-095 — visit recording and prefetch.
+- [x] IT-105–IT-115, IT-117–IT-120 — board query: term, brought-by, pay, sort, performance, markers, hostile input, currencies.
+- [x] E2E-003, E2E-007, E2E-008, E2E-015, E2E-020 — Jobs screen journeys.
 
 ## Success Criteria
 - Every assigned test case implemented and passing

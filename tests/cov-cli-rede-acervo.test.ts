@@ -37,17 +37,19 @@
  * código de saída e a persistência que o comando dispara.
  * Fronteira FORA: a semântica de sync/verify em si — é de `cov-ingest-*`.
  */
+import { readFileSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { syncCandidateFromProfile } from "../src/core/candidate.ts";
-import { job, jobScore, source, verifyTask } from "../src/core/db/schema.ts";
+import { job, jobScore, platformQuota, source, termCapture, verifyTask } from "../src/core/db/schema.ts";
 import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/http-port.ts";
 import "../src/core/sources/http.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 import { banco, carregarCli, rodar, type Execucao } from "./cov-cli-harness.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 vi.mock("commander", async () => (await import("./cov-cli-harness.ts")).commanderMock());
 
@@ -161,6 +163,7 @@ async function semearVaga(
   if (opts.fit !== undefined) {
     await db.insert(jobScore).values({
       candidateId: candidatoId,
+      trackId: await primaryTrackId(db, candidatoId),
       jobId: linha!.id,
       fit: opts.fit,
       titleScore: opts.fit,
@@ -621,6 +624,40 @@ describe("jho sources probe <kind> <handle>", () => {
     // não têm o campo. Imprimir "undefined" faria parecer defeito do adapter.
     expect(r.out).toContain("Principal Engineer");
     expect(r.out).toContain("— ?");
+  });
+
+  it("IT-133 --term exercita a busca por termo e não grava nada", async () => {
+    const port = fixtureHttp({
+      "remotive.com": JSON.parse(readFileSync("tests/fixtures/term-search/remotive-laravel.json", "utf8")) as object,
+    });
+    setHttpPort(port);
+
+    const r = await rodar("sources", "probe", "remotive", "--term", "laravel");
+
+    expect(r.code).toBeUndefined();
+    expect(port.calls).toEqual(["https://remotive.com/api/remote-jobs?search=laravel&limit=100"]);
+    expect(r.out).toContain("remotive term search returned 3 job(s) of about 3");
+    expect(r.out).toContain("validated on");
+    expect(r.out).toContain("Senior Data Scientist");
+    // O probe valida a integração antes de ela entrar nas capturas: nem vaga,
+    // nem fila, nem unidade de cota.
+    expect(await banco().select().from(job)).toHaveLength(0);
+    expect(await banco().select().from(termCapture)).toHaveLength(0);
+    expect(await banco().select().from(platformQuota)).toHaveLength(0);
+  });
+
+  it("--term em plataforma sem busca por termo sai com erro", async () => {
+    const r = await rodar("sources", "probe", "greenhouse", "--term", "laravel");
+
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("greenhouse does not search by term");
+  });
+
+  it("sem handle e sem --term, pede um dos dois", async () => {
+    const r = await rodar("sources", "probe", "greenhouse");
+
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("probe needs a <handle>, or --term <term>");
   });
 
   it("recusa um tipo de fonte sem adapter, dizendo qual tipo era", async () => {

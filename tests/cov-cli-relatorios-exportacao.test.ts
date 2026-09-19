@@ -41,6 +41,7 @@ import { syncCandidateFromProfile } from "../src/core/candidate.ts";
 import { application, job, jobScore, source } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 import { banco, carregarCli, rodar } from "./cov-cli-harness.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 const AMBIENTE_TOCADO = ["JHO_VAULT_PATH", "JHO_REPORT_DIR"] as const;
 let ambienteOriginal: Record<string, string | undefined> = {};
@@ -513,6 +514,7 @@ describe("jho stats", () => {
 
       await banco().insert(jobScore).values({
         candidateId: candidatoId,
+        trackId: await primaryTrackId(banco(), candidatoId),
         jobId: vaga!.id,
         fit: 40 + i,
         titleScore: i,

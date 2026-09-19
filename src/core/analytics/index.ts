@@ -7,6 +7,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { application, job, jobScore } from "../db/schema.ts";
+import { primaryScoreFilter } from "../../contexts/matching/index.ts";
 import { WEIGHTS } from "../scoring/score.ts";
 import { analyzeFunnel, hasReplied, type FunnelAnalysis, type Outcome } from "./funnel.ts";
 import {
@@ -47,8 +48,10 @@ export async function scorerDiagnostics(candidateId: number): Promise<ScorerDiag
     })
     .from(jobScore)
     .innerJoin(job, eq(job.id, jobScore.jobId))
-    // Closed jobs are history, not the corpus the ranking operates on.
-    .where(and(eq(jobScore.candidateId, candidateId), isNull(job.closedAt)));
+    // Closed jobs are history, not the corpus the ranking operates on. The
+    // primary track is the one that scores every job; an accepted track only
+    // sees its relevant slice and would skew every component's distribution.
+    .where(and(eq(jobScore.candidateId, candidateId), primaryScoreFilter(), isNull(job.closedAt)));
 
   const samples: ComponentSample[] = COMPONENTS.map((c) => ({
     key: c.key,
@@ -85,6 +88,7 @@ export async function funnelAnalysis(candidateId: number): Promise<FunnelAnalysi
       and(
         eq(jobScore.jobId, application.jobId),
         eq(jobScore.candidateId, candidateId),
+        primaryScoreFilter(),
       ),
     )
     .where(eq(application.candidateId, candidateId));

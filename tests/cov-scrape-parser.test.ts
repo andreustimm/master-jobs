@@ -14,6 +14,7 @@ import { candidate, job, jobPage, jobScore, source } from "../src/core/db/schema
 import { parseStored, reparseAll, runParseStage } from "../src/core/scrape/parser.ts";
 import type { ClaimedTask, QueuePort, ScrapeStatus } from "../src/core/scrape/queue.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 /** Página realista: corpo longo, campos reconhecíveis e requisitos em <li>. */
 const PAGINA = `<html><head><title>Staff AI Engineer — Acme</title></head><body>
@@ -70,6 +71,7 @@ async function seedScore(jobId: number): Promise<void> {
     .returning({ id: candidate.id });
   await db.insert(jobScore).values({
     candidateId: person!.id,
+    trackId: await primaryTrackId(db, person!.id),
     jobId,
     fit: 70,
     titleScore: 0, keywordScore: 0, seniorityScore: 0, geoScore: 0, compScore: 0,

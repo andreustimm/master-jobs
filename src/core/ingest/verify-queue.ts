@@ -24,10 +24,22 @@ import { and, desc, eq, isNull, like, lt, or, sql } from "drizzle-orm";
 import { clock } from "../clock.ts";
 import { getDb } from "../db/client.ts";
 import { job, verifyTask, type VerifyStatus } from "../db/schema.ts";
+import { primaryScoreFilter } from "../../contexts/matching/index.ts";
 import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
 import { decideReopen, type ReopenDecision } from "./lifecycle.ts";
 import { probe, type ProbeVerdict } from "./probe.ts";
+
+/**
+ * A melhor nota da vaga entre candidatos, só nas trilhas principais.
+ *
+ * Trilha aceita pontua o recorte relevante para ela e costuma dar nota maior
+ * nele; somada ao `max`, furaria a fila de quem só tem o alvo principal
+ * (ADR-008).
+ */
+function bestPrimaryFit() {
+  return sql`coalesce((select max(s.fit) from production.job_score s where s.job_id = ${job.id} and ${primaryScoreFilter("s")}), 0)`;
+}
 
 export const MAX_ATTEMPTS = 3;
 
@@ -132,7 +144,7 @@ export async function enqueueStale(
           like(job.url, "http://%"),
           like(job.url, "https://%"),
         ),
-        sql`coalesce((select max(fit) from production.job_score where job_id = ${job.id}), 0) >= ${minFit}`,
+        sql`${bestPrimaryFit()} >= ${minFit}`,
         or(isNull(job.checkedAt), lt(job.checkedAt, cutoff)),
       ),
     )
@@ -140,7 +152,7 @@ export async function enqueueStale(
     .orderBy(
       sql`${job.checkedAt} is not null`,
       job.checkedAt,
-      desc(sql`coalesce((select max(fit) from production.job_score where job_id = ${job.id}), 0)`),
+      desc(bestPrimaryFit()),
     )
     .limit(opts.limit ?? 200);
 

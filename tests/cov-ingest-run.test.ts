@@ -23,6 +23,7 @@ import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/htt
 import "../src/core/sources/http.ts";
 import type { SourceConfig } from "../src/core/sources/types.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 let db: DB;
 
@@ -209,6 +210,7 @@ describe("syncAll", () => {
     for (const linha of linhas) {
       await db.insert(jobScore).values({
         candidateId: pessoa!.id,
+        trackId: await primaryTrackId(db, pessoa!.id),
         jobId: linha.id,
         fit: 70,
         titleScore: 30,

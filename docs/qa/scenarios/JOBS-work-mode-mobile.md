@@ -6,7 +6,7 @@ persona: Andreus no celular
 journey: J-find-jobs-by-work-mode
 expected: As quatro opções ficam legíveis e operáveis em 375px e o recorte sobrevive à recarga
 entry_points: /; /jobs
-qa_status: pass
+qa_status: untested
 bug_ids:
 fix_status:
 retest_status:

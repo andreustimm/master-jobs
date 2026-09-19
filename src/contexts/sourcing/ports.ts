@@ -1,0 +1,89 @@
+/**
+ * Portas do contexto de captura por termo.
+ *
+ * Duas, e só duas, porque só duas absorvem variação real:
+ *
+ *  - `TermCaptureQueuePort` — hoje uma tabela drenada por `after()` e pela
+ *    varredura; a ADR 0009 já nomeia a fila hospedada como substituta quando o
+ *    runtime web precisar (ADR-007).
+ *  - `PlatformQuotaPort` — o livro de cota. Hoje uma tabela com upsert
+ *    condicional; um contador compartilhado em outro serviço é a troca óbvia.
+ *
+ * Atribuição, fonte `~terms` e leituras de saúde não têm porta: uma
+ * implementação, nenhuma alternativa plausível (ADR 0007).
+ */
+import type { DB } from "../../core/db/client.ts";
+import type { FetchableSourceKind, PlatformBudget } from "../../core/sources/types.ts";
+import type { FailureCode } from "./domain/capture.ts";
+
+export type CaptureOrigin = "web" | "sweep" | "cli";
+
+export type CaptureStatus = "queued" | "running" | "succeeded" | "waiting_quota" | "failed" | "skipped";
+
+export type SkipCode = "platform_disabled" | "ingestion_blocked";
+
+export type CaptureOutcome =
+  | {
+      status: "succeeded";
+      fetched: number;
+      created: number;
+      known: number;
+      attributed: number;
+      totalHint: number | null;
+    }
+  | { status: "waiting_quota"; retryAt: string }
+  | { status: "failed"; code: FailureCode; retryable: boolean }
+  | { status: "skipped"; code: SkipCode };
+
+export type CaptureRequest = {
+  platform: FetchableSourceKind;
+  termKey: string;
+  query: string;
+  windowDay: string;
+  origin: CaptureOrigin;
+  priority: number;
+  /** A platform switched off in the configuration is recorded as skipped. */
+  skipped?: SkipCode;
+};
+
+export type ClaimedCapture = {
+  id: number;
+  platform: FetchableSourceKind;
+  termKey: string;
+  query: string;
+  windowDay: string;
+};
+
+/**
+ * Who writes the rows. Matching saves a term and its captures in one
+ * transaction (a term without captures, or captures without a term, would be
+ * the half-saved state the screen cannot explain), so it passes its own.
+ */
+export type CaptureWriter = Pick<DB, "insert">;
+
+export interface TermCaptureQueuePort {
+  /**
+   * Idempotent on (platform, term key, day): one call serves everyone. A
+   * request that finds today's capture already done marks it as reused.
+   */
+  enqueue(rows: CaptureRequest[], writer?: CaptureWriter): Promise<{ created: number; existing: number }>;
+  /**
+   * Retires non-terminal rows of earlier UTC days, then claims one of today's:
+   * a row left over from yesterday is superseded by today's, never run next to it.
+   */
+  claim(worker: string, now: Date): Promise<ClaimedCapture | null>;
+  /** Only the worker that still holds the claim finishes it. */
+  finish(id: number, worker: string, outcome: CaptureOutcome, now: Date): Promise<void>;
+  /** The earliest `run_after` among today's rows waiting for a quota window. */
+  nextRunAfter(now: Date): Promise<string | null>;
+}
+
+export interface PlatformQuotaPort {
+  reserve(
+    platform: FetchableSourceKind,
+    budget: PlatformBudget,
+    now: Date,
+  ): Promise<{ ok: true } | { ok: false; retryAt: string }>;
+  /** A 429: nothing more goes to the platform until the next UTC day. */
+  exhaustDay(platform: FetchableSourceKind, now: Date): Promise<void>;
+}

@@ -13,6 +13,7 @@ import {
   vocabularyGap,
 } from "../src/contexts/skills/index.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 /**
  * O contexto de skills composto — a fachada que o CLI e o dashboard chamam.
@@ -75,6 +76,7 @@ async function seedVaga(externalId: string, fit: number, texto: string): Promise
     .returning({ id: job.id });
   await db.insert(jobScore).values({
     candidateId: candidatoId,
+    trackId: await primaryTrackId(db, candidatoId),
     jobId: posting!.id,
     fit,
     titleScore: 0,

@@ -16,6 +16,7 @@ import {
 } from "../src/contexts/skills/infra/drizzle-adapters.ts";
 import type { Detection, SkillDefinition } from "../src/contexts/skills/domain/types.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 /**
  * Os adapters de skills contra o schema real.
@@ -331,6 +332,7 @@ describe("drizzleTargetCorpus", () => {
       .returning({ id: job.id });
     await db.insert(jobScore).values({
       candidateId: opts.candidateId,
+      trackId: await primaryTrackId(db, opts.candidateId),
       jobId: posting!.id,
       fit: opts.fit,
       titleScore: 0,

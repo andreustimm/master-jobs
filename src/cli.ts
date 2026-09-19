@@ -13,7 +13,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { closeDb, getDb } from "./core/db/client.ts";
 import { runDatabaseCleanup } from "./core/db/retention.ts";
 import { runMigrations } from "./core/db/migrate.ts";
-import { listBoard } from "./contexts/matching/index.ts";
+import { listBoard, primaryScoreFilter } from "./contexts/matching/index.ts";
 import { pipelineCounts, setApplicationStatus } from "./contexts/pursuit/index.ts";
 import { application, job, jobScore, positioningTask, source } from "./core/db/schema.ts";
 import { APPLICATION_STATUSES, type ApplicationStatus } from "./core/db/schema.ts";
@@ -75,6 +75,16 @@ import { scoreMessages } from "./contexts/matching/index.ts";
 import { renderScoreMessage, translator } from "./core/i18n/index.ts";
 import { loadSources } from "./core/sources/config.ts";
 import { getAdapter, parseFetchableSourceKind } from "./core/sources/registry.ts";
+import { clock } from "./core/clock.ts";
+import { guardIngestion } from "./core/ingest/guard.ts";
+import { IngestionBlockedError } from "./core/ingest/environment.ts";
+import {
+  CAPTURE_LIMIT,
+  captureHealth,
+  requestTermCaptures,
+  runTermCaptures,
+} from "./contexts/sourcing/index.ts";
+import { activeTermKeys, listCandidateTracks, scoredJobsPerTrack } from "./contexts/matching/index.ts";
 import { buildJobSweepSnapshot } from "./core/triage/job-sweep.ts";
 
 const cliTranslator = translator("pt-BR").t;
@@ -501,17 +511,126 @@ sources
   });
 
 sources
-  .command("probe <kind> <handle>")
-  .description("Test a source handle without writing anything to the database")
-  .action(async (kind: string, handle: string) => {
+  .command("probe <kind> [handle]")
+  .description("Test a source handle, or its term search with --term, without writing anything to the database")
+  .option("--term <term>", "exercise the platform's term search instead of its feed")
+  .action(async (kind: string, handle: string | undefined, opts: { term?: string }) => {
+    // Rede de terceiro como sync e recheck: a mesma guarda, antes de tudo.
+    guardIngestion();
     const fetchableKind = parseFetchableSourceKind(kind);
     const adapter = getAdapter(fetchableKind);
+    if (opts.term !== undefined) {
+      const search = adapter.termSearch;
+      if (!search) {
+        console.error(c.red(`${kind} does not search by term`));
+        process.exitCode = 1;
+        return;
+      }
+      // Sem reserva no livro de cota: o probe valida a integração ANTES de ela
+      // entrar nas capturas, e promete não gravar nada.
+      const found = await search.search(opts.term, { limit: CAPTURE_LIMIT, reserve: async () => true });
+      const about = found.totalHint !== null ? ` of about ${found.totalHint}` : "";
+      console.log(`${c.green("✓")} ${kind} term search returned ${found.jobs.length} job(s)${about}`);
+      console.log(
+        c.dim(search.validatedOn ? `  validated on ${search.validatedOn}` : "  not validated: stays out of term runs"),
+      );
+      for (const j of found.jobs.slice(0, 5)) {
+        console.log(`  ${c.dim("·")} ${j.title} ${c.dim(`— ${j.companyName}`)}`);
+      }
+      return;
+    }
+    if (handle === undefined) {
+      console.error(c.red("probe needs a <handle>, or --term <term>"));
+      process.exitCode = 1;
+      return;
+    }
     const result = await adapter.fetchJobs({ kind: fetchableKind, handle, label: handle });
     console.log(`${c.green("✓")} ${kind}:${handle} returned ${result.jobs.length} job(s)`);
     for (const w of result.warnings) console.log(c.yellow(`  ! ${w}`));
     for (const j of result.jobs.slice(0, 5)) {
       console.log(`  ${c.dim("·")} ${j.title} ${c.dim(`— ${j.locationRaw ?? "?"}`)}`);
     }
+  });
+
+/* ---------------------------------- terms --------------------------------- */
+
+const terms = program.command("terms").description("Saved term searches: daily capture and platform health");
+
+/**
+ * Quanto `terms run` espera por janelas de cota do dia antes de sair. O job da
+ * varredura tem 60 minutos para sincronizar, capturar, reconferir e pontuar;
+ * 20 deles cabem para vinte termos numa plataforma de uma chamada por minuto.
+ */
+const TERMS_RUN_WAIT_MS = 20 * 60_000;
+
+terms
+  .command("run")
+  .description("Enqueue today's capture of every active term and drain the queue")
+  .option("--max <n>", "stop after N captures")
+  .action(async (opts: { max?: string }) => {
+    // A varredura diária chama isto; onde a ingestão não é permitida, sai com
+    // o motivo da guarda antes de abrir o banco ou a rede.
+    try {
+      guardIngestion();
+    } catch (error) {
+      if (!(error instanceof IngestionBlockedError)) throw error;
+      console.error(c.red(error.message));
+      process.exitCode = 1;
+      return;
+    }
+    const max = opts.max === undefined ? undefined : idNumerico(opts.max, "capturas");
+    if (max === null) return;
+    await withDb(async () => {
+      const now = new Date(clock().now());
+      for (const { termKey, query } of await activeTermKeys()) {
+        await requestTermCaptures({ termKey, query, origin: "sweep", now });
+      }
+      // Espera as janelas por minuto do dia: o RemoteOK aceita uma chamada por minuto.
+      const summary = await runTermCaptures({ worker: "cli", max, waitMs: TERMS_RUN_WAIT_MS });
+      // Só agregados por plataforma: termo e consulta nunca vão para o log.
+      for (const [platform, counts] of Object.entries(summary)) {
+        console.log(JSON.stringify({ platform, ...counts }));
+      }
+      const runs = Object.values(summary);
+      if (runs.length > 0 && runs.every((run) => run.failed === run.claimed)) {
+        console.error(c.red("every platform failed in this run"));
+        process.exitCode = 1;
+      }
+    });
+  });
+
+terms
+  .command("status")
+  .description("Aggregate capture health per platform (no term, query or candidate)")
+  .action(async () => {
+    await withDb(async () => {
+      for (const health of await captureHealth(new Date(clock().now()))) console.log(JSON.stringify(health));
+    });
+  });
+
+/* ---------------------------------- tracks -------------------------------- */
+
+const tracks = program.command("tracks").description("Target tracks of a candidate");
+
+tracks
+  .command("list")
+  .description("Tracks of a candidate with status and scored-job counts")
+  .option("--candidate <id>", "candidate id (default: the active candidate)")
+  .action(async (opts: { candidate?: string }) => {
+    await withDb(async () => {
+      const candidateId =
+        opts.candidate === undefined ? await activeCandidateId() : idNumerico(opts.candidate, "candidato");
+      if (candidateId === null) return;
+      const counts = await scoredJobsPerTrack(candidateId);
+      const list = await listCandidateTracks(candidateId);
+      if (list.length === 0) console.log(c.dim("No tracks: the candidate has no own matching profile yet."));
+      for (const track of list) {
+        const marker = track.isPrimary ? c.bold("★") : " ";
+        console.log(
+          `${marker} ${truncate(track.name, 28)} ${track.status.padEnd(8)} ${String(counts.get(track.id) ?? 0).padStart(6)} scored`,
+        );
+      }
+    });
   });
 
 /* ---------------------------------- jobs ---------------------------------- */
@@ -786,7 +905,7 @@ jobs
         const rows = await getDb()
           .select({ fit: jobScore.fit, cluster: jobScore.cluster, blockers: jobScore.blockers })
           .from(jobScore)
-          .where(and(eq(jobScore.candidateId, candidateId), eq(jobScore.jobId, result.jobId)))
+          .where(and(eq(jobScore.candidateId, candidateId), eq(jobScore.jobId, result.jobId), primaryScoreFilter()))
           .limit(1);
         const s = rows[0];
         if (s) {
@@ -1056,7 +1175,7 @@ jobs
         .from(job)
         .leftJoin(
           jobScore,
-          and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId)),
+          and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, candidateId), primaryScoreFilter()),
         )
         .leftJoin(
           application,

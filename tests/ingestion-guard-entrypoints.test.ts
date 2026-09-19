@@ -4,6 +4,7 @@ import { probe } from "../src/core/ingest/probe.ts";
 import { syncAll } from "../src/core/ingest/run.ts";
 import { verifyJobs } from "../src/core/ingest/verify.ts";
 import { runFetchStage } from "../src/core/scrape/fetcher.ts";
+import { requestTermCaptures, runTermCaptures } from "../src/contexts/sourcing/index.ts";
 
 /**
  * Suite: contrato de não-I/O dos entrypoints bloqueados (F-08, IT-002)
@@ -68,6 +69,20 @@ describe("IT-002 — entrypoint bloqueado não abre rede nem fila", () => {
     );
 
     expect(new Set(results).size).toBe(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("IT-127 captura por termo: drenar recusa, pedir responde bloqueado sem gravar", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    // Sem banco neste arquivo: se a guarda viesse depois do primeiro acesso, o
+    // erro seria outro. Pedir captura devolve o código em vez de lançar — é o
+    // que deixa o termo ser salvo com "capturas desligadas" (TechSpec).
+    await expect(runTermCaptures({ worker: "test" })).rejects.toBeInstanceOf(IngestionBlockedError);
+    await expect(
+      requestTermCaptures({ termKey: "laravel", query: "Laravel", origin: "web", now: new Date() }),
+    ).resolves.toEqual({ enqueued: 0, existing: 0, skipped: "ingestion_blocked" });
+
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

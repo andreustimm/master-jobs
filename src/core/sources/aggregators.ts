@@ -6,7 +6,28 @@
  * Field shapes verified against live responses.
  */
 import { firstNonEmpty, getJson, htmlToText } from "./http.ts";
-import type { RawJob, SourceAdapter, SourceConfig, FetchResult } from "./types.ts";
+import type {
+  FetchResult,
+  PlatformBudget,
+  RawJob,
+  SourceAdapter,
+  SourceConfig,
+  TermSearchResult,
+} from "./types.ts";
+
+/**
+ * Budgeted platforms never retry inside a call (ADR-010): a retry would spend
+ * a unit the ledger did not reserve. A failed call waits for the next window.
+ */
+const BUDGETED = { retries: 0 } as const;
+
+const QUOTA_STOP: TermSearchResult = { jobs: [], warnings: [], totalHint: null, stoppedByQuota: true };
+
+function cleanTags(tags: unknown): string[] | null {
+  if (!Array.isArray(tags)) return null;
+  const clean = tags.filter((tag): tag is string => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean);
+  return clean.length > 0 ? clean : null;
+}
 
 /* -------------------------------- Himalayas ------------------------------- */
 
@@ -26,6 +47,8 @@ type HimalayasJob = {
   excerpt?: string;
   pubDate?: number | string;
   applicationLink?: string;
+  /** Search results only: the platform's own classification, used as tags. */
+  categories?: string[];
 };
 
 /** Aggregators are inconsistent: a field is sometimes a string, sometimes a list. */
@@ -48,6 +71,36 @@ function toIso(value: number | string | undefined | null): string | null {
 /** Page size is fixed server-side: `limit` above 20 is silently ignored. */
 const HIMALAYAS_PAGE = 20;
 const HIMALAYAS_DEFAULT_PAGES = 50;
+
+/**
+ * Sem limite por minuto (PRD, orçamento da Himalayas): a busca faz até 5 páginas
+ * seguidas numa execução, e um teto de 1 por minuto parava toda captura na
+ * primeira página, com 20 das 100 vagas prometidas. O 429 continua esgotando o dia.
+ */
+const HIMALAYAS_BUDGET: PlatformBudget = { pageSize: HIMALAYAS_PAGE, maxRequestsPerRun: 5 };
+
+function mapHimalayas(j: HimalayasJob): RawJob {
+  return {
+    externalId: j.guid,
+    companyName: j.companyName,
+    title: j.title.trim(),
+    url: j.applicationLink ?? `https://himalayas.app/companies/${j.companySlug ?? ""}`,
+    applyUrl: j.applicationLink ?? null,
+    locationRaw: toList(j.locationRestrictions).join(", ") || "Remote",
+    remote: true,
+    employmentType: j.employmentType ?? null,
+    seniorityRaw: Array.isArray(j.seniority) ? j.seniority.join(", ") : (j.seniority ?? null),
+    descriptionHtml: j.description ?? null,
+    descriptionText: firstNonEmpty(htmlToText(j.description), j.excerpt),
+    postedAt: toIso(j.pubDate),
+    compMin: j.minSalary ?? null,
+    compMax: j.maxSalary ?? null,
+    compCurrency: j.currency ?? null,
+    compPeriod: j.salaryPeriod ?? null,
+    tags: cleanTags(j.categories),
+    raw: j,
+  };
+}
 
 export const himalayas: SourceAdapter = {
   kind: "himalayas",
@@ -72,6 +125,9 @@ export const himalayas: SourceAdapter = {
 
     for (let page = 0; page < pages; page++) {
       const offset = page * HIMALAYAS_PAGE;
+      // Retentativa padrão nas páginas do feed: a sincronização reserva uma
+      // unidade por execução, não por página, e sem retentativa um 5xx
+      // passageiro numa das 60 páginas jogava fora o feed inteiro.
       const data = await getJson<{ jobs?: HimalayasJob[]; totalCount?: number }>(
         `https://himalayas.app/jobs/api?limit=${HIMALAYAS_PAGE}&offset=${offset}`,
       );
@@ -89,26 +145,43 @@ export const himalayas: SourceAdapter = {
       );
     }
 
-    const jobs = collected.map((j): RawJob => ({
-      externalId: j.guid,
-      companyName: j.companyName,
-      title: j.title.trim(),
-      url: j.applicationLink ?? `https://himalayas.app/companies/${j.companySlug ?? ""}`,
-      applyUrl: j.applicationLink ?? null,
-      locationRaw: toList(j.locationRestrictions).join(", ") || "Remote",
-      remote: true,
-      employmentType: j.employmentType ?? null,
-      seniorityRaw: Array.isArray(j.seniority) ? j.seniority.join(", ") : (j.seniority ?? null),
-      descriptionHtml: j.description ?? null,
-      descriptionText: firstNonEmpty(htmlToText(j.description), j.excerpt),
-      postedAt: toIso(j.pubDate),
-      compMin: j.minSalary ?? null,
-      compMax: j.maxSalary ?? null,
-      compCurrency: j.currency ?? null,
-      compPeriod: j.salaryPeriod ?? null,
-      raw: j,
-    })) as RawJob[];
-    return { jobs, warnings };
+    return { jobs: collected.map(mapHimalayas), warnings };
+  },
+  termSearch: {
+    budget: HIMALAYAS_BUDGET,
+    // The search endpoint is not the feed: it honours `q` and pages with
+    // `page` (1-based; `offset` is ignored there). `jho sources probe
+    // himalayas --term laravel` returned 98 of about 296 on 2026-09-19.
+    validatedOn: "2026-09-19",
+    async search(query, opts) {
+      const collected: HimalayasJob[] = [];
+      let totalHint: number | null = null;
+      let stoppedByQuota = false;
+      const pages = Math.min(HIMALAYAS_BUDGET.maxRequestsPerRun, Math.ceil(opts.limit / HIMALAYAS_PAGE));
+      for (let page = 1; page <= pages; page++) {
+        if (!(await opts.reserve())) {
+          stoppedByQuota = true;
+          break;
+        }
+        const params = new URLSearchParams({ q: query, page: String(page) });
+        const data = await getJson<{ jobs?: HimalayasJob[]; totalCount?: number }>(
+          `https://himalayas.app/jobs/api/search?${params}`,
+          BUDGETED,
+        );
+        totalHint = data.totalCount ?? totalHint;
+        const batch = data.jobs ?? [];
+        collected.push(...batch);
+        // A page can come back short in the middle of the results (the probe
+        // got 19 on page 3 of 296): only an empty page or the total ends it.
+        if (batch.length === 0 || (totalHint !== null && page * HIMALAYAS_PAGE >= totalHint)) break;
+      }
+      return {
+        jobs: collected.slice(0, opts.limit).map(mapHimalayas),
+        warnings: [],
+        totalHint,
+        stoppedByQuota,
+      };
+    },
   },
 };
 
@@ -128,30 +201,54 @@ type RemotiveJob = {
   description?: string;
 };
 
+type RemotiveResponse = { jobs?: RemotiveJob[]; "total-job-count"?: number };
+
+/**
+ * The API's legal notice asks for "max. 4 times a day" and blocks excessive
+ * requests. Four is the system-wide day budget, sync included.
+ */
+const REMOTIVE_BUDGET: PlatformBudget = { perDay: 4, perMinute: 2, pageSize: 100, maxRequestsPerRun: 1 };
+
+function mapRemotive(j: RemotiveJob): RawJob {
+  return {
+    externalId: String(j.id),
+    companyName: j.company_name,
+    title: j.title.trim(),
+    url: j.url,
+    applyUrl: j.url,
+    locationRaw: j.candidate_required_location ?? "Remote",
+    remote: true,
+    employmentType: j.job_type ?? null,
+    descriptionHtml: j.description ?? null,
+    descriptionText: htmlToText(j.description),
+    postedAt: j.publication_date ?? null,
+    tags: cleanTags(j.tags),
+    raw: j,
+  };
+}
+
 export const remotive: SourceAdapter = {
   kind: "remotive",
   docs: "https://remotive.com/api/remote-jobs",
   async fetchJobs(config: SourceConfig): Promise<FetchResult> {
     const params = new URLSearchParams({ limit: "50" });
     if (config.handle) params.set("search", config.handle);
-    const data = await getJson<{ jobs?: RemotiveJob[] }>(
-      `https://remotive.com/api/remote-jobs?${params}`,
-    );
-    const jobs = (data.jobs ?? []).map((j): RawJob => ({
-      externalId: String(j.id),
-      companyName: j.company_name,
-      title: j.title.trim(),
-      url: j.url,
-      applyUrl: j.url,
-      locationRaw: j.candidate_required_location ?? "Remote",
-      remote: true,
-      employmentType: j.job_type ?? null,
-      descriptionHtml: j.description ?? null,
-      descriptionText: htmlToText(j.description),
-      postedAt: j.publication_date ?? null,
-      raw: j,
-    }));
-    return { jobs, warnings: [] };
+    const data = await getJson<RemotiveResponse>(`https://remotive.com/api/remote-jobs?${params}`, BUDGETED);
+    return { jobs: (data.jobs ?? []).map(mapRemotive), warnings: [] };
+  },
+  termSearch: {
+    budget: REMOTIVE_BUDGET,
+    validatedOn: "2026-09-19",
+    async search(query, opts) {
+      if (!(await opts.reserve())) return QUOTA_STOP;
+      const params = new URLSearchParams({
+        search: query,
+        limit: String(Math.min(opts.limit, REMOTIVE_BUDGET.pageSize)),
+      });
+      const data = await getJson<RemotiveResponse>(`https://remotive.com/api/remote-jobs?${params}`, BUDGETED);
+      const jobs = (data.jobs ?? []).map(mapRemotive);
+      return { jobs, warnings: [], totalHint: data["total-job-count"] ?? jobs.length, stoppedByQuota: false };
+    },
   },
 };
 
@@ -213,32 +310,60 @@ type RemoteOkJob = {
   legal?: string;
 };
 
+/** No published limit: one call a minute is the courtesy floor (ADR-010). */
+const REMOTEOK_BUDGET: PlatformBudget = { perMinute: 1, pageSize: 100, maxRequestsPerRun: 1 };
+
+/** The first element of the array is a legal notice, not a job. */
+function remoteOkJobs(data: RemoteOkJob[] | null): RawJob[] {
+  return (data ?? [])
+    .filter((j) => !j.legal && j.position && j.id)
+    .map((j): RawJob => ({
+      externalId: String(j.id),
+      companyName: j.company ?? "Unknown",
+      title: (j.position ?? "").trim(),
+      url: j.url ?? `https://remoteok.com/remote-jobs/${j.slug ?? j.id}`,
+      applyUrl: j.apply_url ?? null,
+      locationRaw: j.location || "Remote",
+      remote: true,
+      descriptionHtml: j.description ?? null,
+      descriptionText: htmlToText(j.description),
+      postedAt: j.date ?? null,
+      compMin: j.salary_min ?? null,
+      compMax: j.salary_max ?? null,
+      compCurrency: j.salary_min ? "USD" : null,
+      compPeriod: j.salary_min ? "year" : null,
+      tags: cleanTags(j.tags),
+      raw: j,
+    }));
+}
+
+/** `Tech Lead` -> `tech-lead`: RemoteOK tags are lowercase and hyphenated. */
+export function remoteOkTag(query: string): string {
+  return query.trim().toLowerCase().replace(/\s+/g, "-");
+}
+
 export const remoteok: SourceAdapter = {
   kind: "remoteok",
   docs: "https://remoteok.com/api",
   async fetchJobs(_config: SourceConfig): Promise<FetchResult> {
-    const data = await getJson<RemoteOkJob[]>("https://remoteok.com/api");
-    // The first element of the array is a legal notice, not a job.
-    const jobs = (data ?? [])
-      .filter((j) => !j.legal && j.position && j.id)
-      .map((j): RawJob => ({
-        externalId: String(j.id),
-        companyName: j.company ?? "Unknown",
-        title: (j.position ?? "").trim(),
-        url: j.url ?? `https://remoteok.com/remote-jobs/${j.slug ?? j.id}`,
-        applyUrl: j.apply_url ?? null,
-        locationRaw: j.location || "Remote",
-        remote: true,
-        descriptionHtml: j.description ?? null,
-        descriptionText: htmlToText(j.description),
-        postedAt: j.date ?? null,
-        compMin: j.salary_min ?? null,
-        compMax: j.salary_max ?? null,
-        compCurrency: j.salary_min ? "USD" : null,
-        compPeriod: j.salary_min ? "year" : null,
-        raw: j,
-      }));
-    return { jobs, warnings: [] };
+    const data = await getJson<RemoteOkJob[]>("https://remoteok.com/api", BUDGETED);
+    return { jobs: remoteOkJobs(data), warnings: [] };
+  },
+  termSearch: {
+    budget: REMOTEOK_BUDGET,
+    // `tag` is undocumented: `jho sources probe remoteok --term "tech lead"`
+    // answered with the three tag matches on 2026-09-19. A change surfaces as
+    // `endpoint_gone` or `parse` on the admin view, and Remotive keeps working.
+    validatedOn: "2026-09-19",
+    async search(query, opts) {
+      if (!(await opts.reserve())) return QUOTA_STOP;
+      const data = await getJson<RemoteOkJob[]>(
+        `https://remoteok.com/api?tag=${encodeURIComponent(remoteOkTag(query))}`,
+        BUDGETED,
+      );
+      const jobs = remoteOkJobs(data);
+      return { jobs: jobs.slice(0, opts.limit), warnings: [], totalHint: jobs.length, stoppedByQuota: false };
+    },
   },
 };
 

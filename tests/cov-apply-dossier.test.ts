@@ -21,6 +21,7 @@ import type { DB } from "../src/core/db/client.ts";
 import { company, job, jobPage, jobScore, source, targetAccount } from "../src/core/db/schema.ts";
 import { seedCatalog } from "../src/contexts/skills/index.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 /**
  * Dez linhas de evidência que casam com o anúncio abaixo, para provar o corte
@@ -137,6 +138,7 @@ async function seedJob(input: {
 async function scoreJob(jobId: number, patch: Record<string, unknown> = {}): Promise<void> {
   await db.insert(jobScore).values({
     candidateId,
+    trackId: await primaryTrackId(db, candidateId),
     jobId,
     fit: 78,
     titleScore: 1,

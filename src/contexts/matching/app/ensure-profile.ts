@@ -10,10 +10,8 @@ import { currentDocument } from "../../../core/candidate.ts";
 import { extractSkills } from "../../skills/domain/extractor.ts";
 import { listCatalog } from "../../skills/index.ts";
 import { curriculoSustentaPerfil, deriveMatchingProfile } from "../domain/derive.ts";
-import {
-  loadCandidateMatchingProfile,
-  saveCandidateMatchingProfile,
-} from "../infra/drizzle-profile.ts";
+import { loadCandidateMatchingProfile } from "../infra/drizzle-profile.ts";
+import { saveMatchingProfile } from "./tracks.ts";
 
 export type ResultadoPerfil =
   /** Já tinha perfil próprio. Nada foi tocado. */
@@ -67,7 +65,9 @@ export async function ensureMatchingProfile(candidateId: number): Promise<Result
   // `atual.profile` aqui é o padrão da instalação: entra inteiro e sai com
   // `keywords` trocado, para que campo novo no schema não suma do derivado.
   const derivado = deriveMatchingProfile(atual.profile, deteccoes);
-  await saveCandidateMatchingProfile(candidateId, derivado);
+  // Grava o perfil e a trilha principal juntos. Alvos e faixas vieram do padrão
+  // e saem marcados como "não revisados" até a pessoa salvar a trilha.
+  await saveMatchingProfile(candidateId, derivado, { primary: "fill" });
 
   return {
     estado: "derivado",

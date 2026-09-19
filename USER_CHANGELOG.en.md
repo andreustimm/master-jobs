@@ -18,6 +18,47 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### New
+
+- On the jobs screen, choose which track the scores come from — the primary,
+  an accepted track or all of them, with the track's name on each job.
+- A minimum pay filter in any currency and period, with the conversion beside
+  the original amount. Jobs with no pay disclosed or pay that cannot be
+  compared appear marked, after the ones that reach the minimum, and can be
+  hidden; the screen says how many fell below the minimum.
+- The jobs screen search looks for the whole word in the title, company and
+  description: "java" no longer brings "JavaScript". When it finds little, the
+  screen offers to search the platforms for the term.
+- A "brought by term" filter that shows the jobs a saved term brought and
+  marks the new ones since your last visit.
+
+- A new Searches screen: save a term, such as "Laravel", under a track, and
+  the system looks for jobs with it on the registered platforms and repeats the
+  search every day. The screen shows what each platform brought and how many
+  jobs are new; pause, move, re-run or delete the term whenever you like.
+- Create a track from the suggestion for a term and adjust its titles,
+  keywords, seniority and pay ranges. If one field is refused, what you typed in
+  the others stays in the form. Any track can become the primary, and an
+  archived track can be restored.
+- On a job's page, the score for each track appears side by side.
+- Administrators follow the health of the searches per platform without seeing
+  terms or candidates.
+
+- Each person asks for up to 40 searches a day from the screen; past that, the
+  term is saved and searches in the daily sweep. A paused term does not search,
+  not even by hand.
+
+### Improved
+
+- Groundwork for searching more than one kind of job, each with its own
+  yardstick. Fit scores are recalculated once in this version; the score you
+  see is still the one for your main goal.
+
+### Fixed
+
+- An archived job that is posted again shows up in the job list again. Before,
+  it counted as open but stayed hidden.
+
 ## [1.14.2] - 2026-09-19T13:44:44.288Z
 
 ### Fixed

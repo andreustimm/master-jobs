@@ -91,6 +91,17 @@ jobs:
       - name: Sincronizar as fontes
         run: pnpm jho jobs sync
 
+      # 1b. Repetir as buscas por termo salvas. Depois do sync, que já gastou a
+      #     sua parte da cota de cada plataforma, e antes da repontuação, que dá
+      #     nota às vagas que as buscas trouxeram. O log só tem agregados por
+      #     plataforma. Se TODAS as plataformas falharem, o resto da varredura
+      #     segue — captura, reconferência e nota não dependem dos termos — e o
+      #     alarme vermelho sai no último passo.
+      - name: Buscar os termos salvos
+        id: termos
+        continue-on-error: true
+        run: pnpm jho terms run
+
       # 2. Capturar a descrição das que valem a pena. O corte de fit evita gastar
       #    requisição com vaga que não seria lida de todo jeito.
       - name: Enfileirar captura
@@ -162,3 +173,9 @@ jobs:
         # Fecha o log com o número que interessa a quem abrir a execução para
         # saber se valeu a pena: quantas vagas existem e quantas estão abertas.
         run: pnpm jho stats
+
+      - name: Conferir a busca por termo
+        if: always() && steps.termos.outcome == 'failure'
+        run: |
+          echo "::error::A busca por termo falhou em todas as plataformas; o resto da varredura rodou."
+          exit 1

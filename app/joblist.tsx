@@ -24,21 +24,33 @@ function pay(r: Row): string | null {
   return formatMoney(money(amount, currency, period), "pt-BR");
 }
 
+/** How the Jobs screen asked rows to be read: which track, which pay unit. */
+export type ListContext = {
+  /** Track names by id, shown on each row when the view mixes tracks. */
+  trackNames?: Record<number, string>;
+  /** Currency and period of `payAmount`, when pay was normalized. */
+  pay?: { currency: string; period: "month" | "year" };
+  /** Replaces the generic empty state (a term, a saved term). */
+  empty?: React.ReactNode;
+};
+
 export function JobList({
   rows,
   dense = false,
   locale,
   t,
+  context = {},
 }: {
   rows: Row[];
   dense?: boolean;
   locale: LocaleId;
   t: Translator["t"];
+  context?: ListContext;
 }) {
   if (rows.length === 0) {
     return (
-      <Card className="p-6 text-sm text-muted-foreground">
-        {t("jobs.noneWithFilters")}
+      <Card className="p-6 text-sm text-muted-foreground" data-testid="jobs-empty">
+        {context.empty ?? t("jobs.noneWithFilters")}
       </Card>
     );
   }
@@ -86,6 +98,11 @@ export function JobList({
                   {r.title}
                 </TransitionLink>
                 {r.status && <StatusBadge status={r.status} t={t} />}
+                {r.isNew && (
+                  <Badge className="type-micro" data-testid={`job-new-${r.jobId}`}>
+                    {t("jobs.newBadge")}
+                  </Badge>
+                )}
               </div>
 
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -97,6 +114,11 @@ export function JobList({
                 {r.cluster && (
                   <Badge variant="outline" className="font-mono type-micro text-[var(--primary-text)]">
                     {r.cluster}
+                  </Badge>
+                )}
+                {context.trackNames && r.trackId !== null && context.trackNames[r.trackId] && (
+                  <Badge variant="outline" className="type-micro" data-testid={`job-track-${r.jobId}`} data-user-content>
+                    {t("jobs.trackLabel", { name: context.trackNames[r.trackId]! })}
                   </Badge>
                 )}
                 {/* De onde a vaga veio. Derivado de `source.kind` na leitura,
@@ -111,6 +133,23 @@ export function JobList({
                   </Badge>
                 )}
                 {salary && <span className="font-mono text-foreground">{salary}</span>}
+                {context.pay && r.payState === "amount" && r.payAmount !== null && (
+                  <span className="font-mono" data-testid={`job-pay-${r.jobId}`}>
+                    {t("jobs.payConverted", {
+                      amount: formatMoney(money(r.payAmount, context.pay.currency, context.pay.period), locale),
+                    })}
+                  </span>
+                )}
+                {context.pay && r.payState === "undisclosed" && (
+                  <Badge variant="outline" className="type-micro" data-testid={`job-pay-undisclosed-${r.jobId}`}>
+                    {t("jobs.payUndisclosed")}
+                  </Badge>
+                )}
+                {context.pay && r.payState === "not_comparable" && (
+                  <Badge variant="outline" className="type-micro" data-testid={`job-pay-not-comparable-${r.jobId}`}>
+                    {t("jobs.payNotComparable")}
+                  </Badge>
+                )}
                 {r.locationRaw && <span className="truncate">{r.locationRaw.slice(0, 62)}</span>}
               </div>
 

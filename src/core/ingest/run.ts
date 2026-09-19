@@ -8,10 +8,13 @@
  *     history of what you applied to stays intact.
  */
 import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { platformQuota } from "../../contexts/sourcing/index.ts";
+import { clock } from "../clock.ts";
 import { getDb } from "../db/client.ts";
 import { job, source } from "../db/schema.ts";
+import { HttpError } from "../sources/http.ts";
 import { getAdapter, sourceId } from "../sources/registry.ts";
-import type { SourceConfig } from "../sources/types.ts";
+import type { FetchResult, SourceAdapter, SourceConfig } from "../sources/types.ts";
 import { guardIngestion } from "./guard.ts";
 import { observeRawJob } from "./observe.ts";
 
@@ -72,6 +75,29 @@ export async function ensureSources(configs: SourceConfig[]): Promise<void> {
   }
 }
 
+/**
+ * Fetch one source, spending the platform's shared budget first (ADR-010).
+ *
+ * A budgeted platform counts every call the system makes, sync included — a
+ * term capture and the sync hitting Remotive on the same day draw from the
+ * same four calls. With the window full the source is recorded as `quota` and
+ * nothing goes out; a 429 closes the platform's day for everyone.
+ */
+async function fetchWithinBudget(adapter: SourceAdapter, config: SourceConfig): Promise<FetchResult> {
+  const budget = adapter.termSearch?.budget;
+  if (!budget) return adapter.fetchJobs(config);
+  const reservation = await platformQuota.reserve(config.kind, budget, new Date(clock().now()));
+  if (!reservation.ok) throw new Error("quota");
+  try {
+    return await adapter.fetchJobs(config);
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 429) {
+      await platformQuota.exhaustDay(config.kind, new Date(clock().now()));
+    }
+    throw error;
+  }
+}
+
 async function syncOne(config: SourceConfig): Promise<SyncSourceResult> {
   const db = getDb();
   const id = sourceId(config.kind, config.handle);
@@ -93,7 +119,7 @@ async function syncOne(config: SourceConfig): Promise<SyncSourceResult> {
 
   try {
     const adapter = getAdapter(config.kind);
-    const { jobs: rawJobs, warnings } = await adapter.fetchJobs(config);
+    const { jobs: rawJobs, warnings } = await fetchWithinBudget(adapter, config);
     result.fetched = rawJobs.length;
     result.warnings = warnings;
 

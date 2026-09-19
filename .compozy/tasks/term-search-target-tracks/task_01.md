@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Target tracks and per-track fit
 type: backend
 complexity: critical
@@ -37,15 +37,15 @@ fit, so it must land whole.
 </requirements>
 
 ## Subtasks
-- [ ] 1.1 Term kernel and shared word boundary used by the scorer.
-- [ ] 1.2 Schema and migrations for tracks, saved terms and the `job_score` key, with backfill of primary tracks.
-- [ ] 1.3 Pure track domain: validation, merge, relevance gate, deterministic suggestion, evidence support, inherited fields, preselection.
-- [ ] 1.4 Track storage and lifecycle (create, update, primary, archive, restore, overview) and the profile derivation writing the primary track.
-- [ ] 1.5 Track scope helper and SQL filters for every `job_score` reader.
-- [ ] 1.6 Per-track scoring with the relevance gate, pending-primary guard and scorer version bump.
-- [ ] 1.7 Move every `job_score` reader (board, cockpit, pipeline, dossier, analytics, export, report, gap, referrals, target corpus, verify, scrape, sweep snapshot, CLI) to the track scope.
-- [ ] 1.8 On-demand fit for tracks without a row, for the job detail.
-- [ ] 1.9 Context map, architecture tests, E2E fixtures and scoring/data-model docs.
+- [x] 1.1 Term kernel and shared word boundary used by the scorer.
+- [x] 1.2 Schema and migrations for tracks, saved terms and the `job_score` key, with backfill of primary tracks.
+- [x] 1.3 Pure track domain: validation, merge, relevance gate, deterministic suggestion, evidence support, inherited fields, preselection.
+- [x] 1.4 Track storage and lifecycle (create, update, primary, archive, restore, overview) and the profile derivation writing the primary track.
+- [x] 1.5 Track scope helper and SQL filters for every `job_score` reader.
+- [x] 1.6 Per-track scoring with the relevance gate, pending-primary guard and scorer version bump.
+- [x] 1.7 Move every `job_score` reader (board, cockpit, pipeline, dossier, analytics, export, report, gap, referrals, target corpus, verify, scrape, sweep snapshot, CLI) to the track scope.
+- [x] 1.8 On-demand fit for tracks without a row, for the job detail.
+- [x] 1.9 Context map, architecture tests, E2E fixtures and scoring/data-model docs.
 
 ## Implementation Details
 
@@ -93,15 +93,15 @@ shift with the journal; keep the expand/backfill/contract order.
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-001–UT-012 — term kernel: validation, key, pattern, SQL string.
-- [ ] UT-020–UT-044 — track domain: validation, merge, relevance, suggestion, evidence, inherited fields, preselection.
-- [ ] UT-071–UT-076 — per-track scoring and scorer version.
-- [ ] IT-001–IT-005 — migrations 0004–0006.
-- [ ] IT-006–IT-022 — track lifecycle, profile derivation, scope.
-- [ ] IT-023–IT-031 — per-track scoring and the relevance gate.
-- [ ] IT-032–IT-041 — `job_score` readers and on-demand fit.
-- [ ] IT-116 — TypeScript/PostgreSQL pattern parity.
-- [ ] IT-125 — CSV export without track data for recruiters.
+- [x] UT-001–UT-012 — term kernel: validation, key, pattern, SQL string.
+- [x] UT-020–UT-044 — track domain: validation, merge, relevance, suggestion, evidence, inherited fields, preselection.
+- [x] UT-071–UT-076 — per-track scoring and scorer version.
+- [x] IT-001–IT-005 — migrations 0004–0006.
+- [x] IT-006–IT-022 — track lifecycle, profile derivation, scope.
+- [x] IT-023–IT-031 — per-track scoring and the relevance gate.
+- [x] IT-032–IT-041 — `job_score` readers and on-demand fit.
+- [x] IT-116 — TypeScript/PostgreSQL pattern parity.
+- [x] IT-125 — CSV export without track data for recruiters.
 
 ## Success Criteria
 - Every assigned test case implemented and passing

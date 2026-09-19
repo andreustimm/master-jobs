@@ -27,7 +27,7 @@
  * Claim pendurado volta a ser elegível depois de `MINUTOS_CLAIM_MORTO`: um
  * processo morto no meio não pode travar o candidato para sempre.
  */
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { clock } from "../clock.ts";
 import { getDb } from "../db/client.ts";
 import { scoreTask } from "../db/schema.ts";
@@ -91,6 +91,25 @@ export async function enqueueScore(
 
 export type TarefaReivindicada = { id: number; candidateId: number; attempts: number };
 
+/**
+ * A tarefa ainda é a que este trabalhador reivindicou.
+ *
+ * Editar uma trilha enquanto a repontuação roda re-enfileira o candidato: a
+ * linha volta a `pending` com o alvo novo. Gravar `done` por cima, só pelo id,
+ * apagaria esse pedido e deixaria a trilha editada com as notas antigas.
+ */
+function emExecucao(id: number) {
+  return and(eq(scoreTask.id, id), eq(scoreTask.status, "scoring"));
+}
+
+/** Conclui a tarefa reivindicada — a menos que um pedido novo a tenha re-enfileirado. */
+export async function finishScoreTask(id: number, scored: number, lastError: string | null): Promise<void> {
+  await getDb()
+    .update(scoreTask)
+    .set({ status: "done", scored, lastError, updatedAt: clock().iso() })
+    .where(emExecucao(id));
+}
+
 export async function claimScore(worker: string): Promise<TarefaReivindicada | null> {
   const agora = clock().iso();
   const morto = emMinutos(-MINUTOS_CLAIM_MORTO);
@@ -148,19 +167,16 @@ export async function runScoreQueue(
       // Sem perfil próprio não se pontua. Pontuar com o padrão da instalação
       // daria a essa pessoa o ranking de outra, com a aparência de ser dela.
       if (perfil.estado !== "ja-tinha" && perfil.estado !== "derivado") {
-        await db
-          .update(scoreTask)
-          .set({ status: "done", scored: 0, lastError: perfil.estado, updatedAt: clock().iso() })
-          .where(eq(scoreTask.id, tarefa.id));
+        await finishScoreTask(tarefa.id, 0, perfil.estado);
         resultado.processadas++;
         continue;
       }
 
-      const r = await scoreAll(tarefa.candidateId, { all: true });
-      await db
-        .update(scoreTask)
-        .set({ status: "done", scored: r.scored, lastError: null, updatedAt: clock().iso() })
-        .where(eq(scoreTask.id, tarefa.id));
+      // Incremental, não `all`: o hash do perfil efetivo é por trilha, então só
+      // a trilha editada (ou todas, quando a pessoa mudou) aparece desatualizada
+      // — editar uma trilha recalcula só ela (regra 28 do PRD).
+      const r = await scoreAll(tarefa.candidateId);
+      await finishScoreTask(tarefa.id, r.scored, null);
 
       resultado.processadas++;
       resultado.pontuadas += r.scored;
@@ -180,7 +196,7 @@ export async function runScoreQueue(
           claimedBy: null,
           updatedAt: clock().iso(),
         })
-        .where(eq(scoreTask.id, tarefa.id));
+        .where(emExecucao(tarefa.id));
 
       resultado.processadas++;
       resultado.falhas++;
