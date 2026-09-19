@@ -26,7 +26,7 @@ item move a agulha num funil de contratação real.
 
 ## Captura de 16/09/2026 — próxima semana de trabalho
 
-### F-07 · Arquivar vagas sem perder candidaturas 📋
+### F-07 · Arquivar vagas sem perder candidaturas ✅
 
 Fechamento é fato da fonte; arquivamento é estado operacional; candidatura é
 histórico protegido. Implementar `archived_at`, dry-run de 90 dias e leituras
@@ -35,13 +35,56 @@ escopadas para candidato/recrutador. O contrato completo está no
 [ADR 0020](../adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md) e no
 [documento de produto](job-lifecycle-and-application-history.md).
 
-### F-08 · Dev/staging amostrais e sem ingestão externa 📋
+### F-08 · Dev/staging amostrais e sem ingestão externa ✅
 
 Remote dev/staging devem ter somente fixtures/mocks pequenos. Sync, download,
 scrape, recheck e busca de novas vagas ficam bloqueados fora de produção; local
 usa PostgreSQL isolado por `DATABASE_URL` e é opt-in para diagnóstico. Ver a
 [`tarefa desta semana`](../../.compozy/tasks/environment-sample-only/) e a
 [ADR 0021](../adr/0021-ambientes-nao-produtivos-com-dados-sinteticos.md).
+
+## Captura de 19/09/2026 — pendências do corte de produção
+
+O corte para o Supabase e o relato de erro entraram nesta data. Três coisas
+ficaram para trás **conscientemente**, e estão aqui para não virarem dívida
+invisível. Nenhuma bloqueia o produto hoje; todas custam pouco e valem mais
+quanto antes.
+
+### O-01 · `DATABASE_URL` com a role restrita 📋
+
+Produção conecta pela `POSTGRES_URL`, que é o usuário `postgres` —
+**superusuário**. A separação de privilégio que a migration `0001` desenhou só
+entra em vigor quando `DATABASE_URL` apontar para `master_jobs_app`.
+
+A role já existe e foi validada por `has_*_privilege`: lê e escreve `job` e
+`application`, **não cria no schema**, e alcança coluna criada depois. O que
+falta é cadastrar a URL. Dá para testar **antes** do deploy — o repositório
+versiona `config/certs/supabase-ca.crt`, que é a CA que o pooler apresenta.
+
+Procedimento em [`deploy.md`](../engineering/deploy.md#dar-login-à-role-de-runtime).
+Adiado pelo usuário em 19/09/2026, logo após a queda de 28 minutos, para não
+empilhar mudança de conexão sobre produção recém-restabelecida.
+
+### O-02 · Mapas de origem no Sentry 📋
+
+A pilha que chega no Sentry está **minificada** (`chunks/5303.js:1:1963`) — foi
+exatamente assim que o erro da 1.13.1 apareceu no log da Vercel, e é a
+diferença entre um relatório legível e um enigma.
+
+Exige envolver a configuração com `withSentryConfig` em `next.config.ts` e
+cadastrar `SENTRY_AUTH_TOKEN`, `SENTRY_ORG` e `SENTRY_PROJECT` no ambiente de
+**build**. Ficou fora da entrega inicial porque adicionava risco de build sem
+benefício imediato, no mesmo dia de uma queda. Detalhe em
+[`deploy.md`](../engineering/deploy.md#relato-de-erro).
+
+### O-03 · Alerta de erro do Sentry para um canal 📋
+
+Hoje o Sentry **registra** o erro, mas ninguém é avisado. A queda de 28 minutos
+foi descoberta por uma pessoa abrindo o site; com o Sentry ligado e sem alerta,
+ela seria descoberta do mesmo jeito — só que com um registro bonito no painel.
+
+Capturar e notificar são coisas diferentes, e só a primeira está pronta. Falta
+definir a regra (taxa de erro, primeira ocorrência) e o canal.
 
 ---
 
