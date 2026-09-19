@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Saved terms, daily repeat and CLI
 type: backend
 complexity: high
@@ -36,13 +36,13 @@ daily. This connects the candidate's intent (task 1) to the capture pipeline
 </requirements>
 
 ## Subtasks
-- [ ] 3.1 Saved-term domain rules.
-- [ ] 3.2 Saved-term storage and app functions with limits, uniqueness and atomic save-and-enqueue.
-- [ ] 3.3 New-job counts, overview with per-platform states and the paused/no-results labels.
-- [ ] 3.4 Term Server Actions with guards, impersonation and environment handling, and the `after()` drain.
-- [ ] 3.5 CLI commands `terms run`, `terms status`, `tracks list`.
-- [ ] 3.6 Sweep step and ingestion-guard coverage of the new entry point.
-- [ ] 3.7 `docs/cli.md` and `docs/operations.md` updated.
+- [x] 3.1 Saved-term domain rules.
+- [x] 3.2 Saved-term storage and app functions with limits, uniqueness and atomic save-and-enqueue.
+- [x] 3.3 New-job counts, overview with per-platform states and the paused/no-results labels.
+- [x] 3.4 Term Server Actions with guards, impersonation and environment handling, and the `after()` drain.
+- [x] 3.5 CLI commands `terms run`, `terms status`, `tracks list`.
+- [x] 3.6 Sweep step and ingestion-guard coverage of the new entry point.
+- [x] 3.7 `docs/cli.md` and `docs/operations.md` updated.
 
 ## Implementation Details
 
@@ -84,14 +84,14 @@ task 5; the actions here return codes, and task 5 maps them to dictionary keys.
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-045–UT-049 — saved-term domain rules.
-- [ ] IT-074–IT-083 — save term, including actions, impersonation, environment and `after()`.
-- [ ] IT-084–IT-089 — manual re-run.
-- [ ] IT-090–IT-093 — pause, resume, move, delete.
-- [ ] IT-094, IT-096–IT-102, IT-104 — counts, shared terms, active keys, daily repeat, overview labels, no e-mail.
-- [ ] IT-060, IT-071, IT-073 — runner behaviors observed through `jho terms run`.
-- [ ] IT-127 — ingestion guard on every term-capture entry point.
-- [ ] IT-131, IT-132 — CLI commands.
+- [x] UT-045–UT-049 — saved-term domain rules.
+- [x] IT-074–IT-083 — save term, including actions, impersonation, environment and `after()`.
+- [x] IT-084–IT-089 — manual re-run.
+- [x] IT-090–IT-093 — pause, resume, move, delete.
+- [x] IT-094, IT-096–IT-102, IT-104 — counts, shared terms, active keys, daily repeat, overview labels, no e-mail.
+- [x] IT-060, IT-071, IT-073 — runner behaviors observed through `jho terms run`.
+- [x] IT-127 — ingestion guard on every term-capture entry point.
+- [x] IT-131, IT-132 — CLI commands.
 
 ## Success Criteria
 - Every assigned test case implemented and passing

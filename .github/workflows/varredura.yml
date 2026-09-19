@@ -91,6 +91,13 @@ jobs:
       - name: Sincronizar as fontes
         run: pnpm jho jobs sync
 
+      # 1b. Repetir as buscas por termo salvas. Depois do sync, que já gastou a
+      #     sua parte da cota de cada plataforma, e antes da repontuação, que dá
+      #     nota às vagas que as buscas trouxeram. O log só tem agregados por
+      #     plataforma; falha só se TODAS as plataformas falharem.
+      - name: Buscar os termos salvos
+        run: pnpm jho terms run
+
       # 2. Capturar a descrição das que valem a pena. O corte de fit evita gastar
       #    requisição com vaga que não seria lida de todo jeito.
       - name: Enfileirar captura

@@ -4,6 +4,7 @@
  * (ADR 0009): um `UPDATE … WHERE id = (SELECT … FOR UPDATE SKIP LOCKED)`.
  */
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { clock } from "../../../core/clock.ts";
 import { getDb } from "../../../core/db/client.ts";
 import { source, termAttribution, termCapture } from "../../../core/db/schema.ts";
 import type { FetchableSourceKind } from "../../../core/sources/types.ts";
@@ -21,9 +22,10 @@ import type {
 export const CAPTURE_LEASE_MS = 5 * 60_000;
 
 export const drizzleCaptureQueue: TermCaptureQueuePort = {
-  async enqueue(rows) {
+  async enqueue(rows, writer = getDb()) {
     if (rows.length === 0) return { created: 0, existing: 0 };
-    const created = await getDb()
+    const now = clock().iso();
+    const written = await writer
       .insert(termCapture)
       .values(
         rows.map((row) => ({
@@ -37,9 +39,17 @@ export const drizzleCaptureQueue: TermCaptureQueuePort = {
           reasonCode: row.skipped ?? null,
         })),
       )
-      .onConflictDoNothing({ target: [termCapture.platform, termCapture.termKey, termCapture.windowDay] })
-      .returning({ id: termCapture.id });
-    return { created: created.length, existing: rows.length - created.length };
+      // A capture already done today serves this request too. Touching
+      // `updated_at` after `finished_at` is how the screen tells "reused" from
+      // "ran for you" without a column of its own.
+      .onConflictDoUpdate({
+        target: [termCapture.platform, termCapture.termKey, termCapture.windowDay],
+        set: { updatedAt: now },
+        setWhere: sql`${termCapture.status} = 'succeeded'`,
+      })
+      .returning({ inserted: sql<boolean>`xmax = 0` });
+    const created = written.filter((row) => row.inserted).length;
+    return { created, existing: rows.length - created };
   },
 
   async claim(worker, now) {
@@ -130,6 +140,59 @@ export function attributedJobIds(termKey: string): SQL {
   return sql`(select ${termAttribution.jobId} from ${termAttribution} where ${termAttribution.termKey} = ${termKey})`;
 }
 
+/**
+ * Put today's failed captures of a term back in the queue — except a gone
+ * endpoint, which fails again for sure. The manual re-run inside the cooldown
+ * uses this: a platform that failed is retried, the ones that answered are not
+ * called twice.
+ */
+export async function requeueFailed(termKey: string, now: Date): Promise<number> {
+  const rows = await getDb()
+    .update(termCapture)
+    .set({ status: "queued", reasonCode: null, runAfter: null, updatedAt: now.toISOString() })
+    .where(
+      and(
+        eq(termCapture.termKey, termKey),
+        eq(termCapture.windowDay, windowStarts(now).day),
+        eq(termCapture.status, "failed"),
+        sql`${termCapture.reasonCode} is distinct from 'endpoint_gone'`,
+      ),
+    )
+    .returning({ id: termCapture.id });
+  return rows.length;
+}
+
+export type CaptureDay = {
+  termKey: string;
+  windowDay: string;
+  status: CaptureStatus;
+  fetched: number;
+};
+
+/** Daily outcomes of some terms since a UTC day, for the "no results" streak. */
+export async function captureHistory(termKeys: readonly string[], sinceDay: string): Promise<CaptureDay[]> {
+  if (termKeys.length === 0) return [];
+  const rows = await getDb()
+    .select({
+      termKey: termCapture.termKey,
+      windowDay: termCapture.windowDay,
+      status: termCapture.status,
+      fetched: termCapture.fetched,
+    })
+    .from(termCapture)
+    .where(and(inArray(termCapture.termKey, [...termKeys]), sql`${termCapture.windowDay} >= ${sinceDay}`));
+  return rows.map((row) => ({ ...row, status: row.status as CaptureStatus }));
+}
+
+/** When the daily sweep last asked for a capture; null if it never did. */
+export async function lastSweepCaptureAt(): Promise<string | null> {
+  const [row] = await getDb()
+    .select({ at: sql<string | null>`max(${termCapture.createdAt})` })
+    .from(termCapture)
+    .where(eq(termCapture.origin, "sweep"));
+  return row?.at ?? null;
+}
+
 export type CaptureStateRow = {
   termKey: string;
   platform: FetchableSourceKind;
@@ -143,6 +206,7 @@ export type CaptureStateRow = {
   attributed: number;
   totalHint: number | null;
   finishedAt: string | null;
+  updatedAt: string;
 };
 
 /** A captura mais recente de cada (termo, plataforma). */
@@ -162,6 +226,7 @@ export async function latestCaptures(termKeys: readonly string[]): Promise<Captu
       attributed: termCapture.attributed,
       totalHint: termCapture.totalHint,
       finishedAt: termCapture.finishedAt,
+      updatedAt: termCapture.updatedAt,
     })
     .from(termCapture)
     .where(inArray(termCapture.termKey, [...termKeys]))

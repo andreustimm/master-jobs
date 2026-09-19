@@ -7,7 +7,8 @@
  * só, e um teste de arquitetura exige que todo arquivo que lê `jobScore`
  * passe por aqui (ADR-008).
  */
-import { eq, sql, type SQL } from "drizzle-orm";
+import { and, eq, sql, type SQL } from "drizzle-orm";
+import { getDb } from "../../../core/db/client.ts";
 import { jobScore, targetTrack } from "../../../core/db/schema.ts";
 import { listTracks } from "../infra/drizzle-tracks.ts";
 
@@ -70,6 +71,22 @@ export function primaryScoreFilter(alias?: string): SQL {
   if (alias !== undefined && !/^[a-z_][a-z0-9_]*$/.test(alias)) throw new Error(`invalid alias ${alias}`);
   const column = alias === undefined ? sql`${jobScore.trackId}` : sql.raw(`${alias}.track_id`);
   return sql`exists (select 1 from ${targetTrack} pt where pt.id = ${column} and pt.is_primary)`;
+}
+
+/** Quantas vagas cada trilha do candidato tem pontuadas — para `jho tracks list`. */
+export async function scoredJobsPerTrack(candidateId: number): Promise<Map<number, number>> {
+  const tracks = await listTracks(candidateId);
+  const primaryTrackId = tracks.find((track) => track.isPrimary)?.id ?? 0;
+  const counts = new Map<number, number>();
+  for (const track of tracks) {
+    const scope: TrackScope = { candidateId, primaryTrackId, trackIds: [track.id], mode: "single" };
+    const [row] = await getDb()
+      .select({ n: sql<number>`count(*)` })
+      .from(jobScore)
+      .where(and(eq(jobScore.candidateId, candidateId), scoreTrackFilter(scope)));
+    counts.set(track.id, Number(row?.n ?? 0));
+  }
+  return counts;
 }
 
 /**

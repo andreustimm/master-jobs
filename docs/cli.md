@@ -281,6 +281,59 @@ mas não estão em `ADAPTERS` — logo passam no load e quebram no fetch.
 
 ---
 
+## Área `terms` — buscas por termo salvas
+
+O candidato salva termos ("php", "Tech Lead") na tela Buscas; cada termo busca
+vagas nas plataformas que buscam por termo (Remotive, RemoteOK, Himalayas) e é
+repetido todo dia pela varredura. Regras de plataforma, cota e atribuição em
+[`docs/sources.md`](sources.md#busca-por-termo).
+
+### `jho terms run [--max <n>]`
+
+Enfileira a captura de hoje de cada termo ativo — uma vez por chave, entre
+todos os candidatos, sem termo pausado nem termo de trilha arquivada — e drena a
+fila com o mesmo executor que a tela usa. É o passo "Buscar os termos salvos"
+da varredura diária.
+
+- Passa pela guarda de ingestão: onde ela nega, imprime o motivo e sai com 1,
+  sem abrir banco nem rede.
+- Captura já feita hoje (pela tela ou por outro candidato) é reaproveitada: não
+  há segunda chamada à plataforma.
+- Imprime uma linha JSON por plataforma, e nada mais — termo e consulta nunca
+  vão para o log:
+
+```
+{"platform":"remotive","claimed":2,"succeeded":2,"waiting":0,"failed":0,"created":14,"known":3}
+{"platform":"remoteok","claimed":2,"succeeded":1,"waiting":1,"failed":0,"created":2,"known":0}
+```
+
+- Sai com 1 quando todas as plataformas falharam na execução (a varredura
+  quebra e alguém olha); falha parcial não quebra.
+
+| Flag | Efeito |
+|---|---|
+| `--max <n>` | Para depois de `n` capturas |
+
+### `jho terms status`
+
+A saúde agregada por plataforma, a mesma da tela `/admin/captures`: uso das
+janelas de cota, capturas por estado nas últimas 24 horas, último erro, dias
+seguidos de falha, se a repetição diária parou e se a plataforma está vermelha.
+Uma linha JSON por plataforma, sem termo, consulta nem candidato.
+
+## Área `tracks` — trilhas de alvo
+
+### `jho tracks list [--candidate <id>]`
+
+As trilhas de um candidato (o ativo, por padrão), com estado e quantas vagas
+cada uma tem pontuadas. A principal leva `★`. Candidato sem perfil próprio não
+tem trilha: a principal fica pendente e ninguém pontua para ele.
+
+```
+★ Principal                    active     4122 scored
+  PHP                          active      318 scored
+```
+
 ## Área `jobs` — sync, score e navegação
 
 Grupo `jobs`, descrição `"Sync, score and browse jobs"`.
@@ -1089,11 +1142,14 @@ O ciclo padrão: ingerir, ver o que subiu no topo, exportar para o vault.
 
 ```bash
 pnpm jho jobs sync
+pnpm jho terms run
 pnpm jho jobs list --min-fit 55 --status unfiled --limit 20
 pnpm jho report
 ```
 
-`jobs sync` já pontua ao final, então `jobs score` é redundante aqui. O
+`jobs sync` já pontua ao final, então `jobs score` é redundante aqui. `terms
+run` repete as buscas por termo salvas; as vagas que elas trouxerem entram sem
+nota até a repontuação (`jobs rescore run`). O
 `--status unfiled` esconde o que você já triou em dias anteriores, evitando reler as
 mesmas 30 linhas toda manhã.
 

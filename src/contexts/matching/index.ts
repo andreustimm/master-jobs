@@ -62,11 +62,40 @@ export {
   primaryScoreFilter,
   resolveClusterFilter,
   scoreTrackFilter,
+  scoredJobsPerTrack,
   trackScope,
   type TrackChoice,
   type TrackScope,
 } from "./app/track-scope.ts";
 export { listTracks as listCandidateTracks } from "./infra/drizzle-tracks.ts";
+export {
+  MAX_ACTIVE_TERMS,
+  RERUN_COOLDOWN_MS,
+  ZERO_STREAK_DAYS,
+  cooldownState,
+  isNew,
+  termStatus,
+  zeroStreak,
+  type TermRunState,
+} from "./domain/saved-term.ts";
+export {
+  activeTermKeys,
+  deleteTerm,
+  moveTerm,
+  newCount,
+  rerunTerm,
+  saveTerm,
+  setTermStatus,
+  termOverview,
+  type ActionContext,
+  type CandidateScope,
+  type RerunResult,
+  type SaveTermResult,
+  type TermOverview,
+  type TermView,
+} from "./app/saved-terms.ts";
+/** Sem captura da varredura há 36 horas, a repetição diária parou. */
+export { dailyRepeatPaused } from "../sourcing/index.ts";
 
 export { WORK_MODES, WORK_MODE_ALIASES, readWorkMode, type WorkMode } from "./domain/work-mode.ts";
 

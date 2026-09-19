@@ -14,6 +14,7 @@ import {
   type WorkMode,
 } from "../../contexts/matching/index.ts";
 import { workModeSql } from "./work-mode.ts";
+import { attributedJobIds } from "../../contexts/sourcing/index.ts";
 import {
   IllegalApplicationTransitionError,
   transitionApplication,
@@ -119,6 +120,12 @@ export type BoardFilters = {
    * a reader that did not choose must not mix tracks in one list.
    */
   track?: TrackScope;
+  /**
+   * Only jobs a saved term brought (ADR-005). The key comes from the viewer's
+   * own saved term, resolved server-side; the capture that attributed the job
+   * never knew who saved the term.
+   */
+  broughtBy?: { termKey: string };
   limit?: number;
   offset?: number;
 };
@@ -154,6 +161,7 @@ function boardConditions(opts: BoardFilters, candidateId: number | null): SQL[] 
     );
   }
   if (opts.sourceKind) conditions.push(sql`${job.sourceId} like ${`${opts.sourceKind}:%`}`);
+  if (opts.broughtBy) conditions.push(sql`${job.id} in ${attributedJobIds(opts.broughtBy.termKey)}`);
   if (opts.workMode) conditions.push(eq(workModeSql(), opts.workMode));
   if (opts.freshDays && opts.freshDays > 0) {
     conditions.push(

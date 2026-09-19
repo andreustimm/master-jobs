@@ -71,6 +71,30 @@ sinais:
 > `source.lastError` e segue para a próxima. Nenhum handle errado pode custar as
 > outras 14 fontes ativas.
 
+`source.lastError = "quota"` numa fonte da Remotive, do RemoteOK ou da
+Himalayas não é defeito: o livro de cota recusou a chamada porque o limite do
+dia (ou do minuto) já foi gasto — pela sincronização ou pelas buscas por termo.
+A próxima janela resolve sozinha.
+
+### 1b. Buscas por termo
+
+```bash
+pnpm jho terms run
+pnpm jho terms status
+```
+
+`terms run` repete de uma vez as buscas por termo salvas e imprime agregados
+por plataforma. `terms status` mostra a saúde de cada plataforma. Três sinais:
+
+- **`waiting` alto na Remotive**: esperado. A Remotive pede no máximo quatro
+  chamadas por dia, e as duas entradas `remotive` do `sources.yaml` gastam duas.
+  O resto fica para a janela seguinte, e a tela Buscas diz isso ao candidato.
+- **`red: true`** com `lastErrorCode: "endpoint_gone"`: o endpoint de busca da
+  plataforma mudou. Rode `pnpm jho sources probe <kind> --term <t>`; enquanto
+  não for corrigido, as outras plataformas seguem.
+- **`dailyRepeatPaused: true`**: nenhuma captura da varredura em 36 horas — a
+  varredura automática está parada.
+
 ### 2. Revisar o topo da lista
 
 ```bash
@@ -687,6 +711,7 @@ pnpm check                               # semanal: tsc --noEmit + vitest
 
 ```bash
 pnpm jho jobs sync                       # busca e pontua
+pnpm jho terms run                       # repete as buscas por termo salvas
 pnpm jho jobs list --min-fit 60          # ou abra localhost:3000
 pnpm jho track <id> shortlisted -n "motivo"
 ```

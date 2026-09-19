@@ -28,6 +28,7 @@ import type {
   CaptureOrigin,
   CaptureOutcome,
   CaptureStatus,
+  CaptureWriter,
   ClaimedCapture,
   PlatformQuotaPort,
   TermCaptureQueuePort,
@@ -62,6 +63,7 @@ export type RequestResult = {
 export async function requestCaptures(
   input: { termKey: string; query: string; origin: CaptureOrigin; now: Date },
   deps: Pick<CaptureDeps, "queue" | "adapters" | "sources">,
+  writer?: CaptureWriter,
 ): Promise<RequestResult> {
   try {
     guardIngestion();
@@ -81,8 +83,11 @@ export async function requestCaptures(
   };
   const reachable = validated.filter((platform) => enabled.has(platform));
   const disabled = validated.filter((platform) => !enabled.has(platform));
-  const queued = await deps.queue.enqueue(reachable.map((platform) => ({ ...row, platform })));
-  await deps.queue.enqueue(disabled.map((platform) => ({ ...row, platform, skipped: "platform_disabled" as const })));
+  const queued = await deps.queue.enqueue(reachable.map((platform) => ({ ...row, platform })), writer);
+  await deps.queue.enqueue(
+    disabled.map((platform) => ({ ...row, platform, skipped: "platform_disabled" as const })),
+    writer,
+  );
   return {
     enqueued: queued.created,
     existing: queued.existing,
@@ -224,6 +229,8 @@ export type PlatformCaptureState = {
   windowDay: string;
   /** The state is today's run, not an older one. */
   today: boolean;
+  /** Done today by an earlier request and served again without a new call. */
+  reused: boolean;
   fetched: number;
   created: number;
   known: number;
@@ -235,12 +242,15 @@ export type PlatformCaptureState = {
 export async function captureStatus(
   termKeys: readonly string[],
   now: Date,
-  read: (keys: readonly string[]) => Promise<Array<Omit<PlatformCaptureState, "today"> & { termKey: string }>>,
+  read: (
+    keys: readonly string[],
+  ) => Promise<Array<Omit<PlatformCaptureState, "today" | "reused"> & { termKey: string; updatedAt: string }>>,
 ): Promise<Map<string, PlatformCaptureState[]>> {
   const today = windowStarts(now).day;
   const states = new Map<string, PlatformCaptureState[]>(termKeys.map((key) => [key, []]));
-  for (const { termKey, ...state } of await read(termKeys)) {
-    states.get(termKey)?.push({ ...state, today: state.windowDay === today });
+  for (const { termKey, updatedAt, ...state } of await read(termKeys)) {
+    const reused = state.status === "succeeded" && state.finishedAt !== null && updatedAt > state.finishedAt;
+    states.get(termKey)?.push({ ...state, today: state.windowDay === today, reused });
   }
   return states;
 }

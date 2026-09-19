@@ -12,6 +12,7 @@
  * Atribuição, fonte `~terms` e leituras de saúde não têm porta: uma
  * implementação, nenhuma alternativa plausível (ADR 0007).
  */
+import type { DB } from "../../core/db/client.ts";
 import type { FetchableSourceKind, PlatformBudget } from "../../core/sources/types.ts";
 import type { FailureCode } from "./domain/capture.ts";
 
@@ -53,9 +54,19 @@ export type ClaimedCapture = {
   windowDay: string;
 };
 
+/**
+ * Who writes the rows. Matching saves a term and its captures in one
+ * transaction (a term without captures, or captures without a term, would be
+ * the half-saved state the screen cannot explain), so it passes its own.
+ */
+export type CaptureWriter = Pick<DB, "insert">;
+
 export interface TermCaptureQueuePort {
-  /** Idempotent on (platform, term key, day): one call serves everyone. */
-  enqueue(rows: CaptureRequest[]): Promise<{ created: number; existing: number }>;
+  /**
+   * Idempotent on (platform, term key, day): one call serves everyone. A
+   * request that finds today's capture already done marks it as reused.
+   */
+  enqueue(rows: CaptureRequest[], writer?: CaptureWriter): Promise<{ created: number; existing: number }>;
   claim(worker: string, now: Date): Promise<ClaimedCapture | null>;
   finish(id: number, outcome: CaptureOutcome, now: Date): Promise<void>;
 }

@@ -75,8 +75,16 @@ import { scoreMessages } from "./contexts/matching/index.ts";
 import { renderScoreMessage, translator } from "./core/i18n/index.ts";
 import { loadSources } from "./core/sources/config.ts";
 import { getAdapter, parseFetchableSourceKind } from "./core/sources/registry.ts";
+import { clock } from "./core/clock.ts";
 import { guardIngestion } from "./core/ingest/guard.ts";
-import { CAPTURE_LIMIT } from "./contexts/sourcing/index.ts";
+import { IngestionBlockedError } from "./core/ingest/environment.ts";
+import {
+  CAPTURE_LIMIT,
+  captureHealth,
+  requestTermCaptures,
+  runTermCaptures,
+} from "./contexts/sourcing/index.ts";
+import { activeTermKeys, listCandidateTracks, scoredJobsPerTrack } from "./contexts/matching/index.ts";
 import { buildJobSweepSnapshot } from "./core/triage/job-sweep.ts";
 
 const cliTranslator = translator("pt-BR").t;
@@ -542,6 +550,79 @@ sources
     for (const j of result.jobs.slice(0, 5)) {
       console.log(`  ${c.dim("·")} ${j.title} ${c.dim(`— ${j.locationRaw ?? "?"}`)}`);
     }
+  });
+
+/* ---------------------------------- terms --------------------------------- */
+
+const terms = program.command("terms").description("Saved term searches: daily capture and platform health");
+
+terms
+  .command("run")
+  .description("Enqueue today's capture of every active term and drain the queue")
+  .option("--max <n>", "stop after N captures")
+  .action(async (opts: { max?: string }) => {
+    // A varredura diária chama isto; onde a ingestão não é permitida, sai com
+    // o motivo da guarda antes de abrir o banco ou a rede.
+    try {
+      guardIngestion();
+    } catch (error) {
+      if (!(error instanceof IngestionBlockedError)) throw error;
+      console.error(c.red(error.message));
+      process.exitCode = 1;
+      return;
+    }
+    const max = opts.max === undefined ? undefined : idNumerico(opts.max, "capturas");
+    if (max === null) return;
+    await withDb(async () => {
+      const now = new Date(clock().now());
+      for (const { termKey, query } of await activeTermKeys()) {
+        await requestTermCaptures({ termKey, query, origin: "sweep", now });
+      }
+      const summary = await runTermCaptures({ worker: "cli", max });
+      // Só agregados por plataforma: termo e consulta nunca vão para o log.
+      for (const [platform, counts] of Object.entries(summary)) {
+        console.log(JSON.stringify({ platform, ...counts }));
+      }
+      const runs = Object.values(summary);
+      if (runs.length > 0 && runs.every((run) => run.failed === run.claimed)) {
+        console.error(c.red("every platform failed in this run"));
+        process.exitCode = 1;
+      }
+    });
+  });
+
+terms
+  .command("status")
+  .description("Aggregate capture health per platform (no term, query or candidate)")
+  .action(async () => {
+    await withDb(async () => {
+      for (const health of await captureHealth(new Date(clock().now()))) console.log(JSON.stringify(health));
+    });
+  });
+
+/* ---------------------------------- tracks -------------------------------- */
+
+const tracks = program.command("tracks").description("Target tracks of a candidate");
+
+tracks
+  .command("list")
+  .description("Tracks of a candidate with status and scored-job counts")
+  .option("--candidate <id>", "candidate id (default: the active candidate)")
+  .action(async (opts: { candidate?: string }) => {
+    await withDb(async () => {
+      const candidateId =
+        opts.candidate === undefined ? await activeCandidateId() : idNumerico(opts.candidate, "candidato");
+      if (candidateId === null) return;
+      const counts = await scoredJobsPerTrack(candidateId);
+      const list = await listCandidateTracks(candidateId);
+      if (list.length === 0) console.log(c.dim("No tracks: the candidate has no own matching profile yet."));
+      for (const track of list) {
+        const marker = track.isPrimary ? c.bold("★") : " ";
+        console.log(
+          `${marker} ${truncate(track.name, 28)} ${track.status.padEnd(8)} ${String(counts.get(track.id) ?? 0).padStart(6)} scored`,
+        );
+      }
+    });
   });
 
 /* ---------------------------------- jobs ---------------------------------- */

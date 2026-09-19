@@ -48,6 +48,21 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   existente mantém fonte, id externo, URLs e payload (`keepExistingSource`).
   `sources.yaml` recusa handle que começa com `~` (ADR-011).
 - `jho sources probe` ganha `--term` e passa pela guarda de ingestão.
+- Termos salvos no contexto `matching`: `saveTerm` (termo e primeiras
+  capturas na mesma transação), `rerunTerm` (uma busca manual a cada 24 horas;
+  dentro da janela, só a plataforma que falhou hoje é tentada de novo),
+  pausar, retomar, mover, apagar, contagem de vagas novas e `termOverview` com
+  o estado de cada plataforma, "sem resultado há 14 dias" e "repetição diária
+  parada". Até 20 termos ativos por candidato, um por chave normalizada, cada
+  um numa trilha ativa.
+- Server Actions de termo em `app/searches/actions.ts`: sessão emprestada salva
+  mas não dispara busca (`waiting_sweep`); onde a ingestão não é permitida o
+  termo é salvo com `captures_off`; a busca roda depois da resposta, em
+  `after()`, com 25 segundos de orçamento.
+- `jho terms run`, `jho terms status` e `jho tracks list`; a varredura diária
+  ganha o passo "Buscar os termos salvos" entre a sincronização e a
+  repontuação. Captura já feita hoje é reaproveitada sem nova chamada.
+- Filtro `broughtBy` no leitor do board: vagas que um termo salvo trouxe.
 
 ### Corrigido
 
