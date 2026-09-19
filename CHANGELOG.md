@@ -135,6 +135,13 @@ como `ADR 00NN`.
   1/min, Workable 10/min, HN 30/min. `config/sources.yaml` ganha quatro
   entradas; fixtures de resposta real em `tests/fixtures/term-search/`.
 
+- 28 boards Lever de empresas com vaga remota da stack aberta ao Brasil em
+  `config/sources.yaml` (CI&T, Oowlish, BriteCore, Ubiminds, Jeeves, RYZ
+  Labs, Yuno, VRChat, JetBridge e outras), cada um confirmado com
+  `jho sources probe lever <handle>` em 2026-09-19. A Bluelight Consulting
+  ficou de fora: 1.321 postagens repetindo 10 cargos, uma por cidade, e a
+  cidade entra no `fingerprint`.
+
 ### Alterado
 
 - A busca da tela Vagas deixou de ser substring em cargo e empresa: é o termo

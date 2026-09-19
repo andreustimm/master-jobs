@@ -56,6 +56,9 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   o fio mensal "Who is hiring?" do Hacker News, escrito pelas próprias empresas.
   Os termos salvos em Buscas também procuram nelas.
 
+- Vagas direto de 28 empresas que publicam na Lever e contratam remoto do
+  Brasil, como CI&T, Oowlish, BriteCore, Ubiminds e Yuno.
+
 ### Melhorado
 
 - Preparação para buscar vagas de mais de um tipo, com régua própria para cada
