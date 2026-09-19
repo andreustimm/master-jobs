@@ -26,7 +26,29 @@ function environment(): string {
   return process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development";
 }
 
+/**
+ * Instrumentação nunca derruba o que ela observa.
+ *
+ * `register` roda ANTES de o servidor atender a primeira requisição, e o Next
+ * espera que ela conclua. Uma exceção aqui — DSN rotacionado para um valor
+ * inválido, bug numa atualização do SDK, módulo que não carrega — não degrada
+ * o relato de erro: ela impede o servidor de subir. Trocaríamos "não sei que
+ * quebrou" por "quebrou tudo", que é pior que não ter relato nenhum.
+ *
+ * É a mesma guarda que `instrumentation-client.ts` já tem na navegação, pelo
+ * mesmo motivo. E é literalmente o modo de falha do corte da 1.13.1: uma
+ * verificação correta, em posição de bloquear o processo inteiro.
+ */
 export async function register(): Promise<void> {
+  try {
+    await iniciarRelato();
+  } catch {
+    // Sem console.error: o erro que interessa é o da aplicação, e ruído no log
+    // de inicialização a cada requisição fria esconde exatamente isso.
+  }
+}
+
+async function iniciarRelato(): Promise<void> {
   const dsn = process.env.SENTRY_DSN?.trim();
   if (!dsn) return;
 
@@ -82,7 +104,12 @@ export const onRequestError: Instrumentation.onRequestError = async (
   request,
   context,
 ) => {
-  if (!process.env.SENTRY_DSN?.trim()) return;
-  const Sentry = await import("@sentry/nextjs");
-  Sentry.captureRequestError(error, safeRequest(request), context);
+  try {
+    if (!process.env.SENTRY_DSN?.trim()) return;
+    const Sentry = await import("@sentry/nextjs");
+    Sentry.captureRequestError(error, safeRequest(request), context);
+  } catch {
+    // Falhar ao RELATAR um erro não pode virar um segundo erro por cima do
+    // primeiro. O que a pessoa vê continua sendo a falha original.
+  }
 };

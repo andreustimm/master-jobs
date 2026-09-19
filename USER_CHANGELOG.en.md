@@ -18,6 +18,14 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-09-19T13:22:18.417Z
+
+### Fixed
+
+- Internal hardening of the failure alerting added in this release: a problem
+  in the alerting mechanism itself can no longer stop the system from
+  starting. Nothing changes on screen.
+
 ## [1.14.0] - 2026-09-19T03:29:37.809Z
 
 ### Added
