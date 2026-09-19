@@ -9,6 +9,15 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- Celular: em 320px, título de vaga sem ponto de quebra ("Werkstudent*in
+  Finance (Schwerpunkt Accounting/Controlling) Vollzeit/Teilzeit") passava da
+  borda e a tela de detalhe rolava 31px para o lado. O `h1` é item de flex e
+  não encolhia abaixo do próprio conteúdo: agora tem `min-w-0 break-words`.
+  Achado na revisão da 1.15.2 em produção. A varredura de larguras do E2E passa
+  a cobrir 320px e a tela de detalhe, com uma vaga semeada de título longo.
+
 ## [1.15.2] - 2026-09-19
 
 ### Corrigido

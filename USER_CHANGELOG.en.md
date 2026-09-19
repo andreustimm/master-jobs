@@ -18,6 +18,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- On narrow screens, a job with a very long title no longer pushes the page
+  sideways.
+
 ## [1.15.2] - 2026-09-19T21:10:15.298Z
 
 ### Fixed

@@ -58,7 +58,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
 
       <header className="mt-4 mb-6">
         <div className="flex flex-wrap items-baseline gap-3">
-          <h1 className="type-display-md text-balance">{job.title}</h1>
+          <h1 data-user-content className="type-display-md min-w-0 break-words text-balance">{job.title}</h1>
           {application && <StatusBadge status={application.status} t={t} />}
           {job.closedAt && <Badge variant="destructive">fechada</Badge>}
           {!externalUrl && <Badge variant="secondary">{t("compare.manualJob")}</Badge>}

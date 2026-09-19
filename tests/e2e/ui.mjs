@@ -1166,12 +1166,15 @@ try {
 
   // Rolagem horizontal é a falha que passa despercebida no desktop, porque só
   // aparece quando a janela é estreita o bastante para o conteúdo não caber.
-  const widths = [375, 390, 412, 768, 812, 1024];
+  // 320px é a tela mais estreita em uso (iPhone SE de 1ª geração, e qualquer
+  // aparelho com zoom de sistema): foi nela que o título de uma vaga real
+  // passou da borda enquanto 375px ainda cabia.
+  const widths = [320, 375, 390, 412, 768, 812, 1024];
   const overflows = [];
   const clipped = [];
   for (const width of widths) {
     await page.setViewportSize({ width, height: width >= 812 ? 375 : 812 });
-    for (const path of ["/", "/jobs", "/jobs?track=all", "/searches", "/compare", "/candidate", "/candidate/skills", "/pipeline"]) {
+    for (const path of ["/", "/jobs", "/jobs?track=all", "/jobs/905000031", "/searches", "/compare", "/candidate", "/candidate/skills", "/pipeline"]) {
       await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
