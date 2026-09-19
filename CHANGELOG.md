@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-09-19
+
 ### Corrigido
 
 - `sslmode` com valor que não afrouxa nada — `require`, `verify-ca`,

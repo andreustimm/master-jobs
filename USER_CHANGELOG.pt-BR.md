@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-09-19T02:38:58.911Z
+
 ### Corrigido
 
 - Depois da última atualização, todas as telas que mostram vagas, funil ou

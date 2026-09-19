@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-09-19T02:38:58.911Z
+
 ### Fixed
 
 - After the latest update, every screen showing jobs, the pipeline, or the
