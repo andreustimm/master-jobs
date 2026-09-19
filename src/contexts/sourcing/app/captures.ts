@@ -8,7 +8,7 @@
 import { clock } from "../../../core/clock.ts";
 import { IngestionBlockedError } from "../../../core/ingest/environment.ts";
 import { guardIngestion } from "../../../core/ingest/guard.ts";
-import { observeRawJob } from "../../../core/ingest/observe.ts";
+import { observeRawJobs } from "../../../core/ingest/observe.ts";
 import type {
   FetchableSourceKind,
   SourceAdapter,
@@ -117,13 +117,13 @@ async function ingest(
   let created = 0;
   let known = 0;
   let attributed = 0;
-  for (const raw of jobs) {
-    // Antes de observar: as tags só existem aqui, a observação não as guarda.
-    const attributable = isAttributable(capture.query, raw);
-    const observation = await observeRawJob(raw, sourceId, { keepExistingSource: true });
+  const observations = await observeRawJobs(jobs, sourceId, { keepExistingSource: true });
+  for (const [index, observation] of observations.entries()) {
     if (observation.outcome === "inserted") created++;
     else known++;
-    if (attributable) {
+    // Do anúncio, não da linha gravada: as tags só existem aqui, a observação
+    // não as guarda.
+    if (isAttributable(capture.query, jobs[index]!)) {
       await deps.attribute(capture.termKey, observation.jobId, capture.platform);
       attributed++;
     }

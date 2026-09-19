@@ -25,6 +25,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   Vagas.
 - No celular, a lista de skills a auditar não corta mais a evidência quando ela
   traz um link longo do currículo.
+- A busca diária de vagas volta a terminar: as vagas novas, as buscas por termo
+  salvas e as notas das trilhas passam a ser atualizadas todo dia.
 
 ## [1.15.0] - 2026-09-19T18:03:52.117Z
 

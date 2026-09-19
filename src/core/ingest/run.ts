@@ -16,7 +16,7 @@ import { HttpError } from "../sources/http.ts";
 import { getAdapter, sourceId } from "../sources/registry.ts";
 import type { FetchResult, SourceAdapter, SourceConfig } from "../sources/types.ts";
 import { guardIngestion } from "./guard.ts";
-import { observeRawJob } from "./observe.ts";
+import { observeRawJobs } from "./observe.ts";
 
 export type SyncSourceResult = {
   sourceId: string;
@@ -98,7 +98,7 @@ async function fetchWithinBudget(adapter: SourceAdapter, config: SourceConfig): 
   }
 }
 
-async function syncOne(config: SourceConfig): Promise<SyncSourceResult> {
+async function syncOne(config: SourceConfig, companies: Map<string, number>): Promise<SyncSourceResult> {
   const db = getDb();
   const id = sourceId(config.kind, config.handle);
   const started = Date.now();
@@ -126,9 +126,8 @@ async function syncOne(config: SourceConfig): Promise<SyncSourceResult> {
     const seenFingerprints: string[] = [];
     const stamp = new Date().toISOString();
 
-    for (const raw of rawJobs) {
-      if (!raw.title || !raw.url) continue;
-      const observation = await observeRawJob(raw, id, { observedAt: stamp });
+    const usable = rawJobs.filter((raw) => raw.title && raw.url);
+    for (const observation of await observeRawJobs(usable, id, { observedAt: stamp, companies })) {
       seenFingerprints.push(observation.fingerprint);
       if (observation.outcome === "inserted") result.inserted++;
       if (observation.outcome === "unchanged") result.unchanged++;
@@ -195,12 +194,13 @@ export async function syncAll(
   const concurrency = opts.concurrency ?? 4;
   const queue = [...configs];
   const results: SyncSourceResult[] = [];
+  const companies = new Map<string, number>();
 
   async function worker(): Promise<void> {
     for (;;) {
       const next = queue.shift();
       if (!next) return;
-      const r = await syncOne(next);
+      const r = await syncOne(next, companies);
       results.push(r);
       opts.onProgress?.(r);
     }
