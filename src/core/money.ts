@@ -205,3 +205,65 @@ export function formatMoney(m: Money, locale = "en-US"): string {
     return `${Math.round(m.amount).toLocaleString(locale)} ${m.currency}${perYear}`;
   }
 }
+
+/* ----------------------- Pay normalization (ADR-013) ----------------------- */
+
+/**
+ * The per-year factor of a period, as a SQL `CASE` over a column expression.
+ *
+ * Built from `PERIODS_PER_YEAR` and the same aliases `parsePeriod` reads, so the
+ * Jobs screen's pay filter and sort can never disagree with the amount shown
+ * beside each job. `project` and anything unrecognised give NULL: "not
+ * comparable", never a guess. Every literal comes from the tables above; the
+ * expression is the only input, and it is a column name chosen by the caller.
+ */
+export function annualFactorSql(period = "comp_period"): string {
+  const key = `regexp_replace(regexp_replace(lower(trim(${period})), '[_-]+', ' ', 'g'), '\\s+', ' ', 'g')`;
+  const branches = Object.entries(PERIOD_ALIASES)
+    .filter(([, value]) => value !== "project")
+    .map(([alias, value]) => `when '${alias}' then ${PERIODS_PER_YEAR[value as Exclude<Period, "project">]}`)
+    .join(" ");
+  return `(case ${key} ${branches} else null end)`;
+}
+
+export type NormalizedPay =
+  | { kind: "amount"; amount: number }
+  | { kind: "undisclosed" }
+  | { kind: "not_comparable" };
+
+/**
+ * The top of a posting's pay range in the viewer's currency and period.
+ *
+ * The top, because a job qualifies when the best it offers reaches the
+ * minimum. Undisclosed (no amount) and not comparable (unknown currency or
+ * period, a project without duration, a currency with no stored rate) are
+ * different answers: one says nothing, the other says something we cannot
+ * read. Two decimals, like the amount the screen shows.
+ */
+export function normalizePayTop(
+  job: {
+    compMin?: number | null;
+    compMax?: number | null;
+    currency?: string | null;
+    period?: string | null;
+    durationMonths?: number;
+  },
+  target: { currency: Currency; period: "month" | "year" },
+  fx: FxTable | null,
+): NormalizedPay {
+  const top = [job.compMax, job.compMin].find((value): value is number => typeof value === "number" && value > 0);
+  if (top === undefined) return { kind: "undisclosed" };
+  const currency = parseCurrency(job.currency);
+  const period = parsePeriod(job.period);
+  if (!currency || !period) return { kind: "not_comparable" };
+  const perTarget = toPeriod(money(top, currency, period, job.durationMonths), target.period);
+  if (!perTarget) return { kind: "not_comparable" };
+  const converted =
+    perTarget.currency === target.currency.toUpperCase()
+      ? perTarget
+      : fx
+        ? convert(perTarget, target.currency, fx)
+        : null;
+  if (!converted) return { kind: "not_comparable" };
+  return { kind: "amount", amount: Math.round(converted.amount * 100) / 100 };
+}

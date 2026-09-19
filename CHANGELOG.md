@@ -63,6 +63,25 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   ganha o passo "Buscar os termos salvos" entre a sincronização e a
   repontuação. Captura já feita hoje é reaproveitada sem nova chamada.
 - Filtro `broughtBy` no leitor do board: vagas que um termo salvo trouxe.
+- Tela Vagas: seletor de trilha (principal, aceita ou todas, com rótulo por
+  vaga), filtro "trazida pelo termo" com marcador de vaga nova desde a última
+  visita (gravada em `after()`, nunca num prefetch), salário mínimo com moeda e
+  período, ordenação por salário normalizado e avisos para parâmetro inválido
+  (`track_unknown`, `term_*`, `term_unknown`, `pay_invalid`, `cluster_unknown`)
+  em vez de erro. O estado continua todo na URL (`app/filter-state.ts`), e o
+  trabalho de dados saiu da página para `app/jobs/jobs-data.ts`.
+- `annualFactorSql()` e `normalizePayTop` em `src/core/money.ts`: filtro e
+  ordenação por salário em SQL com a mesma tabela de fatores do TypeScript e a
+  cotação mais recente como lista `VALUES` ligada (ADR-013). Moeda sem
+  cotação, período desconhecido ou projeto sem duração ficam "não
+  comparáveis"; nada disso chega ao scorer.
+
+### Alterado
+
+- A busca da tela Vagas deixou de ser substring em cargo e empresa: é o termo
+  por palavra inteira (`termRegexSql`, ligado como parâmetro) em cargo, empresa
+  e texto capturado ou descrição (ADR-005, ADR-012). Toda ordenação termina em
+  nota e `job.id`, para a paginação não repetir nem perder vaga.
 
 ### Corrigido
 

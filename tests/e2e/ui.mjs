@@ -4817,6 +4817,139 @@ try {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
 
+  /* ------- term-search task_04: trilha, termo e salário na tela Vagas ------- */
+  const payBase = `${BASE}/jobs?q=${encodeURIComponent("Pay fixture")}&fit=0`;
+  const payIds = () => page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid^="job-link-904"]')].map((link) =>
+      link.getAttribute("data-testid").slice("job-link-".length)));
+  const payFits = () => page.evaluate(() => Object.fromEntries(
+    [...document.querySelectorAll('[data-testid^="job-link-904"]')].map((link) => [
+      link.getAttribute("data-testid").slice("job-link-".length),
+      link.closest("article")?.querySelector("div span")?.textContent?.trim() ?? "",
+    ]),
+  ));
+  const settle = async (pattern) => {
+    await page.waitForURL(pattern, { timeout: 20_000 });
+    await page.waitForLoadState("networkidle");
+  };
+
+  await page.goto(payBase, { waitUntil: "networkidle" });
+  const primaryFits = await payFits();
+  await page.locator('[data-testid^="filter-track-"]').filter({ hasText: "PHP E2E" }).click();
+  await settle(/track=\d+/);
+  const trackUrl = page.url();
+  const phpFits = await payFits();
+  await page.locator('[data-testid="filter-track-all"]').click();
+  await settle(/track=all/);
+  const trackLabels = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid^="job-link-904"]')].map((link) =>
+      link.closest("article")?.querySelectorAll('[data-testid^="job-track-"]').length ?? 0));
+  await page.reload({ waitUntil: "networkidle" });
+  const allKept = await page.locator('[data-testid="filter-track-all"]').getAttribute("aria-current");
+  check(
+    "term-search E2E-003 trilha principal por padrão, trilha escolhida na URL, todas com rótulo, recarga mantém",
+    primaryFits["904000001"] === "60"
+      && phpFits["904000001"] === "85"
+      && /track=\d+/.test(trackUrl)
+      && trackLabels.length === 6
+      && trackLabels.every((count) => count === 1)
+      && allKept === "true",
+    JSON.stringify({ primaryFits, phpFits, trackUrl, trackLabels, allKept }),
+  );
+
+  await page.goto(payBase, { waitUntil: "networkidle" });
+  await page.locator('[data-testid="filters-pay"]').fill("6000");
+  await page.locator('[data-testid="filters-pay-currency"]').selectOption("USD");
+  await page.locator('[data-testid="filters-pay-period"]').selectOption("month");
+  await page.locator('[data-testid="filters-pay-submit"]').click();
+  await settle(/pay=6000/);
+  const payMarkers = () => page.evaluate(() => ({
+    converted: document.querySelectorAll('[data-testid^="job-pay-904"]').length,
+    undisclosed: document.querySelectorAll('[data-testid^="job-pay-undisclosed-"]').length,
+    notComparable: document.querySelectorAll('[data-testid^="job-pay-not-comparable-"]').length,
+    hidden: document.querySelector('[data-testid="jobs-hidden-below-minimum"]')?.textContent ?? "",
+  }));
+  const withMinimum = { order: await payIds(), ...(await payMarkers()) };
+  await page.locator('[data-testid="filters-pay-form"] a[href*="disclosed=1"]').click();
+  await settle(/disclosed=1/);
+  const disclosedOnly = { order: await payIds(), ...(await payMarkers()) };
+  await page.reload({ waitUntil: "networkidle" });
+  const reloaded = { url: page.url(), order: await payIds() };
+  const qualifying = new Set(["904000001", "904000002", "904000003"]);
+  check(
+    "term-search E2E-007 mínimo em USD por mês: qualificadas primeiro e convertidas, marcadas depois, abaixo do mínimo contado; só informado some com as marcadas; recarga mantém",
+    withMinimum.order.length === 5
+      && withMinimum.order.slice(0, 3).every((id) => qualifying.has(id))
+      && withMinimum.converted === 3
+      && withMinimum.undisclosed === 1
+      && withMinimum.notComparable === 1
+      && /\b1\b/.test(withMinimum.hidden)
+      && disclosedOnly.order.length === 3
+      && disclosedOnly.undisclosed + disclosedOnly.notComparable === 0
+      && /pay=6000/.test(reloaded.url)
+      && /disclosed=1/.test(reloaded.url)
+      && reloaded.order.length === 3,
+    JSON.stringify({ withMinimum, disclosedOnly, reloaded }),
+  );
+
+  await page.goto(payBase, { waitUntil: "networkidle" });
+  await page.locator('a[href*="sort=comp"]').first().click();
+  await settle(/sort=comp/);
+  const byPay = await payIds();
+  check(
+    "term-search E2E-008 ordenar por salário segue o valor normalizado entre USD/ano, BRL/mês e USD/hora",
+    JSON.stringify(byPay.slice(0, 4)) === JSON.stringify(["904000003", "904000002", "904000001", "904000004"]),
+    JSON.stringify(byPay),
+  );
+
+  let hostileDialog = false;
+  const onDialog = async (dialog) => {
+    hostileDialog = true;
+    await dialog.dismiss();
+  };
+  page.on("dialog", onDialog);
+  await page.goto(`${BASE}/jobs?q=${encodeURIComponent("<script>alert(1)</script>")}`, { waitUntil: "networkidle" });
+  const hostileTerm = await page.evaluate(() => ({
+    notice: Boolean(document.querySelector('[data-testid="jobs-notice-term_invalid_char"]')),
+    // O payload RSC carrega a URL como string JSON num <script> de dados; o
+    // que provaria injeção é um script cujo CÓDIGO seja o do parâmetro.
+    injected: [...document.querySelectorAll("script")].some((node) => (node.textContent ?? "").trim() === "alert(1)"),
+    field: document.querySelector('[data-testid="filters-query"]')?.value ?? null,
+  }));
+  await page.goto(`${BASE}/jobs?pay=0`, { waitUntil: "networkidle" });
+  const payNotice = await page.locator('[data-testid="jobs-notice-pay_invalid"]').count();
+  await page.goto(`${payBase}&track=999`, { waitUntil: "networkidle" });
+  const unknownTrack = {
+    notice: await page.locator('[data-testid="jobs-notice-track_unknown"]').count(),
+    fits: await payFits(),
+  };
+  page.off("dialog", onDialog);
+  check(
+    "term-search E2E-015 entrada hostil vira aviso: termo inválido, salário 0 e trilha inexistente caem na principal",
+    hostileTerm.notice
+      && !hostileTerm.injected
+      && !hostileDialog
+      && hostileTerm.field === ""
+      && payNotice === 1
+      && unknownTrack.notice === 1
+      && unknownTrack.fits["904000001"] === "60",
+    JSON.stringify({ hostileTerm, hostileDialog, payNotice, unknownTrack }),
+  );
+
+  await page.goto(`${BASE}/jobs?q=zzqxunmatched`, { waitUntil: "networkidle" });
+  const emptyTerm = await page.evaluate(() => ({
+    empty: document.querySelector('[data-testid="jobs-empty"]')?.textContent ?? "",
+    offer: document.querySelector('[data-testid="jobs-offer-search-link"]')?.getAttribute("href") ?? "",
+    emphasized: document.querySelector('[data-testid="jobs-offer-search"]')?.getAttribute("data-emphasized"),
+  }));
+  check(
+    "term-search E2E-020 termo sem vaga: o vazio nomeia o termo e oferece buscar nas plataformas",
+    emptyTerm.empty.includes("zzqxunmatched")
+      && emptyTerm.offer === "/searches/tracks/new?term=zzqxunmatched"
+      && emptyTerm.emphasized === "true",
+    JSON.stringify(emptyTerm),
+  );
+
   /* --------------------------------- Logout -------------------------------- */
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   await page.locator('[data-testid="sign-out"]').click();

@@ -18,6 +18,20 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### New
+
+- On the jobs screen, choose which track the scores come from — the primary,
+  an accepted track or all of them, with the track's name on each job.
+- A minimum pay filter in any currency and period, with the conversion beside
+  the original amount. Jobs with no pay disclosed or pay that cannot be
+  compared appear marked, after the ones that reach the minimum, and can be
+  hidden; the screen says how many fell below the minimum.
+- The jobs screen search looks for the whole word in the title, company and
+  description: "java" no longer brings "JavaScript". When it finds little, the
+  screen offers to search the platforms for the term.
+- A "brought by term" filter that shows the jobs a saved term brought and
+  marks the new ones since your last visit.
+
 ### Improved
 
 - Groundwork for searching more than one kind of job, each with its own

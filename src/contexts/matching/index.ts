@@ -81,8 +81,11 @@ export {
 export {
   activeTermKeys,
   deleteTerm,
+  listSavedTerms,
   moveTerm,
   newCount,
+  recordTermVisit,
+  savedTermForBoard,
   rerunTerm,
   saveTerm,
   setTermStatus,
@@ -91,6 +94,7 @@ export {
   type CandidateScope,
   type RerunResult,
   type SaveTermResult,
+  type SavedTermSummary,
   type TermOverview,
   type TermView,
 } from "./app/saved-terms.ts";
@@ -115,9 +119,11 @@ export {
   clusterBreakdown,
   corpusStats,
   countBoard,
+  countHiddenBelowMinimum,
   listBoard,
   type BoardFilters,
   type BoardRow,
+  type PayFilter,
 } from "../../core/db/repo.ts";
 
 export {

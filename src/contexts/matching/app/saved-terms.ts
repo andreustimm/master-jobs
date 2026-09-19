@@ -220,6 +220,59 @@ export async function newCount(scope: CandidateScope, termId: number): Promise<n
   return term ? countNewJobs(term.termKey, term.lastVisitAt) : null;
 }
 
+export type SavedTermSummary = {
+  id: number;
+  term: string;
+  termKey: string;
+  trackId: number;
+  status: "active" | "paused";
+  lastVisitAt: string | null;
+};
+
+function summary(term: Awaited<ReturnType<typeof listTerms>>[number]): SavedTermSummary {
+  return {
+    id: term.id,
+    term: term.term,
+    termKey: term.termKey,
+    trackId: term.trackId,
+    status: term.status === "paused" ? "paused" : "active",
+    lastVisitAt: term.lastVisitAt,
+  };
+}
+
+/** Os termos do candidato, para o seletor "trazida por" da tela Vagas. */
+export async function listSavedTerms(scope: CandidateScope): Promise<SavedTermSummary[]> {
+  return (await listTerms(scope.candidateId)).map(summary);
+}
+
+/**
+ * O termo do filtro "trazida por", com o estado da última busca — é o que a
+ * tela diz quando o filtro volta vazio. `null` para termo de outra pessoa ou
+ * apagado: o id da URL é pedido, não prova.
+ */
+export async function savedTermForBoard(
+  scope: CandidateScope,
+  termId: number,
+  now: Date,
+): Promise<(SavedTermSummary & { run: TermRunState }) | null> {
+  const term = await findTerm(scope.candidateId, termId);
+  if (!term) return null;
+  const platforms = (await captureStatusFor([term.termKey], now)).get(term.termKey) ?? [];
+  const run = termStatus(platforms);
+  return { ...summary(term), run: run === "never_run" && !capturesAllowed() ? "captures_off" : run };
+}
+
+/**
+ * Marca a visita ao filtro do termo. Chamado depois da resposta: a página
+ * marca as vagas novas contra a visita ANTERIOR, e só então a âncora avança.
+ */
+export async function recordTermVisit(scope: CandidateScope, termId: number, at: Date): Promise<void> {
+  await getDb()
+    .update(savedTerm)
+    .set({ lastVisitAt: at.toISOString() })
+    .where(and(eq(savedTerm.candidateId, scope.candidateId), eq(savedTerm.id, termId)));
+}
+
 /** As chaves que a varredura diária busca: cada termo ativo uma vez. */
 export async function activeTermKeys(): Promise<Array<{ termKey: string; query: string }>> {
   return activeKeys();

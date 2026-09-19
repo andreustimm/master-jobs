@@ -18,6 +18,21 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Novidade
+
+- Na tela de vagas, escolha a trilha pela qual as notas aparecem — a
+  principal, uma trilha aceita ou todas juntas, com o nome da trilha em cada
+  vaga.
+- Filtro de salário mínimo em qualquer moeda e período, com a conversão ao
+  lado do valor original. Vagas sem salário informado ou impossíveis de
+  comparar aparecem marcadas, depois das que atingem o mínimo, e podem ser
+  escondidas; a tela diz quantas ficaram abaixo do mínimo.
+- A busca da tela de vagas procura a palavra inteira no cargo, na empresa e na
+  descrição: "java" não traz mais "JavaScript". Quando a busca traz pouco, a
+  tela oferece buscar o termo nas plataformas.
+- Filtro "trazida pelo termo", que mostra as vagas que um termo salvo trouxe
+  e marca as novas desde a última visita.
+
 ### Melhorado
 
 - Preparação para buscar vagas de mais de um tipo, com régua própria para cada

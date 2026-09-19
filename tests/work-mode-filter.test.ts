@@ -120,7 +120,7 @@ describe("work-mode filters", () => {
     expect((await boardFacets(1, filters)).clusters).toEqual(["architect"]);
     await db.update(job).set({ closedAt: "2026-01-01" }).where(eq(job.id, 24));
     await expect(countBoard(1, filters)).resolves.toBe(9);
-    await expect(countBoard(1, { ...filters, q: "does not exist" })).resolves.toBe(0);
+    await expect(countBoard(1, { ...filters, term: { term: "does not exist", key: "doesnotexist" } })).resolves.toBe(0);
   });
 
   it("ignores unsupported URL values instead of accepting arbitrary SQL input", () => {
