@@ -3,6 +3,11 @@
 Canonical behavior catalog for the platform catalog and hybrid-search feature.
 Companion to `_prd.md`; consumed by `_techspec.md` and `_tests.md`.
 
+> **Amended 2026-09-18.** US-006, US-009, US-017, US-018, US-020, US-021,
+> US-029 and US-031 are read together with the "Amendments from
+> term-search-target-tracks" section of `_prd.md` (A1–A5), which wins where
+> they conflict.
+
 ## Personas
 
 - **Administrator** — maintains supported sources and operates captures and

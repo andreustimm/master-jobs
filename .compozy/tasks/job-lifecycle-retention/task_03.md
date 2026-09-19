@@ -27,6 +27,9 @@ keeps closed/archived jobs useful without exposing unrelated candidate data.
 - No response MUST disclose existence of an unrelated candidate or application.
 - Aggregates MUST remain bounded by authorized relationships and paginate rows.
 - Closed/archived job state MUST remain distinct from application status.
+- The recruiter view MUST NOT show a candidate's target tracks, saved terms,
+  per-track fits or compensation ranges, even for linked candidates
+  ([`term-search-target-tracks`](../term-search-target-tracks/_prd.md), rule 45).
 </requirements>
 
 ## Subtasks
