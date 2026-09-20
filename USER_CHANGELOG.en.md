@@ -18,6 +18,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Added
+
+- An operations screen to ask for new jobs, an expiry check or a rescore,
+  without waiting for the automatic daily run.
+
 ## [1.16.0] - 2026-09-20T04:16:18.738Z
 
 ### Added
@@ -27,7 +32,6 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 ### Fixed
 
 - The skills screen and the new-track screen open again instead of timing out.
-
 ## [1.15.4] - 2026-09-20T03:02:27.338Z
 
 ### Fixed

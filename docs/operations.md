@@ -1,9 +1,10 @@
 # Operação diária
 
-> **Incidente ativo — 03/09/2026:** a varredura automática está temporariamente
-> desligada no GitHub Actions e no Vercel Cron para proteger a cota compartilhada
-> do Turso. Não reative antes de cumprir os gates da tarefa B-11. Diagnóstico,
-> estado verificável e runbook de reativação:
+> **Incidente encerrado — 19/09/2026:** a varredura automática está **ligada** e
+> foi validada de ponta a ponta em produção sobre o PostgreSQL do Supabase (0 de
+> 47 fontes com erro, sync em 18m46s). A cota do Turso que motivou o desligamento
+> deixou de ser o banco de runtime. Mantido abaixo o histórico do incidente de
+> 03/09/2026, porque o runbook de reativação explica o que foi conferido antes:
 > [`operations/turso-quota-incident-2026-09-03.md`](operations/turso-quota-incident-2026-09-03.md).
 
 > **Banco atual:** o runtime usa PostgreSQL (`DATABASE_URL`) e migrations usam
@@ -11,6 +12,35 @@
 > fotografia do snapshot SQLite pré-corte; trate-os como referência histórica e
 > não os execute literalmente. Para a operação atual, prefira os comandos
 > `jho` e as rotinas de `docs/engineering/deploy.md`.
+
+## Pedir manutenção pela interface — `/admin/operacoes`
+
+Tela de administrador com um botão por rotina: varredura inteira, buscar vagas
+novas, repetir as buscas por termo, conferir expiradas e repontuar. Mostra
+quantas fontes estão sem erro, qual foi a varredura mais recente e o detalhe das
+que falharam.
+
+**A tela pede; quem executa é o GitHub Actions.** Não é preferência: a função
+web morre em 30 segundos e o sync levou de 18 a 27 minutos nas últimas medições.
+Rodar a rotina dentro do pedido seria prometer o que a plataforma não entrega —
+e foi assim que duas telas passaram a devolver 504 antes da 1.15.5.
+
+O pedido vira um `workflow_dispatch` em `varredura.yml`, com o input `rotina`.
+Cada passo do workflow declara a que rotina pertence, então pedir "conferir
+expiradas" não gasta cota de fonte nem repontua o acervo. Execução agendada não
+tem input: ela continua rodando tudo.
+
+**Sem credencial, a tela diz isso.** O disparo imediato precisa de
+`GITHUB_DISPATCH_TOKEN` — um PAT fine-grained com `actions:write` no repositório
+— cadastrado como variável de ambiente da aplicação; o **nome** da variável é o
+que o código conhece, nunca o valor (regra 16). Sem ela, o botão explica o que
+falta e a execução diária das 06:00 UTC continua de pé: o sistema fica mais
+devagar, nunca incorreto.
+
+**O estado não vem da API do GitHub.** Vem das tabelas que as rotinas escrevem —
+`source.lastSyncedAt`, `source.lastStatus` — pela mesma leitura que a CLI usa em
+`jho sources list`. Assim a tela não depende de token para dizer a verdade sobre
+o acervo.
 
 ## Por que isto existe
 

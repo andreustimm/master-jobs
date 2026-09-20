@@ -37,7 +37,12 @@ it("lets a slow sync time out without taking the day's terms and scores with it"
   expect(sync?.["timeout-minutes"]).toBeLessThan(workflow.jobs.varrer["timeout-minutes"]);
   const after = steps.slice(steps.indexOf(sync!) + 1);
   expect(after.some((s) => s.run === "pnpm jho terms run")).toBe(true);
-  expect(after.some((s) => s.run === "pnpm jho jobs score --every-candidate" && !s.if)).toBe(true);
+  // O passo pode ter condição — a rotina pedida na tela do admin gateia cada um
+  // —, mas ela não pode depender do resultado do sync: é justamente isso que
+  // fazia o dia inteiro parar quando a busca nas fontes estourava o tempo.
+  const nota = after.find((s) => s.run === "pnpm jho jobs score --every-candidate");
+  expect(nota).toBeDefined();
+  expect(nota?.if ?? "").not.toContain("steps.sync");
   const alarm = after.find((s) => s.if?.includes("steps.sync.outcome == 'failure'"));
   expect(alarm?.if).toContain("always()");
   expect(alarm?.run).toContain("exit 1");

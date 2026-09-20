@@ -9,6 +9,21 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Tela **`/admin/operacoes`**: o administrador pede varredura, busca por termo,
+  reconferência de expiradas ou repontuação, e vê quantas fontes estão sem erro,
+  a varredura mais recente e o erro de cada fonte quebrada. A tela **pede**; quem
+  executa é o GitHub Actions, porque função web morre em 30s e o sync leva de 18
+  a 27 minutos. Contexto novo `src/contexts/operations/` com uma porta —
+  `WorkflowDispatchPort` — e o adapter de `workflow_dispatch`; `varredura.yml`
+  ganha o input `rotina` e cada passo declara a que rotina pertence, então pedir
+  uma fatia não gasta cota das outras. Sem `GITHUB_DISPATCH_TOKEN` o botão
+  explica o que falta e a execução diária segue intacta.
+- `src/core/ingest/health.ts`: a saúde das fontes numa leitura só, usada pela
+  tela e pela CLI (`jho sources list`), que antes montava a própria consulta —
+  duas superfícies discordando sobre "fonte quebrada" era questão de tempo.
+
 ## [1.16.0] - 2026-09-20
 
 ### Adicionado
@@ -36,7 +51,6 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   de skills virou `app/candidate/skills/data.ts` para poder ser medida, e
   `tests/db-fan-out.test.ts` conta o pico de consultas em voo — 4 reprova.
   O tamanho do pool agora está documentado como contrato com quem escreve tela.
-
 ## [1.15.4] - 2026-09-20
 
 ### Corrigido
