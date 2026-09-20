@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.18.1] - 2026-09-20
+
 ### Corrigido
 
 - A rota de diagnóstico de `/candidate/skills` passa a dar prazo próprio a cada
