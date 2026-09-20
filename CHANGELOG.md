@@ -9,6 +9,36 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-09-20
+
+### Adicionado
+
+- **Um aviso ao Sentry antes de a Vercel matar a função.** O pior defeito deste
+  sistema era o único invisível: `FUNCTION_INVOCATION_TIMEOUT` encerra o
+  processo aos 30 segundos, o código não lança exceção, nada é reportado, e o
+  registro da plataforma traz uma linha só. Foi assim que o 504 de
+  `/candidate/skills` conviveu com um Sentry limpo enquanto a tela estava
+  quebrada.
+
+  Aos 22 segundos o processo ainda está vivo e consegue falar. `warnIfSlower`
+  é domínio puro com porta de relato — o relógio entra injetado porque aqui o
+  tempo é a decisão —, e `app/timeout-watch.ts` é o adapter que liga isso ao
+  SDK. Ele não corrige nem interrompe nada: faz o travamento deixar rastro, e
+  o rastro nomeia a rota.
+
+  Está nas duas telas que já devolveram 504 por disputa de conexão. O aviso
+  leva o caminho e deixa a query string para trás, pela mesma peneira do relato
+  de erro: o caminho responde "onde travou", a query responde "o que a pessoa
+  procurava".
+
+### Corrigido
+
+- Cobertura: `src/core/triage/job-sweep.ts` estava em 0% e é fronteira de
+  segurança — o snapshot é o único canal pelo qual descrição de terceiro chega
+  ao agente revisor. `src/core/ingest/health.ts` estava em 50%. Adapters
+  ganharam o caso de resposta magra, que é a regra 8 aplicada à ingestão.
+  Branches de 91,18% para 91,65%; statements de 95,59% para 95,90%.
+
 ## [1.19.0] - 2026-09-20
 
 ### Adicionado

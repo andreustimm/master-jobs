@@ -13,6 +13,7 @@ import { createTrackAction } from "../../actions";
 import { feedbackMessages } from "../../feedback";
 import { TrackFieldset } from "../../track-fields";
 import { targetToFields } from "../../track-form";
+import { comVigia } from "../../../timeout-watch.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,11 @@ export default async function NewTrackPage({
   const name = one("name");
 
   const primary = await ensurePrimaryTrack(candidateId);
-  const suggestion = term ? await trackSuggestion(candidateId, term) : null;
+  // A outra tela que já devolveu 504 por disputa de conexão. O vigia não
+  // corrige — faz o travamento deixar rastro, que é o que faltava.
+  const suggestion = term
+    ? await comVigia("/searches/tracks/new", () => trackSuggestion(candidateId, term))
+    : null;
   const pending = !primary?.target;
   const target = suggestion?.ok ? suggestion.target : primary?.target ? blank(primary.target) : null;
   const fields = target ? targetToFields(name || (suggestion?.ok ? suggestion.term.term : ""), target) : null;

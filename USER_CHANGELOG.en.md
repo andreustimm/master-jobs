@@ -18,6 +18,14 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-09-20T23:41:23.163Z
+
+### Added
+
+- When a screen takes too long and the server gives up, the system now records
+  what happened before it is shut down. That kind of failure — the most visible
+  one in daily use — used to leave no trace at all.
+
 ## [1.19.0] - 2026-09-20T22:37:38.237Z
 
 ### Added
