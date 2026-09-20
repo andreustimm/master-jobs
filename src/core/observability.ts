@@ -204,3 +204,60 @@ export function scrubEvent<T extends ScrubbableEvent>(event: T): T | null {
     return null;
   }
 }
+
+/**
+ * O aviso que sai antes de a plataforma matar o processo.
+ *
+ * A pior falha do produto é a única invisível: `FUNCTION_INVOCATION_TIMEOUT`
+ * encerra o processo aos 30 segundos, o código não lança exceção, e por isso
+ * nada é reportado — o registro da Vercel traz uma linha só, sem rastro da
+ * aplicação. Foi assim que o 504 de `/candidate/skills` conviveu com um Sentry
+ * limpo enquanto a tela estava quebrada.
+ *
+ * Um processo ainda vivo aos 22 segundos consegue falar. É essa a janela que
+ * esta função usa: ela não corrige nem interrompe nada, só faz o travamento
+ * deixar rastro — e o rastro nomeia a rota, que é o que faltava.
+ */
+export type TimeoutWatchReport = {
+  /** A rota que não respondeu a tempo, sem query string. */
+  route: string;
+  /** Quanto tempo se passou quando o aviso saiu. */
+  elapsedMs: number;
+};
+
+export type TimeoutWatchDeps = {
+  /** Para onde o aviso vai. Injetado porque domínio puro não conhece SDK. */
+  report: (report: TimeoutWatchReport) => void;
+  /** Injetável para o teste não esperar 22 segundos de verdade. */
+  setTimer?: (fn: () => void, ms: number) => unknown;
+  clearTimer?: (handle: unknown) => void;
+};
+
+/**
+ * Roda `work`, e avisa se ele passar de `limitMs` — sem alterar o resultado.
+ *
+ * O aviso nunca atrapalha o trabalho: um relator que estoura é engolido, e um
+ * trabalho que falha continua falhando com o próprio erro. Relatar não pode
+ * virar um segundo defeito por cima do primeiro.
+ */
+export async function warnIfSlower<T>(
+  route: string,
+  limitMs: number,
+  work: () => Promise<T>,
+  deps: TimeoutWatchDeps,
+): Promise<T> {
+  const setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
+  const clearTimer = deps.clearTimer ?? ((handle) => clearTimeout(handle as never));
+  const handle = setTimer(() => {
+    try {
+      deps.report({ route: redactPath(route), elapsedMs: limitMs });
+    } catch {
+      // Ver acima: o aviso é secundário ao trabalho.
+    }
+  }, limitMs);
+  try {
+    return await work();
+  } finally {
+    clearTimer(handle);
+  }
+}
