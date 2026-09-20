@@ -22,6 +22,7 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 - The new-track screen opens again. The skills screen is still under
   investigation.
+- Internal test-timing adjustment; nothing changes in use.
 
 ## [1.17.1] - 2026-09-20T14:28:16.117Z
 

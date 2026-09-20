@@ -595,7 +595,12 @@ describe("the capture queue under per-minute budgets and leftovers", () => {
     const rows = await captures();
     expect(rows.filter((row) => row.platform === "remoteok").map((row) => row.status)).toEqual(["succeeded", "succeeded"]);
     expect(rows.every((row) => row.status === "succeeded")).toBe(true);
-  });
+    // Tempo próprio: este caso percorre dez minutos de janelas contra o banco de
+    // verdade, e o relógio único (o carimbo da captura vem de `clock()`) faz o
+    // laço visitar mais janelas — 1,2s viraram 3,4s nesta máquina e 7,2s no
+    // runner, que é mais lento. O limite padrão de 5s reprovava por lentidão, não
+    // por defeito.
+  }, 30_000);
 
   it("without a wait budget the drain still stops at the first empty claim (web after())", async () => {
     const id = await person("owner", true);
