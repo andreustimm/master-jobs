@@ -137,6 +137,71 @@ describe("Workable (real response, 2026-09-19)", () => {
   });
 });
 
+describe("resposta magra: campo opcional ausente não quebra o adapter", () => {
+  /**
+   * Regra 8 aplicada à ingestão: dado faltante é neutro, nunca punitivo — e
+   * nunca uma exceção. Um board que para de mandar `salary` ou `pubDate` não
+   * pode derrubar o sync inteiro, e `??` sobre `undefined` é justamente o
+   * caminho que nenhum teste de resposta real exercita, porque resposta real
+   * vem completa.
+   */
+  it("UT-102 Jobicy sem salário, sem data e sem tipo entrega a vaga mesmo assim", async () => {
+    setHttpPort(fixtureHttp({
+      "jobicy.com": {
+        jobs: [{ id: 1, url: "https://jobicy.com/jobs/1", jobTitle: "Staff Engineer", companyName: "Acme" }],
+      },
+    }));
+
+    const { jobs } = await jobicy.fetchJobs({ kind: "jobicy", handle: "", label: "Jobicy" });
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      title: "Staff Engineer",
+      companyName: "Acme",
+      postedAt: null,
+      compMin: null,
+      compMax: null,
+      compCurrency: null,
+      employmentType: null,
+      seniorityRaw: null,
+    });
+    // Sem `jobGeo` a vaga é de qualquer lugar, e não uma vaga sem localização.
+    expect(jobs[0]!.locationRaw).toBe("Anywhere");
+  });
+
+  it("UT-103 Jobicy sem a lista de vagas devolve nenhuma, em vez de estourar", async () => {
+    setHttpPort(fixtureHttp({ "jobicy.com": {} }));
+
+    await expect(
+      jobicy.fetchJobs({ kind: "jobicy", handle: "", label: "Jobicy" }),
+    ).resolves.toMatchObject({ jobs: [], warnings: [] });
+  });
+
+  it("UT-104 o `handle` escolhe a região, e vazio cai na do candidato", async () => {
+    const http = fixtureHttp({ "jobicy.com": { jobs: [] } });
+    setHttpPort(http);
+
+    await jobicy.fetchJobs({ kind: "jobicy", handle: "  europe  ", label: "Jobicy" });
+    expect(http.calls[0]).toContain("geo=europe");
+
+    await jobicy.fetchJobs({ kind: "jobicy", handle: "   ", label: "Jobicy" });
+    expect(http.calls[1]).toContain("geo=latam");
+  });
+
+  it("UT-105 tag longa demais é recusada antes de gastar a cota", async () => {
+    const quota = reserver();
+    setHttpPort(fixtureHttp({ "jobicy.com": { jobs: [] } }));
+
+    const recusada = await jobicy.termSearch!.search("x".repeat(51), { limit: 10, reserve: quota.reserve });
+
+    // A API aceita de 3 a 50 caracteres; fora disso ela gastaria uma unidade
+    // só para dizer não.
+    expect(recusada.jobs).toEqual([]);
+    expect(recusada.warnings[0]).toContain("3–50");
+    expect(quota.calls()).toBe(0);
+  });
+});
+
 describe("Hacker News \"Who is hiring?\" (real thread, September 2026)", () => {
   const thread = () =>
     fixtureHttp({
