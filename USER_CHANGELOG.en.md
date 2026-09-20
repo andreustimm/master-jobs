@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-09-20T18:22:03.370Z
+
 ### Added
 
 - The same job posted across several countries now takes **a single row**, with

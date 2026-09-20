@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-09-20
+
 ### Adicionado
 
 - A mesma vaga publicada em vários países passa a ocupar **uma linha**, com a

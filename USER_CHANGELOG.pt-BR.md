@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-09-20T18:22:03.370Z
+
 ### Adicionado
 
 - A mesma vaga publicada em vários países agora ocupa **uma linha só**, com a
