@@ -25,7 +25,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { candidate, company, job, source } from "../src/core/db/schema.ts";
 import type { DB } from "../src/core/db/client.ts";
-import { ensurePrimaryTrack, trackSuggestion } from "../src/contexts/matching/index.ts";
+import { ensurePrimaryTrack, trackOverview, trackSuggestion } from "../src/contexts/matching/index.ts";
 import { candidateSkills } from "../src/contexts/skills/index.ts";
 import { loadSkillsScreen } from "../app/candidate/skills/data.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
@@ -104,6 +104,22 @@ describe("leque de consultas por tela", () => {
       const { mine, demand } = await loadSkillsScreen(candidateId);
       expect(Array.isArray(mine)).toBe(true);
       expect(Array.isArray(demand)).toBe(true);
+    });
+
+    expect(peak).toBeLessThanOrEqual(TETO);
+  });
+
+  it("a visão geral das trilhas não passa do teto", async () => {
+    // Este caminho nasceu do próprio conserto: `ownEvidence` passou a usar duas
+    // conexões, e somar `listTracks` em paralelo devolvia o pico a três. A
+    // varredura por `Promise.all` só encontra o que já existe; o teto é que
+    // impede o próximo.
+    const candidateId = await seedOwner();
+    await ensurePrimaryTrack(candidateId);
+
+    const peak = await peakInFlight(async () => {
+      const visao = await trackOverview(candidateId);
+      expect(Array.isArray(visao.tracks)).toBe(true);
     });
 
     expect(peak).toBeLessThanOrEqual(TETO);

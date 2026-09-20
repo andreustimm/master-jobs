@@ -351,7 +351,11 @@ async function ownEvidence(candidateId: number): Promise<OwnEvidence> {
  */
 export async function trackOverview(candidateId: number): Promise<TrackOverview> {
   await ensurePrimaryTrack(candidateId);
-  const [tracks, evidence] = await Promise.all([listTracks(candidateId), ownEvidence(candidateId)]);
+  // Em série: `ownEvidence` já usa duas conexões, e somar `listTracks` a elas
+  // devolveria o pico a três — o pool inteiro, que é o que trava a requisição
+  // do lado.
+  const tracks = await listTracks(candidateId);
+  const evidence = await ownEvidence(candidateId);
   return {
     pending: !tracks.find((track) => track.isPrimary)?.target,
     tracks: tracks.map((track) => ({

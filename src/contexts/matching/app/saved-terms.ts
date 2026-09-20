@@ -362,11 +362,14 @@ export async function termOverview(scope: CandidateScope, now: Date): Promise<Te
   const terms = await listTerms(scope.candidateId);
   const keys = terms.map((term) => term.termKey);
   const since = windowStarts(new Date(now.getTime() - ZERO_STREAK_DAYS * 86_400_000)).day;
-  const [states, history, lastSweep] = await Promise.all([
+  // Duas de cada vez, nunca três: o pool tem três conexões, e um caminho que
+  // pede as três exatas deixa a requisição concorrente esperando até a Vercel
+  // matar as duas aos 30 segundos. Foi assim que `/candidate/skills` travava.
+  const [states, history] = await Promise.all([
     captureStatusFor(keys, now),
     captureHistory(keys, since),
-    lastSweepCaptureAt(),
   ]);
+  const lastSweep = await lastSweepCaptureAt();
   const capturesOff = !capturesAllowed();
 
   const views: TermView[] = [];

@@ -1009,9 +1009,21 @@ try {
 
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  // O shell fica `inert` até a transição confirmar, e digitação perdida ali não
+  // muda o currículo — sem mudança não há repontuação para enfileirar, e o
+  // cartão aparece `idle`. Foi o que reprovou este caso em três de cinco
+  // execuções antes desta espera existir.
+  await page.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+End");
+  const antes = await page.locator(".cm-content").innerText();
   await page.keyboard.type("\n\nE2E queue visibility change.", { delay: 0 });
+  // A digitação entrou mesmo: sem isto o caso mediria a fila de um currículo
+  // que ninguém editou.
+  await page.waitForFunction(
+    (texto) => (document.querySelector(".cm-content")?.textContent ?? "") !== texto,
+    antes,
+  );
   await page.fill('input[name="label"]', "E2E queue visibility");
   await page.locator('[data-testid="save-cv"]').click();
   await page.locator('[data-testid="mutation-feedback"][role="status"]').waitFor({
@@ -1358,13 +1370,16 @@ try {
   // reaproveitada, e um caminho que pedia as três exatas deixava a requisição
   // do lado esperando até a Vercel matar as duas aos 30 segundos. Toda a suíte
   // passava porque toda a suíte pede uma página de cada vez.
-  const segundaAba = await page.context().newPage();
-  const emParalelo = await Promise.all([
-    page.goto(`${BASE}/candidate/skills`, { waitUntil: "domcontentloaded" }),
-    segundaAba.goto(`${BASE}/candidate/skills`, { waitUntil: "domcontentloaded" }),
-  ]);
-  const statusEmParalelo = emParalelo.map((resposta) => resposta?.status() ?? 0);
-  await segundaAba.close();
+  // Dois `fetch` de dentro da própria página: requisições HTTP de verdade, com
+  // o mesmo cookie de sessão, disparadas juntas. Uma segunda aba precisaria de
+  // um contexto novo, e um contexto novo não carrega a sessão.
+  const statusEmParalelo = await page.evaluate(async (base) => {
+    const respostas = await Promise.all([
+      fetch(`${base}/candidate/skills`, { redirect: "manual" }),
+      fetch(`${base}/candidate/skills`, { redirect: "manual" }),
+    ]);
+    return respostas.map((resposta) => resposta.status);
+  }, BASE);
   check(
     "E2E-013 duas requisições simultâneas à tela de skills respondem as duas",
     statusEmParalelo.every((status) => status === 200),
