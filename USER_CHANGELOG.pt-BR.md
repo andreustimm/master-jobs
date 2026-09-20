@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-09-20T04:16:18.738Z
+
 ### Adicionado
 
 - Mais uma fonte de vagas com empresa nomeada (Turing).

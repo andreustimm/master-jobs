@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-09-20
+
 ### Adicionado
 
 - Fonte **Turing** (Greenhouse, 21 vagas no probe): única das treze vitrines de
