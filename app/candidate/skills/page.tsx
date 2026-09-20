@@ -6,12 +6,11 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
   SKILL_CATEGORIES,
-  candidateSkills,
-  skillDemand,
   type SkillCategory,
 } from "../../../src/contexts/skills/index.ts";
 import type { TranslationKey } from "../../../src/core/i18n/index.ts";
 import { auditAction, detectAction } from "./actions";
+import { loadSkillsScreen } from "./data";
 import { requireOwnCandidatePage } from "../../auth";
 import { getTranslator } from "../../i18n";
 import { MutationFeedbackForm } from "../../mutation-feedback";
@@ -42,10 +41,9 @@ export default async function SkillsPage() {
   void locale;
   // Guard antes de ler qualquer dado. O escopo vem da sessão.
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
-  const [mine, demand] = await Promise.all([
-    candidateSkills(candidateId),
-    skillDemand({ minFit: 60, candidateId }),
-  ]);
+  // A ordem das leituras é contrato com o pool de conexões e está em `data.ts`,
+  // onde o teste de leque consegue medi-la.
+  const { mine, demand } = await loadSkillsScreen(candidateId);
 
   const pending = mine.filter((s) => s.status === "detected");
   const confirmed = mine.filter((s) => s.status === "confirmed");

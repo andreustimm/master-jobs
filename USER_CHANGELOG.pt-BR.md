@@ -24,6 +24,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 - Mais uma fonte de vagas com empresa nomeada (Turing).
 
+### Corrigido
+
+- As telas de skills e de nova trilha voltam a abrir em vez de dar erro de
+  tempo esgotado.
+
 ## [1.15.4] - 2026-09-20T03:02:27.338Z
 
 ### Corrigido
@@ -173,6 +178,7 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   provedor já mantém, em vez de exigir uma cópia manual que envelhece. Quando a
   senha do banco é trocada do lado do provedor, o sistema continua no ar sem
   ninguém precisar atualizar nada à mão.
+
 ### Corrigido
 
 - Preparar uma versão de teste falhava quando já existia um currículo de exemplo
