@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.18.2] - 2026-09-20
+
 ### Corrigido
 
 - **O 504 de `/candidate/skills`, achado nos logs da Vercel.** A tela respondia

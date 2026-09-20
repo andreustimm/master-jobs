@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.18.2] - 2026-09-20T21:52:14.716Z
+
 ### Corrigido
 
 - A tela de skills não trava mais quando é aberta duas vezes seguidas — era a
