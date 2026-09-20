@@ -24,6 +24,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 - Interruptor "agrupar repetidas" na barra de filtros, ligado por padrão. A URL
   carrega a exceção (`ungrouped=1`), não a regra, para o link comum ficar curto.
 
+### Corrigido
+
+- O caso que recusa semear QA manual fora de um banco provisionado passa a
+  declarar o tempo que precisa. Ele abre quatro processos Node, um por URL
+  recusada: 2,2s nesta máquina, e no runner estourou o limite padrão de 5s e
+  reprovou uma PR que não tocava o arquivo.
+
 ### O que não é óbvio no diff
 
 - O agrupamento é de **apresentação**: os registros continuam separados, e
