@@ -18,6 +18,10 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- A tela de nova trilha volta a abrir. A tela de skills continua em investigação.
+
 ## [1.17.1] - 2026-09-20T14:28:16.117Z
 
 ### Corrigido

@@ -9,6 +9,16 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Rota **temporária** `/api/diag-skills` (admin, somente leitura) para medir de
+  dentro do runtime da Vercel onde vão os 30 segundos de `/candidate/skills`. É a
+  última tela que ainda devolve 504 e já se esgotou o que dá para medir de fora:
+  4–5 consultas abaixo de 700ms cada, sem bloqueio no banco, 600ms num build de
+  produção local contra o mesmo banco e acontece até com candidato sem skill
+  nenhuma. Reduzir consultas simultâneas consertou `/searches/tracks/new` e não
+  consertou esta. A rota sai junto com a correção.
+
 ## [1.17.1] - 2026-09-20
 
 ### Corrigido

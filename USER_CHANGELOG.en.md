@@ -18,6 +18,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- The new-track screen opens again. The skills screen is still under
+  investigation.
+
 ## [1.17.1] - 2026-09-20T14:28:16.117Z
 
 ### Fixed
