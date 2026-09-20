@@ -9,28 +9,48 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
-### Corrigido
-
-- A conferência pós-deploy reprovou na primeira execução real por defeito dela
-  mesma: procurava "número com dois pontos" no HTML e achou o hash de um asset
-  (`022.617.46`) em vez da versão. A página passa a declarar
-  `data-app-version` e o workflow lê esse atributo; o teste prende os dois lados
-  do contrato. Produção estava correta e servindo 1.17.1 o tempo todo.
+## [1.18.0] - 2026-09-20
 
 ### Adicionado
 
-- Rota **temporária** `/api/diag-skills` (admin, somente leitura) para medir de
-  dentro do runtime da Vercel onde vão os 30 segundos de `/candidate/skills`. É a
-  última tela que ainda devolve 504 e já se esgotou o que dá para medir de fora:
-  4–5 consultas abaixo de 700ms cada, sem bloqueio no banco, 600ms num build de
-  produção local contra o mesmo banco e acontece até com candidato sem skill
-  nenhuma. Reduzir consultas simultâneas consertou `/searches/tracks/new` e não
-  consertou esta. A rota sai junto com a correção.
-- O CI de `dev` reprovou por tempo, não por defeito: o caso que percorre dez
-  minutos de janelas de captura leva 1,2s antes do carimbo único e 3,4s depois —
-  o relógio só faz o laço visitar mais janelas —, e no runner, mais lento, deu
-  7,2s contra o limite padrão de 5s. O caso passa a declarar o tempo que precisa,
-  com o motivo escrito ao lado.
+- A mesma vaga publicada em vários países passa a ocupar **uma linha**, com a
+  bandeira de cada país; clicar numa bandeira abre a publicação daquele país.
+  Medido no acervo antes de construir: 391 grupos sobre 2.934 publicações,
+  2.543 linhas a menos — 34% do quadro —, e o maior grupo é a mesma vaga em 42
+  países. Em todos os grupos cada publicação tem uma localização distinta, o
+  que é o que torna a chave (fonte, título, empregador) confiável.
+- `src/core/country.ts`: país de uma localização escrita à mão, bandeira e nome
+  traduzido. A tabela vem do ICU do próprio Node em vez de uma lista à mão, que
+  envelheceria na primeira fonte nova. Cobre 95,3% das localizações dentro dos
+  grupos; o resto são cidades soltas, que aparecem como texto.
+- Interruptor "agrupar repetidas" na barra de filtros, ligado por padrão. A URL
+  carrega a exceção (`ungrouped=1`), não a regra, para o link comum ficar curto.
+
+### Corrigido
+
+- O caso que recusa semear QA manual fora de um banco provisionado passa a
+  declarar o tempo que precisa. Ele abre quatro processos Node, um por URL
+  recusada: 2,2s nesta máquina, e no runner estourou o limite padrão de 5s e
+  reprovou uma PR que não tocava o arquivo.
+
+### O que não é óbvio no diff
+
+- O agrupamento é de **apresentação**: os registros continuam separados, e
+  `closedAt` e as chaves estrangeiras das candidaturas não são tocados.
+- A linha escolhida é a de **menor id**, nunca a de melhor nota — nota é por
+  candidato, e uma linha canônica que mudasse de leitor para leitor faria o
+  mesmo link significar vagas diferentes.
+- O predicado entra em `boardConditions`, que lista e contagem compartilham, e
+  por isso o rodapé conta linhas agrupadas em vez de publicações.
+- É um anti-join, não uma subconsulta por linha: o Postgres resolve numa
+  passada e o acervo pagou 36ms contra 35ms sem ele. Nenhum índice novo,
+  nenhuma migration.
+- Uma marca por país, não por publicação: três cidades brasileiras davam três
+  bandeiras iguais lado a lado. O rótulo então diz quantas são.
+- `DD`, `FX`, `UK` e outros ficam fora da tabela do ICU: o CLDR guarda o
+  passado e chama `DD` de "Germany" e `FX` de "France", então uma varredura
+  alfabética entregava o código morto. `UK` é reservado e não tem bandeira; o
+  código do país é `GB`.
 
 ## [1.17.1] - 2026-09-20
 

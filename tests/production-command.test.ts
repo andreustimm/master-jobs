@@ -43,4 +43,8 @@ it("refuses manual QA seeding outside a local provisioned database", () => {
     expect(result.stderr).not.toContain("synthetic@");
     expect(result.stderr).not.toContain("synthetic-private-credential");
   }
-});
+  // Quatro processos Node inteiros, um por URL recusada: 2,2s nesta máquina e
+  // mais no runner, onde estourou o limite padrão de 5s e reprovou uma PR que
+  // não tocava este arquivo. O caso declara o tempo que precisa em vez de
+  // depender da máquina estar de bom humor.
+}, 30_000);

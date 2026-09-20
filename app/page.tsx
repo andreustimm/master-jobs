@@ -36,7 +36,7 @@ export default async function Cockpit({
     pipelineCounts(candidateId),
     clusterBreakdown(candidateId, 45),
     listBoard(candidateId, { ...filters, limit: 12 }),
-    boardFacets(candidateId, { minFit: state.fit, cluster: state.cluster, term: state.term, sourceKind: state.source, workMode: state.workMode }),
+    boardFacets(candidateId, { minFit: state.fit, cluster: state.cluster, term: state.term, sourceKinds: state.sources, workMode: state.workMode }),
   ]);
 
   const tracked = Object.values(counts).reduce((a, b) => a + b, 0);

@@ -4903,7 +4903,7 @@ try {
   );
 
   await page.goto(payBase, { waitUntil: "networkidle" });
-  await page.locator('[data-testid="filters-pay"]').fill("6000");
+  await page.locator('[data-testid="filters-pay-min"]').fill("6000");
   await page.locator('[data-testid="filters-pay-currency"]').selectOption("USD");
   await page.locator('[data-testid="filters-pay-period"]').selectOption("month");
   await page.locator('[data-testid="filters-pay-submit"]').click();
@@ -4912,7 +4912,7 @@ try {
     converted: document.querySelectorAll('[data-testid^="job-pay-904"]').length,
     undisclosed: document.querySelectorAll('[data-testid^="job-pay-undisclosed-"]').length,
     notComparable: document.querySelectorAll('[data-testid^="job-pay-not-comparable-"]').length,
-    hidden: document.querySelector('[data-testid="jobs-hidden-below-minimum"]')?.textContent ?? "",
+    hidden: document.querySelector('[data-testid="jobs-hidden-by-pay-range"]')?.textContent ?? "",
   }));
   const withMinimum = { order: await payIds(), ...(await payMarkers()) };
   await page.locator('[data-testid="filters-pay-form"] a[href*="disclosed=1"]').click();
@@ -4935,6 +4935,104 @@ try {
       && /disclosed=1/.test(reloaded.url)
       && reloaded.order.length === 3,
     JSON.stringify({ withMinimum, disclosedOnly, reloaded }),
+  );
+
+  // Faixa com os dois lados. Normalizado em USD por mês a fixture vale 10.000,
+  // 12.000, 13.867 e 4.000: um teto de 11.000 deixa uma só de pé.
+  await page.goto(payBase, { waitUntil: "networkidle" });
+  const thumbs = await page.locator('[data-testid="filters-pay-slider"] input[type="range"]').count();
+  await page.locator('[data-testid="filters-pay-min"]').fill("6000");
+  await page.locator('[data-testid="filters-pay-max"]').fill("11000");
+  // O período padrão vem da trilha principal e aqui é anual: sem escolher o
+  // mês, a faixa é lida por ano e o caso mede outra coisa.
+  await page.locator('[data-testid="filters-pay-currency"]').selectOption("USD");
+  await page.locator('[data-testid="filters-pay-period"]').selectOption("month");
+  await page.locator('[data-testid="filters-pay-submit"]').click();
+  await settle(/payMax=11000/);
+  const withCeiling = { order: await payIds(), ...(await payMarkers()) };
+  await page.reload({ waitUntil: "networkidle" });
+  const ceilingKept = {
+    url: page.url(),
+    min: await page.locator('[data-testid="filters-pay-min"]').inputValue(),
+    max: await page.locator('[data-testid="filters-pay-max"]').inputValue(),
+  };
+  check(
+    "term-search E2E-010 faixa de 6.000 a 11.000 em USD por mês: uma qualificada, três fora contadas, recarga devolve os dois campos",
+    thumbs === 2
+      && withCeiling.converted === 1
+      && withCeiling.order.length === 3
+      && /\b3\b/.test(withCeiling.hidden)
+      && /pay=6000/.test(ceilingKept.url)
+      && /payMax=11000/.test(ceilingKept.url)
+      && ceilingKept.min === "6000"
+      && ceilingKept.max === "11000",
+    JSON.stringify({ thumbs, withCeiling, ceilingKept }),
+  );
+
+  // Vagas repetidas por país: quatro publicações da mesma vaga viram uma linha
+  // com três bandeiras, porque as duas brasileiras somam numa marca só.
+  const grupoBase = `${BASE}/jobs?q=${encodeURIComponent("Country Fixture")}&fit=0`;
+  await page.goto(grupoBase, { waitUntil: "networkidle" });
+  const linhasAgrupadas = await page.locator('[data-testid^="job-link-9040001"]').count();
+  const bandeiras = page.locator('[data-testid^="job-country-904000101-"]');
+  const marcas = await bandeiras.evaluateAll((nos) =>
+    nos.map((no) => ({ texto: no.textContent.trim(), rotulo: no.getAttribute("title") })));
+  const destinoPrimeiraBandeira = await bandeiras.first().getAttribute("href");
+  // Desligar o agrupamento devolve as quatro linhas.
+  await page.goto(`${grupoBase}&ungrouped=1`, { waitUntil: "networkidle" });
+  const linhasCruas = await page.locator('[data-testid^="job-link-9040001"]').count();
+  const semBandeiras = await page.locator('[data-testid^="job-countries-"]').count();
+  check(
+    "term-search E2E-012 vaga repetida por país vira uma linha com bandeiras; cidades do mesmo país somam numa marca; desligar devolve as quatro",
+    linhasAgrupadas === 1
+      && marcas.length === 3
+      && marcas.some((m) => m.rotulo === "Países Baixos")
+      && marcas.some((m) => m.rotulo === "França")
+      && marcas.some((m) => (m.rotulo ?? "").startsWith("Brasil"))
+      && (destinoPrimeiraBandeira ?? "").includes("/jobs/904000101")
+      && linhasCruas === 4
+      && semBandeiras === 0,
+    JSON.stringify({ linhasAgrupadas, marcas, destinoPrimeiraBandeira, linhasCruas, semBandeiras }),
+  );
+
+  // Fontes em multi-seleção: duas fontes na fixture, uma escolha por vez e as
+  // duas juntas, com a URL carregando `source` repetido.
+  const sourceBase = `${BASE}/jobs?q=fixture&fit=0`;
+  const listedIds = () => page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid^="job-link-90"]')].map((link) =>
+      link.getAttribute("data-testid").slice("job-link-".length)));
+  await page.goto(sourceBase, { waitUntil: "networkidle" });
+  const everySource = await listedIds();
+  await page.locator('[data-testid="filters-source-summary"]').click();
+  await page.locator('[data-testid="filter-source-lever"]').check();
+  await page.locator('[data-testid="filters-source-submit"]').click();
+  await settle(/source=lever/);
+  const onlyLever = await listedIds();
+  await page.reload({ waitUntil: "networkidle" });
+  const leverStillChecked = await page.locator('[data-testid="filter-source-lever"]').isChecked();
+  await page.locator('[data-testid="filters-source-summary"]').click();
+  await page.locator('[data-testid="filter-source-ashby"]').check();
+  await page.locator('[data-testid="filters-source-submit"]').click();
+  await settle(/source=ashby/);
+  const bothUrl = page.url();
+  const bothSources = await listedIds();
+  await page.locator('[data-testid="filters-source-clear"]').click();
+  // Sem a negativa, `waitForURL` casaria com a URL que ainda tem `source=` e a
+  // leitura aconteceria antes da navegação — verde por corrida, não por efeito.
+  await settle(/\/jobs\?(?!.*source=)/);
+  const cleared = { url: page.url(), ids: await listedIds() };
+  check(
+    "term-search E2E-011 fontes em multi-seleção: uma fonte filtra, recarga mantém a marca, duas fontes repetem o parâmetro, limpar volta ao acervo",
+    everySource.length > 1
+      && onlyLever.length === 1
+      && onlyLever[0] === "904000007"
+      && leverStillChecked === true
+      && /source=lever/.test(bothUrl)
+      && /source=ashby/.test(bothUrl)
+      && bothSources.length === everySource.length
+      && !/source=/.test(cleared.url)
+      && cleared.ids.length === everySource.length,
+    JSON.stringify({ everySource, onlyLever, leverStillChecked, bothUrl, bothSources, cleared }),
   );
 
   await page.goto(payBase, { waitUntil: "networkidle" });

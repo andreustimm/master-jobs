@@ -66,6 +66,9 @@ type VagaEntrada = {
   compMax?: number | null;
   descriptionText?: string | null;
   companyName?: string;
+  title?: string;
+  locationRaw?: string | null;
+  closedAt?: string | null;
 };
 
 async function seedVaga(entrada: VagaEntrada): Promise<number> {
@@ -90,7 +93,9 @@ async function seedVaga(entrada: VagaEntrada): Promise<number> {
       companyId: empresa!.id,
       companyName: entrada.companyName ?? `Empresa ${entrada.n}`,
       externalId: `ext-${entrada.n}`,
-      title: `Arquiteto ${entrada.n}`,
+      title: entrada.title ?? `Arquiteto ${entrada.n}`,
+      locationRaw: entrada.locationRaw ?? null,
+      closedAt: entrada.closedAt ?? null,
       url: `https://exemplo.test/${entrada.n}`,
       fingerprint: `fp-${entrada.n}`,
       contentHash: `ch-${entrada.n}`,
@@ -148,9 +153,92 @@ describe("filtros e ordenação do quadro", () => {
     expect(porCluster.map((r) => r.jobId)).toEqual([backend]);
     await expect(countBoard(candidateId, { cluster: "backend" })).resolves.toBe(1);
 
-    const porFonte = await listBoard(candidateId, { sourceKind: "lever" });
+    const porFonte = await listBoard(candidateId, { sourceKinds: ["lever"] });
     expect(porFonte.map((r) => r.jobId)).toEqual([arquiteto]);
-    await expect(countBoard(candidateId, { sourceKind: "lever" })).resolves.toBe(1);
+    await expect(countBoard(candidateId, { sourceKinds: ["lever"] })).resolves.toBe(1);
+    // Lista vazia é "toda fonte", e não "nenhuma": sem isso, abrir o combo e
+    // desmarcar tudo esvaziaria o quadro em vez de voltar ao padrão.
+    await expect(countBoard(candidateId, { sourceKinds: [] })).resolves.toBe(2);
+
+    // A lista de fontes não encolhe para a fonte escolhida: o combo ficaria
+    // sem o que oferecer, e escolher uma fonte seria um caminho sem volta.
+    // O mesmo vale para o cluster.
+    const comFonte = await boardFacets(candidateId, { sourceKinds: ["lever"] });
+    expect(comFonte.sources).toEqual(["greenhouse", "lever"]);
+    expect(comFonte.total).toBe(1);
+    const comCluster = await boardFacets(candidateId, { cluster: "backend" });
+    expect(comCluster.clusters).toEqual(["architect", "backend"]);
+    expect(comCluster.total).toBe(1);
+  });
+
+  it("dobra a mesma vaga repetida por país numa linha só, e conta o mesmo", async () => {
+    const candidateId = await seedCandidato("dono", true);
+    const mesma = { title: "Engineering Manager", companyName: "Payments Co", sourceId: "lever:acme" };
+    const holanda = await seedVaga({ n: 20, ...mesma, locationRaw: "Netherlands" });
+    const franca = await seedVaga({ n: 21, ...mesma, locationRaw: "France" });
+    const alemanha = await seedVaga({ n: 22, ...mesma, locationRaw: "Germany" });
+    // Mesma empresa e mesmo país, título diferente: não é o mesmo emprego.
+    const outra = await seedVaga({ n: 23, ...mesma, title: "Staff Engineer", locationRaw: "France" });
+    for (const id of [holanda, franca, alemanha, outra]) await seedScore(candidateId, id, 70);
+
+    const agrupado = await listBoard(candidateId, { groupRepeats: true });
+    // A escolhida é a de menor id, nunca a de melhor nota: nota é por
+    // candidato, e a linha canônica não pode mudar de leitor para leitor.
+    expect(new Set(agrupado.map((r) => r.jobId))).toEqual(new Set([holanda, outra]));
+    const linha = agrupado.find((r) => r.jobId === holanda)!;
+    expect(linha.repeats.map((v) => v.location)).toEqual(["Netherlands", "France", "Germany"]);
+    expect(agrupado.find((r) => r.jobId === outra)!.repeats).toHaveLength(1);
+
+    // Lista e contagem compartilham o predicado: o rodapé não pode mentir.
+    await expect(countBoard(candidateId, { groupRepeats: true })).resolves.toBe(2);
+    await expect(countBoard(candidateId, {})).resolves.toBe(4);
+
+    // Desligado, cada vaga é uma linha e ninguém paga a subconsulta.
+    const cru = await listBoard(candidateId, {});
+    expect(cru).toHaveLength(4);
+    expect(cru.every((r) => r.repeats.length === 0)).toBe(true);
+  });
+
+  it("vaga fechada sai do grupo, e some sem levar a linha junto", async () => {
+    const candidateId = await seedCandidato("dono", true);
+    const mesma = { title: "Engineering Manager", companyName: "Payments Co", sourceId: "lever:acme" };
+    const holanda = await seedVaga({ n: 30, ...mesma, locationRaw: "Netherlands" });
+    const franca = await seedVaga({ n: 31, ...mesma, locationRaw: "France" });
+    await seedVaga({ n: 32, ...mesma, locationRaw: "Spain", closedAt: "2026-01-01" });
+    for (const id of [holanda, franca]) await seedScore(candidateId, id, 70);
+
+    const agrupado = await listBoard(candidateId, { groupRepeats: true });
+    expect(agrupado.map((r) => r.jobId)).toEqual([holanda]);
+    // A fechada não aparece entre os países: regra 3 guarda o registro, não a
+    // vitrine.
+    expect(agrupado[0]!.repeats.map((v) => v.location)).toEqual(["Netherlands", "France"]);
+  });
+
+  it("filtra por empregador sem confundir com quem só é citado na descrição", async () => {
+    const candidateId = await seedCandidato("dono", true);
+    const naShopify = await seedVaga({ n: 10, companyName: "Shopify Inc" });
+    const citaShopify = await seedVaga({
+      n: 11,
+      companyName: "Outra Empresa",
+      descriptionText: "Integra com Shopify e com o resto do ecossistema.",
+    });
+    await seedScore(candidateId, naShopify, 70);
+    await seedScore(candidateId, citaShopify, 70);
+
+    // O termo geral varre título, empresa E descrição: as duas respondem.
+    await expect(
+      countBoard(candidateId, { term: { term: "Shopify", key: "shopify" } }),
+    ).resolves.toBe(2);
+
+    // O filtro de empregador pergunta só pela empresa.
+    const porEmpresa = await listBoard(candidateId, { company: "shopify" });
+    expect(porEmpresa.map((r) => r.jobId)).toEqual([naShopify]);
+
+    // Casa dentro da palavra, porque "Shopify" precisa achar "Shopify Inc".
+    await expect(countBoard(candidateId, { company: "hopify In" })).resolves.toBe(1);
+
+    // `%` é texto, não curinga: o valor viaja como parâmetro.
+    await expect(countBoard(candidateId, { company: "%" })).resolves.toBe(0);
   });
 
   it("ordena por publicação recente usando a data vista quando não há a declarada", async () => {

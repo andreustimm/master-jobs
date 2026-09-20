@@ -124,10 +124,11 @@ export {
   clusterBreakdown,
   corpusStats,
   countBoard,
-  countHiddenBelowMinimum,
+  countHiddenByPayRange,
   listBoard,
   type BoardFilters,
   type BoardRow,
+  type GroupPosting,
   type PayFilter,
 } from "../../core/db/repo.ts";
 

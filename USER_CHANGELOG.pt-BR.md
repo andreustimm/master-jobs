@@ -18,10 +18,16 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
-### Corrigido
+## [1.18.0] - 2026-09-20T18:22:03.370Z
 
-- A tela de nova trilha volta a abrir. A tela de skills continua em investigação.
-- Ajuste interno de tempo de teste; nada muda no uso.
+### Adicionado
+
+- A mesma vaga publicada em vários países agora ocupa **uma linha só**, com a
+  bandeira de cada país. Passe o mouse para ver o nome, clique para abrir a
+  publicação daquele país. No acervo de hoje isso tira 2.543 linhas repetidas —
+  uma em cada três.
+- Quem preferir ver cada publicação separada desliga em "agrupar repetidas",
+  na linha do funil.
 
 ## [1.17.1] - 2026-09-20T14:28:16.117Z
 

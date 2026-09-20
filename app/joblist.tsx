@@ -1,5 +1,6 @@
 import type * as React from "react";
 import { TransitionLink } from "./transition-link";
+import { JobCountries } from "./job-countries";
 import { Badge } from "@/components/ui/badge";
 import { JobModal } from "./job-modal";
 import { buttonVariants } from "@/components/ui/button";
@@ -153,7 +154,11 @@ export function JobList({
                     {t("jobs.payNotComparable")}
                   </Badge>
                 )}
-                {r.locationRaw && <span className="truncate">{r.locationRaw.slice(0, 62)}</span>}
+                {r.repeats.length > 1 ? (
+                  <JobCountries jobId={r.jobId} repeats={r.repeats} locale={locale} t={t} />
+                ) : (
+                  r.locationRaw && <span className="truncate">{r.locationRaw.slice(0, 62)}</span>
+                )}
               </div>
 
               {!dense && (

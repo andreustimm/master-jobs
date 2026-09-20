@@ -18,11 +18,15 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
-### Fixed
+## [1.18.0] - 2026-09-20T18:22:03.370Z
 
-- The new-track screen opens again. The skills screen is still under
-  investigation.
-- Internal test-timing adjustment; nothing changes in use.
+### Added
+
+- The same job posted across several countries now takes **a single row**, with
+  each country's flag. Hover for the name, click to open that country's
+  posting. On today's corpus that removes 2,543 repeated rows — one in three.
+- Anyone who prefers one row per posting turns off "group repeats", on the
+  pipeline line.
 
 ## [1.17.1] - 2026-09-20T14:28:16.117Z
 

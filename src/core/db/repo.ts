@@ -6,6 +6,7 @@
  * what "shortlisted" or "open" means.
  */
 import { and, asc, desc, eq, gte, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import {
   primaryScoreFilter,
@@ -88,6 +89,8 @@ export type BoardRow = {
   checkCode: number | null;
   /** Estado na fila de reconferência, quando há tarefa. */
   checkQueue: string | null;
+  /** Every posting of this job's group, itself included. Empty when ungrouped. */
+  repeats: GroupPosting[];
 };
 
 /** How much captured description a list row carries. See the query below. */
@@ -95,6 +98,8 @@ export const PREVIEW_CHARS = 2500;
 
 export type BoardFilters = {
   minFit?: number;
+  /** Highest fit shown; absent means no ceiling. */
+  maxFit?: number;
   cluster?: string;
   /** Absent hides archived jobs ("não me interessa"); `any` shows every job. */
   status?: ApplicationStatus | "unfiled" | "any";
@@ -104,10 +109,48 @@ export type BoardFilters = {
    * captured page text stands in for the description when there is one.
    */
   term?: ValidTerm;
-  sourceKind?: string;
+  /**
+   * Which sources the board shows. Empty or absent means every source.
+   *
+   * A list because the corpus grows one adapter at a time: picking three
+   * boards is the same question as picking one, and asking it once beats
+   * three round trips.
+   */
+  sourceKinds?: readonly string[];
+  /**
+   * Substring of the employer's name, case-insensitive.
+   *
+   * Separate from `term`, which is a whole-word search over title, company AND
+   * description: looking for "Stripe" there also returns every job whose text
+   * mentions Stripe. This one asks about the employer and nothing else, and it
+   * matches inside a word because "Shopify" must find "Shopify Inc".
+   */
+  company?: string;
   workMode?: WorkMode;
   /** Hide anything with a hard blocker — work authorisation, on-site, W2. */
   hideBlocked?: boolean;
+  /**
+   * Fold a job repeated across countries into one row.
+   *
+   * The same posting arrives once per location — the corpus has one in 42
+   * countries — and each copy takes a line and competes for attention. The
+   * records stay separate: this only picks one of each group to show, so
+   * `closedAt` and the applications' foreign keys are untouched.
+   *
+   * The chosen one is the lowest id in the group, never the best fit: fit is
+   * per candidate, and a canonical row that moved between readers would make
+   * the same link mean different jobs.
+   */
+  groupRepeats?: boolean;
+  /**
+   * Hide jobs already sent.
+   *
+   * Read from `appliedAt`, not from the status name. The stamp is set once, on
+   * the move into `applied`, and it survives every later move — a rejection, a
+   * withdrawal, an archive. A status list would have to be edited every time
+   * the pipeline gains a state, and would forget the ones that left it.
+   */
+  hideApplied?: boolean;
   /** Only postings published within N days. */
   freshDays?: number;
   /** Only postings that disclose pay. */
@@ -155,8 +198,10 @@ export type BoardFilters = {
 };
 
 export type PayFilter = {
-  /** Minimum top of the range; absent means normalize and sort only. */
+  /** Minimum top of the range; absent means no floor. */
   min?: number;
+  /** Maximum top of the range; absent means no ceiling. */
+  max?: number;
   currency: Currency;
   period: "month" | "year";
   /** Hide rows whose pay is not disclosed or cannot be compared. */
@@ -204,16 +249,88 @@ async function payContext(opts: BoardFilters): Promise<PaySql | undefined> {
 }
 
 /**
- * Keeps a job whose normalized top reaches the minimum; undisclosed and not
- * comparable ones stay unless the viewer hid them. Below the minimum is
+ * Keeps a job whose normalized top falls inside the range; undisclosed and not
+ * comparable ones stay unless the viewer hid them. Outside the range is
  * hidden — and counted, so the screen can say how many.
  */
 function payCondition(pay: PayFilter | undefined, amount: SQL | undefined): SQL | undefined {
   if (!pay || !amount) return undefined;
-  if (pay.min === undefined) return pay.disclosedOnly ? sql`${amount} is not null` : undefined;
-  return pay.disclosedOnly
-    ? sql`${amount} >= ${pay.min}`
-    : sql`(${amount} >= ${pay.min} or ${amount} is null)`;
+  const bounds: SQL[] = [];
+  if (pay.min !== undefined) bounds.push(sql`${amount} >= ${pay.min}`);
+  if (pay.max !== undefined) bounds.push(sql`${amount} <= ${pay.max}`);
+  if (bounds.length === 0) return pay.disclosedOnly ? sql`${amount} is not null` : undefined;
+  const inRange = sql`(${sql.join(bounds, sql` and `)})`;
+  return pay.disclosedOnly ? inRange : sql`(${inRange} or ${amount} is null)`;
+}
+
+/**
+ * The key that says two postings are the same job in another country.
+ *
+ * Source, title and employer — not the description, which the adapters
+ * normalise differently, and not the location, which is the thing that varies.
+ * Measured on the corpus: 391 groups over 2.934 postings, and in every one of
+ * them each posting carries a distinct location.
+ */
+function groupKey(row: {
+  sourceId: PgColumn;
+  title: PgColumn;
+  companyName: PgColumn;
+}): SQL[] {
+  return [
+    sql`split_part(${row.sourceId}, ':', 1)`,
+    sql`lower(btrim(${row.title}))`,
+    sql`lower(btrim(${row.companyName}))`,
+  ];
+}
+
+/** Uma vaga do grupo, do jeito que a linha consolidada precisa dela. */
+export type GroupPosting = { id: number; location: string | null };
+
+/**
+ * As vagas do grupo, a própria inclusive, para a linha mostrar os países.
+ *
+ * Só é pedida quando o agrupamento está ligado, e só para as linhas da página:
+ * são cinquenta subconsultas, não sete mil.
+ */
+const APELIDO_DO_GRUPO = "vaga_do_grupo";
+
+function groupPostings(): SQL {
+  const irma = alias(job, APELIDO_DO_GRUPO);
+  const [fonte, titulo, empresa] = groupKey(irma);
+  const [minhaFonte, meuTitulo, minhaEmpresa] = groupKey(job);
+  return sql`(
+    select coalesce(
+      json_agg(json_build_object('id', ${irma.id}, 'location', ${irma.locationRaw}) order by ${irma.id}),
+      '[]'::json
+    )
+    from ${job} as ${sql.identifier(APELIDO_DO_GRUPO)}
+    where ${irma.closedAt} is null
+      and ${fonte} = ${minhaFonte}
+      and ${titulo} = ${meuTitulo}
+      and ${empresa} = ${minhaEmpresa}
+  )`;
+}
+
+/**
+ * True for the one posting of a group that gets the row.
+ *
+ * An anti-join, not a subquery per row: Postgres resolves it with a single
+ * merge pass, and the corpus paid 36ms against 35ms without it.
+ */
+const APELIDO_DA_IRMA = "vaga_irma";
+
+function canonicalOfGroup(): SQL {
+  const irma = alias(job, APELIDO_DA_IRMA);
+  const [fonte, titulo, empresa] = groupKey(irma);
+  const [minhaFonte, meuTitulo, minhaEmpresa] = groupKey(job);
+  return sql`not exists (
+    select 1 from ${job} as ${sql.identifier(APELIDO_DA_IRMA)}
+    where ${irma.closedAt} is null
+      and ${irma.id} < ${job.id}
+      and ${fonte} = ${minhaFonte}
+      and ${titulo} = ${meuTitulo}
+      and ${empresa} = ${minhaEmpresa}
+  )`;
 }
 
 const DAY_MS = 86_400_000;
@@ -231,9 +348,15 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
   // cut here would hide every open job from the global board.
   if (candidateId !== null) {
     conditions.push(gte(sql`coalesce(${jobScore.fit}, 0)`, opts.minFit ?? 0));
+    if (opts.maxFit !== undefined) {
+      conditions.push(sql`coalesce(${jobScore.fit}, 0) <= ${opts.maxFit}`);
+    }
     if (opts.cluster) conditions.push(eq(jobScore.cluster, opts.cluster));
     if (opts.hideBlocked) {
       conditions.push(sql`coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb`);
+    }
+    if (opts.hideApplied) {
+      conditions.push(sql`(${application.id} is null or ${application.appliedAt} is null)`);
     }
     if (opts.status === "unfiled") conditions.push(isNull(application.id));
     else if (opts.status === undefined) {
@@ -252,7 +375,16 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
       sql`(${job.title} ~* ${pattern} or ${job.companyName} ~* ${pattern} or coalesce(${jobPage.text}, ${job.descriptionText}, '') ~* ${pattern})`,
     );
   }
-  if (opts.sourceKind) conditions.push(sql`${job.sourceId} like ${`${opts.sourceKind}:%`}`);
+  if (opts.sourceKinds && opts.sourceKinds.length > 0) {
+    const likes = opts.sourceKinds.map((kind) => sql`${job.sourceId} like ${`${kind}:%`}`);
+    conditions.push(sql`(${sql.join(likes, sql` or `)})`);
+  }
+  if (opts.groupRepeats) conditions.push(canonicalOfGroup());
+  if (opts.company) {
+    // `strpos`, not `like`: the value travels as a parameter and `%` or `_`
+    // inside a company name stay literal, with nothing to escape.
+    conditions.push(sql`strpos(lower(${job.companyName}), lower(${opts.company})) > 0`);
+  }
   if (opts.broughtBy) conditions.push(sql`${job.id} in ${attributedJobIds(opts.broughtBy.termKey)}`);
   if (opts.workMode) conditions.push(eq(workModeSql(), opts.workMode));
   if (opts.freshDays && opts.freshDays > 0) {
@@ -280,7 +412,8 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
  */
 function boardOrder(opts: BoardFilters, pay?: PaySql): SQL[] {
   const fit = desc(sql`coalesce(${jobScore.fit}, 0)`);
-  const payLast = pay && opts.pay?.min !== undefined ? [asc(sql`(${pay.amount} is null)`)] : [];
+  const bounded = opts.pay?.min !== undefined || opts.pay?.max !== undefined;
+  const payLast = pay && bounded ? [asc(sql`(${pay.amount} is null)`)] : [];
   if (opts.sort === "comp") {
     const byPay = pay
       ? [asc(sql`(${pay.amount} is null)`), desc(sql`coalesce(${pay.amount}, 0)`)]
@@ -383,6 +516,11 @@ export async function listBoard(
       isNew: opts.newSince !== undefined
         ? sql<boolean>`${job.firstSeenAt} > ${opts.newSince}`
         : sql<boolean>`false`,
+      // Vazio quando o agrupamento está desligado: a linha então é uma vaga só,
+      // e pagar a subconsulta para descobrir isso seria trabalho sem leitor.
+      repeats: opts.groupRepeats
+        ? sql<GroupPosting[]>`${groupPostings()}`
+        : sql<GroupPosting[]>`'[]'::json`,
       payAmount: pay ? sql<number | null>`${pay.amount}` : sql<number | null>`null::float8`,
       payState: pay
         ? sql<BoardRow["payState"]>`${pay.state}`
@@ -436,24 +574,33 @@ async function countWhere(candidateId: number | null, opts: BoardFilters, condit
 }
 
 /**
- * How many jobs the pay minimum hid: everything else matches, the pay is
- * disclosed and comparable, and it falls short. The screen says the number so
- * a minimum never silently empties the list.
+ * How many jobs the pay range hid: everything else matches, the pay is
+ * disclosed and comparable, and it sits below the floor or above the ceiling.
+ * The screen says the number so a range never silently empties the list.
  */
-export async function countHiddenBelowMinimum(
+export async function countHiddenByPayRange(
   candidateId: number | null,
   opts: BoardFilters = {},
 ): Promise<number> {
-  if (!opts.pay || opts.pay.min === undefined) return 0;
+  if (!opts.pay || (opts.pay.min === undefined && opts.pay.max === undefined)) return 0;
   const pay = await payContext(opts);
   const conditions = boardConditions({ ...opts, pay: undefined }, candidateId);
-  return countWhere(candidateId, opts, [...conditions, sql`${pay!.amount} < ${opts.pay.min}`]);
+  const outside: SQL[] = [];
+  if (opts.pay.min !== undefined) outside.push(sql`${pay!.amount} < ${opts.pay.min}`);
+  if (opts.pay.max !== undefined) outside.push(sql`${pay!.amount} > ${opts.pay.max}`);
+  return countWhere(candidateId, opts, [...conditions, sql`(${sql.join(outside, sql` or `)})`]);
 }
 
 /** Counts for the filter chips, so the UI can show what each option yields. */
 export async function boardFacets(candidateId: number | null, base: BoardFilters = {}) {
   const sourceKind = sql<string>`split_part(${job.sourceId}, ':', 1)`;
   const dimensions = { ...base, limit: undefined, offset: undefined };
+  // A dimension's own filter never narrows its own list. Counting the sources
+  // of a board already restricted to two sources answers "which two did you
+  // pick", and the multi-select could then only ever lose options: picking
+  // `ashby` left `ashby` as the only thing left to pick.
+  const sourceDimension = { ...dimensions, sourceKinds: undefined };
+  const clusterDimension = { ...dimensions, cluster: undefined };
   const freshCutoff = freshnessCutoff(3);
 
   // These six counters used to call `countBoard` independently. Each call
@@ -469,6 +616,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
         withComp: sql<number>`coalesce(sum(case when coalesce(${job.compMax}, ${job.compMin}, 0) > 0 then 1 else 0 end), 0)`,
         named: sql<number>`coalesce(sum(case when lower(${job.companyName}) <> lower(coalesce(${source.label}, '')) then 1 else 0 end), 0)`,
         described: sql<number>`coalesce(sum(case when length(coalesce(${job.descriptionText}, '')) >= 200 then 1 else 0 end), 0)`,
+        notApplied: sql<number>`coalesce(sum(case when ${application.appliedAt} is null then 1 else 0 end), 0)`,
       })
       .from(job)
       .leftJoin(jobScore, scoreJoin(candidateId, base.track))
@@ -489,7 +637,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
       )
       .leftJoin(source, eq(source.id, job.sourceId))
       .leftJoin(jobPage, eq(jobPage.jobId, job.id))
-      .where(and(...boardConditions(dimensions, candidateId), sql`${jobScore.cluster} is not null`))
+      .where(and(...boardConditions(clusterDimension, candidateId), sql`${jobScore.cluster} is not null`))
       .groupBy(jobScore.cluster)
       .then((rows) => rows.map((row) => row.cluster!).sort()),
     getDb()
@@ -502,7 +650,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
       )
       .leftJoin(source, eq(source.id, job.sourceId))
       .leftJoin(jobPage, eq(jobPage.jobId, job.id))
-      .where(and(...boardConditions(dimensions, candidateId)))
+      .where(and(...boardConditions(sourceDimension, candidateId)))
       .groupBy(sourceKind)
       .then((rows) => rows.map((row) => row.kind).sort()),
   ]);
@@ -514,6 +662,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
     withComp: Number(summary?.withComp ?? 0),
     named: Number(summary?.named ?? 0),
     described: Number(summary?.described ?? 0),
+    notApplied: Number(summary?.notApplied ?? 0),
     clusters: clusterRows,
     sources: sourceRows,
   };
