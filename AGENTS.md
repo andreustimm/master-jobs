@@ -316,8 +316,13 @@ Antes de iniciar ou retomar, confira `rtk git status --short --branch` e
 HEAD já presente em `dev` não prova que uma worktree com WIP pode ser removida.
 
 ```
-worktree/tarefa → check/e2e aplicável → QA de jornada aplicável → auditoria de agente aplicável → deslop → deep-review → ship-pr → PR → dev → (automático) → staging → PR humana → main → tag + volta para dev
+worktree/tarefa → check/e2e aplicável → QA de jornada aplicável → auditoria de agente aplicável → docs/ + changelogs → deslop → deep-review → ship-pr → PR → dev → (automático) → staging → PR humana → main → tag + volta para dev
 ```
+
+O passo `docs/` é a regra 23: antes da revisão, a documentação que passou
+a valer é atualizada, ou a PR declara em uma linha por que nada mudou.
+O changelog entra no mesmo passo porque responde a outra pergunta — o que
+mudou, e não como é agora.
 
 | Etapa | Quem faz | Como |
 |---|---|---|
@@ -429,6 +434,31 @@ com ele, `staging` e as PRs geradas também recebem checks próprios.
 > `scripts/release/github-releases.ts --apply`, cria somente as releases
 > ausentes e preserva as existentes. Isso inclui backfill: uma tag histórica
 > sem release é dívida detectável e reparada na próxima sincronização.
+
+> **23. O changelog conta o que mudou; `docs/` conta como é agora.**
+> São perguntas diferentes, e só o changelog deixa a segunda envelhecer em
+> silêncio: quem chega depois lê uma pilha de "foi alterado" e nunca encontra
+> "é assim". Tarefa fechada revisa `docs/` e atualiza o que passou a valer —
+> recurso novo, contrato mudado, invariante descoberta, armadilha aprendida.
+>
+> A fronteira continua a da ADR 0011: `.compozy/tasks/` nasce e morre com o
+> slug; `docs/` atravessa. O que muda aqui é a obrigação de olhar.
+>
+> | Se a mudança toca | Atualize |
+> |---|---|
+> | schema, FK, migration | `docs/data-model.md` |
+> | adapter, board, elegibilidade | `docs/sources.md` |
+> | scorer, componente, peso | `docs/scoring.md` |
+> | comando, flag, saída | `docs/cli.md` |
+> | contrato de URL, estado de filtro | `docs/product/` |
+> | invariante de produção, limite, pool | `docs/operations.md` |
+> | decisão que restringe o futuro | ADR em `docs/adr/` |
+>
+> **PR sem alteração em `docs/` declara por quê**, na descrição, em uma linha —
+> do mesmo jeito que a regra 20 faz com QA. "Correção interna, sem contrato
+> alterado" é resposta legítima e frequente; ausência de resposta não é.
+> Declarar é barato e mantém a pergunta viva; ritual obrigatório viraria
+> carimbo, e carimbo não informa ninguém.
 
 ---
 

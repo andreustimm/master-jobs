@@ -28,6 +28,19 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Alterado
 
+- **Regra 23: o changelog conta o que mudou; `docs/` conta como é agora.** São
+  perguntas diferentes, e só o changelog deixa a segunda envelhecer em silêncio
+  — quem chega depois lê uma pilha de "foi alterado" e nunca encontra "é
+  assim". Tarefa fechada revisa `docs/`, e PR que não mexe em `docs/` declara
+  por quê em uma linha, como a regra 20 já faz com QA. O passo entrou no
+  diagrama do fluxo de trabalho.
+
+- Dívida de documentação paga junto: a invariante do pool de três conexões em
+  `docs/operations.md`, com o par 200/504 dos logs e o porquê do teto
+  `POOL - 1`; `docs/product/jobs-url-contract.md`, novo, porque todo filtro da
+  tela Vagas vive na URL e nada documentava isso; `src/core/country.ts` no mapa
+  de `docs/architecture.md`; e a faixa de Score em `docs/scoring.md`.
+
 - A linha agrupada perdeu "Vaga", "Site", "Aplicar" e "não me interessa". As
   quatro agem sobre uma publicação específica, e na linha agrupada não há uma —
   há N. A escolha do país vem antes, no hub.

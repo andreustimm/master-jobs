@@ -523,6 +523,41 @@ sqlite3 data/jobs.db "
 
 ## Troubleshooting
 
+### Uma tela devolve 504 em produção, e só às vezes
+
+**Conte quantas consultas aquele caminho dispara ao mesmo tempo.** O cliente do
+banco abre **três** conexões (`max: 3`, em `src/core/db/client.ts`), e esse
+número é uma invariante de produção, não detalhe de configuração.
+
+Uma requisição que pede as três exatas cabe — e por isso a tela responde 200
+quando ninguém mais a está pedindo. Mas a instância serverless é reaproveitada
+entre requisições concorrentes: **duas** na mesma instância pedem seis conexões
+a um pool de três, cada uma espera a outra, e a Vercel mata as duas aos 30
+segundos.
+
+Foi exatamente isso em `/candidate/skills`, em 2026-09-20. Nos logs da Vercel o
+par aparece cru:
+
+```
+...393589  /candidate/skills  →  200
+...393855  /candidate/skills  →  504   ← 266ms depois, mesma rota
+```
+
+**O teto é `POOL - 1`, não `POOL`.** Uma leitura de tela precisa caber deixando
+conexão para o resto da requisição e para a requisição do lado.
+`tests/db-fan-out.test.ts` mede o pico de consultas em voo por caminho e afirma
+esse teto; quando a régua foi apertada de `<= 3` para `<= 2`, encontrou na hora
+três caminhos que ninguém tinha notado.
+
+**O Sentry não vê isso.** `FUNCTION_INVOCATION_TIMEOUT` mata o processo; o
+código não falha, não reporta, e o registro da Vercel traz uma linha só. A falha
+mais visível do produto é a única invisível na telemetria — procure nos logs da
+Vercel, não no Sentry:
+
+```bash
+vercel logs https://jobs.mastertimm.com.br --json | grep -E "Timeout|504"
+```
+
 ### Uma fonte aparece com status `error`
 
 ```bash
