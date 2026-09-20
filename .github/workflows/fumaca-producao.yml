@@ -1,0 +1,103 @@
+# Fumaça em produção, depois que `main` avança.
+#
+# ## Por que existe
+#
+# O CI prova que o código roda no runner; ele não prova que a página responde em
+# produção. Duas vezes em 2026-09-19/20 a diferença apareceu: o corte da 1.15.1
+# subiu com o banco no schema anterior e devolveu 500 por 28 minutos, e duas
+# telas passaram a devolver 504 sem que nada no CI mudasse de cor. As duas foram
+# descobertas por alguém abrindo o site.
+#
+# ## O que ele garante, e o que não garante
+#
+# Garante que a versão promovida está **servindo** e que as rotas públicas
+# respondem o que devem — inclusive que rota autenticada redireciona em vez de
+# estourar. Não garante tela autenticada: sessão exigiria credencial aqui, e
+# credencial de candidato num workflow é risco maior que o defeito que ele
+# pegaria. Para isso existe o QA de jornada.
+#
+# ## Por que esperar a versão, e não um tempo fixo
+#
+# O deploy da Vercel dispara do mesmo push que este workflow, e leva minutos. Um
+# `sleep` arbitrário testaria a versão anterior e passaria verde sem provar nada.
+# A página de login carrega a versão no HTML, então a espera tem critério: só
+# começa a fumaça quando a versão servida é a que este commit anuncia.
+name: Fumaça em produção
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Dois deploys seguidos: só o último interessa.
+concurrency:
+  group: fumaca-producao
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  fumaca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BASE: https://jobs.mastertimm.com.br
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Versão que este commit anuncia
+        id: versao
+        run: |
+          VERSAO=$(node -p "require('./package.json').version")
+          echo "esperada=$VERSAO" >> "$GITHUB_OUTPUT"
+          echo "Esperando $VERSAO em produção."
+
+      - name: Esperar o deploy servir esta versão
+        run: |
+          ESPERADA="${{ steps.versao.outputs.esperada }}"
+          for tentativa in $(seq 1 40); do
+            SERVIDA=$(curl -sS --max-time 20 "$BASE/login" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+            if [ "$SERVIDA" = "$ESPERADA" ]; then
+              echo "Versão $ESPERADA servindo na tentativa $tentativa."
+              exit 0
+            fi
+            echo "Tentativa $tentativa: servindo '${SERVIDA:-?}', esperando '$ESPERADA'."
+            sleep 15
+          done
+          echo "::error::Produção não passou a servir $ESPERADA em 10 minutos. O deploy falhou ou está preso."
+          exit 1
+
+      - name: Rotas públicas respondem o que devem
+        run: |
+          falhas=0
+          # `/login` é a única página que responde sem sessão; rota autenticada
+          # redireciona (307), e nunca 5xx. `/p/` inexistente é 404 de propósito:
+          # 403 confirmaria que o slug existe.
+          conferir() {
+            local rota="$1" esperado="$2"
+            local codigo
+            codigo=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 25 "$BASE$rota" || echo "000")
+            if [ "$codigo" = "$esperado" ]; then
+              echo "  ok   $rota -> $codigo"
+            else
+              echo "::error::$rota respondeu $codigo, esperado $esperado"
+              falhas=$((falhas + 1))
+            fi
+          }
+
+          conferir /login 200
+          conferir / 307
+          conferir /jobs 307
+          conferir /candidate 307
+          conferir /admin/users 307
+          conferir /api/export 307
+          conferir /p/slug-que-nao-existe 404
+          conferir /offline.html 200
+
+          if [ "$falhas" -gt 0 ]; then
+            echo "::error::$falhas rota(s) fora do esperado em produção."
+            exit 1
+          fi
+          echo "Fumaça limpa."

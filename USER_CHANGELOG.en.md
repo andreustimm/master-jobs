@@ -22,6 +22,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 - An operations screen to ask for new jobs, an expiry check or a rescore,
   without waiting for the automatic daily run.
+- After each release, the system checks by itself that the site is back up and
+  answering.
 
 ## [1.16.0] - 2026-09-20T04:16:18.738Z
 

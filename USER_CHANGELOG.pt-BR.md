@@ -22,6 +22,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 - Uma tela de operações para pedir a busca de vagas novas, a conferência de
   vagas expiradas e a repontuação, sem esperar a execução automática do dia.
+- Depois de cada publicação, o sistema confere sozinho se o site voltou no ar e
+  respondendo.
 
 ## [1.16.0] - 2026-09-20T04:16:18.738Z
 
