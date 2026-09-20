@@ -286,37 +286,45 @@ function groupKey(row: {
 /** Uma vaga do grupo, do jeito que a linha consolidada precisa dela. */
 export type GroupPosting = { id: number; location: string | null };
 
-/**
- * As vagas do grupo, a própria inclusive, para a linha mostrar os países.
- *
- * Só é pedida quando o agrupamento está ligado, e só para as linhas da página:
- * são cinquenta subconsultas, não sete mil.
- */
 const APELIDO_DO_GRUPO = "vaga_do_grupo";
 
-function groupPostings(): SQL {
+/**
+ * As vagas do grupo de cada linha da página, a própria inclusive.
+ *
+ * Uma consulta para a página inteira, não uma por linha. Como subconsulta
+ * correlacionada na projeção, isto custava 215ms sobre uma lista de 61ms —
+ * cinquenta varreduras do acervo para responder cinquenta vezes a mesma
+ * pergunta. Um join contra as linhas já escolhidas responde numa passada.
+ */
+async function groupPostingsOf(linhas: number[]): Promise<Map<number, GroupPosting[]>> {
+  const porLinha = new Map<number, GroupPosting[]>();
+  if (linhas.length === 0) return porLinha;
   const irma = alias(job, APELIDO_DO_GRUPO);
   const [fonte, titulo, empresa] = groupKey(irma);
   const [minhaFonte, meuTitulo, minhaEmpresa] = groupKey(job);
-  return sql`(
-    select coalesce(
-      json_agg(json_build_object('id', ${irma.id}, 'location', ${irma.locationRaw}) order by ${irma.id}),
-      '[]'::json
+  const rows = await getDb()
+    .select({ linha: job.id, id: irma.id, location: irma.locationRaw })
+    .from(job)
+    .innerJoin(
+      irma,
+      and(
+        isNull(irma.closedAt),
+        sql`${fonte} = ${minhaFonte}`,
+        sql`${titulo} = ${meuTitulo}`,
+        sql`${empresa} = ${minhaEmpresa}`,
+      )!,
     )
-    from ${job} as ${sql.identifier(APELIDO_DO_GRUPO)}
-    where ${irma.closedAt} is null
-      and ${fonte} = ${minhaFonte}
-      and ${titulo} = ${meuTitulo}
-      and ${empresa} = ${minhaEmpresa}
-  )`;
+    .where(inArray(job.id, linhas))
+    .orderBy(asc(job.id), asc(irma.id));
+  for (const row of rows) {
+    const atual = porLinha.get(row.linha);
+    const posting = { id: row.id, location: row.location };
+    if (atual) atual.push(posting);
+    else porLinha.set(row.linha, [posting]);
+  }
+  return porLinha;
 }
 
-/**
- * True for the one posting of a group that gets the row.
- *
- * An anti-join, not a subquery per row: Postgres resolves it with a single
- * merge pass, and the corpus paid 36ms against 35ms without it.
- */
 const APELIDO_DA_IRMA = "vaga_irma";
 
 function canonicalOfGroup(): SQL {
@@ -516,11 +524,6 @@ export async function listBoard(
       isNew: opts.newSince !== undefined
         ? sql<boolean>`${job.firstSeenAt} > ${opts.newSince}`
         : sql<boolean>`false`,
-      // Vazio quando o agrupamento está desligado: a linha então é uma vaga só,
-      // e pagar a subconsulta para descobrir isso seria trabalho sem leitor.
-      repeats: opts.groupRepeats
-        ? sql<GroupPosting[]>`${groupPostings()}`
-        : sql<GroupPosting[]>`'[]'::json`,
       payAmount: pay ? sql<number | null>`${pay.amount}` : sql<number | null>`null::float8`,
       payState: pay
         ? sql<BoardRow["payState"]>`${pay.state}`
@@ -540,7 +543,11 @@ export async function listBoard(
     .limit(opts.limit ?? 200)
     .offset(opts.offset ?? 0);
 
-  return rows;
+  // Vazio quando o agrupamento está desligado: a linha então é uma vaga só, e
+  // procurar irmãs para descobrir isso seria trabalho sem leitor.
+  if (!opts.groupRepeats) return rows.map((row) => ({ ...row, repeats: [] }));
+  const grupos = await groupPostingsOf(rows.map((row) => row.jobId));
+  return rows.map((row) => ({ ...row, repeats: grupos.get(row.jobId) ?? [] }));
 }
 
 /**

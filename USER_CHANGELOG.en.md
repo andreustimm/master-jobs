@@ -18,6 +18,10 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- The jobs list is fast again when repeats are grouped.
+
 ## [1.18.0] - 2026-09-20T18:22:03.370Z
 
 ### Added
