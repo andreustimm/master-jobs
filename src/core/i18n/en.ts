@@ -320,6 +320,13 @@ export const en: Dictionary = {
     withdrawn: "Withdrawn",
     archived: "Archived",
   },
+  /** Hub for a job posted once per country. */
+  jobCountries: {
+    back: "← jobs",
+    lead: "This job was posted in {countries} countries, across {postings} listings. Choose where to apply.",
+    withoutCountry: "{count} with no country resolved — the location shows as it came.",
+    empty: "No posting in this group is still open.",
+  },
   filters: {
     search: "search a term…",
     searchHint: "Whole word in the title, company and description: “java” does not bring “JavaScript”.",

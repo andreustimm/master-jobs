@@ -66,6 +66,8 @@ export function JobList({
     >
       {rows.map((r, index) => {
         const blockers = scoreMessages(r.blockers);
+        // Mais de uma publicação no grupo: a linha fala pelo conjunto.
+        const agrupada = r.repeats.length > 1;
         const salary = pay(r);
         const externalUrl = isPublicJobUrl(r.url);
         const externalApplyUrl = isPublicJobUrl(r.applyUrl) ? r.applyUrl : null;
@@ -95,7 +97,10 @@ export function JobList({
             <div className="min-w-0">
               <div className="flex flex-wrap items-baseline gap-2.5">
                 <TransitionLink
-                  href={`/jobs/${r.jobId}`}
+                  // A linha agrupada representa N publicações, e mandar o
+                  // clique para uma delas entrega um país que ninguém pediu —
+                  // o de menor id, que é escolha de ordenação, não de produto.
+                  href={agrupada ? `/jobs/${r.jobId}/paises` : `/jobs/${r.jobId}`}
                   data-testid={`job-link-${r.jobId}`}
                   className="type-body-md font-semibold hover:underline"
                 >
@@ -180,7 +185,7 @@ export function JobList({
               {/* Fora do grupo de ações, que exige três botões de largura
                   igual: "não me interessa" não cabe num terço da tela de 320px.
                   Aqui fica ao lado do bloqueio que costuma motivar o clique. */}
-              {context.triage && (
+              {context.triage && !agrupada && (
                 <div className="mt-2 flex">
                   <TriageButton
                     jobId={r.jobId}
@@ -203,6 +208,11 @@ export function JobList({
 
                 On mobile they sit in a row under the content; from `sm` up they
                 stack in the right-hand column. */}
+            {/* Sem ações na linha agrupada: "Vaga", "Site" e "Aplicar" abrem
+                uma publicação específica, e aqui não há uma — há N. A escolha
+                do país vem antes, no hub. O mesmo vale para "não me
+                interessa", que arquivaria só a publicação canônica. */}
+            {!agrupada && (
             <div className={cn("col-span-2 sm:col-span-1 sm:pt-0.5", ACTION_GROUP)}>
               <button
                 type="button"
@@ -238,7 +248,8 @@ export function JobList({
                 </a>
               )}
             </div>
-            <JobModal row={r} t={t} locale={locale} />
+            )}
+            {!agrupada && <JobModal row={r} t={t} locale={locale} />}
           </article>
         );
       })}

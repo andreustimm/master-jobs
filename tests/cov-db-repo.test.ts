@@ -199,6 +199,31 @@ describe("filtros e ordenação do quadro", () => {
     expect(cru.every((r) => r.repeats.length === 0)).toBe(true);
   });
 
+  it("o hub reúne o grupo a partir de qualquer publicação dele", async () => {
+    const candidateId = await seedCandidato("dono", true);
+    const mesma = { title: "Engineering Manager", companyName: "Payments Co", sourceId: "lever:acme" };
+    const holanda = await seedVaga({ n: 40, ...mesma, locationRaw: "Netherlands" });
+    const franca = await seedVaga({ n: 41, ...mesma, locationRaw: "France" });
+    const outra = await seedVaga({ n: 42, ...mesma, title: "Staff Engineer", locationRaw: "France" });
+    for (const id of [holanda, franca, outra]) await seedScore(candidateId, id, 70);
+
+    // A âncora é qualquer publicação do grupo, não um id de grupo: não existe
+    // registro de grupo para apontar, porque o agrupamento é de apresentação.
+    for (const ancora of [holanda, franca]) {
+      const grupo = await listBoard(candidateId, { sameGroupAs: ancora });
+      expect(new Set(grupo.map((r) => r.jobId)), String(ancora)).toEqual(
+        new Set([holanda, franca]),
+      );
+    }
+
+    // Título diferente é outro emprego, e não entra.
+    const sozinha = await listBoard(candidateId, { sameGroupAs: outra });
+    expect(sozinha.map((r) => r.jobId)).toEqual([outra]);
+
+    // Vaga que não existe não reúne ninguém — a página responde 404 com isto.
+    await expect(listBoard(candidateId, { sameGroupAs: 999_999 })).resolves.toEqual([]);
+  });
+
   it("vaga fechada sai do grupo, e some sem levar a linha junto", async () => {
     const candidateId = await seedCandidato("dono", true);
     const mesma = { title: "Engineering Manager", companyName: "Payments Co", sourceId: "lever:acme" };
