@@ -58,7 +58,11 @@ jobs:
         run: |
           ESPERADA="${{ steps.versao.outputs.esperada }}"
           for tentativa in $(seq 1 40); do
-            SERVIDA=$(curl -sS --max-time 20 "$BASE/login" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+            # Pelo atributo, nunca por "número com dois pontos": o primeiro
+            # casamento no HTML era hash de asset, e a conferência da 1.17.1
+            # reprovou comparando `022.617.46` com a versão.
+            SERVIDA=$(curl -sS --max-time 20 "$BASE/login" \
+              | grep -oE 'data-app-version="[^"]+"' | head -1 | cut -d'"' -f2 || true)
             if [ "$SERVIDA" = "$ESPERADA" ]; then
               echo "Versão $ESPERADA servindo na tentativa $tentativa."
               exit 0
