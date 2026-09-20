@@ -270,6 +270,28 @@ try {
   }))).onConflictDoNothing({ target: job.id });
   await getDb().insert(jobScore).values(searchFixtures.map((fixture) => fixtureScore(fixture.id, primaryTrack.id, 60)))
     .onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
+  // Título de board que não tem onde quebrar: em 320px o `h1` da tela de
+  // detalhe passava da borda e a página rolava para o lado, porque item de
+  // flex não encolhe abaixo do próprio conteúdo. Vem de uma vaga real
+  // (Himalayas) achada na revisão da 1.15.2 em produção.
+  const longTitleFixture = {
+    id: 905000031,
+    title: "Werkstudent*in Finance (Schwerpunkt Accounting/Controlling) Vollzeit/Teilzeit",
+    companyName: "Langtitel Werkstudierendenvermittlung",
+    descriptionText: "Long unbreakable title fixture for the width sweep.",
+  };
+  await getDb().insert(job).values({
+    ...longTitleFixture,
+    fingerprint: `e2e:${longTitleFixture.id}`,
+    contentHash: `e2e:${longTitleFixture.id}`,
+    sourceId: "ashby:e2e",
+    externalId: String(longTitleFixture.id),
+    url: `https://jobs.example.com/${longTitleFixture.id}`,
+    raw: { e2e: true },
+  }).onConflictDoNothing({ target: job.id });
+  await getDb().insert(jobScore).values(fixtureScore(longTitleFixture.id, primaryTrack.id, 60))
+    .onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
+
   const seededTerm = await saveTerm(
     { candidateId },
     { term: "E2E Seeded Stack", trackId: primaryTrack.id },

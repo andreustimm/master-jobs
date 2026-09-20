@@ -112,6 +112,14 @@ describe("layout", () => {
     expect(skills).toMatch(/className="min-w-0 border-l-2[^"]*wrap-anywhere"/);
   });
 
+  it("wraps a long job title instead of pushing the detail screen sideways", () => {
+    // O título vem do board e pode não ter onde quebrar ("Vollzeit/Teilzeit",
+    // composto alemão): o `h1` é item de flex, que não encolhe abaixo do
+    // próprio conteúdo, e em 320px a página rolava para o lado.
+    const detail = read("app/jobs/[id]/page.tsx");
+    expect(detail).toMatch(/<h1[^>]*className="type-display-md min-w-0 break-words text-balance"/);
+  });
+
   it("keeps version actions touchable on mobile and compact on desktop", () => {
     const versions = read("app/candidate/versions.tsx");
     expect(versions).toContain("inline-flex min-h-11");

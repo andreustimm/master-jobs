@@ -18,6 +18,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.15.3] - 2026-09-19T23:26:18.891Z
+
+### Corrigido
+
+- Em telas estreitas, a vaga com título muito longo não empurra mais a página
+  para o lado.
+
 ## [1.15.2] - 2026-09-19T21:10:15.298Z
 
 ### Corrigido
