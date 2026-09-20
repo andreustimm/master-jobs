@@ -11,6 +11,16 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Corrigido
 
+- A rota de diagnóstico de `/candidate/skills` passa a dar prazo próprio a cada
+  passo. Ela morria junto com a tela — a Vercel mata o processo aos 30s e nada
+  voltava —, que é exatamente a cegueira que ela existe para remover. Agora o
+  que já mediu volta, e o passo que estourou é nomeado.
+
+  O log da Vercel para o 504 traz **uma linha só**, `Vercel Runtime Timeout
+  Error`, sem nenhum registro da aplicação: o processo é morto, não falha. Por
+  isso o Sentry nunca viu esse erro, e não veria — a falha mais visível do
+  produto é a única invisível na telemetria.
+
 - A lista de vagas agrupada pagava **215ms sobre uma lista de 61ms**: os países
   de cada linha vinham de uma subconsulta correlacionada na projeção, ou seja,
   cinquenta varreduras do acervo para responder cinquenta vezes a mesma
