@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.15.4] - 2026-09-20
+
 ### Corrigido
 
 - `/jobs/<id não numérico>` respondia **500** em produção: `Number("abc")` é

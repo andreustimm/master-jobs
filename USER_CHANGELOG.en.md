@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.15.4] - 2026-09-20T03:02:27.338Z
+
 ### Fixed
 
 - A broken job link now shows "not found" instead of a system error.
