@@ -9,6 +9,42 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- **`/jobs/<id>/paises`: o hub da vaga publicada uma vez por país.** A linha
+  agrupada representa N publicações, e o clique entregava uma — a de menor id,
+  que é escolha de ordenação e não de produto. Quem clicava em "Engineering
+  Manager" com sete bandeiras abria a vaga na Holanda sem ter pedido a Holanda.
+
+  A âncora da URL é **qualquer publicação do grupo**, não um id de grupo: o
+  agrupamento é de apresentação e não existe registro para apontar. O link vale
+  enquanto aquela publicação estiver aberta e devolve 404 quando ela fecha, que
+  é a resposta honesta — a regra 3 guarda o registro, não a vitrine.
+
+  O hub é a própria lista de Vagas filtrada pelo grupo, sem agrupar, então cada
+  país traz a nota, o salário e o estado no funil que podem divergir entre eles.
+  `BoardFilters` ganhou `sameGroupAs`, que entra em `boardConditions` como todos
+  os outros filtros.
+
+### Alterado
+
+- **Regra 23: o changelog conta o que mudou; `docs/` conta como é agora.** São
+  perguntas diferentes, e só o changelog deixa a segunda envelhecer em silêncio
+  — quem chega depois lê uma pilha de "foi alterado" e nunca encontra "é
+  assim". Tarefa fechada revisa `docs/`, e PR que não mexe em `docs/` declara
+  por quê em uma linha, como a regra 20 já faz com QA. O passo entrou no
+  diagrama do fluxo de trabalho.
+
+- Dívida de documentação paga junto: a invariante do pool de três conexões em
+  `docs/operations.md`, com o par 200/504 dos logs e o porquê do teto
+  `POOL - 1`; `docs/product/jobs-url-contract.md`, novo, porque todo filtro da
+  tela Vagas vive na URL e nada documentava isso; `src/core/country.ts` no mapa
+  de `docs/architecture.md`; e a faixa de Score em `docs/scoring.md`.
+
+- A linha agrupada perdeu "Vaga", "Site", "Aplicar" e "não me interessa". As
+  quatro agem sobre uma publicação específica, e na linha agrupada não há uma —
+  há N. A escolha do país vem antes, no hub.
+
 ## [1.18.2] - 2026-09-20
 
 ### Corrigido

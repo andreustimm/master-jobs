@@ -5030,6 +5030,31 @@ try {
     JSON.stringify({ linhasAgrupadas, marcas, destinoPrimeiraBandeira, linhasCruas, semBandeiras }),
   );
 
+  // O hub: a linha agrupada leva ao centralizador, não a um país sorteado.
+  await page.goto(grupoBase, { waitUntil: "networkidle" });
+  const destinoDoTitulo = await page.locator('[data-testid="job-link-904000101"]').getAttribute("href");
+  const acoesNaLinha = await page.locator('[data-testid^="job-link-904000101"]')
+    .locator("xpath=ancestor::article")
+    .locator("a[target=_blank], button[popovertarget]")
+    .count();
+  await page.locator('[data-testid="job-link-904000101"]').click();
+  await settle(/\/jobs\/904000101\/paises/);
+  const noHub = await page.evaluate(() => ({
+    rota: !!document.querySelector('[data-testid="route-job-countries"]'),
+    chamada: document.querySelector('[data-testid="countries-lead"]')?.textContent?.trim() ?? "",
+    publicacoes: [...document.querySelectorAll('[data-testid^="job-link-9040001"]')]
+      .map((link) => link.getAttribute("data-testid")),
+  }));
+  check(
+    "term-search E2E-014 a linha agrupada leva ao hub, sem botões de ação, e o hub lista as quatro publicações",
+    (destinoDoTitulo ?? "").includes("/jobs/904000101/paises")
+      && acoesNaLinha === 0
+      && noHub.rota
+      && /4/.test(noHub.chamada)
+      && noHub.publicacoes.length === 4,
+    JSON.stringify({ destinoDoTitulo, acoesNaLinha, noHub }),
+  );
+
   // Fontes em multi-seleção: duas fontes na fixture, uma escolha por vez e as
   // duas juntas, com a URL carregando `source` repetido.
   const sourceBase = `${BASE}/jobs?q=fixture&fit=0`;

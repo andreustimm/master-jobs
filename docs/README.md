@@ -50,6 +50,7 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`linkedin-policy.md`](linkedin-policy.md) | **Antes de qualquer coisa que envolva LinkedIn.** O que é publicação oficial via `w_member_social`, o que é assistido, e o que é proibido. |
 | [`cli.md`](cli.md) | Referência completa de comandos, flags e defaults de `jho`. |
 | [`operations.md`](operations.md) | A rotina diária/semanal: sincronizar, triar, mover o funil, exportar o relatório, podar vagas velhas. |
+| [`product/jobs-url-contract.md`](product/jobs-url-contract.md) | Todo filtro da tela Vagas vive na URL: quais parâmetros existem, o que cada ausência significa e por que `source` repete. |
 | [`product/job-lifecycle-and-application-history.md`](product/job-lifecycle-and-application-history.md) | Regras de fechamento, arquivamento e leitura do histórico para candidato e recrutador. |
 | [`engineering/session-2026-09-16.md`](engineering/session-2026-09-16.md) | Registro durável das decisões, bloqueios e próximos passos discutidos na sessão. |
 | [`engineering/local-postgres.md`](engineering/local-postgres.md) | Compose local com imagem Supabase Postgres, PGMQ, pgvector e limites de paridade. |
