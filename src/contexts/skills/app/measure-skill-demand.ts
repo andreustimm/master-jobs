@@ -20,15 +20,27 @@ export async function measureSkillDemand(
     corpus: TargetCorpusPort;
   },
 ): Promise<MarketSkillDemand[]> {
-  const [catalog, candidateSkills, corpus] = await Promise.all([
+  // Duas de cada vez, nunca três.
+  //
+  // O cliente abre três conexões, e as três consultas disparadas juntas
+  // consumiam exatamente as três. Uma requisição sozinha cabe — e por isso esta
+  // tela respondia 200 quando ninguém mais a pedia. Mas a instância serverless
+  // é reaproveitada entre requisições concorrentes: duas requisições na mesma
+  // instância pedem seis conexões a um pool de três, cada uma espera a outra, e
+  // a Vercel mata as duas aos trinta segundos. Nos logs de produção dá para ver
+  // exatamente isso — um 200, e 266ms depois um 504 na mesma rota.
+  //
+  // A pesada vai sozinha, depois das duas leves, para que sempre sobre uma
+  // conexão para o resto da requisição.
+  const [catalog, candidateSkills] = await Promise.all([
     deps.catalog.all(),
     deps.candidates.list(input.candidateId),
-    deps.corpus.targetTexts({
-      candidateId: input.candidateId,
-      minFit: input.minFit ?? 60,
-      limit: input.corpusLimit ?? 400,
-    }),
   ]);
+  const corpus = await deps.corpus.targetTexts({
+    candidateId: input.candidateId,
+    minFit: input.minFit ?? 60,
+    limit: input.corpusLimit ?? 400,
+  });
   const statusBySlug = new Map(candidateSkills.map((entry) => [entry.slug, entry.status]));
   const demandBySlug = new Map(measureDemand(catalog, corpus).map((entry) => [entry.slug, entry]));
 

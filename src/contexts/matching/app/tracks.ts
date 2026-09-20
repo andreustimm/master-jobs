@@ -326,9 +326,12 @@ export type TrackOverview = {
 
 /** A evidência que é da pessoa: linhas do currículo e competências confirmadas. */
 async function ownEvidence(candidateId: number): Promise<OwnEvidence> {
-  const [person, owner, confirmed, defaultProfile] = await Promise.all([
-    personProfile(candidateId),
-    isOwner(candidateId),
+  // Duas consultas de cada vez, nunca três: o pool tem três conexões e a
+  // instância serverless é reaproveitada entre requisições, então um caminho
+  // que pede as três exatas deixa a requisição do lado esperando até os 30s da
+  // Vercel. `loadProfile` lê arquivo e não gasta conexão, por isso viaja junto.
+  const [person, owner] = await Promise.all([personProfile(candidateId), isOwner(candidateId)]);
+  const [confirmed, defaultProfile] = await Promise.all([
     candidateSkills(candidateId, "confirmed"),
     loadProfile(true),
   ]);
@@ -348,7 +351,11 @@ async function ownEvidence(candidateId: number): Promise<OwnEvidence> {
  */
 export async function trackOverview(candidateId: number): Promise<TrackOverview> {
   await ensurePrimaryTrack(candidateId);
-  const [tracks, evidence] = await Promise.all([listTracks(candidateId), ownEvidence(candidateId)]);
+  // Em série: `ownEvidence` já usa duas conexões, e somar `listTracks` a elas
+  // devolveria o pico a três — o pool inteiro, que é o que trava a requisição
+  // do lado.
+  const tracks = await listTracks(candidateId);
+  const evidence = await ownEvidence(candidateId);
   return {
     pending: !tracks.find((track) => track.isPrimary)?.target,
     tracks: tracks.map((track) => ({

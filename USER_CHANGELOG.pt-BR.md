@@ -18,6 +18,14 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.18.2] - 2026-09-20T21:52:14.716Z
+
+### Corrigido
+
+- A tela de skills não trava mais quando é aberta duas vezes seguidas — era a
+  causa do erro de tempo esgotado que aparecia nela. A mesma correção vale para
+  a criação de trilha por termo e para a tela de Buscas.
+
 ## [1.18.1] - 2026-09-20T20:06:42.067Z
 
 ### Corrigido
