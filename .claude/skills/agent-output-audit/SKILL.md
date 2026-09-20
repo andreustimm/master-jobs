@@ -8,7 +8,6 @@ description: >-
   mismatches. Use when validating completed Compozy tasks, AI-authored PRs, or
   codex-loop iterations. Not for real-user, persona, or journey QA — use
   qa-execution for those.
-disable-model-invocation: true
 argument-hint: "[audit-output-path]"
 metadata:
   author: Pedro Nauck

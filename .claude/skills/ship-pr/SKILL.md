@@ -1,7 +1,6 @@
 ---
 name: ship-pr
 description: Ships a finished feature, bug fix, or refactor end-to-end — explores the change's impact on docs/site/README, generates release notes (via pr-release if present, otherwise inline from git log), writes a complete PR description (including QA screenshots and summary when qa-report/qa-execution artifacts exist), commits staged changes following the repo's commitlint config, opens the PR via gh CLI, and optionally launches a CodeRabbit review watch loop. Use when a feature/bug/refactor is implementation-complete and ready to ship. Do not use for draft PRs without finished work, for amending an already-merged PR, for repo-level release publishing (use pr-release directly), or for in-progress development checkpoints.
-disable-model-invocation: true
 metadata:
   author: Pedro Nauck
   github: https://github.com/pedronauck

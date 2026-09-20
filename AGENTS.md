@@ -531,8 +531,18 @@ substitui a outra, e o veredito não é conselho — `FIX_BEFORE_SHIP` ignorado 
 uma linha na descrição da PR dizendo por quê.
 
 **O que ela recusa a fazer:** aplicar correção. Ela revisa e relata; quem
-corrige decide o que aceitar. É por isso que `disable-model-invocation` está
-ligado no frontmatter — a skill só roda quando alguém pede.
+corrige decide o que aceitar. Essa separação é a garantia real, e ela não
+depende de quem aperta o botão.
+
+**O agente invoca.** O frontmatter teve `disable-model-invocation` até
+2026-09-20, e o custo apareceu: sete PRs seguiram para produção sem revisão
+profunda porque a única pessoa que podia rodá-la estava ocupada revisando o
+resto. Gate que só um humano dispara não é gate — é fila. A decisão passou a
+ser a oposta: o agente roda a revisão em toda PR, e a pessoa lê o veredito.
+Publicar na PR continua exigindo `--publish` ou autorização explícita.
+
+O mesmo vale para `qa-report`, `qa-execution`, `agent-output-audit` e
+`ship-pr`.
 
 Configuração opcional em `.deep-review.yaml` na raiz; sem ela, o padrão do
 repositório vale, e `path_instructions` do `.coderabbit.yaml` é lido como
