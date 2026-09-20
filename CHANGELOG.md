@@ -26,6 +26,11 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   produção local contra o mesmo banco e acontece até com candidato sem skill
   nenhuma. Reduzir consultas simultâneas consertou `/searches/tracks/new` e não
   consertou esta. A rota sai junto com a correção.
+- O CI de `dev` reprovou por tempo, não por defeito: o caso que percorre dez
+  minutos de janelas de captura leva 1,2s antes do carimbo único e 3,4s depois —
+  o relógio só faz o laço visitar mais janelas —, e no runner, mais lento, deu
+  7,2s contra o limite padrão de 5s. O caso passa a declarar o tempo que precisa,
+  com o motivo escrito ao lado.
 
 ## [1.17.1] - 2026-09-20
 
