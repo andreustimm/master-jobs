@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-09-20T22:37:38.237Z
+
 ### Adicionado
 
 - Clicar numa vaga publicada em vários países agora abre uma tela só dela, com

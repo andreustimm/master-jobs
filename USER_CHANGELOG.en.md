@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-09-20T22:37:38.237Z
+
 ### Added
 
 - Clicking a job posted across several countries now opens a screen of its own,

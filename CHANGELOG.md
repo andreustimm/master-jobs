@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-09-20
+
 ### Adicionado
 
 - **`/jobs/<id>/paises`: o hub da vaga publicada uma vez por país.** A linha
