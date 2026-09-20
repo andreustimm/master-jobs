@@ -33,7 +33,11 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   const candidateId = candidateScope(session);
 
   const { id } = await params;
-  const detail = await getJobDetail(candidateId, Number(id));
+  // Link de fora com id não numérico é endereço errado, não incidente: `NaN`
+  // chegando à consulta estoura no PostgreSQL e o 404 vira 500 no Sentry.
+  const jobId = Number(id);
+  if (!Number.isSafeInteger(jobId) || jobId <= 0) notFound();
+  const detail = await getJobDetail(candidateId, jobId);
   if (!detail) notFound();
 
   const { job, score, application, source } = detail;
