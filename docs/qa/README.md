@@ -17,6 +17,20 @@ produto como uma pessoa real e grava vereditos e relatórios aqui.
 - Gates automatizados: `rtk pnpm check` (inclui os conversores do tracker) e
   `rtk pnpm test:e2e` (inclui axe cumulativo WCAG 2.0/2.1/2.2 AA em oito telas)
 
+> **Rode os dois em série, nunca ao mesmo tempo.** A suíte de browser mede tempo
+> real — transições, esperas, respostas — e disputar CPU com a suíte de unidade
+> vira falha que não existe. Medido em 2026-09-20, na mesma árvore:
+>
+> | Execução | Falhas |
+> |---|---:|
+> | junto com `pnpm check` | 2 |
+> | máquina ainda ocupada | 2 |
+> | menos carga | 1 |
+> | **máquina livre** | **0** de 274 |
+>
+> As falhas caíam com a carga e sumiram por completo. Uma delas me custou um
+> diagnóstico errado — cheguei a acusar o helper de transição de estar quebrado.
+
 O dashboard sempre usa loopback. Sessões autenticadas usam contas e papéis de
 teste reais; não use mocks para confirmar uma jornada.
 
