@@ -1351,6 +1351,26 @@ try {
   );
   await page.keyboard.press("Escape");
 
+  // Duas requisições ao mesmo tempo na tela mais pesada.
+  //
+  // O teste que faltava. `/candidate/skills` respondia 200 sozinha e 504 quando
+  // pedida duas vezes: o pool tem três conexões, a instância serverless é
+  // reaproveitada, e um caminho que pedia as três exatas deixava a requisição
+  // do lado esperando até a Vercel matar as duas aos 30 segundos. Toda a suíte
+  // passava porque toda a suíte pede uma página de cada vez.
+  const segundaAba = await page.context().newPage();
+  const emParalelo = await Promise.all([
+    page.goto(`${BASE}/candidate/skills`, { waitUntil: "domcontentloaded" }),
+    segundaAba.goto(`${BASE}/candidate/skills`, { waitUntil: "domcontentloaded" }),
+  ]);
+  const statusEmParalelo = emParalelo.map((resposta) => resposta?.status() ?? 0);
+  await segundaAba.close();
+  check(
+    "E2E-013 duas requisições simultâneas à tela de skills respondem as duas",
+    statusEmParalelo.every((status) => status === 200),
+    JSON.stringify({ statusEmParalelo }),
+  );
+
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(`${BASE}/candidate/skills`, { waitUntil: "networkidle" });
   const skillsRows = await page.evaluate(() => [...document.querySelectorAll('[data-testid="skills-market-row"]')].map((row) => {

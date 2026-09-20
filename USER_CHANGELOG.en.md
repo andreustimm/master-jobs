@@ -22,7 +22,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ### Fixed
 
-- The jobs list is fast again when repeats are grouped.
+- The skills screen no longer hangs when opened twice in a row — that was the
+  cause of the timeout error it kept showing.
 
 ## [1.18.0] - 2026-09-20T18:22:03.370Z
 
