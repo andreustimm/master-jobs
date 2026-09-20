@@ -9,6 +9,17 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- O caminho de falha da fila de repontuação estava sem teste. É ele que decide
+  se um defeito fica contido numa tarefa ou trava a fila de todos: o código
+  para de tentar depois de três tentativas justamente porque "um currículo que
+  quebra o extrator quebraria de novo, e a fila giraria nele para sempre
+  enquanto os outros candidatos esperam". Cinco casos prendem isso — a tarefa
+  volta para `pending` e solta a reivindicação na primeira falha, vira `failed`
+  na terceira, mensagem enorme é cortada em 500 caracteres, rejeição que não é
+  `Error` continua sendo descrita, e uma tarefa que falha não impede a próxima.
+
 ## [1.20.0] - 2026-09-20
 
 ### Adicionado
