@@ -48,6 +48,38 @@ it("lets a slow sync time out without taking the day's terms and scores with it"
   expect(alarm?.run).toContain("exit 1");
 });
 
+it("conferência de produção espera a versão promovida antes de julgar", () => {
+  // Um `sleep` fixo testaria o deploy anterior e passaria verde sem provar nada:
+  // o deploy da Vercel dispara do mesmo push. A página de login carrega a versão,
+  // então a espera tem critério.
+  const workflow = parse(readFileSync(".github/workflows/fumaca-producao.yml", "utf8")) as {
+    on: { push: { branches: string[] } };
+    jobs: { fumaca: { steps: { name?: string; run?: string }[] } };
+  };
+  expect(workflow.on.push.branches).toEqual(["main"]);
+
+  const passos = workflow.jobs.fumaca.steps;
+  const espera = passos.find((s) => s.name?.includes("Esperar o deploy"))?.run ?? "";
+  expect(espera).toContain("steps.versao.outputs.esperada");
+  expect(espera).toContain("exit 1");
+
+  // Rota autenticada redireciona; nunca 5xx. `/p/` inexistente é 404 e não 403,
+  // porque 403 confirmaria que o slug existe.
+  const fumaca = passos.find((s) => s.name?.includes("Rotas públicas"))?.run ?? "";
+  for (const linha of [
+    "conferir /login 200",
+    "conferir / 307",
+    "conferir /jobs 307",
+    "conferir /api/export 307",
+    "conferir /p/slug-que-nao-existe 404",
+  ]) {
+    expect(fumaca, linha).toContain(linha);
+  }
+  // A ordem importa: fumaça depois da espera, ou ela julga a versão velha.
+  expect(passos.findIndex((s) => s.name?.includes("Esperar o deploy")))
+    .toBeLessThan(passos.findIndex((s) => s.name?.includes("Rotas públicas")));
+});
+
 it("keeps scheduled retention on the PostgreSQL runtime contract", () => {
   const workflow = parse(readFileSync(".github/workflows/manutencao-banco.yml", "utf8"));
   expect(workflow.jobs.limpar.if).toContain("github.ref == 'refs/heads/main'");

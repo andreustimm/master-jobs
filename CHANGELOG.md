@@ -25,6 +25,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 - `src/core/ingest/health.ts`: a saúde das fontes numa leitura só, usada pela
   tela e pela CLI (`jho sources list`), que antes montava a própria consulta —
   duas superfícies discordando sobre "fonte quebrada" era questão de tempo.
+- Workflow **`fumaca-producao.yml`**: depois de `main` avançar, espera até a
+  versão promovida estar realmente servindo — a página de login carrega a versão,
+  então a espera tem critério em vez de um `sleep` que testaria o deploy anterior
+  — e confere as rotas públicas: `/login` 200, rota autenticada 307, `/p/` de
+  slug inexistente 404 e `/offline.html` 200. Os dois defeitos de produção de
+  19–20/09 (500 por schema atrasado e 504 em duas telas) foram descobertos por
+  alguém abrindo o site; agora há quem repare antes.
 
 ## [1.16.0] - 2026-09-20
 
