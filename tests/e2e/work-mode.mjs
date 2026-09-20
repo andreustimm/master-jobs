@@ -25,8 +25,10 @@ export async function checkWorkModes(page, base, check) {
     await ready();
   };
   await page.goto(`${base}/?q=${encodeURIComponent(query)}`, { waitUntil: "networkidle" });
-  await page.getByTestId("filter-cut-0").click();
-  await page.waitForURL((url) => url.searchParams.get("fit") === "0");
+  // Score vazio é "toda nota": o campo em branco é o que o formulário envia.
+  await page.getByTestId("filters-score-min").fill("");
+  await page.getByTestId("filters-score-submit").click();
+  await page.waitForURL((url) => url.searchParams.get("fit") === "");
   await ready();
   await select("remote");
   await page.reload({ waitUntil: "networkidle" });

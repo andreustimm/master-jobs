@@ -124,7 +124,7 @@ export {
   clusterBreakdown,
   corpusStats,
   countBoard,
-  countHiddenBelowMinimum,
+  countHiddenByPayRange,
   listBoard,
   type BoardFilters,
   type BoardRow,

@@ -828,3 +828,73 @@ describe("documentação que precisa acompanhar o código", () => {
     expect(broken).toEqual([]);
   }, 30_000);
 });
+
+describe("client islands stay out of the server graph", () => {
+  /**
+   * A `"use client"` module is compiled for the browser, so everything it
+   * imports goes with it. Importing one constant from `app/filter-state.ts`
+   * pulled the matching context, Drizzle, `node:crypto` and `node:dns` into the
+   * client bundle, and `next build` refused the whole page — with an error that
+   * named a scheme, not the import that caused it. `pnpm check` was green
+   * throughout: a type checker has no opinion on which runtime a module ends up
+   * in. So the rule is checked here, over the real import graph.
+   */
+  const RELATIVE = /(?:from|import)\s*\(?\s*["'](\.[^"']+|@\/[^"']+)["']/g;
+  const SERVER_ONLY = /from\s+["'](?:node:|drizzle-orm|postgres)/;
+
+  /**
+   * The source without its type-only imports.
+   *
+   * `import type { UrlObject } from "node:url"` is erased before the bundler
+   * ever sees it, so counting it would make the rule flag files that are
+   * already correct — and a fitness test that starts red is a wish, not a wall.
+   */
+  function values(source: string): string {
+    return source
+      .replace(/\b(?:import|export)\s+type\b[\s\S]*?from\s*["'][^"']+["']/g, "")
+      .replace(/\bimport\s*\{\s*(?:type\s+[^,}]+,?\s*)+\}\s*from\s*["'][^"']+["']/g, "");
+  }
+
+  function resolveImport(from: string, spec: string): string | null {
+    const base = spec.startsWith("@/") ? resolve(spec.slice(2)) : resolve(dirname(from), spec);
+    const stripped = base.replace(/\.(ts|tsx)$/, "");
+    for (const candidate of [base, `${stripped}.ts`, `${stripped}.tsx`, join(base, "index.ts")]) {
+      if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+    }
+    return null;
+  }
+
+  /** The import chain from `entry` to the first server-only module, if any. */
+  function serverReach(entry: string, seen: Set<string>): string[] | null {
+    if (seen.has(entry)) return null;
+    seen.add(entry);
+    const source = values(readFileSync(entry, "utf8"));
+    if (SERVER_ONLY.test(source)) return [entry];
+    for (const match of source.matchAll(RELATIVE)) {
+      const next = resolveImport(entry, match[1]!);
+      if (next === null) continue;
+      // A `"use server"` module is the legitimate door: the bundler replaces it
+      // with a reference, so what it imports never crosses to the browser. An
+      // island reaching the database THROUGH a Server Action is the design.
+      if (/^\s*["']use server["']/.test(readFileSync(next, "utf8"))) continue;
+      const deeper = serverReach(next, seen);
+      if (deeper !== null) return [entry, ...deeper];
+    }
+    return null;
+  }
+
+  it("UT-080 a client module reaches the server graph only through a Server Action", () => {
+    const islands = [...walk("app"), ...walk("components")].filter((file) =>
+      /^\s*["']use client["']/.test(readFileSync(file, "utf8")),
+    );
+    // Guarda contra o teste passar por não ter achado ilha nenhuma.
+    expect(islands.length).toBeGreaterThan(3);
+
+    const offenders = islands
+      .map((island) => serverReach(island, new Set<string>()))
+      .filter((chain): chain is string[] => chain !== null)
+      .map((chain) => chain.join(" -> "));
+
+    expect(offenders).toEqual([]);
+  });
+});

@@ -76,9 +76,9 @@ export default async function Jobs({
           {total.toLocaleString(locale)} {t("jobs.matching")}
           {state.term ? ` ${t("jobs.matchingFor", { term: state.term.term })}` : ""}.
         </p>
-        {view.hiddenBelowMinimum > 0 && (
-          <p className="type-caption-md text-muted-foreground" data-testid="jobs-hidden-below-minimum">
-            {t("jobs.hiddenBelowMinimum", { count: view.hiddenBelowMinimum.toLocaleString(locale) })}
+        {view.hiddenByPayRange > 0 && (
+          <p className="type-caption-md text-muted-foreground" data-testid="jobs-hidden-by-pay-range">
+            {t("jobs.hiddenByPayRange", { count: view.hiddenByPayRange.toLocaleString(locale) })}
           </p>
         )}
       </header>
