@@ -9,6 +9,20 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Fonte **Turing** (Greenhouse, 21 vagas no probe): única das treze vitrines de
+  outsourcing sondadas em 2026-09-20 com board público legível. São vagas do
+  time interno da Turing, a maioria presencial nos EUA — entra porque nomeia o
+  empregador e custa uma chamada por varredura.
+- `docs/sources-autenticadas.md` ganha a seção das **vitrines de outsourcing e
+  staff augmentation**: o que a sondagem encontrou em treze plataformas (Revelo,
+  BairesDev, WillDom, Strider, VanHack, TECLA, Jobsity, BEON.tech, Nearsure,
+  Howdy, Talently, Index.dev, Turing), por que não há adapter a escrever onde a
+  listagem não é pública, a prioridade por evidência, o que o perfil precisa
+  dizer, a cadência que mantém a vitrine viva, como medir por canal e o limite
+  do LinkedIn para post de recrutador.
+
 ## [1.15.4] - 2026-09-20
 
 ### Corrigido
