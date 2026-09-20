@@ -478,6 +478,24 @@ describe("counts, sharing and the daily sweep", () => {
     expect(term).toMatchObject({ notice: "no_results_14d", status: "active" });
   });
 
+  it("o carimbo da captura vem do relógio da aplicação, não do banco", async () => {
+    // `dailyRepeatPaused` compara 36 horas contra `created_at`. Enquanto esse
+    // carimbo vinha do `clock_timestamp()` do PostgreSQL, a conta misturava dois
+    // relógios: a mesma suíte passava às 05:07 e reprovava às 13:42 no MESMO
+    // commit, porque a diferença dependia da hora real do dia.
+    const id = await person("owner", true);
+    await saved(id, "Laravel", (await track(id, "PHP")).id);
+    clock.advance(24 * HOUR);
+    await sweep();
+
+    const [captura] = await db
+      .select({ createdAt: termCapture.createdAt })
+      .from(termCapture)
+      .where(eq(termCapture.origin, "sweep"))
+      .limit(1);
+    expect(captura?.createdAt).toBe(clock.iso());
+  });
+
   it("IT-101 36 hours without a sweep capture shows the daily repeat as paused", async () => {
     const id = await person("owner", true);
     await saved(id, "Laravel", (await track(id, "PHP")).id);

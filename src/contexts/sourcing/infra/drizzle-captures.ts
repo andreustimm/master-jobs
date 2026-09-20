@@ -37,6 +37,12 @@ export const drizzleCaptureQueue: TermCaptureQueuePort = {
           priority: row.priority,
           status: row.skipped ? "skipped" : "queued",
           reasonCode: row.skipped ?? null,
+          // Do relógio da aplicação, e não do padrão do banco: este carimbo é
+          // ENTRADA de decisão — `dailyRepeatPaused` compara 36 horas contra
+          // ele. Dois relógios na mesma conta dão respostas diferentes conforme
+          // a hora do dia, que foi como o CI ficou vermelho num commit que já
+          // tinha passado.
+          createdAt: now,
         })),
       )
       // A capture already done today serves this request too. Touching
