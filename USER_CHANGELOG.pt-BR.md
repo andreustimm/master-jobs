@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-09-20T23:41:23.163Z
+
 ### Adicionado
 
 - Quando uma tela demora demais e o servidor desiste, o sistema agora registra

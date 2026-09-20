@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-09-20
+
 ### Adicionado
 
 - **Um aviso ao Sentry antes de a Vercel matar a função.** O pior defeito deste

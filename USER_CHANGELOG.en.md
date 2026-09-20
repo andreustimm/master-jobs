@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-09-20T23:41:23.163Z
+
 ### Added
 
 - When a screen takes too long and the server gives up, the system now records
