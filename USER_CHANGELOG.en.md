@@ -18,6 +18,10 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Added
+
+- One more job source with a named employer (Turing).
+
 ## [1.15.4] - 2026-09-20T03:02:27.338Z
 
 ### Fixed
