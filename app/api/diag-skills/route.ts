@@ -22,12 +22,29 @@ export async function GET() {
   const session = await requirePage("admin:access");
   const candidateId = session.candidateId ?? 1;
   const db = getDb();
-  const passos: { passo: string; ms: number; tamanho?: number; erro?: string }[] = [];
+  const passos: { passo: string; ms: number; tamanho?: number; erro?: string; estourou?: boolean }[] = [];
 
+  /**
+   * Cada passo tem prazo próprio, menor que o da função.
+   *
+   * Sem isso a rota morre junto com a tela: a Vercel mata o processo aos 30s e
+   * nada é devolvido, que é exatamente a cegueira que ela existe para remover.
+   * Com prazo por passo, o que já mediu volta, e o passo que estourou é
+   * nomeado — que é a única informação que falta.
+   */
+  const LIMITE_MS = 7_000;
   const medir = async (passo: string, executar: () => Promise<unknown>) => {
     const inicio = Date.now();
+    const estouro = Symbol("estouro");
     try {
-      const valor = await executar();
+      const valor = await Promise.race([
+        executar(),
+        new Promise((resolve) => setTimeout(() => resolve(estouro), LIMITE_MS)),
+      ]);
+      if (valor === estouro) {
+        passos.push({ passo, ms: Date.now() - inicio, estourou: true });
+        return;
+      }
       const tamanho = Array.isArray(valor) ? valor.length : JSON.stringify(valor ?? null).length;
       passos.push({ passo, ms: Date.now() - inicio, tamanho });
     } catch (erro) {
