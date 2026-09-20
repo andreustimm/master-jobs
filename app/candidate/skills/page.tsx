@@ -11,6 +11,7 @@ import {
 import type { TranslationKey } from "../../../src/core/i18n/index.ts";
 import { auditAction, detectAction } from "./actions";
 import { loadSkillsScreen } from "./data";
+import { comVigia } from "../../timeout-watch.ts";
 import { requireOwnCandidatePage } from "../../auth";
 import { getTranslator } from "../../i18n";
 import { MutationFeedbackForm } from "../../mutation-feedback";
@@ -43,7 +44,10 @@ export default async function SkillsPage() {
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
   // A ordem das leituras é contrato com o pool de conexões e está em `data.ts`,
   // onde o teste de leque consegue medi-la.
-  const { mine, demand } = await loadSkillsScreen(candidateId);
+  // Esta tela já travou em produção por disputa de conexão, e o travamento
+  // não deixava rastro nenhum: a Vercel mata o processo e o código não
+  // chega a falhar. Se voltar a acontecer, agora nasce visível.
+  const { mine, demand } = await comVigia("/candidate/skills", () => loadSkillsScreen(candidateId));
 
   const pending = mine.filter((s) => s.status === "detected");
   const confirmed = mine.filter((s) => s.status === "confirmed");
