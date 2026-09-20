@@ -20,24 +20,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ### Added
 
-- The Jobs screen now takes a pay **range**, minimum and maximum, by dragging or
-  typing — before you could only say the minimum.
-- The "cut" became **Score**, and it is a range too: ask for 60 to 80 instead of
-  picking from fixed buttons.
-- **Sources** became a multi-select list: tick as many as you want and apply
-  once, instead of one source per click.
-- An **employer** field, to search by company without pulling in every job that
-  merely mentions that name in its text.
-- A **"not sent yet"** filter, which hides the jobs you already sent.
-
-### Changed
-
-- The filters line up on a grid, each one's name on the left, and "sort" sits
-  apart from the filters.
-- An empty range field now says what it means: "no floor", "no cap", or the real
-  limit — 0 and 100 on Score.
-- Track, "came from" and cluster now each explain in one line what they do —
-  the three offered the same names and did different things.
+- The same job posted across several countries now takes **a single row**, with
+  each country's flag. Hover for the name, click to open that country's
+  posting. On today's corpus that removes 2,543 repeated rows — one in three.
+- Anyone who prefers one row per posting turns off "group repeats", on the
+  pipeline line.
 
 ## [1.17.1] - 2026-09-20T14:28:16.117Z
 

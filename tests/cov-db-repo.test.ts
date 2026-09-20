@@ -66,6 +66,9 @@ type VagaEntrada = {
   compMax?: number | null;
   descriptionText?: string | null;
   companyName?: string;
+  title?: string;
+  locationRaw?: string | null;
+  closedAt?: string | null;
 };
 
 async function seedVaga(entrada: VagaEntrada): Promise<number> {
@@ -90,7 +93,9 @@ async function seedVaga(entrada: VagaEntrada): Promise<number> {
       companyId: empresa!.id,
       companyName: entrada.companyName ?? `Empresa ${entrada.n}`,
       externalId: `ext-${entrada.n}`,
-      title: `Arquiteto ${entrada.n}`,
+      title: entrada.title ?? `Arquiteto ${entrada.n}`,
+      locationRaw: entrada.locationRaw ?? null,
+      closedAt: entrada.closedAt ?? null,
       url: `https://exemplo.test/${entrada.n}`,
       fingerprint: `fp-${entrada.n}`,
       contentHash: `ch-${entrada.n}`,
@@ -164,6 +169,49 @@ describe("filtros e ordenação do quadro", () => {
     const comCluster = await boardFacets(candidateId, { cluster: "backend" });
     expect(comCluster.clusters).toEqual(["architect", "backend"]);
     expect(comCluster.total).toBe(1);
+  });
+
+  it("dobra a mesma vaga repetida por país numa linha só, e conta o mesmo", async () => {
+    const candidateId = await seedCandidato("dono", true);
+    const mesma = { title: "Engineering Manager", companyName: "Payments Co", sourceId: "lever:acme" };
+    const holanda = await seedVaga({ n: 20, ...mesma, locationRaw: "Netherlands" });
+    const franca = await seedVaga({ n: 21, ...mesma, locationRaw: "France" });
+    const alemanha = await seedVaga({ n: 22, ...mesma, locationRaw: "Germany" });
+    // Mesma empresa e mesmo país, título diferente: não é o mesmo emprego.
+    const outra = await seedVaga({ n: 23, ...mesma, title: "Staff Engineer", locationRaw: "France" });
+    for (const id of [holanda, franca, alemanha, outra]) await seedScore(candidateId, id, 70);
+
+    const agrupado = await listBoard(candidateId, { groupRepeats: true });
+    // A escolhida é a de menor id, nunca a de melhor nota: nota é por
+    // candidato, e a linha canônica não pode mudar de leitor para leitor.
+    expect(new Set(agrupado.map((r) => r.jobId))).toEqual(new Set([holanda, outra]));
+    const linha = agrupado.find((r) => r.jobId === holanda)!;
+    expect(linha.repeats.map((v) => v.location)).toEqual(["Netherlands", "France", "Germany"]);
+    expect(agrupado.find((r) => r.jobId === outra)!.repeats).toHaveLength(1);
+
+    // Lista e contagem compartilham o predicado: o rodapé não pode mentir.
+    await expect(countBoard(candidateId, { groupRepeats: true })).resolves.toBe(2);
+    await expect(countBoard(candidateId, {})).resolves.toBe(4);
+
+    // Desligado, cada vaga é uma linha e ninguém paga a subconsulta.
+    const cru = await listBoard(candidateId, {});
+    expect(cru).toHaveLength(4);
+    expect(cru.every((r) => r.repeats.length === 0)).toBe(true);
+  });
+
+  it("vaga fechada sai do grupo, e some sem levar a linha junto", async () => {
+    const candidateId = await seedCandidato("dono", true);
+    const mesma = { title: "Engineering Manager", companyName: "Payments Co", sourceId: "lever:acme" };
+    const holanda = await seedVaga({ n: 30, ...mesma, locationRaw: "Netherlands" });
+    const franca = await seedVaga({ n: 31, ...mesma, locationRaw: "France" });
+    await seedVaga({ n: 32, ...mesma, locationRaw: "Spain", closedAt: "2026-01-01" });
+    for (const id of [holanda, franca]) await seedScore(candidateId, id, 70);
+
+    const agrupado = await listBoard(candidateId, { groupRepeats: true });
+    expect(agrupado.map((r) => r.jobId)).toEqual([holanda]);
+    // A fechada não aparece entre os países: regra 3 guarda o registro, não a
+    // vitrine.
+    expect(agrupado[0]!.repeats.map((v) => v.location)).toEqual(["Netherlands", "France"]);
   });
 
   it("filtra por empregador sem confundir com quem só é citado na descrição", async () => {

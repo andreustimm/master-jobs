@@ -124,6 +124,9 @@ export const en: Dictionary = {
     payConverted: "≈ {amount}",
     hiddenByPayRange: "{count} jobs paying outside the range were left out.",
     trackLabel: "track {name}",
+    countriesLabel: "posted in {count} countries",
+    countryWithCount: "{name} · {count} postings",
+    moreCountries: "+{count}",
     offerSearch: "Search the platforms for “{term}”",
     offerSearchLead: "Saving the term searches the registered platforms for new jobs with it, every day.",
     emptyTerm: "No job in the corpus mentions “{term}”.",
@@ -350,6 +353,7 @@ export const en: Dictionary = {
     all: "all",
     quality: "quality",
     pipeline: "pipeline",
+    grouped: "group repeats",
     notApplied: "not sent yet",
     workMode: "work mode",
     remote: "Remote",
@@ -490,6 +494,8 @@ export const en: Dictionary = {
       "Which of your saved searches brought the job in. It does not change the score — it shows where the job came from.",
     cluster:
       "The kind of role the score recognised in the title: leadership, architecture, senior IC.",
+    grouped:
+      "The same job posted across several countries becomes one row, with each country\u2019s flag. Turn it off to see every posting separately.",
     notApplied:
       "Hides jobs you already sent — it reads the sent date, so a rejection or a withdrawal stays hidden",
   },
