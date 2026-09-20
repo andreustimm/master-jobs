@@ -148,9 +148,49 @@ describe("filtros e ordenação do quadro", () => {
     expect(porCluster.map((r) => r.jobId)).toEqual([backend]);
     await expect(countBoard(candidateId, { cluster: "backend" })).resolves.toBe(1);
 
-    const porFonte = await listBoard(candidateId, { sourceKind: "lever" });
+    const porFonte = await listBoard(candidateId, { sourceKinds: ["lever"] });
     expect(porFonte.map((r) => r.jobId)).toEqual([arquiteto]);
-    await expect(countBoard(candidateId, { sourceKind: "lever" })).resolves.toBe(1);
+    await expect(countBoard(candidateId, { sourceKinds: ["lever"] })).resolves.toBe(1);
+    // Lista vazia é "toda fonte", e não "nenhuma": sem isso, abrir o combo e
+    // desmarcar tudo esvaziaria o quadro em vez de voltar ao padrão.
+    await expect(countBoard(candidateId, { sourceKinds: [] })).resolves.toBe(2);
+
+    // A lista de fontes não encolhe para a fonte escolhida: o combo ficaria
+    // sem o que oferecer, e escolher uma fonte seria um caminho sem volta.
+    // O mesmo vale para o cluster.
+    const comFonte = await boardFacets(candidateId, { sourceKinds: ["lever"] });
+    expect(comFonte.sources).toEqual(["greenhouse", "lever"]);
+    expect(comFonte.total).toBe(1);
+    const comCluster = await boardFacets(candidateId, { cluster: "backend" });
+    expect(comCluster.clusters).toEqual(["architect", "backend"]);
+    expect(comCluster.total).toBe(1);
+  });
+
+  it("filtra por empregador sem confundir com quem só é citado na descrição", async () => {
+    const candidateId = await seedCandidato("dono", true);
+    const naShopify = await seedVaga({ n: 10, companyName: "Shopify Inc" });
+    const citaShopify = await seedVaga({
+      n: 11,
+      companyName: "Outra Empresa",
+      descriptionText: "Integra com Shopify e com o resto do ecossistema.",
+    });
+    await seedScore(candidateId, naShopify, 70);
+    await seedScore(candidateId, citaShopify, 70);
+
+    // O termo geral varre título, empresa E descrição: as duas respondem.
+    await expect(
+      countBoard(candidateId, { term: { term: "Shopify", key: "shopify" } }),
+    ).resolves.toBe(2);
+
+    // O filtro de empregador pergunta só pela empresa.
+    const porEmpresa = await listBoard(candidateId, { company: "shopify" });
+    expect(porEmpresa.map((r) => r.jobId)).toEqual([naShopify]);
+
+    // Casa dentro da palavra, porque "Shopify" precisa achar "Shopify Inc".
+    await expect(countBoard(candidateId, { company: "hopify In" })).resolves.toBe(1);
+
+    // `%` é texto, não curinga: o valor viaja como parâmetro.
+    await expect(countBoard(candidateId, { company: "%" })).resolves.toBe(0);
   });
 
   it("ordena por publicação recente usando a data vista quando não há a declarada", async () => {

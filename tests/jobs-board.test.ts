@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadJobsView } from "../app/jobs/jobs-data.ts";
 import {
   countBoard,
-  countHiddenBelowMinimum,
+  countHiddenByPayRange,
   createTrack,
   listBoard,
   saveTerm,
@@ -289,11 +289,35 @@ describe("minimum pay and pay sort (ADR-013)", () => {
     expect(byId[jobs.brl]).toMatchObject({ payAmount: 7600, payState: "amount" });
     expect(byId[jobs.undisclosed]!.payState).toBe("undisclosed");
     expect(byId[jobs.ars]!.payState).toBe("not_comparable");
-    expect(await countHiddenBelowMinimum(owner, filters)).toBe(1);
+    expect(await countHiddenByPayRange(owner, filters)).toBe(1);
     expect(await countBoard(owner, filters)).toBe(4);
 
     const disclosed = await listBoard(owner, { pay: { ...USD_MONTH, min: 6000, disclosedOnly: true } });
     expect(new Set(ids(disclosed))).toEqual(new Set([jobs.usd, jobs.brl]));
+  });
+
+  it("IT-134 a ceiling hides what pays above it, and the count covers both sides", async () => {
+    const jobs = await paySeed();
+    // Normalizado em USD por mês: usd 9.500, brl 7.600, low 4.000.
+    const range: BoardFilters = { pay: { ...USD_MONTH, min: 5000, max: 8000 } };
+
+    const rows = await listBoard(owner, range);
+
+    expect(ids(rows).slice(0, 1)).toEqual([jobs.brl]);
+    expect(new Set(ids(rows).slice(1))).toEqual(new Set([jobs.undisclosed, jobs.ars]));
+    expect(await countBoard(owner, range)).toBe(3);
+    expect(await countHiddenByPayRange(owner, range)).toBe(2);
+
+    // Só o teto: quem paga pouco continua, porque nada foi dito sobre piso.
+    const capped: BoardFilters = { pay: { ...USD_MONTH, max: 8000 } };
+    expect(new Set(ids(await listBoard(owner, capped)))).toEqual(
+      new Set([jobs.brl, jobs.low, jobs.undisclosed, jobs.ars]),
+    );
+    expect(await countHiddenByPayRange(owner, capped)).toBe(1);
+
+    // Regra 8 no teto também: salário não informado não é salário alto.
+    const strict: BoardFilters = { pay: { ...USD_MONTH, max: 8000, disclosedOnly: true } };
+    expect(new Set(ids(await listBoard(owner, strict)))).toEqual(new Set([jobs.brl, jobs.low]));
   });
 
   it("IT-111 the SQL amount equals the TypeScript normalizer for every period", async () => {
@@ -398,7 +422,7 @@ describe("minimum pay and pay sort (ADR-013)", () => {
 
     expect(result.rows).toHaveLength(0);
     expect(result.pay).toMatchObject({ min: 6000, currency: "USD", period: "month", disclosedOnly: true });
-    expect(result.hiddenBelowMinimum).toBe(1);
+    expect(result.hiddenByPayRange).toBe(1);
   });
 });
 

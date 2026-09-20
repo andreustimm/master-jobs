@@ -1,7 +1,7 @@
 import {
   boardFacets,
   countBoard,
-  countHiddenBelowMinimum,
+  countHiddenByPayRange,
   listBoard,
   listCandidateTracks,
   listSavedTerms,
@@ -30,7 +30,7 @@ export type JobsView = {
   total: number;
   facets: Awaited<ReturnType<typeof boardFacets>>;
   /** Jobs the pay minimum hid (disclosed, comparable, below it). */
-  hiddenBelowMinimum: number;
+  hiddenByPayRange: number;
   /** Active tracks for the selector; empty without a candidate scope. */
   tracks: Track[];
   scope: TrackScope | null;
@@ -100,6 +100,7 @@ export async function loadJobsView(input: {
     state.pay?.currency && currencies.includes(state.pay.currency) ? state.pay.currency : defaults.currency;
   const pay: PayFilter = {
     min: state.pay?.min,
+    max: state.pay?.max,
     currency,
     period: state.pay?.period ?? defaults.period,
     disclosedOnly: state.pay?.disclosedOnly ?? false,
@@ -116,18 +117,18 @@ export async function loadJobsView(input: {
     newSince: broughtBy ? (broughtBy.lastVisitAt ?? "") : undefined,
     pay: payActive ? pay : undefined,
   };
-  const [rows, total, facets, hiddenBelowMinimum] = await Promise.all([
+  const [rows, total, facets, hiddenByPayRange] = await Promise.all([
     listBoard(candidateId, { ...filters, limit: input.pageSize, offset: (input.page - 1) * input.pageSize }),
     countBoard(candidateId, filters),
     boardFacets(candidateId, {
       minFit: state.fit,
       cluster,
       term: state.term,
-      sourceKind: state.source,
+      sourceKinds: state.sources,
       workMode: state.workMode,
       track: scope ?? undefined,
     }),
-    countHiddenBelowMinimum(candidateId, filters),
+    countHiddenByPayRange(candidateId, filters),
   ]);
 
   if (broughtBy && candidateId !== null && !input.prefetch) {
@@ -142,7 +143,7 @@ export async function loadJobsView(input: {
     rows,
     total,
     facets,
-    hiddenBelowMinimum,
+    hiddenByPayRange,
     tracks,
     scope,
     savedTerms,

@@ -109,7 +109,7 @@ describe("work-mode filters", () => {
         reasons: [], blockers: [], scorerVersion: "fixture",
       });
     }
-    const filters = { workMode: "remote", minFit: 45, sourceKind: "manual", q: "Mode role" } as const;
+    const filters = { workMode: "remote", minFit: 45, sourceKinds: ["manual"], q: "Mode role" } as const;
     const first = await listBoard(1, { ...filters, limit: 5 });
     const second = await listBoard(1, { ...filters, limit: 5, offset: 5 });
     expect(first).toHaveLength(5);

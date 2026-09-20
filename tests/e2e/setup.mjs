@@ -98,6 +98,9 @@ try {
   }
 
   await ensureImportSource("ashby:e2e", "ashby", "e2e", "E2E Public Jobs");
+  // A segunda fonte existe para o filtro de fontes ter o que escolher: com uma
+  // só, o combo não aparece e a jornada não teria como ser percorrida.
+  await ensureImportSource("lever:e2e", "lever", "e2e", "E2E Lever Jobs");
   const [{ count }] = await getDb()
     .select({ count: sql`count(*)` })
     .from(job);
@@ -244,6 +247,26 @@ try {
     ...payFixtures.map((fixture) => fixtureScore(fixture.id, primaryTrack.id, 60)),
     ...payFixtures.filter((fixture) => fixture.php).map((fixture) => fixtureScore(fixture.id, phpTrack.id, fixture.php)),
   ]).onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
+
+  // Uma vaga da segunda fonte, fora do termo "Pay fixture" para não mexer nas
+  // contagens da jornada de salário, e dentro de "fixture" para a de fontes.
+  const leverFixtureId = 904000007;
+  await getDb().insert(job).values([{
+    id: leverFixtureId,
+    fingerprint: `e2e:${leverFixtureId}`,
+    contentHash: `e2e:${leverFixtureId}`,
+    sourceId: "lever:e2e",
+    externalId: String(leverFixtureId),
+    companyName: "Lever Fixture Lab",
+    title: "Source fixture Lever",
+    descriptionText: "Second source fixture for the Jobs screen source filter.",
+    url: `https://jobs.example.com/${leverFixtureId}`,
+    raw: { e2e: true },
+  }]).onConflictDoNothing({ target: job.id });
+  await getDb()
+    .insert(jobScore)
+    .values([fixtureScore(leverFixtureId, primaryTrack.id, 60)])
+    .onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
 
   // Tela Buscas (task_05): uma vaga que cita "Laravel" só na descrição e um
   // termo salvo que já trouxe duas vagas que o dono ainda não viu.
