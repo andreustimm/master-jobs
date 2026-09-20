@@ -488,6 +488,13 @@ export function FilterBar({
           >
             {t("filters.notApplied")} · {facets.notApplied}
           </Toggle>
+          <Toggle
+            href={href(base, state, { ungrouped: state.grouped ? "1" : undefined })}
+            active={state.grouped}
+            hint={t("hints.grouped")}
+          >
+            {t("filters.grouped")}
+          </Toggle>
         </Row>
 
         {facets.clusters.length > 0 && (

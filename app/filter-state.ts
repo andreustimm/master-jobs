@@ -54,6 +54,14 @@ export type FilterState = {
   described?: boolean;
   /** Only jobs not sent yet — no application, or one with no sent date. */
   notApplied?: boolean;
+  /**
+   * Fold a job repeated across countries into one row. On by default.
+   *
+   * The URL carries the exception (`ungrouped=1`), not the rule: the common
+   * link stays short, and a link without the parameter keeps meaning what it
+   * means today.
+   */
+  grouped: boolean;
   sort?: string;
   status?: string;
   /** Track id, or every active track. Absent: the primary. */
@@ -121,6 +129,7 @@ export function readFilters(params: Record<string, string | string[] | undefined
     named: one("named") === "1",
     described: one("described") === "1",
     notApplied: one("notApplied") === "1",
+    grouped: one("ungrouped") !== "1",
     notices,
   };
 
@@ -218,6 +227,7 @@ export function toParams(state: FilterState): Array<[string, string]> {
   put("described", state.described);
   put("fitMax", state.fitMax);
   put("notApplied", state.notApplied);
+  put("ungrouped", !state.grouped);
   put("track", state.track);
   put("by", state.by);
   put("pay", state.pay?.min);
@@ -269,6 +279,7 @@ export function toBoardFilters(state: FilterState): BoardFilters {
     namedEmployer: state.named,
     hasDescription: state.described,
     hideApplied: state.notApplied,
+    groupRepeats: state.grouped,
     sort: SORTS.find((sort) => sort === state.sort) ?? "fit",
   };
 }

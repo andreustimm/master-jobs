@@ -121,6 +121,9 @@ export const ptBR = {
     payConverted: "≈ {amount}",
     hiddenByPayRange: "{count} vagas com salário fora da faixa ficaram de fora.",
     trackLabel: "trilha {name}",
+    countriesLabel: "publicada em {count} países",
+    countryWithCount: "{name} · {count} vagas",
+    moreCountries: "+{count}",
     offerSearch: "Buscar “{term}” nas plataformas",
     offerSearchLead: "Salvar o termo busca vagas novas com ele nas plataformas cadastradas, todo dia.",
     emptyTerm: "Nenhuma vaga do acervo menciona “{term}”.",
@@ -355,6 +358,7 @@ export const ptBR = {
     all: "todas",
     quality: "qualidade",
     pipeline: "funil",
+    grouped: "agrupar repetidas",
     notApplied: "ainda não enviadas",
     workMode: "modalidade",
     remote: "Remoto",
@@ -496,6 +500,8 @@ export const ptBR = {
       "Qual das suas buscas salvas trouxe a vaga até aqui. Não muda a nota — só mostra a origem.",
     cluster:
       "O tipo de posição que o score reconheceu no cargo: liderança, arquitetura, IC sênior.",
+    grouped:
+      "A mesma vaga publicada em vários países vira uma linha só, com a bandeira de cada um. Desligue para ver cada publicação separada.",
     notApplied:
       "Esconde as vagas que você já enviou — vale a data de envio registrada, então uma recusa ou desistência continua escondida",
   },

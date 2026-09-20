@@ -248,6 +248,33 @@ try {
     ...payFixtures.filter((fixture) => fixture.php).map((fixture) => fixtureScore(fixture.id, phpTrack.id, fixture.php)),
   ]).onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
 
+  // Três publicações da mesma vaga em países diferentes, mais uma quarta que
+  // repete o país: é o caso real do acervo, onde a mesma vaga aparece em até
+  // 42 linhas. Fora de "Pay fixture" para não mexer nas contagens de salário.
+  const grupoFixtures = [
+    { id: 904000101, locationRaw: "Netherlands" },
+    { id: 904000102, locationRaw: "France" },
+    { id: 904000103, locationRaw: "São Paulo, State of São Paulo, Brazil" },
+    { id: 904000104, locationRaw: "Rio de Janeiro, Rio de Janeiro, Brazil" },
+  ];
+  await getDb().insert(job).values(grupoFixtures.map((fixture) => ({
+    id: fixture.id,
+    fingerprint: `e2e:${fixture.id}`,
+    contentHash: `e2e:${fixture.id}`,
+    sourceId: "ashby:e2e",
+    externalId: String(fixture.id),
+    companyName: "Country Fixture Lab",
+    title: "Engineering Manager Country Fixture",
+    locationRaw: fixture.locationRaw,
+    descriptionText: "Same posting, one line per country, for the grouping journey.",
+    url: `https://jobs.example.com/${fixture.id}`,
+    raw: { e2e: true },
+  }))).onConflictDoNothing({ target: job.id });
+  await getDb()
+    .insert(jobScore)
+    .values(grupoFixtures.map((fixture) => fixtureScore(fixture.id, primaryTrack.id, 60)))
+    .onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
+
   // Uma vaga da segunda fonte, fora do termo "Pay fixture" para não mexer nas
   // contagens da jornada de salário, e dentro de "fixture" para a de fontes.
   const leverFixtureId = 904000007;

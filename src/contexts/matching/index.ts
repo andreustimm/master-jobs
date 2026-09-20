@@ -128,6 +128,7 @@ export {
   listBoard,
   type BoardFilters,
   type BoardRow,
+  type GroupPosting,
   type PayFilter,
 } from "../../core/db/repo.ts";
 

@@ -4969,6 +4969,32 @@ try {
     JSON.stringify({ thumbs, withCeiling, ceilingKept }),
   );
 
+  // Vagas repetidas por país: quatro publicações da mesma vaga viram uma linha
+  // com três bandeiras, porque as duas brasileiras somam numa marca só.
+  const grupoBase = `${BASE}/jobs?q=${encodeURIComponent("Country Fixture")}&fit=0`;
+  await page.goto(grupoBase, { waitUntil: "networkidle" });
+  const linhasAgrupadas = await page.locator('[data-testid^="job-link-9040001"]').count();
+  const bandeiras = page.locator('[data-testid^="job-country-904000101-"]');
+  const marcas = await bandeiras.evaluateAll((nos) =>
+    nos.map((no) => ({ texto: no.textContent.trim(), rotulo: no.getAttribute("title") })));
+  const destinoPrimeiraBandeira = await bandeiras.first().getAttribute("href");
+  // Desligar o agrupamento devolve as quatro linhas.
+  await page.goto(`${grupoBase}&ungrouped=1`, { waitUntil: "networkidle" });
+  const linhasCruas = await page.locator('[data-testid^="job-link-9040001"]').count();
+  const semBandeiras = await page.locator('[data-testid^="job-countries-"]').count();
+  check(
+    "term-search E2E-012 vaga repetida por país vira uma linha com bandeiras; cidades do mesmo país somam numa marca; desligar devolve as quatro",
+    linhasAgrupadas === 1
+      && marcas.length === 3
+      && marcas.some((m) => m.rotulo === "Países Baixos")
+      && marcas.some((m) => m.rotulo === "França")
+      && marcas.some((m) => (m.rotulo ?? "").startsWith("Brasil"))
+      && (destinoPrimeiraBandeira ?? "").includes("/jobs/904000101")
+      && linhasCruas === 4
+      && semBandeiras === 0,
+    JSON.stringify({ linhasAgrupadas, marcas, destinoPrimeiraBandeira, linhasCruas, semBandeiras }),
+  );
+
   // Fontes em multi-seleção: duas fontes na fixture, uma escolha por vez e as
   // duas juntas, com a URL carregando `source` repetido.
   const sourceBase = `${BASE}/jobs?q=fixture&fit=0`;

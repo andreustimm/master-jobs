@@ -20,24 +20,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ### Adicionado
 
-- Na tela de Vagas você agora escolhe uma **faixa** de salário, com mínimo e
-  máximo, arrastando ou digitando — antes só dava para dizer o mínimo.
-- O "corte" virou **Score**, e também é faixa: você pede, por exemplo, de 60 a
-  80, em vez de escolher entre botões prontos.
-- As **fontes** viraram uma lista de seleção múltipla: marque quantas quiser e
-  aplique de uma vez, em vez de uma fonte por clique.
-- Campo de **empresa**, para procurar pelo empregador sem trazer toda vaga que
-  só cita aquele nome no texto.
-- Filtro **"ainda não enviadas"**, que esconde as vagas que você já enviou.
-
-### Alterado
-
-- Os filtros ficaram alinhados numa grade, com o nome de cada um à esquerda, e
-  "ordenar" separado dos filtros.
-- Campo de faixa vazio agora diz o que significa: "sem mínimo", "sem teto", ou
-  o limite real — 0 e 100 no Score.
-- Trilha, "trazida pelo termo" e cluster passam a explicar, em uma linha, o que
-  cada um faz — os três mostravam os mesmos nomes e faziam coisas diferentes.
+- A mesma vaga publicada em vários países agora ocupa **uma linha só**, com a
+  bandeira de cada país. Passe o mouse para ver o nome, clique para abrir a
+  publicação daquele país. No acervo de hoje isso tira 2.543 linhas repetidas —
+  uma em cada três.
+- Quem preferir ver cada publicação separada desliga em "agrupar repetidas",
+  na linha do funil.
 
 ## [1.17.1] - 2026-09-20T14:28:16.117Z
 

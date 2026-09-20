@@ -11,68 +11,44 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
-- A tela Vagas filtra remuneração por **faixa**, e não só por piso: dois campos
-  e um slider de dois punhos sobre o mesmo par, com moeda e período do lado. O
-  teto entra na URL como `payMax`, a consulta ganhou o lado de cima em
-  `payCondition`, e `countHiddenBelowMinimum` virou `countHiddenByPayRange`
-  porque agora conta os dois lados. Faixa invertida — que só URL escrita à mão
-  e campo digitado produzem — troca os lados e avisa, em vez de ignorar.
-- O corte de aderência virou **Score**, e virou faixa: `fit` ganhou o par
-  `fitMax` e `BoardFilters.maxFit`, no lugar dos chips de 45+/55+/60+/70+. O
-  campo aceita só de 0 a 100 e corta o resto enquanto se digita, porque nota
-  acima do teto do scorer não existe.
-- Filtro **Fonte** em multi-seleção: uma fonte por adapter novo já fazia a
-  fileira de chips quebrar em três linhas, e escolher três fontes custava três
-  idas ao servidor. `source` repete na URL, `BoardFilters.sourceKinds` recebe a
-  lista, e `source=x` sozinho — o formato que ainda circula em link salvo —
-  continua valendo.
-- Filtro **Empresa**, separado da busca livre. O termo geral varre cargo,
-  empresa e descrição, então procurar "Shopify" ali traz toda vaga que cita
-  Shopify no texto; este pergunta só pelo empregador, e casa dentro da palavra
-  porque "Shopify" precisa achar "Shopify Inc". O valor viaja como parâmetro de
-  `strpos`, então `%` num nome de empresa é texto, não curinga.
-- Filtro **funil**: "ainda não enviadas" esconde o que já foi enviado. Lê
-  `appliedAt`, não o nome do status — o carimbo é posto uma vez, na entrada em
-  `applied`, e sobrevive a recusa, desistência e arquivamento; uma lista de
-  status precisaria ser editada a cada estado novo e esqueceria quem saiu dele.
-
-### Alterado
-
-- As faixas de filtro passam a compartilhar uma grade de duas colunas, rótulo e
-  controles, com um separador antes de "ordenar" porque ordenar não é filtrar.
-  Antes cada faixa tinha o mesmo peso e a mesma borda esquerda irregular, que é
-  o que fazia uma barra com tudo dentro parecer uma barra sem nada.
-- O teto do filtro salarial caiu de 10.000.000 para 2.000.000. Acima disso não
-  é salário, e um zero a mais deve ser recusado em vez de esvaziar o quadro em
-  silêncio. A escala de arraste continua bem mais baixa — ela é leitura, e
-  estica para caber o que for digitado.
-- Campo vazio numa faixa passa a dizer o que significa, no próprio campo: "sem
-  mínimo", "sem teto", ou o limite real quando existe (0 e 100 no Score). A
-  convenção "punho no extremo é sem limite" estava correta e invisível, o que
-  fazia o campo parecer ter perdido o valor.
-- Trilha, "trazida pelo termo" e cluster ganharam uma frase de apoio cada. As
-  três ofereciam chips com as MESMAS palavras — PHP, Laravel — e faziam coisas
-  diferentes: a trilha decide qual alvo dá a nota, o termo diz qual busca
-  trouxe a vaga, e o cluster é o tipo de posição. O nome sozinho não separava.
-- `toParams` devolve pares em vez de objeto: um objeto por nome só consegue
-  guardar a última fonte escolhida.
+- A mesma vaga publicada em vários países passa a ocupar **uma linha**, com a
+  bandeira de cada país; clicar numa bandeira abre a publicação daquele país.
+  Medido no acervo antes de construir: 391 grupos sobre 2.934 publicações,
+  2.543 linhas a menos — 34% do quadro —, e o maior grupo é a mesma vaga em 42
+  países. Em todos os grupos cada publicação tem uma localização distinta, o
+  que é o que torna a chave (fonte, título, empregador) confiável.
+- `src/core/country.ts`: país de uma localização escrita à mão, bandeira e nome
+  traduzido. A tabela vem do ICU do próprio Node em vez de uma lista à mão, que
+  envelheceria na primeira fonte nova. Cobre 95,3% das localizações dentro dos
+  grupos; o resto são cidades soltas, que aparecem como texto.
+- Interruptor "agrupar repetidas" na barra de filtros, ligado por padrão. A URL
+  carrega a exceção (`ungrouped=1`), não a regra, para o link comum ficar curto.
 
 ### Corrigido
 
-- A lista de uma dimensão não é mais estreitada pelo filtro dela mesma. Contar
-  as fontes de um quadro já restrito a duas fontes responde "quais duas você
-  escolheu", e o combo só podia perder opções: escolher `ashby` deixava `ashby`
-  como a única coisa restante para escolher. Vale igual para cluster.
-- `fit=abc` chegava na consulta como `NaN` e o Postgres recusava a página. O
-  corte passa a ser preso entre 0 e 100 na leitura da URL, e não confiado.
-- Um teste de arquitetura passa a percorrer o grafo real de imports e reprovar
-  ilha cliente que alcance Drizzle ou builtin `node:`, parando em módulo
-  `"use server"` — a porta legítima. O slider importava uma constante de
-  `app/filter-state.ts` e levava o contexto de matching, `node:crypto` e
-  `node:dns` para o bundle do browser; `next build` recusou a página inteira
-  com um erro que nomeava um esquema de URI, não o import culpado. `pnpm check`
-  ficou verde do começo ao fim: type checker não tem opinião sobre em qual
-  runtime um módulo termina.
+- O caso que recusa semear QA manual fora de um banco provisionado passa a
+  declarar o tempo que precisa. Ele abre quatro processos Node, um por URL
+  recusada: 2,2s nesta máquina, e no runner estourou o limite padrão de 5s e
+  reprovou uma PR que não tocava o arquivo.
+
+### O que não é óbvio no diff
+
+- O agrupamento é de **apresentação**: os registros continuam separados, e
+  `closedAt` e as chaves estrangeiras das candidaturas não são tocados.
+- A linha escolhida é a de **menor id**, nunca a de melhor nota — nota é por
+  candidato, e uma linha canônica que mudasse de leitor para leitor faria o
+  mesmo link significar vagas diferentes.
+- O predicado entra em `boardConditions`, que lista e contagem compartilham, e
+  por isso o rodapé conta linhas agrupadas em vez de publicações.
+- É um anti-join, não uma subconsulta por linha: o Postgres resolve numa
+  passada e o acervo pagou 36ms contra 35ms sem ele. Nenhum índice novo,
+  nenhuma migration.
+- Uma marca por país, não por publicação: três cidades brasileiras davam três
+  bandeiras iguais lado a lado. O rótulo então diz quantas são.
+- `DD`, `FX`, `UK` e outros ficam fora da tabela do ICU: o CLDR guarda o
+  passado e chama `DD` de "Germany" e `FX` de "France", então uma varredura
+  alfabética entregava o código morto. `UK` é reservado e não tem bandeira; o
+  código do país é `GB`.
 
 ## [1.17.1] - 2026-09-20
 
