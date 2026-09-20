@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.17.1] - 2026-09-20
+
 ### Corrigido
 
 - O CI passou a reprovar **no mesmo commit que tinha passado de manhã**: quatro
