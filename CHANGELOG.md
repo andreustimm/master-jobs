@@ -9,13 +9,11 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
-## [1.18.1] - 2026-09-20
-
 ### Corrigido
 
-- **O 504 de `/candidate/skills`, encontrado nos logs da Vercel.** A tela
-  respondia 200 quando pedida sozinha e 504 quando pedida duas vezes — os logs
-  de produção trazem o par cru: um 200, e 266ms depois um 504 na mesma rota.
+- **O 504 de `/candidate/skills`, achado nos logs da Vercel.** A tela respondia
+  200 quando pedida sozinha e 504 quando pedida duas vezes — os logs trazem o
+  par cru: um 200, e 266ms depois um 504 na mesma rota.
 
   `measureSkillDemand` disparava **três** consultas num `Promise.all` contra um
   pool de **três** conexões. Uma requisição sozinha cabe, e é por isso que a
@@ -27,13 +25,45 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   sempre sobrar conexão para o resto da requisição.
 
 - A régua de `tests/db-fan-out.test.ts` era `<= POOL`, que aprova exatamente o
-  caminho que esgota o pool. Passa a ser `POOL - 1`, e na primeira execução
-  encontrou um segundo caminho latente: `ownEvidence`, da tela de trilhas,
-  também pedia as três conexões de uma vez.
+  caminho que esgota o pool. Passa a ser `POOL - 1`, e encontrou mais **três**
+  caminhos: `ownEvidence` (criação de trilha), `trackOverview` — este criado
+  pela própria correção, que é o argumento a favor da régua em vez da varredura
+  — e a saúde das capturas de `/searches`.
 
 - Um caso de browser novo pede a tela de skills **duas vezes ao mesmo tempo** e
   exige 200 nas duas. Era o teste que faltava: toda a suíte pedia uma página por
   vez, e o defeito só existe com duas.
+
+- O caso do currículo na fila reprovava em três de cinco execuções: ele digitava
+  no editor enquanto o shell ainda estava `inert`. Tecla perdida não muda o
+  currículo, currículo igual não enfileira repontuação, e o cartão lia `idle`.
+  Agora espera o shell vivo e confirma que o texto mudou.
+
+## [1.18.1] - 2026-09-20
+
+### Corrigido
+
+- A rota de diagnóstico de `/candidate/skills` passa a dar prazo próprio a cada
+  passo. Ela morria junto com a tela — a Vercel mata o processo aos 30s e nada
+  voltava —, que é exatamente a cegueira que ela existe para remover. Agora o
+  que já mediu volta, e o passo que estourou é nomeado.
+
+  O log da Vercel para o 504 traz **uma linha só**, `Vercel Runtime Timeout
+  Error`, sem nenhum registro da aplicação: o processo é morto, não falha. Por
+  isso o Sentry nunca viu esse erro, e não veria — a falha mais visível do
+  produto é a única invisível na telemetria.
+
+- A lista de vagas agrupada pagava **215ms sobre uma lista de 61ms**: os países
+  de cada linha vinham de uma subconsulta correlacionada na projeção, ou seja,
+  cinquenta varreduras do acervo para responder cinquenta vezes a mesma
+  pergunta. Agora uma consulta só resolve a página inteira, com um join contra
+  as linhas já escolhidas: **79ms**, contra 59ms sem agrupar.
+
+  Achado lendo o Sentry: dois dos issues abertos eram `canceling statement due
+  to statement timeout` durante a varredura diária, e a consulta nomeada num
+  deles é a facet de fontes — a mesma família que o agrupamento tinha acabado
+  de encarecer. Medir antes de supor mostrou que o anti-join custava 1ms e a
+  subconsulta por linha custava o resto.
 
 ## [1.18.0] - 2026-09-20
 
