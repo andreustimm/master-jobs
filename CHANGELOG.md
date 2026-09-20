@@ -9,6 +9,24 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- A conferência pós-deploy reprovou na primeira execução real por defeito dela
+  mesma: procurava "número com dois pontos" no HTML e achou o hash de um asset
+  (`022.617.46`) em vez da versão. A página passa a declarar
+  `data-app-version` e o workflow lê esse atributo; o teste prende os dois lados
+  do contrato. Produção estava correta e servindo 1.17.1 o tempo todo.
+
+### Adicionado
+
+- Rota **temporária** `/api/diag-skills` (admin, somente leitura) para medir de
+  dentro do runtime da Vercel onde vão os 30 segundos de `/candidate/skills`. É a
+  última tela que ainda devolve 504 e já se esgotou o que dá para medir de fora:
+  4–5 consultas abaixo de 700ms cada, sem bloqueio no banco, 600ms num build de
+  produção local contra o mesmo banco e acontece até com candidato sem skill
+  nenhuma. Reduzir consultas simultâneas consertou `/searches/tracks/new` e não
+  consertou esta. A rota sai junto com a correção.
+
 ## [1.17.1] - 2026-09-20
 
 ### Corrigido

@@ -63,6 +63,12 @@ it("conferência de produção espera a versão promovida antes de julgar", () =
   expect(espera).toContain("steps.versao.outputs.esperada");
   expect(espera).toContain("exit 1");
 
+  // Pelo atributo, e não por "número com dois pontos": o primeiro casamento no
+  // HTML era hash de asset, e a primeira execução real reprovou comparando
+  // `022.617.46` com `1.17.1`. Os dois lados do contrato ficam presos aqui.
+  expect(espera).toContain("data-app-version=");
+  expect(readFileSync("app/footer.tsx", "utf8")).toContain("data-app-version={versao}");
+
   // Rota autenticada redireciona; nunca 5xx. `/p/` inexistente é 404 e não 403,
   // porque 403 confirmaria que o slug existe.
   const fumaca = passos.find((s) => s.name?.includes("Rotas públicas"))?.run ?? "";

@@ -47,7 +47,11 @@ export async function Footer({
     <footer className="mt-auto border-t border-[var(--hairline)]">
       {/* Mesmo shell do conteúdo: 95% úteis no celular, calha fixa acima. */}
       <div className="app-shell-content mx-auto flex w-full max-w-[1760px] flex-wrap items-center gap-x-4 gap-y-1 px-4 py-4 sm:px-6 lg:px-8">
-        <span className="type-meta font-mono text-muted-foreground">
+        {/* `data-app-version` é contrato com a fumaça pós-deploy: ela precisa
+            saber QUAL versão está servindo, e procurar "número com dois pontos"
+            no HTML achava hash de asset — foi assim que a conferência da 1.17.1
+            reprovou lendo `022.617.46`. */}
+        <span data-app-version={versao} className="type-meta font-mono text-muted-foreground">
           Master Jobs v{versao}
         </span>
 
