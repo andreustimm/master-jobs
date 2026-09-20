@@ -382,7 +382,10 @@ export async function trackSuggestion(candidateId: number, rawTerm: string): Pro
   if (!valid.ok) return { ok: false, code: valid.code };
   const primary = await ensurePrimaryTrack(candidateId);
   if (!primary?.target) return { ok: false, code: "primary_pending" };
-  const [catalog, evidence] = await Promise.all([listCatalog(), ownEvidence(candidateId)]);
+  // Em série: `ownEvidence` já consulta três coisas ao mesmo tempo e o pool tem
+  // três conexões. Ver o comentário em `app/candidate/skills/page.tsx`.
+  const catalog = await listCatalog();
+  const evidence = await ownEvidence(candidateId);
   const suggestion = suggestTrack({ term: valid.value, catalog, primary: primary.target });
   return {
     ok: true,

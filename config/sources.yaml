@@ -64,6 +64,22 @@ sources:
       restrição mais dura é autorização de trabalho, é a fonte de maior
       densidade de sinal do acervo.
 
+  # --- Vitrine de outsourcing com board público ------------------------------
+  - kind: greenhouse
+    handle: turing
+    label: Turing
+    rationale: >-
+      Das treze vitrines de outsourcing sondadas em 2026-09-20 (Revelo,
+      BairesDev, WillDom, Strider, VanHack, TECLA, Jobsity, BEON, Howdy,
+      Nearsure, Talently, Index.dev, Turing), a Turing é a única com board
+      público que já sabemos ler: Greenhouse, 21 vagas. Ressalva honesta — são
+      as vagas do time INTERNO da Turing, não os contratos do marketplace, e a
+      maioria é presencial nos EUA, que o scorer bloqueia por elegibilidade.
+      Entra porque nomeia o empregador, custa uma chamada por varredura e
+      ocasionalmente abre posição no Brasil. As outras doze não têm listagem
+      pública: a via delas é a vitrine, não a ingestão —
+      ver docs/sources-autenticadas.md.
+
   # --- Broad remote aggregators --------------------------------------------
   # These widen the funnel beyond known companies. Noisy by design; the scorer
   # filters, not the fetcher.

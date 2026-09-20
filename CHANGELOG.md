@@ -9,6 +9,84 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.17.1] - 2026-09-20
+
+### Corrigido
+
+- O CI passou a reprovar **no mesmo commit que tinha passado de manhã**: quatro
+  testes falharam às 13:42 UTC e os mesmos verdes às 05:07, na PR de release
+  #135. Duas causas, as duas de relógio misturado.
+  - `termCapture.createdAt` vinha do padrão do banco (`clock_timestamp()`),
+    enquanto `dailyRepeatPaused` compara 36 horas contra esse carimbo usando o
+    relógio da aplicação. Dois relógios na mesma conta dão respostas diferentes
+    conforme a hora real do dia. O carimbo passa a vir de `clock()`, que é de
+    onde vem a decisão, e um teste novo prende isso.
+  - Três casos de impersonação fixavam a validade do ator em
+    `2026-09-20T12:00:00.000Z`. `authorize` recebe o instante de quem chama e
+    nenhum chamador passa um — por decisão de pureza do domínio, o padrão é o
+    relógio real —, então a data virou bomba de tempo e explodiu ao passar da
+    hora. A validade agora é relativa.
+
+## [1.17.0] - 2026-09-20
+
+### Adicionado
+
+- Tela **`/admin/operacoes`**: o administrador pede varredura, busca por termo,
+  reconferência de expiradas ou repontuação, e vê quantas fontes estão sem erro,
+  a varredura mais recente e o erro de cada fonte quebrada. A tela **pede**; quem
+  executa é o GitHub Actions, porque função web morre em 30s e o sync leva de 18
+  a 27 minutos. Contexto novo `src/contexts/operations/` com uma porta —
+  `WorkflowDispatchPort` — e o adapter de `workflow_dispatch`; `varredura.yml`
+  ganha o input `rotina` e cada passo declara a que rotina pertence, então pedir
+  uma fatia não gasta cota das outras. Sem `GITHUB_DISPATCH_TOKEN` o botão
+  explica o que falta e a execução diária segue intacta.
+- `src/core/ingest/health.ts`: a saúde das fontes numa leitura só, usada pela
+  tela e pela CLI (`jho sources list`), que antes montava a própria consulta —
+  duas superfícies discordando sobre "fonte quebrada" era questão de tempo.
+- Workflow **`fumaca-producao.yml`**: depois de `main` avançar, espera até a
+  versão promovida estar realmente servindo — a página de login carrega a versão,
+  então a espera tem critério em vez de um `sleep` que testaria o deploy anterior
+  — e confere as rotas públicas: `/login` 200, rota autenticada 307, `/p/` de
+  slug inexistente 404 e `/offline.html` 200. Os dois defeitos de produção de
+  19–20/09 (500 por schema atrasado e 504 em duas telas) foram descobertos por
+  alguém abrindo o site; agora há quem repare antes.
+
+## [1.16.0] - 2026-09-20
+
+### Adicionado
+
+- Fonte **Turing** (Greenhouse, 21 vagas no probe): única das treze vitrines de
+  outsourcing sondadas em 2026-09-20 com board público legível. São vagas do
+  time interno da Turing, a maioria presencial nos EUA — entra porque nomeia o
+  empregador e custa uma chamada por varredura.
+- `docs/sources-autenticadas.md` ganha a seção das **vitrines de outsourcing e
+  staff augmentation**: o que a sondagem encontrou em treze plataformas (Revelo,
+  BairesDev, WillDom, Strider, VanHack, TECLA, Jobsity, BEON.tech, Nearsure,
+  Howdy, Talently, Index.dev, Turing), por que não há adapter a escrever onde a
+  listagem não é pública, a prioridade por evidência, o que o perfil precisa
+  dizer, a cadência que mantém a vitrine viva, como medir por canal e o limite
+  do LinkedIn para post de recrutador.
+
+### Corrigido
+
+- `/candidate/skills` e `/searches/tracks/new?term=…` devolviam **504** em
+  produção, aos 30s da função da Vercel, enquanto as outras telas respondiam em
+  1–5s e as mesmas leituras levavam 600ms num build de produção local contra o
+  mesmo banco. O traço que separava umas das outras era o número de consultas
+  simultâneas: as duas passavam de três, e o cliente abre três conexões
+  (`max: 3`). As leituras dessas telas passam a ser em série, a leitura da tela
+  de skills virou `app/candidate/skills/data.ts` para poder ser medida, e
+  `tests/db-fan-out.test.ts` conta o pico de consultas em voo — 4 reprova.
+  O tamanho do pool agora está documentado como contrato com quem escreve tela.
+## [1.15.4] - 2026-09-20
+
+### Corrigido
+
+- `/jobs/<id não numérico>` respondia **500** em produção: `Number("abc")` é
+  `NaN` e `NaN` chegando à consulta estoura no PostgreSQL, então endereço errado
+  de alguém virava incidente no Sentry. A tela valida o id antes de consultar e
+  responde 404, como a tela de trilha já fazia.
+
 ## [1.15.3] - 2026-09-19
 
 ### Corrigido
@@ -341,6 +419,7 @@ como `ADR 00NN`.
   que houve. Certificado é chave pública, então aceitar as duas formas não
   afrouxa nada; desligar a verificação continua impossível.
 - Erro de configuração de banco nomeia a variável de origem e nunca o valor.
+
 ### Corrigido
 
 - O currículo de exemplo passa a ser escrito pela identidade que o banco já
@@ -353,6 +432,7 @@ como `ADR 00NN`.
   também sem concorrência nenhuma, bastando um currículo anterior com outro
   rótulo. O caminho virou upsert no índice parcial, com a mesma retentativa dos
   demais.
+
 ### Adicionado
 
 - O funil passa a dizer o estado da VAGA ao lado do estágio da candidatura —
@@ -365,6 +445,7 @@ como `ADR 00NN`.
   desempata por `id`, senão duas candidaturas salvas no mesmo instante trocam
   de lugar entre páginas e uma some. Estágio desconhecido na URL mostra o funil
   inteiro com um aviso, em vez de uma tela vazia sem explicação.
+
 ### Adicionado
 
 - Estado de arquivamento (`job.archived_at`) separado do fechamento da fonte, e

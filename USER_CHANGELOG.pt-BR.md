@@ -18,6 +18,39 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.17.1] - 2026-09-20T14:28:16.117Z
+
+### Corrigido
+
+- Correção interna de testes que falhavam dependendo da hora do dia; nada muda
+  no uso.
+
+## [1.17.0] - 2026-09-20T04:51:24.001Z
+
+### Adicionado
+
+- Uma tela de operações para pedir a busca de vagas novas, a conferência de
+  vagas expiradas e a repontuação, sem esperar a execução automática do dia.
+- Depois de cada publicação, o sistema confere sozinho se o site voltou no ar e
+  respondendo.
+
+## [1.16.0] - 2026-09-20T04:16:18.738Z
+
+### Adicionado
+
+- Mais uma fonte de vagas com empresa nomeada (Turing).
+
+### Corrigido
+
+- As telas de skills e de nova trilha voltam a abrir em vez de dar erro de
+  tempo esgotado.
+## [1.15.4] - 2026-09-20T03:02:27.338Z
+
+### Corrigido
+
+- Um link de vaga quebrado agora mostra "não encontrada" em vez de erro do
+  sistema.
+
 ## [1.15.3] - 2026-09-19T23:26:18.891Z
 
 ### Corrigido
@@ -160,6 +193,7 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   provedor já mantém, em vez de exigir uma cópia manual que envelhece. Quando a
   senha do banco é trocada do lado do provedor, o sistema continua no ar sem
   ninguém precisar atualizar nada à mão.
+
 ### Corrigido
 
 - Preparar uma versão de teste falhava quando já existia um currículo de exemplo

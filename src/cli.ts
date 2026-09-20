@@ -77,6 +77,7 @@ import { loadSources } from "./core/sources/config.ts";
 import { getAdapter, parseFetchableSourceKind } from "./core/sources/registry.ts";
 import { clock } from "./core/clock.ts";
 import { guardIngestion } from "./core/ingest/guard.ts";
+import { sourceHealth } from "./core/ingest/health.ts";
 import { IngestionBlockedError } from "./core/ingest/environment.ts";
 import {
   CAPTURE_LIMIT,
@@ -487,24 +488,22 @@ sources
   .description("Show every configured source and its last sync result")
   .action(async () => {
     await withDb(async () => {
-      const configs = await loadSources();
-      const rows = await getDb().select().from(source);
-      const byId = new Map(rows.map((r) => [r.id, r]));
+      // A mesma leitura que a tela de operações usa: uma fonte quebrada não
+      // pode ser "quebrada" aqui e "ok" lá.
+      const sources = await sourceHealth();
       console.log(c.bold("\n  KIND             HANDLE               LAST SYNC            JOBS   STATUS"));
-      for (const config of configs) {
-        const id = `${config.kind}:${config.handle}`;
-        const row = byId.get(id);
-        const status = row?.lastStatus === "ok"
+      for (const entry of sources) {
+        const status = entry.status === "ok"
           ? c.green("ok")
-          : row?.lastStatus === "error"
+          : entry.status === "error"
             ? c.red("error")
             : c.dim("never");
         console.log(
-          `  ${truncate(config.kind, 16)} ${truncate(config.handle || "(all)", 20)} ` +
-          `${truncate(row?.lastSyncedAt?.slice(0, 19).replace("T", " ") ?? "—", 20)} ` +
-          `${String(row?.lastJobCount ?? "—").padStart(5)}  ${status}`,
+          `  ${truncate(entry.kind, 16)} ${truncate(entry.handle || "(all)", 20)} ` +
+          `${truncate(entry.lastSyncedAt?.slice(0, 19).replace("T", " ") ?? "—", 20)} ` +
+          `${String(entry.lastJobCount ?? "—").padStart(5)}  ${status}`,
         );
-        if (row?.lastError) console.log(c.red(`      ↳ ${row.lastError}`));
+        if (entry.lastError) console.log(c.red(`      ↳ ${entry.lastError}`));
       }
       console.log();
     });

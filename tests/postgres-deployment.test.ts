@@ -37,10 +37,47 @@ it("lets a slow sync time out without taking the day's terms and scores with it"
   expect(sync?.["timeout-minutes"]).toBeLessThan(workflow.jobs.varrer["timeout-minutes"]);
   const after = steps.slice(steps.indexOf(sync!) + 1);
   expect(after.some((s) => s.run === "pnpm jho terms run")).toBe(true);
-  expect(after.some((s) => s.run === "pnpm jho jobs score --every-candidate" && !s.if)).toBe(true);
+  // O passo pode ter condição — a rotina pedida na tela do admin gateia cada um
+  // —, mas ela não pode depender do resultado do sync: é justamente isso que
+  // fazia o dia inteiro parar quando a busca nas fontes estourava o tempo.
+  const nota = after.find((s) => s.run === "pnpm jho jobs score --every-candidate");
+  expect(nota).toBeDefined();
+  expect(nota?.if ?? "").not.toContain("steps.sync");
   const alarm = after.find((s) => s.if?.includes("steps.sync.outcome == 'failure'"));
   expect(alarm?.if).toContain("always()");
   expect(alarm?.run).toContain("exit 1");
+});
+
+it("conferência de produção espera a versão promovida antes de julgar", () => {
+  // Um `sleep` fixo testaria o deploy anterior e passaria verde sem provar nada:
+  // o deploy da Vercel dispara do mesmo push. A página de login carrega a versão,
+  // então a espera tem critério.
+  const workflow = parse(readFileSync(".github/workflows/fumaca-producao.yml", "utf8")) as {
+    on: { push: { branches: string[] } };
+    jobs: { fumaca: { steps: { name?: string; run?: string }[] } };
+  };
+  expect(workflow.on.push.branches).toEqual(["main"]);
+
+  const passos = workflow.jobs.fumaca.steps;
+  const espera = passos.find((s) => s.name?.includes("Esperar o deploy"))?.run ?? "";
+  expect(espera).toContain("steps.versao.outputs.esperada");
+  expect(espera).toContain("exit 1");
+
+  // Rota autenticada redireciona; nunca 5xx. `/p/` inexistente é 404 e não 403,
+  // porque 403 confirmaria que o slug existe.
+  const fumaca = passos.find((s) => s.name?.includes("Rotas públicas"))?.run ?? "";
+  for (const linha of [
+    "conferir /login 200",
+    "conferir / 307",
+    "conferir /jobs 307",
+    "conferir /api/export 307",
+    "conferir /p/slug-que-nao-existe 404",
+  ]) {
+    expect(fumaca, linha).toContain(linha);
+  }
+  // A ordem importa: fumaça depois da espera, ou ela julga a versão velha.
+  expect(passos.findIndex((s) => s.name?.includes("Esperar o deploy")))
+    .toBeLessThan(passos.findIndex((s) => s.name?.includes("Rotas públicas")));
 });
 
 it("keeps scheduled retention on the PostgreSQL runtime contract", () => {

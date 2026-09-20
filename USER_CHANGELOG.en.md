@@ -18,6 +18,37 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.17.1] - 2026-09-20T14:28:16.117Z
+
+### Fixed
+
+- Internal fix for tests that failed depending on the time of day; nothing
+  changes in use.
+
+## [1.17.0] - 2026-09-20T04:51:24.001Z
+
+### Added
+
+- An operations screen to ask for new jobs, an expiry check or a rescore,
+  without waiting for the automatic daily run.
+- After each release, the system checks by itself that the site is back up and
+  answering.
+
+## [1.16.0] - 2026-09-20T04:16:18.738Z
+
+### Added
+
+- One more job source with a named employer (Turing).
+
+### Fixed
+
+- The skills screen and the new-track screen open again instead of timing out.
+## [1.15.4] - 2026-09-20T03:02:27.338Z
+
+### Fixed
+
+- A broken job link now shows "not found" instead of a system error.
+
 ## [1.15.3] - 2026-09-19T23:26:18.891Z
 
 ### Fixed
@@ -162,6 +193,7 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   already maintains, instead of requiring a manual copy that goes stale. When
   the database password is rotated on the provider's side, the system stays up
   without anyone updating anything by hand.
+
 ### Fixed
 
 - Preparing a test version failed when a sample résumé was already stored under
