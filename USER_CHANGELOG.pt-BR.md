@@ -18,6 +18,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- A lista de vagas voltou a carregar rápido quando as repetidas estão
+  agrupadas.
+
 ## [1.18.0] - 2026-09-20T18:22:03.370Z
 
 ### Adicionado

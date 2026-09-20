@@ -9,6 +9,20 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- A lista de vagas agrupada pagava **215ms sobre uma lista de 61ms**: os países
+  de cada linha vinham de uma subconsulta correlacionada na projeção, ou seja,
+  cinquenta varreduras do acervo para responder cinquenta vezes a mesma
+  pergunta. Agora uma consulta só resolve a página inteira, com um join contra
+  as linhas já escolhidas: **79ms**, contra 59ms sem agrupar.
+
+  Achado lendo o Sentry: dois dos issues abertos eram `canceling statement due
+  to statement timeout` durante a varredura diária, e a consulta nomeada num
+  deles é a facet de fontes — a mesma família que o agrupamento tinha acabado
+  de encarecer. Medir antes de supor mostrou que o anti-join custava 1ms e a
+  subconsulta por linha custava o resto.
+
 ## [1.18.0] - 2026-09-20
 
 ### Adicionado
