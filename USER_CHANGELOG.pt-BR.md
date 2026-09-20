@@ -18,6 +18,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Adicionado
+
+- Uma tela de operações para pedir a busca de vagas novas, a conferência de
+  vagas expiradas e a repontuação, sem esperar a execução automática do dia.
+
 ## [1.16.0] - 2026-09-20T04:16:18.738Z
 
 ### Adicionado
@@ -28,7 +33,6 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 - As telas de skills e de nova trilha voltam a abrir em vez de dar erro de
   tempo esgotado.
-
 ## [1.15.4] - 2026-09-20T03:02:27.338Z
 
 ### Corrigido

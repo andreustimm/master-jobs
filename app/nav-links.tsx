@@ -69,6 +69,11 @@ export function NavLinks({
           {t("admin.nav")}
         </TransitionLink>
       )}
+      {isAdmin && (
+        <TransitionLink href="/admin/operacoes" className={linkClass} data-testid="nav-admin-operations">
+          {t("operations.nav")}
+        </TransitionLink>
+      )}
     </>
   );
 }

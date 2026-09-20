@@ -334,6 +334,22 @@ describe("searches and tracks are the candidate's own (ADR-006)", () => {
     expect(page).not.toContain("getJobDetail(candidateId, Number(id))");
   });
 
+  it("a tela de operações guarda por admin e pede sem executar", () => {
+    // O trabalho leva minutos e a função web morre em 30s: a tela pede e quem
+    // executa é o GitHub Actions. Se ela passar a rodar rotina aqui dentro, o
+    // 504 volta — foi assim que /candidate/skills caiu.
+    const page = read("app/admin/operacoes/page.tsx");
+    expect(page).toContain('await requirePage("admin:access")');
+    expect(page).not.toMatch(/syncAll|runVerifyQueue|scoreAll/);
+
+    const actions = read("app/admin/operacoes/actions.ts");
+    const guardAt = actions.indexOf('await guard("admin:access")');
+    expect(guardAt).toBeGreaterThan(-1);
+    expect(guardAt).toBeLessThan(actions.indexOf("requestRoutine("));
+    // Nenhum id de candidato entra: manutenção é do acervo.
+    expect(actions).not.toContain("candidateId");
+  });
+
   it("IT-123 capture health is an admin page that reads aggregates only", () => {
     const page = read("app/admin/captures/page.tsx");
     expect(page).toContain('await requirePage("admin:access")');

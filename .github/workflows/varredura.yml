@@ -28,8 +28,19 @@ on:
     # 06:00 UTC = 03:00 em São Paulo. Fora do horário comercial de quem hospeda
     # as vagas, e o resultado está pronto quando o dia começa aqui.
     - cron: "0 6 * * *"
-  # Para rodar à mão depois de mexer em `config/sources.yaml`, sem esperar o dia.
+  # Para rodar à mão depois de mexer em `config/sources.yaml`, sem esperar o dia,
+  # e para a tela de operações do administrador pedir uma fatia só.
+  #
+  # O padrão é `tudo`, que é o que a cron faz: um disparo sem escolha não pode
+  # significar menos do que a execução automática significa.
   workflow_dispatch:
+    inputs:
+      rotina:
+        description: "O que rodar"
+        required: false
+        default: tudo
+        type: choice
+        options: [tudo, sync, termos, recheck, rescore]
 
 # Duas varreduras simultâneas dobrariam a carga contra as APIs de terceiros e
 # disputariam as mesmas linhas da fila de captura. `cancel-in-progress: false`
@@ -99,6 +110,10 @@ jobs:
         id: sync
         continue-on-error: true
         timeout-minutes: 45
+        if: >-
+          github.event_name != 'workflow_dispatch' ||
+          inputs.rotina == 'tudo' ||
+          inputs.rotina == 'sync'
         run: pnpm jho jobs sync
 
       # 1b. Repetir as buscas por termo salvas. Depois do sync, que já gastou a
@@ -110,22 +125,42 @@ jobs:
       - name: Buscar os termos salvos
         id: termos
         continue-on-error: true
+        if: >-
+          github.event_name != 'workflow_dispatch' ||
+          inputs.rotina == 'tudo' ||
+          inputs.rotina == 'termos'
         run: pnpm jho terms run
 
       # 2. Capturar a descrição das que valem a pena. O corte de fit evita gastar
       #    requisição com vaga que não seria lida de todo jeito.
       - name: Enfileirar captura
+        if: >-
+          github.event_name != 'workflow_dispatch' ||
+          inputs.rotina == 'tudo' ||
+          inputs.rotina == 'termos'
         run: pnpm jho scrape queue --min-fit 45
 
       - name: Capturar
+        if: >-
+          github.event_name != 'workflow_dispatch' ||
+          inputs.rotina == 'tudo' ||
+          inputs.rotina == 'termos'
         run: pnpm jho scrape run --limit 300
 
       # 3. Reconferir se o que já está no banco continua aberto. É o que o cron
       #    da Vercel faz aos pedaços; aqui a fila inteira cabe numa rodada.
       - name: Enfileirar reconferência
+        if: >-
+          github.event_name != 'workflow_dispatch' ||
+          inputs.rotina == 'tudo' ||
+          inputs.rotina == 'recheck'
         run: pnpm jho jobs recheck queue
 
       - name: Reconferir
+        if: >-
+          github.event_name != 'workflow_dispatch' ||
+          inputs.rotina == 'tudo' ||
+          inputs.rotina == 'recheck'
         run: pnpm jho jobs recheck run --max 400
 
       # 4. Repontuar quem pediu.
@@ -138,6 +173,10 @@ jobs:
       # Aqui a fila é drenada de vez. Quem não quiser esperar até amanhã tem
       # `jho jobs rescore run` na mão.
       - name: Repontuar a fila
+        if: >-
+          github.event_name != 'workflow_dispatch' ||
+          inputs.rotina == 'tudo' ||
+          inputs.rotina == 'rescore'
         run: pnpm jho jobs rescore run
 
       # 5. E garantir que ninguém ficou para trás.
@@ -146,6 +185,10 @@ jobs:
       # nenhum até alguém pontuar. Sem isto, o acervo cresceria e só quem
       # salvasse um currículo veria as vagas do dia.
       - name: Pontuar as vagas novas
+        if: >-
+          github.event_name != 'workflow_dispatch' ||
+          inputs.rotina == 'tudo' ||
+          inputs.rotina == 'rescore'
         run: pnpm jho jobs score --every-candidate
 
       # 4. Olhar para as fontes.

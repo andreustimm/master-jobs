@@ -651,6 +651,31 @@ export const ptBR = {
     referencedBy: "Candidaturas que citam esta versão",
   },
   /** Administração de contas (AUTH-02). */
+  operations: {
+    title: "Operações",
+    nav: "Operações",
+    lead: "Pedir manutenção do acervo. O trabalho roda fora daqui e leva minutos; esta tela pede e mostra o estado.",
+    routineAll: "Rodar a varredura inteira",
+    routineSync: "Buscar vagas novas nas fontes",
+    routineTerms: "Repetir as buscas por termo",
+    routineRecheck: "Conferir se as vagas expiraram",
+    routineRescore: "Repontuar as vagas",
+    request: "Pedir",
+    requested: "Pedido enviado. A rotina roda fora desta tela; o estado abaixo atualiza quando ela termina.",
+    notConfigured:
+      "Sem credencial para pedir na hora: falta a variável GITHUB_DISPATCH_TOKEN. A varredura diária continua rodando no horário.",
+    rejected: "Quem executa recusou o pedido (HTTP {status}).",
+    unknownRoutine: "Rotina desconhecida.",
+    sourcesTitle: "Fontes",
+    sourcesSummary: "{ok} de {total} sem erro",
+    sourcesBroken: "{count} com erro",
+    lastSync: "Última varredura",
+    never: "nunca",
+    brokenTitle: "Fontes com erro",
+    howItRuns: "Quem executa",
+    howItRunsBody:
+      "A rotina roda no GitHub Actions, e não nesta aplicação: função web morre em 30 segundos e o sync leva de 18 a 27 minutos. Há também a execução diária automática.",
+  },
   admin: {
     title: "Usuários",
     nav: "Usuários",
