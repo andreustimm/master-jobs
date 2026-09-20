@@ -18,6 +18,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- The skills screen no longer hangs when opened twice in a row — that was the
+  cause of the timeout error it kept showing. The same fix covers creating a
+  track from a term and the Searches screen.
+
 ## [1.18.1] - 2026-09-20T20:06:42.067Z
 
 ### Fixed

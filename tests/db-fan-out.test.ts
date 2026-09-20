@@ -10,11 +10,22 @@
  *
  * O teste não mede tempo, que varia de máquina: mede o **pico de consultas em
  * voo**, que é a propriedade que o pool limita.
+ *
+ * **A régua é menor que o pool, e isso é o conserto de 2026-09-20.** Ela era
+ * `<= 3`, que aprova exatamente o caminho que esgota as três conexões. Uma
+ * requisição sozinha cabe em três e responde 200 — foi assim que esta tela
+ * passou por toda a suíte. Mas a instância serverless é reaproveitada entre
+ * requisições concorrentes, então duas na mesma instância pedem seis conexões a
+ * um pool de três, cada uma espera a outra, e as duas morrem aos 30s. Os logs
+ * de produção mostram o par: um 200, e 266ms depois um 504 na mesma rota.
+ *
+ * Por isso o limite é `POOL - 1`: uma leitura de tela precisa caber deixando
+ * conexão para o resto da requisição e para a requisição do lado.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { candidate, company, job, source } from "../src/core/db/schema.ts";
 import type { DB } from "../src/core/db/client.ts";
-import { ensurePrimaryTrack, trackSuggestion } from "../src/contexts/matching/index.ts";
+import { ensurePrimaryTrack, trackOverview, trackSuggestion } from "../src/contexts/matching/index.ts";
 import { candidateSkills } from "../src/contexts/skills/index.ts";
 import { loadSkillsScreen } from "../app/candidate/skills/data.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
@@ -57,6 +68,9 @@ async function peakInFlight(run: () => Promise<unknown>): Promise<number> {
 
 const POOL = 3;
 
+/** Uma conexão fica de fora de propósito — ver o cabeçalho. */
+const TETO = POOL - 1;
+
 async function seedOwner(): Promise<number> {
   const [owner] = await db
     .insert(candidate)
@@ -92,7 +106,23 @@ describe("leque de consultas por tela", () => {
       expect(Array.isArray(demand)).toBe(true);
     });
 
-    expect(peak).toBeLessThanOrEqual(POOL);
+    expect(peak).toBeLessThanOrEqual(TETO);
+  });
+
+  it("a visão geral das trilhas não passa do teto", async () => {
+    // Este caminho nasceu do próprio conserto: `ownEvidence` passou a usar duas
+    // conexões, e somar `listTracks` em paralelo devolvia o pico a três. A
+    // varredura por `Promise.all` só encontra o que já existe; o teto é que
+    // impede o próximo.
+    const candidateId = await seedOwner();
+    await ensurePrimaryTrack(candidateId);
+
+    const peak = await peakInFlight(async () => {
+      const visao = await trackOverview(candidateId);
+      expect(Array.isArray(visao.tracks)).toBe(true);
+    });
+
+    expect(peak).toBeLessThanOrEqual(TETO);
   });
 
   it("a sugestão de trilha não passa do tamanho do pool", async () => {
@@ -101,7 +131,7 @@ describe("leque de consultas por tela", () => {
 
     const peak = await peakInFlight(() => trackSuggestion(candidateId, "Laravel"));
 
-    expect(peak).toBeLessThanOrEqual(POOL);
+    expect(peak).toBeLessThanOrEqual(TETO);
   });
 
   it("uma leitura em série continua sendo uma consulta de cada vez", async () => {

@@ -9,6 +9,36 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- **O 504 de `/candidate/skills`, achado nos logs da Vercel.** A tela respondia
+  200 quando pedida sozinha e 504 quando pedida duas vezes — os logs trazem o
+  par cru: um 200, e 266ms depois um 504 na mesma rota.
+
+  `measureSkillDemand` disparava **três** consultas num `Promise.all` contra um
+  pool de **três** conexões. Uma requisição sozinha cabe, e é por isso que a
+  tela passava em toda a suíte. Mas a instância serverless é reaproveitada entre
+  requisições concorrentes: duas na mesma instância pedem seis conexões a um
+  pool de três, cada uma espera a outra, e a Vercel mata as duas aos 30s.
+
+  Agora são duas de cada vez, com a consulta pesada sozinha por último, para
+  sempre sobrar conexão para o resto da requisição.
+
+- A régua de `tests/db-fan-out.test.ts` era `<= POOL`, que aprova exatamente o
+  caminho que esgota o pool. Passa a ser `POOL - 1`, e encontrou mais **três**
+  caminhos: `ownEvidence` (criação de trilha), `trackOverview` — este criado
+  pela própria correção, que é o argumento a favor da régua em vez da varredura
+  — e a saúde das capturas de `/searches`.
+
+- Um caso de browser novo pede a tela de skills **duas vezes ao mesmo tempo** e
+  exige 200 nas duas. Era o teste que faltava: toda a suíte pedia uma página por
+  vez, e o defeito só existe com duas.
+
+- O caso do currículo na fila reprovava em três de cinco execuções: ele digitava
+  no editor enquanto o shell ainda estava `inert`. Tecla perdida não muda o
+  currículo, currículo igual não enfileira repontuação, e o cartão lia `idle`.
+  Agora espera o shell vivo e confirma que o texto mudou.
+
 ## [1.18.1] - 2026-09-20
 
 ### Corrigido
