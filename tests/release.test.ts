@@ -500,6 +500,19 @@ describe("retomada dos workflows de release", () => {
     );
   });
 
+  it("não abre PR de produção quando staging não tem nada além de main", () => {
+    // Depois de uma release, `sincronizar-apos-main` devolve `main` para `dev`, e
+    // o fast-forward leva esse commit a `staging`. `dev` fica à frente de
+    // `staging` (a guarda existente passa), mas produção já tem tudo: o
+    // `gh pr create` recusava com "No commits between main and staging" e o run
+    // ficava vermelho por um no-op — aconteceu na v1.15.3.
+    const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
+    expect(workflow).toContain("git fetch origin main staging --quiet");
+    expect(workflow).toContain('if [ "$(git rev-list --count origin/main..origin/staging)" = "0" ]; then');
+    const guarda = workflow.indexOf("origin/main..origin/staging");
+    expect(guarda).toBeLessThan(workflow.indexOf("gh pr create --base main --head staging"));
+  });
+
   it("a promoção reutiliza a versão persistida e ainda cria sua tag", () => {
     const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
     expect(workflow).toContain('if [ "$RESULTADO" = "already-released" ]; then');

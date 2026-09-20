@@ -285,6 +285,18 @@ jobs:
             exit 0
           fi
 
+          # `staging` pode estar idêntica a `main` e a promoção ainda ter tido o
+          # que fazer: depois de uma release, `sincronizar-apos-main` devolve
+          # `main` para `dev`, e o fast-forward acima leva esse commit de volta a
+          # `staging`. Nesse ponto não existe nada para produção, e `gh pr create`
+          # recusa com "No commits between main and staging" — deixando o run
+          # vermelho por um no-op.
+          git fetch origin main staging --quiet
+          if [ "$(git rev-list --count origin/main..origin/staging)" = "0" ]; then
+            echo "::notice::staging não tem commit além de main; nenhuma PR de produção a abrir."
+            exit 0
+          fi
+
           VERSAO=$(node -p "require('./package.json').version")
           gh pr create --base main --head staging \
             --assignee andreustimm \
