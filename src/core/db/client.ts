@@ -53,6 +53,11 @@ export function connectDatabase(
   const client = postgres(normalized, {
     ssl: local ? false : { rejectUnauthorized: true, ...(ca ? { ca } : {}) },
     prepare: false,
+    // Três conexões, e isso é contrato com quem escreve tela: nenhum trecho
+    // pode disparar mais de três consultas ao mesmo tempo. Uma quarta espera
+    // conexão, e em produção — função da Vercel contra o pooler do Supabase —
+    // essa espera não terminava: a tela morria nos 30s do runtime em vez de
+    // ficar um pouco mais lenta. `tests/db-fan-out.test.ts` mede o pico real.
     max: 3,
     idle_timeout: 20,
     connect_timeout: 10,

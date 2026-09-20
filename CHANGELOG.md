@@ -23,6 +23,18 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   dizer, a cadência que mantém a vitrine viva, como medir por canal e o limite
   do LinkedIn para post de recrutador.
 
+### Corrigido
+
+- `/candidate/skills` e `/searches/tracks/new?term=…` devolviam **504** em
+  produção, aos 30s da função da Vercel, enquanto as outras telas respondiam em
+  1–5s e as mesmas leituras levavam 600ms num build de produção local contra o
+  mesmo banco. O traço que separava umas das outras era o número de consultas
+  simultâneas: as duas passavam de três, e o cliente abre três conexões
+  (`max: 3`). As leituras dessas telas passam a ser em série, a leitura da tela
+  de skills virou `app/candidate/skills/data.ts` para poder ser medida, e
+  `tests/db-fan-out.test.ts` conta o pico de consultas em voo — 4 reprova.
+  O tamanho do pool agora está documentado como contrato com quem escreve tela.
+
 ## [1.15.4] - 2026-09-20
 
 ### Corrigido
@@ -364,6 +376,7 @@ como `ADR 00NN`.
   que houve. Certificado é chave pública, então aceitar as duas formas não
   afrouxa nada; desligar a verificação continua impossível.
 - Erro de configuração de banco nomeia a variável de origem e nunca o valor.
+
 ### Corrigido
 
 - O currículo de exemplo passa a ser escrito pela identidade que o banco já
@@ -376,6 +389,7 @@ como `ADR 00NN`.
   também sem concorrência nenhuma, bastando um currículo anterior com outro
   rótulo. O caminho virou upsert no índice parcial, com a mesma retentativa dos
   demais.
+
 ### Adicionado
 
 - O funil passa a dizer o estado da VAGA ao lado do estágio da candidatura —
@@ -388,6 +402,7 @@ como `ADR 00NN`.
   desempata por `id`, senão duas candidaturas salvas no mesmo instante trocam
   de lugar entre páginas e uma some. Estágio desconhecido na URL mostra o funil
   inteiro com um aviso, em vez de uma tela vazia sem explicação.
+
 ### Adicionado
 
 - Estado de arquivamento (`job.archived_at`) separado do fechamento da fonte, e

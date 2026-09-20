@@ -22,6 +22,10 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 - One more job source with a named employer (Turing).
 
+### Fixed
+
+- The skills screen and the new-track screen open again instead of timing out.
+
 ## [1.15.4] - 2026-09-20T03:02:27.338Z
 
 ### Fixed
@@ -172,6 +176,7 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   already maintains, instead of requiring a manual copy that goes stale. When
   the database password is rotated on the provider's side, the system stays up
   without anyone updating anything by hand.
+
 ### Fixed
 
 - Preparing a test version failed when a sample résumé was already stored under
