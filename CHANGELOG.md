@@ -9,6 +9,14 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- A conferência pós-deploy reprovou na primeira execução real por defeito dela
+  mesma: procurava "número com dois pontos" no HTML e achou o hash de um asset
+  (`022.617.46`) em vez da versão. A página passa a declarar
+  `data-app-version` e o workflow lê esse atributo; o teste prende os dois lados
+  do contrato. Produção estava correta e servindo 1.17.1 o tempo todo.
+
 ### Adicionado
 
 - Rota **temporária** `/api/diag-skills` (admin, somente leitura) para medir de
