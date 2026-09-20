@@ -18,6 +18,19 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-09-20T22:37:38.237Z
+
+### Added
+
+- Clicking a job posted across several countries now opens a screen of its own,
+  with every country side by side: pick where to apply and carry on from there.
+  Before, the click landed on a country the system had picked for you.
+
+### Changed
+
+- The row for a multi-country job no longer shows the action buttons — they
+  come back inside the chosen country's screen, where they mean something.
+
 ## [1.18.2] - 2026-09-20T21:52:14.716Z
 
 ### Fixed

@@ -325,6 +325,13 @@ export const ptBR = {
     withdrawn: "Retirada",
     archived: "Arquivada",
   },
+  /** Hub da vaga publicada uma vez por país. */
+  jobCountries: {
+    back: "← vagas",
+    lead: "Esta vaga foi publicada em {countries} países, em {postings} anúncios. Escolha onde quer se candidatar.",
+    withoutCountry: "{count} sem país identificado — a localização aparece como veio.",
+    empty: "Nenhuma publicação deste grupo continua aberta.",
+  },
   filters: {
     search: "buscar um termo…",
     searchHint: "Palavra inteira no cargo, na empresa e na descrição: “java” não traz “JavaScript”.",

@@ -82,6 +82,16 @@ entre `architect` e `senior_ic` no título compra 9.
 
 > **Invariante:** os pesos somam 100 antes das penalidades. Se você mexer em `WEIGHTS`, mantenha a soma em 100 — todo o vocabulário do projeto (`--min-fit 45`, o corte verde/amarelo em 70/50 do `jobs list`, o `--min-fit` do `report`) assume uma escala 0–100.
 
+> **Na tela, a nota é uma faixa, não um corte.** O filtro "Score" de `/jobs`
+> leva mínimo e máximo (`fit` e `fitMax`), no lugar dos botões de 45+/55+/60+/70+
+> que existiam antes. O campo aceita só de 0 a 100 e corta o resto enquanto se
+> digita, porque nota acima do teto do scorer não existe — e porque `fit=abc`
+> chegava à consulta como `NaN` e derrubava a página. O contrato completo está
+> em [`product/jobs-url-contract.md`](product/jobs-url-contract.md).
+>
+> Um teto tem uso real: procurar entre 55 e 70 encontra a vaga que o scorer
+> achou boa mas não ótima, que é onde costuma estar o que ele não sabe medir.
+
 Arredondamento: cada componente e o `fit` vão para 1 casa decimal (`Math.round(x * 10) / 10`), mas o `fit` é calculado **sobre os valores não arredondados**. Por isso as colunas do `jobs show` podem não somar exatamente o `fit` (ver o exemplo Paires adiante). `penalty` é gravado inteiro, sem arredondamento.
 
 ---

@@ -18,6 +18,19 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-09-20T22:37:38.237Z
+
+### Adicionado
+
+- Clicar numa vaga publicada em vários países agora abre uma tela só dela, com
+  todos os países lado a lado: escolha onde quer se candidatar e siga de lá.
+  Antes o clique levava a um país sorteado pelo sistema.
+
+### Alterado
+
+- A linha de uma vaga com vários países não mostra mais os botões de ação —
+  eles voltam dentro da tela do país escolhido, que é onde fazem sentido.
+
 ## [1.18.2] - 2026-09-20T21:52:14.716Z
 
 ### Corrigido

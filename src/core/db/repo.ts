@@ -143,6 +143,16 @@ export type BoardFilters = {
    */
   groupRepeats?: boolean;
   /**
+   * Only the postings of this job's group — the hub of a job published once
+   * per country.
+   *
+   * The anchor is any posting of the group, not a group id: the grouping is
+   * presentation, so there is no group record to point at. A link stays valid
+   * while the posting it names is open, and gives 404 when it closes, which is
+   * the honest answer — the regra 3 keeps the record, not the shop window.
+   */
+  sameGroupAs?: number;
+  /**
    * Hide jobs already sent.
    *
    * Read from `appliedAt`, not from the status name. The stamp is set once, on
@@ -341,6 +351,22 @@ function canonicalOfGroup(): SQL {
   )`;
 }
 
+const APELIDO_DA_ANCORA = "vaga_ancora";
+
+/** True for every posting that shares the anchor's group. */
+function sameGroupCondition(anchorId: number): SQL {
+  const ancora = alias(job, APELIDO_DA_ANCORA);
+  const [fonte, titulo, empresa] = groupKey(ancora);
+  const [minhaFonte, meuTitulo, minhaEmpresa] = groupKey(job);
+  return sql`exists (
+    select 1 from ${job} as ${sql.identifier(APELIDO_DA_ANCORA)}
+    where ${ancora.id} = ${anchorId}
+      and ${fonte} = ${minhaFonte}
+      and ${titulo} = ${meuTitulo}
+      and ${empresa} = ${minhaEmpresa}
+  )`;
+}
+
 const DAY_MS = 86_400_000;
 
 function freshnessCutoff(days: number): string {
@@ -388,6 +414,7 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
     conditions.push(sql`(${sql.join(likes, sql` or `)})`);
   }
   if (opts.groupRepeats) conditions.push(canonicalOfGroup());
+  if (opts.sameGroupAs !== undefined) conditions.push(sameGroupCondition(opts.sameGroupAs));
   if (opts.company) {
     // `strpos`, not `like`: the value travels as a parameter and `%` or `_`
     // inside a company name stay literal, with nothing to escape.

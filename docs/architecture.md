@@ -492,6 +492,7 @@ escrita: `seedPositioning()` insere/atualiza tarefas e insere o baseline com
 |---|---|---|
 | `src/core/money.ts` | Value object `Money` (amount + currency + period) | O scorer comparava número cru contra piso em USD, ignorando `comp_currency`. Puro e sem dependência — as taxas vêm do chamador |
 | `src/contexts/fx/` | Cotações com cache em `fx_rate` | `FxRateProvider` com adapters Frankfurter e ER API; application service controla fallback |
+| `src/core/country.ts` | País de uma localização escrita à mão, bandeira e nome traduzido | A mesma vaga chega uma vez por país — 2.543 linhas repetidas, 34% do acervo. Para juntá-las é preciso dizer qual país é cada uma. A tabela vem do ICU do Node, não de lista à mão, que envelheceria na primeira fonte nova |
 | `src/core/contacts.ts` | Rede profissional e referrals | Referrals são ~40% das contratações e `application.channel` não era preenchido por nada |
 | `src/core/mail/` | Parser MIME, classificador, extrator de alerta | Implementa a ADR 0008 |
 | `src/core/ingest/detect.ts` | Reconhece o ATS por uma URL | Colar um link é o caminho mais rápido de cadastrar vaga |
