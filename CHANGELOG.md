@@ -9,6 +9,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- `/jobs/<id não numérico>` respondia **500** em produção: `Number("abc")` é
+  `NaN` e `NaN` chegando à consulta estoura no PostgreSQL, então endereço errado
+  de alguém virava incidente no Sentry. A tela valida o id antes de consultar e
+  responde 404, como a tela de trilha já fazia.
+
 ## [1.15.3] - 2026-09-19
 
 ### Corrigido

@@ -324,6 +324,16 @@ describe("searches and tracks are the candidate's own (ADR-006)", () => {
     expect(page).not.toMatch(/searchParams|candidateId\s*=\s*Number/);
   });
 
+  it("um id de vaga não numérico é 404, não erro de servidor", () => {
+    // `Number("abc")` é `NaN`, e `NaN` chegando à consulta estoura no
+    // PostgreSQL: em produção `/jobs/abc` respondia 500 e alimentava o Sentry
+    // com endereço errado de alguém. A tela de trilha já fazia essa guarda.
+    const page = read("app/jobs/[id]/page.tsx");
+    expect(page).toContain("Number.isSafeInteger(jobId)");
+    expect(page).toMatch(/if \(!Number\.isSafeInteger\(jobId\) \|\| jobId <= 0\) notFound\(\);/);
+    expect(page).not.toContain("getJobDetail(candidateId, Number(id))");
+  });
+
   it("IT-123 capture health is an admin page that reads aggregates only", () => {
     const page = read("app/admin/captures/page.tsx");
     expect(page).toContain('await requirePage("admin:access")');
