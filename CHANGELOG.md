@@ -9,6 +9,22 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- O CI passou a reprovar **no mesmo commit que tinha passado de manhã**: quatro
+  testes falharam às 13:42 UTC e os mesmos verdes às 05:07, na PR de release
+  #135. Duas causas, as duas de relógio misturado.
+  - `termCapture.createdAt` vinha do padrão do banco (`clock_timestamp()`),
+    enquanto `dailyRepeatPaused` compara 36 horas contra esse carimbo usando o
+    relógio da aplicação. Dois relógios na mesma conta dão respostas diferentes
+    conforme a hora real do dia. O carimbo passa a vir de `clock()`, que é de
+    onde vem a decisão, e um teste novo prende isso.
+  - Três casos de impersonação fixavam a validade do ator em
+    `2026-09-20T12:00:00.000Z`. `authorize` recebe o instante de quem chama e
+    nenhum chamador passa um — por decisão de pureza do domínio, o padrão é o
+    relógio real —, então a data virou bomba de tempo e explodiu ao passar da
+    hora. A validade agora é relativa.
+
 ## [1.17.0] - 2026-09-20
 
 ### Adicionado

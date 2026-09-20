@@ -18,6 +18,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- Correção interna de testes que falhavam dependendo da hora do dia; nada muda
+  no uso.
+
 ## [1.17.0] - 2026-09-20T04:51:24.001Z
 
 ### Adicionado

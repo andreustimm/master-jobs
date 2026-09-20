@@ -243,6 +243,19 @@ describe("vínculo de recrutador pela fachada", () => {
   });
 });
 
+/**
+ * A validade do ATOR é conferida pelo relógio real, não pelo injetado.
+ *
+ * `authorize` recebe `now` de quem chama e nenhum chamador passa um: o padrão é
+ * `Date.now()`, e é assim que a decisão continua pura — domínio sem relógio
+ * (regra 4). A sessão emprestada, essa sim, nasce do relógio injetável, e é o
+ * que o último caso mede.
+ *
+ * Data fixa aqui é bomba de tempo: `2026-09-20T12:00:00.000Z` passou da hora e
+ * deixou o CI vermelho no mesmo commit que havia passado de manhã.
+ */
+const atorValido = () => new Date(Date.now() + 3_600_000).toISOString();
+
 describe("impersonação pela fachada", () => {
   it("a sessão emprestada entra como o alvo mas perde a administração", async () => {
     // A negativa é por `impersonatedBy !== null`, não por papel — e o teste
@@ -262,7 +275,7 @@ describe("impersonação pela fachada", () => {
       roles: ["admin"] as const,
       email: "admin@local.test",
       fullName: null,
-      expiresAt: "2026-09-20T12:00:00.000Z",
+      expiresAt: atorValido(),
       linkedCandidateIds: [] as number[],
       impersonatedBy: null,
     };
@@ -296,7 +309,7 @@ describe("impersonação pela fachada", () => {
         roles: ["admin"],
         email: "adm2@local.test",
         fullName: null,
-        expiresAt: "2026-09-20T12:00:00.000Z",
+        expiresAt: atorValido(),
         linkedCandidateIds: [],
         impersonatedBy: null,
       },
@@ -324,7 +337,7 @@ describe("impersonação pela fachada", () => {
         roles: ["admin"],
         email: "adm3@local.test",
         fullName: null,
-        expiresAt: "2026-09-20T12:00:00.000Z",
+        expiresAt: atorValido(),
         linkedCandidateIds: [],
         impersonatedBy: null,
       },
