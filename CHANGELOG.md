@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-09-20
+
 ### Adicionado
 
 - Tela **`/admin/operacoes`**: o administrador pede varredura, busca por termo,

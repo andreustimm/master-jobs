@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-09-20T04:51:24.001Z
+
 ### Added
 
 - An operations screen to ask for new jobs, an expiry check or a rescore,

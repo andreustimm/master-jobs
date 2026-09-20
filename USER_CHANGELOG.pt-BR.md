@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-09-20T04:51:24.001Z
+
 ### Adicionado
 
 - Uma tela de operações para pedir a busca de vagas novas, a conferência de
