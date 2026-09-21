@@ -52,6 +52,23 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   `JHO_PERF_LOG=1`. `Server-Timing` não serve a páginas: Server Components não
   escrevem cabeçalho. A análise está em `docs/engineering/performance-buscas.md`.
 
+### Corrigido
+
+- **No celular, um termo salvo longo cortava os controles do próprio cartão.**
+  Um termo de uma palavra só, no limite de 60 caracteres, deixava o cartão dele
+  em Buscas mais largo que a trilha: APAGAR aparecia só pela borda, e "mover
+  para" e MOVER saíam da tela. O cartão é um grid sem `grid-cols-1`, e o nome do
+  termo usava `break-words`, que não reduz a largura mínima do conteúdo — a
+  coluna implícita crescia até a largura do termo. É o
+  `BUG-20260919-mobile-searches-overflow` de volta por outro gatilho: a correção
+  de 19/09 tinha tratado a trilha e o rótulo do intervalo. A mesma semente
+  mostrou o gêmeo em Vagas, no chip "trazida pelo termo" a 320 px: o chip herda
+  `shrink-0` e `whitespace-nowrap` do botão. Agora o cartão tem coluna mínima
+  0, o termo e o título da trilha quebram em qualquer ponto, e os chips com
+  texto do usuário (trilha e termo) quebram linha. Achado pelo QA de jornada de
+  Buscas; `tests/e2e/setup.mjs` semeia o termo longo, e a varredura de larguras
+  reprovava sem a correção.
+
 ### Testes
 
 - **A região das funções é travada contra a do banco, e o número de consultas de

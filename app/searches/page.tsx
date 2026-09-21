@@ -179,7 +179,7 @@ export default async function SearchesPage() {
             <Card key={track.id} data-testid={`track-${track.id}`} data-primary={track.isPrimary ? "true" : "false"}>
               <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <CardTitle className="type-body-emphasis break-words" role="heading" aria-level={3} data-user-content>
+                  <CardTitle className="type-body-emphasis min-w-0 wrap-anywhere" role="heading" aria-level={3} data-user-content>
                     {track.name}
                   </CardTitle>
                   {track.isPrimary && <Badge data-testid={`track-primary-${track.id}`}>{t("searches.primary")}</Badge>}
@@ -252,12 +252,16 @@ export default async function SearchesPage() {
                     <div
                       key={term.id}
                       id={`term-${term.id}`}
-                      className="grid gap-2 rounded-md border p-3"
+                      // Coluna mínima 0 e quebra em qualquer ponto: um termo de uma
+                      // palavra só, no limite de 60 caracteres, fazia a coluna
+                      // implícita crescer até a largura dele, e o cartão cortava
+                      // APAGAR, "mover para" e MOVER no celular.
+                      className="grid grid-cols-1 gap-2 rounded-md border p-3"
                       data-testid={`term-${term.id}`}
                       data-state={term.status}
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="type-body-emphasis break-words" data-user-content>
+                        <span className="type-body-emphasis min-w-0 wrap-anywhere" data-user-content>
                           {term.term}
                         </span>
                         {term.status === "paused" && (

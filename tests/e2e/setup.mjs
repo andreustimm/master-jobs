@@ -357,6 +357,16 @@ try {
     { now: new Date(), impersonated: false },
   );
   if (!seededTerm.ok && seededTerm.code !== "term_duplicate") throw new Error(`E2E term: ${seededTerm.code}`);
+  // Termo de uma palavra só, no limite de 60 caracteres. Sem ponto de quebra, o
+  // cartão do termo crescia até a largura dele no celular e cortava APAGAR,
+  // "mover para" e MOVER — achado no QA de jornada de 2026-09-21, depois de o
+  // rótulo longo do intervalo já ter sido consertado no mesmo cartão.
+  const longTerm = await saveTerm(
+    { candidateId },
+    { term: "Kubernetesoperatorplatformengineeringobservabilityautomation", trackId: primaryTrack.id },
+    { now: new Date(), impersonated: false },
+  );
+  if (!longTerm.ok && longTerm.code !== "term_duplicate") throw new Error(`E2E long term: ${longTerm.code}`);
   // "Novas desde a última visita" parte do zero a cada execução.
   // Busca pedida agora: o termo mostra "de novo a partir de…", o rótulo mais
   // longo da tela Buscas, que é o que estourava o cartão no celular.

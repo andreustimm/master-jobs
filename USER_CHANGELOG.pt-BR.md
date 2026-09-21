@@ -26,6 +26,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   curta. A lista, os contadores dos filtros e o aviso de "sem descrição" mostram
   exatamente o mesmo de antes.
 
+### Corrigido
+
+- No celular, um termo salvo muito longo, sem espaço, deixava o cartão dele em
+  Buscas mais largo que a tela e escondia os botões de apagar e de mover. Agora
+  o termo quebra linha e os botões ficam ao alcance. O mesmo termo também
+  passava da borda no filtro "trazida pelo termo" da tela Vagas.
+
 ## [1.20.3] - 2026-09-21T14:32:47.656Z
 
 ### Corrigido
