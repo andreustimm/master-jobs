@@ -4,6 +4,7 @@ import { fixedClock, resetClock, setClock } from "../src/core/clock.ts";
 import type { DB } from "../src/core/db/client.ts";
 import { authEvent, authLoginToken, authSession, authUser } from "../src/core/db/schema.ts";
 import {
+  isResetTokenLive,
   redeemPasswordReset,
   requestPasswordReset,
   RESET_MAX_PER_HOUR,
@@ -270,6 +271,112 @@ describe("resgatar o link", () => {
       ok: false,
       reason: "invalid",
     });
+  });
+
+  it("UT-380 `isResetTokenLive` responde antes de a pessoa digitar a senha", async () => {
+    // A tela chama isto ao abrir o link. Sem ele a pessoa preenche o campo, envia
+    // e só então descobre que precisa de outro link — e como a mensagem de link
+    // morto e a de senha curta pedem ações diferentes, misturá-las faz alguém
+    // pedir link novo por ter digitado senha curta.
+    const { token } = await pedir();
+
+    expect(await isResetTokenLive(token, hashToken)).toBe(true);
+
+    // String vazia é recusada sem consultar o banco: `hashToken("")` teria hash
+    // válido, e uma linha com esse hash tornaria o vazio um token.
+    expect(await isResetTokenLive("", hashToken)).toBe(false);
+    expect(await isResetTokenLive("token-que-nunca-existiu", hashToken)).toBe(false);
+  });
+
+  it("UT-381 token já usado e token expirado ficam mortos para a verificação", async () => {
+    const { token } = await pedir();
+
+    await redeemPasswordReset(token, SENHA_NOVA, hashToken, deps());
+    // Depois de queimado, a mesma verificação diz não — que é o que impede a tela
+    // de abrir um formulário que vai falhar no envio.
+    expect(await isResetTokenLive(token, hashToken)).toBe(false);
+
+    // E o expirado: emitido para o passado.
+    await db.insert(authLoginToken).values({
+      tokenHash: hashToken("token-velho"),
+      email: "pessoa@local.test",
+      purpose: "reset",
+      expiresAt: "2026-08-20T11:00:00.000Z",
+    });
+    expect(await isResetTokenLive("token-velho", hashToken)).toBe(false);
+
+    // Token de login também não: o `purpose` vale nos dois caminhos.
+    await db.insert(authLoginToken).values({
+      tokenHash: hashToken("token-login"),
+      email: "pessoa@local.test",
+      purpose: "login",
+      expiresAt: "2026-08-20T13:00:00.000Z",
+    });
+    expect(await isResetTokenLive("token-login", hashToken)).toBe(false);
+  });
+
+  it("UT-382 conta que desaparece entre queimar o token e gravar a senha", async () => {
+    // Corrida estreita e real. O token JÁ foi consumido, e isso é correto: um
+    // link que falhou por conta inexistente não pode continuar valendo. O que a
+    // resposta não pode fazer é anunciar sucesso sobre nada.
+    const { token } = await pedir();
+    const eventos: string[] = [];
+
+    const resultado = await redeemPasswordReset(token, SENHA_NOVA, hashToken, deps({
+      setPassword: async () => false,
+      audit: {
+        record: async (e) => {
+          eventos.push(e.kind);
+        },
+        findUserId: async () => null,
+      },
+    }));
+
+    expect(resultado).toEqual({ ok: false, reason: "invalid" });
+    // A falha é auditada: é o único registro de que um link foi gasto sem efeito.
+    expect(eventos).toContain("reset_failed");
+    expect(eventos).not.toContain("reset_completed");
+    // E o token continua queimado, apesar da falha.
+    expect(await isResetTokenLive(token, hashToken)).toBe(false);
+  });
+
+  it("UT-383 token válido de e-mail sem conta não derruba sessão de ninguém", async () => {
+    // O `if (user)` antes de revogar: um token cuja conta não está em `auth_user`
+    // não pode virar `revokeAllFor(undefined)`. Sem a checagem, o comportamento
+    // depende de como o adapter trata um id ausente — e um deles apagaria tudo.
+    await db.insert(authLoginToken).values({
+      tokenHash: hashToken("token-orfao"),
+      email: "fantasma@local.test",
+      purpose: "reset",
+      expiresAt: "2026-08-20T13:00:00.000Z",
+    });
+    const outro = await seedUser("outro@local.test");
+    await db.insert(authSession).values({
+      tokenHash: "sessao-de-outro",
+      userId: outro,
+      expiresAt: "2026-09-01T00:00:00.000Z",
+    });
+
+    const revogados: number[] = [];
+    const resultado = await redeemPasswordReset("token-orfao", SENHA_NOVA, hashToken, deps({
+      // A conta não existe, então `setPassword` devolve false pelo caminho real.
+      sessions: {
+        create: async () => "t",
+        resolve: async () => null,
+        revoke: async () => {},
+        revokeAllFor: async (userId) => {
+          revogados.push(userId);
+          return 0;
+        },
+        purgeExpired: async () => 0,
+      },
+    }));
+
+    expect(resultado).toEqual({ ok: false, reason: "invalid" });
+    expect(revogados).toEqual([]);
+    // A sessão do outro usuário continua lá.
+    const sessoes = await db.select({ id: authSession.id }).from(authSession);
+    expect(sessoes).toHaveLength(1);
   });
 
   it("registra a conclusão para o operador auditar", async () => {
