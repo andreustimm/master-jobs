@@ -9,6 +9,47 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- **A localização da vaga passa a ser marcada como dado do usuário.** Ela vem do
+  acervo — "São Paulo, State of São Paulo, Brazil" tem acento e continua tendo com
+  a interface em inglês —, e sem `data-user-content` a verificação de vazamento de
+  português acusa dado que nunca foi tradução. Faltava em dois lugares: na linha
+  da lista, quando a vaga não é agrupada, e no popover da vaga, que está no DOM
+  mesmo fechado e portanto aparece em TODA tela com lista.
+
+  Os dois só apareceram porque `/jobs/<id>/paises` entrou nas varreduras: nenhuma
+  das rotas varridas antes tinha fixture com acento na localização. Guarda nova
+  achou dois defeitos no primeiro uso.
+
+### Adicionado
+
+- **`/jobs/<id>/paises` entra nas quatro guardas transversais.** Cada uma é um
+  array literal de caminhos — as duas varreduras de vazamento de português, a
+  medição de largura real em 375/768/1024 px e a varredura axe —, então **rota
+  nova não herda nenhuma delas** até alguém editar as quatro. O hub existia desde
+  a 1.19.0, com quatro chaves de dicionário só dele, e estava fora de todas.
+  A varredura de acessibilidade passou de 8 para 9 páginas.
+
+- Testes para as lacunas que a revisão profunda nomeou e que passavam em silêncio:
+
+  - `E2E-012` coletava a bandeira e a contagem por país e **afirmava só o
+    rótulo**: marca vazia, bandeira do país errado, ou a soma das duas cidades
+    brasileiras perdida passariam. Agora as três são afirmadas.
+  - O teto do filtro salarial estava preso por `10000001` — o limite ANTIGO de dez
+    milhões, que continua inválido por estar acima do novo: o caso passava pela
+    razão errada. `UT-070` prende 2.000.000 pelos dois lados da borda.
+  - `ungrouped` não tinha teste em nenhum nível, e o título do caso de round-trip
+    dizia "every new parameter". `UT-071` cobre o parâmetro que carrega a exceção
+    e não a regra, inclusive que só `1` desliga e que o link não o escreve à toa.
+  - `UT-072` e `UT-073` prendem duas correções da 1.20.1 que subiram sem teste:
+    `?pay=%20` é campo vazio e não erro, e as duas faixas invertidas avisam uma
+    vez só.
+  - O adapter do vigia de timeout — o que decide se algo é **realmente** enviado —
+    não tinha teste; os cinco casos existentes cercavam a função pura. Cinco casos
+    novos, incluindo o que importa em produção: sem `SENTRY_DSN`, e com DSN em
+    branco, nada é enviado.
+
 ## [1.20.1] - 2026-09-21
 
 ### Corrigido

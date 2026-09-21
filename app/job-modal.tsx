@@ -105,8 +105,14 @@ export function JobModal({
               {row.cluster}
             </Badge>
           )}
+          {/* `data-user-content` porque a localização vem do acervo: "São Paulo,
+              State of São Paulo, Brazil" tem acento e continua tendo com a
+              interface em inglês. O popover está no DOM mesmo fechado, então ele
+              é varrido junto com a tela — e só não era acusado porque nenhuma
+              fixture das rotas varridas tinha acento na localização. Entrou uma
+              (o hub dos países) e a verificação reprovou na hora. */}
           {row.locationRaw && (
-            <Badge variant="outline" className="type-micro">
+            <Badge variant="outline" className="type-micro" data-user-content>
               {row.locationRaw.slice(0, 70)}
             </Badge>
           )}

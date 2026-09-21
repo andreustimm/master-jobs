@@ -18,6 +18,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- With the interface in English, a job's location — which comes from the posting,
+  not from the translation — could be treated as untranslated text. It is now
+  recognised as posting data, both in the list and in the job detail panel.
+
 ## [1.20.1] - 2026-09-21T03:06:56.669Z
 
 ### Fixed
