@@ -1,5 +1,12 @@
 /**
- * O relatório de `jho jobs archive`, que é o que o operador lê para decidir.
+ * A jornada do operador em `jho jobs archive` (F-07, E2E-003), e o relatório que
+ * ela imprime.
+ *
+ * A primeira metade é a fronteira da CLI: flags, ordem dos efeitos, persistência,
+ * e a recusa de um corte inválido. A regra de elegibilidade tem suíte própria em
+ * `job-lifecycle` e `job-archive`; nada dela é reencenado aqui.
+ *
+ * A segunda metade é o relatório, que é o que o operador lê para decidir.
  *
  * `archiveClosedJobs` tem suíte própria e prova a decisão. O que não tinha caso
  * era a SAÍDA: cinco linhas condicionais, cada uma correspondendo a um estado
@@ -20,9 +27,10 @@
  * - "Há mais elegíveis além do teto" é a única indicação de que o trabalho não
  *   terminou. Sem ela, um acervo grande fica meio arquivado em silêncio.
  */
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { application, candidate, company, job, source } from "../src/core/db/schema.ts";
-import { banco, carregarCli, rodar } from "./cov-cli-harness.ts";
+import { banco, carregarCli, rodar, semCor } from "./cov-cli-harness.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
 vi.mock("commander", async () => (await import("./cov-cli-harness.ts")).commanderMock());
@@ -98,6 +106,91 @@ async function semearFechadas(
   }
   return ids;
 }
+
+const HA_MUITO_TEMPO = "2026-01-01T00:00:00.000Z";
+
+/** Uma vaga fechada de fonte online, do jeito que os casos E2E-003 usavam. */
+async function semearFechada(externalId: string): Promise<number> {
+  const db = banco();
+  await db
+    .insert(source)
+    .values({ id: "web:teste", kind: "greenhouse", handle: "teste", label: "Teste" })
+    .onConflictDoNothing();
+  const [linha] = await db
+    .insert(job)
+    .values({
+      fingerprint: `fp:${externalId}`,
+      contentHash: `hash:${externalId}`,
+      sourceId: "web:teste",
+      externalId,
+      companyName: "Acme",
+      title: `Vaga ${externalId}`,
+      url: `https://example.test/${externalId}`,
+      closedAt: HA_MUITO_TEMPO,
+      raw: {},
+    })
+    .returning({ id: job.id });
+  return linha!.id;
+}
+
+describe("jobs archive: a fronteira da CLI", () => {
+  it("E2E-003 sem --apply relata o que faria e não muda linha nenhuma", async () => {
+    const id = await semearFechada("velha");
+
+    const execucao = await rodar("jobs", "archive", "--closed-days", "90");
+
+    const saida = semCor(execucao.out);
+    expect(saida).toContain("dry-run");
+    expect(saida).toContain("1 elegível(is)");
+    expect(saida).toContain("Rode de novo com --apply");
+
+    const [linha] = await banco()
+      .select({ archivedAt: job.archivedAt })
+      .from(job)
+      .where(eq(job.id, id));
+    expect(linha!.archivedAt).toBeNull();
+  });
+
+  it("E2E-003 com --apply arquiva, e repetir não arquiva de novo", async () => {
+    const id = await semearFechada("velha");
+
+    const primeira = semCor((await rodar("jobs", "archive", "--apply")).out);
+    expect(primeira).toContain("1 arquivada(s)");
+
+    const [depois] = await banco()
+      .select({ archivedAt: job.archivedAt })
+      .from(job)
+      .where(eq(job.id, id));
+    expect(depois!.archivedAt).not.toBeNull();
+
+    const segunda = semCor((await rodar("jobs", "archive", "--apply")).out);
+    expect(segunda).toContain("0 elegível(is)");
+    expect(segunda).toContain("0 arquivada(s)");
+
+    const [final] = await banco()
+      .select({ archivedAt: job.archivedAt })
+      .from(job)
+      .where(eq(job.id, id));
+    // O carimbo é o da primeira execução: a segunda não reescreveu a data.
+    expect(final!.archivedAt).toBe(depois!.archivedAt);
+  });
+
+  it("E2E-003 corte inválido é recusado sem tocar no acervo", async () => {
+    const id = await semearFechada("velha");
+
+    const execucao = await rodar("jobs", "archive", "--closed-days", "-5", "--apply");
+
+    // Mesmo caminho de erro dos demais comandos: mensagem legível que sobe até
+    // o entrypoint, sem meia escrita no banco antes.
+    expect((execucao.erro as Error).message).toMatch(/inteiro maior ou igual a zero/);
+    expect(execucao.out).toBe("");
+    const [linha] = await banco()
+      .select({ archivedAt: job.archivedAt })
+      .from(job)
+      .where(eq(job.id, id));
+    expect(linha!.archivedAt).toBeNull();
+  });
+});
 
 describe("o inventário, antes de qualquer mutação", () => {
   it("UT-310 conta a preservada por candidatura e diz que nada mudou", async () => {
