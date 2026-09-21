@@ -851,7 +851,22 @@ try {
         sameSite: "Lax",
       },
     ]);
-    await webkitPage.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+    // `domcontentloaded` mais o gatilho que o cenário precisa, e NÃO
+    // `networkidle`.
+    //
+    // `networkidle` espera 500 ms sem requisição, e `/jobs` no acervo E2E tem mil
+    // vagas: entre prefetch de rota do Next, fontes e as imagens da lista, o
+    // WebKit não alcança esse silêncio e o `goto` estourava os 30 segundos. Como
+    // a exceção vinha de dentro do `try` da suíte inteira, ela pulava para o
+    // `catch` final e as duas centenas de verificações seguintes não rodavam: uma
+    // espera frágil apagava o relatório de tudo o mais.
+    //
+    // O cenário só precisa do gatilho do changelog clicável. Esperar por ele é
+    // determinístico, é mais rápido, e falha dizendo o que faltou.
+    await webkitPage.goto(`${BASE}/jobs`, { waitUntil: "domcontentloaded" });
+    await webkitPage
+      .locator('[data-testid="changelog-open"]')
+      .waitFor({ state: "visible", timeout: 20_000 });
     const { dialog: webkitDialog } = await openChangelog(webkitPage);
     const webkitVertical = await webkitDialog.evaluate((dialog) => {
       const scrollArea = dialog.querySelector("div.min-h-0.flex-1");
@@ -880,6 +895,17 @@ try {
         webkitVertical.firstHeaderHeight >= 44 &&
         webkitVertical.visibleHeaderHeight >= webkitVertical.firstHeaderHeight - 1,
       JSON.stringify(webkitVertical),
+    );
+  } catch (erro) {
+    // Isolado de propósito. Este é o único cenário que abre um SEGUNDO navegador,
+    // e antes uma falha aqui derrubava a suíte inteira pelo `catch` global —
+    // 42 de 262 verificações rodavam e o resto ficava sem resposta. A falha
+    // continua sendo falha, com o diagnóstico inteiro; o que muda é que ela não
+    // decide o destino dos outros cenários.
+    check(
+      "E2E-019c WebKit móvel: cenário concluiu sem exceção",
+      false,
+      (erro instanceof Error ? erro.stack ?? erro.message : String(erro)).replace(/\s+/g, " ").slice(0, 600),
     );
   } finally {
     await webkitBrowser.close();
@@ -1385,16 +1411,42 @@ try {
   // Dois `fetch` de dentro da própria página: requisições HTTP de verdade, com
   // o mesmo cookie de sessão, disparadas juntas. Uma segunda aba precisaria de
   // um contexto novo, e um contexto novo não carrega a sessão.
+  //
+  // O QUE ESTE CASO PROVA, E O QUE NÃO PROVA.
+  //
+  // Ele prova que concorrência real sobre as telas mais pesadas não devolve erro:
+  // o pool tem três conexões, e um caminho que pedisse as três exatas deixaria a
+  // requisição do lado esperando.
+  //
+  // Ele NÃO prova a ausência do 504. O 504 é o corte de 30 segundos da Vercel, e
+  // aqui não existe: o `postgres.js` enfileira sem erro quando o pool satura, e
+  // uma requisição lenta local termina em vez de morrer. Status 200 é condição
+  // necessária e insuficiente. O gate do teto por REQUISIÇÃO é
+  // `tests/db-fan-out.test.ts`, que mede o fan-out de cada composição de página
+  // contra `POOL - 1` — e é lá que a regressão reprova.
+  //
+  // Medir tempo aqui seria pior que não medir: um piso em milissegundos depende
+  // da carga da máquina, e um caso que reprova de vez em quando ensina a suíte a
+  // ser ignorada.
+  //
+  // O que foi acrescentado é o cenário REAL de produção: a instância serverless é
+  // reaproveitada entre rotas DIFERENTES, então duas telas pesadas distintas
+  // competem pelo mesmo pool. Só `/candidate/skills` duas vezes não exercitava
+  // isso.
   const statusEmParalelo = await page.evaluate(async (base) => {
+    const pedir = (rota) => fetch(`${base}${rota}`, { redirect: "manual" }).then((r) => [rota, r.status]);
     const respostas = await Promise.all([
-      fetch(`${base}/candidate/skills`, { redirect: "manual" }),
-      fetch(`${base}/candidate/skills`, { redirect: "manual" }),
+      pedir("/candidate/skills"),
+      pedir("/candidate/skills"),
+      pedir("/searches/tracks/new"),
+      pedir("/jobs?q=fixture&fit=0"),
     ]);
-    return respostas.map((resposta) => resposta.status);
+    return Object.fromEntries(respostas.map(([rota, status], n) => [`${n}:${rota}`, status]));
   }, BASE);
   check(
-    "E2E-013 duas requisições simultâneas à tela de skills respondem as duas",
-    statusEmParalelo.every((status) => status === 200),
+    "E2E-013 quatro requisições concorrentes em três telas pesadas respondem todas (não prova ausência de 504; o teto por requisição é tests/db-fan-out.test.ts)",
+    Object.values(statusEmParalelo).length === 4
+      && Object.values(statusEmParalelo).every((status) => status === 200),
     JSON.stringify({ statusEmParalelo }),
   );
 
@@ -5112,10 +5164,19 @@ try {
   const onlyLever = await listedIds();
   await page.reload({ waitUntil: "networkidle" });
   const leverStillChecked = await page.locator('[data-testid="filter-source-lever"]').isChecked();
+  // Ashby SOZINHO, desmarcando lever primeiro. A medição separada é o que permite
+  // afirmar depois que as duas juntas devolvem a união — e a união é o que
+  // distingue "o parâmetro repetido funciona" de "a contagem bateu".
   await page.locator('[data-testid="filters-source-summary"]').click();
+  await page.locator('[data-testid="filter-source-lever"]').uncheck();
   await page.locator('[data-testid="filter-source-ashby"]').check();
   await page.locator('[data-testid="filters-source-submit"]').click();
-  await settle(/source=ashby/);
+  await settle(/\/jobs\?(?!.*source=lever)(?=.*source=ashby)/);
+  const onlyAshby = await listedIds();
+  await page.locator('[data-testid="filters-source-summary"]').click();
+  await page.locator('[data-testid="filter-source-lever"]').check();
+  await page.locator('[data-testid="filters-source-submit"]').click();
+  await settle(/source=lever/);
   const bothUrl = page.url();
   const bothSources = await listedIds();
   await page.locator('[data-testid="filters-source-clear"]').click();
@@ -5123,18 +5184,71 @@ try {
   // leitura aconteceria antes da navegação — verde por corrida, não por efeito.
   await settle(/\/jobs\?(?!.*source=)/);
   const cleared = { url: page.url(), ids: await listedIds() };
+
+  // A asserção é sobre CONJUNTOS, não sobre contagens.
+  //
+  // A fixture tem exatamente duas fontes — `lever:e2e` com uma vaga e `ashby:e2e`
+  // com nove — então `bothSources.length === everySource.length` era verdade pelo
+  // tamanho, e continuaria verdade se o filtro devolvesse dez vagas ERRADAS. A
+  // união exata por id fecha isso: ela reprova se o OR virar AND (conjunto
+  // vazio), se a segunda fonte for ignorada (só lever), ou se qualquer id de
+  // fora da seleção entrar.
+  const ordenado = (ids) => [...ids].sort().join(",");
+  const uniao = ordenado([...new Set([...onlyLever, ...onlyAshby])]);
   check(
-    "term-search E2E-011 fontes em multi-seleção: uma fonte filtra, recarga mantém a marca, duas fontes repetem o parâmetro, limpar volta ao acervo",
+    "term-search E2E-011 fontes em multi-seleção: uma fonte filtra, recarga mantém a marca, duas fontes devolvem a UNIÃO das duas, limpar volta ao acervo",
     everySource.length > 1
       && onlyLever.length === 1
       && onlyLever[0] === "904000007"
+      && onlyAshby.length > 1
+      // Disjuntos: se um id aparecesse nos dois, a união não provaria nada.
+      && onlyAshby.every((id) => !onlyLever.includes(id))
       && leverStillChecked === true
       && /source=lever/.test(bothUrl)
       && /source=ashby/.test(bothUrl)
-      && bothSources.length === everySource.length
+      && ordenado(bothSources) === uniao
       && !/source=/.test(cleared.url)
-      && cleared.ids.length === everySource.length,
-    JSON.stringify({ everySource, onlyLever, leverStillChecked, bothUrl, bothSources, cleared }),
+      && ordenado(cleared.ids) === ordenado(everySource),
+    JSON.stringify({ everySource, onlyLever, onlyAshby, leverStillChecked, bothUrl, bothSources, cleared }),
+  );
+
+  // A faixa de Score vinda da URL, no browser.
+  //
+  // `fit=abc` estava provado só na unidade, e a unidade não vê o que a tela faz
+  // com o resultado: o valor recusado cai no PADRÃO (45), e o campo tem de mostrar
+  // esse padrão. Um campo vazio ali diria "todos os scores", que é outra coisa —
+  // e um `NaN` no atributo `value` faz o React reclamar e o campo ficar
+  // descontrolado.
+  const lerFaixa = async (url) => {
+    await page.goto(url, { waitUntil: "networkidle" });
+    return page.evaluate(() => ({
+      min: document.querySelector('[data-testid="filters-score-min"]')?.value ?? null,
+      max: document.querySelector('[data-testid="filters-score-max"]')?.value ?? null,
+      vagas: document.querySelectorAll('[data-testid^="job-link-"]').length,
+    }));
+  };
+
+  const fitPadrao = await lerFaixa(`${BASE}/jobs?q=fixture`);
+  const fitInvalido = await lerFaixa(`${BASE}/jobs?q=fixture&fit=abc`);
+  const fitNegativo = await lerFaixa(`${BASE}/jobs?q=fixture&fit=-30`);
+  const fitAcimaDoTeto = await lerFaixa(`${BASE}/jobs?q=fixture&fit=999`);
+  const fitVazio = await lerFaixa(`${BASE}/jobs?q=fixture&fit=`);
+
+  check(
+    "term-search E2E-015 faixa de Score da URL: valor ilegível cai no padrão, negativo e acima do teto são presos, vazio é «todos os scores»",
+    // Ilegível é indistinguível de não ter passado nada.
+    fitInvalido.min === fitPadrao.min
+      && fitInvalido.min !== null
+      && !Number.isNaN(Number(fitInvalido.min))
+      // Negativo é preso em zero, e zero é "todos": o campo fica vazio.
+      && fitNegativo.min === ""
+      // Acima do teto é preso no teto, e o teto filtra mais que o padrão.
+      && Number(fitAcimaDoTeto.min) > Number(fitPadrao.min)
+      && fitAcimaDoTeto.vagas <= fitPadrao.vagas
+      // Campo vazio é escolha declarada, não erro: mostra tudo.
+      && fitVazio.min === ""
+      && fitVazio.vagas >= fitPadrao.vagas,
+    JSON.stringify({ fitPadrao, fitInvalido, fitNegativo, fitAcimaDoTeto, fitVazio }),
   );
 
   await page.goto(payBase, { waitUntil: "networkidle" });
