@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-save-term-search
 expected: Na sessão emprestada o termo é salvo e a tela diz que ele espera a varredura diária; nenhuma plataforma entra em busca
 entry_points: /admin/users; /searches
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-borrowed-session-term-waits-baseline-salvo.png
+last_report: docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
 overlaps: ADMN-capture-health-aggregate
 ---
 

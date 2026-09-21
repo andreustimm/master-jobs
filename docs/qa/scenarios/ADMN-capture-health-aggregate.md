@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-monitor-term-capture-health
 expected: Um cartão por plataforma mostra cotas, capturas das últimas 24 horas e último erro; sessão emprestada e candidato sem papel admin são recusados
 entry_points: /admin/captures
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-capture-health-glance-baseline.png
+last_report: docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
 overlaps: SRCH-borrowed-session-waits-sweep
 ---
 

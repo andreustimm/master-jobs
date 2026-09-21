@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-save-term-search
 expected: O contador de novas leva a Vagas filtrada pelo termo, as novas aparecem marcadas, e a contagem cai depois da visita
 entry_points: /searches; /jobs?by=<id-do-termo>
-qa_status: untested
+qa_status: blocked-verify
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
 overlaps: JOBS-term-filter-descriptions
 ---
 

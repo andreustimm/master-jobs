@@ -26,6 +26,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   short. The list, the filter counters, and the "no description" notice show
   exactly what they showed before.
 
+### Fixed
+
+- On a phone, a very long saved term with no spaces made its card in Searches
+  wider than the screen and hid the delete and move buttons. The term now wraps
+  and the buttons stay within reach. The same term also ran past the edge in
+  the "brought by term" filter on the Jobs screen.
+
 ## [1.20.3] - 2026-09-21T14:32:47.656Z
 
 ### Fixed

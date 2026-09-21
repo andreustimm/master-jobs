@@ -52,6 +52,10 @@ const chipClass = (active: boolean) =>
     active && "font-medium",
   );
 
+/** Chip cujo texto vem do usuário — nome de trilha, termo salvo — e pode não caber numa linha. */
+const userChipClass = (active: boolean) =>
+  cn(chipClass(active), "h-auto min-h-7 max-w-full shrink py-1 text-left whitespace-normal wrap-anywhere");
+
 /**
  * One filter: its name in the label column, its controls in the wide one.
  *
@@ -75,7 +79,7 @@ function Row({
       <span className="self-start pt-1.5 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
         {label}
       </span>
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={label}>
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5" role="group" aria-label={label}>
         {children}
         {hint && <p className="w-full type-caption-sm text-muted-foreground">{hint}</p>}
       </div>
@@ -281,7 +285,7 @@ export function FilterBar({
               <TransitionLink
                 key={track.id}
                 href={href(base, state, { track: String(track.id), cluster: undefined })}
-                className={chipClass(state.track === track.id)}
+                className={userChipClass(state.track === track.id)}
                 aria-current={state.track === track.id ? "true" : undefined}
                 data-testid={`filter-track-${track.id}`}
                 data-user-content
@@ -316,7 +320,7 @@ export function FilterBar({
               <TransitionLink
                 key={term.id}
                 href={href(base, state, { by: String(term.id) })}
-                className={chipClass(state.by === term.id)}
+                className={userChipClass(state.by === term.id)}
                 aria-current={state.by === term.id ? "true" : undefined}
                 data-testid={`filter-by-${term.id}`}
                 data-user-content
