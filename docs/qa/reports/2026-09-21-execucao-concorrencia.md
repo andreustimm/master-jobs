@@ -24,10 +24,10 @@ escrever nada. `nohup … &` é negado pelo harness; o pipe não é.
 | # | Cenário | Persona | Status | Evidência |
 |---|---|---|---|---|
 | 1 | JOBS-concurrent-heavy-screens | Andreus em triagem | **Pass** | `evidence/2026-09-21-concurrent-heavy-screens.txt` |
-| 2 | JOBS-group-repeated-countries | Andreus em triagem | **Blocked** — fixture ausente | — |
-| 3 | JOBS-country-hub | Andreus em triagem | **Blocked** — fixture ausente | — |
-| 4 | JOBS-group-canonical-survives-filter | Andreus em triagem | **Blocked** — fixture ausente | — |
-| 5 | JOBS-anonymous-employer-never-groups | Andreus em triagem | **Blocked** — fixture ausente | — |
+| 2 | JOBS-group-repeated-countries | Andreus em triagem | **Pass** | `evidence/2026-09-21-quadro-com-fixtures-de-agrupamento.txt` |
+| 3 | JOBS-anonymous-employer-never-groups | Andreus em triagem | **Pass** | idem |
+| 4 | JOBS-country-hub | Andreus em triagem | Untested — falta percorrer | — |
+| 5 | JOBS-group-canonical-survives-filter | Andreus em triagem | Untested — falta percorrer | — |
 | 6 | JOBS-filter-fields-follow-url | Andreus em triagem | Blocked (needs human verify) | — |
 | 7 | JOBS-source-multi-select | Andreus em triagem | Blocked (needs human verify) | — |
 
@@ -62,22 +62,44 @@ no banco.
 O gate que mede o teto por requisição continua sendo `tests/db-fan-out.test.ts`.
 Este cenário é a confirmação pela interface, não o substituto dela.
 
-## 2 a 5. Os quatro de agrupamento — Blocked por ausência de fixture
+## 2 a 5. Os de agrupamento — o bloqueio era fixture, e foi corrigido nesta sessão
 
-Antes ficaram `Skipped` por corte de janela. O motivo real é outro, e é mais útil:
-**o ambiente de paridade não tem o estado que eles pedem.**
+Estavam `Skipped` por "corte de janela", e o motivo real era outro: **o ambiente de
+paridade não tinha o estado que pedem.** `setup-manual.ts` semeava uma única vaga —
+empregador nomeado, um país, `NO BLOCKERS · 1`.
 
-`tests/e2e/setup-manual.ts` semeia uma única vaga — "Senior Software Architect",
-Aurora Sistemas, `Remoto · Brasil`, empregador nomeado, um país. O quadro
-confirma: `NO BLOCKERS · 1`, `NAMED EMPLOYER · 1`, `RECENT · 1`.
+**Corrigido aqui.** O setup manual passou a semear a mesma vaga em quatro publicações
+(duas no mesmo país, como o Jobgether publica) mais uma cujo empregador é o rótulo da
+fonte. O quadro foi para `NO BLOCKERS · 3`, `NAMED EMPLOYER · 2`.
 
-Os quatro cenários precisam de vaga publicada em vários países, e um deles de vaga
-cujo empregador seja o nome da fonte. Nenhuma existe ali. Não há o que percorrer:
-o veredito não é "passou" nem "falhou" — é que o ambiente não oferece o estado.
+### JOBS-group-repeated-countries — Pass
 
-O `setup.mjs` do E2E automatizado **tem** essas fixtures (`904000101`, com quatro
-publicações, exercitado por `E2E-014`). Desbloquear é levá-las para o
-`setup-manual.ts`, e isso é mudança de código, não de execução de QA.
+```
+- group "posted in 3 countries"
+  - link "Netherlands"          🇳🇱
+  - link "France"               🇫🇷
+  - link "Brazil · 2 postings"  🇧🇷
+```
+
+Quatro publicações, três países, o repetido anunciado em vez de duplicado, e
+`1 – 3 de 3` na paginação: a linha agrupada conta como uma e nada some do total.
+
+### JOBS-anonymous-employer-never-groups — Pass
+
+```
+- link "Staff Engineer Anonymous Fixture"
+- StaticText "Grupo QA · employer hidden"
+```
+
+**Sem fileira de bandeiras.** É o que o charter exige, e é o caso em que agrupar
+colocaria empresas diferentes na mesma linha.
+
+### JOBS-country-hub e JOBS-group-canonical-survives-filter — Untested
+
+A fixture era o que faltava, e existe. A navegação até o hub e o teste de
+`?unblocked=1` topou com a instabilidade de sessão do driver descrita abaixo.
+
+Não marco `Blocked`: o ambiente é reprodutível e o caminho está aberto.
 
 ## 6 e 7 — seguem humanos
 
@@ -107,9 +129,16 @@ porque é o que permite a próxima sessão começar andando.
 
 ## Final Status
 
-**Um cenário fechado em `Pass`, com evidência e dupla execução.** Quatro saíram de
-`Skipped` para `Blocked` com a causa nomeada e o caminho de desbloqueio escrito —
-o que é mais acionável que um "pulei por falta de tempo". Dois seguem humanos.
+**Três cenários fechados em `Pass`**, com evidência: a concorrência nas seis entradas
+pesadas (dupla execução) e os dois de agrupamento que as fixtures novas destravaram.
+
+**Dois seguem `Untested`, por razão diferente da anterior:** o bloqueio de fixture
+caiu, e o que falta é percorrer — ambiente reprodutível, caminho aberto.
+
+**Dois seguem humanos por natureza.**
+
+O saldo de método: um "pulei por falta de tempo" virou causa nomeada, a causa foi
+corrigida em código, e dois vereditos saíram disso.
 
 Não é release readiness: o escopo desta sessão foi fechar vereditos pendentes, não
 percorrer o ciclo completo.
