@@ -9,6 +9,28 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Testes
+
+- **O tracker de QA passa a ser validado em todo `pnpm check` e no CI.**
+  `docs/qa/state.csv` é visão gerada e ignorada pelo git, então o esquema dos
+  cenários só era conferido quando alguém rodava `materialize_state.py` de
+  propósito — e a primeira execução em semanas, na 1.20.3, achou 15 registros
+  inválidos. `pnpm check:qa-tracker` roda o validador sem gerar bytecode, entra
+  no `pnpm check` e ganha passo próprio no job `qualidade`, que roda os gates um
+  a um. Custa menos de um segundo. `tests/qa-tracker-gate.test.ts` impede que o
+  gate saia de um dos dois sem alguém perceber, e `__pycache__/` entra no
+  `.gitignore`.
+
+### Documentação
+
+- Duas afirmações da 1.20.3 corrigidas, apontadas pela última rodada da revisão
+  profunda da PR #170. Os seis cenários em `retest_status: pending` são dois
+  com bug `fixed` nunca re-percorrido e quatro cujo reteste antecede a mudança de
+  superfície — não três e três. E o registro de regressão do
+  `BUG-20260921-job-detail-labels-untranslated` dizia que devolver
+  `Ver vaga na origem` ao JSX não reprovaria; depois da correção o texto é valor
+  do dicionário e reprova, enquanto a chave existir.
+
 ## [1.20.3] - 2026-09-21
 
 ### Corrigido
@@ -69,8 +91,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   afirmavam `pass` sem apontar evidência; dois afirmavam `fixed` sem SHA; dois
   usavam `qa_status: blocked`, também inexistente. Todos corrigidos conforme o
   esquema. Seis cenários devem reteste e ficam em `retest_status: pending`:
-  três com bug `fixed` nunca re-percorrido, e três com bug `verified` cujo
-  reteste antecede uma mudança de superfície. Vazio, no esquema, quer dizer
+  dois com bug `fixed` nunca re-percorrido, e quatro cujo reteste antecede uma
+  mudança de superfície — três com bug `verified` e um com bug `fixed`. Vazio, no esquema, quer dizer
   "reteste dispensado", e veredito de uma tela que mudou não vale; a história
   continua no relatório que `last_report` aponta. A visão volta a gerar: 56 cenários,
   zero erros.

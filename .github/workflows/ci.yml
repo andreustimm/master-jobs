@@ -53,6 +53,15 @@ jobs:
           pnpm check:release-ready \
             --commit-message-file "$RUNNER_TEMP/release-commit-message"
 
+      - name: Tracker de QA conforme o esquema
+        # `docs/qa/state.csv` é visão gerada e ignorada pelo git, então o
+        # esquema dos cenários só era conferido quando alguém rodava o
+        # validador de propósito. Quando alguém rodou, em 2026-09-21, achou 15
+        # registros inválidos em 15 arquivos, alguns de semanas antes. Custa
+        # menos de um segundo, e registro fora do esquema passa a reprovar
+        # aqui, no mesmo portão do `pnpm check` local.
+        run: pnpm check:qa-tracker
+
       - name: Tipos
         run: pnpm typecheck
 

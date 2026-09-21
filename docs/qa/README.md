@@ -240,7 +240,12 @@ reseta seus cenários para `untested`. Refactor sem efeito observável declara
 - `automation-backlog/`: intenção de futura automação, um item por arquivo.
 - `templates/`: symlinks para os formatos canônicos das skills; sem cópias.
 
-`state.csv` é visão gerada e nunca é editada ou commitada. `evidence/` é
+`state.csv` é visão gerada e nunca é editada ou commitada. Quem a gera é
+`pnpm check:qa-tracker`, que também valida cada cenário contra o esquema e roda
+dentro do `pnpm check` e do CI — cenário com enum inventado, `pass` sem
+evidência ou `fixed` sem SHA reprova o commit. Antes de entrar no gate, o
+validador só rodava sob demanda, e a primeira execução em semanas achou 15
+registros inválidos. `evidence/` é
 ignorado por padrão: screenshots ficam no disco ou como artefato de CI, e o
 relatório versionado referencia seus caminhos.
 

@@ -520,6 +520,9 @@ seção define a ordem e os gates, não duplica a cadência.
 Artefatos autorais (`personas`, `journeys`, `scenarios`, `charters`, `bugs` e
 `reports`) são commitados. `docs/qa/state.csv` é uma visão gerada e
 `docs/qa/evidence/` guarda evidência volumosa local/CI; ambos ficam ignorados.
+Como a visão não é versionada, quem confere o esquema dos cenários é
+`pnpm check:qa-tracker`, dentro do `pnpm check` e do CI: registro fora do
+esquema reprova o commit.
 Mudanças apenas na documentação ou nos metadados das skills validam estrutura,
 links e scripts afetados; não disparam a suíte do produto sem risco de runtime.
 O navegador de jornada é a dependência local fixada `agent-browser`; instale o
@@ -659,7 +662,7 @@ rtk pnpm jho report              # markdown pro vault Obsidian
 rtk pnpm jho profile             # valida profile.yaml
 
 # desenvolvimento
-rtk pnpm check                   # typecheck + testes — verde antes de qualquer entrega
+rtk pnpm check                   # changelogs, tracker de QA, typecheck, testes — verde antes de qualquer entrega
 rtk pnpm test:qa-skills          # contratos dos conversores do tracker QA
 rtk pnpm test:e2e                # browser real isolado: build, PostgreSQL e porta temporários
 rtk pnpm db:generate             # gera migration após editar schema.ts
