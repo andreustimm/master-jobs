@@ -851,18 +851,20 @@ try {
         sameSite: "Lax",
       },
     ]);
-    // `domcontentloaded` mais o gatilho que o cenário precisa, e NÃO
-    // `networkidle`.
+    // `domcontentloaded` em vez de `networkidle`, e o cenário isolado num `try`
+    // próprio — ver o `catch` no fim deste bloco.
     //
-    // `networkidle` espera 500 ms sem requisição, e `/jobs` no acervo E2E tem mil
-    // vagas: entre prefetch de rota do Next, fontes e as imagens da lista, o
-    // WebKit não alcança esse silêncio e o `goto` estourava os 30 segundos. Como
-    // a exceção vinha de dentro do `try` da suíte inteira, ela pulava para o
-    // `catch` final e as duas centenas de verificações seguintes não rodavam: uma
-    // espera frágil apagava o relatório de tudo o mais.
+    // O `networkidle` nunca alcança silêncio de rede em `/jobs` sobre o acervo
+    // E2E, e essa era a causa do abort original. Mas a troca não bastou: MEDIDO em
+    // cinco execuções, este `goto` estoura trinta segundos de forma
+    // INTERMITENTE, e estoura também em `/candidate`, que renderiza muito menos.
+    // Passou numa das cinco. Não é a rota, e não é o tipo de espera — é o WebKit
+    // nesta máquina sob carga.
     //
-    // O cenário só precisa do gatilho do changelog clicável. Esperar por ele é
-    // determinístico, é mais rápido, e falha dizendo o que faltou.
+    // O que está consertado aqui é o alcance da falha: ela reprova um check e a
+    // suíte continua. O porquê do WebKit ficou registrado na tarefa, com as cinco
+    // medições, em vez de coberto por um timeout maior — que esconderia lentidão
+    // real sem dizer nada.
     await webkitPage.goto(`${BASE}/jobs`, { waitUntil: "domcontentloaded" });
     await webkitPage
       .locator('[data-testid="changelog-open"]')
@@ -3913,6 +3915,18 @@ try {
     // `goto`. Sem esta separação a exceção subia para o `catch` da suíte e
     // levava consigo tudo o que vinha depois, incluindo as asserções sobre o que
     // `/p/[slug]` mostra a quem não tem sessão.
+    // O que a rede respondeu durante a navegação, para o diagnóstico dizer POR QUE
+    // ela não chegou. Sem isto a falha é só um timeout de locator, que não
+    // distingue 429 de 404, de redirecionamento para `/login`, ou de a requisição
+    // RSC nunca ter saído.
+    const respostasDoPerfil = [];
+    const coletor = (resposta) => {
+      const url = resposta.url();
+      if (url.includes("/p/") || url.includes("_rsc")) {
+        respostasDoPerfil.push(`${resposta.status()} ${url.replace(BASE, "").slice(0, 120)}`);
+      }
+    };
+    publicPage.on("response", coletor);
     try {
       publicPhases.push(await observeNavigation(
         publicPage,
@@ -3923,12 +3937,14 @@ try {
       check(
         "task-04 transição suave para o perfil público chega à rota",
         false,
-        (erro instanceof Error ? erro.message : String(erro)).replace(/\s+/g, " ").slice(0, 400),
+        `${(erro instanceof Error ? erro.message : String(erro)).replace(/\s+/g, " ").slice(0, 200)} | rede: ${respostasDoPerfil.slice(0, 6).join(" ; ") || "nenhuma resposta para /p/ ou _rsc"}`,
       );
       await publicPage.goto(`${BASE}${task04PublicHref}`, { waitUntil: "domcontentloaded" });
       await publicPage
         .locator('[data-testid="route-public-profile"]')
         .waitFor({ state: "visible", timeout: 20_000 });
+    } finally {
+      publicPage.off("response", coletor);
     }
   }
   const publicUserText = task04PublicHref
@@ -5369,10 +5385,30 @@ try {
 
   /* ------ term-search task_05: Buscas, trilhas, saúde das capturas e papéis ------ */
   const notice = page.locator('[data-testid="mutation-feedback"]');
-  /** Runs an action and reads the notice it leaves, then clears it for the next one. */
+  /**
+   * Runs an action and reads the notice it leaves, then clears it for the next one.
+   *
+   * Quando o aviso NÃO aparece, isto registra um check reprovado e devolve uma
+   * leitura vazia, em vez de deixar a exceção subir.
+   *
+   * A razão é a mesma que isolou o cenário do WebKit: este ajudante é chamado
+   * dezenove vezes, e a exceção de uma delas ia para o `catch` da suíte e levava
+   * consigo todos os casos seguintes — o relatório parava em 236 de 262 sem dizer
+   * nada sobre o resto. A ação que não deixou aviso continua sendo falha, e
+   * nomeada; o que ela deixa de ser é o fim da execução.
+   */
   const feedbackOf = async (act) => {
     await act();
-    await notice.waitFor({ timeout: 20_000 });
+    try {
+      await notice.waitFor({ timeout: 20_000 });
+    } catch {
+      check(
+        "term-search: toda ação deixa um aviso legível",
+        false,
+        `nenhum [data-testid="mutation-feedback"] em 20s · url=${page.url().replace(BASE, "")}`,
+      );
+      return { role: null, text: "", link: null };
+    }
     const link = page.locator('[data-testid="mutation-feedback-link"]');
     const read = {
       role: await notice.getAttribute("role"),

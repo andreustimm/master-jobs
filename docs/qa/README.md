@@ -111,6 +111,27 @@ Se um relatório vier com muito menos verificações do que o arquivo escreve,
 procure a exceção antes de acreditar no número: `N/N passaram` com `N` pequeno é
 uma suíte que parou, não uma suíte que passou.
 
+**Ajudante chamado muitas vezes precisa do mesmo tratamento.** `feedbackOf` é
+chamado dezenove vezes e esperava o aviso de mutação por 20 segundos; uma falha
+levava a suíte inteira. Hoje ele reprova um check nomeado e devolve leitura vazia.
+A regra geral: onde uma espera se repete, a falha dela não pode ser o fim da
+execução.
+
+## Conjunto de falhas que muda a cada execução é carga, não defeito
+
+Medido em cinco execuções seguidas da mesma árvore: WebKit, a transição suave do
+perfil público, `task-04 E2E-013` e `transition E2E-016` apareceram e
+desapareceram em combinações diferentes. Uma delas deu 262 de 263.
+
+Antes de investigar um cenário como defeito, **rode duas vezes**. As execuções que
+seguem um `pnpm check` completo (quatro workers mais cobertura) na mesma máquina
+falham mais, e a falha cai em cenários diferentes de cada vez.
+
+O caso do WebKit é o exemplo: estoura em `/jobs` com `networkidle`, em `/jobs` com
+`domcontentloaded` e em `/candidate`, que renderiza uma fração. Passou uma vez em
+cinco. Não é a rota nem o tipo de espera — e aumentar o timeout esconderia
+lentidão real sem dizer nada, então ele fica isolado e visível.
+
 ## Áreas
 
 | Código | Área |
