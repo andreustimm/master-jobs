@@ -10,7 +10,7 @@ qa_status: untested
 bug_ids: BUG-20260919-mobile-searches-overflow
 fix_status: fixed
 retest_status:
-fix_commits:
+fix_commits: 4ef5e79; 3ff3f1f
 evidence:
 last_report:
 overlaps: NAV-full-width-shell

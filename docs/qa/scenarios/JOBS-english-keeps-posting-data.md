@@ -9,10 +9,10 @@ entry_points: /jobs; /jobs/<id>; /jobs/<id>/paises
 qa_status: pass
 bug_ids: BUG-20260921-job-detail-labels-untranslated
 fix_status: fixed
-retest_status: verified
-fix_commits:
+retest_status: pass
+fix_commits: 23fa064
 evidence: docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md
-last_report: 2026-09-21-execucao-ingles-detalhe
+last_report: docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md
 overlaps: JOBS-country-hub; JOBS-group-repeated-countries
 ---
 

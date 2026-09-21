@@ -125,9 +125,61 @@ rotas, e os três são legítimos:
 Fica escrito porque a próxima pessoa a ler a saída da verificação vai encontrar os
 mesmos três e precisa saber que não são dívida.
 
+## O tracker não materializava, e ninguém sabia
+
+Achado de tabela, não de tela, e achado por acidente: ao conferir o esquema para
+escrever o veredito deste cenário, escrevi `retest_status: verified` — valor que
+não existe no enum. Rodar o materializador para me corrigir mostrou que a árvore
+**inteira** reprovava: **15 erros em 15 arquivos**, e `docs/qa/state.csv` não
+podia ser gerado.
+
+| Classe | Arquivos | O que era |
+|---|---:|---|
+| `retest_status: verified` | 8 | valor inexistente; o enum é `pass` |
+| `retest_status: pass` com `qa_status` não-`pass` | 4 | a superfície mudou depois do reteste e só metade do par foi zerada |
+| `qa_status: pass` sem `evidence` | 3 | veredito sem prova apontada |
+| `fix_status: fixed` sem `fix_commits` | 2 | correção afirmada sem SHA |
+| `qa_status: blocked` | 2 | valor inexistente; o enum é `blocked-verify` |
+
+Dois desses eram meus, da sessão anterior desta jornada (`qa_status: blocked`), e
+dois eram desta sessão. O resto vinha de ciclos anteriores. Nenhum era visível:
+**o validador só roda quando alguém materializa a visão, e a visão é ignorada
+pelo git** — então o único jeito de o erro aparecer é alguém rodar o script de
+propósito. Oito arquivos com o mesmo valor inventado mostram que ninguém rodou.
+
+Correções aplicadas, todas conformes ao esquema:
+
+- `verified` → `pass` nos oito.
+- `blocked` → `blocked-verify` nos dois.
+- Nos quatro em que a superfície mudou depois do reteste, `retest_status`
+  **zerado**: o veredito não vale mais, e a história continua no relatório que
+  `last_report` aponta. Zerar é a leitura honesta — manter um `pass` órfão diz
+  que algo foi conferido numa tela que não existe mais.
+- `evidence` preenchido com o relatório que produziu o veredito nos três.
+- `fix_commits` preenchido com `4ef5e79; 3ff3f1f` nos dois do
+  `BUG-20260919-mobile-searches-overflow`, recuperados da PR #125.
+
+Depois: `56 scenarios` e zero erros.
+
+**A lição de processo:** um validador que só roda sob demanda não é validador. O
+contrato do tracker vale exatamente enquanto alguém o executa, e oito ocorrências
+do mesmo erro são a medida de há quanto tempo ninguém executava.
+
 ## Decisões para um humano
 
-Nenhuma. A correção é mecânica, coberta e sem efeito em produção além do texto.
+Uma: **o validador do tracker deveria entrar num gate?** Ele é barato (menos de um
+segundo) e acabou de achar 15 registros inválidos que estavam passando há
+semanas. As opções e a recomendação:
+
+1. **Entrar no `pnpm check`** (recomendado) — o gate que já é obrigatório, e onde
+   nenhum registro inválido sobrevive a um commit. Custo: Python no caminho do
+   `check`, o que já é verdade por causa do `test:qa-skills`.
+2. Entrar só no CI — pega antes da PR, mas deixa o commit local passar.
+3. Deixar sob demanda — mantém o custo em zero e o contrato em promessa; é o
+   estado que produziu estes 15.
+
+Não decidi sozinho porque muda o que reprova um commit de todo mundo, e essa
+escolha é do dono do repositório.
 
 ## Status final
 

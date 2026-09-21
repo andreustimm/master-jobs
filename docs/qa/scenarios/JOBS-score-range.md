@@ -11,8 +11,8 @@ bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report: 2026-09-21-docs-qa-jornada-do-quadro-filtrado
+evidence: docs/qa/reports/2026-09-21-docs-qa-jornada-do-quadro-filtrado.md
+last_report: docs/qa/reports/2026-09-21-docs-qa-jornada-do-quadro-filtrado.md
 overlaps: JOBS-pay-filter
 ---
 

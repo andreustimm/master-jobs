@@ -1,6 +1,6 @@
 # BUG-20260921-job-detail-labels-untranslated: detalhe da vaga em português com a interface em inglês
 
-- **Status:** fixed
+- **Status:** verified
 - **Impact (user-side):** Trust-Damage
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Recrutadora convidada
@@ -63,6 +63,7 @@ ocorrências de cada no HTML servido (marcação e payload do RSC).
 - **Root cause:** seis textos de interface como literal no JSX de
   `app/jobs/[id]/page.tsx`, e a rota ausente das duas varreduras de inglês em
   `tests/e2e/ui.mjs`.
+- **Fix commit:** `23fa064`
 - **Fix:** seis chaves novas na seção `jobDetail` dos dois dicionários
   (`back`, `closed`, `seenOn`, `openAtSource`, `applyAtSource`,
   `outOfHundredCluster`); `data-user-content` no nome da empresa, na localização
@@ -75,4 +76,11 @@ ocorrências de cada no HTML servido (marcação e payload do RSC).
 ## Verification
 
 - **Retested:** 2026-09-21 · Recrutadora convidada · `J-trust-the-filtered-board`
-- **Result:** ver o relatório da sessão.
+  · `CH-recruiter-english-board`, no ambiente de paridade reconstruído com a
+  correção.
+- **Result:** verified — os três textos somem do HTML servido com `jho_locale=en`
+  e voltam as formas inglesas (2 ocorrências de cada, marcação e payload do RSC);
+  `São Paulo, State of São Paulo, Brazil` segue intacto dentro de
+  `data-user-content`; sobrevive a duas recargas; confirmado por leitura
+  independente em `/jobs/2/paises`; e com `jho_locale=pt-BR` a tela portuguesa
+  não mudou.

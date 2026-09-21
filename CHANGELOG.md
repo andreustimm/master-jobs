@@ -43,6 +43,19 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   ambiente de paridade. Rota que reprovasse ali seria achado com correção
   própria, e entraria depois dela.
 
+- **O tracker de QA não materializava, e o validador só roda sob demanda.**
+  `docs/qa/state.csv` é visão gerada e ignorada pelo git, então o único jeito de
+  o esquema ser conferido é alguém rodar `materialize_state.py` de propósito —
+  e **15 registros inválidos em 15 arquivos** mostram há quanto tempo ninguém
+  rodava. Oito tinham `retest_status: verified`, valor que não existe no enum;
+  quatro mantinham `retest_status: pass` depois de a superfície mudar e
+  `qa_status` voltar a `untested`; três afirmavam `pass` sem apontar evidência;
+  dois afirmavam `fixed` sem SHA; dois usavam `qa_status: blocked`, também
+  inexistente. Todos corrigidos conforme o esquema — os quatro pares órfãos com
+  `retest_status` **zerado**, porque veredito de uma tela que mudou não vale, e a
+  história continua no relatório que `last_report` aponta. A visão volta a gerar:
+  56 cenários, zero erros.
+
 ### Documentação
 
 - `AGENTS.md` afirmava "sete telas em inglês" e são treze. O número saiu de
