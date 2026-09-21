@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-save-term-search
 expected: A oferta de Vagas abre Buscas com o termo preenchido, e o termo salvo aparece na trilha com um estado por plataforma
 entry_points: /jobs?q=laravel; /searches
-qa_status: untested
+qa_status: blocked-decision
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-saved-term-reaches-new-jobs-baseline-02-destino-da-oferta.png; evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-saved-term-reaches-new-jobs-baseline-05-trilha-criada.png
+last_report: docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
 overlaps: JOBS-term-filter-descriptions
 ---
 

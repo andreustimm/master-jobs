@@ -6,13 +6,13 @@ persona: Andreus no celular
 journey: J-save-term-search
 expected: Buscas, nova trilha, editor de trilha e saúde das capturas não rolam na horizontal em 375px e os controles são tocáveis
 entry_points: /searches; /searches/tracks/new; /searches/tracks/<id>; /admin/captures
-qa_status: untested
+qa_status: pass
 bug_ids: BUG-20260919-mobile-searches-overflow
 fix_status: fixed
-retest_status: pending
-fix_commits: 4ef5e79; 3ff3f1f
-evidence:
-last_report:
+retest_status: pass
+fix_commits: 4ef5e79; 3ff3f1f; 4d6a2b3
+evidence: evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-searches-one-hand-retest-1-termo-longo.png; evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-searches-one-hand-retest-1-vagas-chip-320.png
+last_report: docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
 overlaps: NAV-full-width-shell
 ---
 

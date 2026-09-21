@@ -51,3 +51,24 @@ Revisão de todas as telas, logado, 23 rotas (19 autenticadas, 4 públicas) em
 320×700, 375×812, 390×844, 412×915, 667×375 e 812×375: antes, 4 de 138
 combinações falhavam, todas em `/candidate/skills` (evidência a 482px); depois,
 138 de 138 sem rolagem horizontal e sem elemento além da borda.
+
+## Re-found (2026-09-21)
+
+- **Persona:** Andreus no celular · **Charter:** CH-searches-one-hand · **Report:** docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
+- **Reteste:** o sintoma voltou por outro gatilho. Em 375×812 (Chromium emulando iPhone 15), com um termo salvo de 60 letras sem espaço, o cartão desse termo em Buscas fica mais largo que a trilha: o termo corta à direita, APAGAR aparece só pela borda esquerda, e "mover para" e MOVER saem da tela — a persona não alcança nenhum dos três. `scrollWidth` segue igual à janela; a medição de elemento além da borda acusa `term-platforms-3` e seus filhos em 536px numa janela de 360.
+- **Causa provável:** a correção de 19/09 deu `minmax(0,1fr)` ao conteúdo da trilha e quebra ao rótulo do intervalo, mas o nome do termo não quebra palavra longa — a coluna do cartão do termo cresce até a largura dele.
+- **Não reproduzido nesta rodada:** o rótulo longo "de novo a partir de…" (exige uma captura real, desligada no ambiente de paridade) e o zoom do iOS em campo abaixo de 16px (exige Safari em iPhone físico).
+- Evidência: `docs/qa/evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-searches-one-hand-baseline-termo-longo-cortado.png`
+
+## Fix (2026-09-21, Re-found)
+
+- **Root cause:** o cartão do termo é um grid sem `grid-cols-1`, e o nome do termo usava `break-words`, que não reduz a largura mínima do conteúdo — a coluna implícita crescia até a largura de um termo sem espaço. Em Vagas, o chip "trazida pelo termo" herdava `shrink-0` e `whitespace-nowrap` do botão, dentro de um grupo sem `min-w-0`.
+- **Fix commit:** `4d6a2b3`
+- **Regression test:** `tests/e2e/setup.mjs` semeia um termo de 60 letras; a varredura de larguras de `tests/e2e/ui.mjs` reprovou sem a correção ("320px /jobs: filter-by-2 · 320px /jobs?track=all: filter-by-2 · 320px /searches: div, span", 262/263) e passa com ela (263/263).
+
+## Verification (2026-09-21, parcial)
+
+- **Retested:** Andreus no celular, `J-save-term-search`, sessão nova no ambiente de paridade com `4d6a2b3` · **Report:** docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
+- **Result:** em 375 e 320 px, nenhum elemento de `/searches` nem de `/jobs?track=all` passa da borda. O termo de 60 letras quebra em duas linhas, e BUSCAR DE NOVO, PAUSAR, APAGAR, "mover para" e MOVER ficam dentro do cartão; APAGAR, tocado, apaga o termo, e a recarga confirma. Em Vagas, o chip do termo quebra em três linhas a 320 px e mantém 28 px de altura em desktop.
+- **Ainda sem verificação:** o zoom do iOS em campo abaixo de 16 px, que o Chromium não reproduz — exige Safari num iPhone físico. Por isso o bug fica `fixed`, e não `verified`.
+
