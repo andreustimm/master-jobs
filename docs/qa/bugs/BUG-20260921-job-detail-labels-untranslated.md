@@ -15,7 +15,9 @@ Com a interface em inglês, a tela de detalhe da vaga — a mais aberta do produ
 serve três textos de interface em português: o link de volta `← vagas`, o botão
 principal `Ver vaga na origem` e o rótulo `visto em` na linha da fonte. Mais três
 estão no mesmo arquivo em ramos condicionais e apareceriam nas mesmas condições:
-`fechada`, `Aplicar →` e `de 100 · cluster`.
+`fechada`, `Aplicar →` e `de 100 · cluster`. E dois no cartão de score, que
+este inventário deixou passar e a revisão profunda achou: `casadas:` e
+`ausentes:` — ver *Inventário ampliado*, abaixo.
 
 Não é regressão: esses literais estão ali desde que a tela existe. O que faltava
 era alguém olhar — a guarda de vazamento de português percorre um **array
@@ -49,11 +51,13 @@ ocorrências de cada no HTML servido (marcação e payload do RSC).
 
 - Contagem no HTML servido com `jho_locale=en`, antes da correção:
   `2× ← vagas`, `2× Ver vaga na origem`, `2× visto em`.
-- O mesmo documento com zero valores do dicionário português detectados fora de
-  `data-user-content` — o que prova que a medição não estava cega, e sim que
-  literal de JSX **não é** valor do dicionário e por isso escapa desse critério.
-  Quem pega literal é a rota estar na lista; o critério do dicionário pega
-  tradução mal feita.
+- O mesmo documento com zero valores **novos** do dicionário português fora de
+  `data-user-content`. A leitura original concluía que literal de JSX escapa do
+  critério do dicionário, e isso vale para dois dos três: `← vagas` já era valor
+  do dicionário (`jobCountries.back`) e teria sido pego com a rota listada.
+  `Ver vaga na origem` e `visto em` não têm acento nem estão no dicionário, e
+  passariam mesmo com a rota na lista — a lista decide o que é medido, não o que
+  reprova.
 - Leitura independente na mesma condição: `/jobs/2/paises` mostra
   `São Paulo, State of São Paulo, Brazil` intacto e sem rótulo em português,
   porque o hub já está na guarda.
@@ -63,15 +67,21 @@ ocorrências de cada no HTML servido (marcação e payload do RSC).
 - **Root cause:** seis textos de interface como literal no JSX de
   `app/jobs/[id]/page.tsx`, e a rota ausente das duas varreduras de inglês em
   `tests/e2e/ui.mjs`.
-- **Fix commit:** `23fa064`
+- **Fix commit:** `23fa064` (os seis literais e a marca); os dois rótulos do
+  cartão de score, no commit seguinte da mesma PR (#170).
 - **Fix:** seis chaves novas na seção `jobDetail` dos dois dicionários
   (`back`, `closed`, `seenOn`, `openAtSource`, `applyAtSource`,
-  `outOfHundredCluster`); `data-user-content` no nome da empresa, na localização
-  e no rótulo da fonte; `/jobs/904000101` acrescentada às duas varreduras.
-- **Regression test:** as próprias varreduras. Elas reprovam a tela sem a
-  correção por dois motivos independentes — o rótulo em português e o acento do
-  acervo sem marca —, e é por isso que a rota entrar na lista é a metade do
-  conserto que impede a volta.
+  `outOfHundredCluster`); `compare.matchedKeywords` e `compare.missingKeywords`,
+  que já existiam, para os dois rótulos do cartão; `data-user-content` no nome da
+  empresa, na localização e no rótulo da fonte; `/jobs/904000103` acrescentada às
+  duas varreduras.
+- **Regression test:** as duas varreduras de vazamento em `tests/e2e/ui.mjs`,
+  na publicação de São Paulo do grupo de países. Tirar `data-user-content`
+  reprova pelo acento do acervo; devolver `← vagas` reprova pelo dicionário. Um
+  literal sem acento e fora do dicionário — `Ver vaga na origem` — **não**
+  reprovaria: contra esse, a defesa é a regra 9, não a varredura. A primeira
+  versão desta correção varria `/jobs/904000101`, de localização "Netherlands",
+  onde tirar a marca não reprovaria nada.
 
 ## Verification
 
@@ -84,3 +94,18 @@ ocorrências de cada no HTML servido (marcação e payload do RSC).
   `data-user-content`; sobrevive a duas recargas; confirmado por leitura
   independente em `/jobs/2/paises`; e com `jho_locale=pt-BR` a tela portuguesa
   não mudou.
+
+## Inventário ampliado
+
+- **Found:** 2026-09-21, pela revisão profunda da PR #170 — não por persona.
+- `casadas:` e `ausentes:` eram literais no cartão de score de
+  `app/jobs/[id]/page.tsx`. Nenhuma das três provas os via: a recrutadora não
+  tem candidato, então a tela não mostra score; a fixture das varreduras
+  pontuava toda vaga com listas de palavras-chave vazias, e os dois ramos não
+  renderizavam; e nenhum dos dois textos tem acento ou é valor do dicionário.
+- **Fix:** passam por `compare.matchedKeywords` e `compare.missingKeywords`, e a
+  fixture de São Paulo ganhou palavras-chave casadas e ausentes para que as duas
+  linhas renderizem sob a varredura.
+- **Verification:** pela suíte E2E, não por jornada. A persona do cenário não
+  alcança o cartão; confirmar pela interface pede uma persona candidata, e fica
+  para a próxima sessão que percorrer a tela como dono.

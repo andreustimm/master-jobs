@@ -66,9 +66,10 @@ try {
     // Ver o comentário em `ui.mjs`: rota nova não herda guarda transversal.
     ["job countries hub", "/jobs/904000101/paises"],
     // A tela mais aberta do produto, e estava fora das quatro listas — foi assim
-    // que ela serviu três rótulos em português com a interface em inglês. Entra
-    // aqui medida: 0 violações axe e 0px de excesso em 375, 768 e 1024.
-    ["job detail", "/jobs/904000101"],
+    // que ela serviu três rótulos em português com a interface em inglês. A
+    // varredura roda como dono, que vê o formulário de funil; a medição que
+    // precedeu a entrada foi como recrutador e não via o `select` sem nome.
+    ["job detail", "/jobs/904000103"],
   ]) {
     await scan(name, path);
   }

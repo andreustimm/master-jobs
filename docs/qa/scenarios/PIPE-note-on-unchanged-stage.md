@@ -9,7 +9,7 @@ entry_points: /jobs/<id>; jho track <id> <status> --notes
 qa_status: untested
 bug_ids: BUG-20260917-transition-note-never-readable
 fix_status: fixed
-retest_status:
+retest_status: pending
 fix_commits: 03ac0f6; cb00cbb
 evidence:
 last_report: docs/qa/reports/2026-09-18T022259704434Z-6535cca7-release-candidate-1.8.0-promovido.md

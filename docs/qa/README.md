@@ -106,18 +106,23 @@ E aconteceu de novo, em 2026-09-21, com `/jobs/<id>` — **a tela mais aberta do
 produto**, fora das quatro listas desde que existe. Ela servia `← vagas`,
 `Ver vaga na origem` e `visto em` em português com a interface em inglês.
 
-Essa terceira ocorrência mostrou por que a lição não basta como aviso: **as duas
-metades se protegem.**
+Essa terceira ocorrência mostrou dois limites que o aviso sozinho não cobre:
 
-- Os dois critérios da varredura de português **não pegam literal de JSX.**
-  `← vagas` escrito direto no JSX não é valor do dicionário, então a única coisa
-  que o pega é a rota estar na lista. Uma rota de fora passa nos dois critérios
-  **sem ser medida**, e a medição limpa parece prova.
-- E a rota **não pode** entrar na lista sem `data-user-content` nos campos que vêm
-  do acervo — o acento deles é legítimo e reprovaria.
+- **A lista decide o que é medido, e os critérios decidem o que reprova.** Uma
+  rota de fora passa nos dois critérios **sem ser medida**, e a medição limpa
+  parece prova. Mas numa rota listada, literal de JSX só reprova se tiver acento
+  ou já for valor do dicionário português: `← vagas` seria pego porque já
+  existia como `jobCountries.back`; `Ver vaga na origem` e `visto em` passariam
+  com a rota na lista. A lista é necessária, não suficiente — a defesa continua
+  sendo o texto vir do dicionário.
+- **A rota não pode entrar sem `data-user-content`** nos campos que vêm do acervo:
+  o acento deles é legítimo e reprovaria. E a marca só fica provada se a fixture
+  varrida tiver acento — por isso a tela de detalhe é varrida em `/jobs/904000103`
+  (São Paulo), não na publicação holandesa do mesmo grupo.
 
-Sem a marca a rota não entra; fora da lista o rótulo não aparece. Consertar só uma
-das metades troca um defeito por um falso positivo permanente.
+Há ainda uma quinta lista, mais estrita, no bloco *Mobile* de `tests/e2e/ui.mjs`:
+largura de 320 a 1024 px e conteúdo cortado dentro de cartão. `/jobs/<id>` já
+estava nela, pela fixture `905000031`.
 
 **Ao criar tela:** acrescente o caminho às quatro listas no mesmo commit, e ajuste
 a contagem final da varredura axe. Se a tela precisa de id, use uma fixture do

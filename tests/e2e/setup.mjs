@@ -270,9 +270,18 @@ try {
     url: `https://jobs.example.com/${fixture.id}`,
     raw: { e2e: true },
   }))).onConflictDoNothing({ target: job.id });
+  // A publicação de São Paulo é a que as varreduras de vazamento abrem na tela
+  // de detalhe: a localização acentuada só passa por causa de
+  // `data-user-content`, e as palavras-chave fazem renderizar as duas linhas
+  // do cartão de score, que ficavam fora da varredura com listas vazias.
   await getDb()
     .insert(jobScore)
-    .values(grupoFixtures.map((fixture) => fixtureScore(fixture.id, primaryTrack.id, 60)))
+    .values(grupoFixtures.map((fixture) => ({
+      ...fixtureScore(fixture.id, primaryTrack.id, 60),
+      ...(fixture.id === 904000103
+        ? { matchedKeywords: ["TypeScript"], missingKeywords: ["Kubernetes"] }
+        : {}),
+    })))
     .onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
 
   // Uma vaga da segunda fonte, fora do termo "Pay fixture" para não mexer nas

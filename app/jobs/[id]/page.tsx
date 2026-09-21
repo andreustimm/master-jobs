@@ -152,13 +152,13 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
               <>
                 <Separator className="my-4" />
                 <p className="font-mono type-meta text-muted-foreground">
-                  casadas: {matched.join(", ")}
+                  {t("compare.matchedKeywords")}: {matched.join(", ")}
                 </p>
               </>
             )}
             {missing.length > 0 && (
               <p className="mt-1.5 font-mono type-meta text-muted-foreground">
-                ausentes: {missing.join(", ")}
+                {t("compare.missingKeywords")}: {missing.join(", ")}
               </p>
             )}
           </CardContent>

@@ -53,11 +53,11 @@ nos ramos condicionais correspondentes: `fechada`, `Aplicar →` e
 `de 100 · cluster`.
 
 Detalhe do diagnóstico que vale guardar: na mesma medição, **zero** valores do
-dicionário português foram detectados fora de `data-user-content`. Os dois
-critérios da guarda medem coisas diferentes — o critério do dicionário pega
-tradução mal feita, e literal de JSX não é valor do dicionário, então quem pega
-literal é a rota estar na lista. Uma medição limpa pelo primeiro critério não diz
-nada sobre o segundo.
+dicionário português foram detectados fora de `data-user-content` além de
+`← vagas`, que já era `jobCountries.back`. Os dois critérios da guarda só
+reprovam texto acentuado ou já presente no dicionário: `Ver vaga na origem` e
+`visto em` não são nenhum dos dois, e passariam mesmo com a rota na lista. A
+lista decide o que é medido; o que impede literal de JSX é a regra 9.
 
 `docs/qa/bugs/BUG-20260921-job-detail-labels-untranslated.md` tem a causa e por
 que ela sobreviveu: as duas metades do problema se protegiam. Sem
@@ -68,11 +68,14 @@ acento; fora da varredura, ninguém veria os rótulos.
 
 A correção cabe dentro do governador do ciclo: seis chaves na seção `jobDetail`
 dos dois dicionários, seis literais trocados por `t(...)`, `data-user-content` em
-três campos que vêm do acervo, e `/jobs/904000101` acrescentada às duas
-varreduras de inglês em `tests/e2e/ui.mjs`. Nenhuma mudança de comportamento.
+três campos que vêm do acervo, e a rota acrescentada às duas varreduras de
+inglês em `tests/e2e/ui.mjs` — na publicação de São Paulo, `/jobs/904000103`,
+depois da revisão profunda (ver *Adendo*). A única mudança de comportamento é a
+visível: a tela passa a falar inglês.
 
-A prova de regressão são as próprias varreduras, e ela é de dois lados: sem a
-correção a rota reprova pelo rótulo em português **e** pelo acento sem marca.
+A prova de regressão são as próprias varreduras: tirar a marca reprova pelo
+acento do acervo, e devolver `← vagas` reprova pelo dicionário. Um literal sem
+acento e fora do dicionário não reprovaria.
 
 Reteste no mesmo caminho que produziu o vermelho, com o ambiente reconstruído:
 
@@ -151,10 +154,13 @@ Correções aplicadas, todas conformes ao esquema:
 
 - `verified` → `pass` nos oito.
 - `blocked` → `blocked-verify` nos dois.
-- Nos quatro em que a superfície mudou depois do reteste, `retest_status`
-  **zerado**: o veredito não vale mais, e a história continua no relatório que
-  `last_report` aponta. Zerar é a leitura honesta — manter um `pass` órfão diz
-  que algo foi conferido numa tela que não existe mais.
+- Nos quatro em que a superfície mudou depois do reteste, `retest_status` passa
+  a `pending` — "corrigido, ainda não re-percorrido". O veredito antigo não
+  vale mais, e a história continua no relatório que `last_report` aponta. A
+  primeira versão deste reparo deixou o campo vazio, que no esquema quer dizer
+  "reteste dispensado"; a revisão profunda corrigiu, e estendeu o `pending` aos
+  outros dois cenários com a mesma forma (`JOBS-work-mode-mobile` e
+  `SRCH-mobile-layout`).
 - `evidence` preenchido com o relatório que produziu o veredito nos três.
 - `fix_commits` preenchido com `4ef5e79; 3ff3f1f` nos dois do
   `BUG-20260919-mobile-searches-overflow`, recuperados da PR #125.
@@ -198,6 +204,26 @@ navegação por clique (`JOBS-country-hub`,
 `JOBS-group-canonical-survives-filter`). **Nenhum permanece `untested`.**
 
 Este relatório não afirma que a varredura de inglês cobre o produto inteiro. Ela
-cobre onze rotas de um array literal, e três defeitos já foram achados
+cobre treze rotas em duas listas literais, e três defeitos já foram achados
 exatamente na rota que acabava de entrar nele. O gate que falta é o `pnpm
 test:e2e` não rodar no CI, o que mantém essa varredura fora de qualquer PR.
+
+## Adendo — revisão profunda da PR #170
+
+A `/deep-review` da PR devolveu `FIX_BEFORE_SHIP` e achou três coisas que esta
+sessão afirmou sem ter observado:
+
+- **Dois rótulos ficaram fora do inventário.** `casadas:` e `ausentes:`, no
+  cartão de score, continuavam em português. A recrutadora não vê o cartão, a
+  fixture das varreduras tinha palavras-chave vazias e nenhum dos dois textos é
+  acentuado ou valor do dicionário — as três provas eram cegas para eles.
+  Corrigidos com as chaves que `/compare` já usava.
+- **A fixture varrida não tinha acento.** `/jobs/904000101` é a publicação
+  holandesa do grupo; tirar `data-user-content` não reprovaria nada ali. As
+  quatro listas passam a usar `/jobs/904000103` (São Paulo), com palavras-chave
+  para renderizar o cartão.
+- **A medição axe foi feita como recrutadora; a varredura roda como dono.** O
+  dono vê o formulário de funil, cujo `<select>` não tinha nome acessível
+  (`select-name`, WCAG 2 A) — o `10/10` desta sessão nunca foi observado. O
+  `select` ganhou `aria-label`, e a contagem passou a valer quando a suíte
+  E2E rodou com a correção.

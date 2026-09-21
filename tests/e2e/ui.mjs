@@ -2964,8 +2964,10 @@ try {
     // origem" e "visto em" eram literais no JSX, servidos em português com a
     // interface em inglês. Ela só pôde entrar depois de o nome da empresa, a
     // localização e o rótulo da fonte ganharem `data-user-content`, porque esse
-    // texto vem do acervo e é acentuado de direito.
-    "/jobs/904000101",
+    // texto vem do acervo e é acentuado de direito. Por isso a publicação
+    // varrida é a de São Paulo: numa localização sem acento, tirar a marca não
+    // reprovaria nada, e a metade da guarda que a protege ficaria sem prova.
+    "/jobs/904000103",
   ]);
   check(
     "interface em inglês não vaza português",
@@ -5704,7 +5706,7 @@ try {
     `/searches/tracks/${phpTrackCard?.id}`,
     `/jobs?track=all&by=${seededId}&pay=6000&cur=USD&per=month&fit=0`,
     "/jobs/904000101/paises",
-    "/jobs/904000101",
+    "/jobs/904000103",
     "/admin/captures",
   ];
   const searchOverflows = [];
@@ -5731,7 +5733,7 @@ try {
     `/searches/tracks/${phpTrackCard?.id}`,
     "/jobs",
     "/jobs/904000101/paises",
-    "/jobs/904000101",
+    "/jobs/904000103",
     "/admin/captures",
   ]);
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);

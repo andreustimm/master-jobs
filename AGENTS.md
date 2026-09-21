@@ -206,16 +206,19 @@ dashboard Next.js em `localhost:3000`.
 > inventário do que já tinha sido corrigido. Dado do usuário fica de fora por
 > `data-user-content`: o currículo tem "São Paulo" e continua tendo em inglês.
 >
-> **Os dois critérios pegam defeitos diferentes, e o da rota é o que falta.**
-> Literal de JSX não é valor do dicionário, então quem pega literal é a rota
-> estar na lista — uma tela fora dela passa nos dois critérios sem ser medida.
+> **A lista decide o que é medido; os dois critérios, o que reprova.** Uma tela
+> fora das listas passa nos dois critérios sem ser medida — e numa tela listada,
+> literal de JSX só reprova se tiver acento ou já for valor do dicionário
+> português. `Ver vaga na origem` e `visto em` passariam mesmo com a rota na
+> lista. A lista é necessária, não suficiente: a regra acima (texto vem do
+> dicionário) continua sendo a defesa, e a varredura é a rede.
 > Foi assim que `/jobs/<id>`, a tela mais aberta do produto, serviu `← vagas`,
 > `Ver vaga na origem` e `visto em` em português com a interface em inglês, desde
 > que existe. E ela só pôde entrar na lista depois de o nome da empresa, a
 > localização e o rótulo da fonte ganharem `data-user-content`, porque esse texto
-> vem do acervo e é acentuado de direito: **sem a marca, a rota não entra; fora
-> da lista, o rótulo não aparece.** As duas metades se protegem, e por isso rota
-> nova entra nas listas no mesmo commit que a cria.
+> vem do acervo e é acentuado de direito. Por isso a publicação varrida é
+> acentuada (`São Paulo, …`): numa fixture sem acento, tirar a marca não
+> reprovaria nada. Rota nova entra nas listas no mesmo commit que a cria.
 > `pt-BR` e `en` em `src/core/i18n/`. As chaves são tipadas contra o dicionário
 > português, então tradução faltando é erro de compilação — e não espaço em
 > branco descoberto por um usuário. Página obtém o tradutor com

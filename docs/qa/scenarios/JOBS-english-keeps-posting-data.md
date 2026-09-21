@@ -49,9 +49,10 @@ interface como literal no JSX (`← vagas`, `Ver vaga na origem`, `visto em`,
 servidos em português com a interface em inglês) e o dado do anúncio sem
 `data-user-content` no nome da empresa, na localização e no rótulo da fonte.
 
-As duas metades se protegiam: sem a marca, a rota não podia entrar na varredura
-(o acento legítimo do acervo reprovaria); fora da varredura, ninguém veria os
-rótulos. `docs/qa/bugs/BUG-20260921-job-detail-labels-untranslated.md` tem a
+Sem a marca, a rota não podia entrar na varredura (o acento legítimo do acervo
+reprovaria); fora da varredura, ninguém mediria a tela. E mesmo dentro dela, a
+varredura só reprova texto acentuado ou já presente no dicionário — `Ver vaga na
+origem` passaria. A varredura é rede; a defesa é a regra 9. `docs/qa/bugs/BUG-20260921-job-detail-labels-untranslated.md` tem a
 medição.
 
 O que este cenário passou a exigir, por isso:

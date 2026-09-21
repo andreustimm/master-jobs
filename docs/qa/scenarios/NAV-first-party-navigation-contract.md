@@ -9,7 +9,7 @@ entry_points: /; /jobs; /compare; /pipeline; /referrals; /candidate; /admin/user
 qa_status: untested
 bug_ids: BUG-20260826-responsive-header-artifact-skew
 fix_status: fixed
-retest_status:
+retest_status: pending
 fix_commits: 062eb64; cce67ae; 055af8a; a56a0c1
 evidence: evidence/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter/CH-night-ranking-navigation-baseline-jobs.png
 last_report: reports/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter.md
