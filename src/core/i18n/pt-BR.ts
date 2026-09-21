@@ -124,6 +124,7 @@ export const ptBR = {
     countriesLabel: "publicada em {count} países",
     countryWithCount: "{name} · {count} vagas",
     moreCountries: "+{count}",
+    countryUnknown: "sem localização",
     offerSearch: "Buscar “{term}” nas plataformas",
     offerSearchLead: "Salvar o termo busca vagas novas com ele nas plataformas cadastradas, todo dia.",
     emptyTerm: "Nenhuma vaga do acervo menciona “{term}”.",

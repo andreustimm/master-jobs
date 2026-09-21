@@ -59,6 +59,50 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   `groupRepeats` nas facetas, o rodapé contava grupos e os chips contavam
   publicações.
 
+- **Fonte que oculta o empregador não agrupa mais.** A chave do grupo é (ATS,
+  título, empregador), e no Jobgether — 92% do acervo — dois dos três desabam:
+  `company_name` é o rótulo da própria fonte, porque a API não devolve a empresa,
+  e o primeiro elemento é `lever`, o ATS e não o board. Sobrava o título, então
+  duas vagas de empresas **parceiras diferentes** com o mesmo título viravam a
+  mesma vaga em dois países: a de id maior saía do quadro, e o hub apresentava o
+  empregador de uma como o segundo país da outra. A chave ganhou um quarto
+  elemento que torna cada publicação anônima o próprio grupo — com `''` e não
+  `null`, porque `null = null` não é verdade em SQL. O discriminador já existia
+  no arquivo; só o agrupamento não perguntava.
+
+- **Grupo cuja publicação de menor id é cortada por um filtro não desaparece
+  mais.** `canonicalOfGroup` era um anti-join que não conhecia `minFit`,
+  `hideBlocked`, `term` nem `freshDays` — esses moram no `where` de fora. Quando
+  a de menor id falhava um filtro, TODAS as irmãs falhavam o teste de canônica e
+  o grupo inteiro saía do quadro, com uma irmã casando tudo; e como `countBoard`
+  compartilha o predicado, o rodapé concordava com a lista e nada parecia
+  errado. O gatilho era a tela padrão: agrupamento ligado e corte em 45, com geo
+  valendo 15 dos 100 pontos. Virou `row_number()` sobre o conjunto já filtrado,
+  então filtro novo entra sem precisar ser repetido na escolha.
+
+- **O `+N` da fileira de bandeiras leva ao hub**, não à publicação canônica —
+  que é o menor id do grupo e portanto o mesmo destino da primeira bandeira.
+  Pedir "os outros 34 países" abria a vaga na Holanda, exatamente o "país que
+  ninguém pediu" que o hub existiu para remover.
+
+- **Publicação sem localização nenhuma não é mais um link vazio.** A coluna é
+  nulável e a ingestão grava `null` sem normalizar; `groupByCountry` devolve
+  `name: ""`, e a apresentação usava isso cru — âncora de zero caractere, com
+  `title=""` e `aria-label=""`, invisível e sem nome acessível, ainda ocupando um
+  dos oito lugares visíveis. Ganhou rótulo do dicionário. A decisão do que
+  mostrar e para onde ir saiu do JSX e virou `countryRow` em `src/core/country.ts`,
+  função pura, porque nenhuma das duas era alcançável por teste onde estava.
+
+- **Campo de faixa guardava o valor antigo depois de navegação suave.** `useState`
+  só lê o inicializador na montagem, e as ilhas eram montadas sem `key`: ir de um
+  filtro para outro reconcilia a mesma posição da árvore e não remonta. Três
+  caminhos do fluxo normal chegavam nisso — faixa invertida trocada no servidor,
+  o "limpar", e os presets de corte —, e em todos o Aplicar seguinte reenviava o
+  valor velho, então o aviso nunca saía e a URL nunca estabilizava. O campo de
+  piso que existia antes tinha exatamente esta guarda, com o comentário
+  explicando por quê; ela saiu junto com o campo. Vale também para as marcas do
+  combo de fontes, que são DOM não controlado.
+
 ### Removido
 
 - `GET /api/diag-skills`, a rota que mediu o 504 de dentro do runtime da Vercel.

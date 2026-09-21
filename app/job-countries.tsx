@@ -1,4 +1,4 @@
-import { flagOf, groupByCountry } from "../src/core/country.ts";
+import { countryRow } from "../src/core/country.ts";
 import type { GroupPosting } from "../src/contexts/matching/index.ts";
 import type { Translator } from "../src/core/i18n/index.ts";
 import { TransitionLink } from "./transition-link";
@@ -17,11 +17,12 @@ import { TransitionLink } from "./transition-link";
  *
  * Localização que não nomeia um país — "Remote", "Bogota" — aparece como texto.
  * Inventar uma bandeira para ela seria pior que não ter nenhuma.
+ *
+ * **O que mostrar e para onde ir é decidido em `src/core/country.ts`**, em
+ * função pura. Três decisões erraram aqui uma vez — publicação sem localização
+ * virava âncora vazia, e o transbordo levava à publicação canônica em vez do
+ * hub —, e nenhuma delas era alcançável por teste enquanto morava no JSX.
  */
-
-/** Quantas cabem numa linha antes de a fileira virar um muro. */
-const VISIVEIS = 8;
-
 export function JobCountries({
   jobId,
   repeats,
@@ -35,19 +36,10 @@ export function JobCountries({
 }) {
   if (repeats.length < 2) return null;
 
-  const marcas = groupByCountry(repeats, locale).map((pais) => ({
-    id: pais.id,
-    // Sem país, a própria localização é a marca — encurtada, porque a linha é
-    // estreita e "Bogota,D.C., Capital District" não cabe.
-    marca: pais.code ? flagOf(pais.code) : pais.name.slice(0, 18),
-    rotulo:
-      pais.postings > 1
-        ? t("jobs.countryWithCount", { name: pais.name, count: pais.postings })
-        : pais.name,
-  }));
-
-  const mostradas = marcas.slice(0, VISIVEIS);
-  const restantes = marcas.length - mostradas.length;
+  const { marcas, restantes, maisHref } = countryRow(jobId, repeats, locale, {
+    semLocal: t("jobs.countryUnknown"),
+    comContagem: (name, count) => t("jobs.countryWithCount", { name, count }),
+  });
 
   return (
     <span
@@ -55,9 +47,9 @@ export function JobCountries({
       data-testid={`job-countries-${jobId}`}
       // Com um país só, a frase do conjunto diria "publicada em 1 países" e não
       // acrescentaria nada: o rótulo do próprio link já diz onde a vaga está.
-      aria-label={marcas.length > 1 ? t("jobs.countriesLabel", { count: marcas.length }) : undefined}
+      aria-label={marcas.length > 1 ? t("jobs.countriesLabel", { count: marcas.length + restantes }) : undefined}
     >
-      {mostradas.map((marca) => (
+      {marcas.map((marca) => (
         <TransitionLink
           key={marca.id}
           href={`/jobs/${marca.id}`}
@@ -65,14 +57,14 @@ export function JobCountries({
           aria-label={marca.rotulo}
           className="rounded px-1 leading-none hover:bg-muted"
           data-testid={`job-country-${jobId}-${marca.id}`}
-          data-user-content
+          data-user-content={marca.doUsuario ? "" : undefined}
         >
           {marca.marca}
         </TransitionLink>
       ))}
       {restantes > 0 && (
         <TransitionLink
-          href={`/jobs/${jobId}`}
+          href={maisHref}
           className="rounded px-1 leading-none text-[var(--primary-text)] hover:underline"
           data-testid={`job-countries-more-${jobId}`}
         >

@@ -127,6 +127,7 @@ export const en: Dictionary = {
     countriesLabel: "posted in {count} countries",
     countryWithCount: "{name} · {count} postings",
     moreCountries: "+{count}",
+    countryUnknown: "no location",
     offerSearch: "Search the platforms for “{term}”",
     offerSearchLead: "Saving the term searches the registered platforms for new jobs with it, every day.",
     emptyTerm: "No job in the corpus mentions “{term}”.",

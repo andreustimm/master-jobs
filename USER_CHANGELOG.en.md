@@ -29,6 +29,20 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   without you touching anything. The filter counters had the same problem.
 - When a screen hung, the record of what happened could fail to come out. It now
   covers the whole request, and it exists on the home and Jobs screens too.
+- Jobs from sources that do not name the employer could be folded into a single
+  row just for sharing a title — and then one of them became unreachable from the
+  board, and the countries screen showed another company's job as if it were a
+  second country of the first. They now stay apart.
+- A job posted across several countries vanished from the list when the posting
+  used to represent it was cut by a filter — even with a sibling that passed. The
+  one representing the group is now always one that passes.
+- The "+N" on the flag row opened a country the system picked; it now leads to the
+  screen with every country, which is what "+N" promises.
+- A posting with no location showed up as an empty link, invisible and nameless to
+  anyone using a screen reader. It now says "no location".
+- After clearing a filter, using a score shortcut, or having a range corrected by
+  the system, the fields kept showing the previous value — and applying again
+  brought the filter back on its own.
 
 ### Added
 

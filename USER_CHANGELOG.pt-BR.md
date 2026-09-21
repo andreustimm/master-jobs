@@ -31,6 +31,20 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 - Quando uma tela travava, o registro do que aconteceu podia não sair. Agora
   ele cobre a requisição inteira, e passou a existir também na tela inicial e
   na de Vagas.
+- Vagas de fontes que não dizem o nome da empresa podiam ser fundidas numa linha
+  só por terem o mesmo cargo — e aí uma delas ficava inalcançável no quadro, e a
+  tela de países mostrava a vaga de outra empresa como se fosse um segundo país
+  da primeira. Agora elas continuam separadas.
+- Uma vaga publicada em vários países desaparecia da lista quando a publicação
+  usada para representá-la era cortada pelo filtro — mesmo havendo outra que
+  passava. Agora quem representa o grupo é sempre uma que passa.
+- O "+N" da fileira de bandeiras abria um país escolhido pelo sistema; agora
+  leva à tela com todos os países, que é o que o "+N" promete.
+- Publicação sem localização aparecia como um link vazio, invisível e sem nome
+  para quem usa leitor de tela. Agora ela diz "sem localização".
+- Depois de limpar um filtro, de usar um atalho de corte ou de ter uma faixa
+  corrigida pelo sistema, os campos continuavam mostrando o valor anterior — e
+  aplicar de novo trazia o filtro de volta sozinho.
 
 ### Adicionado
 

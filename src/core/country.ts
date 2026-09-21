@@ -316,3 +316,79 @@ export function groupByCountry(postings: Posting[], locale: string): CountryMark
   }
   return [...porPais.values()];
 }
+
+/** Quantas marcas cabem numa linha antes de a fileira virar um muro. */
+export const MARCAS_VISIVEIS = 8;
+
+/** Uma marca do jeito que a fileira precisa dela. */
+export type MarcaDeFileira = {
+  /** Para onde a marca leva: a publicação daquele país. */
+  id: number;
+  /** O que aparece — bandeira, ou a localização encurtada. */
+  marca: string;
+  /** O nome que vai no `title` e no `aria-label`. Nunca vazio. */
+  rotulo: string;
+  /** Falso quando o rótulo é do dicionário, e não texto do acervo. */
+  doUsuario: boolean;
+};
+
+/**
+ * A fileira de marcas de um grupo, decidida sem JSX e sem `t`.
+ *
+ * Aqui em vez de no componente porque são três decisões que erraram uma vez e
+ * precisam de teste: o que fazer com publicação sem localização nenhuma, quantas
+ * marcas mostrar, e para onde vai o transbordo.
+ *
+ * Os rótulos entram traduzidos: a tradução é do adapter, o domínio não conhece
+ * dicionário.
+ */
+export function countryRow(
+  jobId: number,
+  postings: Posting[],
+  locale: string,
+  rotulos: {
+    /** Rótulo de publicação sem localização nenhuma. */
+    semLocal: string;
+    /** `(nome, quantas) => rótulo` quando o país tem mais de uma publicação. */
+    comContagem: (name: string, count: number) => string;
+  },
+  // O tipo do destino é literal, e não `string`, porque as rotas tipadas do
+  // Next recusam `string` solta — e é essa recusa que impede o transbordo de
+  // voltar a apontar para um caminho que não existe.
+): { marcas: MarcaDeFileira[]; restantes: number; maisHref: `/jobs/${number}/paises` } {
+  const marcas = groupByCountry(postings, locale).map((pais) => {
+    // Publicação sem localização nenhuma existe: a coluna é nulável e a ingestão
+    // grava `null` sem normalizar para texto. `groupByCountry` devolve `name: ""`
+    // para ela, e usar esse valor cru dava uma âncora de ZERO caractere, com
+    // `title=""` e `aria-label=""` — invisível para quem vê, sem nome acessível
+    // para quem ouve, e ainda ocupando um dos lugares visíveis, o que empurrava
+    // um país real para dentro do transbordo.
+    //
+    // Ela não é descartada: é uma vaga aberta de verdade, e esconder seria pior
+    // que mostrar sem nome de país.
+    const semLocal = !pais.code && pais.name.trim() === "";
+    const nome = semLocal ? rotulos.semLocal : pais.name;
+    return {
+      id: pais.id,
+      // Sem país, a própria localização é a marca — encurtada, porque a linha é
+      // estreita e "Bogota,D.C., Capital District" não cabe.
+      marca: pais.code ? flagOf(pais.code) : nome.slice(0, 18),
+      rotulo: pais.postings > 1 ? rotulos.comContagem(nome, pais.postings) : nome,
+      // Rótulo do dicionário não é dado do usuário, então não recebe a isenção
+      // que protege "São Paulo" da verificação da tela em inglês.
+      doUsuario: !semLocal,
+    };
+  });
+  return {
+    marcas: marcas.slice(0, MARCAS_VISIVEIS),
+    restantes: Math.max(0, marcas.length - MARCAS_VISIVEIS),
+    // O transbordo vai para o HUB, não para a publicação canônica.
+    //
+    // Ele apontava para `/jobs/<id>`, e esse id é o da linha canônica — o menor
+    // do grupo, portanto o mesmo destino da primeira bandeira. Clicar em "+34"
+    // abria a vaga na Holanda: exatamente o "país que ninguém pediu" que a
+    // entrega do hub existiu para remover. E a tela de detalhe não lista país
+    // nenhum, então o destino não respondia à pergunta que o rótulo faz.
+    maisHref: `/jobs/${jobId}/paises`,
+  };
+}

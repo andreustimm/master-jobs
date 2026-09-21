@@ -68,6 +68,36 @@ para caber o que for digitado.
 de apresentação e não há registro para apontar. O link vale enquanto aquela
 publicação estiver aberta e devolve **404** quando ela fecha.
 
+**Todo caminho que pergunta "quais são os outros países" leva aqui.** São dois:
+o link do título da linha agrupada e o `+N` da fileira de bandeiras. O `+N`
+apontava para `/jobs/<id>`, que é a publicação canônica — o menor id do grupo, e
+portanto o mesmo destino da primeira bandeira: clicar em "+34" abria a vaga na
+Holanda, que é o "país que ninguém pediu" que esta rota existiu para remover. A
+tela de detalhe não lista país nenhum, então ela nunca é a resposta dessa
+pergunta. Fixado em `UT-093`.
+
+## Quem entra num grupo, e qual publicação representa ele
+
+Duas regras, as duas com prova em `tests/cov-db-repo.test.ts`, porque as duas
+erraram uma vez e as duas escondiam vaga aberta:
+
+**Empregador anônimo não agrupa.** A chave é (ATS, título, empregador), e onde a
+fonte oculta o empregador — Jobgether, 92% do acervo — `company_name` é o rótulo
+da própria fonte, e o primeiro elemento é o ATS (`lever`), não o board. Sobrava
+o título: duas vagas de empresas parceiras DIFERENTES com o mesmo título viravam
+a mesma vaga em dois países, a de id maior saía do quadro, e o hub apresentava o
+empregador de uma como o segundo país da outra. Publicação de empregador anônimo
+é, por definição, o próprio grupo.
+
+**A publicação que representa o grupo é escolhida entre as que passam pelos
+filtros.** Era a de menor id entre todas as abertas, decidida por um anti-join
+que não conhecia `minFit`, `hideBlocked`, `term` nem `freshDays` — esses moram no
+`where` de fora. Quando a de menor id falhava um filtro, todas as irmãs falhavam
+o teste de canônica e **o grupo inteiro desaparecia**, mesmo com uma irmã
+casando tudo; e como a contagem compartilha o predicado, o rodapé concordava com
+a lista e nada parecia errado. Hoje é `row_number()` sobre o conjunto já
+filtrado, então filtro novo entra sem precisar ser repetido na escolha.
+
 ## Exemplos
 
 ```

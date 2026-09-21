@@ -27,6 +27,14 @@ agrupamento é de apresentação e não há registro para apontar.
 A conferir:
 
 - O título da linha agrupada leva a `/jobs/<id>/paises`, não a `/jobs/<id>`.
+- **O `+N` da fileira de bandeiras leva ao hub também.** Ele apontava para a
+  publicação canônica — o mesmo destino da primeira bandeira —, então pedir "os
+  outros 34 países" abria um país escolhido pela ordenação. A tela de detalhe não
+  lista país nenhum, logo ela nunca é a resposta dessa pergunta. Só aparece com
+  mais de oito países, e o acervo tem uma vaga em 42.
+- **Publicação sem localização nenhuma** aparece com rótulo do dicionário ("sem
+  localização"), não como um link vazio: ela é uma vaga aberta de verdade e tem
+  de ser alcançável, e um leitor de tela precisa de nome para anunciar.
 - A linha agrupada **não** mostra "Vaga", "Site", "Aplicar" nem "não me
   interessa": as quatro agem sobre uma publicação, e ali não há uma, há N.
 - O hub mostra o título, o empregador e quantos países e anúncios existem.

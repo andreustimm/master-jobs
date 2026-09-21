@@ -297,15 +297,40 @@ function payCondition(pay: PayFilter | undefined, amount: SQL | undefined): SQL 
  * Measured on the corpus: 391 groups over 2.934 postings, and in every one of
  * them each posting carries a distinct location.
  */
-function groupKey(row: {
-  sourceId: PgColumn;
-  title: PgColumn;
-  companyName: PgColumn;
-}): SQL[] {
+function groupKey(
+  row: {
+    id: PgColumn;
+    sourceId: PgColumn;
+    title: PgColumn;
+    companyName: PgColumn;
+  },
+  sourceLabel: PgColumn | SQL,
+): SQL[] {
   return [
     sql`split_part(${row.sourceId}, ':', 1)`,
     sql`lower(btrim(${row.title}))`,
     sql`lower(btrim(${row.companyName}))`,
+    // **Empregador anônimo não agrupa: cada publicação é o próprio grupo.**
+    //
+    // Onde a fonte oculta o empregador, `company_name` é o rótulo da própria
+    // fonte — `companyName = config.label` em `sources/ats.ts`, porque a API não
+    // devolve a empresa. O Jobgether é 92% do acervo e ali os três primeiros
+    // elementos desta chave desabam: o primeiro é `lever`, o ATS e não o board;
+    // o terceiro é a constante `jobgether`. Sobra o título, e duas vagas de
+    // empresas PARCEIRAS DIFERENTES que compartilham um título viravam a mesma
+    // vaga em dois países — a de id maior ficava inalcançável no quadro, e o hub
+    // apresentava o empregador de uma como o segundo país da outra.
+    //
+    // O discriminador já existia neste arquivo (o filtro `namedEmployer` e a
+    // etiqueta da lista); só o agrupamento não perguntava.
+    //
+    // `''` e não `null` de propósito: `null = null` não é verdade em SQL, então
+    // com `null` nem as vagas de empregador nomeado casariam entre si.
+    sql`(case
+      when lower(btrim(${row.companyName})) = lower(btrim(coalesce(${sourceLabel}, '')))
+      then ${row.id}::text
+      else ''
+    end)`,
   ];
 }
 
@@ -313,6 +338,7 @@ function groupKey(row: {
 export type GroupPosting = { id: number; location: string | null };
 
 const APELIDO_DO_GRUPO = "vaga_do_grupo";
+const APELIDO_DA_FONTE_DA_IRMA = "fonte_da_irma";
 
 /**
  * As vagas do grupo de cada linha da página, a própria inclusive.
@@ -326,11 +352,13 @@ async function groupPostingsOf(linhas: number[]): Promise<Map<number, GroupPosti
   const porLinha = new Map<number, GroupPosting[]>();
   if (linhas.length === 0) return porLinha;
   const irma = alias(job, APELIDO_DO_GRUPO);
-  const [fonte, titulo, empresa] = groupKey(irma);
-  const [minhaFonte, meuTitulo, minhaEmpresa] = groupKey(job);
+  const fonteDaIrma = alias(source, APELIDO_DA_FONTE_DA_IRMA);
+  const [fonte, titulo, empresa, anonima] = groupKey(irma, fonteDaIrma.label);
+  const [minhaFonte, meuTitulo, minhaEmpresa, souAnonima] = groupKey(job, source.label);
   const rows = await getDb()
     .select({ linha: job.id, id: irma.id, location: irma.locationRaw })
     .from(job)
+    .leftJoin(source, eq(source.id, job.sourceId))
     .innerJoin(
       irma,
       and(
@@ -340,7 +368,10 @@ async function groupPostingsOf(linhas: number[]): Promise<Map<number, GroupPosti
         sql`${empresa} = ${minhaEmpresa}`,
       )!,
     )
-    .where(inArray(job.id, linhas))
+    .leftJoin(fonteDaIrma, eq(fonteDaIrma.id, irma.sourceId))
+    // O quarto elemento da chave fica no `where`, não no `on` da irmã: ele lê o
+    // rótulo da fonte DELA, que só existe depois do join seguinte.
+    .where(and(inArray(job.id, linhas), sql`${anonima} = ${souAnonima}`))
     .orderBy(asc(job.id), asc(irma.id));
   for (const row of rows) {
     const atual = porLinha.get(row.linha);
@@ -351,35 +382,74 @@ async function groupPostingsOf(linhas: number[]): Promise<Map<number, GroupPosti
   return porLinha;
 }
 
-const APELIDO_DA_IRMA = "vaga_irma";
-
-function canonicalOfGroup(): SQL {
-  const irma = alias(job, APELIDO_DA_IRMA);
-  const [fonte, titulo, empresa] = groupKey(irma);
-  const [minhaFonte, meuTitulo, minhaEmpresa] = groupKey(job);
-  return sql`not exists (
-    select 1 from ${job} as ${sql.identifier(APELIDO_DA_IRMA)}
-    where ${irma.closedAt} is null
-      and ${irma.id} < ${job.id}
-      and ${fonte} = ${minhaFonte}
-      and ${titulo} = ${meuTitulo}
-      and ${empresa} = ${minhaEmpresa}
+/**
+ * A publicação que representa o grupo — escolhida **entre as que passam pelos
+ * filtros do quadro**, e não entre todas as abertas.
+ *
+ * Antes era um anti-join: "ninguém aberto do grupo tem id menor que o meu". O
+ * anti-join não sabia de `minFit`, de `hideBlocked`, de `term` nem de
+ * `freshDays`, porque esses predicados moram no `where` de fora. Quando a
+ * publicação de menor id do grupo era justamente a que falhava um filtro, TODAS
+ * as irmãs falhavam o teste de canônica, e **o grupo inteiro desaparecia do
+ * quadro** mesmo com uma irmã casando tudo.
+ *
+ * E o gatilho era a tela padrão. `grouped` vale `true` por omissão e o corte é
+ * 45; geo vale 15 dos 100 pontos e sai de `locationRaw`, então duas publicações
+ * do mesmo grupo caem rotineiramente em lados opostos do corte. Com
+ * `?unblocked=1` era determinístico em vez de provável: o bloqueador vem da
+ * restrição de local, logo a publicação on-site nos EUA de um grupo é
+ * exatamente a que o filtro remove — e ela levava a irmã remota embora.
+ * `countBoard` compartilha o predicado, então o rodapé concordava com a lista e
+ * nada parecia errado.
+ *
+ * `row_number()` sobre o conjunto já filtrado resolve por construção: a janela
+ * só vê linhas que passaram, então a canônica é a de menor id ENTRE ELAS. Um
+ * filtro novo entra sem precisar ser repetido aqui, que é o que o anti-join não
+ * dava.
+ *
+ * A subconsulta não é correlacionada — nenhuma referência à linha de fora —,
+ * então o Postgres a avalia uma vez e casa por hash.
+ */
+function canonicalOfGroup(opts: BoardFilters, candidateId: number | null, pay?: PaySql): SQL {
+  const chave = sql.join(groupKey(job, source.label), sql`, `);
+  // Sem `groupRepeats`, senão a condição se chamaria de dentro dela mesma.
+  const dentro = boardConditions({ ...opts, groupRepeats: false }, candidateId, pay);
+  return sql`${job.id} in (
+    select ordenado.id from (
+      select ${job.id} as id,
+             row_number() over (partition by ${chave} order by ${job.id}) as rn
+      from ${job}
+      left join ${jobScore} on ${scoreJoin(candidateId, opts.track)}
+      left join ${application} on ${and(
+        eq(application.jobId, job.id),
+        scopedTo(application.candidateId, candidateId),
+      )}
+      left join ${source} on ${eq(source.id, job.sourceId)}
+      left join ${jobPage} on ${eq(jobPage.jobId, job.id)}
+      where ${and(...dentro)}
+    ) ordenado
+    where ordenado.rn = 1
   )`;
 }
 
 const APELIDO_DA_ANCORA = "vaga_ancora";
+const APELIDO_DA_FONTE_DA_ANCORA = "fonte_da_ancora";
 
 /** True for every posting that shares the anchor's group. */
 function sameGroupCondition(anchorId: number): SQL {
   const ancora = alias(job, APELIDO_DA_ANCORA);
-  const [fonte, titulo, empresa] = groupKey(ancora);
-  const [minhaFonte, meuTitulo, minhaEmpresa] = groupKey(job);
+  const fonteDaAncora = alias(source, APELIDO_DA_FONTE_DA_ANCORA);
+  const [fonte, titulo, empresa, anonima] = groupKey(ancora, fonteDaAncora.label);
+  const [minhaFonte, meuTitulo, minhaEmpresa, souAnonima] = groupKey(job, source.label);
   return sql`exists (
     select 1 from ${job} as ${sql.identifier(APELIDO_DA_ANCORA)}
+    left join ${source} as ${sql.identifier(APELIDO_DA_FONTE_DA_ANCORA)}
+      on ${fonteDaAncora.id} = ${ancora.sourceId}
     where ${ancora.id} = ${anchorId}
       and ${fonte} = ${minhaFonte}
       and ${titulo} = ${meuTitulo}
       and ${empresa} = ${minhaEmpresa}
+      and ${anonima} = ${souAnonima}
   )`;
 }
 
@@ -429,7 +499,7 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
     const likes = opts.sourceKinds.map((kind) => sql`${job.sourceId} like ${`${kind}:%`}`);
     conditions.push(sql`(${sql.join(likes, sql` or `)})`);
   }
-  if (opts.groupRepeats) conditions.push(canonicalOfGroup());
+  if (opts.groupRepeats) conditions.push(canonicalOfGroup(opts, candidateId, pay));
   if (opts.sameGroupAs !== undefined) conditions.push(sameGroupCondition(opts.sameGroupAs));
   if (opts.company) {
     // `strpos`, not `like`: the value travels as a parameter and `%` or `_`
