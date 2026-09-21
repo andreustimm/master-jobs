@@ -549,6 +549,38 @@ conexão para o resto da requisição e para a requisição do lado.
 esse teto; quando a régua foi apertada de `<= 3` para `<= 2`, encontrou na hora
 três caminhos que ninguém tinha notado.
 
+**O teto é por REQUISIÇÃO, e a régua só alcança função.** É a lição de
+2026-09-21, e ela custou uma segunda rodada. A régua apertada media
+`loadSkillsScreen`, `trackOverview` e `trackSuggestion` — três funções. Tela não
+é função: quem compõe as leituras no corpo do Server Component fica fora da
+medição por construção, e eram justamente as três maiores.
+
+| Tela | Consultas em voo antes | Pool |
+|---|---:|---:|
+| `/` (cockpit, `start_url` da PWA e rota do pós-login) | 7 | 3 |
+| `/jobs` (a tela mais aberta do produto) | 5, e 6 com faixa salarial | 3 |
+| `/searches` | 4 | 3 |
+
+Duas armadilhas dentro disso, que não aparecem contando `Promise.all`:
+
+- **Uma leitura pode ser várias consultas.** `boardFacets` eram três
+  simultâneas — o pool inteiro dentro de uma leitura, antes de qualquer chamador
+  somar. Hoje são duas.
+- **Duas leituras corrigidas somam de novo na página que usa as duas.**
+  `trackOverview` e `termOverview` foram levadas a duas cada, e `/searches`
+  rodava as duas em paralelo: quatro.
+
+**Regra prática ao escrever tela:** a composição das leituras mora em um módulo
+de dados (`app/cockpit-data.ts`, `app/jobs/jobs-data.ts`,
+`app/searches/searches-data.ts`, `app/candidate/skills/data.ts`), nunca no corpo
+da página, e cada um desses módulos tem um caso em `tests/db-fan-out.test.ts`.
+Composição na página é invariante sem guarda.
+
+E **passe o câmbio adiante.** `loadRates()` são duas consultas sem cache, e
+`listBoard`, `countBoard` e `countHiddenByPayRange` buscavam cada uma a sua:
+quatro idas ao banco pelo mesmo câmbio numa requisição de `/jobs`.
+`BoardFilters.rates` existe para isso.
+
 **O Sentry não vê isso.** `FUNCTION_INVOCATION_TIMEOUT` mata o processo; o
 código não falha, não reporta, e o registro da Vercel traz uma linha só. A falha
 mais visível do produto é a única invisível na telemetria — procure nos logs da

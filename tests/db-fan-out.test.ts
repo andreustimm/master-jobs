@@ -28,6 +28,10 @@ import type { DB } from "../src/core/db/client.ts";
 import { ensurePrimaryTrack, trackOverview, trackSuggestion } from "../src/contexts/matching/index.ts";
 import { candidateSkills } from "../src/contexts/skills/index.ts";
 import { loadSkillsScreen } from "../app/candidate/skills/data.ts";
+import { loadCockpit } from "../app/cockpit-data.ts";
+import { loadSearchesScreen } from "../app/searches/searches-data.ts";
+import { loadJobsView } from "../app/jobs/jobs-data.ts";
+import { readFilters, toBoardFilters } from "../app/filter-state.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
 let db: DB;
@@ -120,6 +124,72 @@ describe("leque de consultas por tela", () => {
     const peak = await peakInFlight(async () => {
       const visao = await trackOverview(candidateId);
       expect(Array.isArray(visao.tracks)).toBe(true);
+    });
+
+    expect(peak).toBeLessThanOrEqual(TETO);
+  });
+
+  /**
+   * As três telas que a régua não alcançava.
+   *
+   * A régua media FUNÇÃO, e tela não é função: `/`, `/jobs` e `/searches`
+   * compunham as leituras no corpo do Server Component, onde `peakInFlight` não
+   * chega. As três funções consertadas passavam, a suíte ficava verde, e o
+   * cockpit — rota que a PWA abre e onde o candidato cai depois do login — pedia
+   * sete conexões de um pool de três.
+   *
+   * Por isso cada caso abaixo chama a função de composição da tela: enquanto a
+   * leitura mora na página, nada aqui a vê.
+   */
+  it("o cockpit não passa do teto", async () => {
+    const candidateId = await seedOwner();
+    await ensurePrimaryTrack(candidateId);
+    const state = readFilters({});
+
+    const peak = await peakInFlight(async () => {
+      const visao = await loadCockpit(candidateId, state, toBoardFilters(state));
+      expect(Array.isArray(visao.top)).toBe(true);
+      // O número do título vem de `countBoard`, não de `facets.total`: as
+      // facetas anulam cada dimensão na própria contagem e respondem outra
+      // pergunta.
+      expect(typeof visao.total).toBe("number");
+    });
+
+    expect(peak).toBeLessThanOrEqual(TETO);
+  });
+
+  it("a tela de vagas não passa do teto, nem com faixa salarial", async () => {
+    // Com faixa o caminho é o mais largo que existe: as três leituras pesadas
+    // normalizam pagamento, e antes cada uma ia buscar o câmbio por conta
+    // própria — duas consultas cada, quatro vezes o mesmo câmbio.
+    const candidateId = await seedOwner();
+    await ensurePrimaryTrack(candidateId);
+
+    const peak = await peakInFlight(async () => {
+      const visao = await loadJobsView({
+        candidateId,
+        params: { pay: "6000", payMax: "30000", cur: "USD", per: "month" },
+        page: 1,
+        pageSize: 25,
+        prefetch: false,
+        schedule: () => {},
+        now: new Date("2026-09-20T12:00:00Z"),
+      });
+      expect(Array.isArray(visao.rows)).toBe(true);
+    });
+
+    expect(peak).toBeLessThanOrEqual(TETO);
+  });
+
+  it("a tela de buscas não passa do teto", async () => {
+    // Duas leituras corrigidas uma a uma para caber em duas, somadas em
+    // paralelo pela única página que usa as duas: quatro em voo.
+    const candidateId = await seedOwner();
+    await ensurePrimaryTrack(candidateId);
+
+    const peak = await peakInFlight(async () => {
+      const visao = await loadSearchesScreen(candidateId, new Date("2026-09-20T12:00:00Z"));
+      expect(Array.isArray(visao.tracks.tracks)).toBe(true);
     });
 
     expect(peak).toBeLessThanOrEqual(TETO);

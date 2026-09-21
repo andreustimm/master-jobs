@@ -336,6 +336,19 @@ export function FilterBar({
             >
               <Carry state={state} except={["pay", "payMax", "cur", "per", "page"]} />
               <PayRange
+                // Chave derivada do estado do SERVIDOR, senão o campo guarda o
+                // valor antigo. `useState` só lê o inicializador na montagem, e
+                // toda navegação da barra é suave: ir de `/jobs?a` para
+                // `/jobs?b` reconcilia a mesma posição da árvore e a ilha não
+                // remonta. Três caminhos do fluxo normal chegavam nisso — faixa
+                // invertida trocada no servidor, o "limpar", e os presets de
+                // corte —, e em todos o Aplicar seguinte reenviava o valor
+                // velho, então o aviso nunca saía e a URL nunca estabilizava.
+                //
+                // O campo de piso que existia antes tinha exatamente esta
+                // guarda, com o comentário explicando por quê; ela saiu junto
+                // com o campo. `q` e `company` seguem com ela logo acima.
+                key={`${state.pay?.min ?? ""}:${state.pay?.max ?? ""}:${extras.pay.period}:${extras.pay.currency}`}
                 min={state.pay?.min}
                 max={state.pay?.max}
                 period={extras.pay.period}
@@ -416,6 +429,11 @@ export function FilterBar({
           >
             <Carry state={state} except={["fit", "fitMax", "page"]} />
             <RangeSlider
+              // Ver a chave do `PayRange` acima. Aqui o caminho mais visível são
+              // os presets de corte: depois de "Aplicável hoje" o quadro filtra
+              // em 60 e o campo continuava em 45, e o Aplicar do Score desfazia
+              // o preset.
+              key={`${state.fit}:${state.fitMax ?? ""}`}
               minName="fit"
               maxName="fitMax"
               // Zero is "every score": the empty field says that, and a typed
@@ -481,13 +499,27 @@ export function FilterBar({
         </Row>
 
         <Row label={t("filters.pipeline")}>
-          <Toggle
-            href={href(base, state, { notApplied: state.notApplied ? undefined : "1" })}
-            active={Boolean(state.notApplied)}
-            hint={t("hints.notApplied")}
-          >
-            {t("filters.notApplied")} · {facets.notApplied}
-          </Toggle>
+          {/*
+            "ainda não enviadas" depende de escopo de candidato, como trilha,
+            "trazida por" e pagamento — e era a única das quatro fora do portão.
+            Sem escopo (recrutador, ou admin puro) ela era um chip que não
+            filtrava nada e anunciava o acervo inteiro: `repo.ts` ignora
+            `hideApplied` sem candidato, de propósito, e o contador somava
+            `appliedAt is null` sobre um join que nunca casa, então TODA linha
+            entrava. Clicar escrevia `notApplied=1` em todo link seguinte e a
+            lista nunca mudava.
+
+            "agrupar repetidas" fica, porque agrupar não depende de candidato.
+          */}
+          {extras && (
+            <Toggle
+              href={href(base, state, { notApplied: state.notApplied ? undefined : "1" })}
+              active={Boolean(state.notApplied)}
+              hint={t("hints.notApplied")}
+            >
+              {t("filters.notApplied")} · {facets.notApplied}
+            </Toggle>
+          )}
           <Toggle
             href={href(base, state, { ungrouped: state.grouped ? "1" : undefined })}
             active={state.grouped}
@@ -516,7 +548,19 @@ export function FilterBar({
 
         {facets.sources.length > 1 && (
           <Row label={t("filters.source")}>
-            <SourcePicker base={base} state={state} sources={facets.sources} t={t} />
+            {/*
+              Chave pelo estado do servidor: `defaultChecked` é DOM não
+              controlado, e sofre o mesmo que os campos da faixa. Depois de
+              "limpar fontes" por navegação suave, as marcas continuavam onde
+              estavam e o Aplicar seguinte ressuscitava a seleção.
+            */}
+            <SourcePicker
+              key={[...state.sources].sort().join(",")}
+              base={base}
+              state={state}
+              sources={facets.sources}
+              t={t}
+            />
           </Row>
         )}
       </div>

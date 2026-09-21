@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { listBoard } from "../../../../src/contexts/matching/index.ts";
 import { countryOf, groupByCountry } from "../../../../src/core/country.ts";
 import { candidateScope, requirePage } from "../../../auth";
@@ -39,12 +39,29 @@ export default async function JobCountries({ params }: { params: Promise<{ id: s
   const rows = await listBoard(candidateId, { sameGroupAs: jobId, status: "any" });
   if (rows.length === 0) notFound();
 
+  // O hub só existe para escolher entre N. Sobrando uma publicação — e sobra,
+  // porque a regra 3 fecha vagas em vez de apagá-las, então basta as irmãs
+  // fecharem para um link salvo cair aqui —, o hub seria uma cópia pior da
+  // própria tela de detalhe, com um cabeçalho dizendo "publicada em 1 países".
+  // Quem pediu o grupo recebe a única publicação que restou.
+  if (rows.length === 1) redirect(`/jobs/${rows[0]!.jobId}`);
+
   const ancora = rows.find((row) => row.jobId === jobId) ?? rows[0]!;
   const paises = groupByCountry(
     rows.map((row) => ({ id: row.jobId, location: row.locationRaw })),
     locale,
   );
+  // Contagem de PAÍSES, não de marcas: localização que não resolve também vira
+  // marca própria, e contá-la como país fazia o cabeçalho afirmar "2 países"
+  // duas linhas acima de "1 sem país identificado".
+  const comPais = paises.filter((pais) => pais.code !== null).length;
   const semPais = rows.filter((row) => countryOf(row.locationRaw) === null).length;
+  const chamada =
+    comPais === 0
+      ? t("jobCountries.leadNoCountry", { postings: rows.length })
+      : comPais === 1
+        ? t("jobCountries.leadOneCountry", { postings: rows.length })
+        : t("jobCountries.lead", { countries: comPais, postings: rows.length });
 
   return (
     <main className="pt-9 pb-16" data-testid="route-job-countries">
@@ -64,7 +81,7 @@ export default async function JobCountries({ params }: { params: Promise<{ id: s
           <strong className="text-foreground">{ancora.companyName}</strong>
         </p>
         <p className="mt-1.5 type-body-md text-muted-foreground" data-testid="countries-lead">
-          {t("jobCountries.lead", { countries: paises.length, postings: rows.length })}
+          {chamada}
         </p>
         {semPais > 0 && (
           <p className="mt-1 type-caption-sm text-muted-foreground">

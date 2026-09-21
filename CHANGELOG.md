@@ -9,6 +9,176 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- **O 504 não estava consertado, e a régua verde era o motivo.** A 1.18.2
+  apertou o teto de conexões para `POOL - 1` e corrigiu três **funções** —
+  `loadSkillsScreen`, `trackOverview`, `trackSuggestion`. Mas
+  `tests/db-fan-out.test.ts` mede função, e tela não é função: quem compõe as
+  leituras no corpo do Server Component fica fora da régua por construção. As
+  três telas que faziam isso eram justamente as maiores.
+
+  | Tela | Consultas em voo antes | Pool |
+  |---|---:|---:|
+  | `/` (cockpit, rota da PWA e do pós-login) | 7 | 3 |
+  | `/jobs` (a tela mais aberta) | 5, e 6 com faixa salarial | 3 |
+  | `/searches` | 4 | 3 |
+
+  `boardFacets` sozinha eram três consultas simultâneas — o pool inteiro dentro
+  de uma leitura, antes de qualquer chamador somar. E `loadRates()`, que são
+  duas consultas sem cache, ia quatro vezes ao banco na mesma requisição de
+  `/jobs`, porque cada leitura que normaliza pagamento buscava o câmbio por
+  conta própria.
+
+  A correção segue o padrão que `app/candidate/skills/data.ts` já tinha: a
+  composição sai da página e vira função, onde o teste alcança. Nascem
+  `app/cockpit-data.ts` e `app/searches/searches-data.ts`, `loadJobsView`
+  serializa em pares, `boardFacets` pica em dois, e `BoardFilters.rates` deixa
+  quem já carregou o câmbio passá-lo adiante. Três casos novos no teste de
+  leque, um por tela — e o de `/searches` foi visto vermelho em 3 antes de
+  passar.
+
+- **O vigia de 22 segundos começava depois da autenticação.**
+  `requireOwnCandidatePage` já vai ao banco, e a espera por conexão atinge a
+  PRIMEIRA consulta da requisição. Travando ali, o temporizador nem era armado;
+  e se o trecho anterior comesse oito segundos, o aviso era agendado para
+  depois dos 30 e o processo morria antes. Agora ele envolve a requisição
+  inteira, e passa a existir também em `/` e `/jobs`, que não tinham nenhum —
+  as duas telas do quadro podiam travar sem deixar rastro.
+
+- **O número do cockpit contava um quadro que o cockpit não mostra.** Ele saía
+  de `facets.total`, e as facetas anulam cada dimensão na própria contagem de
+  propósito, então respondem outra pergunta. Com `/?company=Acme` a lista
+  filtrava e o número ficava no total sem filtro; e com agrupamento ligado por
+  omissão os dois já divergiam sem ninguém tocar em nada. Passa a vir de
+  `countBoard`, que é de onde `/jobs` sempre tirou o dele: a mesma pergunta não
+  pode ter duas respostas em duas telas. Os chips também passam a receber
+  `groupRepeats`, senão um chip mostrava número maior que o total ao lado.
+
+- **Os chips de filtro e o rodapé contavam coisas diferentes.** Ver acima: sem
+  `groupRepeats` nas facetas, o rodapé contava grupos e os chips contavam
+  publicações.
+
+- **Fonte que oculta o empregador não agrupa mais.** A chave do grupo é (ATS,
+  título, empregador), e no Jobgether — 92% do acervo — dois dos três desabam:
+  `company_name` é o rótulo da própria fonte, porque a API não devolve a empresa,
+  e o primeiro elemento é `lever`, o ATS e não o board. Sobrava o título, então
+  duas vagas de empresas **parceiras diferentes** com o mesmo título viravam a
+  mesma vaga em dois países: a de id maior saía do quadro, e o hub apresentava o
+  empregador de uma como o segundo país da outra. A chave ganhou um quarto
+  elemento que torna cada publicação anônima o próprio grupo — com `''` e não
+  `null`, porque `null = null` não é verdade em SQL. O discriminador já existia
+  no arquivo; só o agrupamento não perguntava.
+
+- **Grupo cuja publicação de menor id é cortada por um filtro não desaparece
+  mais.** `canonicalOfGroup` era um anti-join que não conhecia `minFit`,
+  `hideBlocked`, `term` nem `freshDays` — esses moram no `where` de fora. Quando
+  a de menor id falhava um filtro, TODAS as irmãs falhavam o teste de canônica e
+  o grupo inteiro saía do quadro, com uma irmã casando tudo; e como `countBoard`
+  compartilha o predicado, o rodapé concordava com a lista e nada parecia
+  errado. O gatilho era a tela padrão: agrupamento ligado e corte em 45, com geo
+  valendo 15 dos 100 pontos. Virou `row_number()` sobre o conjunto já filtrado,
+  então filtro novo entra sem precisar ser repetido na escolha.
+
+- **O `+N` da fileira de bandeiras leva ao hub**, não à publicação canônica —
+  que é o menor id do grupo e portanto o mesmo destino da primeira bandeira.
+  Pedir "os outros 34 países" abria a vaga na Holanda, exatamente o "país que
+  ninguém pediu" que o hub existiu para remover.
+
+- **Publicação sem localização nenhuma não é mais um link vazio.** A coluna é
+  nulável e a ingestão grava `null` sem normalizar; `groupByCountry` devolve
+  `name: ""`, e a apresentação usava isso cru — âncora de zero caractere, com
+  `title=""` e `aria-label=""`, invisível e sem nome acessível, ainda ocupando um
+  dos oito lugares visíveis. Ganhou rótulo do dicionário. A decisão do que
+  mostrar e para onde ir saiu do JSX e virou `countryRow` em `src/core/country.ts`,
+  função pura, porque nenhuma das duas era alcançável por teste onde estava.
+
+- **Campo de faixa guardava o valor antigo depois de navegação suave.** `useState`
+  só lê o inicializador na montagem, e as ilhas eram montadas sem `key`: ir de um
+  filtro para outro reconcilia a mesma posição da árvore e não remonta. Três
+  caminhos do fluxo normal chegavam nisso — faixa invertida trocada no servidor,
+  o "limpar", e os presets de corte —, e em todos o Aplicar seguinte reenviava o
+  valor velho, então o aviso nunca saía e a URL nunca estabilizava. O campo de
+  piso que existia antes tinha exatamente esta guarda, com o comentário
+  explicando por quê; ela saiu junto com o campo. Vale também para as marcas do
+  combo de fontes, que são DOM não controlado.
+
+- **O filtro de fonte casava por `like`, então `%` ou `_` no parâmetro alargava
+  o filtro.** O valor sempre viajou como parâmetro, logo nunca houve injeção —
+  mas metacaractere de `like` dentro de um parâmetro continua sendo
+  metacaractere, e a fonte é texto livre lido da URL. `?source=%` montava
+  `like '%:%'`, que toda `source_id` casa: o chip aparecia como filtro ativo e o
+  quadro mostrava tudo. `?source=_ever` escolhia uma fonte que ninguém marcou.
+  Virou igualdade sobre `split_part`, o mesmo recorte que lista as fontes no
+  combo — é a regra do vizinho `strpos`, que já raciocinava sobre isso três
+  linhas abaixo.
+
+- **Âncora fechada não nomeia mais o grupo.** O contrato de `sameGroupAs` diz
+  que o link vale enquanto a publicação que ele nomeia está aberta e dá 404
+  quando ela fecha; faltava o predicado. Linha fechada continuava sendo linha, o
+  `exists` casava, o filtro de fora derrubava só a âncora, e a página caía na
+  primeira irmã: cabeçalho, contagem e lista descrevendo OUTRA publicação sob a
+  URL que a pessoa tinha salvo.
+
+- **O hub não diz mais "publicada em 1 países".** O plural estava fixo na frase
+  e o número contava marcas, não países — duas cidades do mesmo país davam "1
+  países", e um país mais uma localização que não resolve dava "2 países" duas
+  linhas acima de "1 sem país identificado". Agora conta só marca com país, e há
+  frase para um país e para nenhum. Grupo que encolheu para uma publicação
+  redireciona para a tela dela, em vez de virar uma cópia pior do detalhe.
+
+- **O resumo "publicada em N países" não era anunciado.** Ele existia só como
+  `aria-label` de um `<span>`, cujo role implícito é `generic` — e ARIA proíbe
+  nome acessível nesse role, então o rótulo era descartado. A varredura não
+  pegava porque `aria-prohibited-attr` devolve *incomplete*, e não violação,
+  quando o elemento tem texto dentro. Ganhou `role="group"`.
+
+- **O chip "ainda não enviadas" aparecia sem escopo de candidato.** Era a única
+  das quatro fileiras dependentes de funil fora do portão. Para recrutador ou
+  admin puro, o chip não filtrava nada — `repo.ts` ignora `hideApplied` sem
+  candidato, de propósito — e o contador anunciava o acervo inteiro, porque somava
+  `appliedAt is null` sobre um join que nunca casa. Clicar escrevia `notApplied=1`
+  em todo link seguinte e a lista nunca mudava.
+
+- **O campo de piso salarial aceitava 0**, valor que o leitor da URL recusa com
+  aviso: digitar `0` (ou usar a seta para baixo do campo numérico) produzia "o
+  valor precisa ser um número inteiro de 1 a 2.000.000" para um valor que o
+  próprio controle acabara de oferecer. O campo anterior tinha `min={1}`; a
+  restrição não veio junto na mudança para o componente compartilhado. No Score o
+  piso segue 0, que ali significa "toda nota".
+
+- **O aviso de faixa invertida saía duas vezes.** As duas faixas compartilham a
+  chave do dicionário e empilhavam sem conferir, então
+  `?fit=80&fitMax=20&pay=5000&payMax=1000` imprimia a mesma frase duas vezes,
+  com dois irmãos de mesma `key` do React. É a guarda que o `pay_invalid` doze
+  linhas abaixo já usava.
+
+- **`?pay=%20` dizia "valor inválido" em vez de "sem piso".** `bound()` decidia
+  se havia valor sem aparar, sendo o único leitor do módulo que não aparava — e
+  agora governa dois parâmetros em vez de um. Campo vazio é escolha, não erro.
+
+- **Nome de lugar americano que também é nome de país resolvia para o país
+  errado.** A tabela do ICU é a lista completa de países, então dentro de uma
+  localização composta o trecho vencia: `"Peru, Indiana"` virava Peru,
+  `"Mexico, Missouri"` virava México, `"Lebanon, NH"` virava Líbano. Quando outro
+  trecho nomeia um estado americano, o texto prova sozinho que o lugar é nos EUA,
+  e o nome ambíguo deixa de decidir. `"Lima, Peru"` continua sendo o Peru.
+  Fica de fora `"Atlanta, Georgia"`, onde o único candidato é também o estado e
+  nada mais no texto prova nada — separar exigiria tabela de cidades, e a forma
+  com o país no fim já acerta.
+
+### Removido
+
+- `GET /api/diag-skills`, a rota que mediu o 504 de dentro do runtime da Vercel.
+  Ela se declarava temporária — "sai junto com a correção" — e a correção subiu
+  na 1.18.2. Ficar era dívida com três defeitos próprios: `session.candidateId
+  ?? 1` fazia um admin sem papel `candidate` ler o candidato 1, que é
+  exatamente o que a política nega de propósito; sete passos de sete segundos
+  somavam 49 contra os 30 da função, então no pior caso ela não devolvia nada;
+  e o texto cru da exceção voltava no corpo sem `redactSecrets`, numa rota que
+  se abre justamente quando o banco está ruim — e falha de conexão do
+  `postgres` carrega a URL com senha.
+
 ### Alterado
 
 - **`deep-review`, `qa-report`, `qa-execution`, `agent-output-audit` e `ship-pr`
@@ -165,6 +335,51 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   grupos; o resto são cidades soltas, que aparecem como texto.
 - Interruptor "agrupar repetidas" na barra de filtros, ligado por padrão. A URL
   carrega a exceção (`ungrouped=1`), não a regra, para o link comum ficar curto.
+- A tela Vagas filtra remuneração por **faixa**, e não só por piso: dois campos
+  e um slider de dois punhos sobre o mesmo par, com moeda e período do lado. O
+  teto entra na URL como `payMax`, a consulta ganhou o lado de cima em
+  `payCondition`, e `countHiddenBelowMinimum` virou `countHiddenByPayRange`
+  porque agora conta os dois lados. Faixa invertida — que só URL escrita à mão
+  e campo digitado produzem — troca os lados e avisa, em vez de ignorar.
+- O corte de aderência virou **Score**, e virou faixa: `fit` ganhou o par
+  `fitMax` e `BoardFilters.maxFit`, no lugar dos chips de 45+/55+/60+/70+. O
+  campo aceita só de 0 a 100 e corta o resto enquanto se digita, porque nota
+  acima do teto do scorer não existe.
+- Filtro **Fonte** em multi-seleção: uma fonte por adapter novo já fazia a
+  fileira de chips quebrar em três linhas, e escolher três fontes custava três
+  idas ao servidor. `source` repete na URL, `BoardFilters.sourceKinds` recebe a
+  lista, e `source=x` sozinho — o formato que ainda circula em link salvo —
+  continua valendo.
+- Filtro **Empresa**, separado da busca livre. O termo geral varre cargo,
+  empresa e descrição, então procurar "Shopify" ali traz toda vaga que cita
+  Shopify no texto; este pergunta só pelo empregador, e casa dentro da palavra
+  porque "Shopify" precisa achar "Shopify Inc". O valor viaja como parâmetro de
+  `strpos`, então `%` num nome de empresa é texto, não curinga.
+- Filtro **funil**: "ainda não enviadas" esconde o que já foi enviado. Lê
+  `appliedAt`, não o nome do status — o carimbo é posto uma vez, na entrada em
+  `applied`, e sobrevive a recusa, desistência e arquivamento; uma lista de
+  status precisaria ser editada a cada estado novo e esqueceria quem saiu dele.
+
+### Alterado
+
+- As faixas de filtro passam a compartilhar uma grade de duas colunas, rótulo e
+  controles, com um separador antes de "ordenar" porque ordenar não é filtrar.
+  Antes cada faixa tinha o mesmo peso e a mesma borda esquerda irregular, que é
+  o que fazia uma barra com tudo dentro parecer uma barra sem nada.
+- O teto do filtro salarial caiu de 10.000.000 para 2.000.000. Acima disso não
+  é salário, e um zero a mais deve ser recusado em vez de esvaziar o quadro em
+  silêncio. A escala de arraste continua bem mais baixa — ela é leitura, e
+  estica para caber o que for digitado.
+- Campo vazio numa faixa passa a dizer o que significa, no próprio campo: "sem
+  mínimo", "sem teto", ou o limite real quando existe (0 e 100 no Score). A
+  convenção "punho no extremo é sem limite" estava correta e invisível, o que
+  fazia o campo parecer ter perdido o valor.
+- Trilha, "trazida pelo termo" e cluster ganharam uma frase de apoio cada. As
+  três ofereciam chips com as MESMAS palavras — PHP, Laravel — e faziam coisas
+  diferentes: a trilha decide qual alvo dá a nota, o termo diz qual busca
+  trouxe a vaga, e o cluster é o tipo de posição. O nome sozinho não separava.
+- `toParams` devolve pares em vez de objeto: um objeto por nome só consegue
+  guardar a última fonte escolhida.
 
 ### Corrigido
 
@@ -172,8 +387,36 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   declarar o tempo que precisa. Ele abre quatro processos Node, um por URL
   recusada: 2,2s nesta máquina, e no runner estourou o limite padrão de 5s e
   reprovou uma PR que não tocava o arquivo.
+- A lista de uma dimensão não é mais estreitada pelo filtro dela mesma. Contar
+  as fontes de um quadro já restrito a duas fontes responde "quais duas você
+  escolheu", e o combo só podia perder opções: escolher `ashby` deixava `ashby`
+  como a única coisa restante para escolher. Vale igual para cluster.
+- `fit=abc` chegava na consulta como `NaN` e o Postgres recusava a página. O
+  corte passa a ser preso entre 0 e 100 na leitura da URL, e não confiado.
+- Um teste de arquitetura passa a percorrer o grafo real de imports e reprovar
+  ilha cliente que alcance Drizzle ou builtin `node:`, parando em módulo
+  `"use server"` — a porta legítima. O slider importava uma constante de
+  `app/filter-state.ts` e levava o contexto de matching, `node:crypto` e
+  `node:dns` para o bundle do browser; `next build` recusou a página inteira
+  com um erro que nomeava um esquema de URI, não o import culpado. `pnpm check`
+  ficou verde do começo ao fim: type checker não tem opinião sobre em qual
+  runtime um módulo termina.
+- A conferência pós-deploy reprovou na primeira execução real por defeito dela
+  mesma: procurava "número com dois pontos" no HTML e achou o hash de um asset
+  (`022.617.46`) em vez da versão. A página passa a declarar
+  `data-app-version` e o workflow lê esse atributo; o teste prende os dois lados
+  do contrato. Produção estava correta e servindo 1.17.1 o tempo todo.
 
 ### O que não é óbvio no diff
+
+- **As entradas acima sobre os filtros e sobre `data-app-version` foram
+  restauradas em 2026-09-21**, não reescritas. Elas existiam quando cada
+  correção entrou e desapareceram antes da tag: uma branch substituiu o bloco
+  `## [Unreleased]` inteiro pelo seu em vez de acrescentar ao que já estava
+  ali, e o commit de release fechou a versão sobre o sobrevivente. O gate não
+  vê isso — `bodyHasUserContent` só pergunta se há conteúdo AGORA, e uma
+  reescrita passa. Ao rebasear sobre notas de outra branch, `## [Unreleased]`
+  é append-only.
 
 - O agrupamento é de **apresentação**: os registros continuam separados, e
   `closedAt` e as chaves estrangeiras das candidaturas não são tocados.

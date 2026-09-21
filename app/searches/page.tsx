@@ -4,11 +4,8 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import {
-  termOverview,
-  trackOverview,
-  type TermView,
-} from "../../src/contexts/matching/index.ts";
+import type { TermView } from "../../src/contexts/matching/index.ts";
+import { loadSearchesScreen } from "./searches-data.ts";
 import { termSearchPlatforms, type PlatformCaptureState } from "../../src/contexts/sourcing/index.ts";
 import type { TranslationKey, Translator } from "../../src/core/i18n/index.ts";
 import { requireOwnCandidatePage } from "../auth";
@@ -93,7 +90,7 @@ export default async function SearchesPage() {
   // são do candidato e de mais ninguém (ADR-006).
   const { session, candidateId } = await requireOwnCandidatePage("candidate:read");
   const now = new Date();
-  const [tracks, terms] = await Promise.all([trackOverview(candidateId), termOverview({ candidateId }, now)]);
+  const { tracks, terms } = await loadSearchesScreen(candidateId, now);
   const platforms = termSearchPlatforms();
   const impersonated = session.impersonatedBy !== null;
   // Sessão emprestada nunca dispara busca: o que ela salva espera a varredura.

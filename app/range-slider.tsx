@@ -41,11 +41,11 @@ const THUMB =
   "relative size-4 rounded-full border-2 border-primary bg-background after:absolute after:-inset-3 after:content-['']";
 
 /** A typed field is clamped to the range the filter accepts, as it is typed. */
-function clamp(raw: string, limit: number): string {
+function clamp(raw: string, floorLimit: number, limit: number): string {
   if (raw.trim() === "") return "";
   const value = Number(raw);
   if (!Number.isFinite(value)) return raw;
-  return String(Math.min(Math.max(value, 0), limit));
+  return String(Math.min(Math.max(value, floorLimit), limit));
 }
 
 /** The field's value as a slider position, clamped into the scale. */
@@ -67,6 +67,7 @@ export function RangeSlider({
   labels,
   testId,
   children,
+  floorLimit = 0,
 }: {
   minName: string;
   maxName: string;
@@ -74,6 +75,17 @@ export function RangeSlider({
   max: number | undefined;
   /** Largest value the fields accept. */
   limit: number;
+  /**
+   * Smallest value the fields accept.
+   *
+   * Zero é legítimo no Score ("toda nota") e recusado na faixa salarial, onde o
+   * leitor da URL exige `> 0`. Com o piso fixo em 0 aqui, digitar `0` — ou
+   * apertar a seta para baixo do `input[type=number]` — enviava `pay=0`, e a
+   * tela respondia "o valor precisa ser um número inteiro de 1 a 2.000.000" para
+   * um valor que o próprio controle acabara de oferecer. O campo que este
+   * componente substituiu tinha `min={1}`; a restrição não veio junto.
+   */
+  floorLimit?: number;
   /** Where the scale ends before a typed value stretches it. */
   ceiling: number;
   step: number;
@@ -99,13 +111,13 @@ export function RangeSlider({
           <Input
             type="number"
             name={minName}
-            min={0}
+            min={floorLimit}
             max={limit}
             step={1}
             inputMode="numeric"
             value={floor}
             placeholder={labels.minPlaceholder}
-            onChange={(event) => setFloor(clamp(event.target.value, limit))}
+            onChange={(event) => setFloor(clamp(event.target.value, floorLimit, limit))}
             className="w-28"
             data-testid={`${testId}-min`}
           />
@@ -115,13 +127,13 @@ export function RangeSlider({
           <Input
             type="number"
             name={maxName}
-            min={0}
+            min={floorLimit}
             max={limit}
             step={1}
             inputMode="numeric"
             value={roof}
             placeholder={labels.maxPlaceholder}
-            onChange={(event) => setRoof(clamp(event.target.value, limit))}
+            onChange={(event) => setRoof(clamp(event.target.value, floorLimit, limit))}
             className="w-28"
             data-testid={`${testId}-max`}
           />

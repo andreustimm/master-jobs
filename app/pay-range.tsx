@@ -53,6 +53,11 @@ export function PayRange({
       min={min}
       max={max}
       limit={PAY_FILTER_MAX}
+      // Salário começa em 1, não em 0: `positiveInt` recusa zero na leitura da
+      // URL, então oferecer zero no campo era oferecer um valor que a tela
+      // devolveria como inválido. No Score o piso segue sendo 0, que ali
+      // significa "toda nota".
+      floorLimit={1}
       ceiling={PAY_SLIDER_CEILING[unit]}
       step={PAY_SLIDER_STEP[unit]}
       labels={labels}

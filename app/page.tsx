@@ -1,6 +1,6 @@
 import { TransitionLink } from "./transition-link";
-import { boardFacets, clusterBreakdown, corpusStats, listBoard } from "../src/contexts/matching/index.ts";
-import { pipelineCounts } from "../src/contexts/pursuit/index.ts";
+import { loadCockpit } from "./cockpit-data.ts";
+import { comVigia } from "./timeout-watch.ts";
 import { FilterBar, href, readFilters, toBoardFilters } from "./filters";
 import { JobList } from "./joblist";
 import { Legend, Stat } from "./ui";
@@ -16,28 +16,34 @@ export default async function Cockpit({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { t, locale } = await getTranslator();
-  // Sem escopo de candidato, o cockpit não é negado — é REDIRECIONADO.
+  // O vigia cobre a AUTENTICAÇÃO e as leituras, não só as leituras.
   //
-  // 403 aqui seria correto e inútil: o recrutador não tem funil nem currículo,
-  // e dizer "proibido" para quem nunca poderia ter aquilo é resposta certa para
-  // a pergunta errada. Pior com a PWA instalada: `start_url` é "/" e não pode
-  // variar por papel, então o app abriria numa tela de erro — reintroduzindo,
-  // pela porta do manifest, o defeito que a E-06 corrigiu.
-  const session = await requireSession();
-  if (candidateScope(session) === null) redirect("/jobs");
+  // A espera por conexão atinge a primeira consulta da requisição, e
+  // `requireOwnCandidatePage` já vai ao banco: envolver só `loadCockpit` deixava
+  // a janela aberta justamente onde o defeito mora.
+  //
+  // O que ele NÃO envolve é a renderização. Envolver o componente inteiro num
+  // promise devolvido por um helper muda a forma como a árvore é transmitida, e
+  // o commit da rota passa a acontecer numa só pintura — o que apaga o overlay
+  // de transição que a suíte de browser observa no redirect do login. O vigia
+  // existe para medir espera de banco; a árvore não é problema dele.
+  const { state, dados } = await comVigia("/", async () => {
+    // Sem escopo de candidato, o cockpit não é negado — é REDIRECIONADO.
+    //
+    // 403 aqui seria correto e inútil: o recrutador não tem funil nem currículo,
+    // e dizer "proibido" para quem nunca poderia ter aquilo é resposta certa
+    // para a pergunta errada. Pior com a PWA instalada: `start_url` é "/" e não
+    // pode variar por papel, então o app abriria numa tela de erro —
+    // reintroduzindo, pela porta do manifest, o defeito que a E-06 corrigiu.
+    const session = await requireSession();
+    if (candidateScope(session) === null) redirect("/jobs");
 
-  const { candidateId } = await requireOwnCandidatePage("candidate:read");
+    const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
-  const state = readFilters(await searchParams);
-  const filters = toBoardFilters(state);
-
-  const [stats, counts, clusters, top, facets] = await Promise.all([
-    corpusStats(candidateId),
-    pipelineCounts(candidateId),
-    clusterBreakdown(candidateId, 45),
-    listBoard(candidateId, { ...filters, limit: 12 }),
-    boardFacets(candidateId, { minFit: state.fit, cluster: state.cluster, term: state.term, sourceKinds: state.sources, workMode: state.workMode }),
-  ]);
+    const lido = readFilters(await searchParams);
+    return { state: lido, dados: await loadCockpit(candidateId, lido, toBoardFilters(lido)) };
+  });
+  const { stats, counts, clusters, total, top, facets } = dados;
 
   const tracked = Object.values(counts).reduce((a, b) => a + b, 0);
 
@@ -74,7 +80,7 @@ export default async function Cockpit({
           <h2 className="type-display-sm">
             {t("cockpit.topRanked")}
             <span className="ml-1 text-sm font-normal text-muted-foreground">
-              · {t("cockpit.matching", { count: facets.total.toLocaleString(locale) })}
+              · {t("cockpit.matching", { count: total.toLocaleString(locale) })}
             </span>
           </h2>
           <TransitionLink href={href("/jobs", state, {})} data-testid="cockpit-see-all" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">

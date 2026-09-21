@@ -18,6 +18,57 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- As telas pesadas voltavam a demorar até o servidor desistir quando eram
+  abertas duas vezes seguidas — navegando pelo menu, ou com duas abas. A
+  correção anterior cobriu três telas; faltavam as três maiores, entre elas a
+  inicial e a de Vagas. Agora todas pedem menos do banco de uma vez.
+- A tela inicial mostrava o total de vagas sem filtro ao lado de uma lista que
+  o filtro já havia cortado — e, com vagas repetidas agrupadas, os dois números
+  divergiam sem você tocar em nada. Os contadores dos filtros tinham o mesmo
+  problema.
+- Quando uma tela travava, o registro do que aconteceu podia não sair. Agora
+  ele cobre a requisição inteira, e passou a existir também na tela inicial e
+  na de Vagas.
+- Vagas de fontes que não dizem o nome da empresa podiam ser fundidas numa linha
+  só por terem o mesmo cargo — e aí uma delas ficava inalcançável no quadro, e a
+  tela de países mostrava a vaga de outra empresa como se fosse um segundo país
+  da primeira. Agora elas continuam separadas.
+- Uma vaga publicada em vários países desaparecia da lista quando a publicação
+  usada para representá-la era cortada pelo filtro — mesmo havendo outra que
+  passava. Agora quem representa o grupo é sempre uma que passa.
+- O "+N" da fileira de bandeiras abria um país escolhido pelo sistema; agora
+  leva à tela com todos os países, que é o que o "+N" promete.
+- Publicação sem localização aparecia como um link vazio, invisível e sem nome
+  para quem usa leitor de tela. Agora ela diz "sem localização".
+- Depois de limpar um filtro, de usar um atalho de corte ou de ter uma faixa
+  corrigida pelo sistema, os campos continuavam mostrando o valor anterior — e
+  aplicar de novo trazia o filtro de volta sozinho.
+- Um link salvo para a tela de países continuava abrindo depois de a vaga daquele
+  link fechar, mostrando outra publicação com o título e a contagem dela. Agora
+  responde que a vaga não está mais lá.
+- A tela de países dizia "publicada em 1 países", e contava como país uma
+  localização que não identifica nenhum. Quando sobra uma publicação só, ela leva
+  direto para a vaga.
+- O resumo "publicada em N países" não era lido por leitores de tela.
+- O campo de salário mínimo aceitava 0 e a tela respondia que 0 é inválido.
+- Com faixa de salário e de Score invertidas ao mesmo tempo, o aviso aparecia
+  duplicado.
+- Vagas em cidades americanas com nome de país — "Peru, Indiana",
+  "Mexico, Missouri", "Lebanon, NH" — apareciam com a bandeira errada.
+- Um valor estranho no filtro de fonte podia fazer a tela mostrar todas as fontes
+  enquanto o filtro parecia ativo.
+- Quem entra como recrutador não vê mais o filtro "ainda não enviadas", que não
+  se aplica a ele e mostrava um número errado.
+
+### Adicionado
+
+- As novidades da versão 1.18.0 sobre os filtros da tela de Vagas — faixa de
+  salário, Score como faixa, fontes em seleção múltipla, campo de empresa e o
+  filtro "ainda não enviadas" — estavam faltando nesta lista por um erro de
+  registro, e foram devolvidas à versão em que saíram.
+
 ## [1.20.0] - 2026-09-20T23:41:23.163Z
 
 ### Adicionado
@@ -64,6 +115,24 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   uma em cada três.
 - Quem preferir ver cada publicação separada desliga em "agrupar repetidas",
   na linha do funil.
+- Na tela de Vagas você agora escolhe uma **faixa** de salário, com mínimo e
+  máximo, arrastando ou digitando — antes só dava para dizer o mínimo.
+- O "corte" virou **Score**, e também é faixa: você pede, por exemplo, de 60 a
+  80, em vez de escolher entre botões prontos.
+- As **fontes** viraram uma lista de seleção múltipla: marque quantas quiser e
+  aplique de uma vez, em vez de uma fonte por clique.
+- Campo de **empresa**, para procurar pelo empregador sem trazer toda vaga que
+  só cita aquele nome no texto.
+- Filtro **"ainda não enviadas"**, que esconde as vagas que você já enviou.
+
+### Alterado
+
+- Os filtros ficaram alinhados numa grade, com o nome de cada um à esquerda, e
+  "ordenar" separado dos filtros.
+- Campo de faixa vazio agora diz o que significa: "sem mínimo", "sem teto", ou
+  o limite real — 0 e 100 no Score.
+- Trilha, "trazida pelo termo" e cluster passam a explicar, em uma linha, o que
+  cada um faz — os três mostravam os mesmos nomes e faziam coisas diferentes.
 
 ## [1.17.1] - 2026-09-20T14:28:16.117Z
 

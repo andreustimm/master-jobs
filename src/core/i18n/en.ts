@@ -127,6 +127,7 @@ export const en: Dictionary = {
     countriesLabel: "posted in {count} countries",
     countryWithCount: "{name} · {count} postings",
     moreCountries: "+{count}",
+    countryUnknown: "no location",
     offerSearch: "Search the platforms for “{term}”",
     offerSearchLead: "Saving the term searches the registered platforms for new jobs with it, every day.",
     emptyTerm: "No job in the corpus mentions “{term}”.",
@@ -324,6 +325,8 @@ export const en: Dictionary = {
   jobCountries: {
     back: "← jobs",
     lead: "This job was posted in {countries} countries, across {postings} listings. Choose where to apply.",
+    leadOneCountry: "This job was posted in 1 country, across {postings} listings. Choose where to apply.",
+    leadNoCountry: "This job has {postings} listings, none with a country resolved. Choose where to apply.",
     withoutCountry: "{count} with no country resolved — the location shows as it came.",
     empty: "No posting in this group is still open.",
   },

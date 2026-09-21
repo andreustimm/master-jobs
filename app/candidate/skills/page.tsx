@@ -40,14 +40,25 @@ const CATEGORY_LABEL_KEYS = {
 export default async function SkillsPage() {
   const { t, locale } = await getTranslator();
   void locale;
-  // Guard antes de ler qualquer dado. O escopo vem da sessão.
-  const { candidateId } = await requireOwnCandidatePage("candidate:read");
-  // A ordem das leituras é contrato com o pool de conexões e está em `data.ts`,
-  // onde o teste de leque consegue medi-la.
-  // Esta tela já travou em produção por disputa de conexão, e o travamento
-  // não deixava rastro nenhum: a Vercel mata o processo e o código não
-  // chega a falhar. Se voltar a acontecer, agora nasce visível.
-  const { mine, demand } = await comVigia("/candidate/skills", () => loadSkillsScreen(candidateId));
+  // O vigia cobre a autenticação E as leituras.
+  //
+  // `requireOwnCandidatePage` já vai ao banco — `currentSession` roda
+  // `getCandidate()` e resolve o token —, e a espera por conexão atinge a
+  // PRIMEIRA consulta da requisição, não a terceira. Envolvendo só as leituras,
+  // travar ali não armava o temporizador; e se o trecho anterior comesse oito
+  // segundos, o aviso era agendado para depois dos 30 e a plataforma encerrava o
+  // processo antes. Nos dois casos o travamento voltava a ser invisível.
+  //
+  // `warnIfSlower` desarma o prazo no `finally`, então o `redirect` da guarda
+  // continua sendo um desvio normal e não deixa temporizador pendurado.
+  //
+  // A renderização fica fora: ver `app/page.tsx`.
+  const { mine, demand } = await comVigia("/candidate/skills", async () => {
+    const { candidateId } = await requireOwnCandidatePage("candidate:read");
+    // A ordem das leituras é contrato com o pool de conexões e está em
+    // `data.ts`, onde o teste de leque consegue medi-la.
+    return loadSkillsScreen(candidateId);
+  });
 
   const pending = mine.filter((s) => s.status === "detected");
   const confirmed = mine.filter((s) => s.status === "confirmed");
