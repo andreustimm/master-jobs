@@ -9,6 +9,20 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Alterado
+
+- **`deep-review`, `qa-report`, `qa-execution`, `agent-output-audit` e `ship-pr`
+  passam a ser invocáveis por agente.** O `disable-model-invocation` saiu do
+  frontmatter das cinco.
+
+  O custo do bloqueio apareceu em 2026-09-20: sete PRs seguiram para produção
+  sem revisão profunda porque a única pessoa que podia rodá-la estava ocupada
+  com o resto. Gate que só um humano dispara não é gate — é fila.
+
+  A garantia que importa nunca foi quem aperta o botão: é a skill recusar
+  aplicar correção. Ela revisa e relata; quem corrige decide o que aceitar. Isso
+  continua igual, e publicar na PR continua exigindo `--publish`.
+
 ## [1.20.0] - 2026-09-20
 
 ### Adicionado
