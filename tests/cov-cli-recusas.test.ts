@@ -51,24 +51,44 @@ describe("id que não é número", () => {
 });
 
 describe("sem candidato ativo", () => {
-  it("UT-242 `tracks list` sai em silêncio — e este teste prende isso como é hoje", async () => {
-    // Medido: com uma linha de candidato padrão no banco mas sem candidato
-    // ATIVO resolvido, o comando retorna sem imprimir nada e sem estourar.
-    //
-    // O branch é real e agora está coberto. Mas silêncio absoluto é fricção:
-    // quem roda não distingue "não há trilha" de "não achei candidato", e
-    // silêncio lê como sucesso. Registrado na tarefa #39 como achado de
-    // usabilidade de CLI, não corrigido aqui — este arquivo é de cobertura, e
-    // mudar a saída do comando é decisão de produto.
+  /**
+   * O candidato ativo é resolvido pelo SLUG `default`, não pela coluna
+   * `is_default`.
+   *
+   * `getCandidate()` consulta `slug = "default"`, que é o slug que `jho db seed`
+   * cria. Uma linha com `is_default: true` e outro slug NÃO é o candidato ativo —
+   * medido, e é a razão de todo comando sem `--candidate` recusar num banco
+   * semeado à mão com outro slug.
+   *
+   * A recusa é uma exceção com mensagem acionável, e ela sobe até a guarda de
+   * entrypoint, que a imprime. A bancada não tem essa guarda — ela chama
+   * `buildProgram()` direto, justamente para que importar o módulo não execute a
+   * CLI — então aqui a mensagem chega em `erro`, e não em `err`. Saída vazia na
+   * bancada NÃO significa comando silencioso no terminal.
+   */
+  it("UT-242 sem candidato de slug `default`, a recusa diz o comando que resolve", async () => {
     await banco()
       .insert(candidate)
       .values({ slug: "dono", name: "Dono", isDefault: true });
 
     const r = await rodar("tracks", "list");
 
-    // O que importa provar: não estoura, e não vaza stack.
-    expect(r.err).not.toMatch(/at \w+ \(/);
-    expect((r.out + r.err).trim()).toBe("");
+    expect((r.erro as Error).message).toMatch(/Candidato padrão não cadastrado/);
+    // E ela diz o que fazer, que é o que separa recusa de beco sem saída.
+    expect((r.erro as Error).message).toMatch(/jho db seed/);
+  });
+
+  it("UT-245 com o slug `default` presente, o mesmo comando responde", async () => {
+    // O outro lado: prova que a recusa acima é sobre a ausência do slug, e não
+    // um comando quebrado.
+    await banco()
+      .insert(candidate)
+      .values({ slug: "default", name: "Padrão", isDefault: true });
+
+    const r = await rodar("tracks", "list");
+
+    expect(r.erro).toBeUndefined();
+    expect(r.out).toMatch(/no own matching profile/i);
   });
 });
 
