@@ -13,6 +13,7 @@ import { application, job, jobScore } from "../db/schema.ts";
 import { listBoard } from "../db/repo.ts";
 import { primaryScoreFilter } from "../../contexts/matching/index.ts";
 import { loadProfile } from "../profile/load.ts";
+import { firstNonEmpty } from "../sources/http.ts";
 
 export type JobSweepSnapshotCandidate = {
   id: number;
@@ -140,7 +141,12 @@ export async function buildJobSweepSnapshot(
         title: row.title,
         company: row.companyName,
         location: row.locationRaw,
-        url: row.applyUrl ?? row.url,
+        // `firstNonEmpty`, e não `??`: várias fontes devolvem `""` para campo não
+        // preenchido, e um `applyUrl` vazio vencia o `??` — o dossiê saía com
+        // `url: ""`, que num link recarrega a página em que o revisor está em vez
+        // de abrir a vaga. É a regra 17 do repositório, no lugar onde o valor sai
+        // para fora do sistema.
+        url: firstNonEmpty(row.applyUrl, row.url) ?? row.url,
         postedAt: row.postedAt,
         firstSeenAt: row.firstSeenAt,
         fit: row.fit,
