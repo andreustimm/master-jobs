@@ -20,6 +20,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ### Fixed
 
+- When a posting did not give the address of its application form, the sweep's
+  recommendation could come out with a link that led nowhere — clicking it
+  reloaded the same page. The link is now always the posting's own when there is
+  no form.
+
 - With the interface in English, a job's location — which comes from the posting,
   not from the translation — could be treated as untranslated text. It is now
   recognised as posting data, both in the list and in the job detail panel.

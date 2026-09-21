@@ -11,6 +11,19 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Corrigido
 
+- **`applyUrl` vazio chegava ao dossiê da varredura como link vazio.** O endereço
+  que o revisor recebe era montado com `row.applyUrl ?? row.url`, e `??` não
+  protege contra string vazia — a regra 17 deste repositório, a mesma que já
+  apagou 4.538 descrições. Várias fontes devolvem `""` para campo que não
+  preencheram, então uma vaga com `applyUrl: ""` produzia `url: ""`, e um
+  `<a href="">` recarrega a página em que o revisor está em vez de abrir a vaga.
+  Passa a usar `firstNonEmpty()`, a função criada neste repositório para isso.
+
+- **`src/cli.ts` importava a tabela `source` e nunca a usava.** Nas linhas 698-699
+  o nome é parâmetro de callback e sombreava o import. Import de valor morto,
+  removido — e é a remoção que torna possível afirmar, por teste, que nenhum
+  leitor de saúde de fonte monta consulta própria.
+
 - **A localização da vaga passa a ser marcada como dado do usuário.** Ela vem do
   acervo — "São Paulo, State of São Paulo, Brazil" tem acento e continua tendo com
   a interface em inglês —, e sem `data-user-content` a verificação de vazamento de
