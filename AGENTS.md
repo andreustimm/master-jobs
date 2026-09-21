@@ -522,7 +522,7 @@ Artefatos autorais (`personas`, `journeys`, `scenarios`, `charters`, `bugs` e
 `docs/qa/evidence/` guarda evidência volumosa local/CI; ambos ficam ignorados.
 Como a visão não é versionada, quem confere o esquema dos cenários é
 `pnpm check:qa-tracker`, dentro do `pnpm check` e do CI: registro fora do
-esquema reprova o commit.
+esquema reprova o gate local e a PR — nenhum hook o roda no commit.
 Mudanças apenas na documentação ou nos metadados das skills validam estrutura,
 links e scripts afetados; não disparam a suíte do produto sem risco de runtime.
 O navegador de jornada é a dependência local fixada `agent-browser`; instale o
