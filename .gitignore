@@ -59,3 +59,10 @@ public/offline.html
 # QA living docs — generated views & bulky evidence (source of truth: docs/qa/scenarios/ etc.)
 docs/qa/state.csv
 docs/qa/evidence/
+
+# Bytecode de Python. Os gates rodam os scripts das skills de QA com
+# PYTHONDONTWRITEBYTECODE=1, mas quem os importa à mão sem essa variável deixava
+# `__pycache__/` solto na árvore — e a revisão profunda conta arquivo não
+# rastreado no hash que congela o checkout, então um `.pyc` perdido a obrigava a
+# recomeçar a rodada.
+__pycache__/

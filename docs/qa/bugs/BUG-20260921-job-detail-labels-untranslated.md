@@ -78,11 +78,16 @@ ocorrências de cada no HTML servido (marcação e payload do RSC).
   duas varreduras.
 - **Regression test:** as duas varreduras de vazamento em `tests/e2e/ui.mjs`,
   na publicação de São Paulo do grupo de países. Tirar `data-user-content`
-  reprova pelo acento do acervo; devolver `← vagas` reprova pelo dicionário. Um
-  literal sem acento e fora do dicionário — `Ver vaga na origem` — **não**
-  reprovaria: contra esse, a defesa é a regra 9, não a varredura. A primeira
-  versão desta correção varria `/jobs/904000101`, de localização "Netherlands",
-  onde tirar a marca não reprovaria nada.
+  reprova pelo acento do acervo. Devolver ao JSX `← vagas` ou
+  `Ver vaga na origem` reprova pelo dicionário: depois da correção os dois são
+  valores de `jobDetail` e ocupam um nó de texto inteiro, e a proteção dura
+  enquanto as chaves existirem. `visto em` só reprova enquanto for um nó de
+  texto próprio: na forma original, `{label} · visto em {data}`, o nó é
+  `· visto em`, que não é valor exato do dicionário nem tem acento. Um literal
+  **novo**, sem acento e fora do dicionário, não reprovaria: contra esse, a
+  defesa é a regra 9, não a varredura. A primeira versão desta correção varria
+  `/jobs/904000101`, de localização "Netherlands", onde tirar a marca não
+  reprovaria nada.
 
 ## Verification
 
