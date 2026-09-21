@@ -18,6 +18,18 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- With the interface in English, a job's own screen still showed three pieces of
+  Portuguese: the back link, the button that opens the job at its source, and the
+  label for the date it was first seen. They now read in English, like the rest of
+  the screen.
+
+- On the same screen, the employer name and the location are now recognised as
+  text from the posting. A job in "São Paulo, State of São Paulo, Brazil" stays
+  written that way, accents and all, whichever language you pick — because that is
+  what the posting says, not something to translate.
+
 ## [1.20.2] - 2026-09-21T09:13:34.091Z
 
 ### Fixed

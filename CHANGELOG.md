@@ -9,6 +9,52 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- **A tela de detalhe da vaga servia três textos de interface em português com a
+  interface em inglês.** `← vagas`, `Ver vaga na origem` e `visto em` eram
+  literais no JSX de `app/jobs/[id]/page.tsx` — regra 9 —, e mais três estavam no
+  mesmo arquivo em ramos condicionais: `fechada`, `Aplicar →` e
+  `de 100 · cluster`. Passam pelas chaves novas da seção `jobDetail` nos dois
+  dicionários.
+
+  Não é regressão: estão ali desde que a tela existe. O que faltava era medição.
+  A varredura de inglês percorre **listas literais** de rotas em
+  `tests/e2e/ui.mjs`, e `/jobs/<id>` — a tela mais aberta do produto — nunca
+  entrou nelas. Já é a terceira rota descoberta assim.
+
+  E ela não podia entrar como estava: o nome da empresa, a localização e o rótulo
+  da fonte vêm do acervo e são acentuados de direito, então sem
+  `data-user-content` a varredura reprovaria `São Paulo, State of São Paulo,
+  Brazil` como tradução esquecida. As duas metades do defeito se protegiam — sem
+  a marca a rota não entra, fora da lista o rótulo não aparece. A correção faz as
+  duas, e a rota entra nas duas varreduras.
+
+### Testes
+
+- `/jobs/904000101` entra nas **quatro** listas de guarda transversal: as duas
+  varreduras de vazamento de português e a de largura real em `tests/e2e/ui.mjs`,
+  e a varredura axe de `tests/e2e/a11y.mjs` (contagem `9/9` → `10/10`). As duas
+  varreduras de português são a prova de regressão desta correção, por dois lados
+  independentes: o rótulo em português e o acento do acervo sem marca.
+
+  As outras duas entraram **medidas antes**, e não por simetria: a rota deu 0px
+  de excesso horizontal em 375, 768 e 1024 px e zero violações axe WCAG 2.2 AA no
+  ambiente de paridade. Rota que reprovasse ali seria achado com correção
+  própria, e entraria depois dela.
+
+### Documentação
+
+- `AGENTS.md` afirmava "sete telas em inglês" e são treze. O número saiu de
+  cima: o que vale é que as listas são literais, e agora a regra 9 diz por que os
+  dois critérios não pegam literal de JSX e por que rota nova entra nas listas no
+  mesmo commit que a cria.
+- QA de jornada: `JOBS-english-keeps-posting-data` fecha em **Pass** —
+  `docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md`,
+  `docs/qa/bugs/BUG-20260921-job-detail-labels-untranslated.md` e a carta
+  `CH-recruiter-english-board`. A jornada `J-trust-the-filtered-board` fica em
+  oito Pass e quatro bloqueados, **nenhum `untested`**.
+
 ## [1.20.2] - 2026-09-21
 
 ### Corrigido

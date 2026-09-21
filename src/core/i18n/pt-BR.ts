@@ -853,6 +853,14 @@ export const ptBR = {
     candidateHistory: "Histórico · {count} candidatura(s)",
   },
   jobDetail: {
+    back: "← vagas",
+    closed: "fechada",
+    seenOn: "visto em",
+    openAtSource: "Ver vaga na origem",
+    applyAtSource: "Aplicar →",
+    // A frase inteira numa chave, e não "de 100" mais "cluster" com o separador
+    // no JSX: a ordem das duas partes é decisão de quem traduz.
+    outOfHundredCluster: "de 100 · cluster",
     trackFits: "Nota por trilha",
     trackFitsLead: "A mesma vaga medida pela régua de cada trilha ativa.",
     computedFit: "calculada agora — sem nota guardada nesta trilha",

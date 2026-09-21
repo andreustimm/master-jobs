@@ -198,12 +198,24 @@ dashboard Next.js em `localhost:3000`.
 > tradução existia e o componente a ignorava. Chave duplicada é erro de
 > compilação, o que ajuda, mas só depois do trabalho perdido.
 >
-> `pnpm test:e2e` percorre sete telas em inglês e reprova por dois critérios:
-> texto que **é** valor do dicionário português, e texto com acento. A primeira
+> `pnpm test:e2e` percorre em inglês as rotas de duas **listas literais** em
+> `tests/e2e/ui.mjs` (hoje treze) e reprova por dois critérios: texto que **é**
+> valor do dicionário português, e texto com acento. A primeira
 > versão desta verificação usava lista de palavras escrita à mão — ela passava
 > com "Editar", "Vocabulário" e "Práticas" na tela, porque a lista era o
 > inventário do que já tinha sido corrigido. Dado do usuário fica de fora por
 > `data-user-content`: o currículo tem "São Paulo" e continua tendo em inglês.
+>
+> **Os dois critérios pegam defeitos diferentes, e o da rota é o que falta.**
+> Literal de JSX não é valor do dicionário, então quem pega literal é a rota
+> estar na lista — uma tela fora dela passa nos dois critérios sem ser medida.
+> Foi assim que `/jobs/<id>`, a tela mais aberta do produto, serviu `← vagas`,
+> `Ver vaga na origem` e `visto em` em português com a interface em inglês, desde
+> que existe. E ela só pôde entrar na lista depois de o nome da empresa, a
+> localização e o rótulo da fonte ganharem `data-user-content`, porque esse texto
+> vem do acervo e é acentuado de direito: **sem a marca, a rota não entra; fora
+> da lista, o rótulo não aparece.** As duas metades se protegem, e por isso rota
+> nova entra nas listas no mesmo commit que a cria.
 > `pt-BR` e `en` em `src/core/i18n/`. As chaves são tipadas contra o dicionário
 > português, então tradução faltando é erro de compilação — e não espaço em
 > branco descoberto por um usuário. Página obtém o tradutor com

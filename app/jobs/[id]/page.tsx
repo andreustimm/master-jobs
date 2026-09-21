@@ -57,22 +57,30 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   return (
     <main className="pt-9 pb-16" data-testid="route-job-detail">
       <TransitionLink href="/jobs" data-testid="job-detail-back" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
-        ← vagas
+        {t("jobDetail.back")}
       </TransitionLink>
 
       <header className="mt-4 mb-6">
         <div className="flex flex-wrap items-baseline gap-3">
           <h1 data-user-content className="type-display-md min-w-0 break-words text-balance">{job.title}</h1>
           {application && <StatusBadge status={application.status} t={t} />}
-          {job.closedAt && <Badge variant="destructive">fechada</Badge>}
+          {job.closedAt && <Badge variant="destructive">{t("jobDetail.closed")}</Badge>}
           {!externalUrl && <Badge variant="secondary">{t("compare.manualJob")}</Badge>}
         </div>
+        {/* `data-user-content` nos três campos que vêm do acervo — empresa,
+            localização e rótulo da fonte. "São Paulo, State of São Paulo,
+            Brazil" continua acentuado com a interface em inglês, e sem a marca a
+            guarda de vazamento leria isso como tradução esquecida. Foi por isso
+            que esta tela ficou fora da guarda, e com ela ficaram três rótulos em
+            português. O separador fica de fora da marca: é pontuação da
+            interface, não texto do anúncio. */}
         <p className="mt-2 text-muted-foreground">
-          <strong className="text-foreground">{job.companyName}</strong>
-          {job.locationRaw ? ` · ${job.locationRaw}` : ""}
+          <strong className="text-foreground" data-user-content>{job.companyName}</strong>
+          {job.locationRaw ? <> · <span data-user-content>{job.locationRaw}</span></> : ""}
         </p>
         <p className="mt-1.5 font-mono type-meta text-muted-foreground">
-          {source?.label ?? job.sourceId} · visto em {job.firstSeenAt.slice(0, 10)}
+          <span data-user-content>{source?.label ?? job.sourceId}</span> ·{" "}
+          {t("jobDetail.seenOn")} {job.firstSeenAt.slice(0, 10)}
         </p>
 
         {/* Two destinations: the bare URL shows the description, /apply opens
@@ -87,12 +95,12 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
                 rel="noopener"
                 className={buttonVariants({ variant: "outline" })}
               >
-                Ver vaga na origem
+                {t("jobDetail.openAtSource")}
               </a>
             )}
             {externalUrl && externalApplyUrl && externalApplyUrl !== job.url && (
               <a href={externalApplyUrl} target="_blank" rel="noopener" className={buttonVariants()}>
-                Aplicar →
+                {t("jobDetail.applyAtSource")}
               </a>
             )}
             {/* Quem abriu a vaga na origem e viu "US only" decide aqui mesmo. */}
@@ -116,7 +124,8 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
             <div className="mb-3 flex items-center gap-3.5">
               <Fit value={score.fit} />
               <span className="text-sm text-muted-foreground">
-                de 100 · cluster <span className="font-mono">{score.cluster}</span>
+                {t("jobDetail.outOfHundredCluster")}{" "}
+                <span className="font-mono">{score.cluster}</span>
               </span>
             </div>
 

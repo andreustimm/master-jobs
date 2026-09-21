@@ -83,8 +83,8 @@ persona→conta e as credenciais ficam em armazenamento privado, nunca em
 
 ## Tela nova não herda guarda nenhuma
 
-Toda guarda transversal deste repositório é um **array literal de caminhos**, e há
-quatro delas:
+Toda guarda transversal deste repositório é um **array literal de caminhos**. São
+três guardas em **quatro listas** — o vazamento de português tem duas:
 
 | Guarda | Onde |
 |---|---|
@@ -92,8 +92,8 @@ quatro delas:
 | Largura real em 375, 768 e 1024 px | `tests/e2e/ui.mjs`, `searchRoutes` |
 | Varredura axe WCAG 2.2 AA | `tests/e2e/a11y.mjs`, com a contagem `N/N` no fim |
 
-Rota nova **não entra em nenhuma** até alguém editar as quatro. Foi assim que
-`/jobs/<id>/paises` viveu duas releases fora de todas, com quatro chaves de
+Rota nova **não entra em nenhuma** até alguém editar as quatro listas. Foi assim
+que `/jobs/<id>/paises` viveu duas releases fora de todas, com quatro chaves de
 dicionário só dela.
 
 E o custo apareceu no primeiro uso: ao entrar, a varredura reprovou por
@@ -102,9 +102,31 @@ popover de detalhe, que está no DOM mesmo fechado e aparece em toda tela com
 lista. Os dois existiam desde sempre e nenhuma rota varrida tinha fixture com
 acento na localização.
 
+E aconteceu de novo, em 2026-09-21, com `/jobs/<id>` — **a tela mais aberta do
+produto**, fora das quatro listas desde que existe. Ela servia `← vagas`,
+`Ver vaga na origem` e `visto em` em português com a interface em inglês.
+
+Essa terceira ocorrência mostrou por que a lição não basta como aviso: **as duas
+metades se protegem.**
+
+- Os dois critérios da varredura de português **não pegam literal de JSX.**
+  `← vagas` escrito direto no JSX não é valor do dicionário, então a única coisa
+  que o pega é a rota estar na lista. Uma rota de fora passa nos dois critérios
+  **sem ser medida**, e a medição limpa parece prova.
+- E a rota **não pode** entrar na lista sem `data-user-content` nos campos que vêm
+  do acervo — o acento deles é legítimo e reprovaria.
+
+Sem a marca a rota não entra; fora da lista o rótulo não aparece. Consertar só uma
+das metades troca um defeito por um falso positivo permanente.
+
 **Ao criar tela:** acrescente o caminho às quatro listas no mesmo commit, e ajuste
 a contagem final da varredura axe. Se a tela precisa de id, use uma fixture do
-`setup.mjs` em vez de um id inventado.
+`setup.mjs` em vez de um id inventado. Antes de acrescentar, marque com
+`data-user-content` o que vem do acervo, e **meça** largura e axe — rota que
+reprova ali é achado com correção própria, não parte do conserto de i18n.
+
+Uma rota entra nas listas com fixture que dê o que medir: sem localização
+acentuada no acervo, a varredura de acento passa por não ter o que ler.
 
 ## Uma espera frágil apaga o relatório de todos os outros cenários
 

@@ -18,6 +18,18 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- Com a interface em inglês, a tela de uma vaga ainda mostrava três textos em
+  português: o link de volta, o botão de abrir a vaga na origem e o rótulo da data
+  em que ela foi vista pela primeira vez. Agora aparecem em inglês, como o resto
+  da tela.
+
+- Na mesma tela, o nome da empresa e a localização passam a ser reconhecidos como
+  texto do anúncio. Uma vaga em "São Paulo, State of São Paulo, Brazil" continua
+  escrita assim, com acento, seja qual for o idioma escolhido — porque é o que o
+  anúncio diz, e não algo a traduzir.
+
 ## [1.20.2] - 2026-09-21T09:13:34.091Z
 
 ### Corrigido
