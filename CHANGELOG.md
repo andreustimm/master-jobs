@@ -66,10 +66,11 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   depois de a superfície mudar e `qa_status` voltar a `untested`; três
   afirmavam `pass` sem apontar evidência; dois afirmavam `fixed` sem SHA; dois
   usavam `qa_status: blocked`, também inexistente. Todos corrigidos conforme o
-  esquema. Os seis cenários com bug `fixed` e reteste ainda por fazer ficam em
-  `retest_status: pending` — vazio, no esquema, quer dizer "reteste
-  dispensado", e veredito de uma tela que mudou não vale; a história continua
-  no relatório que `last_report` aponta. A visão volta a gerar: 56 cenários,
+  esquema. Seis cenários devem reteste e ficam em `retest_status: pending`:
+  três com bug `fixed` nunca re-percorrido, e três com bug `verified` cujo
+  reteste antecede uma mudança de superfície. Vazio, no esquema, quer dizer
+  "reteste dispensado", e veredito de uma tela que mudou não vale; a história
+  continua no relatório que `last_report` aponta. A visão volta a gerar: 56 cenários,
   zero erros.
 
 ### Documentação
@@ -79,6 +80,9 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   lista decide o que é medido, que os dois critérios só reprovam literal
   acentuado ou já presente no dicionário, e por que rota nova entra nas listas
   no mesmo commit que a cria.
+- QA de jornada: `JOBS-detail-owner-view-english` nasce `untested` para a parte
+  da tela que só o dono vê — cartão de score e seletor de etapa —, que a persona
+  recrutadora não alcança.
 - QA de jornada: `JOBS-english-keeps-posting-data` fecha em **Pass** —
   `docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md`,
   `docs/qa/bugs/BUG-20260921-job-detail-labels-untranslated.md` e a carta

@@ -5,7 +5,7 @@
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Recrutadora convidada
 - **Journey Step:** J-trust-the-filtered-board, ao abrir uma vaga da lista
-- **Scenarios:** JOBS-english-keeps-posting-data
+- **Scenarios:** JOBS-english-keeps-posting-data; JOBS-detail-owner-view-english
 - **Found:** 2026-09-21 · **Report:** docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md
 - **Origin:** mesma classe de [BUG-20260823-pipeline-empty-state-mixed-locale](BUG-20260823-pipeline-empty-state-mixed-locale.md) — literal de interface no JSX, fora do dicionário tipado. Aquele foi corrigido e verificado; este é outra tela, e o motivo de ele ter sobrevivido é estrutural, não repetição do mesmo defeito.
 
@@ -29,7 +29,8 @@ E a tela não podia entrar na guarda como estava, porque o caminho de entrada
 estava fechado dos dois lados: o nome da empresa, a localização e o rótulo da
 fonte vêm do acervo e são acentuados de direito — sem `data-user-content`, a
 guarda reprovaria `São Paulo, State of São Paulo, Brazil` como tradução
-esquecida. O defeito de rótulo e a marca faltante se protegiam um ao outro.
+esquecida. Sem a marca a rota não entrava; e mesmo listada, só `← vagas`
+reprovaria — ver *Evidence*.
 
 ## Reproduction
 
@@ -67,8 +68,8 @@ ocorrências de cada no HTML servido (marcação e payload do RSC).
 - **Root cause:** seis textos de interface como literal no JSX de
   `app/jobs/[id]/page.tsx`, e a rota ausente das duas varreduras de inglês em
   `tests/e2e/ui.mjs`.
-- **Fix commit:** `23fa064` (os seis literais e a marca); os dois rótulos do
-  cartão de score, no commit seguinte da mesma PR (#170).
+- **Fix commit:** `23fa064` (os seis literais e a marca); `52ba067` (os dois
+  rótulos do cartão de score e a fixture acentuada), ambos na PR #170.
 - **Fix:** seis chaves novas na seção `jobDetail` dos dois dicionários
   (`back`, `closed`, `seenOn`, `openAtSource`, `applyAtSource`,
   `outOfHundredCluster`); `compare.matchedKeywords` e `compare.missingKeywords`,
@@ -103,9 +104,13 @@ ocorrências de cada no HTML servido (marcação e payload do RSC).
   tem candidato, então a tela não mostra score; a fixture das varreduras
   pontuava toda vaga com listas de palavras-chave vazias, e os dois ramos não
   renderizavam; e nenhum dos dois textos tem acento ou é valor do dicionário.
+- **Fix commit:** `52ba067`, na PR #170.
 - **Fix:** passam por `compare.matchedKeywords` e `compare.missingKeywords`, e a
   fixture de São Paulo ganhou palavras-chave casadas e ausentes para que as duas
   linhas renderizem sob a varredura.
-- **Verification:** pela suíte E2E, não por jornada. A persona do cenário não
-  alcança o cartão; confirmar pela interface pede uma persona candidata, e fica
-  para a próxima sessão que percorrer a tela como dono.
+- **Regression test:** nenhum automatizado reprovaria a volta. As duas linhas
+  renderizam sob a varredura, mas `casadas:` não tem acento nem é valor do
+  dicionário — contra isso, a defesa é a regra 9.
+- **Verification:** pendente. A persona de `JOBS-english-keeps-posting-data` não
+  alcança o cartão; a confirmação pela interface está em
+  `JOBS-detail-owner-view-english`, criado `untested`.

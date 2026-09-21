@@ -60,9 +60,8 @@ reprovam texto acentuado ou já presente no dicionário: `Ver vaga na origem` e
 lista decide o que é medido; o que impede literal de JSX é a regra 9.
 
 `docs/qa/bugs/BUG-20260921-job-detail-labels-untranslated.md` tem a causa e por
-que ela sobreviveu: as duas metades do problema se protegiam. Sem
-`data-user-content` no dado do acervo, a rota não podia entrar na varredura de
-acento; fora da varredura, ninguém veria os rótulos.
+que ela sobreviveu: sem `data-user-content` no dado do acervo a rota não podia
+entrar na varredura, e dentro dela só `← vagas` teria reprovado.
 
 ## Correção e reteste
 
@@ -70,8 +69,9 @@ A correção cabe dentro do governador do ciclo: seis chaves na seção `jobDeta
 dos dois dicionários, seis literais trocados por `t(...)`, `data-user-content` em
 três campos que vêm do acervo, e a rota acrescentada às duas varreduras de
 inglês em `tests/e2e/ui.mjs` — na publicação de São Paulo, `/jobs/904000103`,
-depois da revisão profunda (ver *Adendo*). A única mudança de comportamento é a
-visível: a tela passa a falar inglês.
+depois da revisão profunda (ver *Adendo*). A mudança de comportamento é a
+visível: a tela passa a falar inglês — e, depois do *Adendo*, também o cartão de
+score, cujos rótulos mudaram nos dois idiomas.
 
 A prova de regressão são as próprias varreduras: tirar a marca reprova pelo
 acento do acervo, e devolver `← vagas` reprova pelo dicionário. Um literal sem
@@ -86,7 +86,7 @@ Reteste no mesmo caminho que produziu o vermelho, com o ambiente reconstruído:
 | `visto em` | 2 | 0 |
 | `← jobs` / `View job at the source` / `first seen` | 0 | 2 cada |
 | `São Paulo, State of São Paulo, Brazil` preservado | sim | sim |
-| valores do dicionário pt-BR fora de `data-user-content` | 0 | 0 |
+| valores do dicionário pt-BR fora de `data-user-content` | 1 (`← vagas`, 2×) | 0 |
 
 Confirmações que o veredito exige:
 
@@ -155,7 +155,8 @@ Correções aplicadas, todas conformes ao esquema:
 - `verified` → `pass` nos oito.
 - `blocked` → `blocked-verify` nos dois.
 - Nos quatro em que a superfície mudou depois do reteste, `retest_status` passa
-  a `pending` — "corrigido, ainda não re-percorrido". O veredito antigo não
+  a `pending` — reteste devido. Três desses têm bug `verified`: o reteste
+  existiu, mas antecede a mudança de superfície, e a convenção está no README. O veredito antigo não
   vale mais, e a história continua no relatório que `last_report` aponta. A
   primeira versão deste reparo deixou o campo vazio, que no esquema quer dizer
   "reteste dispensado"; a revisão profunda corrigiu, e estendeu o `pending` aos
@@ -227,3 +228,8 @@ sessão afirmou sem ter observado:
   (`select-name`, WCAG 2 A) — o `10/10` desta sessão nunca foi observado. O
   `select` ganhou `aria-label`, e a contagem passou a valer quando a suíte
   E2E rodou com a correção.
+
+A confirmação pela interface da parte que só o dono vê — cartão de score nos dois
+idiomas e o nome do seletor de etapa — fica no cenário
+`JOBS-detail-owner-view-english`, criado `untested`, porque a persona desta
+sessão não a alcança.

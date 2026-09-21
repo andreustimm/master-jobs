@@ -24,7 +24,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   português: o link de volta, o botão de abrir a vaga na origem, o rótulo da data
   em que ela foi vista pela primeira vez e, no quadro de pontuação, os rótulos das
   palavras-chave casadas e ausentes. Agora aparecem em inglês, como o resto da
-  tela.
+  tela. Em português, esses dois rótulos passam a dizer "Palavras-chave
+  casadas" e "Palavras-chave ausentes", como na tela de comparação.
 
 - Na mesma tela, o seletor de etapa do funil não tinha nome para leitor de tela:
   ele anunciava só "caixa de seleção". Agora anuncia "mover para", o mesmo texto

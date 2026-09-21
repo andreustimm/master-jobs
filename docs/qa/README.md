@@ -120,6 +120,11 @@ Essa terceira ocorrência mostrou dois limites que o aviso sozinho não cobre:
   varrida tiver acento — por isso a tela de detalhe é varrida em `/jobs/904000103`
   (São Paulo), não na publicação holandesa do mesmo grupo.
 
+**`retest_status: pending` também vale para bug `verified`** quando a
+superfície que o reteste conferiu mudou depois dele: o veredito antigo não vale
+mais, e vazio diria "reteste dispensado". Assim `rg 'retest_status: pending'`
+lista todo reteste devido, qualquer que seja o status do bug.
+
 Há ainda uma quinta lista, mais estrita, no bloco *Mobile* de `tests/e2e/ui.mjs`:
 largura de 320 a 1024 px e conteúdo cortado dentro de cartão. `/jobs/<id>` já
 estava nela, pela fixture `905000031`.
