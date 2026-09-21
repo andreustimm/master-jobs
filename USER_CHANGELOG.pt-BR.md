@@ -18,6 +18,27 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- As telas pesadas voltavam a demorar até o servidor desistir quando eram
+  abertas duas vezes seguidas — navegando pelo menu, ou com duas abas. A
+  correção anterior cobriu três telas; faltavam as três maiores, entre elas a
+  inicial e a de Vagas. Agora todas pedem menos do banco de uma vez.
+- A tela inicial mostrava o total de vagas sem filtro ao lado de uma lista que
+  o filtro já havia cortado — e, com vagas repetidas agrupadas, os dois números
+  divergiam sem você tocar em nada. Os contadores dos filtros tinham o mesmo
+  problema.
+- Quando uma tela travava, o registro do que aconteceu podia não sair. Agora
+  ele cobre a requisição inteira, e passou a existir também na tela inicial e
+  na de Vagas.
+
+### Adicionado
+
+- As novidades da versão 1.18.0 sobre os filtros da tela de Vagas — faixa de
+  salário, Score como faixa, fontes em seleção múltipla, campo de empresa e o
+  filtro "ainda não enviadas" — estavam faltando nesta lista por um erro de
+  registro, e foram devolvidas à versão em que saíram.
+
 ## [1.20.0] - 2026-09-20T23:41:23.163Z
 
 ### Adicionado
@@ -64,6 +85,24 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   uma em cada três.
 - Quem preferir ver cada publicação separada desliga em "agrupar repetidas",
   na linha do funil.
+- Na tela de Vagas você agora escolhe uma **faixa** de salário, com mínimo e
+  máximo, arrastando ou digitando — antes só dava para dizer o mínimo.
+- O "corte" virou **Score**, e também é faixa: você pede, por exemplo, de 60 a
+  80, em vez de escolher entre botões prontos.
+- As **fontes** viraram uma lista de seleção múltipla: marque quantas quiser e
+  aplique de uma vez, em vez de uma fonte por clique.
+- Campo de **empresa**, para procurar pelo empregador sem trazer toda vaga que
+  só cita aquele nome no texto.
+- Filtro **"ainda não enviadas"**, que esconde as vagas que você já enviou.
+
+### Alterado
+
+- Os filtros ficaram alinhados numa grade, com o nome de cada um à esquerda, e
+  "ordenar" separado dos filtros.
+- Campo de faixa vazio agora diz o que significa: "sem mínimo", "sem teto", ou
+  o limite real — 0 e 100 no Score.
+- Trilha, "trazida pelo termo" e cluster passam a explicar, em uma linha, o que
+  cada um faz — os três mostravam os mesmos nomes e faziam coisas diferentes.
 
 ## [1.17.1] - 2026-09-20T14:28:16.117Z
 

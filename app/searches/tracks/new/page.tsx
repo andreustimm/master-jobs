@@ -39,6 +39,15 @@ export default async function NewTrackPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  // O vigia envolve a requisição inteira — ver o cabeçalho de
+  // `app/candidate/skills/page.tsx`. Aqui a diferença é maior: a autenticação e
+  // `ensurePrimaryTrack`, que abre transação, rodavam fora dele.
+  return comVigia("/searches/tracks/new", () => renderNewTrackPage(searchParams));
+}
+
+async function renderNewTrackPage(
+  searchParams: Promise<Record<string, string | string[] | undefined>>,
+) {
   const { t } = await getTranslator();
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
   const params = await searchParams;
@@ -50,11 +59,7 @@ export default async function NewTrackPage({
   const name = one("name");
 
   const primary = await ensurePrimaryTrack(candidateId);
-  // A outra tela que já devolveu 504 por disputa de conexão. O vigia não
-  // corrige — faz o travamento deixar rastro, que é o que faltava.
-  const suggestion = term
-    ? await comVigia("/searches/tracks/new", () => trackSuggestion(candidateId, term))
-    : null;
+  const suggestion = term ? await trackSuggestion(candidateId, term) : null;
   const pending = !primary?.target;
   const target = suggestion?.ok ? suggestion.target : primary?.target ? blank(primary.target) : null;
   const fields = target ? targetToFields(name || (suggestion?.ok ? suggestion.term.term : ""), target) : null;

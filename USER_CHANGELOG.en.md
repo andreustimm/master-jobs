@@ -18,6 +18,25 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- The heavy screens went back to hanging until the server gave up when they were
+  opened twice in a row — navigating through the menu, or with two tabs. The
+  earlier fix covered three screens; the three largest were missing, the home
+  screen and Jobs among them. All of them now ask the database for less at once.
+- The home screen showed the unfiltered job total next to a list the filter had
+  already cut — and, with repeated jobs grouped, the two numbers diverged
+  without you touching anything. The filter counters had the same problem.
+- When a screen hung, the record of what happened could fail to come out. It now
+  covers the whole request, and it exists on the home and Jobs screens too.
+
+### Added
+
+- The 1.18.0 notes about the Jobs filters — pay range, Score as a range,
+  multi-select sources, the employer field and the "not sent yet" filter — were
+  missing from this list through a bookkeeping error, and have been returned to
+  the version they shipped in.
+
 ## [1.20.0] - 2026-09-20T23:41:23.163Z
 
 ### Added
@@ -62,6 +81,24 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   posting. On today's corpus that removes 2,543 repeated rows — one in three.
 - Anyone who prefers one row per posting turns off "group repeats", on the
   pipeline line.
+- The Jobs screen now takes a pay **range**, minimum and maximum, by dragging or
+  typing — before you could only say the minimum.
+- The "cut" became **Score**, and it is a range too: ask for 60 to 80 instead of
+  picking from fixed buttons.
+- **Sources** became a multi-select list: tick as many as you want and apply
+  once, instead of one source per click.
+- An **employer** field, to search by company without pulling in every job that
+  merely mentions that name in its text.
+- A **"not sent yet"** filter, which hides the jobs you already sent.
+
+### Changed
+
+- The filters line up on a grid, each one's name on the left, and "sort" sits
+  apart from the filters.
+- An empty range field now says what it means: "no floor", "no cap", or the real
+  limit — 0 and 100 on Score.
+- Track, "came from" and cluster now each explain in one line what they do —
+  the three offered the same names and did different things.
 
 ## [1.17.1] - 2026-09-20T14:28:16.117Z
 

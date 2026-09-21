@@ -203,6 +203,18 @@ export type BoardFilters = {
    * filter: it never reaches the scorer or a compensation range.
    */
   pay?: PayFilter;
+  /**
+   * A tabela de câmbio já carregada, para a leitura não ir buscá-la de novo.
+   *
+   * `loadRates()` são duas consultas sequenciais sem cache, e uma tela do quadro
+   * chama três leituras que normalizam pagamento — com a da própria página, o
+   * mesmo câmbio ia quatro vezes ao banco na mesma requisição, contra um pool de
+   * três conexões. Quem já tem a tabela passa; quem não passa continua buscando,
+   * então a CLI e os testes não mudam.
+   *
+   * `null` é resposta válida (não há cotação gravada) e diferente de ausente.
+   */
+  rates?: FxTable | null;
   limit?: number;
   offset?: number;
 };
@@ -255,7 +267,11 @@ function paySql(pay: PayFilter, fx: FxTable | null): PaySql {
 }
 
 async function payContext(opts: BoardFilters): Promise<PaySql | undefined> {
-  return opts.pay ? paySql(opts.pay, await loadRates()) : undefined;
+  if (!opts.pay) return undefined;
+  // `rates` ausente busca; `rates: null` é a resposta "não há cotação" e não
+  // deve virar uma segunda ida ao banco para descobrir o mesmo nada.
+  const rates = opts.rates !== undefined ? opts.rates : await loadRates();
+  return paySql(opts.pay, rates);
 }
 
 /**
@@ -641,7 +657,13 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
   // scanned the complete open corpus and its candidate-scoped joins, so one
   // cockpit render paid six full scans before loading a single card. Conditional
   // aggregation produces the same facets with one corpus scan.
-  const [summaryRows, clusterRows, sourceRows] = await Promise.all([
+  //
+  // Duas de cada vez, não três. Três era o pool inteiro (`max: 3` em
+  // `client.ts`) dentro de UMA leitura, então qualquer chamador que somasse
+  // outra consulta já esgotava as conexões — e todos somam. O teto é `POOL - 1`
+  // porque a instância serverless é reaproveitada: a requisição do lado também
+  // precisa de conexão.
+  const [summaryRows, clusterRows] = await Promise.all([
     getDb()
       .select({
         total: sql<number>`count(*)`,
@@ -674,20 +696,20 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
       .where(and(...boardConditions(clusterDimension, candidateId), sql`${jobScore.cluster} is not null`))
       .groupBy(jobScore.cluster)
       .then((rows) => rows.map((row) => row.cluster!).sort()),
-    getDb()
-      .select({ kind: sourceKind })
-      .from(job)
-      .leftJoin(jobScore, scoreJoin(candidateId, base.track))
-      .leftJoin(
-        application,
-        and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
-      )
-      .leftJoin(source, eq(source.id, job.sourceId))
-      .leftJoin(jobPage, eq(jobPage.jobId, job.id))
-      .where(and(...boardConditions(sourceDimension, candidateId)))
-      .groupBy(sourceKind)
-      .then((rows) => rows.map((row) => row.kind).sort()),
   ]);
+  const sourceRows = await getDb()
+    .select({ kind: sourceKind })
+    .from(job)
+    .leftJoin(jobScore, scoreJoin(candidateId, base.track))
+    .leftJoin(
+      application,
+      and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
+    )
+    .leftJoin(source, eq(source.id, job.sourceId))
+    .leftJoin(jobPage, eq(jobPage.jobId, job.id))
+    .where(and(...boardConditions(sourceDimension, candidateId)))
+    .groupBy(sourceKind)
+    .then((rows) => rows.map((row) => row.kind).sort());
   const summary = summaryRows[0];
   return {
     total: Number(summary?.total ?? 0),

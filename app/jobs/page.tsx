@@ -12,16 +12,31 @@ import { candidateScope, requirePage } from "../auth";
 import { getTranslator } from "../i18n";
 import { TransitionLink } from "../transition-link";
 import { loadJobsView } from "./jobs-data";
+import { comVigia } from "../timeout-watch.ts";
 import { ScoreQueueCard, isRecalculating } from "../score-queue-card";
 import { candidateScoreQueueStatus } from "../../src/core/scoring/queue.ts";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * O vigia envolve a requisição inteira — ver `app/candidate/skills/page.tsx`.
+ *
+ * Esta é a tela mais aberta do produto e era a que mais pedia conexões: cinco
+ * ao mesmo tempo, seis com faixa salarial, contra um pool de três. O aviso aos
+ * 22 segundos não corrige nada; garante que uma recaída deixe rastro em vez de
+ * virar um `FUNCTION_INVOCATION_TIMEOUT` mudo, como aconteceu por semanas.
+ */
 export default async function Jobs({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  return comVigia("/jobs", () => renderJobs(searchParams));
+}
+
+async function renderJobs(
+  searchParams: Promise<Record<string, string | string[] | undefined>>,
+) {
   const { t, locale } = await getTranslator();
   // `job:read`, não `candidate:read`.
   //

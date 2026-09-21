@@ -1,6 +1,6 @@
 import { TransitionLink } from "./transition-link";
-import { boardFacets, clusterBreakdown, corpusStats, listBoard } from "../src/contexts/matching/index.ts";
-import { pipelineCounts } from "../src/contexts/pursuit/index.ts";
+import { loadCockpit } from "./cockpit-data.ts";
+import { comVigia } from "./timeout-watch.ts";
 import { FilterBar, href, readFilters, toBoardFilters } from "./filters";
 import { JobList } from "./joblist";
 import { Legend, Stat } from "./ui";
@@ -10,11 +10,24 @@ import { getTranslator } from "./i18n";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * O vigia envolve a requisição inteira — ver `app/candidate/skills/page.tsx`.
+ *
+ * É a rota que a PWA abre (`start_url` é "/") e onde o candidato cai depois do
+ * login, e era a que pedia mais conexões de todas: sete ao mesmo tempo, contra
+ * um pool de três. Um travamento aqui não deixava rastro nenhum.
+ */
 export default async function Cockpit({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  return comVigia("/", () => renderCockpit(searchParams));
+}
+
+async function renderCockpit(
+  searchParams: Promise<Record<string, string | string[] | undefined>>,
+) {
   const { t, locale } = await getTranslator();
   // Sem escopo de candidato, o cockpit não é negado — é REDIRECIONADO.
   //
@@ -31,13 +44,7 @@ export default async function Cockpit({
   const state = readFilters(await searchParams);
   const filters = toBoardFilters(state);
 
-  const [stats, counts, clusters, top, facets] = await Promise.all([
-    corpusStats(candidateId),
-    pipelineCounts(candidateId),
-    clusterBreakdown(candidateId, 45),
-    listBoard(candidateId, { ...filters, limit: 12 }),
-    boardFacets(candidateId, { minFit: state.fit, cluster: state.cluster, term: state.term, sourceKinds: state.sources, workMode: state.workMode }),
-  ]);
+  const { stats, counts, clusters, total, top, facets } = await loadCockpit(candidateId, state, filters);
 
   const tracked = Object.values(counts).reduce((a, b) => a + b, 0);
 
@@ -74,7 +81,7 @@ export default async function Cockpit({
           <h2 className="type-display-sm">
             {t("cockpit.topRanked")}
             <span className="ml-1 text-sm font-normal text-muted-foreground">
-              · {t("cockpit.matching", { count: facets.total.toLocaleString(locale) })}
+              · {t("cockpit.matching", { count: total.toLocaleString(locale) })}
             </span>
           </h2>
           <TransitionLink href={href("/jobs", state, {})} data-testid="cockpit-see-all" className="inline-flex items-center py-1.5 text-sm text-[var(--primary-text)] hover:underline">
