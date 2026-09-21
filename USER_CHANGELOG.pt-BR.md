@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.3] - 2026-09-21T14:32:47.656Z
+
 ### Corrigido
 
 - Com a interface em inglês, a tela de uma vaga ainda mostrava textos em

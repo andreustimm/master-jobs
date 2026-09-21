@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.20.3] - 2026-09-21
+
 ### Corrigido
 
 - **A tela de detalhe da vaga servia três textos de interface em português com a

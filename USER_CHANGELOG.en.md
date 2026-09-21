@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.3] - 2026-09-21T14:32:47.656Z
+
 ### Fixed
 
 - With the interface in English, a job's own screen still showed Portuguese: the
