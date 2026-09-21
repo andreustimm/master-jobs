@@ -31,6 +31,25 @@ produto como uma pessoa real e grava vereditos e relatórios aqui.
 > As falhas caíam com a carga e sumiram por completo. Uma delas me custou um
 > diagnóstico errado — cheguei a acusar o helper de transição de estar quebrado.
 >
+> **Medido de novo em 2026-09-21, e o padrão se repetiu com outros cenários.**
+> Seis execuções da mesma árvore, depois que a suíte deixou de abortar:
+>
+> | Execução | Falhas |
+> |---|---|
+> | 1 (após `pnpm check`) | WebKit, perfil público, task-04, E2E-011 |
+> | 2 (após `pnpm check`) | WebKit, perfil público, task-04, abort |
+> | 3 | só o abort — WebKit e perfil público **passaram** |
+> | 4 | só WebKit — **262 de 263** |
+> | 5 | WebKit, perfil público, task-04, e `transition E2E-016` |
+> | 6 | WebKit, perfil público, task-04 — 261 de 264 |
+>
+> `transition E2E-016` passou nas quatro primeiras e reprovou na quinta, sem
+> nenhuma mudança entre elas. **Conjunto de falhas que muda a cada execução é
+> carga.** E o WebKit é o caso extremo: estoura em `/jobs` com `networkidle`, em
+> `/jobs` com `domcontentloaded` e em `/candidate`, que renderiza uma fração —
+> passou uma vez em seis. Não é a rota nem o tipo de espera, e aumentar o timeout
+> esconderia lentidão real sem dizer nada.
+>
 > **Em 2026-09-21 o helper estava mesmo errado, e a prova veio de medir a árvore
 > limpa.** Numa PR, `observeNavigation` reprovava no redirect do login para o
 > cockpit três execuções de três; parecia defeito da PR. Duas execuções de
@@ -99,13 +118,21 @@ Duas regras saem daí:
 
 **Não use `networkidle` numa tela do acervo.** Ele espera 500 ms sem nenhuma
 requisição, e `/jobs` tem mil vagas no corpus E2E: entre prefetch de rota do Next,
-fontes e imagens da lista, o WebKit não alcança esse silêncio. Espere
+fontes e imagens da lista, esse silêncio pode nunca chegar. Espere
 `domcontentloaded` mais o elemento que o cenário realmente usa — é determinístico,
-é mais rápido, e falha dizendo o que faltou. Chromium tolera; WebKit não.
+é mais rápido, e falha dizendo o que faltou.
 
-**Cenário que abre navegador próprio vai dentro do seu próprio `try`.** A falha
-continua sendo falha, com o diagnóstico inteiro, mas deixa de decidir o destino
-dos outros. O bloco WebKit é o único assim hoje.
+A regra vale por si, mas **não era a causa do caso do WebKit**: trocar por
+`domcontentloaded` não resolveu, e apontar o cenário para `/candidate` também não.
+Registrado aqui para o próximo não repetir a tentativa — ver a segunda tabela em
+*Entrada e execução*.
+
+**Cenário que abre navegador ou contexto próprio vai dentro do seu próprio `try`.**
+A falha continua sendo falha, com o diagnóstico inteiro, mas deixa de decidir o
+destino dos outros. Hoje são dois: o bloco do WebKit e a navegação para o perfil
+público, que além do `try` tem recuperação por `goto` — porque o que vem depois
+dela são asserções de vazamento de dado, e verificação de segurança não pode ficar
+sem resposta porque uma navegação de cliente não chegou.
 
 Se um relatório vier com muito menos verificações do que o arquivo escreve,
 procure a exceção antes de acreditar no número: `N/N passaram` com `N` pequeno é
@@ -116,21 +143,6 @@ chamado dezenove vezes e esperava o aviso de mutação por 20 segundos; uma falh
 levava a suíte inteira. Hoje ele reprova um check nomeado e devolve leitura vazia.
 A regra geral: onde uma espera se repete, a falha dela não pode ser o fim da
 execução.
-
-## Conjunto de falhas que muda a cada execução é carga, não defeito
-
-Medido em cinco execuções seguidas da mesma árvore: WebKit, a transição suave do
-perfil público, `task-04 E2E-013` e `transition E2E-016` apareceram e
-desapareceram em combinações diferentes. Uma delas deu 262 de 263.
-
-Antes de investigar um cenário como defeito, **rode duas vezes**. As execuções que
-seguem um `pnpm check` completo (quatro workers mais cobertura) na mesma máquina
-falham mais, e a falha cai em cenários diferentes de cada vez.
-
-O caso do WebKit é o exemplo: estoura em `/jobs` com `networkidle`, em `/jobs` com
-`domcontentloaded` e em `/candidate`, que renderiza uma fração. Passou uma vez em
-cinco. Não é a rota nem o tipo de espera — e aumentar o timeout esconderia
-lentidão real sem dizer nada, então ele fica isolado e visível.
 
 ## Áreas
 
