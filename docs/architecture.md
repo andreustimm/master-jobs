@@ -439,15 +439,16 @@ Toda a lógica real vive em `src/core/**` e `src/cli.ts`. Os diretórios
 duplicados na raiz de `src/` (`src/scoring/` vs `src/core/scoring/`) são resíduo
 de scaffolding — não coloque código neles.
 
-Cobertura de teste hoje: `tests/scoring.test.ts` (181 linhas, 18 blocos `it(`,
-contra `scoreJob()`) e `tests/normalize.test.ts` (101 linhas, 13 blocos `it(`,
-contra `normalize.ts`) — 282 linhas ao todo. É cobertura do núcleo
-determinístico, não do CLI, da ingestão nem do repo.
+Cobertura de teste hoje: o Vitest mede `src/**` inteiro — `cli.ts` incluído —
+com piso global em `vitest.config.ts`, e o `pnpm check` reprova quando a
+cobertura cai abaixo dele. Dentro disso, `tests/scoring.test.ts` (contra
+`scoreJob()`) e `tests/normalize.test.ts` (contra `normalize.ts`) são as suítes
+que seguram o núcleo determinístico.
 
-> **Invariante:** O escopo de teste é o núcleo puro (`scoring` e `normalize`).
-> Mexeu nos pesos ou nas regexes de normalização? Atualize os testes na mesma
-> mudança — `pnpm check` roda o typecheck e o Vitest (além dos gates de
-> changelog e de QA), e essas duas suítes são o que segura o scorer.
+> **Invariante:** Mexeu nos pesos ou nas regexes de normalização? Atualize
+> `tests/scoring.test.ts` e `tests/normalize.test.ts` na mesma mudança —
+> `pnpm check` roda o typecheck e o Vitest (além dos gates de changelog e de
+> QA), e essas duas suítes são o que segura o scorer.
 
 ---
 

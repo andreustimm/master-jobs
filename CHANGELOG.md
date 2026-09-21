@@ -33,8 +33,9 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 - Backlog: `B-12` (snapshot do Turso) fica **superado** — marca nova ⏹️ —,
   porque o runtime saiu do Turso no corte de 19/09. `B-11` volta a **decisão**:
   a cota que o motivou não existe mais, mas `enqueueStale()` ainda calcula o fit
-  por linha e os dois agendadores de recheck — o workflow `Varredura de vagas` e
-  o cron da Vercel — voltaram a coexistir.
+  por linha, o sync ainda fecha por ausência as janelas parciais, e o cron da
+  Vercel continua definido em `vercel.json` — desabilitado desde 03/09, mas a
+  um PATCH de voltar a disputar o recheck com o workflow `Varredura de vagas`.
 - `AGENTS.md` mostrava 1.609 testes na tabela de estado; são 2.968, mais 263
   verificações E2E, e a cobertura já inclui `cli.ts`. `README.md`,
   `docs/operations.md` e `docs/architecture.md` descreviam o `pnpm check` como

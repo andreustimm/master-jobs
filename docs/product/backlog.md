@@ -1679,14 +1679,20 @@ falho. O acompanhamento histórico detalhado continua fora desta onda.
 
 > **Reavaliar (21/09/2026).** O gatilho deixou de existir: desde o corte de
 > 19/09 o runtime é o PostgreSQL do Supabase, e não há cota do Turso a
-> estourar. A contenção também já não vale — o workflow `Varredura de vagas`
-> está **ativo** no GitHub e `vercel.json` mantém o cron `/api/cron/recheck`,
-> então os dois agendadores de recheck voltaram a coexistir. Parte do escopo
+> estourar. A contenção vale pela metade: o workflow `Varredura de vagas`
+> está **ativo** no GitHub e hoje é o único agendador de recheck; o cron
+> `/api/cron/recheck` segue definido em `vercel.json`, mas os crons do projeto
+> continuam desabilitados na Vercel desde 03/09 (`disabledAt`), então a
+> sobreposição é latente — reabilitá-los a traz de volta. Parte do escopo
 > abaixo independe do banco e segue aberta: `enqueueStale()` ainda calcula
-> `bestPrimaryFit()` por linha, não há dono único do recheck, nem circuito de
-> orçamento, nem telemetria por rotina. O que já vale é a regra de só fechar
-> vaga por 404/410 (`src/core/ingest/probe.ts`). Decidir: reescrever como item
-> de desempenho no PostgreSQL, ou fechar.
+> `bestPrimaryFit()` por linha; `syncOne()` (`src/core/ingest/run.ts`) ainda
+> fecha por ausência as janelas parciais (Himalayas, buscas do Remotive), sem
+> contrato de completude nem identidade por `(source_id, external_id)` — itens
+> de que o PRD `term-search-target-tracks` depende —; e não há dono único do
+> recheck, circuito de orçamento nem telemetria por rotina. A regra de só
+> fechar por 404/410 vale apenas na reconferência (`src/core/ingest/probe.ts`).
+> Decidir: reescrever como item de desempenho e de completude de fonte no
+> PostgreSQL; fechar deixaria sem dono o fechamento por ausência.
 
 **Incidente:** [`../operations/turso-quota-incident-2026-09-03.md`](../operations/turso-quota-incident-2026-09-03.md).
 
