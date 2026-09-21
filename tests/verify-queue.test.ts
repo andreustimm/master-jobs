@@ -334,4 +334,64 @@ describe("failCheck", () => {
     expect(row?.status).toBe("failed");
     expect(row?.lastError).toBe("boom");
   });
+  it("UT-440 `fetch` que rejeita com string não fecha a vaga: vira inconclusivo", async () => {
+    // Medido: `probe()` captura a exceção e devolve `inconclusive`, então o
+    // `catch` de `runVerifyQueue` NÃO é alcançado por falha de rede — ele é
+    // defesa de segunda ordem, para uma exceção vinda de outro lugar.
+    //
+    // O que importa é exatamente isso: uma rejeição de rede não pode fechar
+    // vaga. É a invariante do repositório — só 404 e 410 provam ausência — no
+    // caminho da exceção, onde seria mais fácil errar.
+    const id = await seedJob();
+    await enqueueVerify(id);
+
+    const lancaString = (async () => {
+      throw "ENOTFOUND host inexistente";
+    }) as unknown as typeof fetch;
+
+    const r = await runVerifyQueue({ fetchImpl: lancaString, lookupHost: publicLookup });
+
+    expect(r).toMatchObject({ checked: 1, inconclusive: 1, gone: 0, alive: 0 });
+    const [linha] = await db.select().from(job).where(eq(job.id, id));
+    expect(linha?.closedAt).toBeNull();
+  });
+
+  it("UT-441 `Error` de verdade também é inconclusivo, e a vaga continua aberta", async () => {
+    // O par: qualquer forma de falha de rede tem o mesmo desfecho. Uma delas
+    // fechando a vaga e a outra não seria pior que as duas fecharem.
+    const id = await seedJob();
+    await enqueueVerify(id);
+
+    const lancaErro = (async () => {
+      throw new Error("conexão recusada");
+    }) as unknown as typeof fetch;
+
+    const r = await runVerifyQueue({ fetchImpl: lancaErro, lookupHost: publicLookup });
+
+    expect(r).toMatchObject({ checked: 1, inconclusive: 1, gone: 0 });
+    const [linha] = await db.select().from(job).where(eq(job.id, id));
+    expect(linha?.closedAt).toBeNull();
+  });
+
+  it("UT-442 `delayMs` faz a execução pausar entre sondagens", async () => {
+    // A pausa não é zelo excessivo: são sites de terceiros, e ela é a diferença
+    // entre um cliente educado e um bloqueio de IP. Duas tarefas com 25 ms de
+    // pausa levam mais tempo que as mesmas duas sem pausa.
+    const a = await seedJob();
+    const b = await seedJob();
+    await enqueueVerify(a);
+    await enqueueVerify(b);
+
+    const inicio = Date.now();
+    const r = await runVerifyQueue({
+      fetchImpl: fakeFetch(200),
+      lookupHost: publicLookup,
+      delayMs: 25,
+    });
+    const decorrido = Date.now() - inicio;
+
+    expect(r.checked).toBe(2);
+    // Duas pausas de 25 ms: o piso é 50 ms, com margem para o relógio grosso.
+    expect(decorrido).toBeGreaterThanOrEqual(40);
+  });
 });

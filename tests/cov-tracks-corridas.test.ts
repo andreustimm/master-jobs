@@ -1,17 +1,22 @@
 /**
  * Duas trilhas com o mesmo nome, criadas ao mesmo tempo — e a trilha sem alvo.
  *
- * ## A corrida
+ * ## A corrida, e o que ela de fato exercita
  *
  * `createTrack` e `updateTrack` validam o nome antes de gravar, e a validação é
- * uma consulta. Entre ela e o `insert` cabe outra requisição: o índice único é a
- * única coisa que impede duas trilhas com o mesmo nome, e o `catch` que traduz
- * 23505 em `track_name_duplicate` é o que transforma um erro de banco na
- * mensagem que a tela sabe mostrar. Sem ele, quem clica duas vezes rápido vê um
- * erro de PostgreSQL.
+ * uma consulta. O que impede a janela entre ela e o `insert` é um
+ * `pg_advisory_xact_lock` por candidato, tomado no início da transação: duas
+ * criações simultâneas **serializam**, e a segunda vê a primeira já gravada na
+ * própria validação.
  *
- * Um teste sequencial nunca alcança esse `catch`: a segunda chamada falha na
- * validação, que é o outro caminho.
+ * Medido: por isso estes casos NÃO alcançam o `catch` de 23505. A recusa que eles
+ * observam vem da validação, e o `catch` do índice único permanece como cinto de
+ * segunda ordem — ele existe para o dia em que o lock for removido ou o caminho
+ * mudar, e por isso continua sem cobertura, por design.
+ *
+ * O que os casos provam é o que importa para quem usa: dois cliques rápidos não
+ * criam duas trilhas nem vazam erro de PostgreSQL, e a recusa carrega o código
+ * que a tela sabe traduzir.
  *
  * ## A trilha sem alvo
  *
@@ -72,6 +77,7 @@ async function alvo() {
 
 describe("duas criações simultâneas com o mesmo nome", () => {
   it("UT-320 uma cria, a outra recebe `track_name_duplicate`", async () => {
+    // A recusa vem da validação, não do índice — ver o bloco no topo do arquivo.
     const candidateId = await comPerfil();
     const target = await alvo();
 
