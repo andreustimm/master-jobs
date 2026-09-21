@@ -3,7 +3,7 @@ id: JOBS-country-hub
 area: JOBS
 title: Escolher o país antes de abrir a vaga publicada em vários
 persona: Andreus em triagem
-journey: J-find-jobs-by-work-mode
+journey: J-trust-the-filtered-board
 expected: Clicar numa linha agrupada abre o hub com todas as publicações do grupo, e é lá que se escolhe o país
 entry_points: /jobs/<id>/paises
 qa_status: untested

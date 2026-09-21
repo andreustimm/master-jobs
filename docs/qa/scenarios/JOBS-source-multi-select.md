@@ -3,16 +3,16 @@ id: JOBS-source-multi-select
 area: JOBS
 title: Escolher várias fontes de uma vez e voltar ao acervo inteiro
 persona: Andreus em triagem
-journey: J-find-jobs-by-work-mode
+journey: J-trust-the-filtered-board
 expected: Marcar duas fontes e aplicar uma vez mostra só as vagas delas; a lista de fontes continua oferecendo todas, e limpar devolve o acervo
 entry_points: /jobs?source=ashby&source=lever
-qa_status: untested
+qa_status: blocked-verify
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: 2026-09-21-docs-qa-jornada-do-quadro-filtrado
 overlaps: JOBS-pay-filter
 ---
 

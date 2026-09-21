@@ -3,7 +3,7 @@ id: JOBS-group-canonical-survives-filter
 area: JOBS
 title: Grupo de países não desaparece porque uma das publicações foi cortada
 persona: Andreus em triagem
-journey: J-find-jobs-by-work-mode
+journey: J-trust-the-filtered-board
 expected: Se uma publicação do grupo passa pelos filtros, o grupo aparece — representado por ela, e não pela que foi cortada
 entry_points: /jobs; /jobs?unblocked=1; /jobs?fit=60
 qa_status: untested

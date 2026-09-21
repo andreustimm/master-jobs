@@ -3,16 +3,16 @@ id: JOBS-cockpit-count-matches-list
 area: JOBS
 title: O número da tela inicial conta o mesmo quadro que ela mostra
 persona: Andreus em triagem
-journey: J-refresh-candidate-ranking
+journey: J-trust-the-filtered-board
 expected: O "N vagas" do cockpit reflete os filtros aplicados, e concorda com o que /jobs diz para a mesma URL
 entry_points: /; /?company=Acme; /?notApplied=1; /?fitMax=70
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: docs/qa/evidence/2026-09-21-docs-qa-jornada-do-quadro-filtrado/numbers-agree-empty-employer.png
+last_report: 2026-09-21-docs-qa-jornada-do-quadro-filtrado
 overlaps: JOBS-employer-filter; JOBS-score-range; JOBS-hide-already-sent
 ---
 

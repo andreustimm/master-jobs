@@ -3,7 +3,7 @@ id: JOBS-anonymous-employer-never-groups
 area: JOBS
 title: Vagas de fonte que oculta o empregador não são fundidas numa linha
 persona: Andreus em triagem
-journey: J-find-jobs-by-work-mode
+journey: J-trust-the-filtered-board
 expected: Duas vagas de empresas diferentes com o mesmo título, numa fonte anônima, continuam sendo duas linhas — nenhuma fica inalcançável
 entry_points: /jobs?source=lever; /jobs
 qa_status: untested
