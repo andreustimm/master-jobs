@@ -334,4 +334,77 @@ describe("failCheck", () => {
     expect(row?.status).toBe("failed");
     expect(row?.lastError).toBe("boom");
   });
+  it("UT-440 `fetch` que rejeita com string não fecha a vaga: vira inconclusivo", async () => {
+    // Medido: `probe()` captura a exceção e devolve `inconclusive`, então o
+    // `catch` de `runVerifyQueue` NÃO é alcançado por falha de rede — ele é
+    // defesa de segunda ordem, para uma exceção vinda de outro lugar.
+    //
+    // O que importa é exatamente isso: uma rejeição de rede não pode fechar
+    // vaga. É a invariante do repositório — só 404 e 410 provam ausência — no
+    // caminho da exceção, onde seria mais fácil errar.
+    const id = await seedJob();
+    await enqueueVerify(id);
+
+    const lancaString = (async () => {
+      throw "ENOTFOUND host inexistente";
+    }) as unknown as typeof fetch;
+
+    const r = await runVerifyQueue({ fetchImpl: lancaString, lookupHost: publicLookup });
+
+    expect(r).toMatchObject({ checked: 1, inconclusive: 1, gone: 0, alive: 0 });
+    const [linha] = await db.select().from(job).where(eq(job.id, id));
+    expect(linha?.closedAt).toBeNull();
+  });
+
+  it("UT-441 `Error` de verdade também é inconclusivo, e a vaga continua aberta", async () => {
+    // O par: qualquer forma de falha de rede tem o mesmo desfecho. Uma delas
+    // fechando a vaga e a outra não seria pior que as duas fecharem.
+    const id = await seedJob();
+    await enqueueVerify(id);
+
+    const lancaErro = (async () => {
+      throw new Error("conexão recusada");
+    }) as unknown as typeof fetch;
+
+    const r = await runVerifyQueue({ fetchImpl: lancaErro, lookupHost: publicLookup });
+
+    expect(r).toMatchObject({ checked: 1, inconclusive: 1, gone: 0 });
+    const [linha] = await db.select().from(job).where(eq(job.id, id));
+    expect(linha?.closedAt).toBeNull();
+  });
+
+  it("UT-442 `delayMs` não altera o resultado, e a execução continua completa", async () => {
+    // A pausa entre sondagens existe porque são sites de terceiros: é a diferença
+    // entre um cliente educado e um bloqueio de IP.
+    //
+    // O que este caso NÃO faz é medir tempo de parede. Um piso em milissegundos
+    // depende da carga da máquina, e um teste que às vezes reprova por isso
+    // ensina a suíte a ser ignorada. O que se afirma aqui é o que é
+    // determinístico: com a pausa configurada, o laço percorre as duas tarefas e
+    // devolve exatamente o mesmo resultado que sem ela. A duração do `setTimeout`
+    // é responsabilidade do runtime, não deste teste.
+    const a = await seedJob();
+    const b = await seedJob();
+    await enqueueVerify(a);
+    await enqueueVerify(b);
+
+    const comPausa = await runVerifyQueue({
+      fetchImpl: fakeFetch(200),
+      lookupHost: publicLookup,
+      delayMs: 1,
+    });
+
+    expect(comPausa).toEqual({ checked: 2, alive: 2, gone: 0, inconclusive: 0 });
+
+    // E sem a pausa, o mesmo resultado sobre um acervo equivalente: é o par que
+    // prova que a opção não muda o que é verificado, só o ritmo.
+    const c = await seedJob();
+    const d = await seedJob();
+    await enqueueVerify(c);
+    await enqueueVerify(d);
+
+    const semPausa = await runVerifyQueue({ fetchImpl: fakeFetch(200), lookupHost: publicLookup });
+
+    expect(semPausa).toEqual(comPausa);
+  });
 });

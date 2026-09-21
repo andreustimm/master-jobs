@@ -215,6 +215,110 @@ describe("os dois idiomas têm de contar a mesma história", () => {
     const omitida = "# Novidades\n\n<!-- sem-nota-usuario: 1.0.0 - 2026-09-21 -->\n";
     expect(() => validateLocalizedChangelogs(pt(omitida), pt(omitida))).not.toThrow();
   });
+
+  it("UT-188 a versão que falta é nomeada pelo idioma CERTO, nos dois sentidos", () => {
+    // UT-181 cobre a falta em `en`. O outro sentido tem seu próprio ramo, e é o
+    // que decide qual arquivo a pessoa vai abrir para consertar. Nomear o idioma
+    // errado manda editar o arquivo que está correto.
+    const comVersao = pt(changelog("1.0.0", "2026-09-21"));
+    const vazio = pt("# Novidades\n");
+
+    const faltaEn = (() => {
+      try {
+        validateLocalizedChangelogs(comVersao, vazio);
+      } catch (erro) {
+        return erro as ChangelogDomainError;
+      }
+      throw new Error("deveria ter recusado");
+    })();
+    expect(faltaEn.message).toMatch(/en/);
+
+    const faltaPt = (() => {
+      try {
+        validateLocalizedChangelogs(vazio, comVersao);
+      } catch (erro) {
+        return erro as ChangelogDomainError;
+      }
+      throw new Error("deveria ter recusado");
+    })();
+    expect(faltaPt.message).toMatch(/pt-BR/);
+  });
+
+  it("UT-189 corpo vazio em `en` nomeia `en`, não o primeiro idioma da comparação", () => {
+    // O espelho de UT-182. O ternário que escolhe o idioma tem dois lados, e só
+    // um estava exercitado — uma troca dos lados passaria pela suíte inteira.
+    const ptBR = pt(changelog("1.0.0", "2026-09-21"));
+    const en = pt("# Novidades\n\n## [1.0.0] - 2026-09-21\n\n");
+
+    try {
+      validateLocalizedChangelogs(ptBR, en);
+      throw new Error("deveria ter recusado");
+    } catch (erro) {
+      expect((erro as ChangelogDomainError).message).toMatch(/localized_content_missing/);
+      expect((erro as ChangelogDomainError).message).toMatch(/\ben\b/);
+    }
+  });
+
+  it("UT-196 marcador de omissão com publicação diferente nos dois é divergência", () => {
+    // Versão omitida nos dois idiomas, mas com datas diferentes no marcador. É o
+    // caminho de omissão do mesmo erro que UT-184 cobre no caminho visível.
+    const ptBR = pt("# Novidades\n\n<!-- sem-nota-usuario: 1.0.0 - 2026-09-21 -->\n");
+    const en = pt("# What's New\n\n<!-- sem-nota-usuario: 1.0.0 - 2026-09-22 -->\n");
+
+    try {
+      validateLocalizedChangelogs(ptBR, en);
+      throw new Error("deveria ter recusado");
+    } catch (erro) {
+      expect((erro as ChangelogDomainError).message).toMatch(/localized_publication_mismatch/);
+    }
+  });
+});
+
+describe("o marcador de omissão, que é o único cabeçalho que não é cabeçalho", () => {
+  it("UT-197 a mesma versão omitida duas vezes é versão repetida", () => {
+    // O marcador mora ANTES do primeiro `##`, fora da estrutura de seções, e por
+    // isso a checagem de versão repetida dele é separada. Sem ela, duas linhas
+    // para a mesma versão passariam e a segunda venceria em silêncio.
+    const resultado = parseUserChangelog(
+      "# Novidades\n\n<!-- sem-nota-usuario: 1.0.0 - 2026-09-21 -->\n" +
+        "<!-- sem-nota-usuario: 1.0.0 - 2026-09-22 -->\n",
+    );
+
+    expect(resultado.issues.map((problema) => problema.code)).toContain("duplicate_version");
+    // E só a primeira entra como omitida: a repetida não vira uma segunda.
+    expect(resultado.omitted.filter((r) => r.version === "1.0.0")).toHaveLength(1);
+  });
+
+  it("UT-198 publicação ilegível no marcador é problema, não omissão silenciosa", () => {
+    const resultado = parseUserChangelog(
+      "# Novidades\n\n<!-- sem-nota-usuario: 1.0.0 - 2026-02-30 -->\n",
+    );
+
+    expect(resultado.issues.map((problema) => problema.code)).toContain("invalid_publication");
+    // A versão NÃO entra como omitida: aceitar a linha com data impossível
+    // registraria a release sem saber quando ela saiu.
+    expect(resultado.omitted).toEqual([]);
+  });
+
+  it("UT-199 marcador dentro de cerca de código não conta", () => {
+    // Documentação sobre o formato do marcador vive no próprio changelog. Ler o
+    // exemplo como declaração omitiria uma versão que ninguém publicou.
+    const resultado = parseUserChangelog(
+      "# Novidades\n\nComo omitir:\n\n```md\n<!-- sem-nota-usuario: 9.9.9 - 2026-09-21 -->\n```\n",
+    );
+
+    expect(resultado.omitted).toEqual([]);
+    expect(resultado.issues).toEqual([]);
+  });
+
+  it("UT-200 marcador sem publicação é aceito, com a publicação indefinida", () => {
+    // A data é opcional no marcador: quem omite a nota pode omitir a data também,
+    // e o carimbo entra depois. O que não pode é a linha ser ignorada.
+    const resultado = parseUserChangelog("# Novidades\n\n<!-- sem-nota-usuario: 1.0.0 -->\n");
+
+    expect(resultado.omitted).toEqual([{ version: "1.0.0", publication: undefined }]);
+    expect(resultado.issues).toEqual([]);
+  });
 });
 
 describe("apoio", () => {

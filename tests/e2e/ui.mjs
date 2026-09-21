@@ -1016,13 +1016,25 @@ try {
   await page.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+End");
-  const antes = await page.locator(".cm-content").innerText();
-  await page.keyboard.type("\n\nE2E queue visibility change.", { delay: 0 });
-  // A digitação entrou mesmo: sem isto o caso mediria a fila de um currículo
-  // que ninguém editou.
+  // `textContent` nos DOIS lados da comparação. A versão anterior lia o estado
+  // inicial com `innerText` e comparava com `textContent`: o CodeMirror põe cada
+  // linha numa div, então `innerText` traz `\n` entre elas e `textContent` não —
+  // as duas leituras do MESMO documento já diferiam, e a espera era satisfeita
+  // antes de qualquer tecla entrar. O caso media a fila de um currículo que
+  // ninguém havia editado.
+  const FRASE_DIGITADA = "E2E queue visibility change.";
+  const antes = await page
+    .locator(".cm-content")
+    .evaluate((element) => element.textContent ?? "");
+  await page.keyboard.type(`\n\n${FRASE_DIGITADA}`, { delay: 0 });
+  // A digitação entrou mesmo: o texto mudou E contém o que foi digitado. A
+  // segunda metade é o que torna a espera incapaz de passar por acidente.
   await page.waitForFunction(
-    (texto) => (document.querySelector(".cm-content")?.textContent ?? "") !== texto,
-    antes,
+    ({ texto, frase }) => {
+      const atual = document.querySelector(".cm-content")?.textContent ?? "";
+      return atual !== texto && atual.includes(frase);
+    },
+    { texto: antes, frase: FRASE_DIGITADA },
   );
   await page.fill('input[name="label"]', "E2E queue visibility");
   await page.locator('[data-testid="save-cv"]').click();

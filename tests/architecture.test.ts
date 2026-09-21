@@ -848,12 +848,78 @@ describe("client islands stay out of the server graph", () => {
    * `import type { UrlObject } from "node:url"` is erased before the bundler
    * ever sees it, so counting it would make the rule flag files that are
    * already correct — and a fitness test that starts red is a wish, not a wall.
+   *
+   * ## Why the first pattern is anchored instead of `[\s\S]*?`
+   *
+   * It used to be `/\b(?:import|export)\s+type\b[\s\S]*?from\s*["']…["']/`, and
+   * `[\s\S]*?` crosses lines. A plain `export type Props = { … }` — which is on
+   * hundreds of lines in this repo — matched `export type`, then ran to the
+   * NEXT `from "…"` anywhere below it and deleted everything in between. Any
+   * value import inside that span vanished from the graph, and the rule stopped
+   * seeing exactly the reach it exists to forbid. It erased instead of
+   * reporting, so the symptom was silence.
+   *
+   * The pattern now requires what an import clause actually looks like — braces,
+   * one name, or a namespace — followed by `from`. `export type Props =` does
+   * not match, because after the name comes `=` and not `from`.
    */
   function values(source: string): string {
-    return source
-      .replace(/\b(?:import|export)\s+type\b[\s\S]*?from\s*["'][^"']+["']/g, "")
-      .replace(/\bimport\s*\{\s*(?:type\s+[^,}]+,?\s*)+\}\s*from\s*["'][^"']+["']/g, "");
+    return (
+      source
+        .replace(
+          /\b(?:import|export)\s+type\s+(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s*["'][^"']+["']/g,
+          "",
+        )
+        // Mixed clauses are decided by their specifiers, not by a regex that
+        // tries to describe "all of them are types" in one pass:
+        // `import { type A, b }` keeps `b` and therefore keeps the edge.
+        .replace(/\bimport\s*\{([^}]*)\}\s*from\s*["'][^"']+["']/g, (todo, dentro: string) => {
+          const especificadores = dentro
+            .split(",")
+            .map((parte) => parte.trim())
+            .filter((parte) => parte.length > 0);
+          const soTipos =
+            especificadores.length > 0 && especificadores.every((parte) => /^type\s/.test(parte));
+          return soTipos ? "" : todo;
+        })
+    );
   }
+
+  it("UT-081 the type-only filter erases types and never a value import", () => {
+    // Cada linha abaixo é uma forma que existe neste repositório. A primeira
+    // metade tem de desaparecer; a segunda tem de sobreviver, porque é ela que
+    // carrega a aresta que a regra UT-080 procura.
+    const apagado = [
+      'import type { UrlObject } from "node:url";',
+      'import type Config from "./config.ts";',
+      'import type * as schema from "./schema.ts";',
+      'export type { Board } from "./board.ts";',
+      'import { type A, type B } from "./tipos.ts";',
+    ];
+    for (const linha of apagado) {
+      // Sobra o `;`, e é indiferente: o que conta é não restar aresta nenhuma
+      // para `RELATIVE` ou `SERVER_ONLY` encontrarem.
+      expect(values(linha), linha).not.toMatch(/\bfrom\b/);
+    }
+
+    const preservado = [
+      'import { getDb } from "node:fs";',
+      'import { type Props, render } from "./render.ts";',
+      'import postgres from "postgres";',
+      // A forma que a versão anterior engolia: uma declaração de tipo acima de
+      // um import de valor. Ela não é import, e não pode apagar quem é.
+      'export type Props = { a: string };\nimport { db } from "drizzle-orm";',
+    ];
+    for (const trecho of preservado) {
+      expect(SERVER_ONLY.test(values(trecho)) || /\bfrom\s*["']\./.test(values(trecho)), trecho).toBe(
+        true,
+      );
+    }
+
+    // E a prova direta do defeito: o alcance ao servidor continua visível.
+    const armadilha = 'export type Props = {\n  a: string;\n};\nimport { sql } from "drizzle-orm";';
+    expect(SERVER_ONLY.test(values(armadilha))).toBe(true);
+  });
 
   function resolveImport(from: string, spec: string): string | null {
     const base = spec.startsWith("@/") ? resolve(spec.slice(2)) : resolve(dirname(from), spec);
