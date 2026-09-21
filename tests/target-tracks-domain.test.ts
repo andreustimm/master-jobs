@@ -247,6 +247,118 @@ describe("track domain", () => {
     expect(preselectTrack("Elixir", tracks)).toBeNull();
   });
 
+  it("UT-045 the heaviest weight wins over track order", () => {
+    // O comentário de `preselectTrack` promete exatamente isto: vence quem dá
+    // MAIS peso ao termo, não quem aparece primeiro. Sem o caso, trocar `>` por
+    // `>=` — ou remover a comparação — passaria pela suíte inteira, e a tela
+    // marcaria a trilha errada para quem acabou de criar a certa.
+    const leve = withTarget((t) => {
+      t.keywords.critical = [];
+      t.keywords.strong = [];
+      t.keywords.stack = [{ term: "laravel", weight: 2 }];
+    });
+    const pesado = withTarget((t) => {
+      t.keywords.critical = [{ term: "laravel", weight: 8 }];
+      t.keywords.strong = [];
+      t.keywords.stack = [];
+    });
+
+    const primeiroEhLeve = [
+      { id: 1, status: "active" as const, position: 1, target: leve },
+      { id: 2, status: "active" as const, position: 2, target: pesado },
+    ];
+    expect(preselectTrack("laravel", primeiroEhLeve)?.id).toBe(2);
+
+    // E a ordem oposta dá o mesmo vencedor: é o peso que decide, não a posição.
+    const primeiroEhPesado = [
+      { id: 2, status: "active" as const, position: 1, target: pesado },
+      { id: 1, status: "active" as const, position: 2, target: leve },
+    ];
+    expect(preselectTrack("laravel", primeiroEhPesado)?.id).toBe(2);
+  });
+
+  it("UT-046 a tie goes to the lower position, whatever the array order", () => {
+    const igual = () =>
+      withTarget((t) => {
+        t.keywords.critical = [{ term: "laravel", weight: 8 }];
+        t.keywords.strong = [];
+        t.keywords.stack = [];
+      });
+
+    // Mesma força nas duas: o desempate é determinístico pela posição, e não
+    // pela ordem em que o banco devolveu as linhas.
+    expect(
+      preselectTrack("laravel", [
+        { id: 9, status: "active" as const, position: 7, target: igual() },
+        { id: 4, status: "active" as const, position: 3, target: igual() },
+      ])?.id,
+    ).toBe(4);
+    expect(
+      preselectTrack("laravel", [
+        { id: 4, status: "active" as const, position: 3, target: igual() },
+        { id: 9, status: "active" as const, position: 7, target: igual() },
+      ])?.id,
+    ).toBe(4);
+  });
+
+  it("UT-047 a track without a target is skipped instead of throwing", () => {
+    // Trilha principal de quem ainda não salvou perfil nasce sem alvo. Ela está
+    // ativa e na primeira posição — o candidato mais provável a ser escolhido por
+    // engano, se o alvo ausente não fosse verificado antes de ler as palavras.
+    const tracks = [
+      { id: 1, status: "active" as const, position: 1, target: null },
+      { id: 2, status: "active" as const, position: 2, target: php },
+    ];
+
+    expect(preselectTrack("laravel", tracks)?.id).toBe(2);
+    expect(preselectTrack("laravel", [{ id: 1, status: "active" as const, position: 1, target: null }])).toBeNull();
+    expect(preselectTrack("laravel", [])).toBeNull();
+  });
+
+  it("UT-048 a keyword repeated across groups counts once", () => {
+    // O mesmo termo pode estar em `critical` e em `stack`. `evidenceSupport`
+    // deduplica por chave; sem isso a tela listaria "laravel" duas vezes na
+    // mesma coluna, e a contagem de lacunas mentiria sobre o tamanho do vão.
+    const repetido = withTarget((t) => {
+      t.keywords.critical = [{ term: "laravel", weight: 8 }];
+      t.keywords.strong = [{ term: "Laravel", weight: 5 }];
+      t.keywords.stack = [{ term: " laravel ", weight: 2 }];
+    });
+
+    const resultado = evidenceSupport(repetido, {
+      lines: [],
+      confirmedSkills: [],
+      inherited: false,
+    });
+
+    expect(resultado.gaps).toEqual(["laravel"]);
+    expect(resultado.supported).toEqual([]);
+  });
+
+  it("UT-049 a derived profile that edited compensation stops inheriting it", () => {
+    // `inheritedFields` compara por valor, não por marca de origem: editar a
+    // faixa é o que tira o campo da lista de "herdado e não revisado".
+    const derived = deriveMatchingProfile(person, []);
+    const editado = structuredClone(derived);
+    editado.compensation.ranges = [
+      { currency: "USD", period: "year", floor: 100_000, target: 160_000, ideal: 230_000 },
+    ];
+
+    expect(inheritedFields(editado, person, { isOwner: false })).toEqual(["targets"]);
+    // E editar os dois campos não herda nada, sem deixar de ser derivado.
+    editado.targets.avoid_titles = [...person.targets.avoid_titles, "Scrum Master"];
+    expect(inheritedFields(editado, person, { isOwner: false })).toEqual([]);
+  });
+
+  it("UT-050 a term made only of punctuation still yields a usable cluster", () => {
+    // `slugOf` cai para "track" quando não sobra caractere nenhum. Sem o fallback
+    // o cluster ficaria vazio, e uma string vazia como chave agrupa tudo junto.
+    const sugestao = suggestTrack({ term: "+++", catalog: [], primary });
+
+    expect(sugestao.thin).toBe(true);
+    expect(JSON.stringify(sugestao.target)).not.toContain('"cluster":""');
+  });
+
   it("UT-044 ignores evidence when scoring", () => {
     const withEvidence = effectiveProfile({ ...person, evidence: { theme: ["Laravel 12"] } }, php);
     const without = effectiveProfile({ ...person, evidence: {} }, php);
