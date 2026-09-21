@@ -446,8 +446,8 @@ determinístico, não do CLI, da ingestão nem do repo.
 
 > **Invariante:** O escopo de teste é o núcleo puro (`scoring` e `normalize`).
 > Mexeu nos pesos ou nas regexes de normalização? Atualize os testes na mesma
-> mudança — `pnpm check` é `typecheck && test`, e essas duas suítes são o que
-> segura o scorer.
+> mudança — `pnpm check` roda o typecheck e o Vitest (além dos gates de
+> changelog e de QA), e essas duas suítes são o que segura o scorer.
 
 ---
 

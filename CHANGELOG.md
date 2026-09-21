@@ -30,6 +30,15 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   `BUG-20260921-job-detail-labels-untranslated` dizia que devolver
   `Ver vaga na origem` ao JSX não reprovaria; depois da correção o texto é valor
   do dicionário e reprova, enquanto a chave existir.
+- Backlog: `B-12` (snapshot do Turso) fica **superado** — marca nova ⏹️ —,
+  porque o runtime saiu do Turso no corte de 19/09. `B-11` volta a **decisão**:
+  a cota que o motivou não existe mais, mas `enqueueStale()` ainda calcula o fit
+  por linha e os dois agendadores de recheck — o workflow `Varredura de vagas` e
+  o cron da Vercel — voltaram a coexistir.
+- `AGENTS.md` mostrava 1.609 testes na tabela de estado; são 2.968, mais 263
+  verificações E2E, e a cobertura já inclui `cli.ts`. `README.md`,
+  `docs/operations.md` e `docs/architecture.md` descreviam o `pnpm check` como
+  "typecheck + testes" e passam a listar os gates de changelog e de QA.
 
 ## [1.20.3] - 2026-09-21
 

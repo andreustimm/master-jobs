@@ -23,6 +23,7 @@ item move a agulha num funil de contratação real.
 | 🔨 | Em implementação |
 | 🔄 | Decisão em andamento |
 | 📋 | Capturado, não iniciado |
+| ⏹️ | Superado: o motivo deixou de existir; fica como histórico |
 
 ## Captura de 16/09/2026 — próxima semana de trabalho
 
@@ -1674,7 +1675,18 @@ A tela do candidato mostra o estado da fila de repontuação, com estados
 localizados para ausência de tarefa, pendente, em processamento, concluído e
 falho. O acompanhamento histórico detalhado continua fora desta onda.
 
-### B-11 · Conter e corrigir o consumo de cota do Turso 🔨
+### B-11 · Conter e corrigir o consumo de cota do Turso 🔄
+
+> **Reavaliar (21/09/2026).** O gatilho deixou de existir: desde o corte de
+> 19/09 o runtime é o PostgreSQL do Supabase, e não há cota do Turso a
+> estourar. A contenção também já não vale — o workflow `Varredura de vagas`
+> está **ativo** no GitHub e `vercel.json` mantém o cron `/api/cron/recheck`,
+> então os dois agendadores de recheck voltaram a coexistir. Parte do escopo
+> abaixo independe do banco e segue aberta: `enqueueStale()` ainda calcula
+> `bestPrimaryFit()` por linha, não há dono único do recheck, nem circuito de
+> orçamento, nem telemetria por rotina. O que já vale é a regra de só fechar
+> vaga por 404/410 (`src/core/ingest/probe.ts`). Decidir: reescrever como item
+> de desempenho no PostgreSQL, ou fechar.
 
 **Incidente:** [`../operations/turso-quota-incident-2026-09-03.md`](../operations/turso-quota-incident-2026-09-03.md).
 
@@ -1729,7 +1741,12 @@ antes de concluir os critérios abaixo.
 7. somente o agendador escolhido é reativado;
 8. monitoramento por 24 horas sem estouro do orçamento.
 
-### B-12 · Atualizar o snapshot local com dados de produção 🔨
+### B-12 · Atualizar o snapshot local com dados de produção ⏹️
+
+> **Superado (21/09/2026).** O ambiente local roda PostgreSQL em Docker, e
+> `data/jobs.db` é snapshot SQLite legado, fora do runtime. O procedimento
+> abaixo exporta do Turso, que deixou de ser o banco de produção no corte de
+> 19/09.
 
 **Objetivo:** permitir desenvolvimento, QA e análise do ranking contra o corpus
 real sem apontar a aplicação local para o Turso e sem consumir a cota por cada

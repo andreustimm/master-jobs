@@ -306,7 +306,7 @@ O relatório separa `Novas oportunidades` (sem status ou `backlog`) de
 ```bash
 pnpm jho pipeline
 pnpm jho sources list
-pnpm check                 # tsc --noEmit + vitest
+pnpm check                 # changelogs, tracker de QA, tsc --noEmit, vitest, skills de QA
 ```
 
 `jho pipeline` imprime só os status com contagem > 0, mais a lista ordenada por
@@ -798,7 +798,7 @@ pnpm jho pipeline                        # semanal: estado do funil
 pnpm jho sources list                    # semanal: saúde das fontes
 pnpm jho tasks show <PT-XXXX>            # semanal: detalhe de um item do plano
 pnpm jho db seed                         # sob demanda: plano + baseline de métricas (idempotente)
-pnpm check                               # semanal: tsc --noEmit + vitest
+pnpm check                               # semanal: changelogs, tracker de QA, tsc, vitest, skills de QA
 ```
 
 
