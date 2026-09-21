@@ -87,6 +87,30 @@ acento na localização.
 a contagem final da varredura axe. Se a tela precisa de id, use uma fixture do
 `setup.mjs` em vez de um id inventado.
 
+## Uma espera frágil apaga o relatório de todos os outros cenários
+
+`tests/e2e/ui.mjs` é um script sequencial dentro de um `try` só. Quando um passo
+estoura, a exceção pula para o `catch` final, que registra
+`✗ suíte concluiu sem exceção` — e tudo que vinha depois **não roda**. Em
+2026-09-21 o relatório saiu `42/43` com 262 verificações escritas: um `goto` do
+WebKit estourou e apagou o veredito de 219 cenários que nada tinham com ele.
+
+Duas regras saem daí:
+
+**Não use `networkidle` numa tela do acervo.** Ele espera 500 ms sem nenhuma
+requisição, e `/jobs` tem mil vagas no corpus E2E: entre prefetch de rota do Next,
+fontes e imagens da lista, o WebKit não alcança esse silêncio. Espere
+`domcontentloaded` mais o elemento que o cenário realmente usa — é determinístico,
+é mais rápido, e falha dizendo o que faltou. Chromium tolera; WebKit não.
+
+**Cenário que abre navegador próprio vai dentro do seu próprio `try`.** A falha
+continua sendo falha, com o diagnóstico inteiro, mas deixa de decidir o destino
+dos outros. O bloco WebKit é o único assim hoje.
+
+Se um relatório vier com muito menos verificações do que o arquivo escreve,
+procure a exceção antes de acreditar no número: `N/N passaram` com `N` pequeno é
+uma suíte que parou, não uma suíte que passou.
+
 ## Áreas
 
 | Código | Área |

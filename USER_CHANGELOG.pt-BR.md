@@ -20,6 +20,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ### Corrigido
 
+- Quando um anúncio não informava o endereço do formulário de candidatura, a
+  recomendação da varredura podia sair com um link que não levava a lugar nenhum —
+  clicar nele recarregava a mesma página. Agora o link é sempre o do anúncio
+  quando não há formulário.
+
 - Com a interface em inglês, a localização de uma vaga — que vem do anúncio, não
   da tradução — poderia ser tratada como texto não traduzido. Agora ela é
   reconhecida como dado do anúncio, na lista e na janela de detalhe da vaga.

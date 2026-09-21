@@ -851,7 +851,22 @@ try {
         sameSite: "Lax",
       },
     ]);
-    await webkitPage.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+    // `domcontentloaded` mais o gatilho que o cenário precisa, e NÃO
+    // `networkidle`.
+    //
+    // `networkidle` espera 500 ms sem requisição, e `/jobs` no acervo E2E tem mil
+    // vagas: entre prefetch de rota do Next, fontes e as imagens da lista, o
+    // WebKit não alcança esse silêncio e o `goto` estourava os 30 segundos. Como
+    // a exceção vinha de dentro do `try` da suíte inteira, ela pulava para o
+    // `catch` final e as duas centenas de verificações seguintes não rodavam: uma
+    // espera frágil apagava o relatório de tudo o mais.
+    //
+    // O cenário só precisa do gatilho do changelog clicável. Esperar por ele é
+    // determinístico, é mais rápido, e falha dizendo o que faltou.
+    await webkitPage.goto(`${BASE}/jobs`, { waitUntil: "domcontentloaded" });
+    await webkitPage
+      .locator('[data-testid="changelog-open"]')
+      .waitFor({ state: "visible", timeout: 20_000 });
     const { dialog: webkitDialog } = await openChangelog(webkitPage);
     const webkitVertical = await webkitDialog.evaluate((dialog) => {
       const scrollArea = dialog.querySelector("div.min-h-0.flex-1");
@@ -880,6 +895,17 @@ try {
         webkitVertical.firstHeaderHeight >= 44 &&
         webkitVertical.visibleHeaderHeight >= webkitVertical.firstHeaderHeight - 1,
       JSON.stringify(webkitVertical),
+    );
+  } catch (erro) {
+    // Isolado de propósito. Este é o único cenário que abre um SEGUNDO navegador,
+    // e antes uma falha aqui derrubava a suíte inteira pelo `catch` global —
+    // 42 de 262 verificações rodavam e o resto ficava sem resposta. A falha
+    // continua sendo falha, com o diagnóstico inteiro; o que muda é que ela não
+    // decide o destino dos outros cenários.
+    check(
+      "E2E-019c WebKit móvel: cenário concluiu sem exceção",
+      false,
+      (erro instanceof Error ? erro.stack ?? erro.message : String(erro)).replace(/\s+/g, " ").slice(0, 600),
     );
   } finally {
     await webkitBrowser.close();
@@ -1044,11 +1070,36 @@ try {
   });
   const queuedStatus = page.locator('[data-testid="score-queue-status"]');
   await queuedStatus.waitFor();
+  // Espera o ESTADO, não o aviso.
+  //
+  // `mutation-feedback` aparece quando a Server Action responde, e isso é ANTES
+  // de a árvore revalidada chegar: o cartão lido logo depois ainda é o do render
+  // anterior, que dizia `idle` porque antes de salvar não havia nada na fila. Com
+  // a espera de digitação consertada, o caso passou a reprovar aqui — e reprovava
+  // por ler cedo, não porque a repontuação deixou de ser enfileirada.
+  //
+  // Qualquer estado diferente de `idle` prova o enfileiramento: `pending` é o
+  // comum, e `scoring`/`done` aparecem se o worker for mais rápido que a leitura.
+  // Esperar especificamente por `pending` reintroduziria a corrida ao contrário.
+  let estadoDaFila = await queuedStatus.getAttribute("data-state");
+  try {
+    await page.waitForFunction(
+      () =>
+        (document.querySelector('[data-testid="score-queue-status"]')
+          ?.getAttribute("data-state") ?? "idle") !== "idle",
+      undefined,
+      { timeout: 15_000 },
+    );
+    estadoDaFila = await queuedStatus.getAttribute("data-state");
+  } catch {
+    // Deixa `estadoDaFila` como está: o check abaixo reprova mostrando o que
+    // ficou na tela, em vez de a exceção abortar a suíte inteira.
+  }
   check(
     "E2E-001 salvar CV mostra atualização enfileirada no próximo render",
-    (await queuedStatus.getAttribute("data-state")) === "pending" &&
-      ((await queuedStatus.textContent()) ?? "").includes("Na fila"),
-    `${await queuedStatus.getAttribute("data-state")}: ${await queuedStatus.textContent()}`,
+    estadoDaFila !== null && estadoDaFila !== "idle" &&
+      ((await queuedStatus.textContent()) ?? "").trim() !== "",
+    `${estadoDaFila}: ${await queuedStatus.textContent()}`,
   );
 
   await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
@@ -1385,16 +1436,42 @@ try {
   // Dois `fetch` de dentro da própria página: requisições HTTP de verdade, com
   // o mesmo cookie de sessão, disparadas juntas. Uma segunda aba precisaria de
   // um contexto novo, e um contexto novo não carrega a sessão.
+  //
+  // O QUE ESTE CASO PROVA, E O QUE NÃO PROVA.
+  //
+  // Ele prova que concorrência real sobre as telas mais pesadas não devolve erro:
+  // o pool tem três conexões, e um caminho que pedisse as três exatas deixaria a
+  // requisição do lado esperando.
+  //
+  // Ele NÃO prova a ausência do 504. O 504 é o corte de 30 segundos da Vercel, e
+  // aqui não existe: o `postgres.js` enfileira sem erro quando o pool satura, e
+  // uma requisição lenta local termina em vez de morrer. Status 200 é condição
+  // necessária e insuficiente. O gate do teto por REQUISIÇÃO é
+  // `tests/db-fan-out.test.ts`, que mede o fan-out de cada composição de página
+  // contra `POOL - 1` — e é lá que a regressão reprova.
+  //
+  // Medir tempo aqui seria pior que não medir: um piso em milissegundos depende
+  // da carga da máquina, e um caso que reprova de vez em quando ensina a suíte a
+  // ser ignorada.
+  //
+  // O que foi acrescentado é o cenário REAL de produção: a instância serverless é
+  // reaproveitada entre rotas DIFERENTES, então duas telas pesadas distintas
+  // competem pelo mesmo pool. Só `/candidate/skills` duas vezes não exercitava
+  // isso.
   const statusEmParalelo = await page.evaluate(async (base) => {
+    const pedir = (rota) => fetch(`${base}${rota}`, { redirect: "manual" }).then((r) => [rota, r.status]);
     const respostas = await Promise.all([
-      fetch(`${base}/candidate/skills`, { redirect: "manual" }),
-      fetch(`${base}/candidate/skills`, { redirect: "manual" }),
+      pedir("/candidate/skills"),
+      pedir("/candidate/skills"),
+      pedir("/searches/tracks/new"),
+      pedir("/jobs?q=fixture&fit=0"),
     ]);
-    return respostas.map((resposta) => resposta.status);
+    return Object.fromEntries(respostas.map(([rota, status], n) => [`${n}:${rota}`, status]));
   }, BASE);
   check(
-    "E2E-013 duas requisições simultâneas à tela de skills respondem as duas",
-    statusEmParalelo.every((status) => status === 200),
+    "E2E-013 quatro requisições concorrentes em três telas pesadas respondem todas (não prova ausência de 504; o teto por requisição é tests/db-fan-out.test.ts)",
+    Object.values(statusEmParalelo).length === 4
+      && Object.values(statusEmParalelo).every((status) => status === 200),
     JSON.stringify({ statusEmParalelo }),
   );
 
@@ -3828,11 +3905,31 @@ try {
   );
   publicPhases.push(callbackSoftTransition);
   if (task04PublicHref) {
-    publicPhases.push(await observeNavigation(
-      publicPage,
-      () => publicPage.evaluate((href) => window.next?.router?.push?.(href), task04PublicHref),
-      '[data-testid="route-public-profile"]',
-    ));
+    // A transição suave é o que se mede aqui; o que vem depois — vazamento de
+    // dado no perfil público — é verificação de segurança e não pode ficar sem
+    // resposta porque uma navegação não chegou.
+    //
+    // Então a falha da transição vira um check reprovado, e o cenário segue por
+    // `goto`. Sem esta separação a exceção subia para o `catch` da suíte e
+    // levava consigo tudo o que vinha depois, incluindo as asserções sobre o que
+    // `/p/[slug]` mostra a quem não tem sessão.
+    try {
+      publicPhases.push(await observeNavigation(
+        publicPage,
+        () => publicPage.evaluate((href) => window.next?.router?.push?.(href), task04PublicHref),
+        '[data-testid="route-public-profile"]',
+      ));
+    } catch (erro) {
+      check(
+        "task-04 transição suave para o perfil público chega à rota",
+        false,
+        (erro instanceof Error ? erro.message : String(erro)).replace(/\s+/g, " ").slice(0, 400),
+      );
+      await publicPage.goto(`${BASE}${task04PublicHref}`, { waitUntil: "domcontentloaded" });
+      await publicPage
+        .locator('[data-testid="route-public-profile"]')
+        .waitFor({ state: "visible", timeout: 20_000 });
+    }
   }
   const publicUserText = task04PublicHref
     ? (await publicPage.locator('[data-testid="route-public-profile"] h1').textContent()) ?? ""
@@ -5112,10 +5209,18 @@ try {
   const onlyLever = await listedIds();
   await page.reload({ waitUntil: "networkidle" });
   const leverStillChecked = await page.locator('[data-testid="filter-source-lever"]').isChecked();
+  // Ashby SOZINHO, desmarcando lever primeiro. A medição separada é o que permite
+  // afirmar depois que as duas juntas devolvem a união — e a união é o que
+  // distingue "o parâmetro repetido funciona" de "a contagem bateu".
   await page.locator('[data-testid="filters-source-summary"]').click();
+  await page.locator('[data-testid="filter-source-lever"]').uncheck();
   await page.locator('[data-testid="filter-source-ashby"]').check();
   await page.locator('[data-testid="filters-source-submit"]').click();
-  await settle(/source=ashby/);
+  await settle(/\/jobs\?(?!.*source=lever)(?=.*source=ashby)/);
+  await page.locator('[data-testid="filters-source-summary"]').click();
+  await page.locator('[data-testid="filter-source-lever"]').check();
+  await page.locator('[data-testid="filters-source-submit"]').click();
+  await settle(/source=lever/);
   const bothUrl = page.url();
   const bothSources = await listedIds();
   await page.locator('[data-testid="filters-source-clear"]').click();
@@ -5123,18 +5228,85 @@ try {
   // leitura aconteceria antes da navegação — verde por corrida, não por efeito.
   await settle(/\/jobs\?(?!.*source=)/);
   const cleared = { url: page.url(), ids: await listedIds() };
+
+  // A asserção é sobre o TOTAL do filtro, não sobre a página.
+  //
+  // `listedIds()` lê uma página de cinquenta, e `q=fixture` alcança mais de mil
+  // vagas: comparar tamanhos de página dava igualdade trivial, e comparar
+  // CONJUNTOS de página é pior ainda — `onlyAshby` traz ids que `everySource` não
+  // tem, porque são páginas diferentes do mesmo acervo. Foi o que a execução
+  // mostrou, e é a correção deste próprio caso.
+  //
+  // O número do cabeçalho é o que o filtro produz. Ele reprova se o OR virar AND
+  // (total cai para zero), se a segunda fonte for ignorada (total igual ao de
+  // lever só), ou se o filtro não filtrar (total igual ao do acervo).
+  const totalDoFiltro = () => page.evaluate(() =>
+    Number(document.querySelector('[data-testid="jobs-total"]')?.getAttribute("data-total") ?? -1));
+  await page.goto(`${sourceBase}&source=lever`, { waitUntil: "networkidle" });
+  const totalLever = await totalDoFiltro();
+  await page.goto(`${sourceBase}&source=ashby`, { waitUntil: "networkidle" });
+  const totalAshby = await totalDoFiltro();
+  await page.goto(`${sourceBase}&source=lever&source=ashby`, { waitUntil: "networkidle" });
+  const totalAmbas = await totalDoFiltro();
+  await page.goto(sourceBase, { waitUntil: "networkidle" });
+  const totalSemFiltro = await totalDoFiltro();
+
   check(
-    "term-search E2E-011 fontes em multi-seleção: uma fonte filtra, recarga mantém a marca, duas fontes repetem o parâmetro, limpar volta ao acervo",
-    everySource.length > 1
-      && onlyLever.length === 1
+    "term-search E2E-011 fontes em multi-seleção: o TOTAL de duas fontes é a soma das duas, e cada uma filtra o acervo",
+    onlyLever.length === 1
       && onlyLever[0] === "904000007"
       && leverStillChecked === true
       && /source=lever/.test(bothUrl)
       && /source=ashby/.test(bothUrl)
-      && bothSources.length === everySource.length
       && !/source=/.test(cleared.url)
-      && cleared.ids.length === everySource.length,
-    JSON.stringify({ everySource, onlyLever, leverStillChecked, bothUrl, bothSources, cleared }),
+      // Cada fonte tem vaga, e nenhuma delas é o acervo inteiro.
+      && totalLever > 0 && totalAshby > 0
+      && totalLever < totalSemFiltro && totalAshby < totalSemFiltro
+      // Duas fontes somam as duas: é o OR, e é o que distingue de uma interseção
+      // (que daria zero) ou de uma fonte ignorada (que daria uma das duas).
+      && totalAmbas === totalLever + totalAshby
+      && totalAmbas < totalSemFiltro,
+    JSON.stringify({ onlyLever, leverStillChecked, bothUrl, cleared: cleared.url,
+      totalLever, totalAshby, totalAmbas, totalSemFiltro }),
+  );
+
+  // A faixa de Score vinda da URL, no browser.
+  //
+  // `fit=abc` estava provado só na unidade, e a unidade não vê o que a tela faz
+  // com o resultado: o valor recusado cai no PADRÃO (45), e o campo tem de mostrar
+  // esse padrão. Um campo vazio ali diria "todos os scores", que é outra coisa —
+  // e um `NaN` no atributo `value` faz o React reclamar e o campo ficar
+  // descontrolado.
+  const lerFaixa = async (url) => {
+    await page.goto(url, { waitUntil: "networkidle" });
+    return page.evaluate(() => ({
+      min: document.querySelector('[data-testid="filters-score-min"]')?.value ?? null,
+      max: document.querySelector('[data-testid="filters-score-max"]')?.value ?? null,
+      vagas: document.querySelectorAll('[data-testid^="job-link-"]').length,
+    }));
+  };
+
+  const fitPadrao = await lerFaixa(`${BASE}/jobs?q=fixture`);
+  const fitInvalido = await lerFaixa(`${BASE}/jobs?q=fixture&fit=abc`);
+  const fitNegativo = await lerFaixa(`${BASE}/jobs?q=fixture&fit=-30`);
+  const fitAcimaDoTeto = await lerFaixa(`${BASE}/jobs?q=fixture&fit=999`);
+  const fitVazio = await lerFaixa(`${BASE}/jobs?q=fixture&fit=`);
+
+  check(
+    "term-search E2E-015 faixa de Score da URL: valor ilegível cai no padrão, negativo e acima do teto são presos, vazio é «todos os scores»",
+    // Ilegível é indistinguível de não ter passado nada.
+    fitInvalido.min === fitPadrao.min
+      && fitInvalido.min !== null
+      && !Number.isNaN(Number(fitInvalido.min))
+      // Negativo é preso em zero, e zero é "todos": o campo fica vazio.
+      && fitNegativo.min === ""
+      // Acima do teto é preso no teto, e o teto filtra mais que o padrão.
+      && Number(fitAcimaDoTeto.min) > Number(fitPadrao.min)
+      && fitAcimaDoTeto.vagas <= fitPadrao.vagas
+      // Campo vazio é escolha declarada, não erro: mostra tudo.
+      && fitVazio.min === ""
+      && fitVazio.vagas >= fitPadrao.vagas,
+    JSON.stringify({ fitPadrao, fitInvalido, fitNegativo, fitAcimaDoTeto, fitVazio }),
   );
 
   await page.goto(payBase, { waitUntil: "networkidle" });
