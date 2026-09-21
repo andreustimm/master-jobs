@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.1] - 2026-09-21T03:06:56.669Z
+
 ### Corrigido
 
 - As telas pesadas voltavam a demorar até o servidor desistir quando eram

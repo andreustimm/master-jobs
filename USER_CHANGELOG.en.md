@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.1] - 2026-09-21T03:06:56.669Z
+
 ### Fixed
 
 - The heavy screens went back to hanging until the server gave up when they were

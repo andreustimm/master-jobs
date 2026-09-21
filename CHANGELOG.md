@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.20.1] - 2026-09-21
+
 ### Corrigido
 
 - **O 504 não estava consertado, e a régua verde era o motivo.** A 1.18.2
