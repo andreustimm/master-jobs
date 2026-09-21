@@ -30,6 +30,29 @@ produto como uma pessoa real e grava vereditos e relatórios aqui.
 >
 > As falhas caíam com a carga e sumiram por completo. Uma delas me custou um
 > diagnóstico errado — cheguei a acusar o helper de transição de estar quebrado.
+>
+> **Em 2026-09-21 o helper estava mesmo errado, e a prova veio de medir a árvore
+> limpa.** Numa PR, `observeNavigation` reprovava no redirect do login para o
+> cockpit três execuções de três; parecia defeito da PR. Duas execuções de
+> `origin/dev` **sem alteração nenhuma** deram 262/262 e depois reprovaram
+> exatamente ali: a falha já existia.
+>
+> A causa: num redirect aceito dentro do reducer do Server Action, o overlay
+> nasce no `useLayoutEffect` do observador de commit e morre no `useEffect`
+> seguinte — a janela em que ele existe no DOM é de **um quadro**, e o `locator`
+> do Playwright pode perdê-la inteira. Uma das execuções mostrou o estado
+> intermediário: o overlay anexou e desapareceu entre `waitFor` e
+> `elementHandle`.
+>
+> A espera passou a tolerar não encontrar o elemento, e a prova vem do
+> `MutationObserver` que o próprio helper já instalava — ele registra a inserção
+> mesmo depois de o elemento sair.
+>
+> **A lição de método:** antes de consertar uma reprovação que apareceu junto com
+> a sua mudança, meça a árvore sem ela. Duas execuções de baseline custam meia
+> hora e são a diferença entre consertar o defeito e consertar a coincidência.
+> Aqui a primeira hipótese — de que envolver a página inteira num promise mudava
+> a transmissão da árvore — era plausível, foi implementada, e estava errada.
 
 O dashboard sempre usa loopback. Sessões autenticadas usam contas e papéis de
 teste reais; não use mocks para confirmar uma jornada.

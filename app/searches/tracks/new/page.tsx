@@ -39,17 +39,7 @@ export default async function NewTrackPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  // O vigia envolve a requisição inteira — ver o cabeçalho de
-  // `app/candidate/skills/page.tsx`. Aqui a diferença é maior: a autenticação e
-  // `ensurePrimaryTrack`, que abre transação, rodavam fora dele.
-  return comVigia("/searches/tracks/new", () => renderNewTrackPage(searchParams));
-}
-
-async function renderNewTrackPage(
-  searchParams: Promise<Record<string, string | string[] | undefined>>,
-) {
   const { t } = await getTranslator();
-  const { candidateId } = await requireOwnCandidatePage("candidate:read");
   const params = await searchParams;
   const one = (key: string) => {
     const value = params[key];
@@ -58,8 +48,18 @@ async function renderNewTrackPage(
   const term = one("term");
   const name = one("name");
 
-  const primary = await ensurePrimaryTrack(candidateId);
-  const suggestion = term ? await trackSuggestion(candidateId, term) : null;
+  // O vigia cobre a autenticação e `ensurePrimaryTrack`, que abre transação —
+  // as duas rodavam fora dele. Ver `app/page.tsx` para por que a renderização
+  // fica de fora.
+  const { candidateId, primary, suggestion } = await comVigia(
+    "/searches/tracks/new",
+    async () => {
+      const { candidateId: escopo } = await requireOwnCandidatePage("candidate:read");
+      const principal = await ensurePrimaryTrack(escopo);
+      const sugestao = term ? await trackSuggestion(escopo, term) : null;
+      return { candidateId: escopo, primary: principal, suggestion: sugestao };
+    },
+  );
   const pending = !primary?.target;
   const target = suggestion?.ok ? suggestion.target : primary?.target ? blank(primary.target) : null;
   const fields = target ? targetToFields(name || (suggestion?.ok ? suggestion.term.term : ""), target) : null;

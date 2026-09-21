@@ -166,14 +166,24 @@ export function readFilters(params: Record<string, string | string[] | undefined
   }
   if (state.fitMax !== undefined && state.fit > state.fitMax) {
     [state.fit, state.fitMax] = [state.fitMax, state.fit];
-    notices.push("range_swapped");
+    // Um aviso por leitura, como o `pay_invalid` doze linhas abaixo já fazia.
+    // As duas faixas compartilham a chave, e `?fit=80&fitMax=20&pay=5000&payMax=1000`
+    // empilhava a mesma frase duas vezes — dois irmãos com a mesma `key` do
+    // React, e o `data-testid` resolvendo para dois elementos.
+    if (!notices.includes("range_swapped")) notices.push("range_swapped");
   }
 
   const rawCurrency = one("cur")?.trim().toUpperCase();
   const rawPeriod = one("per");
   const disclosedOnly = one("disclosed") === "1";
   const bound = (raw: string | undefined): number | undefined => {
-    if (raw === undefined || raw === "") return undefined;
+    // Apara antes de decidir se está vazio, como todo o resto do módulo faz
+    // (`boundedFit`, o termo, `company`). `?pay=%20` — link copiado com espaço,
+    // ou URL escrita à mão — chegava como `" "`, escapava do teste de vazio e
+    // caía em `positiveInt`, que apara, acha string vazia e recusa: a tela dizia
+    // "valor inválido" para um parâmetro em branco, quando o contrato é que
+    // campo vazio é escolha e não erro.
+    if (raw === undefined || raw.trim() === "") return undefined;
     const amount = positiveInt(raw);
     if (amount === null || amount > PAY_FILTER_MAX) {
       // One notice per read, even with both sides invalid: the cause is a
@@ -191,7 +201,7 @@ export function readFilters(params: Record<string, string | string[] | undefined
   // like it has a mind of its own.
   if (min !== undefined && max !== undefined && min > max) {
     [min, max] = [max, min];
-    notices.push("range_swapped");
+    if (!notices.includes("range_swapped")) notices.push("range_swapped");
   }
   const currency = rawCurrency && /^[A-Z]{3}$/.test(rawCurrency) ? rawCurrency : undefined;
   const period = rawPeriod === "month" || rawPeriod === "year" ? rawPeriod : undefined;

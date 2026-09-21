@@ -45,6 +45,13 @@ export function JobCountries({
     <span
       className="flex flex-wrap items-center gap-1"
       data-testid={`job-countries-${jobId}`}
+      // `role="group"` porque o role implícito de `<span>` é `generic`, e ARIA
+      // proíbe nome acessível nesse role: o `aria-label` abaixo era simplesmente
+      // descartado, e o resumo que o comentário seguinte raciocina sobre quando
+      // mostrar nunca chegava a ninguém. A varredura de acessibilidade não pegou
+      // porque `aria-prohibited-attr` devolve *incomplete*, e não violação,
+      // quando o elemento tem texto dentro — e aqui tem, as bandeiras.
+      role="group"
       // Com um país só, a frase do conjunto diria "publicada em 1 países" e não
       // acrescentaria nada: o rótulo do próprio link já diz onde a vaga está.
       aria-label={marcas.length > 1 ? t("jobs.countriesLabel", { count: marcas.length + restantes }) : undefined}

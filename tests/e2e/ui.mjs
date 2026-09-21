@@ -3026,8 +3026,25 @@ try {
         globalThis.__e2eTransitionEvidence = { observer, evidence };
       });
       const activation = activate();
-      await overlay.waitFor({ state: "attached" });
-      const attachedOverlay = await overlay.elementHandle();
+      // A espera pelo overlay TOLERA não encontrá-lo, e o MutationObserver acima
+      // é quem testemunha.
+      //
+      // Num redirect aceito dentro do reducer do Server Action, o overlay nasce
+      // no `useLayoutEffect` do observador de commit e morre no `useEffect`
+      // seguinte: a janela em que ele existe no DOM é de um quadro, e o
+      // `locator` do Playwright pode perdê-la inteira. Medido nesta árvore, sem
+      // nenhuma alteração de produto: duas execuções de `origin/dev`, uma
+      // passando 262/262 e a outra reprovando exatamente aqui. É corrida do
+      // teste, não defeito do produto — e um teste que reprova sozinho ensina a
+      // ignorar reprovação.
+      //
+      // O observador registra a inserção mesmo quando o elemento já saiu, então
+      // a prova continua existindo: `maxOverlayCount` e `transitionEvidence`
+      // abaixo vêm dele, e é neles que as asserções se apoiam.
+      const attachedOverlay = await overlay
+        .waitFor({ state: "attached", timeout: 10_000 })
+        .then(() => overlay.elementHandle())
+        .catch(() => null);
       const snapshot = attachedOverlay
         ? await attachedOverlay.evaluate((element) => ({
           count: document.querySelectorAll('[data-testid="navigation-transition"]').length,
@@ -3096,7 +3113,11 @@ try {
       });
       return {
         ...snapshot,
+        // Sem handle, a contagem e a fase vêm do observador — ver o comentário
+        // do `waitFor` acima. `generation` já caía para cá antes.
+        count: snapshot.count || transitionEvidence.maxCount,
         generation: snapshot.generation || transitionEvidence.states[0]?.generation || 0,
+        phase: snapshot.phase ?? transitionEvidence.states.at(-1)?.phase ?? null,
         ...attachedEvidence,
         transitionEvidence: transitionEvidence.states,
         maxOverlayCount: transitionEvidence.maxCount,

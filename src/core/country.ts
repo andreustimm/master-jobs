@@ -193,6 +193,44 @@ function tabela(): Map<string, CountryCode> {
  */
 const DIVISORES = /[,/|;·]/;
 
+/**
+ * Estados dos EUA, por nome e por sigla postal.
+ *
+ * Servem de PROVA, não de resposta: existem nomes de lugar americano que também
+ * são nome de país, e a tabela do ICU é a lista completa de países, então dentro
+ * de uma localização composta o trecho vencia. `"Peru, Indiana"` virava Peru,
+ * `"Mexico, Missouri"` virava México, `"Lebanon, NH"` virava Líbano — vaga
+ * americana com a bandeira errada.
+ *
+ * Quando OUTRO trecho nomeia um estado americano, o texto prova sozinho que o
+ * lugar é nos EUA, e o nome ambíguo deixa de decidir.
+ *
+ * O que isto **não** resolve: `"Atlanta, Georgia"`, onde o único candidato é
+ * também o estado e nada mais no texto prova nada. Separar isso exigiria uma
+ * tabela de cidades, e inventar seria pior — a forma com o país no fim
+ * (`"Atlanta, Georgia, United States"`) já acerta pela leitura de trás para
+ * frente.
+ */
+const ESTADOS_DOS_EUA = new Set(
+  [
+    "alabama", "alaska", "arizona", "arkansas", "california", "colorado",
+    "connecticut", "delaware", "district of columbia", "florida", "georgia",
+    "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky",
+    "louisiana", "maine", "maryland", "massachusetts", "michigan", "minnesota",
+    "mississippi", "missouri", "montana", "nebraska", "nevada",
+    "new hampshire", "new jersey", "new mexico", "new york", "north carolina",
+    "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania",
+    "rhode island", "south carolina", "south dakota", "tennessee", "texas",
+    "utah", "vermont", "virginia", "washington", "west virginia", "wisconsin",
+    "wyoming",
+    "al", "ak", "az", "ar", "ca", "co", "ct", "dc", "de", "fl", "ga", "hi",
+    "ia", "id", "il", "in", "ks", "ky", "la", "ma", "md", "me", "mi", "mn",
+    "mo", "ms", "mt", "nc", "nd", "ne", "nh", "nj", "nm", "nv", "ny", "oh",
+    "ok", "or", "pa", "ri", "sc", "sd", "tn", "tx", "ut", "va", "vt", "wa",
+    "wi", "wv", "wy",
+  ].map(chave),
+);
+
 /** O país de uma localização inteira, sem tentar quebrá-la. */
 function paisDeTrecho(texto: string, aceitaCodigo: boolean): CountryCode | null {
   const limpo = chave(texto);
@@ -236,7 +274,15 @@ export function countryOf(raw: string | null | undefined): CountryCode | null {
   const trechos = raw.split(DIVISORES);
   for (let i = trechos.length - 1; i >= 0; i -= 1) {
     const achado = paisDeTrecho(trechos[i]!, false);
-    if (achado) return achado;
+    if (!achado) continue;
+    // Outro trecho nomeando estado americano é prova de que o lugar é nos EUA, e
+    // vale mais que um nome de país que por acaso é também nome de cidade
+    // americana. `"Peru, Indiana"` é Indiana, não o Peru.
+    const provaDosEUA = trechos.some(
+      (trecho, j) => j !== i && ESTADOS_DOS_EUA.has(chave(trecho)),
+    );
+    if (provaDosEUA) return "US";
+    return achado;
   }
   return null;
 }

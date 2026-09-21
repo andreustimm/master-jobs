@@ -10,41 +10,40 @@ import { getTranslator } from "./i18n";
 
 export const dynamic = "force-dynamic";
 
-/**
- * O vigia envolve a requisição inteira — ver `app/candidate/skills/page.tsx`.
- *
- * É a rota que a PWA abre (`start_url` é "/") e onde o candidato cai depois do
- * login, e era a que pedia mais conexões de todas: sete ao mesmo tempo, contra
- * um pool de três. Um travamento aqui não deixava rastro nenhum.
- */
 export default async function Cockpit({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  return comVigia("/", () => renderCockpit(searchParams));
-}
-
-async function renderCockpit(
-  searchParams: Promise<Record<string, string | string[] | undefined>>,
-) {
   const { t, locale } = await getTranslator();
-  // Sem escopo de candidato, o cockpit não é negado — é REDIRECIONADO.
+  // O vigia cobre a AUTENTICAÇÃO e as leituras, não só as leituras.
   //
-  // 403 aqui seria correto e inútil: o recrutador não tem funil nem currículo,
-  // e dizer "proibido" para quem nunca poderia ter aquilo é resposta certa para
-  // a pergunta errada. Pior com a PWA instalada: `start_url` é "/" e não pode
-  // variar por papel, então o app abriria numa tela de erro — reintroduzindo,
-  // pela porta do manifest, o defeito que a E-06 corrigiu.
-  const session = await requireSession();
-  if (candidateScope(session) === null) redirect("/jobs");
+  // A espera por conexão atinge a primeira consulta da requisição, e
+  // `requireOwnCandidatePage` já vai ao banco: envolver só `loadCockpit` deixava
+  // a janela aberta justamente onde o defeito mora.
+  //
+  // O que ele NÃO envolve é a renderização. Envolver o componente inteiro num
+  // promise devolvido por um helper muda a forma como a árvore é transmitida, e
+  // o commit da rota passa a acontecer numa só pintura — o que apaga o overlay
+  // de transição que a suíte de browser observa no redirect do login. O vigia
+  // existe para medir espera de banco; a árvore não é problema dele.
+  const { state, dados } = await comVigia("/", async () => {
+    // Sem escopo de candidato, o cockpit não é negado — é REDIRECIONADO.
+    //
+    // 403 aqui seria correto e inútil: o recrutador não tem funil nem currículo,
+    // e dizer "proibido" para quem nunca poderia ter aquilo é resposta certa
+    // para a pergunta errada. Pior com a PWA instalada: `start_url` é "/" e não
+    // pode variar por papel, então o app abriria numa tela de erro —
+    // reintroduzindo, pela porta do manifest, o defeito que a E-06 corrigiu.
+    const session = await requireSession();
+    if (candidateScope(session) === null) redirect("/jobs");
 
-  const { candidateId } = await requireOwnCandidatePage("candidate:read");
+    const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
-  const state = readFilters(await searchParams);
-  const filters = toBoardFilters(state);
-
-  const { stats, counts, clusters, total, top, facets } = await loadCockpit(candidateId, state, filters);
+    const lido = readFilters(await searchParams);
+    return { state: lido, dados: await loadCockpit(candidateId, lido, toBoardFilters(lido)) };
+  });
+  const { stats, counts, clusters, total, top, facets } = dados;
 
   const tracked = Object.values(counts).reduce((a, b) => a + b, 0);
 

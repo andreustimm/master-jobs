@@ -163,6 +163,36 @@ describe("país de uma localização livre", () => {
   });
 });
 
+describe("nome de lugar americano que também é nome de país", () => {
+  // A tabela do ICU é a lista completa de países, então dentro de uma localização
+  // composta qualquer trecho cujo nome por extenso esteja nela vencia: a vaga
+  // americana saía com a bandeira do Peru, do Líbano ou do México.
+  it("UT-096 outro trecho nomeando estado americano prova os EUA", () => {
+    expect(countryOf("Peru, Indiana")).toBe("US");
+    expect(countryOf("Mexico, Missouri")).toBe("US");
+    expect(countryOf("Lebanon, NH")).toBe("US");
+    expect(countryOf("China, Texas")).toBe("US");
+    expect(countryOf("Cuba, New Mexico")).toBe("US");
+  });
+
+  it("UT-097 sem prova nenhuma dos EUA, o país continua sendo o país", () => {
+    // O que importa aqui é não estragar o caso legítimo, que é o comum: o nome
+    // do país no fim de uma localização composta.
+    expect(countryOf("Lima, Peru")).toBe("PE");
+    expect(countryOf("Beirut, Lebanon")).toBe("LB");
+    expect(countryOf("Mexico City, Mexico")).toBe("MX");
+    expect(countryOf("Remote / Poland")).toBe("PL");
+  });
+
+  it("UT-098 país no fim continua vencendo o estado que aparece antes", () => {
+    // `"Atlanta, Georgia, United States"` é a forma que já acertava, e a leitura
+    // de trás para frente tem de continuar acertando: "United States" é o último
+    // trecho, e a prova de estado não pode desviá-la.
+    expect(countryOf("Atlanta, Georgia, United States")).toBe("US");
+    expect(countryOf("Austin, Texas, USA")).toBe("US");
+  });
+});
+
 describe("a fileira de marcas de um grupo", () => {
   const rotulos = {
     semLocal: "sem localização",

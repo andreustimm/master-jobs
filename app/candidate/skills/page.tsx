@@ -37,33 +37,28 @@ const CATEGORY_LABEL_KEYS = {
   soft: "skillCategories.soft",
 } satisfies Record<SkillCategory, TranslationKey>;
 
-/**
- * O vigia envolve a requisição INTEIRA, inclusive a autenticação.
- *
- * Envolver só as leituras da página deixava a janela aberta justamente onde o
- * defeito mora: `requireOwnCandidatePage` já vai ao banco — `currentSession`
- * roda `getCandidate()` e resolve o token —, e a espera por conexão atinge a
- * PRIMEIRA consulta da requisição, não a terceira. Travando ali, o temporizador
- * nem era armado; e se o trecho anterior comesse oito segundos, o aviso era
- * agendado para depois dos 30 e a plataforma encerrava o processo antes. Nos
- * dois casos o travamento voltava a ser invisível, que é o que o vigia existe
- * para impedir.
- *
- * `warnIfSlower` desarma o prazo no `finally`, então o `redirect` da guarda
- * continua sendo um desvio normal e não deixa temporizador pendurado.
- */
 export default async function SkillsPage() {
-  return comVigia("/candidate/skills", renderSkillsPage);
-}
-
-async function renderSkillsPage() {
   const { t, locale } = await getTranslator();
   void locale;
-  // Guard antes de ler qualquer dado. O escopo vem da sessão.
-  const { candidateId } = await requireOwnCandidatePage("candidate:read");
-  // A ordem das leituras é contrato com o pool de conexões e está em `data.ts`,
-  // onde o teste de leque consegue medi-la.
-  const { mine, demand } = await loadSkillsScreen(candidateId);
+  // O vigia cobre a autenticação E as leituras.
+  //
+  // `requireOwnCandidatePage` já vai ao banco — `currentSession` roda
+  // `getCandidate()` e resolve o token —, e a espera por conexão atinge a
+  // PRIMEIRA consulta da requisição, não a terceira. Envolvendo só as leituras,
+  // travar ali não armava o temporizador; e se o trecho anterior comesse oito
+  // segundos, o aviso era agendado para depois dos 30 e a plataforma encerrava o
+  // processo antes. Nos dois casos o travamento voltava a ser invisível.
+  //
+  // `warnIfSlower` desarma o prazo no `finally`, então o `redirect` da guarda
+  // continua sendo um desvio normal e não deixa temporizador pendurado.
+  //
+  // A renderização fica fora: ver `app/page.tsx`.
+  const { mine, demand } = await comVigia("/candidate/skills", async () => {
+    const { candidateId } = await requireOwnCandidatePage("candidate:read");
+    // A ordem das leituras é contrato com o pool de conexões e está em
+    // `data.ts`, onde o teste de leque consegue medi-la.
+    return loadSkillsScreen(candidateId);
+  });
 
   const pending = mine.filter((s) => s.status === "detected");
   const confirmed = mine.filter((s) => s.status === "confirmed");

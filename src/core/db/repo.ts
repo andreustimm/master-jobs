@@ -435,7 +435,16 @@ function canonicalOfGroup(opts: BoardFilters, candidateId: number | null, pay?: 
 const APELIDO_DA_ANCORA = "vaga_ancora";
 const APELIDO_DA_FONTE_DA_ANCORA = "fonte_da_ancora";
 
-/** True for every posting that shares the anchor's group. */
+/**
+ * True for every posting that shares the anchor's group.
+ *
+ * **A âncora tem de estar aberta.** O contrato de `sameGroupAs` diz que o link
+ * vale enquanto a publicação que ele nomeia está aberta e dá 404 quando ela
+ * fecha; sem o predicado, linha fechada continuava sendo linha, o `exists`
+ * casava, o `isNull(closedAt)` de fora derrubava só a âncora, e a página caía em
+ * `rows[0]`: cabeçalho, contagem e lista descrevendo OUTRA publicação sob a URL
+ * da que a pessoa tinha salvo.
+ */
 function sameGroupCondition(anchorId: number): SQL {
   const ancora = alias(job, APELIDO_DA_ANCORA);
   const fonteDaAncora = alias(source, APELIDO_DA_FONTE_DA_ANCORA);
@@ -446,6 +455,7 @@ function sameGroupCondition(anchorId: number): SQL {
     left join ${source} as ${sql.identifier(APELIDO_DA_FONTE_DA_ANCORA)}
       on ${fonteDaAncora.id} = ${ancora.sourceId}
     where ${ancora.id} = ${anchorId}
+      and ${ancora.closedAt} is null
       and ${fonte} = ${minhaFonte}
       and ${titulo} = ${meuTitulo}
       and ${empresa} = ${minhaEmpresa}
@@ -496,8 +506,23 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
     );
   }
   if (opts.sourceKinds && opts.sourceKinds.length > 0) {
-    const likes = opts.sourceKinds.map((kind) => sql`${job.sourceId} like ${`${kind}:%`}`);
-    conditions.push(sql`(${sql.join(likes, sql` or `)})`);
+    // Igualdade sobre o prefixo extraído, não `like`.
+    //
+    // O valor viaja como parâmetro, então nunca houve injeção — mas
+    // metacaractere de `like` DENTRO de um parâmetro continua sendo
+    // metacaractere, e a fonte é texto livre lido da URL. `?source=%` montava
+    // `like '%:%'`, que toda `source_id` casa: o chip aparecia como filtro ativo
+    // e o quadro mostrava todas as fontes. `?source=_ever` escolhia
+    // `lever:jobgether`, uma fonte que ninguém marcou.
+    //
+    // `split_part` é o mesmo recorte que `boardFacets` usa para listar as fontes,
+    // então o que o combo oferece e o que o filtro aceita passam a ser a mesma
+    // coisa — é a regra do vizinho `strpos` aplicada aqui.
+    const kinds = sql.join(
+      opts.sourceKinds.map((kind) => sql`${kind}`),
+      sql`, `,
+    );
+    conditions.push(sql`split_part(${job.sourceId}, ':', 1) in (${kinds})`);
   }
   if (opts.groupRepeats) conditions.push(canonicalOfGroup(opts, candidateId, pay));
   if (opts.sameGroupAs !== undefined) conditions.push(sameGroupCondition(opts.sameGroupAs));

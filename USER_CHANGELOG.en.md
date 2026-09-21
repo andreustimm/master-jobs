@@ -43,6 +43,22 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 - After clearing a filter, using a score shortcut, or having a range corrected by
   the system, the fields kept showing the previous value — and applying again
   brought the filter back on its own.
+- A saved link to the countries screen still opened after that link's job closed,
+  showing a different posting under its title and count. It now answers that the
+  job is no longer there.
+- The countries screen said "posted in 1 countries", and counted a location that
+  identifies no country as a country. When a single posting is left, it goes
+  straight to that job.
+- The "posted in N countries" summary was not read out by screen readers.
+- The minimum-pay field accepted 0 and the screen then answered that 0 is invalid.
+- With both the pay and the score range inverted at once, the notice appeared
+  twice.
+- Jobs in US towns named after countries — "Peru, Indiana", "Mexico, Missouri",
+  "Lebanon, NH" — showed the wrong flag.
+- An odd value in the source filter could make the screen show every source while
+  the filter looked active.
+- Signing in as a recruiter no longer shows the "not sent yet" filter, which does
+  not apply and showed a wrong number.
 
 ### Added
 

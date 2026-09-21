@@ -330,6 +330,13 @@ export const ptBR = {
   jobCountries: {
     back: "← vagas",
     lead: "Esta vaga foi publicada em {countries} países, em {postings} anúncios. Escolha onde quer se candidatar.",
+    // O plural estava fixo na frase acima e o número contava marcas, não países:
+    // "publicada em 1 países, em 2 anúncios" acontecia com duas cidades do mesmo
+    // país, e "2 países" acontecia com um país mais uma localização que não
+    // resolve — o mesmo cabeçalho afirmava e negava, duas linhas acima do
+    // "1 sem país identificado".
+    leadOneCountry: "Esta vaga foi publicada em 1 país, em {postings} anúncios. Escolha onde quer se candidatar.",
+    leadNoCountry: "Esta vaga tem {postings} anúncios, nenhum com país identificado. Escolha onde quer se candidatar.",
     withoutCountry: "{count} sem país identificado — a localização aparece como veio.",
     empty: "Nenhuma publicação deste grupo continua aberta.",
   },

@@ -103,6 +103,70 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   explicando por quê; ela saiu junto com o campo. Vale também para as marcas do
   combo de fontes, que são DOM não controlado.
 
+- **O filtro de fonte casava por `like`, então `%` ou `_` no parâmetro alargava
+  o filtro.** O valor sempre viajou como parâmetro, logo nunca houve injeção —
+  mas metacaractere de `like` dentro de um parâmetro continua sendo
+  metacaractere, e a fonte é texto livre lido da URL. `?source=%` montava
+  `like '%:%'`, que toda `source_id` casa: o chip aparecia como filtro ativo e o
+  quadro mostrava tudo. `?source=_ever` escolhia uma fonte que ninguém marcou.
+  Virou igualdade sobre `split_part`, o mesmo recorte que lista as fontes no
+  combo — é a regra do vizinho `strpos`, que já raciocinava sobre isso três
+  linhas abaixo.
+
+- **Âncora fechada não nomeia mais o grupo.** O contrato de `sameGroupAs` diz
+  que o link vale enquanto a publicação que ele nomeia está aberta e dá 404
+  quando ela fecha; faltava o predicado. Linha fechada continuava sendo linha, o
+  `exists` casava, o filtro de fora derrubava só a âncora, e a página caía na
+  primeira irmã: cabeçalho, contagem e lista descrevendo OUTRA publicação sob a
+  URL que a pessoa tinha salvo.
+
+- **O hub não diz mais "publicada em 1 países".** O plural estava fixo na frase
+  e o número contava marcas, não países — duas cidades do mesmo país davam "1
+  países", e um país mais uma localização que não resolve dava "2 países" duas
+  linhas acima de "1 sem país identificado". Agora conta só marca com país, e há
+  frase para um país e para nenhum. Grupo que encolheu para uma publicação
+  redireciona para a tela dela, em vez de virar uma cópia pior do detalhe.
+
+- **O resumo "publicada em N países" não era anunciado.** Ele existia só como
+  `aria-label` de um `<span>`, cujo role implícito é `generic` — e ARIA proíbe
+  nome acessível nesse role, então o rótulo era descartado. A varredura não
+  pegava porque `aria-prohibited-attr` devolve *incomplete*, e não violação,
+  quando o elemento tem texto dentro. Ganhou `role="group"`.
+
+- **O chip "ainda não enviadas" aparecia sem escopo de candidato.** Era a única
+  das quatro fileiras dependentes de funil fora do portão. Para recrutador ou
+  admin puro, o chip não filtrava nada — `repo.ts` ignora `hideApplied` sem
+  candidato, de propósito — e o contador anunciava o acervo inteiro, porque somava
+  `appliedAt is null` sobre um join que nunca casa. Clicar escrevia `notApplied=1`
+  em todo link seguinte e a lista nunca mudava.
+
+- **O campo de piso salarial aceitava 0**, valor que o leitor da URL recusa com
+  aviso: digitar `0` (ou usar a seta para baixo do campo numérico) produzia "o
+  valor precisa ser um número inteiro de 1 a 2.000.000" para um valor que o
+  próprio controle acabara de oferecer. O campo anterior tinha `min={1}`; a
+  restrição não veio junto na mudança para o componente compartilhado. No Score o
+  piso segue 0, que ali significa "toda nota".
+
+- **O aviso de faixa invertida saía duas vezes.** As duas faixas compartilham a
+  chave do dicionário e empilhavam sem conferir, então
+  `?fit=80&fitMax=20&pay=5000&payMax=1000` imprimia a mesma frase duas vezes,
+  com dois irmãos de mesma `key` do React. É a guarda que o `pay_invalid` doze
+  linhas abaixo já usava.
+
+- **`?pay=%20` dizia "valor inválido" em vez de "sem piso".** `bound()` decidia
+  se havia valor sem aparar, sendo o único leitor do módulo que não aparava — e
+  agora governa dois parâmetros em vez de um. Campo vazio é escolha, não erro.
+
+- **Nome de lugar americano que também é nome de país resolvia para o país
+  errado.** A tabela do ICU é a lista completa de países, então dentro de uma
+  localização composta o trecho vencia: `"Peru, Indiana"` virava Peru,
+  `"Mexico, Missouri"` virava México, `"Lebanon, NH"` virava Líbano. Quando outro
+  trecho nomeia um estado americano, o texto prova sozinho que o lugar é nos EUA,
+  e o nome ambíguo deixa de decidir. `"Lima, Peru"` continua sendo o Peru.
+  Fica de fora `"Atlanta, Georgia"`, onde o único candidato é também o estado e
+  nada mais no texto prova nada — separar exigiria tabela de cidades, e a forma
+  com o país no fim já acerta.
+
 ### Removido
 
 - `GET /api/diag-skills`, a rota que mediu o 504 de dentro do runtime da Vercel.

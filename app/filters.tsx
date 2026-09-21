@@ -499,13 +499,27 @@ export function FilterBar({
         </Row>
 
         <Row label={t("filters.pipeline")}>
-          <Toggle
-            href={href(base, state, { notApplied: state.notApplied ? undefined : "1" })}
-            active={Boolean(state.notApplied)}
-            hint={t("hints.notApplied")}
-          >
-            {t("filters.notApplied")} · {facets.notApplied}
-          </Toggle>
+          {/*
+            "ainda não enviadas" depende de escopo de candidato, como trilha,
+            "trazida por" e pagamento — e era a única das quatro fora do portão.
+            Sem escopo (recrutador, ou admin puro) ela era um chip que não
+            filtrava nada e anunciava o acervo inteiro: `repo.ts` ignora
+            `hideApplied` sem candidato, de propósito, e o contador somava
+            `appliedAt is null` sobre um join que nunca casa, então TODA linha
+            entrava. Clicar escrevia `notApplied=1` em todo link seguinte e a
+            lista nunca mudava.
+
+            "agrupar repetidas" fica, porque agrupar não depende de candidato.
+          */}
+          {extras && (
+            <Toggle
+              href={href(base, state, { notApplied: state.notApplied ? undefined : "1" })}
+              active={Boolean(state.notApplied)}
+              hint={t("hints.notApplied")}
+            >
+              {t("filters.notApplied")} · {facets.notApplied}
+            </Toggle>
+          )}
           <Toggle
             href={href(base, state, { ungrouped: state.grouped ? "1" : undefined })}
             active={state.grouped}

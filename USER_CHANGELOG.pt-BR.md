@@ -45,6 +45,22 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 - Depois de limpar um filtro, de usar um atalho de corte ou de ter uma faixa
   corrigida pelo sistema, os campos continuavam mostrando o valor anterior — e
   aplicar de novo trazia o filtro de volta sozinho.
+- Um link salvo para a tela de países continuava abrindo depois de a vaga daquele
+  link fechar, mostrando outra publicação com o título e a contagem dela. Agora
+  responde que a vaga não está mais lá.
+- A tela de países dizia "publicada em 1 países", e contava como país uma
+  localização que não identifica nenhum. Quando sobra uma publicação só, ela leva
+  direto para a vaga.
+- O resumo "publicada em N países" não era lido por leitores de tela.
+- O campo de salário mínimo aceitava 0 e a tela respondia que 0 é inválido.
+- Com faixa de salário e de Score invertidas ao mesmo tempo, o aviso aparecia
+  duplicado.
+- Vagas em cidades americanas com nome de país — "Peru, Indiana",
+  "Mexico, Missouri", "Lebanon, NH" — apareciam com a bandeira errada.
+- Um valor estranho no filtro de fonte podia fazer a tela mostrar todas as fontes
+  enquanto o filtro parecia ativo.
+- Quem entra como recrutador não vê mais o filtro "ainda não enviadas", que não
+  se aplica a ele e mostrava um número errado.
 
 ### Adicionado
 
