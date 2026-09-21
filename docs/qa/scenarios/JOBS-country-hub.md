@@ -6,7 +6,7 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: Clicar numa linha agrupada abre o hub com todas as publicações do grupo, e é lá que se escolhe o país
 entry_points: /jobs/<id>/paises
-qa_status: untested
+qa_status: blocked
 bug_ids:
 fix_status:
 retest_status:
@@ -47,3 +47,18 @@ A conferir:
   responde **404**, não 500.
 - Quando a publicação que ancora o link fecha, o link dá 404 — a regra 3 guarda
   o registro, não a vitrine.
+
+## Bloqueado por ausência de fixture no ambiente manual (2026-09-21)
+
+`tests/e2e/setup-manual.ts` semeia **uma única vaga** — "Senior Software
+Architect", Aurora Sistemas, `Remoto · Brasil`, empregador nomeado, um país. O
+quadro confirma: `NO BLOCKERS · 1`, `NAMED EMPLOYER · 1`.
+
+Este cenário precisa de vaga publicada em vários países (e, no caso do empregador
+anônimo, de uma cujo empregador seja o nome da fonte). Nenhuma existe ali, então
+não há o que percorrer — o veredito não é "passou" nem "falhou", é que o ambiente
+de paridade não oferece o estado.
+
+O `setup.mjs` do E2E automatizado **tem** essas fixtures (`904000101` com quatro
+publicações). Desbloquear é levá-las para o `setup-manual.ts`, e isso é mudança de
+código, não de execução de QA.

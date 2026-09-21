@@ -6,7 +6,7 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: Duas vagas de empresas diferentes com o mesmo título, numa fonte anônima, continuam sendo duas linhas — nenhuma fica inalcançável
 entry_points: /jobs?source=lever; /jobs
-qa_status: untested
+qa_status: blocked
 bug_ids:
 fix_status:
 retest_status:
@@ -41,3 +41,18 @@ A conferir:
 - O contraste continua funcionando: com empregador nomeado de verdade, a mesma
   forma agrupa normalmente.
 - O filtro "empregador nomeado" segue coerente com o que a linha mostra.
+
+## Bloqueado por ausência de fixture no ambiente manual (2026-09-21)
+
+`tests/e2e/setup-manual.ts` semeia **uma única vaga** — "Senior Software
+Architect", Aurora Sistemas, `Remoto · Brasil`, empregador nomeado, um país. O
+quadro confirma: `NO BLOCKERS · 1`, `NAMED EMPLOYER · 1`.
+
+Este cenário precisa de vaga publicada em vários países (e, no caso do empregador
+anônimo, de uma cujo empregador seja o nome da fonte). Nenhuma existe ali, então
+não há o que percorrer — o veredito não é "passou" nem "falhou", é que o ambiente
+de paridade não oferece o estado.
+
+O `setup.mjs` do E2E automatizado **tem** essas fixtures (`904000101` com quatro
+publicações). Desbloquear é levá-las para o `setup-manual.ts`, e isso é mudança de
+código, não de execução de QA.
