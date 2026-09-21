@@ -3,16 +3,16 @@ id: JOBS-score-range
 area: JOBS
 title: Pedir uma faixa de Score em vez de um corte
 persona: Andreus em triagem
-journey: J-refresh-candidate-ranking
+journey: J-trust-the-filtered-board
 expected: Pedir de 60 a 80 mostra só vagas nessa faixa, arrastando ou digitando, e o campo recusa nota fora de 0 a 100
 entry_points: /jobs?fit=60&fitMax=80
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: 2026-09-21-docs-qa-jornada-do-quadro-filtrado
 overlaps: JOBS-pay-filter
 ---
 

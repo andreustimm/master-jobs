@@ -3,7 +3,7 @@ id: JOBS-group-repeated-countries
 area: JOBS
 title: Ler numa linha só a vaga que foi publicada em vários países
 persona: Andreus em triagem
-journey: J-find-jobs-by-work-mode
+journey: J-trust-the-filtered-board
 expected: A mesma vaga repetida por país ocupa uma linha, com a bandeira de cada país; clicar numa bandeira abre a publicação daquele país
 entry_points: /jobs?q=Engineering+Manager; /jobs?ungrouped=1
 qa_status: untested

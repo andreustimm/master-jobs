@@ -3,16 +3,16 @@ id: JOBS-filter-fields-follow-url
 area: JOBS
 title: Campo de filtro mostra o que a URL diz, mesmo depois de navegação suave
 persona: Andreus em triagem
-journey: J-find-jobs-by-work-mode
+journey: J-trust-the-filtered-board
 expected: Depois de limpar, de um preset ou de uma faixa trocada pelo servidor, os campos mostram o estado atual — e o Aplicar seguinte não ressuscita o valor antigo
 entry_points: /jobs; /jobs?pay=12000&payMax=6000; /jobs?fit=45
-qa_status: untested
+qa_status: blocked-verify
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: 2026-09-21-docs-qa-jornada-do-quadro-filtrado
 overlaps: JOBS-pay-filter; JOBS-score-range; JOBS-source-multi-select
 ---
 
