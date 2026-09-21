@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.4] - 2026-09-21T21:46:10.341Z
+
 ### Melhorado
 
 - As telas de Vagas e o painel inicial abrem mais rápido. O sistema passou a

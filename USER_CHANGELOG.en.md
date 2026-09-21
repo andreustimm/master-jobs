@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.4] - 2026-09-21T21:46:10.341Z
+
 ### Improved
 
 - The Jobs screen and the home dashboard open faster. The system now works closer

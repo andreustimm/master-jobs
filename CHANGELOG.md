@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.20.4] - 2026-09-21
+
 ### Alterado
 
 - **A função da Vercel passa de `iad1` para `gru1`, ao lado do banco.** O banco
