@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: Se uma publicação do grupo passa pelos filtros, o grupo aparece — representado por ela, e não pela que foi cortada
 entry_points: /jobs; /jobs?unblocked=1; /jobs?fit=60
-qa_status: untested
+qa_status: blocked
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: docs/qa/reports/2026-09-21-execucao-concorrencia.md
 overlaps: JOBS-group-repeated-countries; JOBS-score-range
 ---
 
@@ -45,14 +45,28 @@ A conferir:
   correto, e é o que separa "não suprimir" de "ressuscitar".
 - O número do rodapé continua igual ao que a lista mostra.
 
-## Fixture resolvida em 2026-09-21; falta percorrer
+## Passada manual em 2026-09-21: driver não conclui, produto tem cobertura verde
 
-O bloqueio era ausência de fixture, e caiu: `setup-manual.ts` agora semeia a vaga
-agrupada, e o quadro a mostra colapsada em três países.
+A fixture existe desde esta data, e o quadro mostra a linha agrupada. A navegação
+até o hub **não pôde ser confirmada pela interface**: o clique no título respondeu
+`✓ Done` e a tela permaneceu em `heading "Jobs"`.
 
-O que falta é a navegação. Ela topou com a instabilidade de sessão do driver descrita
-no relatório desta data: a cadeia de comandos que leu o quadro não sobreviveu ao passo
-seguinte.
+Não é possível, daqui, distinguir "o link não navega" de "o clique não agiu" — e a
+segunda hipótese tem precedente registrado neste driver. Por isso o veredito é
+`Blocked (needs human verify)` e não `Fail`: afirmar defeito sem essa distinção
+seria inventar um.
 
-Não é `blocked` — o ambiente é reprodutível e o caminho está aberto. É percorrer numa
-cadeia única, sem `open` intermediário.
+**O que se sabe do produto, por outra via:** `term-search E2E-014` verifica que
+`[data-testid="job-link-<id>"]` aponta para `/jobs/<id>/paises`, que a linha
+agrupada não tem botões de ação, e que o hub lista as quatro publicações. Ele
+**passou** na última execução da suíte, em Chromium real. O caminho que este
+cenário descreve está coberto e verde ali.
+
+O que falta aqui é a confirmação em persona, pela interface, que é o que este
+cenário existe para dar — e para isso é preciso um driver que navegue de forma
+confiável, ou uma pessoa.
+
+**Para quem for fechar à mão:** entre em `/jobs` com a conta `alex@local.test`,
+clique no título "Engineering Manager Country Fixture" e confirme que a URL vira
+`/jobs/<id>/paises` e que o hub lista as quatro publicações — Netherlands, France
+e as duas do Brasil.

@@ -26,8 +26,8 @@ escrever nada. `nohup … &` é negado pelo harness; o pipe não é.
 | 1 | JOBS-concurrent-heavy-screens | Andreus em triagem | **Pass** | `evidence/2026-09-21-concurrent-heavy-screens.txt` |
 | 2 | JOBS-group-repeated-countries | Andreus em triagem | **Pass** | `evidence/2026-09-21-quadro-com-fixtures-de-agrupamento.txt` |
 | 3 | JOBS-anonymous-employer-never-groups | Andreus em triagem | **Pass** | idem |
-| 4 | JOBS-country-hub | Andreus em triagem | Untested — falta percorrer | — |
-| 5 | JOBS-group-canonical-survives-filter | Andreus em triagem | Untested — falta percorrer | — |
+| 4 | JOBS-country-hub | Andreus em triagem | Blocked (needs human verify) | — |
+| 5 | JOBS-group-canonical-survives-filter | Andreus em triagem | Blocked (needs human verify) | — |
 | 6 | JOBS-filter-fields-follow-url | Andreus em triagem | Blocked (needs human verify) | — |
 | 7 | JOBS-source-multi-select | Andreus em triagem | Blocked (needs human verify) | — |
 
@@ -94,12 +94,22 @@ Quatro publicações, três países, o repetido anunciado em vez de duplicado, e
 **Sem fileira de bandeiras.** É o que o charter exige, e é o caso em que agrupar
 colocaria empresas diferentes na mesma linha.
 
-### JOBS-country-hub e JOBS-group-canonical-survives-filter — Untested
+### JOBS-country-hub e JOBS-group-canonical-survives-filter — Blocked (needs human verify)
 
-A fixture era o que faltava, e existe. A navegação até o hub e o teste de
-`?unblocked=1` topou com a instabilidade de sessão do driver descrita abaixo.
+A fixture era o que faltava, e existe. A navegação, não: o clique no título da linha
+agrupada respondeu `✓ Done` e a tela permaneceu em `heading "Jobs"`.
 
-Não marco `Blocked`: o ambiente é reprodutível e o caminho está aberto.
+**Não afirmo defeito**, porque daqui não dá para distinguir "o link não navega" de
+"o clique não agiu" — e a segunda hipótese tem precedente registrado neste driver.
+Chamar de `Fail` seria inventar um defeito; chamar de `Pass` seria pior.
+
+**O produto tem cobertura verde por outra via.** `term-search E2E-014` verifica que
+o título da linha agrupada aponta para `/jobs/<id>/paises`, que ela não tem botões
+de ação, e que o hub lista as quatro publicações — e passou na última execução da
+suíte, em Chromium real. O caminho existe e funciona ali.
+
+O que falta é a confirmação **em persona, pela interface**, que é o que estes
+cenários existem para dar. As instruções exatas estão nos dois arquivos de cenário.
 
 ## 6 e 7 — seguem humanos
 
@@ -132,10 +142,15 @@ porque é o que permite a próxima sessão começar andando.
 **Três cenários fechados em `Pass`**, com evidência: a concorrência nas seis entradas
 pesadas (dupla execução) e os dois de agrupamento que as fixtures novas destravaram.
 
-**Dois seguem `Untested`, por razão diferente da anterior:** o bloqueio de fixture
-caiu, e o que falta é percorrer — ambiente reprodutível, caminho aberto.
+**Dois viram `Blocked (needs human verify)`:** a fixture deixou de ser o obstáculo,
+e o driver passou a ser. O produto tem cobertura automatizada verde do mesmo
+caminho (`E2E-014`), então o que falta é a confirmação em persona — não a
+funcionalidade.
 
-**Dois seguem humanos por natureza.**
+**Dois seguem humanos por natureza**, dos oito originais.
+
+Saldo: de oito sem veredito, **três fecham em `Pass`**, quatro têm instruções exatas
+para uma pessoa fechar, e um segue `untested`.
 
 O saldo de método: um "pulei por falta de tempo" virou causa nomeada, a causa foi
 corrigida em código, e dois vereditos saíram disso.
