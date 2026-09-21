@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.2] - 2026-09-21T09:13:34.091Z
+
 ### Corrigido
 
 - Quando um anúncio não informava o endereço do formulário de candidatura, a

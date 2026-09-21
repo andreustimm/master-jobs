@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.2] - 2026-09-21T09:13:34.091Z
+
 ### Fixed
 
 - When a posting did not give the address of its application form, the sweep's
