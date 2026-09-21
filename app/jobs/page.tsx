@@ -96,7 +96,11 @@ export default async function Jobs({
     <main className="page-content-top" data-testid="route-jobs">
       <header className="pb-4">
         <h1 className="type-display-md chevron mb-4">{t("jobs.title")}</h1>
-        <p className="type-body-md text-muted-foreground">
+        {/* `data-testid` porque este é o número que o FILTRO produz, e a lista
+            abaixo mostra só uma página dele. Sem ele, um teste de filtro só
+            alcança o tamanho da página — que com mil vagas no acervo é o mesmo
+            antes e depois de filtrar, e a asserção passa sem medir nada. */}
+        <p className="type-body-md text-muted-foreground" data-testid="jobs-total" data-total={total}>
           {total.toLocaleString(locale)} {t("jobs.matching")}
           {state.term ? ` ${t("jobs.matchingFor", { term: state.term.term })}` : ""}.
         </p>

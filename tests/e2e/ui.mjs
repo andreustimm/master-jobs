@@ -1070,11 +1070,36 @@ try {
   });
   const queuedStatus = page.locator('[data-testid="score-queue-status"]');
   await queuedStatus.waitFor();
+  // Espera o ESTADO, não o aviso.
+  //
+  // `mutation-feedback` aparece quando a Server Action responde, e isso é ANTES
+  // de a árvore revalidada chegar: o cartão lido logo depois ainda é o do render
+  // anterior, que dizia `idle` porque antes de salvar não havia nada na fila. Com
+  // a espera de digitação consertada, o caso passou a reprovar aqui — e reprovava
+  // por ler cedo, não porque a repontuação deixou de ser enfileirada.
+  //
+  // Qualquer estado diferente de `idle` prova o enfileiramento: `pending` é o
+  // comum, e `scoring`/`done` aparecem se o worker for mais rápido que a leitura.
+  // Esperar especificamente por `pending` reintroduziria a corrida ao contrário.
+  let estadoDaFila = await queuedStatus.getAttribute("data-state");
+  try {
+    await page.waitForFunction(
+      () =>
+        (document.querySelector('[data-testid="score-queue-status"]')
+          ?.getAttribute("data-state") ?? "idle") !== "idle",
+      undefined,
+      { timeout: 15_000 },
+    );
+    estadoDaFila = await queuedStatus.getAttribute("data-state");
+  } catch {
+    // Deixa `estadoDaFila` como está: o check abaixo reprova mostrando o que
+    // ficou na tela, em vez de a exceção abortar a suíte inteira.
+  }
   check(
     "E2E-001 salvar CV mostra atualização enfileirada no próximo render",
-    (await queuedStatus.getAttribute("data-state")) === "pending" &&
-      ((await queuedStatus.textContent()) ?? "").includes("Na fila"),
-    `${await queuedStatus.getAttribute("data-state")}: ${await queuedStatus.textContent()}`,
+    estadoDaFila !== null && estadoDaFila !== "idle" &&
+      ((await queuedStatus.textContent()) ?? "").trim() !== "",
+    `${estadoDaFila}: ${await queuedStatus.textContent()}`,
   );
 
   await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
@@ -3880,11 +3905,31 @@ try {
   );
   publicPhases.push(callbackSoftTransition);
   if (task04PublicHref) {
-    publicPhases.push(await observeNavigation(
-      publicPage,
-      () => publicPage.evaluate((href) => window.next?.router?.push?.(href), task04PublicHref),
-      '[data-testid="route-public-profile"]',
-    ));
+    // A transição suave é o que se mede aqui; o que vem depois — vazamento de
+    // dado no perfil público — é verificação de segurança e não pode ficar sem
+    // resposta porque uma navegação não chegou.
+    //
+    // Então a falha da transição vira um check reprovado, e o cenário segue por
+    // `goto`. Sem esta separação a exceção subia para o `catch` da suíte e
+    // levava consigo tudo o que vinha depois, incluindo as asserções sobre o que
+    // `/p/[slug]` mostra a quem não tem sessão.
+    try {
+      publicPhases.push(await observeNavigation(
+        publicPage,
+        () => publicPage.evaluate((href) => window.next?.router?.push?.(href), task04PublicHref),
+        '[data-testid="route-public-profile"]',
+      ));
+    } catch (erro) {
+      check(
+        "task-04 transição suave para o perfil público chega à rota",
+        false,
+        (erro instanceof Error ? erro.message : String(erro)).replace(/\s+/g, " ").slice(0, 400),
+      );
+      await publicPage.goto(`${BASE}${task04PublicHref}`, { waitUntil: "domcontentloaded" });
+      await publicPage
+        .locator('[data-testid="route-public-profile"]')
+        .waitFor({ state: "visible", timeout: 20_000 });
+    }
   }
   const publicUserText = task04PublicHref
     ? (await publicPage.locator('[data-testid="route-public-profile"] h1').textContent()) ?? ""
@@ -5172,7 +5217,6 @@ try {
   await page.locator('[data-testid="filter-source-ashby"]').check();
   await page.locator('[data-testid="filters-source-submit"]').click();
   await settle(/\/jobs\?(?!.*source=lever)(?=.*source=ashby)/);
-  const onlyAshby = await listedIds();
   await page.locator('[data-testid="filters-source-summary"]').click();
   await page.locator('[data-testid="filter-source-lever"]').check();
   await page.locator('[data-testid="filters-source-submit"]').click();
@@ -5185,31 +5229,45 @@ try {
   await settle(/\/jobs\?(?!.*source=)/);
   const cleared = { url: page.url(), ids: await listedIds() };
 
-  // A asserção é sobre CONJUNTOS, não sobre contagens.
+  // A asserção é sobre o TOTAL do filtro, não sobre a página.
   //
-  // A fixture tem exatamente duas fontes — `lever:e2e` com uma vaga e `ashby:e2e`
-  // com nove — então `bothSources.length === everySource.length` era verdade pelo
-  // tamanho, e continuaria verdade se o filtro devolvesse dez vagas ERRADAS. A
-  // união exata por id fecha isso: ela reprova se o OR virar AND (conjunto
-  // vazio), se a segunda fonte for ignorada (só lever), ou se qualquer id de
-  // fora da seleção entrar.
-  const ordenado = (ids) => [...ids].sort().join(",");
-  const uniao = ordenado([...new Set([...onlyLever, ...onlyAshby])]);
+  // `listedIds()` lê uma página de cinquenta, e `q=fixture` alcança mais de mil
+  // vagas: comparar tamanhos de página dava igualdade trivial, e comparar
+  // CONJUNTOS de página é pior ainda — `onlyAshby` traz ids que `everySource` não
+  // tem, porque são páginas diferentes do mesmo acervo. Foi o que a execução
+  // mostrou, e é a correção deste próprio caso.
+  //
+  // O número do cabeçalho é o que o filtro produz. Ele reprova se o OR virar AND
+  // (total cai para zero), se a segunda fonte for ignorada (total igual ao de
+  // lever só), ou se o filtro não filtrar (total igual ao do acervo).
+  const totalDoFiltro = () => page.evaluate(() =>
+    Number(document.querySelector('[data-testid="jobs-total"]')?.getAttribute("data-total") ?? -1));
+  await page.goto(`${sourceBase}&source=lever`, { waitUntil: "networkidle" });
+  const totalLever = await totalDoFiltro();
+  await page.goto(`${sourceBase}&source=ashby`, { waitUntil: "networkidle" });
+  const totalAshby = await totalDoFiltro();
+  await page.goto(`${sourceBase}&source=lever&source=ashby`, { waitUntil: "networkidle" });
+  const totalAmbas = await totalDoFiltro();
+  await page.goto(sourceBase, { waitUntil: "networkidle" });
+  const totalSemFiltro = await totalDoFiltro();
+
   check(
-    "term-search E2E-011 fontes em multi-seleção: uma fonte filtra, recarga mantém a marca, duas fontes devolvem a UNIÃO das duas, limpar volta ao acervo",
-    everySource.length > 1
-      && onlyLever.length === 1
+    "term-search E2E-011 fontes em multi-seleção: o TOTAL de duas fontes é a soma das duas, e cada uma filtra o acervo",
+    onlyLever.length === 1
       && onlyLever[0] === "904000007"
-      && onlyAshby.length > 1
-      // Disjuntos: se um id aparecesse nos dois, a união não provaria nada.
-      && onlyAshby.every((id) => !onlyLever.includes(id))
       && leverStillChecked === true
       && /source=lever/.test(bothUrl)
       && /source=ashby/.test(bothUrl)
-      && ordenado(bothSources) === uniao
       && !/source=/.test(cleared.url)
-      && ordenado(cleared.ids) === ordenado(everySource),
-    JSON.stringify({ everySource, onlyLever, onlyAshby, leverStillChecked, bothUrl, bothSources, cleared }),
+      // Cada fonte tem vaga, e nenhuma delas é o acervo inteiro.
+      && totalLever > 0 && totalAshby > 0
+      && totalLever < totalSemFiltro && totalAshby < totalSemFiltro
+      // Duas fontes somam as duas: é o OR, e é o que distingue de uma interseção
+      // (que daria zero) ou de uma fonte ignorada (que daria uma das duas).
+      && totalAmbas === totalLever + totalAshby
+      && totalAmbas < totalSemFiltro,
+    JSON.stringify({ onlyLever, leverStillChecked, bothUrl, cleared: cleared.url,
+      totalLever, totalAshby, totalAmbas, totalSemFiltro }),
   );
 
   // A faixa de Score vinda da URL, no browser.
