@@ -23,6 +23,7 @@ item move a agulha num funil de contratação real.
 | 🔨 | Em implementação |
 | 🔄 | Decisão em andamento |
 | 📋 | Capturado, não iniciado |
+| ⏹️ | Superado: o motivo deixou de existir; fica como histórico |
 
 ## Captura de 16/09/2026 — próxima semana de trabalho
 
@@ -1674,7 +1675,24 @@ A tela do candidato mostra o estado da fila de repontuação, com estados
 localizados para ausência de tarefa, pendente, em processamento, concluído e
 falho. O acompanhamento histórico detalhado continua fora desta onda.
 
-### B-11 · Conter e corrigir o consumo de cota do Turso 🔨
+### B-11 · Conter e corrigir o consumo de cota do Turso 🔄
+
+> **Reavaliar (21/09/2026).** O gatilho deixou de existir: desde o corte de
+> 19/09 o runtime é o PostgreSQL do Supabase, e não há cota do Turso a
+> estourar. A contenção vale pela metade: o workflow `Varredura de vagas`
+> está **ativo** no GitHub e hoje é o único agendador de recheck; o cron
+> `/api/cron/recheck` segue definido em `vercel.json`, mas os crons do projeto
+> continuam desabilitados na Vercel desde 03/09 (`disabledAt`), então a
+> sobreposição é latente — reabilitá-los a traz de volta. Parte do escopo
+> abaixo independe do banco e segue aberta: `enqueueStale()` ainda calcula
+> `bestPrimaryFit()` por linha; `syncOne()` (`src/core/ingest/run.ts`) ainda
+> fecha por ausência as janelas parciais (Himalayas, buscas do Remotive), sem
+> contrato de completude nem identidade por `(source_id, external_id)` — itens
+> de que o PRD `term-search-target-tracks` depende —; e não há dono único do
+> recheck, circuito de orçamento nem telemetria por rotina. A regra de só
+> fechar por 404/410 vale apenas na reconferência (`src/core/ingest/probe.ts`).
+> Decidir: reescrever como item de desempenho e de completude de fonte no
+> PostgreSQL; fechar deixaria sem dono o fechamento por ausência.
 
 **Incidente:** [`../operations/turso-quota-incident-2026-09-03.md`](../operations/turso-quota-incident-2026-09-03.md).
 
@@ -1729,7 +1747,12 @@ antes de concluir os critérios abaixo.
 7. somente o agendador escolhido é reativado;
 8. monitoramento por 24 horas sem estouro do orçamento.
 
-### B-12 · Atualizar o snapshot local com dados de produção 🔨
+### B-12 · Atualizar o snapshot local com dados de produção ⏹️
+
+> **Superado (21/09/2026).** O ambiente local roda PostgreSQL em Docker, e
+> `data/jobs.db` é snapshot SQLite legado, fora do runtime. O procedimento
+> abaixo exporta do Turso, que deixou de ser o banco de produção no corte de
+> 19/09.
 
 **Objetivo:** permitir desenvolvimento, QA e análise do ranking contra o corpus
 real sem apontar a aplicação local para o Turso e sem consumir a cota por cada

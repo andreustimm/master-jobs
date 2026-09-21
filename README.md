@@ -176,7 +176,7 @@ Agentes de IA leem `AGENTS.md`; `CLAUDE.md` é um symlink para essa fonte única
 ## Desenvolvimento
 
 ```bash
-rtk pnpm check                   # typecheck + Vitest/cobertura + contratos das skills de QA
+rtk pnpm check                   # changelogs + tracker de QA + typecheck + Vitest/cobertura + contratos das skills de QA
 rtk pnpm test:e2e                # browser isolado + axe WCAG 2.2 AA
 rtk pnpm qa:browser:install      # instala uma vez o Chrome do QA de jornada
 rtk pnpm db:generate             # após editar src/core/db/schema.ts
