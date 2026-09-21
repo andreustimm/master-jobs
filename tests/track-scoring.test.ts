@@ -15,7 +15,7 @@ import {
   type TrackTarget,
 } from "../src/contexts/matching/index.ts";
 import type { DB } from "../src/core/db/client.ts";
-import { candidate, company, job, jobScore, scoreTask, source } from "../src/core/db/schema.ts";
+import { candidate, company, fxRate, job, jobScore, scoreTask, source, targetTrack } from "../src/core/db/schema.ts";
 import { loadProfile } from "../src/core/profile/load.ts";
 import type { Profile } from "../src/core/profile/schema.ts";
 import { scoreAll, scoreOne } from "../src/core/scoring/apply.ts";
@@ -416,5 +416,102 @@ describe("per-track persistence", () => {
 
     expect(await rowsOf(id, await primaryIdOf(id))).toHaveLength(2);
     expect((await rowsOf(id, php.id)).map((r) => r.jobId)).toEqual([laravelJob]);
+  });
+
+  it("IT-090 pontuar uma vaga que não existe devolve nulo sem gravar nada", async () => {
+    // `scoreOne` é chamado com id que vem da URL e da linha de comando. Um id
+    // inexistente não pode virar linha de score órfã nem exceção na tela.
+    const { id } = await owner();
+    await seedJobs([{ title: "Laravel Developer", description: null }]);
+
+    expect(await scoreOne(id, 987_654)).toBeNull();
+
+    const [{ n }] = (await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(jobScore)) as [{ n: number }];
+    expect(n).toBe(0);
+  });
+
+  it("IT-091 `scoreOne` devolve o resultado da trilha PRIMÁRIA, não de qualquer uma", async () => {
+    // A tela de detalhe mostra UM número, e ele tem de ser o da primária. Com
+    // duas trilhas pontuando a mesma vaga, devolver a última do laço mudaria o
+    // fit mostrado conforme a ordem em que as trilhas foram criadas.
+    const { id, primary } = await owner();
+    const php = await track(id, "Dev PHP", phpTarget(primary));
+    const [laravelJob] = await seedJobs([
+      { title: "Senior Laravel Developer", description: "PHP and Laravel." },
+    ]);
+
+    const resultado = await scoreOne(id, laravelJob!);
+    expect(resultado).not.toBeNull();
+
+    const primaryId = await primaryIdOf(id);
+    const [linhaPrimaria] = await db
+      .select({ fit: jobScore.fit })
+      .from(jobScore)
+      .where(and(eq(jobScore.trackId, primaryId), eq(jobScore.jobId, laravelJob!)));
+    const [linhaPhp] = await db
+      .select({ fit: jobScore.fit })
+      .from(jobScore)
+      .where(and(eq(jobScore.trackId, php.id), eq(jobScore.jobId, laravelJob!)));
+
+    // As duas gravaram, e o que voltou é o da primária.
+    expect(linhaPrimaria).toBeDefined();
+    expect(linhaPhp).toBeDefined();
+    expect(resultado!.fit).toBeCloseTo(linhaPrimaria!.fit, 5);
+  });
+
+  it("IT-092 trilha que deixa de achar a vaga relevante APAGA a linha antiga", async () => {
+    // Sem o apagamento a vaga ficaria no ranking daquela trilha para sempre: o
+    // portão de relevância só decide o que ENTRA, e uma edição de alvo que
+    // estreita a trilha não remove por si o que já entrou.
+    const { id, primary } = await owner();
+    const php = await track(id, "Dev PHP", phpTarget(primary));
+    const [laravelJob] = await seedJobs([
+      { title: "Senior Laravel Developer", description: "PHP and Laravel." },
+    ]);
+
+    await scoreOne(id, laravelJob!);
+    expect((await rowsOf(id, php.id)).map((r) => r.jobId)).toEqual([laravelJob]);
+
+    // Estreita o alvo: nada mais nesta vaga casa com a trilha. `updateTrack`
+    // tem controle otimista, e o `updatedAt` esperado é o da trilha lida agora.
+    const outro = suggestTrack({ term: "Elixir", catalog: [], primary }).target;
+    const [atual] = await db
+      .select({ updatedAt: targetTrack.updatedAt })
+      .from(targetTrack)
+      .where(eq(targetTrack.id, php.id));
+    const atualizado = await updateTrack(id, php.id, {
+      target: outro,
+      expectedUpdatedAt: atual!.updatedAt,
+    });
+    if (!atualizado.ok) throw new Error(atualizado.code);
+
+    await scoreOne(id, laravelJob!);
+
+    expect(await rowsOf(id, php.id)).toEqual([]);
+    // E a primária continua com a vaga: ela pontua tudo, por definição.
+    expect((await rowsOf(id, await primaryIdOf(id))).map((r) => r.jobId)).toEqual([laravelJob]);
+  });
+
+  it("IT-093 cotações antigas viram aviso, e cotação ausente vira outro", async () => {
+    // O aviso é o que aparece na saída do comando. Sem ele, uma vaga em euro
+    // comparada por uma cotação de três meses atrás parece comparada hoje.
+    const { id } = await owner();
+    await seedJobs([{ title: "Laravel Developer", description: null }]);
+
+    const semCotacao = await scoreAll(id);
+    expect(semCotacao.fxWarning).toMatch(/Sem cotações em cache/);
+
+    // Cotação real, mas velha: o texto muda e nomeia a data.
+    const antiga = "2026-01-01";
+    await db.insert(fxRate).values([
+      { date: antiga, base: "USD", currency: "USD", rate: 1, provider: "manual" },
+      { date: antiga, base: "USD", currency: "BRL", rate: 5, provider: "manual" },
+    ]);
+
+    const comVelha = await scoreAll(id);
+    expect(comVelha.fxWarning).toMatch(new RegExp(antiga));
+    expect(comVelha.fxWarning).toMatch(/jho fx refresh/);
   });
 });
