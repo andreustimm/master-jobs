@@ -56,5 +56,60 @@ try {
     raw: {},
   }, "manual:career");
   await scoreOne(owner, result.jobId);
-  console.log("Manual QA accounts and career data prepared in isolated PostgreSQL.");
+
+  /**
+   * A mesma vaga publicada em vários países, e uma com empregador não nomeado.
+   *
+   * Sem isto, quatro cenários da jornada `J-trust-the-filtered-board` não têm o
+   * que percorrer no ambiente manual: `JOBS-group-repeated-countries`,
+   * `JOBS-country-hub`, `JOBS-group-canonical-survives-filter` e
+   * `JOBS-anonymous-employer-never-groups`. Eles ficaram sem veredito duas vezes,
+   * e a segunda foi por isto — o `setup.mjs` do E2E automatizado tem as fixtures,
+   * o manual não tinha.
+   *
+   * A forma reproduz o acervo real: quatro linhas do mesmo anúncio, duas delas no
+   * mesmo país, porque é assim que o Jobgether publica — a mesma vaga chega a
+   * aparecer em 42 linhas.
+   *
+   * O empregador não nomeado é o caso separado, e é o que o charter pede: quando o
+   * nome da empresa É o rótulo da fonte, o quadro não pode agrupar, senão junta
+   * vagas de empresas diferentes numa linha só.
+   */
+  await ensureImportSource("manual:grupo", "manual", "grupo", "Grupo QA");
+  const grupo = [
+    { externalId: "country-fixture-nl", locationRaw: "Netherlands" },
+    { externalId: "country-fixture-fr", locationRaw: "France" },
+    { externalId: "country-fixture-br-sp", locationRaw: "São Paulo, State of São Paulo, Brazil" },
+    { externalId: "country-fixture-br-rj", locationRaw: "Rio de Janeiro, Rio de Janeiro, Brazil" },
+  ];
+  for (const linha of grupo) {
+    const publicacao = await upsertRawJob({
+      externalId: linha.externalId,
+      companyName: "Country Fixture Lab",
+      title: "Engineering Manager Country Fixture",
+      locationRaw: linha.locationRaw,
+      url: `https://example.com/careers/${linha.externalId}`,
+      descriptionText:
+        "Mesma vaga, uma linha por país, para a jornada de agrupamento. Arquitetura " +
+        "de serviços distribuídos em TypeScript, trabalho remoto, liderança técnica.",
+      raw: {},
+    }, "manual:grupo");
+    await scoreOne(owner, publicacao.jobId);
+  }
+
+  // Empregador não nomeado: o nome da empresa é o rótulo da fonte.
+  const anonima = await upsertRawJob({
+    externalId: "anonimo-sem-agrupar",
+    companyName: "Grupo QA",
+    title: "Staff Engineer Anonymous Fixture",
+    locationRaw: "Remote · Europe",
+    url: "https://example.com/careers/anonimo-sem-agrupar",
+    descriptionText:
+      "Vaga cujo empregador é o nome da fonte: o quadro a marca como não nomeada, " +
+      "e ela não pode entrar em grupo com nenhuma outra.",
+    raw: {},
+  }, "manual:grupo");
+  await scoreOne(owner, anonima.jobId);
+
+  console.log("Manual QA accounts, career data and grouping fixtures prepared in isolated PostgreSQL.");
 } finally { await closeDb(); }
