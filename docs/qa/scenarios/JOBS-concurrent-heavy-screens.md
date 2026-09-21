@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-switch-workspace-screen
 expected: Duas requisições simultâneas à mesma tela respondem as duas; nenhuma fica esperando até o limite da função
 entry_points: /; /jobs; /jobs?pay=6000&payMax=30000&cur=USD&per=month; /searches; /candidate/skills; /searches/tracks/new?term=Laravel
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: docs/qa/evidence/2026-09-21-concurrent-heavy-screens.txt
+last_report: docs/qa/reports/2026-09-21-execucao-concorrencia.md
 overlaps: JOBS-pay-filter
 ---
 
