@@ -6,7 +6,7 @@ persona: Andreus em triagem
 journey: J-manage-target-tracks
 expected: O editor sinaliza as palavras-chave sem evidência e a trilha não revisada, sem inventar experiência
 entry_points: /searches/tracks/<id>
-qa_status: pass
+qa_status: blocked-verify
 bug_ids:
 fix_status:
 retest_status:

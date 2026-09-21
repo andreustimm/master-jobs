@@ -2,7 +2,7 @@
 
 - **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Friction
-- **Severity:** Low · **Priority:** P3
+- **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Andreus em triagem
 - **Journey Step:** J-save-term-search, passo 2 (salvar o termo numa trilha)
 - **Scenarios:** SRCH-term-validation

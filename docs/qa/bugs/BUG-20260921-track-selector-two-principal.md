@@ -2,7 +2,7 @@
 
 - **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Trust-Damage
-- **Severity:** Medium · **Priority:** P2
+- **Severity:** High · **Priority:** P1
 - **Persona Affected:** Andreus em triagem
 - **Journey Step:** J-manage-target-tracks, passo de tornar outra trilha principal e voltar a Vagas
 - **Scenarios:** SRCH-track-primary-archive

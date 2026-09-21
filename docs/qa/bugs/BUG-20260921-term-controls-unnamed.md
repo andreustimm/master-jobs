@@ -3,9 +3,9 @@
 - **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Friction
 - **Severity:** Medium · **Priority:** P2
-- **Persona Affected:** Andreus em triagem
+- **Persona Affected:** Candidato por teclado
 - **Journey Step:** J-save-term-search, passo 4 (pausar, mover, rodar de novo ou excluir o termo)
-- **Scenarios:** SRCH-term-lifecycle
+- **Scenarios:** SRCH-term-controls-named
 - **Found:** 2026-09-21 · **Report:** docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
 
 ## Summary
@@ -19,7 +19,7 @@ logo acima dos botões.
 
 ## Reproduction
 
-- **Charter:** CH-saved-term-reaches-new-jobs, releitura pela lente de acessibilidade · **Tour:** Feature Tour
+- **Charter:** nenhuma — achado na releitura pela lente de acessibilidade (passo 5 da execução), depois das cartas · **Tour:** —
 - **Environment:** laptop 1280×800 / wifi-fast / pt-BR, ambiente de paridade `run-isolated.mjs --manual`, conta `alex@local.test`
 
 1. Entrar como o dono com vários termos salvos e abrir Buscas.
