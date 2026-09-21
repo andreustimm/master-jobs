@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "../../../core/db/client.ts";
 import { fxRate } from "../../../core/db/schema.ts";
 import type { FxRateStore } from "../ports.ts";
@@ -27,20 +27,20 @@ export const drizzleFxRateStore: FxRateStore = {
   },
 
   async loadLatest(base) {
-    const db = getDb();
-    const latest = await db
-      .select({ date: fxRate.date })
+    // Uma consulta, não duas em série: a data mais recente vem de subconsulta.
+    // Cada ida ao banco é um round-trip, e a tela de vagas pedia o câmbio antes
+    // de poder começar as leituras que dependem dele.
+    const rows = await getDb()
+      .select({ date: fxRate.date, currency: fxRate.currency, rate: fxRate.rate })
       .from(fxRate)
-      .where(eq(fxRate.base, base))
-      .orderBy(desc(fxRate.date))
-      .limit(1);
-    const date = latest[0]?.date;
+      .where(
+        and(
+          eq(fxRate.base, base),
+          eq(fxRate.date, sql`(select max(${fxRate.date}) from ${fxRate} where ${fxRate.base} = ${base})`),
+        ),
+      );
+    const date = rows[0]?.date;
     if (!date) return null;
-
-    const rows = await db
-      .select({ currency: fxRate.currency, rate: fxRate.rate })
-      .from(fxRate)
-      .where(and(eq(fxRate.base, base), eq(fxRate.date, date)));
     return {
       base,
       date,

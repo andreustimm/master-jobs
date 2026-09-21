@@ -111,8 +111,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const jar = await cookies();
   const theme = resolveTheme(jar.get(THEME_COOKIE)?.value);
   const mode = resolveMode(jar.get(MODE_COOKIE)?.value);
-  const { currentSession } = await import("./auth");
-  const session = await currentSession();
+  const { renderSession } = await import("./auth");
+  const session = await renderSession();
   const signedIn = Boolean(session);
   // `=== true` porque `session?.roles.includes(...)` é `boolean | undefined`, e
   // `undefined` num `&&` de JSX simplesmente não renderiza — o que funcionava.

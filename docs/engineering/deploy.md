@@ -120,8 +120,18 @@ desenvolvimento local e num endereço público é o vazamento inteiro.
 
 ## Os três ambientes
 
-Um banco por ambiente, no grupo `master-jobs` em `aws-us-east-1` — a mesma
-região das funções da Vercel (`iad1`), para o round-trip não atravessar o país.
+Um banco por ambiente. O de produção é o projeto Supabase `master-jobs` em
+`sa-east-1` (São Paulo), e as funções da Vercel ficam em `gru1`, a região
+vizinha: cada ida ao banco é um round-trip, e a tela do quadro fazia de dez a
+doze por requisição (hoje de oito a dez, com bem menos esperas em série). Com a
+função em `iad1` (Virgínia), cada uma cruzava o continente.
+
+`tests/function-region.test.ts` trava o par: o host do pooler de produção
+(`production-target.ts`) tem de mapear para a região de `vercel.json`. Trocar
+um sem o outro reprova a suíte. Para conferir em produção, o cabeçalho
+`x-vercel-id` deve dizer `<borda>::gru1::…` — o primeiro trecho é a borda de
+quem pediu, só o segundo é a região da função. `<borda>::iad1::…` é a função no
+lugar errado.
 
 | Branch | Endereço | Banco | Ambiente Vercel |
 |---|---|---|---|

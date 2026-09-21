@@ -18,6 +18,14 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Melhorado
+
+- As telas de Vagas e o painel inicial abrem mais rápido. O sistema passou a
+  trabalhar mais perto de onde ficam os dados, a fazer menos pedidos a eles a cada
+  abertura e a não medir o texto de cada descrição só para saber se ela é muito
+  curta. A lista, os contadores dos filtros e o aviso de "sem descrição" mostram
+  exatamente o mesmo de antes.
+
 ## [1.20.3] - 2026-09-21T14:32:47.656Z
 
 ### Corrigido

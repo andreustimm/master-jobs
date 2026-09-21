@@ -148,4 +148,41 @@ describe("FX Drizzle store", () => {
       await releaseTestDb();
     }
   });
+
+  it("lê a data mais recente DA BASE pedida, e numa consulta só", async () => {
+    const db = await useTestDb();
+    try {
+      const at = (base: string, date: string, rates: Record<string, number>) =>
+        drizzleFxRateStore.save({ base, date, rates, provider: "fixture", fetchedAt: `${date}T00:00:00.000Z` });
+      await at("USD", "2026-08-18", { BRL: 5.1 });
+      await at("USD", "2026-08-19", { BRL: 5.4, EUR: 0.91 });
+      // Outra base com data MAIS NOVA: a subconsulta que esquecesse a base
+      // devolveria 2026-08-25 e nenhuma linha de USD.
+      await at("EUR", "2026-08-25", { BRL: 6.0 });
+
+      const client = db.$client as unknown as { unsafe: (...args: unknown[]) => Promise<unknown> };
+      const original = client.unsafe.bind(client);
+      let queries = 0;
+      client.unsafe = (...args: unknown[]) => {
+        queries += 1;
+        return original(...args);
+      };
+      try {
+        await expect(drizzleFxRateStore.loadLatest("USD")).resolves.toEqual({
+          base: "USD",
+          date: "2026-08-19",
+          rates: { BRL: 5.4, EUR: 0.91 },
+        });
+        // Eram duas em série (a data, depois as linhas), e o câmbio bloqueia as
+        // leituras da tela de vagas que dependem dele.
+        expect(queries).toBe(1);
+      } finally {
+        client.unsafe = original;
+      }
+
+      await expect(drizzleFxRateStore.loadLatest("GBP")).resolves.toBeNull();
+    } finally {
+      await releaseTestDb();
+    }
+  });
 });

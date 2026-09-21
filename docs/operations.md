@@ -523,6 +523,36 @@ sqlite3 data/jobs.db "
 
 ## Troubleshooting
 
+### A busca está lenta
+
+**Meça antes de mexer.** A análise completa está em
+[`engineering/performance-buscas.md`](engineering/performance-buscas.md); o
+roteiro curto:
+
+1. **A função está na região do banco?** O cabeçalho `x-vercel-id` da resposta
+   deve dizer `<borda>::gru1::…` — o primeiro trecho é a borda de quem pediu, só
+   o segundo é a região da função. `<borda>::iad1::…` é a função na Virgínia com
+   o banco em São Paulo: cada ida ao banco atravessa o continente, sem erro
+   nenhum. `vercel.json` fixa a região e `tests/function-region.test.ts` trava o
+   par com o pooler de produção.
+2. **Onde a requisição gasta o tempo?** `/jobs` e `/` registram uma linha JSON
+   no log da função quando passam de 1 s — ou sempre, com `JHO_PERF_LOG=1` no
+   ambiente: `{"perf":"/jobs","totalMs":…,"region":"gru1","stages":{"auth":…,
+   "prelude":…,"board":…,"facets":…,"tail":…}}`. A linha sai também quando a
+   leitura falha, com o estágio que falhou medido. Não sai se a plataforma mata
+   a função (o 504 aos 30 s): para esse caso existe o vigia de 22 s. Só número e
+   nome de estágio; sem query string nem identidade. Na Hobby o log da Vercel
+   dura 1 h: reproduza e leia logo.
+3. **É o servidor ou o navegador?** `pnpm perf:jobs` roda 6 cenários sobre 10 mil
+   vagas num Postgres local e diz o tempo e o **número de idas** de cada um.
+   Sem rede, é o piso: o custo em produção é `estágios em série × round-trip`.
+   Guarde o relatório com `JHO_PERF_OUT=antes.txt` e compare depois.
+
+`tests/db-fan-out.test.ts` afirma que `/jobs` lê as trilhas e o câmbio uma vez
+cada — a régua de pico de conexões não enxerga round-trip: cada consulta cabe no
+teto e a soma em série ainda é lenta. O que o teste **não** cobra é o paralelismo
+dos estágios (prelúdio, contagem, cauda): esse é medido por `pnpm perf:jobs`.
+
 ### Uma tela devolve 504 em produção, e só às vezes
 
 **Conte quantas consultas aquele caminho dispara ao mesmo tempo.** O cliente do
@@ -576,10 +606,11 @@ de dados (`app/cockpit-data.ts`, `app/jobs/jobs-data.ts`,
 da página, e cada um desses módulos tem um caso em `tests/db-fan-out.test.ts`.
 Composição na página é invariante sem guarda.
 
-E **passe o câmbio adiante.** `loadRates()` são duas consultas sem cache, e
-`listBoard`, `countBoard` e `countHiddenByPayRange` buscavam cada uma a sua:
-quatro idas ao banco pelo mesmo câmbio numa requisição de `/jobs`.
-`BoardFilters.rates` existe para isso.
+E **passe o câmbio adiante.** `loadRates()` é uma consulta sem cache (eram duas,
+em série, antes de a data mais recente virar subconsulta), e `listBoard`,
+`countBoard` e `countHiddenByPayRange` buscavam cada uma a sua: quatro idas ao
+banco pelo mesmo câmbio numa requisição de `/jobs`. `BoardFilters.rates` existe
+para isso.
 
 **O Sentry não vê isso.** `FUNCTION_INVOCATION_TIMEOUT` mata o processo; o
 código não falha, não reporta, e o registro da Vercel traz uma linha só. A falha

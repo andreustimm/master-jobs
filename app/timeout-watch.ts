@@ -1,4 +1,9 @@
-import { warnIfSlower } from "../src/core/observability.ts";
+import {
+  shouldLogTiming,
+  timingLogLine,
+  warnIfSlower,
+  type TimingReport,
+} from "../src/core/observability.ts";
 
 /**
  * O aviso que sai antes de a Vercel matar a função.
@@ -11,6 +16,26 @@ import { warnIfSlower } from "../src/core/observability.ts";
  * o melhor momento para descobrir isso.
  */
 const LIMITE_MS = 22_000;
+
+/** Uma leitura de tela acima disto deixa a medida por estágio no log. */
+const LENTA_MS = 1_000;
+
+/**
+ * Registra onde uma leitura de tela gastou o tempo, quando vale registrar.
+ *
+ * Sai no log da função (Vercel), não no Sentry: o Sentry roda sem tracing de
+ * propósito, porque uma transação carrega a URL com o filtro da pessoa. A linha
+ * é só número e nome de estágio. `JHO_PERF_LOG=1` faz sair sempre, para medir
+ * uma tela em vez de esperar que ela piore.
+ */
+export function registrarTempo(relatorio: TimingReport): void {
+  try {
+    if (!shouldLogTiming(relatorio, { slowMs: LENTA_MS, always: process.env.JHO_PERF_LOG === "1" })) return;
+    console.info(timingLogLine(relatorio, process.env.VERCEL_REGION));
+  } catch {
+    // Medir nunca pode ser o motivo de a tela falhar.
+  }
+}
 
 /**
  * Roda a leitura da página e, se ela travar, deixa rastro.

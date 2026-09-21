@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadJobsView } from "../app/jobs/jobs-data.ts";
 import {
+  boardFacets,
   countBoard,
   countHiddenByPayRange,
   createTrack,
@@ -457,4 +458,33 @@ describe("performance", () => {
     expect(rows.length).toBeGreaterThan(0);
     expect(elapsed).toBeLessThan(2000);
   }, 120_000);
+});
+
+describe("descrição mínima sem medir o texto inteiro", () => {
+  // O limite é 200 caracteres, e a checagem usa `substr`, não `length`: o texto
+  // vem comprimido e medir obrigava a descomprimi-lo inteiro em toda vaga aberta.
+  // Estas bordas provam que as duas formas continuam dizendo a mesma coisa.
+  const chars = (length: number, char = "a") => char.repeat(length);
+
+  it("a lista, o filtro e a faceta concordam em 199 versus 200 caracteres", async () => {
+    const short = await addJob({ title: "Curta", description: chars(199) });
+    const exact = await addJob({ title: "Exata", description: chars(200) });
+    const accented = await addJob({ title: "Acentuada", description: chars(200, "é") });
+    const shortAccented = await addJob({ title: "Acentuada curta", description: chars(199, "é") });
+    const empty = await addJob({ title: "Vazia", description: "" });
+    const missing = await addJob({ title: "Sem texto", description: null });
+
+    const rows = await listBoard(owner, {});
+    const flag = new Map(rows.map((row) => [row.jobId, row.hasFullDescription]));
+    expect(flag.get(short)).toBe(false);
+    expect(flag.get(exact)).toBe(true);
+    expect(flag.get(accented)).toBe(true);
+    expect(flag.get(shortAccented)).toBe(false);
+    expect(flag.get(empty)).toBe(false);
+    expect(flag.get(missing)).toBe(false);
+
+    expect(ids(await listBoard(owner, { hasDescription: true })).sort()).toEqual([exact, accented].sort());
+    expect(await countBoard(owner, { hasDescription: true })).toBe(2);
+    expect((await boardFacets(owner, {})).described).toBe(2);
+  });
 });
