@@ -2864,6 +2864,10 @@ try {
     "/candidate",
     "/candidate/skills",
     "/candidate/vocabulary",
+    // O hub dos países entra nas quatro guardas transversais: cada uma é um
+    // array literal, então rota nova não herda nenhuma delas sozinha. Ele tem
+    // quatro chaves de dicionário próprias e estava fora de todas.
+    "/jobs/904000101/paises",
   ]);
   check(
     "interface em inglês não vaza português",
@@ -5042,9 +5046,14 @@ try {
     "term-search E2E-012 vaga repetida por país vira uma linha com bandeiras; cidades do mesmo país somam numa marca; desligar devolve as quatro",
     linhasAgrupadas === 1
       && marcas.length === 3
-      && marcas.some((m) => m.rotulo === "Países Baixos")
-      && marcas.some((m) => m.rotulo === "França")
-      && marcas.some((m) => (m.rotulo ?? "").startsWith("Brasil"))
+      // O rótulo E a bandeira: o caso coletava as duas e afirmava só a primeira,
+      // então marca vazia ou bandeira do país errado passava.
+      && marcas.some((m) => m.rotulo === "Países Baixos" && m.texto === "\u{1F1F3}\u{1F1F1}")
+      && marcas.some((m) => m.rotulo === "França" && m.texto === "\u{1F1EB}\u{1F1F7}")
+      // As duas cidades brasileiras somam numa marca só, e o rótulo diz quantas
+      // são — `startsWith("Brasil")` passava com "Brasil" puro, que é justamente
+      // o caso em que a soma foi perdida.
+      && marcas.some((m) => /^Brasil\b.*\b2\b/.test(m.rotulo ?? "") && m.texto === "\u{1F1E7}\u{1F1F7}")
       && (destinoPrimeiraBandeira ?? "").includes("/jobs/904000101")
       && linhasCruas === 4
       && semBandeiras === 0,
@@ -5467,6 +5476,7 @@ try {
     "/searches/tracks/new",
     `/searches/tracks/${phpTrackCard?.id}`,
     `/jobs?track=all&by=${seededId}&pay=6000&cur=USD&per=month&fit=0`,
+    "/jobs/904000101/paises",
     "/admin/captures",
   ];
   const searchOverflows = [];
@@ -5492,6 +5502,7 @@ try {
     "/searches",
     `/searches/tracks/${phpTrackCard?.id}`,
     "/jobs",
+    "/jobs/904000101/paises",
     "/admin/captures",
   ]);
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);

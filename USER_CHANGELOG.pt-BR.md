@@ -18,6 +18,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- Com a interface em inglês, a localização de uma vaga — que vem do anúncio, não
+  da tradução — poderia ser tratada como texto não traduzido. Agora ela é
+  reconhecida como dado do anúncio, na lista e na janela de detalhe da vaga.
+
 ## [1.20.1] - 2026-09-21T03:06:56.669Z
 
 ### Corrigido

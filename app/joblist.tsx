@@ -162,7 +162,18 @@ export function JobList({
                 {r.repeats.length > 1 ? (
                   <JobCountries jobId={r.jobId} repeats={r.repeats} locale={locale} t={t} />
                 ) : (
-                  r.locationRaw && <span className="truncate">{r.locationRaw.slice(0, 62)}</span>
+                  // `data-user-content` porque a localização vem do acervo, não do
+                  // dicionário: "São Paulo, State of São Paulo, Brazil" tem acento
+                  // e continua tendo com a interface em inglês. Sem a marca, a
+                  // verificação de vazamento de português acusa dado do usuário —
+                  // e foi assim que ela reprovou quando `/jobs/<id>/paises` entrou
+                  // na varredura. Na linha de Vagas isto escapava porque ali a
+                  // localização chega pelas bandeiras, que já tinham a marca.
+                  r.locationRaw && (
+                    <span className="truncate" data-user-content>
+                      {r.locationRaw.slice(0, 62)}
+                    </span>
+                  )
                 )}
               </div>
 

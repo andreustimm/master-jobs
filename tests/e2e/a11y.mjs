@@ -63,6 +63,8 @@ try {
     ["candidate vocabulary", "/candidate/vocabulary"],
     ["referrals", "/referrals"],
     ["admin users", "/admin/users"],
+    // Ver o comentário em `ui.mjs`: rota nova não herda guarda transversal.
+    ["job countries hub", "/jobs/904000101/paises"],
   ]) {
     await scan(name, path);
   }
@@ -75,4 +77,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log("\n8/8 páginas sem violações axe WCAG 2.2 AA");
+console.log("\n9/9 páginas sem violações axe WCAG 2.2 AA");

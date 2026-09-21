@@ -62,6 +62,31 @@ defina a senha com `rtk pnpm jho auth set-password <email>`. O mapeamento
 persona→conta e as credenciais ficam em armazenamento privado, nunca em
 `docs/qa/` nem no Git.
 
+## Tela nova não herda guarda nenhuma
+
+Toda guarda transversal deste repositório é um **array literal de caminhos**, e há
+quatro delas:
+
+| Guarda | Onde |
+|---|---|
+| Vazamento de português, com cookie `en` | `tests/e2e/ui.mjs`, duas listas |
+| Largura real em 375, 768 e 1024 px | `tests/e2e/ui.mjs`, `searchRoutes` |
+| Varredura axe WCAG 2.2 AA | `tests/e2e/a11y.mjs`, com a contagem `N/N` no fim |
+
+Rota nova **não entra em nenhuma** até alguém editar as quatro. Foi assim que
+`/jobs/<id>/paises` viveu duas releases fora de todas, com quatro chaves de
+dicionário só dela.
+
+E o custo apareceu no primeiro uso: ao entrar, a varredura reprovou por
+localização de vaga sem `data-user-content` — em **dois** lugares, um deles o
+popover de detalhe, que está no DOM mesmo fechado e aparece em toda tela com
+lista. Os dois existiam desde sempre e nenhuma rota varrida tinha fixture com
+acento na localização.
+
+**Ao criar tela:** acrescente o caminho às quatro listas no mesmo commit, e ajuste
+a contagem final da varredura axe. Se a tela precisa de id, use uma fixture do
+`setup.mjs` em vez de um id inventado.
+
 ## Áreas
 
 | Código | Área |
