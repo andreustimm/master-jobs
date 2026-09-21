@@ -6,7 +6,7 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: Se uma publicação do grupo passa pelos filtros, o grupo aparece — representado por ela, e não pela que foi cortada
 entry_points: /jobs; /jobs?unblocked=1; /jobs?fit=60
-qa_status: blocked
+qa_status: blocked-verify
 bug_ids:
 fix_status:
 retest_status:

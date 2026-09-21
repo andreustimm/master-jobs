@@ -6,7 +6,7 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: Clicar numa linha agrupada abre o hub com todas as publicações do grupo, e é lá que se escolhe o país
 entry_points: /jobs/<id>/paises
-qa_status: blocked
+qa_status: blocked-verify
 bug_ids:
 fix_status:
 retest_status:

@@ -9,7 +9,7 @@ entry_points: /; /jobs
 qa_status: untested
 bug_ids: BUG-20260915-clear-search-text
 fix_status: fixed
-retest_status: verified
+retest_status: pending
 fix_commits: cf20630
 evidence: evidence/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter/CH-work-mode-continuity-post-review-all.png; evidence/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter/orion-remote.csv; evidence/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter/CH-work-mode-continuity-post-review-clear.png
 last_report: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md

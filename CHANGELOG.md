@@ -9,6 +9,86 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- **A tela de detalhe da vaga servia três textos de interface em português com a
+  interface em inglês.** `← vagas`, `Ver vaga na origem` e `visto em` eram
+  literais no JSX de `app/jobs/[id]/page.tsx` — regra 9 —, e mais três estavam no
+  mesmo arquivo em ramos condicionais: `fechada`, `Aplicar →` e
+  `de 100 · cluster`. Passam pelas chaves novas da seção `jobDetail` nos dois
+  dicionários. Os dois rótulos do cartão de score, `casadas:` e `ausentes:`,
+  escaparam do primeiro inventário — só aparecem para quem tem score, e o QA
+  percorreu a tela como recrutador — e passam pelas chaves que `/compare` já
+  usava, `compare.matchedKeywords` e `compare.missingKeywords`.
+
+  Não é regressão: estão ali desde que a tela existe. O que faltava era medição.
+  A varredura de inglês percorre **listas literais** de rotas em
+  `tests/e2e/ui.mjs`, e `/jobs/<id>` — a tela mais aberta do produto — nunca
+  entrou nelas. Já é a terceira rota descoberta assim.
+
+  E ela não podia entrar como estava: o nome da empresa, a localização e o rótulo
+  da fonte vêm do acervo e são acentuados de direito, então sem
+  `data-user-content` a varredura reprovaria `São Paulo, State of São Paulo,
+  Brazil` como tradução esquecida. A correção faz as duas coisas: marca os três
+  campos e põe a rota nas duas varreduras.
+
+  A lista é necessária, não suficiente. A varredura só reprova texto acentuado ou
+  que já é valor do dicionário português: dos seis literais, só `← vagas` seria
+  pego, e porque já existia como `jobCountries.back`. `Ver vaga na origem` e
+  `visto em` passariam mesmo com a rota listada.
+
+- **O seletor de etapa do funil na tela de detalhe não tinha nome acessível.** O
+  rótulo visível `mover para` era um `<span>` solto, e o `<select>` do
+  `TrackForm` saía sem nome para leitor de tela — `select-name`, WCAG 2 A. Ganhou
+  `aria-label` com o mesmo texto. Só a visão do dono renderiza o formulário.
+
+### Testes
+
+- `/jobs/904000103` entra nas **quatro** listas de guarda transversal: as duas
+  varreduras de vazamento de português e a de largura real em `tests/e2e/ui.mjs`,
+  e a varredura axe de `tests/e2e/a11y.mjs` (contagem `9/9` → `10/10`). É a
+  publicação de São Paulo do grupo de países, escolhida por ser acentuada: numa
+  localização sem acento, tirar `data-user-content` não reprovaria nada. A
+  fixture ganhou palavras-chave casadas e ausentes para que as duas linhas do
+  cartão de score renderizem sob a varredura.
+
+  A medição que precedeu a entrada (0px de excesso em 375, 768 e 1024 px, zero
+  violações axe) foi feita como recrutador, que não vê o formulário de funil. A
+  varredura axe roda como dono, e ali o `select` sem nome reprovaria — o achado
+  veio da revisão profunda, e a correção está acima.
+
+- **O tracker de QA não materializava, e o validador só roda sob demanda.**
+  `docs/qa/state.csv` é visão gerada e ignorada pelo git, então o único jeito de
+  o esquema ser conferido é alguém rodar `materialize_state.py` de propósito —
+  e **15 registros inválidos em 15 arquivos** mostram há quanto tempo ninguém
+  rodava. Oito tinham `retest_status: verified`, valor que não existe no enum;
+  quatro mantinham `retest_status` preenchido — um `pass` e três `verified` —
+  depois de a superfície mudar e `qa_status` voltar a `untested`; três
+  afirmavam `pass` sem apontar evidência; dois afirmavam `fixed` sem SHA; dois
+  usavam `qa_status: blocked`, também inexistente. Todos corrigidos conforme o
+  esquema. Seis cenários devem reteste e ficam em `retest_status: pending`:
+  três com bug `fixed` nunca re-percorrido, e três com bug `verified` cujo
+  reteste antecede uma mudança de superfície. Vazio, no esquema, quer dizer
+  "reteste dispensado", e veredito de uma tela que mudou não vale; a história
+  continua no relatório que `last_report` aponta. A visão volta a gerar: 56 cenários,
+  zero erros.
+
+### Documentação
+
+- `AGENTS.md` afirmava "sete telas em inglês" e são treze. O número saiu de
+  cima: o que vale é que as listas são literais, e agora a regra 9 diz que a
+  lista decide o que é medido, que os dois critérios só reprovam literal
+  acentuado ou já presente no dicionário, e por que rota nova entra nas listas
+  no mesmo commit que a cria.
+- QA de jornada: `JOBS-detail-owner-view-english` nasce `untested` para a parte
+  da tela que só o dono vê — cartão de score e seletor de etapa —, que a persona
+  recrutadora não alcança.
+- QA de jornada: `JOBS-english-keeps-posting-data` fecha em **Pass** —
+  `docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md`,
+  `docs/qa/bugs/BUG-20260921-job-detail-labels-untranslated.md` e a carta
+  `CH-recruiter-english-board`. A jornada `J-trust-the-filtered-board` fica em
+  oito Pass e quatro bloqueados, **nenhum `untested`**.
+
 ## [1.20.2] - 2026-09-21
 
 ### Corrigido

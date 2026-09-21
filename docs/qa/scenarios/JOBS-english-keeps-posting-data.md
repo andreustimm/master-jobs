@@ -5,14 +5,14 @@ title: Interface em inglês mantém o texto do anúncio como ele veio
 persona: Recrutadora convidada
 journey: J-trust-the-filtered-board
 expected: Com a interface em inglês, a localização e o nome da vaga continuam como o anúncio escreveu — inclusive com acento — e nada da interface aparece em português
-entry_points: /jobs; /jobs/<id>/paises
-qa_status: untested
-bug_ids:
-fix_status:
-retest_status:
-fix_commits:
-evidence:
-last_report:
+entry_points: /jobs; /jobs/<id>; /jobs/<id>/paises
+qa_status: pass
+bug_ids: BUG-20260921-job-detail-labels-untranslated
+fix_status: fixed
+retest_status: pass
+fix_commits: 23fa064; 52ba067
+evidence: docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md
+last_report: docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md
 overlaps: JOBS-country-hub; JOBS-group-repeated-countries
 ---
 
@@ -39,3 +39,28 @@ A conferir, com a interface em inglês:
 - O contraste que dá sentido à regra: se alguém traduzir mal um rótulo, a
   verificação tem de reprovar — a isenção é para dado do usuário, não para
   esconder tradução faltando.
+
+## O terceiro lugar, achado em 2026-09-21
+
+A primeira execução deste cenário acrescentou `/jobs/<id>` aos pontos de entrada,
+porque a jornada passa por lá: quem filtra o quadro clica numa vaga. E a tela de
+detalhe tinha as duas metades do problema ao mesmo tempo — três textos de
+interface como literal no JSX (`← vagas`, `Ver vaga na origem`, `visto em`,
+servidos em português com a interface em inglês) e o dado do anúncio sem
+`data-user-content` no nome da empresa, na localização e no rótulo da fonte.
+
+Sem a marca, a rota não podia entrar na varredura (o acento legítimo do acervo
+reprovaria); fora da varredura, ninguém mediria a tela. E mesmo dentro dela, a
+varredura só reprova texto acentuado ou já presente no dicionário — `Ver vaga na
+origem` passaria. A varredura é rede; a defesa é a regra 9. `docs/qa/bugs/BUG-20260921-job-detail-labels-untranslated.md` tem a
+medição.
+
+O que este cenário passou a exigir, por isso:
+
+- Todo ponto de entrada da jornada entra na verificação — inclusive o que só se
+  alcança clicando, não digitando a URL.
+- Ausência de acento na tela **não** é prova de nada: a rota precisa de fixture
+  com localização acentuada, senão a verificação passa por não ter o que medir.
+- A recíproca também: rota em que o dado do usuário não está marcado só pode
+  entrar depois da marca, e pular esse passo troca um defeito por um falso
+  positivo permanente.

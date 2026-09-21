@@ -9,7 +9,7 @@ entry_points: /
 qa_status: pass
 bug_ids: BUG-20260826-responsive-header-artifact-skew
 fix_status: fixed
-retest_status: verified
+retest_status: pass
 fix_commits: 1570ccd; b05f949; 79d9cf3
 evidence: tests/e2e/ui.mjs; tests/mobile.test.ts; tests/pwa-chrome.test.ts; docs/qa/evidence/2026-09-17T222310262016Z-5e419094-application-draft-on-rejected-transition/NAV-full-width-shell-mobile.png
 last_report: docs/qa/reports/2026-09-17T230607949478Z-796f372b-pre-varredura-cenarios-nao-testados.md

@@ -2959,6 +2959,15 @@ try {
     // array literal, então rota nova não herda nenhuma delas sozinha. Ele tem
     // quatro chaves de dicionário próprias e estava fora de todas.
     "/jobs/904000101/paises",
+    // A tela de detalhe é a mais aberta do produto e estava fora daqui desde o
+    // começo — o custo apareceu no QA de jornada: "← vagas", "Ver vaga na
+    // origem" e "visto em" eram literais no JSX, servidos em português com a
+    // interface em inglês. Ela só pôde entrar depois de o nome da empresa, a
+    // localização e o rótulo da fonte ganharem `data-user-content`, porque esse
+    // texto vem do acervo e é acentuado de direito. Por isso a publicação
+    // varrida é a de São Paulo: numa localização sem acento, tirar a marca não
+    // reprovaria nada, e a metade da guarda que a protege ficaria sem prova.
+    "/jobs/904000103",
   ]);
   check(
     "interface em inglês não vaza português",
@@ -5697,6 +5706,7 @@ try {
     `/searches/tracks/${phpTrackCard?.id}`,
     `/jobs?track=all&by=${seededId}&pay=6000&cur=USD&per=month&fit=0`,
     "/jobs/904000101/paises",
+    "/jobs/904000103",
     "/admin/captures",
   ];
   const searchOverflows = [];
@@ -5723,6 +5733,7 @@ try {
     `/searches/tracks/${phpTrackCard?.id}`,
     "/jobs",
     "/jobs/904000101/paises",
+    "/jobs/904000103",
     "/admin/captures",
   ]);
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);

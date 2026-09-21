@@ -832,6 +832,12 @@ export const en: Dictionary = {
     candidateHistory: "History · {count} application(s)",
   },
   jobDetail: {
+    back: "← jobs",
+    closed: "closed",
+    seenOn: "first seen",
+    openAtSource: "View job at the source",
+    applyAtSource: "Apply →",
+    outOfHundredCluster: "out of 100 · cluster",
     trackFits: "Score by track",
     trackFitsLead: "The same job measured against each active track's yardstick.",
     computedFit: "computed now — no stored score on this track",

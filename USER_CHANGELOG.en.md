@@ -18,6 +18,17 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- With the interface in English, a job's own screen still showed Portuguese: the
+  back link, the button that opens the job at its source, the label for the date
+  it was first seen and, in the score card, the labels for matched and missing
+  keywords. They now read in English, like the rest of the screen.
+
+- On the same screen, the pipeline stage picker had no name for screen readers:
+  it announced only "combo box". It now announces "move to", the same text shown
+  next to it.
+
 ## [1.20.2] - 2026-09-21T09:13:34.091Z
 
 ### Fixed

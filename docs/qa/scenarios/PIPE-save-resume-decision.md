@@ -9,7 +9,7 @@ entry_points: /jobs; /pipeline; pnpm jho jobs show
 qa_status: pass
 bug_ids: BUG-20260910-application-edit-not-retained; BUG-20260917-transition-note-never-readable
 fix_status: fixed
-retest_status: verified
+retest_status: pass
 fix_commits: f16c2b4; 916c531; fa1269d; 03ac0f6; 9bb7fc0
 evidence: docs/qa/evidence/2026-09-17T222310262016Z-5e419094-application-draft-on-rejected-transition/CH-save-resume-application-step3-reachable-stages.png
 last_report: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md

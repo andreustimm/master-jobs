@@ -65,6 +65,11 @@ try {
     ["admin users", "/admin/users"],
     // Ver o comentário em `ui.mjs`: rota nova não herda guarda transversal.
     ["job countries hub", "/jobs/904000101/paises"],
+    // A tela mais aberta do produto, e estava fora das quatro listas — foi assim
+    // que ela serviu três rótulos em português com a interface em inglês. A
+    // varredura roda como dono, que vê o formulário de funil; a medição que
+    // precedeu a entrada foi como recrutador e não via o `select` sem nome.
+    ["job detail", "/jobs/904000103"],
   ]) {
     await scan(name, path);
   }
@@ -77,4 +82,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log("\n9/9 páginas sem violações axe WCAG 2.2 AA");
+console.log("\n10/10 páginas sem violações axe WCAG 2.2 AA");
