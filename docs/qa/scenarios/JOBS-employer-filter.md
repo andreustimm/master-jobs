@@ -3,16 +3,16 @@ id: JOBS-employer-filter
 area: JOBS
 title: Procurar pelo empregador sem trazer quem só o cita
 persona: Andreus em triagem
-journey: J-find-jobs-by-work-mode
+journey: J-trust-the-filtered-board
 expected: O campo de empresa devolve só as vagas daquele empregador, e não as que mencionam o nome na descrição
 entry_points: /jobs?company=Shopify
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: docs/qa/evidence/2026-09-21-docs-qa-jornada-do-quadro-filtrado/numbers-agree-empty-employer.png
+last_report: 2026-09-21-docs-qa-jornada-do-quadro-filtrado
 overlaps: JOBS-source-multi-select
 ---
 

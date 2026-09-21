@@ -253,4 +253,23 @@ describe("setPassword", () => {
     expect((await verifyLogin("eu@test", "segunda-senha-longa")).ok).toBe(true);
     expect((await verifyLogin("eu@test", "primeira-senha-longa")).ok).toBe(false);
   });
+  it("UT-460 a mensagem do erro de KDF diz algo mesmo quando a causa não é `Error`", () => {
+    // O `catch` que embala a falha recebe o que o Node lançar, e nem tudo que o
+    // Node lança é `Error` — um `ENOMEM` de addon nativo pode chegar como string.
+    // `causa.message` sobre string daria `undefined` na mensagem, e o registro do
+    // sistema ficaria com "scrypt não pôde ser executado: undefined", que não
+    // distingue falta de memória de qualquer outra coisa.
+    const comErro = new KdfIndisponivelError(new Error("ENOMEM ao alocar 64 MB"));
+    const comString = new KdfIndisponivelError("ENOMEM");
+    const comObjeto = new KdfIndisponivelError({ codigo: 12 });
+
+    expect(comErro.message).toContain("ENOMEM ao alocar 64 MB");
+    expect(comString.message).toContain("ENOMEM");
+    expect(comObjeto.message).not.toContain("undefined");
+
+    // E os três preservam a causa original, que é o que o rastreamento usa.
+    expect(comErro.cause).toBeInstanceOf(Error);
+    expect(comString.cause).toBe("ENOMEM");
+    expect(comObjeto.name).toBe("KdfIndisponivelError");
+  });
 });

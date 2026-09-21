@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { countryName, countryOf, flagOf, groupByCountry } from "../src/core/country.ts";
+import {
+  countryName,
+  countryOf,
+  countryRow,
+  flagOf,
+  groupByCountry,
+  MARCAS_VISIVEIS,
+} from "../src/core/country.ts";
 
 /**
  * Os casos vêm do acervo, não da imaginação: são as formas que as fontes
@@ -153,5 +160,118 @@ describe("país de uma localização livre", () => {
       [null, "Remote", 1],
       [null, "", 1],
     ]);
+  });
+});
+
+describe("nome de lugar americano que também é nome de país", () => {
+  // A tabela do ICU é a lista completa de países, então dentro de uma localização
+  // composta qualquer trecho cujo nome por extenso esteja nela vencia: a vaga
+  // americana saía com a bandeira do Peru, do Líbano ou do México.
+  it("UT-096 outro trecho nomeando estado americano prova os EUA", () => {
+    expect(countryOf("Peru, Indiana")).toBe("US");
+    expect(countryOf("Mexico, Missouri")).toBe("US");
+    expect(countryOf("Lebanon, NH")).toBe("US");
+    expect(countryOf("China, Texas")).toBe("US");
+    expect(countryOf("Cuba, New Mexico")).toBe("US");
+  });
+
+  it("UT-097 sem prova nenhuma dos EUA, o país continua sendo o país", () => {
+    // O que importa aqui é não estragar o caso legítimo, que é o comum: o nome
+    // do país no fim de uma localização composta.
+    expect(countryOf("Lima, Peru")).toBe("PE");
+    expect(countryOf("Beirut, Lebanon")).toBe("LB");
+    expect(countryOf("Mexico City, Mexico")).toBe("MX");
+    expect(countryOf("Remote / Poland")).toBe("PL");
+  });
+
+  it("UT-098 país no fim continua vencendo o estado que aparece antes", () => {
+    // `"Atlanta, Georgia, United States"` é a forma que já acertava, e a leitura
+    // de trás para frente tem de continuar acertando: "United States" é o último
+    // trecho, e a prova de estado não pode desviá-la.
+    expect(countryOf("Atlanta, Georgia, United States")).toBe("US");
+    expect(countryOf("Austin, Texas, USA")).toBe("US");
+  });
+});
+
+describe("a fileira de marcas de um grupo", () => {
+  const rotulos = {
+    semLocal: "sem localização",
+    comContagem: (name: string, count: number) => `${name} · ${count} vagas`,
+  };
+
+  it("UT-092 publicação sem localização recebe rótulo, nunca âncora vazia", () => {
+    // O `name: ""` que UT-091 fixa como saída certa do domínio chegava cru na
+    // apresentação: a âncora saía com zero caractere, `title=""` e
+    // `aria-label=""` — sem nada para ver e sem nome acessível para ouvir — e
+    // ainda gastava um dos lugares visíveis, empurrando um país real para o
+    // transbordo.
+    const { marcas } = countryRow(
+      7,
+      [
+        { id: 7, location: null },
+        { id: 8, location: "Brazil" },
+      ],
+      "pt-BR",
+      rotulos,
+    );
+
+    const semLocal = marcas.find((m) => m.id === 7)!;
+    expect(semLocal.rotulo).toBe("sem localização");
+    expect(semLocal.marca).toBe("sem localização");
+    expect(semLocal.marca.length).toBeGreaterThan(0);
+    // Rótulo do dicionário não é dado do usuário: a verificação da tela em
+    // inglês tem de enxergá-lo.
+    expect(semLocal.doUsuario).toBe(false);
+    // E a marca de país de verdade continua sendo dado do usuário.
+    expect(marcas.find((m) => m.id === 8)!.doUsuario).toBe(true);
+  });
+
+  it("UT-093 o transbordo leva ao hub, não à publicação canônica", () => {
+    // `+N` apontava para `/jobs/<id>` — o id da linha canônica, que é o menor do
+    // grupo e portanto o MESMO destino da primeira bandeira. Clicar em "+2"
+    // abria um país sorteado pela ordenação, que é o defeito que o hub existiu
+    // para remover do link do título.
+    const paises = [
+      "Netherlands", "France", "Germany", "Spain", "Portugal",
+      "Italy", "Poland", "Ireland", "Brazil", "Mexico",
+    ];
+    const postings = paises.map((location, i) => ({ id: 100 + i, location }));
+
+    const { marcas, restantes, maisHref } = countryRow(100, postings, "en", rotulos);
+
+    expect(marcas).toHaveLength(MARCAS_VISIVEIS);
+    expect(restantes).toBe(paises.length - MARCAS_VISIVEIS);
+    expect(maisHref).toBe("/jobs/100/paises");
+    // A primeira bandeira leva à publicação dela; o transbordo, a outro lugar.
+    expect(maisHref).not.toBe(`/jobs/${marcas[0]!.id}`);
+  });
+
+  it("UT-094 grupo pequeno não tem transbordo", () => {
+    const { marcas, restantes } = countryRow(
+      1,
+      [
+        { id: 1, location: "Brazil" },
+        { id: 2, location: "France" },
+      ],
+      "en",
+      rotulos,
+    );
+    expect(marcas).toHaveLength(2);
+    expect(restantes).toBe(0);
+  });
+
+  it("UT-095 país com várias publicações mostra a contagem no rótulo", () => {
+    const { marcas } = countryRow(
+      1,
+      [
+        { id: 1, location: "São Paulo, Brazil" },
+        { id: 2, location: "Rio de Janeiro, Brazil" },
+        { id: 3, location: "France" },
+      ],
+      "pt-BR",
+      rotulos,
+    );
+    expect(marcas.find((m) => m.id === 1)!.rotulo).toBe("Brasil · 2 vagas");
+    expect(marcas.find((m) => m.id === 3)!.rotulo).toBe("França");
   });
 });

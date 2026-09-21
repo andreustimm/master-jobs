@@ -116,20 +116,39 @@ export async function loadJobsView(input: {
     broughtBy: broughtBy ? { termKey: broughtBy.termKey } : undefined,
     newSince: broughtBy ? (broughtBy.lastVisitAt ?? "") : undefined,
     pay: payActive ? pay : undefined,
+    // O câmbio já está em mãos desde a linha de cima. Sem passar, cada leitura
+    // que normaliza pagamento ia buscá-lo de novo — duas consultas cada.
+    rates: fx,
   };
-  const [rows, total, facets, hiddenByPayRange] = await Promise.all([
+  // Duas leituras por vez, nunca as quatro.
+  //
+  // O pool abre três conexões (`max: 3` em `src/core/db/client.ts`) e o teto é
+  // `POOL - 1`, porque a instância serverless é reaproveitada e a requisição do
+  // lado também precisa de conexão. As quatro juntas pediam cinco consultas
+  // simultâneas — seis com faixa salarial —, e é o mesmo esgotamento que fazia
+  // `/candidate/skills` responder 200 sozinha e 504 quando pedida duas vezes.
+  // Esta é a tela mais aberta do produto, e foi a última a receber o teto.
+  //
+  // A ordem: a lista e a contagem primeiro, porque são o que a página mostra;
+  // as facetas depois, porque já picam em duas por conta própria.
+  const [rows, total] = await Promise.all([
     listBoard(candidateId, { ...filters, limit: input.pageSize, offset: (input.page - 1) * input.pageSize }),
     countBoard(candidateId, filters),
-    boardFacets(candidateId, {
-      minFit: state.fit,
-      cluster,
-      term: state.term,
-      sourceKinds: state.sources,
-      workMode: state.workMode,
-      track: scope ?? undefined,
-    }),
-    countHiddenByPayRange(candidateId, filters),
   ]);
+  const facets = await boardFacets(candidateId, {
+    minFit: state.fit,
+    cluster,
+    term: state.term,
+    sourceKinds: state.sources,
+    workMode: state.workMode,
+    track: scope ?? undefined,
+    // Os chips têm de contar a MESMA coisa que o rodapé. Sem isto o rodapé
+    // contava grupos e os chips contavam publicações, e um chip podia mostrar
+    // número maior que o total exibido ao lado dele.
+    groupRepeats: filters.groupRepeats,
+    rates: fx,
+  });
+  const hiddenByPayRange = await countHiddenByPayRange(candidateId, filters);
 
   if (broughtBy && candidateId !== null && !input.prefetch) {
     const termId = broughtBy.id;

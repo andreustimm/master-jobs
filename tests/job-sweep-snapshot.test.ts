@@ -130,6 +130,49 @@ describe("snapshot da varredura", () => {
     expect(candidato!.breakdown).toMatchObject({ title: 10, keywords: 9, benefits: 4 });
   });
 
+  it("UT-098 sem formulário de candidatura, a URL é a do anúncio", async () => {
+    // `url: row.applyUrl ?? row.url` tem dois lados, e só o primeiro tinha caso.
+    // Este é o lado comum: a maioria das fontes não publica `applyUrl`, e mandar
+    // o revisor para uma URL nula ou vazia é mandá-lo para lugar nenhum.
+    const dono = await seedDono("dono");
+    const vaga = await seedVaga(1, { applyUrl: null });
+    await seedNota(dono, vaga, 80);
+
+    const [candidato] = (await buildJobSweepSnapshot(dono, 60, 10)).candidates;
+
+    expect(candidato!.url).toBe("https://exemplo.test/1");
+  });
+
+  it("UT-099 `applyUrl` vazio também cai para a URL do anúncio", async () => {
+    // Regra 17 do repositório: `??` não protege contra string vazia, e várias
+    // fontes devolvem `""` para campo não preenchido. Se o valor vazio vencesse,
+    // o link do dossiê seria uma string vazia — e um `<a href="">` recarrega a
+    // página em que a pessoa está, em vez de abrir a vaga.
+    const dono = await seedDono("dono");
+    const vaga = await seedVaga(1, { applyUrl: "" });
+    await seedNota(dono, vaga, 80);
+
+    const [candidato] = (await buildJobSweepSnapshot(dono, 60, 10)).candidates;
+
+    expect(candidato!.url).not.toBe("");
+    expect(candidato!.url).toBe("https://exemplo.test/1");
+  });
+
+  it("UT-100 vaga sem URL nenhuma não estoura, e o dossiê sai com o campo vazio", async () => {
+    // Dado corrompido: `applyUrl` e `url` vazios. `url` é `notNull` no schema,
+    // então "" é o pior que o banco aceita — e o fallback do `??` existe para
+    // esse caso. O snapshot precisa sair; recusar a varredura inteira porque UMA
+    // vaga perdeu a URL seria trocar um link quebrado por nenhum candidato.
+    const dono = await seedDono("dono");
+    const vaga = await seedVaga(1, { applyUrl: "", url: "" });
+    await seedNota(dono, vaga, 80);
+
+    const [candidato] = (await buildJobSweepSnapshot(dono, 60, 10)).candidates;
+
+    expect(candidato!.id).toBe(vaga);
+    expect(candidato!.url).toBe("");
+  });
+
   it("UT-094 o estado do funil é o do candidato pedido, nunca o de outro", async () => {
     const dono = await seedDono("dono");
     const outro = await seedDono("outro");

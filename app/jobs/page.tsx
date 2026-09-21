@@ -12,6 +12,7 @@ import { candidateScope, requirePage } from "../auth";
 import { getTranslator } from "../i18n";
 import { TransitionLink } from "../transition-link";
 import { loadJobsView } from "./jobs-data";
+import { comVigia } from "../timeout-watch.ts";
 import { ScoreQueueCard, isRecalculating } from "../score-queue-card";
 import { candidateScoreQueueStatus } from "../../src/core/scoring/queue.ts";
 
@@ -33,9 +34,6 @@ export default async function Jobs({
   //
   // `candidateId` pode ser null. Nota de aderência, trilhas e termos salvos são
   // de UMA pessoa: para quem não é candidato eles simplesmente não existem.
-  const session = await requirePage("job:read");
-  const candidateId = candidateScope(session);
-
   const params = await searchParams;
   const one = (k: string) => {
     const v = params[k];
@@ -45,20 +43,46 @@ export default async function Jobs({
   const pageSize = Math.min(200, Math.max(10, Number(one("size") ?? 50)));
   const dense = one("dense") === "1";
 
-  const view = await loadJobsView({
-    candidateId,
-    params,
-    page,
-    pageSize,
-    // O roteador pré-carrega links visíveis; isso não é visita.
-    prefetch: (await headers()).get("next-router-prefetch") === "1",
-    schedule: (task) => after(task),
-    now: new Date(),
+  // O vigia cobre a autenticação e TODAS as leituras — ver `app/page.tsx` para
+  // por que ele não envolve a renderização.
+  //
+  // Esta é a tela mais aberta do produto e era a que mais pedia conexões: cinco
+  // ao mesmo tempo, seis com faixa salarial, contra um pool de três. O aviso aos
+  // 22 segundos não corrige nada; garante que uma recaída deixe rastro em vez de
+  // virar um `FUNCTION_INVOCATION_TIMEOUT` mudo, como aconteceu por semanas.
+  const { candidateId, view, queue } = await comVigia("/jobs", async () => {
+    // `job:read`, não `candidate:read`.
+    //
+    // O acervo é GLOBAL e a política concede leitura aos três papéis. A página
+    // pedia escopo de candidato, e o efeito era um recrutador entrar com a senha
+    // certa e receber 403 aqui — cada metade correta sozinha, a composição
+    // contradizendo a política. Nenhum teste puro vê isso; só um browser
+    // entrando como recrutador.
+    //
+    // `candidateId` pode ser null. Nota de aderência, trilhas e termos salvos
+    // são de UMA pessoa: para quem não é candidato eles simplesmente não
+    // existem.
+    const session = await requirePage("job:read");
+    const escopo = candidateScope(session);
+    const lido = await loadJobsView({
+      candidateId: escopo,
+      params,
+      page,
+      pageSize,
+      // O roteador pré-carrega links visíveis; isso não é visita.
+      prefetch: (await headers()).get("next-router-prefetch") === "1",
+      schedule: (task) => after(task),
+      now: new Date(),
+    });
+    // Com uma trilha escolhida e a fila pendente, as notas na tela são as
+    // anteriores: dizer isso é o que evita ler a edição como ignorada.
+    const fila =
+      escopo !== null && lido.state.track !== undefined
+        ? await candidateScoreQueueStatus(escopo)
+        : null;
+    return { candidateId: escopo, view: lido, queue: fila };
   });
   const { state, total, offer, broughtBy } = view;
-  // Com uma trilha escolhida e a fila pendente, as notas na tela são as
-  // anteriores: dizer isso é o que evita ler a edição como ignorada.
-  const queue = candidateId !== null && state.track !== undefined ? await candidateScoreQueueStatus(candidateId) : null;
   const showTrack = view.scope?.mode === "best";
   const trackNames = Object.fromEntries(view.tracks.map((track) => [track.id, track.name]));
 
@@ -72,7 +96,11 @@ export default async function Jobs({
     <main className="page-content-top" data-testid="route-jobs">
       <header className="pb-4">
         <h1 className="type-display-md chevron mb-4">{t("jobs.title")}</h1>
-        <p className="type-body-md text-muted-foreground">
+        {/* `data-testid` porque este é o número que o FILTRO produz, e a lista
+            abaixo mostra só uma página dele. Sem ele, um teste de filtro só
+            alcança o tamanho da página — que com mil vagas no acervo é o mesmo
+            antes e depois de filtrar, e a asserção passa sem medir nada. */}
+        <p className="type-body-md text-muted-foreground" data-testid="jobs-total" data-total={total}>
           {total.toLocaleString(locale)} {t("jobs.matching")}
           {state.term ? ` ${t("jobs.matchingFor", { term: state.term.term })}` : ""}.
         </p>

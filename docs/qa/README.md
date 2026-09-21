@@ -30,6 +30,48 @@ produto como uma pessoa real e grava vereditos e relatórios aqui.
 >
 > As falhas caíam com a carga e sumiram por completo. Uma delas me custou um
 > diagnóstico errado — cheguei a acusar o helper de transição de estar quebrado.
+>
+> **Medido de novo em 2026-09-21, e o padrão se repetiu com outros cenários.**
+> Seis execuções da mesma árvore, depois que a suíte deixou de abortar:
+>
+> | Execução | Falhas |
+> |---|---|
+> | 1 (após `pnpm check`) | WebKit, perfil público, task-04, E2E-011 |
+> | 2 (após `pnpm check`) | WebKit, perfil público, task-04, abort |
+> | 3 | só o abort — WebKit e perfil público **passaram** |
+> | 4 | só WebKit — **262 de 263** |
+> | 5 | WebKit, perfil público, task-04, e `transition E2E-016` |
+> | 6 | WebKit, perfil público, task-04 — 261 de 264 |
+>
+> `transition E2E-016` passou nas quatro primeiras e reprovou na quinta, sem
+> nenhuma mudança entre elas. **Conjunto de falhas que muda a cada execução é
+> carga.** E o WebKit é o caso extremo: estoura em `/jobs` com `networkidle`, em
+> `/jobs` com `domcontentloaded` e em `/candidate`, que renderiza uma fração —
+> passou uma vez em seis. Não é a rota nem o tipo de espera, e aumentar o timeout
+> esconderia lentidão real sem dizer nada.
+>
+> **Em 2026-09-21 o helper estava mesmo errado, e a prova veio de medir a árvore
+> limpa.** Numa PR, `observeNavigation` reprovava no redirect do login para o
+> cockpit três execuções de três; parecia defeito da PR. Duas execuções de
+> `origin/dev` **sem alteração nenhuma** deram 262/262 e depois reprovaram
+> exatamente ali: a falha já existia.
+>
+> A causa: num redirect aceito dentro do reducer do Server Action, o overlay
+> nasce no `useLayoutEffect` do observador de commit e morre no `useEffect`
+> seguinte — a janela em que ele existe no DOM é de **um quadro**, e o `locator`
+> do Playwright pode perdê-la inteira. Uma das execuções mostrou o estado
+> intermediário: o overlay anexou e desapareceu entre `waitFor` e
+> `elementHandle`.
+>
+> A espera passou a tolerar não encontrar o elemento, e a prova vem do
+> `MutationObserver` que o próprio helper já instalava — ele registra a inserção
+> mesmo depois de o elemento sair.
+>
+> **A lição de método:** antes de consertar uma reprovação que apareceu junto com
+> a sua mudança, meça a árvore sem ela. Duas execuções de baseline custam meia
+> hora e são a diferença entre consertar o defeito e consertar a coincidência.
+> Aqui a primeira hipótese — de que envolver a página inteira num promise mudava
+> a transmissão da árvore — era plausível, foi implementada, e estava errada.
 
 O dashboard sempre usa loopback. Sessões autenticadas usam contas e papéis de
 teste reais; não use mocks para confirmar uma jornada.
@@ -38,6 +80,101 @@ Crie contas de QA com `rtk pnpm jho auth add-user <email> --role <papéis>` e
 defina a senha com `rtk pnpm jho auth set-password <email>`. O mapeamento
 persona→conta e as credenciais ficam em armazenamento privado, nunca em
 `docs/qa/` nem no Git.
+
+## Tela nova não herda guarda nenhuma
+
+Toda guarda transversal deste repositório é um **array literal de caminhos**. São
+três guardas em **quatro listas** — o vazamento de português tem duas:
+
+| Guarda | Onde |
+|---|---|
+| Vazamento de português, com cookie `en` | `tests/e2e/ui.mjs`, duas listas |
+| Largura real em 375, 768 e 1024 px | `tests/e2e/ui.mjs`, `searchRoutes` |
+| Varredura axe WCAG 2.2 AA | `tests/e2e/a11y.mjs`, com a contagem `N/N` no fim |
+
+Rota nova **não entra em nenhuma** até alguém editar as quatro listas. Foi assim
+que `/jobs/<id>/paises` viveu duas releases fora de todas, com quatro chaves de
+dicionário só dela.
+
+E o custo apareceu no primeiro uso: ao entrar, a varredura reprovou por
+localização de vaga sem `data-user-content` — em **dois** lugares, um deles o
+popover de detalhe, que está no DOM mesmo fechado e aparece em toda tela com
+lista. Os dois existiam desde sempre e nenhuma rota varrida tinha fixture com
+acento na localização.
+
+E aconteceu de novo, em 2026-09-21, com `/jobs/<id>` — **a tela mais aberta do
+produto**, fora das quatro listas desde que existe. Ela servia `← vagas`,
+`Ver vaga na origem` e `visto em` em português com a interface em inglês.
+
+Essa terceira ocorrência mostrou dois limites que o aviso sozinho não cobre:
+
+- **A lista decide o que é medido, e os critérios decidem o que reprova.** Uma
+  rota de fora passa nos dois critérios **sem ser medida**, e a medição limpa
+  parece prova. Mas numa rota listada, literal de JSX só reprova se tiver acento
+  ou já for valor do dicionário português: `← vagas` seria pego porque já
+  existia como `jobCountries.back`; `Ver vaga na origem` e `visto em` passariam
+  com a rota na lista. A lista é necessária, não suficiente — a defesa continua
+  sendo o texto vir do dicionário.
+- **A rota não pode entrar sem `data-user-content`** nos campos que vêm do acervo:
+  o acento deles é legítimo e reprovaria. E a marca só fica provada se a fixture
+  varrida tiver acento — por isso a tela de detalhe é varrida em `/jobs/904000103`
+  (São Paulo), não na publicação holandesa do mesmo grupo.
+
+**`retest_status: pending` também vale para bug `verified`** quando a
+superfície que o reteste conferiu mudou depois dele: o veredito antigo não vale
+mais, e vazio diria "reteste dispensado". Assim `rg 'retest_status: pending'`
+lista todo reteste devido, qualquer que seja o status do bug.
+
+Há ainda uma quinta lista, mais estrita, no bloco *Mobile* de `tests/e2e/ui.mjs`:
+largura de 320 a 1024 px e conteúdo cortado dentro de cartão. `/jobs/<id>` já
+estava nela, pela fixture `905000031`.
+
+**Ao criar tela:** acrescente o caminho às quatro listas no mesmo commit, e ajuste
+a contagem final da varredura axe. Se a tela precisa de id, use uma fixture do
+`setup.mjs` em vez de um id inventado. Antes de acrescentar, marque com
+`data-user-content` o que vem do acervo, e **meça** largura e axe — rota que
+reprova ali é achado com correção própria, não parte do conserto de i18n.
+
+Uma rota entra nas listas com fixture que dê o que medir: sem localização
+acentuada no acervo, a varredura de acento passa por não ter o que ler.
+
+## Uma espera frágil apaga o relatório de todos os outros cenários
+
+`tests/e2e/ui.mjs` é um script sequencial dentro de um `try` só. Quando um passo
+estoura, a exceção pula para o `catch` final, que registra
+`✗ suíte concluiu sem exceção` — e tudo que vinha depois **não roda**. Em
+2026-09-21 o relatório saiu `42/43` com 262 verificações escritas: um `goto` do
+WebKit estourou e apagou o veredito de 219 cenários que nada tinham com ele.
+
+Duas regras saem daí:
+
+**Não use `networkidle` numa tela do acervo.** Ele espera 500 ms sem nenhuma
+requisição, e `/jobs` tem mil vagas no corpus E2E: entre prefetch de rota do Next,
+fontes e imagens da lista, esse silêncio pode nunca chegar. Espere
+`domcontentloaded` mais o elemento que o cenário realmente usa — é determinístico,
+é mais rápido, e falha dizendo o que faltou.
+
+A regra vale por si, mas **não era a causa do caso do WebKit**: trocar por
+`domcontentloaded` não resolveu, e apontar o cenário para `/candidate` também não.
+Registrado aqui para o próximo não repetir a tentativa — ver a segunda tabela em
+*Entrada e execução*.
+
+**Cenário que abre navegador ou contexto próprio vai dentro do seu próprio `try`.**
+A falha continua sendo falha, com o diagnóstico inteiro, mas deixa de decidir o
+destino dos outros. Hoje são dois: o bloco do WebKit e a navegação para o perfil
+público, que além do `try` tem recuperação por `goto` — porque o que vem depois
+dela são asserções de vazamento de dado, e verificação de segurança não pode ficar
+sem resposta porque uma navegação de cliente não chegou.
+
+Se um relatório vier com muito menos verificações do que o arquivo escreve,
+procure a exceção antes de acreditar no número: `N/N passaram` com `N` pequeno é
+uma suíte que parou, não uma suíte que passou.
+
+**Ajudante chamado muitas vezes precisa do mesmo tratamento.** `feedbackOf` é
+chamado dezenove vezes e esperava o aviso de mutação por 20 segundos; uma falha
+levava a suíte inteira. Hoje ele reprova um check nomeado e devolve leitura vazia.
+A regra geral: onde uma espera se repete, a falha dela não pode ser o fim da
+execução.
 
 ## Áreas
 
@@ -103,7 +240,13 @@ reseta seus cenários para `untested`. Refactor sem efeito observável declara
 - `automation-backlog/`: intenção de futura automação, um item por arquivo.
 - `templates/`: symlinks para os formatos canônicos das skills; sem cópias.
 
-`state.csv` é visão gerada e nunca é editada ou commitada. `evidence/` é
+`state.csv` é visão gerada e nunca é editada ou commitada. Quem a gera é
+`pnpm check:qa-tracker`, que também valida cada cenário contra o esquema e roda
+dentro do `pnpm check` e do CI — cenário com enum inventado, `pass` sem
+evidência ou `fixed` sem `fix_commits` reprova o gate local e a PR; nenhum hook
+o roda no commit. Antes de entrar no gate, o
+validador só rodava sob demanda, e a primeira execução em semanas achou 15
+registros inválidos. `evidence/` é
 ignorado por padrão: screenshots ficam no disco ou como artefato de CI, e o
 relatório versionado referencia seus caminhos.
 

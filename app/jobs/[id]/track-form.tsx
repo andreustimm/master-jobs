@@ -111,9 +111,14 @@ export function TrackForm({
       <span className="font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
         {labels.moveTo}
       </span>
+      {/* O rótulo visível acima não é `<label>`, então o `select` não tinha
+          nome acessível e o axe reprova `select-name`. Só a visão do dono
+          renderiza este formulário — a do recrutador, onde a tela foi medida
+          antes de entrar na varredura, não. */}
       <select
         ref={selectRef}
         name="status"
+        aria-label={labels.moveTo}
         data-testid="track-status"
         // O valor sai da lista oferecida, nunca do estado cru. Num conflito de
         // concorrência a revalidação traz opções novas e a escolha anterior

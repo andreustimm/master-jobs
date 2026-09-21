@@ -124,6 +124,7 @@ export const ptBR = {
     countriesLabel: "publicada em {count} países",
     countryWithCount: "{name} · {count} vagas",
     moreCountries: "+{count}",
+    countryUnknown: "sem localização",
     offerSearch: "Buscar “{term}” nas plataformas",
     offerSearchLead: "Salvar o termo busca vagas novas com ele nas plataformas cadastradas, todo dia.",
     emptyTerm: "Nenhuma vaga do acervo menciona “{term}”.",
@@ -329,6 +330,13 @@ export const ptBR = {
   jobCountries: {
     back: "← vagas",
     lead: "Esta vaga foi publicada em {countries} países, em {postings} anúncios. Escolha onde quer se candidatar.",
+    // O plural estava fixo na frase acima e o número contava marcas, não países:
+    // "publicada em 1 países, em 2 anúncios" acontecia com duas cidades do mesmo
+    // país, e "2 países" acontecia com um país mais uma localização que não
+    // resolve — o mesmo cabeçalho afirmava e negava, duas linhas acima do
+    // "1 sem país identificado".
+    leadOneCountry: "Esta vaga foi publicada em 1 país, em {postings} anúncios. Escolha onde quer se candidatar.",
+    leadNoCountry: "Esta vaga tem {postings} anúncios, nenhum com país identificado. Escolha onde quer se candidatar.",
     withoutCountry: "{count} sem país identificado — a localização aparece como veio.",
     empty: "Nenhuma publicação deste grupo continua aberta.",
   },
@@ -845,6 +853,14 @@ export const ptBR = {
     candidateHistory: "Histórico · {count} candidatura(s)",
   },
   jobDetail: {
+    back: "← vagas",
+    closed: "fechada",
+    seenOn: "visto em",
+    openAtSource: "Ver vaga na origem",
+    applyAtSource: "Aplicar →",
+    // A frase inteira numa chave, e não "de 100" mais "cluster" com o separador
+    // no JSX: a ordem das duas partes é decisão de quem traduz.
+    outOfHundredCluster: "de 100 · cluster",
     trackFits: "Nota por trilha",
     trackFitsLead: "A mesma vaga medida pela régua de cada trilha ativa.",
     computedFit: "calculada agora — sem nota guardada nesta trilha",

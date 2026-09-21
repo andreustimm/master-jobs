@@ -15,7 +15,7 @@ import { runDatabaseCleanup } from "./core/db/retention.ts";
 import { runMigrations } from "./core/db/migrate.ts";
 import { listBoard, primaryScoreFilter } from "./contexts/matching/index.ts";
 import { pipelineCounts, setApplicationStatus } from "./contexts/pursuit/index.ts";
-import { application, job, jobScore, positioningTask, source } from "./core/db/schema.ts";
+import { application, job, jobScore, positioningTask } from "./core/db/schema.ts";
 import { APPLICATION_STATUSES, type ApplicationStatus } from "./core/db/schema.ts";
 import { ageInDays, loadRates, refreshRates, STALE_AFTER_DAYS } from "./contexts/fx/index.ts";
 import { importJobs, parseFile } from "./core/ingest/import.ts";

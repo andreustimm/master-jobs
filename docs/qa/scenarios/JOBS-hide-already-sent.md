@@ -3,16 +3,16 @@ id: JOBS-hide-already-sent
 area: JOBS
 title: Esconder as vagas que já enviei
 persona: Andreus em triagem
-journey: J-preserve-application-decision
+journey: J-trust-the-filtered-board
 expected: Ligar "ainda não enviadas" tira da lista as vagas com envio registrado, inclusive as recusadas e as desistidas
 entry_points: /jobs?notApplied=1
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: docs/qa/reports/2026-09-21-docs-qa-jornada-do-quadro-filtrado.md
+last_report: docs/qa/reports/2026-09-21-docs-qa-jornada-do-quadro-filtrado.md
 overlaps: PIPE-save-resume-decision
 ---
 

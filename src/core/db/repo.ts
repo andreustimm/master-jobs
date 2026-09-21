@@ -203,6 +203,18 @@ export type BoardFilters = {
    * filter: it never reaches the scorer or a compensation range.
    */
   pay?: PayFilter;
+  /**
+   * A tabela de câmbio já carregada, para a leitura não ir buscá-la de novo.
+   *
+   * `loadRates()` são duas consultas sequenciais sem cache, e uma tela do quadro
+   * chama três leituras que normalizam pagamento — com a da própria página, o
+   * mesmo câmbio ia quatro vezes ao banco na mesma requisição, contra um pool de
+   * três conexões. Quem já tem a tabela passa; quem não passa continua buscando,
+   * então a CLI e os testes não mudam.
+   *
+   * `null` é resposta válida (não há cotação gravada) e diferente de ausente.
+   */
+  rates?: FxTable | null;
   limit?: number;
   offset?: number;
 };
@@ -255,7 +267,11 @@ function paySql(pay: PayFilter, fx: FxTable | null): PaySql {
 }
 
 async function payContext(opts: BoardFilters): Promise<PaySql | undefined> {
-  return opts.pay ? paySql(opts.pay, await loadRates()) : undefined;
+  if (!opts.pay) return undefined;
+  // `rates` ausente busca; `rates: null` é a resposta "não há cotação" e não
+  // deve virar uma segunda ida ao banco para descobrir o mesmo nada.
+  const rates = opts.rates !== undefined ? opts.rates : await loadRates();
+  return paySql(opts.pay, rates);
 }
 
 /**
@@ -281,15 +297,40 @@ function payCondition(pay: PayFilter | undefined, amount: SQL | undefined): SQL 
  * Measured on the corpus: 391 groups over 2.934 postings, and in every one of
  * them each posting carries a distinct location.
  */
-function groupKey(row: {
-  sourceId: PgColumn;
-  title: PgColumn;
-  companyName: PgColumn;
-}): SQL[] {
+function groupKey(
+  row: {
+    id: PgColumn;
+    sourceId: PgColumn;
+    title: PgColumn;
+    companyName: PgColumn;
+  },
+  sourceLabel: PgColumn | SQL,
+): SQL[] {
   return [
     sql`split_part(${row.sourceId}, ':', 1)`,
     sql`lower(btrim(${row.title}))`,
     sql`lower(btrim(${row.companyName}))`,
+    // **Empregador anônimo não agrupa: cada publicação é o próprio grupo.**
+    //
+    // Onde a fonte oculta o empregador, `company_name` é o rótulo da própria
+    // fonte — `companyName = config.label` em `sources/ats.ts`, porque a API não
+    // devolve a empresa. O Jobgether é 92% do acervo e ali os três primeiros
+    // elementos desta chave desabam: o primeiro é `lever`, o ATS e não o board;
+    // o terceiro é a constante `jobgether`. Sobra o título, e duas vagas de
+    // empresas PARCEIRAS DIFERENTES que compartilham um título viravam a mesma
+    // vaga em dois países — a de id maior ficava inalcançável no quadro, e o hub
+    // apresentava o empregador de uma como o segundo país da outra.
+    //
+    // O discriminador já existia neste arquivo (o filtro `namedEmployer` e a
+    // etiqueta da lista); só o agrupamento não perguntava.
+    //
+    // `''` e não `null` de propósito: `null = null` não é verdade em SQL, então
+    // com `null` nem as vagas de empregador nomeado casariam entre si.
+    sql`(case
+      when lower(btrim(${row.companyName})) = lower(btrim(coalesce(${sourceLabel}, '')))
+      then ${row.id}::text
+      else ''
+    end)`,
   ];
 }
 
@@ -297,6 +338,7 @@ function groupKey(row: {
 export type GroupPosting = { id: number; location: string | null };
 
 const APELIDO_DO_GRUPO = "vaga_do_grupo";
+const APELIDO_DA_FONTE_DA_IRMA = "fonte_da_irma";
 
 /**
  * As vagas do grupo de cada linha da página, a própria inclusive.
@@ -310,11 +352,13 @@ async function groupPostingsOf(linhas: number[]): Promise<Map<number, GroupPosti
   const porLinha = new Map<number, GroupPosting[]>();
   if (linhas.length === 0) return porLinha;
   const irma = alias(job, APELIDO_DO_GRUPO);
-  const [fonte, titulo, empresa] = groupKey(irma);
-  const [minhaFonte, meuTitulo, minhaEmpresa] = groupKey(job);
+  const fonteDaIrma = alias(source, APELIDO_DA_FONTE_DA_IRMA);
+  const [fonte, titulo, empresa, anonima] = groupKey(irma, fonteDaIrma.label);
+  const [minhaFonte, meuTitulo, minhaEmpresa, souAnonima] = groupKey(job, source.label);
   const rows = await getDb()
     .select({ linha: job.id, id: irma.id, location: irma.locationRaw })
     .from(job)
+    .leftJoin(source, eq(source.id, job.sourceId))
     .innerJoin(
       irma,
       and(
@@ -324,7 +368,10 @@ async function groupPostingsOf(linhas: number[]): Promise<Map<number, GroupPosti
         sql`${empresa} = ${minhaEmpresa}`,
       )!,
     )
-    .where(inArray(job.id, linhas))
+    .leftJoin(fonteDaIrma, eq(fonteDaIrma.id, irma.sourceId))
+    // O quarto elemento da chave fica no `where`, não no `on` da irmã: ele lê o
+    // rótulo da fonte DELA, que só existe depois do join seguinte.
+    .where(and(inArray(job.id, linhas), sql`${anonima} = ${souAnonima}`))
     .orderBy(asc(job.id), asc(irma.id));
   for (const row of rows) {
     const atual = porLinha.get(row.linha);
@@ -335,35 +382,84 @@ async function groupPostingsOf(linhas: number[]): Promise<Map<number, GroupPosti
   return porLinha;
 }
 
-const APELIDO_DA_IRMA = "vaga_irma";
-
-function canonicalOfGroup(): SQL {
-  const irma = alias(job, APELIDO_DA_IRMA);
-  const [fonte, titulo, empresa] = groupKey(irma);
-  const [minhaFonte, meuTitulo, minhaEmpresa] = groupKey(job);
-  return sql`not exists (
-    select 1 from ${job} as ${sql.identifier(APELIDO_DA_IRMA)}
-    where ${irma.closedAt} is null
-      and ${irma.id} < ${job.id}
-      and ${fonte} = ${minhaFonte}
-      and ${titulo} = ${meuTitulo}
-      and ${empresa} = ${minhaEmpresa}
+/**
+ * A publicação que representa o grupo — escolhida **entre as que passam pelos
+ * filtros do quadro**, e não entre todas as abertas.
+ *
+ * Antes era um anti-join: "ninguém aberto do grupo tem id menor que o meu". O
+ * anti-join não sabia de `minFit`, de `hideBlocked`, de `term` nem de
+ * `freshDays`, porque esses predicados moram no `where` de fora. Quando a
+ * publicação de menor id do grupo era justamente a que falhava um filtro, TODAS
+ * as irmãs falhavam o teste de canônica, e **o grupo inteiro desaparecia do
+ * quadro** mesmo com uma irmã casando tudo.
+ *
+ * E o gatilho era a tela padrão. `grouped` vale `true` por omissão e o corte é
+ * 45; geo vale 15 dos 100 pontos e sai de `locationRaw`, então duas publicações
+ * do mesmo grupo caem rotineiramente em lados opostos do corte. Com
+ * `?unblocked=1` era determinístico em vez de provável: o bloqueador vem da
+ * restrição de local, logo a publicação on-site nos EUA de um grupo é
+ * exatamente a que o filtro remove — e ela levava a irmã remota embora.
+ * `countBoard` compartilha o predicado, então o rodapé concordava com a lista e
+ * nada parecia errado.
+ *
+ * `row_number()` sobre o conjunto já filtrado resolve por construção: a janela
+ * só vê linhas que passaram, então a canônica é a de menor id ENTRE ELAS. Um
+ * filtro novo entra sem precisar ser repetido aqui, que é o que o anti-join não
+ * dava.
+ *
+ * A subconsulta não é correlacionada — nenhuma referência à linha de fora —,
+ * então o Postgres a avalia uma vez e casa por hash.
+ */
+function canonicalOfGroup(opts: BoardFilters, candidateId: number | null, pay?: PaySql): SQL {
+  const chave = sql.join(groupKey(job, source.label), sql`, `);
+  // Sem `groupRepeats`, senão a condição se chamaria de dentro dela mesma.
+  const dentro = boardConditions({ ...opts, groupRepeats: false }, candidateId, pay);
+  return sql`${job.id} in (
+    select ordenado.id from (
+      select ${job.id} as id,
+             row_number() over (partition by ${chave} order by ${job.id}) as rn
+      from ${job}
+      left join ${jobScore} on ${scoreJoin(candidateId, opts.track)}
+      left join ${application} on ${and(
+        eq(application.jobId, job.id),
+        scopedTo(application.candidateId, candidateId),
+      )}
+      left join ${source} on ${eq(source.id, job.sourceId)}
+      left join ${jobPage} on ${eq(jobPage.jobId, job.id)}
+      where ${and(...dentro)}
+    ) ordenado
+    where ordenado.rn = 1
   )`;
 }
 
 const APELIDO_DA_ANCORA = "vaga_ancora";
+const APELIDO_DA_FONTE_DA_ANCORA = "fonte_da_ancora";
 
-/** True for every posting that shares the anchor's group. */
+/**
+ * True for every posting that shares the anchor's group.
+ *
+ * **A âncora tem de estar aberta.** O contrato de `sameGroupAs` diz que o link
+ * vale enquanto a publicação que ele nomeia está aberta e dá 404 quando ela
+ * fecha; sem o predicado, linha fechada continuava sendo linha, o `exists`
+ * casava, o `isNull(closedAt)` de fora derrubava só a âncora, e a página caía em
+ * `rows[0]`: cabeçalho, contagem e lista descrevendo OUTRA publicação sob a URL
+ * da que a pessoa tinha salvo.
+ */
 function sameGroupCondition(anchorId: number): SQL {
   const ancora = alias(job, APELIDO_DA_ANCORA);
-  const [fonte, titulo, empresa] = groupKey(ancora);
-  const [minhaFonte, meuTitulo, minhaEmpresa] = groupKey(job);
+  const fonteDaAncora = alias(source, APELIDO_DA_FONTE_DA_ANCORA);
+  const [fonte, titulo, empresa, anonima] = groupKey(ancora, fonteDaAncora.label);
+  const [minhaFonte, meuTitulo, minhaEmpresa, souAnonima] = groupKey(job, source.label);
   return sql`exists (
     select 1 from ${job} as ${sql.identifier(APELIDO_DA_ANCORA)}
+    left join ${source} as ${sql.identifier(APELIDO_DA_FONTE_DA_ANCORA)}
+      on ${fonteDaAncora.id} = ${ancora.sourceId}
     where ${ancora.id} = ${anchorId}
+      and ${ancora.closedAt} is null
       and ${fonte} = ${minhaFonte}
       and ${titulo} = ${meuTitulo}
       and ${empresa} = ${minhaEmpresa}
+      and ${anonima} = ${souAnonima}
   )`;
 }
 
@@ -410,10 +506,25 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
     );
   }
   if (opts.sourceKinds && opts.sourceKinds.length > 0) {
-    const likes = opts.sourceKinds.map((kind) => sql`${job.sourceId} like ${`${kind}:%`}`);
-    conditions.push(sql`(${sql.join(likes, sql` or `)})`);
+    // Igualdade sobre o prefixo extraído, não `like`.
+    //
+    // O valor viaja como parâmetro, então nunca houve injeção — mas
+    // metacaractere de `like` DENTRO de um parâmetro continua sendo
+    // metacaractere, e a fonte é texto livre lido da URL. `?source=%` montava
+    // `like '%:%'`, que toda `source_id` casa: o chip aparecia como filtro ativo
+    // e o quadro mostrava todas as fontes. `?source=_ever` escolhia
+    // `lever:jobgether`, uma fonte que ninguém marcou.
+    //
+    // `split_part` é o mesmo recorte que `boardFacets` usa para listar as fontes,
+    // então o que o combo oferece e o que o filtro aceita passam a ser a mesma
+    // coisa — é a regra do vizinho `strpos` aplicada aqui.
+    const kinds = sql.join(
+      opts.sourceKinds.map((kind) => sql`${kind}`),
+      sql`, `,
+    );
+    conditions.push(sql`split_part(${job.sourceId}, ':', 1) in (${kinds})`);
   }
-  if (opts.groupRepeats) conditions.push(canonicalOfGroup());
+  if (opts.groupRepeats) conditions.push(canonicalOfGroup(opts, candidateId, pay));
   if (opts.sameGroupAs !== undefined) conditions.push(sameGroupCondition(opts.sameGroupAs));
   if (opts.company) {
     // `strpos`, not `like`: the value travels as a parameter and `%` or `_`
@@ -641,7 +752,13 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
   // scanned the complete open corpus and its candidate-scoped joins, so one
   // cockpit render paid six full scans before loading a single card. Conditional
   // aggregation produces the same facets with one corpus scan.
-  const [summaryRows, clusterRows, sourceRows] = await Promise.all([
+  //
+  // Duas de cada vez, não três. Três era o pool inteiro (`max: 3` em
+  // `client.ts`) dentro de UMA leitura, então qualquer chamador que somasse
+  // outra consulta já esgotava as conexões — e todos somam. O teto é `POOL - 1`
+  // porque a instância serverless é reaproveitada: a requisição do lado também
+  // precisa de conexão.
+  const [summaryRows, clusterRows] = await Promise.all([
     getDb()
       .select({
         total: sql<number>`count(*)`,
@@ -674,20 +791,20 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
       .where(and(...boardConditions(clusterDimension, candidateId), sql`${jobScore.cluster} is not null`))
       .groupBy(jobScore.cluster)
       .then((rows) => rows.map((row) => row.cluster!).sort()),
-    getDb()
-      .select({ kind: sourceKind })
-      .from(job)
-      .leftJoin(jobScore, scoreJoin(candidateId, base.track))
-      .leftJoin(
-        application,
-        and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
-      )
-      .leftJoin(source, eq(source.id, job.sourceId))
-      .leftJoin(jobPage, eq(jobPage.jobId, job.id))
-      .where(and(...boardConditions(sourceDimension, candidateId)))
-      .groupBy(sourceKind)
-      .then((rows) => rows.map((row) => row.kind).sort()),
   ]);
+  const sourceRows = await getDb()
+    .select({ kind: sourceKind })
+    .from(job)
+    .leftJoin(jobScore, scoreJoin(candidateId, base.track))
+    .leftJoin(
+      application,
+      and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
+    )
+    .leftJoin(source, eq(source.id, job.sourceId))
+    .leftJoin(jobPage, eq(jobPage.jobId, job.id))
+    .where(and(...boardConditions(sourceDimension, candidateId)))
+    .groupBy(sourceKind)
+    .then((rows) => rows.map((row) => row.kind).sort());
   const summary = summaryRows[0];
   return {
     total: Number(summary?.total ?? 0),

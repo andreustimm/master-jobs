@@ -3,16 +3,16 @@ id: JOBS-group-repeated-countries
 area: JOBS
 title: Ler numa linha só a vaga que foi publicada em vários países
 persona: Andreus em triagem
-journey: J-find-jobs-by-work-mode
+journey: J-trust-the-filtered-board
 expected: A mesma vaga repetida por país ocupa uma linha, com a bandeira de cada país; clicar numa bandeira abre a publicação daquele país
 entry_points: /jobs?q=Engineering+Manager; /jobs?ungrouped=1
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: docs/qa/evidence/2026-09-21-quadro-com-fixtures-de-agrupamento.txt
+last_report: docs/qa/reports/2026-09-21-execucao-concorrencia.md
 overlaps: JOBS-source-multi-select
 ---
 
@@ -39,3 +39,24 @@ A conferir:
   publicações.
 - No Windows a bandeira não é desenhada e aparecem as duas letras do país —
   degradação esperada, e o nome continua no rótulo.
+
+## Verificado no ambiente manual em 2026-09-21, depois das fixtures
+
+O bloqueio de fixture caiu: `setup-manual.ts` passou a semear a mesma vaga em quatro
+publicações, duas delas no mesmo país. O quadro mostra:
+
+```
+- link "Engineering Manager Country Fixture"
+- StaticText "Country Fixture Lab"
+- group "posted in 3 countries"
+  - link "Netherlands"          🇳🇱
+  - link "France"               🇫🇷
+  - link "Brazil · 2 postings"  🇧🇷
+```
+
+Quatro publicações, **três** países, e o repetido anunciado como `2 postings` em vez
+de aparecer duas vezes. A paginação diz `1 – 3 de 3`: a linha agrupada conta como
+uma, e nenhuma publicação some do total.
+
+Evidência: `docs/qa/evidence/2026-09-21-quadro-com-fixtures-de-agrupamento.txt`
+(árvore de acessibilidade completa, ignorada pelo Git por desenho).

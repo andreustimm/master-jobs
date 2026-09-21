@@ -149,6 +149,10 @@ describe("Jobs screen filters in the URL", () => {
       disclosed: "1",
       sort: "recent",
       source: ["lever", "ashby"],
+      // `ungrouped` é o único parâmetro que carrega a EXCEÇÃO e não a regra, e
+      // era o único que este caso — cujo título diz "every new parameter" — não
+      // incluía.
+      ungrouped: "1",
     });
 
     const again = readFilters(parse(href("/jobs", state, {})));
@@ -173,5 +177,61 @@ describe("Jobs screen filters in the URL", () => {
     ];
     expect(defaultPay(target)).toEqual({ currency: "BRL", period: "month" });
     expect(defaultPay(null)).toEqual({ currency: "USD", period: "month" });
+  });
+  it("UT-070 o teto do filtro salarial é 2.000.000, e está preso por número", () => {
+    // O caso anterior usava `10000001`, o teto ANTIGO de dez milhões: ele
+    // continua inválido por estar acima do novo, então passava pela razão errada
+    // e não reprovaria se alguém devolvesse o limite antigo.
+    expect(readFilters({ pay: "2000000" }).pay?.min).toBe(2_000_000);
+    expect(readFilters({ payMax: "2000000" }).pay?.max).toBe(2_000_000);
+
+    const acima = readFilters({ pay: "2000001" });
+    expect(acima.pay?.min).toBeUndefined();
+    expect(acima.notices).toEqual(["pay_invalid"]);
+  });
+
+  it("UT-071 `ungrouped` carrega a exceção: ausente agrupa, `1` desagrupa", () => {
+    // Agrupar é o padrão, e a URL guarda o desvio. Se fosse o contrário, todo
+    // link comum carregaria um parâmetro.
+    expect(readFilters({}).grouped).toBe(true);
+    expect(toBoardFilters(readFilters({})).groupRepeats).toBe(true);
+
+    expect(readFilters({ ungrouped: "1" }).grouped).toBe(false);
+    expect(toBoardFilters(readFilters({ ungrouped: "1" })).groupRepeats).toBe(false);
+
+    // Qualquer outro valor não é a exceção: só `1` desliga.
+    expect(readFilters({ ungrouped: "0" }).grouped).toBe(true);
+    expect(readFilters({ ungrouped: "sim" }).grouped).toBe(true);
+
+    // E o link de volta só escreve o parâmetro quando ele é preciso.
+    expect(href("/jobs", readFilters({}), {})).not.toContain("ungrouped");
+    expect(href("/jobs", readFilters({ ungrouped: "1" }), {})).toContain("ungrouped=1");
+  });
+
+  it("UT-072 parâmetro de faixa só com espaço é campo vazio, não erro", () => {
+    // `?pay=%20` chega como `" "`: um link copiado, ou uma URL escrita à mão.
+    // Campo vazio é escolha, e o contrato diz isso — dizer "valor inválido" para
+    // um parâmetro em branco é acusar o leitor de um erro que ele não cometeu.
+    for (const branco of [" ", "   ", "\t"]) {
+      const piso = readFilters({ pay: branco });
+      expect(piso.pay?.min, branco).toBeUndefined();
+      expect(piso.notices, branco).toEqual([]);
+
+      const teto = readFilters({ payMax: branco });
+      expect(teto.pay?.max, branco).toBeUndefined();
+      expect(teto.notices, branco).toEqual([]);
+    }
+  });
+
+  it("UT-073 as duas faixas invertidas avisam UMA vez, não duas", () => {
+    // As duas compartilham a chave do dicionário. Empilhar sem conferir dava a
+    // mesma frase duas vezes, dois irmãos com a mesma `key` do React, e um
+    // `data-testid` resolvendo para dois elementos.
+    const state = readFilters({ fit: "80", fitMax: "20", pay: "5000", payMax: "1000" });
+
+    expect(state.notices.filter((n) => n === "range_swapped")).toHaveLength(1);
+    // E as duas faixas foram efetivamente trocadas, não só avisadas.
+    expect([state.fit, state.fitMax]).toEqual([20, 80]);
+    expect([state.pay?.min, state.pay?.max]).toEqual([1000, 5000]);
   });
 });

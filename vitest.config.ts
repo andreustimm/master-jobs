@@ -44,11 +44,25 @@ export default defineConfig({
         "src/**/*.d.ts",
       ],
       reporter: ["text-summary", "json-summary"],
+      /**
+       * O piso é o que foi alcançado, menos uma margem estreita de propósito.
+       *
+       * Deixá-lo abaixo do alcançado permite que a cobertura escorra sem que
+       * nada reprove — foi o que aconteceu com `branches` em 90 enquanto o real
+       * andava por 92: cinco pontos de folga são cinco pontos que podem ser
+       * perdidos em silêncio. Subir o piso junto com a cobertura é o que fecha
+       * essa porta.
+       *
+       * A margem existe porque dois números aqui não são estáveis ao decimal:
+       * arquivo novo em `src/` muda o denominador antes de o teste chegar, e um
+       * `it` marcado como `skip` numa investigação reduz o numerador. Meio ponto
+       * absorve isso sem absorver a remoção de uma suíte.
+       */
       thresholds: {
-        statements: 95,
-        branches: 90,
-        functions: 95,
-        lines: 95,
+        statements: 97,
+        branches: 94.5,
+        functions: 97.5,
+        lines: 97.9,
       },
     },
   },

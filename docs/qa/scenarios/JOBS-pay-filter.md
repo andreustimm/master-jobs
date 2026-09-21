@@ -3,16 +3,16 @@ id: JOBS-pay-filter
 area: JOBS
 title: Filtrar e ordenar Vagas por faixa de pagamento na minha moeda
 persona: Andreus em triagem
-journey: J-manage-target-tracks
+journey: J-trust-the-filtered-board
 expected: A faixa (mínimo e máximo) na moeda e no período escolhidos filtra vagas convertidas; pagamento não informado ou não comparável fica visível e marcado
 entry_points: /jobs?pay=<min>&payMax=<max>&cur=USD&per=month; /jobs?sort=pay
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: docs/qa/evidence/2026-09-21-docs-qa-jornada-do-quadro-filtrado/pay-disclosed-only-empty.png
+last_report: 2026-09-21-docs-qa-jornada-do-quadro-filtrado
 overlaps: JOBS-track-selector-fit
 ---
 

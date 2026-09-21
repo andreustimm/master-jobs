@@ -199,6 +199,79 @@ describe("filtros e ordenação do quadro", () => {
     expect(cru.every((r) => r.repeats.length === 0)).toBe(true);
   });
 
+  it("empregador anônimo não agrupa: cada publicação é o próprio grupo", async () => {
+    // O Jobgether é 92% do acervo e oculta o empregador por desenho:
+    // `company_name` é o rótulo da própria fonte. Ali os três primeiros
+    // elementos da chave desabam — `lever` é o ATS, não o board, e a empresa é
+    // uma constante — e sobrava o título. Duas vagas de empresas PARCEIRAS
+    // DIFERENTES que compartilhassem um título viravam a mesma vaga em dois
+    // países: a de id maior ficava inalcançável no quadro, e o hub mostrava o
+    // empregador de uma como o segundo país da outra.
+    const candidateId = await seedCandidato("dono", true);
+    const anonima = {
+      title: "Senior Software Engineer",
+      sourceId: "lever:jobgether",
+      // Igual ao rótulo que `seedVaga` dá à fonte: é o que "anônimo" significa.
+      companyName: "Rótulo lever:jobgether",
+    };
+    const espanha = await seedVaga({ n: 50, ...anonima, locationRaw: "Spain" });
+    const brasil = await seedVaga({ n: 51, ...anonima, locationRaw: "Brazil" });
+    // Controle, no MESMO teste: com empregador nomeado a mesma forma agrupa.
+    const nomeada = { title: "Staff Engineer", sourceId: "lever:acme", companyName: "Payments Co" };
+    const portugal = await seedVaga({ n: 52, ...nomeada, locationRaw: "Portugal" });
+    const mexico = await seedVaga({ n: 53, ...nomeada, locationRaw: "Mexico" });
+    for (const id of [espanha, brasil, portugal, mexico]) await seedScore(candidateId, id, 70);
+
+    const agrupado = await listBoard(candidateId, { groupRepeats: true });
+    // As duas anônimas ficam; das nomeadas, só a de menor id.
+    expect(new Set(agrupado.map((r) => r.jobId))).toEqual(new Set([espanha, brasil, portugal]));
+    await expect(countBoard(candidateId, { groupRepeats: true })).resolves.toBe(3);
+
+    // E nenhuma anônima carrega a outra como "segundo país".
+    for (const id of [espanha, brasil]) {
+      expect(agrupado.find((r) => r.jobId === id)!.repeats.map((v) => v.location)).toEqual([
+        id === espanha ? "Spain" : "Brazil",
+      ]);
+    }
+    // Pelo hub, idem: a âncora anônima reúne só ela mesma.
+    await expect(
+      listBoard(candidateId, { sameGroupAs: espanha }).then((r) => r.map((x) => x.jobId)),
+    ).resolves.toEqual([espanha]);
+  });
+
+  it("grupo cuja publicação de menor id é cortada por um filtro não desaparece", async () => {
+    // O anti-join escolhia a canônica entre TODAS as abertas, sem saber de
+    // `minFit`. Quando a de menor id falhava o corte, todas as irmãs falhavam o
+    // teste de canônica e o grupo inteiro saía do quadro — com uma irmã casando
+    // tudo. E como `countBoard` compartilha o predicado, o rodapé concordava
+    // com a lista e nada parecia errado.
+    //
+    // O gatilho é a tela padrão: agrupamento ligado e corte em 45. Geo vale 15
+    // dos 100 pontos e sai de `locationRaw`, então duas publicações do mesmo
+    // grupo caem rotineiramente em lados opostos do corte.
+    const candidateId = await seedCandidato("dono", true);
+    const mesma = { title: "Engineering Manager", companyName: "Payments Co", sourceId: "lever:acme" };
+    const austin = await seedVaga({ n: 60, ...mesma, locationRaw: "Austin, TX" });
+    const remoto = await seedVaga({ n: 61, ...mesma, locationRaw: "Remote — Brazil" });
+    await seedScore(candidateId, austin, 41);
+    await seedScore(candidateId, remoto, 63);
+
+    const acima = await listBoard(candidateId, { groupRepeats: true, minFit: 45 });
+    expect(acima.map((r) => r.jobId)).toEqual([remoto]);
+    await expect(countBoard(candidateId, { groupRepeats: true, minFit: 45 })).resolves.toBe(1);
+
+    // Sem corte, a canônica volta a ser a de menor id — a regra não mudou, só
+    // passou a ser aplicada sobre o conjunto que os filtros deixam passar.
+    const tudo = await listBoard(candidateId, { groupRepeats: true });
+    expect(tudo.map((r) => r.jobId)).toEqual([austin]);
+
+    // Corte acima das duas continua devolvendo nada: o grupo não é ressuscitado
+    // por ter irmã, só deixa de ser suprimido por ela.
+    await expect(
+      listBoard(candidateId, { groupRepeats: true, minFit: 90 }),
+    ).resolves.toEqual([]);
+  });
+
   it("o hub reúne o grupo a partir de qualquer publicação dele", async () => {
     const candidateId = await seedCandidato("dono", true);
     const mesma = { title: "Engineering Manager", companyName: "Payments Co", sourceId: "lever:acme" };

@@ -53,6 +53,15 @@ jobs:
           pnpm check:release-ready \
             --commit-message-file "$RUNNER_TEMP/release-commit-message"
 
+      - name: Tracker de QA conforme o esquema
+        # `docs/qa/state.csv` é visão gerada e ignorada pelo git, então o
+        # esquema dos cenários só era conferido quando alguém rodava o
+        # validador de propósito. Quando alguém rodou, em 2026-09-21, achou 15
+        # registros inválidos em 15 arquivos, alguns de semanas antes. Custa
+        # menos de um segundo, e registro fora do esquema passa a reprovar
+        # aqui, no mesmo portão do `pnpm check` local.
+        run: pnpm check:qa-tracker
+
       - name: Tipos
         run: pnpm typecheck
 
@@ -79,9 +88,14 @@ jobs:
         run: pnpm test:pwa-browser
 
       - name: Testes e cobertura
-        # Os limiares moram em vitest.config.ts (95% statements, 95% lines, 95%
-        # funcs, 90% branches). O comando falha sozinho quando algum não é
-        # alcançado — não há número repetido aqui.
+        # Os limiares moram em `vitest.config.ts`, e o comando falha sozinho
+        # quando algum não é alcançado.
+        #
+        # Este comentário TINHA os quatro números, e eles envelheceram: foram
+        # elevados junto com a cobertura e aqui continuaram os antigos. Um número
+        # repetido em dois lugares só informa enquanto ninguém mexe no primeiro,
+        # e depois desinforma — que é pior do que não estar escrito. O config é a
+        # fonte, e é lá que se lê qual é o piso de hoje.
         run: pnpm vitest run --coverage
 
       - name: Contratos das skills de QA

@@ -9,9 +9,9 @@ entry_points: /jobs/<id>
 qa_status: pass
 bug_ids: BUG-20260917-transition-note-never-readable
 fix_status: fixed
-retest_status: verified
+retest_status: pass
 fix_commits: cb00cbb
-evidence:
+evidence: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md
 last_report: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md
 overlaps: PIPE-save-resume-decision; PIPE-note-on-unchanged-stage
 ---

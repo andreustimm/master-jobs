@@ -198,12 +198,27 @@ dashboard Next.js em `localhost:3000`.
 > tradução existia e o componente a ignorava. Chave duplicada é erro de
 > compilação, o que ajuda, mas só depois do trabalho perdido.
 >
-> `pnpm test:e2e` percorre sete telas em inglês e reprova por dois critérios:
-> texto que **é** valor do dicionário português, e texto com acento. A primeira
+> `pnpm test:e2e` percorre em inglês as rotas de duas **listas literais** em
+> `tests/e2e/ui.mjs` (hoje treze) e reprova por dois critérios: texto que **é**
+> valor do dicionário português, e texto com acento. A primeira
 > versão desta verificação usava lista de palavras escrita à mão — ela passava
 > com "Editar", "Vocabulário" e "Práticas" na tela, porque a lista era o
 > inventário do que já tinha sido corrigido. Dado do usuário fica de fora por
 > `data-user-content`: o currículo tem "São Paulo" e continua tendo em inglês.
+>
+> **A lista decide o que é medido; os dois critérios, o que reprova.** Uma tela
+> fora das listas passa nos dois critérios sem ser medida — e numa tela listada,
+> literal de JSX só reprova se tiver acento ou já for valor do dicionário
+> português. `Ver vaga na origem` e `visto em` passariam mesmo com a rota na
+> lista. A lista é necessária, não suficiente: a regra acima (texto vem do
+> dicionário) continua sendo a defesa, e a varredura é a rede.
+> Foi assim que `/jobs/<id>`, a tela mais aberta do produto, serviu `← vagas`,
+> `Ver vaga na origem` e `visto em` em português com a interface em inglês, desde
+> que existe. E ela só pôde entrar na lista depois de o nome da empresa, a
+> localização e o rótulo da fonte ganharem `data-user-content`, porque esse texto
+> vem do acervo e é acentuado de direito. Por isso a publicação varrida é
+> acentuada (`São Paulo, …`): numa fixture sem acento, tirar a marca não
+> reprovaria nada. Rota nova entra nas listas no mesmo commit que a cria.
 > `pt-BR` e `en` em `src/core/i18n/`. As chaves são tipadas contra o dicionário
 > português, então tradução faltando é erro de compilação — e não espaço em
 > branco descoberto por um usuário. Página obtém o tradutor com
@@ -505,6 +520,9 @@ seção define a ordem e os gates, não duplica a cadência.
 Artefatos autorais (`personas`, `journeys`, `scenarios`, `charters`, `bugs` e
 `reports`) são commitados. `docs/qa/state.csv` é uma visão gerada e
 `docs/qa/evidence/` guarda evidência volumosa local/CI; ambos ficam ignorados.
+Como a visão não é versionada, quem confere o esquema dos cenários é
+`pnpm check:qa-tracker`, dentro do `pnpm check` e do CI: registro fora do
+esquema reprova o gate local e a PR — nenhum hook o roda no commit.
 Mudanças apenas na documentação ou nos metadados das skills validam estrutura,
 links e scripts afetados; não disparam a suíte do produto sem risco de runtime.
 O navegador de jornada é a dependência local fixada `agent-browser`; instale o
@@ -644,7 +662,7 @@ rtk pnpm jho report              # markdown pro vault Obsidian
 rtk pnpm jho profile             # valida profile.yaml
 
 # desenvolvimento
-rtk pnpm check                   # typecheck + testes — verde antes de qualquer entrega
+rtk pnpm check                   # changelogs, tracker de QA, typecheck, testes — verde antes de qualquer entrega
 rtk pnpm test:qa-skills          # contratos dos conversores do tracker QA
 rtk pnpm test:e2e                # browser real isolado: build, PostgreSQL e porta temporários
 rtk pnpm db:generate             # gera migration após editar schema.ts

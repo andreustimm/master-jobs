@@ -40,7 +40,6 @@ export default async function NewTrackPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { t } = await getTranslator();
-  const { candidateId } = await requireOwnCandidatePage("candidate:read");
   const params = await searchParams;
   const one = (key: string) => {
     const value = params[key];
@@ -49,12 +48,18 @@ export default async function NewTrackPage({
   const term = one("term");
   const name = one("name");
 
-  const primary = await ensurePrimaryTrack(candidateId);
-  // A outra tela que já devolveu 504 por disputa de conexão. O vigia não
-  // corrige — faz o travamento deixar rastro, que é o que faltava.
-  const suggestion = term
-    ? await comVigia("/searches/tracks/new", () => trackSuggestion(candidateId, term))
-    : null;
+  // O vigia cobre a autenticação e `ensurePrimaryTrack`, que abre transação —
+  // as duas rodavam fora dele. Ver `app/page.tsx` para por que a renderização
+  // fica de fora.
+  const { candidateId, primary, suggestion } = await comVigia(
+    "/searches/tracks/new",
+    async () => {
+      const { candidateId: escopo } = await requireOwnCandidatePage("candidate:read");
+      const principal = await ensurePrimaryTrack(escopo);
+      const sugestao = term ? await trackSuggestion(escopo, term) : null;
+      return { candidateId: escopo, primary: principal, suggestion: sugestao };
+    },
+  );
   const pending = !primary?.target;
   const target = suggestion?.ok ? suggestion.target : primary?.target ? blank(primary.target) : null;
   const fields = target ? targetToFields(name || (suggestion?.ok ? suggestion.term.term : ""), target) : null;
