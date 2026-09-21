@@ -765,7 +765,7 @@ Nunca mapeie campos a partir de documentação sem conferir resposta real.
 | Vagas com bloqueador | 468 |
 | Descrições offline | 207 |
 | Candidaturas no funil | 2 |
-| Testes | 1.609 + 89 e2e · cobertura 97,7% fora do CLI · `cli.ts` 39% |
+| Testes (21/09/2026) | 2.968 + 263 verificações e2e · cobertura de `src/` 98,4% linhas / 95,0% branches, `cli.ts` incluído |
 
 > A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
 > candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de
