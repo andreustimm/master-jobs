@@ -79,9 +79,14 @@ jobs:
         run: pnpm test:pwa-browser
 
       - name: Testes e cobertura
-        # Os limiares moram em vitest.config.ts (95% statements, 95% lines, 95%
-        # funcs, 90% branches). O comando falha sozinho quando algum não é
-        # alcançado — não há número repetido aqui.
+        # Os limiares moram em `vitest.config.ts`, e o comando falha sozinho
+        # quando algum não é alcançado.
+        #
+        # Este comentário TINHA os quatro números, e eles envelheceram: foram
+        # elevados junto com a cobertura e aqui continuaram os antigos. Um número
+        # repetido em dois lugares só informa enquanto ninguém mexe no primeiro,
+        # e depois desinforma — que é pior do que não estar escrito. O config é a
+        # fonte, e é lá que se lê qual é o piso de hoje.
         run: pnpm vitest run --coverage
 
       - name: Contratos das skills de QA
