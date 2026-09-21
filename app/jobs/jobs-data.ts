@@ -18,6 +18,7 @@ import {
   type TrackScope,
 } from "../../src/contexts/matching/index.ts";
 import { loadRates } from "../../src/contexts/fx/index.ts";
+import type { StageTimer } from "../../src/core/observability.ts";
 import { defaultPay, readFilters, toBoardFilters, type FilterNotice, type FilterState } from "../filter-state";
 
 /** Abaixo disto, a oferta de buscar o termo nas plataformas ganha destaque. */
@@ -66,31 +67,48 @@ export async function loadJobsView(input: {
   prefetch: boolean;
   schedule: (task: () => Promise<void>) => void;
   now: Date;
+  /** Mede cada estágio de espera do banco; ausente, a leitura roda sem medir. */
+  timer?: StageTimer;
 }): Promise<JobsView> {
   const { candidateId } = input;
+  const stage = <T>(name: string, work: () => Promise<T>): Promise<T> =>
+    input.timer ? input.timer.time(name, work) : work();
   const state = readFilters(input.params);
   const notices = [...state.notices];
 
+  // Trilhas e câmbio não dependem um do outro, e cada ida ao banco é um
+  // round-trip: juntas custam um. Em série eram quatro ou cinco esperas — as
+  // trilhas lidas de novo pelo escopo (e pelo cluster, quando há) e o câmbio em
+  // duas consultas. Duas por vez, sempre: o teto de conexões vale para a tela
+  // inteira, ver o comentário mais abaixo.
+  const [allTracks, fx] = await stage("prelude", () =>
+    Promise.all([
+      candidateId !== null ? listCandidateTracks(candidateId) : Promise.resolve([] as Track[]),
+      loadRates(),
+    ]),
+  );
+
   let tracks: Track[] = [];
   let scope: TrackScope | null = null;
-  let savedTerms: SavedTermSummary[] = [];
   let cluster = state.cluster;
   let broughtBy: JobsView["broughtBy"] = null;
   if (candidateId !== null) {
-    tracks = (await listCandidateTracks(candidateId)).filter((track) => track.status === "active" && track.target);
-    scope = await trackScope(candidateId, trackChoice(state));
+    tracks = allTracks.filter((track) => track.status === "active" && track.target);
+    // As mesmas trilhas já lidas: escopo e cluster não voltam ao banco por elas.
+    scope = await trackScope(candidateId, trackChoice(state), allTracks);
     if (scope?.notice) notices.push(scope.notice);
     if (scope && cluster) {
-      const resolved = await resolveClusterFilter(scope, cluster);
+      const resolved = await resolveClusterFilter(scope, cluster, allTracks);
       cluster = resolved.cluster;
       if (resolved.notice) notices.push(resolved.notice);
     }
-    savedTerms = await listSavedTerms({ candidateId });
-    if (state.by !== undefined) broughtBy = await savedTermForBoard({ candidateId }, state.by, input.now);
+    const termId = state.by;
+    if (termId !== undefined) {
+      broughtBy = await stage("brought_by", () => savedTermForBoard({ candidateId }, termId, input.now));
+    }
   }
   if (state.by !== undefined && !broughtBy && !notices.includes("term_unknown")) notices.push("term_unknown");
 
-  const fx = await loadRates();
   const primary = tracks.find((track) => track.isPrimary);
   const defaults = defaultPay(primary?.target ?? null);
   const currencies = fx
@@ -131,24 +149,36 @@ export async function loadJobsView(input: {
   //
   // A ordem: a lista e a contagem primeiro, porque são o que a página mostra;
   // as facetas depois, porque já picam em duas por conta própria.
-  const [rows, total] = await Promise.all([
-    listBoard(candidateId, { ...filters, limit: input.pageSize, offset: (input.page - 1) * input.pageSize }),
-    countBoard(candidateId, filters),
-  ]);
-  const facets = await boardFacets(candidateId, {
-    minFit: state.fit,
-    cluster,
-    term: state.term,
-    sourceKinds: state.sources,
-    workMode: state.workMode,
-    track: scope ?? undefined,
-    // Os chips têm de contar a MESMA coisa que o rodapé. Sem isto o rodapé
-    // contava grupos e os chips contavam publicações, e um chip podia mostrar
-    // número maior que o total exibido ao lado dele.
-    groupRepeats: filters.groupRepeats,
-    rates: fx,
-  });
-  const hiddenByPayRange = await countHiddenByPayRange(candidateId, filters);
+  const [rows, total] = await stage("board", () =>
+    Promise.all([
+      listBoard(candidateId, { ...filters, limit: input.pageSize, offset: (input.page - 1) * input.pageSize }),
+      countBoard(candidateId, filters),
+    ]),
+  );
+  const facets = await stage("facets", () =>
+    boardFacets(candidateId, {
+      minFit: state.fit,
+      cluster,
+      term: state.term,
+      sourceKinds: state.sources,
+      workMode: state.workMode,
+      track: scope ?? undefined,
+      // Os chips têm de contar a MESMA coisa que o rodapé. Sem isto o rodapé
+      // contava grupos e os chips contavam publicações, e um chip podia mostrar
+      // número maior que o total exibido ao lado dele.
+      groupRepeats: filters.groupRepeats,
+      rates: fx,
+    }),
+  );
+  // Os termos salvos só alimentam o seletor da tela — nenhum filtro depende
+  // deles —, então viajam ao lado da última leitura em vez de abrir uma ida
+  // própria antes das que importam.
+  const [hiddenByPayRange, savedTerms] = await stage("tail", () =>
+    Promise.all([
+      countHiddenByPayRange(candidateId, filters),
+      candidateId !== null ? listSavedTerms({ candidateId }) : Promise.resolve([] as SavedTermSummary[]),
+    ]),
+  );
 
   if (broughtBy && candidateId !== null && !input.prefetch) {
     const termId = broughtBy.id;

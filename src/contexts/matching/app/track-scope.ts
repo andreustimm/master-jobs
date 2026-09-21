@@ -10,6 +10,7 @@
 import { and, eq, sql, type SQL } from "drizzle-orm";
 import { getDb } from "../../../core/db/client.ts";
 import { jobScore, targetTrack } from "../../../core/db/schema.ts";
+import type { Track } from "../domain/track.ts";
 import { listTracks } from "../infra/drizzle-tracks.ts";
 
 export type TrackChoice = { kind: "primary" } | { kind: "track"; trackId: number } | { kind: "all" };
@@ -24,9 +25,19 @@ export type TrackScope = {
   notice?: "track_unknown";
 };
 
-/** `null` quando a principal está pendente: não há nota para mostrar. */
-export async function trackScope(candidateId: number, choice: TrackChoice): Promise<TrackScope | null> {
-  const tracks = await listTracks(candidateId);
+/**
+ * `null` quando a principal está pendente: não há nota para mostrar.
+ *
+ * `known` é a lista de trilhas do candidato que o chamador já leu. A tela de
+ * vagas as lê para o seletor e pedia de novo aqui — a mesma consulta duas
+ * vezes, em série, cada uma um round-trip. Sem `known`, lê como sempre.
+ */
+export async function trackScope(
+  candidateId: number,
+  choice: TrackChoice,
+  known?: Track[],
+): Promise<TrackScope | null> {
+  const tracks = known ?? (await listTracks(candidateId));
   const primary = tracks.find((track) => track.isPrimary);
   if (!primary?.target) return null;
   const active = tracks.filter((track) => track.status === "active" && track.target);
@@ -97,9 +108,10 @@ export async function scoredJobsPerTrack(candidateId: number): Promise<Map<numbe
 export async function resolveClusterFilter(
   scope: TrackScope,
   cluster: string | undefined,
+  known?: Track[],
 ): Promise<{ cluster?: string; notice?: "cluster_unknown" }> {
   if (!cluster) return {};
-  const tracks = (await listTracks(scope.candidateId)).filter((track) => scope.trackIds.includes(track.id));
+  const tracks = (known ?? (await listTracks(scope.candidateId))).filter((track) => scope.trackIds.includes(track.id));
   const allowed = new Set(["other", ...tracks.flatMap((track) => Object.keys(track.target?.targets.clusters ?? {}))]);
   return allowed.has(cluster) ? { cluster } : { notice: "cluster_unknown" };
 }

@@ -1,6 +1,7 @@
 import { TransitionLink } from "./transition-link";
 import { loadCockpit } from "./cockpit-data.ts";
-import { comVigia } from "./timeout-watch.ts";
+import { comVigia, registrarTempo } from "./timeout-watch.ts";
+import { createStageTimer } from "../src/core/observability.ts";
 import { FilterBar, href, readFilters, toBoardFilters } from "./filters";
 import { JobList } from "./joblist";
 import { Legend, Stat } from "./ui";
@@ -35,13 +36,21 @@ export default async function Cockpit({
     // para a pergunta errada. Pior com a PWA instalada: `start_url` é "/" e não
     // pode variar por papel, então o app abriria numa tela de erro —
     // reintroduzindo, pela porta do manifest, o defeito que a E-06 corrigiu.
-    const session = await requireSession();
-    if (candidateScope(session) === null) redirect("/jobs");
+    const timer = createStageTimer();
+    // No `finally`: a leitura que falha ou estoura é a que mais precisa da medida.
+    try {
+      const candidateId = await timer.time("auth", async () => {
+        const session = await requireSession();
+        if (candidateScope(session) === null) redirect("/jobs");
+        return (await requireOwnCandidatePage("candidate:read")).candidateId;
+      });
 
-    const { candidateId } = await requireOwnCandidatePage("candidate:read");
-
-    const lido = readFilters(await searchParams);
-    return { state: lido, dados: await loadCockpit(candidateId, lido, toBoardFilters(lido)) };
+      const lido = readFilters(await searchParams);
+      const dados = await timer.time("cockpit", () => loadCockpit(candidateId, lido, toBoardFilters(lido)));
+      return { state: lido, dados };
+    } finally {
+      registrarTempo(timer.report("/"));
+    }
   });
   const { stats, counts, clusters, total, top, facets } = dados;
 

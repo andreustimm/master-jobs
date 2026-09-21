@@ -18,6 +18,14 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Improved
+
+- The Jobs screen and the home dashboard open faster. The system now works closer
+  to where the data lives, asks it for less each time a screen opens, and no
+  longer measures the text of every description just to tell whether it is very
+  short. The list, the filter counters, and the "no description" notice show
+  exactly what they showed before.
+
 ## [1.20.3] - 2026-09-21T14:32:47.656Z
 
 ### Fixed

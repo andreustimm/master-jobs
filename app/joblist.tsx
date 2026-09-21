@@ -183,7 +183,7 @@ export function JobList({
                 </div>
               )}
 
-              {r.descriptionLength < 200 && (
+              {!r.hasFullDescription && (
                 <p className="mt-2 text-xs text-[var(--color-mid)]">
                   {t("jobs.noDescription")}
                 </p>

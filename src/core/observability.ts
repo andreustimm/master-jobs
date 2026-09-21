@@ -261,3 +261,79 @@ export async function warnIfSlower<T>(
     clearTimer(handle);
   }
 }
+
+/**
+ * Onde uma leitura de tela gasta o tempo.
+ *
+ * Existe porque "a busca está lenta" era uma sensação sem número: nenhuma
+ * rota media a si mesma, o log da Vercel não traz duração por etapa e o Sentry
+ * roda sem tracing (a URL carrega o filtro do usuário). Sem medida, cada
+ * conserto era uma hipótese — a região da função só apareceu ao comparar dois
+ * nomes de região.
+ *
+ * Mede ESTÁGIOS, não consultas: cada estágio é uma espera do servidor pelo
+ * banco (uma ida, ou várias em paralelo), e é o que a latência soma. Só sai
+ * número e nome de estágio — nunca query string, nem identidade, nem valor de
+ * filtro —, então o que sai por aqui cabe na mesma lista de permissão do resto.
+ */
+export type StageTiming = { stage: string; ms: number };
+
+export type TimingReport = {
+  /** A rota, sem query string. */
+  route: string;
+  totalMs: number;
+  stages: StageTiming[];
+};
+
+export type StageTimer = {
+  /** Roda `work`, anota quanto levou e devolve o resultado (ou relança o erro). */
+  time<T>(stage: string, work: () => Promise<T>): Promise<T>;
+  report(route: string): TimingReport;
+};
+
+const roundMs = (ms: number) => Math.round(ms * 10) / 10;
+
+/** `now` é injetável para o teste não depender do relógio da máquina. */
+export function createStageTimer(now: () => number = () => performance.now()): StageTimer {
+  const startedAt = now();
+  const stages: StageTiming[] = [];
+  return {
+    async time(stage, work) {
+      const begin = now();
+      try {
+        return await work();
+      } finally {
+        // No `finally`: o estágio que estoura é justamente o que interessa medir.
+        stages.push({ stage, ms: roundMs(now() - begin) });
+      }
+    },
+    report(route) {
+      return { route: redactPath(route), totalMs: roundMs(now() - startedAt), stages: [...stages] };
+    },
+  };
+}
+
+export type TimingLogPolicy = {
+  /** A partir daqui o relatório sai mesmo sem pedido. */
+  slowMs: number;
+  /** `JHO_PERF_LOG=1`: sai sempre, para medir uma tela em vez de esperar que ela piore. */
+  always: boolean;
+};
+
+export function shouldLogTiming(report: TimingReport, policy: TimingLogPolicy): boolean {
+  return policy.always || report.totalMs >= policy.slowMs;
+}
+
+/**
+ * A linha que vai para o log: JSON de uma linha, para o painel filtrar por
+ * `perf`. `region` é a região da função, que é o que teria mostrado a
+ * `iad1` ao lado de um banco em São Paulo.
+ */
+export function timingLogLine(report: TimingReport, region?: string): string {
+  return JSON.stringify({
+    perf: report.route,
+    totalMs: report.totalMs,
+    ...(region ? { region } : {}),
+    stages: Object.fromEntries(report.stages.map(({ stage, ms }) => [stage, ms])),
+  });
+}

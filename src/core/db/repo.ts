@@ -66,7 +66,8 @@ export type BoardRow = {
   benefitScore: number | null;
   blockers: unknown;
   reasons: unknown;
-  descriptionLength: number;
+  /** A descrição tem o mínimo para valer a leitura; ver `fullDescriptionSql`. */
+  hasFullDescription: boolean;
   /** Description captured offline by the scraper, if any. */
   pageText: string | null;
   pageTextLength: number;
@@ -206,10 +207,10 @@ export type BoardFilters = {
   /**
    * A tabela de câmbio já carregada, para a leitura não ir buscá-la de novo.
    *
-   * `loadRates()` são duas consultas sequenciais sem cache, e uma tela do quadro
-   * chama três leituras que normalizam pagamento — com a da própria página, o
-   * mesmo câmbio ia quatro vezes ao banco na mesma requisição, contra um pool de
-   * três conexões. Quem já tem a tabela passa; quem não passa continua buscando,
+   * `loadRates()` é uma consulta sem cache, e uma tela do quadro chama três
+   * leituras que normalizam pagamento — com a da própria página, o mesmo câmbio
+   * ia quatro vezes ao banco na mesma requisição, contra um pool de três
+   * conexões. Quem já tem a tabela passa; quem não passa continua buscando,
    * então a CLI e os testes não mudam.
    *
    * `null` é resposta válida (não há cotação gravada) e diferente de ausente.
@@ -463,6 +464,23 @@ function sameGroupCondition(anchorId: number): SQL {
   )`;
 }
 
+/** Abaixo disto a vaga conta como "sem descrição": só título e ruído de scraping. */
+const MIN_DESCRIPTION_CHARS = 200;
+
+/**
+ * "A descrição tem ao menos `MIN_DESCRIPTION_CHARS` caracteres", sem medi-la.
+ *
+ * `length(descricao) >= 200` obriga o PostgreSQL a descomprimir o texto INTEIRO
+ * de cada linha (TOAST/pglz) só para comparar com 200, e a lista fazia isso
+ * antes do LIMIT, em todas as vagas abertas. `substr(texto, 200, 1) <> ''` diz
+ * o mesmo — o 200º caractere existe se, e só se, há 200 — e só precisa do início
+ * do texto. Medido no acervo local (9 mil vagas): 103ms → 26ms, resultado
+ * idêntico nas bordas (199/200/201, acento, emoji, vazio, nulo).
+ */
+function fullDescriptionSql(): SQL {
+  return sql`substr(coalesce(${job.descriptionText}, ''), ${sql.raw(String(MIN_DESCRIPTION_CHARS))}, 1) <> ''`;
+}
+
 const DAY_MS = 86_400_000;
 
 function freshnessCutoff(days: number): string {
@@ -539,9 +557,7 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
     );
   }
   if (opts.hasComp) conditions.push(sql`coalesce(${job.compMax}, ${job.compMin}, 0) > 0`);
-  if (opts.hasDescription) {
-    conditions.push(sql`length(coalesce(${job.descriptionText}, '')) >= 200`);
-  }
+  if (opts.hasDescription) conditions.push(fullDescriptionSql());
   if (opts.namedEmployer) {
     conditions.push(sql`lower(${job.companyName}) <> lower(coalesce(${source.label}, ''))`);
   }
@@ -635,7 +651,7 @@ export async function listBoard(
       benefitScore: jobScore.benefitScore,
       blockers: jobScore.blockers,
       reasons: jobScore.reasons,
-      descriptionLength: sql<number>`length(coalesce(${job.descriptionText}, ''))`,
+      hasFullDescription: sql<boolean>`${fullDescriptionSql()}`,
       // Captured offline by the scraper. Present means the description can be
       // read without leaving the app — and without the employer seeing a visit.
       //
@@ -766,7 +782,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
         fresh: sql<number>`coalesce(sum(case when coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${freshCutoff} then 1 else 0 end), 0)`,
         withComp: sql<number>`coalesce(sum(case when coalesce(${job.compMax}, ${job.compMin}, 0) > 0 then 1 else 0 end), 0)`,
         named: sql<number>`coalesce(sum(case when lower(${job.companyName}) <> lower(coalesce(${source.label}, '')) then 1 else 0 end), 0)`,
-        described: sql<number>`coalesce(sum(case when length(coalesce(${job.descriptionText}, '')) >= 200 then 1 else 0 end), 0)`,
+        described: sql<number>`coalesce(sum(case when ${fullDescriptionSql()} then 1 else 0 end), 0)`,
         notApplied: sql<number>`coalesce(sum(case when ${application.appliedAt} is null then 1 else 0 end), 0)`,
       })
       .from(job)

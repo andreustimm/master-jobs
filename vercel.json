@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "regions": ["iad1"],
+  "regions": ["gru1"],
   "functions": {
     "app/**": {
       "maxDuration": 30

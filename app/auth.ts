@@ -1,9 +1,11 @@
 import { cookies } from "next/headers";
 import { forbidden, redirect } from "next/navigation";
+import { cache } from "react";
 import {
   authorize,
   AuthorizationError,
   candidateScope,
+  isOpenMode,
   resolveSession,
   type Action,
   type Resource,
@@ -44,9 +46,26 @@ export async function currentSession(): Promise<Session | null> {
   // Resolving a session is a read path. Updating the candidate here made every
   // page view contend for a database write and hid profile synchronisation
   // inside authentication. Seeding/syncing remains an explicit command.
-  const defaultCandidate = await getCandidate().catch(() => null);
+  //
+  // O candidato padrão só serve ao modo aberto (`resolveSession` ignora o id
+  // com token de verdade), e buscá-lo custava uma ida ao banco em toda
+  // requisição de produção — em série, antes da resolução da sessão.
+  const defaultCandidate = isOpenMode() ? await getCandidate().catch(() => null) : null;
   return resolveSession(await sessionToken(), defaultCandidate?.id ?? null);
 }
+
+/**
+ * A sessão para RENDERIZAR: resolvida uma vez por requisição.
+ *
+ * O layout, o `SessionBadge` e a página pediam a mesma sessão, cada um com a
+ * sua ida ao banco, e disputavam as três conexões do pool. `cache()` do React
+ * é por requisição, então a segunda pergunta reaproveita a primeira.
+ *
+ * Só leitura de tela. Ação e guarda usam `currentSession`, sem cache: a
+ * impersonação e a troca de senha mudam a sessão NO MEIO da requisição, e uma
+ * autorização que lesse o valor de antes da mudança seria a decisão errada.
+ */
+export const renderSession = cache(currentSession);
 
 /**
  * Authorises an action, returning the session it was authorised for.
@@ -88,7 +107,7 @@ export async function guardOwnCandidate(action: Action): Promise<{ session: Sess
  * forgets it is caught by the architecture test.
  */
 export async function requireSession(): Promise<Session> {
-  const session = await currentSession();
+  const session = await renderSession();
   if (!session) redirect("/login");
   return session;
 }
