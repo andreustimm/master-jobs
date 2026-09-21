@@ -131,11 +131,36 @@ varreduras do acervo.
   Opções: não abrir quando o `pathname` não muda e usar `useLinkStatus` /
   `data-pending` na lista, ou atrasar o overlay até ~250 ms. Manter `offline` e
   `prolonged`.
-- **Cuidado:** 28 referências no E2E (`tests/e2e/ui.mjs`), cinco arquivos de
-  teste (`navigation-transition`, `pwa-transition`,
-  `cov-transition-store-ambiente`, `navigation-adapters`, `pwa-chrome`),
-  `docs/qa/reports/2026-08-23-task-02-loading-transicoes.md` e
+- **Cuidado:** `tests/e2e/ui.mjs` tem 28 referências ao overlay e **76** somando
+  `observeNavigation` e `data-phase` — o `contextualPhases` assume overlay em
+  **toda** navegação. Cinco arquivos de teste (`navigation-transition`,
+  `pwa-transition`, `cov-transition-store-ambiente`, `navigation-adapters`,
+  `pwa-chrome`), `docs/qa/reports/2026-08-23-task-02-loading-transicoes.md` e
   `BUG-20260824-canonical-route-splash`. A regra 20 exige QA de jornada.
+- **Desenho proposto para o 6 — transição "suave"** (dimensionado em
+  2026-09-21, **nenhum código escrito**; a worktree `perf-overlay-filtros` foi
+  criada, ficou vazia e pode ser descartada):
+  1. `NavigationTransition` (`src/core/pwa/transition.ts`) ganha `soft: boolean`;
+     o evento `start` a carrega; `prolonged` e `offline` a zeram (**promovem** a
+     transição ao overlay atual, preservando o tratamento de demora e de falta
+     de rede).
+  2. `store.begin` decide `soft` comparando o `pathname` do destino com o da URL
+     atual: só mudou filtro, ordem, página ou densidade → suave.
+  3. `NavigationTransition` (`app/navigation-transition.tsx`): overlay e `inert`
+     só quando `!soft`. Suave vira `aria-busy` e um atributo no
+     `#application-shell`, e uma regra CSS em `app/globals.css` escurece o
+     conteúdo (`opacity`, sem cor nem tamanho novos — regra 10). O shell segue
+     interativo, e um novo clique começa outra geração: vence o último.
+  4. As fases (`loading` → `leaving` → `reset`) continuam iguais no store: só a
+     apresentação muda. O `NavigationCommitObserver` também cai aqui, sem exceção.
+  5. Testes: os três de unidade acima e, sobretudo, o E2E. Navegação de filtro,
+     ordem e página passa a afirmar o estado suave; navegação entre rotas mantém
+     as asserções de overlay. **Rode o E2E com a máquina livre e em série** —
+     `docs/qa/README.md` mede que a suíte reprova por carga.
+  6. QA: `qa-report` targeted e `qa-execution`; os cenários de transição em
+     `docs/qa/` voltam a `untested`.
+  Ganho esperado: ~440 ms a menos em cada clique de filtro, independente do
+  servidor.
 - **`loading.tsx` (15):** o teste `navigation-adapters` afirma que
   `app/loading.tsx` **não existe**; ponha em `app/jobs/`. Ele também liga o
   prefetch até a fronteira em rota dinâmica: teste.
