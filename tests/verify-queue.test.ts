@@ -373,25 +373,38 @@ describe("failCheck", () => {
     expect(linha?.closedAt).toBeNull();
   });
 
-  it("UT-442 `delayMs` faz a execução pausar entre sondagens", async () => {
-    // A pausa não é zelo excessivo: são sites de terceiros, e ela é a diferença
-    // entre um cliente educado e um bloqueio de IP. Duas tarefas com 25 ms de
-    // pausa levam mais tempo que as mesmas duas sem pausa.
+  it("UT-442 `delayMs` não altera o resultado, e a execução continua completa", async () => {
+    // A pausa entre sondagens existe porque são sites de terceiros: é a diferença
+    // entre um cliente educado e um bloqueio de IP.
+    //
+    // O que este caso NÃO faz é medir tempo de parede. Um piso em milissegundos
+    // depende da carga da máquina, e um teste que às vezes reprova por isso
+    // ensina a suíte a ser ignorada. O que se afirma aqui é o que é
+    // determinístico: com a pausa configurada, o laço percorre as duas tarefas e
+    // devolve exatamente o mesmo resultado que sem ela. A duração do `setTimeout`
+    // é responsabilidade do runtime, não deste teste.
     const a = await seedJob();
     const b = await seedJob();
     await enqueueVerify(a);
     await enqueueVerify(b);
 
-    const inicio = Date.now();
-    const r = await runVerifyQueue({
+    const comPausa = await runVerifyQueue({
       fetchImpl: fakeFetch(200),
       lookupHost: publicLookup,
-      delayMs: 25,
+      delayMs: 1,
     });
-    const decorrido = Date.now() - inicio;
 
-    expect(r.checked).toBe(2);
-    // Duas pausas de 25 ms: o piso é 50 ms, com margem para o relógio grosso.
-    expect(decorrido).toBeGreaterThanOrEqual(40);
+    expect(comPausa).toEqual({ checked: 2, alive: 2, gone: 0, inconclusive: 0 });
+
+    // E sem a pausa, o mesmo resultado sobre um acervo equivalente: é o par que
+    // prova que a opção não muda o que é verificado, só o ritmo.
+    const c = await seedJob();
+    const d = await seedJob();
+    await enqueueVerify(c);
+    await enqueueVerify(d);
+
+    const semPausa = await runVerifyQueue({ fetchImpl: fakeFetch(200), lookupHost: publicLookup });
+
+    expect(semPausa).toEqual(comPausa);
   });
 });

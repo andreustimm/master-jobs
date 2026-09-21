@@ -156,13 +156,43 @@ describe("as trilhas na linha de comando", () => {
 });
 
 describe("o perfil e o ambiente que ele precisa", () => {
-  it("UT-339 `profile` valida o arquivo real e relata o que falta no ambiente", async () => {
-    // O comando lê `profile/profile.yaml` de verdade. O ramo coberto aqui é o de
-    // variável de ambiente ausente, que é o estado de uma máquina nova — e a
-    // resposta certa é listar quais, não falhar sem dizer o quê.
+  it("UT-339 `profile` valida o arquivo real e imprime o perfil resolvido", async () => {
+    // Este caso lê `profile/profile.yaml` de propósito: é o único ponto da suíte
+    // que afirma que o arquivo de verdade passa pelo Zod. Um perfil quebrado
+    // derruba o scorer inteiro, e descobrir isso por aqui é melhor que por um
+    // `jho jobs score --all` que para no meio.
+    //
+    // As asserções são sobre o que o comando promete, não sobre o comprimento da
+    // saída: o veredito de validade, o nome resolvido, e os clusters com peso.
+    // Nada aqui depende do CONTEÚDO do perfil além de ele existir e ter cluster —
+    // o que muda se alguém editar o arquivo é o texto, não o formato.
     const r = await rodar("profile");
 
     expect(r.erro).toBeUndefined();
-    expect((r.out + r.err).trim().length).toBeGreaterThan(0);
+    expect(r.out).toContain("profile.yaml is valid");
+    expect(r.out).toContain("Target clusters");
+    // Pelo menos um cluster com peso: um perfil sem cluster não pontua nada.
+    expect(r.out).toMatch(/weight \d/);
+    expect(r.code).toBeUndefined();
+  });
+
+  it("UT-341 variável de ambiente ausente é listada, e não silenciada", async () => {
+    // O ramo `missingProfileEnv.length > 0`. Numa máquina nova o `.env` não existe
+    // e o perfil referencia valores que vêm dele; a resposta certa é dizer QUAIS
+    // faltam e apontar o `.env.example`, não validar como se estivesse completo.
+    const { missingProfileEnv } = await import("../src/core/profile/load.ts");
+
+    const r = await rodar("profile");
+
+    if (missingProfileEnv.length === 0) {
+      // Ambiente completo: o aviso não aparece. É o outro lado do mesmo ramo, e
+      // vale como asserção — um aviso que aparece sempre não informa nada.
+      expect(r.out).not.toContain(".env.example");
+      return;
+    }
+    expect(r.out).toContain(".env.example");
+    for (const nome of missingProfileEnv) {
+      expect(r.out, nome).toContain(nome);
+    }
   });
 });
