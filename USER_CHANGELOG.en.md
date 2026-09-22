@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+- The database connection is configured and validated with limited permissions; it takes effect in the next approved production deployment.
+
 ## [1.21.1] - 2026-09-22T18:19:03.735Z
 
 - The job list and its total are calculated together, reducing search work while preserving ordering and totals when changing pages.
