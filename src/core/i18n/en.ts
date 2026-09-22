@@ -18,6 +18,7 @@ export const en: Dictionary = {
   },
   transition: {
     loading: "Loading the next screen",
+    updating: "Updating this screen",
     prolonged: "Still loading. This is taking longer than usual.",
     offlineTitle: "You're offline",
     offlineBody: "We couldn't load this screen. Check your connection and try again.",

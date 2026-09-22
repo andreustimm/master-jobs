@@ -15,6 +15,7 @@ export const ptBR = {
   },
   transition: {
     loading: "Carregando a próxima tela",
+    updating: "Atualizando esta tela",
     prolonged: "Ainda estamos carregando. Isso está levando mais tempo que o normal.",
     offlineTitle: "Sem conexão",
     offlineBody: "Não foi possível carregar esta tela. Verifique sua conexão e tente novamente.",

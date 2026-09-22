@@ -225,6 +225,35 @@ describe("resgatar o link", () => {
     });
   });
 
+  it("V03-05 dois resgates SIMULTÂNEOS do mesmo link trocam a senha uma vez só", async () => {
+    // O teste anterior prova o reuso EM SÉRIE. Em paralelo, um "lê, confere,
+    // depois grava" deixaria os dois passarem pela conferência antes de
+    // qualquer gravação — e a senha final seria de quem chegou por último,
+    // com as duas respostas dizendo sucesso.
+    const { id, token } = await pedir();
+    await db.insert(authSession).values({
+      tokenHash: "sessao-antiga",
+      userId: id,
+      expiresAt: "2026-09-20T12:00:00.000Z",
+    });
+
+    const [primeira, segunda] = await Promise.all([
+      redeemPasswordReset(token, "primeira-senha-bem-longa", hashToken, deps()),
+      redeemPasswordReset(token, "segunda-senha-bem-longa", hashToken, deps()),
+    ]);
+
+    const vencedoras = [primeira, segunda].filter((r) => r.ok);
+    expect(vencedoras).toHaveLength(1);
+    expect([primeira, segunda].filter((r) => !r.ok)).toEqual([{ ok: false, reason: "invalid" }]);
+
+    const [user] = await db.select().from(authUser).where(eq(authUser.id, id));
+    const senhaQueVenceu = primeira.ok ? "primeira-senha-bem-longa" : "segunda-senha-bem-longa";
+    const senhaQuePerdeu = primeira.ok ? "segunda-senha-bem-longa" : "primeira-senha-bem-longa";
+    expect(await verifyPassword(senhaQueVenceu, user!.passwordHash)).toBe(true);
+    expect(await verifyPassword(senhaQuePerdeu, user!.passwordHash)).toBe(false);
+    expect(await db.select().from(authSession).where(eq(authSession.userId, id))).toHaveLength(0);
+  });
+
   it("token expirado não serve", async () => {
     const { token } = await pedir();
     setClock(fixedClock("2026-08-20T13:01:00.000Z"));

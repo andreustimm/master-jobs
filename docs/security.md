@@ -139,6 +139,59 @@ Action passa por `guard(...)` antes de qualquer efeito, e o escopo por candidato
 nasce da sessão em vez de vir da entrada. O modo aberto é somente opt-in por
 `JHO_AUTH_MODE=open`; o guard permanece no mesmo caminho. Ver AUTH-01.
 
+**Toda entrada tem política, e a desconhecida reprova** — ✅ **22/09 (#197).**
+O teste de autorização lia só arquivos `*actions.ts` e `export async function`;
+`logoutAction` ficava de fora pelo nome do arquivo. O inventário em
+`tests/support/entry-inventory.ts` descobre pela semântica do Next: toda
+`page.*` e `route.*` sob `app/`, cada método HTTP exportado, todo export de
+módulo com a diretiva `"use server"` em qualquer forma (`export const`,
+`export { a as b }`, `export default`) e diretiva inline. Cada uma precisa de
+política em `tests/architecture.test.ts` — o guarda literal da página, o
+guarda como PRIMEIRO `await` da action sem efeito antes dele, ou uma exceção
+registrada com justificativa. Exceção órfã também reprova.
+
+As exceções, e o que substitui a sessão em cada uma:
+
+| Entrada | O que protege |
+|---|---|
+| `passwordLoginAction` | limite de tentativas e resposta idêntica para conta inexistente |
+| `requestResetAction`, `submitResetAction` | resposta uniforme; token de uso único queimado antes de gravar |
+| `logoutAction`, `stopImpersonatingAction` | só revogam/restauram o que está no próprio cookie |
+| `setLocaleAction`, `setAppearanceAction` | preferência de interface em cookie próprio, sem dado de ninguém |
+| `/login`, `/login/forgot`, `/login/reset` | pré-sessão; `/login` só pergunta se existe alguma conta |
+| `/login/callback` | link mágico de uso único |
+| `/api/cron/recheck` | `CRON_SECRET` em tempo constante; 503 sem ele |
+| `/p/[slug]` | lista de permissão de `publicProfile()`, 404 para não público, limite por IP |
+
+`tests/entry-denial.test.ts` prova a NEGAÇÃO, não só a presença: chama cada
+action descoberta com o `app/auth.ts` real contra PostgreSQL de teste, sem
+cookie, com cookie forjado, sessão expirada, revogada e conta desabilitada, e
+exige recusa sem nenhuma escrita no banco, cookie, revalidação, `after()` ou
+rede. Também chama tudo com ids da vítima numa sessão válida de outro
+candidato e de um recrutador vinculado, e as ações de administração com sessão
+emprestada — o dado da vítima fica idêntico byte a byte.
+
+O limite é declarado: a descoberta é léxica, sem compilador, e nas páginas o
+inventário prova a PRESENÇA do guarda; a ordem das leituras de página é
+coberta pelos cenários por papel de `pnpm test:e2e`.
+
+**Modo aberto só na máquina local** — ✅ **22/09 (#197).** A proibição de
+`JHO_AUTH_MODE=open` em produção era só documental; agora é do código.
+`openModeActive()` (`src/contexts/auth/domain/open-mode.ts`) exige o pedido E
+um ambiente local: nenhum `VERCEL`, e `JHO_ENV` e `VERCEL_ENV` ausentes ou
+iguais a `local` — as duas são conferidas, sem precedência. Produção, preview, staging, dev e valor
+desconhecido ignoram o pedido e continuam exigindo login. Sessão e `proxy.ts`
+chamam a mesma função; nenhum outro arquivo lê a variável.
+
+**O consentimento do CV não publica o que nunca sai** — ✅ **22/09 (#197).**
+`publicProfile()` passa o texto por `publicCvText()` (`src/core/public-cv.ts`):
+e-mail (o cadastrado e qualquer endereço), telefone com código de país ou DDD
+entre parênteses e o bloco inteiro (parágrafo, item ou tabela entre linhas em
+branco; a seção, quando é título) que traz rótulo de pretensão salarial ou
+palavra de remuneração perto de um valor são retirados.
+Detecção por padrão, com limite escrito no arquivo e travado em teste: valor
+sem rótulo e telefone sem marca passam. Não é sanitização perfeita.
+
 **Fluxo verificado ponta a ponta em 19/08**, no modo autenticado padrão: sem
 sessão o cabeçalho oferece entrar; o link de uso único resgata em
 `/login/callback` e grava o cookie `httpOnly`; a sessão passa a aparecer no

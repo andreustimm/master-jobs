@@ -3,7 +3,10 @@
 ```mermaid
 flowchart TD
     A[Entrada: tela autenticada, auth ou perfil público] --> B[Usuário ativa navegação global, contextual ou filtro GET]
-    B --> C[Splash de transição único bloqueia a tela anterior]
+    B -->|outra rota| C[Splash de transição único bloqueia a tela anterior]
+    B -->|mesma tela: filtro, ordem, página, densidade| S[Conteúdo esmaece, shell operável e aria-busy]
+    S -->|resposta chega| D
+    S -->|espera acima de 3 s ou offline| C
     C -->|destino pronto| D[Splash sai e destino aparece]
     C -->|redirect após ação única| D
     C -->|papel, sessão ou entidade mudou| H[Resultado canônico autorizado, login, forbidden ou not-found]
