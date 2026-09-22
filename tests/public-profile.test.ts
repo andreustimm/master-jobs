@@ -1,6 +1,7 @@
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
-import { candidateSkill, skill } from "../src/core/db/schema.ts";
+import { candidate, candidateSkill, skill } from "../src/core/db/schema.ts";
 import {
   ensureCandidate,
   saveDocument,
@@ -183,6 +184,16 @@ describe("o currículo exige o segundo consentimento", () => {
     }
     // O que é currículo continua: anos não são telefone.
     expect(cv).toContain("Senior AI Software Architect, 2015-2020 e 2020-2026.");
+  });
+
+  it("V03-04 o e-mail cadastrado sai do CV mesmo fora do padrão geral de endereço", async () => {
+    // Endereço sem domínio de primeiro nível não casa com o padrão genérico;
+    // só a composição que passa o e-mail cadastrado o encontra.
+    await db.update(candidate).set({ email: "andreus@intranet" }).where(eq(candidate.id, candidateId));
+    await saveDocument({ candidateId, kind: "cv", label: "CV", content: "# Andreus\n\nContato interno: andreus@intranet" });
+    await setVisibility(candidateId, "public");
+    await setPublicCv(candidateId, true);
+    expect((await publicProfile("andreus"))?.cv).not.toContain("andreus@intranet");
   });
 
   it("o consentimento do CV não vale nada sem o perfil ser público", async () => {

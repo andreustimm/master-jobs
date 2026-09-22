@@ -795,6 +795,10 @@ describe("authorisation (AUTH-01)", () => {
     expect(guardComesFirst(sneaky, "padrao")).toMatchObject({ reason: "efeito antes do guarda: revalidatePath(" });
     expect(guardComesFirst(sneaky, "comTipo")).toMatchObject({ ok: false, reason: expect.stringContaining("lerCurriculo") });
 
+    // Action sem await não herda o guarda de um helper declarado depois dela.
+    const helperAfter = '"use server";\nexport async function semGuarda() {\n  return 1;\n}\n\nasync function helper() {\n  await guard("job:read");\n}\n';
+    expect(guardComesFirst(helperAfter, "semGuarda").ok).toBe(false);
+
     // Default anônimo em arrow: descoberto, e recusado por não ter corpo nomeado.
     const anonymous = '"use server";\nexport default async (formData: FormData) => { await apagarTudo(formData); };';
     expect(exportedBindings(anonymous)).toEqual([{ exported: "default", local: null }]);

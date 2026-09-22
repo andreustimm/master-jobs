@@ -85,11 +85,15 @@ const SALARY_LABEL = new RegExp(
     "faixa\\s+salarial",
     "valor\\s+(?:da\\s+)?hora",
     "salary\\s*(?:floor|expectations?|requirements?|minimum)",
+    // Palavra de remuneração como RÓTULO ("Salary: 2000 EUR"): vale sem
+    // olhar o número, que pode parecer um ano.
+    "\\b(?:salar(?:y|ies)|sal[áa]rio|remunera[çc][ãa]o|compensation|pay)\\s*:",
     "(?:minimum|desired|expected|target)\\s+(?:salary|compensation|rate|pay)",
     "compensation\\s*(?:floor|expectations?|requirements?)",
     // `rate:` só como rótulo no começo da linha (recuada ou não), de item,
     // de lista numerada ou de célula; "Success rate: 99%" no meio da frase fica.
-    "(?:^|\\n|[|·•*-]|\\d+[.)])\\s*(?:(?:hourly|daily|day)\\s+)?rate\\s*(?::|floor)",
+    // O marcador de item só conta no começo da linha: "error-rate: 0.1%" fica.
+    "(?:^|\\n|\\|)\\s*(?:[·•*-]\\s*|\\d+[.)]\\s*)?(?:(?:hourly|daily|day)\\s+)?rate\\s*(?::|floor)",
   ].join("|"),
   "iu",
 );
@@ -105,9 +109,14 @@ const AMOUNT = "(?:[$€£¥]|R\\$|\\b(?!(?:19|20)\\d{2}\\b)\\d)";
 const PAY_NEAR_AMOUNT = new RegExp(`${PAY_WORD}.{0,60}?${AMOUNT}|${AMOUNT}.{0,60}?${PAY_WORD}`, "iu");
 
 function isSalaryBlock(block: string): boolean {
-  const prose = block.replace(/\s+/g, " ");
-  return SALARY_LABEL.test(block) || SALARY_LABEL.test(prose) || PAY_NEAR_AMOUNT.test(prose);
+  // Ênfase Markdown não separa rótulo de valor: `**Piso**: 180000`.
+  const plain = block.replace(/[*_`~]/g, "");
+  const prose = plain.replace(/\s+/g, " ");
+  return SALARY_LABEL.test(plain) || SALARY_LABEL.test(prose) || PAY_NEAR_AMOUNT.test(prose);
 }
+
+/** Título que anuncia remuneração: a seção inteira é o valor. */
+const PAY_HEADING = new RegExp(PAY_WORD, "iu");
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -150,7 +159,7 @@ export function publicCvText(content: string, known: { email?: string | null } =
       else continue;
     }
     const text = block.join("\n");
-    if (text.trim() !== "" && isSalaryBlock(text)) {
+    if (text.trim() !== "" && (isSalaryBlock(text) || (heading !== null && PAY_HEADING.test(text)))) {
       if (heading) skippingSection = heading[1]!.length;
       continue;
     }

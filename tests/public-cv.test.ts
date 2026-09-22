@@ -80,6 +80,14 @@ describe("publicCvText", () => {
     for (const cv of ["Pretensão PJ: R$ 30.000", "Salário atual: R$ 25.000", "Expectativa\nsalarial: 30k", "Salary\nexpectation: 150k"]) {
       expect(publicCvText(`Topo\n\n${cv}\n\nFim`), cv).toBe("Topo\n\n\nFim");
     }
+    // Ênfase Markdown, título de remuneração e valor com cara de ano.
+    for (const cv of ["**Piso**: 180000 USD/ano", "**Rate**: 90 USD/h", "Salary: 2000 EUR/month"]) {
+      expect(publicCvText(`Topo\n\n${cv}\n\nFim`), cv).toBe("Topo\n\n\nFim");
+    }
+    expect(publicCvText("# Nome\n\n## Salário\nR$ 30.000 mensais\n\n## Fim")).toBe("# Nome\n\n## Fim");
+    expect(publicCvText("# Nome\n\n## Remuneração\n\nR$ 30.000\n\n## Fim")).toBe("# Nome\n\n## Fim");
+    // Hífen no meio da frase não é marcador de item.
+    expect(publicCvText("Reduced error-rate: 0.1% across services")).toBe("Reduced error-rate: 0.1% across services");
     // O bloco inteiro sai, inclusive as linhas ACIMA do rótulo.
     expect(publicCvText("Topo\n\nR$ 30.000 mensais\nPretensão salarial\n\nFim")).toBe("Topo\n\n\nFim");
   });

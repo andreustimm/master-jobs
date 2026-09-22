@@ -265,9 +265,10 @@ export function guardComesFirst(source: string, local: string | null): GuardVerd
   const rest = code.slice(declaration.index + declaration[0].length);
   const awaitAt = rest.search(/\bawait\b/);
   if (awaitAt === -1) return { ok: false, reason: "nenhum await: o guarda não é chamado" };
-  // O próximo `export` delimita a função; um await depois dele é de outra.
-  const nextExport = rest.search(/\n\s*export\s/);
-  if (nextExport !== -1 && nextExport < awaitAt) return { ok: false, reason: "nenhum await no corpo" };
+  // A próxima declaração de topo delimita a função: um await depois dela é
+  // de outra — inclusive de um helper não exportado que chama o guarda.
+  const nextTopLevel = rest.search(/\n(?:export\s|(?:async\s+)?function\s|const\s|let\s|var\s|\}\s*\n)/);
+  if (nextTopLevel !== -1 && nextTopLevel < awaitAt) return { ok: false, reason: "nenhum await no corpo" };
   if (!GUARD_CALL.test(rest.slice(awaitAt))) {
     return { ok: false, reason: `o primeiro await não é guard: ${rest.slice(awaitAt, awaitAt + 60).split("\n")[0]}` };
   }
