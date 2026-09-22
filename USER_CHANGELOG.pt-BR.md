@@ -18,6 +18,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- O sistema nunca mais faz pedidos automáticos ao LinkedIn, nem quando uma
+  vaga veio de um alerta por e-mail ou quando outro site redireciona para lá.
+  Essas vagas continuam aparecendo com o link para você abrir, e não são
+  fechadas por não poderem ser verificadas.
+
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 
 - Alertas por e-mail configurados para avisar o responsável sobre erros novos em produção e falhas resolvidas que voltam a acontecer.

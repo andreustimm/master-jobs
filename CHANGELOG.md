@@ -9,6 +9,19 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- Rede: `assertSafeRemoteUrl` recusa `linkedin.com`, `linkedin.cn`, `lnkd.in`,
+  `licdn.com` e subdomínios antes do DNS, e `safeRemoteFetch` repete a
+  recusa em cada redirect (regra 1, ADR 0001). URL de vaga vinda de alerta por
+  e-mail já chegava à sonda de `jobs verify` e à captura de `scrape run`; agora
+  a sonda fica `inconclusive` sem pedido e a captura bloqueia antes do
+  `robots.txt`. `getJson` não repete recusa de política no laço de retry.
+  Testes com transporte instrumentado provam zero pedido ao LinkedIn (direto e
+  por redirect), zero envio em `jho prep`/`buildDossier`, que `growth:` nunca
+  vira evidência citada, e um inventário fechado de quem abre transporte de
+  saída, com detector exercitado por casos positivos e negativos.
+
 ## [1.20.7] - 2026-09-22
 
 - Operações: alerta Sentry configurado para erros novos, regressões e alta prioridade em produção, com e-mail para o responsável e intervalo de 30 minutos; disparo validado com canário sintético.

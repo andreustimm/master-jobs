@@ -14,6 +14,7 @@ import { getDb } from "../db/client.ts";
 import { jobPage } from "../db/schema.ts";
 import {
   assertSafeRemoteUrl,
+  ProhibitedAcquisitionError,
   safeRemoteFetch,
   type LookupHost,
 } from "../remote-url.ts";
@@ -75,7 +76,12 @@ export async function capture(
 
   try {
     await assertSafeRemoteUrl(url, { lookupHost: opts.lookupHost });
-  } catch {
+  } catch (error) {
+    // Antes do robots.txt: pedir o robots do LinkedIn já seria requisição
+    // automatizada ao domínio que a regra 1 proíbe.
+    if (error instanceof ProhibitedAcquisitionError) {
+      return { kind: "blocked", reason: "aquisição proibida (LinkedIn, regra 1)" };
+    }
     return { kind: "blocked", reason: "destino de rede não permitido" };
   }
 

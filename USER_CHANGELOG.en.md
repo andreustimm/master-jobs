@@ -18,6 +18,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- The system no longer makes automated requests to LinkedIn, not even for jobs
+  that came from an email alert or when another site redirects there. Those
+  jobs still show up with the link for you to open, and they are not closed
+  just because they cannot be checked.
+
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 
 - Email alerts are configured to notify the system owner of new production errors and recurring failures that had been resolved.

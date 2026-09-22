@@ -14,12 +14,21 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildDossier } from "../src/core/apply/dossier.ts";
 import { ensureCandidate } from "../src/core/candidate.ts";
 import type { DB } from "../src/core/db/client.ts";
-import { company, job, jobPage, jobScore, source, targetAccount } from "../src/core/db/schema.ts";
+import {
+  application,
+  company,
+  job,
+  jobPage,
+  jobScore,
+  source,
+  targetAccount,
+} from "../src/core/db/schema.ts";
 import { seedCatalog } from "../src/contexts/skills/index.ts";
+import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/http-port.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 import { primaryTrackId } from "./support/tracks.ts";
 
@@ -403,5 +412,85 @@ describe("vocabulário do anúncio contra o CV", () => {
       missing: [],
       warnings: [],
     });
+  });
+});
+
+/* ------------------------------------------------ growth contra evidência - */
+
+describe("growth é lacuna, nunca evidência (regra 7)", () => {
+  /**
+   * A alegação falsa mora SÓ em `growth`, e o anúncio usa exatamente as mesmas
+   * palavras. É a entrada mais tentadora possível: se o dossiê lesse `growth`,
+   * esta seria a linha de maior casamento e sairia no topo.
+   */
+  const GROWTH_CLAIM = "Led the Rust compiler team shipping a WebAssembly runtime";
+  const RUST_POSTING = [
+    "We need an architect who led a Rust compiler team and shipped a WebAssembly",
+    "runtime in production. The compiler team owns the runtime end to end, and",
+    "the Rust toolchain is the core of the platform. Remote LATAM, senior level.",
+    "You will also run observability over distributed systems and own design",
+    "decisions for the platform as the senior architect on a small team that",
+    "ships often and measures everything it ships, from compiler to runtime.",
+  ].join(" ");
+
+  beforeEach(async () => {
+    const path = join(profileDir, "profile.yaml");
+    await writeFile(path, `${PROFILE_YAML}growth:\n  - "${GROWTH_CLAIM}"\n`);
+  });
+
+  it("não cita a alegação de growth mesmo quando o anúncio a repete palavra por palavra", async () => {
+    await seedCatalog();
+    const jobId = await seedJob({ descriptionText: RUST_POSTING });
+
+    const dossier = await buildDossier(candidateId, jobId, CV);
+
+    const cited = dossier!.evidence.map((e) => e.line);
+    expect(cited).not.toContain(GROWTH_CLAIM);
+    expect(cited.join(" ").toLowerCase()).not.toContain("compiler");
+    // Rastreável: toda linha citada existe, literalmente, em `evidence:`.
+    const declared = PROFILE_YAML.split("\n")
+      .map((l) => /^\s+- "(.*)"$/.exec(l)?.[1])
+      .filter((l): l is string => Boolean(l));
+    for (const e of dossier!.evidence) expect(declared, e.line).toContain(e.line);
+    // O controle: a evidência real que casa continua saindo — sem ele, um
+    // dossiê que não cita nada passaria no teste.
+    expect(cited).toContain("observability over distributed systems");
+    // E a lacuna é dita, não maquiada: Rust aparece como o que o CV não sustenta.
+    expect(dossier!.missing).toContain("rust");
+  });
+});
+
+/* ------------------------------------------------------ preparar != enviar - */
+
+describe("preparar não envia nada (regra 13, ADR 0010)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetHttpPort();
+  });
+
+  it("monta o dossiê sem um único pedido de rede e sem tocar o funil", async () => {
+    // Transporte instrumentado nas duas saídas que existem: o `fetch` global
+    // (onde qualquer cliente HTTP novo terminaria) e a porta HTTP dos adapters.
+    // Os dois respondem 200 a tudo — o pior caso, em que um envio "daria certo".
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", (async (input: string | URL | Request) => {
+      calls.push(input instanceof Request ? input.url : String(input));
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch);
+    const port = fixtureHttp({ "": { status: 200, body: {} } });
+    setHttpPort(port);
+
+    await seedCatalog();
+    const jobId = await seedJob({ applyUrl: "https://boards.greenhouse.io/acme/jobs/1/apply" });
+
+    const dossier = await buildDossier(candidateId, jobId, CV);
+
+    // A saída é um artefato: o link de candidatura vai para a pessoa clicar.
+    expect(dossier?.job.applyUrl).toBe("https://boards.greenhouse.io/acme/jobs/1/apply");
+    expect(dossier?.evidence.length).toBeGreaterThan(0);
+    expect(calls).toEqual([]);
+    expect(port.calls).toEqual([]);
+    // Preparar não é candidatar-se: nenhuma linha nasce em `application`.
+    expect(await db.select().from(application)).toEqual([]);
   });
 });
