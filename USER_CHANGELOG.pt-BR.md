@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-09-22T23:04:57.000Z
+
 ### Novidade
 
 - Você escolhe o endereço público do seu perfil (o link /p/…) na área do

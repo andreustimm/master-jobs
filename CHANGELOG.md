@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-09-22
+
 ### Adicionado
 
 - Busca por termo com pré-filtro indexado (#214). Migrations aditivas

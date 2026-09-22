@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-09-22T23:04:57.000Z
+
 ### New
 
 - You pick your profile's public address (the /p/… link) in the candidate
