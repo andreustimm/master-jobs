@@ -22,6 +22,7 @@ import {
   json,
   text,
   uniqueIndex,
+  type PgColumn,
   unique,
 } from "drizzle-orm/pg-core";
 import {
@@ -77,6 +78,14 @@ export const company = production.table(
   },
   (t) => [uniqueIndex("company_slug_idx").on(t.slug)],
 );
+
+/**
+ * O texto sem espaço e hífen: a forma que os índices trigrama da busca por
+ * termo guardam (#214). Índice e consulta usam esta mesma função, porque uma
+ * expressão diferente — mesmo equivalente — faz o planner ignorar o índice
+ * sem erro nenhum.
+ */
+export const withoutSeparators = (column: PgColumn) => sql`replace(replace(${column}, ' ', ''), '-', '')`;
 
 /** A job posting as observed. Re-ingest updates lastSeenAt, never user state. */
 export const job = production.table(
@@ -162,7 +171,7 @@ export const job = production.table(
     // `src/core/term.ts` tem a prova; a expressão precisa ser idêntica à de
     // `termTextCandidates` em `repo.ts`, ou o planner não usa o índice.
     index("job_description_trgm_idx")
-      .using("gin", sql`replace(replace(${t.descriptionText}, ' ', ''), '-', '') gin_trgm_ops`)
+      .using("gin", sql`${withoutSeparators(t.descriptionText)} gin_trgm_ops`)
       .where(sql`${t.closedAt} is null`),
   ],
 );
@@ -992,7 +1001,7 @@ export const jobPage = production.table(
     index("job_page_parsed_idx").on(t.parsedAt),
     // A descrição capturada substitui a da fonte na busca por termo; mesmo
     // pré-filtro de `job_description_trgm_idx`.
-    index("job_page_text_trgm_idx").using("gin", sql`replace(replace(${t.text}, ' ', ''), '-', '') gin_trgm_ops`),
+    index("job_page_text_trgm_idx").using("gin", sql`${withoutSeparators(t.text)} gin_trgm_ops`),
   ],
 );
 

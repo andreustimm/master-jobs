@@ -36,6 +36,7 @@ import {
   company,
   type ApplicationStatus,
   verifyTask,
+  withoutSeparators,
 } from "./schema.ts";
 
 export type BoardRow = {
@@ -527,12 +528,11 @@ function freshnessCutoff(days: number): string {
  * aninhado: 3,4 s no benchmark. O `array` é um InitPlan — calculado uma vez
  * por consulta — e o filtro continua onde estava, com a mesma forma de plano.
  *
- * As expressões e o predicado de vaga aberta repetem, literalmente, os de
- * `job_description_trgm_idx` e `job_page_text_trgm_idx`: com `' '` como
- * parâmetro o planner não reconheceria a expressão do índice. `replace` duas
- * vezes, e não `translate`, porque o índice é com perdas e cada candidato tem
- * a expressão reconferida: no acervo local `translate` custou o dobro (457
- * contra 227 ms nas 5.576 abertas).
+ * A expressão vem de `withoutSeparators` e o predicado de vaga aberta repete
+ * o de `job_description_trgm_idx`: é o que deixa o planner casar a consulta
+ * com o índice. `replace` duas vezes, e não `translate`, porque o índice é com
+ * perdas e cada candidato tem a expressão reconferida: no acervo local
+ * `translate` custou o dobro (457 contra 227 ms nas 5.576 abertas).
  */
 function termTextCandidates(like: string): SQL {
   return sql`array(select ${job.id} from ${job}
@@ -540,10 +540,6 @@ function termTextCandidates(like: string): SQL {
     union all
     select ${jobPage.jobId} from ${jobPage}
     where ${withoutSeparators(jobPage.text)} ilike ${like})`;
-}
-
-function withoutSeparators(column: PgColumn): SQL {
-  return sql`replace(replace(${column}, ${sql.raw("' '")}, ${sql.raw("''")}), ${sql.raw("'-'")}, ${sql.raw("''")})`;
 }
 
 function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: PaySql): SQL[] {

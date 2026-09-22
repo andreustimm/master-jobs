@@ -307,7 +307,12 @@ ASCII e três letras ou dígitos seguidos usam o pré-filtro
 planner o ignora sem erro — `tests/jobs-board.test.ts` (IT-214b) confere o
 plano. Exigem a extensão `pg_trgm`, criada por `0010_enable_pg_trgm.sql` com
 `CREATE EXTENSION IF NOT EXISTS`. Migrations `0010` e `0011` são só aditivas;
-reverter é `DROP INDEX` dos dois (a extensão pode ficar).
+reverter é `DROP INDEX` dos dois (a extensão pode ficar). O migrator roda numa
+transação, então `0011` usa `CREATE INDEX` comum, sem `CONCURRENTLY`: durante a
+construção, escritas em `job` e `job_page` esperam. No acervo local (9.060
+vagas) o índice de descrição tem 19 MB e ficou pronto em poucos segundos
+(observado, não cronometrado); rode
+`migrate.yml` fora da janela do sync.
 
 A migration que adicionar `archived_at` também deve manter um índice que suporte
 as varreduras por corte de `closed_at`/`archived_at`, conforme o TechSpec de

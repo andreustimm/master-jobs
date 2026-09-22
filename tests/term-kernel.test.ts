@@ -90,7 +90,7 @@ describe("term kernel", () => {
       text.replace(/[ -]/g, "").toLowerCase().includes(like.slice(1, -1));
     const terms = ["techlead", "Tech Lead", "java", "node.js", "k8s", "laravel", "typescript", "react"];
     const texts = [
-      "Senior Tech Lead (Remote)", "tech-lead", "TECH - LEAD", "t-e-c-h-l-e-a-d", "Java 21", "j a v a",
+      "Senior Tech Lead (Remote)", "tech-lead", "TECH-LEAD", "t-e-c-h-l-e-a-d", "Java 21", "j a v a",
       "Node.js and Node JS", "no de.js", "K8S", "La-ra-vel", "Type Script", "React Native", "re act",
       "techlead,java;react", "nothing here",
     ];
@@ -158,7 +158,7 @@ describe("term kernel against PostgreSQL", () => {
 
   it("IT-214c in PostgreSQL, no ~* hit is dropped by the replace/ilike prefilter", async () => {
     let checked = 0;
-    for (const [term, text] of [...PAIRS, ["techlead", "TECH - LEAD"], ["java", "J-A-V-A"]] as Array<[string, string]>) {
+    for (const [term, text] of [...PAIRS, ["techlead", "TECH-LEAD"], ["java", "J-A-V-A"]] as Array<[string, string]>) {
       const like = termPrefilterLike(term);
       if (like === null) continue;
       const [row] = await db.execute<{ hit: boolean; kept: boolean }>(
