@@ -52,7 +52,7 @@ function stripNoise(code: string): string {
 }
 
 const TRANSPORT_MODULES =
-  /\bfrom\s+["'](node:)?(http|https|http2|net|tls|dgram|undici|axios|got|node-fetch|ky|ws)["']|\bimport\(\s*["'](node:)?(http|https|http2|net|tls|dgram|undici|axios|got|node-fetch|ky|ws)["']\s*\)|\brequire\(\s*["'](node:)?(http|https|http2|net|tls|dgram|undici|axios|got|node-fetch|ky|ws)["']\s*\)/;
+  /\bfrom\s+["'](node:)?(http|https|http2|net|tls|dgram|child_process|undici|axios|got|node-fetch|ky|ws)["']|\bimport\(\s*["'](node:)?(http|https|http2|net|tls|dgram|child_process|undici|axios|got|node-fetch|ky|ws)["']\s*\)|\brequire\(\s*["'](node:)?(http|https|http2|net|tls|dgram|child_process|undici|axios|got|node-fetch|ky|ws)["']\s*\)/;
 
 /**
  * Que tipo de transporte de saída o trecho usa. Vazio quando nenhum.
@@ -110,6 +110,8 @@ describe("detector de transporte de saída", () => {
       ["import axios from 'axios';", "module:axios"],
       ['const { fetch: f } = await import("undici");', "module:undici"],
       ['const net = require("net");', "module:net"],
+      // Um `curl` ou `gh` em subprocesso também envia, sem passar por `fetch`.
+      ['import { execFile } from "node:child_process";', "module:child_process"],
       ["const ws = new WebSocket(url);", "xhr/ws"],
       ["navigator.sendBeacon(url, body);", "beacon"],
       ['  fetch(applyUrl, { method: "POST" });', "fetch"],
