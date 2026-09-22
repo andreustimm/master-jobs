@@ -18,6 +18,10 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+- The job list and its total are calculated together, reducing search work while preserving ordering and totals when changing pages.
+
+- Job filter counts and options require less work from the system while keeping the same results and grouping rules.
+
 ### Security
 
 - The CV shown on the public profile now hides email addresses, phone numbers
@@ -28,6 +32,24 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 - The no-login mode meant for development is automatically refused in any
   published environment.
 
+## [1.21.0] - 2026-09-22T18:02:40.049Z
+
+### New
+
+- Preparation for centralized improvement tracking, preserving priorities
+  and distinguishing ongoing work from verified deliveries. Activation will
+  be confirmed after the complete workflow is validated.
+
+## [1.20.9] - 2026-09-22T17:41:44.517Z
+
+- The project now defines internal availability and latency targets, incident tracking, and a report that distinguishes measured results from insufficient data.
+
+## [1.20.8] - 2026-09-22T17:17:31.926Z
+
+### Fixed
+
+- Preparing a new release now keeps the validated revision even when other
+  changes arrive during publication or a retry.
 
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 

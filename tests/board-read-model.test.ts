@@ -1,7 +1,7 @@
-import { sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
-import { boardFacets, countBoard, getJobDetail, listBoard } from "../src/core/db/repo.ts";
+import { boardFacets, countBoard, getJobDetail, listBoard, listBoardPage } from "../src/core/db/repo.ts";
 import { application, candidate, company, job, jobScore, source } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 import { primaryTrackId } from "./support/tracks.ts";
@@ -52,6 +52,32 @@ async function seedBoard(size: number): Promise<number> {
 }
 
 describe("Board SQL read model", () => {
+  it("mantém o total da página, inclusive além do fim e sem linhas elegíveis", async () => {
+    const candidateId = await seedBoard(6);
+    for (const offset of [0, 4, 99]) {
+      const filters = { limit: 2, offset };
+      const page = await listBoardPage(candidateId, filters);
+      expect(page.total).toBe(6);
+      expect(page.rows).toEqual(await listBoard(candidateId, filters));
+    }
+    await expect(listBoardPage(candidateId, { limit: 0 })).resolves.toEqual({ rows: [], total: 6 });
+    await expect(listBoardPage(candidateId, { minFit: 99 })).resolves.toEqual({ rows: [], total: 0 });
+  });
+
+  it("conta grupos antes do limite e não expõe a coluna de contagem nas linhas", async () => {
+    const candidateId = await seedBoard(6);
+    const ids = await db.select({ id: job.id }).from(job).limit(3);
+    await db.update(job).set({ title: "Repeated role" }).where(inArray(job.id, ids.map((row) => row.id)));
+    const filters = { groupRepeats: true, limit: 2, offset: 1 };
+    for (const scope of [candidateId, null]) {
+      const page = await listBoardPage(scope, filters);
+      expect(page.total).toBe(4);
+      expect(page.total).toBe(await countBoard(scope, filters));
+      expect(page.rows).toEqual(await listBoard(scope, filters));
+      expect(page.rows.every((row) => !("boardTotal" in row))).toBe(true);
+    }
+  });
+
   it("counts and facets every row beyond the former 5,000 ceiling", async () => {
     const candidateId = await seedBoard(5_005);
 
