@@ -15,3 +15,19 @@ export function assertProductionTarget(value: string | undefined): string {
   }
   return url.toString();
 }
+
+/**
+ * O host direto (`db.<ref>.supabase.co`) só publica AAAA, e o runner do GitHub
+ * não tem IPv6: o `migrate.yml` nunca conectou desde o corte de 19/09/2026 — o
+ * drizzle só dizia "Failed query: CREATE SCHEMA". O pooler de sessão da mesma
+ * região tem IPv4, aceita DDL (porta 5432, não a 6543 de transação) e usa a
+ * mesma senha; muda só o usuário, que ganha o sufixo do projeto.
+ */
+export function reachableMigrationTarget(value: string | undefined): string {
+  const url = new URL(assertProductionTarget(value));
+  if (url.hostname === PRODUCTION_POOLER_HOST) return url.toString();
+  url.hostname = PRODUCTION_POOLER_HOST;
+  url.port = "5432";
+  url.username = `postgres.${PRODUCTION_PROJECT_REF}`;
+  return assertProductionTarget(url.toString());
+}

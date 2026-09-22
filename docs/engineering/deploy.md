@@ -260,6 +260,14 @@ depois que alguém liga a proteção em Settings → Branches.
 O segredo usado por `migrate.yml` é `SUPABASE_MIGRATION_URL`; o workflow valida o
 project ref antes de abrir a conexão.
 
+**O host direto não é alcançável do runner.** `db.<ref>.supabase.co` só publica
+registro AAAA, e o runner hospedado do GitHub não tem IPv6: de 19/09 a 22/09/2026
+toda execução falhou com `Failed query: CREATE SCHEMA IF NOT EXISTS "drizzle"`,
+que é como o drizzle embrulha o erro de conexão. `migrar.sh` converte a URL direta
+no pooler de sessão da mesma região (`aws-0-sa-east-1.pooler.supabase.com:5432`,
+usuário `postgres.<ref>`, mesma senha) por `reachableMigrationTarget()` e mascara
+o resultado no log. A porta 6543 (transação) continua recusada.
+
 ## Migrar o banco
 
 ```bash
