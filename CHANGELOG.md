@@ -11,6 +11,15 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- Medição de produção (#221): `pnpm perf:producao` mede TTFB frio e quente
+  (p50/p95), `x-vercel-id` e `x-vercel-cache` das rotas públicas e, com o cookie
+  do dono em `JHO_PERF_SESSION`, de `/jobs` com `fit=45`, `workMode=remote` e
+  termo. `--logs` agrega por rota e estágio as linhas `perf` do log da Vercel.
+  Só GET e leitura de log; o cookie só sai por HTTPS ou loopback e nunca vai
+  para disco ou saída; termo, query string e mensagem bruta do log não aparecem
+  no relatório. Regras puras em `scripts/perf/medicao.ts`, procedimento e
+  primeira medição em `docs/engineering/performance-buscas.md`.
+
 - Minha conta (`/account`, #236): qualquer papel troca a própria senha e o
   nome de exibição. A troca exige a senha atual, limita a 5 tentativas por
   conta em 15 minutos (tentativa gravada em `auth_event` antes de contada, para

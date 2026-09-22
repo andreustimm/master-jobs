@@ -17,6 +17,7 @@ Três camadas, da mais barata para a mais fiel. Nenhuma substitui a outra.
 |---|---|---|---|
 | **Piso local** | `pnpm perf:jobs` | Quanto o servidor gasta sobre o banco em 6 cenários (padrão, termo, cluster, faixa salarial, ordenar por pagamento, sem agrupar), 10 mil vagas, e **quantas idas ao banco** cada um faz. Hermético: Postgres em Docker, fora do `pnpm check`. `JHO_PERF_OUT=arquivo` guarda o relatório; `JHO_PERF_JOBS=N` muda o corpus; `JHO_PERF_RUNS=N` e `JHO_PERF_WARMUPS=N` controlam as repetições (inteiros positivos, padrões 3 e 1); `JHO_PERF_JSON=arquivo` guarda amostras, volume de SQL/parâmetros, resultados de referência e plano de execução | Sem rede. Não mede React nem o navegador |
 | **Produção, por estágio** | Linha JSON `{"perf":"/jobs","totalMs":…,"region":"gru1","stages":{…}}` no log da função | Onde uma requisição real gasta o tempo: `auth`, `prelude`, `board`, `facets`, `tail` (e `cockpit` em `/`) | Sai só se a leitura passa de 1 s, ou sempre com `JHO_PERF_LOG=1`. Log da Vercel na Hobby dura 1 h |
+| **Produção, de fora** | `pnpm perf:producao` (e `--logs`) | TTFB frio e quente, p50/p95, região e cache por rota; com `JHO_PERF_SESSION`, `/jobs` com os filtros comuns; com `--logs`, a agregação das linhas `perf` acima | Ver [Medir a produção](#medir-a-produção-221). De fora não se prova que a instância estava fria |
 | **Região** | Cabeçalho `x-vercel-id` da resposta | Onde a função rodou. `<borda>::gru1::…` é o certo (o primeiro trecho é a borda de quem pediu, só o segundo é a função); `<borda>::iad1::…` é a função longe do banco | Só diz a região, não o custo |
 
 A linha de log leva só número, nome de estágio, rota **sem query string** e
@@ -28,6 +29,128 @@ filtro da pessoa, e é por isso que o Sentry roda sem tracing (ver
 resposta (a documentação do Next não tem API para isso), e o `proxy.ts` roda
 antes da renderização, sem saber quanto ela vai custar. Vale para rota de API,
 que não é onde a lentidão está.
+
+## Medir a produção (#221)
+
+`scripts/perf/medir-producao.ts`, pelo atalho `pnpm perf:producao`. Só faz GET
+e lê log: nada é gravado em produção. As regras que decidem o que sai no
+relatório são puras, em `scripts/perf/medicao.ts`, e testadas em
+`tests/perf-producao.test.ts`.
+
+### Sem sessão: frio e quente das rotas públicas
+
+```bash
+pnpm perf:producao                                  # 1 rodada × 10 amostras
+pnpm perf:producao --rodadas 3 --pausa 600          # 3 rodadas com 10 min ociosos entre elas
+pnpm perf:producao --amostras 20 --json perf.json   # guarda o resumo em JSON
+```
+
+Três cenários: `/login` (renderiza na função e faz uma consulta — o melhor sinal
+público de partida a frio), `/offline.html` (estático, servido pela CDN) e
+`/jobs` sem cookie (o proxy responde 307 sem renderizar). Antes de cada rodada
+o script abre a conexão num estático fora da conta, para a primeira amostra
+não somar DNS e TLS. "Primeira" é a 1ª requisição do cenário na rodada, e só é
+fria se a instância estava ociosa — daí `--pausa`. O relatório diz, por
+cenário, `borda::função` lido do `x-vercel-id` e o `x-vercel-cache`.
+
+**Medido em 22/09/2026, 21:27–21:48 UTC**, produção 1.21.2, 3 rodadas × 10
+amostras, 10 min ociosos entre rodadas, de São Paulo:
+
+| Cenário | Primeira (3 rodadas) | Quente p50 | Quente p95 | `x-vercel-id` |
+|---|---|---:|---:|---|
+| `/login` (função + 1 consulta) | 164 · 1.346 · 1.375 ms | 88 ms | 135 ms | `gru1::gru1` |
+| `/offline.html` (CDN) | 32–49 ms | 39 ms | 50 ms | `gru1` (sem função) |
+| `/jobs` sem cookie (proxy 307) | 40–45 ms | 39 ms | 49 ms | `gru1` (sem função) |
+
+A primeira rodada não estava fria (o script tinha rodado um minuto antes); as
+duas depois de 10 min ociosos custaram ~1,35 s, e uma das 27 quentes, 1.084 ms
+— provavelmente uma segunda instância subindo. **Região confirmada:** a função
+roda em `gru1`, ao lado do banco (`sa-east-1`). O custo da partida a frio é da
+função, não da borda nem do proxy: o 307 e o estático ficam em ~40 ms mesmo
+depois da pausa. Limites: um único ponto de origem, poucas amostras frias, e o
+`/login` faz uma consulta leve — não mede o custo de `/jobs`.
+
+### Com sessão: `/jobs` com os filtros comuns
+
+O cookie vem **só** do ambiente, do próprio dono, e nunca é gravado em arquivo,
+impresso ou mandado a outro host que não seja HTTPS ou `127.0.0.1`:
+
+1. No navegador, com a sessão aberta em produção: DevTools → Application →
+   Cookies → `jobs.mastertimm.com.br` → copie o **valor** de `jho_session`.
+2. No terminal, sem deixar o valor no histórico do shell:
+
+   ```bash
+   read -rs JHO_PERF_SESSION     # cole o valor; nada aparece
+   export JHO_PERF_SESSION
+   pnpm perf:producao --rodadas 3 --pausa 600 --amostras 10
+   unset JHO_PERF_SESSION
+   ```
+
+Além dos três públicos, mede `/jobs`, `/jobs?fit=45`,
+`/jobs?fit=45&workMode=remote` e `/jobs?fit=45&q=<termo>`. O termo padrão é
+`typescript`; `JHO_PERF_TERMO` troca, e o valor nunca aparece na saída — o
+relatório só diz "termo". Se a sessão venceu, o script para no primeiro 307
+para `/login` sem gravar nada. Cada requisição com sessão é uma visita real:
+conta como uso, e um `?by=` salvo nunca é pedido.
+
+### Por dentro: as linhas `perf` do log
+
+`/jobs` e `/` cronometram cada espera do banco com `createStageTimer`
+(`timer.time("auth" | "prelude" | "board" | "facets" | "tail" | "queue", …)`
+em `app/jobs/page.tsx` e `app/jobs/jobs-data.ts`; `cockpit` em `app/page.tsx`),
+dentro do `comVigia`. `registrarTempo` escreve uma linha JSON só com número,
+nome de estágio, rota sem query string e região:
+
+```json
+{"perf":"/jobs","totalMs":5291.3,"region":"gru1","stages":{"auth":168.5,"prelude":71,"board":1571,"facets":3479.2,"tail":0.1}}
+```
+
+Ela só sai quando a leitura passa de 1 s, ou sempre com `JHO_PERF_LOG=1` na
+Vercel. **Sem a variável a amostra é enviesada**: mostra só as lentas. Ligar a
+variável exige um novo deploy — é decisão do dono, e pode ser desligada depois.
+
+Para ler (o log da Hobby dura 1 h, então rode logo depois de usar a tela):
+
+```bash
+pnpm perf:producao --logs --since 1h
+```
+
+O script chama `vercel logs --environment production --query perf --json`,
+relê cada mensagem por `lerLinhaPerf` e imprime só a agregação por rota e
+estágio (n, p50, p95, máximo), a janela de tempo e o id da implantação.
+Mensagem bruta e caminho da requisição do log nunca são impressos. Quem
+preferir o CLI direto deve usar `--query perf` e ler só o campo `message`:
+os outros campos do registro trazem o caminho requisitado.
+
+**Uma linha observada em 22/09/2026 às 21:21 UTC**, no mesmo minuto em que a
+1.21.2 foi publicada (implantação `dpl_2w4g3kPZRb5y4E4KVDTi6jt8TkJZ`), sem
+`JHO_PERF_LOG`:
+
+| Estágio | ms |
+|---|---:|
+| `auth` | 168,5 |
+| `prelude` | 71 |
+| `board` | 1.571 |
+| `facets` | 3.479,2 |
+| `tail` | 0,1 |
+| **total** | **5.291,3** |
+
+Uma amostra, provavelmente fria, com filtros desconhecidos: não é p50 de nada.
+Mas localiza a espera: `board` e `facets` são 96% do total, e o prelúdio, que a
+#175 enxugou, custa 71 ms. Leitura local vs. produção: o `perf:jobs` põe
+`facets` em ~24 ms com 10 mil vagas sem rede; 3,5 s em produção é outra ordem
+de grandeza, e não se explica por round-trip (uma ida em `gru1` custa poucos
+ms). Hipóteses a medir com `JHO_PERF_LOG=1`: partida a frio do pool e do plano,
+buffers frios no Supabase, ou o plano de produção diferente do local.
+
+### Procedimento recomendado
+
+1. `pnpm perf:producao --rodadas 3 --pausa 600` (sem sessão) — região e frio.
+2. O mesmo com `JHO_PERF_SESSION` — `/jobs` por filtro, frio e quente.
+3. Se o dono ligar `JHO_PERF_LOG=1`: usar a tela alguns minutos e rodar
+   `pnpm perf:producao --logs --since 1h` — estágios por requisição.
+4. Registrar na #221 as tabelas impressas, o SHA/versão e a janela. Nenhuma
+   delas carrega filtro, termo, cookie ou caminho requisitado.
 
 ## Diagnóstico
 
@@ -210,6 +333,7 @@ das amostras. Sem essa opção permanece somente o plano da maior consulta.
 | 1 ✅ | `description` mínima sem descomprimir o texto | alto × baixo | `repo.ts` |
 | 1 ✅ | Prelúdio de `/jobs`: trilhas ∥ câmbio, sem `listTracks` duplicado, câmbio em 1 consulta | alto × baixo | `jobs-data.ts` |
 | 1 ✅ | Medição: baseline local e log por estágio | habilita o resto | `perf:jobs`, `registrarTempo` |
+| 🟡 | Medição de produção: TTFB frio/quente, região e agregação das linhas `perf` (#221, em revisão; falta a rodada com sessão) | habilita o cache de facetas | `perf:producao` |
 | PR 2 | Overlay só na troca de rota (#220, em revisão); filtros que se aplicam sozinhos (#218) | alto × médio | fase 3 |
 | 2 ✅ | Seleção compartilhada para lista e total, facetas fundidas | alto × médio | `repo.ts` |
 | 2 | Busca por termo indexada (`pg_trgm` ou `tsvector`) | altíssimo × médio | migration |
