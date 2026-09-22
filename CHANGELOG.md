@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+- As facetas do quadro passam a ler o conjunto elegível uma vez e devolver contadores, clusters e fontes em uma consulta, preservando a primeira publicação elegível de cada dimensão e o isolamento por candidato.
+
 ## [1.20.7] - 2026-09-22
 
 - Operações: alerta Sentry configurado para erros novos, regressões e alta prioridade em produção, com e-mail para o responsável e intervalo de 30 minutos; disparo validado com canário sintético.

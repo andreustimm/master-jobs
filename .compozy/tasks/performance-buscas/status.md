@@ -19,7 +19,8 @@ ganho com número. A primeira entrega cortou a rede e as idas ao banco; o que re
 | PR 1 — [#175](https://github.com/andreustimm/master-jobs/pull/175) | Em produção pela PR #178, mesclada em 22/09 às 13:39 UTC; CI e fumaça de produção verdes. |
 | Verificação em produção | Deploy e fumaça confirmados; pendente medir `x-vercel-id` = `<borda>::gru1::…` e a primeira linha `perf` de `/jobs` com `JHO_PERF_LOG=1` |
 | Tarefa 17 | Entregue: vigia em `/` e `/jobs`, teto nas funções de composição e QA de concorrência aprovado. Já em main. |
-| Tarefa 13 | Em validação na branch `perf/filtro-salarial`; demais tarefas ainda pendentes. |
+| Tarefa 13 | Entregue em `dev` pela PR #192 e promovida a `staging`; produção depende da PR humana #193. |
+| Tarefa 11 | Facetas unificadas com seis resultados de referência idênticos; em validação na branch `perf/facetas-filtros`. |
 
 **Base das próximas branches.** As tarefas abaixo usam coisas que só existem com a
 #175 (`pnpm perf:jobs`, `hasFullDescription`, `renderSession`, o cronômetro de
@@ -65,7 +66,7 @@ varreduras do acervo.
 
 ### 13 — Normalização salarial compartilhada
 
-Implementada na branch `perf/filtro-salarial`, em validação antes da PR.
+Entregue pela PR #192 em `dev` e `staging`; aguardando promoção humana para produção.
 Com 10 mil vagas, 29 moedas, três aquecimentos e dez amostras, a mediana da
 faixa salarial caiu de 395,05 para 109,95 ms; ordenar por pagamento caiu de
 96,75 para 89,15 ms. São tempos locais, sem rede.

@@ -25,7 +25,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { candidate, company, job, source } from "../src/core/db/schema.ts";
 import type { DB } from "../src/core/db/client.ts";
-import { ensurePrimaryTrack, trackOverview, trackSuggestion } from "../src/contexts/matching/index.ts";
+import { boardFacets, ensurePrimaryTrack, trackOverview, trackSuggestion } from "../src/contexts/matching/index.ts";
 import { candidateSkills } from "../src/contexts/skills/index.ts";
 import { loadSkillsScreen } from "../app/candidate/skills/data.ts";
 import { loadCockpit } from "../app/cockpit-data.ts";
@@ -116,6 +116,13 @@ async function seedOwner(): Promise<number> {
 }
 
 describe("leque de consultas por tela", () => {
+  it("lê contadores e opções de facetas em uma única ida ao banco", async () => {
+    const candidateId = await seedOwner();
+    await ensurePrimaryTrack(candidateId);
+    const queries = await queriesOf(() => boardFacets(candidateId, { groupRepeats: true }));
+    expect(queries).toHaveLength(1);
+  });
+
   it("a tela de skills não passa do tamanho do pool", async () => {
     const candidateId = await seedOwner();
     await ensurePrimaryTrack(candidateId);

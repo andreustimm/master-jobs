@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+- Os contadores e as opções dos filtros de vagas exigem menos trabalho do sistema, mantendo os mesmos resultados e critérios de agrupamento.
+
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 
 - Alertas por e-mail configurados para avisar o responsável sobre erros novos em produção e falhas resolvidas que voltam a acontecer.

@@ -65,7 +65,7 @@ Números do PostgreSQL local com 9 mil vagas, sem rede — o **piso**.
 
 | Achado | Evidência | Estado |
 |---|---|---|
-| 5 a 6 varreduras do acervo por requisição, cada uma com `row_number()` (`canonicalOfGroup`) e descompressão de `description_text` | `repo.ts`: lista, contagem, 3 facetas e `countHiddenByPayRange` | **MEDIDO**, aberto (fase 2) |
+| Varreduras repetidas por requisição (`canonicalOfGroup`) | Lista, contagem e `countHiddenByPayRange` ainda escolhem a canônica; as três facetas compartilham uma leitura | **MEDIDO**, facetas corrigidas; lista e contagem em avaliação |
 | Busca por termo: regex `~*` sobre título, empresa e descrição, sem índice possível | 160–175 ms por consulta × 5 consultas; só `sum(length(description_text))` leva 116 ms | **MEDIDO**, aberto (fase 2). O padrão `[ -]?` de `term.ts` impede extração de trigramas (INFERIDO) |
 | `length(descricao) >= 200` calculado em todas as linhas antes do `LIMIT`, para a UI só testar `< 200` | 103 ms → 26 ms com `substr` (mesmo resultado em 199/200/201, acento, emoji, vazio, nulo) | **MEDIDO**, corrigido |
 | Faixa salarial: `paySql` interpolada repetidamente | Na tela completa com 29 moedas, 183 KB de SQL e 1.169 parâmetros; normalização compartilhada reduziu para 48 KB e 301 | **MEDIDO**, corrigido; comparação abaixo |
@@ -141,6 +141,34 @@ volume total de SQL/parâmetros, resultados de referência e `EXPLAIN (ANALYZE,
 BUFFERS, FORMAT JSON)` da maior consulta de cada cenário. O plano é colhido no
 aquecimento, fora das amostras cronometradas. Os resultados de referência devem
 coincidir antes/depois; uma diferença impede declarar a otimização equivalente.
+
+## Facetas em uma consulta — medição de 22/09/2026
+
+Contadores, clusters e fontes compartilham os filtros comuns em uma consulta.
+Cada dimensão continua ignorando apenas o próprio filtro: selecionar uma fonte
+não apaga as outras opções, e selecionar um cluster não apaga os demais.
+A fonte integra a chave de agrupamento; o cluster pode variar entre publicações
+do mesmo grupo. Por isso a leitura conserva dois representantes: o menor id
+entre todas as elegíveis e o menor id entre as que passam pelo cluster escolhido.
+As vagas anônimas continuam separadas, e o score e as candidaturas continuam
+restritos à pessoa e à trilha da sessão.
+
+Três aquecimentos e dez amostras sobre o mesmo corpus de 10 mil vagas.
+Medianas locais, sem rede; os seis resultados completos e seus hashes coincidem.
+
+| Cenário | Total antes → depois | Facetas antes → depois | Consultas antes → depois |
+|---|---:|---:|---:|
+| Padrão | 75,20 → 61,85 ms | 37,75 → 23,80 ms | 9 → 7 |
+| Com termo | 184,40 → 129,95 ms | 110,70 → 53,25 ms | 9 → 7 |
+| Com cluster | 50,50 → 48,20 ms | 28,05 → 23,40 ms | 9 → 7 |
+| Faixa salarial | 111,40 → 101,25 ms | 39,50 → 23,70 ms | 10 → 8 |
+| Ordenar por pagamento | 86,05 → 70,50 ms | 38,25 → 22,40 ms | 9 → 7 |
+| Sem agrupar | 65,20 → 59,45 ms | 18,60 → 16,70 ms | 8 → 6 |
+
+`tests/board-facets.test.ts` cobre dimensões combinadas, a troca da publicação
+representante, fontes distintas do mesmo tipo, empregador anônimo, cluster
+nulo, arquivamento, candidatura alheia e conjunto vazio. A régua de consultas
+exige uma única ida para todas as facetas; o limite por tela continua valendo.
 
 ## Plano
 
