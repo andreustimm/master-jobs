@@ -18,7 +18,15 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
-<!-- sem-nota-usuario -->
+- Alertas por e-mail configurados para avisar o responsável sobre erros novos em produção e falhas resolvidas que voltam a acontecer.
+
+## [1.20.6] - 2026-09-22T14:44:58.815Z
+
+### Melhorado
+
+- Filtrar vagas por faixa salarial e ordenar por remuneração exigem menos
+  trabalho do sistema. Os valores, a ordem das vagas e os avisos sobre salários
+  não informados continuam seguindo os mesmos critérios.
 
 ## [1.20.5] - 2026-09-22T11:47:50.607Z
 

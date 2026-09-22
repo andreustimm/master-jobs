@@ -18,7 +18,15 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
-<!-- sem-nota-usuario -->
+- Email alerts are configured to notify the system owner of new production errors and recurring failures that had been resolved.
+
+## [1.20.6] - 2026-09-22T14:44:58.815Z
+
+### Improved
+
+- Filtering jobs by pay range and sorting by compensation require less work
+  from the system. Amounts, job ordering and notices for undisclosed salaries
+  continue to follow the same rules.
 
 ## [1.20.5] - 2026-09-22T11:47:50.607Z
 

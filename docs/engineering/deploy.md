@@ -459,6 +459,40 @@ log da Vercel. Para ligá-los, envolva a configuração com `withSentryConfig` e
 exige conta e token no momento do build, e adicionar risco de build sem
 benefício imediato logo depois de uma queda não se justifica.
 
+### Alertas de produção
+
+A regra [Master Jobs — erros em produção](https://master-timm.sentry.io/monitors/alerts/6032839/)
+é do projeto `master-timm/master-jobs` e usa o detector de issues `10385751`.
+Foi configurada em 22/09/2026 e reaproveita a regra existente, sem duplicá-la.
+
+- Ambiente: `production`, o mesmo valor de `VERCEL_ENV` usado na instrumentação.
+- Disparos: primeira ocorrência, regressão ou issue de alta prioridade.
+- Filtro: nível `error` ou `fatal`.
+- Canal: e-mail direto para Andreus, membro `4377260` no Sentry.
+- Intervalo entre notificações repetidas: 30 minutos.
+
+O canário sintético `MASTER-JOBS-7`, evento `92d23a7c0e784e12b1a9efc764f59e5b`,
+foi recebido às 13:52:44 UTC; o Sentry registrou o disparo da regra às
+13:53:12 UTC em 22/09/2026. Isso comprova a ingestão e a execução do alerta;
+a entrega na caixa de entrada não foi inspecionada. O evento é identificado
+por `synthetic:true` e `verification:O03-canary` e não representa falha do produto.
+A issue `MASTER-JOBS-7` foi marcada como resolvida após a validação.
+
+Para conferir ou suspender a regra:
+
+```bash
+rtk sentry alert issues view master-timm/master-jobs/6032839 --json
+rtk sentry alert issues edit master-timm/master-jobs/6032839 --status disabled
+rtk sentry alert issues edit master-timm/master-jobs/6032839 --status active
+```
+
+O CLI precisa de `alerts:write` para editar alertas; autenticar só com leitura
+resulta em 403. Resolver uma issue de teste exige separadamente `event:write`.
+Os tokens ficam no armazenamento de credenciais do CLI, nunca no repositório.
+O alerta não cobre processos encerrados antes de enviar o evento, como o limite
+de execução da Vercel; esse diagnóstico continua no
+[runbook de timeouts](../operations.md#uma-tela-devolve-504-em-produção-e-só-às-vezes).
+
 ## O que confirmar depois de subir
 
 1. `/login` responde e nenhuma outra rota responde sem sessão.

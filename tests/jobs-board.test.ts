@@ -321,6 +321,26 @@ describe("minimum pay and pay sort (ADR-013)", () => {
     expect(new Set(ids(await listBoard(owner, strict)))).toEqual(new Set([jobs.brl, jobs.low]));
   });
 
+  it("a faixa escolhe a publicação elegível do grupo; só ordenar mantém a primeira", async () => {
+    await rates({ BRL: 5.0 });
+    const first = await addJob({ title: "Engineer", company: "Same employer", compMax: 4000, cur: "USD", per: "month" });
+    const eligible = await addJob({ title: "Engineer", company: "Same employer", compMax: 40_000, cur: "BRL", per: "month" });
+    const unknown = await addJob({ title: "Other", compMax: 900_000, cur: "ARS", per: "month" });
+    const range: BoardFilters = { groupRepeats: true, pay: { ...USD_MONTH, min: 6000, max: 9000 } };
+
+    const rows = await listBoard(owner, range);
+    expect(ids(rows)).toEqual([eligible, unknown]);
+    expect(rows[0]).toMatchObject({ payAmount: 8000, payState: "amount" });
+    expect(rows[0]!.repeats.map((posting) => posting.id)).toEqual([first, eligible]);
+    expect(rows[1]).toMatchObject({ payAmount: null, payState: "not_comparable" });
+    expect(await countBoard(owner, range)).toBe(2);
+    expect(ids(await listBoard(owner, { ...range, pay: { ...USD_MONTH, min: 6000, max: 9000, disclosedOnly: true } }))).toEqual([eligible]);
+
+    const sorted: BoardFilters = { groupRepeats: true, pay: USD_MONTH, sort: "comp" };
+    expect(ids(await listBoard(owner, sorted))).toEqual([first, unknown]);
+    expect(await countBoard(owner, sorted)).toBe(2);
+  });
+
   it("IT-111 the SQL amount equals the TypeScript normalizer for every period", async () => {
     await rates({ BRL: 5.0 });
     const cases = [
