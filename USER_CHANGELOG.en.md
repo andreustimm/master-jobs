@@ -18,9 +18,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### New
+
 - Preparation for centralized improvement tracking, preserving priorities
   and distinguishing ongoing work from verified deliveries. Activation will
   be confirmed after the complete workflow is validated.
+
+## [1.20.7] - 2026-09-22T16:01:55.822Z
 
 - Email alerts are configured to notify the system owner of new production errors and recurring failures that had been resolved.
 

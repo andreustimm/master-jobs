@@ -18,9 +18,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Novidade
+
 - Preparação do acompanhamento centralizado das melhorias, para preservar
   prioridades e distinguir trabalho em andamento de entregas verificadas.
   A ativação será confirmada após a validação do fluxo completo.
+
+## [1.20.7] - 2026-09-22T16:01:55.822Z
 
 - Alertas por e-mail configurados para avisar o responsável sobre erros novos em produção e falhas resolvidas que voltam a acontecer.
 
