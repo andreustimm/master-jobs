@@ -18,6 +18,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### New
+
+- New My account screen, in the menu: change your display name and your
+  password without asking an admin. Changing the password requires the
+  current one; every other session of the account is signed out and you stay
+  signed in. The email is still changed by an admin.
+
 ### Security
 
 - An invited account can no longer see or change the owner's profile, CV,
@@ -25,7 +32,19 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   denied in the candidate area, including when an admin is acting as that
   account.
 
+- The CV shown on the public profile now hides email addresses, phone numbers
+  with a country code or a parenthesised area code, and the whole paragraph or
+  table that states a salary expectation (such as "Salary expectation:" or
+  "Current salary: …"), even when they are written in the CV text. An amount
+  written with no label or mention of salary is still shown.
+- The no-login mode meant for development is automatically refused in any
+  published environment.
+
 ### Fixed
+
+- While email delivery is not configured on the server, the password recovery
+  link is no longer written to the server's technical log, where other people
+  could read it. The log now shows only an alert that the email was not sent.
 
 - The system no longer makes automated requests to LinkedIn, not even for jobs
   that came from an email alert or when another site redirects there. Those
@@ -37,16 +56,6 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   never deletes a job that has an application.
 
 - The database connection is configured and validated with limited permissions; it takes effect in the next approved production deployment.
-
-### Security
-
-- The CV shown on the public profile now hides email addresses, phone numbers
-  with a country code or a parenthesised area code, and the whole paragraph or
-  table that states a salary expectation (such as "Salary expectation:" or
-  "Current salary: …"), even when they are written in the CV text. An amount
-  written with no label or mention of salary is still shown.
-- The no-login mode meant for development is automatically refused in any
-  published environment.
 
 ### Improved
 
@@ -92,7 +101,6 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 - Filtering jobs by pay range and sorting by compensation require less work
   from the system. Amounts, job ordering and notices for undisclosed salaries
   continue to follow the same rules.
-||||||| parent of 3948771 (fix(auth): nenhuma conta recebe o candidato de outra pessoa)
 
 ## [1.20.5] - 2026-09-22T11:47:50.607Z
 

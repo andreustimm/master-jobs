@@ -63,6 +63,7 @@ try {
     ["candidate vocabulary", "/candidate/vocabulary"],
     ["referrals", "/referrals"],
     ["admin users", "/admin/users"],
+    ["account", "/account"],
     // Ver o comentário em `ui.mjs`: rota nova não herda guarda transversal.
     ["job countries hub", "/jobs/904000101/paises"],
     // A tela mais aberta do produto, e estava fora das quatro listas — foi assim
@@ -82,4 +83,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log("\n10/10 páginas sem violações axe WCAG 2.2 AA");
+console.log("\n11/11 páginas sem violações axe WCAG 2.2 AA");

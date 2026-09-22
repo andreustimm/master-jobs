@@ -9,6 +9,18 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Minha conta (`/account`, #236): qualquer papel troca a própria senha e o
+  nome de exibição. A troca exige a senha atual, limita a 5 tentativas por
+  conta em 15 minutos (tentativa gravada em `auth_event` antes de contada, para
+  rajada concorrente não passar junta), derruba todas as sessões da conta e
+  abre uma nova para o navegador que pediu; registra `password_changed` e
+  `profile_updated`. Novas ações `account:read` e `account:write` na política;
+  sessão emprestada lê, mas nunca escreve na conta do alvo. Troca de e-mail
+  continua só com admin até haver confirmação por e-mail (`docs/security.md`).
+  Link "Minha conta" no menu; rota nas guardas de inglês, largura e axe.
+
 ### Segurança
 
 - Uma conta não recebe mais o candidato de outra pessoa. Em produção, uma
@@ -34,7 +46,40 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   `/admin/users` nascia marcado como padrão e era pontuado com o
   `profile.yaml` do dono.
 
+- Inventário de entradas (#197): toda página, Route Handler (por método) e
+  export de módulo `"use server"` — em qualquer forma e nome de arquivo — é
+  descoberto pela semântica do Next e precisa de política ou exceção
+  registrada com justificativa; entrada nova sem classificação e exceção órfã
+  reprovam. `logoutAction`, `setLocaleAction` e `setAppearanceAction` passam
+  a constar como exceções. `tests/entry-denial.test.ts` chama cada action com
+  sessão ausente, forjada, expirada, revogada e de conta desabilitada, ids da
+  vítima e sessão emprestada, e exige recusa sem escrita, cookie, revalidação,
+  `after()` ou rede.
+- `JHO_AUTH_MODE=open` só vale na máquina local: em deployment (`VERCEL`
+  presente, ou `VERCEL_ENV`/`JHO_ENV` diferente de `local`) o pedido é ignorado, em
+  sessão e em `proxy.ts`, pela mesma função de domínio.
+- O CV publicado em `/p/[slug]` com os dois consentimentos passa por
+  `publicCvText()`: e-mail, telefone com código de país ou DDD entre
+  parênteses e o bloco inteiro (parágrafo, item ou tabela entre linhas em
+  branco; a seção, quando é título) que traz rótulo de pretensão salarial ou
+  palavra de remuneração perto de um valor são retirados. Detecção por padrão, com limite declarado e testado.
+- `/recruiter/[candidateId]` autoriza a leitura por `requirePage("candidate:read")`
+  depois do vínculo, em vez de decidir fora da política.
+- Teste de concorrência: dois resgates simultâneos do mesmo link de
+  recuperação trocam a senha uma vez só.
+
 ### Corrigido
+
+- Recuperação de senha: em deployment sem `RESEND_API_KEY`/`RESEND_FROM`, o
+  adapter de console imprimia o e-mail inteiro — com o link de reset, que é
+  credencial — no log das funções da Vercel. `configuredMailer` passa a usar o
+  console só em processo local (`isLocalProcess`, a mesma lista de permissão
+  do modo aberto) e escolhe `withheldMailer` em qualquer outro ambiente e
+  sempre que a chave está presente sem remetente: ele emite um
+  alerta com `console.warn` sem destinatário, assunto nem link, e devolve falha,
+  para o `auth_event` gravar `reset_send_failed`. O console com corpo completo
+  fica restrito ao terminal local sem chave. Checklist humano de ativação do
+  Resend em `docs/operations.md` (#237).
 
 - Rede: `assertSafeRemoteUrl` recusa `linkedin.com`, `linkedin.cn`, `lnkd.in`,
   `licdn.com` e subdomínios antes do DNS, e `safeRemoteFetch` repete a
@@ -68,30 +113,6 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   `docs/engineering/deploy.md` deixa de proibir o `sslmode` que o código aceita.
 
 - Operações: conexão restrita de produção configurada e validada antes do deploy; runbook corrigido para TLS, pooler e rotação recuperável. Ativação aguarda promoção humana.
-
-### Segurança
-
-- Inventário de entradas (#197): toda página, Route Handler (por método) e
-  export de módulo `"use server"` — em qualquer forma e nome de arquivo — é
-  descoberto pela semântica do Next e precisa de política ou exceção
-  registrada com justificativa; entrada nova sem classificação e exceção órfã
-  reprovam. `logoutAction`, `setLocaleAction` e `setAppearanceAction` passam
-  a constar como exceções. `tests/entry-denial.test.ts` chama cada action com
-  sessão ausente, forjada, expirada, revogada e de conta desabilitada, ids da
-  vítima e sessão emprestada, e exige recusa sem escrita, cookie, revalidação,
-  `after()` ou rede.
-- `JHO_AUTH_MODE=open` só vale na máquina local: em deployment (`VERCEL`
-  presente, ou `VERCEL_ENV`/`JHO_ENV` diferente de `local`) o pedido é ignorado, em
-  sessão e em `proxy.ts`, pela mesma função de domínio.
-- O CV publicado em `/p/[slug]` com os dois consentimentos passa por
-  `publicCvText()`: e-mail, telefone com código de país ou DDD entre
-  parênteses e o bloco inteiro (parágrafo, item ou tabela entre linhas em
-  branco; a seção, quando é título) que traz rótulo de pretensão salarial ou
-  palavra de remuneração perto de um valor são retirados. Detecção por padrão, com limite declarado e testado.
-- `/recruiter/[candidateId]` autoriza a leitura por `requirePage("candidate:read")`
-  depois do vínculo, em vez de decidir fora da política.
-- Teste de concorrência: dois resgates simultâneos do mesmo link de
-  recuperação trocam a senha uma vez só.
 
 ### Alterado
 
@@ -163,7 +184,6 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 - O benchmark de buscas aceita `JHO_PERF_RUNS`, `JHO_PERF_WARMUPS` e
   `JHO_PERF_JSON` para guardar amostras, volume de SQL, parâmetros, resultados
   de referência e planos `EXPLAIN ANALYZE`.
-||||||| parent of 3948771 (fix(auth): nenhuma conta recebe o candidato de outra pessoa)
 
 ## [1.20.5] - 2026-09-22
 

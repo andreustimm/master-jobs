@@ -18,6 +18,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Novidade
+
+- Nova tela Minha conta, no menu: troque o seu nome de exibição e a sua senha
+  sem pedir ao admin. Para trocar a senha é preciso informar a atual; ao
+  trocar, todas as outras sessões da conta são encerradas e você continua
+  conectado. O e-mail continua sendo trocado por um admin.
+
 ### Segurança
 
 - Uma conta convidada não enxerga nem altera mais o perfil, o currículo, a
@@ -25,7 +32,21 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   negado na área do candidato, inclusive quando o admin assume a identidade
   dessa conta.
 
+- O currículo publicado no perfil público passa a esconder e-mails, telefones
+  com código de país ou com DDD entre parênteses e o parágrafo ou a tabela
+  inteira em que aparece a pretensão salarial (como "Pretensão salarial:",
+  "Salário atual: R$ …" ou "Salary expectation:"), mesmo quando estão escritos
+  no texto. Um valor escrito sem rótulo nem menção a salário continua
+  aparecendo.
+- O modo sem login, próprio para desenvolvimento, é recusado automaticamente
+  em qualquer ambiente publicado.
+
 ### Corrigido
+
+- Enquanto o envio de e-mail não estiver configurado no servidor, o link de
+  recuperação de senha não é mais gravado no registro técnico do servidor,
+  onde outras pessoas poderiam lê-lo. O registro passa a mostrar só um alerta
+  de que o e-mail não foi enviado.
 
 - O sistema nunca mais faz pedidos automáticos ao LinkedIn, nem quando uma
   vaga veio de um alerta por e-mail ou quando outro site redireciona para lá.
@@ -37,17 +58,6 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   novo, e nunca apaga vaga com candidatura.
 
 - A conexão com o banco foi preparada com permissões limitadas e validada; a ativação ocorrerá no próximo deploy de produção aprovado.
-
-### Segurança
-
-- O currículo publicado no perfil público passa a esconder e-mails, telefones
-  com código de país ou com DDD entre parênteses e o parágrafo ou a tabela
-  inteira em que aparece a pretensão salarial (como "Pretensão salarial:",
-  "Salário atual: R$ …" ou "Salary expectation:"), mesmo quando estão escritos
-  no texto. Um valor escrito sem rótulo nem menção a salário continua
-  aparecendo.
-- O modo sem login, próprio para desenvolvimento, é recusado automaticamente
-  em qualquer ambiente publicado.
 
 ### Melhorado
 
@@ -92,7 +102,6 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 - Filtrar vagas por faixa salarial e ordenar por remuneração exigem menos
   trabalho do sistema. Os valores, a ordem das vagas e os avisos sobre salários
   não informados continuam seguindo os mesmos critérios.
-||||||| parent of 3948771 (fix(auth): nenhuma conta recebe o candidato de outra pessoa)
 
 ## [1.20.5] - 2026-09-22T11:47:50.607Z
 

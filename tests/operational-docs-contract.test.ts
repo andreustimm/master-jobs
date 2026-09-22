@@ -39,16 +39,16 @@ describe("operational environment contract", () => {
         RESEND_API_KEY: "re_fake",
         RESEND_FROM_EMAIL: "mail@example.test",
       })).name,
-    ).toBe("console");
+    ).toBe("withheld");
   });
 
-  it("UT-003: absent or blank values select console without printing the key", () => {
+  it("UT-003: absent or blank values never send and never print the key", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     expect(configuredMailer(fakeEnv()).name).toBe("console");
     expect(
       configuredMailer(fakeEnv({ RESEND_API_KEY: "re_fake_secret", RESEND_FROM: "  " })).name,
-    ).toBe("console");
+    ).toBe("withheld");
     expect(log).not.toHaveBeenCalled();
   });
 

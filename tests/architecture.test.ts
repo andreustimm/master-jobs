@@ -554,6 +554,8 @@ describe("authorisation (AUTH-01)", () => {
    */
   const PAGE_POLICY: Record<string, { guard: string } | { exception: string }> = {
     "app/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
+    // A própria conta, de qualquer papel. Nenhum id na URL: a conta é a da sessão.
+    "app/account/page.tsx": { guard: 'requirePage("account:read")' },
     "app/admin/captures/page.tsx": { guard: 'requirePage("admin:access")' },
     "app/admin/operacoes/page.tsx": { guard: 'requirePage("admin:access")' },
     "app/admin/users/page.tsx": { guard: 'requirePage("user:manage")' },

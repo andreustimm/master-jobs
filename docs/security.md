@@ -204,6 +204,41 @@ candidate` dá à conta desvinculada um candidato próprio.
 
 ---
 
+## Minha conta (`/account`) — o que a própria conta muda
+
+A tela existe para qualquer papel e age sempre sobre `session.userId`; nenhum
+id vem da URL nem do formulário (`account:read` para ver, `account:write` para
+mudar, em `src/contexts/auth/domain/policy.ts`).
+
+- **Trocar a senha exige a senha atual.** Sem ela, um cookie roubado viraria
+  posse permanente da conta. Conta que entra só por link não define a primeira
+  senha por aqui — usa a recuperação.
+- **Limite de tentativas: 5 por conta em 15 minutos**, certas ou erradas. A
+  tentativa é gravada em `auth_event` (`password_change_attempt`) ANTES de ser
+  contada, então uma rajada concorrente não passa junta pelo limite. Senha nova
+  fraca e confirmação diferente não consomem tentativa.
+- **Hash gravado ilegível nega**, pelo mesmo `verifyPassword` do login.
+- **Trocar derruba TODAS as sessões da conta**, inclusive a de quem pediu, e
+  abre uma sessão nova para esse navegador. Na prática "as outras caem e eu
+  continuo dentro", e um cookie copiado antes da troca também morre. Fica
+  registrado `password_changed` com o número de sessões encerradas.
+- **Sessão emprestada não escreve na conta do alvo** — nem senha, nem nome,
+  mesmo quando o alvo é admin. A política nega `account:write` por
+  `impersonatedBy !== null` antes de olhar papel, e a composição
+  (`changePasswordForSession`, `renameForSession`) nega de novo. A tela abre
+  para leitura, sem formulário.
+- **Nome de exibição** é editável e registra `profile_updated`.
+
+**Decisão: troca de e-mail fica só com admin (`/admin/users`).** O e-mail é o
+login e o destino da recuperação de senha. Trocá-lo pela própria sessão sem
+confirmar a posse do endereço novo deixaria quem roubou uma sessão desviar a
+recuperação para si e tomar a conta de vez. A confirmação por e-mail depende do
+Resend ativo em produção (#237), que ainda é pendência do dono; quando existir,
+a troca pela própria conta pode entrar com link de confirmação enviado ao
+endereço NOVO e aviso ao antigo.
+
+---
+
 ## Riscos aceitos conscientemente
 
 **Autenticação exigida por omissão** — ✅ **19/08.** O padrão era `single-user`,
