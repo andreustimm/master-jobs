@@ -92,6 +92,7 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`0019`](adr/0019-retencao-de-payloads-de-ingestao.md) | Payload de ingestão temporário e texto normalizado durável |
 | [`0020`](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md) | Arquivamento de vagas preserva candidaturas |
 | [`0021`](adr/0021-ambientes-nao-produtivos-com-dados-sinteticos.md) | Dev e staging usam fixtures, não ingestão real |
+| [`0022`](adr/0022-novidades-compiladas-no-build.md) | Novidades compiladas no build, com artefato privado por idioma |
 
 ---
 

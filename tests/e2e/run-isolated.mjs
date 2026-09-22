@@ -189,20 +189,22 @@ try {
   };
 
   await run(process.execPath, ["scripts/sw-version.mjs"], { cwd: appRoot, env });
+  await run(process.execPath, ["scripts/build-changelog.ts"], { cwd: appRoot, env });
   await run(process.execPath, [nextCli, "build", "--webpack"], { cwd: appRoot, env });
   const standaloneAppRoot = join(appRoot, ".next", "standalone", relative(tracingRoot, appRoot));
-  await Promise.all([
-    access(join(standaloneAppRoot, "USER_CHANGELOG.pt-BR.md")),
-    access(join(standaloneAppRoot, "USER_CHANGELOG.en.md")),
-    access(join(standaloneAppRoot, "config", "certs", "supabase-ca.crt")),
-  ]);
+  await access(join(standaloneAppRoot, "config", "certs", "supabase-ca.crt"));
+  for (const file of ["USER_CHANGELOG.pt-BR.md", "USER_CHANGELOG.en.md"]) {
+    // The complete browser suite must work without any source Markdown after build.
+    await rm(join(appRoot, file));
+    await rm(join(standaloneAppRoot, file), { force: true });
+  }
   await Promise.all([
     cp(join(appRoot, "public"), join(standaloneAppRoot, "public"), { recursive: true }),
     cp(join(appRoot, ".next", "static"), join(standaloneAppRoot, ".next", "static"), {
       recursive: true,
     }),
   ]);
-  console.log("✓ IT-011 standalone inclui os dois changelogs localizados");
+  console.log("✓ IT-011 standalone roda com novidades compiladas e sem os Markdown de origem");
   await run(process.execPath, [manual ? "tests/e2e/setup-manual.ts" : "tests/e2e/setup.mjs"], { cwd: appRoot, env });
   runtimeLogin = await provisionRuntimeLogin(testDatabase.url);
   const runtimeEnv = { ...env, DATABASE_URL: runtimeLogin.url };
@@ -235,55 +237,6 @@ try {
   await run(process.execPath, ["tests/e2e/ui.mjs"], { cwd: appRoot, env });
   await run(process.execPath, ["tests/e2e/a11y.mjs"], { cwd: appRoot, env });
 
-  await stop(server);
-  server = undefined;
-  const malformed = `# Novidades
-
-## [v1.2] - 2026-08-22
-
-### Inválida
-
-- Esta entrada não pode virar card.
-
-## [1.0.0] - 2026-08-21
-
-### Válida
-
-- Esta entrada continua visível.
-`;
-  await Promise.all([
-    writeFile(join(standaloneAppRoot, "USER_CHANGELOG.pt-BR.md"), malformed),
-    writeFile(join(standaloneAppRoot, "USER_CHANGELOG.en.md"), malformed),
-  ]);
-  server = startStandalone();
-  await waitUntilReady(`${env.E2E_BASE}/login`, server);
-  await run(process.execPath, ["tests/e2e/changelog-degradation.mjs"], {
-    cwd: appRoot,
-    env: { ...env, E2E_CHANGELOG_MODE: "malformed" },
-  });
-
-  await stop(server);
-  server = undefined;
-  await Promise.all([
-    writeFile(join(standaloneAppRoot, "USER_CHANGELOG.pt-BR.md"), "# Novidades\n\n## [Unreleased]\n"),
-    writeFile(join(standaloneAppRoot, "USER_CHANGELOG.en.md"), "# What's New\n\n## [Unreleased]\n"),
-  ]);
-  server = startStandalone();
-  await waitUntilReady(`${env.E2E_BASE}/login`, server);
-  await run(process.execPath, ["tests/e2e/changelog-degradation.mjs"], {
-    cwd: appRoot,
-    env: { ...env, E2E_CHANGELOG_MODE: "empty" },
-  });
-
-  await stop(server);
-  server = undefined;
-  await rm(join(standaloneAppRoot, "USER_CHANGELOG.pt-BR.md"));
-  server = startStandalone();
-  await waitUntilReady(`${env.E2E_BASE}/login`, server);
-  await run(process.execPath, ["tests/e2e/changelog-degradation.mjs"], {
-    cwd: appRoot,
-    env: { ...env, E2E_CHANGELOG_MODE: "missing" },
-  });
   }
 } finally {
   await stop(server);

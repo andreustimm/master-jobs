@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+<!-- sem-nota-usuario -->
+
 ## [1.20.5] - 2026-09-22T11:47:50.607Z
 
 ### Fixed

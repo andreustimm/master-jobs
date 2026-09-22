@@ -571,6 +571,10 @@ try {
   });
   const changelogUrl = page.url();
   const portugueseResponse = await page.content();
+  check(
+    "novidades não montam cards nem conteúdo enquanto o modal está fechado",
+    (await page.locator('[data-testid^="changelog-release-"]').count()) === 0,
+  );
   let opened = await openChangelog(page);
   const focusEntered = await opened.dialog.evaluate((dialog) =>
     dialog.contains(document.activeElement),

@@ -9,6 +9,15 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Alterado
+
+- Novidades são compiladas no build: parsing dos dois históricos e conversão
+  segura de Markdown para HTML saem das requisições e do bundle cliente.
+  O artefato gerado é privado, selecionado por idioma depois da autenticação,
+  e substitui os Markdown no pacote standalone. O modal monta os cards ao abrir
+  e os corpos ao expandir; conteúdo, datas locais e interação permanecem iguais.
+  Geração determinística e E2E sem os arquivos de origem cobrem o contrato.
+
 ## [1.20.5] - 2026-09-22
 
 ### Corrigido
