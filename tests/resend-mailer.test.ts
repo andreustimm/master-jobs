@@ -28,6 +28,17 @@ afterEach(() => {
 
 const MAIL = { to: "pessoa@local.test", subject: "Assunto", text: "corpo\ncom link" };
 
+/** Captura tudo que qualquer método do console imprimir — o vazamento pode vir por qualquer um. */
+function captureConsole(): string[] {
+  const linhas: string[] = [];
+  for (const method of ["log", "info", "warn", "error", "debug"] as const) {
+    vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
+      linhas.push(args.map(String).join(" "));
+    });
+  }
+  return linhas;
+}
+
 describe("configuredMailer", () => {
   it("sem chave, cai para o terminal em vez de falhar", () => {
     // A chave é do usuário e ninguém mais pode gerá-la. Falhar o cadastro de
@@ -105,13 +116,7 @@ describe("consoleMailer", () => {
 
 describe("withheldMailer", () => {
   it("alerta sem imprimir destinatário, assunto, corpo nem link", async () => {
-    const linhas: string[] = [];
-    const capture = (...args: unknown[]) => {
-      linhas.push(args.map(String).join(" "));
-    };
-    for (const method of ["log", "info", "warn", "error", "debug"] as const) {
-      vi.spyOn(console, method).mockImplementation(capture);
-    }
+    const linhas = captureConsole();
 
     const secret = {
       to: "pessoa@local.test",
@@ -132,12 +137,7 @@ describe("withheldMailer", () => {
   });
 
   it("com o ambiente de produção, o e-mail escolhido não imprime o link", async () => {
-    const linhas: string[] = [];
-    for (const method of ["log", "info", "warn", "error", "debug"] as const) {
-      vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
-        linhas.push(args.map(String).join(" "));
-      });
-    }
+    const linhas = captureConsole();
     const mailer = configuredMailer({ VERCEL_ENV: "production" } as unknown as NodeJS.ProcessEnv);
     await mailer.send({ ...MAIL, text: "link https://x.test/login/reset?token=tok_prod" });
     expect(linhas.join("\n")).not.toContain("tok_prod");
@@ -200,12 +200,7 @@ describe("resendMailer", () => {
   });
 
   it("com a chave presente, nada é impresso no log", async () => {
-    const linhas: string[] = [];
-    for (const method of ["log", "info", "warn", "error", "debug"] as const) {
-      vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
-        linhas.push(args.map(String).join(" "));
-      });
-    }
+    const linhas = captureConsole();
     const fake = (async () =>
       new Response(JSON.stringify({ id: "abc" }), { status: 200 })) as unknown as typeof fetch;
     await resendMailer("re_x", "f@x.test", fake).send({ ...MAIL, text: "token=tok_resend" });
