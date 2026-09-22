@@ -42,6 +42,7 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   novo, e nunca apaga vaga com candidatura.
 
 - A conexão com o banco foi preparada com permissões limitadas e validada; a ativação ocorrerá no próximo deploy de produção aprovado.
+- As telas de "Acesso negado" e "Página não encontrada" aparecem logo abaixo do menu, sem o espaço vazio que empurrava a mensagem para baixo, e o botão "Voltar ao início" fica com o texto centralizado.
 
 ### Segurança
 

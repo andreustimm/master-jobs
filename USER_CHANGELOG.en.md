@@ -41,6 +41,7 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   never deletes a job that has an application.
 
 - The database connection is configured and validated with limited permissions; it takes effect in the next approved production deployment.
+- The "Access denied" and "Page not found" screens now appear right below the menu, without the empty space that pushed the message down, and the "Back to start" button centres its label.
 
 ### Security
 

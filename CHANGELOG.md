@@ -66,6 +66,7 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   `docs/engineering/deploy.md` deixa de proibir o `sslmode` que o código aceita.
 
 - Operações: conexão restrita de produção configurada e validada antes do deploy; runbook corrigido para TLS, pooler e rotação recuperável. Ativação aguarda promoção humana.
+- Tela de erro de rota (403, 404 e falha de navegação): o painel começa logo abaixo do cabeçalho em vez de centralizar numa caixa de `100dvh` que o empurrava para baixo da dobra, e o botão "Voltar ao início" centraliza o texto (`inline-flex`), em vez de deixá-lo colado no topo.
 
 ### Segurança
 

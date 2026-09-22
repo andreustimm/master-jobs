@@ -614,9 +614,13 @@ body {
 
 .navigation-transition__retry,
 .navigation-route-error__retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-block-size: 44px;
   border: 0;
   border-radius: var(--radius-action);
+  text-decoration: none;
   padding-inline: var(--spacing-lg);
   background: var(--primary);
   color: var(--primary-foreground);
@@ -629,11 +633,13 @@ body {
   outline-offset: var(--spacing-xxs);
 }
 
+/* Dentro do app o cabeçalho já ocupa o topo: uma caixa de 100dvh centralizada
+   empurrava a mensagem para baixo da dobra. O painel começa logo abaixo dele. */
 .navigation-route-error {
   display: grid;
-  min-block-size: calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom));
-  place-items: center;
-  padding-block: max(var(--spacing-xl), var(--safe-area-top))
+  align-content: start;
+  justify-items: start;
+  padding-block: max(var(--spacing-xxl), var(--safe-area-top))
     max(var(--spacing-xl), var(--safe-area-bottom));
   padding-inline: max(var(--spacing-lg), var(--safe-area-left))
     max(var(--spacing-lg), var(--safe-area-right));
