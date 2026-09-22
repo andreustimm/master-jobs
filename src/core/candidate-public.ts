@@ -16,7 +16,7 @@
  * O texto do currículo exige um SEGUNDO consentimento (`publicCv`). Marcar o
  * perfil como público diz "alcançável sem sessão"; publicar o currículo inteiro
  * é outra decisão. E o consentimento publica o CURRÍCULO, não o que nunca sai:
- * o texto passa por `publicCvText()`, que retira e-mail, telefone e a linha do
+ * o texto passa por `publicCvText()`, que retira e-mail, telefone e a frase do
  * piso salarial escritos nele — com os limites de detecção declarados lá.
  */
 import { and, eq } from "drizzle-orm";

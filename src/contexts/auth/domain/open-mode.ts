@@ -28,7 +28,7 @@ export type AuthEnvironment = Readonly<Record<string, string | undefined>>;
 /** Ambientes em que o modo aberto é aceito. Só a máquina de quem desenvolve. */
 const OPEN_MODE_ENVIRONMENTS: readonly string[] = ["local"];
 
-export function openModeRequested(env: AuthEnvironment): boolean {
+function openModeRequested(env: AuthEnvironment): boolean {
   return env.JHO_AUTH_MODE === "open";
 }
 
