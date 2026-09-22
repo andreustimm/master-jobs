@@ -638,9 +638,8 @@ body {
 .navigation-route-error {
   display: grid;
   align-content: start;
-  justify-items: start;
-  padding-block: max(var(--spacing-xxl), var(--safe-area-top))
-    max(var(--spacing-xl), var(--safe-area-bottom));
+  /* O cabeçalho já reserva a área segura do topo; somá-la aqui dobraria o notch. */
+  padding-block: var(--spacing-xxl) max(var(--spacing-xl), var(--safe-area-bottom));
   padding-inline: max(var(--spacing-lg), var(--safe-area-left))
     max(var(--spacing-lg), var(--safe-area-right));
 }
