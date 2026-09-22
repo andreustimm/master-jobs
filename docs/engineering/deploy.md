@@ -181,6 +181,15 @@ Somente `main`, `dev` e `staging` geram deployments automáticos. A lista de
 permissão fica em `git.deploymentEnabled` no `vercel.json`: `**: false` cobre
 também branches com `/`, e as três exceções explícitas habilitam os ambientes.
 Branches de tarefa e suas PRs executam o CI do GitHub, sem preview próprio.
+
+**Commit que não muda o site não gera deploy.** O plano Hobby limita os
+deploys por dia; em 22/09/2026 o limite estourou e bloqueou a produção por
+24 h. `ignoreCommand` roda `scripts/vercel-ignore-build.sh`, que pula o build
+quando todos os arquivos alterados (desde `VERCEL_GIT_PREVIOUS_SHA`, ou o
+commit anterior) estão em `docs/`, `.compozy/`, `tests/`, `.github/`,
+`.claude/` ou são `.md` avulsos. `CHANGELOG.md` e `USER_CHANGELOG.*.md`
+constroem, porque a tela Novidades é compilada deles; arquivo desconhecido
+também constrói — errar para "pular" publicaria código velho.
 `dev` e `staging` continuam no ambiente **Preview** da Vercel; o nome do
 ambiente não significa que toda PR recebe um deployment.
 
