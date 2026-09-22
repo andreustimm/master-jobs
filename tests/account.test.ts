@@ -181,6 +181,18 @@ describe("trocar a própria senha", () => {
     }
   });
 
+  it("falha do KDF ao gerar o hash novo responde indisponível e não troca nada", async () => {
+    const me = await account("eu@example.test");
+    const domain = await import("../src/contexts/auth/domain/password.ts");
+    const spy = vi.spyOn(domain, "hashPassword").mockRejectedValueOnce(new Error("ENOMEM"));
+    const result = await changePasswordForSession(me.session, SENHA, NOVA);
+    spy.mockRestore();
+    expect(result).toEqual({ ok: false, reason: "unavailable" });
+    expect(await events(me.id, "password_change_unavailable")).toHaveLength(1);
+    expect(await resolveSession(me.token)).not.toBeNull();
+    expect((await passwordSignIn("eu@example.test", SENHA)).ok).toBe(true);
+  });
+
   it("conta sem senha não define uma por aqui", async () => {
     // Sem senha atual não há o que provar; definir a primeira por esta tela
     // deixaria uma sessão roubada virar posse permanente da conta.

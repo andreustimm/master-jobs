@@ -301,7 +301,22 @@ export async function changeOwnPassword(
     return { ok: false, reason: "invalid" };
   }
 
-  const hash = await hashPassword(newPassword);
+  // O hash da nova pede os mesmos ~64 MB da verificação, e sob pressão de
+  // memória falha do mesmo jeito: é falta de recurso, não veredito — mesma
+  // resposta `unavailable`, e não uma página de erro.
+  let hash: string;
+  try {
+    hash = await hashPassword(newPassword);
+  } catch (erro) {
+    await db.insert(authEvent).values({
+      kind: "password_change_unavailable",
+      userId,
+      email: user.email,
+      detail: new KdfIndisponivelError(erro).message.slice(0, 300),
+      at: clock().iso(),
+    });
+    return { ok: false, reason: "unavailable" };
+  }
   const storedHash = user.passwordHash;
   // Senha, revogação e registro numa transação só. Em comandos separados, uma
   // queda de conexão entre a escrita da senha e a revogação deixaria a senha
