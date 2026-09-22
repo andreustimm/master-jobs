@@ -272,6 +272,11 @@ jobs:
             exit 1
           fi
 
+          # Toda PR tem responsável (AGENTS.md). Pela API REST, como em
+          # `promover-para-staging.yml`: vale para a PR recém-criada e para a
+          # que já estava aberta, e não depende do GraphQL do Projects legado.
+          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$ABERTA/assignees" -f 'assignees[]=andreustimm' --silent
+
           # Merge, e não rebase: `main` é história publicada e reescrevê-la faria
           # `dev` divergir de todo clone que já a tem.
           if gh pr merge "$ABERTA" --merge --delete-branch=false 2>/dev/null; then

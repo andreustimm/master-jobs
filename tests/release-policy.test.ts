@@ -173,4 +173,22 @@ describe("GitHub Release planning", () => {
     expect(step?.run).toContain('--repo "$GITHUB_REPOSITORY" --apply');
     expect(step?.env?.GH_TOKEN).toBe("${{ secrets.RELEASE_PAT || github.token }}");
   });
+
+  // As PRs de retorno #245 e #246 nasceram sem responsável: o passo criava a
+  // PR e nunca a atribuía, ao contrário da promoção para `main`.
+  it("assigns the owner to the main-to-dev return PR, new or already open", () => {
+    const workflow = YAML.parse(
+      readFileSync(".github/workflows/sincronizar-apos-main.yml", "utf8"),
+    ) as { jobs: Record<string, { steps?: Array<{ name?: string; run?: string }> }> };
+    const step = Object.values(workflow.jobs)
+      .flatMap((job) => job.steps ?? [])
+      .find((candidate) => candidate.name === "Devolver por PR");
+    const run = step?.run ?? "";
+
+    const assign = run.indexOf('issues/$ABERTA/assignees" -f \'assignees[]=andreustimm\'');
+    expect(assign).toBeGreaterThan(-1);
+    // Depois de localizar a PR (nova ou existente) e antes do merge automático.
+    expect(assign).toBeGreaterThan(run.indexOf("Não consegui abrir nem encontrar a PR de retorno"));
+    expect(assign).toBeLessThan(run.indexOf("gh pr merge"));
+  });
 });
