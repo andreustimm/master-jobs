@@ -138,6 +138,32 @@ describe("recruiter", () => {
   });
 });
 
+describe("a própria conta", () => {
+  it("todo papel lê e escreve a própria conta", () => {
+    for (const who of [admin(), candidate(1), recruiter()]) {
+      expect(can(who, "account:read", { kind: "global" }, NOW).allowed).toBe(true);
+      expect(can(who, "account:write", { kind: "global" }, NOW).allowed).toBe(true);
+    }
+  });
+
+  it("sessão emprestada lê, mas não escreve na conta do alvo — nem quando ele é admin", () => {
+    // Trocar a senha ou o nome de outra pessoa com a cara dela é tomar a
+    // conta, e o registro diria que foi ela.
+    for (const roles of [["candidate"], ["recruiter"], ["admin", "candidate"]] as Role[][]) {
+      const borrowed = session({ roles, candidateId: 1, impersonatedBy: 99 });
+      expect(can(borrowed, "account:read", { kind: "global" }, NOW).allowed).toBe(true);
+      const decision = can(borrowed, "account:write", { kind: "global" }, NOW);
+      expect(decision).toEqual({ allowed: false, reason: "sessão emprestada não altera a conta do alvo" });
+    }
+  });
+
+  it("conta sem papel não entra na própria conta", () => {
+    const empty = session({ roles: [] });
+    expect(can(empty, "account:read", { kind: "global" }, NOW).allowed).toBe(false);
+    expect(can(empty, "account:write", { kind: "global" }, NOW).allowed).toBe(false);
+  });
+});
+
 describe("visibilidade do perfil", () => {
   it("privado é o padrão: campo ausente não abre nada", () => {
     // Esquecer de carregar a visibilidade tem de NEGAR, nunca permitir.

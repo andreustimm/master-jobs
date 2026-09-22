@@ -18,18 +18,41 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
-### Added
+### New
 
 - You pick your profile's public address (the /p/… link) in the candidate
   area — and you can already pick it when creating the profile. When you
-  change it, the old address stops working right away and someone else may pick it. The profile only
-  shows at that address while it is set to Public.
+  change it, the old address stops working right away and someone else may
+  pick it. The profile only shows at that address while it is set to Public.
 
+- New My account screen, in the menu: change your display name and your
+  password without asking an admin. Changing the password requires the
+  current one; every other session of the account is signed out and you stay
+  signed in. The email is still changed by an admin.
 - Signing in with a new candidate account now lets you create your own profile
   under "Create my profile": name, headline, location and, if you want, your CV.
   The profile starts private and belongs only to you.
 
+### Security
+
+- An invited account can no longer see or change the owner's profile, CV,
+  visibility, or pipeline. An account without its own profile now gets access
+  denied in the candidate area, including when an admin is acting as that
+  account.
+
+- The CV shown on the public profile now hides email addresses, phone numbers
+  with a country code or a parenthesised area code, and the whole paragraph or
+  table that states a salary expectation (such as "Salary expectation:" or
+  "Current salary: …"), even when they are written in the CV text. An amount
+  written with no label or mention of salary is still shown.
+- The no-login mode meant for development is automatically refused in any
+  published environment.
+
 ### Fixed
+
+- While email delivery is not configured on the server, the password recovery
+  link is no longer written to the server's technical log, where other people
+  could read it. The log now shows only an alert that the email was not sent.
 
 - The system no longer makes automated requests to LinkedIn, not even for jobs
   that came from an email alert or when another site redirects there. Those
@@ -41,16 +64,6 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   never deletes a job that has an application.
 
 - The database connection is configured and validated with limited permissions; it takes effect in the next approved production deployment.
-
-### Security
-
-- The CV shown on the public profile now hides email addresses, phone numbers
-  with a country code or a parenthesised area code, and the whole paragraph or
-  table that states a salary expectation (such as "Salary expectation:" or
-  "Current salary: …"), even when they are written in the CV text. An amount
-  written with no label or mention of salary is still shown.
-- The no-login mode meant for development is automatically refused in any
-  published environment.
 
 ### Improved
 

@@ -82,6 +82,7 @@ export const SLUG_MAX = 40;
  */
 export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "default",
+  "account",
   "admin",
   "api",
   "app",

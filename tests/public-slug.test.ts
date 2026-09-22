@@ -247,14 +247,14 @@ describe("endereço derivado do e-mail nunca é publicado", () => {
   });
 });
 
-describe("migração 0010: backfill do endereço público", () => {
+describe("migração 0011: backfill do endereço público", () => {
   it("copia `slug` para quem ainda não tem endereço, e só para esses", async () => {
     await db.insert(candidate).values([
       { slug: "legado", name: "Legado" },
       { slug: "ja-tem", name: "Já tem", publicSlug: "escolhido" },
       { slug: "user-maria-x-com", name: "Pelo admin" },
     ]);
-    const backfill = readFileSync("drizzle/postgres/0010_backfill_candidate_public_slug.sql", "utf8");
+    const backfill = readFileSync("drizzle/postgres/0011_backfill_candidate_public_slug.sql", "utf8");
     await db.execute(sql.raw(backfill));
     await db.execute(sql.raw(backfill));
 

@@ -81,7 +81,11 @@ export async function ensureCandidate(input: {
       // endereço publicaria o e-mail, e a conta fica sem endereço até a
       // própria pessoa escolher um em `/candidate`.
       publicSlug: slug.startsWith(EMAIL_SLUG_PREFIX) ? null : slug,
-      isDefault: true,
+      // Só o candidato `default` é o do dono. Marcar toda linha nova como
+      // padrão fazia `isOwner` responder sim para o candidato de um convidado,
+      // e ele passava a ser pontuado — e a ver trilhas — com o `profile.yaml`
+      // do dono, piso salarial incluído.
+      isDefault: slug === "default",
     })
     .returning({ id: candidate.id });
 

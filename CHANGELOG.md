@@ -14,16 +14,72 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 - Endereço público escolhido pelo candidato (#235): `/p/<slug>` passa a ler
   `candidate.public_slug` (coluna nova, índice único), separado do `slug`
   interno que a CLI e o seed usam para achar o dono. Migrações aditivas
-  `0009_candidate_public_slug` e `0010_backfill_candidate_public_slug` (copia
+  `0010_candidate_public_slug` e `0011_backfill_candidate_public_slug` (copia
   `slug`, idempotente, exceto `user-<e-mail>`, que ficaria com o e-mail no
-  endereço) — **suspendem a promoção automática**. `/candidate`
-  ganha o cartão "Endereço público" (`setPublicSlugAction`, com
+  endereço) — **suspendem a promoção automática**. `/candidate` ganha o cartão "Endereço público" (`setPublicSlugAction`, com
   `guardOwnCandidate`), e o formulário de criação aceita o endereço, sugerido
   a partir do nome. Validação pura em `validatePublicSlug` (minúsculas,
   números e hífen, 3–40, reservados incluindo toda rota de primeiro nível do
   app e os prefixos `user-`/`e2e-`); unicidade pelo índice, com `23505`
   traduzido em `slugTaken`. Trocar faz o antigo responder 404 na hora, sem
   redirecionamento (ADR 0024).
+
+- Minha conta (`/account`, #236): qualquer papel troca a própria senha e o
+  nome de exibição. A troca exige a senha atual, limita a 5 tentativas por
+  conta em 15 minutos (tentativa gravada em `auth_event` antes de contada, para
+  rajada concorrente não passar junta), derruba todas as sessões da conta e
+  abre uma nova para o navegador que pediu; registra `password_changed` e
+  `profile_updated`. Novas ações `account:read` e `account:write` na política;
+  sessão emprestada lê, mas nunca escreve na conta do alvo. Troca de e-mail
+  continua só com admin até haver confirmação por e-mail (`docs/security.md`).
+  Link "Minha conta" no menu; rota nas guardas de inglês, largura e axe.
+
+### Segurança
+
+- Uma conta não recebe mais o candidato de outra pessoa. Em produção, uma
+  conta semeada pelo setup do e2e (`seedOwner` com `E2E_EMAIL` real, fora do
+  banco isolado) apontava para o candidato `default` — o do dono — e abria
+  `/candidate` com currículo, versões, visibilidade, skills e funil dele,
+  podendo alterá-los. A sessão agora só concede um candidato à conta mais
+  antiga que aponta para ele (`ownedCandidateId`, nos três caminhos que montam
+  identidade), o que nega o dado já gravado sem migração. Conta nova com papel
+  candidato recebe candidato próprio por `claimOwnCandidate`, na CLI e em
+  `/admin/users`, sempre novo (nem o de conta apagada é reaproveitado); `jho
+  auth add-user` só dá o candidato do perfil à primeira conta da instalação
+  (tabela vazia), nunca troca vínculo
+  gravado e perdeu `--candidate`; `seedOwner` recusa um segundo e-mail; o setup
+  do e2e recusa qualquer URL de banco fora do loopback (inclusive
+  `POSTGRES_URL*`, que a migração usa como alternativa) e `E2E_EMAIL` que não
+  seja `@local.test`.
+  A migration `0009` cria o índice único parcial `auth_user_candidate_idx` —
+  manual, e só depois de a consulta de duplicatas em `docs/security.md` voltar
+  vazia.
+- `isOwner` passou a ser o candidato padrão de slug `default`, e `ensureCandidate`
+  só marca `is_default` no slug `default`. Todo candidato criado em
+  `/admin/users` nascia marcado como padrão e era pontuado com o
+  `profile.yaml` do dono.
+
+- Inventário de entradas (#197): toda página, Route Handler (por método) e
+  export de módulo `"use server"` — em qualquer forma e nome de arquivo — é
+  descoberto pela semântica do Next e precisa de política ou exceção
+  registrada com justificativa; entrada nova sem classificação e exceção órfã
+  reprovam. `logoutAction`, `setLocaleAction` e `setAppearanceAction` passam
+  a constar como exceções. `tests/entry-denial.test.ts` chama cada action com
+  sessão ausente, forjada, expirada, revogada e de conta desabilitada, ids da
+  vítima e sessão emprestada, e exige recusa sem escrita, cookie, revalidação,
+  `after()` ou rede.
+- `JHO_AUTH_MODE=open` só vale na máquina local: em deployment (`VERCEL`
+  presente, ou `VERCEL_ENV`/`JHO_ENV` diferente de `local`) o pedido é ignorado, em
+  sessão e em `proxy.ts`, pela mesma função de domínio.
+- O CV publicado em `/p/[slug]` com os dois consentimentos passa por
+  `publicCvText()`: e-mail, telefone com código de país ou DDD entre
+  parênteses e o bloco inteiro (parágrafo, item ou tabela entre linhas em
+  branco; a seção, quando é título) que traz rótulo de pretensão salarial ou
+  palavra de remuneração perto de um valor são retirados. Detecção por padrão, com limite declarado e testado.
+- `/recruiter/[candidateId]` autoriza a leitura por `requirePage("candidate:read")`
+  depois do vínculo, em vez de decidir fora da política.
+- Teste de concorrência: dois resgates simultâneos do mesmo link de
+  recuperação trocam a senha uma vez só.
 
 - Autoatendimento do candidato (#234): conta de papel candidato sem candidato
   vê "Criar meu perfil" em `/candidate` (e na navegação) em vez do 403 sem
@@ -38,6 +94,17 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   de profile/profile.yaml" só aparece para o candidato do dono.
 
 ### Corrigido
+
+- Recuperação de senha: em deployment sem `RESEND_API_KEY`/`RESEND_FROM`, o
+  adapter de console imprimia o e-mail inteiro — com o link de reset, que é
+  credencial — no log das funções da Vercel. `configuredMailer` passa a usar o
+  console só em processo local (`isLocalProcess`, a mesma lista de permissão
+  do modo aberto) e escolhe `withheldMailer` em qualquer outro ambiente e
+  sempre que a chave está presente sem remetente: ele emite um
+  alerta com `console.warn` sem destinatário, assunto nem link, e devolve falha,
+  para o `auth_event` gravar `reset_send_failed`. O console com corpo completo
+  fica restrito ao terminal local sem chave. Checklist humano de ativação do
+  Resend em `docs/operations.md` (#237).
 
 - Rede: `assertSafeRemoteUrl` recusa `linkedin.com`, `linkedin.cn`, `lnkd.in`,
   `licdn.com` e subdomínios antes do DNS, e `safeRemoteFetch` repete a
@@ -71,30 +138,6 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   `docs/engineering/deploy.md` deixa de proibir o `sslmode` que o código aceita.
 
 - Operações: conexão restrita de produção configurada e validada antes do deploy; runbook corrigido para TLS, pooler e rotação recuperável. Ativação aguarda promoção humana.
-
-### Segurança
-
-- Inventário de entradas (#197): toda página, Route Handler (por método) e
-  export de módulo `"use server"` — em qualquer forma e nome de arquivo — é
-  descoberto pela semântica do Next e precisa de política ou exceção
-  registrada com justificativa; entrada nova sem classificação e exceção órfã
-  reprovam. `logoutAction`, `setLocaleAction` e `setAppearanceAction` passam
-  a constar como exceções. `tests/entry-denial.test.ts` chama cada action com
-  sessão ausente, forjada, expirada, revogada e de conta desabilitada, ids da
-  vítima e sessão emprestada, e exige recusa sem escrita, cookie, revalidação,
-  `after()` ou rede.
-- `JHO_AUTH_MODE=open` só vale na máquina local: em deployment (`VERCEL`
-  presente, ou `VERCEL_ENV`/`JHO_ENV` diferente de `local`) o pedido é ignorado, em
-  sessão e em `proxy.ts`, pela mesma função de domínio.
-- O CV publicado em `/p/[slug]` com os dois consentimentos passa por
-  `publicCvText()`: e-mail, telefone com código de país ou DDD entre
-  parênteses e o bloco inteiro (parágrafo, item ou tabela entre linhas em
-  branco; a seção, quando é título) que traz rótulo de pretensão salarial ou
-  palavra de remuneração perto de um valor são retirados. Detecção por padrão, com limite declarado e testado.
-- `/recruiter/[candidateId]` autoriza a leitura por `requirePage("candidate:read")`
-  depois do vínculo, em vez de decidir fora da política.
-- Teste de concorrência: dois resgates simultâneos do mesmo link de
-  recuperação trocam a senha uma vez só.
 
 ### Alterado
 

@@ -32,7 +32,14 @@ function openModeRequested(env: AuthEnvironment): boolean {
   return env.JHO_AUTH_MODE === "open";
 }
 
-export function openModeAllowedIn(env: AuthEnvironment): boolean {
+/**
+ * O processo roda na máquina de quem desenvolve, e não num deployment.
+ *
+ * Exportada à parte porque não é só o modo aberto que depende disto: o
+ * adapter de e-mail só imprime o corpo (com link de recuperação) onde o log é
+ * o terminal de quem opera. Uma regra, e não duas listas que divergem.
+ */
+export function isLocalProcess(env: AuthEnvironment): boolean {
   // `VERCEL=1` existe em build e runtime da Vercel mesmo quando `VERCEL_ENV`
   // não chega a um script. Presença dele é prova de deployment.
   if (env.VERCEL !== undefined && env.VERCEL !== "") return false;
@@ -46,6 +53,10 @@ export function openModeAllowedIn(env: AuthEnvironment): boolean {
       declared === "" ||
       OPEN_MODE_ENVIRONMENTS.includes(declared.trim().toLowerCase()),
   );
+}
+
+export function openModeAllowedIn(env: AuthEnvironment): boolean {
+  return isLocalProcess(env);
 }
 
 /** O modo aberto vale: foi pedido E o ambiente o admite. */

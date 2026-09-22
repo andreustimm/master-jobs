@@ -18,8 +18,8 @@ de uma troca.
 
 1. **Coluna própria.** `candidate.public_slug`, com índice único, é o endereço
    público. `slug` continua sendo o identificador interno e nunca muda pela
-   tela. A migração é aditiva: `0009` cria a coluna anulável e o índice,
-   `0010` copia `slug` para quem ainda não tem endereço — todo perfil público
+   tela. A migração é aditiva: `0010` cria a coluna anulável e o índice,
+   `0011` copia `slug` para quem ainda não tem endereço — todo perfil público
    segue respondendo onde respondia, menos o de slug `user-<e-mail>` (criado
    pelo admin), que ficaria com o e-mail no endereço e passa a não ter
    endereço até a pessoa escolher um.

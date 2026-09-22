@@ -2027,7 +2027,7 @@ try {
       role: "recrutador",
       email: "e2e-recrutador@local.test",
       lands: "/jobs",
-      allowed: ["/jobs", "/jobs/new"],
+      allowed: ["/jobs", "/jobs/new", "/account"],
       // Sem escopo de candidato: currículo, funil e cockpit são de outra pessoa.
       denied: ["/candidate", "/pipeline", "/admin/users"],
     },
@@ -2035,7 +2035,7 @@ try {
       role: "candidato",
       email: "e2e-candidato@local.test",
       lands: "/",
-      allowed: ["/", "/jobs", "/candidate", "/pipeline", "/jobs/new"],
+      allowed: ["/", "/jobs", "/candidate", "/pipeline", "/jobs/new", "/account"],
       // Candidato puro não administra contas.
       denied: ["/admin/users"],
     },
@@ -2174,6 +2174,73 @@ try {
     });
 
     await roleCtx.close();
+  }
+
+  /* ------------------ Minha conta: trocar a própria senha (#236) ----------- */
+
+  // Conta dedicada: trocar a senha de uma conta compartilhada quebraria os
+  // logins das outras jornadas. Duas sessões da mesma conta, e a troca feita
+  // numa delas precisa derrubar a outra e manter quem pediu.
+  {
+    const ACCOUNT_EMAIL = "e2e-conta@local.test";
+    const NEW_PASSWORD = "conta-trocada-pelo-e2e-43";
+    const openSession = async () => {
+      const ctx = await browser.newContext();
+      const tab = await ctx.newPage();
+      trackConsole(tab);
+      await ctx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+      await tab.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+      await tab.fill('input[name="email"]', ACCOUNT_EMAIL);
+      await tab.fill('input[name="password"]', E2E_PASSWORD);
+      await tab.locator('[data-testid="login-submit"]').click();
+      await tab.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 15_000 }).catch(() => {});
+      return { ctx, tab };
+    };
+    const first = await openSession();
+    const second = await openSession();
+
+    await first.tab.goto(`${BASE}/account`, { waitUntil: "networkidle" });
+    await first.tab.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
+    await first.tab.fill('input[name="currentPassword"]', "senha-errada-do-e2e-99");
+    await first.tab.fill('input[name="newPassword"]', NEW_PASSWORD);
+    await first.tab.fill('input[name="confirmPassword"]', NEW_PASSWORD);
+    await first.tab.locator('[data-testid="account-change-password"]').click();
+    await first.tab.waitForSelector('[data-testid="account-status"]', { timeout: 15_000 }).catch(() => {});
+    const wrongStatus = await first.tab.locator('[data-testid="account-status"]').getAttribute("role").catch(() => null);
+    check("Minha conta: senha atual errada é recusada com alerta", wrongStatus === "alert", String(wrongStatus));
+
+    await first.tab.goto(`${BASE}/account`, { waitUntil: "networkidle" });
+    await first.tab.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
+    await first.tab.fill('input[name="currentPassword"]', E2E_PASSWORD);
+    await first.tab.fill('input[name="newPassword"]', NEW_PASSWORD);
+    await first.tab.fill('input[name="confirmPassword"]', NEW_PASSWORD);
+    await first.tab.locator('[data-testid="account-change-password"]').click();
+    await first.tab.waitForURL((url) => url.searchParams.get("status") === "password-changed", { timeout: 15_000 })
+      .catch(() => {});
+    // Sobrevive a refresh: a sessão nova gravada no cookie é a que vale.
+    await first.tab.reload({ waitUntil: "networkidle" });
+    const stillIn = new URL(first.tab.url()).pathname === "/account"
+      && (await first.tab.locator('[data-testid="route-account"]').count()) === 1;
+    const otherResponse = await second.tab.goto(`${BASE}/account`, { waitUntil: "networkidle" });
+    const otherOut = new URL(second.tab.url()).pathname.startsWith("/login");
+    check(
+      "Minha conta: trocar a senha mantém quem pediu e derruba a outra sessão",
+      stillIn && otherOut,
+      JSON.stringify({ stillIn, otherOut, other: otherResponse?.status(), url: second.tab.url() }),
+    );
+
+    await second.tab.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+    await second.tab.fill('input[name="email"]', ACCOUNT_EMAIL);
+    await second.tab.fill('input[name="password"]', NEW_PASSWORD);
+    await second.tab.locator('[data-testid="login-submit"]').click();
+    await second.tab.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 15_000 }).catch(() => {});
+    check(
+      "Minha conta: a senha nova entra",
+      !new URL(second.tab.url()).pathname.startsWith("/login"),
+      second.tab.url(),
+    );
+    await first.ctx.close();
+    await second.ctx.close();
   }
 
   // Conta desabilitada não entra, mesmo com a senha certa.
@@ -2739,6 +2806,17 @@ try {
     check("sessão emprestada recebe 403 na administração", denied?.status() === 403,
       `${denied?.status()}`);
 
+    // A conta do alvo abre para leitura, sem formulário nenhum: trocar senha,
+    // e-mail ou nome de outra pessoa com a cara dela é tomar a conta.
+    const borrowedAccount = await page.goto(`${BASE}/account`, { waitUntil: "networkidle" });
+    const borrowedForms = await page.locator('[data-testid="route-account"] form').count();
+    const borrowedNote = await page.locator('[data-testid="account-borrowed"]').count();
+    check(
+      "sessão emprestada vê Minha conta sem formulário de senha nem de nome",
+      borrowedAccount?.status() === 200 && borrowedForms === 0 && borrowedNote === 1,
+      JSON.stringify({ status: borrowedAccount?.status(), borrowedForms, borrowedNote }),
+    );
+
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.click('[data-testid="stop-impersonating"]');
     await page.waitForFunction(
@@ -2971,6 +3049,8 @@ try {
     "/candidate",
     "/candidate/skills",
     "/candidate/vocabulary",
+    // Minha conta (#236): e-mail da sessão marcado como dado do usuário.
+    "/account",
     // O hub dos países entra nas quatro guardas transversais: cada uma é um
     // array literal, então rota nova não herda nenhuma delas sozinha. Ele tem
     // quatro chaves de dicionário próprias e estava fora de todas.
@@ -5926,6 +6006,7 @@ try {
     "/jobs/904000101/paises",
     "/jobs/904000103",
     "/admin/captures",
+    "/account",
   ];
   const searchOverflows = [];
   for (const [width, height] of [[375, 812], [768, 1024], [1024, 768]]) {
@@ -5953,6 +6034,7 @@ try {
     "/jobs/904000101/paises",
     "/jobs/904000103",
     "/admin/captures",
+    "/account",
   ]);
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
   check(

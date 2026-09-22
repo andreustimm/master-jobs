@@ -68,15 +68,22 @@
     {
       "idx": 9,
       "version": "7",
-      "when": 1790105922368,
-      "tag": "0009_candidate_public_slug",
+      "when": 1790104026604,
+      "tag": "0009_auth_user_candidate_unique",
       "breakpoints": true
     },
     {
       "idx": 10,
       "version": "7",
-      "when": 1790105922827,
-      "tag": "0010_backfill_candidate_public_slug",
+      "when": 1790109316533,
+      "tag": "0010_candidate_public_slug",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790109316995,
+      "tag": "0011_backfill_candidate_public_slug",
       "breakpoints": true
     }
   ]

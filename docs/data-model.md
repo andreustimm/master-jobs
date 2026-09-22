@@ -441,8 +441,8 @@ transação e usa o status anterior como token de concorrência otimista.
 é o identificador interno — a CLI e o seed acham o dono por `slug = 'default'`
 — e nunca muda pela tela; `public_slug` é o endereço que o próprio candidato
 escolhe em `/candidate` (`setPublicSlug`), com índice único
-`candidate_public_slug_idx`. Migrações `0009_candidate_public_slug` (coluna
-anulável + índice) e `0010_backfill_candidate_public_slug` (copia `slug` para
+`candidate_public_slug_idx`. Migrações `0010_candidate_public_slug` (coluna
+anulável + índice) e `0011_backfill_candidate_public_slug` (copia `slug` para
 quem não tem endereço, idempotente). Trocar o endereço faz o antigo responder
 404 na hora, sem redirecionamento, e o libera para outra pessoa. Linha sem
 `public_slug` não responde em `/p/`; é o caso do candidato cujo `slug` é
@@ -843,6 +843,12 @@ A distinção entre as duas primeiras é o ponto: o Drizzle completa com
 `no action` o `onDelete` que ninguém escreveu, e o PostgreSQL grava o mesmo.
 Paridade sozinha não distingue "escolhi" de "esqueci".
 
+
+`0009` cria `auth_user_candidate_idx`, índice único parcial em
+`auth_user(candidate_id) where candidate_id is not null`: um candidato tem no
+máximo uma conta. Conta sem candidato (admin, recrutador) continua livre. O
+índice só aplica sobre dados limpos — a verificação e a ordem estão em
+[`docs/security.md`](security.md#achado-5--conta-convidada-com-o-candidato-do-dono--corrigido-hotfix).
 
 ## Tabelas adicionadas depois da primeira versão
 
