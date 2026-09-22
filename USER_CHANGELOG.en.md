@@ -20,6 +20,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ### New
 
+- You pick your profile's public address (the /p/… link) in the candidate
+  area — and you can already pick it when creating the profile. When you
+  change it, the old address stops working right away and someone else may
+  pick it. The profile only shows at that address while it is set to Public.
+
 - New My account screen, in the menu: change your display name and your
   password without asking an admin. Changing the password requires the
   current one; every other session of the account is signed out and you stay

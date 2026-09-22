@@ -20,6 +20,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ### Novidade
 
+- Você escolhe o endereço público do seu perfil (o link /p/…) na área do
+  candidato — e já pode escolher ao criar o perfil. Ao trocar, o endereço
+  antigo deixa de funcionar na hora e pode ser escolhido por outra pessoa. O
+  perfil só aparece nesse endereço enquanto estiver marcado como Público.
+
 - Nova tela Minha conta, no menu: troque o seu nome de exibição e a sua senha
   sem pedir ao admin. Para trocar a senha é preciso informar a atual; ao
   trocar, todas as outras sessões da conta são encerradas e você continua

@@ -60,7 +60,7 @@ async function account(email: string, roles: Session["roles"] = ["candidate"]): 
   return (await createUser({ email, roles })).id;
 }
 
-const NO_CV = { cv: null, cvLabel: "CV" };
+const NO_CV = { cv: null, cvLabel: "CV", publicSlug: null };
 
 function sessionOf(userId: number, overrides: Partial<Session> = {}): Session {
   return {
@@ -224,6 +224,7 @@ describe("createOwnCandidate", () => {
       location: null,
       cv: CV,
       cvLabel: "CV 2026-09-22",
+      publicSlug: null,
     });
     expect(result.status).toBe("created");
     if (result.status !== "created") return;

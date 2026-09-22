@@ -108,6 +108,7 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`0021`](adr/0021-ambientes-nao-produtivos-com-dados-sinteticos.md) | Dev e staging usam fixtures, não ingestão real |
 | [`0022`](adr/0022-novidades-compiladas-no-build.md) | Novidades compiladas no build, com artefato privado por idioma |
 | [`0023`](adr/0023-github-project-como-autoridade-operacional.md) | GitHub Project concentra a coordenação de tarefas; arquivos locais são contexto ou projeção |
+| [`0024`](adr/0024-endereco-publico-separado-e-sem-redirecionamento.md) | Endereço público `/p/` em coluna própria, separado do identificador; trocar não redireciona |
 
 ---
 

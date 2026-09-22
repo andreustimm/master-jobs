@@ -848,6 +848,21 @@ export const ptBR = {
     cvTooShort: "O texto é curto demais para ser um currículo (mínimo {min} caracteres). Deixe em branco para colar depois.",
     unavailable: "Esta conta não pode criar um perfil agora. Entre de novo ou fale com quem administra o sistema.",
   },
+  /** Endereço público escolhido pelo candidato (#235). */
+  publicAddress: {
+    title: "Endereço público",
+    label: "Endereço",
+    hint: "Minúsculas, números e hífen, de {min} a {max} caracteres. Só responde quando o perfil está Público.",
+    changeWarning: "Ao trocar, o endereço antigo deixa de funcionar na hora e pode ser escolhido por outra pessoa.",
+    save: "Salvar endereço",
+    saved: "Endereço salvo.",
+    onboardingHint: "Opcional. Em branco, usamos um derivado do nome. Dá para trocar depois.",
+    slugInvalid: "Use só letras minúsculas, números e hífen entre eles.",
+    slugTooShort: "O endereço precisa de pelo menos {min} caracteres.",
+    slugTooLong: "O endereço passa de {max} caracteres.",
+    slugReserved: "Este endereço é reservado pelo sistema. Escolha outro.",
+    slugTaken: "Este endereço já está em uso. Escolha outro.",
+  },
   skillCategories: {
     language: "Linguagens",
     framework: "Frameworks",
