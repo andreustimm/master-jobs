@@ -191,7 +191,7 @@ Números do PostgreSQL local com 9 mil vagas, sem rede — o **piso**.
 | Achado | Evidência | Estado |
 |---|---|---|
 | Varreduras repetidas por requisição (`canonicalOfGroup`) | Lista e total compartilham a seleção; as facetas usam outra leitura com dimensões independentes; o aviso salarial mantém sua própria semântica | **MEDIDO**, corrigido na tarefa 11 |
-| Busca por termo: regex `~*` sobre título, empresa e descrição, sem índice possível | 160–175 ms por consulta × 5 consultas; só `sum(length(description_text))` leva 116 ms | **MEDIDO**, aberto (fase 2). O padrão `[ -]?` de `term.ts` impede extração de trigramas (INFERIDO) |
+| Busca por termo: regex `~*` sobre título, empresa e descrição, que nenhum índice atende diretamente | 160–175 ms por consulta × 5 consultas; só `sum(length(description_text))` leva 116 ms | **MEDIDO**, pré-filtro trigrama em revisão (#214, seção abaixo). O padrão `[ -]?` de `term.ts` de fato impede a extração de trigramas: **MEDIDO**, o índice direto devolveu 8.863 de 9.060 linhas |
 | `length(descricao) >= 200` calculado em todas as linhas antes do `LIMIT`, para a UI só testar `< 200` | 103 ms → 26 ms com `substr` (mesmo resultado em 199/200/201, acento, emoji, vazio, nulo) | **MEDIDO**, corrigido |
 | Faixa salarial: `paySql` interpolada repetidamente | Na tela completa com 29 moedas, 183 KB de SQL e 1.169 parâmetros; normalização compartilhada reduziu para 48 KB e 301 | **MEDIDO**, corrigido; comparação abaixo |
 | Estimativa errada do planner em `coalesce(fit,0) >= n` sobre `LEFT JOIN` | estimou 2 linhas, vieram 1.568 | **MEDIDO**, aberto |
@@ -326,6 +326,79 @@ Com `JHO_PERF_PLANS=1` e `JHO_PERF_JSON`, o benchmark guarda também os planos d
 todas as consultas, na ordem de envio. Eles são coletados no aquecimento, fora
 das amostras. Sem essa opção permanece somente o plano da maior consulta.
 
+## Busca por termo indexada — medição de 22/09/2026
+
+A semântica não muda: o `~*` de palavra inteira de `termRegexSql` continua
+sendo quem decide, em título, empresa e `coalesce(job_page.text,
+description_text)`. O que entra é um **pré-filtro** que só descarta vaga que
+nunca casaria (#214).
+
+**Por que não um índice direto.** O `pg_trgm` aceita `~*`, mas precisa de
+trigramas garantidos no padrão, e `[ -]?` entre cada letra não deixa nenhum:
+com `gin_trgm_ops` sobre `description_text`, a busca por `java` leu 8.863 das
+9.060 linhas pelo índice e as descartou na reconferência — mais lento que a
+varredura. `tsvector` mudaria a semântica (radical, tokenização), e `unaccent`
+não serve: o contrato atual não dobra acento.
+
+**O pré-filtro.** Se o padrão casa, o texto sem espaço e sem hífen contém a
+chave do termo (`tech-lead` → `techlead`). O índice é sobre essa forma, e a
+consulta pergunta `ilike '%chave%'` a ele; `~*` e `ilike` concordam sobre caixa
+nas letras ASCII, então o pré-filtro só vale para chaves ASCII com três letras
+ou dígitos seguidos. Termo com acento, `C++`, `CI/CD` ou `go` seguem só com o
+`~*`, como antes. Os candidatos vêm num `array(...)`: um InitPlan, calculado
+uma vez por consulta. As duas alternativas medidas pioraram — `in (...)` dentro
+do `or` vira subplano reconstruído duas vezes por ocorrência, e a semijunção
+fora do `or` mudou a estimativa e levou o agrupamento a um laço aninhado de
+3,4 s no benchmark.
+
+**Acervo local real** (cópia com 9.060 vagas, 5.576 abertas; índices criados e
+desfeitos dentro de uma transação; predicado isolado, `EXPLAIN ANALYZE`):
+
+| Termo | Antes | Depois | Buffers antes → depois | Linhas |
+|---|---:|---:|---:|---:|
+| `typescript` | 160,7 ms | 35,1 ms | 18.103 → 2.998 | 276 = 276 |
+| `java` | 143,9 ms | 34,9 ms | 17.891 → 3.234 | 201 = 201 |
+
+Antes: `Seq Scan` em `job` com o `~*` sobre a descrição de toda vaga aberta —
+descomprimir o texto domina (só `length(description_text)` nas abertas leva
+117 ms). Depois: `Bitmap Index Scan` em `job_description_trgm_idx` (350 e 389
+candidatos), reconferência com perdas na própria expressão e o `~*` só nas
+linhas que passaram. O índice ocupa 19 MB, para uma tabela de 62 MB.
+
+**Benchmark sintético** (`pnpm perf:jobs`, 10 mil vagas, três aquecimentos, dez
+amostras, mesma máquina; os seis resultados completos coincidem por hash):
+
+| Cenário | Antes | Depois | board | facets |
+|---|---:|---:|---:|---:|
+| Com termo | 129 ms | 155 ms | 72,9 → 89,7 | 53,3 → 64,2 |
+
+O sintético **piora**, e a razão é a fixture, não a produção: suas descrições
+são 40 hashes MD5 (≈1,3 KB, abaixo do limiar do TOAST, sem compressão) e o
+termo `laravel` aparece em uma de cada sete. Sem descompressão o `~*` é barato,
+e com 1.286 candidatos a reconferência e o `= any` linear custam mais do que
+economizam. No acervo real as descrições são longas e comprimidas e o termo
+buscado é seletivo — o caso para o qual o índice existe. **Nenhum destes números
+é tempo de produção;** o ganho lá só se afirma com a medição de #221 depois do
+deploy.
+
+**Disponibilidade da extensão.** No PostgreSQL local de trabalho (imagem
+`supabase/postgres:17.6.1.171`), `pg_available_extensions` lista `pg_trgm` 1.6
+e `unaccent` 1.1, nenhuma instalada. No Supabase de produção **não foi
+consultado** por este trabalho. Para confirmar, só leitura, no SQL Editor do
+projeto:
+
+```sql
+select name, default_version, installed_version
+from pg_available_extensions where name in ('pg_trgm', 'unaccent');
+select extname, extversion, extnamespace::regnamespace from pg_extension;
+```
+
+O caminho recomendado é habilitar `pg_trgm` pelo painel (Database →
+Extensions, schema `extensions`) antes de rodar `migrate.yml`; aí a `0012` não
+faz nada. Se a migration a criar, ela vai para o primeiro schema do
+`search_path` da role de migração, e o índice de `0013` resolve
+`gin_trgm_ops` pelo mesmo `search_path`.
+
 ## Plano
 
 | Fase | Item | Ganho × esforço | Onde |
@@ -338,7 +411,7 @@ das amostras. Sem essa opção permanece somente o plano da maior consulta.
 | 🟡 | Medição de produção: TTFB frio/quente, região e agregação das linhas `perf` (#221, em revisão; falta a rodada com sessão) | habilita o cache de facetas | `perf:producao` |
 | PR 2 | Overlay só na troca de rota (#220, em revisão); filtros que se aplicam sozinhos (#218) | alto × médio | fase 3 |
 | 2 ✅ | Seleção compartilhada para lista e total, facetas fundidas | alto × médio | `repo.ts` |
-| 2 | Busca por termo indexada (`pg_trgm` ou `tsvector`) | altíssimo × médio | migration |
+| 2 🟡 | Busca por termo indexada: pré-filtro `pg_trgm`, `~*` inalterado (#214, em revisão) | alto com termo seletivo × médio | migration `0012`/`0013` |
 | 2 ✅ | Normalização salarial compartilhada, sem repetir cotações a cada uso | alto com faixa | `repo.ts` |
 | 2 | Cache de facetas com TTL — **só depois de medir** | médio × médio | `matching/app` |
 | 3 | `loading.tsx` + `Suspense` em `/jobs` | só rende após o cache de facetas | `app/jobs/` |
@@ -386,7 +459,9 @@ painel antes de depender de um número):
 | SigNoz Cloud | Descartar: sem plano gratuito permanente |
 | Upstash Redis (500 mil comandos/mês) | Só na condição da seção Decisões |
 
-**Não confirmado:** `pg_trgm` e `unaccent` no seu plano Supabase; se "Query
+**Não confirmado:** `pg_trgm` e `unaccent` no Supabase de produção (consulta
+de leitura em [Busca por termo indexada](#busca-por-termo-indexada--medição-de-22092026));
+se "Query
 Performance" existe no Free; o plano real da Vercel — o Hobby é restrito a uso
 pessoal não comercial, e o repositório tem papel de recrutador.
 

@@ -11,6 +11,18 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- Busca por termo com pré-filtro indexado (#214). Migrations aditivas
+  `0012_enable_pg_trgm` (`CREATE EXTENSION IF NOT EXISTS pg_trgm`) e
+  `0013_term_search_trgm` (GIN `gin_trgm_ops` sobre a descrição sem espaço e
+  hífen, parcial em vagas abertas, e o mesmo em `job_page.text`). Para chave
+  ASCII com três letras ou dígitos seguidos, o quadro calcula uma vez por
+  consulta (`array(...)`, InitPlan) as vagas cuja descrição pode conter o termo
+  e só nelas roda o `~*` de palavra inteira, que continua decidindo: `java`
+  segue sem trazer `JavaScript`, e os resultados de referência do `perf:jobs`
+  são idênticos. No acervo local real o predicado caiu de 161/144 ms para
+  35/35 ms (`typescript`/`java`); no sintético de 10 mil vagas, com descrições
+  curtas sem compressão e termo pouco seletivo, subiu de 129 para 155 ms.
+  Tempos locais, não de produção.
 - Endereço público escolhido pelo candidato (#235): `/p/<slug>` passa a ler
   `candidate.public_slug` (coluna nova, índice único), separado do `slug`
   interno que a CLI e o seed usam para achar o dono. Migrações aditivas

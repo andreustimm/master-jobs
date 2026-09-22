@@ -167,6 +167,71 @@ describe("term filter over the corpus (ADR-005, ADR-012)", () => {
 
     expect(ids(await listBoard(owner, { term: hostile }))).toEqual([literal]);
   });
+
+  it("IT-214a the indexed prefilter keeps whole words over the description (#214)", async () => {
+    const hyphen = await addJob({ title: "Engineer", description: "Hands-on Tech-Lead role." });
+    const spaced = await addJob({ title: "Engineer", description: "We need a TECH LEAD now." });
+    const glued = await addJob({ title: "Engineer", description: "Our techlead mentors." });
+    await addJob({ title: "Engineer", description: "Techleading is one longer word." });
+    const java = await addJob({ title: "Engineer", description: "Java 21 and Spring." });
+    await addJob({ title: "Engineer", description: "Only JavaScript here." });
+    const captured = await addJob({ title: "Engineer", description: "nothing", page: "TypeScript on the captured page." });
+    // A página capturada SUBSTITUI a descrição da fonte: o termo só na
+    // descrição da fonte não casa, e o pré-filtro não pode mudar isso.
+    await addJob({ title: "Engineer", description: "typescript in the source text", page: "captured text says nothing" });
+    const closed = await addJob({ title: "Engineer", description: "tech lead" });
+    await db.update(job).set({ closedAt: "2026-09-01T00:00:00Z" }).where(eq(job.id, closed));
+    const accented = await addJob({ title: "Engineer", description: "Gestão de pessoas." });
+    const sorted = (rows: Array<{ jobId: number }>) => ids(rows).sort((a, b) => a - b);
+
+    expect(sorted(await listBoard(owner, { term: term("techlead") }))).toEqual([hyphen, spaced, glued]);
+    expect(sorted(await listBoard(owner, { term: term("Tech Lead") }))).toEqual([hyphen, spaced, glued]);
+    expect(sorted(await listBoard(owner, { term: term("java") }))).toEqual([java]);
+    expect(sorted(await listBoard(owner, { term: term("typescript") }))).toEqual([captured]);
+    // Sem pré-filtro (acento): o `~*` sozinho, como antes.
+    expect(sorted(await listBoard(owner, { term: term("gestão") }))).toEqual([accented]);
+    expect(await countBoard(owner, { term: term("techlead") })).toBe(3);
+  });
+
+  it("IT-214b the term query can reach both trigram indexes (#214)", async () => {
+    await addJob({ title: "Engineer", description: "Tech lead", page: "tech lead" });
+    // Captura o SQL que o quadro realmente envia: a expressão do índice e a da
+    // consulta precisam ser idênticas, e só o plano mostra se são.
+    const client = db.$client as unknown as {
+      unsafe: (...args: unknown[]) => Promise<unknown>;
+      begin: <T>(work: (tx: { unsafe: (query: string, values?: unknown[]) => Promise<unknown> }) => Promise<T>) => Promise<T>;
+    };
+    const original = client.unsafe.bind(client);
+    const sent: { query: string; values: unknown[] }[] = [];
+    client.unsafe = (...args: unknown[]) => {
+      sent.push({ query: String(args[0]), values: Array.isArray(args[1]) ? args[1] : [] });
+      return original(...args);
+    };
+    try {
+      await countBoard(owner, { term: term("techlead") });
+    } finally {
+      client.unsafe = original;
+    }
+    const counted = sent.find((statement) => statement.query.includes("ilike"));
+    expect(counted).toBeDefined();
+    // Com poucas linhas o planner prefere outra rota; tirá-las mostra se o
+    // índice é ALCANÇÁVEL, que é o que uma divergência de expressão quebraria.
+    // Os índices de `closed_at` somem só dentro da transação, desfeita no fim.
+    let text = "";
+    const rollback = new Error("rollback");
+    await client
+      .begin(async (tx) => {
+        await tx.unsafe("set local enable_seqscan = off");
+        await tx.unsafe("drop index production.job_closed_idx, production.job_archive_scan_idx");
+        text = JSON.stringify(await tx.unsafe(`explain (format json) ${counted!.query}`, counted!.values));
+        throw rollback;
+      })
+      .catch((error: unknown) => {
+        if (error !== rollback) throw error;
+      });
+    expect(text).toContain("job_description_trgm_idx");
+    expect(text).toContain("job_page_text_trgm_idx");
+  });
 });
 
 describe("brought by a saved term", () => {
