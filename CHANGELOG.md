@@ -9,6 +9,45 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- Descarte de vagas (`jho db prune` e `jho db cleanup --apply`): uma candidatura
+  criada enquanto o descarte rodava podia ser apagada em cascata junto com a
+  vaga, porque o `DELETE ... WHERE NOT EXISTS (application)` avaliava o
+  predicado antes de esperar o lock da candidatura. Os dois comandos passam por
+  uma única função, `deleteClosedJobsWithoutApplication`, que trava as vagas
+  (`FOR UPDATE`) e reconfere em comando novo. Corrida reproduzida com duas
+  conexões reais em `tests/db-decision-integrity.test.ts`.
+- `job.company_id` declara `onDelete: "no action"` explicitamente; o DDL não
+  muda (nenhuma migration nova). `tests/fk-delete-intent.test.ts` passa a
+  exigir política escrita em toda FK, e `cov-db-schema` ganhou o caso adverso
+  de ação divergente em `pg_constraint`.
+- Upgrade de banco populado provado: `tests/postgres-upgrade.test.ts` migra da
+  0003 com dados até a versão atual, conferindo backfill, funil intacto,
+  recusa de dado inconsistente, falha sem meia aplicação e retomada.
+- Skill `drizzle-safe-migrations` e playbook reescritos para PostgreSQL
+  (`drizzle/postgres/`, journal e `when`, transação única, locks, `migrate.yml`);
+  `docs/engineering/deploy.md` deixa de proibir o `sslmode` que o código aceita.
+
+- Operações: conexão restrita de produção configurada e validada antes do deploy; runbook corrigido para TLS, pooler e rotação recuperável. Ativação aguarda promoção humana.
+
+## [1.21.1] - 2026-09-22
+
+- A tela de vagas calcula lista e total em uma seleção de ids antes de carregar os dados da página, evitando repetir filtros e agrupamento. Páginas além do fim mantêm o total por uma contagem de fallback; o benchmark pode registrar todos os planos com `JHO_PERF_PLANS=1`.
+
+- As facetas do quadro passam a ler o conjunto elegível uma vez e devolver contadores, clusters e fontes em uma consulta, preservando a primeira publicação elegível de cada dimensão e o isolamento por candidato.
+
+## [1.21.0] - 2026-09-22
+
+### Adicionado
+
+- Ferramentas: gestão canônica de tarefas pelo GitHub Project, com CLI remota,
+  claims e recibos assinados, revisão/geração, recuperação de operações,
+  projeções Compozy descartáveis e gate de vínculo de PR. Escritor em main e
+  enforcement dependem do provisionamento e piloto documentados em #191.
+
+## [1.20.9] - 2026-09-22
+
 - Governança: SLOs internos, orçamento de erros e resposta a incidentes definidos; adicionados sonda pública e relatório de métricas DORA com cobertura explícita e histórico por artefatos.
 
 ### Corrigido

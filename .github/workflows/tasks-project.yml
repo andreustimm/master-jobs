@@ -1,0 +1,62 @@
+name: Coordenador do GitHub Project
+
+on:
+  issue_comment:
+    types: [created]
+  issues:
+    types: [opened, reopened, edited]
+  workflow_run:
+    workflows: [CI, Fumaça em produção]
+    types: [completed]
+  deployment_status:
+  pull_request_target:
+    branches: [dev]
+    types: [opened, reopened, synchronize, ready_for_review, closed, edited]
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [reconcile, initialize]
+        default: reconcile
+
+# All mutations, including recovery and administrative commands, use this group.
+# Queue overflow may cancel a run, but cannot delete an intent from issue #207.
+concurrency:
+  group: tasks-project-PVT_kwHOAAxgXs4Bj8-V
+  queue: max
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  writer:
+    if: >-
+      github.repository == 'andreustimm/master-jobs' &&
+      (vars.TASKS_WRITER_ENABLED == 'true' || github.event_name == 'workflow_dispatch') &&
+      (github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.event_name != 'issue_comment' ||
+      (github.event.issue.number == 207 && startsWith(github.event.comment.body, '<!-- tasks-command:v1 -->')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Coordenar intenções persistidas e conferir evidências
+        env:
+          # Personal Projects require this separately provisioned credential.
+          # No fallback to GITHUB_TOKEN and no branch-supplied code is executed.
+          GH_TOKEN: ${{ secrets.PROJECTS_TOKEN }}
+          TASKS_WRITER_PRIVATE_KEY: ${{ secrets.TASKS_WRITER_PRIVATE_KEY }}
+          PROJECTS_TOKEN_PRESENT: ${{ secrets.PROJECTS_TOKEN != '' }}
+        run: node scripts/tasks/writer.ts

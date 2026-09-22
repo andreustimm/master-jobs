@@ -273,7 +273,7 @@ fato imutável: reingestão atualiza conteúdo e `last_seen_at`, reabre
 | `content_hash` | detector de edição — mesma seção |
 | `source_id` -> `source.id` | `ON DELETE cascade`. **Atenção:** é reescrito quando a vaga é atualizada com conteúdo novo (o `set` do ramo `contentHash` diferente inclui `sourceId`), então numa vaga vista por duas fontes essa coluna aponta para a última fonte que a viu com conteúdo alterado |
 | `external_id` | id estável dentro da fonte; **não** participa da deduplicação |
-| `company_id` -> `company.id` | sem cascade (`ON DELETE no action`) |
+| `company_id` -> `company.id` | sem cascade: `ON DELETE no action`, **declarado** no schema. Empresa que ainda nomeia vaga não pode ser apagada; nada apaga empresa hoje |
 | `company_name` | denormalizado de propósito: existe mesmo quando `slugifyCompany()` devolve string vazia e `company_id` fica `null` |
 | `description_html` / `description_text` | `description_text` é o dado durável que scorer e UI leem. `description_html` permanece por compatibilidade de schema, mas ingestão nova grava `null`; `jho db cleanup` remove o legado |
 | `remote` | `null` = a vaga não diz. Diferente de `false` |
@@ -417,8 +417,11 @@ estágio, taxa de conversão). `setApplicationStatus()` grava um evento
 `kind="status_change"` em toda transição, com `from_status` (ausente na
 criação), `to_status` e `detail` (o `-n/--note` do `jho track`).
 
-> **Invariante:** `application_event` nunca é atualizada nem deletada. É log.
-> Qualquer correção é um evento novo, não um `UPDATE`.
+> **Invariante:** `application_event` nunca é atualizada nem deletada pelo
+> ciclo de vida do funil. É log. Qualquer correção é um evento novo, não um
+> `UPDATE`. "Append-only" não é retenção absoluta: a FK é `cascade`, e apagar a
+> candidatura, o candidato ou a vaga leva o histórico junto — por isso o único
+> descarte de vaga deixa de fora toda vaga com candidatura.
 
 **Regra de retenção:** `application` é a unidade de contagem de candidaturas;
 `application_event` é a unidade de etapas/auditoria. Fechar ou arquivar o `job`
@@ -538,10 +541,12 @@ Está declarado no cabeçalho de [`src/core/ingest/run.ts`](../src/core/ingest/r
  *  1. Sync never writes to `application` — user decisions survive every re-run.
 ```
 
-E é verificável por leitura: `run.ts` importa exatamente `company`, `job` e
-`source` de `schema.ts`. `application` não aparece no arquivo — exceto dentro
-da subquery textual de `pruneClosed()`, onde é usada só para **proteger** linhas
-(`select job_id from application`).
+E é verificável por leitura: `run.ts` importa exatamente `job` e `source` de
+`schema.ts`, e `application` só aparece ali em comentário. `pruneClosed()` delega o
+descarte a `deleteClosedJobsWithoutApplication()`, em `src/core/db/retention.ts`,
+onde `application` é lida só para **proteger** linhas. A importação repetida —
+igual e com conteúdo alterado — contra uma candidatura com histórico é provada
+em `tests/db-decision-integrity.test.ts`.
 
 Consequência prática: `pnpm jho jobs sync` pode rodar todo dia, quantas vezes
 quiser, e um `status = 'interviewing'` continua `interviewing`. As tabelas de
@@ -579,21 +584,40 @@ Reabertura é automática: nos dois ramos do update (`contentHash` igual ou
 diferente), o `set` inclui `closedAt: null`. Uma vaga que reaparece na fonte
 volta ao board sem intervenção.
 
-A **única** exclusão permitida no sistema é `pruneClosed()`, exposta como
-`jho db prune --days <n>` (default `90`), e ela é explicitamente defensiva:
+**Ausência na fonte e descarte são coisas diferentes.** A ausência — board que
+parou de listar, 404/410 na verificação — só fecha (`closed_at`) e é
+reversível. O descarte é administrativo, pedido por pessoa, e só alcança vaga
+fechada há mais de N dias **e sem nenhuma candidatura**. Ele tem uma única
+implementação, `deleteClosedJobsWithoutApplication()` em
+[`src/core/db/retention.ts`](../src/core/db/retention.ts), e duas entradas:
+`jho db prune --days <n>` (default `90`) e `jho db cleanup --apply`.
 
-```ts
-and(
-  lt(job.closedAt, cutoff),
-  sql`${job.id} not in (select job_id from application)`,
-)
-```
+A implementação trava antes de conferir, em dois comandos na mesma transação:
 
-> **Invariante:** nenhum caminho de código pode `DELETE FROM job` sem o predicado
-> `job.id not in (select job_id from application)`. As FKs `ON DELETE cascade` de
+1. `SELECT id FROM job WHERE <fechada antes do corte> AND NOT EXISTS
+   (application) FOR UPDATE` — espera toda candidatura em curso que já
+   referencia essas vagas e impede que uma nova se prenda a elas até o commit;
+2. `DELETE FROM job WHERE id = ANY(<travadas>) AND <o mesmo predicado>` — um
+   comando novo, que em READ COMMITTED enxerga as candidaturas confirmadas
+   enquanto o passo 1 esperava.
+
+Um `DELETE ... WHERE NOT EXISTS (application)` sozinho **não basta**: ele
+avalia o predicado com a fotografia do início do comando, espera o lock que a
+FK da candidatura concorrente pôs na vaga e, quando ela confirma, apaga assim
+mesmo — a vaga estava travada, não alterada, então nada é reavaliado — e o
+cascade leva a candidatura recém-confirmada. Os dois caminhos faziam isso até a
+correção; `tests/db-decision-integrity.test.ts` reproduz a corrida com duas
+conexões reais. Na ordem inversa (descarte trava primeiro), a candidatura
+tardia falha na FK: o usuário vê o erro, e nada some em silêncio.
+
+> **Invariante:** nenhum caminho de código faz `DELETE FROM job` fora de
+> `deleteClosedJobsWithoutApplication()` — `tests/architecture.test.ts` procura
+> `.delete(job)` e `delete from job` em `src/`. As FKs `ON DELETE cascade` de
 > `job_score` e `application` significam que apagar uma `job` apaga junto a linha
 > de funil e todo o `application_event` pendurado nela — histórico que não tem
-> como ser reconstruído.
+> como ser reconstruído. Pelo mesmo motivo, `job.source_id` em cascade faz de
+> "apagar uma fonte" um descarte de candidaturas: nenhum código apaga `source`,
+> e fonte aposentada é desligada (`enabled = false`), não removida.
 
 ### 3. Scores são derivados e versionados por `SCORER_VERSION`
 
@@ -747,8 +771,9 @@ pnpm jho db migrate     # aplica; roda tambem no inicio de `jho jobs sync`
 `runMigrations()` usa `DATABASE_MIGRATION_URL`, uma conexão PostgreSQL separada
 da URL de runtime. O snapshot SQLite legado não participa do bootstrap normal.
 
-> **Invariante:** `schema.ts` é a fonte da verdade; o SQL em `drizzle/` é
-> **gerado**. Editar o `.sql` à mão desincroniza o snapshot de `drizzle/meta/` e
+> **Invariante:** `schema.ts` é a fonte da verdade; o SQL em `drizzle/postgres/`
+> é **gerado**. Editar o `.sql` à mão desincroniza o snapshot de
+> `drizzle/postgres/meta/` e
 > a próxima geração produz um diff errado. Mexeu no schema, rode
 > `pnpm db:generate` e commite os dois.
 
@@ -757,7 +782,27 @@ Migração de dados é a exceção declarada: nasce vazia com
 journal gerados pelo kit. A troca de chave de `job_score` é o exemplo —
 expandir (`0004`, trilha anulável), preencher (`0005`, trilha principal por
 candidato e `track_id` nas notas existentes) e contrair (`0006`, `NOT NULL` e a
-chave nova). O migrator aplica as pendentes numa transação só.
+chave nova). O migrator aplica as pendentes numa transação só: falha no meio
+não deixa metade aplicada, e rodar de novo depois de corrigir a causa retoma.
+Ele também só aplica entrada do journal cuja `when` é mais nova que a última
+migração registrada no banco — entrada com `when` antiga (típico depois de
+rebase sobre a migração de outra pessoa) é **pulada sem aviso**.
+
+O procedimento completo, com locks e checklist, está na skill
+[`drizzle-safe-migrations`](../.claude/skills/drizzle-safe-migrations/SKILL.md).
+As provas que o sustentam:
+
+| Pergunta | Prova |
+|---|---|
+| Toda FK escreve `onDelete`, inclusive `no action`? | `tests/fk-delete-intent.test.ts` |
+| O DDL aplicado tem as mesmas FKs e ações que o schema? | `tests/cov-db-schema.test.ts` (`pg_constraint`) |
+| Banco populado na versão anterior sobe sem perder o funil? | `tests/postgres-upgrade.test.ts` (0003 → atual, com falha e retomada) |
+| Runtime não tem DDL nem escala privilégio? | `tests/postgres-permissions.test.ts` |
+| Schema e SQL gerado estão em sincronia? | job `schema-e-migracao` do CI |
+
+A distinção entre as duas primeiras é o ponto: o Drizzle completa com
+`no action` o `onDelete` que ninguém escreveu, e o PostgreSQL grava o mesmo.
+Paridade sozinha não distingue "escolhi" de "esqueci".
 
 
 ## Tabelas adicionadas depois da primeira versão

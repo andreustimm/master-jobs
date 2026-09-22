@@ -18,6 +18,30 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- An application recorded at the exact moment the old-job cleanup ran could
+  disappear together with the job. The cleanup now waits and checks again, and
+  never deletes a job that has an application.
+
+- The database connection is configured and validated with limited permissions; it takes effect in the next approved production deployment.
+
+## [1.21.1] - 2026-09-22T18:19:03.735Z
+
+- The job list and its total are calculated together, reducing search work while preserving ordering and totals when changing pages.
+
+- Job filter counts and options require less work from the system while keeping the same results and grouping rules.
+
+## [1.21.0] - 2026-09-22T18:02:40.049Z
+
+### New
+
+- Preparation for centralized improvement tracking, preserving priorities
+  and distinguishing ongoing work from verified deliveries. Activation will
+  be confirmed after the complete workflow is validated.
+
+## [1.20.9] - 2026-09-22T17:41:44.517Z
+
 - The project now defines internal availability and latency targets, incident tracking, and a report that distinguishes measured results from insufficient data.
 
 ### Fixed
