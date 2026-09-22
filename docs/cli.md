@@ -1137,6 +1137,12 @@ Com o papel `candidate`, a conta recebe um candidato:
   com sufixo `-2`, `-3`… se o slug já existir). Candidato de conta apagada
   nunca é reaproveitado.
 
+O candidato novo recebe o nome de exibição da conta, quando ela já tem um; sem
+ele, nasce **sem nome**, e a pessoa o escreve em `/candidate` antes de publicar
+o perfil. O e-mail nunca vira nome: o nome é o título de `/p/<endereço>`.
+
+A conta nasce sem senha; defina com `jho auth set-password <email>`.
+
 Não há `--candidate <id>`: apontar uma conta para o candidato de outra pessoa
 é leitura de dado alheio fora da impersonação auditada. Rodar de novo atualiza
 os papéis e nunca troca o candidato já vinculado — só preenche quando falta.

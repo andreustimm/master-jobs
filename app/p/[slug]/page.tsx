@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { publicProfile } from "../../../src/core/candidate-public.ts";
 import { MarkdownPreview } from "../../candidate/markdown-preview";
+import { getTranslator } from "../../i18n";
 
 /**
  * Portfólio público. **A única rota do sistema que responde sem sessão.**
@@ -31,8 +32,9 @@ type Params = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const profile = await publicProfile((await params).slug);
+  const { t } = await getTranslator();
   return {
-    title: profile ? `${profile.name} — perfil` : "Perfil",
+    title: profile?.name ? t("publicName.pageTitle", { name: profile.name }) : t("publicName.unnamed"),
     description: profile?.headline ?? undefined,
     robots: { index: false, follow: false },
   };
@@ -44,13 +46,21 @@ export default async function PublicProfilePage({ params }: Params) {
   // pagaria o custo que o limite existe para evitar.
   const profile = await publicProfile((await params).slug);
   if (!profile) notFound();
+  const { t } = await getTranslator();
 
   return (
     <main className="mx-auto w-full max-w-[62ch] pt-12 pb-16" data-testid="route-public-profile">
       <header className="mb-8">
-        <h1 data-user-content className="type-display-md">
-          {profile.name}
-        </h1>
+        {/* Nome vazio é perfil que ainda não escolheu um nome publicável —
+            `publicProfile()` também esvazia o que parece e-mail ou telefone.
+            O título neutro vem do dicionário, nunca de outro campo da pessoa. */}
+        {profile.name ? (
+          <h1 data-user-content className="type-display-md">
+            {profile.name}
+          </h1>
+        ) : (
+          <h1 className="type-display-md">{t("publicName.unnamed")}</h1>
+        )}
         {profile.headline && (
           <p data-user-content className="type-body-lg mt-1 text-muted-foreground">
             {profile.headline}

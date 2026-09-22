@@ -21,9 +21,11 @@ import { loadProfile } from "./profile/load.ts";
 import { isVisibility, type Visibility } from "../contexts/auth/index.ts";
 import { primaryScoreFilter } from "../contexts/matching/index.ts";
 import {
+  parsePublicName,
   slugAttempt,
   slugBaseFromName,
   validatePublicSlug,
+  type NameError,
   type PublicSlugError,
 } from "./candidate-identity.ts";
 
@@ -302,6 +304,26 @@ export async function setPublicSlug(
   return { ok: true, slug: valid.slug };
 }
 
+/**
+ * Troca o nome do candidato — o título de `/p/<endereço>`. Só o próprio
+ * candidato chama.
+ *
+ * Separado do nome de exibição da conta (`/account`): aquele é quem ENTRA, este
+ * é o que se PUBLICA, e trocar um não pode publicar o outro por tabela. A
+ * validação recusa e-mail e telefone; ver `parsePublicName`.
+ */
+export async function setCandidateName(
+  candidateId: number,
+  raw: string,
+): Promise<{ ok: true; name: string } | { ok: false; code: NameError }> {
+  const parsed = parsePublicName(raw);
+  if (!parsed.ok) return parsed;
+  await getDb()
+    .update(candidate)
+    .set({ name: parsed.name, updatedAt: new Date().toISOString() })
+    .where(eq(candidate.id, candidateId));
+  return parsed;
+}
 
 /**
  * Publicar o texto do currículo no perfil público. Segundo consentimento.

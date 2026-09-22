@@ -39,7 +39,12 @@ export default async function RecruiterHistory() {
                 data-testid={`recruiter-candidate-${summary.candidateId}`}
                 className="font-semibold hover:underline"
               >
-                <span data-user-content>{summary.name}</span>
+                {/* Candidato sem nome escolhido: o link não pode ficar vazio. */}
+                {summary.name.trim() !== "" ? (
+                  <span data-user-content>{summary.name}</span>
+                ) : (
+                  <span>{t("publicName.unnamed")}</span>
+                )}
               </TransitionLink>
               <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>{t("recruiter.applications", { count: String(summary.total) })}</span>

@@ -732,7 +732,7 @@ export const en: Dictionary = {
     roleCandidate: "Candidate",
     roleRecruiter: "Recruiter",
     lead: "Accounts that can sign in. A user only sees their own data; to see someone else's, an admin acts as them — and acting as someone is recorded.",
-    noPasswordHint: "The account is created without a password and cannot sign in until someone sets one with `jho auth password`.",
+    noPasswordHint: "The account is created without a password and cannot sign in until someone sets one with `jho auth set-password <email>`.",
     lastAdmin: "Last active admin: promote another one before demoting or disabling this account.",
     edit: "Edit",
     editTitle: "Edit account",
@@ -821,10 +821,22 @@ export const en: Dictionary = {
     created: "Profile created.",
     nameRequired: "Enter your name.",
     nameTooLong: "The name is longer than {max} characters.",
+    nameContact: "The name shows on the public profile: write your name, with no email or phone number.",
     headlineTooLong: "The headline is longer than {max} characters.",
     locationTooLong: "The location is longer than {max} characters.",
     cvTooShort: "The text is too short to be a CV (at least {min} characters). Leave it blank to paste it later.",
     unavailable: "This account cannot create a profile right now. Sign in again or contact whoever runs the system.",
+  },
+  /** Name the public profile shows, editable by the candidate. */
+  publicName: {
+    title: "Profile name",
+    label: "Name",
+    hint: "It is the title of your public profile. Never use an email or phone number here.",
+    missing: "Your profile has no name yet. Write how you want to be called before making it public.",
+    save: "Save name",
+    saved: "Name saved.",
+    unnamed: "Unnamed profile",
+    pageTitle: "{name} — profile",
   },
   /** Public address chosen by the candidate (#235). */
   publicAddress: {

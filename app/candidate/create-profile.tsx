@@ -10,7 +10,6 @@ import {
   HEADLINE_MAX,
   LOCATION_MAX,
   NAME_MAX,
-  SLUG_MAX,
   slugBaseFromName,
   type OwnProfileError,
   type PublicSlugError,
@@ -29,6 +28,7 @@ function refusalMessages(
     ...publicSlugMessages(t),
     nameRequired: t("onboarding.nameRequired"),
     nameTooLong: t("onboarding.nameTooLong", { max: NAME_MAX }),
+    nameContact: t("onboarding.nameContact"),
     headlineTooLong: t("onboarding.headlineTooLong", { max: HEADLINE_MAX }),
     locationTooLong: t("onboarding.locationTooLong", { max: LOCATION_MAX }),
     cvTooShort: t("onboarding.cvTooShort", { min: CV_MIN }),
@@ -119,7 +119,10 @@ export function CreateProfile({ t, suggestedName }: { t: Translator["t"]; sugges
                 <Input
                   id="profile-slug"
                   name="publicSlug"
-                  maxLength={SLUG_MAX}
+                  // Sem `maxLength`: o navegador cortaria o endereço colado e
+                  // publicaria outro sem aviso. A recusa de tamanho é do
+                  // domínio (`validatePublicSlug`), com a mensagem certa.
+                  //
                   // Sugestão, não valor: em branco o servidor deriva do nome
                   // digitado e resolve colisão sozinho; preenchido, a escolha é
                   // da pessoa e colisão volta como "já em uso".

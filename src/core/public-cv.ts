@@ -174,7 +174,39 @@ function blocks(lines: string[]): string[][] {
   return out;
 }
 
-export function publicCvText(content: string, known: { email?: string | null } = {}): string {
+/** E-mails que a instalação já sabe serem da pessoa: o do candidato e o da conta. */
+export type KnownContact = { email?: string | null; emails?: readonly (string | null | undefined)[] };
+
+function knownEmails(known: KnownContact): string[] {
+  return [known.email, ...(known.emails ?? [])]
+    .map((email) => email?.trim() ?? "")
+    .filter((email) => email !== "");
+}
+
+/**
+ * Um campo CURTO do perfil público — nome, headline, localização — que traz
+ * e-mail ou telefone.
+ *
+ * Mesma detecção do currículo, e um caso a mais: uma sequência de dez dígitos
+ * seguidos (`11912345678`). No texto corrido do currículo ela fica, porque não
+ * se distingue de um número qualquer; num nome ou numa headline ninguém escreve
+ * dez dígitos sem separador que não sejam um telefone. Intervalo de anos
+ * (`2004-2024`) tem separador e não conta.
+ *
+ * Não redige: quem chama descarta o campo inteiro. Um nome com o e-mail no
+ * meio, publicado com `[…]` no lugar, ainda diria de quem é o endereço.
+ */
+export function containsContact(text: string, known: KnownContact = {}): boolean {
+  const normalized = text.normalize("NFC").replace(/[   ]/g, " ");
+  const lower = normalized.toLowerCase();
+  if (knownEmails(known).some((email) => lower.includes(email.toLowerCase()))) return true;
+  if (normalized.replace(EMAIL, REDACTED) !== normalized) return true;
+  if (redactInternationalPhones(normalized) !== normalized) return true;
+  if (normalized.replace(LOCAL_PHONE, REDACTED) !== normalized) return true;
+  return /\d{10,}/.test(normalized);
+}
+
+export function publicCvText(content: string, known: KnownContact = {}): string {
   const out: string[] = [];
   // Nível do título cuja seção inteira está saindo, ou nulo.
   let skippingSection: number | null = null;
@@ -211,8 +243,9 @@ export function publicCvText(content: string, known: { email?: string | null } =
   }
 
   let text = out.join("\n");
-  const email = known.email?.trim();
-  if (email) text = text.replace(new RegExp(escapeRegExp(email), "giu"), REDACTED);
+  for (const email of knownEmails(known)) {
+    text = text.replace(new RegExp(escapeRegExp(email), "giu"), REDACTED);
+  }
   text = text.replace(EMAIL, REDACTED);
   text = redactInternationalPhones(text);
   return text.replace(LOCAL_PHONE, REDACTED);

@@ -50,12 +50,15 @@ export function PublicAddressCard({ current, t }: { current: string; t: Translat
             <span aria-hidden="true" className="font-mono type-body-sm text-muted-foreground">
               /p/
             </span>
+            {/* Sem `minLength`/`maxLength`, de propósito. O `maxlength` cortava
+                o endereço colado e o salvava como outro, com "Endereço salvo.";
+                o `minlength` barrava o envio no navegador, e a pessoa lia o
+                aviso anterior como se fosse a razão. O tamanho é regra do
+                domínio (`validatePublicSlug`), e a recusa dele diz qual é. */}
             <Input
               id="public-slug"
               name="publicSlug"
               required
-              minLength={SLUG_MIN}
-              maxLength={SLUG_MAX}
               defaultValue={current}
               autoCapitalize="none"
               autoCorrect="off"

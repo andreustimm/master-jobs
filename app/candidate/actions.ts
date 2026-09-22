@@ -7,10 +7,17 @@ import {
   CV_MIN,
   parseOwnProfile,
   validatePublicSlug,
+  type NameError,
   type OwnProfileError,
   type PublicSlugError,
 } from "../../src/core/candidate-identity.ts";
-import { requestCvRescore, setPublicCv, setPublicSlug, setVisibility } from "../../src/core/candidate.ts";
+import {
+  requestCvRescore,
+  setCandidateName,
+  setPublicCv,
+  setPublicSlug,
+  setVisibility,
+} from "../../src/core/candidate.ts";
 import {
   deleteDocument,
   documentById,
@@ -223,6 +230,25 @@ export async function createProfileAction(formData: FormData): Promise<CreatePro
   if (result.status === "created" && parsed.value.cv !== null) await requestCvRescore(result.candidateId);
 
   revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Nome público                                                                */
+/* -------------------------------------------------------------------------- */
+
+export type PublicNameResult = { ok: true } | { ok: false; code: NameError };
+
+/**
+ * Troca o nome que o perfil público mostra. O candidato vem da sessão
+ * (`guardOwnCandidate`, sem id por parâmetro), e a guarda vem antes de ler o
+ * formulário.
+ */
+export async function setPublicNameAction(formData: FormData): Promise<PublicNameResult> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  const result = await setCandidateName(candidateId, String(formData.get("name") ?? ""));
+  if (!result.ok) return result;
+  revalidatePath("/candidate");
   return { ok: true };
 }
 

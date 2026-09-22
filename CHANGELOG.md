@@ -9,6 +9,34 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Segurança
+
+- O perfil público não publica mais o e-mail como nome
+  (BUG-20260922-public-profile-shows-email-as-name). `addUser` dava ao
+  candidato de `jho auth add-user` o nome `email`, e `/p/<endereço>` o
+  mostrava como título. Agora: o candidato recebe o nome de exibição da conta
+  ou nasce sem nome (`initialCandidateName`); `publicProfile()` esvazia nome,
+  headline, localização e links que tragam e-mail ou telefone
+  (`containsContact`, também com o e-mail da conta dona); e a migration de
+  dados `0014_clear_contact_candidate_names` zera os nomes já gravados.
+
+### Adicionado
+
+- Cartão "Nome no perfil" em `/candidate` (`setPublicNameAction`, guarda
+  `candidate:write` antes de ler o formulário), que pede o nome quando ele
+  falta e recusa e-mail ou telefone (`nameContact`). O título de `/p/` sem nome
+  e o `<title>` da página vêm do dicionário.
+
+### Corrigido
+
+- `/admin/users` citava `jho auth password`; o comando é
+  `jho auth set-password <email>` (BUG-20260922-admin-password-hint-wrong-command).
+- Endereço público: o campo tinha `maxlength`/`minlength`, que cortavam 41
+  caracteres para 40 e salvavam, e barravam `ab` no navegador deixando à vista
+  o aviso anterior. Sem os atributos, `validatePublicSlug` recusa pelo tamanho
+  com a mensagem certa (BUG-20260922-long-address-cut-silently,
+  BUG-20260922-short-address-wrong-reason).
+
 ## [1.22.0] - 2026-09-22
 
 ### Adicionado

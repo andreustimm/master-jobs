@@ -18,6 +18,7 @@ import {
   getCandidate,
   syncCandidateFromProfile,
 } from "../../../core/candidate.ts";
+import { initialCandidateName } from "../../../core/candidate-identity.ts";
 import type { Role } from "../domain/types.ts";
 
 /**
@@ -35,12 +36,16 @@ export function ownCandidateSlug(email: string): string {
  * `user-a-b-x-com`. E um candidato sem conta não é "livre": apagar a conta
  * deixa o candidato com o currículo e o funil de quem saiu. Reaproveitar por
  * slug entregaria esse dado à conta seguinte, então slug existente é pulado.
+ *
+ * O nome passa por `initialCandidateName`: e-mail ou telefone no lugar do nome
+ * — digitado no campo de nome completo, por exemplo — vira candidato sem nome.
  */
 export async function claimOwnCandidate(input: { email: string; name: string }): Promise<number> {
   const base = ownCandidateSlug(input.email);
+  const name = initialCandidateName(input.name);
   for (let n = 1; ; n++) {
     const slug = n === 1 ? base : `${base}-${n}`;
-    if (!(await getCandidate(slug))) return ensureCandidate({ slug, name: input.name });
+    if (!(await getCandidate(slug))) return ensureCandidate({ slug, name });
   }
 }
 
@@ -74,7 +79,7 @@ export async function addUser(input: {
   const db = getDb();
 
   const [existing] = await db
-    .select({ candidateId: authUser.candidateId })
+    .select({ candidateId: authUser.candidateId, fullName: authUser.fullName })
     .from(authUser)
     .where(eq(authUser.email, email))
     .limit(1);
@@ -84,9 +89,13 @@ export async function addUser(input: {
     // A primeira conta da instalação é a do dono — é o primeiro acesso que a
     // regra 14 e `/login` ensinam — e fica com o candidato do `profile.yaml`.
     // Qualquer conta depois dela é de outra pessoa.
+    //
+    // O nome NUNCA é o e-mail: o nome é o título de `/p/<endereço>`, e a
+    // 1.22.0 publicava o e-mail ali. Sem nome de exibição na conta, o
+    // candidato nasce sem nome e `/candidate` pede um.
     candidateId = !existing && (await isFirstAccount())
       ? await syncCandidateFromProfile()
-      : await claimOwnCandidate({ email, name: email });
+      : await claimOwnCandidate({ email, name: initialCandidateName(existing?.fullName) });
   }
 
   await db

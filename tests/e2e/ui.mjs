@@ -3145,12 +3145,53 @@ try {
     check("endereço público escolhido sobrevive ao refresh", savedSlug === chosen, `${savedSlug} != ${chosen}`);
     check("cartão de endereço público cabe em 375px", addressOverflow <= 1, `overflow=${addressOverflow}`);
 
+    // BUG-20260922-short-address-wrong-reason e -long-address-cut-silently: o
+    // navegador não barra nem corta; a recusa de tamanho vem do domínio, com a
+    // razão certa, e o endereço atual não muda.
+    const refusalNotice = onboarding.locator('[data-testid="mutation-feedback"][role="alert"]');
+    const refusal = async (value) => {
+      await onboarding.locator('[data-testid="mutation-feedback-dismiss"]').click().catch(() => undefined);
+      await onboarding.fill('[data-testid="public-slug"]', value);
+      await onboarding.locator('[data-testid="save-public-slug"]').click();
+      await refusalNotice.waitFor({ timeout: 10_000 }).catch(() => undefined);
+      return ((await refusalNotice.textContent().catch(() => "")) ?? "").trim();
+    };
+    const shortReason = await refusal("ab");
+    const longReason = await refusal("a".repeat(41));
+    await onboarding.reload({ waitUntil: "networkidle" });
+    const afterRefusals = await onboarding.locator('[data-testid="public-slug"]').inputValue().catch(() => "");
+    check("endereço curto é recusado pelo tamanho", /at least 3 characters/.test(shortReason), shortReason);
+    check("endereço de 41 caracteres é recusado, não cortado", /longer than 40 characters/.test(longReason), longReason);
+    check("recusas não mudam o endereço atual", afterRefusals === chosen, afterRefusals);
+
+    // Nome do perfil público: editável, e e-mail não passa.
+    const nameCard = onboarding.locator('[data-testid="public-name-card"]');
+    check("nome do perfil é editável em /candidate", (await nameCard.count()) === 1);
+    await onboarding.fill('[data-testid="public-name"]', "e2e-sem-perfil@local.test");
+    await onboarding.locator('[data-testid="save-public-name"]').click();
+    await refusalNotice.waitFor({ timeout: 10_000 }).catch(() => undefined);
+    const nameReason = ((await refusalNotice.textContent().catch(() => "")) ?? "").trim();
+    check("e-mail como nome do perfil é recusado com a razão", /no email or phone/.test(nameReason), nameReason);
+    await onboarding.locator('[data-testid="mutation-feedback-dismiss"]').click().catch(() => undefined);
+    await onboarding.fill('[data-testid="public-name"]', "Onboarding Person Renamed");
+    await onboarding.locator('[data-testid="save-public-name"]').click();
+    await savedNotice.waitFor({ timeout: 10_000 }).catch(() => undefined);
+    await onboarding.reload({ waitUntil: "networkidle" });
+    const savedName = await onboarding.locator('[data-testid="public-name"]').inputValue().catch(() => "");
+    const nameOverflow = await onboarding.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    check("nome do perfil sobrevive ao refresh", savedName === "Onboarding Person Renamed", savedName);
+    check("cartão de nome do perfil cabe em 375px", nameOverflow <= 1, `overflow=${nameOverflow}`);
+
     const anon = await browser.newContext();
     const anonPage = await anon.newPage();
     const fresh = await anonPage.goto(`${BASE}/p/${chosen}`, { waitUntil: "domcontentloaded" });
     const freshShown = (await anonPage.locator('[data-testid="route-public-profile"]').count()) === 1;
+    const freshHeading = ((await anonPage.locator('[data-testid="route-public-profile"] h1').textContent().catch(() => "")) ?? "").trim();
     const stale = await anonPage.goto(`${BASE}/p/${derivedSlug}`, { waitUntil: "domcontentloaded" });
     check("endereço novo responde ao anônimo", fresh?.status() === 200 && freshShown, String(fresh?.status()));
+    check("perfil público mostra o nome editado", freshHeading === "Onboarding Person Renamed", freshHeading);
     check(
       "endereço antigo responde 404 depois da troca",
       derivedSlug !== "" && stale?.status() === 404,
@@ -4388,7 +4429,11 @@ try {
       && !loginReplayRestoredSession
       && emptyProfileResponse?.status() === 200
       && emptyProfile.statusSurface
-      && emptyProfile.heading === "e2e-alvo@local.test"
+      // O setup grava o e-mail como nome deste candidato — o dado que a
+      // 1.22.0 produzia pela CLI. A página nunca o publica: o título é o
+      // neutro do dicionário (BUG-20260922-public-profile-shows-email-as-name).
+      && !emptyProfile.heading.includes("@")
+      && ["Perfil sem nome", "Unnamed profile"].includes(emptyProfile.heading)
       && emptyProfile.optionalParagraphs === 0
       && emptyProfile.optionalSections === 0
       && emptyProfile.optionalLinks === 0

@@ -18,14 +18,23 @@
  * é outra decisão. E o consentimento publica o CURRÍCULO, não o que nunca sai:
  * o texto passa por `publicCvText()`, que retira e-mail, telefone e a frase do
  * piso salarial escritos nele — com os limites de detecção declarados lá.
+ *
+ * **A lista de permissão escolhe COLUNAS; o valor também é conferido.** Na
+ * 1.22.0 a conta criada por `jho auth add-user` ganhava o próprio e-mail como
+ * nome do candidato, e o nome é uma coluna permitida: `/p/<endereço>` publicava
+ * o e-mail no título. A correção na origem não basta, porque a coluna aceita
+ * qualquer texto — um nome digitado, um `profile.yaml`, uma migration futura.
+ * Então todo campo de texto que sai passa por `containsContact()` e, se trouxer
+ * e-mail ou telefone, sai VAZIO, independentemente de como o dado chegou lá.
  */
 import { and, eq } from "drizzle-orm";
 import { getDb } from "./db/client.ts";
-import { candidate, candidateDocument, candidateSkill, skill } from "./db/schema.ts";
-import { publicCvText } from "./public-cv.ts";
+import { authUser, candidate, candidateDocument, candidateSkill, skill } from "./db/schema.ts";
+import { containsContact, publicCvText, type KnownContact } from "./public-cv.ts";
 
 export type PublicProfile = {
   slug: string;
+  /** Vazio quando a pessoa ainda não escolheu um nome publicável. */
   name: string;
   headline: string | null;
   location: string | null;
@@ -58,10 +67,13 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
       githubUrl: candidate.githubUrl,
       visibility: candidate.visibility,
       publicCv: candidate.publicCv,
-      // Lido para ser RETIRADO do texto do CV, nunca devolvido.
+      // Lidos para serem RETIRADOS do que sai, nunca devolvidos. O da conta
+      // importa porque o candidato criado pela CLI não tem `email` próprio.
       email: candidate.email,
+      accountEmail: authUser.email,
     })
     .from(candidate)
+    .leftJoin(authUser, eq(authUser.candidateId, candidate.id))
     // O endereço público, nunca o identificador interno: quem trocou de
     // endereço não pode continuar alcançável pelo antigo nem pelo `slug`.
     .where(eq(candidate.publicSlug, slug))
@@ -71,6 +83,9 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
   // perfil e deixasse a decisão para quem renderiza seria usada errado no
   // segundo lugar que a chamasse.
   if (!row || row.visibility !== "public") return null;
+  const known: KnownContact = { emails: [row.email, row.accountEmail] };
+  const text = (value: string | null): string | null =>
+    value === null || containsContact(value, known) ? null : value;
 
   const skills = await db
     .select({ name: skill.canonicalName })
@@ -91,16 +106,16 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
         ),
       )
       .limit(1);
-    cv = doc ? publicCvText(doc.content, { email: row.email }) : null;
+    cv = doc ? publicCvText(doc.content, known) : null;
   }
 
   return {
     slug,
-    name: row.name,
-    headline: row.headline,
-    location: row.location,
-    linkedinUrl: row.linkedinUrl,
-    githubUrl: row.githubUrl,
+    name: text(row.name.trim()) ?? "",
+    headline: text(row.headline),
+    location: text(row.location),
+    linkedinUrl: text(row.linkedinUrl),
+    githubUrl: text(row.githubUrl),
     skills: skills.map((s) => s.name),
     cv,
   };
