@@ -7,9 +7,9 @@ import {
   formatPublication,
   type ChangelogLocale,
   type Publication,
-  type UserRelease,
+  type BuiltUserRelease,
 } from "../src/core/changelog.ts";
-import { ChangelogMarkdown } from "./changelog-markdown";
+import { ChangelogContent } from "./changelog-content";
 
 export type ChangelogModalLabels = {
   open: string;
@@ -21,7 +21,7 @@ export type ChangelogModalLabels = {
 export type ChangelogModalProps = {
   currentVersion: string;
   locale: ChangelogLocale;
-  releases: UserRelease[];
+  releases: BuiltUserRelease[];
   labels: ChangelogModalLabels;
 };
 
@@ -77,7 +77,7 @@ function ReleaseCard({
   hydrated,
   onToggle,
 }: {
-  release: UserRelease;
+  release: BuiltUserRelease;
   locale: ChangelogLocale;
   expanded: boolean;
   hydrated: boolean;
@@ -133,7 +133,7 @@ function ReleaseCard({
         hidden={!expanded}
         className="min-w-0 border-t border-[var(--hairline)] px-4 py-4"
       >
-        <ChangelogMarkdown markdown={release.markdown} />
+        {expanded ? <ChangelogContent html={release.html} /> : null}
       </div>
     </article>
   );
@@ -147,12 +147,14 @@ export function ChangelogModal({
 }: ChangelogModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const [opened, setOpened] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => setHydrated(true), []);
 
   function openModal() {
+    setOpened(true);
     setExpanded(initialExpanded(releases.map((release) => release.version)));
     const dialog = dialogRef.current;
     if (dialog && !dialog.open) dialog.showModal();
@@ -163,6 +165,7 @@ export function ChangelogModal({
   }
 
   function resetAfterClose() {
+    setOpened(false);
     setExpanded(new Set());
     triggerRef.current?.focus();
   }
@@ -243,7 +246,7 @@ export function ChangelogModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-6">
           <ol className="grid min-w-0 gap-4">
-            {releases.map((release) => (
+            {opened && releases.map((release) => (
               <li key={release.version} className="min-w-0">
                 <ReleaseCard
                   release={release}

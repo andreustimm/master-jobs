@@ -4,6 +4,10 @@
 
 Accepted
 
+The build-time loading decision in [ADR 0022](0022-novidades-compiladas-no-build.md)
+supersedes the disk reading and parsing described below. The client modal,
+authentication boundary, locale selection and device-local dates remain in force.
+
 ## Date
 
 2026-08-22

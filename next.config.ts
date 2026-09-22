@@ -22,22 +22,10 @@ const config: NextConfig = {
   // Server-only PostgreSQL driver; unpdf resolves its bundled PDF.js assets.
   serverExternalPackages: ["postgres", "unpdf"],
 
-  /**
-   * O changelog do rodapé é lido do disco em runtime.
-   *
-   * `app/footer.tsx` seleciona um dos dois changelogs localizados em runtime, e
-   * o rastreador de dependências não segue caminho montado em tempo de
-   * execução: ele não tem como saber que aquela string vira este arquivo. Sem
-   * declarar, o markdown entraria no pacote por acaso — pelo mesmo rastreamento
-   * amplo que hoje carrega `profile.yaml` e `sources.yaml`, e que o próprio
-   * Turbopack avisa ser frágil.
-   *
-   * O modo de falhar é silencioso: o `catch` em `lerChangelog` devolve lista
-   * vazia, o rodapé mostra só a versão, e nada acusa que o recurso sumiu.
-   * Declarar é uma linha; descobrir isso em produção é uma tarde.
-   */
+  // The CA certificate is selected by path at runtime. Changelogs are compiled
+  // before Next builds and enter the server bundle through a static import.
   outputFileTracingIncludes: {
-    "/**": ["./USER_CHANGELOG.pt-BR.md", "./USER_CHANGELOG.en.md", "./config/certs/supabase-ca.crt"],
+    "/**": ["./config/certs/supabase-ca.crt"],
   },
 
   // Both candidate CVs and manual job descriptions accept files up to 10 MB.

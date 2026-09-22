@@ -7,7 +7,7 @@ const CHANGELOG_FILES: Record<ChangelogLocale, string> = {
   en: "USER_CHANGELOG.en.md",
 };
 
-/** Keep runtime file selection total and independent from untrusted path input. */
+/** Keep locale file selection total and independent from untrusted path input. */
 export function changelogFile(locale: unknown): string | null {
   return locale === "pt-BR" || locale === "en" ? CHANGELOG_FILES[locale] : null;
 }
@@ -21,6 +21,8 @@ export type UserRelease = {
   publication: Publication;
   markdown: string;
 };
+
+export type BuiltUserRelease = Omit<UserRelease, "markdown"> & { html: string };
 
 export type OmittedUserRelease = {
   version: string;

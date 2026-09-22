@@ -173,6 +173,21 @@ antigo de limite de deployments não é apagado pela mudança: depois da libera�
 da cota, retome o deployment do commit vigente no ambiente afetado e confira
 o resultado na Vercel e na PR.
 
+### Novidades preparadas no build
+
+`pnpm build` prepara o service worker e executa `pnpm changelog:build` antes
+do Next. O gerador lê `USER_CHANGELOG.pt-BR.md` e `USER_CHANGELOG.en.md` e
+grava metadados e HTML sanitizado em `src/generated/changelog.ts`, ignorado
+pelo Git. Cada build usa o histórico daquele checkout, inclusive em rollback.
+Um arquivo de origem ausente interrompe a geração.
+
+O rodapé importa o módulo no servidor e envia apenas o idioma ativo a quem
+tem sessão válida. Os Markdown e o renderer não são dependências de runtime
+das novidades, nem arquivos públicos. No desenvolvimento, `pnpm dev` também
+gera o artefato; após editar as notas, rode `pnpm changelog:build` ou reinicie.
+Quem invocar `next build` diretamente precisa executar o gerador antes,
+assim como o runner E2E isolado faz. Ver [ADR 0022](../adr/0022-novidades-compiladas-no-build.md).
+
 ### DNS
 
 Os três são `CNAME` para `cname.vercel-dns.com` na Cloudflare, **sem proxy**

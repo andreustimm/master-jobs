@@ -42,6 +42,7 @@ export default defineConfig({
         // número sem dizer nada sobre o que foi testado.
         "src/core/db/schema.ts",
         "src/**/*.d.ts",
+        "src/generated/**",
       ],
       reporter: ["text-summary", "json-summary"],
       /**
