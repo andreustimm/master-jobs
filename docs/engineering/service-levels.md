@@ -190,8 +190,10 @@ Para inspecionar ou recuperar uma cópia ainda disponível:
 rtk gh run list --workflow governanca.yml --branch main --limit 10
 # Substituir <run-id> por uma execução que tenha publicado o artefato.
 rtk gh run download <run-id> --name governanca-producao --dir /tmp/master-jobs-governance-original
-cp -R /tmp/master-jobs-governance-original /tmp/master-jobs-governance-recovery
-rtk pnpm governance:collect --out /tmp/master-jobs-governance-recovery
+# Diretório novo a cada recuperação: um destino existente receberia a cópia aninhada.
+RECOVERY="$(mktemp -d)"
+cp -R /tmp/master-jobs-governance-original/. "$RECOVERY"
+rtk pnpm governance:collect --out "$RECOVERY"
 ```
 
 O coletor reescreve o `history.json` do diretório `--out`: descarta sondas com

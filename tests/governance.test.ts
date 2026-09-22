@@ -150,7 +150,7 @@ it("workflow mede só produção e preserva evidência de falha com permissões 
 });
 
 it("atraso de minutos do agendador não junta dois runs no mesmo slot", () => {
-  // Run de :07 atrasado 3,5 min e run de :17 no horário: slots diferentes.
+  // Run de :37 atrasado 3,5 min e run de :47 no horário: slots diferentes.
   const h: History = { schemaVersion: 1, startedAt: since, delivery: null,
     probes: [sample("2026-10-23T11:40:30Z"), sample("2026-10-23T11:47:40Z")] };
   expect(summarize(h, ledger, now).availability.total).toBe(2);
