@@ -40,6 +40,28 @@ function hash(token: string): string {
 }
 
 /**
+ * O candidato que esta conta pode agir como — só se for DELA.
+ *
+ * `auth_user.candidate_id` não é prova de posse: uma conta semeada pelo e2e
+ * apontava para o candidato `default`, o do dono, e abria `/candidate` com o
+ * currículo, a visibilidade e o funil dele.
+ *
+ * O candidato pertence à conta MAIS ANTIGA que aponta para ele — a do dono
+ * nasce antes de qualquer convidado. As posteriores recebem `null`, e
+ * `candidateScope` nega. Negar para todas trancaria o dono fora do próprio
+ * perfil por um erro de cadastro alheio.
+ *
+ * Fica na leitura, e não só no cadastro, porque o dado já gravado continua
+ * errado até alguém corrigi-lo. SQL à mão porque `alias()` dentro de `sql`
+ * perde o schema e deixa a coluna externa sem qualificação.
+ */
+export const ownedCandidateId = sql<number | null>`case when not exists (
+  select 1 from ${authUser} as earlier_owner
+  where earlier_owner.candidate_id = ${authUser}.candidate_id
+    and earlier_owner.id < ${authUser}.id
+) then ${authUser}.candidate_id end`;
+
+/**
  * Candidatos que um recrutador acompanha.
  *
  * Uma consulta só, usada por todos os caminhos que montam uma `Identity` ou
@@ -82,7 +104,7 @@ export const drizzleSessions: SessionStore = {
         email: authUser.email,
         fullName: authUser.fullName,
         roles: authUser.roles,
-        candidateId: authUser.candidateId,
+        candidateId: ownedCandidateId,
         disabledAt: authUser.disabledAt,
         impersonatedBy: authSession.impersonatedBy,
       })
@@ -263,7 +285,7 @@ export const magicLink: IdentityProvider = {
         email: authUser.email,
         fullName: authUser.fullName,
         roles: authUser.roles,
-        candidateId: authUser.candidateId,
+        candidateId: ownedCandidateId,
         disabledAt: authUser.disabledAt,
       })
       .from(authUser)

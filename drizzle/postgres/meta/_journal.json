@@ -64,6 +64,13 @@
       "when": 1789827583534,
       "tag": "0008_term_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790104026604,
+      "tag": "0009_auth_user_candidate_unique",
+      "breakpoints": true
     }
   ]
 }

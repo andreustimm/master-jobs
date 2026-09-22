@@ -2154,10 +2154,9 @@ auth
   .command("add-user <email>")
   .description("Criar conta")
   .option("--role <papel>", "admin | candidate | recruiter (repetível com vírgula)", "candidate")
-  .option("--candidate <id>", "candidato que esta conta representa")
-  .action(async (email: string, opts: { role: string; candidate?: string }) => {
+  .action(async (email: string, opts: { role: string }) => {
     await withDb(async () => {
-      const { ROLES } = await import("./contexts/auth/index.ts");
+      const { addUser, ROLES } = await import("./contexts/auth/index.ts");
       const roles = opts.role.split(",").map((r) => r.trim());
       const invalid = roles.filter((r) => !(ROLES as readonly string[]).includes(r));
       if (invalid.length > 0) {
@@ -2166,30 +2165,9 @@ auth
         return;
       }
 
-      // `candidate`, e não `owner`.
-      //
-      // O papel `owner` foi renomeado para `candidate` quando os três papéis
-      // entraram, e esta linha ficou para trás — em duas frentes. O default de
-      // `--role` fazia `jho auth add-user <email>` falhar com "Papel inválido:
-      // owner", e é o comando que a regra 14 do CLAUDE.md manda rodar e que a
-      // tela de login mostra para quem ainda não tem conta: o primeiro acesso
-      // ao sistema estava quebrado.
-      //
-      // E esta derivação virou código morto, com efeito silencioso: toda conta
-      // criada sem `--candidate` nascia com `candidateId` nulo, inclusive uma
-      // de papel candidato — justamente a que precisa dele para ter currículo e
-      // funil.
-      const candidateId = opts.candidate
-        ? Number(opts.candidate)
-        : roles.includes("candidate")
-          ? await syncCandidateFromProfile()
-          : null;
-
-      const { authUser } = await import("./core/db/schema.ts");
-      await getDb()
-        .insert(authUser)
-        .values({ email: email.toLowerCase().trim(), roles, candidateId })
-        .onConflictDoUpdate({ target: authUser.email, set: { roles, candidateId } });
+      // Sem `--candidate <id>`: apontar uma conta para o candidato de outra
+      // pessoa é leitura por procuração. Ver `addUser`.
+      await addUser({ email, roles: roles as (typeof ROLES)[number][] });
 
       console.log(`${c.green("\u2713")} ${email} · ${roles.join(", ")}`);
       console.log(c.dim("  Entrar: jho auth login <email>\n"));

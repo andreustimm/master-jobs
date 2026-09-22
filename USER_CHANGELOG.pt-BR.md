@@ -18,6 +18,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Segurança
+
+- Uma conta convidada não enxerga nem altera mais o perfil, o currículo, a
+  visibilidade e o funil do dono. Quem ainda não tem perfil próprio vê acesso
+  negado na área do candidato, inclusive quando o admin assume a identidade
+  dessa conta.
+
 ## [1.21.1] - 2026-09-22T18:19:03.735Z
 
 - A lista de vagas e seu total são calculados juntos, reduzindo o trabalho das buscas e preservando a ordem e os totais ao trocar de página.

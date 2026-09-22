@@ -109,6 +109,85 @@ deliberada e documentada. `jho security check` avisa.
 
 ---
 
+## Achado 5 — Conta convidada com o candidato do dono 🔴 **corrigido (hotfix)**
+
+Em produção, a conta `auth_user` 3 apontava para o candidato 1 (`default`, o do
+dono). Qualquer sessão dela — login direto ou admin assumindo a identidade —
+abria `/candidate`, `/candidate/skills`, `/candidate/vocabulary`, trilhas,
+buscas, funil e exportação com os dados do dono, e as ações de escrita
+(visibilidade, versões de CV, skills, trilhas, funil) os alteravam. Não havia
+fallback no código de leitura: a sessão confiava em `auth_user.candidate_id`, e
+nada impedia duas contas de apontarem para o mesmo candidato.
+
+Três caminhos gravavam esse vínculo:
+
+- `tests/e2e/setup.mjs` roda `seedOwner({ email: E2E_EMAIL, force: true })`
+  sem conferir o banco. Rodado fora do banco isolado, com `E2E_EMAIL` real,
+  ligava a conta ao candidato `default` e redefinia a senha a cada execução —
+  e `ui.mjs` trocava a visibilidade e salvava versões de CV nesse candidato.
+- `seedOwner` com um e-mail diferente do dono fazia o mesmo.
+- `jho auth add-user` com o papel `candidate` (o padrão) usava
+  `syncCandidateFromProfile()` — o candidato do dono — e aceitava
+  `--candidate <id>`.
+
+A correção:
+
+- **Leitura:** um candidato pertence à conta **mais antiga** que aponta para
+  ele (`ownedCandidateId` em `src/contexts/auth/infra/drizzle-store.ts`). As
+  posteriores recebem `candidateId = null` nos três caminhos que montam
+  identidade — sessão, senha e link —, e `candidateScope` nega (403). Vale para
+  o dado já gravado, sem migração.
+- **Escrita:** `claimOwnCandidate` (`src/contexts/auth/app/accounts.ts`) é o
+  único caminho de candidato para conta nova, na CLI e em `/admin/users`, e
+  sempre cria candidato novo: nunca reaproveita slug existente, nem o de conta
+  apagada, cujo currículo continua lá. `add-user` só dá o candidato do perfil à
+  primeira conta da instalação (tabela vazia), nunca troca
+  vínculo gravado e perdeu
+  `--candidate`. `seedOwner` recusa um segundo e-mail sobre o candidato do dono.
+- **E2E:** `tests/e2e/database-guard.mjs` recusa o setup se qualquer URL de
+  banco que `src/core/db/config.ts` consulta (`DATABASE_URL`,
+  `DATABASE_MIGRATION_URL`, `POSTGRES_URL`, `POSTGRES_URL_NON_POOLING`) sair do
+  loopback, e `E2E_EMAIL` que não seja `@local.test`.
+- **Estrutural:** a migration `0009` cria o índice único parcial
+  `auth_user_candidate_idx`.
+- **Dono do perfil:** `isOwner` passou a ser o candidato padrão de slug
+  `default` (o de menor id só desempata instalação sem ele).
+  `ensureCandidate` marcava `is_default` em todo candidato que criava, e o
+  convidado de `/admin/users` era pontuado com o `profile.yaml` do dono.
+
+**Ordem em produção.** A migração é manual (`migrate.yml`) e falha se houver
+duplicata. Antes de aplicá-la, a consulta abaixo precisa voltar vazia:
+
+```sql
+select candidate_id, count(*) from production.auth_user
+where candidate_id is not null group by candidate_id having count(*) > 1;
+```
+
+A limpeza segue a mesma regra da leitura — o candidato fica com a conta de
+menor id, e as posteriores perdem o vínculo:
+
+```sql
+update production.auth_user u set candidate_id = null
+where candidate_id is not null
+  and exists (select 1 from production.auth_user e
+              where e.candidate_id = u.candidate_id and e.id < u.id);
+```
+
+Enquanto a conta errada resolvia para o candidato do dono, ela podia vincular
+recrutadores a ele. Confira também os vínculos e remova os que o dono não criou:
+
+```sql
+select id, recruiter_user_id, created_by, created_at
+from production.recruiter_candidate
+where candidate_id = (select id from production.candidate where slug = 'default');
+```
+
+O deploy do código pode vir antes da limpeza: a leitura já nega o candidato às
+contas posteriores. Depois da limpeza, `jho auth add-user <email> --role
+candidate` dá à conta desvinculada um candidato próprio.
+
+---
+
 ## O que foi verificado e está correto
 
 | Superfície | Situação |

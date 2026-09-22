@@ -18,6 +18,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Security
+
+- An invited account can no longer see or change the owner's profile, CV,
+  visibility, or pipeline. An account without its own profile now gets access
+  denied in the candidate area, including when an admin is acting as that
+  account.
+
 ## [1.21.1] - 2026-09-22T18:19:03.735Z
 
 - The job list and its total are calculated together, reducing search work while preserving ordering and totals when changing pages.

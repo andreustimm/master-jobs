@@ -18,6 +18,8 @@ import { ROLES } from "../src/contexts/auth/index.ts";
  */
 
 const cli = readFileSync("src/cli.ts", "utf8");
+// A derivação do candidato saiu de `cli.ts` para `addUser`, onde é testável.
+const addUser = readFileSync("src/contexts/auth/app/accounts.ts", "utf8");
 const claude = readFileSync("CLAUDE.md", "utf8");
 const login = readFileSync("app/login/page.tsx", "utf8");
 
@@ -62,6 +64,7 @@ describe("papéis citados existem de verdade", () => {
     // conta criada sem `--candidate` nascia sem `candidateId`, inclusive uma de
     // papel candidato — justamente a que precisa dele.
     expect(cli).not.toMatch(/includes\("owner"\)/);
-    expect(cli).toMatch(/includes\("candidate"\)/);
+    expect(addUser).not.toMatch(/includes\("owner"\)/);
+    expect(addUser).toMatch(/includes\("candidate"\)/);
   });
 });
