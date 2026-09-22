@@ -37,6 +37,14 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 - Job filter counts and options require less work from the system while keeping the same results and grouping rules.
 
+### Fixed
+
+- Changing a filter, the order, the page or the density on the Jobs screen no
+  longer covers the whole screen with the loading splash. The list stays in
+  view, dims while it updates and keeps responding to clicks. The full splash
+  remains for switching screens and when a response is slow or the connection
+  drops.
+
 ## [1.21.0] - 2026-09-22T18:02:40.049Z
 
 ### New

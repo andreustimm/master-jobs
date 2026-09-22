@@ -4,6 +4,7 @@ import {
   TRANSITION_MIN_MS,
   TRANSITION_PROLONGED_MS,
   classifyNavigation,
+  isSameScreenNavigation,
   isTransitionReady,
   normalizeNavigationTarget,
   parseNavigationOfflineMessage,
@@ -140,7 +141,7 @@ export function createTransitionStore(options: TransitionStoreOptions = {}): Tra
     clearTimers();
     retryUsedGeneration = null;
     const at = now();
-    dispatch({ type: "start", target, at });
+    dispatch({ type: "start", target, at, soft: isSameScreenNavigation(url, base) });
     const generation = snapshot.generation;
     prolongedTimer = {
       generation,

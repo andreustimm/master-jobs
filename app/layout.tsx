@@ -196,6 +196,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <NavigationTransition
           labels={{
             loading: t("transition.loading"),
+            updating: t("transition.updating"),
             prolonged: t("transition.prolonged"),
             offlineTitle: t("transition.offlineTitle"),
             offlineBody: t("transition.offlineBody"),

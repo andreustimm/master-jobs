@@ -62,7 +62,7 @@ Ordem sugerida, e o que depende do quê. Cada uma é uma PR própria para `dev`.
 | 17 ✅ | Régua de conexões por tela e `comVigia` em `/jobs` e `/` — entregue | — | não | QA de concorrência aprovado |
 | 14 | Cache de facetas com TTL | 11 e 12, **e medir antes** | não | não |
 | 15 | `loading.tsx` + `Suspense` em `/jobs` | 14 | não | sim |
-| 6 | Overlay só na troca de rota | — | não | **sim** |
+| 6 🟡 | Overlay só na troca de rota — em `fix/overlay-troca-de-rota` (#220) | — | não | **sim** |
 | 16 | Filtros que se aplicam sozinhos, `staleTimes` | 12 e 14 | não | **sim** |
 | 18 | Sentry tracing com escrubagem | — | não | não |
 

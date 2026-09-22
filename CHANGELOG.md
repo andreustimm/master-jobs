@@ -50,6 +50,21 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 - As facetas do quadro passam a ler o conjunto elegível uma vez e devolver contadores, clusters e fontes em uma consulta, preservando a primeira publicação elegível de cada dimensão e o isolamento por candidato.
 
+### Corrigido
+
+- O overlay opaco de navegação passa a ser só da troca de rota (#220). Filtro,
+  ordem, página e densidade em `/jobs` (mesmo `pathname`) viram transição
+  suave: `NavigationTransition.soft`, decidido em `transitionStore.begin` por
+  `isSameScreenNavigation`, sem overlay nem `inert`; o shell recebe
+  `aria-busy` e `data-navigation="soft"`, o `<main>` esmaece por CSS depois de
+  120 ms e um aviso `role="status"` usa `transition.updating`. O ciclo do
+  store não muda (mínimo de 180 ms, saída e reset): no voltar/avançar o
+  roteador confirma a URL antes de o conteúdo chegar, e encerrar no commit
+  anunciaria pronto sobre a lista anterior. Na saída o conteúdo volta à
+  opacidade plena e `aria-busy` cai no reset. `prolonged` e `offline`
+  promovem ao overlay. O E2E passa a afirmar o estado suave nas sete navegações de
+  filtro, densidade, tamanho, página e preset.
+
 ## [1.21.0] - 2026-09-22
 
 ### Adicionado

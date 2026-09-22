@@ -6,7 +6,7 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: Depois de limpar, de um preset ou de uma faixa trocada pelo servidor, os campos mostram o estado atual — e o Aplicar seguinte não ressuscita o valor antigo
 entry_points: /jobs; /jobs?pay=12000&payMax=6000; /jobs?fit=45
-qa_status: blocked-verify
+qa_status: untested
 bug_ids:
 fix_status:
 retest_status:
@@ -48,3 +48,5 @@ fazia):
 - Clicar num preset de corte: o campo de Score passa a mostrar o corte do preset.
 - Marcar duas fontes, aplicar, limpar fontes: as marcas somem.
 - Em todos os casos, o que a URL diz e o que o campo mostra são a mesma coisa.
+
+Resetado para `untested` pela #220: a navegação de filtro deixou de tornar o shell `inert`, então agora dá para editar um campo enquanto a resposta anterior ainda chega. Conferir que o campo mostra a URL depois do commit e que o último Aplicar vence.

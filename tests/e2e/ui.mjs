@@ -3242,6 +3242,72 @@ try {
     }
   };
 
+  // Navegação na mesma tela (filtro, ordem, página, densidade) não abre o
+  // overlay nem torna o shell `inert` (#220). O observador testemunha o
+  // atributo mesmo quando a resposta chega no quadro seguinte: a prova é ter
+  // visto `data-navigation="soft"` com `aria-busy`, nunca `inert` nem overlay,
+  // e o shell limpo no fim.
+  const observeSoftNavigation = async (targetPage, activate, destination, label = destination) => {
+    try {
+      await targetPage.locator('[data-testid="navigation-transition"]').waitFor({ state: "detached" });
+      const before = targetPage.url();
+      await targetPage.evaluate(() => {
+        globalThis.__e2eSoftEvidence?.observer?.disconnect();
+        const shell = document.getElementById("application-shell");
+        const evidence = { soft: false, inert: false, overlays: 0, status: "" };
+        const record = (mutations = []) => {
+          for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+              if (!(node instanceof Element)) continue;
+              if (node.matches('[data-testid="navigation-transition"]')
+                || node.querySelector('[data-testid="navigation-transition"]')) {
+                evidence.overlays += 1;
+              }
+              const status = node.matches('[data-testid="navigation-soft-status"]')
+                ? node
+                : node.querySelector('[data-testid="navigation-soft-status"]');
+              if (status) evidence.status = status.textContent ?? "";
+            }
+          }
+          if (shell?.getAttribute("data-navigation") === "soft" && shell.getAttribute("aria-busy") === "true") {
+            evidence.soft = true;
+          }
+          if (shell?.hasAttribute("inert")) evidence.inert = true;
+        };
+        const observer = new MutationObserver(record);
+        observer.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["data-navigation", "inert", "aria-busy"],
+          childList: true,
+          subtree: true,
+        });
+        globalThis.__e2eSoftEvidence = { observer, evidence };
+      });
+      await activate();
+      await targetPage.waitForURL((url) => url.href !== before, { timeout: 20_000 });
+      await targetPage.locator(destination).waitFor({ state: "visible", timeout: 20_000 });
+      await targetPage.waitForFunction(
+        () => !document.getElementById("application-shell")?.hasAttribute("aria-busy"),
+        null,
+        { timeout: 20_000 },
+      );
+      return await targetPage.evaluate(() => {
+        const { observer, evidence } = globalThis.__e2eSoftEvidence;
+        observer.disconnect();
+        delete globalThis.__e2eSoftEvidence;
+        const shell = document.getElementById("application-shell");
+        const settled = !shell?.hasAttribute("inert") && !shell?.hasAttribute("data-navigation");
+        return {
+          ...evidence,
+          settled,
+          phase: evidence.soft && !evidence.inert && evidence.overlays === 0 && settled ? "soft" : "blocking",
+        };
+      });
+    } catch (error) {
+      throw new Error(`${label}: ${String(error)}`);
+    }
+  };
+
   const observeRedirectAction = async (targetPage, activate, destination) => {
     let actionRequests = 0;
     let actionResponses = 0;
@@ -3258,6 +3324,7 @@ try {
     };
     targetPage.on("request", countAction);
     targetPage.on("response", countActionResponse);
+    const sourcePath = new URL(targetPage.url()).pathname;
     try {
       const snapshot = await observeNavigation(
         targetPage,
@@ -3266,7 +3333,10 @@ try {
         destination,
         async () => ({ actionResponseSeenAtAttach: actionResponseSeen }),
       );
-      return { ...snapshot, actionRequests, actionResponses };
+      // Redirect para a mesma tela (só a query muda) é transição suave: sem
+      // overlay (#220). A prova de "uma vez" continua sendo o POST único.
+      const sameScreen = new URL(targetPage.url()).pathname === sourcePath;
+      return { ...snapshot, actionRequests, actionResponses, sameScreen };
     } finally {
       targetPage.off("request", countAction);
       targetPage.off("response", countActionResponse);
@@ -3436,7 +3506,7 @@ try {
   contextualPhases.push((await observeNavigation(page, () => firstJobLink.click(), '[data-testid="route-job-detail"]')).phase);
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   await page.locator('[data-testid="filters-query"]').fill("Task 04 typical fixture");
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push((await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="filters-submit"]').click(),
     '[data-testid="route-jobs"]',
@@ -3446,7 +3516,7 @@ try {
     summary: await page.locator('[data-testid="route-jobs"] > header > p').textContent(),
     next: await page.locator('[data-testid="pagination-next"]').count(),
   };
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push((await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="density-compact"]').click(),
     '[data-testid="route-jobs"]',
@@ -3457,12 +3527,12 @@ try {
     layout: await page.locator('[data-density]').first().getAttribute("data-density"),
   };
   await page.locator('[data-testid="filters-query"]').fill("Task 04 bulk fixture");
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push((await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="filters-submit"]').click(),
     '[data-testid="route-jobs"]',
   )).phase);
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push((await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="page-size-200"]').click(),
     '[data-testid="route-jobs"]',
@@ -3472,13 +3542,13 @@ try {
     summary: await page.locator('[data-testid="route-jobs"] > header > p').textContent(),
     next: await page.locator('[data-testid="pagination-next"]').count(),
   };
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push((await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="pagination-next"]').click(),
     '[data-testid="route-jobs"]',
   )).phase);
   const paginationUrl = new URL(page.url());
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push((await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="preset-applicableToday"]').click(),
     '[data-testid="route-jobs"]',
@@ -3500,7 +3570,7 @@ try {
     },
   };
   await page.locator('[data-testid="filters-query"]').fill(`zero-${crypto.randomUUID()}`);
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push((await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="filters-submit"]').click(),
     '[data-testid="route-jobs"]',
@@ -3513,7 +3583,8 @@ try {
   check(
     "task-04 E2E-003 card, densidade, paginação e GET cobrem zero, típico e milhares",
     contextualPhases.length === 8
-      && contextualPhases.every((phase) => phase === "loading")
+      && contextualPhases[0] === "loading"
+      && contextualPhases.slice(1).every((phase) => phase === "soft")
       && typicalCardinality.cards === 7
       && /^7\s/.test(typicalCardinality.summary ?? "")
       && typicalCardinality.next === 0
@@ -3776,8 +3847,11 @@ try {
   const restoredAdministratorCache = await readCacheStorage(page);
   check(
     "task-04 E2E-004 redirects de login, recovery, compare, vaga e impersonação mutam uma vez",
-    redirectEvidence.length === 5 && redirectEvidence.every(({ count, actionRequests }) => count === 1 && actionRequests === 1),
-    JSON.stringify(redirectEvidence.map(({ count, actionRequests }) => ({ count, actionRequests }))),
+    redirectEvidence.length === 5
+      && redirectEvidence.every(({ count, actionRequests, sameScreen }) =>
+        count === (sameScreen ? 0 : 1) && actionRequests === 1)
+      && redirectEvidence.filter(({ sameScreen }) => !sameScreen).length >= 3,
+    JSON.stringify(redirectEvidence.map(({ count, actionRequests, sameScreen }) => ({ count, actionRequests, sameScreen }))),
   );
   check(
     "task-04 IT-012 Server Actions reais mutam uma vez e iniciam somente o redirect aceito",

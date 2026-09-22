@@ -6,6 +6,7 @@ import {
   TRANSITION_MIN_MS,
   TRANSITION_PROLONGED_MS,
   classifyNavigation,
+  isSameScreenNavigation,
   isTransitionReady,
   parseNavigationOfflineMessage,
   reduceTransition,
@@ -111,7 +112,7 @@ function storeFixture(start = 0) {
 }
 
 function started(target = "/pipeline", at = 1000): NavigationTransition {
-  return reduceTransition(INITIAL_NAVIGATION_TRANSITION, { type: "start", target, at });
+  return reduceTransition(INITIAL_NAVIGATION_TRANSITION, { type: "start", target, at, soft: false });
 }
 
 describe("navigation URL contract", () => {
@@ -172,24 +173,26 @@ describe("pure transition reducer", () => {
       target: "/pipeline",
       startedAt: 1000,
       committed: false,
+      soft: false,
     });
   });
 
   it("UT-005 coalesces a duplicate active target", () => {
     const first = started();
-    expect(reduceTransition(first, { type: "start", target: "/pipeline", at: 1001 })).toBe(first);
+    expect(reduceTransition(first, { type: "start", target: "/pipeline", at: 1001, soft: false })).toBe(first);
   });
 
   it("UT-006 gives a different target a new clean generation", () => {
     let state = started();
     state = reduceTransition(state, { type: "url-committed", url: "/pipeline", generation: 1 });
     state = reduceTransition(state, { type: "prolonged", generation: 1 });
-    expect(reduceTransition(state, { type: "start", target: "/compare", at: 5000 })).toEqual({
+    expect(reduceTransition(state, { type: "start", target: "/compare", at: 5000, soft: false })).toEqual({
       generation: 2,
       phase: "loading",
       target: "/compare",
       startedAt: 5000,
       committed: false,
+      soft: false,
     });
   });
 
@@ -211,7 +214,7 @@ describe("pure transition reducer", () => {
   });
 
   it("UT-012 ignores prolonged, leave, and reset callbacks from an older generation", () => {
-    const current = reduceTransition(started(), { type: "start", target: "/compare", at: 1100 });
+    const current = reduceTransition(started(), { type: "start", target: "/compare", at: 1100, soft: false });
     for (const event of [
       { type: "prolonged", generation: 1 },
       { type: "leave", generation: 1 },
@@ -444,5 +447,78 @@ describe("offline and public-copy boundaries", () => {
     for (const value of values) {
       expect(toPublicNavigationError(value)).toBe("transition.failedBody");
     }
+  });
+});
+
+describe("transição suave na mesma tela (#220)", () => {
+  it("UT-220-1 só a query mudando é a mesma tela; outro caminho não é", () => {
+    const current = "https://jobs.example/jobs?fit=45";
+    expect(isSameScreenNavigation("/jobs?fit=60", current)).toBe(true);
+    expect(isSameScreenNavigation("/jobs", current)).toBe(true);
+    expect(isSameScreenNavigation("?page=2", current)).toBe(true);
+    expect(isSameScreenNavigation("/jobs/12", current)).toBe(false);
+    expect(isSameScreenNavigation("/pipeline", current)).toBe(false);
+    // Entrada que não normaliza cai para o lado do overlay.
+    expect(isSameScreenNavigation("https://evil.example/jobs", current)).toBe(false);
+    expect(isSameScreenNavigation("/jobs?q=%zz", current)).toBe(false);
+  });
+
+  it("UT-220-2 demora e falta de rede promovem a suave ao overlay", () => {
+    const soft = reduceTransition(INITIAL_NAVIGATION_TRANSITION, {
+      type: "start", target: "/jobs?fit=60", at: 0, soft: true,
+    });
+    expect(soft).toMatchObject({ phase: "loading", soft: true });
+    expect(reduceTransition(soft, { type: "prolonged", generation: 1 })).toMatchObject({
+      phase: "prolonged", soft: false,
+    });
+    expect(
+      reduceTransition(soft, { type: "offline", target: "/jobs?fit=60", generation: 1 }),
+    ).toMatchObject({ phase: "offline", soft: false });
+    expect(reduceTransition(soft, { type: "reset", generation: 1 })).toMatchObject({
+      phase: "idle", soft: false,
+    });
+  });
+
+  it("UT-220-3 o store decide pela URL atual: filtro é suave, outra rota bloqueia", () => {
+    const { store } = storeFixture();
+    store.begin("/jobs?sort=comp");
+    expect(store.getSnapshot()).toMatchObject({ phase: "loading", soft: true });
+    store.begin("/pipeline");
+    expect(store.getSnapshot()).toMatchObject({ generation: 2, phase: "loading", soft: false });
+  });
+
+  it("UT-220-4 a suave segue o mesmo ciclo da troca de tela: mínimo, saída e reset", () => {
+    const { store, time } = storeFixture();
+    const generation = store.begin("/jobs?page=2");
+    store.commit("/jobs?page=2", generation ?? undefined);
+    expect(store.getSnapshot()).toMatchObject({ phase: "loading", soft: true, committed: true });
+    time.advance(TRANSITION_MIN_MS);
+    expect(store.getSnapshot()).toMatchObject({ phase: "leaving", soft: true });
+    time.advance(1000);
+    expect(store.getSnapshot()).toMatchObject({ phase: "idle", generation, soft: false });
+  });
+
+  it("UT-220-6 a última geração vence: um filtro novo substitui o anterior", () => {
+    const { store } = storeFixture();
+    const first = store.begin("/jobs?fit=45");
+    const second = store.begin("/jobs?fit=60");
+    expect(second).toBe((first ?? 0) + 1);
+    store.commit("/jobs?fit=45", first ?? undefined);
+    expect(store.getSnapshot()).toMatchObject({ generation: second, phase: "loading", target: "/jobs?fit=60" });
+    store.commit("/jobs?fit=60", second ?? undefined);
+    expect(store.getSnapshot()).toMatchObject({ generation: second, committed: true, target: "/jobs?fit=60" });
+  });
+
+  it("UT-220-7 a suave que demora vira overlay de espera prolongada", () => {
+    const { store, time } = storeFixture();
+    store.begin("/jobs?fit=60");
+    time.advance(TRANSITION_PROLONGED_MS);
+    expect(store.getSnapshot()).toMatchObject({ phase: "prolonged", soft: false });
+  });
+
+  it("UT-220-8 os dois dicionários trazem o aviso da atualização", () => {
+    expect(ptBR.transition.updating.trim()).not.toBe("");
+    expect(en.transition.updating.trim()).not.toBe("");
+    expect(en.transition.updating).not.toBe(ptBR.transition.updating);
   });
 });

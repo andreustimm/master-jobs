@@ -436,3 +436,10 @@ pessoa ter pedido que não se movesse é falha de acessibilidade, não detalhe.
 próprias páginas. E8.2 adiciona JavaScript de cliente estritamente na fronteira
 de navegação porque o estado solicitado, concluído, prolongado e offline não
 pode ser observado de forma confiável apenas por `@view-transition`.
+
+**Troca de tela × mesma tela (#220):** o splash opaco é reservado à troca de
+rota. Quando só filtro, ordem, página ou densidade mudam (mesmo `pathname`), a
+transição é **suave**: sem overlay e sem `inert`, o conteúdo esmaece depois de
+120 ms, o shell recebe `aria-busy` e um aviso `role="status"` ("Atualizando esta
+tela"), e um novo clique abre outra geração — vence o último. Demora acima de
+3 s e falta de rede promovem a suave ao overlay com o tratamento de sempre.

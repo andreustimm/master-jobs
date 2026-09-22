@@ -37,6 +37,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 - Os contadores e as opções dos filtros de vagas exigem menos trabalho do sistema, mantendo os mesmos resultados e critérios de agrupamento.
 
+### Corrigido
+
+- Mudar filtro, ordem, página ou densidade na tela de Vagas não cobre mais a
+  tela inteira com a abertura de carregamento. A lista fica visível, esmaece
+  enquanto atualiza e continua respondendo a cliques. A abertura completa
+  continua na troca de tela e quando a resposta demora ou a conexão cai.
+
 ## [1.21.0] - 2026-09-22T18:02:40.049Z
 
 ### Novidade
