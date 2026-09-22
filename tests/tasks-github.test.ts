@@ -129,8 +129,13 @@ describe("GitHub task gateway", () => {
     expect(task.priority).toBeNull();
   });
 
+  it("never trusts a coordination envelope from another author and does not let it halt the read", async () => {
+    const task = await snapshotHarness({ comments: [comment(1, coordinationBody(COORDINATION), "attacker")] }).gateway.readTask(1);
+    expect(task.coordination).toBeNull();
+    expect(task.coordinationCommentId).toBeNull();
+  });
+
   it.each([
-    { comments: [comment(1, coordinationBody(COORDINATION), "attacker")], error: /Untrusted author/u },
     { comments: [comment(1, coordinationBody(COORDINATION)), comment(2, coordinationBody(COORDINATION))], error: /Multiple coordination/u },
     { comments: [comment(1, "<!-- tasks-coordination:v1 -->\nnot-json")], error: /Malformed/u },
   ])("refuses ambiguous or untrusted coordination ($error)", async ({ comments, error }) => {
@@ -527,8 +532,10 @@ describe("authenticated writer comments", () => {
       const gateway = new GitHubGateway(attestedConfig, { request: async () => [comment(1, body)] });
       await expect(gateway.comments(99)).rejects.toThrow(/attestation/u);
     }
-    const gateway = new GitHubGateway(attestedConfig, { request: async () => [comment(1, signed, "another-user")] });
-    await expect(gateway.comments(99)).rejects.toThrow(/Untrusted author/u);
+    // A copied envelope under another login is dropped, not trusted, and does
+    // not poison the writer's own comments on the same issue.
+    const gateway = new GitHubGateway(attestedConfig, { request: async () => [comment(1, signed, "another-user"), comment(2, signed)] });
+    expect((await gateway.comments(99)).map((c) => c.id)).toEqual([2]);
   });
 
   it("does not mutate anything when the signing key is absent, including a combined Project patch", async () => {

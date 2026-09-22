@@ -1,4 +1,5 @@
 import { requestGitHub } from "./github.ts";
+import { deliveryWindowStart } from "./evidence.ts";
 import { deliveryOf, hash, parseControl } from "./protocol.ts";
 import type { ControlState, ProjectConfig, PullRequestEvidence, TaskGateway, TaskSnapshot, TaskStatus } from "./types.ts";
 
@@ -220,7 +221,7 @@ export async function collectEventEvidence(gateway: TaskGateway, config: Project
         if (!ignored && source.kind === "deployment") {
           if (delivery !== "production" || task.status !== "Implantando") ignored = "Conclusão por deployment exige entrega production em Implantando";
           else if (pr.state !== "MERGED" || !pr.mergeSha || !pr.mergedAt) ignored = "PR vinculada ainda não foi integrada em dev";
-          else if (Date.parse(pr.mergedAt) < Date.parse(task.coordination!.execution!.acquiredAt)) ignored = "Merge pertence a uma execução anterior";
+          else if (Date.parse(pr.mergedAt) < deliveryWindowStart(task)) ignored = "Merge anterior ao início da tarefa";
           else if (await completionBlocker(gateway, task)) ignored = "Filhos ou dependências ainda não foram entregues";
           else if (!await gateway.containsCommit(pr.mergeSha, source.deployment!.sha)) ignored = "SHA publicado não contém o merge da PR vinculada";
           else {
@@ -231,7 +232,7 @@ export async function collectEventEvidence(gateway: TaskGateway, config: Project
           }
         } else if (!ignored && pr.state === "MERGED") {
           if (!pr.mergeSha || !pr.mergedAt) ignored = "Merge não comprovado";
-          else if (Date.parse(pr.mergedAt) < Date.parse(task.coordination!.execution!.acquiredAt)) ignored = "Merge pertence a uma execução anterior";
+          else if (Date.parse(pr.mergedAt) < deliveryWindowStart(task)) ignored = "Merge anterior ao início da tarefa";
           else if (delivery === "dev" && ["QA", "Testando", "Implantar", "Implantando"].includes(task.status!)) {
             ignored = await completionBlocker(gateway, task);
             if (!ignored) note.suggestedStatus = "Concluído";

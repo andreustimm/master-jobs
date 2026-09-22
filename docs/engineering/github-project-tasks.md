@@ -59,7 +59,7 @@ decisão explícita no corpo da issue.
 
 | Entrega | Evidência para Concluído |
 |---|---|
-| dev | PR nativamente vinculada, branch da execução → dev, checks atuais e merge durante a execução |
+| dev | PR nativamente vinculada, branch da execução → dev, checks atuais e merge posterior ao primeiro claim ("Iniciado em"), para que reclaim ou transferência durante a espera pela promoção não invalidem a entrega |
 | production | Mesmo vínculo/merge + deployment Production bem-sucedido + execução mais recente do workflow exato de fumaça em main, mesmo SHA e posterior ao mesmo merge; ancestralidade comprovada pela API |
 | artifact | Comentário do assignee na própria issue com `Entrega aceita:` e link do artefato; motivo de aceite no comando |
 | operation | Mesmo aceite explícito, com evidência observável da operação remota |

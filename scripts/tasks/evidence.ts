@@ -1,6 +1,17 @@
 import { deliveryOf } from "./protocol.ts";
 import type { Command, ProjectConfig, TaskGateway, TaskSnapshot } from "./types.ts";
 
+// A production delivery waits days for the human staging → main promotion, far
+// beyond one 90-minute lease, so the holder is replaced by reclaim or transfer
+// before the deploy lands. The merge still belongs to this task if it happened
+// after the first claim ("Iniciado em"); the current lease start is only the
+// fallback for a task that never recorded one.
+export function deliveryWindowStart(task: TaskSnapshot): number {
+  const acquired = Date.parse(task.coordination!.execution!.acquiredAt);
+  const started = task.startedAt ? Date.parse(task.startedAt) : Number.NaN;
+  return Number.isFinite(started) ? Math.min(started, acquired) : acquired;
+}
+
 export async function validateEvidence(gateway: TaskGateway, config: ProjectConfig, task: TaskSnapshot, command: Command): Promise<void> {
   if (command.action !== "transition" || command.status === "Cancelado") return;
   const urls = command.evidence ?? [];
@@ -20,9 +31,9 @@ export async function validateEvidence(gateway: TaskGateway, config: ProjectConf
     if (child.status !== "Concluído") throw new Error(`Required child/dependency #${number} is not Concluído`);
   }
   const delivery = deliveryOf(task.issue.body);
-  const delivered = relevant.filter(pr => pr.state === "MERGED" && pr.mergedAt && pr.mergeSha && Date.parse(pr.mergedAt) >= Date.parse(task.coordination!.execution!.acquiredAt));
+  const delivered = relevant.filter(pr => pr.state === "MERGED" && pr.mergedAt && pr.mergeSha && Date.parse(pr.mergedAt) >= deliveryWindowStart(task));
   if (delivery === "dev" || delivery === "production") {
-    if (!delivered.length) throw new Error("Dev delivery requires a merged, linked PR with checks on its current head, delivered during this execution");
+    if (!delivered.length) throw new Error("Dev delivery requires a merged, linked PR with checks on its current head, delivered after this task's first claim");
   }
   if (delivery === "production") {
     const deployments = await Promise.all(parsed.flatMap(url => { const match = url.pathname.match(/\/deployments\/(\d+)$/); return match ? [gateway.deployment(Number(match[1]))] : []; }));

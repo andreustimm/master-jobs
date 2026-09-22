@@ -34,6 +34,9 @@ manual da projeção, uma memória de sessão ou um arquivo recuperado de outra
 branch nunca é importado como atualização operacional. A assinatura e a posse
 válidas exigidas pelo protocolo continuam necessárias mesmo quando o
 responsável humano é o mesmo em duas sessões.
+Até o corte de ativação em [#191](https://github.com/andreustimm/master-jobs/issues/191),
+essa posse é registrada administrativamente na issue, porque o escritor ainda
+não está inicializado.
 
 ## Trabalho já existente
 

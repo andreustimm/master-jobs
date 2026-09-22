@@ -170,6 +170,11 @@ planejamento e dependências são publicados ali, e a execução exige a posse
 válida definida no [protocolo de tarefas](github-project-tasks.md). O grafo
 local consumido pelo Compozy é uma projeção desse estado remoto.
 
+> **Bootstrap.** Até o corte de ativação em [#191](https://github.com/andreustimm/master-jobs/issues/191),
+> o escritor não está inicializado e `pnpm tasks claim` recusa a operação. Nesse
+> período a posse é o registro administrativo na issue, conforme o
+> [protocolo de tarefas](github-project-tasks.md); nada aqui descreve enforcement ativo.
+
 ```mermaid
 flowchart TD
     A[Item do backlog] --> B["/cy-create-spec<br/>_spec.md + _tests.md<br/>_user_stories · _dx · _uiux"]

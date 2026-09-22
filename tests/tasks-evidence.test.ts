@@ -69,9 +69,16 @@ it("requires proof of the merge, including merge SHA and merged timestamp", asyn
   await expect(validateEvidence(f.gateway, config, f.issue, f.command)).rejects.toThrow("merged, linked PR");
 });
 
-it("does not reuse a merge delivered by a previous execution on the same branch name", async () => {
+it("does not reuse a merge delivered before this task was first claimed", async () => {
   const f = fixture("dev"); f.pr.mergedAt = "2026-09-21T11:00:00.000Z";
-  await expect(validateEvidence(f.gateway, config, f.issue, f.command)).rejects.toThrow("during this execution");
+  await expect(validateEvidence(f.gateway, config, f.issue, f.command)).rejects.toThrow("after this task's first claim");
+});
+
+it("keeps the task's own merge valid after the lease was reclaimed while waiting for promotion", async () => {
+  const f = fixture("dev"); f.issue.coordination!.execution!.acquiredAt = "2026-09-22T11:45:00.000Z";
+  await expect(validateEvidence(f.gateway, config, f.issue, f.command)).resolves.toBeUndefined();
+  f.issue.startedAt = null;
+  await expect(validateEvidence(f.gateway, config, f.issue, f.command)).rejects.toThrow("after this task's first claim");
 });
 
 it("does not count a canceled, closed child as an accepted deliverable", async () => {

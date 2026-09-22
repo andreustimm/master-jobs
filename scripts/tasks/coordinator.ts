@@ -35,10 +35,22 @@ export class Coordinator {
     const inbox = await this.gateway.comments(this.config.controlIssue);
     const results: Receipt[] = [];
     this.failures = 0;
+    // Terminal receipts never change, so the snapshot read above settles every
+    // already-answered command. Re-reading the whole inbox for each of them made
+    // one run cost O(commands × pages) and outgrew the token's rate limit.
+    const settled = new Map<string, Receipt[]>();
+    for (const comment of inbox) {
+      if (comment.author !== this.config.writerLogin) continue;
+      const receipt = parseReceipt(comment.body);
+      if (receipt) settled.set(receipt.operationId, [...(settled.get(receipt.operationId) ?? []), receipt]);
+    }
     for (const request of inbox.sort((a,b) => a.id-b.id)) {
       let command: Command | null;
       try { command = parseCommand(request.body); } catch { continue; } // Malformed data never executes.
       if (!command) continue;
+      const known = settled.get(command.operationId);
+      const done = known?.length === 1 && known[0]!.commandHash === commandHash(command) && known[0]!.actor === request.author && ["confirmed", "rejected"].includes(known[0]!.phase) ? known[0] : undefined;
+      if (done) { results.push(done); continue; }
       try { results.push(await this.process(command, request)); }
       catch (error) {
         this.failures++;

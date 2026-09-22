@@ -516,7 +516,19 @@ export class GitHubGateway implements TaskGateway {
 
   async comments(issue: number): Promise<RemoteComment[]> {
     integer(issue, "issue number");
-    return (await this.restPages(`${this.base}/issues/${issue}/comments`)).map((comment) => this.remoteComment(comment, issue));
+    // Any account that can comment can paste a writer envelope. It is never
+    // trusted, and throwing on it would let one comment halt the inbox and every
+    // task read, so it is dropped before parsing; the writer's own envelopes are
+    // still verified and still fail closed.
+    return (await this.restPages(`${this.base}/issues/${issue}/comments`))
+      .filter((comment) => !this.forgedEnvelope(comment))
+      .map((comment) => this.remoteComment(comment, issue));
+  }
+
+  private forgedEnvelope(value: unknown): boolean {
+    const comment = object(value, "issue comment");
+    const author = string(object(comment.user, "comment author").login, "comment login");
+    return isWriterEnvelope(text(comment.body, "comment body")) && author.toLowerCase() !== this.config.writerLogin.toLowerCase();
   }
 
   async comment(issue: number, body: string): Promise<RemoteComment> {

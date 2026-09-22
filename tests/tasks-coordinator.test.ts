@@ -119,6 +119,17 @@ describe("canonical task writer", () => {
     expect(drained.some(r => r.operationId === heartbeat.operationId && r.phase === "confirmed")).toBe(true);
     expect(f.coordinator.failures).toBe(1);
   });
+  it("settles already-answered commands from one inbox read instead of re-reading per command", async () => {
+    const f = fixture(); await f.submit(await f.claim());
+    for (let i = 0; i < 4; i++) await f.submit(await f.owned("heartbeat"));
+    const original = f.gateway.comments; let reads = 0;
+    f.gateway.comments = async () => { reads++; return original(); };
+    const drained = await f.coordinator.drain();
+    expect(drained).toHaveLength(5);
+    expect(drained.every(r => r.phase === "confirmed")).toBe(true);
+    expect(reads).toBe(1);
+    expect(f.writes()).toBe(5);
+  });
   it("revalidates delivery evidence before retrying an unapplied prepared conclusion", async () => {
     const f = fixture(); await f.submit(await f.claim()); f.mutate(s => { s.status = "QA"; });
     const command = await f.owned("transition", { status: "Concluído", evidence: ["https://github.com/andreustimm/master-jobs/pull/20"] });

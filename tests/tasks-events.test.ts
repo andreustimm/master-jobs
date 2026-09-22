@@ -196,7 +196,7 @@ describe("production evidence", () => {
     ["unproven main ref", (f: ReturnType<typeof fixture>) => { f.deployment.ref = deploymentSha; }],
     ["earlier stage", (f: ReturnType<typeof fixture>) => { f.task.status = "Testando"; }],
     ["PR not merged", (f: ReturnType<typeof fixture>) => { f.pr.state = "OPEN"; }],
-    ["old execution merge", (f: ReturnType<typeof fixture>) => { f.pr.mergedAt = "2026-09-22T12:30:00Z"; }],
+    ["merge before the task started", (f: ReturnType<typeof fixture>) => { f.pr.mergedAt = "2026-09-21T12:30:00Z"; }],
     ["smoke SHA mismatch", (f: ReturnType<typeof fixture>) => { f.smoke.sha = "a".repeat(40); }],
     ["smoke failed", (f: ReturnType<typeof fixture>) => { f.smoke.conclusion = "failure"; }],
     ["smoke rerun", (f: ReturnType<typeof fixture>) => { f.smokeMetadata.run_attempt = 2; }],
