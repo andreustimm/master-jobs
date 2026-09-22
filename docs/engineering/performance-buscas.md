@@ -59,8 +59,8 @@ amostras, 10 min ociosos entre rodadas, de São Paulo:
 | Cenário | Primeira (3 rodadas) | Quente p50 | Quente p95 | `x-vercel-id` |
 |---|---|---:|---:|---|
 | `/login` (função + 1 consulta) | 164 · 1.346 · 1.375 ms | 88 ms | 135 ms | `gru1::gru1` |
-| `/offline.html` (CDN) | 32–49 ms | 39 ms | 50 ms | `gru1` (sem função) |
-| `/jobs` sem cookie (proxy 307) | 40–45 ms | 39 ms | 49 ms | `gru1` (sem função) |
+| `/offline.html` (CDN) | 32–49 ms | 39 ms | 50 ms | `gru1::sem função` |
+| `/jobs` sem cookie (proxy 307) | 40–45 ms | 39 ms | 49 ms | `gru1::sem função` |
 
 A primeira rodada não estava fria (o script tinha rodado um minuto antes); as
 duas depois de 10 min ociosos custaram ~1,35 s, e uma das 27 quentes, 1.084 ms
@@ -73,7 +73,7 @@ depois da pausa. Limites: um único ponto de origem, poucas amostras frias, e o
 ### Com sessão: `/jobs` com os filtros comuns
 
 O cookie vem **só** do ambiente, do próprio dono, e nunca é gravado em arquivo,
-impresso ou mandado a outro host que não seja HTTPS ou `127.0.0.1`:
+impresso ou mandado a outro host que não seja HTTPS ou `127.0.0.1`/`localhost`:
 
 1. No navegador, com a sessão aberta em produção: DevTools → Application →
    Cookies → `jobs.mastertimm.com.br` → copie o **valor** de `jho_session`.
@@ -118,7 +118,9 @@ pnpm perf:producao --logs --since 1h
 O script chama `vercel logs --environment production --query perf --json`,
 relê cada mensagem por `lerLinhaPerf` e imprime só a agregação por rota e
 estágio (n, p50, p95, máximo), a janela de tempo e o id da implantação.
-Mensagem bruta e caminho da requisição do log nunca são impressos. Quem
+Lê no máximo `--limit` registros (padrão 500) do projeto `--projeto` (padrão
+`master-jobs`); se a contagem impressa bater no limite, aumente-o ou encurte
+`--since`, ou a amostra fica cortada. Mensagem bruta e caminho da requisição do log nunca são impressos. Quem
 preferir o CLI direto deve usar `--query perf` e ler só o campo `message`:
 os outros campos do registro trazem o caminho requisitado.
 
@@ -136,7 +138,7 @@ os outros campos do registro trazem o caminho requisitado.
 | **total** | **5.291,3** |
 
 Uma amostra, provavelmente fria, com filtros desconhecidos: não é p50 de nada.
-Mas localiza a espera: `board` e `facets` são 96% do total, e o prelúdio, que a
+Mas localiza a espera: `board` e `facets` são 95% do total, e o prelúdio, que a
 #175 enxugou, custa 71 ms. Leitura local vs. produção: o `perf:jobs` põe
 `facets` em ~24 ms com 10 mil vagas sem rede; 3,5 s em produção é outra ordem
 de grandeza, e não se explica por round-trip (uma ida em `gru1` custa poucos

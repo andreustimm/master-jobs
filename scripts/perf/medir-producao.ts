@@ -55,14 +55,14 @@ type Medida = { ttfbMs: number; totalMs: number; status: number; vercelId: strin
  * é reaproveitada entre amostras (keep-alive), como no navegador: sem isso o
  * número mediria o aperto de mão TLS, não a função.
  */
-function medir(base: URL, cenario: Cenario, cookie: string | null, agente: Agent | AgentHttp): Promise<Medida> {
+function medir(base: URL, cenario: Cenario, cookie: string | null, agente: AgentHttp): Promise<Medida> {
   const url = new URL(cenario.caminho, base);
   const enviar = url.protocol === "https:" ? request : requestHttp;
   const cabecalhos: Record<string, string> = { "user-agent": "master-jobs-perf/1", accept: "text/html" };
   if (cenario.sessao && cookie) cabecalhos.cookie = `jho_session=${cookie}`;
   return new Promise((resolve, reject) => {
     const inicio = performance.now();
-    const req = enviar(url, { method: "GET", headers: cabecalhos, agent: agente as Agent }, (res) => {
+    const req = enviar(url, { method: "GET", headers: cabecalhos, agent: agente }, (res) => {
       const ttfbMs = performance.now() - inicio;
       res.on("data", () => {});
       res.on("end", () => {
@@ -90,7 +90,7 @@ const AQUECE_CONEXAO: Cenario = { nome: "conexão", caminho: "/offline.html", se
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const fmt = (ms: number | undefined) => (ms === undefined ? "—" : ms.toFixed(0));
 
-async function medirRotas(): Promise<object> {
+async function medirRotas() {
   const base = new URL(values.base!);
   const amostras = inteiro("amostras", values.amostras, 1);
   const rodadas = inteiro("rodadas", values.rodadas, 1);
@@ -108,33 +108,38 @@ async function medirRotas(): Promise<object> {
   const primeiras = new Map<string, number[]>();
   const quentes = new Map<string, number[]>();
   const totais = new Map<string, number[]>();
-  const regioes = new Map<string, Set<string>>();
-  const status = new Map<string, Set<string>>();
-  const anota = <T>(m: Map<string, T[]>, k: string, v: T) => m.set(k, [...(m.get(k) ?? []), v]);
+  const regioes = new Map<string, string[]>();
+  const status = new Map<string, string[]>();
+  const anota = <T>(m: Map<string, T[]>, k: string, v: T) => void (m.get(k) ?? m.set(k, []).get(k)!).push(v);
 
-  for (let rodada = 1; rodada <= rodadas; rodada++) {
-    if (rodada > 1 && pausaS > 0) {
-      console.error(`rodada ${rodada}/${rodadas}: aguardando ${pausaS} s ociosos…`);
-      await esperar(pausaS * 1000);
-    }
-    // Abre a conexão num arquivo estático, fora da conta: sem isto a primeira
-    // amostra da rodada somaria DNS e aperto de mão TLS ao tempo da função.
-    await medir(base, AQUECE_CONEXAO, null, agente);
-    for (const cenario of cenarios) {
-      for (let i = 0; i < amostras; i++) {
-        const m = await medir(base, cenario, cookie, agente);
-        if (cenario.sessao && m.status >= 300 && m.status < 400 && m.destino === "/login") {
-          throw new Error("A sessão foi recusada (redirecionou para /login): cookie vencido ou inválido. Nada foi gravado.");
+  // No `finally`: com keep-alive, um erro no meio deixaria o socket aberto e o
+  // processo pendurado até o servidor fechar a conexão.
+  try {
+    for (let rodada = 1; rodada <= rodadas; rodada++) {
+      if (rodada > 1 && pausaS > 0) {
+        console.error(`rodada ${rodada}/${rodadas}: aguardando ${pausaS} s ociosos…`);
+        await esperar(pausaS * 1000);
+      }
+      // Abre a conexão num arquivo estático, fora da conta: sem isto a primeira
+      // amostra da rodada somaria DNS e aperto de mão TLS ao tempo da função.
+      await medir(base, AQUECE_CONEXAO, null, agente);
+      for (const cenario of cenarios) {
+        for (let i = 0; i < amostras; i++) {
+          const m = await medir(base, cenario, cookie, agente);
+          if (cenario.sessao && m.status >= 300 && m.status < 400 && m.destino === "/login") {
+            throw new Error("A sessão foi recusada (redirecionou para /login): cookie vencido ou inválido. Nada foi gravado.");
+          }
+          anota(i === 0 ? primeiras : quentes, cenario.nome, m.ttfbMs);
+          anota(totais, cenario.nome, m.totalMs);
+          const r = regiaoDaResposta(m.vercelId);
+          anota(regioes, cenario.nome, r ? `${r.borda}::${r.funcao ?? "sem função"}` : "?");
+          anota(status, cenario.nome, `${m.status}${m.cache ? ` ${m.cache}` : ""}`);
         }
-        anota(i === 0 ? primeiras : quentes, cenario.nome, m.ttfbMs);
-        anota(totais, cenario.nome, m.totalMs);
-        const r = regiaoDaResposta(m.vercelId);
-        regioes.set(cenario.nome, (regioes.get(cenario.nome) ?? new Set()).add(r ? `${r.borda}::${r.funcao ?? "sem função"}` : "?"));
-        status.set(cenario.nome, (status.get(cenario.nome) ?? new Set()).add(`${m.status}${m.cache ? ` ${m.cache}` : ""}`));
       }
     }
+  } finally {
+    agente.destroy();
   }
-  agente.destroy();
 
   const linhas = cenarios.map((c) => ({
     cenario: c.nome,
@@ -142,11 +147,12 @@ async function medirRotas(): Promise<object> {
     primeira: resumir(primeiras.get(c.nome) ?? []),
     quente: resumir(quentes.get(c.nome) ?? []),
     total: resumir(totais.get(c.nome) ?? []),
-    regiao: [...(regioes.get(c.nome) ?? [])],
-    status: [...(status.get(c.nome) ?? [])],
+    regiao: [...new Set(regioes.get(c.nome))],
+    status: [...new Set(status.get(c.nome))],
   }));
 
-  console.log(`\nTTFB em ms — ${base.origin}, ${new Date().toISOString()}, ${rodadas} rodada(s) × ${amostras} amostra(s)`);
+  const quando = new Date().toISOString();
+  console.log(`\nTTFB em ms — ${base.origin}, ${quando}, ${rodadas} rodada(s) × ${amostras} amostra(s)`);
   console.log("'primeira' = 1ª requisição do cenário na rodada (fria só se a instância estava ociosa); 'quente' = as seguintes.\n");
   console.log("| cenário | primeira p50 | primeira max | quente n | quente p50 | quente p95 | total p50 | borda::função | status |");
   console.log("|---|---:|---:|---:|---:|---:|---:|---|---|");
@@ -156,7 +162,7 @@ async function medirRotas(): Promise<object> {
     );
   }
   if (cookie === null) console.log("\nSem JHO_PERF_SESSION: só rotas públicas. Ver docs/engineering/performance-buscas.md.");
-  return { base: base.origin, quando: new Date().toISOString(), rodadas, amostras, cenarios: linhas };
+  return { base: base.origin, quando, rodadas, amostras, cenarios: linhas };
 }
 
 /**
@@ -164,7 +170,7 @@ async function medirRotas(): Promise<object> {
  * relidas por `lerLinhaPerf`. A mensagem bruta, o caminho da requisição e
  * qualquer outro campo do log nunca são impressos.
  */
-function lerLogs(): object {
+function lerLogs() {
   const saida = execFileSync(
     "vercel",
     [

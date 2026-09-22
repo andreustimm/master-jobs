@@ -37,6 +37,9 @@ export function resumir(valores: readonly number[]): Resumo | null {
   };
 }
 
+/** Nome de região da Vercel (`gru1`, `iad1`): o que não tiver essa forma não entra no relatório. */
+const REGIAO = /^[a-z]{3}\d$/;
+
 /**
  * `x-vercel-id` tem a borda de quem pediu no primeiro trecho e, quando uma
  * função rodou, a região dela no segundo: `gru1::gru1::abc`. Resposta de CDN
@@ -47,7 +50,7 @@ export function resumir(valores: readonly number[]): Resumo | null {
 export function regiaoDaResposta(vercelId: string | null | undefined): { borda: string; funcao: string | null } | null {
   if (!vercelId) return null;
   const partes = vercelId.split("::");
-  const valido = (s: string | undefined) => (s !== undefined && /^[a-z]{3}\d$/.test(s) ? s : null);
+  const valido = (s: string | undefined) => (s !== undefined && REGIAO.test(s) ? s : null);
   const borda = valido(partes[0]);
   if (!borda) return null;
   return { borda, funcao: partes.length >= 3 ? valido(partes[1]) : null };
@@ -89,7 +92,7 @@ export function lerLinhaPerf(mensagem: string): LinhaPerf | null {
   return {
     rota: perf.split(/[?#]/)[0]!,
     totalMs,
-    regiao: typeof region === "string" && /^[a-z]{3}\d$/.test(region) ? region : null,
+    regiao: typeof region === "string" && REGIAO.test(region) ? region : null,
     estagios,
   };
 }
