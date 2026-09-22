@@ -15,11 +15,14 @@
  *
  * O texto do currículo exige um SEGUNDO consentimento (`publicCv`). Marcar o
  * perfil como público diz "alcançável sem sessão"; publicar o currículo inteiro
- * é outra decisão.
+ * é outra decisão. E o consentimento publica o CURRÍCULO, não o que nunca sai:
+ * o texto passa por `publicCvText()`, que retira e-mail, telefone e a linha do
+ * piso salarial escritos nele — com os limites de detecção declarados lá.
  */
 import { and, eq } from "drizzle-orm";
 import { getDb } from "./db/client.ts";
 import { candidate, candidateDocument, candidateSkill, skill } from "./db/schema.ts";
+import { publicCvText } from "./public-cv.ts";
 
 export type PublicProfile = {
   slug: string;
@@ -56,6 +59,8 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
       githubUrl: candidate.githubUrl,
       visibility: candidate.visibility,
       publicCv: candidate.publicCv,
+      // Lido para ser RETIRADO do texto do CV, nunca devolvido.
+      email: candidate.email,
     })
     .from(candidate)
     .where(eq(candidate.slug, slug))
@@ -85,7 +90,7 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
         ),
       )
       .limit(1);
-    cv = doc?.content ?? null;
+    cv = doc ? publicCvText(doc.content, { email: row.email }) : null;
   }
 
   return {

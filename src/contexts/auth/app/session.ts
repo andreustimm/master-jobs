@@ -12,6 +12,7 @@ import type {
   SessionStore,
 } from "../ports.ts";
 import type { Role, Session } from "../domain/types.ts";
+import { openModeActive } from "../domain/open-mode.ts";
 
 export type AuthDeps = {
   sessions: SessionStore;
@@ -145,7 +146,9 @@ export async function revokeAllSessionsForEmail(
  * foi um ramo pouco exercitado.
  */
 export function isOpenMode(env: Record<string, string | undefined> = process.env): boolean {
-  return env.JHO_AUTH_MODE === "open";
+  // Pedir o modo aberto não basta: o ambiente também precisa se
+  // declarar local. Ver `domain/open-mode.ts`.
+  return openModeActive(env);
 }
 
 /** @deprecated Use `isOpenMode`. Mantido para não quebrar chamada antiga. */

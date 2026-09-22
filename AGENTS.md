@@ -151,7 +151,8 @@ dashboard Next.js em `localhost:3000`.
 > candidaturas nem piso salarial — o piso é a posição de negociação, e
 > publicá-la é mostrar a carta antes da mesa. Perfil não público responde
 > **404, não 403**: 403 confirma que o slug existe, e existência é informação.
-> O texto do currículo exige um SEGUNDO consentimento.
+> O texto do currículo exige um SEGUNDO consentimento, e mesmo com ele o texto
+> publicado passa por `publicCvText()`: e-mail, telefone e a frase do piso saem.
 
 > **Admin não lê dado privado; ele assume a identidade, e isso fica registrado.**
 > Três papéis: `admin`, `candidate`, `recruiter`. A sessão emprestada perde TODA
@@ -286,10 +287,11 @@ dashboard Next.js em `localhost:3000`.
 
 > **14. Autenticação é exigida por omissão.**
 > Nenhuma página nem API responde sem sessão válida — inclusive `/api/export`,
-> que carrega o acervo inteiro. O modo aberto existe mas precisa ser pedido:
-> `JHO_AUTH_MODE=open`. "Só roda em loopback" protege contra a internet, não
-> contra outro processo, outra conta da máquina, nem contra um bind errado —
-> que já aconteceu aqui. Segurança por omissão é a omissão ser a opção segura.
+> que carrega o acervo inteiro. O modo aberto existe mas precisa ser pedido —
+> `JHO_AUTH_MODE=open` — e só vale na máquina local: em deployment o código
+> ignora o pedido (`src/contexts/auth/domain/open-mode.ts`). "Só roda em
+> loopback" protege contra a internet, não contra outro processo, outra conta
+> da máquina, nem contra um bind errado — que já aconteceu aqui. Segurança por omissão é a omissão ser a opção segura.
 >
 > Primeiro acesso: `jho auth add-user <email> --role admin,candidate` e
 > `jho auth set-password <email>`. Sem conta cadastrada, `/login` mostra esses
@@ -301,10 +303,16 @@ dashboard Next.js em `localhost:3000`.
 > legível por quem não tem sessão. `proxy.ts` é a rede grossa (existe
 > cookie?), a página é a checagem real (o cookie vale?). Nenhuma action aceita
 > `candidateId` da própria entrada — id em FormData é pedido, não prova.
-> Exceção única e registrada: `passwordLoginAction`, onde a sessão nasce; ela
-> é protegida por limite de tentativas, não por permissão.
-> A decisão mora em `src/contexts/auth/domain/policy.ts`, é pura, e nega por
-> padrão. Coberto por teste de arquitetura.
+> Entrada sem guarda só existe como exceção registrada, com o que a substitui:
+> `passwordLoginAction` (onde a sessão nasce, protegida por limite de
+> tentativas), recuperação de senha, logout, preferência de interface,
+> `/login/callback`, o cron por segredo e `/p/[slug]`. As exceções de action
+> vivem em `tests/support/entry-inventory.ts`, as de página e rota em
+> `tests/architecture.test.ts`, e o inventário descobre toda página,
+> Route Handler e export `"use server"` pela semântica do Next — entrada nova
+> sem política reprova. A decisão mora em `src/contexts/auth/domain/policy.ts`,
+> é pura, e nega por padrão. `tests/entry-denial.test.ts` prova a negação
+> antes de qualquer efeito; detalhes em `docs/security.md`.
 
 > **16. Chave de API nunca vai para o banco.**
 > O cadastro de provedores guarda o **nome da variável de ambiente**, jamais a

@@ -18,6 +18,14 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Security
+
+- The CV shown on the public profile no longer displays email, phone number or
+  the salary expectation sentence, even when they are written in the CV text.
+- The no-login mode meant for development is automatically refused in any
+  published environment.
+
+
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 
 - Email alerts are configured to notify the system owner of new production errors and recurring failures that had been resolved.

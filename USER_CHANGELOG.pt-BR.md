@@ -18,6 +18,15 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Segurança
+
+- O currículo publicado no perfil público deixa de mostrar e-mail, telefone e
+  a frase da pretensão salarial, mesmo quando estão escritos no texto do
+  currículo.
+- O modo sem login, próprio para desenvolvimento, é recusado automaticamente
+  em qualquer ambiente publicado.
+
+
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 
 - Alertas por e-mail configurados para avisar o responsável sobre erros novos em produção e falhas resolvidas que voltam a acontecer.

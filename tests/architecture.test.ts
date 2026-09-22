@@ -4,6 +4,16 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
 import { describe, expect, it } from "vitest";
+import {
+  discoverEntries,
+  exportedBindings,
+  UNGUARDED_BY_DESIGN,
+  guardComesFirst,
+  inlineServerDirectives,
+  isServerModule,
+  routeMethods,
+  stripComments,
+} from "./support/entry-inventory.ts";
 
 /**
  * Executable architecture rules.
@@ -516,36 +526,79 @@ describe("pluggability (rule 4)", () => {
 });
 
 describe("authorisation (AUTH-01)", () => {
-  const APP = walk("app").filter((f) => f.endsWith("actions.ts"));
-  const ROUTES = walk("app").filter((f) => f.endsWith("route.ts"));
+  // Descobertos pela semântica do Next, não pelo nome do arquivo. O teste antigo
+  // lia só `*actions.ts` e `logoutAction` ficava de fora pelo nome do arquivo
+  // (E13). Ver `tests/support/entry-inventory.ts`.
+  const INVENTORY = discoverEntries();
+  const APP = INVENTORY.serverModules;
+  const ROUTES = INVENTORY.routes;
 
   /**
-   * The one action that may not be guarded, and why.
+   * A política de cada página, por arquivo. Página nova sem linha aqui reprova.
    *
-   * Sign-in is where a session begins, so requiring one would be circular. It
-   * is the only unauthenticated write in the system, which is why the rate
-   * limit lives underneath it. Listed here explicitly so the exception is a
-   * decision on the record rather than an omission nobody noticed.
+   * `guard` é a chamada literal que precisa estar na página; `exception` é a
+   * razão registrada de uma página responder sem sessão, e o que a protege.
    */
-  const UNGUARDED_BY_DESIGN = new Set([
-    "passwordLoginAction",
-    // Encerrar uma sessão não pode exigir uma sessão válida. `guard` lançaria
-    // para quem está com sessão emprestada expirada ou quebrada, e a pessoa
-    // ficaria presa na identidade de outra — sem caminho de volta pela
-    // interface. Mesma razão de `logoutAction`, que só não aparece aqui porque
-    // o arquivo dele não termina em `actions.ts`.
-    "stopImpersonatingAction",
-    // Recuperação de senha não pode exigir sessão: quem esqueceu a senha não
-    // tem uma. Exigir guard aqui seria pedir que a pessoa entrasse para poder
-    // recuperar o acesso de que não se lembra.
-    //
-    // O que substitui o guard nas duas: `requestResetAction` responde igual
-    // para conta existente e inexistente, e limita por endereço;
-    // `submitResetAction` trata o TOKEN como a autorização — uso único, uma
-    // hora de validade, e queimado antes de a senha ser gravada.
-    "requestResetAction",
-    "submitResetAction",
-  ]);
+  const PAGE_POLICY: Record<string, { guard: string } | { exception: string }> = {
+    "app/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
+    "app/admin/captures/page.tsx": { guard: 'requirePage("admin:access")' },
+    "app/admin/operacoes/page.tsx": { guard: 'requirePage("admin:access")' },
+    "app/admin/users/page.tsx": { guard: 'requirePage("user:manage")' },
+    "app/candidate/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
+    "app/candidate/skills/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
+    "app/candidate/vocabulary/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
+    "app/compare/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
+    "app/jobs/page.tsx": { guard: 'requirePage("job:read")' },
+    "app/jobs/[id]/page.tsx": { guard: 'requirePage("job:read")' },
+    "app/jobs/[id]/paises/page.tsx": { guard: 'requirePage("job:read")' },
+    "app/jobs/new/page.tsx": { guard: 'requirePage("job:write")' },
+    "app/pipeline/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
+    "app/recruiter/page.tsx": { guard: 'requirePage("job:read")' },
+    "app/recruiter/[candidateId]/page.tsx": {
+      guard: 'requirePage("candidate:read", { kind: "candidate", candidateId })',
+    },
+    "app/referrals/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
+    "app/searches/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
+    "app/searches/tracks/[id]/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
+    "app/searches/tracks/new/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
+    "app/transition-test/page.tsx": { guard: 'requirePage("job:read")' },
+    "app/login/page.tsx": {
+      exception:
+        "pré-sessão: formulário de entrada; lê só se EXISTE alguma conta, para mostrar os comandos de primeiro acesso",
+    },
+    "app/login/forgot/page.tsx": { exception: "pré-sessão: formulário de recuperação; não lê dado nenhum" },
+    "app/login/reset/page.tsx": {
+      exception: "pré-sessão: o token de uso único é a autorização; a página só pergunta se ele está vivo",
+    },
+    "app/p/[slug]/page.tsx": {
+      exception:
+        "portfólio público: `publicProfile()` monta por lista de permissão, 404 para não público, limite por IP no proxy",
+    },
+  };
+
+  /** Route Handlers sem sessão por necessidade, e o que substitui a sessão. */
+  const PUBLIC_ROUTES: Record<string, string> = {
+    "app/login/callback/route.ts": "pré-sessão: o link mágico de uso único é a autorização e cria a sessão",
+    // O cron não tem sessão para validar: a Vercel o chama sem cookie. Ele
+    // se autentica com `CRON_SECRET` em `authorization`, comparado em tempo
+    // constante — um `===` sobre segredo vaza o prefixo pelo tempo de
+    // resposta, e esta rota atende quem quiser chamá-la. Sem o segredo
+    // configurado responde 503: fechada por omissão, e não aberta.
+    "app/api/cron/recheck/route.ts": "serviço: `CRON_SECRET` em tempo constante; 503 sem o segredo",
+  };
+  const ROUTE_GUARD = /await (require(?:OwnCandidatePage|Page|Session)|guard(?:OwnCandidate)?)\(/;
+
+  /**
+   * Arquivos de segmento que renderizam sem ser página. Não recebem parâmetro
+   * de rota nem leem dado privado; o layout só consulta a sessão para o crachá.
+   */
+  const SEGMENT_POLICY: Record<string, string> = {
+    "app/layout.tsx": "casca: lê a própria sessão (`renderSession`) só para crachá e navegação",
+    "app/error.tsx": "fallback de erro sem dado",
+    "app/forbidden.tsx": "fallback 403 sem dado",
+    "app/not-found.tsx": "fallback 404 sem dado",
+    "app/transition-test/error.tsx": "fallback de erro da rota de teste, sem dado",
+  };
 
   it("exposes Auth to production callers only through its public API", () => {
     const callers = [...SRC.filter((file) => !file.includes("src/contexts/auth/")), ...walk("app")];
@@ -571,7 +624,7 @@ describe("authorisation (AUTH-01)", () => {
       // `trackAction` ganhou um, e a action saiu do teste sem ninguém notar.
       for (const match of code.matchAll(/export async function (\w+)\s*\([^)]*\)\s*(?::[^{]+)?\{/g)) {
         const name = match[1]!;
-        if (UNGUARDED_BY_DESIGN.has(name)) continue;
+        if (UNGUARDED_BY_DESIGN.get(name)?.file === file) continue;
         const body = code.slice(match.index, code.indexOf("\n}", match.index));
         if (!/await guard(OwnCandidate)?\(/.test(body)) {
           offenders.push(`${file}: ${name}`);
@@ -584,22 +637,135 @@ describe("authorisation (AUTH-01)", () => {
   it("validates sessions inside every protected Route Handler", () => {
     // Middleware checks cookie presence only. A forged cookie reaches the
     // handler, so the handler itself must resolve and authorise the session.
-    const publicByDesign = new Set([
-      "app/login/callback/route.ts",
-      // O cron não tem sessão para validar: a Vercel o chama sem cookie. Ele
-      // se autentica com `CRON_SECRET` em `authorization`, comparado em tempo
-      // constante — um `===` sobre segredo vaza o prefixo pelo tempo de
-      // resposta, e esta rota atende quem quiser chamá-la. Sem o segredo
-      // configurado responde 503: fechada por omissão, e não aberta.
-      "app/api/cron/recheck/route.ts",
-    ]);
-    const offenders = ROUTES.filter(
-      (file) =>
-        !publicByDesign.has(file) &&
-        !/await (require(?:OwnCandidatePage|Page|Session)|guard(?:OwnCandidate)?)\(/.test(read(file)),
-    );
+    // Por MÉTODO: um `POST` novo num arquivo que já tem `GET` guardado não
+    // herda o guarda do vizinho.
+    expect(ROUTES.length).toBeGreaterThan(0);
+    const offenders: string[] = [];
+    for (const file of ROUTES) {
+      if (file in PUBLIC_ROUTES) continue;
+      const source = read(file);
+      const { methods, unknown } = routeMethods(source);
+      if (methods.length === 0) offenders.push(`${file}: nenhum método HTTP reconhecido`);
+      for (const name of unknown) offenders.push(`${file}: export desconhecido ${name}`);
+      for (const method of methods) {
+        const body = stripComments(source).slice(stripComments(source).search(new RegExp(`function\\s+${method}\\s*\\(`)));
+        const end = body.search(/\n\}/);
+        if (!ROUTE_GUARD.test(end === -1 ? body : body.slice(0, end))) offenders.push(`${file}: ${method}`);
+      }
+    }
     expect(offenders).toEqual([]);
   });
+
+  it("V03-01 classifica toda página, Route Handler, segmento e Server Action descobertos", () => {
+    // O inventário é a lista do que o FRAMEWORK expõe; a política é a lista do
+    // que alguém decidiu. Entrada na primeira sem linha na segunda reprova, e
+    // linha na segunda sem entrada na primeira também — exceção órfã é furo
+    // esperando alguém recriar o arquivo.
+    const offenders: string[] = [];
+
+    for (const page of INVENTORY.pages) {
+      const policy = PAGE_POLICY[page];
+      if (!policy) {
+        offenders.push(`${page}: página sem política`);
+        continue;
+      }
+      if ("guard" in policy) {
+        if (!stripComments(read(page)).includes(policy.guard)) offenders.push(`${page}: falta ${policy.guard}`);
+      } else if (policy.exception.trim().length < 20) {
+        offenders.push(`${page}: exceção sem justificativa`);
+      }
+    }
+    for (const page of Object.keys(PAGE_POLICY)) {
+      if (!INVENTORY.pages.includes(page)) offenders.push(`${page}: política órfã`);
+    }
+
+    for (const route of Object.keys(PUBLIC_ROUTES)) {
+      if (!ROUTES.includes(route)) offenders.push(`${route}: exceção órfã`);
+    }
+
+    for (const segment of INVENTORY.segments) {
+      if (!(segment in SEGMENT_POLICY)) offenders.push(`${segment}: segmento sem classificação`);
+    }
+    for (const segment of Object.keys(SEGMENT_POLICY)) {
+      if (!INVENTORY.segments.includes(segment)) offenders.push(`${segment}: classificação órfã`);
+    }
+
+    // Server Action: TODO export do módulo, em qualquer forma, guarda primeiro.
+    const exempted = new Set<string>();
+    for (const file of APP) {
+      const source = read(file);
+      for (const binding of exportedBindings(source)) {
+        const exception = UNGUARDED_BY_DESIGN.get(binding.exported);
+        if (exception?.file === file) {
+          exempted.add(binding.exported);
+          continue;
+        }
+        const verdict = guardComesFirst(source, binding.local);
+        if (!verdict.ok) offenders.push(`${file}: ${binding.exported} — ${verdict.reason}`);
+      }
+    }
+    for (const [name, { why }] of UNGUARDED_BY_DESIGN) {
+      if (!exempted.has(name)) offenders.push(`${name}: exceção órfã`);
+      if (why.trim().length < 20) offenders.push(`${name}: exceção sem justificativa`);
+    }
+
+    // Diretiva dentro de função vira endpoint sem que o arquivo diga isso.
+    for (const file of INVENTORY.inlineServer) offenders.push(`${file}: "use server" inline`);
+
+    expect(offenders).toEqual([]);
+    // Guarda contra o teste passar por não ter achado nada.
+    expect(INVENTORY.pages.length).toBeGreaterThan(20);
+    expect(APP.length).toBeGreaterThan(10);
+  });
+
+  it("V03-01 roteia só por app/: outro diretório de rotas seria superfície fora do inventário", () => {
+    for (const dir of ["pages", "src/app", "src/pages"]) {
+      expect(existsSync(dir), dir).toBe(false);
+    }
+  });
+
+  it("V03-01 a descoberta não depende de nome de arquivo nem de forma de export", () => {
+    // Fixture negativa: cada forma abaixo é uma action que a versão anterior
+    // do teste não via. A descoberta precisa enxergá-las E a conferência do
+    // guarda precisa recusá-las.
+    const sneaky = [
+      '"use server";',
+      "// comentário com { chave } e export async function fantasma() {}",
+      "export const arrow = async (formData: FormData) => { await apagarTudo(formData); };",
+      "async function local() { await apagarTudo(); }",
+      "export { local as renamed };",
+      'export { outra } from "./outra";',
+      "export default async function padrao(formData: FormData) { revalidatePath(\"/\"); await guard(\"job:read\"); }",
+      "export async function comTipo(): Promise<{ ok: true }> { const x = await lerCurriculo(); await guard(\"job:read\"); return { ok: true }; }",
+      "export async function certa(): Promise<{ ok: true }> { const s = await guard(\"job:read\"); return { ok: true }; }",
+    ].join("\n");
+
+    expect(isServerModule(sneaky)).toBe(true);
+    const bindings = exportedBindings(sneaky);
+    expect(bindings.map((b) => b.exported).sort()).toEqual(
+      ["arrow", "certa", "comTipo", "default", "outra", "renamed"].sort(),
+    );
+    const verdicts = Object.fromEntries(
+      bindings.map((b) => [b.exported, guardComesFirst(sneaky, b.local).ok]),
+    );
+    expect(verdicts).toEqual({
+      arrow: false,
+      renamed: false,
+      outra: false,
+      default: false,
+      comTipo: false,
+      certa: true,
+    });
+    // Recusadas pelo motivo certo, e não por acaso do padrão.
+    expect(guardComesFirst(sneaky, "padrao")).toMatchObject({ reason: "efeito antes do guarda: revalidatePath(" });
+    expect(guardComesFirst(sneaky, "comTipo")).toMatchObject({ ok: false, reason: expect.stringContaining("lerCurriculo") });
+
+    // "use server" citado em comentário não é diretiva; dentro de função é.
+    expect(isServerModule('// "use server"\nexport async function x() {}')).toBe(false);
+    expect(inlineServerDirectives('export function Form() { async function salvar() { "use server"; } }')).toBe(1);
+    expect(inlineServerDirectives('"use server";\nexport async function a() { await guard("x"); }')).toBe(0);
+  });
+
 
   it("uses candidate-scoped page guards wherever funnel or CV data is read", () => {
     // `/jobs` NÃO está nesta lista, e a ausência é decisão.
@@ -733,10 +899,24 @@ describe("authorisation (AUTH-01)", () => {
     // O padrão era `single-user`, que sintetizava sessão e deixava currículo,
     // funil e o export CSV inteiro acessíveis a qualquer requisição. Agora o
     // modo aberto tem de ser pedido.
+    //
+    // E pedir não basta: a decisão mora numa função pura que também exige o
+    // ambiente local (V03-04). Sessão e proxy chamam a MESMA função; ler a
+    // variável em qualquer outro lugar seria uma segunda regra, e a segunda
+    // regra é a que um dia esquece o ambiente.
+    const rule = read("src/contexts/auth/domain/open-mode.ts");
+    expect(rule).toContain('env.JHO_AUTH_MODE === "open"');
     const session = read("src/contexts/auth/app/session.ts");
-    expect(session).toContain('env.JHO_AUTH_MODE === "open"');
+    expect(session).toContain("return openModeActive(env);");
     const proxy = readFileSync("proxy.ts", "utf8");
-    expect(proxy).toContain('process.env.JHO_AUTH_MODE === "open"');
+    expect(proxy).toContain("if (openModeActive(process.env))");
+
+    const readers = [...SRC, ...walk("app"), "proxy.ts"].filter(
+      (file) =>
+        file !== "src/contexts/auth/domain/open-mode.ts" &&
+        /JHO_AUTH_MODE\s*(?:===|!==|==|!=)|\[\s*["']JHO_AUTH_MODE["']\s*\]/.test(read(file)),
+    );
+    expect(readers).toEqual([]);
   });
 
   it("keeps the permission decision in one pure function", () => {
