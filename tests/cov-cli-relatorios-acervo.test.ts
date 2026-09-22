@@ -31,7 +31,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { syncCandidateFromProfile } from "../src/core/candidate.ts";
 import { application, job, jobPage, jobScore, source } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
@@ -711,6 +711,27 @@ describe("jho prep <id>", () => {
     expect(r.out).toContain("Trocar a palavra");
     expect(r.out).toContain("Pedem e o CV não mostra");
     expect(r.out).toContain("8+ anos em arquitetura");
+  });
+
+  it("prepara sem pedir nada à rede e sem registrar candidatura (regra 13)", async () => {
+    // O dossiê entrega o link de candidatura para a PESSOA clicar. O `fetch`
+    // global responde 200 a tudo — o pior caso, em que um envio "daria certo".
+    const { forte } = await semearAcervoPontuado();
+    const pedidos: string[] = [];
+    vi.stubGlobal("fetch", (async (input: string | URL | Request) => {
+      pedidos.push(input instanceof Request ? input.url : String(input));
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch);
+    try {
+      const r = await rodar("prep", String(forte));
+      expect(r.erro).toBeUndefined();
+      expect(r.code).toBeUndefined();
+      expect(r.out).toContain("https://vagas.empresa-interna.test/forte/apply");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(pedidos).toEqual([]);
+    expect(await banco().select().from(application).where(eq(application.jobId, forte))).toEqual([]);
   });
 
   it("vaga sem local declarado não imprime local vazio", async () => {
