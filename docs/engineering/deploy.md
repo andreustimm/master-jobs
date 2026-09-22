@@ -132,7 +132,10 @@ manual de `.eml`.
 
 **`JHO_AUTH_MODE` não deve existir em produção.** Com `open`, o sistema sintetiza
 uma sessão e serve currículo, funil e export para qualquer requisição. É modo de
-desenvolvimento local e num endereço público é o vazamento inteiro.
+desenvolvimento local e num endereço público é o vazamento inteiro. Desde #197 o
+código também recusa: em qualquer deployment (`VERCEL` presente, ou
+`VERCEL_ENV`/`JHO_ENV` diferente de `local`) o pedido é ignorado e o login continua exigido —
+ver `src/contexts/auth/domain/open-mode.ts`.
 
 ## Os três ambientes
 
