@@ -30,11 +30,6 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ### Security
 
-- An invited account can no longer see or change the owner's profile, CV,
-  visibility, or pipeline. An account without its own profile now gets access
-  denied in the candidate area, including when an admin is acting as that
-  account.
-
 - The CV shown on the public profile now hides email addresses, phone numbers
   with a country code or a parenthesised area code, and the whole paragraph or
   table that states a salary expectation (such as "Salary expectation:" or
@@ -68,6 +63,15 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   view, dims while it updates and keeps responding to clicks. The full splash
   remains for switching screens and when a response is slow or the connection
   drops.
+
+## [1.21.2] - 2026-09-22T21:14:29.956Z
+
+### Security
+
+- An invited account can no longer see or change the owner's profile, CV,
+  visibility, or pipeline. An account without its own profile now gets access
+  denied in the candidate area, including when an admin is acting as that
+  account.
 
 ## [1.21.1] - 2026-09-22T18:19:03.735Z
 

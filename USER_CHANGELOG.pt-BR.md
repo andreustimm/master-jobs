@@ -30,11 +30,6 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ### Segurança
 
-- Uma conta convidada não enxerga nem altera mais o perfil, o currículo, a
-  visibilidade e o funil do dono. Quem ainda não tem perfil próprio vê acesso
-  negado na área do candidato, inclusive quando o admin assume a identidade
-  dessa conta.
-
 - O currículo publicado no perfil público passa a esconder e-mails, telefones
   com código de país ou com DDD entre parênteses e o parágrafo ou a tabela
   inteira em que aparece a pretensão salarial (como "Pretensão salarial:",
@@ -69,6 +64,15 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   tela inteira com a abertura de carregamento. A lista fica visível, esmaece
   enquanto atualiza e continua respondendo a cliques. A abertura completa
   continua na troca de tela e quando a resposta demora ou a conexão cai.
+
+## [1.21.2] - 2026-09-22T21:14:29.956Z
+
+### Segurança
+
+- Uma conta convidada não enxerga nem altera mais o perfil, o currículo, a
+  visibilidade e o funil do dono. Quem ainda não tem perfil próprio vê acesso
+  negado na área do candidato, inclusive quando o admin assume a identidade
+  dessa conta.
 
 ## [1.21.1] - 2026-09-22T18:19:03.735Z
 
