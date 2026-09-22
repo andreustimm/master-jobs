@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { openModeActive } from "./src/contexts/auth/domain/open-mode.ts";
 import { clientKey, createRateLimiter } from "./src/core/rate-limit.ts";
 
 /**
@@ -55,7 +56,10 @@ const PUBLIC = [
 const publicProfileLimiter = createRateLimiter({ limit: 30, windowMs: 5 * 60_000 });
 
 export function proxy(request: NextRequest) {
-  if (process.env.JHO_AUTH_MODE === "open") {
+  // Mesma regra de `isOpenMode()`, importada do domínio e não da composição:
+  // a borda não pode puxar o banco. Em deployment, `open` é ignorado e a rede
+  // grossa continua valendo — ver `src/contexts/auth/domain/open-mode.ts`.
+  if (openModeActive(process.env)) {
     return NextResponse.next();
   }
 

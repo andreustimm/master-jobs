@@ -44,6 +44,32 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 - Operações: conexão restrita de produção configurada e validada antes do deploy; runbook corrigido para TLS, pooler e rotação recuperável. Ativação aguarda promoção humana.
 
+### Segurança
+
+- Inventário de entradas (#197): toda página, Route Handler (por método) e
+  export de módulo `"use server"` — em qualquer forma e nome de arquivo — é
+  descoberto pela semântica do Next e precisa de política ou exceção
+  registrada com justificativa; entrada nova sem classificação e exceção órfã
+  reprovam. `logoutAction`, `setLocaleAction` e `setAppearanceAction` passam
+  a constar como exceções. `tests/entry-denial.test.ts` chama cada action com
+  sessão ausente, forjada, expirada, revogada e de conta desabilitada, ids da
+  vítima e sessão emprestada, e exige recusa sem escrita, cookie, revalidação,
+  `after()` ou rede.
+- `JHO_AUTH_MODE=open` só vale na máquina local: em deployment (`VERCEL`
+  presente, ou `VERCEL_ENV`/`JHO_ENV` diferente de `local`) o pedido é ignorado, em
+  sessão e em `proxy.ts`, pela mesma função de domínio.
+- O CV publicado em `/p/[slug]` com os dois consentimentos passa por
+  `publicCvText()`: e-mail, telefone com código de país ou DDD entre
+  parênteses e o bloco inteiro (parágrafo, item ou tabela entre linhas em
+  branco; a seção, quando é título) que traz rótulo de pretensão salarial ou
+  palavra de remuneração perto de um valor são retirados. Detecção por padrão, com limite declarado e testado.
+- `/recruiter/[candidateId]` autoriza a leitura por `requirePage("candidate:read")`
+  depois do vínculo, em vez de decidir fora da política.
+- Teste de concorrência: dois resgates simultâneos do mesmo link de
+  recuperação trocam a senha uma vez só.
+
+### Alterado
+
 - O overlay opaco de navegação passa a ser só da troca de rota (#220). Filtro,
   ordem, página e densidade em `/jobs` (mesmo `pathname`) viram transição
   suave: `NavigationTransition.soft`, decidido em `transitionStore.begin` por
