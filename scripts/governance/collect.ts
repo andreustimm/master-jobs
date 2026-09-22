@@ -40,7 +40,9 @@ function restoreHistory(directory: string) {
       timeout: 30_000, maxBuffer: 16 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"],
     }));
     // Ler apenas o membro esperado, sem extrair caminhos do arquivo remoto.
-    const text = execFileSync("unzip", ["-p", archive, "history.json"], { encoding: "utf8", timeout: 10_000, maxBuffer: 16 * 1024 * 1024 });
+    const text = execFileSync("unzip", ["-p", archive, "history.json"], {
+      encoding: "utf8", timeout: 10_000, maxBuffer: 16 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"],
+    });
     const history = historySchema.parse(JSON.parse(text));
     writeFileSync(join(directory, "history.json"), JSON.stringify(history));
   } finally { rmSync(archive, { force: true }); }

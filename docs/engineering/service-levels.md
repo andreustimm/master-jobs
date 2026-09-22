@@ -20,7 +20,7 @@ A janela móvel é de **30 dias**, incluindo noites, fins de semana e manutenç�
 |---|---|---|---|
 | Disponibilidade pública observada | **99,5%** dos ciclos bons | Uma sonda a cada 10 min; ciclo bom exige login 200 com marcadores da aplicação, `/jobs` redirecionando para login e perfil inexistente 404 | Workflow `Governança em produção`, após promoção para main |
 | Latência pública do login | **95% em até 3 s**, p95 informado | GET completo a `/login` a partir do runner; falhas/timeouts também são eventos ruins | Mesma sonda; inclui acesso ao banco, rede e cold starts |
-| Latência das jornadas `/jobs`, `/` e `/searches` | **95% em até 2 s**, por rota | Duração de servidor de todas as requisições elegíveis, incluindo falhas; mínimo de 100 amostras por rota | **Sem dados suficientes**; depende da tarefa 18 e de coleta sem viés |
+| Latência das jornadas `/jobs`, `/` e `/searches` | **95% em até 2 s**, por rota | Duração de servidor de todas as requisições elegíveis, incluindo falhas; mínimo de 100 amostras por rota | **Sem dados suficientes**; depende do tracing do Sentry ([#219](https://github.com/andreustimm/master-jobs/issues/219)) e de coleta sem viés |
 | Atualização do acervo | **95% das fontes elegíveis com sucesso nas últimas 30 h** | Fontes habilitadas e permitidas em produção; inclui falhas temporárias, exclui somente pausa deliberada | Depende da telemetria B-11; workflow verde sozinho não prova frescor de cada fonte |
 
 SLI é a medição; SLO é a meta. Um SLA acrescentaria um compromisso externo,
@@ -39,7 +39,9 @@ completa e cobertura de pelo menos **95% dos 4.320 slots esperados**. Antes diss
 mostra `sem dados` ou `dados insuficientes`. Execuções manuais não aumentam a
 cobertura; retries no mesmo slot não diluem falhas. Uma falha prevalece sobre
 um sucesso no mesmo slot, por rota, e a maior duração é preservada. O p95 usa nearest rank; medianas pares usam a média
-dos dois valores centrais.
+dos dois valores centrais. Os slots começam no minuto do cron (:07, :17, …,
+`slotOffsetMinutes` em `POLICY`), para que um atraso de poucos minutos do
+agendador não empurre a execução para o slot seguinte.
 
 ## Orçamento de erros e decisão sobre entregas
 
@@ -83,7 +85,8 @@ operação, contadas **após a ciência do responsável**, e não garantias exte
 Registrar início observado, detecção, ciência e restauração separadamente em
 [`governance-ledger.json`](governance-ledger.json), com link para evidência e
 severidade. `cause` distingue mudança, outra causa e causa ainda desconhecida;
-esta última impede afirmar taxa de falha de mudanças. `restoredAt: null` significa incidente aberto. A restauração precisa
+esta última impede afirmar taxa de falha de mudanças, taxa de retrabalho e
+mediana de recuperação enquanto o incidente tocar a janela. `restoredAt: null` significa incidente aberto. A restauração precisa
 ser confirmada pela jornada afetada, e não apenas por um deploy pronto.
 Dados de usuário, tokens, URLs com segredo e conteúdo de candidaturas não entram
 no ledger público. Canários sintéticos não contam como incidentes do produto.
@@ -186,13 +189,16 @@ Para inspecionar ou recuperar uma cópia ainda disponível:
 ```bash
 rtk gh run list --workflow governanca.yml --branch main --limit 10
 # Substituir <run-id> por uma execução que tenha publicado o artefato.
-rtk gh run download <run-id> --name governanca-producao --dir /tmp/master-jobs-governance-recovery
+rtk gh run download <run-id> --name governanca-producao --dir /tmp/master-jobs-governance-original
+cp -R /tmp/master-jobs-governance-original /tmp/master-jobs-governance-recovery
 rtk pnpm governance:collect --out /tmp/master-jobs-governance-recovery
 ```
 
-O último comando valida a cópia e acrescenta apenas uma sonda manual: ela não
-preenche slots que faltaram. Preserve `history.json` junto do relatório ao
-arquivar a evidência mensal. A cópia local não é republicada automaticamente
+O coletor reescreve o `history.json` do diretório `--out`: descarta sondas com
+mais de 31 dias e pode renovar os dados de entrega. Por isso ele roda sobre uma
+cópia, e o download original fica intacto como evidência. A execução valida o
+histórico e acrescenta apenas uma sonda manual, que não preenche slots que
+faltaram. Arquive o `history.json` original junto do relatório mensal. A cópia local não é republicada automaticamente
 no Actions. Se o problema era acesso à API ou uma regressão do coletor, corrija
 a causa e execute novamente `Governança em produção` em main; a restauração
 normal retoma do artefato válido e mantém os intervalos sem coleta.
@@ -202,6 +208,12 @@ investigar a série anterior. Sem cópia, há perda real de observações: regis
 o incidente de coleta e mantenha o indicador sem dados. Uma nova série exige
 uma mudança explícita revisada, com data de início e justificativa; o coletor
 não oferece uma flag para apagar o período ruim ou inventar sua recuperação.
+
+O mesmo vale quando a primeira execução falha antes de publicar o artefato:
+sem histórico e com mais de um run registrado, o coletor não consegue provar
+que a série nunca começou e recusa iniciá-la. O monitor fica falhando na
+restauração até uma mudança revisada iniciar a série, e a recusa é deliberada,
+porque um reinício automático nesse ponto também apagaria uma série perdida.
 
 O agendador do GitHub pode atrasar ou descartar execuções; isso aparece como
 perda de cobertura, conforme a [documentação de schedule](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).

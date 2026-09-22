@@ -3,6 +3,10 @@ import { z } from "zod";
 export const POLICY = {
   windowDays: 30,
   intervalMinutes: 10,
+  // Igual ao minuto do cron em governanca.yml (:07, :17, …). Com a grade em :00,
+  // um atraso de ~3 min do agendador empurrava a execução para o slot seguinte
+  // e dois runs caíam juntos, perdendo cobertura sem nenhuma falha real.
+  slotOffsetMinutes: 7,
   minimumCoverage: 0.95,
   availabilityTarget: 0.995,
   latencyTarget: 0.95,
@@ -73,7 +77,7 @@ export function summarize(history: History, ledger: Ledger, now: Date) {
   for (const p of history.probes) {
     const time = Date.parse(p.at);
     if (!p.scheduled || time <= since || time > end) continue;
-    const slot = Math.floor(time / SLOT);
+    const slot = Math.floor((time - POLICY.slotOffsetMinutes * 60_000) / SLOT);
     const old = slots.get(slot);
     if (!old) slots.set(slot, p);
     else slots.set(slot, { ...old, checks: old.checks.map(prior => {

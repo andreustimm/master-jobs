@@ -144,6 +144,16 @@ it("workflow mede só produção e preserva evidência de falha com permissões 
   const artifact = workflow.jobs.medir.steps.find((s: { uses?: string }) => s.uses?.startsWith("actions/upload-artifact@"));
   expect(artifact.if).toBe("always()");
   expect(artifact.with["retention-days"]).toBe(3);
+  // A grade de slots começa no minuto do cron; divergir volta a perder slots por atraso.
+  const minutes = String(workflow.on.schedule[0].cron).split(" ")[0]!.split(",").map(Number);
+  expect(minutes).toEqual(Array.from({ length: 6 }, (_, i) => POLICY.slotOffsetMinutes + i * POLICY.intervalMinutes));
+});
+
+it("atraso de minutos do agendador não junta dois runs no mesmo slot", () => {
+  // Run de :07 atrasado 3,5 min e run de :17 no horário: slots diferentes.
+  const h: History = { schemaVersion: 1, startedAt: since, delivery: null,
+    probes: [sample("2026-10-23T11:40:30Z"), sample("2026-10-23T11:47:40Z")] };
+  expect(summarize(h, ledger, now).availability.total).toBe(2);
 });
 
 

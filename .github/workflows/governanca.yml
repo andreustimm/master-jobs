@@ -3,6 +3,7 @@ name: Governança em produção
 on:
   schedule:
     # Fora do início da hora, quando o agendador do GitHub tem mais atrasos.
+    # Os minutos são a origem da grade de slots (POLICY.slotOffsetMinutes).
     - cron: '7,17,27,37,47,57 * * * *'
   workflow_dispatch:
 
