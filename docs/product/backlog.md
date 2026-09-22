@@ -78,14 +78,15 @@ cadastrar `SENTRY_AUTH_TOKEN`, `SENTRY_ORG` e `SENTRY_PROJECT` no ambiente de
 benefício imediato, no mesmo dia de uma queda. Detalhe em
 [`deploy.md`](../engineering/deploy.md#relato-de-erro).
 
-### O-03 · Alerta de erro do Sentry para um canal 📋
+### O-03 · Alerta de erro do Sentry para um canal ✅
 
-Hoje o Sentry **registra** o erro, mas ninguém é avisado. A queda de 28 minutos
-foi descoberta por uma pessoa abrindo o site; com o Sentry ligado e sem alerta,
-ela seria descoberta do mesmo jeito — só que com um registro bonito no painel.
+Configurado em 22/09/2026: a regra existente do projeto Master Jobs agora
+notifica Andreus por e-mail sobre erros novos, regressões e issues de alta
+prioridade em `production`, com nível mínimo `error` e intervalo de 30 minutos.
 
-Capturar e notificar são coisas diferentes, e só a primeira está pronta. Falta
-definir a regra (taxa de erro, primeira ocorrência) e o canal.
+O canário sintético `MASTER-JOBS-7` foi recebido e disparou a regra; não se
+inspecionou a caixa de entrada. Configuração, evidência e comandos para
+suspender/reativar em [Alertas de produção](../engineering/deploy.md#alertas-de-produção).
 
 ---
 

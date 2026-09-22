@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+- Operações: alerta Sentry configurado para erros novos, regressões e alta prioridade em produção, com e-mail para o responsável e intervalo de 30 minutos; disparo validado com canário sintético.
+
 ## [1.20.6] - 2026-09-22
 
 ### Melhorado
