@@ -617,14 +617,19 @@ try {
     "E2E-005 somente a versão mais nova começa expandida",
     (await releaseButtons.count()) === 100 &&
       (await opened.dialog.locator('[data-testid^="changelog-release-"][aria-expanded="true"]').count()) === 1 &&
+      (await opened.dialog.locator('[id$="-content"] > *').count()) === 1 &&
       (await releaseButtons.first().getAttribute("aria-expanded")) === "true",
   );
 
+  const middleBodyId = await releaseButtons.nth(1).getAttribute("aria-controls");
+  const middleBody = opened.dialog.locator(`#${middleBodyId}`);
   await releaseButtons.nth(1).click();
   await releaseButtons.nth(2).click();
   check(
     "E2E-006 três versões permanecem expandidas",
-    (await opened.dialog.locator('[aria-expanded="true"]').count()) === 3,
+    (await opened.dialog.locator('[aria-expanded="true"]').count()) === 3 &&
+      (await opened.dialog.locator('[id$="-content"] > *').count()) === 3 &&
+      ((await middleBody.textContent()) ?? "").includes("histórico sem horário"),
   );
 
   await releaseButtons.nth(1).click();
@@ -634,7 +639,9 @@ try {
   check(
     "E2E-007 fechar a intermediária preserva as demais sem duplicar",
     statesAfterMiddleCollapse.join(",") === "true,false,true" &&
-      (await opened.dialog.locator('[id$="-content"]').count()) === 100,
+      (await opened.dialog.locator('[id$="-content"]').count()) === 100 &&
+      (await opened.dialog.locator('[id$="-content"] > *').count()) === 2 &&
+      (await middleBody.locator(":scope > *").count()) === 0,
     statesAfterMiddleCollapse.join(","),
   );
 

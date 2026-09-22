@@ -780,9 +780,10 @@ describe("localized repository integration", () => {
   });
 
   it("IT-003 keeps Markdown sources out of the runtime tracing allowlist", async () => {
-    const config = await readFile("next.config.ts", "utf8");
-    expect(config).not.toContain("USER_CHANGELOG");
-    expect(config).toContain("./config/certs/supabase-ca.crt");
+    const { default: config } = await import("../next.config.ts");
+    const includes = Object.values(config.outputFileTracingIncludes ?? {}).flat();
+    expect(includes.join("\n")).not.toContain("USER_CHANGELOG");
+    expect(includes).toContain("./config/certs/supabase-ca.crt");
   });
 
   it("IT-013 preserves date-only history because lightweight tags prove no tag instant", async () => {

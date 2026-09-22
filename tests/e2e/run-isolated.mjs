@@ -204,7 +204,7 @@ try {
       recursive: true,
     }),
   ]);
-  console.log("✓ IT-011 standalone roda com novidades compiladas e sem os Markdown de origem");
+  console.log("✓ IT-011 standalone preparado com novidades compiladas e sem os Markdown de origem");
   await run(process.execPath, [manual ? "tests/e2e/setup-manual.ts" : "tests/e2e/setup.mjs"], { cwd: appRoot, env });
   runtimeLogin = await provisionRuntimeLogin(testDatabase.url);
   const runtimeEnv = { ...env, DATABASE_URL: runtimeLogin.url };

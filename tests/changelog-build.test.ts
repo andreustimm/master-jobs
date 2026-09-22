@@ -6,7 +6,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ChangelogModal } from "../app/changelog-modal.tsx";
+import { Footer } from "../app/footer.tsx";
 import { compileChangelog, generateChangelogs } from "../scripts/build-changelog.ts";
+import { translator } from "../src/core/i18n/index.ts";
 
 const notes = (body: string) => `# Notes
 
@@ -85,6 +87,21 @@ describe("build-time release history", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("keeps the version without a changelog trigger when the compiled history is empty", () => {
+    const releases = compileChangelog("# Notes\n\n## [Unreleased]\n", "en").releases;
+    const html = renderToStaticMarkup(createElement(Footer, {
+      versao: "2.0.0",
+      locale: "en",
+      t: translator("en").t,
+      signedIn: true,
+      loadReleases: () => releases,
+    }));
+    expect(html).toContain('data-app-version="2.0.0"');
+    expect(html).toContain("Master Jobs v2.0.0");
+    expect(html).not.toContain('data-testid="changelog-open"');
+    expect(html).not.toContain('data-testid="changelog-dialog"');
   });
 
   it("fails generation when an input is missing instead of publishing a partial artifact", async () => {
