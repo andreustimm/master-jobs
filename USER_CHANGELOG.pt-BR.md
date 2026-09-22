@@ -31,18 +31,16 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 - A conexão com o banco foi preparada com permissões limitadas e validada; a ativação ocorrerá no próximo deploy de produção aprovado.
 
+- Mudar filtro, ordem, página ou densidade na tela de Vagas não cobre mais a
+  tela inteira com a abertura de carregamento. A lista fica visível, esmaece
+  enquanto atualiza e continua respondendo a cliques. A abertura completa
+  continua na troca de tela e quando a resposta demora ou a conexão cai.
+
 ## [1.21.1] - 2026-09-22T18:19:03.735Z
 
 - A lista de vagas e seu total são calculados juntos, reduzindo o trabalho das buscas e preservando a ordem e os totais ao trocar de página.
 
 - Os contadores e as opções dos filtros de vagas exigem menos trabalho do sistema, mantendo os mesmos resultados e critérios de agrupamento.
-
-### Corrigido
-
-- Mudar filtro, ordem, página ou densidade na tela de Vagas não cobre mais a
-  tela inteira com a abertura de carregamento. A lista fica visível, esmaece
-  enquanto atualiza e continua respondendo a cliques. A abertura completa
-  continua na troca de tela e quando a resposta demora ou a conexão cai.
 
 ## [1.21.0] - 2026-09-22T18:02:40.049Z
 
