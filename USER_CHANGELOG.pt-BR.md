@@ -31,6 +31,17 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 - A conexão com o banco foi preparada com permissões limitadas e validada; a ativação ocorrerá no próximo deploy de produção aprovado.
 
+### Segurança
+
+- O currículo publicado no perfil público passa a esconder e-mails, telefones
+  com código de país ou com DDD entre parênteses e o parágrafo ou a tabela
+  inteira em que aparece a pretensão salarial (como "Pretensão salarial:",
+  "Salário atual: R$ …" ou "Salary expectation:"), mesmo quando estão escritos
+  no texto. Um valor escrito sem rótulo nem menção a salário continua
+  aparecendo.
+- O modo sem login, próprio para desenvolvimento, é recusado automaticamente
+  em qualquer ambiente publicado.
+
 ## [1.21.1] - 2026-09-22T18:19:03.735Z
 
 - A lista de vagas e seu total são calculados juntos, reduzindo o trabalho das buscas e preservando a ordem e os totais ao trocar de página.

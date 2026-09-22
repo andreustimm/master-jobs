@@ -31,6 +31,16 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 - The database connection is configured and validated with limited permissions; it takes effect in the next approved production deployment.
 
+### Security
+
+- The CV shown on the public profile now hides email addresses, phone numbers
+  with a country code or a parenthesised area code, and the whole paragraph or
+  table that states a salary expectation (such as "Salary expectation:" or
+  "Current salary: …"), even when they are written in the CV text. An amount
+  written with no label or mention of salary is still shown.
+- The no-login mode meant for development is automatically refused in any
+  published environment.
+
 ## [1.21.1] - 2026-09-22T18:19:03.735Z
 
 - The job list and its total are calculated together, reducing search work while preserving ordering and totals when changing pages.
