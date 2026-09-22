@@ -9,6 +9,7 @@
  * conta porque não há provedor de e-mail configurado seria transformar um
  * detalhe de infraestrutura em bloqueio de produto.
  */
+import { isLocalProcess } from "../domain/open-mode.ts";
 import type { Mailer, MailResult, OutgoingMail } from "../ports-mailer.ts";
 
 const ENDPOINT = "https://api.resend.com/emails";
@@ -101,22 +102,10 @@ export const withheldMailer: Mailer = {
 };
 
 /**
- * Deployment hospedado: o log das funções não é o terminal de quem opera.
- *
- * `preview` entra junto de `production` porque o log de preview é o mesmo
- * painel, e um link de recuperação de staging ainda é credencial de alguém.
- * `development` é o `vercel dev` local, que é terminal de fato.
- */
-function isHostedDeployment(env: NodeJS.ProcessEnv): boolean {
-  const target = env.VERCEL_ENV?.trim();
-  return target === "production" || target === "preview";
-}
-
-/**
  * O mailer configurado; sem configuração, o de terminal ou o que omite.
  *
  * O terminal só é aceitável onde o log é a tela de quem opera: sem chave
- * nenhuma, fora de deployment hospedado. Chave presente com remetente faltando
+ * nenhuma, num processo local. Chave presente com remetente faltando
  * é intenção de enviar pela metade — imprimir o link ali seria justamente o
  * vazamento que a chave veio evitar.
  *
@@ -128,6 +117,10 @@ export function configuredMailer(env = process.env): Mailer {
   const key = env.RESEND_API_KEY?.trim();
   const from = env.RESEND_FROM?.trim();
   if (key && from) return resendMailer(key, from);
-  if (key || isHostedDeployment(env)) return withheldMailer;
+  // Lista de permissão: o terminal só vale onde o processo se declara local
+  // ou não se declara deployment nenhum (`isLocalProcess`, a mesma regra do
+  // modo aberto). Produção, preview, `JHO_ENV` desconhecido ou `VERCEL=1`
+  // omitem o corpo — valor inventado depois cai no lado seguro.
+  if (key || !isLocalProcess(env)) return withheldMailer;
   return consoleMailer;
 }

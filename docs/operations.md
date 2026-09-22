@@ -530,7 +530,8 @@ sqlite3 data/jobs.db "
 
 Sem `RESEND_API_KEY` e `RESEND_FROM` no ambiente, a recuperação de senha
 responde normalmente para quem pede, mas **nenhum e-mail sai**. Em produção e
-preview o log das funções mostra só este alerta, sem destinatário nem link:
+qualquer deployment o log das funções mostra só este alerta, sem destinatário
+nem link:
 
 ```
 [auth] ALERTA: e-mail transacional NÃO enviado — RESEND_API_KEY e RESEND_FROM precisam estar configurados neste ambiente. …
@@ -565,7 +566,9 @@ segredos da Vercel; nenhum agente faz estes passos:
    ```
 
    `reset_send_failed` com `resend respondeu 4xx` aponta chave ou domínio;
-   `e-mail não configurado` aponta variável faltando no ambiente.
+   `resend respondeu 5xx` ou mensagem de rede é falha do provedor, e passa
+   repetindo o pedido mais tarde; `e-mail não configurado` aponta variável
+   faltando no ambiente.
 
 ---
 

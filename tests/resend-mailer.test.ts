@@ -64,8 +64,19 @@ describe("configuredMailer", () => {
         configuredMailer({ VERCEL_ENV, RESEND_FROM: "eu@dominio.test" } as unknown as NodeJS.ProcessEnv).name,
       ).toBe("withheld");
     }
-    // `vercel dev` roda na máquina de quem opera: o log é o terminal dele.
-    expect(configuredMailer({ VERCEL_ENV: "development" } as unknown as NodeJS.ProcessEnv).name).toBe("console");
+    // Lista de permissão, a mesma do modo aberto: só `local` ou nenhuma
+    // declaração usam o terminal. `development`, `VERCEL=1` e valor inventado
+    // caem no lado seguro.
+    for (const env of [
+      { VERCEL_ENV: "development" },
+      { VERCEL: "1" },
+      { JHO_ENV: "production" },
+      { JHO_ENV: "staging" },
+      { JHO_ENV: "local", VERCEL_ENV: "production" },
+    ]) {
+      expect(configuredMailer(env as unknown as NodeJS.ProcessEnv).name, JSON.stringify(env)).toBe("withheld");
+    }
+    expect(configuredMailer({ JHO_ENV: "local" } as unknown as NodeJS.ProcessEnv).name).toBe("console");
   });
 
   it("em produção com as duas variáveis, usa o Resend", () => {
