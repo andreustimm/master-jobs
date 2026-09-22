@@ -27,9 +27,32 @@ describe("publicCvText", () => {
 
   it("na mesma linha, sai só a frase do piso", () => {
     expect(publicCvText("Senior AI Software Architect. Piso: 180000 USD/ano.")).toBe("Senior AI Software Architect.");
-    expect(publicCvText("Remoto B2B · Salary floor: 150k · São Paulo")).toBe("Remoto B2B · São Paulo");
+    // Do rótulo ao fim da linha: o que vem depois pode ser o próprio valor.
+    expect(publicCvText("Remoto B2B · Salary floor: 150k · São Paulo")).toBe("Remoto B2B ·");
     // `30.000` não é fim de frase: o valor não sobra depois do corte.
     expect(publicCvText("Pretensão salarial: R$ 30.000 mensais")).toBe("");
+  });
+
+  it("o valor não escapa do rótulo por separador, tabela, abreviação ou quebra de linha", () => {
+    for (const cv of [
+      "| Pretensão salarial | R$ 30.000 |",
+      "Pretensão salarial · R$ 30.000",
+      "Salary expectation approx. 150k USD",
+      "Pretensão salarial aprox. R$ 30.000 mensais",
+      "## Pretensão salarial\n\nR$ 30.000 mensais",
+    ]) {
+      const out = publicCvText(`Experiência\n${cv}\nFim`);
+      expect(out, cv).not.toMatch(/30\.000|150k/);
+      expect(out, cv).toContain("Experiência");
+      expect(out, cv).toContain("Fim");
+    }
+  });
+
+  it("reconhece os rótulos curtos, e não confunde taxa de sucesso com pretensão", () => {
+    for (const cv of ["Pretensão: 30k", "Salário: R$ 30.000", "Salary: 150k", "Rate: 90 USD/h", "- Hourly rate: 90"]) {
+      expect(publicCvText(cv), cv).toBe("");
+    }
+    expect(publicCvText("Success rate: 99% em produção")).toBe("Success rate: 99% em produção");
   });
 
   it("troca todo endereço de e-mail e o cadastrado, mesmo fora do padrão geral", () => {
@@ -42,6 +65,11 @@ describe("publicCvText", () => {
     expect(publicCvText("+55 11 91234-5678")).toBe(REDACTED);
     expect(publicCvText("+1 (415) 555-0100")).toBe(REDACTED);
     expect(publicCvText("(11) 91234-5678")).toBe(REDACTED);
+    // Grupos soltos, como se escreve em vários países.
+    expect(publicCvText("+55 11 9 1234-5678")).toBe(REDACTED);
+    expect(publicCvText("+33 1 23 45 67 89")).toBe(REDACTED);
+    // Poucos dígitos depois do `+` não são telefone.
+    expect(publicCvText("+30% de conversão, +2 anos")).toBe("+30% de conversão, +2 anos");
   });
 
   it("preserva o que é currículo: anos, intervalos e números sem marca de telefone", () => {

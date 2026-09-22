@@ -27,7 +27,7 @@ import { join } from "node:path";
 
 export const ROUTING_ROOTS = ["app"] as const;
 const SOURCE_ROOTS = ["app", "components", "lib", "src"] as const;
-const SOURCE = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
+const SOURCE = /\.(?:ts|tsx|js|jsx|mjs|cjs|mdx)$/;
 
 function walk(dir: string, out: string[] = []): string[] {
   let entries: string[];
@@ -129,7 +129,8 @@ export function exportedBindings(source: string): ExportedBinding[] {
     // Função anônima não tem nome pelo qual achar o corpo: recusa-se.
     found.push({ exported: "default", local: m[1] ?? null });
   }
-  for (const m of code.matchAll(/\bexport\s+default\s+(?!(?:async\s+)?function\b)(\w+)?/g)) {
+  for (const m of code.matchAll(/\bexport\s+default\s+(?!(?:async\s+)?function\b)(?!async\b)(\w+)?/g)) {
+    // `export default async () => …` não tem nome: `local` nulo, e recusa.
     found.push({ exported: "default", local: m[1] ?? null });
   }
   for (const m of code.matchAll(/\bexport\s+(?:async\s+)?function\s*\*?\s*(\w+)/g)) {

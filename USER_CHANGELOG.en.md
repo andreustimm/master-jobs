@@ -20,8 +20,10 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ### Security
 
-- The CV shown on the public profile no longer displays email, phone number or
-  the salary expectation sentence, even when they are written in the CV text.
+- The CV shown on the public profile now hides email addresses, phone numbers
+  with a country or area code, and salary expectations marked by a label (such
+  as "Salary expectation:"), even when they are written in the CV text. An
+  amount written without a label is still shown.
 - The no-login mode meant for development is automatically refused in any
   published environment.
 

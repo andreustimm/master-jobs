@@ -576,15 +576,26 @@ describe("authorisation (AUTH-01)", () => {
     },
   };
 
-  /** Route Handlers sem sessão por necessidade, e o que substitui a sessão. */
-  const PUBLIC_ROUTES: Record<string, string> = {
-    "app/login/callback/route.ts": "pré-sessão: o link mágico de uso único é a autorização e cria a sessão",
+  /**
+   * Route Handlers sem sessão por necessidade, e o que substitui a sessão.
+   *
+   * Por MÉTODO, como a rota guardada: um `POST` acrescentado ao cron não
+   * herda a exceção do `GET`.
+   */
+  const PUBLIC_ROUTES: Record<string, { methods: string[]; why: string }> = {
+    "app/login/callback/route.ts": {
+      methods: ["GET"],
+      why: "pré-sessão: o link mágico de uso único é a autorização e cria a sessão",
+    },
     // O cron não tem sessão para validar: a Vercel o chama sem cookie. Ele
     // se autentica com `CRON_SECRET` em `authorization`, comparado em tempo
     // constante — um `===` sobre segredo vaza o prefixo pelo tempo de
     // resposta, e esta rota atende quem quiser chamá-la. Sem o segredo
     // configurado responde 503: fechada por omissão, e não aberta.
-    "app/api/cron/recheck/route.ts": "serviço: `CRON_SECRET` em tempo constante; 503 sem o segredo",
+    "app/api/cron/recheck/route.ts": {
+      methods: ["GET"],
+      why: "serviço: `CRON_SECRET` em tempo constante; 503 sem o segredo",
+    },
   };
   const ROUTE_GUARD = /await (require(?:OwnCandidatePage|Page|Session)|guard(?:OwnCandidate)?)\(/;
 
@@ -642,13 +653,22 @@ describe("authorisation (AUTH-01)", () => {
     expect(ROUTES.length).toBeGreaterThan(0);
     const offenders: string[] = [];
     for (const file of ROUTES) {
-      if (file in PUBLIC_ROUTES) continue;
       const source = read(file);
       const { methods, unknown } = routeMethods(source);
       if (methods.length === 0) offenders.push(`${file}: nenhum método HTTP reconhecido`);
       for (const name of unknown) offenders.push(`${file}: export desconhecido ${name}`);
+      const exempt = PUBLIC_ROUTES[file]?.methods ?? [];
+      const code = stripComments(source);
       for (const method of methods) {
-        const body = stripComments(source).slice(stripComments(source).search(new RegExp(`function\\s+${method}\\s*\\(`)));
+        if (exempt.includes(method)) continue;
+        // `export const GET = …` não tem `function GET(`: sem corpo achado,
+        // reprova em vez de ler o arquivo a partir do último caractere.
+        const start = code.search(new RegExp(`function\\s+${method}\\s*\\(`));
+        if (start === -1) {
+          offenders.push(`${file}: ${method} sem corpo legível`);
+          continue;
+        }
+        const body = code.slice(start);
         const end = body.search(/\n\}/);
         if (!ROUTE_GUARD.test(end === -1 ? body : body.slice(0, end))) offenders.push(`${file}: ${method}`);
       }
@@ -679,8 +699,15 @@ describe("authorisation (AUTH-01)", () => {
       if (!INVENTORY.pages.includes(page)) offenders.push(`${page}: política órfã`);
     }
 
-    for (const route of Object.keys(PUBLIC_ROUTES)) {
-      if (!ROUTES.includes(route)) offenders.push(`${route}: exceção órfã`);
+    for (const [route, { methods }] of Object.entries(PUBLIC_ROUTES)) {
+      if (!ROUTES.includes(route)) {
+        offenders.push(`${route}: exceção órfã`);
+        continue;
+      }
+      const exposed = routeMethods(read(route)).methods;
+      for (const method of methods) {
+        if (!exposed.includes(method)) offenders.push(`${route}: exceção órfã para ${method}`);
+      }
     }
 
     for (const segment of INVENTORY.segments) {
@@ -820,7 +847,7 @@ describe("authorisation (AUTH-01)", () => {
     expect(actions.slice(start, end)).toContain('guardOwnCandidate("application:write")');
   });
 
-  it("rate-limits the one action that cannot be guarded", () => {
+  it("rate-limits sign-in, the pre-session action that cannot be guarded", () => {
     // Sign-in is unauthenticated by necessity, so the protection has to be a
     // limit rather than a permission.
     const login = read("src/contexts/auth/infra/password-login.ts");

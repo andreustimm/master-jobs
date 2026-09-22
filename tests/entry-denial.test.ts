@@ -13,9 +13,21 @@ import {
 } from "../src/contexts/auth/index.ts";
 import { ensureCandidate, saveDocument } from "../src/core/candidate.ts";
 import type { DB } from "../src/core/db/client.ts";
-import { authSession, authUser } from "../src/core/db/schema.ts";
+import {
+  application,
+  authSession,
+  authUser,
+  candidateDocument,
+  candidateSkill,
+  company,
+  job,
+  savedTerm,
+  skill,
+  source,
+} from "../src/core/db/schema.ts";
 import { discoverEntries, exportedBindings, UNGUARDED_BY_DESIGN } from "./support/entry-inventory.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 /**
  * V03-02 / V03-03 — a negação acontece ANTES de qualquer leitura ou efeito.
@@ -181,6 +193,70 @@ async function outcome(action: Action, args: unknown[]): Promise<string> {
   }
 }
 
+/**
+ * O dado da vítima em cada tabela que uma action pode alcançar: currículo,
+ * skill detectada, trilha, termo salvo e candidatura. Sem isto o teste só
+ * afirmaria que o CV ficou intacto, e uma action de busca ou de funil que
+ * deixasse de escopar pela sessão passaria sem ser vista.
+ */
+async function seedVictim(): Promise<Record<string, number>> {
+  const [doc] = await db
+    .select({ id: candidateDocument.id })
+    .from(candidateDocument)
+    .where(eq(candidateDocument.candidateId, victim));
+  const [catalog] = await db
+    .insert(skill)
+    .values({ slug: "kubernetes", canonicalName: "Kubernetes", category: "infra", aliases: [] })
+    .returning({ id: skill.id });
+  const [detected] = await db
+    .insert(candidateSkill)
+    .values({ candidateId: victim, skillId: catalog!.id, status: "detected" })
+    .returning({ id: candidateSkill.id });
+  const trackId = await primaryTrackId(db, victim);
+  const [term] = await db
+    .insert(savedTerm)
+    .values({ candidateId: victim, trackId, term: "Laravel", termKey: "laravel" })
+    .returning({ id: savedTerm.id });
+  await db.insert(source).values({ id: "remotive:~terms", kind: "remotive", handle: "~terms", label: "R", enabled: false });
+  const [employer] = await db.insert(company).values({ slug: "acme", name: "Acme" }).returning({ id: company.id });
+  const [posting] = await db
+    .insert(job)
+    .values({
+      sourceId: "remotive:~terms", companyId: employer!.id, companyName: "Acme", externalId: "1",
+      title: "Staff Engineer", url: "https://example.test/1", fingerprint: "fp1", contentHash: "h1", raw: {},
+    })
+    .returning({ id: job.id });
+  await db.insert(application).values({ candidateId: victim, jobId: posting!.id, status: "interviewing" });
+  return { documentId: doc!.id, candidateSkillId: detected!.id, trackId, termId: term!.id, jobId: posting!.id };
+}
+
+/**
+ * Um formulário por objeto da vítima, porque `id` significa coisas diferentes
+ * em actions diferentes (versão do CV, skill detectada).
+ */
+function victimForms(ids: Record<string, number>): FormData[] {
+  const common = { jobId: ids.jobId!, termId: ids.termId!, trackId: ids.trackId!, versionId: ids.documentId! };
+  return [
+    hostileForm({ ...common, id: ids.documentId!, documentId: ids.documentId! }),
+    hostileForm({ ...common, id: ids.candidateSkillId! }),
+  ];
+}
+
+/** Chama toda action não administrativa com cada forma de argumento hostil. */
+async function sweepCandidateActions(ids: Record<string, number>): Promise<string[]> {
+  const ran: string[] = [];
+  for (const { file, name } of GUARDED) {
+    if (file.startsWith("app/admin/")) continue;
+    const action = await load(file, name);
+    for (const form of victimForms(ids)) {
+      for (const args of argumentShapes(form, ids.documentId!)) {
+        if (/^(executou|NEXT_REDIRECT;)/.test(await outcome(action, args))) ran.push(name);
+      }
+    }
+  }
+  return ran;
+}
+
 let fetchCalls: string[];
 
 beforeEach(async () => {
@@ -268,20 +344,10 @@ describe("V03-02 id forjado não alcança outro candidato", () => {
     // vítima fica como estava, byte a byte.
     const own = await ensureCandidate({ slug: "intruso", name: "Intruso" });
     boundary.token = await login("intruso@example.test", ["candidate"], own);
-    const [doc] = await db.execute<{ id: number }>(
-      sql`select id from production.candidate_document where candidate_id = ${victim} limit 1`,
-    );
-    const form = hostileForm({ id: doc!.id, versionId: doc!.id, documentId: doc!.id });
+    const ids = await seedVictim();
     const before = await victimSnapshot();
 
-    const ran: string[] = [];
-    for (const { file, name } of GUARDED) {
-      if (file.startsWith("app/admin/")) continue;
-      const action = await load(file, name);
-      for (const args of argumentShapes(form, doc!.id)) {
-        if (/^(executou|NEXT_REDIRECT;)/.test(await outcome(action, args))) ran.push(name);
-      }
-    }
+    const ran = await sweepCandidateActions(ids);
 
     expect(await victimSnapshot()).toEqual(before);
     // A sessão é válida, então parte das actions RODOU e gravou — no escopo
@@ -325,20 +391,10 @@ describe("V03-03 sessão emprestada não administra, nem quando o alvo é admin"
     await linkRecruiterToCandidate(recruiter!.id, victim, recruiter!.id);
     boundary.token = recruiterToken;
 
-    const [doc] = await db.execute<{ id: number }>(
-      sql`select id from production.candidate_document where candidate_id = ${victim} limit 1`,
-    );
-    const form = hostileForm({ id: doc!.id, versionId: doc!.id });
+    const ids = await seedVictim();
     const before = await victimSnapshot();
 
-    const ran: string[] = [];
-    for (const { file, name } of GUARDED) {
-      if (file.startsWith("app/admin/")) continue;
-      const action = await load(file, name);
-      for (const args of argumentShapes(form, doc!.id)) {
-        if (/^(executou|NEXT_REDIRECT;)/.test(await outcome(action, args))) ran.push(name);
-      }
-    }
+    const ran = await sweepCandidateActions(ids);
 
     expect(await victimSnapshot()).toEqual(before);
     // O recrutador acompanha; nenhuma escrita de candidato chega a rodar.

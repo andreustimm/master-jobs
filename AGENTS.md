@@ -291,7 +291,8 @@ dashboard Next.js em `localhost:3000`.
 > `JHO_AUTH_MODE=open` — e só vale na máquina local: em deployment o código
 > ignora o pedido (`src/contexts/auth/domain/open-mode.ts`). "Só roda em
 > loopback" protege contra a internet, não contra outro processo, outra conta
-> da máquina, nem contra um bind errado — que já aconteceu aqui. Segurança por omissão é a omissão ser a opção segura.
+> da máquina, nem contra um bind errado — que já aconteceu aqui. Segurança
+> por omissão é a omissão ser a opção segura.
 >
 > Primeiro acesso: `jho auth add-user <email> --role admin,candidate` e
 > `jho auth set-password <email>`. Sem conta cadastrada, `/login` mostra esses
@@ -305,7 +306,8 @@ dashboard Next.js em `localhost:3000`.
 > `candidateId` da própria entrada — id em FormData é pedido, não prova.
 > Entrada sem guarda só existe como exceção registrada, com o que a substitui:
 > `passwordLoginAction` (onde a sessão nasce, protegida por limite de
-> tentativas), recuperação de senha, logout, preferência de interface,
+> tentativas), recuperação de senha, logout, encerrar impersonação
+> (`stopImpersonatingAction`), preferência de interface, as telas `/login`,
 > `/login/callback`, o cron por segredo e `/p/[slug]`. As exceções de action
 > vivem em `tests/support/entry-inventory.ts`, as de página e rota em
 > `tests/architecture.test.ts`, e o inventário descobre toda página,

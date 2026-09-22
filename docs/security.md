@@ -178,15 +178,17 @@ coberta pelos cenários por papel de `pnpm test:e2e`.
 **Modo aberto só na máquina local** — ✅ **22/09 (#197).** A proibição de
 `JHO_AUTH_MODE=open` em produção era só documental; agora é do código.
 `openModeActive()` (`src/contexts/auth/domain/open-mode.ts`) exige o pedido E
-um ambiente local: `JHO_ENV=local` ou nenhuma declaração de deployment
-(`JHO_ENV`, `VERCEL_ENV`, `VERCEL`). Produção, preview, staging, dev e valor
+um ambiente local: nenhum `VERCEL`, e `JHO_ENV` e `VERCEL_ENV` ausentes ou
+iguais a `local` — as duas são conferidas, sem precedência. Produção, preview, staging, dev e valor
 desconhecido ignoram o pedido e continuam exigindo login. Sessão e `proxy.ts`
 chamam a mesma função; nenhum outro arquivo lê a variável.
 
 **O consentimento do CV não publica o que nunca sai** — ✅ **22/09 (#197).**
 `publicProfile()` passa o texto por `publicCvText()` (`src/core/public-cv.ts`):
 e-mail (o cadastrado e qualquer endereço), telefone com código de país ou DDD
-entre parênteses e a frase com rótulo de pretensão salarial são retirados.
+entre parênteses e, a partir da frase com rótulo de pretensão salarial, o
+resto da linha (e a linha seguinte com número, quando o rótulo é um título)
+são retirados.
 Detecção por padrão, com limite escrito no arquivo e travado em teste: valor
 sem rótulo e telefone sem marca passam. Não é sanitização perfeita.
 

@@ -24,8 +24,9 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   `VERCEL_ENV` ou `JHO_ENV` diferente de `local`) o pedido é ignorado, em
   sessão e em `proxy.ts`, pela mesma função de domínio.
 - O CV publicado em `/p/[slug]` com os dois consentimentos passa por
-  `publicCvText()`: e-mail, telefone com código de país/DDD e a frase com
-  rótulo de pretensão salarial são retirados. Detecção por padrão, com limite
+  `publicCvText()`: e-mail, telefone com código de país/DDD e, da frase com
+  rótulo de pretensão salarial, o resto da linha (e a linha seguinte com
+  número, quando o rótulo é título) são retirados. Detecção por padrão, com limite
   declarado e testado.
 - `/recruiter/[candidateId]` autoriza a leitura por `requirePage("candidate:read")`
   depois do vínculo, em vez de decidir fora da política.

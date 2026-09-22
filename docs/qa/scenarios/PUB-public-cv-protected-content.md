@@ -16,8 +16,9 @@ last_report:
 overlaps: PUB-public-profile-mobile-entry
 ---
 
-O candidato salva um currículo que traz no cabeçalho o próprio e-mail e um
-telefone com DDD, e no rodapé "Pretensão salarial: …". Marca o perfil como
+O candidato salva um currículo que traz no cabeçalho o próprio e-mail e o
+telefone no formato `(11) 91234-5678` ou `+55 11 91234-5678`, e no rodapé
+"Pretensão salarial: R$ …". Marca o perfil como
 público e publica o currículo em `/candidate`. Numa sessão anônima, `/p/<slug>`
 mostra o restante do texto; os três trechos aparecem trocados por `[…]` ou
 ausentes. Um valor escrito sem rótulo continua visível — é o limite declarado
