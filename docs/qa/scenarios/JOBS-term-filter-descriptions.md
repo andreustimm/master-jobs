@@ -6,16 +6,18 @@ persona: Andreus em triagem
 journey: J-save-term-search
 expected: A busca encontra a palavra inteira no título, na empresa e na descrição, e não encontra pedaço de palavra
 entry_points: /jobs?q=laravel
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: evidence/2026-09-22-rc-1.22.0/log.txt
+last_report: docs/qa/reports/2026-09-22-release-candidate-1.22.0-full.md
 overlaps: JOBS-work-mode-continuity
 ---
 
 "go" não traz "Google"; "c++" e "node.js" funcionam. Termo inválido na URL
 mostra aviso e a lista sem filtro, em vez de erro. Com poucas vagas aparece
 a oferta de salvar o termo em Buscas.
+
+Full 1.22.0 (2026-09-22): typescript e observabilidade acham vagas só pela descrição; type e java não acham pedaço; empresa (Aurora) e título (architect) acham; termo acentuado e frase funcionam; o termo sobrevive ao reload.

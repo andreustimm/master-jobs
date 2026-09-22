@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: Clicar numa linha agrupada abre o hub com todas as publicações do grupo, e é lá que se escolhe o país
 entry_points: /jobs/<id>/paises
-qa_status: blocked-verify
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report: docs/qa/reports/2026-09-21-execucao-concorrencia.md
+evidence: evidence/2026-09-22-rc-1.22.0/log.txt
+last_report: docs/qa/reports/2026-09-22-release-candidate-1.22.0-full.md
 overlaps: JOBS-group-repeated-countries
 ---
 
@@ -73,3 +73,5 @@ confiável, ou uma pessoa.
 clique no título "Engineering Manager Country Fixture" e confirme que a URL vira
 `/jobs/<id>/paises` e que o hub lista as quatro publicações — Netherlands, France
 e as duas do Brasil.
+
+Full 1.22.0 (2026-09-22): A linha agrupada de Country Fixture Lab leva a /jobs/2/paises, que lista as quatro publicações em três países.
