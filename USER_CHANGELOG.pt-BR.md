@@ -20,6 +20,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ### Corrigido
 
+- Enquanto o envio de e-mail não estiver configurado no servidor, o link de
+  recuperação de senha não é mais gravado no registro técnico do servidor,
+  onde outras pessoas poderiam lê-lo. O registro passa a mostrar só um alerta
+  de que o e-mail não foi enviado.
+
 - O sistema nunca mais faz pedidos automáticos ao LinkedIn, nem quando uma
   vaga veio de um alerta por e-mail ou quando outro site redireciona para lá.
   Essas vagas continuam aparecendo com o link para você abrir, e não são

@@ -895,7 +895,8 @@ a senha nova e só então descobre que o link morreu.
 **A credencial é sua.** O operador cria `RESEND_API_KEY`, verifica o domínio
 do remetente e configura `RESEND_FROM` conforme `.env.example`; nenhum agente
 pode gerar, ler ou versionar esses valores. Sem as duas, o adapter de console
-continua sendo o fallback documentado.
+continua sendo o fallback local; em deployment hospedado o fallback alerta sem
+imprimir o link (#237).
 
 ### E-01 · Arquitetura hexagonal, DDD, monolito modular ✅
 

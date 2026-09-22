@@ -67,7 +67,7 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 | `POSTGRES_URL_NON_POOLING` | Vercel (integração) | usada na migration quando não há a de cima |
 | `DATABASE_CA_CERT` | CI/Vercel | o PEM da CA **ou** o caminho de um arquivo |
 | `SUPABASE_CRAWL_ENABLED` | Actions produção | `true` somente após os gates de quota/retensão |
-| `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela o link vai para o log |
+| `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela ou sem `RESEND_FROM`, nada é enviado e o log só alerta |
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |
 | `CRON_SECRET` | Vercel | protege a rota de cron; a Vercel a envia em `authorization` |
 | `SENTRY_DSN` | Vercel | relato de erro do servidor; **sem ela nada é enviado** ([detalhe](#relato-de-erro)) |
@@ -111,7 +111,18 @@ caminho de um arquivo. O repositório versiona `config/certs/supabase-ca.crt` e 
 bundle. Valor que não é nenhum dos dois falha nomeando a variável.
 
 `RESEND_API_KEY` e `RESEND_FROM` formam um par: se qualquer uma estiver ausente
-ou vazia, `configuredMailer` usa o adapter de console e nenhum e-mail é enviado.
+ou vazia, nenhum e-mail é enviado. Onde o link vai parar depende de quem lê o
+log: sem chave nenhuma, num processo que se declara local (`JHO_ENV=local`) ou
+não se declara deployment nenhum (nem `JHO_ENV`, nem `VERCEL_ENV`, nem
+`VERCEL`), `configuredMailer` usa o adapter de console, que imprime o e-mail
+inteiro no terminal de quem opera. Em qualquer outro caso — deployment na
+Vercel, `JHO_ENV` diferente de `local`, ou chave presente com o remetente
+faltando — usa `withheldMailer`, que registra um alerta **sem** destinatário, assunto nem link —
+o link de recuperação é credencial, e o log das funções é lido por outras
+pessoas. O pedido de recuperação continua respondendo igual para quem pede, e o
+`auth_event` grava `reset_send_failed`. A regra de "processo local" é a mesma
+do modo aberto (`isLocalProcess`, em `src/contexts/auth/domain/open-mode.ts`). Checklist de ativação em
+[`docs/operations.md`](../operations.md#ativar-o-e-mail-de-recuperação-resend).
 O operador cria a chave no Resend, verifica o domínio e cadastra os dois valores
 diretamente no ambiente da Vercel. Os valores reais não devem ser copiados para
 `.env.example`, documentação, logs ou commits.
