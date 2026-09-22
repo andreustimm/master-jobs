@@ -60,7 +60,7 @@ const TRANSPORT_MODULES =
  * Os módulos são lidos ANTES de apagar as strings (o nome do módulo é uma
  * string); o uso de `fetch` é lido DEPOIS, para ignorar comentário e texto.
  */
-export function outboundTransportUses(source: string): string[] {
+function outboundTransportUses(source: string): string[] {
   const uses = new Set<string>();
   const imports = source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:\\])\/\/.*$/gm, "$1");
   const moduleHit = TRANSPORT_MODULES.exec(imports);
