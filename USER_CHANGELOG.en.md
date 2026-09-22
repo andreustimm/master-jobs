@@ -20,6 +20,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ### Fixed
 
+- The system no longer makes automated requests to LinkedIn, not even for jobs
+  that came from an email alert or when another site redirects there. Those
+  jobs still show up with the link for you to open, and they are not closed
+  just because they cannot be checked.
+
 - An application recorded at the exact moment the old-job cleanup ran could
   disappear together with the job. The cleanup now waits and checks again, and
   never deletes a job that has an application.
@@ -43,13 +48,6 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 ## [1.20.9] - 2026-09-22T17:41:44.517Z
 
 - The project now defines internal availability and latency targets, incident tracking, and a report that distinguishes measured results from insufficient data.
-
-### Fixed
-
-- The system no longer makes automated requests to LinkedIn, not even for jobs
-  that came from an email alert or when another site redirects there. Those
-  jobs still show up with the link for you to open, and they are not closed
-  just because they cannot be checked.
 
 ## [1.20.8] - 2026-09-22T17:17:31.926Z
 

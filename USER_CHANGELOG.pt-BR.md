@@ -20,6 +20,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ### Corrigido
 
+- O sistema nunca mais faz pedidos automáticos ao LinkedIn, nem quando uma
+  vaga veio de um alerta por e-mail ou quando outro site redireciona para lá.
+  Essas vagas continuam aparecendo com o link para você abrir, e não são
+  fechadas por não poderem ser verificadas.
+
 - Uma candidatura registrada exatamente enquanto a limpeza de vagas antigas
   rodava podia sumir junto com a vaga. A limpeza agora espera e confere de
   novo, e nunca apaga vaga com candidatura.
@@ -43,13 +48,6 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 ## [1.20.9] - 2026-09-22T17:41:44.517Z
 
 - O projeto passa a ter metas internas de disponibilidade e latência, acompanhamento de incidentes e um relatório que distingue resultados medidos de dados ainda insuficientes.
-
-### Corrigido
-
-- O sistema nunca mais faz pedidos automáticos ao LinkedIn, nem quando uma
-  vaga veio de um alerta por e-mail ou quando outro site redireciona para lá.
-  Essas vagas continuam aparecendo com o link para você abrir, e não são
-  fechadas por não poderem ser verificadas.
 
 ## [1.20.8] - 2026-09-22T17:17:31.926Z
 
