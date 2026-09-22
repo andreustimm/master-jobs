@@ -9,6 +9,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Ferramentas: gestão canônica de tarefas pelo GitHub Project, com CLI remota,
+  claims e recibos assinados, revisão/geração, recuperação de operações,
+  projeções Compozy descartáveis e gate de vínculo de PR. Escritor em main e
+  enforcement dependem do provisionamento e piloto documentados em #191.
+
 ## [1.20.9] - 2026-09-22
 
 - Governança: SLOs internos, orçamento de erros e resposta a incidentes definidos; adicionados sonda pública e relatório de métricas DORA com cobertura explícita e histórico por artefatos.
