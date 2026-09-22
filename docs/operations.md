@@ -273,6 +273,11 @@ digitação de alguém, não ausência observada. A implementação e os critér
 
 ### Dev e staging: somente fixtures
 
+A promoção para staging é vinculada a um SHA com CI aprovado. Retomada manual
+exige `target-sha` e respeita a guarda de migrações; siga o
+[contrato de promoção](engineering/promotion.md) para reutilizar o mesmo alvo
+depois de uma falha.
+
 Os ambientes remotos de dev e staging não devem executar `jobs sync`, download
 de descrição, scraping, recheck, probe ou busca de novas vagas. Eles
 usam uma amostra sintética com as modalidades e estados necessários para UI,

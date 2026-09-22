@@ -1,51 +1,4 @@
-# Promoção automática `dev` → `staging`, e a PR de `staging` → `main`.
-#
-# ## O fluxo inteiro
-#
-#     worktree/tarefa → PR → dev → (automático) → staging → PR → main → tag + volta para dev
-#
-# Este arquivo cobre o meio: quando o CI de `dev` fica verde, `staging` avança
-# por fast-forward e uma PR `staging → main` é **aberta, nunca mesclada**.
-# Produção não sai sem alguém dizer que sim.
-#
-# ## Fast-forward, e não merge
-#
-# `staging` é `dev` alguns commits atrás, e nada nasce em `staging`. Um merge
-# criaria um commit que só existe ali, e a partir dele as duas branches
-# divergiriam para sempre — a próxima promoção deixaria de ser trivial e passaria
-# a exigir resolução de conflito num lugar onde ninguém escreve código. O
-# fast-forward mantém a identidade: o que está em staging é literalmente o que
-# passou no CI de dev.
-#
-# ## O guard de migração, que é fail-closed
-#
-# Se houver diferença em `drizzle/` ou em `src/core/db/schema.ts` entre `staging`
-# e `dev`, a promoção automática PARA e a PR é aberta para revisão humana.
-#
-# Não é zelo abstrato. O deploy da Vercel e a migração do banco disparam do mesmo
-# push e não se conhecem; migração aditiva sobrevive a essa corrida, migração que
-# remove ou renomeia não. Decidir isso é leitura humana, e o custo de errar é uma
-# página de erro em produção — enquanto o custo de parar é alguém apertar um
-# botão.
-#
-# ## Sobre o token e a PR
-#
-# Abrir a PR `staging → main` exige permissão de criar PR. O `GITHUB_TOKEN`
-# padrão **não** tem, por omissão: o repositório precisa do setting
-# **Settings → Actions → General → "Allow GitHub Actions to create and approve
-# pull requests"**, e o `permissions:` abaixo não substitui esse setting — os
-# dois são necessários. Sem nenhum dos dois, `gh pr create` falha com
-# `createPullRequest` negado e a promoção morre após avançar `staging`.
-#
-# Alternativa: definir o segredo `RELEASE_PAT` (um PAT com `contents:write` e
-# `pull_requests:write`). Ele substitui o token padrão no checkout, no push de
-# `staging` e na abertura da PR, e tem uma vantagem extra: push feito com ele
-# dispara os workflows de `staging` e as PRs geradas recebem checks próprios —
-# o token padrão não dispara outros workflows, por trava anti-recursão.
-#
-# Sem o `RELEASE_PAT` **e** sem o setting acima, o fluxo ainda promove
-# `staging` por fast-forward, mas a PR não nasce e o run falha de propósito,
-# para ninguém achar que a PR existe quando não existe.
+# Contrato, retomada e commit de release: docs/engineering/promotion.md.
 name: Promover para staging
 
 on:
@@ -53,263 +6,145 @@ on:
     workflows: ["CI"]
     types: [completed]
     branches: [dev]
-  # Retomada manual: um job morto no meio não pode obrigar a esperar o próximo
-  # push em `dev` para destravar a promoção.
-  #
-  # O guard de migração é fail-closed e não conhece o `workflow_dispatch`:
-  # retomar manualmente com schema alterado voltaria a parar no mesmo lugar —
-  # deadlock. A confirmação abaixo é o carimbo humano de que a migração foi
-  # lida e decidida; sem ela, a retomada manual respeita o guard.
   workflow_dispatch:
     inputs:
+      target-sha:
+        description: SHA completo de dev cujo CI deve autorizar esta promoção.
+        required: true
+        type: string
       confirmar-migracao:
-        description: >-
-          Confirma que a migração entre staging e dev foi revisada por gente e
-          é segura de promover (aditiva, sem remover ou renomear coluna).
+        description: Confirma revisão humana da migração entre staging e o SHA escolhido.
         required: false
         default: false
         type: boolean
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  actions: read
 
-# Sem cancelamento: uma promoção começada precisa terminar. Interrompida entre
-# avançar `staging` e abrir a PR, o estado fica pela metade e ninguém avisa.
+# Também usado pelo retorno main → dev. A validação inteira faz parte da fila.
 concurrency:
-  # `main` e `dev` escrevem a mesma sequência de versões/tags. O grupo é
-  # compartilhado com `sincronizar-apos-main.yml` para o preflight e o push
-  # formarem uma única transação global.
   group: release-versionar
   queue: max
   cancel-in-progress: false
 
 jobs:
-  promover:
-    name: dev → staging
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    # Só promove o que passou. `workflow_run` dispara também quando o CI falha.
+  preparar:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      source: ${{ steps.alvo.outputs.source }}
+      target: ${{ steps.alvo.outputs.target }}
+    steps:
+      # O controlador vem da revisão do workflow, nunca do checkout candidato.
+      - uses: actions/checkout@v7
+        with:
+          path: control
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          path: candidate
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.RELEASE_PAT || github.token }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: control/package.json
+      - name: Fixar entrada, conferir CI e preparar release
+        id: alvo
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+        run: node control/scripts/release/promotion.ts prepare candidate
 
+  validar:
+    needs: preparar
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      target-sha: ${{ needs.preparar.outputs.target }}
+
+  promover:
+    needs: [preparar, validar]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
         with:
-          # Histórico inteiro: `merge-base` e a contagem de commits à frente não
-          # funcionam sobre um clone raso.
+          path: control
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          path: candidate
           fetch-depth: 0
+          fetch-tags: true
           token: ${{ secrets.RELEASE_PAT || github.token }}
-
-      # O versionamento roda um `.ts` com o type stripping nativo do Node 24 —
-      # a mesma sintaxe do restante do projeto. Sem isto, o runner viria com o
-      # Node pré-instalado da imagem, que não tem o flag.
       - uses: actions/setup-node@v7
         with:
-          node-version-file: package.json
-
-      - name: Situação das branches
-        id: situacao
-        run: |
-          git fetch origin dev staging --quiet
-          ADIANTE=$(git rev-list --count origin/staging..origin/dev)
-          ATRAS=$(git rev-list --count origin/dev..origin/staging)
-          echo "adiante=$ADIANTE" >> "$GITHUB_OUTPUT"
-          echo "atras=$ATRAS" >> "$GITHUB_OUTPUT"
-          echo "dev está $ADIANTE commit(s) à frente e $ATRAS atrás de staging."
-
-      - name: Nada a promover
-        if: steps.situacao.outputs.adiante == '0'
-        run: echo "::notice::staging já contém tudo que está em dev."
-
-      # Divergência é o estado que o fast-forward não resolve, e é anormal:
-      # significa que alguém escreveu direto em `staging`. Parar aqui é melhor
-      # que forçar — forçar apagaria esse trabalho sem perguntar.
-      - name: Branches divergiram
-        if: steps.situacao.outputs.atras != '0'
-        run: |
-          echo "::error::staging tem ${{ steps.situacao.outputs.atras }} commit(s) que dev não tem."
-          echo "Fast-forward não resolve isso, e forçar apagaria esse trabalho."
-          echo "Traga staging para dev por PR e rode este workflow de novo."
-          exit 1
-
-      - name: Migração pendente entre staging e dev
-        id: guard
-        if: steps.situacao.outputs.adiante != '0'
-        run: |
-          MUDOU=$(git diff --name-only origin/staging origin/dev -- drizzle/ src/core/db/schema.ts)
-          if [ -z "$MUDOU" ]; then
-            echo "schema=limpo" >> "$GITHUB_OUTPUT"
-            echo "Sem mudança de schema entre staging e dev."
-            exit 0
-          fi
-          echo "$MUDOU"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.confirmar-migracao }}" = "true" ]; then
-            echo "schema=aprovado" >> "$GITHUB_OUTPUT"
-            echo "::notice::Migração confirmada por gente — promoção prossegue."
-            exit 0
-          fi
-          echo "schema=mudou" >> "$GITHUB_OUTPUT"
-          echo "::warning::Mudança de schema entre staging e dev — promoção automática suspensa."
-
-      # Fail-closed: com schema alterado, a promoção automática para e espera
-      # gente. A exceção é o `workflow_dispatch` com `confirmar-migracao=true`:
-      # aí o humano já leu a migração e decidiu que ela é segura — retomar sem
-      # o input respeita o guard, e retomar com ele é a decisão que o guard
-      # existe para exigir.
-      - name: Suspender por causa do schema
-        if: steps.guard.outputs.schema == 'mudou'
-        run: |
-          echo "::error::Promoção automática suspensa: o schema mudou."
-          echo "Migração aditiva sobrevive à corrida entre deploy e migração;"
-          echo "migração que remove ou renomeia não. Quem decide isso é gente."
-          echo "Confira a migração e, se for segura, promova com:"
-          echo "  gh workflow run promover-para-staging.yml --field confirmar-migracao=true"
-          exit 1
-
-      - name: Versionar
-        if: >-
-          steps.situacao.outputs.adiante != '0' &&
-          steps.guard.outputs.schema != 'mudou'
-        id: versao
+          node-version-file: control/package.json
+      - name: Publicar somente o SHA validado
+        id: promocao
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
-        run: |
-          # Decide o bump pelos commits `últimaTag..dev`, carimba o changelog
-          # técnico, as duas edições de usuário e o package.json. É o escritor
-          # único de versão do fluxo — só a promoção, serializada pelo
-          # concurrency, escreve versão. Uma promoção = uma versão.
-          git checkout origin/dev
-          RESULTADO=$(node --experimental-strip-types --no-warnings scripts/release/versionar.ts origin/dev)
-          echo "versionar devolveu: $RESULTADO"
-
-          if [ "$RESULTADO" = "no-release" ]; then
-            echo "versao=no-release" >> "$GITHUB_OUTPUT"
-            echo "::notice::Nada a versionar nesta promoção."
-            exit 0
-          fi
-
-          if [ "$RESULTADO" = "already-released" ]; then
-            VERSAO=$(node -p "require('./package.json').version")
-            echo "versao=$VERSAO" >> "$GITHUB_OUTPUT"
-            echo "::notice::Bump ${VERSAO} já persistido; retomando pela criação da tag."
-            exit 0
-          fi
-
-          VERSAO=$RESULTADO
-          echo "versao=$VERSAO" >> "$GITHUB_OUTPUT"
-
-          # A versão-alvo ainda não pode ter tag. Esta consulta devolve lista
-          # vazia com HTTP 200 quando a ref não existe; erro de rede/autorização
-          # aborta antes de qualquer commit ou push.
-          TAG_SHA=$(node --experimental-strip-types --no-warnings scripts/release/tag-remota.ts "$GITHUB_REPOSITORY" "$VERSAO")
-          node --experimental-strip-types --no-warnings \
-            scripts/release/validar-tag.ts "" "$TAG_SHA" --must-be-missing
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json CHANGELOG.md USER_CHANGELOG.pt-BR.md USER_CHANGELOG.en.md
-          git commit -m "chore(release): ${VERSAO}"
-
-          # O commit do bump precisa estar em `dev` antes do fast-forward —
-          # staging é dev bit a bit, e sem isto a versão ficaria só no staging.
-          git push origin HEAD:dev
-          git fetch origin dev --quiet
-          echo "::notice::Versão ${VERSAO} commitada em dev."
-
-      - name: Validar tag vigente quando não há bump
-        if: steps.versao.outputs.versao == 'no-release'
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
-        run: |
-          # `no-release` permite promover manutenção, mas não torna uma tag
-          # ausente ou deslocada aceitável. A versão vigente continua sendo a
-          # fronteira auditável do último release.
-          VERSAO=$(node -p "require('./package.json').version")
-          SHA=$(node --experimental-strip-types --no-warnings scripts/release/commit-da-versao.ts origin/dev "$VERSAO")
-          TAG_SHA=$(node --experimental-strip-types --no-warnings scripts/release/tag-remota.ts "$GITHUB_REPOSITORY" "$VERSAO")
-          node --experimental-strip-types --no-warnings \
-            scripts/release/validar-tag.ts "$SHA" "$TAG_SHA" --required
-
-      - name: Criar a tag da versão
-        id: tag
-        if: >-
-          steps.versao.outputs.versao != 'no-release' &&
-          steps.versao.outputs.versao != ''
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
-          VERSAO: ${{ steps.versao.outputs.versao }}
-        run: |
-          # Tag por API, não por `git push`: o checkout grava o token como
-          # `http.extraheader`, e o push sairia autenticado pelo token padrão —
-          # ref criada por ele não dispara workflow nenhum. A API cria a tag e
-          # o resto do fluxo a enxerga.
-          # Num retry, `origin/dev` pode já ter avançado além do bump. A tag
-          # pertence ao commit que gravou esta versão, não ao topo acidental.
-          SHA=$(node --experimental-strip-types --no-warnings scripts/release/commit-da-versao.ts origin/dev "$VERSAO")
-          TAG_SHA=$(node --experimental-strip-types --no-warnings scripts/release/tag-remota.ts "$GITHUB_REPOSITORY" "$VERSAO")
-          ESTADO=$(node --experimental-strip-types --no-warnings scripts/release/validar-tag.ts "$SHA" "$TAG_SHA")
-          if [ "$ESTADO" = "current" ]; then
-            echo "::notice::Tag v${VERSAO} já existe."
-          else
-            gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
-              -f ref="refs/tags/v${VERSAO}" -f sha="${SHA}" --silent
-            echo "::notice::Tag v${VERSAO} criada em ${SHA}."
-          fi
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-
-      - name: Avançar staging
-        if: >-
-          steps.situacao.outputs.adiante != '0' &&
-          steps.guard.outputs.schema != 'mudou'
-        env:
-          RELEASE_SHA: ${{ steps.tag.outputs.sha }}
-        run: |
-          # Release usa o SHA tagueado como fronteira. Se dev avançou durante
-          # uma retomada, os commits posteriores ficam para a próxima promoção.
-          node --experimental-strip-types --no-warnings \
-            scripts/release/promover-staging.ts \
-            origin origin/staging origin/dev "$RELEASE_SHA"
+          PROMOTION_TARGET: ${{ needs.preparar.outputs.target }}
+          VALIDATED_SHA: ${{ needs.validar.outputs.validated-sha }}
+        run: node control/scripts/release/promotion.ts complete candidate
 
       - name: Abrir a PR staging → main
-        if: >-
-          steps.situacao.outputs.adiante != '0' &&
-          steps.guard.outputs.schema != 'mudou'
+        if: steps.promocao.outputs.promoted == 'true'
+        working-directory: candidate
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+          SOURCE_SHA: ${{ needs.preparar.outputs.source }}
+          TARGET_SHA: ${{ needs.preparar.outputs.target }}
         run: |
           ABERTA=$(gh pr list --base main --head staging --state open --json number --jq '.[0].number // ""')
+          if [ -z "$ABERTA" ]; then
+            git fetch origin main staging --quiet
+            if [ "$(git rev-list --count origin/main..origin/staging)" = "0" ]; then
+              echo "::notice::staging não tem commit além de main; nenhuma PR de produção a abrir."
+              exit 0
+            fi
+          fi
+          VERSAO=$(git show "$TARGET_SHA:package.json" | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).version')
+          SUBSTITUIDO=$(git show -s --format='%(trailers:key=Promotion-Supersedes,valueonly)' "$TARGET_SHA")
+          cat > "$RUNNER_TEMP/promotion-pr.md" <<EOF
+          Promoção de dev para staging. Esta PR **não** é mesclada por robô.
+
+          <!-- promotion-provenance:start -->
+          Entrada com CI aprovado: $SOURCE_SHA. Alvo validado pelo CI reutilizável: $TARGET_SHA.
+          Execução: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID.
+          Candidato pendente substituído nesta preparação: ${SUBSTITUIDO:-nenhum}.
+          <!-- promotion-provenance:end -->
+
+          Antes de mesclar, confira:
+          - [ ] Changelogs técnico e bilíngues e versão de package.json.
+          - [ ] QA full do release candidate conforme docs/qa/README.md.
+          - [ ] Migração revisada e procedimento de deploy cumprido, se aplicável.
+
+          Após o merge humano, sincronizar-apos-main.yml preserva a tag, cria as GitHub Releases ausentes e devolve main para dev.
+          EOF
           if [ -n "$ABERTA" ]; then
-            echo "::notice::PR #$ABERTA já está aberta; ela recebeu os commits novos."
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$ABERTA" --jq '.body // ""' > "$RUNNER_TEMP/promotion-pr-previous.md"
+            node ../control/scripts/release/promotion-pr.ts "$RUNNER_TEMP/promotion-pr-previous.md" "$RUNNER_TEMP/promotion-pr.md"
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/pulls/$ABERTA" \
+              -f "title=chore(release): Promover staging para produção — v${VERSAO}" \
+              -F "body=@$RUNNER_TEMP/promotion-pr.md" --silent
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$ABERTA/assignees" -f 'assignees[]=andreustimm' --silent
+            echo "::notice::Proveniência da PR #$ABERTA atualizada."
             exit 0
           fi
-
-          # `staging` pode estar idêntica a `main` e a promoção ainda ter tido o
-          # que fazer: depois de uma release, `sincronizar-apos-main` devolve
-          # `main` para `dev`, e o fast-forward acima leva esse commit de volta a
-          # `staging`. Nesse ponto não existe nada para produção, e `gh pr create`
-          # recusa com "No commits between main and staging" — deixando o run
-          # vermelho por um no-op.
-          git fetch origin main staging --quiet
-          if [ "$(git rev-list --count origin/main..origin/staging)" = "0" ]; then
-            echo "::notice::staging não tem commit além de main; nenhuma PR de produção a abrir."
-            exit 0
-          fi
-
-          VERSAO=$(node -p "require('./package.json').version")
           gh pr create --base main --head staging \
             --assignee andreustimm \
             --title "chore(release): Promover staging para produção — v${VERSAO}" \
-            --body "$(printf '%s\n' \
-              "Promoção automática de \`dev\` para \`staging\`. Esta PR **não** é mesclada por robô." \
-              "" \
-              "O que está aqui já passou pelo CI em \`dev\`, e é bit a bit o mesmo código." \
-              "" \
-              "Antes de mesclar, confira:" \
-              "" \
-              "- [ ] O que mudou está descrito em \`USER_CHANGELOG.pt-BR.md\` e \`USER_CHANGELOG.en.md\`, em linguagem de usuário" \
-              "- [ ] \`package.json\` está na versão que a PR anuncia" \
-              "- [ ] Se há migração, ela é aditiva — deploy e migração disparam do mesmo push e não se conhecem" \
-              "" \
-              "Ao mesclar, \`sincronizar-apos-main.yml\` cria a tag e devolve \`main\` para \`dev\`.")"
+            --body-file "$RUNNER_TEMP/promotion-pr.md"
