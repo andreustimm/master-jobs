@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.6] - 2026-09-22T14:44:58.815Z
+
 ### Improved
 
 - Filtering jobs by pay range and sorting by compensation require less work

@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.20.6] - 2026-09-22
+
 ### Melhorado
 
 - A leitura salarial do quadro compartilha a normalização entre o filtro e a

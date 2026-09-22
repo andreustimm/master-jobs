@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.6] - 2026-09-22T14:44:58.815Z
+
 ### Melhorado
 
 - Filtrar vagas por faixa salarial e ordenar por remuneração exigem menos
