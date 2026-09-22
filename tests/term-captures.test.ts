@@ -340,13 +340,26 @@ describe("capture runner", () => {
   it("IT-065 two concurrent drains process each capture exactly once", async () => {
     const port = fixtureHttp({ "remotive.com": { jobs: [] } });
     setHttpPort(port);
-    const open = { adapters: [unbudgeted(remotive)] };
-    for (const key of ["a1", "b2", "c3", "d4", "e5", "f6"]) await request(key, key, open);
+    let release!: () => void;
+    let arrived = 0;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const open = {
+      adapters: [unbudgeted(remotive)],
+      termSource: async (kind: Parameters<typeof ensureTermSource>[0]) => {
+        if (++arrived === 2) release();
+        await gate;
+        return ensureTermSource(kind);
+      },
+    };
+    const keys = ["a1", "b2", "c3", "d4", "e5", "f6"];
+    for (const key of keys) await request(key, key, open);
 
     await Promise.all([runCaptures({ worker: "w1" }, deps(open)), runCaptures({ worker: "w2" }, deps(open))]);
 
     expect(port.calls).toHaveLength(6);
-    expect((await captures()).every((row) => row.status === "succeeded" && row.attempts === 1)).toBe(true);
+    expect(await captures()).toMatchObject(
+      keys.map((termKey) => ({ termKey, status: "succeeded", attempts: 1, reasonCode: null })),
+    );
   });
 
   it("IT-066 the drain stops before a capture that would not fit the budget", async () => {

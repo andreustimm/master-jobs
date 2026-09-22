@@ -120,8 +120,18 @@ desenvolvimento local e num endereço público é o vazamento inteiro.
 
 ## Os três ambientes
 
-Um banco por ambiente, no grupo `master-jobs` em `aws-us-east-1` — a mesma
-região das funções da Vercel (`iad1`), para o round-trip não atravessar o país.
+Um banco por ambiente. O de produção é o projeto Supabase `master-jobs` em
+`sa-east-1` (São Paulo), e as funções da Vercel ficam em `gru1`, a região
+vizinha: cada ida ao banco é um round-trip, e a tela do quadro fazia de dez a
+doze por requisição (hoje de oito a dez, com bem menos esperas em série). Com a
+função em `iad1` (Virgínia), cada uma cruzava o continente.
+
+`tests/function-region.test.ts` trava o par: o host do pooler de produção
+(`production-target.ts`) tem de mapear para a região de `vercel.json`. Trocar
+um sem o outro reprova a suíte. Para conferir em produção, o cabeçalho
+`x-vercel-id` deve dizer `<borda>::gru1::…` — o primeiro trecho é a borda de
+quem pediu, só o segundo é a região da função. `<borda>::iad1::…` é a função no
+lugar errado.
 
 | Branch | Endereço | Banco | Ambiente Vercel |
 |---|---|---|---|
@@ -143,6 +153,26 @@ ambiente compartilhado precisa de uma ADR própria sobre quota, roles,
 `search_path` e migrations; criar schemas no projeto de produção não é um
 atalho seguro.
 
+### Branches que geram deploy
+
+Somente `main`, `dev` e `staging` geram deployments automáticos. A lista de
+permissão fica em `git.deploymentEnabled` no `vercel.json`: `**: false` cobre
+também branches com `/`, e as três exceções explícitas habilitam os ambientes.
+Branches de tarefa e suas PRs executam o CI do GitHub, sem preview próprio.
+`dev` e `staging` continuam no ambiente **Preview** da Vercel; o nome do
+ambiente não significa que toda PR recebe um deployment.
+
+A Vercel [aplica a regra por branch e dá precedência a uma correspondência
+`true`](https://vercel.com/docs/project-configuration/git-configuration#gitdeploymentenabled).
+Uma PR `staging → main` usa o deployment de `staging`; produção continua
+dependendo do merge humano em `main`. A restrição vale para a integração Git;
+na CLI ou API, o operador deve selecionar o ambiente explicitamente.
+
+Essa configuração evita consumir builds com branches de tarefa. Um status
+antigo de limite de deployments não é apagado pela mudança: depois da liberação
+da cota, retome o deployment do commit vigente no ambiente afetado e confira
+o resultado na Vercel e na PR.
+
 ### DNS
 
 Os três são `CNAME` para `cname.vercel-dns.com` na Cloudflare, **sem proxy**
@@ -159,7 +189,7 @@ exigem.
 `jobs-dev` e `jobs-staging` continuam atrás do SSO da Vercel, e isso é
 deliberado — ambiente de teste com dado de teste não precisa de plateia. Para
 abri-los seria preciso desligar a proteção do projeto inteiro, o que tornaria
-pública também toda URL de preview de PR.
+públicas também as URLs diretas dos deployments de teste.
 
 ## A varredura diária
 

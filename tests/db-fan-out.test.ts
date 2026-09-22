@@ -70,6 +70,23 @@ async function peakInFlight(run: () => Promise<unknown>): Promise<number> {
   return peak;
 }
 
+/** O SQL de cada consulta que `run` mandou ao banco, na ordem em que saiu. */
+async function queriesOf(run: () => Promise<unknown>): Promise<string[]> {
+  const client = db.$client as unknown as { unsafe: (...args: unknown[]) => Promise<unknown> };
+  const original = client.unsafe.bind(client);
+  const sent: string[] = [];
+  client.unsafe = (...args: unknown[]) => {
+    sent.push(String(args[0]));
+    return original(...args);
+  };
+  try {
+    await run();
+  } finally {
+    client.unsafe = original;
+  }
+  return sent;
+}
+
 const POOL = 3;
 
 /** Uma conexão fica de fora de propósito — ver o cabeçalho. */
@@ -179,6 +196,31 @@ describe("leque de consultas por tela", () => {
     });
 
     expect(peak).toBeLessThanOrEqual(TETO);
+  });
+
+  it("a tela de vagas lê as trilhas e o câmbio uma vez só", async () => {
+    // Cada ida ao banco é um round-trip, e o prelúdio da tela vinha em série:
+    // trilhas para o seletor, as MESMAS trilhas para o escopo (e de novo para o
+    // cluster) e o câmbio em duas consultas. A régua de pico não vê isso — cada
+    // uma cabe no teto —, então a contagem é o que impede a volta.
+    const candidateId = await seedOwner();
+    await ensurePrimaryTrack(candidateId);
+
+    const queries = await queriesOf(() =>
+      loadJobsView({
+        candidateId,
+        params: { cluster: "architect" },
+        page: 1,
+        pageSize: 25,
+        prefetch: false,
+        schedule: () => {},
+        now: new Date("2026-09-20T12:00:00Z"),
+      }),
+    );
+
+    const from = (table: string) => queries.filter((query) => query.includes(`from "production"."${table}"`)).length;
+    expect(from("target_track")).toBe(1);
+    expect(from("fx_rate")).toBe(1);
   });
 
   it("a tela de buscas não passa do teto", async () => {

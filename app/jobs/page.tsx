@@ -12,7 +12,8 @@ import { candidateScope, requirePage } from "../auth";
 import { getTranslator } from "../i18n";
 import { TransitionLink } from "../transition-link";
 import { loadJobsView } from "./jobs-data";
-import { comVigia } from "../timeout-watch.ts";
+import { comVigia, registrarTempo } from "../timeout-watch.ts";
+import { createStageTimer } from "../../src/core/observability.ts";
 import { ScoreQueueCard, isRecalculating } from "../score-queue-card";
 import { candidateScoreQueueStatus } from "../../src/core/scoring/queue.ts";
 
@@ -62,25 +63,32 @@ export default async function Jobs({
     // `candidateId` pode ser null. Nota de aderência, trilhas e termos salvos
     // são de UMA pessoa: para quem não é candidato eles simplesmente não
     // existem.
-    const session = await requirePage("job:read");
-    const escopo = candidateScope(session);
-    const lido = await loadJobsView({
-      candidateId: escopo,
-      params,
-      page,
-      pageSize,
-      // O roteador pré-carrega links visíveis; isso não é visita.
-      prefetch: (await headers()).get("next-router-prefetch") === "1",
-      schedule: (task) => after(task),
-      now: new Date(),
-    });
-    // Com uma trilha escolhida e a fila pendente, as notas na tela são as
-    // anteriores: dizer isso é o que evita ler a edição como ignorada.
-    const fila =
-      escopo !== null && lido.state.track !== undefined
-        ? await candidateScoreQueueStatus(escopo)
-        : null;
-    return { candidateId: escopo, view: lido, queue: fila };
+    const timer = createStageTimer();
+    // No `finally`: a leitura que falha ou estoura é a que mais precisa da medida.
+    try {
+      const session = await timer.time("auth", () => requirePage("job:read"));
+      const escopo = candidateScope(session);
+      const lido = await loadJobsView({
+        candidateId: escopo,
+        params,
+        page,
+        pageSize,
+        // O roteador pré-carrega links visíveis; isso não é visita.
+        prefetch: (await headers()).get("next-router-prefetch") === "1",
+        schedule: (task) => after(task),
+        now: new Date(),
+        timer,
+      });
+      // Com uma trilha escolhida e a fila pendente, as notas na tela são as
+      // anteriores: dizer isso é o que evita ler a edição como ignorada.
+      const fila =
+        escopo !== null && lido.state.track !== undefined
+          ? await timer.time("queue", () => candidateScoreQueueStatus(escopo))
+          : null;
+      return { candidateId: escopo, view: lido, queue: fila };
+    } finally {
+      registrarTempo(timer.report("/jobs"));
+    }
   });
   const { state, total, offer, broughtBy } = view;
   const showTrack = view.scope?.mode === "best";

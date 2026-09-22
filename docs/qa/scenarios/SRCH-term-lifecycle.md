@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-save-term-search
 expected: Cada ação muda o termo na tela e sobrevive à recarga; excluir não remove nenhuma vaga do acervo
 entry_points: /searches
-qa_status: untested
+qa_status: blocked-verify
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-saved-term-reaches-new-jobs-baseline-07-apos-apagar.png
+last_report: docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
 overlaps: SRCH-new-jobs-count
 ---
 

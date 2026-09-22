@@ -1,7 +1,7 @@
 # BUG-20260919-mobile-searches-overflow: no celular, Buscas corta os cartões e os campos dão zoom na tela inteira
 
 - **Status:** fixed <!-- open | fixed | verified | wont-fix | invalid -->
-- **Impact (user-side):** Usability
+- **Impact (user-side):** Friction <!-- normalizado em 2026-09-21: 'Usability' não é um nível do registro -->
 - **Severity:** Medium · **Priority:** P1
 - **Persona Affected:** Andreus no celular
 - **Journey Step:** J-save-term-search, steps 2–4
@@ -51,3 +51,29 @@ Revisão de todas as telas, logado, 23 rotas (19 autenticadas, 4 públicas) em
 320×700, 375×812, 390×844, 412×915, 667×375 e 812×375: antes, 4 de 138
 combinações falhavam, todas em `/candidate/skills` (evidência a 482px); depois,
 138 de 138 sem rolagem horizontal e sem elemento além da borda.
+
+## Re-found (2026-09-21)
+
+- **Persona:** Andreus no celular · **Charter:** CH-searches-one-hand · **Report:** docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
+- **Reteste:** o sintoma voltou por outro gatilho. Em 375×812 (Chromium emulando iPhone 15), com um termo salvo de 60 letras sem espaço, o cartão desse termo em Buscas fica mais largo que a trilha: o termo corta à direita, APAGAR aparece só pela borda esquerda, e "mover para" e MOVER saem da tela — a persona não alcança nenhum dos três. `scrollWidth` segue igual à janela; a medição de elemento além da borda acusa `term-platforms-3` e seus filhos em 536px numa janela de 360.
+- **Causa provável:** a correção de 19/09 deu `minmax(0,1fr)` ao conteúdo da trilha e quebra ao rótulo do intervalo, mas o nome do termo não quebra palavra longa — a coluna do cartão do termo cresce até a largura dele.
+- **Não reproduzido nesta rodada:** o rótulo longo "de novo a partir de…" (exige uma captura real, desligada no ambiente de paridade) e o zoom do iOS em campo abaixo de 16px (exige Safari em iPhone físico).
+- Evidência: `docs/qa/evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-searches-one-hand-baseline-termo-longo-cortado.png`
+
+## Fix (2026-09-21, Re-found)
+
+- **Root cause:** o cartão do termo é um grid sem `grid-cols-1`, e o nome do termo usava `break-words`, que não reduz a largura mínima do conteúdo — a coluna implícita crescia até a largura de um termo sem espaço. Em Vagas, o chip "trazida pelo termo" herdava `shrink-0` e `whitespace-nowrap` do botão, dentro de um grupo sem `min-w-0`.
+- **Fix commit:** `5e6d6aa`
+- **Regression test:** `tests/e2e/setup.mjs` semeia um termo de 60 letras; a varredura de larguras de `tests/e2e/ui.mjs` reprovou sem a correção ("320px /jobs: filter-by-2 · 320px /jobs?track=all: filter-by-2 · 320px /searches: div, span", 262/263) e passa com ela (263/263).
+
+## Verification (2026-09-21, parcial)
+
+- **Retested:** Andreus no celular, `J-save-term-search`, sessão nova no ambiente de paridade com `5e6d6aa` · **Report:** docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
+- **Result:** em 375 e 320 px, nenhum elemento de `/searches` nem de `/jobs?track=all` passa da borda. O termo de 60 letras quebra em duas linhas, e BUSCAR DE NOVO, PAUSAR, APAGAR, "mover para" e MOVER ficam dentro do cartão; APAGAR, tocado, apaga o termo, e a recarga confirma. Em Vagas, o chip do termo quebra em três linhas a 320 px e mantém 28 px de altura em desktop.
+- **O que a medição cobriu:** o termo longo, nas rotas da varredura (`/searches` e `/jobs?track=all`, 320 a 1024 px) e no reteste em persona — todo elemento de `main`, o link "0 novas · ver vagas" do cartão incluído. **Não coberto:** nome de trilha longo (nenhuma semente tem um; a correção do título da trilha e dos chips de trilha não tem prova) e o toque real (o perfil do celular não emulou toque).
+- **Ainda sem verificação:** o zoom do iOS em campo abaixo de 16 px, que o Chromium não reproduz — exige Safari num iPhone físico. Por isso o bug fica `fixed`, e não `verified`.
+
+## Irmãos ainda não tratados (2026-09-21)
+
+A revisão profunda da rodada achou o mesmo padrão — texto de trilha ou termo sem quebra em qualquer ponto — fora das telas corrigidas, e a varredura de larguras não visita nenhum deles: `app/searches/tracks/[id]/page.tsx:54` (título do editor de trilha), `app/jobs/[id]/page.tsx:178` (nota por trilha no detalhe da vaga), `app/joblist.tsx:57` e `:129` (linhas da lista) e `app/jobs/page.tsx:140` (oferta de salvar o termo). Ficam para a próxima correção, com uma semente de nome de trilha longo.
+

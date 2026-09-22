@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-manage-target-tracks
 expected: Só uma trilha é principal; a arquivada some do seletor de Vagas e volta ao restaurar, com seus termos
 entry_points: /searches; /searches/tracks/<id>; /jobs
-qa_status: untested
-bug_ids:
-fix_status:
+qa_status: blocked-decision
+bug_ids: BUG-20260921-track-selector-two-principal
+fix_status: pending
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-target-track-edit-archive-baseline-seletor-dois-principal.png
+last_report: docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
 overlaps: JOBS-track-selector-fit
 ---
 

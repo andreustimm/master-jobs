@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-manage-target-tracks
 expected: A sugestão preenche o formulário; a trilha salva reaparece com os mesmos títulos, palavras, senioridade e faixas depois da recarga
 entry_points: /searches/tracks/new?term=laravel; /searches/tracks/<id>
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-saved-term-reaches-new-jobs-baseline-05-trilha-criada.png
+last_report: docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
 overlaps: SRCH-track-primary-archive
 ---
 

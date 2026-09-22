@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-save-term-search
 expected: Um termo salvo mostra seis plataformas, incluindo Jobicy, Workable e Hacker News; as vagas delas aparecem em Vagas com empresa nomeada e link para a origem, e a vaga da Jobicy restrita a outro país aparece bloqueada
 entry_points: /searches; /jobs?source=jobicy; /jobs?source=workable; /jobs?source=hackernews; pnpm jho sources probe jobicy --term laravel
-qa_status: untested
+qa_status: blocked-verify
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-saved-term-reaches-new-jobs-baseline-05-trilha-criada.png
+last_report: docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
 overlaps: SRCH-save-term-from-jobs; JOBS-country-only-blocked
 ---
 

@@ -150,7 +150,9 @@ export async function ensureTermSource(kind: FetchableSourceKind): Promise<strin
   await getDb()
     .insert(source)
     .values({ id: term.id, kind, handle: term.handle, label: term.label, enabled: false })
-    .onConflictDoNothing({ target: source.id });
+    // A mesma fonte tem duas identidades únicas: id e (kind, handle).
+    // Ambas precisam arbitrar a primeira criação por capturas concorrentes.
+    .onConflictDoNothing();
   return term.id;
 }
 

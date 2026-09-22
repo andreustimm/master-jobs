@@ -1,7 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "main": true,
+      "dev": true,
+      "staging": true
+    }
+  },
   "framework": "nextjs",
-  "regions": ["iad1"],
+  "regions": ["gru1"],
   "functions": {
     "app/**": {
       "maxDuration": 30

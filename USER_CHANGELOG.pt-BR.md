@@ -18,6 +18,30 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.5] - 2026-09-22T11:47:50.607Z
+
+### Corrigido
+
+- Ao salvar buscas ao mesmo tempo, a primeira captura de vagas de uma
+  plataforma não aparece mais como falha por uma disputa entre as buscas.
+
+## [1.20.4] - 2026-09-21T21:46:10.341Z
+
+### Melhorado
+
+- As telas de Vagas e o painel inicial abrem mais rápido. O sistema passou a
+  trabalhar mais perto de onde ficam os dados, a fazer menos pedidos a eles a cada
+  abertura e a não medir o texto de cada descrição só para saber se ela é muito
+  curta. A lista, os contadores dos filtros e o aviso de "sem descrição" mostram
+  exatamente o mesmo de antes.
+
+### Corrigido
+
+- No celular, um termo salvo muito longo, sem espaço, deixava o cartão dele em
+  Buscas mais largo que a tela e escondia os botões de apagar e de mover. Agora
+  o termo quebra linha e os botões ficam ao alcance. O mesmo termo também
+  passava da borda no filtro "trazida pelo termo" da tela Vagas.
+
 ## [1.20.3] - 2026-09-21T14:32:47.656Z
 
 ### Corrigido

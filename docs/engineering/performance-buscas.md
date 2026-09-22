@@ -1,0 +1,182 @@
+# Latência das buscas — diagnóstico, medição e plano
+
+Levantado em 2026-09-21, a partir de "as buscas estão lentas e não temos nenhuma
+observabilidade". Quatro leituras independentes (consultas e índices, renderização
+e cache, infraestrutura, ferramentas gratuitas) foram cruzadas aqui. **Cada
+afirmação diz se foi MEDIDA ou INFERIDA** — a lentidão era uma sensação sem
+número, e a primeira entrega foi justamente poder medi-la.
+
+> Este documento diz **como é agora**. O que mudou em cada versão está nos
+> changelogs; o que ainda falta está na seção [Plano](#plano).
+
+## Como medir
+
+Três camadas, da mais barata para a mais fiel. Nenhuma substitui a outra.
+
+| Camada | Comando ou sinal | O que responde | Limite |
+|---|---|---|---|
+| **Piso local** | `pnpm perf:jobs` | Quanto o servidor gasta sobre o banco em 6 cenários (padrão, termo, cluster, faixa salarial, ordenar por pagamento, sem agrupar), 10 mil vagas, e **quantas idas ao banco** cada um faz. Hermético: Postgres em Docker, fora do `pnpm check`. `JHO_PERF_OUT=arquivo` guarda o relatório; `JHO_PERF_JOBS=N` muda o corpus | Sem rede. Não mede React nem o navegador |
+| **Produção, por estágio** | Linha JSON `{"perf":"/jobs","totalMs":…,"region":"gru1","stages":{…}}` no log da função | Onde uma requisição real gasta o tempo: `auth`, `prelude`, `board`, `facets`, `tail` (e `cockpit` em `/`) | Sai só se a leitura passa de 1 s, ou sempre com `JHO_PERF_LOG=1`. Log da Vercel na Hobby dura 1 h |
+| **Região** | Cabeçalho `x-vercel-id` da resposta | Onde a função rodou. `<borda>::gru1::…` é o certo (o primeiro trecho é a borda de quem pediu, só o segundo é a função); `<borda>::iad1::…` é a função longe do banco | Só diz a região, não o custo |
+
+A linha de log leva só número, nome de estágio, rota **sem query string** e
+região. Nunca valor de filtro, identidade ou id de candidato — a URL carrega o
+filtro da pessoa, e é por isso que o Sentry roda sem tracing (ver
+[Sentry](#sentry-e-o-que-fica-de-fora)).
+
+**`Server-Timing` não serve aqui.** Server Components não escrevem cabeçalho de
+resposta (a documentação do Next não tem API para isso), e o `proxy.ts` roda
+antes da renderização, sem saber quanto ela vai custar. Vale para rota de API,
+que não é onde a lentidão está.
+
+## Diagnóstico
+
+O tempo vem de três camadas somadas. **Falta de índice não é uma delas**: um scan
+em `job` custa ~2 ms, porque 61% das vagas estão abertas.
+
+### 1. Rede: a função estava longe do banco
+
+- **MEDIDO:** funções da Vercel em `iad1` (Virgínia, `vercel.json`); banco
+  Supabase em `sa-east-1` (São Paulo, `supabase projects list` e o host do
+  pooler em `scripts/migration/production-target.ts`). O `x-vercel-id` de
+  produção era `gru1::iad1::…`: borda em São Paulo, função na Virgínia, banco em
+  São Paulo.
+- **INFERIDO:** cada ida pagava ~110–130 ms de round-trip. Não foi medido, porque
+  só se mede de dentro da função — o log por estágio existe para isso.
+- `docs/engineering/deploy.md` dizia `aws-us-east-1`. Era sobra do Turso.
+
+### 2. Aplicação: cascata, sessão triplicada, nada em cache
+
+- **MEDIDO (`pnpm perf:jobs`):** `/jobs` fazia de 10 a 12 consultas por
+  requisição. Só o prelúdio já eram 5 ou 6 esperas em série: trilhas, as
+  **mesmas** trilhas para o escopo (e de novo para o cluster), termos salvos,
+  câmbio em duas consultas.
+- `currentSession()` rodava 3× por carga (layout, `SessionBadge`, página), cada
+  uma com `getCandidate()` + `resolveSession()` — e `getCandidate()` só serve ao
+  modo aberto, que não existe em produção.
+- Nenhum cache (`unstable_cache`, `'use cache'`, `cache()` do React), nenhum
+  `loading.tsx`, `Suspense` só no observador de navegação.
+- O teto de conexões (`POOL - 1` = 2 por leitura) é o que empurra tudo para série.
+  Ver `docs/operations.md` → Troubleshooting.
+
+### 3. Banco: o mesmo trabalho pesado repetido por requisição
+
+Números do PostgreSQL local com 9 mil vagas, sem rede — o **piso**.
+
+| Achado | Evidência | Estado |
+|---|---|---|
+| 5 a 6 varreduras do acervo por requisição, cada uma com `row_number()` (`canonicalOfGroup`) e descompressão de `description_text` | `repo.ts`: lista, contagem, 3 facetas e `countHiddenByPayRange` | **MEDIDO**, aberto (fase 2) |
+| Busca por termo: regex `~*` sobre título, empresa e descrição, sem índice possível | 160–175 ms por consulta × 5 consultas; só `sum(length(description_text))` leva 116 ms | **MEDIDO**, aberto (fase 2). O padrão `[ -]?` de `term.ts` impede extração de trigramas (INFERIDO) |
+| `length(descricao) >= 200` calculado em todas as linhas antes do `LIMIT`, para a UI só testar `< 200` | 103 ms → 26 ms com `substr` (mesmo resultado em 199/200/201, acento, emoji, vazio, nulo) | **MEDIDO**, corrigido |
+| Faixa salarial: `paySql` interpolada 7× | SQL de 72 KB e 446 parâmetros com 29 moedas; lista 58 → 169 ms | **MEDIDO**, aberto (fase 2) |
+| Estimativa errada do planner em `coalesce(fit,0) >= n` sobre `LEFT JOIN` | estimou 2 linhas, vieram 1.568 | **MEDIDO**, aberto |
+| `/searches`: N+1 de `countNewJobs` (até 20 termos) e `listTracks` duplicado | leitura do código, consultas leves por índice | INFERIDO, custo é round-trip |
+
+Paginação por `OFFSET` **não** é o problema (top-N heapsort de 107 kB), e o
+agrupamento em JS custa 18 ms no pior caso (50 linhas × 42 publicações).
+
+### 4. Percepção: o overlay custa mais que o servidor
+
+`TransitionLink` e `TransitionGetForm` chamam `transitionStore.begin()` sem
+atraso. Toda navegação — inclusive mudar só um chip de filtro — abre um overlay
+opaco de tela cheia: **180 ms mínimos** (`TRANSITION_MIN_MS`) mais **260 ms** de
+esmaecimento (`SPLASH_FADE_MS`), com o shell `inert`. ~440 ms fixos, mesmo se o
+servidor responder na hora. **MEDIDO no código; não cronometrado no navegador.**
+
+## Baseline: antes e depois da primeira entrega
+
+`pnpm perf:jobs`, 10 mil vagas, mediana de 3 execuções, mesma máquina. Coluna
+**idas** = consultas por requisição.
+
+| Cenário | idas antes | idas depois |
+|---|---:|---:|
+| padrão | 11 | 9 |
+| com termo | 11 | 9 |
+| com cluster | 12 | 9 |
+| faixa salarial | 12 | 10 |
+| ordenar por pagamento | 11 | 9 |
+| sem agrupar | 10 | 8 |
+
+O **tempo local não muda** (77–81 ms no padrão antes e depois): sem rede, a ida
+custa quase nada. O ganho está nas idas em **série** — o prelúdio de `/jobs`
+passou de 5–6 esperas para 1 — e cada uma custa um round-trip de verdade em
+produção. Por isso a régua nova está em `tests/db-fan-out.test.ts`, que **conta**
+consultas, e não em tempo.
+
+## Plano
+
+| Fase | Item | Ganho × esforço | Onde |
+|---|---|---|---|
+| 1 ✅ | Função em `gru1`, ao lado do banco (`tests/function-region.test.ts` trava o par) | alto × mínimo | `vercel.json` |
+| 1 ✅ | Sessão resolvida uma vez por requisição; `getCandidate()` só no modo aberto | alto × baixo | `app/auth.ts` |
+| 1 ✅ | `description` mínima sem descomprimir o texto | alto × baixo | `repo.ts` |
+| 1 ✅ | Prelúdio de `/jobs`: trilhas ∥ câmbio, sem `listTracks` duplicado, câmbio em 1 consulta | alto × baixo | `jobs-data.ts` |
+| 1 ✅ | Medição: baseline local e log por estágio | habilita o resto | `perf:jobs`, `registrarTempo` |
+| PR 2 | Overlay só na troca de rota; filtros que se aplicam sozinhos | alto × médio | fase 3 |
+| 2 | Conjunto filtrado calculado uma vez (`count(*) over()`, facetas fundidas) | alto × médio | `repo.ts` |
+| 2 | Busca por termo indexada (`pg_trgm` ou `tsvector`) | altíssimo × médio | migration |
+| 2 | Faixa salarial sem 7 cópias do `CASE` | alto só com faixa | `repo.ts` |
+| 2 | Cache de facetas com TTL — **só depois de medir** | médio × médio | `matching/app` |
+| 3 | `loading.tsx` + `Suspense` em `/jobs` | só rende após o cache de facetas | `app/jobs/` |
+| — | Régua de conexões por **tela**, `comVigia` em `/jobs` e `/` | previne o 504 | testes |
+
+### Decisões
+
+- **Sem `cacheComponents`.** Exigiria tirar `force-dynamic` de todas as páginas e
+  reintroduz o risco de dado velho que `next.config.ts` recusou de propósito. O
+  sync e o score rodam **fora** do processo do Next, então só um TTL curto os
+  cobriria.
+- **Sem Redis agora.** Um usuário, instância reaproveitada pelo Fluid Compute:
+  `React.cache` mais um mapa com TTL no processo bastam. Upstash entra atrás de
+  um `CachePort` **quando** existir o segundo backend (regra 4 e ADR 0007 — porta
+  com uma implementação só é cerimônia) e a medição mostrar hit rate baixo.
+- **Memo do câmbio adiado.** Com a função em `gru1` cada ida custa poucos ms; o
+  ganho é ≤ 1 round-trip. Medir com o log por estágio antes de decidir.
+- **`renderSession` × `currentSession`.** Só renderização usa a sessão em cache.
+  Ação e `guard*` leem sempre fresco: impersonação e troca de senha mudam a
+  sessão **no meio** da requisição, e autorizar com o valor de antes seria a
+  decisão errada.
+
+## Sentry e o que fica de fora
+
+`tracesSampleRate` está em 0 de propósito: uma transação carrega a URL com a
+query string, isto é, os filtros da pessoa. Ligá-lo exige `beforeSendTransaction`
+e `beforeSendSpan` reaproveitando `scrubEvent`/`redactPath`, e um teste de que
+nada sai. Confirmar antes: a quota de spans do plano Developer (o "5M" veio de
+resumo de página de preços) e se `instrumentPostgresJsSql` existe no
+`@sentry/nextjs` (a documentação achada é de Deno e Cloudflare). Não foi feito
+nesta entrega.
+
+Ferramentas gratuitas avaliadas (limites consultados em 2026-09-21; confirme no
+painel antes de depender de um número):
+
+| Ferramenta | Veredito |
+|---|---|
+| `pg_stat_statements` + Supabase Reports | **Usar.** Consultas reais de produção, sem PII fora do Supabase. Reports guardam 24 h no Free |
+| Vercel Observability e runtime logs | Usar o que há. Hobby: logs por 1 h, sem histórico |
+| Sentry (já instalado) | Tracing depois, com a escrubagem acima |
+| Better Stack (uptime) | Barato e sem PII, se quiser alarme externo |
+| OpenTelemetry → Grafana Cloud ou Axiom | Só se o Sentry não bastar; conflita com o OTel do Sentry |
+| Speed Insights, Web Analytics | Baixo valor para um usuário, e gravam a URL. Não habilitados no código |
+| PostHog | Descartar: SDK de browser quebra a CSP `connect-src 'self'` e envia URL |
+| SigNoz Cloud | Descartar: sem plano gratuito permanente |
+| Upstash Redis (500 mil comandos/mês) | Só na condição da seção Decisões |
+
+**Não confirmado:** `pg_trgm` e `unaccent` no seu plano Supabase; se "Query
+Performance" existe no Free; o plano real da Vercel — o Hobby é restrito a uso
+pessoal não comercial, e o repositório tem papel de recrutador.
+
+## Armadilhas que já custaram caro
+
+- **A régua medida por função aprova a tela que estoura.** O teto de conexões é
+  por requisição; quem compõe leituras no corpo do Server Component escapa da
+  régua. Ver `docs/operations.md`.
+- **O número local é piso.** 77 ms no padrão contra um banco sem rede não diz
+  nada sobre produção. O custo real é `estágios em série × RTT`.
+- **Trocar a região sem trocar o teste.** Função em `iad1` com banco em
+  `sa-east-1` não dá erro nenhum: só devolve 1 s a mais em silêncio.
+  `tests/function-region.test.ts` existe por isso.
+- **O overlay tem 28 referências no E2E** e cenários de QA vivos
+  (`docs/qa/reports/2026-08-23-task-02-loading-transicoes.md`,
+  `BUG-20260824-canonical-route-splash`). Mexer nele é trabalho de PR própria, com
+  QA de jornada.

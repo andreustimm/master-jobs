@@ -1,5 +1,5 @@
 import { isOpenMode } from "../src/contexts/auth/index.ts";
-import { currentSession } from "./auth";
+import { renderSession } from "./auth";
 import { getTranslator } from "./i18n";
 import { logoutAction } from "./logout-action";
 import { MutationFeedbackForm } from "./mutation-feedback";
@@ -14,7 +14,7 @@ import { TransitionLink } from "./transition-link";
  */
 export async function SessionBadge() {
   const open = isOpenMode();
-  const session = await currentSession();
+  const session = await renderSession();
   const { t } = await getTranslator();
 
   if (open) {

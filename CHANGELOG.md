@@ -9,8 +9,95 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.20.5] - 2026-09-22
+
+### Corrigido
+
+- Primeiras capturas simultâneas de uma plataforma não falham mais ao criar
+  a fonte `~terms`: o insert trata conflito tanto no id quanto no índice único
+  de plataforma e handle. A regressão exercita dois consumidores com a primeira
+  criação alinhada e confere estado, tentativas e motivo de cada captura.
+
+### Alterado
+
+- Deployments automáticos da Vercel restritos a `main`, `dev` e `staging`.
+  Branches de tarefa continuam no CI do GitHub, sem criar previews e consumir
+  a cota de builds dos ambientes. A lista de permissão fica em `vercel.json`.
+
+## [1.20.4] - 2026-09-21
+
+### Alterado
+
+- **A função da Vercel passa de `iad1` para `gru1`, ao lado do banco.** O banco
+  Supabase está em `sa-east-1` (São Paulo) e as funções rodavam na Virgínia: o
+  `x-vercel-id` de produção era `gru1::iad1::…`, e cada ida ao banco atravessava
+  o continente sem erro nenhum. `docs/engineering/deploy.md` dizia
+  `aws-us-east-1` — sobra do Turso —, e foi corrigido. `PRODUCTION_POOLER_HOST`
+  passa a ser exportado de `production-target.ts` para o teste cruzar as duas
+  regiões.
+- **A sessão é resolvida uma vez por requisição, e só em produção deixa de
+  buscar o candidato padrão.** `currentSession()` rodava 3× por carga (layout,
+  `SessionBadge`, página), cada uma com `getCandidate()` seguido de
+  `resolveSession()`, e o candidato padrão só serve ao modo aberto. `renderSession`
+  (`cache()` do React) atende layout, badge e `requireSession`; `guard*` e as
+  ações continuam em `currentSession`, sem cache, porque impersonação e troca de
+  senha mudam a sessão no meio da requisição.
+- **`/jobs` faz de 8 a 10 consultas, não de 10 a 12, e o prelúdio caiu de 5–6
+  esperas em série para 1.** Trilhas e câmbio saem em paralelo; `trackScope` e
+  `resolveClusterFilter` aceitam a lista de trilhas já lida (antes repetiam
+  `listTracks`); `loadLatest` do câmbio virou uma consulta com subconsulta, em
+  vez de duas em série; os termos salvos viajam ao lado da contagem escondida
+  por faixa. Sempre no máximo duas consultas por estágio, para não furar o teto
+  `POOL - 1`.
+- **A lista de vagas não calcula mais o tamanho da descrição.** `length()` obriga
+  o PostgreSQL a descomprimir o texto inteiro (TOAST) de cada vaga aberta, antes
+  do `LIMIT`, para a interface só perguntar se há menos de 200 caracteres.
+  `substr(descricao, 200, 1) <> ''` responde o mesmo — idêntico em 199, 200 e 201,
+  com acento, emoji, vazio e nulo — e só lê o início: 103 ms → 26 ms na contagem
+  do acervo local. A linha do quadro troca `descriptionLength: number` por
+  `hasFullDescription: boolean`, e o filtro `hasDescription` e a faceta
+  `described` usam o mesmo predicado.
+
+### Adicionado
+
+- **Medição de latência das buscas.** `pnpm perf:jobs` roda 6 cenários de `/jobs`
+  (padrão, termo, cluster, faixa salarial, ordenar por pagamento, sem agrupar)
+  sobre 10 mil vagas num PostgreSQL hermético e diz o tempo e o número de idas ao
+  banco; fica fora do `pnpm check` e `JHO_PERF_OUT` guarda o relatório. Em
+  produção, `/jobs` e `/` registram uma linha JSON com rota (sem query string),
+  total, região e tempo por estágio quando passam de 1 s, ou sempre com
+  `JHO_PERF_LOG=1`. `Server-Timing` não serve a páginas: Server Components não
+  escrevem cabeçalho. A análise está em `docs/engineering/performance-buscas.md`.
+
+### Corrigido
+
+- **No celular, um termo salvo longo cortava os controles do próprio cartão.**
+  Um termo de uma palavra só, no limite de 60 caracteres, deixava o cartão dele
+  em Buscas mais largo que a trilha: APAGAR aparecia só pela borda, e "mover
+  para" e MOVER saíam da tela. O cartão é um grid sem `grid-cols-1`, e o nome do
+  termo usava `break-words`, que não reduz a largura mínima do conteúdo — a
+  coluna implícita crescia até a largura do termo. É o
+  `BUG-20260919-mobile-searches-overflow` de volta por outro gatilho: a correção
+  de 19/09 tinha tratado a trilha e o rótulo do intervalo. A mesma semente
+  mostrou o gêmeo em Vagas, no chip "trazida pelo termo" a 320 px: o chip herda
+  `shrink-0` e `whitespace-nowrap` do botão. Agora o cartão tem coluna mínima
+  0, o termo e o título da trilha quebram em qualquer ponto, e os chips com
+  texto do usuário (trilha e termo) quebram linha. Achado pelo QA de jornada de
+  Buscas; `tests/e2e/setup.mjs` semeia o termo longo, e a varredura de larguras
+  reprovava sem a correção.
+
 ### Testes
 
+- **A região das funções é travada contra a do banco, e o número de consultas de
+  `/jobs` é contado.** `tests/function-region.test.ts` deriva a região do host do
+  pooler de produção e exige que `vercel.json` fixe a vizinha — com `iad1` ele
+  reprova. `tests/db-fan-out.test.ts` ganhou `queriesOf` e afirma que trilhas e
+  câmbio são lidos uma vez cada: a régua de pico de conexões não enxerga
+  round-trip, porque cada consulta cabe no teto e a soma em série ainda é lenta.
+  Ambos foram confirmados contra o código antigo. Também entram
+  `tests/auth-render-session.test.ts`, `tests/stage-timer.test.ts`, as bordas
+  199/200 de descrição em `tests/jobs-board.test.ts` e o caso do câmbio em
+  `tests/fx-context.test.ts` (data mais recente **da base pedida**, e uma consulta).
 - **O tracker de QA passa a ser validado em todo `pnpm check` e no CI.**
   `docs/qa/state.csv` é visão gerada e ignorada pelo git, então o esquema dos
   cenários só era conferido quando alguém rodava `materialize_state.py` de
@@ -23,6 +110,10 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Documentação
 
+- `docs/engineering/performance-buscas.md` registra o diagnóstico de latência das
+  buscas (o que foi medido e o que foi inferido), o baseline antes e depois, o
+  plano por fases e as decisões de não adotar `cacheComponents` nem Redis agora.
+  `docs/operations.md` ganha "A busca está lenta" em Troubleshooting.
 - Duas afirmações da 1.20.3 corrigidas, apontadas pela última rodada da revisão
   profunda da PR #170. Os seis cenários em `retest_status: pending` são dois
   com bug `fixed` nunca re-percorrido e quatro cujo reteste antecede a mudança de
