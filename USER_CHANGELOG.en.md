@@ -18,12 +18,21 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+- The project now defines internal availability and latency targets, incident tracking, and a report that distinguishes measured results from insufficient data.
+
 ### Fixed
 
 - The system no longer makes automated requests to LinkedIn, not even for jobs
   that came from an email alert or when another site redirects there. Those
   jobs still show up with the link for you to open, and they are not closed
   just because they cannot be checked.
+
+## [1.20.8] - 2026-09-22T17:17:31.926Z
+
+### Fixed
+
+- Preparing a new release now keeps the validated revision even when other
+  changes arrive during publication or a retry.
 
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 

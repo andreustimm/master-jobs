@@ -18,12 +18,21 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+- O projeto passa a ter metas internas de disponibilidade e latência, acompanhamento de incidentes e um relatório que distingue resultados medidos de dados ainda insuficientes.
+
 ### Corrigido
 
 - O sistema nunca mais faz pedidos automáticos ao LinkedIn, nem quando uma
   vaga veio de um alerta por e-mail ou quando outro site redireciona para lá.
   Essas vagas continuam aparecendo com o link para você abrir, e não são
   fechadas por não poderem ser verificadas.
+
+## [1.20.8] - 2026-09-22T17:17:31.926Z
+
+### Correção
+
+- A preparação de novas versões mantém a revisão validada mesmo quando outras
+  mudanças chegam durante a publicação ou sua retomada.
 
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 
