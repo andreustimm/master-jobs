@@ -95,7 +95,7 @@ export async function addUser(input: {
     // candidato nasce sem nome e `/candidate` pede um.
     candidateId = !existing && (await isFirstAccount())
       ? await syncCandidateFromProfile()
-      : await claimOwnCandidate({ email, name: initialCandidateName(existing?.fullName) });
+      : await claimOwnCandidate({ email, name: existing?.fullName ?? "" });
   }
 
   await db
