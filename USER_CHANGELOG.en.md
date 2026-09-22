@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-09-22T18:02:40.049Z
+
 ### New
 
 - Preparation for centralized improvement tracking, preserving priorities

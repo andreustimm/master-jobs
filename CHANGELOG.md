@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-09-22
+
 ### Adicionado
 
 - Ferramentas: gestão canônica de tarefas pelo GitHub Project, com CLI remota,

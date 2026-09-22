@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-09-22T18:02:40.049Z
+
 ### Novidade
 
 - Preparação do acompanhamento centralizado das melhorias, para preservar
