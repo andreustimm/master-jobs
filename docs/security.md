@@ -141,7 +141,7 @@ A correção:
   único caminho de candidato para conta nova, na CLI e em `/admin/users`, e
   sempre cria candidato novo: nunca reaproveita slug existente, nem o de conta
   apagada, cujo currículo continua lá. `add-user` só dá o candidato do perfil à
-  conta mais antiga da instalação enquanto `default` não tem conta, nunca troca
+  primeira conta da instalação (tabela vazia), nunca troca
   vínculo gravado e perdeu
   `--candidate`. `seedOwner` recusa um segundo e-mail sobre o candidato do dono.
 - **E2E:** `tests/e2e/database-guard.mjs` recusa o setup se qualquer URL de
@@ -150,7 +150,8 @@ A correção:
   loopback, e `E2E_EMAIL` que não seja `@local.test`.
 - **Estrutural:** a migration `0009` cria o índice único parcial
   `auth_user_candidate_idx`.
-- **Dono do perfil:** `isOwner` passou a ser o candidato padrão mais antigo.
+- **Dono do perfil:** `isOwner` passou a ser o candidato padrão de slug
+  `default` (o de menor id só desempata instalação sem ele).
   `ensureCandidate` marcava `is_default` em todo candidato que criava, e o
   convidado de `/admin/users` era pontuado com o `profile.yaml` do dono.
 
