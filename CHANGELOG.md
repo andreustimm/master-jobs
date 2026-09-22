@@ -9,6 +9,20 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Autoatendimento do candidato (#234): conta de papel candidato sem candidato
+  vê "Criar meu perfil" em `/candidate` (e na navegação) em vez do 403 sem
+  saída. `createProfileAction` passa por `guard("candidate:create")` — ação nova
+  na política, permitida só a papel candidato, sem candidato e com sessão
+  própria (sessão emprestada nega). `createOwnCandidate` cria SEMPRE uma linha
+  nova (`insertOwnCandidate`, `on conflict (slug) do nothing` com sufixo),
+  privada, `is_default = false`, com identidade digitada — nunca do
+  `profile.yaml` — e liga à conta no mesmo commit, com `for update` na linha da
+  conta para que duplo envio não crie dois candidatos. Regras puras de
+  formulário e slug em `src/core/candidate-identity.ts`. A nota "identidade vem
+  de profile/profile.yaml" só aparece para o candidato do dono.
+
 ### Corrigido
 
 - Rede: `assertSafeRemoteUrl` recusa `linkedin.com`, `linkedin.cn`, `lnkd.in`,

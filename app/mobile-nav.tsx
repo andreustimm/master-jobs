@@ -89,12 +89,14 @@ function updateNavigationMode() {
  */
 export function MobileNav({
   hasCandidateScope,
+  canCreateProfile,
   isAdmin,
   isRecruiter,
   rotulo,
   locale,
 }: {
   hasCandidateScope: boolean;
+  canCreateProfile: boolean;
   isAdmin: boolean;
   isRecruiter: boolean;
   rotulo: string;
@@ -188,6 +190,7 @@ export function MobileNav({
         <nav className="grid px-4 py-2" onClick={fechar}>
           <NavLinks
             hasCandidateScope={hasCandidateScope}
+            canCreateProfile={canCreateProfile}
             isAdmin={isAdmin}
             isRecruiter={isRecruiter}
             // Linha inteira clicável, e não só o texto: num menu vertical o alvo

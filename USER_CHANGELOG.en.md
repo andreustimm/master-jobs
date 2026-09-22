@@ -18,6 +18,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Added
+
+- Signing in with a new candidate account now lets you create your own profile
+  under "Create my profile": name, headline, location and, if you want, your CV.
+  The profile starts private and belongs only to you.
+
 ### Fixed
 
 - The system no longer makes automated requests to LinkedIn, not even for jobs

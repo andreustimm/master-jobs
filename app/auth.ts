@@ -4,6 +4,7 @@ import { cache } from "react";
 import {
   authorize,
   AuthorizationError,
+  can,
   candidateScope,
   isOpenMode,
   resolveSession,
@@ -137,4 +138,24 @@ export async function requireOwnCandidatePage(
   if (candidateId === null) forbidden();
   authorize(session, action, { kind: "candidate", candidateId });
   return { session, candidateId };
+}
+
+/**
+ * A sessão que pode criar o próprio candidato, ou `null`.
+ *
+ * Conta de papel candidato sem candidato recebia 403 em `/candidate` e ficava
+ * sem caminho nenhum. `/candidate` pergunta isto ANTES de
+ * `requireOwnCandidatePage`: quem pode criar vê o formulário; quem não pode
+ * (admin, recrutador, sessão emprestada) segue para a guarda de sempre e
+ * recebe o mesmo 403 de antes. A decisão é de `can()`, não desta função.
+ */
+export async function onboardingSession(): Promise<Session | null> {
+  const session = await requireSession();
+  return mayCreateProfile(session) ? session : null;
+}
+
+/** A mesma pergunta, para quem já tem a sessão em mãos (o layout, no link). */
+export function mayCreateProfile(session: Session | null): boolean {
+  if (session === null || candidateScope(session) !== null) return false;
+  return can(session, "candidate:create").allowed;
 }

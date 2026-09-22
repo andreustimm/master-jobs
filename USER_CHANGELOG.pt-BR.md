@@ -18,6 +18,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Adicionado
+
+- Quem entra com uma conta de candidato nova agora pode criar o próprio perfil
+  em "Criar meu perfil": nome, headline, localização e, se quiser, o currículo.
+  O perfil nasce privado e é só seu.
+
 ### Corrigido
 
 - O sistema nunca mais faz pedidos automáticos ao LinkedIn, nem quando uma

@@ -6,9 +6,10 @@
  * conta longe do caminho de autenticação é higiene barata — o arquivo que
  * resolve um token não deveria ter uma função capaz de criar um admin.
  */
-import { asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { getDb } from "../../../core/db/client.ts";
 import { authUser, recruiterCandidate } from "../../../core/db/schema.ts";
+import { insertOwnCandidate } from "../../../core/candidate.ts";
 import type { UserDirectory, UserSummary } from "../ports.ts";
 import type { Role } from "../domain/types.ts";
 
@@ -180,4 +181,50 @@ export async function otherActiveAdmins(exceptUserId: number): Promise<number[]>
   return rows
     .filter((r) => r.id !== exceptUserId && ((r.roles as Role[]) ?? []).includes("admin"))
     .map((r) => r.id);
+}
+
+export type OwnCandidateResult =
+  | { status: "created"; candidateId: number; slug: string }
+  | { status: "existing"; candidateId: number }
+  | { status: "no-account" };
+
+/**
+ * Cria o candidato da própria conta e liga os dois, no mesmo commit.
+ *
+ * O id da conta vem da sessão de quem chama — nunca de formulário — e o
+ * candidato é sempre uma linha NOVA: nenhuma conta passa a apontar para
+ * candidato que já existia.
+ *
+ * **Idempotente sob duplo envio.** `for update` na linha da conta serializa
+ * duas requisições da mesma pessoa: a segunda espera o commit da primeira, lê
+ * `candidate_id` já preenchido e devolve `existing` sem criar outro. Conferir
+ * sem a trava deixaria as duas passarem pela checagem e criarem dois
+ * candidatos, um deles órfão. O `where candidate_id is null` no update é a
+ * segunda linha de defesa, e não substitui a trava.
+ *
+ * A unicidade "um candidato, uma conta" também é garantida pelo índice parcial
+ * do hotfix de 22/09/2026; aqui ela vale mesmo sem ele, porque o candidato
+ * acabou de nascer dentro desta transação e nenhuma outra conta o conhece.
+ */
+export async function createOwnCandidate(
+  userId: number,
+  profile: { name: string; headline: string | null; location: string | null },
+): Promise<OwnCandidateResult> {
+  return getDb().transaction(async (tx) => {
+    const [account] = await tx
+      .select({ candidateId: authUser.candidateId, disabledAt: authUser.disabledAt })
+      .from(authUser)
+      .where(eq(authUser.id, userId))
+      .for("update")
+      .limit(1);
+    if (!account || account.disabledAt !== null) return { status: "no-account" as const };
+    if (account.candidateId !== null) return { status: "existing" as const, candidateId: account.candidateId };
+
+    const created = await insertOwnCandidate(tx, profile);
+    await tx
+      .update(authUser)
+      .set({ candidateId: created.id })
+      .where(and(eq(authUser.id, userId), isNull(authUser.candidateId)));
+    return { status: "created" as const, candidateId: created.id, slug: created.slug };
+  });
 }

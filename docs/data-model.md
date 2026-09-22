@@ -435,6 +435,22 @@ transição comum — a exceção é `archived` sem `applied_at`, que volta a
 somente na primeira entrada em `applied`. O repositório persiste a nova `application` e seu evento na mesma
 transação e usa o status anterior como token de concorrência otimista.
 
+### Candidato criado pela própria conta
+
+Só o candidato do dono nasce do `profile/profile.yaml` (`syncCandidateFromProfile`,
+slug `default`, `is_default = true`). Toda conta de papel candidato sem
+candidato cria o PRÓPRIO em `/candidate` (#234), por `createOwnCandidate`:
+
+- a linha é sempre **nova** — `insertOwnCandidate` usa `on conflict (slug) do
+  nothing` e tenta `nome`, `nome-2`, `nome-3`…; nunca atualiza nem reaproveita
+  candidato existente, ao contrário de `ensureCandidate`;
+- nasce com `visibility = 'private'`, `public_cv = false` e `is_default = false`;
+- o slug vem do nome digitado, sem acento, e nunca é um reservado (`default`,
+  nomes de rota) — ver `src/core/candidate-identity.ts`;
+- candidato e vínculo (`auth_user.candidate_id`) entram no mesmo commit, com
+  `select … for update` na linha da conta: duplo envio concorrente espera o
+  primeiro e devolve o candidato já criado, sem gerar um segundo.
+
 ### Migração do ownership por candidato
 
 A mudança é expand/backfill/contract para não reconstruir tabelas antes de os

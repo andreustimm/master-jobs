@@ -18,6 +18,7 @@ import { application, candidate, candidateDocument, job, jobScore } from "./db/s
 import { loadProfile } from "./profile/load.ts";
 import { isVisibility, type Visibility } from "../contexts/auth/index.ts";
 import { primaryScoreFilter } from "../contexts/matching/index.ts";
+import { slugAttempt, slugBaseFromName } from "./candidate-identity.ts";
 
 /* -------------------------------------------------------------------------- */
 /* Profile                                                                     */
@@ -75,6 +76,55 @@ export async function ensureCandidate(input: {
   const row = inserted[0];
   if (!row) throw new Error("insert returned no row");
   return row.id;
+}
+
+type DbTransaction = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
+
+/** Tentativas de sufixo antes de desistir. Cinquenta homônimos já é anomalia. */
+const MAX_SLUG_ATTEMPTS = 50;
+
+/**
+ * Insere um candidato NOVO, com slug livre derivado do nome.
+ *
+ * Nunca atualiza nem devolve linha existente — ao contrário de
+ * `ensureCandidate`, que reaproveita pelo slug e por isso serve só ao dono.
+ * Reaproveitar aqui seria entregar a uma conta nova o candidato de outra
+ * pessoa, que é a regra que o AGENTS.md proíbe.
+ *
+ * `on conflict do nothing` no índice único do slug, e não "consultar e depois
+ * inserir": duas contas de mesmo nome criando o perfil ao mesmo tempo passariam
+ * juntas pela consulta. O índice decide, e quem perde tenta o próximo sufixo.
+ *
+ * Recebe a transação de quem chama porque o vínculo com a conta precisa entrar
+ * no mesmo commit — candidato criado sem dono é lixo que ninguém alcança.
+ */
+export async function insertOwnCandidate(
+  tx: DbTransaction,
+  input: { name: string; headline: string | null; location: string | null },
+): Promise<{ id: number; slug: string }> {
+  const base = slugBaseFromName(input.name);
+  for (let attempt = 1; attempt <= MAX_SLUG_ATTEMPTS; attempt++) {
+    const slug = slugAttempt(base, attempt);
+    const [row] = await tx
+      .insert(candidate)
+      .values({
+        slug,
+        name: input.name,
+        headline: input.headline,
+        location: input.location,
+        // `isDefault` marca o do dono, e o matching (`isOwner`) pontua quem o
+        // tem com o `profile.yaml` dele — piso salarial incluído.
+        isDefault: false,
+        // Explícito, embora seja o padrão da coluna: esta é a linha em que
+        // "esqueci de configurar" viraria vazamento se o padrão mudasse.
+        visibility: "private",
+        publicCv: false,
+      })
+      .onConflictDoNothing({ target: candidate.slug })
+      .returning({ id: candidate.id, slug: candidate.slug });
+    if (row) return row;
+  }
+  throw new Error("nenhum slug livre para este nome");
 }
 
 /** Seed the candidate row from profile.yaml, so the two never drift on identity. */

@@ -2926,11 +2926,11 @@ try {
       .filter((v) => v.length > 2 && !shared.has(v)),
   );
 
-  const portugueseLeaks = async (paths) => {
+  const portugueseLeaks = async (paths, target = page) => {
     const leaks = [];
     for (const path of paths) {
-      await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
-      const found = await page.evaluate((dictionary) => {
+      await target.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+      const found = await target.evaluate((dictionary) => {
         const known = new Set(dictionary);
         const accented = /[ãõçáéíóúâêôàÃÕÇÁÉÍÓÚÂÊÔÀ]/;
         const out = [];
@@ -2985,6 +2985,57 @@ try {
     leaks.length === 0,
     leaks.slice(0, 8).join(" | "),
   );
+
+  /* ---------- Criar o próprio perfil (#234): conta sem candidato ---------- */
+
+  // A conta tem papel candidato e nenhum candidato. Antes, `/candidate` dava
+  // 403 e ela só via "Vagas". Agora vê o formulário, cria um candidato NOVO e
+  // privado, e passa a ver a área do candidato — com o próprio nome, nunca o
+  // do dono.
+  {
+    const context = await browser.newContext({ viewport: { width: 375, height: 812 } });
+    const onboarding = await context.newPage();
+    trackConsole(onboarding);
+    await context.addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
+    await onboarding.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+    await onboarding.fill('input[name="email"]', "e2e-sem-perfil@local.test");
+    await onboarding.fill('input[name="password"]', E2E_PASSWORD);
+    await onboarding.locator('[data-testid="login-submit"]').click();
+    await onboarding.waitForTimeout(1_500);
+
+    const onboardingLeaks = await portugueseLeaks(["/candidate"], onboarding);
+    const form = onboarding.locator('[data-testid="route-candidate-onboarding"]');
+    const formShown = (await form.count()) === 1;
+    const overflow = await onboarding.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    const navLink = await onboarding.locator('[data-testid="nav-create-profile"]').count();
+    check("conta sem candidato vê Criar meu perfil em /candidate", formShown);
+    check("Criar meu perfil aparece na navegação", navLink >= 1);
+    check("Criar meu perfil cabe em 375px", overflow <= 1, `overflow=${overflow}`);
+    check("Criar meu perfil não vaza português", onboardingLeaks.length === 0, onboardingLeaks.join(" | "));
+
+    await onboarding.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+    await onboarding.fill('[data-testid="profile-name"]', "Onboarding Person E2E");
+    await onboarding.fill('[data-testid="profile-headline"]', "Platform Engineer");
+    await onboarding.locator('[data-testid="create-profile"]').click();
+    await onboarding.locator('[data-testid="route-candidate"]').waitFor({ timeout: 15_000 }).catch(() => undefined);
+    await onboarding.reload({ waitUntil: "networkidle" });
+    const created = (await onboarding.locator('[data-testid="route-candidate"]').count()) === 1;
+    const body = (await onboarding.locator("main").textContent()) ?? "";
+    const privateChecked = await onboarding
+      .locator('input[name="visibility"][value="private"]')
+      .isChecked()
+      .catch(() => false);
+    check("perfil criado sobrevive ao refresh e abre a área do candidato", created);
+    check(
+      "perfil novo usa o nome digitado, nunca a identidade do dono",
+      body.includes("Onboarding Person E2E") && !body.includes("profile/profile.yaml"),
+      body.slice(0, 200),
+    );
+    check("perfil novo nasce privado", privateChecked);
+    await context.close();
+  }
 
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
 

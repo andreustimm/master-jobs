@@ -41,7 +41,12 @@ export { RESET_MINUTES, RESET_MAX_PER_HOUR } from "./app/password-reset.ts";
 export type { Mailer, OutgoingMail, MailResult } from "./ports-mailer.ts";
 export { configuredMailer, consoleMailer, resendMailer } from "./infra/resend-mailer.ts";
 
-import { drizzleUserDirectory, otherActiveAdmins } from "./infra/drizzle-directory.ts";
+import {
+  createOwnCandidate as createOwnCandidateRow,
+  drizzleUserDirectory,
+  otherActiveAdmins,
+  type OwnCandidateResult,
+} from "./infra/drizzle-directory.ts";
 import { hashToken, issueResetToken } from "./infra/drizzle-store.ts";
 import { configuredMailer } from "./infra/resend-mailer.ts";
 import {
@@ -162,6 +167,21 @@ export function linkRecruiterToCandidate(recruiterUserId: number, candidateId: n
 export function removeRecruiterLink(linkId: number) {
   return drizzleUserDirectory.unlinkById(linkId);
 }
+
+/**
+ * Cria o candidato da conta desta sessão.
+ *
+ * Recebe a SESSÃO, não um id: a conta é a de quem pediu, e nenhum chamador
+ * consegue apontar a criação para outra. A autorização (`candidate:create`)
+ * fica com quem chama, no `guard`, antes de qualquer efeito.
+ */
+export function createOwnCandidate(
+  session: Session,
+  profile: { name: string; headline: string | null; location: string | null },
+): Promise<OwnCandidateResult> {
+  return createOwnCandidateRow(session.userId, profile);
+}
+export type { OwnCandidateResult };
 
 /**
  * Admins ativos além deste. Zero significa que ele é o último — e a instalação

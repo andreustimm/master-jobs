@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { guardOwnCandidate } from "../auth";
+import { guard, guardOwnCandidate } from "../auth";
+import { createOwnCandidate } from "../../src/contexts/auth/index.ts";
+import { parseOwnProfile, type OwnProfileError } from "../../src/core/candidate-identity.ts";
 import { setPublicCv, setVisibility } from "../../src/core/candidate.ts";
 import {
   deleteDocument,
@@ -161,4 +163,56 @@ export async function setVisibilityAction(formData: FormData) {
   await setPublicCv(candidateId, result.visibility === "public" && formData.get("publicCv") === "on");
 
   revalidatePath("/candidate");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Criar o próprio perfil                                                      */
+/* -------------------------------------------------------------------------- */
+
+export type CreateProfileResult =
+  | { ok: true }
+  | { ok: false; code: OwnProfileError | "unavailable" };
+
+/**
+ * "Criar meu perfil": a conta sem candidato cria o PRÓPRIO.
+ *
+ * O guarda vem antes de tudo e decide pela sessão — `candidate:create` só
+ * passa para conta de papel candidato, sem candidato, e com sessão própria.
+ * Não há id nenhum no formulário: a conta é a da sessão, e o candidato é uma
+ * linha nova. Identidade vem do que a pessoa escreveu; `profile.yaml` é do
+ * dono e não entra aqui.
+ *
+ * Duplo envio devolve sucesso sem criar o segundo: `createOwnCandidate` trava
+ * a linha da conta, e a segunda requisição encontra o vínculo já feito.
+ */
+export async function createProfileAction(formData: FormData): Promise<CreateProfileResult> {
+  const session = await guard("candidate:create");
+
+  const parsed = parseOwnProfile({
+    name: String(formData.get("name") ?? ""),
+    headline: String(formData.get("headline") ?? ""),
+    location: String(formData.get("location") ?? ""),
+    cv: String(formData.get("cv") ?? ""),
+  });
+  if (!parsed.ok) return parsed;
+
+  const { name, headline, location, cv } = parsed.value;
+  const result = await createOwnCandidate(session, { name, headline, location });
+  if (result.status === "no-account") return { ok: false, code: "unavailable" };
+
+  // Só quem acabou de criar grava o currículo. No duplo envio a segunda
+  // requisição encontra `existing`, e gravar de novo criaria uma versão
+  // idêntica — ou, com texto diferente, trocaria o CV sem a pessoa pedir.
+  if (result.status === "created" && cv !== null) {
+    await saveDocument({
+      candidateId: result.candidateId,
+      kind: "cv",
+      label: `CV ${new Date().toISOString().slice(0, 10)}`,
+      content: cv,
+      format: "text",
+    });
+  }
+
+  revalidatePath("/", "layout");
+  return { ok: true };
 }
