@@ -132,7 +132,9 @@ dashboard Next.js em `localhost:3000`.
 > conta". Token de uso único, uma hora, queimado antes de gravar a senha; e
 > trocar a senha derruba TODAS as sessões, porque quem recupera costuma
 > suspeitar de acesso indevido. Sem `RESEND_API_KEY` o link vai para o terminal
-> — ausência de provedor não bloqueia produto.
+> — ausência de provedor não bloqueia produto — mas só em processo local: em
+> deployment o log é lido por outras pessoas e o link é credencial, então o
+> sistema só alerta, sem imprimir o link (`withheldMailer`).
 
 > **Hash de senha com tamanho errado NEGA acesso.** `verifyPassword` derivava a
 > chave com o comprimento do valor **gravado** em vez da constante `KEYLEN`: um

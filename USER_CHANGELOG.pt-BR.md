@@ -18,13 +18,38 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
-### Adicionado
+### Novidade
 
+- Nova tela Minha conta, no menu: troque o seu nome de exibição e a sua senha
+  sem pedir ao admin. Para trocar a senha é preciso informar a atual; ao
+  trocar, todas as outras sessões da conta são encerradas e você continua
+  conectado. O e-mail continua sendo trocado por um admin.
 - Quem entra com uma conta de candidato nova agora pode criar o próprio perfil
   em "Criar meu perfil": nome, headline, localização e, se quiser, o currículo.
   O perfil nasce privado e é só seu.
 
+### Segurança
+
+- Uma conta convidada não enxerga nem altera mais o perfil, o currículo, a
+  visibilidade e o funil do dono. Quem ainda não tem perfil próprio vê acesso
+  negado na área do candidato, inclusive quando o admin assume a identidade
+  dessa conta.
+
+- O currículo publicado no perfil público passa a esconder e-mails, telefones
+  com código de país ou com DDD entre parênteses e o parágrafo ou a tabela
+  inteira em que aparece a pretensão salarial (como "Pretensão salarial:",
+  "Salário atual: R$ …" ou "Salary expectation:"), mesmo quando estão escritos
+  no texto. Um valor escrito sem rótulo nem menção a salário continua
+  aparecendo.
+- O modo sem login, próprio para desenvolvimento, é recusado automaticamente
+  em qualquer ambiente publicado.
+
 ### Corrigido
+
+- Enquanto o envio de e-mail não estiver configurado no servidor, o link de
+  recuperação de senha não é mais gravado no registro técnico do servidor,
+  onde outras pessoas poderiam lê-lo. O registro passa a mostrar só um alerta
+  de que o e-mail não foi enviado.
 
 - O sistema nunca mais faz pedidos automáticos ao LinkedIn, nem quando uma
   vaga veio de um alerta por e-mail ou quando outro site redireciona para lá.
@@ -36,17 +61,6 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   novo, e nunca apaga vaga com candidatura.
 
 - A conexão com o banco foi preparada com permissões limitadas e validada; a ativação ocorrerá no próximo deploy de produção aprovado.
-
-### Segurança
-
-- O currículo publicado no perfil público passa a esconder e-mails, telefones
-  com código de país ou com DDD entre parênteses e o parágrafo ou a tabela
-  inteira em que aparece a pretensão salarial (como "Pretensão salarial:",
-  "Salário atual: R$ …" ou "Salary expectation:"), mesmo quando estão escritos
-  no texto. Um valor escrito sem rótulo nem menção a salário continua
-  aparecendo.
-- O modo sem login, próprio para desenvolvimento, é recusado automaticamente
-  em qualquer ambiente publicado.
 
 ### Melhorado
 

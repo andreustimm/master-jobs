@@ -1093,7 +1093,18 @@ export const authUser = production.table(
     disabledAt: text("disabled_at"),
     createdAt: text("created_at").notNull().default(now),
   },
-  (t) => [uniqueIndex("auth_user_email_idx").on(t.email)],
+  (t) => [
+    uniqueIndex("auth_user_email_idx").on(t.email),
+    // Um candidato, no máximo uma conta. Duas contas no mesmo candidato leem e
+    // escrevem o currículo, a visibilidade e o funil uma da outra — foi o
+    // vazamento da v1.20.5, em que uma conta semeada pelo e2e apontava para o
+    // candidato do dono. Parcial só para deixar fora do índice as contas sem
+    // candidato (admin, recrutador). A migração 0009 falha se já houver
+    // duplicata: limpe antes (docs/security.md, achado 5).
+    uniqueIndex("auth_user_candidate_idx")
+      .on(t.candidateId)
+      .where(sql`${t.candidateId} is not null`),
+  ],
 );
 
 /**

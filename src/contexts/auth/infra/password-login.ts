@@ -15,12 +15,12 @@
  *  3. **Attempts are limited.** scrypt makes each guess expensive; the limit
  *     makes a sustained campaign impossible.
  */
-import { and, eq, gte, sql } from "drizzle-orm";
-import { linkedCandidatesFor } from "./drizzle-store.ts";
+import { and, eq, gte, isNull, sql } from "drizzle-orm";
+import { linkedCandidatesFor, ownedCandidateId } from "./drizzle-store.ts";
 import { clock } from "../../../core/clock.ts";
 import { getDb } from "../../../core/db/client.ts";
-import { authEvent, authUser } from "../../../core/db/schema.ts";
-import { hashPassword, KdfIndisponivelError, verifyPassword } from "../domain/password.ts";
+import { authEvent, authSession, authUser } from "../../../core/db/schema.ts";
+import { checkPassword, hashPassword, KdfIndisponivelError, verifyPassword } from "../domain/password.ts";
 import type { PasswordResult, PasswordVerifier } from "../ports.ts";
 import type { Role } from "../domain/types.ts";
 
@@ -78,7 +78,7 @@ export async function verifyLogin(email: string, password: string): Promise<Pass
       email: authUser.email,
       fullName: authUser.fullName,
       roles: authUser.roles,
-      candidateId: authUser.candidateId,
+      candidateId: ownedCandidateId,
       passwordHash: authUser.passwordHash,
       disabledAt: authUser.disabledAt,
     })
@@ -171,4 +171,188 @@ export async function setPassword(email: string, password: string): Promise<bool
     at: clock().iso(),
   });
   return true;
+}
+
+/* ------------------------- Trocar a própria senha -------------------------- */
+
+/**
+ * Tentativas de troca por conta, na janela. Contam todas, certas ou erradas:
+ * ninguém troca a senha cinco vezes em quinze minutos de boa-fé.
+ */
+export const MAX_CHANGE_ATTEMPTS = 5;
+
+export type ChangePasswordResult =
+  | { ok: true; email: string }
+  /**
+   * `invalid`: senha atual errada, conta desabilitada ou sumida, ou troca
+   * concorrente — uma resposta só, como no login.
+   * `no_password`: a conta entra só por link; não há senha atual a provar.
+   * `unavailable`: o KDF não rodou, e isso não é veredito sobre a senha.
+   */
+  | { ok: false; reason: "invalid" | "weak" | "rate_limited" | "unavailable" | "no_password" };
+
+async function changeAttemptsSince(userId: number, since: string): Promise<number> {
+  const [row] = await getDb()
+    .select({ n: sql<number>`count(*)` })
+    .from(authEvent)
+    .where(
+      and(
+        eq(authEvent.kind, "password_change_attempt"),
+        eq(authEvent.userId, userId),
+        gte(authEvent.at, since),
+      ),
+    );
+  return Number(row?.n ?? 0);
+}
+
+/**
+ * Troca a senha de uma conta que PROVA a senha atual.
+ *
+ * O `userId` vem da sessão de quem chama, nunca de formulário; esta função não
+ * sabe de sessão e confia nisso. Quatro garantias:
+ *
+ *  1. **A senha atual é exigida.** Uma sessão roubada — cookie copiado, máquina
+ *     destravada — não vira posse permanente da conta sem a senha.
+ *  2. **O limite reserva o slot ANTES de verificar.** A tentativa é gravada e
+ *     só depois contada: N requisições simultâneas enxergam umas às outras, e
+ *     a k-ésima a gravar conta pelo menos k. Contar primeiro e gravar depois
+ *     deixaria todas passarem juntas pelo mesmo número.
+ *  3. **Hash ilegível nega.** A verificação é `verifyPassword`, que nunca
+ *     deriva parâmetro do valor gravado; hash truncado responde `invalid`.
+ *  4. **Todas as sessões da conta caem** — quem troca a senha costuma
+ *     suspeitar de acesso indevido. Quem chama abre uma sessão nova para o
+ *     navegador que pediu, e é assim que "as outras" caem e esta continua.
+ *
+ * A escrita confere o hash lido (`WHERE password_hash = <lido>`): duas trocas
+ * concorrentes com a mesma senha atual não gravam as duas.
+ */
+export async function changeOwnPassword(
+  userId: number,
+  currentPassword: string,
+  newPassword: string,
+): Promise<ChangePasswordResult> {
+  // Senha nova fraca não consome tentativa: não diz nada sobre a atual, e um
+  // erro de digitação na nova não pode bloquear a conta.
+  if (!checkPassword(newPassword).ok) return { ok: false, reason: "weak" };
+
+  const db = getDb();
+  const now = clock().iso();
+  await db.insert(authEvent).values({ kind: "password_change_attempt", userId, at: now });
+  const since = new Date(clock().now() - WINDOW_MINUTES * 60_000).toISOString();
+  if ((await changeAttemptsSince(userId, since)) > MAX_CHANGE_ATTEMPTS) {
+    await db.insert(authEvent).values({
+      kind: "password_change_failed",
+      userId,
+      detail: "bloqueado por tentativas",
+      at: clock().iso(),
+    });
+    return { ok: false, reason: "rate_limited" };
+  }
+
+  const [user] = await db
+    .select({ email: authUser.email, passwordHash: authUser.passwordHash, disabledAt: authUser.disabledAt })
+    .from(authUser)
+    .where(eq(authUser.id, userId))
+    .limit(1);
+
+  if (!user || user.disabledAt) {
+    await db.insert(authEvent).values({
+      kind: "password_change_failed",
+      userId,
+      detail: !user ? "conta inexistente" : "conta desabilitada",
+      at: clock().iso(),
+    });
+    return { ok: false, reason: "invalid" };
+  }
+  if (!user.passwordHash) {
+    await db.insert(authEvent).values({
+      kind: "password_change_failed",
+      userId,
+      email: user.email,
+      detail: "conta sem senha definida",
+      at: clock().iso(),
+    });
+    return { ok: false, reason: "no_password" };
+  }
+
+  let ok: boolean;
+  try {
+    ok = await verifyPassword(currentPassword, user.passwordHash);
+  } catch (erro) {
+    if (!(erro instanceof KdfIndisponivelError)) throw erro;
+    await db.insert(authEvent).values({
+      kind: "password_change_unavailable",
+      userId,
+      email: user.email,
+      detail: erro.message.slice(0, 300),
+      at: clock().iso(),
+    });
+    return { ok: false, reason: "unavailable" };
+  }
+
+  if (!ok) {
+    await db.insert(authEvent).values({
+      kind: "password_change_failed",
+      userId,
+      email: user.email,
+      detail: "senha atual incorreta",
+      at: clock().iso(),
+    });
+    return { ok: false, reason: "invalid" };
+  }
+
+  // O hash da nova pede os mesmos ~64 MB da verificação, e sob pressão de
+  // memória falha do mesmo jeito: é falta de recurso, não veredito — mesma
+  // resposta `unavailable`, e não uma página de erro.
+  let hash: string;
+  try {
+    hash = await hashPassword(newPassword);
+  } catch (erro) {
+    await db.insert(authEvent).values({
+      kind: "password_change_unavailable",
+      userId,
+      email: user.email,
+      detail: new KdfIndisponivelError(erro).message.slice(0, 300),
+      at: clock().iso(),
+    });
+    return { ok: false, reason: "unavailable" };
+  }
+  const storedHash = user.passwordHash;
+  // Senha, revogação e registro numa transação só. Em comandos separados, uma
+  // queda de conexão entre a escrita da senha e a revogação deixaria a senha
+  // trocada com as sessões antigas — inclusive um cookie roubado — ainda
+  // valendo, que é o oposto do que a troca promete.
+  const revoked = await db.transaction(async (tx) => {
+    const rows = await tx
+      .update(authUser)
+      .set({ passwordHash: hash })
+      .where(and(eq(authUser.id, userId), eq(authUser.passwordHash, storedHash)))
+      .returning({ id: authUser.id });
+    if (rows.length === 0) return null;
+    const ended = await tx
+      .update(authSession)
+      .set({ revokedAt: clock().iso() })
+      .where(and(eq(authSession.userId, userId), isNull(authSession.revokedAt)))
+      .returning({ id: authSession.id });
+    await tx.insert(authEvent).values({
+      kind: "password_changed",
+      userId,
+      email: user.email,
+      detail: `trocada pela própria conta; ${ended.length} sessões encerradas`,
+      at: clock().iso(),
+    });
+    return ended.length;
+  });
+
+  if (revoked === null) {
+    await db.insert(authEvent).values({
+      kind: "password_change_failed",
+      userId,
+      email: user.email,
+      detail: "senha alterada por outra requisição",
+      at: clock().iso(),
+    });
+    return { ok: false, reason: "invalid" };
+  }
+  return { ok: true, email: user.email };
 }

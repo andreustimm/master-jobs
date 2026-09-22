@@ -99,6 +99,19 @@ export function can(
       // registrada na `source`, para a tela poder dizer de onde veio.
       return isAdmin || isCandidate || isRecruiter ? ALLOW : deny("requer sessão válida");
 
+    case "account:read":
+      // A própria conta: qualquer papel. Não há recurso a conferir — o alvo é
+      // sempre `session.userId`, e nenhum chamador escolhe outro.
+      return isAdmin || isCandidate || isRecruiter ? ALLOW : deny("requer sessão válida");
+
+    case "account:write":
+      // Sessão emprestada NÃO escreve na conta do alvo, qualquer que seja o
+      // papel dele: trocar a senha ou o nome de outra pessoa com a cara dela é
+      // tomar a conta, e o registro diria que foi ela. O admin que precisa
+      // corrigir um nome usa `/admin/users`, sem empréstimo e com o nome dele.
+      if (borrowed) return deny("sessão emprestada não altera a conta do alvo");
+      return isAdmin || isCandidate || isRecruiter ? ALLOW : deny("requer sessão válida");
+
     case "candidate:write":
     case "application:write":
       // Escrita em dado de candidato é só de quem é aquele candidato. Um

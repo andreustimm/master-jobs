@@ -70,7 +70,11 @@ export async function ensureCandidate(input: {
       email: input.email ?? null,
       linkedinUrl: input.linkedinUrl ?? null,
       githubUrl: input.githubUrl ?? null,
-      isDefault: true,
+      // Só o candidato `default` é o do dono. Marcar toda linha nova como
+      // padrão fazia `isOwner` responder sim para o candidato de um convidado,
+      // e ele passava a ser pontuado — e a ver trilhas — com o `profile.yaml`
+      // do dono, piso salarial incluído.
+      isDefault: slug === "default",
     })
     .returning({ id: candidate.id });
 

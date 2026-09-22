@@ -825,6 +825,12 @@ A distinção entre as duas primeiras é o ponto: o Drizzle completa com
 Paridade sozinha não distingue "escolhi" de "esqueci".
 
 
+`0009` cria `auth_user_candidate_idx`, índice único parcial em
+`auth_user(candidate_id) where candidate_id is not null`: um candidato tem no
+máximo uma conta. Conta sem candidato (admin, recrutador) continua livre. O
+índice só aplica sobre dados limpos — a verificação e a ordem estão em
+[`docs/security.md`](security.md#achado-5--conta-convidada-com-o-candidato-do-dono--corrigido-hotfix).
+
 ## Tabelas adicionadas depois da primeira versão
 
 ### Captura por termo — `term_capture`, `term_attribution`, `platform_quota`

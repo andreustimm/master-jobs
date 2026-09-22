@@ -40,6 +40,11 @@ import { runMigrations } from "../../src/core/db/migrate.ts";
 import { loadProfile } from "../../src/core/profile/load.ts";
 import { scoreOne } from "../../src/core/scoring/apply.ts";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
+import { isolationRefusal } from "./database-guard.mjs";
+
+// Antes de qualquer migração ou escrita. Ver `database-guard.mjs`.
+const refusal = isolationRefusal(process.env);
+if (refusal) throw new Error(`e2e setup recusado: ${refusal}`);
 
 const EMAIL = process.env.E2E_EMAIL ?? "e2e@local.test";
 const PASSWORD = process.env.E2E_PASSWORD ?? "conta-de-teste-e2e-42";
@@ -75,6 +80,9 @@ export const E2E_ROLES = {
   linkedRecruiter: { email: "e2e-recrutador-vinculado@local.test", roles: ["recruiter"] },
   // Papel candidato SEM candidato: é quem vê "Criar meu perfil" (#234).
   onboarding: { email: "e2e-sem-perfil@local.test", roles: ["candidate"], noCandidate: true },
+  // Troca a própria senha na jornada de Minha conta; dedicada para não mudar a
+  // senha de quem as outras jornadas usam.
+  account: { email: "e2e-conta@local.test", roles: ["recruiter"] },
 };
 
 try {

@@ -29,6 +29,7 @@ export type { Action, Decision, Resource, Role, Session } from "./domain/types.t
 export { ACTIONS, ROLES } from "./domain/types.ts";
 export { isOpenMode, isSingleUser, singleUserSession, SESSION_DAYS } from "./app/session.ts";
 export { generatePassword, seedOwner } from "./app/seed.ts";
+export { addUser, claimOwnCandidate } from "./app/accounts.ts";
 export type { SeedResult } from "./app/seed.ts";
 export { setPassword, verifyLogin } from "./infra/password-login.ts";
 import { setPassword } from "./infra/password-login.ts";
@@ -62,6 +63,11 @@ import {
   type ImpersonationDeps,
 } from "./app/impersonation.ts";
 import type { Role } from "./domain/types.ts";
+import { changeOwnPassword, type ChangePasswordResult } from "./infra/password-login.ts";
+import { AuthorizationError } from "./domain/policy.ts";
+import { SESSION_DAYS } from "./app/session.ts";
+import { clock } from "../../core/clock.ts";
+export { MAX_CHANGE_ATTEMPTS } from "./infra/password-login.ts";
 
 const deps: AuthDeps = {
   sessions: drizzleSessions,
@@ -190,6 +196,74 @@ export type { OwnCandidateResult };
  */
 export function adminsBesides(userId: number) {
   return otherActiveAdmins(userId);
+}
+
+/* ------------------------------- Minha conta ------------------------------- */
+
+export type OwnPasswordResult =
+  | { ok: true; token: string; expiresAt: string }
+  | Extract<ChangePasswordResult, { ok: false }>;
+
+/**
+ * Sessão emprestada nunca chega à escrita da conta.
+ *
+ * A política já nega `account:write` a ela, e a ação chama `guard` antes. Esta
+ * segunda barreira existe porque a função recebe a sessão como argumento e
+ * pode ser chamada de outro lugar amanhã: quem esquecer o `guard` ainda não
+ * troca a senha do alvo.
+ */
+function assertOwnSession(session: Session): void {
+  if (session.impersonatedBy !== null) {
+    throw new AuthorizationError("account:write", "sessão emprestada não altera a conta do alvo");
+  }
+}
+
+/**
+ * Troca a senha da conta DA SESSÃO, provando a atual.
+ *
+ * Todas as sessões da conta caem, inclusive a que pediu; em seguida nasce uma
+ * sessão nova, cujo token quem chama grava no cookie. O efeito para a pessoa é
+ * "as outras sessões caíram e eu continuo dentro", e o token antigo deste
+ * navegador também deixa de valer — um cookie copiado antes da troca não
+ * sobrevive a ela.
+ */
+export async function changePasswordForSession(
+  session: Session,
+  currentPassword: string,
+  newPassword: string,
+): Promise<OwnPasswordResult> {
+  assertOwnSession(session);
+  const result = await changeOwnPassword(session.userId, currentPassword, newPassword);
+  if (!result.ok) return result;
+  const expiresAt = new Date(clock().now() + SESSION_DAYS * 86_400_000).toISOString();
+  const token = await drizzleSessions.create({ userId: session.userId, expiresAt });
+  await drizzleAuthRepository.record({
+    kind: "login",
+    userId: session.userId,
+    email: result.email,
+    detail: "sessão renovada após troca de senha",
+  });
+  return { ok: true, token, expiresAt };
+}
+
+/**
+ * Troca o nome de exibição da conta DA SESSÃO.
+ *
+ * Só o nome. O e-mail é o identificador de entrada e o destino da recuperação
+ * de senha; trocá-lo sem confirmar a posse do endereço novo deixaria uma
+ * sessão roubada redirecionar a recuperação para o atacante. Enquanto não
+ * houver confirmação por e-mail em produção, e-mail muda só por admin
+ * (`docs/security.md`).
+ */
+export async function renameForSession(session: Session, fullName: string): Promise<void> {
+  assertOwnSession(session);
+  await drizzleUserDirectory.update(session.userId, { fullName });
+  await drizzleAuthRepository.record({
+    kind: "profile_updated",
+    userId: session.userId,
+    email: session.email,
+    detail: "nome de exibição alterado pela própria conta",
+  });
 }
 
 /* ----------------------------- Impersonação ------------------------------- */

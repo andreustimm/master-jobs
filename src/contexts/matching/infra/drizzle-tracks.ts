@@ -59,12 +59,20 @@ export async function lockCandidateTracks(db: Executor, candidateId: number): Pr
 }
 
 export async function isOwner(candidateId: number, db: Executor = getDb()): Promise<boolean> {
+  // O dono é UM candidato padrão, e não qualquer linha marcada:
+  // `ensureCandidate` marcava como padrão todo candidato que criava, inclusive
+  // o de cada convidado cadastrado em /admin/users, e essas linhas continuam no
+  // banco. Com a marca sozinha, o convidado era pontuado — e via as trilhas —
+  // pelo `profile.yaml` do dono, piso salarial incluído.
   const [row] = await db
-    .select({ isDefault: candidate.isDefault })
+    .select({ id: candidate.id })
     .from(candidate)
-    .where(eq(candidate.id, candidateId))
+    .where(eq(candidate.isDefault, true))
+    // O slug `default` primeiro — é o que `syncCandidateFromProfile` cria —, e
+    // o id só desempata instalações sem ele.
+    .orderBy(sql`${candidate.slug} = 'default' desc`, asc(candidate.id))
     .limit(1);
-  return row?.isDefault ?? false;
+  return row?.id === candidateId;
 }
 
 export async function nextPosition(db: Executor, candidateId: number): Promise<number> {
