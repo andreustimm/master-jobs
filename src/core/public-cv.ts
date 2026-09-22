@@ -45,8 +45,10 @@ const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
  */
 const INTERNATIONAL_START = /\+(?=\d)/g;
 // Separadores de telefone: espaço, ponto, hífen, traço (– —) e barra.
-const PHONE_GROUP = /^[ \t.\-–—/]?\(?(\d{1,5})\)?/u;
-const LOCAL_PHONE = /\(\d{2,3}\)[ \t]?(?:9[ \t.\-–—/]?)?\d{4}[ \t.\-–—/]?\d{4}/gu;
+// O separador pode vir cercado de espaço: `+55 11 91234 - 5678`.
+const PHONE_GROUP = /^(?:[ \t]*[.\-–—/][ \t]*|[ \t]+)?\(?(\d{1,5})\)?/u;
+const PHONE_SEP = "(?:[ \\t]*[.\\-–—/][ \\t]*|[ \\t]+)?";
+const LOCAL_PHONE = new RegExp(`\\(\\d{2,3}\\)[ \\t]*(?:9${PHONE_SEP})?\\d{4}${PHONE_SEP}\\d{4}`, "gu");
 
 function redactInternationalPhones(text: string): string {
   let out = "";
@@ -105,7 +107,9 @@ const SALARY_LABEL = new RegExp(
  * conta como valor.
  */
 const PAY_WORD = "\\b(?:sal[áa]ri(?:o|os|al|ais)|remunera[çc](?:[ãa]o|[õo]es)|salar(?:y|ies)|compensation|pay\\s+rate|hourly\\s+rate)\\b";
-const AMOUNT = "(?:[$€£¥]|R\\$|\\b(?!(?:19|20)\\d{2}\\b)\\d)";
+// Ano sozinho não é valor; seguido de moeda ou de `k`, é ("2000 EUR").
+const AMOUNT =
+  "(?:[$€£¥]|R\\$|\\b(?!(?:19|20)\\d{2}\\b)\\d|\\b(?:19|20)\\d{2}\\s*(?:k\\b|usd|eur|brl|gbp|reais|d[óo]lares|euros))";
 const PAY_NEAR_AMOUNT = new RegExp(`${PAY_WORD}.{0,60}?${AMOUNT}|${AMOUNT}.{0,60}?${PAY_WORD}`, "iu");
 
 function isSalaryBlock(block: string): boolean {
@@ -151,6 +155,9 @@ export function publicCvText(content: string, known: { email?: string | null } =
   const out: string[] = [];
   // Nível do título cuja seção inteira está saindo, ou nulo.
   let skippingSection: number | null = null;
+  // Rótulo sozinho num parágrafo ("Pretensão salarial:") promete o valor no
+  // bloco seguinte, que também sai.
+  let valueExpected = false;
   // NFC: um "ã" digitado como "a" + til combinante não casaria com o rótulo.
   for (const block of blocks(content.normalize("NFC").split("\n"))) {
     const heading = HEADING.exec(block[0]!);
@@ -159,8 +166,17 @@ export function publicCvText(content: string, known: { email?: string | null } =
       else continue;
     }
     const text = block.join("\n");
-    if (text.trim() !== "" && (isSalaryBlock(text) || (heading !== null && PAY_HEADING.test(text)))) {
+    if (text.trim() === "") {
+      out.push(...block);
+      continue;
+    }
+    if (valueExpected) {
+      valueExpected = false;
+      if (/\d/.test(text)) continue;
+    }
+    if (isSalaryBlock(text) || (heading !== null && PAY_HEADING.test(text))) {
       if (heading) skippingSection = heading[1]!.length;
+      else valueExpected = !/\d/.test(text);
       continue;
     }
     out.push(...block);
