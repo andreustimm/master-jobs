@@ -18,6 +18,10 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+- The job list and its total are calculated together, reducing search work while preserving ordering and totals when changing pages.
+
+- Job filter counts and options require less work from the system while keeping the same results and grouping rules.
+
 ## [1.21.0] - 2026-09-22T18:02:40.049Z
 
 ### New
