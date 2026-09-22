@@ -3,7 +3,7 @@
 Nota de continuidade: nasce e morre com este slug (ADR 0011). O que sobrevive à
 tarefa — diagnóstico, medidas, decisões — está em
 [`docs/engineering/performance-buscas.md`](../../../docs/engineering/performance-buscas.md),
-que chega a `dev` com a PR #175.
+entregue em `dev` pela PR #175.
 
 ## Objetivo
 
@@ -12,18 +12,18 @@ nenhuma medida. A meta é reduzir a latência percebida **e** poder provar cada
 ganho com número. A primeira entrega cortou a rede e as idas ao banco; o que resta
 é o trabalho pesado sobre o acervo e a percepção de interatividade dos filtros.
 
-## Estado em 2026-09-21
+## Estado em 2026-09-22
 
 | Item | Estado |
 |---|---|
-| PR 1 — [#175](https://github.com/andreustimm/master-jobs/pull/175) (`perf/latencia-das-buscas`) | Rascunho, CI verde (4/4), deep-review SHIP. Falta marcar pronta e mesclar (humano) |
-| Verificação em produção | Pendente, depois do deploy: `x-vercel-id` = `<borda>::gru1::…` e a primeira linha `perf` de `/jobs` com `JHO_PERF_LOG=1` |
-| Todas as tarefas abaixo | Não iniciadas |
+| PR 1 — [#175](https://github.com/andreustimm/master-jobs/pull/175) | Em produção pela PR #178, mesclada em 22/09 às 13:39 UTC; CI e fumaça de produção verdes. |
+| Verificação em produção | Deploy e fumaça confirmados; pendente medir `x-vercel-id` = `<borda>::gru1::…` e a primeira linha `perf` de `/jobs` com `JHO_PERF_LOG=1` |
+| Tarefa 17 | Entregue: vigia em `/` e `/jobs`, teto nas funções de composição e QA de concorrência aprovado. Já em main. |
+| Tarefa 13 | Em validação na branch `perf/filtro-salarial`; demais tarefas ainda pendentes. |
 
 **Base das próximas branches.** As tarefas abaixo usam coisas que só existem com a
 #175 (`pnpm perf:jobs`, `hasFullDescription`, `renderSession`, o cronômetro de
-estágios). Espere o merge e parta de `dev`; se precisar adiantar, empilhe sobre
-`perf/latencia-das-buscas` e reaponte a base da PR depois.
+estágios). A #175 já foi mesclada: partir de `origin/dev` atualizado, em worktree própria.
 
 ## Linha de base para bater
 
@@ -49,10 +49,10 @@ Ordem sugerida, e o que depende do quê. Cada uma é uma PR própria para `dev`.
 
 | # | Tarefa | Depende de | Migration | QA de jornada |
 |---|---|---|:---:|:---:|
-| 13 | Faixa salarial sem 7 cópias do `CASE` | — | não | não |
+| 13 | Normalização salarial compartilhada | — | não | não |
 | 11 | Conjunto filtrado calculado uma vez | — | talvez (`group_key`) | não |
 | 12 | Busca por termo indexada | confirmar `pg_trgm` no Supabase | **sim** | não |
-| 17 | Régua de conexões por tela e `comVigia` em `/jobs` e `/` | — | não | não |
+| 17 ✅ | Régua de conexões por tela e `comVigia` em `/jobs` e `/` — entregue | — | não | QA de concorrência aprovado |
 | 14 | Cache de facetas com TTL | 11 e 12, **e medir antes** | não | não |
 | 15 | `loading.tsx` + `Suspense` em `/jobs` | 14 | não | sim |
 | 6 | Overlay só na troca de rota | — | não | **sim** |
@@ -63,15 +63,18 @@ Ordem sugerida, e o que depende do quê. Cada uma é uma PR própria para `dev`.
 busca indexada e sem cache de facetas transforma cada movimento em cinco
 varreduras do acervo.
 
-### 13 — Faixa salarial sem 7 cópias do `CASE`
+### 13 — Normalização salarial compartilhada
 
-- `src/core/db/repo.ts` (`paySql`, `payCondition`, ~linhas 245–290): a
-  expressão é interpolada 7 vezes. **Medido** com 29 moedas: SQL de 72 KB e 446
-  parâmetros; a lista sobe de 58 para 169 ms, a contagem de 27 para 76 ms.
-- Direção: passar as taxas uma vez (CTE `VALUES` ou junção lateral) em vez de
-  repetir o `CASE` por moeda. Só pesa com faixa ou `sort=comp`.
-- Pronto quando: cenários "faixa salarial" e "ordenar por pagamento" do
-  `perf:jobs` caem de forma mensurável e o SQL gerado cai de ordem de grandeza.
+Implementada na branch `perf/filtro-salarial`, em validação antes da PR.
+Com 10 mil vagas, 29 moedas, três aquecimentos e dez amostras, a mediana da
+faixa salarial caiu de 395,05 para 109,95 ms; ordenar por pagamento caiu de
+96,75 para 89,15 ms. São tempos locais, sem rede.
+
+A faixa compartilha uma CTE entre a consulta externa e a seleção do grupo;
+ordenar sem faixa usa uma junção lateral. O SQL total da tela com faixa caiu
+de 183.062 para 48.326 bytes e de 1.169 para 301 parâmetros. Os seis resultados
+de referência são idênticos antes/depois, incluindo ordem e valores.
+Evidência e reprodução em `docs/engineering/performance-buscas.md`.
 
 ### 11 — Conjunto filtrado calculado uma vez
 
@@ -99,16 +102,14 @@ varreduras do acervo.
   diferença em `drizzle/` existir. Decida se é aditiva. ADR se restringir o
   futuro. Atualize `docs/data-model.md`.
 
-### 17 — Régua de conexões por tela
+### 17 — Régua de conexões por tela — concluída
 
-- `tests/db-fan-out.test.ts` mede **função**; a invariante é por **requisição**.
-  `/`, `/jobs` e `/searches` compõem leituras no corpo do Server Component e
-  ficam fora da régua. Duas requisições na mesma instância pedem mais de 3
-  conexões a um pool de 3 (`client.ts`, `max: 3`) e a Vercel mata as duas aos
-  30 s — o 504 de `/candidate/skills`, ainda possível aqui.
-- Direção: estender a régua à composição da tela (layout + página) e pôr
-  `comVigia` onde falta. Caso de browser que pede a tela duas vezes ao mesmo
-  tempo. Ver `docs/operations.md`, Troubleshooting.
+O commit `b04ed5e` extraiu a composição de `/`, `/jobs` e `/searches` para
+funções exercitadas por `tests/db-fan-out.test.ts`, com teto `POOL - 1`.
+O vigia cobre autenticação e leitura em `/` e `/jobs`. O E2E percorre pedidos
+concorrentes e o cenário `JOBS-concurrent-heavy-screens` tem QA `pass` no
+[relatório de 21/09](../../../docs/qa/reports/2026-09-21-execucao-concorrencia.md).
+Esse commit já está em `main`; não reimplementar a tarefa a partir da nota antiga.
 
 ### 14 — Cache de facetas
 
@@ -227,3 +228,19 @@ regressão: `Worker exited unexpectedly` sem nenhum `×`).
   repositório tem papel de recrutador. Confirmar o plano em uso.
 - Disponibilidade de `pg_trgm`/`unaccent` e de "Query Performance" no plano
   Supabase.
+
+## Retomada de 22/09/2026
+
+O usuário autorizou concluir todas as tarefas de performance e as pendências
+B-11/O-01/O-02/O-03 da tabela de continuidade. O-01 está retomada por esse pedido.
+Não criar conta Upstash nem introduzir Redis: o usuário confirmou a continuidade
+do cache local com TTL. A promoção para produção mantém o gate humano.
+
+Em 22/09, o usuário acrescentou a definição e aplicação de SLA/SLO e métricas
+de governança. A continuidade operacional registra esse escopo; a documentação
+durável ficará em `docs/engineering/`. Sem criar serviços pagos ou contas novas.
+
+A tarefa 13 preserva os contratos de remuneração, ordem, agrupamento, autorização
+e paginação; só troca o plano de consulta. Sem mudança visível de comportamento,
+portanto QA de jornada não se aplica a essa tarefa. `pnpm check`, E2E e revisão
+profunda continuam obrigatórios antes da PR.

@@ -18,6 +18,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Melhorado
+
+- Filtrar vagas por faixa salarial e ordenar por remuneração exigem menos
+  trabalho do sistema. Os valores, a ordem das vagas e os avisos sobre salários
+  não informados continuam seguindo os mesmos critérios.
+
 ## [1.20.5] - 2026-09-22T11:47:50.607Z
 
 ### Corrigido

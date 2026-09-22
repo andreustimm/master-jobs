@@ -18,6 +18,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Improved
+
+- Filtering jobs by pay range and sorting by compensation require less work
+  from the system. Amounts, job ordering and notices for undisclosed salaries
+  continue to follow the same rules.
+
 ## [1.20.5] - 2026-09-22T11:47:50.607Z
 
 ### Fixed

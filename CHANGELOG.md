@@ -9,6 +9,16 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Melhorado
+
+- A leitura salarial do quadro compartilha a normalização entre o filtro e a
+  escolha da publicação do grupo; a ordenação sem faixa calcula somente as
+  linhas participantes. As cotações deixam de ser expandidas em cada uso da
+  expressão, preservando valores, ausências, ordem e paginação.
+- O benchmark de buscas aceita `JHO_PERF_RUNS`, `JHO_PERF_WARMUPS` e
+  `JHO_PERF_JSON` para guardar amostras, volume de SQL, parâmetros, resultados
+  de referência e planos `EXPLAIN ANALYZE`.
+
 ## [1.20.5] - 2026-09-22
 
 ### Corrigido
