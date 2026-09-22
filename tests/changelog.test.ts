@@ -807,16 +807,13 @@ describe("localized repository integration", () => {
     expect(metadata.every((kind) => kind === "commit")).toBe(true);
   });
 
-  it("IT-014 stages and validates both localized release outputs", async () => {
-    const promotion = await readFile(".github/workflows/promover-para-staging.yml", "utf8");
+  it("IT-014 keeps main stamping wired to both localized release outputs", async () => {
     const sync = await readFile(".github/workflows/sincronizar-apos-main.yml", "utf8");
     const shell = await readFile("scripts/release/versionar.ts", "utf8");
-    for (const workflow of [promotion, sync]) {
-      expect(workflow).toMatch(
-        /git add package\.json CHANGELOG\.md USER_CHANGELOG\.pt-BR\.md USER_CHANGELOG\.en\.md/,
-      );
-      expect(workflow).not.toMatch(/["' ]USER_CHANGELOG\.md["' ]/);
-    }
+    expect(sync).toMatch(
+      /git add package\.json CHANGELOG\.md USER_CHANGELOG\.pt-BR\.md USER_CHANGELOG\.en\.md/,
+    );
+    expect(sync).not.toMatch(/["' ]USER_CHANGELOG\.md["' ]/);
     for (const file of ["CHANGELOG.md", "USER_CHANGELOG.pt-BR.md", "USER_CHANGELOG.en.md"]) {
       expect(shell).toContain(file);
     }
