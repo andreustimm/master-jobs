@@ -29,6 +29,10 @@ confira sua disponibilidade no checkout e a prontidão remota:
 rtk pnpm tasks preflight
 ```
 
+A promoção usa o SHA do CI concluído ou um SHA explícito no dispatch. O commit
+de release recebe o mesmo CI antes de avançar `staging`; retentativas conservam
+o alvo. Veja o [contrato e a retomada da promoção](promotion.md).
+
 ## Começar ou retomar
 
 Use Node 24.19.0, fixado em `.nvmrc` e compatível com `package.json`.

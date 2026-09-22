@@ -18,6 +18,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preparing a new release now keeps the validated revision even when other
+  changes arrive during publication or a retry.
+
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 
 - Email alerts are configured to notify the system owner of new production errors and recurring failures that had been resolved.
