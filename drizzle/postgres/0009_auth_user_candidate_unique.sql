@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "auth_user_candidate_idx" ON "production"."auth_user" USING btree ("candidate_id") WHERE "production"."auth_user"."candidate_id" is not null;

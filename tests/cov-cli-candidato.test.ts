@@ -37,6 +37,7 @@ import { syncCandidateFromProfile } from "../src/core/candidate.ts";
 import {
   authLoginToken,
   authUser,
+  candidate,
   candidateDocument,
   candidateSkill,
   skill,
@@ -344,34 +345,47 @@ describe("jho auth add-user <email>", () => {
     expect(conta?.email).toBe("andreus@exemplo.test");
   });
 
-  it("`--candidate` aponta a conta para um candidato existente", async () => {
-    const candidatoId = await syncCandidateFromProfile();
+  it("conta sem papel candidato não recebe candidato nenhum", async () => {
+    await syncCandidateFromProfile();
 
-    await rodar(
-      "auth", "add-user", "recrutador@exemplo.test",
-      "--role", "recruiter",
-      "--candidate", String(candidatoId),
-    );
+    await rodar("auth", "add-user", "recrutador@exemplo.test", "--role", "recruiter");
 
     const [conta] = await banco().select().from(authUser);
-    expect(conta?.candidateId).toBe(candidatoId);
+    expect(conta?.candidateId).toBeNull();
   });
 
   /**
-   * Consequência do defeito acima: `candidateId` só é derivado do perfil
-   * quando o papel inclui `owner` — que nunca passa da validação. Toda conta
-   * criada por este comando sem `--candidate` nasce com `candidateId` nulo,
-   * inclusive uma de papel `candidate`, que é justamente a que precisaria dele.
+   * INCIDENTE: o papel candidato ligava a conta ao candidato `default` — o do
+   * dono. Todo convidado criado por este comando abria `/candidate` com o
+   * currículo, a visibilidade e o funil do dono, e podia alterá-los.
    */
-  it("sem `--candidate`, o papel candidate deriva o candidato do perfil", async () => {
-    // A derivação lia `roles.includes("owner")` e virou código morto na
-    // renomeação: toda conta nascia com `candidateId` nulo, inclusive uma de
-    // papel candidato — justamente a que precisa dele para ter currículo e
-    // funil.
+  it("papel candidato ganha candidato PRÓPRIO, nunca o do dono", async () => {
+    await rodar("auth", "add-user", "dono@exemplo.test", "--role", "admin,candidate");
+    const doDono = await syncCandidateFromProfile();
+
     await rodar("auth", "add-user", "candidato@exemplo.test", "--role", "candidate");
 
-    const [conta] = await banco().select().from(authUser);
+    const [conta] = await banco()
+      .select()
+      .from(authUser)
+      .where(eq(authUser.email, "candidato@exemplo.test"));
     expect(conta?.candidateId).not.toBeNull();
+    expect(conta?.candidateId).not.toBe(doDono);
+    const [proprio] = await banco()
+      .select()
+      .from(candidate)
+      .where(eq(candidate.id, conta!.candidateId!));
+    expect(proprio?.slug).toBe("user-candidato-exemplo-test");
+  });
+
+  it("rodar de novo não troca o candidato já vinculado", async () => {
+    await rodar("auth", "add-user", "eu@exemplo.test", "--role", "candidate");
+    const [antes] = await banco().select().from(authUser);
+
+    await rodar("auth", "add-user", "eu@exemplo.test", "--role", "admin,candidate");
+
+    const [depois] = await banco().select().from(authUser);
+    expect(depois?.candidateId).toBe(antes?.candidateId);
   });
 
   it("rodar de novo atualiza a conta em vez de duplicar", async () => {
