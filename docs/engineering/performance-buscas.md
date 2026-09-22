@@ -65,7 +65,7 @@ Números do PostgreSQL local com 9 mil vagas, sem rede — o **piso**.
 
 | Achado | Evidência | Estado |
 |---|---|---|
-| Varreduras repetidas por requisição (`canonicalOfGroup`) | Lista, contagem e `countHiddenByPayRange` ainda escolhem a canônica; as três facetas compartilham uma leitura | **MEDIDO**, facetas corrigidas; lista e contagem em avaliação |
+| Varreduras repetidas por requisição (`canonicalOfGroup`) | Lista e total compartilham a seleção; as facetas usam outra leitura com dimensões independentes; o aviso salarial mantém sua própria semântica | **MEDIDO**, corrigido na tarefa 11 |
 | Busca por termo: regex `~*` sobre título, empresa e descrição, sem índice possível | 160–175 ms por consulta × 5 consultas; só `sum(length(description_text))` leva 116 ms | **MEDIDO**, aberto (fase 2). O padrão `[ -]?` de `term.ts` impede extração de trigramas (INFERIDO) |
 | `length(descricao) >= 200` calculado em todas as linhas antes do `LIMIT`, para a UI só testar `< 200` | 103 ms → 26 ms com `substr` (mesmo resultado em 199/200/201, acento, emoji, vazio, nulo) | **MEDIDO**, corrigido |
 | Faixa salarial: `paySql` interpolada repetidamente | Na tela completa com 29 moedas, 183 KB de SQL e 1.169 parâmetros; normalização compartilhada reduziu para 48 KB e 301 | **MEDIDO**, corrigido; comparação abaixo |
@@ -142,7 +142,7 @@ BUFFERS, FORMAT JSON)` da maior consulta de cada cenário. O plano é colhido no
 aquecimento, fora das amostras cronometradas. Os resultados de referência devem
 coincidir antes/depois; uma diferença impede declarar a otimização equivalente.
 
-## Facetas em uma consulta — medição de 22/09/2026
+## Lista e facetas compartilhadas — medição de 22/09/2026
 
 Contadores, clusters e fontes compartilham os filtros comuns em uma consulta.
 Cada dimensão continua ignorando apenas o próprio filtro: selecionar uma fonte
@@ -153,22 +153,40 @@ entre todas as elegíveis e o menor id entre as que passam pelo cluster escolhid
 As vagas anônimas continuam separadas, e o score e as candidaturas continuam
 restritos à pessoa e à trilha da sessão.
 
+A tela usa `listBoardPage`: total por janela sobre ids elegíveis e dados completos
+somente depois do limite da página. Uma página além do fim, ou de tamanho zero,
+não tem linha para carregar o total; nesses casos a contagem separada conserva o
+rodapé correto. Os demais consumidores de `listBoard` não calculam a janela.
+A lista continua usando os mesmos filtros e desempates.
+
+A largura da janela importa: carregar descrições nela fez o cenário sem agrupar
+escrever 967 blocos temporários no benchmark. Restringir a janela a ids e chaves
+de ordenação zerou esses blocos; o plano final da página levou 8,47 ms. Não houve
+migration, coluna materializada, cache nem mudança de semântica nesta entrega.
+
 Três aquecimentos e dez amostras sobre o mesmo corpus de 10 mil vagas.
 Medianas locais, sem rede; os seis resultados completos e seus hashes coincidem.
 
 | Cenário | Total antes → depois | Facetas antes → depois | Consultas antes → depois |
 |---|---:|---:|---:|
-| Padrão | 75,20 → 61,85 ms | 37,75 → 23,80 ms | 9 → 7 |
-| Com termo | 184,40 → 129,95 ms | 110,70 → 53,25 ms | 9 → 7 |
-| Com cluster | 50,50 → 48,20 ms | 28,05 → 23,40 ms | 9 → 7 |
-| Faixa salarial | 111,40 → 101,25 ms | 39,50 → 23,70 ms | 10 → 8 |
-| Ordenar por pagamento | 86,05 → 70,50 ms | 38,25 → 22,40 ms | 9 → 7 |
-| Sem agrupar | 65,20 → 59,45 ms | 18,60 → 16,70 ms | 8 → 6 |
+| Padrão | 75,20 → 59,35 ms | 37,75 → 23,50 ms | 9 → 6 |
+| Com termo | 184,40 → 127,90 ms | 110,70 → 54,60 ms | 9 → 6 |
+| Com cluster | 50,50 → 49,25 ms | 28,05 → 23,80 ms | 9 → 6 |
+| Faixa salarial | 111,40 → 94,65 ms | 39,50 → 23,55 ms | 10 → 7 |
+| Ordenar por pagamento | 86,05 → 70,45 ms | 38,25 → 22,65 ms | 9 → 6 |
+| Sem agrupar | 65,20 → 33,55 ms | 18,60 → 18,05 ms | 8 → 5 |
 
 `tests/board-facets.test.ts` cobre dimensões combinadas, a troca da publicação
 representante, fontes distintas do mesmo tipo, empregador anônimo, cluster
 nulo, arquivamento, candidatura alheia e conjunto vazio. A régua de consultas
-exige uma única ida para todas as facetas; o limite por tela continua valendo.
+exige uma única ida para todas as facetas e outra para página com total, além
+da leitura das irmãs quando há agrupamento; o limite por tela continua valendo.
+Os testes de paginação comparam a API nova à lista e à contagem independentes,
+inclusive páginas além do fim, tamanho zero e grupos.
+
+Com `JHO_PERF_PLANS=1` e `JHO_PERF_JSON`, o benchmark guarda também os planos de
+todas as consultas, na ordem de envio. Eles são coletados no aquecimento, fora
+das amostras. Sem essa opção permanece somente o plano da maior consulta.
 
 ## Plano
 
@@ -180,7 +198,7 @@ exige uma única ida para todas as facetas; o limite por tela continua valendo.
 | 1 ✅ | Prelúdio de `/jobs`: trilhas ∥ câmbio, sem `listTracks` duplicado, câmbio em 1 consulta | alto × baixo | `jobs-data.ts` |
 | 1 ✅ | Medição: baseline local e log por estágio | habilita o resto | `perf:jobs`, `registrarTempo` |
 | PR 2 | Overlay só na troca de rota; filtros que se aplicam sozinhos | alto × médio | fase 3 |
-| 2 | Conjunto filtrado calculado uma vez (`count(*) over()`, facetas fundidas) | alto × médio | `repo.ts` |
+| 2 ✅ | Seleção compartilhada para lista e total, facetas fundidas | alto × médio | `repo.ts` |
 | 2 | Busca por termo indexada (`pg_trgm` ou `tsvector`) | altíssimo × médio | migration |
 | 2 ✅ | Normalização salarial compartilhada, sem repetir cotações a cada uso | alto com faixa | `repo.ts` |
 | 2 | Cache de facetas com TTL — **só depois de medir** | médio × médio | `matching/app` |

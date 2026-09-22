@@ -644,13 +644,51 @@ export async function listBoard(
   candidateId: number | null,
   opts: BoardFilters = {},
 ): Promise<BoardRow[]> {
+  return (await readBoard(candidateId, opts, false)).rows;
+}
+
+/** A página e seu total, calculados sobre o mesmo conjunto filtrado. */
+export async function listBoardPage(
+  candidateId: number | null,
+  opts: BoardFilters = {},
+): Promise<{ rows: BoardRow[]; total: number }> {
+  return readBoard(candidateId, opts, true);
+}
+
+function selectBoardPage(candidateId: number | null, opts: BoardFilters, conditions: SQL[], order: SQL[], pay?: PaySql) {
+  // A janela carrega só id e chaves de ordenação. Incluir descrições e estado
+  // completo aqui fazia as 5.500 linhas elegíveis derramarem 967 blocos em
+  // disco no benchmark sem agrupamento; esses dados só são lidos após o LIMIT.
+  let query = getDb().select({ jobId: job.id, total: sql<number>`count(*) over ()`.as("total") })
+    .from(job)
+    .leftJoin(jobScore, scoreJoin(candidateId, opts.track))
+    .leftJoin(application, and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)))
+    .leftJoin(source, eq(source.id, job.sourceId))
+    .leftJoin(jobPage, eq(jobPage.jobId, job.id))
+    .where(and(...conditions))
+    .orderBy(...order)
+    .limit(opts.limit ?? 200)
+    .offset(opts.offset ?? 0)
+    .$dynamic();
+  if (pay?.relation.kind === "shared") query = query.leftJoin(pay.relation.table, eq(pay.relation.table.jobId, job.id));
+  else if (pay) query = query.leftJoinLateral(pay.relation.table, sql`true`);
+  return getDb().$with("board_page").as(query);
+}
+
+async function readBoard(
+  candidateId: number | null,
+  opts: BoardFilters,
+  withTotal: boolean,
+): Promise<{ rows: BoardRow[]; total: number }> {
   const db = getDb();
   const pay = await payContext(opts);
   const conditions = boardConditions(opts, candidateId, pay);
   const order = boardOrder(opts, pay);
+  const page = withTotal ? selectBoardPage(candidateId, opts, conditions, order, pay) : undefined;
 
-  let query = db.with(...(pay?.relation.kind === "shared" ? [pay.relation.table] : []))
+  let query = db.with(...(pay?.relation.kind === "shared" ? [pay.relation.table] : []), ...(page ? [page] : []))
     .select({
+      boardTotal: page ? sql<number>`${page.total}` : sql<number | null>`null::bigint`,
       jobId: job.id,
       title: job.title,
       companyName: job.companyName,
@@ -718,20 +756,26 @@ export async function listBoard(
     .leftJoin(source, eq(source.id, job.sourceId))
     .leftJoin(verifyTask, eq(verifyTask.jobId, job.id))
     .leftJoin(jobPage, eq(jobPage.jobId, job.id))
-    .where(and(...conditions))
+    .where(page ? undefined : and(...conditions))
     .orderBy(...order)
-    .limit(opts.limit ?? 200)
-    .offset(opts.offset ?? 0)
     .$dynamic();
+  if (page) query = query.innerJoin(page, eq(page.jobId, job.id));
+  else query = query.limit(opts.limit ?? 200).offset(opts.offset ?? 0);
   if (pay?.relation.kind === "shared") query = query.leftJoin(pay.relation.table, eq(pay.relation.table.jobId, job.id));
   else if (pay) query = query.leftJoinLateral(pay.relation.table, sql`true`);
   const rows = await query;
-
-  // Vazio quando o agrupamento está desligado: a linha então é uma vaga só, e
-  // procurar irmãs para descobrir isso seria trabalho sem leitor.
-  if (!opts.groupRepeats) return rows.map((row) => ({ ...row, repeats: [] }));
-  const grupos = await groupPostingsOf(rows.map((row) => row.jobId));
-  return rows.map((row) => ({ ...row, repeats: grupos.get(row.jobId) ?? [] }));
+  // Uma página além do fim não tem linha para carregar a janela. Só nesse
+  // caso (ou limite zero) a contagem precisa de uma consulta separada.
+  let total = 0;
+  if (withTotal) {
+    if (rows[0]) total = Number(rows[0].boardTotal);
+    else if ((opts.offset ?? 0) > 0 || opts.limit === 0) total = await countBoard(candidateId, opts);
+  }
+  const grupos = opts.groupRepeats ? await groupPostingsOf(rows.map((row) => row.jobId)) : new Map<number, GroupPosting[]>();
+  return {
+    total,
+    rows: rows.map(({ boardTotal: _total, ...row }) => ({ ...row, repeats: grupos.get(row.jobId) ?? [] })),
+  };
 }
 
 /**

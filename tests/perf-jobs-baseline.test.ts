@@ -101,6 +101,7 @@ async function measure(params: Record<string, string>, profile = false) {
   let sqlBytes = 0;
   let parameters = 0;
   let largest: { query: string; values: unknown[] } | undefined;
+  const statements: { query: string; values: unknown[] }[] = [];
   client.unsafe = (...args: unknown[]) => {
     queries += 1;
     const query = String(args[0]);
@@ -108,6 +109,7 @@ async function measure(params: Record<string, string>, profile = false) {
     const bytes = Buffer.byteLength(query);
     sqlBytes += bytes;
     parameters += values.length;
+    if (profile && process.env.JHO_PERF_PLANS === "1") statements.push({ query, values });
     if (!largest || bytes > Buffer.byteLength(largest.query)) largest = { query, values };
     return original(...args);
   };
@@ -130,7 +132,14 @@ async function measure(params: Record<string, string>, profile = false) {
     const plan = profile && largest
       ? await original(`explain (analyze, buffers, format json) ${largest.query}`, largest.values)
       : undefined;
-    return { report, queries, sqlBytes, parameters, golden, plan };
+    const plans = [];
+    for (const statement of statements) {
+      plans.push({
+        sqlBytes: Buffer.byteLength(statement.query), parameters: statement.values.length,
+        plan: await original(`explain (analyze, buffers, format json) ${statement.query}`, statement.values),
+      });
+    }
+    return { report, queries, sqlBytes, parameters, golden, plan, plans };
   } finally {
     client.unsafe = original;
   }
@@ -163,9 +172,11 @@ describe.runIf(enabled)("baseline de /jobs", () => {
     ];
     for (const scenario of SCENARIOS) {
       let plan: unknown;
+      let plans: unknown;
       for (let warmup = 0; warmup < WARMUPS; warmup++) {
         const warmed = await measure(scenario.params, warmup === WARMUPS - 1 && !!process.env.JHO_PERF_JSON);
         plan = warmed.plan;
+        plans = warmed.plans;
       }
       const runs = [];
       for (let run = 0; run < RUNS; run++) runs.push(await measure(scenario.params));
@@ -183,6 +194,7 @@ describe.runIf(enabled)("baseline de /jobs", () => {
         samples: runs.map(({ report, queries, sqlBytes, parameters }) => ({ report, queries, sqlBytes, parameters })),
         golden: middle.golden,
         plan,
+        plans,
       });
     }
     lines.push("");

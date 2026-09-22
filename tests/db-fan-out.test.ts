@@ -25,7 +25,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { candidate, company, job, source } from "../src/core/db/schema.ts";
 import type { DB } from "../src/core/db/client.ts";
-import { boardFacets, ensurePrimaryTrack, trackOverview, trackSuggestion } from "../src/contexts/matching/index.ts";
+import { boardFacets, ensurePrimaryTrack, listBoardPage, trackOverview, trackSuggestion } from "../src/contexts/matching/index.ts";
 import { candidateSkills } from "../src/contexts/skills/index.ts";
 import { loadSkillsScreen } from "../app/candidate/skills/data.ts";
 import { loadCockpit } from "../app/cockpit-data.ts";
@@ -120,6 +120,17 @@ describe("leque de consultas por tela", () => {
     const candidateId = await seedOwner();
     await ensurePrimaryTrack(candidateId);
     const queries = await queriesOf(() => boardFacets(candidateId, { groupRepeats: true }));
+    expect(queries).toHaveLength(1);
+  });
+
+  it("lê a página com seu total sem uma contagem separada", async () => {
+    const candidateId = await seedOwner();
+    await ensurePrimaryTrack(candidateId);
+    const queries = await queriesOf(async () => {
+      const page = await listBoardPage(candidateId, { limit: 25 });
+      expect(page.total).toBe(1);
+      expect(page.rows).toHaveLength(1);
+    });
     expect(queries).toHaveLength(1);
   });
 
