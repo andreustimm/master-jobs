@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+- A conexão com o banco foi preparada com permissões limitadas e validada; a ativação ocorrerá no próximo deploy de produção aprovado.
+
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 
 - Alertas por e-mail configurados para avisar o responsável sobre erros novos em produção e falhas resolvidas que voltam a acontecer.

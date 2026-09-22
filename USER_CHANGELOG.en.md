@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+- The database connection is configured and validated with limited permissions; it takes effect in the next approved production deployment.
+
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 
 - Email alerts are configured to notify the system owner of new production errors and recurring failures that had been resolved.
