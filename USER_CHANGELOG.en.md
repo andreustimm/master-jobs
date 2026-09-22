@@ -18,6 +18,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- An application recorded at the exact moment the old-job cleanup ran could
+  disappear together with the job. The cleanup now waits and checks again, and
+  never deletes a job that has an application.
+
 - The database connection is configured and validated with limited permissions; it takes effect in the next approved production deployment.
 
 ## [1.21.1] - 2026-09-22T18:19:03.735Z

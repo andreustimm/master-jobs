@@ -91,10 +91,18 @@ configuram explicitamente. Variável em branco conta como ausente, e o erro de
 configuração **nomeia a variável** de onde a URL veio — nunca o valor.
 
 **Query string:** parâmetros de pool (`pgbouncer`, `connection_limit`) são
-descartados, porque a configuração do cliente já é explícita. Parâmetros de TLS
-(`sslmode`, `ssl`, `sslrootcert`…) são **recusados** com erro, e não apagados em
-silêncio: a política de TLS é do cliente, e apagar `sslmode=disable` deixaria
-quem escreveu convencido de que desligou a verificação.
+descartados, porque a configuração do cliente já é explícita. `sslmode` passa
+por **lista de permissão**: `require`, `verify-ca` e `verify-full` pedem o mesmo
+ou mais do que o cliente já impõe e são aceitos — é a forma que a integração do
+Supabase com a Vercel cadastra em `POSTGRES_URL` (`?sslmode=require`), e
+recusá-la derrubou a 1.13.1 por 28 minutos. Qualquer outro valor (`disable`,
+`allow`, `prefer`, um valor inventado) e os demais parâmetros de TLS (`ssl`,
+`sslrootcert`, `sslcert`…) são **recusados** com erro que nomeia a variável, e
+não apagados em silêncio: a política de TLS é do cliente, e apagar
+`sslmode=disable` deixaria quem escreveu convencido de que desligou a
+verificação. Quando aceito, o parâmetro sai da URL antes de chegar ao driver.
+Contrato em `src/core/db/config.ts`, provado por
+`tests/db-config-diagnostics.test.ts` com a URL na forma que o provedor cadastra.
 
 **`DATABASE_CA_CERT` aceita as duas formas:** o PEM colado direto na variável
 (o gesto natural num painel serverless, onde não há onde pôr arquivo) ou o
@@ -379,9 +387,11 @@ DATABASE_URL=postgresql://master_jobs_app.<project-ref>:<senha>@<pooler-host>:54
 
 No pooler compartilhado do Supabase, o usuário é `<role>.<project-ref>`;
 na conexão direta, é somente `<role>`. Copie host e porta da configuração do
-projeto. O cliente aceita `sslmode=require`, `verify-ca` e `verify-full` e
-mantém a verificação de cadeia com a CA configurada. Valores que afrouxam TLS,
-desconhecidos ou outros parâmetros que mudem sua política são recusados.
+projeto. Query string é desnecessária — a política de TLS é do cliente. Se
+vier, `?sslmode=require` (ou `verify-ca`/`verify-full`) é aceito e descartado,
+e a verificação de cadeia continua com a CA configurada; `?sslmode=disable`,
+valores desconhecidos ou outros parâmetros que mudem a política são recusados
+com erro que nomeia a variável.
 
 **Por que isto importa mesmo com o fallback.** O runtime aceita `POSTGRES_URL`
 quando `DATABASE_URL` falta, e é isso que faz o deploy subir sem configuração

@@ -11,7 +11,6 @@
  */
 import {
   and,
-  eq,
   isNotNull,
   lt,
   lte,
@@ -20,7 +19,7 @@ import {
   type SQL,
   type SQLWrapper,
 } from "drizzle-orm";
-import { getDb } from "./client.ts";
+import { getDb, type DB } from "./client.ts";
 import { application, job, jobPage, source } from "./schema.ts";
 import { MANUAL_SOURCE_KINDS } from "../sources/types.ts";
 
@@ -76,6 +75,50 @@ function payloadNeedsCompaction(descriptionHtml: SQLWrapper, raw: SQLWrapper): S
       )
     )
   )`;
+}
+
+type Transaction = Parameters<Parameters<DB["transaction"]>[0]>[0];
+
+/**
+ * The only authorized way to delete a job: closed before `closedBefore` and
+ * without any application. Must run inside a transaction.
+ *
+ * Two statements on purpose. A single `DELETE ... WHERE NOT EXISTS
+ * (application)` evaluates the predicate with the snapshot taken when the
+ * statement starts. An application inserted concurrently holds a key-share
+ * lock on the job; the DELETE waits for it and, once the other transaction
+ * commits, proceeds — the job row was locked, not changed, so nothing is
+ * rechecked — and `application.job_id ON DELETE CASCADE` erases the decision
+ * that just committed. `tests/db-decision-integrity.test.ts` reproduces it.
+ *
+ * Locking first (`FOR UPDATE`) waits for every application already referencing
+ * those rows and blocks new ones until commit. The DELETE is then a new
+ * statement in READ COMMITTED, so its snapshot sees every application that
+ * committed while we waited, and the predicate is evaluated again. A late
+ * application fails on the foreign key instead of vanishing: the user sees
+ * an error, never a silent loss.
+ */
+export async function deleteClosedJobsWithoutApplication(
+  tx: Transaction,
+  closedBefore: string,
+): Promise<{ id: number }[]> {
+  const eligible = and(
+    lt(job.closedAt, closedBefore),
+    sql`not exists (select 1 from ${application} a where a.job_id = ${job.id})`,
+  );
+  const locked = await tx
+    .select({ id: job.id })
+    .from(job)
+    .where(eligible)
+    .orderBy(job.id)
+    .for("update");
+  if (locked.length === 0) return [];
+  return tx
+    .delete(job)
+    // One array parameter, not one parameter per id: a large prune would
+    // otherwise hit the protocol's 65 535-parameter ceiling.
+    .where(and(sql`${job.id} = any(${`{${locked.map((row) => row.id).join(",")}}`}::int[])`, eligible))
+    .returning({ id: job.id });
 }
 
 /**
@@ -202,15 +245,7 @@ export async function runDatabaseCleanup(
       )
       .returning({ id: jobPage.jobId });
 
-    const pruned = await tx
-      .delete(job)
-      .where(
-        and(
-          lt(job.closedAt, closedBefore),
-          sql`not exists (select 1 from ${application} a where a.job_id = ${job.id})`,
-        ),
-      )
-      .returning({ id: job.id });
+    const pruned = await deleteClosedJobsWithoutApplication(tx, closedBefore);
 
     return {
       compactedJobs: compacted.length,
