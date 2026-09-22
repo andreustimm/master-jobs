@@ -79,6 +79,21 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 - Teste de concorrência: dois resgates simultâneos do mesmo link de
   recuperação trocam a senha uma vez só.
 
+### Alterado
+
+- O overlay opaco de navegação passa a ser só da troca de rota (#220). Filtro,
+  ordem, página e densidade em `/jobs` (mesmo `pathname`) viram transição
+  suave: `NavigationTransition.soft`, decidido em `transitionStore.begin` por
+  `isSameScreenNavigation`, sem overlay nem `inert`; o shell recebe
+  `aria-busy` e `data-navigation="soft"`, o `<main>` esmaece por CSS depois de
+  120 ms e um aviso `role="status"` usa `transition.updating`. O ciclo do
+  store não muda (mínimo de 180 ms, saída e reset): no voltar/avançar o
+  roteador confirma a URL antes de o conteúdo chegar, e encerrar no commit
+  anunciaria pronto sobre a lista anterior. Na saída o conteúdo volta à
+  opacidade plena e `aria-busy` cai no reset. `prolonged` e `offline`
+  promovem ao overlay. O E2E passa a afirmar o estado suave nas sete navegações de
+  filtro, densidade, tamanho, página e preset.
+
 ## [1.21.1] - 2026-09-22
 
 - A tela de vagas calcula lista e total em uma seleção de ids antes de carregar os dados da página, evitando repetir filtros e agrupamento. Páginas além do fim mantêm o total por uma contagem de fallback; o benchmark pode registrar todos os planos com `JHO_PERF_PLANS=1`.

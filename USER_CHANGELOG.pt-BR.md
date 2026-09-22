@@ -47,6 +47,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 - O modo sem login, próprio para desenvolvimento, é recusado automaticamente
   em qualquer ambiente publicado.
 
+### Melhorado
+
+- Mudar filtro, ordem, página ou densidade na tela de Vagas não cobre mais a
+  tela inteira com a abertura de carregamento. A lista fica visível, esmaece
+  enquanto atualiza e continua respondendo a cliques. A abertura completa
+  continua na troca de tela e quando a resposta demora ou a conexão cai.
+
 ## [1.21.1] - 2026-09-22T18:19:03.735Z
 
 - A lista de vagas e seu total são calculados juntos, reduzindo o trabalho das buscas e preservando a ordem e os totais ao trocar de página.

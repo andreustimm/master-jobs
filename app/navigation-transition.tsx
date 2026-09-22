@@ -66,24 +66,42 @@ function NavigationCommitObserver() {
   return null;
 }
 
-function useApplicationShellState(active: boolean): void {
+type ShellMode = "idle" | "soft" | "settling" | "blocking";
+
+/**
+ * O overlay bloqueia só a troca de tela. Na mesma tela (filtro, ordem, página,
+ * densidade) o shell fica operável: `aria-busy` avisa a tecnologia assistiva e
+ * `data-navigation="soft"` deixa o CSS esmaecer o conteúdo, sem `inert`.
+ *
+ * O ciclo do store é o mesmo da troca de tela — mínimo e esmaecimento
+ * inclusos. No voltar/avançar o roteador confirma a URL antes de o conteúdo da
+ * entrada chegar (medido no E2E de modalidade); encerrar no commit anunciaria
+ * pronto sobre a lista anterior. Por isso, ao sair (`leaving`), o conteúdo
+ * volta à opacidade plena, mas `aria-busy` só cai no `reset`.
+ */
+function useApplicationShellState(mode: ShellMode): void {
   useLayoutEffect(() => {
     const shell = document.getElementById("application-shell");
     if (!shell) return;
 
-    if (active) {
+    const clear = () => {
+      shell.removeAttribute("inert");
+      shell.removeAttribute("aria-busy");
+      shell.removeAttribute("data-navigation");
+    };
+    clear();
+    if (mode === "blocking") {
       shell.setAttribute("inert", "");
       shell.setAttribute("aria-busy", "true");
-    } else {
-      shell.removeAttribute("inert");
-      shell.removeAttribute("aria-busy");
+    } else if (mode === "soft") {
+      shell.setAttribute("aria-busy", "true");
+      shell.setAttribute("data-navigation", "soft");
+    } else if (mode === "settling") {
+      shell.setAttribute("aria-busy", "true");
     }
 
-    return () => {
-      shell.removeAttribute("inert");
-      shell.removeAttribute("aria-busy");
-    };
-  }, [active]);
+    return clear;
+  }, [mode]);
 }
 
 function SplashBrand() {
@@ -138,14 +156,23 @@ export function NavigationTransition({ labels }: { labels: TransitionLabels }) {
     () => INITIAL_NAVIGATION_TRANSITION,
   );
   const active = snapshot.phase !== "idle";
-  useApplicationShellState(active);
+  const soft = active && snapshot.soft;
+  useApplicationShellState(
+    !active ? "idle" : !soft ? "blocking" : snapshot.phase === "leaving" ? "settling" : "soft",
+  );
 
   return (
     <>
       <Suspense fallback={null}>
         <NavigationCommitObserver />
       </Suspense>
-      {active ? (
+      {/* Sempre montada, vazia em repouso: leitor de tela anuncia mudança
+          dentro de uma região que já acompanha, e pode ignorar uma que já
+          nasce com o texto. */}
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="navigation-soft-status">
+        {soft && snapshot.phase === "loading" ? labels.updating : ""}
+      </p>
+      {active && !soft ? (
         <div
           id={TRANSITION_SPLASH_ROOT_ID}
           className="navigation-transition"

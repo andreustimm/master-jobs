@@ -192,6 +192,7 @@ describe("depois de parar o ciclo de vida", () => {
 describe("os rótulos da transição", () => {
   const completos = {
     loading: "Carregando",
+    updating: "Atualizando",
     prolonged: "Ainda carregando",
     offlineTitle: "Sem conexão",
     offlineBody: "Verifique a rede",
@@ -229,6 +230,7 @@ describe("os eventos que a máquina de transição ignora", () => {
     type: "start",
     target: "/jobs",
     at: 1_000,
+    soft: false,
   });
 
   it("UT-430 `prolonged` sobre fase que não é `loading` não muda nada", () => {

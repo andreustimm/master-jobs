@@ -83,6 +83,19 @@ opaco de tela cheia: **180 ms mínimos** (`TRANSITION_MIN_MS`) mais **260 ms** d
 esmaecimento (`SPLASH_FADE_MS`), com o shell `inert`. ~440 ms fixos, mesmo se o
 servidor responder na hora. **MEDIDO no código; não cronometrado no navegador.**
 
+**Mudança da #220 (em revisão para `dev`):** na mesma tela o overlay não abre mais. O store decide
+por `isSameScreenNavigation` (mesmo `pathname`, query diferente) e marca a
+geração como `soft`; a apresentação vira `aria-busy` e
+`data-navigation="soft"` no `#application-shell`, com o `<main>` esmaecido por
+CSS depois de 120 ms. O ciclo do store é o mesmo (mínimo, `leaving`, `reset`):
+o ganho é a tela continuar visível e operável, não um fim mais cedo. Encerrar
+no commit foi tentado e reprovado pelo E2E de modalidade: no voltar/avançar o
+roteador confirma a URL antes de o conteúdo da entrada chegar, e o shell
+anunciava pronto sobre a lista anterior por até alguns segundos. Na saída o
+conteúdo volta à opacidade plena e `aria-busy` só cai no `reset`. Demora
+(`prolonged`) e falta de rede (`offline`) zeram `soft` e promovem ao overlay.
+Troca de rota continua igual.
+
 ## Baseline: antes e depois da primeira entrega
 
 `pnpm perf:jobs`, 10 mil vagas, mediana de 3 execuções, mesma máquina. Coluna
@@ -197,7 +210,7 @@ das amostras. Sem essa opção permanece somente o plano da maior consulta.
 | 1 ✅ | `description` mínima sem descomprimir o texto | alto × baixo | `repo.ts` |
 | 1 ✅ | Prelúdio de `/jobs`: trilhas ∥ câmbio, sem `listTracks` duplicado, câmbio em 1 consulta | alto × baixo | `jobs-data.ts` |
 | 1 ✅ | Medição: baseline local e log por estágio | habilita o resto | `perf:jobs`, `registrarTempo` |
-| PR 2 | Overlay só na troca de rota; filtros que se aplicam sozinhos | alto × médio | fase 3 |
+| PR 2 | Overlay só na troca de rota (#220, em revisão); filtros que se aplicam sozinhos (#218) | alto × médio | fase 3 |
 | 2 ✅ | Seleção compartilhada para lista e total, facetas fundidas | alto × médio | `repo.ts` |
 | 2 | Busca por termo indexada (`pg_trgm` ou `tsvector`) | altíssimo × médio | migration |
 | 2 ✅ | Normalização salarial compartilhada, sem repetir cotações a cada uso | alto com faixa | `repo.ts` |

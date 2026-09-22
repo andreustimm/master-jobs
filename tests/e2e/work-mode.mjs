@@ -1,6 +1,8 @@
+// Pronto = sem `inert` (troca de tela) e sem `aria-busy` (mesma tela, #220):
+// a navegação de filtro não bloqueia mais o shell, só o marca como ocupado.
 const waitForFilters = (page) => page.waitForFunction(() => {
   const input = document.querySelector('[data-testid="filters-query"]');
-  return input && !input.closest("[inert]");
+  return input && !input.closest("[inert]") && !input.closest("[aria-busy]");
 });
 
 export async function checkClearingSearch(page, check) {

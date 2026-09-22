@@ -45,6 +45,14 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 - The no-login mode meant for development is automatically refused in any
   published environment.
 
+### Improved
+
+- Changing a filter, the order, the page or the density on the Jobs screen no
+  longer covers the whole screen with the loading splash. The list stays in
+  view, dims while it updates and keeps responding to clicks. The full splash
+  remains for switching screens and when a response is slow or the connection
+  drops.
+
 ## [1.21.1] - 2026-09-22T18:19:03.735Z
 
 - The job list and its total are calculated together, reducing search work while preserving ordering and totals when changing pages.
