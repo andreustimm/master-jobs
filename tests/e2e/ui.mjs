@@ -3021,6 +3021,7 @@ try {
     check("Criar meu perfil não vaza português", onboardingLeaks.length === 0, onboardingLeaks.join(" | "));
 
     await onboarding.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+    check("criar perfil oferece o endereço público", (await onboarding.locator('[data-testid="profile-slug"]').count()) === 1);
     await onboarding.fill('[data-testid="profile-name"]', "Onboarding Person E2E");
     await onboarding.fill('[data-testid="profile-headline"]', "Platform Engineer");
     await onboarding.locator('[data-testid="create-profile"]').click();
@@ -3039,6 +3040,36 @@ try {
       body.slice(0, 200),
     );
     check("perfil novo nasce privado", privateChecked);
+
+    // Endereço público escolhido (#235): troca, publica e confere que só o
+    // novo responde — o derivado do nome passa a 404.
+    const chosen = `endereco-e2e-${Date.now().toString(36)}`;
+    const derivedHref = await onboarding
+      .locator('[data-testid="public-slug"]')
+      .inputValue()
+      .catch(() => "");
+    await onboarding.fill('[data-testid="public-slug"]', chosen);
+    await onboarding.locator('[data-testid="save-public-slug"]').click();
+    await onboarding.waitForTimeout(1_000);
+    await onboarding.locator('input[name="visibility"][value="public"]').check();
+    await onboarding.locator('[data-testid="save-visibility"]').click();
+    await onboarding.waitForTimeout(1_000);
+    await onboarding.reload({ waitUntil: "networkidle" });
+    const savedSlug = await onboarding.locator('[data-testid="public-slug"]').inputValue().catch(() => "");
+    const addressOverflow = await onboarding.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    check("endereço público escolhido sobrevive ao refresh", savedSlug === chosen, `${savedSlug} != ${chosen}`);
+    check("cartão de endereço público cabe em 375px", addressOverflow <= 1, `overflow=${addressOverflow}`);
+
+    const anon = await browser.newContext();
+    const anonPage = await anon.newPage();
+    const fresh = await anonPage.goto(`${BASE}/p/${chosen}`, { waitUntil: "domcontentloaded" });
+    const freshShown = (await anonPage.locator('[data-testid="route-public-profile"]').count()) === 1;
+    const stale = await anonPage.goto(`${BASE}/p/${derivedHref}`, { waitUntil: "domcontentloaded" });
+    check("endereço novo responde ao anônimo", fresh?.status() === 200 && freshShown, String(fresh?.status()));
+    check("endereço antigo responde 404 depois da troca", stale?.status() === 404, `${derivedHref}: ${stale?.status()}`);
+    await anon.close();
     await context.close();
   }
 

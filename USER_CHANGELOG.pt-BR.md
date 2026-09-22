@@ -20,6 +20,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ### Adicionado
 
+- Você escolhe o endereço público do seu perfil (o link /p/…) na área do
+  candidato — e já pode escolher ao criar o perfil. Ao trocar, o endereço
+  antigo deixa de funcionar na hora. O perfil só aparece nesse endereço
+  enquanto estiver marcado como Público.
+
 - Quem entra com uma conta de candidato nova agora pode criar o próprio perfil
   em "Criar meu perfil": nome, headline, localização e, se quiser, o currículo.
   O perfil nasce privado e é só seu.

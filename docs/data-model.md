@@ -435,6 +435,18 @@ transição comum — a exceção é `archived` sem `applied_at`, que volta a
 somente na primeira entrada em `applied`. O repositório persiste a nova `application` e seu evento na mesma
 transação e usa o status anterior como token de concorrência otimista.
 
+### Endereço público (`candidate.public_slug`)
+
+`/p/<slug>` lê `candidate.public_slug`, não `candidate.slug` (ADR 0024). `slug`
+é o identificador interno — a CLI e o seed acham o dono por `slug = 'default'`
+— e nunca muda pela tela; `public_slug` é o endereço que o próprio candidato
+escolhe em `/candidate` (`setPublicSlug`), com índice único
+`candidate_public_slug_idx`. Migrações `0009_candidate_public_slug` (coluna
+anulável + índice) e `0010_backfill_candidate_public_slug` (copia `slug` para
+quem não tem endereço, idempotente). Trocar o endereço faz o antigo responder
+404 na hora, sem redirecionamento, e o libera para outra pessoa. Linha sem
+`public_slug` não responde em `/p/`.
+
 ### Candidato criado pela própria conta
 
 Só o candidato do dono nasce do `profile/profile.yaml` (`syncCandidateFromProfile`,
@@ -449,7 +461,9 @@ candidato cria o PRÓPRIO em `/candidate` (#234), por `createOwnCandidate`:
   que `createUserAction` e o e2e montam e `ensureCandidate` reaproveita — ganha
   o prefixo `perfil-`;
 - o currículo colado entra no mesmo commit do candidato;
-- nasce com `visibility = 'private'`, `public_cv = false` e `is_default = false`;
+- nasce com `visibility = 'private'`, `public_cv = false`, `is_default = false`
+  e `public_slug = slug` — ou com o endereço que a pessoa escolheu no
+  formulário, que não ganha sufixo: ocupado, a criação volta pedindo outro;
 - o slug vem do nome digitado, sem acento — ver `src/core/candidate-identity.ts`;
 - candidato e vínculo (`auth_user.candidate_id`) entram no mesmo commit, com
   `select … for update` na linha da conta: duplo envio concorrente espera o

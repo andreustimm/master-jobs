@@ -798,6 +798,21 @@ export const en: Dictionary = {
     cvTooShort: "The text is too short to be a CV (at least {min} characters). Leave it blank to paste it later.",
     unavailable: "This account cannot create a profile right now. Sign in again or contact whoever runs the system.",
   },
+  /** Public address chosen by the candidate (#235). */
+  publicAddress: {
+    title: "Public address",
+    label: "Address",
+    hint: "Lowercase letters, numbers and hyphens, {min} to {max} characters. It only answers while the profile is Public.",
+    changeWarning: "When you change it, the old address stops working right away and someone else may pick it.",
+    save: "Save address",
+    saved: "Address saved.",
+    onboardingHint: "Optional. Leave it blank and we derive one from your name. You can change it later.",
+    slugInvalid: "Use only lowercase letters, numbers and hyphens between them.",
+    slugTooShort: "The address needs at least {min} characters.",
+    slugTooLong: "The address is longer than {max} characters.",
+    slugReserved: "This address is reserved by the system. Pick another one.",
+    slugTaken: "This address is already taken. Pick another one.",
+  },
   skillCategories: {
     language: "Languages",
     framework: "Frameworks",

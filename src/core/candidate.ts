@@ -19,7 +19,12 @@ import { application, candidate, candidateDocument, job, jobScore } from "./db/s
 import { loadProfile } from "./profile/load.ts";
 import { isVisibility, type Visibility } from "../contexts/auth/index.ts";
 import { primaryScoreFilter } from "../contexts/matching/index.ts";
-import { slugAttempt, slugBaseFromName } from "./candidate-identity.ts";
+import {
+  slugAttempt,
+  slugBaseFromName,
+  validatePublicSlug,
+  type PublicSlugError,
+} from "./candidate-identity.ts";
 
 /* -------------------------------------------------------------------------- */
 /* Profile                                                                     */
@@ -70,6 +75,9 @@ export async function ensureCandidate(input: {
       email: input.email ?? null,
       linkedinUrl: input.linkedinUrl ?? null,
       githubUrl: input.githubUrl ?? null,
+      // O endereço público nasce igual ao identificador; só a própria pessoa
+      // o troca depois, em `/candidate`.
+      publicSlug: slug,
       isDefault: true,
     })
     .returning({ id: candidate.id });
@@ -102,15 +110,21 @@ const RANDOM_SLUG_ATTEMPTS = 5;
 export async function insertOwnCandidate(
   tx: DbTransaction,
   input: OwnCandidateInput,
-): Promise<{ id: number; slug: string }> {
+): Promise<{ id: number; slug: string } | null> {
   const base = slugBaseFromName(input.name);
-  // Sequencial primeiro, porque `maria-souza-2` é legível. Nomes que caem no
-  // mesmo `perfil` (escrita não latina, só símbolos) esgotariam os cinquenta
-  // e travariam o cadastro de todo o resto; o sufixo aleatório os absorve.
-  const slugs = [
-    ...Array.from({ length: MAX_SLUG_ATTEMPTS }, (_, i) => slugAttempt(base, i + 1)),
-    ...Array.from({ length: RANDOM_SLUG_ATTEMPTS }, () => `${base}-${randomBytes(3).toString("hex")}`),
-  ];
+  // Endereço escolhido pela pessoa: uma tentativa só. Se já é de alguém, a
+  // resposta é "escolha outro" — pôr um sufixo em silêncio publicaria um
+  // endereço que ela não escolheu.
+  //
+  // Sem escolha, sequencial primeiro, porque `maria-souza-2` é legível. Nomes
+  // que caem no mesmo `perfil` (escrita não latina, só símbolos) esgotariam os
+  // cinquenta e travariam o cadastro de todo o resto; o aleatório os absorve.
+  const slugs = input.publicSlug !== null
+    ? [input.publicSlug]
+    : [
+        ...Array.from({ length: MAX_SLUG_ATTEMPTS }, (_, i) => slugAttempt(base, i + 1)),
+        ...Array.from({ length: RANDOM_SLUG_ATTEMPTS }, () => `${base}-${randomBytes(3).toString("hex")}`),
+      ];
   for (const slug of slugs) {
     const [row] = await tx
       .insert(candidate)
@@ -126,8 +140,11 @@ export async function insertOwnCandidate(
         // "esqueci de configurar" viraria vazamento se o padrão mudasse.
         visibility: "private",
         publicCv: false,
+        publicSlug: slug,
       })
-      .onConflictDoNothing({ target: candidate.slug })
+      // Sem alvo: conflito em QUALQUER índice único — o do identificador ou o
+      // do endereço público, que outra pessoa pode ter escolhido — é "ocupado".
+      .onConflictDoNothing()
       .returning({ id: candidate.id, slug: candidate.slug });
     if (!row) continue;
     // O currículo entra no mesmo commit do candidato: se a gravação dele
@@ -145,6 +162,7 @@ export async function insertOwnCandidate(
     }
     return row;
   }
+  if (input.publicSlug !== null) return null;
   throw new Error("nenhum slug livre para este nome");
 }
 
@@ -155,6 +173,8 @@ export type OwnCandidateInput = {
   /** Texto do currículo, ou `null` para colar depois. */
   cv: string | null;
   cvLabel: string;
+  /** Endereço público já validado, ou `null` para derivar do nome. */
+  publicSlug: string | null;
 };
 
 /**
@@ -227,6 +247,46 @@ export async function setVisibility(
     .set({ visibility: value, updatedAt: new Date().toISOString() })
     .where(eq(candidate.id, candidateId));
   return { ok: true, visibility: value };
+}
+
+/**
+ * Troca o endereço público (`/p/<public_slug>`). Só o próprio candidato chama.
+ *
+ * O endereço antigo deixa de responder na hora — 404, sem redirecionamento — e
+ * fica livre para outra pessoa. Redirecionar diria a quem guardou o link antigo
+ * qual é o novo, e a troca existe justamente para quem quer se desligar de um
+ * endereço que circulou. Ver ADR 0024.
+ *
+ * A unicidade é do índice, não de uma consulta anterior: duas pessoas pedindo o
+ * mesmo endereço ao mesmo tempo passariam juntas por um "está livre?".
+ */
+export async function setPublicSlug(
+  candidateId: number,
+  raw: string,
+): Promise<{ ok: true; slug: string } | { ok: false; code: PublicSlugError | "slugTaken" }> {
+  const valid = validatePublicSlug(raw);
+  if (!valid.ok) return valid;
+  try {
+    await getDb()
+      .update(candidate)
+      .set({ publicSlug: valid.slug, updatedAt: new Date().toISOString() })
+      .where(eq(candidate.id, candidateId));
+  } catch (error) {
+    if (isUniqueViolation(error)) return { ok: false, code: "slugTaken" };
+    throw error;
+  }
+  return { ok: true, slug: valid.slug };
+}
+
+/**
+ * `unique_violation` do PostgreSQL. O driver pode embrulhar o erro original
+ * em `cause`, então os dois níveis são olhados.
+ */
+function isUniqueViolation(error: unknown): boolean {
+  for (let current: unknown = error; current && typeof current === "object"; current = (current as { cause?: unknown }).cause) {
+    if ((current as { code?: unknown }).code === "23505") return true;
+  }
+  return false;
 }
 
 /**

@@ -11,6 +11,19 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- Endereço público escolhido pelo candidato (#235): `/p/<slug>` passa a ler
+  `candidate.public_slug` (coluna nova, índice único), separado do `slug`
+  interno que a CLI e o seed usam para achar o dono. Migrações aditivas
+  `0009_candidate_public_slug` e `0010_backfill_candidate_public_slug` (copia
+  `slug`, idempotente) — **suspendem a promoção automática**. `/candidate`
+  ganha o cartão "Endereço público" (`setPublicSlugAction`, com
+  `guardOwnCandidate`), e o formulário de criação aceita o endereço, sugerido
+  a partir do nome. Validação pura em `validatePublicSlug` (minúsculas,
+  números e hífen, 3–40, reservados incluindo toda rota de primeiro nível do
+  app e os prefixos `user-`/`e2e-`); unicidade pelo índice, com `23505`
+  traduzido em `slugTaken`. Trocar faz o antigo responder 404 na hora, sem
+  redirecionamento (ADR 0024).
+
 - Autoatendimento do candidato (#234): conta de papel candidato sem candidato
   vê "Criar meu perfil" em `/candidate` (e na navegação) em vez do 403 sem
   saída. `createProfileAction` passa por `guard("candidate:create")` — ação nova

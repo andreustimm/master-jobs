@@ -97,7 +97,7 @@ async function seedCandidate(fixture: CandidateFixture): Promise<"inserted" | "u
   const [row] = await withDuplicateKeyRetry(() =>
     db
       .insert(candidate)
-      .values({ slug: fixture.slug, name: fixture.name })
+      .values({ slug: fixture.slug, publicSlug: fixture.slug, name: fixture.name })
       .onConflictDoUpdate({ target: candidate.slug, set: { name: fixture.name } })
       .returning({ id: candidate.id, inserted: sql<boolean>`(xmax = 0)` }),
   );

@@ -51,7 +51,6 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
   const [row] = await db
     .select({
       id: candidate.id,
-      slug: candidate.slug,
       name: candidate.name,
       headline: candidate.headline,
       location: candidate.location,
@@ -63,7 +62,9 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
       email: candidate.email,
     })
     .from(candidate)
-    .where(eq(candidate.slug, slug))
+    // O endereço público, nunca o identificador interno: quem trocou de
+    // endereço não pode continuar alcançável pelo antigo nem pelo `slug`.
+    .where(eq(candidate.publicSlug, slug))
     .limit(1);
 
   // A checagem acontece AQUI, e não na página. Uma função que devolvesse o
@@ -94,7 +95,7 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
   }
 
   return {
-    slug: row.slug,
+    slug,
     name: row.name,
     headline: row.headline,
     location: row.location,
