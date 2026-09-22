@@ -16,14 +16,16 @@
  *   soltos como `+33 1 23 45 67 89`) ou com DDD entre parênteses
  *   (`(11) 91234-5678`) — um número sem essas marcas não é distinguível de um
  *   intervalo de anos ou de um valor, e fica;
- * - piso: a linha que contém um rótulo de pretensão salarial (`piso:`,
- *   `pretensão:`, `pretensão salarial`, `faixa salarial`, `valor hora`,
- *   `salário:`, `salary expectation`, `rate:`…) sai inteira, com o resto do
- *   BLOCO: as linhas seguintes até a próxima linha em branco — o parágrafo, o
- *   item ou a tabela em que o valor mora, antes ou depois do rótulo. Num título Markdown,
- *   sai a seção inteira até o próximo título de mesmo nível ou acima. Um valor
- *   sem rótulo não é reconhecido, e o bloco inteiro some mesmo quando só uma
- *   parte dele era o piso: diante da dúvida, esconde-se.
+ * - piso: o BLOCO inteiro — parágrafo, item, tabela, tudo entre duas linhas
+ *   em branco — em que aparece um rótulo de pretensão (`piso:`, `pretensão`,
+ *   `faixa salarial`, `valor hora`, `salary expectation`, `rate:`…) ou uma
+ *   palavra de remuneração (`salário`, `remuneração`, `salary`,
+ *   `compensation`) a até 60 caracteres de um valor que não seja ano. O bloco é lido como texto corrido,
+ *   então um rótulo quebrado em duas linhas continua sendo rótulo, e o valor
+ *   sai esteja antes ou depois dele. Num título Markdown, sai a seção inteira
+ *   até o próximo título de mesmo nível ou acima. Um valor sem rótulo nem
+ *   palavra de remuneração não é reconhecido; um bloco com "reduzi o custo de
+ *   salário em 30%" some sem ser piso — diante da dúvida, esconde-se.
  *
  * Não é sanitização perfeita, e não se apresenta como tal: quem escreve o
  * piso sem rótulo no meio de um parágrafo o publica. O que ela garante é que
@@ -42,8 +44,9 @@ const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
  * para que `+30%` ou `+2 anos` fiquem.
  */
 const INTERNATIONAL_START = /\+(?=\d)/g;
-const PHONE_GROUP = /^[ \t.-]?\(?(\d{1,5})\)?/;
-const LOCAL_PHONE = /\(\d{2,3}\)[ \t]?(?:9[ \t.-]?)?\d{4}[ \t.-]?\d{4}/g;
+// Separadores de telefone: espaço, ponto, hífen, traço (– —) e barra.
+const PHONE_GROUP = /^[ \t.\-–—/]?\(?(\d{1,5})\)?/u;
+const LOCAL_PHONE = /\(\d{2,3}\)[ \t]?(?:9[ \t.\-–—/]?)?\d{4}[ \t.\-–—/]?\d{4}/gu;
 
 function redactInternationalPhones(text: string): string {
   let out = "";
@@ -68,32 +71,43 @@ function redactInternationalPhones(text: string): string {
 }
 
 /**
- * Rótulos de pretensão salarial em português e inglês. O valor pode estar
- * antes ou depois do rótulo, em qualquer moeda e período, e cortar só o número
- * deixaria "Piso: USD/ano" à vista — por isso sai a linha inteira.
+ * Rótulos de pretensão salarial em português e inglês, que valem sozinhos:
+ * são inequívocos mesmo sem número no bloco (o valor pode estar numa célula
+ * ao lado ou na linha de baixo).
  */
 const SALARY_LABEL = new RegExp(
   [
     // `piso` sozinho é chão de fábrica; só conta com o que o faz salarial.
     "\\bpiso\\s*(?::|salarial|m[íi]nimo|de\\s+(?:remunera|sal[áa]rio))",
-    // "sem pretensões comerciais" é currículo; o rótulo tem dois-pontos ou
-    // o adjetivo salarial.
-    "pretens(?:[ãa]o|[õo]es)\\s*(?::|salaria|de\\s+(?:remunera|sal[áa]rio))",
+    // "Pretensão PJ:", "pretensões salariais"; "sem pretensões comerciais" fica.
+    "pretens(?:[ãa]o|[õo]es)\\b(?!\\s+(?:comercia|art[íi]stic|liter[áa]ri|acad[êe]mic))",
     "expectativa\\s+(?:salarial|de\\s+remunera)",
     "faixa\\s+salarial",
     "valor\\s+(?:da\\s+)?hora",
-    "remunera[çc][ãa]o\\s*(?::|desejada|pretendida|m[íi]nima|esperada)",
-    "sal[áa]rio\\s*(?::|desejado|pretendido|m[íi]nimo|esperado)",
-    "salary\\s*(?::|floor|expectations?|requirements?|minimum|range\\s*:)",
+    "salary\\s*(?:floor|expectations?|requirements?|minimum)",
     "(?:minimum|desired|expected|target)\\s+(?:salary|compensation|rate|pay)",
-    "compensation\\s*(?::|floor|expectations?|requirements?)",
+    "compensation\\s*(?:floor|expectations?|requirements?)",
     // `rate:` só como rótulo no começo da linha (recuada ou não), de item,
-    // de lista numerada ou de célula:
-    // "Success rate: 99%" no meio de uma frase é currículo, não pretensão.
-    "(?:^|[|·•*-]|\\d+[.)])\\s*(?:(?:hourly|daily|day)\\s+)?rate\\s*(?::|floor)",
+    // de lista numerada ou de célula; "Success rate: 99%" no meio da frase fica.
+    "(?:^|\\n|[|·•*-]|\\d+[.)])\\s*(?:(?:hourly|daily|day)\\s+)?rate\\s*(?::|floor)",
   ].join("|"),
   "iu",
 );
+
+/**
+ * Palavras de remuneração que só contam PERTO de um valor (60 caracteres, no
+ * texto corrido do bloco): "Salário atual: R$ 25.000" é piso, "Salary range
+ * benchmarking tool" seguido de "2019-2021" não é. Ano de quatro dígitos não
+ * conta como valor.
+ */
+const PAY_WORD = "\\b(?:sal[áa]ri(?:o|os|al|ais)|remunera[çc](?:[ãa]o|[õo]es)|salar(?:y|ies)|compensation|pay\\s+rate|hourly\\s+rate)\\b";
+const AMOUNT = "(?:[$€£¥]|R\\$|\\b(?!(?:19|20)\\d{2}\\b)\\d)";
+const PAY_NEAR_AMOUNT = new RegExp(`${PAY_WORD}.{0,60}?${AMOUNT}|${AMOUNT}.{0,60}?${PAY_WORD}`, "iu");
+
+function isSalaryBlock(block: string): boolean {
+  const prose = block.replace(/\s+/g, " ");
+  return SALARY_LABEL.test(block) || SALARY_LABEL.test(prose) || PAY_NEAR_AMOUNT.test(prose);
+}
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -101,32 +115,46 @@ function escapeRegExp(value: string): string {
 
 const HEADING = /^(#{1,6})\s/;
 
+/** Linhas em blocos: separados por linha em branco, e um título é bloco sozinho. */
+function blocks(lines: string[]): string[][] {
+  const out: string[][] = [];
+  let current: string[] = [];
+  const flush = () => {
+    if (current.length > 0) out.push(current);
+    current = [];
+  };
+  for (const line of lines) {
+    if (line.trim() === "") {
+      flush();
+      out.push([line]);
+    } else if (HEADING.test(line)) {
+      flush();
+      out.push([line]);
+    } else {
+      current.push(line);
+    }
+  }
+  flush();
+  return out;
+}
+
 export function publicCvText(content: string, known: { email?: string | null } = {}): string {
   const out: string[] = [];
-  // Enquanto não nulo, as linhas pertencem ao bloco do rótulo e saem.
-  // `paragraph` termina na linha em branco; um número termina na seção cujo
-  // título tinha aquele nível.
-  let skipping: "paragraph" | number | null = null;
+  // Nível do título cuja seção inteira está saindo, ou nulo.
+  let skippingSection: number | null = null;
   // NFC: um "ã" digitado como "a" + til combinante não casaria com o rótulo.
-  for (const line of content.normalize("NFC").split("\n")) {
-    const heading = HEADING.exec(line);
-    if (skipping === "paragraph" && line.trim() === "") skipping = null;
-    if (typeof skipping === "number" && heading && heading[1]!.length <= skipping) skipping = null;
-    if (skipping !== null) continue;
-
-    const label = SALARY_LABEL.exec(line);
-    if (!label) {
-      out.push(line);
+  for (const block of blocks(content.normalize("NFC").split("\n"))) {
+    const heading = HEADING.exec(block[0]!);
+    if (skippingSection !== null) {
+      if (heading && heading[1]!.length <= skippingSection) skippingSection = null;
+      else continue;
+    }
+    const text = block.join("\n");
+    if (text.trim() !== "" && isSalaryBlock(text)) {
+      if (heading) skippingSection = heading[1]!.length;
       continue;
     }
-    if (heading) {
-      skipping = heading[1]!.length;
-      continue;
-    }
-    // A linha do rótulo sai inteira: o valor pode vir ANTES dele
-    // (`| R$ 30.000 | Pretensão salarial |`), e guardar o começo da linha
-    // publicaria justamente o número.
-    skipping = "paragraph";
+    out.push(...block);
   }
 
   let text = out.join("\n");

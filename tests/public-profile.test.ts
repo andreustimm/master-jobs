@@ -161,7 +161,9 @@ describe("o currículo exige o segundo consentimento", () => {
         "# Andreus Timm",
         "Contato: andreus@zorbit.com.br · +55 11 91234-5678 · (11) 3456-7890",
         "Alternativo: outro.endereco@example.test",
+        "",
         "Senior AI Software Architect, 2015-2020 e 2020-2026.",
+        "",
         "Salary expectation: USD 15,000/month",
       ].join("\n"),
     });

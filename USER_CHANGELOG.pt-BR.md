@@ -21,10 +21,10 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 ### Segurança
 
 - O currículo publicado no perfil público passa a esconder e-mails, telefones
-  com código de país ou com DDD entre parênteses e o trecho da pretensão
-  salarial identificada por rótulo (como "Pretensão salarial:" ou "Salary
-  expectation:") — a linha e o parágrafo ou tabela em que ela está —, mesmo
-  quando estão escritos no texto. Um valor escrito sem rótulo continua
+  com código de país ou com DDD entre parênteses e o parágrafo ou a tabela
+  inteira em que aparece a pretensão salarial (como "Pretensão salarial:",
+  "Salário atual: R$ …" ou "Salary expectation:"), mesmo quando estão escritos
+  no texto. Um valor escrito sem rótulo nem menção a salário continua
   aparecendo.
 - O modo sem login, próprio para desenvolvimento, é recusado automaticamente
   em qualquer ambiente publicado.

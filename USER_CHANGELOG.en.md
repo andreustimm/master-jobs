@@ -21,10 +21,10 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 ### Security
 
 - The CV shown on the public profile now hides email addresses, phone numbers
-  with a country code or a parenthesised area code, and the passage holding a
-  labelled salary expectation (such as "Salary expectation:") — its line and
-  the paragraph or table it sits in — even when they are written in the CV
-  text. An amount written without a label is still shown.
+  with a country code or a parenthesised area code, and the whole paragraph or
+  table that states a salary expectation (such as "Salary expectation:" or
+  "Current salary: …"), even when they are written in the CV text. An amount
+  written with no label or mention of salary is still shown.
 - The no-login mode meant for development is automatically refused in any
   published environment.
 

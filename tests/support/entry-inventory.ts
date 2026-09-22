@@ -26,7 +26,12 @@ import { join } from "node:path";
  */
 
 export const ROUTING_ROOTS = ["app"] as const;
-const SOURCE_ROOTS = ["app", "components", "lib", "src"] as const;
+/**
+ * Onde pode morar código importável pela aplicação: o repositório inteiro,
+ * porque `@/*` resolve a partir da raiz. Ficam fora só dependências, saídas
+ * geradas, diretórios ocultos de ferramenta e os próprios testes.
+ */
+const NOT_SHIPPED = new Set(["node_modules", "coverage", "public", "tests", "docs"]);
 const SOURCE = /\.(?:ts|tsx|js|jsx|mjs|cjs|mdx)$/;
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -37,7 +42,8 @@ function walk(dir: string, out: string[] = []): string[] {
     return out;
   }
   for (const entry of entries) {
-    const full = join(dir, entry);
+    if (entry.startsWith(".") || (dir === "." && NOT_SHIPPED.has(entry))) continue;
+    const full = dir === "." ? entry : join(dir, entry);
     if (statSync(full).isDirectory()) walk(full, out);
     else if (SOURCE.test(full)) out.push(full);
   }
@@ -285,6 +291,11 @@ export function routeMethods(source: string): { methods: string[]; unknown: stri
   return { methods, unknown };
 }
 
+/** Todo arquivo de código que pode chegar ao build, a partir da raiz. */
+export function productionSources(): string[] {
+  return walk(".");
+}
+
 export type Inventory = {
   pages: string[];
   routes: string[];
@@ -299,7 +310,7 @@ const METADATA_ROUTE = /\/(?:opengraph-image|twitter-image|icon|apple-icon|sitem
 
 export function discoverEntries(): Inventory {
   const routing = ROUTING_ROOTS.flatMap((root) => walk(root));
-  const all = SOURCE_ROOTS.flatMap((root) => walk(root));
+  const all = productionSources();
   const read = (file: string) => readFileSync(file, "utf8");
   return {
     pages: routing.filter((f) => /\/page\.(?:tsx|ts|jsx|js|mdx)$/.test(f)).sort(),

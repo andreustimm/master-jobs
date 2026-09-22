@@ -75,6 +75,13 @@ describe("publicCvText", () => {
     );
     // `piso` que não é salário é currículo, e a linha seguinte também fica.
     expect(publicCvText("Automação do piso de fábrica\n2019-2021")).toBe("Automação do piso de fábrica\n2019-2021");
+    // Rótulos que a revisão achou escapando: qualificador, estado atual,
+    // quebra de linha no meio do rótulo.
+    for (const cv of ["Pretensão PJ: R$ 30.000", "Salário atual: R$ 25.000", "Expectativa\nsalarial: 30k", "Salary\nexpectation: 150k"]) {
+      expect(publicCvText(`Topo\n\n${cv}\n\nFim`), cv).toBe("Topo\n\n\nFim");
+    }
+    // O bloco inteiro sai, inclusive as linhas ACIMA do rótulo.
+    expect(publicCvText("Topo\n\nR$ 30.000 mensais\nPretensão salarial\n\nFim")).toBe("Topo\n\n\nFim");
   });
 
   it("troca todo endereço de e-mail e o cadastrado, mesmo fora do padrão geral", () => {
@@ -91,6 +98,8 @@ describe("publicCvText", () => {
     expect(publicCvText("+55 11 9 1234-5678")).toBe(REDACTED);
     expect(publicCvText("+33 1 23 45 67 89")).toBe(REDACTED);
     expect(publicCvText("(11) 9 1234-5678")).toBe(REDACTED);
+    expect(publicCvText("+55 11 91234–5678")).toBe(REDACTED);
+    expect(publicCvText("(11) 91234/5678")).toBe(REDACTED);
     // Dígitos logo depois do telefone não o escondem da detecção.
     expect(publicCvText("+55 11 91234-5678\n2015-2020 Staff")).toBe(`${REDACTED}\n2015-2020 Staff`);
     expect(publicCvText("+55 11 91234-5678 2015")).toBe(`${REDACTED} 2015`);
