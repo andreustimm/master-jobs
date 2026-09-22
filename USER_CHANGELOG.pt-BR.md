@@ -18,6 +18,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Segurança
+
+- Uma conta convidada não enxerga nem altera mais o perfil, o currículo, a
+  visibilidade e o funil do dono. Quem ainda não tem perfil próprio vê acesso
+  negado na área do candidato, inclusive quando o admin assume a identidade
+  dessa conta.
+
 ### Corrigido
 
 - O sistema nunca mais faz pedidos automáticos ao LinkedIn, nem quando uma
@@ -85,6 +92,7 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 - Filtrar vagas por faixa salarial e ordenar por remuneração exigem menos
   trabalho do sistema. Os valores, a ordem das vagas e os avisos sobre salários
   não informados continuam seguindo os mesmos critérios.
+||||||| parent of 3948771 (fix(auth): nenhuma conta recebe o candidato de outra pessoa)
 
 ## [1.20.5] - 2026-09-22T11:47:50.607Z
 

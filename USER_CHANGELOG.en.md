@@ -18,6 +18,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Security
+
+- An invited account can no longer see or change the owner's profile, CV,
+  visibility, or pipeline. An account without its own profile now gets access
+  denied in the candidate area, including when an admin is acting as that
+  account.
+
 ### Fixed
 
 - The system no longer makes automated requests to LinkedIn, not even for jobs
@@ -85,6 +92,7 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 - Filtering jobs by pay range and sorting by compensation require less work
   from the system. Amounts, job ordering and notices for undisclosed salaries
   continue to follow the same rules.
+||||||| parent of 3948771 (fix(auth): nenhuma conta recebe o candidato de outra pessoa)
 
 ## [1.20.5] - 2026-09-22T11:47:50.607Z
 

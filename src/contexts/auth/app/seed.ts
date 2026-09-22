@@ -15,7 +15,7 @@
  * comportamento possível para um comando chamado "seed".
  */
 import { randomBytes } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { getDb } from "../../../core/db/client.ts";
 import { authUser } from "../../../core/db/schema.ts";
 import { loadProfile } from "../../../core/profile/load.ts";
@@ -84,6 +84,20 @@ export async function seedOwner(
     .limit(1);
 
   if (!existing) {
+    // O candidato `default` é o do dono, e dono há um só. Semear com outro
+    // e-mail criaria uma segunda conta com o currículo, a visibilidade e o
+    // funil dele — o vazamento que `ownedCandidateId` passou a barrar na
+    // leitura. Recusar aqui evita gravar o dado errado.
+    const [holder] = await db
+      .select({ email: authUser.email })
+      .from(authUser)
+      .where(and(eq(authUser.candidateId, candidateId), ne(authUser.email, email)))
+      .limit(1);
+    if (holder) {
+      throw new Error(
+        `O candidato do perfil já pertence a ${holder.email}. Para outra pessoa, use jho auth add-user <email>.`,
+      );
+    }
     await db.insert(authUser).values({ email, roles, candidateId });
   }
 

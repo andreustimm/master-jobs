@@ -1093,7 +1093,17 @@ export const authUser = production.table(
     disabledAt: text("disabled_at"),
     createdAt: text("created_at").notNull().default(now),
   },
-  (t) => [uniqueIndex("auth_user_email_idx").on(t.email)],
+  (t) => [
+    uniqueIndex("auth_user_email_idx").on(t.email),
+    // Um candidato, no máximo uma conta. Duas contas no mesmo candidato leem e
+    // escrevem o currículo, a visibilidade e o funil uma da outra — foi o
+    // vazamento da v1.20.5, em que uma conta semeada pelo e2e apontava para o
+    // candidato do dono. Parcial porque conta só de admin ou recrutador não tem
+    // candidato, e várias podem ficar sem.
+    uniqueIndex("auth_user_candidate_idx")
+      .on(t.candidateId)
+      .where(sql`${t.candidateId} is not null`),
+  ],
 );
 
 /**
