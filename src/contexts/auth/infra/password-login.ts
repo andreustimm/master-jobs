@@ -15,11 +15,11 @@
  *  3. **Attempts are limited.** scrypt makes each guess expensive; the limit
  *     makes a sustained campaign impossible.
  */
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { linkedCandidatesFor } from "./drizzle-store.ts";
 import { clock } from "../../../core/clock.ts";
 import { getDb } from "../../../core/db/client.ts";
-import { authEvent, authUser } from "../../../core/db/schema.ts";
+import { authEvent, authSession, authUser } from "../../../core/db/schema.ts";
 import { checkPassword, hashPassword, KdfIndisponivelError, verifyPassword } from "../domain/password.ts";
 import type { PasswordResult, PasswordVerifier } from "../ports.ts";
 import type { Role } from "../domain/types.ts";
@@ -264,7 +264,16 @@ export async function changeOwnPassword(
     });
     return { ok: false, reason: "invalid" };
   }
-  if (!user.passwordHash) return { ok: false, reason: "no_password" };
+  if (!user.passwordHash) {
+    await db.insert(authEvent).values({
+      kind: "password_change_failed",
+      userId,
+      email: user.email,
+      detail: "conta sem senha definida",
+      at: clock().iso(),
+    });
+    return { ok: false, reason: "no_password" };
+  }
 
   let ok: boolean;
   try {
@@ -293,12 +302,34 @@ export async function changeOwnPassword(
   }
 
   const hash = await hashPassword(newPassword);
-  const rows = await db
-    .update(authUser)
-    .set({ passwordHash: hash })
-    .where(and(eq(authUser.id, userId), eq(authUser.passwordHash, user.passwordHash)))
-    .returning({ id: authUser.id });
-  if (rows.length === 0) {
+  const storedHash = user.passwordHash;
+  // Senha, revogação e registro numa transação só. Em comandos separados, uma
+  // queda de conexão entre a escrita da senha e a revogação deixaria a senha
+  // trocada com as sessões antigas — inclusive um cookie roubado — ainda
+  // valendo, que é o oposto do que a troca promete.
+  const revoked = await db.transaction(async (tx) => {
+    const rows = await tx
+      .update(authUser)
+      .set({ passwordHash: hash })
+      .where(and(eq(authUser.id, userId), eq(authUser.passwordHash, storedHash)))
+      .returning({ id: authUser.id });
+    if (rows.length === 0) return null;
+    const ended = await tx
+      .update(authSession)
+      .set({ revokedAt: clock().iso() })
+      .where(and(eq(authSession.userId, userId), isNull(authSession.revokedAt)))
+      .returning({ id: authSession.id });
+    await tx.insert(authEvent).values({
+      kind: "password_changed",
+      userId,
+      email: user.email,
+      detail: `trocada pela própria conta; ${ended.length} sessões encerradas`,
+      at: clock().iso(),
+    });
+    return ended.length;
+  });
+
+  if (revoked === null) {
     await db.insert(authEvent).values({
       kind: "password_change_failed",
       userId,
@@ -308,16 +339,5 @@ export async function changeOwnPassword(
     });
     return { ok: false, reason: "invalid" };
   }
-
-  const { drizzleSessions } = await import("./drizzle-store.ts");
-  const revoked = await drizzleSessions.revokeAllFor(userId);
-
-  await db.insert(authEvent).values({
-    kind: "password_changed",
-    userId,
-    email: user.email,
-    detail: `trocada pela própria conta; ${revoked} sessões encerradas`,
-    at: clock().iso(),
-  });
   return { ok: true, email: user.email };
 }

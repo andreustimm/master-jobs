@@ -196,6 +196,7 @@ describe("trocar a própria senha", () => {
       impersonatedBy: null,
     } satisfies Session;
     expect(await changePasswordForSession(session, "", NOVA)).toEqual({ ok: false, reason: "no_password" });
+    expect(await events(id, "password_change_failed")).toHaveLength(1);
   });
 
   it("a troca vale só para a conta da sessão", async () => {

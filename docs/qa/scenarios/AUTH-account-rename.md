@@ -4,7 +4,7 @@ area: AUTH
 title: Trocar o nome de exibição muda o topo sem novo login
 persona: Andreus no celular
 journey: J-manage-own-account
-expected: Em 375px o nome salvo aparece confirmado, sobrevive a refresh e o e-mail aparece só para leitura com a orientação de pedir a troca a um admin
+expected: Em 375px o nome salvo aparece confirmado, sobrevive a refresh, aparece no topo em largura maior e o e-mail aparece só para leitura com a orientação de pedir a troca a um admin
 entry_points: /account
 qa_status: untested
 bug_ids:
