@@ -86,6 +86,7 @@ describe("classificação do host proibido", () => {
       "www.linkedin.com",
       "br.linkedin.com",
       "LINKEDIN.COM.",
+      "www.linkedin.com..",
       "linkedin.cn",
       "lnkd.in",
       "media.licdn.com",
@@ -200,13 +201,22 @@ describe("aquisição pela porta HTTP dos adapters (JSON e HTML)", () => {
   });
 
   it("getJson recusa sem pedido e sem tentar de novo", async () => {
-    // Sem a exceção em `realGetJson`, a recusa entraria no laço de retry com
-    // espera exponencial: nenhum pedido, mas um sync mais lento à toa.
-    const started = Date.now();
-    await expect(getJson("https://www.linkedin.com/voyager/api/jobs")).rejects.toBeInstanceOf(
-      ProhibitedAcquisitionError,
-    );
-    expect(Date.now() - started).toBeLessThan(400);
+    // Com o `setTimeout` falso, uma nova tentativa ficaria presa na espera
+    // exponencial e a promessa não assentaria antes do próximo ciclo real.
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      const pending = getJson("https://www.linkedin.com/voyager/api/jobs").then(
+        () => "resolveu",
+        (error: unknown) => error,
+      );
+      const settled = await Promise.race([
+        pending,
+        new Promise((resolve) => setImmediate(() => resolve("pendente"))),
+      ]);
+      expect(settled).toBeInstanceOf(ProhibitedAcquisitionError);
+    } finally {
+      vi.useRealTimers();
+    }
     expect(net.calls).toEqual([]);
   });
 
@@ -244,6 +254,27 @@ describe("aquisição pela raspagem de descrição", () => {
     expect(robotsPort.calls).toEqual([]);
     expect(net.calls).toEqual([]);
     expect(dns.hosts).toEqual([]);
+  });
+});
+
+describe("aquisição pela raspagem: redirect", () => {
+  afterEach(() => {
+    resetHttpPort();
+    clearRobotsCache();
+  });
+
+  it("redirect para o LinkedIn durante a captura é bloqueio final, não falha a repetir", async () => {
+    setHttpPort(fixtureHttp({ "robots.txt": "User-agent: *\nAllow: /" }));
+    const net = redirectTo("https://www.linkedin.com/jobs/view/1");
+    const dns = lookupSpy();
+
+    const outcome = await capture(
+      { id: 2, jobId: 2, url: "https://ats.example.test/jobs/1", attempts: 0 },
+      { fetcher: net.impl, lookupHost: dns.lookupHost },
+    );
+
+    expect(outcome).toEqual({ kind: "blocked", reason: "aquisição proibida (LinkedIn, regra 1)" });
+    expect(net.calls.map((c) => c.url)).toEqual(["https://ats.example.test/jobs/1"]);
   });
 });
 

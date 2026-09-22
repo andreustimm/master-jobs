@@ -569,7 +569,8 @@ timeouts tight, retry only on transient failures, and never hammer on a 4xx."*
 > e GET) e captura de `scrape run` — passa por `safeRemoteFetch`
 > (`src/core/remote-url.ts`), que valida cada salto de redirect: endereço
 > privado, DNS misto e o domínio do LinkedIn (regra 1) são recusados antes do
-> pedido. Recusa de política não é repetida pelo laço de retry. O inventário de
+> pedido. A recusa ao LinkedIn não é repetida pelo laço de retry; falha de DNS,
+> que pode ser transitória, continua sendo. O inventário de
 > quem pode abrir transporte de saída é fechado e testado
 > (`tests/outbound-transport-boundary.test.ts`); detalhes da recusa ao LinkedIn
 > em `docs/linkedin-policy.md` §5.1.

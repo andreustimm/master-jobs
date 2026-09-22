@@ -107,6 +107,11 @@ export async function capture(
       lookupHost: opts.lookupHost,
     });
   } catch (error) {
+    // Redirect de um ATS ou encurtador para o LinkedIn: a recusa é final, e
+    // tentar de novo só repetiria o primeiro salto.
+    if (error instanceof ProhibitedAcquisitionError) {
+      return { kind: "blocked", reason: "aquisição proibida (LinkedIn, regra 1)" };
+    }
     return { kind: "failed", reason: (error as Error).message, retryable: true };
   }
 

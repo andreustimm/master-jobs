@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildDossier } from "../src/core/apply/dossier.ts";
+import { loadProfile } from "../src/core/profile/load.ts";
 import { ensureCandidate } from "../src/core/candidate.ts";
 import type { DB } from "../src/core/db/client.ts";
 import {
@@ -436,6 +437,10 @@ describe("growth é lacuna, nunca evidência (regra 7)", () => {
   beforeEach(async () => {
     const path = join(profileDir, "profile.yaml");
     await writeFile(path, `${PROFILE_YAML}growth:\n  - "${GROWTH_CLAIM}"\n`);
+    // `loadProfile` guarda em cache: sem forçar a releitura, o dossiê usaria o
+    // perfil de um caso anterior, sem `growth`, e o teste passaria à toa.
+    const profile = await loadProfile(true);
+    expect(profile.growth).toContain(GROWTH_CLAIM);
   });
 
   it("não cita a alegação de growth mesmo quando o anúncio a repete palavra por palavra", async () => {
@@ -443,20 +448,21 @@ describe("growth é lacuna, nunca evidência (regra 7)", () => {
     const jobId = await seedJob({ descriptionText: RUST_POSTING });
 
     const dossier = await buildDossier(candidateId, jobId, CV);
+    if (!dossier) throw new Error("dossiê não montado");
 
-    const cited = dossier!.evidence.map((e) => e.line);
+    const cited = dossier.evidence.map((e) => e.line);
     expect(cited).not.toContain(GROWTH_CLAIM);
     expect(cited.join(" ").toLowerCase()).not.toContain("compiler");
     // Rastreável: toda linha citada existe, literalmente, em `evidence:`.
     const declared = PROFILE_YAML.split("\n")
       .map((l) => /^\s+- "(.*)"$/.exec(l)?.[1])
       .filter((l): l is string => Boolean(l));
-    for (const e of dossier!.evidence) expect(declared, e.line).toContain(e.line);
+    for (const e of dossier.evidence) expect(declared, e.line).toContain(e.line);
     // O controle: a evidência real que casa continua saindo — sem ele, um
     // dossiê que não cita nada passaria no teste.
     expect(cited).toContain("observability over distributed systems");
     // E a lacuna é dita, não maquiada: Rust aparece como o que o CV não sustenta.
-    expect(dossier!.missing).toContain("rust");
+    expect(dossier.missing).toContain("rust");
   });
 });
 

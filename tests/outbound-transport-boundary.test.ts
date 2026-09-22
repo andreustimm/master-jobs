@@ -68,8 +68,10 @@ function outboundTransportUses(source: string): string[] {
 
   const code = stripNoise(source);
   for (const line of code.split("\n")) {
-    // Definição de método chamado `fetch` (porta de câmbio) não é transporte.
-    if (/^\s*(async\s+)?fetch\s*[(<]/.test(line)) continue;
+    // Definição ou assinatura de método chamado `fetch` (porta de câmbio) não
+    // é transporte; uma chamada solta `fetch(url, ...);` continua sendo.
+    if (/^\s*async\s+fetch\s*\(/.test(line)) continue;
+    if (/^\s*fetch\s*\([^)]*\)\s*:/.test(line)) continue;
     const withoutTypes = line.replace(/\btypeof\s+fetch\b/g, "");
     if (/(?<![.\w$])fetch\b/.test(withoutTypes)) uses.add("fetch");
     if (/\b(globalThis|window|self)\s*\.\s*fetch\b/.test(withoutTypes)) uses.add("fetch");
@@ -110,6 +112,8 @@ describe("detector de transporte de saída", () => {
       ['const net = require("net");', "module:net"],
       ["const ws = new WebSocket(url);", "xhr/ws"],
       ["navigator.sendBeacon(url, body);", "beacon"],
+      ['  fetch(applyUrl, { method: "POST" });', "fetch"],
+      ["fetch(url);", "fetch"],
     ];
     for (const [snippet, kind] of positives) {
       expect(outboundTransportUses(snippet), snippet).toContain(kind);
@@ -192,8 +196,11 @@ describe("preparar candidatura não abre transporte (regra 13)", () => {
     const cli = readFileSync("src/cli.ts", "utf8");
     const start = cli.indexOf('.command("prep <id>")');
     expect(start).toBeGreaterThan(0);
-    const end = cli.indexOf("program\n", start + 1);
-    const action = cli.slice(start, end > start ? end : undefined);
+    // O próximo comando registrado, seja em `program` ou em um subcomando.
+    const end = cli.slice(start + 1).search(/\n(program|const \w+ = program)\b/);
+    const action = end >= 0 ? cli.slice(start, start + 1 + end) : cli.slice(start);
+    expect(action).toContain("buildDossier");
+    expect(action).not.toContain('.command("queue")');
     const dynamic = [...action.matchAll(/import\(\s*["']([^"']+)["']\s*\)/g)].map((m) => m[1]);
     expect(dynamic).toEqual(["./core/apply/dossier.ts"]);
     expect(outboundTransportUses(action)).toEqual([]);

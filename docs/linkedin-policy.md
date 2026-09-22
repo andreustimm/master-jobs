@@ -248,7 +248,8 @@ Confundir as duas seria prometer mais do que o código entrega.
 `safeRemoteFetch` repete a checagem em cada salto de redirect. Como é o único
 transporte de URL de vaga, a recusa vale para a porta HTTP dos adapters
 (JSON e HTML), para a sonda de `jobs verify` (HEAD e GET) e para a captura de
-`scrape run`, que bloqueia antes mesmo de pedir o `robots.txt`. Na sonda a
+`scrape run`, que bloqueia antes mesmo de pedir o `robots.txt` e trata o
+redirect para o LinkedIn como bloqueio final, sem nova tentativa. Na sonda a
 recusa é `inconclusive`, nunca `gone`: vaga de alerta por e-mail não é
 fechada por não poder ser verificada. `tests/linkedin-acquisition-boundary.test.ts`
 prova tudo isso com transporte falso que registra chamadas — zero pedido

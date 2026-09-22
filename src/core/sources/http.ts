@@ -8,7 +8,7 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 import { HttpError, http, registerRealPort, type HttpPort } from "./http-port.ts";
-import { safeRemoteFetch, UnsafeRemoteUrlError } from "../remote-url.ts";
+import { ProhibitedAcquisitionError, safeRemoteFetch } from "../remote-url.ts";
 
 export { HttpError };
 
@@ -64,9 +64,10 @@ async function realGetJson<T = unknown>(
     } catch (error) {
       lastError = error;
       if (error instanceof HttpError && !RETRYABLE.has(error.status)) throw error;
-      // Destino recusado pela política não muda de ideia na segunda tentativa;
-      // repetir só atrasaria o sync com espera exponencial.
-      if (error instanceof UnsafeRemoteUrlError) throw error;
+      // A recusa por finalidade não muda na segunda tentativa; repetir só
+      // atrasaria o sync. Falha de DNS, também `UnsafeRemoteUrlError`, pode
+      // ser transitória e continua no laço.
+      if (error instanceof ProhibitedAcquisitionError) throw error;
     } finally {
       clearTimeout(timer);
     }
