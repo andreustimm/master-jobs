@@ -163,9 +163,10 @@ não um fallback silencioso ([guia de deploy](docs/engineering/deploy.md)).
 
 | Trilha | O que responde |
 |---|---|
+| [GitHub Project 3](https://github.com/users/andreustimm/projects/3) | Fila, prioridade, estado e responsáveis das tarefas, vinculadas a issues reais |
 | [Referência](docs/README.md) | Como o sistema funciona |
 | [ADRs](docs/adr/) | Por que cada decisão foi tomada |
-| [Produto](docs/product/) | Visão e backlog priorizado |
+| [Produto](docs/product/) | Visão, contratos de produto e histórico de discovery |
 | [Benchmark](docs/benchmark/) | Concorrentes, mercado e riscos |
 | [QA vivo](docs/qa/README.md) | Personas, jornadas, cenários, charters, bugs e relatórios |
 | [Skills de desenvolvimento](docs/engineering/skills-evaluation.md) | Catálogo instalado, origem e integração no fluxo |
@@ -174,6 +175,13 @@ não um fallback silencioso ([guia de deploy](docs/engineering/deploy.md)).
 Agentes de IA leem `AGENTS.md`; `CLAUDE.md` é um symlink para essa fonte única.
 
 ## Desenvolvimento
+
+Toda tarefa é registrada em uma issue de `andreustimm/master-jobs` no
+[Project 3](https://github.com/users/andreustimm/projects/3). Antes de começar
+ou retomar, consulte a issue e siga o [fluxo de tarefas](docs/engineering/github-project-tasks.md).
+Backlogs e arquivos Compozy antigos preservam contexto; seus estados e ordens
+locais são snapshots históricos. O [relatório de migração](docs/engineering/github-project-migration.md)
+registra os vínculos e as lacunas ainda em reconciliação.
 
 ```bash
 rtk pnpm check                   # changelogs + tracker de QA + typecheck + Vitest/cobertura + contratos das skills de QA

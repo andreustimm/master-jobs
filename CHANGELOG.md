@@ -9,6 +9,11 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+- Ferramentas: gestão canônica de tarefas pelo GitHub Project, com CLI remota,
+  claims e recibos assinados, revisão/geração, recuperação de operações,
+  projeções Compozy descartáveis e gate de vínculo de PR. Escritor em main e
+  enforcement dependem do provisionamento e piloto documentados em #191.
+
 - Operações: alerta Sentry configurado para erros novos, regressões e alta prioridade em produção, com e-mail para o responsável e intervalo de 30 minutos; disparo validado com canário sintético.
 
 ### Alterado

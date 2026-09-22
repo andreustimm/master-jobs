@@ -1,5 +1,13 @@
 # Backlog de discovery
 
+> **Snapshot histórico de discovery.** A fila, a prioridade, os estados e os
+> responsáveis atuais vivem nas issues de `andreustimm/master-jobs` no
+> [GitHub Project 3](https://github.com/users/andreustimm/projects/3).
+> Datas, símbolos, ordens e verbos de ação abaixo descrevem o momento da
+> captura; não autorizam retomada, posse ou conclusão. Preserve os pedidos e
+> resultados autorais e consulte o [relatório de migração](../engineering/github-project-migration.md)
+> antes de reutilizá-los. Novos pedidos entram pelo [fluxo de tarefas](../engineering/github-project-tasks.md).
+
 Status conferido em 18/08/2026 contra o código, não contra a intenção. Oito
 itens estavam marcados como pendentes tendo sido entregues — corrigidos nesta
 revisão. Um backlog que mente sobre o próprio estado é pior que backlog nenhum,
@@ -10,12 +18,12 @@ Contexto de produto: `vision.md` · `personas.md` · `user-stories.md`.
 Captura de tudo que foi pedido na sessão de 18/08/2026, priorizado por impacto
 no objetivo real: **converter posicionamento em entrevistas qualificadas**.
 
-A priorização não é por ordem de pedido nem por facilidade. É por quanto cada
-item move a agulha num funil de contratação real.
+A priorização registrada usou o impacto no funil de contratação real. A ordem
+de execução vigente deve ser lida no Project.
 
 ---
 
-## Legenda
+## Legenda histórica
 
 | Marca | Significado |
 |---|---|

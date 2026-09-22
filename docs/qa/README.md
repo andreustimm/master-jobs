@@ -10,6 +10,8 @@ produto como uma pessoa real e grava vereditos e relatórios aqui.
 - Login: `http://127.0.0.1:3000/login`
 - Perfil público: `http://127.0.0.1:3000/p/<slug>`
 - CLI pública: `rtk pnpm jho <comando>`
+- CLI de tarefas: `rtk pnpm tasks <comando>`; piloto e pré-condições na
+  [jornada de coordenação da entrega](journeys/J-coordinate-task-delivery.md)
 - Servidor de desenvolvimento: `rtk pnpm dev`
 - Build com paridade local: `rtk pnpm build` e `rtk pnpm start`
 - Driver de jornada: `rtk pnpm exec agent-browser <comando>`

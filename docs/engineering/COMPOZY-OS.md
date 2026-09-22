@@ -1,9 +1,17 @@
 # CompozyOS 0.3 no fluxo do master-jobs
 
-Como conduzir o ciclo **SDD + Loop Engineering** deste repositório com o
-CompozyOS 0.3: especificar, decompor em tarefas, executar, revisar e verificar.
+> **Guia histórico da instalação e do ciclo Compozy.** O inventário e os
+> exemplos abaixo refletem a apuração de 19/08/2026. A fila, a prioridade, as
+> dependências, o estado e a posse de execução agora têm autoridade nas issues
+> de `andreustimm/master-jobs` no [GitHub Project 3](https://github.com/users/andreustimm/projects/3).
+> Antes de usar um Loop, siga o [fluxo de tarefas](github-project-tasks.md).
+> Arquivos legados e estados de runs são contexto; não autorizam execução ou
+> conclusão. A [migração](github-project-migration.md) preserva os documentos
+> autorais e reconcilia suas alegações com evidências remotas.
 
-Escrito para humano e para agente. Todo comando é literal.
+Registro do ciclo **SDD + Loop Engineering** com CompozyOS 0.3:
+especificar, decompor, executar, revisar e verificar. Os comandos são exemplos
+da instalação auditada, sujeitos às regras atuais de `AGENTS.md`.
 
 > **Estado apurado em 19/08/2026**, contra a instalação real desta máquina
 > (`0.3.0-beta.17`) e contra o `MIGRATION_GUIDE.md` oficial. Onde a
@@ -155,7 +163,12 @@ extension `dev-cycle`. Aqui a `dev-cycle` 0.3.1 está em **error/unhealthy**, a
 
 ---
 
-## 5. O ciclo, ponta a ponta
+## 5. Ciclo registrado e integração atual
+
+O diagrama documenta o ciclo original. Hoje, a entrada é uma issue do Project:
+planejamento e dependências são publicados ali, e a execução exige a posse
+válida definida no [protocolo de tarefas](github-project-tasks.md). O grafo
+local consumido pelo Compozy é uma projeção desse estado remoto.
 
 ```mermaid
 flowchart TD
@@ -193,9 +206,12 @@ Interativo — entrevista antes de escrever. Saída em
 /cy-create-tasks
 ```
 
-Produz `_tasks.md` (o grafo) e `task_01.md … task_NN.md`. **Cada caso de
-`_tests.md` cai em exatamente uma tarefa** — é o que impede caso órfão e caso
-contado duas vezes.
+O ciclo original produzia `_tasks.md` (o grafo) e `task_01.md … task_NN.md`.
+No fluxo atual, a decomposição cria ou reutiliza issues no Project e a
+projeção fornece os arquivos de execução; status, dependências e responsáveis
+não são mantidos manualmente no Markdown. **Cada caso de `_tests.md` continua
+atribuído a uma única tarefa canônica**, evitando caso órfão ou contado duas
+vezes. PRDs, contratos de testes e evidências autorais permanecem versionados.
 
 ### 5.3 Executar
 
@@ -221,7 +237,7 @@ run. Use sempre: é a diferença entre saber e supor qual modelo e qual
 | | `implement-tasks` | `orchestrate-tasks` |
 |---|---|---|
 | Modelo | Uma sessão executa em ordem | Uma sessão worker **por tarefa** |
-| Prova de conclusão | Estado do run | **Só o arquivo da tarefa em disco** |
+| Prova de conclusão | Evidência aceita na issue canônica, conforme a entrega exigida | Evidência aceita na issue canônica, conforme a entrega exigida |
 | Quando usar | Padrão | Tarefas realmente independentes |
 
 Comece serial. `orchestrate-tasks` só compensa quando o grafo tem largura real —
@@ -315,8 +331,11 @@ Ignore só runtime:
 .compozy/cache/
 ```
 
-Fica versionado: `.compozy/tasks/`, definições de Loop, skills, agentes e a
-config de workspace que o time compartilha.
+Ficam versionados os documentos autorais e o histórico de `.compozy/tasks/`,
+as definições de Loop, skills, agentes e a configuração compartilhada.
+Projeções de issues usam um diretório próprio e descartável; não substituem
+especificações nem publicam edições locais no GitHub. Consulte o
+[contrato dos artefatos](../../.compozy/tasks/README.md).
 
 ---
 
@@ -376,16 +395,19 @@ O CompozyOS orquestra; não substitui os invariantes do `CLAUDE.md`.
 | **13 — autorização por `can()`** | Tarefa que cria Server Action nasce com guard. |
 | **`pnpm check` verde** | É a evidência que `/cy-final-verify` exige. Não invente outra. |
 
-**Regra de convivência:** o CompozyOS decide *o que* e em que ordem; o
-`CLAUDE.md` decide *como*. Onde discordarem, **o `CLAUDE.md` vence** — ele
-carrega restrições que já custaram bug aqui.
+**Regra de convivência vigente:** as issues do Project definem o trabalho,
+sua prioridade, dependências, estado e execução ativa. O CompozyOS executa a
+partir desse contrato remoto; `AGENTS.md` rege as restrições do repositório e
+`CLAUDE.md` aponta para o mesmo arquivo. Memória, runs e grafos locais não
+alteram o estado canônico.
 
 ---
 
-## 10. Primeira jornada
+## 10. Exemplo histórico de primeira jornada
 
-Escolha algo pequeno, real e isolado. Sugestão: **upload de PDF em lote** — tem
-valor, é conhecido, e não toca scoring nem autorização.
+A sugestão original foi **upload de PDF em lote**. Ela é preservada como
+exemplo, não como pedido novo. Uma execução atual começa pela issue
+correspondente no Project e pela confirmação de seu escopo e posse.
 
 ```bash
 # 1. contexto
