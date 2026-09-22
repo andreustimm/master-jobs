@@ -1,7 +1,25 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, connectDatabase, getDb } from "../src/core/db/client.ts";
-import { runMigrations } from "../src/core/db/migrate.ts";
+import { runMigrations, withDatabaseCause } from "../src/core/db/migrate.ts";
+
+describe("withDatabaseCause", () => {
+  it("surfaces the server code and message hidden behind drizzle's 'Failed query'", () => {
+    const cause = Object.assign(new Error('password authentication failed for user "postgres.ref"'), { code: "28P01" });
+    const wrapped = Object.assign(new Error('Failed query: CREATE SCHEMA IF NOT EXISTS "drizzle"\nparams: '), { cause });
+    const surfaced = withDatabaseCause(wrapped) as Error;
+    expect(surfaced.message).toBe('Failed query: CREATE SCHEMA IF NOT EXISTS "drizzle" — causa: 28P01 password authentication failed for user "postgres.ref"');
+    expect(surfaced.cause).toBe(cause);
+  });
+
+  it("keeps a socket error without code and leaves causeless errors untouched", () => {
+    const socket = withDatabaseCause(Object.assign(new Error("Failed query: X"), { cause: new Error("connect ETIMEDOUT") })) as Error;
+    expect(socket.message).toBe("Failed query: X — causa: connect ETIMEDOUT");
+    const plain = new Error("plain");
+    expect(withDatabaseCause(plain)).toBe(plain);
+    expect(withDatabaseCause("text")).toBe("text");
+  });
+});
 import { provisionTestDatabase } from "./support/db.ts";
 
 let target: Awaited<ReturnType<typeof provisionTestDatabase>>;
