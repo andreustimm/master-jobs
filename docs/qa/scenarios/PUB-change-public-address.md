@@ -6,7 +6,7 @@ persona: Andreus no celular
 journey: J-choose-public-address
 expected: Depois de salvar um endereço novo, /p/<novo> mostra o perfil público e /p/<antigo> responde 404, também após refresh, em 375 px
 entry_points: /candidate; /p/[slug]
-qa_status: pass
+qa_status: untested
 bug_ids:
 fix_status:
 retest_status:

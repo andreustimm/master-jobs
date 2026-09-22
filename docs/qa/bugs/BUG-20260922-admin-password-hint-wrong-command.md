@@ -1,6 +1,6 @@
 # BUG-20260922-admin-password-hint-wrong-command: a tela de usuários manda definir a senha com um comando que não existe
 
-- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
+- **Status:** fixed <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Friction
 - **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Andreus em triagem (admin criando a conta de outra pessoa)
@@ -36,9 +36,9 @@ que segue a instrução da tela fica sem saída até descobrir o nome certo.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** `admin.noPasswordHint` nos dois dicionários citava `jho auth password`, que nunca existiu.
+- **Fix commit:** 2371b8b (`fix/bugs-qa-1.22.0`) — o texto cita `jho auth set-password <email>`.
+- **Regression test:** `tests/public-name.test.ts` ("orientação de senha em /admin/users").
 
 ## Verification
 

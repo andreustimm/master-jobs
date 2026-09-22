@@ -1,6 +1,6 @@
 # BUG-20260922-short-address-wrong-reason: endereço curto demais é recusado com a razão errada
 
-- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
+- **Status:** fixed <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Friction
 - **Severity:** Low · **Priority:** P3
 - **Persona Affected:** Andreus no celular
@@ -36,9 +36,9 @@ não sabe o que mudar.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** `minLength={SLUG_MIN}` no campo: o navegador barra o envio de `ab`, o servidor não responde, e o aviso visível é o da tentativa anterior (`-abc`, formato). `validatePublicSlug("ab")` já devolvia `slugTooShort`.
+- **Fix commit:** 2371b8b (`fix/bugs-qa-1.22.0`) — campo sem `minLength`; `ab` chega ao domínio e volta com a razão de tamanho.
+- **Regression test:** `tests/public-name.test.ts` (atributos do campo); `tests/e2e/ui.mjs` ("endereço curto é recusado pelo tamanho").
 
 ## Verification
 

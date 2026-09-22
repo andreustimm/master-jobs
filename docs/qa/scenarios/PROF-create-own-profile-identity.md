@@ -6,7 +6,7 @@ persona: Candidato convidado sem perfil
 journey: J-create-own-profile
 expected: A área do candidato recém-criada mostra só o que a pessoa digitou, sem nome, e-mail, headline, currículo ou funil do dono e sem a nota de identidade vinda de profile.yaml
 entry_points: /candidate; /pipeline; /p/[slug]
-qa_status: pass
+qa_status: untested
 bug_ids:
 fix_status:
 retest_status:
