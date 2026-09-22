@@ -83,7 +83,7 @@ opaco de tela cheia: **180 ms mínimos** (`TRANSITION_MIN_MS`) mais **260 ms** d
 esmaecimento (`SPLASH_FADE_MS`), com o shell `inert`. ~440 ms fixos, mesmo se o
 servidor responder na hora. **MEDIDO no código; não cronometrado no navegador.**
 
-**Entregue pela #220:** na mesma tela o overlay não abre mais. O store decide
+**Mudança da #220 (em revisão para `dev`):** na mesma tela o overlay não abre mais. O store decide
 por `isSameScreenNavigation` (mesmo `pathname`, query diferente) e marca a
 geração como `soft`; a apresentação vira `aria-busy` e
 `data-navigation="soft"` no `#application-shell`, com o `<main>` esmaecido por

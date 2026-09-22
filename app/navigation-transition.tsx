@@ -169,7 +169,7 @@ export function NavigationTransition({ labels }: { labels: TransitionLabels }) {
       {/* Sempre montada, vazia em repouso: leitor de tela anuncia mudança
           dentro de uma região que já acompanha, e pode ignorar uma que já
           nasce com o texto. */}
-      <p className="sr-only" role="status" aria-live="polite" data-testid="navigation-soft-status">
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="navigation-soft-status">
         {soft && snapshot.phase === "loading" ? labels.updating : ""}
       </p>
       {active && !soft ? (
