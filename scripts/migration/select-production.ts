@@ -33,6 +33,9 @@ export const policies: Record<string, string> = {
 export const postSnapshotColumns: Record<string, Record<string, unknown>> = {
   job: { archived_at: null },
   job_score: { track_id: null },
+  // Endereço público (#235). Nulo na importação: sem endereço o perfil não
+  // responde em `/p/`, que é o lado seguro; o dono escolhe um em `/candidate`.
+  candidate: { public_slug: null },
 };
 
 /**
