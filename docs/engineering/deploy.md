@@ -432,7 +432,9 @@ A configuração será aplicada no próximo deploy de produção aprovado por hu
 não foi disparado redeploy. Depois da promoção, conferir a fumaça de produção,
 login e leitura de vagas, e confirmar sessões de `master_jobs_app` no banco.
 Até essa evidência, O-01 permanece em validação. Se houver falha, preservar os
-registros e reverter a configuração pelo fluxo de deploy; nunca imprimir URLs
+registros, **remover `DATABASE_URL` de Production** na Vercel e fazer
+redeploy — só a ausência da variável devolve o runtime ao fallback
+`POSTGRES_URL`; editar outra variável não reverte nada. Nunca imprimir URLs
 de conexão nem rotacionar o usuário `postgres` como tentativa de diagnóstico.
 
 ## Relato de erro

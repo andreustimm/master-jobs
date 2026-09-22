@@ -61,7 +61,8 @@ schema continuam negados.
 
 Não houve redeploy: a instância publicada ainda usa a configuração anterior.
 Concluir após promoção humana, fumaça de produção, login/leitura de vagas e
-confirmação da role nas sessões. Credencial preservada de forma privada para
+confirmação da role nas sessões. Rollback: remover `DATABASE_URL` de
+Production e fazer redeploy (volta ao fallback `POSTGRES_URL`). Credencial preservada de forma privada para
 retomada; nenhum segredo entra no repositório. Procedimento e cuidados de
 rotação em [`deploy.md`](../engineering/deploy.md#dar-login-à-role-de-runtime).
 
