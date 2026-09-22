@@ -24,6 +24,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   disappear together with the job. The cleanup now waits and checks again, and
   never deletes a job that has an application.
 
+## [1.20.8] - 2026-09-22T17:17:31.926Z
+
+### Fixed
+
+- Preparing a new release now keeps the validated revision even when other
+  changes arrive during publication or a retry.
+
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 
 - Email alerts are configured to notify the system owner of new production errors and recurring failures that had been resolved.

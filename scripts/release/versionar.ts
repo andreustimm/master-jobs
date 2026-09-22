@@ -20,7 +20,7 @@ import {
   type PrepareReleaseResult,
   type ReleaseDocuments,
 } from "../../src/core/release.ts";
-import { commitSubjectsSinceLatestTag } from "./git-context.ts";
+import { commitSubjectsSince, commitSubjectsSinceLatestTag } from "./git-context.ts";
 
 export type ApplyReleaseFilesInput = {
   directory: string;
@@ -126,10 +126,11 @@ export function applyReleaseFiles(
   return prepared;
 }
 
-function tagExists(version: string): boolean {
+function tagExists(version: string, directory: string): boolean {
   try {
     execFileSync("git", ["rev-parse", "--verify", `refs/tags/v${version}`], {
       stdio: "ignore",
+      cwd: directory,
     });
     return true;
   } catch {
@@ -149,25 +150,33 @@ function documentsContainVersion(documents: ReleaseDocuments, version: string): 
   ];
 }
 
-export function versionar(base = "HEAD", directory = process.cwd()): string {
+export function versionar(
+  base = "HEAD",
+  directory = process.cwd(),
+  options: { publishedAt?: Date; supersedePending?: boolean; baseline?: string | null } = {},
+): string {
   const current = readPackage(directory).version;
   const currentPresence = documentsContainVersion(readDocuments(directory), current);
 
   // The version commit reaches the remote before its tag. A retry must finish
   // that release even when the remaining commit subjects are only maintenance.
-  if (!tagExists(current) && currentPresence.some(Boolean)) {
+  // A new promotion source may explicitly supersede a verified failed candidate.
+  if (!tagExists(current, directory) && currentPresence.some(Boolean)) {
     if (!currentPresence.every(Boolean)) {
       throw new ReleaseDomainError("partial_existing_release", { version: current });
     }
-    applyReleaseFiles({ directory, version: current, publishedAt: new Date() });
-    return "already-released";
+    applyReleaseFiles({ directory, version: current, publishedAt: options.publishedAt ?? new Date() });
+    if (!options.supersedePending) return "already-released";
   }
 
-  const bump = classificarBump(commitSubjectsSinceLatestTag(base));
+  const subjects = options.baseline === undefined
+    ? commitSubjectsSinceLatestTag(base, directory)
+    : commitSubjectsSince(base, directory, options.baseline);
+  const bump = classificarBump(subjects);
   if (!bump) return "no-release";
 
   const version = proximaVersao(current, bump);
-  const result = applyReleaseFiles({ directory, version, publishedAt: new Date() });
+  const result = applyReleaseFiles({ directory, version, publishedAt: options.publishedAt ?? new Date() });
   return result.status === "already-released" ? "already-released" : version;
 }
 

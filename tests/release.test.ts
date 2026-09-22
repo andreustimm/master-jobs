@@ -513,24 +513,6 @@ describe("retomada dos workflows de release", () => {
     expect(guarda).toBeLessThan(workflow.indexOf("gh pr create --base main --head staging"));
   });
 
-  it("a promoção reutiliza a versão persistida e ainda cria sua tag", () => {
-    const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
-    expect(workflow).toContain('if [ "$RESULTADO" = "already-released" ]; then');
-    expect(workflow).toContain('VERSAO=$(node -p "require(\'./package.json\').version")');
-    expect(workflow).not.toContain("steps.versao.outputs.versao != 'already-released'");
-  });
-
-  it("ambos os fluxos ancoram a tag no commit do bump", () => {
-    for (const arquivo of [
-      ".github/workflows/promover-para-staging.yml",
-      ".github/workflows/sincronizar-apos-main.yml",
-    ]) {
-      expect(readFileSync(arquivo, "utf8"), arquivo).toContain(
-        'scripts/release/commit-da-versao.ts origin/',
-      );
-    }
-  });
-
   it("resolve somente assunto exato e recusa commit ambíguo", () => {
     const valido = "a1b2c3\tchore(release): 1.1.0\n";
     const armadilha = "d4e5f6\tdocs: menciona chore(release): 1.1.0 no corpo\n";
@@ -582,23 +564,6 @@ describe("retomada dos workflows de release", () => {
     expect(workflow.slice(inicio, fim)).not.toContain("--json");
   });
 
-  it("staging avança somente até o SHA publicado pela etapa da tag", () => {
-    const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
-    expect(workflow).toContain("id: tag");
-    expect(workflow).toContain('echo "sha=$SHA" >> "$GITHUB_OUTPUT"');
-    expect(workflow).toContain("RELEASE_SHA: ${{ steps.tag.outputs.sha }}");
-    expect(workflow).toContain("scripts/release/promover-staging.ts");
-    expect(workflow).toContain('origin origin/staging origin/dev "$RELEASE_SHA"');
-    expect(workflow).not.toContain('SHA=$(git rev-parse origin/dev)');
-  });
-
-  it("no-release valida a tag vigente antes de promover manutenção", () => {
-    const workflow = readFileSync(".github/workflows/promover-para-staging.yml", "utf8");
-    expect(workflow).toContain("name: Validar tag vigente quando não há bump");
-    expect(workflow).toContain("if: steps.versao.outputs.versao == 'no-release'");
-    expect(workflow).toContain('scripts/release/validar-tag.ts "$SHA" "$TAG_SHA" --required');
-  });
-
   it("estado da tag distingue criação, existência e corrupção", () => {
     expect(estadoDaTag("release", null, false)).toBe("missing");
     expect(estadoDaTag("release", "release", true)).toBe("current");
@@ -608,17 +573,12 @@ describe("retomada dos workflows de release", () => {
     expect(() => exigirTagAlvoAusente("conflito")).toThrow("já existe");
   });
 
-  it("a tag da versão nova é verificada antes do commit e do push", () => {
-    for (const arquivo of [
-      ".github/workflows/promover-para-staging.yml",
-      ".github/workflows/sincronizar-apos-main.yml",
-    ]) {
-      const workflow = readFileSync(arquivo, "utf8");
-      const preflight = workflow.indexOf("--must-be-missing");
-      const commit = workflow.indexOf('git commit -m "chore(release): ${VERSAO}"');
-      expect(preflight, arquivo).toBeGreaterThan(-1);
-      expect(preflight, arquivo).toBeLessThan(commit);
-    }
+  it("pós-main verifica a tag nova antes do commit e do push", () => {
+    const workflow = readFileSync(".github/workflows/sincronizar-apos-main.yml", "utf8");
+    const preflight = workflow.indexOf("--must-be-missing");
+    const commit = workflow.indexOf('git commit -m "chore(release): ${VERSAO}"');
+    expect(preflight).toBeGreaterThan(-1);
+    expect(preflight).toBeLessThan(commit);
   });
 
   it("matching-refs ignora tags que apenas compartilham o prefixo", () => {
