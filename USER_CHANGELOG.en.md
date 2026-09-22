@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.7] - 2026-09-22T16:01:55.822Z
+
 - Email alerts are configured to notify the system owner of new production errors and recurring failures that had been resolved.
 
 ## [1.20.6] - 2026-09-22T14:44:58.815Z
