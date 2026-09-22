@@ -88,6 +88,11 @@ describe("publicCvText", () => {
     expect(publicCvText("# Nome\n\n## Remuneração\n\nR$ 30.000\n\n## Fim")).toBe("# Nome\n\n## Fim");
     // Rótulo sozinho no parágrafo leva junto o parágrafo do valor.
     expect(publicCvText("Topo\n\nPretensão salarial:\n\nR$ 30.000 mensais\n\nFim")).toBe("Topo\n\n\n\nFim");
+    // Ano DENTRO do rótulo não é o valor: o parágrafo seguinte também sai.
+    expect(publicCvText("Topo\n\nPretensão salarial (2026):\n\nR$ 30.000 mensais\n\nFim")).toBe("Topo\n\n\n\nFim");
+    for (const cv of ["Valor/hora: R$ 200", "Valor-hora: R$ 200"]) {
+      expect(publicCvText(`Topo\n\n${cv}\n\nFim`), cv).toBe("Topo\n\n\nFim");
+    }
     // Ano com moeda é valor.
     expect(publicCvText("Topo\n\nRemuneração mínima de 2000 EUR\n\nFim")).toBe("Topo\n\n\nFim");
     // Hífen no meio da frase não é marcador de item.
@@ -113,6 +118,8 @@ describe("publicCvText", () => {
     expect(publicCvText("+55 11 91234–5678")).toBe(REDACTED);
     expect(publicCvText("(11) 91234/5678")).toBe(REDACTED);
     expect(publicCvText("+55 11 91234 - 5678")).toBe(REDACTED);
+    expect(publicCvText("(415) 555-0100")).toBe(REDACTED);
+    expect(publicCvText("+1 415 555 0100 2015")).toBe(`${REDACTED} 2015`);
     expect(publicCvText("(11) 91234 - 5678")).toBe(REDACTED);
     // Dígitos logo depois do telefone não o escondem da detecção.
     expect(publicCvText("+55 11 91234-5678\n2015-2020 Staff")).toBe(`${REDACTED}\n2015-2020 Staff`);

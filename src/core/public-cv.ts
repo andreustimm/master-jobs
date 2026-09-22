@@ -48,7 +48,12 @@ const INTERNATIONAL_START = /\+(?=\d)/g;
 // O separador pode vir cercado de espaço: `+55 11 91234 - 5678`.
 const PHONE_GROUP = /^(?:[ \t]*[.\-–—/][ \t]*|[ \t]+)?\(?(\d{1,5})\)?/u;
 const PHONE_SEP = "(?:[ \\t]*[.\\-–—/][ \\t]*|[ \\t]+)?";
-const LOCAL_PHONE = new RegExp(`\\(\\d{2,3}\\)[ \\t]*(?:9${PHONE_SEP})?\\d{4}${PHONE_SEP}\\d{4}`, "gu");
+// DDD brasileiro (`(11) 91234-5678`) e código de área norte-americano
+// (`(415) 555-0100`).
+const LOCAL_PHONE = new RegExp(
+  `\\(\\d{2,3}\\)[ \\t]*(?:(?:9${PHONE_SEP})?\\d{4}|\\d{3})${PHONE_SEP}\\d{4}`,
+  "gu",
+);
 
 function redactInternationalPhones(text: string): string {
   let out = "";
@@ -61,6 +66,8 @@ function redactInternationalPhones(text: string): string {
     for (;;) {
       const group = PHONE_GROUP.exec(text.slice(at));
       if (!group || digits + group[1]!.length > 15) break;
+      // Um ano solto depois de um telefone já completo é o texto seguinte.
+      if (digits >= 8 && /^\s+(?:19|20)\d{2}$/.test(group[0])) break;
       digits += group[1]!.length;
       at += group[0].length;
       end = at;
@@ -85,7 +92,7 @@ const SALARY_LABEL = new RegExp(
     "pretens(?:[ãa]o|[õo]es)\\b(?!\\s+(?:comercia|art[íi]stic|liter[áa]ri|acad[êe]mic))",
     "expectativa\\s+(?:salarial|de\\s+remunera)",
     "faixa\\s+salarial",
-    "valor\\s+(?:da\\s+)?hora",
+    "valor\\s*[\\s/-]\\s*(?:da\\s+)?hora",
     "salary\\s*(?:floor|expectations?|requirements?|minimum)",
     // Palavra de remuneração como RÓTULO ("Salary: 2000 EUR"): vale sem
     // olhar o número, que pode parecer um ano.
@@ -110,6 +117,7 @@ const PAY_WORD = "\\b(?:sal[áa]ri(?:o|os|al|ais)|remunera[çc](?:[ãa]o|[õo]es
 // Ano sozinho não é valor; seguido de moeda ou de `k`, é ("2000 EUR").
 const AMOUNT =
   "(?:[$€£¥]|R\\$|\\b(?!(?:19|20)\\d{2}\\b)\\d|\\b(?:19|20)\\d{2}\\s*(?:k\\b|usd|eur|brl|gbp|reais|d[óo]lares|euros))";
+const HAS_AMOUNT = new RegExp(AMOUNT, "iu");
 const PAY_NEAR_AMOUNT = new RegExp(`${PAY_WORD}.{0,60}?${AMOUNT}|${AMOUNT}.{0,60}?${PAY_WORD}`, "iu");
 
 function isSalaryBlock(block: string): boolean {
@@ -172,11 +180,12 @@ export function publicCvText(content: string, known: { email?: string | null } =
     }
     if (valueExpected) {
       valueExpected = false;
-      if (/\d/.test(text)) continue;
+      if (HAS_AMOUNT.test(text)) continue;
     }
     if (isSalaryBlock(text) || (heading !== null && PAY_HEADING.test(text))) {
       if (heading) skippingSection = heading[1]!.length;
-      else valueExpected = !/\d/.test(text);
+      // Um ano no rótulo ("Pretensão salarial (2026):") não é o valor.
+      else valueExpected = !HAS_AMOUNT.test(text);
       continue;
     }
     out.push(...block);
