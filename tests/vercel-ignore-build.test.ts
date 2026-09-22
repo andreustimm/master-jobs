@@ -23,7 +23,7 @@ function commit(files: Record<string, string>) {
 }
 
 function decide(env: Record<string, string> = {}) {
-  const result = spawnSync("bash", [script], { cwd: repo, encoding: "utf8", env: { PATH: process.env.PATH ?? "", ...env } });
+  const result = spawnSync("bash", [script], { cwd: repo, encoding: "utf8", env: { ...process.env, VERCEL_GIT_PREVIOUS_SHA: "", ...env } });
   return result.status === 0 ? "pula" : "constrói";
 }
 
