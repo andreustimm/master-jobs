@@ -11,6 +11,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 - Governança: SLOs internos, orçamento de erros e resposta a incidentes definidos; adicionados sonda pública e relatório de métricas DORA com cobertura explícita e histórico por artefatos.
 
+## [1.20.7] - 2026-09-22
+
 - Operações: alerta Sentry configurado para erros novos, regressões e alta prioridade em produção, com e-mail para o responsável e intervalo de 30 minutos; disparo validado com canário sintético.
 
 ### Alterado

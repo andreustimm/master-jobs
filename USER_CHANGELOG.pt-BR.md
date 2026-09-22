@@ -20,6 +20,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 - O projeto passa a ter metas internas de disponibilidade e latência, acompanhamento de incidentes e um relatório que distingue resultados medidos de dados ainda insuficientes.
 
+## [1.20.7] - 2026-09-22T16:01:55.822Z
+
 - Alertas por e-mail configurados para avisar o responsável sobre erros novos em produção e falhas resolvidas que voltam a acontecer.
 
 ## [1.20.6] - 2026-09-22T14:44:58.815Z
