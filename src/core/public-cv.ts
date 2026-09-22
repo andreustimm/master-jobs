@@ -116,7 +116,7 @@ const SALARY_LABEL = new RegExp(
 const PAY_WORD = "\\b(?:sal[áa]ri(?:o|os|al|ais)|remunera[çc](?:[ãa]o|[õo]es)|salar(?:y|ies)|compensation|pay\\s+rate|hourly\\s+rate)\\b";
 // Ano sozinho não é valor; seguido de moeda ou de `k`, é ("2000 EUR").
 const AMOUNT =
-  "(?:[$€£¥]|R\\$|\\b(?!(?:19|20)\\d{2}\\b)\\d|\\b(?:19|20)\\d{2}\\s*(?:k\\b|usd|eur|brl|gbp|reais|d[óo]lares|euros))";
+  "(?:[$€£¥]|R\\$|\\b(?:usd|eur|brl|gbp)\\s*\\d|\\b(?!(?:19|20)\\d{2}\\b)\\d|\\b(?:19|20)\\d{2}\\s*(?:k\\b|usd|eur|brl|gbp|reais|d[óo]lares|euros))";
 const HAS_AMOUNT = new RegExp(AMOUNT, "iu");
 const PAY_NEAR_AMOUNT = new RegExp(`${PAY_WORD}.{0,60}?${AMOUNT}|${AMOUNT}.{0,60}?${PAY_WORD}`, "iu");
 
@@ -167,7 +167,10 @@ export function publicCvText(content: string, known: { email?: string | null } =
   // bloco seguinte, que também sai.
   let valueExpected = false;
   // NFC: um "ã" digitado como "a" + til combinante não casaria com o rótulo.
-  for (const block of blocks(content.normalize("NFC").split("\n"))) {
+  // Espaço inseparável (U+00A0, U+2007, U+202F) vira espaço comum: é como
+  // editores e PDFs costumam separar os grupos de um telefone.
+  const normalized = content.normalize("NFC").replace(/[\u00A0\u2007\u202F]/g, " ");
+  for (const block of blocks(normalized.split("\n"))) {
     const heading = HEADING.exec(block[0]!);
     if (skippingSection !== null) {
       if (heading && heading[1]!.length <= skippingSection) skippingSection = null;
@@ -180,7 +183,8 @@ export function publicCvText(content: string, known: { email?: string | null } =
     }
     if (valueExpected) {
       valueExpected = false;
-      if (HAS_AMOUNT.test(text)) continue;
+      // Um título seguinte abre outra seção; ele não é o valor prometido.
+      if (heading === null && HAS_AMOUNT.test(text)) continue;
     }
     if (isSalaryBlock(text) || (heading !== null && PAY_HEADING.test(text))) {
       if (heading) skippingSection = heading[1]!.length;

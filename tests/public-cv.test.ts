@@ -93,6 +93,10 @@ describe("publicCvText", () => {
     for (const cv of ["Valor/hora: R$ 200", "Valor-hora: R$ 200"]) {
       expect(publicCvText(`Topo\n\n${cv}\n\nFim`), cv).toBe("Topo\n\n\nFim");
     }
+    // Moeda colada ao número é valor.
+    expect(publicCvText("Topo\n\nSalário em torno de EUR150k anuais\n\nFim")).toBe("Topo\n\n\nFim");
+    // O título seguinte ao rótulo isolado abre outra seção e fica.
+    expect(publicCvText("Topo\n\nPretensão salarial:\n\n## Projetos 2024\n\nFim")).toBe("Topo\n\n\n## Projetos 2024\n\nFim");
     // Ano com moeda é valor.
     expect(publicCvText("Topo\n\nRemuneração mínima de 2000 EUR\n\nFim")).toBe("Topo\n\n\nFim");
     // Hífen no meio da frase não é marcador de item.
@@ -119,6 +123,9 @@ describe("publicCvText", () => {
     expect(publicCvText("(11) 91234/5678")).toBe(REDACTED);
     expect(publicCvText("+55 11 91234 - 5678")).toBe(REDACTED);
     expect(publicCvText("(415) 555-0100")).toBe(REDACTED);
+    // Espaço inseparável entre os grupos.
+    expect(publicCvText("+55\u00A011\u00A091234-5678")).toBe(REDACTED);
+    expect(publicCvText("(11)\u202F91234\u202F5678")).toBe(REDACTED);
     expect(publicCvText("+1 415 555 0100 2015")).toBe(`${REDACTED} 2015`);
     expect(publicCvText("(11) 91234 - 5678")).toBe(REDACTED);
     // Dígitos logo depois do telefone não o escondem da detecção.
