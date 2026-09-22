@@ -22,7 +22,7 @@ import { releaseTestDb, useTestDb } from "./support/db.ts";
 let db: DB;
 let candidateId: number;
 
-const CV = "# Andreus Timm\n\nSenior AI Software Architect. Piso: 180000 USD/ano.";
+const CV = "# Andreus Timm\n\nSenior AI Software Architect.\n\nPiso: 180000 USD/ano.";
 
 beforeEach(async () => {
   db = await useTestDb();

@@ -16,11 +16,11 @@
  *   soltos como `+33 1 23 45 67 89`) ou com DDD entre parênteses
  *   (`(11) 91234-5678`) — um número sem essas marcas não é distinguível de um
  *   intervalo de anos ou de um valor, e fica;
- * - piso: a partir da frase que contém um rótulo de pretensão salarial
- *   (`piso:`, `pretensão:`, `pretensão salarial`, `faixa salarial`, `valor
- *   hora`, `salário:`, `salary expectation`, `rate:`…), sai o resto do BLOCO:
- *   o resto da linha e as linhas seguintes até a próxima linha em branco — o
- *   parágrafo, o item ou a tabela em que o valor mora. Num título Markdown,
+ * - piso: a linha que contém um rótulo de pretensão salarial (`piso:`,
+ *   `pretensão:`, `pretensão salarial`, `faixa salarial`, `valor hora`,
+ *   `salário:`, `salary expectation`, `rate:`…) sai inteira, com o resto do
+ *   BLOCO: as linhas seguintes até a próxima linha em branco — o parágrafo, o
+ *   item ou a tabela em que o valor mora, antes ou depois do rótulo. Num título Markdown,
  *   sai a seção inteira até o próximo título de mesmo nível ou acima. Um valor
  *   sem rótulo não é reconhecido, e o bloco inteiro some mesmo quando só uma
  *   parte dele era o piso: diante da dúvida, esconde-se.
@@ -70,8 +70,7 @@ function redactInternationalPhones(text: string): string {
 /**
  * Rótulos de pretensão salarial em português e inglês. O valor pode estar
  * antes ou depois do rótulo, em qualquer moeda e período, e cortar só o número
- * deixaria "Piso: USD/ano" à vista — por isso sai a frase inteira até o fim
- * da linha.
+ * deixaria "Piso: USD/ano" à vista — por isso sai a linha inteira.
  */
 const SALARY_LABEL = new RegExp(
   [
@@ -88,28 +87,16 @@ const SALARY_LABEL = new RegExp(
     "salary\\s*(?::|floor|expectations?|requirements?|minimum|range\\s*:)",
     "(?:minimum|desired|expected|target)\\s+(?:salary|compensation|rate|pay)",
     "compensation\\s*(?::|floor|expectations?|requirements?)",
-    // `rate:` só como rótulo no começo da linha, de item ou de célula:
+    // `rate:` só como rótulo no começo da linha (recuada ou não), de item,
+    // de lista numerada ou de célula:
     // "Success rate: 99%" no meio de uma frase é currículo, não pretensão.
-    "(?:^|[|·•*-]\\s*)(?:hourly\\s+)?rate\\s*(?::|floor)",
+    "(?:^|[|·•*-]|\\d+[.)])\\s*(?:(?:hourly|daily|day)\\s+)?rate\\s*(?::|floor)",
   ].join("|"),
   "iu",
 );
 
-/** Fim de frase: pontuação seguida de espaço. `30.000` não quebra. */
-const SENTENCE_END = /[.!?;·|]\s/gu;
-
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** O que sobra da linha antes da frase do rótulo, ou `null` se nada sobra. */
-function beforeSalarySentence(line: string, labelAt: number): string | null {
-  const prefix = line.slice(0, labelAt);
-  let cut = -1;
-  for (const boundary of prefix.matchAll(SENTENCE_END)) cut = boundary.index + 1;
-  const kept = cut === -1 ? "" : prefix.slice(0, cut).trimEnd();
-  // Sobrou só pontuação de tabela ou separador: não há frase para manter.
-  return /[\p{L}\p{N}]/u.test(kept) ? kept : null;
 }
 
 const HEADING = /^(#{1,6})\s/;
@@ -136,9 +123,10 @@ export function publicCvText(content: string, known: { email?: string | null } =
       skipping = heading[1]!.length;
       continue;
     }
+    // A linha do rótulo sai inteira: o valor pode vir ANTES dele
+    // (`| R$ 30.000 | Pretensão salarial |`), e guardar o começo da linha
+    // publicaria justamente o número.
     skipping = "paragraph";
-    const kept = beforeSalarySentence(line, label.index);
-    if (kept !== null) out.push(kept);
   }
 
   let text = out.join("\n");

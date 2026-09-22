@@ -259,20 +259,35 @@ function victimForms(ids: Record<string, number>): FormData[] {
   ];
 }
 
-/** Chama toda action não administrativa com cada forma de argumento hostil. */
-async function sweepCandidateActions(ids: Record<string, number>): Promise<string[]> {
+/**
+ * Chama toda action não administrativa com cada forma de argumento hostil e
+ * devolve quem rodou e TUDO o que voltou — valor e mensagem de erro. Escrita
+ * alheia aparece no banco; leitura alheia só aparece no que a action devolve.
+ */
+async function sweepCandidateActions(ids: Record<string, number>): Promise<{ ran: string[]; returned: string }> {
   const ran: string[] = [];
+  const returned: string[] = [];
   for (const { file, name } of GUARDED) {
     if (file.startsWith("app/admin/")) continue;
     const action = await load(file, name);
     for (const form of victimForms(ids)) {
       for (const args of argumentShapes(form, ids.documentId!)) {
-        if (/^(executou|NEXT_REDIRECT;)/.test(await outcome(action, args))) ran.push(name);
+        try {
+          returned.push(JSON.stringify((await action(...args)) ?? null));
+          ran.push(name);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          returned.push(message);
+          if (message.startsWith("NEXT_REDIRECT;")) ran.push(name);
+        }
       }
     }
   }
-  return ran;
+  return { ran, returned: returned.join("\n") };
 }
+
+/** O que só existe no dado da vítima: se aparecer numa resposta, vazou. */
+const VICTIM_SENTINEL = "999999";
 
 let fetchCalls: string[];
 
@@ -372,9 +387,10 @@ describe("V03-02 id forjado não alcança outro candidato", () => {
     const ids = await seedVictim();
     const before = await victimSnapshot();
 
-    const ran = await sweepCandidateActions(ids);
+    const { ran, returned } = await sweepCandidateActions(ids);
 
     expect(await victimSnapshot()).toEqual(before);
+    expect(returned).not.toContain(VICTIM_SENTINEL);
     // A sessão é válida, então parte das actions RODOU e gravou — no escopo
     // do intruso. Sem isto o teste passaria com tudo falhando por outro motivo.
     expect(ran).toEqual(expect.arrayContaining(["saveCvAction", "setVisibilityAction"]));
@@ -419,9 +435,10 @@ describe("V03-03 sessão emprestada não administra, nem quando o alvo é admin"
     const ids = await seedVictim();
     const before = await victimSnapshot();
 
-    const ran = await sweepCandidateActions(ids);
+    const { ran, returned } = await sweepCandidateActions(ids);
 
     expect(await victimSnapshot()).toEqual(before);
+    expect(returned).not.toContain(VICTIM_SENTINEL);
     // O recrutador acompanha; nenhuma escrita de candidato chega a rodar.
     expect(ran.filter((name) => ["saveCvAction", "setVisibilityAction", "deleteVersionAction"].includes(name))).toEqual([]);
   });

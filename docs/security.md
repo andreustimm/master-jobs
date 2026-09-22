@@ -186,9 +186,9 @@ chamam a mesma função; nenhum outro arquivo lê a variável.
 **O consentimento do CV não publica o que nunca sai** — ✅ **22/09 (#197).**
 `publicProfile()` passa o texto por `publicCvText()` (`src/core/public-cv.ts`):
 e-mail (o cadastrado e qualquer endereço), telefone com código de país ou DDD
-entre parênteses e, a partir da frase com rótulo de pretensão salarial, o
-resto do bloco — parágrafo, item ou tabela até a linha em branco, ou a seção
-inteira quando o rótulo é título — são retirados.
+entre parênteses e a linha com rótulo de pretensão salarial, com o resto do
+bloco — parágrafo, item ou tabela até a linha em branco, ou a seção inteira
+quando o rótulo é título — são retirados.
 Detecção por padrão, com limite escrito no arquivo e travado em teste: valor
 sem rótulo e telefone sem marca passam. Não é sanitização perfeita.
 

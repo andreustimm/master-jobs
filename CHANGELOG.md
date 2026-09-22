@@ -24,10 +24,10 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   presente, ou `VERCEL_ENV`/`JHO_ENV` diferente de `local`) o pedido é ignorado, em
   sessão e em `proxy.ts`, pela mesma função de domínio.
 - O CV publicado em `/p/[slug]` com os dois consentimentos passa por
-  `publicCvText()`: e-mail, telefone com código de país/DDD e, da frase com
-  rótulo de pretensão salarial, o resto do bloco (parágrafo, item ou tabela
-  até a linha em branco; a seção, quando o rótulo é título) são retirados. Detecção por padrão, com limite
-  declarado e testado.
+  `publicCvText()`: e-mail, telefone com código de país ou DDD entre
+  parênteses e a linha com rótulo de pretensão salarial, com o resto do bloco
+  (parágrafo, item ou tabela até a linha em branco; a seção, quando o rótulo é
+  título), são retirados. Detecção por padrão, com limite declarado e testado.
 - `/recruiter/[candidateId]` autoriza a leitura por `requirePage("candidate:read")`
   depois do vínculo, em vez de decidir fora da política.
 - Teste de concorrência: dois resgates simultâneos do mesmo link de

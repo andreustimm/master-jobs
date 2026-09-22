@@ -27,12 +27,16 @@ describe("publicCvText", () => {
     }
   });
 
-  it("na mesma linha, sai só a frase do piso", () => {
-    expect(publicCvText("Senior AI Software Architect. Piso: 180000 USD/ano.")).toBe("Senior AI Software Architect.");
-    // Do rótulo ao fim da linha: o que vem depois pode ser o próprio valor.
-    expect(publicCvText("Remoto B2B · Salary floor: 150k · São Paulo")).toBe("Remoto B2B ·");
-    // `30.000` não é fim de frase: o valor não sobra depois do corte.
-    expect(publicCvText("Pretensão salarial: R$ 30.000 mensais")).toBe("");
+  it("a linha do rótulo sai inteira, porque o valor pode vir antes dele", () => {
+    for (const cv of [
+      "Senior AI Software Architect. Piso: 180000 USD/ano.",
+      "Remoto B2B · Salary floor: 150k · São Paulo",
+      "| R$ 30.000 | Pretensão salarial |",
+      "180k USD · Salary expectation",
+      "Aceito R$ 30.000; é minha pretensão salarial",
+    ]) {
+      expect(publicCvText(`# Nome\n\n${cv}\n\nFim`), cv).toBe("# Nome\n\n\nFim");
+    }
   });
 
   it("o valor não escapa do rótulo por separador, tabela, abreviação ou quebra de linha", () => {
@@ -55,7 +59,7 @@ describe("publicCvText", () => {
   });
 
   it("reconhece os rótulos curtos, e não confunde taxa de sucesso com pretensão", () => {
-    for (const cv of ["Pretensão: 30k", "Salário: R$ 30.000", "Salary: 150k", "Rate: 90 USD/h", "- Hourly rate: 90"]) {
+    for (const cv of ["Pretensão: 30k", "Salário: R$ 30.000", "Salary: 150k", "Rate: 90 USD/h", "- Hourly rate: 90", "Daily rate: 600 EUR", "Day rate: 600 EUR", "  Rate: 90 USD/h", "1. Rate: 90 USD/h"]) {
       expect(publicCvText(cv), cv).toBe("");
     }
     expect(publicCvText("Success rate: 99% em produção")).toBe("Success rate: 99% em produção");

@@ -152,7 +152,7 @@ dashboard Next.js em `localhost:3000`.
 > publicá-la é mostrar a carta antes da mesa. Perfil não público responde
 > **404, não 403**: 403 confirma que o slug existe, e existência é informação.
 > O texto do currículo exige um SEGUNDO consentimento, e mesmo com ele o texto
-> publicado passa por `publicCvText()`: e-mail, telefone e a frase do piso saem.
+> publicado passa por `publicCvText()`: e-mail, telefone e o bloco do piso saem.
 
 > **Admin não lê dado privado; ele assume a identidade, e isso fica registrado.**
 > Três papéis: `admin`, `candidate`, `recruiter`. A sessão emprestada perde TODA
