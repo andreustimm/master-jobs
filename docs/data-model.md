@@ -293,6 +293,22 @@ candidaturas. O contrato está em [ADR 0020](adr/0020-ciclo-de-vida-e-historico-
 (por `company_name`), `job_last_seen_idx`, `job_closed_idx`. O último importa
 porque toda query de board filtra `closed_at IS NULL`.
 
+**Busca por termo (#214).** `job_description_trgm_idx` é GIN `gin_trgm_ops`
+sobre `replace(replace(description_text, ' ', ''), '-', '')`, parcial em
+`closed_at IS NULL`; `job_page_text_trgm_idx` é o mesmo sobre `job_page.text`.
+Eles não respondem ao `~*` de palavra inteira — o separador opcional `[ -]?`
+de `termPattern` não deixa o `pg_trgm` extrair trigrama garantido, e o índice
+direto sobre a coluna devolvia 98% das linhas —, e sim a um **pré-filtro**
+`ilike '%chave%'` sobre o texto sem espaço e hífen, que é condição necessária
+do padrão. O `~*` exato continua na consulta e decide; só termos com chave
+ASCII e três letras ou dígitos seguidos usam o pré-filtro
+(`termPrefilterLike` em `src/core/term.ts`). A expressão da consulta
+(`termTextCandidates` em `repo.ts`) precisa ser **idêntica** à do índice, ou o
+planner o ignora sem erro — `tests/jobs-board.test.ts` (IT-214b) confere o
+plano. Exigem a extensão `pg_trgm`, criada por `0010_enable_pg_trgm.sql` com
+`CREATE EXTENSION IF NOT EXISTS`. Migrations `0010` e `0011` são só aditivas;
+reverter é `DROP INDEX` dos dois (a extensão pode ficar).
+
 A migration que adicionar `archived_at` também deve manter um índice que suporte
 as varreduras por corte de `closed_at`/`archived_at`, conforme o TechSpec de
 retenção; a coluna sem esse índice não atende ao contrato de lote.

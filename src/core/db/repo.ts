@@ -18,7 +18,7 @@ import { workModeSql } from "./work-mode.ts";
 import { attributedJobIds } from "../../contexts/sourcing/index.ts";
 import { loadRates } from "../../contexts/fx/index.ts";
 import { PERIODS_PER_YEAR, annualFactorSql, type Currency, type FxTable } from "../money.ts";
-import { termRegexSql, type ValidTerm } from "../term.ts";
+import { termPrefilterLike, termRegexSql, type ValidTerm } from "../term.ts";
 import {
   IllegalApplicationTransitionError,
   transitionApplication,
@@ -513,6 +513,39 @@ function freshnessCutoff(days: number): string {
   return new Date(Date.now() - days * DAY_MS).toISOString();
 }
 
+/**
+ * Vagas cuja descrição — da fonte ou capturada — PODE conter o termo.
+ *
+ * É um superconjunto (ver `termPrefilterLike`): inclui a descrição da fonte
+ * mesmo quando a capturada a substitui, o que só amplia o conjunto que o `~*`
+ * confere.
+ *
+ * `array(...)`, e não `in (...)` nem semijunção. O `in` dentro do `or` vira
+ * subplano com hash, e o planner o reconstrói em cada lugar onde repete o
+ * filtro (duas vezes por ocorrência, medido). Fora do `or`, como semijunção,
+ * a estimativa de linhas do conjunto derrubava o agrupamento num laço
+ * aninhado: 3,4 s no benchmark. O `array` é um InitPlan — calculado uma vez
+ * por consulta — e o filtro continua onde estava, com a mesma forma de plano.
+ *
+ * As expressões e o predicado de vaga aberta repetem, literalmente, os de
+ * `job_description_trgm_idx` e `job_page_text_trgm_idx`: com `' '` como
+ * parâmetro o planner não reconheceria a expressão do índice. `replace` duas
+ * vezes, e não `translate`, porque o índice é com perdas e cada candidato tem
+ * a expressão reconferida: no acervo local `translate` custou o dobro (457
+ * contra 227 ms nas 5.576 abertas).
+ */
+function termTextCandidates(like: string): SQL {
+  return sql`array(select ${job.id} from ${job}
+    where ${job.closedAt} is null and ${withoutSeparators(job.descriptionText)} ilike ${like}
+    union all
+    select ${jobPage.jobId} from ${jobPage}
+    where ${withoutSeparators(jobPage.text)} ilike ${like})`;
+}
+
+function withoutSeparators(column: PgColumn): SQL {
+  return sql`replace(replace(${column}, ${sql.raw("' '")}, ${sql.raw("''")}), ${sql.raw("'-'")}, ${sql.raw("''")})`;
+}
+
 function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: PaySql): SQL[] {
   const conditions: SQL[] = [isNull(job.closedAt)];
   // Fit, cluster, blockers and application status are candidate-scoped. A
@@ -545,8 +578,15 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
     // Bound as a parameter, never spliced: the pattern is escaped by the term
     // kernel and still travels as data (`O'Reilly%_` is just text here).
     const pattern = termRegexSql(opts.term.term);
+    const like = termPrefilterLike(opts.term.term);
+    const inText = sql`coalesce(${jobPage.text}, ${job.descriptionText}, '') ~* ${pattern}`;
+    // Título e empresa são curtos e vão direto ao `~*`. A descrição é o texto
+    // longo, descomprimido linha a linha: ali o índice trigrama corta antes o
+    // que nunca casaria, e o `~*` continua decidindo (#214).
     conditions.push(
-      sql`(${job.title} ~* ${pattern} or ${job.companyName} ~* ${pattern} or coalesce(${jobPage.text}, ${job.descriptionText}, '') ~* ${pattern})`,
+      sql`(${job.title} ~* ${pattern} or ${job.companyName} ~* ${pattern} or ${
+        like ? sql`(${job.id} = any(${termTextCandidates(like)}) and ${inText})` : inText
+      })`,
     );
   }
   if (opts.sourceKinds && opts.sourceKinds.length > 0) {

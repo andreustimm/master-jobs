@@ -11,6 +11,19 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- Busca por termo com pré-filtro indexado (#214). Migrations aditivas
+  `0010_enable_pg_trgm` (`CREATE EXTENSION IF NOT EXISTS pg_trgm`) e
+  `0011_term_search_trgm` (GIN `gin_trgm_ops` sobre a descrição sem espaço e
+  hífen, parcial em vagas abertas, e o mesmo em `job_page.text`). Para chave
+  ASCII com três letras ou dígitos seguidos, o quadro calcula uma vez por
+  consulta (`array(...)`, InitPlan) as vagas cuja descrição pode conter o termo
+  e só nelas roda o `~*` de palavra inteira, que continua decidindo: `java`
+  segue sem trazer `JavaScript`, e os resultados de referência do `perf:jobs`
+  são idênticos. No acervo local real o predicado caiu de 161/144 ms para
+  35/35 ms (`typescript`/`java`); no sintético de 10 mil vagas, com descrições
+  curtas sem compressão e termo pouco seletivo, subiu de 129 para 155 ms.
+  Tempos locais, não de produção.
+
 - Minha conta (`/account`, #236): qualquer papel troca a própria senha e o
   nome de exibição. A troca exige a senha atual, limita a 5 tentativas por
   conta em 15 minutos (tentativa gravada em `auth_event` antes de contada, para

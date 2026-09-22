@@ -86,6 +86,34 @@ export function termRegexSql(term: string): string {
   return `(^|${TERM_BOUNDARY})${termPattern(term)}(${TERM_BOUNDARY}|$)`;
 }
 
+/** Chave só com ASCII minúsculo, dígito e os símbolos que `termKey` preserva. */
+const PREFILTER_KEY = /^[a-z0-9+#./]+$/;
+/** Sem três letras ou dígitos seguidos o pg_trgm não extrai trigrama útil. */
+const TRIGRAM_RUN = /[a-z0-9]{3}/;
+
+/**
+ * O `ilike` que o índice trigrama responde, ou `null` quando o termo não o
+ * aproveita e a busca segue só com o `~*`.
+ *
+ * É condição NECESSÁRIA do padrão, nunca suficiente: se `termRegexSql(term)`
+ * casa um texto, então o texto sem espaço e sem hífen contém a chave — o trecho
+ * casado é a chave com, no máximo, `[ -]` entre letras, e é exatamente isso que
+ * `replace(replace(texto, ' ', ''), '-', '')` apaga. O `~*` continua na
+ * consulta e decide; o pré-filtro só descarta quem nunca casaria.
+ *
+ * A prova vale para letras ASCII, onde `~*` e `ilike` concordam sobre caixa em
+ * qualquer locale usado aqui. Acento e letra de outro alfabeto têm regras de
+ * caixa que dependem da collation, e um pré-filtro que recusasse o que o `~*`
+ * aceita esconderia vaga: esses termos, e os curtos demais para trigrama,
+ * ficam sem pré-filtro. `%`, `_` e `\` não passam por `PREFILTER_KEY`, então o
+ * padrão não precisa de escape.
+ */
+export function termPrefilterLike(term: string): string | null {
+  const key = termKey(term);
+  if (!PREFILTER_KEY.test(key) || !TRIGRAM_RUN.test(key)) return null;
+  return `%${key}%`;
+}
+
 export function matchesTerm(term: string, text: string): boolean {
   if (!termKey(term)) return false;
   return new RegExp(termRegexSql(term), "i").test(text);

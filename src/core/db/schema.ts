@@ -153,6 +153,17 @@ export const job = production.table(
     // do corte e ainda não arquivada. Índice composto nessa ordem serve à
     // varredura e ao filtro do quadro ativo com a mesma estrutura.
     index("job_archive_scan_idx").on(t.closedAt, t.archivedAt),
+    // Pré-filtro da busca por termo (#214). O `~*` de palavra inteira não
+    // aproveita trigrama — o separador opcional `[ -]?` entre letras não deixa
+    // o pg_trgm extrair nenhum trigrama garantido —, mas o texto sem espaço e
+    // hífen contém a chave sempre que o padrão casa. O índice responde ao
+    // `ilike` sobre essa forma; o `~*` exato continua decidindo. Só vagas
+    // abertas: é o único conjunto que o quadro lê. `termPrefilterLike` em
+    // `src/core/term.ts` tem a prova; a expressão precisa ser idêntica à de
+    // `termTextCandidates` em `repo.ts`, ou o planner não usa o índice.
+    index("job_description_trgm_idx")
+      .using("gin", sql`replace(replace(${t.descriptionText}, ' ', ''), '-', '') gin_trgm_ops`)
+      .where(sql`${t.closedAt} is null`),
   ],
 );
 
@@ -977,7 +988,12 @@ export const jobPage = production.table(
     fetchedAt: text("fetched_at").notNull().default(now),
     parsedAt: text("parsed_at"),
   },
-  (t) => [index("job_page_parsed_idx").on(t.parsedAt)],
+  (t) => [
+    index("job_page_parsed_idx").on(t.parsedAt),
+    // A descrição capturada substitui a da fonte na busca por termo; mesmo
+    // pré-filtro de `job_description_trgm_idx`.
+    index("job_page_text_trgm_idx").using("gin", sql`replace(replace(${t.text}, ' ', ''), '-', '') gin_trgm_ops`),
+  ],
 );
 
 export type ScrapeTask = typeof scrapeTask.$inferSelect;
