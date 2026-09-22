@@ -56,4 +56,3 @@ Casos de propriedade desta tarefa: **V07-01, V07-02, V07-03, V07-04**. Entradas 
 Fazer walkthrough documental dos casos V07, checar links/frontmatter e testar qualquer script efetivamente modificado. Não rodar todos os procedimentos das skills nem executar comandos de produção para validar texto.
 
 Registrar ambiente, comando, diff/commit e resultado; preservar falhas e limitações. Antes de PR, cumprir documentação, changelogs, revisão e QA aplicáveis conforme a regra vigente. Não marcar concluída pela mera existência dos artefatos.
-

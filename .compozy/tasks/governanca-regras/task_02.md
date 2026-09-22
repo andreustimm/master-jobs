@@ -51,4 +51,3 @@ Casos de propriedade desta tarefa: **V02-01, V02-02, V02-03, V02-04**. Entradas 
 Usar simulações seguras de autorização e consulta somente leitura ao repositório real. Se faltar recurso/permissão da plataforma, registrar o impedimento concreto e manter o item pendente; não simular proteção com hooks locais.
 
 Registrar ambiente, comando, diff/commit e resultado; preservar falhas e limitações. Antes de PR, cumprir documentação, changelogs, revisão e QA aplicáveis conforme a regra vigente. Não marcar concluída pela mera existência dos artefatos.
-

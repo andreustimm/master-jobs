@@ -55,4 +55,3 @@ Casos de propriedade desta tarefa: **V09-01, V09-02, V09-03, V09-04, V09-05**. E
 Executar validadores sobre cópias temporárias com regressões induzidas e fixtures da API de PR. Reconsultar configuração remota quando ela for parte da entrega; não abrir PR real apenas para experimentar o gate.
 
 Registrar ambiente, comando, diff/commit e resultado; preservar falhas e limitações. Antes de PR, cumprir documentação, changelogs, revisão e QA aplicáveis conforme a regra vigente. Não marcar concluída pela mera existência dos artefatos.
-

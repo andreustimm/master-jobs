@@ -52,4 +52,3 @@ Casos de propriedade desta tarefa: **V01-01, V01-02, V01-03, V01-04, V01-05**. E
 Executar testes de release/workflow com repos temporários e API de fixture, incluindo os cinco negativos/positivos do catálogo. Rodar checks pertinentes ao diff; não disparar promoção de produção para validar.
 
 Registrar ambiente, comando, diff/commit e resultado; preservar falhas e limitações. Antes de PR, cumprir documentação, changelogs, revisão e QA aplicáveis conforme a regra vigente. Não marcar concluída pela mera existência dos artefatos.
-

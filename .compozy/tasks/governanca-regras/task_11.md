@@ -53,4 +53,3 @@ Casos de propriedade desta tarefa: **V11-01, V11-02, V11-03, V11-04**. Entradas 
 Executar V11 conforme o diff real. Se um P0 ainda estiver pendente, o relatório não certifica governança concluída. A auditoria de regras atual não substitui esta verificação futura da implementação.
 
 Registrar ambiente, comando, diff/commit e resultado; preservar falhas e limitações. Antes de PR, cumprir documentação, changelogs, revisão e QA aplicáveis conforme a regra vigente. Não marcar concluída pela mera existência dos artefatos.
-

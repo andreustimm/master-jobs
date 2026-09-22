@@ -53,4 +53,3 @@ Casos de propriedade desta tarefa: **V04-01, V04-02, V04-03, V04-04**. Entradas 
 Executar negativos por transporte e as regressões de SSRF/ingestão/dossiê. Não usar rede real de LinkedIn, conta autenticada ou submissão de teste como técnica de verificação.
 
 Registrar ambiente, comando, diff/commit e resultado; preservar falhas e limitações. Antes de PR, cumprir documentação, changelogs, revisão e QA aplicáveis conforme a regra vigente. Não marcar concluída pela mera existência dos artefatos.
-

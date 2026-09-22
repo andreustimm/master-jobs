@@ -55,4 +55,3 @@ Casos de propriedade desta tarefa: **V05-01, V05-02, V05-03, V05-04, V05-05**. E
 Usar PostgreSQL Docker descartável para upgrade, concorrência, schema e permissões. Testar URLs fictícias representativas do provedor. Não executar migration ou rescore de produção; configuração implantada só pode ser certificada por evidência operacional separada.
 
 Registrar ambiente, comando, diff/commit e resultado; preservar falhas e limitações. Antes de PR, cumprir documentação, changelogs, revisão e QA aplicáveis conforme a regra vigente. Não marcar concluída pela mera existência dos artefatos.
-

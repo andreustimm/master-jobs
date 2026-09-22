@@ -53,4 +53,3 @@ Casos de propriedade desta tarefa: **V08-01, V08-02, V08-03, V08-04, V08-05**. E
 Executar browser no ambiente isolado suportado e demonstrar falha induzida segura. Rodar targeted QA das jornadas afetadas após checks/E2E; full fica exigido no release candidate conforme README, sem inventar sessão para docs-only.
 
 Registrar ambiente, comando, diff/commit e resultado; preservar falhas e limitações. Antes de PR, cumprir documentação, changelogs, revisão e QA aplicáveis conforme a regra vigente. Não marcar concluída pela mera existência dos artefatos.
-
