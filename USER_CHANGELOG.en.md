@@ -25,6 +25,21 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   current one; every other session of the account is signed out and you stay
   signed in. The email is still changed by an admin.
 
+### Security
+
+- An invited account can no longer see or change the owner's profile, CV,
+  visibility, or pipeline. An account without its own profile now gets access
+  denied in the candidate area, including when an admin is acting as that
+  account.
+
+- The CV shown on the public profile now hides email addresses, phone numbers
+  with a country code or a parenthesised area code, and the whole paragraph or
+  table that states a salary expectation (such as "Salary expectation:" or
+  "Current salary: …"), even when they are written in the CV text. An amount
+  written with no label or mention of salary is still shown.
+- The no-login mode meant for development is automatically refused in any
+  published environment.
+
 ### Fixed
 
 - While email delivery is not configured on the server, the password recovery
@@ -41,16 +56,6 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   never deletes a job that has an application.
 
 - The database connection is configured and validated with limited permissions; it takes effect in the next approved production deployment.
-
-### Security
-
-- The CV shown on the public profile now hides email addresses, phone numbers
-  with a country code or a parenthesised area code, and the whole paragraph or
-  table that states a salary expectation (such as "Salary expectation:" or
-  "Current salary: …"), even when they are written in the CV text. An amount
-  written with no label or mention of salary is still shown.
-- The no-login mode meant for development is automatically refused in any
-  published environment.
 
 ### Improved
 

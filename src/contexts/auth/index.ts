@@ -29,6 +29,7 @@ export type { Action, Decision, Resource, Role, Session } from "./domain/types.t
 export { ACTIONS, ROLES } from "./domain/types.ts";
 export { isOpenMode, isSingleUser, singleUserSession, SESSION_DAYS } from "./app/session.ts";
 export { generatePassword, seedOwner } from "./app/seed.ts";
+export { addUser, claimOwnCandidate } from "./app/accounts.ts";
 export type { SeedResult } from "./app/seed.ts";
 export { setPassword, verifyLogin } from "./infra/password-login.ts";
 import { setPassword } from "./infra/password-login.ts";

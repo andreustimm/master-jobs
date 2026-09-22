@@ -8,6 +8,7 @@ import {
   beginImpersonation,
   createUser,
   deleteUser,
+  claimOwnCandidate,
   endImpersonation,
   ROLES,
   setUserDisabled,
@@ -15,7 +16,6 @@ import {
   removeRecruiterLink,
   type Role,
 } from "../../src/contexts/auth/index.ts";
-import { ensureCandidate } from "../../src/core/candidate.ts";
 import { ADMIN_COOKIE, currentSession, guard, SESSION_COOKIE } from "../auth";
 import { setMutationFeedbackCookie } from "../mutation-feedback-server";
 import type { UserEditActionState } from "./user-edit-state";
@@ -96,13 +96,7 @@ export async function createUserAction(formData: FormData) {
   // Conta com papel de candidato ganha um candidato PRÓPRIO, novo, cujo slug
   // deriva do e-mail e portanto é dela.
   const candidateId = roles.includes("candidate")
-    ? await ensureCandidate({
-        slug: `user-${email.replace(/[^a-z0-9]+/g, "-")}`,
-        // O slug continua vindo do e-mail, que é único; só o nome exibido usa o
-        // que a pessoa escreveu. Derivar o slug do nome deixaria dois "João
-        // Silva" brigando pela mesma URL pública.
-        name: fullName,
-      })
+    ? await claimOwnCandidate({ email, name: fullName })
     : null;
 
   await createUser({ email, fullName, roles, candidateId });

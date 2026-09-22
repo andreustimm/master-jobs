@@ -25,6 +25,22 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   trocar, todas as outras sessões da conta são encerradas e você continua
   conectado. O e-mail continua sendo trocado por um admin.
 
+### Segurança
+
+- Uma conta convidada não enxerga nem altera mais o perfil, o currículo, a
+  visibilidade e o funil do dono. Quem ainda não tem perfil próprio vê acesso
+  negado na área do candidato, inclusive quando o admin assume a identidade
+  dessa conta.
+
+- O currículo publicado no perfil público passa a esconder e-mails, telefones
+  com código de país ou com DDD entre parênteses e o parágrafo ou a tabela
+  inteira em que aparece a pretensão salarial (como "Pretensão salarial:",
+  "Salário atual: R$ …" ou "Salary expectation:"), mesmo quando estão escritos
+  no texto. Um valor escrito sem rótulo nem menção a salário continua
+  aparecendo.
+- O modo sem login, próprio para desenvolvimento, é recusado automaticamente
+  em qualquer ambiente publicado.
+
 ### Corrigido
 
 - Enquanto o envio de e-mail não estiver configurado no servidor, o link de
@@ -42,17 +58,6 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   novo, e nunca apaga vaga com candidatura.
 
 - A conexão com o banco foi preparada com permissões limitadas e validada; a ativação ocorrerá no próximo deploy de produção aprovado.
-
-### Segurança
-
-- O currículo publicado no perfil público passa a esconder e-mails, telefones
-  com código de país ou com DDD entre parênteses e o parágrafo ou a tabela
-  inteira em que aparece a pretensão salarial (como "Pretensão salarial:",
-  "Salário atual: R$ …" ou "Salary expectation:"), mesmo quando estão escritos
-  no texto. Um valor escrito sem rótulo nem menção a salário continua
-  aparecendo.
-- O modo sem login, próprio para desenvolvimento, é recusado automaticamente
-  em qualquer ambiente publicado.
 
 ### Melhorado
 
