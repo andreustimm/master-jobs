@@ -449,7 +449,9 @@ describe("V01-05 — ancestry and existing delivery", () => {
     git(repo, "fetch", "-q", "origin", "main", "dev");
     setAPI({ returnPR: true });
     const workflow = YAML.parse(readFileSync(".github/workflows/sincronizar-apos-main.yml", "utf8"));
-    const env = { ...process.env, PATH: `${root}/bin:${process.env.PATH}`, FIXTURE_ROOT: root, GITHUB_OUTPUT: `${root}/return-output`, VERSAO: "1.0.1" };
+    // `GITHUB_REPOSITORY` fixo: no runner do CI a variável real vazaria para o
+    // `gh` falso, e localmente ela nem existe — o teste passaria só em um lugar.
+    const env = { ...process.env, PATH: `${root}/bin:${process.env.PATH}`, FIXTURE_ROOT: root, GITHUB_OUTPUT: `${root}/return-output`, GITHUB_REPOSITORY: "owner/repo", VERSAO: "1.0.1" };
     const before = refs();
     for (const name of ["Devolver por fast-forward", "Devolver por PR"]) {
       const step = workflow.jobs.devolver.steps.find((candidate: { name?: string }) => candidate.name === name);
@@ -459,6 +461,7 @@ describe("V01-05 — ancestry and existing delivery", () => {
     expect(readFileSync(`${root}/return-output`, "utf8")).toContain("feito=nao");
     expect(calls().find((args) => args[0] === "pr" && args[1] === "create")).toEqual(expect.arrayContaining(["--base", "dev", "--head", "main"]));
     expect(calls().find((args) => args[0] === "pr" && args[1] === "merge")).toEqual(["pr", "merge", "77", "--merge", "--delete-branch=false"]);
+    expect(calls().some((args) => args.includes("repos/owner/repo/issues/77/assignees") && args.includes("assignees[]=andreustimm"))).toBe(true);
     expect(refs()).toBe(before);
   });
 
