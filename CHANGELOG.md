@@ -9,6 +9,16 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- Promoção para staging vinculada ao SHA aprovado pelo CI, inclusive no
+  dispatch. O commit de release passa pelo mesmo CI antes da tag e do
+  fast-forward; retentativas preservam o alvo após avanços de dev e a guarda
+  de migrações compara o intervalo desse alvo. Um candidato reprovado pode ser
+  substituído por uma nova entrada aprovada, sem validar ou etiquetar o anterior.
+  A base do versionamento fica registrada por SHA para resistir a tags tardias.
+  A PR de produção atualiza sua proveniência e preserva anotações humanas.
+
 ## [1.20.7] - 2026-09-22
 
 - Operações: alerta Sentry configurado para erros novos, regressões e alta prioridade em produção, com e-mail para o responsável e intervalo de 30 minutos; disparo validado com canário sintético.
@@ -21,16 +31,6 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   e substitui os Markdown no pacote standalone. O modal monta os cards ao abrir
   e os corpos ao expandir; conteúdo, datas locais e interação permanecem iguais.
   Geração determinística e E2E sem os arquivos de origem cobrem o contrato.
-
-### Corrigido
-
-- Promoção para staging vinculada ao SHA aprovado pelo CI, inclusive no
-  dispatch. O commit de release passa pelo mesmo CI antes da tag e do
-  fast-forward; retentativas preservam o alvo após avanços de dev e a guarda
-  de migrações compara o intervalo desse alvo. Um candidato reprovado pode ser
-  substituído por uma nova entrada aprovada, sem validar ou etiquetar o anterior.
-  A base do versionamento fica registrada por SHA para resistir a tags tardias.
-  A PR de produção atualiza sua proveniência e preserva anotações humanas.
 
 ## [1.20.6] - 2026-09-22
 
