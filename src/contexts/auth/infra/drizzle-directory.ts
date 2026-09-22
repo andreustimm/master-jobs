@@ -186,6 +186,7 @@ export async function otherActiveAdmins(exceptUserId: number): Promise<number[]>
 export type OwnCandidateResult =
   | { status: "created"; candidateId: number; slug: string }
   | { status: "existing"; candidateId: number }
+  | { status: "slug-taken" }
   | { status: "no-account" };
 
 /**
@@ -221,6 +222,7 @@ export async function createOwnCandidate(
     if (account.candidateId !== null) return { status: "existing" as const, candidateId: account.candidateId };
 
     const created = await insertOwnCandidate(tx, profile);
+    if (created === null) return { status: "slug-taken" as const };
     await tx
       .update(authUser)
       .set({ candidateId: created.id })

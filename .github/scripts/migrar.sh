@@ -7,11 +7,15 @@ if [ -z "${DATABASE_MIGRATION_URL:-}" ]; then
   exit 1
 fi
 
-# A identidade do destino é validada antes de qualquer DDL. Nenhuma senha sai.
-node --input-type=module -e '
-import { assertProductionTarget } from "./scripts/migration/production-target.ts";
-assertProductionTarget(process.env.DATABASE_MIGRATION_URL);
-'
+# A identidade do destino é validada antes de qualquer DDL, e o host direto
+# (só IPv6, inalcançável do runner) vira o pooler de sessão com a mesma senha.
+# Nenhuma senha sai: a URL derivada é mascarada antes de qualquer uso.
+DATABASE_MIGRATION_URL=$(node --input-type=module -e '
+import { reachableMigrationTarget } from "./scripts/migration/production-target.ts";
+process.stdout.write(reachableMigrationTarget(process.env.DATABASE_MIGRATION_URL));
+')
+echo "::add-mask::${DATABASE_MIGRATION_URL}"
+export DATABASE_MIGRATION_URL
 
 pnpm jho db migrate
 # Verificação pontual com a mesma conexão privilegiada; não vira segredo runtime.

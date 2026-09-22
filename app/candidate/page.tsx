@@ -16,6 +16,7 @@ import { VersionHistory } from "./versions";
 import { importPdfAction, saveCvAction, setVisibilityAction } from "./actions";
 import { onboardingSession, requireOwnCandidatePage } from "../auth";
 import { CreateProfile } from "./create-profile";
+import { PublicAddressCard } from "./public-address";
 import { getTranslator } from "../i18n";
 import { formatNumber, type TranslationKey, type Translator } from "../../src/core/i18n/index.ts";
 import type { Visibility } from "../../src/contexts/auth/index.ts";
@@ -46,7 +47,8 @@ function VisibilityCard({
 }: {
   current: string;
   publicCv: boolean;
-  slug: string;
+  /** Nulo só para linha criada fora dos caminhos do produto; sem link então. */
+  slug: string | null;
   t: Translator["t"];
 }) {
   const options = [
@@ -118,7 +120,7 @@ function VisibilityCard({
             </span>
           </label>
 
-          {current === "public" && (
+          {current === "public" && slug !== null && (
             <p className="type-meta text-muted-foreground">
               {t("visibility.publicLink")}:{" "}
               <TransitionLink
@@ -209,10 +211,12 @@ export default async function CandidateArea() {
         <VisibilityCard
           current={person.visibility}
           publicCv={person.publicCv}
-          slug={person.slug}
+          slug={person.publicSlug}
           t={t}
         />
       )}
+
+      {person && <PublicAddressCard current={person.publicSlug ?? ""} t={t} />}
 
       {person && (
         <Card className="mb-6">

@@ -14,12 +14,18 @@
  */
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb, type DbTransaction } from "./db/client.ts";
+import { isDuplicateKey } from "./db/retry.ts";
 import { randomBytes } from "node:crypto";
 import { application, candidate, candidateDocument, job, jobScore } from "./db/schema.ts";
 import { loadProfile } from "./profile/load.ts";
 import { isVisibility, type Visibility } from "../contexts/auth/index.ts";
 import { primaryScoreFilter } from "../contexts/matching/index.ts";
-import { slugAttempt, slugBaseFromName } from "./candidate-identity.ts";
+import {
+  slugAttempt,
+  slugBaseFromName,
+  validatePublicSlug,
+  type PublicSlugError,
+} from "./candidate-identity.ts";
 
 /* -------------------------------------------------------------------------- */
 /* Profile                                                                     */
@@ -70,6 +76,11 @@ export async function ensureCandidate(input: {
       email: input.email ?? null,
       linkedinUrl: input.linkedinUrl ?? null,
       githubUrl: input.githubUrl ?? null,
+      // O endereço público nasce igual ao identificador — menos quando o
+      // identificador é `user-<e-mail>`, o que `createUserAction` monta: aí o
+      // endereço publicaria o e-mail, e a conta fica sem endereço até a
+      // própria pessoa escolher um em `/candidate`.
+      publicSlug: slug.startsWith(EMAIL_SLUG_PREFIX) ? null : slug,
       // Só o candidato `default` é o do dono. Marcar toda linha nova como
       // padrão fazia `isOwner` responder sim para o candidato de um convidado,
       // e ele passava a ser pontuado — e a ver trilhas — com o `profile.yaml`
@@ -82,6 +93,9 @@ export async function ensureCandidate(input: {
   if (!row) throw new Error("insert returned no row");
   return row.id;
 }
+
+/** Prefixo do slug que o cadastro pelo admin deriva do e-mail. */
+const EMAIL_SLUG_PREFIX = "user-";
 
 /** Sufixos sequenciais antes de cair no aleatório. */
 const MAX_SLUG_ATTEMPTS = 50;
@@ -96,9 +110,11 @@ const RANDOM_SLUG_ATTEMPTS = 5;
  * Reaproveitar aqui seria entregar a uma conta nova o candidato de outra
  * pessoa, que é a regra que o AGENTS.md proíbe.
  *
- * `on conflict do nothing` no índice único do slug, e não "consultar e depois
- * inserir": duas contas de mesmo nome criando o perfil ao mesmo tempo passariam
- * juntas pela consulta. O índice decide, e quem perde tenta o próximo sufixo.
+ * `on conflict do nothing` sem alvo — cobre o índice do identificador e o do
+ * endereço público —, e não "consultar e depois inserir": duas contas de mesmo
+ * nome criando o perfil ao mesmo tempo passariam juntas pela consulta. O
+ * índice decide, e quem perde tenta o próximo sufixo. Devolve `null` só quando
+ * o endereço ESCOLHIDO já é de outra pessoa.
  *
  * Recebe a transação de quem chama porque o vínculo com a conta precisa entrar
  * no mesmo commit — candidato criado sem dono é lixo que ninguém alcança.
@@ -106,16 +122,26 @@ const RANDOM_SLUG_ATTEMPTS = 5;
 export async function insertOwnCandidate(
   tx: DbTransaction,
   input: OwnCandidateInput,
-): Promise<{ id: number; slug: string }> {
+): Promise<{ id: number; slug: string } | null> {
   const base = slugBaseFromName(input.name);
-  // Sequencial primeiro, porque `maria-souza-2` é legível. Nomes que caem no
-  // mesmo `perfil` (escrita não latina, só símbolos) esgotariam os cinquenta
-  // e travariam o cadastro de todo o resto; o sufixo aleatório os absorve.
+  // Endereço escolhido pela pessoa: uma tentativa só. Se já é de alguém, a
+  // resposta é "escolha outro" — pôr um sufixo em silêncio publicaria um
+  // endereço que ela não escolheu.
+  //
+  // Sem escolha, sequencial primeiro, porque `maria-souza-2` é legível. Nomes
+  // que caem no mesmo `perfil` (escrita não latina, só símbolos) esgotariam os
+  // cinquenta e travariam o cadastro de todo o resto; o aleatório os absorve.
   const slugs = [
+    ...(input.publicSlug !== null ? [input.publicSlug] : []),
     ...Array.from({ length: MAX_SLUG_ATTEMPTS }, (_, i) => slugAttempt(base, i + 1)),
     ...Array.from({ length: RANDOM_SLUG_ATTEMPTS }, () => `${base}-${randomBytes(3).toString("hex")}`),
   ];
   for (const slug of slugs) {
+    // Endereço escolhido já publicado por outra pessoa: recusa. O conflito do
+    // `insert` sem alvo não diz QUAL índice colidiu — o do endereço ou o do
+    // identificador interno, que um endereço liberado por troca ainda ocupa —,
+    // então a pergunta é feita aqui, ao índice certo.
+    if (input.publicSlug !== null && (await publicSlugTaken(tx, input.publicSlug))) return null;
     const [row] = await tx
       .insert(candidate)
       .values({
@@ -130,8 +156,11 @@ export async function insertOwnCandidate(
         // "esqueci de configurar" viraria vazamento se o padrão mudasse.
         visibility: "private",
         publicCv: false,
+        publicSlug: input.publicSlug ?? slug,
       })
-      .onConflictDoNothing({ target: candidate.slug })
+      // Sem alvo: conflito em QUALQUER índice único — o do identificador ou o
+      // do endereço público, que outra pessoa pode ter escolhido — é "ocupado".
+      .onConflictDoNothing()
       .returning({ id: candidate.id, slug: candidate.slug });
     if (!row) continue;
     // O currículo entra no mesmo commit do candidato: se a gravação dele
@@ -152,6 +181,15 @@ export async function insertOwnCandidate(
   throw new Error("nenhum slug livre para este nome");
 }
 
+async function publicSlugTaken(tx: DbTransaction, publicSlug: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: candidate.id })
+    .from(candidate)
+    .where(eq(candidate.publicSlug, publicSlug))
+    .limit(1);
+  return row !== undefined;
+}
+
 export type OwnCandidateInput = {
   name: string;
   headline: string | null;
@@ -159,6 +197,8 @@ export type OwnCandidateInput = {
   /** Texto do currículo, ou `null` para colar depois. */
   cv: string | null;
   cvLabel: string;
+  /** Endereço público já validado, ou `null` para derivar do nome. */
+  publicSlug: string | null;
 };
 
 /**
@@ -232,6 +272,36 @@ export async function setVisibility(
     .where(eq(candidate.id, candidateId));
   return { ok: true, visibility: value };
 }
+
+/**
+ * Troca o endereço público (`/p/<public_slug>`). Só o próprio candidato chama.
+ *
+ * O endereço antigo deixa de responder na hora — 404, sem redirecionamento — e
+ * fica livre para outra pessoa. Redirecionar diria a quem guardou o link antigo
+ * qual é o novo, e a troca existe justamente para quem quer se desligar de um
+ * endereço que circulou. Ver ADR 0024.
+ *
+ * A unicidade é do índice, não de uma consulta anterior: duas pessoas pedindo o
+ * mesmo endereço ao mesmo tempo passariam juntas por um "está livre?".
+ */
+export async function setPublicSlug(
+  candidateId: number,
+  raw: string,
+): Promise<{ ok: true; slug: string } | { ok: false; code: PublicSlugError | "slugTaken" }> {
+  const valid = validatePublicSlug(raw);
+  if (!valid.ok) return valid;
+  try {
+    await getDb()
+      .update(candidate)
+      .set({ publicSlug: valid.slug, updatedAt: new Date().toISOString() })
+      .where(eq(candidate.id, candidateId));
+  } catch (error) {
+    if (isDuplicateKey(error)) return { ok: false, code: "slugTaken" };
+    throw error;
+  }
+  return { ok: true, slug: valid.slug };
+}
+
 
 /**
  * Publicar o texto do currículo no perfil público. Segundo consentimento.

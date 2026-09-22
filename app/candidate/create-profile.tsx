@@ -10,16 +10,23 @@ import {
   HEADLINE_MAX,
   LOCATION_MAX,
   NAME_MAX,
+  SLUG_MAX,
+  slugBaseFromName,
   type OwnProfileError,
+  type PublicSlugError,
 } from "../../src/core/candidate-identity.ts";
+import { publicSlugMessages } from "./public-address";
 import type { Translator } from "../../src/core/i18n/index.ts";
 
 /**
  * Mensagem de cada recusa, já com o limite de verdade. `Record` sobre a união
  * inteira: código novo sem mensagem é erro de compilação, não toast genérico.
  */
-function refusalMessages(t: Translator["t"]): Record<OwnProfileError | "unavailable", string> {
+function refusalMessages(
+  t: Translator["t"],
+): Record<OwnProfileError | PublicSlugError | "slugTaken" | "unavailable", string> {
   return {
+    ...publicSlugMessages(t),
     nameRequired: t("onboarding.nameRequired"),
     nameTooLong: t("onboarding.nameTooLong", { max: NAME_MAX }),
     headlineTooLong: t("onboarding.headlineTooLong", { max: HEADLINE_MAX }),
@@ -100,6 +107,33 @@ export function CreateProfile({ t, suggestedName }: { t: Translator["t"]; sugges
               />
               <p id="profile-location-hint" className="type-body-sm text-muted-foreground">
                 {t("onboarding.locationHint")}
+              </p>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="profile-slug">{t("publicAddress.title")}</Label>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span aria-hidden="true" className="font-mono type-body-sm text-muted-foreground">
+                  /p/
+                </span>
+                <Input
+                  id="profile-slug"
+                  name="publicSlug"
+                  maxLength={SLUG_MAX}
+                  // Sugestão, não valor: em branco o servidor deriva do nome
+                  // digitado e resolve colisão sozinho; preenchido, a escolha é
+                  // da pessoa e colisão volta como "já em uso".
+                  placeholder={suggestedName ? slugBaseFromName(suggestedName) : undefined}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  aria-describedby="profile-slug-hint"
+                  className="min-w-0 font-mono"
+                  data-testid="profile-slug"
+                />
+              </div>
+              <p id="profile-slug-hint" className="type-body-sm text-muted-foreground">
+                {t("publicAddress.onboardingHint")}
               </p>
             </div>
 

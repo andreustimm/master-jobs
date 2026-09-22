@@ -323,6 +323,16 @@ candidato é sempre uma linha nova, privada, com a identidade digitada — nunca
 do `profile.yaml`. As demais páginas de candidato continuam negando 403 para
 quem não tem candidato.
 
+**Endereço público escolhido pelo candidato** — ✅ **22/09 (#235).** `/p/`
+lê `public_slug`, nunca o `slug` interno, e continua passando por
+`publicProfile()` — lista de permissão, 404 para perfil não público em qualquer
+endereço. Trocar o endereço faz o antigo responder 404 sem redirecionar (ADR
+0024): redirecionar contaria a quem guardou o link antigo qual é o novo.
+Reservados cobrem toda rota de primeiro nível do app e os prefixos que o
+cadastro pelo admin (`user-`) e o setup do e2e (`e2e-`) reaproveitam pelo slug.
+Candidato de slug `user-<e-mail>` nasce sem endereço público: copiar o slug
+publicaria o e-mail.
+
 **Sem criptografia em repouso.** O banco é um arquivo SQLite legível por
 qualquer processo do usuário. Quem tem acesso local à conta já tem acesso a
 tudo; criptografar aqui protegeria contra roubo do disco, o que o FileVault já

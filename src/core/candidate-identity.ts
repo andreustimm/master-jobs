@@ -82,6 +82,7 @@ export const SLUG_MAX = 40;
  */
 export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "default",
+  "account",
   "admin",
   "api",
   "app",
@@ -102,6 +103,7 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "skills",
   "support",
   "system",
+  "transition-test",
   "vocabulary",
 ]);
 
@@ -147,4 +149,32 @@ export function slugBaseFromName(name: string): string {
 /** A n-ésima tentativa: `base`, `base-2`, `base-3`… */
 export function slugAttempt(base: string, attempt: number): string {
   return attempt <= 1 ? base : `${base}-${attempt}`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Endereço público escolhido (#235)                                           */
+/* -------------------------------------------------------------------------- */
+
+export type PublicSlugError = "slugInvalid" | "slugTooShort" | "slugTooLong" | "slugReserved";
+
+const PUBLIC_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * Valida o endereço público que a própria pessoa digitou.
+ *
+ * Minúsculas, dígitos e hífen entre eles — nada de acento, espaço, ponto ou
+ * barra, que numa URL viram codificação ou caminho. Maiúsculas são aceitas e
+ * rebaixadas: `Maria-Souza` e `maria-souza` são o mesmo endereço, e recusar
+ * seria atrito sem ganho. Reservado recusa em vez de ganhar prefixo: aqui a
+ * pessoa escolheu, e trocar a escolha dela em silêncio seria pior.
+ */
+export function validatePublicSlug(raw: string): { ok: true; slug: string } | { ok: false; code: PublicSlugError } {
+  const slug = raw.trim().toLowerCase();
+  if (slug.length < SLUG_MIN) return { ok: false, code: "slugTooShort" };
+  if (slug.length > SLUG_MAX) return { ok: false, code: "slugTooLong" };
+  if (!PUBLIC_SLUG.test(slug)) return { ok: false, code: "slugInvalid" };
+  if (RESERVED_SLUGS.has(slug) || RESERVED_PREFIXES.some((prefix) => slug.startsWith(prefix))) {
+    return { ok: false, code: "slugReserved" };
+  }
+  return { ok: true, slug };
 }
