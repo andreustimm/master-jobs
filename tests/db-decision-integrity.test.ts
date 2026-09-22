@@ -25,7 +25,7 @@ import postgres from "postgres";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
 import { setApplicationStatus } from "../src/core/db/repo.ts";
-import { runDatabaseCleanup } from "../src/core/db/retention.ts";
+import { deleteClosedJobsWithoutApplication, runDatabaseCleanup } from "../src/core/db/retention.ts";
 import { application, applicationEvent, candidate, job, source } from "../src/core/db/schema.ts";
 import { importJobs, parsePayload } from "../src/core/ingest/import.ts";
 import { pruneClosed } from "../src/core/ingest/run.ts";
@@ -96,11 +96,11 @@ async function untilSomeoneWaitsOnALock(): Promise<void> {
  * Abre a candidatura numa transação que ainda não confirmou, dispara o
  * descarte, garante que ele está bloqueado nela, e só então confirma.
  */
-async function raceDiscardAgainstApplication(
+async function raceDiscardAgainstApplication<T>(
   candidateId: number,
   jobId: number,
-  discard: () => Promise<unknown>,
-): Promise<unknown> {
+  discard: () => Promise<T>,
+): Promise<T> {
   const tx = await other.reserve();
   try {
     await tx`begin`;
@@ -122,9 +122,9 @@ describe("descarte concorrente com candidatura", () => {
     const owner = await seedOwner();
     const jobId = await seedClosedJob("disputada");
 
-    const result = (await raceDiscardAgainstApplication(owner, jobId, () =>
+    const result = await raceDiscardAgainstApplication(owner, jobId, () =>
       runDatabaseCleanup({ apply: true, now: NOW, closedJobDays: 90, pageHtmlDays: 0 }),
-    )) as Awaited<ReturnType<typeof runDatabaseCleanup>>;
+    );
 
     expect(result.applied?.prunedJobs).toBe(0);
     const decisions = await db.select().from(application);
@@ -156,18 +156,24 @@ describe("descarte concorrente com candidatura", () => {
     const owner = await seedOwner();
     const jobId = await seedClosedJob("apagada-antes");
 
-    const discard = await other.reserve();
-    try {
-      await discard`begin`;
-      await discard`select id from production.job where id = ${jobId} for update`;
-      const applying = setApplicationStatus(owner, jobId, "applied");
-      await untilSomeoneWaitsOnALock();
-      await discard`delete from production.job where id = ${jobId}`;
-      await discard`commit`;
-      await expect(applying).rejects.toThrow();
-    } finally {
-      discard.release();
-    }
+    // O descarte real, com a transação segurada aberta depois de apagar: é a
+    // janela em que a candidatura chega.
+    let finish!: () => void;
+    const held = new Promise<void>((resolve) => { finish = resolve; });
+    let deleted!: () => void;
+    const afterDelete = new Promise<void>((resolve) => { deleted = resolve; });
+    const discarding = db.transaction(async (tx) => {
+      const removed = await deleteClosedJobsWithoutApplication(tx, NOW.toISOString());
+      deleted();
+      await held;
+      return removed;
+    });
+    await afterDelete;
+    const applying = setApplicationStatus(owner, jobId, "applied");
+    await untilSomeoneWaitsOnALock();
+    finish();
+    await expect(discarding).resolves.toEqual([{ id: jobId }]);
+    await expect(applying).rejects.toThrow();
     await expect(db.select().from(application)).resolves.toHaveLength(0);
     await expect(db.select().from(applicationEvent)).resolves.toHaveLength(0);
   });

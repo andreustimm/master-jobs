@@ -23,7 +23,9 @@ text of this skill wherever they differ.
   `pragma`, table rebuild or libSQL/Turso step applies to the current runtime.
 - Prefix shell commands with `rtk` in Codex/OpenCode; use pnpm, never Bun.
 - Apply locally with `rtk pnpm jho db migrate` (uses `DATABASE_MIGRATION_URL`,
-  the privileged connection — the runtime role `master_jobs_runtime` has no
+  falling back to `POSTGRES_URL_NON_POOLING` then `POSTGRES_URL` — set
+  `DATABASE_MIGRATION_URL` explicitly so a leftover provider variable never
+  picks the target; it is the privileged connection — the runtime role `master_jobs_runtime` has no
   DDL, by design and by `tests/postgres-permissions.test.ts`). Production is
   applied **only** by the manual `migrate.yml` workflow from `main`, which
   validates the project ref before connecting (`docs/engineering/deploy.md`).
@@ -50,7 +52,7 @@ Use this skill to run database migrations in a way that is auditable, deployment
 
 - Always generate schema migrations with the project script (`rtk pnpm db:generate`).
 - Never hand-edit generated schema migration files.
-- Generate data backfills as custom migrations (`rtk pnpm db:generate -- --custom --name <name>`) and edit only that custom SQL file.
+- Generate data backfills as custom migrations (`rtk pnpm db:generate --custom --name <name>`) and edit only that custom SQL file.
 - Apply data normalization before tightening constraints.
 - Keep one-off data fixes in migration history, not as hidden runtime logic, unless an emergency hotfix requires temporary mitigation.
 
@@ -60,7 +62,7 @@ Use this skill to run database migrations in a way that is auditable, deployment
    - `schema-only`: only column/table/index/default changes.
    - `data+schema`: old rows must be transformed before new constraints/defaults.
 2. For `data+schema`, create custom migration first:
-   - `rtk pnpm db:generate -- --custom --name <descriptive_name>`
+   - `rtk pnpm db:generate --custom --name <descriptive_name>`
    - Add idempotent backfill SQL.
 3. Generate schema migration second:
    - `rtk pnpm db:generate`
@@ -105,14 +107,16 @@ In PostgreSQL:
 - All pending migrations run in **one transaction**. A failure rolls every
   pending file back; fix the cause and rerun the same command. Never insert
   into `drizzle.__drizzle_migrations` by hand. Consequence: statements that
-  cannot run inside a transaction (`CREATE INDEX CONCURRENTLY`, `VACUUM`,
-  `ALTER TYPE ... ADD VALUE` used in the same transaction) do not belong in a
-  migration file.
+  cannot run inside a transaction (`CREATE INDEX CONCURRENTLY`, `VACUUM`) do
+  not belong in a migration file, and an enum value added with
+  `ALTER TYPE ... ADD VALUE` cannot be used by a later file of the same batch.
 - Lock cost matters because the whole batch holds its locks until commit:
-  `ALTER TABLE` takes `ACCESS EXCLUSIVE`; `SET NOT NULL` and a plain
-  `ADD CONSTRAINT ... CHECK/FOREIGN KEY` scan the table under that lock. For a
-  large table prefer `ADD CONSTRAINT ... NOT VALID` followed by
-  `VALIDATE CONSTRAINT` in a later migration. `ADD COLUMN` with a constant
+  most `ALTER TABLE` forms take `ACCESS EXCLUSIVE`, and `SET NOT NULL` or a
+  plain `ADD CONSTRAINT ... CHECK` scans the table under it; `ADD FOREIGN KEY`
+  takes `SHARE ROW EXCLUSIVE` on both tables and scans the child. For a large
+  table prefer `ADD CONSTRAINT ... NOT VALID` and ship `VALIDATE CONSTRAINT` in
+  a later release — two files applied in the same run share one transaction,
+  so splitting them only helps when they are applied separately. `ADD COLUMN` with a constant
   default is metadata-only.
 - `ALTER TABLE ... ADD ... REFERENCES` without `ON DELETE` means `NO ACTION`.
   Declare the action in `schema.ts` and let `db:generate` write it; the two

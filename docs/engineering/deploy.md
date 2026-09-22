@@ -100,7 +100,7 @@ recusá-la derrubou a 1.13.1 por 28 minutos. Qualquer outro valor (`disable`,
 `sslrootcert`, `sslcert`…) são **recusados** com erro que nomeia a variável, e
 não apagados em silêncio: a política de TLS é do cliente, e apagar
 `sslmode=disable` deixaria quem escreveu convencido de que desligou a
-verificação. Aceito ou não, o parâmetro sai da URL antes de chegar ao driver.
+verificação. Quando aceito, o parâmetro sai da URL antes de chegar ao driver.
 Contrato em `src/core/db/config.ts`, provado por
 `tests/db-config-diagnostics.test.ts` com a URL na forma que o provedor cadastra.
 

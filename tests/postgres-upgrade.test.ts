@@ -31,6 +31,8 @@ const FOLDER = "./drizzle/postgres";
 const PREVIOUS = "0003_familiar_darwin";
 
 type Journal = { entries: Array<{ idx: number; tag: string; when: number }> };
+const readJournal = () =>
+  JSON.parse(readFileSync(join(FOLDER, "meta/_journal.json"), "utf8")) as Journal;
 
 let target: Awaited<ReturnType<typeof provisionTestDatabase>>;
 let db: DB;
@@ -41,7 +43,7 @@ let partial: string;
 function foldersUpTo(lastTag: string): string {
   const dir = mkdtempSync(join(tmpdir(), "jho-upgrade-"));
   cpSync(FOLDER, dir, { recursive: true });
-  const journal = JSON.parse(readFileSync(join(FOLDER, "meta/_journal.json"), "utf8")) as Journal;
+  const journal = readJournal();
   const cut = journal.entries.findIndex((e) => e.tag === lastTag);
   if (cut < 0) throw new Error(`migration ${lastTag} não está no journal`);
   journal.entries = journal.entries.slice(0, cut + 1);
@@ -184,8 +186,7 @@ describe("upgrade de banco populado", () => {
     // histórico de migrations.
     await client.unsafe(`drop table production.platform_quota`);
     await migrate(db, { migrationsFolder: FOLDER });
-    const journal = JSON.parse(readFileSync(join(FOLDER, "meta/_journal.json"), "utf8")) as Journal;
-    expect(await appliedMigrations()).toBe(journal.entries.length);
+    expect(await appliedMigrations()).toBe(readJournal().entries.length);
     expect(await funnel()).toEqual(before);
   });
 });

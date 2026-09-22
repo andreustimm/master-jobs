@@ -421,7 +421,7 @@ criação), `to_status` e `detail` (o `-n/--note` do `jho track`).
 > ciclo de vida do funil. É log. Qualquer correção é um evento novo, não um
 > `UPDATE`. "Append-only" não é retenção absoluta: a FK é `cascade`, e apagar a
 > candidatura, o candidato ou a vaga leva o histórico junto — por isso o único
-> descarte de vaga exclui toda vaga com candidatura.
+> descarte de vaga deixa de fora toda vaga com candidatura.
 
 **Regra de retenção:** `application` é a unidade de contagem de candidaturas;
 `application_event` é a unidade de etapas/auditoria. Fechar ou arquivar o `job`
@@ -542,7 +542,7 @@ Está declarado no cabeçalho de [`src/core/ingest/run.ts`](../src/core/ingest/r
 ```
 
 E é verificável por leitura: `run.ts` importa exatamente `job` e `source` de
-`schema.ts`, e `application` não aparece no arquivo. `pruneClosed()` delega o
+`schema.ts`, e `application` só aparece ali em comentário. `pruneClosed()` delega o
 descarte a `deleteClosedJobsWithoutApplication()`, em `src/core/db/retention.ts`,
 onde `application` é lida só para **proteger** linhas. A importação repetida —
 igual e com conteúdo alterado — contra uma candidatura com histórico é provada

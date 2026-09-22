@@ -78,7 +78,7 @@ function declaredForeignKeys(): DeclaredFk[] {
   return out;
 }
 
-/**
+/*
  * Histórico: na era SQLite (migrations em `drizzle/*.sql`, hoje só legado de
  * importação), a 0021 acrescentou `job.posted_by_user_id` e
  * `auth_session.impersonated_by` com `ALTER TABLE ... ADD ... REFERENCES` sem

@@ -285,6 +285,8 @@ describe("write-path invariants (ADR 0005)", () => {
     );
     expect(offenders).toEqual([]);
     const retention = read("src/core/db/retention.ts");
+    // Dentro de retention.ts também: um único delete de vaga, o guardado.
+    expect(retention.match(/\.delete\(\s*job\s*\)/g)).toHaveLength(1);
     const guarded = retention.slice(retention.indexOf("export async function deleteClosedJobsWithoutApplication"));
     expect(guarded).toContain('.for("update")');
     expect(guarded).toContain("not exists (select 1 from ${application} a where a.job_id = ${job.id})");
