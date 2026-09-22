@@ -49,4 +49,4 @@ fazia):
 - Marcar duas fontes, aplicar, limpar fontes: as marcas somem.
 - Em todos os casos, o que a URL diz e o que o campo mostra são a mesma coisa.
 
-Resetado para `untested` pela #220: a navegação de filtro deixou de tornar o shell `inert`, então agora dá para editar um campo enquanto a resposta anterior ainda chega. Conferir que o campo mostra a URL depois do commit e que o último Aplicar vence.
+**Reset 2026-09-22 (#220):** a navegação de filtro deixou de tornar o shell `inert`, então agora dá para editar um campo enquanto a resposta anterior ainda chega. Conferir que o campo mostra a URL depois do commit e que o último Aplicar vence.

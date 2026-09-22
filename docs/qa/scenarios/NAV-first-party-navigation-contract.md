@@ -4,7 +4,7 @@ area: NAV
 title: Percorrer toda navegação interna por uma transição estável
 persona: Andreus em triagem
 journey: J-switch-workspace-screen
-expected: Menu, links contextuais, filtros, paginação e redirects chegam ao destino com um único splash e sem repetir ações
+expected: Menu, links contextuais e redirects entre telas chegam ao destino com um único splash; filtros, paginação e redirect para a mesma tela atualizam sem splash; nenhuma ação se repete
 entry_points: /; /jobs; /compare; /pipeline; /referrals; /candidate; /admin/users
 qa_status: untested
 bug_ids: BUG-20260826-responsive-header-artifact-skew
@@ -13,7 +13,7 @@ retest_status: pending
 fix_commits: 062eb64; cce67ae; 055af8a; a56a0c1
 evidence: evidence/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter/CH-night-ranking-navigation-baseline-jobs.png
 last_report: reports/2026-09-15T154024495800Z-d256aed5-job-work-mode-filter.md
-overlaps: NAV-switch-screen-ready
+overlaps: NAV-switch-screen-ready; NAV-same-screen-soft-transition
 ---
 
 Cobertura: inventário desktop/mobile, links contextuais, GET URL-backed, redirects de Server Actions e exclusões nativas/externas.
@@ -38,3 +38,5 @@ completa e compacta, a rotação nem o posicionamento do popover.
 **Reteste 2026-08-28:** o build de produção local manteve navegação compacta e
 controles alinhados em 375×812, usou a fileira de 65px em 812×375 e não criou
 overflow horizontal. A suíte E2E completa confirmou também tablet e desktop.
+
+**Reset 2026-09-22 (#220):** o contrato mudou para navegações na mesma tela, que não abrem mais o splash. Revalidar o inventário com a expectativa nova.

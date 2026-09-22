@@ -210,7 +210,7 @@ das amostras. Sem essa opção permanece somente o plano da maior consulta.
 | 1 ✅ | `description` mínima sem descomprimir o texto | alto × baixo | `repo.ts` |
 | 1 ✅ | Prelúdio de `/jobs`: trilhas ∥ câmbio, sem `listTracks` duplicado, câmbio em 1 consulta | alto × baixo | `jobs-data.ts` |
 | 1 ✅ | Medição: baseline local e log por estágio | habilita o resto | `perf:jobs`, `registrarTempo` |
-| PR 2 | Overlay só na troca de rota (✅ #220); filtros que se aplicam sozinhos (#218) | alto × médio | fase 3 |
+| PR 2 | Overlay só na troca de rota (#220, em revisão); filtros que se aplicam sozinhos (#218) | alto × médio | fase 3 |
 | 2 ✅ | Seleção compartilhada para lista e total, facetas fundidas | alto × médio | `repo.ts` |
 | 2 | Busca por termo indexada (`pg_trgm` ou `tsvector`) | altíssimo × médio | migration |
 | 2 ✅ | Normalização salarial compartilhada, sem repetir cotações a cada uso | alto com faixa | `repo.ts` |

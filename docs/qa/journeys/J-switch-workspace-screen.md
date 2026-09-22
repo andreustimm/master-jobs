@@ -4,7 +4,7 @@
 flowchart TD
     A[Entrada: tela autenticada, auth ou perfil público] --> B[Usuário ativa navegação global, contextual ou filtro GET]
     B -->|outra rota| C[Splash de transição único bloqueia a tela anterior]
-    B -->|mesma tela: filtro, ordem, página| S[Conteúdo esmaece, shell operável e aria-busy]
+    B -->|mesma tela: filtro, ordem, página, densidade| S[Conteúdo esmaece, shell operável e aria-busy]
     S -->|resposta chega| D
     S -->|espera acima de 3 s ou offline| C
     C -->|destino pronto| D[Splash sai e destino aparece]

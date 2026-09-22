@@ -451,7 +451,7 @@ describe("offline and public-copy boundaries", () => {
 });
 
 describe("transição suave na mesma tela (#220)", () => {
-  it("UT-220-1 só a query mudando é a mesma tela; outro caminho não é", () => {
+  it("UT-OVL-1 só a query mudando é a mesma tela; outro caminho não é", () => {
     const current = "https://jobs.example/jobs?fit=45";
     expect(isSameScreenNavigation("/jobs?fit=60", current)).toBe(true);
     expect(isSameScreenNavigation("/jobs", current)).toBe(true);
@@ -463,7 +463,7 @@ describe("transição suave na mesma tela (#220)", () => {
     expect(isSameScreenNavigation("/jobs?q=%zz", current)).toBe(false);
   });
 
-  it("UT-220-2 demora e falta de rede promovem a suave ao overlay", () => {
+  it("UT-OVL-2 demora e falta de rede promovem a suave ao overlay", () => {
     const soft = reduceTransition(INITIAL_NAVIGATION_TRANSITION, {
       type: "start", target: "/jobs?fit=60", at: 0, soft: true,
     });
@@ -479,7 +479,7 @@ describe("transição suave na mesma tela (#220)", () => {
     });
   });
 
-  it("UT-220-3 o store decide pela URL atual: filtro é suave, outra rota bloqueia", () => {
+  it("UT-OVL-3 o store decide pela URL atual: filtro é suave, outra rota bloqueia", () => {
     const { store } = storeFixture();
     store.begin("/jobs?sort=comp");
     expect(store.getSnapshot()).toMatchObject({ phase: "loading", soft: true });
@@ -487,7 +487,7 @@ describe("transição suave na mesma tela (#220)", () => {
     expect(store.getSnapshot()).toMatchObject({ generation: 2, phase: "loading", soft: false });
   });
 
-  it("UT-220-4 a suave segue o mesmo ciclo da troca de tela: mínimo, saída e reset", () => {
+  it("UT-OVL-4 a suave segue o mesmo ciclo da troca de tela: mínimo, saída e reset", () => {
     const { store, time } = storeFixture();
     const generation = store.begin("/jobs?page=2");
     store.commit("/jobs?page=2", generation ?? undefined);
@@ -498,7 +498,7 @@ describe("transição suave na mesma tela (#220)", () => {
     expect(store.getSnapshot()).toMatchObject({ phase: "idle", generation, soft: false });
   });
 
-  it("UT-220-6 a última geração vence: um filtro novo substitui o anterior", () => {
+  it("UT-OVL-6 a última geração vence: um filtro novo substitui o anterior", () => {
     const { store } = storeFixture();
     const first = store.begin("/jobs?fit=45");
     const second = store.begin("/jobs?fit=60");
@@ -509,14 +509,14 @@ describe("transição suave na mesma tela (#220)", () => {
     expect(store.getSnapshot()).toMatchObject({ generation: second, committed: true, target: "/jobs?fit=60" });
   });
 
-  it("UT-220-7 a suave que demora vira overlay de espera prolongada", () => {
+  it("UT-OVL-7 a suave que demora vira overlay de espera prolongada", () => {
     const { store, time } = storeFixture();
     store.begin("/jobs?fit=60");
     time.advance(TRANSITION_PROLONGED_MS);
     expect(store.getSnapshot()).toMatchObject({ phase: "prolonged", soft: false });
   });
 
-  it("UT-220-8 os dois dicionários trazem o aviso da atualização", () => {
+  it("UT-OVL-8 os dois dicionários trazem o aviso da atualização", () => {
     expect(ptBR.transition.updating.trim()).not.toBe("");
     expect(en.transition.updating.trim()).not.toBe("");
     expect(en.transition.updating).not.toBe(ptBR.transition.updating);

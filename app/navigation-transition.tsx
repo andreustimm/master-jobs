@@ -166,11 +166,12 @@ export function NavigationTransition({ labels }: { labels: TransitionLabels }) {
       <Suspense fallback={null}>
         <NavigationCommitObserver />
       </Suspense>
-      {soft && snapshot.phase === "loading" ? (
-        <p className="sr-only" role="status" data-testid="navigation-soft-status">
-          {labels.updating}
-        </p>
-      ) : null}
+      {/* Sempre montada, vazia em repouso: leitor de tela anuncia mudança
+          dentro de uma região que já acompanha, e pode ignorar uma que já
+          nasce com o texto. */}
+      <p className="sr-only" role="status" aria-live="polite" data-testid="navigation-soft-status">
+        {soft && snapshot.phase === "loading" ? labels.updating : ""}
+      </p>
       {active && !soft ? (
         <div
           id={TRANSITION_SPLASH_ROOT_ID}
