@@ -11,8 +11,8 @@ bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence: evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-capture-health-glance-baseline.png
-last_report: docs/qa/reports/2026-09-21T175034729239Z-e901131e-qa-buscas.md
+evidence: evidence/2026-09-22T103914934977Z-a59f3329-capturas-concorrentes/CH-capture-health-glance-baseline-aggregate.png; evidence/2026-09-22T103914934977Z-a59f3329-capturas-concorrentes/CH-capture-health-glance-baseline-borrowed-denied.png; evidence/2026-09-22T103914934977Z-a59f3329-capturas-concorrentes/CH-capture-health-glance-baseline-candidate-denied.png
+last_report: docs/qa/reports/2026-09-22T103914934977Z-a59f3329-capturas-concorrentes.md
 overlaps: SRCH-borrowed-session-waits-sweep
 ---
 

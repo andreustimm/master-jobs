@@ -635,6 +635,11 @@ sincronização lê só o `sources.yaml`, ela nunca sincroniza nem fecha essa fo
 só a verificação (404/410) fecha suas vagas. Por isso o YAML **recusa handle que
 começa com `~`**.
 
+A criação é idempotente também quando as primeiras capturas da plataforma
+terminam juntas. O insert ignora conflito em qualquer uma das duas identidades
+únicas da fonte: `id` e `(kind, handle)`. Arbitrar só `id` deixa uma corrida no
+índice de `(kind, handle)` transformar uma resposta válida em falha de captura.
+
 Vaga que já existe é observada com `keepExistingSource`: continua com a fonte,
 o id externo, as URLs e o payload de quem a trouxe primeiro, e só o conteúdo é
 atualizado. A captura nunca fecha, arquiva, apaga nem reatribui vaga. Vaga

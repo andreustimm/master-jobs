@@ -18,6 +18,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- Ao salvar buscas ao mesmo tempo, a primeira captura de vagas de uma
+  plataforma não aparece mais como falha por uma disputa entre as buscas.
+
 ## [1.20.4] - 2026-09-21T21:46:10.341Z
 
 ### Melhorado

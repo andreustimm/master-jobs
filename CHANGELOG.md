@@ -9,6 +9,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- Primeiras capturas simultâneas de uma plataforma não falham mais ao criar
+  a fonte `~terms`: o insert trata conflito tanto no id quanto no índice único
+  de plataforma e handle. A regressão exercita dois consumidores com a primeira
+  criação alinhada e confere estado, tentativas e motivo de cada captura.
+
 ### Alterado
 
 - Deployments automáticos da Vercel restritos a `main`, `dev` e `staging`.

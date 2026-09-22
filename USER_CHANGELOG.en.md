@@ -18,6 +18,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Saving searches at the same time no longer makes a platform's first job
+  capture appear to fail because the searches compete to initialize it.
+
 ## [1.20.4] - 2026-09-21T21:46:10.341Z
 
 ### Improved

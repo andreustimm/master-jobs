@@ -8,6 +8,9 @@ flowchart TD
     C --> E[Escolher a trilha e salvar]
     D --> E
     E --> F[Ver o estado por plataforma]
+    E --> L[Salvar outro termo em uma segunda aba]
+    L --> M[Capturas compartilham a fonte da plataforma]
+    M --> F
     F --> G{Alguma plataforma trouxe vagas?}
     G -->|sim| H[Abrir as vagas novas do termo em Vagas]
     G -->|não| I[Ler o motivo e esperar a varredura diária]
@@ -41,6 +44,9 @@ journey:
     - step: 4
       verb: Pausar, mover, rodar de novo ou excluir o termo
       expected_observable: O estado muda e sobrevive à recarga; rodar de novo no intervalo diz quando será possível
+    - step: 5
+      verb: Salvar outro termo em uma segunda aba e voltar depois das capturas
+      expected_observable: Os dois termos mostram o resultado da plataforma, sem falha causada pela criação simultânea da fonte
   goal:
     observable: O termo salvo existe, repete sozinho todo dia e mostra quantas vagas novas trouxe
     side_effects: [captura por plataforma, vagas novas no acervo]
