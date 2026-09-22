@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.21.2] - 2026-09-22T21:14:29.956Z
+
 ### Security
 
 - An invited account can no longer see or change the owner's profile, CV,

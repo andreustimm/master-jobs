@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.21.2] - 2026-09-22
+
 ### Segurança
 
 - Uma conta não recebe mais o candidato de outra pessoa. Em produção, uma

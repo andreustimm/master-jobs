@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.21.2] - 2026-09-22T21:14:29.956Z
+
 ### Segurança
 
 - Uma conta convidada não enxerga nem altera mais o perfil, o currículo, a
