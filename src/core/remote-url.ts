@@ -67,6 +67,49 @@ export class UnsafeRemoteUrlError extends Error {
   }
 }
 
+/**
+ * Recusa por finalidade, não por rede: o LinkedIn é público, responde 200 e
+ * tem `robots.txt`, e nada disso autoriza buscá-lo — a regra 1 e a ADR 0001
+ * proíbem aquisição automatizada daquele domínio. Por isso a recusa mora aqui,
+ * no único ponto por onde passa cada salto de toda requisição a URL de vaga,
+ * e não em `robots.ts` nem em cada adapter. Um redirect de um encurtador ou de
+ * um ATS para `linkedin.com` é recusado antes do segundo pedido.
+ *
+ * Exibir a URL continua permitido: o alerta por e-mail (ADR 0008) e a vaga
+ * cadastrada à mão guardam links do LinkedIn, e a interface os mostra como
+ * âncora. O que esta regra impede é o SERVIDOR pedir essa URL.
+ *
+ * Limite conhecido: casa pelo nome do host. Um IP literal do LinkedIn ou um
+ * domínio de terceiros que sirva o conteúdo por proxy passaria; e ferramentas
+ * de agente fora deste runtime não passam por aqui (ver
+ * `docs/linkedin-policy.md`).
+ */
+const PROHIBITED_ACQUISITION_DOMAINS = [
+  "linkedin.com",
+  "linkedin.cn",
+  "lnkd.in",
+  "licdn.com",
+] as const;
+
+export class ProhibitedAcquisitionError extends UnsafeRemoteUrlError {
+  constructor(url: string) {
+    super(url, "aquisição automatizada do LinkedIn é proibida (regra 1, ADR 0001)");
+    this.name = "ProhibitedAcquisitionError";
+  }
+}
+
+function normalizeHostname(hostname: string): string {
+  return unbracket(hostname).toLowerCase().replace(/\.+$/, "");
+}
+
+/** Pure, exported so the prohibited list stays auditable. */
+export function isProhibitedAcquisitionHost(hostname: string): boolean {
+  const host = normalizeHostname(hostname);
+  return PROHIBITED_ACQUISITION_DOMAINS.some(
+    (domain) => host === domain || host.endsWith(`.${domain}`),
+  );
+}
+
 function unbracket(hostname: string): string {
   return hostname.startsWith("[") && hostname.endsWith("]")
     ? hostname.slice(1, -1)
@@ -114,7 +157,11 @@ export async function assertSafeRemoteUrl(
     throw new UnsafeRemoteUrlError(raw, "credenciais na URL não são permitidas");
   }
 
-  const hostname = unbracket(parsed.hostname).toLowerCase().replace(/\.$/, "");
+  const hostname = normalizeHostname(parsed.hostname);
+  // Antes do DNS: a recusa por finalidade não deve custar nem a consulta.
+  if (isProhibitedAcquisitionHost(hostname)) {
+    throw new ProhibitedAcquisitionError(raw);
+  }
   if (
     hostname === "localhost" ||
     hostname.endsWith(".localhost") ||

@@ -115,13 +115,13 @@ deliberada e documentada. `jho security check` avisa.
 |---|---|
 | **SQL injection** | Sem risco. Todo `sql\`\`` interpola coluna do Drizzle ou valor parametrizado. Nenhuma concatenação de string. |
 | **XSS** | Sem `dangerouslySetInnerHTML` em lugar nenhum. Descrição de vaga é renderizada como texto, nunca como HTML — e ela vem de terceiro. |
-| **SSRF** | `jho jobs add <url>` só busca URL que casa com um ATS conhecido (`detectJobUrl`). URL arbitrária não é buscada: vira registro manual. |
+| **SSRF** | `jho jobs add <url>` só busca URL que casa com um ATS conhecido (`detectJobUrl`). URL arbitrária não é buscada: vira registro manual. Toda URL de vaga buscada passa por `safeRemoteFetch`, que recusa rede privada, DNS misto e redirect para qualquer um dos dois. |
 | **Segredos** | `.gitignore` cobre `.env*`, `*.token.json`, `.linkedin-session.json`, `data/` e `out/`. Nenhum segredo versionado. |
 | **Banco** | `data/` ignorado. O histórico de candidaturas nunca vai para o Git. |
 | **Timeout de rede** | Todo fetch tem `AbortSignal` com timeout. Fonte lenta não trava o sync. |
 | **Upload de PDF** | Teto de 10 MB, e o texto extraído é tratado como texto — nunca executado nem renderizado como HTML. |
 | **Escrita no funil** | Caminho único (`setApplicationStatus`), garantido por teste de arquitetura. Ingestão não escreve decisão. |
-| **LinkedIn** | Nenhum código lê `li_at` nem dirige sessão autenticada. ADR 0001. |
+| **LinkedIn** | Nenhum código lê `li_at` nem dirige sessão autenticada. ADR 0001. O transporte de URL de vaga recusa o domínio do LinkedIn em cada salto de redirect, antes do DNS — ver `docs/linkedin-policy.md` §5.1. |
 
 ---
 
