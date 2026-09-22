@@ -97,6 +97,23 @@ const GUARDED = discoverEntries().serverModules.flatMap((file) =>
     .map((binding) => ({ file, name: binding.exported })),
 );
 
+/**
+ * A leitura léxica é a do inventário; o RUNTIME é a verdade. Toda função que
+ * o módulo de fato exporta precisa estar entre as guardadas ou as exceções —
+ * `export const a = …, b = …` e qualquer forma que o leitor léxico não
+ * enxergue aparecem aqui.
+ */
+async function runtimeExports(): Promise<string[]> {
+  const names: string[] = [];
+  for (const file of discoverEntries().serverModules) {
+    const module = (await import(/* @vite-ignore */ `../${file}`)) as Record<string, unknown>;
+    for (const [name, value] of Object.entries(module)) {
+      if (typeof value === "function") names.push(`${file}#${name}`);
+    }
+  }
+  return names.sort();
+}
+
 type Action = (...args: unknown[]) => Promise<unknown>;
 
 async function load(file: string, name: string): Promise<Action> {
@@ -281,6 +298,14 @@ describe("V03-02 sessão inválida é negada antes de qualquer efeito", () => {
   it("o inventário encontrou as actions guardadas", () => {
     // Guarda contra o teste passar por não ter chamado nada.
     expect(GUARDED.length).toBeGreaterThan(30);
+  });
+
+  it("toda função exportada em runtime foi vista pelo inventário", async () => {
+    const seen = [
+      ...GUARDED.map(({ file, name }) => `${file}#${name}`),
+      ...[...UNGUARDED_BY_DESIGN].map(([name, { file }]) => `${file}#${name}`),
+    ].sort();
+    expect(await runtimeExports()).toEqual(seen);
   });
 
   const INVALID: Array<[string, () => Promise<string | undefined>]> = [

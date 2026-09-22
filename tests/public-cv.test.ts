@@ -8,7 +8,7 @@ import { publicCvText, REDACTED } from "../src/core/public-cv.ts";
  * perfeita.
  */
 describe("publicCvText", () => {
-  it("retira a linha inteira de cada rótulo de pretensão salarial", () => {
+  it("retira o bloco de cada rótulo de pretensão salarial", () => {
     const lines = [
       "Piso: 180000 USD/ano",
       "Pretensão salarial: R$ 30.000",
@@ -21,8 +21,10 @@ describe("publicCvText", () => {
       "Desired compensation: 200k",
       "Compensation requirements: 180k",
     ];
-    const out = publicCvText(["Experiência", ...lines, "Fim"].join("\n"));
-    expect(out).toBe("Experiência\nFim");
+    for (const line of lines) {
+      // Cada rótulo no seu parágrafo: o que vem depois da linha em branco fica.
+      expect(publicCvText(`Experiência\n\n${line}\n\nFim`), line).toBe("Experiência\n\n\nFim");
+    }
   });
 
   it("na mesma linha, sai só a frase do piso", () => {
@@ -40,8 +42,12 @@ describe("publicCvText", () => {
       "Salary expectation approx. 150k USD",
       "Pretensão salarial aprox. R$ 30.000 mensais",
       "## Pretensão salarial\n\nR$ 30.000 mensais",
+      "| Pretensão salarial | Disponibilidade |\n|---|---|\n| R$ 30.000 | Imediata |",
+      "Pretensão salarial (2026):\nR$ 30.000 mensais",
+      "Salary expectations (12 months):\n150k USD",
     ]) {
-      const out = publicCvText(`Experiência\n${cv}\nFim`);
+      // O bloco do rótulo termina na linha em branco; `Fim` está depois dela.
+    const out = publicCvText(`Experiência\n\n${cv}\n\n## Fim`);
       expect(out, cv).not.toMatch(/30\.000|150k/);
       expect(out, cv).toContain("Experiência");
       expect(out, cv).toContain("Fim");
@@ -56,6 +62,13 @@ describe("publicCvText", () => {
     for (const cv of ["Pretensões salariais: 30k", "Pretensa\u0303o: 30k", "Faixa salarial: 25-30k", "Valor hora: R$ 200"]) {
       expect(publicCvText(cv), cv).toBe("");
     }
+    // Palavras vizinhas de rótulo, sem ser rótulo, não apagam currículo.
+    expect(publicCvText("Projeto sem pretensões comerciais.\n2019-2021 Staff Engineer na Acme")).toBe(
+      "Projeto sem pretensões comerciais.\n2019-2021 Staff Engineer na Acme",
+    );
+    expect(publicCvText("Built salary range benchmarking tool for HR\n2019-2021 Staff")).toBe(
+      "Built salary range benchmarking tool for HR\n2019-2021 Staff",
+    );
     // `piso` que não é salário é currículo, e a linha seguinte também fica.
     expect(publicCvText("Automação do piso de fábrica\n2019-2021")).toBe("Automação do piso de fábrica\n2019-2021");
   });

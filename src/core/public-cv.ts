@@ -16,12 +16,14 @@
  *   soltos como `+33 1 23 45 67 89`) ou com DDD entre parênteses
  *   (`(11) 91234-5678`) — um número sem essas marcas não é distinguível de um
  *   intervalo de anos ou de um valor, e fica;
- * - piso: da frase que contém um rótulo de pretensão salarial (`piso:`,
- *   `pretensão`, `faixa salarial`, `valor hora`, `salário:`, `salary
- *   expectation`, `rate:`…) até o fim da
- *   linha; se o rótulo não traz número na própria linha, como num título, a
- *   linha seguinte com número também sai. Um valor sem rótulo não é
- *   reconhecido.
+ * - piso: a partir da frase que contém um rótulo de pretensão salarial
+ *   (`piso:`, `pretensão:`, `pretensão salarial`, `faixa salarial`, `valor
+ *   hora`, `salário:`, `salary expectation`, `rate:`…), sai o resto do BLOCO:
+ *   o resto da linha e as linhas seguintes até a próxima linha em branco — o
+ *   parágrafo, o item ou a tabela em que o valor mora. Num título Markdown,
+ *   sai a seção inteira até o próximo título de mesmo nível ou acima. Um valor
+ *   sem rótulo não é reconhecido, e o bloco inteiro some mesmo quando só uma
+ *   parte dele era o piso: diante da dúvida, esconde-se.
  *
  * Não é sanitização perfeita, e não se apresenta como tal: quem escreve o
  * piso sem rótulo no meio de um parágrafo o publica. O que ela garante é que
@@ -75,13 +77,15 @@ const SALARY_LABEL = new RegExp(
   [
     // `piso` sozinho é chão de fábrica; só conta com o que o faz salarial.
     "\\bpiso\\s*(?::|salarial|m[íi]nimo|de\\s+(?:remunera|sal[áa]rio))",
-    "pretens(?:[ãa]o|[õo]es)\\b",
+    // "sem pretensões comerciais" é currículo; o rótulo tem dois-pontos ou
+    // o adjetivo salarial.
+    "pretens(?:[ãa]o|[õo]es)\\s*(?::|salaria|de\\s+(?:remunera|sal[áa]rio))",
     "expectativa\\s+(?:salarial|de\\s+remunera)",
     "faixa\\s+salarial",
     "valor\\s+(?:da\\s+)?hora",
     "remunera[çc][ãa]o\\s*(?::|desejada|pretendida|m[íi]nima|esperada)",
     "sal[áa]rio\\s*(?::|desejado|pretendido|m[íi]nimo|esperado)",
-    "salary\\s*(?::|floor|expectations?|requirements?|range|minimum)",
+    "salary\\s*(?::|floor|expectations?|requirements?|minimum|range\\s*:)",
     "(?:minimum|desired|expected|target)\\s+(?:salary|compensation|rate|pay)",
     "compensation\\s*(?::|floor|expectations?|requirements?)",
     // `rate:` só como rótulo no começo da linha, de item ou de célula:
@@ -108,22 +112,31 @@ function beforeSalarySentence(line: string, labelAt: number): string | null {
   return /[\p{L}\p{N}]/u.test(kept) ? kept : null;
 }
 
+const HEADING = /^(#{1,6})\s/;
+
 export function publicCvText(content: string, known: { email?: string | null } = {}): string {
   const out: string[] = [];
-  let valueExpected = false;
+  // Enquanto não nulo, as linhas pertencem ao bloco do rótulo e saem.
+  // `paragraph` termina na linha em branco; um número termina na seção cujo
+  // título tinha aquele nível.
+  let skipping: "paragraph" | number | null = null;
   // NFC: um "ã" digitado como "a" + til combinante não casaria com o rótulo.
   for (const line of content.normalize("NFC").split("\n")) {
-    if (valueExpected && line.trim() !== "") {
-      valueExpected = false;
-      // O título "Pretensão salarial" com o valor na linha de baixo.
-      if (/\d/.test(line)) continue;
-    }
+    const heading = HEADING.exec(line);
+    if (skipping === "paragraph" && line.trim() === "") skipping = null;
+    if (typeof skipping === "number" && heading && heading[1]!.length <= skipping) skipping = null;
+    if (skipping !== null) continue;
+
     const label = SALARY_LABEL.exec(line);
     if (!label) {
       out.push(line);
       continue;
     }
-    valueExpected = !/\d/.test(line.slice(label.index));
+    if (heading) {
+      skipping = heading[1]!.length;
+      continue;
+    }
+    skipping = "paragraph";
     const kept = beforeSalarySentence(line, label.index);
     if (kept !== null) out.push(kept);
   }

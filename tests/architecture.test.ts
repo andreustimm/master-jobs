@@ -949,10 +949,13 @@ describe("authorisation (AUTH-01)", () => {
     const proxy = readFileSync("proxy.ts", "utf8");
     expect(proxy).toContain("if (openModeActive(process.env))");
 
+    // Qualquer menção FORA de string e comentário é leitura — `env.X`,
+    // `env["X"]`, desestruturação. Texto de ajuda da CLI e do dicionário cita
+    // o nome da variável para quem lê, e fica de fora por ser string.
     const readers = [...SRC, ...walk("app"), "proxy.ts"].filter(
       (file) =>
         file !== "src/contexts/auth/domain/open-mode.ts" &&
-        /JHO_AUTH_MODE\s*(?:===|!==|==|!=)|\[\s*["']JHO_AUTH_MODE["']\s*\]/.test(read(file)),
+        /\bJHO_AUTH_MODE\b/.test(stripComments(read(file)).replace(/(["'`])(?:\\.|(?!\1)[^\\])*\1/g, '""')),
     );
     expect(readers).toEqual([]);
   });
