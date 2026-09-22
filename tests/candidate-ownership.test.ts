@@ -211,13 +211,26 @@ describe("um candidato, uma conta", () => {
     expect(await claimOwnCandidate({ email: "volta@test", name: "Volta" })).not.toBe(orfao);
   });
 
-  it("o dono que entrou só como admin ganha o candidato do perfil ao virar candidato", async () => {
+  it("conta que já existia não herda o candidato do perfil ao virar candidato", async () => {
+    await syncCandidateFromProfile();
     await addUser({ email: "dono@test", roles: ["admin"] });
 
     const r = await addUser({ email: "dono@test", roles: ["admin", "candidate"] });
 
     const [row] = await db.select().from(candidate).where(eq(candidate.id, r.candidateId!));
-    expect(row!.slug).toBe("default");
+    expect(row!.slug).toBe("user-dono-test");
+  });
+
+  it("candidato do dono sem conta não vai para a conta seguinte", async () => {
+    await addUser({ email: "dono@test", roles: ["admin", "candidate"] });
+    await addUser({ email: "admin2@test", roles: ["admin"] });
+    // Conta do dono apagada: `default` fica sem conta, com o currículo dele.
+    await db.delete(authUser).where(eq(authUser.email, "dono@test"));
+
+    const r = await addUser({ email: "admin2@test", roles: ["admin", "candidate"] });
+
+    const [row] = await db.select().from(candidate).where(eq(candidate.id, r.candidateId!));
+    expect(row!.slug).toBe("user-admin2-test");
   });
 
   it("slug `default` é o dono mesmo com convidado padrão legado mais antigo", async () => {

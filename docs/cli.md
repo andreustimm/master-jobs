@@ -1131,8 +1131,8 @@ Cria ou atualiza uma conta. `--role` aceita `admin`, `candidate` e
 
 Com o papel `candidate`, a conta recebe um candidato:
 
-- o do `profile.yaml` (`default`) só quando ela é a conta mais antiga da
-  instalação e esse candidato ainda não tem conta — o primeiro acesso do dono;
+- o do `profile.yaml` (`default`) só quando ela é a primeira conta da
+  instalação — o primeiro acesso do dono;
 - em qualquer outro caso, um candidato **novo e próprio** (`user-<email>`,
   com sufixo `-2`, `-3`… se o slug já existir). Candidato de conta apagada
   nunca é reaproveitado.

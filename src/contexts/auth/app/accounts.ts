@@ -10,7 +10,7 @@
  * Todo caminho que cria conta com papel candidato passa por
  * `claimOwnCandidate`, e nenhum aceita id de candidato vindo de fora.
  */
-import { asc, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb } from "../../../core/db/client.ts";
 import { authUser } from "../../../core/db/schema.ts";
 import {
@@ -45,26 +45,17 @@ export async function claimOwnCandidate(input: { email: string; name: string }):
 }
 
 /**
- * A conta é a do dono: a mais antiga da instalação (ou a primeira a ser
- * criada) e o candidato `default` ainda não tem conta. Cobre o dono que entrou
- * primeiro só como admin e depois ganhou o papel de candidato.
+ * A conta é a do dono só no primeiro acesso: nenhuma conta existe ainda.
+ *
+ * Qualquer critério mais largo tem um caso em que o candidato `default` — com
+ * o currículo e o funil do dono — vai para outra pessoa: apagada a conta do
+ * dono, "a mais antiga" ou "a única que sobrou" já é de outra pessoa. O dono
+ * que entrou primeiro só como admin recebe candidato próprio; o do perfil
+ * continua disponível pela tela, não por herança.
  */
-async function isInstallationOwner(email: string): Promise<boolean> {
-  const db = getDb();
-  const [oldest] = await db
-    .select({ email: authUser.email })
-    .from(authUser)
-    .orderBy(asc(authUser.id))
-    .limit(1);
-  if (oldest && oldest.email !== email) return false;
-  const owner = await getCandidate("default");
-  if (!owner) return true;
-  const [holder] = await db
-    .select({ id: authUser.id })
-    .from(authUser)
-    .where(eq(authUser.candidateId, owner.id))
-    .limit(1);
-  return !holder;
+async function isFirstAccount(): Promise<boolean> {
+  const [any] = await getDb().select({ id: authUser.id }).from(authUser).limit(1);
+  return !any;
 }
 
 /**
@@ -93,7 +84,7 @@ export async function addUser(input: {
     // A primeira conta da instalação é a do dono — é o primeiro acesso que a
     // regra 14 e `/login` ensinam — e fica com o candidato do `profile.yaml`.
     // Qualquer conta depois dela é de outra pessoa.
-    candidateId = (await isInstallationOwner(email))
+    candidateId = !existing && (await isFirstAccount())
       ? await syncCandidateFromProfile()
       : await claimOwnCandidate({ email, name: email });
   }
