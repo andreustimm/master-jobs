@@ -48,6 +48,7 @@
     "predev": "node scripts/sw-version.mjs && pnpm changelog:build",
     "test:coverage": "vitest run --coverage",
     "perf:jobs": "JHO_PERF=1 vitest run tests/perf-jobs-baseline.test.ts",
+    "governance:collect": "node scripts/governance/collect.ts",
     "tasks": "node scripts/tasks/cli.ts",
     "tasks:setup": "node scripts/tasks/setup.ts",
     "test:tasks": "vitest run --config vitest.tasks.config.ts"

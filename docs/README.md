@@ -77,6 +77,7 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`engineering/cobertura.md`](engineering/cobertura.md) | O que o piso de cobertura garante, o que os ramos descobertos são, e as duas armadilhas de teste que não pode falhar. |
 | [`engineering/compozy-backlog-map.md`](engineering/compozy-backlog-map.md) | Snapshot da auditoria de 16/09; preserva a origem das especificações, sem ordenar trabalho atual. |
 | [`engineering/performance-buscas.md`](engineering/performance-buscas.md) | Por que as buscas eram lentas, como medir (`pnpm perf:jobs`, log por estágio, `x-vercel-id`), o baseline e o plano por fases. |
+| [`engineering/service-levels.md`](engineering/service-levels.md) | SLOs internos, orçamento de erros, incidentes, métricas DORA e relatório de governança. |
 | [`roadmap.md`](roadmap.md) | Contexto de planejamento; conferir prioridade e pendências atuais nas issues do Project 3. |
 | [`adr/`](adr/) | Por que cada decisão estrutural foi tomada, com as alternativas descartadas. Leia antes de propor reverter qualquer uma delas. |
 
