@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.20.5] - 2026-09-22
+
 ### Corrigido
 
 - Primeiras capturas simultâneas de uma plataforma não falham mais ao criar
