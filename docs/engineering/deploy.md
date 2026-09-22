@@ -91,10 +91,18 @@ configuram explicitamente. Variável em branco conta como ausente, e o erro de
 configuração **nomeia a variável** de onde a URL veio — nunca o valor.
 
 **Query string:** parâmetros de pool (`pgbouncer`, `connection_limit`) são
-descartados, porque a configuração do cliente já é explícita. Parâmetros de TLS
-(`sslmode`, `ssl`, `sslrootcert`…) são **recusados** com erro, e não apagados em
-silêncio: a política de TLS é do cliente, e apagar `sslmode=disable` deixaria
-quem escreveu convencido de que desligou a verificação.
+descartados, porque a configuração do cliente já é explícita. `sslmode` passa
+por **lista de permissão**: `require`, `verify-ca` e `verify-full` pedem o mesmo
+ou mais do que o cliente já impõe e são aceitos — é a forma que a integração do
+Supabase com a Vercel cadastra em `POSTGRES_URL` (`?sslmode=require`), e
+recusá-la derrubou a 1.13.1 por 28 minutos. Qualquer outro valor (`disable`,
+`allow`, `prefer`, um valor inventado) e os demais parâmetros de TLS (`ssl`,
+`sslrootcert`, `sslcert`…) são **recusados** com erro que nomeia a variável, e
+não apagados em silêncio: a política de TLS é do cliente, e apagar
+`sslmode=disable` deixaria quem escreveu convencido de que desligou a
+verificação. Quando aceito, o parâmetro sai da URL antes de chegar ao driver.
+Contrato em `src/core/db/config.ts`, provado por
+`tests/db-config-diagnostics.test.ts` com a URL na forma que o provedor cadastra.
 
 **`DATABASE_CA_CERT` aceita as duas formas:** o PEM colado direto na variável
 (o gesto natural num painel serverless, onde não há onde pôr arquivo) ou o
@@ -377,11 +385,16 @@ GRANT master_jobs_runtime TO master_jobs_app;
 E então cadastrar na Vercel, em Production:
 
 ```
-DATABASE_URL=postgresql://master_jobs_app:<senha>@<host>:5432/postgres
+DATABASE_URL=postgresql://master_jobs_app.<project-ref>:<senha>@<pooler-host>:5432/postgres?sslmode=require
 ```
 
-**Sem query string** — a política de TLS é do cliente, e `?sslmode=...` é
-recusado com erro que nomeia a variável.
+No pooler compartilhado do Supabase, o usuário é `<role>.<project-ref>`;
+na conexão direta, é somente `<role>`. Copie host e porta da configuração do
+projeto. Query string é desnecessária — a política de TLS é do cliente. Se
+vier, `?sslmode=require` (ou `verify-ca`/`verify-full`) é aceito e descartado,
+e a verificação de cadeia continua com a CA configurada; `?sslmode=disable`,
+valores desconhecidos ou outros parâmetros que mudem a política são recusados
+com erro que nomeia a variável.
 
 **Por que isto importa mesmo com o fallback.** O runtime aceita `POSTGRES_URL`
 quando `DATABASE_URL` falta, e é isso que faz o deploy subir sem configuração
@@ -400,8 +413,42 @@ SELECT has_table_privilege('master_jobs_app', 'production.job', 'SELECT'),
                                                           -- true, false
 ```
 
-A rotação é trocar a senha de `master_jobs_app` e atualizar `DATABASE_URL`: as
-permissões ficam no papel de grupo e não são reescritas.
+Confira cada privilégio individualmente: uma lista como
+`has_table_privilege(..., 'SELECT,INSERT,UPDATE,DELETE')` responde se **algum**
+dos privilégios existe, não se todos existem. Valide também o uso das sequências
+e faça uma transação somente leitura usando o mesmo cliente e CA do runtime.
+
+Antes de alterar credencial, preserve-a em armazenamento privado recuperável,
+fora do Git, com acesso exclusivo do operador. Registre a etapa antes de cada
+efeito remoto: se a execução parar, a retomada reutiliza a mesma credencial.
+Uma senha gerada somente em memória pode ser perdida depois de aplicada no
+banco e antes de chegar à Vercel. A variável deve ser **Sensitive**, somente
+em Production, e ser cadastrada apenas após o preflight passar.
+
+Para uma role já em uso, prefira criar outro login no mesmo grupo, validar,
+migrar os clientes e só então aposentar o anterior. As permissões continuam no
+grupo. O pooler pode rejeitar temporariamente uma senha recém-alterada com
+`28P01`; não faça rotações repetidas. A [orientação do Supabase](https://supabase.com/docs/guides/troubleshooting/supavisor-error-password-authentication-failed-after-password-rotation)
+explica como distinguir atraso do cache de credencial incorreta.
+
+### Configuração verificada em 22/09/2026
+
+`DATABASE_URL` foi cadastrada como Sensitive somente em Production para
+`master_jobs_app`, após validar TLS, leitura real de `job` e `application`,
+os quatro privilégios em cada uma das 36 tabelas e uso das 28 sequências.
+As flags administrativas e CREATE no schema `production` permaneceram negadas.
+A primeira conexão retornou `28P01`; a seguinte passou com a mesma credencial,
+sem outra rotação. `POSTGRES_URL` permanece como fallback quando a variável
+preferida estiver ausente.
+
+A configuração será aplicada no próximo deploy de produção aprovado por humano;
+não foi disparado redeploy. Depois da promoção, conferir a fumaça de produção,
+login e leitura de vagas, e confirmar sessões de `master_jobs_app` no banco.
+Até essa evidência, O-01 permanece em validação. Se houver falha, preservar os
+registros, **remover `DATABASE_URL` de Production** na Vercel e fazer
+redeploy — só a ausência da variável devolve o runtime ao fallback
+`POSTGRES_URL`; editar outra variável não reverte nada. Nunca imprimir URLs
+de conexão nem rotacionar o usuário `postgres` como tentativa de diagnóstico.
 
 ## Relato de erro
 

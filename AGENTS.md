@@ -144,6 +144,9 @@ dashboard Next.js em `localhost:3000`.
 > `REFERENCES` precisa declarar a ação `ON DELETE` no schema e no DDL aplicado;
 > `tests/cov-db-schema.test.ts` compara as duas camadas no PostgreSQL. Uma
 > divergência deixa a migration incompleta, mesmo que a sintaxe aceite a tabela.
+> Paridade não prova intenção: o Drizzle completa com `no action` o que ninguém
+> escreveu, e `tests/fk-delete-intent.test.ts` exige `onDelete` escrito em toda
+> FK, inclusive quando a escolha é `no action`.
 
 > **`/p/[slug]` é a única rota sem sessão, e o que ela mostra é lista de
 > permissão.** `publicProfile()` enumera os campos que saem; a página não
