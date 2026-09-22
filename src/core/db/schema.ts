@@ -463,10 +463,28 @@ export const candidate = production.table(
      * colateral de marcar "público" não é.
      */
     publicCv: boolean("public_cv").notNull().default(false),
+    /**
+     * O endereço público: `/p/<public_slug>`. Escolhido pelo próprio candidato.
+     *
+     * Separado de `slug` de propósito. `slug` é o identificador interno — a
+     * CLI, o modo aberto e `syncCandidateFromProfile` acham o dono por
+     * `slug = 'default'`, e trocá-lo faria o próximo `jho db seed` criar um
+     * segundo candidato para ele. O endereço público muda quando a pessoa
+     * quiser sem mexer em nada disso.
+     *
+     * Anulável de propósito: nulo é "sem endereço", e perfil sem endereço não
+     * responde em `/p/`. Fica nulo o candidato cujo `slug` é `user-<e-mail>`
+     * (publicaria o e-mail) e o que chega pela importação do snapshot legado,
+     * até a própria pessoa escolher um em `/candidate`.
+     */
+    publicSlug: text("public_slug"),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },
-  (t) => [uniqueIndex("candidate_slug_idx").on(t.slug)],
+  (t) => [
+    uniqueIndex("candidate_slug_idx").on(t.slug),
+    uniqueIndex("candidate_public_slug_idx").on(t.publicSlug),
+  ],
 );
 
 /**

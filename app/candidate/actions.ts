@@ -3,8 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { guard, guardOwnCandidate } from "../auth";
 import { createOwnCandidate } from "../../src/contexts/auth/index.ts";
-import { CV_MIN, parseOwnProfile, type OwnProfileError } from "../../src/core/candidate-identity.ts";
-import { requestCvRescore, setPublicCv, setVisibility } from "../../src/core/candidate.ts";
+import {
+  CV_MIN,
+  parseOwnProfile,
+  validatePublicSlug,
+  type OwnProfileError,
+  type PublicSlugError,
+} from "../../src/core/candidate-identity.ts";
+import { requestCvRescore, setPublicCv, setPublicSlug, setVisibility } from "../../src/core/candidate.ts";
 import {
   deleteDocument,
   documentById,
@@ -176,7 +182,7 @@ export async function setVisibilityAction(formData: FormData) {
 
 export type CreateProfileResult =
   | { ok: true }
-  | { ok: false; code: OwnProfileError | "unavailable" };
+  | { ok: false; code: OwnProfileError | PublicSlugError | "slugTaken" | "unavailable" };
 
 /**
  * "Criar meu perfil": a conta sem candidato cria o PRÓPRIO.
@@ -202,10 +208,40 @@ export async function createProfileAction(formData: FormData): Promise<CreatePro
   });
   if (!parsed.ok) return parsed;
 
-  const result = await createOwnCandidate(session, { ...parsed.value, cvLabel: defaultCvLabel() });
+  // Endereço público opcional: em branco, deriva do nome.
+  const rawSlug = String(formData.get("publicSlug") ?? "").trim();
+  let publicSlug: string | null = null;
+  if (rawSlug !== "") {
+    const valid = validatePublicSlug(rawSlug);
+    if (!valid.ok) return valid;
+    publicSlug = valid.slug;
+  }
+
+  const result = await createOwnCandidate(session, { ...parsed.value, cvLabel: defaultCvLabel(), publicSlug });
   if (result.status === "no-account") return { ok: false, code: "unavailable" };
+  if (result.status === "slug-taken") return { ok: false, code: "slugTaken" };
   if (result.status === "created" && parsed.value.cv !== null) await requestCvRescore(result.candidateId);
 
   revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Endereço público                                                            */
+/* -------------------------------------------------------------------------- */
+
+export type PublicSlugResult = { ok: true } | { ok: false; code: PublicSlugError | "slugTaken" };
+
+/**
+ * Troca o endereço `/p/<slug>` do próprio perfil.
+ *
+ * O candidato vem da sessão (`guardOwnCandidate`, sem id por parâmetro). O
+ * antigo deixa de responder na hora; ver `setPublicSlug` e a ADR 0024.
+ */
+export async function setPublicSlugAction(formData: FormData): Promise<PublicSlugResult> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  const result = await setPublicSlug(candidateId, String(formData.get("publicSlug") ?? ""));
+  if (!result.ok) return result;
+  revalidatePath("/candidate");
   return { ok: true };
 }

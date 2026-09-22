@@ -75,15 +75,29 @@
     {
       "idx": 10,
       "version": "7",
-      "when": 1790112689829,
-      "tag": "0010_enable_pg_trgm",
+      "when": 1790109316533,
+      "tag": "0010_candidate_public_slug",
       "breakpoints": true
     },
     {
       "idx": 11,
       "version": "7",
-      "when": 1790113364527,
-      "tag": "0011_term_search_trgm",
+      "when": 1790109316995,
+      "tag": "0011_backfill_candidate_public_slug",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790115283066,
+      "tag": "0012_enable_pg_trgm",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790115290481,
+      "tag": "0013_term_search_trgm",
       "breakpoints": true
     }
   ]

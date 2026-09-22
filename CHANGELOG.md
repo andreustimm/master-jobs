@@ -12,8 +12,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 ### Adicionado
 
 - Busca por termo com pré-filtro indexado (#214). Migrations aditivas
-  `0010_enable_pg_trgm` (`CREATE EXTENSION IF NOT EXISTS pg_trgm`) e
-  `0011_term_search_trgm` (GIN `gin_trgm_ops` sobre a descrição sem espaço e
+  `0012_enable_pg_trgm` (`CREATE EXTENSION IF NOT EXISTS pg_trgm`) e
+  `0013_term_search_trgm` (GIN `gin_trgm_ops` sobre a descrição sem espaço e
   hífen, parcial em vagas abertas, e o mesmo em `job_page.text`). Para chave
   ASCII com três letras ou dígitos seguidos, o quadro calcula uma vez por
   consulta (`array(...)`, InitPlan) as vagas cuja descrição pode conter o termo
@@ -23,6 +23,18 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   35/35 ms (`typescript`/`java`); no sintético de 10 mil vagas, com descrições
   curtas sem compressão e termo pouco seletivo, subiu de 129 para 155 ms.
   Tempos locais, não de produção.
+- Endereço público escolhido pelo candidato (#235): `/p/<slug>` passa a ler
+  `candidate.public_slug` (coluna nova, índice único), separado do `slug`
+  interno que a CLI e o seed usam para achar o dono. Migrações aditivas
+  `0010_candidate_public_slug` e `0011_backfill_candidate_public_slug` (copia
+  `slug`, idempotente, exceto `user-<e-mail>`, que ficaria com o e-mail no
+  endereço) — **suspendem a promoção automática**. `/candidate` ganha o cartão "Endereço público" (`setPublicSlugAction`, com
+  `guardOwnCandidate`), e o formulário de criação aceita o endereço, sugerido
+  a partir do nome. Validação pura em `validatePublicSlug` (minúsculas,
+  números e hífen, 3–40, reservados incluindo toda rota de primeiro nível do
+  app e os prefixos `user-`/`e2e-`); unicidade pelo índice, com `23505`
+  traduzido em `slugTaken`. Trocar faz o antigo responder 404 na hora, sem
+  redirecionamento (ADR 0024).
 
 - Minha conta (`/account`, #236): qualquer papel troca a própria senha e o
   nome de exibição. A troca exige a senha atual, limita a 5 tentativas por
@@ -35,29 +47,6 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   Link "Minha conta" no menu; rota nas guardas de inglês, largura e axe.
 
 ### Segurança
-
-- Uma conta não recebe mais o candidato de outra pessoa. Em produção, uma
-  conta semeada pelo setup do e2e (`seedOwner` com `E2E_EMAIL` real, fora do
-  banco isolado) apontava para o candidato `default` — o do dono — e abria
-  `/candidate` com currículo, versões, visibilidade, skills e funil dele,
-  podendo alterá-los. A sessão agora só concede um candidato à conta mais
-  antiga que aponta para ele (`ownedCandidateId`, nos três caminhos que montam
-  identidade), o que nega o dado já gravado sem migração. Conta nova com papel
-  candidato recebe candidato próprio por `claimOwnCandidate`, na CLI e em
-  `/admin/users`, sempre novo (nem o de conta apagada é reaproveitado); `jho
-  auth add-user` só dá o candidato do perfil à primeira conta da instalação
-  (tabela vazia), nunca troca vínculo
-  gravado e perdeu `--candidate`; `seedOwner` recusa um segundo e-mail; o setup
-  do e2e recusa qualquer URL de banco fora do loopback (inclusive
-  `POSTGRES_URL*`, que a migração usa como alternativa) e `E2E_EMAIL` que não
-  seja `@local.test`.
-  A migration `0009` cria o índice único parcial `auth_user_candidate_idx` —
-  manual, e só depois de a consulta de duplicatas em `docs/security.md` voltar
-  vazia.
-- `isOwner` passou a ser o candidato padrão de slug `default`, e `ensureCandidate`
-  só marca `is_default` no slug `default`. Todo candidato criado em
-  `/admin/users` nascia marcado como padrão e era pontuado com o
-  `profile.yaml` do dono.
 
 - Inventário de entradas (#197): toda página, Route Handler (por método) e
   export de módulo `"use server"` — em qualquer forma e nome de arquivo — é
@@ -154,6 +143,33 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   opacidade plena e `aria-busy` cai no reset. `prolonged` e `offline`
   promovem ao overlay. O E2E passa a afirmar o estado suave nas sete navegações de
   filtro, densidade, tamanho, página e preset.
+
+## [1.21.2] - 2026-09-22
+
+### Segurança
+
+- Uma conta não recebe mais o candidato de outra pessoa. Em produção, uma
+  conta semeada pelo setup do e2e (`seedOwner` com `E2E_EMAIL` real, fora do
+  banco isolado) apontava para o candidato `default` — o do dono — e abria
+  `/candidate` com currículo, versões, visibilidade, skills e funil dele,
+  podendo alterá-los. A sessão agora só concede um candidato à conta mais
+  antiga que aponta para ele (`ownedCandidateId`, nos três caminhos que montam
+  identidade), o que nega o dado já gravado sem migração. Conta nova com papel
+  candidato recebe candidato próprio por `claimOwnCandidate`, na CLI e em
+  `/admin/users`, sempre novo (nem o de conta apagada é reaproveitado); `jho
+  auth add-user` só dá o candidato do perfil à primeira conta da instalação
+  (tabela vazia), nunca troca vínculo
+  gravado e perdeu `--candidate`; `seedOwner` recusa um segundo e-mail; o setup
+  do e2e recusa qualquer URL de banco fora do loopback (inclusive
+  `POSTGRES_URL*`, que a migração usa como alternativa) e `E2E_EMAIL` que não
+  seja `@local.test`.
+  A migration `0009` cria o índice único parcial `auth_user_candidate_idx` —
+  manual, e só depois de a consulta de duplicatas em `docs/security.md` voltar
+  vazia.
+- `isOwner` passou a ser o candidato padrão de slug `default`, e `ensureCandidate`
+  só marca `is_default` no slug `default`. Todo candidato criado em
+  `/admin/users` nascia marcado como padrão e era pontuado com o
+  `profile.yaml` do dono.
 
 ## [1.21.1] - 2026-09-22
 

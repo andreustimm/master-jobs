@@ -20,6 +20,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ### New
 
+- You pick your profile's public address (the /p/… link) in the candidate
+  area — and you can already pick it when creating the profile. When you
+  change it, the old address stops working right away and someone else may
+  pick it. The profile only shows at that address while it is set to Public.
+
 - New My account screen, in the menu: change your display name and your
   password without asking an admin. Changing the password requires the
   current one; every other session of the account is signed out and you stay
@@ -29,11 +34,6 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   The profile starts private and belongs only to you.
 
 ### Security
-
-- An invited account can no longer see or change the owner's profile, CV,
-  visibility, or pipeline. An account without its own profile now gets access
-  denied in the candidate area, including when an admin is acting as that
-  account.
 
 - The CV shown on the public profile now hides email addresses, phone numbers
   with a country code or a parenthesised area code, and the whole paragraph or
@@ -68,6 +68,15 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   view, dims while it updates and keeps responding to clicks. The full splash
   remains for switching screens and when a response is slow or the connection
   drops.
+
+## [1.21.2] - 2026-09-22T21:14:29.956Z
+
+### Security
+
+- An invited account can no longer see or change the owner's profile, CV,
+  visibility, or pipeline. An account without its own profile now gets access
+  denied in the candidate area, including when an admin is acting as that
+  account.
 
 ## [1.21.1] - 2026-09-22T18:19:03.735Z
 

@@ -20,6 +20,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ### Novidade
 
+- Você escolhe o endereço público do seu perfil (o link /p/…) na área do
+  candidato — e já pode escolher ao criar o perfil. Ao trocar, o endereço
+  antigo deixa de funcionar na hora e pode ser escolhido por outra pessoa. O
+  perfil só aparece nesse endereço enquanto estiver marcado como Público.
+
 - Nova tela Minha conta, no menu: troque o seu nome de exibição e a sua senha
   sem pedir ao admin. Para trocar a senha é preciso informar a atual; ao
   trocar, todas as outras sessões da conta são encerradas e você continua
@@ -29,11 +34,6 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   O perfil nasce privado e é só seu.
 
 ### Segurança
-
-- Uma conta convidada não enxerga nem altera mais o perfil, o currículo, a
-  visibilidade e o funil do dono. Quem ainda não tem perfil próprio vê acesso
-  negado na área do candidato, inclusive quando o admin assume a identidade
-  dessa conta.
 
 - O currículo publicado no perfil público passa a esconder e-mails, telefones
   com código de país ou com DDD entre parênteses e o parágrafo ou a tabela
@@ -69,6 +69,15 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   tela inteira com a abertura de carregamento. A lista fica visível, esmaece
   enquanto atualiza e continua respondendo a cliques. A abertura completa
   continua na troca de tela e quando a resposta demora ou a conexão cai.
+
+## [1.21.2] - 2026-09-22T21:14:29.956Z
+
+### Segurança
+
+- Uma conta convidada não enxerga nem altera mais o perfil, o currículo, a
+  visibilidade e o funil do dono. Quem ainda não tem perfil próprio vê acesso
+  negado na área do candidato, inclusive quando o admin assume a identidade
+  dessa conta.
 
 ## [1.21.1] - 2026-09-22T18:19:03.735Z
 

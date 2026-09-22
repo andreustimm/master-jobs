@@ -269,9 +269,9 @@ select extname, extversion, extnamespace::regnamespace from pg_extension;
 ```
 
 O caminho recomendado é habilitar `pg_trgm` pelo painel (Database →
-Extensions, schema `extensions`) antes de rodar `migrate.yml`; aí a `0010` não
+Extensions, schema `extensions`) antes de rodar `migrate.yml`; aí a `0012` não
 faz nada. Se a migration a criar, ela vai para o primeiro schema do
-`search_path` da role de migração, e o índice de `0011` resolve
+`search_path` da role de migração, e o índice de `0013` resolve
 `gin_trgm_ops` pelo mesmo `search_path`.
 
 ## Plano
@@ -285,7 +285,7 @@ faz nada. Se a migration a criar, ela vai para o primeiro schema do
 | 1 ✅ | Medição: baseline local e log por estágio | habilita o resto | `perf:jobs`, `registrarTempo` |
 | PR 2 | Overlay só na troca de rota (#220, em revisão); filtros que se aplicam sozinhos (#218) | alto × médio | fase 3 |
 | 2 ✅ | Seleção compartilhada para lista e total, facetas fundidas | alto × médio | `repo.ts` |
-| 2 🟡 | Busca por termo indexada: pré-filtro `pg_trgm`, `~*` inalterado (#214, em revisão) | alto com termo seletivo × médio | migration `0010`/`0011` |
+| 2 🟡 | Busca por termo indexada: pré-filtro `pg_trgm`, `~*` inalterado (#214, em revisão) | alto com termo seletivo × médio | migration `0012`/`0013` |
 | 2 ✅ | Normalização salarial compartilhada, sem repetir cotações a cada uso | alto com faixa | `repo.ts` |
 | 2 | Cache de facetas com TTL — **só depois de medir** | médio × médio | `matching/app` |
 | 3 | `loading.tsx` + `Suspense` em `/jobs` | só rende após o cache de facetas | `app/jobs/` |
