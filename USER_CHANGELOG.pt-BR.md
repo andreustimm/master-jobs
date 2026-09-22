@@ -24,6 +24,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   prioridades e distinguir trabalho em andamento de entregas verificadas.
   A ativação será confirmada após a validação do fluxo completo.
 
+## [1.20.8] - 2026-09-22T17:17:31.926Z
+
+### Correção
+
+- A preparação de novas versões mantém a revisão validada mesmo quando outras
+  mudanças chegam durante a publicação ou sua retomada.
+
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 
 - Alertas por e-mail configurados para avisar o responsável sobre erros novos em produção e falhas resolvidas que voltam a acontecer.

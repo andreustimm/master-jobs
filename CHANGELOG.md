@@ -16,6 +16,18 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   projeções Compozy descartáveis e gate de vínculo de PR. Escritor em main e
   enforcement dependem do provisionamento e piloto documentados em #191.
 
+## [1.20.8] - 2026-09-22
+
+### Corrigido
+
+- Promoção para staging vinculada ao SHA aprovado pelo CI, inclusive no
+  dispatch. O commit de release passa pelo mesmo CI antes da tag e do
+  fast-forward; retentativas preservam o alvo após avanços de dev e a guarda
+  de migrações compara o intervalo desse alvo. Um candidato reprovado pode ser
+  substituído por uma nova entrada aprovada, sem validar ou etiquetar o anterior.
+  A base do versionamento fica registrada por SHA para resistir a tags tardias.
+  A PR de produção atualiza sua proveniência e preserva anotações humanas.
+
 ## [1.20.7] - 2026-09-22
 
 - Operações: alerta Sentry configurado para erros novos, regressões e alta prioridade em produção, com e-mail para o responsável e intervalo de 30 minutos; disparo validado com canário sintético.

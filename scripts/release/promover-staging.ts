@@ -1,11 +1,13 @@
 /** Avança staging por fast-forward até a fronteira exata desta promoção. */
 import { execFileSync } from "node:child_process";
+import { requireSha } from "./promotion-ci.ts";
 
 const remote = process.argv[2] ?? "origin";
 const staging = process.argv[3] ?? "origin/staging";
 const dev = process.argv[4] ?? "origin/dev";
-const releaseSha = process.argv[5] || null;
-const alvo = releaseSha ?? dev;
+const alvo = requireSha(process.argv[5] ?? "");
+
+execFileSync("git", ["merge-base", "--is-ancestor", alvo, dev], { stdio: "ignore" });
 
 try {
   execFileSync("git", ["merge-base", "--is-ancestor", staging, alvo], {
