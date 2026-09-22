@@ -22,6 +22,13 @@ scope and timing. Use `references/session-charters.md` for charter anatomy,
 coverage inversion and session mechanics, but do not apply its generic cadence
 table when choosing Smoke, Targeted, Full or Sanity here.
 
+Use AGENTS rule 24 and [the project workflow](../../../docs/engineering/workflow.md)
+for the canonical issue, execution and required delivery. Link the issue/PR in
+the cycle's report or charter body. Scenario verdicts and bug analysis stay in
+the living QA tree as evidence; they do not own operational task status or
+priority. Work discovered by QA needs a linked Project issue before execution;
+an automation-backlog file records intent, not a competing execution queue.
+
 Plan QA as journeys real people walk, not test cases that accumulate. This skill owns the project's **living QA docs** — one committed tree (`<qa-docs-path>`, default `docs/qa/`) that every round appends to — and plans the persona-driven sessions `qa-execution` runs.
 
 Two rules anchor everything:

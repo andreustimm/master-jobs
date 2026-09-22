@@ -38,8 +38,8 @@ Skip this section only if no task, phase, PRD, tech spec, or implementation-plan
 - [ ] Incomplete completed tasks were marked `REOPEN` or linked to a `BUG-*` issue
 - [ ] Large missing features were not silently passed as audit success
 - [ ] The audit report includes a Task Implementation Audit section with per-task verdicts
-- [ ] Task frontmatter `status:` was used as the declared status; `state.yaml` was read but not written
-- [ ] When running in `.compozy/tasks/<slug>/`, `memory/qa-execution.md` was written with canonical sections **before** any frontmatter status was flipped (memory-precedes-status invariant)
+- [ ] Canonical issue, Project status, execution, remote revision, required delivery and PR were read; local frontmatter and `state.yaml` were treated as historical evidence or projections
+- [ ] Technical findings were recorded before requesting remote reconciliation; no local task status was flipped, and any authorized remote transition has a receipt or is explicitly pending
 
 ## Independent Evaluator Stance
 
