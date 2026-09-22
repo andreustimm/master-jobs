@@ -34,13 +34,13 @@ When auditing a task under `.compozy/tasks/<slug>/`:
    - `grader-bug` — the agent encountered a test or check that was wrong; the resolution may be legitimate.
    - `ambiguous-task` — the requirement was unclear and the agent picked an interpretation.
    - `bypass-exploit` — the agent found a path that satisfies the literal test but not the requirement (e.g., hardcoded an expected value, skipped a step the test did not enforce).
-3. **Record classifications in `memory/qa-execution.md` → `Errors / Corrections` section.** This write happens **before** any frontmatter `status:` flip (memory-precedes-status invariant from `cy-codex-loop`).
+3. **Record classifications in `memory/qa-execution.md` → `Errors / Corrections` section.** Link the canonical issue and remote revision. This evidence precedes any request for reconciliation by the authorized owning execution; it never authorizes a local task-status flip.
 4. **Then** apply the audit's normal verification — re-execute the smallest proof, read the diff, and run the AI test-hygiene Red Flag scans (RF-1..RF-6) defined in the AI Implementation Audit reference (Step 4 of SKILL.md).
 5. **Then** decide the `qa_verdict`. If transcript classification surfaced a `bypass-exploit` or `genuine-failure` not addressed by the implementation, the verdict cannot be `PASS` regardless of green tests.
 
 ## Why this matters in Compozy mode
 
-`cy-codex-loop` is built around the premise that an agent implements a task and self-reports completion via `state.yaml` and `task_NN.md` frontmatter. `agent-output-audit` is the independent evaluator in that loop. If the auditor accepts the implementer's framing, the loop has no real verification — only ceremonial verification — and `task_NN.md status: completed` becomes a coordination signal, not a quality signal.
+Generic Compozy loops may self-report completion through `state.yaml` and task frontmatter. In Master Jobs, AGENTS rule 24 overrides that operational model: read the issue/Project remotely and treat those files only as history or identified projections. The independent evaluator checks actual implementation and required delivery; neither a local completion claim nor a remote status is proof that the work is correct.
 
 ## Sources
 

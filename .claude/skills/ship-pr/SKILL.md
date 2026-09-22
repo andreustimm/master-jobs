@@ -16,6 +16,14 @@ task worktree created from `dev`, prefix shell invocations with `rtk`, run
 PR with base `dev`. Refuse to ship from `dev`, `staging`, or `main`. Living QA
 artifacts are under `docs/qa/`, in addition to any task-local Compozy artifacts.
 
+Before shipping, follow AGENTS rule 24 and [the project workflow](../../../docs/engineering/workflow.md)
+for remote issue/claim verification and bootstrap handling. The PR must link the
+issue, required delivery and fresh evidence, with the GitHub assignee confirmed.
+A local `completed`, `SHIP`, PR creation or merge into dev does not establish
+delivery to production or activation of an issue-comment writer. Only the owning
+execution requests the coordinated completion transition after the required delivery
+is proved; do not update task status through local Compozy files or bulk sync.
+
 This skill drives the end-of-feature ritual: detect what changed, document its impact, generate release notes, write a complete PR description, commit cleanly, open the PR via `gh`, and (optionally) start an automated review-watch loop.
 
 Two layers exist:
@@ -97,8 +105,8 @@ Gist tripwires:
 
 ### 2. Pass the mandatory deep review
 
-Run `/deep-review --worktree` while the payload is uncommitted, or
-`/deep-review --base dev` for a clean branch already ahead of `dev`. Continue
+Run `/deep-review --worktree --base origin/dev` while the payload is uncommitted, or
+`/deep-review --base origin/dev` for a clean branch already ahead of `dev`. Continue
 only after the rendered verdict is `SHIP`. A `FIX_BEFORE_SHIP` or `REWORK`
 verdict stops this operating loop: repair the findings, rerun the applicable
 verification, and start a fresh review round before generating release notes or
@@ -161,7 +169,7 @@ dev|staging|main|master|develop|trunk) echo "Refusing to ship from $BRANCH. Crea
 esac
 
 rtk git push -u origin "$BRANCH"
-rtk gh pr create --base dev --title "<title>" --body-file "$BODY_FILE"
+rtk gh pr create --base dev --assignee @me --title "<title>" --body-file "$BODY_FILE"
 ```
 
 `$BODY_FILE` is the temp file written in step 5 (per `references/pr-description.md` §5). Capture the returned PR URL and number from `gh`'s stdout — the PR number is the input for step 8.

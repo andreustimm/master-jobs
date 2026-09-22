@@ -6,6 +6,15 @@ argument-hint: "[--pr N | --base <ref> | --staged | --worktree] [--files p1,p2] 
 
 # Deep Review
 
+## Project binding: master-jobs
+
+Follow AGENTS rule 24 and [the project workflow](../../../docs/engineering/workflow.md)
+to read the canonical issue, execution and required delivery before reviewing.
+Use `--base origin/dev` explicitly for local task reviews, including `--worktree`.
+Record issue/PR and reviewed revision in the context pack. A rendered `SHIP` is
+review evidence; it does not transition or complete the remote task. Review stays
+read-only; the owning execution handles any authorized transition after the review.
+
 Review at CodeRabbit grade with no file cap and one assertive posture: funnel the diff, discover root/nested project instructions and relevant local skills, shard defects and polish into independent cohorts, fan out reviewers, then merge with complete hunk/rule accounting. Defects require causal evidence and control the verdict; advisories require a concrete improvement and always remain visible.
 
 Steps 1–4 drive an idempotent artifact pipeline under `<out>`: every stage gate is a bundled-script exit 0, valid agent outputs are never re-run, and an interrupted round resumes by re-running the same commands.

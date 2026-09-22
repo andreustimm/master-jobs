@@ -116,8 +116,9 @@ dashboard Next.js em `localhost:3000`.
 
 > **Documento de feature em `.compozy/tasks/`; o que sobrevive à feature em
 > `docs/`.** A fronteira é o ciclo de vida, e está na ADR 0011: spec, contrato
-> de testes e grafo de tarefas nascem e morrem com o slug; ADR, visão, personas,
-> backlog e mapa de contextos atravessam features. Parte de `docs/` é teste de
+> de testes e contexto técnico nascem e morrem com o slug; o grafo operacional
+> é projeção das relações remotas, conforme a regra 24. ADR, visão, personas,
+> histórico de backlog e mapa de contextos atravessam features. Parte de `docs/` é teste de
 > fitness — `pnpm check` abre `context-map.md` por caminho literal.
 
 > **Política correta não basta: a composição precisa respeitá-la.** `job:read` é
@@ -326,8 +327,9 @@ dashboard Next.js em `localhost:3000`.
 ## Fluxo de trabalho
 
 Guia operacional curto: [começar, retomar, validar e limpar](docs/engineering/workflow.md).
-Antes de iniciar ou retomar, confira `rtk git status --short --branch` e
-`rtk pnpm worktrees`. Preserve alterações pendentes antes de reconciliar a raiz;
+Antes de iniciar ou retomar, consulte a issue e a execução remotas conforme a
+regra 24; confira `rtk git status --short --branch` e `rtk pnpm worktrees`.
+Preserve alterações pendentes antes de reconciliar a raiz;
 HEAD já presente em `dev` não prova que uma worktree com WIP pode ser removida.
 
 ```
@@ -475,6 +477,31 @@ com ele, `staging` e as PRs geradas também recebem checks próprios.
 > Declarar é barato e mantém a pergunta viva; ritual obrigatório viraria
 > carimbo, e carimbo não informa ninguém.
 
+> **24. A issue e o GitHub Project 3 são a autoridade operacional da tarefa.**
+> Toda demanda, inclusive pequena, precisa de issue vinculada ao Project antes
+> de execução. Estado, prioridade, assignee e dependências vêm do remoto; specs,
+> código e evidências continuam em Git. Antes de iniciar ou retomar, leia o
+> remoto com `rtk pnpm tasks show <issue> --json` e verifique a posse da execução.
+> Claim identifica execução + branch + worktree, não apenas a pessoa.
+>
+> Escritas usam comandos coordenados com revisão e UUID de operação, aguardam
+> recibo e não sobrescrevem tarefas concorrentes por bulk sync. Sem confirmação
+> remota, não declare sucesso nem trabalhe sob recibo local vencido. Resultados
+> de QA/review e frontmatter `completed` não concluem a issue: a conclusão exige
+> prova da **Entrega exigida**, que pode ir além do merge em dev.
+>
+> `.compozy/tasks/`, memória e backlog local guardam contexto autoral, histórico
+> ou projeções identificadas; nunca comandam estado, prioridade ou relações.
+> Isso prevalece sobre instruções genéricas das skills `cy-*` e vale nos três
+> harnesses mesmo sem invocar skill. O roteiro único de criação, claim, retomada,
+> transferência e falha remota está em `docs/engineering/workflow.md`.
+>
+> **Integração em dev não é ativação.** Durante o bootstrap do épico #181,
+> o coordenador registra a execução na issue enquanto constrói o escritor.
+> O corte exige código confiável de `issue_comment` na default `main`,
+> `PROJECTS_TOKEN` e chave do escritor validados, preflight e piloto confirmados. Até esse corte,
+> não anuncie enforcement ativo. Produção continua dependente de ação humana.
+
 ---
 
 
@@ -492,6 +519,9 @@ O conjunto instalado cobre o ciclo inteiro: `documentation-writer` na autoria,
 e `ship-pr` depois do veredito de `deep-review`. Regras desta página sempre têm
 precedência sobre exemplos genéricos das skills — em especial RTK, base `dev`,
 worktree obrigatória, PostgreSQL/Supabase e os gates deste repositório.
+O binding da regra 24 também prevalece sobre status/grafo locais sugeridos por
+skills globais: adapte o procedimento neste projeto, sem editar a instalação
+global nem criar cópias por harness.
 
 
 ## QA de jornada
@@ -537,9 +567,9 @@ idempotentes em `.deep-review/`. Como toda skill do projeto, é alcançada pelos
 três harnesses a partir da única cópia canônica em `.claude/skills/`.
 
 ```bash
-/deep-review                      # diff contra a base, relatório local
+/deep-review --base origin/dev    # diff contra dev, relatório local
 /deep-review --pr 7               # uma PR do GitHub
-/deep-review --worktree           # trabalho não commitado
+/deep-review --worktree --base origin/dev # trabalho não commitado
 /deep-review --pr 7 --publish     # comenta na PR
 ```
 
