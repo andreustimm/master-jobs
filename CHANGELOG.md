@@ -31,12 +31,6 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 - Operações: conexão restrita de produção configurada e validada antes do deploy; runbook corrigido para TLS, pooler e rotação recuperável. Ativação aguarda promoção humana.
 
-## [1.21.1] - 2026-09-22
-
-- A tela de vagas calcula lista e total em uma seleção de ids antes de carregar os dados da página, evitando repetir filtros e agrupamento. Páginas além do fim mantêm o total por uma contagem de fallback; o benchmark pode registrar todos os planos com `JHO_PERF_PLANS=1`.
-
-- As facetas do quadro passam a ler o conjunto elegível uma vez e devolver contadores, clusters e fontes em uma consulta, preservando a primeira publicação elegível de cada dimensão e o isolamento por candidato.
-
 ### Segurança
 
 - Inventário de entradas (#197): toda página, Route Handler (por método) e
@@ -60,6 +54,12 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   depois do vínculo, em vez de decidir fora da política.
 - Teste de concorrência: dois resgates simultâneos do mesmo link de
   recuperação trocam a senha uma vez só.
+
+## [1.21.1] - 2026-09-22
+
+- A tela de vagas calcula lista e total em uma seleção de ids antes de carregar os dados da página, evitando repetir filtros e agrupamento. Páginas além do fim mantêm o total por uma contagem de fallback; o benchmark pode registrar todos os planos com `JHO_PERF_PLANS=1`.
+
+- As facetas do quadro passam a ler o conjunto elegível uma vez e devolver contadores, clusters e fontes em uma consulta, preservando a primeira publicação elegível de cada dimensão e o isolamento por candidato.
 
 ## [1.21.0] - 2026-09-22
 
