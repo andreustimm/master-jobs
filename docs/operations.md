@@ -548,6 +548,12 @@ roteiro curto:
    Sem rede, é o piso: o custo em produção é `estágios em série × round-trip`.
    Guarde o relatório com `JHO_PERF_OUT=antes.txt` e compare depois.
 
+Para guardar a comparação completa, use também `JHO_PERF_JSON=arquivo.json`.
+`JHO_PERF_RUNS` e `JHO_PERF_WARMUPS` (inteiros positivos) controlam as repetições. A evidência inclui
+resultados de referência, volume de SQL, parâmetros e o plano da maior consulta;
+compare os resultados antes/depois, além dos tempos. O comando continua usando
+somente o banco sintético isolado.
+
 `tests/db-fan-out.test.ts` afirma que `/jobs` lê as trilhas e o câmbio uma vez
 cada — a régua de pico de conexões não enxerga round-trip: cada consulta cabe no
 teto e a soma em série ainda é lenta. O que o teste **não** cobra é o paralelismo
