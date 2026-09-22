@@ -8,8 +8,10 @@
  *     exercitar a recuperação de senha e não exercitá-la — e recuperação de
  *     senha é justamente o caminho que ninguém percorre até precisar.
  *  2. **A chave é do usuário.** Sem `RESEND_API_KEY` o sistema precisa
- *     continuar funcionando, e continua: o adapter nulo imprime o link no
- *     terminal, que é como este projeto já entregava o link mágico.
+ *     continuar funcionando, e continua: localmente o adapter nulo imprime o
+ *     link no terminal, que é como este projeto já entregava o link mágico; em
+ *     deployment hospedado ele avisa sem imprimir, porque lá o log é lido por
+ *     outras pessoas e o link é credencial.
  *
  * A porta é estreita de propósito. Não há template, anexo nem lista: um e-mail
  * transacional tem destinatário, assunto e corpo, e tudo além disso seria

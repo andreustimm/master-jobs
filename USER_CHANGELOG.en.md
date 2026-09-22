@@ -20,6 +20,10 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ### Fixed
 
+- While email delivery is not configured on the server, the password recovery
+  link is no longer written to the server's technical log, where other people
+  could read it. The log now shows only an alert that the email was not sent.
+
 - The system no longer makes automated requests to LinkedIn, not even for jobs
   that came from an email alert or when another site redirects there. Those
   jobs still show up with the link for you to open, and they are not closed

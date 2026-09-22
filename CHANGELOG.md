@@ -11,6 +11,16 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Corrigido
 
+- Recuperação de senha: em deployment hospedado (`VERCEL_ENV` `production` ou
+  `preview`) sem `RESEND_API_KEY`/`RESEND_FROM`, o adapter de console imprimia
+  o e-mail inteiro — com o link de reset, que é credencial — no log das funções
+  da Vercel. `configuredMailer` passa a escolher `withheldMailer` nesses
+  ambientes e sempre que a chave está presente sem remetente: ele emite um
+  alerta com `console.warn` sem destinatário, assunto nem link, e devolve falha,
+  para o `auth_event` gravar `reset_send_failed`. O console com corpo completo
+  fica restrito ao terminal local sem chave. Checklist humano de ativação do
+  Resend em `docs/operations.md` (#237).
+
 - Rede: `assertSafeRemoteUrl` recusa `linkedin.com`, `linkedin.cn`, `lnkd.in`,
   `licdn.com` e subdomínios antes do DNS, e `safeRemoteFetch` repete a
   recusa em cada redirect (regra 1, ADR 0001). URL de vaga vinda de alerta por

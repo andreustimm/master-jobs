@@ -526,6 +526,49 @@ sqlite3 data/jobs.db "
 
 ---
 
+## Ativar o e-mail de recuperação (Resend)
+
+Sem `RESEND_API_KEY` e `RESEND_FROM` no ambiente, a recuperação de senha
+responde normalmente para quem pede, mas **nenhum e-mail sai**. Em produção e
+preview o log das funções mostra só este alerta, sem destinatário nem link:
+
+```
+[auth] ALERTA: e-mail transacional NÃO enviado — RESEND_API_KEY e RESEND_FROM precisam estar configurados neste ambiente. …
+```
+
+O link nunca vai para o log hospedado porque ele é uma credencial: quem o lê
+troca a senha da conta. Localmente, sem chave, o e-mail inteiro continua
+aparecendo no terminal, que é a tela de quem opera.
+
+Checklist do dono — só ele tem acesso à conta do Resend, ao DNS e aos
+segredos da Vercel; nenhum agente faz estes passos:
+
+1. **Chave.** No Resend, crie uma API key com permissão **somente de envio**
+   (*Sending access*), restrita ao domínio remetente.
+2. **Domínio.** Verifique o domínio remetente (ex.: `mastertimm.com.br`) no
+   Resend e publique no DNS (Cloudflare) os registros SPF e DKIM que ele
+   indicar. Espere o Resend marcar o domínio como verificado.
+3. **Variáveis.** Na Vercel, ambiente **Production**: `RESEND_API_KEY` como
+   *Sensitive* e `RESEND_FROM` com o remetente do domínio verificado (ex.:
+   `Master Jobs <no-reply@mastertimm.com.br>`). As duas formam um par: uma sem a
+   outra não envia e continua só alertando.
+4. **Redeploy.** Variável nova só vale no deploy seguinte.
+5. **Prova.** Peça recuperação para uma conta de teste em `/login/forgot` e
+   confirme que o e-mail chega e o link funciona uma vez.
+6. **Log limpo.** No log das funções, confira que o pedido não imprimiu o link
+   nem o alerta acima. No banco, o evento esperado é `reset_requested` com
+   `detail = 'via resend'`:
+
+   ```sql
+   select kind, detail, at from production.auth_event
+   where kind like 'reset_%' order by at desc limit 5;
+   ```
+
+   `reset_send_failed` com `resend respondeu 4xx` aponta chave ou domínio;
+   `e-mail não configurado` aponta variável faltando no ambiente.
+
+---
+
 ## Troubleshooting
 
 ### A busca está lenta

@@ -3,6 +3,7 @@ import {
   configuredMailer,
   consoleMailer,
   resendMailer,
+  withheldMailer,
 } from "../src/contexts/auth/infra/resend-mailer.ts";
 
 /**
@@ -35,11 +36,35 @@ describe("configuredMailer", () => {
     expect(configuredMailer({} as unknown as NodeJS.ProcessEnv).name).toBe("console");
   });
 
-  it("chave sem remetente também cai para o terminal", () => {
-    // O Resend recusa envio sem `from` verificado. Metade da configuração é
-    // configuração nenhuma, e descobrir isso na hora do envio seria tarde.
-    expect(configuredMailer({ RESEND_API_KEY: "re_x" } as unknown as NodeJS.ProcessEnv).name).toBe("console");
+  it("chave sem remetente não envia e não imprime o corpo", () => {
+    // O Resend recusa envio sem `from` verificado, então metade da configuração
+    // não envia. Mas chave presente é intenção de enviar: imprimir o link ali
+    // seria o vazamento que a chave veio evitar.
+    expect(configuredMailer({ RESEND_API_KEY: "re_x" } as unknown as NodeJS.ProcessEnv).name).toBe("withheld");
     expect(configuredMailer({ RESEND_FROM: "eu@dominio.test" } as unknown as NodeJS.ProcessEnv).name).toBe("console");
+  });
+
+  it("deployment hospedado sem chave nunca usa o terminal", () => {
+    // O log das funções da Vercel é lido por outras pessoas, e o corpo do
+    // e-mail de recuperação é a credencial.
+    for (const VERCEL_ENV of ["production", "preview"]) {
+      expect(configuredMailer({ VERCEL_ENV } as unknown as NodeJS.ProcessEnv).name).toBe("withheld");
+      expect(
+        configuredMailer({ VERCEL_ENV, RESEND_FROM: "eu@dominio.test" } as unknown as NodeJS.ProcessEnv).name,
+      ).toBe("withheld");
+    }
+    // `vercel dev` roda na máquina de quem opera: o log é o terminal dele.
+    expect(configuredMailer({ VERCEL_ENV: "development" } as unknown as NodeJS.ProcessEnv).name).toBe("console");
+  });
+
+  it("em produção com as duas variáveis, usa o Resend", () => {
+    expect(
+      configuredMailer({
+        VERCEL_ENV: "production",
+        RESEND_API_KEY: "re_x",
+        RESEND_FROM: "eu@dominio.test",
+      } as unknown as NodeJS.ProcessEnv).name,
+    ).toBe("resend");
   });
 
   it("espaço em branco não conta como configuração", () => {
@@ -75,6 +100,47 @@ describe("consoleMailer", () => {
     expect(saida).toContain("RESEND_API_KEY");
     expect(saida).toContain("pessoa@local.test");
     expect(saida).toContain("com link");
+  });
+});
+
+describe("withheldMailer", () => {
+  it("alerta sem imprimir destinatário, assunto, corpo nem link", async () => {
+    const linhas: string[] = [];
+    const capture = (...args: unknown[]) => {
+      linhas.push(args.map(String).join(" "));
+    };
+    for (const method of ["log", "info", "warn", "error", "debug"] as const) {
+      vi.spyOn(console, method).mockImplementation(capture);
+    }
+
+    const secret = {
+      to: "pessoa@local.test",
+      subject: "Recuperar o acesso",
+      text: "https://jobs.example.test/login/reset?token=tok_muito_secreto",
+    };
+    const result = await withheldMailer.send(secret);
+
+    // Falha, não sucesso: nada foi entregue, e o auth_event precisa dizer isso.
+    expect(result.ok).toBe(false);
+    const saida = linhas.join("\n");
+    expect(saida).toContain("ALERTA");
+    expect(saida).toContain("RESEND_API_KEY");
+    for (const vazamento of ["tok_muito_secreto", "/login/reset", "pessoa@local.test", "Recuperar o acesso"]) {
+      expect(saida).not.toContain(vazamento);
+      expect(JSON.stringify(result)).not.toContain(vazamento);
+    }
+  });
+
+  it("com o ambiente de produção, o e-mail escolhido não imprime o link", async () => {
+    const linhas: string[] = [];
+    for (const method of ["log", "info", "warn", "error", "debug"] as const) {
+      vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
+        linhas.push(args.map(String).join(" "));
+      });
+    }
+    const mailer = configuredMailer({ VERCEL_ENV: "production" } as unknown as NodeJS.ProcessEnv);
+    await mailer.send({ ...MAIL, text: "link https://x.test/login/reset?token=tok_prod" });
+    expect(linhas.join("\n")).not.toContain("tok_prod");
   });
 });
 
@@ -131,6 +197,19 @@ describe("resendMailer", () => {
     const fake = (async () =>
       new Response("nao é json", { status: 200 })) as unknown as typeof fetch;
     expect(await resendMailer("k", "f@x.test", fake).send(MAIL)).toEqual({ ok: true, id: null });
+  });
+
+  it("com a chave presente, nada é impresso no log", async () => {
+    const linhas: string[] = [];
+    for (const method of ["log", "info", "warn", "error", "debug"] as const) {
+      vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
+        linhas.push(args.map(String).join(" "));
+      });
+    }
+    const fake = (async () =>
+      new Response(JSON.stringify({ id: "abc" }), { status: 200 })) as unknown as typeof fetch;
+    await resendMailer("re_x", "f@x.test", fake).send({ ...MAIL, text: "token=tok_resend" });
+    expect(linhas).toEqual([]);
   });
 
   it("a chave nunca aparece no resultado", async () => {
