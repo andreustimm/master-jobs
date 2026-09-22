@@ -1,6 +1,18 @@
 import { spawnSync } from "node:child_process";
 import { expect, it } from "vitest";
-import { assertProductionTarget, PRODUCTION_PROJECT_REF } from "../scripts/migration/production-target.ts";
+import { assertProductionTarget, PRODUCTION_PROJECT_REF, reachableMigrationTarget } from "../scripts/migration/production-target.ts";
+
+it("turns the IPv6-only direct host into the IPv4 session pooler, keeping the password", () => {
+  const direct = `postgresql://postgres:synthetic@db.${PRODUCTION_PROJECT_REF}.supabase.co/postgres`;
+  const pooler = `postgresql://postgres.${PRODUCTION_PROJECT_REF}:synthetic@aws-0-sa-east-1.pooler.supabase.com:5432/postgres`;
+  expect(reachableMigrationTarget(direct)).toBe(pooler);
+  expect(reachableMigrationTarget(pooler)).toBe(pooler);
+  for (const value of [undefined, direct.replace(PRODUCTION_PROJECT_REF, "other"), direct + "?sslmode=disable"]) {
+    expect(() => reachableMigrationTarget(value)).toThrow();
+    try { reachableMigrationTarget(value); }
+    catch (error) { expect(String(error)).not.toContain("synthetic"); }
+  }
+});
 
 it("accepts only the authorized direct or São Paulo session connection", () => {
   for (const authority of [`postgres:synthetic@db.${PRODUCTION_PROJECT_REF}.supabase.co`,
