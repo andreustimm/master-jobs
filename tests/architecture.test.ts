@@ -690,7 +690,14 @@ describe("authorisation (AUTH-01)", () => {
         continue;
       }
       if ("guard" in policy) {
-        if (!stripComments(read(page)).includes(policy.guard)) offenders.push(`${page}: falta ${policy.guard}`);
+        const code = stripComments(read(page));
+        const at = code.indexOf(policy.guard);
+        // Presença não basta: `void requirePage(...)` ou uma chamada solta
+        // não guarda nada. A instrução que contém o guarda precisa aguardá-lo
+        // (direto, via `Promise.all` ou pelo cronômetro de estágio).
+        const statementStart = Math.max(code.lastIndexOf(";", at), code.lastIndexOf("{\n", at));
+        if (at === -1) offenders.push(`${page}: falta ${policy.guard}`);
+        else if (!/\bawait\b/.test(code.slice(statementStart, at))) offenders.push(`${page}: ${policy.guard} sem await`);
       } else if (policy.exception.trim().length < 20) {
         offenders.push(`${page}: exceção sem justificativa`);
       }
@@ -786,6 +793,10 @@ describe("authorisation (AUTH-01)", () => {
     // Recusadas pelo motivo certo, e não por acaso do padrão.
     expect(guardComesFirst(sneaky, "padrao")).toMatchObject({ reason: "efeito antes do guarda: revalidatePath(" });
     expect(guardComesFirst(sneaky, "comTipo")).toMatchObject({ ok: false, reason: expect.stringContaining("lerCurriculo") });
+
+    // Default anônimo em arrow: descoberto, e recusado por não ter corpo nomeado.
+    const anonymous = '"use server";\nexport default async (formData: FormData) => { await apagarTudo(formData); };';
+    expect(exportedBindings(anonymous)).toEqual([{ exported: "default", local: null }]);
 
     // "use server" citado em comentário não é diretiva; dentro de função é.
     expect(isServerModule('// "use server"\nexport async function x() {}')).toBe(false);

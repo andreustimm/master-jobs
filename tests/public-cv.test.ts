@@ -53,6 +53,11 @@ describe("publicCvText", () => {
       expect(publicCvText(cv), cv).toBe("");
     }
     expect(publicCvText("Success rate: 99% em produção")).toBe("Success rate: 99% em produção");
+    for (const cv of ["Pretensões salariais: 30k", "Pretensa\u0303o: 30k", "Faixa salarial: 25-30k", "Valor hora: R$ 200"]) {
+      expect(publicCvText(cv), cv).toBe("");
+    }
+    // `piso` que não é salário é currículo, e a linha seguinte também fica.
+    expect(publicCvText("Automação do piso de fábrica\n2019-2021")).toBe("Automação do piso de fábrica\n2019-2021");
   });
 
   it("troca todo endereço de e-mail e o cadastrado, mesmo fora do padrão geral", () => {
@@ -68,6 +73,10 @@ describe("publicCvText", () => {
     // Grupos soltos, como se escreve em vários países.
     expect(publicCvText("+55 11 9 1234-5678")).toBe(REDACTED);
     expect(publicCvText("+33 1 23 45 67 89")).toBe(REDACTED);
+    expect(publicCvText("(11) 9 1234-5678")).toBe(REDACTED);
+    // Dígitos logo depois do telefone não o escondem da detecção.
+    expect(publicCvText("+55 11 91234-5678\n2015-2020 Staff")).toBe(`${REDACTED}\n2015-2020 Staff`);
+    expect(publicCvText("+55 11 91234-5678 2015")).toBe(`${REDACTED} 2015`);
     // Poucos dígitos depois do `+` não são telefone.
     expect(publicCvText("+30% de conversão, +2 anos")).toBe("+30% de conversão, +2 anos");
   });

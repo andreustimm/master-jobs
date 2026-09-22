@@ -16,8 +16,9 @@
  *   soltos como `+33 1 23 45 67 89`) ou com DDD entre parênteses
  *   (`(11) 91234-5678`) — um número sem essas marcas não é distinguível de um
  *   intervalo de anos ou de um valor, e fica;
- * - piso: da frase que contém um rótulo de pretensão salarial (`piso`,
- *   `pretensão`, `salário:`, `salary expectation`, `rate:`…) até o fim da
+ * - piso: da frase que contém um rótulo de pretensão salarial (`piso:`,
+ *   `pretensão`, `faixa salarial`, `valor hora`, `salário:`, `salary
+ *   expectation`, `rate:`…) até o fim da
  *   linha; se o rótulo não traz número na própria linha, como num título, a
  *   linha seguinte com número também sai. Um valor sem rótulo não é
  *   reconhecido.
@@ -32,12 +33,37 @@ export const REDACTED = "[…]";
 const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
 
 /**
- * Telefone internacional: `+`, código e grupos separados por espaço, ponto,
- * hífen ou parênteses. O total de dígitos (8 a 15, o intervalo do E.164) é o
- * que separa um telefone de um `+30%` ou de um `+2 anos`.
+ * Telefone internacional: `+`, código e grupos de dígitos com um separador
+ * simples entre eles, nunca atravessando linha. A leitura para ao passar de
+ * 15 dígitos (o teto do E.164), para que um `2015-2020` logo depois do número
+ * não o torne longo demais para ser telefone — e só redige a partir de 8,
+ * para que `+30%` ou `+2 anos` fiquem.
  */
-const INTERNATIONAL_PHONE = /\+\d[\d\s().-]{6,}\d/g;
-const LOCAL_PHONE = /\(\d{2,3}\)\s?\d{4,5}[\s.-]?\d{4}/g;
+const INTERNATIONAL_START = /\+(?=\d)/g;
+const PHONE_GROUP = /^[ \t.-]?\(?(\d{1,5})\)?/;
+const LOCAL_PHONE = /\(\d{2,3}\)[ \t]?(?:9[ \t.-]?)?\d{4}[ \t.-]?\d{4}/g;
+
+function redactInternationalPhones(text: string): string {
+  let out = "";
+  let from = 0;
+  for (const start of text.matchAll(INTERNATIONAL_START)) {
+    if (start.index < from) continue;
+    let at = start.index + 1;
+    let digits = 0;
+    let end = at;
+    for (;;) {
+      const group = PHONE_GROUP.exec(text.slice(at));
+      if (!group || digits + group[1]!.length > 15) break;
+      digits += group[1]!.length;
+      at += group[0].length;
+      end = at;
+    }
+    if (digits < 8) continue;
+    out += text.slice(from, start.index) + REDACTED;
+    from = end;
+  }
+  return out + text.slice(from);
+}
 
 /**
  * Rótulos de pretensão salarial em português e inglês. O valor pode estar
@@ -47,9 +73,12 @@ const LOCAL_PHONE = /\(\d{2,3}\)\s?\d{4,5}[\s.-]?\d{4}/g;
  */
 const SALARY_LABEL = new RegExp(
   [
-    "\\bpiso\\b",
-    "pretens[ãa]o\\b",
+    // `piso` sozinho é chão de fábrica; só conta com o que o faz salarial.
+    "\\bpiso\\s*(?::|salarial|m[íi]nimo|de\\s+(?:remunera|sal[áa]rio))",
+    "pretens(?:[ãa]o|[õo]es)\\b",
     "expectativa\\s+(?:salarial|de\\s+remunera)",
+    "faixa\\s+salarial",
+    "valor\\s+(?:da\\s+)?hora",
     "remunera[çc][ãa]o\\s*(?::|desejada|pretendida|m[íi]nima|esperada)",
     "sal[áa]rio\\s*(?::|desejado|pretendido|m[íi]nimo|esperado)",
     "salary\\s*(?::|floor|expectations?|requirements?|range|minimum)",
@@ -82,7 +111,8 @@ function beforeSalarySentence(line: string, labelAt: number): string | null {
 export function publicCvText(content: string, known: { email?: string | null } = {}): string {
   const out: string[] = [];
   let valueExpected = false;
-  for (const line of content.split("\n")) {
+  // NFC: um "ã" digitado como "a" + til combinante não casaria com o rótulo.
+  for (const line of content.normalize("NFC").split("\n")) {
     if (valueExpected && line.trim() !== "") {
       valueExpected = false;
       // O título "Pretensão salarial" com o valor na linha de baixo.
@@ -102,9 +132,6 @@ export function publicCvText(content: string, known: { email?: string | null } =
   const email = known.email?.trim();
   if (email) text = text.replace(new RegExp(escapeRegExp(email), "giu"), REDACTED);
   text = text.replace(EMAIL, REDACTED);
-  text = text.replace(INTERNATIONAL_PHONE, (match) => {
-    const digits = match.replace(/\D/g, "").length;
-    return digits >= 8 && digits <= 15 ? REDACTED : match;
-  });
+  text = redactInternationalPhones(text);
   return text.replace(LOCAL_PHONE, REDACTED);
 }

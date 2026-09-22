@@ -129,9 +129,11 @@ export function exportedBindings(source: string): ExportedBinding[] {
     // Função anônima não tem nome pelo qual achar o corpo: recusa-se.
     found.push({ exported: "default", local: m[1] ?? null });
   }
-  for (const m of code.matchAll(/\bexport\s+default\s+(?!(?:async\s+)?function\b)(?!async\b)(\w+)?/g)) {
-    // `export default async () => …` não tem nome: `local` nulo, e recusa.
-    found.push({ exported: "default", local: m[1] ?? null });
+  for (const m of code.matchAll(/\bexport\s+default\s+(?!(?:async\s+)?function\b)(\w+)?/g)) {
+    // `export default async () => …` não tem nome: `local` nulo, e recusa —
+    // a palavra capturada é a própria `async`, não um identificador.
+    const name = m[1];
+    found.push({ exported: "default", local: name === undefined || name === "async" ? null : name });
   }
   for (const m of code.matchAll(/\bexport\s+(?:async\s+)?function\s*\*?\s*(\w+)/g)) {
     found.push({ exported: m[1]!, local: m[1]! });

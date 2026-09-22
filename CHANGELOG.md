@@ -20,8 +20,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   sessão ausente, forjada, expirada, revogada e de conta desabilitada, ids da
   vítima e sessão emprestada, e exige recusa sem escrita, cookie, revalidação,
   `after()` ou rede.
-- `JHO_AUTH_MODE=open` só vale na máquina local: em deployment (`VERCEL`,
-  `VERCEL_ENV` ou `JHO_ENV` diferente de `local`) o pedido é ignorado, em
+- `JHO_AUTH_MODE=open` só vale na máquina local: em deployment (`VERCEL`
+  presente, ou `VERCEL_ENV`/`JHO_ENV` diferente de `local`) o pedido é ignorado, em
   sessão e em `proxy.ts`, pela mesma função de domínio.
 - O CV publicado em `/p/[slug]` com os dois consentimentos passa por
   `publicCvText()`: e-mail, telefone com código de país/DDD e, da frase com
