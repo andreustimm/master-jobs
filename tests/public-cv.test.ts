@@ -93,6 +93,10 @@ describe("publicCvText", () => {
     for (const cv of ["Valor/hora: R$ 200", "Valor-hora: R$ 200"]) {
       expect(publicCvText(`Topo\n\n${cv}\n\nFim`), cv).toBe("Topo\n\n\nFim");
     }
+    // Título em texto puro, com ou sublinhado, promete o valor no bloco seguinte.
+    for (const title of ["Salário", "Salary", "Salário\n-------", "Remuneração:"]) {
+      expect(publicCvText(`Topo\n\n${title}\n\nR$ 30.000 mensais\n\nFim`), title).toBe("Topo\n\n\n\nFim");
+    }
     // Moeda colada ao número é valor.
     expect(publicCvText("Topo\n\nSalário em torno de EUR150k anuais\n\nFim")).toBe("Topo\n\n\nFim");
     // O título seguinte ao rótulo isolado abre outra seção e fica.

@@ -130,6 +130,21 @@ function isSalaryBlock(block: string): boolean {
 /** Título que anuncia remuneração: a seção inteira é o valor. */
 const PAY_HEADING = new RegExp(PAY_WORD, "iu");
 
+/**
+ * Título em texto puro: um bloco que é só a palavra de remuneração, com
+ * dois-pontos ou sublinhado Setext (`Salário\n-------`). Promete o valor no
+ * bloco seguinte, como o rótulo isolado.
+ */
+const PAY_ONLY = new RegExp(`^\\s*${PAY_WORD}\\s*:?\\s*$`, "iu");
+
+function isPayTitle(block: string): boolean {
+  const lines = block
+    .replace(/[*_`~#]/g, "")
+    .split("\n")
+    .filter((line) => !/^\s*[-=]{2,}\s*$/.test(line));
+  return lines.length === 1 && PAY_ONLY.test(lines[0]!);
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -186,7 +201,7 @@ export function publicCvText(content: string, known: { email?: string | null } =
       // Um título seguinte abre outra seção; ele não é o valor prometido.
       if (heading === null && HAS_AMOUNT.test(text)) continue;
     }
-    if (isSalaryBlock(text) || (heading !== null && PAY_HEADING.test(text))) {
+    if (isSalaryBlock(text) || isPayTitle(text) || (heading !== null && PAY_HEADING.test(text))) {
       if (heading) skippingSection = heading[1]!.length;
       // Um ano no rótulo ("Pretensão salarial (2026):") não é o valor.
       else valueExpected = !HAS_AMOUNT.test(text);
