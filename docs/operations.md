@@ -528,7 +528,7 @@ sqlite3 data/jobs.db "
 
 ## Ativar o e-mail de recuperação (Resend)
 
-Sem `RESEND_API_KEY` e `RESEND_FROM` no ambiente, a recuperação de senha
+Se `RESEND_API_KEY` ou `RESEND_FROM` faltar no ambiente, a recuperação de senha
 responde normalmente para quem pede, mas **nenhum e-mail sai**. Em produção e
 qualquer deployment o log das funções mostra só este alerta, sem destinatário
 nem link:
@@ -566,8 +566,8 @@ segredos da Vercel; nenhum agente faz estes passos:
    ```
 
    `reset_send_failed` com `resend respondeu 4xx` aponta chave ou domínio;
-   `resend respondeu 5xx` ou mensagem de rede é falha do provedor, e passa
-   repetindo o pedido mais tarde; `e-mail não configurado` aponta variável
+   `resend respondeu 5xx` ou mensagem de rede é falha do provedor — peça a
+   recuperação de novo alguns minutos depois; `e-mail não configurado` aponta variável
    faltando no ambiente.
 
 ---
