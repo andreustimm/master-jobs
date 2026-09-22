@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { parseArgs } from "node:util";
-import { historySchema, ledgerSchema, POLICY, renderMarkdown, summarize, type History } from "./model.ts";
+import { historySchema, ledgerSchema, renderMarkdown, summarize, type History } from "./model.ts";
 import { probe } from "./probe.ts";
 import { collectDelivery, confirmFirstMonitorRun } from "./github.ts";
 
