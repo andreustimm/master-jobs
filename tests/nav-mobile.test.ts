@@ -48,7 +48,7 @@ const mobileNavCodigo = semComentarios(mobileNav);
 const sessionBadgeCodigo = semComentarios(sessionBadge);
 
 /** As rotas que o menu oferece. */
-const ROTAS = ["/jobs", "/compare", "/pipeline", "/referrals", "/candidate", "/admin/users"];
+const ROTAS = ["/jobs", "/compare", "/pipeline", "/referrals", "/candidate", "/account", "/admin/users"];
 
 describe("os links moram num lugar só", () => {
   it("todas as rotas do menu estão em nav-links.tsx", () => {

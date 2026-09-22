@@ -18,6 +18,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### New
+
+- New My account screen, in the menu: change your display name and your
+  password without asking an admin. Changing the password requires the
+  current one; every other session of the account is signed out and you stay
+  signed in. The email is still changed by an admin.
+
 ### Fixed
 
 - While email delivery is not configured on the server, the password recovery
