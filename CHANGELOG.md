@@ -9,6 +9,26 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Corrigido
+
+- Descarte de vagas (`jho db prune` e `jho db cleanup --apply`): uma candidatura
+  criada enquanto o descarte rodava podia ser apagada em cascata junto com a
+  vaga, porque o `DELETE ... WHERE NOT EXISTS (application)` avaliava o
+  predicado antes de esperar o lock da candidatura. Os dois comandos passam por
+  uma única função, `deleteClosedJobsWithoutApplication`, que trava as vagas
+  (`FOR UPDATE`) e reconfere em comando novo. Corrida reproduzida com duas
+  conexões reais em `tests/db-decision-integrity.test.ts`.
+- `job.company_id` declara `onDelete: "no action"` explicitamente; o DDL não
+  muda (nenhuma migration nova). `tests/fk-delete-intent.test.ts` passa a
+  exigir política escrita em toda FK, e `cov-db-schema` ganhou o caso adverso
+  de ação divergente em `pg_constraint`.
+- Upgrade de banco populado provado: `tests/postgres-upgrade.test.ts` migra da
+  0003 com dados até a versão atual, conferindo backfill, funil intacto,
+  recusa de dado inconsistente, falha sem meia aplicação e retomada.
+- Skill `drizzle-safe-migrations` e playbook reescritos para PostgreSQL
+  (`drizzle/postgres/`, journal e `when`, transação única, locks, `migrate.yml`);
+  `docs/engineering/deploy.md` deixa de proibir o `sslmode` que o código aceita.
+
 ## [1.20.7] - 2026-09-22
 
 - Operações: alerta Sentry configurado para erros novos, regressões e alta prioridade em produção, com e-mail para o responsável e intervalo de 30 minutos; disparo validado com canário sintético.

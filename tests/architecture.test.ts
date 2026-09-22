@@ -275,9 +275,19 @@ describe("write-path invariants (ADR 0005)", () => {
   it("closes jobs instead of deleting them", () => {
     const run = read("src/core/ingest/run.ts");
     expect(run).toContain("closedAt");
-    // The only delete in the sync path is pruneClosed, and it is guarded.
-    const prune = run.slice(run.indexOf("pruneClosed"));
-    expect(prune).toContain("not in (select job_id from production.application)");
+    // The sync path deletes nothing itself: pruneClosed delegates to the one
+    // authorized delete, which locks and re-checks for applications.
+    expect(run).not.toMatch(/\.delete\(\s*job\s*\)/);
+    const prune = run.slice(run.indexOf("export async function pruneClosed"));
+    expect(prune).toContain("deleteClosedJobsWithoutApplication(");
+    const offenders = SRC.filter(
+      (f) => f !== "src/core/db/retention.ts" && /\.delete\(\s*job\s*\)|delete\s+from\s+(production\.)?job\b/i.test(read(f)),
+    );
+    expect(offenders).toEqual([]);
+    const retention = read("src/core/db/retention.ts");
+    const guarded = retention.slice(retention.indexOf("export async function deleteClosedJobsWithoutApplication"));
+    expect(guarded).toContain('.for("update")');
+    expect(guarded).toContain("not exists (select 1 from ${application} a where a.job_id = ${job.id})");
   });
 });
 

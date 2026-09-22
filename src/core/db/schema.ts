@@ -91,7 +91,11 @@ export const job = production.table(
       .notNull()
       .references(() => source.id, { onDelete: "cascade" }),
     externalId: text("external_id").notNull(),
-    companyId: integer("company_id").references(() => company.id),
+    // `no action`, declared rather than defaulted: a company that still names
+    // jobs cannot be deleted. Nothing deletes companies today; if something
+    // starts to, the refusal is the prompt to decide, not a silent cascade
+    // through `job` into `application`.
+    companyId: integer("company_id").references(() => company.id, { onDelete: "no action" }),
     companyName: text("company_name").notNull(),
     title: text("title").notNull(),
     descriptionHtml: text("description_html"),

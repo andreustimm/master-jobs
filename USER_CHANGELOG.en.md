@@ -18,6 +18,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- An application recorded at the exact moment the old-job cleanup ran could
+  disappear together with the job. The cleanup now waits and checks again, and
+  never deletes a job that has an application.
+
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 
 - Email alerts are configured to notify the system owner of new production errors and recurring failures that had been resolved.

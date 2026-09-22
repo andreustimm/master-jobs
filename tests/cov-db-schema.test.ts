@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
 import * as schema from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { foreignKeyParityDiff } from "./support/fk-intent.ts";
 
 let db: DB;
 
@@ -67,7 +68,9 @@ function declaredForeignKeys(): DeclaredFk[] {
         from: reference.columns.map((c) => c.name),
         to: getTableConfig(reference.foreignTable).name,
         toColumns: reference.foreignColumns.map((c) => c.name),
-        // SQLite grava "NO ACTION" quando nada foi declarado.
+        // O Drizzle já entrega "no action" quando nada foi escrito, e o
+        // PostgreSQL grava o mesmo. Por isso esta comparação prova PARIDADE, não
+        // intenção; a intenção escrita é de `fk-delete-intent.test.ts`.
         onDelete: (fk.onDelete ?? "no action").toUpperCase(),
       });
     }
@@ -76,27 +79,31 @@ function declaredForeignKeys(): DeclaredFk[] {
 }
 
 /**
- * Divergências já conhecidas entre a declaração e o DDL aplicado.
- *
- * Cada entrada é um bug registrado, não uma exceção permitida: a lista existe
- * para o caso acima continuar guardando as outras 27 chaves em vez de ficar
- * vermelho o tempo todo e ser desligado. Entrada nova aqui exige nota no
- * relatório.
+ * Histórico: na era SQLite (migrations em `drizzle/*.sql`, hoje só legado de
+ * importação), a 0021 acrescentou `job.posted_by_user_id` e
+ * `auth_session.impersonated_by` com `ALTER TABLE ... ADD ... REFERENCES` sem
+ * `ON DELETE`, o SQLite assumiu `NO ACTION` em silêncio e a 0025 teve de
+ * reconstruir as tabelas. No PostgreSQL (`drizzle/postgres/`) não há exceção
+ * nenhuma: a comparação abaixo exige igualdade total.
  */
-/**
- * Chaves cuja aplicação diverge do que o schema declara.
- *
- * **Vazia, e o objetivo é que continue.** Teve duas: a migração 0021 acrescentou
- * `job.posted_by_user_id` e `auth_session.impersonated_by` com
- * `ALTER TABLE ... ADD ... REFERENCES` sem cláusula `ON DELETE`, e o SQLite
- * assume `NO ACTION` em silêncio. O efeito ficou invertido nos dois casos —
- * apagar a conta de um recrutador passava a ser recusado pelo banco em vez de a
- * vaga esquecer quem a cadastrou. A 0025 reconstruiu as duas tabelas.
- *
- * Uma entrada nova aqui é dívida consciente, não conveniência: significa que o
- * banco não faz o que o código diz que ele faz.
- */
-const DIVERGENCIAS_CONHECIDAS = new Set<string>([]);
+
+/** As FKs do schema `production`, lidas de `pg_constraint`. */
+async function appliedForeignKeys(): Promise<Array<DeclaredFk & { validated: boolean }>> {
+  return db.execute<DeclaredFk & { validated: boolean }>(sql`
+    select child.relname as "table", parent.relname as "to",
+      array(select a.attname from unnest(c.conkey) with ordinality k(attnum, position)
+        join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum order by k.position) as "from",
+      array(select a.attname from unnest(c.confkey) with ordinality k(attnum, position)
+        join pg_attribute a on a.attrelid = c.confrelid and a.attnum = k.attnum order by k.position) as "toColumns",
+      case c.confdeltype when 'a' then 'NO ACTION' when 'r' then 'RESTRICT'
+        when 'c' then 'CASCADE' when 'n' then 'SET NULL' when 'd' then 'SET DEFAULT' end as "onDelete",
+      c.convalidated as validated
+    from pg_constraint c
+    join pg_class child on child.oid = c.conrelid
+    join pg_class parent on parent.oid = c.confrelid
+    where c.contype = 'f' and c.connamespace = 'production'::regnamespace
+  `) as unknown as Promise<Array<DeclaredFk & { validated: boolean }>>;
+}
 
 describe("chaves estrangeiras declaradas", () => {
   it("aponta toda referência para uma tabela e uma coluna que existem", async () => {
@@ -119,26 +126,30 @@ describe("chaves estrangeiras declaradas", () => {
     // `pnpm db:generate`". As duas fontes divergindo é o pior modo de falha do
     // ORM: o TypeScript continua compilando, as queries continuam passando, e a
     // política de exclusão em produção é a antiga.
-    const declared = declaredForeignKeys();
-    const rows = await db.execute<{
-      table: string; from: string[]; to: string; toColumns: string[]; onDelete: string; validated: boolean;
-    }>(sql`
-      select child.relname as "table", parent.relname as "to",
-        array(select a.attname from unnest(c.conkey) with ordinality k(attnum, position)
-          join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum order by k.position) as "from",
-        array(select a.attname from unnest(c.confkey) with ordinality k(attnum, position)
-          join pg_attribute a on a.attrelid = c.confrelid and a.attnum = k.attnum order by k.position) as "toColumns",
-        case c.confdeltype when 'a' then 'NO ACTION' when 'r' then 'RESTRICT'
-          when 'c' then 'CASCADE' when 'n' then 'SET NULL' when 'd' then 'SET DEFAULT' end as "onDelete",
-        c.convalidated as validated
-      from pg_constraint c
-      join pg_class child on child.oid = c.conrelid
-      join pg_class parent on parent.oid = c.confrelid
-      where c.contype = 'f' and c.connamespace = 'production'::regnamespace
-    `);
+    const rows = await appliedForeignKeys();
     expect(rows.every((row) => row.validated)).toBe(true);
-    const normalize = (fk: DeclaredFk) => JSON.stringify([fk.table, fk.from, fk.to, fk.toColumns, fk.onDelete]);
-    expect(rows.map(normalize).sort()).toEqual(declared.map(normalize).sort());
+    expect(foreignKeyParityDiff(declaredForeignKeys(), rows)).toEqual({
+      missingInDatabase: [],
+      notDeclared: [],
+    });
+  });
+
+  it("acusa a FK cuja ação aplicada difere da declarada, sem acusar as demais", async () => {
+    // O caso adverso da paridade: alguém "corrige" uma FK direto no banco (ou
+    // uma migration escrita à mão troca a ação). O schema continua dizendo
+    // SET NULL e o banco passa a apagar em cascata — o pior modo de falha,
+    // porque nada no TypeScript muda.
+    await db.execute(sql.raw(`
+      alter table production.job drop constraint job_posted_by_user_id_auth_user_id_fk;
+      alter table production.job add constraint job_posted_by_user_id_auth_user_id_fk
+        foreign key (posted_by_user_id) references production.auth_user(id) on delete cascade;
+    `));
+
+    const diff = foreignKeyParityDiff(declaredForeignKeys(), await appliedForeignKeys());
+    expect(diff).toEqual({
+      missingInDatabase: ["job(posted_by_user_id) -> auth_user(id) ON DELETE SET NULL"],
+      notDeclared: ["job(posted_by_user_id) -> auth_user(id) ON DELETE CASCADE"],
+    });
   });
 
   // O caso que afirmava as duas divergências da migration 0021 saiu daqui: a

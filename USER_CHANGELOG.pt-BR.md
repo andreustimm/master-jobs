@@ -18,6 +18,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- Uma candidatura registrada exatamente enquanto a limpeza de vagas antigas
+  rodava podia sumir junto com a vaga. A limpeza agora espera e confere de
+  novo, e nunca apaga vaga com candidatura.
+
 ## [1.20.7] - 2026-09-22T16:01:55.822Z
 
 - Alertas por e-mail configurados para avisar o responsável sobre erros novos em produção e falhas resolvidas que voltam a acontecer.
