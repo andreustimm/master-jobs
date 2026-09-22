@@ -1,5 +1,13 @@
 # Backlog de discovery
 
+> **Snapshot histórico de discovery.** A fila, a prioridade, os estados e os
+> responsáveis atuais vivem nas issues de `andreustimm/master-jobs` no
+> [GitHub Project 3](https://github.com/users/andreustimm/projects/3).
+> Datas, símbolos, ordens e verbos de ação abaixo descrevem o momento da
+> captura; não autorizam retomada, posse ou conclusão. Preserve os pedidos e
+> resultados autorais e consulte o [relatório de migração](../engineering/github-project-migration.md)
+> antes de reutilizá-los. Novos pedidos entram pelo [fluxo de tarefas](../engineering/github-project-tasks.md).
+
 Status conferido em 18/08/2026 contra o código, não contra a intenção. Oito
 itens estavam marcados como pendentes tendo sido entregues — corrigidos nesta
 revisão. Um backlog que mente sobre o próprio estado é pior que backlog nenhum,
@@ -10,12 +18,12 @@ Contexto de produto: `vision.md` · `personas.md` · `user-stories.md`.
 Captura de tudo que foi pedido na sessão de 18/08/2026, priorizado por impacto
 no objetivo real: **converter posicionamento em entrevistas qualificadas**.
 
-A priorização não é por ordem de pedido nem por facilidade. É por quanto cada
-item move a agulha num funil de contratação real.
+A priorização registrada usou o impacto no funil de contratação real. A ordem
+de execução vigente deve ser lida no Project.
 
 ---
 
-## Legenda
+## Legenda histórica
 
 | Marca | Significado |
 |---|---|
@@ -51,20 +59,20 @@ ficaram para trás **conscientemente**, e estão aqui para não virarem dívida
 invisível. Nenhuma bloqueia o produto hoje; todas custam pouco e valem mais
 quanto antes.
 
-### O-01 · `DATABASE_URL` com a role restrita 📋
+### O-01 · `DATABASE_URL` com a role restrita 🟡
 
-Produção conecta pela `POSTGRES_URL`, que é o usuário `postgres` —
-**superusuário**. A separação de privilégio que a migration `0001` desenhou só
-entra em vigor quando `DATABASE_URL` apontar para `master_jobs_app`.
+**Configurada em 22/09/2026; aguarda validação no próximo deploy humano.**
+`DATABASE_URL` Sensitive foi cadastrada somente em Production para a role
+`master_jobs_app`. TLS, leitura real, CRUD individual das 36 tabelas e uso das
+28 sequências passaram no preflight; privilégios administrativos e CREATE no
+schema continuam negados.
 
-A role já existe e foi validada por `has_*_privilege`: lê e escreve `job` e
-`application`, **não cria no schema**, e alcança coluna criada depois. O que
-falta é cadastrar a URL. Dá para testar **antes** do deploy — o repositório
-versiona `config/certs/supabase-ca.crt`, que é a CA que o pooler apresenta.
-
-Procedimento em [`deploy.md`](../engineering/deploy.md#dar-login-à-role-de-runtime).
-Adiado pelo usuário em 19/09/2026, logo após a queda de 28 minutos, para não
-empilhar mudança de conexão sobre produção recém-restabelecida.
+Não houve redeploy: a instância publicada ainda usa a configuração anterior.
+Concluir após promoção humana, fumaça de produção, login/leitura de vagas e
+confirmação da role nas sessões. Rollback: remover `DATABASE_URL` de
+Production e fazer redeploy (volta ao fallback `POSTGRES_URL`). Credencial preservada de forma privada para
+retomada; nenhum segredo entra no repositório. Procedimento e cuidados de
+rotação em [`deploy.md`](../engineering/deploy.md#dar-login-à-role-de-runtime).
 
 ### O-02 · Mapas de origem no Sentry 📋
 

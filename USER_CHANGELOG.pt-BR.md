@@ -24,6 +24,26 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   rodava podia sumir junto com a vaga. A limpeza agora espera e confere de
   novo, e nunca apaga vaga com candidatura.
 
+- A conexão com o banco foi preparada com permissões limitadas e validada; a ativação ocorrerá no próximo deploy de produção aprovado.
+
+## [1.21.1] - 2026-09-22T18:19:03.735Z
+
+- A lista de vagas e seu total são calculados juntos, reduzindo o trabalho das buscas e preservando a ordem e os totais ao trocar de página.
+
+- Os contadores e as opções dos filtros de vagas exigem menos trabalho do sistema, mantendo os mesmos resultados e critérios de agrupamento.
+
+## [1.21.0] - 2026-09-22T18:02:40.049Z
+
+### Novidade
+
+- Preparação do acompanhamento centralizado das melhorias, para preservar
+  prioridades e distinguir trabalho em andamento de entregas verificadas.
+  A ativação será confirmada após a validação do fluxo completo.
+
+## [1.20.9] - 2026-09-22T17:41:44.517Z
+
+- O projeto passa a ter metas internas de disponibilidade e latência, acompanhamento de incidentes e um relatório que distingue resultados medidos de dados ainda insuficientes.
+
 ## [1.20.8] - 2026-09-22T17:17:31.926Z
 
 ### Correção

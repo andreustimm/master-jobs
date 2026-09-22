@@ -15,6 +15,7 @@ data/
 out/
 data/mail/
 .compozy/runtime/
+.compozy/projections/
 
 # node
 node_modules
