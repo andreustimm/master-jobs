@@ -60,6 +60,8 @@ async function account(email: string, roles: Session["roles"] = ["candidate"]): 
   return (await createUser({ email, roles })).id;
 }
 
+const NO_CV = { cv: null, cvLabel: "CV" };
+
 function sessionOf(userId: number, overrides: Partial<Session> = {}): Session {
   return {
     userId,
@@ -106,10 +108,14 @@ describe("regras puras do formulário", () => {
 
   it("deriva o slug do nome, sem acento, e nunca um reservado", () => {
     expect(slugBaseFromName("João da Silva Araújo")).toBe("joao-da-silva-araujo");
-    expect(slugBaseFromName("Default")).toBe("default-perfil");
-    expect(slugBaseFromName("Admin")).toBe("admin-perfil");
+    expect(slugBaseFromName("Default")).toBe("perfil-default");
+    expect(slugBaseFromName("Admin")).toBe("perfil-admin");
+    // `user-<e-mail>` é o slug que `createUserAction` monta e `ensureCandidate`
+    // reaproveita: ocupá-lo ligaria uma conta futura a este candidato.
+    expect(slugBaseFromName("User Maria X Com")).toBe("perfil-user-maria-x-com");
+    expect(slugBaseFromName("e2e sem cv")).toBe("perfil-e2e-sem-cv");
     expect(slugBaseFromName("李小龙")).toBe("perfil");
-    expect(slugBaseFromName("A".repeat(80)).length).toBeLessThanOrEqual(36);
+    expect(slugBaseFromName("A".repeat(80)).length).toBeLessThanOrEqual(32);
     expect(slugAttempt("maria", 1)).toBe("maria");
     expect(slugAttempt("maria", 3)).toBe("maria-3");
   });
@@ -122,6 +128,7 @@ describe("createOwnCandidate", () => {
       name: "Maria Souza",
       headline: "Data Engineer",
       location: "Recife, Brasil",
+      ...NO_CV,
     });
 
     expect(result.status).toBe("created");
@@ -147,7 +154,7 @@ describe("createOwnCandidate", () => {
       .returning({ id: candidate.id });
     const userId = await account("maria@local.test");
 
-    const result = await createOwnCandidate(sessionOf(userId), { name: "Maria Souza", headline: null, location: null });
+    const result = await createOwnCandidate(sessionOf(userId), { name: "Maria Souza", headline: null, location: null, ...NO_CV });
 
     expect(result.status).toBe("created");
     if (result.status !== "created") return;
@@ -160,7 +167,7 @@ describe("createOwnCandidate", () => {
     const userId = await account("maria@local.test");
     const results = await Promise.all(
       Array.from({ length: 5 }, () =>
-        createOwnCandidate(sessionOf(userId), { name: "Maria Souza", headline: null, location: null }),
+        createOwnCandidate(sessionOf(userId), { name: "Maria Souza", headline: null, location: null, ...NO_CV }),
       ),
     );
 
@@ -174,8 +181,8 @@ describe("createOwnCandidate", () => {
     const a = await account("a@local.test");
     const b = await account("b@local.test");
     const [ra, rb] = await Promise.all([
-      createOwnCandidate(sessionOf(a), { name: "Ana Lima", headline: null, location: null }),
-      createOwnCandidate(sessionOf(b), { name: "Ana Lima", headline: null, location: null }),
+      createOwnCandidate(sessionOf(a), { name: "Ana Lima", headline: null, location: null, ...NO_CV }),
+      createOwnCandidate(sessionOf(b), { name: "Ana Lima", headline: null, location: null, ...NO_CV }),
     ]);
 
     expect(ra.status).toBe("created");
@@ -187,21 +194,50 @@ describe("createOwnCandidate", () => {
 
   it("conta que já tem candidato não ganha outro", async () => {
     const userId = await account("maria@local.test");
-    const first = await createOwnCandidate(sessionOf(userId), { name: "Maria", headline: null, location: null });
-    const again = await createOwnCandidate(sessionOf(userId), { name: "Outro Nome", headline: null, location: null });
+    const first = await createOwnCandidate(sessionOf(userId), { name: "Maria", headline: null, location: null, ...NO_CV });
+    const again = await createOwnCandidate(sessionOf(userId), { name: "Outro Nome", headline: null, location: null, ...NO_CV });
 
-    expect(again).toEqual({ status: "existing", candidateId: "candidateId" in first ? first.candidateId : -1 });
+    expect(first.status).toBe("created");
+    if (first.status !== "created") return;
+    expect(again).toEqual({ status: "existing", candidateId: first.candidateId });
     expect(await db.select().from(candidate)).toHaveLength(1);
+  });
+
+  it("nomes sem letra latina não esgotam os sufixos", async () => {
+    // Todos caem na base `perfil`; depois dos cinquenta sequenciais, o sufixo
+    // aleatório continua achando endereço livre.
+    await db.insert(candidate).values(
+      Array.from({ length: 50 }, (_, i) => ({ slug: i === 0 ? "perfil" : `perfil-${i + 1}`, name: "x" })),
+    );
+    const userId = await account("li@local.test");
+    const result = await createOwnCandidate(sessionOf(userId), { name: "李小龙", headline: null, location: null, ...NO_CV });
+    expect(result.status).toBe("created");
+    if (result.status !== "created") return;
+    expect(result.slug).toMatch(/^perfil-[0-9a-f]{6}$/);
+  });
+
+  it("currículo entra no mesmo commit do candidato", async () => {
+    const userId = await account("maria@local.test");
+    const result = await createOwnCandidate(sessionOf(userId), {
+      name: "Maria",
+      headline: null,
+      location: null,
+      cv: CV,
+      cvLabel: "CV 2026-09-22",
+    });
+    expect(result.status).toBe("created");
+    if (result.status !== "created") return;
+    expect(await currentDocument(result.candidateId)).toMatchObject({ content: CV, label: "CV 2026-09-22", isCurrent: true });
   });
 
   it("conta desabilitada ou inexistente não cria nada", async () => {
     const userId = await account("maria@local.test");
     await setUserDisabled(userId, true);
 
-    expect(await createOwnCandidate(sessionOf(userId), { name: "M", headline: null, location: null })).toEqual({
+    expect(await createOwnCandidate(sessionOf(userId), { name: "M", headline: null, location: null, ...NO_CV })).toEqual({
       status: "no-account",
     });
-    expect(await createOwnCandidate(sessionOf(9999), { name: "M", headline: null, location: null })).toEqual({
+    expect(await createOwnCandidate(sessionOf(9999), { name: "M", headline: null, location: null, ...NO_CV })).toEqual({
       status: "no-account",
     });
     expect(await db.select().from(candidate)).toHaveLength(0);
@@ -269,8 +305,8 @@ describe("isolamento depois de criar", () => {
     const ownerCandidate = await syncCandidateFromProfile();
     const a = await account("a@local.test");
     const b = await account("b@local.test");
-    await createOwnCandidate(sessionOf(a), { name: "Ana", headline: null, location: null });
-    await createOwnCandidate(sessionOf(b), { name: "Bia", headline: null, location: null });
+    await createOwnCandidate(sessionOf(a), { name: "Ana", headline: null, location: null, ...NO_CV });
+    await createOwnCandidate(sessionOf(b), { name: "Bia", headline: null, location: null, ...NO_CV });
 
     const sa = await reloaded(a);
     const sb = await reloaded(b);

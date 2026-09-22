@@ -48,6 +48,7 @@ import {
   type OwnCandidateResult,
 } from "./infra/drizzle-directory.ts";
 import { hashToken, issueResetToken } from "./infra/drizzle-store.ts";
+import type { OwnCandidateInput } from "../../core/candidate.ts";
 import { configuredMailer } from "./infra/resend-mailer.ts";
 import {
   isResetTokenLive,
@@ -177,7 +178,7 @@ export function removeRecruiterLink(linkId: number) {
  */
 export function createOwnCandidate(
   session: Session,
-  profile: { name: string; headline: string | null; location: string | null },
+  profile: OwnCandidateInput,
 ): Promise<OwnCandidateResult> {
   return createOwnCandidateRow(session.userId, profile);
 }

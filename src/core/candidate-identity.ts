@@ -105,6 +105,20 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "vocabulary",
 ]);
 
+/**
+ * Prefixos de slug que outros caminhos criam e REAPROVEITAM pelo slug.
+ *
+ * `createUserAction` e o setup do e2e montam `user-<e-mail>` / `e2e-<e-mail>` e
+ * chamam `ensureCandidate`, que devolve a linha existente com aquele slug. Se
+ * alguém chamado "User Maria X Com" ocupasse `user-maria-x-com` antes, a conta
+ * que o admin criasse depois para `maria@x.com` seria ligada ao candidato
+ * dele — leitura de CV alheio por procuração.
+ */
+export const RESERVED_PREFIXES: readonly string[] = ["user-", "e2e-"];
+
+/** Espaço deixado no teto para o sufixo de colisão (`-50`, ou um aleatório curto). */
+const SUFFIX_ROOM = 8;
+
 /** Quando o nome não rende letra nenhuma aproveitável (só símbolos, escrita não latina). */
 const FALLBACK_BASE = "perfil";
 
@@ -118,14 +132,15 @@ const FALLBACK_BASE = "perfil";
 export function slugBaseFromName(name: string): string {
   const ascii = name
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  // Deixa espaço para o sufixo de colisão sem estourar o teto.
-  const cut = ascii.slice(0, SLUG_MAX - 4).replace(/-+$/g, "");
+  const cut = ascii.slice(0, SLUG_MAX - SUFFIX_ROOM).replace(/-+$/g, "");
   if (cut.length < SLUG_MIN) return FALLBACK_BASE;
-  if (RESERVED_SLUGS.has(cut)) return `${cut}-${FALLBACK_BASE}`;
+  if (RESERVED_SLUGS.has(cut) || RESERVED_PREFIXES.some((prefix) => cut.startsWith(prefix))) {
+    return `${FALLBACK_BASE}-${cut}`.slice(0, SLUG_MAX - SUFFIX_ROOM).replace(/-+$/g, "");
+  }
   return cut;
 }
 

@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MutationFeedbackForm } from "../mutation-feedback";
 import { createProfileAction } from "./actions";
 import {
+  CV_MIN,
   HEADLINE_MAX,
   LOCATION_MAX,
   NAME_MAX,
@@ -13,14 +14,20 @@ import {
 } from "../../src/core/candidate-identity.ts";
 import type { Translator } from "../../src/core/i18n/index.ts";
 
-const ERROR_CODES = [
-  "nameRequired",
-  "nameTooLong",
-  "headlineTooLong",
-  "locationTooLong",
-  "cvTooShort",
-  "unavailable",
-] as const satisfies readonly (OwnProfileError | "unavailable")[];
+/**
+ * Mensagem de cada recusa, já com o limite de verdade. `Record` sobre a união
+ * inteira: código novo sem mensagem é erro de compilação, não toast genérico.
+ */
+function refusalMessages(t: Translator["t"]): Record<OwnProfileError | "unavailable", string> {
+  return {
+    nameRequired: t("onboarding.nameRequired"),
+    nameTooLong: t("onboarding.nameTooLong", { max: NAME_MAX }),
+    headlineTooLong: t("onboarding.headlineTooLong", { max: HEADLINE_MAX }),
+    locationTooLong: t("onboarding.locationTooLong", { max: LOCATION_MAX }),
+    cvTooShort: t("onboarding.cvTooShort", { min: CV_MIN }),
+    unavailable: t("onboarding.unavailable"),
+  };
+}
 
 /**
  * "Criar meu perfil" — o que a conta sem candidato vê em `/candidate`.
@@ -31,7 +38,7 @@ const ERROR_CODES = [
  * sessão, e o candidato nasce novo.
  */
 export function CreateProfile({ t, suggestedName }: { t: Translator["t"]; suggestedName: string }) {
-  const messages = Object.fromEntries(ERROR_CODES.map((code) => [code, t(`onboarding.${code}`)]));
+  const messages = refusalMessages(t);
 
   return (
     <main className="pt-10 pb-16" data-testid="route-candidate-onboarding">

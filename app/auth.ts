@@ -156,6 +156,8 @@ export async function onboardingSession(): Promise<Session | null> {
 
 /** A mesma pergunta, para quem já tem a sessão em mãos (o layout, no link). */
 export function mayCreateProfile(session: Session | null): boolean {
-  if (session === null || candidateScope(session) !== null) return false;
+  // O modo aberto sintetiza uma sessão sem conta por trás: não há linha a que
+  // ligar o candidato, e o formulário só poderia responder "indisponível".
+  if (session === null || isOpenMode() || candidateScope(session) !== null) return false;
   return can(session, "candidate:create").allowed;
 }

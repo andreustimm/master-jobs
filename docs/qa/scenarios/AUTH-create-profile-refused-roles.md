@@ -4,7 +4,7 @@ area: AUTH
 title: Quem não é candidato sem perfil não recebe o formulário
 persona: Recrutadora convidada
 journey: J-create-own-profile
-expected: Recrutador, admin sem papel candidato e sessão emprestada abrem /candidate e recebem 403, sem formulário de criação nem link na navegação
+expected: Recrutador, admin sem papel candidato e sessão emprestada (admin assumindo uma conta de candidato sem perfil) abrem /candidate e recebem 403, sem formulário de criação nem link na navegação
 entry_points: /candidate
 qa_status: untested
 bug_ids:

@@ -9,7 +9,7 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { getDb } from "../../../core/db/client.ts";
 import { authUser, recruiterCandidate } from "../../../core/db/schema.ts";
-import { insertOwnCandidate } from "../../../core/candidate.ts";
+import { insertOwnCandidate, type OwnCandidateInput } from "../../../core/candidate.ts";
 import type { UserDirectory, UserSummary } from "../ports.ts";
 import type { Role } from "../domain/types.ts";
 
@@ -208,7 +208,7 @@ export type OwnCandidateResult =
  */
 export async function createOwnCandidate(
   userId: number,
-  profile: { name: string; headline: string | null; location: string | null },
+  profile: OwnCandidateInput,
 ): Promise<OwnCandidateResult> {
   return getDb().transaction(async (tx) => {
     const [account] = await tx

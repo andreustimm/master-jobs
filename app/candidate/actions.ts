@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { guard, guardOwnCandidate } from "../auth";
 import { createOwnCandidate } from "../../src/contexts/auth/index.ts";
-import { parseOwnProfile, type OwnProfileError } from "../../src/core/candidate-identity.ts";
-import { setPublicCv, setVisibility } from "../../src/core/candidate.ts";
+import { CV_MIN, parseOwnProfile, type OwnProfileError } from "../../src/core/candidate-identity.ts";
+import { requestCvRescore, setPublicCv, setVisibility } from "../../src/core/candidate.ts";
 import {
   deleteDocument,
   documentById,
@@ -13,6 +13,11 @@ import {
   saveDocument,
   type VersionError,
 } from "../../src/core/candidate.ts";
+
+/** Rótulo de versão sem idioma: a data. Fica gravado, então não pode ser frase. */
+function defaultCvLabel(): string {
+  return `CV ${new Date().toISOString().slice(0, 10)}`;
+}
 
 /**
  * Save the CV the candidate pasted.
@@ -25,9 +30,9 @@ export async function saveCvAction(formData: FormData) {
   const { candidateId } = await guardOwnCandidate("candidate:write");
 
   const content = String(formData.get("content") ?? "").trim();
-  const label = String(formData.get("label") ?? "").trim() || `CV ${new Date().toISOString().slice(0, 10)}`;
+  const label = String(formData.get("label") ?? "").trim() || defaultCvLabel();
 
-  if (content.length < 100) {
+  if (content.length < CV_MIN) {
     throw new Error("O texto é curto demais para ser um currículo (mínimo 100 caracteres).");
   }
 
@@ -183,7 +188,8 @@ export type CreateProfileResult =
  * dono e não entra aqui.
  *
  * Duplo envio devolve sucesso sem criar o segundo: `createOwnCandidate` trava
- * a linha da conta, e a segunda requisição encontra o vínculo já feito.
+ * a linha da conta, e a segunda requisição encontra o vínculo já feito. O
+ * currículo, quando colado, entra no MESMO commit do candidato.
  */
 export async function createProfileAction(formData: FormData): Promise<CreateProfileResult> {
   const session = await guard("candidate:create");
@@ -196,22 +202,9 @@ export async function createProfileAction(formData: FormData): Promise<CreatePro
   });
   if (!parsed.ok) return parsed;
 
-  const { name, headline, location, cv } = parsed.value;
-  const result = await createOwnCandidate(session, { name, headline, location });
+  const result = await createOwnCandidate(session, { ...parsed.value, cvLabel: defaultCvLabel() });
   if (result.status === "no-account") return { ok: false, code: "unavailable" };
-
-  // Só quem acabou de criar grava o currículo. No duplo envio a segunda
-  // requisição encontra `existing`, e gravar de novo criaria uma versão
-  // idêntica — ou, com texto diferente, trocaria o CV sem a pessoa pedir.
-  if (result.status === "created" && cv !== null) {
-    await saveDocument({
-      candidateId: result.candidateId,
-      kind: "cv",
-      label: `CV ${new Date().toISOString().slice(0, 10)}`,
-      content: cv,
-      format: "text",
-    });
-  }
+  if (result.status === "created" && parsed.value.cv !== null) await requestCvRescore(result.candidateId);
 
   revalidatePath("/", "layout");
   return { ok: true };

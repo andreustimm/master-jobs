@@ -12,11 +12,11 @@ journey:
       origin: nav
   actions:
     - step: 1
-      verb: Entrar com a conta nova e abrir "Criar meu perfil" pela navegação
+      verb: Entrar com a conta nova e abrir o link de criar perfil pela navegação (Create my profile em inglês)
       expected_observable: /candidate mostra o formulário com nome, headline, localização e currículo opcional, sem dado de outro candidato
     - step: 2
       verb: Preencher o nome (e opcionalmente o resto) e enviar
-      expected_observable: A área do candidato abre com o nome digitado e a visibilidade Privado marcada
+      expected_observable: A área do candidato abre com o nome digitado e a visibilidade privada marcada
     - step: 3
       verb: Recarregar a página
       expected_observable: O perfil continua lá; o formulário de criação não volta

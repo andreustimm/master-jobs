@@ -442,11 +442,15 @@ slug `default`, `is_default = true`). Toda conta de papel candidato sem
 candidato cria o PRÓPRIO em `/candidate` (#234), por `createOwnCandidate`:
 
 - a linha é sempre **nova** — `insertOwnCandidate` usa `on conflict (slug) do
-  nothing` e tenta `nome`, `nome-2`, `nome-3`…; nunca atualiza nem reaproveita
-  candidato existente, ao contrário de `ensureCandidate`;
+  nothing` e tenta `nome`, `nome-2` … `nome-50` e depois cinco sufixos
+  aleatórios; nunca atualiza nem reaproveita candidato existente, ao contrário
+  de `ensureCandidate`;
+- slug reservado (`default`, nomes de rota) ou com prefixo `user-`/`e2e-` — os
+  que `createUserAction` e o e2e montam e `ensureCandidate` reaproveita — ganha
+  o prefixo `perfil-`;
+- o currículo colado entra no mesmo commit do candidato;
 - nasce com `visibility = 'private'`, `public_cv = false` e `is_default = false`;
-- o slug vem do nome digitado, sem acento, e nunca é um reservado (`default`,
-  nomes de rota) — ver `src/core/candidate-identity.ts`;
+- o slug vem do nome digitado, sem acento — ver `src/core/candidate-identity.ts`;
 - candidato e vínculo (`auth_user.candidate_id`) entram no mesmo commit, com
   `select … for update` na linha da conta: duplo envio concorrente espera o
   primeiro e devolve o candidato já criado, sem gerar um segundo.

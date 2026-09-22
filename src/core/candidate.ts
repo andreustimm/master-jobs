@@ -13,7 +13,8 @@
  * > CLAUDE.md and the `growth:` list in profile.yaml.
  */
 import { and, desc, eq, sql } from "drizzle-orm";
-import { getDb } from "./db/client.ts";
+import { getDb, type DbTransaction } from "./db/client.ts";
+import { randomBytes } from "node:crypto";
 import { application, candidate, candidateDocument, job, jobScore } from "./db/schema.ts";
 import { loadProfile } from "./profile/load.ts";
 import { isVisibility, type Visibility } from "../contexts/auth/index.ts";
@@ -78,10 +79,10 @@ export async function ensureCandidate(input: {
   return row.id;
 }
 
-type DbTransaction = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
-
-/** Tentativas de sufixo antes de desistir. Cinquenta homônimos já é anomalia. */
+/** Sufixos sequenciais antes de cair no aleatório. */
 const MAX_SLUG_ATTEMPTS = 50;
+/** Tentativas com sufixo aleatório depois dos sequenciais. */
+const RANDOM_SLUG_ATTEMPTS = 5;
 
 /**
  * Insere um candidato NOVO, com slug livre derivado do nome.
@@ -100,11 +101,17 @@ const MAX_SLUG_ATTEMPTS = 50;
  */
 export async function insertOwnCandidate(
   tx: DbTransaction,
-  input: { name: string; headline: string | null; location: string | null },
+  input: OwnCandidateInput,
 ): Promise<{ id: number; slug: string }> {
   const base = slugBaseFromName(input.name);
-  for (let attempt = 1; attempt <= MAX_SLUG_ATTEMPTS; attempt++) {
-    const slug = slugAttempt(base, attempt);
+  // Sequencial primeiro, porque `maria-souza-2` é legível. Nomes que caem no
+  // mesmo `perfil` (escrita não latina, só símbolos) esgotariam os cinquenta
+  // e travariam o cadastro de todo o resto; o sufixo aleatório os absorve.
+  const slugs = [
+    ...Array.from({ length: MAX_SLUG_ATTEMPTS }, (_, i) => slugAttempt(base, i + 1)),
+    ...Array.from({ length: RANDOM_SLUG_ATTEMPTS }, () => `${base}-${randomBytes(3).toString("hex")}`),
+  ];
+  for (const slug of slugs) {
     const [row] = await tx
       .insert(candidate)
       .values({
@@ -122,9 +129,49 @@ export async function insertOwnCandidate(
       })
       .onConflictDoNothing({ target: candidate.slug })
       .returning({ id: candidate.id, slug: candidate.slug });
-    if (row) return row;
+    if (!row) continue;
+    // O currículo entra no mesmo commit do candidato: se a gravação dele
+    // falhasse depois, o perfil já existiria, a nova tentativa cairia em
+    // "já tem candidato" e o texto colado se perderia sem aviso.
+    if (input.cv !== null) {
+      await tx.insert(candidateDocument).values({
+        candidateId: row.id,
+        kind: "cv",
+        label: input.cvLabel,
+        content: input.cv,
+        format: "text",
+        isCurrent: true,
+      });
+    }
+    return row;
   }
   throw new Error("nenhum slug livre para este nome");
+}
+
+export type OwnCandidateInput = {
+  name: string;
+  headline: string | null;
+  location: string | null;
+  /** Texto do currículo, ou `null` para colar depois. */
+  cv: string | null;
+  cvLabel: string;
+};
+
+/**
+ * Pede a repontuação depois de um currículo novo.
+ *
+ * Fora da transação e depois do commit: enfileirar lá dentro deixaria uma
+ * tarefa apontando para um documento que um rollback desfez. Falha aqui não
+ * derruba quem chamou — o documento é o que a pessoa pediu para guardar; a
+ * repontuação é consequência, e a varredura diária a recupera.
+ */
+export async function requestCvRescore(candidateId: number): Promise<void> {
+  try {
+    const { enqueueScore } = await import("./scoring/queue.ts");
+    await enqueueScore(candidateId, { origin: "cv" });
+  } catch {
+    // Silêncio deliberado: ver o parágrafo acima.
+  }
 }
 
 /** Seed the candidate row from profile.yaml, so the two never drift on identity. */
@@ -279,14 +326,7 @@ export async function saveDocument(input: {
   //
   // Falha aqui não derruba o salvamento. O documento é o que a pessoa pediu para
   // guardar; a repontuação é consequência, e a varredura diária a recupera.
-  if (kind === "cv" && !("unchanged" in resultado)) {
-    try {
-      const { enqueueScore } = await import("./scoring/queue.ts");
-      await enqueueScore(input.candidateId, { origin: "cv" });
-    } catch {
-      // Silêncio deliberado: ver o parágrafo acima.
-    }
-  }
+  if (kind === "cv" && !("unchanged" in resultado)) await requestCvRescore(input.candidateId);
 
   return resultado;
 }
