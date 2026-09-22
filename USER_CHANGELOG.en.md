@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.20.8] - 2026-09-22T17:17:31.926Z
+
 ### Fixed
 
 - Preparing a new release now keeps the validated revision even when other

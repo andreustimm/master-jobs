@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.20.8] - 2026-09-22
+
 ### Corrigido
 
 - Promoção para staging vinculada ao SHA aprovado pelo CI, inclusive no
