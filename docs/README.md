@@ -64,6 +64,7 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`engineering/cobertura.md`](engineering/cobertura.md) | O que o piso de cobertura garante, o que os ramos descobertos são, e as duas armadilhas de teste que não pode falhar. |
 | [`engineering/compozy-backlog-map.md`](engineering/compozy-backlog-map.md) | Ordem de decomposição do backlog e ponte entre discovery e tarefas Compozy. |
 | [`engineering/performance-buscas.md`](engineering/performance-buscas.md) | Por que as buscas eram lentas, como medir (`pnpm perf:jobs`, log por estágio, `x-vercel-id`), o baseline e o plano por fases. |
+| [`engineering/service-levels.md`](engineering/service-levels.md) | SLOs internos, orçamento de erros, incidentes, métricas DORA e relatório de governança. |
 | [`roadmap.md`](roadmap.md) | O que vem depois e em que ordem — e a lista explícita do que ainda não existe. |
 | [`adr/`](adr/) | Por que cada decisão estrutural foi tomada, com as alternativas descartadas. Leia antes de propor reverter qualquer uma delas. |
 

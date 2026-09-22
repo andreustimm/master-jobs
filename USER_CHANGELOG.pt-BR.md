@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+- O projeto passa a ter metas internas de disponibilidade e latência, acompanhamento de incidentes e um relatório que distingue resultados medidos de dados ainda insuficientes.
+
 ## [1.20.8] - 2026-09-22T17:17:31.926Z
 
 ### Correção
