@@ -1,0 +1,45 @@
+name: Governança em produção
+
+on:
+  schedule:
+    # Fora do início da hora, quando o agendador do GitHub tem mais atrasos.
+    # Os minutos são a origem da grade de slots (POLICY.slotOffsetMinutes).
+    - cron: '7,17,27,37,47,57 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+
+concurrency:
+  group: governanca-producao
+  cancel-in-progress: false
+
+jobs:
+  medir:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Medir e preservar a série
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/governance/collect.ts --restore
+      - name: Evidência, inclusive quando a sonda falha
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: governanca-producao
+          path: data/governance/
+          if-no-files-found: error
+          # Cada artefato contém a janela móvel inteira. Retenção curta limita
+          # armazenamento; arquivar o relatório mensal antes de expirar.
+          retention-days: 3

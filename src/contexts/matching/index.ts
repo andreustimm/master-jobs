@@ -126,6 +126,7 @@ export {
   countBoard,
   countHiddenByPayRange,
   listBoard,
+  listBoardPage,
   type BoardFilters,
   type BoardRow,
   type GroupPosting,

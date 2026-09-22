@@ -1,0 +1,31 @@
+name: Vínculo da tarefa
+
+on:
+  pull_request_target:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, edited, assigned, unassigned]
+
+permissions:
+  contents: read
+
+jobs:
+  canonical-task:
+    # Bootstrap is deliberately explicit. Enable only after the main pilot.
+    if: vars.TASKS_ENFORCEMENT == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Conferir vínculos, dependências e posse remota
+        env:
+          GH_TOKEN: ${{ secrets.PROJECTS_TOKEN }}
+        run: node scripts/tasks/check-pr.ts

@@ -2,6 +2,11 @@
 
 **Status:** aceita · 2026-08-20
 
+> **Atualização de 2026-09-22:** a [ADR 0023](0023-github-project-como-autoridade-operacional.md)
+> substitui a autoridade operacional do backlog/grafo local por Project e
+> issues nativas. Abaixo permanece o contexto histórico da decisão. Specs e
+> evidências continuam em Git; status, ordem e dependências atuais são remotos.
+
 ## Contexto
 
 O pedido foi: *"o ideal é utilizarmos a estrutura do compozy para os epics, prd,

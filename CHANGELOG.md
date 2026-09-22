@@ -11,6 +11,25 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 - Operações: conexão restrita de produção configurada e validada antes do deploy; runbook corrigido para TLS, pooler e rotação recuperável. Ativação aguarda promoção humana.
 
+## [1.21.1] - 2026-09-22
+
+- A tela de vagas calcula lista e total em uma seleção de ids antes de carregar os dados da página, evitando repetir filtros e agrupamento. Páginas além do fim mantêm o total por uma contagem de fallback; o benchmark pode registrar todos os planos com `JHO_PERF_PLANS=1`.
+
+- As facetas do quadro passam a ler o conjunto elegível uma vez e devolver contadores, clusters e fontes em uma consulta, preservando a primeira publicação elegível de cada dimensão e o isolamento por candidato.
+
+## [1.21.0] - 2026-09-22
+
+### Adicionado
+
+- Ferramentas: gestão canônica de tarefas pelo GitHub Project, com CLI remota,
+  claims e recibos assinados, revisão/geração, recuperação de operações,
+  projeções Compozy descartáveis e gate de vínculo de PR. Escritor em main e
+  enforcement dependem do provisionamento e piloto documentados em #191.
+
+## [1.20.9] - 2026-09-22
+
+- Governança: SLOs internos, orçamento de erros e resposta a incidentes definidos; adicionados sonda pública e relatório de métricas DORA com cobertura explícita e histórico por artefatos.
+
 ## [1.20.8] - 2026-09-22
 
 ### Corrigido

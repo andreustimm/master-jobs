@@ -1,5 +1,11 @@
 # Latência das buscas
 
+Contexto técnico e evidências históricas. Estado, prioridade, dependências e
+posse de execução são mantidos no [épico #222](https://github.com/andreustimm/master-jobs/issues/222)
+e suas subtarefas no Project 3. A tarefa 11 corresponde à
+[issue #213](https://github.com/andreustimm/master-jobs/issues/213).
+Este arquivo não concede claim nem conclui a entrega exigida no remoto.
+
 Nota de continuidade: nasce e morre com este slug (ADR 0011). O que sobrevive à
 tarefa — diagnóstico, medidas, decisões — está em
 [`docs/engineering/performance-buscas.md`](../../../docs/engineering/performance-buscas.md),
@@ -12,14 +18,15 @@ nenhuma medida. A meta é reduzir a latência percebida **e** poder provar cada
 ganho com número. A primeira entrega cortou a rede e as idas ao banco; o que resta
 é o trabalho pesado sobre o acervo e a percepção de interatividade dos filtros.
 
-## Estado em 2026-09-22
+## Evidências em 2026-09-22
 
-| Item | Estado |
+| Item | Evidência e verificação pendente |
 |---|---|
 | PR 1 — [#175](https://github.com/andreustimm/master-jobs/pull/175) | Em produção pela PR #178, mesclada em 22/09 às 13:39 UTC; CI e fumaça de produção verdes. |
 | Verificação em produção | Deploy e fumaça confirmados; pendente medir `x-vercel-id` = `<borda>::gru1::…` e a primeira linha `perf` de `/jobs` com `JHO_PERF_LOG=1` |
 | Tarefa 17 | Entregue: vigia em `/` e `/jobs`, teto nas funções de composição e QA de concorrência aprovado. Já em main. |
-| Tarefa 13 | Em validação na branch `perf/filtro-salarial`; demais tarefas ainda pendentes. |
+| Tarefa 13 | Entregue em `dev` pela PR #192 e promovida a `staging`; produção depende da PR humana #193. |
+| Tarefa 11 | Lista/total compartilhados e facetas unificadas; seis resultados de referência idênticos; em validação na branch `perf/facetas-filtros`. |
 
 **Base das próximas branches.** As tarefas abaixo usam coisas que só existem com a
 #175 (`pnpm perf:jobs`, `hasFullDescription`, `renderSession`, o cronômetro de
@@ -65,7 +72,7 @@ varreduras do acervo.
 
 ### 13 — Normalização salarial compartilhada
 
-Implementada na branch `perf/filtro-salarial`, em validação antes da PR.
+Entregue pela PR #192 em `dev` e `staging`; aguardando promoção humana para produção.
 Com 10 mil vagas, 29 moedas, três aquecimentos e dez amostras, a mediana da
 faixa salarial caiu de 395,05 para 109,95 ms; ordenar por pagamento caiu de
 96,75 para 89,15 ms. São tempos locais, sem rede.
@@ -78,15 +85,17 @@ Evidência e reprodução em `docs/engineering/performance-buscas.md`.
 
 ### 11 — Conjunto filtrado calculado uma vez
 
-- `canonicalOfGroup` (`repo.ts`, ~linhas 413–433) roda dentro de
-  `boardConditions` em: lista, contagem, três facetas e `countHiddenByPayRange`.
-  São 5 a 6 varreduras do acervo por requisição, cada uma com `row_number()`.
-- Direção: `count(*) over()` na lista (elimina a contagem separada), fundir as
-  três facetas, e avaliar materializar `group_key`/`is_canonical` no ingest
-  (migration — ver a skill `drizzle-safe-migrations`).
-- Pronto quando: as `idas` e o `facets`/`board` do `perf:jobs` caem, e os totais
-  exibidos na tela continuam idênticos (há teste de que o chip conta o mesmo que
-  o rodapé).
+Implementada na branch `perf/facetas-filtros`, em validação antes da PR.
+`listBoardPage` calcula o total sobre ids elegíveis e só então carrega os dados
+da página. As facetas compartilham filtros comuns e preservam o representante
+adequado a cada dimensão. Página além do fim conserva uma contagem de fallback.
+Não foi necessário materializar `group_key` nem alterar o schema.
+
+Nos seis cenários, as consultas caíram de 8–10 para 5–7. A busca por termo
+passou de 184,40 para 127,90 ms; sem agrupamento, de 65,20 para 33,55 ms.
+São medianas locais, sem rede, de dez amostras após três aquecimentos.
+Os objetos completos de referência permaneceram iguais. Evidência e contratos
+em `docs/engineering/performance-buscas.md`.
 
 ### 12 — Busca por termo indexada
 

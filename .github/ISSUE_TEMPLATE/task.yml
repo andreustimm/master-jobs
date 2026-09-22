@@ -1,0 +1,45 @@
+name: Tarefa
+description: Escopo e aceite para o fluxo canônico do Project
+assignees: [andreustimm]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Esta issue será incluída no Project 3 pelo coordenador após a ativação.
+        Status, prioridade e dependências atuais ficam no Project e em Relationships.
+        Não publique tokens, chaves ou dados privados.
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Resultado esperado
+      description: Problema concreto, comportamento esperado e fronteira do escopo.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Critérios de aceite
+      description: Resultados observáveis e como verificá-los.
+    validations:
+      required: true
+  - type: dropdown
+    id: delivery
+    attributes:
+      label: Entrega exigida
+      options: [production, dev, artifact, operation]
+    validations:
+      required: true
+  - type: dropdown
+    id: task-type
+    attributes:
+      label: Tipo
+      options: [feat, fix, docs, chore, refactor, test, perf, ci, build, style, revert]
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioridade
+      options: [Média, Alta, Crítica, Baixa]
+    validations:
+      required: true

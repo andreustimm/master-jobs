@@ -1,8 +1,7 @@
 import {
   boardFacets,
-  countBoard,
   countHiddenByPayRange,
-  listBoard,
+  listBoardPage,
   listCandidateTracks,
   listSavedTerms,
   recordTermVisit,
@@ -27,7 +26,7 @@ export const FEW_MATCHES = 10;
 export type JobsView = {
   state: FilterState;
   notices: FilterNotice[];
-  rows: Awaited<ReturnType<typeof listBoard>>;
+  rows: Awaited<ReturnType<typeof listBoardPage>>["rows"];
   total: number;
   facets: Awaited<ReturnType<typeof boardFacets>>;
   /** Jobs the pay minimum hid (disclosed, comparable, below it). */
@@ -138,22 +137,11 @@ export async function loadJobsView(input: {
     // que normaliza pagamento ia buscá-lo de novo — duas consultas cada.
     rates: fx,
   };
-  // Duas leituras por vez, nunca as quatro.
-  //
-  // O pool abre três conexões (`max: 3` em `src/core/db/client.ts`) e o teto é
-  // `POOL - 1`, porque a instância serverless é reaproveitada e a requisição do
-  // lado também precisa de conexão. As quatro juntas pediam cinco consultas
-  // simultâneas — seis com faixa salarial —, e é o mesmo esgotamento que fazia
-  // `/candidate/skills` responder 200 sozinha e 504 quando pedida duas vezes.
-  // Esta é a tela mais aberta do produto, e foi a última a receber o teto.
-  //
-  // A ordem: a lista e a contagem primeiro, porque são o que a página mostra;
-  // as facetas depois, porque já picam em duas por conta própria.
-  const [rows, total] = await stage("board", () =>
-    Promise.all([
-      listBoard(candidateId, { ...filters, limit: input.pageSize, offset: (input.page - 1) * input.pageSize }),
-      countBoard(candidateId, filters),
-    ]),
+  // Lista e total compartilham a consulta; as facetas leem seu próprio conjunto
+  // porque ignoram filtros diferentes. O teto da tela continua `POOL - 1`:
+  // as etapas deixam conexão disponível para a requisição do lado.
+  const { rows, total } = await stage("board", () =>
+    listBoardPage(candidateId, { ...filters, limit: input.pageSize, offset: (input.page - 1) * input.pageSize }),
   );
   const facets = await stage("facets", () =>
     boardFacets(candidateId, {
