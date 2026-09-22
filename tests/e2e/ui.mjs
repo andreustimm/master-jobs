@@ -3044,16 +3044,19 @@ try {
     // Endereço público escolhido (#235): troca, publica e confere que só o
     // novo responde — o derivado do nome passa a 404.
     const chosen = `endereco-e2e-${Date.now().toString(36)}`;
-    const derivedHref = await onboarding
+    const derivedSlug = await onboarding
       .locator('[data-testid="public-slug"]')
       .inputValue()
       .catch(() => "");
+    check("perfil criado nasce com endereço derivado do nome", /^onboarding-person-e2e/.test(derivedSlug), derivedSlug);
+    const savedNotice = onboarding.locator('[data-testid="mutation-feedback"][role="status"]');
     await onboarding.fill('[data-testid="public-slug"]', chosen);
     await onboarding.locator('[data-testid="save-public-slug"]').click();
-    await onboarding.waitForTimeout(1_000);
+    await savedNotice.waitFor({ timeout: 10_000 }).catch(() => undefined);
+    await onboarding.locator('[data-testid="mutation-feedback-dismiss"]').click().catch(() => undefined);
     await onboarding.locator('input[name="visibility"][value="public"]').check();
     await onboarding.locator('[data-testid="save-visibility"]').click();
-    await onboarding.waitForTimeout(1_000);
+    await savedNotice.waitFor({ timeout: 10_000 }).catch(() => undefined);
     await onboarding.reload({ waitUntil: "networkidle" });
     const savedSlug = await onboarding.locator('[data-testid="public-slug"]').inputValue().catch(() => "");
     const addressOverflow = await onboarding.evaluate(
@@ -3066,9 +3069,13 @@ try {
     const anonPage = await anon.newPage();
     const fresh = await anonPage.goto(`${BASE}/p/${chosen}`, { waitUntil: "domcontentloaded" });
     const freshShown = (await anonPage.locator('[data-testid="route-public-profile"]').count()) === 1;
-    const stale = await anonPage.goto(`${BASE}/p/${derivedHref}`, { waitUntil: "domcontentloaded" });
+    const stale = await anonPage.goto(`${BASE}/p/${derivedSlug}`, { waitUntil: "domcontentloaded" });
     check("endereço novo responde ao anônimo", fresh?.status() === 200 && freshShown, String(fresh?.status()));
-    check("endereço antigo responde 404 depois da troca", stale?.status() === 404, `${derivedHref}: ${stale?.status()}`);
+    check(
+      "endereço antigo responde 404 depois da troca",
+      derivedSlug !== "" && stale?.status() === 404,
+      `${derivedSlug}: ${stale?.status()}`,
+    );
     await anon.close();
     await context.close();
   }

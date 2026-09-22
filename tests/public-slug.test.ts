@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createOwnCandidate, createUser, type Session } from "../src/contexts/auth/index.ts";
 import {
@@ -132,7 +132,7 @@ describe("setPublicSlug", () => {
     expect(await setPublicSlug(b, "ana")).toEqual({ ok: false, code: "slugTaken" });
     expect((await getCandidateById(b))?.publicSlug).toBe("bia");
     expect((await publicProfile("ana"))?.name).toBe("ana");
-    expect(a).not.toBe(b);
+    expect((await getCandidateById(a))?.publicSlug).toBe("ana");
   });
 
   it("recusa reservado e inválido sem gravar", async () => {
@@ -214,6 +214,20 @@ describe("onboarding com endereço escolhido", () => {
     expect(await db.select().from(candidate)).toHaveLength(1);
   });
 
+  it("endereço liberado por uma troca serve à conta nova, mesmo sendo slug interno de alguém", async () => {
+    const other = await person("maria-souza");
+    await setPublicSlug(other, "outra-maria");
+    const { id } = await createUser({ email: "m@local.test", roles: ["candidate"] });
+    const result = await createOwnCandidate(session(id), input("maria-souza"));
+    expect(result).toMatchObject({ status: "created" });
+    if (result.status !== "created") return;
+    const mine = await getCandidateById(result.candidateId);
+    expect(mine?.publicSlug).toBe("maria-souza");
+    // O identificador interno não pode repetir o de outra pessoa.
+    expect(mine?.slug).not.toBe("maria-souza");
+    expect((await getCandidateById(other))?.slug).toBe("maria-souza");
+  });
+
   it("endereço público escolhido por outra pessoa também conta como ocupado", async () => {
     const other = await person("ana");
     await setPublicSlug(other, "maria-souza");
@@ -224,11 +238,21 @@ describe("onboarding com endereço escolhido", () => {
   });
 });
 
+describe("endereço derivado do e-mail nunca é publicado", () => {
+  it("conta criada pelo admin nasce sem endereço público", async () => {
+    const id = await ensureCandidate({ slug: "user-maria-x-com", name: "Maria" });
+    await setVisibility(id, "public");
+    expect((await getCandidateById(id))?.publicSlug).toBeNull();
+    expect(await publicProfile("user-maria-x-com")).toBeNull();
+  });
+});
+
 describe("migração 0010: backfill do endereço público", () => {
   it("copia `slug` para quem ainda não tem endereço, e só para esses", async () => {
     await db.insert(candidate).values([
       { slug: "legado", name: "Legado" },
       { slug: "ja-tem", name: "Já tem", publicSlug: "escolhido" },
+      { slug: "user-maria-x-com", name: "Pelo admin" },
     ]);
     const backfill = readFileSync("drizzle/postgres/0010_backfill_candidate_public_slug.sql", "utf8");
     await db.execute(sql.raw(backfill));
@@ -239,9 +263,9 @@ describe("migração 0010: backfill do endereço público", () => {
       expect.arrayContaining([
         { slug: "legado", publicSlug: "legado" },
         { slug: "ja-tem", publicSlug: "escolhido" },
+        // O e-mail não vira endereço: fica sem, até a pessoa escolher.
+        { slug: "user-maria-x-com", publicSlug: null },
       ]),
     );
-    const [legado] = await db.select().from(candidate).where(eq(candidate.slug, "legado"));
-    expect(legado?.publicSlug).toBe("legado");
   });
 });

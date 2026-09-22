@@ -22,7 +22,7 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 - You pick your profile's public address (the /p/… link) in the candidate
   area — and you can already pick it when creating the profile. When you
-  change it, the old address stops working right away. The profile only
+  change it, the old address stops working right away and someone else may pick it. The profile only
   shows at that address while it is set to Public.
 
 - Signing in with a new candidate account now lets you create your own profile

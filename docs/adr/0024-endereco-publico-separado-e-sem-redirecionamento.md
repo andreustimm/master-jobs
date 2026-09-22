@@ -20,7 +20,9 @@ de uma troca.
    público. `slug` continua sendo o identificador interno e nunca muda pela
    tela. A migração é aditiva: `0009` cria a coluna anulável e o índice,
    `0010` copia `slug` para quem ainda não tem endereço — todo perfil público
-   segue respondendo onde respondia.
+   segue respondendo onde respondia, menos o de slug `user-<e-mail>` (criado
+   pelo admin), que ficaria com o e-mail no endereço e passa a não ter
+   endereço até a pessoa escolher um.
 2. **Escolha validada no domínio.** Minúsculas, números e hífen entre eles,
    de 3 a 40 caracteres; nomes reservados (rotas de primeiro nível do app,
    `default`, `api`…) e os prefixos que outros caminhos reaproveitam pelo slug
@@ -28,7 +30,7 @@ de uma troca.
    consulta anterior.
 3. **Troca sem redirecionamento.** O endereço antigo passa a responder 404 na
    hora, exatamente como um endereço que nunca existiu, e fica livre para outra
-   pessoa escolher.
+   pessoa escolher — em `/candidate` e no formulário de criação.
 4. **Visibilidade continua mandando.** Perfil privado ou só para recrutadores
    responde 404 em qualquer endereço — o antigo, o novo e o identificador.
 

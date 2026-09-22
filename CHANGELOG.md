@@ -15,7 +15,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   `candidate.public_slug` (coluna nova, índice único), separado do `slug`
   interno que a CLI e o seed usam para achar o dono. Migrações aditivas
   `0009_candidate_public_slug` e `0010_backfill_candidate_public_slug` (copia
-  `slug`, idempotente) — **suspendem a promoção automática**. `/candidate`
+  `slug`, idempotente, exceto `user-<e-mail>`, que ficaria com o e-mail no
+  endereço) — **suspendem a promoção automática**. `/candidate`
   ganha o cartão "Endereço público" (`setPublicSlugAction`, com
   `guardOwnCandidate`), e o formulário de criação aceita o endereço, sugerido
   a partir do nome. Validação pura em `validatePublicSlug` (minúsculas,

@@ -22,7 +22,7 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 - Você escolhe o endereço público do seu perfil (o link /p/…) na área do
   candidato — e já pode escolher ao criar o perfil. Ao trocar, o endereço
-  antigo deixa de funcionar na hora. O perfil só aparece nesse endereço
+  antigo deixa de funcionar na hora e pode ser escolhido por outra pessoa. O perfil só aparece nesse endereço
   enquanto estiver marcado como Público.
 
 - Quem entra com uma conta de candidato nova agora pode criar o próprio perfil

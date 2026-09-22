@@ -452,8 +452,10 @@ export const candidate = production.table(
      * segundo candidato para ele. O endereço público muda quando a pessoa
      * quiser sem mexer em nada disso.
      *
-     * Anulável só pela janela da migração: o backfill copia `slug` para cá, e
-     * todo candidato novo nasce com os dois preenchidos.
+     * Anulável de propósito: nulo é "sem endereço", e perfil sem endereço não
+     * responde em `/p/`. Fica nulo o candidato cujo `slug` é `user-<e-mail>`
+     * (publicaria o e-mail) e o que chega pela importação do snapshot legado,
+     * até a própria pessoa escolher um em `/candidate`.
      */
     publicSlug: text("public_slug"),
     createdAt: text("created_at").notNull().default(now),

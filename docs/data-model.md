@@ -445,7 +445,9 @@ escolhe em `/candidate` (`setPublicSlug`), com índice único
 anulável + índice) e `0010_backfill_candidate_public_slug` (copia `slug` para
 quem não tem endereço, idempotente). Trocar o endereço faz o antigo responder
 404 na hora, sem redirecionamento, e o libera para outra pessoa. Linha sem
-`public_slug` não responde em `/p/`.
+`public_slug` não responde em `/p/`; é o caso do candidato cujo `slug` é
+`user-<e-mail>` (criado pelo admin — o endereço publicaria o e-mail), que o
+backfill e `ensureCandidate` deixam sem endereço até a pessoa escolher um.
 
 ### Candidato criado pela própria conta
 
@@ -453,8 +455,8 @@ Só o candidato do dono nasce do `profile/profile.yaml` (`syncCandidateFromProfi
 slug `default`, `is_default = true`). Toda conta de papel candidato sem
 candidato cria o PRÓPRIO em `/candidate` (#234), por `createOwnCandidate`:
 
-- a linha é sempre **nova** — `insertOwnCandidate` usa `on conflict (slug) do
-  nothing` e tenta `nome`, `nome-2` … `nome-50` e depois cinco sufixos
+- a linha é sempre **nova** — `insertOwnCandidate` usa `on conflict do
+  nothing` (sem alvo: cobre o índice do `slug` e o do `public_slug`) e tenta `nome`, `nome-2` … `nome-50` e depois cinco sufixos
   aleatórios; nunca atualiza nem reaproveita candidato existente, ao contrário
   de `ensureCandidate`;
 - slug reservado (`default`, nomes de rota) ou com prefixo `user-`/`e2e-` — os
@@ -463,7 +465,10 @@ candidato cria o PRÓPRIO em `/candidate` (#234), por `createOwnCandidate`:
 - o currículo colado entra no mesmo commit do candidato;
 - nasce com `visibility = 'private'`, `public_cv = false`, `is_default = false`
   e `public_slug = slug` — ou com o endereço que a pessoa escolheu no
-  formulário, que não ganha sufixo: ocupado, a criação volta pedindo outro;
+  formulário, que não ganha sufixo: já publicado por outra pessoa, a criação
+  volta pedindo outro; se só colide com o `slug` interno de alguém (endereço
+  liberado por troca), o endereço é aceito e o `slug` interno é derivado do
+  nome;
 - o slug vem do nome digitado, sem acento — ver `src/core/candidate-identity.ts`;
 - candidato e vínculo (`auth_user.candidate_id`) entram no mesmo commit, com
   `select … for update` na linha da conta: duplo envio concorrente espera o

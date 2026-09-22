@@ -215,7 +215,9 @@ lê `public_slug`, nunca o `slug` interno, e continua passando por
 endereço. Trocar o endereço faz o antigo responder 404 sem redirecionar (ADR
 0024): redirecionar contaria a quem guardou o link antigo qual é o novo.
 Reservados cobrem toda rota de primeiro nível do app e os prefixos que o
-cadastro pelo admin reaproveita pelo slug.
+cadastro pelo admin (`user-`) e o setup do e2e (`e2e-`) reaproveitam pelo slug.
+Candidato de slug `user-<e-mail>` nasce sem endereço público: copiar o slug
+publicaria o e-mail.
 
 **Sem criptografia em repouso.** O banco é um arquivo SQLite legível por
 qualquer processo do usuário. Quem tem acesso local à conta já tem acesso a
