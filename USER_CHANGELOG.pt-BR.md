@@ -24,6 +24,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   prioridades e distinguir trabalho em andamento de entregas verificadas.
   A ativação será confirmada após a validação do fluxo completo.
 
+## [1.20.9] - 2026-09-22T17:41:44.517Z
+
 - O projeto passa a ter metas internas de disponibilidade e latência, acompanhamento de incidentes e um relatório que distingue resultados medidos de dados ainda insuficientes.
 
 ## [1.20.8] - 2026-09-22T17:17:31.926Z

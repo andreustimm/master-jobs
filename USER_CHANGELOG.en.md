@@ -24,6 +24,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   and distinguishing ongoing work from verified deliveries. Activation will
   be confirmed after the complete workflow is validated.
 
+## [1.20.9] - 2026-09-22T17:41:44.517Z
+
 - The project now defines internal availability and latency targets, incident tracking, and a report that distinguishes measured results from insufficient data.
 
 ## [1.20.8] - 2026-09-22T17:17:31.926Z
