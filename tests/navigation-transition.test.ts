@@ -199,7 +199,7 @@ describe("App Router transition integration", () => {
     expect(startup).toBeLessThan(transition);
     expect(transition).toBeLessThan(shell);
     expect(presenter).toContain("snapshot.phase !== \"idle\"");
-    expect(presenter).toContain("{active ? (");
+    expect(presenter).toContain("{active && !soft ? (");
     expect(presenter).toContain("removeInertSplashDuplicates(");
     expect(presenter).toContain("document.querySelectorAll<HTMLElement>");
     expect(layout).toContain("labels={{");

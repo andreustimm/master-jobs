@@ -1052,7 +1052,12 @@ try {
   // muda o currículo — sem mudança não há repontuação para enfileirar, e o
   // cartão aparece `idle`. Foi o que reprovou este caso em três de cinco
   // execuções antes desta espera existir.
-  await page.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
+  await page.waitForFunction(() => {
+      // Pronto = sem `inert` (troca de tela) e sem `aria-busy` (mesma tela,
+      // #220, que deixa o shell operável enquanto a resposta chega).
+      const shell = document.getElementById("application-shell");
+      return !shell?.hasAttribute("inert") && !shell?.hasAttribute("aria-busy");
+    });
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+End");
   // `textContent` nos DOIS lados da comparação. A versão anterior lia o estado
@@ -3242,6 +3247,72 @@ try {
     }
   };
 
+  // Navegação na mesma tela (filtro, ordem, página, densidade) não abre o
+  // overlay nem torna o shell `inert` (#220). O observador testemunha o
+  // atributo mesmo quando a resposta chega no quadro seguinte: a prova é ter
+  // visto `data-navigation="soft"` com `aria-busy`, nunca `inert` nem overlay,
+  // e o shell limpo no fim.
+  const observeSoftNavigation = async (targetPage, activate, destination, label = destination) => {
+    try {
+      await targetPage.locator('[data-testid="navigation-transition"]').waitFor({ state: "detached" });
+      const before = targetPage.url();
+      await targetPage.evaluate(() => {
+        globalThis.__e2eSoftEvidence?.observer?.disconnect();
+        const shell = document.getElementById("application-shell");
+        const evidence = { soft: false, inert: false, overlays: 0, status: "" };
+        const softStatus = document.querySelector('[data-testid="navigation-soft-status"]');
+        const record = (mutations = []) => {
+          for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+              if (!(node instanceof Element)) continue;
+              if (node.matches('[data-testid="navigation-transition"]')
+                || node.querySelector('[data-testid="navigation-transition"]')) {
+                evidence.overlays += 1;
+              }
+            }
+          }
+          const announced = softStatus?.textContent?.trim();
+          if (announced) evidence.status = announced;
+          if (shell?.getAttribute("data-navigation") === "soft" && shell.getAttribute("aria-busy") === "true") {
+            evidence.soft = true;
+          }
+          if (shell?.hasAttribute("inert")) evidence.inert = true;
+        };
+        const observer = new MutationObserver(record);
+        observer.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["data-navigation", "inert", "aria-busy"],
+          characterData: true,
+          childList: true,
+          subtree: true,
+        });
+        globalThis.__e2eSoftEvidence = { observer, evidence };
+      });
+      await activate();
+      await targetPage.waitForURL((url) => url.href !== before, { timeout: 20_000 });
+      await targetPage.locator(destination).waitFor({ state: "visible", timeout: 20_000 });
+      await targetPage.waitForFunction(
+        () => !document.getElementById("application-shell")?.hasAttribute("aria-busy"),
+        null,
+        { timeout: 20_000 },
+      );
+      return await targetPage.evaluate(() => {
+        const { observer, evidence } = globalThis.__e2eSoftEvidence;
+        observer.disconnect();
+        delete globalThis.__e2eSoftEvidence;
+        const shell = document.getElementById("application-shell");
+        const settled = !shell?.hasAttribute("inert") && !shell?.hasAttribute("data-navigation");
+        return {
+          ...evidence,
+          settled,
+          phase: evidence.soft && !evidence.inert && evidence.overlays === 0 && settled ? "soft" : "blocking",
+        };
+      });
+    } catch (error) {
+      throw new Error(`${label}: ${String(error)}`);
+    }
+  };
+
   const observeRedirectAction = async (targetPage, activate, destination) => {
     let actionRequests = 0;
     let actionResponses = 0;
@@ -3258,6 +3329,8 @@ try {
     };
     targetPage.on("request", countAction);
     targetPage.on("response", countActionResponse);
+    const sourceUrl = targetPage.url();
+    const sourcePath = new URL(sourceUrl).pathname;
     try {
       const snapshot = await observeNavigation(
         targetPage,
@@ -3266,7 +3339,11 @@ try {
         destination,
         async () => ({ actionResponseSeenAtAttach: actionResponseSeen }),
       );
-      return { ...snapshot, actionRequests, actionResponses };
+      // Redirect para a mesma tela (só a query muda) é transição suave: sem
+      // overlay (#220). A prova de "uma vez" continua sendo o POST único.
+      const sameScreen = new URL(targetPage.url()).pathname === sourcePath;
+      const moved = targetPage.url() !== sourceUrl;
+      return { ...snapshot, actionRequests, actionResponses, sameScreen, moved };
     } finally {
       targetPage.off("request", countAction);
       targetPage.off("response", countActionResponse);
@@ -3433,56 +3510,61 @@ try {
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   const firstJobLink = page.locator('[data-testid^="job-link-"]').first();
   const contextualPhases = [];
+  const softStatuses = [];
+  const softOf = (evidence) => {
+    softStatuses.push(evidence.status);
+    return evidence.phase;
+  };
   contextualPhases.push((await observeNavigation(page, () => firstJobLink.click(), '[data-testid="route-job-detail"]')).phase);
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   await page.locator('[data-testid="filters-query"]').fill("Task 04 typical fixture");
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push(softOf(await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="filters-submit"]').click(),
     '[data-testid="route-jobs"]',
-  )).phase);
+  )));
   const typicalCardinality = {
     cards: await page.locator('[data-testid^="job-link-"]').count(),
     summary: await page.locator('[data-testid="route-jobs"] > header > p').textContent(),
     next: await page.locator('[data-testid="pagination-next"]').count(),
   };
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push(softOf(await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="density-compact"]').click(),
     '[data-testid="route-jobs"]',
-  )).phase);
+  )));
   const densityState = {
     query: new URL(page.url()).searchParams.get("dense"),
     current: await page.locator('[data-testid="density-compact"]').getAttribute("aria-current"),
     layout: await page.locator('[data-density]').first().getAttribute("data-density"),
   };
   await page.locator('[data-testid="filters-query"]').fill("Task 04 bulk fixture");
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push(softOf(await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="filters-submit"]').click(),
     '[data-testid="route-jobs"]',
-  )).phase);
-  contextualPhases.push((await observeNavigation(
+  )));
+  contextualPhases.push(softOf(await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="page-size-200"]').click(),
     '[data-testid="route-jobs"]',
-  )).phase);
+  )));
   const bulkCardinality = {
     cards: await page.locator('[data-testid^="job-link-"]').count(),
     summary: await page.locator('[data-testid="route-jobs"] > header > p').textContent(),
     next: await page.locator('[data-testid="pagination-next"]').count(),
   };
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push(softOf(await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="pagination-next"]').click(),
     '[data-testid="route-jobs"]',
-  )).phase);
+  )));
   const paginationUrl = new URL(page.url());
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push(softOf(await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="preset-applicableToday"]').click(),
     '[data-testid="route-jobs"]',
-  )).phase);
+  )));
   const presetUrl = new URL(page.url());
   const contextualState = {
     pagination: {
@@ -3500,11 +3582,11 @@ try {
     },
   };
   await page.locator('[data-testid="filters-query"]').fill(`zero-${crypto.randomUUID()}`);
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push(softOf(await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="filters-submit"]').click(),
     '[data-testid="route-jobs"]',
-  )).phase);
+  )));
   const zeroCardinality = {
     cards: await page.locator('[data-testid^="job-link-"]').count(),
     summary: await page.locator('[data-testid="route-jobs"] > header > p').textContent(),
@@ -3513,7 +3595,9 @@ try {
   check(
     "task-04 E2E-003 card, densidade, paginação e GET cobrem zero, típico e milhares",
     contextualPhases.length === 8
-      && contextualPhases.every((phase) => phase === "loading")
+      && contextualPhases[0] === "loading"
+      && contextualPhases.slice(1).every((phase) => phase === "soft")
+      && softStatuses.some((status) => status === ptBR.transition.updating || status === en.transition.updating)
       && typicalCardinality.cards === 7
       && /^7\s/.test(typicalCardinality.summary ?? "")
       && typicalCardinality.next === 0
@@ -3537,12 +3621,34 @@ try {
       && zeroCardinality.next === 0,
     JSON.stringify({
       contextualPhases,
+      softStatuses,
       typicalCardinality,
       densityState,
       bulkCardinality,
       contextualState,
       zeroCardinality,
     }),
+  );
+
+  // Voltar/avançar na mesma tela também é suave. Aqui o início vem do
+  // observador de commit (o roteador já trocou a URL quando o evento chega),
+  // um caminho diferente do Link e do formulário GET acima.
+  const historyBack = await observeSoftNavigation(
+    page,
+    () => page.goBack(),
+    '[data-testid="route-jobs"]',
+    "history back on /jobs",
+  );
+  const historyForward = await observeSoftNavigation(
+    page,
+    () => page.goForward(),
+    '[data-testid="route-jobs"]',
+    "history forward on /jobs",
+  );
+  check(
+    "#220 voltar e avançar na mesma tela não abrem o overlay nem travam o shell",
+    historyBack.phase === "soft" && historyForward.phase === "soft",
+    JSON.stringify({ historyBack, historyForward }),
   );
 
   const contextualFamilyFailures = [];
@@ -3776,8 +3882,10 @@ try {
   const restoredAdministratorCache = await readCacheStorage(page);
   check(
     "task-04 E2E-004 redirects de login, recovery, compare, vaga e impersonação mutam uma vez",
-    redirectEvidence.length === 5 && redirectEvidence.every(({ count, actionRequests }) => count === 1 && actionRequests === 1),
-    JSON.stringify(redirectEvidence.map(({ count, actionRequests }) => ({ count, actionRequests }))),
+    redirectEvidence.length === 5
+      && redirectEvidence.every(({ count, actionRequests, sameScreen, moved }) =>
+        count === (sameScreen ? 0 : 1) && actionRequests === 1 && moved),
+    JSON.stringify(redirectEvidence.map(({ count, actionRequests, sameScreen, moved }) => ({ count, actionRequests, sameScreen, moved }))),
   );
   check(
     "task-04 IT-012 Server Actions reais mutam uma vez e iniciam somente o redirect aceito",
@@ -5080,7 +5188,12 @@ try {
     await page.waitForLoadState("networkidle");
     // A soft navigation keeps the shell inert until the transition commits;
     // typing before that is lost, for a person and for `fill` alike.
-    await page.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
+    await page.waitForFunction(() => {
+      // Pronto = sem `inert` (troca de tela) e sem `aria-busy` (mesma tela,
+      // #220, que deixa o shell operável enquanto a resposta chega).
+      const shell = document.getElementById("application-shell");
+      return !shell?.hasAttribute("inert") && !shell?.hasAttribute("aria-busy");
+    });
   };
 
   await page.goto(payBase, { waitUntil: "networkidle" });
@@ -5465,7 +5578,12 @@ try {
   const saveTermOnPage = (term) => feedbackOf(async () => {
     // After a redirect the shell stays inert until the transition commits, and
     // `fill` on it is silently lost: the save goes out empty and no notice comes.
-    await page.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
+    await page.waitForFunction(() => {
+      // Pronto = sem `inert` (troca de tela) e sem `aria-busy` (mesma tela,
+      // #220, que deixa o shell operável enquanto a resposta chega).
+      const shell = document.getElementById("application-shell");
+      return !shell?.hasAttribute("inert") && !shell?.hasAttribute("aria-busy");
+    });
     await page.locator('[data-testid="searches-term-input"]').fill(term);
     await page.locator('[data-testid="searches-term-save"]').click();
   });
