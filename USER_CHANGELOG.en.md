@@ -22,6 +22,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 - Job filter counts and options require less work from the system while keeping the same results and grouping rules.
 
+## [1.21.0] - 2026-09-22T18:02:40.049Z
+
 ### New
 
 - Preparation for centralized improvement tracking, preserving priorities

@@ -22,6 +22,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 - Os contadores e as opções dos filtros de vagas exigem menos trabalho do sistema, mantendo os mesmos resultados e critérios de agrupamento.
 
+## [1.21.0] - 2026-09-22T18:02:40.049Z
+
 ### Novidade
 
 - Preparação do acompanhamento centralizado das melhorias, para preservar

@@ -13,6 +13,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 - As facetas do quadro passam a ler o conjunto elegível uma vez e devolver contadores, clusters e fontes em uma consulta, preservando a primeira publicação elegível de cada dimensão e o isolamento por candidato.
 
+## [1.21.0] - 2026-09-22
+
 ### Adicionado
 
 - Ferramentas: gestão canônica de tarefas pelo GitHub Project, com CLI remota,
