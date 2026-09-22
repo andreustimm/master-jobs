@@ -88,7 +88,7 @@ function declaredForeignKeys(): DeclaredFk[] {
  */
 
 /** As FKs do schema `production`, lidas de `pg_constraint`. */
-async function appliedForeignKeys(): Promise<Array<DeclaredFk & { validated: boolean }>> {
+async function appliedForeignKeys() {
   return db.execute<DeclaredFk & { validated: boolean }>(sql`
     select child.relname as "table", parent.relname as "to",
       array(select a.attname from unnest(c.conkey) with ordinality k(attnum, position)
@@ -102,7 +102,7 @@ async function appliedForeignKeys(): Promise<Array<DeclaredFk & { validated: boo
     join pg_class child on child.oid = c.conrelid
     join pg_class parent on parent.oid = c.confrelid
     where c.contype = 'f' and c.connamespace = 'production'::regnamespace
-  `) as unknown as Promise<Array<DeclaredFk & { validated: boolean }>>;
+  `);
 }
 
 describe("chaves estrangeiras declaradas", () => {

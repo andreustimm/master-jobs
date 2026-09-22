@@ -69,10 +69,10 @@ export function foreignKeyParityDiff(
 ): { missingInDatabase: string[]; notDeclared: string[] } {
   const key = (fk: ForeignKeyShape) =>
     `${fk.table}(${fk.from.join(",")}) -> ${fk.to}(${fk.toColumns.join(",")}) ON DELETE ${fk.onDelete.toUpperCase()}`;
-  const applied_ = new Set(applied.map(key));
-  const declared_ = new Set(declared.map(key));
+  const inDatabase = new Set(applied.map(key));
+  const inSchema = new Set(declared.map(key));
   return {
-    missingInDatabase: [...declared_].filter((k) => !applied_.has(k)).sort(),
-    notDeclared: [...applied_].filter((k) => !declared_.has(k)).sort(),
+    missingInDatabase: [...inSchema].filter((k) => !inDatabase.has(k)).sort(),
+    notDeclared: [...inDatabase].filter((k) => !inSchema.has(k)).sort(),
   };
 }

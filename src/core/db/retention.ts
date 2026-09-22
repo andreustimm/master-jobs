@@ -19,7 +19,7 @@ import {
   type SQL,
   type SQLWrapper,
 } from "drizzle-orm";
-import { getDb } from "./client.ts";
+import { getDb, type DB } from "./client.ts";
 import { application, job, jobPage, source } from "./schema.ts";
 import { MANUAL_SOURCE_KINDS } from "../sources/types.ts";
 
@@ -77,7 +77,7 @@ function payloadNeedsCompaction(descriptionHtml: SQLWrapper, raw: SQLWrapper): S
   )`;
 }
 
-type Transaction = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
+type Transaction = Parameters<Parameters<DB["transaction"]>[0]>[0];
 
 /**
  * The only authorized way to delete a job: closed before `closedBefore` and
