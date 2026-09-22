@@ -1122,6 +1122,32 @@ de vaga aberta. Silêncio seria indistinguível de defeito.
 
 ---
 
+## Área `auth` — contas
+
+### `jho auth add-user <email> [--role <papéis>]`
+
+Cria ou atualiza uma conta. `--role` aceita `admin`, `candidate` e
+`recruiter`, separados por vírgula; o padrão é `candidate`.
+
+Com o papel `candidate`, a conta recebe um candidato:
+
+- o do `profile.yaml` (`default`) só quando ela é a conta mais antiga da
+  instalação e esse candidato ainda não tem conta — o primeiro acesso do dono;
+- em qualquer outro caso, um candidato **novo e próprio** (`user-<email>`,
+  com sufixo `-2`, `-3`… se o slug já existir). Candidato de conta apagada
+  nunca é reaproveitado.
+
+Não há `--candidate <id>`: apontar uma conta para o candidato de outra pessoa
+é leitura de dado alheio fora da impersonação auditada. Rodar de novo atualiza
+os papéis e nunca troca o candidato já vinculado — só preenche quando falta.
+Um candidato tem no máximo uma conta (índice `auth_user_candidate_idx`).
+
+### `jho auth seed [email]`
+
+Cria a conta do dono (admin + candidato `default`) com senha gerada, mostrada
+uma vez. Recusa um e-mail diferente quando o candidato `default` já pertence a
+outra conta.
+
 ## Variáveis de ambiente que a CLI respeita
 
 Carregadas de `.env` pelo `--env-file-if-exists=.env` do script `jho`.
