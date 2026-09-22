@@ -1,13 +1,13 @@
 # Auditoria independente do coordenador de tarefas
 
-Auditor: `/root/coordinator_audit`. Data: 2026-09-22. Worktree: `github-project-workflow`.
+Auditor: agente independente `coordinator_audit`. Data: 2026-09-22. Worktree: `github-project-workflow`.
 
-**Resultado final do escopo local: PASS. Os oito achados foram corrigidos e verificados.** Esta auditoria cobre comportamento do coordenador, protocolo, política, evidências e workflows. Não certifica o épico inteiro nem substitui `deep-review` após congelar o diff. O rollout remoto ainda depender de main, credenciais e piloto é uma condição de integração prevista, não um defeito presumido.
+**Resultado final do escopo local: PASS. Os oito achados foram corrigidos e verificados.** Esta auditoria cobre comportamento do coordenador, protocolo, política, evidências e workflows. Não certifica o épico inteiro nem substitui `deep-review` após congelar o diff. Que o rollout remoto ainda dependa de main, credenciais e piloto é uma condição de integração prevista, não um defeito presumido.
 
 ## Contrato e independência
 
 - Lidos `agent-output-audit/SKILL.md` e os protocolos de avaliador independente, cobertura E2E, higiene de testes e checklist.
-- Fontes de requisitos: `parent.json`, `task-3.json`, `task-5.json` e `task-8.json` em `/private/tmp/master-jobs-project-01a0c96c/`, correspondentes ao épico #181 e às fatias de comandos, eventos e aceitação.
+- Fontes de requisitos: `parent.json`, `task-3.json`, `task-5.json` e `task-8.json` no diretório temporário local da execução, fora do repositório, correspondentes ao épico #181 e às fatias de comandos, eventos e aceitação.
 - A autoridade operacional é o GitHub Project, conforme instrução explícita. Nenhum frontmatter, status de tarefa ou arquivo do produto foi alterado pelo auditor.
 - A discovery identificou `pnpm check` e `pnpm test:e2e`. Para esta fatia de ferramenta, foi executado o gate dedicado `pnpm test:tasks`, além de provas negativas independentes. Não houve prova de produção nem alteração remota.
 - Os testes com gateway simulado são testes de comportamento/unidade e de contrato, não E2E real do GitHub. O piloto com duas worktrees, runner, token e Project real permanece separado.
@@ -82,7 +82,7 @@ Verificação final: o workflow passou a escutar `pull_request_target` para PRs 
 | `coordinator-bootstrap-proof.ts`, reteste final | exit 0 | Ativação recupera sem duplicar o controle |
 | `coordinator-smoke-proof.ts`, reteste final | exit 0 | Smoke antigo recusado quando há run posterior vermelho |
 
-Os scripts de reprodução estão em `/private/tmp/master-jobs-project-01a0c96c/`; importam os módulos reais. Usam transporte controlado para injetar falhas nas fronteiras, sem escrever no GitHub. Os asserts dos scripts finais exigem o comportamento corrigido. As observações anteriores dos defeitos permanecem documentadas acima.
+Os scripts de reprodução ficaram no diretório temporário local da execução, fora do repositório; importam os módulos reais. Usam transporte controlado para injetar falhas nas fronteiras, sem escrever no GitHub. Os asserts dos scripts finais exigem o comportamento corrigido. As observações anteriores dos defeitos permanecem documentadas acima.
 
 ## Matriz de requisitos e cobertura
 
