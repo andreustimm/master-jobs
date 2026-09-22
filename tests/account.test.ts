@@ -76,7 +76,6 @@ async function outcome(run: () => Promise<unknown>): Promise<string> {
   }
 }
 
-
 const SENHA = "senha-atual-bem-longa";
 const NOVA = "senha-nova-bem-longa-2";
 

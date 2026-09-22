@@ -56,7 +56,7 @@ import {
   type ImpersonationDeps,
 } from "./app/impersonation.ts";
 import type { Role } from "./domain/types.ts";
-import { changeOwnPassword } from "./infra/password-login.ts";
+import { changeOwnPassword, type ChangePasswordResult } from "./infra/password-login.ts";
 import { AuthorizationError } from "./domain/policy.ts";
 import { SESSION_DAYS } from "./app/session.ts";
 import { clock } from "../../core/clock.ts";
@@ -180,7 +180,7 @@ export function adminsBesides(userId: number) {
 
 export type OwnPasswordResult =
   | { ok: true; token: string; expiresAt: string }
-  | { ok: false; reason: "invalid" | "weak" | "rate_limited" | "unavailable" | "no_password" };
+  | Extract<ChangePasswordResult, { ok: false }>;
 
 /**
  * Sessão emprestada nunca chega à escrita da conta.
