@@ -9,6 +9,12 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Alterado
+
+- Deployments automáticos da Vercel restritos a `main`, `dev` e `staging`.
+  Branches de tarefa continuam no CI do GitHub, sem criar previews e consumir
+  a cota de builds dos ambientes. A lista de permissão fica em `vercel.json`.
+
 ## [1.20.4] - 2026-09-21
 
 ### Alterado
