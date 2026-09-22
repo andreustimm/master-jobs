@@ -312,6 +312,17 @@ sessão o cabeçalho oferece entrar; o link de uso único resgata em
 cabeçalho; **o mesmo link recusa o segundo uso**; e o logout revoga no servidor,
 deixando o cookie antigo inválido.
 
+**Conta nova cria o próprio candidato** — ✅ **22/09 (#234).** Depois do
+incidente em que uma conta de seed apontava para o candidato do dono, contas de
+papel candidato sem candidato recebiam 403 em `/candidate` e não tinham saída.
+Agora elas veem "Criar meu perfil". A ação `candidate:create` só passa para
+papel candidato, sem candidato, com sessão própria — sessão emprestada é negada,
+porque criar o perfil é decisão da pessoa, não do admin que assume a
+identidade. O formulário não carrega id nenhum: a conta é a da sessão e o
+candidato é sempre uma linha nova, privada, com a identidade digitada — nunca a
+do `profile.yaml`. As demais páginas de candidato continuam negando 403 para
+quem não tem candidato.
+
 **Sem criptografia em repouso.** O banco é um arquivo SQLite legível por
 qualquer processo do usuário. Quem tem acesso local à conta já tem acesso a
 tudo; criptografar aqui protegeria contra roubo do disco, o que o FileVault já

@@ -14,7 +14,8 @@ import {
 import { MarkdownEditor } from "./editor";
 import { VersionHistory } from "./versions";
 import { importPdfAction, saveCvAction, setVisibilityAction } from "./actions";
-import { requireOwnCandidatePage } from "../auth";
+import { onboardingSession, requireOwnCandidatePage } from "../auth";
+import { CreateProfile } from "./create-profile";
 import { getTranslator } from "../i18n";
 import { formatNumber, type TranslationKey, type Translator } from "../../src/core/i18n/index.ts";
 import type { Visibility } from "../../src/contexts/auth/index.ts";
@@ -168,6 +169,12 @@ function versionLabels(t: Translator["t"]): Record<string, string> {
 
 export default async function CandidateArea() {
   const { t, locale } = await getTranslator();
+  // Conta de papel candidato ainda sem candidato cria o próprio aqui. Quem não
+  // pode criar (admin, recrutador, sessão emprestada) cai na guarda abaixo e
+  // recebe o 403 de sempre — nenhum dado é lido antes de uma das duas decidir.
+  const creator = await onboardingSession();
+  if (creator) return <CreateProfile t={t} suggestedName={creator.fullName ?? ""} />;
+
   // Guard antes de ler qualquer dado. O escopo vem da sessão.
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
@@ -223,9 +230,13 @@ export default async function CandidateArea() {
             <p data-user-content className="mt-1">
               {[person.location, person.email].filter(Boolean).join(" · ")}
             </p>
-            <p className="mt-2 font-mono type-meta">
-              {t("copy.identityFrom", { file: "profile/profile.yaml" })}
-            </p>
+            {/* Só o candidato do dono nasce do `profile.yaml`; quem criou o
+                próprio perfil pela tela não tem nada a ver com esse arquivo. */}
+            {person.isDefault && (
+              <p className="mt-2 font-mono type-meta">
+                {t("copy.identityFrom", { file: "profile/profile.yaml" })}
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

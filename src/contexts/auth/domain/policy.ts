@@ -122,6 +122,21 @@ export function can(
       if (!ownsCandidate) return deny("recurso de outro candidato");
       return ALLOW;
 
+    case "candidate:create":
+      // Conta de papel candidato sem candidato cria o PRÓPRIO — nunca se liga
+      // a um que já existe. Quem já tem um não cria o segundo: duas linhas
+      // para a mesma pessoa dividiriam currículo e funil sem ninguém saber
+      // qual vale.
+      //
+      // Sessão emprestada não cria. Decidir existir como candidato — e com
+      // qual nome — é da pessoa; o admin que assume a identidade vê e ajuda,
+      // mas não abre um perfil em nome de alguém.
+      if (!isCandidate) return deny("requer papel candidate");
+      if (borrowed) return deny("sessão emprestada não cria perfil");
+      if (resource.kind !== "global") return deny("criação não tem escopo de candidato");
+      if (session.candidateId !== null) return deny("conta já tem candidato");
+      return ALLOW;
+
     case "candidate:read":
       // Um recurso global nunca é atalho para dado privado: todo chamador
       // precisa provar o escopo de candidato que derivou da sessão.

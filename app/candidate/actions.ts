@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { guardOwnCandidate } from "../auth";
-import { setPublicCv, setVisibility } from "../../src/core/candidate.ts";
+import { guard, guardOwnCandidate } from "../auth";
+import { createOwnCandidate } from "../../src/contexts/auth/index.ts";
+import { CV_MIN, parseOwnProfile, type OwnProfileError } from "../../src/core/candidate-identity.ts";
+import { requestCvRescore, setPublicCv, setVisibility } from "../../src/core/candidate.ts";
 import {
   deleteDocument,
   documentById,
@@ -11,6 +13,11 @@ import {
   saveDocument,
   type VersionError,
 } from "../../src/core/candidate.ts";
+
+/** Rótulo de versão sem idioma: a data. Fica gravado, então não pode ser frase. */
+function defaultCvLabel(): string {
+  return `CV ${new Date().toISOString().slice(0, 10)}`;
+}
 
 /**
  * Save the CV the candidate pasted.
@@ -23,9 +30,9 @@ export async function saveCvAction(formData: FormData) {
   const { candidateId } = await guardOwnCandidate("candidate:write");
 
   const content = String(formData.get("content") ?? "").trim();
-  const label = String(formData.get("label") ?? "").trim() || `CV ${new Date().toISOString().slice(0, 10)}`;
+  const label = String(formData.get("label") ?? "").trim() || defaultCvLabel();
 
-  if (content.length < 100) {
+  if (content.length < CV_MIN) {
     throw new Error("O texto é curto demais para ser um currículo (mínimo 100 caracteres).");
   }
 
@@ -161,4 +168,44 @@ export async function setVisibilityAction(formData: FormData) {
   await setPublicCv(candidateId, result.visibility === "public" && formData.get("publicCv") === "on");
 
   revalidatePath("/candidate");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Criar o próprio perfil                                                      */
+/* -------------------------------------------------------------------------- */
+
+export type CreateProfileResult =
+  | { ok: true }
+  | { ok: false; code: OwnProfileError | "unavailable" };
+
+/**
+ * "Criar meu perfil": a conta sem candidato cria o PRÓPRIO.
+ *
+ * O guarda vem antes de tudo e decide pela sessão — `candidate:create` só
+ * passa para conta de papel candidato, sem candidato, e com sessão própria.
+ * Não há id nenhum no formulário: a conta é a da sessão, e o candidato é uma
+ * linha nova. Identidade vem do que a pessoa escreveu; `profile.yaml` é do
+ * dono e não entra aqui.
+ *
+ * Duplo envio devolve sucesso sem criar o segundo: `createOwnCandidate` trava
+ * a linha da conta, e a segunda requisição encontra o vínculo já feito. O
+ * currículo, quando colado, entra no MESMO commit do candidato.
+ */
+export async function createProfileAction(formData: FormData): Promise<CreateProfileResult> {
+  const session = await guard("candidate:create");
+
+  const parsed = parseOwnProfile({
+    name: String(formData.get("name") ?? ""),
+    headline: String(formData.get("headline") ?? ""),
+    location: String(formData.get("location") ?? ""),
+    cv: String(formData.get("cv") ?? ""),
+  });
+  if (!parsed.ok) return parsed;
+
+  const result = await createOwnCandidate(session, { ...parsed.value, cvLabel: defaultCvLabel() });
+  if (result.status === "no-account") return { ok: false, code: "unavailable" };
+  if (result.status === "created" && parsed.value.cv !== null) await requestCvRescore(result.candidateId);
+
+  revalidatePath("/", "layout");
+  return { ok: true };
 }

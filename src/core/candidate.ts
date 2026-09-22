@@ -13,11 +13,13 @@
  * > CLAUDE.md and the `growth:` list in profile.yaml.
  */
 import { and, desc, eq, sql } from "drizzle-orm";
-import { getDb } from "./db/client.ts";
+import { getDb, type DbTransaction } from "./db/client.ts";
+import { randomBytes } from "node:crypto";
 import { application, candidate, candidateDocument, job, jobScore } from "./db/schema.ts";
 import { loadProfile } from "./profile/load.ts";
 import { isVisibility, type Visibility } from "../contexts/auth/index.ts";
 import { primaryScoreFilter } from "../contexts/matching/index.ts";
+import { slugAttempt, slugBaseFromName } from "./candidate-identity.ts";
 
 /* -------------------------------------------------------------------------- */
 /* Profile                                                                     */
@@ -79,6 +81,101 @@ export async function ensureCandidate(input: {
   const row = inserted[0];
   if (!row) throw new Error("insert returned no row");
   return row.id;
+}
+
+/** Sufixos sequenciais antes de cair no aleatório. */
+const MAX_SLUG_ATTEMPTS = 50;
+/** Tentativas com sufixo aleatório depois dos sequenciais. */
+const RANDOM_SLUG_ATTEMPTS = 5;
+
+/**
+ * Insere um candidato NOVO, com slug livre derivado do nome.
+ *
+ * Nunca atualiza nem devolve linha existente — ao contrário de
+ * `ensureCandidate`, que reaproveita pelo slug e por isso serve só ao dono.
+ * Reaproveitar aqui seria entregar a uma conta nova o candidato de outra
+ * pessoa, que é a regra que o AGENTS.md proíbe.
+ *
+ * `on conflict do nothing` no índice único do slug, e não "consultar e depois
+ * inserir": duas contas de mesmo nome criando o perfil ao mesmo tempo passariam
+ * juntas pela consulta. O índice decide, e quem perde tenta o próximo sufixo.
+ *
+ * Recebe a transação de quem chama porque o vínculo com a conta precisa entrar
+ * no mesmo commit — candidato criado sem dono é lixo que ninguém alcança.
+ */
+export async function insertOwnCandidate(
+  tx: DbTransaction,
+  input: OwnCandidateInput,
+): Promise<{ id: number; slug: string }> {
+  const base = slugBaseFromName(input.name);
+  // Sequencial primeiro, porque `maria-souza-2` é legível. Nomes que caem no
+  // mesmo `perfil` (escrita não latina, só símbolos) esgotariam os cinquenta
+  // e travariam o cadastro de todo o resto; o sufixo aleatório os absorve.
+  const slugs = [
+    ...Array.from({ length: MAX_SLUG_ATTEMPTS }, (_, i) => slugAttempt(base, i + 1)),
+    ...Array.from({ length: RANDOM_SLUG_ATTEMPTS }, () => `${base}-${randomBytes(3).toString("hex")}`),
+  ];
+  for (const slug of slugs) {
+    const [row] = await tx
+      .insert(candidate)
+      .values({
+        slug,
+        name: input.name,
+        headline: input.headline,
+        location: input.location,
+        // `isDefault` marca o do dono, e o matching (`isOwner`) pontua quem o
+        // tem com o `profile.yaml` dele — piso salarial incluído.
+        isDefault: false,
+        // Explícito, embora seja o padrão da coluna: esta é a linha em que
+        // "esqueci de configurar" viraria vazamento se o padrão mudasse.
+        visibility: "private",
+        publicCv: false,
+      })
+      .onConflictDoNothing({ target: candidate.slug })
+      .returning({ id: candidate.id, slug: candidate.slug });
+    if (!row) continue;
+    // O currículo entra no mesmo commit do candidato: se a gravação dele
+    // falhasse depois, o perfil já existiria, a nova tentativa cairia em
+    // "já tem candidato" e o texto colado se perderia sem aviso.
+    if (input.cv !== null) {
+      await tx.insert(candidateDocument).values({
+        candidateId: row.id,
+        kind: "cv",
+        label: input.cvLabel,
+        content: input.cv,
+        format: "text",
+        isCurrent: true,
+      });
+    }
+    return row;
+  }
+  throw new Error("nenhum slug livre para este nome");
+}
+
+export type OwnCandidateInput = {
+  name: string;
+  headline: string | null;
+  location: string | null;
+  /** Texto do currículo, ou `null` para colar depois. */
+  cv: string | null;
+  cvLabel: string;
+};
+
+/**
+ * Pede a repontuação depois de um currículo novo.
+ *
+ * Fora da transação e depois do commit: enfileirar lá dentro deixaria uma
+ * tarefa apontando para um documento que um rollback desfez. Falha aqui não
+ * derruba quem chamou — o documento é o que a pessoa pediu para guardar; a
+ * repontuação é consequência, e a varredura diária a recupera.
+ */
+export async function requestCvRescore(candidateId: number): Promise<void> {
+  try {
+    const { enqueueScore } = await import("./scoring/queue.ts");
+    await enqueueScore(candidateId, { origin: "cv" });
+  } catch {
+    // Silêncio deliberado: ver o parágrafo acima.
+  }
 }
 
 /** Seed the candidate row from profile.yaml, so the two never drift on identity. */
@@ -233,14 +330,7 @@ export async function saveDocument(input: {
   //
   // Falha aqui não derruba o salvamento. O documento é o que a pessoa pediu para
   // guardar; a repontuação é consequência, e a varredura diária a recupera.
-  if (kind === "cv" && !("unchanged" in resultado)) {
-    try {
-      const { enqueueScore } = await import("./scoring/queue.ts");
-      await enqueueScore(input.candidateId, { origin: "cv" });
-    } catch {
-      // Silêncio deliberado: ver o parágrafo acima.
-    }
-  }
+  if (kind === "cv" && !("unchanged" in resultado)) await requestCvRescore(input.candidateId);
 
   return resultado;
 }

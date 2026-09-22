@@ -24,6 +24,9 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
   password without asking an admin. Changing the password requires the
   current one; every other session of the account is signed out and you stay
   signed in. The email is still changed by an admin.
+- Signing in with a new candidate account now lets you create your own profile
+  under "Create my profile": name, headline, location and, if you want, your CV.
+  The profile starts private and belongs only to you.
 
 ### Security
 

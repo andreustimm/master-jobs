@@ -111,7 +111,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const jar = await cookies();
   const theme = resolveTheme(jar.get(THEME_COOKIE)?.value);
   const mode = resolveMode(jar.get(MODE_COOKIE)?.value);
-  const { renderSession } = await import("./auth");
+  const { mayCreateProfile, renderSession } = await import("./auth");
   const session = await renderSession();
   const signedIn = Boolean(session);
   // `=== true` porque `session?.roles.includes(...)` é `boolean | undefined`, e
@@ -120,6 +120,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // "falso" precisam ser a mesma coisa.
   const hasCandidateScope =
     session?.candidateId !== null && session?.roles.includes("candidate") === true;
+  // Conta de papel candidato ainda sem candidato: o link leva a "Criar meu
+  // perfil". Sem ele, a conta nova só via "Vagas" e não tinha como descobrir
+  // que podia criar o próprio perfil. Quem decide é a política, não o layout.
+  const canCreateProfile = mayCreateProfile(session);
   // Admin de verdade: papel `admin` E sessão própria. Numa sessão emprestada a
   // política nega administração, e um link que leva a uma página que vai negar
   // é pior que link nenhum.
@@ -264,6 +268,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               >
                 <NavLinks
                   hasCandidateScope={hasCandidateScope}
+                  canCreateProfile={canCreateProfile}
                   isAdmin={isAdmin}
                   isRecruiter={isRecruiter}
                   linkClass={navClass}
@@ -278,6 +283,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               {signedIn && (
                 <MobileNav
                   hasCandidateScope={hasCandidateScope}
+                  canCreateProfile={canCreateProfile}
                   isAdmin={isAdmin}
                   isRecruiter={isRecruiter}
                   rotulo={t("nav.menu")}

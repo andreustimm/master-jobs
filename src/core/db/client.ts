@@ -5,6 +5,8 @@ import * as schema from "./schema.ts";
 import { normalizeConnectionUrl, resolveDatabaseUrl } from "./config.ts";
 
 export type DB = ReturnType<typeof drizzle<typeof schema>>;
+/** A transação que `db.transaction(fn)` entrega a `fn`. */
+export type DbTransaction = Parameters<Parameters<DB["transaction"]>[0]>[0];
 let cached: { client: postgres.Sql; db: DB } | undefined;
 
 /**

@@ -274,3 +274,29 @@ describe("candidateScope", () => {
     expect(candidateScope(session({ roles: ["recruiter"], candidateId: 7 }))).toBeNull();
   });
 });
+
+describe("candidate:create — conta nova cria o próprio candidato", () => {
+  it("permite só a conta de papel candidato ainda sem candidato", () => {
+    expect(can(candidate(null), "candidate:create", { kind: "global" }, NOW).allowed).toBe(true);
+  });
+
+  it("quem já tem candidato não cria o segundo", () => {
+    expect(can(candidate(1), "candidate:create", { kind: "global" }, NOW).allowed).toBe(false);
+  });
+
+  it("admin e recrutador sem papel candidato não criam", () => {
+    expect(can(admin(), "candidate:create", { kind: "global" }, NOW).allowed).toBe(false);
+    expect(can(recruiter(), "candidate:create", { kind: "global" }, NOW).allowed).toBe(false);
+  });
+
+  it("sessão emprestada não cria perfil em nome de ninguém", () => {
+    const borrowed = session({ roles: ["candidate"], candidateId: null, impersonatedBy: 9 });
+    expect(can(borrowed, "candidate:create", { kind: "global" }, NOW).allowed).toBe(false);
+  });
+
+  it("escopo de candidato não é caminho para criar — nem apontando para outro", () => {
+    // Criação nunca recebe id: um recurso de candidato aqui seria o pedido de
+    // se ligar a alguém que já existe.
+    expect(can(candidate(null), "candidate:create", other, NOW).allowed).toBe(false);
+  });
+});

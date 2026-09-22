@@ -78,6 +78,8 @@ export const E2E_ROLES = {
   disabled: { email: "e2e-desabilitada@local.test", roles: ["candidate"], disabled: true },
   // Vinculado ao dono: lê o funil dele e nunca as trilhas nem os termos.
   linkedRecruiter: { email: "e2e-recrutador-vinculado@local.test", roles: ["recruiter"] },
+  // Papel candidato SEM candidato: é quem vê "Criar meu perfil" (#234).
+  onboarding: { email: "e2e-sem-perfil@local.test", roles: ["candidate"], noCandidate: true },
   // Troca a própria senha na jornada de Minha conta; dedicada para não mudar a
   // senha de quem as outras jornadas usam.
   account: { email: "e2e-conta@local.test", roles: ["recruiter"] },
@@ -460,15 +462,20 @@ try {
   // Contas por papel, cada uma com o próprio candidato quando o papel pede um.
   // O slug deriva do e-mail: apontar duas contas para o mesmo candidato seria
   // dar a uma o dado da outra, que é justamente o que a política impede.
-  for (const { email, roles, disabled } of Object.values(E2E_ROLES)) {
+  for (const { email, roles, disabled, noCandidate } of Object.values(E2E_ROLES)) {
     const [existing] = await getDb()
       .select({ id: authUser.id })
       .from(authUser)
       .where(eq(authUser.email, email))
       .limit(1);
-    if (existing) continue;
+    if (existing) {
+      // Numa base reaproveitada, a execução anterior já criou o perfil desta
+      // conta. Desfazer o vínculo a devolve ao estado "sem candidato".
+      if (noCandidate) await getDb().update(authUser).set({ candidateId: null }).where(eq(authUser.id, existing.id));
+      continue;
+    }
 
-    const scoped = roles.includes("candidate")
+    const scoped = roles.includes("candidate") && !noCandidate
       ? await ensureCandidate({ slug: `e2e-${email.split("@")[0]}`, name: email })
       : null;
     await getDb().insert(authUser).values({ email, roles, candidateId: scoped });

@@ -63,6 +63,7 @@ export const ACTIONS = [
   "application:write",
   "candidate:read",
   "candidate:write",
+  "candidate:create",
   "skill:audit",
   "provider:manage",
   "admin:access",

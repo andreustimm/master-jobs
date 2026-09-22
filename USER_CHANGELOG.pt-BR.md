@@ -24,6 +24,9 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   sem pedir ao admin. Para trocar a senha é preciso informar a atual; ao
   trocar, todas as outras sessões da conta são encerradas e você continua
   conectado. O e-mail continua sendo trocado por um admin.
+- Quem entra com uma conta de candidato nova agora pode criar o próprio perfil
+  em "Criar meu perfil": nome, headline, localização e, se quiser, o currículo.
+  O perfil nasce privado e é só seu.
 
 ### Segurança
 
