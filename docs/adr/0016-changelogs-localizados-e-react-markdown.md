@@ -4,6 +4,10 @@
 
 Accepted
 
+[ADR 0022](0022-novidades-compiladas-no-build.md) moves the safe renderer to
+build time and replaces Markdown output tracing with a private generated module.
+The separate source documents and Markdown safety policy below remain in force.
+
 ## Date
 
 2026-08-22

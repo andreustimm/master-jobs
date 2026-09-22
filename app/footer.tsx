@@ -1,47 +1,24 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import {
-  changelogFile,
-  formatChangelogDiagnostic,
-  parseUserChangelog,
-  type UserRelease,
-} from "../src/core/changelog.ts";
+import type { BuiltUserRelease } from "../src/core/changelog.ts";
 import type { LocaleId, Translator } from "../src/core/i18n/index.ts";
+import { changelogs } from "../src/generated/changelog.ts";
 import { ChangelogModal } from "./changelog-modal";
 
-async function loadChangelog(locale: LocaleId): Promise<UserRelease[]> {
-  const file = changelogFile(locale);
-  if (!file) return [];
-
-  try {
-    const source = await readFile(join(process.cwd(), file), "utf8");
-    const parsed = parseUserChangelog(source);
-    for (const issue of parsed.issues) {
-      console.warn(formatChangelogDiagnostic(issue, locale));
-    }
-    return parsed.releases;
-  } catch {
-    console.warn(`changelog:read_failed locale=${locale}`);
-    return [];
-  }
-}
-
-export async function Footer({
+export function Footer({
   versao,
   locale,
   t,
   signedIn,
-  loadReleases = loadChangelog,
+  loadReleases = (locale) => changelogs[locale],
 }: {
   versao: string;
   locale: LocaleId;
   t: Translator["t"];
   signedIn: boolean;
-  loadReleases?: (locale: LocaleId) => Promise<UserRelease[]>;
+  loadReleases?: (locale: LocaleId) => BuiltUserRelease[];
 }) {
   // O changelog é conteúdo interno do produto. Além de não renderizar o
-  // gatilho no login, evitamos até ler o arquivo quando não há sessão válida.
-  const releases = signedIn ? await loadReleases(locale) : [];
+  // gatilho no login, enviamos os dados pré-compilados somente com sessão válida.
+  const releases = signedIn ? loadReleases(locale) : [];
 
   return (
     <footer className="mt-auto border-t border-[var(--hairline)]">

@@ -18,6 +18,43 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.21.1] - 2026-09-22T18:19:03.735Z
+
+- The job list and its total are calculated together, reducing search work while preserving ordering and totals when changing pages.
+
+- Job filter counts and options require less work from the system while keeping the same results and grouping rules.
+
+## [1.21.0] - 2026-09-22T18:02:40.049Z
+
+### New
+
+- Preparation for centralized improvement tracking, preserving priorities
+  and distinguishing ongoing work from verified deliveries. Activation will
+  be confirmed after the complete workflow is validated.
+
+## [1.20.9] - 2026-09-22T17:41:44.517Z
+
+- The project now defines internal availability and latency targets, incident tracking, and a report that distinguishes measured results from insufficient data.
+
+## [1.20.8] - 2026-09-22T17:17:31.926Z
+
+### Fixed
+
+- Preparing a new release now keeps the validated revision even when other
+  changes arrive during publication or a retry.
+
+## [1.20.7] - 2026-09-22T16:01:55.822Z
+
+- Email alerts are configured to notify the system owner of new production errors and recurring failures that had been resolved.
+
+## [1.20.6] - 2026-09-22T14:44:58.815Z
+
+### Improved
+
+- Filtering jobs by pay range and sorting by compensation require less work
+  from the system. Amounts, job ordering and notices for undisclosed salaries
+  continue to follow the same rules.
+
 ## [1.20.5] - 2026-09-22T11:47:50.607Z
 
 ### Fixed

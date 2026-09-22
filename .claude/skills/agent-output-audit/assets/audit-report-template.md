@@ -1,6 +1,9 @@
 AUDIT REPORT
 ------------
-Claim: <what is being audited (e.g., "Compozy slug auth-refactor task_07 status: completed")>
+Claim: <canonical issue and implementation/delivery claim being audited>
+Issue: <canonical GitHub issue URL>
+Project revision / execution: <remote revision and execution ID>
+Required delivery / PR: <delivery contract and PR URL or "n/a">
 Compozy slug: <.compozy/tasks/<slug>/ or "n/a">
 Command: `<full verification command>`
 Executed: <timestamp or relative time>
@@ -42,7 +45,11 @@ Summary:
   - Fixed during audit: <count>
 Results:
   - Task: <task_NN.md path>
-    Declared status (frontmatter): <pending | in_progress | completed>
+    Issue: <canonical GitHub issue URL>
+    Project revision / execution: <remote revision and execution ID>
+    Required delivery / PR: <delivery contract and PR URL or "n/a">
+    Declared status (remote Project): <literal remote status>
+    Local projection provenance: <source/revision or historical; never authority>
     Audit verdict: <PASS | PARTIAL | FAIL | REOPEN | BLOCKED>
     Techspec deliverable: <section in _techspec.md or "none">
     Implementation evidence: <files, specs, commands>
@@ -51,11 +58,11 @@ Results:
     Gaps: <none or missing requirements/checklist items>
     AI audit findings: <none | list of red flags from references/ai-implementation-audit.md with verdict>
     Transcript anomalies: <none | genuine-failure | grader-bug | ambiguous-task | bypass-exploit>
-    Action: <none | fixed | frontmatter reverted to <status> | BUG-NNN filed>
-Reopened tasks (frontmatter reverted from `completed`):
-  - <task_NN.md path>: <reason> | New frontmatter status: <pending | in_progress> | Bug: <BUG-NNN or none>
+    Action: <none | fixed | remote-transition-requested | remote-transition-confirmed | BUG-NNN filed>
+Remote reconciliation:
+  - <issue URL>: <reason> | Owner execution: <id> | Operation/receipt: <id and confirmed or pending> | Bug: <BUG-NNN or none>
 Memory file written: <.compozy/tasks/<slug>/memory/qa-execution.md or "n/a">
-state.yaml: read-only (cy-codex-loop owns mutation via update-state.py)
+Local task tracking: read-only history or identified remote projection; never bulk-published
 
 SUITE HEALTH SNAPSHOT
 ---------------------

@@ -13,7 +13,7 @@ This reference catalogs the **observable signals** `agent-output-audit` uses whe
 
 ## When to apply
 
-- Any task with `declared_status: completed` whose implementation includes new or modified test files.
+- Any task claimed complete in the remote Project whose implementation includes new or modified test files.
 - Any commit that touches both production code and its sibling test in the same change set.
 - Any `cy-codex-loop` Compozy slug under `.compozy/tasks/<slug>/` where the implementing agent self-reported success.
 
@@ -32,7 +32,7 @@ rtk git diff <baseline_sha>..HEAD -- '*test*' '*spec*' \
 
 ### RF-2 Weakened assertions
 
-Detect replacements from strict equality (`toBe`, `toEqual`, `toStrictEqual`) to permissive matchers in the same commit that flipped `status: completed`.
+Detect replacements from strict equality (`toBe`, `toEqual`, `toStrictEqual`) to permissive matchers in the implementation diff supporting the completion claim; do not depend on a local status flip to select the audit baseline.
 
 Run both scans over the same diff, then correlate removed and added assertions
 inside each hunk:
@@ -108,7 +108,7 @@ A `weak` row blocks `PASS` on a P0/P1 task. A `missing` row blocks `PASS` on any
 
 | Red flag fired | Task verdict | Required action |
 |---|---|---|
-| RF-1 Skip/disable | `FAIL` | REOPEN frontmatter + BUG (`Type: Functional`) |
+| RF-1 Skip/disable | `FAIL` | REOPEN audit verdict + remote reconciliation request + BUG (`Type: Functional`) |
 | RF-2 Weakened on P0/P1 criterion | `FAIL` | REOPEN + BUG, name the original assertion in Root cause |
 | RF-2 Weakened on edge case only | `PARTIAL` | BUG, do not REOPEN unless P0 |
 | RF-3 Mock hiding integration | `FAIL` | REOPEN + BUG (tag `mock-hides-integration`) |
@@ -118,7 +118,7 @@ A `weak` row blocks `PASS` on a P0/P1 task. A `missing` row blocks `PASS` on any
 | RF-6 Symbiosis + `weak`/`missing` row | `FAIL` | REOPEN + BUG |
 | RF-6 Symbiosis + all `covers` rows | `PASS` | Note in audit log; no action |
 
-When multiple flags fire on the same task, take the strictest verdict.
+When multiple flags fire on the same task, take the strictest verdict. REOPEN is an audit finding, not a local status mutation: the authorized owning execution handles remote reconciliation with evidence and receipt under the project workflow.
 
 ## Recording findings
 
@@ -126,7 +126,7 @@ Record findings in three places:
 
 1. `audit-report.md` → `TASK IMPLEMENTATION AUDIT` block → per-task `AI audit findings:` field (list red flag IDs that fired with their verdicts).
 2. `audit-report.md` → `SUITE HEALTH SNAPSHOT` → `AI audit findings:` count.
-3. Compozy mode only: `.compozy/tasks/<slug>/memory/qa-execution.md` → `Errors / Corrections` section, **before** any frontmatter status flip (memory-precedes-status invariant).
+3. Compozy mode only: `.compozy/tasks/<slug>/memory/qa-execution.md` → `Errors / Corrections` section, with the canonical issue URL and remote revision, before requesting reconciliation; never flip task frontmatter to control operational state.
 
 ## Sources
 

@@ -1,5 +1,13 @@
 # Backlog de discovery
 
+> **Snapshot histórico de discovery.** A fila, a prioridade, os estados e os
+> responsáveis atuais vivem nas issues de `andreustimm/master-jobs` no
+> [GitHub Project 3](https://github.com/users/andreustimm/projects/3).
+> Datas, símbolos, ordens e verbos de ação abaixo descrevem o momento da
+> captura; não autorizam retomada, posse ou conclusão. Preserve os pedidos e
+> resultados autorais e consulte o [relatório de migração](../engineering/github-project-migration.md)
+> antes de reutilizá-los. Novos pedidos entram pelo [fluxo de tarefas](../engineering/github-project-tasks.md).
+
 Status conferido em 18/08/2026 contra o código, não contra a intenção. Oito
 itens estavam marcados como pendentes tendo sido entregues — corrigidos nesta
 revisão. Um backlog que mente sobre o próprio estado é pior que backlog nenhum,
@@ -10,12 +18,12 @@ Contexto de produto: `vision.md` · `personas.md` · `user-stories.md`.
 Captura de tudo que foi pedido na sessão de 18/08/2026, priorizado por impacto
 no objetivo real: **converter posicionamento em entrevistas qualificadas**.
 
-A priorização não é por ordem de pedido nem por facilidade. É por quanto cada
-item move a agulha num funil de contratação real.
+A priorização registrada usou o impacto no funil de contratação real. A ordem
+de execução vigente deve ser lida no Project.
 
 ---
 
-## Legenda
+## Legenda histórica
 
 | Marca | Significado |
 |---|---|
@@ -78,14 +86,15 @@ cadastrar `SENTRY_AUTH_TOKEN`, `SENTRY_ORG` e `SENTRY_PROJECT` no ambiente de
 benefício imediato, no mesmo dia de uma queda. Detalhe em
 [`deploy.md`](../engineering/deploy.md#relato-de-erro).
 
-### O-03 · Alerta de erro do Sentry para um canal 📋
+### O-03 · Alerta de erro do Sentry para um canal ✅
 
-Hoje o Sentry **registra** o erro, mas ninguém é avisado. A queda de 28 minutos
-foi descoberta por uma pessoa abrindo o site; com o Sentry ligado e sem alerta,
-ela seria descoberta do mesmo jeito — só que com um registro bonito no painel.
+Configurado em 22/09/2026: a regra existente do projeto Master Jobs agora
+notifica Andreus por e-mail sobre erros novos, regressões e issues de alta
+prioridade em `production`, com nível mínimo `error` e intervalo de 30 minutos.
 
-Capturar e notificar são coisas diferentes, e só a primeira está pronta. Falta
-definir a regra (taxa de erro, primeira ocorrência) e o canal.
+O canário sintético `MASTER-JOBS-7` foi recebido e disparou a regra; não se
+inspecionou a caixa de entrada. Configuração, evidência e comandos para
+suspender/reativar em [Alertas de produção](../engineering/deploy.md#alertas-de-produção).
 
 ---
 

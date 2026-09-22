@@ -26,6 +26,13 @@ dependency, so every bare `agent-browser` command in the references means
 `rtk pnpm qa:browser:install`; authentication state and bulky evidence remain
 inside the ignored `docs/qa/evidence/<run-id>/` tree.
 
+Follow AGENTS rule 24 and [the project workflow](../../../docs/engineering/workflow.md)
+to verify the remote issue and execution before starting or resuming. Record
+issue/PR and required delivery in the report body. Local `Pass`, bug `fixed` and
+round closure are QA evidence, not completion of the Project task; the owning
+execution requests a completion transition only with the required delivery proved.
+Do not change the scenario schema to carry operational claims or queue priority.
+
 QA the product the way a real person meets it: a **persona** walks a journey through the product's public interfaces, feels the friction, hits the edges, and reports what happened. This is **dogfooding**, not a scripted test pass — the session is the work, and the living QA docs tree remembers it.
 
 Three non-negotiables hold every session:
@@ -51,7 +58,7 @@ Each step names the reference that owns its detail — read it in full when you 
 **Step 2 — Build the matrix and create the report now**
 - Read `references/status-and-reporting.md` — it owns the seven-value status enum and the report lifecycle.
 - Assemble the session matrix from the planned charters, expanding each charter into one row per in-scope scenario: charter × scenario × persona × journey × tour × time-box, ordered by risk. A charter missing for an in-scope journey is drafted per `../qa-report/references/session-charters.md` before running — never walk unplanned.
-- Create `<qa-docs-path>/reports/<YYYY-MM-DDTHHMMSSffffffZ>-<nonce8>-<scope>.md` from the report template (project copy at `<qa-docs-path>/templates/report.md`, else `assets/report-template.md`) **before the first session**, with every matrix row `Pending`. Generate the UTC microsecond timestamp and random eight-hex nonce once; their complete stem is the collision-resistant run id and names the matching evidence directory. This on-disk report is the source of truth for explicit resume — update it after every session and every fix, never only at the end.
+- Create `<qa-docs-path>/reports/<YYYY-MM-DDTHHMMSSffffffZ>-<nonce8>-<scope>.md` from the report template (project copy at `<qa-docs-path>/templates/report.md`, else `assets/report-template.md`) **before the first session**, with every matrix row `Pending`. Generate the UTC microsecond timestamp and random eight-hex nonce once; their complete stem is the collision-resistant run id and names the matching evidence directory. Update this report after every session and fix: it records where the QA round stopped. Resuming execution still requires the remote issue/claim verification in the project binding.
 - **Done when:** the report exists on disk carrying the full matrix, every row `Pending`.
 
 **Step 3 — Walk each journey in persona**

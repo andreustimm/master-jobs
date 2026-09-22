@@ -50,9 +50,9 @@ When a `flaky-suspect` is confirmed flaky after the diagnosis protocol (i.e., th
 
 ## Compozy mode interaction
 
-When the failing test is associated with a task whose `declared_status: completed` and the task lives under `.compozy/tasks/<slug>/`:
+When the failing test is associated with a task claimed complete remotely and its evidence lives under `.compozy/tasks/<slug>/`:
 
-- If the failure is `flaky-suspect` on a **P0/P1** flow proving the task: degrade `qa_verdict` to `PARTIAL`, file `BUG-<num>.md` with Status `flaky-suspect`, and do **not** promote the task. Write the finding to `memory/qa-execution.md` → `Errors / Corrections` **before** flipping any frontmatter status (memory-precedes-status invariant).
+- If the failure is `flaky-suspect` on a **P0/P1** flow proving the task: degrade `qa_verdict` to `PARTIAL`, file `BUG-<num>.md` with Status `flaky-suspect`, and do **not** promote the task. Write the finding to `memory/qa-execution.md` → `Errors / Corrections` and link the canonical issue. Request reconciliation through the authorized owning execution per the project workflow; never flip task frontmatter to control remote status.
 - If the failure is `flaky-suspect` on a non-critical flow: record in the SUITE HEALTH SNAPSHOT, file `BUG-<num>.md`, but do not degrade the task verdict.
 - A `flaky-on-completion` P0 task **never** passes the gate until the BUG is `resolved` or the flake is confirmed `invalid`.
 

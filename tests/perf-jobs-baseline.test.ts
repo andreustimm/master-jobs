@@ -20,14 +20,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadJobsView } from "../app/jobs/jobs-data.ts";
 import { ensurePrimaryTrack, trackScope } from "../src/contexts/matching/index.ts";
 import { candidate, fxRate, job, jobScore, source } from "../src/core/db/schema.ts";
-import { createStageTimer, type TimingReport } from "../src/core/observability.ts";
+import { createStageTimer } from "../src/core/observability.ts";
 import type { DB } from "../src/core/db/client.ts";
 import { sql } from "drizzle-orm";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
 const enabled = process.env.JHO_PERF === "1";
 const JOBS = Number(process.env.JHO_PERF_JOBS ?? 10_000);
-const RUNS = 3;
+const RUNS = Number(process.env.JHO_PERF_RUNS ?? 3);
+const WARMUPS = Number(process.env.JHO_PERF_WARMUPS ?? 1);
 
 const CURRENCIES = [
   "BRL", "EUR", "GBP", "CAD", "AUD", "MXN", "ARS", "COP", "CLP", "PEN", "UYU", "CHF", "SEK", "NOK", "DKK",
@@ -65,6 +66,7 @@ async function seedCorpus() {
       (array['month','year','hour'])[1 + x % 3]
     from generate_series(1, ${JOBS}) as x
   `));
+  await db.update(job).set({ firstSeenAt: "2026-09-18T12:00:00.000Z" });
   const trackId = (await trackScope(owner, { kind: "primary" }))!.primaryTrackId;
   const ids = await db.select({ id: job.id }).from(job);
   for (let at = 0; at < ids.length; at += 1000) {
@@ -92,12 +94,23 @@ const SCENARIOS: Scenario[] = [
   { name: "sem agrupar", params: { ungrouped: "1" } },
 ];
 
-async function measure(params: Record<string, string>): Promise<{ report: TimingReport; queries: number }> {
+async function measure(params: Record<string, string>, profile = false) {
   const client = db.$client as unknown as { unsafe: (...args: unknown[]) => Promise<unknown> };
   const original = client.unsafe.bind(client);
   let queries = 0;
+  let sqlBytes = 0;
+  let parameters = 0;
+  let largest: { query: string; values: unknown[] } | undefined;
+  const statements: { query: string; values: unknown[] }[] = [];
   client.unsafe = (...args: unknown[]) => {
     queries += 1;
+    const query = String(args[0]);
+    const values = Array.isArray(args[1]) ? args[1] : [];
+    const bytes = Buffer.byteLength(query);
+    sqlBytes += bytes;
+    parameters += values.length;
+    if (profile && process.env.JHO_PERF_PLANS === "1") statements.push({ query, values });
+    if (!largest || bytes > Buffer.byteLength(largest.query)) largest = { query, values };
     return original(...args);
   };
   try {
@@ -107,13 +120,36 @@ async function measure(params: Record<string, string>): Promise<{ report: Timing
       schedule: () => {}, now: new Date("2026-09-20T12:00:00Z"), timer,
     });
     expect(view.total).toBeGreaterThan(0);
-    return { report: timer.report("/jobs"), queries };
+    const report = timer.report("/jobs");
+    const golden = {
+      rows: view.rows,
+      total: view.total,
+      facets: view.facets,
+      hiddenByPayRange: view.hiddenByPayRange,
+      pay: view.pay,
+      offer: view.offer,
+    };
+    const plan = profile && largest
+      ? await original(`explain (analyze, buffers, format json) ${largest.query}`, largest.values)
+      : undefined;
+    const plans = [];
+    for (const statement of statements) {
+      plans.push({
+        sqlBytes: Buffer.byteLength(statement.query), parameters: statement.values.length,
+        plan: await original(`explain (analyze, buffers, format json) ${statement.query}`, statement.values),
+      });
+    }
+    return { report, queries, sqlBytes, parameters, golden, plan, plans };
   } finally {
     client.unsafe = original;
   }
 }
 
-const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]!;
+function median(values: number[]) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[middle - 1]! + sorted[middle]!) / 2 : sorted[middle]!;
+}
 
 describe.runIf(enabled)("baseline de /jobs", () => {
   beforeEach(async () => {
@@ -126,21 +162,40 @@ describe.runIf(enabled)("baseline de /jobs", () => {
   });
 
   it(`cronometra ${SCENARIOS.length} cenários sobre ${JOBS} vagas`, async () => {
+    expect(Number.isInteger(RUNS) && RUNS > 0).toBe(true);
+    expect(Number.isInteger(WARMUPS) && WARMUPS > 0).toBe(true);
+    const evidence = [];
     const lines = [
       "",
       `baseline /jobs — ${JOBS} vagas, mediana de ${RUNS} execuções, PostgreSQL local (sem rede)`,
       "cenário".padEnd(24) + "total ms".padStart(10) + "idas".padStart(6) + "  estágios (ms)",
     ];
     for (const scenario of SCENARIOS) {
-      await measure(scenario.params); // aquece o plano e o cache de páginas
+      let plan: unknown;
+      let plans: unknown;
+      for (let warmup = 0; warmup < WARMUPS; warmup++) {
+        const warmed = await measure(scenario.params, warmup === WARMUPS - 1 && !!process.env.JHO_PERF_JSON);
+        plan = warmed.plan;
+        plans = warmed.plans;
+      }
       const runs = [];
       for (let run = 0; run < RUNS; run++) runs.push(await measure(scenario.params));
+      for (const run of runs) expect(run.golden).toEqual(runs[0]!.golden);
       const totals = runs.map((r) => r.report.totalMs);
-      const middle = runs.find((r) => r.report.totalMs === median(totals))!;
+      // A mediana de um número par de amostras pode não pertencer a nenhuma
+      // execução; os estágios ilustram a amostra central superior, real.
+      const middle = [...runs].sort((a, b) => a.report.totalMs - b.report.totalMs)[Math.floor(runs.length / 2)]!;
       const stages = middle.report.stages.map((s) => `${s.stage}=${s.ms}`).join(" ");
       lines.push(
         scenario.name.padEnd(24) + median(totals).toFixed(0).padStart(10) + String(middle.queries).padStart(6) + `  ${stages}`,
       );
+      evidence.push({
+        scenario: scenario.name,
+        samples: runs.map(({ report, queries, sqlBytes, parameters }) => ({ report, queries, sqlBytes, parameters })),
+        golden: middle.golden,
+        plan,
+        plans,
+      });
     }
     lines.push("");
     const report = lines.join("\n");
@@ -148,5 +203,8 @@ describe.runIf(enabled)("baseline de /jobs", () => {
     // O vitest captura o console de teste que passa; o arquivo é o caminho
     // certo para guardar um "antes" e comparar com o "depois".
     if (process.env.JHO_PERF_OUT) writeFileSync(process.env.JHO_PERF_OUT, report);
+    if (process.env.JHO_PERF_JSON) {
+      writeFileSync(process.env.JHO_PERF_JSON, JSON.stringify({ jobs: JOBS, runs: RUNS, warmups: WARMUPS, evidence }, null, 2));
+    }
   }, 600_000);
 });

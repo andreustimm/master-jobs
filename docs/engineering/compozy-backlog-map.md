@@ -1,12 +1,20 @@
 # Mapa de backlog para o Compozy
 
+> **Snapshot histórico de 16/09/2026.** A ordem e os estados desta auditoria
+> foram superados por entregas posteriores. A autoridade operacional é o
+> [GitHub Project 3](https://github.com/users/andreustimm/projects/3) e suas
+> issues de `andreustimm/master-jobs`. Consulte a [reconciliação com PRs e SHAs](github-project-migration.md)
+> antes de interpretar uma linha como pendência. Este arquivo preserva a
+> origem das especificações e não recebe novas tarefas ou atualizações de status.
+
 **Data da auditoria:** 2026-09-16
 
-Este mapa evita que o backlog de discovery seja confundido com uma tarefa
-executável. Um item entra em implementação somente quando tem PRD, histórias,
-Tech Spec, contrato de testes e grafo `compozy.tasks/v2`.
+Este mapa registrou a separação entre discovery e tarefa executável usada
+naquela sessão: PRD, histórias, Tech Spec, contrato de testes e grafo
+`compozy.tasks/v2`. Os contratos autorais continuam disponíveis; a execução
+atual segue o [fluxo de tarefas no GitHub](github-project-tasks.md).
 
-## Ordem de ação
+## Ordem de ação registrada em 16/09 — histórica
 
 | Ordem | Item | Estado no Compozy | Próxima ação |
 |---:|---|---|---|
@@ -16,7 +24,7 @@ Tech Spec, contrato de testes e grafo `compozy.tasks/v2`.
 | 4 | Supabase production | Plano operacional em [`supabase-production`](../../.compozy/tasks/supabase-production/); ainda não normalizado como PRD/TechSpec | Criar planejamento Compozy dedicado antes de qualquer DDL, import ou corte. |
 | 5 | Workspace hygiene | Entrega concluída; registro em [`workspace-hygiene`](../../.compozy/tasks/workspace-hygiene/status.md) | Não reabrir sem nova evidência de branches/WIP. |
 
-## Auditoria do backlog de discovery
+## Achados registrados na auditoria de 16/09
 
 - Os itens marcados como entregues (scoring, ingestão, dashboard, autenticação,
   recheck, currículo, PWA e arquitetura) não devem virar tarefas novas apenas
@@ -30,10 +38,11 @@ Tech Spec, contrato de testes e grafo `compozy.tasks/v2`.
   junto com a limpeza de ambientes. Ele fica depois dos guards/fixtures e exige
   um PRD/TechSpec próprio antes do corte.
 
-## Regra de retomada
+## Retomada vigente
 
-1. Ler este mapa e o registro da sessão antes de abrir uma tarefa.
-2. Validar o workflow Compozy (`compozy tasks validate --name <slug>`).
-3. Executar uma tarefa por vez, respeitando as arestas de `_tasks.md`.
-4. Atualizar docs/QA e o status do task antes de criar a próxima PR.
-5. Remover branch/worktree de trabalho somente após merge comprovado em `dev`.
+Leia a issue canônica no Project e confira a execução ativa antes de iniciar
+trabalho. Especificações e registros desta auditoria são contexto para a
+issue; `_tasks.md`, `task_NN.md` e `status.md` legados não concedem posse nem
+determinam a próxima tarefa. A projeção local deve ser atualizada a partir do
+GitHub, conforme o [guia operacional](github-project-tasks.md), sem publicar
+o estado de uma branch antiga sobre o remoto.

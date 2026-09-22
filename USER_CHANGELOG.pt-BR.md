@@ -18,6 +18,43 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.21.1] - 2026-09-22T18:19:03.735Z
+
+- A lista de vagas e seu total são calculados juntos, reduzindo o trabalho das buscas e preservando a ordem e os totais ao trocar de página.
+
+- Os contadores e as opções dos filtros de vagas exigem menos trabalho do sistema, mantendo os mesmos resultados e critérios de agrupamento.
+
+## [1.21.0] - 2026-09-22T18:02:40.049Z
+
+### Novidade
+
+- Preparação do acompanhamento centralizado das melhorias, para preservar
+  prioridades e distinguir trabalho em andamento de entregas verificadas.
+  A ativação será confirmada após a validação do fluxo completo.
+
+## [1.20.9] - 2026-09-22T17:41:44.517Z
+
+- O projeto passa a ter metas internas de disponibilidade e latência, acompanhamento de incidentes e um relatório que distingue resultados medidos de dados ainda insuficientes.
+
+## [1.20.8] - 2026-09-22T17:17:31.926Z
+
+### Correção
+
+- A preparação de novas versões mantém a revisão validada mesmo quando outras
+  mudanças chegam durante a publicação ou sua retomada.
+
+## [1.20.7] - 2026-09-22T16:01:55.822Z
+
+- Alertas por e-mail configurados para avisar o responsável sobre erros novos em produção e falhas resolvidas que voltam a acontecer.
+
+## [1.20.6] - 2026-09-22T14:44:58.815Z
+
+### Melhorado
+
+- Filtrar vagas por faixa salarial e ordenar por remuneração exigem menos
+  trabalho do sistema. Os valores, a ordem das vagas e os avisos sobre salários
+  não informados continuam seguindo os mesmos critérios.
+
 ## [1.20.5] - 2026-09-22T11:47:50.607Z
 
 ### Corrigido

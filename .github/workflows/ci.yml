@@ -7,6 +7,14 @@
 name: CI
 
 on:
+  workflow_call:
+    inputs:
+      target-sha:
+        required: true
+        type: string
+    outputs:
+      validated-sha:
+        value: ${{ jobs.validacao.outputs.sha }}
   pull_request:
   push:
     branches: [main, staging, dev]
@@ -14,7 +22,8 @@ on:
 # Um PR que recebe três pushes seguidos não precisa de três execuções: só a
 # última diz alguma coisa. As anteriores são canceladas.
 concurrency:
-  group: ci-${{ github.ref }}
+  # A validação de release não disputa/cancela o CI de pushes posteriores.
+  group: ci-${{ inputs.target-sha || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,6 +34,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.target-sha || github.sha }}
+          persist-credentials: false
           # O teste de precisão histórica distingue tags leves de anotadas.
           # Sem as refs, um clone raso parece não ter evidência nenhuma e o
           # contrato passa localmente, mas falha no runner limpo.
@@ -114,6 +125,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target-sha || github.sha }}
+          persist-credentials: false
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -134,3 +148,15 @@ jobs:
             exit 1
           fi
           echo "Schema e migrações em sincronia."
+
+  validacao:
+    if: inputs.target-sha != ''
+    needs: [qualidade, schema-e-migracao]
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.alvo.outputs.sha }}
+    steps:
+      - id: alvo
+        env:
+          TARGET_SHA: ${{ inputs.target-sha }}
+        run: echo "sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"

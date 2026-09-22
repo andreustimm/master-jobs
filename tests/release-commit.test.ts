@@ -185,7 +185,7 @@ describe("commit-da-versao", () => {
 
       execFileSync(
         process.execPath,
-        ["--experimental-strip-types", "--no-warnings", PROMOVER, "origin", "origin/staging", "origin/dev", ""],
+        ["--experimental-strip-types", "--no-warnings", PROMOVER, "origin", "origin/staging", "origin/dev", topo],
         { cwd: repo, stdio: "pipe" },
       );
       expect(git(remote, "rev-parse", "staging")).toBe(topo);

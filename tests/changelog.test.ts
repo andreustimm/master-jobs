@@ -1,9 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { ChangelogMarkdown, safeChangelogUrl } from "../app/changelog-markdown.tsx";
+import { renderChangelogMarkdown, safeChangelogUrl } from "../scripts/changelog-markdown.ts";
 import { Footer } from "../app/footer.tsx";
 import {
   initialExpanded,
@@ -506,8 +505,7 @@ describe("formatPublication", () => {
 });
 
 describe("safe changelog Markdown", () => {
-  const renderMarkdown = (markdown: string) =>
-    renderToStaticMarkup(createElement(ChangelogMarkdown, { markdown }));
+  const renderMarkdown = renderChangelogMarkdown;
 
   it("UT-037 preserves HTTP and HTTPS destinations", () => {
     expect(safeChangelogUrl("https://example.com/a")).toBe("https://example.com/a");
@@ -636,7 +634,7 @@ describe("localized footer boundary", () => {
         locale: "en",
         t,
         signedIn: false,
-        loadReleases: async () => {
+        loadReleases: () => {
           changelogReads += 1;
           return [];
         },
@@ -665,11 +663,7 @@ describe("localized footer boundary", () => {
     expect(pkg.dependencies?.["rehype-raw"]).toBeUndefined();
     expect(pkg.devDependencies?.["rehype-raw"]).toBeUndefined();
 
-    const html = renderToStaticMarkup(
-      createElement(ChangelogMarkdown, {
-        markdown: "[unsafe](javascript:alert(2))\n\n<script>alert(1)</script>",
-      }),
-    );
+    const html = renderChangelogMarkdown("[unsafe](javascript:alert(2))\n\n<script>alert(1)</script>");
     expect(html).not.toContain("<script");
     expect(html).not.toContain('href="javascript:');
     expect(html).not.toContain("href=\"\"");
@@ -689,7 +683,7 @@ describe("localized footer boundary", () => {
         {
           version: "1.2.0",
           publication: { kind: "date", value: "2026-08-22" },
-          markdown: "Visible change.",
+          html: "<p>Visible change.</p>",
         },
       ],
       labels: { open: "Open", title: "Title", lead: "Lead", close: "Close" },
@@ -785,11 +779,11 @@ describe("localized repository integration", () => {
     }
   });
 
-  it("IT-003 traces both locale files without the deprecated path", async () => {
-    const config = await readFile("next.config.ts", "utf8");
-    expect(config).toContain("./USER_CHANGELOG.pt-BR.md");
-    expect(config).toContain("./USER_CHANGELOG.en.md");
-    expect(config).not.toMatch(/["']\.\/USER_CHANGELOG\.md["']/);
+  it("IT-003 keeps Markdown sources out of the runtime tracing allowlist", async () => {
+    const { default: config } = await import("../next.config.ts");
+    const includes = Object.values(config.outputFileTracingIncludes ?? {}).flat();
+    expect(includes.join("\n")).not.toContain("USER_CHANGELOG");
+    expect(includes).toContain("./config/certs/supabase-ca.crt");
   });
 
   it("IT-013 preserves date-only history because lightweight tags prove no tag instant", async () => {
@@ -813,16 +807,13 @@ describe("localized repository integration", () => {
     expect(metadata.every((kind) => kind === "commit")).toBe(true);
   });
 
-  it("IT-014 stages and validates both localized release outputs", async () => {
-    const promotion = await readFile(".github/workflows/promover-para-staging.yml", "utf8");
+  it("IT-014 keeps main stamping wired to both localized release outputs", async () => {
     const sync = await readFile(".github/workflows/sincronizar-apos-main.yml", "utf8");
     const shell = await readFile("scripts/release/versionar.ts", "utf8");
-    for (const workflow of [promotion, sync]) {
-      expect(workflow).toMatch(
-        /git add package\.json CHANGELOG\.md USER_CHANGELOG\.pt-BR\.md USER_CHANGELOG\.en\.md/,
-      );
-      expect(workflow).not.toMatch(/["' ]USER_CHANGELOG\.md["' ]/);
-    }
+    expect(sync).toMatch(
+      /git add package\.json CHANGELOG\.md USER_CHANGELOG\.pt-BR\.md USER_CHANGELOG\.en\.md/,
+    );
+    expect(sync).not.toMatch(/["' ]USER_CHANGELOG\.md["' ]/);
     for (const file of ["CHANGELOG.md", "USER_CHANGELOG.pt-BR.md", "USER_CHANGELOG.en.md"]) {
       expect(shell).toContain(file);
     }

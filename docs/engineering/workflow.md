@@ -1,7 +1,37 @@
 # Trabalhar e retomar sem deixar trabalho perdido
 
 O fluxo continua sendo worktree de `dev` → PR para `dev` → promoção automática
-para `staging` → aprovação humana para `main`.
+para `staging` → aprovação humana para `main`. A regra 24 de
+[AGENTS.md](../../AGENTS.md) define a autoridade operacional: issue e
+[Project 3 — Master Jobs](https://github.com/users/andreustimm/projects/3).
+Git continua sendo a fonte de specs, código e evidências.
+
+## Preparação e ativação
+
+Este roteiro acompanha o [épico #181](https://github.com/andreustimm/master-jobs/issues/181).
+Integrar a CLI e estas instruções em `dev` **não ativa o escritor remoto**.
+O workflow de `issue_comment` precisa do código confiável na branch default
+`main`, de `PROJECTS_TOKEN` e da chave do escritor validados, de `preflight` aprovado e
+do piloto de rollout confirmado. A promoção para `main` continua humana.
+
+Durante o bootstrap do próprio épico, o coordenador registra na issue remota
+a execução, branch, worktree, motivo e evidência dessa preparação. Esse registro
+permite construir o controle antes de ele estar disponível; não equivale a recibo
+da CLI nem autoriza anunciar enforcement ativo. A exceção termina no corte
+registrado no épico. Fora desse bootstrap, CLI/escritor indisponível impede
+iniciar ou retomar execução sob o novo fluxo; não há fallback autoritativo local.
+
+A referência detalhada da CLI, entregue com o épico, fica em
+`docs/engineering/github-project-tasks.md`. Antes de usar os comandos abaixo,
+confira sua disponibilidade no checkout e a prontidão remota:
+
+```bash
+rtk pnpm tasks preflight
+```
+
+A promoção usa o SHA do CI concluído ou um SHA explícito no dispatch. O commit
+de release recebe o mesmo CI antes de avançar `staging`; retentativas conservam
+o alvo. Veja o [contrato e a retomada da promoção](promotion.md).
 
 ## Começar ou retomar
 
@@ -11,23 +41,151 @@ Quem usa nvm pode executar `nvm use` antes dos comandos.
 1. Rode `rtk git status --short --branch` e `rtk pnpm worktrees`.
    O segundo comando só consulta o estado local; atualize as referências com
    `rtk git fetch origin --prune` antes de decidir sobre integração.
-2. Reuse a worktree da demanda se ela já existir. Para trabalho novo, crie
-   `<tipo>/<slug>` a partir de `origin/dev` em uma worktree própria, com os
-   tipos e o slug definidos em `AGENTS.md`: `feat/busca-por-tecnologia`.
-   `.githooks/pre-push` recusa outro formato; `codex/*` é legado aceito para
-   as branches já abertas.
-3. Se houver alterações na raiz em `dev`, identifique a origem antes de editar.
-   Preserve patch **e arquivos não rastreados** em `data/workspace-recovery/`
-   ou na worktree responsável. Compare a cópia antes de limpar. Nunca use
-   `reset --hard` ou `clean -fd` como solução genérica.
-4. Não atualize a base nem remova a worktree de outro trabalho durante sua execução.
-   Portas, banco e build de teste pertencem à execução; dados reais ficam fora.
+2. Consulte a issue remota e seus campos, dependências, entrega exigida,
+   execução e revisão antes de iniciar **e a cada retomada**:
+   `rtk pnpm tasks show <issue> --json`. Confirme vínculo ao Project 3 e
+   ausência de bloqueio ou posse incompatível. Assignee humano não identifica
+   uma execução: duas sessões da mesma pessoa continuam concorrentes.
+3. Reuse a worktree da demanda se ela já existir. Para trabalho novo, crie
+   `<tipo>/<slug>` a partir de `origin/dev` em worktree própria.
+   `.githooks/pre-push` valida o nome; `codex/*` permanece legado aceito.
+   Se houver WIP na raiz, preserve patch **e arquivos não rastreados** em
+   `data/workspace-recovery/` ou na worktree responsável e confira a cópia.
+   Nunca use `reset --hard` ou `clean -fd` como solução genérica.
+4. Obtenha claim remoto antes de editar. Use ID novo por execução, associado
+   pelo comando à branch e ao worktreeId do checkout. Guarde o ID para as
+   próximas operações da mesma execução; não o substitua por nome de pessoa.
+5. Confirme o vínculo com `verify`. Uma execução interrompida retoma com
+   `resume`, revisão remota atual e evidência; recibo antigo não concede posse.
+   Não atualize base nem remova worktree de outro trabalho. Portas, banco e
+   build de teste pertencem à execução; dados reais ficam fora.
 
-Para uma mudança pequena, a descrição da PR basta para registrar objetivo,
-validação e pendências. Trabalho que atravessa sessões mantém uma nota curta em
-`.compozy/tasks/<slug>/`: branch/worktree, estado atual, próximo passo e bloqueio.
-Specs extensas ficam para mudanças que precisam delas. Decisões duráveis vão
-para `docs/`, conforme a ADR 0011.
+Toda demanda tem issue, inclusive correção pequena. Se não existir, escreva
+objetivo, aceite e **Entrega exigida** em arquivo e use `create`. Specs extensas
+e Compozy continuam proporcionais à complexidade; não são pré-requisito para
+registrar uma tarefa pequena.
+
+Nos exemplos, substitua os valores entre `<...>`. Obtenha UUIDs com
+`rtk proxy uuidgen`: um para a execução e um por operação de escrita.
+Reutilize o UUID da operação somente ao repetir a mesma intenção/payload.
+
+```bash
+rtk pnpm tasks create --title "<título>" --body-file "<arquivo>" --priority "<Crítica|Alta|Média|Baixa>" --type "<tipo>" --delivery "<dev|production|artifact|operation>" --operation "<uuid-da-operação>"
+rtk pnpm tasks show <issue> --json
+rtk pnpm tasks claim <issue> --execution "<uuid-da-execução>" --operation "<uuid-da-operação>"
+rtk pnpm tasks verify <issue> --execution "<uuid-da-execução>"
+```
+
+`create` também aceita `--parent <issue>` e `--depends-on <issues>`.
+Confirme a issue criada e seu vínculo remoto antes do claim. Para issue existente
+sem vínculo, preserve seu número: o coordenador usa a adoção administrativa,
+sem criar uma cópia:
+
+```bash
+rtk pnpm tasks adopt <issue> --delivery "<dev|production|artifact|operation>" --type "<tipo>" --priority "<prioridade>" --operation "<uuid>"
+```
+
+## Atualizar, bloquear, retomar ou transferir
+
+Use os nomes de status configurados no Project e a revisão retornada por
+`show`; não calcule revisão nem traduza status a partir do frontmatter local.
+A escrita envia intenção durável e aguarda recibo do coordenador. Sem recibo
+confirmado, o resultado permanece pendente/falha, mesmo que um arquivo tenha
+sido atualizado.
+
+```bash
+rtk pnpm tasks transition <issue> --execution "<id>" --revision "<revisão>" --status "<status>" --evidence "<url>" --operation "<uuid>"
+rtk pnpm tasks block <issue> --execution "<id>" --revision "<revisão>" --reason "<motivo>" --operation "<uuid>"
+rtk pnpm tasks resume <issue> --execution "<id>" --revision "<revisão>" --evidence "<url>" --operation "<uuid>"
+rtk pnpm tasks heartbeat <issue> --execution "<id>" --revision "<revisão>" --operation "<uuid>"
+rtk pnpm tasks release <issue> --execution "<id>" --revision "<revisão>" --reason "<motivo>" --operation "<uuid>"
+rtk pnpm tasks transfer <issue> --execution "<id>" --revision "<revisão>" --to-execution "<novo-id>" --to-branch "<branch>" --to-worktree "<worktreeId>" --to-public-key "<SPKI-base64>" --reason "<motivo>" --operation "<uuid>"
+```
+
+`transition` aceita `--reason <texto>` quando a decisão precisa de justificativa.
+`heartbeat` renova somente lease válido; não recupera uma execução expirada.
+Antes da transferência, combine o destinatário e preserve WIP/evidências; depois,
+o destinatário lê o remoto e verifica seu próprio checkout antes de trabalhar.
+
+A CLI assina os comandos de execução automaticamente. A chave privada Ed25519
+fica no gitdir da worktree, com modo `0600`; não deve entrar em commit, issue ou
+log. O destinatário obtém a chave **pública** no próprio checkout para informar
+`--to-public-key` ao transferente:
+
+```bash
+rtk pnpm tasks key --execution "<novo-id>"
+```
+
+A identidade GitHub autoriza o ator; a assinatura comprova a execução. Copiar
+IDs públicos de outra execução não transfere sua posse.
+
+O escritor também assina recibos, controle e coordenação com uma chave própria.
+`TASKS_WRITER_PRIVATE_KEY` fica somente no CI confiável; a chave pública fica em
+`config/tasks-project.json`. O provisionamento é explícito, sem reutilizar outra
+credencial. Um comentário do mesmo login GitHub não comprova um recibo: a
+assinatura do escritor precisa ser validada.
+
+| Situação | Procedimento |
+|---|---|
+| Lease vencido ou claim incompatível | Pare a edição; consulte `show` e `verify`. O recibo `task-claim.json` fica no gitdir da worktree, consultável com `rtk git rev-parse --git-path task-claim.json`; é descartável e não autoriza offline. Lease vencido exige recuperação administrativa antes de novo claim; não use retry de heartbeat nem assuma que expiração transfere a execução. |
+| Timeout após enviar escrita | Consulte o remoto e repita a mesma operação com o mesmo UUID/payload para obter o recibo; não gere outra intenção para “garantir”. |
+| Conflito de revisão confirmado | Releia a issue e avalie a mudança concorrente antes de decidir uma nova operação. Não sobrescreva snapshot remoto com a versão da branch. |
+| GitHub indisponível | Preserve WIP e registre diagnóstico técnico local; não avance status, conclua tarefa ou inicie execução com base no cache. |
+| Bloqueio ou abandono | Use `block` ou `release` com motivo e revisão. Mensagem no chat ou checkbox local não libera claim. |
+| Edição manual de Status | Use comando coordenado ou pause e drene o escritor antes da edição; reconcilie antes de retomar. Não há garantia de exclusão contra UI irrestrita. |
+
+Os comandos administrativos abaixo exigem confirmação remota. `pause` e
+`unpause` são globais, pela issue de controle: espere a pausa e a drenagem antes
+de editar Status manualmente. `unpause` incrementa o epoch e invalida revisões
+anteriores; as execuções devem reler o remoto. `reconcile` recupera intenção
+parcial ou libera lease expirado com motivo e evidência de WIP preservado;
+nunca escolhe automaticamente um novo detentor.
+
+```bash
+rtk pnpm tasks pause --reason "<motivo>" --operation "<uuid>"
+rtk pnpm tasks reconcile <issue> --revision "<revisão>" --reason "<motivo>" --evidence "<url>" --operation "<uuid>"
+rtk pnpm tasks unpause --reason "<motivo>" --operation "<uuid>"
+```
+
+Esses comandos não publicam snapshots da branch. Transições automáticas não
+reescrevem prioridade nem ordem do quadro. Dependências são relações nativas
+do GitHub; nenhuma execução pode atualizar tarefas concorrentes por
+sincronização em lote.
+
+Eventos de PR, CI e deploy produzem evidências ou sugestões que precisam de
+revalidação; não substituem a transição assinada pelo detentor. Um evento
+atrasado não deve sobrescrever uma decisão manual mais recente.
+
+## Compozy, memória e evidências
+
+Trabalho que atravessa sessões pode manter contexto técnico em
+`.compozy/tasks/<slug>/`: decisões, comandos, provas e próximo passo, com link
+da issue. Estado, prioridade, assignee, dependências e claim vêm do remoto.
+O backlog antigo fica como histórico ou referência; uma lista editável local
+não vira outra fila operacional.
+
+Para obter uma projeção identificada de issue, subtarefas e grafo:
+
+```bash
+rtk pnpm tasks refresh <issue> --out "<diretório-de-projeção>"
+```
+
+A projeção deve indicar proveniência/revisão; `refresh` não altera specs
+autorais. Não editar projeção para comandar o remoto, nem executar bulk sync
+de `_tasks.md`, `state.yaml` ou frontmatter. Specs e contratos de testes
+continuam autorais em Git; resultados de cenário QA, achados de revisão e
+vereditos locais são evidência, distintos do status da issue.
+
+O binding vale também para skills globais usadas neste projeto, sem alterá-las
+para outros repositórios:
+
+| Skill | Aplicação no Master Jobs |
+|---|---|
+| `cy-create-tasks` | Autorar decomposição/spec; registrar issues e relações remotas; grafo operacional local é projeção, não autoridade. |
+| `cy-execute-task` | Ler/claim/verify antes de executar; verificação local não autoriza escrever `completed` como status operacional. |
+| `cy-workflow-memory` | Guardar memória técnica e evidência; retomada sempre consulta o remoto. |
+| `cy-review-round` | Conferir contrato e entrega exigida da issue; apontar URL da issue/PR e veredito de revisão. |
+| `cy-fix-reviews` | `valid/invalid/resolved` de achados descreve análise; resolução do achado não conclui automaticamente a tarefa. |
 
 ## Validar pelo risco
 
@@ -39,40 +197,50 @@ para `docs/`, conforme a ADR 0011.
 | Comportamento percebido pelo usuário | Gates de runtime e QA targeted conforme [QA vivo](../qa/README.md) |
 | Schema, autenticação ou promoção | Gates específicos existentes; não reduzir os testes por conveniência |
 
-Rode suites pesadas em sequência na mesma máquina. Se o código ou a base mudar
-depois da validação, renove os checks afetados. Registre o comando e o resultado
-real na PR; execução não realizada continua pendente.
+Rode suites pesadas em sequência na mesma máquina. Se código/base mudar depois
+da validação, renove os checks afetados. Registre comando, resultado e revisão
+na PR e vincule essa evidência à issue. Execução não realizada continua pendente.
+Um resultado `Pass`, `SHIP` ou uma checkbox não confirma a entrega exigida.
 
 ## Entregar e limpar
 
-Antes da PR: deslop, deep-review com veredito SHIP e responsável atribuído.
-Depois do merge, a limpeza faz parte da mesma entrega:
+Antes da PR: `show` e `verify` da execução, deslop, deep-review com veredito
+SHIP e responsável atribuído. A descrição liga issue, entrega exigida, evidências
+e pendências. Para este projeto, merge em dev só conclui entrega `dev`;
+entrega `production` exige publicação correspondente; `artifact` ou
+`operation` exigem o resultado declarado. Workflow novo em `issue_comment`
+só opera depois de disponível na default main e ativado. Fechamento automático
+da issue reflete decisão comprovada, nunca substitui essa prova.
 
-1. Confirme no GitHub que a PR da branch foi mesclada em `dev` e que seu último
-   commit está incluído. Em squash, compare o conteúdo com o commit do merge.
-2. Confirme a worktree limpa e preserve evidências locais que ainda importam.
-   Estar no mesmo HEAD de `dev` **não** torna seguro apagar alterações locais.
-3. Remova a worktree, a branch local e a remota, se ainda existir.
-4. Rode `rtk git fetch origin --prune` e confira `rtk pnpm worktrees`.
-   Atualize a raiz limpa com `rtk git merge --ff-only origin/dev`.
+Depois do merge:
 
-Sem PR mesclada ou com commits posteriores: preserve a branch e registre a
-pendência. `dev`, `staging` e `main` permanecem sempre.
+1. Confirme no GitHub integração do último commit da PR; em squash, compare
+   conteúdo com o commit do merge. Registre a evidência e efetue a transição
+   adequada à entrega exigida; não conclua tudo só porque entrou em dev.
+2. Antes de remover a worktree, resolva/libere o claim conforme o estado remoto,
+   usando `release` quando necessário. Se a escrita não confirmar, preserve
+   checkout/recibo para recuperar a operação.
+3. Confirme worktree limpa e preserve evidências locais relevantes. Estar no
+   mesmo HEAD de dev não torna seguro apagar WIP.
+4. Remova worktree e branch de trabalho local/remota apenas após a integração.
+   Rode `rtk git fetch origin --prune` e `rtk pnpm worktrees`; atualize a raiz
+   limpa com `rtk git merge --ff-only origin/dev`.
+
+Sem PR mesclada ou com commits posteriores, preserve a branch e registre a
+pendência na issue. `dev`, `staging` e `main` permanecem sempre.
 
 ## Proteção local
 
-`pnpm install` configura `.githooks`. O hook `prepare-commit-msg` impede commit
+`pnpm install` configura `.githooks`. `prepare-commit-msg` impede commit
 em branches permanentes; `pre-push` impede push direto para elas, inclusive
-`feature:dev`, e recusa branch de trabalho fora de `<tipo>/<slug>`. Isso também
-protege operações de clientes Git locais.
-As promoções continuam nos workflows do GitHub. Hooks não protegem escritas
-feitas diretamente pela API: as regras de PR continuam necessárias.
+feature:dev, e valida o nome da branch de trabalho. Hooks não protegem escritas
+pela API; não substituem política remota, claim ou recibo.
 
 ## O que foi adaptado de contas_casal
 
-Adotamos isolamento por demanda, proteção local das branches permanentes,
-preservação antes de reconciliar a raiz, evidência atual e limpeza após merge.
-A inspeção usa Git e um script pequeno; o registro usa os diretórios existentes.
-O master-jobs mantém seus slugs, branches `<tipo>/<slug>`, pnpm, E2E local isolado e
-QA vivo. Não exige IDs sequenciais, métricas por execução, recibos de gates,
-sincronização com GitHub Project ou um motor de orquestração para uma correção.
+Mantemos isolamento por demanda, preservação antes de reconciliar a raiz,
+validação proporcional e limpeza após merge. A antiga dispensa de sincronização
+com GitHub Project está **revogada**: toda tarefa segue a regra 24 e o corte
+de ativação acima. Specs extensas e Compozy continuam opcionais conforme o
+trabalho; issue no Project é obrigatória. Contas Casal e Project 2 não fazem
+parte deste fluxo.

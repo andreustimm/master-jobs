@@ -15,7 +15,7 @@ Três camadas, da mais barata para a mais fiel. Nenhuma substitui a outra.
 
 | Camada | Comando ou sinal | O que responde | Limite |
 |---|---|---|---|
-| **Piso local** | `pnpm perf:jobs` | Quanto o servidor gasta sobre o banco em 6 cenários (padrão, termo, cluster, faixa salarial, ordenar por pagamento, sem agrupar), 10 mil vagas, e **quantas idas ao banco** cada um faz. Hermético: Postgres em Docker, fora do `pnpm check`. `JHO_PERF_OUT=arquivo` guarda o relatório; `JHO_PERF_JOBS=N` muda o corpus | Sem rede. Não mede React nem o navegador |
+| **Piso local** | `pnpm perf:jobs` | Quanto o servidor gasta sobre o banco em 6 cenários (padrão, termo, cluster, faixa salarial, ordenar por pagamento, sem agrupar), 10 mil vagas, e **quantas idas ao banco** cada um faz. Hermético: Postgres em Docker, fora do `pnpm check`. `JHO_PERF_OUT=arquivo` guarda o relatório; `JHO_PERF_JOBS=N` muda o corpus; `JHO_PERF_RUNS=N` e `JHO_PERF_WARMUPS=N` controlam as repetições (inteiros positivos, padrões 3 e 1); `JHO_PERF_JSON=arquivo` guarda amostras, volume de SQL/parâmetros, resultados de referência e plano de execução | Sem rede. Não mede React nem o navegador |
 | **Produção, por estágio** | Linha JSON `{"perf":"/jobs","totalMs":…,"region":"gru1","stages":{…}}` no log da função | Onde uma requisição real gasta o tempo: `auth`, `prelude`, `board`, `facets`, `tail` (e `cockpit` em `/`) | Sai só se a leitura passa de 1 s, ou sempre com `JHO_PERF_LOG=1`. Log da Vercel na Hobby dura 1 h |
 | **Região** | Cabeçalho `x-vercel-id` da resposta | Onde a função rodou. `<borda>::gru1::…` é o certo (o primeiro trecho é a borda de quem pediu, só o segundo é a função); `<borda>::iad1::…` é a função longe do banco | Só diz a região, não o custo |
 
@@ -65,10 +65,10 @@ Números do PostgreSQL local com 9 mil vagas, sem rede — o **piso**.
 
 | Achado | Evidência | Estado |
 |---|---|---|
-| 5 a 6 varreduras do acervo por requisição, cada uma com `row_number()` (`canonicalOfGroup`) e descompressão de `description_text` | `repo.ts`: lista, contagem, 3 facetas e `countHiddenByPayRange` | **MEDIDO**, aberto (fase 2) |
+| Varreduras repetidas por requisição (`canonicalOfGroup`) | Lista e total compartilham a seleção; as facetas usam outra leitura com dimensões independentes; o aviso salarial mantém sua própria semântica | **MEDIDO**, corrigido na tarefa 11 |
 | Busca por termo: regex `~*` sobre título, empresa e descrição, sem índice possível | 160–175 ms por consulta × 5 consultas; só `sum(length(description_text))` leva 116 ms | **MEDIDO**, aberto (fase 2). O padrão `[ -]?` de `term.ts` impede extração de trigramas (INFERIDO) |
 | `length(descricao) >= 200` calculado em todas as linhas antes do `LIMIT`, para a UI só testar `< 200` | 103 ms → 26 ms com `substr` (mesmo resultado em 199/200/201, acento, emoji, vazio, nulo) | **MEDIDO**, corrigido |
-| Faixa salarial: `paySql` interpolada 7× | SQL de 72 KB e 446 parâmetros com 29 moedas; lista 58 → 169 ms | **MEDIDO**, aberto (fase 2) |
+| Faixa salarial: `paySql` interpolada repetidamente | Na tela completa com 29 moedas, 183 KB de SQL e 1.169 parâmetros; normalização compartilhada reduziu para 48 KB e 301 | **MEDIDO**, corrigido; comparação abaixo |
 | Estimativa errada do planner em `coalesce(fit,0) >= n` sobre `LEFT JOIN` | estimou 2 linhas, vieram 1.568 | **MEDIDO**, aberto |
 | `/searches`: N+1 de `countNewJobs` (até 20 termos) e `listTracks` duplicado | leitura do código, consultas leves por índice | INFERIDO, custo é round-trip |
 
@@ -103,6 +103,91 @@ passou de 5–6 esperas para 1 — e cada uma custa um round-trip de verdade em
 produção. Por isso a régua nova está em `tests/db-fan-out.test.ts`, que **conta**
 consultas, e não em tempo.
 
+## Normalização salarial — medição de 22/09/2026
+
+O filtro salarial usa uma relação com uma remuneração normalizada por vaga
+aberta. A consulta externa e a escolha da publicação do grupo compartilham essa
+relação: a faixa não expande cotações e regras de período em cada comparação.
+Quando só há ordenação ou exibição salarial, uma junção lateral procura a cotação
+nas linhas participantes, evitando calcular o acervo inteiro sem necessidade.
+Sem controle salarial, a consulta continua sem essa relação.
+
+A mediana usa a média das duas amostras centrais quando há um número par de
+execuções. Os estágios da tabela ilustram uma execução real: a amostra central
+superior, que pode diferir da mediana do total.
+
+Mesma máquina e corpus sintético de 10 mil vagas, três aquecimentos e dez
+amostras por cenário. Medianas locais, sem rede; não são tempos de produção.
+
+| Cenário | Antes | Depois | SQL total antes → depois | Parâmetros antes → depois |
+|---|---:|---:|---:|---:|
+| Faixa salarial | 395,05 ms | 109,95 ms | 183.062 → 48.326 bytes | 1.169 → 301 |
+| Ordenar por pagamento | 96,75 ms | 89,15 ms | 54.797 → 35.580 bytes | 345 → 221 |
+
+A comparação dos seis cenários preservou linha a linha os resultados, ordem,
+valores, estados salariais, grupos, contagens e facetas. Os testes de contrato
+comparam também todos os períodos ao normalizador TypeScript e verificam a
+publicação elegível de um grupo quando a primeira fica fora da faixa.
+A aritmética e o arredondamento não mudam; a consulta passa a reutilizá-los.
+
+Para reproduzir a evidência estruturada:
+
+```bash
+rtk proxy env JHO_PERF_RUNS=10 JHO_PERF_WARMUPS=3 JHO_PERF_OUT=antes.txt JHO_PERF_JSON=antes.json pnpm perf:jobs
+```
+
+O JSON contém somente o corpus sintético do benchmark: amostras por estágio,
+volume total de SQL/parâmetros, resultados de referência e `EXPLAIN (ANALYZE,
+BUFFERS, FORMAT JSON)` da maior consulta de cada cenário. O plano é colhido no
+aquecimento, fora das amostras cronometradas. Os resultados de referência devem
+coincidir antes/depois; uma diferença impede declarar a otimização equivalente.
+
+## Lista e facetas compartilhadas — medição de 22/09/2026
+
+Contadores, clusters e fontes compartilham os filtros comuns em uma consulta.
+Cada dimensão continua ignorando apenas o próprio filtro: selecionar uma fonte
+não apaga as outras opções, e selecionar um cluster não apaga os demais.
+A fonte integra a chave de agrupamento; o cluster pode variar entre publicações
+do mesmo grupo. Por isso a leitura conserva dois representantes: o menor id
+entre todas as elegíveis e o menor id entre as que passam pelo cluster escolhido.
+As vagas anônimas continuam separadas, e o score e as candidaturas continuam
+restritos à pessoa e à trilha da sessão.
+
+A tela usa `listBoardPage`: total por janela sobre ids elegíveis e dados completos
+somente depois do limite da página. Uma página além do fim, ou de tamanho zero,
+não tem linha para carregar o total; nesses casos a contagem separada conserva o
+rodapé correto. Os demais consumidores de `listBoard` não calculam a janela.
+A lista continua usando os mesmos filtros e desempates.
+
+A largura da janela importa: carregar descrições nela fez o cenário sem agrupar
+escrever 967 blocos temporários no benchmark. Restringir a janela a ids e chaves
+de ordenação zerou esses blocos; o plano final da página levou 8,47 ms. Não houve
+migration, coluna materializada, cache nem mudança de semântica nesta entrega.
+
+Três aquecimentos e dez amostras sobre o mesmo corpus de 10 mil vagas.
+Medianas locais, sem rede; os seis resultados completos e seus hashes coincidem.
+
+| Cenário | Total antes → depois | Facetas antes → depois | Consultas antes → depois |
+|---|---:|---:|---:|
+| Padrão | 75,20 → 59,35 ms | 37,75 → 23,50 ms | 9 → 6 |
+| Com termo | 184,40 → 127,90 ms | 110,70 → 54,60 ms | 9 → 6 |
+| Com cluster | 50,50 → 49,25 ms | 28,05 → 23,80 ms | 9 → 6 |
+| Faixa salarial | 111,40 → 94,65 ms | 39,50 → 23,55 ms | 10 → 7 |
+| Ordenar por pagamento | 86,05 → 70,45 ms | 38,25 → 22,65 ms | 9 → 6 |
+| Sem agrupar | 65,20 → 33,55 ms | 18,60 → 18,05 ms | 8 → 5 |
+
+`tests/board-facets.test.ts` cobre dimensões combinadas, a troca da publicação
+representante, fontes distintas do mesmo tipo, empregador anônimo, cluster
+nulo, arquivamento, candidatura alheia e conjunto vazio. A régua de consultas
+exige uma única ida para todas as facetas e outra para página com total, além
+da leitura das irmãs quando há agrupamento; o limite por tela continua valendo.
+Os testes de paginação comparam a API nova à lista e à contagem independentes,
+inclusive páginas além do fim, tamanho zero e grupos.
+
+Com `JHO_PERF_PLANS=1` e `JHO_PERF_JSON`, o benchmark guarda também os planos de
+todas as consultas, na ordem de envio. Eles são coletados no aquecimento, fora
+das amostras. Sem essa opção permanece somente o plano da maior consulta.
+
 ## Plano
 
 | Fase | Item | Ganho × esforço | Onde |
@@ -113,12 +198,12 @@ consultas, e não em tempo.
 | 1 ✅ | Prelúdio de `/jobs`: trilhas ∥ câmbio, sem `listTracks` duplicado, câmbio em 1 consulta | alto × baixo | `jobs-data.ts` |
 | 1 ✅ | Medição: baseline local e log por estágio | habilita o resto | `perf:jobs`, `registrarTempo` |
 | PR 2 | Overlay só na troca de rota; filtros que se aplicam sozinhos | alto × médio | fase 3 |
-| 2 | Conjunto filtrado calculado uma vez (`count(*) over()`, facetas fundidas) | alto × médio | `repo.ts` |
+| 2 ✅ | Seleção compartilhada para lista e total, facetas fundidas | alto × médio | `repo.ts` |
 | 2 | Busca por termo indexada (`pg_trgm` ou `tsvector`) | altíssimo × médio | migration |
-| 2 | Faixa salarial sem 7 cópias do `CASE` | alto só com faixa | `repo.ts` |
+| 2 ✅ | Normalização salarial compartilhada, sem repetir cotações a cada uso | alto com faixa | `repo.ts` |
 | 2 | Cache de facetas com TTL — **só depois de medir** | médio × médio | `matching/app` |
 | 3 | `loading.tsx` + `Suspense` em `/jobs` | só rende após o cache de facetas | `app/jobs/` |
-| — | Régua de conexões por **tela**, `comVigia` em `/jobs` e `/` | previne o 504 | testes |
+| ✅ | Régua de conexões por **tela**, `comVigia` em `/jobs` e `/` | entregue e exercitado no QA de concorrência | testes |
 
 ### Decisões
 

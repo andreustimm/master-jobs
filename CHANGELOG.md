@@ -9,6 +9,62 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.21.1] - 2026-09-22
+
+- A tela de vagas calcula lista e total em uma seleção de ids antes de carregar os dados da página, evitando repetir filtros e agrupamento. Páginas além do fim mantêm o total por uma contagem de fallback; o benchmark pode registrar todos os planos com `JHO_PERF_PLANS=1`.
+
+- As facetas do quadro passam a ler o conjunto elegível uma vez e devolver contadores, clusters e fontes em uma consulta, preservando a primeira publicação elegível de cada dimensão e o isolamento por candidato.
+
+## [1.21.0] - 2026-09-22
+
+### Adicionado
+
+- Ferramentas: gestão canônica de tarefas pelo GitHub Project, com CLI remota,
+  claims e recibos assinados, revisão/geração, recuperação de operações,
+  projeções Compozy descartáveis e gate de vínculo de PR. Escritor em main e
+  enforcement dependem do provisionamento e piloto documentados em #191.
+
+## [1.20.9] - 2026-09-22
+
+- Governança: SLOs internos, orçamento de erros e resposta a incidentes definidos; adicionados sonda pública e relatório de métricas DORA com cobertura explícita e histórico por artefatos.
+
+## [1.20.8] - 2026-09-22
+
+### Corrigido
+
+- Promoção para staging vinculada ao SHA aprovado pelo CI, inclusive no
+  dispatch. O commit de release passa pelo mesmo CI antes da tag e do
+  fast-forward; retentativas preservam o alvo após avanços de dev e a guarda
+  de migrações compara o intervalo desse alvo. Um candidato reprovado pode ser
+  substituído por uma nova entrada aprovada, sem validar ou etiquetar o anterior.
+  A base do versionamento fica registrada por SHA para resistir a tags tardias.
+  A PR de produção atualiza sua proveniência e preserva anotações humanas.
+
+## [1.20.7] - 2026-09-22
+
+- Operações: alerta Sentry configurado para erros novos, regressões e alta prioridade em produção, com e-mail para o responsável e intervalo de 30 minutos; disparo validado com canário sintético.
+
+### Alterado
+
+- Novidades são compiladas no build: parsing dos dois históricos e conversão
+  segura de Markdown para HTML saem das requisições e do bundle cliente.
+  O artefato gerado é privado, selecionado por idioma depois da autenticação,
+  e substitui os Markdown no pacote standalone. O modal monta os cards ao abrir
+  e os corpos ao expandir; conteúdo, datas locais e interação permanecem iguais.
+  Geração determinística e E2E sem os arquivos de origem cobrem o contrato.
+
+## [1.20.6] - 2026-09-22
+
+### Melhorado
+
+- A leitura salarial do quadro compartilha a normalização entre o filtro e a
+  escolha da publicação do grupo; a ordenação sem faixa calcula somente as
+  linhas participantes. As cotações deixam de ser expandidas em cada uso da
+  expressão, preservando valores, ausências, ordem e paginação.
+- O benchmark de buscas aceita `JHO_PERF_RUNS`, `JHO_PERF_WARMUPS` e
+  `JHO_PERF_JSON` para guardar amostras, volume de SQL, parâmetros, resultados
+  de referência e planos `EXPLAIN ANALYZE`.
+
 ## [1.20.5] - 2026-09-22
 
 ### Corrigido

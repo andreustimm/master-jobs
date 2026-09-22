@@ -23,7 +23,16 @@ Prefix shell commands with `rtk`. The canonical gates are `rtk pnpm check` and
 audit is independent from the mandatory `deep-review` and from the real-user
 journeys maintained in `docs/qa/`; never use one verdict as evidence for another.
 
-You are the **independent evaluator**. Answer one question — *"Did the implementing agent actually do what `task_NN.md` says it did?"* — from files, public behavior, tests, and CI. A self-report is not evidence. (Whether a real user can succeed at the product is `qa-execution`; run both on a Compozy slug and keep their outputs separate.)
+AGENTS rule 24 and [the project workflow](../../../docs/engineering/workflow.md)
+govern operational task state, including bootstrap. Read the remote issue,
+Project fields, execution, revision and required delivery before auditing; link
+them and the PR in the report. Local task frontmatter, `state.yaml` and `_tasks.md`
+are historical claims or identified projections, never operational authority.
+`PASS`/`REOPEN` are audit verdicts. An authorized owning execution requests any
+remote transition with evidence and waits for its receipt; an independent reviewer
+without that claim reports the finding to the owner and does not take over it.
+
+You are the **independent evaluator**. Answer one question — *"Did the implementing agent satisfy the canonical issue and its authorial task/spec?"* — from files, public behavior, tests, and CI. A self-report is not evidence. (Whether a real user can succeed at the product is `qa-execution`; run both on a Compozy slug and keep their outputs separate.)
 
 ## Step 1: Discover the Repository Verification Contract
 
@@ -33,10 +42,10 @@ You are the **independent evaluator**. Answer one question — *"Did the impleme
 4. Read `references/e2e-coverage.md` before classifying any flow's coverage.
 5. Resolve the audit artifact directory: the `audit-output-path` argument if given, else repository conventions, else `/tmp/agent-output-audit-<slug>`. Create its `audit/` subdirectory; store all bugs and reports under `<audit-output-path>/audit/`.
 6. **Detect Compozy mode.** If `.compozy/tasks/<slug>/` exists, record the slug and:
-   - Read `state.yaml` **read-only** — `scripts/update-state.py` owns its mutation per the cy-codex-loop contract.
-   - Read `_techspec.md` (deliverable source of truth) and `_tasks.md` (task roster) when present.
-   - List every `task_NN.md` and capture its frontmatter `status:` (`pending` | `in_progress` | `completed`). When frontmatter disagrees with `state.yaml`, frontmatter is the source of truth.
-   - Note the memory slot `.compozy/tasks/<slug>/memory/qa-execution.md` — Step 5 writes it before any status flip.
+   - Read `state.yaml`, `_tasks.md` and task frontmatter read-only; record their provenance/revision and disagreements with the remote issue.
+   - Read `_techspec.md` and test contracts as authorial specifications. Resolve operational status, dependencies and required delivery from the remote issue/Project, not local tracking files.
+   - List `task_NN.md` files and associate them with canonical issue URLs. Preserve unlinked legacy content as history; arrange adoption before operational use.
+   - Note `.compozy/tasks/<slug>/memory/qa-execution.md` for technical audit evidence; writing it does not authorize a status transition.
 
 ## Step 2: Run the Baseline Verification Gate
 
@@ -51,40 +60,40 @@ You are the **independent evaluator**. Answer one question — *"Did the impleme
 Skip this step only when no task, phase, PRD, tech spec, or implementation-plan artifacts exist.
 
 1. Read `references/independent-evaluator-protocol.md` in full before forming any verdict — it owns what does and does not count as evidence, and the transcript classification (`genuine-failure` / `grader-bug` / `ambiguous-task` / `bypass-exploit`). In Compozy mode, read the implementer's `memory/<phase>.md` artifacts and record anomaly classifications in `memory/qa-execution.md` → `Errors / Corrections` before judging the task.
-2. Summarize each `task_NN.md` and its body into a Task Implementation Matrix (columns mirror cy-codex-loop frontmatter):
-   - `task_path`, `declared_status` (literal frontmatter `status:`)
-   - `title`, `type`, `complexity`, `dependencies` — mirrored from frontmatter
+2. Summarize each canonical issue and its authorial task/spec into a Task Implementation Matrix:
+   - `issue_url`, `execution`, `remote_revision`, `required_delivery`, `pr_url`, `declared_status` (remote Project status)
+   - `task_path`, `title`, `type`, `complexity`; `dependencies` from native remote relationships; local snapshots annotated as historical evidence
    - `techspec_deliverable` — linked `_techspec.md` section when present
    - Requirements, subtasks, checklist items, success criteria, dependent files
    - `implementation_evidence` — files, modules, routes, commands, migrations, seeds, tests
    - `verification_evidence` — commands executed, exit codes, output summaries
    - `qa_verdict` — `PASS` | `PARTIAL` | `FAIL` | `REOPEN` | `BLOCKED` (distinct from `declared_status`)
    - `ai_audit_findings` — red flag IDs that fired in Step 4 with verdict
-   - `action` — `none` | `fixed` | `reopened-frontmatter` | `BUG-NNN.md filed`
+   - `action` — `none` | `fixed` | `remote-transition-requested` | `remote-transition-confirmed` | `BUG-NNN.md filed`
    - `linked_bugs` — BUG IDs
 3. Verify every completed or claimed-complete task against actual files, public behavior, automated tests, and acceptance criteria. Re-execute the smallest public proof against the current repository state.
 4. Assign `qa_verdict`:
    - `PASS`: every material requirement and success criterion has implementation and fresh verification evidence.
    - `PARTIAL`: implementation exists but one or more non-critical requirements, tests, or evidence are missing.
    - `FAIL`: claimed behavior does not work or a critical requirement is absent.
-   - `REOPEN`: frontmatter says `status: completed` but the QA verdict is `PARTIAL` or `FAIL`.
+   - `REOPEN`: the remote task claims completion but the audit verdict is `PARTIAL` or `FAIL`; record the recommendation and evidence without mutating local task status.
    - `BLOCKED`: a concrete prerequisite is missing. Validate every local boundary that does not need the missing dependency and report the blocked live validation separately.
 
 ## Step 4: AI Test-Hygiene Scan (RF-1..RF-6)
 
-1. Read `references/ai-implementation-audit.md` in full before scanning the test diff of any task with `declared_status: completed` — it owns the RF-1..RF-6 scanners, the Requirement→Test mapping, and the verdict matrix.
+1. Read `references/ai-implementation-audit.md` in full before scanning the test diff of any task claimed complete remotely — it owns the RF-1..RF-6 scanners, the Requirement→Test mapping, and the verdict matrix.
 2. Run the scans against the diff since the task baseline (`rtk git log --follow <test_file>`, `rtk git diff <baseline_sha>..HEAD`).
 3. Emit the verdict the matrix assigns. RF-1 (skip/only/xit/t.Skip inserted), RF-2 on a P0/P1 criterion (weakened assertion), RF-3 (mock on a dependency the TC declared Integration/E2E), and RF-4 on P0/P1 (unjustified snapshot drift) are automatic `FAIL`.
 4. Record findings in the matrix column `ai_audit_findings` and in the per-task block of `audit-report.md`.
 5. Apply the Requirement→Test mapping: for every Success Criterion in `task_NN.md` and every linked `_techspec.md` bullet, mark the matching test `covers` / `weak` / `missing`. A checked item or `status: completed` without a `covers` row is an audit failure.
 
-## Step 5: Reopen, File Bugs, Write Memory
+## Step 5: Record Findings and Request Remote Reconciliation
 
-1. Mark every incomplete completed task `REOPEN`.
-2. **In Compozy mode**, write `memory/qa-execution.md` with the cy-codex-loop canonical sections (`Objective Snapshot`, `Important Decisions`, `Learnings`, `Files / Surfaces`, `Errors / Corrections`, `Ready for Next Run`) **before** flipping any `task_NN.md` frontmatter (memory-precedes-status invariant).
-3. Edit the offending `task_NN.md` frontmatter `status:` back to `pending` (or `in_progress` if salvageable). Leave `state.yaml` alone — `update-state.py` owns it, and the next iteration reconciles from frontmatter.
+1. Record `REOPEN` in the audit for every incomplete task claimed complete remotely.
+2. **In Compozy mode**, write technical findings in `memory/qa-execution.md` with the sections `Objective Snapshot`, `Important Decisions`, `Learnings`, `Files / Surfaces`, `Errors / Corrections`, `Ready for Next Run`.
+3. Follow the project workflow for remote reconciliation: the authorized owner reads the current revision, requests the appropriate transition with evidence and waits for its receipt. If the auditor is not that execution, hand the evidence to the owner. Do not edit task frontmatter/`state.yaml` to reopen a task or publish a branch snapshot. Refresh identified projections only from the confirmed remote state.
 4. File `BUG-<num>.md` under `<audit-output-path>/audit/issues/` using `assets/issue-template.md`, including: the task path (`Reopens task:`), the failed Success Criterion (`Summary:`), the original strict assertion when RF-2 fired (`Root cause:`), the red flag ID and verdict (`Automation Follow-up:`), and any transcript anomaly classification (`Related:`).
-5. When the gap is a bounded root-cause fix inside the audit scope, implement it, add regression coverage, and rerun the task proof. Otherwise reopen the task.
+5. When a bounded fix is authorized within the audit scope and its execution has the required remote claim, implement it, add regression coverage, and rerun the proof. Otherwise report the gap for the owning execution; do not acquire another execution's work by changing a local file.
 
 ## Step 6: Quality Gates Verdict
 
@@ -107,5 +116,5 @@ Skip this step only when no task, phase, PRD, tech spec, or implementation-plan 
    - **QUALITY GATES** — PASS/FAIL/N/A per gate.
    - **ISSUES FILED** — total, by severity, with `Reopens task:` annotations.
    - Report each blocked scenario, missing credential, or environment gap with the exact command or prerequisite that stopped execution.
-2. In a Compozy slug, a final PASS feeds cy-codex-loop's `verify.last_status=PASS` precondition for Phase E — leave `update-state.py` to cy-codex-loop.
+2. A final PASS supplies verification evidence for the owning execution. It does not complete the remote issue or authorize a local `verify.last_status`/frontmatter to override the required delivery.
 3. Before declaring the audit complete, confirm every item in `references/checklist.md` — it is the exhaustive completion criterion across all steps.

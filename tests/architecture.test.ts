@@ -187,7 +187,6 @@ describe("architecture inventory", () => {
   it("routes first-party anchors through the stable transition boundary", () => {
     const allowedRawAnchors = new Map<string, Set<string>>([
       ["app/candidate/markdown-preview.tsx", new Set(["href"])],
-      ["app/changelog-markdown.tsx", new Set(["href"])],
       ["app/compare/page.tsx", new Set(["externalUrl"])],
       ["app/grid.tsx", new Set(["exportHref"])],
       ["app/job-modal.tsx", new Set(["row.url", "externalApplyUrl"])],
@@ -203,9 +202,8 @@ describe("architecture inventory", () => {
       for (const match of read(file).matchAll(/<a\b[\s\S]*?>/g)) {
         const compact = match[0].replace(/\s+/g, " ").trim();
         const href = /\bhref=\{([^}]+)\}/.exec(compact)?.[1]?.trim();
-        const contentAuthored = file === "app/changelog-markdown.tsx";
         const nativeNavigation = /\bdownload(?:\s|=)/.test(compact) || /\btarget="_blank"/.test(compact);
-        if (!href || !allowedRawAnchors.get(file)?.has(href) || (!contentAuthored && !nativeNavigation)) {
+        if (!href || !allowedRawAnchors.get(file)?.has(href) || !nativeNavigation) {
           offenders.push(`${file}:${compact}`);
         }
       }

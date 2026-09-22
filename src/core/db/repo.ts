@@ -231,7 +231,7 @@ export type PayFilter = {
   disclosedOnly?: boolean;
 };
 
-type PaySql = { amount: SQL; state: SQL };
+type PaySql = ReturnType<typeof paySql>;
 
 /**
  * The normalized top of the pay range, in SQL.
@@ -243,7 +243,7 @@ type PaySql = { amount: SQL; state: SQL };
  * stored quote. A currency without a rate, an unknown period or a project
  * gives NULL: not comparable.
  */
-function paySql(pay: PayFilter, fx: FxTable | null): PaySql {
+function paySql(pay: PayFilter, fx: FxTable | null) {
   const target = pay.currency.toUpperCase();
   // Without a stored quote only the viewer's own currency compares.
   const rates = new Map<string, number>(
@@ -257,14 +257,34 @@ function paySql(pay: PayFilter, fx: FxTable | null): PaySql {
     [...rates].map(([code, rate]) => sql`(${code}::text, ${rate}::float8)`),
     sql`, `,
   );
-  const rateOf = sql`(select r.rate from (values ${values}) as r(code, rate) where r.code = upper(trim(${job.compCurrency})))`;
   const factor = sql.raw(annualFactorSql(`"job"."comp_period"`));
-  const amount =
+  const normalizedAmount =
     targetRate === undefined
       ? sql`null::float8`
-      : sql`round((${top} * ${factor} / nullif(${rateOf}, 0) * ${targetRate}::float8 / ${PERIODS_PER_YEAR[pay.period]})::numeric, 2)::float8`;
+      : sql`round((${top} * ${factor} / nullif(pay_rates.rate, 0) * ${targetRate}::float8 / ${PERIODS_PER_YEAR[pay.period]})::numeric, 2)::float8`;
+  // Filtrar salário o calcula tanto no quadro quanto na escolha do grupo:
+  // uma CTE compartilha esse trabalho. Só ordenar não precisa calcular o
+  // acervo todo; a relação lateral alcança apenas as linhas participantes.
+  const relation = pay.min !== undefined || pay.max !== undefined || pay.disclosedOnly
+    ? {
+      kind: "shared" as const,
+      table: getDb().$with("board_pay").as(
+        getDb().select({ jobId: job.id, amount: normalizedAmount.as("amount") })
+          .from(job)
+          .leftJoin(sql`(values ${values}) as pay_rates(code, rate)`, sql`pay_rates.code = upper(trim(${job.compCurrency}))`)
+          .where(isNull(job.closedAt)),
+      ),
+    }
+    : {
+      kind: "inline" as const,
+      table: getDb().select({ amount: normalizedAmount.as("amount") })
+        .from(sql`(values ${values}) as pay_rates(code, rate)`)
+        .where(sql`pay_rates.code = upper(trim(${job.compCurrency}))`)
+        .as("board_pay"),
+    };
+  const amount = sql`${relation.table.amount}`;
   const state = sql`(case when ${top} is null then 'undisclosed' when ${amount} is null then 'not_comparable' else 'amount' end)`;
-  return { amount, state };
+  return { amount, state, relation };
 }
 
 async function payContext(opts: BoardFilters): Promise<PaySql | undefined> {
@@ -413,8 +433,11 @@ async function groupPostingsOf(linhas: number[]): Promise<Map<number, GroupPosti
  */
 function canonicalOfGroup(opts: BoardFilters, candidateId: number | null, pay?: PaySql): SQL {
   const chave = sql.join(groupKey(job, source.label), sql`, `);
+  // Ordenar por salário não muda qual publicação representa o grupo. Só a
+  // faixa ou a exigência de salário comparável precisam do câmbio nesta leitura.
+  const groupPay = payCondition(opts.pay, pay?.amount) ? pay : undefined;
   // Sem `groupRepeats`, senão a condição se chamaria de dentro dela mesma.
-  const dentro = boardConditions({ ...opts, groupRepeats: false }, candidateId, pay);
+  const dentro = boardConditions({ ...opts, groupRepeats: false }, candidateId, groupPay);
   return sql`${job.id} in (
     select ordenado.id from (
       select ${job.id} as id,
@@ -427,6 +450,9 @@ function canonicalOfGroup(opts: BoardFilters, candidateId: number | null, pay?: 
       )}
       left join ${source} on ${eq(source.id, job.sourceId)}
       left join ${jobPage} on ${eq(jobPage.jobId, job.id)}
+      ${groupPay?.relation.kind === "shared"
+        ? sql`left join ${groupPay.relation.table} on ${eq(groupPay.relation.table.jobId, job.id)}`
+        : sql``}
       where ${and(...dentro)}
     ) ordenado
     where ordenado.rn = 1
@@ -618,13 +644,51 @@ export async function listBoard(
   candidateId: number | null,
   opts: BoardFilters = {},
 ): Promise<BoardRow[]> {
+  return (await readBoard(candidateId, opts, false)).rows;
+}
+
+/** A página e seu total, calculados sobre o mesmo conjunto filtrado. */
+export async function listBoardPage(
+  candidateId: number | null,
+  opts: BoardFilters = {},
+): Promise<{ rows: BoardRow[]; total: number }> {
+  return readBoard(candidateId, opts, true);
+}
+
+function selectBoardPage(candidateId: number | null, opts: BoardFilters, conditions: SQL[], order: SQL[], pay?: PaySql) {
+  // A janela carrega só id e chaves de ordenação. Incluir descrições e estado
+  // completo aqui fazia as 5.500 linhas elegíveis derramarem 967 blocos em
+  // disco no benchmark sem agrupamento; esses dados só são lidos após o LIMIT.
+  let query = getDb().select({ jobId: job.id, total: sql<number>`count(*) over ()`.as("total") })
+    .from(job)
+    .leftJoin(jobScore, scoreJoin(candidateId, opts.track))
+    .leftJoin(application, and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)))
+    .leftJoin(source, eq(source.id, job.sourceId))
+    .leftJoin(jobPage, eq(jobPage.jobId, job.id))
+    .where(and(...conditions))
+    .orderBy(...order)
+    .limit(opts.limit ?? 200)
+    .offset(opts.offset ?? 0)
+    .$dynamic();
+  if (pay?.relation.kind === "shared") query = query.leftJoin(pay.relation.table, eq(pay.relation.table.jobId, job.id));
+  else if (pay) query = query.leftJoinLateral(pay.relation.table, sql`true`);
+  return getDb().$with("board_page").as(query);
+}
+
+async function readBoard(
+  candidateId: number | null,
+  opts: BoardFilters,
+  withTotal: boolean,
+): Promise<{ rows: BoardRow[]; total: number }> {
   const db = getDb();
   const pay = await payContext(opts);
   const conditions = boardConditions(opts, candidateId, pay);
   const order = boardOrder(opts, pay);
+  const page = withTotal ? selectBoardPage(candidateId, opts, conditions, order, pay) : undefined;
 
-  const rows = await db
+  let query = db.with(...(pay?.relation.kind === "shared" ? [pay.relation.table] : []), ...(page ? [page] : []))
     .select({
+      boardTotal: page ? sql<number>`${page.total}` : sql<number | null>`null::bigint`,
       jobId: job.id,
       title: job.title,
       companyName: job.companyName,
@@ -692,16 +756,26 @@ export async function listBoard(
     .leftJoin(source, eq(source.id, job.sourceId))
     .leftJoin(verifyTask, eq(verifyTask.jobId, job.id))
     .leftJoin(jobPage, eq(jobPage.jobId, job.id))
-    .where(and(...conditions))
+    .where(page ? undefined : and(...conditions))
     .orderBy(...order)
-    .limit(opts.limit ?? 200)
-    .offset(opts.offset ?? 0);
-
-  // Vazio quando o agrupamento está desligado: a linha então é uma vaga só, e
-  // procurar irmãs para descobrir isso seria trabalho sem leitor.
-  if (!opts.groupRepeats) return rows.map((row) => ({ ...row, repeats: [] }));
-  const grupos = await groupPostingsOf(rows.map((row) => row.jobId));
-  return rows.map((row) => ({ ...row, repeats: grupos.get(row.jobId) ?? [] }));
+    .$dynamic();
+  if (page) query = query.innerJoin(page, eq(page.jobId, job.id));
+  else query = query.limit(opts.limit ?? 200).offset(opts.offset ?? 0);
+  if (pay?.relation.kind === "shared") query = query.leftJoin(pay.relation.table, eq(pay.relation.table.jobId, job.id));
+  else if (pay) query = query.leftJoinLateral(pay.relation.table, sql`true`);
+  const rows = await query;
+  // Uma página além do fim não tem linha para carregar a janela. Só nesse
+  // caso (ou limite zero) a contagem precisa de uma consulta separada.
+  let total = 0;
+  if (withTotal) {
+    if (rows[0]) total = Number(rows[0].boardTotal);
+    else if ((opts.offset ?? 0) > 0 || opts.limit === 0) total = await countBoard(candidateId, opts);
+  }
+  const grupos = opts.groupRepeats ? await groupPostingsOf(rows.map((row) => row.jobId)) : new Map<number, GroupPosting[]>();
+  return {
+    total,
+    rows: rows.map(({ boardTotal: _total, ...row }) => ({ ...row, repeats: grupos.get(row.jobId) ?? [] })),
+  };
 }
 
 /**
@@ -716,11 +790,11 @@ export async function countBoard(
   opts: BoardFilters = {},
 ): Promise<number> {
   const pay = await payContext(opts);
-  return countWhere(candidateId, opts, boardConditions(opts, candidateId, pay));
+  return countWhere(candidateId, opts, boardConditions(opts, candidateId, pay), pay);
 }
 
-async function countWhere(candidateId: number | null, opts: BoardFilters, conditions: SQL[]): Promise<number> {
-  const [row] = await getDb()
+async function countWhere(candidateId: number | null, opts: BoardFilters, conditions: SQL[], pay?: PaySql): Promise<number> {
+  let query = getDb().with(...(pay?.relation.kind === "shared" ? [pay.relation.table] : []))
     .select({ count: sql<number>`count(*)` })
     .from(job)
     .leftJoin(jobScore, scoreJoin(candidateId, opts.track))
@@ -730,7 +804,11 @@ async function countWhere(candidateId: number | null, opts: BoardFilters, condit
     )
     .leftJoin(source, eq(source.id, job.sourceId))
     .leftJoin(jobPage, eq(jobPage.jobId, job.id))
-    .where(and(...conditions));
+    .where(and(...conditions))
+    .$dynamic();
+  if (pay?.relation.kind === "shared") query = query.leftJoin(pay.relation.table, eq(pay.relation.table.jobId, job.id));
+  else if (pay) query = query.leftJoinLateral(pay.relation.table, sql`true`);
+  const [row] = await query;
   return Number(row?.count ?? 0);
 }
 
@@ -749,41 +827,42 @@ export async function countHiddenByPayRange(
   const outside: SQL[] = [];
   if (opts.pay.min !== undefined) outside.push(sql`${pay!.amount} < ${opts.pay.min}`);
   if (opts.pay.max !== undefined) outside.push(sql`${pay!.amount} > ${opts.pay.max}`);
-  return countWhere(candidateId, opts, [...conditions, sql`(${sql.join(outside, sql` or `)})`]);
+  return countWhere(candidateId, opts, [...conditions, sql`(${sql.join(outside, sql` or `)})`], pay);
 }
 
 /** Counts for the filter chips, so the UI can show what each option yields. */
 export async function boardFacets(candidateId: number | null, base: BoardFilters = {}) {
   const sourceKind = sql<string>`split_part(${job.sourceId}, ':', 1)`;
-  const dimensions = { ...base, limit: undefined, offset: undefined };
-  // A dimension's own filter never narrows its own list. Counting the sources
-  // of a board already restricted to two sources answers "which two did you
-  // pick", and the multi-select could then only ever lose options: picking
-  // `ashby` left `ashby` as the only thing left to pick.
-  const sourceDimension = { ...dimensions, sourceKinds: undefined };
-  const clusterDimension = { ...dimensions, cluster: undefined };
+  const matchesSource = base.sourceKinds?.length
+    ? inArray(sourceKind, [...base.sourceKinds]) : sql`true`;
+  const matchesCluster = candidateId !== null && base.cluster
+    ? eq(jobScore.cluster, base.cluster) : sql`true`;
+  const group = sql.join(groupKey(job, source.label), sql`, `);
   const freshCutoff = freshnessCutoff(3);
 
-  // These six counters used to call `countBoard` independently. Each call
-  // scanned the complete open corpus and its candidate-scoped joins, so one
-  // cockpit render paid six full scans before loading a single card. Conditional
-  // aggregation produces the same facets with one corpus scan.
-  //
-  // Duas de cada vez, não três. Três era o pool inteiro (`max: 3` em
-  // `client.ts`) dentro de UMA leitura, então qualquer chamador que somasse
-  // outra consulta já esgotava as conexões — e todos somam. O teto é `POOL - 1`
-  // porque a instância serverless é reaproveitada: a requisição do lado também
-  // precisa de conexão.
-  const [summaryRows, clusterRows] = await Promise.all([
+  // A dimensão não restringe as próprias opções. Fonte faz parte da chave do
+  // grupo, então seu filtro aceita ou recusa o grupo inteiro. Cluster pode
+  // mudar entre irmãs: o resumo precisa da primeira que passa pelo cluster,
+  // enquanto as opções de cluster precisam da primeira sem esse filtro.
+  const eligible = getDb().$with("facet_candidates").as(
     getDb()
       .select({
-        total: sql<number>`count(*)`,
-        unblocked: sql<number>`coalesce(sum(case when coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb then 1 else 0 end), 0)`,
-        fresh: sql<number>`coalesce(sum(case when coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${freshCutoff} then 1 else 0 end), 0)`,
-        withComp: sql<number>`coalesce(sum(case when coalesce(${job.compMax}, ${job.compMin}, 0) > 0 then 1 else 0 end), 0)`,
-        named: sql<number>`coalesce(sum(case when lower(${job.companyName}) <> lower(coalesce(${source.label}, '')) then 1 else 0 end), 0)`,
-        described: sql<number>`coalesce(sum(case when ${fullDescriptionSql()} then 1 else 0 end), 0)`,
-        notApplied: sql<number>`coalesce(sum(case when ${application.appliedAt} is null then 1 else 0 end), 0)`,
+        id: job.id,
+        cluster: jobScore.cluster,
+        kind: sourceKind.as("kind"),
+        matchesSource: matchesSource.as("matches_source"),
+        matchesCluster: matchesCluster.as("matches_cluster"),
+        firstId: (base.groupRepeats
+          ? sql`min(${job.id}) over (partition by ${group})` : sql`${job.id}`).as("first_id"),
+        firstSelectedId: (base.groupRepeats
+          ? sql`min(${job.id}) filter (where ${matchesCluster}) over (partition by ${group})`
+          : sql`${job.id}`).as("first_selected_id"),
+        unblocked: sql`coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb`.as("unblocked"),
+        fresh: sql`coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${freshCutoff}`.as("fresh"),
+        withComp: sql`coalesce(${job.compMax}, ${job.compMin}, 0) > 0`.as("with_comp"),
+        named: sql`lower(${job.companyName}) <> lower(coalesce(${source.label}, ''))`.as("named"),
+        described: fullDescriptionSql().as("described"),
+        notApplied: sql`${application.appliedAt} is null`.as("not_applied"),
       })
       .from(job)
       .leftJoin(jobScore, scoreJoin(candidateId, base.track))
@@ -793,35 +872,25 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
       )
       .leftJoin(source, eq(source.id, job.sourceId))
       .leftJoin(jobPage, eq(jobPage.jobId, job.id))
-      .where(and(...boardConditions(dimensions, candidateId))),
-    getDb()
-      .select({ cluster: jobScore.cluster })
-      .from(job)
-      .leftJoin(jobScore, scoreJoin(candidateId, base.track))
-      .leftJoin(
-        application,
-        and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
-      )
-      .leftJoin(source, eq(source.id, job.sourceId))
-      .leftJoin(jobPage, eq(jobPage.jobId, job.id))
-      .where(and(...boardConditions(clusterDimension, candidateId), sql`${jobScore.cluster} is not null`))
-      .groupBy(jobScore.cluster)
-      .then((rows) => rows.map((row) => row.cluster!).sort()),
-  ]);
-  const sourceRows = await getDb()
-    .select({ kind: sourceKind })
-    .from(job)
-    .leftJoin(jobScore, scoreJoin(candidateId, base.track))
-    .leftJoin(
-      application,
-      and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
-    )
-    .leftJoin(source, eq(source.id, job.sourceId))
-    .leftJoin(jobPage, eq(jobPage.jobId, job.id))
-    .where(and(...boardConditions(sourceDimension, candidateId)))
-    .groupBy(sourceKind)
-    .then((rows) => rows.map((row) => row.kind).sort());
-  const summary = summaryRows[0];
+      .where(and(...boardConditions({ ...base, sourceKinds: undefined, cluster: undefined, groupRepeats: false }, candidateId))),
+  );
+  const inSummary = sql`${eligible.matchesSource} and ${eligible.matchesCluster} and ${eligible.id} = ${eligible.firstSelectedId}`;
+  const count = (condition: SQL = sql`true`) => sql<number>`count(*) filter (where ${inSummary} and ${condition})`;
+  const [summary] = await getDb().with(eligible).select({
+    total: count(),
+    unblocked: count(sql`${eligible.unblocked}`),
+    fresh: count(sql`${eligible.fresh}`),
+    withComp: count(sql`${eligible.withComp}`),
+    named: count(sql`${eligible.named}`),
+    described: count(sql`${eligible.described}`),
+    notApplied: count(sql`${eligible.notApplied}`),
+    clusters: sql<string[] | null>`array_agg(distinct ${eligible.cluster}) filter (
+      where ${eligible.matchesSource} and ${eligible.id} = ${eligible.firstId} and ${eligible.cluster} is not null
+    )`,
+    // Para listar fontes basta existir uma publicação elegível: todas as irmãs
+    // do grupo têm o mesmo prefixo e a agregação já elimina duplicatas.
+    sources: sql<string[] | null>`array_agg(distinct ${eligible.kind}) filter (where ${eligible.matchesCluster})`,
+  }).from(eligible);
   return {
     total: Number(summary?.total ?? 0),
     unblocked: Number(summary?.unblocked ?? 0),
@@ -830,8 +899,8 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
     named: Number(summary?.named ?? 0),
     described: Number(summary?.described ?? 0),
     notApplied: Number(summary?.notApplied ?? 0),
-    clusters: clusterRows,
-    sources: sourceRows,
+    clusters: (summary?.clusters ?? []).sort(),
+    sources: (summary?.sources ?? []).sort(),
   };
 }
 

@@ -273,6 +273,11 @@ digitação de alguém, não ausência observada. A implementação e os critér
 
 ### Dev e staging: somente fixtures
 
+A promoção para staging é vinculada a um SHA com CI aprovado. Retomada manual
+exige `target-sha` e respeita a guarda de migrações; siga o
+[contrato de promoção](engineering/promotion.md) para reutilizar o mesmo alvo
+depois de uma falha.
+
 Os ambientes remotos de dev e staging não devem executar `jobs sync`, download
 de descrição, scraping, recheck, probe ou busca de novas vagas. Eles
 usam uma amostra sintética com as modalidades e estados necessários para UI,
@@ -547,6 +552,12 @@ roteiro curto:
    vagas num Postgres local e diz o tempo e o **número de idas** de cada um.
    Sem rede, é o piso: o custo em produção é `estágios em série × round-trip`.
    Guarde o relatório com `JHO_PERF_OUT=antes.txt` e compare depois.
+
+Para guardar a comparação completa, use também `JHO_PERF_JSON=arquivo.json`.
+`JHO_PERF_RUNS` e `JHO_PERF_WARMUPS` (inteiros positivos) controlam as repetições. A evidência inclui
+resultados de referência, volume de SQL, parâmetros e o plano da maior consulta;
+compare os resultados antes/depois, além dos tempos. O comando continua usando
+somente o banco sintético isolado.
 
 `tests/db-fan-out.test.ts` afirma que `/jobs` lê as trilhas e o câmbio uma vez
 cada — a régua de pico de conexões não enxerga round-trip: cada consulta cabe no
