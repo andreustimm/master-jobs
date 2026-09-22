@@ -18,6 +18,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Novidade
+
+- Nova tela Minha conta, no menu: troque o seu nome de exibição e a sua senha
+  sem pedir ao admin. Para trocar a senha é preciso informar a atual; ao
+  trocar, todas as outras sessões da conta são encerradas e você continua
+  conectado. O e-mail continua sendo trocado por um admin.
+
 ### Corrigido
 
 - O sistema nunca mais faz pedidos automáticos ao LinkedIn, nem quando uma

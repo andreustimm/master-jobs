@@ -73,6 +73,9 @@ export const E2E_ROLES = {
   disabled: { email: "e2e-desabilitada@local.test", roles: ["candidate"], disabled: true },
   // Vinculado ao dono: lê o funil dele e nunca as trilhas nem os termos.
   linkedRecruiter: { email: "e2e-recrutador-vinculado@local.test", roles: ["recruiter"] },
+  // Troca a própria senha na jornada de Minha conta; dedicada para não mudar a
+  // senha de quem as outras jornadas usam.
+  account: { email: "e2e-conta@local.test", roles: ["recruiter"] },
 };
 
 try {

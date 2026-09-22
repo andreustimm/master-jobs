@@ -9,6 +9,18 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Minha conta (`/account`, #236): qualquer papel troca a própria senha e o
+  nome de exibição. A troca exige a senha atual, limita a 5 tentativas por
+  conta em 15 minutos (tentativa gravada em `auth_event` antes de contada, para
+  rajada concorrente não passar junta), derruba todas as sessões da conta e
+  abre uma nova para o navegador que pediu; registra `password_changed` e
+  `profile_updated`. Novas ações `account:read` e `account:write` na política;
+  sessão emprestada lê, mas nunca escreve na conta do alvo. Troca de e-mail
+  continua só com admin até haver confirmação por e-mail (`docs/security.md`).
+  Link "Minha conta" no menu; rota nas guardas de inglês, largura e axe.
+
 ### Corrigido
 
 - Rede: `assertSafeRemoteUrl` recusa `linkedin.com`, `linkedin.cn`, `lnkd.in`,

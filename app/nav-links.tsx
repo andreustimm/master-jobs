@@ -64,6 +64,9 @@ export function NavLinks({
           {t("recruiter.title")}
         </TransitionLink>
       )}
+      <TransitionLink href="/account" className={linkClass} data-testid="nav-account">
+        {t("account.nav")}
+      </TransitionLink>
       {isAdmin && (
         <TransitionLink href="/admin/users" className={linkClass} data-testid="nav-admin-users">
           {t("admin.nav")}
