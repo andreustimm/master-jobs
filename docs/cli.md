@@ -1,5 +1,9 @@
 # Referência da CLI
 
+Esta página cobre a CLI do produto (`rtk pnpm jho`). A coordenação de tarefas
+de engenharia usa `rtk pnpm tasks`; comandos, assinaturas, códigos de saída e
+procedimento de ativação estão no [guia de tarefas do GitHub Project](engineering/github-project-tasks.md).
+
 ## Por que isto existe
 
 Hoje a CLI **é** o produto. Não há UI: `src/cli.ts` é a superfície de uso inteira do
