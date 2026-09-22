@@ -19,10 +19,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   antiga que aponta para ele (`ownedCandidateId`, nos três caminhos que montam
   identidade), o que nega o dado já gravado sem migração. Conta nova com papel
   candidato recebe candidato próprio por `claimOwnCandidate`, na CLI e em
-  `/admin/users`, pulando slug de outra conta; `jho auth add-user` só dá o
-  candidato do perfil à primeira conta da instalação, nunca troca vínculo
+  `/admin/users`, sempre novo (nem o de conta apagada é reaproveitado); `jho
+  auth add-user` só dá o candidato do perfil à conta mais antiga da instalação
+  enquanto `default` não tem conta, nunca troca vínculo
   gravado e perdeu `--candidate`; `seedOwner` recusa um segundo e-mail; o setup
-  do e2e recusa banco fora do loopback e `E2E_EMAIL` que não seja `@local.test`.
+  do e2e recusa qualquer URL de banco fora do loopback (inclusive
+  `POSTGRES_URL*`, que a migração usa como alternativa) e `E2E_EMAIL` que não
+  seja `@local.test`.
   A migration `0009` cria o índice único parcial `auth_user_candidate_idx` —
   manual, e só depois de a consulta de duplicatas em `docs/security.md` voltar
   vazia.

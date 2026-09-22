@@ -184,7 +184,9 @@ describe("um candidato, uma conta", () => {
     const doDono = await novoCandidato("default");
     await novaConta("dono@test", doDono, ["admin", "candidate"]);
 
-    await expect(novaConta("convidado@test", doDono)).rejects.toThrow();
+    await expect(novaConta("convidado@test", doDono)).rejects.toMatchObject({
+      cause: { constraint_name: "auth_user_candidate_idx" },
+    });
     // Várias contas sem candidato continuam possíveis.
     await novaConta("admin2@test", null, ["admin"]);
     await novaConta("recrutador@test", null, ["recruiter"]);
@@ -202,10 +204,31 @@ describe("um candidato, uma conta", () => {
     expect(row!.slug).toBe("user-a-b-x-test-2");
   });
 
-  it("candidato órfão de conta apagada é reaproveitado", async () => {
+  it("candidato órfão de conta apagada nunca é reaproveitado", async () => {
+    // Apagar a conta não apaga o candidato: o currículo de quem saiu continua lá.
     const orfao = await claimOwnCandidate({ email: "volta@test", name: "Volta" });
 
-    expect(await claimOwnCandidate({ email: "volta@test", name: "Volta" })).toBe(orfao);
+    expect(await claimOwnCandidate({ email: "volta@test", name: "Volta" })).not.toBe(orfao);
+  });
+
+  it("o dono que entrou só como admin ganha o candidato do perfil ao virar candidato", async () => {
+    await addUser({ email: "dono@test", roles: ["admin"] });
+
+    const r = await addUser({ email: "dono@test", roles: ["admin", "candidate"] });
+
+    const [row] = await db.select().from(candidate).where(eq(candidate.id, r.candidateId!));
+    expect(row!.slug).toBe("default");
+  });
+
+  it("slug `default` é o dono mesmo com convidado padrão legado mais antigo", async () => {
+    const [legado] = await db
+      .insert(candidate)
+      .values({ slug: "user-legado-test", name: "Legado", isDefault: true })
+      .returning({ id: candidate.id });
+    const doDono = await syncCandidateFromProfile();
+
+    expect(await isOwner(doDono)).toBe(true);
+    expect(await isOwner(legado!.id)).toBe(false);
   });
 });
 

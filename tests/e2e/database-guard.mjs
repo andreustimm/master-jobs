@@ -12,9 +12,19 @@
  */
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
+// Todas as variáveis que `src/core/db/config.ts` consulta, runtime e migração.
+// Conferir só `DATABASE_*` deixava `runMigrations` cair em
+// `POSTGRES_URL_NON_POOLING` — a de produção, quando o `.env` a carrega.
+const DATABASE_VARIABLES = [
+  "DATABASE_URL",
+  "DATABASE_MIGRATION_URL",
+  "POSTGRES_URL",
+  "POSTGRES_URL_NON_POOLING",
+];
+
 /** Motivo da recusa, ou `null` quando o ambiente é seguro para o setup. */
 export function isolationRefusal(env) {
-  for (const name of ["DATABASE_URL", "DATABASE_MIGRATION_URL"]) {
+  for (const name of DATABASE_VARIABLES) {
     const value = env[name];
     if (value === undefined || value === "") {
       if (name === "DATABASE_URL") return "DATABASE_URL ausente";

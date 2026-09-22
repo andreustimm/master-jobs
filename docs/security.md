@@ -139,11 +139,15 @@ A correção:
   o dado já gravado, sem migração.
 - **Escrita:** `claimOwnCandidate` (`src/contexts/auth/app/accounts.ts`) é o
   único caminho de candidato para conta nova, na CLI e em `/admin/users`, e
-  pula slug que já pertence a outra conta. `add-user` só dá o candidato do
-  perfil à primeira conta da instalação, nunca troca vínculo gravado e perdeu
+  sempre cria candidato novo: nunca reaproveita slug existente, nem o de conta
+  apagada, cujo currículo continua lá. `add-user` só dá o candidato do perfil à
+  conta mais antiga da instalação enquanto `default` não tem conta, nunca troca
+  vínculo gravado e perdeu
   `--candidate`. `seedOwner` recusa um segundo e-mail sobre o candidato do dono.
-- **E2E:** `tests/e2e/database-guard.mjs` recusa o setup fora do loopback e
-  `E2E_EMAIL` que não seja `@local.test`.
+- **E2E:** `tests/e2e/database-guard.mjs` recusa o setup se qualquer URL de
+  banco que `src/core/db/config.ts` consulta (`DATABASE_URL`,
+  `DATABASE_MIGRATION_URL`, `POSTGRES_URL`, `POSTGRES_URL_NON_POOLING`) sair do
+  loopback, e `E2E_EMAIL` que não seja `@local.test`.
 - **Estrutural:** a migration `0009` cria o índice único parcial
   `auth_user_candidate_idx`.
 - **Dono do perfil:** `isOwner` passou a ser o candidato padrão mais antigo.
@@ -156,6 +160,25 @@ duplicata. Antes de aplicá-la, a consulta abaixo precisa voltar vazia:
 ```sql
 select candidate_id, count(*) from production.auth_user
 where candidate_id is not null group by candidate_id having count(*) > 1;
+```
+
+A limpeza segue a mesma regra da leitura — o candidato fica com a conta de
+menor id, e as posteriores perdem o vínculo:
+
+```sql
+update production.auth_user u set candidate_id = null
+where candidate_id is not null
+  and exists (select 1 from production.auth_user e
+              where e.candidate_id = u.candidate_id and e.id < u.id);
+```
+
+Enquanto a conta errada resolvia para o candidato do dono, ela podia vincular
+recrutadores a ele. Confira também os vínculos e remova os que o dono não criou:
+
+```sql
+select id, recruiter_user_id, created_by, created_at
+from production.recruiter_candidate
+where candidate_id = (select id from production.candidate where slug = 'default');
 ```
 
 O deploy do código pode vir antes da limpeza: a leitura já nega o candidato às

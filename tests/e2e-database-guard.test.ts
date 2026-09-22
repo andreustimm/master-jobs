@@ -24,6 +24,13 @@ describe("isolationRefusal", () => {
     );
   });
 
+  it("recusa URL de produção nas variáveis do provedor, que a migração usa como alternativa", () => {
+    expect(isolationRefusal({ DATABASE_URL: LOCAL, POSTGRES_URL_NON_POOLING: SUPABASE })).toMatch(
+      /POSTGRES_URL_NON_POOLING/,
+    );
+    expect(isolationRefusal({ DATABASE_URL: LOCAL, POSTGRES_URL: SUPABASE })).toMatch(/POSTGRES_URL/);
+  });
+
   it("recusa sem banco declarado ou com URL inválida", () => {
     expect(isolationRefusal({})).toMatch(/ausente/);
     expect(isolationRefusal({ DATABASE_URL: "não é url" })).toMatch(/inválida/);
