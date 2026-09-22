@@ -6,13 +6,13 @@ persona: Candidato por teclado
 journey: J-switch-workspace-screen
 expected: Um splash único e curto bloqueia a tela anterior e sai somente quando o destino correto está utilizável
 entry_points: /jobs
-qa_status: untested
+qa_status: pass
 bug_ids: BUG-20260823-pipeline-empty-state-mixed-locale
 fix_status: fixed
 retest_status: pending
 fix_commits: bfd27a9
-evidence: tests/e2e/ui.mjs; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/triagem-pipeline.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/keyboard-pipeline-goal.png; docs/qa/reports/2026-08-24T210158000000Z-71293d34-release-1.3.0-full.md
-last_report: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md
+evidence: evidence/2026-09-22-rc-1.22.0/s4-after-route-change.png
+last_report: docs/qa/reports/2026-09-22-release-candidate-1.22.0-full.md
 overlaps:
 ---
 
@@ -25,3 +25,5 @@ Revalidado na Task 04 em menu global, links contextuais, filtros GET, paginaçã
 O Full QA confirmou Pipeline por menu e por teclado, seguido de reload no mesmo destino.
 
 **Reset 2026-09-22 (#220):** filtros GET, paginação e densidade deixaram de abrir o splash — viraram transição suave na mesma tela (`NAV-same-screen-soft-transition`). Este cenário passa a cobrir só a troca entre telas; revalidar.
+
+Full 1.22.0 (2026-09-22): Troca /jobs → /pipeline pelo menu do celular: um overlay, shell inert com 'Loading the next screen', liberado em ~450 ms com o destino utilizável.

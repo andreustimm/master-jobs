@@ -6,13 +6,13 @@ persona: Andreus em triagem noturna
 journey: J-preserve-application-decision
 expected: A nota escrita com o estágio inalterado é gravada como evento, e a tela não anuncia sucesso sobre uma gravação que não aconteceu
 entry_points: /jobs/<id>; jho track <id> <status> --notes
-qa_status: untested
+qa_status: pass
 bug_ids: BUG-20260917-transition-note-never-readable
 fix_status: fixed
 retest_status: pending
 fix_commits: 03ac0f6; cb00cbb
-evidence:
-last_report: docs/qa/reports/2026-09-18T022259704434Z-6535cca7-release-candidate-1.8.0-promovido.md
+evidence: evidence/2026-09-22-rc-1.22.0/log.txt
+last_report: docs/qa/reports/2026-09-22-release-candidate-1.22.0-full.md
 overlaps: PIPE-save-resume-decision
 ---
 
@@ -28,3 +28,5 @@ existindo em superfície pública nenhuma — isso é
 BUG-20260917-transition-note-never-readable e depende de decisão humana. Por
 isso este cenário só assenta quando houver onde ler: hoje a única prova
 disponível seria banco, e banco não é veredito de jornada.
+
+Full 1.22.0 (2026-09-22): Nota salva com Pré-selecionada inalterada aparece no detalhe após reload, junto da primeira.
