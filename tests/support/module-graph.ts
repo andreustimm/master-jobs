@@ -81,13 +81,7 @@ export function resolveLocal(from: string, specifier: string): string | null {
  */
 export type ForbiddenEdge = (specifier: string | null, resolved: string | null) => string | null;
 
-/**
- * A cadeia de imports de VALOR de `entry` até a primeira aresta proibida,
- * seguindo módulos locais. `null` quando nada proibido é alcançado.
- *
- * A cadeia termina com o motivo, para a falha dizer por onde o banco entrou:
- * `score.ts -> matching/index.ts -> infra/drizzle-profile.ts -> drizzle-orm`.
- */
+/** De onde o grafo lê: o disco, ou um conjunto de arquivos em memória no teste negativo. */
 export type ModuleSource = {
   read: (file: string) => string;
   resolve: (from: string, specifier: string) => string | null;
@@ -95,6 +89,13 @@ export type ModuleSource = {
 
 const DISK: ModuleSource = { read: (file) => readFileSync(file, "utf8"), resolve: resolveLocal };
 
+/**
+ * A cadeia de imports de VALOR de `entry` até a primeira aresta proibida,
+ * seguindo módulos locais. `null` quando nada proibido é alcançado.
+ *
+ * A cadeia termina com o motivo, para a falha dizer por onde o banco entrou:
+ * `score.ts -> matching/index.ts -> infra/drizzle-profile.ts -> drizzle-orm`.
+ */
 export function forbiddenReach(
   entry: string,
   forbidden: ForbiddenEdge,
