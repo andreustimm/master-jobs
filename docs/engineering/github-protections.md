@@ -190,4 +190,22 @@ reais:
 | push direto em `sonda/protecoes-main` | `Changes must be made through a pull request` e `2 of 2 required status checks are expected` |
 | `gh pr merge` sem aprovação na PR para `sonda/protecoes-main` | `the base branch policy prohibits the merge` |
 | `gh pr merge --admin` com CI em andamento | `Required status check "qualidade" is in progress` |
-| ruleset com GitHub Actions como bypass | 422 (seção acima) |
+| ruleset com GitHub Actions como bypass | 422 (seção acima), repetido em 23/09/2026 |
+
+Conferido em 23/09/2026, já com os rulesets ativos:
+
+- A PR de produção #262 tem autor `github-actions[bot]`, `qualidade` e
+  `schema-e-migracao` verdes na cabeça e fica `REVIEW_REQUIRED`. Falta só a
+  aprovação do dono, que pode aprová-la porque não é o autor.
+- A varredura agendada das 10:27 UTC recebeu o ambiente `Production` na branch
+  `main` e rodou com os segredos. A política de branch não barra as rotinas
+  por cron, que rodam na branch padrão.
+- Os pushes da automação conferem com as regras: `promotion.ts` empurra o commit
+  de versão para `dev` e o SHA validado para `staging`, os dois como
+  fast-forward. O retorno `main → dev` é fast-forward ou merge de PR, e a tag
+  nasce pela API. Nenhum desses pushes reescreve histórico, e `dev` e `staging`
+  não têm outra regra. O único push recusado é o `git push origin HEAD:main` do
+  hotfix, descrito acima.
+- Ainda não houve deploy de produção da Vercel depois dos rulesets. A conferência
+  da seção *Deployments da Vercel* continua pendente para o próximo merge em
+  `main`.

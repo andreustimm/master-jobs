@@ -40,16 +40,14 @@ describe("política desejada", () => {
 
   it("checks exigidos são os jobs do CI, emitidos pelo GitHub Actions, sem modo estrito", () => {
     const ci = YAML.parse(readFileSync(".github/workflows/ci.yml", "utf8")) as { jobs: Record<string, unknown> };
-    for (const branch of ["main"]) {
-      const [set] = covering(branch, "required_status_checks");
-      const parameters = set!.rules.find((rule) => rule.type === "required_status_checks")!.parameters!;
-      expect(parameters.strict_required_status_checks_policy).toBe(false);
-      const checks = parameters.required_status_checks as Array<{ context: string; integration_id: number }>;
-      expect(checks.map((check) => check.context)).toEqual(["qualidade", "schema-e-migracao"]);
-      for (const check of checks) {
-        expect(check.integration_id).toBe(GITHUB_ACTIONS_APP_ID);
-        expect(Object.keys(ci.jobs)).toContain(check.context);
-      }
+    const [set] = covering("main", "required_status_checks");
+    const parameters = set!.rules.find((rule) => rule.type === "required_status_checks")!.parameters!;
+    expect(parameters.strict_required_status_checks_policy).toBe(false);
+    const checks = parameters.required_status_checks as Array<{ context: string; integration_id: number }>;
+    expect(checks.map((check) => check.context)).toEqual(["qualidade", "schema-e-migracao"]);
+    for (const check of checks) {
+      expect(check.integration_id).toBe(GITHUB_ACTIONS_APP_ID);
+      expect(Object.keys(ci.jobs)).toContain(check.context);
     }
   });
 
