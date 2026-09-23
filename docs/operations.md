@@ -661,7 +661,15 @@ Duas armadilhas dentro disso, que não aparecem contando `Promise.all`:
 de dados (`app/cockpit-data.ts`, `app/jobs/jobs-data.ts`,
 `app/searches/searches-data.ts`, `app/candidate/skills/data.ts`), nunca no corpo
 da página, e cada um desses módulos tem um caso em `tests/db-fan-out.test.ts`.
-Composição na página é invariante sem guarda.
+Composição na página é invariante sem guarda — ou era: o inventário V10-05 em
+`tests/architecture.test.ts` descobre pelo conteúdo todo arquivo de `app/` com
+`Promise.all` (e parentes) e exige uma de duas coisas: a função de composição
+chamada em `db-fan-out.test.ts`, ou um leque literal de no máximo `max - 1`
+itens (o `max` lido de `src/core/db/client.ts`) com o motivo escrito. Leque
+dinâmico (`Promise.all(rows.map(…))`) conta como ilimitado, e ler `loadRates`
+duas vezes na mesma composição reprova. É inventário, não medição: o leque
+declarado conta chamadas, e uma chamada que abre duas consultas por dentro só
+aparece no pico medido.
 
 E **passe o câmbio adiante.** `loadRates()` é uma consulta sem cache (eram duas,
 em série, antes de a data mais recente virar subconsulta), e `listBoard`,

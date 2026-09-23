@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { fingerprint } from "../src/core/ingest/normalize.ts";
 import { loadProfile } from "../src/core/profile/load.ts";
 import type { Profile } from "../src/core/profile/schema.ts";
-import { locationRestriction, scoreJob } from "../src/core/scoring/score.ts";
+import { locationRestriction } from "../src/core/scoring/score.ts";
+import { scoreJob } from "./support/score-now.ts";
 import { himalayas } from "../src/core/sources/aggregators.ts";
 import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/http-port.ts";
 

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadProfile } from "../src/core/profile/load.ts";
 import type { Profile } from "../src/core/profile/schema.ts";
-import { scoreJob } from "../src/core/scoring/score.ts";
+import { scoreJob } from "./support/score-now.ts";
 import { hackernews } from "../src/core/sources/hackernews.ts";
 import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/http-port.ts";
 import { jobicy } from "../src/core/sources/jobicy.ts";

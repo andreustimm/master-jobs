@@ -465,7 +465,7 @@ fx.command("show")
         console.log(c.yellow("Nenhuma cotação em cache. Rode: jho fx refresh"));
         return;
       }
-      const age = ageInDays(table);
+      const age = ageInDays(table, new Date(clock().now()));
       const stamp = age > STALE_AFTER_DAYS ? c.red(`${table.date} (${age}d)`) : c.green(table.date);
       console.log(`\n  Base ${c.bold(table.base)} · cotação de ${stamp}\n`);
       const entries = Object.entries(table.rates).sort(([a], [b]) => a.localeCompare(b));

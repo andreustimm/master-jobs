@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { stripComments } from "./support/entry-inventory.ts";
 
 /**
  * DESIGN.md is the visual source of truth (rule 8 in CLAUDE.md).
@@ -181,5 +182,200 @@ describe("design tokens", () => {
       .map((b) => b[0].split(" ")[0]);
     expect(blocks.length).toBeGreaterThan(10);
     expect(withoutFamily).toEqual([]);
+  });
+});
+
+/**
+ * V10-03: o tema DEFINE a paleta; o componente só a LÊ.
+ *
+ * As duas verificações acima olham `#` de seis dígitos e `text-[Npx]` em
+ * `.tsx`. Passavam, portanto, `#fff`, `rgb(…)`, `oklch(…)`, `var(--color-iris)`
+ * (paleta crua, igual em todos os temas), `text-slate-500`, `text-[0.8rem]`,
+ * `fontSize: "14.5px"` e qualquer cor escrita num `.ts` ou num `.css` novo.
+ *
+ * O critério não é "hex existe no repositório": os três arquivos de definição
+ * existem justamente para conter a paleta. A regra é onde o valor aparece. Um
+ * nome `--color-*` é tema quando `globals.css` o declara como apelido de uma
+ * variável semântica (`--color-hairline: var(--hairline)`), e é paleta crua
+ * quando só existe como valor literal.
+ */
+const DEFINITIONS = ["app/globals.css", "app/themes.css", "app/design-tokens.css"];
+
+type StyleScale = {
+  /** `--color-*` que resolvem para variável do tema. */
+  themed: Set<string>;
+  /** Nomes de utilidade (`iris`, `good`) cuja cor é literal e fixa. */
+  rawPalette: Set<string>;
+  /** Tamanhos de fonte em px que a escala define. */
+  fontPx: Set<number>;
+};
+
+function readScale(): StyleScale {
+  const css = DEFINITIONS.map((file) => read(file).replace(/\/\*[\s\S]*?\*\//g, "")).join("\n");
+  const themed = new Set([...css.matchAll(/(--color-[\w-]+)\s*:\s*var\(/g)].map((m) => m[1]!));
+  const rawPalette = new Set(
+    [...css.matchAll(/--color-([\w-]+)\s*:\s*(?:#|rgb|hsl|oklch)/g)]
+      .map((m) => m[1]!)
+      .filter((name) => !themed.has(`--color-${name}`)),
+  );
+  const fontPx = new Set([...css.matchAll(/font-size:\s*([\d.]+)px/g)].map((m) => Number(m[1])));
+  return { themed, rawPalette, fontPx };
+}
+
+const COLOR_UTILITY = "(?:text|bg|border|ring|fill|stroke|outline|decoration|from|to|via|shadow|accent|caret|divide|placeholder)";
+const TAILWIND_PALETTE =
+  "(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)";
+
+/**
+ * Tudo o que, num componente, é cor ou tamanho fora do sistema.
+ *
+ * Os `#` que sobram de propósito (`allowedHex`) são os mesmos do teste de hex
+ * acima: valores de token usados onde `var()` não resolve.
+ */
+function styleViolations(source: string, scale: StyleScale, allowedHex: Set<string>): string[] {
+  const code = stripComments(source);
+  const found: string[] = [];
+  // `&#8212;` é entidade HTML, não cor.
+  for (const m of code.matchAll(/(?<!&)#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![\w-])/g)) {
+    if (!allowedHex.has(m[0].toLowerCase())) found.push(m[0]);
+  }
+  for (const m of code.matchAll(/(?<![\w-])(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/g)) found.push(m[0]);
+  for (const m of code.matchAll(/--color-[\w-]+/g)) {
+    if (!scale.themed.has(m[0])) found.push(m[0]);
+  }
+  for (const m of code.matchAll(new RegExp(`(?<![\\w-])${COLOR_UTILITY}-([\\w-]+?)(?=[\\s"'\`/:\\]]|$)`, "g"))) {
+    if (scale.rawPalette.has(m[1]!)) found.push(m[0]);
+  }
+  for (const m of code.matchAll(new RegExp(`(?<![\\w-])${COLOR_UTILITY}-${TAILWIND_PALETTE}-\\d{2,3}\\b`, "g"))) {
+    found.push(m[0]);
+  }
+  // Preto e branco fixos ignoram o tema. O véu de um diálogo (`backdrop:`) é
+  // escurecimento sobre qualquer tema, e não cor de componente.
+  for (const m of code.matchAll(/(?<!backdrop:)(?<![\w-])(?:text|bg|border|ring|fill|stroke)-(?:white|black)\b/g)) {
+    found.push(m[0]);
+  }
+  for (const m of code.matchAll(/(?<![\w-])text-\[(?:length:)?[\d.]+(?:px|rem|em)\]/g)) found.push(m[0]);
+  for (const m of code.matchAll(/\bfont-?[sS]ize\s*:\s*["'`]?([\d.]+)(px|rem|em)?/g)) {
+    if (m[2] !== "px" || !scale.fontPx.has(Number(m[1]))) found.push(m[0]);
+  }
+  for (const m of code.matchAll(
+    /(?<![\w-])-?(?:p|px|py|pt|pb|pl|pr|ps|pe|m|mx|my|mt|mb|ml|mr|ms|me|gap|gap-x|gap-y|space-x|space-y)-\[([^\]]+)\]/g,
+  )) {
+    if (/\d(?:px|rem|em)\b/.test(m[1]!)) found.push(m[0]);
+  }
+  return found;
+}
+
+/** Arquivo e casos tolerados, cada um com o motivo. Exceção órfã reprova. */
+const STYLE_EXCEPTIONS: Record<string, { matches: string[]; why: string }> = {
+  "components/ui/button.tsx": {
+    matches: ["text-[0.8rem]"],
+    why: "gerado pelo shadcn; 12,8px cai entre dois degraus da escala e trocar muda o botão pequeno em todas as telas — correção visual fica para tarefa própria",
+  },
+  "app/candidate/highlight.ts": {
+    matches: ['fontSize: "1.2em', 'fontSize: "1.1em'],
+    why: "títulos do markdown dentro do editor, relativos à fonte de 13px do CodeMirror; achados quando a varredura passou a ler `.ts`, e trocar por degrau da escala muda o editor",
+  },
+  "app/candidate/editor.tsx": {
+    matches: ["text-white"],
+    why: "texto do botão ativo do editor sobre `--color-brand`; a troca por `--primary-foreground` precisa de medição de contraste nos seis ambientes",
+  },
+};
+
+function styleFiles(): string[] {
+  const out: string[] = [];
+  const visit = (dir: string) => {
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) visit(full);
+      else if (/\.(tsx?|css)$/.test(full) && !DEFINITIONS.includes(full)) out.push(full);
+    }
+  };
+  for (const dir of ["app", "components", "lib"]) visit(dir);
+  return out;
+}
+
+describe("V10-03 componente lê o tema, não a paleta", () => {
+  const scale = readScale();
+  const allowedHex = new Set(["#5b5fa8", "#356373", "#7fadbe", "#ffffff", "#101215"]);
+
+  it("lê a escala dos arquivos de definição, e não de uma lista escrita à mão", () => {
+    // Guarda contra o teste passar por não ter entendido a escala.
+    expect(scale.themed.has("--color-hairline")).toBe(true);
+    expect(scale.themed.has("--color-brand")).toBe(true);
+    expect(scale.rawPalette.has("iris")).toBe(true);
+    expect(scale.rawPalette.has("brand")).toBe(false);
+    expect(scale.fontPx.has(13)).toBe(true);
+    expect(scale.fontPx.has(12.8)).toBe(false);
+  });
+
+  it("recusa cor e tamanho fora do sistema e aceita o que vem do tema", () => {
+    const proibido = [
+      'const a = "#fff";',
+      'const b = "#ffcc00aa";',
+      'style={{ color: "rgb(0 0 0)" }}',
+      'className="bg-[oklch(0.7_0.1_200)]"',
+      'className="text-[var(--color-iris)]"',
+      'className="text-iris bg-ember/20"',
+      'className="text-slate-500"',
+      'className="text-white"',
+      'className="hover:bg-black"',
+      'className="text-[0.8rem]"',
+      'className="text-[14px]"',
+      "style={{ fontSize: \"14.5px\" }}",
+      "style={{ fontSize: \"1.1rem\" }}",
+      'className="p-[13px] gap-[0.3rem]"',
+    ];
+    for (const trecho of proibido) {
+      expect(styleViolations(trecho, scale, allowedHex), trecho).not.toEqual([]);
+    }
+
+    const permitido = [
+      'className="text-[var(--primary-text)] border-[var(--color-hairline)]"',
+      'className="hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)]"',
+      'className="bg-card text-card-foreground text-good-label"',
+      'className="backdrop:bg-black/40"',
+      "style={{ fontSize: \"13px\" }}",
+      'className="p-[var(--spacing-md)] max-w-[320px]"',
+      "<a href=\"#main\">&#8212;</a>",
+      '// comentário citando #fff e rgb(0 0 0)',
+    ];
+    for (const trecho of permitido) {
+      expect(styleViolations(trecho, scale, allowedHex), trecho).toEqual([]);
+    }
+  });
+
+  it("não bloqueia o tema que define a paleta", () => {
+    // Os arquivos de definição têm hex por natureza: a regra é sobre ONDE o
+    // valor aparece. Se o detector valesse para eles, a paleta seria proibida
+    // de existir — e ela não fica fora da varredura por acaso, mas por nome.
+    const themes = read("app/themes.css");
+    expect(styleViolations(themes, scale, allowedHex).length).toBeGreaterThan(10);
+    expect(styleFiles()).not.toContain("app/themes.css");
+    expect(styleFiles()).toContain("app/ui.tsx");
+  });
+
+  it("nenhum componente, módulo de UI ou CSS novo escreve cor ou tamanho fora do sistema", () => {
+    const files = styleFiles();
+    expect(files.length).toBeGreaterThan(40);
+    const offenders: string[] = [];
+    const used = new Set<string>();
+    for (const file of files) {
+      const exception = STYLE_EXCEPTIONS[file];
+      for (const violation of styleViolations(read(file), scale, allowedHex)) {
+        if (exception?.matches.includes(violation)) {
+          used.add(`${file}: ${violation}`);
+          continue;
+        }
+        offenders.push(`${file}: ${violation}`);
+      }
+    }
+    for (const [file, { matches, why }] of Object.entries(STYLE_EXCEPTIONS)) {
+      for (const match of matches) {
+        if (!used.has(`${file}: ${match}`)) offenders.push(`${file}: exceção órfã ${match}`);
+      }
+      if (why.trim().length < 20) offenders.push(`${file}: exceção sem justificativa`);
+    }
+    expect(offenders).toEqual([]);
   });
 });
