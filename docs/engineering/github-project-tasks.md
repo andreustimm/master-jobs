@@ -157,10 +157,14 @@ nativos, depois registram evidência/sugestão idempotente. Não alteram Status.
 Payload atrasado, fechamento ou merge isolado não concluem nem regridem tarefa.
 O SHA publicado em main pertence à PR humana `staging → main`, não às PRs das
 tarefas; por isso o deployment chega às PRs de dev pelos commits dessa
-promoção. A mensagem de merge só nomeia candidatas: cada uma é relida e precisa
-provar base dev, vínculo nativo, branch reclamada e ancestralidade do SHA
-publicado. Promoção com 250 commits ou mais — o limite que a API lista — exige
-reconciliação explícita em vez de perder candidatas em silêncio.
+promoção. Só um deployment Production de main bem-sucedido, de uma promoção já
+mesclada, é expandido: deploys de dev e staging também resolvem para a promoção
+aberta e comentariam em toda issue promovida. A mensagem de merge só nomeia
+candidatas: número que é issue ou não existe é descartado, e cada PR restante é
+relida e precisa provar base dev, vínculo nativo, branch reclamada, merge
+posterior ao primeiro claim e ancestralidade do SHA publicado. Promoção com 250
+commits ou mais — o limite que a API lista — exige reconciliação explícita em
+vez de perder candidatas em silêncio.
 O pipeline dev → staging → main e os deployments de branches permanentes
 continuam sob os gates existentes; promoção de main continua humana.
 

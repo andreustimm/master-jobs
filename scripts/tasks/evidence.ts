@@ -9,8 +9,9 @@ import type { Command, ProjectConfig, TaskGateway, TaskSnapshot } from "./types.
 // using it would admit a merge from the same day that predates the claim, so the
 // window reads the exact instant kept in the coordination record instead.
 export function deliveryWindowStart(task: TaskSnapshot): number {
-  const acquired = Date.parse(task.coordination!.execution!.acquiredAt);
-  const first = task.coordination?.firstClaimedAt ? Date.parse(task.coordination.firstClaimedAt) : Number.NaN;
+  const coordination = task.coordination!;
+  const acquired = Date.parse(coordination.execution!.acquiredAt);
+  const first = coordination.firstClaimedAt ? Date.parse(coordination.firstClaimedAt) : Number.NaN;
   return Number.isFinite(first) ? Math.min(first, acquired) : acquired;
 }
 
