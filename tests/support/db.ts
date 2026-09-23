@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { closeDb, connectDatabase, getDb, type DB } from "../../src/core/db/client.ts";
+import { invalidateBoardFacets } from "../../src/contexts/matching/app/board-facets.ts";
 
 export type TestDb = DB;
 
@@ -40,6 +41,9 @@ let previousMigrationUrl: string | undefined;
 
 export async function useTestDb(): Promise<DB> {
   await releaseTestDb();
+  // Banco novo, ids reaproveitados: facetas guardadas do teste anterior
+  // pertenceriam a outro acervo com o mesmo candidato 1.
+  invalidateBoardFacets();
   previousUrl = process.env.DATABASE_URL;
   previousMigrationUrl = process.env.DATABASE_MIGRATION_URL;
   singleton = await provisionTestDatabase();

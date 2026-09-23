@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { addManualDescriptionJob } from "../../../src/core/ingest/manual.ts";
 import { scoreOne } from "../../../src/core/scoring/apply.ts";
 import { listCandidates } from "../../../src/core/candidate.ts";
+import { invalidateBoardFacets } from "../../../src/contexts/matching/index.ts";
 import { guard } from "../../auth";
 import { setMutationFeedbackCookie } from "../../mutation-feedback-server";
 
@@ -52,6 +53,8 @@ export async function createRecruiterJobAction(formData: FormData) {
     });
   }
 
+  // Vaga nova, pontuada para todos: as contagens de todo mundo mudam.
+  invalidateBoardFacets();
   revalidatePath("/jobs");
   revalidatePath("/");
   await setMutationFeedbackCookie("success");

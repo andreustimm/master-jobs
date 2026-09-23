@@ -134,6 +134,13 @@ export {
 } from "../../core/db/repo.ts";
 
 export {
+  FACET_CACHE_TTL_MS,
+  cachedBoardFacets,
+  invalidateBoardFacets,
+  type BoardFacets,
+} from "./app/board-facets.ts";
+
+export {
   ComparisonInputError,
   createManualComparison,
   getComparisonDetail,

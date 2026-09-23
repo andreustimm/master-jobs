@@ -143,7 +143,9 @@ jobs:
               scripts/release/validar-tag.ts "" "$TAG_SHA" --must-be-missing
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add package.json CHANGELOG.md USER_CHANGELOG.pt-BR.md USER_CHANGELOG.en.md
+            # O versionamento apaga os fragmentos que consumiu; `ls-files`
+            # ainda os lista pelo índice, e `add -A` registra a remoção.
+            git add -A -- package.json CHANGELOG.md USER_CHANGELOG.pt-BR.md USER_CHANGELOG.en.md $(git ls-files -- changelog.d)
             git commit -m "chore(release): ${VERSAO}"
             git push origin HEAD:main
             echo "::notice::Versão ${VERSAO} commitada em main."

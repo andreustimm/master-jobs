@@ -25,6 +25,8 @@ supabase/.temp/
 dist/
 *.tsbuildinfo
 coverage/
+# blobs das fatias de teste do CI (`vitest --reporter=blob`)
+.vitest-reports/
 
 # os
 .DS_Store

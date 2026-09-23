@@ -7,18 +7,29 @@ registra a entrega desta correção; o estado operacional fica no Project 3.
 
 ## Entrada e prova de CI
 
-No evento automático, a entrada **A** é `workflow_run.head_sha`, de um push
-em `dev`. Na retomada manual, `target-sha` é obrigatório: SHA completo, nunca
-um nome de branch. A conclusão do evento sozinha não autoriza nenhuma escrita.
+A promoção roda por agenda, às 15:00 e 21:00 UTC (`schedule`), e não mais a
+cada CI verde de `dev`: cada promoção gera deploy de `staging` e um
+`chore(release)` em `dev`, e o volume estourou o limite diário da Vercel.
+
+No agendado, a entrada **A** é a ponta de `origin/dev` lida uma única vez na
+preparação; a publicação recebe esse SHA pela saída da preparação e nunca relê
+a branch. Se `staging` já contém A, a execução termina sem consultar CI, sem
+validar e sem escrita (`skip=true`). O agendado nunca carrega aprovação de
+migração. No dispatch, `target-sha` é obrigatório: SHA completo, nunca um nome
+de branch. Nenhum dos dois eventos autoriza escrita por si só.
 
 Nos dois caminhos, o controlador consulta o CI de A pela API de Actions:
 
 - Workflow `.github/workflows/ci.yml`, evento `push`, branch `dev`, repositório
   de origem correto e `head_sha` exato.
-- Run mais recente concluído com sucesso; no automático, seu ID também deve
-  corresponder ao evento. Um run antigo verde não compensa outro posterior falho.
+- Run mais recente concluído com sucesso. Um run antigo verde não compensa
+  outro posterior falho, e um run ainda em andamento recusa: o agendado seguinte
+  tenta de novo.
 - Jobs `qualidade` e `schema-e-migracao` aprovados para A na tentativa atual,
   com paginação. Ausência, falha, execução pendente, skip ou erro de API recusam.
+  `qualidade` é o agregador dos jobs paralelos do CI (contratos, fatias de
+  teste, cobertura, browser PWA, build): ele só termina em sucesso quando todos
+  terminaram — ver a seção "O portão" de [deploy.md](deploy.md).
 
 Os nomes exigidos ficam em `scripts/release/promotion-ci.ts`; os testes
 conferem sua ligação ao CI. Alterar os gates exige atualizar esse contrato.
@@ -28,7 +39,11 @@ mais recente da branch.
 ## Commit automático de release
 
 Se há bump, ele produz um filho direto **R** de A. Somente `package.json`
-(campo `version`) e os três changelogs mudam. A classificação usa a tag mais
+(campo `version`) e os três changelogs mudam, e os fragmentos de
+`changelog.d/` presentes em A são apagados: o carimbo os juntou ao
+`Unreleased` em ordem de nome (ver [Escrever o changelog](workflow.md#escrever-o-changelog)).
+A verificação de R reconstrói essa junção a partir dos fragmentos de A e recusa
+filho que mantenha, reescreva ou acrescente arquivo em `changelog.d/`. A classificação usa a tag mais
 alta alcançável por A na preparação. Seu commit é gravado como SHA imutável
 em `Promotion-Base` (`none` se não houver tag). Toda retentativa reconstrói o
 mesmo intervalo base..A; uma tag publicada depois não muda a classificação.
@@ -77,7 +92,10 @@ ficam intactos. PRs antigas sem delimitadores recebem o bloco no início.
 
 ## Retomar sem mudar o alvo
 
-Use **Re-run all jobs** no run original ou dispatch com o mesmo A:
+Use dispatch com o mesmo A — a saída `source` da preparação registra o SHA.
+**Re-run all jobs** conserva A só num run de dispatch; num run agendado a
+preparação relê a ponta de `dev`, que depois de R pode ser o próprio R, sem CI
+de push próprio quando o push usou `GITHUB_TOKEN`.
 
 ```bash
 rtk gh workflow run promover-para-staging.yml \
@@ -86,8 +104,8 @@ rtk gh workflow run promover-para-staging.yml \
 
 Inclua `--field confirmar-migracao=true` somente após revisar a migração.
 O retry procura o filho de A identificado por `Promotion-Source` no histórico
-de `dev`, verifica pai, versão e conteúdo exato dos quatro arquivos e reutiliza
-R. Mesmo com `dev` em B, não cria outro release nem troca o alvo/tag. O CI de R
+de `dev`, verifica pai, versão, conteúdo exato dos quatro arquivos e a remoção
+dos fragmentos, e reutiliza R. Mesmo com `dev` em B, não cria outro release nem troca o alvo/tag. O CI de R
 é repetido quando se reexecuta o fluxo inteiro. A opção de reexecutar só jobs
 falhos conserva os outputs dos jobs aprovados da execução original.
 
@@ -99,7 +117,7 @@ o SHA do commit de release e comprovando seu próprio CI de push em `dev`.
 ### Corrigir um candidato que reprova no CI
 
 Se R exige uma correção de código, publique um novo commit **B** em `dev`,
-descendente de R, com a correção e os três `Unreleased` prontos. Depois do CI
+descendente de R, com a correção e seu fragmento de changelog. Depois do CI
 de B, inicie uma **nova promoção com B**. O controlador verifica o R pendente
 e cria um novo filho **R2** de B, com a próxima versão e os trailers
 `Promotion-Source: <B>` e `Promotion-Supersedes: <R>`. R2 passa pelo CI completo
@@ -127,18 +145,29 @@ PR, sem reescrever `dev`. Publicação em `main` exige decisão humana e QA full
 
 ## Evidência e limites
 
-`tests/promotion-provenance.test.ts` executa os casos V01-01 a V01-05 com Git
+`tests/promotion-provenance.test.ts` executa os casos V01-01 a V01-06 com Git
 real e API local: corrida A/B, checks adversos, intervalo de migração, validação
 de R, recuperação por B/R2 após reprovação, repetição após avanço,
-atualização da PR preservando revisão humana e ancestralidade. As suítes de release preservam
+atualização da PR preservando revisão humana, ancestralidade, entrada agendada
+e consumo de fragmentos. `tests/changelog-fragments.test.ts` cobre formato,
+ordem, idempotência e o merge de dois fragmentos sem conflito. As suítes de release preservam
 changelogs, tags, releases existentes e o retorno. O contrato YAML comprova a
 ligação dos dois jobs aos SHAs e permissões; testes locais não executam o
 scheduler de Actions nem comprovam permissões/deploys remotos.
 
-`workflow_run` usa o workflow da branch padrão. Integrar esta mudança em `dev`
-não demonstra que ela já governa promoções remotas; a instalação na branch
+`schedule` usa o workflow da branch padrão. Integrar esta mudança em `dev`
+não demonstra que ela já governa promoções remotas: até chegar a `main`, a
+versão antiga (por `workflow_run`) continua valendo, e a instalação na branch
 padrão permanece parte da publicação humana. Não disparar promoção real como
 teste desta correção.
+
+O mesmo vale para os fragmentos: o controlador da promoção vem de `main`. Até
+a versão que traz `changelog.d/` chegar lá, o controlador antigo carimba só o
+`Unreleased` escrito à mão e deixa os fragmentos em `dev` — eles entram na
+primeira versão carimbada pelo controlador novo, uma versão depois do código.
+Se nessa janela o `Unreleased` estiver vazio e a leva pedir bump, a promoção
+antiga recusa por nota ausente até o merge humano em `main`;
+nenhum estado é escrito, e o agendado seguinte promove normalmente.
 
 Referências de plataforma: [workflows reutilizáveis](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows),
 [permissões e concorrência](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations)
