@@ -99,6 +99,9 @@ importers:
       '@axe-core/playwright':
         specifier: 4.13.0
         version: 4.13.0(playwright-core@1.62.1)
+      '@sentry/cli':
+        specifier: ^2.58.6
+        version: 2.58.6
       '@tailwindcss/postcss':
         specifier: ^4.3.3
         version: 4.3.3

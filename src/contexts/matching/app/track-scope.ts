@@ -84,6 +84,26 @@ export function primaryScoreFilter(alias?: string): SQL {
   return sql`exists (select 1 from ${targetTrack} pt where pt.id = ${column} and pt.is_primary)`;
 }
 
+/**
+ * A melhor nota de cada vaga entre candidatos, só nas trilhas principais, como
+ * CTE: `job_score` é agregado UMA vez por consulta e ligado à vaga por junção.
+ *
+ * A forma anterior era uma subconsulta correlacionada por vaga, repetida no
+ * WHERE e no ORDER BY — foi ela que leu 77,4 milhões de linhas por varredura
+ * no incidente de cota de 03/09. A trilha aceita fica de fora pelo mesmo
+ * motivo de `primaryScoreFilter` (ADR-008).
+ */
+export function bestPrimaryFitByJob() {
+  const db = getDb();
+  return db.$with("best_primary_fit").as(
+    db
+      .select({ jobId: jobScore.jobId, fit: sql<number>`max(${jobScore.fit})`.as("best_fit") })
+      .from(jobScore)
+      .where(primaryScoreFilter())
+      .groupBy(jobScore.jobId),
+  );
+}
+
 /** Quantas vagas cada trilha do candidato tem pontuadas — para `jho tracks list`. */
 export async function scoredJobsPerTrack(candidateId: number): Promise<Map<number, number>> {
   const tracks = await listTracks(candidateId);

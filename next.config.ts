@@ -1,8 +1,15 @@
 import type { NextConfig } from "next";
+import { publishServerSourceMaps } from "./scripts/sentry-source-maps.ts";
+import { sourceMapPlan } from "./src/core/observability.ts";
 
 // The isolated standalone build symlinks dependencies from a sibling worktree,
 // so its tracer receives their common ancestor. Normal builds stay repo-local.
 const tracingRoot = process.env.JHO_OUTPUT_TRACING_ROOT ?? import.meta.dirname;
+
+// Mapas de origem do servidor só existem quando há para onde enviá-los. Sem
+// `SENTRY_AUTH_TOKEN` o build é o mesmo de antes — nem gera `.map`. Ver
+// `scripts/sentry-source-maps.ts`.
+const publishSourceMaps = sourceMapPlan(process.env).upload;
 
 const config: NextConfig = {
   output: "standalone",
@@ -37,6 +44,17 @@ const config: NextConfig = {
     authInterrupts: true,
     serverActions: {
       bodySizeLimit: "11mb",
+    },
+    ...(publishSourceMaps ? { serverSourceMaps: true } : {}),
+  },
+
+  // Nunca mapa de cliente: sem SDK de browser ele não resolveria pilha
+  // nenhuma, e servido em `/_next/static` publicaria o código-fonte.
+  productionBrowserSourceMaps: false,
+
+  compiler: {
+    runAfterProductionCompile: async ({ distDir }) => {
+      await publishServerSourceMaps({ distDir });
     },
   },
 

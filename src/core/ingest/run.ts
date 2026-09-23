@@ -5,7 +5,9 @@
  *  1. Sync never writes to `application` — user decisions survive every re-run.
  *  2. A source that fails is recorded and skipped; it never aborts the run.
  *  3. Postings that vanish from a source are marked closed, not deleted, so the
- *     history of what you applied to stays intact.
+ *     history of what you applied to stays intact — and only when the source
+ *     listed everything it has (`decideAbsenceClosure`). A partial window
+ *     closes nothing by absence.
  */
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { platformQuota } from "../../contexts/sourcing/index.ts";
@@ -15,8 +17,9 @@ import { deleteClosedJobsWithoutApplication } from "../db/retention.ts";
 import { job, source } from "../db/schema.ts";
 import { HttpError } from "../sources/http.ts";
 import { getAdapter, sourceId } from "../sources/registry.ts";
-import type { FetchResult, SourceAdapter, SourceConfig } from "../sources/types.ts";
+import type { Completeness, SourceAdapter, SourceConfig, SourceSnapshot } from "../sources/types.ts";
 import { guardIngestion } from "./guard.ts";
+import { decideAbsenceClosure } from "./lifecycle.ts";
 import { observeRawJobs } from "./observe.ts";
 
 export type SyncSourceResult = {
@@ -32,6 +35,8 @@ export type SyncSourceResult = {
   closed: number;
   /** Scores invalidated because the posting's content changed. */
   rescored: number;
+  /** What the listing proved; `null` when the fetch failed. */
+  completeness: Completeness | null;
   warnings: string[];
   error?: string;
   durationMs: number;
@@ -84,7 +89,7 @@ export async function ensureSources(configs: SourceConfig[]): Promise<void> {
  * same four calls. With the window full the source is recorded as `quota` and
  * nothing goes out; a 429 closes the platform's day for everyone.
  */
-async function fetchWithinBudget(adapter: SourceAdapter, config: SourceConfig): Promise<FetchResult> {
+async function fetchWithinBudget(adapter: SourceAdapter, config: SourceConfig): Promise<SourceSnapshot> {
   const budget = adapter.termSearch?.budget;
   if (!budget) return adapter.fetchJobs(config);
   const reservation = await platformQuota.reserve(config.kind, budget, new Date(clock().now()));
@@ -114,15 +119,17 @@ async function syncOne(config: SourceConfig, companies: Map<string, number>): Pr
     reopened: 0,
     closed: 0,
     rescored: 0,
+    completeness: null,
     warnings: [],
     durationMs: 0,
   };
 
   try {
     const adapter = getAdapter(config.kind);
-    const { jobs: rawJobs, warnings } = await fetchWithinBudget(adapter, config);
+    const { jobs: rawJobs, warnings, completeness } = await fetchWithinBudget(adapter, config);
     result.fetched = rawJobs.length;
     result.warnings = warnings;
+    result.completeness = completeness;
 
     const seenFingerprints: string[] = [];
     const stamp = new Date().toISOString();
@@ -138,8 +145,9 @@ async function syncOne(config: SourceConfig, companies: Map<string, number>): Pr
       result.rescored += observation.invalidatedScores;
     }
 
-    // Anything this source used to carry but no longer lists is closed.
-    if (seenFingerprints.length > 0) {
+    // Anything a complete listing no longer carries is closed. A partial
+    // window leaves the rest to the 404/410 recheck.
+    if (decideAbsenceClosure({ completeness, seen: seenFingerprints.length }).kind === "close-missing") {
       const stale = await db
         .select({ id: job.id, fingerprint: job.fingerprint })
         .from(job)

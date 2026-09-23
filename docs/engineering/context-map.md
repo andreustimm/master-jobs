@@ -2,7 +2,12 @@
 
 Este inventário é a fonte de verdade das fronteiras do monólito modular. A
 contagem e a presença das APIs públicas são verificadas por
-`tests/architecture.test.ts`.
+`tests/architecture.test.ts`, que também percorre o grafo de imports de valor
+de todo `domain/`, do scorer (`src/core/scoring/`) e da estatística
+(`src/core/analytics/`) e reprova quem alcança banco, rede, Next ou `infra/` —
+inclusive pelo `index.ts` de um contexto, que compõe adapters. O scorer é
+domínio de Matching fisicamente fora do contexto, e por isso é o único de fora
+que importa `contexts/matching/domain/` direto.
 
 <!-- schema-table-count: 36 -->
 

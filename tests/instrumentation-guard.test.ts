@@ -57,6 +57,35 @@ describe("register", () => {
     const { register } = await import("../instrumentation.ts");
     await expect(register()).resolves.toBeUndefined();
   });
+
+  it("o init recebe as peneiras e a amostragem do ambiente, não uma cópia escrita à mão", async () => {
+    // Liga o que `tests/sentry-tracing.test.ts` prova na função pura ao que o
+    // SDK realmente recebe: trocar `sentryServerOptions` por um objeto literal
+    // sem `beforeSendTransaction` reprova aqui.
+    process.env.SENTRY_DSN = "https://chave@exemplo.ingest.sentry.io/1";
+    process.env.SENTRY_TRACES_SAMPLE_RATE = "0.05";
+    let recebido: Record<string, unknown> = {};
+    vi.doMock("@sentry/nextjs", () => ({
+      init: (opcoes: Record<string, unknown>) => {
+        recebido = opcoes;
+      },
+      captureRequestError: () => {},
+    }));
+    try {
+      const { register } = await import("../instrumentation.ts");
+      await register();
+    } finally {
+      delete process.env.SENTRY_TRACES_SAMPLE_RATE;
+    }
+    expect(recebido).toMatchObject({ sendDefaultPii: false, tracesSampleRate: 0.05, tracePropagationTargets: [] });
+    const peneira = recebido.beforeSendTransaction as (e: object) => unknown;
+    const limpo = peneira({
+      transaction: "GET /jobs?q=termo-secreto",
+      request: { url: "/jobs?q=termo-secreto", cookies: { jho_session: "x" } },
+    });
+    expect(JSON.stringify(limpo)).not.toContain("termo-secreto");
+    expect(JSON.stringify(limpo)).not.toContain("jho_session");
+  });
 });
 
 describe("onRequestError", () => {

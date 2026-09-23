@@ -7,11 +7,11 @@
  */
 import { firstNonEmpty, getJson, htmlToText } from "./http.ts";
 import type {
-  FetchResult,
   PlatformBudget,
   RawJob,
   SourceAdapter,
   SourceConfig,
+  SourceSnapshot,
   TermSearchResult,
 } from "./types.ts";
 
@@ -120,7 +120,7 @@ function mapHimalayas(j: HimalayasJob): RawJob {
 export const himalayas: SourceAdapter = {
   kind: "himalayas",
   docs: "https://himalayas.app/api",
-  async fetchJobs(config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     // Himalayas exposes ~101.000 postings but serves 20 per request and
     // ignores a larger `limit`, so the whole board would be ~5.000 calls —
     // neither practical nor polite. It orders by publication date descending,
@@ -160,7 +160,10 @@ export const himalayas: SourceAdapter = {
       );
     }
 
-    return { jobs: collected.map(mapHimalayas), warnings };
+    // The feed is a recency window over ~100.000 postings: leaving it is aging
+    // out, not closing. Only the platform's own total proves the list ended.
+    const completeness = total !== undefined && collected.length >= total ? "complete" : "partial";
+    return { jobs: collected.map(mapHimalayas), warnings, completeness };
   },
   termSearch: {
     budget: HIMALAYAS_BUDGET,
@@ -245,11 +248,12 @@ function mapRemotive(j: RemotiveJob): RawJob {
 export const remotive: SourceAdapter = {
   kind: "remotive",
   docs: "https://remotive.com/api/remote-jobs",
-  async fetchJobs(config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const params = new URLSearchParams({ limit: "50" });
     if (config.handle) params.set("search", config.handle);
     const data = await getJson<RemotiveResponse>(`https://remotive.com/api/remote-jobs?${params}`, BUDGETED);
-    return { jobs: (data.jobs ?? []).map(mapRemotive), warnings: [] };
+    // `limit=50`: the newest slice of a search, never the whole board.
+    return { jobs: (data.jobs ?? []).map(mapRemotive), warnings: [], completeness: "partial" };
   },
   termSearch: {
     budget: REMOTIVE_BUDGET,
@@ -285,7 +289,7 @@ type ArbeitnowJob = {
 export const arbeitnow: SourceAdapter = {
   kind: "arbeitnow",
   docs: "https://www.arbeitnow.com/blog/job-board-api",
-  async fetchJobs(_config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(_config: SourceConfig): Promise<SourceSnapshot> {
     const data = await getJson<{ data?: ArbeitnowJob[] }>(
       "https://www.arbeitnow.com/api/job-board-api",
     );
@@ -303,7 +307,8 @@ export const arbeitnow: SourceAdapter = {
       postedAt: toIso(j.created_at),
       raw: j,
     }));
-    return { jobs, warnings: [] };
+    // Only the first page of a paginated board is read.
+    return { jobs, warnings: [], completeness: "partial" };
   },
 };
 
@@ -360,9 +365,10 @@ export function remoteOkTag(query: string): string {
 export const remoteok: SourceAdapter = {
   kind: "remoteok",
   docs: "https://remoteok.com/api",
-  async fetchJobs(_config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(_config: SourceConfig): Promise<SourceSnapshot> {
     const data = await getJson<RemoteOkJob[]>("https://remoteok.com/api", BUDGETED);
-    return { jobs: remoteOkJobs(data), warnings: [] };
+    // The feed is the latest postings, not the archive of open ones.
+    return { jobs: remoteOkJobs(data), warnings: [], completeness: "partial" };
   },
   termSearch: {
     budget: REMOTEOK_BUDGET,
@@ -400,11 +406,15 @@ type AdzunaJob = {
 export const adzuna: SourceAdapter = {
   kind: "adzuna",
   docs: "https://developer.adzuna.com/",
-  async fetchJobs(config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const appId = process.env.ADZUNA_APP_ID;
     const appKey = process.env.ADZUNA_APP_KEY;
     if (!appId || !appKey) {
-      return { jobs: [], warnings: ["adzuna skipped: ADZUNA_APP_ID/ADZUNA_APP_KEY not set"] };
+      return {
+        jobs: [],
+        warnings: ["adzuna skipped: ADZUNA_APP_ID/ADZUNA_APP_KEY not set"],
+        completeness: "partial",
+      };
     }
     // handle format: "<country>:<query>", e.g. "us:AI architect"
     //
@@ -446,6 +456,7 @@ export const adzuna: SourceAdapter = {
       compPeriod: "year",
       raw: j,
     }));
-    return { jobs, warnings: [] };
+    // Page 1 of a search: 50 results out of however many match.
+    return { jobs, warnings: [], completeness: "partial" };
   },
 };

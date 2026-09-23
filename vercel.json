@@ -15,11 +15,5 @@
     "app/**": {
       "maxDuration": 30
     }
-  },
-  "crons": [
-    {
-      "path": "/api/cron/recheck",
-      "schedule": "0 10 * * *"
-    }
-  ]
+  }
 }

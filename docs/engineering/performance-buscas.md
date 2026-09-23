@@ -18,12 +18,13 @@ Três camadas, da mais barata para a mais fiel. Nenhuma substitui a outra.
 | **Piso local** | `pnpm perf:jobs` | Quanto o servidor gasta sobre o banco em 6 cenários (padrão, termo, cluster, faixa salarial, ordenar por pagamento, sem agrupar), 10 mil vagas, e **quantas idas ao banco** cada um faz. Hermético: Postgres em Docker, fora do `pnpm check`. `JHO_PERF_OUT=arquivo` guarda o relatório; `JHO_PERF_JOBS=N` muda o corpus; `JHO_PERF_RUNS=N` e `JHO_PERF_WARMUPS=N` controlam as repetições (inteiros positivos, padrões 3 e 1); `JHO_PERF_JSON=arquivo` guarda amostras, volume de SQL/parâmetros, resultados de referência e plano de execução | Sem rede. Não mede React nem o navegador |
 | **Produção, por estágio** | Linha JSON `{"perf":"/jobs","totalMs":…,"region":"gru1","stages":{…}}` no log da função | Onde uma requisição real gasta o tempo: `auth`, `prelude`, `board`, `facets`, `tail` (e `cockpit` em `/`) | Sai só se a leitura passa de 1 s, ou sempre com `JHO_PERF_LOG=1`. Log da Vercel na Hobby dura 1 h |
 | **Produção, de fora** | `pnpm perf:producao` (e `--logs`) | TTFB frio e quente, p50/p95, região e cache por rota; com `JHO_PERF_SESSION`, `/jobs` com os filtros comuns; com `--logs`, a agregação das linhas `perf` acima | Ver [Medir a produção](#medir-a-produção-221). De fora não se prova que a instância estava fria |
+| **Produção, amostrada** | Trace do Sentry: span `jho.leitura` por rota e `jho.etapa` por estágio | Os mesmos estágios da linha acima, com os spans de renderização e de PostgreSQL do SDK, e retidos além de 1 h | Amostra de `SENTRY_TRACES_SAMPLE_RATE` (padrão 10%). Ver [Sentry](#sentry-e-o-que-fica-de-fora) |
 | **Região** | Cabeçalho `x-vercel-id` da resposta | Onde a função rodou. `<borda>::gru1::…` é o certo (o primeiro trecho é a borda de quem pediu, só o segundo é a função); `<borda>::iad1::…` é a função longe do banco | Só diz a região, não o custo |
 
 A linha de log leva só número, nome de estágio, rota **sem query string** e
 região. Nunca valor de filtro, identidade ou id de candidato — a URL carrega o
-filtro da pessoa, e é por isso que o Sentry roda sem tracing (ver
-[Sentry](#sentry-e-o-que-fica-de-fora)).
+filtro da pessoa, e é por isso que o tracing do Sentry só saiu depois de uma
+peneira com lista de permissão (ver [Sentry](#sentry-e-o-que-fica-de-fora)).
 
 **`Server-Timing` não serve aqui.** Server Components não escrevem cabeçalho de
 resposta (a documentação do Next não tem API para isso), e o `proxy.ts` roda
@@ -399,6 +400,93 @@ faz nada. Se a migration a criar, ela vai para o primeiro schema do
 `search_path` da role de migração, e o índice de `0013` resolve
 `gin_trgm_ops` pelo mesmo `search_path`.
 
+## Cache das facetas — medição de 22/09/2026
+
+A requisição de produção medida acima gastou 3.479 ms em `facets`, 66% do
+total. As facetas dependem só do escopo da sessão e de sete filtros; paginar,
+reordenar, mudar a faixa salarial, a empresa ou os chips de recorte refazia a
+mesma consulta para devolver os mesmos números. Desde a #216,
+`cachedBoardFacets` (`src/contexts/matching/app/board-facets.ts`) guarda o
+resultado num mapa do processo. `/jobs` e `/` passam por ele; `boardFacets`
+continua sendo a consulta, sem mudança de semântica.
+
+**A chave** (`facetCacheKey`, pura, em `domain/facet-cache.ts`) é a serialização
+canônica de tudo que a consulta recebe — `minFit`, `cluster`, `term` (texto e
+chave), `sourceKinds` na ordem dada, `workMode`, `track` (candidato, trilha
+principal, trilhas e modo) e `groupRepeats` —, mais o `candidateId` **da
+sessão** e `SCORER_VERSION`. A chave não mantém lista própria de campos: tudo
+que `FacetQuery` deixa passar entra nela. Um filtro novo da consulta só precisa
+entrar no `Pick` de `FacetQuery`, e daí chega à chave sozinho. Idioma não entra porque as
+facetas são números e códigos, e o texto é traduzido na página.
+`tests/board-facets-cache.test.ts` prova com dois candidatos que um nunca
+recebe as contagens do outro, nem com as mesmas URLs.
+
+**Validade e invalidação.**
+
+| O que muda | Como o cache acompanha |
+|---|---|
+| Triagem e funil (`trackAction`, "não me interessa", restaurar) | Invalida as entradas **do candidato**, depois da escrita, na instância que atendeu |
+| Trilhas (editar, trocar a principal, arquivar, restaurar) | Invalida as entradas **do candidato** — o cockpit lê pela principal da hora |
+| Vaga nova (`/jobs/new`, `/compare`, captura por termo em `after()`) | Invalida **todas** as entradas da instância |
+| Sync, score, raspagem, verificação (CLI e workers, fora do processo) | Só a validade: **60 s** |
+| Outra instância da função | Só a validade: a invalidação não cruza instâncias |
+| Deploy ou instância nova | Mapa vazio |
+
+60 s cobre a rajada de paginar e reordenar e deixa os chips no máximo um minuto
+atrás de uma mudança externa. A lista e o total do rodapé **nunca** passam pelo
+cache: no pior caso, por até um minuto, um chip conta diferente do rodapé
+depois de um sync. Entrada que falha sai do cache; duas leituras iguais ao mesmo
+tempo esperam a mesma consulta (a entrada é reservada antes do `await`).
+O mapa mora em `globalThis`, não numa constante de módulo: o Next compila as
+Server Actions importadas por componentes de cliente numa camada própria do
+bundle, com cópia própria dos módulos, e uma constante de módulo faria a ação
+invalidar um mapa que a página não lê.
+**Memória:** teto de 200 entradas, com despejo da menos usada; cada entrada tem
+menos de 1 KB.
+
+**Local** (`pnpm perf:jobs`, 10 mil vagas, três aquecimentos, dez amostras,
+mesma máquina). A leitura fria descarta o cache antes de cada amostra e é
+comparável às tabelas anteriores; a quente é a página 2 logo depois da 1:
+
+| Cenário | Antes | Depois, fria | Depois, página 2 | facets fria → quente | Consultas fria → quente |
+|---|---:|---:|---:|---:|---:|
+| Padrão | 57 ms | 56 ms | 31 ms | 22,1 → 0 ms | 6 → 5 |
+| Com termo | 151 ms | 145 ms | 88 ms | 57,2 → 0 ms | 6 → 5 |
+| Com cluster | 47 ms | 51 ms | 22 ms | 22,6 → 0 ms | 6 → 5 |
+| Faixa salarial | 94 ms | 92 ms | 69 ms | 22,5 → 0,1 ms | 7 → 6 |
+| Ordenar por pagamento | 68 ms | 68 ms | 47 ms | 22,3 → 0 ms | 6 → 5 |
+| Sem agrupar | 29 ms | 31 ms | 12 ms | 16,8 → 0 ms | 5 → 4 |
+
+A leitura fria não muda (a diferença é ruído). O ganho é todo na leitura que
+repete filtros.
+
+**Em produção, não confirmado.** Nenhum número da tabela acima é de produção, e o ganho
+lá só se afirma com `pnpm perf:producao` com sessão depois do deploy: cada
+cenário de `/jobs` pede a mesma URL várias vezes, então a "primeira" de cada
+rodada é a leitura sem cache e o "quente" é a leitura com cache. Com
+`JHO_PERF_LOG=1`, a linha `perf` mostra `facets` perto de 0 nas leituras
+servidas pelo cache.
+
+**O limite da função serverless.** O cache vive enquanto a instância vive. Na
+medição de #221, as duas rodadas depois de 10 min ociosos pagaram partida a
+frio (~1,35 s no `/login`): depois de uma pausa desse tamanho a instância, e o
+mapa com ela, já não existem. E a amostra de 3.479 ms em `facets` foi colhida no
+minuto do deploy, provavelmente fria — **exatamente a leitura que este cache
+não acelera.** O que ele garante é a segunda leitura em diante dentro de um
+minuto, na mesma instância: paginar, reordenar, abrir e voltar.
+
+Se a medição de produção mostrar que a primeira leitura continua dominando,
+o próximo passo não é um cache maior, e sim, nesta ordem:
+
+1. Descobrir por que `facets` custa 3,5 s lá e ~24 ms aqui (buffers frios,
+   plano diferente): `JHO_PERF_LOG=1`, `pg_stat_statements` e o `EXPLAIN` da
+   consulta de facetas no Supabase.
+2. Materializar as facetas das combinações sem termo por candidato e trilha,
+   recalculadas ao fim do sync e do score — os processos que mudam as
+   contagens. Isso exige migration e muda o modelo de dados; é decisão própria.
+3. Só com um segundo backend real, trocar o mapa por um `CachePort` (regra 4),
+   se a medição mostrar acerto baixo por espalhamento entre instâncias.
+
 ## Plano
 
 | Fase | Item | Ganho × esforço | Onde |
@@ -413,7 +501,7 @@ faz nada. Se a migration a criar, ela vai para o primeiro schema do
 | 2 ✅ | Seleção compartilhada para lista e total, facetas fundidas | alto × médio | `repo.ts` |
 | 2 🟡 | Busca por termo indexada: pré-filtro `pg_trgm`, `~*` inalterado (#214, em revisão) | alto com termo seletivo × médio | migration `0012`/`0013` |
 | 2 ✅ | Normalização salarial compartilhada, sem repetir cotações a cada uso | alto com faixa | `repo.ts` |
-| 2 | Cache de facetas com TTL — **só depois de medir** | médio × médio | `matching/app` |
+| 2 🟡 | Cache local das facetas, validade de 60 s (#216, em revisão; ver [seção](#cache-das-facetas--medição-de-22092026)) | alto ao paginar/ordenar, nulo na primeira leitura × médio | `matching/app/board-facets.ts` |
 | 3 | `loading.tsx` + `Suspense` em `/jobs` | só rende após o cache de facetas | `app/jobs/` |
 | ✅ | Régua de conexões por **tela**, `comVigia` em `/jobs` e `/` | entregue e exercitado no QA de concorrência | testes |
 
@@ -436,13 +524,18 @@ faz nada. Se a migration a criar, ela vai para o primeiro schema do
 
 ## Sentry e o que fica de fora
 
-`tracesSampleRate` está em 0 de propósito: uma transação carrega a URL com a
-query string, isto é, os filtros da pessoa. Ligá-lo exige `beforeSendTransaction`
-e `beforeSendSpan` reaproveitando `scrubEvent`/`redactPath`, e um teste de que
-nada sai. Confirmar antes: a quota de spans do plano Developer (o "5M" veio de
-resumo de página de preços) e se `instrumentPostgresJsSql` existe no
-`@sentry/nextjs` (a documentação achada é de Deno e Cloudflare). Não foi feito
-nesta entrega.
+Tracing ligado pela #219, a 10% por padrão (`SENTRY_TRACES_SAMPLE_RATE`). Uma
+transação carrega a URL com a query string, isto é, os filtros da pessoa, então
+`beforeSendTransaction` e `beforeSendSpan` passam por `scrubTransaction` e
+`scrubSpan`, com lista de permissão de atributos e um teste que reprova se um
+marcador privado sobreviver. O que sai e o que não sai está em
+[`deploy.md`](deploy.md#tracing).
+
+Confirmado em 22/09/2026: a quota de spans do plano Developer é de fato
+5.000.000 por ciclo (API `customers/master-timm`), sem gasto sob demanda; e o
+`@sentry/node` 10.75 traz `postgresJsIntegration`, ligada automaticamente com
+tracing — o SDK já troca literais por `?`, e a peneira reduz a consulta ao
+verbo mesmo assim.
 
 Ferramentas gratuitas avaliadas (limites consultados em 2026-09-21; confirme no
 painel antes de depender de um número):

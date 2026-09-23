@@ -29,9 +29,10 @@ confira sua disponibilidade no checkout e a prontidão remota:
 rtk pnpm tasks preflight
 ```
 
-A promoção usa o SHA do CI concluído ou um SHA explícito no dispatch. O commit
-de release recebe o mesmo CI antes de avançar `staging`; retentativas conservam
-o alvo. Veja o [contrato e a retomada da promoção](promotion.md).
+A promoção roda às 15:00 e 21:00 UTC com a ponta de `dev` cujo CI de push está
+verde, ou por dispatch com um SHA explícito. O commit de release recebe o mesmo
+CI antes de avançar `staging`; retentativas conservam o alvo. Veja o
+[contrato e a retomada da promoção](promotion.md).
 
 ## Começar ou retomar
 
@@ -202,6 +203,56 @@ da validação, renove os checks afetados. Registre comando, resultado e revisã
 na PR e vincule essa evidência à issue. Execução não realizada continua pendente.
 Um resultado `Pass`, `SHIP` ou uma checkbox não confirma a entrega exigida.
 
+## Escrever o changelog
+
+Cada PR com mudança releaseável (`fix:`, `feat:` e afins) cria **um arquivo
+próprio** em `changelog.d/`, com o slug da branch: `fix/filtro-de-estagio` →
+`changelog.d/filtro-de-estagio.md`. Ela **não edita** o `## [Unreleased]` de
+`CHANGELOG.md`, `USER_CHANGELOG.pt-BR.md` nem `USER_CHANGELOG.en.md`. Quando
+toda PR editava os mesmos três trechos, cada merge em `dev` — e cada
+`chore(release)` da promoção — reabria conflito em todas as PRs abertas, com
+merge manual e CI de novo. Arquivos distintos não conflitam.
+
+```markdown
+## Técnico
+
+### Corrigido
+
+- O que mudou, para quem mexe no código: módulo, decisão, defeito fechado.
+
+## pt-BR
+
+### Corrigido
+
+- O efeito para quem usa, em linguagem simples.
+
+## en
+
+### Fixed
+
+- The effect for users, in plain language.
+```
+
+- Os três blocos são obrigatórios, com esses nomes exatos. Conteúdo fica sob
+  `### Seção` (`Adicionado`, `Alterado`, `Corrigido`, `Segurança`…; nos de
+  usuário, `Novidade`, `Melhorado`, `Corrigido`…) e começa por item `- `.
+- Sem efeito visível, `pt-BR` e `en` trazem só `<!-- sem-nota-usuario -->`,
+  os dois juntos. O bloco técnico sempre tem conteúdo.
+- Cabeçalho `#` ou `##` além dos três blocos é recusado: dentro do changelog
+  ele viraria uma versão.
+- Todo arquivo em `changelog.d/` precisa ser `[a-z0-9][a-z0-9._-]*.md`; um
+  `.MD` ou `.txt` reprova em vez de sumir.
+
+A promoção junta os fragmentos no `Unreleased`, em ordem de nome de arquivo e
+com as seções na ordem da primeira aparição, carimba a versão e apaga os
+fragmentos no mesmo commit `chore(release)`. `pnpm check:release-ready` e o
+hook `commit-msg` aceitam o fragmento como nota da leva e reprovam fragmento
+malformado mesmo sem bump. Entrada escrita direto no `Unreleased` continua
+aceita durante a transição e aparece antes das dos fragmentos. Até a versão que
+traz os fragmentos chegar a `main`, o controlador da promoção ainda é o antigo:
+fragmento criado nessa janela sai uma versão depois do código (ver
+[promotion.md](promotion.md#evidência-e-limites)).
+
 ## Entregar e limpar
 
 Antes da PR: `show` e `verify` da execução, deslop, deep-review com veredito
@@ -245,6 +296,16 @@ pendência na issue. `dev`, `staging` e `main` permanecem sempre.
 em branches permanentes; `pre-push` impede push direto para elas, inclusive
 feature:dev, e valida o nome da branch de trabalho. Hooks não protegem escritas
 pela API; não substituem política remota, claim ou recibo.
+
+## Proteção remota
+
+Rulesets do GitHub impedem exclusão e force-push em `main`, `staging` e `dev`
+para todos, e exigem em `main` PR aprovada e CI verde sem bypass de CI. `dev` e
+`staging` ainda não exigem PR nem CI no remoto: a plataforma não aceita a
+exceção de que a promoção automática precisaria. O que está aplicado, o
+caminho humano do hotfix, os limites e a reversão estão em
+[github-protections.md](github-protections.md). Confira com
+`rtk node scripts/github/verify-protections.ts`.
 
 ## O que foi adaptado de contas_casal
 

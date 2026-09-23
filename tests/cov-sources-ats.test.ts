@@ -85,6 +85,7 @@ describe("greenhouse", () => {
     await expect(greenhouse.fetchJobs(config("greenhouse", "inexistente"))).resolves.toEqual({
       jobs: [],
       warnings: [],
+      completeness: "complete",
     });
   });
 
@@ -285,12 +286,34 @@ describe("smartrecruiters", () => {
     });
     setHttpPort(port);
 
-    const { jobs, warnings } = await smartrecruiters.fetchJobs(config("smartrecruiters", "acme"));
+    const { jobs, warnings, completeness } = await smartrecruiters.fetchJobs(config("smartrecruiters", "acme"));
     expect(jobs).toHaveLength(102);
     expect(port.calls).toHaveLength(2);
     // O aviso existe porque a listagem não traz corpo: quem lê o relatório
     // precisa saber que o score de keywords veio só do título.
     expect(warnings.join(" ")).toContain("titles only");
+    // A página incompleta prova o fim da lista.
+    expect(completeness).toBe("complete");
+  });
+
+  it("parar no teto de 500 com a última página cheia é janela parcial", async () => {
+    // As vagas depois da quinta página nunca foram vistas. Declarar a lista
+    // completa faria a sincronização fechá-las por ausência.
+    const page = (prefix: string) =>
+      Array.from({ length: 100 }, (_, i) => ({ id: `${prefix}-${i}`, name: `Vaga ${prefix} ${i}` }));
+    setHttpPort(
+      fixtureHttp({
+        "offset=0": { content: page("p0") },
+        "offset=100": { content: page("p1") },
+        "offset=200": { content: page("p2") },
+        "offset=300": { content: page("p3") },
+        "offset=400": { content: page("p4") },
+      }),
+    );
+
+    const { jobs, completeness } = await smartrecruiters.fetchJobs(config("smartrecruiters", "acme"));
+    expect(jobs).toHaveLength(500);
+    expect(completeness).toBe("partial");
   });
 
   it("compõe cidade, região e país e monta a URL pública da vaga", async () => {
@@ -330,6 +353,7 @@ describe("smartrecruiters", () => {
     await expect(smartrecruiters.fetchJobs(config("smartrecruiters", "acme"))).resolves.toEqual({
       jobs: [],
       warnings: [],
+      completeness: "complete",
     });
   });
 });
@@ -396,6 +420,7 @@ describe("recruitee", () => {
     await expect(recruitee.fetchJobs(config("recruitee", "acme"))).resolves.toEqual({
       jobs: [],
       warnings: [],
+      completeness: "complete",
     });
   });
 });
@@ -408,6 +433,7 @@ describe("bordas de resposta", () => {
     await expect(lever.fetchJobs(config("lever", "sumido"))).resolves.toEqual({
       jobs: [],
       warnings: [],
+      completeness: "complete",
     });
   });
 
