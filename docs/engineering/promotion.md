@@ -27,6 +27,9 @@ Nos dois caminhos, o controlador consulta o CI de A pela API de Actions:
   tenta de novo.
 - Jobs `qualidade` e `schema-e-migracao` aprovados para A na tentativa atual,
   com paginação. Ausência, falha, execução pendente, skip ou erro de API recusam.
+  `qualidade` é o agregador dos jobs paralelos do CI (contratos, fatias de
+  teste, cobertura, browser PWA, build): ele só termina em sucesso quando todos
+  terminaram — ver a seção "O portão" de [deploy.md](deploy.md).
 
 Os nomes exigidos ficam em `scripts/release/promotion-ci.ts`; os testes
 conferem sua ligação ao CI. Alterar os gates exige atualizar esse contrato.

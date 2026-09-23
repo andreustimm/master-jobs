@@ -145,8 +145,8 @@ São perguntas diferentes, e nenhuma das quatro camadas responde a da outra.
 
 | Camada | Onde roda | O que prova | O que não prova |
 |---|---|---|---|
-| `pnpm check` (Vitest, cobertura, inventário de rotas) | job `qualidade`, obrigatório | regra pura, contrato de banco, autorização de toda entrada, que toda página tem varredura ou exceção | que a tela renderiza, cabe ou fala inglês |
-| Fronteira PWA (`pnpm test:pwa-browser`) | job `qualidade`, obrigatório | service worker sem nada autenticado, num Chromium real | o resto da interface |
+| `pnpm check` (Vitest, cobertura, inventário de rotas) | jobs `contratos`, `testes` e `cobertura`, obrigatórios via `qualidade` | regra pura, contrato de banco, autorização de toda entrada, que toda página tem varredura ou exceção | que a tela renderiza, cabe ou fala inglês |
+| Fronteira PWA (`pnpm test:pwa-browser`) | job `pwa-browser`, obrigatório via `qualidade` | service worker sem nada autenticado, num Chromium real | o resto da interface |
 | `pnpm test:e2e` (`ui.mjs` + `a11y.mjs`) | job `e2e-navegador`, **ainda não obrigatório** | build de produção, PostgreSQL descartável, login real por papel; as varreduras de `routes.mjs`; temas, contraste do editor, WebKit no histórico de novidades | que uma pessoa consegue cumprir o objetivo; texto literal sem acento; telas em `UNMEASURED_PAGES` |
 | QA de jornada (`qa-execution`) | só local, com gente ou agente dirigindo | que a persona chega ao estado final pela interface pública, e que ele sobrevive a refresh e a leitura independente | nada que o CI já reprova — ela não substitui nenhuma das linhas acima |
 
@@ -158,8 +158,9 @@ O build descartável também não recebe nenhum `.env*` além do molde
 de produção para o servidor do E2E. Dado de produção nunca entra na fixture: a
 fixture é o `setup.mjs`.
 
-**Ele ainda não é obrigatório** — fica fora de `validacao` e da proteção de
-branch, e não roda na chamada da promoção. Torná-lo obrigatório espera a
+**Ele ainda não é obrigatório** — é a única exceção registrada ao agregador
+`qualidade` (`NON_BLOCKING_JOBS` em `tests/support/ci-workflow.ts`), e não roda
+na chamada da promoção. Torná-lo obrigatório espera a
 medição de instabilidade da #202: um portão que reprova por carga ensina a
 reexecutar até passar, e isso é pior do que não ter portão.
 

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
+import { AGGREGATOR, NON_BLOCKING_JOBS, gatedJobWithStep, needsOf, type CiWorkflow } from "./support/ci-workflow.ts";
 
 /**
  * Suite: o E2E de navegador no CI (governança task_08, V08-02)
@@ -23,7 +24,7 @@ type Job = {
 };
 
 const raw = readFileSync(".github/workflows/ci.yml", "utf8");
-const workflow = parse(raw) as { jobs: Record<string, Job> };
+const workflow = parse(raw) as CiWorkflow & { jobs: Record<string, Job> };
 const job = workflow.jobs["e2e-navegador"]!;
 
 describe("V08-02 — o CI roda o navegador geral", () => {
@@ -35,9 +36,11 @@ describe("V08-02 — o CI roda o navegador geral", () => {
     expect(runs.join("\n")).not.toContain("test:e2e:external");
   });
 
-  it("fica separado do portão `qualidade`, com teto de tempo próprio", () => {
-    const quality = workflow.jobs.qualidade!.steps.map((step) => step.run ?? "").join("\n");
-    expect(quality).not.toContain("test:e2e");
+  it("é o único job que roda a suíte, sem esperar outro job, com teto de tempo próprio", () => {
+    const owners = Object.entries(workflow.jobs)
+      .filter(([, candidate]) => candidate.steps.some((step) => /\btest:e2e\b/.test(step.run ?? "")))
+      .map(([name]) => name);
+    expect(owners).toEqual(["e2e-navegador"]);
     expect(job.needs ?? []).toEqual([]);
     expect(job["timeout-minutes"]).toBeGreaterThan(0);
     expect(job["timeout-minutes"]).toBeLessThanOrEqual(60);
@@ -70,15 +73,16 @@ describe("V08-02 — o CI roda o navegador geral", () => {
     expect(install).toMatch(/playwright install-deps chromium webkit/);
   });
 
-  it("ainda não é obrigatório: fora de `validacao` e fora da chamada da promoção", () => {
+  it("ainda não é obrigatório: exceção registrada ao agregador e fora da promoção", () => {
     // Tornar obrigatório espera a medição de instabilidade (issue #202).
     // Quem mudar isto muda também este teste, de propósito.
+    expect(NON_BLOCKING_JOBS).toHaveProperty("e2e-navegador");
+    expect(needsOf(workflow.jobs[AGGREGATOR]!)).not.toContain("e2e-navegador");
     expect(workflow.jobs.validacao!.needs).not.toContain("e2e-navegador");
     expect(job.if).toBe("inputs.target-sha == ''");
   });
 
   it("a PWA continua no portão obrigatório", () => {
-    const quality = workflow.jobs.qualidade!.steps.map((step) => step.run ?? "").join("\n");
-    expect(quality).toContain("pnpm test:pwa-browser");
+    expect(gatedJobWithStep(workflow, (step) => step.run === "pnpm test:pwa-browser")).toBe("pwa-browser");
   });
 });

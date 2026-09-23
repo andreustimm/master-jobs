@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import YAML from "yaml";
+import { checkoutOf, ciWorkflow, gatedJobWithStep } from "./support/ci-workflow.ts";
 import {
   planejarGithubReleases,
   validarReleasePendente,
@@ -63,12 +64,15 @@ describe("commit release gate", () => {
     const pkg = JSON.parse(readFileSync("package.json", "utf8")) as {
       scripts: Record<string, string>;
     };
-    const ci = YAML.parse(readFileSync(".github/workflows/ci.yml", "utf8")) as {
-      jobs: { qualidade: { steps: Array<{ name?: string; run?: string }> } };
-    };
-    const releaseGate = ci.jobs.qualidade.steps.find(
-      (candidate) => candidate.name === "Changelogs prontos para release",
-    );
+    const ci = ciWorkflow();
+    const isReleaseGate = (candidate: { name?: string }) =>
+      candidate.name === "Changelogs prontos para release";
+    const gateJob = ci.jobs[gatedJobWithStep(ci, isReleaseGate)]!;
+    const releaseGate = gateJob.steps.find(isReleaseGate);
+    // O validador lê os assuntos desde a última tag: sem histórico, a leva
+    // parece vazia e o gate aprova qualquer coisa.
+    expect(checkoutOf(gateJob)?.with?.["fetch-depth"]).toBe(0);
+    expect(checkoutOf(gateJob)?.with?.["fetch-tags"]).toBe(true);
 
     expect(pkg.scripts.prepare).toBe("node scripts/configure-git-hooks.mjs");
     expect(pkg.scripts["check:release-ready"]).toContain("validar-changelogs.ts");

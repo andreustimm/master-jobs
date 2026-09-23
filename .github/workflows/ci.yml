@@ -4,6 +4,12 @@
 # integração Git da Vercel, que dispara no push — este arquivo NÃO implanta. A
 # consequência importante: sem proteção de branch, a Vercel implanta mesmo com
 # este workflow vermelho. Ver docs/engineering/deploy.md, seção "O portão".
+#
+# Os gates rodam em jobs paralelos, e `qualidade` é o agregador: ele só passa
+# quando TODOS os outros jobs passaram. É esse nome que a promoção
+# (`scripts/release/promotion-ci.ts`) e a proteção de branch exigem, então um
+# job novo neste arquivo precisa entrar em `qualidade.needs` — o teste
+# `tests/ci-pipeline.test.ts` reprova quem esquecer.
 name: CI
 
 on:
@@ -27,18 +33,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  qualidade:
+  contratos:
+    # Os gates curtos que não dependem de teste: changelogs, tracker de QA,
+    # tipos e os contratos das skills de QA. Juntos custam menos que a
+    # preparação de um runner, por isso dividem um.
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.target-sha || github.sha }}
           persist-credentials: false
-          # O teste de precisão histórica distingue tags leves de anotadas.
-          # Sem as refs, um clone raso parece não ter evidência nenhuma e o
-          # contrato passa localmente, mas falha no runner limpo.
+          # O validador de changelogs lê os assuntos desde a última tag. Num
+          # clone raso não há tag nenhuma, e a leva parece vazia.
           fetch-depth: 0
           fetch-tags: true
 
@@ -76,6 +84,51 @@ jobs:
       - name: Tipos
         run: pnpm typecheck
 
+      - name: Contratos das skills de QA
+        run: pnpm test:qa-skills
+
+  testes:
+    # A suíte em quatro fatias, cada uma num runner próprio. Cada runner sobe o
+    # seu PostgreSQL em Docker (`tests/support/postgres-global.ts`) e tem o seu
+    # disco, então as fatias não disputam banco, porta nem arquivo temporário.
+    #
+    # A cobertura de uma fatia é parcial e não diz nada sozinha: os limiares
+    # ficam zerados aqui e são aplicados sobre o total, no job `cobertura`.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      # Uma fatia vermelha não cancela as outras: a lista completa de falhas
+      # vale mais que os segundos economizados.
+      fail-fast: false
+      matrix:
+        fatia: [1, 2, 3, 4]
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target-sha || github.sha }}
+          persist-credentials: false
+          # O teste de precisão histórica distingue tags leves de anotadas.
+          # Sem as refs, um clone raso parece não ter evidência nenhuma e o
+          # contrato passa localmente, mas falha no runner limpo.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Gerar o changelog compilado
+        # `src/generated/changelog.ts` não é versionado. No job único ele vinha
+        # de carona no `pretypecheck`; aqui não há typecheck antes, e os testes
+        # que o importam precisam dele.
+        run: pnpm changelog:build
+
       - name: Gerar o service worker
         # ANTES dos testes, e a ordem não é estética.
         #
@@ -89,30 +142,152 @@ jobs:
         # build antes — que é justamente como essa divergência se esconde.
         run: node scripts/sw-version.mjs
 
+      - name: Testes (fatia ${{ matrix.fatia }} de 4)
+        run: >-
+          pnpm vitest run --shard=${{ matrix.fatia }}/4 --coverage --reporter=blob
+          --coverage.thresholds.statements=0 --coverage.thresholds.branches=0
+          --coverage.thresholds.functions=0 --coverage.thresholds.lines=0
+
+      - uses: actions/upload-artifact@v7
+        # Também quando a fatia falha: o relatório mesclado é o lugar mais
+        # legível para ver quais testes quebraram.
+        if: ${{ !cancelled() }}
+        with:
+          name: blob-${{ matrix.fatia }}
+          path: .vitest-reports/*
+          # `.vitest-reports` começa com ponto, e o upload ignora arquivo
+          # oculto por padrão — sem isto o artefato sobe vazio.
+          include-hidden-files: true
+          if-no-files-found: error
+          # "Re-run failed jobs" reaproveita as fatias verdes e refaz só a
+          # vermelha, no mesmo run: sem sobrescrever, o upload da fatia refeita
+          # colide com o artefato da tentativa anterior e reprova por nome.
+          overwrite: true
+          # Os blobs das fatias verdes precisam sobreviver até esse re-run: se
+          # expirarem antes, `cobertura` mescla só a fatia refeita e reprova o
+          # piso num commit cujos testes passaram todos. Sete dias cobrem um
+          # re-run tardio sem guardar artefato indefinidamente.
+          retention-days: 7
+
+  cobertura:
+    # Junta as quatro fatias e aplica os limiares de `vitest.config.ts` sobre o
+    # TOTAL — é o mesmo piso global do `pnpm check` local, medido sobre a suíte
+    # inteira. Os números moram no config: um número repetido aqui só informa
+    # enquanto ninguém mexe no primeiro, e depois desinforma.
+    #
+    # Roda também quando uma fatia falhou (`!cancelled()`): sem isso ele seria
+    # pulado, e o relatório mesclado — que lista as falhas de todas as fatias
+    # num lugar só — nunca apareceria justo quando é útil. O veredito não muda:
+    # `qualidade` reprova pela fatia vermelha de qualquer jeito.
+    if: ${{ !cancelled() }}
+    needs: testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target-sha || github.sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: blob-*
+          path: .vitest-reports
+          merge-multiple: true
+
+      - name: Cobertura total contra os limiares
+        # Reprova também se alguma fatia registrou teste falho: a mesclagem
+        # repete o resultado de cada um.
+        run: pnpm vitest run --merge-reports --coverage
+
+  pwa-browser:
+    # O contrato de privacidade abre um Chromium real. Ele fica separado da
+    # cobertura para não concorrer com os testes curtos, mas continua sendo
+    # obrigatório no mesmo portão que autoriza a promoção.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target-sha || github.sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Preparar os artefatos gerados
+        # Os mesmos que os testes curtos exigem: o service worker (pelo motivo
+        # do comentário no job `testes`) e o changelog compilado.
+        run: |
+          pnpm changelog:build
+          node scripts/sw-version.mjs
+
+      - name: Versão do Playwright
+        id: playwright
+        run: echo "versao=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v6
+        # O Chromium pinado só muda quando o Playwright muda; baixá-lo em toda
+        # execução custava mais que o próprio teste. As dependências do sistema
+        # continuam vindo do `--with-deps`, que não fica em cache.
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.versao }}
+
       - name: Instalar Chromium do gate PWA
-        # O contrato de privacidade abre um Chromium real. Ele fica separado da
-        # cobertura para não concorrer com os testes curtos, mas continua sendo
-        # obrigatório no mesmo portão que autoriza a promoção.
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Fronteira PWA em navegador real
         run: pnpm test:pwa-browser
 
-      - name: Testes e cobertura
-        # Os limiares moram em `vitest.config.ts`, e o comando falha sozinho
-        # quando algum não é alcançado.
-        #
-        # Este comentário TINHA os quatro números, e eles envelheceram: foram
-        # elevados junto com a cobertura e aqui continuaram os antigos. Um número
-        # repetido em dois lugares só informa enquanto ninguém mexe no primeiro,
-        # e depois desinforma — que é pior do que não estar escrito. O config é a
-        # fonte, e é lá que se lê qual é o piso de hoje.
-        run: pnpm vitest run --coverage
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
 
-      - name: Contratos das skills de QA
-        run: pnpm test:qa-skills
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target-sha || github.sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/cache@v6
+        # Cache incremental do webpack. A chave exata casa só com o mesmo
+        # código; a de restauração reaproveita o último build com as mesmas
+        # dependências, que é onde está quase todo o ganho.
+        with:
+          path: .next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('app/**', 'src/**', 'components/**', 'next.config.ts') }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
       - name: Build
+        # `prebuild` gera o service worker e o changelog compilado.
         run: pnpm build
 
   schema-e-migracao:
@@ -155,7 +330,8 @@ jobs:
     # autenticação real. Até aqui ela só rodava na máquina de quem lembrava, e
     # o CI via apenas o Vitest e a fronteira da PWA.
     #
-    # Job próprio, sem `needs`, para não somar o tempo ao portão `qualidade`.
+    # Job próprio, sem `needs`, e fora de `qualidade.needs`: é a única exceção
+    # registrada ao agregador (`NON_BLOCKING_JOBS` em tests/support/ci-workflow.ts).
     #
     # Banco: o próprio `run-isolated.mjs` sobe um `postgres:17` descartável pelo
     # Docker do runner, preso a 127.0.0.1, com senha aleatória — o mesmo
@@ -166,7 +342,7 @@ jobs:
     # Nenhum `secrets.*` aqui: a suíte não precisa de credencial nenhuma, e um
     # PR de qualquer branch roda este job.
     #
-    # Fora de `validacao` e da proteção de branch de propósito, até a
+    # Fora do agregador e da proteção de branch de propósito, até a
     # instabilidade estar medida (issue #202). Na chamada da promoção ele nem
     # roda: um job vermelho ali reprovaria a promoção inteira, e isso é tornar
     # o E2E obrigatório por outra porta.
@@ -226,6 +402,25 @@ jobs:
 
       - name: E2E hermético (UI + axe)
         run: pnpm test:e2e
+
+  qualidade:
+    # O agregador. `always()` é obrigatório, e não enfeite: sem ele, um job
+    # anterior vermelho faz este ser PULADO, e a proteção de branch trata check
+    # obrigatório pulado como aprovado. Com ele, o job roda sempre e reprova
+    # por conta própria quando qualquer dependência não terminou em sucesso —
+    # falha, pulo ou cancelamento.
+    if: ${{ always() }}
+    needs: [contratos, testes, cobertura, pwa-browser, build, schema-e-migracao]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Todos os gates passaram
+        env:
+          RESULTADOS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTADOS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$RESULTADOS" | jq -e 'length > 0 and (to_entries | all(.value.result == "success"))' > /dev/null
 
   validacao:
     if: inputs.target-sha != ''
