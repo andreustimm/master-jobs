@@ -248,7 +248,10 @@ com as seções na ordem da primeira aparição, carimba a versão e apaga os
 fragmentos no mesmo commit `chore(release)`. `pnpm check:release-ready` e o
 hook `commit-msg` aceitam o fragmento como nota da leva e reprovam fragmento
 malformado mesmo sem bump. Entrada escrita direto no `Unreleased` continua
-aceita durante a transição e aparece antes das dos fragmentos.
+aceita durante a transição e aparece antes das dos fragmentos. Até a versão que
+traz os fragmentos chegar a `main`, o controlador da promoção ainda é o antigo:
+fragmento criado nessa janela sai uma versão depois do código (ver
+[promotion.md](promotion.md#evidência-e-limites)).
 
 ## Entregar e limpar
 

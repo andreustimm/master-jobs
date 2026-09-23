@@ -811,7 +811,7 @@ describe("localized repository integration", () => {
     const sync = await readFile(".github/workflows/sincronizar-apos-main.yml", "utf8");
     const shell = await readFile("scripts/release/versionar.ts", "utf8");
     expect(sync).toMatch(
-      /git add package\.json CHANGELOG\.md USER_CHANGELOG\.pt-BR\.md USER_CHANGELOG\.en\.md/,
+      /git add -A -- package\.json CHANGELOG\.md USER_CHANGELOG\.pt-BR\.md USER_CHANGELOG\.en\.md \$\(git ls-files -- changelog\.d\)/,
     );
     expect(sync).not.toMatch(/["' ]USER_CHANGELOG\.md["' ]/);
     for (const file of ["CHANGELOG.md", "USER_CHANGELOG.pt-BR.md", "USER_CHANGELOG.en.md"]) {

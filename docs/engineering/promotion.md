@@ -158,6 +158,14 @@ versão antiga (por `workflow_run`) continua valendo, e a instalação na branch
 padrão permanece parte da publicação humana. Não disparar promoção real como
 teste desta correção.
 
+O mesmo vale para os fragmentos: o controlador da promoção vem de `main`. Até
+a versão que traz `changelog.d/` chegar lá, o controlador antigo carimba só o
+`Unreleased` escrito à mão e deixa os fragmentos em `dev` — eles entram na
+primeira versão carimbada pelo controlador novo, uma versão depois do código.
+Se nessa janela o `Unreleased` estiver vazio e a leva pedir bump, a promoção
+antiga recusa por nota ausente até o merge humano em `main`;
+nenhum estado é escrito, e o agendado seguinte promove normalmente.
+
 Referências de plataforma: [workflows reutilizáveis](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows),
 [permissões e concorrência](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations)
 e [API de runs](https://docs.github.com/en/rest/actions/workflow-runs).
