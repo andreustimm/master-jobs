@@ -12,6 +12,7 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Alterado
 
+- Governança (#196): rulesets do GitHub aplicados. `main`, `staging` e `dev` recusam exclusão e force-push para todos. `main` exige PR com 1 aprovação e os checks `qualidade` e `schema-e-migracao`, sem bypass de CI; o admin só dispensa a aprovação dentro de PR, e o `GITHUB_TOKEN` não tem bypass. O ambiente `Production` só aceita `main`, e `can_admins_bypass` está desligado. O push direto do commit de versão de hotfix em `main` passa a ser recusado e segue por PR humana. `scripts/github/verify-protections.ts` confere o estado efetivo; limites da plataforma e reversão em `docs/engineering/github-protections.md`.
 - Fluxo: a issue fecha quando o código chega a produção — commits das PRs levam `Closes #N` na mensagem, porque a PR aponta para `dev` e só a entrada em `main` fecha issues (AGENTS.md, `docs/engineering/workflow.md`).
 
 ## [1.22.1] - 2026-09-23

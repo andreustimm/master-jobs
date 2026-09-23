@@ -246,6 +246,16 @@ em branches permanentes; `pre-push` impede push direto para elas, inclusive
 feature:dev, e valida o nome da branch de trabalho. Hooks não protegem escritas
 pela API; não substituem política remota, claim ou recibo.
 
+## Proteção remota
+
+Rulesets do GitHub impedem exclusão e force-push em `main`, `staging` e `dev`
+para todos, e exigem em `main` PR aprovada e CI verde sem bypass de CI. `dev` e
+`staging` ainda não exigem PR nem CI no remoto: a plataforma não aceita a
+exceção de que a promoção automática precisaria. O que está aplicado, o
+caminho humano do hotfix, os limites e a reversão estão em
+[github-protections.md](github-protections.md). Confira com
+`rtk node scripts/github/verify-protections.ts`.
+
 ## O que foi adaptado de contas_casal
 
 Mantemos isolamento por demanda, preservação antes de reconciliar a raiz,

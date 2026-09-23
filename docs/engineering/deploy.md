@@ -284,9 +284,13 @@ migrations de `dev` e `staging` ficam desativadas até existirem bancos de
 fixture isolados. Esta configuração não pausa os deployments da Vercel.
 
 **A Vercel implanta no push, independente do CI.** As duas coisas disparam do
-mesmo evento e não se conhecem: sem proteção de branch em `main` exigindo o CI
-verde, o workflow vermelho não impede o deploy. O portão existe, mas só fecha
-depois que alguém liga a proteção em Settings → Branches.
+mesmo evento e não se conhecem. Por isso o portão está na entrada de `main`:
+desde 22/09/2026 um ruleset exige ali PR aprovada com `qualidade` e
+`schema-e-migracao` verdes, sem bypass de CI, e recusa push direto. Em
+`staging` e `dev` o push continua implantando sem CI prévio. A plataforma não
+aceita a exceção de que a promoção precisaria, e a promoção valida o SHA pelo
+CI reutilizável antes do fast-forward. Detalhes, limites e reversão em
+[github-protections.md](github-protections.md).
 
 O segredo usado por `migrate.yml` é `SUPABASE_MIGRATION_URL`; o workflow valida o
 project ref antes de abrir a conexão.
