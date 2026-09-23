@@ -413,8 +413,9 @@ continua sendo a consulta, sem mudança de semântica.
 canônica de tudo que a consulta recebe — `minFit`, `cluster`, `term` (texto e
 chave), `sourceKinds` na ordem dada, `workMode`, `track` (candidato, trilha
 principal, trilhas e modo) e `groupRepeats` —, mais o `candidateId` **da
-sessão** e `SCORER_VERSION`. Não há lista de campos escrita à mão: um filtro
-novo que chegue à consulta entra na chave sozinho. Idioma não entra porque as
+sessão** e `SCORER_VERSION`. A chave não mantém lista própria de campos: tudo
+que `FacetQuery` deixa passar entra nela. Um filtro novo da consulta só precisa
+entrar no `Pick` de `FacetQuery`, e daí chega à chave sozinho. Idioma não entra porque as
 facetas são números e códigos, e o texto é traduzido na página.
 `tests/board-facets-cache.test.ts` prova com dois candidatos que um nunca
 recebe as contagens do outro, nem com as mesmas URLs.
@@ -425,7 +426,7 @@ recebe as contagens do outro, nem com as mesmas URLs.
 |---|---|
 | Triagem e funil (`trackAction`, "não me interessa", restaurar) | Invalida as entradas **do candidato**, depois da escrita, na instância que atendeu |
 | Trilhas (editar, trocar a principal, arquivar, restaurar) | Invalida as entradas **do candidato** — o cockpit lê pela principal da hora |
-| Vaga nova (`/jobs/new`, `/compare`) | Invalida **todas** as entradas da instância |
+| Vaga nova (`/jobs/new`, `/compare`, captura por termo em `after()`) | Invalida **todas** as entradas da instância |
 | Sync, score, raspagem, verificação (CLI e workers, fora do processo) | Só a validade: **60 s** |
 | Outra instância da função | Só a validade: a invalidação não cruza instâncias |
 | Deploy ou instância nova | Mapa vazio |
@@ -438,7 +439,8 @@ tempo esperam a mesma consulta (a entrada é reservada antes do `await`).
 O mapa mora em `globalThis`, não numa constante de módulo: o Next compila as
 Server Actions importadas por componentes de cliente numa camada própria do
 bundle, com cópia própria dos módulos, e uma constante de módulo faria a ação
-invalidar um mapa que a página não lê. **Memória:** teto de 200 entradas, com despejo da menos usada; cada entrada tem
+invalidar um mapa que a página não lê.
+**Memória:** teto de 200 entradas, com despejo da menos usada; cada entrada tem
 menos de 1 KB.
 
 **Local** (`pnpm perf:jobs`, 10 mil vagas, três aquecimentos, dez amostras,

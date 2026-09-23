@@ -58,7 +58,7 @@ const cache = (slots[CACHE_SLOT] ??= createTtlLru<Cached>({
 }));
 
 /**
- * As mesmas facetas de `boardFacets`, reaproveitadas por até 60 s.
+ * As mesmas facetas de `boardFacets`, reaproveitadas por até `FACET_CACHE_TTL_MS`.
  *
  * A entrada é reservada ANTES do `await`: duas requisições iguais ao mesmo
  * tempo (a página e o prefetch do roteador) esperam a mesma consulta em vez de
@@ -73,6 +73,8 @@ export async function cachedBoardFacets(candidateId: number | null, query: Facet
     const created: Cached = { candidateId, facets: boardFacets(candidateId, query) };
     entry = created;
     cache.set(key, created, now);
+    // Por identidade, não pela chave: depois de uma invalidação a mesma chave
+    // pode já guardar uma leitura nova e sadia, que não deve sair junto.
     created.facets.catch(() => cache.deleteWhere((value) => value === created));
   }
   const facets = await entry.facets;

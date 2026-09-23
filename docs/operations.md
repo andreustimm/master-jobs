@@ -101,7 +101,8 @@ sinais:
 > `source.lastError` e segue para a próxima. Nenhum handle errado pode custar as
 > outras 14 fontes ativas.
 
-**Depois do sync, do score, da raspagem ou da verificação, os chips de `/jobs` e do painel `/` podem ficar até 60 s atrás.**
+**Depois do sync, do score, da raspagem ou da verificação, os chips de `/jobs`
+e do painel `/` podem ficar até 60 s atrás.**
 As contagens dos filtros ficam num cache de cada instância da função, e o sync
 roda fora dela, sem como avisar. A lista e o total do rodapé são sempre lidos
 na hora. Não há o que fazer: em um minuto os chips alcançam. Detalhe em

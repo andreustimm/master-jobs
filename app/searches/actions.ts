@@ -49,6 +49,8 @@ function idFrom(formData: FormData, field: string): number | null {
 function drainAfterResponse(candidateId: number): void {
   after(async () => {
     await runTermCaptures({ budgetMs: 25_000, worker: "web" });
+    // A captura grava vagas no acervo global, aqui mesmo no processo.
+    invalidateBoardFacets();
     await enqueueScore(candidateId, { origin: "perfil" });
   });
 }
@@ -192,7 +194,9 @@ export async function updateTrackAction(formData: FormData): Promise<UpdateTrack
     target: parsed.target,
     expectedUpdatedAt: String(formData.get("expectedUpdatedAt") ?? ""),
   });
-  invalidateBoardFacets(candidateId);
+  // Só descarta as entradas de antes da edição: o que muda as contagens é a
+  // repontuação enfileirada por `updateTrack`, e ela chega depois — pela validade.
+  if (result.ok) invalidateBoardFacets(candidateId);
   refresh();
   revalidatePath(`/searches/tracks/${track.id}`);
   return result;

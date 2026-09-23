@@ -198,8 +198,8 @@ describe.runIf(enabled)("baseline de /jobs", () => {
       // execução; os estágios ilustram a amostra central superior, real.
       const middle = middleRun(runs);
       const stages = middle.report.stages.map((s) => `${s.stage}=${s.ms}`).join(" ");
-      // Quente: a entrada da página 1 já está no cache, e a página 2 tem as
-      // mesmas facetas. É o paginar/reordenar que o cache existe para servir.
+      // Quente: uma leitura fria da página 1 guarda a entrada, e a página 2 tem
+      // as mesmas facetas. É o paginar/reordenar que o cache existe para servir.
       await measure(scenario.params);
       const warm = [];
       for (let run = 0; run < RUNS; run++) warm.push(await measure(scenario.params, { page: 2, cold: false }));
