@@ -99,7 +99,7 @@ const SCENARIOS: Scenario[] = [
  * antes, para o número continuar comparável às medições anteriores ao cache
  * (#216). `page` > 1 com `cold: false` é o caso que o cache existe para servir.
  */
-async function measure(params: Record<string, string>, profile = false, { page = 1, cold = true } = {}) {
+async function measure(params: Record<string, string>, { profile = false, page = 1, cold = true } = {}) {
   if (cold) invalidateBoardFacets();
   const client = db.$client as unknown as { unsafe: (...args: unknown[]) => Promise<unknown> };
   const original = client.unsafe.bind(client);
@@ -151,6 +151,11 @@ async function measure(params: Record<string, string>, profile = false, { page =
   }
 }
 
+/** A amostra central superior: uma execução real, ao contrário da mediana de um número par. */
+function middleRun<T extends { report: { totalMs: number } }>(runs: T[]): T {
+  return [...runs].sort((a, b) => a.report.totalMs - b.report.totalMs)[Math.floor(runs.length / 2)]!;
+}
+
 function median(values: number[]) {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
@@ -181,7 +186,7 @@ describe.runIf(enabled)("baseline de /jobs", () => {
       let plan: unknown;
       let plans: unknown;
       for (let warmup = 0; warmup < WARMUPS; warmup++) {
-        const warmed = await measure(scenario.params, warmup === WARMUPS - 1 && !!process.env.JHO_PERF_JSON);
+        const warmed = await measure(scenario.params, { profile: warmup === WARMUPS - 1 && !!process.env.JHO_PERF_JSON });
         plan = warmed.plan;
         plans = warmed.plans;
       }
@@ -191,16 +196,19 @@ describe.runIf(enabled)("baseline de /jobs", () => {
       const totals = runs.map((r) => r.report.totalMs);
       // A mediana de um número par de amostras pode não pertencer a nenhuma
       // execução; os estágios ilustram a amostra central superior, real.
-      const middle = [...runs].sort((a, b) => a.report.totalMs - b.report.totalMs)[Math.floor(runs.length / 2)]!;
+      const middle = middleRun(runs);
       const stages = middle.report.stages.map((s) => `${s.stage}=${s.ms}`).join(" ");
       // Quente: a entrada da página 1 já está no cache, e a página 2 tem as
       // mesmas facetas. É o paginar/reordenar que o cache existe para servir.
       await measure(scenario.params);
       const warm = [];
-      for (let run = 0; run < RUNS; run++) warm.push(await measure(scenario.params, false, { page: 2, cold: false }));
+      for (let run = 0; run < RUNS; run++) warm.push(await measure(scenario.params, { page: 2, cold: false }));
       for (const run of warm) expect(run.golden.facets).toEqual(runs[0]!.golden.facets);
-      const warmMiddle = [...warm].sort((a, b) => a.report.totalMs - b.report.totalMs)[Math.floor(warm.length / 2)]!;
-      const warmFacets = warmMiddle.report.stages.find((s) => s.stage === "facets")?.ms ?? 0;
+      const warmMiddle = middleRun(warm);
+      // Sem o estágio, `?? 0` imprimiria o acerto perfeito: melhor falhar.
+      const warmFacetsStage = warmMiddle.report.stages.find((s) => s.stage === "facets");
+      expect(warmFacetsStage).toBeDefined();
+      const warmFacets = warmFacetsStage!.ms;
       lines.push(
         scenario.name.padEnd(24) + median(totals).toFixed(0).padStart(10) + String(middle.queries).padStart(6) + `  ${stages}`
           + `  ‖ ${median(warm.map((r) => r.report.totalMs)).toFixed(0)} ms, ${warmMiddle.queries} idas, facets=${warmFacets}`,

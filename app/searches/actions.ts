@@ -10,6 +10,7 @@ import {
   createTrack,
   deleteTerm,
   ensurePrimaryTrack,
+  invalidateBoardFacets,
   listCandidateTracks,
   moveTerm,
   restoreTrack,
@@ -191,6 +192,7 @@ export async function updateTrackAction(formData: FormData): Promise<UpdateTrack
     target: parsed.target,
     expectedUpdatedAt: String(formData.get("expectedUpdatedAt") ?? ""),
   });
+  invalidateBoardFacets(candidateId);
   refresh();
   revalidatePath(`/searches/tracks/${track.id}`);
   return result;
@@ -204,6 +206,9 @@ async function lifecycle(
   const trackId = idFrom(formData, "trackId");
   if (trackId === null) return { ok: false, code: "not_found" };
   const result = await change(candidateId, trackId);
+  // O cockpit lê as facetas sem trilha na chave — a principal da hora da
+  // leitura. Trocar, arquivar ou restaurar trilha muda a resposta dele.
+  invalidateBoardFacets(candidateId);
   refresh();
   revalidatePath(`/searches/tracks/${trackId}`);
   return result;

@@ -41,9 +41,9 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ### Improved
 
-- On the Jobs screen, changing page, sort order or pay range responds faster:
-  the filter counts are reused for up to a minute. When the job list is
-  updated, they may take up to a minute to reflect the change; the list and
+- On the Jobs screen and the home panel, changing page, sort order or pay
+  range responds faster: the filter counts are reused for up to a minute. When
+  the job catalog is updated, they may take up to a minute to reflect the change; the list and
   the job total always show the current state.
 
 ## [1.22.0] - 2026-09-22T23:04:57.000Z

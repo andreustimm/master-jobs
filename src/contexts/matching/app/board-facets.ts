@@ -14,7 +14,7 @@
 import { clock } from "../../../core/clock.ts";
 import { boardFacets, type BoardFilters } from "../../../core/db/repo.ts";
 import { SCORER_VERSION } from "../../../core/scoring/score.ts";
-import { createTtlLru, facetCacheKey } from "../domain/facet-cache.ts";
+import { createTtlLru, facetCacheKey, type TtlLru } from "../domain/facet-cache.ts";
 
 /** Os filtros que as facetas leem. Qualquer campo passado entra na chave. */
 export type FacetQuery = Pick<
@@ -44,7 +44,18 @@ export const FACET_CACHE_MAX_ENTRIES = 200;
 
 type Cached = { candidateId: number | null; facets: Promise<BoardFacets> };
 
-const cache = createTtlLru<Cached>({ ttlMs: FACET_CACHE_TTL_MS, maxEntries: FACET_CACHE_MAX_ENTRIES });
+/**
+ * Um mapa por PROCESSO, não por módulo. O Next compila as Server Actions
+ * importadas por componentes de cliente numa camada própria do bundle, com a
+ * sua cópia deste módulo: um `const` de módulo daria à ação de triagem um mapa
+ * e à página outro, e a invalidação limparia o mapa que ninguém lê.
+ */
+const CACHE_SLOT = Symbol.for("master-jobs.matching.board-facets-cache");
+const slots = globalThis as typeof globalThis & { [CACHE_SLOT]?: TtlLru<Cached> };
+const cache = (slots[CACHE_SLOT] ??= createTtlLru<Cached>({
+  ttlMs: FACET_CACHE_TTL_MS,
+  maxEntries: FACET_CACHE_MAX_ENTRIES,
+}));
 
 /**
  * As mesmas facetas de `boardFacets`, reaproveitadas por até 60 s.

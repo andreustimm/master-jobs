@@ -53,7 +53,6 @@ export type TtlLru<V> = {
   /** O valor, se existe e ainda vale em `now`; conta como uso recente. */
   get(key: string, now: number): V | undefined;
   set(key: string, value: V, now: number): void;
-  delete(key: string): void;
   /** Remove as entradas cujo valor satisfaz o predicado. */
   deleteWhere(predicate: (value: V) => boolean): void;
   clear(): void;
@@ -79,11 +78,8 @@ export function createTtlLru<V>(options: TtlLruOptions): TtlLru<V> {
       // Relógio que volta (ajuste de NTP) também invalida: uma idade negativa
       // não prova que a entrada é recente.
       const age = now - entry.storedAt;
-      if (age >= options.ttlMs || age < 0) {
-        entries.delete(key);
-        return undefined;
-      }
       entries.delete(key);
+      if (age >= options.ttlMs || age < 0) return undefined;
       entries.set(key, entry);
       return entry.value;
     },
@@ -94,9 +90,6 @@ export function createTtlLru<V>(options: TtlLruOptions): TtlLru<V> {
         const oldest = entries.keys().next().value as string;
         entries.delete(oldest);
       }
-    },
-    delete(key) {
-      entries.delete(key);
     },
     deleteWhere(predicate) {
       for (const [key, entry] of entries) if (predicate(entry.value)) entries.delete(key);

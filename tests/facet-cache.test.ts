@@ -101,7 +101,7 @@ describe("mapa com validade e teto", () => {
     expect(cache.get("a", 1500)).toBe("2");
   });
 
-  it("remove por chave, por predicado e tudo", () => {
+  it("remove por predicado e tudo", () => {
     const cache = createTtlLru<{ owner: number }>({ ttlMs: 1000, maxEntries: 8 });
     cache.set("a", { owner: 1 }, 0);
     cache.set("b", { owner: 2 }, 0);
@@ -109,7 +109,7 @@ describe("mapa com validade e teto", () => {
     cache.deleteWhere((value) => value.owner === 1);
     expect(cache.size).toBe(1);
     expect(cache.get("b", 1)).toEqual({ owner: 2 });
-    cache.delete("b");
+    cache.deleteWhere(() => true);
     expect(cache.size).toBe(0);
     cache.set("d", { owner: 3 }, 0);
     cache.clear();

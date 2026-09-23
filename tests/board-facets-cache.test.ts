@@ -155,6 +155,19 @@ describe("cache das facetas", () => {
     expect(await cachedBoardFacets(1, query)).toMatchObject({ clusters: ["architect"], sources: ["lever"] });
   });
 
+  it("o mapa é do processo: uma segunda cópia do módulo lê e limpa o mesmo", async () => {
+    // O Next compila as Server Actions de componentes de cliente numa camada
+    // própria do bundle. O que importa é a ação e a página verem o MESMO mapa.
+    await scored(1, 1, "architect");
+    await cachedBoardFacets(1, query);
+    const slot = (globalThis as Record<symbol, { size: number } | undefined>)[
+      Symbol.for("master-jobs.matching.board-facets-cache")
+    ];
+    expect(slot?.size).toBe(1);
+    invalidateBoardFacets(1);
+    expect(slot?.size).toBe(0);
+  });
+
   it("uma falha não fica guardada", async () => {
     await scored(1, 1, "architect");
     const client = db.$client as unknown as { unsafe: (...args: unknown[]) => Promise<unknown> };

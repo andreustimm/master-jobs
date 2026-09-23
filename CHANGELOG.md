@@ -47,7 +47,9 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   salarial, empresa e chips de recorte reaproveitam a entrada. Validade de
   60 s, teto de 200 entradas (LRU), consulta reservada antes do `await` e
   falha descartada. Triagem e funil invalidam as entradas do candidato; vaga
-  nova (`/jobs/new`, `/compare`) invalida todas. Sync, score e raspagem rodam
+  nova (`/jobs/new`, `/compare`) invalida todas; mudar trilha invalida as do
+  candidato. O mapa fica em `globalThis`, compartilhado entre a camada das
+  páginas e a das Server Actions. Sync, score e raspagem rodam
   fora do processo e só a validade os cobre. `pnpm perf:jobs` mede a leitura
   fria (comparável às anteriores) e a página 2 com cache: no padrão, 56 → 31 ms,
   facetas 22 → 0 ms, 6 → 5 consultas.

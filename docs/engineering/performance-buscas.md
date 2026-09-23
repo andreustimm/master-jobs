@@ -424,6 +424,7 @@ recebe as contagens do outro, nem com as mesmas URLs.
 | O que muda | Como o cache acompanha |
 |---|---|
 | Triagem e funil (`trackAction`, "não me interessa", restaurar) | Invalida as entradas **do candidato**, depois da escrita, na instância que atendeu |
+| Trilhas (editar, trocar a principal, arquivar, restaurar) | Invalida as entradas **do candidato** — o cockpit lê pela principal da hora |
 | Vaga nova (`/jobs/new`, `/compare`) | Invalida **todas** as entradas da instância |
 | Sync, score, raspagem, verificação (CLI e workers, fora do processo) | Só a validade: **60 s** |
 | Outra instância da função | Só a validade: a invalidação não cruza instâncias |
@@ -434,7 +435,10 @@ atrás de uma mudança externa. A lista e o total do rodapé **nunca** passam pe
 cache: no pior caso, por até um minuto, um chip conta diferente do rodapé
 depois de um sync. Entrada que falha sai do cache; duas leituras iguais ao mesmo
 tempo esperam a mesma consulta (a entrada é reservada antes do `await`).
-**Memória:** teto de 200 entradas, com despejo da menos usada; cada entrada tem
+O mapa mora em `globalThis`, não numa constante de módulo: o Next compila as
+Server Actions importadas por componentes de cliente numa camada própria do
+bundle, com cópia própria dos módulos, e uma constante de módulo faria a ação
+invalidar um mapa que a página não lê. **Memória:** teto de 200 entradas, com despejo da menos usada; cada entrada tem
 menos de 1 KB.
 
 **Local** (`pnpm perf:jobs`, 10 mil vagas, três aquecimentos, dez amostras,
@@ -453,7 +457,7 @@ comparável às tabelas anteriores; a quente é a página 2 logo depois da 1:
 A leitura fria não muda (a diferença é ruído). O ganho é todo na leitura que
 repete filtros.
 
-**Em produção, não confirmado.** Nenhum número acima é de produção, e o ganho
+**Em produção, não confirmado.** Nenhum número da tabela acima é de produção, e o ganho
 lá só se afirma com `pnpm perf:producao` com sessão depois do deploy: cada
 cenário de `/jobs` pede a mesma URL várias vezes, então a "primeira" de cada
 rodada é a leitura sem cache e o "quente" é a leitura com cache. Com
