@@ -36,7 +36,11 @@ describe("trusted task automation", () => {
     const writes = [...sources.matchAll(/\(\s*"(?:POST|PUT|PATCH|DELETE)",\s*(["`])(.*?)\1/g)].map(match => match[2]!);
     expect(writes.length).toBeGreaterThan(0);
     for (const path of writes) expect(path).not.toMatch(/merge|deployment|git\/|dispatches|pulls|actions/);
-    const mutations = new Set([...sources.matchAll(/mutation \w+\(\$input:(\w+)Input!\)/g)].map(match => match[1]));
+    // Every GraphQL mutation must be written in the one recognised shape, so an
+    // anonymous or differently spaced mutation fails here instead of slipping by.
+    const named = [...sources.matchAll(/mutation \w+\(\$input:(\w+)Input!\)/g)];
+    expect(named).toHaveLength([...sources.matchAll(/\bmutation\s*\w*\s*[({]/g)].length);
+    const mutations = new Set(named.map(match => match[1]));
     expect([...mutations].sort()).toEqual(["AddBlockedBy", "AddProjectV2ItemById", "AddSubIssue", "CreateProjectV2Field", "UpdateProjectV2Field", "UpdateProjectV2ItemFieldValue"]);
   });
   it("does not silently substitute the repository token for Projects privilege", () => {
