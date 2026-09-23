@@ -173,9 +173,11 @@ describe("a fatia com prazo", () => {
   });
 
   it("página inteira fora do alvo de uma trilha aceita não prende a fatia num laço", async () => {
-    // A trilha PHP não é relevante para nenhuma destas vagas: a página não
-    // grava nada. Parar no fim dela devolveria a tarefa à fila, e a fatia
-    // seguinte recomeçaria da mesma página — para sempre.
+    // A trilha PHP não é relevante para nenhuma destas vagas: o lote não
+    // grava nada. Se o ponto de retomada dependesse do que foi gravado, a
+    // fatia seguinte recomeçaria do mesmo lote — para sempre. Com o cursor
+    // (#288), cada fatia avança um lote e a tarefa termina num número finito
+    // de fatias: onze lotes cheios e a leitura vazia que fecha a passada.
     await seedCatalog();
     await semearVagas(1_100);
     const id = await criarCandidato("maria");
@@ -188,9 +190,16 @@ describe("a fatia com prazo", () => {
     expect(trilha.ok).toBe(true);
     relogioQueCorre();
 
-    const r = await runScoreQueue({ budgetMs: 1, worker: "teste" });
+    let fatias = 0;
+    let ultima = await runScoreQueue({ budgetMs: 1, worker: "teste" });
+    fatias++;
+    while (ultima.adiadas > 0 && fatias < 50) {
+      ultima = await runScoreQueue({ budgetMs: 1, worker: "teste" });
+      fatias++;
+    }
 
-    expect(r).toMatchObject({ adiadas: 0, processadas: 1 });
+    expect(ultima).toMatchObject({ adiadas: 0, processadas: 1 });
+    expect(fatias).toBe(12);
     expect((await tarefaDe(id))!.status).toBe("done");
   });
 
@@ -404,6 +413,16 @@ describe("toda entrada de currículo enfileira E pontua depois da resposta", () 
 });
 
 describe("a fatia `repontuar` que o agendador chama", () => {
+  // A rota só trabalha em produção (#288).
+  const ORIGINAL_ENV = process.env.JHO_ENV;
+  beforeEach(() => {
+    process.env.JHO_ENV = "production";
+  });
+  afterEach(() => {
+    if (ORIGINAL_ENV === undefined) delete process.env.JHO_ENV;
+    else process.env.JHO_ENV = ORIGINAL_ENV;
+  });
+
   function pedido(authorization?: string): NextRequest {
     return new NextRequest("https://exemplo.test/api/cron/varredura?fatia=repontuar", {
       headers: authorization ? { authorization } : {},
