@@ -9,6 +9,24 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+
+- Tracing do servidor no Sentry (#219), amostrado por `SENTRY_TRACES_SAMPLE_RATE`
+  (padrão 10%; `0` ou valor ilegível desliga). Cada estágio já medido das telas
+  (`auth`, `prelude`, `board`, `facets`, `tail`, `cockpit`…) vira um span
+  `jho.etapa` dentro de um `jho.leitura` por rota (`criarCronometro`,
+  `rastrearEtapa`). A peneira é pura e testada em `src/core/observability.ts`:
+  `scrubTransaction`/`scrubSpan` (`beforeSendTransaction`/`beforeSendSpan`)
+  tiram query string do nome e dos spans, reduzem SQL ao verbo e só deixam sair
+  atributos de uma lista de permissão (`ALLOWED_SPAN_DATA`) — `http.target`,
+  `url.full`, `url.query`, `client.address`, `db.query.text` e
+  `server.address` não saem. `tracePropagationTargets: []` impede o
+  `baggage` de ir para os boards. As migalhas de erro também perdem a query.
+- Mapas de origem do servidor publicados no Sentry no build (#212), pelo gancho
+  `compiler.runAfterProductionCompile` e `@sentry/cli` (`sourcemaps inject` +
+  `upload` em `.next/server`, release = SHA). Sem `SENTRY_AUTH_TOKEN` nada
+  muda — nem `.map` é gerado — e o log de build diz por quê; falha de envio
+  não derruba o build. Sem `withSentryConfig`, sem mapa de cliente.
 
 ### Alterado
 

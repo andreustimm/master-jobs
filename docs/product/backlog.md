@@ -80,11 +80,12 @@ A pilha que chega no Sentry está **minificada** (`chunks/5303.js:1:1963`) — f
 exatamente assim que o erro da 1.13.1 apareceu no log da Vercel, e é a
 diferença entre um relatório legível e um enigma.
 
-Exige envolver a configuração com `withSentryConfig` em `next.config.ts` e
-cadastrar `SENTRY_AUTH_TOKEN`, `SENTRY_ORG` e `SENTRY_PROJECT` no ambiente de
-**build**. Ficou fora da entrega inicial porque adicionava risco de build sem
-benefício imediato, no mesmo dia de uma queda. Detalhe em
-[`deploy.md`](../engineering/deploy.md#relato-de-erro).
+O código entrou pela #212, sem `withSentryConfig`: o gancho
+`runAfterProductionCompile` publica os mapas do servidor com `sentry-cli`
+quando há `SENTRY_AUTH_TOKEN` no build, e sem ele o build segue igual. Falta
+o passo humano — criar o token e cadastrá-lo na Vercel — e a verificação de
+uma pilha resolvida. Detalhe em
+[`deploy.md`](../engineering/deploy.md#mapas-de-origem).
 
 ### O-03 · Alerta de erro do Sentry para um canal ✅
 

@@ -153,7 +153,29 @@ export type ScrubbableEvent = {
     url?: string;
   };
   user?: unknown;
+  breadcrumbs?: Array<{ message?: string; data?: { [key: string]: unknown } }>;
 };
+
+/** Texto sem o que vem depois de `?` ou `#` — a mesma regra de `redactPath`, fora de caminho. */
+function withoutQuery(text: string): string {
+  const cut = text.search(/[?#]/);
+  return cut === -1 ? text : text.slice(0, cut);
+}
+
+/**
+ * Migalha é o rastro que o SDK junta antes do erro: requisição de saída,
+ * linha de console, navegação. A de requisição traz a URL inteira — e a busca
+ * por termo nas fontes leva o termo da pessoa na query string.
+ */
+function scrubBreadcrumb(crumb: { message?: string; data?: { [key: string]: unknown } }): void {
+  if (!crumb || typeof crumb !== "object") return;
+  if (typeof crumb.message === "string") crumb.message = withoutQuery(redactSecrets(crumb.message));
+  if (!crumb.data || typeof crumb.data !== "object") return;
+  for (const [key, value] of Object.entries(crumb.data)) {
+    if (typeof value === "string") crumb.data[key] = withoutQuery(redactSecrets(value));
+    else if (typeof value !== "number" && typeof value !== "boolean") delete crumb.data[key];
+  }
+}
 
 /**
  * Última peneira, depois de tudo que o SDK montou.
@@ -196,6 +218,8 @@ export function scrubEvent<T extends ScrubbableEvent>(event: T): T | null {
       }
     }
 
+    for (const crumb of Array.isArray(event.breadcrumbs) ? event.breadcrumbs : []) scrubBreadcrumb(crumb);
+
     // Identidade nunca acompanha o erro, mesmo que `sendDefaultPii` mude de
     // padrão numa atualização do SDK.
     delete event.user;
@@ -203,6 +227,248 @@ export function scrubEvent<T extends ScrubbableEvent>(event: T): T | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Amostragem de traces quando `SENTRY_TRACES_SAMPLE_RATE` não diz nada.
+ *
+ * Um em cada dez. O plano Developer da organização reserva 5 milhões de spans
+ * por ciclo, dividido entre quatro projetos, e sem gasto sob demanda: passar da
+ * quota descarta span, não gera cobrança. Uma leitura de `/jobs` rende algumas
+ * dezenas de spans; com um usuário, 10% é folga larga e ainda junta amostra
+ * para o objetivo de latência (100 por rota) em poucos dias.
+ */
+export const DEFAULT_TRACES_SAMPLE_RATE = 0.1;
+
+/**
+ * Lê a amostragem configurada.
+ *
+ * Valor que não é um número entre 0 e 1 DESLIGA o tracing, em vez de cair no
+ * padrão: configuração ilegível é engano de alguém, e o engano não pode
+ * resultar em mais dado saindo do que o pedido. Ausente ou em branco é o
+ * padrão — a regra 17 vale aqui, `""` não é zero.
+ */
+export function tracesSampleRate(raw: string | undefined): number {
+  if (typeof raw !== "string" || raw.trim() === "") return DEFAULT_TRACES_SAMPLE_RATE;
+  const text = raw.trim();
+  if (!/^(?:0|1|0?\.\d+|1\.0+)$/.test(text)) return 0;
+  return Number(text);
+}
+
+/**
+ * Atributos de span que podem sair.
+ *
+ * Lista de PERMISSÃO, como os cabeçalhos. A instrumentação de HTTP anexa
+ * `http.target`, `url.full` e `url.query` — a URL com o filtro da pessoa — e
+ * `client.address`, que é IP. A do PostgreSQL anexa `db.query.text` e o
+ * endereço do banco. Nenhum deles responde "quanto demorou e onde", que é a
+ * pergunta do tracing; todos respondem "quem, e o que procurava".
+ */
+export const ALLOWED_SPAN_DATA: readonly string[] = [
+  "sentry.op",
+  "sentry.origin",
+  "sentry.source",
+  "sentry.sample_rate",
+  "http.method",
+  "http.request.method",
+  "http.status_code",
+  "http.response.status_code",
+  "http.route",
+  "next.route",
+  "next.span_name",
+  "next.span_type",
+  "db.system",
+  "db.system.name",
+  "db.operation.name",
+  "db.response.status_code",
+  "otel.kind",
+  "error.type",
+  "jho.etapa",
+];
+
+/** Contextos de transação que podem sair; o resto (`otel`, `response`, o que uma atualização do SDK anexar) não. */
+export const ALLOWED_TRANSACTION_CONTEXTS: readonly string[] = ["trace", "runtime", "os", "app", "device"];
+
+/** O formato mínimo de span que a peneira toca — estrutural, pelo mesmo motivo de `ScrubbableEvent`. */
+export type ScrubbableSpan = {
+  description?: string;
+  op?: string;
+  data?: { [key: string]: unknown };
+};
+
+function safeSpanData(data: unknown): { [key: string]: unknown } {
+  const safe: { [key: string]: unknown } = {};
+  if (!data || typeof data !== "object") return safe;
+  for (const [key, value] of Object.entries(data)) {
+    if (!ALLOWED_SPAN_DATA.includes(key)) continue;
+    if (typeof value === "string") safe[key] = withoutQuery(redactSecrets(value));
+    else if (typeof value === "number" || typeof value === "boolean") safe[key] = value;
+  }
+  return safe;
+}
+
+const SQL_VERB = /^\s*(select|insert|update|delete|with|begin|commit|rollback|set|show|values|copy|lock|create|alter|drop|truncate|explain)\b/i;
+
+/**
+ * A descrição de um span de banco é a consulta. O SDK troca os literais por
+ * `?`, mas a consulta ainda descreve o filtro — quais colunas a busca tocou — e
+ * o nome da operação basta para saber onde o tempo foi.
+ */
+function safeSpanDescription(description: string, op: string | undefined, data: { [key: string]: unknown }): string {
+  const isDb =
+    (typeof op === "string" && op.startsWith("db")) ||
+    data["db.system"] !== undefined ||
+    data["db.system.name"] !== undefined;
+  if (!isDb) return withoutQuery(redactSecrets(description));
+  const operation = data["db.operation.name"];
+  if (typeof operation === "string" && operation.length > 0) return operation;
+  return SQL_VERB.exec(description)?.[1]?.toUpperCase() ?? "db";
+}
+
+/**
+ * Peneira de um span. Roda como `beforeSendSpan` e, de novo, dentro de
+ * `scrubTransaction` para cada span da transação.
+ *
+ * `beforeSendSpan` não pode descartar span — o SDK envia o original se a função
+ * devolver `null`. Então, se algo estourar aqui, o span sai vazio de dado, e
+ * não como veio.
+ */
+export function scrubSpan<T extends ScrubbableSpan>(span: T): T {
+  if (!span || typeof span !== "object") return span;
+  try {
+    span.data = safeSpanData(span.data);
+    if (typeof span.description === "string") {
+      span.description = safeSpanDescription(span.description, span.op, span.data);
+    }
+  } catch {
+    span.data = {};
+    delete span.description;
+  }
+  return span;
+}
+
+/** O formato mínimo da transação que a peneira toca. */
+export type ScrubbableTransaction = ScrubbableEvent & {
+  transaction?: string;
+  contexts?: { [key: string]: unknown };
+  spans?: ScrubbableSpan[];
+  tags?: { [key: string]: unknown };
+  extra?: unknown;
+};
+
+/**
+ * Última peneira de uma transação, depois de tudo que o SDK montou.
+ *
+ * Roda como `beforeSendTransaction`. Uma transação é um evento como outro
+ * qualquer — pedido, usuário, migalhas — e mais: o nome (que pode ser a URL),
+ * o contexto `trace` com os atributos do span raiz e a lista de spans. Por
+ * isso ela reaproveita `scrubEvent` e acrescenta o resto.
+ *
+ * O span raiz passa por `beforeSendSpan`, mas o SDK MESCLA o resultado com o
+ * evento original: chave apagada lá volta na mescla. É aqui, e não no
+ * `beforeSendSpan`, que `contexts.trace.data` perde o que não pode sair.
+ *
+ * Em caso de dúvida, descarta — `null` significa "não envie". Perder uma
+ * amostra de latência não custa nada; mandar a busca de alguém custa.
+ */
+export function scrubTransaction<T extends ScrubbableTransaction>(event: T): T | null {
+  try {
+    const clean = scrubEvent(event);
+    if (!clean) return null;
+
+    if (typeof clean.transaction === "string") {
+      clean.transaction = withoutQuery(redactSecrets(clean.transaction));
+    }
+
+    if (clean.contexts && typeof clean.contexts === "object") {
+      for (const name of Object.keys(clean.contexts)) {
+        if (!ALLOWED_TRANSACTION_CONTEXTS.includes(name)) delete clean.contexts[name];
+      }
+      const trace = clean.contexts.trace;
+      if (trace && typeof trace === "object") scrubSpan(trace as ScrubbableSpan);
+    }
+
+    if (Array.isArray(clean.spans)) {
+      for (const span of clean.spans) scrubSpan(span);
+    }
+
+    if (clean.tags && typeof clean.tags === "object") {
+      for (const [key, value] of Object.entries(clean.tags)) {
+        if (typeof value === "string") clean.tags[key] = withoutQuery(redactSecrets(value));
+        else if (typeof value !== "number" && typeof value !== "boolean") delete clean.tags[key];
+      }
+    }
+
+    // Numa transação não há diagnóstico a preservar em `extra` nem em
+    // migalha: a pergunta é de tempo, e os dois são onde texto livre entra.
+    delete clean.extra;
+    delete clean.breadcrumbs;
+    return clean;
+  } catch {
+    return null;
+  }
+}
+
+/** O que a instrumentação lê do ambiente para montar o relato. */
+export type SentryServerEnv = {
+  dsn: string;
+  environment: string;
+  release?: string;
+  tracesSampleRate?: string;
+};
+
+/**
+ * A configuração do SDK no servidor, montada aqui para ser TESTADA.
+ *
+ * Enquanto viveu dentro do `Sentry.init`, só a leitura do código garantia que a
+ * peneira estava ligada. Aqui um teste aplica cada gancho a um evento real e
+ * reprova se a remoção sumir.
+ *
+ * `tracePropagationTargets: []`: com tracing ligado, o SDK anexa `sentry-trace`
+ * e `baggage` a TODA requisição de saída — e o `baggage` leva a chave pública,
+ * o release e o nome da transação para cada board que a sincronização consulta.
+ * Não há serviço nosso do outro lado para continuar o trace; propagar só vaza.
+ */
+export function sentryServerOptions(env: SentryServerEnv) {
+  return {
+    dsn: env.dsn,
+    environment: env.environment,
+    release: env.release,
+    sendDefaultPii: false,
+    tracesSampleRate: tracesSampleRate(env.tracesSampleRate),
+    tracePropagationTargets: [] as string[],
+    beforeSend: scrubEvent,
+    beforeSendTransaction: scrubTransaction,
+    beforeSendSpan: scrubSpan,
+  };
+}
+
+/**
+ * Onde publicar os mapas de origem do build, ou por que não publicar.
+ *
+ * Sem `SENTRY_AUTH_TOKEN`, o build segue sem mapas: ausência de provedor não
+ * bloqueia produto, e o desenvolvimento local e o CI não têm — nem devem ter —
+ * o token. Organização e projeto têm padrão porque não são segredo; o token
+ * nunca entra no plano, para que registrar o plano não o imprima.
+ */
+export type SourceMapPlan =
+  | { upload: false; reason: string }
+  | { upload: true; org: string; project: string; release?: string };
+
+export const SENTRY_DEFAULT_ORG = "master-timm";
+export const SENTRY_DEFAULT_PROJECT = "master-jobs";
+
+export function sourceMapPlan(env: Readonly<{ [key: string]: string | undefined }>): SourceMapPlan {
+  if (!env.SENTRY_AUTH_TOKEN?.trim()) {
+    return { upload: false, reason: "SENTRY_AUTH_TOKEN ausente: o build segue sem publicar mapas de origem" };
+  }
+  const release = env.VERCEL_GIT_COMMIT_SHA?.trim();
+  return {
+    upload: true,
+    org: env.SENTRY_ORG?.trim() || SENTRY_DEFAULT_ORG,
+    project: env.SENTRY_PROJECT?.trim() || SENTRY_DEFAULT_PROJECT,
+    ...(release ? { release } : {}),
+  };
 }
 
 /**
@@ -267,9 +533,13 @@ export async function warnIfSlower<T>(
  *
  * Existe porque "a busca está lenta" era uma sensação sem número: nenhuma
  * rota media a si mesma, o log da Vercel não traz duração por etapa e o Sentry
- * roda sem tracing (a URL carrega o filtro do usuário). Sem medida, cada
+ * rodava sem tracing (a URL carrega o filtro do usuário). Sem medida, cada
  * conserto era uma hipótese — a região da função só apareceu ao comparar dois
  * nomes de região.
+ *
+ * `trace`, quando injetado, envolve cada estágio num span: é o mesmo nome de
+ * estágio que já sai no log, agora dentro do trace amostrado da requisição.
+ * Domínio puro não conhece SDK, então quem abre o span é o adapter.
  *
  * Mede ESTÁGIOS, não consultas: cada estágio é uma espera do servidor pelo
  * banco (uma ida, ou várias em paralelo), e é o que a latência soma. Só sai
@@ -293,15 +563,21 @@ export type StageTimer = {
 
 const roundMs = (ms: number) => Math.round(ms * 10) / 10;
 
+/** Envolve o trabalho de um estágio num span; tem de rodar `work` exatamente uma vez. */
+export type StageTrace = <T>(stage: string, work: () => Promise<T>) => Promise<T>;
+
 /** `now` é injetável para o teste não depender do relógio da máquina. */
-export function createStageTimer(now: () => number = () => performance.now()): StageTimer {
+export function createStageTimer(
+  now: () => number = () => performance.now(),
+  trace?: StageTrace,
+): StageTimer {
   const startedAt = now();
   const stages: StageTiming[] = [];
   return {
     async time(stage, work) {
       const begin = now();
       try {
-        return await work();
+        return await (trace ? trace(stage, work) : work());
       } finally {
         // No `finally`: o estágio que estoura é justamente o que interessa medir.
         stages.push({ stage, ms: roundMs(now() - begin) });

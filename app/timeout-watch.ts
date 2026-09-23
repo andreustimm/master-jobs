@@ -1,7 +1,10 @@
 import {
+  createStageTimer,
+  redactPath,
   shouldLogTiming,
   timingLogLine,
   warnIfSlower,
+  type StageTimer,
   type TimingReport,
 } from "../src/core/observability.ts";
 
@@ -23,10 +26,10 @@ const LENTA_MS = 1_000;
 /**
  * Registra onde uma leitura de tela gastou o tempo, quando vale registrar.
  *
- * Sai no log da função (Vercel), não no Sentry: o Sentry roda sem tracing de
- * propósito, porque uma transação carrega a URL com o filtro da pessoa. A linha
- * é só número e nome de estágio. `JHO_PERF_LOG=1` faz sair sempre, para medir
- * uma tela em vez de esperar que ela piore.
+ * Sai no log da função (Vercel), além do span no Sentry: o trace é amostrado,
+ * e o log lento sai sempre. A linha é só número e nome de estágio.
+ * `JHO_PERF_LOG=1` faz sair sempre, para medir uma tela em vez de esperar que
+ * ela piore.
  */
 export function registrarTempo(relatorio: TimingReport): void {
   try {
@@ -38,15 +41,48 @@ export function registrarTempo(relatorio: TimingReport): void {
 }
 
 /**
+ * Roda `trabalho` dentro de um span do Sentry, quando há Sentry.
+ *
+ * Sem `SENTRY_DSN`, ou com o SDK sem `startSpan`, o trabalho roda sozinho. O
+ * nome do span é o nome do estágio, texto fixo do código — nunca valor de
+ * filtro. E o trabalho roda exatamente uma vez: se o SDK estourar antes de
+ * chamá-lo, ele roda fora do span; se estourar depois, o erro é do trabalho.
+ */
+export async function rastrearEtapa<T>(etapa: string, trabalho: () => Promise<T>, op = "jho.etapa"): Promise<T> {
+  if (!process.env.SENTRY_DSN?.trim()) return trabalho();
+  let iniciou = false;
+  const executar = () => {
+    iniciou = true;
+    return trabalho();
+  };
+  try {
+    const Sentry = await import("@sentry/nextjs");
+    if (typeof Sentry.startSpan !== "function") return executar();
+    return await Sentry.startSpan({ name: etapa, op, attributes: { "jho.etapa": etapa } }, executar);
+  } catch (erro) {
+    if (iniciou) throw erro;
+    // Falhar ao MEDIR não pode impedir a tela de carregar.
+    return executar();
+  }
+}
+
+/** O cronômetro das telas: log por estágio e, com tracing, um span por estágio. */
+export function criarCronometro(): StageTimer {
+  return createStageTimer(undefined, rastrearEtapa);
+}
+
+/**
  * Roda a leitura da página e, se ela travar, deixa rastro.
  *
  * Não corrige nada nem interrompe nada. Existe porque o pior defeito deste
  * sistema é o único invisível: `FUNCTION_INVOCATION_TIMEOUT` encerra o
  * processo, o código não lança, e o Sentry fica limpo enquanto a tela está
  * quebrada. Um processo vivo aos 22 segundos ainda consegue falar.
+ *
+ * A leitura inteira vira um span `jho.leitura`, pai dos estágios medidos.
  */
 export function comVigia<T>(rota: string, trabalho: () => Promise<T>): Promise<T> {
-  return warnIfSlower(rota, LIMITE_MS, trabalho, {
+  return warnIfSlower(rota, LIMITE_MS, () => rastrearEtapa(`leitura ${redactPath(rota)}`, trabalho, "jho.leitura"), {
     report: ({ route, elapsedMs }) => {
       if (!process.env.SENTRY_DSN?.trim()) return;
       void import("@sentry/nextjs")

@@ -21,6 +21,7 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ### Melhorado
 
+- O sistema passa a medir quanto tempo cada tela leva, numa amostra das visitas, para achar lentidão antes que ela vire problema. O que você procura, seus filtros, seu currículo e seus dados de contato não fazem parte dessa medida.
 - O acompanhamento das melhorias passa a marcar cada item como concluído quando ele chega à versão publicada.
 
 ## [1.22.1] - 2026-09-23T00:33:04.000Z

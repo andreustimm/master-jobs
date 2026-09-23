@@ -21,6 +21,7 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ### Improved
 
+- The system now measures how long each screen takes on a sample of visits, to catch slowness before it becomes a problem. What you search for, your filters, your résumé and your contact details are not part of that measurement.
 - Improvement tracking now marks each item as done when it reaches the published version.
 
 ## [1.22.1] - 2026-09-23T00:33:04.000Z
