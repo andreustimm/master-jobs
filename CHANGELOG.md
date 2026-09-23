@@ -9,6 +9,11 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+
+### Alterado
+
+- Fluxo: a issue fecha quando o código chega a produção — commits das PRs levam `Closes #N` na mensagem, porque a PR aponta para `dev` e só a entrada em `main` fecha issues (AGENTS.md, `docs/engineering/workflow.md`).
+
 ## [1.22.1] - 2026-09-23
 
 ### Segurança
