@@ -89,7 +89,9 @@ describe("detalhe da vaga por streaming", () => {
   it("transmite só as seções secundárias, com espera anunciada", () => {
     expect(page).toContain('testId="job-track-fits-loading"');
     expect(page).toContain('testId="application-timeline-loading"');
-    expect(page.match(/t\("jobDetail\.loadingSection"\)/g)).toHaveLength(2);
+    // A análise estruturada (#223) também é secundária: lê fila e texto da vaga.
+    expect(page).toContain('testId="job-analysis-loading"');
+    expect(page.match(/t\("jobDetail\.loadingSection"\)/g)).toHaveLength(3);
     // A nota por trilha continua exclusiva de quem é candidato.
     expect(page).toMatch(/candidateId !== null && scoredTracks > 1 && \(\s*<Suspense[\s\S]*?<TrackFits candidateId=\{candidateId\}/);
   });
