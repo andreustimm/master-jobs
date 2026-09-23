@@ -13,6 +13,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ensureCandidate, saveDocument } from "../src/core/candidate.ts";
 import type { DB } from "../src/core/db/client.ts";
+import { deleteClosedJobsWithoutApplication } from "../src/core/db/retention.ts";
 import { application, job, jobAnalysis, jobPage, source } from "../src/core/db/schema.ts";
 import {
   analysisQueueStatus,
@@ -166,8 +167,26 @@ describe("IT-011 fila, idempotência, cota e vaga alterada", () => {
     await processNextAnalysis(model(fakePort(() => "não é JSON")), { now: () => at(6000) });
     const exhausted = await requestJobAnalysis({ jobId, requestedBy: null, now: at(7000) });
     expect(exhausted).toMatchObject({ ok: true, outcome: "exhausted" });
+    // A tela não oferece o pedido que a action recusaria.
+    expect((await jobAnalysisPanel(jobId, { admin: false })).exhausted).toBe(true);
     const [, , third] = await allRows();
     expect(await retryJobAnalysis({ analysisId: third!.id, requestedBy: null, now: at(8000) })).toMatchObject({ ok: true, outcome: "created" });
+  });
+
+  it("processador que perde o lease no meio da chamada não grava nem diz que concluiu", async () => {
+    await requestJobAnalysis({ jobId, requestedBy: null, now: T0 });
+    const late = fakePort(() => GOOD);
+    const slow: LlmPort = {
+      ...late,
+      async complete(req) {
+        // Outro pedido chega depois do lease e marca a linha como interrupted.
+        await requestJobAnalysis({ jobId, requestedBy: null, now: at(ANALYSIS_LEASE_MS + 5000) });
+        return late.complete(req);
+      },
+    };
+    const processed = await processNextAnalysis(model(slow), { now: () => at(1000) });
+    expect(processed?.status).toBe("interrupted");
+    expect((await allRows())[0]).toMatchObject({ status: "interrupted", result: null });
   });
 
   it("running sem batimento vira interrupted e libera novo pedido", async () => {
@@ -230,8 +249,11 @@ describe("IT-011 fila, idempotência, cota e vaga alterada", () => {
     await processNextAnalysis(model(fakePort(() => "não é JSON")), { now: () => at(1000) });
     const [original] = await allRows();
     await retryJobAnalysis({ analysisId: original!.id, requestedBy: null, now: at(2000) });
-    // `retry_of` é `no action`: confere no fim do comando, quando as duas já saíram.
-    await db.delete(job).where(eq(job.id, jobId));
+    // `retry_of` é `no action`: confere no fim do comando, quando as duas já
+    // saíram. Pelo caminho real de descarte, o único que apaga vaga.
+    await db.update(job).set({ closedAt: "2026-01-01T00:00:00.000Z" }).where(eq(job.id, jobId));
+    const deleted = await db.transaction((tx) => deleteClosedJobsWithoutApplication(tx, T0));
+    expect(deleted).toEqual([{ id: jobId }]);
     expect(await allRows()).toEqual([]);
   });
 });

@@ -87,7 +87,12 @@ export async function JobAnalysisSection({ jobId, admin, t }: Props) {
               </p>
             </>
           )}
-          {!pending && (
+          {panel.exhausted && (
+            <p data-testid="job-analysis-exhausted" className="type-caption-sm text-muted-foreground">
+              {t("jobAnalysis.exhausted")}
+            </p>
+          )}
+          {!pending && !panel.exhausted && (
             <form action={requestJobAnalysisAction}>
               <input type="hidden" name="analysisJobId" value={jobId} />
               <Button type="submit" variant="outline" data-testid="job-analysis-request">

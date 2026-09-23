@@ -981,6 +981,7 @@ export const en: Dictionary = {
     pending: "Analysis pending. It runs outside this page and shows up here when it finishes.",
     outdated: "The job changed after this analysis: the fields below read the previous text.",
     unfinished: "The latest attempt did not finish ({status}).",
+    exhausted: "This job has reached the attempt limit for this text; only an administrator can try again.",
     unknown: "unknown",
     conflict: "the posting contradicts itself",
     version: "prompt v{prompt} · schema v{schema}",

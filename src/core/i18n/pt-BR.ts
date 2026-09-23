@@ -1005,6 +1005,7 @@ export const ptBR = {
     pending: "Análise pendente. Ela roda fora desta tela e aparece aqui quando terminar.",
     outdated: "A vaga mudou depois desta análise: os campos abaixo leem o texto anterior.",
     unfinished: "A última tentativa não terminou ({status}).",
+    exhausted: "Esta vaga já teve o máximo de tentativas deste texto; só um administrador pode tentar de novo.",
     unknown: "desconhecido",
     conflict: "o anúncio se contradiz",
     version: "prompt v{prompt} · esquema v{schema}",

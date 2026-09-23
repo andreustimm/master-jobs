@@ -9,6 +9,7 @@
  * `job-structure.ts`; aqui só se lê, grava e chama a porta.
  */
 import { and, count, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { clock } from "../clock.ts";
 import { getDb } from "../db/client.ts";
 import { job, jobAnalysis, jobPage, type JobAnalysisRow } from "../db/schema.ts";
 import { firstNonEmpty } from "../sources/http.ts";
@@ -278,22 +279,30 @@ export async function processNextAnalysis(
   model: ProcessorModel,
   opts: { now: () => string; root?: string },
 ): Promise<{ id: number; status: AnalysisStatus } | null> {
+  // Antes de reivindicar: prompt ausente é defeito de instalação, e falhar
+  // aqui deixa a fila intacta em vez de gastar a tentativa de alguém.
+  const system = await loadSystemPrompt("job-structure", opts.root);
   const claimedAt = opts.now();
   const row = await claimJobAnalysis(claimedAt);
   if (!row) return null;
   const claimed = { id: row.id, claimedAt };
   const meta = { providerSlug: model.providerSlug, modelId: model.modelId };
+  // Quem perdeu o lease no meio da chamada não grava: a linha já é
+  // `interrupted`, e dizer "concluída" no terminal seria mentir.
+  const settle = async (finish: AnalysisFinish) => ({
+    id: row.id,
+    status: (await finishJobAnalysis(claimed, finish, opts.now())) ? finish.status : ("interrupted" as const),
+  });
 
   const source = await jobStructureSource(row.jobId);
   const current = source ? inputFor(source) : null;
   if (!current || current.hash !== row.inputHash) {
-    await finishJobAnalysis(claimed, { status: "failed", errorCode: "input_changed", providerSlug: null, modelId: null }, opts.now());
-    return { id: row.id, status: "failed" };
+    return settle({ status: "failed", errorCode: "input_changed", providerSlug: null, modelId: null });
   }
 
   try {
     const response = await model.port.complete({
-      system: await loadSystemPrompt("job-structure", opts.root),
+      system,
       messages: [{ role: "user", content: current.input }],
       maxTokens: model.maxOutputTokens,
       effort: model.effort,
@@ -301,19 +310,22 @@ export async function processNextAnalysis(
       temperature: 0,
     });
     const tokens = { input: response.inputTokens, output: response.outputTokens };
-    const cost = estimateCost(tokens, { inputPerMTok: model.inputCostPerMTok, outputPerMTok: model.outputCostPerMTok });
+    const usage = {
+      ...meta,
+      inputTokens: tokens.input,
+      outputTokens: tokens.output,
+      costEstimate: estimateCost(tokens, { inputPerMTok: model.inputCostPerMTok, outputPerMTok: model.outputCostPerMTok }),
+    };
     const outcome = interpretOutput(response.text, current.input);
-    const finish: AnalysisFinish =
+    return settle(
       outcome.status === "failed"
-        ? { status: "failed", errorCode: outcome.code, ...meta, inputTokens: tokens.input, outputTokens: tokens.output, costEstimate: cost }
-        : { status: outcome.status, result: outcome.structure, ...meta, inputTokens: tokens.input, outputTokens: tokens.output, costEstimate: cost };
-    await finishJobAnalysis(claimed, finish, opts.now());
-    return { id: row.id, status: finish.status };
+        ? { status: "failed", errorCode: outcome.code, ...usage }
+        : { status: outcome.status, result: outcome.structure, ...usage },
+    );
   } catch (error) {
     const quota = error instanceof LlmError && error.status === 429;
     const code = quota ? "quota" : error instanceof LlmError ? "provider_error" : "network";
-    await finishJobAnalysis(claimed, { status: quota ? "paused_quota" : "failed", errorCode: code, ...meta }, opts.now());
-    return { id: row.id, status: quota ? "paused_quota" : "failed" };
+    return settle({ status: quota ? "paused_quota" : "failed", errorCode: code, ...meta });
   }
 }
 
@@ -342,8 +354,8 @@ export type AdminAnalysisView = AnalysisView & {
 };
 
 export type JobAnalysisPanel =
-  | { admin: false; latest: AnalysisView | null }
-  | { admin: true; latest: AdminAnalysisView | null; attempts: AdminAnalysisView[] };
+  | { admin: false; latest: AnalysisView | null; exhausted: boolean }
+  | { admin: true; latest: AdminAnalysisView | null; exhausted: boolean; attempts: AdminAnalysisView[] };
 
 /**
  * O que a tela da vaga mostra. Modelo, provedor, tokens, custo, erro e o
@@ -356,6 +368,13 @@ export async function jobAnalysisPanel(jobId: number, opts: { admin: boolean }):
     jobStructureSource(jobId),
   ]);
   const hash = source ? inputFor(source).hash : null;
+  // A mesma regra do pedido: a tela não oferece um botão que a action recusaria.
+  const sameText = rows.filter((row) => row.inputHash === hash && row.schemaVersion === JOB_STRUCTURE_SCHEMA_VERSION);
+  const exhausted =
+    decideAnalysisRequest(
+      sameText.map((row) => ({ id: row.id, status: row.status as AnalysisStatus, heartbeatAt: row.heartbeatAt, claimedAt: row.claimedAt })),
+      clock().iso(),
+    ).kind === "exhausted";
   const base = (row: JobAnalysisRow): AnalysisView => ({
     id: row.id,
     status: row.status as AnalysisStatus,
@@ -366,7 +385,7 @@ export async function jobAnalysisPanel(jobId: number, opts: { admin: boolean }):
     result: (row.result as JobStructure | null) ?? null,
     outdated: hash !== null && hash !== row.inputHash,
   });
-  if (!opts.admin) return { admin: false, latest: rows[0] ? base(rows[0]) : null };
+  if (!opts.admin) return { admin: false, latest: rows[0] ? base(rows[0]) : null, exhausted };
   const full = rows.map((row) => ({
     ...base(row),
     retryOf: row.retryOf,
@@ -377,7 +396,7 @@ export async function jobAnalysisPanel(jobId: number, opts: { admin: boolean }):
     outputTokens: row.outputTokens,
     costEstimate: row.costEstimate,
   }));
-  return { admin: true, latest: full[0] ?? null, attempts: full };
+  return { admin: true, latest: full[0] ?? null, exhausted, attempts: full };
 }
 
 /** Só agregados: nem vaga, nem texto, nem quem pediu. */
