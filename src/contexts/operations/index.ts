@@ -18,6 +18,7 @@ import { runFetchStage } from "../../core/scrape/fetcher.ts";
 import { runParseStage } from "../../core/scrape/parser.ts";
 import { enqueuePending } from "../../core/scrape/queue.ts";
 import { scoreCandidate } from "../../core/scoring/apply.ts";
+import { runScoreQueue, scoreQueueStatus } from "../../core/scoring/queue.ts";
 import { loadSources } from "../../core/sources/config.ts";
 import { sourceId } from "../../core/sources/registry.ts";
 import type { SourceConfig } from "../../core/sources/types.ts";
@@ -116,6 +117,22 @@ async function recheckSlice(worker: string, budgetMs: number): Promise<QueueOutc
 }
 
 /**
+ * A fila de repontuação (ADR 0026): pedidos de quem salvou currículo ou mexeu
+ * em trilha. `pontuar` percorre todo candidato de dez em dez minutos, mas não
+ * conclui a tarefa nem registra a recusa — e é a tarefa que a tela lê.
+ */
+async function rescoreSlice(worker: string, budgetMs: number): Promise<QueueOutcome> {
+  const result = await runScoreQueue({ worker, budgetMs });
+  const pending = (await scoreQueueStatus()).pending ?? 0;
+  return {
+    // Concluídas ou recusadas; a que falhou e voltou à fila conta em `errors`.
+    items: result.processadas - result.falhas,
+    errors: result.falhas,
+    detail: { scored: result.pontuadas, deferred: result.adiadas, pending },
+  };
+}
+
+/**
  * Executa uma fatia da varredura com os adapters de verdade.
  *
  * `alarm` vem de quem chama porque o destino do alarme (Sentry, log da função)
@@ -155,6 +172,7 @@ export async function runSweep(
     terms: (budgetMs) => termsSlice(worker, budgetMs),
     capture: () => captureSlice(),
     recheck: (budgetMs) => recheckSlice(worker, budgetMs),
+    rescore: (budgetMs) => rescoreSlice(worker, budgetMs),
     alarm: opts.alarm,
   });
 }

@@ -101,6 +101,10 @@ function fake(opts: {
       budgets.push(budget);
       return { items: 4, errors: 0, detail: { gone: 1 } };
     },
+    async rescore(budget) {
+      budgets.push(budget);
+      return { items: 1, errors: 0, detail: { scored: 30, deferred: 0, pending: 2 } };
+    },
     async alarm(report) {
       alarms.push(report.sources);
     },
@@ -221,10 +225,13 @@ describe("fatias de fila", () => {
     const terms = await runSweepSlice("termos", f.deps);
     await runSweepSlice("captura", f.deps);
     const recheck = await runSweepSlice("reconferencia", f.deps);
+    const rescore = await runSweepSlice("repontuar", f.deps);
 
-    expect(f.budgets).toEqual([18_000, 18_000, 18_000]);
+    expect(f.budgets).toEqual([18_000, 18_000, 18_000, 18_000]);
     expect(terms).toMatchObject({ items: 2, errors: 1, detail: { claimed: 3 } });
     expect(recheck).toMatchObject({ items: 4, detail: { gone: 1 } });
+    // A fila de repontuação é uma fatia de fila como as outras (ADR 0026).
+    expect(rescore).toMatchObject({ slice: "repontuar", items: 1, detail: { scored: 30, pending: 2 } });
   });
 
   it("uma fatia que lança ainda deixa a linha de métrica, com o erro", async () => {

@@ -10,7 +10,7 @@
  * vez; cada fatia faz o que cabe em {@link SWEEP_BUDGET_MS} e devolve (ADR 0025).
  */
 
-export const SWEEP_SLICES = ["sync", "termos", "captura", "reconferencia", "pontuar"] as const;
+export const SWEEP_SLICES = ["sync", "termos", "captura", "reconferencia", "pontuar", "repontuar"] as const;
 
 export type SweepSlice = (typeof SWEEP_SLICES)[number];
 
@@ -24,6 +24,7 @@ export const SLICE_TOUCHES_THIRD_PARTIES: Readonly<Record<SweepSlice, boolean>> 
   captura: true,
   reconferencia: true,
   pontuar: false,
+  repontuar: false,
 };
 
 /**

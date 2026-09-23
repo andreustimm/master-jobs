@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 /**
- * Uma fatia da varredura por chamada: `?fatia=sync|termos|captura|reconferencia|pontuar`.
+ * Uma fatia da varredura por chamada: `?fatia=sync|termos|captura|reconferencia|pontuar|repontuar`.
  *
  * Quem chama é o `pg_cron` do Supabase, via `pg_net` (ADR 0025; SQL em
  * `supabase/cron/varredura.sql`). Nem Vercel Cron, que no plano Hobby roda uma

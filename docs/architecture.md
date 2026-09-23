@@ -504,7 +504,8 @@ que seguram o núcleo determinístico.
 | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | `sources/aggregators.ts` | Sem elas o adapter `adzuna` retorna 0 jobs + warning, em vez de falhar. |
 | `JHO_VAULT_PATH` | `report/markdown.ts` | Raiz do vault Obsidian; ausente e sem `--out`, `buildReport()` retorna `path: null` e nada é escrito. |
 | `JHO_REPORT_DIR` | `report/markdown.ts` | Subdiretório dentro do vault; default `05_Interviews/LinkedIn`. |
-| `CRON_SECRET`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_REDIRECT_URI` | — | Declaradas em `.env.example`, **nenhum código as lê hoje**. |
+| `CRON_SECRET` | `app/api/cron/authorize.ts` | Segredo das rotas de `/api/cron/` (`recheck`, `varredura`); sem ele respondem 503. |
+| `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_REDIRECT_URI` | — | Declaradas em `.env.example`, **nenhum código as lê hoje**. |
 
 ---
 

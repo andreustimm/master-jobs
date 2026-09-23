@@ -77,6 +77,8 @@ export type SweepDeps = {
   terms(budgetMs: number): Promise<QueueOutcome>;
   capture(budgetMs: number): Promise<QueueOutcome>;
   recheck(budgetMs: number): Promise<QueueOutcome>;
+  /** A fila `score_task`: currículo salvo, trilha editada (ADR 0026). */
+  rescore(budgetMs: number): Promise<QueueOutcome>;
   alarm(report: { kind: "fonte_sem_sync"; sources: string[] }): Promise<void>;
 };
 
@@ -208,7 +210,13 @@ export async function runSweepSlice(slice: SweepSlice, deps: SweepDeps): Promise
     } else {
       const left = remainingBudget(deps.now() - started, budget);
       queue =
-        slice === "termos" ? await deps.terms(left) : slice === "captura" ? await deps.capture(left) : await deps.recheck(left);
+        slice === "termos"
+          ? await deps.terms(left)
+          : slice === "captura"
+            ? await deps.capture(left)
+            : slice === "repontuar"
+              ? await deps.rescore(left)
+              : await deps.recheck(left);
     }
   } catch (error) {
     failure = safeError(error);

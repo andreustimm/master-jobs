@@ -102,6 +102,7 @@ describe("fatia sync contra o banco", () => {
       terms: async () => ({ items: 0, errors: 0, detail: {} }),
       capture: async () => ({ items: 0, errors: 0, detail: {} }),
       recheck: async () => ({ items: 0, errors: 0, detail: {} }),
+      rescore: async () => ({ items: 0, errors: 0, detail: {} }),
       alarm: async () => {},
     });
 

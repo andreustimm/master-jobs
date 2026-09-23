@@ -17,7 +17,7 @@
 
 Desde a [ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)
 a varredura roda na Vercel em fatias: `GET /api/cron/varredura?fatia=<nome>`,
-com `sync`, `termos`, `captura`, `reconferencia` e `pontuar`. Cada chamada faz o
+com `sync`, `termos`, `captura`, `reconferencia`, `pontuar` e `repontuar`. Cada chamada faz o
 que cabe em 20 s, grava uma linha em `production.sweep_run` e devolve o
 relatório em JSON. Quem chama é o `pg_cron` do Supabase — e ligá-lo é **passo
 humano**, uma vez, depois de o código estar em produção (a migração
@@ -112,6 +112,46 @@ devagar, nunca incorreto.
 `source.lastSyncedAt`, `source.lastStatus` — pela mesma leitura que a CLI usa em
 `jho sources list`. Assim a tela não depende de token para dizer a verdade sobre
 o acervo.
+
+## Repontuação de candidato: fatias na web
+
+Candidato que salva o currículo não espera a varredura: a ação enfileira em
+`score_task` e roda **uma fatia** da fila no `after()`, depois da resposta. A
+fatia tem orçamento de `SCORE_SLICE_MS` (20 s), conferido entre dois lotes —
+pode passar dele por um lote e uma página de leitura, e cabe no teto de 30 s da
+função; o que não couber volta à fila sem gastar tentativa
+([ADR 0026](adr/0026-fila-de-repontuacao-em-fatias-na-web.md); mecânica em
+[`scoring.md`](scoring.md#quando-a-nota-é-calculada-a-fila-e-as-fatias)).
+
+A continuação é a fatia **`repontuar`** da varredura (`GET
+/api/cron/varredura?fatia=repontuar`, mesmo `CRON_SECRET`, mesma borda
+`cronDenied`, métrica em `sweep_run`), agendada a cada dois minutos em
+`supabase/cron/varredura.sql` (`jho-varredura-repontuar`). Ela não consulta a
+política de ingestão: só grava nota no banco do próprio ambiente. O relatório
+traz `items` (tarefas concluídas ou recusadas), `errors` (tentativas que
+falharam) e `detail: { scored, deferred,
+pending }` — `pending > 0` quer dizer que ainda há fila; o agendador não
+decide nada com isso, chama no próximo ciclo de qualquer jeito.
+
+A fatia `pontuar` continua existindo e é outra coisa: repassa todo candidato de
+dez em dez minutos para as vagas novas. Ela não conclui a tarefa da fila nem
+registra a recusa — e é a tarefa que a tela de candidato lê.
+
+**Ativar.** O agendamento entra junto com as outras fatias ao reaplicar
+`supabase/cron/varredura.sql` no SQL Editor de produção (idempotente; passo 4
+de "Varredura horária: ativar o agendador" acima). Enquanto não for
+reaplicado, o que sobra da fatia do `after()` espera a próxima ação do
+candidato ou `jho jobs rescore run`. À mão:
+
+```bash
+curl -sS -H "authorization: Bearer $CRON_SECRET" "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=repontuar"
+```
+
+**Diagnóstico.** `jho jobs rescore status` conta a fila por estado. Tarefa em
+`scoring` há mais de `MINUTOS_CLAIM_MORTO` (10 min) é de uma função que morreu
+no meio, e a próxima fatia a retoma. `done` com `last_error` `sem-curriculo`,
+`curriculo-fraco` ou `catalogo-vazio` é **recusa**, não falha: a tela de
+candidato mostra o motivo; `catalogo-vazio` pede `jho skills seed`.
 
 ## Por que isto existe
 
@@ -312,7 +352,8 @@ pnpm jho jobs score --all
 > `job_score.scorer_version <> SCORER_VERSION` — ou seja, sem o bump os scores
 > velhos passam por válidos e se misturam com os novos sem ninguém perceber.
 
-Não existe repontuação de uma vaga só: `scoreAll()` aceita apenas `{ all }`.
+Não existe repontuação de uma vaga só: `scoreAll()` aceita `{ all }` e, na fila
+da web, um `deadline` que interrompe entre lotes.
 `loadProfile(true)` força releitura do YAML a cada run, então não há cache
 antigo em jogo.
 

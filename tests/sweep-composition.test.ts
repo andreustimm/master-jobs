@@ -20,6 +20,8 @@ const loadSources = vi.fn();
 const activeTermKeys = vi.fn();
 const requestTermCaptures = vi.fn();
 const runTermCaptures = vi.fn();
+const runScoreQueue = vi.fn();
+const scoreQueueStatus = vi.fn();
 
 vi.mock("../src/core/ingest/run.ts", async (orig) => ({ ...(await orig<object>()), syncSource }));
 vi.mock("../src/core/ingest/verify-queue.ts", async (orig) => ({
@@ -32,6 +34,7 @@ vi.mock("../src/core/scrape/fetcher.ts", async (orig) => ({ ...(await orig<objec
 vi.mock("../src/core/scrape/parser.ts", async (orig) => ({ ...(await orig<object>()), runParseStage }));
 vi.mock("../src/core/scrape/queue.ts", async (orig) => ({ ...(await orig<object>()), enqueuePending }));
 vi.mock("../src/core/scoring/apply.ts", async (orig) => ({ ...(await orig<object>()), scoreCandidate }));
+vi.mock("../src/core/scoring/queue.ts", async (orig) => ({ ...(await orig<object>()), runScoreQueue, scoreQueueStatus }));
 vi.mock("../src/core/sources/config.ts", async (orig) => ({ ...(await orig<object>()), loadSources }));
 vi.mock("../src/contexts/matching/index.ts", async (orig) => ({ ...(await orig<object>()), activeTermKeys }));
 vi.mock("../src/contexts/sourcing/index.ts", async (orig) => ({
@@ -113,6 +116,20 @@ describe("pontuar", () => {
 });
 
 describe("fatias de fila", () => {
+  it("repontuar drena a fila `score_task` dentro do orçamento e diz o que sobrou", async () => {
+    runScoreQueue.mockResolvedValue({ processadas: 2, pontuadas: 80, falhas: 1, adiadas: 1, interrompida: true });
+    scoreQueueStatus.mockResolvedValue({ pending: 3, done: 5 });
+
+    const report = await runSweep("repontuar", { alarm });
+
+    const opts = runScoreQueue.mock.calls[0]![0] as { budgetMs: number; worker: string };
+    expect(opts.budgetMs).toBeGreaterThan(0);
+    expect(opts.budgetMs).toBeLessThanOrEqual(20_000);
+    expect(opts.worker).toMatch(/^varredura-/);
+    expect(report).toMatchObject({ items: 1, errors: 1, detail: { scored: 80, deferred: 1, pending: 3 } });
+  });
+
+
   it("reconferência só enfileira quando a rodada anterior drenou, e drena com teto de tempo", async () => {
     verifyStats.mockResolvedValueOnce({ done: 3 }).mockResolvedValueOnce({ pending: 2 });
     enqueueStale.mockResolvedValue(7);

@@ -53,6 +53,10 @@ revoke all on function jho_cron.chamar_fatia(text) from public;
 select cron.schedule('jho-varredura-sync', '*/2 * * * *', $$select jho_cron.chamar_fatia('sync')$$);
 -- pontuar: vaga nova ganha nota para todo candidato em ~10 min.
 select cron.schedule('jho-varredura-pontuar', '*/5 * * * *', $$select jho_cron.chamar_fatia('pontuar')$$);
+-- repontuar: a fila de quem salvou currículo ou mexeu em trilha (ADR 0026).
+-- Minutos ímpares: a fatia do `after()` já atende quem salvou; esta termina o
+-- que não coube nela, em até dois minutos.
+select cron.schedule('jho-varredura-repontuar', '1-59/2 * * * *', $$select jho_cron.chamar_fatia('repontuar')$$);
 -- reconferencia: o ÚNICO agendador da reconferência depois da troca.
 select cron.schedule('jho-varredura-reconferencia', '3,13,23,33,43,53 * * * *', $$select jho_cron.chamar_fatia('reconferencia')$$);
 -- captura: quatro páginas por chamada, uma por host.

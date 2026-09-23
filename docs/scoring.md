@@ -725,6 +725,49 @@ cada trilha ativa. Trilha sem linha (vaga fora do portão, ou trilha recém-cria
 ganha a nota calculada na hora, marcada como `computed`, e nada é gravado —
 gravar poria no ranking da trilha uma vaga que o portão deixa de fora.
 
+## Quando a nota é calculada: a fila e as fatias
+
+Salvar currículo (colar, importar PDF, restaurar versão, criar o perfil) e
+mexer em trilha **enfileiram** a repontuação do candidato em `score_task` — uma
+linha por candidato, idempotente. Quem consome a fila
+(`runScoreQueue`, em `src/core/scoring/queue.ts`) primeiro deriva o perfil
+(`ensureMatchingProfile`, que cria a trilha principal) e depois roda
+`scoreAll`. São três consumidores do mesmo código ([ADR 0026](adr/0026-fila-de-repontuacao-em-fatias-na-web.md)):
+
+| Quem | Quando | Orçamento |
+|---|---|---|
+| `after()` da ação que salvou o currículo (não as de trilha) | logo depois da resposta | uma fatia (`SCORE_SLICE_MS`, 20 s) |
+| fatia `repontuar` de `/api/cron/varredura` | a cada 2 min pelo `pg_cron` ([ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)) ou à mão | uma fatia |
+| `jho jobs rescore run` (CLI; também no Actions enquanto ele agendar a varredura) | à mão | sem prazo, drena tudo |
+
+A fatia do `after()` pega primeiro a tarefa de quem salvou, e depois o topo da
+fila (prioridade, depois ordem de chegada); a fatia `repontuar` só usa a ordem
+da fila.
+
+**Fatia.** Com prazo, `scoreAll` lê as vagas desatualizadas em páginas de mil,
+em ordem de id, grava em lotes de cem e confere o prazo **depois** de cada lote.
+Vencido, devolve `complete: false`; a fila põe a tarefa de volta em `pending`
+**sem** contar tentativa e com a soma das notas já gravadas em `scored`. A
+fatia seguinte recomeça pelo que ainda está desatualizado — o que foi gravado
+saiu do filtro de staleness, então nada é refeito. O prazo só interrompe depois
+de a execução ter gravado algo: uma página inteira fora do alvo de uma trilha
+aceita não grava nada, e parar nela repetiria a mesma página a cada fatia.
+
+A fatia `pontuar` da varredura é outra coisa: repassa todo candidato a cada dez
+minutos para as vagas novas, sem tocar em `score_task`.
+
+**Recusa.** Quando a derivação recusa, a tarefa termina `done` com o código em
+`last_error` e nenhuma nota é gravada. A tela de candidato mostra o estado
+`refused` com o motivo e a saída, pelo dicionário:
+
+| Código | Motivo na tela | Quem resolve |
+|---|---|---|
+| `sem-curriculo` | `noCv` | a pessoa: colar ou importar o currículo |
+| `curriculo-fraco` | `weakCv` — currículo curto ou sem skill do catálogo | a pessoa: currículo completo ou PDF |
+| `catalogo-vazio` | `emptyCatalog` | quem administra: `jho skills seed` |
+
+Qualquer outro `last_error` continua `failed`: é erro, não recusa.
+
 ## Como ajustar
 
 ### Mapa: quero X → edito Y
