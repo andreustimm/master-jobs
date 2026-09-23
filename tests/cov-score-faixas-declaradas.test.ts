@@ -16,7 +16,8 @@
  */
 import { beforeAll, describe, expect, it } from "vitest";
 import { loadProfile } from "../src/core/profile/load.ts";
-import { WEIGHTS, scoreJob, type ScoreInput } from "../src/core/scoring/score.ts";
+import { WEIGHTS, type ScoreInput } from "../src/core/scoring/score.ts";
+import { scoreJob } from "./support/score-now.ts";
 import type { Profile } from "../src/core/profile/schema.ts";
 
 let base: Profile;

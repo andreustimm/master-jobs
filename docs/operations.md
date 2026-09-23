@@ -95,6 +95,17 @@ sinais:
 - **`closed` alto de repente**: a fonte devolveu menos vagas que da última vez.
   Confira se não foi degradação da API antes de acreditar que 200 vagas
   fecharam no mesmo dia.
+- **`partial window: absence closes nothing`** ao lado da linha: a fonte é uma
+  janela (as mais recentes, as primeiras páginas) e não fecha nada por
+  ausência — `closed` ali é sempre 0. Essas vagas só fecham por 404/410 na
+  reconferência. A lista de fontes completas e parciais está em
+  [`sources.md`](sources.md#completude-da-listagem).
+
+> **Invariante:** ausência só fecha vaga quando a fonte listou tudo o que tem.
+> Janela parcial nunca fecha por ausência, e lista vazia não fecha nada nem em
+> fonte completa (`decideAbsenceClosure()` em `src/core/ingest/lifecycle.ts`).
+> A reconferência agendada tem um único dono, a varredura do GitHub; a Vercel
+> não agenda nada.
 
 > **Invariante:** Uma fonte que falha é registrada e pulada, nunca aborta a run.
 > O `try/catch` de `syncOne()` grava `source.lastStatus = 'error'` e
@@ -668,7 +679,14 @@ Duas armadilhas dentro disso, que não aparecem contando `Promise.all`:
 de dados (`app/cockpit-data.ts`, `app/jobs/jobs-data.ts`,
 `app/searches/searches-data.ts`, `app/candidate/skills/data.ts`), nunca no corpo
 da página, e cada um desses módulos tem um caso em `tests/db-fan-out.test.ts`.
-Composição na página é invariante sem guarda.
+A guarda é o inventário V10-05 em `tests/architecture.test.ts`: ele descobre
+pelo conteúdo todo arquivo de `app/` com `Promise.all` (e parentes) e exige uma de duas coisas: a função de composição
+chamada em `db-fan-out.test.ts`, ou um leque literal de no máximo `max - 1`
+itens (o `max` lido de `src/core/db/client.ts`) com o motivo escrito. Leque
+dinâmico (`Promise.all(rows.map(…))`, ou `[...lista]` dentro da literal) conta como ilimitado, e ler `loadRates`
+duas vezes na mesma composição reprova. É inventário, não medição: o leque
+declarado conta chamadas, e uma chamada que abre duas consultas por dentro só
+aparece no pico medido.
 
 E **passe o câmbio adiante.** `loadRates()` é uma consulta sem cache (eram duas,
 em série, antes de a data mais recente virar subconsulta), e `listBoard`,
@@ -678,8 +696,9 @@ para isso.
 
 **O Sentry não vê isso.** `FUNCTION_INVOCATION_TIMEOUT` mata o processo; o
 código não falha, não reporta, e o registro da Vercel traz uma linha só. A falha
-mais visível do produto é a única invisível na telemetria — procure nos logs da
-Vercel, não no Sentry:
+mais visível do produto é a única invisível na telemetria. O tracing (#219) não
+muda isso: a transação só é enviada quando a requisição termina, e a requisição
+morta não termina. Procure nos logs da Vercel, não no Sentry:
 
 ```bash
 vercel logs https://jobs.mastertimm.com.br --json | grep -E "Timeout|504"

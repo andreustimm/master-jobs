@@ -1,0 +1,44 @@
+{
+  "coletado_em": "2026-09-22T22:00-03:00",
+  "repositorio": "andreustimm/master-jobs",
+  "metodo": "gh api (GET), sessão andreustimm; nenhum valor de secret lido",
+  "repo": {
+    "visibility": "public",
+    "default_branch": "main",
+    "allow_merge_commit": true,
+    "allow_squash_merge": true,
+    "allow_rebase_merge": true,
+    "allow_auto_merge": false,
+    "delete_branch_on_merge": false
+  },
+  "rulesets": [],
+  "rulesets_incluindo_herdados": [],
+  "branch_protection": {
+    "main": { "status": 404, "message": "Branch not protected" },
+    "staging": { "status": 404, "message": "Branch not protected" },
+    "dev": { "status": 404, "message": "Branch not protected" }
+  },
+  "actions_workflow_permissions": {
+    "default_workflow_permissions": "write",
+    "can_approve_pull_request_reviews": true
+  },
+  "actions_secrets_repo_nomes": ["TURSO_TOKEN_DEV", "TURSO_TOKEN_PROD", "TURSO_TOKEN_STAGING"],
+  "release_pat_configurado": false,
+  "environments": [
+    {
+      "name": "Preview",
+      "can_admins_bypass": true,
+      "protection_rules": [],
+      "deployment_branch_policy": null
+    },
+    {
+      "name": "Production",
+      "can_admins_bypass": true,
+      "protection_rules": [],
+      "deployment_branch_policy": null,
+      "deployment_branch_policies": { "status": 404 },
+      "secrets_nomes": ["SUPABASE_DATABASE_URL", "SUPABASE_MIGRATION_URL"],
+      "usado_por": ["migrate.yml (workflow_dispatch)", "varredura.yml (cron diário)", "manutencao-banco.yml (cron semanal)"]
+    }
+  ]
+}

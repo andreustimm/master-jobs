@@ -68,7 +68,12 @@ function parseDays(iso: string | null | undefined, now: number): number | null {
   return days < 0 ? 0 : days;
 }
 
-export function scoreFreshness(input: FreshnessInput, now: number = Date.now()): FreshnessResult {
+/**
+ * `now` is required on purpose. A `Date.now()` default made the same posting
+ * score differently tomorrow for any caller that forgot the argument; the
+ * instant comes from the run (`ScoringContext.asOf`), never from here.
+ */
+export function scoreFreshness(input: FreshnessInput, now: number): FreshnessResult {
   const posted = parseDays(input.postedAt, now);
 
   // `firstSeenAt` measures crawler timing, not posting age. Using it would

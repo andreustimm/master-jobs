@@ -7,7 +7,7 @@
  */
 import { BUDGETED, cleanTags, QUOTA_STOP, toList, withRestriction } from "./aggregators.ts";
 import { getJson, htmlToText } from "./http.ts";
-import type { FetchResult, PlatformBudget, RawJob, SourceAdapter, SourceConfig } from "./types.ts";
+import type { PlatformBudget, RawJob, SourceAdapter, SourceConfig, SourceSnapshot } from "./types.ts";
 
 type JobicyJob = {
   id: number;
@@ -83,11 +83,12 @@ function jobicyUrl(params: Record<string, string>): string {
 export const jobicy: SourceAdapter = {
   kind: "jobicy",
   docs: "https://jobi.cy/apidocs",
-  async fetchJobs(config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     // `handle` is the geography slug; empty means the candidate's default.
     const geo = config.handle.trim() || JOBICY_DEFAULT_GEO;
     const data = await getJson<JobicyResponse>(jobicyUrl({ count: "100", geo }), BUDGETED);
-    return { jobs: (data.jobs ?? []).map(mapJobicy), warnings: [] };
+    // `count=100`: the newest hundred for the region, not every open posting.
+    return { jobs: (data.jobs ?? []).map(mapJobicy), warnings: [], completeness: "partial" };
   },
   termSearch: {
     budget: JOBICY_BUDGET,

@@ -771,6 +771,26 @@ Notas de execução:
 
 > **Invariante:** `SCORER_VERSION` é um identificador de compatibilidade de score, não um número de release do projeto. Ele muda quando o **output do scorer** muda para o mesmo input. Refatorar `score.ts` sem alterar resultado não pede bump; mudar um peso no `profile.yaml` pede.
 
+**O portão.** `tests/scorer-version.test.ts` pontua um acervo fixo de vagas —
+escolhido para passar por título, vocabulário, senioridade, geografia,
+remuneração, frescor, benefícios e bloqueadores — contra o `profile.yaml` real,
+com instante e câmbio fixos, e grava o hash do resultado ao lado da versão em
+`RECORDED`. Saída diferente com a mesma versão reprova com a impressão nova na
+mensagem; bump sem impressão registrada também reprova. O ciclo passa a ser:
+mudou a saída, suba `SCORER_VERSION`, cole `{ version, fingerprint }` da
+mensagem em `RECORDED` no mesmo commit e repontue.
+
+O que ele não vê: mudança que não altera nenhuma vaga do acervo (o teste de
+sensibilidade no mesmo arquivo mostra que cada eixo do perfil move a impressão),
+e troca da impressão registrada sem troca de versão — edição deliberada que só a
+revisão distingue de um refactor.
+
+O instante é entrada explícita: `scoreJob(input, { profile, fx, asOf })` é a
+única forma, e `scoreFreshness` exige `now`. A forma antiga
+`scoreJob(input, profile, fx)` lia `Date.now()` sozinha e saiu; testes que não
+dependem de data usam `tests/support/score-now.ts`, onde o relógio é decisão da
+composição do teste.
+
 ### Use o banco como laboratório antes de commitar
 
 `data/jobs.db` tem 5021 vagas já pontuadas. É barato medir o efeito de uma mudança antes de fechá-la:

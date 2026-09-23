@@ -64,7 +64,7 @@ async function loadTrackContexts(candidateId: number): Promise<TrackContext[] | 
     let fxWarning: string | undefined;
     if (!fx) {
       fxWarning = "Sem cotações em cache — vagas em outras moedas não serão comparadas. Rode `jho fx refresh`.";
-    } else if (ageInDays(fx) > STALE_AFTER_DAYS) {
+    } else if (ageInDays(fx, new Date(asOf)) > STALE_AFTER_DAYS) {
       fxWarning = `Cotações de ${fx.date} têm mais de ${STALE_AFTER_DAYS} dias. Rode \`jho fx refresh\`.`;
     }
     contexts.push({ track, profile, profileHash: hash, fx, fxWarning, asOf });

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadProfile } from "../src/core/profile/load.ts";
 import type { Profile } from "../src/core/profile/schema.ts";
-import { scoreJob } from "../src/core/scoring/score.ts";
+import { scoreJob } from "./support/score-now.ts";
 import { hackernews } from "../src/core/sources/hackernews.ts";
 import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/http-port.ts";
 import { jobicy } from "../src/core/sources/jobicy.ts";
@@ -31,9 +31,11 @@ describe("Jobicy (real response, 2026-09-19)", () => {
     const http = fixtureHttp({ "jobicy.com": fixture("jobicy-typescript-latam.json") });
     setHttpPort(http);
 
-    const { jobs } = await jobicy.fetchJobs({ kind: "jobicy", handle: "", label: "Jobicy" });
+    const { jobs, completeness } = await jobicy.fetchJobs({ kind: "jobicy", handle: "", label: "Jobicy" });
 
     expect(http.calls[0]).toContain("geo=latam");
+    // `count=100` is the newest slice of the region, never the whole list.
+    expect(completeness).toBe("partial");
     expect(http.options[0]).toEqual({ retries: 0 });
     expect(jobs.length).toBeGreaterThan(3);
     // Applications go to the feed's own URL, as the README asks.

@@ -10,7 +10,7 @@
  */
 import { BUDGETED, QUOTA_STOP } from "./aggregators.ts";
 import { getJson, htmlToText } from "./http.ts";
-import type { FetchResult, PlatformBudget, RawJob, SourceAdapter, SourceConfig } from "./types.ts";
+import type { PlatformBudget, RawJob, SourceAdapter, SourceConfig, SourceSnapshot } from "./types.ts";
 
 type WorkableJob = {
   id: string;
@@ -72,33 +72,40 @@ async function searchPages(
   query: string,
   pages: number,
   reserve: () => Promise<boolean>,
-): Promise<{ jobs: WorkableJob[]; totalHint: number | null; stoppedByQuota: boolean }> {
+): Promise<{ jobs: WorkableJob[]; totalHint: number | null; stoppedByQuota: boolean; reachedEnd: boolean }> {
   const jobs: WorkableJob[] = [];
   let totalHint: number | null = null;
   let token: string | undefined;
   for (let page = 0; page < pages; page++) {
-    if (!(await reserve())) return { jobs, totalHint, stoppedByQuota: true };
+    if (!(await reserve())) return { jobs, totalHint, stoppedByQuota: true, reachedEnd: false };
     const params = new URLSearchParams({ ...REACH, ...(query ? { query } : {}), ...(token ? { pageToken: token } : {}) });
     const data = await getJson<WorkableResponse>(`${WORKABLE_API}?${params}`, BUDGETED);
     totalHint = data.totalSize ?? totalHint;
     jobs.push(...(data.jobs ?? []));
     token = data.nextPageToken;
-    if (!token || (data.jobs ?? []).length === 0) break;
+    // No next token is the platform saying the list ended. An empty page with
+    // a token still pending is not.
+    if (!token) return { jobs, totalHint, stoppedByQuota: false, reachedEnd: true };
+    if ((data.jobs ?? []).length === 0) break;
   }
-  return { jobs, totalHint, stoppedByQuota: false };
+  return { jobs, totalHint, stoppedByQuota: false, reachedEnd: false };
 }
 
 export const workable: SourceAdapter = {
   kind: "workable",
   docs: "https://jobs.workable.com",
-  async fetchJobs(config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     // `handle` is the search text; empty lists every remote job in Brazil.
     const found = await searchPages(config.handle.trim(), WORKABLE_BUDGET.maxRequestsPerRun, async () => true);
     const warnings =
       found.totalHint !== null && found.jobs.length < found.totalHint
         ? [`workable: ${found.jobs.length} de ${found.totalHint} vagas (as primeiras páginas).`]
         : [];
-    return { jobs: found.jobs.map(mapWorkable), warnings };
+    return {
+      jobs: found.jobs.map(mapWorkable),
+      warnings,
+      completeness: found.reachedEnd ? "complete" : "partial",
+    };
   },
   termSearch: {
     budget: WORKABLE_BUDGET,

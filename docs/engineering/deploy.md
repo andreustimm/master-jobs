@@ -37,15 +37,17 @@ compartilhado — e aí a ADR 0009 se inverte, porque o motivo dela (processo
 minutos. Uma função serverless tem teto de duração, e o de 30 segundos declarado
 no `vercel.json` não é generoso — é o máximo do plano gratuito.
 
-Duas saídas, e a escolha é de custo:
+A escolha feita: **o runner roda fora da Vercel.** O GitHub Actions
+(`varredura.yml`) aponta para o PostgreSQL de produção por secret e tem até
+seis horas por job; localmente, o mesmo worker aponta para a instância Docker
+isolada. Nenhuma captura longa fica presa ao limite de uma função.
 
-- **Cron da Vercel chamando uma rota que processa um lote pequeno.** É o que o
-  `vercel.json` prevê: uma chamada por dia que consome parte da fila. Simples,
-  cabe no plano gratuito, e leva dias para vencer uma fila grande.
-- **Continuar rodando o runner fora da Vercel.** O GitHub Actions aponta para o
-  PostgreSQL de produção por secret e tem até seis horas por job; localmente,
-  o mesmo worker aponta para a instância Docker isolada. Nenhuma captura longa
-  deve ficar presa ao limite de uma função Edge.
+O cron da Vercel que chamava `/api/cron/recheck` com um lote pequeno saiu de
+`vercel.json`: dois agendadores sobre a mesma fila dobravam a leitura do banco
+e as requisições a terceiros sem que um soubesse do outro (B-11). A rota
+continua, protegida por `CRON_SECRET` e pela política de ingestão, para uma
+chamada manual; nada a agenda. `tests/workflow-environment-isolation.test.ts`
+exige exatamente um agendador de `jobs recheck`.
 
 ### 3. `profile.yaml` e `sources.yaml` são lidos do disco em runtime
 
@@ -69,8 +71,11 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 | `SUPABASE_CRAWL_ENABLED` | Actions produção | `true` somente após os gates de quota/retensão |
 | `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela ou sem `RESEND_FROM`, nada é enviado e o log só alerta |
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |
-| `CRON_SECRET` | Vercel | protege a rota de cron; a Vercel a envia em `authorization` |
+| `CRON_SECRET` | Vercel | protege `/api/cron/recheck`, hoje só de chamada manual (`authorization: Bearer <segredo>`); nada a agenda |
 | `SENTRY_DSN` | Vercel | relato de erro do servidor; **sem ela nada é enviado** ([detalhe](#relato-de-erro)) |
+| `SENTRY_TRACES_SAMPLE_RATE` | Vercel (opcional) | fração de requisições com trace; ausente = `0.1`, `0` ou valor ilegível desliga ([detalhe](#tracing)) |
+| `SENTRY_AUTH_TOKEN` | Vercel, **só build** | publica os mapas de origem do servidor; sem ela o build segue sem mapas ([detalhe](#mapas-de-origem)) |
+| `SENTRY_ORG`, `SENTRY_PROJECT` | Vercel (opcional) | padrão `master-timm` / `master-jobs` |
 
 **A URL pode vir de mais de um nome, e a ordem é declarada.** A integração do
 Supabase com a Vercel cadastra `POSTGRES_URL` e `POSTGRES_URL_NON_POOLING` e as
@@ -249,17 +254,19 @@ queue`+`run` e `jobs recheck queue`+`run` contra **produção**, todo dia às
 06:00 UTC (03:00 em São Paulo), com `workflow_dispatch` para rodar à mão depois
 de mexer em `config/sources.yaml`.
 
-**Por que no GitHub e não na Vercel.** A Vercel tem `/api/cron/recheck`, e ele
-resolve um pedaço pequeno: 25 vagas por execução, porque o teto de função no
-plano gratuito é de 30 segundos. Com 427 vagas elegíveis (fit ≥ 55, abertas, com
-URL), o ciclo completo leva ~17 dias — enquanto `enqueueStale` declara a meta de
-reconferir a cada 7. O cron de lá entrega menos da metade do que promete, e não
-por defeito: por teto.
+**Por que no GitHub e não na Vercel.** `/api/cron/recheck` processa 25 vagas
+por chamada, porque o teto de função no plano gratuito é de 30 segundos. Com 427
+vagas elegíveis (fit ≥ 55, abertas, com URL), um cron diário nela levava ~17
+dias para dar a volta — enquanto `enqueueStale` declara a meta de reconferir a
+cada 7. Não por defeito: por teto.
 
 E a **busca** não roda lá de jeito nenhum: `jobs sync` e `scrape run` não têm
 rota de API. Um runner do GitHub tem 6 horas por job, e é a mesma tarefa num
-lugar onde ela cabe. A rota da Vercel servia como rede de segurança, mas não
-deve voltar junto com o Actions sem orçamento e responsabilidade distintos.
+lugar onde ela cabe. Por isso a varredura é o **único** agendador da
+reconferência: o cron da Vercel foi removido de `vercel.json`, e
+`tests/workflow-environment-isolation.test.ts` exige `crons` vazio e exatamente
+um workflow agendado rodando `jobs recheck` — mudar o dono é mudar esse teste
+junto.
 
 Só produção é varrida. `dev` e `staging` existem para exercitar código, não para
 acumular acervo — varrer os três triplicaria as requisições contra APIs de
@@ -323,9 +330,13 @@ migrations de `dev` e `staging` ficam desativadas até existirem bancos de
 fixture isolados. Esta configuração não pausa os deployments da Vercel.
 
 **A Vercel implanta no push, independente do CI.** As duas coisas disparam do
-mesmo evento e não se conhecem: sem proteção de branch em `main` exigindo o CI
-verde, o workflow vermelho não impede o deploy. O portão existe, mas só fecha
-depois que alguém liga a proteção em Settings → Branches.
+mesmo evento e não se conhecem. Por isso o portão está na entrada de `main`:
+desde 22/09/2026 um ruleset exige ali PR aprovada com `qualidade` e
+`schema-e-migracao` verdes, sem bypass de CI, e recusa push direto. Em
+`staging` e `dev` o push continua implantando sem CI prévio. A plataforma não
+aceita a exceção de que a promoção precisaria, e a promoção valida o SHA pelo
+CI reutilizável antes do fast-forward. Detalhes, limites e reversão em
+[github-protections.md](github-protections.md).
 
 O segredo usado por `migrate.yml` é `SUPABASE_MIGRATION_URL`; o workflow valida o
 project ref antes de abrir a conexão.
@@ -563,18 +574,92 @@ já aconteceu com a fonte do Google até um browser de verdade reportar. Ligá-l
 exigiria abrir a CSP para um terceiro e passar a mandar JS de cliente que estas
 páginas hoje não mandam. O erro que motivou isto era do servidor.
 
-Também não há `tracesSampleRate` acima de zero: transação carrega a URL
-completa, com a query string que acabou de ser excluída de propósito.
+### Tracing
 
-### O que falta, quando houver conta
+Ligado desde #219, só no servidor, amostrado por `SENTRY_TRACES_SAMPLE_RATE`
+(padrão `0.1`). `0` desliga; valor que não seja número entre 0 e 1 também
+desliga, em vez de cair no padrão — engano de configuração não pode mandar mais
+dado do que o pedido. A taxa vale para toda requisição: um `tracesSampler` fixo
+faz o SDK ignorar a decisão que chega no cabeçalho `sentry-trace` (`…-1`), que
+de outro modo deixaria qualquer cliente forçar 100% de amostragem e gastar a
+quota — e tornaria o `0` inútil.
 
-Mapas de origem. Sem eles a pilha chega minificada
-(`chunks/5303.js:1:1963`), que foi exatamente como o erro da 1.13.1 apareceu no
-log da Vercel. Para ligá-los, envolva a configuração com `withSentryConfig` em
-`next.config.ts` e cadastre `SENTRY_AUTH_TOKEN`, `SENTRY_ORG` e
-`SENTRY_PROJECT` no ambiente de build. Ficou de fora desta entrega porque
-exige conta e token no momento do build, e adicionar risco de build sem
-benefício imediato logo depois de uma queda não se justifica.
+Cada leitura de tela medida vira um span `jho.leitura` (`leitura /jobs`,
+`leitura /`), e cada estágio do cronômetro (`auth`, `prelude`, `brought_by`,
+`board`, `facets`, `tail`, `queue`, `cockpit`) um span `jho.etapa` filho — os
+mesmos nomes da linha `perf` do log. O SDK acrescenta os spans de
+renderização do Next e de PostgreSQL.
+
+Uma transação carrega exatamente o que o relato de erro exclui: a URL com o
+filtro da pessoa (`http.target`, `url.full`, `url.query`), o IP
+(`client.address`), o texto da consulta (`db.query.text`) e o endereço do
+banco (`server.address`). Por isso a peneira é outra lista de permissão:
+
+| Onde | O que sai | O que não sai |
+|---|---|---|
+| Nome da transação e descrição de span | caminho, método, rota | query string e fragmento |
+| Atributos (`ALLOWED_SPAN_DATA`) | método, status, rota, `next.*`, `db.system`, `db.operation.name`, `jho.etapa` | qualquer outro, inclusive os quatro acima |
+| Span de banco | o verbo (`SELECT`, `UPDATE`…) | o texto da consulta |
+| Contextos | `trace`, `runtime`, `os`, `app`, `device` | `otel`, `response` e o que vier |
+| `extra`, migalhas, usuário | — | tudo |
+
+`tracePropagationTargets: []` impede o SDK de anexar `sentry-trace` e
+`baggage` às requisições de saída — o `baggage` levaria a chave pública, o
+release e o nome da transação a cada board consultado.
+
+A organização no Sentry está com a limpeza do lado do servidor **desligada**
+(`dataScrubber: false`, `scrubIPAddresses: false`, lido em 22/09/2026), então a
+peneira daqui é a única. `tests/sentry-tracing.test.ts` monta a transação no
+formato do SDK com um marcador por dado privado e reprova se algum sobreviver.
+
+**Quota** (API `customers/master-timm`, 22/09/2026): plano Developer
+(`am3_f`), 5.000.000 spans reservados por ciclo (11/09 a 10/10), 48.198 usados,
+sem gasto sob demanda — passar da quota descarta span, não cobra. A quota é da
+organização, dividida com outros três projetos. Uma leitura de `/jobs` rende
+algumas dezenas de spans; a 10% o custo fica em fração pequena da quota.
+Reveja com:
+
+```bash
+rtk sentry api "customers/master-timm/" --json --fields plan,categories.spans
+```
+
+### Mapas de origem
+
+Sem eles a pilha chega minificada (`chunks/5303.js:1:1963`), que foi
+exatamente como o erro da 1.13.1 apareceu no log da Vercel.
+
+`next.config.ts` liga o gancho `compiler.runAfterProductionCompile`, que chama
+`scripts/sentry-source-maps.ts`: `sentry-cli sourcemaps inject` e `upload` em
+`.next/server`, com o SHA do commit como release. O identificador de depuração
+injetado no `.js` e no `.map` é o que casa a pilha com o mapa. Só servidor —
+não há SDK de browser, e `productionBrowserSourceMaps` fica `false`.
+
+- **Sem `SENTRY_AUTH_TOKEN`**, nada muda: nem `.map` é gerado
+  (`experimental.serverSourceMaps` só liga com o token), e o log de build
+  mostra `[sentry] SENTRY_AUTH_TOKEN ausente: o build segue sem publicar mapas
+  de origem`. É o estado do CI e do desenvolvimento local.
+- **Com o token e o Sentry fora do ar** (ou token revogado), o build segue e o
+  log mostra `[sentry] falha ao publicar mapas de origem; o build segue sem
+  eles`. Relato de erro não derruba o que ele observa.
+- Os `.map` ficam dentro do pacote da função, que não é servido ao browser.
+  Apagá-los quebra o build: a saída `standalone` copia `proxy.js.map`.
+- Não se usa `withSentryConfig`: ele injeta `instrumentation-client.ts` na
+  entrada do cliente pelo webpack e embrulha cada rota do servidor.
+
+**Passo humano para ligar** (o token não pode ser criado por agente):
+
+1. Em <https://master-timm.sentry.io/settings/auth-tokens/>, crie um
+   *Organization Token* (nasce com o escopo fixo `org:ci`, feito para enviar
+   mapas e criar release). Se preferir token pessoal, marque só
+   `project:releases` e `org:read`.
+2. Cadastre na Vercel, só para Production (o padrão da CLI já é Sensitive, que
+   é o certo aqui — ao contrário do DSN, o token é credencial):
+   `vercel env add SENTRY_AUTH_TOKEN production`.
+3. Faça um deploy e confira no log de build a linha `[sentry] mapas de origem
+   do servidor publicados em master-timm/master-jobs`.
+4. Confirme a resolução: com um erro de servidor no release novo,
+   `rtk sentry issue view <issue> --json` deve mostrar frames com caminho de
+   `app/…` ou `src/…` e linha do fonte, não `chunks/<n>.js:1`.
 
 ### Alertas de produção
 

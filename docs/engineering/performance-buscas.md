@@ -18,12 +18,13 @@ Três camadas, da mais barata para a mais fiel. Nenhuma substitui a outra.
 | **Piso local** | `pnpm perf:jobs` | Quanto o servidor gasta sobre o banco em 6 cenários (padrão, termo, cluster, faixa salarial, ordenar por pagamento, sem agrupar), 10 mil vagas, e **quantas idas ao banco** cada um faz. Hermético: Postgres em Docker, fora do `pnpm check`. `JHO_PERF_OUT=arquivo` guarda o relatório; `JHO_PERF_JOBS=N` muda o corpus; `JHO_PERF_RUNS=N` e `JHO_PERF_WARMUPS=N` controlam as repetições (inteiros positivos, padrões 3 e 1); `JHO_PERF_JSON=arquivo` guarda amostras, volume de SQL/parâmetros, resultados de referência e plano de execução | Sem rede. Não mede React nem o navegador |
 | **Produção, por estágio** | Linha JSON `{"perf":"/jobs","totalMs":…,"region":"gru1","stages":{…}}` no log da função | Onde uma requisição real gasta o tempo: `auth`, `prelude`, `board`, `facets`, `tail` (e `cockpit` em `/`) | Sai só se a leitura passa de 1 s, ou sempre com `JHO_PERF_LOG=1`. Log da Vercel na Hobby dura 1 h |
 | **Produção, de fora** | `pnpm perf:producao` (e `--logs`) | TTFB frio e quente, p50/p95, região e cache por rota; com `JHO_PERF_SESSION`, `/jobs` com os filtros comuns; com `--logs`, a agregação das linhas `perf` acima | Ver [Medir a produção](#medir-a-produção-221). De fora não se prova que a instância estava fria |
+| **Produção, amostrada** | Trace do Sentry: span `jho.leitura` por rota e `jho.etapa` por estágio | Os mesmos estágios da linha acima, com os spans de renderização e de PostgreSQL do SDK, e retidos além de 1 h | Amostra de `SENTRY_TRACES_SAMPLE_RATE` (padrão 10%). Ver [Sentry](#sentry-e-o-que-fica-de-fora) |
 | **Região** | Cabeçalho `x-vercel-id` da resposta | Onde a função rodou. `<borda>::gru1::…` é o certo (o primeiro trecho é a borda de quem pediu, só o segundo é a função); `<borda>::iad1::…` é a função longe do banco | Só diz a região, não o custo |
 
 A linha de log leva só número, nome de estágio, rota **sem query string** e
 região. Nunca valor de filtro, identidade ou id de candidato — a URL carrega o
-filtro da pessoa, e é por isso que o Sentry roda sem tracing (ver
-[Sentry](#sentry-e-o-que-fica-de-fora)).
+filtro da pessoa, e é por isso que o tracing do Sentry só saiu depois de uma
+peneira com lista de permissão (ver [Sentry](#sentry-e-o-que-fica-de-fora)).
 
 **`Server-Timing` não serve aqui.** Server Components não escrevem cabeçalho de
 resposta (a documentação do Next não tem API para isso), e o `proxy.ts` roda
@@ -523,13 +524,18 @@ o próximo passo não é um cache maior, e sim, nesta ordem:
 
 ## Sentry e o que fica de fora
 
-`tracesSampleRate` está em 0 de propósito: uma transação carrega a URL com a
-query string, isto é, os filtros da pessoa. Ligá-lo exige `beforeSendTransaction`
-e `beforeSendSpan` reaproveitando `scrubEvent`/`redactPath`, e um teste de que
-nada sai. Confirmar antes: a quota de spans do plano Developer (o "5M" veio de
-resumo de página de preços) e se `instrumentPostgresJsSql` existe no
-`@sentry/nextjs` (a documentação achada é de Deno e Cloudflare). Não foi feito
-nesta entrega.
+Tracing ligado pela #219, a 10% por padrão (`SENTRY_TRACES_SAMPLE_RATE`). Uma
+transação carrega a URL com a query string, isto é, os filtros da pessoa, então
+`beforeSendTransaction` e `beforeSendSpan` passam por `scrubTransaction` e
+`scrubSpan`, com lista de permissão de atributos e um teste que reprova se um
+marcador privado sobreviver. O que sai e o que não sai está em
+[`deploy.md`](deploy.md#tracing).
+
+Confirmado em 22/09/2026: a quota de spans do plano Developer é de fato
+5.000.000 por ciclo (API `customers/master-timm`), sem gasto sob demanda; e o
+`@sentry/node` 10.75 traz `postgresJsIntegration`, ligada automaticamente com
+tracing — o SDK já troca literais por `?`, e a peneira reduz a consulta ao
+verbo mesmo assim.
 
 Ferramentas gratuitas avaliadas (limites consultados em 2026-09-21; confirme no
 painel antes de depender de um número):

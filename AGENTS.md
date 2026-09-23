@@ -68,9 +68,11 @@ dashboard Next.js em `localhost:3000`.
 > é isso. Imports relativos carregam extensão `.ts` explícita.
 
 > **6. Mexeu no scorer ou em `profile.yaml`? Bump `SCORER_VERSION`.**
-> Fica em `src/core/scoring/score.ts` (hoje `1.3.0`). Depois
+> Fica em `src/core/scoring/score.ts` (hoje `1.4.1`). Depois
 > `pnpm jho jobs score --all`. Sem o bump, duas gerações de score convivem na
-> mesma coluna sem sinal visível.
+> mesma coluna sem sinal visível. `tests/scorer-version.test.ts` guarda a
+> impressão da saída sobre um acervo fixo: saída nova com a versão antiga
+> reprova, e a mensagem traz a impressão a gravar junto com o bump.
 
 > **7. Não invente evidência.**
 > Tailoring de CV só cita o que está em `evidence:` no `profile.yaml`.

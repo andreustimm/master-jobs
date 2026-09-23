@@ -193,7 +193,7 @@ describe("SmartRecruiters and Recruitee registry fixtures", () => {
         handle: "fixture",
         label: "Acme",
       }),
-    ).resolves.toEqual({ jobs: [], warnings: [] });
+    ).resolves.toEqual({ jobs: [], warnings: [], completeness: "complete" });
   });
 
   it("keeps normalized fingerprints stable when listing order changes", async () => {
