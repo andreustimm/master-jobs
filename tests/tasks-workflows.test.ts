@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
@@ -27,6 +27,17 @@ describe("trusted task automation", () => {
       expect(job.steps.find(s => s.run?.startsWith("pnpm install"))?.run).toContain("--ignore-scripts");
       expect(job.steps.map(s => s.run ?? "").join("\n")).not.toContain("${{");
     }
+  });
+  // PROJECTS_TOKEN is a PAT: its scope cannot stop the writer from merging or
+  // deploying, so the code is the only guard that task automation never promotes.
+  it("has no write path to merges, deployments, refs or workflow dispatches", () => {
+    const sources = readdirSync(new URL("../scripts/tasks/", import.meta.url)).filter(name => name.endsWith(".ts"))
+      .map(name => readFileSync(new URL(`../scripts/tasks/${name}`, import.meta.url), "utf8")).join("\n");
+    const writes = [...sources.matchAll(/\(\s*"(?:POST|PUT|PATCH|DELETE)",\s*(["`])(.*?)\1/g)].map(match => match[2]!);
+    expect(writes.length).toBeGreaterThan(0);
+    for (const path of writes) expect(path).not.toMatch(/merge|deployment|git\/|dispatches|pulls|actions/);
+    const mutations = new Set([...sources.matchAll(/mutation \w+\(\$input:(\w+)Input!\)/g)].map(match => match[1]));
+    expect([...mutations].sort()).toEqual(["AddBlockedBy", "AddProjectV2ItemById", "AddSubIssue", "CreateProjectV2Field", "UpdateProjectV2Field", "UpdateProjectV2ItemFieldValue"]);
   });
   it("does not silently substitute the repository token for Projects privilege", () => {
     const step = writer.jobs.writer.steps.find((s: { env?: unknown }) => s.env);

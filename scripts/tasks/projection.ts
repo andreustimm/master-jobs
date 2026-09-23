@@ -117,6 +117,37 @@ export async function collectProjection(gateway: TaskGateway, issue: number, epo
   return [...tasks.values()];
 }
 
+function alive(pid: number): boolean {
+  try { process.kill(pid, 0); return true; }
+  catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; }
+}
+
+// A refresh killed mid-write (Ctrl-C, closed terminal) skips its `finally` and
+// leaves the lock behind, which blocked every later refresh until someone found
+// and deleted a hidden file. The lock names its owner, so a lock whose process
+// is gone is recovered. Anything unreadable stays a refusal: an empty lock may
+// belong to a refresh that has not written its pid yet.
+async function createLock(lockPath: string) {
+  const lock = await open(lockPath, "wx");
+  await lock.writeFile(`${process.pid}\n`);
+  return lock;
+}
+
+async function acquireLock(lockPath: string) {
+  try {
+    return await createLock(lockPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+  const owner = Number((await readFile(lockPath, "utf8").catch(() => "")).trim());
+  if (!Number.isSafeInteger(owner) || owner <= 0 || alive(owner)) {
+    throw new Error(`Outro refresh desta projeção está em andamento (${lockPath}). Se nenhum estiver, remova o arquivo.`);
+  }
+  await rm(lockPath, { force: true });
+  // A second EEXIST here means another refresh recovered the same stale lock first.
+  return createLock(lockPath);
+}
+
 /** Replace only an identified, unedited projection; authored specs cannot be adopted implicitly. */
 export async function writeProjection(
   output: string,
@@ -135,7 +166,7 @@ export async function writeProjection(
   await assertNoSymlink(directory);
   await mkdir(dirname(directory), { recursive: true });
   const lockPath = join(dirname(directory), `.${basename(directory)}.projection.lock`);
-  const lock = await open(lockPath, "wx");
+  const lock = await acquireLock(lockPath);
   let staging: string | undefined;
   let backup: string | undefined;
   try {

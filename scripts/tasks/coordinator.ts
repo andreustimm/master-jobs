@@ -129,7 +129,9 @@ export class Coordinator {
       preparationAttempted = true;
       durable = await this.recordReceipt(receipt);
       const fresh = await this.gateway.readTask(command.issue, state.manualEpoch);
-      if (fresh.revision !== before.revision) throw new Error("STALE_REVISION after preparation; no task write applied");
+      // Nothing was written yet, so this is a rejection, not an uncertainty: an
+      // "uncertain" receipt would lock the issue until an administrator reconciled.
+      if (fresh.revision !== before.revision) return await this.finish(durable, receipt, "rejected", "STALE_REVISION after preparation; no task write applied");
       if (!fresh.itemId && command.action === "adopt") {
         await this.gateway.addToProject(fresh.issue.id);
         const added = await this.gateway.readTask(command.issue, state.manualEpoch);
@@ -137,9 +139,7 @@ export class Coordinator {
       } else await this.gateway.patchTask(fresh, patch);
       const after = await this.gateway.readTask(command.issue, state.manualEpoch);
       this.assertApplied(after, patch);
-      if (command.action === "reconcile") {
-        for (const pending of receipts.filter(r => r.value.issue === command.issue && ["prepared", "uncertain"].includes(r.value.phase))) await this.finish(pending.comment, pending.value, "rejected", `Superseded by explicit administrative reconciliation ${command.operationId}; original result was not confirmed`);
-      }
+      if (command.action === "reconcile") await this.supersedePending(command);
       receipt.result = { issue: after.issue.number, revision: after.revision, execution: after.coordination?.execution };
       return await this.finish(durable, receipt, "confirmed", `${command.action} confirmed by remote read-back`);
     } catch (error) {
@@ -170,8 +170,10 @@ export class Coordinator {
     if (!issue.assignees.includes(actor)) throw new Error("Created issue lost its expected assignee; reconcile explicitly");
     let snapshot = await this.gateway.readTask(issue.number, epoch);
     if (!snapshot.itemId) { await this.gateway.addToProject(issue.id); snapshot = await this.gateway.readTask(issue.number, epoch); }
-    if (data.parent) await this.gateway.addSubIssue(data.parent, issue.id);
-    for (const dep of data.dependsOn) await this.gateway.addDependency(issue.number, dep);
+    // Recovery replays this path after an interruption; GitHub refuses a second
+    // sub-issue or dependency link, so only the links still missing are added.
+    if (data.parent && snapshot.parent !== data.parent) await this.gateway.addSubIssue(data.parent, issue.id);
+    for (const dep of data.dependsOn) if (!snapshot.dependencies.some(d => d.number === dep)) await this.gateway.addDependency(issue.number, dep);
     const patch: TaskPatch = { fields: { ...(!snapshot.status ? { status: "Backlog" as const } : {}), ...(!snapshot.priority ? { priority: data.priority } : {}), ...(!snapshot.type ? { type: data.type } : {}) } };
     await this.gateway.patchTask(snapshot, patch);
     const after = await this.gateway.readTask(issue.number, epoch);
@@ -207,8 +209,11 @@ export class Coordinator {
       catch { /* An incomplete adoption still needs an explicit reconciliation. */ }
     }
     if (current.coordination?.lastOperation === receipt.operationId) {
-      try { this.assertApplied(current, receipt.patch); receipt.result = { issue: current.issue.number, revision: current.revision, execution: current.coordination?.execution }; return await this.finish(comment, receipt, "confirmed", "Recovered mutation confirmed by read-back"); }
+      try { this.assertApplied(current, receipt.patch); }
       catch { return this.finish(comment, receipt, "uncertain", "Partial mutation requires administrative reconciliation"); }
+      if (command.action === "reconcile") await this.supersedePending(command);
+      receipt.result = { issue: current.issue.number, revision: current.revision, execution: current.coordination?.execution };
+      return this.finish(comment, receipt, "confirmed", "Recovered mutation confirmed by read-back");
     }
     // Retrying only when all semantic state is still the pre-mutation state cannot
     // reassign a task after another execution or a manual epoch has superseded it.
@@ -226,10 +231,21 @@ export class Coordinator {
       await this.gateway.patchTask(current, receipt.patch);
       const after = await this.gateway.readTask(receipt.issue, state.manualEpoch);
       this.assertApplied(after, receipt.patch);
+      if (command.action === "reconcile") await this.supersedePending(command);
       receipt.result = { issue: after.issue.number, revision: after.revision, execution: after.coordination?.execution };
       return this.finish(comment, receipt, "confirmed", "Prepared mutation resumed and confirmed");
     }
     return this.finish(comment, receipt, "uncertain", "Remote state diverged; no retry applied");
+  }
+  // A reconciliation settles every unresolved mutation of its issue. The recovery
+  // path must do the same as the first attempt, or the recovered reconcile leaves
+  // the pending receipts in place and the issue stays locked (UNRESOLVED_OPERATION).
+  async supersedePending(command: Command): Promise<void> {
+    const pending = (await this.gateway.comments(this.config.controlIssue)).filter(c => c.author === this.config.writerLogin).flatMap(comment => {
+      const value = parseReceipt(comment.body);
+      return value && value.issue === command.issue && value.operationId !== command.operationId && ["prepared", "uncertain"].includes(value.phase) ? [{ comment, value }] : [];
+    });
+    for (const entry of pending) await this.finish(entry.comment, entry.value, "rejected", `Superseded by explicit administrative reconciliation ${command.operationId}; original result was not confirmed`);
   }
   assertApplied(after: TaskSnapshot, patch: TaskPatch): void {
     for (const [key, value] of Object.entries(patch.fields)) if (after[key as keyof TaskSnapshot] !== value) throw new Error(`Read-back mismatch: ${key}`);

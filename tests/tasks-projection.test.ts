@@ -82,6 +82,21 @@ it("refuses traversal, symlink destinations and a forged manifest path", async (
   expect(await readFile(join(authored, "spec.md"), "utf8")).toBe("keep");
 });
 
+it("recovers the lock of a refresh whose process died, and refuses a live or unidentified one", async () => {
+  const parent = await directory();
+  const target = join(parent, "generated");
+  const lockPath = join(parent, ".generated.projection.lock");
+  await writeFile(lockPath, `${process.pid}\n`);
+  await expect(writeProjection(target, config, 10, [task()])).rejects.toThrow("em andamento");
+  await writeFile(lockPath, "");
+  await expect(writeProjection(target, config, 10, [task()])).rejects.toThrow("em andamento");
+  // Far above any pid the kernel hands out, so no process can own it.
+  await writeFile(lockPath, "2147483646\n");
+  await writeProjection(target, config, 10, [task()]);
+  expect(await readFile(join(target, "task.md"), "utf8")).toContain("Status observado: Backlog");
+  await expect(readFile(lockPath)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
 it("does not publish a partial graph when a remote child read fails", async () => {
   const root = task(); root.subIssues = [11];
   const gateway = { readTask: async (number: number) => { if (number !== 10) throw new Error("network unavailable"); return root; } } as TaskGateway;
