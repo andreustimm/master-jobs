@@ -23,14 +23,16 @@ import {
 } from "../money.ts";
 import type { Profile } from "../profile/schema.ts";
 import { TERM_BOUNDARY } from "../term.ts";
+// Direto do domínio de Matching, e não do `index.ts` do contexto: o índice
+// compõe os adapters Drizzle, e importá-lo carregava o banco no scorer puro.
+// O scorer é domínio de Matching fisicamente fora dele (MIGRATION.md).
 import {
   evaluateEligibility,
-  message,
   type EligibilityResult,
   type EligibilitySignals,
   type MatchPolicy,
-  type ScoreMessage,
-} from "../../contexts/matching/index.ts";
+} from "../../contexts/matching/domain/eligibility.ts";
+import { message, type ScoreMessage } from "../../contexts/matching/domain/score-message.ts";
 import { scoreBenefits } from "./benefits.ts";
 import { PLATEAU_DAYS, scoreFreshness } from "./freshness.ts";
 
@@ -559,14 +561,12 @@ export function locationRestriction(
 
 /* --------------------------------- Score --------------------------------- */
 
-export function scoreJob(
-  input: ScoreInput,
-  contextOrProfile: ScoringContext | Profile,
-  legacyFx: FxTable | null = null,
-): ScoreResult {
-  const context: ScoringContext = "profile" in contextOrProfile
-    ? contextOrProfile
-    : { profile: contextOrProfile, fx: legacyFx, asOf: Date.now() };
+/**
+ * Only the explicit context. The old `scoreJob(input, profile, fx)` form read
+ * `Date.now()` for freshness, so the "pure" scorer gave a different answer
+ * tomorrow; a caller that wants "now" says so when it builds the context.
+ */
+export function scoreJob(input: ScoreInput, context: ScoringContext): ScoreResult {
   const { profile, fx } = context;
   const fullText = `${input.title}\n${input.descriptionText ?? ""}`;
 
