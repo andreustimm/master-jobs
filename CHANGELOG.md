@@ -14,6 +14,24 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 - Fluxo: a issue fecha quando o código chega a produção — commits das PRs levam `Closes #N` na mensagem, porque a PR aponta para `dev` e só a entrada em `main` fecha issues (AGENTS.md, `docs/engineering/workflow.md`).
 
+### Melhorado
+
+- Facetas de `/jobs` e `/` com cache local no processo (#216):
+  `cachedBoardFacets` em `src/contexts/matching/app/board-facets.ts`, regra pura
+  em `domain/facet-cache.ts`. Chave canônica com candidato da sessão, todos os
+  filtros que a consulta recebe (cluster, termo, fontes, modalidade, trilha,
+  agrupamento, fit) e `SCORER_VERSION`; página, tamanho, ordenação, faixa
+  salarial, empresa e chips de recorte reaproveitam a entrada. Validade de
+  60 s, teto de 200 entradas (LRU), consulta reservada antes do `await` e
+  falha descartada. Triagem e funil invalidam as entradas do candidato; vaga
+  nova (`/jobs/new`, `/compare`) invalida todas; mudar trilha invalida as do
+  candidato; a captura por termo em `after()` invalida todas. O mapa fica em
+  `globalThis`, compartilhado entre a camada das páginas e a das Server
+  Actions. Sync, score e raspagem rodam fora do processo e só a validade os
+  cobre. `pnpm perf:jobs` mede a leitura
+  fria (comparável às anteriores) e a página 2 com cache: no padrão, 56 → 31 ms,
+  facetas 22 → 0 ms, 6 → 5 consultas.
+
 ## [1.22.1] - 2026-09-23
 
 ### Segurança
