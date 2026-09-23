@@ -14,11 +14,17 @@ Execução e branch:
 
 ## Validação
 
-<!-- Liste somente comandos executados e resultados observados. -->
+<!-- Liste somente comandos executados e resultados observados.
+     Docs e QA aceitam justificativa de uma linha ("sem contrato alterado",
+     "sem mudança visível"); campo vazio não é resposta.
+     A revisão vale para o SHA que ela fixou: revisão de um SHA anterior a
+     mudança relevante não aprova o diff atual — rode nova rodada incremental.
+     FIX_BEFORE_SHIP remanescente só segue com os achados listados aqui e a
+     decisão escrita de uma pessoa (G54). -->
 
 - Docs:
 - QA de jornada ou justificativa de ausência de mudança visível:
-- Revisão profunda:
+- Revisão profunda (veredito e SHA revisado):
 
 ## Ativação
 

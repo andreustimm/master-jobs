@@ -39,9 +39,11 @@ describe("agregador qualidade", () => {
       name !== AGGREGATOR && name !== "validacao" && !(name in NON_BLOCKING_JOBS));
     expect(new Set(needsOf(aggregator))).toEqual(new Set(others));
     // Exceção só existe para job que existe, e nunca para um que já bloqueia.
-    for (const name of Object.keys(NON_BLOCKING_JOBS)) {
+    // E exceção sem política não é exceção: cada uma diz por quê.
+    for (const [name, why] of Object.entries(NON_BLOCKING_JOBS)) {
       expect(ci.jobs[name], name).toBeDefined();
       expect(needsOf(aggregator)).not.toContain(name);
+      expect(why.trim(), `${name} sem motivo registrado`).not.toBe("");
     }
   });
 

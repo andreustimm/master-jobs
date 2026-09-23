@@ -1,3 +1,4 @@
+import { Card } from "@/components/ui/card";
 import { TransitionLink } from "./transition-link";
 import { loadCockpit } from "./cockpit-data.ts";
 import { comVigia, criarCronometro, registrarTempo } from "./timeout-watch.ts";
@@ -70,6 +71,13 @@ export default async function Cockpit({
           {t("cockpit.leadTail")}
         </p>
       </header>
+
+      {/* Sem nota ainda, a lista abaixo vem sem ordem de aderência (#279). */}
+      {stats?.scored === false && (
+        <Card className="mb-4 p-4" role="status" data-testid="cockpit-scores-pending">
+          <p className="type-body-md">{t("filterNotices.scores_pending")}</p>
+        </Card>
+      )}
 
       <div className="mb-7 grid grid-cols-[repeat(auto-fit,minmax(104px,1fr))] gap-px overflow-hidden rounded-xl border bg-border">
         <Stat value={stats?.open?.toLocaleString(locale) ?? "0"} label={t("cockpit.openJobs")} />

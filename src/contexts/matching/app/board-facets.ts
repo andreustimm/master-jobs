@@ -19,7 +19,7 @@ import { createTtlLru, facetCacheKey, type TtlLru } from "../domain/facet-cache.
 /** Os filtros que as facetas leem. Qualquer campo passado entra na chave. */
 export type FacetQuery = Pick<
   BoardFilters,
-  "minFit" | "cluster" | "term" | "sourceKinds" | "workMode" | "track" | "groupRepeats"
+  "minFit" | "keepUnscored" | "cluster" | "term" | "sourceKinds" | "workMode" | "track" | "groupRepeats"
 >;
 
 export type BoardFacets = Awaited<ReturnType<typeof boardFacets>>;
