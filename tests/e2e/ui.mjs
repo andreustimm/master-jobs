@@ -3227,6 +3227,69 @@ try {
     await context.close();
   }
 
+  /* ------ Criar o perfil enviando o currículo em PDF (#278), em 375px ------ */
+
+  // O multipart de verdade, pelo mesmo `readCvPdf` do perfil existente. Um
+  // arquivo que não é PDF é recusado com a razão e não cria nada; o PDF válido
+  // cria o perfil e deixa o texto extraído no editor, para revisão.
+  {
+    const context = await browser.newContext({ viewport: { width: 375, height: 812 } });
+    const onboarding = await context.newPage();
+    trackConsole(onboarding);
+    await context.addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
+    await onboarding.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+    await onboarding.fill('input[name="email"]', "e2e-sem-perfil-pdf@local.test");
+    await onboarding.fill('input[name="password"]', E2E_PASSWORD);
+    await onboarding.locator('[data-testid="login-submit"]').click();
+    await onboarding.waitForTimeout(1_500);
+    await onboarding.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+
+    const refusalNotice = onboarding.locator('[data-testid="mutation-feedback"][role="alert"]');
+    await onboarding.fill('[data-testid="profile-name"]', "Pdf Onboarding E2E");
+    await onboarding.locator('[data-testid="profile-cv-file"]').setInputFiles({
+      name: "not-a-cv.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("plain text renamed to look like a PDF"),
+    });
+    await onboarding.locator('[data-testid="create-profile"]').click();
+    await refusalNotice.waitFor({ timeout: 10_000 }).catch(() => undefined);
+    const notPdfReason = ((await refusalNotice.textContent().catch(() => "")) ?? "").trim();
+    check(
+      "onboarding recusa arquivo que não é PDF, com a razão",
+      notPdfReason.includes(en.onboarding.pdfNotPdf),
+      notPdfReason,
+    );
+    check(
+      "recusa do PDF não cria perfil",
+      (await onboarding.locator('[data-testid="route-candidate-onboarding"]').count()) === 1,
+    );
+    await onboarding.locator('[data-testid="mutation-feedback-dismiss"]').click().catch(() => undefined);
+
+    const { pdfComTexto } = await import("../support/synthetic-pdf.ts");
+    const marker = "Kubernetes platform migration led for the payments team";
+    const lines = Array.from({ length: 6 }, (_, i) => `${marker}, release ${i + 1}, with observability`);
+    const cvPdf = Buffer.from(pdfComTexto([lines]));
+    await onboarding.locator('[data-testid="profile-cv-file"]').setInputFiles({
+      name: "e2e-onboarding-cv.pdf",
+      mimeType: "application/pdf",
+      buffer: cvPdf,
+    });
+    await onboarding.locator('[data-testid="create-profile"]').click();
+    await onboarding.locator('[data-testid="route-candidate"]').waitFor({ timeout: 15_000 }).catch(() => undefined);
+    await onboarding.reload({ waitUntil: "networkidle" });
+    const created = (await onboarding.locator('[data-testid="route-candidate"]').count()) === 1;
+    const cvText = await onboarding.locator('textarea[name="content"]').inputValue().catch(() => "");
+    const cvLabel = await onboarding.locator('input[name="label"]').inputValue().catch(() => "");
+    const overflow = await onboarding.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    check("perfil criado com PDF sobrevive ao refresh", created);
+    check("texto extraído do PDF vira o currículo, no editor", cvText.includes(marker), cvText.slice(0, 120));
+    check("versão do currículo leva o nome do arquivo", cvLabel === "e2e-onboarding-cv", cvLabel);
+    check("perfil criado com PDF cabe em 375px", overflow <= 1, `overflow=${overflow}`);
+    await context.close();
+  }
+
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
 
   /* ------------- Limite de requisição no portfólio (E-05, jornada) --------- */
@@ -4754,7 +4817,24 @@ try {
     await rolePage.fill('input[name="password"]', E2E_PASSWORD);
     await rolePage.locator('[data-testid="login-submit"]').click();
     await rolePage.waitForURL((url) => !url.pathname.startsWith("/login"));
+    // #279: a conta de candidato do E2E nunca é pontuada. Com o corte padrão de
+    // 45, o cockpit e o quadro dela têm de listar o acervo e dizer que a nota
+    // está pendente. O cockpit é lido direto, sem depender de onde o login cai.
+    let unscoredBoard = null;
+    if (scenario.email === "e2e-candidato@local.test") {
+      await rolePage.goto(`${BASE}/`, { waitUntil: "networkidle" });
+      const cockpitNotice = await rolePage.evaluate(
+        () => document.querySelector('[data-testid="cockpit-scores-pending"]')?.textContent ?? null,
+      );
+      unscoredBoard = { cockpitNotice };
+    }
     if (scenario.prepare) await rolePage.goto(`${BASE}${scenario.prepare}`, { waitUntil: "networkidle" });
+    if (unscoredBoard) {
+      Object.assign(unscoredBoard, await rolePage.evaluate(() => ({
+        total: Number(document.querySelector('[data-testid="jobs-total"]')?.getAttribute("data-total") ?? "-1"),
+        notice: document.querySelector('[data-testid="jobs-notice-scores_pending"]')?.textContent ?? null,
+      })));
+    }
     const snapshot = await observeNavigation(
       rolePage,
       () => rolePage.locator(scenario.control).click(),
@@ -4808,6 +4888,7 @@ try {
       missingRoleOutcome,
       missingRoleReload,
       emptyPipelineLocale,
+      unscoredBoard,
       cache,
     });
     await roleCtx.close();
@@ -4911,6 +4992,15 @@ try {
       roleNeutral,
       roleCacheIsolated,
     }),
+  );
+  const candidateUnscoredBoard = roleTransitionResults
+    .find(({ email }) => email === "e2e-candidato@local.test")?.unscoredBoard;
+  check(
+    "#279 candidato sem nota vê as vagas sob o corte padrão, com aviso de nota pendente em inglês",
+    (candidateUnscoredBoard?.total ?? 0) > 0
+      && candidateUnscoredBoard?.notice === en.filterNotices.scores_pending
+      && candidateUnscoredBoard?.cockpitNotice === en.filterNotices.scores_pending,
+    JSON.stringify(candidateUnscoredBoard),
   );
   const candidateEmptyPipeline = roleTransitionResults
     .find(({ email }) => email === "e2e-candidato@local.test")?.emptyPipelineLocale;

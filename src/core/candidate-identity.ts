@@ -16,6 +16,11 @@ export const HEADLINE_MAX = 200;
 export const LOCATION_MAX = 120;
 /** O mesmo mínimo de `saveCvAction`: abaixo disso não é um currículo. */
 export const CV_MIN = 100;
+/**
+ * Teto do currículo enviado em PDF. Mora aqui, e não em `pdf.ts`, para que a
+ * tela possa citá-lo sem carregar o extrator.
+ */
+export const CV_PDF_MAX_MB = 10;
 
 export type OwnProfileError =
   | NameError

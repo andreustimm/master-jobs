@@ -187,6 +187,19 @@ async function syncOne(config: SourceConfig, companies: Map<string, number>): Pr
   return result;
 }
 
+/**
+ * Sincroniza UMA fonte — a unidade da varredura fatiada (ADR 0025).
+ *
+ * Mesmo caminho de `syncAll`, sem o laço: a mesma guarda, o mesmo registro da
+ * fonte e o mesmo `syncOne`, que nunca lança e grava o erro em
+ * `source.lastError`. Fatiar não pode virar uma segunda implementação do sync.
+ */
+export async function syncSource(config: SourceConfig): Promise<SyncSourceResult> {
+  guardIngestion();
+  await ensureSources([config]);
+  return syncOne(config, new Map());
+}
+
 /** Run every enabled source with bounded concurrency. */
 export async function syncAll(
   configs: SourceConfig[],

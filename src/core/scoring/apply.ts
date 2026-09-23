@@ -465,36 +465,54 @@ export async function scoreEveryCandidate(
     .orderBy(candidate.id);
 
   const resultados: ResultadoPorCandidato[] = [];
-
   for (const c of candidatos) {
-    let perfil: ResultadoPerfil["estado"] = "sem-curriculo";
-    try {
-      perfil = (await ensureMatchingProfile(c.id)).estado;
-
-      // Sem perfil próprio, NÃO pontua.
-      //
-      // A alternativa seria pontuar com o perfil padrão da instalação, e foi o
-      // que esta função fazia até ser exercitada contra dados reais: o
-      // candidato 2 do banco de dev, que não tem currículo, começou a receber
-      // 2.757 pontuações calculadas com o perfil de outra pessoa. Seria
-      // reintroduzir, por outro caminho, exatamente o problema que o M-06
-      // existe para resolver — com o agravante de o ranking PARECER dele.
-      //
-      // Board sem ranking é o estado honesto: a tela convida a subir um
-      // currículo, e é disso que o perfil sai.
-      if (perfil !== "ja-tinha" && perfil !== "derivado") {
-        resultados.push({ candidateId: c.id, slug: c.slug, perfil, scored: 0, topFit: 0 });
-        continue;
-      }
-
-      const r = await scoreAll(c.id, opts);
-      resultados.push({ candidateId: c.id, slug: c.slug, perfil, scored: r.scored, topFit: r.topFit });
-    } catch {
-      // Registrado como zero e seguido adiante. O chamador vê a linha com
-      // `scored: 0` e sabe onde olhar.
-      resultados.push({ candidateId: c.id, slug: c.slug, perfil, scored: 0, topFit: 0 });
-    }
+    const r = await scoreCandidate(c.id, opts);
+    resultados.push({ candidateId: c.id, slug: c.slug, perfil: r.perfil, scored: r.scored, topFit: r.topFit });
   }
-
   return resultados;
+}
+
+export type ResultadoDoCandidato = {
+  perfil: ResultadoPerfil["estado"];
+  scored: number;
+  topFit: number;
+  /** Presente quando a pontuação lançou; o candidato conta como zero. */
+  erro?: string;
+};
+
+/**
+ * Pontua UM candidato, derivando o perfil se ele ainda não tiver. Nunca lança.
+ *
+ * É a unidade de `scoreEveryCandidate` e da fatia `pontuar` da varredura
+ * (ADR 0025): as duas precisam da mesma regra — sem perfil próprio, não
+ * pontua —, e duas cópias dela seriam duas chances de divergir.
+ */
+export async function scoreCandidate(
+  candidateId: number,
+  opts: { all?: boolean } = {},
+): Promise<ResultadoDoCandidato> {
+  let perfil: ResultadoPerfil["estado"] = "sem-curriculo";
+  try {
+    perfil = (await ensureMatchingProfile(candidateId)).estado;
+
+    // Sem perfil próprio, NÃO pontua.
+    //
+    // A alternativa seria pontuar com o perfil padrão da instalação, e foi o
+    // que esta função fazia até ser exercitada contra dados reais: o
+    // candidato 2 do banco de dev, que não tem currículo, começou a receber
+    // 2.757 pontuações calculadas com o perfil de outra pessoa. Seria
+    // reintroduzir, por outro caminho, exatamente o problema que o M-06
+    // existe para resolver — com o agravante de o ranking PARECER dele.
+    //
+    // Board sem ranking é o estado honesto: a tela convida a subir um
+    // currículo, e é disso que o perfil sai.
+    if (perfil !== "ja-tinha" && perfil !== "derivado") return { perfil, scored: 0, topFit: 0 };
+
+    const r = await scoreAll(candidateId, opts);
+    return { perfil, scored: r.scored, topFit: r.topFit };
+  } catch (erro) {
+    // Registrado como zero e seguido adiante. O chamador vê `scored: 0` e o
+    // erro, e sabe onde olhar.
+    return { perfil, scored: 0, topFit: 0, erro: erro instanceof Error ? erro.message : String(erro) };
+  }
 }

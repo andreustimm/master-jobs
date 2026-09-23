@@ -287,7 +287,6 @@ As exceções, e o que substitui a sessão em cada uma:
 | `/login`, `/login/forgot`, `/login/reset` | pré-sessão; `/login` só pergunta se existe alguma conta |
 | `/login/callback` | link mágico de uso único |
 | `/api/cron/recheck` | `CRON_SECRET` em tempo constante; 503 sem ele |
-| `/api/cron/score` | o mesmo `CRON_SECRET`, pela mesma função (`refuseWithoutCronSecret`); só pontua, não chama terceiro |
 | `/p/[slug]` | lista de permissão de `publicProfile()`, 404 para não público, limite por IP |
 
 `tests/entry-denial.test.ts` prova a NEGAÇÃO, não só a presença: chama cada
@@ -335,6 +334,13 @@ identidade. O formulário não carrega id nenhum: a conta é a da sessão e o
 candidato é sempre uma linha nova, privada, com a identidade digitada — nunca a
 do `profile.yaml`. As demais páginas de candidato continuam negando 403 para
 quem não tem candidato.
+
+O currículo pode chegar em PDF já nesse formulário (#278), pelo mesmo
+`readCvPdf` (`src/core/pdf.ts`) do import do perfil existente: teto de 10 MB,
+tipo decidido pelos bytes (`%PDF-`) e não pelo MIME que o navegador declara, e
+mínimo de texto igual ao `CV_MIN`. A extração roda depois da guarda e dos campos
+baratos, e o texto só é gravado pelo `createOwnCandidate` — conta que já tem
+vínculo recebe `existing`, e o PDF não vira currículo de candidato nenhum.
 
 **Endereço público escolhido pelo candidato** — ✅ **22/09 (#235).** `/p/`
 lê `public_slug`, nunca o `slug` interno, e continua passando por

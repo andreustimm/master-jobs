@@ -37,25 +37,19 @@ compartilhado — e aí a ADR 0009 se inverte, porque o motivo dela (processo
 minutos. Uma função serverless tem teto de duração, e o de 30 segundos declarado
 no `vercel.json` não é generoso — é o máximo do plano gratuito.
 
-A escolha feita: **o runner roda fora da Vercel.** O GitHub Actions
-(`varredura.yml`) aponta para o PostgreSQL de produção por secret e tem até
-seis horas por job; localmente, o mesmo worker aponta para a instância Docker
-isolada. Nenhuma captura longa fica presa ao limite de uma função.
+A escolha feita ([ADR 0025](../adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)):
+**o trabalho é fatiado.** `/api/cron/varredura?fatia=…` faz, por chamada, o que
+cabe em 20 s — algumas fontes do sync, uma onda de capturas, um lote de
+reconferência, as capturas por termo, a nota dos candidatos devidos — e o
+`pg_cron` do Supabase a chama a cada poucos minutos. Reserva por fonte e por
+candidato (`sweep_lease`) impede que duas chamadas sobrepostas façam o mesmo
+trabalho. O GitHub Actions (`varredura.yml`) continua como rede de segurança;
+localmente, os comandos `jho` de sempre rodam contra a instância Docker.
 
-O cron da Vercel que chamava `/api/cron/recheck` com um lote pequeno saiu de
-`vercel.json`: dois agendadores sobre a mesma fila dobravam a leitura do banco
-e as requisições a terceiros sem que um soubesse do outro (B-11). A rota
-continua, protegida por `CRON_SECRET` e pela política de ingestão, para uma
-chamada manual; nada a agenda. `tests/workflow-environment-isolation.test.ts`
-exige exatamente um agendador de `jobs recheck`.
-
-A repontuação de candidato é a exceção que **roda** na Vercel, porque cabe:
-cada ação que salva currículo pontua uma fatia de até 20 s no `after()`, e
-`/api/cron/score` continua o que sobrou, pelo mesmo segredo. `vercel.json`
-segue sem `crons` — o plano só agenda uma vez por dia; quem vai chamar a rota a cada
-poucos minutos é o `pg_cron` do Supabase (#281, **ainda não agendado**). Ver
-[ADR 0025](../adr/0025-fila-de-repontuacao-em-fatias-na-web.md) e o contrato em
-[operations.md](../operations.md#repontuação-de-candidato-fatias-na-web).
+A Vercel continua sem cron próprio em `vercel.json` (1×/dia no Hobby não serve).
+`/api/cron/recheck` segue para chamada manual. Há sempre **um** agendador da
+reconferência ativo: o `pg_cron`, ou o Actions até a troca —
+`tests/workflow-environment-isolation.test.ts` confere as duas pontas.
 
 ### 3. `profile.yaml` e `sources.yaml` são lidos do disco em runtime
 
@@ -65,7 +59,9 @@ o acesso dinâmico ao sistema de arquivos "causa o rastreamento do projeto
 inteiro" — é como eles acabam incluídos, e é frágil.
 
 `JHO_PROFILE_PATH` e `JHO_SOURCES_PATH` existem e permitem apontar para outro
-lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
+lugar. Enquanto os dois arquivos forem versionados, o padrão funciona. A rota
+da varredura fatiada não depende da sorte: `next.config.ts` inclui
+`config/sources.yaml` explicitamente no pacote de `/api/cron/varredura`.
 
 ## Variáveis
 
@@ -79,7 +75,9 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 | `SUPABASE_CRAWL_ENABLED` | Actions produção | `true` somente após os gates de quota/retensão |
 | `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela ou sem `RESEND_FROM`, nada é enviado e o log só alerta |
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |
-| `CRON_SECRET` | Vercel | protege `/api/cron/recheck` (só chamada manual) e `/api/cron/score` (fatia da repontuação, que o agendador da #281 vai chamar), com `authorization: Bearer <segredo>` |
+| `CRON_SECRET` | Vercel **e** Supabase Vault (`jho_cron_secret`) | protege toda rota de `/api/cron/` (`authorization: Bearer <segredo>`); o `pg_cron` o lê do Vault para chamar `/api/cron/varredura`. Os dois valores precisam ser iguais |
+| `JHO_SOURCE_ALLOWLIST` | Vercel produção **e** Actions | declaração exigida pela política de ingestão (ADR 0021); sem ela as fatias de rede respondem 503 |
+| `VARREDURA_AGENDADOR` | variável de repositório (Actions) | `supabase` depois da troca de agendador: o disparo agendado de `varredura.yml` deixa de rodar ([ADR 0025](../adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)) |
 | `SENTRY_DSN` | Vercel | relato de erro do servidor; **sem ela nada é enviado** ([detalhe](#relato-de-erro)) |
 | `SENTRY_TRACES_SAMPLE_RATE` | Vercel (opcional) | fração de requisições com trace; ausente = `0.1`, `0` ou valor ilegível desliga ([detalhe](#tracing)) |
 | `SENTRY_AUTH_TOKEN` | Vercel, **só build** | publica os mapas de origem do servidor; sem ela o build segue sem mapas ([detalhe](#mapas-de-origem)) |
@@ -262,19 +260,19 @@ queue`+`run` e `jobs recheck queue`+`run` contra **produção**, todo dia às
 06:00 UTC (03:00 em São Paulo), com `workflow_dispatch` para rodar à mão depois
 de mexer em `config/sources.yaml`.
 
-**Por que no GitHub e não na Vercel.** `/api/cron/recheck` processa 25 vagas
-por chamada, porque o teto de função no plano gratuito é de 30 segundos. Com 427
-vagas elegíveis (fit ≥ 55, abertas, com URL), um cron diário nela levava ~17
-dias para dar a volta — enquanto `enqueueStale` declara a meta de reconferir a
-cada 7. Não por defeito: por teto.
-
-E a **busca** não roda lá de jeito nenhum: `jobs sync` e `scrape run` não têm
-rota de API. Um runner do GitHub tem 6 horas por job, e é a mesma tarefa num
-lugar onde ela cabe. Por isso a varredura é o **único** agendador da
-reconferência: o cron da Vercel foi removido de `vercel.json`, e
-`tests/workflow-environment-isolation.test.ts` exige `crons` vazio e exatamente
-um workflow agendado rodando `jobs recheck` — mudar o dono é mudar esse teste
-junto.
+**Agora é rede de segurança.** Desde a
+[ADR 0025](../adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md), a
+varredura de verdade roda na Vercel, fatiada e agendada pelo `pg_cron` do
+Supabase — a ~57 minutos por execução daqui (runner nos EUA, banco em São
+Paulo), o Actions não chegaria a "de hora em hora". Até a troca ser ativada
+([runbook](../operations.md#varredura-horária-ativar-o-agendador)), a execução
+diária continua como sempre. Depois dela, a variável de repositório
+`VARREDURA_AGENDADOR=supabase` faz o disparo agendado não rodar nada; o
+`workflow_dispatch` continua, e é o caminho de volta se a Vercel parar.
+`tests/workflow-environment-isolation.test.ts` exige `crons` vazio no
+`vercel.json`, a reconferência agendada uma única vez no SQL do `pg_cron` e o
+disparo agendado do Actions condicionado à variável — mudar o dono é mudar esse
+teste junto.
 
 Só produção é varrida. `dev` e `staging` existem para exercitar código, não para
 acumular acervo — varrer os três triplicaria as requisições contra APIs de

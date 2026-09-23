@@ -13,6 +13,77 @@
 > não os execute literalmente. Para a operação atual, prefira os comandos
 > `jho` e as rotinas de `docs/engineering/deploy.md`.
 
+## Varredura horária: ativar o agendador
+
+Desde a [ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)
+a varredura roda na Vercel em fatias: `GET /api/cron/varredura?fatia=<nome>`,
+com `sync`, `termos`, `captura`, `reconferencia`, `pontuar` e `repontuar`. Cada chamada faz o
+que cabe em 20 s, grava uma linha em `production.sweep_run` e devolve o
+relatório em JSON. Quem chama é o `pg_cron` do Supabase — e ligá-lo é **passo
+humano**, uma vez, depois de o código estar em produção (a migração
+`0016_sweep_lease_and_runs` aplicada):
+
+1. **Vercel, produção.** O valor de uma variável *Sensitive* não volta pela API,
+   então gere um segredo novo e cadastre (ou substitua) `CRON_SECRET`:
+   `openssl rand -hex 32`, depois `vercel env rm CRON_SECRET production` e
+   `vercel env add CRON_SECRET production` (marcar como Sensitive). Confira
+   também `JHO_SOURCE_ALLOWLIST` em produção — o mesmo valor da variável do
+   Actions; sem ela as fatias de rede respondem 503 por política (ADR 0021).
+   `JHO_USER_AGENT` é recomendado (`master-jobs/0.1 (+https://jobs.mastertimm.com.br)`).
+   Redeploy de produção para as variáveis valerem.
+2. **Fumaça.** Sem cabeçalho a rota recusa; com ele, a fatia que não toca
+   terceiros responde:
+   `curl -s -o /dev/null -w '%{http_code}\n' "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=pontuar"` → `401`;
+   `curl -s -H "authorization: Bearer $CRON_SECRET" "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=pontuar"` → JSON com `durationMs`.
+3. **Um agendador por vez.** Imediatamente antes de rodar o SQL do passo
+   seguinte, desligue o disparo agendado do Actions:
+   `gh variable set VARREDURA_AGENDADOR --body supabase --repo andreustimm/master-jobs`.
+   O disparo manual e a tela de operações continuam. Se o passo 4 falhar,
+   `gh variable delete VARREDURA_AGENDADOR --repo andreustimm/master-jobs`
+   devolve a execução diária.
+4. **Supabase, SQL Editor do projeto de produção.** Habilite `pg_cron` e
+   `pg_net` (Integrations, ou as linhas `create extension` do arquivo), grave os
+   dois segredos no Vault — o **mesmo** valor do passo 1:
+   `select vault.create_secret('<CRON_SECRET>', 'jho_cron_secret');`
+   `select vault.create_secret('https://jobs.mastertimm.com.br', 'jho_cron_base_url');`
+   e rode [`supabase/cron/varredura.sql`](../supabase/cron/varredura.sql). O
+   arquivo é idempotente: rodar de novo só atualiza.
+5. **Conferir em minutos.**
+   `select jobname, schedule, active from cron.job where jobname like 'jho-varredura-%';`
+   e `select status_code, count(*) from net._http_response where created > now() - interval '15 minutes' group by 1;`
+   — tudo `200`. (`pg_net` só guarda respostas por 6 h.)
+
+**Prova de 24 h** (a entrega da #281). Toda fonte com intervalo ≤ 60 min e
+nenhuma chamada perto do teto:
+
+```sql
+with s as (
+  select unit, started_at::timestamptz as at,
+         lag(started_at::timestamptz) over (partition by unit order by started_at) as antes
+  from production.sweep_run
+  where slice = 'sync' and unit is not null
+    and started_at::timestamptz > now() - interval '24 hours'
+)
+select unit, count(*) as syncs, max(at - antes) as maior_intervalo
+from s group by unit order by maior_intervalo desc nulls first;
+
+select slice, count(*) as chamadas, max(duration_ms) as mais_lenta_ms, sum(errors) as erros
+from production.sweep_run
+where unit is null and started_at::timestamptz > now() - interval '24 hours'
+group by slice;
+```
+
+`duration_ms` mede o trabalho dentro da função; o teto de 30 s da plataforma se
+confere nos logs da Vercel (nenhum `FUNCTION_INVOCATION_TIMEOUT` em
+`/api/cron/varredura`) e no painel *Usage*, que também diz se a cadência cabe
+no plano. Fonte ausente da primeira consulta não sincronizou nas 24 h — o
+alarme "fonte há mais de 2 h sem sync" (log da função e Sentry, uma vez por
+hora) já deveria tê-la apontado.
+
+**Desfazer:** `select cron.unschedule(jobname) from cron.job where jobname like 'jho-varredura-%';`
+e `gh variable delete VARREDURA_AGENDADOR --repo andreustimm/master-jobs` — a
+execução diária do Actions volta a valer na manhã seguinte.
+
 ## Pedir manutenção pela interface — `/admin/operacoes`
 
 Tela de administrador com um botão por rotina: varredura inteira, buscar vagas
@@ -44,36 +115,35 @@ o acervo.
 
 ## Repontuação de candidato: fatias na web
 
-Candidato que salva o currículo não espera a varredura: a
-ação enfileira em `score_task` e roda **uma fatia** da fila no `after()`, depois
-da resposta. Uma fatia tem orçamento de `SCORE_SLICE_MS` (20 s), conferido entre dois
-lotes — pode passar dele por um lote e uma página de leitura, e cabe no teto
-de 30 s da função; o que não couber volta à fila sem gastar
-tentativa ([ADR 0025](adr/0025-fila-de-repontuacao-em-fatias-na-web.md);
-mecânica em [`scoring.md`](scoring.md#quando-a-nota-é-calculada-a-fila-e-as-fatias)).
+Candidato que salva o currículo não espera a varredura: a ação enfileira em
+`score_task` e roda **uma fatia** da fila no `after()`, depois da resposta. A
+fatia tem orçamento de `SCORE_SLICE_MS` (20 s), conferido entre dois lotes —
+pode passar dele por um lote e uma página de leitura, e cabe no teto de 30 s da
+função; o que não couber volta à fila sem gastar tentativa
+([ADR 0026](adr/0026-fila-de-repontuacao-em-fatias-na-web.md); mecânica em
+[`scoring.md`](scoring.md#quando-a-nota-é-calculada-a-fila-e-as-fatias)).
 
-A continuação é a rota por segredo, que um agendador externo chama a cada poucos
-minutos (#281 — `pg_cron` + `pg_net` no Supabase; **ainda não agendado**
-enquanto a #281 não entrar). Até lá, o que sobra de uma fatia espera a próxima
-ação do candidato ou a varredura diária (`jho jobs rescore run`).
+A continuação é a fatia **`repontuar`** da varredura (`GET
+/api/cron/varredura?fatia=repontuar`, mesmo `CRON_SECRET`, mesma borda
+`cronDenied`, métrica em `sweep_run`), agendada a cada dois minutos em
+`supabase/cron/varredura.sql` (`jho-varredura-repontuar`). Ela não consulta a
+política de ingestão: só grava nota no banco do próprio ambiente. O relatório
+traz `items` (tarefas concluídas), `errors` e `detail: { scored, deferred,
+pending }` — `pending > 0` quer dizer que ainda há fila; o agendador não
+decide nada com isso, chama no próximo ciclo de qualquer jeito.
 
-**Contrato de `/api/cron/score`:**
+A fatia `pontuar` continua existindo e é outra coisa: repassa todo candidato de
+dez em dez minutos para as vagas novas. Ela não conclui a tarefa da fila nem
+registra a recusa — e é a tarefa que a tela de candidato lê.
 
-| | |
-|---|---|
-| Método | `GET` |
-| Autenticação | `authorization: Bearer <CRON_SECRET>` — o mesmo segredo de `/api/cron/recheck`; 503 sem ele configurado, 401 errado |
-| Trabalho | uma fatia de `runScoreQueue` (≤ 20 s de pontuação; a função tem `maxDuration` 30 s) |
-| Resposta 200 | `{ processadas, pontuadas, falhas, adiadas, interrompida, pendentes }` |
-| Idempotência | chamar de novo é sempre seguro: reivindicação atômica, fatia interrompida volta a `pending` sem tentativa, nota gravada não é refeita |
-| Timeout de quem chama | ≥ 30 s (`pg_net`: `timeout_milliseconds := 30000`); a resposta só sai no fim da fatia |
-
-`pendentes > 0` ou `interrompida: true` quer dizer "ainda há trabalho"; o
-agendador não precisa ler isso para decidir nada — ele chama no próximo ciclo
-de qualquer jeito. Chamada à mão:
+**Ativar.** O agendamento entra junto com as outras fatias ao reaplicar
+`supabase/cron/varredura.sql` no SQL Editor de produção (idempotente; passo 4
+de "Varredura horária: ativar o agendador" acima). Enquanto não for
+reaplicado, o que sobra da fatia do `after()` espera a próxima ação do
+candidato ou `jho jobs rescore run`. À mão:
 
 ```bash
-curl -sS -H "authorization: Bearer $CRON_SECRET" https://jobs.mastertimm.com.br/api/cron/score
+curl -sS -H "authorization: Bearer $CRON_SECRET" "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=repontuar"
 ```
 
 **Diagnóstico.** `jho jobs rescore status` conta a fila por estado. Tarefa em
@@ -144,8 +214,10 @@ sinais:
 > **Invariante:** ausência só fecha vaga quando a fonte listou tudo o que tem.
 > Janela parcial nunca fecha por ausência, e lista vazia não fecha nada nem em
 > fonte completa (`decideAbsenceClosure()` em `src/core/ingest/lifecycle.ts`).
-> A reconferência agendada tem um único dono, a varredura do GitHub; a Vercel
-> não agenda nada.
+> A reconferência agendada tem um único dono por vez: o `pg_cron` do Supabase
+> depois da troca de agendador, o GitHub Actions diário até ela
+> ([ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)).
+> A Vercel não tem cron próprio.
 
 > **Invariante:** Uma fonte que falha é registrada e pulada, nunca aborta a run.
 > O `try/catch` de `syncOne()` grava `source.lastStatus = 'error'` e

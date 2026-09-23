@@ -31,8 +31,11 @@ const config: NextConfig = {
 
   // The CA certificate is selected by path at runtime. Changelogs are compiled
   // before Next builds and enter the server bundle through a static import.
+  // `sources.yaml` is read by path too: the sweep slices (ADR 0025) sync from
+  // it inside the function, and a missing file there is a sweep that does nothing.
   outputFileTracingIncludes: {
     "/**": ["./config/certs/supabase-ca.crt"],
+    "/api/cron/varredura": ["./config/sources.yaml"],
   },
 
   // Both candidate CVs and manual job descriptions accept files up to 10 MB.

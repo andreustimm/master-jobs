@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
+import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetClock, setClock } from "../src/core/clock.ts";
 import { createUser, type Session } from "../src/contexts/auth/index.ts";
@@ -55,12 +56,13 @@ vi.mock("next/server", async (original) => ({
   ...(await original<typeof import("next/server")>()),
   after: (callback: () => Promise<void> | void) => void state.after.push(callback),
 }));
-vi.mock("../src/core/pdf.ts", () => ({
-  extractPdfText: async () => ({ text: state.pdfText, pages: 1 }),
+vi.mock("../src/core/pdf.ts", async (original) => ({
+  ...(await original<typeof import("../src/core/pdf.ts")>()),
+  readCvPdf: async () => ({ ok: true, text: state.pdfText, label: "cv" }),
 }));
 
 const actions = await import("../app/candidate/actions.ts");
-const { GET } = await import("../app/api/cron/score/route.ts");
+const { GET } = await import("../app/api/cron/varredura/route.ts");
 
 let db: DB;
 
@@ -308,7 +310,7 @@ describe("toda entrada de currículo enfileira E pontua depois da resposta", () 
     await esperarTrilhaENotas(id);
   });
 
-  it("criar o perfil com currículo (createProfileAction)", async () => {
+  async function sessaoDeContaNova(): Promise<number> {
     const { id: userId } = await createUser({ email: "maria@local.test", roles: ["candidate"] });
     state.session = {
       userId,
@@ -320,11 +322,26 @@ describe("toda entrada de currículo enfileira E pontua depois da resposta", () 
       linkedCandidateIds: [],
       impersonatedBy: null,
     } satisfies Session;
+    return userId;
+  }
 
-    expect(await actions.createProfileAction(form({ name: "Maria Souza", cv: CURRICULO }))).toEqual({ ok: true });
-
+  async function candidatoDaConta(userId: number): Promise<number> {
     const [conta] = await db.select({ candidateId: authUser.candidateId }).from(authUser).where(eq(authUser.id, userId));
-    await esperarTrilhaENotas(conta!.candidateId!);
+    return conta!.candidateId!;
+  }
+
+  it("criar o perfil colando o currículo (createProfileAction)", async () => {
+    const userId = await sessaoDeContaNova();
+    expect(await actions.createProfileAction(form({ name: "Maria Souza", cv: CURRICULO }))).toEqual({ ok: true });
+    await esperarTrilhaENotas(await candidatoDaConta(userId));
+  });
+
+  it("criar o perfil enviando o PDF (createProfileAction, #278)", async () => {
+    const userId = await sessaoDeContaNova();
+    state.pdfText = CURRICULO;
+    const pdf = new File(["%PDF"], "cv.pdf", { type: "application/pdf" });
+    expect(await actions.createProfileAction(form({ name: "Maria Souza", cvFile: pdf }))).toMatchObject({ ok: true });
+    await esperarTrilhaENotas(await candidatoDaConta(userId));
   });
 
   it("currículo fraco não fica mudo: a fatia roda e a tela recebe o motivo", async () => {
@@ -371,49 +388,42 @@ describe("toda entrada de currículo enfileira E pontua depois da resposta", () 
   });
 });
 
-describe("a rota por segredo que o agendador chama", () => {
-  function pedido(authorization?: string): Request {
-    return new Request("https://exemplo.test/api/cron/score", {
+describe("a fatia `repontuar` que o agendador chama", () => {
+  function pedido(authorization?: string): NextRequest {
+    return new NextRequest("https://exemplo.test/api/cron/varredura?fatia=repontuar", {
       headers: authorization ? { authorization } : {},
     });
   }
 
-  it("fechada sem segredo configurado, e recusa segredo errado", async () => {
-    expect((await GET(pedido("Bearer qualquer") as never)).status).toBe(503);
+  it("recusada não trabalha: a tarefa segue esperando", async () => {
     process.env.CRON_SECRET = "segredo-de-verdade";
-    expect((await GET(pedido() as never)).status).toBe(401);
-    expect((await GET(pedido("Bearer segredo") as never)).status).toBe(401);
-    expect((await GET(pedido("segredo-de-verdade") as never)).status).toBe(401);
-    // Recusada não trabalha: a tarefa segue esperando.
     const id = await criarCandidato("maria");
     await enqueueScore(id);
-    await GET(pedido("Bearer outro") as never);
+
+    expect((await GET(pedido("Bearer outro"))).status).toBe(401);
     expect((await tarefaDe(id))!.status).toBe("pending");
   });
 
-  it("com o segredo, roda uma fatia e diz o que fez e o que falta", async () => {
+  it("com o segredo, drena a fila e diz o que fez e o que falta; chamar de novo é seguro", async () => {
     await seedCatalog();
     await semearVagas(3);
     const id = await criarCandidato("maria");
     await saveDocument({ candidateId: id, label: "cv", content: CURRICULO });
     process.env.CRON_SECRET = "segredo-de-verdade";
 
-    const r = await GET(pedido("Bearer segredo-de-verdade") as never);
+    const r = await GET(pedido("Bearer segredo-de-verdade"));
 
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({
-      processadas: 1,
-      pontuadas: 3,
-      falhas: 0,
-      adiadas: 0,
-      interrompida: false,
-      pendentes: 0,
+    expect(await r.json()).toMatchObject({
+      slice: "repontuar",
+      items: 1,
+      errors: 0,
+      detail: { scored: 3, deferred: 0, pending: 0 },
     });
-    // Chamar de novo é seguro: fila vazia, nada refeito.
-    expect(await (await GET(pedido("Bearer segredo-de-verdade") as never)).json()).toMatchObject({
-      processadas: 0,
-      pontuadas: 0,
-      pendentes: 0,
+    expect(await tarefaDe(id)).toMatchObject({ status: "done", scored: 3 });
+    expect(await (await GET(pedido("Bearer segredo-de-verdade"))).json()).toMatchObject({
+      items: 0,
+      detail: { scored: 0, pending: 0 },
     });
     expect(await notasDe(id)).toBe(3);
   });

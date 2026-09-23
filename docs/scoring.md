@@ -91,6 +91,23 @@ entre `architect` e `senior_ic` no título compra 9.
 >
 > Um teto tem uso real: procurar entre 55 e 70 encontra a vaga que o scorer
 > achou boa mas não ótima, que é onde costuma estar o que ele não sabe medir.
+>
+> **Vaga sem nota passa pela faixa.** A nota é do candidato da sessão e só
+> existe depois que a fila de repontuação roda para ele. Até lá, a vaga não tem
+> linha em `job_score` e o filtro de Score não a corta: `fit is null or fit >=
+> mínimo` e `fit is null or fit <= máximo`. Ler a ausência como nota zero
+> (`coalesce(fit, 0)`, que segue sendo o modo estrito) deixava o candidato
+> recém-criado com o quadro e o cockpit vazios sob o corte padrão de 45 (#279,
+> regra 8). A ordenação por
+> aderência continua levando as sem nota para o fim. Enquanto o candidato não
+> tem nenhuma nota na trilha principal, `/jobs` e o cockpit mostram o aviso
+> `filterNotices.scores_pending`. Para o acervo sem escopo de candidato
+> (recrutador) nada muda: o filtro de Score não se aplica.
+>
+> Isso vale para as telas (`/jobs`, cockpit, `/api/export`), que pedem
+> `keepUnscored` ao montar os filtros. Relatório (`jho report`), `jho jobs list
+> --min-fit` e a varredura de triagem continuam estritos: a pergunta deles é
+> "vagas com nota acima de X", e vaga sem nota não responde a ela.
 
 Arredondamento: cada componente e o `fit` vão para 1 casa decimal (`Math.round(x * 10) / 10`), mas o `fit` é calculado **sobre os valores não arredondados**. Por isso as colunas do `jobs show` podem não somar exatamente o `fit` (ver o exemplo Paires adiante). `penalty` é gravado inteiro, sem arredondamento.
 
@@ -715,12 +732,12 @@ mexer em trilha **enfileiram** a repontuação do candidato em `score_task` — 
 linha por candidato, idempotente. Quem consome a fila
 (`runScoreQueue`, em `src/core/scoring/queue.ts`) primeiro deriva o perfil
 (`ensureMatchingProfile`, que cria a trilha principal) e depois roda
-`scoreAll`. São três consumidores do mesmo código ([ADR 0025](adr/0025-fila-de-repontuacao-em-fatias-na-web.md)):
+`scoreAll`. São três consumidores do mesmo código ([ADR 0026](adr/0026-fila-de-repontuacao-em-fatias-na-web.md)):
 
 | Quem | Quando | Orçamento |
 |---|---|---|
 | `after()` da ação que salvou o currículo (não as de trilha) | logo depois da resposta | uma fatia (`SCORE_SLICE_MS`, 20 s) |
-| `GET /api/cron/score` | chamada pelo agendador externo (#281) ou à mão | uma fatia |
+| fatia `repontuar` de `/api/cron/varredura` | a cada 2 min pelo `pg_cron` ([ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)) ou à mão | uma fatia |
 | `jho jobs rescore run` (varredura diária, CLI) | uma vez por dia / à mão | sem prazo, drena tudo |
 
 A fatia pega a tarefa do topo da fila (prioridade, depois ordem de chegada),
@@ -732,8 +749,12 @@ em ordem de id, grava em lotes de cem e confere o prazo **depois** de cada lote.
 Vencido, devolve `complete: false`; a fila põe a tarefa de volta em `pending`
 **sem** contar tentativa e com a soma das notas já gravadas em `scored`. A
 fatia seguinte recomeça pelo que ainda está desatualizado — o que foi gravado
-saiu do filtro de staleness, então nada é refeito. Toda fatia avança pelo menos
-um lote, mesmo chamada com o prazo vencido.
+saiu do filtro de staleness, então nada é refeito. O prazo só interrompe depois
+de a execução ter gravado algo: uma página inteira fora do alvo de uma trilha
+aceita não grava nada, e parar nela repetiria a mesma página a cada fatia.
+
+A fatia `pontuar` da varredura é outra coisa: repassa todo candidato a cada dez
+minutos para as vagas novas, sem tocar em `score_task`.
 
 **Recusa.** Quando a derivação recusa, a tarefa termina `done` com o código em
 `last_error` e nenhuma nota é gravada. A tela de candidato mostra o estado

@@ -9,11 +9,10 @@
   `after()` (`scoreAfterResponse`, `SCORE_SLICE_MS` = 20 s). `scoreAll` aceita
   `deadline`: lê em páginas por id, confere o prazo depois de cada lote e
   devolve `complete: false`; `runScoreQueue({ budgetMs })` devolve a tarefa a
-  `pending` sem gastar tentativa e soma `scored` entre as fatias. Nova rota
-  `GET /api/cron/score` (`CRON_SECRET`, mesma função de `/api/cron/recheck`,
-  agora em `app/api/cron/authorize.ts`) roda uma fatia e responde
-  `{ processadas, pontuadas, falhas, adiadas, interrompida, pendentes }` para o
-  agendador `pg_cron` da #281. `vercel.json` segue sem `crons`. ADR 0025.
+  `pending` sem gastar tentativa e soma `scored` entre as fatias. Nova fatia
+  `repontuar` em `/api/cron/varredura` drena `score_task` com o orçamento da
+  chamada (`detail: { scored, deferred, pending }`), agendada a cada 2 min em
+  `supabase/cron/varredura.sql` (`jho-varredura-repontuar`). ADR 0026.
 - A derivação que recusa (`sem-curriculo`, `curriculo-fraco`,
   `catalogo-vazio`) aparecia como `failed`; `scoreQueueDisplay` devolve
   `refused` com `reason` (`noCv`, `weakCv`, `emptyCatalog`), e o cartão da

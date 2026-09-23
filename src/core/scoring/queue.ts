@@ -261,27 +261,15 @@ export async function runScoreQueue(
 }
 
 /**
- * Orçamento de uma fatia na web: o `after()` de quem salvou o currículo e a
- * rota `/api/cron/score` que o agendador chama.
+ * Orçamento da fatia no `after()` de quem salvou o currículo.
  *
  * A função serverless morre em 30 s (`vercel.json`), e o prazo só é conferido
  * entre dois lotes — a fatia passa dele por até um lote e uma página de leitura.
  * No `after()` o relógio da função já correu durante a própria ação (ler um
- * PDF, gravar o documento), então 20 s deixa folga para as duas coisas.
+ * PDF, gravar o documento), então 20 s deixa folga para as duas coisas. É o
+ * mesmo orçamento da varredura fatiada (`SWEEP_BUDGET_MS`).
  */
 export const SCORE_SLICE_MS = 20_000;
-
-export type ResultadoFatia = ResultadoFila & {
-  /** Tarefas esperando depois da fatia — o agendador sabe se ainda há trabalho. */
-  pendentes: number;
-};
-
-/** Uma fatia da fila dentro do teto da web, com o que ficou para a próxima. */
-export async function runScoreSlice(worker: string): Promise<ResultadoFatia> {
-  const resultado = await runScoreQueue({ budgetMs: SCORE_SLICE_MS, worker });
-  const contagem = await scoreQueueStatus();
-  return { ...resultado, pendentes: contagem.pending ?? 0 };
-}
 
 /** O que a tela mostra sem precisar do trabalhador. */
 export async function scoreQueueStatus(candidateId?: number): Promise<Record<string, number>> {

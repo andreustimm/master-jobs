@@ -19,5 +19,6 @@ overlaps: PROF-create-own-profile; PROF-rescore-status-visibility
 Comportamento novo da #280: a fatia de repontuação roda no `after()` da ação que
 salvou o currículo, sem esperar a varredura diária. Conferir com currículo real
 (com skills do catálogo) e acervo de produção: a primeira fatia cria a trilha
-principal; o que não couber em 20 s continua em `/api/cron/score` (agendador da
-#281) — sem ele, anotar quanto tempo levou até Atualizado.
+principal; o que não couber em 20 s continua na fatia `repontuar` da varredura
+(`pg_cron` a cada 2 min) — sem o agendamento aplicado, anotar quanto tempo levou
+até Atualizado.

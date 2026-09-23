@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { runScoreSlice } from "../src/core/scoring/queue.ts";
+import { runScoreQueue, SCORE_SLICE_MS } from "../src/core/scoring/queue.ts";
 
 /**
  * Roda uma fatia da fila de repontuação depois da resposta.
@@ -7,7 +7,7 @@ import { runScoreSlice } from "../src/core/scoring/queue.ts";
  * Quem acabou de salvar o currículo não espera o acervo ser pontuado, mas
  * também não espera a varredura do dia seguinte: a fatia começa assim que a
  * tela responde, dentro do teto da função (`SCORE_SLICE_MS`). O que não couber
- * fica na fila para a rota por segredo que o agendador chama.
+ * fica na fila para a fatia `repontuar` da varredura (`/api/cron/varredura`).
  *
  * Só as entradas de currículo agendam: editar trilha continua enfileirando e
  * esperando o consumidor da fila, porque a tela da trilha foi desenhada para
@@ -19,6 +19,6 @@ import { runScoreSlice } from "../src/core/scoring/queue.ts";
  */
 export function scoreAfterResponse(): void {
   after(async () => {
-    await runScoreSlice("web");
+    await runScoreQueue({ budgetMs: SCORE_SLICE_MS, worker: "web" });
   });
 }

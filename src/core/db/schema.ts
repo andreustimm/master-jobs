@@ -1000,6 +1000,49 @@ export const verifyTask = production.table(
 export type VerifyTask = typeof verifyTask.$inferSelect;
 export type VerifyStatus = "pending" | "checking" | "done" | "failed";
 
+/**
+ * Reserva de uma unidade da varredura fatiada (ADR 0025).
+ *
+ * `key` nomeia a unidade — `sync:<fonte>`, `pontuar:<candidato>`, `alarme:<nome>`.
+ * A reserva é um upsert condicional: só vence quem encontra a linha livre ou
+ * com a reserva vencida, então duas chamadas simultâneas da Vercel nunca
+ * sincronizam a mesma fonte.
+ *
+ * `last_claimed_at` não é limpo ao liberar, de propósito: uma fonte cuja função
+ * foi morta no meio nunca chega a `last_finished_at`, e é a tentativa que a
+ * manda para o fim da fila — sem isso ela seria a primeira de toda chamada e
+ * mataria todas.
+ */
+export const sweepLease = production.table("sweep_lease", {
+  key: text("key").primaryKey(),
+  claimedAt: text("claimed_at"),
+  claimedBy: text("claimed_by"),
+  lastClaimedAt: text("last_claimed_at"),
+  lastFinishedAt: text("last_finished_at"),
+});
+
+/**
+ * Uma execução da varredura fatiada: a métrica que prova a cadência.
+ *
+ * Uma linha por chamada (`unit` nulo) e uma por unidade processada dentro dela
+ * (`unit` = fonte ou candidato). Só números e identificadores de fonte ou de
+ * candidato — título, URL e texto de vaga nunca entram aqui.
+ */
+export const sweepRun = production.table(
+  "sweep_run",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    slice: text("slice").notNull(),
+    unit: text("unit"),
+    startedAt: text("started_at").notNull(),
+    durationMs: integer("duration_ms").notNull(),
+    items: integer("items").notNull().default(0),
+    errors: integer("errors").notNull().default(0),
+    error: text("error"),
+  },
+  (t) => [index("sweep_run_slice_started_idx").on(t.slice, t.startedAt)],
+);
+
 export const jobPage = production.table(
   "job_page",
   {
