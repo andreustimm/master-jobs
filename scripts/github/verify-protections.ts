@@ -8,11 +8,10 @@
  *
  * Contrato e reversão: docs/engineering/github-protections.md.
  */
-import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { REQUIRED_CI_JOBS } from "../release/promotion-ci.ts";
+import { REQUIRED_CI_JOBS, ghApi } from "../release/promotion-ci.ts";
 
 /** App "GitHub Actions": o GITHUB_TOKEN dos workflows age como esta integração. */
 export const GITHUB_ACTIONS_APP_ID = 15368;
@@ -172,11 +171,11 @@ export function compareRulesets(desired: Ruleset[], actual: Ruleset[]): string[]
     for (const rule of want.rules) {
       // A API acrescenta parâmetros novos com o tempo; só os declarados aqui
       // formam a política, e cada um precisa ter exatamente o valor desejado.
-      const found = haveRules.find((item) => item.type === rule.type)!;
-      const projected: Rule = { type: found.type };
+      const actualRule = haveRules.find((item) => item.type === rule.type)!;
+      const projected: Rule = { type: actualRule.type };
       if (rule.parameters) {
         projected.parameters = Object.fromEntries(Object.keys(rule.parameters)
-          .map((key) => [key, found.parameters?.[key]]));
+          .map((key) => [key, actualRule.parameters?.[key]]));
       }
       if (canonicalRule(rule) !== canonicalRule(projected)) problems.push(`${want.name}: parâmetros de ${rule.type} divergem`);
     }
@@ -199,25 +198,24 @@ export function compareEnvironment(desired: Environment, actual: Environment | n
   return problems;
 }
 
-function gh<T>(path: string): T {
-  return JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8" })) as T;
-}
-
 function readRulesets(repo: string): Ruleset[] {
-  const summaries = gh<Array<{ id: number; source_type: string }>>(`repos/${repo}/rulesets?per_page=100`);
+  const summaries = ghApi<Array<{ id: number; source_type: string }>>(`repos/${repo}/rulesets?per_page=100`);
   return summaries.filter((item) => item.source_type === "Repository")
-    .map((item) => gh<Ruleset>(`repos/${repo}/rulesets/${item.id}`));
+    .map((item) => ghApi<Ruleset>(`repos/${repo}/rulesets/${item.id}`));
 }
 
 function readEnvironment(repo: string): Environment | null {
   let environment: Omit<Environment, "branch_policies">;
   try {
-    environment = gh(`repos/${repo}/environments/${PRODUCTION_ENVIRONMENT}`);
-  } catch {
-    return null;
+    environment = ghApi(`repos/${repo}/environments/${PRODUCTION_ENVIRONMENT}`);
+  } catch (error) {
+    // Só o 404 é ausência; credencial vencida ou rede não podem virar
+    // "ambiente ausente" no diagnóstico.
+    if (String((error as { stderr?: unknown }).stderr ?? "").includes("HTTP 404")) return null;
+    throw error;
   }
   const policies = environment.deployment_branch_policy?.custom_branch_policies
-    ? gh<{ branch_policies: Array<{ name: string }> }>(`repos/${repo}/environments/${PRODUCTION_ENVIRONMENT}/deployment-branch-policies`)
+    ? ghApi<{ branch_policies: Array<{ name: string }> }>(`repos/${repo}/environments/${PRODUCTION_ENVIRONMENT}/deployment-branch-policies`)
       .branch_policies.map((policy) => policy.name)
     : [];
   return { ...environment, branch_policies: policies };

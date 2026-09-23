@@ -32,10 +32,12 @@ O que isso garante:
 - Nada entra em `main` por push direto. O admin recebe recusa
   `Changes must be made through a pull request`.
 - O CI de `main` não tem bypass para ninguém. Mesmo com `gh pr merge --admin`,
-  a mesclagem é recusada enquanto `qualidade` estiver pendente ou vermelho.
+  a mesclagem é recusada enquanto `qualidade` ou `schema-e-migracao` estiver
+  pendente ou vermelho.
 - O `GITHUB_TOKEN` não tem bypass em `main`. A PR de produção é aberta pelo robô,
-  e o autor não pode aprovar a própria PR. Por isso ela só entra depois da
-  aprovação de uma pessoa.
+  e o autor não pode aprovar a própria PR. Por isso ela só entra por ação de uma
+  pessoa: a aprovação, ou o bypass de admin dentro da PR, que dispensa a
+  aprovação e fica registrado em *Rule insights*. O fluxo normal é aprovar.
 
 ## O caminho humano
 
@@ -69,11 +71,28 @@ inclusive um de branch de trabalho, publicar produção sem ninguém. O job
    que consumiu e imprime a versão.
 2. Registre também a remoção dos fragmentos
    (`git add -A -- package.json CHANGELOG.md USER_CHANGELOG.pt-BR.md USER_CHANGELOG.en.md changelog.d`),
-   comite como `chore(release): X.Y.Z` e abra a PR para `main`. Ela tem CI
-   próprio porque foi empurrada por uma pessoa. Mescle-a com o bypass de PR.
-3. O push em `main` roda `sincronizar-apos-main.yml` de novo.
-   `versionar.ts` responde `already-released`, e o workflow cria a tag, a
-   GitHub Release e o retorno para `dev`.
+   comite como `chore(release): X.Y.Z` e empurre a branch.
+3. **Crie a tag antes de abrir a PR**, no commit de release:
+   `gh api repos/andreustimm/master-jobs/git/refs -f ref=refs/tags/vX.Y.Z -f sha=<SHA do chore(release)>`.
+   Sem ela, o CI da PR reprova. O gate de changelog lê o merge sintético da PR,
+   cuja mensagem começa com `Merge`, e não o `chore(release)`. Aí ele conta o
+   `fix:` do hotfix desde a tag anterior e tenta abrir X.Y.(Z+1) com o
+   `Unreleased` vazio (`release_changelog_not_ready`). Com a tag no commit, não
+   há commit releaseável depois dela e o gate responde `no-release`.
+4. Abra a PR para `main`. Ela tem CI próprio porque foi empurrada por uma
+   pessoa. Mescle com o bypass de PR e o método **merge** (`gh pr merge --merge --admin`).
+   *Squash* e *rebase* criam outro SHA, e a tag ficaria fora de `main`.
+   Se a PR for abandonada, apague a tag
+   (`gh api --method DELETE repos/andreustimm/master-jobs/git/refs/tags/vX.Y.Z`).
+5. O push em `main` roda `sincronizar-apos-main.yml` de novo.
+   `versionar.ts` responde `no-release` porque a tag já existe. O workflow
+   confirma a tag, cria a GitHub Release ausente e devolve `main` para `dev`.
+
+Esse caminho foi simulado num clone descartável em 23/09/2026. A base foi esta
+branch, com fragmentos. Sem a tag, o gate da PR reprova com
+`release_changelog_not_ready`. Com a tag, o gate da PR, o CI de push em `main`
+e o `versionar.ts` do sincronizador respondem `no-release`, e a tag fica
+alcançável a partir de `main`.
 
 A correção estrutural é o workflow abrir essa PR sozinho, em vez de empurrar.
 Ela fica registrada como pendência, fora desta entrega.
@@ -146,9 +165,12 @@ política de branch (reversão abaixo), sem mexer nos rulesets.
 
 ## Reverter
 
-O estado anterior está em
-[`task_02-antes.json`](../../.compozy/tasks/governanca-regras/evidencias/task_02-antes.json):
-nenhum ruleset e ambiente sem regra. Reverter é desligar, não reescrever.
+O estado anterior a 22/09/2026 era: nenhum ruleset, nenhuma proteção de branch
+e o ambiente `Production` com `can_admins_bypass: true`, sem
+`deployment_branch_policy` e sem regras de proteção. A coleta está em
+[`task_02-antes.json`](../../.compozy/tasks/governanca-regras/evidencias/task_02-antes.json),
+e o estado aplicado em `task_02-depois.json`, na mesma pasta. Reverter é
+desligar, não reescrever.
 Prefira `enforcement: disabled`, que preserva a definição e o histórico em
 *Rule insights*, a apagar:
 

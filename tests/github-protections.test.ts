@@ -12,6 +12,9 @@ const desired = desiredRulesets(REAL_BRANCHES);
 const covering = (branch: string, type: string) => desired.filter((set) =>
   set.conditions.ref_name.include.includes(`refs/heads/${branch}`) && set.rules.some((rule) => rule.type === type));
 const clone = (): Ruleset[] => structuredClone(desired);
+// Pelo tipo de regra, e não pela posição: reordenar os rulesets não pode
+// fazer um caso mutar o ruleset errado e continuar verde.
+const byType = (sets: Ruleset[], type: string) => sets.find((set) => set.rules.some((rule) => rule.type === type))!;
 
 describe("política desejada", () => {
   it.each(["main", "staging", "dev"])("%s não aceita exclusão nem force-push de ninguém", (branch) => {
@@ -79,9 +82,9 @@ describe("política desejada", () => {
 describe("comparação com o estado efetivo", () => {
   it("estado igual não diverge, mesmo com parâmetros extras que a API acrescenta", () => {
     const actual = clone();
-    actual[2]!.rules[0]!.parameters!.automatic_copilot_code_review_enabled = false;
-    actual[1]!.rules[0]!.parameters!.required_status_checks =
-      [...(actual[1]!.rules[0]!.parameters!.required_status_checks as unknown[])].reverse();
+    byType(actual, "pull_request").rules[0]!.parameters!.automatic_copilot_code_review_enabled = false;
+    byType(actual, "required_status_checks").rules[0]!.parameters!.required_status_checks =
+      [...(byType(actual, "required_status_checks").rules[0]!.parameters!.required_status_checks as unknown[])].reverse();
     expect(compareRulesets(desired, actual)).toEqual([]);
   });
 
@@ -91,17 +94,17 @@ describe("comparação com o estado efetivo", () => {
   });
 
   it.each([
-    ["enforcement desligado", (sets: Ruleset[]) => { sets[0]!.enforcement = "evaluate"; }, /enforcement/],
-    ["bypass a mais", (sets: Ruleset[]) => { sets[1]!.bypass_actors.push({ actor_id: GITHUB_ACTIONS_APP_ID, actor_type: "Integration", bypass_mode: "always" }); }, /bypass/],
-    ["branch a menos", (sets: Ruleset[]) => { sets[0]!.conditions.ref_name.include.pop(); }, /branches/],
-    ["exclusão de branch", (sets: Ruleset[]) => { sets[0]!.conditions.ref_name.exclude.push("refs/heads/main"); }, /branches/],
-    ["regra removida", (sets: Ruleset[]) => { sets[0]!.rules.pop(); }, /regras/],
+    ["enforcement desligado", (sets: Ruleset[]) => { byType(sets, "deletion").enforcement = "evaluate"; }, /enforcement/],
+    ["bypass a mais", (sets: Ruleset[]) => { byType(sets, "required_status_checks").bypass_actors.push({ actor_id: GITHUB_ACTIONS_APP_ID, actor_type: "Integration", bypass_mode: "always" }); }, /bypass/],
+    ["branch a menos", (sets: Ruleset[]) => { byType(sets, "deletion").conditions.ref_name.include.pop(); }, /branches/],
+    ["exclusão de branch", (sets: Ruleset[]) => { byType(sets, "deletion").conditions.ref_name.exclude.push("refs/heads/main"); }, /branches/],
+    ["regra removida", (sets: Ruleset[]) => { byType(sets, "deletion").rules.pop(); }, /regras/],
     ["check removido", (sets: Ruleset[]) => {
-      const parameters = sets[1]!.rules[0]!.parameters!;
+      const parameters = byType(sets, "required_status_checks").rules[0]!.parameters!;
       parameters.required_status_checks = (parameters.required_status_checks as unknown[]).slice(1);
     }, /parâmetros/],
-    ["modo estrito ligado", (sets: Ruleset[]) => { sets[1]!.rules[0]!.parameters!.strict_required_status_checks_policy = true; }, /parâmetros/],
-    ["aprovação zerada", (sets: Ruleset[]) => { sets[2]!.rules[0]!.parameters!.required_approving_review_count = 0; }, /parâmetros/],
+    ["modo estrito ligado", (sets: Ruleset[]) => { byType(sets, "required_status_checks").rules[0]!.parameters!.strict_required_status_checks_policy = true; }, /parâmetros/],
+    ["aprovação zerada", (sets: Ruleset[]) => { byType(sets, "pull_request").rules[0]!.parameters!.required_approving_review_count = 0; }, /parâmetros/],
   ])("%s diverge", (_label, mutate, expected) => {
     const actual = clone();
     mutate(actual);
