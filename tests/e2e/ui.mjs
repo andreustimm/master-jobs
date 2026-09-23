@@ -1148,10 +1148,20 @@ try {
   await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
   await page.reload({ waitUntil: "networkidle" });
   const englishQueueText = (await queuedStatus.textContent()) ?? "";
+  // Desde a #280 a fatia de repontuação roda logo depois de salvar, então o
+  // estado já pode ter passado de `pending`: o rótulo esperado é o do estado
+  // que está na tela, lido do atributo — nunca o rótulo português.
+  const englishQueueLabel = {
+    pending: "Queued",
+    scoring: "Scoring",
+    done: "Up to date",
+    failed: "Refresh failed",
+    refused: "Track not built",
+  }[(await queuedStatus.getAttribute("data-state")) ?? ""];
   check(
     "E2E-001 estado da fila usa o locale selecionado",
-    englishQueueText.includes("Ranking refresh") && englishQueueText.includes("Queued") &&
-      !englishQueueText.includes("candidate.queue"),
+    englishQueueText.includes("Ranking refresh") && englishQueueLabel !== undefined &&
+      englishQueueText.includes(englishQueueLabel) && !englishQueueText.includes("candidate.queue"),
     englishQueueText,
   );
 

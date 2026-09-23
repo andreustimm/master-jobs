@@ -266,6 +266,11 @@ com o limite da Vercel, só por chamada manual: nada a agenda. A varredura do
 GitHub Actions, onde os comandos longos cabem, é o único agendador da
 reconferência, e segue opt-in desde 03/09/2026.
 
+A fila de repontuação de candidato é a fatia `repontuar` de
+`/api/cron/varredura` (#280, ADR 0026), agendada em `supabase/cron/varredura.sql`
+com as outras; o agendamento só vale depois de o dono reaplicar o SQL em
+produção.
+
 > **Invariante:** A rota de cron não pode virar um segundo pipeline. Se ela
 > precisar de lógica que a CLI não tem, a lógica está no lugar errado — vai para
 > `src/core/`, e os dois chamadores compartilham.

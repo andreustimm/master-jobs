@@ -305,6 +305,12 @@ export async function runVerifyQueue(
     worker?: string;
     max?: number;
     delayMs?: number;
+    /**
+     * Teto de tempo da rodada. Antes de reivindicar a próxima, supõe que ela
+     * demora tanto quanto a mais lenta até aqui: começar uma sondagem que não
+     * cabe na função da Vercel deixaria a tarefa `checking` até o claim vencer.
+     */
+    budgetMs?: number;
     fetchImpl?: typeof fetch;
     lookupHost?: LookupHost;
     onProgress?: (done: number, verdict: ProbeVerdict, url: string) => void;
@@ -313,15 +319,26 @@ export async function runVerifyQueue(
   const worker = opts.worker ?? `verify-${process.pid}`;
   const max = opts.max ?? Number.POSITIVE_INFINITY;
   const result: RunResult = { checked: 0, gone: 0, alive: 0, inconclusive: 0 };
+  const started = clock().now();
+  let slowest = 0;
+  let attempted = 0;
 
   while (result.checked < max) {
+    if (opts.budgetMs !== undefined && attempted > 0 && clock().now() - started + slowest > opts.budgetMs) break;
     const task = await claimCheck(worker);
     if (!task) break;
+    const began = clock().now();
+    attempted++;
 
     try {
+      // Com teto, a sondagem não passa do que resta: uma que começou aos 19 s
+      // com o timeout padrão de 15 s terminaria depois do limite da função.
+      // Esgotado vira timeout, e timeout é inconclusivo — não fecha nada.
+      const left = opts.budgetMs === undefined ? undefined : Math.max(1_000, opts.budgetMs - (began - started));
       const { verdict, status } = await probe(task.url, {
         fetchImpl: opts.fetchImpl,
         lookupHost: opts.lookupHost,
+        timeoutMs: left === undefined ? undefined : Math.min(15_000, left),
       });
       await recordVerdict(task.id, task.jobId, verdict, status);
       result.checked++;
@@ -332,6 +349,8 @@ export async function runVerifyQueue(
     }
 
     if (opts.delayMs) await new Promise((r) => setTimeout(r, opts.delayMs));
+    // A pausa entra na medida: é tempo que a próxima também vai gastar.
+    slowest = Math.max(slowest, clock().now() - began);
   }
 
   return result;

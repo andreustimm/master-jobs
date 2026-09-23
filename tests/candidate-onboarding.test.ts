@@ -44,6 +44,9 @@ vi.mock("../app/auth", async () => {
   };
 });
 vi.mock("next/cache", () => ({ revalidatePath: () => undefined }));
+// A fatia de repontuação depois da resposta tem teste próprio
+// (`tests/score-slice.test.ts`); aqui só não pode estourar fora do Next.
+vi.mock("next/server", () => ({ after: () => undefined }));
 
 const { createProfileAction } = await import("../app/candidate/actions.ts");
 

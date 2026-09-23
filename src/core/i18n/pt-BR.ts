@@ -560,6 +560,10 @@ export const ptBR = {
     queueDone: "Ranking atualizado para {count} vagas.",
     queueFailedLabel: "Falha na atualização",
     queueFailed: "Não foi possível atualizar o ranking. Salve novamente ou tente mais tarde.",
+    queueRefusedLabel: "Trilha não montada",
+    queueRefusedNoCv: "Não há currículo salvo para montar a trilha principal. Cole o currículo ou importe o PDF nesta página — a pontuação começa ao salvar.",
+    queueRefusedWeakCv: "Seu currículo é curto demais ou não cita nenhuma competência que reconhecemos, então a trilha principal não foi montada e as vagas ficaram sem nota. Cole o currículo completo ou importe o PDF nesta página — a pontuação recomeça ao salvar.",
+    queueRefusedEmptyCatalog: "O catálogo de competências desta instalação está vazio, e sem ele nenhum currículo gera trilha. Não é o seu texto: avise quem administra o sistema.",
   },
   compare: {
     eyebrow: "ANÁLISE MANUAL",

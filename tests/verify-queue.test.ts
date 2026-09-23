@@ -4,6 +4,7 @@ import type { DB } from "../src/core/db/client.ts";
 import { candidate, company, job, jobScore, source, targetTrack, verifyTask } from "../src/core/db/schema.ts";
 import { classify } from "../src/core/ingest/probe.ts";
 import type { LookupHost } from "../src/core/remote-url.ts";
+import { fixedClock, resetClock, setClock } from "../src/core/clock.ts";
 import {
   claimCheck,
   enqueueStale,
@@ -341,6 +342,25 @@ describe("runVerifyQueue", () => {
     });
     expect(result.checked).toBe(2);
     expect((await verifyStats()).pending).toBe(1);
+  });
+
+  it("com teto de tempo, não começa a sondagem que não caberia (fatia da Vercel)", async () => {
+    // Cada sondagem "leva" 8 s no relógio de teste; com 20 s de teto, a
+    // terceira não começa (16 + 8 > 20) e fica na fila para a próxima chamada.
+    const relogio = fixedClock();
+    setClock(relogio);
+    try {
+      for (let i = 0; i < 4; i++) await enqueueVerify(await seedJob());
+      const lenta: typeof fetch = async (...args) => {
+        relogio.advance(8_000);
+        return fakeFetch(200)(...args);
+      };
+      const result = await runVerifyQueue({ fetchImpl: lenta, lookupHost: publicLookup, budgetMs: 20_000 });
+      expect(result.checked).toBe(2);
+      expect((await verifyStats()).pending).toBe(2);
+    } finally {
+      resetClock();
+    }
   });
 
   it("esvazia a fila e para", async () => {
