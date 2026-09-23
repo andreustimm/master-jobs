@@ -23,6 +23,10 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 - The system now measures how long each screen takes on a sample of visits, to catch slowness before it becomes a problem. What you search for, your filters, your résumé and your contact details are not part of that measurement.
 - Improvement tracking now marks each item as done when it reaches the published version.
+- On the Jobs screen and the home panel, changing page, sort order or pay
+  range responds faster: the filter counts are reused for up to a minute. When
+  the job catalog is updated, they may take up to a minute to reflect the change; the list and
+  the job total always show the current state.
 
 ## [1.22.1] - 2026-09-23T00:33:04.000Z
 

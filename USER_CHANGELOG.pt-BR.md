@@ -23,6 +23,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 - O sistema passa a medir quanto tempo cada tela leva, numa amostra das visitas, para achar lentidão antes que ela vire problema. O que você procura, seus filtros, seu currículo e seus dados de contato não fazem parte dessa medida.
 - O acompanhamento das melhorias passa a marcar cada item como concluído quando ele chega à versão publicada.
+- Na tela Vagas e no painel inicial, trocar de página, de ordenação ou de
+  faixa salarial responde mais rápido: as contagens dos filtros são
+  reaproveitadas por até um minuto. Quando o acervo é atualizado, elas podem
+  levar até um minuto para refletir a mudança; a lista e o total de vagas
+  mostram sempre o estado atual.
 
 ## [1.22.1] - 2026-09-23T00:33:04.000Z
 

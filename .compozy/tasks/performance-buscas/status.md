@@ -60,7 +60,7 @@ Ordem sugerida, e o que depende do quê. Cada uma é uma PR própria para `dev`.
 | 11 | Conjunto filtrado calculado uma vez | — | talvez (`group_key`) | não |
 | 12 | Busca por termo indexada | confirmar `pg_trgm` no Supabase | **sim** | não |
 | 17 ✅ | Régua de conexões por tela e `comVigia` em `/jobs` e `/` — entregue | — | não | QA de concorrência aprovado |
-| 14 | Cache de facetas com TTL | 11 e 12, **e medir antes** | não | não |
+| 14 🟡 | Cache de facetas com TTL — em `perf/cache-facetas` (#216) | 11 e 12, **e medir antes** | não | não |
 | 15 | `loading.tsx` + `Suspense` em `/jobs` | 14 | não | sim |
 | 6 🟡 | Overlay só na troca de rota — em `fix/overlay-troca-de-rota` (#220) | — | não | **sim** |
 | 16 | Filtros que se aplicam sozinhos, `staleTimes` | 12 e 14 | não | **sim** |
@@ -132,6 +132,10 @@ Esse commit já está em `main`; não reimplementar a tarefa a partir da nota an
 - **Sem `cacheComponents`** e **sem Redis** — decisões registradas em
   `performance-buscas.md`. Lógica em `src/contexts/matching/app` (regra 4).
 - Só faça depois de medir com o log por estágio em produção.
+- Em `perf/cache-facetas` (#216): mapa no processo, 60 s, 200 entradas,
+  invalidação por candidato na triagem e geral na vaga nova. O ganho em
+  produção ainda depende de `pnpm perf:producao` com sessão depois do deploy;
+  a primeira leitura (fria) não muda — ver `performance-buscas.md`.
 
 ### 6, 15, 16 — Percepção (mexe na interface)
 
