@@ -37,6 +37,21 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   com a mensagem certa (BUG-20260922-long-address-cut-silently,
   BUG-20260922-short-address-wrong-reason).
 
+### Melhorado
+
+- Facetas de `/jobs` e `/` com cache local no processo (#216):
+  `cachedBoardFacets` em `src/contexts/matching/app/board-facets.ts`, regra pura
+  em `domain/facet-cache.ts`. Chave canônica com candidato da sessão, todos os
+  filtros que a consulta recebe (cluster, termo, fontes, modalidade, trilha,
+  agrupamento, fit) e `SCORER_VERSION`; página, tamanho, ordenação, faixa
+  salarial, empresa e chips de recorte reaproveitam a entrada. Validade de
+  60 s, teto de 200 entradas (LRU), consulta reservada antes do `await` e
+  falha descartada. Triagem e funil invalidam as entradas do candidato; vaga
+  nova (`/jobs/new`, `/compare`) invalida todas. Sync, score e raspagem rodam
+  fora do processo e só a validade os cobre. `pnpm perf:jobs` mede a leitura
+  fria (comparável às anteriores) e a página 2 com cache: no padrão, 56 → 31 ms,
+  facetas 22 → 0 ms, 6 → 5 consultas.
+
 ## [1.22.0] - 2026-09-22
 
 ### Adicionado

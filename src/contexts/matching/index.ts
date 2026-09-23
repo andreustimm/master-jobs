@@ -134,6 +134,15 @@ export {
 } from "../../core/db/repo.ts";
 
 export {
+  FACET_CACHE_MAX_ENTRIES,
+  FACET_CACHE_TTL_MS,
+  cachedBoardFacets,
+  invalidateBoardFacets,
+  type BoardFacets,
+  type FacetQuery,
+} from "./app/board-facets.ts";
+
+export {
   ComparisonInputError,
   createManualComparison,
   getComparisonDetail,

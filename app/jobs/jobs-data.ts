@@ -1,5 +1,5 @@
 import {
-  boardFacets,
+  cachedBoardFacets,
   countHiddenByPayRange,
   listBoardPage,
   listCandidateTracks,
@@ -8,6 +8,7 @@ import {
   resolveClusterFilter,
   savedTermForBoard,
   trackScope,
+  type BoardFacets,
   type BoardFilters,
   type PayFilter,
   type SavedTermSummary,
@@ -28,7 +29,7 @@ export type JobsView = {
   notices: FilterNotice[];
   rows: Awaited<ReturnType<typeof listBoardPage>>["rows"];
   total: number;
-  facets: Awaited<ReturnType<typeof boardFacets>>;
+  facets: BoardFacets;
   /** Jobs the pay minimum hid (disclosed, comparable, below it). */
   hiddenByPayRange: number;
   /** Active tracks for the selector; empty without a candidate scope. */
@@ -143,8 +144,10 @@ export async function loadJobsView(input: {
   const { rows, total } = await stage("board", () =>
     listBoardPage(candidateId, { ...filters, limit: input.pageSize, offset: (input.page - 1) * input.pageSize }),
   );
+  // Com cache: paginar, reordenar ou trocar a faixa salarial não muda as
+  // facetas, e elas eram a leitura mais cara da tela. Ver `cachedBoardFacets`.
   const facets = await stage("facets", () =>
-    boardFacets(candidateId, {
+    cachedBoardFacets(candidateId, {
       minFit: state.fit,
       cluster,
       term: state.term,
@@ -155,7 +158,6 @@ export async function loadJobsView(input: {
       // contava grupos e os chips contavam publicações, e um chip podia mostrar
       // número maior que o total exibido ao lado dele.
       groupRepeats: filters.groupRepeats,
-      rates: fx,
     }),
   );
   // Os termos salvos só alimentam o seletor da tela — nenhum filtro depende

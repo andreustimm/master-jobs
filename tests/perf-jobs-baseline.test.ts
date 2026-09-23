@@ -18,7 +18,7 @@
 import { writeFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadJobsView } from "../app/jobs/jobs-data.ts";
-import { ensurePrimaryTrack, trackScope } from "../src/contexts/matching/index.ts";
+import { ensurePrimaryTrack, invalidateBoardFacets, trackScope } from "../src/contexts/matching/index.ts";
 import { candidate, fxRate, job, jobScore, source } from "../src/core/db/schema.ts";
 import { createStageTimer } from "../src/core/observability.ts";
 import type { DB } from "../src/core/db/client.ts";
@@ -94,7 +94,13 @@ const SCENARIOS: Scenario[] = [
   { name: "sem agrupar", params: { ungrouped: "1" } },
 ];
 
-async function measure(params: Record<string, string>, profile = false) {
+/**
+ * Uma leitura da tela. Por omissão, FRIA: o cache das facetas é descartado
+ * antes, para o número continuar comparável às medições anteriores ao cache
+ * (#216). `page` > 1 com `cold: false` é o caso que o cache existe para servir.
+ */
+async function measure(params: Record<string, string>, profile = false, { page = 1, cold = true } = {}) {
+  if (cold) invalidateBoardFacets();
   const client = db.$client as unknown as { unsafe: (...args: unknown[]) => Promise<unknown> };
   const original = client.unsafe.bind(client);
   let queries = 0;
@@ -116,7 +122,7 @@ async function measure(params: Record<string, string>, profile = false) {
   try {
     const timer = createStageTimer();
     const view = await loadJobsView({
-      candidateId: owner, params, page: 1, pageSize: 50, prefetch: false,
+      candidateId: owner, params, page, pageSize: 50, prefetch: false,
       schedule: () => {}, now: new Date("2026-09-20T12:00:00Z"), timer,
     });
     expect(view.total).toBeGreaterThan(0);
@@ -168,7 +174,8 @@ describe.runIf(enabled)("baseline de /jobs", () => {
     const lines = [
       "",
       `baseline /jobs — ${JOBS} vagas, mediana de ${RUNS} execuções, PostgreSQL local (sem rede)`,
-      "cenário".padEnd(24) + "total ms".padStart(10) + "idas".padStart(6) + "  estágios (ms)",
+      "cenário".padEnd(24) + "total ms".padStart(10) + "idas".padStart(6) + "  estágios (ms)"
+        + "  ‖ página 2 com cache: total ms, idas, facets ms",
     ];
     for (const scenario of SCENARIOS) {
       let plan: unknown;
@@ -186,12 +193,22 @@ describe.runIf(enabled)("baseline de /jobs", () => {
       // execução; os estágios ilustram a amostra central superior, real.
       const middle = [...runs].sort((a, b) => a.report.totalMs - b.report.totalMs)[Math.floor(runs.length / 2)]!;
       const stages = middle.report.stages.map((s) => `${s.stage}=${s.ms}`).join(" ");
+      // Quente: a entrada da página 1 já está no cache, e a página 2 tem as
+      // mesmas facetas. É o paginar/reordenar que o cache existe para servir.
+      await measure(scenario.params);
+      const warm = [];
+      for (let run = 0; run < RUNS; run++) warm.push(await measure(scenario.params, false, { page: 2, cold: false }));
+      for (const run of warm) expect(run.golden.facets).toEqual(runs[0]!.golden.facets);
+      const warmMiddle = [...warm].sort((a, b) => a.report.totalMs - b.report.totalMs)[Math.floor(warm.length / 2)]!;
+      const warmFacets = warmMiddle.report.stages.find((s) => s.stage === "facets")?.ms ?? 0;
       lines.push(
-        scenario.name.padEnd(24) + median(totals).toFixed(0).padStart(10) + String(middle.queries).padStart(6) + `  ${stages}`,
+        scenario.name.padEnd(24) + median(totals).toFixed(0).padStart(10) + String(middle.queries).padStart(6) + `  ${stages}`
+          + `  ‖ ${median(warm.map((r) => r.report.totalMs)).toFixed(0)} ms, ${warmMiddle.queries} idas, facets=${warmFacets}`,
       );
       evidence.push({
         scenario: scenario.name,
         samples: runs.map(({ report, queries, sqlBytes, parameters }) => ({ report, queries, sqlBytes, parameters })),
+        warmPage2: warm.map(({ report, queries }) => ({ report, queries })),
         golden: middle.golden,
         plan,
         plans,

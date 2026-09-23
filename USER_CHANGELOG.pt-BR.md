@@ -39,6 +39,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
   cortado e salvo diferente do que você colou; e um curto demais diz que
   precisa de pelo menos 3 caracteres.
 
+### Melhorado
+
+- Na tela Vagas, trocar de página, de ordenação ou de faixa salarial responde
+  mais rápido: as contagens dos filtros são reaproveitadas por até um minuto.
+  Quando o acervo é atualizado, elas podem levar até um minuto para refletir a
+  mudança; a lista e o total de vagas mostram sempre o estado atual.
+
 ## [1.22.0] - 2026-09-22T23:04:57.000Z
 
 ### Novidade
