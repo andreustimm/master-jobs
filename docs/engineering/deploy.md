@@ -532,7 +532,10 @@ páginas hoje não mandam. O erro que motivou isto era do servidor.
 Ligado desde #219, só no servidor, amostrado por `SENTRY_TRACES_SAMPLE_RATE`
 (padrão `0.1`). `0` desliga; valor que não seja número entre 0 e 1 também
 desliga, em vez de cair no padrão — engano de configuração não pode mandar mais
-dado do que o pedido.
+dado do que o pedido. A taxa vale para toda requisição: um `tracesSampler` fixo
+faz o SDK ignorar a decisão que chega no cabeçalho `sentry-trace` (`…-1`), que
+de outro modo deixaria qualquer cliente forçar 100% de amostragem e gastar a
+quota — e tornaria o `0` inútil.
 
 Cada leitura de tela medida vira um span `jho.leitura` (`leitura /jobs`,
 `leitura /`), e cada estágio do cronômetro (`auth`, `prelude`, `brought_by`,

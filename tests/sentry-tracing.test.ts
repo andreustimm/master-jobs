@@ -299,6 +299,14 @@ describe("sentryServerOptions", () => {
     naoVaza(opcoes.beforeSendSpan({ description: `GET /jobs?q=${PRIVADO.termo}`, data: { "url.full": PRIVADO.termo } }));
   });
 
+  it("a taxa configurada vence a decisão que chega no cabeçalho sentry-trace", () => {
+    // Sem isto, `sentry-trace: …-1` de qualquer cliente amostraria 100%, e o
+    // `0` não desligaria nada.
+    const desligado = sentryServerOptions({ dsn: "x", environment: "production", tracesSampleRate: "0" });
+    expect(desligado.tracesSampler({ parentSampled: true, parentSampleRate: 1 })).toBe(0);
+    expect(opcoes.tracesSampler({ parentSampled: true, parentSampleRate: 1 })).toBe(0.2);
+  });
+
   it("sem amostragem configurada, fica no padrão", () => {
     expect(sentryServerOptions({ dsn: "x", environment: "production" }).tracesSampleRate).toBe(DEFAULT_TRACES_SAMPLE_RATE);
   });

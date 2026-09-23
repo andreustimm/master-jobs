@@ -430,12 +430,17 @@ export type SentryServerEnv = {
  * Não há serviço nosso do outro lado para continuar o trace; propagar só vaza.
  */
 export function sentryServerOptions(env: SentryServerEnv) {
+  const rate = tracesSampleRate(env.tracesSampleRate);
   return {
     dsn: env.dsn,
     environment: env.environment,
     release: env.release,
     sendDefaultPii: false,
-    tracesSampleRate: tracesSampleRate(env.tracesSampleRate),
+    tracesSampleRate: rate,
+    // Sem `tracesSampler`, o SDK obedece ao `sentry-trace: …-1` que chega no
+    // pedido ANTES da taxa configurada: qualquer cliente, sem sessão, forçaria
+    // 100% de amostragem — e o `0` deixaria de desligar. A taxa é nossa.
+    tracesSampler: (_contexto?: unknown) => rate,
     tracePropagationTargets: [] as string[],
     beforeSend: scrubEvent,
     beforeSendTransaction: scrubTransaction,

@@ -46,23 +46,24 @@ export function registrarTempo(relatorio: TimingReport): void {
  * Sem `SENTRY_DSN`, ou com o SDK sem `startSpan`, o trabalho roda sozinho. O
  * nome do span é o nome do estágio, texto fixo do código — nunca valor de
  * filtro. E o trabalho roda exatamente uma vez: se o SDK estourar antes de
- * chamá-lo, ele roda fora do span; se estourar depois, o erro é do trabalho.
+ * chamá-lo, ele roda fora do span; se estourar depois, vale o desfecho do
+ * próprio trabalho — o valor, se ele concluiu, ou o erro DELE.
  */
 export async function rastrearEtapa<T>(etapa: string, trabalho: () => Promise<T>, op = "jho.etapa"): Promise<T> {
   if (!process.env.SENTRY_DSN?.trim()) return trabalho();
-  let iniciou = false;
+  let emCurso: Promise<T> | undefined;
   const executar = () => {
-    iniciou = true;
-    return trabalho();
+    emCurso = trabalho();
+    return emCurso;
   };
   try {
     const Sentry = await import("@sentry/nextjs");
     if (typeof Sentry.startSpan !== "function") return executar();
     return await Sentry.startSpan({ name: etapa, op, attributes: { "jho.etapa": etapa } }, executar);
-  } catch (erro) {
-    if (iniciou) throw erro;
-    // Falhar ao MEDIR não pode impedir a tela de carregar.
-    return executar();
+  } catch {
+    // Falhar ao MEDIR — antes ou depois do trabalho, como ao encerrar o span —
+    // não pode impedir a tela de carregar.
+    return emCurso ?? executar();
   }
 }
 

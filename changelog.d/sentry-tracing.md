@@ -12,7 +12,10 @@
   atributos de uma lista de permissão (`ALLOWED_SPAN_DATA`) — `http.target`,
   `url.full`, `url.query`, `client.address`, `db.query.text` e
   `server.address` não saem. `tracePropagationTargets: []` impede o
-  `baggage` de ir para os boards. As migalhas de erro também perdem a query.
+  `baggage` de ir para os boards, e um `tracesSampler` fixo impede o cabeçalho
+  `sentry-trace` de um cliente forçar a amostragem acima da taxa (ou furar o
+  `0`). Falha do SDK ao abrir ou encerrar o span nunca derruba a tela. As
+  migalhas de erro também perdem a query.
 - Mapas de origem do servidor publicados no Sentry no build (#212), pelo gancho
   `compiler.runAfterProductionCompile` e `@sentry/cli` (`sourcemaps inject` +
   `upload` em `.next/server`, release = SHA). Sem `SENTRY_AUTH_TOKEN` nada

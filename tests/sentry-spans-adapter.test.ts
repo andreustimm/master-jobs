@@ -71,6 +71,36 @@ describe("rastrearEtapa", () => {
     expect(vezes).toBe(1);
   });
 
+  it("SDK que estoura DEPOIS de o trabalho concluir não derruba a tela: vale o valor do trabalho", async () => {
+    process.env.SENTRY_DSN = DSN;
+    vi.doMock("@sentry/nextjs", () => ({
+      startSpan: async (_opcoes: unknown, fn: () => Promise<unknown>) => {
+        await fn();
+        throw new Error("falhou ao encerrar o span");
+      },
+    }));
+    const { rastrearEtapa } = await import("../app/timeout-watch.ts");
+    let vezes = 0;
+    await expect(rastrearEtapa("board", async () => ++vezes)).resolves.toBe(1);
+    expect(vezes).toBe(1);
+  });
+
+  it("SDK que estoura depois de o trabalho falhar devolve o erro do trabalho", async () => {
+    process.env.SENTRY_DSN = DSN;
+    vi.doMock("@sentry/nextjs", () => ({
+      startSpan: async (_opcoes: unknown, fn: () => Promise<unknown>) => {
+        await fn().catch(() => {});
+        throw new Error("falhou ao encerrar o span");
+      },
+    }));
+    const { rastrearEtapa } = await import("../app/timeout-watch.ts");
+    await expect(
+      rastrearEtapa("board", async () => {
+        throw new Error("o banco recusou");
+      }),
+    ).rejects.toThrow("o banco recusou");
+  });
+
   it("SDK sem startSpan roda o trabalho sozinho", async () => {
     process.env.SENTRY_DSN = DSN;
     vi.doMock("@sentry/nextjs", () => ({ startSpan: undefined }));
