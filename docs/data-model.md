@@ -939,6 +939,18 @@ Regras de negócio em [`docs/sources.md`](sources.md#busca-por-termo).
 Vaga nova de captura entra numa fonte `<kind>:~terms` criada com
 `enabled = false`: a sincronização nunca a fecha.
 
+### Varredura fatiada — `sweep_lease`, `sweep_run`
+
+Do contexto `operations` (`src/contexts/operations/`), pela
+[ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md). Sem
+FK, de propósito: a chave de reserva nomeia fonte ou candidato como texto, e
+apagar um candidato não pode falhar por causa de uma reserva de dez minutos.
+
+| Tabela | Chave | O que guarda |
+|---|---|---|
+| `sweep_lease` | `key` (`sync:<fonte>`, `pontuar:<candidato>`, `alarme:<nome>`, `manutencao:<nome>`) | reserva viva (`claimed_at`, `claimed_by`), última tentativa (`last_claimed_at`, nunca limpa) e último término (`last_finished_at`). Reservada por um único `INSERT … ON CONFLICT DO UPDATE … WHERE`; vence em 5 min |
+| `sweep_run` | `id`; índice `(slice, started_at)` | uma linha por chamada (`unit` nulo) e uma por unidade: duração, itens, erros, mensagem de erro. Só números e ids; podada a cada 24 h para 14 dias |
+
 ### `fx_rate` — cotações em cache
 
 | Coluna | Papel |

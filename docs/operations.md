@@ -13,6 +13,77 @@
 > não os execute literalmente. Para a operação atual, prefira os comandos
 > `jho` e as rotinas de `docs/engineering/deploy.md`.
 
+## Varredura horária: ativar o agendador
+
+Desde a [ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)
+a varredura roda na Vercel em fatias: `GET /api/cron/varredura?fatia=<nome>`,
+com `sync`, `termos`, `captura`, `reconferencia` e `pontuar`. Cada chamada faz o
+que cabe em 20 s, grava uma linha em `production.sweep_run` e devolve o
+relatório em JSON. Quem chama é o `pg_cron` do Supabase — e ligá-lo é **passo
+humano**, uma vez, depois de o código estar em produção (a migração
+`0016_sweep_lease_and_runs` aplicada):
+
+1. **Vercel, produção.** O valor de uma variável *Sensitive* não volta pela API,
+   então gere um segredo novo e cadastre (ou substitua) `CRON_SECRET`:
+   `openssl rand -hex 32`, depois `vercel env rm CRON_SECRET production` e
+   `vercel env add CRON_SECRET production` (marcar como Sensitive). Confira
+   também `JHO_SOURCE_ALLOWLIST` em produção — o mesmo valor da variável do
+   Actions; sem ela as fatias de rede respondem 503 por política (ADR 0021).
+   `JHO_USER_AGENT` é recomendado (`master-jobs/0.1 (+https://jobs.mastertimm.com.br)`).
+   Redeploy de produção para as variáveis valerem.
+2. **Fumaça.** Sem cabeçalho a rota recusa; com ele, a fatia que não toca
+   terceiros responde:
+   `curl -s -o /dev/null -w '%{http_code}\n' "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=pontuar"` → `401`;
+   `curl -s -H "authorization: Bearer $CRON_SECRET" "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=pontuar"` → JSON com `durationMs`.
+3. **Um agendador por vez.** Imediatamente antes de rodar o SQL do passo
+   seguinte, desligue o disparo agendado do Actions:
+   `gh variable set VARREDURA_AGENDADOR --body supabase --repo andreustimm/master-jobs`.
+   O disparo manual e a tela de operações continuam. Se o passo 4 falhar,
+   `gh variable delete VARREDURA_AGENDADOR --repo andreustimm/master-jobs`
+   devolve a execução diária.
+4. **Supabase, SQL Editor do projeto de produção.** Habilite `pg_cron` e
+   `pg_net` (Integrations, ou as linhas `create extension` do arquivo), grave os
+   dois segredos no Vault — o **mesmo** valor do passo 1:
+   `select vault.create_secret('<CRON_SECRET>', 'jho_cron_secret');`
+   `select vault.create_secret('https://jobs.mastertimm.com.br', 'jho_cron_base_url');`
+   e rode [`supabase/cron/varredura.sql`](../supabase/cron/varredura.sql). O
+   arquivo é idempotente: rodar de novo só atualiza.
+5. **Conferir em minutos.**
+   `select jobname, schedule, active from cron.job where jobname like 'jho-varredura-%';`
+   e `select status_code, count(*) from net._http_response where created > now() - interval '15 minutes' group by 1;`
+   — tudo `200`. (`pg_net` só guarda respostas por 6 h.)
+
+**Prova de 24 h** (a entrega da #281). Toda fonte com intervalo ≤ 60 min e
+nenhuma chamada perto do teto:
+
+```sql
+with s as (
+  select unit, started_at::timestamptz as at,
+         lag(started_at::timestamptz) over (partition by unit order by started_at) as antes
+  from production.sweep_run
+  where slice = 'sync' and unit is not null
+    and started_at::timestamptz > now() - interval '24 hours'
+)
+select unit, count(*) as syncs, max(at - antes) as maior_intervalo
+from s group by unit order by maior_intervalo desc nulls first;
+
+select slice, count(*) as chamadas, max(duration_ms) as mais_lenta_ms, sum(errors) as erros
+from production.sweep_run
+where unit is null and started_at::timestamptz > now() - interval '24 hours'
+group by slice;
+```
+
+`duration_ms` mede o trabalho dentro da função; o teto de 30 s da plataforma se
+confere nos logs da Vercel (nenhum `FUNCTION_INVOCATION_TIMEOUT` em
+`/api/cron/varredura`) e no painel *Usage*, que também diz se a cadência cabe
+no plano. Fonte ausente da primeira consulta não sincronizou nas 24 h — o
+alarme "fonte há mais de 2 h sem sync" (log da função e Sentry, uma vez por
+hora) já deveria tê-la apontado.
+
+**Desfazer:** `select cron.unschedule(jobname) from cron.job where jobname like 'jho-varredura-%';`
+e `gh variable delete VARREDURA_AGENDADOR --repo andreustimm/master-jobs` — a
+execução diária do Actions volta a valer na manhã seguinte.
+
 ## Pedir manutenção pela interface — `/admin/operacoes`
 
 Tela de administrador com um botão por rotina: varredura inteira, buscar vagas
@@ -104,8 +175,10 @@ sinais:
 > **Invariante:** ausência só fecha vaga quando a fonte listou tudo o que tem.
 > Janela parcial nunca fecha por ausência, e lista vazia não fecha nada nem em
 > fonte completa (`decideAbsenceClosure()` em `src/core/ingest/lifecycle.ts`).
-> A reconferência agendada tem um único dono, a varredura do GitHub; a Vercel
-> não agenda nada.
+> A reconferência agendada tem um único dono por vez: o `pg_cron` do Supabase
+> depois da troca de agendador, o GitHub Actions diário até ela
+> ([ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)).
+> A Vercel não tem cron próprio.
 
 > **Invariante:** Uma fonte que falha é registrada e pulada, nunca aborta a run.
 > O `try/catch` de `syncOne()` grava `source.lastStatus = 'error'` e
