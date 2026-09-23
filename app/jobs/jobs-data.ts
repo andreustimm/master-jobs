@@ -5,12 +5,14 @@ import {
   listBoardPage,
   listCandidateTracks,
   listSavedTerms,
+  nearMatches,
   recordTermVisit,
   resolveClusterFilter,
   savedTermForBoard,
   trackScope,
   type BoardFacets,
   type BoardFilters,
+  type NearRow,
   type PayFilter,
   type SavedTermSummary,
   type TermRunState,
@@ -42,6 +44,11 @@ export type JobsView = {
   currencies: string[];
   /** The currency and period pay is shown and compared in. */
   pay: PayFilter;
+  /**
+   * Vagas de título parecido que a consulta não casou — grupo à parte, que
+   * nunca entra na lista nem no total. Null sem consulta.
+   */
+  near: { available: boolean; rows: NearRow[] } | null;
   /** Offer to search the platforms for the typed term; emphasized when few match. */
   offer: { term: string; emphasized: boolean } | null;
 };
@@ -164,7 +171,7 @@ export async function loadJobsView(input: {
       minFit: state.fit,
       keepUnscored: filters.keepUnscored,
       cluster,
-      term: state.term,
+      query: filters.query,
       sourceKinds: state.sources,
       workMode: state.workMode,
       track: scope ?? undefined,
@@ -183,6 +190,10 @@ export async function loadJobsView(input: {
       candidateId !== null ? listSavedTerms({ candidateId }) : Promise.resolve([] as SavedTermSummary[]),
     ]),
   );
+
+  // Em série, depois das outras: é uma leitura a mais só quando há consulta, e
+  // o teto de conexões da tela continua o mesmo.
+  const near = filters.query ? await stage("near", () => nearMatches(candidateId, filters)) : null;
 
   if (broughtBy && candidateId !== null && !input.prefetch) {
     const termId = broughtBy.id;
@@ -203,6 +214,7 @@ export async function loadJobsView(input: {
     broughtBy,
     currencies,
     pay,
+    near,
     offer: state.term && candidateId !== null ? { term: state.term.term, emphasized: total < FEW_MATCHES } : null,
   };
 }

@@ -173,6 +173,12 @@ export const job = production.table(
     index("job_description_trgm_idx")
       .using("gin", sql`${withoutSeparators(t.descriptionText)} gin_trgm_ops`)
       .where(sql`${t.closedAt} is null`),
+    // Grupo "termos parecidos" (#223): o `termo <% title` de `nearMatchesQuery`.
+    // Sobre o título cru, sem tirar separador: a similaridade por palavra
+    // compara palavras, e é o espaço que as separa.
+    index("job_title_trgm_idx")
+      .using("gin", sql`${t.title} gin_trgm_ops`)
+      .where(sql`${t.closedAt} is null`),
   ],
 );
 
