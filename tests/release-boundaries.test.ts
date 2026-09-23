@@ -146,6 +146,16 @@ describe("versioned commit hook", () => {
       git(repo, "add", "changelog.d/cabecalho.md");
       const fragmentAccepted = spawnSync(`${repo}/.githooks/commit-msg`, [message], { cwd: repo, encoding: "utf8" });
       expect(fragmentAccepted.stdout, fragmentAccepted.stderr).toContain("release-ready version=1.3.8");
+      // The working-tree gate (`check:release-ready`) ignores OS litter such as
+      // `.DS_Store`, which Git never commits.
+      writeFileSync(`${repo}/changelog.d/.DS_Store`, "\0");
+      const workingTree = spawnSync(
+        process.execPath,
+        [...NODE_TS_ARGS, "scripts/release/validar-changelogs.ts", "--commit-message-file", message],
+        { cwd: repo, encoding: "utf8" },
+      );
+      expect(workingTree.stdout, workingTree.stderr).toContain("release-ready version=1.3.8");
+      rmSync(`${repo}/changelog.d/.DS_Store`);
       writeFileSync(`${repo}/changelog.d/Errado.md`, "x");
       git(repo, "add", "changelog.d/Errado.md");
       const badName = spawnSync(`${repo}/.githooks/commit-msg`, [message], { cwd: repo, encoding: "utf8" });

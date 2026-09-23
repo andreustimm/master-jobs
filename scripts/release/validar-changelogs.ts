@@ -86,7 +86,11 @@ function fragmentNames(options: Options): string[] {
     }).split("\0").filter(Boolean).map((path) => path.slice(FRAGMENT_DIRECTORY.length + 1));
   }
   try {
-    return readdirSync(resolve(options.directory, FRAGMENT_DIRECTORY));
+    // The working tree carries what Git never sees (`.DS_Store`, editor
+    // swap files). A dotfile cannot be a fragment name anyway, and the
+    // staged listing above still rejects one that is actually committed.
+    return readdirSync(resolve(options.directory, FRAGMENT_DIRECTORY))
+      .filter((name) => !name.startsWith("."));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;

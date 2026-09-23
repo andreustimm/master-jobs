@@ -73,6 +73,11 @@ describe("fragment format", () => {
   it("keeps headings inside code blocks as content and sanitizes the reported name", () => {
     const fenced = valid.replace("  Continuação.", "\n  ```\n  ## [9.9.9] - 2026-01-01\n  ```");
     expect(parseChangelogFragments([{ name: "ok.md", content: fenced }])).toHaveLength(1);
+    // A wrapped line that starts with a PR reference is content, not a heading.
+    const wrapped = valid.replace("  Continuação.", "#228 e #229 no começo da linha.");
+    expect(parseChangelogFragments([{ name: "ok.md", content: wrapped }])).toHaveLength(1);
+    expect(code(() => parseChangelogFragments([{ name: "ok.md", content: `##[1.0.0]\n\n${valid}` }])))
+      .toBe("forbidden_heading");
     const error = new ChangelogFragmentError("invalid_name", "a\u001b[31m.md");
     expect(error.message).toBe("changelog_fragment_invalid code=invalid_name fragment=a??31m.md");
   });

@@ -104,7 +104,9 @@ const BLOCKS: ReadonlyMap<string, Part> = new Map([
 const PARTS: readonly Part[] = ["technical", "ptBR", "en"];
 // `#` e `##` (inclusive `##[1.0.0]`, que o parser do changelog lê como versão)
 // criariam uma seção de release dentro do Unreleased. Só os blocos passam.
-const TOP_HEADING = /^ {0,3}#{1,2}(?!#)/;
+// `#228` no começo de linha quebrada é referência a PR, não cabeçalho: sem
+// espaço, fim de linha ou `[` depois dos `#`, o Markdown não abre título.
+const TOP_HEADING = /^ {0,3}#{1,2}(?:[ \t[]|$)/;
 const BLOCK_HEADING = /^ {0,3}##[ \t]+(\S.*?)[ \t]*$/;
 const SECTION_HEADING = /^ {0,3}###[ \t]+(\S.*?)[ \t]*$/;
 const LIST_ITEM = /^ {0,3}- \S/;
