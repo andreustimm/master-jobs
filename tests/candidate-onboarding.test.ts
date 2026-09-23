@@ -14,7 +14,9 @@ import { parseOwnProfile, slugAttempt, slugBaseFromName, CV_MIN } from "../src/c
 import type { DB } from "../src/core/db/client.ts";
 import { authUser, candidate } from "../src/core/db/schema.ts";
 import { loadProfile } from "../src/core/profile/load.ts";
+import { CV_PDF_MAX_BYTES } from "../src/core/pdf.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { pdfComTexto } from "./support/synthetic-pdf.ts";
 
 /**
  * Conta nova cria o PRÓPRIO candidato (#234).
@@ -298,6 +300,94 @@ describe("createProfileAction", () => {
     const mine = await reloaded(userId);
     expect(await db.select().from(candidate)).toHaveLength(1);
     expect((await currentDocument(mine.candidateId!))?.content).toBe(CV.trim());
+  });
+});
+
+describe("createProfileAction com o currículo em PDF (#278)", () => {
+  const LINHAS = Array.from(
+    { length: 6 },
+    (_, i) => `Experiencia ${i}: pipelines de dados, machine learning e observabilidade em nuvem`,
+  );
+
+  function withPdf(fields: Record<string, string>, bytes: Uint8Array<ArrayBuffer> | string, name = "Maria Souza CV.pdf"): FormData {
+    const data = form(fields);
+    data.set("cvFile", new File([bytes], name, { type: "application/pdf" }));
+    return data;
+  }
+
+  it("PDF válido cria o perfil com o texto extraído, no mesmo commit", async () => {
+    const userId = await account("maria@local.test");
+    state.session = sessionOf(userId);
+
+    expect(await createProfileAction(withPdf({ name: "Maria Souza" }, pdfComTexto([LINHAS])))).toEqual({
+      ok: true,
+      run: "fromPdf",
+    });
+
+    const mine = await reloaded(userId);
+    const doc = await currentDocument(mine.candidateId!);
+    expect(doc).toMatchObject({ label: "Maria Souza CV", isCurrent: true });
+    expect(doc?.content).toContain("pipelines de dados, machine learning");
+  });
+
+  it("PDF inválido, sem texto ou grande demais recusa com código e não cria nada", async () => {
+    state.session = sessionOf(await account("maria@local.test"));
+
+    expect(await createProfileAction(withPdf({ name: "Maria" }, "texto renomeado para .pdf"))).toEqual({
+      ok: false,
+      code: "pdfNotPdf",
+    });
+    expect(await createProfileAction(withPdf({ name: "Maria" }, pdfComTexto([["Maria"]])))).toEqual({
+      ok: false,
+      code: "pdfNoText",
+    });
+    const huge = new Uint8Array(CV_PDF_MAX_BYTES + 1);
+    huge.set(new TextEncoder().encode("%PDF-1.4"));
+    expect(await createProfileAction(withPdf({ name: "Maria" }, huge))).toEqual({ ok: false, code: "pdfTooLarge" });
+    expect(await db.select().from(candidate)).toHaveLength(0);
+  });
+
+  it("PDF e texto colado juntos são recusados, sem escolher um em silêncio", async () => {
+    state.session = sessionOf(await account("maria@local.test"));
+    expect(await createProfileAction(withPdf({ name: "Maria", cv: CV }, pdfComTexto([LINHAS])))).toEqual({
+      ok: false,
+      code: "cvBoth",
+    });
+    expect(await db.select().from(candidate)).toHaveLength(0);
+  });
+
+  it("campo de arquivo vazio vale como ausente: o texto colado segue sozinho", async () => {
+    const userId = await account("maria@local.test");
+    state.session = sessionOf(userId);
+    expect(await createProfileAction(withPdf({ name: "Maria", cv: CV }, new Uint8Array(), ""))).toEqual({ ok: true });
+    expect((await currentDocument((await reloaded(userId)).candidateId!))?.content).toBe(CV.trim());
+  });
+
+  it("recusa campo barato antes de gastar a extração", async () => {
+    state.session = sessionOf(await account("maria@local.test"));
+    // Arquivo que não é PDF: se a extração rodasse antes, o código seria `pdfNotPdf`.
+    expect(await createProfileAction(withPdf({ name: " " }, "não é pdf"))).toEqual({ ok: false, code: "nameRequired" });
+  });
+
+  it("conta que já tem candidato é negada antes de ler o PDF, e nada muda", async () => {
+    const userId = await account("maria@local.test");
+    const first = await createOwnCandidate(sessionOf(userId), { name: "Maria", headline: null, location: null, ...NO_CV });
+    expect(first.status).toBe("created");
+    if (first.status !== "created") return;
+
+    // Sessão atual: já carrega o candidato, e a política nega `candidate:create`.
+    state.session = await reloaded(userId);
+    await expect(createProfileAction(withPdf({ name: "Outra" }, pdfComTexto([LINHAS])))).rejects.toThrow(/negado/);
+
+    // Sessão resolvida antes da criação: passa na política, mas o vínculo já
+    // existe e o PDF não vira currículo de ninguém.
+    state.session = sessionOf(userId);
+    expect(await createProfileAction(withPdf({ name: "Outra" }, pdfComTexto([LINHAS])))).toEqual({ ok: true });
+
+    const rows = await db.select().from(candidate);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.name).toBe("Maria");
+    expect(await currentDocument(first.candidateId)).toBeNull();
   });
 });
 

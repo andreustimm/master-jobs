@@ -5,6 +5,7 @@ import { guard, guardOwnCandidate } from "../auth";
 import { createOwnCandidate } from "../../src/contexts/auth/index.ts";
 import {
   CV_MIN,
+  CV_PDF_MAX_MB,
   parseOwnProfile,
   validatePublicSlug,
   type NameError,
@@ -26,6 +27,7 @@ import {
   saveDocument,
   type VersionError,
 } from "../../src/core/candidate.ts";
+import type { CvPdfError } from "../../src/core/pdf.ts";
 
 /** Rótulo de versão sem idioma: a data. Fica gravado, então não pode ser frase. */
 function defaultCvLabel(): string {
@@ -56,6 +58,15 @@ export async function saveCvAction(formData: FormData) {
   revalidatePath("/candidate");
 }
 
+/** Log de servidor: a tela mostra a mensagem genérica do formulário. */
+const PDF_REFUSAL: Record<CvPdfError, string> = {
+  pdfMissing: "Selecione um arquivo PDF.",
+  pdfTooLarge: `Arquivo acima de ${CV_PDF_MAX_MB} MB. Currículo não deveria chegar perto disso.`,
+  pdfNotPdf: "O arquivo não é um PDF legível.",
+  pdfNoText:
+    "Quase nenhum texto no PDF. Provavelmente é digitalizado (imagem), sem camada de texto — cole o conteúdo manualmente.",
+};
+
 /**
  * Import a CV from an uploaded PDF.
  *
@@ -67,28 +78,15 @@ export async function saveCvAction(formData: FormData) {
 export async function importPdfAction(formData: FormData) {
   const { candidateId } = await guardOwnCandidate("candidate:write");
 
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    throw new Error("Selecione um arquivo PDF.");
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    throw new Error("Arquivo acima de 10 MB. Currículo não deveria chegar perto disso.");
-  }
-
-  const { extractPdfText } = await import("../../src/core/pdf.ts");
-  const extracted = await extractPdfText(await file.arrayBuffer());
-
-  if (extracted.text.trim().length < 100) {
-    throw new Error(
-      "Quase nenhum texto no PDF. Provavelmente é digitalizado (imagem), sem camada de texto — cole o conteúdo manualmente.",
-    );
-  }
+  const { readCvPdf } = await import("../../src/core/pdf.ts");
+  const pdf = await readCvPdf(formData.get("file"));
+  if (!pdf.ok) throw new Error(PDF_REFUSAL[pdf.code]);
 
   await saveDocument({
     candidateId,
     kind: "cv",
-    label: file.name.replace(/\.pdf$/i, ""),
-    content: extracted.text,
+    label: pdf.label || defaultCvLabel(),
+    content: pdf.text,
     format: "text",
   });
 
@@ -187,9 +185,21 @@ export async function setVisibilityAction(formData: FormData) {
 /* Criar o próprio perfil                                                      */
 /* -------------------------------------------------------------------------- */
 
+export type CreateProfileError =
+  | OwnProfileError
+  | PublicSlugError
+  | CvPdfError
+  | "cvBoth"
+  | "slugTaken"
+  | "unavailable";
+
+/**
+ * `run: "fromPdf"` troca o aviso de sucesso: o texto veio de uma extração que
+ * ninguém leu ainda, e a pessoa precisa saber que a revisão é o próximo passo.
+ */
 export type CreateProfileResult =
-  | { ok: true }
-  | { ok: false; code: OwnProfileError | PublicSlugError | "slugTaken" | "unavailable" };
+  | { ok: true; run?: "fromPdf" }
+  | { ok: false; code: CreateProfileError };
 
 /**
  * "Criar meu perfil": a conta sem candidato cria o PRÓPRIO.
@@ -202,16 +212,28 @@ export type CreateProfileResult =
  *
  * Duplo envio devolve sucesso sem criar o segundo: `createOwnCandidate` trava
  * a linha da conta, e a segunda requisição encontra o vínculo já feito. O
- * currículo, quando colado, entra no MESMO commit do candidato.
+ * currículo, colado ou extraído do PDF, entra no MESMO commit do candidato.
+ *
+ * PDF e texto colado juntos são recusados: escolher um dos dois em silêncio
+ * descartaria o que a pessoa escreveu ou o que ela enviou. O texto extraído
+ * não é revisado aqui — o perfil nasce e a pessoa cai no editor do currículo,
+ * que é a mesma revisão do import de PDF do perfil existente.
  */
 export async function createProfileAction(formData: FormData): Promise<CreateProfileResult> {
   const session = await guard("candidate:create");
 
+  const pastedCv = String(formData.get("cv") ?? "");
+  const cvFile = formData.get("cvFile");
+  const hasPdf = cvFile instanceof File && cvFile.size > 0;
+  if (hasPdf && pastedCv.trim() !== "") return { ok: false, code: "cvBoth" };
+
+  // Os campos baratos primeiro: recusar o nome vazio não pode custar uma
+  // extração de PDF.
   const parsed = parseOwnProfile({
     name: String(formData.get("name") ?? ""),
     headline: String(formData.get("headline") ?? ""),
     location: String(formData.get("location") ?? ""),
-    cv: String(formData.get("cv") ?? ""),
+    cv: pastedCv,
   });
   if (!parsed.ok) return parsed;
 
@@ -224,13 +246,23 @@ export async function createProfileAction(formData: FormData): Promise<CreatePro
     publicSlug = valid.slug;
   }
 
-  const result = await createOwnCandidate(session, { ...parsed.value, cvLabel: defaultCvLabel(), publicSlug });
+  let cv = parsed.value.cv;
+  let cvLabel = defaultCvLabel();
+  if (hasPdf) {
+    const { readCvPdf } = await import("../../src/core/pdf.ts");
+    const pdf = await readCvPdf(cvFile);
+    if (!pdf.ok) return pdf;
+    cv = pdf.text;
+    cvLabel = pdf.label || cvLabel;
+  }
+
+  const result = await createOwnCandidate(session, { ...parsed.value, cv, cvLabel, publicSlug });
   if (result.status === "no-account") return { ok: false, code: "unavailable" };
   if (result.status === "slug-taken") return { ok: false, code: "slugTaken" };
-  if (result.status === "created" && parsed.value.cv !== null) await requestCvRescore(result.candidateId);
+  if (result.status === "created" && cv !== null) await requestCvRescore(result.candidateId);
 
   revalidatePath("/", "layout");
-  return { ok: true };
+  return hasPdf && result.status === "created" ? { ok: true, run: "fromPdf" } : { ok: true };
 }
 
 /* -------------------------------------------------------------------------- */

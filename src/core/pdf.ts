@@ -11,6 +11,7 @@
  * stays deployable on a serverless runtime.
  */
 import { extractText, getDocumentProxy } from "unpdf";
+import { CV_MIN, CV_PDF_MAX_MB } from "./candidate-identity.ts";
 
 export type PdfExtraction = {
   text: string;
@@ -99,6 +100,54 @@ function inspect(text: string, pages: number, documentKind: "cv" | "job"): strin
   }
 
   return warnings;
+}
+
+export const CV_PDF_MAX_BYTES = CV_PDF_MAX_MB * 1024 * 1024;
+
+export type CvPdfError = "pdfMissing" | "pdfTooLarge" | "pdfNotPdf" | "pdfNoText";
+
+export type CvPdf =
+  | { ok: true; text: string; label: string }
+  | { ok: false; code: CvPdfError };
+
+/**
+ * A especificação admite lixo antes do cabeçalho, e o Acrobat aceita até 1 KB
+ * dele; exigir `%PDF-` no byte zero recusaria arquivo que abre em todo leitor.
+ */
+function looksLikePdf(bytes: Uint8Array): boolean {
+  const head = new TextDecoder("latin1").decode(bytes.subarray(0, 1024));
+  return head.includes("%PDF-");
+}
+
+/**
+ * O currículo enviado como PDF, validado e extraído — o caminho único do
+ * upload, usado pelo perfil existente e pelo onboarding.
+ *
+ * Recebe a entrada crua do `FormData` para que a checagem de "veio arquivo?"
+ * também seja uma só. O tipo é decidido pelos bytes, não pelo `type` que o
+ * navegador declara: esse vem do nome do arquivo e qualquer um o escreve.
+ * O mínimo de texto é o `CV_MIN` do perfil, para que um PDF aceito aqui nunca
+ * seja recusado adiante como "curto demais".
+ */
+export async function readCvPdf(entry: unknown): Promise<CvPdf> {
+  if (!(entry instanceof File) || entry.size === 0) return { ok: false, code: "pdfMissing" };
+  if (entry.size > CV_PDF_MAX_BYTES) return { ok: false, code: "pdfTooLarge" };
+
+  const bytes = new Uint8Array(await entry.arrayBuffer());
+  if (!looksLikePdf(bytes)) return { ok: false, code: "pdfNotPdf" };
+
+  let text: string;
+  try {
+    text = (await extractPdfText(bytes)).text;
+  } catch {
+    // Cabeçalho certo, corpo corrompido: para quem enviou, é o mesmo "não é
+    // um PDF legível" — e não uma falha genérica do servidor.
+    return { ok: false, code: "pdfNotPdf" };
+  }
+  // Digitalizado (só imagem) não tem camada de texto.
+  if (text.trim().length < CV_MIN) return { ok: false, code: "pdfNoText" };
+
+  return { ok: true, text, label: entry.name.replace(/\.pdf$/i, "").trim() };
 }
 
 export async function extractPdfText(
