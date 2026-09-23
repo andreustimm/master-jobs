@@ -1,5 +1,5 @@
 import {
-  boardFacets,
+  cachedBoardFacets,
   clusterBreakdown,
   corpusStats,
   countBoard,
@@ -50,7 +50,7 @@ export async function loadCockpit(
     countBoard(candidateId, filters),
   ]);
   const top = await listBoard(candidateId, { ...filters, limit: 12 });
-  const facets = await boardFacets(candidateId, {
+  const facets = await cachedBoardFacets(candidateId, {
     minFit: state.fit,
     cluster: state.cluster,
     term: state.term,
