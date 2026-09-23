@@ -18,6 +18,11 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+
+### Improved
+
+- Improvement tracking now marks each item as done when it reaches the published version.
+
 ## [1.22.1] - 2026-09-23T00:33:04.000Z
 
 ### Security

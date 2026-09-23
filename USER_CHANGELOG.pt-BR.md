@@ -18,6 +18,11 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+
+### Melhorado
+
+- O acompanhamento das melhorias passa a marcar cada item como concluído quando ele chega à versão publicada.
+
 ## [1.22.1] - 2026-09-23T00:33:04.000Z
 
 ### Segurança

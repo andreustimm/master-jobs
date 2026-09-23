@@ -212,6 +212,16 @@ entrega `production` exige publicação correspondente; `artifact` ou
 só opera depois de disponível na default main e ativado. Fechamento automático
 da issue reflete decisão comprovada, nunca substitui essa prova.
 
+**`Closes #N` vai na mensagem do commit, não só na descrição da PR.** A
+branch padrão é `main`, e a PR aponta para `dev`: palavra-chave na descrição
+não fecha nada, porque o GitHub só a lê quando a PR entra na branch padrão. Na
+**mensagem do commit** ela fecha a issue quando o commit chega a `main` — ou
+seja, quando entrou em produção pela PR `staging → main`, que é o critério da
+entrega `production`. Pelo menos um commit da PR carrega uma linha
+`Closes #N` por issue entregue por inteiro; entrega parcial usa `Refs #N`.
+Issue com entrega `dev`, `artifact` ou `operation` continua sendo concluída
+pela transição explícita, com a prova correspondente.
+
 Depois do merge:
 
 1. Confirme no GitHub integração do último commit da PR; em squash, compare
