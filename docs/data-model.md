@@ -314,6 +314,16 @@ vagas) o índice de descrição tem 19 MB e ficou pronto em poucos segundos
 (observado, não cronometrado); rode
 `migrate.yml` fora da janela do sync.
 
+**Termos parecidos (#223).** `job_title_trgm_idx` é GIN `gin_trgm_ops` sobre
+`title` cru (sem tirar separador: a similaridade por palavra compara palavras),
+parcial em `closed_at IS NULL`, migration aditiva `0017_job_title_trgm`. Responde
+ao `termo <% title` do grupo de proximidade (`nearMatchesQuery` em `repo.ts`),
+com o limiar em `pg_trgm.word_similarity_threshold` fixado na transação da
+consulta; `word_similarity()` só ordena, porque sozinha nunca usa o índice.
+`tests/search-relevance.test.ts` (IT-010) prova que o índice é elegível no plano.
+Reverter é `DROP INDEX production.job_title_trgm_idx`; como `0013`, sem
+`CONCURRENTLY`.
+
 A migration que adicionar `archived_at` também deve manter um índice que suporte
 as varreduras por corte de `closed_at`/`archived_at`, conforme o TechSpec de
 retenção; a coluna sem esse índice não atende ao contrato de lote.

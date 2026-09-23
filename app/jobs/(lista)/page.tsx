@@ -95,8 +95,8 @@ export default async function Jobs({
 
   const empty = broughtBy
     ? t("jobs.broughtByEmpty", { term: broughtBy.term, state: t(`termRun.${broughtBy.run}`) })
-    : state.term
-      ? t("jobs.emptyTerm", { term: state.term.term })
+    : state.query
+      ? t("jobs.emptyTerm", { term: state.query.raw })
       : undefined;
 
   return (
@@ -109,7 +109,7 @@ export default async function Jobs({
             antes e depois de filtrar, e a asserção passa sem medir nada. */}
         <p className="type-body-md text-muted-foreground" data-testid="jobs-total" data-total={total}>
           {total.toLocaleString(locale)} {t("jobs.matching")}
-          {state.term ? ` ${t("jobs.matchingFor", { term: state.term.term })}` : ""}.
+          {state.query ? ` ${t("jobs.matchingFor", { term: state.query.raw })}` : ""}.
         </p>
         {view.hiddenByPayRange > 0 && (
           <p className="type-caption-md text-muted-foreground" data-testid="jobs-hidden-by-pay-range">
@@ -184,6 +184,30 @@ export default async function Jobs({
       />
 
       <Pagination base="/jobs" state={state} page={page} pageSize={pageSize} total={total} t={t} />
+
+      {/* Fora da lista e do total: são vagas que a consulta NÃO casou, só de
+          título parecido. Sem a extensão de trigrama, nada aparece — nem o
+          rótulo, para a tela não prometer um grupo que não existe. */}
+      {view.near?.available && view.near.rows.length > 0 && (
+        <section className="mt-6" aria-labelledby="jobs-near-title" data-testid="jobs-near">
+          <h2 id="jobs-near-title" className="type-display-xs mb-1">{t("jobs.nearTitle")}</h2>
+          <p className="type-caption-md mb-3 text-muted-foreground">{t("jobs.nearHint")}</p>
+          <ul className="divide-y overflow-hidden rounded-xl border bg-card">
+            {view.near.rows.map((row) => (
+              <li key={row.jobId} className="px-4 py-3" data-testid={`jobs-near-${row.jobId}`}>
+                <TransitionLink href={`/jobs/${row.jobId}`} className="type-body-md font-semibold hover:underline">
+                  {row.title}
+                </TransitionLink>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <span data-user-content>{row.companyName}</span>
+                  {row.locationRaw && <span data-user-content>{` · ${row.locationRaw.slice(0, 62)}`}</span>}
+                  {` · ${t("jobs.matchProximity")}`}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </main>
   );
 }

@@ -124,8 +124,15 @@
     {
       "idx": 17,
       "version": "7",
-      "when": 1790198746987,
-      "tag": "0017_job_analysis",
+      "when": 1790196707271,
+      "tag": "0017_job_title_trgm",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790203769317,
+      "tag": "0018_job_analysis",
       "breakpoints": true
     }
   ]

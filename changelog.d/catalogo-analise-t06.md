@@ -3,7 +3,7 @@
 ### Adicionado
 
 - Análise estruturada da vaga (#223, tarefa 06). Tabela `job_analysis`
-  (migration aditiva `0017_job_analysis`): uma linha imutável por tentativa,
+  (migration aditiva `0018_job_analysis`): uma linha imutável por tentativa,
   `retry_of` para a nova tentativa, índice único parcial por
   `(job_id, input_hash, schema_version)` nos estados ativos e lease de 10 min
   (`running` vencido vira `interrupted`). Regras puras em

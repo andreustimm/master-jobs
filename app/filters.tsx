@@ -227,14 +227,14 @@ export function FilterBar({
         <Carry state={state} except={["q", "page"]} />
         <AutoApplyInput
           name="q"
-          applied={state.term?.term ?? ""}
+          applied={state.query?.raw ?? ""}
           placeholder={t("filters.search")}
           aria-describedby="filters-query-hint"
           className="min-w-0 flex-1"
           data-testid="filters-query"
         />
         <Button type="submit" data-testid="filters-submit">{t("filters.submit")}</Button>
-        {state.term && (
+        {state.query && (
           <TransitionLink href={href(base, state, { q: undefined })} className={chipClass(false)} data-testid="filters-query-clear">
             {t("filters.clear")}
           </TransitionLink>
@@ -572,9 +572,24 @@ export function FilterBar({
 
       <div className={grid}>
         <Row label={t("filters.sort")}>
-          <TransitionLink href={href(base, state, { sort: undefined })} className={chipClass(!state.sort || state.sort === "fit")}>
+          {/* Relevância sem consulta não pesa nada e a lista sai por fit: o
+              chip ativo diz a ordem que de fato vale. */}
+          <TransitionLink
+            href={href(base, state, { sort: undefined })}
+            className={chipClass(!state.sort || state.sort === "fit" || (state.sort === "relevance" && !state.query))}
+            data-testid="filters-sort-fit"
+          >
             {t("filters.byFit")}
           </TransitionLink>
+          {state.query && (
+            <TransitionLink
+              href={href(base, state, { sort: "relevance" })}
+              className={chipClass(state.sort === "relevance")}
+              data-testid="filters-sort-relevance"
+            >
+              {t("filters.byRelevance")}
+            </TransitionLink>
+          )}
           <TransitionLink href={href(base, state, { sort: "recent" })} className={chipClass(state.sort === "recent")}>
             {t("filters.byRecent")}
           </TransitionLink>
