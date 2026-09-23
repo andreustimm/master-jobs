@@ -19,5 +19,9 @@ introduced in the branch. Never broaden the cleanup beyond that diff.
 ## Guardrails
 
 - Keep behavior unchanged unless fixing a clear bug.
+- Never remove a safeguard in the name of brevity: guards, tests, validations,
+  `firstNonEmpty()` over `??`, and comments that explain *why* (a decision,
+  trade-off or trap) stay. Only comments that restate *what* the code does are
+  slop ([rules/architecture.md](../../../docs/engineering/rules/architecture.md#g82)).
 - Prefer minimal, focused edits over broad rewrites.
 - Keep the final summary concise (1-3 sentences).

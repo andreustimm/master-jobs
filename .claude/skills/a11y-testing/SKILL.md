@@ -14,14 +14,17 @@ user-invocable: false
 
 Use the existing hermetic Playwright runner in `tests/e2e/`; never create a
 second Jest, Playwright, server, database, or CI stack. Project rules in
-`AGENTS.md` and `DESIGN.md` are the source of truth.
+`AGENTS.md`, [docs/engineering/rules/frontend.md](../../../docs/engineering/rules/frontend.md)
+and `DESIGN.md` are the source of truth.
 
 ## Workflow
 
 1. Read the existing browser checks in `tests/e2e/ui.mjs`, the axe lane in
    `tests/e2e/a11y.mjs`, and its orchestration in `tests/e2e/run-isolated.mjs`.
-2. Add page or state coverage to those files. Reuse the isolated build, seeded
-   SQLite database, loopback server and real authentication path.
+2. Add page or state coverage to those files. Reuse the isolated build, the
+   temporary seeded PostgreSQL database, loopback server and real
+   authentication path. A new route also enters the literal lists in
+   `tests/e2e/ui.mjs` in the same commit (rule 9).
 3. Scan the cumulative WCAG 2.2 AA tag set:
    `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, and `wcag22aa`.
 4. Confirm the requested route returned a successful response and that the

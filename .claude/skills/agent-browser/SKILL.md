@@ -13,6 +13,18 @@ once with `rtk pnpm qa:browser:install`. Keep the dashboard on loopback and
 store authentication state only under the ignored QA evidence directory defined
 by `docs/qa/README.md`.
 
+Limits that the generic examples below do not know about (the policy is in
+[rules/security.md](../../../docs/engineering/rules/security.md)):
+
+- **Never on LinkedIn.** No navigation, extraction, form filling or session
+  reuse on `linkedin.com` or its subdomains, logged in or not (rule 1).
+- **Never send an application** or submit a form to an employer or ATS
+  (rule 13). The "fill forms" examples below are for this project's own UI.
+- **Observe, do not bypass.** In a QA journey, devtools and browser settings
+  may configure and observe the persona's environment (throttling, viewport);
+  they never replace the interaction or the verification through the public
+  interface.
+
 ## Quick start
 
 ```bash

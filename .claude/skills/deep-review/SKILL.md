@@ -15,6 +15,15 @@ Record issue/PR and reviewed revision in the context pack. A rendered `SHIP` is
 review evidence; it does not transition or complete the remote task. Review stays
 read-only; the owning execution handles any authorized transition after the review.
 
+When and what the verdict is worth is policy, in `AGENTS.md` (rule 19) and
+[docs/engineering/rules/delivery.md](../../../docs/engineering/rules/delivery.md#g53)
+— load both, and the domain file the diff touches, in the knowledge stage. The
+review runs after the applicable gate and before the PR; a verdict covers only
+the revision it pinned, so a relevant change afterwards needs a new
+(incremental) round. `FIX_BEFORE_SHIP` and `REWORK` are never downgraded by the
+reviewer or waived by the agent that asked for the review: only a person may
+accept remaining findings, in writing on the PR (G54).
+
 Review at CodeRabbit grade with no file cap and one assertive posture: funnel the diff, discover root/nested project instructions and relevant local skills, shard defects and polish into independent cohorts, fan out reviewers, then merge with complete hunk/rule accounting. Defects require causal evidence and control the verdict; advisories require a concrete improvement and always remain visible.
 
 Steps 1–4 drive an idempotent artifact pipeline under `<out>`: every stage gate is a bundled-script exit 0, valid agent outputs are never re-run, and an interrupted round resumes by re-running the same commands.

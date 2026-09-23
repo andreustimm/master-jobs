@@ -11,6 +11,9 @@ Monte o kit de candidatura para a vaga indicada em $ARGUMENTS (id da vaga).
 4. Gere em `out/<empresa>-<cargo>/`: `cv.md`, `cover-letter.md`, `outreach.md`
    e `notes.md` (o que foi enfatizado e por quê).
 5. Sinalize explicitamente qualquer requisito da vaga que caia em `growth:`.
-6. Registre: `pnpm jho track <id> preparing -n "kit em out/<dir>"`.
+6. Registre: `pnpm jho track <id> preparing -n "kit em out/<dir>"` — pedir o
+   kit é a decisão de preparar.
+7. **Não envie nada.** O kit é rascunho; quem envia a candidatura é o usuário
+   (regra 13). `applied` só depois que ele disser que enviou.
 
 Use as skills `application-kit` e `candidate-profile`.

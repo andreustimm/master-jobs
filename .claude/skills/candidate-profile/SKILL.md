@@ -36,10 +36,9 @@ São Paulo, Brasil. Inglês C2. Remoto, B2B/contractor.
 > designing production AI platforms, agentic workflows and data-intensive
 > products for international teams.
 
-**Clusters-alvo**, em ordem de peso: `architect` (1.0) · `staff` (0.95) ·
-`ai_lead` (0.95) · `eng_lead` (0.85) · `senior_ic` (0.6).
-Cada cluster mapeia para uma variante de currículo — veja `targets.clusters`
-no YAML.
+**Clusters-alvo:** `architect`, `staff`, `ai_lead`, `eng_lead` e `senior_ic`.
+Pesos e ordem vivem em `targets.clusters` no YAML — não os copie para cá, eles
+mudam com o perfil. Cada cluster mapeia para uma variante de currículo.
 
 ---
 
@@ -76,10 +75,9 @@ Ao adaptar currículo, carta ou mensagem:
   usuário em vez de esconder. Lacuna conhecida é informação útil para decidir
   se vale aplicar.
 
-Lacunas atuais declaradas: nenhum case study público de Zorbit ou Contas Casal;
-Kubernetes é entrega, não força de destaque; tooling formal de evals é
-prática interna, não demonstrada publicamente; só 2 recomendações no LinkedIn,
-nenhuma validando arquitetura ou IA.
+As lacunas vigentes estão sob `growth:` no YAML; leia-as de lá a cada uso, em
+vez de confiar numa lista copiada. A regra completa é a regra 7
+([rules/security.md](../../../docs/engineering/rules/security.md#g09)).
 
 ---
 

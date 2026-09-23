@@ -12,8 +12,10 @@ Execute a varredura diária de vagas.
    aderência real ao perfil.
 4. Apresente uma recomendação de triagem em tabela: id, empresa, cargo, fit,
    veredito (aplicar / talvez / descartar) e o motivo em uma linha.
-5. **Não mova nada no funil sem confirmação.** Depois que o usuário decidir,
-   registre com `pnpm jho track <id> <status> -n "<motivo>"`.
+5. **Não mova nada no funil sem decisão do usuário.** Se `$ARGUMENTS` já
+   delega a decisão explicitamente, registre o que ela cobre; senão, espere a
+   resposta à tabela. Registre com `pnpm jho track <id> <status> -n "<motivo>"`.
+   O sync nunca autoriza `track`, e nada aqui envia candidatura.
 
 Use as skills `job-triage` e `candidate-profile`.
 

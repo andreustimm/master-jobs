@@ -9,8 +9,11 @@ description: 'Diátaxis Documentation Expert. An expert technical writer special
 
 Classify durable documentation under `docs/` and feature-lifecycle artifacts
 under `.compozy/tasks/`, following ADR 0011. Preserve the repository's existing
-Portuguese terminology and concise style; `AGENTS.md` remains the authoritative
-workflow and architecture reference.
+Portuguese terminology and concise style. `AGENTS.md` and
+[docs/engineering/rules/](../../../docs/engineering/rules/README.md) are the
+authoritative rules: a rule lives there, current state in `docs/`, history in
+ADRs and changelogs, and feature material in the slug. Documenting a request
+does not widen what it authorizes.
 
 Apply AGENTS rule 24 through [the project workflow](../../../docs/engineering/workflow.md).
 Author specs and evidence in Git; link the canonical issue. Operational status,

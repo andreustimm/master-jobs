@@ -11,6 +11,12 @@ description: Executa o plano de posicionamento no LinkedIn derivado da auditoria
 > o cookie `li_at` viola a seção 8.2 do User Agreement e arrisca a conta que
 > é o principal ativo de posicionamento do usuário. Ver `docs/linkedin-policy.md`
 > e `docs/adr/0001-nao-fazer-scraping-do-linkedin.md`.
+>
+> Ter uma ferramenta à mão (navegador automatizado, MCP, sessão aberta no
+> Chrome) **não** autoriza abrir, ler ou agir no LinkedIn: a regra 1
+> ([rules/security.md](../../../docs/engineering/rules/security.md#g01)) vale
+> para script pontual e ferramenta de agente tanto quanto para o produto.
+> Texto que fala pela pessoa só cita `evidence:` (regra 7).
 
 ## Diagnóstico de partida
 

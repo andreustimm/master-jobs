@@ -152,19 +152,19 @@ pendente na issue indicada.
 | C03 | Exceções de guarda | Resolvido por #197; lista em G39 |
 | C04 | "Nunca deletar vaga" × retenção | Resolvido: exceção nomeada em G03 |
 | C05 | FK explícita × default | Resolvido por #199; G20 |
-| C06 | Skill de migration em SQLite | Resolvido por #199 no `SKILL.md`; resíduos revistos em [#201](https://github.com/andreustimm/master-jobs/issues/201) |
+| C06 | Skill de migration em SQLite | Resolvido por #199 no `SKILL.md`; resíduos (`a11y-testing`, avaliação das skills) corrigidos em [#201](https://github.com/andreustimm/master-jobs/issues/201) |
 | C07 | `sslmode` recusado em `deploy.md` | Resolvido por #199; G27 |
 | C08 | Token bruto × semântico | Resolvido: G32; `tests/design.test.ts` (V10-03, #204) reprova paleta crua fora das exceções nomeadas |
 | C09 | Versão copiada; invalidação por conteúdo | Resolvido: G08 sem número, G77 e `data-model.md` corrigidos |
 | C10 | "Sem JS de cliente" | Resolvido: G69 |
-| C11 | FIX_BEFORE_SHIP × `ship-pr` | Regra resolvida em G54; skills alinhadas em [#201](https://github.com/andreustimm/master-jobs/issues/201) |
+| C11 | FIX_BEFORE_SHIP × `ship-pr` | Resolvido: G54; `ship-pr` e `deep-review` alinhadas em [#201](https://github.com/andreustimm/master-jobs/issues/201) |
 | C12 | "Editar ambos" AGENTS/CLAUDE | Resolvido: G72, `.codex/config.toml` e documentos que diziam "espelho" |
 | C13 | Contagens de rotas/cobertura copiadas | Resolvido na entrada e em G30; demais documentos em [#202](https://github.com/andreustimm/master-jobs/issues/202) |
 | C14 | `application_event` "nunca deletada" | Resolvido por #199; G75 |
 | C15 | "Única mutação" da UI | Resolvido: G65, `architecture.md` e `data-model.md` |
 | C16 | "Toda rede por `getJson`" | Resolvido por #198; G73 |
-| C17 | Zero vagas = handle errado | Regra resolvida em G70; comando `fonte-nova` em [#201](https://github.com/andreustimm/master-jobs/issues/201) |
-| C18 | Triagem × confirmação no funil | Procedimento em [#201](https://github.com/andreustimm/master-jobs/issues/201); G02 continua negando escrita à ingestão |
+| C17 | Zero vagas = handle errado | Resolvido: G70; comando `fonte-nova` alinhado em [#201](https://github.com/andreustimm/master-jobs/issues/201) |
+| C18 | Triagem × confirmação no funil | Resolvido em [#201](https://github.com/andreustimm/master-jobs/issues/201): `job-triage`, `/vagas` e `/aplicar` propõem e só registram decisão do usuário; G02 continua negando escrita à ingestão |
 | C19 | Produção humana sem proteção remota | Resolvido em `main` por #196 (rulesets aplicados em 22/09/2026); `dev`/`staging` só recusam exclusão e force-push no remoto — ver G46 e [github-protections.md](../github-protections.md) |
 | C20 | CI de `dev` × ref posterior | Resolvido por #195; G45 |
 | C21 | Commit direto × bots e hotfix | Resolvido: exceções nomeadas em G43 |
