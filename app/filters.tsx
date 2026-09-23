@@ -345,18 +345,15 @@ export function FilterBar({
             >
               <Carry state={state} except={["pay", "payMax", "cur", "per", "page"]} />
               <PayRange
-                // Toda navegação da barra é suave: ir de `/jobs?a` para
-                // `/jobs?b` reconcilia a mesma posição da árvore e a ilha não
-                // remonta, e `useState` só lê o inicializador na montagem.
-                // Faixa invertida trocada no servidor, o "limpar" e os presets
-                // de corte deixavam o campo com o valor velho, e o Aplicar
-                // seguinte o reenviava. Os valores da faixa seguem a URL por
-                // `useAppliedValue`, que não apaga a digitação em curso — a
-                // chave pelos valores remontava o campo no meio dela quando o
-                // filtro passou a se aplicar sozinho (#218). Período e moeda
-                // continuam na chave: o período reescala o slider e a moeda é
-                // um select não controlado.
-                key={`${extras.pay.period}:${extras.pay.currency}`}
+                // Sem chave. Toda navegação da barra é suave: ir de `/jobs?a`
+                // para `/jobs?b` reconcilia a mesma posição da árvore e a ilha
+                // não remonta, e `useState` só lê o inicializador. Faixa
+                // invertida trocada no servidor, o "limpar" e os presets de
+                // corte deixavam o campo com o valor velho, e o Aplicar
+                // seguinte o reenviava. A chave pelo estado resolvia, mas
+                // remontava a faixa no meio da digitação quando o filtro passou
+                // a se aplicar sozinho (#218). Agora valores, período e moeda
+                // seguem a URL por dentro (`useAppliedValue`, `useFollowed`).
                 min={state.pay?.min}
                 max={state.pay?.max}
                 period={extras.pay.period}

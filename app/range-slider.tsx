@@ -1,7 +1,7 @@
 "use client";
 
 import { Slider } from "@base-ui/react/slider";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { AUTO_APPLY_CONTROL_MS } from "./auto-apply.ts";
 import { useAppliedValue, useAutoSubmit } from "./auto-submit";
@@ -102,9 +102,30 @@ export function RangeSlider({
   children?: React.ReactNode;
 }) {
   const root = useRef<HTMLDivElement>(null);
-  const submitter = useAutoSubmit(root);
-  const [floor, setFloor] = useAppliedValue(min === undefined ? "" : String(min), root, submitter);
-  const [roof, setRoof] = useAppliedValue(max === undefined ? "" : String(max), root, submitter);
+  // Sair de uma faixa intacta, ou clicar num polegar sem arrastar, não é
+  // pedido: só envia se um campo difere do que já foi pedido, ou se um select
+  // ao lado mudou desde o último envio.
+  const selectChanged = useRef(false);
+  const changed = useRef<() => boolean>(() => true);
+  const submitter = useAutoSubmit(root, changed);
+  const floorField = useAppliedValue(min === undefined ? "" : String(min), root, submitter);
+  const roofField = useAppliedValue(max === undefined ? "" : String(max), root, submitter);
+  const { value: floor, set: setFloor } = floorField;
+  const { value: roof, set: setRoof } = roofField;
+  useEffect(() => {
+    changed.current = () =>
+      selectChanged.current ||
+      floorField.current() !== floorField.requested() ||
+      roofField.current() !== roofField.requested();
+  });
+  useEffect(() => {
+    const form = root.current?.closest("form");
+    const reset = () => {
+      selectChanged.current = false;
+    };
+    form?.addEventListener("submit", reset);
+    return () => form?.removeEventListener("submit", reset);
+  }, []);
   const confirm = () => submitter.schedule(AUTO_APPLY_CONTROL_MS);
   // Sair de um campo confirma só quando o foco deixa a faixa inteira.
   const leave = (event: React.FocusEvent) => {
@@ -125,7 +146,9 @@ export function RangeSlider({
       // `change` dele sobe até aqui. O dos campos numéricos também sobe, a cada
       // tecla, e é ignorado — o campo confirma ao sair.
       onChange={(event) => {
-        if (event.target instanceof HTMLSelectElement) confirm();
+        if (!(event.target instanceof HTMLSelectElement)) return;
+        selectChanged.current = true;
+        confirm();
       }}
     >
       <div className="flex flex-wrap items-end gap-2">

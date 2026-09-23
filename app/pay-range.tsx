@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PAY_FILTER_MAX, PAY_SLIDER_CEILING, PAY_SLIDER_STEP } from "./filter-scales.ts";
 import { RangeSlider, type RangeLabels } from "./range-slider";
 
@@ -12,8 +12,24 @@ import { RangeSlider, type RangeLabels } from "./range-slider";
  * has to move the track under the thumbs immediately, not after Apply.
  *
  * The currency does not rescale anything — the scale is a reading aid, not a
- * conversion — so it is an uncontrolled select that only travels with the form.
+ * conversion — so it only travels with the form.
+ *
+ * Both selects follow the URL when it changes, instead of the island being
+ * remounted by `key`: a remount in the middle of an automatic apply (#218)
+ * would throw away what is being typed in the amount fields.
  */
+
+/** Adopt the server's value whenever it changes; a select is never mid-typing. */
+function useFollowed<T>(applied: T): [T, (next: T) => void] {
+  const [value, setValue] = useState(applied);
+  const seen = useRef(applied);
+  useEffect(() => {
+    if (seen.current === applied) return;
+    seen.current = applied;
+    setValue(applied);
+  }, [applied]);
+  return [value, setValue];
+}
 
 type Period = "month" | "year";
 
@@ -44,7 +60,8 @@ export function PayRange({
   /** The Apply button, composed from the server so its text stays translated. */
   children?: React.ReactNode;
 }) {
-  const [unit, setUnit] = useState<Period>(period);
+  const [unit, setUnit] = useFollowed<Period>(period);
+  const [chosenCurrency, setCurrency] = useFollowed(currency);
 
   return (
     <RangeSlider
@@ -65,7 +82,13 @@ export function PayRange({
     >
       <label className="flex flex-col gap-1 type-caption-sm text-muted-foreground">
         {labels.currency}
-        <select name="cur" defaultValue={currency} className={SELECT} data-testid="filters-pay-currency">
+        <select
+          name="cur"
+          value={chosenCurrency}
+          onChange={(event) => setCurrency(event.target.value)}
+          className={SELECT}
+          data-testid="filters-pay-currency"
+        >
           {currencies.map((code) => (
             <option key={code} value={code}>
               {code}

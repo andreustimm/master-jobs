@@ -192,6 +192,31 @@ async function runChecks(page, base, { email, password }, check) {
         && (await page.getByTestId("filters-score-max").inputValue()) === "",
       JSON.stringify({ reloaded, back: page.url() }),
     );
+
+    // 9. Sair de uma faixa intacta não navega: o formulário serializa campos
+    //    vazios que a URL não tem, e isso não é pedido.
+    navigations = 0;
+    await page.getByTestId("filters-score-min").click();
+    await page.locator("h1").first().click();
+    await page.waitForTimeout(800);
+    check("#218 entrar e sair da faixa sem mudar nada não navega", navigations === 0, String(navigations));
+
+    // 10. Navegação de outro caminho vence o pedido pendente: digitar e, antes
+    //     da pausa, clicar em Limpar não traz a busca de volta.
+    await page.goto(`${base}/jobs?q=Work`, { waitUntil: "networkidle" });
+    await ready(page);
+    navigations = 0;
+    await query.click();
+    await page.keyboard.type(" mode");
+    await page.getByTestId("filters-get-form").getByRole("link").click();
+    await page.waitForURL((url) => !url.searchParams.has("q"), { timeout: 10_000 });
+    await ready(page);
+    await page.waitForTimeout(1_000);
+    check(
+      "#218 Limpar durante o pedido pendente vence: a busca não volta",
+      !new URL(page.url()).searchParams.has("q") && navigations === 1 && (await query.inputValue()) === "",
+      JSON.stringify({ url: page.url(), navigations, value: await query.inputValue() }),
+    );
   } finally {
     holdMs = 0;
     await page.unroute(jobsUrl, count);

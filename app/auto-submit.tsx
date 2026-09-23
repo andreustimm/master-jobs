@@ -45,8 +45,17 @@ function navigationInFlight(): boolean {
   return snapshot.phase !== "idle" && !snapshot.committed;
 }
 
-/** Pedido de aplicação do formulário que contém `ref`; um por controle, o último vence. */
-export function useAutoSubmit(ref: RefObject<HTMLElement | null>): AutoSubmitter {
+/**
+ * Pedido de aplicação do formulário que contém `ref`; um por controle, o último vence.
+ *
+ * `changed`, quando dado, é conferido na hora do envio: a faixa serializa
+ * campos vazios e selects que a URL de quem chegou não tem (`fitMax=`,
+ * `cur=USD`), então comparar URLs não reconhece "nada mudou" ali.
+ */
+export function useAutoSubmit(
+  ref: RefObject<HTMLElement | null>,
+  changed?: RefObject<() => boolean>,
+): AutoSubmitter {
   const [submitter] = useState(() =>
     createAutoSubmitter({
       setTimer: (callback, delay) => window.setTimeout(callback, delay),
@@ -56,6 +65,7 @@ export function useAutoSubmit(ref: RefObject<HTMLElement | null>): AutoSubmitter
       submit: () => {
         const form = formOf(ref.current);
         if (!form) return;
+        if (changed && !changed.current()) return;
         // Voltar ao valor que a URL já tem não é pedido novo: sem isso, sair
         // de um campo intacto ou devolver o slider ao lugar abriria uma
         // navegação para a mesma lista.
@@ -70,10 +80,33 @@ export function useAutoSubmit(ref: RefObject<HTMLElement | null>): AutoSubmitter
     const form = formOf(ref.current);
     // Enter e o botão Aplicar enviam na hora; o pedido pendente viraria uma
     // segunda navegação para o mesmo lugar.
-    const cancel = () => submitter.cancel();
-    form?.addEventListener("submit", cancel);
+    let own = false;
+    const onSubmit = () => {
+      own = true;
+      submitter.cancel();
+      // O `begin` do próprio envio acontece dentro deste mesmo despacho; se ele
+      // não abrir geração nova (alvo repetido), a marca não pode sobrar para a
+      // próxima navegação alheia.
+      queueMicrotask(() => {
+        own = false;
+      });
+    };
+    // Navegação que não saiu deste formulário — Limpar, preset, outro filtro,
+    // Voltar — é a interação mais recente, e o pedido pendente não pode
+    // desfazê-la depois do commit. O envio do próprio formulário abre a
+    // geração logo depois do `submit` (o `formdata` de `TransitionGetForm`).
+    let generation = transitionStore.getSnapshot().generation;
+    const unsubscribe = transitionStore.subscribe(() => {
+      const next = transitionStore.getSnapshot().generation;
+      if (next === generation) return;
+      generation = next;
+      if (!own) submitter.cancel();
+      own = false;
+    });
+    form?.addEventListener("submit", onSubmit);
     return () => {
-      form?.removeEventListener("submit", cancel);
+      form?.removeEventListener("submit", onSubmit);
+      unsubscribe();
       submitter.dispose();
     };
   }, [ref, submitter]);
@@ -98,7 +131,7 @@ export function useAppliedValue(
   applied: string,
   root: RefObject<HTMLElement | null>,
   submitter: AutoSubmitter,
-): [string, (next: string) => void, () => string] {
+): AppliedField {
   const [value, setValue] = useState(applied);
   const latest = useRef(applied);
   const sent = useRef(applied);
@@ -128,35 +161,46 @@ export function useAppliedValue(
     setValue(applied);
   }, [applied, root, submitter]);
 
-  // O valor que a URL vai ter: o último enviado, ou o que veio dela. Durante
-  // uma navegação em voo, `applied` ainda é o de antes.
-  const requested = () => sent.current;
-  return [value, setValue, requested];
+  return {
+    value,
+    set: setValue,
+    // O valor que a URL vai ter: o último enviado, ou o que veio dela. Durante
+    // uma navegação em voo, `applied` ainda é o de antes.
+    requested: () => sent.current,
+    // Lido na hora do envio, depois do último render.
+    current: () => latest.current,
+  };
 }
+
+export type AppliedField = {
+  value: string;
+  set: (next: string) => void;
+  requested: () => string;
+  current: () => string;
+};
 
 type AutoApplyInputProps = Omit<ComponentProps<typeof Input>, "value" | "defaultValue" | "onChange" | "ref"> & {
   /** O valor que a URL aplica agora. */
   applied: string;
-  minChars?: number;
 };
 
 /** Campo de texto que aplica o filtro quando a pessoa para de digitar. */
-export function AutoApplyInput({ applied, minChars = AUTO_APPLY_MIN_CHARS, ...props }: AutoApplyInputProps) {
+export function AutoApplyInput({ applied, ...props }: AutoApplyInputProps) {
   const ref = useRef<HTMLInputElement>(null);
   const submitter = useAutoSubmit(ref);
-  const [value, setValue, requested] = useAppliedValue(applied, ref, submitter);
+  const field = useAppliedValue(applied, ref, submitter);
 
   return (
     <Input
       {...props}
       ref={ref}
-      value={value}
+      value={field.value}
       onChange={(event) => {
         const next = event.target.value;
-        setValue(next);
+        field.set(next);
         // Comparar com o que já foi pedido, não com a URL de agora: com "Work"
         // em voo, voltar a digitar o valor antigo da URL é um pedido novo.
-        if (textReady(next, requested(), minChars)) submitter.schedule(AUTO_APPLY_TEXT_MS);
+        if (textReady(next, field.requested(), AUTO_APPLY_MIN_CHARS)) submitter.schedule(AUTO_APPLY_TEXT_MS);
         else submitter.cancel();
       }}
     />

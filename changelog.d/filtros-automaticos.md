@@ -17,9 +17,10 @@
 
 ### Alterado
 
-- Busca, empresa e os campos das faixas deixaram de ser remontados por `key`
-  a cada resposta: `useAppliedValue` segue a URL sem apagar o texto ainda não
-  enviado do campo em foco. `PayRange` continua com a chave de período e moeda.
+- Busca, empresa e as faixas deixaram de ser remontados por `key` a cada
+  resposta: `useAppliedValue` segue a URL sem apagar o texto ainda não enviado
+  do campo em foco, e período e moeda do `PayRange` seguem a URL por
+  `useFollowed`.
 
 ## pt-BR
 

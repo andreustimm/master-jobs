@@ -542,15 +542,21 @@ o próximo passo não é um cache maior, e sim, nesta ordem:
   navegação sem a URL confirmada, o envio espera por ela: os campos ocultos do
   formulário carregam o resto do filtro, e antes da resposta ainda trazem o
   estado anterior — a busca digitada logo depois do slider desfaria o slider.
-  Envio para a URL atual é descartado (`sameDestination`), e Enter/Aplicar
-  cancelam o pedido pendente, para não haver duas navegações iguais.
+  Envio para a URL atual é descartado (`sameDestination`); na faixa, que
+  serializa campos vazios e selects que a URL não tem, o envio só sai se um
+  campo difere do último pedido ou se um select mudou — sair de uma faixa
+  intacta não navega. Enter/Aplicar cancelam o pedido pendente, e qualquer
+  navegação que não saiu do próprio formulário (limpar, preset, outro filtro,
+  Voltar) também: ela é a interação mais recente.
+- **Janelas.** 300 ms nos controles basta para juntar setas seguidas no
+  slider; 400 ms no texto é a pausa de quem ainda está digitando uma palavra.
 - **Os campos deixaram de ser remontados por `key`.** A chave pelo valor do
   servidor remontava o campo a cada resposta; com o envio automático a
   resposta chega no meio da digitação e devolvia o texto antigo, sem foco.
   `useAppliedValue` segue a URL (limpar, voltar, preset, faixa invertida
   corrigida pelo servidor) exceto quando há texto não enviado no campo em foco.
-  Período e moeda continuam na chave do `PayRange`: o período reescala o slider
-  e a moeda é select não controlado.
+  Período e moeda do `PayRange` seguem a URL por `useFollowed`, também sem
+  chave: trocar o período e digitar o valor logo em seguida não perde nada.
 - **Fora do automático:** a lista de fontes. Cada aplicação reconstrói o
   seletor pela URL e fecharia o `<details>` no meio de uma escolha múltipla; o
   Aplicar fica ao lado da lista.
