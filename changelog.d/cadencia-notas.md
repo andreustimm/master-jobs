@@ -10,7 +10,7 @@
   da chamada (20 s) passado à unidade. A fatia `pontuar` sai: a rota responde
   400, e reaplicar `supabase/cron/varredura.sql` remove
   `jho-varredura-pontuar`.
-- Tabela `score_cursor` (migração aditiva `0017_score_cursor`) e índice
+- Tabela `score_cursor` (migração aditiva `0019_score_cursor`) e índice
   parcial `job_recency_open_idx`: `scoreAll` percorre as vagas abertas por
   `coalesce(posted_at, first_seen_at)` decrescente em lotes de 100
   (`SCORE_BATCH`), grava a posição depois de cada lote e retoma dela;

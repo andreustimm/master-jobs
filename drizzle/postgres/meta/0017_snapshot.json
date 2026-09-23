@@ -1,5 +1,5 @@
 {
-  "id": "3f04f283-ce2e-4d64-b7d8-7971fe4ec2d3",
+  "id": "42685e19-c2c7-447c-883d-ae3d1da8e88b",
   "prevId": "401062d5-f054-490c-9a7e-451a922d1eaa",
   "version": "7",
   "dialect": "postgresql",
@@ -1909,26 +1909,20 @@
           "method": "gin",
           "with": {}
         },
-        "job_recency_open_idx": {
-          "name": "job_recency_open_idx",
+        "job_title_trgm_idx": {
+          "name": "job_title_trgm_idx",
           "columns": [
             {
-              "expression": "coalesce(\"posted_at\", \"first_seen_at\")",
+              "expression": "\"title\" gin_trgm_ops",
               "asc": true,
               "isExpression": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": false,
           "where": "\"production\".\"job\".\"closed_at\" is null",
           "concurrently": false,
-          "method": "btree",
+          "method": "gin",
           "with": {}
         }
       },
@@ -3635,118 +3629,6 @@
           "columns": [
             "candidate_id",
             "window_day"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "production.score_cursor": {
-      "name": "score_cursor",
-      "schema": "production",
-      "columns": {
-        "candidate_id": {
-          "name": "candidate_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "track_id": {
-          "name": "track_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "profile_hash": {
-          "name": "profile_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "scorer_version": {
-          "name": "scorer_version",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position_key": {
-          "name": "position_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "position_job_id": {
-          "name": "position_job_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_completed_at": {
-          "name": "last_completed_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "first_completed_at": {
-          "name": "first_completed_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "score_cursor_candidate_id_candidate_id_fk": {
-          "name": "score_cursor_candidate_id_candidate_id_fk",
-          "tableFrom": "score_cursor",
-          "tableTo": "candidate",
-          "schemaTo": "production",
-          "columnsFrom": [
-            "candidate_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "score_cursor_track_id_target_track_id_fk": {
-          "name": "score_cursor_track_id_target_track_id_fk",
-          "tableFrom": "score_cursor",
-          "tableTo": "target_track",
-          "schemaTo": "production",
-          "columnsFrom": [
-            "track_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "score_cursor_candidate_track_pk": {
-          "name": "score_cursor_candidate_track_pk",
-          "columns": [
-            "candidate_id",
-            "track_id"
           ]
         }
       },

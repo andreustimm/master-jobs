@@ -22,7 +22,7 @@ com `sync`, `termos`, `captura`, `reconferencia`, `sem-nota`, `manutencao` e
 que cabe em 20 s, grava uma linha em `production.sweep_run` e devolve o
 relatório em JSON. Quem chama é o `pg_cron` do Supabase — e ligá-lo é **passo
 humano**, uma vez, depois de o código estar em produção (as migrações
-`0016_sweep_lease_and_runs` e `0017_score_cursor` aplicadas).
+`0016_sweep_lease_and_runs` e `0019_score_cursor` aplicadas).
 
 **Só em produção** ([ADR 0027](adr/0027-cadencia-das-notas-em-lotes-com-cursor.md)).
 O SQL do agendador é aplicado **somente no projeto Supabase de produção** — ele
@@ -181,7 +181,7 @@ Cada chamada tem 20 s: o candidato que pega a fatia usa o orçamento em lotes
 se ainda couber. Quem não terminou volta na agenda seguinte, do cursor. A
 reserva é `pontuacao:<candidato>` em `sweep_lease`, comum às duas filas.
 
-**Ativar.** Depois do deploy de produção com a migração `0017_score_cursor`
+**Ativar.** Depois do deploy de produção com a migração `0019_score_cursor`
 aplicada, reaplique `supabase/cron/varredura.sql` no SQL Editor do projeto de
 **produção** (passo 4 de "Varredura horária" acima). Entre o deploy e o SQL, a
 agenda antiga ainda chama `fatia=pontuar`, que agora responde `400`: vaga nova

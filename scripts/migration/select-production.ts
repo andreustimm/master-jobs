@@ -55,6 +55,8 @@ export const postSnapshotTables = new Set([
   "sweep_run",
   // Cursor da passada de pontuação (#288): derivado; vazio = começar do topo.
   "score_cursor",
+  // Análise estruturada da vaga (#223): derivada de LLM, refeita sob pedido.
+  "job_analysis",
 ]);
 
 const selectedJobs = `SELECT id FROM job WHERE

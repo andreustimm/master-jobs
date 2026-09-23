@@ -18,7 +18,8 @@ import { workModeSql } from "./work-mode.ts";
 import { attributedJobIds } from "../../contexts/sourcing/index.ts";
 import { loadRates } from "../../contexts/fx/index.ts";
 import { PERIODS_PER_YEAR, annualFactorSql, type Currency, type FxTable } from "../money.ts";
-import { termPrefilterLike, termRegexSql, type ValidTerm } from "../term.ts";
+import type { MatchField } from "../search.ts";
+import { phraseRegexSql, termPrefilterLike, termRegexSql, type ValidTerm } from "../term.ts";
 import {
   IllegalApplicationTransitionError,
   transitionApplication,
@@ -93,7 +94,12 @@ export type BoardRow = {
   checkQueue: string | null;
   /** Every posting of this job's group, itself included. Empty when ungrouped. */
   repeats: GroupPosting[];
+  /** Onde a consulta casou, para a explicação da linha. Null sem consulta. */
+  matchedFields: MatchField[] | null;
 };
+
+/** Termos e frases já validados; ver `parseQuery` em `src/core/search.ts`. */
+export type SearchQuery = { terms: readonly ValidTerm[]; phrases: readonly ValidTerm[] };
 
 /** How much captured description a list row carries. See the query below. */
 export const PREVIEW_CHARS = 2500;
@@ -194,7 +200,17 @@ export type BoardFilters = {
    * visible rather than silently depressing the rank.
    */
   hasDescription?: boolean;
-  sort?: "fit" | "recent" | "comp";
+  /**
+   * A consulta analisada da tela (`parseQuery`): cada termo e cada frase é uma
+   * condição a mais, todas obrigatórias. `term` continua valendo como consulta
+   * de um termo só, para quem chama sem análise (CLI, cockpit).
+   */
+  query?: SearchQuery;
+  /**
+   * `relevance` só ordena quando há consulta: sem ela não há casamento a
+   * pesar, e a ordem cai na de fit. Nunca muda o conjunto nem a contagem.
+   */
+  sort?: "fit" | "recent" | "comp" | "relevance";
   /**
    * Which track's fit the board ranks by (ADR-008). Absent means the primary:
    * a reader that did not choose must not mix tracks in one list.
@@ -550,6 +566,56 @@ function termTextCandidates(like: string): SQL {
     where ${withoutSeparators(jobPage.text)} ilike ${like})`;
 }
 
+/** Um termo ou uma frase da consulta, já como padrão de `~*` e pré-filtro trigrama. */
+type QueryPart = { pattern: string; like: string | null };
+
+function queryParts(opts: BoardFilters): QueryPart[] {
+  const terms = [...(opts.term ? [opts.term] : []), ...(opts.query?.terms ?? [])];
+  return [
+    ...terms.map((term) => ({ pattern: termRegexSql(term.term), like: termPrefilterLike(term.term) })),
+    ...(opts.query?.phrases ?? []).map((phrase) => ({
+      pattern: phraseRegexSql(phrase.term),
+      like: termPrefilterLike(phrase.term),
+    })),
+  ];
+}
+
+// Bound as a parameter, never spliced: the pattern is escaped by the term
+// kernel and still travels as data (`O'Reilly%_` is just text here).
+// `coalesce` nos dois: `null ~* x` é nulo, e o `not` do grupo de proximidade
+// leria "não sei" como "não casou" pela metade.
+const inText = (pattern: string) => sql`coalesce(${jobPage.text}, ${job.descriptionText}, '') ~* ${pattern}`;
+const inLocation = (pattern: string) => sql`coalesce(${job.locationRaw}, '') ~* ${pattern}`;
+
+/**
+ * Onde cada termo pode casar: cargo, empresa, localização e descrição (A4).
+ * Cargo, empresa e localização são curtos e vão direto ao `~*`. A descrição é
+ * o texto longo, descomprimido linha a linha: ali o índice trigrama corta antes
+ * o que nunca casaria, e o `~*` continua decidindo (#214). Todo termo e toda
+ * frase precisam casar, cada um em algum campo.
+ */
+function queryCondition(parts: readonly QueryPart[]): SQL | undefined {
+  if (parts.length === 0) return undefined;
+  return sql`(${sql.join(
+    parts.map(({ pattern, like }) =>
+      sql`(${job.title} ~* ${pattern} or ${job.companyName} ~* ${pattern} or ${inLocation(pattern)} or ${
+        like ? sql`(${job.id} = any(${termTextCandidates(like)}) and ${inText(pattern)})` : inText(pattern)
+      })`,
+    ),
+    sql` and `,
+  )})`;
+}
+
+/** Algum termo ou frase casou neste campo — para a explicação e a relevância. */
+function fieldMatches(parts: readonly QueryPart[], field: MatchField): SQL {
+  const one = (pattern: string) =>
+    field === "title" ? sql`${job.title} ~* ${pattern}`
+    : field === "company" ? sql`${job.companyName} ~* ${pattern}`
+    : field === "location" ? inLocation(pattern)
+    : inText(pattern);
+  return sql`(${sql.join(parts.map(({ pattern }) => one(pattern)), sql` or `)})`;
+}
+
 function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: PaySql): SQL[] {
   const conditions: SQL[] = [isNull(job.closedAt)];
   // Fit, cluster, blockers and application status are candidate-scoped. A
@@ -584,21 +650,8 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
       conditions.push(eq(application.status, opts.status));
     }
   }
-  if (opts.term) {
-    // Bound as a parameter, never spliced: the pattern is escaped by the term
-    // kernel and still travels as data (`O'Reilly%_` is just text here).
-    const pattern = termRegexSql(opts.term.term);
-    const like = termPrefilterLike(opts.term.term);
-    const inText = sql`coalesce(${jobPage.text}, ${job.descriptionText}, '') ~* ${pattern}`;
-    // Título e empresa são curtos e vão direto ao `~*`. A descrição é o texto
-    // longo, descomprimido linha a linha: ali o índice trigrama corta antes o
-    // que nunca casaria, e o `~*` continua decidindo (#214).
-    conditions.push(
-      sql`(${job.title} ~* ${pattern} or ${job.companyName} ~* ${pattern} or ${
-        like ? sql`(${job.id} = any(${termTextCandidates(like)}) and ${inText})` : inText
-      })`,
-    );
-  }
+  const matched = queryCondition(queryParts(opts));
+  if (matched) conditions.push(matched);
   if (opts.sourceKinds && opts.sourceKinds.length > 0) {
     // Igualdade sobre o prefixo extraído, não `like`.
     //
@@ -660,6 +713,14 @@ function boardOrder(opts: BoardFilters, pay?: PaySql): SQL[] {
   }
   if (opts.sort === "recent") {
     return [...payLast, desc(sql`coalesce(${job.postedAt}, ${job.firstSeenAt})`), fit, asc(job.id)];
+  }
+  const parts = queryParts(opts);
+  if (opts.sort === "relevance" && parts.length > 0) {
+    // A ordem de `compareByRelevance`: campo mais forte, fit, recência, id.
+    // Toda linha aqui já casou em algum campo, então "nem cargo nem empresa"
+    // é localização ou descrição — que valem o mesmo — sem reler a descrição.
+    const rank = sql`(case when ${fieldMatches(parts, "title")} then 0 when ${fieldMatches(parts, "company")} then 1 else 2 end)`;
+    return [...payLast, asc(rank), fit, desc(sql`coalesce(${job.postedAt}, ${job.firstSeenAt})`), asc(job.id)];
   }
   return [...payLast, fit, desc(job.firstSeenAt), asc(job.id)];
 }
@@ -734,6 +795,7 @@ async function readBoard(
   const pay = await payContext(opts);
   const conditions = boardConditions(opts, candidateId, pay);
   const order = boardOrder(opts, pay);
+  const parts = queryParts(opts);
   const page = withTotal ? selectBoardPage(candidateId, opts, conditions, order, pay) : undefined;
 
   let query = db.with(...(pay?.relation.kind === "shared" ? [pay.relation.table] : []), ...(page ? [page] : []))
@@ -796,6 +858,17 @@ async function readBoard(
       payState: pay
         ? sql<BoardRow["payState"]>`${pay.state}`
         : sql<BoardRow["payState"]>`null::text`,
+      // Só as linhas escolhidas chegam aqui (a página, depois do LIMIT), então
+      // reler a descrição para dizer onde casou custa uma página, não o acervo.
+      matchedFields: parts.length > 0
+        ? sql<MatchField[]>`array_remove(array[${sql.join(
+          (["title", "company", "location", "description"] as const).map(
+            // Literal da lista fixa acima, nunca entrada: parâmetro aqui ficaria sem tipo.
+            (field) => sql`case when ${fieldMatches(parts, field)} then ${sql.raw(`'${field}'`)} end`,
+          ),
+          sql`, `,
+        )}]::text[], null)`
+        : sql<MatchField[] | null>`null::text[]`,
     })
     .from(job)
     .leftJoin(jobScore, scoreJoin(candidateId, opts.track))
@@ -878,6 +951,82 @@ export async function countHiddenByPayRange(
   if (opts.pay.min !== undefined) outside.push(sql`${pay!.amount} < ${opts.pay.min}`);
   if (opts.pay.max !== undefined) outside.push(sql`${pay!.amount} > ${opts.pay.max}`);
   return countWhere(candidateId, opts, [...conditions, sql`(${sql.join(outside, sql` or `)})`], pay);
+}
+
+/**
+ * Limiar de `word_similarity` do grupo "termos parecidos", calibrado na fixture
+ * de `tests/search-relevance.test.ts`: "kubernets" traz "Kubernetes Engineer",
+ * "frontend" não traz "Backend Engineer".
+ */
+export const NEAR_THRESHOLD = 0.6;
+export const NEAR_LIMIT = 20;
+
+export type NearRow = { jobId: number; title: string; companyName: string; locationRaw: string | null };
+
+/** A agulha do grupo: os termos e frases da consulta, na ordem em que vieram. */
+function nearNeedle(opts: BoardFilters): string {
+  const parts = [...(opts.term ? [opts.term] : []), ...(opts.query?.terms ?? []), ...(opts.query?.phrases ?? [])];
+  return parts.map((part) => part.term.toLowerCase()).join(" ");
+}
+
+/**
+ * A consulta do grupo de proximidade, sem executar — o teste de plano a lê.
+ *
+ * Só entre vagas que passam por TODOS os outros filtros e que NÃO casaram a
+ * consulta: o grupo nunca repete o resultado principal nem mexe na contagem
+ * dele. Filtra com `<%` (similaridade por palavra, limiar em
+ * `pg_trgm.word_similarity_threshold`), que o índice `job_title_trgm_idx`
+ * responde; `word_similarity()` sozinha nunca usaria o índice e só ordena.
+ */
+export function nearMatchesQuery(tx: Pick<DB, "with">, candidateId: number | null, opts: BoardFilters, pay?: PaySql) {
+  const parts = queryParts(opts);
+  const needle = nearNeedle(opts);
+  // Os mesmos filtros exatos do quadro, menos a consulta, que aqui é negada.
+  const conditions = boardConditions({ ...opts, term: undefined, query: undefined }, candidateId, pay);
+  let query = tx
+    .with(...(pay?.relation.kind === "shared" ? [pay.relation.table] : []))
+    .select({ jobId: job.id, title: job.title, companyName: job.companyName, locationRaw: job.locationRaw })
+    .from(job)
+    .leftJoin(jobScore, scoreJoin(candidateId, opts.track))
+    .leftJoin(application, and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)))
+    .leftJoin(source, eq(source.id, job.sourceId))
+    .leftJoin(jobPage, eq(jobPage.jobId, job.id))
+    .where(and(...conditions, sql`${needle} <% ${job.title}`, sql`not ${queryCondition(parts)!}`))
+    .orderBy(desc(sql`word_similarity(${needle}, ${job.title})`), asc(job.id))
+    .limit(NEAR_LIMIT)
+    .$dynamic();
+  if (pay?.relation.kind === "shared") query = query.leftJoin(pay.relation.table, eq(pay.relation.table.jobId, job.id));
+  else if (pay) query = query.leftJoinLateral(pay.relation.table, sql`true`);
+  return query;
+}
+
+/** Sem a extensão (ou o operador), não há grupo — e a tela não fala dele. */
+const TRIGRAM_MISSING = new Set(["42883", "42704", "58P01"]);
+
+/**
+ * O grupo "termos parecidos" (#223, US-018): separado, rotulado, limitado a
+ * `NEAR_LIMIT`. Numa transação própria, porque o limiar do `<%` é uma
+ * configuração da sessão e só pode valer para esta consulta.
+ */
+export async function nearMatches(
+  candidateId: number | null,
+  opts: BoardFilters,
+): Promise<{ available: boolean; rows: NearRow[] }> {
+  if (queryParts(opts).length === 0) return { available: false, rows: [] };
+  const pay = await payContext(opts);
+  try {
+    const rows = await getDb().transaction(async (tx) => {
+      await tx.execute(sql`select set_config('pg_trgm.word_similarity_threshold', ${String(NEAR_THRESHOLD)}, true)`);
+      return nearMatchesQuery(tx, candidateId, opts, pay);
+    });
+    return { available: true, rows };
+  } catch (error) {
+    // O Drizzle embrulha o erro do driver; o código SQLSTATE fica em `cause`.
+    const failure = error as { code?: string; cause?: { code?: string } };
+    const code = failure.code ?? failure.cause?.code;
+    if (code !== undefined && TRIGRAM_MISSING.has(code)) return { available: false, rows: [] };
+    throw error;
+  }
 }
 
 /** Counts for the filter chips, so the UI can show what each option yields. */

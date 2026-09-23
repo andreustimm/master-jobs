@@ -34,7 +34,7 @@ ganham API pública quando uma mudança funcional atravessa sua fronteira:
 | positioning | `post`, `engagement`, `target_account`, `metric_snapshot`, `positioning_task` |
 | scrape | fila técnica `scrape_task` |
 | matching | perfil da pessoa em `candidate_matching_profile`, trilhas de alvo em `target_track`, termos salvos em `saved_term`, teto diário de buscas pedidas em `saved_term_request`, notas por trilha em `job_score`, onde a passada de pontuação parou em `score_cursor`, fila de repontuação em `score_task` |
-| llm | catálogo BYOK em `llm_provider`, `llm_model` |
+| llm | catálogo BYOK em `llm_provider`, `llm_model`; análise estruturada da vaga em `job_analysis` (fila processada pela CLI, só dado da vaga) |
 
 `src/core/db/schema.ts` é o único composition root físico do Drizzle: migrations
 e foreign keys cruzadas precisam enxergar o grafo completo. Ownership lógico

@@ -503,7 +503,7 @@ o próximo passo não é um cache maior, e sim, nesta ordem:
 | 1 ✅ | Prelúdio de `/jobs`: trilhas ∥ câmbio, sem `listTracks` duplicado, câmbio em 1 consulta | alto × baixo | `jobs-data.ts` |
 | 1 ✅ | Medição: baseline local e log por estágio | habilita o resto | `perf:jobs`, `registrarTempo` |
 | 🟡 | Medição de produção: TTFB frio/quente, região e agregação das linhas `perf` (#221, em revisão; falta a rodada com sessão) | habilita o cache de facetas | `perf:producao` |
-| PR 2 | Overlay só na troca de rota (#220, em revisão); filtros que se aplicam sozinhos (#218) | alto × médio | fase 3 |
+| PR 2 | Overlay só na troca de rota (#220); filtros que se aplicam sozinhos (#218, em revisão; ver [decisão](#filtros-que-se-aplicam-sozinhos-218)) | alto × médio | fase 3 |
 | 2 ✅ | Seleção compartilhada para lista e total, facetas fundidas | alto × médio | `repo.ts` |
 | 2 🟡 | Busca por termo indexada: pré-filtro `pg_trgm`, `~*` inalterado (#214, em revisão) | alto com termo seletivo × médio | migration `0012`/`0013` |
 | 2 ✅ | Normalização salarial compartilhada, sem repetir cotações a cada uso | alto com faixa | `repo.ts` |
@@ -527,6 +527,59 @@ o próximo passo não é um cache maior, e sim, nesta ordem:
   Ação e `guard*` leem sempre fresco: impersonação e troca de senha mudam a
   sessão **no meio** da requisição, e autorizar com o valor de antes seria a
   decisão errada.
+
+### Filtros que se aplicam sozinhos (#218)
+
+- **O gesto completo pede a lista, não o movimento.** Slider: `onValueCommitted`
+  (soltar o polegar ou a tecla de seta), nunca `onValueChange`. Campos da faixa:
+  ao sair da faixa inteira — passar do piso ao teto, ou do campo ao Aplicar, é o
+  mesmo gesto. Select de moeda e período: ao escolher. Texto (busca e empresa):
+  400 ms sem digitar e pelo menos três caracteres, ou o campo vazio. Três é o
+  mínimo que o pré-filtro trigrama da #214 aproveita; abaixo disso a consulta
+  varre tudo. Enter e Aplicar valem na hora para qualquer tamanho.
+- **Cliente mínimo, e por quê.** Um formulário GET só envia com clique ou
+  Enter; esperar a pausa exige temporizador no navegador. A ilha
+  (`app/auto-submit.tsx`) só chama `requestSubmit()` no formulário em volta —
+  o mesmo caminho do Aplicar. Não guarda filtro, não monta query, não conhece
+  regra: a URL continua sendo o estado e o servidor, a autoridade. As regras de
+  tempo e de "último vence" são puras, em `app/auto-apply.ts`, testadas sem
+  DOM nem relógio.
+- **Último vence.** Um pedido por controle; o novo substitui o pendente. Se há
+  navegação sem a URL confirmada, o envio espera por ela: os campos ocultos do
+  formulário carregam o resto do filtro, e antes da resposta ainda trazem o
+  estado anterior — a busca digitada logo depois do slider desfaria o slider.
+  Envio para a URL atual é descartado (`sameDestination`); na faixa, que
+  serializa campos vazios e selects que a URL não tem, o envio só sai se um
+  campo difere do último pedido ou se um select mudou — sair de uma faixa
+  intacta não navega. Enter/Aplicar cancelam o pedido pendente, e navegação
+  por link ou histórico (limpar, preset, chip, Voltar/Avançar) também: ela é a
+  interação mais recente. Envio de outro formulário da barra não cancela — o
+  pedido espera e sai depois, com os campos ocultos atualizados, e os dois
+  filtros chegam à URL. Quem diz qual é qual é quem abre a geração:
+  `TransitionGetForm` chama `begin` dentro de `duringFormNavigation`
+  (`app/form-navigation.ts`), e o ouvinte consulta a marca na mesma pilha.
+  Limite que já existia antes da #218: Enter/Aplicar **manual** enquanto a
+  navegação de outro filtro ainda está em voo sai com os campos ocultos
+  anteriores, e esse outro filtro se perde — o envio manual não espera.
+- **Janelas.** 300 ms nos controles basta para juntar setas seguidas no
+  slider; 400 ms no texto é a pausa de quem ainda está digitando uma palavra.
+- **Os campos deixaram de ser remontados por `key`.** A chave pelo valor do
+  servidor remontava o campo a cada resposta; com o envio automático a
+  resposta chega no meio da digitação e devolvia o texto antigo, sem foco.
+  `useAppliedValue` segue a URL (limpar, voltar, preset, faixa invertida
+  corrigida pelo servidor) exceto quando há texto não enviado no campo em foco.
+  Período e moeda do `PayRange` seguem a URL por `useFollowed`, também sem
+  chave: trocar o período e digitar o valor logo em seguida não perde nada.
+- **Fora do automático:** a lista de fontes. Cada aplicação reconstrói o
+  seletor pela URL e fecharia o `<details>` no meio de uma escolha múltipla; o
+  Aplicar fica ao lado da lista.
+- **Histórico.** Cada aplicação é uma entrada nova, como era com o botão. Com
+  o intervalo de 400 ms, digitar uma palavra de uma vez gera uma entrada só.
+- **Prova.** `tests/auto-apply.test.ts` (regras) e o E2E
+  `tests/e2e/filter-auto-apply.mjs`, que conta as navegações RSC de `/jobs`:
+  dois caracteres não navegam, digitação contínua vira uma navegação, arrastar
+  não navega e soltar navega uma vez, cinco setas viram uma, e com a resposta
+  retida por 1,5 s a digitação seguinte não é apagada e a última busca vence.
 
 ### Fronteira de carregamento (#217)
 

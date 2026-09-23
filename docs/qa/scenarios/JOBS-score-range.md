@@ -27,3 +27,5 @@ página — ela respondia 500 antes.
 Reaberto por #279: vaga ainda sem nota do candidato passa pela faixa e vem no
 fim da lista. Conferir que, com notas, a faixa continua cortando as vagas
 pontuadas fora dela.
+
+**Reset 2026-09-23 (#218):** a faixa de Score deixou de ser remontada por `key` e passou a se aplicar sozinha (soltar o polegar, sair da faixa). Refazer a faixa invertida e o preset sem Aplicar, e conferir que sair da faixa sem mudar nada não navega.

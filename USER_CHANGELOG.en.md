@@ -18,6 +18,34 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-09-23T18:11:35.000Z
+
+### Improved
+
+- Filters on Jobs and the Cockpit now apply on their own: search once you stop
+  typing (from three letters on); Score and the pay range when you release the
+  control or leave its fields; currency and period when you pick them. The list
+  stays put while you drag. Enter and the Apply button still
+  work immediately, and sources keep their own Apply.
+- The daily check of jobs that are still open is now lighter on the system.
+- The Jobs screen now responds to a menu click right away: while the list
+  loads, an outline of the page replaces the previous screen. Changing a filter
+  still keeps the current list on screen until the new one arrives. On a job's
+  detail page, the per-track fit and the application history arrive just after
+  the rest, without delaying the page itself.
+- The system now measures how long each screen takes on a sample of visits, to catch slowness before it becomes a problem. What you search for, your filters, your résumé and your contact details are not part of that measurement.
+
+### Fixed
+
+- Jobs from sites that only show their latest postings no longer disappear from the board just because they moved down the list. They stay open until the link check confirms the posting was taken down.
+- Creating your profile or saving a CV now builds your main track and starts scoring jobs right after you save, instead of waiting for the next day's refresh.
+- When your CV is too short to build a track, the candidate area says so and what to do — paste your full CV or import the PDF — instead of just "Refresh failed".
+- A new account now sees jobs on Jobs and on the home screen before its scores are calculated, with a notice that the calculation is still running. The screens used to be empty.
+
+### New
+
+- When you create your profile, you can upload your CV as a PDF instead of pasting the text. The extracted text becomes the first version of your CV, and the profile opens right in the editor for you to review.
+
 ## [1.22.2] - 2026-09-23T10:46:42.000Z
 
 

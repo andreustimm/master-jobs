@@ -1,6 +1,7 @@
 import type { Route } from "next";
 import { WORK_MODES, readWorkMode, type BoardFilters, type TrackTarget, type WorkMode } from "../src/contexts/matching/index.ts";
 import { APPLICATION_STATUSES } from "../src/contexts/pursuit/domain/application.ts";
+import { parseQuery } from "../src/core/search.ts";
 import { validateTerm, type TermError, type ValidTerm } from "../src/core/term.ts";
 import { FIT_MAX, PAY_FILTER_MAX } from "./filter-scales.ts";
 
@@ -45,7 +46,12 @@ export type FilterState = {
   /** Highest fit shown; absent means no ceiling. */
   fitMax?: number;
   cluster?: string;
-  /** Whole-word term over title, company and description (`q`). */
+  /**
+   * A consulta `q` analisada: termos de palavra inteira e frases entre aspas
+   * sobre cargo, empresa, localização e descrição. `raw` é o que volta à URL.
+   */
+  query?: { raw: string; terms: ValidTerm[]; phrases: ValidTerm[] };
+  /** O termo, quando a consulta é um termo só — o que se salva como termo. */
   term?: ValidTerm;
   /** Part of the employer's name. Free text: it is matched, never parsed. */
   company?: string;
@@ -84,7 +90,7 @@ export type BoardRoute = "/" | "/jobs";
 // without pulling this module's server graph with them.
 export { FIT_MAX, FIT_SLIDER_STEP, PAY_FILTER_MAX, PAY_SLIDER_CEILING, PAY_SLIDER_STEP } from "./filter-scales.ts";
 
-const SORTS = ["fit", "recent", "comp"] as const;
+const SORTS = ["fit", "recent", "comp", "relevance"] as const;
 
 /**
  * A score read from the URL, held between zero and the scorer's ceiling.
@@ -145,9 +151,25 @@ export function readFilters(params: Record<string, string | string[] | undefined
 
   const q = one("q");
   if (q !== undefined && q.trim() !== "") {
-    const valid = validateTerm(q);
-    if (valid.ok) state.term = valid.value;
-    else notices.push(valid.code);
+    // Cada termo e cada frase passa pela mesma validação do termo de sempre;
+    // um pedaço inválido invalida a consulta inteira, como antes.
+    const parsed = parseQuery(q);
+    const terms: ValidTerm[] = [];
+    const phrases: ValidTerm[] = [];
+    let error: TermError | undefined;
+    for (const [list, into] of [[parsed.terms, terms], [parsed.phrases, phrases]] as const) {
+      for (const part of list) {
+        const valid = validateTerm(part);
+        if (valid.ok) into.push(valid.value);
+        else error ??= valid.code;
+      }
+    }
+    if (error) notices.push(error);
+    else if (terms.length + phrases.length > 0) {
+      state.query = { raw: q.trim().replace(/\s+/g, " "), terms, phrases };
+      // Um termo só, sem frase: é o termo que se salva e se busca nas plataformas.
+      if (terms.length === 1 && phrases.length === 0) state.term = terms[0];
+    }
   }
 
   const track = one("track");
@@ -229,7 +251,7 @@ export function toParams(state: FilterState): Array<[string, string]> {
     params.push([key, value === true ? "1" : String(value)]);
   };
   put("cluster", state.cluster);
-  put("q", state.term?.term);
+  put("q", state.query?.raw);
   put("company", state.company);
   for (const kind of state.sources) put("source", kind);
   put("workMode", state.workMode);
@@ -285,7 +307,7 @@ export function toBoardFilters(state: FilterState): BoardFilters {
     // A tela mostra o acervo a quem ainda espera a nota (#279).
     keepUnscored: true,
     cluster: state.cluster,
-    term: state.term,
+    query: state.query ? { terms: state.query.terms, phrases: state.query.phrases } : undefined,
     company: state.company,
     sourceKinds: state.sources,
     workMode: state.workMode,
@@ -297,7 +319,9 @@ export function toBoardFilters(state: FilterState): BoardFilters {
     hasDescription: state.described,
     hideApplied: state.notApplied,
     groupRepeats: state.grouped,
-    sort: SORTS.find((sort) => sort === state.sort) ?? "fit",
+    // Relevância sem consulta não tem o que pesar: cai na ordem de fit, e o
+    // parâmetro fica na URL para voltar a valer quando a consulta voltar.
+    sort: state.sort === "relevance" && !state.query ? "fit" : (SORTS.find((sort) => sort === state.sort) ?? "fit"),
   };
 }
 

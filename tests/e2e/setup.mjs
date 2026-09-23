@@ -150,6 +150,30 @@ try {
       locationRaw: index < 13 ? "Remote · Brazil" : index === 13 ? "São Paulo · Hybrid" : index === 14 ? "São Paulo · On-site" : "São Paulo",
       remote: index < 13 ? true : null,
     })),
+    // Busca por relevância (#223, E2E-005): a frase no título, a frase só na
+    // descrição e um título parecido que a frase não casa.
+    {
+      id: 906000000,
+      title: "Tech Lead Relevance Fixture",
+      companyName: "Relevance QA",
+      locationRaw: "Remote · Brazil",
+      remote: true,
+    },
+    {
+      id: 906000001,
+      title: "Staff Relevance Fixture",
+      companyName: "Relevance QA",
+      locationRaw: "Remote · Brazil",
+      remote: true,
+      descriptionText: "Relevance fixture: you act as tech lead for the platform squad.",
+    },
+    {
+      id: 906000002,
+      title: "Tech Leader Relevance Fixture",
+      companyName: "Relevance QA",
+      locationRaw: "Remote · Brazil",
+      remote: true,
+    },
     ...Array.from({ length: 7 }, (_, index) => ({
       id: 901000000 + index,
       title: `Task 04 typical fixture ${index + 1}`,
@@ -177,7 +201,7 @@ try {
       locationRaw: fixture.locationRaw,
       remote: fixture.remote,
       title: fixture.title,
-      descriptionText: "Task 04 deterministic result-cardinality fixture.",
+      descriptionText: fixture.descriptionText ?? "Task 04 deterministic result-cardinality fixture.",
       url: `https://jobs.example.com/${fixture.id}`,
       raw: { e2e: true },
     }))).onConflictDoNothing({ target: job.id });

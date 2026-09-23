@@ -3,6 +3,7 @@
 import Form, { type FormProps } from "next/form";
 import type { FormEvent, ReactElement } from "react";
 import { transitionStore } from "../src/core/pwa/transition-store.ts";
+import { duringFormNavigation } from "./form-navigation.ts";
 
 const TypedForm = Form as <RouteType>(props: FormProps<RouteType>) => ReactElement;
 
@@ -73,7 +74,7 @@ export function TransitionGetForm<RouteType>({
 
         const onFormData = (formDataEvent: FormDataEvent) => {
           const destination = getDestination(intent, formDataEvent.formData);
-          if (destination !== null) transitionStore.begin(destination);
+          if (destination !== null) duringFormNavigation(() => transitionStore.begin(destination));
         };
         intent.form.addEventListener("formdata", onFormData, { once: true });
         queueMicrotask(() => intent.form.removeEventListener("formdata", onFormData));

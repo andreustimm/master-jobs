@@ -6,7 +6,7 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: Depois de limpar, de um preset ou de uma faixa trocada pelo servidor, os campos mostram o estado atual — e o Aplicar seguinte não ressuscita o valor antigo
 entry_points: /jobs; /jobs?pay=12000&payMax=6000; /jobs?fit=45
-qa_status: pass
+qa_status: untested
 bug_ids:
 fix_status:
 retest_status:
@@ -52,3 +52,5 @@ fazia):
 **Reset 2026-09-22 (#220):** a navegação de filtro deixou de tornar o shell `inert`, então agora dá para editar um campo enquanto a resposta anterior ainda chega. Conferir que o campo mostra a URL depois do commit e que o último Aplicar vence.
 
 Full 1.22.0 (2026-09-22): Preset leva o campo mínimo ao valor da URL; Aplicar em seguida não ressuscita valor antigo; 70 aplicado e Voltar devolve 60 no campo. Limpar não foi exercitado.
+
+**Reset 2026-09-23 (#218):** os campos de busca, empresa, Score e faixa salarial deixaram de ser remontados por `key` a cada resposta; agora seguem a URL por `useAppliedValue`, que só preserva texto ainda não enviado no campo em foco. Refazer os quatro caminhos acima (faixa invertida, limpar, preset, fontes), agora também com o filtro aplicado sozinho, e conferir que a digitação em curso não é apagada pela resposta anterior (`JOBS-filters-auto-apply`).

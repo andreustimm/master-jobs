@@ -2,7 +2,6 @@ import { Badge } from "@/components/ui/badge";
 import { Toggle } from "./filter-toggle";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { ChevronDownIcon } from "lucide-react";
@@ -13,6 +12,7 @@ import { PayRange } from "./pay-range";
 import { RangeSlider } from "./range-slider";
 import { FIT_MAX, FIT_SLIDER_STEP } from "./filter-scales.ts";
 import { TransitionGetForm } from "./transition-get-form";
+import { AutoApplyInput } from "./auto-submit";
 import { TransitionLink } from "./transition-link";
 
 export { href, readFilters, toBoardFilters, toParams, type BoardRoute, type FilterState } from "./filter-state";
@@ -22,7 +22,14 @@ export { href, readFilters, toBoardFilters, toParams, type BoardRoute, type Filt
  *
  * State lives in the URL, not in React: a filtered view is shareable and
  * bookmarkable, the back button behaves, and every page stays a Server
- * Component with no client bundle.
+ * Component. The client islands inside it (fields, ranges) only edit inputs
+ * and submit the GET form around them.
+ *
+ * Filters apply themselves when a gesture ends (#218): text after a pause of
+ * typing, a range when the thumb is released or the focus leaves it, a select
+ * when chosen. Enter and Apply still submit at once, which is also the path
+ * without JavaScript. The source list keeps its explicit Apply: every submit
+ * rebuilds the picker from the URL and would close it mid-selection.
  *
  * Each toggle shows what it yields, because a filter that silently returns
  * nothing is indistinguishable from a broken page.
@@ -218,18 +225,17 @@ export function FilterBar({
     <Card className="mb-5 gap-4 p-4">
       <TransitionGetForm action={base} className="flex flex-wrap gap-2" data-testid="filters-get-form">
         <Carry state={state} except={["q", "page"]} />
-        <Input
-          key={state.term?.term ?? ""}
+        <AutoApplyInput
           name="q"
-          defaultValue={state.term?.term ?? ""}
+          applied={state.query?.raw ?? ""}
           placeholder={t("filters.search")}
           aria-describedby="filters-query-hint"
           className="min-w-0 flex-1"
           data-testid="filters-query"
         />
         <Button type="submit" data-testid="filters-submit">{t("filters.submit")}</Button>
-        {state.term && (
-          <TransitionLink href={href(base, state, { q: undefined })} className={chipClass(false)}>
+        {state.query && (
+          <TransitionLink href={href(base, state, { q: undefined })} className={chipClass(false)} data-testid="filters-query-clear">
             {t("filters.clear")}
           </TransitionLink>
         )}
@@ -248,10 +254,9 @@ export function FilterBar({
             data-testid="filters-company-form"
           >
             <Carry state={state} except={["company", "page"]} />
-            <Input
-              key={state.company ?? ""}
+            <AutoApplyInput
               name="company"
-              defaultValue={state.company ?? ""}
+              applied={state.company ?? ""}
               placeholder={t("filters.companyPlaceholder")}
               className="w-56"
               data-testid="filters-company"
@@ -340,19 +345,15 @@ export function FilterBar({
             >
               <Carry state={state} except={["pay", "payMax", "cur", "per", "page"]} />
               <PayRange
-                // Chave derivada do estado do SERVIDOR, senão o campo guarda o
-                // valor antigo. `useState` só lê o inicializador na montagem, e
-                // toda navegação da barra é suave: ir de `/jobs?a` para
-                // `/jobs?b` reconcilia a mesma posição da árvore e a ilha não
-                // remonta. Três caminhos do fluxo normal chegavam nisso — faixa
-                // invertida trocada no servidor, o "limpar", e os presets de
-                // corte —, e em todos o Aplicar seguinte reenviava o valor
-                // velho, então o aviso nunca saía e a URL nunca estabilizava.
-                //
-                // O campo de piso que existia antes tinha exatamente esta
-                // guarda, com o comentário explicando por quê; ela saiu junto
-                // com o campo. `q` e `company` seguem com ela logo acima.
-                key={`${state.pay?.min ?? ""}:${state.pay?.max ?? ""}:${extras.pay.period}:${extras.pay.currency}`}
+                // Sem chave. Toda navegação da barra é suave: ir de `/jobs?a`
+                // para `/jobs?b` reconcilia a mesma posição da árvore e a ilha
+                // não remonta, e `useState` só lê o inicializador. Faixa
+                // invertida trocada no servidor, o "limpar" e os presets de
+                // corte deixavam o campo com o valor velho, e o Aplicar
+                // seguinte o reenviava. A chave pelo estado resolvia, mas
+                // remontava a faixa no meio da digitação quando o filtro passou
+                // a se aplicar sozinho (#218). Agora valores, período e moeda
+                // seguem a URL por dentro (`useAppliedValue`, `useFollowed`).
                 min={state.pay?.min}
                 max={state.pay?.max}
                 period={extras.pay.period}
@@ -433,11 +434,9 @@ export function FilterBar({
           >
             <Carry state={state} except={["fit", "fitMax", "page"]} />
             <RangeSlider
-              // Ver a chave do `PayRange` acima. Aqui o caminho mais visível são
-              // os presets de corte: depois de "Aplicável hoje" o quadro filtra
-              // em 60 e o campo continuava em 45, e o Aplicar do Score desfazia
-              // o preset.
-              key={`${state.fit}:${state.fitMax ?? ""}`}
+              // Sem chave: ver o `PayRange` acima. Aqui o caminho mais visível
+              // são os presets de corte — depois de "Aplicável hoje" o campo
+              // precisa mostrar 60, e `useAppliedValue` o leva até lá.
               minName="fit"
               maxName="fitMax"
               // Zero is "every score": the empty field says that, and a typed
@@ -573,9 +572,24 @@ export function FilterBar({
 
       <div className={grid}>
         <Row label={t("filters.sort")}>
-          <TransitionLink href={href(base, state, { sort: undefined })} className={chipClass(!state.sort || state.sort === "fit")}>
+          {/* Relevância sem consulta não pesa nada e a lista sai por fit: o
+              chip ativo diz a ordem que de fato vale. */}
+          <TransitionLink
+            href={href(base, state, { sort: undefined })}
+            className={chipClass(!state.sort || state.sort === "fit" || (state.sort === "relevance" && !state.query))}
+            data-testid="filters-sort-fit"
+          >
             {t("filters.byFit")}
           </TransitionLink>
+          {state.query && (
+            <TransitionLink
+              href={href(base, state, { sort: "relevance" })}
+              className={chipClass(state.sort === "relevance")}
+              data-testid="filters-sort-relevance"
+            >
+              {t("filters.byRelevance")}
+            </TransitionLink>
+          )}
           <TransitionLink href={href(base, state, { sort: "recent" })} className={chipClass(state.sort === "recent")}>
             {t("filters.byRecent")}
           </TransitionLink>

@@ -93,7 +93,7 @@ continua neutra na UI (#279), e nada aqui escreve em `application`.
 - **Dois consumidores no mesmo candidato** (a fila `score_task` e uma fatia da
   agenda) não se excluem: repetem trabalho idempotente, e o cursor pode recuar
   um lote. Não há perda.
-- **Ativação é passo humano:** a migração `0017_score_cursor` e reaplicar o SQL
+- **Ativação é passo humano:** a migração `0019_score_cursor` e reaplicar o SQL
   no projeto Supabase de produção.
 
 ## Alternativas rejeitadas
