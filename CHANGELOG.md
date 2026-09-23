@@ -9,28 +9,27 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
-### Adicionado
+## [1.22.2] - 2026-09-23
 
-- Tracing do servidor no Sentry (#219), amostrado por `SENTRY_TRACES_SAMPLE_RATE`
-  (padrão 10%; `0` ou valor ilegível desliga). Cada estágio já medido das telas
-  (`auth`, `prelude`, `board`, `facets`, `tail`, `cockpit`…) vira um span
-  `jho.etapa` dentro de um `jho.leitura` por rota (`criarCronometro`,
-  `rastrearEtapa`). A peneira é pura e testada em `src/core/observability.ts`:
-  `scrubTransaction`/`scrubSpan` (`beforeSendTransaction`/`beforeSendSpan`)
-  tiram query string do nome e dos spans, reduzem SQL ao verbo e só deixam sair
-  atributos de uma lista de permissão (`ALLOWED_SPAN_DATA`) — `http.target`,
-  `url.full`, `url.query`, `client.address`, `db.query.text` e
-  `server.address` não saem. `tracePropagationTargets: []` impede o
-  `baggage` de ir para os boards. As migalhas de erro também perdem a query.
-- Mapas de origem do servidor publicados no Sentry no build (#212), pelo gancho
-  `compiler.runAfterProductionCompile` e `@sentry/cli` (`sourcemaps inject` +
-  `upload` em `.next/server`, release = SHA). Sem `SENTRY_AUTH_TOKEN` nada
-  muda — nem `.map` é gerado — e o log de build diz por quê; falha de envio
-  não derruba o build. Sem `withSentryConfig`, sem mapa de cliente.
 
 ### Alterado
 
 - Fluxo: a issue fecha quando o código chega a produção — commits das PRs levam `Closes #N` na mensagem, porque a PR aponta para `dev` e só a entrada em `main` fecha issues (AGENTS.md, `docs/engineering/workflow.md`).
+- Changelog por fragmentos: cada PR adiciona `changelog.d/<slug>.md` com os
+  blocos `## Técnico`, `## pt-BR` e `## en`, em vez de editar o
+  `## [Unreleased]` dos três arquivos. A promoção junta os fragmentos
+  (`mergeChangelogFragments`, ordem pelo nome) antes do carimbo e os apaga no
+  commit de release; `verifyReleaseChild` reconstrói R a partir dos fragmentos
+  de A e recusa filho que mantenha ou reescreva um deles. `check:release-ready`
+  e o hook `commit-msg` aceitam fragmento como nota releaseável e reprovam
+  fragmento malformado mesmo em leva sem bump. O `Unreleased` escrito à mão
+  continua aceito durante a transição — e é o formato desta própria entrada,
+  porque a promoção que a leva a `main` ainda roda o controlador antigo.
+- `promover-para-staging.yml` roda às 15:00 e 21:00 UTC (`schedule`) e por
+  `workflow_dispatch` com `target-sha`, em vez de a cada `workflow_run` do CI de
+  `dev`. O agendado promove a ponta de `dev` somente com CI de push verde, sem
+  aprovação de migração, e termina sem escrita nem consulta quando `staging` já
+  a contém; a publicação usa a entrada fixada na preparação.
 
 ### Melhorado
 

@@ -7,6 +7,7 @@ import {
   classificarBump, commitDaVersao, estadoDaTag, exigirTagAlvoAusente, prepareRelease,
   proximaVersao, shaDaTagRemota,
 } from "../../src/core/release.ts";
+import { FRAGMENT_DIRECTORY } from "../../src/core/changelog-fragments.ts";
 import { commitSubjectsSince, mostRecentVersionTag } from "./git-context.ts";
 import { ghApi, requireSha, requireSourceCI } from "./promotion-ci.ts";
 import { versionar } from "./versionar.ts";
@@ -15,27 +16,42 @@ const CHANGELOGS = {
   technical: "CHANGELOG.md", ptBR: "USER_CHANGELOG.pt-BR.md", en: "USER_CHANGELOG.en.md",
 } as const;
 const RELEASE_FILES = ["package.json", ...Object.values(CHANGELOGS)];
-type Input = { source: string; confirmMigration: boolean; runId?: number };
+type Input = { source: string; confirmMigration: boolean; scheduled: boolean };
 type Event = {
   inputs?: { "target-sha"?: string; "confirmar-migracao"?: boolean | string };
-  workflow_run?: { id: number; head_sha: string; head_branch: string; event: string; conclusion: string };
 };
 
-export function promotionInput(eventName: string, event: Event): Input {
+/**
+ * The scheduled run promotes the tip of dev as it is at preparation time.
+ * `devTip` is resolved once, here; the publication phase receives that same
+ * SHA from the preparation output and never reads the branch again.
+ */
+export function promotionInput(eventName: string, event: Event, devTip: () => string): Input {
   if (eventName === "workflow_dispatch") {
     return {
       source: requireSha(event.inputs?.["target-sha"] ?? ""),
       confirmMigration: [true, "true"].includes(event.inputs?.["confirmar-migracao"] ?? false),
+      scheduled: false,
     };
   }
-  const run = event.workflow_run;
-  if (eventName !== "workflow_run" || !run || run.head_branch !== "dev" ||
-    run.event !== "push" || run.conclusion !== "success") throw new Error("Evento de CI inválido.");
-  return { source: requireSha(run.head_sha), confirmMigration: false, runId: run.id };
+  if (eventName !== "schedule") throw new Error("Evento de promoção inválido.");
+  // Migration approval is a human decision; a timer cannot carry one.
+  return { source: requireSha(devTip()), confirmMigration: false, scheduled: true };
 }
 
 function git(directory: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trim();
+}
+
+/** Tracked fragment paths at a commit, e.g. `changelog.d/fix-x.md`. */
+function fragmentPaths(directory: string, sha: string): string[] {
+  return git(directory, "ls-tree", "-r", "-z", "--name-only", sha, "--", `${FRAGMENT_DIRECTORY}/`)
+    .split("\0").filter(Boolean);
+}
+
+/** A scheduled run with nothing new since the last promotion is a no-op, not a CI query. */
+export function nothingToPromote(directory: string, source: string): boolean {
+  return isAncestor(directory, source, "origin/staging");
 }
 
 function isAncestor(directory: string, ancestor: string, descendant: string): boolean {
@@ -86,6 +102,8 @@ function verifyReleaseChild(directory: string, source: string, target: string): 
     readAt(directory, target, "package.json") !== `${JSON.stringify({ ...pkg, version: next.version }, null, 2)}\n`) {
     throw new Error("Metadados inesperados no commit de release.");
   }
+  // The retry rebuilds R from A's own fragments: same bytes in, same bytes out.
+  const consumed = fragmentPaths(directory, source);
   const prepared = prepareRelease({
     documents: {
       technical: readAt(directory, source, CHANGELOGS.technical),
@@ -94,11 +112,17 @@ function verifyReleaseChild(directory: string, source: string, target: string): 
     },
     version: next.version,
     publishedAt: new Date(git(directory, "show", "-s", "--format=%cI", target)),
+    fragments: consumed.map((path) => ({
+      name: path.slice(FRAGMENT_DIRECTORY.length + 1),
+      content: readAt(directory, source, path),
+    })),
   });
   if (prepared.status !== "prepared") throw new Error("Transformação de release inesperada.");
+  const allowed = new Set([...RELEASE_FILES, ...consumed]);
   if ((Object.keys(CHANGELOGS) as Array<keyof typeof CHANGELOGS>)
     .some((key) => readAt(directory, target, CHANGELOGS[key]) !== prepared.documents[key]) ||
-    git(directory, "diff", "--name-only", source, target).split("\n").some((path) => !RELEASE_FILES.includes(path))) {
+    git(directory, "diff", "--name-only", source, target).split("\n").some((path) => !allowed.has(path)) ||
+    fragmentPaths(directory, target).length > 0) {
     throw new Error("O commit de release contém alterações fora do versionamento.");
   }
 }
@@ -126,7 +150,7 @@ function pendingPredecessor(directory: string, repository: string, source: strin
 }
 
 export function preparePromotion(directory: string, repository: string, input: Input): string {
-  requireSourceCI(repository, input.source, input.runId);
+  requireSourceCI(repository, input.source);
   refresh(directory);
   const existing = releaseChild(directory, input.source);
   const target = existing ?? input.source;
@@ -149,7 +173,8 @@ export function preparePromotion(directory: string, repository: string, input: I
   exigirTagAlvoAusente(remoteTag(repository, result));
   git(directory, "config", "user.name", "github-actions[bot]");
   git(directory, "config", "user.email", "github-actions[bot]@users.noreply.github.com");
-  git(directory, "add", "--", ...RELEASE_FILES);
+  // `add -A` on the consumed paths stages their deletion.
+  git(directory, "add", "-A", "--", ...RELEASE_FILES, ...fragmentPaths(directory, input.source));
   const provenance = `Promotion-Source: ${input.source}\nPromotion-Base: ${baseline ?? "none"}${supersedes ? `\nPromotion-Supersedes: ${supersedes}` : ""}`;
   execFileSync("git", ["commit", "-m", `chore(release): ${result}`, "-m", provenance], {
     cwd: directory,
@@ -183,12 +208,26 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const [phase, directory] = process.argv.slice(2);
   const repository = process.env.GITHUB_REPOSITORY ?? "";
   if (!directory || !/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error("Uso: promotion.ts prepare|complete <directory>; GITHUB_REPOSITORY obrigatório.");
-  const input = promotionInput(process.env.GITHUB_EVENT_NAME ?? "", JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH!, "utf8")));
+  const eventName = process.env.GITHUB_EVENT_NAME ?? "";
+  const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH!, "utf8"));
   let output: string;
   if (phase === "prepare") {
-    const target = preparePromotion(directory, repository, input);
-    output = `source=${input.source}\ntarget=${target}\n`;
+    const input = promotionInput(eventName, event, () => {
+      refresh(directory);
+      return git(directory, "rev-parse", "origin/dev");
+    });
+    if (input.scheduled && nothingToPromote(directory, input.source)) {
+      console.log(`::notice::staging já contém ${input.source}; nada a promover.`);
+      output = `source=${input.source}\ntarget=${input.source}\nskip=true\n`;
+    } else {
+      const target = preparePromotion(directory, repository, input);
+      output = `source=${input.source}\ntarget=${target}\nskip=false\n`;
+    }
   } else if (phase === "complete") {
+    // Publication never re-reads dev: the source is the one preparation fixed.
+    const source = requireSha(process.env.PROMOTION_SOURCE ?? "");
+    const input = promotionInput(eventName, event, () => source);
+    if (input.source !== source) throw new Error("A entrada da publicação difere da preparada.");
     const promoted = completePromotion(directory, repository, input, process.env.PROMOTION_TARGET ?? "", process.env.VALIDATED_SHA ?? "");
     output = `promoted=${promoted}\n`;
   } else throw new Error("Fase de promoção inválida.");
