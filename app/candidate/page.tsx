@@ -14,7 +14,10 @@ import {
 import { MarkdownEditor } from "./editor";
 import { VersionHistory } from "./versions";
 import { importPdfAction, saveCvAction, setVisibilityAction } from "./actions";
-import { requireOwnCandidatePage } from "../auth";
+import { onboardingSession, requireOwnCandidatePage } from "../auth";
+import { CreateProfile } from "./create-profile";
+import { PublicAddressCard } from "./public-address";
+import { PublicNameCard } from "./public-name";
 import { getTranslator } from "../i18n";
 import { formatNumber, type TranslationKey, type Translator } from "../../src/core/i18n/index.ts";
 import type { Visibility } from "../../src/contexts/auth/index.ts";
@@ -45,7 +48,8 @@ function VisibilityCard({
 }: {
   current: string;
   publicCv: boolean;
-  slug: string;
+  /** Nulo só para linha criada fora dos caminhos do produto; sem link então. */
+  slug: string | null;
   t: Translator["t"];
 }) {
   const options = [
@@ -117,7 +121,7 @@ function VisibilityCard({
             </span>
           </label>
 
-          {current === "public" && (
+          {current === "public" && slug !== null && (
             <p className="type-meta text-muted-foreground">
               {t("visibility.publicLink")}:{" "}
               <TransitionLink
@@ -168,6 +172,12 @@ function versionLabels(t: Translator["t"]): Record<string, string> {
 
 export default async function CandidateArea() {
   const { t, locale } = await getTranslator();
+  // Conta de papel candidato ainda sem candidato cria o próprio aqui. Quem não
+  // pode criar (admin, recrutador, sessão emprestada) cai na guarda abaixo e
+  // recebe o 403 de sempre — nenhum dado é lido antes de uma das duas decidir.
+  const creator = await onboardingSession();
+  if (creator) return <CreateProfile t={t} suggestedName={creator.fullName ?? ""} />;
+
   // Guard antes de ler qualquer dado. O escopo vem da sessão.
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
@@ -198,19 +208,32 @@ export default async function CandidateArea() {
         .
       </p>
 
+      {/* O nome do dono vem do `profile.yaml`, e `jho db seed` o regrava:
+          editá-lo aqui duraria até o próximo seed. Para quem criou a conta,
+          esta é a única tela do nome publicado. */}
+      {person && !person.isDefault && <PublicNameCard current={person.name} t={t} />}
+
       {person && (
         <VisibilityCard
           current={person.visibility}
           publicCv={person.publicCv}
-          slug={person.slug}
+          slug={person.publicSlug}
           t={t}
         />
       )}
 
+      {person && <PublicAddressCard current={person.publicSlug ?? ""} t={t} />}
+
       {person && (
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle className="text-lg">{person.name}</CardTitle>
+            <CardTitle className="text-lg">
+              {person.name.trim() !== "" ? (
+                <span data-user-content>{person.name}</span>
+              ) : (
+                t("publicName.unnamed")
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent className="pt-0 text-sm text-muted-foreground">
             {/* Dado do usuário: `profile.yaml` está no idioma dele, e continua
@@ -223,9 +246,13 @@ export default async function CandidateArea() {
             <p data-user-content className="mt-1">
               {[person.location, person.email].filter(Boolean).join(" · ")}
             </p>
-            <p className="mt-2 font-mono type-meta">
-              {t("copy.identityFrom", { file: "profile/profile.yaml" })}
-            </p>
+            {/* Só o candidato do dono nasce do `profile.yaml`; quem criou o
+                próprio perfil pela tela não tem nada a ver com esse arquivo. */}
+            {person.isDefault && (
+              <p className="mt-2 font-mono type-meta">
+                {t("copy.identityFrom", { file: "profile/profile.yaml" })}
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

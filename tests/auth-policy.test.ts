@@ -138,6 +138,32 @@ describe("recruiter", () => {
   });
 });
 
+describe("a própria conta", () => {
+  it("todo papel lê e escreve a própria conta", () => {
+    for (const who of [admin(), candidate(1), recruiter()]) {
+      expect(can(who, "account:read", { kind: "global" }, NOW).allowed).toBe(true);
+      expect(can(who, "account:write", { kind: "global" }, NOW).allowed).toBe(true);
+    }
+  });
+
+  it("sessão emprestada lê, mas não escreve na conta do alvo — nem quando ele é admin", () => {
+    // Trocar a senha ou o nome de outra pessoa com a cara dela é tomar a
+    // conta, e o registro diria que foi ela.
+    for (const roles of [["candidate"], ["recruiter"], ["admin", "candidate"]] as Role[][]) {
+      const borrowed = session({ roles, candidateId: 1, impersonatedBy: 99 });
+      expect(can(borrowed, "account:read", { kind: "global" }, NOW).allowed).toBe(true);
+      const decision = can(borrowed, "account:write", { kind: "global" }, NOW);
+      expect(decision).toEqual({ allowed: false, reason: "sessão emprestada não altera a conta do alvo" });
+    }
+  });
+
+  it("conta sem papel não entra na própria conta", () => {
+    const empty = session({ roles: [] });
+    expect(can(empty, "account:read", { kind: "global" }, NOW).allowed).toBe(false);
+    expect(can(empty, "account:write", { kind: "global" }, NOW).allowed).toBe(false);
+  });
+});
+
 describe("visibilidade do perfil", () => {
   it("privado é o padrão: campo ausente não abre nada", () => {
     // Esquecer de carregar a visibilidade tem de NEGAR, nunca permitir.
@@ -246,5 +272,31 @@ describe("candidateScope", () => {
   it("ignora vínculo antigo quando a conta não tem papel candidate", () => {
     expect(candidateScope(session({ roles: ["admin"], candidateId: 7 }))).toBeNull();
     expect(candidateScope(session({ roles: ["recruiter"], candidateId: 7 }))).toBeNull();
+  });
+});
+
+describe("candidate:create — conta nova cria o próprio candidato", () => {
+  it("permite só a conta de papel candidato ainda sem candidato", () => {
+    expect(can(candidate(null), "candidate:create", { kind: "global" }, NOW).allowed).toBe(true);
+  });
+
+  it("quem já tem candidato não cria o segundo", () => {
+    expect(can(candidate(1), "candidate:create", { kind: "global" }, NOW).allowed).toBe(false);
+  });
+
+  it("admin e recrutador sem papel candidato não criam", () => {
+    expect(can(admin(), "candidate:create", { kind: "global" }, NOW).allowed).toBe(false);
+    expect(can(recruiter(), "candidate:create", { kind: "global" }, NOW).allowed).toBe(false);
+  });
+
+  it("sessão emprestada não cria perfil em nome de ninguém", () => {
+    const borrowed = session({ roles: ["candidate"], candidateId: null, impersonatedBy: 9 });
+    expect(can(borrowed, "candidate:create", { kind: "global" }, NOW).allowed).toBe(false);
+  });
+
+  it("escopo de candidato não é caminho para criar — nem apontando para outro", () => {
+    // Criação nunca recebe id: um recurso de candidato aqui seria o pedido de
+    // se ligar a alguém que já existe.
+    expect(can(candidate(null), "candidate:create", other, NOW).allowed).toBe(false);
   });
 });

@@ -59,20 +59,20 @@ ficaram para trás **conscientemente**, e estão aqui para não virarem dívida
 invisível. Nenhuma bloqueia o produto hoje; todas custam pouco e valem mais
 quanto antes.
 
-### O-01 · `DATABASE_URL` com a role restrita 📋
+### O-01 · `DATABASE_URL` com a role restrita 🟡
 
-Produção conecta pela `POSTGRES_URL`, que é o usuário `postgres` —
-**superusuário**. A separação de privilégio que a migration `0001` desenhou só
-entra em vigor quando `DATABASE_URL` apontar para `master_jobs_app`.
+**Configurada em 22/09/2026; aguarda validação no próximo deploy humano.**
+`DATABASE_URL` Sensitive foi cadastrada somente em Production para a role
+`master_jobs_app`. TLS, leitura real, CRUD individual das 36 tabelas e uso das
+28 sequências passaram no preflight; privilégios administrativos e CREATE no
+schema continuam negados.
 
-A role já existe e foi validada por `has_*_privilege`: lê e escreve `job` e
-`application`, **não cria no schema**, e alcança coluna criada depois. O que
-falta é cadastrar a URL. Dá para testar **antes** do deploy — o repositório
-versiona `config/certs/supabase-ca.crt`, que é a CA que o pooler apresenta.
-
-Procedimento em [`deploy.md`](../engineering/deploy.md#dar-login-à-role-de-runtime).
-Adiado pelo usuário em 19/09/2026, logo após a queda de 28 minutos, para não
-empilhar mudança de conexão sobre produção recém-restabelecida.
+Não houve redeploy: a instância publicada ainda usa a configuração anterior.
+Concluir após promoção humana, fumaça de produção, login/leitura de vagas e
+confirmação da role nas sessões. Rollback: remover `DATABASE_URL` de
+Production e fazer redeploy (volta ao fallback `POSTGRES_URL`). Credencial preservada de forma privada para
+retomada; nenhum segredo entra no repositório. Procedimento e cuidados de
+rotação em [`deploy.md`](../engineering/deploy.md#dar-login-à-role-de-runtime).
 
 ### O-02 · Mapas de origem no Sentry 📋
 
@@ -895,7 +895,8 @@ a senha nova e só então descobre que o link morreu.
 **A credencial é sua.** O operador cria `RESEND_API_KEY`, verifica o domínio
 do remetente e configura `RESEND_FROM` conforme `.env.example`; nenhum agente
 pode gerar, ler ou versionar esses valores. Sem as duas, o adapter de console
-continua sendo o fallback documentado.
+continua sendo o fallback local; em deployment hospedado o fallback alerta sem
+imprimir o link (#237).
 
 ### E-01 · Arquitetura hexagonal, DDD, monolito modular ✅
 

@@ -9,6 +9,182 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.22.1] - 2026-09-23
+
+### Segurança
+
+- O perfil público não publica mais o e-mail como nome
+  (BUG-20260922-public-profile-shows-email-as-name). `addUser` dava ao
+  candidato de `jho auth add-user` o nome `email`, e `/p/<endereço>` o
+  mostrava como título. Agora: o candidato recebe o nome de exibição da conta
+  ou nasce sem nome (`initialCandidateName`); `publicProfile()` esvazia nome,
+  headline, localização e links que tragam e-mail ou telefone
+  (`containsContact`, também com o e-mail da conta dona); e a migration de
+  dados `0014_clear_contact_candidate_names` zera os nomes já gravados que trazem e-mail.
+
+### Adicionado
+
+- Cartão "Nome no perfil" em `/candidate` (`setPublicNameAction`, guarda
+  `candidate:write` antes de ler o formulário), que pede o nome quando ele
+  falta e recusa e-mail ou telefone (`nameContact`). O título de `/p/` sem nome
+  e o `<title>` da página vêm do dicionário.
+
+### Corrigido
+
+- `/admin/users` citava `jho auth password`; o comando é
+  `jho auth set-password <email>` (BUG-20260922-admin-password-hint-wrong-command).
+- Endereço público: o campo tinha `maxlength`/`minlength`, que cortavam 41
+  caracteres para 40 e salvavam, e barravam `ab` no navegador deixando à vista
+  o aviso anterior. Sem os atributos, `validatePublicSlug` recusa pelo tamanho
+  com a mensagem certa (BUG-20260922-long-address-cut-silently,
+  BUG-20260922-short-address-wrong-reason).
+
+## [1.22.0] - 2026-09-22
+
+### Adicionado
+
+- Busca por termo com pré-filtro indexado (#214). Migrations aditivas
+  `0012_enable_pg_trgm` (`CREATE EXTENSION IF NOT EXISTS pg_trgm`) e
+  `0013_term_search_trgm` (GIN `gin_trgm_ops` sobre a descrição sem espaço e
+  hífen, parcial em vagas abertas, e o mesmo em `job_page.text`). Para chave
+  ASCII com três letras ou dígitos seguidos, o quadro calcula uma vez por
+  consulta (`array(...)`, InitPlan) as vagas cuja descrição pode conter o termo
+  e só nelas roda o `~*` de palavra inteira, que continua decidindo: `java`
+  segue sem trazer `JavaScript`, e os resultados de referência do `perf:jobs`
+  são idênticos. No acervo local real o predicado caiu de 161/144 ms para
+  35/35 ms (`typescript`/`java`); no sintético de 10 mil vagas, com descrições
+  curtas sem compressão e termo pouco seletivo, subiu de 129 para 155 ms.
+  Tempos locais, não de produção.
+- Endereço público escolhido pelo candidato (#235): `/p/<slug>` passa a ler
+  `candidate.public_slug` (coluna nova, índice único), separado do `slug`
+  interno que a CLI e o seed usam para achar o dono. Migrações aditivas
+  `0010_candidate_public_slug` e `0011_backfill_candidate_public_slug` (copia
+  `slug`, idempotente, exceto `user-<e-mail>`, que ficaria com o e-mail no
+  endereço) — **suspendem a promoção automática**. `/candidate` ganha o cartão "Endereço público" (`setPublicSlugAction`, com
+  `guardOwnCandidate`), e o formulário de criação aceita o endereço, sugerido
+  a partir do nome. Validação pura em `validatePublicSlug` (minúsculas,
+  números e hífen, 3–40, reservados incluindo toda rota de primeiro nível do
+  app e os prefixos `user-`/`e2e-`); unicidade pelo índice, com `23505`
+  traduzido em `slugTaken`. Trocar faz o antigo responder 404 na hora, sem
+  redirecionamento (ADR 0024).
+
+- Medição de produção (#221): `pnpm perf:producao` mede TTFB frio e quente
+  (p50/p95), `x-vercel-id` e `x-vercel-cache` das rotas públicas e, com o cookie
+  do dono em `JHO_PERF_SESSION`, de `/jobs` com `fit=45`, `workMode=remote` e
+  termo. `--logs` agrega por rota e estágio as linhas `perf` do log da Vercel.
+  Só GET e leitura de log; o cookie só sai por HTTPS ou loopback e nunca vai
+  para disco ou saída; termo, query string e mensagem bruta do log não aparecem
+  no relatório. Regras puras em `scripts/perf/medicao.ts`, procedimento e
+  primeira medição em `docs/engineering/performance-buscas.md`.
+
+- Minha conta (`/account`, #236): qualquer papel troca a própria senha e o
+  nome de exibição. A troca exige a senha atual, limita a 5 tentativas por
+  conta em 15 minutos (tentativa gravada em `auth_event` antes de contada, para
+  rajada concorrente não passar junta), derruba todas as sessões da conta e
+  abre uma nova para o navegador que pediu; registra `password_changed` e
+  `profile_updated`. Novas ações `account:read` e `account:write` na política;
+  sessão emprestada lê, mas nunca escreve na conta do alvo. Troca de e-mail
+  continua só com admin até haver confirmação por e-mail (`docs/security.md`).
+  Link "Minha conta" no menu; rota nas guardas de inglês, largura e axe.
+
+### Segurança
+
+- Inventário de entradas (#197): toda página, Route Handler (por método) e
+  export de módulo `"use server"` — em qualquer forma e nome de arquivo — é
+  descoberto pela semântica do Next e precisa de política ou exceção
+  registrada com justificativa; entrada nova sem classificação e exceção órfã
+  reprovam. `logoutAction`, `setLocaleAction` e `setAppearanceAction` passam
+  a constar como exceções. `tests/entry-denial.test.ts` chama cada action com
+  sessão ausente, forjada, expirada, revogada e de conta desabilitada, ids da
+  vítima e sessão emprestada, e exige recusa sem escrita, cookie, revalidação,
+  `after()` ou rede.
+- `JHO_AUTH_MODE=open` só vale na máquina local: em deployment (`VERCEL`
+  presente, ou `VERCEL_ENV`/`JHO_ENV` diferente de `local`) o pedido é ignorado, em
+  sessão e em `proxy.ts`, pela mesma função de domínio.
+- O CV publicado em `/p/[slug]` com os dois consentimentos passa por
+  `publicCvText()`: e-mail, telefone com código de país ou DDD entre
+  parênteses e o bloco inteiro (parágrafo, item ou tabela entre linhas em
+  branco; a seção, quando é título) que traz rótulo de pretensão salarial ou
+  palavra de remuneração perto de um valor são retirados. Detecção por padrão, com limite declarado e testado.
+- `/recruiter/[candidateId]` autoriza a leitura por `requirePage("candidate:read")`
+  depois do vínculo, em vez de decidir fora da política.
+- Teste de concorrência: dois resgates simultâneos do mesmo link de
+  recuperação trocam a senha uma vez só.
+
+- Autoatendimento do candidato (#234): conta de papel candidato sem candidato
+  vê "Criar meu perfil" em `/candidate` (e na navegação) em vez do 403 sem
+  saída. `createProfileAction` passa por `guard("candidate:create")` — ação nova
+  na política, permitida só a papel candidato, sem candidato e com sessão
+  própria (sessão emprestada nega). `createOwnCandidate` cria SEMPRE uma linha
+  nova (`insertOwnCandidate`, `on conflict (slug) do nothing` com sufixo),
+  privada, `is_default = false`, com identidade digitada — nunca do
+  `profile.yaml` — e liga à conta no mesmo commit, com `for update` na linha da
+  conta para que duplo envio não crie dois candidatos. Regras puras de
+  formulário e slug em `src/core/candidate-identity.ts`. A nota "identidade vem
+  de profile/profile.yaml" só aparece para o candidato do dono.
+
+### Corrigido
+
+- Recuperação de senha: em deployment sem `RESEND_API_KEY`/`RESEND_FROM`, o
+  adapter de console imprimia o e-mail inteiro — com o link de reset, que é
+  credencial — no log das funções da Vercel. `configuredMailer` passa a usar o
+  console só em processo local (`isLocalProcess`, a mesma lista de permissão
+  do modo aberto) e escolhe `withheldMailer` em qualquer outro ambiente e
+  sempre que a chave está presente sem remetente: ele emite um
+  alerta com `console.warn` sem destinatário, assunto nem link, e devolve falha,
+  para o `auth_event` gravar `reset_send_failed`. O console com corpo completo
+  fica restrito ao terminal local sem chave. Checklist humano de ativação do
+  Resend em `docs/operations.md` (#237).
+
+- Rede: `assertSafeRemoteUrl` recusa `linkedin.com`, `linkedin.cn`, `lnkd.in`,
+  `licdn.com` e subdomínios antes do DNS, e `safeRemoteFetch` repete a
+  recusa em cada redirect (regra 1, ADR 0001). URL de vaga vinda de alerta por
+  e-mail já chegava à sonda de `jobs verify` e à captura de `scrape run`; agora
+  a sonda fica `inconclusive` sem pedido e a captura bloqueia antes do
+  `robots.txt` (e registra redirect para o LinkedIn como bloqueio final, sem
+  nova tentativa). `getJson` não repete a recusa ao LinkedIn no laço de retry;
+  falha de DNS continua sendo repetida.
+  Testes com transporte instrumentado provam zero pedido ao LinkedIn (direto e
+  por redirect), zero envio em `jho prep`/`buildDossier`, que `growth:` nunca
+  vira evidência citada, e um inventário fechado de quem abre transporte de
+  saída, com detector exercitado por casos positivos e negativos.
+
+- Descarte de vagas (`jho db prune` e `jho db cleanup --apply`): uma candidatura
+  criada enquanto o descarte rodava podia ser apagada em cascata junto com a
+  vaga, porque o `DELETE ... WHERE NOT EXISTS (application)` avaliava o
+  predicado antes de esperar o lock da candidatura. Os dois comandos passam por
+  uma única função, `deleteClosedJobsWithoutApplication`, que trava as vagas
+  (`FOR UPDATE`) e reconfere em comando novo. Corrida reproduzida com duas
+  conexões reais em `tests/db-decision-integrity.test.ts`.
+- `job.company_id` declara `onDelete: "no action"` explicitamente; o DDL não
+  muda (nenhuma migration nova). `tests/fk-delete-intent.test.ts` passa a
+  exigir política escrita em toda FK, e `cov-db-schema` ganhou o caso adverso
+  de ação divergente em `pg_constraint`.
+- Upgrade de banco populado provado: `tests/postgres-upgrade.test.ts` migra da
+  0003 com dados até a versão atual, conferindo backfill, funil intacto,
+  recusa de dado inconsistente, falha sem meia aplicação e retomada.
+- Skill `drizzle-safe-migrations` e playbook reescritos para PostgreSQL
+  (`drizzle/postgres/`, journal e `when`, transação única, locks, `migrate.yml`);
+  `docs/engineering/deploy.md` deixa de proibir o `sslmode` que o código aceita.
+
+- Operações: conexão restrita de produção configurada e validada antes do deploy; runbook corrigido para TLS, pooler e rotação recuperável. Ativação aguarda promoção humana.
+- Tela de erro de rota (403, 404 e falha de navegação): o painel começa logo abaixo do cabeçalho em vez de centralizar numa caixa de `100dvh` que o empurrava para baixo da dobra, e o botão "Voltar ao início" centraliza o texto (`inline-flex`), em vez de deixá-lo colado no topo.
+
+### Alterado
+
+- O overlay opaco de navegação passa a ser só da troca de rota (#220). Filtro,
+  ordem, página e densidade em `/jobs` (mesmo `pathname`) viram transição
+  suave: `NavigationTransition.soft`, decidido em `transitionStore.begin` por
+  `isSameScreenNavigation`, sem overlay nem `inert`; o shell recebe
+  `aria-busy` e `data-navigation="soft"`, o `<main>` esmaece por CSS depois de
+  120 ms e um aviso `role="status"` usa `transition.updating`. O ciclo do
+  store não muda (mínimo de 180 ms, saída e reset): no voltar/avançar o
+  roteador confirma a URL antes de o conteúdo chegar, e encerrar no commit
+  anunciaria pronto sobre a lista anterior. Na saída o conteúdo volta à
+  opacidade plena e `aria-busy` cai no reset. `prolonged` e `offline`
+  promovem ao overlay. O E2E passa a afirmar o estado suave nas sete navegações de
+  filtro, densidade, tamanho, página e preset.
+
 ## [1.21.2] - 2026-09-22
 
 ### Segurança

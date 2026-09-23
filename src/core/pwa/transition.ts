@@ -9,10 +9,17 @@ export type NavigationTransition = {
   target: string | null;
   startedAt: number | null;
   committed: boolean;
+  /**
+   * A navegação fica na mesma tela: só filtro, ordem, página ou densidade
+   * mudaram. Ela não cobre a tela nem torna o shell `inert` — a pessoa continua
+   * vendo e operando a lista, e um clique novo abre outra geração. Demora e
+   * falta de rede zeram o campo e promovem a espera ao overlay completo.
+   */
+  soft: boolean;
 };
 
 export type TransitionEvent =
-  | { type: "start"; target: string; at: number }
+  | { type: "start"; target: string; at: number; soft: boolean }
   | { type: "url-committed"; url: string; generation: number }
   | { type: "prolonged"; generation: number }
   | { type: "offline"; target: string; generation: number }
@@ -26,6 +33,7 @@ export type NavigationOfflineMessage = {
 
 export type TransitionLabels = {
   loading: string;
+  updating: string;
   prolonged: string;
   offlineTitle: string;
   offlineBody: string;
@@ -54,6 +62,7 @@ export const INITIAL_NAVIGATION_TRANSITION: NavigationTransition = {
   target: null,
   startedAt: null,
   committed: false,
+  soft: false,
 };
 
 const INVALID_PERCENT_ESCAPE = /%(?![0-9a-f]{2})/i;
@@ -91,6 +100,20 @@ export function classifyNavigation(candidate: string, current: string): string |
   const target = normalizeNavigationTarget(candidate, current);
   const active = normalizeNavigationTarget(current, current);
   return target !== null && active !== null && target !== active ? target : null;
+}
+
+/**
+ * O destino é a mesma tela quando só a query muda. `current` já deve ser uma
+ * URL absoluta; qualquer entrada que não normalize conta como troca de tela,
+ * porque errar para o lado do overlay só custa espera, e errar para o outro
+ * lado deixaria conteúdo operável de uma tela que está saindo.
+ */
+export function isSameScreenNavigation(candidate: string, current: string): boolean {
+  const target = normalizeNavigationTarget(candidate, current);
+  const active = normalizeNavigationTarget(current, current);
+  if (target === null || active === null) return false;
+  const path = (value: string) => value.split("?", 1)[0];
+  return path(target) === path(active);
 }
 
 /** Native link behavior wins before a project transition may start. */
@@ -145,6 +168,7 @@ export function reduceTransition(
       target: event.target,
       startedAt: event.at,
       committed: false,
+      soft: event.soft,
     };
   }
 
@@ -156,10 +180,10 @@ export function reduceTransition(
       return { ...state, committed: true };
     case "prolonged":
       if (state.phase !== "loading") return state;
-      return { ...state, phase: "prolonged" };
+      return { ...state, phase: "prolonged", soft: false };
     case "offline":
       if (!isPending(state.phase) || event.target !== state.target) return state;
-      return { ...state, phase: "offline" };
+      return { ...state, phase: "offline", soft: false };
     case "leave":
       if (!isTransitionReady(state)) return state;
       return { ...state, phase: "leaving" };
@@ -203,6 +227,7 @@ export function parseNavigationOfflineMessage(
 
 const TRANSITION_LABEL_KEYS = [
   "loading",
+  "updating",
   "prolonged",
   "offlineTitle",
   "offlineBody",

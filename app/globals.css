@@ -409,6 +409,20 @@ body {
   min-inline-size: 0;
 }
 
+/* Navegação na mesma tela (filtro, ordem, página): sem overlay e sem `inert`.
+   O conteúdo esmaece só depois de um instante, para resposta rápida não
+   piscar; o cabeçalho continua inteiro porque não está mudando. Só opacidade:
+   nenhuma cor nem medida nova (regra 10). */
+#application-shell main {
+  transition: opacity 180ms var(--ease-out, ease-out);
+}
+
+#application-shell[data-navigation="soft"] main {
+  opacity: 0.6;
+  cursor: progress;
+  transition-delay: 120ms;
+}
+
 /* A superfície do topo pertence à viewport, não ao container de conteúdo.
    Declarar a geometria explicitamente impede uma classe de shell ou um
    max-width ancestral de voltar a transformar a barra numa ilha central. */
@@ -600,9 +614,13 @@ body {
 
 .navigation-transition__retry,
 .navigation-route-error__retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-block-size: 44px;
   border: 0;
   border-radius: var(--radius-action);
+  text-decoration: none;
   padding-inline: var(--spacing-lg);
   background: var(--primary);
   color: var(--primary-foreground);
@@ -615,12 +633,13 @@ body {
   outline-offset: var(--spacing-xxs);
 }
 
+/* Dentro do app o cabeçalho já ocupa o topo: uma caixa de 100dvh centralizada
+   empurrava a mensagem para baixo da dobra. O painel começa logo abaixo dele. */
 .navigation-route-error {
   display: grid;
-  min-block-size: calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom));
-  place-items: center;
-  padding-block: max(var(--spacing-xl), var(--safe-area-top))
-    max(var(--spacing-xl), var(--safe-area-bottom));
+  align-content: start;
+  /* O cabeçalho já reserva a área segura do topo; somá-la aqui dobraria o notch. */
+  padding-block: var(--spacing-xxl) max(var(--spacing-xl), var(--safe-area-bottom));
   padding-inline: max(var(--spacing-lg), var(--safe-area-left))
     max(var(--spacing-lg), var(--safe-area-right));
 }

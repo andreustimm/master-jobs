@@ -18,6 +18,83 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.22.1] - 2026-09-23T00:33:04.000Z
+
+### Segurança
+
+- Seu perfil público nunca mostra seu e-mail no lugar do nome. Contas criadas
+  pela linha de comando ganhavam o e-mail como nome, e ele aparecia no título
+  do perfil público; esses nomes foram apagados, e o perfil mostra um título
+  neutro até você escrever o seu.
+
+### Novidade
+
+- Você edita o nome do seu perfil público na área do candidato. Se ele ainda
+  não tiver nome, a tela pede um, e o perfil público mostra um título neutro
+  até você escrevê-lo.
+
+### Corrigido
+
+- A tela de usuários ensina o comando certo para definir a senha:
+  `jho auth set-password <email>`.
+- Um endereço público longo demais é recusado com a razão, em vez de ser
+  cortado e salvo diferente do que você colou; e um curto demais diz que
+  precisa de pelo menos 3 caracteres.
+
+## [1.22.0] - 2026-09-22T23:04:57.000Z
+
+### Novidade
+
+- Você escolhe o endereço público do seu perfil (o link /p/…) na área do
+  candidato — e já pode escolher ao criar o perfil. Ao trocar, o endereço
+  antigo deixa de funcionar na hora e pode ser escolhido por outra pessoa. O
+  perfil só aparece nesse endereço enquanto estiver marcado como Público.
+
+- Nova tela Minha conta, no menu: troque o seu nome de exibição e a sua senha
+  sem pedir ao admin. Para trocar a senha é preciso informar a atual; ao
+  trocar, todas as outras sessões da conta são encerradas e você continua
+  conectado. O e-mail continua sendo trocado por um admin.
+- Quem entra com uma conta de candidato nova agora pode criar o próprio perfil
+  em "Criar meu perfil": nome, headline, localização e, se quiser, o currículo.
+  O perfil nasce privado e é só seu.
+
+### Segurança
+
+- O currículo publicado no perfil público passa a esconder e-mails, telefones
+  com código de país ou com DDD entre parênteses e o parágrafo ou a tabela
+  inteira em que aparece a pretensão salarial (como "Pretensão salarial:",
+  "Salário atual: R$ …" ou "Salary expectation:"), mesmo quando estão escritos
+  no texto. Um valor escrito sem rótulo nem menção a salário continua
+  aparecendo.
+- O modo sem login, próprio para desenvolvimento, é recusado automaticamente
+  em qualquer ambiente publicado.
+
+### Corrigido
+
+- Enquanto o envio de e-mail não estiver configurado no servidor, o link de
+  recuperação de senha não é mais gravado no registro técnico do servidor,
+  onde outras pessoas poderiam lê-lo. O registro passa a mostrar só um alerta
+  de que o e-mail não foi enviado.
+
+- O sistema nunca mais faz pedidos automáticos ao LinkedIn, nem quando uma
+  vaga veio de um alerta por e-mail ou quando outro site redireciona para lá.
+  Essas vagas continuam aparecendo com o link para você abrir, e não são
+  fechadas por não poderem ser verificadas.
+
+- Uma candidatura registrada exatamente enquanto a limpeza de vagas antigas
+  rodava podia sumir junto com a vaga. A limpeza agora espera e confere de
+  novo, e nunca apaga vaga com candidatura.
+
+- A conexão com o banco foi preparada com permissões limitadas e validada; a ativação ocorrerá no próximo deploy de produção aprovado.
+- As telas de "Acesso negado" e "Página não encontrada" aparecem logo abaixo do menu, sem o espaço vazio que empurrava a mensagem para baixo, e o botão "Voltar ao início" fica com o texto centralizado.
+
+### Melhorado
+
+- Mudar filtro, ordem, página ou densidade na tela de Vagas não cobre mais a
+  tela inteira com a abertura de carregamento. A lista fica visível, esmaece
+  enquanto atualiza e continua respondendo a cliques. A abertura completa
+  continua na troca de tela e quando a resposta demora ou a conexão cai.
+
 ## [1.21.2] - 2026-09-22T21:14:29.956Z
 
 ### Segurança

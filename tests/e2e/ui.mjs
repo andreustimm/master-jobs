@@ -1052,7 +1052,12 @@ try {
   // muda o currículo — sem mudança não há repontuação para enfileirar, e o
   // cartão aparece `idle`. Foi o que reprovou este caso em três de cinco
   // execuções antes desta espera existir.
-  await page.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
+  await page.waitForFunction(() => {
+      // Pronto = sem `inert` (troca de tela) e sem `aria-busy` (mesma tela,
+      // #220, que deixa o shell operável enquanto a resposta chega).
+      const shell = document.getElementById("application-shell");
+      return !shell?.hasAttribute("inert") && !shell?.hasAttribute("aria-busy");
+    });
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+End");
   // `textContent` nos DOIS lados da comparação. A versão anterior lia o estado
@@ -2022,7 +2027,7 @@ try {
       role: "recrutador",
       email: "e2e-recrutador@local.test",
       lands: "/jobs",
-      allowed: ["/jobs", "/jobs/new"],
+      allowed: ["/jobs", "/jobs/new", "/account"],
       // Sem escopo de candidato: currículo, funil e cockpit são de outra pessoa.
       denied: ["/candidate", "/pipeline", "/admin/users"],
     },
@@ -2030,7 +2035,7 @@ try {
       role: "candidato",
       email: "e2e-candidato@local.test",
       lands: "/",
-      allowed: ["/", "/jobs", "/candidate", "/pipeline", "/jobs/new"],
+      allowed: ["/", "/jobs", "/candidate", "/pipeline", "/jobs/new", "/account"],
       // Candidato puro não administra contas.
       denied: ["/admin/users"],
     },
@@ -2169,6 +2174,73 @@ try {
     });
 
     await roleCtx.close();
+  }
+
+  /* ------------------ Minha conta: trocar a própria senha (#236) ----------- */
+
+  // Conta dedicada: trocar a senha de uma conta compartilhada quebraria os
+  // logins das outras jornadas. Duas sessões da mesma conta, e a troca feita
+  // numa delas precisa derrubar a outra e manter quem pediu.
+  {
+    const ACCOUNT_EMAIL = "e2e-conta@local.test";
+    const NEW_PASSWORD = "conta-trocada-pelo-e2e-43";
+    const openSession = async () => {
+      const ctx = await browser.newContext();
+      const tab = await ctx.newPage();
+      trackConsole(tab);
+      await ctx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+      await tab.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+      await tab.fill('input[name="email"]', ACCOUNT_EMAIL);
+      await tab.fill('input[name="password"]', E2E_PASSWORD);
+      await tab.locator('[data-testid="login-submit"]').click();
+      await tab.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 15_000 }).catch(() => {});
+      return { ctx, tab };
+    };
+    const first = await openSession();
+    const second = await openSession();
+
+    await first.tab.goto(`${BASE}/account`, { waitUntil: "networkidle" });
+    await first.tab.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
+    await first.tab.fill('input[name="currentPassword"]', "senha-errada-do-e2e-99");
+    await first.tab.fill('input[name="newPassword"]', NEW_PASSWORD);
+    await first.tab.fill('input[name="confirmPassword"]', NEW_PASSWORD);
+    await first.tab.locator('[data-testid="account-change-password"]').click();
+    await first.tab.waitForSelector('[data-testid="account-status"]', { timeout: 15_000 }).catch(() => {});
+    const wrongStatus = await first.tab.locator('[data-testid="account-status"]').getAttribute("role").catch(() => null);
+    check("Minha conta: senha atual errada é recusada com alerta", wrongStatus === "alert", String(wrongStatus));
+
+    await first.tab.goto(`${BASE}/account`, { waitUntil: "networkidle" });
+    await first.tab.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
+    await first.tab.fill('input[name="currentPassword"]', E2E_PASSWORD);
+    await first.tab.fill('input[name="newPassword"]', NEW_PASSWORD);
+    await first.tab.fill('input[name="confirmPassword"]', NEW_PASSWORD);
+    await first.tab.locator('[data-testid="account-change-password"]').click();
+    await first.tab.waitForURL((url) => url.searchParams.get("status") === "password-changed", { timeout: 15_000 })
+      .catch(() => {});
+    // Sobrevive a refresh: a sessão nova gravada no cookie é a que vale.
+    await first.tab.reload({ waitUntil: "networkidle" });
+    const stillIn = new URL(first.tab.url()).pathname === "/account"
+      && (await first.tab.locator('[data-testid="route-account"]').count()) === 1;
+    const otherResponse = await second.tab.goto(`${BASE}/account`, { waitUntil: "networkidle" });
+    const otherOut = new URL(second.tab.url()).pathname.startsWith("/login");
+    check(
+      "Minha conta: trocar a senha mantém quem pediu e derruba a outra sessão",
+      stillIn && otherOut,
+      JSON.stringify({ stillIn, otherOut, other: otherResponse?.status(), url: second.tab.url() }),
+    );
+
+    await second.tab.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+    await second.tab.fill('input[name="email"]', ACCOUNT_EMAIL);
+    await second.tab.fill('input[name="password"]', NEW_PASSWORD);
+    await second.tab.locator('[data-testid="login-submit"]').click();
+    await second.tab.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 15_000 }).catch(() => {});
+    check(
+      "Minha conta: a senha nova entra",
+      !new URL(second.tab.url()).pathname.startsWith("/login"),
+      second.tab.url(),
+    );
+    await first.ctx.close();
+    await second.ctx.close();
   }
 
   // Conta desabilitada não entra, mesmo com a senha certa.
@@ -2734,6 +2806,17 @@ try {
     check("sessão emprestada recebe 403 na administração", denied?.status() === 403,
       `${denied?.status()}`);
 
+    // A conta do alvo abre para leitura, sem formulário nenhum: trocar senha,
+    // e-mail ou nome de outra pessoa com a cara dela é tomar a conta.
+    const borrowedAccount = await page.goto(`${BASE}/account`, { waitUntil: "networkidle" });
+    const borrowedForms = await page.locator('[data-testid="route-account"] form').count();
+    const borrowedNote = await page.locator('[data-testid="account-borrowed"]').count();
+    check(
+      "sessão emprestada vê Minha conta sem formulário de senha nem de nome",
+      borrowedAccount?.status() === 200 && borrowedForms === 0 && borrowedNote === 1,
+      JSON.stringify({ status: borrowedAccount?.status(), borrowedForms, borrowedNote }),
+    );
+
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
     await page.click('[data-testid="stop-impersonating"]');
     await page.waitForFunction(
@@ -2926,11 +3009,11 @@ try {
       .filter((v) => v.length > 2 && !shared.has(v)),
   );
 
-  const portugueseLeaks = async (paths) => {
+  const portugueseLeaks = async (paths, target = page) => {
     const leaks = [];
     for (const path of paths) {
-      await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
-      const found = await page.evaluate((dictionary) => {
+      await target.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+      const found = await target.evaluate((dictionary) => {
         const known = new Set(dictionary);
         const accented = /[ãõçáéíóúâêôàÃÕÇÁÉÍÓÚÂÊÔÀ]/;
         const out = [];
@@ -2966,6 +3049,8 @@ try {
     "/candidate",
     "/candidate/skills",
     "/candidate/vocabulary",
+    // Minha conta (#236): e-mail da sessão marcado como dado do usuário.
+    "/account",
     // O hub dos países entra nas quatro guardas transversais: cada uma é um
     // array literal, então rota nova não herda nenhuma delas sozinha. Ele tem
     // quatro chaves de dicionário próprias e estava fora de todas.
@@ -2985,6 +3070,136 @@ try {
     leaks.length === 0,
     leaks.slice(0, 8).join(" | "),
   );
+
+  /* ---------- Criar o próprio perfil (#234): conta sem candidato ---------- */
+
+  // A conta tem papel candidato e nenhum candidato. Antes, `/candidate` dava
+  // 403 e ela só via "Vagas". Agora vê o formulário, cria um candidato NOVO e
+  // privado, e passa a ver a área do candidato — com o próprio nome, nunca o
+  // do dono.
+  {
+    const context = await browser.newContext({ viewport: { width: 375, height: 812 } });
+    const onboarding = await context.newPage();
+    trackConsole(onboarding);
+    await context.addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
+    await onboarding.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+    await onboarding.fill('input[name="email"]', "e2e-sem-perfil@local.test");
+    await onboarding.fill('input[name="password"]', E2E_PASSWORD);
+    await onboarding.locator('[data-testid="login-submit"]').click();
+    await onboarding.waitForTimeout(1_500);
+
+    const onboardingLeaks = await portugueseLeaks(["/candidate"], onboarding);
+    const form = onboarding.locator('[data-testid="route-candidate-onboarding"]');
+    const formShown = (await form.count()) === 1;
+    const overflow = await onboarding.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    const navLink = await onboarding.locator('[data-testid="nav-create-profile"]').count();
+    check("conta sem candidato vê Criar meu perfil em /candidate", formShown);
+    check("Criar meu perfil aparece na navegação", navLink >= 1);
+    check("Criar meu perfil cabe em 375px", overflow <= 1, `overflow=${overflow}`);
+    check("Criar meu perfil não vaza português", onboardingLeaks.length === 0, onboardingLeaks.join(" | "));
+
+    await onboarding.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+    check("criar perfil oferece o endereço público", (await onboarding.locator('[data-testid="profile-slug"]').count()) === 1);
+    await onboarding.fill('[data-testid="profile-name"]', "Onboarding Person E2E");
+    await onboarding.fill('[data-testid="profile-headline"]', "Platform Engineer");
+    await onboarding.locator('[data-testid="create-profile"]').click();
+    await onboarding.locator('[data-testid="route-candidate"]').waitFor({ timeout: 15_000 }).catch(() => undefined);
+    await onboarding.reload({ waitUntil: "networkidle" });
+    const created = (await onboarding.locator('[data-testid="route-candidate"]').count()) === 1;
+    const body = (await onboarding.locator("main").textContent()) ?? "";
+    const privateChecked = await onboarding
+      .locator('input[name="visibility"][value="private"]')
+      .isChecked()
+      .catch(() => false);
+    check("perfil criado sobrevive ao refresh e abre a área do candidato", created);
+    check(
+      "perfil novo usa o nome digitado, nunca a identidade do dono",
+      body.includes("Onboarding Person E2E") && !body.includes("profile/profile.yaml"),
+      body.slice(0, 200),
+    );
+    check("perfil novo nasce privado", privateChecked);
+
+    // Endereço público escolhido (#235): troca, publica e confere que só o
+    // novo responde — o derivado do nome passa a 404.
+    const chosen = `endereco-e2e-${Date.now().toString(36)}`;
+    const derivedSlug = await onboarding
+      .locator('[data-testid="public-slug"]')
+      .inputValue()
+      .catch(() => "");
+    check("perfil criado nasce com endereço derivado do nome", /^onboarding-person-e2e/.test(derivedSlug), derivedSlug);
+    const savedNotice = onboarding.locator('[data-testid="mutation-feedback"][role="status"]');
+    await onboarding.fill('[data-testid="public-slug"]', chosen);
+    await onboarding.locator('[data-testid="save-public-slug"]').click();
+    await savedNotice.waitFor({ timeout: 10_000 }).catch(() => undefined);
+    await onboarding.locator('[data-testid="mutation-feedback-dismiss"]').click().catch(() => undefined);
+    await onboarding.locator('input[name="visibility"][value="public"]').check();
+    await onboarding.locator('[data-testid="save-visibility"]').click();
+    await savedNotice.waitFor({ timeout: 10_000 }).catch(() => undefined);
+    await onboarding.reload({ waitUntil: "networkidle" });
+    const savedSlug = await onboarding.locator('[data-testid="public-slug"]').inputValue().catch(() => "");
+    const addressOverflow = await onboarding.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    check("endereço público escolhido sobrevive ao refresh", savedSlug === chosen, `${savedSlug} != ${chosen}`);
+    check("cartão de endereço público cabe em 375px", addressOverflow <= 1, `overflow=${addressOverflow}`);
+
+    // BUG-20260922-short-address-wrong-reason e -long-address-cut-silently: o
+    // navegador não barra nem corta; a recusa de tamanho vem do domínio, com a
+    // razão certa, e o endereço atual não muda.
+    const refusalNotice = onboarding.locator('[data-testid="mutation-feedback"][role="alert"]');
+    const refusal = async (value) => {
+      await onboarding.locator('[data-testid="mutation-feedback-dismiss"]').click().catch(() => undefined);
+      await onboarding.fill('[data-testid="public-slug"]', value);
+      await onboarding.locator('[data-testid="save-public-slug"]').click();
+      await refusalNotice.waitFor({ timeout: 10_000 }).catch(() => undefined);
+      return ((await refusalNotice.textContent().catch(() => "")) ?? "").trim();
+    };
+    const shortReason = await refusal("ab");
+    const longReason = await refusal("a".repeat(41));
+    await onboarding.reload({ waitUntil: "networkidle" });
+    const afterRefusals = await onboarding.locator('[data-testid="public-slug"]').inputValue().catch(() => "");
+    check("endereço curto é recusado pelo tamanho", /at least 3 characters/.test(shortReason), shortReason);
+    check("endereço de 41 caracteres é recusado, não cortado", /longer than 40 characters/.test(longReason), longReason);
+    check("recusas não mudam o endereço atual", afterRefusals === chosen, afterRefusals);
+
+    // Nome do perfil público: editável, e e-mail não passa.
+    const nameCard = onboarding.locator('[data-testid="public-name-card"]');
+    check("nome do perfil é editável em /candidate", (await nameCard.count()) === 1);
+    await onboarding.fill('[data-testid="public-name"]', "e2e-sem-perfil@local.test");
+    await onboarding.locator('[data-testid="save-public-name"]').click();
+    await refusalNotice.waitFor({ timeout: 10_000 }).catch(() => undefined);
+    const nameReason = ((await refusalNotice.textContent().catch(() => "")) ?? "").trim();
+    check("e-mail como nome do perfil é recusado com a razão", /no email or phone/.test(nameReason), nameReason);
+    await onboarding.locator('[data-testid="mutation-feedback-dismiss"]').click().catch(() => undefined);
+    await onboarding.fill('[data-testid="public-name"]', "Onboarding Person Renamed");
+    await onboarding.locator('[data-testid="save-public-name"]').click();
+    await savedNotice.waitFor({ timeout: 10_000 }).catch(() => undefined);
+    await onboarding.reload({ waitUntil: "networkidle" });
+    const savedName = await onboarding.locator('[data-testid="public-name"]').inputValue().catch(() => "");
+    const nameOverflow = await onboarding.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    check("nome do perfil sobrevive ao refresh", savedName === "Onboarding Person Renamed", savedName);
+    check("cartão de nome do perfil cabe em 375px", nameOverflow <= 1, `overflow=${nameOverflow}`);
+
+    const anon = await browser.newContext();
+    const anonPage = await anon.newPage();
+    const fresh = await anonPage.goto(`${BASE}/p/${chosen}`, { waitUntil: "domcontentloaded" });
+    const freshShown = (await anonPage.locator('[data-testid="route-public-profile"]').count()) === 1;
+    const freshHeading = ((await anonPage.locator('[data-testid="route-public-profile"] h1').textContent().catch(() => "")) ?? "").trim();
+    const stale = await anonPage.goto(`${BASE}/p/${derivedSlug}`, { waitUntil: "domcontentloaded" });
+    check("endereço novo responde ao anônimo", fresh?.status() === 200 && freshShown, String(fresh?.status()));
+    check("perfil público mostra o nome editado", freshHeading === "Onboarding Person Renamed", freshHeading);
+    check(
+      "endereço antigo responde 404 depois da troca",
+      derivedSlug !== "" && stale?.status() === 404,
+      `${derivedSlug}: ${stale?.status()}`,
+    );
+    await anon.close();
+    await context.close();
+  }
 
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
 
@@ -3242,6 +3457,72 @@ try {
     }
   };
 
+  // Navegação na mesma tela (filtro, ordem, página, densidade) não abre o
+  // overlay nem torna o shell `inert` (#220). O observador testemunha o
+  // atributo mesmo quando a resposta chega no quadro seguinte: a prova é ter
+  // visto `data-navigation="soft"` com `aria-busy`, nunca `inert` nem overlay,
+  // e o shell limpo no fim.
+  const observeSoftNavigation = async (targetPage, activate, destination, label = destination) => {
+    try {
+      await targetPage.locator('[data-testid="navigation-transition"]').waitFor({ state: "detached" });
+      const before = targetPage.url();
+      await targetPage.evaluate(() => {
+        globalThis.__e2eSoftEvidence?.observer?.disconnect();
+        const shell = document.getElementById("application-shell");
+        const evidence = { soft: false, inert: false, overlays: 0, status: "" };
+        const softStatus = document.querySelector('[data-testid="navigation-soft-status"]');
+        const record = (mutations = []) => {
+          for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+              if (!(node instanceof Element)) continue;
+              if (node.matches('[data-testid="navigation-transition"]')
+                || node.querySelector('[data-testid="navigation-transition"]')) {
+                evidence.overlays += 1;
+              }
+            }
+          }
+          const announced = softStatus?.textContent?.trim();
+          if (announced) evidence.status = announced;
+          if (shell?.getAttribute("data-navigation") === "soft" && shell.getAttribute("aria-busy") === "true") {
+            evidence.soft = true;
+          }
+          if (shell?.hasAttribute("inert")) evidence.inert = true;
+        };
+        const observer = new MutationObserver(record);
+        observer.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["data-navigation", "inert", "aria-busy"],
+          characterData: true,
+          childList: true,
+          subtree: true,
+        });
+        globalThis.__e2eSoftEvidence = { observer, evidence };
+      });
+      await activate();
+      await targetPage.waitForURL((url) => url.href !== before, { timeout: 20_000 });
+      await targetPage.locator(destination).waitFor({ state: "visible", timeout: 20_000 });
+      await targetPage.waitForFunction(
+        () => !document.getElementById("application-shell")?.hasAttribute("aria-busy"),
+        null,
+        { timeout: 20_000 },
+      );
+      return await targetPage.evaluate(() => {
+        const { observer, evidence } = globalThis.__e2eSoftEvidence;
+        observer.disconnect();
+        delete globalThis.__e2eSoftEvidence;
+        const shell = document.getElementById("application-shell");
+        const settled = !shell?.hasAttribute("inert") && !shell?.hasAttribute("data-navigation");
+        return {
+          ...evidence,
+          settled,
+          phase: evidence.soft && !evidence.inert && evidence.overlays === 0 && settled ? "soft" : "blocking",
+        };
+      });
+    } catch (error) {
+      throw new Error(`${label}: ${String(error)}`);
+    }
+  };
+
   const observeRedirectAction = async (targetPage, activate, destination) => {
     let actionRequests = 0;
     let actionResponses = 0;
@@ -3258,6 +3539,8 @@ try {
     };
     targetPage.on("request", countAction);
     targetPage.on("response", countActionResponse);
+    const sourceUrl = targetPage.url();
+    const sourcePath = new URL(sourceUrl).pathname;
     try {
       const snapshot = await observeNavigation(
         targetPage,
@@ -3266,7 +3549,11 @@ try {
         destination,
         async () => ({ actionResponseSeenAtAttach: actionResponseSeen }),
       );
-      return { ...snapshot, actionRequests, actionResponses };
+      // Redirect para a mesma tela (só a query muda) é transição suave: sem
+      // overlay (#220). A prova de "uma vez" continua sendo o POST único.
+      const sameScreen = new URL(targetPage.url()).pathname === sourcePath;
+      const moved = targetPage.url() !== sourceUrl;
+      return { ...snapshot, actionRequests, actionResponses, sameScreen, moved };
     } finally {
       targetPage.off("request", countAction);
       targetPage.off("response", countActionResponse);
@@ -3433,56 +3720,61 @@ try {
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   const firstJobLink = page.locator('[data-testid^="job-link-"]').first();
   const contextualPhases = [];
+  const softStatuses = [];
+  const softOf = (evidence) => {
+    softStatuses.push(evidence.status);
+    return evidence.phase;
+  };
   contextualPhases.push((await observeNavigation(page, () => firstJobLink.click(), '[data-testid="route-job-detail"]')).phase);
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   await page.locator('[data-testid="filters-query"]').fill("Task 04 typical fixture");
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push(softOf(await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="filters-submit"]').click(),
     '[data-testid="route-jobs"]',
-  )).phase);
+  )));
   const typicalCardinality = {
     cards: await page.locator('[data-testid^="job-link-"]').count(),
     summary: await page.locator('[data-testid="route-jobs"] > header > p').textContent(),
     next: await page.locator('[data-testid="pagination-next"]').count(),
   };
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push(softOf(await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="density-compact"]').click(),
     '[data-testid="route-jobs"]',
-  )).phase);
+  )));
   const densityState = {
     query: new URL(page.url()).searchParams.get("dense"),
     current: await page.locator('[data-testid="density-compact"]').getAttribute("aria-current"),
     layout: await page.locator('[data-density]').first().getAttribute("data-density"),
   };
   await page.locator('[data-testid="filters-query"]').fill("Task 04 bulk fixture");
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push(softOf(await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="filters-submit"]').click(),
     '[data-testid="route-jobs"]',
-  )).phase);
-  contextualPhases.push((await observeNavigation(
+  )));
+  contextualPhases.push(softOf(await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="page-size-200"]').click(),
     '[data-testid="route-jobs"]',
-  )).phase);
+  )));
   const bulkCardinality = {
     cards: await page.locator('[data-testid^="job-link-"]').count(),
     summary: await page.locator('[data-testid="route-jobs"] > header > p').textContent(),
     next: await page.locator('[data-testid="pagination-next"]').count(),
   };
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push(softOf(await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="pagination-next"]').click(),
     '[data-testid="route-jobs"]',
-  )).phase);
+  )));
   const paginationUrl = new URL(page.url());
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push(softOf(await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="preset-applicableToday"]').click(),
     '[data-testid="route-jobs"]',
-  )).phase);
+  )));
   const presetUrl = new URL(page.url());
   const contextualState = {
     pagination: {
@@ -3500,11 +3792,11 @@ try {
     },
   };
   await page.locator('[data-testid="filters-query"]').fill(`zero-${crypto.randomUUID()}`);
-  contextualPhases.push((await observeNavigation(
+  contextualPhases.push(softOf(await observeSoftNavigation(
     page,
     () => page.locator('[data-testid="filters-submit"]').click(),
     '[data-testid="route-jobs"]',
-  )).phase);
+  )));
   const zeroCardinality = {
     cards: await page.locator('[data-testid^="job-link-"]').count(),
     summary: await page.locator('[data-testid="route-jobs"] > header > p').textContent(),
@@ -3513,7 +3805,9 @@ try {
   check(
     "task-04 E2E-003 card, densidade, paginação e GET cobrem zero, típico e milhares",
     contextualPhases.length === 8
-      && contextualPhases.every((phase) => phase === "loading")
+      && contextualPhases[0] === "loading"
+      && contextualPhases.slice(1).every((phase) => phase === "soft")
+      && softStatuses.some((status) => status === ptBR.transition.updating || status === en.transition.updating)
       && typicalCardinality.cards === 7
       && /^7\s/.test(typicalCardinality.summary ?? "")
       && typicalCardinality.next === 0
@@ -3537,12 +3831,34 @@ try {
       && zeroCardinality.next === 0,
     JSON.stringify({
       contextualPhases,
+      softStatuses,
       typicalCardinality,
       densityState,
       bulkCardinality,
       contextualState,
       zeroCardinality,
     }),
+  );
+
+  // Voltar/avançar na mesma tela também é suave. Aqui o início vem do
+  // observador de commit (o roteador já trocou a URL quando o evento chega),
+  // um caminho diferente do Link e do formulário GET acima.
+  const historyBack = await observeSoftNavigation(
+    page,
+    () => page.goBack(),
+    '[data-testid="route-jobs"]',
+    "history back on /jobs",
+  );
+  const historyForward = await observeSoftNavigation(
+    page,
+    () => page.goForward(),
+    '[data-testid="route-jobs"]',
+    "history forward on /jobs",
+  );
+  check(
+    "#220 voltar e avançar na mesma tela não abrem o overlay nem travam o shell",
+    historyBack.phase === "soft" && historyForward.phase === "soft",
+    JSON.stringify({ historyBack, historyForward }),
   );
 
   const contextualFamilyFailures = [];
@@ -3776,8 +4092,10 @@ try {
   const restoredAdministratorCache = await readCacheStorage(page);
   check(
     "task-04 E2E-004 redirects de login, recovery, compare, vaga e impersonação mutam uma vez",
-    redirectEvidence.length === 5 && redirectEvidence.every(({ count, actionRequests }) => count === 1 && actionRequests === 1),
-    JSON.stringify(redirectEvidence.map(({ count, actionRequests }) => ({ count, actionRequests }))),
+    redirectEvidence.length === 5
+      && redirectEvidence.every(({ count, actionRequests, sameScreen, moved }) =>
+        count === (sameScreen ? 0 : 1) && actionRequests === 1 && moved),
+    JSON.stringify(redirectEvidence.map(({ count, actionRequests, sameScreen, moved }) => ({ count, actionRequests, sameScreen, moved }))),
   );
   check(
     "task-04 IT-012 Server Actions reais mutam uma vez e iniciam somente o redirect aceito",
@@ -4111,7 +4429,11 @@ try {
       && !loginReplayRestoredSession
       && emptyProfileResponse?.status() === 200
       && emptyProfile.statusSurface
-      && emptyProfile.heading === "e2e-alvo@local.test"
+      // O setup grava o e-mail como nome deste candidato — o dado que a
+      // 1.22.0 produzia pela CLI. A página nunca o publica: o título é o
+      // neutro do dicionário (BUG-20260922-public-profile-shows-email-as-name).
+      && !emptyProfile.heading.includes("@")
+      && ["Perfil sem nome", "Unnamed profile"].includes(emptyProfile.heading)
       && emptyProfile.optionalParagraphs === 0
       && emptyProfile.optionalSections === 0
       && emptyProfile.optionalLinks === 0
@@ -5080,7 +5402,12 @@ try {
     await page.waitForLoadState("networkidle");
     // A soft navigation keeps the shell inert until the transition commits;
     // typing before that is lost, for a person and for `fill` alike.
-    await page.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
+    await page.waitForFunction(() => {
+      // Pronto = sem `inert` (troca de tela) e sem `aria-busy` (mesma tela,
+      // #220, que deixa o shell operável enquanto a resposta chega).
+      const shell = document.getElementById("application-shell");
+      return !shell?.hasAttribute("inert") && !shell?.hasAttribute("aria-busy");
+    });
   };
 
   await page.goto(payBase, { waitUntil: "networkidle" });
@@ -5465,7 +5792,12 @@ try {
   const saveTermOnPage = (term) => feedbackOf(async () => {
     // After a redirect the shell stays inert until the transition commits, and
     // `fill` on it is silently lost: the save goes out empty and no notice comes.
-    await page.waitForFunction(() => !document.getElementById("application-shell")?.hasAttribute("inert"));
+    await page.waitForFunction(() => {
+      // Pronto = sem `inert` (troca de tela) e sem `aria-busy` (mesma tela,
+      // #220, que deixa o shell operável enquanto a resposta chega).
+      const shell = document.getElementById("application-shell");
+      return !shell?.hasAttribute("inert") && !shell?.hasAttribute("aria-busy");
+    });
     await page.locator('[data-testid="searches-term-input"]').fill(term);
     await page.locator('[data-testid="searches-term-save"]').click();
   });
@@ -5719,6 +6051,7 @@ try {
     "/jobs/904000101/paises",
     "/jobs/904000103",
     "/admin/captures",
+    "/account",
   ];
   const searchOverflows = [];
   for (const [width, height] of [[375, 812], [768, 1024], [1024, 768]]) {
@@ -5746,6 +6079,7 @@ try {
     "/jobs/904000101/paises",
     "/jobs/904000103",
     "/admin/captures",
+    "/account",
   ]);
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
   check(

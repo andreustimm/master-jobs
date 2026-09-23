@@ -194,13 +194,48 @@ candidate` dá à conta desvinculada um candidato próprio.
 |---|---|
 | **SQL injection** | Sem risco. Todo `sql\`\`` interpola coluna do Drizzle ou valor parametrizado. Nenhuma concatenação de string. |
 | **XSS** | Sem `dangerouslySetInnerHTML` em lugar nenhum. Descrição de vaga é renderizada como texto, nunca como HTML — e ela vem de terceiro. |
-| **SSRF** | `jho jobs add <url>` só busca URL que casa com um ATS conhecido (`detectJobUrl`). URL arbitrária não é buscada: vira registro manual. |
+| **SSRF** | `jho jobs add <url>` só busca URL que casa com um ATS conhecido (`detectJobUrl`). URL arbitrária não é buscada: vira registro manual. Toda URL de vaga buscada passa por `safeRemoteFetch`, que recusa rede privada, DNS misto e redirect para qualquer um dos dois. |
 | **Segredos** | `.gitignore` cobre `.env*`, `*.token.json`, `.linkedin-session.json`, `data/` e `out/`. Nenhum segredo versionado. |
 | **Banco** | `data/` ignorado. O histórico de candidaturas nunca vai para o Git. |
 | **Timeout de rede** | Todo fetch tem `AbortSignal` com timeout. Fonte lenta não trava o sync. |
 | **Upload de PDF** | Teto de 10 MB, e o texto extraído é tratado como texto — nunca executado nem renderizado como HTML. |
 | **Escrita no funil** | Caminho único (`setApplicationStatus`), garantido por teste de arquitetura. Ingestão não escreve decisão. |
-| **LinkedIn** | Nenhum código lê `li_at` nem dirige sessão autenticada. ADR 0001. |
+| **LinkedIn** | Nenhum código lê `li_at` nem dirige sessão autenticada. ADR 0001. O transporte de URL de vaga recusa o domínio do LinkedIn em cada salto de redirect, antes do DNS — ver `docs/linkedin-policy.md` §5.1. |
+
+---
+
+## Minha conta (`/account`) — o que a própria conta muda
+
+A tela existe para qualquer papel e age sempre sobre `session.userId`; nenhum
+id vem da URL nem do formulário (`account:read` para ver, `account:write` para
+mudar, em `src/contexts/auth/domain/policy.ts`).
+
+- **Trocar a senha exige a senha atual.** Sem ela, um cookie roubado viraria
+  posse permanente da conta. Conta que entra só por link não define a primeira
+  senha por aqui — usa a recuperação.
+- **Limite de tentativas: 5 por conta em 15 minutos**, certas ou erradas. A
+  tentativa é gravada em `auth_event` (`password_change_attempt`) ANTES de ser
+  contada, então uma rajada concorrente não passa junta pelo limite. Senha nova
+  fraca e confirmação diferente não consomem tentativa.
+- **Hash gravado ilegível nega**, pelo mesmo `verifyPassword` do login.
+- **Trocar derruba TODAS as sessões da conta**, inclusive a de quem pediu, e
+  abre uma sessão nova para esse navegador. Na prática "as outras caem e eu
+  continuo dentro", e um cookie copiado antes da troca também morre. Fica
+  registrado `password_changed` com o número de sessões encerradas.
+- **Sessão emprestada não escreve na conta do alvo** — nem senha, nem nome,
+  mesmo quando o alvo é admin. A política nega `account:write` por
+  `impersonatedBy !== null` antes de olhar papel, e a composição
+  (`changePasswordForSession`, `renameForSession`) nega de novo. A tela abre
+  para leitura, sem formulário.
+- **Nome de exibição** é editável e registra `profile_updated`.
+
+**Decisão: troca de e-mail fica só com admin (`/admin/users`).** O e-mail é o
+login e o destino da recuperação de senha. Trocá-lo pela própria sessão sem
+confirmar a posse do endereço novo deixaria quem roubou uma sessão desviar a
+recuperação para si e tomar a conta de vez. A confirmação por e-mail depende do
+Resend ativo em produção (#237), que ainda é pendência do dono; quando existir,
+a troca pela própria conta pode entrar com link de confirmação enviado ao
+endereço NOVO e aviso ao antigo.
 
 ---
 
@@ -218,11 +253,95 @@ Action passa por `guard(...)` antes de qualquer efeito, e o escopo por candidato
 nasce da sessão em vez de vir da entrada. O modo aberto é somente opt-in por
 `JHO_AUTH_MODE=open`; o guard permanece no mesmo caminho. Ver AUTH-01.
 
+**Toda entrada tem política, e a desconhecida reprova** — ✅ **22/09 (#197).**
+O teste de autorização lia só arquivos `*actions.ts` e `export async function`;
+`logoutAction` ficava de fora pelo nome do arquivo. O inventário em
+`tests/support/entry-inventory.ts` descobre pela semântica do Next: toda
+`page.*` e `route.*` sob `app/`, cada método HTTP exportado, todo export de
+módulo com a diretiva `"use server"` em qualquer forma (`export const`,
+`export { a as b }`, `export default`) e diretiva inline. Cada uma precisa de
+política em `tests/architecture.test.ts` — o guarda literal da página, o
+guarda como PRIMEIRO `await` da action sem efeito antes dele, ou uma exceção
+registrada com justificativa. Exceção órfã também reprova.
+
+As exceções, e o que substitui a sessão em cada uma:
+
+| Entrada | O que protege |
+|---|---|
+| `passwordLoginAction` | limite de tentativas e resposta idêntica para conta inexistente |
+| `requestResetAction`, `submitResetAction` | resposta uniforme; token de uso único queimado antes de gravar |
+| `logoutAction`, `stopImpersonatingAction` | só revogam/restauram o que está no próprio cookie |
+| `setLocaleAction`, `setAppearanceAction` | preferência de interface em cookie próprio, sem dado de ninguém |
+| `/login`, `/login/forgot`, `/login/reset` | pré-sessão; `/login` só pergunta se existe alguma conta |
+| `/login/callback` | link mágico de uso único |
+| `/api/cron/recheck` | `CRON_SECRET` em tempo constante; 503 sem ele |
+| `/p/[slug]` | lista de permissão de `publicProfile()`, 404 para não público, limite por IP |
+
+`tests/entry-denial.test.ts` prova a NEGAÇÃO, não só a presença: chama cada
+action descoberta com o `app/auth.ts` real contra PostgreSQL de teste, sem
+cookie, com cookie forjado, sessão expirada, revogada e conta desabilitada, e
+exige recusa sem nenhuma escrita no banco, cookie, revalidação, `after()` ou
+rede. Também chama tudo com ids da vítima numa sessão válida de outro
+candidato e de um recrutador vinculado, e as ações de administração com sessão
+emprestada — o dado da vítima fica idêntico byte a byte.
+
+O limite é declarado: a descoberta é léxica, sem compilador, e nas páginas o
+inventário prova a PRESENÇA do guarda; a ordem das leituras de página é
+coberta pelos cenários por papel de `pnpm test:e2e`.
+
+**Modo aberto só na máquina local** — ✅ **22/09 (#197).** A proibição de
+`JHO_AUTH_MODE=open` em produção era só documental; agora é do código.
+`openModeActive()` (`src/contexts/auth/domain/open-mode.ts`) exige o pedido E
+um ambiente local: nenhum `VERCEL`, e `JHO_ENV` e `VERCEL_ENV` ausentes ou
+iguais a `local` — as duas são conferidas, sem precedência. Produção, preview, staging, dev e valor
+desconhecido ignoram o pedido e continuam exigindo login. Sessão e `proxy.ts`
+chamam a mesma função; nenhum outro arquivo lê a variável.
+
+**O consentimento do CV não publica o que nunca sai** — ✅ **22/09 (#197).**
+`publicProfile()` passa o texto por `publicCvText()` (`src/core/public-cv.ts`):
+e-mail (o cadastrado e qualquer endereço), telefone com código de país ou DDD
+entre parênteses e o bloco inteiro (parágrafo, item ou tabela entre linhas em
+branco; a seção, quando é título) que traz rótulo de pretensão salarial ou
+palavra de remuneração perto de um valor são retirados.
+Detecção por padrão, com limite escrito no arquivo e travado em teste: valor
+sem rótulo e telefone sem marca passam. Não é sanitização perfeita.
+
 **Fluxo verificado ponta a ponta em 19/08**, no modo autenticado padrão: sem
 sessão o cabeçalho oferece entrar; o link de uso único resgata em
 `/login/callback` e grava o cookie `httpOnly`; a sessão passa a aparecer no
 cabeçalho; **o mesmo link recusa o segundo uso**; e o logout revoga no servidor,
 deixando o cookie antigo inválido.
+
+**Conta nova cria o próprio candidato** — ✅ **22/09 (#234).** Depois do
+incidente em que uma conta de seed apontava para o candidato do dono, contas de
+papel candidato sem candidato recebiam 403 em `/candidate` e não tinham saída.
+Agora elas veem "Criar meu perfil". A ação `candidate:create` só passa para
+papel candidato, sem candidato, com sessão própria — sessão emprestada é negada,
+porque criar o perfil é decisão da pessoa, não do admin que assume a
+identidade. O formulário não carrega id nenhum: a conta é a da sessão e o
+candidato é sempre uma linha nova, privada, com a identidade digitada — nunca a
+do `profile.yaml`. As demais páginas de candidato continuam negando 403 para
+quem não tem candidato.
+
+**Endereço público escolhido pelo candidato** — ✅ **22/09 (#235).** `/p/`
+lê `public_slug`, nunca o `slug` interno, e continua passando por
+`publicProfile()` — lista de permissão, 404 para perfil não público em qualquer
+endereço. Trocar o endereço faz o antigo responder 404 sem redirecionar (ADR
+0024): redirecionar contaria a quem guardou o link antigo qual é o novo.
+Reservados cobrem toda rota de primeiro nível do app e os prefixos que o
+cadastro pelo admin (`user-`) e o setup do e2e (`e2e-`) reaproveitam pelo slug.
+Candidato de slug `user-<e-mail>` nasce sem endereço público: copiar o slug
+publicaria o e-mail.
+
+**O e-mail não é nome público** — ✅ **22/09 (QA da 1.22.0).** `jho auth
+add-user` gravava o e-mail como nome do candidato, e `/p/<endereço>` o
+publicava como título assim que o perfil ficava Público. A lista de permissão
+escolhia colunas, e `name` é coluna permitida. Três camadas agora: a CLI dá o
+nome de exibição da conta ou nenhum; `publicProfile()` confere o valor de nome,
+headline, localização e links por `containsContact()` e esvazia o que traz
+e-mail ou telefone, venha de onde vier; e a pessoa edita o nome em `/candidate`.
+A migração `0014` limpa os nomes já gravados. Detecção por padrão, com o mesmo
+limite declarado de `publicCvText()`, mais sequência de dez dígitos.
 
 **Sem criptografia em repouso.** O banco é um arquivo SQLite legível por
 qualquer processo do usuário. Quem tem acesso local à conta já tem acesso a

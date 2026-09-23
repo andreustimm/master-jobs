@@ -203,6 +203,10 @@ describe("addJob pelo caminho manual", () => {
     // Mensagem acionável: LinkedIn não é uma falha nossa, é uma propriedade
     // daquele host. Dizer isso junto com "passe --description" é a diferença
     // entre o usuário melhorar a pontuação e achar que o sistema está quebrado.
+    // Referência manual continua permitida pela regra 1: guardar a URL não é
+    // buscá-la, e a porta instrumentada prova que nada foi pedido.
+    const port = fixtureHttp({});
+    setHttpPort(port);
     const r = await addJob({
       url: "https://www.linkedin.com/jobs/view/4111216009",
       title: "Staff AI Engineer",
@@ -217,6 +221,8 @@ describe("addJob pelo caminho manual", () => {
     // "www.linkedin.com" viram duas fontes para o mesmo lugar.
     const [linha] = await db.select().from(job).where(eq(job.id, r.jobId));
     expect(linha!.sourceId).toBe("manual:linkedin.com");
+    expect(linha!.url).toBe("https://www.linkedin.com/jobs/view/4111216009");
+    expect(port.calls).toEqual([]);
   });
 
   it("avisa que sem descrição o fit sai artificialmente baixo", async () => {

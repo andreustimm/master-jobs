@@ -67,7 +67,7 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 | `POSTGRES_URL_NON_POOLING` | Vercel (integração) | usada na migration quando não há a de cima |
 | `DATABASE_CA_CERT` | CI/Vercel | o PEM da CA **ou** o caminho de um arquivo |
 | `SUPABASE_CRAWL_ENABLED` | Actions produção | `true` somente após os gates de quota/retensão |
-| `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela o link vai para o log |
+| `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela ou sem `RESEND_FROM`, nada é enviado e o log só alerta |
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |
 | `CRON_SECRET` | Vercel | protege a rota de cron; a Vercel a envia em `authorization` |
 | `SENTRY_DSN` | Vercel | relato de erro do servidor; **sem ela nada é enviado** ([detalhe](#relato-de-erro)) |
@@ -91,10 +91,18 @@ configuram explicitamente. Variável em branco conta como ausente, e o erro de
 configuração **nomeia a variável** de onde a URL veio — nunca o valor.
 
 **Query string:** parâmetros de pool (`pgbouncer`, `connection_limit`) são
-descartados, porque a configuração do cliente já é explícita. Parâmetros de TLS
-(`sslmode`, `ssl`, `sslrootcert`…) são **recusados** com erro, e não apagados em
-silêncio: a política de TLS é do cliente, e apagar `sslmode=disable` deixaria
-quem escreveu convencido de que desligou a verificação.
+descartados, porque a configuração do cliente já é explícita. `sslmode` passa
+por **lista de permissão**: `require`, `verify-ca` e `verify-full` pedem o mesmo
+ou mais do que o cliente já impõe e são aceitos — é a forma que a integração do
+Supabase com a Vercel cadastra em `POSTGRES_URL` (`?sslmode=require`), e
+recusá-la derrubou a 1.13.1 por 28 minutos. Qualquer outro valor (`disable`,
+`allow`, `prefer`, um valor inventado) e os demais parâmetros de TLS (`ssl`,
+`sslrootcert`, `sslcert`…) são **recusados** com erro que nomeia a variável, e
+não apagados em silêncio: a política de TLS é do cliente, e apagar
+`sslmode=disable` deixaria quem escreveu convencido de que desligou a
+verificação. Quando aceito, o parâmetro sai da URL antes de chegar ao driver.
+Contrato em `src/core/db/config.ts`, provado por
+`tests/db-config-diagnostics.test.ts` com a URL na forma que o provedor cadastra.
 
 **`DATABASE_CA_CERT` aceita as duas formas:** o PEM colado direto na variável
 (o gesto natural num painel serverless, onde não há onde pôr arquivo) ou o
@@ -103,7 +111,18 @@ caminho de um arquivo. O repositório versiona `config/certs/supabase-ca.crt` e 
 bundle. Valor que não é nenhum dos dois falha nomeando a variável.
 
 `RESEND_API_KEY` e `RESEND_FROM` formam um par: se qualquer uma estiver ausente
-ou vazia, `configuredMailer` usa o adapter de console e nenhum e-mail é enviado.
+ou vazia, nenhum e-mail é enviado. Onde o link vai parar depende de quem lê o
+log: sem chave nenhuma, num processo que se declara local (`JHO_ENV=local`) ou
+não se declara deployment nenhum (nem `JHO_ENV`, nem `VERCEL_ENV`, nem
+`VERCEL`), `configuredMailer` usa o adapter de console, que imprime o e-mail
+inteiro no terminal de quem opera. Em qualquer outro caso — deployment na
+Vercel, `JHO_ENV` diferente de `local`, ou chave presente com o remetente
+faltando — usa `withheldMailer`, que registra um alerta **sem** destinatário, assunto nem link —
+o link de recuperação é credencial, e o log das funções é lido por outras
+pessoas. O pedido de recuperação continua respondendo igual para quem pede, e o
+`auth_event` grava `reset_send_failed`. A regra de "processo local" é a mesma
+do modo aberto (`isLocalProcess`, em `src/contexts/auth/domain/open-mode.ts`). Checklist de ativação em
+[`docs/operations.md`](../operations.md#ativar-o-e-mail-de-recuperação-resend).
 O operador cria a chave no Resend, verifica o domínio e cadastra os dois valores
 diretamente no ambiente da Vercel. Os valores reais não devem ser copiados para
 `.env.example`, documentação, logs ou commits.
@@ -116,7 +135,10 @@ manual de `.eml`.
 
 **`JHO_AUTH_MODE` não deve existir em produção.** Com `open`, o sistema sintetiza
 uma sessão e serve currículo, funil e export para qualquer requisição. É modo de
-desenvolvimento local e num endereço público é o vazamento inteiro.
+desenvolvimento local e num endereço público é o vazamento inteiro. Desde #197 o
+código também recusa: em qualquer deployment (`VERCEL` presente, ou
+`VERCEL_ENV`/`JHO_ENV` diferente de `local`) o pedido é ignorado e o login continua exigido —
+ver `src/contexts/auth/domain/open-mode.ts`.
 
 ## Os três ambientes
 
@@ -159,6 +181,15 @@ Somente `main`, `dev` e `staging` geram deployments automáticos. A lista de
 permissão fica em `git.deploymentEnabled` no `vercel.json`: `**: false` cobre
 também branches com `/`, e as três exceções explícitas habilitam os ambientes.
 Branches de tarefa e suas PRs executam o CI do GitHub, sem preview próprio.
+
+**Commit que não muda o site não gera deploy.** O plano Hobby limita os
+deploys por dia; em 22/09/2026 o limite estourou e bloqueou a produção por
+24 h. `ignoreCommand` roda `scripts/vercel-ignore-build.sh`, que pula o build
+quando todos os arquivos alterados (desde `VERCEL_GIT_PREVIOUS_SHA`, ou o
+commit anterior) estão em `docs/`, `.compozy/`, `tests/`, `.github/`,
+`.claude/` ou são `.md` avulsos. `CHANGELOG.md` e `USER_CHANGELOG.*.md`
+constroem, porque a tela Novidades é compilada deles; arquivo desconhecido
+também constrói — errar para "pular" publicaria código velho.
 `dev` e `staging` continuam no ambiente **Preview** da Vercel; o nome do
 ambiente não significa que toda PR recebe um deployment.
 
@@ -382,11 +413,16 @@ GRANT master_jobs_runtime TO master_jobs_app;
 E então cadastrar na Vercel, em Production:
 
 ```
-DATABASE_URL=postgresql://master_jobs_app:<senha>@<host>:5432/postgres
+DATABASE_URL=postgresql://master_jobs_app.<project-ref>:<senha>@<pooler-host>:5432/postgres?sslmode=require
 ```
 
-**Sem query string** — a política de TLS é do cliente, e `?sslmode=...` é
-recusado com erro que nomeia a variável.
+No pooler compartilhado do Supabase, o usuário é `<role>.<project-ref>`;
+na conexão direta, é somente `<role>`. Copie host e porta da configuração do
+projeto. Query string é desnecessária — a política de TLS é do cliente. Se
+vier, `?sslmode=require` (ou `verify-ca`/`verify-full`) é aceito e descartado,
+e a verificação de cadeia continua com a CA configurada; `?sslmode=disable`,
+valores desconhecidos ou outros parâmetros que mudem a política são recusados
+com erro que nomeia a variável.
 
 **Por que isto importa mesmo com o fallback.** O runtime aceita `POSTGRES_URL`
 quando `DATABASE_URL` falta, e é isso que faz o deploy subir sem configuração
@@ -405,8 +441,42 @@ SELECT has_table_privilege('master_jobs_app', 'production.job', 'SELECT'),
                                                           -- true, false
 ```
 
-A rotação é trocar a senha de `master_jobs_app` e atualizar `DATABASE_URL`: as
-permissões ficam no papel de grupo e não são reescritas.
+Confira cada privilégio individualmente: uma lista como
+`has_table_privilege(..., 'SELECT,INSERT,UPDATE,DELETE')` responde se **algum**
+dos privilégios existe, não se todos existem. Valide também o uso das sequências
+e faça uma transação somente leitura usando o mesmo cliente e CA do runtime.
+
+Antes de alterar credencial, preserve-a em armazenamento privado recuperável,
+fora do Git, com acesso exclusivo do operador. Registre a etapa antes de cada
+efeito remoto: se a execução parar, a retomada reutiliza a mesma credencial.
+Uma senha gerada somente em memória pode ser perdida depois de aplicada no
+banco e antes de chegar à Vercel. A variável deve ser **Sensitive**, somente
+em Production, e ser cadastrada apenas após o preflight passar.
+
+Para uma role já em uso, prefira criar outro login no mesmo grupo, validar,
+migrar os clientes e só então aposentar o anterior. As permissões continuam no
+grupo. O pooler pode rejeitar temporariamente uma senha recém-alterada com
+`28P01`; não faça rotações repetidas. A [orientação do Supabase](https://supabase.com/docs/guides/troubleshooting/supavisor-error-password-authentication-failed-after-password-rotation)
+explica como distinguir atraso do cache de credencial incorreta.
+
+### Configuração verificada em 22/09/2026
+
+`DATABASE_URL` foi cadastrada como Sensitive somente em Production para
+`master_jobs_app`, após validar TLS, leitura real de `job` e `application`,
+os quatro privilégios em cada uma das 36 tabelas e uso das 28 sequências.
+As flags administrativas e CREATE no schema `production` permaneceram negadas.
+A primeira conexão retornou `28P01`; a seguinte passou com a mesma credencial,
+sem outra rotação. `POSTGRES_URL` permanece como fallback quando a variável
+preferida estiver ausente.
+
+A configuração será aplicada no próximo deploy de produção aprovado por humano;
+não foi disparado redeploy. Depois da promoção, conferir a fumaça de produção,
+login e leitura de vagas, e confirmar sessões de `master_jobs_app` no banco.
+Até essa evidência, O-01 permanece em validação. Se houver falha, preservar os
+registros, **remover `DATABASE_URL` de Production** na Vercel e fazer
+redeploy — só a ausência da variável devolve o runtime ao fallback
+`POSTGRES_URL`; editar outra variável não reverte nada. Nunca imprimir URLs
+de conexão nem rotacionar o usuário `postgres` como tentativa de diagnóstico.
 
 ## Relato de erro
 

@@ -18,12 +18,15 @@ import type { Translator } from "../src/core/i18n/index.ts";
  */
 export function NavLinks({
   hasCandidateScope,
+  canCreateProfile,
   isAdmin,
   isRecruiter,
   linkClass,
   t,
 }: {
   hasCandidateScope: boolean;
+  /** Conta de papel candidato sem candidato: pode criar o próprio perfil. */
+  canCreateProfile: boolean;
   isAdmin: boolean;
   isRecruiter: boolean;
   linkClass: string;
@@ -59,11 +62,19 @@ export function NavLinks({
           {t("nav.candidate")}
         </TransitionLink>
       )}
+      {canCreateProfile && (
+        <TransitionLink href="/candidate" className={linkClass} data-testid="nav-create-profile">
+          {t("onboarding.title")}
+        </TransitionLink>
+      )}
       {isRecruiter && (
         <TransitionLink href="/recruiter" className={linkClass} data-testid="nav-recruiter">
           {t("recruiter.title")}
         </TransitionLink>
       )}
+      <TransitionLink href="/account" className={linkClass} data-testid="nav-account">
+        {t("account.nav")}
+      </TransitionLink>
       {isAdmin && (
         <TransitionLink href="/admin/users" className={linkClass} data-testid="nav-admin-users">
           {t("admin.nav")}

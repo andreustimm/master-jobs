@@ -559,10 +559,21 @@ timeouts tight, retry only on transient failures, and never hammer on a 4xx."*
 | Backoff | `500 * 2 ** attempt` ms, ou seja 500 ms e depois 1000 ms |
 | Concorrência limitada | `syncAll()` usa uma fila com `concurrency` workers, default 4 (`--concurrency <n>`) |
 
-> **Invariante:** Todo acesso a rede passa por `getJson()`. Um adapter que chama
-> `fetch` diretamente escapa do user-agent, do timeout e da política de retry —
-> e o custo de errar isso não é um teste vermelho, é um IP bloqueado num serviço
-> gratuito que não tem canal de suporte para reverter.
+> **Invariante:** adapter acessa a rede pela porta HTTP (`getJson()` para
+> JSON, `getText()` para HTML). Um adapter que chama `fetch` diretamente escapa
+> do user-agent, do timeout e da política de retry — e o custo de errar isso
+> não é um teste vermelho, é um IP bloqueado num serviço gratuito que não tem
+> canal de suporte para reverter.
+>
+> Abaixo da porta, **toda URL de vaga** — adapter, sonda de `jobs verify` (HEAD
+> e GET) e captura de `scrape run` — passa por `safeRemoteFetch`
+> (`src/core/remote-url.ts`), que valida cada salto de redirect: endereço
+> privado, DNS misto e o domínio do LinkedIn (regra 1) são recusados antes do
+> pedido. A recusa ao LinkedIn não é repetida pelo laço de retry; falha de DNS,
+> que pode ser transitória, continua sendo. O inventário de
+> quem pode abrir transporte de saída é fechado e testado
+> (`tests/outbound-transport-boundary.test.ts`); detalhes da recusa ao LinkedIn
+> em `docs/linkedin-policy.md` §5.1.
 
 Se você precisa de mais volume de uma fonte, prefira **mais queries
 específicas** (como as duas entradas `remotive`) a subir `limit` /

@@ -129,3 +129,17 @@ persona:
   locale: pt-BR
   patience_seconds: 5
 ```
+
+## Candidato convidado sem perfil
+
+```yaml
+persona:
+  name: Candidato convidado sem perfil
+  base: First-Time User
+  goal: entrar pela primeira vez com uma conta de candidato recém-criada e montar o próprio perfil sem ver dado de ninguém
+  device: phone-small
+  network: 4g
+  modality: touch
+  locale: en-US
+  patience_seconds: 8
+```

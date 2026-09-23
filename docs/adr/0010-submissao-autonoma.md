@@ -66,3 +66,22 @@ problema errado com risco irreversível.
 confirmação explícita, uma vaga por vez, com registro completo do que foi
 mandado. `jho track` continua sendo o usuário dizendo o que fez, nunca o
 sistema dizendo o que fez por ele.
+
+### Como a invariante é verificada
+
+Ausência de capacidade não se prova chamando a capacidade, então a prova é em
+duas camadas, e nenhuma delas é um serviço de submissão desligado:
+
+- **Efeito.** `jho prep` e `buildDossier` rodam com o `fetch` global e a porta
+  HTTP instrumentados, respondendo 200 a tudo: zero pedido, nenhuma linha em
+  `application`, e o link de candidatura sai como texto para a pessoa
+  (`cov-apply-dossier.test.ts`, `cov-cli-relatorios-acervo.test.ts`).
+- **Inventário.** Todo arquivo de `src/` e `app/` que abre transporte de saída
+  está numa lista fechada, cada um com a finalidade escrita
+  (`tests/outbound-transport-boundary.test.ts`). Um adapter de envio a um ATS
+  seria um arquivo novo nessa lista — e o teste reprova até alguém justificá-lo.
+
+O limite: reaproveitar um transporte já listado para um destino novo não muda o
+inventário; a revisão desses arquivos é humana. E skills de agente
+(`application-kit`, `aplicar`) agem fora do runtime — para elas, esta ADR é a
+barreira.

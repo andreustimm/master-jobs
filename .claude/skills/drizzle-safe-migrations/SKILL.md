@@ -10,12 +10,39 @@ metadata:
 
 ## Project binding: master-jobs
 
-This repository uses pnpm, Drizzle and SQLite/libSQL. Prefix shell commands with
-`rtk`; use `rtk pnpm db:generate`, never Bun. A foreign-key or constraint change may
-require rebuilding the SQLite table, and the applied schema must be checked via
-the existing schema fitness tests. Any diff in `drizzle/` or
-`src/core/db/schema.ts` suspends automatic `dev` → `staging` promotion for human
-migration review.
+This repository runs **PostgreSQL** (Supabase in production, Docker at
+`127.0.0.1:5432` locally and in tests). The binding below overrides the generic
+text of this skill wherever they differ.
+
+- Config: `drizzle.postgres.config.ts` (`dialect: "postgresql"`,
+  `schemaFilter: ["production"]`, `strict: true`). Migrations live in
+  `drizzle/postgres/`; the journal is `drizzle/postgres/meta/_journal.json`.
+- `drizzle/*.sql` and `drizzle/meta/` (top level) are the **legacy SQLite
+  history**, kept only for the snapshot import in `scripts/migration/`. Never
+  edit, generate into, or reason about the current database from them. No
+  `pragma`, table rebuild or libSQL/Turso step applies to the current runtime.
+- Prefix shell commands with `rtk` in Codex/OpenCode; use pnpm, never Bun.
+- Apply locally with `rtk pnpm jho db migrate` (uses `DATABASE_MIGRATION_URL`,
+  falling back to `POSTGRES_URL_NON_POOLING` then `POSTGRES_URL` — set
+  `DATABASE_MIGRATION_URL` explicitly so a leftover provider variable never
+  picks the target; it is the privileged connection — the runtime role `master_jobs_runtime` has no
+  DDL, by design and by `tests/postgres-permissions.test.ts`). Production is
+  applied **only** by the manual `migrate.yml` workflow from `main`, which
+  validates the project ref before connecting (`docs/engineering/deploy.md`).
+  Never point a local command at production.
+- Any diff in `drizzle/` or `src/core/db/schema.ts` suspends automatic
+  `dev` → `staging` promotion for human migration review. Removing or renaming
+  a column/table is never a single migration: expand, deploy, backfill, then
+  contract in a later release.
+- Every FK declares `onDelete` explicitly in `schema.ts`, including
+  `"no action"` (`tests/fk-delete-intent.test.ts`), and the applied DDL must
+  match it in `pg_constraint` (`tests/cov-db-schema.test.ts`).
+- A backfill → constraint pair needs a populated-upgrade test, not only the
+  empty-database run every other test does. Follow
+  `tests/postgres-upgrade.test.ts`: migrate a disposable database to the
+  previous tag, insert rows in that shape, migrate to head, assert the
+  transformation, the untouched funnel (`application`, `application_event`) and
+  the rejection of new inconsistent data.
 
 ## Overview
 
@@ -25,7 +52,7 @@ Use this skill to run database migrations in a way that is auditable, deployment
 
 - Always generate schema migrations with the project script (`rtk pnpm db:generate`).
 - Never hand-edit generated schema migration files.
-- Generate data backfills as custom migrations (`rtk pnpm db:generate -- --custom --name <name>`) and edit only that custom SQL file.
+- Generate data backfills as custom migrations (`rtk pnpm db:generate --custom --name <name>`) and edit only that custom SQL file.
 - Apply data normalization before tightening constraints.
 - Keep one-off data fixes in migration history, not as hidden runtime logic, unless an emergency hotfix requires temporary mitigation.
 
@@ -35,18 +62,26 @@ Use this skill to run database migrations in a way that is auditable, deployment
    - `schema-only`: only column/table/index/default changes.
    - `data+schema`: old rows must be transformed before new constraints/defaults.
 2. For `data+schema`, create custom migration first:
-   - `rtk pnpm db:generate -- --custom --name <descriptive_name>`
+   - `rtk pnpm db:generate --custom --name <descriptive_name>`
    - Add idempotent backfill SQL.
 3. Generate schema migration second:
    - `rtk pnpm db:generate`
-4. Verify migration ordering in `drizzle/meta/_journal.json`:
-   - backfill migration index must be lower than constraint-tightening migration index.
+4. Verify migration ordering in `drizzle/postgres/meta/_journal.json`:
+   - backfill migration index must be lower than constraint-tightening migration index;
+   - `when` must strictly increase down the journal, and your new entries must be
+     newer than the last migration already applied anywhere. The Drizzle
+     migrator only applies entries whose `when` is greater than the newest row
+     in `drizzle.__drizzle_migrations` — an entry with an older `when` (typical
+     after a rebase over someone else's migration) is **skipped silently**.
+     Regenerate instead of hand-editing timestamps.
 5. Verify generated SQL and snapshots:
    - backfill migration contains only intended data change.
    - schema migration contains constraint/default/type changes.
 6. Run the repository verification gates:
-   - `rtk pnpm check`
-   - `rtk pnpm test:e2e`
+   - `rtk pnpm db:generate` again must report "No schema changes" (CI repeats it);
+   - `rtk pnpm check` (includes the FK, upgrade and permission suites against
+     disposable PostgreSQL);
+   - `rtk pnpm test:e2e` when the change is visible.
 7. Document deployment notes:
    - expected data transformations,
    - lock-risk areas,
@@ -67,16 +102,35 @@ When removing allowed values (enum/check):
 2. Update default to new value.
 3. Tighten check/enum constraint.
 
-For SQLite constraints and foreign keys, rebuild the table when required and
-verify the applied `pragma` state; `ALTER TABLE ... ADD ... REFERENCES` does not
-preserve the intended `ON DELETE` behavior in this project.
+In PostgreSQL:
+
+- All pending migrations run in **one transaction**. A failure rolls every
+  pending file back; fix the cause and rerun the same command. Never insert
+  into `drizzle.__drizzle_migrations` by hand. Consequence: statements that
+  cannot run inside a transaction (`CREATE INDEX CONCURRENTLY`, `VACUUM`) do
+  not belong in a migration file, and an enum value added with
+  `ALTER TYPE ... ADD VALUE` cannot be used by a later file of the same batch.
+- Lock cost matters because the whole batch holds its locks until commit:
+  most `ALTER TABLE` forms take `ACCESS EXCLUSIVE`, and `SET NOT NULL` or a
+  plain `ADD CONSTRAINT ... CHECK` scans the table under it; `ADD FOREIGN KEY`
+  takes `SHARE ROW EXCLUSIVE` on both tables and scans the child. For a large
+  table prefer `ADD CONSTRAINT ... NOT VALID` and ship `VALIDATE CONSTRAINT` in
+  a later release — two files applied in the same run share one transaction,
+  so splitting them only helps when they are applied separately. `ADD COLUMN` with a constant
+  default is metadata-only.
+- `ALTER TABLE ... ADD ... REFERENCES` without `ON DELETE` means `NO ACTION`.
+  Declare the action in `schema.ts` and let `db:generate` write it; the two
+  schema tests fail on either an undeclared intent or a mismatch.
 
 ## Anti-Patterns
 
 - Hand-editing generated schema migration files.
 - Tightening constraints before backfilling existing data.
 - Hiding one-time migration logic in app startup code without migration artifacts.
-- Running migrations without validating order in the Drizzle journal.
+- Running migrations without validating order and `when` in the Drizzle journal.
+- Proving a data migration only on an empty database.
+- Following SQLite-era instructions (`pragma`, table rebuild, `drizzle/meta/`)
+  for the current PostgreSQL database.
 
 ## Reference
 

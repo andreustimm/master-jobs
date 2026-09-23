@@ -1,8 +1,23 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { guardOwnCandidate } from "../auth";
-import { setPublicCv, setVisibility } from "../../src/core/candidate.ts";
+import { guard, guardOwnCandidate } from "../auth";
+import { createOwnCandidate } from "../../src/contexts/auth/index.ts";
+import {
+  CV_MIN,
+  parseOwnProfile,
+  validatePublicSlug,
+  type NameError,
+  type OwnProfileError,
+  type PublicSlugError,
+} from "../../src/core/candidate-identity.ts";
+import {
+  requestCvRescore,
+  setCandidateName,
+  setPublicCv,
+  setPublicSlug,
+  setVisibility,
+} from "../../src/core/candidate.ts";
 import {
   deleteDocument,
   documentById,
@@ -11,6 +26,11 @@ import {
   saveDocument,
   type VersionError,
 } from "../../src/core/candidate.ts";
+
+/** Rótulo de versão sem idioma: a data. Fica gravado, então não pode ser frase. */
+function defaultCvLabel(): string {
+  return `CV ${new Date().toISOString().slice(0, 10)}`;
+}
 
 /**
  * Save the CV the candidate pasted.
@@ -23,9 +43,9 @@ export async function saveCvAction(formData: FormData) {
   const { candidateId } = await guardOwnCandidate("candidate:write");
 
   const content = String(formData.get("content") ?? "").trim();
-  const label = String(formData.get("label") ?? "").trim() || `CV ${new Date().toISOString().slice(0, 10)}`;
+  const label = String(formData.get("label") ?? "").trim() || defaultCvLabel();
 
-  if (content.length < 100) {
+  if (content.length < CV_MIN) {
     throw new Error("O texto é curto demais para ser um currículo (mínimo 100 caracteres).");
   }
 
@@ -161,4 +181,93 @@ export async function setVisibilityAction(formData: FormData) {
   await setPublicCv(candidateId, result.visibility === "public" && formData.get("publicCv") === "on");
 
   revalidatePath("/candidate");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Criar o próprio perfil                                                      */
+/* -------------------------------------------------------------------------- */
+
+export type CreateProfileResult =
+  | { ok: true }
+  | { ok: false; code: OwnProfileError | PublicSlugError | "slugTaken" | "unavailable" };
+
+/**
+ * "Criar meu perfil": a conta sem candidato cria o PRÓPRIO.
+ *
+ * O guarda vem antes de tudo e decide pela sessão — `candidate:create` só
+ * passa para conta de papel candidato, sem candidato, e com sessão própria.
+ * Não há id nenhum no formulário: a conta é a da sessão, e o candidato é uma
+ * linha nova. Identidade vem do que a pessoa escreveu; `profile.yaml` é do
+ * dono e não entra aqui.
+ *
+ * Duplo envio devolve sucesso sem criar o segundo: `createOwnCandidate` trava
+ * a linha da conta, e a segunda requisição encontra o vínculo já feito. O
+ * currículo, quando colado, entra no MESMO commit do candidato.
+ */
+export async function createProfileAction(formData: FormData): Promise<CreateProfileResult> {
+  const session = await guard("candidate:create");
+
+  const parsed = parseOwnProfile({
+    name: String(formData.get("name") ?? ""),
+    headline: String(formData.get("headline") ?? ""),
+    location: String(formData.get("location") ?? ""),
+    cv: String(formData.get("cv") ?? ""),
+  });
+  if (!parsed.ok) return parsed;
+
+  // Endereço público opcional: em branco, deriva do nome.
+  const rawSlug = String(formData.get("publicSlug") ?? "").trim();
+  let publicSlug: string | null = null;
+  if (rawSlug !== "") {
+    const valid = validatePublicSlug(rawSlug);
+    if (!valid.ok) return valid;
+    publicSlug = valid.slug;
+  }
+
+  const result = await createOwnCandidate(session, { ...parsed.value, cvLabel: defaultCvLabel(), publicSlug });
+  if (result.status === "no-account") return { ok: false, code: "unavailable" };
+  if (result.status === "slug-taken") return { ok: false, code: "slugTaken" };
+  if (result.status === "created" && parsed.value.cv !== null) await requestCvRescore(result.candidateId);
+
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Nome público                                                                */
+/* -------------------------------------------------------------------------- */
+
+export type PublicNameResult = { ok: true } | { ok: false; code: NameError };
+
+/**
+ * Troca o nome que o perfil público mostra. O candidato vem da sessão
+ * (`guardOwnCandidate`, sem id por parâmetro), e a guarda vem antes de ler o
+ * formulário.
+ */
+export async function setPublicNameAction(formData: FormData): Promise<PublicNameResult> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  const result = await setCandidateName(candidateId, String(formData.get("name") ?? ""));
+  if (!result.ok) return result;
+  revalidatePath("/candidate");
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Endereço público                                                            */
+/* -------------------------------------------------------------------------- */
+
+export type PublicSlugResult = { ok: true } | { ok: false; code: PublicSlugError | "slugTaken" };
+
+/**
+ * Troca o endereço `/p/<slug>` do próprio perfil.
+ *
+ * O candidato vem da sessão (`guardOwnCandidate`, sem id por parâmetro). O
+ * antigo deixa de responder na hora; ver `setPublicSlug` e a ADR 0024.
+ */
+export async function setPublicSlugAction(formData: FormData): Promise<PublicSlugResult> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  const result = await setPublicSlug(candidateId, String(formData.get("publicSlug") ?? ""));
+  if (!result.ok) return result;
+  revalidatePath("/candidate");
+  return { ok: true };
 }

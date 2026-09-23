@@ -22,3 +22,5 @@ paisagem. Os estados por plataforma quebram linha em vez de estourar.
 Conferir com dados reais: vários termos numa trilha e um termo com busca pedida
 hoje, cujo botão diz "de novo a partir de…" — ele quebra linha dentro do cartão.
 Focar o seletor de trilha no iPhone não dá zoom na página.
+
+Full 1.22.0 (2026-09-22): três termos salvos (um de 44 caracteres) e uma segunda trilha; /searches, /searches/tracks/1, /searches/tracks/2, /searches/tracks/new e /admin/captures sem rolagem horizontal em 375 px. O link "0 novas · ver vagas" tem 19 px de altura (abaixo dos 24 px do WCAG 2.5.8). Toque real, nome de trilha longo e zoom do iPhone seguem sem prova: continua blocked-verify.

@@ -99,6 +99,19 @@ export function can(
       // registrada na `source`, para a tela poder dizer de onde veio.
       return isAdmin || isCandidate || isRecruiter ? ALLOW : deny("requer sessão válida");
 
+    case "account:read":
+      // A própria conta: qualquer papel. Não há recurso a conferir — o alvo é
+      // sempre `session.userId`, e nenhum chamador escolhe outro.
+      return isAdmin || isCandidate || isRecruiter ? ALLOW : deny("requer sessão válida");
+
+    case "account:write":
+      // Sessão emprestada NÃO escreve na conta do alvo, qualquer que seja o
+      // papel dele: trocar a senha ou o nome de outra pessoa com a cara dela é
+      // tomar a conta, e o registro diria que foi ela. O admin que precisa
+      // corrigir um nome usa `/admin/users`, sem empréstimo e com o nome dele.
+      if (borrowed) return deny("sessão emprestada não altera a conta do alvo");
+      return isAdmin || isCandidate || isRecruiter ? ALLOW : deny("requer sessão válida");
+
     case "candidate:write":
     case "application:write":
       // Escrita em dado de candidato é só de quem é aquele candidato. Um
@@ -107,6 +120,21 @@ export function can(
       if (!isCandidate) return deny("requer papel candidate");
       if (resource.kind !== "candidate") return deny("requer escopo de candidato");
       if (!ownsCandidate) return deny("recurso de outro candidato");
+      return ALLOW;
+
+    case "candidate:create":
+      // Conta de papel candidato sem candidato cria o PRÓPRIO — nunca se liga
+      // a um que já existe. Quem já tem um não cria o segundo: duas linhas
+      // para a mesma pessoa dividiriam currículo e funil sem ninguém saber
+      // qual vale.
+      //
+      // Sessão emprestada não cria. Decidir existir como candidato — e com
+      // qual nome — é da pessoa; o admin que assume a identidade vê e ajuda,
+      // mas não abre um perfil em nome de alguém.
+      if (!isCandidate) return deny("requer papel candidate");
+      if (borrowed) return deny("sessão emprestada não cria perfil");
+      if (resource.kind !== "global") return deny("criação não tem escopo de candidato");
+      if (session.candidateId !== null) return deny("conta já tem candidato");
       return ALLOW;
 
     case "candidate:read":

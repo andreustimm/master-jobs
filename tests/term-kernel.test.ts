@@ -4,6 +4,7 @@ import type { DB } from "../src/core/db/client.ts";
 import {
   matchesTerm,
   termKey,
+  termPrefilterLike,
   termRegexSql,
   validateTerm,
 } from "../src/core/term.ts";
@@ -70,6 +71,37 @@ describe("term kernel", () => {
     expect(termRegexSql("C++")).toBe("(^|[^a-z0-9+#])c\\+\\+([^a-z0-9+#]|$)");
     expect(termRegexSql("Go")).toBe("(^|[^a-z0-9+#])g[ -]?o([^a-z0-9+#]|$)");
   });
+
+  it("UT-214a prefilters only ASCII keys with a trigram run", () => {
+    expect(termPrefilterLike("Tech Lead")).toBe("%techlead%");
+    expect(termPrefilterLike("node.js")).toBe("%node.js%");
+    expect(termPrefilterLike("CI/CD")).toBeNull();
+    expect(termPrefilterLike("C++")).toBeNull();
+    expect(termPrefilterLike("go")).toBeNull();
+    expect(termPrefilterLike("k8s")).toBe("%k8s%");
+    expect(termPrefilterLike("gestão")).toBeNull();
+    expect(termPrefilterLike("O'Reilly%_")).toBeNull();
+  });
+
+  it("UT-214b the prefilter is necessary: every regex hit survives it", () => {
+    // Remove espaço e hífen como os `replace` do índice e confere em
+    // minúsculas, como o `ilike`. Uma recusa aqui seria vaga escondida.
+    const survives = (like: string, text: string) =>
+      text.replace(/[ -]/g, "").toLowerCase().includes(like.slice(1, -1));
+    const terms = ["techlead", "Tech Lead", "java", "node.js", "k8s", "laravel", "typescript", "react"];
+    const texts = [
+      "Senior Tech Lead (Remote)", "tech-lead", "TECH-LEAD", "t-e-c-h-l-e-a-d", "Java 21", "j a v a",
+      "Node.js and Node JS", "no de.js", "K8S", "La-ra-vel", "Type Script", "React Native", "re act",
+      "techlead,java;react", "nothing here",
+    ];
+    for (const term of terms) {
+      const like = termPrefilterLike(term)!;
+      expect(like, term).not.toBeNull();
+      for (const text of texts) {
+        if (matchesTerm(term, text)) expect(survives(like, text), `${term} in ${text}`).toBe(true);
+      }
+    }
+  });
 });
 
 describe("term kernel against PostgreSQL", () => {
@@ -122,5 +154,21 @@ describe("term kernel against PostgreSQL", () => {
       );
       expect(row!.hit, `${term} in ${text}`).toBe(matchesTerm(term, text));
     }
+  });
+
+  it("IT-214c in PostgreSQL, no ~* hit is dropped by the replace/ilike prefilter", async () => {
+    let checked = 0;
+    for (const [term, text] of [...PAIRS, ["techlead", "TECH-LEAD"], ["java", "J-A-V-A"]] as Array<[string, string]>) {
+      const like = termPrefilterLike(term);
+      if (like === null) continue;
+      const [row] = await db.execute<{ hit: boolean; kept: boolean }>(
+        sql`select (${text} ~* ${termRegexSql(term)}) as hit, (replace(replace(${text}, ' ', ''), '-', '') ilike ${like}) as kept`,
+      );
+      if (row!.hit) {
+        checked += 1;
+        expect(row!.kept, `${term} in ${text}`).toBe(true);
+      }
+    }
+    expect(checked).toBeGreaterThan(5);
   });
 });

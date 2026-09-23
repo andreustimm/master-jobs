@@ -85,7 +85,7 @@ function session(overrides: Partial<Session>): Session {
 }
 
 async function person(slug: string, owner = false): Promise<number> {
-  const [row] = await db.insert(candidate).values({ slug, name: slug, isDefault: owner }).returning();
+  const [row] = await db.insert(candidate).values({ slug, publicSlug: slug, name: slug, isDefault: owner }).returning();
   await setMatchingProfile(row!.id, await loadProfile(true));
   return row!.id;
 }
@@ -220,9 +220,9 @@ describe("who reaches tracks and terms", () => {
     await saveTerm({ candidateId: owner }, { term: "Laravel", trackId: track.id }, { now: new Date(), impersonated: false });
     await setVisibility(owner, "public");
     await setPublicCv(owner, true);
-    const [row] = await db.select({ slug: candidate.slug }).from(candidate).where(eq(candidate.id, owner));
+    const [row] = await db.select({ slug: candidate.publicSlug }).from(candidate).where(eq(candidate.id, owner));
 
-    const profile = await publicProfile(row!.slug);
+    const profile = await publicProfile(row!.slug!);
 
     expect(Object.keys(profile!).sort()).toEqual(["cv", "githubUrl", "headline", "linkedinUrl", "location", "name", "skills", "slug"]);
     const text = JSON.stringify(profile);

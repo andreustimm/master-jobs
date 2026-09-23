@@ -273,7 +273,7 @@ fato imutável: reingestão atualiza conteúdo e `last_seen_at`, reabre
 | `content_hash` | detector de edição — mesma seção |
 | `source_id` -> `source.id` | `ON DELETE cascade`. **Atenção:** é reescrito quando a vaga é atualizada com conteúdo novo (o `set` do ramo `contentHash` diferente inclui `sourceId`), então numa vaga vista por duas fontes essa coluna aponta para a última fonte que a viu com conteúdo alterado |
 | `external_id` | id estável dentro da fonte; **não** participa da deduplicação |
-| `company_id` -> `company.id` | sem cascade (`ON DELETE no action`) |
+| `company_id` -> `company.id` | sem cascade: `ON DELETE no action`, **declarado** no schema. Empresa que ainda nomeia vaga não pode ser apagada; nada apaga empresa hoje |
 | `company_name` | denormalizado de propósito: existe mesmo quando `slugifyCompany()` devolve string vazia e `company_id` fica `null` |
 | `description_html` / `description_text` | `description_text` é o dado durável que scorer e UI leem. `description_html` permanece por compatibilidade de schema, mas ingestão nova grava `null`; `jho db cleanup` remove o legado |
 | `remote` | `null` = a vaga não diz. Diferente de `false` |
@@ -292,6 +292,27 @@ candidaturas. O contrato está em [ADR 0020](adr/0020-ciclo-de-vida-e-historico-
 Índices: `job_fingerprint_idx` (único), `job_source_idx`, `job_company_idx`
 (por `company_name`), `job_last_seen_idx`, `job_closed_idx`. O último importa
 porque toda query de board filtra `closed_at IS NULL`.
+
+**Busca por termo (#214).** `job_description_trgm_idx` é GIN `gin_trgm_ops`
+sobre `replace(replace(description_text, ' ', ''), '-', '')`, parcial em
+`closed_at IS NULL`; `job_page_text_trgm_idx` é o mesmo sobre `job_page.text`.
+Eles não respondem ao `~*` de palavra inteira — o separador opcional `[ -]?`
+de `termPattern` não deixa o `pg_trgm` extrair trigrama garantido, e o índice
+direto sobre a coluna devolvia 98% das linhas —, e sim a um **pré-filtro**
+`ilike '%chave%'` sobre o texto sem espaço e hífen, que é condição necessária
+do padrão. O `~*` exato continua na consulta e decide; só termos com chave
+ASCII e três letras ou dígitos seguidos usam o pré-filtro
+(`termPrefilterLike` em `src/core/term.ts`). A expressão da consulta
+(`termTextCandidates` em `repo.ts`) precisa ser **idêntica** à do índice, ou o
+planner o ignora sem erro — `tests/jobs-board.test.ts` (IT-214b) confere o
+plano. Exigem a extensão `pg_trgm`, criada por `0012_enable_pg_trgm.sql` com
+`CREATE EXTENSION IF NOT EXISTS`. Migrations `0012` e `0013` são só aditivas;
+reverter é `DROP INDEX` dos dois (a extensão pode ficar). O migrator roda numa
+transação, então `0013` usa `CREATE INDEX` comum, sem `CONCURRENTLY`: durante a
+construção, escritas em `job` e `job_page` esperam. No acervo local (9.060
+vagas) o índice de descrição tem 19 MB e ficou pronto em poucos segundos
+(observado, não cronometrado); rode
+`migrate.yml` fora da janela do sync.
 
 A migration que adicionar `archived_at` também deve manter um índice que suporte
 as varreduras por corte de `closed_at`/`archived_at`, conforme o TechSpec de
@@ -417,8 +438,11 @@ estágio, taxa de conversão). `setApplicationStatus()` grava um evento
 `kind="status_change"` em toda transição, com `from_status` (ausente na
 criação), `to_status` e `detail` (o `-n/--note` do `jho track`).
 
-> **Invariante:** `application_event` nunca é atualizada nem deletada. É log.
-> Qualquer correção é um evento novo, não um `UPDATE`.
+> **Invariante:** `application_event` nunca é atualizada nem deletada pelo
+> ciclo de vida do funil. É log. Qualquer correção é um evento novo, não um
+> `UPDATE`. "Append-only" não é retenção absoluta: a FK é `cascade`, e apagar a
+> candidatura, o candidato ou a vaga leva o histórico junto — por isso o único
+> descarte de vaga deixa de fora toda vaga com candidatura.
 
 **Regra de retenção:** `application` é a unidade de contagem de candidaturas;
 `application_event` é a unidade de etapas/auditoria. Fechar ou arquivar o `job`
@@ -431,6 +455,65 @@ transição comum — a exceção é `archived` sem `applied_at`, que volta a
 `backlog` para desfazer um "não me interessa" — e `applied_at` é gravado
 somente na primeira entrada em `applied`. O repositório persiste a nova `application` e seu evento na mesma
 transação e usa o status anterior como token de concorrência otimista.
+
+### Endereço público (`candidate.public_slug`)
+
+`/p/<slug>` lê `candidate.public_slug`, não `candidate.slug` (ADR 0024). `slug`
+é o identificador interno — a CLI e o seed acham o dono por `slug = 'default'`
+— e nunca muda pela tela; `public_slug` é o endereço que o próprio candidato
+escolhe em `/candidate` (`setPublicSlug`), com índice único
+`candidate_public_slug_idx`. Migrações `0010_candidate_public_slug` (coluna
+anulável + índice) e `0011_backfill_candidate_public_slug` (copia `slug` para
+quem não tem endereço, idempotente). Trocar o endereço faz o antigo responder
+404 na hora, sem redirecionamento, e o libera para outra pessoa. Linha sem
+`public_slug` não responde em `/p/`; é o caso do candidato cujo `slug` é
+`user-<e-mail>` (criado pelo admin — o endereço publicaria o e-mail), que o
+backfill e `ensureCandidate` deixam sem endereço até a pessoa escolher um.
+
+### Candidato criado pela própria conta
+
+Só o candidato do dono nasce do `profile/profile.yaml` (`syncCandidateFromProfile`,
+slug `default`, `is_default = true`). Toda conta de papel candidato sem
+candidato cria o PRÓPRIO em `/candidate` (#234), por `createOwnCandidate`:
+
+- a linha é sempre **nova** — `insertOwnCandidate` usa `on conflict do
+  nothing` (sem alvo: cobre o índice do `slug` e o do `public_slug`) e tenta `nome`, `nome-2` … `nome-50` e depois cinco sufixos
+  aleatórios; nunca atualiza nem reaproveita candidato existente, ao contrário
+  de `ensureCandidate`;
+- slug reservado (`default`, nomes de rota) ou com prefixo `user-`/`e2e-` — os
+  que `createUserAction` e o e2e montam e `ensureCandidate` reaproveita — ganha
+  o prefixo `perfil-`;
+- o currículo colado entra no mesmo commit do candidato;
+- nasce com `visibility = 'private'`, `public_cv = false`, `is_default = false`
+  e `public_slug = slug` — ou com o endereço que a pessoa escolheu no
+  formulário, que não ganha sufixo: já publicado por outra pessoa, a criação
+  volta pedindo outro; se só colide com o `slug` interno de alguém (endereço
+  liberado por troca), o endereço é aceito e o `slug` interno é derivado do
+  nome;
+- o slug vem do nome digitado, sem acento — ver `src/core/candidate-identity.ts`;
+- candidato e vínculo (`auth_user.candidate_id`) entram no mesmo commit, com
+  `select … for update` na linha da conta: duplo envio concorrente espera o
+  primeiro e devolve o candidato já criado, sem gerar um segundo.
+
+### Nome do candidato (`candidate.name`)
+
+`name` é o título de `/p/<endereço>`, e por isso nunca guarda e-mail nem
+telefone. A coluna continua `not null`; **string vazia** é o estado "ainda sem
+nome", e não um defeito: `/candidate` pede o nome (`setCandidateName`, validado
+por `parsePublicName`) e `/p/` mostra um título neutro do dicionário.
+
+- `jho auth add-user` dá ao candidato próprio o nome de exibição da conta
+  (`auth_user.full_name`) quando existe e é publicável; senão, vazio. Até a
+  1.22.0 gravava o e-mail (BUG-20260922-public-profile-shows-email-as-name).
+- `claimOwnCandidate` passa todo nome por `initialCandidateName`: e-mail ou
+  telefone digitado no nome completo vira candidato sem nome.
+- `publicProfile()` confere o VALOR de cada campo de texto que sai
+  (`containsContact`, `src/core/public-cv.ts`) e esvazia o que traz e-mail ou
+  telefone, independentemente de como o dado foi gravado.
+- Migração `0014_clear_contact_candidate_names` (só dados, idempotente) zera
+  `name` igual ao e-mail da conta dona, igual a `candidate.email` ou que contenha
+  um e-mail. Não há volta automática: o valor apagado era o e-mail, que continua
+  em `auth_user.email`.
 
 ### Migração do ownership por candidato
 
@@ -538,10 +621,12 @@ Está declarado no cabeçalho de [`src/core/ingest/run.ts`](../src/core/ingest/r
  *  1. Sync never writes to `application` — user decisions survive every re-run.
 ```
 
-E é verificável por leitura: `run.ts` importa exatamente `company`, `job` e
-`source` de `schema.ts`. `application` não aparece no arquivo — exceto dentro
-da subquery textual de `pruneClosed()`, onde é usada só para **proteger** linhas
-(`select job_id from application`).
+E é verificável por leitura: `run.ts` importa exatamente `job` e `source` de
+`schema.ts`, e `application` só aparece ali em comentário. `pruneClosed()` delega o
+descarte a `deleteClosedJobsWithoutApplication()`, em `src/core/db/retention.ts`,
+onde `application` é lida só para **proteger** linhas. A importação repetida —
+igual e com conteúdo alterado — contra uma candidatura com histórico é provada
+em `tests/db-decision-integrity.test.ts`.
 
 Consequência prática: `pnpm jho jobs sync` pode rodar todo dia, quantas vezes
 quiser, e um `status = 'interviewing'` continua `interviewing`. As tabelas de
@@ -579,21 +664,40 @@ Reabertura é automática: nos dois ramos do update (`contentHash` igual ou
 diferente), o `set` inclui `closedAt: null`. Uma vaga que reaparece na fonte
 volta ao board sem intervenção.
 
-A **única** exclusão permitida no sistema é `pruneClosed()`, exposta como
-`jho db prune --days <n>` (default `90`), e ela é explicitamente defensiva:
+**Ausência na fonte e descarte são coisas diferentes.** A ausência — board que
+parou de listar, 404/410 na verificação — só fecha (`closed_at`) e é
+reversível. O descarte é administrativo, pedido por pessoa, e só alcança vaga
+fechada há mais de N dias **e sem nenhuma candidatura**. Ele tem uma única
+implementação, `deleteClosedJobsWithoutApplication()` em
+[`src/core/db/retention.ts`](../src/core/db/retention.ts), e duas entradas:
+`jho db prune --days <n>` (default `90`) e `jho db cleanup --apply`.
 
-```ts
-and(
-  lt(job.closedAt, cutoff),
-  sql`${job.id} not in (select job_id from application)`,
-)
-```
+A implementação trava antes de conferir, em dois comandos na mesma transação:
 
-> **Invariante:** nenhum caminho de código pode `DELETE FROM job` sem o predicado
-> `job.id not in (select job_id from application)`. As FKs `ON DELETE cascade` de
+1. `SELECT id FROM job WHERE <fechada antes do corte> AND NOT EXISTS
+   (application) FOR UPDATE` — espera toda candidatura em curso que já
+   referencia essas vagas e impede que uma nova se prenda a elas até o commit;
+2. `DELETE FROM job WHERE id = ANY(<travadas>) AND <o mesmo predicado>` — um
+   comando novo, que em READ COMMITTED enxerga as candidaturas confirmadas
+   enquanto o passo 1 esperava.
+
+Um `DELETE ... WHERE NOT EXISTS (application)` sozinho **não basta**: ele
+avalia o predicado com a fotografia do início do comando, espera o lock que a
+FK da candidatura concorrente pôs na vaga e, quando ela confirma, apaga assim
+mesmo — a vaga estava travada, não alterada, então nada é reavaliado — e o
+cascade leva a candidatura recém-confirmada. Os dois caminhos faziam isso até a
+correção; `tests/db-decision-integrity.test.ts` reproduz a corrida com duas
+conexões reais. Na ordem inversa (descarte trava primeiro), a candidatura
+tardia falha na FK: o usuário vê o erro, e nada some em silêncio.
+
+> **Invariante:** nenhum caminho de código faz `DELETE FROM job` fora de
+> `deleteClosedJobsWithoutApplication()` — `tests/architecture.test.ts` procura
+> `.delete(job)` e `delete from job` em `src/`. As FKs `ON DELETE cascade` de
 > `job_score` e `application` significam que apagar uma `job` apaga junto a linha
 > de funil e todo o `application_event` pendurado nela — histórico que não tem
-> como ser reconstruído.
+> como ser reconstruído. Pelo mesmo motivo, `job.source_id` em cascade faz de
+> "apagar uma fonte" um descarte de candidaturas: nenhum código apaga `source`,
+> e fonte aposentada é desligada (`enabled = false`), não removida.
 
 ### 3. Scores são derivados e versionados por `SCORER_VERSION`
 
@@ -747,8 +851,9 @@ pnpm jho db migrate     # aplica; roda tambem no inicio de `jho jobs sync`
 `runMigrations()` usa `DATABASE_MIGRATION_URL`, uma conexão PostgreSQL separada
 da URL de runtime. O snapshot SQLite legado não participa do bootstrap normal.
 
-> **Invariante:** `schema.ts` é a fonte da verdade; o SQL em `drizzle/` é
-> **gerado**. Editar o `.sql` à mão desincroniza o snapshot de `drizzle/meta/` e
+> **Invariante:** `schema.ts` é a fonte da verdade; o SQL em `drizzle/postgres/`
+> é **gerado**. Editar o `.sql` à mão desincroniza o snapshot de
+> `drizzle/postgres/meta/` e
 > a próxima geração produz um diff errado. Mexeu no schema, rode
 > `pnpm db:generate` e commite os dois.
 
@@ -757,8 +862,34 @@ Migração de dados é a exceção declarada: nasce vazia com
 journal gerados pelo kit. A troca de chave de `job_score` é o exemplo —
 expandir (`0004`, trilha anulável), preencher (`0005`, trilha principal por
 candidato e `track_id` nas notas existentes) e contrair (`0006`, `NOT NULL` e a
-chave nova). O migrator aplica as pendentes numa transação só.
+chave nova). O migrator aplica as pendentes numa transação só: falha no meio
+não deixa metade aplicada, e rodar de novo depois de corrigir a causa retoma.
+Ele também só aplica entrada do journal cuja `when` é mais nova que a última
+migração registrada no banco — entrada com `when` antiga (típico depois de
+rebase sobre a migração de outra pessoa) é **pulada sem aviso**.
 
+O procedimento completo, com locks e checklist, está na skill
+[`drizzle-safe-migrations`](../.claude/skills/drizzle-safe-migrations/SKILL.md).
+As provas que o sustentam:
+
+| Pergunta | Prova |
+|---|---|
+| Toda FK escreve `onDelete`, inclusive `no action`? | `tests/fk-delete-intent.test.ts` |
+| O DDL aplicado tem as mesmas FKs e ações que o schema? | `tests/cov-db-schema.test.ts` (`pg_constraint`) |
+| Banco populado na versão anterior sobe sem perder o funil? | `tests/postgres-upgrade.test.ts` (0003 → atual, com falha e retomada) |
+| Runtime não tem DDL nem escala privilégio? | `tests/postgres-permissions.test.ts` |
+| Schema e SQL gerado estão em sincronia? | job `schema-e-migracao` do CI |
+
+A distinção entre as duas primeiras é o ponto: o Drizzle completa com
+`no action` o `onDelete` que ninguém escreveu, e o PostgreSQL grava o mesmo.
+Paridade sozinha não distingue "escolhi" de "esqueci".
+
+
+`0009` cria `auth_user_candidate_idx`, índice único parcial em
+`auth_user(candidate_id) where candidate_id is not null`: um candidato tem no
+máximo uma conta. Conta sem candidato (admin, recrutador) continua livre. O
+índice só aplica sobre dados limpos — a verificação e a ordem estão em
+[`docs/security.md`](security.md#achado-5--conta-convidada-com-o-candidato-do-dono--corrigido-hotfix).
 
 `0009` cria `auth_user_candidate_idx`, índice único parcial em
 `auth_user(candidate_id) where candidate_id is not null`: um candidato tem no

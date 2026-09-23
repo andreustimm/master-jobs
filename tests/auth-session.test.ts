@@ -10,6 +10,7 @@ import {
 } from "../src/contexts/auth/infra/drizzle-store.ts";
 import { drizzlePasswords } from "../src/contexts/auth/infra/password-login.ts";
 import { completeLogin, isSingleUser, logout, singleUserSession } from "../src/contexts/auth/app/session.ts";
+import { openModeActive, openModeAllowedIn } from "../src/contexts/auth/domain/open-mode.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
 let db: DB;
@@ -244,6 +245,37 @@ describe("modo aberto", () => {
 
   it("só abre quando pedido explicitamente", () => {
     expect(isSingleUser({ JHO_AUTH_MODE: "open" })).toBe(true);
+  });
+
+  it("V03-04 recusa o pedido de modo aberto fora da máquina local", () => {
+    // Deployment nenhum honra `open`: a sessão sintetizada serviria currículo,
+    // funil e piso a qualquer requisição de um endereço público. A lista é de
+    // PERMISSÃO — valor inventado depois (`qa`, `sandbox`) também recusa.
+    for (const env of [
+      { JHO_AUTH_MODE: "open", VERCEL_ENV: "production" },
+      { JHO_AUTH_MODE: "open", VERCEL_ENV: "preview" },
+      { JHO_AUTH_MODE: "open", JHO_ENV: "production" },
+      { JHO_AUTH_MODE: "open", JHO_ENV: "staging" },
+      { JHO_AUTH_MODE: "open", JHO_ENV: "dev" },
+      { JHO_AUTH_MODE: "open", JHO_ENV: "sandbox" },
+      { JHO_AUTH_MODE: "open", VERCEL: "1" },
+      // Declarar-se local não apaga a prova de que o processo roda na Vercel.
+      { JHO_AUTH_MODE: "open", JHO_ENV: "local", VERCEL: "1" },
+      // Na ingestão `JHO_ENV` tem precedência; aqui não. Um deployment não
+      // vira máquina local por também se declarar local.
+      { JHO_AUTH_MODE: "open", VERCEL_ENV: "production", JHO_ENV: "local" },
+    ]) {
+      expect(isSingleUser(env), JSON.stringify(env)).toBe(false);
+      expect(openModeAllowedIn(env), JSON.stringify(env)).toBe(false);
+    }
+  });
+
+  it("V03-04 mantém o modo aberto de desenvolvimento local", () => {
+    expect(isSingleUser({ JHO_AUTH_MODE: "open", JHO_ENV: "local" })).toBe(true);
+    expect(isSingleUser({ JHO_AUTH_MODE: "open", JHO_ENV: "LOCAL" })).toBe(true);
+    // Ambiente local sem pedir continua fechado: o ambiente só PERMITE.
+    expect(isSingleUser({ JHO_ENV: "local" })).toBe(false);
+    expect(openModeActive({ JHO_ENV: "local" })).toBe(false);
   });
 
   it("synthesises a session that still passes through the same guard", () => {

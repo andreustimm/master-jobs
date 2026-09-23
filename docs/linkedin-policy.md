@@ -237,6 +237,39 @@ Lista explícita. Cada item já foi considerado e recusado.
     `AGENTS.md` devem dizer a mesma coisa — editou um, edite o outro — e a
     reversão de fundo exige nova ADR substituindo a 0001.
 
+### 5.1 O que o runtime garante, e o que só esta política garante
+
+Parte desta lista é contrato executável; parte depende de quem opera.
+Confundir as duas seria prometer mais do que o código entrega.
+
+**Garantido pelo runtime, com teste.** `assertSafeRemoteUrl`
+(`src/core/remote-url.ts`) recusa `linkedin.com`, `linkedin.cn`, `lnkd.in`,
+`licdn.com` e qualquer subdomínio deles **antes** do DNS, e
+`safeRemoteFetch` repete a checagem em cada salto de redirect. Como é o único
+transporte de URL de vaga, a recusa vale para a porta HTTP dos adapters
+(JSON e HTML), para a sonda de `jobs verify` (HEAD e GET) e para a captura de
+`scrape run`, que bloqueia antes mesmo de pedir o `robots.txt` e trata o
+redirect para o LinkedIn como bloqueio final, sem nova tentativa. Na sonda a
+recusa é `inconclusive`, nunca `gone`: vaga de alerta por e-mail não é
+fechada por não poder ser verificada. `tests/linkedin-acquisition-boundary.test.ts`
+prova tudo isso com transporte falso que registra chamadas — zero pedido
+ao domínio, direto ou por redirect — e nunca toca o LinkedIn real.
+
+Domínio público, IP roteável, `robots.txt` permissivo e HTTP 200 **não**
+autorizam a aquisição. A recusa é por finalidade, não por rede.
+
+**Continua permitido, e também testado:** ler o alerta que o LinkedIn envia
+por e-mail (ADR 0008), guardar e exibir a URL `linkedin.com/jobs/view/<id>`
+que ele traz, e cadastrar à mão uma vaga com URL do LinkedIn
+(`jho jobs add`), que vira registro manual sem busca. Exibir um link não é
+buscá-lo.
+
+**Garantido só por esta política.** A recusa casa pelo nome do host: IP
+literal do LinkedIn ou um proxy de terceiros que sirva o conteúdo passariam.
+E nada disso alcança o que roda fora do runtime — scripts avulsos, o navegador
+do usuário, ferramentas de agente (Codex, Claude Code, OpenCode) e MCPs. Para
+esses, os itens 1 a 8 acima são a única barreira, e cabe a quem opera cumpri-los.
+
 ---
 
 ## 6. Setup OAuth do caminho oficial de publicação

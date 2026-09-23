@@ -1,0 +1,2 @@
+CREATE INDEX "job_description_trgm_idx" ON "production"."job" USING gin (replace(replace("description_text", ' ', ''), '-', '') gin_trgm_ops) WHERE "production"."job"."closed_at" is null;--> statement-breakpoint
+CREATE INDEX "job_page_text_trgm_idx" ON "production"."job_page" USING gin (replace(replace("text", ' ', ''), '-', '') gin_trgm_ops);

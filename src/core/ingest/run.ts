@@ -7,10 +7,11 @@
  *  3. Postings that vanish from a source are marked closed, not deleted, so the
  *     history of what you applied to stays intact.
  */
-import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { platformQuota } from "../../contexts/sourcing/index.ts";
 import { clock } from "../clock.ts";
 import { getDb } from "../db/client.ts";
+import { deleteClosedJobsWithoutApplication } from "../db/retention.ts";
 import { job, source } from "../db/schema.ts";
 import { HttpError } from "../sources/http.ts";
 import { getAdapter, sourceId } from "../sources/registry.ts";
@@ -236,18 +237,15 @@ export async function syncAll(
   return { startedAt, finishedAt: new Date().toISOString(), sources: results, totals };
 }
 
-/** Housekeeping: forget postings closed long ago that were never applied to. */
+/**
+ * Housekeeping: forget postings closed long ago that were never applied to.
+ *
+ * Delegates to the single authorized delete path, which locks before it
+ * re-checks — a concurrent application must never be cascaded away.
+ */
 export async function pruneClosed(olderThanDays = 90): Promise<number> {
   const db = getDb();
   const cutoff = new Date(Date.now() - olderThanDays * 86_400_000).toISOString();
-  const deleted = await db
-    .delete(job)
-    .where(
-      and(
-        lt(job.closedAt, cutoff),
-        sql`${job.id} not in (select job_id from production.application)`,
-      ),
-    )
-    .returning({ id: job.id });
+  const deleted = await db.transaction((tx) => deleteClosedJobsWithoutApplication(tx, cutoff));
   return deleted.length;
 }

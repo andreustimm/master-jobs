@@ -11,7 +11,7 @@ import {
 import { jobLifecycleState } from "../../../src/core/ingest/lifecycle.ts";
 import { StatusBadge } from "../../ui";
 import { applicationStatusOptions } from "../../status.ts";
-import { requireSession } from "../../auth";
+import { requirePage, requireSession } from "../../auth";
 import { getTranslator } from "../../i18n";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +42,10 @@ export default async function RecruiterCandidateHistory({
   if (!Number.isInteger(candidateId) || !session.linkedCandidateIds.includes(candidateId)) {
     notFound();
   }
+  // O vínculo decide o 404; a POLÍTICA decide a leitura. Sem esta chamada a
+  // tela autorizava por conta própria, fora de `can()` — e uma regra nova da
+  // política (sessão emprestada, papel retirado) não chegaria aqui. Regra 15.
+  await requirePage("candidate:read", { kind: "candidate", candidateId });
 
   const query = await searchParams;
   const rawPage = query.page;
