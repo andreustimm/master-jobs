@@ -28,7 +28,7 @@ export type SourceAdapter = {
   kind: SourceKind;
   /** Human-facing docs URL, so the config file explains itself. */
   docs: string;
-  fetchJobs(config: SourceConfig): Promise<FetchResult>;
+  fetchJobs(config: SourceConfig): Promise<SourceSnapshot>;
 };
 
 export type FetchResult = {
@@ -36,6 +36,10 @@ export type FetchResult = {
   /** Non-fatal problems worth surfacing without failing the whole sync. */
   warnings: string[];
 };
+
+/** `complete` só quando a resposta prova o fim da lista; na dúvida, `partial`. */
+export type Completeness = "complete" | "partial";
+export type SourceSnapshot = FetchResult & { completeness: Completeness };
 ```
 
 `fetchJobs` recebe `SourceConfig` (`kind`, `handle`, `label`, `rationale?`) e
@@ -404,17 +408,22 @@ num arquivo novo em `src/core/sources/` se a forma for diferente. Exporte um
 export const minhafonte: SourceAdapter = {
   kind: "minhafonte",
   docs: "https://exemplo.com/api-docs",
-  async fetchJobs(config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const url = `https://exemplo.com/api/jobs?board=${encodeURIComponent(config.handle)}`;
     const data = await getJson<{ jobs?: MinhaFonteJob[] }>(url);
     const jobs = (data.jobs ?? []).map((j): RawJob => ({ /* ... */ }));
-    return { jobs, warnings: [] };
+    return { jobs, warnings: [], completeness: "partial" };
   },
 };
 ```
 
 Checklist do adapter:
 
+- Declare `completeness: "complete"` só quando a resposta prova o fim da lista
+  (board inteiro numa resposta, página curta, sem próximo token, total
+  alcançado). Janela de recência, primeira página ou corte por teto é
+  `partial` — e fonte parcial nunca fecha vaga por ausência
+  ([Completude da listagem](#completude-da-listagem)).
 - Sempre `getJson()` do `./http.ts`, nunca `fetch` cru — é o que garante
   user-agent, timeout e política de retry.
 - Sempre `encodeURIComponent(config.handle)` na URL. O `handle` vem de um YAML

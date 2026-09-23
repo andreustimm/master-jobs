@@ -251,19 +251,19 @@ queue`+`run` e `jobs recheck queue`+`run` contra **produção**, todo dia às
 06:00 UTC (03:00 em São Paulo), com `workflow_dispatch` para rodar à mão depois
 de mexer em `config/sources.yaml`.
 
-**Por que no GitHub e não na Vercel.** A Vercel tem `/api/cron/recheck`, e ele
-resolve um pedaço pequeno: 25 vagas por execução, porque o teto de função no
-plano gratuito é de 30 segundos. Com 427 vagas elegíveis (fit ≥ 55, abertas, com
-URL), o ciclo completo leva ~17 dias — enquanto `enqueueStale` declara a meta de
-reconferir a cada 7. O cron de lá entrega menos da metade do que promete, e não
-por defeito: por teto.
+**Por que no GitHub e não na Vercel.** `/api/cron/recheck` processa 25 vagas
+por chamada, porque o teto de função no plano gratuito é de 30 segundos. Com 427
+vagas elegíveis (fit ≥ 55, abertas, com URL), um cron diário nela levava ~17
+dias para dar a volta — enquanto `enqueueStale` declara a meta de reconferir a
+cada 7. Não por defeito: por teto.
 
 E a **busca** não roda lá de jeito nenhum: `jobs sync` e `scrape run` não têm
 rota de API. Um runner do GitHub tem 6 horas por job, e é a mesma tarefa num
 lugar onde ela cabe. Por isso a varredura é o **único** agendador da
-reconferência: o cron da Vercel foi removido de `vercel.json`, e reativá-lo
-exige remover antes o passo equivalente daqui — o teste de isolamento de
-workflow reprova dois donos.
+reconferência: o cron da Vercel foi removido de `vercel.json`, e
+`tests/workflow-environment-isolation.test.ts` exige `crons` vazio e exatamente
+um workflow agendado rodando `jobs recheck` — mudar o dono é mudar esse teste
+junto.
 
 Só produção é varrida. `dev` e `staging` existem para exercitar código, não para
 acumular acervo — varrer os três triplicaria as requisições contra APIs de

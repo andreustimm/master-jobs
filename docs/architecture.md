@@ -42,7 +42,7 @@ transição explícita de Pursuit.
 
 | Camada | Diretório | Responsabilidade | O que NÃO faz |
 |---|---|---|---|
-| **sources** | `src/core/sources/` | Um adapter por endpoint público. Fetch, mapear para `RawJob`, retornar `FetchResult { jobs, warnings }`. | Não normaliza, não deduplica, não pontua, não toca no banco. |
+| **sources** | `src/core/sources/` | Um adapter por endpoint público. Fetch, mapear para `RawJob`, retornar `SourceSnapshot { jobs, warnings, completeness }` — `completeness` diz se a listagem é a fonte inteira ou uma janela. | Não normaliza, não deduplica, não pontua, não toca no banco. |
 | **ingest** | `src/core/ingest/` | Normalização (`slugifyCompany`, `normalizeTitle`, `normalizeLocation`), `fingerprint`/`contentHash`, upsert idempotente em `job`, fechamento do que sumiu, saúde da `source`. | Nunca escreve em `application`. |
 | **scoring** | `src/core/scoring/` | `score.ts` é um scorer **puro** (sem banco) que recebe `ScoreInput` + `Profile` e devolve `ScoreResult`. `apply.ts` persiste em `job_score`. | Não faz I/O de rede, não chama LLM. |
 | **matching** | `src/contexts/matching/` | Score candidato–vaga, elegibilidade, board/cockpit e comparação manual. | Não altera candidatura. |
@@ -367,7 +367,7 @@ account inside the LinkedIn User Agreement."
 
 | Arquivo | O que é |
 |---|---|
-| `src/core/sources/types.ts` | Contratos: `RawJob`, `SourceKind` (12 valores), `SourceConfig`, `FetchResult`, `SourceAdapter`. |
+| `src/core/sources/types.ts` | Contratos: `RawJob`, `SourceKind` (12 valores), `SourceConfig`, `FetchResult`, `Completeness`, `SourceSnapshot`, `SourceAdapter`. |
 | `src/core/sources/registry.ts` | `ADAPTERS: Partial<Record<SourceKind, SourceAdapter>>` com 10 adapters, `getAdapter()` (lança para kind não registrado) e `sourceId(kind, handle)`, que devolve `kind:handle`. |
 | `src/core/sources/config.ts` | `sourcesPath()` e `loadSources()`: valida com Zod, filtra `enabled: true` e descarta o campo `enabled` do objeto retornado. |
 | `src/core/sources/http.ts` | `getJson()` com `AbortController` (timeout 20 000 ms), até 2 retries só para `RETRYABLE`, backoff `500 * 2 ** attempt`, user-agent de `JHO_USER_AGENT`; classe `HttpError`; `htmlToText()` (strip barato de HTML, suficiente para scoring, não para renderizar). |

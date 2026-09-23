@@ -2,12 +2,12 @@
 #
 # ## Por que aqui e não na Vercel
 #
-# A Vercel tem `/api/cron/recheck`, e ele resolve um pedaço pequeno do problema:
-# reconfere se vagas que já estão no banco continuam abertas, 25 por execução,
-# porque o teto de função no plano gratuito é de 30 segundos. Com 427 vagas
-# elegíveis, o ciclo completo leva ~17 dias — enquanto o próprio código declara
-# a meta de reconferir a cada 7 (`olderThanDays: 7` em `enqueueStale`). O cron
-# de lá cumpre menos da metade do que promete, e não por defeito: por teto.
+# `/api/cron/recheck` reconfere 25 vagas por chamada, porque o teto de função no
+# plano gratuito da Vercel é de 30 segundos. Com 427 vagas elegíveis, um cron
+# diário nela levava ~17 dias para dar a volta — enquanto o próprio código
+# declara a meta de reconferir a cada 7 (`olderThanDays: 7` em `enqueueStale`).
+# Por isso o cron da Vercel saiu de `vercel.json`, e esta varredura é o único
+# agendador da reconferência (travado por teste).
 #
 # E a BUSCA não roda lá de jeito nenhum. `jho jobs sync` e `jho scrape run` não
 # têm rota de API; são comandos de terminal que levam minutos. Até hoje, achar

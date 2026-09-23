@@ -52,14 +52,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "ingestão bloqueada", motivo: decisao.reason }, { status: 503 });
   }
 
-  // Enfileira antes de consumir: sem isto, o primeiro dia processaria a fila
-  // que já existia e os seguintes não teriam o que fazer.
+  // Enfileira antes de consumir: sem isto, a chamada só drenaria a fila que já
+  // existia e as seguintes não teriam o que fazer.
   const enfileiradas = await enqueueStale({ limit: 60 });
 
   // `max` bem abaixo do teto de tempo. Ser interrompido no meio deixa tarefas
   // com claim pendurado, que só voltam a ser elegíveis depois do timeout de
-  // claim — atrasa o dia seguinte por um lote ambicioso demais hoje.
-  const result = await runVerifyQueue({ max: 25, delayMs: 200, worker: "vercel-cron" });
+  // claim — atrasa a próxima rodada por um lote ambicioso demais agora.
+  const result = await runVerifyQueue({ max: 25, delayMs: 200, worker: "recheck-route" });
 
   return NextResponse.json({ enfileiradas, ...result });
 }

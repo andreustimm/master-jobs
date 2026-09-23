@@ -95,11 +95,11 @@ describe("IT-003 — o contrato de ambiente não vaza produção", () => {
     };
     expect(vercel.crons ?? []).toEqual([]);
 
-    const schedulers = readdirSync(".github/workflows")
-      .map((file) => readFileSync(`.github/workflows/${file}`, "utf8"))
-      .filter((text) => /^\s*schedule:/m.test(text) && /jho jobs recheck (queue|run)/.test(text));
-    expect(schedulers).toHaveLength(1);
-    expect(schedulers[0]).toContain("name: Varredura de vagas");
+    const schedulers = readdirSync(".github/workflows").filter((file) => {
+      const text = readFileSync(`.github/workflows/${file}`, "utf8");
+      return /^\s*schedule:/m.test(text) && /jho jobs recheck (queue|run)/.test(text);
+    });
+    expect(schedulers).toEqual(["varredura.yml"]);
   });
 
   it("a rota de reconferência por segredo consulta a política", () => {

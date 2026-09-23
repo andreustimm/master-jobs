@@ -138,16 +138,17 @@ export function careersAdapter(options: CareersOptions = {}): SourceAdapter {
 
       const found = findJobAnchors(listHtml, listUrl);
       const anchors = found.slice(0, maxJobs);
-      // The company's own listing, read whole, is the list of what it has
-      // open. Cut at `maxJobs`, the rest was never looked at.
-      const completeness = found.length <= maxJobs ? "complete" : "partial";
       if (anchors.length === 0) {
         warnings.push(
           `Nenhum link de vaga reconhecido em ${listUrl}. ` +
             `A página pode montar a lista por JavaScript — nesse caso use \`jho sources snippet\`.`,
         );
+        // A page we could not read proves nothing about what is open.
         return { jobs: [], warnings, completeness: "partial" };
       }
+      // The company's own listing, read whole, is the list of what it has
+      // open. Cut at `maxJobs`, the rest was never looked at.
+      const completeness = found.length <= maxJobs ? "complete" : "partial";
 
       const jobs: RawJob[] = [];
 
