@@ -128,6 +128,15 @@ export function agregarLinhasPerf(linhas: readonly LinhaPerf[]): AgregadoPerf[] 
 export type Cenario = { nome: string; caminho: string; sessao: boolean };
 
 /**
+ * Confere a sessão antes de medir, numa rota autenticada SEM fronteira de
+ * carregamento. `/jobs` tem `loading.tsx` (#217): o esboço compromete a
+ * resposta em 200 antes de a página decidir, e a sessão vencida vira
+ * redirecionamento no cliente — o 307 para `/login` que denunciava o cookie
+ * vencido não aparece mais ali. `/account` ainda responde 307.
+ */
+export const CENARIO_VALIDA_SESSAO: Cenario = { nome: "sessão", caminho: "/account", sessao: true };
+
+/**
  * Os cenários medidos. Sem sessão só existem rotas que não expõem nada: o
  * `/login` (renderiza e toca o banco uma vez, bom sinal de função fria), o
  * estático `/offline.html` (CDN, sem função) e `/jobs` sem cookie, que o proxy

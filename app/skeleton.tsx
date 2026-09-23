@@ -21,6 +21,10 @@ export function SkeletonBar({ className }: { className?: string }) {
  * Região que espera dados: `aria-busy` diz à tecnologia assistiva que o trecho
  * está incompleto, e o `role="status"` lê uma vez o que está carregando.
  *
+ * O aviso fica FORA do trecho ocupado: mudança dentro de `aria-busy="true"`
+ * pode ser adiada ou ignorada pelo leitor de tela até o trecho desocupar, e
+ * este trecho nunca desocupa — é trocado inteiro quando o conteúdo chega.
+ *
  * Sem dado nenhum dentro, por construção: o esqueleto é o mesmo para qualquer
  * sessão, então não há como ele mostrar a tela de outra pessoa enquanto a nova
  * não chega.
@@ -37,11 +41,13 @@ export function LoadingRegion({
   children: React.ReactNode;
 }) {
   return (
-    <div aria-busy="true" data-testid={testId} className={className}>
+    <div data-testid={testId} className={className}>
       <p role="status" className="sr-only">
         {label}
       </p>
-      {children}
+      <div aria-busy="true" className="contents">
+        {children}
+      </div>
     </div>
   );
 }

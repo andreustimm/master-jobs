@@ -41,11 +41,26 @@ describe("fronteira de carregamento de /jobs", () => {
     const html = await render(id);
     expect(html).toContain('data-testid="route-jobs-loading"');
     expect(html).toContain(`>${dictionary.jobs.title}</h1>`);
-    expect(html).toMatch(/<div aria-busy="true" data-testid="jobs-loading"[^>]*>\s*<p role="status" class="sr-only">/);
+    // O aviso fica fora do trecho ocupado: dentro de `aria-busy` o leitor de
+    // tela pode adiá-lo até o trecho desocupar, e este nunca desocupa.
+    expect(html).toMatch(/<div data-testid="jobs-loading"[^>]*>\s*<p role="status" class="sr-only">[^<]*<\/p>\s*<div aria-busy="true"/);
     expect(html).toContain(dictionary.jobs.loading);
     // O esqueleto é decorativo e não carrega texto além do título e do aviso.
     const visible = html.replace(/<[^>]+>/g, "");
     expect(visible).toBe(`${dictionary.jobs.title}${dictionary.jobs.loading}`);
+  });
+
+  it("repete o cabeçalho da página, para o título não pular quando a lista chega", () => {
+    const loading = readFileSync("app/jobs/(lista)/loading.tsx", "utf8");
+    const page = readFileSync("app/jobs/(lista)/page.tsx", "utf8");
+    for (const markup of [
+      '<main className="page-content-top"',
+      '<header className="pb-4">',
+      '<h1 className="type-display-md chevron mb-4">{t("jobs.title")}</h1>',
+    ]) {
+      expect(loading, markup).toContain(markup);
+      expect(page, markup).toContain(markup);
+    }
   });
 
   it("desenha só com token semântico e sem largura fixa", async () => {
@@ -76,6 +91,6 @@ describe("detalhe da vaga por streaming", () => {
     expect(page).toContain('testId="application-timeline-loading"');
     expect(page.match(/t\("jobDetail\.loadingSection"\)/g)).toHaveLength(2);
     // A nota por trilha continua exclusiva de quem é candidato.
-    expect(page).toMatch(/candidateId !== null && \(\s*<Suspense[\s\S]*?<TrackFits candidateId=\{candidateId\}/);
+    expect(page).toMatch(/candidateId !== null && scoredTracks > 1 && \(\s*<Suspense[\s\S]*?<TrackFits candidateId=\{candidateId\}/);
   });
 });

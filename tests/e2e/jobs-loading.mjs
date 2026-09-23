@@ -119,7 +119,7 @@ async function runChecks(page, base, { email, password }, check) {
     await page.locator('[data-testid="navigation-transition"]').waitFor({ state: "detached", timeout: 10_000 });
     const overlayGoneBeforeList = (await page.getByTestId("route-jobs").count()) === 0;
     const announced = (await page.getByTestId("jobs-loading").locator('[role="status"]').textContent())?.trim() ?? "";
-    const busy = await page.getByTestId("jobs-loading").getAttribute("aria-busy");
+    const busy = await page.getByTestId("jobs-loading").locator("[aria-busy]").first().getAttribute("aria-busy");
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     await page.getByTestId("route-jobs").waitFor({ state: "visible", timeout: 20_000 });
     await settled(page);

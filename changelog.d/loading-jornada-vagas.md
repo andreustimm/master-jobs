@@ -21,6 +21,16 @@
   mostra, que o documento transmite o esboço antes da lista e que o 404 do
   detalhe se mantém.
 
+### Alterado
+
+- Em `/jobs`, sessão vencida com cookie presente redireciona para `/login`
+  pelo cliente, e não mais por 307: o esboço já comprometeu a resposta em 200.
+  Sem cookie, o `proxy.ts` continua respondendo antes da página. Por isso
+  `pnpm perf:producao` confere a sessão em `/account` antes de medir, e o TTFB
+  de `/jobs` passa a medir a chegada do esboço.
+- No detalhe da vaga, a espera da nota por trilha só aparece para quem tem
+  mais de uma trilha ativa.
+
 ## pt-BR
 
 ### Melhorado

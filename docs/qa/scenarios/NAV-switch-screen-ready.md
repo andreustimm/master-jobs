@@ -4,7 +4,7 @@ area: NAV
 title: Trocar para uma tela interna pronta
 persona: Candidato por teclado
 journey: J-switch-workspace-screen
-expected: Um splash único e curto bloqueia a tela anterior e sai somente quando o destino correto está utilizável
+expected: Um splash único e curto bloqueia a tela anterior e sai somente quando o destino correto está utilizável — ou, em Vagas, quando o esboço pré-carregado, que anuncia a espera, assume a tela
 entry_points: /jobs
 qa_status: untested
 bug_ids: BUG-20260823-pipeline-empty-state-mixed-locale

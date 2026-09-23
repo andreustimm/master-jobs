@@ -90,15 +90,20 @@ impresso ou mandado a outro host que não seja HTTPS ou `127.0.0.1`/`localhost`:
 Além dos três públicos, mede `/jobs`, `/jobs?fit=45`,
 `/jobs?fit=45&workMode=remote` e `/jobs?fit=45&q=<termo>`. O termo padrão é
 `typescript`; `JHO_PERF_TERMO` troca, e o valor nunca aparece na saída — o
-relatório só diz "termo". Se a sessão venceu, o script para no primeiro 307
-para `/login` sem gravar nada. Cada requisição com sessão é uma visita real:
-conta como uso, e um `?by=` salvo nunca é pedido.
+relatório só diz "termo". Antes de cada rodada o script confere a sessão em
+`/account`, que não tem fronteira de carregamento: se ela venceu, para no 307
+para `/login` sem gravar nada. Em `/jobs` esse 307 não existe mais — desde a
+#217 o esboço compromete a resposta em 200 e a sessão vencida redireciona pelo
+cliente. Pelo mesmo motivo, o TTFB de `/jobs` a partir da #217 mede a chegada do
+esboço, não a da lista: compare rodadas anteriores pelo tempo total. Cada
+requisição com sessão é uma visita real: conta como uso, e um `?by=` salvo
+nunca é pedido.
 
 ### Por dentro: as linhas `perf` do log
 
 `/jobs` e `/` cronometram cada espera do banco com `createStageTimer`
 (`timer.time("auth" | "prelude" | "board" | "facets" | "tail" | "queue", …)`
-em `app/jobs/page.tsx` e `app/jobs/jobs-data.ts`; `cockpit` em `app/page.tsx`),
+em `app/jobs/(lista)/page.tsx` e `app/jobs/jobs-data.ts`; `cockpit` em `app/page.tsx`),
 dentro do `comVigia`. `registrarTempo` escreve uma linha JSON só com número,
 nome de estágio, rota sem query string e região:
 

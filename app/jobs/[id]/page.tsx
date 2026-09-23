@@ -10,7 +10,7 @@ import {
   applicationTimeline,
   getJobDetail,
 } from "../../../src/contexts/pursuit/index.ts";
-import { scoreMessages } from "../../../src/contexts/matching/index.ts";
+import { listCandidateTracks, scoreMessages } from "../../../src/contexts/matching/index.ts";
 import { renderScoreMessage } from "../../../src/core/i18n/index.ts";
 import { isPublicJobUrl } from "../../../src/core/job-url.ts";
 import { trackFitsForJob } from "../../../src/core/scoring/apply.ts";
@@ -44,6 +44,14 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   if (!detail) notFound();
 
   const { job, score, application, source } = detail;
+  // A seção só existe com mais de uma trilha que pontua. Decidir isso antes da
+  // fronteira, numa leitura barata, evita reservar espaço e anunciar espera
+  // para uma seção que não vem — e o formulário do funil, logo abaixo, subir
+  // quando o esboço some.
+  const scoredTracks =
+    candidateId === null
+      ? 0
+      : (await listCandidateTracks(candidateId)).filter((track) => track.status === "active" && track.target).length;
   const blockers = scoreMessages(score?.blockers);
   const matched = (score?.matchedKeywords as string[]) ?? [];
   const missing = (score?.missingKeywords as string[]) ?? [];
@@ -165,7 +173,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
       {/* A nota por trilha é calculada na hora para a trilha sem linha guardada,
           e é a leitura mais cara da tela: vem por streaming, sem segurar o
           cabeçalho, a nota principal e o formulário do funil. */}
-      {candidateId !== null && (
+      {candidateId !== null && scoredTracks > 1 && (
         <Suspense fallback={<SectionLoading label={t("jobDetail.loadingSection")} testId="job-track-fits-loading" />}>
           <TrackFits candidateId={candidateId} jobId={job.id} t={t} />
         </Suspense>

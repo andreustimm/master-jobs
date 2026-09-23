@@ -17,6 +17,7 @@ import { request as requestHttp, Agent as AgentHttp } from "node:http";
 import { parseArgs } from "node:util";
 import {
   agregarLinhasPerf,
+  CENARIO_VALIDA_SESSAO,
   cookieValido,
   destinoAceitaCookie,
   lerLinhaPerf,
@@ -123,6 +124,12 @@ async function medirRotas() {
       // Abre a conexão num arquivo estático, fora da conta: sem isto a primeira
       // amostra da rodada somaria DNS e aperto de mão TLS ao tempo da função.
       await medir(base, AQUECE_CONEXAO, null, agente);
+      if (cookie !== null) {
+        const sessao = await medir(base, CENARIO_VALIDA_SESSAO, cookie, agente);
+        if (sessao.status >= 300 && sessao.status < 400 && sessao.destino === "/login") {
+          throw new Error("A sessão foi recusada (redirecionou para /login): cookie vencido ou inválido. Nada foi gravado.");
+        }
+      }
       for (const cenario of cenarios) {
         for (let i = 0; i < amostras; i++) {
           const m = await medir(base, cenario, cookie, agente);
