@@ -303,6 +303,7 @@ export const ptBR = {
     track_unknown: "Essa trilha não existe ou está arquivada; mostrando a principal.",
     term_unknown: "Esse termo salvo não existe; o filtro foi ignorado.",
     cluster_unknown: "Esse cluster não pertence à trilha escolhida; o filtro foi ignorado.",
+    scores_pending: "Suas vagas ainda não têm nota: ela é calculada depois que você salva o currículo. Até lá as vagas aparecem sem nota, e o filtro de Score não as esconde.",
   },
   /** Estado da busca de um termo salvo, somando as plataformas. */
   termRun: {

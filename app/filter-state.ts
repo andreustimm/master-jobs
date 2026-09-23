@@ -22,7 +22,12 @@ export type FilterNotice =
   | "range_swapped"
   | "track_unknown"
   | "term_unknown"
-  | "cluster_unknown";
+  | "cluster_unknown"
+  /**
+   * O candidato ainda não tem nota na trilha principal — sem currículo, ou com
+   * a fila ainda por rodar. O texto vale para os dois casos.
+   */
+  | "scores_pending";
 
 export type PayState = {
   /** Floor of the range; absent means "no floor". */
@@ -277,6 +282,8 @@ export function toBoardFilters(state: FilterState): BoardFilters {
   return {
     minFit: state.fit,
     maxFit: state.fitMax,
+    // A tela mostra o acervo a quem ainda espera a nota (#279).
+    keepUnscored: true,
     cluster: state.cluster,
     term: state.term,
     company: state.company,
