@@ -103,6 +103,7 @@ describe("versioned commit hook", () => {
       copyFileSync("scripts/release/git-context.ts", `${repo}/scripts/release/git-context.ts`);
       copyFileSync("src/core/release.ts", `${repo}/src/core/release.ts`);
       copyFileSync("src/core/changelog.ts", `${repo}/src/core/changelog.ts`);
+      copyFileSync("src/core/changelog-fragments.ts", `${repo}/src/core/changelog-fragments.ts`);
       chmodSync(`${repo}/.githooks/commit-msg`, 0o755);
       writeFileSync(`${repo}/package.json`, '{"type":"module","version":"1.3.7"}\n');
       writeFileSync(`${repo}/CHANGELOG.md`, emptyTechnical);
@@ -130,6 +131,48 @@ describe("versioned commit hook", () => {
       });
       expect(stagedAccepted.status).toBe(0);
       expect(stagedAccepted.stdout).toContain("release-ready version=1.3.8");
+
+      // A staged fragment stands in for the technical Unreleased; an unstaged
+      // one is not part of the commit and cannot.
+      git(repo, "reset", "-q", "--", "CHANGELOG.md");
+      mkdirSync(`${repo}/changelog.d`);
+      const fragmentPath = `${repo}/changelog.d/cabecalho.md`;
+      writeFileSync(
+        fragmentPath,
+        "## Técnico\n\n### Corrigido\n\n- Cabeçalho.\n\n## pt-BR\n\n<!-- sem-nota-usuario -->\n\n## en\n\n<!-- sem-nota-usuario -->\n",
+      );
+      const unstaged = spawnSync(`${repo}/.githooks/commit-msg`, [message], { cwd: repo, encoding: "utf8" });
+      expect(unstaged.status).not.toBe(0);
+      git(repo, "add", "changelog.d/cabecalho.md");
+      const fragmentAccepted = spawnSync(`${repo}/.githooks/commit-msg`, [message], { cwd: repo, encoding: "utf8" });
+      expect(fragmentAccepted.stdout, fragmentAccepted.stderr).toContain("release-ready version=1.3.8");
+      // The working-tree gate (`check:release-ready`, what CI runs) lets Git
+      // decide: an ignored `.DS_Store` is skipped, a committed `.gitkeep` is not.
+      const workingTreeGate = () => spawnSync(
+        process.execPath,
+        [...NODE_TS_ARGS, "scripts/release/validar-changelogs.ts", "--commit-message-file", message],
+        { cwd: repo, encoding: "utf8" },
+      );
+      writeFileSync(`${repo}/.git/info/exclude`, ".DS_Store\n");
+      writeFileSync(`${repo}/changelog.d/.DS_Store`, "\0");
+      const ignoredLitter = workingTreeGate();
+      expect(ignoredLitter.stdout, ignoredLitter.stderr).toContain("release-ready version=1.3.8");
+      rmSync(`${repo}/changelog.d/.DS_Store`);
+      writeFileSync(`${repo}/changelog.d/.gitkeep`, "");
+      git(repo, "add", "changelog.d/.gitkeep");
+      const trackedDotfile = workingTreeGate();
+      expect(trackedDotfile.status).not.toBe(0);
+      expect(trackedDotfile.stderr).toContain("changelog_fragment_invalid code=invalid_name");
+      git(repo, "rm", "-q", "--cached", "changelog.d/.gitkeep");
+      rmSync(`${repo}/changelog.d/.gitkeep`);
+      writeFileSync(`${repo}/changelog.d/Errado.md`, "x");
+      git(repo, "add", "changelog.d/Errado.md");
+      const badName = spawnSync(`${repo}/.githooks/commit-msg`, [message], { cwd: repo, encoding: "utf8" });
+      expect(badName.status).not.toBe(0);
+      expect(badName.stderr).toContain("changelog_fragment_invalid code=invalid_name");
+      // The rest of this scenario exercises the Unreleased path alone.
+      git(repo, "rm", "-q", "--cached", "changelog.d/Errado.md", "changelog.d/cabecalho.md");
+      rmSync(`${repo}/changelog.d`, { recursive: true });
 
       writeFileSync(`${repo}/pending.txt`, "releaseable\n");
       commitAll(repo, "fix(ui): mudança pendente");

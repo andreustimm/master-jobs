@@ -59,10 +59,11 @@ function calls(): string[][] {
 function refs(): string {
   return git(remote, "for-each-ref", "--format=%(refname) %(objectname)");
 }
-function run(phase: string, options: { target?: string; validated?: string; confirm?: boolean; automatic?: boolean; sha?: string } = {}) {
+function run(phase: string, options: { target?: string; validated?: string; confirm?: boolean; scheduled?: boolean; sha?: string; preparedSource?: string } = {}) {
   const sha = options.sha ?? source;
-  const event = options.automatic
-    ? { workflow_run: { ...goodRun(), head_sha: sha } }
+  // A scheduled event carries no SHA; the migration flag here is a forgery attempt.
+  const event = options.scheduled
+    ? { schedule: "0 15 * * *", inputs: { "confirmar-migracao": true } }
     : { inputs: { "target-sha": sha, "confirmar-migracao": options.confirm ?? false } };
   writeFileSync(`${root}/event.json`, JSON.stringify(event));
   writeFileSync(`${root}/output`, "");
@@ -71,8 +72,9 @@ function run(phase: string, options: { target?: string; validated?: string; conf
     env: {
       ...process.env, PATH: `${root}/bin:${process.env.PATH}`, FIXTURE_ROOT: root,
       GITHUB_REPOSITORY: "owner/repo", GITHUB_EVENT_PATH: `${root}/event.json`,
-      GITHUB_EVENT_NAME: options.automatic ? "workflow_run" : "workflow_dispatch",
+      GITHUB_EVENT_NAME: options.scheduled ? "schedule" : "workflow_dispatch",
       GITHUB_OUTPUT: `${root}/output`, PROMOTION_TARGET: options.target ?? "",
+      PROMOTION_SOURCE: options.preparedSource ?? sha,
       VALIDATED_SHA: options.validated ?? "",
     },
   });
@@ -157,7 +159,7 @@ describe("V01-01 — CI A cannot authorize B", () => {
     git(repo, "push", "-q", "origin", `${newer}:refs/heads/race-fixture`);
     writeFileSync(`${repo}/.git/hooks/pre-push`, `#!/bin/sh\ngit --git-dir '${remote}' update-ref refs/heads/dev '${newer}' '${source}'\n`);
     chmodSync(`${repo}/.git/hooks/pre-push`, 0o755);
-    const result = run("prepare", { automatic: true });
+    const result = run("prepare", { scheduled: true });
     expect(result.status).not.toBe(0);
     expect(git(remote, "rev-parse", "dev")).toBe(newer);
     expect(git(remote, "rev-parse", "staging")).toBe(base);
@@ -169,7 +171,7 @@ describe("V01-01 — CI A cannot authorize B", () => {
     const newer = commit("fix: posterior sem CI", { "app.txt": "B" });
     git(repo, "push", "-q", "origin", `${newer}:refs/heads/dev`);
     const before = refs();
-    const result = run("prepare", { automatic: true });
+    const result = run("prepare");
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("dev avançou");
     expect(refs()).toBe(before);
@@ -181,7 +183,7 @@ describe("V01-01 — CI A cannot authorize B", () => {
     publishSource("docs: manutenção");
     const newer = commit("fix: schema posterior", { "drizzle/next.sql": "ALTER TABLE x ADD y int;" });
     git(repo, "push", "-q", "origin", `${newer}:refs/heads/dev`);
-    const prepared = run("prepare", { automatic: true });
+    const prepared = run("prepare");
     expect(prepared.status, prepared.stderr).toBe(0);
     expect(prepared.outputs.target).toBe(source);
     const done = run("complete", { target: source, validated: source });
@@ -221,11 +223,17 @@ describe("V01-02 — identical source checks for automatic and manual entry", ()
     expect(calls().every((args) => !args.includes("POST"))).toBe(true);
   });
 
-  it("requires an explicit full SHA and ignores forged migration approval in automatic events", () => {
+  it("requires an explicit full SHA and ignores forged migration approval in scheduled events", () => {
+    const tip = () => source;
     for (const sha of ["", "dev", "deadbee", "a".repeat(40) + "\n"]) {
-      expect(() => promotionInput("workflow_dispatch", { inputs: { "target-sha": sha } })).toThrow();
+      expect(() => promotionInput("workflow_dispatch", { inputs: { "target-sha": sha } }, tip)).toThrow();
+      expect(() => promotionInput("schedule", {}, () => sha)).toThrow();
     }
-    expect(promotionInput("workflow_run", { workflow_run: goodRun(), inputs: { "confirmar-migracao": true } }).confirmMigration).toBe(false);
+    publishSource();
+    const scheduled = promotionInput("schedule", { inputs: { "confirmar-migracao": true } }, tip);
+    expect(scheduled).toEqual({ source, confirmMigration: false, scheduled: true });
+    // The per-push trigger is gone; a leftover event must not authorize anything.
+    expect(() => promotionInput("workflow_run", {}, tip)).toThrow("Evento de promoção inválido");
   });
 });
 
@@ -500,6 +508,100 @@ describe("V01-05 — ancestry and existing delivery", () => {
     const done = run("complete", { target: source, validated: source });
     expect(done.status, done.stderr).toBe(0);
     expect(done.outputs.promoted).toBe("false");
+    expect(refs()).toBe(before);
+  });
+});
+
+function fragment(technical: string, user: string): string {
+  return `## Técnico\n\n### Corrigido\n\n- ${technical}\n\n## pt-BR\n\n### Corrigido\n\n- ${user}\n\n## en\n\n### Fixed\n\n- ${user}\n`;
+}
+
+describe("V01-06 — scheduled entry and changelog fragments", () => {
+  it("schedule promotes the dev tip whose push CI is green, consuming the fragments", () => {
+    publishSource("fix: duas PRs", {
+      ...notes(false),
+      "changelog.d/b-segunda.md": fragment("Segunda técnica.", "Segunda visível."),
+      "changelog.d/a-primeira.md": fragment("Primeira técnica.", "Primeira visível."),
+    });
+    const prepared = run("prepare", { scheduled: true });
+    expect(prepared.status, prepared.stderr).toBe(0);
+    expect(prepared.outputs).toMatchObject({ source, skip: "false" });
+    const target = prepared.outputs.target!;
+    expect(git(repo, "show", "-s", "--format=%P", target)).toBe(source);
+    expect(git(repo, "diff", "--name-status", source, target).split("\n").sort()).toEqual([
+      "D\tchangelog.d/a-primeira.md", "D\tchangelog.d/b-segunda.md",
+      "M\tCHANGELOG.md", "M\tUSER_CHANGELOG.en.md", "M\tUSER_CHANGELOG.pt-BR.md", "M\tpackage.json",
+    ]);
+    // Name order, one tight list, stamped as the new version.
+    expect(git(repo, "show", `${target}:CHANGELOG.md`)).toContain(
+      "## [1.0.1] - " + new Date(git(repo, "show", "-s", "--format=%cI", target)).toISOString().slice(0, 10) +
+      "\n\n### Corrigido\n\n- Primeira técnica.\n- Segunda técnica.\n\n## [1.0.0]",
+    );
+    // A retry rebuilds the same R from A's fragments instead of creating another.
+    const retry = run("prepare");
+    expect(retry.status, retry.stderr).toBe(0);
+    expect(retry.outputs.target).toBe(target);
+    const done = run("complete", { scheduled: true, preparedSource: source, target, validated: target });
+    expect(done.status, done.stderr).toBe(0);
+    expect(git(remote, "rev-parse", "staging")).toBe(target);
+    expect(git(remote, "rev-parse", "v1.0.1")).toBe(target);
+  });
+
+  it("schedule is a no-op without a CI query when staging already has the dev tip", () => {
+    publishSource("docs: manutenção");
+    git(remote, "update-ref", "refs/heads/staging", source);
+    const before = refs();
+    const result = run("prepare", { scheduled: true });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.outputs).toMatchObject({ source, target: source, skip: "true" });
+    expect(calls()).toEqual([]);
+    expect(refs()).toBe(before);
+    const workflow = YAML.parse(readFileSync(".github/workflows/promover-para-staging.yml", "utf8"));
+    expect(workflow.jobs.validar.if).toBe("needs.preparar.outputs.skip != 'true'");
+    expect(workflow.jobs.promover.needs).toContain("validar");
+  });
+
+  it("schedule refuses a dev tip without green push CI and writes nothing", () => {
+    publishSource();
+    setAPI({ runs: [{ ...goodRun(), status: "in_progress", conclusion: null }] });
+    const before = refs();
+    const result = run("prepare", { scheduled: true });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("CI de dev não aprovado");
+    expect(refs()).toBe(before);
+  });
+
+  it("schedule never carries migration approval", () => {
+    publishSource("fix: migração", { "src/core/db/schema.ts": "export const changed = true;" });
+    const before = refs();
+    expect(run("prepare", { scheduled: true }).stderr).toContain("Migração exige confirmação");
+    expect(refs()).toBe(before);
+  });
+
+  it("publication refuses a source other than the prepared one", () => {
+    publishSource();
+    const prepared = run("prepare");
+    expect(prepared.status, prepared.stderr).toBe(0);
+    const before = refs();
+    const target = prepared.outputs.target!;
+    const result = run("complete", { target, validated: target, preparedSource: base });
+    expect(result.stderr).toContain("difere da preparada");
+    expect(refs()).toBe(before);
+  });
+
+  it("rejects a release child that keeps or rewrites a consumed fragment", () => {
+    publishSource("fix: fragmento", { ...notes(false), "changelog.d/um.md": fragment("Técnica.", "Visível.") });
+    const prepared = run("prepare");
+    expect(prepared.status, prepared.stderr).toBe(0);
+    const target = prepared.outputs.target!;
+    git(repo, "checkout", "--detach", source);
+    git(repo, "checkout", target, "--", "package.json", "CHANGELOG.md", "USER_CHANGELOG.pt-BR.md", "USER_CHANGELOG.en.md");
+    writeFileSync(`${repo}/changelog.d/um.md`, fragment("Reescrita.", "Reescrita."));
+    git(repo, "add", ".");
+    git(repo, "commit", "-qm", "chore(release): 1.0.1", "-m", `Promotion-Source: ${source}\nPromotion-Base: ${base}`);
+    const forged = git(repo, "rev-parse", "HEAD");
+    const before = refs();
+    expect(run("complete", { target: forged, validated: forged }).stderr).toContain("fora do versionamento");
     expect(refs()).toBe(before);
   });
 });

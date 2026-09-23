@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.22.2] - 2026-09-23T10:46:42.000Z
+
 
 ### Melhorado
 

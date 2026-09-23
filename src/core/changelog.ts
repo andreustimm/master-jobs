@@ -117,7 +117,7 @@ type Fence = {
   length: number;
 };
 
-type MarkdownLine = {
+export type MarkdownLine = {
   code: boolean;
   end: number;
   line: number;
@@ -230,7 +230,7 @@ function releaseHeaderAt(
   };
 }
 
-function linesIn(markdown: string): MarkdownLine[] {
+export function linesIn(markdown: string): MarkdownLine[] {
   const lines: MarkdownLine[] = [];
   let fence: Fence | null = null;
   let offset = 0;
@@ -278,6 +278,16 @@ export function changelogSections(markdown: string): ChangelogSection[] {
     headers[index]!.bodyEnd = headers[index + 1]!.index;
   }
   return headers;
+}
+
+/** `## [Unreleased]` bare: no date, no suffix — the only header a release stamps. */
+export function isCanonicalUnreleased(section: ChangelogSection): boolean {
+  return (
+    section.token === "Unreleased" &&
+    section.publication === undefined &&
+    section.publicationSyntaxValid &&
+    section.versionSyntaxValid
+  );
 }
 
 export function hasNoUserChangeMarker(markdown: string): boolean {
