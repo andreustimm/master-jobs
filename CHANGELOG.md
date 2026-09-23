@@ -9,6 +9,148 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-09-23
+
+### Alterado
+
+- CI: o job `e2e-navegador` roda `pnpm test:e2e` inteiro (UI, papéis, 320–1024 px, inglês, temas, WebKit e axe) em todo PR e push, com PostgreSQL descartável do próprio harness, navegadores em cache pela versão do Playwright (restauração e gravação separadas, para gravar também com a suíte vermelha) e nenhum segredo. Ainda fora do agregador `qualidade` (exceção registrada em `NON_BLOCKING_JOBS`, `tests/support/ci-workflow.ts`) e da promoção até a instabilidade estar medida (#202).
+- E2E: as listas das varreduras transversais saíram de `ui.mjs`/`a11y.mjs` para `tests/e2e/routes.mjs`; `tests/e2e-route-coverage.test.ts` cruza-as com o inventário de páginas, exige que as varreduras as consumam, e página sem varredura nem exceção em `UNMEASURED_PAGES` reprova. `/jobs/new`, `/admin/operacoes` e as telas sem sessão (`/login`, `/login/forgot`, `/login/reset`) entraram nas varreduras. `gotoMeasured` reprova quando a varredura cai em outra tela (por exemplo, `/login`) em vez de medi-la.
+- E2E: o build descartável não recebe mais nenhum `.env*` além de `.env.example` (`copiedToHarness`); um checkout com `.env.production` levava a configuração de produção ao servidor do E2E.
+- Busca, empresa e as faixas deixaram de ser remontados por `key` a cada
+  resposta: `useAppliedValue` segue a URL sem apagar o texto ainda não enviado
+  do campo em foco, e período e moeda do `PayRange` seguem a URL por
+  `useFollowed`.
+- Em `/jobs`, sessão vencida com cookie presente redireciona para `/login`
+  pelo cliente, e não mais por 307: o esboço já comprometeu a resposta em 200.
+  Sem cookie, o `proxy.ts` continua respondendo antes da página. Por isso
+  `pnpm perf:producao` confere a sessão em `/account` ao fim de cada rodada, e o TTFB
+  de `/jobs` passa a medir a chegada do esboço.
+- No detalhe da vaga, a espera da nota por trilha só aparece para quem tem
+  mais de uma trilha ativa.
+- `importPdfAction` recusa arquivo que não começa como PDF antes de chamar o
+  extrator, em vez de deixar o `unpdf` estourar.
+- CI em jobs paralelos: `contratos` (changelogs, tracker de QA, tipos, skills de QA), `testes` em quatro fatias Vitest com relatório `blob`, `cobertura` (mescla as fatias e aplica o piso de `vitest.config.ts` sobre o total), `pwa-browser` com Chromium em cache, `build` com `.next/cache` em cache e `schema-e-migracao`. `qualidade` virou agregador com `if: always()`, e segue sendo, com `schema-e-migracao`, o nome exigido pela promoção e pelo ruleset de `main`. Medido: 6 min 53 s → 2 min 41 s.
+- Governança (#196): `main`, `staging` e `dev` recusam exclusão e force-push para todos.
+- `main` exige PR com 1 aprovação e os checks `qualidade` e `schema-e-migracao`, sem modo estrito e sem bypass de CI; o admin só dispensa a aprovação dentro de PR, e o `GITHUB_TOKEN` não tem bypass.
+- O ambiente `Production` só aceita `main`, e `can_admins_bypass` está desligado.
+- O push direto do commit de versão de hotfix em `main` passa a ser recusado; a versão do hotfix fecha por PR humana, com a tag criada antes dela.
+- `dev` e `staging` ficam sem PR/CI obrigatório no remoto porque a API recusa o GitHub Actions como bypass em repositório de conta pessoal.
+- Instruções (#200): `AGENTS.md` vira entrada comum compacta (regras 1–24 resumidas, roteador por área, fluxo curto) e o detalhe normativo passa para `docs/engineering/rules/`, em seis domínios, com o inventário das 84 obrigações da auditoria e a situação dos conflitos C01–C22. Contradições antigas corrigidas: token bruto em componente, "sem JS de cliente", "única mutação da UI", versão do scorer copiada, conteúdo alterado que não invalidaria o score, "editar ambos" AGENTS/CLAUDE e o modelo de ameaça "só local". Inventário de comandos movido para `docs/cli.md` e mapa de diretórios para `docs/architecture.md`.
+- Skills e comandos (#201) apontam para as regras canônicas em vez de reescrevê-las: `ship-pr` e `deep-review` não concedem a si mesmas dispensa de `FIX_BEFORE_SHIP`, e a nota de release da `ship-pr` é o fragmento de `changelog.d/`; `job-triage`, `/vagas` e `/aplicar` propõem e só registram no funil o que o usuário decidiu, sem enviar candidatura; `/fonte-nova` deixa de tratar board vazio como handle errado; `agent-browser` e `linkedin-positioning` explicitam que ferramenta disponível não autoriza agir no LinkedIn; `a11y-testing` descreve o banco PostgreSQL do E2E; `candidate-profile` lê pesos e lacunas do `profile.yaml` em vez de copiá-los. `docs/engineering/skills-evaluation.md` registra o vínculo.
+- `varredura.yml` vira rede de segurança: com `VARREDURA_AGENDADOR=supabase`, o disparo agendado não roda; o manual continua. O teste de agendador único passa a conferir o SQL do `pg_cron` e a condição do Actions.
+- `runVerifyQueue` aceita `budgetMs`, `runFetchStage` aceita `timeoutMs` por página, `syncSource` sincroniza uma fonte só e `scoreCandidate` pontua um candidato sem lançar — as unidades das fatias, sem segunda implementação.
+- `/api/cron/recheck` usa a borda comum e o mesmo teto de tempo.
+
+### Corrigido
+
+- E2E: o cenário de termos em Buscas espera o formulário assentar (`aria-busy`) antes de digitar o termo seguinte; o reset do formulário não controlado apagava o campo sob carga e o termo nunca era salvo.
+- E2E: duas corridas do teste achadas nas primeiras execuções no CI. E2E-016 aceita que o aviso de demora (`prolonged`, aos 3 s) apareça durante as doze amostras de tema — a prova de "não reiniciou" é a geração. O callback vencido volta à mesma tela (`/login?error=invalid`) e pode não abrir overlay; a observação espera o alerta, não `route-login`, que já estava visível antes do push, e exige no máximo uma camada.
+- Janela parcial não fecha mais vaga por ausência (#211). Todo adapter declara
+  em `fetchJobs()` se a listagem é `complete` ou `partial` (`SourceSnapshot`), e
+  `syncOne()` só fecha o que deixou de listar quando `decideAbsenceClosure()`
+  confirma listagem completa e não vazia. Himalayas, Remotive, Arbeitnow,
+  RemoteOK, Adzuna e Jobicy — e SmartRecruiters, Workable, Braintrust e career
+  pages quando cortados pelo teto — fechavam a cada rodada vagas que só tinham
+  saído da janela; agora essas fecham apenas por 404/410 na reconferência.
+- `enqueueStale()` e `verifyJobs()` leem a melhor nota por vaga de um CTE
+  agregado uma vez (`bestPrimaryFitByJob`) em vez de uma subconsulta
+  correlacionada por vaga repetida no `WHERE` e no `ORDER BY`. Novo índice
+  `job_score_job_idx (job_id, fit)`, migração aditiva `0015_job_score_job_idx`.
+- A reconferência agendada tem um dono só: o cron de `/api/cron/recheck` saiu
+  de `vercel.json` e a varredura do GitHub é o único agendador de
+  `jobs recheck`, travado por teste. A rota continua para chamada manual.
+- Candidato novo (e quem troca o currículo) só ganhava trilha principal e notas
+  na varredura diária do GitHub Actions (#280). As ações que enfileiram em
+  `score_task` — `saveCvAction`, `importPdfAction`, `restoreVersionAction`,
+  `createProfileAction` — agora rodam uma fatia da fila no
+  `after()` (`scoreAfterResponse`, `SCORE_SLICE_MS` = 20 s). `scoreAll` aceita
+  `deadline`: lê em páginas por id, confere o prazo depois de cada lote e
+  devolve `complete: false`; `runScoreQueue({ budgetMs })` devolve a tarefa a
+  `pending` sem gastar tentativa e soma `scored` entre as fatias. Nova fatia
+  `repontuar` em `/api/cron/varredura` drena `score_task` com o orçamento da
+  chamada (`detail: { scored, deferred, pending }`), agendada a cada 2 min em
+  `supabase/cron/varredura.sql` (`jho-varredura-repontuar`). ADR 0026.
+- A derivação que recusa (`sem-curriculo`, `curriculo-fraco`,
+  `catalogo-vazio`) aparecia como `failed`; `scoreQueueDisplay` devolve
+  `refused` com `reason` (`noCv`, `weakCv`, `emptyCatalog`), e o cartão da
+  área do candidato traduz o motivo e a saída.
+- Coordenador de tarefas: a janela de entrega começa no **instante** do primeiro claim (`firstClaimedAt`, novo campo opcional do registro de coordenação), não em "Iniciado em". O campo do Project é de data e era lido como meia-noite UTC, aceitando como entrega um merge do mesmo dia anterior ao claim.
+- Coordenador de tarefas: o deployment de produção chega às PRs das tarefas pelos commits da promoção `staging → main`. Antes, o SHA de main só resolvia a própria PR de promoção, com base `main`, e a sugestão de "Concluído" em produção nunca disparava. Só deployment Production de main bem-sucedido, de promoção mesclada, é expandido; número de issue ou inexistente numa mensagem é descartado; promoção com 250 commits ou mais pede reconciliação explícita.
+- Coordenador de tarefas: tarefa que muda entre o recibo preparado e a escrita recebe `rejected`, não `uncertain` — nada foi escrito, e `uncertain` trancava a issue até uma reconciliação.
+- Coordenador de tarefas: um `reconcile` confirmado na retomada também rejeita os recibos pendentes da issue; antes só a primeira tentativa o fazia, e a issue continuava trancada.
+- Coordenador de tarefas: retomar um `create` interrompido só acrescenta o pai e as dependências que ainda faltam, porque o GitHub recusa o vínculo repetido.
+- `pnpm tasks refresh`: o lock da projeção guarda o pid do dono, e o de um refresh interrompido é recuperado em vez de bloquear todo refresh seguinte.
+- `boardConditions` (`src/core/db/repo.ts`) ganha `keepUnscored`: com ele, vaga sem nota do candidato passa pelo filtro de Score (`fit is null or …`, no mínimo e no máximo) em vez de valer zero. `toBoardFilters` e as facetas de `/jobs` e do cockpit o pedem, então lista, total, faixa salarial, facetas, cockpit e exportação deixam de mostrar o quadro vazio ao candidato recém-criado sob o corte padrão de 45 (#279, regra 8). Relatório, `jobs list` e a varredura de triagem continuam estritos; a ordenação continua levando as sem nota para o fim; o acervo sem escopo de candidato não muda.
+- `hasTrackScores` e `corpusStats().scored` dizem se o candidato já tem nota na trilha principal; `/jobs` (aviso `scores_pending`) e o cockpit mostram que o cálculo está pendente enquanto não tem.
+
+### Adicionado
+
+- Filtros de `/` e `/jobs` que se aplicam ao terminar o gesto (#218). Busca e
+  empresa: 400 ms sem digitar, com três caracteres ou mais (ou vazio). Faixas de
+  Score e salarial: `onValueCommitted` do slider e saída do foco da faixa
+  inteira. Moeda e período: ao escolher. A ilha `app/auto-submit.tsx` só chama
+  `requestSubmit()` no formulário GET em volta; as regras (`textReady`,
+  `sameDestination`, `createAutoSubmitter`) são puras em `app/auto-apply.ts`.
+  Um pedido por controle, o último vence; o envio espera a navegação anterior
+  confirmar a URL e é descartado se levaria à URL atual. Enter e Aplicar
+  continuam imediatos e cancelam o pedido pendente. A lista de fontes mantém o
+  Aplicar explícito.
+- E2E `tests/e2e/filter-auto-apply.mjs`, que conta as navegações RSC de `/jobs`
+  e retém a resposta para provar que a última digitação vence.
+- Fronteira de carregamento em `/jobs`: `app/jobs/(lista)/loading.tsx` mostra
+  o título real e um esqueleto com `aria-busy` e aviso `role="status"` do
+  dicionário (`jobs.loading`). Com ela o roteador pré-carrega a fronteira da
+  rota dinâmica, e a troca de tela para Vagas mostra o esboço na hora; a lista
+  chega por streaming. A página foi para o grupo `(lista)` para a fronteira não
+  envolver `/jobs/<id>`, `/jobs/<id>/paises` e `/jobs/new`: o fallback
+  compromete o status em 200, e a vaga inexistente precisa continuar 404.
+  `app/loading.tsx` continua ausente. Filtro, ordem e página na mesma tela não
+  mostram o esboço: o Next 16 mantém a fronteira pela chave de estado sem a
+  query, e a transição suave da #220 segue mostrando a lista anterior.
+- `/jobs/<id>` transmite por `<Suspense>` a nota por trilha e o histórico da
+  candidatura, depois de autenticação e `notFound()`; cabeçalho, nota principal
+  e formulário do funil não esperam mais por essas leituras
+  (`jobDetail.loadingSection`).
+- E2E `tests/e2e/jobs-loading.mjs`: retém a navegação RSC de `/jobs` para ver
+  o esboço pré-carregado na troca de tela, prova que filtro na mesma tela não o
+  mostra, que o documento transmite o esboço antes da lista e que o 404 do
+  detalhe se mantém.
+- "Criar meu perfil" aceita o currículo em PDF (#278). `createProfileAction`
+  lê o campo `cvFile` e extrai pelo novo `readCvPdf` (`src/core/pdf.ts`), o
+  mesmo caminho que `importPdfAction` passou a usar: teto de 10 MB
+  (`CV_PDF_MAX_MB`), tipo decidido pelos bytes (`%PDF-` no primeiro KB) e
+  mínimo de texto igual a `CV_MIN`. A extração roda depois da guarda e da
+  validação dos campos baratos; PDF junto com texto colado é recusado
+  (`cvBoth`); recusas voltam como código traduzível (`pdfNotPdf`,
+  `pdfNoText`, `pdfTooLarge`), e o sucesso por PDF devolve `run: "fromPdf"`
+  para o aviso pedir a revisão no editor.
+- `scripts/github/verify-protections.ts` confere o estado efetivo dos rulesets e do ambiente `Production` contra a política versionada (#196); limites da plataforma, caminho humano e reversão em `docs/engineering/github-protections.md`.
+- Tracing do servidor no Sentry (#219), amostrado por `SENTRY_TRACES_SAMPLE_RATE`
+  (padrão 10%; `0` ou valor ilegível desliga). Cada estágio já medido das telas
+  (`auth`, `prelude`, `board`, `facets`, `tail`, `cockpit`…) vira um span
+  `jho.etapa` dentro de um `jho.leitura` por rota (`criarCronometro`,
+  `rastrearEtapa`). A peneira é pura e testada em `src/core/observability.ts`:
+  `scrubTransaction`/`scrubSpan` (`beforeSendTransaction`/`beforeSendSpan`)
+  tiram query string do nome e dos spans, reduzem SQL ao verbo e só deixam sair
+  atributos de uma lista de permissão (`ALLOWED_SPAN_DATA`) — `http.target`,
+  `url.full`, `url.query`, `client.address`, `db.query.text` e
+  `server.address` não saem. `tracePropagationTargets: []` impede o
+  `baggage` de ir para os boards, e um `tracesSampler` fixo impede o cabeçalho
+  `sentry-trace` de um cliente forçar a amostragem acima da taxa (ou furar o
+  `0`). Falha do SDK ao abrir ou encerrar o span nunca derruba a tela. As
+  migalhas de erro também perdem a query.
+- Mapas de origem do servidor publicados no Sentry no build (#212), pelo gancho
+  `compiler.runAfterProductionCompile` e `@sentry/cli` (`sourcemaps inject` +
+  `upload` em `.next/server`, release = SHA). Sem `SENTRY_AUTH_TOKEN` nada
+  muda — nem `.map` é gerado — e o log de build diz por quê; falha de envio
+  não derruba o build. Sem `withSentryConfig`, sem mapa de cliente.
+- `docs/engineering/github-project-verification.md` (#189): cada cenário CAN-01…14 ligado ao teste que o prova e ao que só o ensaio real prova.
+- `tests/tasks-workflows.test.ts` prende a superfície de escrita do coordenador: nenhum caminho para merge, deployment, ref ou dispatch de workflow, e só as seis mutações GraphQL conhecidas.
+- `docs/engineering/github-project-tasks.md`: regras nativas do Project antes/depois e a conferência pela UI no corte (#186).
+- Varredura fatiada na Vercel (ADR 0025, #281): `GET /api/cron/varredura?fatia=sync|termos|captura|reconferencia|pontuar` faz, por chamada, o que cabe em 20 s. Sync por fonte em round-robin (tentativa mais antiga primeiro, no máximo a cada 45 min), pontuação por candidato a cada 10 min, reserva por unidade com prazo em `sweep_lease` e métrica por chamada e por unidade em `sweep_run` (migração `0016_sweep_lease_and_runs`, aditiva). Alarme de fonte há mais de 2 h sem sync no log e no Sentry, no máximo uma vez por hora.
+- Agendamento por `pg_cron` + `pg_net` no Supabase, versionado em `supabase/cron/varredura.sql` e lido do Vault; ativação é passo humano (runbook em `docs/operations.md`).
+- `authorizeCronRequest` (contexto de autenticação) e `app/api/cron/authorize.ts`: a borda única do cron por segredo, em tempo constante e sem vazar tamanho. `tests/architecture.test.ts` exige que toda rota de `/api/cron/` recuse pelo segredo antes do primeiro `await`.
+
 ## [1.22.2] - 2026-09-23
 
 

@@ -154,6 +154,15 @@ export async function onboardingSession(): Promise<Session | null> {
   return mayCreateProfile(session) ? session : null;
 }
 
+/**
+ * Se a sessão vê a parte de administração de uma tela comum (custo, modelo,
+ * tentativas). Sessão emprestada não vê: `admin:access` é ação de
+ * administração, negada em bloco pelo `can()`.
+ */
+export function mayAdminister(session: Session | null): boolean {
+  return can(session, "admin:access").allowed;
+}
+
 /** A mesma pergunta, para quem já tem a sessão em mãos (o layout, no link). */
 export function mayCreateProfile(session: Session | null): boolean {
   // O modo aberto sintetiza uma sessão sem conta por trás: não há linha a que

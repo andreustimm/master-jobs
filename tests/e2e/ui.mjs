@@ -23,8 +23,10 @@ import { chromium, webkit } from "playwright";
 import { readFile } from "node:fs/promises";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { checkWorkModes } from "./work-mode.mjs";
+import { checkSearchRelevance } from "./search-relevance.mjs";
 import { checkFilterAutoApply } from "./filter-auto-apply.mjs";
 import { checkJobsLoading } from "./jobs-loading.mjs";
+import { checkJobAnalysis } from "./job-analysis.mjs";
 import {
   ENGLISH_ANONYMOUS_SWEEP,
   ENGLISH_OWNER_SWEEP,
@@ -3808,8 +3810,13 @@ try {
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await checkWorkModes(page, BASE, check);
+  await checkSearchRelevance(page, BASE, check);
   await checkFilterAutoApply(browser, BASE, { email: "e2e-candidato@local.test", password: E2E_PASSWORD }, check);
   await checkJobsLoading(browser, BASE, { email: "e2e-candidato@local.test", password: E2E_PASSWORD }, check);
+  await checkJobAnalysis(browser, BASE, {
+    candidate: { email: "e2e-candidato@local.test", password: E2E_PASSWORD },
+    admin: { email: E2E_EMAIL, password: E2E_PASSWORD },
+  }, check);
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   const firstJobLink = page.locator('[data-testid^="job-link-"]').first();
   const contextualPhases = [];

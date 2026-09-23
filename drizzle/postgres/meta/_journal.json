@@ -124,15 +124,29 @@
     {
       "idx": 17,
       "version": "7",
-      "when": 1790196388004,
-      "tag": "0017_source_catalog",
+      "when": 1790196707271,
+      "tag": "0017_job_title_trgm",
       "breakpoints": true
     },
     {
       "idx": 18,
       "version": "7",
-      "when": 1790196734864,
-      "tag": "0018_backfill_source_origin",
+      "when": 1790203769317,
+      "tag": "0018_job_analysis",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790207845026,
+      "tag": "0019_source_catalog",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790207847692,
+      "tag": "0020_backfill_source_origin",
       "breakpoints": true
     }
   ]

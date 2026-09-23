@@ -16,7 +16,7 @@ import { isPublicJobUrl } from "../../../src/core/job-url.ts";
 import { trackFitsForJob } from "../../../src/core/scoring/apply.ts";
 import { trackAction } from "../../actions";
 import { Fit, Legend, ScoreBar, StatusBadge } from "../../ui";
-import { candidateScope, requirePage } from "../../auth";
+import { candidateScope, mayAdminister, requirePage } from "../../auth";
 import { getTranslator } from "../../i18n";
 import type { Translator } from "../../../src/core/i18n/index.ts";
 import { LoadingRegion, SkeletonBar } from "../../skeleton";
@@ -25,6 +25,7 @@ import {
   applicationStatusLabels,
   applicationStatusOptions,
 } from "../../status.ts";
+import { JobAnalysisSection } from "./job-analysis";
 import { TrackForm } from "./track-form";
 import { TriageButton } from "../../triage-button";
 
@@ -212,6 +213,12 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
           <Timeline candidateId={candidateId} jobId={job.id} t={t} />
         </Suspense>
       )}
+
+      {/* Leitura só da vaga, igual para todo papel que lê o acervo; custo e
+          modelo só para admin, decidido pelo `can()` e não pela tela. */}
+      <Suspense fallback={<SectionLoading label={t("jobDetail.loadingSection")} testId="job-analysis-loading" />}>
+        <JobAnalysisSection jobId={job.id} admin={mayAdminister(session)} t={t} />
+      </Suspense>
 
       {job.descriptionText && (
         <section>

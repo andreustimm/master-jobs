@@ -151,7 +151,7 @@ describe("IT-001 migration 0018: origem das linhas que já existiam", () => {
       { id: "manual:sample", kind: "manual", handle: "sample", label: "Fixture" },
       { id: "lever:tela", kind: "lever", handle: "tela", label: "Tela", origin: "admin" },
     ]);
-    const backfill = readFileSync(resolve(process.cwd(), "drizzle/postgres/0018_backfill_source_origin.sql"), "utf8");
+    const backfill = readFileSync(resolve(process.cwd(), "drizzle/postgres/0020_backfill_source_origin.sql"), "utf8");
 
     await db.execute(sql.raw(backfill));
     await db.execute(sql.raw(backfill));

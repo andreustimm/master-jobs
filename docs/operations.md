@@ -15,7 +15,7 @@
 
 ## Catálogo de fontes: passar a verdade para o banco
 
-Com a migration `0017_source_catalog` aplicada, o catálogo continua espelhando
+Com a migration `0019_source_catalog` aplicada, o catálogo continua espelhando
 `config/sources.yaml` linha a linha até alguém importá-lo. A transição é
 explícita e de uma vez (#223):
 

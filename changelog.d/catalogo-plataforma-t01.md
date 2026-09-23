@@ -3,7 +3,7 @@
 ### Adicionado
 
 - Catálogo de fontes governado pelo banco (#223, tarefa 01). Migration aditiva
-  `0017_source_catalog` e `0018_backfill_source_origin`: `source` ganha `retired_at`, `origin`, `config_revision`,
+  `0019_source_catalog` e `0020_backfill_source_origin`: `source` ganha `retired_at`, `origin`, `config_revision`,
   `secret_ref` e `managed_at`. Linha não gerida espelha `config/sources.yaml`,
   inclusive `enabled: false`, e é desabilitada quando sai do arquivo; linha
   gerida (importada ou editada) nunca é sobrescrita pelo YAML.

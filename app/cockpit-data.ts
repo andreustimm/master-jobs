@@ -54,7 +54,7 @@ export async function loadCockpit(
     minFit: state.fit,
     keepUnscored: filters.keepUnscored,
     cluster: state.cluster,
-    term: state.term,
+    query: filters.query,
     sourceKinds: state.sources,
     workMode: state.workMode,
     groupRepeats: filters.groupRepeats,

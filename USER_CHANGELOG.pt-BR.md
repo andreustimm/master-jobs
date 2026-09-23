@@ -18,6 +18,35 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-09-23T18:11:35.000Z
+
+### Melhorado
+
+- Os filtros de Vagas e do Cockpit se aplicam sozinhos: a busca, quando você
+  para de digitar (a partir de três letras); o Score e a faixa salarial, quando
+  você solta o controle ou sai dos campos; moeda e período, ao escolher.
+  Durante o arrasto a lista fica como está. Enter e o botão
+  Aplicar continuam funcionando na hora, e as fontes seguem com o Aplicar
+  próprio.
+- A conferência diária de vagas ainda abertas ficou mais leve para o sistema.
+- A tela de Vagas responde na hora ao clique no menu: enquanto a lista carrega,
+  aparece o esboço da página no lugar da tela anterior. Mudar um filtro continua
+  mostrando a lista atual até a nova chegar. No detalhe de uma vaga, a nota por
+  trilha e o histórico da candidatura chegam logo depois do restante, sem
+  atrasar a abertura da página.
+- O sistema passa a medir quanto tempo cada tela leva, numa amostra das visitas, para achar lentidão antes que ela vire problema. O que você procura, seus filtros, seu currículo e seus dados de contato não fazem parte dessa medida.
+
+### Corrigido
+
+- Vagas de sites que mostram só as publicações mais recentes não somem mais do quadro só porque desceram na lista. Elas continuam abertas até a conferência do link confirmar que o anúncio saiu do ar.
+- Quem cria o perfil ou salva um currículo passa a ter a trilha principal e as notas calculadas logo depois de salvar, em vez de esperar a atualização do dia seguinte.
+- Quando o currículo é curto demais para montar a trilha, a área do candidato diz isso e o que fazer — colar o currículo completo ou importar o PDF — em vez de mostrar só "Falha na atualização".
+- Conta nova agora vê as vagas em Vagas e no início antes de as notas serem calculadas, com um aviso de que o cálculo ainda está em andamento. Antes, a tela ficava vazia.
+
+### Novidade
+
+- Ao criar o perfil, dá para enviar o currículo em PDF em vez de colar o texto. O texto extraído vira a primeira versão do currículo, e o perfil abre direto no editor para você revisar.
+
 ## [1.22.2] - 2026-09-23T10:46:42.000Z
 
 

@@ -193,6 +193,12 @@ export const job = production.table(
     index("job_description_trgm_idx")
       .using("gin", sql`${withoutSeparators(t.descriptionText)} gin_trgm_ops`)
       .where(sql`${t.closedAt} is null`),
+    // Grupo "termos parecidos" (#223): o `termo <% title` de `nearMatchesQuery`.
+    // Sobre o título cru, sem tirar separador: a similaridade por palavra
+    // compara palavras, e é o espaço que as separa.
+    index("job_title_trgm_idx")
+      .using("gin", sql`${t.title} gin_trgm_ops`)
+      .where(sql`${t.closedAt} is null`),
   ],
 );
 
@@ -1171,6 +1177,64 @@ export const llmModel = production.table(
 
 export type LlmProvider = typeof llmProvider.$inferSelect;
 export type LlmModel = typeof llmModel.$inferSelect;
+
+/**
+ * Análise estruturada da VAGA (#223, tarefa 06): uma linha por tentativa,
+ * imutável depois de terminal. Nova tentativa é linha nova ligada por
+ * `retry_of`; a original não muda. Fila em tabela (ADR 0009), processada pela
+ * CLI — nunca pela requisição da Vercel.
+ *
+ * Nunca guarda a chave nem o corpo da resposta do provedor (G41): `result` é a
+ * estrutura já conferida contra a evidência, e o erro é só um código.
+ */
+export const jobAnalysis = production.table(
+  "job_analysis",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    // A retenção só apaga vaga sem candidatura, e a análise não vale sem a vaga.
+    jobId: integer("job_id")
+      .notNull()
+      .references(() => job.id, { onDelete: "cascade" }),
+    // Quem pediu sai, a análise da vaga fica.
+    requestedBy: integer("requested_by").references(() => authUser.id, { onDelete: "set null" }),
+    /**
+     * Tentativa anterior do mesmo texto. `no action`, não `restrict`: os dois
+     * impedem apagar a original sozinha, mas `restrict` confere na hora e faria
+     * a retenção falhar ao apagar em cascata uma vaga com duas tentativas; `no
+     * action` confere no fim do comando, quando as duas já saíram juntas.
+     */
+    retryOf: integer("retry_of"),
+    /** queued | running | succeeded | partial | failed | paused_quota | interrupted */
+    status: text("status").notNull().default("queued"),
+    /** SHA-256 do texto normalizado enviado; diferente do atual = "a vaga mudou". */
+    inputHash: text("input_hash").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    providerSlug: text("provider_slug"),
+    modelId: text("model_id"),
+    result: json("result"),
+    errorCode: text("error_code"),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    costEstimate: doublePrecision("cost_estimate"),
+    claimedAt: text("claimed_at"),
+    heartbeatAt: text("heartbeat_at"),
+    finishedAt: text("finished_at"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [
+    foreignKey({ columns: [t.retryOf], foreignColumns: [t.id], name: "job_analysis_retry_of_fk" }).onDelete("no action"),
+    // Idempotência: um pedido ativo por texto e versão. Clique duplo e corrida
+    // de processos batem aqui, não numa leitura antes de gravar.
+    uniqueIndex("job_analysis_active_idx")
+      .on(t.jobId, t.inputHash, t.schemaVersion)
+      .where(sql`${t.status} in ('queued', 'running')`),
+    index("job_analysis_job_idx").on(t.jobId, t.id),
+    index("job_analysis_claim_idx").on(t.status, t.id),
+  ],
+);
+
+export type JobAnalysisRow = typeof jobAnalysis.$inferSelect;
 
 /* -------------------------------------------------------------------------- */
 /* Authentication (AUTH-01)                                                   */
