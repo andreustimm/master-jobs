@@ -1,7 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  ChangelogFragmentError,
+  FRAGMENT_DIRECTORY,
+  assertFragmentNames,
+  type ChangelogFragment,
+} from "../../src/core/changelog-fragments.ts";
 import {
   ReleaseDomainError,
   validarReleasePendente,
@@ -71,6 +77,34 @@ function readDocuments(options: Options): ReleaseDocuments {
   };
 }
 
+/**
+ * With `--staged`, the index decides: an unstaged fragment is not in the
+ * commit. Without it, Git still decides what counts: tracked and untracked
+ * files, minus what `.gitignore` excludes. A raw directory listing would fail
+ * on a `.DS_Store` nobody commits, and skipping dotfiles by name would let a
+ * committed `.gitkeep` pass here and break the promotion after the merge.
+ */
+function fragmentNames(options: Options): string[] {
+  const args = options.staged
+    ? ["ls-files", "--cached", "-z"]
+    : ["ls-files", "--cached", "--others", "--exclude-standard", "--deduplicate", "-z"];
+  const paths = execFileSync("git", [...args, "--", `${FRAGMENT_DIRECTORY}/`], {
+    cwd: options.directory,
+    encoding: "utf8",
+  }).split("\0").filter(Boolean);
+  // A tracked fragment deleted from the working tree is not part of it.
+  const present = options.staged
+    ? paths
+    : paths.filter((path) => existsSync(resolve(options.directory, path)));
+  return present.map((path) => path.slice(FRAGMENT_DIRECTORY.length + 1));
+}
+
+function readFragments(options: Options): ChangelogFragment[] {
+  const names = fragmentNames(options);
+  assertFragmentNames(names);
+  return names.map((name) => ({ name, content: readProjectFile(`${FRAGMENT_DIRECTORY}/${name}`, options) }));
+}
+
 function packageVersion(options: Options): string {
   const parsed = JSON.parse(readProjectFile("package.json", options)) as { version?: unknown };
   if (typeof parsed.version !== "string" || !versaoSemanticaValida(parsed.version)) {
@@ -101,12 +135,14 @@ export function validatePendingRelease(options: Options): string {
     currentVersion: packageVersion(options),
     documents: readDocuments(options),
     publishedAt: new Date(),
+    fragments: readFragments(options),
   });
   return result.status === "ready" ? `release-ready version=${result.version}` : "no-release";
 }
 
 function safeFailure(error: unknown): string {
   if (error instanceof ReleaseDomainError) return `release_changelog_not_ready code=${error.code}`;
+  if (error instanceof ChangelogFragmentError) return error.message;
   return "release_changelog_not_ready";
 }
 
@@ -120,7 +156,7 @@ if (direct) {
   } catch (error) {
     console.error(safeFailure(error));
     console.error(
-      "Atualize CHANGELOG.md, USER_CHANGELOG.pt-BR.md e USER_CHANGELOG.en.md antes do commit releaseável.",
+      "Adicione um fragmento em changelog.d/<slug>.md (blocos Técnico, pt-BR e en) antes do commit releaseável.",
     );
     process.exitCode = 1;
   }
