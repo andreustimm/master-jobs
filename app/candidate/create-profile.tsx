@@ -4,26 +4,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MutationFeedbackForm } from "../mutation-feedback";
-import { createProfileAction } from "./actions";
+import { createProfileAction, type CreateProfileError } from "./actions";
 import {
   CV_MIN,
+  CV_PDF_MAX_MB,
   HEADLINE_MAX,
   LOCATION_MAX,
   NAME_MAX,
   slugBaseFromName,
-  type OwnProfileError,
-  type PublicSlugError,
 } from "../../src/core/candidate-identity.ts";
 import { publicSlugMessages } from "./public-address";
 import type { Translator } from "../../src/core/i18n/index.ts";
 
 /**
- * Mensagem de cada recusa, já com o limite de verdade. `Record` sobre a união
- * inteira: código novo sem mensagem é erro de compilação, não toast genérico.
+ * Mensagem de cada recusa, já com o limite de verdade, e do sucesso vindo de
+ * PDF. `Record` sobre a união inteira: código novo sem mensagem é erro de
+ * compilação, não toast genérico.
  */
-function refusalMessages(
-  t: Translator["t"],
-): Record<OwnProfileError | PublicSlugError | "slugTaken" | "unavailable", string> {
+function resultMessages(t: Translator["t"]): Record<CreateProfileError | "fromPdf", string> {
   return {
     ...publicSlugMessages(t),
     nameRequired: t("onboarding.nameRequired"),
@@ -32,7 +30,13 @@ function refusalMessages(
     headlineTooLong: t("onboarding.headlineTooLong", { max: HEADLINE_MAX }),
     locationTooLong: t("onboarding.locationTooLong", { max: LOCATION_MAX }),
     cvTooShort: t("onboarding.cvTooShort", { min: CV_MIN }),
+    cvBoth: t("onboarding.cvBoth"),
+    pdfMissing: t("onboarding.pdfMissing"),
+    pdfTooLarge: t("onboarding.pdfTooLarge", { max: CV_PDF_MAX_MB }),
+    pdfNotPdf: t("onboarding.pdfNotPdf"),
+    pdfNoText: t("onboarding.pdfNoText"),
     unavailable: t("onboarding.unavailable"),
+    fromPdf: t("onboarding.createdFromPdf"),
   };
 }
 
@@ -45,7 +49,7 @@ function refusalMessages(
  * sessão, e o candidato nasce novo.
  */
 export function CreateProfile({ t, suggestedName }: { t: Translator["t"]; suggestedName: string }) {
-  const messages = refusalMessages(t);
+  const messages = resultMessages(t);
 
   return (
     <main className="pt-10 pb-16" data-testid="route-candidate-onboarding">
@@ -151,6 +155,22 @@ export function CreateProfile({ t, suggestedName }: { t: Translator["t"]; sugges
               />
               <p id="profile-cv-hint" className="type-body-sm text-muted-foreground">
                 {t("onboarding.cvHint")}
+              </p>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="profile-cv-file">{t("onboarding.cvPdf")}</Label>
+              <Input
+                id="profile-cv-file"
+                name="cvFile"
+                type="file"
+                accept="application/pdf,.pdf"
+                aria-describedby="profile-cv-file-hint"
+                className="min-w-0"
+                data-testid="profile-cv-file"
+              />
+              <p id="profile-cv-file-hint" className="type-body-sm text-muted-foreground">
+                {t("onboarding.cvPdfHint", { max: CV_PDF_MAX_MB })}
               </p>
             </div>
 
