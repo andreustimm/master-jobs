@@ -278,7 +278,32 @@ com aviso e as outras fontes seguem.
 ## O portão
 
 `.github/workflows/ci.yml` roda typecheck, testes com cobertura e build no PR e
-no push das três branches. `migrate.yml` aplica migrações somente em produção,
+no push das três branches. Os gates correm em jobs paralelos:
+
+| Job | O que prova |
+|---|---|
+| `contratos` | changelogs prontos, tracker de QA, tipos, contratos das skills de QA |
+| `testes` (4 fatias) | a suíte Vitest, cada fatia num runner com o próprio PostgreSQL em Docker |
+| `cobertura` | mescla os blobs das fatias e aplica o piso de `vitest.config.ts` sobre o total |
+| `pwa-browser` | a fronteira de privacidade do service worker num Chromium real |
+| `build` | `next build`, com `.next/cache` reaproveitado entre execuções |
+| `schema-e-migracao` | `schema.ts` e `drizzle/` em sincronia |
+| `qualidade` | agregador: só passa quando todos os anteriores passaram |
+
+`qualidade` e `schema-e-migracao` são os nomes que a promoção e a proteção de
+branch exigem. O agregador usa `if: always()` porque check obrigatório
+**pulado** conta como aprovado na proteção de branch: sem a condição, um job
+anterior vermelho faria `qualidade` ser pulado, e a PR ficaria mesclável. Job
+novo no CI entra em `qualidade.needs`; `tests/ci-pipeline.test.ts` reprova quem
+esquecer. A fatia de teste zera os limiares de cobertura porque a cobertura de
+um quarto da suíte não mede nada; o piso vale sobre a soma, em `cobertura`.
+
+Não há atalho para PR só de documentação: cerca de quarenta arquivos de teste
+leem `docs/`, os changelogs e `.claude/skills/`, e o build compila os
+changelogs. Pular a suíte nesses casos deixaria passar exatamente a quebra de
+contrato documental que ela existe para pegar.
+
+`migrate.yml` aplica migrações somente em produção,
 por `workflow_dispatch`, depois de confirmar o project ref do Supabase. As
 migrations de `dev` e `staging` ficam desativadas até existirem bancos de
 fixture isolados. Esta configuração não pausa os deployments da Vercel.

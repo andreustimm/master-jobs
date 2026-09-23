@@ -1,10 +1,10 @@
 // Suite: QA tracker gate
 // Invariant: every scenario in docs/qa/scenarios/ is checked against the state schema by `pnpm check` and by CI
-// Boundary IN: package.json scripts, the CI quality job and .gitignore wiring
+// Boundary IN: package.json scripts, the CI jobs gated by `qualidade` and .gitignore wiring
 // Boundary OUT: the validator's own rules, covered by .claude/skills/qa-report/tests/test_scripts.py
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import YAML from "yaml";
+import { ciWorkflow, gatedJobWithStep } from "./support/ci-workflow.ts";
 
 // `docs/qa/state.csv` é visão gerada e ignorada pelo git: sem gate, o esquema só
 // era conferido quando alguém rodava o validador de propósito, e a primeira vez
@@ -28,12 +28,10 @@ describe("QA tracker gate", () => {
     expect(pkg.scripts.check?.split(" && ")).toContain("pnpm check:qa-tracker");
   });
 
-  it("is a step of the CI quality job, which runs the gates one by one", () => {
-    const ci = YAML.parse(readFileSync(".github/workflows/ci.yml", "utf8")) as {
-      jobs: { qualidade: { steps: Array<{ name?: string; run?: string }> } };
-    };
+  it("is a step of a CI job that the quality aggregator requires", () => {
+    const ci = ciWorkflow();
 
-    expect(ci.jobs.qualidade.steps.map((step) => step.run)).toContain("pnpm check:qa-tracker");
+    expect(() => gatedJobWithStep(ci, (step) => step.run === "pnpm check:qa-tracker")).not.toThrow();
   });
 
   it("keeps Python bytecode out of the tree for whoever skips the gate", () => {

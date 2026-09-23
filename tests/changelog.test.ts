@@ -23,6 +23,7 @@ import {
 import { en } from "../src/core/i18n/en.ts";
 import { DEFAULT_LOCALE, resolveLocale, translator } from "../src/core/i18n/index.ts";
 import { ptBR } from "../src/core/i18n/pt-BR.ts";
+import { checkoutOf, ciWorkflow, gatedJobWithStep } from "./support/ci-workflow.ts";
 
 function release(version: string, publication: string, body = "### New\n\n- Visible change."): string {
   return `## [${version}] - ${publication}\n\n${body}\n`;
@@ -794,10 +795,13 @@ describe("localized repository integration", () => {
         historicalVersions.has(item.version) ? "date" : "instant",
       );
     }
-    const ci = await readFile(".github/workflows/ci.yml", "utf8");
-    const qualityJob = ci.slice(ci.indexOf("  qualidade:"), ci.indexOf("  schema-e-migracao:"));
-    expect(qualityJob).toContain("fetch-depth: 0");
-    expect(qualityJob).toContain("fetch-tags: true");
+    // O job que roda ESTE teste no CI precisa das tags; num clone raso a
+    // lista abaixo sai vazia e o contrato não prova nada.
+    const ci = ciWorkflow();
+    const testJob = gatedJobWithStep(ci, (step) => step.run?.includes("vitest run --shard=") ?? false);
+    const checkout = checkoutOf(ci.jobs[testJob]!);
+    expect(checkout?.with?.["fetch-depth"]).toBe(0);
+    expect(checkout?.with?.["fetch-tags"]).toBe(true);
     const metadata = execFileSync(
       "git",
       ["tag", "--list", "v*", "--format=%(objecttype)"],
