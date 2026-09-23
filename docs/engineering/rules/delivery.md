@@ -170,17 +170,25 @@ aplicado, caminho humano e verificação em
 afrouxa a regra.
 
 <a id="g51"></a>
-### G51 — Migração suspende a promoção automática
+### G51 — Migração não aditiva suspende a promoção e a migração automáticas
 
-**Obrigação.** Diferença em `drizzle/` ou em `src/core/db/schema.ts` entre
-`staging` e o alvo para o fluxo: o deploy da Vercel e a migração disparam do
-mesmo push e não se conhecem. Migração aditiva sobrevive a essa corrida;
-migração que remove ou renomeia, não — e decidir qual é qual é leitura humana.
-Só dispatch com `confirmar-migracao=true`, depois de revisão humana, prossegue;
-a confirmação nunca dispensa CI.
+**Obrigação.** O deploy da Vercel e a migração disparam do mesmo push para
+`main` e não se conhecem. Migração aditiva sobrevive a essa corrida; migração
+que remove, renomeia, muda tipo, aperta restrição ou reescreve dado, não. Quem
+separa as duas é o detector puro `src/core/db/migration-review.ts`, por lista
+de permissão: forma de comando não prevista conta como não aditiva. Aditiva
+promove sem confirmação e é aplicada sozinha por `migrate.yml` no push para
+`main`. Não aditiva — ou `.sql` publicado alterado, ou arquivo fora de
+`drizzle/postgres/` — para a promoção até dispatch com
+`confirmar-migracao=true`, depois de revisão humana, e para o job automático
+antes de qualquer DDL até o dispatch manual de `migrate.yml`. A confirmação
+nunca dispensa CI. Migração nova ganha veredito em
+`tests/migration-review.test.ts` no mesmo commit.
 
-Detalhes: [promotion.md](../promotion.md) ("Migrações, ancestralidade e
-publicação"), skill `drizzle-safe-migrations`.
+Detalhes: [ADR 0027](../../adr/0027-migracao-automatica-so-aditiva.md),
+[promotion.md](../promotion.md) ("Migrações, ancestralidade e publicação"),
+[deploy.md](../deploy.md#migração-que-não-é-aditiva), skill
+`drizzle-safe-migrations`.
 
 <a id="g52"></a>
 ### G52 — O retorno `main` → `dev` não é opcional

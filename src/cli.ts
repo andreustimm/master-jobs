@@ -12,7 +12,7 @@ import { Command } from "commander";
 import { and, desc, eq } from "drizzle-orm";
 import { closeDb, getDb } from "./core/db/client.ts";
 import { runDatabaseCleanup } from "./core/db/retention.ts";
-import { runMigrations } from "./core/db/migrate.ts";
+import { MigrationNeedsReview, runMigrations } from "./core/db/migrate.ts";
 import { listBoard, primaryScoreFilter } from "./contexts/matching/index.ts";
 import { pipelineCounts, setApplicationStatus } from "./contexts/pursuit/index.ts";
 import { application, job, jobScore, positioningTask } from "./core/db/schema.ts";
@@ -190,10 +190,18 @@ const db = program.command("db").description("Database maintenance");
 
 db.command("migrate")
   .description("Create or upgrade the database schema")
-  .action(async () => {
+  .option("--additive-only", "refuse, before any DDL, when a pending migration is not additive")
+  .action(async (opts: { additiveOnly?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
-      console.log(c.green("✓") + " schema is up to date");
+      try {
+        const applied = await runMigrations(undefined, { additiveOnly: opts.additiveOnly === true });
+        if (applied.length > 0) console.log(c.dim(`  aplicadas: ${applied.join(", ")}`));
+        console.log(c.green("✓") + " schema is up to date");
+      } catch (error) {
+        if (!(error instanceof MigrationNeedsReview)) throw error;
+        console.error(c.red(error.message));
+        process.exitCode = 1;
+      }
     });
   });
 

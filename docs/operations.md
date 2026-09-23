@@ -403,6 +403,25 @@ digitação de alguém, não ausência observada. A implementação e os critér
 [`job-lifecycle-retention`](../.compozy/tasks/job-lifecycle-retention/) e na
 [ADR 0020](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md).
 
+### Migração de produção
+
+Não há passo de rotina: o merge em `main` que traz `drizzle/postgres/**`
+dispara `migrate.yml`, que aplica sozinho o lote pendente quando ele é aditivo
+([ADR 0027](adr/0027-migracao-automatica-so-aditiva.md)). O log mostra
+`aplicadas: <tags>` e depois o `jho db check`.
+
+**Job vermelho com `Migração pendente exige execução manual`:** o lote tem
+comando não aditivo, e nada foi aplicado. A lista abaixo da mensagem diz o
+arquivo, o motivo e o comando. Siga
+[deploy.md](engineering/deploy.md#migração-que-não-é-aditiva) para escolher a
+ordem e dispare `migrate.yml` à mão com o ref do projeto — nunca reexecute o job
+do push esperando outro resultado: ele recusa até o lote mudar.
+
+**Job vermelho por outro motivo** (conexão, SQL que o banco recusou): a
+transação desfez o lote inteiro, e o código novo pode estar servindo sobre o
+schema velho. A causa do servidor vem na mensagem (`— causa: <código>`).
+Corrija para frente, numa migração nova; o push dela dispara o job de novo.
+
 ### Dev e staging: somente fixtures
 
 A promoção para staging é vinculada a um SHA com CI aprovado. Retomada manual

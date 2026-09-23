@@ -134,14 +134,17 @@ atualizar a PR de produção significaria mesclar `main` dentro de `staging`.
 Merge queue também não é usada.
 
 **Revisor obrigatório no ambiente `Production`.** `migrate.yml` usa o ambiente
-por `workflow_dispatch`. `varredura.yml` o usa todo dia por cron, e
+no push para `main` (só migração aditiva, [ADR 0027](../adr/0027-migracao-automatica-so-aditiva.md))
+e por `workflow_dispatch`; um revisor ali também faria o disparo automático
+esperar clique. `varredura.yml` o usa todo dia por cron, e
 `manutencao-banco.yml` toda semana. Um revisor obrigatório pararia as duas
 rotinas à espera de clique, e elas falhariam depois de 30 dias. A aprovação
 humana da migração exige um ambiente só dela (por exemplo
 `production-migrations`, com revisor `andreustimm`, sem autoaprovação
 impedida e restrito a `main`). `migrate.yml` passaria a apontar para ele, e
 `SUPABASE_MIGRATION_URL` seria movido para lá. O valor é *write-only* e
-precisa ser redigitado pelo dono. Hoje a trava humana da migração é o
+precisa ser redigitado pelo dono. Hoje a trava humana da migração não aditiva
+é o detector que para o job do push antes de qualquer DDL, somado ao
 `workflow_dispatch` com confirmação do project ref.
 
 **Uma identidade só.** Os agentes usam a credencial do dono, e o GitHub não

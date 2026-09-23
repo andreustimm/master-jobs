@@ -330,10 +330,13 @@ cobertura mesclada saiu idêntica, contador por contador, à de uma execução
 única local — a divisão não perde nem duplica nada. Se o caminho crítico
 crescer, a primeira alavanca é o número de fatias.
 
-`migrate.yml` aplica migrações somente em produção,
-por `workflow_dispatch`, depois de confirmar o project ref do Supabase. As
-migrations de `dev` e `staging` ficam desativadas até existirem bancos de
-fixture isolados. Esta configuração não pausa os deployments da Vercel.
+`migrate.yml` aplica migrações somente em produção, de dois jeitos
+([ADR 0027](../adr/0027-migracao-automatica-so-aditiva.md)): **sozinho**, no
+push para `main` que traz mudança em `drizzle/postgres/**`, quando todo o lote
+pendente no banco é aditivo; e por `workflow_dispatch`, depois de confirmar o
+project ref do Supabase, para o que exige revisão. As migrations de `dev` e
+`staging` ficam desativadas até existirem bancos de fixture isolados. Esta
+configuração não pausa os deployments da Vercel.
 
 **A Vercel implanta no push, independente do CI.** As duas coisas disparam do
 mesmo evento e não se conhecem. Por isso o portão está na entrada de `main`:
@@ -363,9 +366,52 @@ pnpm jho db migrate
 DATABASE_URL="$DATABASE_MIGRATION_URL" pnpm jho db check
 ```
 
-Em produção, o caminho aprovado é o workflow manual `migrate.yml`, com
-`confirm_project=bujawvnxwtmneiggizje`. A migration deve ser aplicada e
-verificada antes da importação de dados; o workflow recusa outro project ref.
+Em produção, ninguém roda isto no dia a dia: o merge em `main` dispara
+`migrate.yml`, que executa `jho db migrate --additive-only` e depois
+`jho db check`. `--additive-only` lê no banco o lote que o migrador vai
+aplicar, classifica cada comando com o detector de
+`src/core/db/migration-review.ts` e, se algum não for aditivo, recusa **antes
+de qualquer DDL**, listando arquivo, motivo e comando. Sem a flag, o comando
+aplica o lote inteiro — é o que o dispatch manual faz, com
+`confirm_project=bujawvnxwtmneiggizje`; o workflow recusa outro project ref.
+`MIGRATION_MODE` (`aditiva` no push, `revisada` no dispatch) escolhe entre os
+dois em `migrar.sh`, e valor ausente ou desconhecido não migra nada.
+
+**O que é aditivo** (lista de permissão; o resto pede revisão): criar schema,
+tabela, índice não único, sequência, enum ou extensão; acrescentar coluna nula
+ou com default; acrescentar valor a enum; `DROP NOT NULL`; `SET DEFAULT`;
+`GRANT`; `COMMENT`; `INSERT` sem `DO UPDATE`. FK e índice único só quando a
+tabela nasce no mesmo lote ou as colunas são novas e sem default. `DROP`,
+`RENAME`, mudança de tipo, `SET NOT NULL` em coluna existente, restrição sobre
+dado existente, `UPDATE`/`DELETE`/`TRUNCATE`, `REVOKE`, bloco `DO`, função e
+qualquer forma não prevista pedem revisão. Toda migração publicada tem o
+veredito fixado em `tests/migration-review.test.ts`; migração nova entra
+naquela tabela no mesmo commit.
+
+**Ordem com o deploy.** A Vercel constrói `main` no mesmo push em que o job
+migra, e os dois não se esperam. Para aditiva a corrida é aceita: o código
+antigo não enxerga o que foi acrescentado, e o novo só erra se o build
+terminar antes do job (o job leva cerca de um minuto; o build, alguns). Se a
+migração aditiva falhar, o código novo serve sobre o schema velho até a
+correção, que vai para frente numa migração nova — o job vermelho e o alerta
+do Sentry são o sinal.
+
+### Migração que não é aditiva
+
+O job automático para vermelho com `Migração pendente exige execução manual`,
+e a promoção `dev → staging` já tinha parado antes, pedindo
+`confirmar-migracao=true` ([promotion.md](promotion.md)). Quem revisa escolhe a
+ordem, porque nenhuma é segura sozinha:
+
+- **Contrair o que o código novo já não usa** (remover coluna, índice ou
+  restrição órfã): mescle `staging → main`, espere o deploy e dispare
+  `migrate.yml` à mão com `confirm_project=bujawvnxwtmneiggizje`.
+- **Mudar o que o código antigo ainda usa** (chave, tipo, `NOT NULL`,
+  reescrita de dado): migre **antes** do merge, pela CLI, a partir do commit que
+  vai ser mesclado, e mescle logo depois — o roteiro da 1.15.0 abaixo. O job do
+  push em seguida encontra o lote vazio e passa.
+
+A migration deve ser aplicada e verificada antes da importação de dados.
 
 ### Release 1.15.0: migrar antes, pela CLI
 
@@ -376,6 +422,8 @@ publicar deixa a versão no ar funcionando sozinha: o código novo lê
 `ON CONFLICT (candidate_id, job_id)`, a chave que a 0006 remove. O `migrate.yml`
 só roda a partir de `main`, e a Vercel publica `main` no mesmo push — seguir o
 caminho aprovado daria 500 em toda tela com nota até alguém disparar o workflow.
+(Hoje o detector classifica a 0005 e a 0006 como não aditivas, e o push
+automático as recusaria do mesmo jeito.)
 Nesta versão a migração vem antes, pela CLI, e o merge logo depois:
 
 1. Desligue a varredura: `vars.SUPABASE_CRAWL_ENABLED=false`. Ela grava nota com

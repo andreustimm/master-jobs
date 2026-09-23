@@ -68,15 +68,20 @@ WHERE "status" = 'saved';
 
 ## Deployment Checklist
 
-- The PR says it carries a migration; automatic `dev` → `staging` promotion is
-  suspended until a human reviews it.
+- The PR says it carries a migration and adds its verdict to the table in
+  `tests/migration-review.test.ts`. An additive migration (per
+  `src/core/db/migration-review.ts`) promotes without confirmation; anything
+  else suspends automatic `dev` → `staging` promotion until a human reviews it.
 - Confirm a Supabase backup/point-in-time recovery window exists.
-- Production is migrated only by the manual `migrate.yml` workflow from
-  `main`, with the confirmed project ref; it runs `jho db migrate` and
-  `jho db check` with the privileged `DATABASE_MIGRATION_URL`. The Vercel
-  deploy and the migration are not coordinated: when old code cannot run on
-  the new schema (or the reverse), sequence them by hand as
-  `docs/engineering/deploy.md` describes for release 1.15.0.
+- Production is migrated by `migrate.yml` from `main` (ADR 0027): on the push
+  that changes `drizzle/postgres/**` it runs `jho db migrate --additive-only`,
+  which refuses before any DDL when the pending batch in the database is not
+  additive; the manual dispatch, with the confirmed project ref, applies the
+  whole batch after review. Both run `jho db check` with the privileged
+  `DATABASE_MIGRATION_URL`. The Vercel deploy and the migration are not
+  coordinated: when old code cannot run on the new schema (or the reverse),
+  sequence them by hand as `docs/engineering/deploy.md` ("Migração que não é
+  aditiva") describes.
 - Record row counts before and after the backfill.
 - Run app smoke checks after migration.
 

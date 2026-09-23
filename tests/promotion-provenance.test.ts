@@ -237,12 +237,21 @@ describe("V01-02 — identical source checks for automatic and manual entry", ()
   });
 });
 
+const DESTRUCTIVE = { "drizzle/postgres/0017_x.sql": 'ALTER TABLE "production"."job" DROP COLUMN "x";' };
+const ADDITIVE = {
+  "drizzle/postgres/0017_x.sql": 'CREATE TABLE "production"."novo" ("id" integer);',
+  "drizzle/postgres/meta/_journal.json": '{"entries":[]}\n',
+  "src/core/db/schema.ts": "export const changed = true;",
+};
+
 describe("V01-03 — migrations use staging..target", () => {
-  it("requires human confirmation and still refuses missing CI with that confirmation", () => {
-    publishSource("fix: migração", { "src/core/db/schema.ts": "export const changed = true;" });
+  it("requires human confirmation for a non-additive migration and still refuses missing CI with that confirmation", () => {
+    publishSource("fix: migração", DESTRUCTIVE);
     const before = refs();
     const blocked = run("prepare");
     expect(blocked.stderr).toContain("Migração exige confirmação");
+    // O erro diz qual arquivo e por quê: é o que a pessoa vai revisar.
+    expect(blocked.stderr).toContain("drizzle/postgres/0017_x.sql: remove objeto");
     expect(refs()).toBe(before);
     setAPI({ jobs: [] });
     expect(run("prepare", { confirm: true }).status).not.toBe(0);
@@ -256,6 +265,37 @@ describe("V01-03 — migrations use staging..target", () => {
     const done = run("complete", { target, validated: target, confirm: true });
     expect(done.status, done.stderr).toBe(0);
     expect(git(remote, "rev-parse", "staging")).toBe(target);
+  });
+
+  it("promotes an additive migration without confirmation, scheduled or dispatched", () => {
+    publishSource("fix: migração aditiva", ADDITIVE);
+    const prepared = run("prepare", { scheduled: true });
+    expect(prepared.status, prepared.stderr).toBe(0);
+    const target = prepared.outputs.target!;
+    const done = run("complete", { target, validated: target, scheduled: true, preparedSource: source });
+    expect(done.status, done.stderr).toBe(0);
+    expect(git(remote, "rev-parse", "staging")).toBe(target);
+  });
+
+  it("an additive tip does not launder a non-additive migration earlier in the interval", () => {
+    // O intervalo é staging..alvo inteiro, não o último commit.
+    publishSource("fix: destrutiva", DESTRUCTIVE);
+    publishSource("fix: aditiva depois", { "drizzle/postgres/0018_y.sql": 'CREATE TABLE "production"."outro" ("id" integer);' });
+    const before = refs();
+    expect(run("prepare").stderr).toContain("Migração exige confirmação");
+    expect(refs()).toBe(before);
+  });
+
+  it("an edited published migration is never additive", () => {
+    publishSource("fix: base", ADDITIVE);
+    const prepared = run("prepare");
+    expect(prepared.status, prepared.stderr).toBe(0);
+    const target = prepared.outputs.target!;
+    expect(run("complete", { target, validated: target }).status).toBe(0);
+    git(repo, "checkout", "-q", "--detach", target);
+    publishSource("fix: reescreve", { "drizzle/postgres/0017_x.sql": 'CREATE TABLE "production"."novo" ("id" bigint);' });
+    const blocked = run("prepare");
+    expect(blocked.stderr).toContain("altera ou remove migração já publicada");
   });
 });
 
@@ -572,7 +612,7 @@ describe("V01-06 — scheduled entry and changelog fragments", () => {
   });
 
   it("schedule never carries migration approval", () => {
-    publishSource("fix: migração", { "src/core/db/schema.ts": "export const changed = true;" });
+    publishSource("fix: migração", DESTRUCTIVE);
     const before = refs();
     expect(run("prepare", { scheduled: true }).stderr).toContain("Migração exige confirmação");
     expect(refs()).toBe(before);

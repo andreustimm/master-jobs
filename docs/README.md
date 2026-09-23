@@ -112,6 +112,7 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`0024`](adr/0024-endereco-publico-separado-e-sem-redirecionamento.md) | Endereço público `/p/` em coluna própria, separado do identificador; trocar não redireciona |
 | [`0025`](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md) | Varredura em fatias de < 25 s na Vercel, agendada por `pg_cron` no Supabase; Actions vira rede de segurança |
 | [`0026`](adr/0026-fila-de-repontuacao-em-fatias-na-web.md) | Repontuação de candidato: fatia no `after()` de quem salva o currículo e fatia `repontuar` da varredura |
+| [`0027`](adr/0027-migracao-automatica-so-aditiva.md) | Migração de produção automática no push para `main` só quando o lote pendente é aditivo; destrutiva para job e promoção |
 
 ---
 

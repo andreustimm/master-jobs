@@ -166,8 +166,9 @@ A correção:
   `ensureCandidate` marcava `is_default` em todo candidato que criava, e o
   convidado de `/admin/users` era pontuado com o `profile.yaml` do dono.
 
-**Ordem em produção.** A migração é manual (`migrate.yml`) e falha se houver
-duplicata. Antes de aplicá-la, a consulta abaixo precisa voltar vazia:
+**Ordem em produção.** A migração é manual (dispatch de `migrate.yml`: índice
+único sobre coluna existente não é aditivo, e o push não a aplica — ADR 0027) e
+falha se houver duplicata. Antes de aplicá-la, a consulta abaixo precisa voltar vazia:
 
 ```sql
 select candidate_id, count(*) from production.auth_user

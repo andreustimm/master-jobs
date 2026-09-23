@@ -50,7 +50,7 @@ rtk pnpm qa:browser:install       # Chrome usado pelo QA de jornada
 rtk pnpm dev                     # dashboard em 127.0.0.1:3000
 
 # banco
-rtk pnpm jho db migrate          # cria/atualiza o schema
+rtk pnpm jho db migrate          # cria/atualiza o schema (--additive-only: só lote aditivo)
 rtk pnpm jho db seed             # conta do dono + skills + provedores + posicionamento
 rtk pnpm jho db prune --days 90  # remove vagas fechadas sem candidatura
 
@@ -186,15 +186,25 @@ um subcomando.
 usa `DATABASE_MIGRATION_URL`, separado da URL de runtime, e não cria banco de
 arquivo nem faz fallback para SQLite/Turso.
 
-Sem flags.
+| Flag | Default | Descrição |
+|---|---|---|
+| `--additive-only` | desligada | recusa, antes de qualquer DDL, quando o lote pendente no banco tem comando não aditivo (`src/core/db/migration-review.ts`); sai com 1 listando arquivo, motivo e comando |
+
+`--additive-only` é o modo do push em `main` (`migrate.yml`,
+[ADR 0027](adr/0027-migracao-automatica-so-aditiva.md)). Num banco vazio ele
+sempre recusa: o histórico inclui `REVOKE` e mudança de tipo.
 
 ```bash
 pnpm jho db migrate
+pnpm jho db migrate --additive-only
 ```
 
 ```
+  aplicadas: 0017_exemplo
 ✓ schema is up to date
 ```
+
+A linha `aplicadas:` só aparece quando algo foi aplicado.
 
 Rodar duas vezes seguidas é inofensivo: o migrator só aplica o que falta. `jobs sync`
 já executa isso internamente, então na prática você só chama `db migrate` num banco

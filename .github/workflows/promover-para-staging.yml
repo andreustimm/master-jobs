@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       confirmar-migracao:
-        description: Confirma revisão humana da migração entre staging e o SHA escolhido.
+        description: Confirma revisão humana de migração NÃO aditiva entre staging e o SHA escolhido (aditiva dispensa).
         required: false
         default: false
         type: boolean

@@ -27,13 +27,19 @@ text of this skill wherever they differ.
   `DATABASE_MIGRATION_URL` explicitly so a leftover provider variable never
   picks the target; it is the privileged connection — the runtime role `master_jobs_runtime` has no
   DDL, by design and by `tests/postgres-permissions.test.ts`). Production is
-  applied **only** by the manual `migrate.yml` workflow from `main`, which
-  validates the project ref before connecting (`docs/engineering/deploy.md`).
-  Never point a local command at production.
-- Any diff in `drizzle/` or `src/core/db/schema.ts` suspends automatic
-  `dev` → `staging` promotion for human migration review. Removing or renaming
-  a column/table is never a single migration: expand, deploy, backfill, then
-  contract in a later release.
+  applied **only** by `migrate.yml` from `main`, which validates the project
+  ref before connecting: automatically on push when the pending batch is
+  additive (`jho db migrate --additive-only`), by manual dispatch otherwise
+  (ADR 0027, `docs/engineering/deploy.md`). Never point a local command at
+  production.
+- `src/core/db/migration-review.ts` classifies migrations by allowlist. A
+  non-additive one (drop, rename, type change, `SET NOT NULL`, constraint on
+  existing data, data rewrite, revoke, procedural or unknown form) suspends
+  automatic `dev` → `staging` promotion and the automatic production run for
+  human review; add every new migration's verdict to
+  `tests/migration-review.test.ts`. Removing or renaming a column/table is
+  never a single migration: expand, deploy, backfill, then contract in a later
+  release.
 - Every FK declares `onDelete` explicitly in `schema.ts`, including
   `"no action"` (`tests/fk-delete-intent.test.ts`), and the applied DDL must
   match it in `pg_constraint` (`tests/cov-db-schema.test.ts`).

@@ -195,6 +195,32 @@ describe("jho db migrate", () => {
     expect(segunda.code).toBeUndefined();
     expect(segunda.out).toContain("schema is up to date");
   });
+
+  it("--additive-only recusa lote não aditivo sem aplicar nada, e aplica o aditivo dizendo o quê", async () => {
+    // Recria a pendência de verdade: a 0014 reescreve dado, a 0015 e a 0016 só criam.
+    const desfazer = [
+      "drop index production.job_score_job_idx",
+      "drop table production.sweep_run, production.sweep_lease",
+      "delete from drizzle.__drizzle_migrations where id >= 15",
+    ];
+    for (const comando of desfazer) await banco().execute(sql.raw(comando));
+    const recusa = await rodar("db", "migrate", "--additive-only");
+    expect(recusa.code).toBe(1);
+    expect(recusa.err).toContain("exige execução manual");
+    expect(recusa.err).toContain("0014_clear_contact_candidate_names: reescreve ou apaga dado");
+    const [depois] = await banco().execute(sql.raw("select count(*)::int as n from drizzle.__drizzle_migrations"));
+    expect(depois!.n).toBe(14);
+
+    await rodar("db", "migrate");
+    await banco().execute(sql.raw("drop table production.sweep_run, production.sweep_lease"));
+    await banco().execute(sql.raw(
+      "delete from drizzle.__drizzle_migrations where created_at = (select max(created_at) from drizzle.__drizzle_migrations)",
+    ));
+    const aditiva = await rodar("db", "migrate", "--additive-only");
+    expect(aditiva.code).toBeUndefined();
+    expect(aditiva.out).toContain("aplicadas: 0016_sweep_lease_and_runs");
+    expect(aditiva.out).toContain("schema is up to date");
+  });
 });
 
 describe("jho db check", () => {

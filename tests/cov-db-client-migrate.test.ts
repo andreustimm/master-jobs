@@ -1,7 +1,10 @@
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeDb, connectDatabase, getDb } from "../src/core/db/client.ts";
-import { runMigrations, withDatabaseCause } from "../src/core/db/migrate.ts";
+import { MigrationNeedsReview, runMigrations, withDatabaseCause } from "../src/core/db/migrate.ts";
 
 describe("withDatabaseCause", () => {
   it("surfaces the server code and message hidden behind drizzle's 'Failed query'", () => {
@@ -81,5 +84,67 @@ describe("PostgreSQL client and migrations", () => {
     const tables = await getDb().execute(sql`select tablename from pg_tables where schemaname = 'production'`);
     expect(tables).toHaveLength(38);
     expect(tables.map((t) => t.tablename)).toEqual(expect.arrayContaining(["job", "application", "job_score"]));
+  });
+});
+
+describe("runMigrations({ additiveOnly }) — o modo do push em main", () => {
+  let folder: string;
+  beforeEach(() => {
+    folder = mkdtempSync(join(tmpdir(), "master-jobs-migrations-"));
+    cpSync("./drizzle/postgres", folder, { recursive: true });
+  });
+  afterEach(() => rmSync(folder, { recursive: true, force: true }));
+
+  /** Acrescenta uma migração ao journal da cópia, como `db:generate` faria. */
+  function append(tag: string, body: string): void {
+    const path = join(folder, "meta", "_journal.json");
+    const journal = JSON.parse(readFileSync(path, "utf8")) as { entries: Array<{ idx: number; when: number; tag: string }> };
+    const last = journal.entries.at(-1)!;
+    journal.entries.push({ ...last, idx: last.idx + 1, when: last.when + 1000, tag });
+    writeFileSync(path, JSON.stringify(journal));
+    writeFileSync(join(folder, `${tag}.sql`), body);
+  }
+  const applied = async () =>
+    (await getDb().execute(sql`select count(*)::int as n from drizzle.__drizzle_migrations`))[0]!.n;
+
+  it("on an empty database the baseline is not additive, and nothing is applied", async () => {
+    // 0001 revoga privilégio e 0002 muda tipo: banco novo se cria à mão, nunca pelo push.
+    const refusal = await runMigrations(folder, { additiveOnly: true }).catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(MigrationNeedsReview);
+    expect((refusal as MigrationNeedsReview).message).toContain("0001_production_access: retira privilégio");
+    const schema = await getDb().execute(sql`select to_regclass('production.job') as t`);
+    expect(schema[0]!.t).toBeNull();
+    // Tabela de controle criada e vazia (transação que falhou depois dela): ainda nada aplicado.
+    await getDb().execute(sql`create schema drizzle`);
+    await getDb().execute(sql`create table drizzle.__drizzle_migrations (id serial primary key, hash text not null, created_at bigint)`);
+    await expect(runMigrations(folder, { additiveOnly: true })).rejects.toThrow(/0001_production_access/);
+  });
+
+  it("applies an additive batch and reports its tags", async () => {
+    expect(await runMigrations(folder)).toHaveLength(17);
+    append("0017_aditiva", 'CREATE TABLE "production"."nova" ("id" integer);');
+    expect(await runMigrations(folder, { additiveOnly: true })).toEqual(["0017_aditiva"]);
+    expect((await getDb().execute(sql`select to_regclass('production.nova') as t`))[0]!.t).toBe("production.nova");
+    expect(await runMigrations(folder, { additiveOnly: true })).toEqual([]);
+  });
+
+  it("refuses a destructive batch before any DDL, and keeps refusing when an additive one lands after it", async () => {
+    await runMigrations(folder);
+    const before = await applied();
+    append("0017_destrutiva", 'ALTER TABLE "production"."job" DROP COLUMN "archived_at";');
+    await expect(runMigrations(folder, { additiveOnly: true })).rejects.toThrow(/0017_destrutiva: remove objeto/);
+    // O push seguinte traz só uma aditiva; a destrutiva continua no lote pendente.
+    append("0018_aditiva", 'CREATE TABLE "production"."nova" ("id" integer);');
+    await expect(runMigrations(folder, { additiveOnly: true })).rejects.toThrow(/0017_destrutiva/);
+    expect(await applied()).toBe(before);
+    expect((await getDb().execute(sql`select to_regclass('production.nova') as t`))[0]!.t).toBeNull();
+    // O disparo humano, depois de revisão, aplica o lote inteiro.
+    expect(await runMigrations(folder)).toEqual(["0017_destrutiva", "0018_aditiva"]);
+  });
+
+  it("an unreadable journal fails before any DDL", async () => {
+    await runMigrations(folder);
+    writeFileSync(join(folder, "meta", "_journal.json"), "{");
+    await expect(runMigrations(folder, { additiveOnly: true })).rejects.toThrow(SyntaxError);
   });
 });
