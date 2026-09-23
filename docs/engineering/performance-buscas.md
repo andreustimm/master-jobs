@@ -399,6 +399,93 @@ faz nada. Se a migration a criar, ela vai para o primeiro schema do
 `search_path` da role de migração, e o índice de `0013` resolve
 `gin_trgm_ops` pelo mesmo `search_path`.
 
+## Cache das facetas — medição de 22/09/2026
+
+A requisição de produção medida acima gastou 3.479 ms em `facets`, 66% do
+total. As facetas dependem só do escopo da sessão e de sete filtros; paginar,
+reordenar, mudar a faixa salarial, a empresa ou os chips de recorte refazia a
+mesma consulta para devolver os mesmos números. Desde a #216,
+`cachedBoardFacets` (`src/contexts/matching/app/board-facets.ts`) guarda o
+resultado num mapa do processo. `/jobs` e `/` passam por ele; `boardFacets`
+continua sendo a consulta, sem mudança de semântica.
+
+**A chave** (`facetCacheKey`, pura, em `domain/facet-cache.ts`) é a serialização
+canônica de tudo que a consulta recebe — `minFit`, `cluster`, `term` (texto e
+chave), `sourceKinds` na ordem dada, `workMode`, `track` (candidato, trilha
+principal, trilhas e modo) e `groupRepeats` —, mais o `candidateId` **da
+sessão** e `SCORER_VERSION`. A chave não mantém lista própria de campos: tudo
+que `FacetQuery` deixa passar entra nela. Um filtro novo da consulta só precisa
+entrar no `Pick` de `FacetQuery`, e daí chega à chave sozinho. Idioma não entra porque as
+facetas são números e códigos, e o texto é traduzido na página.
+`tests/board-facets-cache.test.ts` prova com dois candidatos que um nunca
+recebe as contagens do outro, nem com as mesmas URLs.
+
+**Validade e invalidação.**
+
+| O que muda | Como o cache acompanha |
+|---|---|
+| Triagem e funil (`trackAction`, "não me interessa", restaurar) | Invalida as entradas **do candidato**, depois da escrita, na instância que atendeu |
+| Trilhas (editar, trocar a principal, arquivar, restaurar) | Invalida as entradas **do candidato** — o cockpit lê pela principal da hora |
+| Vaga nova (`/jobs/new`, `/compare`, captura por termo em `after()`) | Invalida **todas** as entradas da instância |
+| Sync, score, raspagem, verificação (CLI e workers, fora do processo) | Só a validade: **60 s** |
+| Outra instância da função | Só a validade: a invalidação não cruza instâncias |
+| Deploy ou instância nova | Mapa vazio |
+
+60 s cobre a rajada de paginar e reordenar e deixa os chips no máximo um minuto
+atrás de uma mudança externa. A lista e o total do rodapé **nunca** passam pelo
+cache: no pior caso, por até um minuto, um chip conta diferente do rodapé
+depois de um sync. Entrada que falha sai do cache; duas leituras iguais ao mesmo
+tempo esperam a mesma consulta (a entrada é reservada antes do `await`).
+O mapa mora em `globalThis`, não numa constante de módulo: o Next compila as
+Server Actions importadas por componentes de cliente numa camada própria do
+bundle, com cópia própria dos módulos, e uma constante de módulo faria a ação
+invalidar um mapa que a página não lê.
+**Memória:** teto de 200 entradas, com despejo da menos usada; cada entrada tem
+menos de 1 KB.
+
+**Local** (`pnpm perf:jobs`, 10 mil vagas, três aquecimentos, dez amostras,
+mesma máquina). A leitura fria descarta o cache antes de cada amostra e é
+comparável às tabelas anteriores; a quente é a página 2 logo depois da 1:
+
+| Cenário | Antes | Depois, fria | Depois, página 2 | facets fria → quente | Consultas fria → quente |
+|---|---:|---:|---:|---:|---:|
+| Padrão | 57 ms | 56 ms | 31 ms | 22,1 → 0 ms | 6 → 5 |
+| Com termo | 151 ms | 145 ms | 88 ms | 57,2 → 0 ms | 6 → 5 |
+| Com cluster | 47 ms | 51 ms | 22 ms | 22,6 → 0 ms | 6 → 5 |
+| Faixa salarial | 94 ms | 92 ms | 69 ms | 22,5 → 0,1 ms | 7 → 6 |
+| Ordenar por pagamento | 68 ms | 68 ms | 47 ms | 22,3 → 0 ms | 6 → 5 |
+| Sem agrupar | 29 ms | 31 ms | 12 ms | 16,8 → 0 ms | 5 → 4 |
+
+A leitura fria não muda (a diferença é ruído). O ganho é todo na leitura que
+repete filtros.
+
+**Em produção, não confirmado.** Nenhum número da tabela acima é de produção, e o ganho
+lá só se afirma com `pnpm perf:producao` com sessão depois do deploy: cada
+cenário de `/jobs` pede a mesma URL várias vezes, então a "primeira" de cada
+rodada é a leitura sem cache e o "quente" é a leitura com cache. Com
+`JHO_PERF_LOG=1`, a linha `perf` mostra `facets` perto de 0 nas leituras
+servidas pelo cache.
+
+**O limite da função serverless.** O cache vive enquanto a instância vive. Na
+medição de #221, as duas rodadas depois de 10 min ociosos pagaram partida a
+frio (~1,35 s no `/login`): depois de uma pausa desse tamanho a instância, e o
+mapa com ela, já não existem. E a amostra de 3.479 ms em `facets` foi colhida no
+minuto do deploy, provavelmente fria — **exatamente a leitura que este cache
+não acelera.** O que ele garante é a segunda leitura em diante dentro de um
+minuto, na mesma instância: paginar, reordenar, abrir e voltar.
+
+Se a medição de produção mostrar que a primeira leitura continua dominando,
+o próximo passo não é um cache maior, e sim, nesta ordem:
+
+1. Descobrir por que `facets` custa 3,5 s lá e ~24 ms aqui (buffers frios,
+   plano diferente): `JHO_PERF_LOG=1`, `pg_stat_statements` e o `EXPLAIN` da
+   consulta de facetas no Supabase.
+2. Materializar as facetas das combinações sem termo por candidato e trilha,
+   recalculadas ao fim do sync e do score — os processos que mudam as
+   contagens. Isso exige migration e muda o modelo de dados; é decisão própria.
+3. Só com um segundo backend real, trocar o mapa por um `CachePort` (regra 4),
+   se a medição mostrar acerto baixo por espalhamento entre instâncias.
+
 ## Plano
 
 | Fase | Item | Ganho × esforço | Onde |
@@ -413,7 +500,7 @@ faz nada. Se a migration a criar, ela vai para o primeiro schema do
 | 2 ✅ | Seleção compartilhada para lista e total, facetas fundidas | alto × médio | `repo.ts` |
 | 2 🟡 | Busca por termo indexada: pré-filtro `pg_trgm`, `~*` inalterado (#214, em revisão) | alto com termo seletivo × médio | migration `0012`/`0013` |
 | 2 ✅ | Normalização salarial compartilhada, sem repetir cotações a cada uso | alto com faixa | `repo.ts` |
-| 2 | Cache de facetas com TTL — **só depois de medir** | médio × médio | `matching/app` |
+| 2 🟡 | Cache local das facetas, validade de 60 s (#216, em revisão; ver [seção](#cache-das-facetas--medição-de-22092026)) | alto ao paginar/ordenar, nulo na primeira leitura × médio | `matching/app/board-facets.ts` |
 | 3 | `loading.tsx` + `Suspense` em `/jobs` | só rende após o cache de facetas | `app/jobs/` |
 | ✅ | Régua de conexões por **tela**, `comVigia` em `/jobs` e `/` | entregue e exercitado no QA de concorrência | testes |
 
