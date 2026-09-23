@@ -1,6 +1,7 @@
 import {
   cachedBoardFacets,
   countHiddenByPayRange,
+  hasTrackScores,
   listBoardPage,
   listCandidateTracks,
   listSavedTerms,
@@ -81,9 +82,18 @@ export async function loadJobsView(input: {
   // trilhas lidas de novo pelo escopo (e pelo cluster, quando há) e o câmbio em
   // duas consultas. Duas por vez, sempre: o teto de conexões vale para a tela
   // inteira, ver o comentário mais abaixo.
-  const [allTracks, fx] = await stage("prelude", () =>
+  //
+  // A pergunta "já tem nota?" vai em série DEPOIS das trilhas, no mesmo ramo:
+  // o pico continua em duas conexões e a espera extra se sobrepõe ao câmbio.
+  // Principal sem alvo não é pontuada, e a resposta sai sem consulta.
+  const [[allTracks, scored], fx] = await stage("prelude", () =>
     Promise.all([
-      candidateId !== null ? listCandidateTracks(candidateId) : Promise.resolve([] as Track[]),
+      candidateId !== null
+        ? listCandidateTracks(candidateId).then(async (list) => {
+          const primary = list.find((track) => track.isPrimary && track.target);
+          return [list, primary ? await hasTrackScores(candidateId, primary.id) : false] as const;
+        })
+        : Promise.resolve([[] as Track[], true] as const),
       loadRates(),
     ]),
   );
@@ -93,6 +103,9 @@ export async function loadJobsView(input: {
   let cluster = state.cluster;
   let broughtBy: JobsView["broughtBy"] = null;
   if (candidateId !== null) {
+    // Sem nota na principal (trilha ainda sem alvo, ou fila ainda não rodou),
+    // o quadro mostra as vagas sem nota; o aviso diz por quê (#279).
+    if (!scored) notices.push("scores_pending");
     tracks = allTracks.filter((track) => track.status === "active" && track.target);
     // As mesmas trilhas já lidas: escopo e cluster não voltam ao banco por elas.
     scope = await trackScope(candidateId, trackChoice(state), allTracks);
@@ -149,6 +162,7 @@ export async function loadJobsView(input: {
   const facets = await stage("facets", () =>
     cachedBoardFacets(candidateId, {
       minFit: state.fit,
+      keepUnscored: filters.keepUnscored,
       cluster,
       term: state.term,
       sourceKinds: state.sources,
