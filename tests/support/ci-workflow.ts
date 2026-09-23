@@ -21,6 +21,17 @@ export type CiWorkflow = { concurrency: { group: string }; jobs: Record<string, 
 /** O CI roda os gates em jobs paralelos; `qualidade` é o agregador exigido. */
 export const AGGREGATOR = "qualidade";
 
+/**
+ * Jobs que rodam no CI sem bloquear o agregador, cada um com o porquê.
+ *
+ * Exceção é decisão com prazo, não esquecimento: sair daqui é entrar em
+ * `qualidade.needs`, e `tests/ci-e2e-job.test.ts` trava a de hoje.
+ */
+export const NON_BLOCKING_JOBS: Record<string, string> = {
+  "e2e-navegador":
+    "suíte de navegador inteira; fica fora do portão até a instabilidade no CI estar medida (issue #202)",
+};
+
 export function ciWorkflow(): CiWorkflow {
   return YAML.parse(readFileSync(".github/workflows/ci.yml", "utf8")) as CiWorkflow;
 }

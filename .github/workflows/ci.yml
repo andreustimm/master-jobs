@@ -324,6 +324,85 @@ jobs:
           fi
           echo "Schema e migrações em sincronia."
 
+  e2e-navegador:
+    # A suíte `pnpm test:e2e` inteira — interface, papéis, 320–1024 px, inglês,
+    # temas e axe WCAG 2.2 AA — num navegador real, sobre build de produção e
+    # autenticação real. Até aqui ela só rodava na máquina de quem lembrava, e
+    # o CI via apenas o Vitest e a fronteira da PWA.
+    #
+    # Job próprio, sem `needs`, e fora de `qualidade.needs`: é a única exceção
+    # registrada ao agregador (`NON_BLOCKING_JOBS` em tests/support/ci-workflow.ts).
+    #
+    # Banco: o próprio `run-isolated.mjs` sobe um `postgres:17` descartável pelo
+    # Docker do runner, preso a 127.0.0.1, com senha aleatória — o mesmo
+    # caminho da máquina local. Um `services:` do Actions seria um segundo
+    # caminho, que o harness não usa e que poderia divergir do primeiro; e
+    # `tests/e2e/database-guard.mjs` recusa qualquer banco fora do loopback.
+    #
+    # Nenhum `secrets.*` aqui: a suíte não precisa de credencial nenhuma, e um
+    # PR de qualquer branch roda este job.
+    #
+    # Fora do agregador e da proteção de branch de propósito, até a
+    # instabilidade estar medida (issue #202). Na chamada da promoção ele nem
+    # roda: um job vermelho ali reprovaria a promoção inteira, e isso é tornar
+    # o E2E obrigatório por outra porta.
+    if: inputs.target-sha == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target-sha || github.sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Versão do Playwright
+        id: playwright
+        # A chave do cache é a versão instalada, não o lockfile inteiro: trocar
+        # qualquer outra dependência não deve baixar os navegadores de novo.
+        run: echo "version=$(node -p 'require("playwright/package.json").version')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache dos navegadores do Playwright
+        id: cache-navegadores
+        # Restauração e gravação separadas: o `actions/cache` inteiro só grava
+        # quando o job termina verde, e enquanto a suíte reprovar cada execução
+        # baixaria os navegadores de novo.
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-webkit
+
+      - name: Instalar Chromium e WebKit
+        # `ui.mjs` abre o WebKit para o histórico de novidades no Safari.
+        if: steps.cache-navegadores.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium webkit
+
+      - name: Guardar os navegadores no cache
+        if: steps.cache-navegadores.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.cache-navegadores.outputs.cache-primary-key }}
+
+      - name: Dependências de sistema dos navegadores
+        # O cache guarda os binários, não as bibliotecas do apt.
+        if: steps.cache-navegadores.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium webkit
+
+      - name: E2E hermético (UI + axe)
+        run: pnpm test:e2e
+
   qualidade:
     # O agregador. `always()` é obrigatório, e não enfeite: sem ele, um job
     # anterior vermelho faz este ser PULADO, e a proteção de branch trata check
