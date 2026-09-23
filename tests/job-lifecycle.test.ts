@@ -7,10 +7,33 @@
 import { describe, expect, it } from "vitest";
 import {
   archiveCutoff,
+  decideAbsenceClosure,
   decideArchive,
   decideReopen,
   type ArchiveInput,
 } from "../src/core/ingest/lifecycle.ts";
+
+describe("decideAbsenceClosure", () => {
+  it("só a listagem completa e não vazia fecha o que deixou de listar", () => {
+    expect(decideAbsenceClosure({ completeness: "complete", seen: 3 })).toEqual({ kind: "close-missing" });
+  });
+
+  it("janela parcial nunca fecha por ausência, por maior que seja", () => {
+    // As 50 mais recentes do Remotive não dizem nada sobre a 51ª: ela saiu da
+    // janela, não da plataforma. Fecha só por 404/410 na reconferência.
+    expect(decideAbsenceClosure({ completeness: "partial", seen: 5000 })).toEqual({
+      kind: "keep",
+      reason: "partial-window",
+    });
+  });
+
+  it("lista vazia não fecha nada, nem em fonte completa", () => {
+    // "A empresa não tem vaga" e "a API mudou o formato" chegam iguais.
+    for (const completeness of ["complete", "partial"] as const) {
+      expect(decideAbsenceClosure({ completeness, seen: 0 })).toEqual({ kind: "keep", reason: "empty-listing" });
+    }
+  });
+});
 
 const CUTOFF = "2026-06-01T00:00:00.000Z";
 

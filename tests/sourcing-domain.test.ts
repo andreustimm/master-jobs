@@ -32,7 +32,7 @@ function adapter(kind: SourceAdapter["kind"], validatedOn: string | null | undef
           validatedOn,
           search: async () => ({ jobs: [], warnings: [], totalHint: null, stoppedByQuota: false }),
         };
-  return { kind, docs: "", fetchJobs: async () => ({ jobs: [], warnings: [] }), termSearch };
+  return { kind, docs: "", fetchJobs: async () => ({ jobs: [], warnings: [], completeness: "complete" }), termSearch };
 }
 
 describe("quota windows", () => {

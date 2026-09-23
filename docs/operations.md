@@ -95,6 +95,17 @@ sinais:
 - **`closed` alto de repente**: a fonte devolveu menos vagas que da última vez.
   Confira se não foi degradação da API antes de acreditar que 200 vagas
   fecharam no mesmo dia.
+- **`partial window: absence closes nothing`** ao lado da linha: a fonte é uma
+  janela (as mais recentes, as primeiras páginas) e não fecha nada por
+  ausência — `closed` ali é sempre 0. Essas vagas só fecham por 404/410 na
+  reconferência. A lista de fontes completas e parciais está em
+  [`sources.md`](sources.md#completude-da-listagem).
+
+> **Invariante:** ausência só fecha vaga quando a fonte listou tudo o que tem.
+> Janela parcial nunca fecha por ausência, e lista vazia não fecha nada nem em
+> fonte completa (`decideAbsenceClosure()` em `src/core/ingest/lifecycle.ts`).
+> A reconferência agendada tem um único dono, a varredura do GitHub; a Vercel
+> não agenda nada.
 
 > **Invariante:** Uma fonte que falha é registrada e pulada, nunca aborta a run.
 > O `try/catch` de `syncOne()` grava `source.lastStatus = 'error'` e

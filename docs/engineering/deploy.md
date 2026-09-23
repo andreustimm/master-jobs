@@ -37,15 +37,17 @@ compartilhado — e aí a ADR 0009 se inverte, porque o motivo dela (processo
 minutos. Uma função serverless tem teto de duração, e o de 30 segundos declarado
 no `vercel.json` não é generoso — é o máximo do plano gratuito.
 
-Duas saídas, e a escolha é de custo:
+A escolha feita: **o runner roda fora da Vercel.** O GitHub Actions
+(`varredura.yml`) aponta para o PostgreSQL de produção por secret e tem até
+seis horas por job; localmente, o mesmo worker aponta para a instância Docker
+isolada. Nenhuma captura longa fica presa ao limite de uma função.
 
-- **Cron da Vercel chamando uma rota que processa um lote pequeno.** É o que o
-  `vercel.json` prevê: uma chamada por dia que consome parte da fila. Simples,
-  cabe no plano gratuito, e leva dias para vencer uma fila grande.
-- **Continuar rodando o runner fora da Vercel.** O GitHub Actions aponta para o
-  PostgreSQL de produção por secret e tem até seis horas por job; localmente,
-  o mesmo worker aponta para a instância Docker isolada. Nenhuma captura longa
-  deve ficar presa ao limite de uma função Edge.
+O cron da Vercel que chamava `/api/cron/recheck` com um lote pequeno saiu de
+`vercel.json`: dois agendadores sobre a mesma fila dobravam a leitura do banco
+e as requisições a terceiros sem que um soubesse do outro (B-11). A rota
+continua, protegida por `CRON_SECRET` e pela política de ingestão, para uma
+chamada manual; nada a agenda. `tests/workflow-environment-isolation.test.ts`
+exige exatamente um agendador de `jobs recheck`.
 
 ### 3. `profile.yaml` e `sources.yaml` são lidos do disco em runtime
 
@@ -69,7 +71,7 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 | `SUPABASE_CRAWL_ENABLED` | Actions produção | `true` somente após os gates de quota/retensão |
 | `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela ou sem `RESEND_FROM`, nada é enviado e o log só alerta |
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |
-| `CRON_SECRET` | Vercel | protege a rota de cron; a Vercel a envia em `authorization` |
+| `CRON_SECRET` | Vercel | protege `/api/cron/recheck`, hoje só de chamada manual (`authorization: Bearer <segredo>`); nada a agenda |
 | `SENTRY_DSN` | Vercel | relato de erro do servidor; **sem ela nada é enviado** ([detalhe](#relato-de-erro)) |
 | `SENTRY_TRACES_SAMPLE_RATE` | Vercel (opcional) | fração de requisições com trace; ausente = `0.1`, `0` ou valor ilegível desliga ([detalhe](#tracing)) |
 | `SENTRY_AUTH_TOKEN` | Vercel, **só build** | publica os mapas de origem do servidor; sem ela o build segue sem mapas ([detalhe](#mapas-de-origem)) |
@@ -252,17 +254,19 @@ queue`+`run` e `jobs recheck queue`+`run` contra **produção**, todo dia às
 06:00 UTC (03:00 em São Paulo), com `workflow_dispatch` para rodar à mão depois
 de mexer em `config/sources.yaml`.
 
-**Por que no GitHub e não na Vercel.** A Vercel tem `/api/cron/recheck`, e ele
-resolve um pedaço pequeno: 25 vagas por execução, porque o teto de função no
-plano gratuito é de 30 segundos. Com 427 vagas elegíveis (fit ≥ 55, abertas, com
-URL), o ciclo completo leva ~17 dias — enquanto `enqueueStale` declara a meta de
-reconferir a cada 7. O cron de lá entrega menos da metade do que promete, e não
-por defeito: por teto.
+**Por que no GitHub e não na Vercel.** `/api/cron/recheck` processa 25 vagas
+por chamada, porque o teto de função no plano gratuito é de 30 segundos. Com 427
+vagas elegíveis (fit ≥ 55, abertas, com URL), um cron diário nela levava ~17
+dias para dar a volta — enquanto `enqueueStale` declara a meta de reconferir a
+cada 7. Não por defeito: por teto.
 
 E a **busca** não roda lá de jeito nenhum: `jobs sync` e `scrape run` não têm
 rota de API. Um runner do GitHub tem 6 horas por job, e é a mesma tarefa num
-lugar onde ela cabe. A rota da Vercel servia como rede de segurança, mas não
-deve voltar junto com o Actions sem orçamento e responsabilidade distintos.
+lugar onde ela cabe. Por isso a varredura é o **único** agendador da
+reconferência: o cron da Vercel foi removido de `vercel.json`, e
+`tests/workflow-environment-isolation.test.ts` exige `crons` vazio e exatamente
+um workflow agendado rodando `jobs recheck` — mudar o dono é mudar esse teste
+junto.
 
 Só produção é varrida. `dev` e `staging` existem para exercitar código, não para
 acumular acervo — varrer os três triplicaria as requisições contra APIs de

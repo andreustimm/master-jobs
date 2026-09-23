@@ -19,7 +19,7 @@
  * Verified live 2026-08-18: 121 open jobs, no auth, no key.
  */
 import { getJson, htmlToText, firstNonEmpty } from "./http.ts";
-import type { RawJob, SourceAdapter, SourceConfig, FetchResult } from "./types.ts";
+import type { RawJob, SourceAdapter, SourceConfig, SourceSnapshot } from "./types.ts";
 
 type BraintrustLocation = {
   location?: string;
@@ -104,7 +104,7 @@ function eligibilityLine(job: BraintrustJob): string {
 export const braintrust: SourceAdapter = {
   kind: "braintrust",
   docs: "https://app.usebraintrust.com/api/jobs/",
-  async fetchJobs(config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const warnings: string[] = [];
     const requested = Number.parseInt(config.handle, 10);
     const max = Number.isFinite(requested) && requested > 0 ? requested : DEFAULT_MAX;
@@ -124,6 +124,11 @@ export const braintrust: SourceAdapter = {
     }
 
     const slice = listed.slice(0, max);
+    // Without a `next` link, without the cap cutting the list and without the
+    // platform's own count saying there is more, the listing is every open job.
+    // Anything less is a window, and absence from it is not closure.
+    const whole = url === null && slice.length === listed.length && (total === undefined || listed.length >= total);
+    const completeness = whole ? "complete" : "partial";
     if (total && total > slice.length) {
       warnings.push(`braintrust: ${slice.length} de ${total} vagas abertas.`);
     }
@@ -189,6 +194,6 @@ export const braintrust: SourceAdapter = {
       );
     }
 
-    return { jobs, warnings };
+    return { jobs, warnings, completeness };
   },
 };

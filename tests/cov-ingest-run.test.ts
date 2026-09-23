@@ -244,6 +244,41 @@ describe("syncAll", () => {
     await expect(db.select().from(jobScore)).resolves.toHaveLength(1);
   });
 
+  it("janela parcial não fecha por ausência a vaga que saiu dela", async () => {
+    // O Arbeitnow entrega só a primeira página. A vaga que desceu para a
+    // segunda saiu da JANELA, não do quadro; fechá-la escondia uma vaga viva a
+    // cada rodada. Ela só fecha por 404/410 na reconferência — e a candidatura
+    // pendurada nela nem é lida pela sincronização.
+    const anuncio = (slug: string) => ({
+      slug,
+      company_name: "Acme",
+      title: `Vaga ${slug}`,
+      url: `https://www.arbeitnow.com/jobs/${slug}`,
+      description: `<p>Descrição ${slug}.</p>`,
+    });
+    const arbeitnow: SourceConfig = { kind: "arbeitnow", handle: "", label: "Arbeitnow" };
+    const [pessoa] = await db
+      .insert(candidate)
+      .values({ slug: "dono", name: "Dono", isDefault: true })
+      .returning({ id: candidate.id });
+
+    setHttpPort(fixtureHttp({ "arbeitnow.com/api/job-board-api": { data: [anuncio("a"), anuncio("b")] } }));
+    await syncAll([arbeitnow]);
+    const [saiuDaJanela] = await db.select().from(job).where(eq(job.externalId, "b"));
+    await db
+      .insert(application)
+      .values({ candidateId: pessoa!.id, jobId: saiuDaJanela!.id, status: "applied", notes: "enviei" });
+
+    setHttpPort(fixtureHttp({ "arbeitnow.com/api/job-board-api": { data: [anuncio("a")] } }));
+    const r = await syncAll([arbeitnow]);
+
+    expect(r.sources[0]).toMatchObject({ ok: true, completeness: "partial", closed: 0 });
+    const [depois] = await db.select().from(job).where(eq(job.externalId, "b"));
+    expect(depois!.closedAt).toBeNull();
+    const [candidatura] = await db.select().from(application);
+    expect(candidatura).toMatchObject({ status: "applied", notes: "enviei" });
+  });
+
   it("não fecha nada quando a fonte devolve lista vazia", async () => {
     // Lista vazia é ambígua: pode ser "a empresa não tem vaga" ou "a API mudou o
     // formato". Fechar o acervo inteiro por causa da segunda hipótese é

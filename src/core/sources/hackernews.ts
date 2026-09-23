@@ -10,7 +10,7 @@
  */
 import { BUDGETED, QUOTA_STOP } from "./aggregators.ts";
 import { getJson, htmlToText } from "./http.ts";
-import type { FetchResult, PlatformBudget, RawJob, SourceAdapter } from "./types.ts";
+import type { PlatformBudget, RawJob, SourceAdapter, SourceSnapshot } from "./types.ts";
 
 type HnHit = {
   objectID: string;
@@ -96,12 +96,20 @@ function postings(hits: HnHit[] | undefined, thread: string): RawJob[] {
 export const hackernews: SourceAdapter = {
   kind: "hackernews",
   docs: "https://hn.algolia.com/api",
-  async fetchJobs(): Promise<FetchResult> {
+  async fetchJobs(): Promise<SourceSnapshot> {
     const thread = await currentThread();
-    if (!thread) return { jobs: [], warnings: ["hackernews: no \"Who is hiring?\" thread found"] };
+    if (!thread) {
+      return { jobs: [], warnings: ["hackernews: no \"Who is hiring?\" thread found"], completeness: "partial" };
+    }
     const params = new URLSearchParams({ tags: `comment,story_${thread}`, hitsPerPage: String(THREAD_PAGE) });
     const data = await getJson<HnSearch>(`${HN_API}/search?${params}`, BUDGETED);
-    return { jobs: postings(data.hits, thread), warnings: [] };
+    // The source is the month's thread. Read whole, it proves what the thread
+    // no longer carries — including last month's postings once a new thread
+    // opens, which is how a monthly repost cycle closes. Cut by the page
+    // ceiling, or without Algolia's count, it proves nothing.
+    const hits = data.hits ?? [];
+    const whole = data.nbHits !== undefined && hits.length >= data.nbHits;
+    return { jobs: postings(hits, thread), warnings: [], completeness: whole ? "complete" : "partial" };
   },
   termSearch: {
     budget: HN_BUDGET,

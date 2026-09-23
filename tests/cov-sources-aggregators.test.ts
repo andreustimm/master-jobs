@@ -168,7 +168,7 @@ describe("himalayas", () => {
       }),
     );
 
-    const { jobs, warnings } = await himalayas.fetchJobs(config("himalayas", "5"));
+    const { jobs, warnings, completeness } = await himalayas.fetchJobs(config("himalayas", "5"));
     // Parou na página incompleta em vez de gastar as cinco chamadas pedidas.
     expect(jobs).toHaveLength(23);
     // O separador de milhar sai do locale do processo, então a asserção olha o
@@ -176,6 +176,26 @@ describe("himalayas", () => {
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("23 de ");
     expect(warnings[0]).toMatch(/101[.,]018/);
+    // A página curta no meio de 101.018 não prova o fim: é janela, e ausência
+    // nela não fecha vaga nenhuma.
+    expect(completeness).toBe("partial");
+  });
+
+  it("só declara a lista completa quando o total da plataforma foi alcançado", async () => {
+    setHttpPort(
+      fixtureHttp({
+        "offset=0": {
+          totalCount: 2,
+          jobs: [
+            { guid: "a", title: "A", companyName: "X" },
+            { guid: "b", title: "B", companyName: "X" },
+          ],
+        },
+      }),
+    );
+
+    const { completeness } = await himalayas.fetchJobs(config("himalayas", "5"));
+    expect(completeness).toBe("complete");
   });
 
   it("usa a paginação padrão quando o handle não é um número de páginas", async () => {
@@ -192,6 +212,7 @@ describe("himalayas", () => {
     await expect(himalayas.fetchJobs(config("himalayas", "1"))).resolves.toEqual({
       jobs: [],
       warnings: [],
+      completeness: "partial",
     });
   });
 });
@@ -282,6 +303,7 @@ describe("arbeitnow", () => {
     await expect(arbeitnow.fetchJobs(config("arbeitnow"))).resolves.toEqual({
       jobs: [],
       warnings: [],
+      completeness: "partial",
     });
   });
 });
@@ -347,6 +369,7 @@ describe("remoteok", () => {
     await expect(remoteok.fetchJobs(config("remoteok"))).resolves.toEqual({
       jobs: [],
       warnings: [],
+      completeness: "partial",
     });
   });
 });
@@ -463,11 +486,12 @@ describe("bordas de resposta", () => {
       }),
     );
 
-    await expect(remotive.fetchJobs(config("remotive"))).resolves.toEqual({ jobs: [], warnings: [] });
-    await expect(remoteok.fetchJobs(config("remoteok"))).resolves.toEqual({ jobs: [], warnings: [] });
+    await expect(remotive.fetchJobs(config("remotive"))).resolves.toEqual({ jobs: [], warnings: [], completeness: "partial" });
+    await expect(remoteok.fetchJobs(config("remoteok"))).resolves.toEqual({ jobs: [], warnings: [], completeness: "partial" });
     await expect(adzuna.fetchJobs(config("adzuna", "us:x"))).resolves.toEqual({
       jobs: [],
       warnings: [],
+      completeness: "partial",
     });
   });
 });
