@@ -10,6 +10,11 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 ## [Unreleased]
 
 
+### Corrigido
+
+- Coordenador de tarefas: a janela de entrega começa no **instante** do primeiro claim (`firstClaimedAt`, novo campo opcional do registro de coordenação), não em "Iniciado em". O campo do Project é de data e era lido como meia-noite UTC, aceitando como entrega um merge do mesmo dia anterior ao claim.
+- Coordenador de tarefas: o deployment de produção chega às PRs das tarefas pelos commits da promoção `staging → main`. Antes, o SHA de main só resolvia a própria PR de promoção, com base `main`, e a sugestão de "Concluído" em produção nunca disparava. Promoção com 250 commits ou mais pede reconciliação explícita.
+
 ### Alterado
 
 - Fluxo: a issue fecha quando o código chega a produção — commits das PRs levam `Closes #N` na mensagem, porque a PR aponta para `dev` e só a entrada em `main` fecha issues (AGENTS.md, `docs/engineering/workflow.md`).

@@ -1,7 +1,7 @@
 import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { Coordinator } from "../scripts/tasks/coordinator.ts";
-import { controlBody, parseCoordination, parseReceipt, snapshotRevision } from "../scripts/tasks/protocol.ts";
+import { controlBody, coordinationBody, parseCoordination, parseReceipt, snapshotRevision } from "../scripts/tasks/protocol.ts";
 import { signCommand } from "../scripts/tasks/signing.ts";
 import type { Command, ProjectConfig, RemoteComment, TaskGateway, TaskPatch, TaskSnapshot } from "../scripts/tasks/types.ts";
 
@@ -62,6 +62,19 @@ describe("canonical task writer", () => {
     expect((await f.submit(old)).phase).toBe("rejected");
     const forged = signCommand({ ...old, operationId: randomUUID(), expectedRevision: (await f.gateway.readTask(1)).revision }, privateKey);
     expect((await f.submit(forged)).message).toContain("NOT_OWNER");
+  });
+  it("records the exact first-claim instant and keeps it across transfer, release and reclaim", async () => {
+    const f = fixture(); await f.submit(await f.claim());
+    expect(f.state().coordination!.firstClaimedAt).toBe(time.toISOString());
+    expect(f.state().startedAt).toBe("2026-09-22");
+    const earlier = "2026-09-22T09:15:00.000Z";
+    f.mutate(s => { s.coordination!.firstClaimedAt = earlier; });
+    await f.submit(await f.owned("transfer", { reason: "WIP handed off", transferTo: { executionId: randomUUID(), publicKey, branch: "feat/new", worktreeId: "new" } }));
+    expect(f.state().coordination!.firstClaimedAt).toBe(earlier);
+    expect((await f.submit(await f.owned("release", { reason: "WIP preserved in the issue" }))).phase).toBe("confirmed");
+    expect((await f.submit(await f.claim())).phase).toBe("confirmed");
+    expect(f.state().coordination!.firstClaimedAt).toBe(earlier);
+    expect(parseCoordination(coordinationBody(f.state().coordination!))?.firstClaimedAt).toBe(earlier);
   });
   it("coalesces duplicate operations but rejects a UUID with a different payload (CAN-08)", async () => {
     const f = fixture(); const command = await f.claim(); const first = await f.submit(command);

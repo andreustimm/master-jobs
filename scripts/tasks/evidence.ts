@@ -4,12 +4,14 @@ import type { Command, ProjectConfig, TaskGateway, TaskSnapshot } from "./types.
 // A production delivery waits days for the human staging → main promotion, far
 // beyond one 90-minute lease, so the holder is replaced by reclaim or transfer
 // before the deploy lands. The merge still belongs to this task if it happened
-// after the first claim ("Iniciado em"); the current lease start is only the
-// fallback for a task that never recorded one.
+// after the first claim; the current lease start is only the fallback for a task
+// that never recorded one. "Iniciado em" is a DATE field, parsed as midnight UTC:
+// using it would admit a merge from the same day that predates the claim, so the
+// window reads the exact instant kept in the coordination record instead.
 export function deliveryWindowStart(task: TaskSnapshot): number {
   const acquired = Date.parse(task.coordination!.execution!.acquiredAt);
-  const started = task.startedAt ? Date.parse(task.startedAt) : Number.NaN;
-  return Number.isFinite(started) ? Math.min(started, acquired) : acquired;
+  const first = task.coordination?.firstClaimedAt ? Date.parse(task.coordination.firstClaimedAt) : Number.NaN;
+  return Number.isFinite(first) ? Math.min(first, acquired) : acquired;
 }
 
 export async function validateEvidence(gateway: TaskGateway, config: ProjectConfig, task: TaskSnapshot, command: Command): Promise<void> {

@@ -119,7 +119,7 @@ export class Coordinator {
         const journal = receipts.filter(r => r.value.issue === command.issue && r.value.phase !== "rejected");
         const revision = Math.max(before.coordination?.revision ?? 0, ...journal.map(r => r.value.patch?.coordination?.revision ?? 0)) + 1;
         const generation = preserveOwner ? before.coordination!.generation : Math.max(before.coordination?.generation ?? 0, ...journal.map(r => r.value.patch?.coordination?.generation ?? 0)) + 1;
-        patch = { fields: {}, coordination: { protocolVersion: 1, revision, generation, execution: preserveOwner ? owner : null, lastOperation: command.operationId, ...(before.coordination?.previousStatus ? { previousStatus: before.coordination.previousStatus } : {}) } };
+        patch = { fields: {}, coordination: { protocolVersion: 1, revision, generation, execution: preserveOwner ? owner : null, lastOperation: command.operationId, ...(before.coordination?.previousStatus ? { previousStatus: before.coordination.previousStatus } : {}), ...(before.coordination?.firstClaimedAt ? { firstClaimedAt: before.coordination.firstClaimedAt } : {}) } };
       } else {
         verifyCommandSignature(command, command.action === "claim" ? undefined : before.coordination?.execution?.publicKey);
         patch = planCommand(before, command, request.author, this.now());

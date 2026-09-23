@@ -20,7 +20,7 @@ export const commandSchema = z.strictObject({
   create: z.strictObject({ title: z.string().trim().min(1).max(256), body: z.string().min(1).max(30000), priority, type: nonempty, delivery, parent: z.number().int().positive().optional(), dependsOn: z.array(z.number().int().positive()).max(100) }).optional(),
 });
 const execution = workspace.required().extend({ actor: nonempty, acquiredAt: timestamp, heartbeatAt: timestamp, expiresAt: timestamp });
-const coordinationSchema = z.strictObject({ protocolVersion: z.literal(1), revision: z.number().int().nonnegative(), generation: z.number().int().nonnegative(), execution: execution.nullable(), previousStatus: z.enum(STATUSES).optional(), lastOperation: uuid });
+const coordinationSchema = z.strictObject({ protocolVersion: z.literal(1), revision: z.number().int().nonnegative(), generation: z.number().int().nonnegative(), execution: execution.nullable(), previousStatus: z.enum(STATUSES).optional(), firstClaimedAt: timestamp.optional(), lastOperation: uuid });
 const controlSchema = z.strictObject({ protocolVersion: z.literal(1), paused: z.boolean(), manualEpoch: z.number().int().nonnegative(), lastOperation: uuid, activation: z.strictObject({ status: z.literal("ready"), checkedAt: timestamp, workflowRun: z.number().int().positive(), sha: z.string().regex(/^[a-f0-9]{40}$/) }).optional() });
 const receiptSchema = z.object({ protocolVersion: z.literal(1), operationId: uuid, commandHash: z.string().regex(/^[a-f0-9]{64}$/), requestId: z.number().int().positive(), issue: z.number().int().positive(), phase: z.enum(["prepared", "confirmed", "rejected", "uncertain"]), actor: nonempty, message: z.string(), at: timestamp }).passthrough();
 

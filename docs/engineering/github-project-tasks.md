@@ -59,7 +59,7 @@ decisão explícita no corpo da issue.
 
 | Entrega | Evidência para Concluído |
 |---|---|
-| dev | PR nativamente vinculada, branch da execução → dev, checks atuais e merge posterior ao primeiro claim ("Iniciado em"), para que reclaim ou transferência durante a espera pela promoção não invalidem a entrega |
+| dev | PR nativamente vinculada, branch da execução → dev, checks atuais e merge posterior ao instante do primeiro claim (`firstClaimedAt` no registro de coordenação), para que reclaim ou transferência durante a espera pela promoção não invalidem a entrega. "Iniciado em" é campo de data e não delimita a janela: lido como meia-noite UTC, aceitaria um merge do mesmo dia anterior ao claim |
 | production | Mesmo vínculo/merge + deployment Production bem-sucedido + execução mais recente do workflow exato de fumaça em main, mesmo SHA e posterior ao mesmo merge; ancestralidade comprovada pela API |
 | artifact | Comentário do assignee na própria issue com `Entrega aceita:` e link do artefato; motivo de aceite no comando |
 | operation | Mesmo aceite explícito, com evidência observável da operação remota |
@@ -155,6 +155,12 @@ minutos drena intenções duráveis e recupera inclusão de issues perdidas.
 Eventos de PR/CI/deploy reconsultam HEAD, tentativa, ambiente, lease e vínculos
 nativos, depois registram evidência/sugestão idempotente. Não alteram Status.
 Payload atrasado, fechamento ou merge isolado não concluem nem regridem tarefa.
+O SHA publicado em main pertence à PR humana `staging → main`, não às PRs das
+tarefas; por isso o deployment chega às PRs de dev pelos commits dessa
+promoção. A mensagem de merge só nomeia candidatas: cada uma é relida e precisa
+provar base dev, vínculo nativo, branch reclamada e ancestralidade do SHA
+publicado. Promoção com 250 commits ou mais — o limite que a API lista — exige
+reconciliação explícita em vez de perder candidatas em silêncio.
 O pipeline dev → staging → main e os deployments de branches permanentes
 continuam sob os gates existentes; promoção de main continua humana.
 
