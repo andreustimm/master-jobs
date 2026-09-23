@@ -11,6 +11,7 @@ import {
   parseApplicationStatus,
   type ApplicationStatus,
 } from "../src/contexts/pursuit/domain/application.ts";
+import { invalidateBoardFacets } from "../src/contexts/matching/index.ts";
 
 /**
  * O que a tela precisa saber para explicar a recusa sem perder o rascunho.
@@ -64,6 +65,11 @@ export async function trackAction(formData: FormData): Promise<TrackResult> {
       return { status: "error", code: "conflict" };
     }
     throw error;
+  } finally {
+    // Depois da escrita, e também na recusa: ela prova que o funil mudou por
+    // outro caminho. Invalidar antes da escrita deixaria uma leitura paralela
+    // guardar de novo as contagens de antes.
+    invalidateBoardFacets(candidateId);
   }
 
   revalidatePath("/");
@@ -90,6 +96,9 @@ async function moveFromList(candidateId: number, formData: FormData, status: "ar
     if (!(error instanceof IllegalApplicationTransitionError || error instanceof ApplicationTransitionConflictError)) {
       throw error;
     }
+  } finally {
+    // Arquivar tira a vaga das contagens dos chips; restaurar a devolve.
+    invalidateBoardFacets(candidateId);
   }
   revalidatePath("/");
   revalidatePath("/jobs");
