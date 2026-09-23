@@ -15,6 +15,24 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 - Governança (#196): rulesets do GitHub aplicados. `main`, `staging` e `dev` recusam exclusão e force-push para todos. `main` exige PR com 1 aprovação e os checks `qualidade` e `schema-e-migracao`, sem bypass de CI; o admin só dispensa a aprovação dentro de PR, e o `GITHUB_TOKEN` não tem bypass. O ambiente `Production` só aceita `main`, e `can_admins_bypass` está desligado. O push direto do commit de versão de hotfix em `main` passa a ser recusado e segue por PR humana. `scripts/github/verify-protections.ts` confere o estado efetivo; limites da plataforma e reversão em `docs/engineering/github-protections.md`.
 - Fluxo: a issue fecha quando o código chega a produção — commits das PRs levam `Closes #N` na mensagem, porque a PR aponta para `dev` e só a entrada em `main` fecha issues (AGENTS.md, `docs/engineering/workflow.md`).
 
+### Melhorado
+
+- Facetas de `/jobs` e `/` com cache local no processo (#216):
+  `cachedBoardFacets` em `src/contexts/matching/app/board-facets.ts`, regra pura
+  em `domain/facet-cache.ts`. Chave canônica com candidato da sessão, todos os
+  filtros que a consulta recebe (cluster, termo, fontes, modalidade, trilha,
+  agrupamento, fit) e `SCORER_VERSION`; página, tamanho, ordenação, faixa
+  salarial, empresa e chips de recorte reaproveitam a entrada. Validade de
+  60 s, teto de 200 entradas (LRU), consulta reservada antes do `await` e
+  falha descartada. Triagem e funil invalidam as entradas do candidato; vaga
+  nova (`/jobs/new`, `/compare`) invalida todas; mudar trilha invalida as do
+  candidato; a captura por termo em `after()` invalida todas. O mapa fica em
+  `globalThis`, compartilhado entre a camada das páginas e a das Server
+  Actions. Sync, score e raspagem rodam fora do processo e só a validade os
+  cobre. `pnpm perf:jobs` mede a leitura
+  fria (comparável às anteriores) e a página 2 com cache: no padrão, 56 → 31 ms,
+  facetas 22 → 0 ms, 6 → 5 consultas.
+
 ## [1.22.1] - 2026-09-23
 
 ### Segurança
