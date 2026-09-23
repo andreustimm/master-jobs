@@ -570,8 +570,9 @@ app/
   grid.tsx             paginação, densidade, export, presets
   ui.tsx               Fit, ScoreBar, Legend, StatusBadge, Stat
   actions.ts           server action de mudança de status
-  jobs/page.tsx        lista com filtros e paginação
-  jobs/[id]/page.tsx   detalhe com breakdown
+  jobs/(lista)/page.tsx     lista com filtros e paginação
+  jobs/(lista)/loading.tsx  esqueleto da lista (fronteira de Suspense)
+  jobs/[id]/page.tsx   detalhe com breakdown; trilhas e histórico em Suspense
   pipeline/page.tsx    funil
   referrals/page.tsx   vagas onde há contato
   api/export/route.ts  CSV dos filtros atuais

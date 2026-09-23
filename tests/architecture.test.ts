@@ -891,7 +891,7 @@ describe("authorisation (AUTH-01)", () => {
     "app/candidate/skills/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
     "app/candidate/vocabulary/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
     "app/compare/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
-    "app/jobs/page.tsx": { guard: 'requirePage("job:read")' },
+    "app/jobs/(lista)/page.tsx": { guard: 'requirePage("job:read")' },
     "app/jobs/[id]/page.tsx": { guard: 'requirePage("job:read")' },
     "app/jobs/[id]/paises/page.tsx": { guard: 'requirePage("job:read")' },
     "app/jobs/new/page.tsx": { guard: 'requirePage("job:write")' },
@@ -958,6 +958,9 @@ describe("authorisation (AUTH-01)", () => {
     "app/forbidden.tsx": "fallback 403 sem dado",
     "app/not-found.tsx": "fallback 404 sem dado",
     "app/transition-test/error.tsx": "fallback de erro da rota de teste, sem dado",
+    // O esqueleto é o mesmo para qualquer sessão: título e barras, sem dado. A
+    // página que ele envolve continua chamando `requirePage`.
+    "app/jobs/(lista)/loading.tsx": "fallback de carregamento da lista de vagas, sem dado",
   };
 
   it("exposes Auth to production callers only through its public API", () => {

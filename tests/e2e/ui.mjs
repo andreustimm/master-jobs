@@ -23,6 +23,7 @@ import { chromium, webkit } from "playwright";
 import { readFile } from "node:fs/promises";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { checkWorkModes } from "./work-mode.mjs";
+import { checkJobsLoading } from "./jobs-loading.mjs";
 import {
   ENGLISH_ANONYMOUS_SWEEP,
   ENGLISH_OWNER_SWEEP,
@@ -3806,6 +3807,7 @@ try {
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await checkWorkModes(page, BASE, check);
+  await checkJobsLoading(browser, BASE, { email: "e2e-candidato@local.test", password: E2E_PASSWORD }, check);
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   const firstJobLink = page.locator('[data-testid^="job-link-"]').first();
   const contextualPhases = [];

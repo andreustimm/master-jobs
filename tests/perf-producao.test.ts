@@ -1,6 +1,8 @@
+import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   agregarLinhasPerf,
+  CENARIO_VALIDA_SESSAO,
   cookieValido,
   destinoAceitaCookie,
   lerLinhaPerf,
@@ -87,6 +89,16 @@ describe("medição de produção", () => {
     ]);
     // O nome do cenário vai para o relatório; o termo nunca.
     expect(todos.map((c) => c.nome).join(" ")).not.toContain("c++");
+  });
+
+  it("confere a sessão numa rota autenticada sem fronteira de carregamento", () => {
+    // Com `loading.tsx` a sessão vencida vira 200 + redirecionamento no
+    // cliente, e o 307 que a denuncia some (#217).
+    expect(CENARIO_VALIDA_SESSAO.sessao).toBe(true);
+    const segmento = CENARIO_VALIDA_SESSAO.caminho.slice(1);
+    expect(existsSync(`app/${segmento}/page.tsx`)).toBe(true);
+    expect(existsSync(`app/${segmento}/loading.tsx`)).toBe(false);
+    expect(existsSync("app/loading.tsx")).toBe(false);
   });
 
   it("o cookie só sai por HTTPS ou para a própria máquina, e sem caractere de cabeçalho", () => {

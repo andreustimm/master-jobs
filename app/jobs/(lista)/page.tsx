@@ -4,17 +4,17 @@ import { after } from "next/server";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { FilterBar } from "../filters";
-import { GridToolbar, Pagination, Presets } from "../grid";
-import { JobList } from "../joblist";
-import { Legend } from "../ui";
-import { candidateScope, requirePage } from "../auth";
-import { getTranslator } from "../i18n";
-import { TransitionLink } from "../transition-link";
-import { loadJobsView } from "./jobs-data";
-import { comVigia, criarCronometro, registrarTempo } from "../timeout-watch.ts";
-import { ScoreQueueCard, isRecalculating } from "../score-queue-card";
-import { candidateScoreQueueStatus } from "../../src/core/scoring/queue.ts";
+import { FilterBar } from "../../filters";
+import { GridToolbar, Pagination, Presets } from "../../grid";
+import { JobList } from "../../joblist";
+import { Legend } from "../../ui";
+import { candidateScope, requirePage } from "../../auth";
+import { getTranslator } from "../../i18n";
+import { TransitionLink } from "../../transition-link";
+import { loadJobsView } from "../jobs-data";
+import { comVigia, criarCronometro, registrarTempo } from "../../timeout-watch.ts";
+import { ScoreQueueCard, isRecalculating } from "../../score-queue-card";
+import { candidateScoreQueueStatus } from "../../../src/core/scoring/queue.ts";
 
 export const dynamic = "force-dynamic";
 

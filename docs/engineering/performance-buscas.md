@@ -90,15 +90,21 @@ impresso ou mandado a outro host que não seja HTTPS ou `127.0.0.1`/`localhost`:
 Além dos três públicos, mede `/jobs`, `/jobs?fit=45`,
 `/jobs?fit=45&workMode=remote` e `/jobs?fit=45&q=<termo>`. O termo padrão é
 `typescript`; `JHO_PERF_TERMO` troca, e o valor nunca aparece na saída — o
-relatório só diz "termo". Se a sessão venceu, o script para no primeiro 307
-para `/login` sem gravar nada. Cada requisição com sessão é uma visita real:
-conta como uso, e um `?by=` salvo nunca é pedido.
+relatório só diz "termo". Ao fim de cada rodada — depois das amostras, para
+não aquecer a função antes da "primeira" — o script confere a sessão em
+`/account`, que não tem fronteira de carregamento: se ela venceu, para no 307
+para `/login` sem gravar nada. Em `/jobs` esse 307 não existe mais — desde a
+#217 o esboço compromete a resposta em 200 e a sessão vencida redireciona pelo
+cliente. Pelo mesmo motivo, o TTFB de `/jobs` a partir da #217 mede a chegada do
+esboço, não a da lista: compare rodadas anteriores pelo tempo total. Cada
+requisição com sessão é uma visita real: conta como uso, e um `?by=` salvo
+nunca é pedido.
 
 ### Por dentro: as linhas `perf` do log
 
 `/jobs` e `/` cronometram cada espera do banco com `createStageTimer`
 (`timer.time("auth" | "prelude" | "board" | "facets" | "tail" | "queue", …)`
-em `app/jobs/page.tsx` e `app/jobs/jobs-data.ts`; `cockpit` em `app/page.tsx`),
+em `app/jobs/(lista)/page.tsx` e `app/jobs/jobs-data.ts`; `cockpit` em `app/page.tsx`),
 dentro do `comVigia`. `registrarTempo` escreve uma linha JSON só com número,
 nome de estágio, rota sem query string e região:
 
@@ -502,7 +508,7 @@ o próximo passo não é um cache maior, e sim, nesta ordem:
 | 2 🟡 | Busca por termo indexada: pré-filtro `pg_trgm`, `~*` inalterado (#214, em revisão) | alto com termo seletivo × médio | migration `0012`/`0013` |
 | 2 ✅ | Normalização salarial compartilhada, sem repetir cotações a cada uso | alto com faixa | `repo.ts` |
 | 2 🟡 | Cache local das facetas, validade de 60 s (#216, em revisão; ver [seção](#cache-das-facetas--medição-de-22092026)) | alto ao paginar/ordenar, nulo na primeira leitura × médio | `matching/app/board-facets.ts` |
-| 3 | `loading.tsx` + `Suspense` em `/jobs` | só rende após o cache de facetas | `app/jobs/` |
+| 3 🟡 | `loading.tsx` + `Suspense` em `/jobs` (#217, em revisão; ver [fronteira](#fronteira-de-carregamento-217)) | percepção imediata na troca de tela; o total não muda | `app/jobs/(lista)/`, `app/jobs/[id]/` |
 | ✅ | Régua de conexões por **tela**, `comVigia` em `/jobs` e `/` | entregue e exercitado no QA de concorrência | testes |
 
 ### Decisões
@@ -521,6 +527,46 @@ o próximo passo não é um cache maior, e sim, nesta ordem:
   Ação e `guard*` leem sempre fresco: impersonação e troca de senha mudam a
   sessão **no meio** da requisição, e autorizar com o valor de antes seria a
   decisão errada.
+
+### Fronteira de carregamento (#217)
+
+- **Onde.** `app/jobs/(lista)/loading.tsx`, num grupo de rota que só contém a
+  lista. Dois lugares foram recusados: `app/loading.tsx` cobriria o produto
+  inteiro, e a ausência dele é contrato (`navigation-adapters`);
+  `app/jobs/loading.tsx` envolveria `/jobs/<id>`, `/jobs/<id>/paises` e
+  `/jobs/new`.
+- **Por que o status decide.** O primeiro chunk do fallback compromete a
+  resposta em 200. Depois dele, `notFound()` vira 200 com `noindex` e
+  `redirect()` vira redirecionamento no cliente. `/jobs/999999999` responder 404
+  é contrato do E2E, então o detalhe não tem `loading.tsx`: autenticação e
+  `notFound()` rodam antes, e só a nota por trilha e o histórico da candidatura
+  vêm por `<Suspense>` (`job-track-fits-loading`,
+  `application-timeline-loading`).
+- **O que a lista troca.** Em `/jobs`, sessão vencida com cookie presente passa
+  a redirecionar para `/login` pelo cliente, e não mais por 307. Sem cookie, o
+  `proxy.ts` continua respondendo antes da página. `job:read` vale para os três
+  papéis, então `forbidden()` não é caminho real aqui.
+- **Troca de tela × mesma tela.** Rota dinâmica sem fronteira não tem o que
+  pré-carregar. Com ela, o roteador busca o esqueleto com antecedência: o clique
+  em Vagas, vindo de outra tela, mostra o esboço na hora, o overlay sai sobre
+  ele (a URL confirma com o esboço) e a lista entra por streaming. Filtro, ordem
+  e página **não** mostram o esboço: no Next 16 a fronteira é mantida pela chave
+  de estado do segmento, que exclui a query (`createRouterCacheKey(segment,
+  true)` em `layout-router`), e numa transição React não troca por fallback uma
+  fronteira já revelada. A transição suave da #220 continua mostrando a lista
+  anterior. O E2E `tests/e2e/jobs-loading.mjs` retém a resposta RSC por 2,5 s
+  para provar as duas metades sem depender de corrida.
+- **O que o esqueleto mostra.** Título real, `aria-busy` na região e um aviso
+  `role="status"` do dicionário (`jobs.loading`, `jobDetail.loadingSection`).
+  As barras são decorativas, só com `bg-muted`, e animam apenas com
+  `motion-safe`. Nenhum dado entra no fallback: ele é igual para qualquer
+  sessão e não pode exibir a tela de outra pessoa.
+- **Ganho.** A fronteira muda o tempo até a primeira resposta visível na troca
+  de tela, não o tempo total de `/jobs`, que continua dependendo de lista e
+  facetas (com o cache da #216). No E2E, com a navegação retida por 2,5 s, o
+  esboço aparece bem antes da resposta; sem a fronteira, a tela anterior ficava
+  sob o overlay durante toda a espera. A medição em produção fica para depois
+  do deploy, pela rodada com sessão de `perf:producao` (#221).
 
 ## Sentry e o que fica de fora
 
