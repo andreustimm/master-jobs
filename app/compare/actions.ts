@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import {
   ComparisonInputError,
   createManualComparison,
+  invalidateBoardFacets,
 } from "../../src/contexts/matching/index.ts";
 import { guard, guardOwnCandidate } from "../auth";
 import {
@@ -58,6 +59,8 @@ export async function compareJobAction(
     return { status: "error", formError: "unexpected" };
   }
 
+  // Vaga nova no acervo global: as contagens de todo mundo mudam.
+  invalidateBoardFacets();
   revalidatePath("/");
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${jobId}`);
