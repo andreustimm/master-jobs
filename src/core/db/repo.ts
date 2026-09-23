@@ -5,7 +5,7 @@
  * query changes it once, and the CLI and dashboard can never disagree about
  * what "shortlisted" or "open" means.
  */
-import { and, asc, desc, eq, gte, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import {
@@ -564,11 +564,10 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
     // zero transformava a espera em reprovação, e o candidato recém-criado via
     // o quadro vazio com o corte padrão de 45 (regra 8: dado faltante é
     // neutro). A ordenação continua levando as sem nota para o fim.
-    const unscored = opts.keepUnscored ? sql`${jobScore.fit} is null or ` : sql``;
-    conditions.push(sql`(${unscored}coalesce(${jobScore.fit}, 0) >= ${opts.minFit ?? 0})`);
-    if (opts.maxFit !== undefined) {
-      conditions.push(sql`(${unscored}coalesce(${jobScore.fit}, 0) <= ${opts.maxFit})`);
-    }
+    const fit = sql`coalesce(${jobScore.fit}, 0)`;
+    const bound = (cut: SQL): SQL => (opts.keepUnscored ? or(isNull(jobScore.fit), cut)! : cut);
+    conditions.push(bound(gte(fit, opts.minFit ?? 0)));
+    if (opts.maxFit !== undefined) conditions.push(bound(lte(fit, opts.maxFit)));
     if (opts.cluster) conditions.push(eq(jobScore.cluster, opts.cluster));
     if (opts.hideBlocked) {
       conditions.push(sql`coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb`);
@@ -1333,8 +1332,12 @@ export async function corpusStats(candidateId: number) {
  * rodar, o quadro não pode parecer vazio nem ordenado ao acaso sem explicação.
  * `exists` para no primeiro registro do índice por candidato.
  */
+function scoreExistsSql(candidateId: number, onTrack: SQL): SQL<boolean> {
+  return sql<boolean>`exists (select 1 from ${jobScore} s where s.candidate_id = ${candidateId} and ${onTrack})`;
+}
+
 function hasPrimaryScoreSql(candidateId: number): SQL<boolean> {
-  return sql<boolean>`exists (select 1 from ${jobScore} s where s.candidate_id = ${candidateId} and ${primaryScoreFilter("s")})`;
+  return scoreExistsSql(candidateId, primaryScoreFilter("s"));
 }
 
 /**
@@ -1343,7 +1346,7 @@ function hasPrimaryScoreSql(candidateId: number): SQL<boolean> {
  */
 export async function hasTrackScores(candidateId: number, trackId: number): Promise<boolean> {
   const [row] = await getDb()
-    .select({ scored: sql<boolean>`exists (select 1 from ${jobScore} s where s.candidate_id = ${candidateId} and s.track_id = ${trackId})` })
+    .select({ scored: scoreExistsSql(candidateId, sql`s.track_id = ${trackId}`) })
     .from(sql`(select 1) as singleton`);
   return row?.scored === true;
 }

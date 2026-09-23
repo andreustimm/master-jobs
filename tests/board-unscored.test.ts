@@ -125,16 +125,16 @@ describe("vaga sem nota do candidato da sessão (#279)", () => {
   });
 
   it("o cockpit do candidato novo lista as vagas e avisa que a nota está pendente", async () => {
-    const cockpit = await loadCockpit(novo, DEFAULT, toBoardFilters(DEFAULT));
+    const novoCockpit = await loadCockpit(novo, DEFAULT, toBoardFilters(DEFAULT));
 
-    expect(cockpit.total).toBe(3);
-    expect(ids(cockpit.top).sort()).toEqual([alta, baixa, semNota].sort());
-    expect(cockpit.facets.total).toBe(3);
-    expect(cockpit.stats?.scored).toBe(false);
+    expect(novoCockpit.total).toBe(3);
+    expect(ids(novoCockpit.top).sort()).toEqual([alta, baixa, semNota].sort());
+    expect(novoCockpit.facets.total).toBe(3);
+    expect(novoCockpit.stats?.scored).toBe(false);
 
-    const dono = await loadCockpit(owner, DEFAULT, toBoardFilters(DEFAULT));
-    expect(dono.total).toBe(2);
-    expect(dono.stats?.scored).toBe(true);
+    const ownerCockpit = await loadCockpit(owner, DEFAULT, toBoardFilters(DEFAULT));
+    expect(ownerCockpit.total).toBe(2);
+    expect(ownerCockpit.stats?.scored).toBe(true);
   });
 
   it("a tela Vagas do candidato novo mostra as vagas com o aviso de nota pendente", async () => {
@@ -143,19 +143,19 @@ describe("vaga sem nota do candidato da sessão (#279)", () => {
       schedule: () => undefined, now: new Date(),
     });
 
-    const nova = await view(novo);
-    expect(nova.total).toBe(3);
-    expect(nova.facets.total).toBe(3);
-    expect(nova.notices).toContain("scores_pending");
+    const novoView = await view(novo);
+    expect(novoView.total).toBe(3);
+    expect(novoView.facets.total).toBe(3);
+    expect(novoView.notices).toContain("scores_pending");
 
-    const dono = await view(owner);
-    expect(dono.total).toBe(2);
-    expect(dono.notices).not.toContain("scores_pending");
+    const ownerView = await view(owner);
+    expect(ownerView.total).toBe(2);
+    expect(ownerView.notices).not.toContain("scores_pending");
 
     // Sem candidato não há nota a esperar: o aviso seria sobre ninguém.
-    const recrutador = await view(null);
-    expect(recrutador.total).toBe(3);
-    expect(recrutador.notices).not.toContain("scores_pending");
+    const recruiterView = await view(null);
+    expect(recruiterView.total).toBe(3);
+    expect(recruiterView.notices).not.toContain("scores_pending");
   });
 
   it("a nota de outro candidato não conta como nota do candidato da sessão", async () => {

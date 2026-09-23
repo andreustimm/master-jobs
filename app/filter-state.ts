@@ -23,7 +23,10 @@ export type FilterNotice =
   | "track_unknown"
   | "term_unknown"
   | "cluster_unknown"
-  /** O candidato ainda não tem trilha principal pontuada: as vagas vêm sem nota. */
+  /**
+   * O candidato ainda não tem nota na trilha principal — sem currículo, ou com
+   * a fila ainda por rodar. O texto vale para os dois casos.
+   */
   | "scores_pending";
 
 export type PayState = {

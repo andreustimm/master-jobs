@@ -21,5 +21,8 @@ Score (regra 8: ausência é neutra); a ordenação por aderência a leva para o
 
 A conferir: o total de `/jobs` sem parâmetros é o de vagas abertas, não zero; o
 aviso `jobs-notice-scores_pending` aparece em `/jobs` e `cockpit-scores-pending`
-no início, com o texto em inglês quando a interface está em inglês; como dono
-(com notas), nenhum dos dois avisos aparece e o total continua o do corte de 45.
+no início, com o texto em inglês quando a interface está em inglês. Depois, a
+mesma conta salva o currículo e espera a fila terminar (estado "concluído" em
+`/candidate`, ver `PROF-rescore-status-visibility`): recarregadas, as duas telas
+perdem o aviso e o total volta a respeitar o corte de 45. Como dono (com
+notas), nenhum dos dois avisos aparece.

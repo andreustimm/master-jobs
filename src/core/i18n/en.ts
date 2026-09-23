@@ -299,7 +299,7 @@ export const en: Dictionary = {
     track_unknown: "That track does not exist or is archived; showing the primary.",
     term_unknown: "That saved term does not exist; the filter was ignored.",
     cluster_unknown: "That cluster does not belong to the chosen track; the filter was ignored.",
-    scores_pending: "Your scores are still being calculated. Until then jobs show without a score, and the Score filter does not hide them.",
+    scores_pending: "Your jobs have no score yet: it is calculated after you save your CV. Until then jobs show without a score, and the Score filter does not hide them.",
   },
   termRun: {
     never_run: "not run yet",

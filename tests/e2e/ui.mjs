@@ -4744,15 +4744,24 @@ try {
     await rolePage.fill('input[name="password"]', E2E_PASSWORD);
     await rolePage.locator('[data-testid="login-submit"]').click();
     await rolePage.waitForURL((url) => !url.pathname.startsWith("/login"));
-    if (scenario.prepare) await rolePage.goto(`${BASE}${scenario.prepare}`, { waitUntil: "networkidle" });
     // #279: a conta de candidato do E2E nunca é pontuada. Com o corte padrão de
-    // 45, o quadro dela tem de listar o acervo e dizer que a nota está pendente.
-    const unscoredBoard = scenario.email === "e2e-candidato@local.test"
-      ? await rolePage.evaluate(() => ({
+    // 45, o cockpit e o quadro dela têm de listar o acervo e dizer que a nota
+    // está pendente. O cockpit é lido direto, sem depender de onde o login cai.
+    let unscoredBoard = null;
+    if (scenario.email === "e2e-candidato@local.test") {
+      await rolePage.goto(`${BASE}/`, { waitUntil: "networkidle" });
+      const cockpitNotice = await rolePage.evaluate(
+        () => document.querySelector('[data-testid="cockpit-scores-pending"]')?.textContent ?? null,
+      );
+      unscoredBoard = { cockpitNotice };
+    }
+    if (scenario.prepare) await rolePage.goto(`${BASE}${scenario.prepare}`, { waitUntil: "networkidle" });
+    if (unscoredBoard) {
+      Object.assign(unscoredBoard, await rolePage.evaluate(() => ({
         total: Number(document.querySelector('[data-testid="jobs-total"]')?.getAttribute("data-total") ?? "-1"),
         notice: document.querySelector('[data-testid="jobs-notice-scores_pending"]')?.textContent ?? null,
-      }))
-      : null;
+      })));
+    }
     const snapshot = await observeNavigation(
       rolePage,
       () => rolePage.locator(scenario.control).click(),
@@ -4916,7 +4925,8 @@ try {
   check(
     "#279 candidato sem nota vê as vagas sob o corte padrão, com aviso de nota pendente em inglês",
     (candidateUnscoredBoard?.total ?? 0) > 0
-      && candidateUnscoredBoard?.notice === en.filterNotices.scores_pending,
+      && candidateUnscoredBoard?.notice === en.filterNotices.scores_pending
+      && candidateUnscoredBoard?.cockpitNotice === en.filterNotices.scores_pending,
     JSON.stringify(candidateUnscoredBoard),
   );
   const candidateEmptyPipeline = roleTransitionResults

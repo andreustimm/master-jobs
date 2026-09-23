@@ -94,10 +94,11 @@ entre `architect` e `senior_ic` no título compra 9.
 >
 > **Vaga sem nota passa pela faixa.** A nota é do candidato da sessão e só
 > existe depois que a fila de repontuação roda para ele. Até lá, a vaga não tem
-> linha em `job_score` e o filtro de Score (mínimo e máximo) não a corta:
-> `fit is null or fit >= mínimo`. Ler a ausência como nota zero — o
-> `coalesce(fit, 0)` de antes — deixava o candidato recém-criado com o quadro e o
-> cockpit vazios sob o corte padrão de 45 (#279, regra 8). A ordenação por
+> linha em `job_score` e o filtro de Score não a corta: `fit is null or fit >=
+> mínimo` e `fit is null or fit <= máximo`. Ler a ausência como nota zero
+> (`coalesce(fit, 0)`, que segue sendo o modo estrito) deixava o candidato
+> recém-criado com o quadro e o cockpit vazios sob o corte padrão de 45 (#279,
+> regra 8). A ordenação por
 > aderência continua levando as sem nota para o fim. Enquanto o candidato não
 > tem nenhuma nota na trilha principal, `/jobs` e o cockpit mostram o aviso
 > `filterNotices.scores_pending`. Para o acervo sem escopo de candidato
