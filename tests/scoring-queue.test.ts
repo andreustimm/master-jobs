@@ -11,7 +11,7 @@ import {
   scoreTask,
   source,
 } from "../src/core/db/schema.ts";
-import { scoreEveryCandidate } from "../src/core/scoring/apply.ts";
+import { scoreCandidate, scoreEveryCandidate } from "../src/core/scoring/apply.ts";
 import {
   candidateScoreQueueStatus,
   claimScore,
@@ -218,7 +218,7 @@ describe("status da fila por candidato", () => {
       failed: 0,
       scored: 0,
       lastError: "catalogo-vazio",
-    })).toEqual({ state: "failed", scored: 0 });
+    })).toEqual({ state: "refused", scored: 0, reason: "emptyCatalog" });
 
     expect(scoreQueueDisplay({
       pending: 1,
@@ -367,6 +367,8 @@ describe("o consumo", () => {
       processadas: 0,
       pontuadas: 0,
       falhas: 0,
+      adiadas: 0,
+      interrompida: false,
     });
   });
 
@@ -447,5 +449,12 @@ describe("scoreEveryCandidate", () => {
     // Registrado com zero e seguido adiante: quem lê o relatório sabe onde olhar.
     expect(porSlug["quebrado"]!.scored).toBe(0);
     expect(linhas).toHaveLength(2);
+
+    // A unidade da fatia `pontuar` (ADR 0025) é a mesma função, e ela devolve
+    // o erro em vez de lançar: a fatia registra e segue para o próximo.
+    const sozinho = await scoreCandidate(quebrado);
+    expect(sozinho.scored).toBe(0);
+    expect(sozinho.erro).toBeTruthy();
+    expect((await scoreCandidate(bom)).erro).toBeUndefined();
   });
 });

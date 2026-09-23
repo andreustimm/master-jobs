@@ -91,6 +91,23 @@ entre `architect` e `senior_ic` no título compra 9.
 >
 > Um teto tem uso real: procurar entre 55 e 70 encontra a vaga que o scorer
 > achou boa mas não ótima, que é onde costuma estar o que ele não sabe medir.
+>
+> **Vaga sem nota passa pela faixa.** A nota é do candidato da sessão e só
+> existe depois que a fila de repontuação roda para ele. Até lá, a vaga não tem
+> linha em `job_score` e o filtro de Score não a corta: `fit is null or fit >=
+> mínimo` e `fit is null or fit <= máximo`. Ler a ausência como nota zero
+> (`coalesce(fit, 0)`, que segue sendo o modo estrito) deixava o candidato
+> recém-criado com o quadro e o cockpit vazios sob o corte padrão de 45 (#279,
+> regra 8). A ordenação por
+> aderência continua levando as sem nota para o fim. Enquanto o candidato não
+> tem nenhuma nota na trilha principal, `/jobs` e o cockpit mostram o aviso
+> `filterNotices.scores_pending`. Para o acervo sem escopo de candidato
+> (recrutador) nada muda: o filtro de Score não se aplica.
+>
+> Isso vale para as telas (`/jobs`, cockpit, `/api/export`), que pedem
+> `keepUnscored` ao montar os filtros. Relatório (`jho report`), `jho jobs list
+> --min-fit` e a varredura de triagem continuam estritos: a pergunta deles é
+> "vagas com nota acima de X", e vaga sem nota não responde a ela.
 
 Arredondamento: cada componente e o `fit` vão para 1 casa decimal (`Math.round(x * 10) / 10`), mas o `fit` é calculado **sobre os valores não arredondados**. Por isso as colunas do `jobs show` podem não somar exatamente o `fit` (ver o exemplo Paires adiante). `penalty` é gravado inteiro, sem arredondamento.
 
@@ -708,6 +725,49 @@ cada trilha ativa. Trilha sem linha (vaga fora do portão, ou trilha recém-cria
 ganha a nota calculada na hora, marcada como `computed`, e nada é gravado —
 gravar poria no ranking da trilha uma vaga que o portão deixa de fora.
 
+## Quando a nota é calculada: a fila e as fatias
+
+Salvar currículo (colar, importar PDF, restaurar versão, criar o perfil) e
+mexer em trilha **enfileiram** a repontuação do candidato em `score_task` — uma
+linha por candidato, idempotente. Quem consome a fila
+(`runScoreQueue`, em `src/core/scoring/queue.ts`) primeiro deriva o perfil
+(`ensureMatchingProfile`, que cria a trilha principal) e depois roda
+`scoreAll`. São três consumidores do mesmo código ([ADR 0026](adr/0026-fila-de-repontuacao-em-fatias-na-web.md)):
+
+| Quem | Quando | Orçamento |
+|---|---|---|
+| `after()` da ação que salvou o currículo (não as de trilha) | logo depois da resposta | uma fatia (`SCORE_SLICE_MS`, 20 s) |
+| fatia `repontuar` de `/api/cron/varredura` | a cada 2 min pelo `pg_cron` ([ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)) ou à mão | uma fatia |
+| `jho jobs rescore run` (CLI; também no Actions enquanto ele agendar a varredura) | à mão | sem prazo, drena tudo |
+
+A fatia do `after()` pega primeiro a tarefa de quem salvou, e depois o topo da
+fila (prioridade, depois ordem de chegada); a fatia `repontuar` só usa a ordem
+da fila.
+
+**Fatia.** Com prazo, `scoreAll` lê as vagas desatualizadas em páginas de mil,
+em ordem de id, grava em lotes de cem e confere o prazo **depois** de cada lote.
+Vencido, devolve `complete: false`; a fila põe a tarefa de volta em `pending`
+**sem** contar tentativa e com a soma das notas já gravadas em `scored`. A
+fatia seguinte recomeça pelo que ainda está desatualizado — o que foi gravado
+saiu do filtro de staleness, então nada é refeito. O prazo só interrompe depois
+de a execução ter gravado algo: uma página inteira fora do alvo de uma trilha
+aceita não grava nada, e parar nela repetiria a mesma página a cada fatia.
+
+A fatia `pontuar` da varredura é outra coisa: repassa todo candidato a cada dez
+minutos para as vagas novas, sem tocar em `score_task`.
+
+**Recusa.** Quando a derivação recusa, a tarefa termina `done` com o código em
+`last_error` e nenhuma nota é gravada. A tela de candidato mostra o estado
+`refused` com o motivo e a saída, pelo dicionário:
+
+| Código | Motivo na tela | Quem resolve |
+|---|---|---|
+| `sem-curriculo` | `noCv` | a pessoa: colar ou importar o currículo |
+| `curriculo-fraco` | `weakCv` — currículo curto ou sem skill do catálogo | a pessoa: currículo completo ou PDF |
+| `catalogo-vazio` | `emptyCatalog` | quem administra: `jho skills seed` |
+
+Qualquer outro `last_error` continua `failed`: é erro, não recusa.
+
 ## Como ajustar
 
 ### Mapa: quero X → edito Y
@@ -729,7 +789,7 @@ Coisas que **não** são ajustáveis pelo YAML e exigem mudar `score.ts`: os `WE
 
 ### O ciclo obrigatório depois de qualquer ajuste
 
-> **Invariante:** mexeu em `profile.yaml` ou em `src/core/scoring/score.ts`? **Bump `SCORER_VERSION`** e rode o rescore. (Regra 5 do `CLAUDE.md`.)
+> **Invariante:** mexeu em `profile.yaml` ou em `src/core/scoring/score.ts`? **Bump `SCORER_VERSION`** e rode o rescore. (Regra 6 do `AGENTS.md`; detalhe em [`engineering/rules/matching-and-evidence.md`](engineering/rules/matching-and-evidence.md#g08).)
 
 ```bash
 # 1. valida o YAML e mostra os targets resolvidos (não abre o banco)
@@ -770,6 +830,26 @@ Notas de execução:
 - O cabeçalho de `score.ts` menciona `jobs score --rescore`, mas a flag implementada em `src/cli.ts` é **`--all`**. O comentário está desatualizado; a flag é `--all`.
 
 > **Invariante:** `SCORER_VERSION` é um identificador de compatibilidade de score, não um número de release do projeto. Ele muda quando o **output do scorer** muda para o mesmo input. Refatorar `score.ts` sem alterar resultado não pede bump; mudar um peso no `profile.yaml` pede.
+
+**O portão.** `tests/scorer-version.test.ts` pontua um acervo fixo de vagas —
+escolhido para passar por título, vocabulário, senioridade, geografia,
+remuneração, frescor, benefícios e bloqueadores — contra o `profile.yaml` real,
+com instante e câmbio fixos, e grava o hash do resultado ao lado da versão em
+`RECORDED`. Saída diferente com a mesma versão reprova com a impressão nova na
+mensagem; bump sem impressão registrada também reprova. O ciclo passa a ser:
+mudou a saída, suba `SCORER_VERSION`, cole `{ version, fingerprint }` da
+mensagem em `RECORDED` no mesmo commit e repontue.
+
+O que ele não vê: mudança que não altera nenhuma vaga do acervo (o teste de
+sensibilidade no mesmo arquivo mostra que cada eixo do perfil move a impressão),
+e troca da impressão registrada sem troca de versão — edição deliberada que só a
+revisão distingue de um refactor.
+
+O instante é entrada explícita: `scoreJob(input, { profile, fx, asOf })` é a
+única forma, e `scoreFreshness` exige `now`. A forma antiga
+`scoreJob(input, profile, fx)` lia `Date.now()` sozinha e saiu; testes que não
+dependem de data usam `tests/support/score-now.ts`, onde o relógio é decisão da
+composição do teste.
 
 ### Use o banco como laboratório antes de commitar
 

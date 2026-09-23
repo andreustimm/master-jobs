@@ -52,6 +52,7 @@ export async function loadCockpit(
   const top = await listBoard(candidateId, { ...filters, limit: 12 });
   const facets = await cachedBoardFacets(candidateId, {
     minFit: state.fit,
+    keepUnscored: filters.keepUnscored,
     cluster: state.cluster,
     term: state.term,
     sourceKinds: state.sources,

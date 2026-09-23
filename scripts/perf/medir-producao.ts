@@ -17,6 +17,7 @@ import { request as requestHttp, Agent as AgentHttp } from "node:http";
 import { parseArgs } from "node:util";
 import {
   agregarLinhasPerf,
+  CENARIO_VALIDA_SESSAO,
   cookieValido,
   destinoAceitaCookie,
   lerLinhaPerf,
@@ -134,6 +135,14 @@ async function medirRotas() {
           const r = regiaoDaResposta(m.vercelId);
           anota(regioes, cenario.nome, r ? `${r.borda}::${r.funcao ?? "sem função"}` : "?");
           anota(status, cenario.nome, `${m.status}${m.cache ? ` ${m.cache}` : ""}`);
+        }
+      }
+      // Depois das amostras, e não antes: conferir antes aqueceria a função e a
+      // "primeira" deixaria de medir a partida a frio. Nada é gravado até o fim.
+      if (cookie !== null) {
+        const sessao = await medir(base, CENARIO_VALIDA_SESSAO, cookie, agente);
+        if (sessao.status >= 300 && sessao.status < 400 && sessao.destino === "/login") {
+          throw new Error("A sessão foi recusada (redirecionou para /login): cookie vencido ou inválido. Nada foi gravado.");
         }
       }
     }

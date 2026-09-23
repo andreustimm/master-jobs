@@ -13,6 +13,77 @@
 > não os execute literalmente. Para a operação atual, prefira os comandos
 > `jho` e as rotinas de `docs/engineering/deploy.md`.
 
+## Varredura horária: ativar o agendador
+
+Desde a [ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)
+a varredura roda na Vercel em fatias: `GET /api/cron/varredura?fatia=<nome>`,
+com `sync`, `termos`, `captura`, `reconferencia`, `pontuar` e `repontuar`. Cada chamada faz o
+que cabe em 20 s, grava uma linha em `production.sweep_run` e devolve o
+relatório em JSON. Quem chama é o `pg_cron` do Supabase — e ligá-lo é **passo
+humano**, uma vez, depois de o código estar em produção (a migração
+`0016_sweep_lease_and_runs` aplicada):
+
+1. **Vercel, produção.** O valor de uma variável *Sensitive* não volta pela API,
+   então gere um segredo novo e cadastre (ou substitua) `CRON_SECRET`:
+   `openssl rand -hex 32`, depois `vercel env rm CRON_SECRET production` e
+   `vercel env add CRON_SECRET production` (marcar como Sensitive). Confira
+   também `JHO_SOURCE_ALLOWLIST` em produção — o mesmo valor da variável do
+   Actions; sem ela as fatias de rede respondem 503 por política (ADR 0021).
+   `JHO_USER_AGENT` é recomendado (`master-jobs/0.1 (+https://jobs.mastertimm.com.br)`).
+   Redeploy de produção para as variáveis valerem.
+2. **Fumaça.** Sem cabeçalho a rota recusa; com ele, a fatia que não toca
+   terceiros responde:
+   `curl -s -o /dev/null -w '%{http_code}\n' "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=pontuar"` → `401`;
+   `curl -s -H "authorization: Bearer $CRON_SECRET" "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=pontuar"` → JSON com `durationMs`.
+3. **Um agendador por vez.** Imediatamente antes de rodar o SQL do passo
+   seguinte, desligue o disparo agendado do Actions:
+   `gh variable set VARREDURA_AGENDADOR --body supabase --repo andreustimm/master-jobs`.
+   O disparo manual e a tela de operações continuam. Se o passo 4 falhar,
+   `gh variable delete VARREDURA_AGENDADOR --repo andreustimm/master-jobs`
+   devolve a execução diária.
+4. **Supabase, SQL Editor do projeto de produção.** Habilite `pg_cron` e
+   `pg_net` (Integrations, ou as linhas `create extension` do arquivo), grave os
+   dois segredos no Vault — o **mesmo** valor do passo 1:
+   `select vault.create_secret('<CRON_SECRET>', 'jho_cron_secret');`
+   `select vault.create_secret('https://jobs.mastertimm.com.br', 'jho_cron_base_url');`
+   e rode [`supabase/cron/varredura.sql`](../supabase/cron/varredura.sql). O
+   arquivo é idempotente: rodar de novo só atualiza.
+5. **Conferir em minutos.**
+   `select jobname, schedule, active from cron.job where jobname like 'jho-varredura-%';`
+   e `select status_code, count(*) from net._http_response where created > now() - interval '15 minutes' group by 1;`
+   — tudo `200`. (`pg_net` só guarda respostas por 6 h.)
+
+**Prova de 24 h** (a entrega da #281). Toda fonte com intervalo ≤ 60 min e
+nenhuma chamada perto do teto:
+
+```sql
+with s as (
+  select unit, started_at::timestamptz as at,
+         lag(started_at::timestamptz) over (partition by unit order by started_at) as antes
+  from production.sweep_run
+  where slice = 'sync' and unit is not null
+    and started_at::timestamptz > now() - interval '24 hours'
+)
+select unit, count(*) as syncs, max(at - antes) as maior_intervalo
+from s group by unit order by maior_intervalo desc nulls first;
+
+select slice, count(*) as chamadas, max(duration_ms) as mais_lenta_ms, sum(errors) as erros
+from production.sweep_run
+where unit is null and started_at::timestamptz > now() - interval '24 hours'
+group by slice;
+```
+
+`duration_ms` mede o trabalho dentro da função; o teto de 30 s da plataforma se
+confere nos logs da Vercel (nenhum `FUNCTION_INVOCATION_TIMEOUT` em
+`/api/cron/varredura`) e no painel *Usage*, que também diz se a cadência cabe
+no plano. Fonte ausente da primeira consulta não sincronizou nas 24 h — o
+alarme "fonte há mais de 2 h sem sync" (log da função e Sentry, uma vez por
+hora) já deveria tê-la apontado.
+
+**Desfazer:** `select cron.unschedule(jobname) from cron.job where jobname like 'jho-varredura-%';`
+e `gh variable delete VARREDURA_AGENDADOR --repo andreustimm/master-jobs` — a
+execução diária do Actions volta a valer na manhã seguinte.
+
 ## Pedir manutenção pela interface — `/admin/operacoes`
 
 Tela de administrador com um botão por rotina: varredura inteira, buscar vagas
@@ -41,6 +112,46 @@ devagar, nunca incorreto.
 `source.lastSyncedAt`, `source.lastStatus` — pela mesma leitura que a CLI usa em
 `jho sources list`. Assim a tela não depende de token para dizer a verdade sobre
 o acervo.
+
+## Repontuação de candidato: fatias na web
+
+Candidato que salva o currículo não espera a varredura: a ação enfileira em
+`score_task` e roda **uma fatia** da fila no `after()`, depois da resposta. A
+fatia tem orçamento de `SCORE_SLICE_MS` (20 s), conferido entre dois lotes —
+pode passar dele por um lote e uma página de leitura, e cabe no teto de 30 s da
+função; o que não couber volta à fila sem gastar tentativa
+([ADR 0026](adr/0026-fila-de-repontuacao-em-fatias-na-web.md); mecânica em
+[`scoring.md`](scoring.md#quando-a-nota-é-calculada-a-fila-e-as-fatias)).
+
+A continuação é a fatia **`repontuar`** da varredura (`GET
+/api/cron/varredura?fatia=repontuar`, mesmo `CRON_SECRET`, mesma borda
+`cronDenied`, métrica em `sweep_run`), agendada a cada dois minutos em
+`supabase/cron/varredura.sql` (`jho-varredura-repontuar`). Ela não consulta a
+política de ingestão: só grava nota no banco do próprio ambiente. O relatório
+traz `items` (tarefas concluídas ou recusadas), `errors` (tentativas que
+falharam) e `detail: { scored, deferred,
+pending }` — `pending > 0` quer dizer que ainda há fila; o agendador não
+decide nada com isso, chama no próximo ciclo de qualquer jeito.
+
+A fatia `pontuar` continua existindo e é outra coisa: repassa todo candidato de
+dez em dez minutos para as vagas novas. Ela não conclui a tarefa da fila nem
+registra a recusa — e é a tarefa que a tela de candidato lê.
+
+**Ativar.** O agendamento entra junto com as outras fatias ao reaplicar
+`supabase/cron/varredura.sql` no SQL Editor de produção (idempotente; passo 4
+de "Varredura horária: ativar o agendador" acima). Enquanto não for
+reaplicado, o que sobra da fatia do `after()` espera a próxima ação do
+candidato ou `jho jobs rescore run`. À mão:
+
+```bash
+curl -sS -H "authorization: Bearer $CRON_SECRET" "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=repontuar"
+```
+
+**Diagnóstico.** `jho jobs rescore status` conta a fila por estado. Tarefa em
+`scoring` há mais de `MINUTOS_CLAIM_MORTO` (10 min) é de uma função que morreu
+no meio, e a próxima fatia a retoma. `done` com `last_error` `sem-curriculo`,
+`curriculo-fraco` ou `catalogo-vazio` é **recusa**, não falha: a tela de
+candidato mostra o motivo; `catalogo-vazio` pede `jho skills seed`.
 
 ## Por que isto existe
 
@@ -95,6 +206,19 @@ sinais:
 - **`closed` alto de repente**: a fonte devolveu menos vagas que da última vez.
   Confira se não foi degradação da API antes de acreditar que 200 vagas
   fecharam no mesmo dia.
+- **`partial window: absence closes nothing`** ao lado da linha: a fonte é uma
+  janela (as mais recentes, as primeiras páginas) e não fecha nada por
+  ausência — `closed` ali é sempre 0. Essas vagas só fecham por 404/410 na
+  reconferência. A lista de fontes completas e parciais está em
+  [`sources.md`](sources.md#completude-da-listagem).
+
+> **Invariante:** ausência só fecha vaga quando a fonte listou tudo o que tem.
+> Janela parcial nunca fecha por ausência, e lista vazia não fecha nada nem em
+> fonte completa (`decideAbsenceClosure()` em `src/core/ingest/lifecycle.ts`).
+> A reconferência agendada tem um único dono por vez: o `pg_cron` do Supabase
+> depois da troca de agendador, o GitHub Actions diário até ela
+> ([ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)).
+> A Vercel não tem cron próprio.
 
 > **Invariante:** Uma fonte que falha é registrada e pulada, nunca aborta a run.
 > O `try/catch` de `syncOne()` grava `source.lastStatus = 'error'` e
@@ -228,7 +352,8 @@ pnpm jho jobs score --all
 > `job_score.scorer_version <> SCORER_VERSION` — ou seja, sem o bump os scores
 > velhos passam por válidos e se misturam com os novos sem ninguém perceber.
 
-Não existe repontuação de uma vaga só: `scoreAll()` aceita apenas `{ all }`.
+Não existe repontuação de uma vaga só: `scoreAll()` aceita `{ all }` e, na fila
+da web, um `deadline` que interrompe entre lotes.
 `loadProfile(true)` força releitura do YAML a cada run, então não há cache
 antigo em jogo.
 
@@ -668,7 +793,14 @@ Duas armadilhas dentro disso, que não aparecem contando `Promise.all`:
 de dados (`app/cockpit-data.ts`, `app/jobs/jobs-data.ts`,
 `app/searches/searches-data.ts`, `app/candidate/skills/data.ts`), nunca no corpo
 da página, e cada um desses módulos tem um caso em `tests/db-fan-out.test.ts`.
-Composição na página é invariante sem guarda.
+A guarda é o inventário V10-05 em `tests/architecture.test.ts`: ele descobre
+pelo conteúdo todo arquivo de `app/` com `Promise.all` (e parentes) e exige uma de duas coisas: a função de composição
+chamada em `db-fan-out.test.ts`, ou um leque literal de no máximo `max - 1`
+itens (o `max` lido de `src/core/db/client.ts`) com o motivo escrito. Leque
+dinâmico (`Promise.all(rows.map(…))`, ou `[...lista]` dentro da literal) conta como ilimitado, e ler `loadRates`
+duas vezes na mesma composição reprova. É inventário, não medição: o leque
+declarado conta chamadas, e uma chamada que abre duas consultas por dentro só
+aparece no pico medido.
 
 E **passe o câmbio adiante.** `loadRates()` é uma consulta sem cache (eram duas,
 em série, antes de a data mais recente virar subconsulta), e `listBoard`,
@@ -678,8 +810,9 @@ para isso.
 
 **O Sentry não vê isso.** `FUNCTION_INVOCATION_TIMEOUT` mata o processo; o
 código não falha, não reporta, e o registro da Vercel traz uma linha só. A falha
-mais visível do produto é a única invisível na telemetria — procure nos logs da
-Vercel, não no Sentry:
+mais visível do produto é a única invisível na telemetria. O tracing (#219) não
+muda isso: a transação só é enviada quando a requisição termina, e a requisição
+morta não termina. Procure nos logs da Vercel, não no Sentry:
 
 ```bash
 vercel logs https://jobs.mastertimm.com.br --json | grep -E "Timeout|504"

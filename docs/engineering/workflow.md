@@ -4,7 +4,9 @@ O fluxo continua sendo worktree de `dev` → PR para `dev` → promoção autom�
 para `staging` → aprovação humana para `main`. A regra 24 de
 [AGENTS.md](../../AGENTS.md) define a autoridade operacional: issue e
 [Project 3 — Master Jobs](https://github.com/users/andreustimm/projects/3).
-Git continua sendo a fonte de specs, código e evidências.
+Git continua sendo a fonte de specs, código e evidências. Este documento é o
+roteiro; as regras que ele executa, com escopo e exceções, estão em
+[rules/delivery.md](rules/delivery.md).
 
 ## Preparação e ativação
 
@@ -192,7 +194,7 @@ para outros repositórios:
 
 | Mudança | Evidência necessária |
 |---|---|
-| Markdown e metadados | Estrutura, links e scripts afetados |
+| Markdown e metadados | Estrutura, links e scripts afetados: `pnpm check:instructions`, `pnpm check:release-ready`, `pnpm check:qa-tracker` |
 | Ferramenta de desenvolvimento | Testes de comportamento da ferramenta e comandos afetados |
 | Runtime | `rtk pnpm check` e E2E aplicável |
 | Comportamento percebido pelo usuário | Gates de runtime e QA targeted conforme [QA vivo](../qa/README.md) |
@@ -296,6 +298,16 @@ pendência na issue. `dev`, `staging` e `main` permanecem sempre.
 em branches permanentes; `pre-push` impede push direto para elas, inclusive
 feature:dev, e valida o nome da branch de trabalho. Hooks não protegem escritas
 pela API; não substituem política remota, claim ou recibo.
+
+## Proteção remota
+
+Rulesets do GitHub impedem exclusão e force-push em `main`, `staging` e `dev`
+para todos, e exigem em `main` PR aprovada e CI verde sem bypass de CI. `dev` e
+`staging` ainda não exigem PR nem CI no remoto: a plataforma não aceita a
+exceção de que a promoção automática precisaria. O que está aplicado, o
+caminho humano do hotfix, os limites e a reversão estão em
+[github-protections.md](github-protections.md). Confira com
+`rtk node scripts/github/verify-protections.ts`.
 
 ## O que foi adaptado de contas_casal
 

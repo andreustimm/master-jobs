@@ -57,6 +57,20 @@ describe("Workable diante de resposta magra", () => {
     expect(warnings).toEqual([]);
   });
 
+  it("sem próximo token a lista acabou: completa", async () => {
+    setHttpPort(fixtureHttp({ "jobs.workable.com": { jobs: [magra] } }));
+    const { completeness } = await workable.fetchJobs({ kind: "workable", handle: "", label: "Workable" });
+    expect(completeness).toBe("complete");
+  });
+
+  it("teto de páginas com token pendente é janela parcial", async () => {
+    // As cinco páginas do orçamento acabaram e a plataforma ainda oferecia a
+    // seguinte: o que ficou depois nunca foi visto.
+    setHttpPort(fixtureHttp({ "jobs.workable.com": { jobs: [magra], nextPageToken: "sempre" } }));
+    const { completeness } = await workable.fetchJobs({ kind: "workable", handle: "", label: "Workable" });
+    expect(completeness).toBe("partial");
+  });
+
   it("UT-121 `workplace` presente e diferente de remoto é presencial, não desconhecido", async () => {
     setHttpPort(
       fixtureHttp({
@@ -81,7 +95,7 @@ describe("Workable diante de resposta magra", () => {
     });
     setHttpPort(http);
 
-    const { jobs, warnings } = await workable.fetchJobs({
+    const { jobs, warnings, completeness } = await workable.fetchJobs({
       kind: "workable",
       handle: "",
       label: "Workable",
@@ -89,6 +103,8 @@ describe("Workable diante de resposta magra", () => {
 
     expect(jobs).toHaveLength(1);
     expect(http.calls).toHaveLength(2);
+    // Página vazia com token pendente não é o fim declarado pela plataforma.
+    expect(completeness).toBe("partial");
     // Com `totalSize` maior que o que veio, o aviso diz que são as primeiras
     // páginas — é o outro lado do caso UT-120.
     expect(warnings[0]).toMatch(/1 de 9 vagas/);
@@ -166,6 +182,27 @@ describe("Hacker News diante de comentário que não é vaga", () => {
     });
 
     expect(resultado.jobs).toEqual([]);
+    // Sem a contagem do Algolia, nada prova que a thread veio inteira.
+    expect(resultado.completeness).toBe("partial");
+  });
+
+  it("thread lida inteira é completa; cortada pelo teto de página, parcial", async () => {
+    const comentario = (id: string) => ({
+      objectID: id,
+      parent_id: "t1",
+      comment_text: "Acme | Staff Engineer | Remote",
+    });
+    setHttpPort(
+      fixtureHttp({ search_by_date: { hits: [hiring] }, "/search?": { hits: [comentario("c1")], nbHits: 1 } }),
+    );
+    const inteira = await hackernews.fetchJobs({ kind: "hackernews", handle: "", label: "Hacker News" });
+    expect(inteira.completeness).toBe("complete");
+
+    setHttpPort(
+      fixtureHttp({ search_by_date: { hits: [hiring] }, "/search?": { hits: [comentario("c1")], nbHits: 1200 } }),
+    );
+    const cortada = await hackernews.fetchJobs({ kind: "hackernews", handle: "", label: "Hacker News" });
+    expect(cortada.completeness).toBe("partial");
   });
 
   it("UT-129 story que não é 'Who is hiring?' não conta como thread", async () => {

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
@@ -86,18 +86,52 @@ describe("IT-003 — o contrato de ambiente não vaza produção", () => {
     expect(example).toContain("DATABASE_URL");
   });
 
-  it("o cron da Vercel aponta para uma rota que consulta a política", () => {
+  it("a reconferência agendada tem um dono por vez: o pg_cron, e o Actions só até a troca", () => {
+    // Dois agendadores sobre a mesma fila dobravam a leitura do banco e as
+    // requisições a sites de terceiros sem que nenhum dos dois soubesse do
+    // outro (B-11, #269). Desde a ADR 0025 quem agenda é o `pg_cron` do
+    // Supabase; a Vercel continua sem cron próprio.
     const vercel = JSON.parse(readFileSync("vercel.json", "utf8")) as {
       crons?: { path: string }[];
     };
-    const paths = (vercel.crons ?? []).map((cron) => cron.path);
+    expect(vercel.crons ?? []).toEqual([]);
 
-    expect(paths).toContain("/api/cron/recheck");
+    // O SQL versionado agenda a fatia de reconferência exatamente uma vez.
+    const sql = readFileSync("supabase/cron/varredura.sql", "utf8");
+    expect(sql.match(/chamar_fatia\('reconferencia'\)/g) ?? []).toHaveLength(1);
 
-    const route = readFileSync("app/api/cron/recheck/route.ts", "utf8");
+    // O Actions ainda agenda a reconferência — mas o disparo agendado para
+    // de rodar quando a troca é declarada, e só o manual sobra.
+    const schedulers = readdirSync(".github/workflows").filter((file) => {
+      const text = readFileSync(`.github/workflows/${file}`, "utf8");
+      return /^\s*schedule:/m.test(text) && /jho jobs recheck (queue|run)/.test(text);
+    });
+    expect(schedulers).toEqual(["varredura.yml"]);
+    const job = (workflow("varredura.yml") as { jobs: Record<string, { if: string }> }).jobs.varrer!;
+    expect(job.if).toContain("github.event_name == 'workflow_dispatch' || vars.VARREDURA_AGENDADOR != 'supabase'");
+  });
+
+  it("as rotas por segredo passam pela mesma borda, que consulta a política", () => {
+    const edge = readFileSync("app/api/cron/authorize.ts", "utf8");
     // Segredo prova quem chama; a política diz se este deployment pode gastar
     // cota. Um preview com o segredo herdado continuaria autenticado.
-    expect(route).toContain("canRunIngestion");
-    expect(route).toContain("CRON_SECRET");
+    expect(edge).toContain("canRunIngestion");
+    expect(edge).toContain("CRON_SECRET");
+    for (const route of ["app/api/cron/recheck/route.ts", "app/api/cron/varredura/route.ts"]) {
+      const text = readFileSync(route, "utf8");
+      expect(text, route).toContain("cronDenied(request)");
+      expect(text, route).toContain("ingestionDenied()");
+    }
+  });
+
+  it("o SQL do agendamento lê o segredo do Vault e nunca o carrega", () => {
+    const sql = readFileSync("supabase/cron/varredura.sql", "utf8");
+    // O segredo chega por `vault.decrypted_secrets`; um `Bearer` literal no
+    // arquivo seria o segredo em commit.
+    expect(sql).toContain("vault.decrypted_secrets");
+    expect(sql).not.toMatch(/'Bearer [^'\s]/);
+    // Fora de `public`: lá a função viraria RPC da Data API.
+    expect(sql).toContain("create or replace function jho_cron.chamar_fatia");
+    expect(sql).not.toMatch(/function\s+public\./);
   });
 });

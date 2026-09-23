@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { isolationRefusal } from "./e2e/database-guard.mjs";
+import { copiedToHarness, isolationRefusal } from "./e2e/database-guard.mjs";
 
 /**
  * O setup do e2e só escreve em banco local. Foi rodado contra um banco real e
@@ -38,6 +38,21 @@ describe("isolationRefusal", () => {
 
   it("recusa conta de e2e com e-mail de uma pessoa", () => {
     expect(isolationRefusal({ DATABASE_URL: LOCAL, E2E_EMAIL: "alguem@gmail.com" })).toMatch(/E2E_EMAIL/);
+  });
+
+  it("o build descartável não recebe arquivo de ambiente real", () => {
+    for (const file of [".env", ".env.local", ".env.production", ".env.production.local", ".env.development"]) {
+      expect(copiedToHarness(file), file).toBe(false);
+    }
+    for (const generated of [".git/HEAD", ".next/server", "node_modules/next", "data/jobs.db"]) {
+      expect(copiedToHarness(generated), generated).toBe(false);
+    }
+    // O molde não tem valor real e documenta o contrato; o código, sim, vai.
+    for (const kept of ["", ".env.example", "app/page.tsx", "tests/e2e/ui.mjs", "package.json"]) {
+      expect(copiedToHarness(kept), kept).toBe(true);
+    }
+    const runner = readFileSync("tests/e2e/run-isolated.mjs", "utf8");
+    expect(runner).toContain("filter: (source) => copiedToHarness(relative(ROOT, source))");
   });
 
   it("setup.mjs consulta a guarda antes de migrar ou escrever", () => {

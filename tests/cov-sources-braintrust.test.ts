@@ -73,11 +73,13 @@ describe("paginação", () => {
     });
     setHttpPort(port);
 
-    const { jobs, warnings } = await braintrust.fetchJobs(config());
+    const { jobs, warnings, completeness } = await braintrust.fetchJobs(config());
     expect(jobs.map((j) => j.externalId)).toEqual(["1", "2"]);
     expect(jobs[0]!.descriptionText).toContain("corpo um");
     // As duas páginas foram lidas e a contagem bate com `count`: sem aviso.
     expect(warnings).toEqual([]);
+    // Cursor esgotado e contagem alcançada: a listagem é o board inteiro.
+    expect(completeness).toBe("complete");
   });
 
   it("avisa quando o teto do handle corta parte do board", async () => {
@@ -97,9 +99,11 @@ describe("paginação", () => {
       }),
     );
 
-    const { jobs, warnings } = await braintrust.fetchJobs(config("1"));
+    const { jobs, warnings, completeness } = await braintrust.fetchJobs(config("1"));
     expect(jobs).toHaveLength(1);
     expect(warnings.join(" ")).toContain("1 de 121");
+    // O teto cortou a lista: o que ficou de fora não foi visto, não sumiu.
+    expect(completeness).toBe("partial");
   });
 });
 
@@ -187,7 +191,7 @@ describe("bordas de dado", () => {
 
   it("aceita uma página de listagem sem contagem e sem resultados", async () => {
     setHttpPort(fixtureHttp({ "api/jobs/?limit=20": {} }));
-    await expect(braintrust.fetchJobs(config())).resolves.toEqual({ jobs: [], warnings: [] });
+    await expect(braintrust.fetchJobs(config())).resolves.toEqual({ jobs: [], warnings: [], completeness: "complete" });
   });
 });
 

@@ -6,7 +6,8 @@
  * every open job; an accepted track scores only the jobs relevant to it. This
  * module is the only writer of `job_score`.
  */
-import { and, eq, getTableColumns, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, eq, getTableColumns, gt, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { clock } from "../clock.ts";
 import { getDb, type DB } from "../db/client.ts";
 import { candidate, job, jobScore } from "../db/schema.ts";
 import { ageInDays, loadRates, STALE_AFTER_DAYS } from "../../contexts/fx/index.ts";
@@ -28,6 +29,8 @@ export type ScoreRunResult = {
   scored: number;
   skipped: number;
   topFit: number;
+  /** False when `deadline` stopped the run with stale scores left for the next one. */
+  complete: boolean;
   /** Surfaced so the CLI can warn instead of silently scoring without rates. */
   fxDate?: string;
   fxWarning?: string;
@@ -64,7 +67,7 @@ async function loadTrackContexts(candidateId: number): Promise<TrackContext[] | 
     let fxWarning: string | undefined;
     if (!fx) {
       fxWarning = "Sem cotações em cache — vagas em outras moedas não serão comparadas. Rode `jho fx refresh`.";
-    } else if (ageInDays(fx) > STALE_AFTER_DAYS) {
+    } else if (ageInDays(fx, new Date(asOf)) > STALE_AFTER_DAYS) {
       fxWarning = `Cotações de ${fx.date} têm mais de ${STALE_AFTER_DAYS} dias. Rode \`jho fx refresh\`.`;
     }
     contexts.push({ track, profile, profileHash: hash, fx, fxWarning, asOf });
@@ -74,6 +77,9 @@ async function loadTrackContexts(candidateId: number): Promise<TrackContext[] | 
 
 /** Cem scores por comando: poucas idas ao banco, parâmetros bem abaixo do limite do protocolo. */
 const LOTE = 100;
+
+/** Vagas lidas por consulta: a memória de uma função serverless não carrega o acervo inteiro com descrição. */
+const PAGINA = 1_000;
 
 type Writer = Pick<DB, "insert">;
 
@@ -293,44 +299,42 @@ export async function trackFitsForJob(candidateId: number, jobId: number): Promi
  * the person changed) or older than the freshness window. `all: true` rescores
  * everything. On an accepted track, a job that stopped being relevant loses its
  * row: it is outside that track now.
+ *
+ * With `deadline` (epoch ms, `clock()`), the run stops between two written
+ * batches once it passes and returns `complete: false`; the next run picks up
+ * what is still stale.
  */
 export async function scoreAll(
   candidateId: number,
-  opts: { all?: boolean } = {},
+  opts: { all?: boolean; deadline?: number } = {},
 ): Promise<ScoreRunResult> {
   const db = getDb();
   const contexts = await loadTrackContexts(candidateId);
-  if (!contexts) return { scored: 0, skipped: 0, topFit: 0 };
+  if (!contexts) return { scored: 0, skipped: 0, topFit: 0, complete: true };
 
   let scored = 0;
   let skipped = 0;
   let topFit = 0;
+  let expired = false;
+  let wrote = false;
+  // Só para depois de ter GRAVADO algo nesta execução: a seguinte recomeça da
+  // primeira página, e uma página inteira fora do alvo de uma trilha aceita não
+  // grava nada — parar nela repetiria a mesma página para sempre.
+  const pastDeadline = () => wrote && opts.deadline !== undefined && clock().now() >= opts.deadline;
 
   for (const context of contexts) {
+    if (expired) break;
     const freshnessCutoff = new Date(
       context.asOf - FRESHNESS_RESCORE_AFTER_HOURS * 3_600_000,
     ).toISOString();
-    const rows = await db
-      .select({ ...JOB_COLUMNS, existing: jobScore.jobId })
-      .from(job)
-      .leftJoin(
-        jobScore,
-        and(
-          eq(jobScore.jobId, job.id),
-          eq(jobScore.candidateId, candidateId),
-          eq(jobScore.trackId, context.track.id),
-        ),
-      )
-      .where(
-        opts.all
-          ? isNull(job.closedAt)
-          : sql`${job.closedAt} is null and (
-              ${jobScore.jobId} is null
-              or ${jobScore.scorerVersion} <> ${SCORER_VERSION}
-              or ${jobScore.profileHash} <> ${context.profileHash}
-              or ${jobScore.scoredAt} < ${freshnessCutoff}
-            )`,
-      );
+    const pending = opts.all
+      ? isNull(job.closedAt)
+      : sql`${job.closedAt} is null and (
+          ${jobScore.jobId} is null
+          or ${jobScore.scorerVersion} <> ${SCORER_VERSION}
+          or ${jobScore.profileHash} <> ${context.profileHash}
+          or ${jobScore.scoredAt} < ${freshnessCutoff}
+        )`;
 
     // Calcula antes e persiste em lotes: cada lote é um único comando, atômico.
     type Gravacao = { jobId: number; result: ScoreResult };
@@ -339,22 +343,58 @@ export async function scoreAll(
       if (pendentes.length === 0) return;
       await upsertScores(db, candidateId, pendentes, context);
       pendentes = [];
+      wrote = true;
     };
 
     const outside: number[] = [];
-    for (const row of rows) {
-      if (!scores(context, row)) {
-        if (row.existing !== null) outside.push(row.id);
-        skipped++;
-        continue;
+    // Por páginas, em ordem de id. Com prazo, a execução para entre dois lotes
+    // e a seguinte recomeça pelo que ainda está desatualizado — o que já foi
+    // gravado saiu do filtro. O cursor é por id, e não por "o que sobrou",
+    // porque a vaga fora do alvo de uma trilha aceita nunca ganha linha e
+    // voltaria em toda página.
+    let lastId = 0;
+    pages: for (;;) {
+      const rows = await db
+        .select({ ...JOB_COLUMNS, existing: jobScore.jobId })
+        .from(job)
+        .leftJoin(
+          jobScore,
+          and(
+            eq(jobScore.jobId, job.id),
+            eq(jobScore.candidateId, candidateId),
+            eq(jobScore.trackId, context.track.id),
+          ),
+        )
+        .where(and(gt(job.id, lastId), pending))
+        .orderBy(job.id)
+        .limit(PAGINA);
+
+      for (const row of rows) {
+        if (!scores(context, row)) {
+          if (row.existing !== null) outside.push(row.id);
+          skipped++;
+          continue;
+        }
+        const result = scoreJob(row, context);
+        if (context.track.isPrimary) topFit = Math.max(topFit, result.fit);
+        pendentes.push({ jobId: row.id, result });
+        scored++;
+        if (pendentes.length >= LOTE) {
+          await descarregar();
+          if (pastDeadline()) {
+            expired = true;
+            break pages;
+          }
+        }
       }
-      const result = scoreJob(row, context);
-      if (context.track.isPrimary) topFit = Math.max(topFit, result.fit);
-      pendentes.push({ jobId: row.id, result });
-      scored++;
-      if (pendentes.length >= LOTE) await descarregar();
+      await descarregar();
+      if (rows.length < PAGINA) break;
+      lastId = rows[rows.length - 1]!.id;
+      if (pastDeadline()) {
+        expired = true;
+        break pages;
+      }
     }
-    await descarregar();
 
     for (let offset = 0; offset < outside.length; offset += LOTE) {
       await db
@@ -374,6 +414,7 @@ export async function scoreAll(
     scored,
     skipped,
     topFit,
+    complete: !expired,
     fxDate: primary?.fx?.date,
     fxWarning: primary?.fxWarning,
   };
@@ -424,36 +465,54 @@ export async function scoreEveryCandidate(
     .orderBy(candidate.id);
 
   const resultados: ResultadoPorCandidato[] = [];
-
   for (const c of candidatos) {
-    let perfil: ResultadoPerfil["estado"] = "sem-curriculo";
-    try {
-      perfil = (await ensureMatchingProfile(c.id)).estado;
-
-      // Sem perfil próprio, NÃO pontua.
-      //
-      // A alternativa seria pontuar com o perfil padrão da instalação, e foi o
-      // que esta função fazia até ser exercitada contra dados reais: o
-      // candidato 2 do banco de dev, que não tem currículo, começou a receber
-      // 2.757 pontuações calculadas com o perfil de outra pessoa. Seria
-      // reintroduzir, por outro caminho, exatamente o problema que o M-06
-      // existe para resolver — com o agravante de o ranking PARECER dele.
-      //
-      // Board sem ranking é o estado honesto: a tela convida a subir um
-      // currículo, e é disso que o perfil sai.
-      if (perfil !== "ja-tinha" && perfil !== "derivado") {
-        resultados.push({ candidateId: c.id, slug: c.slug, perfil, scored: 0, topFit: 0 });
-        continue;
-      }
-
-      const r = await scoreAll(c.id, opts);
-      resultados.push({ candidateId: c.id, slug: c.slug, perfil, scored: r.scored, topFit: r.topFit });
-    } catch {
-      // Registrado como zero e seguido adiante. O chamador vê a linha com
-      // `scored: 0` e sabe onde olhar.
-      resultados.push({ candidateId: c.id, slug: c.slug, perfil, scored: 0, topFit: 0 });
-    }
+    const r = await scoreCandidate(c.id, opts);
+    resultados.push({ candidateId: c.id, slug: c.slug, perfil: r.perfil, scored: r.scored, topFit: r.topFit });
   }
-
   return resultados;
+}
+
+export type ResultadoDoCandidato = {
+  perfil: ResultadoPerfil["estado"];
+  scored: number;
+  topFit: number;
+  /** Presente quando a pontuação lançou; o candidato conta como zero. */
+  erro?: string;
+};
+
+/**
+ * Pontua UM candidato, derivando o perfil se ele ainda não tiver. Nunca lança.
+ *
+ * É a unidade de `scoreEveryCandidate` e da fatia `pontuar` da varredura
+ * (ADR 0025): as duas precisam da mesma regra — sem perfil próprio, não
+ * pontua —, e duas cópias dela seriam duas chances de divergir.
+ */
+export async function scoreCandidate(
+  candidateId: number,
+  opts: { all?: boolean } = {},
+): Promise<ResultadoDoCandidato> {
+  let perfil: ResultadoPerfil["estado"] = "sem-curriculo";
+  try {
+    perfil = (await ensureMatchingProfile(candidateId)).estado;
+
+    // Sem perfil próprio, NÃO pontua.
+    //
+    // A alternativa seria pontuar com o perfil padrão da instalação, e foi o
+    // que esta função fazia até ser exercitada contra dados reais: o
+    // candidato 2 do banco de dev, que não tem currículo, começou a receber
+    // 2.757 pontuações calculadas com o perfil de outra pessoa. Seria
+    // reintroduzir, por outro caminho, exatamente o problema que o M-06
+    // existe para resolver — com o agravante de o ranking PARECER dele.
+    //
+    // Board sem ranking é o estado honesto: a tela convida a subir um
+    // currículo, e é disso que o perfil sai.
+    if (perfil !== "ja-tinha" && perfil !== "derivado") return { perfil, scored: 0, topFit: 0 };
+
+    const r = await scoreAll(candidateId, opts);
+    return { perfil, scored: r.scored, topFit: r.topFit };
+  } catch (erro) {
+    // Registrado como zero e seguido adiante. O chamador vê `scored: 0` e o
+    // erro, e sabe onde olhar.
+    return { perfil, scored: 0, topFit: 0, erro: erro instanceof Error ? erro.message : String(erro) };
+  }
 }

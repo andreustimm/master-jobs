@@ -32,6 +32,10 @@ issue/PR and required delivery in the report body. Local `Pass`, bug `fixed` and
 round closure are QA evidence, not completion of the Project task; the owning
 execution requests a completion transition only with the required delivery proved.
 Do not change the scenario schema to carry operational claims or queue priority.
+Cadence, `Pass` and `Blocked (needs human verify)` follow
+[rules/delivery.md](../../../docs/engineering/rules/delivery.md#g56) and
+`docs/qa/README.md`; a green tracker validator is never a substitute for the
+observable.
 
 QA the product the way a real person meets it: a **persona** walks a journey through the product's public interfaces, feels the friction, hits the edges, and reports what happened. This is **dogfooding**, not a scripted test pass — the session is the work, and the living QA docs tree remembers it.
 

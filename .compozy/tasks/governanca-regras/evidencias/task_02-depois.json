@@ -1,0 +1,177 @@
+{
+  "coletado_em": "2026-09-23T10:44:00.685Z",
+  "repositorio": "andreustimm/master-jobs",
+  "metodo": "gh api (GET), sessão andreustimm; nenhum valor de secret lido",
+  "rulesets": [
+    {
+      "id": 23854306,
+      "name": "main: CI obrigatório",
+      "target": "branch",
+      "enforcement": "active",
+      "source_type": "Repository",
+      "conditions": {
+        "ref_name": {
+          "exclude": [],
+          "include": [
+            "refs/heads/main"
+          ]
+        }
+      },
+      "bypass_actors": [],
+      "rules": [
+        {
+          "type": "required_status_checks",
+          "parameters": {
+            "strict_required_status_checks_policy": false,
+            "do_not_enforce_on_create": false,
+            "required_status_checks": [
+              {
+                "context": "qualidade",
+                "integration_id": 15368
+              },
+              {
+                "context": "schema-e-migracao",
+                "integration_id": 15368
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 23854307,
+      "name": "main: produção por PR aprovada",
+      "target": "branch",
+      "enforcement": "active",
+      "source_type": "Repository",
+      "conditions": {
+        "ref_name": {
+          "exclude": [],
+          "include": [
+            "refs/heads/main"
+          ]
+        }
+      },
+      "bypass_actors": [
+        {
+          "actor_id": 5,
+          "actor_type": "RepositoryRole",
+          "bypass_mode": "pull_request"
+        }
+      ],
+      "rules": [
+        {
+          "type": "pull_request",
+          "parameters": {
+            "required_approving_review_count": 1,
+            "dismiss_stale_reviews_on_push": true,
+            "required_reviewers": [],
+            "require_code_owner_review": false,
+            "require_last_push_approval": false,
+            "required_review_thread_resolution": false,
+            "require_extra_approval_for_unattributed_changes": true,
+            "allowed_merge_methods": [
+              "merge",
+              "squash",
+              "rebase"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 23854305,
+      "name": "permanentes: sem exclusão nem force-push",
+      "target": "branch",
+      "enforcement": "active",
+      "source_type": "Repository",
+      "conditions": {
+        "ref_name": {
+          "exclude": [],
+          "include": [
+            "refs/heads/main",
+            "refs/heads/staging",
+            "refs/heads/dev"
+          ]
+        }
+      },
+      "bypass_actors": [],
+      "rules": [
+        {
+          "type": "deletion"
+        },
+        {
+          "type": "non_fast_forward"
+        }
+      ]
+    }
+  ],
+  "regras_efetivas_por_branch": {
+    "main": [
+      {
+        "type": "required_status_checks",
+        "ruleset_id": 23854306
+      },
+      {
+        "type": "pull_request",
+        "ruleset_id": 23854307
+      },
+      {
+        "type": "deletion",
+        "ruleset_id": 23854305
+      },
+      {
+        "type": "non_fast_forward",
+        "ruleset_id": 23854305
+      }
+    ],
+    "staging": [
+      {
+        "type": "deletion",
+        "ruleset_id": 23854305
+      },
+      {
+        "type": "non_fast_forward",
+        "ruleset_id": 23854305
+      }
+    ],
+    "dev": [
+      {
+        "type": "deletion",
+        "ruleset_id": 23854305
+      },
+      {
+        "type": "non_fast_forward",
+        "ruleset_id": 23854305
+      }
+    ]
+  },
+  "actions_workflow_permissions": {
+    "default_workflow_permissions": "write",
+    "can_approve_pull_request_reviews": true
+  },
+  "environment_production": {
+    "can_admins_bypass": false,
+    "protection_rules": [
+      "branch_policy"
+    ],
+    "deployment_branch_policy": {
+      "protected_branches": false,
+      "custom_branch_policies": true
+    },
+    "deployment_branch_policies": [
+      "main"
+    ]
+  },
+  "pr_producao_262": {
+    "state": "open",
+    "autor": "github-actions[bot]",
+    "head": "59ce66256837d32cc6823749fab095bb69890a0a",
+    "base": "main",
+    "mergeable_state": "blocked"
+  },
+  "sonda_bypass_github_actions": {
+    "em": "2026-09-23",
+    "resultado": "422 Validation Failed: Actor GitHub Actions integration must be part of the ruleset source or owner organization"
+  }
+}

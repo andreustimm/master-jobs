@@ -23,6 +23,15 @@ import { chromium, webkit } from "playwright";
 import { readFile } from "node:fs/promises";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { checkWorkModes } from "./work-mode.mjs";
+import { checkFilterAutoApply } from "./filter-auto-apply.mjs";
+import { checkJobsLoading } from "./jobs-loading.mjs";
+import {
+  ENGLISH_ANONYMOUS_SWEEP,
+  ENGLISH_OWNER_SWEEP,
+  ENGLISH_SEARCHES_SWEEP,
+  OVERFLOW_SEARCHES_SWEEP,
+  OVERFLOW_SWEEP,
+} from "./routes.mjs";
 
 const BASE = process.env.E2E_BASE ?? "http://127.0.0.1:3000";
 
@@ -63,6 +72,23 @@ function rememberCreatedJob(url, title, companyName) {
 function check(name, ok, detail = "") {
   results.push({ name, ok, detail });
   if (!ok) failed++;
+}
+
+/**
+ * Navigates for a sweep and confirms the page measured is the page requested.
+ *
+ * Uma sessão que caiu no meio da suíte manda toda rota privada para `/login`,
+ * e a varredura media o login — que não tem estouro nem português — no lugar
+ * da tela pedida, e aprovava. Destino diferente ou resposta não-2xx vira
+ * falha nomeada em `failures`, e quem chama pula a medição.
+ */
+async function gotoMeasured(target, path, failures, prefix = "") {
+  const response = await target.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+  const wanted = new URL(path, BASE).pathname;
+  const landed = new URL(target.url()).pathname;
+  if (response?.ok() && landed === wanted) return true;
+  failures.push(`${prefix}${path}: mediu ${landed} (HTTP ${response?.status() ?? "sem resposta"})`);
+  return false;
 }
 
 const browser = await chromium.launch();
@@ -1123,10 +1149,20 @@ try {
   await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
   await page.reload({ waitUntil: "networkidle" });
   const englishQueueText = (await queuedStatus.textContent()) ?? "";
+  // Desde a #280 a fatia de repontuação roda logo depois de salvar, então o
+  // estado já pode ter passado de `pending`: o rótulo esperado é o do estado
+  // que está na tela, lido do atributo — nunca o rótulo português.
+  const englishQueueLabel = {
+    pending: "Queued",
+    scoring: "Scoring",
+    done: "Up to date",
+    failed: "Refresh failed",
+    refused: "Track not built",
+  }[(await queuedStatus.getAttribute("data-state")) ?? ""];
   check(
     "E2E-001 estado da fila usa o locale selecionado",
-    englishQueueText.includes("Ranking refresh") && englishQueueText.includes("Queued") &&
-      !englishQueueText.includes("candidate.queue"),
+    englishQueueText.includes("Ranking refresh") && englishQueueLabel !== undefined &&
+      englishQueueText.includes(englishQueueLabel) && !englishQueueText.includes("candidate.queue"),
     englishQueueText,
   );
 
@@ -1267,8 +1303,8 @@ try {
   const clipped = [];
   for (const width of widths) {
     await page.setViewportSize({ width, height: width >= 812 ? 375 : 812 });
-    for (const path of ["/", "/jobs", "/jobs?track=all", "/jobs/905000031", "/searches", "/compare", "/candidate", "/candidate/skills", "/pipeline"]) {
-      await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+    for (const path of OVERFLOW_SWEEP) {
+      if (!(await gotoMeasured(page, path, overflows, `${width}px `))) continue;
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
@@ -3012,7 +3048,7 @@ try {
   const portugueseLeaks = async (paths, target = page) => {
     const leaks = [];
     for (const path of paths) {
-      await target.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+      if (!(await gotoMeasured(target, path, leaks))) continue;
       const found = await target.evaluate((dictionary) => {
         const known = new Set(dictionary);
         const accented = /[ãõçáéíóúâêôàÃÕÇÁÉÍÓÚÂÊÔÀ]/;
@@ -3040,36 +3076,28 @@ try {
   };
 
   await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
-  const leaks = await portugueseLeaks([
-    "/",
-    "/jobs",
-    "/compare",
-    "/pipeline",
-    "/referrals",
-    "/candidate",
-    "/candidate/skills",
-    "/candidate/vocabulary",
-    // Minha conta (#236): e-mail da sessão marcado como dado do usuário.
-    "/account",
-    // O hub dos países entra nas quatro guardas transversais: cada uma é um
-    // array literal, então rota nova não herda nenhuma delas sozinha. Ele tem
-    // quatro chaves de dicionário próprias e estava fora de todas.
-    "/jobs/904000101/paises",
-    // A tela de detalhe é a mais aberta do produto e estava fora daqui desde o
-    // começo — o custo apareceu no QA de jornada: "← vagas", "Ver vaga na
-    // origem" e "visto em" eram literais no JSX, servidos em português com a
-    // interface em inglês. Ela só pôde entrar depois de o nome da empresa, a
-    // localização e o rótulo da fonte ganharem `data-user-content`, porque esse
-    // texto vem do acervo e é acentuado de direito. Por isso a publicação
-    // varrida é a de São Paulo: numa localização sem acento, tirar a marca não
-    // reprovaria nada, e a metade da guarda que a protege ficaria sem prova.
-    "/jobs/904000103",
-  ]);
+  // As rotas moram em `routes.mjs`, onde o teste de cobertura as cruza com o
+  // inventário de páginas: rota nova sem varredura nem exceção reprova.
+  const leaks = await portugueseLeaks(ENGLISH_OWNER_SWEEP);
   check(
     "interface em inglês não vaza português",
     leaks.length === 0,
     leaks.slice(0, 8).join(" | "),
   );
+  {
+    // As telas anteriores à sessão, num contexto sem cookie: com o do dono,
+    // `/login` redirecionaria e a varredura não mediria nada.
+    const anonymousContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    await anonymousContext.addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
+    const anonymous = await anonymousContext.newPage();
+    const anonymousLeaks = await portugueseLeaks(ENGLISH_ANONYMOUS_SWEEP, anonymous);
+    await anonymousContext.close();
+    check(
+      "telas sem sessão em inglês não vazam português",
+      anonymousLeaks.length === 0,
+      anonymousLeaks.slice(0, 8).join(" | "),
+    );
+  }
 
   /* ---------- Criar o próprio perfil (#234): conta sem candidato ---------- */
 
@@ -3198,6 +3226,69 @@ try {
       `${derivedSlug}: ${stale?.status()}`,
     );
     await anon.close();
+    await context.close();
+  }
+
+  /* ------ Criar o perfil enviando o currículo em PDF (#278), em 375px ------ */
+
+  // O multipart de verdade, pelo mesmo `readCvPdf` do perfil existente. Um
+  // arquivo que não é PDF é recusado com a razão e não cria nada; o PDF válido
+  // cria o perfil e deixa o texto extraído no editor, para revisão.
+  {
+    const context = await browser.newContext({ viewport: { width: 375, height: 812 } });
+    const onboarding = await context.newPage();
+    trackConsole(onboarding);
+    await context.addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
+    await onboarding.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+    await onboarding.fill('input[name="email"]', "e2e-sem-perfil-pdf@local.test");
+    await onboarding.fill('input[name="password"]', E2E_PASSWORD);
+    await onboarding.locator('[data-testid="login-submit"]').click();
+    await onboarding.waitForTimeout(1_500);
+    await onboarding.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+
+    const refusalNotice = onboarding.locator('[data-testid="mutation-feedback"][role="alert"]');
+    await onboarding.fill('[data-testid="profile-name"]', "Pdf Onboarding E2E");
+    await onboarding.locator('[data-testid="profile-cv-file"]').setInputFiles({
+      name: "not-a-cv.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("plain text renamed to look like a PDF"),
+    });
+    await onboarding.locator('[data-testid="create-profile"]').click();
+    await refusalNotice.waitFor({ timeout: 10_000 }).catch(() => undefined);
+    const notPdfReason = ((await refusalNotice.textContent().catch(() => "")) ?? "").trim();
+    check(
+      "onboarding recusa arquivo que não é PDF, com a razão",
+      notPdfReason.includes(en.onboarding.pdfNotPdf),
+      notPdfReason,
+    );
+    check(
+      "recusa do PDF não cria perfil",
+      (await onboarding.locator('[data-testid="route-candidate-onboarding"]').count()) === 1,
+    );
+    await onboarding.locator('[data-testid="mutation-feedback-dismiss"]').click().catch(() => undefined);
+
+    const { pdfComTexto } = await import("../support/synthetic-pdf.ts");
+    const marker = "Kubernetes platform migration led for the payments team";
+    const lines = Array.from({ length: 6 }, (_, i) => `${marker}, release ${i + 1}, with observability`);
+    const cvPdf = Buffer.from(pdfComTexto([lines]));
+    await onboarding.locator('[data-testid="profile-cv-file"]').setInputFiles({
+      name: "e2e-onboarding-cv.pdf",
+      mimeType: "application/pdf",
+      buffer: cvPdf,
+    });
+    await onboarding.locator('[data-testid="create-profile"]').click();
+    await onboarding.locator('[data-testid="route-candidate"]').waitFor({ timeout: 15_000 }).catch(() => undefined);
+    await onboarding.reload({ waitUntil: "networkidle" });
+    const created = (await onboarding.locator('[data-testid="route-candidate"]').count()) === 1;
+    const cvText = await onboarding.locator('textarea[name="content"]').inputValue().catch(() => "");
+    const cvLabel = await onboarding.locator('input[name="label"]').inputValue().catch(() => "");
+    const overflow = await onboarding.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    check("perfil criado com PDF sobrevive ao refresh", created);
+    check("texto extraído do PDF vira o currículo, no editor", cvText.includes(marker), cvText.slice(0, 120));
+    check("versão do currículo leva o nome do arquivo", cvLabel === "e2e-onboarding-cv", cvLabel);
+    check("perfil criado com PDF cabe em 375px", overflow <= 1, `overflow=${overflow}`);
     await context.close();
   }
 
@@ -3717,6 +3808,8 @@ try {
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await checkWorkModes(page, BASE, check);
+  await checkFilterAutoApply(browser, BASE, { email: "e2e-candidato@local.test", password: E2E_PASSWORD }, check);
+  await checkJobsLoading(browser, BASE, { email: "e2e-candidato@local.test", password: E2E_PASSWORD }, check);
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   const firstJobLink = page.locator('[data-testid^="job-link-"]').first();
   const contextualPhases = [];
@@ -4240,10 +4333,21 @@ try {
     () => publicPage.evaluate((token) => {
       window.next?.router?.push?.(`/login/callback?token=${encodeURIComponent(token)}`);
     }, E2E_LOGIN_EXPIRED_TOKEN),
-    '[data-testid="route-login"]',
+    // O alerta, não a tela: `route-login` já está visível ANTES do push, e
+    // esperar por ela encerrava a observação antes de a navegação acontecer.
+    '[data-testid="route-login"] [role="alert"]',
     "expired callback soft transition",
   );
   publicPhases.push(callbackSoftTransition);
+  // O callback vencido volta para `/login?error=invalid`: a MESMA tela de onde
+  // o push saiu, só com outra query — navegação de mesma tela, que não abre
+  // overlay (#220). O overlay só aparece quando o roteador chega a confirmar a
+  // URL intermediária `/login/callback`, e isso depende de quanto a resposta do
+  // redirect demora: na máquina local aparecia, no runner do CI não (medido na
+  // #202). Nos dois casos o que se exige é o mesmo: nunca duas camadas, e a
+  // tela certa no fim — o alerta, que só existe com `error=invalid`.
+  const overlayCountFits = (phase) =>
+    phase === callbackSoftTransition ? phase.count <= 1 && phase.maxOverlayCount <= 1 : phase.count === 1;
   if (task04PublicHref) {
     // A transição suave é o que se mede aqui; o que vem depois — vazamento de
     // dado no perfil público — é verificação de segurança e não pode ficar sem
@@ -4302,12 +4406,16 @@ try {
       && directRouteLayers.every(({ startup, transition }) => startup === 1 && transition === 0)
       && publicPhases.length === 6
       && publicProfileMarkers.length > 0
-      && publicPhases.every(({ count, text }) =>
-        count === 1
-          && privateMarkers.every((term) => !text.includes(term))
-          && publicLeakMarkers.every((term) => !text.includes(term))
+      && publicPhases.every((phase) =>
+        overlayCountFits(phase)
+          && privateMarkers.every((term) => !phase.text.includes(term))
+          && publicLeakMarkers.every((term) => !phase.text.includes(term))
       ),
-    JSON.stringify({ directRouteLayers, phases: publicPhases.length, publicLeakMarkers }),
+    JSON.stringify({
+      directRouteLayers,
+      phases: publicPhases.map(({ count, maxOverlayCount }) => [count, maxOverlayCount]),
+      publicLeakMarkers,
+    }),
   );
   await publicPage.goto(`${BASE}/login/reset?token=nunca-existiu-task04`, { waitUntil: "networkidle" });
   const invalidReset = await publicPage.locator('[data-testid="route-login-reset"]').textContent();
@@ -4713,7 +4821,24 @@ try {
     await rolePage.fill('input[name="password"]', E2E_PASSWORD);
     await rolePage.locator('[data-testid="login-submit"]').click();
     await rolePage.waitForURL((url) => !url.pathname.startsWith("/login"));
+    // #279: a conta de candidato do E2E nunca é pontuada. Com o corte padrão de
+    // 45, o cockpit e o quadro dela têm de listar o acervo e dizer que a nota
+    // está pendente. O cockpit é lido direto, sem depender de onde o login cai.
+    let unscoredBoard = null;
+    if (scenario.email === "e2e-candidato@local.test") {
+      await rolePage.goto(`${BASE}/`, { waitUntil: "networkidle" });
+      const cockpitNotice = await rolePage.evaluate(
+        () => document.querySelector('[data-testid="cockpit-scores-pending"]')?.textContent ?? null,
+      );
+      unscoredBoard = { cockpitNotice };
+    }
     if (scenario.prepare) await rolePage.goto(`${BASE}${scenario.prepare}`, { waitUntil: "networkidle" });
+    if (unscoredBoard) {
+      Object.assign(unscoredBoard, await rolePage.evaluate(() => ({
+        total: Number(document.querySelector('[data-testid="jobs-total"]')?.getAttribute("data-total") ?? "-1"),
+        notice: document.querySelector('[data-testid="jobs-notice-scores_pending"]')?.textContent ?? null,
+      })));
+    }
     const snapshot = await observeNavigation(
       rolePage,
       () => rolePage.locator(scenario.control).click(),
@@ -4767,6 +4892,7 @@ try {
       missingRoleOutcome,
       missingRoleReload,
       emptyPipelineLocale,
+      unscoredBoard,
       cache,
     });
     await roleCtx.close();
@@ -4871,6 +4997,15 @@ try {
       roleCacheIsolated,
     }),
   );
+  const candidateUnscoredBoard = roleTransitionResults
+    .find(({ email }) => email === "e2e-candidato@local.test")?.unscoredBoard;
+  check(
+    "#279 candidato sem nota vê as vagas sob o corte padrão, com aviso de nota pendente em inglês",
+    (candidateUnscoredBoard?.total ?? 0) > 0
+      && candidateUnscoredBoard?.notice === en.filterNotices.scores_pending
+      && candidateUnscoredBoard?.cockpitNotice === en.filterNotices.scores_pending,
+    JSON.stringify(candidateUnscoredBoard),
+  );
   const candidateEmptyPipeline = roleTransitionResults
     .find(({ email }) => email === "e2e-candidato@local.test")?.emptyPipelineLocale;
   check(
@@ -4899,7 +5034,8 @@ try {
       && expiredCallbackUrl === "/login?error=invalid"
       && replayCallbackUrl === "/login?error=invalid"
       && resetSoftTransition.count === 1
-      && callbackSoftTransition.count === 1
+      // Ver `overlayCountFits`: o redirect volta para a mesma tela.
+      && overlayCountFits(callbackSoftTransition)
       && roleTransitionResults.length === 2
       && roleTransitionResults.every(({ snapshot }) => snapshot.count === 1)
       && Number.isInteger(recruiterMissingRole.generation)
@@ -5057,6 +5193,9 @@ try {
   const liveStatus = transitionOverlay.locator('[role="status"][aria-live="polite"][aria-atomic="true"]');
   const statusCount = await liveStatus.count();
   const accessibilitySnapshot = await liveStatus.ariaSnapshot();
+  // Lido junto com o snapshot: `statusBeforeTheme` vem depois de um clique e
+  // de um Tab, e a fase `prolonged` (3 s) pode chegar no meio.
+  const statusAtSnapshot = await liveStatus.textContent();
   const focusOutsideStatus = await transitionOverlay.evaluate((overlay) =>
     !overlay.contains(document.activeElement),
   );
@@ -5073,6 +5212,12 @@ try {
   }));
   const generationBeforeTheme = Number(await transitionOverlay.getAttribute("data-generation"));
   const statusBeforeTheme = await transitionOverlay.locator('[role="status"]').textContent();
+  // Trocar o tema não pode reiniciar a transição — quem prova isso é a
+  // geração, que não muda. O texto pode AVANÇAR para o aviso de demora: a
+  // fase `prolonged` chega aos 3 s pelo relógio, e as doze amostras abaixo
+  // passam disso num runner de CI. Recuar ou mudar para outro texto reprova.
+  const statusKept = (status) =>
+    status === statusBeforeTheme || status === ptBR.transition.prolonged;
   const transitionContrastFailures = [];
   const systemModeEvidence = [];
   for (const theme of ["hp", "huly", "graphy"]) {
@@ -5130,13 +5275,13 @@ try {
         sample.modeAttribute === null
           && sample.prefersDark === (sample.colorScheme === "dark")
           && Number(sample.generation) === generationBeforeTheme
-          && sample.status === statusBeforeTheme
+          && statusKept(sample.status)
       )
       && reducedMotion.rootTransition === "0s"
       && reducedMotion.brandAnimation === "none"
       && reducedMotion.sweepAnimation === "none"
       && Number(reducedMotion.generation) === generationBeforeTheme
-      && reducedMotion.status === statusBeforeTheme,
+      && statusKept(reducedMotion.status),
     JSON.stringify({ transitionContrastFailures, systemModeEvidence, reducedMotion }),
   );
   await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
@@ -5200,7 +5345,8 @@ try {
       && shellWhileBusy.busy === "true"
       && statusCount === 1
       && /status/i.test(accessibilitySnapshot)
-      && accessibilitySnapshot.includes(statusBeforeTheme ?? "")
+      && Boolean(statusAtSnapshot)
+      && accessibilitySnapshot.includes(statusAtSnapshot ?? "")
       && focusOutsideStatus
       && underlyingBlocked
       && !keyboardFocusWhileBusy.inApplicationShell
@@ -5792,11 +5938,21 @@ try {
   const saveTermOnPage = (term) => feedbackOf(async () => {
     // After a redirect the shell stays inert until the transition commits, and
     // `fill` on it is silently lost: the save goes out empty and no notice comes.
+    //
+    // O formulário do termo também precisa ter assentado. O aviso é publicado
+    // DENTRO da action, antes de a transição dela terminar; o React só
+    // reinicia o formulário não controlado quando a transição assenta. Sob
+    // carga esse intervalo cresce, e o `fill` do termo seguinte caía nele: o
+    // reset apagava o campo, o `required` barrava o envio e nenhum aviso vinha
+    // — "techlead" nunca era salvo, e "Tech Lead" passava como termo novo em
+    // vez de duplicado. `aria-busy` no formulário é o `pending` da action.
     await page.waitForFunction(() => {
       // Pronto = sem `inert` (troca de tela) e sem `aria-busy` (mesma tela,
       // #220, que deixa o shell operável enquanto a resposta chega).
       const shell = document.getElementById("application-shell");
-      return !shell?.hasAttribute("inert") && !shell?.hasAttribute("aria-busy");
+      const form = document.querySelector('[data-testid="searches-term-input"]')?.closest("form");
+      return !shell?.hasAttribute("inert") && !shell?.hasAttribute("aria-busy")
+        && Boolean(form) && !form.hasAttribute("aria-busy");
     });
     await page.locator('[data-testid="searches-term-input"]').fill(term);
     await page.locator('[data-testid="searches-term-save"]').click();
@@ -6043,21 +6199,14 @@ try {
     JSON.stringify({ hostileCreated, hostileTrack, injectedImages, trackDialog }),
   );
 
-  const searchRoutes = [
-    "/searches",
-    "/searches/tracks/new",
-    `/searches/tracks/${phpTrackCard?.id}`,
-    `/jobs?track=all&by=${seededId}&pay=6000&cur=USD&per=month&fit=0`,
-    "/jobs/904000101/paises",
-    "/jobs/904000103",
-    "/admin/captures",
-    "/account",
-  ];
+  const withSuiteIds = (path) =>
+    path.replace("{track}", String(phpTrackCard?.id)).replace("{term}", String(seededId));
+  const searchRoutes = OVERFLOW_SEARCHES_SWEEP.map(withSuiteIds);
   const searchOverflows = [];
   for (const [width, height] of [[375, 812], [768, 1024], [1024, 768]]) {
     await page.setViewportSize({ width, height });
     for (const path of searchRoutes) {
-      await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+      if (!(await gotoMeasured(page, path, searchOverflows, `${width}px `))) continue;
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
@@ -6072,15 +6221,7 @@ try {
   );
 
   await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
-  const searchLeaks = await portugueseLeaks([
-    "/searches",
-    `/searches/tracks/${phpTrackCard?.id}`,
-    "/jobs",
-    "/jobs/904000101/paises",
-    "/jobs/904000103",
-    "/admin/captures",
-    "/account",
-  ]);
+  const searchLeaks = await portugueseLeaks(ENGLISH_SEARCHES_SWEEP.map(withSuiteIds));
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
   check(
     "term-search E2E-014 Buscas, editor de trilha, Vagas e saúde das capturas em inglês não vazam português",

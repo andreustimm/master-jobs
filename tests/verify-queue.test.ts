@@ -1,9 +1,10 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
-import { candidate, company, job, jobScore, source, verifyTask } from "../src/core/db/schema.ts";
+import { candidate, company, job, jobScore, source, targetTrack, verifyTask } from "../src/core/db/schema.ts";
 import { classify } from "../src/core/ingest/probe.ts";
 import type { LookupHost } from "../src/core/remote-url.ts";
+import { fixedClock, resetClock, setClock } from "../src/core/clock.ts";
 import {
   claimCheck,
   enqueueStale,
@@ -12,6 +13,7 @@ import {
   MAX_ATTEMPTS,
   pendingFor,
   runVerifyQueue,
+  staleCandidates,
   USER_PRIORITY,
   verifyStats,
 } from "../src/core/ingest/verify-queue.ts";
@@ -227,6 +229,67 @@ describe("enqueueStale", () => {
     expect(await pendingFor(first)).toBe("pending");
     expect(await pendingFor(second)).toBe("pending");
   });
+
+  it("nota de trilha aceita não fura a fila", async () => {
+    // ADR-008: a trilha aceita pontua o recorte dela e costuma dar nota maior.
+    const baixa = await seedJob({ fit: 10 });
+    const [aceita] = await db
+      .insert(targetTrack)
+      .values({
+        candidateId,
+        name: "Aceita",
+        nameKey: "aceita",
+        isPrimary: false,
+        status: "active",
+        position: 2,
+        targetJson: "{}",
+      })
+      .returning({ id: targetTrack.id });
+    await db.insert(jobScore).values({
+      candidateId,
+      trackId: aceita!.id,
+      jobId: baixa,
+      fit: 95,
+      titleScore: 0,
+      keywordScore: 0,
+      seniorityScore: 0,
+      geoScore: 0,
+      compScore: 0,
+      cluster: "other",
+      matchedKeywords: [],
+      missingKeywords: [],
+      reasons: [],
+      blockers: [],
+      scorerVersion: "test",
+    });
+
+    expect(await enqueueStale({ minFit: 55 })).toBe(0);
+  });
+
+  it("o plano agrega job_score uma vez, sem subconsulta por vaga", async () => {
+    // B-11: a subconsulta correlacionada, repetida no WHERE e no ORDER BY,
+    // releu `job_score` para cada vaga e somou 77,4 milhões de linhas numa
+    // varredura. O plano não pode ter SubPlan e só pode visitar a tabela uma vez.
+    for (let i = 0; i < 20; i++) await seedJob({ fit: 50 + i });
+    await db.execute(sql`analyze production.job, production.job_score`);
+
+    const { sql: text, params } = staleCandidates({ minFit: 55 }).toSQL();
+    const plan = JSON.stringify(await db.$client.unsafe(`explain (format json) ${text}`, params as never[]));
+
+    expect(plan).not.toContain("SubPlan");
+    expect(plan.match(/"Relation Name":"job_score"/g)).toHaveLength(1);
+  });
+
+  it("leitura de job_score por vaga tem índice iniciado por job_id", async () => {
+    // A chave primária começa por candidato. Invalidação por edição do anúncio,
+    // cascade de `job` e a melhor nota por vaga precisam de índice próprio.
+    const id = await seedJob({ fit: 70 });
+    const plan = await db.$client.begin(async (tx) => {
+      await tx.unsafe("set local enable_seqscan = off");
+      return tx.unsafe("explain (format json) select fit from production.job_score where job_id = $1", [id]);
+    });
+    expect(JSON.stringify(plan)).toContain('"Index Name":"job_score_job_idx"');
+  });
 });
 
 describe("runVerifyQueue", () => {
@@ -279,6 +342,25 @@ describe("runVerifyQueue", () => {
     });
     expect(result.checked).toBe(2);
     expect((await verifyStats()).pending).toBe(1);
+  });
+
+  it("com teto de tempo, não começa a sondagem que não caberia (fatia da Vercel)", async () => {
+    // Cada sondagem "leva" 8 s no relógio de teste; com 20 s de teto, a
+    // terceira não começa (16 + 8 > 20) e fica na fila para a próxima chamada.
+    const relogio = fixedClock();
+    setClock(relogio);
+    try {
+      for (let i = 0; i < 4; i++) await enqueueVerify(await seedJob());
+      const lenta: typeof fetch = async (...args) => {
+        relogio.advance(8_000);
+        return fakeFetch(200)(...args);
+      };
+      const result = await runVerifyQueue({ fetchImpl: lenta, lookupHost: publicLookup, budgetMs: 20_000 });
+      expect(result.checked).toBe(2);
+      expect((await verifyStats()).pending).toBe(2);
+    } finally {
+      resetClock();
+    }
   });
 
   it("esvazia a fila e para", async () => {

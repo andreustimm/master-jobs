@@ -9,7 +9,7 @@
  *   Recruitee   {company}.recruitee.com/api/offers/
  */
 import { firstNonEmpty, getJson, htmlToText } from "./http.ts";
-import type { RawJob, SourceAdapter, SourceConfig, FetchResult } from "./types.ts";
+import type { RawJob, SourceAdapter, SourceConfig, SourceSnapshot } from "./types.ts";
 
 /* ------------------------------- Greenhouse ------------------------------- */
 
@@ -28,7 +28,7 @@ type GreenhouseJob = {
 export const greenhouse: SourceAdapter = {
   kind: "greenhouse",
   docs: "https://developers.greenhouse.io/job-board.html",
-  async fetchJobs(config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     // `content=true` returns the HTML body; without it there is nothing to score.
     const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(config.handle)}/jobs?content=true`;
     const data = await getJson<{ jobs?: GreenhouseJob[] }>(url);
@@ -51,7 +51,7 @@ export const greenhouse: SourceAdapter = {
         raw: j,
       };
     });
-    return { jobs, warnings: [] };
+    return { jobs, warnings: [], completeness: "complete" };
   },
 };
 
@@ -81,7 +81,7 @@ type LeverJob = {
 export const lever: SourceAdapter = {
   kind: "lever",
   docs: "https://github.com/lever/postings-api",
-  async fetchJobs(config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const url = `https://api.lever.co/v0/postings/${encodeURIComponent(config.handle)}?mode=json`;
     const data = await getJson<LeverJob[]>(url);
     const jobs = (data ?? []).map((j): RawJob => {
@@ -115,7 +115,7 @@ export const lever: SourceAdapter = {
         raw: j,
       };
     });
-    return { jobs, warnings: [] };
+    return { jobs, warnings: [], completeness: "complete" };
   },
 };
 
@@ -150,7 +150,7 @@ type AshbyJob = {
 export const ashby: SourceAdapter = {
   kind: "ashby",
   docs: "https://developers.ashbyhq.com/reference/job-posting-api",
-  async fetchJobs(config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const url = `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(config.handle)}?includeCompensation=true`;
     const data = await getJson<{ jobs?: AshbyJob[] }>(url);
     const warnings: string[] = [];
@@ -186,7 +186,9 @@ export const ashby: SourceAdapter = {
       });
 
     if (jobs.length === 0) warnings.push(`ashby:${config.handle} returned no listed jobs`);
-    return { jobs, warnings };
+    // The board is the whole list in one response; an unlisted posting leaving
+    // it is the company taking it down.
+    return { jobs, warnings, completeness: "complete" };
   },
 };
 
@@ -205,10 +207,13 @@ type SmartRecruitersPosting = {
 export const smartrecruiters: SourceAdapter = {
   kind: "smartrecruiters",
   docs: "https://developers.smartrecruiters.com/reference/postings-1",
-  async fetchJobs(config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const jobs: RawJob[] = [];
     const warnings: string[] = [];
     const limit = 100;
+    // Only a short page proves the end of the list. Stopping at the offset cap
+    // with a full last page leaves postings unseen, not gone.
+    let reachedEnd = false;
 
     // The postings endpoint paginates with offset and caps the page at 100.
     for (let offset = 0; offset < 500; offset += limit) {
@@ -233,7 +238,10 @@ export const smartrecruiters: SourceAdapter = {
           raw: p,
         });
       }
-      if (content.length < limit) break;
+      if (content.length < limit) {
+        reachedEnd = true;
+        break;
+      }
     }
 
     if (jobs.length > 0) {
@@ -241,7 +249,7 @@ export const smartrecruiters: SourceAdapter = {
         `smartrecruiters:${config.handle} list endpoint has no job body; keyword scoring uses titles only`,
       );
     }
-    return { jobs, warnings };
+    return { jobs, warnings, completeness: reachedEnd ? "complete" : "partial" };
   },
 };
 
@@ -266,7 +274,7 @@ type RecruiteeOffer = {
 export const recruitee: SourceAdapter = {
   kind: "recruitee",
   docs: "https://docs.recruitee.com/reference/offers",
-  async fetchJobs(config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const url = `https://${encodeURIComponent(config.handle)}.recruitee.com/api/offers/`;
     const data = await getJson<{ offers?: RecruiteeOffer[] }>(url);
     const jobs = (data.offers ?? []).map((o): RawJob => {
@@ -286,6 +294,6 @@ export const recruitee: SourceAdapter = {
         raw: o,
       };
     });
-    return { jobs, warnings: [] };
+    return { jobs, warnings: [], completeness: "complete" };
   },
 };

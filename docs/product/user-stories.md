@@ -143,7 +143,18 @@ plano de saúde provavelmente tem — descrição pública costuma omitir a seç
 - [x] Ordenação por fit, valor, data
 - [x] Paginação com contagem total
 - [x] Estado do filtro na URL — o link é compartilhável e o botão voltar funciona
-- [x] Sem JS de cliente para filtrar (Server Components)
+- [x] O servidor filtra (Server Components); o cliente só edita campos e envia
+      o formulário GET — nenhuma regra de filtro no navegador
+- [x] O filtro se aplica ao terminar o gesto (#218): a busca e a empresa depois
+      de 400 ms sem digitar e com pelo menos três caracteres (apagar tudo também
+      aplica); a faixa de score e a salarial ao soltar o slider ou ao sair da
+      faixa; moeda e período ao escolher. Arrastar não navega. Enter e Aplicar
+      continuam aplicando na hora, com qualquer tamanho. A lista de fontes mantém
+      o Aplicar explícito, porque cada aplicação reconstrói a lista pela URL e a
+      fecharia no meio da escolha
+- [x] Sob concorrência vence a última interação: o envio espera a navegação
+      anterior confirmar a URL, e a resposta que chega não apaga o que ainda
+      está sendo digitado
 
 ---
 

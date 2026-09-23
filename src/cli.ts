@@ -465,7 +465,7 @@ fx.command("show")
         console.log(c.yellow("Nenhuma cotação em cache. Rode: jho fx refresh"));
         return;
       }
-      const age = ageInDays(table);
+      const age = ageInDays(table, new Date(clock().now()));
       const stamp = age > STALE_AFTER_DAYS ? c.red(`${table.date} (${age}d)`) : c.green(table.date);
       console.log(`\n  Base ${c.bold(table.base)} · cotação de ${stamp}\n`);
       const entries = Object.entries(table.rates).sort(([a], [b]) => a.localeCompare(b));
@@ -544,7 +544,7 @@ sources
       return;
     }
     const result = await adapter.fetchJobs({ kind: fetchableKind, handle, label: handle });
-    console.log(`${c.green("✓")} ${kind}:${handle} returned ${result.jobs.length} job(s)`);
+    console.log(`${c.green("✓")} ${kind}:${handle} returned ${result.jobs.length} job(s), ${result.completeness} listing`);
     for (const w of result.warnings) console.log(c.yellow(`  ! ${w}`));
     for (const j of result.jobs.slice(0, 5)) {
       console.log(`  ${c.dim("·")} ${j.title} ${c.dim(`— ${j.locationRaw ?? "?"}`)}`);
@@ -651,7 +651,8 @@ jobs
         onProgress: (r) => {
           const mark = r.ok ? c.green("✓") : c.red("✗");
           const detail = r.ok
-            ? `${String(r.fetched).padStart(4)} fetched  ${c.green(`+${r.inserted}`)} new  ${r.updated} updated  ${r.closed} closed`
+            ? `${String(r.fetched).padStart(4)} fetched  ${c.green(`+${r.inserted}`)} new  ${r.updated} updated  ${r.closed} closed` +
+              (r.completeness === "partial" ? c.dim("  partial window: absence closes nothing") : "")
             : c.red(r.error ?? "failed");
           console.log(`  ${mark} ${truncate(r.sourceId, 28)} ${detail} ${c.dim(`${r.durationMs}ms`)}`);
           for (const w of r.warnings) console.log(c.yellow(`      ! ${w}`));

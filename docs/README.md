@@ -72,6 +72,7 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`engineering/skills-evaluation.md`](engineering/skills-evaluation.md) | Entender quais skills de desenvolvimento estão instaladas, sua origem e onde entram no fluxo. |
 | [`engineering/workflow.md`](engineering/workflow.md) | Começar, retomar e limpar worktrees com validação proporcional. |
 | [`engineering/github-project-tasks.md`](engineering/github-project-tasks.md) | Registrar issues no Project 3, assumir e transferir execução, validar e registrar entrega. |
+| [`engineering/github-project-verification.md`](engineering/github-project-verification.md) | Qual teste prova cada cenário CAN-01…14 do coordenador e o que só o piloto real prova. |
 | [`engineering/github-project-migration.md`](engineering/github-project-migration.md) | Inventário, deduplicação, evidências e pendências da migração do legado. |
 | [`.compozy/tasks/README.md`](../.compozy/tasks/README.md) | Separar especificações autorais, histórico e projeções descartáveis das tarefas remotas. |
 | [`engineering/cobertura.md`](engineering/cobertura.md) | O que o piso de cobertura garante, o que os ramos descobertos são, e as duas armadilhas de teste que não pode falhar. |
@@ -109,29 +110,22 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`0022`](adr/0022-novidades-compiladas-no-build.md) | Novidades compiladas no build, com artefato privado por idioma |
 | [`0023`](adr/0023-github-project-como-autoridade-operacional.md) | GitHub Project concentra a coordenação de tarefas; arquivos locais são contexto ou projeção |
 | [`0024`](adr/0024-endereco-publico-separado-e-sem-redirecionamento.md) | Endereço público `/p/` em coluna própria, separado do identificador; trocar não redireciona |
+| [`0025`](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md) | Varredura em fatias de < 25 s na Vercel, agendada por `pg_cron` no Supabase; Actions vira rede de segurança |
+| [`0026`](adr/0026-fila-de-repontuacao-em-fatias-na-web.md) | Repontuação de candidato: fatia no `after()` de quem salva o currículo e fatia `repontuar` da varredura |
 
 ---
 
-## As seis regras que um agente não pode quebrar
+## Regras para agentes e pessoas
 
-O texto normativo está em `AGENTS.md`. `CLAUDE.md` é apenas um symlink para a
-mesma fonte, assim como Codex e OpenCode compartilham as skills canônicas.
-Resumo, com o ponteiro para o documento que explica cada uma:
+A entrada comum é `AGENTS.md`, com as invariantes críticas e o roteador.
+`CLAUDE.md` é apenas um symlink para a mesma fonte, assim como Codex e OpenCode
+compartilham as skills canônicas. O detalhe normativo de cada regra — escopo,
+exceções, origem e prova — está em
+[`engineering/rules/`](engineering/rules/README.md), dividido em seis domínios,
+com o inventário de equivalência das obrigações. Este índice não mantém uma
+segunda cópia das regras.
 
-> **Invariante:** Nunca faça scraping do LinkedIn. Nada aqui pode ler `li_at`, dirigir sessão autenticada ou usar um "LinkedIn MCP" não oficial — viola a seção 8.2 do User Agreement e arrisca a conta que é o principal ativo de posicionamento. Publicação usa a API oficial (`w_member_social`); comentários, conexões e busca são **assistidos** — o agente redige, o humano executa. Ver [`linkedin-policy.md`](linkedin-policy.md) e [ADR 0001](adr/0001-nao-fazer-scraping-do-linkedin.md).
-
-> **Invariante:** Ingestão nunca escreve em `application`. O sync pode inserir, atualizar e fechar `job`, mas jamais toca decisões do usuário. Ver [`data-model.md`](data-model.md) e [ADR 0005](adr/0005-separacao-entre-fato-observado-e-decisao-do-usuario.md).
-
-> **Invariante:** Vaga que some é fechada, não deletada. Marque `closedAt`. A única exclusão permitida é `pruneClosed()`, e ela protege explicitamente o que tem candidatura. Ver [`operations.md`](operations.md).
-
-> **Invariante:** Só sintaxe TypeScript apagável. O runtime é o type stripping nativo do Node 24 — sem `enum`, sem parameter properties, sem `namespace`, sem decorators. `erasableSyntaxOnly: true` está ligado no `tsconfig.json`; o sintoma em runtime é `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`. Ver [ADR 0006](adr/0006-typescript-apagavel-sem-build-step.md).
-
-> **Invariante:** Mexeu em `profile.yaml` ou no scorer? Bump `SCORER_VERSION` em `src/core/scoring/score.ts` (hoje `"1.0.0"`) e rode `pnpm jho jobs score --all`. Sem o bump, `scoreAll()` considera os scores antigos válidos e eles se misturam com os novos sem ninguém perceber. Ver [`scoring.md`](scoring.md).
-
-> **Invariante:** Não invente evidência. O agente de tailoring de CV só pode citar o que está sob a chave `evidence` de `profile.yaml`. O que está em `growth` é lacuna assumida — sinalize, nunca maquie.
-
-> **Invariante:** edite somente `AGENTS.md`; nunca substitua nem edite o symlink `CLAUDE.md` como uma cópia independente.
-
+> **Invariante:** edite somente `AGENTS.md` e `docs/engineering/rules/`; nunca substitua nem edite o symlink `CLAUDE.md` como uma cópia independente.
 
 ## Documentos adicionados depois
 

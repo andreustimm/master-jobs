@@ -6,9 +6,10 @@ procedimento de ativação estão no [guia de tarefas do GitHub Project](enginee
 
 ## Por que isto existe
 
-Hoje a CLI **é** o produto. Não há UI: `src/cli.ts` é a superfície de uso inteira do
-`master-jobs` — buscar vagas em APIs públicas, pontuá-las de forma determinística,
-mover candidaturas pelo funil e exportar um snapshot para o vault do Obsidian.
+A CLI é uma das duas superfícies do `master-jobs` — a outra é o dashboard
+Next.js, que chama as mesmas APIs públicas. `src/cli.ts` cobre buscar vagas em
+APIs públicas, pontuá-las de forma determinística, mover candidaturas pelo funil
+e exportar um snapshot para o vault do Obsidian.
 
 Este documento existe para duas audiências:
 
@@ -31,7 +32,112 @@ Ou seja: `pnpm jho <comando>`. Não existe binário global instalado.
 > `onConflictDoUpdate` em `job_id`. Nenhum comando novo pode quebrar essa propriedade.
 
 > **Invariante:** A ingestão nunca escreve em `application`. `jobs sync` pode inserir,
-> atualizar e fechar `job`; decisões do usuário (o funil) só mudam por `jho track`.
+> atualizar e fechar `job`; decisões do usuário (o funil) só mudam por uma ação
+> explícita da pessoa (`jho track`, a tela do funil, sugestão de e-mail aceita).
+
+## Referência rápida
+
+Os exemplos usam `rtk` porque no
+Codex e no OpenCode todo comando de shell vai prefixado (no Claude Code o hook
+global reescreve). Para digitar só `jho`, instale o atalho uma vez:
+`ln -sf "$PWD/bin/jho" ~/bin/jho` (com `~/bin` no `PATH`); ele funciona de
+qualquer subdiretório do projeto. Os detalhes de cada comando estão nas seções
+abaixo.
+
+```bash
+rtk pnpm install
+rtk pnpm qa:browser:install       # Chrome usado pelo QA de jornada
+rtk pnpm dev                     # dashboard em 127.0.0.1:3000
+
+# banco
+rtk pnpm jho db migrate          # cria/atualiza o schema
+rtk pnpm jho db seed             # conta do dono + skills + provedores + posicionamento
+rtk pnpm jho db prune --days 90  # remove vagas fechadas sem candidatura
+
+# sourcing
+rtk pnpm jho jobs sync           # busca todas as fontes + pontua
+rtk pnpm jho jobs score --all    # repontua tudo
+rtk pnpm jho jobs verify         # checa se as vagas do topo ainda existem (404 → fecha)
+rtk pnpm jho jobs add <url>      # cadastra vaga por URL, resolvendo pelo ATS
+rtk pnpm jho jobs import <file> --source revelo   # importa JSON de plataforma logada
+rtk pnpm jho sources list        # saúde das fontes
+rtk pnpm jho sources probe ashby textlayer        # testa um handle sem gravar
+rtk pnpm jho sources snippet revelo               # extrator para plataforma logada
+
+# autenticação
+rtk pnpm jho auth seed <email>   # cria a conta do dono, senha gerada e mostrada uma vez
+rtk pnpm jho auth status         # modo e contas
+rtk pnpm jho auth add-user <email> --role admin,candidate
+rtk pnpm jho auth set-password <email>   # senha (entrada escondida ou --stdin)
+rtk pnpm jho auth login <email>          # link de uso único → /login/callback
+
+# LLM opcional (BYOK — sua chave, seu custo)
+rtk pnpm jho llm seed            # cadastra provedores conhecidos
+rtk pnpm jho llm list            # modelos, esforço, custo e quais têm chave
+rtk pnpm jho llm use <modelo>    # define o padrão
+rtk pnpm jho llm add-provider <slug> --label X --key-env VAR [--kind compatible --base-url URL]
+rtk pnpm jho llm add-model <provedor> <modelo> --label X [--reasoning --effort high]
+rtk pnpm jho analyze <id>        # leitura qualitativa da vaga; pede confirmação antes de enviar
+
+# candidatura
+rtk pnpm jho prep <id>           # dossiê: bloqueios, rede, evidências, vocabulário
+
+# triagem e funil
+rtk pnpm jho jobs list --min-fit 60
+rtk pnpm jho jobs show <id>      # breakdown completo do score
+rtk pnpm jho track <id> applied --channel referral
+rtk pnpm jho pipeline
+
+# câmbio
+rtk pnpm jho fx refresh          # cotações do BCE (Frankfurter)
+rtk pnpm jho fx show
+
+# e-mail (ADR 0008)
+rtk pnpm jho mail auth           # conecta o Gmail (escopo somente leitura)
+rtk pnpm jho mail fetch          # baixa .eml — não importa nada sozinho
+rtk pnpm jho mail import ~/mail --dry-run
+rtk pnpm jho mail suggestions    # mudanças de funil sugeridas por e-mail
+rtk pnpm jho mail accept <id> | dismiss <id>
+
+# rede e referrals
+rtk pnpm jho contacts seed       # empresas onde já trabalhou
+rtk pnpm jho contacts add "Nome" -c Empresa -k former
+rtk pnpm jho referrals           # vagas onde já conhece alguém
+
+# currículo
+rtk pnpm jho cv import <arquivo.pdf>   # extrai texto de PDF (--dry-run para conferir)
+rtk pnpm jho cv set <arquivo.md>       # salva de texto/markdown
+
+# vocabulário e skills
+rtk pnpm jho skills gap          # o que o mercado escreve e o CV não — lacuna de vocabulário
+rtk pnpm jho skills detect       # detecta skills no CV (detectada != confirmada)
+
+# posicionamento
+rtk pnpm jho tasks list --horizon 24h
+rtk pnpm jho tasks done PT-0001
+
+# segurança
+rtk pnpm jho security check      # bind, PII versionada, segredos, permissões do banco
+
+# raspagem (robô de descrições)
+rtk pnpm jho scrape queue        # enfileira vagas por fit
+rtk pnpm jho scrape run          # captura e trata, em paralelo
+rtk pnpm jho scrape status       # situação da fila
+rtk pnpm jho scrape reparse      # reprocessa tudo sem baixar de novo
+
+# análise
+rtk pnpm jho stats               # diagnóstico do scorer e do funil (--json)
+
+# saída
+rtk pnpm jho report              # markdown pro vault Obsidian
+rtk pnpm jho profile             # valida profile.yaml
+
+# desenvolvimento
+rtk pnpm check                   # changelogs, tracker de QA, typecheck, testes — verde antes de qualquer entrega
+rtk pnpm test:qa-skills          # contratos dos conversores do tracker QA
+rtk pnpm test:e2e                # browser real isolado: build, PostgreSQL e porta temporários
+rtk pnpm db:generate             # gera migration após editar schema.ts
+```
 
 ## Convenções de leitura
 
@@ -242,7 +348,7 @@ pnpm jho sources probe greenhouse stackblitz
 ```
 
 ```
-✓ greenhouse:stackblitz returned 41 job(s)
+✓ greenhouse:stackblitz returned 41 job(s), complete listing
   · Staff Applied AI Engineer — Remote
   · Senior Software Engineer, Platform — Remote
   · Developer Advocate — Remote (US)
@@ -376,11 +482,17 @@ Syncing 12 source(s)…
   ! ashby:reflow returned no listed jobs
   ✗ ashby:handle-errado           GET https://api.ashbyhq.com/... -> 404 183ms
   ✓ lever:jobgether             4691 fetched  +0 new  6 updated  0 closed 14344ms
+  ✓ remotive:ai engineer          50 fetched  +3 new  0 updated  0 closed  partial window: absence closes nothing 612ms
 
-Totals  5069 fetched · 197 new · 7 updated · 24 closed · 1 failed
+Totals  5119 fetched · 200 new · 7 updated · 24 closed · 1 failed
 
-Scoring 197 job(s) scored · best fit 74
+Scoring 200 job(s) scored · best fit 74
 ```
+
+`partial window` marca a fonte que é uma janela (as mais recentes, as
+primeiras páginas): ela nunca fecha vaga por ausência, e o `closed` dela é
+sempre 0. A tabela de completude por fonte está em
+[`sources.md`](sources.md#completude-da-listagem).
 
 Exemplo ilustrativo, com uma fonte quebrada de propósito para mostrar como a
 falha aparece. Um `✗` **não interrompe o sync** — as outras 11 fontes seguem, e

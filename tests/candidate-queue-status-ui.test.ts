@@ -25,6 +25,10 @@ describe("candidate queue status page wiring", () => {
       "candidate.queueScoringLabel",
       "candidate.queueDoneLabel",
       "candidate.queueFailedLabel",
+      "candidate.queueRefusedLabel",
+      "candidate.queueRefusedNoCv",
+      "candidate.queueRefusedWeakCv",
+      "candidate.queueRefusedEmptyCatalog",
     ] as const;
 
     for (const locale of ["pt-BR", "en"] as const) {

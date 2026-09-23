@@ -1,8 +1,15 @@
 import type { NextConfig } from "next";
+import { publishServerSourceMaps } from "./scripts/sentry-source-maps.ts";
+import { sourceMapPlan } from "./src/core/observability.ts";
 
 // The isolated standalone build symlinks dependencies from a sibling worktree,
 // so its tracer receives their common ancestor. Normal builds stay repo-local.
 const tracingRoot = process.env.JHO_OUTPUT_TRACING_ROOT ?? import.meta.dirname;
+
+// Mapas de origem do servidor só existem quando há para onde enviá-los. Sem
+// `SENTRY_AUTH_TOKEN` o build é o mesmo de antes — nem gera `.map`. Ver
+// `scripts/sentry-source-maps.ts`.
+const publishSourceMaps = sourceMapPlan(process.env).upload;
 
 const config: NextConfig = {
   output: "standalone",
@@ -24,8 +31,11 @@ const config: NextConfig = {
 
   // The CA certificate is selected by path at runtime. Changelogs are compiled
   // before Next builds and enter the server bundle through a static import.
+  // `sources.yaml` is read by path too: the sweep slices (ADR 0025) sync from
+  // it inside the function, and a missing file there is a sweep that does nothing.
   outputFileTracingIncludes: {
     "/**": ["./config/certs/supabase-ca.crt"],
+    "/api/cron/varredura": ["./config/sources.yaml"],
   },
 
   // Both candidate CVs and manual job descriptions accept files up to 10 MB.
@@ -37,6 +47,17 @@ const config: NextConfig = {
     authInterrupts: true,
     serverActions: {
       bodySizeLimit: "11mb",
+    },
+    ...(publishSourceMaps ? { serverSourceMaps: true } : {}),
+  },
+
+  // Nunca mapa de cliente: sem SDK de browser ele não resolveria pilha
+  // nenhuma, e servido em `/_next/static` publicaria o código-fonte.
+  productionBrowserSourceMaps: false,
+
+  compiler: {
+    runAfterProductionCompile: async ({ distDir }) => {
+      await publishServerSourceMaps({ distDir });
     },
   },
 

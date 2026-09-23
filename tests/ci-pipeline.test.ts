@@ -6,7 +6,15 @@
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import config from "../vitest.config.ts";
-import { AGGREGATOR, checkoutOf, ciWorkflow, needsOf, type CiJob, type CiStep } from "./support/ci-workflow.ts";
+import {
+  AGGREGATOR,
+  NON_BLOCKING_JOBS,
+  checkoutOf,
+  ciWorkflow,
+  needsOf,
+  type CiJob,
+  type CiStep,
+} from "./support/ci-workflow.ts";
 
 const ci = ciWorkflow();
 const aggregator = ci.jobs[AGGREGATOR]!;
@@ -27,8 +35,16 @@ function runAggregator(needs: Record<string, { result: string }>) {
 
 describe("agregador qualidade", () => {
   it("depende de todo job do CI, para que nenhum gate rode sem bloquear", () => {
-    const others = Object.keys(ci.jobs).filter((name) => name !== AGGREGATOR && name !== "validacao");
+    const others = Object.keys(ci.jobs).filter((name) =>
+      name !== AGGREGATOR && name !== "validacao" && !(name in NON_BLOCKING_JOBS));
     expect(new Set(needsOf(aggregator))).toEqual(new Set(others));
+    // Exceção só existe para job que existe, e nunca para um que já bloqueia.
+    // E exceção sem política não é exceção: cada uma diz por quê.
+    for (const [name, why] of Object.entries(NON_BLOCKING_JOBS)) {
+      expect(ci.jobs[name], name).toBeDefined();
+      expect(needsOf(aggregator)).not.toContain(name);
+      expect(why.trim(), `${name} sem motivo registrado`).not.toBe("");
+    }
   });
 
   it("roda sempre, inclusive quando uma dependência falha", () => {

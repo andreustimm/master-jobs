@@ -65,7 +65,7 @@ export function retryable(status: number): boolean {
 
 export async function capture(
   task: ClaimedTask,
-  opts: { fetcher?: typeof fetch; lookupHost?: LookupHost } = {},
+  opts: { fetcher?: typeof fetch; lookupHost?: LookupHost; timeoutMs?: number } = {},
 ): Promise<FetchOutcome> {
   let url: URL;
   try {
@@ -96,7 +96,7 @@ export async function capture(
   let res: Response;
   try {
     res = await safeRemoteFetch(task.url, {
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS),
       headers: {
         "user-agent": process.env.JHO_USER_AGENT ?? "jho/1.0 (job search; +local)",
         accept: "text/html,application/xhtml+xml",
@@ -178,6 +178,8 @@ export async function runFetchStage(
     queue?: QueuePort;
     fetcher?: typeof fetch;
     lookupHost?: LookupHost;
+    /** Teto por página. A fatia da Vercel encurta para caber em 30 segundos. */
+    timeoutMs?: number;
   } = {},
 ): Promise<StageResult> {
   // Antes de `opts.queue ?? dbQueue`: o padrão resolve a fila do banco, e o
@@ -224,7 +226,7 @@ export async function runFetchStage(
       }
 
       result.processed++;
-      const outcome = await capture(task, { fetcher, lookupHost: opts.lookupHost });
+      const outcome = await capture(task, { fetcher, lookupHost: opts.lookupHost, timeoutMs: opts.timeoutMs });
 
       if (outcome.kind === "stored") {
         result.stored++;

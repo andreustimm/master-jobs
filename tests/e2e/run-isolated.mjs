@@ -8,24 +8,17 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { access, cp, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
-import { dirname, join, relative, sep } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline/promises";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
+import { copiedToHarness } from "./database-guard.mjs";
 import setupPostgres from "../support/postgres-global.ts";
 import { provisionTestDatabase } from "../support/db.ts";
 import { provisionRuntimeLogin } from "../support/runtime-login.ts";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const manual = process.argv.includes("--manual");
-const EXCLUDED_ROOTS = new Set([
-  ".git",
-  ".next",
-  "data",
-  "node_modules",
-  ".env",
-  ".env.local",
-]);
 
 function run(command, args, options) {
   return new Promise((resolve, reject) => {
@@ -158,11 +151,7 @@ try {
   testDatabase = await provisionTestDatabase();
   await cp(ROOT, appRoot, {
     recursive: true,
-    filter(source) {
-      const path = relative(ROOT, source);
-      if (!path) return true;
-      return !EXCLUDED_ROOTS.has(path.split(sep)[0]);
-    },
+    filter: (source) => copiedToHarness(relative(ROOT, source)),
   });
   await symlink(join(ROOT, "node_modules"), join(appRoot, "node_modules"), "dir");
   if (!manual) await Promise.all([

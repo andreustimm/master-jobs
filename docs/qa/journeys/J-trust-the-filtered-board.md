@@ -3,6 +3,8 @@
 ```mermaid
 flowchart TD
     A[Entrar em / ou em /jobs] --> B[Estreitar: faixa de salário, Score, fontes, empregador, ainda não enviadas]
+    B -->|gesto completo: pausa na digitação, soltar o slider, sair da faixa| B1[Filtro se aplica sozinho; a digitação em curso fica]
+    B1 --> C
     B --> C{O número ao lado bate com a lista?}
     C -->|não bate| C1[Defeito: o número descreve outro quadro]
     C --> D{Sobrou alguma vaga?}

@@ -350,6 +350,18 @@ teste de arquitetura reprova arquivo que lê `jobScore` sem um dos dois.
 `job_score_candidate_track_fit_idx (candidate_id, track_id, fit)` — o board
 ordena por `coalesce(job_score.fit, 0) DESC` dentro de uma trilha.
 
+`job_score_job_idx (job_id, fit)` (migração `0015_job_score_job_idx`, só
+aditiva) serve às leituras **por vaga**, que a chave primária — começando por
+`candidate_id` — não atende: a invalidação quando o anúncio muda
+(`deleteJobScores`), o cascade de `job` e a melhor nota por vaga. A melhor nota
+entre candidatos, nas trilhas principais, sai de `bestPrimaryFitByJob()`
+(`src/contexts/matching/app/track-scope.ts`): um CTE que agrega `job_score` uma
+vez por consulta e entra por junção. `enqueueStale()` e `verifyJobs()` usavam
+uma subconsulta correlacionada por vaga, repetida no `WHERE` e no `ORDER BY` —
+a forma que leu 77,4 milhões de linhas numa varredura em 03/09.
+`tests/verify-queue.test.ts` lê o plano e reprova `SubPlan` ou mais de uma
+visita a `job_score`.
+
 ### `candidate_matching_profile`
 
 Política persistida de matching por candidato. Guarda o JSON validado do
@@ -630,8 +642,10 @@ em `tests/db-decision-integrity.test.ts`.
 
 Consequência prática: `pnpm jho jobs sync` pode rodar todo dia, quantas vezes
 quiser, e um `status = 'interviewing'` continua `interviewing`. As tabelas de
-decisão só mudam por `setApplicationStatus()`, chamada exclusivamente pelo
-`jho track`.
+decisão só mudam por `setApplicationStatus()`, e só por ação explícita da
+pessoa: `jho track`, `jho jobs add --status`, a tela do funil ou uma sugestão
+de e-mail aceita. Nenhum
+caminho de ingestão a chama.
 
 > **Invariante:** nenhum código sob `src/core/ingest/` ou `src/core/sources/`
 > pode importar `application` ou `applicationEvent` para escrita. Se um sync
@@ -641,16 +655,25 @@ decisão só mudam por `setApplicationStatus()`, chamada exclusivamente pelo
 ### 2. Vaga que some é fechada, não deletada
 
 `syncOne()` compara os fingerprints vistos nesta rodada com os que aquela fonte
-carregava e faz `UPDATE ... SET closed_at = stamp`. Nunca `DELETE`.
+carregava e faz `UPDATE ... SET closed_at = stamp`. Nunca `DELETE`. E só faz
+isso quando a listagem é a fonte inteira:
 
 ```ts
-// Anything this source used to carry but no longer lists is closed.
-if (seenFingerprints.length > 0) {
+// Anything a complete listing no longer carries is closed. A partial
+// window leaves the rest to the 404/410 recheck.
+if (decideAbsenceClosure({ completeness, seen: seenFingerprints.length }).kind === "close-missing") {
 ```
 
-Dois detalhes que um agente precisa preservar:
+Três detalhes que um agente precisa preservar:
 
-- **O guard `seenFingerprints.length > 0` é intencional.** Se uma API devolve
+- **Janela parcial não fecha por ausência.** Todo adapter declara, em
+  `fetchJobs()`, se a listagem é `complete` ou `partial` (`SourceSnapshot` em
+  `src/core/sources/types.ts`; a tabela por fonte está em
+  [`sources.md`](sources.md#completude-da-listagem)). As 50 mais recentes do
+  Remotive não dizem nada sobre a 51ª: ela saiu da janela, não da plataforma.
+  Vaga de janela parcial só fecha por 404/410 na reconferência. A decisão é a
+  função pura `decideAbsenceClosure()` em `src/core/ingest/lifecycle.ts`.
+- **Lista vazia não fecha nada, nem em fonte completa.** Se uma API devolve
   zero vagas (rate limit, mudança de endpoint, board vazio temporariamente),
   nenhuma vaga é fechada. Sem esse guard, um blip de API fecharia o board
   inteiro de uma empresa.
@@ -831,10 +854,12 @@ comportamento desejado, já que o contador `updated` da saída do `jobs sync` s�
 > duas vagas legitimamente diferentes podem ter conteúdo idêntico depois da
 > normalização que o `fingerprint` aplica e o `content_hash` não.
 
-Note que `content_hash` **não** dispara repontuação. Quem decide o que repontuar
-é `SCORER_VERSION` (e o `--all`). Uma vaga cujo corpo mudou mantém o score
-antigo até a próxima corrida com `--all` ou até um bump de versão — algo a
-considerar ao mexer no pipeline.
+Conteúdo alterado **descarta o score** da vaga: a observação apaga as linhas de
+`job_score` daquela vaga para todos os candidatos (`invalidateScores()` em
+`src/core/ingest/observe.ts`), o sync reporta quantas foram invalidadas, e a
+próxima pontuação a recalcula. Mudança só em metadado fora do hash (como
+`applyUrl`) não invalida. Mudança do **scorer** ou do perfil continua exigindo
+bump de `SCORER_VERSION` — o hash de conteúdo não substitui essa regra.
 
 ---
 
@@ -913,6 +938,18 @@ Regras de negócio em [`docs/sources.md`](sources.md#busca-por-termo).
 
 Vaga nova de captura entra numa fonte `<kind>:~terms` criada com
 `enabled = false`: a sincronização nunca a fecha.
+
+### Varredura fatiada — `sweep_lease`, `sweep_run`
+
+Do contexto `operations` (`src/contexts/operations/`), pela
+[ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md). Sem
+FK, de propósito: a chave de reserva nomeia fonte ou candidato como texto, e
+apagar um candidato não pode falhar por causa de uma reserva de dez minutos.
+
+| Tabela | Chave | O que guarda |
+|---|---|---|
+| `sweep_lease` | `key` (`sync:<fonte>`, `pontuar:<candidato>`, `alarme:<nome>`, `manutencao:<nome>`) | reserva viva (`claimed_at`, `claimed_by`), última tentativa (`last_claimed_at`, nunca limpa) e último término (`last_finished_at`). Reservada por um único `INSERT … ON CONFLICT DO UPDATE … WHERE`; vence em 5 min |
+| `sweep_run` | `id`; índice `(slice, started_at)` | uma linha por chamada (`unit` nulo) e uma por unidade: duração, itens, erros, mensagem de erro. Só números e ids; podada a cada 24 h para 14 dias |
 
 ### `fx_rate` — cotações em cache
 

@@ -17,8 +17,28 @@
  * calendário é o caso de uso.
  */
 
-import { MANUAL_SOURCE_KINDS, type SourceKind } from "../sources/types.ts";
+import { MANUAL_SOURCE_KINDS, type Completeness, type SourceKind } from "../sources/types.ts";
 import type { ProbeVerdict } from "./probe.ts";
+
+export type AbsenceDecision =
+  | { kind: "close-missing" }
+  | { kind: "keep"; reason: "partial-window" | "empty-listing" };
+
+/**
+ * Pode a sincronização fechar o que a fonte deixou de listar?
+ *
+ * Só quando a listagem é a fonte inteira. Uma janela parcial — as 50 mais
+ * recentes, as primeiras páginas — não diz nada sobre o que ficou fora dela, e
+ * fechar ali escondia vagas vivas a cada rodada; essas só fecham por 404/410
+ * na reconferência. Lista vazia é ambígua até numa fonte completa: "a empresa
+ * não tem vaga" e "a API mudou o formato" chegam iguais, e a segunda fecharia o
+ * acervo inteiro da fonte.
+ */
+export function decideAbsenceClosure(input: { completeness: Completeness; seen: number }): AbsenceDecision {
+  if (input.seen === 0) return { kind: "keep", reason: "empty-listing" };
+  if (input.completeness !== "complete") return { kind: "keep", reason: "partial-window" };
+  return { kind: "close-missing" };
+}
 
 /**
  * Por que uma vaga fechada continua no quadro.

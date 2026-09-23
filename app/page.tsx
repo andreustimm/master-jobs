@@ -1,7 +1,7 @@
+import { Card } from "@/components/ui/card";
 import { TransitionLink } from "./transition-link";
 import { loadCockpit } from "./cockpit-data.ts";
-import { comVigia, registrarTempo } from "./timeout-watch.ts";
-import { createStageTimer } from "../src/core/observability.ts";
+import { comVigia, criarCronometro, registrarTempo } from "./timeout-watch.ts";
 import { FilterBar, href, readFilters, toBoardFilters } from "./filters";
 import { JobList } from "./joblist";
 import { Legend, Stat } from "./ui";
@@ -36,7 +36,7 @@ export default async function Cockpit({
     // para a pergunta errada. Pior com a PWA instalada: `start_url` é "/" e não
     // pode variar por papel, então o app abriria numa tela de erro —
     // reintroduzindo, pela porta do manifest, o defeito que a E-06 corrigiu.
-    const timer = createStageTimer();
+    const timer = criarCronometro();
     // No `finally`: a leitura que falha ou estoura é a que mais precisa da medida.
     try {
       const candidateId = await timer.time("auth", async () => {
@@ -71,6 +71,13 @@ export default async function Cockpit({
           {t("cockpit.leadTail")}
         </p>
       </header>
+
+      {/* Sem nota ainda, a lista abaixo vem sem ordem de aderência (#279). */}
+      {stats?.scored === false && (
+        <Card className="mb-4 p-4" role="status" data-testid="cockpit-scores-pending">
+          <p className="type-body-md">{t("filterNotices.scores_pending")}</p>
+        </Card>
+      )}
 
       <div className="mb-7 grid grid-cols-[repeat(auto-fit,minmax(104px,1fr))] gap-px overflow-hidden rounded-xl border bg-border">
         <Stat value={stats?.open?.toLocaleString(locale) ?? "0"} label={t("cockpit.openJobs")} />

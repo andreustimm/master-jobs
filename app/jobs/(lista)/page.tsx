@@ -4,18 +4,17 @@ import { after } from "next/server";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { FilterBar } from "../filters";
-import { GridToolbar, Pagination, Presets } from "../grid";
-import { JobList } from "../joblist";
-import { Legend } from "../ui";
-import { candidateScope, requirePage } from "../auth";
-import { getTranslator } from "../i18n";
-import { TransitionLink } from "../transition-link";
-import { loadJobsView } from "./jobs-data";
-import { comVigia, registrarTempo } from "../timeout-watch.ts";
-import { createStageTimer } from "../../src/core/observability.ts";
-import { ScoreQueueCard, isRecalculating } from "../score-queue-card";
-import { candidateScoreQueueStatus } from "../../src/core/scoring/queue.ts";
+import { FilterBar } from "../../filters";
+import { GridToolbar, Pagination, Presets } from "../../grid";
+import { JobList } from "../../joblist";
+import { Legend } from "../../ui";
+import { candidateScope, requirePage } from "../../auth";
+import { getTranslator } from "../../i18n";
+import { TransitionLink } from "../../transition-link";
+import { loadJobsView } from "../jobs-data";
+import { comVigia, criarCronometro, registrarTempo } from "../../timeout-watch.ts";
+import { ScoreQueueCard, isRecalculating } from "../../score-queue-card";
+import { candidateScoreQueueStatus } from "../../../src/core/scoring/queue.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +62,7 @@ export default async function Jobs({
     // `candidateId` pode ser null. Nota de aderência, trilhas e termos salvos
     // são de UMA pessoa: para quem não é candidato eles simplesmente não
     // existem.
-    const timer = createStageTimer();
+    const timer = criarCronometro();
     // No `finally`: a leitura que falha ou estoura é a que mais precisa da medida.
     try {
       const session = await timer.time("auth", () => requirePage("job:read"));

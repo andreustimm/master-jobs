@@ -74,6 +74,30 @@ function prNumbers(value: unknown): number[] {
   }))] : [];
 }
 
+function mergedPullRequests(commits: ObjectValue[]): number[] {
+  return commits.flatMap(row => {
+    const message = object(row.commit).message;
+    if (typeof message !== "string") return [];
+    const subject = message.split("\n", 1)[0]!;
+    const match = subject.match(/^Merge pull request #(\d+) from /) ?? subject.match(/\(#(\d+)\)$/);
+    const number = match ? id(Number(match[1])) : null;
+    return number === null ? [] : [number];
+  });
+}
+
+// "(#N)" in a subject may name an issue, or a number that no longer exists; a hint
+// that fails must drop the candidate, not abort evidence for the whole promotion.
+async function promotedPullRequest(gateway: TaskGateway, base: string, number: number): Promise<PullRequestEvidence | null> {
+  let issue: ObjectValue;
+  try {
+    issue = object(await requestGitHub("GET", `${base}/issues/${number}`));
+  } catch (error) {
+    if ((error as { status?: unknown }).status === 404) return null;
+    throw error;
+  }
+  return issue.pull_request === undefined ? null : gateway.pullRequest(number);
+}
+
 async function sourceEvent(gateway: TaskGateway, config: ProjectConfig, eventName: string, payload: ObjectValue): Promise<SourceEvent | null> {
   const base = `repos/${config.repository}`;
   const web = `https://github.com/${config.repository}`;
@@ -125,12 +149,29 @@ async function sourceEvent(gateway: TaskGateway, config: ProjectConfig, eventNam
     if (deploymentId === null) return null;
     const deployment = await gateway.deployment(deploymentId);
     if (!sha(deployment.sha)) throw new Error("Deployment metadata has no valid SHA");
-    const associated = await metadataPages(`${base}/commits/${deployment.sha}/pulls`);
-    const numbers = prNumbers(associated);
-    const prs = await Promise.all(numbers.map(number => gateway.pullRequest(number)));
     const invalid = raw.sha !== deployment.sha ? "SHA do deployment foi substituído" :
       deployment.state !== "success" || status.state !== "success" ? "Deployment atual ainda pendente ou sem sucesso confirmado" :
       deployment.environment.toLowerCase() !== "production" || !["main", "refs/heads/main"].includes(deployment.ref) ? "Deployment não comprova publicação de main em production" : undefined;
+    const associated = await Promise.all(prNumbers(await metadataPages(`${base}/commits/${deployment.sha}/pulls`)).map(number => gateway.pullRequest(number)));
+    // The SHA published on main belongs to the human staging → main promotion, not to
+    // the task PRs, which always target dev. Their merge commits travel inside that
+    // promotion, so its commit messages name the candidates. A message is only a
+    // hint: each candidate is reread and must still prove base dev, native link,
+    // claimed branch and ancestry of the deployed SHA below.
+    // Only a valid production deploy of a merged promotion expands: dev and staging
+    // deploys also resolve to the OPEN promotion, and expanding them would comment
+    // "Ignorado" on every promoted issue for each deployment status.
+    const promoted: number[] = [];
+    for (const promotion of invalid ? [] : associated.filter(pr => pr.base === "main" && pr.head === "staging" && pr.state === "MERGED")) {
+      const commits = await metadataPages(`${base}/pulls/${promotion.number}/commits`);
+      // GitHub lists at most 250 commits of a pull request; a longer promotion would
+      // silently drop candidates, so it demands explicit reconciliation instead.
+      if (commits.length >= 250) throw new Error("Promotion exceeds the commits GitHub lists; explicit reconciliation is required");
+      promoted.push(...mergedPullRequests(commits));
+    }
+    const known = new Set(associated.map(pr => pr.number));
+    const expanded = await Promise.all([...new Set(promoted)].filter(number => !known.has(number)).map(number => promotedPullRequest(gateway, base, number)));
+    const prs = [...associated, ...expanded.filter(pr => pr !== null)].filter(pr => pr.base === "dev");
     return {
       id: hash({ eventName, deploymentId, statusId: id(status.id), state: status.state, sha: raw.sha }),
       kind: "deployment", occurredAt: timestamp(raw.created_at), pullRequests: prs,

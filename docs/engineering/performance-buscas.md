@@ -18,12 +18,13 @@ Três camadas, da mais barata para a mais fiel. Nenhuma substitui a outra.
 | **Piso local** | `pnpm perf:jobs` | Quanto o servidor gasta sobre o banco em 6 cenários (padrão, termo, cluster, faixa salarial, ordenar por pagamento, sem agrupar), 10 mil vagas, e **quantas idas ao banco** cada um faz. Hermético: Postgres em Docker, fora do `pnpm check`. `JHO_PERF_OUT=arquivo` guarda o relatório; `JHO_PERF_JOBS=N` muda o corpus; `JHO_PERF_RUNS=N` e `JHO_PERF_WARMUPS=N` controlam as repetições (inteiros positivos, padrões 3 e 1); `JHO_PERF_JSON=arquivo` guarda amostras, volume de SQL/parâmetros, resultados de referência e plano de execução | Sem rede. Não mede React nem o navegador |
 | **Produção, por estágio** | Linha JSON `{"perf":"/jobs","totalMs":…,"region":"gru1","stages":{…}}` no log da função | Onde uma requisição real gasta o tempo: `auth`, `prelude`, `board`, `facets`, `tail` (e `cockpit` em `/`) | Sai só se a leitura passa de 1 s, ou sempre com `JHO_PERF_LOG=1`. Log da Vercel na Hobby dura 1 h |
 | **Produção, de fora** | `pnpm perf:producao` (e `--logs`) | TTFB frio e quente, p50/p95, região e cache por rota; com `JHO_PERF_SESSION`, `/jobs` com os filtros comuns; com `--logs`, a agregação das linhas `perf` acima | Ver [Medir a produção](#medir-a-produção-221). De fora não se prova que a instância estava fria |
+| **Produção, amostrada** | Trace do Sentry: span `jho.leitura` por rota e `jho.etapa` por estágio | Os mesmos estágios da linha acima, com os spans de renderização e de PostgreSQL do SDK, e retidos além de 1 h | Amostra de `SENTRY_TRACES_SAMPLE_RATE` (padrão 10%). Ver [Sentry](#sentry-e-o-que-fica-de-fora) |
 | **Região** | Cabeçalho `x-vercel-id` da resposta | Onde a função rodou. `<borda>::gru1::…` é o certo (o primeiro trecho é a borda de quem pediu, só o segundo é a função); `<borda>::iad1::…` é a função longe do banco | Só diz a região, não o custo |
 
 A linha de log leva só número, nome de estágio, rota **sem query string** e
 região. Nunca valor de filtro, identidade ou id de candidato — a URL carrega o
-filtro da pessoa, e é por isso que o Sentry roda sem tracing (ver
-[Sentry](#sentry-e-o-que-fica-de-fora)).
+filtro da pessoa, e é por isso que o tracing do Sentry só saiu depois de uma
+peneira com lista de permissão (ver [Sentry](#sentry-e-o-que-fica-de-fora)).
 
 **`Server-Timing` não serve aqui.** Server Components não escrevem cabeçalho de
 resposta (a documentação do Next não tem API para isso), e o `proxy.ts` roda
@@ -89,15 +90,21 @@ impresso ou mandado a outro host que não seja HTTPS ou `127.0.0.1`/`localhost`:
 Além dos três públicos, mede `/jobs`, `/jobs?fit=45`,
 `/jobs?fit=45&workMode=remote` e `/jobs?fit=45&q=<termo>`. O termo padrão é
 `typescript`; `JHO_PERF_TERMO` troca, e o valor nunca aparece na saída — o
-relatório só diz "termo". Se a sessão venceu, o script para no primeiro 307
-para `/login` sem gravar nada. Cada requisição com sessão é uma visita real:
-conta como uso, e um `?by=` salvo nunca é pedido.
+relatório só diz "termo". Ao fim de cada rodada — depois das amostras, para
+não aquecer a função antes da "primeira" — o script confere a sessão em
+`/account`, que não tem fronteira de carregamento: se ela venceu, para no 307
+para `/login` sem gravar nada. Em `/jobs` esse 307 não existe mais — desde a
+#217 o esboço compromete a resposta em 200 e a sessão vencida redireciona pelo
+cliente. Pelo mesmo motivo, o TTFB de `/jobs` a partir da #217 mede a chegada do
+esboço, não a da lista: compare rodadas anteriores pelo tempo total. Cada
+requisição com sessão é uma visita real: conta como uso, e um `?by=` salvo
+nunca é pedido.
 
 ### Por dentro: as linhas `perf` do log
 
 `/jobs` e `/` cronometram cada espera do banco com `createStageTimer`
 (`timer.time("auth" | "prelude" | "board" | "facets" | "tail" | "queue", …)`
-em `app/jobs/page.tsx` e `app/jobs/jobs-data.ts`; `cockpit` em `app/page.tsx`),
+em `app/jobs/(lista)/page.tsx` e `app/jobs/jobs-data.ts`; `cockpit` em `app/page.tsx`),
 dentro do `comVigia`. `registrarTempo` escreve uma linha JSON só com número,
 nome de estágio, rota sem query string e região:
 
@@ -496,12 +503,12 @@ o próximo passo não é um cache maior, e sim, nesta ordem:
 | 1 ✅ | Prelúdio de `/jobs`: trilhas ∥ câmbio, sem `listTracks` duplicado, câmbio em 1 consulta | alto × baixo | `jobs-data.ts` |
 | 1 ✅ | Medição: baseline local e log por estágio | habilita o resto | `perf:jobs`, `registrarTempo` |
 | 🟡 | Medição de produção: TTFB frio/quente, região e agregação das linhas `perf` (#221, em revisão; falta a rodada com sessão) | habilita o cache de facetas | `perf:producao` |
-| PR 2 | Overlay só na troca de rota (#220, em revisão); filtros que se aplicam sozinhos (#218) | alto × médio | fase 3 |
+| PR 2 | Overlay só na troca de rota (#220); filtros que se aplicam sozinhos (#218, em revisão; ver [decisão](#filtros-que-se-aplicam-sozinhos-218)) | alto × médio | fase 3 |
 | 2 ✅ | Seleção compartilhada para lista e total, facetas fundidas | alto × médio | `repo.ts` |
 | 2 🟡 | Busca por termo indexada: pré-filtro `pg_trgm`, `~*` inalterado (#214, em revisão) | alto com termo seletivo × médio | migration `0012`/`0013` |
 | 2 ✅ | Normalização salarial compartilhada, sem repetir cotações a cada uso | alto com faixa | `repo.ts` |
 | 2 🟡 | Cache local das facetas, validade de 60 s (#216, em revisão; ver [seção](#cache-das-facetas--medição-de-22092026)) | alto ao paginar/ordenar, nulo na primeira leitura × médio | `matching/app/board-facets.ts` |
-| 3 | `loading.tsx` + `Suspense` em `/jobs` | só rende após o cache de facetas | `app/jobs/` |
+| 3 🟡 | `loading.tsx` + `Suspense` em `/jobs` (#217, em revisão; ver [fronteira](#fronteira-de-carregamento-217)) | percepção imediata na troca de tela; o total não muda | `app/jobs/(lista)/`, `app/jobs/[id]/` |
 | ✅ | Régua de conexões por **tela**, `comVigia` em `/jobs` e `/` | entregue e exercitado no QA de concorrência | testes |
 
 ### Decisões
@@ -521,15 +528,113 @@ o próximo passo não é um cache maior, e sim, nesta ordem:
   sessão **no meio** da requisição, e autorizar com o valor de antes seria a
   decisão errada.
 
+### Filtros que se aplicam sozinhos (#218)
+
+- **O gesto completo pede a lista, não o movimento.** Slider: `onValueCommitted`
+  (soltar o polegar ou a tecla de seta), nunca `onValueChange`. Campos da faixa:
+  ao sair da faixa inteira — passar do piso ao teto, ou do campo ao Aplicar, é o
+  mesmo gesto. Select de moeda e período: ao escolher. Texto (busca e empresa):
+  400 ms sem digitar e pelo menos três caracteres, ou o campo vazio. Três é o
+  mínimo que o pré-filtro trigrama da #214 aproveita; abaixo disso a consulta
+  varre tudo. Enter e Aplicar valem na hora para qualquer tamanho.
+- **Cliente mínimo, e por quê.** Um formulário GET só envia com clique ou
+  Enter; esperar a pausa exige temporizador no navegador. A ilha
+  (`app/auto-submit.tsx`) só chama `requestSubmit()` no formulário em volta —
+  o mesmo caminho do Aplicar. Não guarda filtro, não monta query, não conhece
+  regra: a URL continua sendo o estado e o servidor, a autoridade. As regras de
+  tempo e de "último vence" são puras, em `app/auto-apply.ts`, testadas sem
+  DOM nem relógio.
+- **Último vence.** Um pedido por controle; o novo substitui o pendente. Se há
+  navegação sem a URL confirmada, o envio espera por ela: os campos ocultos do
+  formulário carregam o resto do filtro, e antes da resposta ainda trazem o
+  estado anterior — a busca digitada logo depois do slider desfaria o slider.
+  Envio para a URL atual é descartado (`sameDestination`); na faixa, que
+  serializa campos vazios e selects que a URL não tem, o envio só sai se um
+  campo difere do último pedido ou se um select mudou — sair de uma faixa
+  intacta não navega. Enter/Aplicar cancelam o pedido pendente, e navegação
+  por link ou histórico (limpar, preset, chip, Voltar/Avançar) também: ela é a
+  interação mais recente. Envio de outro formulário da barra não cancela — o
+  pedido espera e sai depois, com os campos ocultos atualizados, e os dois
+  filtros chegam à URL. Quem diz qual é qual é quem abre a geração:
+  `TransitionGetForm` chama `begin` dentro de `duringFormNavigation`
+  (`app/form-navigation.ts`), e o ouvinte consulta a marca na mesma pilha.
+  Limite que já existia antes da #218: Enter/Aplicar **manual** enquanto a
+  navegação de outro filtro ainda está em voo sai com os campos ocultos
+  anteriores, e esse outro filtro se perde — o envio manual não espera.
+- **Janelas.** 300 ms nos controles basta para juntar setas seguidas no
+  slider; 400 ms no texto é a pausa de quem ainda está digitando uma palavra.
+- **Os campos deixaram de ser remontados por `key`.** A chave pelo valor do
+  servidor remontava o campo a cada resposta; com o envio automático a
+  resposta chega no meio da digitação e devolvia o texto antigo, sem foco.
+  `useAppliedValue` segue a URL (limpar, voltar, preset, faixa invertida
+  corrigida pelo servidor) exceto quando há texto não enviado no campo em foco.
+  Período e moeda do `PayRange` seguem a URL por `useFollowed`, também sem
+  chave: trocar o período e digitar o valor logo em seguida não perde nada.
+- **Fora do automático:** a lista de fontes. Cada aplicação reconstrói o
+  seletor pela URL e fecharia o `<details>` no meio de uma escolha múltipla; o
+  Aplicar fica ao lado da lista.
+- **Histórico.** Cada aplicação é uma entrada nova, como era com o botão. Com
+  o intervalo de 400 ms, digitar uma palavra de uma vez gera uma entrada só.
+- **Prova.** `tests/auto-apply.test.ts` (regras) e o E2E
+  `tests/e2e/filter-auto-apply.mjs`, que conta as navegações RSC de `/jobs`:
+  dois caracteres não navegam, digitação contínua vira uma navegação, arrastar
+  não navega e soltar navega uma vez, cinco setas viram uma, e com a resposta
+  retida por 1,5 s a digitação seguinte não é apagada e a última busca vence.
+
+### Fronteira de carregamento (#217)
+
+- **Onde.** `app/jobs/(lista)/loading.tsx`, num grupo de rota que só contém a
+  lista. Dois lugares foram recusados: `app/loading.tsx` cobriria o produto
+  inteiro, e a ausência dele é contrato (`navigation-adapters`);
+  `app/jobs/loading.tsx` envolveria `/jobs/<id>`, `/jobs/<id>/paises` e
+  `/jobs/new`.
+- **Por que o status decide.** O primeiro chunk do fallback compromete a
+  resposta em 200. Depois dele, `notFound()` vira 200 com `noindex` e
+  `redirect()` vira redirecionamento no cliente. `/jobs/999999999` responder 404
+  é contrato do E2E, então o detalhe não tem `loading.tsx`: autenticação e
+  `notFound()` rodam antes, e só a nota por trilha e o histórico da candidatura
+  vêm por `<Suspense>` (`job-track-fits-loading`,
+  `application-timeline-loading`).
+- **O que a lista troca.** Em `/jobs`, sessão vencida com cookie presente passa
+  a redirecionar para `/login` pelo cliente, e não mais por 307. Sem cookie, o
+  `proxy.ts` continua respondendo antes da página. `job:read` vale para os três
+  papéis, então `forbidden()` não é caminho real aqui.
+- **Troca de tela × mesma tela.** Rota dinâmica sem fronteira não tem o que
+  pré-carregar. Com ela, o roteador busca o esqueleto com antecedência: o clique
+  em Vagas, vindo de outra tela, mostra o esboço na hora, o overlay sai sobre
+  ele (a URL confirma com o esboço) e a lista entra por streaming. Filtro, ordem
+  e página **não** mostram o esboço: no Next 16 a fronteira é mantida pela chave
+  de estado do segmento, que exclui a query (`createRouterCacheKey(segment,
+  true)` em `layout-router`), e numa transição React não troca por fallback uma
+  fronteira já revelada. A transição suave da #220 continua mostrando a lista
+  anterior. O E2E `tests/e2e/jobs-loading.mjs` retém a resposta RSC por 2,5 s
+  para provar as duas metades sem depender de corrida.
+- **O que o esqueleto mostra.** Título real, `aria-busy` na região e um aviso
+  `role="status"` do dicionário (`jobs.loading`, `jobDetail.loadingSection`).
+  As barras são decorativas, só com `bg-muted`, e animam apenas com
+  `motion-safe`. Nenhum dado entra no fallback: ele é igual para qualquer
+  sessão e não pode exibir a tela de outra pessoa.
+- **Ganho.** A fronteira muda o tempo até a primeira resposta visível na troca
+  de tela, não o tempo total de `/jobs`, que continua dependendo de lista e
+  facetas (com o cache da #216). No E2E, com a navegação retida por 2,5 s, o
+  esboço aparece bem antes da resposta; sem a fronteira, a tela anterior ficava
+  sob o overlay durante toda a espera. A medição em produção fica para depois
+  do deploy, pela rodada com sessão de `perf:producao` (#221).
+
 ## Sentry e o que fica de fora
 
-`tracesSampleRate` está em 0 de propósito: uma transação carrega a URL com a
-query string, isto é, os filtros da pessoa. Ligá-lo exige `beforeSendTransaction`
-e `beforeSendSpan` reaproveitando `scrubEvent`/`redactPath`, e um teste de que
-nada sai. Confirmar antes: a quota de spans do plano Developer (o "5M" veio de
-resumo de página de preços) e se `instrumentPostgresJsSql` existe no
-`@sentry/nextjs` (a documentação achada é de Deno e Cloudflare). Não foi feito
-nesta entrega.
+Tracing ligado pela #219, a 10% por padrão (`SENTRY_TRACES_SAMPLE_RATE`). Uma
+transação carrega a URL com a query string, isto é, os filtros da pessoa, então
+`beforeSendTransaction` e `beforeSendSpan` passam por `scrubTransaction` e
+`scrubSpan`, com lista de permissão de atributos e um teste que reprova se um
+marcador privado sobreviver. O que sai e o que não sai está em
+[`deploy.md`](deploy.md#tracing).
+
+Confirmado em 22/09/2026: a quota de spans do plano Developer é de fato
+5.000.000 por ciclo (API `customers/master-timm`), sem gasto sob demanda; e o
+`@sentry/node` 10.75 traz `postgresJsIntegration`, ligada automaticamente com
+tracing — o SDK já troca literais por `?`, e a peneira reduz a consulta ao
+verbo mesmo assim.
 
 Ferramentas gratuitas avaliadas (limites consultados em 2026-09-21; confirme no
 painel antes de depender de um número):

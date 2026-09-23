@@ -1,7 +1,8 @@
 # Codex configuration for master-jobs.
 #
-# Instructions live in AGENTS.md at the repository root — that file is the
-# mirror of CLAUDE.md. Edit both together.
+# Instructions live in AGENTS.md at the repository root — the single authored
+# source. CLAUDE.md is a symlink to it, so there is only one file to edit.
+# Rule details live in docs/engineering/rules/; this file only wires Codex up.
 
 [project]
 name = "master-jobs"

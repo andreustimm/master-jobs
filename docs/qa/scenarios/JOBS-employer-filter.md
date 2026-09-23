@@ -6,7 +6,7 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: O campo de empresa devolve só as vagas daquele empregador, e não as que mencionam o nome na descrição
 entry_points: /jobs?company=Shopify
-qa_status: pass
+qa_status: untested
 bug_ids:
 fix_status:
 retest_status:
@@ -23,3 +23,5 @@ empregador, e casa dentro da palavra, porque "Shopify" precisa achar
 A conferir: uma vaga que apenas cita a empresa na descrição NÃO aparece;
 `%` e `_` no nome são texto, não curinga; o nome com `&` sobrevive à URL;
 limpar remove o filtro.
+
+**Reset 2026-09-23 (#218):** o campo Empresa passou a aplicar sozinho depois de 400 ms sem digitar, com três caracteres ou mais; Enter continua aplicando na hora para nomes curtos.

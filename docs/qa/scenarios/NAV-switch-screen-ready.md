@@ -4,9 +4,9 @@ area: NAV
 title: Trocar para uma tela interna pronta
 persona: Candidato por teclado
 journey: J-switch-workspace-screen
-expected: Um splash único e curto bloqueia a tela anterior e sai somente quando o destino correto está utilizável
+expected: Um splash único e curto bloqueia a tela anterior e sai somente quando o destino correto está utilizável — ou, em Vagas, quando o esboço pré-carregado, que anuncia a espera, assume a tela
 entry_points: /jobs
-qa_status: pass
+qa_status: untested
 bug_ids: BUG-20260823-pipeline-empty-state-mixed-locale
 fix_status: fixed
 retest_status: pending
@@ -27,3 +27,5 @@ O Full QA confirmou Pipeline por menu e por teclado, seguido de reload no mesmo 
 **Reset 2026-09-22 (#220):** filtros GET, paginação e densidade deixaram de abrir o splash — viraram transição suave na mesma tela (`NAV-same-screen-soft-transition`). Este cenário passa a cobrir só a troca entre telas; revalidar.
 
 Full 1.22.0 (2026-09-22): Troca /jobs → /pipeline pelo menu do celular: um overlay, shell inert com 'Loading the next screen', liberado em ~450 ms com o destino utilizável.
+
+**Reset 2026-09-23 (#217):** ao entrar em Vagas vindo de outra tela, o splash agora sai sobre o esboço pré-carregado da lista (`JOBS-loading-skeleton`), e a lista chega por streaming depois dele. Confirmar que o esboço anuncia a espera, que nada da tela anterior fica operável e que as outras áreas não mudaram.

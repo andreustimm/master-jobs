@@ -15,6 +15,7 @@ import {
   routeMethods,
   stripComments,
 } from "./support/entry-inventory.ts";
+import { ambientReads, forbiddenReach, moduleEdges, type ForbiddenEdge } from "./support/module-graph.ts";
 
 /**
  * Executable architecture rules.
@@ -56,6 +57,37 @@ const SRC = walk("src");
 const APP = walk("app");
 const read = (f: string) => readFileSync(f, "utf8");
 
+/**
+ * Arquivos de composição que moram em diretório de domínio puro. Lêem banco por
+ * ofício, e cada um diz por quê. Arquivo novo nesses diretórios é puro até
+ * alguém escrever aqui o contrário.
+ */
+const PURE_COMPOSITION = new Map<string, string>([
+  ["src/core/scoring/apply.ts", "persiste scores: lê perfis por trilha, câmbio e vagas, e grava job_score"],
+  ["src/core/scoring/queue.ts", "fila de repontuação guardada em tabela"],
+  ["src/core/analytics/index.ts", "consultas do diagnóstico; a estatística pura mora em stats, funnel e scorer-diagnostics"],
+]);
+
+/** Domínio puro: todo `domain/`, o scorer e a estatística (regra 4). */
+const PURE_CORE = SRC.filter(
+  (file) =>
+    (/\/domain\//.test(file) || file.startsWith("src/core/scoring/") || file.startsWith("src/core/analytics/")) &&
+    !PURE_COMPOSITION.has(file),
+);
+
+const INFRA_PACKAGE =
+  /^(?:drizzle-orm|postgres|@libsql\/|undici|next(?:\/|$)|node:(?:fs|net|http|https|http2|dns|child_process|tls|dgram|worker_threads)(?:\/|$)|(?:fs|net|http|https|http2|dns|child_process|tls)(?:\/|$))/;
+
+/** O que o domínio puro não alcança, nem direto nem por reexport. */
+const domainForbidden: ForbiddenEdge = (specifier, resolved) => {
+  if (specifier === null) return "import dinâmico com especificador não literal";
+  if (INFRA_PACKAGE.test(specifier)) return specifier;
+  if (resolved !== null && (resolved.includes("/infra/") || resolved.startsWith("src/core/db/") || resolved === "src/core/remote-url.ts")) {
+    return resolved;
+  }
+  return null;
+};
+
 describe("erasable TypeScript (ADR 0006)", () => {
   it("uses no enum, namespace, decorator or parameter property", () => {
     const offenders: string[] = [];
@@ -72,16 +104,47 @@ describe("erasable TypeScript (ADR 0006)", () => {
   });
 
   it("carries explicit .ts extensions on relative imports", () => {
+    // Toda grafia de aresta, não só `from "…"` com aspas duplas: aspas
+    // simples, `import("…")`, `require`, `export * from` e import de efeito
+    // colateral chegam ao type stripping do Node do mesmo jeito (V10-02).
     const offenders: string[] = [];
     for (const file of SRC) {
-      for (const m of read(file).matchAll(/from\s+"(\.[^"]+)"/g)) {
-        const spec = m[1]!;
+      for (const edge of moduleEdges(read(file))) {
+        const spec = edge.specifier;
+        if (spec === null || !spec.startsWith(".")) continue;
         if (!spec.endsWith(".ts") && !spec.endsWith(".tsx") && !spec.endsWith(".json")) {
           offenders.push(`${file}: ${spec}`);
         }
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it("V10-02 a descoberta de arestas não depende de aspas nem de sintaxe", () => {
+    const fonte = [
+      "import a from './a.ts';",
+      'import { b } from "./b.ts";',
+      "import './efeito.ts';",
+      "export * from './reexport.ts';",
+      'export { c } from "./c.ts";',
+      "const d = await import('./dinamico.ts');",
+      'const e = require("./cjs.ts");',
+      "const f = await import(nome);",
+      "import type { T } from './tipo.ts';",
+      "import { type U } from './tipo2.ts';",
+      "import { type V, w } from './misto.ts';",
+      "export type Props = {\n  a: string;\n};",
+      "// import x from './comentado.ts';",
+    ].join("\n");
+    const edges = moduleEdges(fonte);
+    expect(edges.filter((e) => !e.typeOnly).map((e) => e.specifier ?? "<não literal>").sort()).toEqual(
+      ["./a.ts", "./b.ts", "./c.ts", "./cjs.ts", "./dinamico.ts", "./efeito.ts", "./misto.ts", "./reexport.ts", "<não literal>"],
+    );
+    expect(edges.filter((e) => e.typeOnly).map((e) => e.specifier).sort()).toEqual(["./tipo.ts", "./tipo2.ts"]);
+
+    // A regra antiga só lia `from "…"`: as grafias abaixo passavam sem extensão.
+    const semExtensao = "import x from './x';\nexport * from './y';\nawait import('./z');";
+    expect(moduleEdges(semExtensao).map((e) => e.specifier)).toEqual(["./x", "./y", "./z"]);
   });
 });
 
@@ -132,9 +195,17 @@ describe("layering", () => {
     const callers = [...SRC, ...walk("app")].filter(
       (file) => !file.includes("src/contexts/matching/"),
     );
+    // Uma exceção, e só para o DOMÍNIO: o scorer é domínio de Matching que mora
+    // fora do contexto (MIGRATION.md, "ownership Matching"). Pelo `index.ts`
+    // ele carregava os adapters Drizzle que o índice compõe (V10-02). `app/` e
+    // `infra/` continuam fechados para ele também.
+    const scorer = new Set(PURE_CORE.filter((file) => file.startsWith("src/core/scoring/")));
     const offenders = callers.filter((file) =>
-      /contexts\/matching\/(?:app|domain|infra)\//.test(read(file)),
+      (scorer.has(file) ? /contexts\/matching\/(?:app|infra)\// : /contexts\/matching\/(?:app|domain|infra)\//)
+        .test(read(file)),
     );
+    expect(scorer.has("src/core/scoring/score.ts")).toBe(true);
+    expect(scorer.has("src/core/scoring/apply.ts")).toBe(false);
     expect(offenders).toEqual([]);
   });
 
@@ -191,6 +262,263 @@ describe("layering", () => {
     expect(text).not.toContain("findOccurrences");
     expect(types).not.toMatch(/\bweight\??\s*:/);
     expect(strategies).not.toMatch(/\bweight\s*:/);
+  });
+});
+
+describe("V10-02 fronteiras do domínio e dos adapters", () => {
+  /**
+   * Leitura ambiente que ainda existe no domínio: o que é lido e por quê.
+   * Entrada nova reprova; entrada que deixou de ser verdade também (órfã).
+   */
+  const AMBIENT_DEBT = new Map<string, { reads: string[]; why: string }>([
+    [
+      "src/contexts/auth/domain/policy.ts",
+      {
+        reads: ["Date.now()"],
+        why: "`can()` e `authorize()` aceitam `now = Date.now()` por padrão; os chamadores de sessão ainda não passam o instante",
+      },
+    ],
+    [
+      "src/contexts/auth/domain/password.ts",
+      {
+        reads: ["crypto random"],
+        why: "o sal do scrypt nasce em `hashPassword`; a verificação, que é a decisão, é determinística e recebe o sal gravado",
+      },
+    ],
+  ]);
+
+  it("descobre o domínio puro por diretório, com a composição declarada", () => {
+    // Guarda contra o teste passar por não ter achado nada.
+    expect(PURE_CORE.length).toBeGreaterThan(30);
+    for (const file of ["src/core/scoring/score.ts", "src/core/scoring/freshness.ts", "src/contexts/auth/domain/policy.ts"]) {
+      expect(PURE_CORE, file).toContain(file);
+    }
+    for (const [file, why] of PURE_COMPOSITION) {
+      expect(SRC, `composição órfã: ${file}`).toContain(file);
+      expect(why.trim().length, file).toBeGreaterThan(20);
+    }
+  });
+
+  it("nenhum domínio puro alcança banco, rede ou Next — nem por reexport", () => {
+    // Transitivo e só por import de VALOR: tipo some antes da execução. Foi
+    // assim que `score.ts` carregava Drizzle sem citar nada de banco: importava
+    // `contexts/matching/index.ts`, e o índice compõe `infra/drizzle-profile.ts`.
+    const offenders = PURE_CORE.map((file) => forbiddenReach(file, domainForbidden))
+      .filter((chain): chain is string[] => chain !== null)
+      .map((chain) => chain.join(" -> "));
+    expect(offenders).toEqual([]);
+  });
+
+  it("nenhum domínio puro lê relógio, acaso ou rede sozinho", () => {
+    const offenders: string[] = [];
+    const used = new Set<string>();
+    for (const file of PURE_CORE) {
+      const reads = ambientReads(read(file));
+      if (reads.length === 0) continue;
+      const debt = AMBIENT_DEBT.get(file);
+      if (debt && reads.every((name) => debt.reads.includes(name))) {
+        used.add(file);
+        continue;
+      }
+      offenders.push(`${file}: ${reads.join(", ")}`);
+    }
+    for (const file of AMBIENT_DEBT.keys()) if (!used.has(file)) offenders.push(`${file}: dívida de leitura ambiente órfã`);
+    expect(offenders).toEqual([]);
+  });
+
+  it("adapter de fonte é burro: não alcança banco, scorer nem funil", () => {
+    // Adapter busca, mapeia e devolve (regra 4). Um adapter que grava ou
+    // pontua mistura a qualidade da API da fonte com a decisão do usuário.
+    const adapters = SRC.filter((file) => file.startsWith("src/core/sources/"));
+    expect(adapters.length).toBeGreaterThan(8);
+    const adapterForbidden: ForbiddenEdge = (specifier, resolved) => {
+      if (specifier !== null && /^(?:drizzle-orm|postgres|@libsql\/)/.test(specifier)) return specifier;
+      if (
+        resolved !== null &&
+        (resolved.startsWith("src/core/db/") ||
+          resolved.startsWith("src/core/scoring/") ||
+          resolved.startsWith("src/core/ingest/") ||
+          /src\/contexts\/(?:matching|pursuit)\//.test(resolved) ||
+          resolved.includes("/infra/"))
+      ) {
+        return resolved;
+      }
+      return null;
+    };
+    const offenders = adapters
+      .map((file) => forbiddenReach(file, adapterForbidden))
+      .filter((chain): chain is string[] => chain !== null)
+      .map((chain) => chain.join(" -> "));
+    expect(offenders).toEqual([]);
+  });
+
+  it("recusa as fugas que a regra antiga deixava passar", () => {
+    // Fixture negativa: um domínio que chega ao banco pelo índice do próprio
+    // contexto, sem escrever `drizzle` nem `db/` em lugar nenhum.
+    const files: Record<string, string> = {
+      "ctx/domain/regra.ts": "import { salvar } from '../index.ts';\nimport type { Linha } from '../infra/tabela.ts';",
+      "ctx/index.ts": "export { salvar } from './infra/tabela.ts';",
+      "ctx/infra/tabela.ts": "import { sql } from 'drizzle-orm';",
+      "ctx/domain/so-tipo.ts": "import type { Linha } from '../infra/tabela.ts';\nimport { type Salvar } from '../index.ts';",
+      "ctx/domain/rede.ts": "const http = require('node:https');",
+      "ctx/domain/dinamico.ts": "const m = await import(caminho);",
+      "ctx/domain/template.ts": "const m = await import(`../infra/${tipo}.ts`);",
+    };
+    const source = {
+      read: (file: string) => files[file]!,
+      resolve: (from: string, spec: string) => {
+        const target = join(dirname(from), spec);
+        return target in files ? target : null;
+      },
+    };
+    expect(forbiddenReach("ctx/domain/regra.ts", domainForbidden, source)).toEqual([
+      "ctx/domain/regra.ts",
+      "ctx/index.ts",
+      "ctx/infra/tabela.ts",
+    ]);
+    expect(forbiddenReach("ctx/domain/so-tipo.ts", domainForbidden, source)).toBeNull();
+    expect(forbiddenReach("ctx/domain/rede.ts", domainForbidden, source)).toEqual(["ctx/domain/rede.ts", "node:https"]);
+    expect(forbiddenReach("ctx/domain/dinamico.ts", domainForbidden, source)).toEqual([
+      "ctx/domain/dinamico.ts",
+      "import dinâmico com especificador não literal",
+    ]);
+    expect(forbiddenReach("ctx/domain/template.ts", domainForbidden, source)).toEqual([
+      "ctx/domain/template.ts",
+      "import dinâmico com especificador não literal",
+    ]);
+
+    // Relógio: o padrão de parâmetro é a forma que escapava.
+    expect(ambientReads("export function idade(now = Date.now()) { return now; }")).toEqual(["Date.now()"]);
+    expect(ambientReads("const hoje = new Date();\nconst x = new Date;")).toEqual(["new Date()", "new Date"]);
+    expect(ambientReads("const r = await fetch(url);")).toEqual(["fetch()"]);
+    expect(ambientReads("const s = randomBytes(16);\nconst id = crypto.randomUUID();")).toEqual(["crypto random", "crypto random"]);
+    expect(ambientReads("randomFillSync(buf);")).toEqual(["crypto random"]);
+    expect(ambientReads("const h = createHash('sha256');\nconst k = myrandomBytes(2);")).toEqual([]);
+    expect(ambientReads("const y = new Date(asOf);\nport.fetch(url);\nconst s = 'Date.now()';")).toEqual([]);
+  });
+});
+
+/**
+ * Quantas promessas cada `Promise.all` (e parentes) dispara de uma vez.
+ *
+ * Lista literal conta os elementos no nível de cima; qualquer outra coisa
+ * (`Promise.all(rows.map(…))`) é `Infinity`, porque o tamanho depende de dado.
+ */
+function parallelArities(source: string): number[] {
+  const code = stripComments(source);
+  const arities: number[] = [];
+  for (const match of code.matchAll(/\bPromise\.(?:all|allSettled|any|race)\s*(?:<[^()]*>)?\s*\(\s*/g)) {
+    const start = match.index + match[0].length;
+    if (code[start] !== "[") {
+      arities.push(Number.POSITIVE_INFINITY);
+      continue;
+    }
+    let depth = 0;
+    let items = 0;
+    let pending = false;
+    let spread = false;
+    for (let i = start; i < code.length; i++) {
+      const c = code[i]!;
+      if (c === '"' || c === "'" || c === "`") {
+        const close = code.indexOf(c, i + 1);
+        i = close === -1 ? code.length : close;
+        pending = true;
+        continue;
+      }
+      if ("([{".includes(c)) {
+        depth++;
+        if (depth === 1) continue;
+      } else if (")]}".includes(c)) {
+        depth--;
+        if (depth === 0) break;
+      } else if (c === "," && depth === 1) {
+        if (pending) items++;
+        pending = false;
+        continue;
+      } else if (depth === 1 && code.startsWith("...", i)) {
+        // `[...rows.map(ler)]` é um item só no texto e N consultas em execução.
+        spread = true;
+      }
+      if (depth >= 1 && !/\s/.test(c)) pending = true;
+    }
+    arities.push(spread ? Number.POSITIVE_INFINITY : items + (pending ? 1 : 0));
+  }
+  return arities;
+}
+
+describe("V10-05 leque de consultas: toda composição de tela está no inventário", () => {
+  // O pool vem do cliente, não de uma constante do teste: se `max` mudar, o
+  // teto acompanha. Uma conexão fica livre — ver `tests/db-fan-out.test.ts`.
+  const POOL = Number(/\bmax:\s*(\d+)/.exec(read("src/core/db/client.ts"))?.[1]);
+  const TETO = POOL - 1;
+
+  /**
+   * Arquivo de `app/` que dispara leituras em paralelo, e como o pico dele é
+   * conhecido. `measuredBy` é a função que `db-fan-out.test.ts` executa contra
+   * o PostgreSQL de teste; `declared` é leque literal pequeno, com o motivo.
+   *
+   * Descoberto pelo CONTEÚDO (`Promise.all`), não pelo nome `*-data.ts`: uma
+   * página nova que compõe no próprio corpo aparece aqui sem ninguém lembrar.
+   */
+  const FAN_OUT: Record<string, { measuredBy: string } | { declared: string }> = {
+    "app/cockpit-data.ts": { measuredBy: "loadCockpit" },
+    "app/jobs/jobs-data.ts": { measuredBy: "loadJobsView" },
+    "app/candidate/page.tsx": { declared: "pessoa e fila de pontuação: uma consulta cada, o resto em série" },
+    "app/searches/tracks/[id]/page.tsx": { declared: "suporte da trilha e fila de pontuação, depois de a trilha ser achada" },
+    "app/referrals/page.tsx": { declared: "oportunidades de indicação e empresas da rede, uma consulta cada" },
+    "app/recruiter/[candidateId]/page.tsx": { declared: "contagem e página do funil de um candidato, uma consulta cada" },
+    "app/compare/page.tsx": { declared: "tradutor com sessão, depois currículo e detalhe da comparação" },
+  };
+
+  it("mede a composição, e não a presume pelo nome do arquivo", () => {
+    expect(POOL).toBeGreaterThan(1);
+    const fanOutTest = read("tests/db-fan-out.test.ts");
+    const composers = APP.filter((file) => parallelArities(read(file)).length > 0);
+    expect(composers.length).toBeGreaterThan(3);
+
+    const offenders: string[] = [];
+    for (const file of composers) {
+      const policy = FAN_OUT[file];
+      const arities = parallelArities(read(file));
+      if (!policy) {
+        offenders.push(`${file}: leque paralelo fora do inventário (${arities.join(", ")})`);
+        continue;
+      }
+      if ("measuredBy" in policy) {
+        if (!new RegExp(`export async function ${policy.measuredBy}\\b`).test(read(file))) {
+          offenders.push(`${file}: ${policy.measuredBy} não é exportada daqui`);
+        }
+        // Chamada, não só importada: o teste tem de executar a composição.
+        if (!new RegExp(`\\b${policy.measuredBy}\\(`).test(fanOutTest)) {
+          offenders.push(`${file}: ${policy.measuredBy} não é medida em db-fan-out.test.ts`);
+        }
+      } else {
+        // Leque declarado só vale enquanto for literal e couber no teto.
+        const tooWide = arities.filter((arity) => arity > TETO);
+        if (tooWide.length > 0) offenders.push(`${file}: leque ${tooWide.join(", ")} acima de ${TETO} — meça em db-fan-out`);
+        if (policy.declared.trim().length < 20) offenders.push(`${file}: declaração sem motivo`);
+      }
+      const fx = stripComments(read(file)).match(/\bloadRates\s*\(/g)?.length ?? 0;
+      if (fx > 1) offenders.push(`${file}: câmbio lido ${fx} vezes na mesma composição`);
+    }
+    for (const file of Object.keys(FAN_OUT)) {
+      if (!composers.includes(file)) offenders.push(`${file}: entrada órfã no inventário`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("conta o leque literal e trata o dinâmico como ilimitado", () => {
+    expect(parallelArities("await Promise.all([a(), b(\"x, y\"), c({ d, e })]);")).toEqual([3]);
+    expect(parallelArities("await Promise.all([\n  a(),\n  b(),\n]);")).toEqual([2]);
+    expect(parallelArities("await Promise.allSettled(rows.map((r) => ler(r)));")).toEqual([Number.POSITIVE_INFINITY]);
+    expect(parallelArities("await Promise.all([...rows.map(ler)]);")).toEqual([Number.POSITIVE_INFINITY]);
+    expect(parallelArities("await Promise.all([a(), ...extras]);")).toEqual([Number.POSITIVE_INFINITY]);
+    expect(parallelArities("await Promise.all([a({ ...opts }), b()]);")).toEqual([2]);
+    expect(parallelArities("await Promise.all<[A, B, C]>([a(), b(), c()]);")).toEqual([3]);
+    expect(parallelArities("// Promise.all([a(), b(), c()])\nconst x = 1;")).toEqual([]);
+    // Uma página nova que abre quatro leituras no corpo seria recusada.
+    const nova = "export default async function Page() { const [a, b, c, d] = await Promise.all([ler1(), ler2(), ler3(), ler4()]); }";
+    expect(parallelArities(nova).some((arity) => arity > TETO)).toBe(true);
   });
 });
 
@@ -563,7 +891,7 @@ describe("authorisation (AUTH-01)", () => {
     "app/candidate/skills/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
     "app/candidate/vocabulary/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
     "app/compare/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
-    "app/jobs/page.tsx": { guard: 'requirePage("job:read")' },
+    "app/jobs/(lista)/page.tsx": { guard: 'requirePage("job:read")' },
     "app/jobs/[id]/page.tsx": { guard: 'requirePage("job:read")' },
     "app/jobs/[id]/paises/page.tsx": { guard: 'requirePage("job:read")' },
     "app/jobs/new/page.tsx": { guard: 'requirePage("job:write")' },
@@ -611,6 +939,12 @@ describe("authorisation (AUTH-01)", () => {
       methods: ["GET"],
       why: "serviço: `CRON_SECRET` em tempo constante; 503 sem o segredo",
     },
+    // A varredura fatiada (ADR 0025): quem chama é o `pg_cron` do Supabase,
+    // via `pg_net`, também sem cookie. Mesmo segredo, mesma borda.
+    "app/api/cron/varredura/route.ts": {
+      methods: ["GET"],
+      why: "serviço: `CRON_SECRET` em tempo constante via `cronDenied`; 503 sem o segredo; política de ingestão antes de rede",
+    },
   };
   const ROUTE_GUARD = /await (require(?:OwnCandidatePage|Page|Session)|guard(?:OwnCandidate)?)\(/;
 
@@ -624,6 +958,9 @@ describe("authorisation (AUTH-01)", () => {
     "app/forbidden.tsx": "fallback 403 sem dado",
     "app/not-found.tsx": "fallback 404 sem dado",
     "app/transition-test/error.tsx": "fallback de erro da rota de teste, sem dado",
+    // O esqueleto é o mesmo para qualquer sessão: título e barras, sem dado. A
+    // página que ele envolve continua chamando `requirePage`.
+    "app/jobs/(lista)/loading.tsx": "fallback de carregamento da lista de vagas, sem dado",
   };
 
   it("exposes Auth to production callers only through its public API", () => {
@@ -686,6 +1023,27 @@ describe("authorisation (AUTH-01)", () => {
         const body = code.slice(start);
         const end = body.search(/\n\}/);
         if (!ROUTE_GUARD.test(end === -1 ? body : body.slice(0, end))) offenders.push(`${file}: ${method}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("toda rota de /api/cron/ recusa pelo segredo antes do primeiro await", () => {
+    // Descoberta, não listada: uma rota nova sob `app/api/cron/` herda a
+    // exigência sem ninguém lembrar de acrescentá-la. `cronDenied` é síncrona e
+    // é a única decisão sobre o segredo; qualquer `await` antes dela já pode
+    // ser efeito — ler o banco, abrir fila, sair para a rede.
+    const cronRoutes = ROUTES.filter((file) => file.startsWith("app/api/cron/"));
+    expect(cronRoutes.length).toBeGreaterThan(0);
+    const offenders: string[] = [];
+    for (const file of cronRoutes) {
+      const code = stripComments(read(file));
+      for (const method of routeMethods(read(file)).methods) {
+        const start = code.search(new RegExp(`function\\s+${method}\\s*\\(`));
+        const body = start === -1 ? "" : code.slice(start);
+        const denied = body.search(/\bcronDenied\s*\(\s*request\s*\)/);
+        const firstAwait = body.search(/\bawait\b/);
+        if (denied === -1 || (firstAwait !== -1 && firstAwait < denied)) offenders.push(`${file}: ${method}`);
       }
     }
     expect(offenders).toEqual([]);

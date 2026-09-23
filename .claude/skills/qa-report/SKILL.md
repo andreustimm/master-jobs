@@ -29,6 +29,11 @@ the living QA tree as evidence; they do not own operational task status or
 priority. Work discovered by QA needs a linked Project issue before execution;
 an automation-backlog file records intent, not a competing execution queue.
 
+`pnpm check:qa-tracker` validates the scenario schema only. A well-formed row
+never certifies a run: `pass` comes from a `qa-execution` session with evidence
+([rules/delivery.md](../../../docs/engineering/rules/delivery.md#g56)), and the
+tracker is the only QA state — do not keep a second one.
+
 Plan QA as journeys real people walk, not test cases that accumulate. This skill owns the project's **living QA docs** — one committed tree (`<qa-docs-path>`, default `docs/qa/`) that every round appends to — and plans the persona-driven sessions `qa-execution` runs.
 
 Two rules anchor everything:

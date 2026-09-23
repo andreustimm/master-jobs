@@ -5,6 +5,7 @@
  */
 import AxeBuilder from "@axe-core/playwright";
 import { chromium } from "playwright";
+import { AXE_SWEEP } from "./routes.mjs";
 
 const BASE = process.env.E2E_BASE ?? "http://127.0.0.1:3000";
 const EMAIL = process.env.E2E_EMAIL ?? "e2e@local.test";
@@ -48,30 +49,16 @@ async function scan(name, path) {
 }
 
 try {
-  await scan("login", "/login");
+  await scan(...AXE_SWEEP.find(([, path]) => path === "/login"));
 
   await page.fill('input[name="email"]', EMAIL);
   await page.fill('input[name="password"]', PASSWORD);
   await page.click('[data-testid="login-submit"]');
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 
-  for (const [name, path] of [
-    ["jobs", "/jobs"],
-    ["pipeline", "/pipeline"],
-    ["candidate", "/candidate"],
-    ["candidate skills", "/candidate/skills"],
-    ["candidate vocabulary", "/candidate/vocabulary"],
-    ["referrals", "/referrals"],
-    ["admin users", "/admin/users"],
-    ["account", "/account"],
-    // Ver o comentário em `ui.mjs`: rota nova não herda guarda transversal.
-    ["job countries hub", "/jobs/904000101/paises"],
-    // A tela mais aberta do produto, e estava fora das quatro listas — foi assim
-    // que ela serviu três rótulos em português com a interface em inglês. A
-    // varredura roda como dono, que vê o formulário de funil; a medição que
-    // precedeu a entrada foi como recrutador e não via o `select` sem nome.
-    ["job detail", "/jobs/904000103"],
-  ]) {
+  // A lista mora em `routes.mjs`, cruzada com o inventário de páginas por
+  // `tests/e2e-route-coverage.test.ts`. `/login` foi varrida acima, sem sessão.
+  for (const [name, path] of AXE_SWEEP.filter(([, path]) => path !== "/login")) {
     await scan(name, path);
   }
 } finally {
@@ -83,4 +70,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log("\n11/11 páginas sem violações axe WCAG 2.2 AA");
+console.log(`\n${AXE_SWEEP.length}/${AXE_SWEEP.length} páginas sem violações axe WCAG 2.2 AA`);

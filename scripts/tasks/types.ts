@@ -33,6 +33,8 @@ export interface Coordination {
   generation: number;
   execution: Execution | null;
   previousStatus?: TaskStatus;
+  /** Instant of the first confirmed claim. "Iniciado em" is a DATE field and cannot bound a delivery window. */
+  firstClaimedAt?: string;
   lastOperation: string;
 }
 export interface IssueData {

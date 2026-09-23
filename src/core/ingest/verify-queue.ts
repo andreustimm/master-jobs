@@ -24,22 +24,11 @@ import { and, desc, eq, isNull, like, lt, or, sql } from "drizzle-orm";
 import { clock } from "../clock.ts";
 import { getDb } from "../db/client.ts";
 import { job, verifyTask, type VerifyStatus } from "../db/schema.ts";
-import { primaryScoreFilter } from "../../contexts/matching/index.ts";
+import { bestPrimaryFitByJob } from "../../contexts/matching/index.ts";
 import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
 import { decideReopen, type ReopenDecision } from "./lifecycle.ts";
 import { probe, type ProbeVerdict } from "./probe.ts";
-
-/**
- * A melhor nota da vaga entre candidatos, só nas trilhas principais.
- *
- * Trilha aceita pontua o recorte relevante para ela e costuma dar nota maior
- * nele; somada ao `max`, furaria a fila de quem só tem o alvo principal
- * (ADR-008).
- */
-function bestPrimaryFit() {
-  return sql`coalesce((select max(s.fit) from production.job_score s where s.job_id = ${job.id} and ${primaryScoreFilter("s")}), 0)`;
-}
 
 export const MAX_ATTEMPTS = 3;
 
@@ -125,16 +114,32 @@ export async function enqueueVerify(
  * 200 melhores toda execução enquanto a cauda nunca era olhada. Guardar
  * `checked_at` é o que torna a varredura progressiva em vez de circular.
  */
-export async function enqueueStale(
-  opts: { minFit?: number; limit?: number; olderThanDays?: number } = {},
-): Promise<number> {
-  const db = getDb();
+export async function enqueueStale(opts: StaleOptions = {}): Promise<number> {
+  const rows = await staleCandidates(opts);
+  for (const row of rows) await enqueueVerify(row.id, { origin: "periodic", priority: 0 });
+  return rows.length;
+}
+
+type StaleOptions = { minFit?: number; limit?: number; olderThanDays?: number };
+
+/**
+ * A consulta da varredura, sem executar — exportada para o teste ler o plano.
+ *
+ * A melhor nota entra por junção com um agregado calculado uma vez
+ * (`bestPrimaryFitByJob`), nunca por subconsulta por vaga.
+ */
+export function staleCandidates(opts: StaleOptions = {}) {
   const minFit = opts.minFit ?? 55;
   const cutoff = new Date(clock().now() - (opts.olderThanDays ?? 7) * 86_400_000).toISOString();
 
-  const rows = await db
+  // Vaga sem nota vale 0, como antes: com `minFit` 0 ela ainda entra.
+  const best = bestPrimaryFitByJob();
+  const fit = sql`coalesce(${best.fit}, 0)`;
+  return getDb()
+    .with(best)
     .select({ id: job.id })
     .from(job)
+    .leftJoin(best, eq(best.jobId, job.id))
     .where(
       and(
         isNull(job.closedAt),
@@ -144,20 +149,13 @@ export async function enqueueStale(
           like(job.url, "http://%"),
           like(job.url, "https://%"),
         ),
-        sql`${bestPrimaryFit()} >= ${minFit}`,
+        sql`${fit} >= ${minFit}`,
         or(isNull(job.checkedAt), lt(job.checkedAt, cutoff)),
       ),
     )
     // Nunca conferida vem antes; depois, a conferência mais antiga.
-    .orderBy(
-      sql`${job.checkedAt} is not null`,
-      job.checkedAt,
-      desc(bestPrimaryFit()),
-    )
+    .orderBy(sql`${job.checkedAt} is not null`, job.checkedAt, desc(fit))
     .limit(opts.limit ?? 200);
-
-  for (const row of rows) await enqueueVerify(row.id, { origin: "periodic", priority: 0 });
-  return rows.length;
 }
 
 export async function claimCheck(worker: string): Promise<ClaimedCheck | null> {
@@ -307,6 +305,12 @@ export async function runVerifyQueue(
     worker?: string;
     max?: number;
     delayMs?: number;
+    /**
+     * Teto de tempo da rodada. Antes de reivindicar a próxima, supõe que ela
+     * demora tanto quanto a mais lenta até aqui: começar uma sondagem que não
+     * cabe na função da Vercel deixaria a tarefa `checking` até o claim vencer.
+     */
+    budgetMs?: number;
     fetchImpl?: typeof fetch;
     lookupHost?: LookupHost;
     onProgress?: (done: number, verdict: ProbeVerdict, url: string) => void;
@@ -315,15 +319,26 @@ export async function runVerifyQueue(
   const worker = opts.worker ?? `verify-${process.pid}`;
   const max = opts.max ?? Number.POSITIVE_INFINITY;
   const result: RunResult = { checked: 0, gone: 0, alive: 0, inconclusive: 0 };
+  const started = clock().now();
+  let slowest = 0;
+  let attempted = 0;
 
   while (result.checked < max) {
+    if (opts.budgetMs !== undefined && attempted > 0 && clock().now() - started + slowest > opts.budgetMs) break;
     const task = await claimCheck(worker);
     if (!task) break;
+    const began = clock().now();
+    attempted++;
 
     try {
+      // Com teto, a sondagem não passa do que resta: uma que começou aos 19 s
+      // com o timeout padrão de 15 s terminaria depois do limite da função.
+      // Esgotado vira timeout, e timeout é inconclusivo — não fecha nada.
+      const left = opts.budgetMs === undefined ? undefined : Math.max(1_000, opts.budgetMs - (began - started));
       const { verdict, status } = await probe(task.url, {
         fetchImpl: opts.fetchImpl,
         lookupHost: opts.lookupHost,
+        timeoutMs: left === undefined ? undefined : Math.min(15_000, left),
       });
       await recordVerdict(task.id, task.jobId, verdict, status);
       result.checked++;
@@ -334,6 +349,8 @@ export async function runVerifyQueue(
     }
 
     if (opts.delayMs) await new Promise((r) => setTimeout(r, opts.delayMs));
+    // A pausa entra na medida: é tempo que a próxima também vai gastar.
+    slowest = Math.max(slowest, clock().now() - began);
   }
 
   return result;

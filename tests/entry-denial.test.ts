@@ -394,7 +394,10 @@ describe("V03-02 id forjado não alcança outro candidato", () => {
     // A sessão é válida, então parte das actions RODOU e gravou — no escopo
     // do intruso. Sem isto o teste passaria com tudo falhando por outro motivo.
     expect(ran).toEqual(expect.arrayContaining(["saveCvAction", "setVisibilityAction"]));
-  });
+    // Varre TODA action de candidato com sessão válida contra o PostgreSQL de
+    // verdade: o tempo cresce com cada action nova. Passava de 5 s numa fatia
+    // do CI (6,5 s e 7,1 s medidos na #202) sem nada de errado no que afirma.
+  }, 30_000);
 });
 
 describe("V03-03 sessão emprestada não administra, nem quando o alvo é admin", () => {
@@ -441,5 +444,6 @@ describe("V03-03 sessão emprestada não administra, nem quando o alvo é admin"
     expect(returned).not.toContain(VICTIM_SENTINEL);
     // O recrutador acompanha; nenhuma escrita de candidato chega a rodar.
     expect(ran.filter((name) => ["saveCvAction", "setVisibilityAction", "deleteVersionAction"].includes(name))).toEqual([]);
-  });
+    // A mesma varredura de V03-02, com o mesmo custo.
+  }, 30_000);
 });
