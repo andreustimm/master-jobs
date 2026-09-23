@@ -65,8 +65,11 @@ inclusive um de branch de trabalho, publicar produção sem ninguém. O job
 
 1. Numa worktree criada de `origin/main`, na branch `chore/release-X.Y.Z`,
    rode `node scripts/release/versionar.ts HEAD`. O comando grava
-   `package.json` e os três changelogs e imprime a versão.
-2. Comite como `chore(release): X.Y.Z` e abra a PR para `main`. Ela tem CI
+   `package.json` e os três changelogs, apaga os fragmentos de `changelog.d/`
+   que consumiu e imprime a versão.
+2. Registre também a remoção dos fragmentos
+   (`git add -A -- package.json CHANGELOG.md USER_CHANGELOG.pt-BR.md USER_CHANGELOG.en.md changelog.d`),
+   comite como `chore(release): X.Y.Z` e abra a PR para `main`. Ela tem CI
    próprio porque foi empurrada por uma pessoa. Mescle-a com o bypass de PR.
 3. O push em `main` roda `sincronizar-apos-main.yml` de novo.
    `versionar.ts` responde `already-released`, e o workflow cria a tag, a
