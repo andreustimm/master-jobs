@@ -9,6 +9,8 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.22.1] - 2026-09-23
+
 ### Segurança
 
 - O perfil público não publica mais o e-mail como nome

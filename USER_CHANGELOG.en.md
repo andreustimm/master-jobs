@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.22.1] - 2026-09-23T00:33:04.000Z
+
 ### Security
 
 - Your public profile never shows your email in place of your name. Accounts
