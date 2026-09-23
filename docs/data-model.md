@@ -495,6 +495,26 @@ candidato cria o PRÓPRIO em `/candidate` (#234), por `createOwnCandidate`:
   `select … for update` na linha da conta: duplo envio concorrente espera o
   primeiro e devolve o candidato já criado, sem gerar um segundo.
 
+### Nome do candidato (`candidate.name`)
+
+`name` é o título de `/p/<endereço>`, e por isso nunca guarda e-mail nem
+telefone. A coluna continua `not null`; **string vazia** é o estado "ainda sem
+nome", e não um defeito: `/candidate` pede o nome (`setCandidateName`, validado
+por `parsePublicName`) e `/p/` mostra um título neutro do dicionário.
+
+- `jho auth add-user` dá ao candidato próprio o nome de exibição da conta
+  (`auth_user.full_name`) quando existe e é publicável; senão, vazio. Até a
+  1.22.0 gravava o e-mail (BUG-20260922-public-profile-shows-email-as-name).
+- `claimOwnCandidate` passa todo nome por `initialCandidateName`: e-mail ou
+  telefone digitado no nome completo vira candidato sem nome.
+- `publicProfile()` confere o VALOR de cada campo de texto que sai
+  (`containsContact`, `src/core/public-cv.ts`) e esvazia o que traz e-mail ou
+  telefone, independentemente de como o dado foi gravado.
+- Migração `0014_clear_contact_candidate_names` (só dados, idempotente) zera
+  `name` igual ao e-mail da conta dona, igual a `candidate.email` ou que contenha
+  um e-mail. Não há volta automática: o valor apagado era o e-mail, que continua
+  em `auth_user.email`.
+
 ### Migração do ownership por candidato
 
 A mudança é expand/backfill/contract para não reconstruir tabelas antes de os

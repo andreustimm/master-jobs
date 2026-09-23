@@ -1,6 +1,6 @@
 # BUG-20260922-long-address-cut-silently: endereço público colado acima de 40 caracteres é cortado e salvo sem aviso
 
-- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
+- **Status:** fixed <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Friction
 - **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Andreus no celular
@@ -37,9 +37,9 @@ chegue a responder.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** `maxLength={SLUG_MAX}` no campo de `/candidate` (e no de Criar perfil): o navegador descarta o excedente antes do envio, e `validatePublicSlug` nunca vê os 41 caracteres.
+- **Fix commit:** 2371b8b (`fix/bugs-qa-1.22.0`) — os dois campos de endereço sem `maxLength`/`minLength`; o tamanho é recusado pelo domínio.
+- **Regression test:** `tests/public-name.test.ts` ("o campo de endereço não corta nem barra pelo tamanho"); `tests/e2e/ui.mjs` ("endereço de 41 caracteres é recusado, não cortado").
 
 ## Verification
 

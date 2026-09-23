@@ -17,6 +17,7 @@ import { importPdfAction, saveCvAction, setVisibilityAction } from "./actions";
 import { onboardingSession, requireOwnCandidatePage } from "../auth";
 import { CreateProfile } from "./create-profile";
 import { PublicAddressCard } from "./public-address";
+import { PublicNameCard } from "./public-name";
 import { getTranslator } from "../i18n";
 import { formatNumber, type TranslationKey, type Translator } from "../../src/core/i18n/index.ts";
 import type { Visibility } from "../../src/contexts/auth/index.ts";
@@ -207,6 +208,11 @@ export default async function CandidateArea() {
         .
       </p>
 
+      {/* O nome do dono vem do `profile.yaml`, e `jho db seed` o regrava:
+          editá-lo aqui duraria até o próximo seed. Para quem criou a conta,
+          esta é a única tela do nome publicado. */}
+      {person && !person.isDefault && <PublicNameCard current={person.name} t={t} />}
+
       {person && (
         <VisibilityCard
           current={person.visibility}
@@ -221,7 +227,13 @@ export default async function CandidateArea() {
       {person && (
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle className="text-lg">{person.name}</CardTitle>
+            <CardTitle className="text-lg">
+              {person.name.trim() !== "" ? (
+                <span data-user-content>{person.name}</span>
+              ) : (
+                t("publicName.unnamed")
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent className="pt-0 text-sm text-muted-foreground">
             {/* Dado do usuário: `profile.yaml` está no idioma dele, e continua

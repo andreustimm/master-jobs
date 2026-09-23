@@ -1,6 +1,6 @@
 # BUG-20260922-public-profile-shows-email-as-name: conta criada por `jho auth add-user` publica o próprio e-mail como nome
 
-- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
+- **Status:** fixed <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Trust-Damage
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Visitante do perfil público (quem lê); a candidata dona da conta (quem é exposta)
@@ -47,8 +47,8 @@ nasce em `claimOwnCandidate({ email, name: email })`, chamado por `addUser`
 
 <!-- filled when status moves to fixed -->
 - **Root cause:** `addUser` cria o candidato com `name: email`, e `publicProfile()` publica o nome do candidato sem filtrar endereço de e-mail.
-- **Fix commit:**
-- **Regression test:**
+- **Fix commit:** 2371b8b (`fix/bugs-qa-1.22.0`) — `initialCandidateName` na CLI e em `claimOwnCandidate`; `containsContact` em todo campo de texto de `publicProfile()`; cartão "Nome no perfil" em `/candidate` (`setPublicNameAction`); migration de dados `0014_clear_contact_candidate_names`.
+- **Regression test:** `tests/public-name.test.ts` (add-user → público → `/p/` sem o e-mail; campo gravado por fora esvaziado; ação com guarda antes do efeito; migration 0014 idempotente); `tests/e2e/ui.mjs` (título neutro em `/p/e2e-e2e-alvo`, cujo setup grava o e-mail como nome; nome editado aparece no `/p/` anônimo).
 
 ## Verification
 

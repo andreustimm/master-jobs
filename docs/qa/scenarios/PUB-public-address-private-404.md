@@ -6,7 +6,7 @@ persona: Visitante do perfil público
 journey: J-choose-public-address
 expected: Com o perfil Privado ou Recrutadores, o endereço novo, o antigo e o identificador interno respondem 404 idêntico ao de endereço inexistente
 entry_points: /p/[slug]
-qa_status: pass
+qa_status: untested
 bug_ids:
 fix_status:
 retest_status:

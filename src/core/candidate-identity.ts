@@ -9,6 +9,7 @@
  *
  * Sem banco, sem rede, sem relógio. Quem grava é `createOwnCandidate`.
  */
+import { containsContact } from "./public-cv.ts";
 
 export const NAME_MAX = 120;
 export const HEADLINE_MAX = 200;
@@ -17,8 +18,7 @@ export const LOCATION_MAX = 120;
 export const CV_MIN = 100;
 
 export type OwnProfileError =
-  | "nameRequired"
-  | "nameTooLong"
+  | NameError
   | "headlineTooLong"
   | "locationTooLong"
   | "cvTooShort";
@@ -37,6 +37,39 @@ function optional(value: string | null | undefined): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
+export type NameError = "nameRequired" | "nameTooLong" | "nameContact";
+
+/**
+ * O nome do candidato, que é o título de `/p/<endereço>`.
+ *
+ * Recusa e-mail e telefone: o nome é campo publicável, e um endereço digitado
+ * ali sairia na página aberta. `publicProfile()` confere de novo na saída —
+ * esta recusa é a que explica à pessoa o que mudar; aquela é a que vale para
+ * dado gravado por qualquer outro caminho.
+ */
+export function parsePublicName(
+  raw: string | null | undefined,
+): { ok: true; name: string } | { ok: false; code: NameError } {
+  const name = optional(raw);
+  if (name === null) return { ok: false, code: "nameRequired" };
+  if (name.length > NAME_MAX) return { ok: false, code: "nameTooLong" };
+  if (containsContact(name)) return { ok: false, code: "nameContact" };
+  return { ok: true, name };
+}
+
+/**
+ * O nome com que o candidato de uma conta NASCE, quando a conta não passou por
+ * formulário nenhum (`jho auth add-user`).
+ *
+ * O nome de exibição da conta, se existir e for publicável; senão, vazio — e
+ * `/candidate` pede o nome. Nunca o e-mail: foi o que a 1.22.0 fazia, e o
+ * e-mail saía como título do perfil público.
+ */
+export function initialCandidateName(fullName: string | null | undefined): string {
+  const parsed = parsePublicName(fullName);
+  return parsed.ok ? parsed.name : "";
+}
+
 /**
  * Valida o formulário de "Criar meu perfil".
  *
@@ -50,9 +83,9 @@ export function parseOwnProfile(raw: {
   location?: string | null;
   cv?: string | null;
 }): { ok: true; value: OwnProfile } | { ok: false; code: OwnProfileError } {
-  const name = optional(raw.name);
-  if (name === null) return { ok: false, code: "nameRequired" };
-  if (name.length > NAME_MAX) return { ok: false, code: "nameTooLong" };
+  const parsedName = parsePublicName(raw.name);
+  if (!parsedName.ok) return parsedName;
+  const name = parsedName.name;
 
   const headline = optional(raw.headline);
   if (headline !== null && headline.length > HEADLINE_MAX) return { ok: false, code: "headlineTooLong" };

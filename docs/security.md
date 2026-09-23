@@ -333,6 +333,16 @@ cadastro pelo admin (`user-`) e o setup do e2e (`e2e-`) reaproveitam pelo slug.
 Candidato de slug `user-<e-mail>` nasce sem endereço público: copiar o slug
 publicaria o e-mail.
 
+**O e-mail não é nome público** — ✅ **22/09 (QA da 1.22.0).** `jho auth
+add-user` gravava o e-mail como nome do candidato, e `/p/<endereço>` o
+publicava como título assim que o perfil ficava Público. A lista de permissão
+escolhia colunas, e `name` é coluna permitida. Três camadas agora: a CLI dá o
+nome de exibição da conta ou nenhum; `publicProfile()` confere o valor de nome,
+headline, localização e links por `containsContact()` e esvazia o que traz
+e-mail ou telefone, venha de onde vier; e a pessoa edita o nome em `/candidate`.
+A migração `0014` limpa os nomes já gravados. Detecção por padrão, com o mesmo
+limite declarado de `publicCvText()`, mais sequência de dez dígitos.
+
 **Sem criptografia em repouso.** O banco é um arquivo SQLite legível por
 qualquer processo do usuário. Quem tem acesso local à conta já tem acesso a
 tudo; criptografar aqui protegeria contra roubo do disco, o que o FileVault já

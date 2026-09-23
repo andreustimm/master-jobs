@@ -18,6 +18,27 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Security
+
+- Your public profile never shows your email in place of your name. Accounts
+  created from the command line got the email as their name, and it appeared as
+  the public profile's title; those names were cleared, and the profile shows a
+  neutral title until you write yours.
+
+### New
+
+- You edit your public profile's name in the candidate area. If it has no name
+  yet, the screen asks for one, and the public profile shows a neutral title
+  until you write it.
+
+### Fixed
+
+- The users screen teaches the right command to set a password:
+  `jho auth set-password <email>`.
+- A public address that is too long is refused with the reason, instead of
+  being cut and saved as something other than what you pasted; and one that is
+  too short says it needs at least 3 characters.
+
 ## [1.22.0] - 2026-09-22T23:04:57.000Z
 
 ### New

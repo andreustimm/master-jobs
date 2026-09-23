@@ -6,7 +6,7 @@ persona: Candidato convidado sem perfil
 journey: J-create-own-profile
 expected: O formulário de criação sugere um endereço a partir do nome; em branco o perfil ganha um derivado do nome, e um endereço em uso volta recusado sem criar o perfil
 entry_points: /candidate
-qa_status: pass
+qa_status: untested
 bug_ids:
 fix_status:
 retest_status:

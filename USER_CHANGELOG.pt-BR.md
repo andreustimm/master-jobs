@@ -18,6 +18,27 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Segurança
+
+- Seu perfil público nunca mostra seu e-mail no lugar do nome. Contas criadas
+  pela linha de comando ganhavam o e-mail como nome, e ele aparecia no título
+  do perfil público; esses nomes foram apagados, e o perfil mostra um título
+  neutro até você escrever o seu.
+
+### Novidade
+
+- Você edita o nome do seu perfil público na área do candidato. Se ele ainda
+  não tiver nome, a tela pede um, e o perfil público mostra um título neutro
+  até você escrevê-lo.
+
+### Corrigido
+
+- A tela de usuários ensina o comando certo para definir a senha:
+  `jho auth set-password <email>`.
+- Um endereço público longo demais é recusado com a razão, em vez de ser
+  cortado e salvo diferente do que você colou; e um curto demais diz que
+  precisa de pelo menos 3 caracteres.
+
 ## [1.22.0] - 2026-09-22T23:04:57.000Z
 
 ### Novidade

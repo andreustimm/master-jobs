@@ -6,7 +6,7 @@ persona: Visitante do perfil público
 journey: J-open-public-profile
 expected: Com perfil público e currículo publicado, /p/<slug> mostra o texto profissional do CV sem o e-mail, o telefone nem a frase de pretensão salarial que estão escritos nele, antes e depois do reload
 entry_points: /candidate; /p/[slug]
-qa_status: pass
+qa_status: untested
 bug_ids:
 fix_status:
 retest_status:

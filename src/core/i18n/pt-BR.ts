@@ -752,7 +752,7 @@ export const ptBR = {
     roleCandidate: "Candidato",
     roleRecruiter: "Recrutador",
     lead: "Contas que entram no sistema. Um usuário só vê o próprio dado; para ver o de outro, o admin assume a identidade — e assumir fica registrado.",
-    noPasswordHint: "A conta é criada sem senha e não entra até alguém definir uma com `jho auth password`.",
+    noPasswordHint: "A conta é criada sem senha e não entra até alguém definir uma com `jho auth set-password <email>`.",
     lastAdmin: "Último admin ativo: promova outro antes de rebaixar ou desabilitar este.",
     edit: "Editar",
     editTitle: "Editar conta",
@@ -843,10 +843,22 @@ export const ptBR = {
     created: "Perfil criado.",
     nameRequired: "Informe o nome.",
     nameTooLong: "O nome passa de {max} caracteres.",
+    nameContact: "O nome aparece no perfil público: escreva seu nome, sem e-mail nem telefone.",
     headlineTooLong: "A headline passa de {max} caracteres.",
     locationTooLong: "A localização passa de {max} caracteres.",
     cvTooShort: "O texto é curto demais para ser um currículo (mínimo {min} caracteres). Deixe em branco para colar depois.",
     unavailable: "Esta conta não pode criar um perfil agora. Entre de novo ou fale com quem administra o sistema.",
+  },
+  /** Nome que o perfil público mostra, editável pelo próprio candidato. */
+  publicName: {
+    title: "Nome no perfil",
+    label: "Nome",
+    hint: "É o título do seu perfil público. Nunca use e-mail nem telefone aqui.",
+    missing: "Seu perfil ainda não tem nome. Escreva como quer ser chamado antes de torná-lo público.",
+    save: "Salvar nome",
+    saved: "Nome salvo.",
+    unnamed: "Perfil sem nome",
+    pageTitle: "{name} — perfil",
   },
   /** Endereço público escolhido pelo candidato (#235). */
   publicAddress: {
