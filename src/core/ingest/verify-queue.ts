@@ -305,6 +305,12 @@ export async function runVerifyQueue(
     worker?: string;
     max?: number;
     delayMs?: number;
+    /**
+     * Teto de tempo da rodada. Antes de reivindicar a próxima, supõe que ela
+     * demora tanto quanto a mais lenta até aqui: começar uma sondagem que não
+     * cabe na função da Vercel deixaria a tarefa `checking` até o claim vencer.
+     */
+    budgetMs?: number;
     fetchImpl?: typeof fetch;
     lookupHost?: LookupHost;
     onProgress?: (done: number, verdict: ProbeVerdict, url: string) => void;
@@ -313,10 +319,16 @@ export async function runVerifyQueue(
   const worker = opts.worker ?? `verify-${process.pid}`;
   const max = opts.max ?? Number.POSITIVE_INFINITY;
   const result: RunResult = { checked: 0, gone: 0, alive: 0, inconclusive: 0 };
+  const started = clock().now();
+  let slowest = 0;
+  let attempted = 0;
 
   while (result.checked < max) {
+    if (opts.budgetMs !== undefined && attempted > 0 && clock().now() - started + slowest > opts.budgetMs) break;
     const task = await claimCheck(worker);
     if (!task) break;
+    const began = clock().now();
+    attempted++;
 
     try {
       const { verdict, status } = await probe(task.url, {
@@ -332,6 +344,8 @@ export async function runVerifyQueue(
     }
 
     if (opts.delayMs) await new Promise((r) => setTimeout(r, opts.delayMs));
+    // A pausa entra na medida: é tempo que a próxima também vai gastar.
+    slowest = Math.max(slowest, clock().now() - began);
   }
 
   return result;

@@ -939,6 +939,12 @@ describe("authorisation (AUTH-01)", () => {
       methods: ["GET"],
       why: "serviço: `CRON_SECRET` em tempo constante; 503 sem o segredo",
     },
+    // A varredura fatiada (ADR 0025): quem chama é o `pg_cron` do Supabase,
+    // via `pg_net`, também sem cookie. Mesmo segredo, mesma borda.
+    "app/api/cron/varredura/route.ts": {
+      methods: ["GET"],
+      why: "serviço: `CRON_SECRET` em tempo constante via `cronDenied`; 503 sem o segredo; política de ingestão antes de rede",
+    },
   };
   const ROUTE_GUARD = /await (require(?:OwnCandidatePage|Page|Session)|guard(?:OwnCandidate)?)\(/;
 
@@ -1014,6 +1020,27 @@ describe("authorisation (AUTH-01)", () => {
         const body = code.slice(start);
         const end = body.search(/\n\}/);
         if (!ROUTE_GUARD.test(end === -1 ? body : body.slice(0, end))) offenders.push(`${file}: ${method}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("toda rota de /api/cron/ recusa pelo segredo antes do primeiro await", () => {
+    // Descoberta, não listada: uma rota nova sob `app/api/cron/` herda a
+    // exigência sem ninguém lembrar de acrescentá-la. `cronDenied` é síncrona e
+    // é a única decisão sobre o segredo; qualquer `await` antes dela já pode
+    // ser efeito — ler o banco, abrir fila, sair para a rede.
+    const cronRoutes = ROUTES.filter((file) => file.startsWith("app/api/cron/"));
+    expect(cronRoutes.length).toBeGreaterThan(0);
+    const offenders: string[] = [];
+    for (const file of cronRoutes) {
+      const code = stripComments(read(file));
+      for (const method of routeMethods(read(file)).methods) {
+        const start = code.search(new RegExp(`function\\s+${method}\\s*\\(`));
+        const body = start === -1 ? "" : code.slice(start);
+        const denied = body.search(/\bcronDenied\s*\(\s*request\s*\)/);
+        const firstAwait = body.search(/\bawait\b/);
+        if (denied === -1 || (firstAwait !== -1 && firstAwait < denied)) offenders.push(`${file}: ${method}`);
       }
     }
     expect(offenders).toEqual([]);
