@@ -8,6 +8,8 @@ flowchart TD
     S -->|resposta chega| D
     S -->|espera acima de 3 s ou offline| C
     C -->|destino pronto| D[Splash sai e destino aparece]
+    C -->|Vagas: esboço pré-carregado| L[Splash sai sobre o esboço de Vagas, que anuncia a espera]
+    L -->|lista chega por streaming| D
     C -->|redirect após ação única| D
     C -->|papel, sessão ou entidade mudou| H[Resultado canônico autorizado, login, forbidden ou not-found]
     C -->|espera acima de 3 s| E[Mensagem de espera prolongada]

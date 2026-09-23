@@ -1,5 +1,6 @@
 import { TransitionLink } from "../../transition-link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +18,8 @@ import { trackAction } from "../../actions";
 import { Fit, Legend, ScoreBar, StatusBadge } from "../../ui";
 import { candidateScope, requirePage } from "../../auth";
 import { getTranslator } from "../../i18n";
+import type { Translator } from "../../../src/core/i18n/index.ts";
+import { LoadingRegion, SkeletonBar } from "../../skeleton";
 import {
   applicationStatusLabel,
   applicationStatusLabels,
@@ -41,12 +44,6 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   if (!detail) notFound();
 
   const { job, score, application, source } = detail;
-  // Só quem tem candidatura tem histórico, e a query já nega fora do escopo:
-  // pedir aqui sem candidato devolveria vazio, mas nem a consulta é feita.
-  const timeline = application ? await applicationTimeline(candidateId, job.id) : [];
-  // Nota em cada trilha ativa; a que não tem linha é calculada agora e não é
-  // gravada (fora do portão de relevância, ou trilha recém-criada).
-  const trackFits = candidateId !== null ? await trackFitsForJob(candidateId, job.id) : null;
   const blockers = scoreMessages(score?.blockers);
   const matched = (score?.matchedKeywords as string[]) ?? [];
   const missing = (score?.missingKeywords as string[]) ?? [];
@@ -165,30 +162,13 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
         </Card>
       )}
 
-      {trackFits && trackFits.length > 1 && (
-        <section className="mb-7" data-testid="job-track-fits">
-          <h2 className="type-display-xs mb-1">{t("jobDetail.trackFits")}</h2>
-          <p className="mb-3 type-caption-md text-muted-foreground">{t("jobDetail.trackFitsLead")}</p>
-          <div className="grid gap-3 md:grid-cols-2">
-            {trackFits.map((fit) => (
-              <Card key={fit.trackId} data-testid={`job-track-fit-${fit.trackId}`} data-computed={fit.computed ? "true" : "false"}>
-                <CardContent className="grid gap-3 pt-0">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Fit value={fit.fit} />
-                    <span className="type-body-emphasis break-words" data-user-content>{fit.name}</span>
-                    {fit.isPrimary && <Badge>{t("tracks.primaryBadge")}</Badge>}
-                  </div>
-                  <ScoreBar parts={fit} t={t} />
-                  {fit.computed && (
-                    <p className="type-caption-sm text-muted-foreground" data-testid={`job-track-fit-computed-${fit.trackId}`}>
-                      {t("jobDetail.computedFit")}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
+      {/* A nota por trilha é calculada na hora para a trilha sem linha guardada,
+          e é a leitura mais cara da tela: vem por streaming, sem segurar o
+          cabeçalho, a nota principal e o formulário do funil. */}
+      {candidateId !== null && (
+        <Suspense fallback={<SectionLoading label={t("jobDetail.loadingSection")} testId="job-track-fits-loading" />}>
+          <TrackFits candidateId={candidateId} jobId={job.id} t={t} />
+        </Suspense>
       )}
 
       {candidateId !== null && (
@@ -217,39 +197,12 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
         />
       )}
 
-      {timeline.length > 0 && (
-        <section className="mb-7" data-testid="application-timeline">
-          <h2 className="type-display-xs mb-3">{t("jobDetail.history")}</h2>
-          <Card>
-            <CardContent className="pt-0">
-              <ul className="divide-y divide-[var(--hairline)]">
-                {timeline.map((event, index) => (
-                  <li key={`${event.at}-${index}`} className="py-3">
-                    <p className="type-caption-sm text-muted-foreground">
-                      {event.at.slice(0, 10)}
-                      {" · "}
-                      {event.toStatus
-                        ? event.fromStatus
-                          ? t("jobDetail.historyMoved", {
-                              from: applicationStatusLabel(event.fromStatus, t),
-                              to: applicationStatusLabel(event.toStatus, t),
-                            })
-                          : t("jobDetail.historyStarted", {
-                              to: applicationStatusLabel(event.toStatus, t),
-                            })
-                        : t("jobDetail.historyNote")}
-                    </p>
-                    {event.detail && (
-                      <p className="type-body-sm mt-1" data-user-content>
-                        {event.detail}
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        </section>
+      {/* Só quem tem candidatura tem histórico, e a query já nega fora do
+          escopo: sem candidatura nem a consulta é feita. */}
+      {application && (
+        <Suspense fallback={<SectionLoading label={t("jobDetail.loadingSection")} testId="application-timeline-loading" />}>
+          <Timeline candidateId={candidateId} jobId={job.id} t={t} />
+        </Suspense>
       )}
 
       {job.descriptionText && (
@@ -265,5 +218,88 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
         </section>
       )}
     </main>
+  );
+}
+
+type SectionProps = { candidateId: number | null; jobId: number; t: Translator["t"] };
+
+/** Espaço reservado de uma seção que chega por streaming. */
+function SectionLoading({ label, testId }: { label: string; testId: string }) {
+  return (
+    <LoadingRegion label={label} testId={testId} className="mb-7 grid gap-3">
+      <SkeletonBar className="h-6 w-1/3" />
+      <SkeletonBar className="h-24 w-full" />
+    </LoadingRegion>
+  );
+}
+
+// Nota em cada trilha ativa; a que não tem linha é calculada agora e não é
+// gravada (fora do portão de relevância, ou trilha recém-criada).
+async function TrackFits({ candidateId, jobId, t }: SectionProps & { candidateId: number }) {
+  const trackFits = await trackFitsForJob(candidateId, jobId);
+  if (!trackFits || trackFits.length <= 1) return null;
+  return (
+    <section className="mb-7" data-testid="job-track-fits">
+      <h2 className="type-display-xs mb-1">{t("jobDetail.trackFits")}</h2>
+      <p className="mb-3 type-caption-md text-muted-foreground">{t("jobDetail.trackFitsLead")}</p>
+      <div className="grid gap-3 md:grid-cols-2">
+        {trackFits.map((fit) => (
+          <Card key={fit.trackId} data-testid={`job-track-fit-${fit.trackId}`} data-computed={fit.computed ? "true" : "false"}>
+            <CardContent className="grid gap-3 pt-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <Fit value={fit.fit} />
+                <span className="type-body-emphasis break-words" data-user-content>{fit.name}</span>
+                {fit.isPrimary && <Badge>{t("tracks.primaryBadge")}</Badge>}
+              </div>
+              <ScoreBar parts={fit} t={t} />
+              {fit.computed && (
+                <p className="type-caption-sm text-muted-foreground" data-testid={`job-track-fit-computed-${fit.trackId}`}>
+                  {t("jobDetail.computedFit")}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+async function Timeline({ candidateId, jobId, t }: SectionProps) {
+  const timeline = await applicationTimeline(candidateId, jobId);
+  if (timeline.length === 0) return null;
+  return (
+    <section className="mb-7" data-testid="application-timeline">
+      <h2 className="type-display-xs mb-3">{t("jobDetail.history")}</h2>
+      <Card>
+        <CardContent className="pt-0">
+          <ul className="divide-y divide-[var(--hairline)]">
+            {timeline.map((event, index) => (
+              <li key={`${event.at}-${index}`} className="py-3">
+                <p className="type-caption-sm text-muted-foreground">
+                  {event.at.slice(0, 10)}
+                  {" · "}
+                  {event.toStatus
+                    ? event.fromStatus
+                      ? t("jobDetail.historyMoved", {
+                          from: applicationStatusLabel(event.fromStatus, t),
+                          to: applicationStatusLabel(event.toStatus, t),
+                        })
+                      : t("jobDetail.historyStarted", {
+                          to: applicationStatusLabel(event.toStatus, t),
+                        })
+                    : t("jobDetail.historyNote")}
+                </p>
+                {event.detail && (
+                  <p className="type-body-sm mt-1" data-user-content>
+                    {event.detail}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+    </section>
   );
 }

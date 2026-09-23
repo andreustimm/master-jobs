@@ -5,7 +5,7 @@ describe("ritmo vertical das superfícies principais", () => {
   it("mantém Cockpit e Vagas no mesmo início de conteúdo da comparação", async () => {
     const [cockpit, jobs, compare, globals] = await Promise.all([
       readFile("app/page.tsx", "utf8"),
-      readFile("app/jobs/page.tsx", "utf8"),
+      readFile("app/jobs/(lista)/page.tsx", "utf8"),
       readFile("app/compare/page.tsx", "utf8"),
       readFile("app/globals.css", "utf8"),
     ]);
