@@ -126,6 +126,7 @@ export {
   corpusStats,
   countBoard,
   countHiddenByPayRange,
+  hasTrackScores,
   listBoard,
   listBoardPage,
   type BoardFilters,
