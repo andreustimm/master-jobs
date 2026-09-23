@@ -208,7 +208,7 @@ async function runChecks(page, base, { email, password }, check) {
     navigations = 0;
     await query.click();
     await page.keyboard.type(" mode");
-    await page.getByTestId("filters-get-form").getByRole("link").click();
+    await page.getByTestId("filters-query-clear").click();
     await page.waitForURL((url) => !url.searchParams.has("q"), { timeout: 10_000 });
     await ready(page);
     await page.waitForTimeout(1_000);
@@ -216,6 +216,29 @@ async function runChecks(page, base, { email, password }, check) {
       "#218 Limpar durante o pedido pendente vence: a busca não volta",
       !new URL(page.url()).searchParams.has("q") && navigations === 1 && (await query.inputValue()) === "",
       JSON.stringify({ url: page.url(), navigations, value: await query.inputValue() }),
+    );
+
+    // 11. Dois filtros seguidos, em formulários diferentes, chegam os dois à
+    //     URL: a busca espera o Score em voo e sai depois, com ele carregado.
+    await page.goto(`${base}/jobs`, { waitUntil: "networkidle" });
+    await ready(page);
+    const fitChained = Number(await page.getByTestId("filters-score-min").inputValue()) + 3;
+    holdMs = 1_200;
+    await page.getByTestId("filters-score-slider").getByRole("slider").first().focus();
+    for (let press = 0; press < 3; press += 1) await page.keyboard.press("ArrowRight");
+    await page.waitForTimeout(450);
+    await query.click();
+    await page.keyboard.type("Work");
+    await page.waitForURL(
+      (url) => url.searchParams.get("q") === "Work" && Number(url.searchParams.get("fit")) === fitChained,
+      { timeout: 20_000 },
+    );
+    await ready(page);
+    holdMs = 0;
+    check(
+      "#218 filtros seguidos em formulários diferentes chegam os dois à URL",
+      param(page, "q") === "Work" && Number(param(page, "fit")) === fitChained,
+      page.url(),
     );
   } finally {
     holdMs = 0;

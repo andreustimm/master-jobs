@@ -80,32 +80,39 @@ export function useAutoSubmit(
     const form = formOf(ref.current);
     // Enter e o botão Aplicar enviam na hora; o pedido pendente viraria uma
     // segunda navegação para o mesmo lugar.
-    let own = false;
-    const onSubmit = () => {
-      own = true;
-      submitter.cancel();
-      // O `begin` do próprio envio acontece dentro deste mesmo despacho; se ele
-      // não abrir geração nova (alvo repetido), a marca não pode sobrar para a
-      // próxima navegação alheia.
+    const onSubmit = () => submitter.cancel();
+    // Navegação por link ou histórico — Limpar, preset, chip, Voltar — é a
+    // interação mais recente, e o pedido pendente não pode desfazê-la depois
+    // do commit. Envio de formulário GET (desta ou de outra linha da barra)
+    // não cancela: o pedido espera por ele e depois sai com os campos ocultos
+    // já atualizados, que é como dois filtros seguidos chegam os dois à URL.
+    // O `begin` do envio acontece dentro do mesmo despacho do `submit`.
+    let formNavigation = false;
+    const onAnySubmit = (event: SubmitEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLFormElement) || target.method !== "get") return;
+      formNavigation = true;
       queueMicrotask(() => {
-        own = false;
+        formNavigation = false;
       });
     };
-    // Navegação que não saiu deste formulário — Limpar, preset, outro filtro,
-    // Voltar — é a interação mais recente, e o pedido pendente não pode
-    // desfazê-la depois do commit. O envio do próprio formulário abre a
-    // geração logo depois do `submit` (o `formdata` de `TransitionGetForm`).
     let generation = transitionStore.getSnapshot().generation;
     const unsubscribe = transitionStore.subscribe(() => {
       const next = transitionStore.getSnapshot().generation;
       if (next === generation) return;
       generation = next;
-      if (!own) submitter.cancel();
-      own = false;
+      if (!formNavigation) submitter.cancel();
     });
+    // Voltar e avançar durante uma navegação em voo não abrem geração nova
+    // (o observador de commit desiste), então o histórico cancela direto.
+    const onHistory = () => submitter.cancel();
     form?.addEventListener("submit", onSubmit);
+    document.addEventListener("submit", onAnySubmit, true);
+    window.addEventListener("popstate", onHistory);
     return () => {
       form?.removeEventListener("submit", onSubmit);
+      document.removeEventListener("submit", onAnySubmit, true);
+      window.removeEventListener("popstate", onHistory);
       unsubscribe();
       submitter.dispose();
     };

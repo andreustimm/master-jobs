@@ -235,7 +235,7 @@ export function FilterBar({
         />
         <Button type="submit" data-testid="filters-submit">{t("filters.submit")}</Button>
         {state.term && (
-          <TransitionLink href={href(base, state, { q: undefined })} className={chipClass(false)}>
+          <TransitionLink href={href(base, state, { q: undefined })} className={chipClass(false)} data-testid="filters-query-clear">
             {t("filters.clear")}
           </TransitionLink>
         )}

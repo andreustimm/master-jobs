@@ -545,9 +545,11 @@ o próximo passo não é um cache maior, e sim, nesta ordem:
   Envio para a URL atual é descartado (`sameDestination`); na faixa, que
   serializa campos vazios e selects que a URL não tem, o envio só sai se um
   campo difere do último pedido ou se um select mudou — sair de uma faixa
-  intacta não navega. Enter/Aplicar cancelam o pedido pendente, e qualquer
-  navegação que não saiu do próprio formulário (limpar, preset, outro filtro,
-  Voltar) também: ela é a interação mais recente.
+  intacta não navega. Enter/Aplicar cancelam o pedido pendente, e navegação
+  por link ou histórico (limpar, preset, chip, Voltar/Avançar) também: ela é a
+  interação mais recente. Envio de outro formulário da barra não cancela — o
+  pedido espera e sai depois, com os campos ocultos atualizados, e os dois
+  filtros chegam à URL.
 - **Janelas.** 300 ms nos controles basta para juntar setas seguidas no
   slider; 400 ms no texto é a pausa de quem ainda está digitando uma palavra.
 - **Os campos deixaram de ser remontados por `key`.** A chave pelo valor do
