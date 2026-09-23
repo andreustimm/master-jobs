@@ -28,7 +28,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 ### Novidade
 
 - Você edita o nome do seu perfil público na área do candidato. Se ele ainda
-  não tiver nome, a tela pede um antes de você publicar.
+  não tiver nome, a tela pede um, e o perfil público mostra um título neutro
+  até você escrevê-lo.
 
 ### Corrigido
 

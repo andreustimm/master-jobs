@@ -6,7 +6,7 @@ persona: Candidato convidado sem perfil
 journey: J-create-own-profile
 expected: O formulário cria um candidato novo e privado com o nome digitado, e a área do candidato sobrevive ao refresh em 375 px e em inglês
 entry_points: /candidate
-qa_status: pass
+qa_status: untested
 bug_ids:
 fix_status:
 retest_status:

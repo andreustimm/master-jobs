@@ -1138,8 +1138,9 @@ Com o papel `candidate`, a conta recebe um candidato:
   nunca é reaproveitado.
 
 O candidato novo recebe o nome de exibição da conta, quando ela já tem um; sem
-ele, nasce **sem nome**, e a pessoa o escreve em `/candidate` antes de publicar
-o perfil. O e-mail nunca vira nome: o nome é o título de `/p/<endereço>`.
+ele, nasce **sem nome**: `/candidate` pede o nome, e `/p/<endereço>` mostra um
+título neutro até a pessoa escrevê-lo. O e-mail nunca vira nome: o nome é o
+título de `/p/<endereço>`.
 
 A conta nasce sem senha; defina com `jho auth set-password <email>`.
 

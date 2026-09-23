@@ -34,7 +34,13 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const profile = await publicProfile((await params).slug);
   const { t } = await getTranslator();
   return {
-    title: profile?.name ? t("publicName.pageTitle", { name: profile.name }) : t("publicName.unnamed"),
+    // Sem perfil, o título é o mesmo 404 de qualquer endereço: "perfil sem
+    // nome" diria que existe um perfil ali.
+    title: !profile
+      ? t("routeStatus.notFoundTitle")
+      : profile.name
+        ? t("publicName.pageTitle", { name: profile.name })
+        : t("publicName.unnamed"),
     description: profile?.headline ?? undefined,
     robots: { index: false, follow: false },
   };

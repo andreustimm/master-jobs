@@ -28,7 +28,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 ### New
 
 - You edit your public profile's name in the candidate area. If it has no name
-  yet, the screen asks for one before you publish.
+  yet, the screen asks for one, and the public profile shows a neutral title
+  until you write it.
 
 ### Fixed
 

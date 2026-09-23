@@ -511,8 +511,8 @@ por `parsePublicName`) e `/p/` mostra um título neutro do dicionário.
   (`containsContact`, `src/core/public-cv.ts`) e esvazia o que traz e-mail ou
   telefone, independentemente de como o dado foi gravado.
 - Migração `0014_clear_contact_candidate_names` (só dados, idempotente) zera
-  `name` igual ao e-mail da conta dona, igual a `candidate.email` ou com forma
-  de e-mail. Não há volta automática: o valor apagado era o e-mail, que continua
+  `name` igual ao e-mail da conta dona, igual a `candidate.email` ou que contenha
+  um e-mail. Não há volta automática: o valor apagado era o e-mail, que continua
   em `auth_user.email`.
 
 ### Migração do ownership por candidato

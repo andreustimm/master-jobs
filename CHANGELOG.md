@@ -18,7 +18,7 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
   ou nasce sem nome (`initialCandidateName`); `publicProfile()` esvazia nome,
   headline, localização e links que tragam e-mail ou telefone
   (`containsContact`, também com o e-mail da conta dona); e a migration de
-  dados `0014_clear_contact_candidate_names` zera os nomes já gravados.
+  dados `0014_clear_contact_candidate_names` zera os nomes já gravados que trazem e-mail.
 
 ### Adicionado
 

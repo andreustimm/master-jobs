@@ -102,7 +102,6 @@ describe("conta criada por `jho auth add-user`", () => {
 
     const row = await getCandidateById(candidateId!);
     expect(row!.name).toBe("");
-    expect(row!.name).not.toContain("@");
 
     expect(await setPublicSlug(candidateId!, "pia-qa")).toMatchObject({ ok: true });
     await setVisibility(candidateId!, "public");
@@ -227,7 +226,9 @@ describe("recusas pela tela chegam ao domínio", () => {
     // `validatePublicSlug`, com a mensagem de tamanho.
     for (const file of ["app/candidate/public-address.tsx", "app/candidate/create-profile.tsx"]) {
       const source = readFileSync(file, "utf8");
-      const input = source.slice(source.indexOf('name="publicSlug"') - 200, source.indexOf('name="publicSlug"') + 600);
+      const at = source.indexOf('name="publicSlug"');
+      expect(at, file).toBeGreaterThan(-1);
+      const input = source.slice(source.lastIndexOf("<Input", at), source.indexOf("/>", at));
       expect(input, file).not.toMatch(/maxLength=|minLength=/);
     }
     const nameCard = readFileSync("app/candidate/public-name.tsx", "utf8");

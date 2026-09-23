@@ -4,7 +4,7 @@
 -- e-mail no lugar do nome, e `/p/<endereço>` publicava esse nome como título.
 -- O código deixou de gravar isso; esta migration limpa o que já foi gravado.
 --
--- Só dados, aditiva e idempotente: zera `name` quando ele é igual ao e-mail da
+-- Só dados, sem mudança de schema, idempotente, e SOBRESCREVE sem guardar o valor anterior: zera `name` quando ele é igual ao e-mail da
 -- conta dona do candidato, igual ao e-mail do próprio candidato, ou tem forma
 -- de e-mail. Nome vazio é o estado "ainda sem nome": `/candidate` pede um, e o
 -- perfil público mostra um título neutro. Rodar de novo não acha nada, porque
