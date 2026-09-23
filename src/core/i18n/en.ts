@@ -548,6 +548,10 @@ export const en: Dictionary = {
     queueDone: "Ranking refreshed for {count} jobs.",
     queueFailedLabel: "Refresh failed",
     queueFailed: "The ranking could not be refreshed. Save again or try later.",
+    queueRefusedLabel: "Track not built",
+    queueRefusedNoCv: "There is no saved CV to build your main track from. Paste your CV or import the PDF on this page — scoring starts when you save.",
+    queueRefusedWeakCv: "Your CV is too short or mentions no skill we recognize, so your main track was not built and jobs have no score. Paste your full CV or import the PDF on this page — scoring starts again when you save.",
+    queueRefusedEmptyCatalog: "This installation's skill catalog is empty, and without it no CV produces a track. It is not your text: let the administrator know.",
   },
   compare: {
     eyebrow: "MANUAL ANALYSIS",

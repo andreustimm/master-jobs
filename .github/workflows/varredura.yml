@@ -1,20 +1,24 @@
-# A varredura diária de vagas, sem depender de laptop ligado.
+# A varredura de vagas no GitHub Actions: rede de segurança da varredura horária.
 #
-# ## Por que aqui e não na Vercel
+# ## Quem varre de verdade
 #
-# `/api/cron/recheck` reconfere 25 vagas por chamada, porque o teto de função no
-# plano gratuito da Vercel é de 30 segundos. Com 427 vagas elegíveis, um cron
-# diário nela levava ~17 dias para dar a volta — enquanto o próprio código
-# declara a meta de reconferir a cada 7 (`olderThanDays: 7` em `enqueueStale`).
-# Por isso o cron da Vercel saiu de `vercel.json`, e esta varredura é o único
-# agendador da reconferência (travado por teste).
+# Desde a ADR 0025, a varredura roda na Vercel, em fatias de menos de 25
+# segundos: o `pg_cron` do Supabase chama `/api/cron/varredura?fatia=…` a cada
+# poucos minutos (SQL em `supabase/cron/varredura.sql`). A função roda em `gru1`,
+# ao lado do banco; este runner fica nos EUA e pagava uma ida e volta por
+# consulta — foram ~57 minutos por execução em 23/09/2026.
 #
-# E a BUSCA não roda lá de jeito nenhum. `jho jobs sync` e `jho scrape run` não
-# têm rota de API; são comandos de terminal que levam minutos. Até hoje, achar
-# vaga nova dependia de alguém abrir o laptop.
+# ## O que sobra para este arquivo
 #
-# Um runner do GitHub tem 6 horas por job. É a mesma tarefa num lugar onde ela
-# cabe.
+# - **Até a troca de agendador**, a execução diária continua como sempre: o
+#   agendamento no Supabase é passo humano (runbook em `docs/operations.md`), e
+#   desligar isto antes dele deixaria o acervo sem varredura nenhuma.
+# - **Depois da troca**, o dono define a variável de repositório
+#   `VARREDURA_AGENDADOR=supabase` e o disparo agendado deste workflow passa a
+#   não fazer nada. Um agendador por vez: dois sobre a mesma fila dobravam as
+#   requisições a sites de terceiros sem que um soubesse do outro (B-11, #269).
+# - **Sempre**, o disparo manual (`workflow_dispatch`) continua valendo — é o
+#   que a tela de operações pede, e é o caminho de volta se a Vercel parar.
 #
 # ## Só produção
 #
@@ -54,7 +58,13 @@ jobs:
   varrer:
     # Opt-in somente depois de definir retenção/orçamento. A migração seletiva
     # não autoriza recarregar automaticamente todo o corpus no plano Free.
-    if: github.ref == 'refs/heads/main' && vars.SUPABASE_CRAWL_ENABLED == 'true'
+    #
+    # A terceira condição é a troca de agendador (ADR 0025): com
+    # `VARREDURA_AGENDADOR=supabase`, só o disparo manual executa.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      vars.SUPABASE_CRAWL_ENABLED == 'true' &&
+      (github.event_name == 'workflow_dispatch' || vars.VARREDURA_AGENDADOR != 'supabase')
     environment: production
     runs-on: ubuntu-latest
     # Generoso mas limitado. O runner fica nos EUA e o banco em São Paulo, e a
@@ -147,9 +157,10 @@ jobs:
           inputs.rotina == 'termos'
         run: pnpm jho scrape run --limit 300
 
-      # 3. Reconferir se o que já está no banco continua aberto. Esta varredura
-      #    é o ÚNICO agendador da reconferência — a Vercel não agenda nada, e um
-      #    teste trava isso. Aqui a fila inteira cabe numa rodada.
+      # 3. Reconferir se o que já está no banco continua aberto. Depois da troca
+      #    de agendador, quem reconfere é a fatia `reconferencia` do `pg_cron`,
+      #    e este passo só roda por disparo manual — um teste trava que nunca
+      #    haja dois agendadores ativos ao mesmo tempo.
       - name: Enfileirar reconferência
         if: >-
           github.event_name != 'workflow_dispatch' ||

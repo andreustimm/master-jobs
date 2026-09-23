@@ -17,7 +17,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
 import { application, candidate, job, jobScore, source } from "../src/core/db/schema.ts";
-import { ensureSources, pruneClosed, syncAll } from "../src/core/ingest/run.ts";
+import { ensureSources, pruneClosed, syncAll, syncSource } from "../src/core/ingest/run.ts";
 import { observeRawJob } from "../src/core/ingest/observe.ts";
 import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/http-port.ts";
 import "../src/core/sources/http.ts";
@@ -443,6 +443,26 @@ describe("syncAll", () => {
       failed: 0,
     });
     expect(Date.parse(r.finishedAt)).toBeGreaterThanOrEqual(Date.parse(r.startedAt));
+  });
+});
+
+describe("syncSource — a unidade da varredura fatiada", () => {
+  it("registra a fonte, sincroniza só ela e grava o estado", async () => {
+    boardCom([vaga(1), vaga(2)]);
+    const r = await syncSource(config("acme"));
+
+    expect(r).toMatchObject({ sourceId: "greenhouse:acme", ok: true, fetched: 2, inserted: 2 });
+    const [linha] = await db.select().from(source).where(eq(source.id, "greenhouse:acme"));
+    expect(linha).toMatchObject({ lastStatus: "ok", lastJobCount: 2 });
+    expect(linha?.lastSyncedAt).not.toBeNull();
+  });
+
+  it("falha da fonte vira resultado, não exceção", async () => {
+    setHttpPort(fixtureHttp({}));
+    const r = await syncSource(config("sumiu"));
+    expect(r.ok).toBe(false);
+    const [linha] = await db.select().from(source).where(eq(source.id, "greenhouse:sumiu"));
+    expect(linha?.lastStatus).toBe("error");
   });
 });
 

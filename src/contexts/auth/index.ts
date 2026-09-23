@@ -34,6 +34,7 @@ export type { SeedResult } from "./app/seed.ts";
 export { setPassword, verifyLogin } from "./infra/password-login.ts";
 import { setPassword } from "./infra/password-login.ts";
 export { canReadPublicProfile } from "./domain/policy.ts";
+export { authorizeCronRequest, type CronAuthorization } from "./domain/cron-authorization.ts";
 export { VISIBILITIES, isVisibility, ADMIN_ACTIONS } from "./domain/types.ts";
 export type { Visibility } from "./domain/types.ts";
 export type { UserSummary } from "./ports.ts";

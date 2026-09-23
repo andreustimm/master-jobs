@@ -5,6 +5,7 @@ import {
   scoreQueueDisplay,
   type ScoreQueueDisplay,
   type ScoreQueueSnapshot,
+  type ScoreRefusal,
 } from "../src/core/scoring/queue.ts";
 
 /**
@@ -23,7 +24,14 @@ const QUEUE_STATE_KEYS = {
   scoring: { label: "candidate.queueScoringLabel", detail: "candidate.queueScoring" },
   done: { label: "candidate.queueDoneLabel", detail: "candidate.queueDone" },
   failed: { label: "candidate.queueFailedLabel", detail: "candidate.queueFailed" },
-} satisfies Record<ScoreQueueDisplay["state"], { label: TranslationKey; detail: TranslationKey }>;
+} satisfies Record<Exclude<ScoreQueueDisplay["state"], "refused">, { label: TranslationKey; detail: TranslationKey }>;
+
+/** O que fazer depende de quem pode resolver: a pessoa, ou quem administra a instalação. */
+const REFUSAL_DETAIL_KEYS = {
+  noCv: "candidate.queueRefusedNoCv",
+  weakCv: "candidate.queueRefusedWeakCv",
+  emptyCatalog: "candidate.queueRefusedEmptyCatalog",
+} satisfies Record<ScoreRefusal, TranslationKey>;
 
 const QUEUE_BADGE_VARIANT = {
   idle: "outline",
@@ -32,6 +40,7 @@ const QUEUE_BADGE_VARIANT = {
   scoring: "secondary",
   done: "default",
   failed: "destructive",
+  refused: "destructive",
 } as const satisfies Record<ScoreQueueDisplay["state"], "outline" | "secondary" | "default" | "destructive">;
 
 /** A repontuação ainda não terminou: as notas mostradas são as anteriores. */
@@ -55,7 +64,9 @@ export function ScoreQueueCard({
   recalculating?: boolean;
 }) {
   const display = scoreQueueDisplay(snapshot, hasCv);
-  const keys = QUEUE_STATE_KEYS[display.state];
+  const keys = display.state === "refused"
+    ? { label: "candidate.queueRefusedLabel" as const, detail: REFUSAL_DETAIL_KEYS[display.reason] }
+    : QUEUE_STATE_KEYS[display.state];
   const values = display.state === "done"
     ? { count: formatNumber(display.scored ?? 0, locale) }
     : undefined;
@@ -65,6 +76,7 @@ export function ScoreQueueCard({
       className="mb-6"
       data-testid="score-queue-status"
       data-state={display.state}
+      data-reason={display.state === "refused" ? display.reason : undefined}
       role="status"
       aria-live="polite"
       aria-atomic="true"

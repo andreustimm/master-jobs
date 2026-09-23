@@ -35,10 +35,12 @@ import {
   saveTerm,
   setMatchingProfile,
   suggestTrack,
+  trackScoringProfiles,
 } from "../../src/contexts/matching/index.ts";
 import { runMigrations } from "../../src/core/db/migrate.ts";
 import { loadProfile } from "../../src/core/profile/load.ts";
 import { scoreOne } from "../../src/core/scoring/apply.ts";
+import { SCORER_VERSION } from "../../src/core/scoring/score.ts";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { isolationRefusal } from "./database-guard.mjs";
 
@@ -363,6 +365,18 @@ try {
   }).onConflictDoNothing({ target: job.id });
   await getDb().insert(jobScore).values(fixtureScore(longTitleFixture.id, primaryTrack.id, 60))
     .onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
+
+  // As notas das fixtures são fixas, e desde a #280 salvar currículo roda a
+  // fila de repontuação logo depois da resposta: nota marcada como de outro
+  // scorer seria recalculada no meio da suíte e mudaria os recortes que os
+  // percursos contam. Carimbadas com a versão e o hash atuais de cada trilha,
+  // elas ficam em dia e a repontuação incremental passa por cima delas.
+  for (const { track, hash } of (await trackScoringProfiles(candidateId)) ?? []) {
+    await getDb()
+      .update(jobScore)
+      .set({ scorerVersion: SCORER_VERSION, profileHash: hash, scoredAt: new Date().toISOString() })
+      .where(and(eq(jobScore.candidateId, candidateId), eq(jobScore.trackId, track.id), eq(jobScore.scorerVersion, "e2e")));
+  }
 
   const seededTerm = await saveTerm(
     { candidateId },
