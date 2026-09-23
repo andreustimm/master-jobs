@@ -56,11 +56,12 @@ const cache = createTtlLru<Cached>({ ttlMs: FACET_CACHE_TTL_MS, maxEntries: FACE
  */
 export async function cachedBoardFacets(candidateId: number | null, query: FacetQuery): Promise<BoardFacets> {
   const key = facetCacheKey(candidateId, query, SCORER_VERSION);
-  let entry = cache.get(key, clock().now());
+  const now = clock().now();
+  let entry = cache.get(key, now);
   if (!entry) {
     const created: Cached = { candidateId, facets: boardFacets(candidateId, query) };
     entry = created;
-    cache.set(key, created, clock().now());
+    cache.set(key, created, now);
     created.facets.catch(() => cache.deleteWhere((value) => value === created));
   }
   const facets = await entry.facets;
