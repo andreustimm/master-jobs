@@ -379,6 +379,13 @@ cliente GraphQL falhar por causa do recurso legado Projects, use o endpoint
 REST equivalente: `gh api --method POST repos/andreustimm/master-jobs/issues/<número>/assignees -f 'assignees[]=andreustimm'`.
 Nenhuma PR pode ser deixada sem assignee.
 
+**A issue fecha quando o código chega a produção.** Pelo menos um commit da
+PR leva na mensagem `Closes #N` para cada issue entregue por inteiro (`Refs #N`
+quando parcial). Como a PR aponta para `dev` e a branch padrão é `main`, a
+palavra-chave na descrição não fecha nada; na mensagem do commit, o GitHub
+fecha a issue quando esse commit entra em `main`. Detalhe em
+`docs/engineering/workflow.md` ("Entregar e limpar").
+
 **`dev`, `staging` e `main` são branches permanentes e nunca são apagadas.**
 Elas representam os ambientes e o caminho de promoção; permanecem no remoto e
 nos clones locais mesmo depois de qualquer promoção ou retorno.
