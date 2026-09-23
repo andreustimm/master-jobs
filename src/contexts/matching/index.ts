@@ -129,10 +129,13 @@ export {
   hasTrackScores,
   listBoard,
   listBoardPage,
+  nearMatches,
   type BoardFilters,
   type BoardRow,
   type GroupPosting,
+  type NearRow,
   type PayFilter,
+  type SearchQuery,
 } from "../../core/db/repo.ts";
 
 export {

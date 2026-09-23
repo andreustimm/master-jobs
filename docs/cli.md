@@ -78,6 +78,9 @@ rtk pnpm jho llm use <modelo>    # define o padrão
 rtk pnpm jho llm add-provider <slug> --label X --key-env VAR [--kind compatible --base-url URL]
 rtk pnpm jho llm add-model <provedor> <modelo> --label X [--reasoning --effort high]
 rtk pnpm jho analyze <id>        # leitura qualitativa da vaga; pede confirmação antes de enviar
+rtk pnpm jho analysis queue <id> # pede a análise estruturada (reaproveita a concluída)
+rtk pnpm jho analysis run        # processa a fila com a sua chave; pede confirmação
+rtk pnpm jho analysis status     # quantas em cada estado
 
 # candidatura
 rtk pnpm jho prep <id>           # dossiê: bloqueios, rede, evidências, vocabulário
@@ -1276,6 +1279,46 @@ Um candidato tem no máximo uma conta (índice `auth_user_candidate_idx`).
 Cria a conta do dono (admin + candidato `default`) com senha gerada, mostrada
 uma vez. Recusa um e-mail diferente quando o candidato `default` já pertence a
 outra conta.
+
+## Área `analysis` — análise estruturada da vaga
+
+Grupo `analysis`, separado de `jho analyze <id>`: aquele é a leitura
+qualitativa livre, com o dossiê, impressa no terminal; este é a análise da
+**vaga** (só título, empresa, local e anúncio), estruturada, versionada e
+guardada em `job_analysis`, que a tela da vaga também pede. Regras em
+`docs/data-model.md` (`job_analysis`) e o prompt em
+[`docs/prompts/system/job-structure.md`](prompts/system/job-structure.md).
+
+### `jho analysis queue <id>`
+
+Pede a análise. Imprime `{"analysis": <id>, "outcome": ...}`, com `outcome`
+`created` (nova na fila), `active` (já havia uma na fila ou rodando),
+`reused` (há uma concluída do mesmo texto — nada é refeito nem pago) ou
+`exhausted` (três tentativas sem sucesso; só o admin tenta de novo, pela tela).
+Vaga inexistente sai com código 1. Não chama o provedor.
+
+### `jho analysis run [--max <n>] [--yes] [--model <id>]`
+
+Processa a fila, uma análise por vez, com o modelo escolhido como em
+`jho analyze` (`--model`, o padrão, ou o primeiro com chave). Sem modelo com
+chave, sai com código 1 **sem reivindicar nada**: a fila fica como está. Com
+fila, diz o que vai sair da máquina — destino, chave redigida, quantos
+anúncios e quantos caracteres — e espera confirmação (Enter vazio é "não";
+`--yes` pula). Imprime só `{"id", "status"}` por análise: nem texto da vaga,
+nem resposta do provedor.
+
+| Flag | Default | Efeito |
+|---|---|---|
+| `--max <n>` | `10` | para depois de N análises |
+| `--yes` | — | não pede confirmação |
+| `--model <id>` | padrão do cadastro | modelo específico (`jho llm list`) |
+
+Texto da vaga alterado depois do pedido: a análise falha com `input_changed`
+sem chamar o provedor. 429 do provedor vira `paused_quota`.
+
+### `jho analysis status`
+
+Contagem por estado, em JSON. Só agregados.
 
 ## Variáveis de ambiente que a CLI respeita
 

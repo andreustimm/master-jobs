@@ -86,6 +86,20 @@ export function termRegexSql(term: string): string {
   return `(^|${TERM_BOUNDARY})${termPattern(term)}(${TERM_BOUNDARY}|$)`;
 }
 
+/**
+ * A frase entre aspas: as palavras nessa ordem, separadas por um ou mais
+ * espaços, com a mesma borda do termo. Diferente do termo, não junta nem
+ * separa letras — `"tech lead"` não casa "techlead" nem "tech-lead".
+ *
+ * O `termPrefilterLike` da frase continua condição necessária: o trecho casado
+ * é a frase com espaços, e sem espaço e hífen ele é exatamente `termKey`.
+ */
+export function phraseRegexSql(phrase: string): string {
+  const words = phrase.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const body = words.map((word) => [...word].map(escapeRegex).join("")).join(" +");
+  return `(^|${TERM_BOUNDARY})${body}(${TERM_BOUNDARY}|$)`;
+}
+
 /** Chave só com ASCII minúsculo, dígito e os símbolos que `termKey` preserva. */
 const PREFILTER_KEY = /^[a-z0-9+#./]+$/;
 /** Sem três letras ou dígitos seguidos o pg_trgm não extrai trigrama útil. */
