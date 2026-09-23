@@ -21,10 +21,11 @@ sendo o único juiz do conjunto (adenda A4).
 </critical>
 
 <requirements>
-- Conjunto e contagem com `sort=relevance` MUST ser idênticos aos do filtro atual.
-- `parseQuery`, `relevanceRank` e a explicação MUST ser puros.
+- Conjunto e contagem MUST ser os mesmos com `sort=relevance` e `sort=fit`; sem casamento em localização, idênticos aos de antes da tarefa.
+- `parseQuery`, `compareByRelevance` e a explicação MUST ser puros.
+- `job_title_trgm_idx` entra em migration aditiva própria.
 - Grupo de proximidade MUST ser separado, rotulado, limitado e só com vagas que passam nos filtros exatos.
-- Reaproveitar `pg_trgm` e os índices de #214; índice novo só com `EXPLAIN` na fixture.
+- Reaproveitar `pg_trgm` e os índices de #214; o único índice novo é o do título.
 - Estado na URL; sem JS de cliente novo; texto do dicionário.
 - Scorer intocado (G08, G11).
 </requirements>
@@ -34,7 +35,7 @@ sendo o único juiz do conjunto (adenda A4).
 - [ ] Análise da consulta e ordenação.
 - [ ] Localização no filtro e explicação por campo.
 - [ ] Grupo de termos parecidos com limiar calibrado na fixture.
-- [ ] Docs: `docs/product/` (contrato de URL) e `docs/data-model.md` se houver índice.
+- [ ] Docs: `docs/product/` (contrato de URL) e `docs/data-model.md` (índice do título).
 - [ ] QA de jornada conforme `docs/qa/README.md`.
 - [ ] Casos de teste atribuídos.
 

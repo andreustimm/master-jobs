@@ -10,7 +10,7 @@ complexity: medium
 ## Visão geral
 
 Guardar cada veredito em `job_check_event`, unificar os dois caminhos de
-verificação em `recordVerdict()` e mostrar na vaga a disponibilidade com a
+verificação numa `applyVerdict()` transacional e mostrar na vaga a disponibilidade com a
 última checagem.
 
 <critical>
@@ -23,7 +23,7 @@ verificação em `recordVerdict()` e mostrar na vaga a disponibilidade com a
 - Só 404/410 fecham (G26); o teste existente não pode ser enfraquecido.
 - Evento e estado da vaga MUST mudar na mesma transação.
 - `currentAvailability` MUST ser pura e decidir por `checked_at` e `id`.
-- `jho jobs verify` MUST passar por `recordVerdict()`.
+- `jho jobs verify` e a fila MUST passar pela mesma `applyVerdict()`; concluir a `verify_task` fica só na fila.
 - Motivo diferente de `closed`/`unknown` só com evidência de adapter; hoje nenhum adapter produz.
 - A tela MUST dizer "desconhecida" sem checagem e "vencida" além da janela.
 </requirements>

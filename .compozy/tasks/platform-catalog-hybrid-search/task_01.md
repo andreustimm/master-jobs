@@ -22,8 +22,9 @@ a divergência é visível.
 <requirements>
 - `source` ganha `retired_at`, `origin`, `config_revision`, `secret_ref` e `managed_at`, em migration aditiva.
 - Validação de escrita e capacidades MUST ser funções puras em `src/contexts/sourcing/domain/`.
-- `ensureSources()` MUST espelhar o YAML inteiro (inclusive `enabled: false`) só em linha não gerida.
-- O sync MUST selecionar fontes do banco (`enabled` e não aposentada).
+- `parseSourcesConfig()` MUST devolver a entrada desabilitada com `enabled: false`; quem chama `loadSources()` filtra explicitamente.
+- `ensureSources()` MUST espelhar o YAML inteiro (inclusive `enabled: false`) só em linha não gerida, e desabilitar a linha não gerida que saiu do YAML.
+- O sync MUST selecionar fontes do banco (`enabled`, não aposentada e kind com adapter de sync).
 - `secret_ref` MUST aceitar só nome de variável; o valor nunca é gravado nem ecoado (G41).
 - `jho sources import` MUST simular por padrão; `jho sources diff` nunca grava.
 </requirements>

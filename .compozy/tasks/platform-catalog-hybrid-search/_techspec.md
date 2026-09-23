@@ -68,6 +68,9 @@ export type Capabilities = {
   statusReason: false; // nenhum adapter atual prova filled/cancelled/paused
 };
 export function capabilitiesOf(kind: string): Capabilities; // kind fora do registro → tudo indisponível
+export type ProbeOutcome = "reachable" | "empty" | "blocked" | "failed";
+export function classifyProbe(result: { status: number | null; count: number | null }): ProbeOutcome;
+// 401/403/429 → blocked; 5xx, timeout ou rede → failed; nunca "empty" sem resposta 2xx
 
 export type CatalogWrite = {
   kind: string; handle: string; label: string; enabled: boolean;
@@ -77,9 +80,11 @@ export function validateCatalogWrite(
   input: CatalogWrite, existing: { kind: string; handle: string }[],
 ): { ok: true; value: CatalogWrite } | { ok: false; code: CatalogError };
 
+// CatalogRow carrega managedAt; o regime é por linha, sem chave global.
 export function planCatalogImport(
-  yaml: CatalogWrite[], db: CatalogRow[], imported: boolean,
-): { inserts: CatalogWrite[]; drift: DriftItem[] };
+  yaml: CatalogWrite[], db: CatalogRow[],
+): { inserts: CatalogWrite[]; mirrors: CatalogWrite[]; orphans: string[]; drift: DriftItem[] };
+// orphans = linhas não geridas sem entrada no YAML; a aplicação as desabilita
 
 // operations/domain — puro
 export type RunScope =
@@ -93,11 +98,10 @@ export function runKey(scope: RunScope, configRevision: number): string;
 export function nextRunStatus(current: RunStatus, event: RunEvent): RunStatus | null; // null = transição recusada
 export function isStale(run: { status: RunStatus; heartbeatAt: string }, now: string, leaseMs: number): boolean;
 
-// ingest — puro
-export type CheckVerdict = "alive" | "gone" | "inconclusive";
+// ingest — puro; reaproveita ProbeVerdict de src/core/ingest/probe.ts
 export type StatusReason = "closed" | "filled" | "cancelled" | "paused" | "unknown";
 export function currentAvailability(
-  events: { checkedAt: string; id: number; verdict: CheckVerdict }[],
+  events: { checkedAt: string; id: number; verdict: ProbeVerdict }[],
   now: string, staleMs: number,
 ): "open" | "closed" | "stale" | "unknown";
 
@@ -105,7 +109,10 @@ export function currentAvailability(
 export type ParsedQuery = { terms: string[]; phrases: string[] };
 export function parseQuery(raw: string): ParsedQuery; // aspas desbalanceadas → texto simples
 export type MatchField = "title" | "company" | "location" | "description";
-export function relevanceRank(fields: MatchField[]): number;
+export type RankedRow = { fields: MatchField[]; fit: number | null; postedAt: string | null; id: number };
+export function compareByRelevance(a: RankedRow, b: RankedRow): number;
+// campo mais forte (título > empresa > localização/descrição), depois fit, recência e id
+// A mesma ordem vira o ORDER BY da consulta; o teste compara as duas na fixture.
 
 // análise — puro
 export type Provenance = "explicit" | "normalized" | "unknown" | "conflict";
@@ -135,13 +142,23 @@ no DDL (G20).
 é por linha, marcado por `managed_at`:
 
 - linha **não gerida** (`managed_at` nulo) continua espelhando o YAML, agora
-  inclusive `enabled: false` — hoje `ensureSources()` força `enabled: true`;
+  inclusive `enabled: false`. Hoje isso não acontece em dois lugares:
+  `parseSourcesConfig()` (`src/core/sources/config.ts`) descarta a entrada
+  desabilitada e remove o campo `enabled`, e `ensureSources()` força
+  `enabled: true`. A tarefa 01 muda os dois: o carregador devolve a entrada
+  com `enabled`, e os chamadores de `loadSources()` que contavam só com as
+  habilitadas passam a filtrar explicitamente;
+- linha não gerida **sem entrada no YAML** (removida do arquivo) é desabilitada
+  pelo espelhamento — hoje ela fica `enabled = true` para sempre;
 - `jho sources import --apply` grava o estado do YAML e carimba `managed_at`
   em todas as linhas; toda escrita do admin também carimba;
 - linha **gerida** nunca é sobrescrita por `ensureSources()`: o YAML só
   insere o que falta;
-- o sync seleciona fontes do banco (`enabled and retired_at is null`), não
-  mais da lista do YAML;
+- o sync seleciona fontes do banco com
+  `enabled and retired_at is null and kind in (<kinds com adapter de sync>)`,
+  não mais da lista do YAML. O filtro por kind é o que mantém fora linhas
+  como `manual:sample` da fixture (`src/core/db/seed-fixtures.ts`) e a fonte
+  `manual` de `src/core/ingest/manual.ts`, que existem em `source` sem adapter;
 - `jho sources diff` lista a divergência YAML × banco sem gravar nada.
 
 Banco vazio (local, fixture sintética da ADR 0021) continua funcionando: sem
@@ -161,7 +178,7 @@ linha gerida, o YAML inicializa o catálogo como hoje.
 | `status`, `heartbeat_at`, `queued_at`, `started_at`, `finished_at` | Máquina de estados de `nextRunStatus()`. |
 | `fetched`, `inserted`, `updated`, `unchanged`, `closed`, `inconclusive` | **Nulos** = desconhecido (a tela mostra "desconhecido", não zero). |
 | `completeness` | O que o adapter declarou (`SourceSnapshot`). |
-| `error_code`, `error_detail` | Detalhe limitado a 500 caracteres, com URL sem query string e sem e-mail. |
+| `error_code`, `error_detail` | Detalhe limitado a 500 caracteres, com URL sem query string, sem e-mail e sem telefone (mesma redação de `evidence`). |
 
 Linhas em estado terminal não são atualizadas: toda escrita de progresso
 filtra `status in ('queued','running')`, e o teste de integração prova que um
@@ -177,9 +194,13 @@ UPDATE numa linha terminal afeta zero linhas. A captura por termo continua em
 | `checked_at`, `verdict`, `http_code`, `reason` | `reason` só é diferente de `unknown` com evidência; hoje só `closed` (404/410). |
 | `evidence` | Até 280 caracteres, redigido. |
 
-`recordVerdict()` passa a gravar o evento na mesma transação que atualiza
-`job.check_status`. O caminho em lote `jho jobs verify` passa a usar o mesmo
-`recordVerdict()`, eliminando o segundo caminho que fecha sem registrar.
+Hoje `recordVerdict(taskId, jobId, verdict, status)` atualiza a vaga e
+conclui a linha de `verify_task` em comandos separados, sem transação, e o
+caminho em lote `jho jobs verify` não tem `verify_task`. A tarefa 04 separa as
+duas metades: uma função `applyVerdict(jobId, verdict, runId)` grava vaga e
+evento na mesma transação e é usada pelos dois caminhos; concluir a
+`verify_task` fica só na fila. Assim o lote deixa de fechar vaga sem registrar
+o veredito.
 Chegada fora de ordem: `currentAvailability()` ordena por `checked_at` e
 desempata por `id`; um evento mais antigo não reabre nem fecha a vaga.
 
@@ -190,7 +211,8 @@ desempata por `id`; um evento mais antigo não reabre nem fecha a vaga.
 | `job_id` | `onDelete: "cascade"`. |
 | `requested_by` | `onDelete: "set null"`. Visível só para admin. |
 | `retry_of` | `onDelete: "restrict"`. |
-| `status` | `queued`, `running`, `succeeded`, `partial`, `failed`, `paused_quota`. |
+| `status` | `queued`, `running`, `succeeded`, `partial`, `failed`, `paused_quota`, `interrupted`. |
+| `claimed_at`, `heartbeat_at` | Lease do processador. `running` sem batimento além do lease vira `interrupted` pela mesma `isStale()` de `source_run`, e sai do índice de idempotência; sem isso, um processador morto prenderia a vaga para sempre. |
 | `input_hash` | SHA-256 do texto normalizado analisado; a tela compara com o texto atual para mostrar "vaga mudou depois da análise". |
 | `prompt_version`, `schema_version`, `provider_slug`, `model_id` | Nunca a chave. |
 | `result` | `jsonb` validado por Zod depois de `bindEvidence()`. |
@@ -223,7 +245,7 @@ jho sources import [--apply]          # padrão: simulação
 jho sources diff
 jho jobs sync --source <kind:handle> [--run <id>]
 jho jobs verify --source <kind:handle> [--run <id>]
-jho analyze queue|run|status
+jho analysis queue|run|status         # não colide com o `jho analyze <id>` existente
 ```
 
 URL da busca: `sort=relevance` só é aceito com `q` não vazio; sem `q`, cai
@@ -233,9 +255,13 @@ aparece quando há `q` e nunca altera a contagem do resultado principal.
 ## Pontos de integração
 
 - **PostgreSQL/Supabase** — `pg_trgm` já habilitado (migration `0012`).
-  `word_similarity()` usa a extensão existente; índice trigrama em título só
-  entra se o `EXPLAIN` da fixture mostrar varredura cara (migration aditiva
-  separada).
+  `word_similarity()` usa a extensão existente. Não há índice trigrama em
+  `job.title` (só em descrição e texto de página), então a tarefa 05 cria
+  `job_title_trgm_idx` (GIN, parcial em `closed_at is null`) em migration
+  aditiva própria. Numa fixture pequena o planejador escolhe varredura
+  sequencial de qualquer forma; por isso o teste prova que o índice existe e
+  é elegível (`EXPLAIN` com `enable_seqscan = off` dentro da transação do
+  teste), não que o planejador o prefere.
 - **GitHub Actions** — `WorkflowDispatchPort.dispatch()` ganha parâmetros
   (`routine`, `source`, `run`). O workflow recebe os insumos e chama a CLI.
   Sem credencial, a execução fica `queued` com o motivo visível, e não some.
@@ -250,7 +276,7 @@ aparece quando há `q` e nunca altera a contagem do resultado principal.
 | `src/core/ingest/run.ts` | alterado | `ensureSources()` muda de regime depois da importação | teste dos dois regimes |
 | `src/core/ingest/verify.ts`, `verify-queue.ts` | alterado | caminho único de veredito | não afrouxar G26 |
 | `src/contexts/operations/` | alterado | porta com parâmetros; estados de execução | reserva antes do `await` (G13) |
-| `src/core/db/repo.ts` | alterado | relevância e grupo de proximidade | resultado principal idêntico ao atual para os mesmos filtros |
+| `src/core/db/repo.ts` | alterado | relevância e grupo de proximidade | mesmo conjunto com `sort=relevance` e `sort=fit`; sem casamento em localização, conjunto idêntico ao de antes |
 | `src/core/llm/` | alterado | análise estruturada e prompt novo | `docs/prompts/system/` |
 | `app/admin/`, `app/jobs/` | novo/alterado | telas e textos | `tests/e2e/routes.mjs`, i18n, 375 px |
 | `.github/workflows/` | alterado | insumos do dispatch | teste de isolamento de ambiente |
@@ -296,9 +322,15 @@ resposta de provedor. Execução `running` sem batimento além do lease vira
 
 ### Decisões
 
-- **Marcador de importação em vez de trocar a fonte da verdade de uma vez** —
-  ambientes vazios e fixtures continuam inicializando pelo YAML; produção muda
-  por um comando explícito e auditável.
+- **Regime por linha (`managed_at`) em vez de trocar a fonte da verdade de
+  uma vez** — ambientes vazios e fixtures continuam inicializando pelo YAML;
+  produção muda por um comando explícito e auditável, e uma edição do admin
+  protege só a linha que ele tocou.
+- **A ordenação não muda o conjunto** — para os mesmos filtros e o mesmo
+  termo, `sort=relevance` e `sort=fit` devolvem as mesmas vagas e a mesma
+  contagem. A extensão à localização muda o conjunto de propósito (A4), e por
+  isso é medida à parte: numa consulta cujo termo não aparece em nenhuma
+  localização, o conjunto é idêntico ao de antes da tarefa 05.
 - **Sem `QueuePort` genérica** — há uma só implementação de fila (tabela,
   ADR 0009). A variação real é quem executa, e ela já tem porta.
 - **Relevância por campo casado, sem `tsvector` na primeira leva** — o filtro

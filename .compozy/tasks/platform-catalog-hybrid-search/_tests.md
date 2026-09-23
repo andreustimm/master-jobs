@@ -27,7 +27,7 @@ O residual não pode enfraquecer estes testes; cada tarefa os roda como estão.
 | Só 404/410 fecham; 401/403/429, 5xx e rede são inconclusivos (US-013) | `tests/cov-ingest-verify.test.ts`, `tests/verify-queue.test.ts` |
 | Alive reabre e limpa arquivamento (US-015) | `tests/job-lifecycle.test.ts`, `tests/verify-queue.test.ts` |
 | Janela parcial não fecha por ausência; candidatura intocada (US-007.EC-2) | `tests/job-lifecycle.test.ts`, `tests/cov-ingest-run.test.ts` |
-| Histórico de candidatura após fechar e arquivar (US-016) | testes de `job-lifecycle-retention` |
+| Histórico de candidatura após fechar e arquivar (US-016) | `tests/job-archive.test.ts`, `tests/candidate-history.test.ts`, `tests/cov-cli-arquivamento.test.ts` |
 | Filtro whole-word, `C#`/`C++` literais, separador `[ -]?` (US-017, US-018 parcial) | `tests/term-kernel.test.ts`, `tests/jobs-board.test.ts` |
 | Entrada nova sem política reprova | `tests/entry-denial.test.ts`, `tests/support/entry-inventory.ts`, `tests/architecture.test.ts` |
 
@@ -72,7 +72,7 @@ O residual não pode enfraquecer estes testes; cada tarefa os roda como estão.
 | US-014.EC-1/EC-2 | Checagem vencida → "vencida"; nunca verificada → "desconhecida" | UT-010 | — | E2E-004 |
 | US-015.EC-1 | Evento fora de ordem não decide o estado | UT-010 | IT-007 | — |
 | US-015.AC-1 | Reabertura preserva o evento de fechamento anterior | — | IT-007 | — |
-| Caminho único | `jho jobs verify` passa por `recordVerdict()` e grava `check_status` | — | IT-008 | — |
+| Caminho único | `jho jobs verify` e a fila passam por `applyVerdict()` e gravam `check_status` e evento | — | IT-008 | — |
 | US-017 | Localização entra no filtro; explicação diz o campo | UT-015 | IT-009 | E2E-005 |
 | US-017.EC-1/EC-2 | Consulta vazia usa o padrão; aspas desbalanceadas viram texto | UT-013 | — | E2E-005 |
 | US-018 | Grupo "termos parecidos" separado, limitado, só com quem passa nos filtros | — | IT-010 | E2E-005 |
@@ -100,20 +100,20 @@ O residual não pode enfraquecer estes testes; cada tarefa os roda como estão.
 
 ## Testes unitários
 
-- **UT-001** (capacidade): `capabilitiesOf` devolve as capacidades de cada kind do registro; kind desconhecido → tudo indisponível; a sondagem classifica 401/403/429 como bloqueado e 5xx/rede como falha, nunca como vazio.
+- **UT-001** (capacidade): `capabilitiesOf` devolve as capacidades de cada kind do registro; kind desconhecido → tudo indisponível; `classifyProbe` classifica 401/403/429 como `blocked` e 5xx/rede como `failed`, nunca como `empty`.
 - **UT-002** (validação): `validateCatalogWrite` recusa kind fora do registro, handle malformado, rótulo e handle acima do máximo e kind/handle duplicado, sem rede nem banco.
 - **UT-003** (segredo): `secretRef` aceita só nome de variável; valor com forma de chave é recusado, e o erro não contém o valor.
-- **UT-004** (importação): `planCatalogImport` insere o que falta, não toca linha gerida, espelha `enabled: false` em linha não gerida e lista a divergência.
+- **UT-004** (importação): `planCatalogImport` insere o que falta, não toca linha gerida, espelha `enabled: false` em linha não gerida, marca como órfã a linha não gerida ausente do YAML e lista a divergência; `parseSourcesConfig` passa a devolver a entrada desabilitada com `enabled: false`.
 - **UT-005** (idempotência): `runKey` é estável para o mesmo escopo e revisão e muda com a revisão; fonte desabilitada ou aposentada não gera execução.
 - **UT-006** (estado): `nextRunStatus` recusa sair de estado terminal, compõe `partial` quando uma filha falha e mantém contagem nula como desconhecida.
 - **UT-007** (interrupção): `isStale` marca `running` sem batimento além do lease e nunca marca execução terminal.
 - **UT-008** (concorrência): o limitador de execuções reserva o slot antes do `await`; N pedidos simultâneos respeitam o teto e os excedentes ficam enfileirados com motivo.
 - **UT-009** (permissão): as políticas novas negam candidato, recrutador e sessão emprestada (inclusive de admin) antes de qualquer efeito.
 - **UT-010** (disponibilidade): `currentAvailability` ordena por `checked_at` e `id`, ignora evento mais antigo, devolve `stale` além da janela e `unknown` sem evento.
-- **UT-011** (motivo): só 404/410 produzem `closed`; demais respostas produzem `inconclusive` com motivo `unknown`.
+- **UT-011** (motivo): só 404/410 produzem `gone` com motivo `closed`; 2xx/3xx produzem `alive`; 401/403/429, 5xx, timeout e rede produzem `inconclusive` com motivo `unknown`.
 - **UT-012** (redação): evidência e detalhe de erro são limitados em tamanho e perdem query string, e-mail e telefone.
 - **UT-013** (consulta): `parseQuery` separa termos e frases entre aspas, trata aspas desbalanceadas como texto, mantém `C#` e `C++` literais e devolve vazio para espaço em branco.
-- **UT-014** (ordenação): `relevanceRank` ordena título > empresa > localização/descrição, com desempate por fit, recência e id, de forma determinística.
+- **UT-014** (ordenação): `compareByRelevance` ordena título > empresa > localização/descrição, com desempate por fit, recência e id, de forma determinística.
 - **UT-015** (explicação): a explicação lista só os campos que casaram e a proximidade quando ela contribuiu; nunca menciona semântica sem sinal persistido.
 - **UT-016** (evidência): `bindEvidence` rebaixa para `unknown` o campo cujo trecho não é substring do texto normalizado, marca `conflict` com as duas evidências e preserva os campos válidos de um resultado parcial.
 - **UT-017** (esquema): saída malformada do provedor vira `failed` ou `partial` sem coerção; o resultado persistível não contém chave nem corpo bruto.
@@ -124,16 +124,16 @@ O residual não pode enfraquecer estes testes; cada tarefa os roda como estão.
 ## Testes de integração
 
 - **IT-001**: migration aplicada; cadastrar, editar, desabilitar e aposentar fonte no PostgreSQL; duplicado e segredo recusados; vagas e execuções de fonte aposentada seguem legíveis.
-- **IT-002**: `ensureSources()` nos dois regimes, `jho sources import` em simulação e aplicado, `jho sources diff`; a sondagem pela action não grava vaga nem saúde.
+- **IT-002**: `ensureSources()` nos dois regimes; linha órfã desabilitada; o sync não seleciona `manual:sample` da fixture nem kind sem adapter; `jho sources import` em simulação e aplicado, `jho sources diff`; a sondagem pela action não grava vaga nem saúde.
 - **IT-003**: dois pedidos equivalentes concorrentes geram uma execução; UPDATE em linha terminal afeta zero linhas; resultado atrasado não sobrescreve.
 - **IT-004**: `syncOne()` grava a execução-filha com contagens e completude; janela parcial registra `closed = 0`; nenhuma escrita em `application`; lista de execuções paginada.
 - **IT-005**: execução "todas" usa o retrato de fontes do momento do pedido; filha falha → pai `partial`; nova tentativa ligada à original; `running` vencida vira `interrupted`.
 - **IT-006**: dispatch sem credencial deixa a execução `queued` com motivo; erro do executor fica limitado e redigido.
-- **IT-007**: `recordVerdict()` grava evento e estado na mesma transação; reabertura preserva o evento de fechamento; candidatura intocada; evento fora de ordem não muda o estado.
-- **IT-008**: `jho jobs verify` passa por `recordVerdict()`; execução de verificação por fonte conta vivo/fechado/inconclusivo; interrupção deixa não verificadas intactas; nada vencido → zero.
-- **IT-009**: com `sort=relevance`, o conjunto e a contagem são idênticos aos do filtro atual para os mesmos filtros na fixture de referência; casamento em localização aparece e é explicado.
-- **IT-010**: grupo de proximidade só com vagas que passam nos filtros e não casaram o termo, limitado a 20, exemplo abaixo do limiar excluído; `EXPLAIN` da fixture sem varredura sequencial em `job` para o grupo; sem a extensão, o resultado principal continua.
-- **IT-011**: pedido de análise idempotente sob clique duplo; nova tentativa ligada; cota esgotada → `paused_quota`; `input_hash` diferente sinaliza vaga alterada; nenhuma coluna guarda chave.
+- **IT-007**: `applyVerdict()` grava evento e estado na mesma transação; reabertura preserva o evento de fechamento; candidatura intocada; evento fora de ordem não muda o estado.
+- **IT-008**: `jho jobs verify` e a fila passam pela mesma `applyVerdict()`, que grava vaga e evento na mesma transação; execução de verificação por fonte conta vivo/fechado/inconclusivo; interrupção deixa não verificadas intactas; nada vencido → zero.
+- **IT-009**: na fixture de referência, `sort=relevance` e `sort=fit` devolvem o mesmo conjunto e a mesma contagem para os mesmos filtros e termo; para um termo que não aparece em nenhuma localização, o conjunto é idêntico ao do filtro anterior à tarefa 05; uma vaga que só casa na localização aparece e a explicação diz "localização"; a ordem da consulta coincide com `compareByRelevance`.
+- **IT-010**: grupo de proximidade só com vagas que passam nos filtros e não casaram o termo, limitado a 20, exemplo abaixo do limiar excluído; `job_title_trgm_idx` existe e aparece no `EXPLAIN` do grupo com `enable_seqscan = off` dentro da transação do teste (a fixture é pequena demais para o planejador preferi-lo por conta própria); sem a extensão, o resultado principal continua.
+- **IT-011**: pedido de análise idempotente sob clique duplo; nova tentativa ligada; cota esgotada → `paused_quota`; `running` sem batimento vira `interrupted` e libera novo pedido; `input_hash` diferente sinaliza vaga alterada; nenhuma coluna guarda chave.
 - **IT-012**: vaga ilegível responde como inexistente; candidato não recebe modelo nem custo; análise não escreve em `application`, `job_score` nem `candidate`.
 - **IT-013**: com vetores presentes, o sinal semântico só reordena; o conjunto filtrado é idêntico ao da busca sem vetor.
 

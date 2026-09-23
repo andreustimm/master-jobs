@@ -33,7 +33,7 @@ atual, que usa o dossiê do candidato, continua como está.
 
 - [ ] Migration de `job_analysis` com `onDelete` escrito.
 - [ ] Esquema Zod, `bindEvidence` e prompt `job-structure.md` versionado.
-- [ ] Fila em tabela e `jho analyze queue|run|status`.
+- [ ] Fila em tabela com lease e `jho analysis queue|run|status`.
 - [ ] Ação e tela na vaga; visão de admin.
 - [ ] Docs: `data-model.md`, `cli.md`, `docs/prompts/system/`.
 - [ ] QA de jornada conforme `docs/qa/README.md`.
