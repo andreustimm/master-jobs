@@ -7,10 +7,19 @@ evidência, e o que foi corrigido.
 
 ## Modelo de ameaça
 
-Não é um SaaS. É uma aplicação local com autenticação exigida por padrão, que
-guarda o material mais sensível de uma busca de emprego. A persistência do
-funil e do score ainda assume um candidato por banco (ARCH-001/002), mesmo que
-Auth já permita mais de uma conta:
+Não é um SaaS aberto ao público, mas também não é mais só local. Roda em dois
+modelos, os dois com autenticação exigida por omissão:
+
+- **Local:** CLI e dashboard em `127.0.0.1`, PostgreSQL em Docker. O bind em
+  loopback é defesa em profundidade da máquina, não a única barreira.
+- **Hospedado:** `jobs.mastertimm.com.br` na Vercel, com PostgreSQL do Supabase
+  (schema `production`); `dev` e `staging` usam só dados sintéticos, atrás do
+  SSO da Vercel. Detalhes em [`engineering/deploy.md`](engineering/deploy.md).
+
+As regras normativas deste domínio estão em
+[`engineering/rules/security.md`](engineering/rules/security.md); este documento
+guarda o modelo de ameaça, os achados e sua história. O sistema guarda o
+material mais sensível de uma busca de emprego:
 
 | Ativo | Por que importa |
 |---|---|
@@ -27,9 +36,11 @@ cenários mundanos:
 3. Um empregador correlacionando candidaturas por vazamento de referrer.
 4. Cookie forjado/revogado ou papel administrativo alcançando CV e funil.
 
-O que **não** é ameaça relevante hoje: um invasor remoto alcançando diretamente
-um serviço público. O bind continua restrito a loopback. Isolamento entre
-candidatos, por outro lado, é dívida P0 antes de qualquer deploy compartilhado.
+Com a implantação hospedada, um visitante remoto alcança o serviço público: a
+defesa é a autenticação por omissão, a guarda em toda entrada, a lista de
+permissão do perfil público e o isolamento por candidato no escopo da sessão
+(ver [`engineering/rules/security.md`](engineering/rules/security.md)). O bind
+em loopback continua valendo para os scripts locais.
 
 ---
 
@@ -344,22 +355,35 @@ e-mail ou telefone, venha de onde vier; e a pessoa edita o nome em `/candidate`.
 A migração `0014` limpa os nomes já gravados. Detecção por padrão, com o mesmo
 limite declarado de `publicCvText()`, mais sequência de dez dígitos.
 
-**Sem criptografia em repouso.** O banco é um arquivo SQLite legível por
-qualquer processo do usuário. Quem tem acesso local à conta já tem acesso a
-tudo; criptografar aqui protegeria contra roubo do disco, o que o FileVault já
-faz melhor.
+**Sem criptografia em repouso feita por este código.** Localmente, o
+PostgreSQL em Docker é legível por quem tem acesso à conta da máquina;
+criptografar aqui protegeria contra roubo do disco, o que o FileVault já faz
+melhor. Em produção, o armazenamento é do Supabase, e a criptografia em repouso
+é responsabilidade do provedor, não deste repositório.
 
 ---
 
-## Se um dia isto for para a Vercel
+## Implantação hospedada: o que já vale e o que falta
 
-Nesta ordem; autenticação e guards já existem, os itens abaixo não:
+A lista abaixo substitui o antigo "Se um dia isto for para a Vercel", escrito
+quando o banco ainda era SQLite/Turso. O que ela previa, na situação de hoje:
 
-1. ARCH-001/002: `candidateId` no funil e no score, com queries escopadas.
-2. `TURSO_AUTH_TOKEN` fora do repositório e rotação operacional.
-3. TLS, cookies `secure` e política de origem do ambiente publicado.
-4. Rate limit distribuído nas Server Actions sensíveis.
-5. `Strict-Transport-Security` e revisão da CSP sem `unsafe-eval`.
+1. **Escopo por candidato** no funil e no score: `application.candidate_id` é
+   obrigatório e o escopo nasce da sessão (ver `data-model.md` e a regra 15).
+2. **Credencial do banco fora do repositório:** variáveis Sensitive na Vercel;
+   o antigo `TURSO_AUTH_TOKEN` não se aplica mais.
+3. **Cookies de sessão** `httpOnly`, `sameSite=lax` e `secure` em produção;
+   TLS do banco por lista de permissão de `sslmode`.
+4. **Rate limit distribuído: pendente.** O limitador é em memória e vale por
+   instância na Vercel ([`engineering/deploy.md`](engineering/deploy.md), "O
+   limite de requisição vira por instância").
+5. **CSP:** produção já não usa `unsafe-eval`; `Strict-Transport-Security`
+   explícito no `next.config.ts` continua pendente de revisão.
+6. **Proteção remota: aplicada em `main`/Production, parcial em `dev`/`staging`**
+   (issue [#196](https://github.com/andreustimm/master-jobs/issues/196), desde
+   22/09/2026). `dev` e `staging` recusam exclusão e force-push, mas ainda não
+   exigem PR nem CI no remoto — ver
+   [`engineering/github-protections.md`](engineering/github-protections.md).
 
 ---
 

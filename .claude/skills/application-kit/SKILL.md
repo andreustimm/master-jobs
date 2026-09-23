@@ -18,6 +18,12 @@ vale integralmente aqui.
 > **Invariante:** só cite experiência que existe em `evidence:` no
 > `profile.yaml`. O que está em `growth:` é lacuna — sinalize ao usuário,
 > nunca maquie no documento.
+>
+> **Invariante:** o kit é rascunho. Nada aqui envia candidatura, documento
+> ou mensagem ao empregador, ATS ou recrutador — quem envia é o usuário.
+> Ver regras 7 e 13 em
+> [rules/security.md](../../../docs/engineering/rules/security.md#g09) e
+> [ADR 0010](../../../docs/adr/0010-submissao-autonoma.md).
 
 ## Currículo
 
@@ -73,3 +79,5 @@ Depois registre no funil:
 ```bash
 pnpm jho track <id> preparing -n "kit gerado em out/paires-applied-ai-engineer"
 ```
+
+`applied` só entra quando o usuário disser que enviou.

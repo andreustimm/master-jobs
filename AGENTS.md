@@ -5,887 +5,234 @@ Sistema de sourcing, scoring e gestão de candidaturas de **Andreus Timm**
 **sem autorização de trabalho nos EUA**).
 
 Objetivo: encontrar vagas que dão match com o perfil, ranqueá-las de forma
-auditável, e gerenciar o funil de candidaturas. Roda **localmente** — CLI +
-dashboard Next.js em `localhost:3000`.
+auditável e gerenciar o funil de candidaturas. Duas superfícies sobre as mesmas
+APIs: CLI (`pnpm jho`) e dashboard Next.js — local em `127.0.0.1:3000` e
+hospedado em `jobs.mastertimm.com.br` (Vercel + PostgreSQL/Supabase), sempre
+com login. **O gargalo é a decisão, não a descoberta:** leia toda proposta de
+funcionalidade contra isso ([vision.md](docs/product/vision.md)).
+
+Este arquivo é a **entrada comum** e a única fonte autoral das instruções.
+`CLAUDE.md` é um symlink para ele — **edite só aqui.** Ele traz as regras
+críticas por escrito, o roteador e o fluxo curto. O detalhe de cada regra —
+escopo, exceções, origem e prova — está em
+[`docs/engineering/rules/`](docs/engineering/rules/README.md). Link não é
+leitura automática: antes de alterar uma área, **abra a referência dela** no
+roteador abaixo.
 
 ---
 
 ## Regras invioláveis
 
-> **1. Nunca faça scraping do LinkedIn.**
-> Nada aqui pode ler `li_at`, dirigir sessão autenticada, ou usar "LinkedIn MCP"
-> não oficial. Viola a §8.2 do User Agreement e arrisca a conta que é o
-> principal ativo de posicionamento do usuário. Publicação usaria a API oficial
-> (`w_member_social`); comentários e conexões são **assistidos**.
-> **Job alert por e-mail é permitido** e é a via legítima — ver ADR 0008.
-> Detalhes: `docs/linkedin-policy.md`, `docs/adr/0001`, `docs/adr/0008`.
+A numeração é estável: comentários de código e testes citam "regra N".
+Entre colchetes, o ID do detalhe em `docs/engineering/rules/`.
 
-> **2. Ingestão nunca escreve em `application`.**
-> Sync, import e parsing de e-mail mexem em `job`; jamais em decisões do
-> usuário. E-mail produz **sugestões** em `mail_suggestion`, que o usuário
-> aceita ou descarta. Quebrar isso destrói o único dado irrecuperável.
+1. **Nunca adquira dados do LinkedIn.** Nada lê `li_at`, dirige sessão
+   autenticada, raspa HTML (mesmo deslogado) ou usa "LinkedIn MCP" não oficial
+   — viola a §8.2 do User Agreement e arrisca a conta que é o principal ativo
+   do usuário. Publicação só pela API oficial (`w_member_social`); comentários
+   e conexões são **assistidos**. **Job alert por e-mail é permitido** (ADR
+   0008). Leia [linkedin-policy.md](docs/linkedin-policy.md) antes de qualquer
+   coisa de LinkedIn. [[G01](docs/engineering/rules/security.md#g01)]
+2. **Ingestão nunca escreve em `application`.** Sync, import, captura e e-mail
+   mexem em `job`; jamais em decisões do usuário. E-mail produz **sugestões**
+   em `mail_suggestion`, que o usuário aceita ou descarta. É o único dado
+   irrecuperável. [[G02](docs/engineering/rules/data-and-sourcing.md#g02)]
+3. **Vaga que some é fechada (`closedAt`), nunca deletada.** O único descarte
+   é a retenção administrativa, que protege toda vaga com candidatura mesmo sob
+   concorrência. [[G03](docs/engineering/rules/data-and-sourcing.md#g03)]
+4. **Variação real entra por porta; domínio é puro.** Fonte, fila, provedor de
+   LLM, armazenamento: porta + adapter. Porta sem alternativa plausível é
+   cerimônia. Lógica que decide fica sem banco, rede ou relógio; adapter busca,
+   mapeia, devolve; injeção é composição de função, sem container.
+   [[G04](docs/engineering/rules/architecture.md#g04), [G05](docs/engineering/rules/architecture.md#g05)]
+5. **Só sintaxe TypeScript apagável.** Type stripping do Node 24: sem `enum`,
+   parameter properties, `namespace` ou decorators (`erasableSyntaxOnly`).
+   Imports relativos com extensão `.ts`. Sintoma:
+   `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`. [[G06](docs/engineering/rules/architecture.md#g06), [G07](docs/engineering/rules/architecture.md#g07)]
+6. **Mexeu no scorer ou em `profile.yaml`? Bump `SCORER_VERSION`** (em
+   `src/core/scoring/score.ts`; o valor mora só lá) e rode
+   `pnpm jho jobs score --all`. `tests/scorer-version.test.ts` reprova saída
+   nova com a versão antiga. [[G08](docs/engineering/rules/matching-and-evidence.md#g08)]
+7. **Não invente evidência.** Texto que fala pela pessoa só cita `evidence:` do
+   `profile.yaml`; `growth:` é lacuna assumida — sinalize, nunca maquie.
+   [[G09](docs/engineering/rules/security.md#g09)]
+8. **Dado faltante pontua neutro, nunca punitivo.** `freshness` sem data e
+   `benefits` em texto curto valem 0,5 e nunca geram bloqueador.
+   [[G10](docs/engineering/rules/matching-and-evidence.md#g10)]
+9. **Texto de interface vem do dicionário** (`src/core/i18n/`), inclusive
+   rótulo dentro de constante; procure a chave existente antes de criar. Rota
+   nova entra nas listas de `tests/e2e/routes.mjs` no mesmo commit (ou em
+   `UNMEASURED_PAGES`, com motivo — o `pnpm check` reprova a omissão); dado do usuário
+   leva `data-user-content`; teste acha controle por `data-testid`.
+   [[G29](docs/engineering/rules/frontend.md#g29)–[G31](docs/engineering/rules/frontend.md#g31)]
+10. **Todo frontend segue o sistema de temas.** Componente lê só token
+    semântico — nunca `#hex` nem paleta bruta (`--color-iris`; apelido de
+    variável do tema, como `--color-brand`, é semântico); escala fechada de
+    cor, tipo e espaço; nunca `max-w-xs`…`max-w-xl` (nem `w-`/`h-`/`min-w-`).
+    Leia [DESIGN.md](DESIGN.md) antes. [[G32](docs/engineering/rules/frontend.md#g32)–[G34](docs/engineering/rules/frontend.md#g34)]
+11. **Toda tela funciona no celular** — medido em 375px no E2E; viewport
+    `device-width`, zoom livre. [[G35](docs/engineering/rules/frontend.md#g35)]
+12. **Scripts locais fazem bind só em `127.0.0.1`** (`dev` e `start`, travado
+    por teste). [[G36](docs/engineering/rules/security.md#g36)]
+13. **Nada neste sistema envia uma candidatura.** `jho prep` monta o dossiê;
+    quem envia é a pessoa. Não crie adapter de envio, nem "desabilitado"
+    (ADR 0010). [[G37](docs/engineering/rules/security.md#g37)]
+14. **Autenticação é exigida por omissão.** Nenhuma página nem API responde sem
+    sessão, inclusive `/api/export`. `JHO_AUTH_MODE=open` só vale na máquina
+    local; em deployment o código ignora o pedido. Primeiro acesso:
+    `jho auth add-user <email> --role admin,candidate` e
+    `jho auth set-password <email>`. [[G38](docs/engineering/rules/security.md#g38)]
+15. **Autorização passa por `can()`, e o escopo vem da sessão.** Toda Server
+    Action chama `guard(...)` antes de qualquer efeito; toda página chama
+    `requirePage(...)`. Nenhuma action aceita `candidateId` da própria entrada. Entrada
+    sem guarda só como exceção registrada, com o controle que a substitui; o
+    inventário descobre entrada nova e reprova se ela não tiver política.
+    [[G39](docs/engineering/rules/security.md#g39), [G40](docs/engineering/rules/security.md#g40)]
+16. **Chave de API nunca vai para o banco** nem para log: guarda-se o nome da
+    variável de ambiente. [[G41](docs/engineering/rules/security.md#g41)]
+17. **`??` não protege contra string vazia.** Use `firstNonEmpty()`; entre
+    apelidos de campo, decida pelo valor normalizado.
+    [[G42](docs/engineering/rules/data-and-sourcing.md#g42), [G12](docs/engineering/rules/data-and-sourcing.md#g12)]
+18. **Tarefa nasce em worktree a partir de `dev`, e a PR aponta para `dev`.**
+    Nunca comite direto em `dev`, `staging` ou `main`; exceções são só as
+    automações nomeadas e hotfix humano. [[G43](docs/engineering/rules/delivery.md#g43)]
+19. **Antes de abrir PR, rode `deep-review`.** SHIP é o caminho normal;
+    `FIX_BEFORE_SHIP` remanescente vai escrito na PR e só uma pessoa decide
+    aceitá-lo — o agente não se concede a exceção.
+    [[G53](docs/engineering/rules/delivery.md#g53), [G54](docs/engineering/rules/delivery.md#g54)]
+20. **Mudança percebida por usuário atualiza e percorre o QA vivo**
+    (`docs/qa/`); `Pass` só com observável que sobrevive a refresh e leitura
+    independente. Markdown/metadados sem runtime validam só estrutura.
+    [[G55](docs/engineering/rules/delivery.md#g55)–[G57](docs/engineering/rules/delivery.md#g57)]
+21. **Commit releaseável carrega a nota em um fragmento de changelog:**
+    `changelog.d/<slug-da-branch>.md`, com `## Técnico`, `## pt-BR` e `## en`.
+    **Não edite** o `## [Unreleased]` dos três changelogs — a promoção junta os
+    fragmentos (o hook `commit-msg` e o CI conferem).
+    [[G58](docs/engineering/rules/delivery.md#g58)]
+22. **Toda tag SemVer tem uma GitHub Release**, gerada do changelog técnico.
+    [[G59](docs/engineering/rules/delivery.md#g59)]
+23. **O changelog conta o que mudou; `docs/` conta como é agora.** Tarefa
+    fechada atualiza `docs/`, ou a PR declara em uma linha por que nada mudou.
+    [[G60](docs/engineering/rules/delivery.md#g60)]
+24. **A issue e o GitHub Project 3 são a autoridade operacional da tarefa.**
+    Toda demanda tem issue no Project antes de execução; estado, prioridade,
+    assignee e dependências vêm do remoto (`rtk pnpm tasks show <issue>
+    --json`). `.compozy/tasks/`, memória e backlog local nunca comandam estado.
+    Integração em dev não é ativação do escritor remoto.
+    [[R24](docs/engineering/rules/delivery.md#r24)]
 
-> **3. Vaga que some é fechada (`closedAt`), nunca deletada.**
-> Deletar quebra o histórico de candidaturas por foreign key.
+**Outras invariantes que valem sem invocar skill** (detalhe no link):
 
-> **4. Módulo novo entra por porta. Sempre.**
-> O sistema é feito para receber módulos: fontes, filas, provedores de LLM,
-> armazenamento. Cada um desses é uma **porta** com adapter, nunca uma chamada
-> direta espalhada pelo código.
->
-> As portas que já existem, e que são o padrão a seguir:
->
-> | Porta | Variação que ela absorve |
-> |---|---|
-> | `SourceAdapter` | cada board, ATS e career page |
-> | `QueuePort` | tabela hoje, Upstash quando for para a web (ADR 0009) |
-> | `LlmPort` | Anthropic, OpenAI, o que vier — BYOK |
-> | `SkillCatalogPort` · `CandidateSkillPort` · `TargetCorpusPort` | contexto de skills (ADR 0007) |
->
-> **Regra de quando criar porta:** só onde a variação é real. Porta com uma
-> implementação e nenhuma alternativa plausível é cerimônia — ADR 0007 rejeita
-> isso explicitamente. Mas onde há troca previsível (provedor, serviço, board),
-> a porta é obrigatória.
->
-> **Domínio puro:** a lógica que decide fica em funções puras, sem banco, sem
-> rede, sem relógio. É o que torna `scoring/`, `skills/domain/` e `analytics/`
-> testáveis exaustivamente. Adapter é burro: busca, mapeia, devolve.
->
-> Estrutura para contexto novo (espelhe `src/contexts/skills/`):
-> ```
-> domain/     puro — tipos e regras
-> ports.ts    só as portas com variação real
-> app/        casos de uso, orquestração burra
-> infra/      o único lugar que conhece SQL ou HTTP
-> index.ts    composição por função, sem container
-> ```
-> Injeção é composição de função. Container seria ilegal sob a regra 5 (sintaxe apagável).
-
-> **5. Só sintaxe TypeScript apagável.**
-> Runtime é o type stripping nativo do Node 24: sem `enum`, sem parameter
-> properties, sem `namespace`, sem decorators. `erasableSyntaxOnly: true` no
-> `tsconfig.json`. Se `pnpm jho` estourar `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`,
-> é isso. Imports relativos carregam extensão `.ts` explícita.
-
-> **6. Mexeu no scorer ou em `profile.yaml`? Bump `SCORER_VERSION`.**
-> Fica em `src/core/scoring/score.ts` (hoje `1.4.1`). Depois
-> `pnpm jho jobs score --all`. Sem o bump, duas gerações de score convivem na
-> mesma coluna sem sinal visível. `tests/scorer-version.test.ts` guarda a
-> impressão da saída sobre um acervo fixo: saída nova com a versão antiga
-> reprova, e a mensagem traz a impressão a gravar junto com o bump.
-
-> **7. Não invente evidência.**
-> Tailoring de CV só cita o que está em `evidence:` no `profile.yaml`.
-> O que está em `growth:` é lacuna assumida — sinalize, nunca maquie.
-
-> **8. Dado faltante pontua neutro, nunca punitivo.**
-> Vaga sem data de publicação não é vaga velha; vaga sem descrição não é vaga
-> sem benefício. Punir ausência rebaixa a fonte pela qualidade da API dela, não
-> pela qualidade do emprego. `freshness` sem data vale 0,5; `benefits` em texto
-> curto vale 0,5 e **nunca** gera bloqueador.
-
-> **Token de UI não serve como cor de texto.** `--accent-2`, `--warn` e afins
-> são feitos para preenchimento, onde o mínimo é 3:1 — `--accent-2` no tema
-> graphy claro dá 2.53:1 contra o fundo do editor. Texto precisa de 4.5:1, e a
-> paleta de sintaxe do editor mora em `--cm-*`, verificada nos seis ambientes
-> por `pnpm test:e2e` lendo o estilo computado dos spans reais.
-
-> **O score é rubrica ponderada, não similaridade de cosseno.** Sete
-> componentes com teto fixo, casamento léxico por borda de palavra, curva
-> saturante na keyword e decaimento exponencial no frescor — nenhum embedding,
-> nenhum vetor, nenhum LLM no caminho. A razão é o caso de uso: sem autorização
-> de trabalho nos EUA, "W2 on-site em Austin" é **eliminatório**, e cosseno
-> diria 0,91 de similaridade porque o texto de fato se parece. Similaridade não
-> distingue "combina" de "é possível". Detalhe em `docs/scoring.md`.
-
-> **Escolha entre apelidos de campo decide pelo VALOR normalizado, nunca pela
-> presença da chave.** `{ company: { name: "  " }, employer: "Acme" }` entrava
-> como "Desconhecida" porque um objeto passa no teste de presença e `employer`
-> nunca era lido — e vaga sem nome de empresa some do `jho referrals`. É a regra
-> 17 um nível mais fundo.
->
-> **Limite sob concorrência reserva o slot ANTES do `await`.** A reserva
-> síncrona é atômica porque o laço de eventos não interrompe código síncrono;
-> conferir depois do `await` deixava N−1 workers passarem juntos.
-
-> **O service worker não guarda nada autenticado, e a ausência é a política.**
-> Só `static-` e `shell-` (`/offline.html`, gerado e sem credenciais). `/login`
-> nunca entra no cache. Sem `pages-`, sem `api-`, e
-> `/p/` também fora — público por escolha revogável, e cópia em disco não
-> obedece a revogação. Limpar no logout não bastaria: `logoutAction` não roda em
-> sessão vencida nem em aparelho perdido. `scripts/sw-template.js` é a fonte;
-> `public/sw.js` é gerado com a versão e ignorado pelo git.
-
-> **Documento de feature em `.compozy/tasks/`; o que sobrevive à feature em
-> `docs/`.** A fronteira é o ciclo de vida, e está na ADR 0011: spec, contrato
-> de testes e contexto técnico nascem e morrem com o slug; o grafo operacional
-> é projeção das relações remotas, conforme a regra 24. ADR, visão, personas,
-> histórico de backlog e mapa de contextos atravessam features. Parte de `docs/` é teste de
-> fitness — `pnpm check` abre `context-map.md` por caminho literal.
-
-> **Política correta não basta: a composição precisa respeitá-la.** `job:read` é
-> dos três papéis, mas `/jobs` guardava por escopo de candidato e o login
-> mandava todo mundo para `/` — um recrutador entrava com a senha certa e
-> recebia 403 em toda tela. Cada metade estava correta sozinha, e por isso
-> nenhum teste puro via. Cenário por papel em `pnpm test:e2e` é o que vê.
-
-> **Recuperar senha não revela quem está cadastrado.** Endereço existente e
-> inexistente recebem a mesma URL e o mesmo texto, redigido como "se existir uma
-> conta". Token de uso único, uma hora, queimado antes de gravar a senha; e
-> trocar a senha derruba TODAS as sessões, porque quem recupera costuma
-> suspeitar de acesso indevido. Sem `RESEND_API_KEY` o link vai para o terminal
-> — ausência de provedor não bloqueia produto — mas só em processo local: em
-> deployment o log é lido por outras pessoas e o link é credencial, então o
-> sistema só alerta, sem imprimir o link (`withheldMailer`).
-
-> **Hash de senha com tamanho errado NEGA acesso.** `verifyPassword` derivava a
-> chave com o comprimento do valor **gravado** em vez da constante `KEYLEN`: um
-> `password_hash` truncado produzia buffers vazios e `timingSafeEqual(vazio,
-> vazio)` aceitava qualquer senha. Dado corrompido em coluna de senha nega,
-> nunca concede — e o parâmetro do verificador nunca sai do valor verificado.
->
-> **FKs são contrato de dados, não detalhe de migration.** Toda alteração em
-> `REFERENCES` precisa declarar a ação `ON DELETE` no schema e no DDL aplicado;
-> `tests/cov-db-schema.test.ts` compara as duas camadas no PostgreSQL. Uma
-> divergência deixa a migration incompleta, mesmo que a sintaxe aceite a tabela.
-> Paridade não prova intenção: o Drizzle completa com `no action` o que ninguém
-> escreveu, e `tests/fk-delete-intent.test.ts` exige `onDelete` escrito em toda
-> FK, inclusive quando a escolha é `no action`.
-
-> **`/p/[slug]` é a única rota sem sessão, e o que ela mostra é lista de
-> permissão.** `publicProfile()` enumera os campos que saem; a página não
-> alcança o registro do candidato. Nunca saem e-mail, telefone, funil,
-> candidaturas nem piso salarial — o piso é a posição de negociação, e
-> publicá-la é mostrar a carta antes da mesa. Perfil não público responde
-> **404, não 403**: 403 confirma que o slug existe, e existência é informação.
-> O texto do currículo exige um SEGUNDO consentimento, e mesmo com ele o texto
-> publicado passa por `publicCvText()`: e-mail, telefone e o bloco do piso saem.
-
-> **Admin não lê dado privado; ele assume a identidade, e isso fica registrado.**
-> Três papéis: `admin`, `candidate`, `recruiter`. A sessão emprestada perde TODA
-> ação de administração em bloco, por `impersonatedBy !== null` e não por papel
-> — o alvo pode ser outro admin. Ninguém além do próprio candidato cria vínculo
-> recrutador↔candidato, e nenhuma conta nova é apontada para candidato
-> existente: os dois seriam leitura de CV alheio por procuração.
-
-> **Só 404 e 410 fecham uma vaga.** 401/403/429 são bloqueio de robô, não prova
-> de ausência — o Himalayas devolve 403 em toda requisição, e fechar nele
-> apagaria uma fonte viva inteira. 5xx e falha de rede não decidem nada. A
-> regra é função pura em `src/core/ingest/probe.ts` justamente porque é a única
-> capaz de esconder uma vaga boa por engano. `alive` reabre: um 404 transitório
-> não pode sumir com a vaga para sempre.
-
-> **Guarda de configuração recusa quem pede MENOS, nunca quem pede o mesmo ou
-> mais.** A validação da URL do banco recusava qualquer `sslmode`, e a
-> integração do Supabase com a Vercel cadastra `POSTGRES_URL` **com**
-> `sslmode=require`: o corte de produção da 1.13.1 subiu e devolveu 500 em toda
-> página que toca o banco, por 28 minutos. A guarda existe para impedir
-> `sslmode=disable` — quem afrouxa. `require` pede exatamente o que o cliente já
-> impõe, e recusá-lo só impedia o provedor de configurar o próprio serviço.
-> A regra geral: valide contra o que a política **perde**, não contra a
-> presença do parâmetro. E use lista de permissão, para que valor desconhecido
-> recuse — afrouxamento inventado depois não passa por omissão.
->
-> **Variável de provedor não é legível: teste com o valor que ele cadastra.**
-> `POSTGRES_URL`, `POSTGRES_PASSWORD` e `DATABASE_CA_CERT` estão marcadas
-> **Sensitive** na Vercel, e Sensitive é *write-only* — não volta pela API, pelo
-> painel, nem pelo `vercel env pull`, que devolve `[SENSITIVE]`. Ninguém, nem o
-> dono da conta, confere aquele valor antes de mesclar. Então a única defesa
-> possível é o teste usar a forma REAL que o provedor cadastra, query string
-> inclusive. A suíte inteira montava URL limpa aqui dentro, e por isso a única
-> combinação capaz de quebrar era exatamente a que nunca era exercitada.
-
-> **9. Texto de interface vem do dicionário, nunca do JSX.**
-> Isto inclui **rótulo dentro de constante**: `COMPONENTS` em `app/ui.tsx`,
-> `FIELD_LABEL` no modal, `CATEGORY_LABEL` nas skills e `THEMES[].description`
-> guardavam texto pronto. Constante guarda **chave** — texto em constante não
-> aparece em busca por string no JSX e sobrevive a uma revisão de tradução
-> inteira.
->
-> **Antes de criar chave, procure a existente.** `candidate.edit`,
-> `vocabulary.title` e `nav.appearance` já estavam no dicionário e sem uso: a
-> tradução existia e o componente a ignorava. Chave duplicada é erro de
-> compilação, o que ajuda, mas só depois do trabalho perdido.
->
-> `pnpm test:e2e` percorre em inglês as rotas das listas `ENGLISH_*_SWEEP` de
-> `tests/e2e/routes.mjs` (como dono, sem sessão e depois de criar trilhas) e
-> reprova por dois critérios: texto que **é**
-> valor do dicionário português, e texto com acento. A primeira
-> versão desta verificação usava lista de palavras escrita à mão — ela passava
-> com "Editar", "Vocabulário" e "Práticas" na tela, porque a lista era o
-> inventário do que já tinha sido corrigido. Dado do usuário fica de fora por
-> `data-user-content`: o currículo tem "São Paulo" e continua tendo em inglês.
->
-> **A lista decide o que é medido; os dois critérios, o que reprova.** Uma tela
-> em `UNMEASURED_PAGES` passa nos dois critérios sem ser medida — e numa tela listada,
-> literal de JSX só reprova se tiver acento ou já for valor do dicionário
-> português. `Ver vaga na origem` e `visto em` passariam mesmo com a rota na
-> lista. A lista é necessária, não suficiente: a regra acima (texto vem do
-> dicionário) continua sendo a defesa, e a varredura é a rede.
-> Foi assim que `/jobs/<id>`, a tela mais aberta do produto, serviu `← vagas`,
-> `Ver vaga na origem` e `visto em` em português com a interface em inglês, desde
-> que existe. E ela só pôde entrar na lista depois de o nome da empresa, a
-> localização e o rótulo da fonte ganharem `data-user-content`, porque esse texto
-> vem do acervo e é acentuado de direito. Por isso a publicação varrida é
-> acentuada (`São Paulo, …`): numa fixture sem acento, tirar a marca não
-> reprovaria nada. Rota nova entra nas listas no mesmo commit que a cria — e
-> `tests/e2e-route-coverage.test.ts` cruza as listas com o inventário de
-> páginas: página sem varredura nem exceção registrada em `UNMEASURED_PAGES`
-> reprova o `pnpm check`. A varredura também confere o destino: ser mandada ao
-> `/login` no lugar da tela pedida é falha, não medição limpa.
-> `pt-BR` e `en` em `src/core/i18n/`. As chaves são tipadas contra o dicionário
-> português, então tradução faltando é erro de compilação — e não espaço em
-> branco descoberto por um usuário. Página obtém o tradutor com
-> `getTranslator()`; string literal no JSX é tradução que nunca vai existir.
->
-> **Teste que busca controle por texto quebra quando alguém traduz.** Use
-> `data-testid` para controle e texto só para conteúdo.
-
-> **10. Todo frontend segue o sistema de temas.**
-> Três temas — **HP**, **Huly**, **Graphy** — cada um com ambiente claro e
-> escuro, e um terceiro estado que segue o sistema operacional. Definidos em
-> `app/themes.css`, registrados em `src/core/theme.ts`.
->
-> **Componente lê só token semântico:** `--background`, `--foreground`,
-> `--card`, `--primary` (superfície de botão), `--primary-text` (link e texto
-> de acento — contrasta com o FUNDO, não com o botão), `--border`, `--muted`,
-> `--hairline`, `--good`, `--warn`, `--bad`, `--accent-2`.
-> Um `#hex` ou um token bruto (`--color-iris`) num componente é o tema vazando,
-> e a partir daí um dos temas começa a ficar errado.
->
-> Tema novo = um bloco em `themes.css` + uma linha em `theme.ts`. Nada em
-> `components/` muda.
-> **Nunca use `max-w-xs`, `max-w-sm`, `max-w-md`, `max-w-lg` nem `max-w-xl`**
-> (idem `w-`, `h-`, `min-w-`). O Tailwind v4 resolve esses nomes por
-> `--spacing-<nome>`, e o DESIGN.md nomeia os espaçamentos assim — `max-w-xs`
-> vale 8px, não 320px. Use valor explícito. Coberto por teste.
-> A fonte da especificação é **Forma DJR Micro**, proprietária. O projeto usa
-> **Inter** (~85% de similaridade, OFL-1.1) e a substituição está documentada
-> no topo de `app/design-tokens.css`. Com Adobe Fonts, troque só `--font-sans`.
-> `DESIGN.md` (raiz) é a fonte da verdade visual — cores, tipografia, escala de
-> espaçamento, raios, motivos. Ele já está traduzido em `app/design-tokens.css`
-> (28 cores, 16 estilos de texto, 8 raios, 8 espaçamentos) e em `app/globals.css`.
->
-> **Tela nova, componente novo, ajuste visual: derive dos tokens existentes.**
-> Nunca escreva cor, tamanho de fonte ou espaçamento fora da escala — nem
-> "só desta vez", nem "um valor aproximado". Se algo parece faltar no sistema,
-> a resposta é compor com o que existe, não inventar um valor novo.
->
-> Na prática: use `var(--color-*)`, as classes `type-*`, e os utilitários de
-> espaçamento do Tailwind já mapeados. Um `#hex` literal ou um `text-[13px]`
-> num componente é sinal de que a regra foi quebrada — há teste cobrindo isso.
->
-> Vale igual para responsividade: **toda tela precisa funcionar no celular**
-> (ver regra 10). Um layout que só existe no desktop não cumpriu o DESIGN.md.
-
-> **11. Toda tela funciona no celular.**
-> Verificado por `pnpm test:e2e`, que mede `scrollWidth` real em 375px. Teste
-> estático não pega estouro horizontal — os dois que existiam passavam por
-> todos os greps e só apareceram num browser.
-> `export const viewport` com `width: device-width` no layout raiz — sem isso o
-> telefone renderiza a 980px e todo o CSS responsivo vira código morto. Grid de
-> múltiplas colunas precisa de fallback de coluna única; nada de largura fixa
-> acima de 360px; nunca limite o zoom. Coberto por `tests/mobile.test.ts`.
-
-> **12. O dashboard nunca faz bind fora de `127.0.0.1`.**
-> Não há autenticação nenhuma, e ele serve CV, funil e piso salarial. Em rede
-> compartilhada isso é publicação. `--hostname 127.0.0.1` nos scripts `dev` e
-> `start`; travado por teste. Ver `docs/security.md`.
-
-> **13. Nada neste sistema envia uma candidatura.**
-> `jho prep` monta o dossiê; quem envia é o usuário. Automatizar envio antes de
-> a triagem estar calibrada acelera o gargalo errado, e candidatura enviada não
-> volta. ADR 0010 define as três condições para reavaliar.
-
-> **14. Autenticação é exigida por omissão.**
-> Nenhuma página nem API responde sem sessão válida — inclusive `/api/export`,
-> que carrega o acervo inteiro. O modo aberto existe mas precisa ser pedido —
-> `JHO_AUTH_MODE=open` — e só vale na máquina local: em deployment o código
-> ignora o pedido (`src/contexts/auth/domain/open-mode.ts`). "Só roda em
-> loopback" protege contra a internet, não contra outro processo, outra conta
-> da máquina, nem contra um bind errado — que já aconteceu aqui. Segurança
-> por omissão é a omissão ser a opção segura.
->
-> Primeiro acesso: `jho auth add-user <email> --role admin,candidate` e
-> `jho auth set-password <email>`. Sem conta cadastrada, `/login` mostra esses
-> dois comandos em vez de um formulário sem saída.
-
-> **15. Autorização passa por `can()`, e o escopo vem da sessão.**
-> Toda Server Action chama `guard(...)` **antes** de qualquer efeito, e **toda
-> página chama `requirePage(...)`** — guardar só as actions deixa o dado
-> legível por quem não tem sessão. `proxy.ts` é a rede grossa (existe
-> cookie?), a página é a checagem real (o cookie vale?). Nenhuma action aceita
-> `candidateId` da própria entrada — id em FormData é pedido, não prova.
-> Entrada sem guarda só existe como exceção registrada, com o que a substitui:
-> `passwordLoginAction` (onde a sessão nasce, protegida por limite de
-> tentativas), recuperação de senha, logout, encerrar impersonação
-> (`stopImpersonatingAction`), preferência de interface, as telas `/login`,
-> `/login/callback`, o cron por segredo e `/p/[slug]`. As exceções de action
-> vivem em `tests/support/entry-inventory.ts`, as de página e rota em
-> `tests/architecture.test.ts`, e o inventário descobre toda página,
-> Route Handler e export `"use server"` pela semântica do Next — entrada nova
-> sem política reprova. A decisão mora em `src/contexts/auth/domain/policy.ts`,
-> é pura, e nega por padrão. `tests/entry-denial.test.ts` prova a negação
-> antes de qualquer efeito; detalhes em `docs/security.md`.
-
-> **16. Chave de API nunca vai para o banco.**
-> O cadastro de provedores guarda o **nome da variável de ambiente**, jamais a
-> chave. Banco é copiado, versionado em backup e aberto por outros processos —
-> chave dentro dele viaja junto. BYOK só é promessa cumprida se for estrutural.
-> Há teste asserindo que nenhuma coluna guarda chave e que nada a imprime.
-
-> **17. `??` não protege contra string vazia.**
-> Várias APIs devolvem `""` para campo não preenchido. Use `firstNonEmpty()`
-> de `src/core/sources/http.ts`. Esse bug já apagou 4.538 descrições uma vez.
-
-> **18. Tarefa nasce em worktree a partir de `dev`, e a PR aponta para `dev`.**
-> Nunca comite direto em `dev`, `staging` ou `main`. A promoção para `staging` é
-> automática e a de `staging` para `main` é humana — ver **Fluxo de trabalho**
-> abaixo. Um commit direto em `staging` faz as branches divergirem e trava a
-> promoção seguinte, com o sintoma aparecendo dias depois da causa.
+- Política correta não basta: login e guarda de tela precisam funcionar para
+  cada papel — cenário por papel no E2E. [[G16](docs/engineering/rules/security.md#g16)]
+- Admin não lê dado privado: assume a identidade, fica registrado, e a sessão
+  emprestada perde toda ação de administração. Ninguém além do candidato cria
+  vínculo com recrutador; conta nova nunca aponta para candidato existente.
+  [[G24](docs/engineering/rules/security.md#g24), [G25](docs/engineering/rules/security.md#g25)]
+- Recuperar senha não revela quem está cadastrado; token de uso único, uma hora,
+  queimado antes de gravar; trocar a senha derruba todas as sessões; em
+  deployment o link nunca vai para o log. Hash de senha corrompido **nega**.
+  [[G17](docs/engineering/rules/security.md#g17)–[G19](docs/engineering/rules/security.md#g19)]
+- `/p/[slug]` é a única rota de conteúdo sem sessão e mostra só a lista de
+  permissão: nunca e-mail, telefone, funil, candidaturas nem piso salarial.
+  Não público responde **404**. Texto do CV exige segundo consentimento e
+  continua filtrado. [[G21](docs/engineering/rules/security.md#g21)–[G23](docs/engineering/rules/security.md#g23)]
+- O service worker não guarda nada autenticado: só `static-` e `shell-`; nunca
+  `/login`, páginas, API nem `/p/`. [[G14](docs/engineering/rules/security.md#g14)]
+- Só 404 e 410 fecham vaga; 401/403/429, 5xx e rede não decidem nada.
+  [[G26](docs/engineering/rules/data-and-sourcing.md#g26)]
+- FK declara `ON DELETE` escrito no schema e igual no DDL.
+  [[G20](docs/engineering/rules/data-and-sourcing.md#g20)]
+- Guarda de configuração recusa quem pede **menos** (lista de permissão), e
+  variável Sensitive se testa com a forma que o provedor cadastra — nunca se
+  extrai. [[G27](docs/engineering/rules/data-and-sourcing.md#g27), [G28](docs/engineering/rules/data-and-sourcing.md#g28)]
+- Limite sob concorrência reserva o slot **antes** do `await`.
+  [[G13](docs/engineering/rules/data-and-sourcing.md#g13)]
+- O score é rubrica ponderada determinística, sem embedding nem LLM:
+  "W2 on-site em Austin" é eliminatório, e similaridade não vê isso.
+  [[G11](docs/engineering/rules/matching-and-evidence.md#g11)]
+- Token de preenchimento (`--accent-2`, `--warn`) não serve como cor de texto
+  (4.5:1); sintaxe do editor usa `--cm-*`. [[G32](docs/engineering/rules/frontend.md#g32)]
+- Produção não sai sem gente: a PR `staging → main` nunca é mesclada por robô
+  ou agente. [[G46](docs/engineering/rules/delivery.md#g46)]
 
 ---
 
-## Fluxo de trabalho
+## Roteador: o que ler antes de mexer
 
-Guia operacional curto: [começar, retomar, validar e limpar](docs/engineering/workflow.md).
-Antes de iniciar ou retomar, consulte a issue e a execução remotas conforme a
-regra 24; confira `rtk git status --short --branch` e `rtk pnpm worktrees`.
-Preserve alterações pendentes antes de reconciliar a raiz;
-HEAD já presente em `dev` não prova que uma worktree com WIP pode ser removida.
+| Antes de alterar… | Leia |
+|---|---|
+| autenticação, sessão, papéis, perfil público, cache, segredos, rede, LinkedIn, dossiê | [rules/security.md](docs/engineering/rules/security.md), [security.md](docs/security.md) |
+| estrutura de `src/`, contexto novo, porta, fila, runtime | [rules/architecture.md](docs/engineering/rules/architecture.md), [architecture.md](docs/architecture.md), [MIGRATION.md](MIGRATION.md), [ADR 0009](docs/adr/0009-fila-de-raspagem.md) |
+| schema, FK, migration, ingestão, fonte, cota, retenção, e-mail | [rules/data-and-sourcing.md](docs/engineering/rules/data-and-sourcing.md), [data-model.md](docs/data-model.md), [sources.md](docs/sources.md), [email-ingestion.md](docs/email-ingestion.md), [sources-autenticadas.md](docs/sources-autenticadas.md) |
+| scorer, `profile.yaml`, peso, componente | [rules/matching-and-evidence.md](docs/engineering/rules/matching-and-evidence.md), [scoring.md](docs/scoring.md) |
+| tela, componente, texto de UI, tema | [rules/frontend.md](docs/engineering/rules/frontend.md), [DESIGN.md](DESIGN.md) |
+| prompt de LLM | [docs/prompts/system/](docs/prompts/system/README.md) |
+| envio de candidatura (mesmo que só "estudar") | [ADR 0010](docs/adr/0010-submissao-autonoma.md) |
+| funcionalidade nova | [vision.md](docs/product/vision.md), [personas.md](docs/product/personas.md) |
+| branch, PR, release, QA, docs, skills | [rules/delivery.md](docs/engineering/rules/delivery.md), [workflow.md](docs/engineering/workflow.md) |
+| produção, variáveis, ambientes | [deploy.md](docs/engineering/deploy.md), [operations.md](docs/operations.md) |
+
+Comandos: [docs/cli.md](docs/cli.md) (há uma referência rápida no topo).
+Índice geral: [docs/README.md](docs/README.md). O que ainda não existe:
+[roadmap.md](docs/roadmap.md) — **não descreva como pronto o que não está.**
+
+---
+
+## Começar ou retomar
+
+1. Leia a issue remota e verifique a posse da execução (regra 24).
+2. `rtk git status --short --branch` e `rtk pnpm worktrees`. Preserve WIP
+   (patch **e** não rastreados) antes de reconciliar a raiz; HEAD já presente em
+   `dev` não prova que uma worktree com WIP pode ser removida.
+3. Trabalho novo: worktree `<tipo>/<slug>` a partir de `origin/dev`.
+
+Roteiro completo, com os comandos de claim e retomada:
+[workflow.md](docs/engineering/workflow.md).
+
+## Fluxo curto
 
 ```
 worktree/tarefa → check/e2e aplicável → QA de jornada aplicável → auditoria de agente aplicável → docs/ + changelogs → deslop → deep-review → ship-pr → PR → dev → (automático) → staging → PR humana → main → tag + volta para dev
 ```
 
-O passo `docs/` é a regra 23: antes da revisão, a documentação que passou
-a valer é atualizada, ou a PR declara em uma linha por que nada mudou.
-O changelog entra no mesmo passo porque responde a outra pergunta — o que
-mudou, e não como é agora.
-
-| Etapa | Quem faz | Como |
-|---|---|---|
-| tarefa → `dev` | pessoa ou agente | worktree a partir de `dev`, PR com CI verde |
-| `dev` → `staging` | automático | `promover-para-staging.yml`, às 15:00 e 21:00 UTC, com a ponta de `dev` de CI verde (ou dispatch com `target-sha`) |
-| `staging` → `main` | **humano** | PR aberta pelo robô, mesclada por gente |
-| tag + `main` → `dev` | automático | `sincronizar-apos-main.yml` |
-
-**Fast-forward, não merge, de `dev` para `staging`.** Nada nasce em `staging`;
-um merge criaria ali um commit que não existe em `dev`, e a partir dele as duas
-divergiriam para sempre. O que está em `staging` é literalmente o que passou no
-CI de `dev`.
-
-**Produção não sai sem gente.** A PR `staging → main` é aberta e nunca mesclada
-por robô.
-
-**Toda PR tem responsável atribuído.** Antes de abrir ou mesclar uma PR,
-confira a identidade local com `git config user.name` e `git config user.email`,
-confirme o login da sessão com `gh api user --jq .login` e atribua a PR com
-`gh pr edit <número> --add-assignee @me` (neste projeto, `andreustimm`). Se o
-cliente GraphQL falhar por causa do recurso legado Projects, use o endpoint
-REST equivalente: `gh api --method POST repos/andreustimm/master-jobs/issues/<número>/assignees -f 'assignees[]=andreustimm'`.
-Nenhuma PR pode ser deixada sem assignee.
-
-**A issue fecha quando o código chega a produção.** Pelo menos um commit da
-PR leva na mensagem `Closes #N` para cada issue entregue por inteiro (`Refs #N`
-quando parcial). Como a PR aponta para `dev` e a branch padrão é `main`, a
-palavra-chave na descrição não fecha nada; na mensagem do commit, o GitHub
-fecha a issue quando esse commit entra em `main`. Detalhe em
-`docs/engineering/workflow.md` ("Entregar e limpar").
-
-**`dev`, `staging` e `main` são branches permanentes e nunca são apagadas.**
-Elas representam os ambientes e o caminho de promoção; permanecem no remoto e
-nos clones locais mesmo depois de qualquer promoção ou retorno.
-
-**Branch de trabalho é `<tipo>/<slug>`, com os tipos do Conventional Commits.**
-`feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`, `ci`, `build`,
-`style` ou `revert`, e slug minúsculo, com letras e números separados por `-`
-ou `.`: `feat/busca-por-tecnologia`, `fix/filtro-de-estagio`, `fix/node-24.19`.
-O prefixo da branch anuncia o tipo dos commits que ela entrega; quem decide o
-bump de versão continua sendo o prefixo de cada commit, não o nome da branch.
-O nome nunca carrega a ferramenta que abriu a branch. `.githooks/pre-push` recusa
-nome fora do padrão; `codex/*` é legado aceito, para que branches abertas antes
-da convenção sigam publicáveis sem renomear.
-
-**Branch de trabalho mesclada é excluída — local e remota.** Assim que a PR de
-uma branch de trabalho entra em `dev` (ou em `main`), a branch e sua
-worktree são removidas: `git worktree remove` (desbloqueando antes, se estiver
-locked), `git branch -d` e `git push origin --delete <branch>`. A remota é tão
-obrigatória quanto a local — deixar branches de trabalho mortas cria uma
-floresta que ninguém sabe se ainda vale. Branch de trabalho ainda não mesclada
-fica até entrar.
-
-**Migração suspende a promoção automática.** Diferença em `drizzle/` ou em
-`src/core/db/schema.ts` entre `staging` e `dev` para o fluxo: o deploy da Vercel
-e a migração disparam do mesmo push e não se conhecem. Migração aditiva
-sobrevive a essa corrida; migração que remove ou renomeia, não — e decidir qual
-é qual é leitura humana.
-
-**O retorno para `dev` não é opcional.** Hotfix nasce em `main`, e correção nos
-próprios arquivos de fluxo também. Sem devolver, `dev` fica sem esses commits e
-a promoção seguinte deixa de ser fast-forward.
-
-**Sobre o `RELEASE_PAT`.** Push feito com o token padrão da Action não dispara
-outros workflows — trava anti-recursão do GitHub. Sem o segredo o fluxo funciona
-e é seguro, porque o código promovido é bit a bit o que passou no CI de `dev`;
-com ele, `staging` e as PRs geradas também recebem checks próprios.
-
-| Ambiente | Branch | Banco PostgreSQL | Endereço |
-|---|---|---|---|
-| Produção | `main` | Supabase (`production`) | `jobs.mastertimm.com.br` |
-| Staging | `staging` | fixture isolada (pendente) | `jobs-staging.mastertimm.com.br` |
-| Dev | `dev` | fixture isolada (pendente) | `jobs-dev.mastertimm.com.br` |
-| Local | — | PostgreSQL Docker (`127.0.0.1:5432`) | `127.0.0.1:3000` |
-
-> **19. Antes de abrir PR, rode a revisão profunda.**
-> `/deep-review` (skill em `.claude/skills/deep-review/`) revisa o diff com
-> evidência causal, cobertura por hunk e veredito **SHIP / FIX_BEFORE_SHIP /
-> REWORK**. Rode ANTES de pedir revisão humana: o CI prova que o código roda, e
-> a revisão profunda diz se ele está certo — são perguntas diferentes.
-> Com `--publish` ela comenta na PR; sem a flag, fica local em `.deep-review/`.
-> Um `FIX_BEFORE_SHIP` ignorado é uma decisão, e vai escrita na descrição da PR.
-
-> **20. Mudança percebida por usuário atualiza e percorre o QA vivo.**
-> `qa-report` planeja em `docs/qa/`; `qa-execution` percorre essas jornadas pela
-> interface pública e escreve os resultados de volta na mesma árvore. Antes da
-> PR, mudança visível segue a cadência definida em `docs/qa/README.md`. Mudança
-> sem efeito visível declara isso no handoff e não inventa sessão. Antes da PR
-> humana `staging → main`, release candidate cumpre o tier **full**. QA de
-> jornada não substitui `rtk pnpm check`,
-> `rtk pnpm test:e2e` nem `deep-review`; são provas diferentes.
->
-> **Implementador mantém o tracker vivo.** Comportamento novo cria cenário
-> `untested`; comportamento alterado reseta os cenários afetados para
-> `untested`; refactor puro declara "sem mudança visível". IDs, charters, bugs,
-> relatórios e evidências seguem o contrato de `docs/qa/README.md`.
-> PR apenas de Markdown ou metadados de skills, sem alteração de runtime, usa
-> validação estrutural proporcional e não precisa rodar suítes unitárias/E2E.
-
-> **21. Commit releaseável carrega a nota em um fragmento de changelog.**
-> Se a leva desde a última tag contém `fix:`, `feat:` ou outro commit que pede
-> bump, a PR adiciona `changelog.d/<slug-da-branch>.md` com os blocos
-> `## Técnico`, `## pt-BR` e `## en` (cada um com `### Seção` e itens `- `;
-> `pt-BR` e `en` podem ser só `<!-- sem-nota-usuario -->`, os dois juntos).
-> **Não edite** o `## [Unreleased]` de `CHANGELOG.md`, `USER_CHANGELOG.pt-BR.md`
-> e `USER_CHANGELOG.en.md`: cada PR editando os mesmos três trechos reabria
-> conflito em todas as outras a cada merge. A promoção junta os fragmentos no
-> carimbo da versão e os apaga no commit de release. Não deixe para a promoção
-> descobrir erro: `.githooks/commit-msg` valida o índice (fragmento malformado
-> reprova mesmo sem bump), e o CI repete o mesmo gate com
-> `pnpm check:release-ready`. `pnpm install` ativa os hooks versionados via
-> `core.hooksPath=.githooks`. O commit automático `chore(release): X.Y.Z` é a
-> única exceção, porque ele vem depois do preflight. Entrada escrita direto no
-> `Unreleased` ainda é aceita, só durante a transição. Formato e exemplo em
-> `docs/engineering/workflow.md`.
-
-> **22. Toda tag SemVer tem uma GitHub Release.**
-> A tag `vX.Y.Z` e a entrada `## [X.Y.Z]` do changelog técnico são a fonte da
-> release. Tags anteriores à primeira versão documentada recebem somente a
-> nota histórica padrão; qualquer lacuna posterior interrompe a sincronização.
-> Não publique
-> texto paralelo manualmente. O workflow pós-`main` roda
-> `scripts/release/github-releases.ts --apply`, cria somente as releases
-> ausentes e preserva as existentes. Isso inclui backfill: uma tag histórica
-> sem release é dívida detectável e reparada na próxima sincronização.
-
-> **23. O changelog conta o que mudou; `docs/` conta como é agora.**
-> São perguntas diferentes, e só o changelog deixa a segunda envelhecer em
-> silêncio: quem chega depois lê uma pilha de "foi alterado" e nunca encontra
-> "é assim". Tarefa fechada revisa `docs/` e atualiza o que passou a valer —
-> recurso novo, contrato mudado, invariante descoberta, armadilha aprendida.
->
-> A fronteira continua a da ADR 0011: `.compozy/tasks/` nasce e morre com o
-> slug; `docs/` atravessa. O que muda aqui é a obrigação de olhar.
->
-> | Se a mudança toca | Atualize |
-> |---|---|
-> | schema, FK, migration | `docs/data-model.md` |
-> | adapter, board, elegibilidade | `docs/sources.md` |
-> | scorer, componente, peso | `docs/scoring.md` |
-> | comando, flag, saída | `docs/cli.md` |
-> | contrato de URL, estado de filtro | `docs/product/` |
-> | invariante de produção, limite, pool | `docs/operations.md` |
-> | decisão que restringe o futuro | ADR em `docs/adr/` |
->
-> **PR sem alteração em `docs/` declara por quê**, na descrição, em uma linha —
-> do mesmo jeito que a regra 20 faz com QA. "Correção interna, sem contrato
-> alterado" é resposta legítima e frequente; ausência de resposta não é.
-> Declarar é barato e mantém a pergunta viva; ritual obrigatório viraria
-> carimbo, e carimbo não informa ninguém.
-
-> **24. A issue e o GitHub Project 3 são a autoridade operacional da tarefa.**
-> Toda demanda, inclusive pequena, precisa de issue vinculada ao Project antes
-> de execução. Estado, prioridade, assignee e dependências vêm do remoto; specs,
-> código e evidências continuam em Git. Antes de iniciar ou retomar, leia o
-> remoto com `rtk pnpm tasks show <issue> --json` e verifique a posse da execução.
-> Claim identifica execução + branch + worktree, não apenas a pessoa.
->
-> Escritas usam comandos coordenados com revisão e UUID de operação, aguardam
-> recibo e não sobrescrevem tarefas concorrentes por bulk sync. Sem confirmação
-> remota, não declare sucesso nem trabalhe sob recibo local vencido. Resultados
-> de QA/review e frontmatter `completed` não concluem a issue: a conclusão exige
-> prova da **Entrega exigida**, que pode ir além do merge em dev.
->
-> `.compozy/tasks/`, memória e backlog local guardam contexto autoral, histórico
-> ou projeções identificadas; nunca comandam estado, prioridade ou relações.
-> Isso prevalece sobre instruções genéricas das skills `cy-*` e vale nos três
-> harnesses mesmo sem invocar skill. O roteiro único de criação, claim, retomada,
-> transferência e falha remota está em `docs/engineering/workflow.md`.
->
-> **Integração em dev não é ativação.** Durante o bootstrap do épico #181,
-> o coordenador registra a execução na issue enquanto constrói o escritor.
-> O corte exige código confiável de `issue_comment` na default `main`,
-> `PROJECTS_TOKEN` e chave do escritor validados, preflight e piloto confirmados. Até esse corte,
-> não anuncie enforcement ativo. Produção continua dependente de ação humana.
-
----
-
-
-## Skills compartilhadas pelos três harnesses
-
-Skill de projeto é instalada **uma vez** em `.claude/skills/<nome>/`.
-`.codex/skills` e `.opencode/skills` são links simbólicos para
-`../.claude/skills`, portanto Codex, Claude Code e OpenCode leem exatamente o
-mesmo conteúdo. Nunca copie uma skill para os três diretórios: atualização e
-remoção acontecem somente na cópia canônica.
-
-O conjunto instalado cobre o ciclo inteiro: `documentation-writer` na autoria,
-`drizzle-safe-migrations` em schema, `a11y-testing` no E2E,
-`agent-output-audit` para conferir tarefas de agentes, `deslop` antes da revisão
-e `ship-pr` depois do veredito de `deep-review`. Regras desta página sempre têm
-precedência sobre exemplos genéricos das skills — em especial RTK, base `dev`,
-worktree obrigatória, PostgreSQL/Supabase e os gates deste repositório.
-O binding da regra 24 também prevalece sobre status/grafo locais sugeridos por
-skills globais: adapte o procedimento neste projeto, sem editar a instalação
-global nem criar cópias por harness.
-
-
-## QA de jornada
-
-As skills `qa-report` e `qa-execution` formam um único ciclo, com estado
-durável e versionado em `docs/qa/`. Invoque `qa-report` com o argumento
-`docs/qa` para planejar; depois invoque `qa-execution` com o mesmo argumento
-para dogfooding e write-back. Essa formulação é intencionalmente neutra entre
-Codex, Claude Code e OpenCode.
-
-**Ordem para mudança visível:** implementação → `rtk pnpm check` e E2E aplicável →
-`qa-report` (tier targeted) → `qa-execution` → correções/reteste governados →
-suite completa → `deep-review` → PR para `dev`.
-
-`qa-execution` exige build alcançável com paridade de produção, autenticação
-real e suíte automatizada verde. Ela não usa mocks, banco, endpoints internos
-nem devtools para substituir interação ou verificação pela interface pública;
-devtools continuam permitidos para configurar e observar o ambiente da persona,
-como throttling de rede. O resultado só é `Pass` quando o observável sobrevive
-a refresh e é confirmado por uma leitura independente. Pernas que exigem ação humana ficam
-`Blocked (needs human verify)` com instruções exatas.
-
-O escopo de cada tier é definido uma única vez em `docs/qa/README.md`; esta
-seção define a ordem e os gates, não duplica a cadência.
-
-Artefatos autorais (`personas`, `journeys`, `scenarios`, `charters`, `bugs` e
-`reports`) são commitados. `docs/qa/state.csv` é uma visão gerada e
-`docs/qa/evidence/` guarda evidência volumosa local/CI; ambos ficam ignorados.
-Como a visão não é versionada, quem confere o esquema dos cenários é
-`pnpm check:qa-tracker`, dentro do `pnpm check` e do CI: registro fora do
-esquema reprova o gate local e a PR — nenhum hook o roda no commit.
-Mudanças apenas na documentação ou nos metadados das skills validam estrutura,
-links e scripts afetados; não disparam a suíte do produto sem risco de runtime.
-O navegador de jornada é a dependência local fixada `agent-browser`; instale o
-Chrome uma vez com `rtk pnpm qa:browser:install` e invoque comandos com
-`rtk pnpm exec agent-browser`.
-
-
-## Revisão profunda
-
-A skill `deep-review` roda o pipeline de revisão em seis etapas com artefatos
-idempotentes em `.deep-review/`. Como toda skill do projeto, é alcançada pelos
-três harnesses a partir da única cópia canônica em `.claude/skills/`.
-
-```bash
-/deep-review --base origin/dev    # diff contra dev, relatório local
-/deep-review --pr 7               # uma PR do GitHub
-/deep-review --worktree --base origin/dev # trabalho não commitado
-/deep-review --pr 7 --publish     # comenta na PR
-```
-
-**Onde entra no fluxo:** depois do CI verde e antes do merge em `dev`. O CI prova
-que o código roda; a revisão profunda diz se ele está certo. Uma coisa não
-substitui a outra, e o veredito não é conselho — `FIX_BEFORE_SHIP` ignorado vira
-uma linha na descrição da PR dizendo por quê.
-
-**O que ela recusa a fazer:** aplicar correção. Ela revisa e relata; quem
-corrige decide o que aceitar. Essa separação é a garantia real, e ela não
-depende de quem aperta o botão.
-
-**O agente invoca.** O frontmatter teve `disable-model-invocation` até
-2026-09-20, e o custo apareceu: sete PRs seguiram para produção sem revisão
-profunda porque a única pessoa que podia rodá-la estava ocupada revisando o
-resto. Gate que só um humano dispara não é gate — é fila. A decisão passou a
-ser a oposta: o agente roda a revisão em toda PR, e a pessoa lê o veredito.
-Publicar na PR continua exigindo `--publish` ou autorização explícita.
-
-O mesmo vale para `qa-report`, `qa-execution`, `agent-output-audit` e
-`ship-pr`.
-
-Configuração opcional em `.deep-review.yaml` na raiz; sem ela, o padrão do
-repositório vale, e `path_instructions` do `.coderabbit.yaml` é lido como
-fallback para quem vier de lá.
-
----
-## Comandos
-
-> **Os comandos abaixo usam `pnpm jho`.** Para digitar só `jho`, instale o
-> atalho uma vez: `ln -sf "$PWD/bin/jho" ~/bin/jho` (com `~/bin` no `PATH`).
-> Ele funciona de qualquer subdiretório do projeto.
-
-```bash
-rtk pnpm install
-rtk pnpm qa:browser:install       # Chrome usado pelo QA de jornada
-rtk pnpm dev                     # dashboard em localhost:3000
-
-# banco
-rtk pnpm jho db migrate          # cria/atualiza o schema
-rtk pnpm jho db seed             # conta do dono + skills + provedores + posicionamento
-rtk pnpm jho db prune --days 90  # remove vagas fechadas sem candidatura
-
-# sourcing
-rtk pnpm jho jobs sync           # busca todas as fontes + pontua
-rtk pnpm jho jobs score --all    # repontua tudo
-rtk pnpm jho jobs verify         # checa se as vagas do topo ainda existem (404 → fecha)
-rtk pnpm jho jobs add <url>      # cadastra vaga por URL, resolvendo pelo ATS
-rtk pnpm jho jobs import <file> --source revelo   # importa JSON de plataforma logada
-rtk pnpm jho sources list        # saúde das fontes
-rtk pnpm jho sources probe ashby textlayer        # testa um handle sem gravar
-rtk pnpm jho sources snippet revelo               # extrator para plataforma logada
-
-# autenticação
-rtk pnpm jho auth seed <email>   # cria a conta do dono, senha gerada e mostrada uma vez
-rtk pnpm jho auth status         # modo e contas
-rtk pnpm jho auth add-user <email> --role admin,candidate
-rtk pnpm jho auth set-password <email>   # senha (entrada escondida ou --stdin)
-rtk pnpm jho auth login <email>          # link de uso único → /login/callback
-
-# LLM opcional (BYOK — sua chave, seu custo)
-rtk pnpm jho llm seed            # cadastra provedores conhecidos
-rtk pnpm jho llm list            # modelos, esforço, custo e quais têm chave
-rtk pnpm jho llm use <modelo>    # define o padrão
-rtk pnpm jho llm add-provider <slug> --label X --key-env VAR [--kind compatible --base-url URL]
-rtk pnpm jho llm add-model <provedor> <modelo> --label X [--reasoning --effort high]
-rtk pnpm jho analyze <id>        # leitura qualitativa da vaga; pede confirmação antes de enviar
-
-# candidatura
-rtk pnpm jho prep <id>           # dossiê: bloqueios, rede, evidências, vocabulário
-
-# triagem e funil
-rtk pnpm jho jobs list --min-fit 60
-rtk pnpm jho jobs show <id>      # breakdown completo do score
-rtk pnpm jho track <id> applied --channel referral
-rtk pnpm jho pipeline
-
-# câmbio
-rtk pnpm jho fx refresh          # cotações do BCE (Frankfurter)
-rtk pnpm jho fx show
-
-# e-mail (ADR 0008)
-rtk pnpm jho mail auth           # conecta o Gmail (escopo somente leitura)
-rtk pnpm jho mail fetch          # baixa .eml — não importa nada sozinho
-rtk pnpm jho mail import ~/mail --dry-run
-rtk pnpm jho mail suggestions    # mudanças de funil sugeridas por e-mail
-rtk pnpm jho mail accept <id> | dismiss <id>
-
-# rede e referrals
-rtk pnpm jho contacts seed       # empresas onde já trabalhou
-rtk pnpm jho contacts add "Nome" -c Empresa -k former
-rtk pnpm jho referrals           # vagas onde já conhece alguém
-
-# currículo
-rtk pnpm jho cv import <arquivo.pdf>   # extrai texto de PDF (--dry-run para conferir)
-rtk pnpm jho cv set <arquivo.md>       # salva de texto/markdown
-
-# vocabulário e skills
-rtk pnpm jho skills gap          # o que o mercado escreve e o CV não — lacuna de vocabulário
-rtk pnpm jho skills detect       # detecta skills no CV (detectada != confirmada)
-
-# posicionamento
-rtk pnpm jho tasks list --horizon 24h
-rtk pnpm jho tasks done PT-0001
-
-# segurança
-rtk pnpm jho security check      # bind, PII versionada, segredos, permissões do banco
-
-# raspagem (robô de descrições)
-rtk pnpm jho scrape queue        # enfileira vagas por fit
-rtk pnpm jho scrape run          # captura e trata, em paralelo
-rtk pnpm jho scrape status       # situação da fila
-rtk pnpm jho scrape reparse      # reprocessa tudo sem baixar de novo
-
-# análise
-rtk pnpm jho stats               # diagnóstico do scorer e do funil (--json)
-
-# saída
-rtk pnpm jho report              # markdown pro vault Obsidian
-rtk pnpm jho profile             # valida profile.yaml
-
-# desenvolvimento
-rtk pnpm check                   # changelogs, tracker de QA, typecheck, testes — verde antes de qualquer entrega
-rtk pnpm test:qa-skills          # contratos dos conversores do tracker QA
-rtk pnpm test:e2e                # browser real isolado: build, PostgreSQL e porta temporários
-rtk pnpm db:generate             # gera migration após editar schema.ts
-```
-
-Referência completa: `docs/cli.md`.
-
----
-
-## Arquitetura
-
-```
-src/contexts/      bounded contexts — auth, correspondence, fx, matching, pursuit, skills
-  i18n/            pt-BR e en, chaves tipadas contra o dicionário português
-src/core/          lógica pura, compartilhada entre CLI e UI
-  db/              composition root Drizzle (28 tabelas), client e migrations
-  sources/         um adapter por board público + registry + careers (página própria)
-  ingest/          normalização, fingerprint, upsert, import manual, verificação
-  scoring/         fit score determinístico (7 componentes) + persistência
-                   score.ts · freshness.ts · benefits.ts · apply.ts
-  profile/         carga e validação de profile.yaml (Zod)
-  mail/            parser MIME, classificador, extrator de job alert, Gmail OAuth
-  positioning/     plano da auditoria como dados
-  report/          export markdown
-  analytics/       estatística: Wilson, Spearman, diagnóstico de componente
-  scrape/          fila, robots.txt, captura e extração (duas etapas)
-  security.ts      autoverificações (bind, PII, segredos, permissões)
-  apply/           dossiê de candidatura (prepara; nunca envia — ADR 0010)
-  llm/             porta BYOK, adapters e cadastro de provedores/modelos
-                   port.ts · providers.ts · registry.ts · analyze.ts
-  clock.ts         relógio injetável — só onde o tempo é decisão, não carimbo
-  money.ts         value object (amount + currency + period)
-  pdf.ts           extração de PDF (unpdf, JS puro) + limpeza de texto
-  contacts.ts      rede profissional e referrals
-src/cli.ts         Commander
-app/               dashboard Next.js 16 — adapter sobre APIs públicas
-config/sources.yaml   quais boards buscar
-profile/profile.yaml  perfil do candidato — fonte da verdade do scoring
-data/jobs.db       snapshot SQLite legado (gitignored; não é runtime)
-```
-
-Fluxo: `sources → ingest → scoring → application → report/UI`.
-
-> **Invariante:** a UI é **adaptador**, não implementação paralela. Server
-> Components chamam as mesmas APIs públicas que a CLI chama, e a única
-> mutação passa por `setApplicationStatus`. Nunca duplique query entre as duas
-> superfícies — coloque-a atrás da API pública do contexto proprietário.
-
-Detalhes: `docs/architecture.md`, `docs/data-model.md`.
-A migração para hexagonal/DDD está decidida em `docs/adr/0007` e **concluída** —
-ver `MIGRATION.md` e `docs/engineering/context-map.md`. Os seis contextos
-atuais seguem o padrão da regra 4.
-
----
-
-## Convenções de código
-
-- **Comentários explicam _por quê_**, não o quê. Comente decisões, trade-offs e
-  armadilhas ("Greenhouse HTML-escapa o content", "o primeiro item do RemoteOK
-  é aviso legal", "Jobgether anonimiza o empregador por design").
-- **Adapters são burros:** fetch, mapear, retornar.
-- **Erro de uma fonte não derruba o sync.** Registra em `source.lastError`.
-- **Tudo idempotente.**
-- **Zod valida o que é editado à mão** (`profile.yaml`, `sources.yaml`).
-- **PostgreSQL explícito.** `DATABASE_URL` é o runtime; `DATABASE_MIGRATION_URL`
-  é a conexão privilegiada de migrations. SQLite/Turso só aparecem no fluxo de
-  importação do snapshot legado.
-- **UI:** shadcn/ui sobre Tailwind v4. `--primary` é o azul do `DESIGN.md`.
-  Estado de filtro vive na URL, não em React — as páginas não enviam JS de
-  cliente.
-
----
-
-## Ao adicionar uma fonte
-
-1. Adapter em `src/core/sources/` implementando `SourceAdapter`.
-2. Registrar em `registry.ts` e no union `SourceKind` de `types.ts`.
-3. Adicionar em `config/sources.yaml` com `rationale`.
-4. **Validar contra a API real:** `pnpm jho sources probe <kind> <handle>`.
-
-Nunca mapeie campos a partir de documentação sem conferir resposta real.
-
-> **Invariante de qualidade de fonte:** fonte que **nomeia o empregador** vale
-> mais que volume anônimo. O Jobgether responde por 74% do acervo, oculta a
-> empresa por design e teve **25% de links mortos** na verificação; o Braintrust
-> tem 119 vagas, empresa nomeada e elegibilidade por país estruturada.
-
----
-
-## Estado atual
-
-| Item | Número |
-|---|---:|
-| Vagas abertas | 6.027 |
-| Vagas pontuadas | 6.027 |
-| Empresas | 1.031 |
-| Fontes ativas | 13 |
-| Acima de 45 / 60 / 70 | 1.612 / 262 / 35 |
-| Melhor fit | 86,0 |
-| Vagas com bloqueador | 468 |
-| Descrições offline | 207 |
-| Candidaturas no funil | 2 |
-| Testes (21/09/2026) | 2.968 + 263 verificações e2e · cobertura de `src/` 98,4% linhas / 95,0% branches, `cli.ts` incluído |
-
-> A última linha é a que importa. O acervo tem 6.239 vagas e o funil tem 1
-> candidatura: **o gargalo é a decisão, não a descoberta.** Toda proposta de
-> funcionalidade deve ser lida contra isso — ver `docs/product/vision.md`.
-
-Pronto: sourcing (10 adapters), scoring com moeda, funil, e-mail, referrals,
-verificação de links, dashboard Next.js, export CSV e markdown.
-
-**O corte de produção para o Supabase foi feito em 2026-09-19**, na v1.13.1:
-`jobs.mastertimm.com.br` serve do PostgreSQL do Supabase, com o schema
-`production`, quatro migrations aplicadas e o acervo preservado. O runtime
-ainda conecta pela `POSTGRES_URL`, que é o **superusuário** — cadastrar
-`DATABASE_URL` com a role restrita `master_jobs_app` segue pendente, e até lá a
-separação de privilégio que a migration `0001` desenhou não está em vigor.
-
-OAuth do Gmail, geração de CV/cover letter, publicação no LinkedIn e submissão
-autônoma continuam não concluídos. Ver `docs/roadmap.md` — e **não descreva
-como pronto o que não está**.
-
----
-
-## Documentação
-
-| Documento | Quando ler |
-|---|---|
-| `docs/architecture.md` | Entender o sistema |
-| `docs/data-model.md` | Mexer no schema ou em queries |
-| `docs/sources.md` | Adicionar/debugar fonte |
-| `docs/scoring.md` | Ajustar o ranking |
-| `docs/linkedin-policy.md` | **Antes de qualquer coisa de LinkedIn** |
-| `docs/email-ingestion.md` | Mexer no pipeline de e-mail |
-| `docs/sources-autenticadas.md` | Revelo, BairesDev, marketplaces logados |
-| `docs/cli.md` | Referência de comandos |
-| `docs/operations.md` | Rotina diária e semanal |
-| `docs/security.md` | **Antes de expor a UI ou publicar o repositório** |
-| `DESIGN.md` | **Antes de qualquer trabalho de frontend** |
-| `docs/adr/0009` | **Fila de raspagem — por que tabela e não broker** |
-| `docs/adr/0010` | **Antes de automatizar envio de candidatura** |
-| `docs/prompts/system/` | **Antes de mexer em qualquer prompt de LLM** |
-| `docs/product/task-auth.md` | Autenticação e autorização — planejado |
-| `docs/roadmap.md` | O que vem depois |
-| `docs/benchmark/` | Concorrentes e mercado |
-| `docs/product/` | **Visão, personas, user stories, backlog** |
-| `docs/adr/` | Por que cada decisão |
-| `docs/product/vision.md` | **Antes de propor funcionalidade** |
-| `docs/product/personas.md` | Antes de mexer em score ou UI |
-| `MIGRATION.md` | **Antes de criar arquivo novo em `src/`** |
-
-Este arquivo é a fonte única das instruções para os três harnesses. `CLAUDE.md`
-é um symlink para ele — **edite só aqui.**
-
-> Conforme `~/.claude/RTK.md`: no Codex e no OpenCode todo comando de shell vai
-> prefixado com `rtk`. No Claude Code o hook global reescreve e não duplica o
-> prefixo — o comando já vem com `rtk` e ele não acrescenta outro.
+- Gate: `rtk pnpm check` verde antes de qualquer entrega de runtime;
+  `rtk pnpm test:e2e` quando a mudança toca navegador. PR só de Markdown ou
+  metadados de skill valida estrutura, links e scripts afetados.
+- PR para `dev` com responsável atribuído (`andreustimm`), descrição com docs,
+  QA, plano de teste real e veredito do `deep-review`. Pelo menos um commit leva
+  `Closes #N` (ou `Refs #N`) na **mensagem**: é ela que fecha a issue quando o
+  commit chega a `main`. [[G47](docs/engineering/rules/delivery.md#g47), [R24](docs/engineering/rules/delivery.md#r24-closes)]
+- Branch mesclada é removida, local e remota; `dev`, `staging` e `main` nunca.
+  [[G48](docs/engineering/rules/delivery.md#g48)–[G50](docs/engineering/rules/delivery.md#g50)]
+- Migração em `drizzle/` ou `schema.ts` suspende a promoção automática até
+  revisão humana. [[G51](docs/engineering/rules/delivery.md#g51)]
+
+## Precedência e conflito
+
+As regras desta entrada e de `docs/engineering/rules/` prevalecem sobre
+exemplos genéricos de skills — em especial RTK, base `dev`, worktree
+obrigatória, PostgreSQL/Supabase e os gates deste repositório. Encontrou uma
+fonte dizendo o oposto? **Não enfraqueça a proteção para seguir o exemplo mais
+fraco**: registre a discrepância com evidência e corrija a fonte responsável.
+Mudar uma regra é mudar a entrada e o arquivo de domínio no mesmo commit.
+
+## Skills e harnesses
+
+Skill de projeto vive **uma vez** em `.claude/skills/<nome>/`; `.codex/skills`
+e `.opencode/skills` (e `.opencode/agents`, `.opencode/commands`) são symlinks
+para os equivalentes em `.claude/`. Nunca copie uma skill por harness. Skill
+ensina procedimento; não define política nem concede autorização. O agente
+invoca `deep-review`, `qa-report`, `qa-execution`, `agent-output-audit` e
+`ship-pr` por conta própria; publicar na PR exige `--publish` ou autorização
+explícita. [[G61](docs/engineering/rules/delivery.md#g61)–[G62](docs/engineering/rules/delivery.md#g62)]
+
+Conforme `~/.claude/RTK.md`: no Codex e no OpenCode todo comando de shell vai
+prefixado com `rtk`. No Claude Code o hook global reescreve e não duplica o
+prefixo. [[G63](docs/engineering/rules/delivery.md#g63)]
+
+O bloco abaixo é gerado pelo `next dev`; não o edite nem o mova.
+[[G64](docs/engineering/rules/delivery.md#g64)]
 
 
 <!-- BEGIN:nextjs-agent-rules -->

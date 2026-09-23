@@ -24,6 +24,33 @@ delivery to production or activation of an issue-comment writer. Only the owning
 execution requests the coordinated completion transition after the required delivery
 is proved; do not update task status through local Compozy files or bulk sync.
 
+The policy lives in `AGENTS.md` and [docs/engineering/rules/delivery.md](../../../docs/engineering/rules/delivery.md);
+this binding only maps it onto the steps below, and it wins over the generic text:
+
+- **Verdict (G54).** Only a rendered `SHIP` on the current diff continues. On
+  `FIX_BEFORE_SHIP` or `REWORK` the skill stops and reports. Accepting a
+  remaining finding is a decision only a person can take, written in the PR
+  with the findings and the reason; the skill never grants that exception to
+  itself, and a change after the verdict needs a new review round.
+- **Release notes (G58).** Step 3 means the project's changelog fragment:
+  `changelog.d/<branch-slug>.md` with `## Técnico`, `## pt-BR` and `## en`
+  (format in [workflow.md](../../../docs/engineering/workflow.md#escrever-o-changelog)).
+  Never edit the `## [Unreleased]` of the three changelogs, and do not use
+  `pr-release` here.
+- **Docs and QA (G55, G57, G60).** The PR body carries one line on what changed
+  in `docs/` (or why nothing did) and one on QA (session run, or "no visible
+  change"). A Markdown/skill-metadata-only diff validates structure, links and
+  touched scripts; do not impose the product suites on it, and do not list a
+  check that did not run.
+- **Issue and assignee (R24, G47).** At least one commit message carries
+  `Closes #N` (or `Refs #N` when partial). If `gh pr create --assignee @me`
+  fails on the legacy Projects GraphQL field, assign through REST:
+  `rtk gh api --method POST repos/andreustimm/master-jobs/issues/<n>/assignees -f 'assignees[]=andreustimm'`.
+  No PR is left without an assignee.
+- **CodeRabbit loop (step 8).** It auto-commits and auto-pushes, so it runs only
+  when the user asks for it in this session; `compozy` being installed is not
+  that request.
+
 This skill drives the end-of-feature ritual: detect what changed, document its impact, generate release notes, write a complete PR description, commit cleanly, open the PR via `gh`, and (optionally) start an automated review-watch loop.
 
 Two layers exist:

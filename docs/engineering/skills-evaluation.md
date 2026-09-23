@@ -21,7 +21,7 @@ contradizer as regras locais não entra só porque compartilha o stack.
 | `qa-execution` | Percorre o produto pela interface pública e grava evidências e vereditos. | Usa o mesmo `docs/qa/` e o CLI local de navegador. |
 | `agent-browser` | Fornece o driver real exigido por `qa-execution`. | `agent-browser@0.26.0` está fixado como dependência de desenvolvimento; `rtk pnpm qa:browser:install` instala o Chrome. A versão é a última anterior à exigência de pnpm 11, pois o projeto fixa pnpm 10.28. |
 | `ship-pr` | Fecha o trabalho com impacto, descrição, commit e PR. | Regras locais têm precedência: worktree desde `dev`, `deep-review` antes da PR e base `dev`. |
-| `drizzle-safe-migrations` | Ordena backfill e alteração de schema com revisão explícita. | Adaptada a pnpm, PostgreSQL/Supabase, `rtk pnpm db:generate` e à suspensão da promoção automática. |
+| `drizzle-safe-migrations` | Ordena backfill e alteração de schema com revisão explícita. | Adaptada a pnpm, PostgreSQL/Supabase, `rtk pnpm db:generate` e à suspensão da promoção automática. A adaptação só ficou completa com [#199](https://github.com/andreustimm/master-jobs/issues/199): até ali o procedimento ainda trazia passos de SQLite/libSQL e `pragma`, que hoje aparecem só como histórico rotulado. |
 | `a11y-testing` | Acrescenta o gate automatizado de WCAG ao browser E2E. | `@axe-core/playwright` roda dentro do runner isolado existente, sem criar outra infraestrutura. |
 | `agent-output-audit` | Audita alegações e provas de tarefas implementadas por agente. | Invocada sob demanda; não substitui QA de jornada nem `deep-review`. |
 | `deslop` | Remove ruído introduzido no diff por agentes antes da revisão. | Compara a branch de tarefa contra `dev`, sem tocar arquivos fora do escopo. |
@@ -58,10 +58,34 @@ o último commit que contém a skill completa.
   `drizzle-safe-migrations` é a variante adequada.
 - `obsidian-markdown`, `obsidian-cli` e `obsidian-bases`: o repositório vive num
   vault, mas a aplicação produz Markdown comum e não depende desses recursos.
-- `find-rules`: redundante; `AGENTS.md` já é a fonte única e detalhada.
+- `find-rules`: redundante; `AGENTS.md` e
+  [`docs/engineering/rules/`](rules/README.md) já são a fonte única das regras.
 - skills de deploy/Kubernetes/Cloudflare: o deploy Vercel/Supabase está
   documentado, mas a promoção de produção ainda depende dos gates de migração.
 - qualquer item em `skills/deprecated/`: excluído por definição.
 
 Todas as instalações são canônicas em `.claude/skills/`. Codex e OpenCode leem
 esse mesmo conteúdo pelos symlinks existentes; não há cópias por harness.
+
+## Como as skills se ligam às regras
+
+As 14 skills de `.claude/skills/` — as nove acima e as cinco do próprio projeto
+(`application-kit`, `candidate-profile`, `deep-review`, `job-triage`,
+`linkedin-positioning`) — ensinam procedimento; a política está em `AGENTS.md`
+e em [`docs/engineering/rules/`](rules/README.md). Cada skill que toca uma regra
+aponta para ela em vez de reescrevê-la, e nenhuma concede autorização que a
+regra não dá. O alinhamento foi revisto em
+[#201](https://github.com/andreustimm/master-jobs/issues/201):
+
+- `ship-pr` e `deep-review`: só `SHIP` segue; `FIX_BEFORE_SHIP` remanescente é
+  decisão humana escrita na PR, nunca exceção que a skill concede a si mesma
+  (G54). Nota de release é o fragmento em `changelog.d/` (G58).
+- `qa-report` e `qa-execution`: o validador do tracker confere esquema, não
+  execução; `Pass` exige o observável (G56).
+- `job-triage`, `/vagas` e `/aplicar`: o agente propõe; `track` registra o que
+  o usuário decidiu, e nada envia candidatura (G02, G37).
+- `/fonte-nova`: board vazio não prova handle errado (G70).
+- `agent-browser` e `linkedin-positioning`: ferramenta disponível não autoriza
+  agir no LinkedIn (G01).
+- `candidate-profile`: pesos e lacunas são lidos do `profile.yaml`, não
+  copiados.

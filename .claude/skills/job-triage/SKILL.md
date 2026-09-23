@@ -5,13 +5,27 @@ description: Triagem diária de vagas — roda o sync, revisa o topo do ranking,
 
 # Triagem de vagas
 
+## Quem decide
+
+A decisão sobre a vaga é do usuário; `application` é o único dado
+irrecuperável do sistema (regra 2,
+[rules/data-and-sourcing.md](../../../docs/engineering/rules/data-and-sourcing.md#g02)).
+
+- O **sync** só mexe em `job`. Rodar `jobs sync` nunca autoriza `track`.
+- O agente **propõe** o veredito de cada vaga. Registra com `jho track` só o
+  que o usuário decidiu — seja respondendo à proposta, seja por pedido
+  explícito que já delegue a decisão ("marque como shortlisted as que passarem
+  nos bloqueios"). Sem essa autorização, a saída é a tabela de sugestões.
+- `applied` registra uma candidatura que **o usuário** enviou. Nada aqui envia
+  candidatura (regra 13).
+
 ## Rotina
 
 ```bash
 pnpm jho jobs sync                    # busca todas as fontes + pontua
 pnpm jho jobs list --min-fit 55       # revisa o topo
 pnpm jho jobs show <id>               # aprofunda uma vaga
-pnpm jho track <id> shortlisted -n "motivo"
+pnpm jho track <id> shortlisted -n "motivo"   # só com decisão do usuário
 ```
 
 ## Como triar de verdade
@@ -30,8 +44,10 @@ O ranking é um ponto de partida, não um veredito. Para cada vaga no topo:
 4. **Cheque a empresa.** Ela contrata contractor internacional? Se a
    informação existir, registre em `company.hiresContractors` /
    `hiresLatam` — evita reanalisar a mesma empresa toda semana.
-5. **Decida e registre.** Toda vaga analisada deve sair da triagem com um
-   status. Vaga sem status volta na próxima varredura e desperdiça atenção.
+5. **Feche cada vaga com um veredito.** Toda vaga analisada sai da triagem
+   com uma proposta (aplicar / talvez / descartar) e, quando o usuário
+   decidir, com um status registrado. Vaga sem status volta na próxima
+   varredura e desperdiça atenção.
 
 ## Estados do funil
 
@@ -55,7 +71,8 @@ O ranking é um ponto de partida, não um veredito. Para cada vaga no topo:
   redação usada; ajuste `blockers:`.
 
 Depois de qualquer ajuste no perfil: **suba `SCORER_VERSION`** em
-`src/core/scoring/score.ts` e rode `pnpm jho jobs score --all`.
+`src/core/scoring/score.ts` e rode `pnpm jho jobs score --all` (regra 6,
+[rules/matching-and-evidence.md](../../../docs/engineering/rules/matching-and-evidence.md#g08)).
 
 ## Cadência recomendada
 
