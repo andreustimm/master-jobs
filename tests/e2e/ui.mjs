@@ -5089,6 +5089,9 @@ try {
   const liveStatus = transitionOverlay.locator('[role="status"][aria-live="polite"][aria-atomic="true"]');
   const statusCount = await liveStatus.count();
   const accessibilitySnapshot = await liveStatus.ariaSnapshot();
+  // Lido junto com o snapshot: `statusBeforeTheme` vem depois de um clique e
+  // de um Tab, e a fase `prolonged` (3 s) pode chegar no meio.
+  const statusAtSnapshot = await liveStatus.textContent();
   const focusOutsideStatus = await transitionOverlay.evaluate((overlay) =>
     !overlay.contains(document.activeElement),
   );
@@ -5238,7 +5241,8 @@ try {
       && shellWhileBusy.busy === "true"
       && statusCount === 1
       && /status/i.test(accessibilitySnapshot)
-      && accessibilitySnapshot.includes(statusBeforeTheme ?? "")
+      && Boolean(statusAtSnapshot)
+      && accessibilitySnapshot.includes(statusAtSnapshot ?? "")
       && focusOutsideStatus
       && underlyingBlocked
       && !keyboardFocusWhileBusy.inApplicationShell
