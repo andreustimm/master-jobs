@@ -147,8 +147,9 @@ jobs:
           inputs.rotina == 'termos'
         run: pnpm jho scrape run --limit 300
 
-      # 3. Reconferir se o que já está no banco continua aberto. É o que o cron
-      #    da Vercel faz aos pedaços; aqui a fila inteira cabe numa rodada.
+      # 3. Reconferir se o que já está no banco continua aberto. Esta varredura
+      #    é o ÚNICO agendador da reconferência — a Vercel não agenda nada, e um
+      #    teste trava isso. Aqui a fila inteira cabe numa rodada.
       - name: Enfileirar reconferência
         if: >-
           github.event_name != 'workflow_dispatch' ||

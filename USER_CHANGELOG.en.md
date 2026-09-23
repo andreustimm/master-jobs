@@ -18,10 +18,14 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Jobs from sites that only show their latest postings no longer disappear from the board just because they moved down the list. They stay open until the link check confirms the posting was taken down.
 
 ### Improved
 
 - Improvement tracking now marks each item as done when it reaches the published version.
+- The daily check of jobs that are still open is now lighter on the system.
 
 ## [1.22.1] - 2026-09-23T00:33:04.000Z
 

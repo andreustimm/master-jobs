@@ -57,7 +57,7 @@ describe("careersAdapter", () => {
     });
     setHttpPort(port);
 
-    const { jobs, warnings } = await careersAdapter({ listOnly: true }).fetchJobs(
+    const { jobs, warnings, completeness } = await careersAdapter({ listOnly: true }).fetchJobs(
       config("https://acme.test/careers"),
     );
 
@@ -65,6 +65,7 @@ describe("careersAdapter", () => {
       "vagas-staff-engineer",
       "vagas-principal-architect",
     ]);
+    expect(completeness).toBe("complete");
     expect(jobs.every((j) => j.companyName === "Acme Corp")).toBe(true);
     expect(jobs[0]!.descriptionText).toBeUndefined();
     expect(warnings).toEqual([]);
@@ -83,10 +84,13 @@ describe("careersAdapter", () => {
     });
     setHttpPort(port);
 
-    const { jobs } = await careersAdapter({ maxJobs: 2, listOnly: true }).fetchJobs(
+    const { jobs, completeness } = await careersAdapter({ maxJobs: 2, listOnly: true }).fetchJobs(
       config("https://big.test/careers"),
     );
     expect(jobs).toHaveLength(2);
+    // As três cortadas pelo teto não foram vistas; fechá-las por ausência
+    // esconderia vagas vivas da própria empresa.
+    expect(completeness).toBe("partial");
   });
 
   it("mantém a vaga da listagem quando robots.txt proíbe só o anúncio", async () => {

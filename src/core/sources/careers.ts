@@ -21,7 +21,7 @@
 import { getText } from "./http.ts";
 import { mayFetch } from "../scrape/robots.ts";
 import { cleanBullets, extractFields, stripHtml } from "../scrape/extract.ts";
-import type { FetchResult, RawJob, SourceAdapter, SourceConfig } from "./types.ts";
+import type { RawJob, SourceAdapter, SourceConfig, SourceSnapshot } from "./types.ts";
 
 /**
  * Anchors that look like a posting.
@@ -125,24 +125,28 @@ export function careersAdapter(options: CareersOptions = {}): SourceAdapter {
     kind: "careers",
     docs: "https://developers.google.com/search/docs/crawling-indexing/robots/intro",
 
-    async fetchJobs(config: SourceConfig): Promise<FetchResult> {
+    async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
       const warnings: string[] = [];
       const listUrl = config.handle;
 
       if (!(await mayFetch(listUrl))) {
-        return { jobs: [], warnings: [`robots.txt não permite ${listUrl}`] };
+        return { jobs: [], warnings: [`robots.txt não permite ${listUrl}`], completeness: "partial" };
       }
 
       const listHtml = await getText(listUrl);
-      if (!listHtml) return { jobs: [], warnings: [`Sem resposta de ${listUrl}`] };
+      if (!listHtml) return { jobs: [], warnings: [`Sem resposta de ${listUrl}`], completeness: "partial" };
 
-      const anchors = findJobAnchors(listHtml, listUrl).slice(0, maxJobs);
+      const found = findJobAnchors(listHtml, listUrl);
+      const anchors = found.slice(0, maxJobs);
+      // The company's own listing, read whole, is the list of what it has
+      // open. Cut at `maxJobs`, the rest was never looked at.
+      const completeness = found.length <= maxJobs ? "complete" : "partial";
       if (anchors.length === 0) {
         warnings.push(
           `Nenhum link de vaga reconhecido em ${listUrl}. ` +
             `A página pode montar a lista por JavaScript — nesse caso use \`jho sources snippet\`.`,
         );
-        return { jobs: [], warnings };
+        return { jobs: [], warnings, completeness: "partial" };
       }
 
       const jobs: RawJob[] = [];
@@ -195,7 +199,7 @@ export function careersAdapter(options: CareersOptions = {}): SourceAdapter {
         });
       }
 
-      return { jobs, warnings };
+      return { jobs, warnings, completeness };
     },
   };
 }

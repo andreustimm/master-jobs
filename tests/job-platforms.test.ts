@@ -31,9 +31,11 @@ describe("Jobicy (real response, 2026-09-19)", () => {
     const http = fixtureHttp({ "jobicy.com": fixture("jobicy-typescript-latam.json") });
     setHttpPort(http);
 
-    const { jobs } = await jobicy.fetchJobs({ kind: "jobicy", handle: "", label: "Jobicy" });
+    const { jobs, completeness } = await jobicy.fetchJobs({ kind: "jobicy", handle: "", label: "Jobicy" });
 
     expect(http.calls[0]).toContain("geo=latam");
+    // `count=100` is the newest slice of the region, never the whole list.
+    expect(completeness).toBe("partial");
     expect(http.options[0]).toEqual({ retries: 0 });
     expect(jobs.length).toBeGreaterThan(3);
     // Applications go to the feed's own URL, as the README asks.

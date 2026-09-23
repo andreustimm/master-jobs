@@ -62,6 +62,7 @@ export {
   type UpdateTrackResult,
 } from "./app/tracks.ts";
 export {
+  bestPrimaryFitByJob,
   primaryScoreFilter,
   resolveClusterFilter,
   scoreTrackFilter,

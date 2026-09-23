@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
@@ -86,14 +86,23 @@ describe("IT-003 — o contrato de ambiente não vaza produção", () => {
     expect(example).toContain("DATABASE_URL");
   });
 
-  it("o cron da Vercel aponta para uma rota que consulta a política", () => {
+  it("a reconferência agendada tem exatamente um dono: a varredura do GitHub", () => {
+    // Dois agendadores sobre a mesma fila dobravam a leitura do banco e as
+    // requisições a sites de terceiros sem que nenhum dos dois soubesse do
+    // outro (B-11). A Vercel não agenda nada; a varredura é quem reconfere.
     const vercel = JSON.parse(readFileSync("vercel.json", "utf8")) as {
       crons?: { path: string }[];
     };
-    const paths = (vercel.crons ?? []).map((cron) => cron.path);
+    expect(vercel.crons ?? []).toEqual([]);
 
-    expect(paths).toContain("/api/cron/recheck");
+    const schedulers = readdirSync(".github/workflows")
+      .map((file) => readFileSync(`.github/workflows/${file}`, "utf8"))
+      .filter((text) => /^\s*schedule:/m.test(text) && /jho jobs recheck (queue|run)/.test(text));
+    expect(schedulers).toHaveLength(1);
+    expect(schedulers[0]).toContain("name: Varredura de vagas");
+  });
 
+  it("a rota de reconferência por segredo consulta a política", () => {
     const route = readFileSync("app/api/cron/recheck/route.ts", "utf8");
     // Segredo prova quem chama; a política diz se este deployment pode gastar
     // cota. Um preview com o segredo herdado continuaria autenticado.

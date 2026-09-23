@@ -79,6 +79,33 @@ em amarelo abaixo da linha da fonte, tanto em `jobs sync` quanto em
 | `workable` | `workable.ts` | Sim (`description` + seções) | `pageToken`, 20/página, até 5 páginas | — |
 | `hackernews` | `hackernews.ts` | Sim (o próprio comentário) | Não, o fio inteiro numa chamada | — |
 
+### Completude da listagem
+
+Todo `fetchJobs()` devolve `completeness`: `complete` quando a listagem é tudo o
+que a fonte tem aberto, `partial` quando é uma janela. Só a listagem completa
+prova que a vaga ausente saiu — a sincronização fecha por ausência apenas nela
+(`decideAbsenceClosure()` em `src/core/ingest/lifecycle.ts`). Vaga de janela
+parcial só fecha por 404/410 na reconferência (`probe.ts`). Adapter que não
+consegue provar o fim da lista declara `partial`.
+
+| kind | Completude | O que prova o fim |
+|---|---|---|
+| `greenhouse`, `lever`, `ashby`, `recruitee` | `complete` | o board inteiro numa resposta |
+| `smartrecruiters` | `complete` só com página curta | teto de 500 com a última página cheia é `partial` |
+| `workable` | `complete` só sem `nextPageToken` | as 5 páginas do orçamento com token pendente é `partial` |
+| `braintrust` | `complete` só sem `next`, sem corte do handle e com `count` alcançado | — |
+| `himalayas` | `complete` só com `totalCount` alcançado | na prática sempre `partial` (~100.000 vagas) |
+| `careers` | `complete` quando nenhum link foi cortado por `maxJobs` | a página de vagas da própria empresa |
+| `hackernews` | `complete` quando `hits` alcança `nbHits` | a fonte é a thread do mês; a da nova thread fecha as do mês anterior |
+| `remotive`, `arbeitnow`, `remoteok`, `adzuna`, `jobicy` | `partial` | recorte de recência ou primeira página |
+
+Consequência a conhecer: a vaga de fonte parcial que nunca mais aparece fica
+aberta até a reconferência responder 404/410. A varredura periódica
+(`enqueueStale`) só enfileira vagas com nota ≥ 55, então vaga de fonte parcial
+abaixo do corte permanece aberta — ausência não é prova, e dado faltante é
+neutro. `pnpm jho sources probe <kind> <handle>` e `jho jobs sync` mostram a
+completude de cada rodada.
+
 ### ATS — `src/core/sources/ats.ts`
 
 #### `greenhouse`

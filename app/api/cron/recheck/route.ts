@@ -7,18 +7,16 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 /**
- * Reconferência agendada, para quando o sistema vive na Vercel.
+ * Reconferência por segredo, num lote que cabe em uma função serverless.
  *
- * `jho jobs recheck queue && jho jobs recheck run` fazem isto no terminal e
- * levam minutos. Uma função serverless tem teto — 30 segundos no plano gratuito
- * — então o lote aqui é pequeno de propósito e a fila é consumida ao longo de
- * vários dias. Não é a mesma coisa; é o que cabe.
+ * **Nada agenda esta rota.** O dono da reconferência agendada é a varredura do
+ * GitHub (`.github/workflows/varredura.yml`), que drena a fila inteira numa
+ * rodada; o cron da Vercel que também a chamava saiu de `vercel.json` para que
+ * dois agendadores não disputassem a mesma fila (B-11). A rota fica para uma
+ * chamada manual, com o mesmo lote pequeno — 30 segundos de teto.
  *
- * Quem roda `jho` num laptop apontado para a mesma Turso não precisa desta
- * rota. Ela existe para quem não tem laptop ligado.
- *
- * **Autenticação por `CRON_SECRET`, não por sessão.** A Vercel chama esta rota
- * sem cookie nenhum, então o guard de sessão a bloquearia. O segredo vem no
+ * **Autenticação por `CRON_SECRET`, não por sessão.** Quem chama esta rota
+ * não traz cookie nenhum, então o guard de sessão a bloquearia. O segredo vem no
  * `authorization`, e a comparação é de tempo constante — um `===` sobre
  * segredo vaza o prefixo pelo tempo de resposta, e esta rota responde a quem
  * quiser chamá-la.

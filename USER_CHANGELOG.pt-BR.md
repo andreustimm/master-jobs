@@ -18,10 +18,14 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+### Corrigido
+
+- Vagas de sites que mostram só as publicações mais recentes não somem mais do quadro só porque desceram na lista. Elas continuam abertas até a conferência do link confirmar que o anúncio saiu do ar.
 
 ### Melhorado
 
 - O acompanhamento das melhorias passa a marcar cada item como concluído quando ele chega à versão publicada.
+- A conferência diária de vagas ainda abertas ficou mais leve para o sistema.
 
 ## [1.22.1] - 2026-09-23T00:33:04.000Z
 
