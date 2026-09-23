@@ -10,10 +10,10 @@ import { describe, expect, it } from "vitest";
 import YAML from "yaml";
 
 /**
- * As únicas bases de automação, cada uma com a cabeça que a justifica (G43).
+ * Cada cabeça de automação e a única base para a qual ela abre PR (G43).
  * PR de trabalho não está aqui: ela nasce de pessoa ou agente, sempre para `dev`.
  */
-const AUTOMATION_BASES: Record<string, string> = {
+const BASE_BY_HEAD: Record<string, string> = {
   staging: "main", // promoção: PR humana para produção (G46)
   main: "dev", // retorno depois de main (G52)
 };
@@ -26,9 +26,10 @@ function producers(): { where: string; run: string }[] {
   for (const file of readdirSync(".github/workflows").filter((name) => name.endsWith(".yml")).sort()) {
     const workflow = YAML.parse(readFileSync(`.github/workflows/${file}`, "utf8")) as Workflow;
     for (const [job, { steps = [] }] of Object.entries(workflow.jobs)) {
-      for (const step of steps) {
-        if (step.run?.includes("gh pr create")) found.push({ where: `${file}:${job}:${step.name}`, run: step.run });
-      }
+      steps.forEach((step, index) => {
+        if (!step.run?.includes("gh pr create")) return;
+        found.push({ where: `${file}:${job}:${step.name ?? `passo ${index + 1}`}`, run: step.run });
+      });
     }
   }
   return found;
@@ -45,7 +46,7 @@ function producerProblems(run: string): string[] {
   const base = /--base\s+(\S+)/.exec(create)?.[1];
   const head = /--head\s+(\S+)/.exec(create)?.[1];
   if (!base || !head) problems.push("`gh pr create` sem --base e --head explícitos");
-  else if (AUTOMATION_BASES[head] !== base) problems.push(`base ${base} para ${head} não é exceção nomeada`);
+  else if (BASE_BY_HEAD[head] !== base) problems.push(`base ${base} para ${head} não é exceção nomeada`);
   const rest = run.indexOf("assignees[]=andreustimm");
   if (rest < 0) problems.push("sem atribuição por REST, que cobre a PR reaproveitada");
   else if (rest < run.indexOf("gh pr create") && !/--assignee\s+andreustimm/.test(create)) {

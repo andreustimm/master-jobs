@@ -326,7 +326,7 @@ workflow ou arquivo interpretado em execução exige o teste do comportamento qu
 mudou. A tabela de evidência por tipo de mudança está em
 [workflow.md](../workflow.md) ("Validar pelo risco").
 
-A validação estrutural de Markdown e metadados são os validadores únicos que já
+A validação estrutural de Markdown e metadados usa os validadores únicos que já
 existem, sem cópia: `pnpm check:instructions` (symlinks, links, âncoras e IDs de
 regra), `pnpm check:release-ready` (changelogs e fragmentos) e
 `pnpm check:qa-tracker` (esquema dos cenários). A proporcionalidade é de quem

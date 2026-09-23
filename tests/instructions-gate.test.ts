@@ -144,6 +144,14 @@ describe("V09-02 — links, âncoras e IDs de regra", () => {
     expect(checkInstructions(root)).toEqual([]);
   });
 
+  it("resolve título com código em linha como o GitHub, com o texto do código", () => {
+    write("docs/engineering/rules/delivery.md", `${DELIVERY}## Base \`dev\` e \`main\`\n`);
+    write("AGENTS.md", `${ENTRY}[base](docs/engineering/rules/delivery.md#base-dev-e-main)\n`);
+    expect(checkInstructions(root)).toEqual([]);
+    write("AGENTS.md", `${ENTRY}[base](docs/engineering/rules/delivery.md#base--e-)\n`);
+    expect(errors()).toContain('âncora "#base--e-" não existe');
+  });
+
   it("reprova linha do inventário que aponta para outra âncora ou se repete", () => {
     write("docs/engineering/rules/README.md", `${INVENTORY}| G44 | Outra vez | [delivery](delivery.md#g43) |\n`);
     const found = errors();

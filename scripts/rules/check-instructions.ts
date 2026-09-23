@@ -111,18 +111,19 @@ export function headingSlug(heading: string): string {
     .replace(/\s/g, "-");
 }
 
-type Line = { number: number; text: string };
+/** `text` sem código em linha, para achar links; `raw` intacta, para títulos. */
+type Line = { number: number; text: string; raw: string };
 
-/** Linhas fora de bloco cercado, com código em linha removido. */
+/** Linhas fora de bloco cercado. */
 function proseLines(markdown: string): Line[] {
   const lines: Line[] = [];
   let fenced = false;
-  markdown.split("\n").forEach((text, index) => {
-    if (/^\s*(```|~~~)/.test(text)) {
+  markdown.split("\n").forEach((raw, index) => {
+    if (/^\s*(```|~~~)/.test(raw)) {
       fenced = !fenced;
       return;
     }
-    if (!fenced) lines.push({ number: index + 1, text: text.replace(/`[^`\n]*`/g, "") });
+    if (!fenced) lines.push({ number: index + 1, text: raw.replace(/`[^`\n]*`/g, ""), raw });
   });
   return lines;
 }
@@ -130,9 +131,10 @@ function proseLines(markdown: string): Line[] {
 export function anchorsOf(markdown: string): Set<string> {
   const anchors = new Set<string>();
   const seen = new Map<string, number>();
-  for (const { text } of proseLines(markdown)) {
+  for (const { text, raw } of proseLines(markdown)) {
     for (const match of text.matchAll(/<a\s+(?:id|name)="([^"]+)"/g)) anchors.add(match[1]!);
-    const heading = /^#{1,6}\s+(.+?)\s*#*\s*$/.exec(text);
+    // O GitHub gera o slug com o texto do código em linha, sem as crases.
+    const heading = /^#{1,6}\s+(.+?)\s*#*\s*$/.exec(raw);
     if (!heading) continue;
     const slug = headingSlug(heading[1]!);
     const count = seen.get(slug) ?? 0;
