@@ -306,7 +306,7 @@ paralelismo, que já vale para todas.
 
 Medido em 23/09/2026: o job único levava 6 min 53 s (run 35803388420, em `dev`);
 os jobs paralelos, 2 min 41 s do disparo ao `qualidade` (run 35850357880, PR
-#266). O caminho crítico é fatia mais lenta (~2 min) + `cobertura` (~30 s). A
+#266). O caminho crítico é a fatia mais lenta (~2 min) + `cobertura` (~30 s). A
 cobertura mesclada saiu idêntica, contador por contador, à de uma execução
 única local — a divisão não perde nem duplica nada. Se o caminho crítico
 crescer, a primeira alavanca é o número de fatias.
