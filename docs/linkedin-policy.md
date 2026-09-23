@@ -20,7 +20,8 @@ precisa entender **por que** a automação mais óbvia foi recusada, para não
 reintroduzi-la "só para testar".
 
 Fontes normativas relacionadas: `docs/adr/0001-nao-fazer-scraping-do-linkedin.md`
-(a decisão formal), regra 1 de `CLAUDE.md` e de `AGENTS.md`.
+(a decisão formal), regra 1 de `AGENTS.md` e seu detalhe em
+`docs/engineering/rules/security.md` (G01).
 
 ---
 
@@ -233,9 +234,11 @@ Lista explícita. Cada item já foi considerado e recusado.
    salvo-conduto operacional para uma conta que se quer preservar.
 9. **Não guarde credenciais em código nem em arquivo versionado.** Tudo em
    `.env.local` (gitignored), espelhando `.env.example`.
-10. **Não altere esta política editando só um arquivo.** `CLAUDE.md` e
-    `AGENTS.md` devem dizer a mesma coisa — editou um, edite o outro — e a
-    reversão de fundo exige nova ADR substituindo a 0001.
+10. **Não altere esta política editando só um arquivo.** A regra 1 em
+    `AGENTS.md` (`CLAUDE.md` é symlink para ele), o detalhe em
+    `docs/engineering/rules/security.md` (G01) e esta página devem dizer a
+    mesma coisa, no mesmo commit — e a reversão de fundo exige nova ADR
+    substituindo a 0001.
 
 ### 5.1 O que o runtime garante, e o que só esta política garante
 

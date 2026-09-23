@@ -630,8 +630,9 @@ em `tests/db-decision-integrity.test.ts`.
 
 Consequência prática: `pnpm jho jobs sync` pode rodar todo dia, quantas vezes
 quiser, e um `status = 'interviewing'` continua `interviewing`. As tabelas de
-decisão só mudam por `setApplicationStatus()`, chamada exclusivamente pelo
-`jho track`.
+decisão só mudam por `setApplicationStatus()`, e só por ação explícita da
+pessoa: `jho track`, a tela do funil ou uma sugestão de e-mail aceita. Nenhum
+caminho de ingestão a chama.
 
 > **Invariante:** nenhum código sob `src/core/ingest/` ou `src/core/sources/`
 > pode importar `application` ou `applicationEvent` para escrita. Se um sync
@@ -831,10 +832,12 @@ comportamento desejado, já que o contador `updated` da saída do `jobs sync` s�
 > duas vagas legitimamente diferentes podem ter conteúdo idêntico depois da
 > normalização que o `fingerprint` aplica e o `content_hash` não.
 
-Note que `content_hash` **não** dispara repontuação. Quem decide o que repontuar
-é `SCORER_VERSION` (e o `--all`). Uma vaga cujo corpo mudou mantém o score
-antigo até a próxima corrida com `--all` ou até um bump de versão — algo a
-considerar ao mexer no pipeline.
+Conteúdo alterado **descarta o score** da vaga: a observação apaga as linhas de
+`job_score` daquela vaga para todos os candidatos (`invalidateScores()` em
+`src/core/ingest/observe.ts`), o sync reporta quantas foram invalidadas, e a
+próxima pontuação a recalcula. Mudança só em metadado fora do hash (como
+`applyUrl`) não invalida. Mudança do **scorer** ou do perfil continua exigindo
+bump de `SCORER_VERSION` — o hash de conteúdo não substitui essa regra.
 
 ---
 

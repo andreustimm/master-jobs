@@ -302,8 +302,8 @@ e o fit final é `Math.max(0, Math.min(100, rawTotal - penalty))`. Blockers
 role that says 'US preferred' is still worth seeing, just not at the top of the
 list". Detalhes componente a componente em `docs/scoring.md`.
 
-`SCORER_VERSION = "1.3.0"` e o `profile_hash` são persistidos em cada linha de
-`job_score`. Sem `--all`, `scoreAll()` processa jobs sem score, com geração ou
+`SCORER_VERSION` (valor atual em `src/core/scoring/score.ts`) e o
+`profile_hash` são persistidos em cada linha de `job_score`. Sem `--all`, `scoreAll()` processa jobs sem score, com geração ou
 perfil divergentes, e os que expiraram pela política de freshness.
 
 > **Invariante:** Mexeu em `profile.yaml` ou no scorer? Bump `SCORER_VERSION` em
@@ -345,6 +345,45 @@ account inside the LinkedIn User Agreement."
 > `docs/adr/0001-nao-fazer-scraping-do-linkedin.md`.
 
 ---
+
+## Mapa rápido dos diretórios
+
+Contagens (tabelas, adapters) ficam no código e em
+[`data-model.md`](data-model.md), não aqui.
+
+```
+src/contexts/      bounded contexts — auth, correspondence, fx, matching, pursuit, skills
+  i18n/            pt-BR e en, chaves tipadas contra o dicionário português
+src/core/          lógica pura, compartilhada entre CLI e UI
+  db/              composition root Drizzle, client e migrations
+  sources/         um adapter por board público + registry + careers (página própria)
+  ingest/          normalização, fingerprint, upsert, import manual, verificação
+  scoring/         fit score determinístico + persistência
+                   score.ts · freshness.ts · benefits.ts · apply.ts
+  profile/         carga e validação de profile.yaml (Zod)
+  mail/            parser MIME, classificador, extrator de job alert, Gmail OAuth
+  positioning/     plano da auditoria como dados
+  report/          export markdown
+  analytics/       estatística: Wilson, Spearman, diagnóstico de componente
+  scrape/          fila, robots.txt, captura e extração (duas etapas)
+  security.ts      autoverificações (bind, PII, segredos, permissões)
+  apply/           dossiê de candidatura (prepara; nunca envia — ADR 0010)
+  llm/             porta BYOK, adapters e cadastro de provedores/modelos
+                   port.ts · providers.ts · registry.ts · analyze.ts
+  clock.ts         relógio injetável — só onde o tempo é decisão, não carimbo
+  money.ts         value object (amount + currency + period)
+  pdf.ts           extração de PDF (unpdf, JS puro) + limpeza de texto
+  contacts.ts      rede profissional e referrals
+src/cli.ts         Commander
+app/               dashboard Next.js — adapter sobre APIs públicas
+config/sources.yaml   quais boards buscar
+profile/profile.yaml  perfil do candidato — fonte da verdade do scoring
+data/jobs.db       snapshot SQLite legado (gitignored; não é runtime)
+```
+
+Fluxo: `sources → ingest → scoring → application → report/UI`. A migração para
+hexagonal/DDD está decidida na ADR 0007 e concluída — ver `MIGRATION.md` e
+[`engineering/context-map.md`](engineering/context-map.md).
 
 ## Mapa arquivo a arquivo
 
@@ -422,7 +461,7 @@ account inside the LinkedIn User Agreement."
 | `drizzle.config.ts` | Configuração PostgreSQL, schema `./src/core/db/schema.ts`, migrations em `./drizzle/postgres`, e conexão por `DATABASE_MIGRATION_URL`. |
 | `next.config.ts` | `experimental.cacheComponents: true` (Next 16 Cache Components) e `typedRoutes: true`. O dashboard existe e roda localmente em loopback. |
 | `vitest.config.ts` | `include: ["tests/**/*.test.ts"]`, `environment: "node"`, `globals: false`. |
-| `CLAUDE.md` / `AGENTS.md` | Instruções para agentes. São espelhos um do outro. |
+| `AGENTS.md` / `CLAUDE.md` | Entrada comum das instruções para agentes. `AGENTS.md` é a única fonte; `CLAUDE.md` é um symlink para ela. O detalhe normativo fica em `docs/engineering/rules/`. |
 | `.claude/agents/fit-analyst.md`, `.claude/commands/{aplicar,fonte-nova,funil,vagas}.md` | Agente e slash-commands do Claude Code para triagem e funil. |
 | `.claude/skills/{application-kit,candidate-profile,job-triage,linkedin-positioning}/SKILL.md` | As quatro skills que empacotam o procedimento de cada frente. |
 | `.codex/config.toml`, `compozy/loops/job-sweep.yaml`, `compozy/README.md` | Configuração do Codex e o loop de varredura periódica de vagas. |
@@ -540,17 +579,21 @@ app/
 Next.js 16 com shadcn/ui sobre Tailwind v4.
 
 > **Invariante:** a UI é **adaptador**, não implementação paralela. Server
-> Components chamam as mesmas APIs públicas que a CLI chama, e a única
-> mutação passa por `setApplicationStatus` — uma mudança de status feita no
-> navegador cai em `application_event` exatamente como uma feita no terminal.
-> Nunca duplique query entre as superfícies: coloque-a atrás da API pública do
-> contexto proprietário.
+> Components e Server Actions chamam as mesmas APIs públicas que a CLI chama.
+> A transição do funil passa por `setApplicationStatus` nos dois lados — uma
+> mudança de status feita no navegador cai em `application_event` exatamente
+> como uma feita no terminal. Outras mutações (conta, candidato, buscas, perfil
+> público) ficam atrás do contexto proprietário e da sua guarda. Nunca duplique
+> query entre as superfícies. Regra em
+> [`engineering/rules/architecture.md`](engineering/rules/architecture.md#g65).
 
 Três decisões que valem registro:
 
 **Estado de filtro vive na URL**, não em React. A visão filtrada é
-compartilhável, o botão voltar funciona, e toda página continua Server Component
-— o dashboard não envia JavaScript de cliente.
+compartilhável, o botão voltar funciona, e as páginas continuam Server
+Components. JavaScript de cliente existe em ilhas (editor, modal, formulários,
+navegação, tema — ver ADR 0015), que não duplicam regra de negócio nem puxam o
+grafo do servidor para o bundle.
 
 O recorte `workMode=remote|hybrid|onsite` usa a mesma expressão SQL na lista,
 contagem, facetas e exportação, antes de `LIMIT/OFFSET`. Modalidade reconhecida

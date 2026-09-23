@@ -112,26 +112,17 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 
 ---
 
-## As seis regras que um agente não pode quebrar
+## Regras para agentes e pessoas
 
-O texto normativo está em `AGENTS.md`. `CLAUDE.md` é apenas um symlink para a
-mesma fonte, assim como Codex e OpenCode compartilham as skills canônicas.
-Resumo, com o ponteiro para o documento que explica cada uma:
+A entrada comum é `AGENTS.md`, com as invariantes críticas e o roteador.
+`CLAUDE.md` é apenas um symlink para a mesma fonte, assim como Codex e OpenCode
+compartilham as skills canônicas. O detalhe normativo de cada regra — escopo,
+exceções, origem e prova — está em
+[`engineering/rules/`](engineering/rules/README.md), dividido em seis domínios,
+com o inventário de equivalência das obrigações. Este índice não mantém uma
+segunda cópia das regras.
 
-> **Invariante:** Nunca faça scraping do LinkedIn. Nada aqui pode ler `li_at`, dirigir sessão autenticada ou usar um "LinkedIn MCP" não oficial — viola a seção 8.2 do User Agreement e arrisca a conta que é o principal ativo de posicionamento. Publicação usa a API oficial (`w_member_social`); comentários, conexões e busca são **assistidos** — o agente redige, o humano executa. Ver [`linkedin-policy.md`](linkedin-policy.md) e [ADR 0001](adr/0001-nao-fazer-scraping-do-linkedin.md).
-
-> **Invariante:** Ingestão nunca escreve em `application`. O sync pode inserir, atualizar e fechar `job`, mas jamais toca decisões do usuário. Ver [`data-model.md`](data-model.md) e [ADR 0005](adr/0005-separacao-entre-fato-observado-e-decisao-do-usuario.md).
-
-> **Invariante:** Vaga que some é fechada, não deletada. Marque `closedAt`. A única exclusão permitida é `pruneClosed()`, e ela protege explicitamente o que tem candidatura. Ver [`operations.md`](operations.md).
-
-> **Invariante:** Só sintaxe TypeScript apagável. O runtime é o type stripping nativo do Node 24 — sem `enum`, sem parameter properties, sem `namespace`, sem decorators. `erasableSyntaxOnly: true` está ligado no `tsconfig.json`; o sintoma em runtime é `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`. Ver [ADR 0006](adr/0006-typescript-apagavel-sem-build-step.md).
-
-> **Invariante:** Mexeu em `profile.yaml` ou no scorer? Bump `SCORER_VERSION` em `src/core/scoring/score.ts` (hoje `"1.0.0"`) e rode `pnpm jho jobs score --all`. Sem o bump, `scoreAll()` considera os scores antigos válidos e eles se misturam com os novos sem ninguém perceber. Ver [`scoring.md`](scoring.md).
-
-> **Invariante:** Não invente evidência. O agente de tailoring de CV só pode citar o que está sob a chave `evidence` de `profile.yaml`. O que está em `growth` é lacuna assumida — sinalize, nunca maquie.
-
-> **Invariante:** edite somente `AGENTS.md`; nunca substitua nem edite o symlink `CLAUDE.md` como uma cópia independente.
-
+> **Invariante:** edite somente `AGENTS.md` e `docs/engineering/rules/`; nunca substitua nem edite o symlink `CLAUDE.md` como uma cópia independente.
 
 ## Documentos adicionados depois
 

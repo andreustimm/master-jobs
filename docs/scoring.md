@@ -729,7 +729,7 @@ Coisas que **não** são ajustáveis pelo YAML e exigem mudar `score.ts`: os `WE
 
 ### O ciclo obrigatório depois de qualquer ajuste
 
-> **Invariante:** mexeu em `profile.yaml` ou em `src/core/scoring/score.ts`? **Bump `SCORER_VERSION`** e rode o rescore. (Regra 5 do `CLAUDE.md`.)
+> **Invariante:** mexeu em `profile.yaml` ou em `src/core/scoring/score.ts`? **Bump `SCORER_VERSION`** e rode o rescore. (Regra 6 do `AGENTS.md`; detalhe em [`engineering/rules/matching-and-evidence.md`](engineering/rules/matching-and-evidence.md#g08).)
 
 ```bash
 # 1. valida o YAML e mostra os targets resolvidos (não abre o banco)

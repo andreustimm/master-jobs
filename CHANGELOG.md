@@ -13,6 +13,7 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 ### Alterado
 
 - Fluxo: a issue fecha quando o código chega a produção — commits das PRs levam `Closes #N` na mensagem, porque a PR aponta para `dev` e só a entrada em `main` fecha issues (AGENTS.md, `docs/engineering/workflow.md`).
+- Instruções: `AGENTS.md` vira entrada comum compacta (regras 1–24 resumidas, roteador por área, fluxo curto) e o detalhe normativo passa para `docs/engineering/rules/`, em seis domínios, com o inventário das 84 obrigações da auditoria e a situação dos conflitos C01–C22 (#200). Contradições antigas corrigidas: token bruto em componente, "sem JS de cliente", "única mutação da UI", versão do scorer copiada, conteúdo alterado que não invalidaria o score, "editar ambos" AGENTS/CLAUDE e o modelo de ameaça "só local". Inventário de comandos movido para `docs/cli.md` e mapa de diretórios para `docs/architecture.md`.
 
 ## [1.22.1] - 2026-09-23
 

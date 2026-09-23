@@ -4,7 +4,9 @@ O fluxo continua sendo worktree de `dev` → PR para `dev` → promoção autom�
 para `staging` → aprovação humana para `main`. A regra 24 de
 [AGENTS.md](../../AGENTS.md) define a autoridade operacional: issue e
 [Project 3 — Master Jobs](https://github.com/users/andreustimm/projects/3).
-Git continua sendo a fonte de specs, código e evidências.
+Git continua sendo a fonte de specs, código e evidências. Este documento é o
+roteiro; as regras que ele executa, com escopo e exceções, estão em
+[rules/delivery.md](rules/delivery.md).
 
 ## Preparação e ativação
 
