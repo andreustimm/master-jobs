@@ -8,10 +8,10 @@
  *
  * Fronteira FORA: rede (porta HTTP dublê) e o arquivo YAML (temporário).
  */
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { count, eq } from "drizzle-orm";
+import { join, resolve } from "node:path";
+import { count, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   catalogSources,
@@ -140,6 +140,29 @@ describe("IT-001 escrita no catálogo", () => {
     expect(await db.select({ id: job.id }).from(job).where(eq(job.sourceId, "greenhouse:acme"))).toHaveLength(1);
     expect(await db.select({ status: application.status }).from(application)).toEqual([{ status: "applied" }]);
     expect((await catalogSources()).map((row) => [row.id, row.retiredAt])).toEqual([["greenhouse:acme", NOW]]);
+  });
+});
+
+describe("IT-001 migration 0018: origem das linhas que já existiam", () => {
+  it("marca como yaml só as linhas de sync, e reaplicar não muda nada", async () => {
+    await db.insert(source).values([
+      { id: "greenhouse:acme", kind: "greenhouse", handle: "acme", label: "Acme" },
+      { id: "remotive:~terms", kind: "remotive", handle: "~terms", label: "Termos" },
+      { id: "manual:sample", kind: "manual", handle: "sample", label: "Fixture" },
+      { id: "lever:tela", kind: "lever", handle: "tela", label: "Tela", origin: "admin" },
+    ]);
+    const backfill = readFileSync(resolve(process.cwd(), "drizzle/postgres/0018_backfill_source_origin.sql"), "utf8");
+
+    await db.execute(sql.raw(backfill));
+    await db.execute(sql.raw(backfill));
+
+    const rows = await db.select({ id: source.id, origin: source.origin, managedAt: source.managedAt }).from(source).orderBy(source.id);
+    expect(rows).toEqual([
+      { id: "greenhouse:acme", origin: "yaml", managedAt: null },
+      { id: "lever:tela", origin: "admin", managedAt: null },
+      { id: "manual:sample", origin: "system", managedAt: null },
+      { id: "remotive:~terms", origin: "system", managedAt: null },
+    ]);
   });
 });
 
