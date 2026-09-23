@@ -8,6 +8,7 @@ import YAML from "yaml";
 import { promotionInput } from "../scripts/release/promotion.ts";
 import { REQUIRED_CI_JOBS } from "../scripts/release/promotion-ci.ts";
 import { updatePromotionBody } from "../scripts/release/promotion-pr.ts";
+import { checkoutOf, ciWorkflow } from "./support/ci-workflow.ts";
 
 const SCRIPT = resolve("scripts/release/promotion.ts");
 const LOWER_LEVEL = resolve("scripts/release/promover-staging.ts");
@@ -628,11 +629,24 @@ it("wires the same CI jobs to the exact target with read-only credentials before
   expect(promotion.jobs.promover.needs).toEqual(["preparar", "validar"]);
   expect(ci.jobs.validacao.needs).toEqual(REQUIRED_CI_JOBS);
   for (const job of REQUIRED_CI_JOBS) {
-    expect(ci.jobs[job].if).toBeUndefined();
+    // `qualidade` é o agregador e PRECISA de `always()`: sem ele, uma
+    // dependência vermelha faz o job ser pulado, e check obrigatório pulado
+    // conta como aprovado na proteção de branch. Qualquer outra condição
+    // poderia pular o gate.
+    expect(ci.jobs[job].if).toBe(job === "qualidade" ? "${{ always() }}" : undefined);
     expect(ci.jobs[job]["continue-on-error"]).toBeUndefined();
-    const checkout = ci.jobs[job].steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/checkout@"));
-    expect(checkout.with.ref).toBe("${{ inputs.target-sha || github.sha }}");
-    expect(checkout.with["persist-credentials"]).toBe(false);
+  }
+  // Todo job que lê código faz checkout do alvo exato, sem credencial persistida;
+  // só o agregador e a emissão do SHA não leem código.
+  const gates = ciWorkflow();
+  for (const [name, job] of Object.entries(gates.jobs)) {
+    const checkout = checkoutOf(job);
+    if (name === "qualidade" || name === "validacao") {
+      expect(checkout, name).toBeUndefined();
+      continue;
+    }
+    expect(checkout?.with?.ref, name).toBe("${{ inputs.target-sha || github.sha }}");
+    expect(checkout?.with?.["persist-credentials"], name).toBe(false);
   }
   expect(promotion.jobs.promover.steps.find((step: { id?: string }) => step.id === "promocao").env.VALIDATED_SHA).toBe("${{ needs.validar.outputs.validated-sha }}");
   expect(ci.concurrency.group).toBe("ci-${{ inputs.target-sha || github.ref }}");
