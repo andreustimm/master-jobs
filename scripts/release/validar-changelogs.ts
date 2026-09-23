@@ -1,7 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  ChangelogFragmentError,
+  FRAGMENT_DIRECTORY,
+  assertFragmentNames,
+  type ChangelogFragment,
+} from "../../src/core/changelog-fragments.ts";
 import {
   ReleaseDomainError,
   validarReleasePendente,
@@ -71,6 +77,28 @@ function readDocuments(options: Options): ReleaseDocuments {
   };
 }
 
+/** With `--staged`, the index decides: an unstaged fragment is not in the commit. */
+function fragmentNames(options: Options): string[] {
+  if (options.staged) {
+    return execFileSync("git", ["ls-files", "--cached", "-z", "--", `${FRAGMENT_DIRECTORY}/`], {
+      cwd: options.directory,
+      encoding: "utf8",
+    }).split("\0").filter(Boolean).map((path) => path.slice(FRAGMENT_DIRECTORY.length + 1));
+  }
+  try {
+    return readdirSync(resolve(options.directory, FRAGMENT_DIRECTORY));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+function readFragments(options: Options): ChangelogFragment[] {
+  const names = fragmentNames(options);
+  assertFragmentNames(names);
+  return names.map((name) => ({ name, content: readProjectFile(`${FRAGMENT_DIRECTORY}/${name}`, options) }));
+}
+
 function packageVersion(options: Options): string {
   const parsed = JSON.parse(readProjectFile("package.json", options)) as { version?: unknown };
   if (typeof parsed.version !== "string" || !versaoSemanticaValida(parsed.version)) {
@@ -101,12 +129,14 @@ export function validatePendingRelease(options: Options): string {
     currentVersion: packageVersion(options),
     documents: readDocuments(options),
     publishedAt: new Date(),
+    fragments: readFragments(options),
   });
   return result.status === "ready" ? `release-ready version=${result.version}` : "no-release";
 }
 
 function safeFailure(error: unknown): string {
   if (error instanceof ReleaseDomainError) return `release_changelog_not_ready code=${error.code}`;
+  if (error instanceof ChangelogFragmentError) return error.message;
   return "release_changelog_not_ready";
 }
 
@@ -120,7 +150,7 @@ if (direct) {
   } catch (error) {
     console.error(safeFailure(error));
     console.error(
-      "Atualize CHANGELOG.md, USER_CHANGELOG.pt-BR.md e USER_CHANGELOG.en.md antes do commit releaseável.",
+      "Adicione um fragmento em changelog.d/<slug>.md (blocos Técnico, pt-BR e en) antes do commit releaseável.",
     );
     process.exitCode = 1;
   }
