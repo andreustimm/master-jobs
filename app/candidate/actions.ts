@@ -5,7 +5,6 @@ import { guard, guardOwnCandidate } from "../auth";
 import { createOwnCandidate } from "../../src/contexts/auth/index.ts";
 import {
   CV_MIN,
-  CV_PDF_MAX_MB,
   parseOwnProfile,
   validatePublicSlug,
   type NameError,
@@ -58,15 +57,6 @@ export async function saveCvAction(formData: FormData) {
   revalidatePath("/candidate");
 }
 
-/** Log de servidor: a tela mostra a mensagem genérica do formulário. */
-const PDF_REFUSAL: Record<CvPdfError, string> = {
-  pdfMissing: "Selecione um arquivo PDF.",
-  pdfTooLarge: `Arquivo acima de ${CV_PDF_MAX_MB} MB. Currículo não deveria chegar perto disso.`,
-  pdfNotPdf: "O arquivo não é um PDF legível.",
-  pdfNoText:
-    "Quase nenhum texto no PDF. Provavelmente é digitalizado (imagem), sem camada de texto — cole o conteúdo manualmente.",
-};
-
 /**
  * Import a CV from an uploaded PDF.
  *
@@ -80,7 +70,9 @@ export async function importPdfAction(formData: FormData) {
 
   const { readCvPdf } = await import("../../src/core/pdf.ts");
   const pdf = await readCvPdf(formData.get("file"));
-  if (!pdf.ok) throw new Error(PDF_REFUSAL[pdf.code]);
+  // Só o log lê esta mensagem (a tela mostra o erro genérico do formulário),
+  // e para o log o código é o identificador estável.
+  if (!pdf.ok) throw new Error(`importPdfAction: ${pdf.code}`);
 
   await saveDocument({
     candidateId,

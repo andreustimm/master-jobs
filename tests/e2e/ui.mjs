@@ -3244,25 +3244,21 @@ try {
     await onboarding.locator('[data-testid="create-profile"]').click();
     await refusalNotice.waitFor({ timeout: 10_000 }).catch(() => undefined);
     const notPdfReason = ((await refusalNotice.textContent().catch(() => "")) ?? "").trim();
-    check("onboarding recusa arquivo que não é PDF, com a razão", /not a readable PDF/.test(notPdfReason), notPdfReason);
+    check(
+      "onboarding recusa arquivo que não é PDF, com a razão",
+      notPdfReason.includes(en.onboarding.pdfNotPdf),
+      notPdfReason,
+    );
     check(
       "recusa do PDF não cria perfil",
       (await onboarding.locator('[data-testid="route-candidate-onboarding"]').count()) === 1,
     );
     await onboarding.locator('[data-testid="mutation-feedback-dismiss"]').click().catch(() => undefined);
 
+    const { pdfComTexto } = await import("../support/synthetic-pdf.ts");
     const marker = "Kubernetes platform migration led for the payments team";
     const lines = Array.from({ length: 6 }, (_, i) => `${marker}, release ${i + 1}, with observability`);
-    const stream = lines.map((line, n) => `BT /F1 10 Tf 20 ${740 - n * 14} Td (${line}) Tj ET`).join("\n");
-    const cvPdf = Buffer.from(
-      "%PDF-1.4\n" +
-        "1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n" +
-        "2 0 obj<</Type/Pages/Kids[4 0 R]/Count 1>>endobj\n" +
-        "3 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n" +
-        "4 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 9000 792]/Resources<</Font<</F1 3 0 R>>>>/Contents 5 0 R>>endobj\n" +
-        `5 0 obj<</Length ${stream.length}>>stream\n${stream}\nendstream endobj\n` +
-        "trailer<</Root 1 0 R>>",
-    );
+    const cvPdf = Buffer.from(pdfComTexto([lines]));
     await onboarding.locator('[data-testid="profile-cv-file"]').setInputFiles({
       name: "e2e-onboarding-cv.pdf",
       mimeType: "application/pdf",

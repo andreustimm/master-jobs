@@ -22,10 +22,10 @@ journey:
       expected_observable: O perfil continua lá; o formulário de criação não volta
   goal:
     observable: A conta tem um candidato novo, privado e só dela
-    side_effects: [candidate criado, auth_user.candidate_id preenchido]
+    side_effects: [candidate criado, auth_user.candidate_id preenchido, candidate_document do CV quando colado ou enviado em PDF]
   true_end_state: Depois do refresh, /candidate mostra a área do candidato com a identidade digitada e visibilidade privada
   exit:
-    natural: Seguir para colar o currículo ou abrir Vagas
+    natural: Revisar o currículo no editor (ou colá-lo, se ainda não veio) ou abrir Vagas
   abandonment:
     - at_step: 2
       how: Desiste antes de enviar
@@ -43,5 +43,5 @@ flowchart LR
 
 - **Entrada:** conta de papel candidato sem candidato vinculado.
 - **Estado final verdadeiro:** candidato novo, privado, ligado só a esta conta, com a identidade digitada — nunca a do `profile.yaml`.
-- **Saída:** colar o currículo ou seguir para Vagas.
+- **Saída:** revisar o currículo no editor (ou colá-lo, se ainda não veio) ou seguir para Vagas.
 - **Abandono:** desistir antes de enviar; nada é criado e o formulário continua lá.

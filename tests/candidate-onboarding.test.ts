@@ -369,7 +369,7 @@ describe("createProfileAction com o currículo em PDF (#278)", () => {
     expect(await createProfileAction(withPdf({ name: " " }, "não é pdf"))).toEqual({ ok: false, code: "nameRequired" });
   });
 
-  it("conta que já tem candidato é negada antes de ler o PDF, e nada muda", async () => {
+  it("conta que já tem candidato: a sessão atual é negada, a antiga não grava o PDF em ninguém", async () => {
     const userId = await account("maria@local.test");
     const first = await createOwnCandidate(sessionOf(userId), { name: "Maria", headline: null, location: null, ...NO_CV });
     expect(first.status).toBe("created");

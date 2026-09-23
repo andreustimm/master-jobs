@@ -123,8 +123,9 @@ function looksLikePdf(bytes: Uint8Array): boolean {
  * O currículo enviado como PDF, validado e extraído — o caminho único do
  * upload, usado pelo perfil existente e pelo onboarding.
  *
- * Recebe a entrada crua do `FormData` para que a checagem de "veio arquivo?"
- * também seja uma só. O tipo é decidido pelos bytes, não pelo `type` que o
+ * Recebe a entrada crua do `FormData` e recusa a ausência (`pdfMissing`); o
+ * onboarding repete essa checagem antes, porque decide `cvBoth` e a ordem das
+ * recusas sem carregar o extrator. O tipo é decidido pelos bytes, não pelo `type` que o
  * navegador declara: esse vem do nome do arquivo e qualquer um o escreve.
  * O mínimo de texto é o `CV_MIN` do perfil, para que um PDF aceito aqui nunca
  * seja recusado adiante como "curto demais".

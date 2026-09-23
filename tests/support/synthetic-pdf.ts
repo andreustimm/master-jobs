@@ -36,7 +36,8 @@ export function pdfComTexto(paginas: string[][], larguraPt = 9_000): Uint8Array<
         `/Resources<</Font<</F1 3 0 R>>>>/Contents ${idConteudo} 0 R>>endobj`,
     );
     objetos.push(
-      `${idConteudo} 0 obj<</Length ${fluxo.length}>>stream\n${fluxo}\nendstream endobj`,
+      // `/Length` conta bytes; `fluxo.length` contaria unidades UTF-16.
+      `${idConteudo} 0 obj<</Length ${new TextEncoder().encode(fluxo).length}>>stream\n${fluxo}\nendstream endobj`,
     );
   });
 
