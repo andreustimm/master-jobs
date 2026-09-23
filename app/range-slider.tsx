@@ -1,8 +1,10 @@
 "use client";
 
 import { Slider } from "@base-ui/react/slider";
-import { useState } from "react";
+import { useRef } from "react";
 import { Input } from "@/components/ui/input";
+import { AUTO_APPLY_CONTROL_MS } from "./auto-apply.ts";
+import { useAppliedValue, useAutoSubmit } from "./auto-submit";
 
 /**
  * A range: two number fields and a two-thumb slider over the same pair.
@@ -18,6 +20,11 @@ import { Input } from "@/components/ui/input";
  * `"use client"` stops here. The page stays a Server Component, the state still
  * lives in the URL, and this island only edits inputs inside the GET form
  * around it.
+ *
+ * The range applies itself when a gesture ends (#218): releasing a thumb,
+ * leaving the range with the keyboard or the mouse, choosing in a select that
+ * sits beside the fields. Dragging never navigates, and moving between the two
+ * fields, or from a field to Apply, is still the same gesture.
  */
 
 export type RangeLabels = {
@@ -94,8 +101,15 @@ export function RangeSlider({
   /** Controls that belong on the fields row — Apply, a currency, a period. */
   children?: React.ReactNode;
 }) {
-  const [floor, setFloor] = useState(min === undefined ? "" : String(min));
-  const [roof, setRoof] = useState(max === undefined ? "" : String(max));
+  const root = useRef<HTMLDivElement>(null);
+  const submitter = useAutoSubmit(root);
+  const [floor, setFloor] = useAppliedValue(min === undefined ? "" : String(min), root, submitter);
+  const [roof, setRoof] = useAppliedValue(max === undefined ? "" : String(max), root, submitter);
+  const confirm = () => submitter.schedule(AUTO_APPLY_CONTROL_MS);
+  // Sair de um campo confirma só quando o foco deixa a faixa inteira.
+  const leave = (event: React.FocusEvent) => {
+    if (!(event.relatedTarget instanceof Node && root.current?.contains(event.relatedTarget))) confirm();
+  };
 
   // The scale grows to hold a typed value above it, so a 90.000 monthly floor
   // still shows a thumb instead of pinning at the end of the track.
@@ -104,7 +118,16 @@ export function RangeSlider({
   const value: [number, number] = [position(floor, 0, top), position(roof, top, top)];
 
   return (
-    <div className="flex w-full flex-col gap-1">
+    <div
+      ref={root}
+      className="flex w-full flex-col gap-1"
+      // Um select ao lado dos campos (moeda, período) é gesto completo: o
+      // `change` dele sobe até aqui. O dos campos numéricos também sobe, a cada
+      // tecla, e é ignorado — o campo confirma ao sair.
+      onChange={(event) => {
+        if (event.target instanceof HTMLSelectElement) confirm();
+      }}
+    >
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1 type-caption-sm text-muted-foreground">
           {labels.min}
@@ -118,6 +141,7 @@ export function RangeSlider({
             value={floor}
             placeholder={labels.minPlaceholder}
             onChange={(event) => setFloor(clamp(event.target.value, floorLimit, limit))}
+            onBlur={leave}
             className="w-28"
             data-testid={`${testId}-min`}
           />
@@ -134,6 +158,7 @@ export function RangeSlider({
             value={roof}
             placeholder={labels.maxPlaceholder}
             onChange={(event) => setRoof(clamp(event.target.value, floorLimit, limit))}
+            onBlur={leave}
             className="w-28"
             data-testid={`${testId}-max`}
           />
@@ -154,6 +179,7 @@ export function RangeSlider({
           if (details.activeThumbIndex === 0) setFloor(next[0] === 0 ? "" : String(next[0]));
           else setRoof(next[1] === top ? "" : String(next[1]));
         }}
+        onValueCommitted={confirm}
         className="max-w-[28rem]"
         data-testid={`${testId}-slider`}
       >
