@@ -33,7 +33,14 @@ function fixture() {
   const smoke = { id: 88, sha: deploymentSha, branch: "main", conclusion: "success" as string | null, url: `${web}/actions/runs/88`, name: "Fumaça de produção" };
   const ciMetadata = { id: 77, repository: { full_name: repository }, head_repository: { full_name: repository }, head_sha: headSha, head_branch: "feat/task", run_attempt: 1, status: "completed", conclusion: "success", path: ".github/workflows/ci.yml", pull_requests: [{ number: 31 }], run_started_at: "2026-09-22T14:00:00Z" };
   const smokeMetadata = { ...ciMetadata, id: 88, head_sha: deploymentSha, head_branch: "main", path: ".github/workflows/fumaca-producao.yml" };
-  const associated = [{ number: 31 }];
+  // A main deployment SHA is associated with the human staging → main promotion;
+  // the task PR (base dev) only appears inside that promotion's commits.
+  const promotion: PullRequestEvidence = { number: 300, url: `${web}/pull/300`, state: "MERGED", base: "main", head: "staging", headSha: deploymentSha, mergeSha: deploymentSha, mergedAt: "2026-09-22T14:15:00Z", linkedIssues: [1], checksSuccessful: true };
+  const associated = [{ number: 300 }];
+  const promotionCommits: Array<{ commit: { message?: string } }> = [
+    { commit: { message: "Merge pull request #31 from andreustimm/feat/task\n\nCloses #1" } },
+    { commit: { message: "fix(tasks): unrelated change" } },
+  ];
   const smokeRuns: Array<{ id: number; run_attempt: number }> = [{ id: 88, run_attempt: 1 }];
   const mutations = {
     comment: vi.fn(async () => { throw new Error("Events may not mutate issues"); }), updateComment: vi.fn(async () => { throw new Error("Events may not mutate comments"); }),
@@ -49,7 +56,7 @@ function fixture() {
       const result = structuredClone(task); result.revision = snapshotRevision(result); return result;
     }),
     listProjectTasks: vi.fn(async () => { throw new Error("Events must not scan the Project"); }),
-    pullRequest: vi.fn(async () => structuredClone(pr)), deployment: vi.fn(async () => structuredClone(deployment)),
+    pullRequest: vi.fn(async (number: number) => structuredClone(number === promotion.number ? promotion : pr)), deployment: vi.fn(async () => structuredClone(deployment)),
     containsCommit: vi.fn(async () => true), workflowRun: vi.fn(async (number: number) => structuredClone(number === 88 ? smoke : run)),
   } satisfies TaskGateway;
   vi.mocked(requestGitHub).mockImplementation(async (method, path) => {
@@ -57,6 +64,12 @@ function fixture() {
     if (path === `repos/${repository}/actions/runs/77`) return structuredClone(ciMetadata);
     if (path === `repos/${repository}/actions/runs/88`) return structuredClone(smokeMetadata);
     if (path === `repos/${repository}/commits/${deploymentSha}/pulls?per_page=100&page=1`) return structuredClone(associated);
+    const commitsPage = path.match(new RegExp(`^repos/${repository}/pulls/300/commits\\?per_page=100&page=(\\d+)$`));
+    if (path === `repos/${repository}/issues/31`) return { number: 31, pull_request: { url: `${web}/pull/31` } };
+    if (path === `repos/${repository}/issues/186`) return { number: 186 };
+    if (path === `repos/${repository}/issues/999`) throw Object.assign(new Error("GitHub GET issues/999 failed"), { status: 404 });
+    if (path === `repos/${repository}/issues/500`) throw Object.assign(new Error("GitHub GET issues/500 failed"), { status: 502 });
+    if (commitsPage) { const page = Number(commitsPage[1]); return structuredClone(promotionCommits.slice((page - 1) * 100, page * 100)); }
     if (path === `repos/${repository}/actions/workflows/fumaca-producao.yml/runs?head_sha=${deploymentSha}&branch=main&per_page=100&page=1`) return { workflow_runs: structuredClone(smokeRuns) };
     throw new Error("Unexpected read-only metadata endpoint");
   });
@@ -64,7 +77,7 @@ function fixture() {
   const ciEvent = () => ({ repository: { full_name: repository }, action: "completed", workflow_run: structuredClone(ciMetadata) });
   const deployEvent = () => ({ repository: { full_name: repository }, deployment: { id: 42, sha: deploymentSha, created_at: "2026-09-22T14:20:00Z" }, deployment_status: { id: 900, state: "success" } });
   const production = () => { task.status = "Implantando"; task.issue.body = "<!-- task-delivery:production -->"; pr.state = "MERGED"; pr.mergeSha = mergeSha; pr.mergedAt = "2026-09-22T14:10:00Z"; };
-  return { gateway, task, pr, control, ciMetadata, smokeMetadata, smokeRuns, associated, deployment, run, smoke, mutations, prEvent, ciEvent, deployEvent, production, changeControlTime: (value: string) => { controlUpdatedAt = value; } };
+  return { gateway, task, pr, promotion, promotionCommits, control, ciMetadata, smokeMetadata, smokeRuns, associated, deployment, run, smoke, mutations, prEvent, ciEvent, deployEvent, production, changeControlTime: (value: string) => { controlUpdatedAt = value; } };
 }
 
 describe("native events remain read-only evidence", () => {
@@ -202,15 +215,78 @@ describe("production evidence", () => {
     ["smoke rerun", (f: ReturnType<typeof fixture>) => { f.smokeMetadata.run_attempt = 2; }],
     ["wrong smoke workflow", (f: ReturnType<typeof fixture>) => { f.smokeMetadata.path = ".github/workflows/other.yml"; }],
   ] as const)("refuses completion for %s", async (_name, mutate) => {
-    const f = fixture(); f.production(); mutate(f);
+    // Direct association keeps a note to inspect even when an invalid deployment
+    // is not expanded through its promotion.
+    const f = fixture(); f.production(); f.associated[0] = { number: 31 }; mutate(f);
     const [note] = await collectEventEvidence(f.gateway, config, "deployment_status", f.deployEvent());
     expect(note?.suggestedStatus).toBeUndefined(); expect(note?.message).toContain("Ignorado para transição");
+  });
+
+  it.each([
+    ["failed deployment", (f: ReturnType<typeof fixture>) => { f.deployment.state = "failure"; }],
+    ["staging deployment", (f: ReturnType<typeof fixture>) => { f.deployment.environment = "Preview"; f.deployment.ref = "staging"; }],
+    ["open promotion", (f: ReturnType<typeof fixture>) => { f.promotion.state = "OPEN"; }],
+  ] as const)("does not expand the promotion for a %s", async (_name, mutate) => {
+    const f = fixture(); f.production(); mutate(f);
+    expect(await collectEventEvidence(f.gateway, config, "deployment_status", f.deployEvent())).toEqual([]);
+    expect(vi.mocked(requestGitHub).mock.calls.some(([, path]) => path.includes("/pulls/300/commits"))).toBe(false);
+    expect(f.gateway.readTask).not.toHaveBeenCalled();
+  });
+
+  it("drops a subject that names an issue or a missing number without aborting the event", async () => {
+    const f = fixture(); f.production();
+    f.promotionCommits.push({ commit: { message: "docs: nota (#186)" } }, { commit: { message: "fix: antigo (#999)" } });
+    const [note] = await collectEventEvidence(f.gateway, config, "deployment_status", f.deployEvent());
+    expect(note?.suggestedStatus).toBe("Concluído");
+    expect(f.gateway.pullRequest).not.toHaveBeenCalledWith(186);
+    expect(f.gateway.pullRequest).not.toHaveBeenCalledWith(999);
+  });
+
+  it("still fails loudly when a candidate lookup errors for another reason", async () => {
+    const f = fixture(); f.production();
+    f.promotionCommits.push({ commit: { message: "fix: instável (#500)" } });
+    await expect(collectEventEvidence(f.gateway, config, "deployment_status", f.deployEvent())).rejects.toThrow("issues/500");
   });
 
   it("does not claim ancestry when a successful deployment contains another change", async () => {
     const f = fixture(); f.production(); f.gateway.containsCommit.mockResolvedValue(false);
     const [note] = await collectEventEvidence(f.gateway, config, "deployment_status", f.deployEvent());
     expect(note?.suggestedStatus).toBeUndefined(); expect(note?.message).toContain("não contém");
+  });
+
+  it("resolves the task PR through the staging → main promotion, never the promotion itself", async () => {
+    const f = fixture(); f.production();
+    const notes = await collectEventEvidence(f.gateway, config, "deployment_status", f.deployEvent());
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.evidence).not.toContain(`${web}/pull/300`);
+    expect(f.gateway.pullRequest).toHaveBeenCalledWith(300);
+    expect(f.gateway.pullRequest).toHaveBeenCalledWith(31);
+    expect(f.gateway.listProjectTasks).not.toHaveBeenCalled();
+  });
+
+  it("also reads squash subjects and ignores commits without a message", async () => {
+    const f = fixture(); f.production();
+    f.promotionCommits.splice(0, f.promotionCommits.length, { commit: { message: "feat(tasks): entrega (#31)" } }, { commit: {} });
+    const [note] = await collectEventEvidence(f.gateway, config, "deployment_status", f.deployEvent());
+    expect(note?.suggestedStatus).toBe("Concluído");
+  });
+
+  it("still accepts a dev PR associated directly with the deployed SHA", async () => {
+    const f = fixture(); f.production(); f.associated[0] = { number: 31 };
+    const [note] = await collectEventEvidence(f.gateway, config, "deployment_status", f.deployEvent());
+    expect(note?.suggestedStatus).toBe("Concluído");
+  });
+
+  it("treats a commit message only as a hint and drops candidates that did not target dev", async () => {
+    const f = fixture(); f.production(); f.pr.base = "main";
+    expect(await collectEventEvidence(f.gateway, config, "deployment_status", f.deployEvent())).toEqual([]);
+    expect(f.gateway.readTask).not.toHaveBeenCalled();
+  });
+
+  it("demands reconciliation when the promotion exceeds the commits GitHub lists", async () => {
+    const f = fixture(); f.production();
+    f.promotionCommits.push(...Array.from({ length: 248 }, (_, index) => ({ commit: { message: `chore: filler ${index}` } })));
+    await expect(collectEventEvidence(f.gateway, config, "deployment_status", f.deployEvent())).rejects.toThrow("explicit reconciliation");
   });
 
   it("returns no task conclusion if promotion metadata does not expose native issue links", async () => {

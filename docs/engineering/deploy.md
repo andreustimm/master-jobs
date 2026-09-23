@@ -305,6 +305,12 @@ novo no CI entra em `qualidade.needs`; `tests/ci-pipeline.test.ts` reprova quem
 esquecer. A fatia de teste zera os limiares de cobertura porque a cobertura de
 um quarto da suíte não mede nada; o piso vale sobre a soma, em `cobertura`.
 
+O job `e2e-navegador` roda ao lado a suíte `pnpm test:e2e` inteira, sem
+segredo e com PostgreSQL descartável no loopback do runner. Ele é a única
+exceção registrada a `qualidade.needs` (`NON_BLOCKING_JOBS` em
+`tests/support/ci-workflow.ts`) e não roda na chamada da promoção, até a
+instabilidade estar medida — ver [O que o CI prova](../qa/README.md#o-que-o-ci-prova-e-o-que-só-a-jornada-prova).
+
 Não há atalho para PR só de documentação: cerca de quarenta arquivos de teste
 leem `docs/`, os changelogs e `.claude/skills/`, e o build compila os
 changelogs. Pular a suíte nesses casos deixaria passar exatamente a quebra de

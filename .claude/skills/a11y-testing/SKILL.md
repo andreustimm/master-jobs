@@ -19,12 +19,14 @@ and `DESIGN.md` are the source of truth.
 
 ## Workflow
 
-1. Read the existing browser checks in `tests/e2e/ui.mjs`, the axe lane in
+1. Read the route lists in `tests/e2e/routes.mjs` (`AXE_SWEEP` and the
+   others), the existing browser checks in `tests/e2e/ui.mjs`, the axe lane in
    `tests/e2e/a11y.mjs`, and its orchestration in `tests/e2e/run-isolated.mjs`.
 2. Add page or state coverage to those files. Reuse the isolated build, the
    temporary seeded PostgreSQL database, loopback server and real
-   authentication path. A new route also enters the literal lists in
-   `tests/e2e/ui.mjs` in the same commit (rule 9).
+   authentication path. A new route also enters the lists in
+   `tests/e2e/routes.mjs` in the same commit, or `UNMEASURED_PAGES` with a
+   reason (rule 9).
 3. Scan the cumulative WCAG 2.2 AA tag set:
    `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, and `wcag22aa`.
 4. Confirm the requested route returned a successful response and that the

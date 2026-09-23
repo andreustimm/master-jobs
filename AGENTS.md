@@ -61,7 +61,8 @@ Entre colchetes, o ID do detalhe em `docs/engineering/rules/`.
    [[G10](docs/engineering/rules/matching-and-evidence.md#g10)]
 9. **Texto de interface vem do dicionário** (`src/core/i18n/`), inclusive
    rótulo dentro de constante; procure a chave existente antes de criar. Rota
-   nova entra nas listas de `tests/e2e/ui.mjs` no mesmo commit; dado do usuário
+   nova entra nas listas de `tests/e2e/routes.mjs` no mesmo commit (ou em
+   `UNMEASURED_PAGES`, com motivo — o `pnpm check` reprova a omissão); dado do usuário
    leva `data-user-content`; teste acha controle por `data-testid`.
    [[G29](docs/engineering/rules/frontend.md#g29)–[G31](docs/engineering/rules/frontend.md#g31)]
 10. **Todo frontend segue o sistema de temas.** Componente lê só token

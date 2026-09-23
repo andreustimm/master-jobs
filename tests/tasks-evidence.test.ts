@@ -76,9 +76,22 @@ it("does not reuse a merge delivered before this task was first claimed", async 
 
 it("keeps the task's own merge valid after the lease was reclaimed while waiting for promotion", async () => {
   const f = fixture("dev"); f.issue.coordination!.execution!.acquiredAt = "2026-09-22T11:45:00.000Z";
+  f.issue.coordination!.firstClaimedAt = "2026-09-22T10:00:00.000Z";
   await expect(validateEvidence(f.gateway, config, f.issue, f.command)).resolves.toBeUndefined();
-  f.issue.startedAt = null;
+  delete f.issue.coordination!.firstClaimedAt;
   await expect(validateEvidence(f.gateway, config, f.issue, f.command)).rejects.toThrow("after this task's first claim");
+});
+
+it("does not widen the window to midnight because \"Iniciado em\" only stores the date", async () => {
+  // Merge at 09:00 UTC, claim at 10:00 UTC on the same day: the DATE field reads as
+  // 00:00 and used to admit a merge that predates the claim.
+  const f = fixture("dev"); f.pr.mergedAt = "2026-09-22T09:00:00.000Z";
+  expect(f.issue.startedAt).toBe("2026-09-22");
+  await expect(validateEvidence(f.gateway, config, f.issue, f.command)).rejects.toThrow("after this task's first claim");
+  f.issue.coordination!.firstClaimedAt = "2026-09-22T10:00:00.000Z";
+  await expect(validateEvidence(f.gateway, config, f.issue, f.command)).rejects.toThrow("after this task's first claim");
+  f.issue.coordination!.firstClaimedAt = "2026-09-22T08:30:00.000Z";
+  await expect(validateEvidence(f.gateway, config, f.issue, f.command)).resolves.toBeUndefined();
 });
 
 it("does not count a canceled, closed child as an accepted deliverable", async () => {

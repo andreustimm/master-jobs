@@ -31,14 +31,21 @@ Origem: regra 9. Prova: `tests/i18n.test.ts` e a varredura de G30.
 <a id="g30"></a>
 ## G30 — Rota nova entra na varredura de idioma; dado do usuário é marcado
 
-**Obrigação.** `pnpm test:e2e` percorre em inglês as rotas de **listas
-literais** em `tests/e2e/ui.mjs` e reprova por dois critérios: texto que **é**
-valor do dicionário português, e texto com acento. Rota nova entra nas listas
-**no mesmo commit** que a cria. Dado do usuário fica de fora por
-`data-user-content` (o currículo tem "São Paulo" e continua tendo em inglês).
+**Obrigação.** `pnpm test:e2e` percorre em inglês as rotas das listas
+`ENGLISH_*_SWEEP` de `tests/e2e/routes.mjs` (como dono, sem sessão e depois de
+criar trilhas) e reprova por dois critérios: texto que **é** valor do
+dicionário português, e texto com acento. Rota nova entra nas listas **no mesmo
+commit** que a cria. Dado do usuário fica de fora por `data-user-content` (o
+currículo tem "São Paulo" e continua tendo em inglês).
 
-**A lista decide o que é medido; os critérios, o que reprova.** Tela fora das
-listas passa sem ser medida — e numa tela listada, literal de JSX só reprova se
+**Toda página tem varredura ou exceção.** `tests/e2e-route-coverage.test.ts`
+cruza as listas com o inventário de páginas: página sem varredura nem exceção
+registrada, com motivo, em `UNMEASURED_PAGES` reprova o `pnpm check`. A
+varredura também confere o destino: ser mandada ao `/login` no lugar da tela
+pedida é falha, não medição limpa.
+
+**A lista decide o que é medido; os critérios, o que reprova.** Tela em
+`UNMEASURED_PAGES` passa sem ser medida — e numa tela listada, literal de JSX só reprova se
 tiver acento ou já for valor do dicionário português. A lista é necessária, não
 suficiente: G29 continua sendo a defesa, e a varredura é a rede. Foi assim que
 `/jobs/<id>` serviu `← vagas`, `Ver vaga na origem` e `visto em` em português
@@ -46,10 +53,12 @@ com a interface em inglês. Por isso a fixture varrida é acentuada: sem acento,
 tirar a marca `data-user-content` não reprovaria nada.
 
 **Não copie a contagem de rotas** para documentos (resolve C13): a fonte é o
-próprio `tests/e2e/ui.mjs`.
+próprio `tests/e2e/routes.mjs`.
 
-Origem: regra 9. Descoberta automática de rotas é trabalho de
-[#202](https://github.com/andreustimm/master-jobs/issues/202).
+Origem: regra 9. Prova: `tests/e2e-route-coverage.test.ts` e a varredura de
+`tests/e2e/ui.mjs` (#267). No CI, o job `e2e-navegador` roda a suíte inteira;
+o que ele prova e o que só a jornada prova está em
+[docs/qa/README.md](../../qa/README.md#o-que-o-ci-prova-e-o-que-só-a-jornada-prova).
 
 <a id="g31"></a>
 ## G31 — Controle em teste por `data-testid`

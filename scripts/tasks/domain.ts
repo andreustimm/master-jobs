@@ -23,7 +23,7 @@ export function planCommand(snapshot: TaskSnapshot, command: Command, actor: str
   if (!snapshot.itemId || !snapshot.status) throw new Error("Task is not configured in the canonical Project; adopt it first");
   if (terminal.has(snapshot.status) || snapshot.issue.state !== "OPEN") throw new Error("Task is terminal; reopening requires an explicit administrative decision");
   const previous = snapshot.coordination;
-  const coordination: Coordination = { protocolVersion: 1, revision: (previous?.revision ?? 0) + 1, generation: previous?.generation ?? 0, execution: previous?.execution ?? null, lastOperation: command.operationId, ...(previous?.previousStatus ? { previousStatus: previous.previousStatus } : {}) };
+  const coordination: Coordination = { protocolVersion: 1, revision: (previous?.revision ?? 0) + 1, generation: previous?.generation ?? 0, execution: previous?.execution ?? null, lastOperation: command.operationId, ...(previous?.previousStatus ? { previousStatus: previous.previousStatus } : {}), ...(previous?.firstClaimedAt ? { firstClaimedAt: previous.firstClaimedAt } : {}) };
   const patch: TaskPatch = { fields: {}, coordination };
   const time = now.toISOString();
   const expiresAt = new Date(now.getTime() + LEASE_MS).toISOString();
@@ -36,6 +36,7 @@ export function planCommand(snapshot: TaskSnapshot, command: Command, actor: str
     coordination.generation++;
     coordination.execution = { ...command.execution, actor, generation: coordination.generation, acquiredAt: time, heartbeatAt: time, expiresAt };
     if (snapshot.status === "Analisar" || snapshot.status === "Backlog") patch.fields.status = "Em execução";
+    coordination.firstClaimedAt ??= time;
     if (!snapshot.startedAt) patch.fields.startedAt = time.slice(0, 10);
     return patch;
   }
