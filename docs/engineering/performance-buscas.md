@@ -549,7 +549,12 @@ o próximo passo não é um cache maior, e sim, nesta ordem:
   por link ou histórico (limpar, preset, chip, Voltar/Avançar) também: ela é a
   interação mais recente. Envio de outro formulário da barra não cancela — o
   pedido espera e sai depois, com os campos ocultos atualizados, e os dois
-  filtros chegam à URL.
+  filtros chegam à URL. Quem diz qual é qual é quem abre a geração:
+  `TransitionGetForm` chama `begin` dentro de `duringFormNavigation`
+  (`app/form-navigation.ts`), e o ouvinte consulta a marca na mesma pilha.
+  Limite que já existia antes da #218: Enter/Aplicar **manual** enquanto a
+  navegação de outro filtro ainda está em voo sai com os campos ocultos
+  anteriores, e esse outro filtro se perde — o envio manual não espera.
 - **Janelas.** 300 ms nos controles basta para juntar setas seguidas no
   slider; 400 ms no texto é a pausa de quem ainda está digitando uma palavra.
 - **Os campos deixaram de ser remontados por `key`.** A chave pelo valor do

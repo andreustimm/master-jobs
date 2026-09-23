@@ -218,27 +218,44 @@ async function runChecks(page, base, { email, password }, check) {
       JSON.stringify({ url: page.url(), navigations, value: await query.inputValue() }),
     );
 
-    // 11. Dois filtros seguidos, em formulários diferentes, chegam os dois à
-    //     URL: a busca espera o Score em voo e sai depois, com ele carregado.
+    // 11. Com uma busca em voo, dois pedidos de formulários diferentes esperam
+    //     juntos (Score e Empresa); o primeiro a sair não derruba o outro, e um
+    //     Enter manual em outra linha também não. Os três chegam à URL.
     await page.goto(`${base}/jobs`, { waitUntil: "networkidle" });
     await ready(page);
     const fitChained = Number(await page.getByTestId("filters-score-min").inputValue()) + 3;
-    holdMs = 1_200;
-    await page.getByTestId("filters-score-slider").getByRole("slider").first().focus();
-    for (let press = 0; press < 3; press += 1) await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(450);
+    holdMs = 1_500;
     await query.click();
     await page.keyboard.type("Work");
+    await page.waitForTimeout(600);
+    await page.getByTestId("filters-score-slider").getByRole("slider").first().focus();
+    for (let press = 0; press < 3; press += 1) await page.keyboard.press("ArrowRight");
+    await page.getByTestId("filters-company").click();
+    await page.keyboard.type("Acme");
     await page.waitForURL(
-      (url) => url.searchParams.get("q") === "Work" && Number(url.searchParams.get("fit")) === fitChained,
-      { timeout: 20_000 },
+      (url) => url.searchParams.get("q") === "Work"
+        && Number(url.searchParams.get("fit")) === fitChained
+        && url.searchParams.get("company") === "Acme",
+      { timeout: 30_000 },
+    );
+    await ready(page);
+    const chained = page.url();
+    // Enter manual em outra linha enquanto o pedido do Score ainda está no
+    // intervalo de 300 ms: o Enter navega, o pedido espera e sai depois.
+    await page.getByTestId("filters-score-slider").getByRole("slider").first().focus();
+    await page.keyboard.press("ArrowRight");
+    await query.fill("Work mode");
+    await query.press("Enter");
+    await page.waitForURL(
+      (url) => url.searchParams.get("q") === "Work mode" && Number(url.searchParams.get("fit")) === fitChained + 1,
+      { timeout: 30_000 },
     );
     await ready(page);
     holdMs = 0;
     check(
-      "#218 filtros seguidos em formulários diferentes chegam os dois à URL",
-      param(page, "q") === "Work" && Number(param(page, "fit")) === fitChained,
-      page.url(),
+      "#218 pedidos de formulários diferentes, automáticos ou com Enter, chegam todos à URL",
+      param(page, "company") === "Acme" && param(page, "q") === "Work mode" && Number(param(page, "fit")) === fitChained + 1,
+      JSON.stringify({ chained, final: page.url() }),
     );
   } finally {
     holdMs = 0;

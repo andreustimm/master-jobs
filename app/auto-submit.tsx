@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ComponentProps, type RefObject } from "react";
 import { Input } from "@/components/ui/input";
 import { transitionStore } from "../src/core/pwa/transition-store.ts";
+import { isFormNavigation } from "./form-navigation.ts";
 import {
   AUTO_APPLY_MIN_CHARS,
   AUTO_APPLY_TEXT_MS,
@@ -86,32 +87,20 @@ export function useAutoSubmit(
     // do commit. Envio de formulário GET (desta ou de outra linha da barra)
     // não cancela: o pedido espera por ele e depois sai com os campos ocultos
     // já atualizados, que é como dois filtros seguidos chegam os dois à URL.
-    // O `begin` do envio acontece dentro do mesmo despacho do `submit`.
-    let formNavigation = false;
-    const onAnySubmit = (event: SubmitEvent) => {
-      const target = event.target;
-      if (!(target instanceof HTMLFormElement) || target.method !== "get") return;
-      formNavigation = true;
-      queueMicrotask(() => {
-        formNavigation = false;
-      });
-    };
     let generation = transitionStore.getSnapshot().generation;
     const unsubscribe = transitionStore.subscribe(() => {
       const next = transitionStore.getSnapshot().generation;
       if (next === generation) return;
       generation = next;
-      if (!formNavigation) submitter.cancel();
+      if (!isFormNavigation()) submitter.cancel();
     });
     // Voltar e avançar durante uma navegação em voo não abrem geração nova
     // (o observador de commit desiste), então o histórico cancela direto.
     const onHistory = () => submitter.cancel();
     form?.addEventListener("submit", onSubmit);
-    document.addEventListener("submit", onAnySubmit, true);
     window.addEventListener("popstate", onHistory);
     return () => {
       form?.removeEventListener("submit", onSubmit);
-      document.removeEventListener("submit", onAnySubmit, true);
       window.removeEventListener("popstate", onHistory);
       unsubscribe();
       submitter.dispose();

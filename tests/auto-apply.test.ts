@@ -7,6 +7,7 @@ import {
   sameDestination,
   textReady,
 } from "../app/auto-apply.ts";
+import { duringFormNavigation, isFormNavigation } from "../app/form-navigation.ts";
 
 describe("textReady", () => {
   it("pede a lista a partir de três caracteres", () => {
@@ -182,5 +183,21 @@ describe("createAutoSubmitter", () => {
     h.setBusy(false);
     h.advance(1000);
     expect(h.submits).toEqual([]);
+  });
+});
+
+describe("form-navigation", () => {
+  it("marca só durante o begin do formulário, mesmo se ele lançar", () => {
+    const seen: boolean[] = [];
+    expect(isFormNavigation()).toBe(false);
+    duringFormNavigation(() => seen.push(isFormNavigation()));
+    expect(seen).toEqual([true]);
+    expect(isFormNavigation()).toBe(false);
+    expect(() =>
+      duringFormNavigation(() => {
+        throw new Error("falhou");
+      }),
+    ).toThrow("falhou");
+    expect(isFormNavigation()).toBe(false);
   });
 });
