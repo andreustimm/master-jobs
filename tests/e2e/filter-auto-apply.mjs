@@ -241,10 +241,12 @@ async function runChecks(page, base, { email, password }, check) {
     await ready(page);
     const chained = page.url();
     // Enter manual em outra linha enquanto o pedido do Score ainda está no
-    // intervalo de 300 ms: o Enter navega, o pedido espera e sai depois.
+    // intervalo de 300 ms: o Enter navega, o pedido espera e sai depois. A
+    // busca é preenchida ANTES da seta, para só uma ação caber no intervalo
+    // (o pedido de 400 ms da própria busca é cancelado pelo Enter).
+    await query.fill("Work mode");
     await page.getByTestId("filters-score-slider").getByRole("slider").first().focus();
     await page.keyboard.press("ArrowRight");
-    await query.fill("Work mode");
     await query.press("Enter");
     await page.waitForURL(
       (url) => url.searchParams.get("q") === "Work mode" && Number(url.searchParams.get("fit")) === fitChained + 1,
