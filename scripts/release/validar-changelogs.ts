@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -77,24 +77,26 @@ function readDocuments(options: Options): ReleaseDocuments {
   };
 }
 
-/** With `--staged`, the index decides: an unstaged fragment is not in the commit. */
+/**
+ * With `--staged`, the index decides: an unstaged fragment is not in the
+ * commit. Without it, Git still decides what counts: tracked and untracked
+ * files, minus what `.gitignore` excludes. A raw directory listing would fail
+ * on a `.DS_Store` nobody commits, and skipping dotfiles by name would let a
+ * committed `.gitkeep` pass here and break the promotion after the merge.
+ */
 function fragmentNames(options: Options): string[] {
-  if (options.staged) {
-    return execFileSync("git", ["ls-files", "--cached", "-z", "--", `${FRAGMENT_DIRECTORY}/`], {
-      cwd: options.directory,
-      encoding: "utf8",
-    }).split("\0").filter(Boolean).map((path) => path.slice(FRAGMENT_DIRECTORY.length + 1));
-  }
-  try {
-    // The working tree carries what Git never sees (`.DS_Store`, editor
-    // swap files). A dotfile cannot be a fragment name anyway, and the
-    // staged listing above still rejects one that is actually committed.
-    return readdirSync(resolve(options.directory, FRAGMENT_DIRECTORY))
-      .filter((name) => !name.startsWith("."));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw error;
-  }
+  const args = options.staged
+    ? ["ls-files", "--cached", "-z"]
+    : ["ls-files", "--cached", "--others", "--exclude-standard", "--deduplicate", "-z"];
+  const paths = execFileSync("git", [...args, "--", `${FRAGMENT_DIRECTORY}/`], {
+    cwd: options.directory,
+    encoding: "utf8",
+  }).split("\0").filter(Boolean);
+  // A tracked fragment deleted from the working tree is not part of it.
+  const present = options.staged
+    ? paths
+    : paths.filter((path) => existsSync(resolve(options.directory, path)));
+  return present.map((path) => path.slice(FRAGMENT_DIRECTORY.length + 1));
 }
 
 function readFragments(options: Options): ChangelogFragment[] {

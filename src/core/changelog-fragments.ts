@@ -74,6 +74,7 @@ export type ChangelogFragmentIssue =
   | "duplicate_block"
   | "missing_block"
   | "forbidden_heading"
+  | "unclosed_fence"
   | "content_outside_section"
   | "empty_block"
   | "empty_section"
@@ -157,6 +158,14 @@ function parseFragment(fragment: ChangelogFragment): ParsedFragment {
   const ranges = new Map<Part, { start: number; end: number }>();
   let current: Part | null = null;
   let preambleEnd = content.length;
+
+  // A fence left open would swallow every older release header once the
+  // fragment is pasted into the changelog, and the stamped file would still
+  // parse. Block boundaries never fall inside a fence, so checking the end of
+  // the fragment covers every block.
+  if (linesIn(`${content}\n\n## fim`).at(-1)!.code) {
+    throw new ChangelogFragmentError("unclosed_fence", name);
+  }
 
   for (const line of linesIn(content)) {
     if (line.code || !TOP_HEADING.test(line.text)) continue;

@@ -146,16 +146,25 @@ describe("versioned commit hook", () => {
       git(repo, "add", "changelog.d/cabecalho.md");
       const fragmentAccepted = spawnSync(`${repo}/.githooks/commit-msg`, [message], { cwd: repo, encoding: "utf8" });
       expect(fragmentAccepted.stdout, fragmentAccepted.stderr).toContain("release-ready version=1.3.8");
-      // The working-tree gate (`check:release-ready`) ignores OS litter such as
-      // `.DS_Store`, which Git never commits.
-      writeFileSync(`${repo}/changelog.d/.DS_Store`, "\0");
-      const workingTree = spawnSync(
+      // The working-tree gate (`check:release-ready`, what CI runs) lets Git
+      // decide: an ignored `.DS_Store` is skipped, a committed `.gitkeep` is not.
+      const workingTreeGate = () => spawnSync(
         process.execPath,
         [...NODE_TS_ARGS, "scripts/release/validar-changelogs.ts", "--commit-message-file", message],
         { cwd: repo, encoding: "utf8" },
       );
-      expect(workingTree.stdout, workingTree.stderr).toContain("release-ready version=1.3.8");
+      writeFileSync(`${repo}/.git/info/exclude`, ".DS_Store\n");
+      writeFileSync(`${repo}/changelog.d/.DS_Store`, "\0");
+      const ignoredLitter = workingTreeGate();
+      expect(ignoredLitter.stdout, ignoredLitter.stderr).toContain("release-ready version=1.3.8");
       rmSync(`${repo}/changelog.d/.DS_Store`);
+      writeFileSync(`${repo}/changelog.d/.gitkeep`, "");
+      git(repo, "add", "changelog.d/.gitkeep");
+      const trackedDotfile = workingTreeGate();
+      expect(trackedDotfile.status).not.toBe(0);
+      expect(trackedDotfile.stderr).toContain("changelog_fragment_invalid code=invalid_name");
+      git(repo, "rm", "-q", "--cached", "changelog.d/.gitkeep");
+      rmSync(`${repo}/changelog.d/.gitkeep`);
       writeFileSync(`${repo}/changelog.d/Errado.md`, "x");
       git(repo, "add", "changelog.d/Errado.md");
       const badName = spawnSync(`${repo}/.githooks/commit-msg`, [message], { cwd: repo, encoding: "utf8" });

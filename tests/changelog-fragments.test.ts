@@ -58,6 +58,7 @@ describe("fragment format", () => {
     ["unknown_block", [{ name: "ok.md", content: `${valid}\n## es\n\n### Arreglado\n\n- Uno.\n` }]],
     ["forbidden_heading", [{ name: "ok.md", content: `${valid}\n## [2.0.0] - 2026-01-01\n` }]],
     ["forbidden_heading", [{ name: "ok.md", content: `# Título\n\n${valid}` }]],
+    ["unclosed_fence", [{ name: "ok.md", content: `${valid}\n  \`\`\`\n  ## [1.0.0] - 2026-01-01\n` }]],
     ["content_outside_section", [{ name: "ok.md", content: `Solto.\n\n${valid}` }]],
     ["content_outside_section", [{ name: "ok.md", content: valid.replace("## pt-BR\n\n", "## pt-BR\n\nSolto.\n\n") }]],
     ["empty_block", [{ name: "ok.md", content: valid.replace(/### Corrigido\n\n- ok.md técnico.\n  Continuação.\n/, "") }]],
