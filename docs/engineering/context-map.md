@@ -9,7 +9,7 @@ inclusive pelo `index.ts` de um contexto, que compõe adapters. O scorer é
 domínio de Matching fisicamente fora do contexto, e por isso é o único de fora
 que importa `contexts/matching/domain/` direto.
 
-<!-- schema-table-count: 38 -->
+<!-- schema-table-count: 39 -->
 
 | Contexto | Aggregate owner / responsabilidade | Tabelas próprias | API pública | Dependências permitidas |
 |---|---|---|---|---|
@@ -34,7 +34,7 @@ ganham API pública quando uma mudança funcional atravessa sua fronteira:
 | positioning | `post`, `engagement`, `target_account`, `metric_snapshot`, `positioning_task` |
 | scrape | fila técnica `scrape_task` |
 | matching | perfil da pessoa em `candidate_matching_profile`, trilhas de alvo em `target_track`, termos salvos em `saved_term`, teto diário de buscas pedidas em `saved_term_request`, notas por trilha em `job_score`, fila de repontuação em `score_task` |
-| llm | catálogo BYOK em `llm_provider`, `llm_model` |
+| llm | catálogo BYOK em `llm_provider`, `llm_model`; análise estruturada da vaga em `job_analysis` (fila processada pela CLI, só dado da vaga) |
 
 `src/core/db/schema.ts` é o único composition root físico do Drizzle: migrations
 e foreign keys cruzadas precisam enxergar o grafo completo. Ownership lógico

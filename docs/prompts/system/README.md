@@ -44,6 +44,7 @@ como qualquer pessoa (ou agente) mexeria nele depois.
 | [`research-technical.md`](research-technical.md) | Pesquisa de decisões técnicas (fila, free tiers). Origem da ADR 0009. |
 | [`cv-tailoring.md`](cv-tailoring.md) | Prompt para ajustar CV a uma vaga. **Ainda não implementado** — está aqui como contrato, não como registro. |
 | [`job-analysis.md`](job-analysis.md) | Prompt para leitura qualitativa de uma vaga. **Implementado** — `jho analyze <id>`. |
+| [`job-structure.md`](job-structure.md) | Análise estruturada e versionada da vaga, com evidência conferida por campo. **Implementado** — fila `job_analysis`, processada por `jho analysis run`. Só a vaga entra; nunca CV, perfil nem dossiê. |
 
 Os dois primeiros são histórico: reconstruídos fielmente do que foi executado.
 O `cv-tailoring` é especificação do que virá. O `job-analysis` **é executado**
@@ -71,9 +72,11 @@ prompt aqui e não numa constante.
 
 ### O que sai da sua máquina
 
-Todo o resto do sistema roda offline contra um banco local. `analyze` é o único
-comando que envia algo para fora, então ele **diz o que vai enviar e espera
-confirmação** antes de enviar:
+Todo o resto do sistema roda offline contra um banco local. `analyze` e
+`analysis run` são os únicos comandos que enviam algo para fora, então eles
+**dizem o que vão enviar e esperam confirmação** antes de enviar. A tela da vaga
+só enfileira o pedido de análise estruturada; quem chama o provedor é o
+`analysis run`, com a sua chave, nunca a requisição da Vercel:
 
 ```
 Isto vai sair da sua máquina
