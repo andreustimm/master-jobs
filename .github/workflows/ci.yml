@@ -72,6 +72,12 @@ jobs:
           pnpm check:release-ready \
             --commit-message-file "$RUNNER_TEMP/release-commit-message"
 
+      - name: Fonte canônica das instruções
+        # Symlinks dos harnesses (cópia vira segunda autoridade), links, âncoras
+        # e IDs de regra da entrada, das regras e das skills. Não julga o texto
+        # das regras: só garante que cada ponteiro chega aonde diz chegar.
+        run: pnpm check:instructions
+
       - name: Tracker de QA conforme o esquema
         # `docs/qa/state.csv` é visão gerada e ignorada pelo git, então o
         # esquema dos cenários só era conferido quando alguém rodava o

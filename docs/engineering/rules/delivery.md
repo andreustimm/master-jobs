@@ -201,7 +201,12 @@ produção.
 recurso legado Projects, use o REST equivalente:
 `gh api --method POST repos/andreustimm/master-jobs/issues/<número>/assignees -f 'assignees[]=andreustimm'`.
 Nenhuma PR fica sem assignee — inclusive as abertas por workflow (promoção e
-retorno).
+retorno), criadas ou reaproveitadas.
+
+Prova: `tests/pr-producers.test.ts` acha todo `gh pr create` dos workflows e
+reprova o passo sem atribuição da PR criada **e** da reaproveitada, ou com base
+fora das exceções nomeadas (`staging → main`, `main → dev`); a execução com `gh`
+falso está em `tests/promotion-provenance.test.ts`.
 
 ---
 
@@ -220,7 +225,11 @@ worktree/tarefa → check/e2e aplicável → QA de jornada aplicável → audito
 hunk e veredito **SHIP / FIX_BEFORE_SHIP / REWORK**. Rode antes de pedir revisão
 humana: o CI prova que o código roda; a revisão profunda diz se ele está certo.
 Uma coisa não substitui a outra. Mudança relevante depois do veredito exige nova
-rodada (incremental): revisão de um diff antigo não aprova o atual.
+rodada (incremental): revisão de um diff antigo não aprova o atual. Por isso a
+PR registra o veredito **com o SHA revisado** (campo do
+[modelo de PR](../../../.github/PULL_REQUEST_TEMPLATE.md)): quem lê compara com
+a ponta da PR. O campo é declaração, não prova — nenhum gate julga se o texto é
+verdadeiro; `tests/pr-producers.test.ts` só impede que o modelo perca a pergunta.
 
 **O agente invoca.** O frontmatter da skill teve `disable-model-invocation` até
 2026-09-20, e sete PRs seguiram para produção sem revisão profunda porque a
@@ -316,6 +325,17 @@ unitárias/E2E do produto. A extensão do arquivo não decide sozinha: script,
 workflow ou arquivo interpretado em execução exige o teste do comportamento que
 mudou. A tabela de evidência por tipo de mudança está em
 [workflow.md](../workflow.md) ("Validar pelo risco").
+
+A validação estrutural de Markdown e metadados usa os validadores únicos que já
+existem, sem cópia: `pnpm check:instructions` (symlinks, links, âncoras e IDs de
+regra), `pnpm check:release-ready` (changelogs e fragmentos) e
+`pnpm check:qa-tracker` (esquema dos cenários). A proporcionalidade é de quem
+valida antes da PR; o CI roda o portão inteiro em toda PR de propósito, porque
+`qualidade` é check obrigatório, e check obrigatório filtrado por caminho fica
+pendente ou pulado — e pulado conta como aprovado. A seleção por caminho que
+existe é a do deploy (`scripts/vercel-ignore-build.sh`, provada por
+`tests/vercel-ignore-build.test.ts`): só documentação, testes e automação não
+publicam versão nova.
 
 <a id="g60"></a>
 ### G60 — O changelog conta o que mudou; `docs/` conta como é agora (regra 23)
@@ -428,6 +448,14 @@ o mesmo conteúdo. Nunca copie uma skill para os três diretórios: atualizaçã
 remoção acontecem só na cópia canônica. O binding da regra 24 prevalece sobre
 status/grafo locais sugeridos por skills globais: adapte o procedimento neste
 projeto, sem editar a instalação global nem criar cópias por harness.
+
+Prova: `pnpm check:instructions` (no `pnpm check` e no CI) reprova symlink
+trocado por cópia, apontado para outro destino ou quebrado, instrução duplicada
+por harness (`.codex/AGENTS.md` e afins que não sejam symlink para a entrada), e
+link, âncora ou ID de regra quebrado na entrada, em `docs/engineering/rules/` e
+no `SKILL.md` de cada skill — inclusive rótulo `[G44]` apontando para `#g43`,
+regra sem linha no inventário e regra com dois destinos primários.
+`tests/instructions-gate.test.ts` induz cada regressão numa árvore temporária.
 
 O conjunto instalado cobre o ciclo: `documentation-writer` na autoria,
 `drizzle-safe-migrations` em schema, `a11y-testing` no E2E,
