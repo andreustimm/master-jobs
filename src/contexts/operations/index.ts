@@ -12,7 +12,7 @@ import { githubDispatch } from "./infra/github-dispatch.ts";
 import { randomUUID } from "node:crypto";
 import { clock } from "../../core/clock.ts";
 import { guardIngestion } from "../../core/ingest/guard.ts";
-import { syncSource } from "../../core/ingest/run.ts";
+import { catalogForSync, syncSource } from "../../core/ingest/run.ts";
 import { enqueueStale, runVerifyQueue, verifyStats } from "../../core/ingest/verify-queue.ts";
 import { runFetchStage } from "../../core/scrape/fetcher.ts";
 import { runParseStage } from "../../core/scrape/parser.ts";
@@ -151,7 +151,10 @@ export async function runSweep(
     runs: drizzleSweepRuns,
     sync: {
       async sources() {
-        for (const config of await loadSources()) configs.set(sourceId(config.kind, config.handle), config);
+        // Do banco, como a CLI: o YAML só entra pelo regime de `ensureSources`.
+        for (const config of await catalogForSync(await loadSources())) {
+          configs.set(sourceId(config.kind, config.handle), config);
+        }
         return [...configs.keys()].map((id) => ({ id }));
       },
       lastSynced: lastSyncedBySource,

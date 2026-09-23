@@ -19,9 +19,10 @@ let db: DB;
 
 vi.mock("../src/core/sources/config.ts", () => ({
   loadSources: async () => [
-    { kind: "lever", handle: "acme", label: "Acme" },
-    { kind: "ashby", handle: "globex", label: "Globex" },
-    { kind: "greenhouse", handle: "initech", label: "Initech" },
+    { kind: "lever", handle: "acme", label: "Acme", enabled: true },
+    { kind: "ashby", handle: "globex", label: "Globex", enabled: true },
+    { kind: "greenhouse", handle: "initech", label: "Initech", enabled: true },
+    { kind: "greenhouse", handle: "desligada", label: "Desligada no arquivo", enabled: false },
   ],
 }));
 

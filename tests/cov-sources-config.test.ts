@@ -54,14 +54,15 @@ describe("parseSourcesConfig", () => {
     );
 
     expect(configs).toEqual([
-      { kind: "greenhouse", handle: "acme", label: "Acme", rationale: "infra de agentes, contrata remoto" },
-      { kind: "lever", handle: "globex", label: "Globex", rationale: undefined },
+      { kind: "greenhouse", handle: "acme", label: "Acme", rationale: "infra de agentes, contrata remoto", enabled: true },
+      { kind: "lever", handle: "globex", label: "Globex", rationale: undefined, enabled: true },
     ]);
   });
 
-  it("respeita enabled: false sem exigir que a linha seja apagada", () => {
+  it("UT-004: devolve a entrada desabilitada com enabled: false, sem exigir que a linha seja apagada", () => {
     // Desligar uma fonte tem de ser reversível: apagar a entrada perderia o
-    // handle e o racional junto.
+    // handle e o racional junto. E o banco só aprende que ela foi desligada se
+    // o carregador a devolver — descartá-la deixava a linha habilitada para sempre.
     const configs = parseSourcesConfig(
       [
         "sources:",
@@ -74,14 +75,17 @@ describe("parseSourcesConfig", () => {
         "    label: Globex",
       ].join("\n"),
     );
-    expect(configs.map((c) => c.kind)).toEqual(["lever"]);
+    expect(configs.map((c) => [c.kind, c.enabled])).toEqual([
+      ["greenhouse", false],
+      ["lever", true],
+    ]);
   });
 
   it("aceita fonte sem handle, porque agregador não tem board token", () => {
     // RemoteOK e Arbeitnow não recebem handle nenhum; exigi-lo obrigaria a
     // escrever um valor falso no arquivo.
     const configs = parseSourcesConfig("sources:\n  - kind: remoteok\n    label: RemoteOK");
-    expect(configs[0]).toEqual({ kind: "remoteok", handle: "", label: "RemoteOK", rationale: undefined });
+    expect(configs[0]).toEqual({ kind: "remoteok", handle: "", label: "RemoteOK", rationale: undefined, enabled: true });
   });
 
   it("aponta o campo e a linha do problema em vez de só recusar o arquivo", () => {
@@ -112,7 +116,8 @@ describe("loadSources", () => {
     process.env.JHO_SOURCES_PATH = file;
 
     await expect(loadSources()).resolves.toEqual([
-      { kind: "ashby", handle: "acme", label: "Acme", rationale: undefined },
+      { kind: "ashby", handle: "acme", label: "Acme", rationale: undefined, enabled: true },
+      { kind: "adzuna", handle: "br:ai", label: "Adzuna", rationale: undefined, enabled: false },
     ]);
   });
 

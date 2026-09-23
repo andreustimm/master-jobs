@@ -95,6 +95,7 @@ function postings(hits: HnHit[] | undefined, thread: string): RawJob[] {
 
 export const hackernews: SourceAdapter = {
   kind: "hackernews",
+  snapshot: "complete",
   docs: "https://hn.algolia.com/api",
   async fetchJobs(): Promise<SourceSnapshot> {
     const thread = await currentThread();

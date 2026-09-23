@@ -13,6 +13,21 @@
 > não os execute literalmente. Para a operação atual, prefira os comandos
 > `jho` e as rotinas de `docs/engineering/deploy.md`.
 
+## Catálogo de fontes: passar a verdade para o banco
+
+Com a migration `0017_source_catalog` aplicada, o catálogo continua espelhando
+`config/sources.yaml` linha a linha até alguém importá-lo. A transição é
+explícita e de uma vez (#223):
+
+1. `pnpm jho sources diff` — confira o que o arquivo e o banco discordam.
+2. `pnpm jho sources import` — simulação; mostra o que vai inserir, regravar e
+   desabilitar.
+3. `pnpm jho sources import --apply` — grava e marca toda linha como gerida.
+
+Depois disso, editar o YAML só acrescenta fontes novas; mudar ou desligar uma
+existente é escrita no banco. Rode o `diff` sempre que mexer
+no arquivo: divergência em linha gerida não é aplicada sozinha.
+
 ## Varredura horária: ativar o agendador
 
 Desde a [ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)
@@ -187,8 +202,9 @@ pnpm jho jobs sync
 ```
 
 O que acontece, em ordem: `runMigrations()` (por isso não existe passo separado
-de migração no dia a dia) → `loadSources()` lê `config/sources.yaml` e descarta
-o que está `enabled: false` → `syncAll()` roda as fontes com concorrência 4 →
+de migração no dia a dia) → `loadSources()` lê `config/sources.yaml` → `catalogForSync()`
+espelha o arquivo nas linhas não geridas e seleciona do banco as fontes habilitadas e não
+aposentadas → `syncAll()` roda as fontes com concorrência 4 →
 `scoreAll()` no final, salvo se você passar `--no-score`.
 
 | Flag | Default | Quando usar |
@@ -979,7 +995,7 @@ pnpm jho sources probe ashby textlayer
 
 **Efeito colateral que ninguém espera:** desabilitar uma fonte não fecha as
 vagas dela. O fechamento só acontece dentro do `syncOne()` daquela fonte, e
-`loadSources()` filtra `enabled: true` antes do sync sequer começar. As vagas
+o sync só seleciona fontes habilitadas antes de sequer começar. As vagas
 ficam abertas e continuam aparecendo em `jho jobs list`. Se a intenção era
 aposentar a fonte, feche-as explicitamente:
 

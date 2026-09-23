@@ -55,6 +55,26 @@ export const source = production.table(
     lastError: text("last_error"),
     lastJobCount: integer("last_job_count"),
     createdAt: text("created_at").notNull().default(now),
+    /**
+     * Aposentadoria suave: fonte não é apagada (as vagas apontam para ela).
+     * Aposentada sai do sync e de toda execução; vagas e histórico ficam.
+     */
+    retiredAt: text("retired_at"),
+    // `origin` e `config_revision` têm padrão mas aceitam nulo: `source`
+    // atravessa a importação do snapshot legado, e coluna posterior a ele é
+    // opcional por contrato (`tests/postgres-schema.test.ts`). Nada no código
+    // grava nulo nelas.
+    /** Quem criou a linha: `yaml` (arquivo), `admin` (tela) ou `system` (importação, captura por termo). */
+    origin: text("origin").default("system"),
+    /** Sobe a cada edição; entra na chave de idempotência e no retrato da execução. */
+    configRevision: integer("config_revision").default(1),
+    /** NOME da variável de ambiente com a credencial — nunca o valor (G41). */
+    secretRef: text("secret_ref"),
+    /**
+     * Não nulo = o banco governa a linha (importação ou edição do admin), e o
+     * YAML só insere o que falta. Nulo = a linha ainda espelha o arquivo.
+     */
+    managedAt: text("managed_at"),
   },
   (t) => [uniqueIndex("source_kind_handle_idx").on(t.kind, t.handle)],
 );

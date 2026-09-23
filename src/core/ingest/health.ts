@@ -36,7 +36,8 @@ export type SourceHealthSummary = {
 
 /** A configuração é a fonte da verdade; o banco é o que aconteceu com ela. */
 export async function sourceHealth(): Promise<SourceHealth[]> {
-  const configs = await loadSources();
+  // O carregador devolve também as desabilitadas; saúde é das que rodam.
+  const configs = (await loadSources()).filter((config) => config.enabled);
   const rows = await getDb().select().from(source);
   const byId = new Map(rows.map((row) => [row.id, row]));
 

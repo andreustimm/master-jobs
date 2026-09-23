@@ -93,6 +93,7 @@ async function searchPages(
 
 export const workable: SourceAdapter = {
   kind: "workable",
+  snapshot: "complete",
   docs: "https://jobs.workable.com",
   async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     // `handle` is the search text; empty lists every remote job in Brazil.
