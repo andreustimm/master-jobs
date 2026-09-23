@@ -8,6 +8,7 @@
       "staging": true
     }
   },
+  "ignoreCommand": "bash scripts/vercel-ignore-build.sh",
   "framework": "nextjs",
   "regions": ["gru1"],
   "functions": {
