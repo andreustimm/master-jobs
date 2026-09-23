@@ -678,8 +678,9 @@ para isso.
 
 **O Sentry não vê isso.** `FUNCTION_INVOCATION_TIMEOUT` mata o processo; o
 código não falha, não reporta, e o registro da Vercel traz uma linha só. A falha
-mais visível do produto é a única invisível na telemetria — procure nos logs da
-Vercel, não no Sentry:
+mais visível do produto é a única invisível na telemetria. O tracing (#219) não
+muda isso: a transação só é enviada quando a requisição termina, e a requisição
+morta não termina. Procure nos logs da Vercel, não no Sentry:
 
 ```bash
 vercel logs https://jobs.mastertimm.com.br --json | grep -E "Timeout|504"
