@@ -199,7 +199,10 @@ jobs:
 
       - name: Cache dos navegadores do Playwright
         id: cache-navegadores
-        uses: actions/cache@v6
+        # Restauração e gravação separadas: o `actions/cache` inteiro só grava
+        # quando o job termina verde, e enquanto a suíte reprovar cada execução
+        # baixaria os navegadores de novo.
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-webkit
@@ -208,6 +211,13 @@ jobs:
         # `ui.mjs` abre o WebKit para o histórico de novidades no Safari.
         if: steps.cache-navegadores.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium webkit
+
+      - name: Guardar os navegadores no cache
+        if: steps.cache-navegadores.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.cache-navegadores.outputs.cache-primary-key }}
 
       - name: Dependências de sistema dos navegadores
         # O cache guarda os binários, não as bibliotecas do apt.

@@ -56,9 +56,15 @@ describe("V08-02 — o CI roda o navegador geral", () => {
   });
 
   it("guarda os navegadores em cache pela versão do Playwright e instala o WebKit", () => {
-    const cache = job.steps.find((step) => step.uses?.startsWith("actions/cache"));
-    expect(cache?.with?.path).toBe("~/.cache/ms-playwright");
-    expect(String(cache?.with?.key)).toContain("steps.playwright.outputs.version");
+    const restore = job.steps.find((step) => step.uses?.startsWith("actions/cache/restore@"));
+    expect(restore?.with?.path).toBe("~/.cache/ms-playwright");
+    expect(String(restore?.with?.key)).toContain("steps.playwright.outputs.version");
+    // Gravação própria, fora do pós-job: o `actions/cache` inteiro só grava em
+    // job verde, e uma suíte vermelha baixaria os navegadores toda vez.
+    const save = job.steps.find((step) => step.uses?.startsWith("actions/cache/save@"));
+    expect(save?.with?.path).toBe("~/.cache/ms-playwright");
+    expect(String(save?.with?.key)).toContain("cache-primary-key");
+    expect(job.steps.some((step) => /^actions\/cache@/.test(step.uses ?? ""))).toBe(false);
     const install = job.steps.map((step) => step.run ?? "").join("\n");
     expect(install).toMatch(/playwright install --with-deps chromium webkit/);
     expect(install).toMatch(/playwright install-deps chromium webkit/);

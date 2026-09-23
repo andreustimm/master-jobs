@@ -4256,10 +4256,21 @@ try {
     () => publicPage.evaluate((token) => {
       window.next?.router?.push?.(`/login/callback?token=${encodeURIComponent(token)}`);
     }, E2E_LOGIN_EXPIRED_TOKEN),
-    '[data-testid="route-login"]',
+    // O alerta, não a tela: `route-login` já está visível ANTES do push, e
+    // esperar por ela encerrava a observação antes de a navegação acontecer.
+    '[data-testid="route-login"] [role="alert"]',
     "expired callback soft transition",
   );
   publicPhases.push(callbackSoftTransition);
+  // O callback vencido volta para `/login?error=invalid`: a MESMA tela de onde
+  // o push saiu, só com outra query — navegação de mesma tela, que não abre
+  // overlay (#220). O overlay só aparece quando o roteador chega a confirmar a
+  // URL intermediária `/login/callback`, e isso depende de quanto a resposta do
+  // redirect demora: na máquina local aparecia, no runner do CI não (medido na
+  // #202). Nos dois casos o que se exige é o mesmo: nunca duas camadas, e a
+  // tela certa no fim — o alerta, que só existe com `error=invalid`.
+  const overlayCountFits = (phase) =>
+    phase === callbackSoftTransition ? phase.count <= 1 && phase.maxOverlayCount <= 1 : phase.count === 1;
   if (task04PublicHref) {
     // A transição suave é o que se mede aqui; o que vem depois — vazamento de
     // dado no perfil público — é verificação de segurança e não pode ficar sem
@@ -4318,12 +4329,16 @@ try {
       && directRouteLayers.every(({ startup, transition }) => startup === 1 && transition === 0)
       && publicPhases.length === 6
       && publicProfileMarkers.length > 0
-      && publicPhases.every(({ count, text }) =>
-        count === 1
-          && privateMarkers.every((term) => !text.includes(term))
-          && publicLeakMarkers.every((term) => !text.includes(term))
+      && publicPhases.every((phase) =>
+        overlayCountFits(phase)
+          && privateMarkers.every((term) => !phase.text.includes(term))
+          && publicLeakMarkers.every((term) => !phase.text.includes(term))
       ),
-    JSON.stringify({ directRouteLayers, phases: publicPhases.length, publicLeakMarkers }),
+    JSON.stringify({
+      directRouteLayers,
+      phases: publicPhases.map(({ count }) => count),
+      publicLeakMarkers,
+    }),
   );
   await publicPage.goto(`${BASE}/login/reset?token=nunca-existiu-task04`, { waitUntil: "networkidle" });
   const invalidReset = await publicPage.locator('[data-testid="route-login-reset"]').textContent();
@@ -4915,7 +4930,8 @@ try {
       && expiredCallbackUrl === "/login?error=invalid"
       && replayCallbackUrl === "/login?error=invalid"
       && resetSoftTransition.count === 1
-      && callbackSoftTransition.count === 1
+      // Ver `overlayCountFits`: o redirect volta para a mesma tela.
+      && overlayCountFits(callbackSoftTransition)
       && roleTransitionResults.length === 2
       && roleTransitionResults.every(({ snapshot }) => snapshot.count === 1)
       && Number.isInteger(recruiterMissingRole.generation)
@@ -5089,6 +5105,12 @@ try {
   }));
   const generationBeforeTheme = Number(await transitionOverlay.getAttribute("data-generation"));
   const statusBeforeTheme = await transitionOverlay.locator('[role="status"]').textContent();
+  // Trocar o tema não pode reiniciar a transição — quem prova isso é a
+  // geração, que não muda. O texto pode AVANÇAR para o aviso de demora: a
+  // fase `prolonged` chega aos 3 s pelo relógio, e as doze amostras abaixo
+  // passam disso num runner de CI. Recuar ou mudar para outro texto reprova.
+  const statusKept = (status) =>
+    status === statusBeforeTheme || status === ptBR.transition.prolonged;
   const transitionContrastFailures = [];
   const systemModeEvidence = [];
   for (const theme of ["hp", "huly", "graphy"]) {
@@ -5146,13 +5168,13 @@ try {
         sample.modeAttribute === null
           && sample.prefersDark === (sample.colorScheme === "dark")
           && Number(sample.generation) === generationBeforeTheme
-          && sample.status === statusBeforeTheme
+          && statusKept(sample.status)
       )
       && reducedMotion.rootTransition === "0s"
       && reducedMotion.brandAnimation === "none"
       && reducedMotion.sweepAnimation === "none"
       && Number(reducedMotion.generation) === generationBeforeTheme
-      && reducedMotion.status === statusBeforeTheme,
+      && statusKept(reducedMotion.status),
     JSON.stringify({ transitionContrastFailures, systemModeEvidence, reducedMotion }),
   );
   await page.locator('[data-testid="transition-test-destination"]').waitFor({ state: "visible" });
