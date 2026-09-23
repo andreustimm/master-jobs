@@ -7,7 +7,7 @@ journey: J-choose-public-address
 expected: Em /candidate, a pessoa sem nome é convidada a escrever um; e-mail ou telefone como nome é recusado com a razão; o nome salvo sobrevive ao reload e é o título de /p/<endereço> para o visitante anônimo
 entry_points: /candidate; /p/[slug]
 qa_status: untested
-bug_ids: BUG-20260922-public-profile-shows-email-as-name
+bug_ids:
 fix_status:
 retest_status:
 fix_commits:
