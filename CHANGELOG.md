@@ -12,6 +12,11 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Alterado
 
+- CI: o job `e2e-navegador` roda `pnpm test:e2e` inteiro (UI, papéis, 320–1024 px, inglês, temas, WebKit e axe) em todo PR e push, com PostgreSQL descartável do próprio harness, navegadores em cache pela versão do Playwright e nenhum segredo. Ainda fora de `validacao` e da promoção até a instabilidade estar medida (#202).
+- E2E: as listas das varreduras transversais saíram de `ui.mjs`/`a11y.mjs` para `tests/e2e/routes.mjs`; `tests/e2e-route-coverage.test.ts` cruza-as com o inventário de páginas, e página sem varredura nem exceção em `UNMEASURED_PAGES` reprova. `/jobs/new`, `/admin/operacoes` e as telas sem sessão (`/login`, `/login/forgot`, `/login/reset`) entraram nas varreduras. `gotoMeasured` reprova quando a varredura cai em outra tela (por exemplo, `/login`) em vez de medi-la.
+- E2E: o build descartável não recebe mais nenhum `.env*` além de `.env.example` (`copiedToHarness`); um checkout com `.env.production` levava a configuração de produção ao servidor do E2E.
+- E2E: o cenário de termos em Buscas espera o formulário assentar (`aria-busy`) antes de digitar o termo seguinte; o reset do formulário não controlado apagava o campo sob carga e o termo nunca era salvo.
+
 - Fluxo: a issue fecha quando o código chega a produção — commits das PRs levam `Closes #N` na mensagem, porque a PR aponta para `dev` e só a entrada em `main` fecha issues (AGENTS.md, `docs/engineering/workflow.md`).
 
 ## [1.22.1] - 2026-09-23

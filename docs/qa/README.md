@@ -17,7 +17,9 @@ produto como uma pessoa real e grava vereditos e relatórios aqui.
 - Driver de jornada: `rtk pnpm exec agent-browser <comando>`
 - Instalação inicial do Chrome do driver: `rtk pnpm qa:browser:install`
 - Gates automatizados: `rtk pnpm check` (inclui os conversores do tracker) e
-  `rtk pnpm test:e2e` (inclui axe cumulativo WCAG 2.0/2.1/2.2 AA em oito telas)
+  `rtk pnpm test:e2e` (inclui axe cumulativo WCAG 2.0/2.1/2.2 AA nas telas de
+  `AXE_SWEEP`, em `tests/e2e/routes.mjs`). O que cada um cobre no CI e o que
+  fica só para a jornada está em [O que o CI prova](#o-que-o-ci-prova-e-o-que-só-a-jornada-prova).
 
 > **Rode os dois em série, nunca ao mesmo tempo.** A suíte de browser mede tempo
 > real — transições, esperas, respostas — e disputar CPU com a suíte de unidade
@@ -83,62 +85,83 @@ defina a senha com `rtk pnpm jho auth set-password <email>`. O mapeamento
 persona→conta e as credenciais ficam em armazenamento privado, nunca em
 `docs/qa/` nem no Git.
 
-## Tela nova não herda guarda nenhuma
+## Tela nova não herda guarda nenhuma — agora reprova
 
-Toda guarda transversal deste repositório é um **array literal de caminhos**. São
-três guardas em **quatro listas** — o vazamento de português tem duas:
+As guardas transversais do navegador eram **arrays literais de caminhos**,
+espalhados por `ui.mjs` e `a11y.mjs`, e rota nova não entrava em nenhum até
+alguém lembrar. Foi assim que `/jobs/<id>/paises` viveu duas releases fora de
+todas, e `/jobs/<id>` — **a tela mais aberta do produto** — serviu `← vagas`,
+`Ver vaga na origem` e `visto em` em português com a interface em inglês desde
+que existe.
 
-| Guarda | Onde |
+Desde a #202 as listas moram em `tests/e2e/routes.mjs`, e as varreduras as
+importam:
+
+| Guarda | Lista |
 |---|---|
-| Vazamento de português, com cookie `en` | `tests/e2e/ui.mjs`, duas listas |
-| Largura real em 375, 768 e 1024 px | `tests/e2e/ui.mjs`, `searchRoutes` |
-| Varredura axe WCAG 2.2 AA | `tests/e2e/a11y.mjs`, com a contagem `N/N` no fim |
+| Vazamento de português, cookie `en`, como dono | `ENGLISH_OWNER_SWEEP` |
+| Vazamento de português, sem sessão | `ENGLISH_ANONYMOUS_SWEEP` |
+| Vazamento de português depois de criar trilhas | `ENGLISH_SEARCHES_SWEEP` |
+| Largura de 320 a 1024 px e conteúdo cortado | `OVERFLOW_SWEEP` |
+| Largura em 375, 768 e 1024 px com as trilhas | `OVERFLOW_SEARCHES_SWEEP` |
+| axe WCAG 2.2 AA a 1280 px | `AXE_SWEEP` |
 
-Rota nova **não entra em nenhuma** até alguém editar as quatro listas. Foi assim
-que `/jobs/<id>/paises` viveu duas releases fora de todas, com quatro chaves de
-dicionário só dela.
+`tests/e2e-route-coverage.test.ts`, dentro do `pnpm check`, cruza a união
+dessas listas com o inventário de páginas de `tests/support/entry-inventory.ts`
+— o mesmo que decide autorização. **Página nova que não entra em nenhuma lista
+nem em `UNMEASURED_PAGES` reprova.** Exceção precisa de motivo, precisa apontar
+para página que existe, e sai quando a página passa a ser medida. Hoje ficam
+fora, com o porquê escrito: a fixture `/transition-test`, as duas telas de
+recrutador e `/p/[slug]`.
 
-E o custo apareceu no primeiro uso: ao entrar, a varredura reprovou por
-localização de vaga sem `data-user-content` — em **dois** lugares, um deles o
-popover de detalhe, que está no DOM mesmo fechado e aparece em toda tela com
-lista. Os dois existiam desde sempre e nenhuma rota varrida tinha fixture com
-acento na localização.
+E as varreduras deixaram de aprovar o login no lugar da tela pedida:
+`gotoMeasured` confere resposta 2xx e **destino igual ao pedido**. Uma sessão
+que caísse no meio da suíte mandava toda rota privada para `/login`, e a
+varredura media o login — sem estouro e sem português — e passava.
 
-E aconteceu de novo, em 2026-09-21, com `/jobs/<id>` — **a tela mais aberta do
-produto**, fora das quatro listas desde que existe. Ela servia `← vagas`,
-`Ver vaga na origem` e `visto em` em português com a interface em inglês.
+O que continua valendo, e o teste não substitui:
 
-Essa terceira ocorrência mostrou dois limites que o aviso sozinho não cobre:
-
-- **A lista decide o que é medido, e os critérios decidem o que reprova.** Uma
-  rota de fora passa nos dois critérios **sem ser medida**, e a medição limpa
-  parece prova. Mas numa rota listada, literal de JSX só reprova se tiver acento
-  ou já for valor do dicionário português: `← vagas` seria pego porque já
-  existia como `jobCountries.back`; `Ver vaga na origem` e `visto em` passariam
-  com a rota na lista. A lista é necessária, não suficiente — a defesa continua
-  sendo o texto vir do dicionário.
-- **A rota não pode entrar sem `data-user-content`** nos campos que vêm do acervo:
-  o acento deles é legítimo e reprovaria. E a marca só fica provada se a fixture
-  varrida tiver acento — por isso a tela de detalhe é varrida em `/jobs/904000103`
-  (São Paulo), não na publicação holandesa do mesmo grupo.
+- **A lista decide o que é medido, e os critérios decidem o que reprova.**
+  Numa rota listada, literal de JSX só reprova se tiver acento ou já for valor
+  do dicionário português: `Ver vaga na origem` e `visto em` passariam com a
+  rota na lista. A defesa continua sendo o texto vir do dicionário.
+- **A rota não pode entrar sem `data-user-content`** nos campos que vêm do
+  acervo: o acento deles é legítimo e reprovaria. E a marca só fica provada se a
+  fixture varrida tiver acento — por isso a tela de detalhe é varrida em
+  `/jobs/904000103` (São Paulo), não na publicação holandesa do mesmo grupo.
+- Rota com id usa fixture do `setup.mjs`, nunca id inventado; `{track}` e
+  `{term}` são trocados pelo id criado durante a suíte.
+- **Meça antes de acrescentar.** Rota que reprova em largura ou axe ao entrar é
+  achado com correção própria, não parte do conserto de i18n.
 
 **`retest_status: pending` também vale para bug `verified`** quando a
 superfície que o reteste conferiu mudou depois dele: o veredito antigo não vale
 mais, e vazio diria "reteste dispensado". Assim `rg 'retest_status: pending'`
 lista todo reteste devido, qualquer que seja o status do bug.
 
-Há ainda uma quinta lista, mais estrita, no bloco *Mobile* de `tests/e2e/ui.mjs`:
-largura de 320 a 1024 px e conteúdo cortado dentro de cartão. `/jobs/<id>` já
-estava nela, pela fixture `905000031`.
+## O que o CI prova e o que só a jornada prova
 
-**Ao criar tela:** acrescente o caminho às quatro listas no mesmo commit, e ajuste
-a contagem final da varredura axe. Se a tela precisa de id, use uma fixture do
-`setup.mjs` em vez de um id inventado. Antes de acrescentar, marque com
-`data-user-content` o que vem do acervo, e **meça** largura e axe — rota que
-reprova ali é achado com correção própria, não parte do conserto de i18n.
+São perguntas diferentes, e nenhuma das três camadas responde a da outra.
 
-Uma rota entra nas listas com fixture que dê o que medir: sem localização
-acentuada no acervo, a varredura de acento passa por não ter o que ler.
+| Camada | Onde roda | O que prova | O que não prova |
+|---|---|---|---|
+| `pnpm check` (Vitest, cobertura, inventário de rotas) | job `qualidade`, obrigatório | regra pura, contrato de banco, autorização de toda entrada, que toda página tem varredura ou exceção | que a tela renderiza, cabe ou fala inglês |
+| Fronteira PWA (`pnpm test:pwa-browser`) | job `qualidade`, obrigatório | service worker sem nada autenticado, num Chromium real | o resto da interface |
+| `pnpm test:e2e` (`ui.mjs` + `a11y.mjs`) | job `e2e-navegador`, **ainda não obrigatório** | build de produção, PostgreSQL descartável, login real por papel; as varreduras de `routes.mjs`; temas, contraste do editor, WebKit no histórico de novidades | que uma pessoa consegue cumprir o objetivo; texto literal sem acento; telas em `UNMEASURED_PAGES` |
+| QA de jornada (`qa-execution`) | só local, com gente ou agente dirigindo | que a persona chega ao estado final pela interface pública, e que ele sobrevive a refresh e a leitura independente | nada que o CI já reprova — ela não substitui nenhuma das linhas acima |
+
+O job `e2e-navegador` roda em todo PR e push das três branches, sem segredo
+nenhum: o próprio harness sobe um `postgres:17` descartável no loopback do
+runner, com senha aleatória, e `database-guard.mjs` recusa qualquer outro banco.
+O build descartável também não recebe nenhum `.env*` além do molde
+`.env.example` — antes, um checkout com `.env.production` levava a configuração
+de produção para o servidor do E2E. Dado de produção nunca entra na fixture: a
+fixture é o `setup.mjs`.
+
+**Ele ainda não é obrigatório** — fica fora de `validacao` e da proteção de
+branch, e não roda na chamada da promoção. Torná-lo obrigatório espera a
+medição de instabilidade da #202: um portão que reprova por carga ensina a
+reexecutar até passar, e isso é pior do que não ter portão.
 
 ## Uma espera frágil apaga o relatório de todos os outros cenários
 

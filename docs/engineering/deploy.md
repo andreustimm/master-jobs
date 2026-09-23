@@ -278,7 +278,11 @@ com aviso e as outras fontes seguem.
 ## O portão
 
 `.github/workflows/ci.yml` roda typecheck, testes com cobertura e build no PR e
-no push das três branches. `migrate.yml` aplica migrações somente em produção,
+no push das três branches. O job `e2e-navegador` roda ao lado a suíte
+`pnpm test:e2e` inteira, sem segredo e com PostgreSQL descartável no loopback
+do runner; ele ainda não entra em `validacao` nem na promoção, até a
+instabilidade estar medida — ver [O que o CI prova](../qa/README.md#o-que-o-ci-prova-e-o-que-só-a-jornada-prova).
+`migrate.yml` aplica migrações somente em produção,
 por `workflow_dispatch`, depois de confirmar o project ref do Supabase. As
 migrations de `dev` e `staging` ficam desativadas até existirem bancos de
 fixture isolados. Esta configuração não pausa os deployments da Vercel.

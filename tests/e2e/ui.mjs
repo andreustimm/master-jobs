@@ -23,6 +23,13 @@ import { chromium, webkit } from "playwright";
 import { readFile } from "node:fs/promises";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { checkWorkModes } from "./work-mode.mjs";
+import {
+  ENGLISH_ANONYMOUS_SWEEP,
+  ENGLISH_OWNER_SWEEP,
+  ENGLISH_SEARCHES_SWEEP,
+  OVERFLOW_SEARCHES_SWEEP,
+  OVERFLOW_SWEEP,
+} from "./routes.mjs";
 
 const BASE = process.env.E2E_BASE ?? "http://127.0.0.1:3000";
 
@@ -63,6 +70,23 @@ function rememberCreatedJob(url, title, companyName) {
 function check(name, ok, detail = "") {
   results.push({ name, ok, detail });
   if (!ok) failed++;
+}
+
+/**
+ * Navigates for a sweep and confirms the page measured is the page requested.
+ *
+ * Uma sessão que caiu no meio da suíte manda toda rota privada para `/login`,
+ * e a varredura media o login — que não tem estouro nem português — no lugar
+ * da tela pedida, e aprovava. Destino diferente ou resposta não-2xx vira
+ * falha nomeada em `failures`, e quem chama pula a medição.
+ */
+async function gotoMeasured(target, path, failures, prefix = "") {
+  const response = await target.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+  const wanted = new URL(path, BASE).pathname;
+  const landed = new URL(target.url()).pathname;
+  if (response?.ok() && landed === wanted) return true;
+  failures.push(`${prefix}${path}: mediu ${landed} (HTTP ${response?.status() ?? "sem resposta"})`);
+  return false;
 }
 
 const browser = await chromium.launch();
@@ -1267,8 +1291,8 @@ try {
   const clipped = [];
   for (const width of widths) {
     await page.setViewportSize({ width, height: width >= 812 ? 375 : 812 });
-    for (const path of ["/", "/jobs", "/jobs?track=all", "/jobs/905000031", "/searches", "/compare", "/candidate", "/candidate/skills", "/pipeline"]) {
-      await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+    for (const path of OVERFLOW_SWEEP) {
+      if (!(await gotoMeasured(page, path, overflows, `${width}px `))) continue;
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
@@ -3012,7 +3036,7 @@ try {
   const portugueseLeaks = async (paths, target = page) => {
     const leaks = [];
     for (const path of paths) {
-      await target.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+      if (!(await gotoMeasured(target, path, leaks))) continue;
       const found = await target.evaluate((dictionary) => {
         const known = new Set(dictionary);
         const accented = /[ãõçáéíóúâêôàÃÕÇÁÉÍÓÚÂÊÔÀ]/;
@@ -3040,36 +3064,28 @@ try {
   };
 
   await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
-  const leaks = await portugueseLeaks([
-    "/",
-    "/jobs",
-    "/compare",
-    "/pipeline",
-    "/referrals",
-    "/candidate",
-    "/candidate/skills",
-    "/candidate/vocabulary",
-    // Minha conta (#236): e-mail da sessão marcado como dado do usuário.
-    "/account",
-    // O hub dos países entra nas quatro guardas transversais: cada uma é um
-    // array literal, então rota nova não herda nenhuma delas sozinha. Ele tem
-    // quatro chaves de dicionário próprias e estava fora de todas.
-    "/jobs/904000101/paises",
-    // A tela de detalhe é a mais aberta do produto e estava fora daqui desde o
-    // começo — o custo apareceu no QA de jornada: "← vagas", "Ver vaga na
-    // origem" e "visto em" eram literais no JSX, servidos em português com a
-    // interface em inglês. Ela só pôde entrar depois de o nome da empresa, a
-    // localização e o rótulo da fonte ganharem `data-user-content`, porque esse
-    // texto vem do acervo e é acentuado de direito. Por isso a publicação
-    // varrida é a de São Paulo: numa localização sem acento, tirar a marca não
-    // reprovaria nada, e a metade da guarda que a protege ficaria sem prova.
-    "/jobs/904000103",
-  ]);
+  // As rotas moram em `routes.mjs`, onde o teste de cobertura as cruza com o
+  // inventário de páginas: rota nova sem varredura nem exceção reprova.
+  const leaks = await portugueseLeaks(ENGLISH_OWNER_SWEEP);
   check(
     "interface em inglês não vaza português",
     leaks.length === 0,
     leaks.slice(0, 8).join(" | "),
   );
+  {
+    // As telas anteriores à sessão, num contexto sem cookie: com o do dono,
+    // `/login` redirecionaria e a varredura não mediria nada.
+    const anonymousContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    await anonymousContext.addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
+    const anonymous = await anonymousContext.newPage();
+    const anonymousLeaks = await portugueseLeaks(ENGLISH_ANONYMOUS_SWEEP, anonymous);
+    await anonymousContext.close();
+    check(
+      "telas sem sessão em inglês não vazam português",
+      anonymousLeaks.length === 0,
+      anonymousLeaks.slice(0, 8).join(" | "),
+    );
+  }
 
   /* ---------- Criar o próprio perfil (#234): conta sem candidato ---------- */
 
@@ -5792,11 +5808,21 @@ try {
   const saveTermOnPage = (term) => feedbackOf(async () => {
     // After a redirect the shell stays inert until the transition commits, and
     // `fill` on it is silently lost: the save goes out empty and no notice comes.
+    //
+    // O formulário do termo também precisa ter assentado. O aviso é publicado
+    // DENTRO da action, antes de a transição dela terminar; o React só
+    // reinicia o formulário não controlado quando a transição assenta. Sob
+    // carga esse intervalo cresce, e o `fill` do termo seguinte caía nele: o
+    // reset apagava o campo, o `required` barrava o envio e nenhum aviso vinha
+    // — "techlead" nunca era salvo, e "Tech Lead" passava como termo novo em
+    // vez de duplicado. `aria-busy` no formulário é o `pending` da action.
     await page.waitForFunction(() => {
       // Pronto = sem `inert` (troca de tela) e sem `aria-busy` (mesma tela,
       // #220, que deixa o shell operável enquanto a resposta chega).
       const shell = document.getElementById("application-shell");
-      return !shell?.hasAttribute("inert") && !shell?.hasAttribute("aria-busy");
+      const form = document.querySelector('[data-testid="searches-term-input"]')?.closest("form");
+      return !shell?.hasAttribute("inert") && !shell?.hasAttribute("aria-busy")
+        && Boolean(form) && !form.hasAttribute("aria-busy");
     });
     await page.locator('[data-testid="searches-term-input"]').fill(term);
     await page.locator('[data-testid="searches-term-save"]').click();
@@ -6043,21 +6069,14 @@ try {
     JSON.stringify({ hostileCreated, hostileTrack, injectedImages, trackDialog }),
   );
 
-  const searchRoutes = [
-    "/searches",
-    "/searches/tracks/new",
-    `/searches/tracks/${phpTrackCard?.id}`,
-    `/jobs?track=all&by=${seededId}&pay=6000&cur=USD&per=month&fit=0`,
-    "/jobs/904000101/paises",
-    "/jobs/904000103",
-    "/admin/captures",
-    "/account",
-  ];
+  const withSuiteIds = (path) =>
+    path.replace("{track}", String(phpTrackCard?.id)).replace("{term}", String(seededId));
+  const searchRoutes = OVERFLOW_SEARCHES_SWEEP.map(withSuiteIds);
   const searchOverflows = [];
   for (const [width, height] of [[375, 812], [768, 1024], [1024, 768]]) {
     await page.setViewportSize({ width, height });
     for (const path of searchRoutes) {
-      await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+      if (!(await gotoMeasured(page, path, searchOverflows, `${width}px `))) continue;
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
@@ -6072,15 +6091,7 @@ try {
   );
 
   await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
-  const searchLeaks = await portugueseLeaks([
-    "/searches",
-    `/searches/tracks/${phpTrackCard?.id}`,
-    "/jobs",
-    "/jobs/904000101/paises",
-    "/jobs/904000103",
-    "/admin/captures",
-    "/account",
-  ]);
+  const searchLeaks = await portugueseLeaks(ENGLISH_SEARCHES_SWEEP.map(withSuiteIds));
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
   check(
     "term-search E2E-014 Buscas, editor de trilha, Vagas e saúde das capturas em inglês não vazam português",

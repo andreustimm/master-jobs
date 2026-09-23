@@ -205,8 +205,9 @@ dashboard Next.js em `localhost:3000`.
 > tradução existia e o componente a ignorava. Chave duplicada é erro de
 > compilação, o que ajuda, mas só depois do trabalho perdido.
 >
-> `pnpm test:e2e` percorre em inglês as rotas de duas **listas literais** em
-> `tests/e2e/ui.mjs` (hoje treze) e reprova por dois critérios: texto que **é**
+> `pnpm test:e2e` percorre em inglês as rotas das listas `ENGLISH_*_SWEEP` de
+> `tests/e2e/routes.mjs` (como dono, sem sessão e depois de criar trilhas) e
+> reprova por dois critérios: texto que **é**
 > valor do dicionário português, e texto com acento. A primeira
 > versão desta verificação usava lista de palavras escrita à mão — ela passava
 > com "Editar", "Vocabulário" e "Práticas" na tela, porque a lista era o
@@ -225,7 +226,11 @@ dashboard Next.js em `localhost:3000`.
 > localização e o rótulo da fonte ganharem `data-user-content`, porque esse texto
 > vem do acervo e é acentuado de direito. Por isso a publicação varrida é
 > acentuada (`São Paulo, …`): numa fixture sem acento, tirar a marca não
-> reprovaria nada. Rota nova entra nas listas no mesmo commit que a cria.
+> reprovaria nada. Rota nova entra nas listas no mesmo commit que a cria — e
+> `tests/e2e-route-coverage.test.ts` cruza as listas com o inventário de
+> páginas: página sem varredura nem exceção registrada em `UNMEASURED_PAGES`
+> reprova o `pnpm check`. A varredura também confere o destino: ser mandada ao
+> `/login` no lugar da tela pedida é falha, não medição limpa.
 > `pt-BR` e `en` em `src/core/i18n/`. As chaves são tipadas contra o dicionário
 > português, então tradução faltando é erro de compilação — e não espaço em
 > branco descoberto por um usuário. Página obtém o tradutor com
