@@ -124,12 +124,6 @@ async function medirRotas() {
       // Abre a conexão num arquivo estático, fora da conta: sem isto a primeira
       // amostra da rodada somaria DNS e aperto de mão TLS ao tempo da função.
       await medir(base, AQUECE_CONEXAO, null, agente);
-      if (cookie !== null) {
-        const sessao = await medir(base, CENARIO_VALIDA_SESSAO, cookie, agente);
-        if (sessao.status >= 300 && sessao.status < 400 && sessao.destino === "/login") {
-          throw new Error("A sessão foi recusada (redirecionou para /login): cookie vencido ou inválido. Nada foi gravado.");
-        }
-      }
       for (const cenario of cenarios) {
         for (let i = 0; i < amostras; i++) {
           const m = await medir(base, cenario, cookie, agente);
@@ -141,6 +135,14 @@ async function medirRotas() {
           const r = regiaoDaResposta(m.vercelId);
           anota(regioes, cenario.nome, r ? `${r.borda}::${r.funcao ?? "sem função"}` : "?");
           anota(status, cenario.nome, `${m.status}${m.cache ? ` ${m.cache}` : ""}`);
+        }
+      }
+      // Depois das amostras, e não antes: conferir antes aqueceria a função e a
+      // "primeira" deixaria de medir a partida a frio. Nada é gravado até o fim.
+      if (cookie !== null) {
+        const sessao = await medir(base, CENARIO_VALIDA_SESSAO, cookie, agente);
+        if (sessao.status >= 300 && sessao.status < 400 && sessao.destino === "/login") {
+          throw new Error("A sessão foi recusada (redirecionou para /login): cookie vencido ou inválido. Nada foi gravado.");
         }
       }
     }

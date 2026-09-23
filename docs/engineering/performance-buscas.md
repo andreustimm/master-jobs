@@ -90,7 +90,8 @@ impresso ou mandado a outro host que não seja HTTPS ou `127.0.0.1`/`localhost`:
 Além dos três públicos, mede `/jobs`, `/jobs?fit=45`,
 `/jobs?fit=45&workMode=remote` e `/jobs?fit=45&q=<termo>`. O termo padrão é
 `typescript`; `JHO_PERF_TERMO` troca, e o valor nunca aparece na saída — o
-relatório só diz "termo". Antes de cada rodada o script confere a sessão em
+relatório só diz "termo". Ao fim de cada rodada — depois das amostras, para
+não aquecer a função antes da "primeira" — o script confere a sessão em
 `/account`, que não tem fronteira de carregamento: se ela venceu, para no 307
 para `/login` sem gravar nada. Em `/jobs` esse 307 não existe mais — desde a
 #217 o esboço compromete a resposta em 200 e a sessão vencida redireciona pelo
