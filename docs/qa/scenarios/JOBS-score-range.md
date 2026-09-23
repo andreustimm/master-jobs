@@ -24,4 +24,8 @@ em 0; campo vazio é "toda nota" e o placeholder diz qual é o limite (0 e 100);
 mínimo acima do máximo é trocado com aviso; `fit=abc` na URL não derruba a
 página — ela respondia 500 antes.
 
+Reaberto por #279: vaga ainda sem nota do candidato passa pela faixa e vem no
+fim da lista. Conferir que, com notas, a faixa continua cortando as vagas
+pontuadas fora dela.
+
 **Reset 2026-09-23 (#218):** a faixa de Score deixou de ser remontada por `key` e passou a se aplicar sozinha (soltar o polegar, sair da faixa). Refazer a faixa invertida e o preset sem Aplicar, e conferir que sair da faixa sem mudar nada não navega.

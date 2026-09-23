@@ -80,6 +80,9 @@ export const E2E_ROLES = {
   linkedRecruiter: { email: "e2e-recrutador-vinculado@local.test", roles: ["recruiter"] },
   // Papel candidato SEM candidato: é quem vê "Criar meu perfil" (#234).
   onboarding: { email: "e2e-sem-perfil@local.test", roles: ["candidate"], noCandidate: true },
+  // Mesma situação, criando o perfil com o currículo em PDF (#278). Conta
+  // própria porque a de cima termina a jornada já com candidato.
+  onboardingPdf: { email: "e2e-sem-perfil-pdf@local.test", roles: ["candidate"], noCandidate: true },
   // Troca a própria senha na jornada de Minha conta; dedicada para não mudar a
   // senha de quem as outras jornadas usam.
   account: { email: "e2e-conta@local.test", roles: ["recruiter"] },

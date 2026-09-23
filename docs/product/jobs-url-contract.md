@@ -52,6 +52,11 @@ sem o parâmetro continua significando o que significava.
 "toda nota" — zero. `fit` ausente mantém o corte de 45. É a diferença entre
 "não pedi nada" e "pedi tudo".
 
+**`fit` e `fitMax` só cortam vaga que tem nota.** Vaga ainda sem nota para o
+candidato da sessão aparece com qualquer faixa, no fim da ordenação por
+aderência; sem nenhuma nota na trilha principal, a tela avisa que o cálculo está
+pendente (`scores_pending`). Detalhe em [`../scoring.md`](../scoring.md).
+
 **Os limites são presos, não confiados.** O Score fica entre 0 e 100 na leitura
 e na digitação; `fit=abc` já derrubou a página com 500 quando `NaN` chegou ao
 PostgreSQL.

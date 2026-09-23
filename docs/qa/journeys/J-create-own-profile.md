@@ -13,19 +13,19 @@ journey:
   actions:
     - step: 1
       verb: Entrar com a conta nova e abrir o link de criar perfil pela navegação (Create my profile em inglês)
-      expected_observable: /candidate mostra o formulário com nome, headline, localização e currículo opcional, sem dado de outro candidato
+      expected_observable: /candidate mostra o formulário com nome, headline, localização e currículo opcional (colado ou em PDF), sem dado de outro candidato
     - step: 2
-      verb: Preencher o nome (e opcionalmente o resto) e enviar
-      expected_observable: A área do candidato abre com o nome digitado e a visibilidade privada marcada
+      verb: Preencher o nome (e opcionalmente o resto, colando o currículo ou enviando o PDF) e enviar
+      expected_observable: A área do candidato abre com o nome digitado e a visibilidade privada marcada; com PDF, o aviso pede a revisão e o editor mostra o texto extraído
     - step: 3
       verb: Recarregar a página
       expected_observable: O perfil continua lá; o formulário de criação não volta
   goal:
     observable: A conta tem um candidato novo, privado e só dela
-    side_effects: [candidate criado, auth_user.candidate_id preenchido]
+    side_effects: [candidate criado, auth_user.candidate_id preenchido, candidate_document do CV quando colado ou enviado em PDF]
   true_end_state: Depois do refresh, /candidate mostra a área do candidato com a identidade digitada e visibilidade privada
   exit:
-    natural: Seguir para colar o currículo ou abrir Vagas
+    natural: Revisar o currículo no editor (ou colá-lo, se ainda não veio) ou abrir Vagas
   abandonment:
     - at_step: 2
       how: Desiste antes de enviar
@@ -43,5 +43,5 @@ flowchart LR
 
 - **Entrada:** conta de papel candidato sem candidato vinculado.
 - **Estado final verdadeiro:** candidato novo, privado, ligado só a esta conta, com a identidade digitada — nunca a do `profile.yaml`.
-- **Saída:** colar o currículo ou seguir para Vagas.
+- **Saída:** revisar o currículo no editor (ou colá-lo, se ainda não veio) ou seguir para Vagas.
 - **Abandono:** desistir antes de enviar; nada é criado e o formulário continua lá.
