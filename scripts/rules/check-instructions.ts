@@ -105,7 +105,8 @@ export function headingSlug(heading: string): string {
   return heading
     .trim()
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/<[^>]*>/g, "")
+    // Tag HTML sai; `<tipo>` dentro de código em linha é texto e fica.
+    .replace(/`([^`]*)`|<[^>]*>/g, (_, code: string | undefined) => code ?? "")
     .toLowerCase()
     .replace(/[^\p{L}\p{M}\p{N}\s_-]/gu, "")
     .replace(/\s/g, "-");

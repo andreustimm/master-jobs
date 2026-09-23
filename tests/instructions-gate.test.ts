@@ -173,6 +173,8 @@ describe("slug de título", () => {
     expect(headingSlug("G43 — Tarefa nasce em worktree a partir de `dev`; PR aponta para `dev` (regra 18)"))
       .toBe("g43--tarefa-nasce-em-worktree-a-partir-de-dev-pr-aponta-para-dev-regra-18");
     expect(headingSlug("Evidência e limites")).toBe("evidência-e-limites");
+    expect(headingSlug("G49 — Branch de trabalho é `<tipo>/<slug>`")).toBe("g49--branch-de-trabalho-é-tiposlug");
+    expect(headingSlug('Título <a id="x"></a>')).toBe("título-");
     expect(headingSlug("Ver [o roteiro](workflow.md)")).toBe("ver-o-roteiro");
   });
 });
