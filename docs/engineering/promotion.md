@@ -142,6 +142,9 @@ O retorno `main → dev`, o versionamento de hotfixes em `main` e a criação
 idempotente de GitHub Releases permanecem em `sincronizar-apos-main.yml`.
 Uma release existente é preservada. Divergência no retorno continua indo por
 PR, sem reescrever `dev`. Publicação em `main` exige decisão humana e QA full.
+Desde 22/09/2026, o ruleset de `main` recusa o push direto do commit de versão
+de um hotfix. O fechamento manual está em
+[github-protections.md](github-protections.md#o-caminho-humano).
 
 ## Evidência e limites
 
