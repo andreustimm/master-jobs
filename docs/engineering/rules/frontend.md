@@ -67,8 +67,10 @@ Origem: regra 9. Critério de revisão.
 (link e texto de acento — contrasta com o FUNDO, não com o botão), `--border`,
 `--muted`, `--hairline`, `--good`, `--warn`, `--bad`, `--accent-2`, e os
 utilitários do Tailwind mapeados sobre eles. Um `#hex`, `rgb()` ou token bruto
-de paleta (`--color-iris`, `--color-brand`…) num componente é o tema vazando, e
-a partir daí um dos temas começa a ficar errado. A paleta bruta pertence à
+de paleta (`--color-iris`, `--color-ember`…) num componente é o tema vazando, e
+a partir daí um dos temas começa a ficar errado. Um `--color-*` que é apelido de
+variável do tema (`--color-brand`, `--color-hairline`) é token semântico, não
+paleta. A paleta bruta pertence à
 **definição** do tema, não ao componente.
 
 **Resolve C08.** A entrada comum dizia em outro parágrafo "use

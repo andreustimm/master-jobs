@@ -352,9 +352,9 @@ Contagens (tabelas, adapters) ficam no código e em
 [`data-model.md`](data-model.md), não aqui.
 
 ```
-src/contexts/      bounded contexts — auth, correspondence, fx, matching, pursuit, skills
-  i18n/            pt-BR e en, chaves tipadas contra o dicionário português
+src/contexts/      bounded contexts — lista viva em engineering/context-map.md
 src/core/          lógica pura, compartilhada entre CLI e UI
+  i18n/            pt-BR e en, chaves tipadas contra o dicionário português
   db/              composition root Drizzle, client e migrations
   sources/         um adapter por board público + registry + careers (página própria)
   ingest/          normalização, fingerprint, upsert, import manual, verificação

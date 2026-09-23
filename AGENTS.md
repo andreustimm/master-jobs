@@ -65,7 +65,8 @@ Entre colchetes, o ID do detalhe em `docs/engineering/rules/`.
    leva `data-user-content`; teste acha controle por `data-testid`.
    [[G29](docs/engineering/rules/frontend.md#g29)–[G31](docs/engineering/rules/frontend.md#g31)]
 10. **Todo frontend segue o sistema de temas.** Componente lê só token
-    semântico — nunca `#hex` nem paleta bruta (`--color-*`); escala fechada de
+    semântico — nunca `#hex` nem paleta bruta (`--color-iris`; apelido de
+    variável do tema, como `--color-brand`, é semântico); escala fechada de
     cor, tipo e espaço; nunca `max-w-xs`…`max-w-xl` (nem `w-`/`h-`/`min-w-`).
     Leia [DESIGN.md](DESIGN.md) antes. [[G32](docs/engineering/rules/frontend.md#g32)–[G34](docs/engineering/rules/frontend.md#g34)]
 11. **Toda tela funciona no celular** — medido em 375px no E2E; viewport
@@ -82,7 +83,7 @@ Entre colchetes, o ID do detalhe em `docs/engineering/rules/`.
     `jho auth set-password <email>`. [[G38](docs/engineering/rules/security.md#g38)]
 15. **Autorização passa por `can()`, e o escopo vem da sessão.** Toda Server
     Action chama `guard(...)` antes de qualquer efeito; toda página chama
-    `requirePage(...)`. Nenhuma entrada aceita `candidateId` do input. Entrada
+    `requirePage(...)`. Nenhuma action aceita `candidateId` da própria entrada. Entrada
     sem guarda só como exceção registrada, com o controle que a substitui; o
     inventário descobre entrada nova e reprova se ela não tiver política.
     [[G39](docs/engineering/rules/security.md#g39), [G40](docs/engineering/rules/security.md#g40)]

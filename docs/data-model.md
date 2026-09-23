@@ -643,7 +643,8 @@ em `tests/db-decision-integrity.test.ts`.
 Consequência prática: `pnpm jho jobs sync` pode rodar todo dia, quantas vezes
 quiser, e um `status = 'interviewing'` continua `interviewing`. As tabelas de
 decisão só mudam por `setApplicationStatus()`, e só por ação explícita da
-pessoa: `jho track`, a tela do funil ou uma sugestão de e-mail aceita. Nenhum
+pessoa: `jho track`, `jho jobs add --status`, a tela do funil ou uma sugestão
+de e-mail aceita. Nenhum
 caminho de ingestão a chama.
 
 > **Invariante:** nenhum código sob `src/core/ingest/` ou `src/core/sources/`

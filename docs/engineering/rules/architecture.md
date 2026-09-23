@@ -98,8 +98,8 @@ públicas que a CLI chama. Nunca duplique query entre as superfícies — coloqu
 atrás da API pública do contexto proprietário.
 
 **Resolve C15.** A transição do funil é centralizada no caso de uso
-`setApplicationStatus` (contexto `pursuit`); UI e CLI (`jho track`) são dois
-chamadores dele, e uma mudança de status feita no navegador cai em
+`setApplicationStatus` (contexto `pursuit`); a UI e a CLI (`jho track` e
+`jho jobs add --status`) são chamadores dele, e uma mudança de status feita no navegador cai em
 `application_event` exatamente como uma feita no terminal. A frase antiga "a
 única mutação da UI" não descreve o produto atual: há outras mutações
 legítimas (conta, candidato, buscas salvas, perfil público), cada uma atrás do

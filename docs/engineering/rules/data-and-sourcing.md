@@ -20,6 +20,12 @@ Quebrar isso destrói o único dado irrecuperável.
 importa `application` ou `applicationEvent` para escrita. Se o sync precisar
 sinalizar algo sobre vaga já candidatada, o lugar é `job` ou um campo derivado.
 
+**Agente em triagem (resolve C18).** O agente propõe o veredito; ele só registra
+uma decisão (`jho track`) que o usuário tomou — respondendo à proposta ou por
+pedido explícito que já a delegue. Rodar o sync não é essa autorização, e
+`applied` registra uma candidatura que o próprio usuário enviou (G37). As skills
+`job-triage` e os comandos `/vagas` e `/aplicar` seguem esta regra.
+
 Origem: regra 2. Detalhes: [data-model.md](../../data-model.md) ("Ingestão nunca
 escreve em `application`"),
 [ADR 0005](../../adr/0005-separacao-entre-fato-observado-e-decisao-do-usuario.md).

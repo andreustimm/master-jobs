@@ -164,7 +164,7 @@ pendente na issue indicada.
 | C15 | "Única mutação" da UI | Resolvido: G65, `architecture.md` e `data-model.md` |
 | C16 | "Toda rede por `getJson`" | Resolvido por #198; G73 |
 | C17 | Zero vagas = handle errado | Resolvido: G70; comando `fonte-nova` alinhado em [#201](https://github.com/andreustimm/master-jobs/issues/201) |
-| C18 | Triagem × confirmação no funil | Resolvido em [#201](https://github.com/andreustimm/master-jobs/issues/201): `job-triage`, `/vagas` e `/aplicar` propõem e só registram decisão do usuário; G02 continua negando escrita à ingestão |
+| C18 | Triagem × confirmação no funil | Resolvido: regra em G02; em [#201](https://github.com/andreustimm/master-jobs/issues/201), `job-triage`, `/vagas` e `/aplicar` propõem e só registram decisão do usuário; G02 continua negando escrita à ingestão |
 | C19 | Produção humana sem proteção remota | Resolvido em `main` por #196 (rulesets aplicados em 22/09/2026); `dev`/`staging` só recusam exclusão e force-push no remoto — ver G46 e [github-protections.md](../github-protections.md) |
 | C20 | CI de `dev` × ref posterior | Resolvido por #195; G45 |
 | C21 | Commit direto × bots e hotfix | Resolvido: exceções nomeadas em G43 |

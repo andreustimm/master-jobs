@@ -379,8 +379,11 @@ quando o banco ainda era SQLite/Turso. O que ela previa, na situação de hoje:
    limite de requisição vira por instância").
 5. **CSP:** produção já não usa `unsafe-eval`; `Strict-Transport-Security`
    explícito no `next.config.ts` continua pendente de revisão.
-6. **Proteção remota de `main`/Production: pendente** (issue
-   [#196](https://github.com/andreustimm/master-jobs/issues/196)).
+6. **Proteção remota: aplicada em `main`/Production, parcial em `dev`/`staging`**
+   (issue [#196](https://github.com/andreustimm/master-jobs/issues/196), desde
+   22/09/2026). `dev` e `staging` recusam exclusão e force-push, mas ainda não
+   exigem PR nem CI no remoto — ver
+   [`engineering/github-protections.md`](engineering/github-protections.md).
 
 ---
 
