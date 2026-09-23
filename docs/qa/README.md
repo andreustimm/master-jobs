@@ -141,7 +141,7 @@ lista todo reteste devido, qualquer que seja o status do bug.
 
 ## O que o CI prova e o que só a jornada prova
 
-São perguntas diferentes, e nenhuma das três camadas responde a da outra.
+São perguntas diferentes, e nenhuma das quatro camadas responde a da outra.
 
 | Camada | Onde roda | O que prova | O que não prova |
 |---|---|---|---|

@@ -4336,7 +4336,7 @@ try {
       ),
     JSON.stringify({
       directRouteLayers,
-      phases: publicPhases.map(({ count }) => count),
+      phases: publicPhases.map(({ count, maxOverlayCount }) => [count, maxOverlayCount]),
       publicLeakMarkers,
     }),
   );

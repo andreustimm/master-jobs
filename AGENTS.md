@@ -215,7 +215,7 @@ dashboard Next.js em `localhost:3000`.
 > `data-user-content`: o currículo tem "São Paulo" e continua tendo em inglês.
 >
 > **A lista decide o que é medido; os dois critérios, o que reprova.** Uma tela
-> fora das listas passa nos dois critérios sem ser medida — e numa tela listada,
+> em `UNMEASURED_PAGES` passa nos dois critérios sem ser medida — e numa tela listada,
 > literal de JSX só reprova se tiver acento ou já for valor do dicionário
 > português. `Ver vaga na origem` e `visto em` passariam mesmo com a rota na
 > lista. A lista é necessária, não suficiente: a regra acima (texto vem do

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { discoverEntries } from "./support/entry-inventory.ts";
 import {
@@ -99,6 +100,20 @@ describe("V08-01 — nenhuma página fica fora da medição sem decisão", () =>
       const nowMeasured = all.filter((path) => servedBy(path, pages) === page);
       expect(nowMeasured, `${page} já é medida; retire a exceção`).toEqual([]);
     }
+  });
+
+  it("as varreduras do navegador consomem as listas, não cópias delas", () => {
+    // Sem isto, `routes.mjs` poderia listar toda página enquanto `ui.mjs` volta
+    // a um array literal: a cobertura acima ficaria verde medindo dado morto.
+    const ui = readFileSync("tests/e2e/ui.mjs", "utf8");
+    const a11y = readFileSync("tests/e2e/a11y.mjs", "utf8");
+    expect(ui).toContain("portugueseLeaks(ENGLISH_OWNER_SWEEP)");
+    expect(ui).toContain("portugueseLeaks(ENGLISH_ANONYMOUS_SWEEP, anonymous)");
+    expect(ui).toContain("portugueseLeaks(ENGLISH_SEARCHES_SWEEP.map(withSuiteIds))");
+    expect(ui).toContain("for (const path of OVERFLOW_SWEEP)");
+    expect(ui).toContain("OVERFLOW_SEARCHES_SWEEP.map(withSuiteIds)");
+    expect(a11y).toContain("AXE_SWEEP.filter(([, path]) => path !== \"/login\")");
+    expect(a11y).toContain("AXE_SWEEP.find(([, path]) => path === \"/login\")");
   });
 
   it("a correspondência distingue estático de dinâmico", () => {
