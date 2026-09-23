@@ -18,14 +18,16 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
-### Fixed
+## [1.22.2] - 2026-09-23T10:46:42.000Z
 
-- Jobs from sites that only show their latest postings no longer disappear from the board just because they moved down the list. They stay open until the link check confirms the posting was taken down.
 
 ### Improved
 
 - Improvement tracking now marks each item as done when it reaches the published version.
-- The daily check of jobs that are still open is now lighter on the system.
+- On the Jobs screen and the home panel, changing page, sort order or pay
+  range responds faster: the filter counts are reused for up to a minute. When
+  the job catalog is updated, they may take up to a minute to reflect the change; the list and
+  the job total always show the current state.
 
 ## [1.22.1] - 2026-09-23T00:33:04.000Z
 
