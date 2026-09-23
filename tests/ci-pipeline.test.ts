@@ -77,6 +77,8 @@ describe("suíte fatiada", () => {
     expect(upload.with?.name).toBe("blob-${{ matrix.fatia }}");
     expect(upload.with?.["include-hidden-files"]).toBe(true);
     expect(upload.with?.["if-no-files-found"]).toBe("error");
+    // Refazer só a fatia vermelha reenvia o mesmo nome no mesmo run.
+    expect(upload.with?.overwrite).toBe(true);
   });
 
   it("aplica o piso de vitest.config.ts sobre o total mesclado, não sobre a fatia", () => {

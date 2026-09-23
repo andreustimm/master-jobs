@@ -301,7 +301,15 @@ um quarto da suíte não mede nada; o piso vale sobre a soma, em `cobertura`.
 Não há atalho para PR só de documentação: cerca de quarenta arquivos de teste
 leem `docs/`, os changelogs e `.claude/skills/`, e o build compila os
 changelogs. Pular a suíte nesses casos deixaria passar exatamente a quebra de
-contrato documental que ela existe para pegar.
+contrato documental que ela existe para pegar. O ganho para essas PRs vem do
+paralelismo, que já vale para todas.
+
+Medido em 23/09/2026: o job único levava 6 min 53 s (run 35803388420, em `dev`);
+os jobs paralelos, 2 min 41 s do disparo ao `qualidade` (run 35850357880, PR
+#266). O caminho crítico é fatia mais lenta (~2 min) + `cobertura` (~30 s). A
+cobertura mesclada saiu idêntica, contador por contador, à de uma execução
+única local — a divisão não perde nem duplica nada. Se o caminho crítico
+crescer, a primeira alavanca é o número de fatias.
 
 `migrate.yml` aplica migrações somente em produção,
 por `workflow_dispatch`, depois de confirmar o project ref do Supabase. As

@@ -159,6 +159,10 @@ jobs:
           # oculto por padrão — sem isto o artefato sobe vazio.
           include-hidden-files: true
           if-no-files-found: error
+          # "Re-run failed jobs" reaproveita as fatias verdes e refaz só a
+          # vermelha, no mesmo run: sem sobrescrever, o upload da fatia refeita
+          # colide com o artefato da tentativa anterior e reprova por nome.
+          overwrite: true
           retention-days: 1
 
   cobertura:
