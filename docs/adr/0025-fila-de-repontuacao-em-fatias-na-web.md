@@ -33,7 +33,7 @@ Os limites do lugar onde o produto roda:
    tarefa a `pending` sem contar tentativa e com a soma das notas já gravadas;
    depois do prazo não reivindica outra tarefa.
 3. **Três consumidores, o mesmo código.** O `after()` das ações que enfileiram
-   (salvar, importar PDF, restaurar versão, criar perfil, mexer em trilha) roda
+   de currículo (salvar, importar PDF, restaurar versão, criar perfil) roda
    uma fatia de `SCORE_SLICE_MS` (20 s) depois da resposta; `GET
    /api/cron/score`, protegida por `CRON_SECRET` como `/api/cron/recheck`, roda
    uma fatia para quem a chamar; a varredura e a CLI drenam sem prazo.
@@ -55,7 +55,10 @@ Os limites do lugar onde o produto roda:
   página de leitura, por isso 20 s e não 30.
 - Uma função morta no meio deixa claim pendurado por `MINUTOS_CLAIM_MORTO`
   (10 min), que continua valendo porque a CLI sem prazo ainda leva minutos.
-- Toda ação nova que grave currículo ou mexa em trilha precisa chamar
+- Editar trilha continua só enfileirando: a tela da trilha mostra
+  "recalculando, notas anteriores" até o consumidor passar, e o E2E trava esse
+  estado. Quem atende é a rota por segredo.
+- Toda ação nova que grave currículo precisa chamar
   `scoreAfterResponse()`; `tests/score-slice.test.ts` reprova a que esquecer.
 
 ## Alternativas rejeitadas

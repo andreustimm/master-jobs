@@ -299,6 +299,10 @@ export async function trackFitsForJob(candidateId: number, jobId: number): Promi
  * the person changed) or older than the freshness window. `all: true` rescores
  * everything. On an accepted track, a job that stopped being relevant loses its
  * row: it is outside that track now.
+ *
+ * With `deadline` (epoch ms, `clock()`), the run stops between two written
+ * batches once it passes and returns `complete: false`; the next run picks up
+ * what is still stale.
  */
 export async function scoreAll(
   candidateId: number,
@@ -312,10 +316,11 @@ export async function scoreAll(
   let skipped = 0;
   let topFit = 0;
   let expired = false;
-  // Conferido só DEPOIS de gravar um lote: toda execução avança pelo menos
-  // um lote, mesmo chamada com o prazo já vencido — senão a fila adiaria o
-  // mesmo candidato para sempre sem gravar nada.
-  const pastDeadline = () => opts.deadline !== undefined && clock().now() >= opts.deadline;
+  let wrote = false;
+  // Só para depois de ter GRAVADO algo nesta execução: a seguinte recomeça da
+  // primeira página, e uma página inteira fora do alvo de uma trilha aceita não
+  // grava nada — parar nela repetiria a mesma página para sempre.
+  const pastDeadline = () => wrote && opts.deadline !== undefined && clock().now() >= opts.deadline;
 
   for (const context of contexts) {
     if (expired) break;
@@ -338,6 +343,7 @@ export async function scoreAll(
       if (pendentes.length === 0) return;
       await upsertScores(db, candidateId, pendentes, context);
       pendentes = [];
+      wrote = true;
     };
 
     const outside: number[] = [];
@@ -386,7 +392,7 @@ export async function scoreAll(
       lastId = rows[rows.length - 1]!.id;
       if (pastDeadline()) {
         expired = true;
-        break;
+        break pages;
       }
     }
 

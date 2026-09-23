@@ -4,9 +4,10 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetClock, setClock } from "../src/core/clock.ts";
 import { createUser, type Session } from "../src/contexts/auth/index.ts";
-import { listCandidateTracks } from "../src/contexts/matching/index.ts";
+import { createTrack, listCandidateTracks, suggestTrack, targetOf } from "../src/contexts/matching/index.ts";
 import { seedCatalog } from "../src/contexts/skills/index.ts";
 import { documentHistory, saveDocument } from "../src/core/candidate.ts";
+import { loadProfile } from "../src/core/profile/load.ts";
 import type { DB } from "../src/core/db/client.ts";
 import { authUser, candidate, job, jobScore, scoreTask, source } from "../src/core/db/schema.ts";
 import {
@@ -169,6 +170,28 @@ describe("a fatia com prazo", () => {
     expect(await tarefaDe(id)).toMatchObject({ status: "done", scored: 250, lastError: null });
   });
 
+  it("página inteira fora do alvo de uma trilha aceita não prende a fatia num laço", async () => {
+    // A trilha PHP não é relevante para nenhuma destas vagas: a página não
+    // grava nada. Parar no fim dela devolveria a tarefa à fila, e a fatia
+    // seguinte recomeçaria da mesma página — para sempre.
+    await seedCatalog();
+    await semearVagas(1_100);
+    const id = await criarCandidato("maria");
+    await saveDocument({ candidateId: id, label: "cv", content: CURRICULO });
+    await runScoreQueue({ worker: "teste" });
+    const trilha = await createTrack(id, {
+      name: "PHP",
+      target: suggestTrack({ term: "PHP", catalog: [], primary: targetOf(await loadProfile(true)) }).target,
+    });
+    expect(trilha.ok).toBe(true);
+    relogioQueCorre();
+
+    const r = await runScoreQueue({ budgetMs: 1, worker: "teste" });
+
+    expect(r).toMatchObject({ adiadas: 0, processadas: 1 });
+    expect((await tarefaDe(id))!.status).toBe("done");
+  });
+
   it("sem prazo drena tudo de uma vez, como a varredura e a CLI fazem", async () => {
     await seedCatalog();
     await semearVagas(250);
@@ -315,11 +338,11 @@ describe("toda entrada de currículo enfileira E pontua depois da resposta", () 
     });
   });
 
-  it("nenhuma action que grava currículo ou mexe em trilha esquece de agendar a fatia", () => {
+  it("nenhuma action que grava currículo esquece de agendar a fatia", () => {
     // Rede estática para a PRÓXIMA entrada de currículo: uma action nova que
     // enfileire sem agendar a fatia devolveria a pessoa à espera da varredura
     // do dia seguinte, e nenhum teste de comportamento existente a veria.
-    const ENFILEIRAM = /\b(saveDocument|restoreDocument|createOwnCandidate|requestCvRescore|createTrack|updateTrack|setPrimaryTrack|restoreTrack)\b/;
+    const ENFILEIRAM = /\b(saveDocument|restoreDocument|createOwnCandidate|requestCvRescore)\b/;
     const arquivos: string[] = [];
     const andar = (dir: string) => {
       for (const nome of readdirSync(dir)) {
@@ -337,17 +360,13 @@ describe("toda entrada de currículo enfileira E pontua depois da resposta", () 
       if (!codigo.includes('"use server"')) continue;
       for (const match of codigo.matchAll(/export async function (\w+)\s*\(/g)) {
         const corpo = codigo.slice(match.index, codigo.indexOf("\n}", match.index));
-        // A composição de `lifecycle` recebe a função por parâmetro: quem
-        // agenda é o `lifecycle`, conferido pelo próprio corpo.
-        const chama = ENFILEIRAM.test(corpo) || /\blifecycle\(/.test(corpo);
-        if (!chama) continue;
+        if (!ENFILEIRAM.test(corpo)) continue;
         conferidas.push(`${arquivo}: ${match[1]}`);
-        const agenda = /scoreAfterResponse\(\)/.test(corpo) || /\blifecycle\(/.test(corpo);
-        if (!agenda) faltando.push(`${arquivo}: ${match[1]}`);
+        if (!/scoreAfterResponse\(\)/.test(corpo)) faltando.push(`${arquivo}: ${match[1]}`);
       }
     }
 
-    expect(conferidas.length).toBeGreaterThanOrEqual(6);
+    expect(conferidas.length).toBeGreaterThanOrEqual(4);
     expect(faltando).toEqual([]);
   });
 });

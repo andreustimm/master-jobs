@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { guardOwnCandidate } from "../auth";
 import { setMutationFeedbackCookie } from "../mutation-feedback-server";
-import { scoreAfterResponse } from "../score-queue-drain";
 import {
   archiveTrack,
   createTrack,
@@ -161,9 +160,6 @@ export async function createTrackAction(
   }
   const created = await createTrack(candidateId, { name: fields.name, target: parsed.target });
   if (!created.ok) return created;
-  // `createTrack` enfileirou a nota da trilha nova; o `after()` roda mesmo com
-  // o `redirect` abaixo.
-  scoreAfterResponse();
 
   if (term) {
     const saved = await saveTerm(
@@ -200,10 +196,7 @@ export async function updateTrackAction(formData: FormData): Promise<UpdateTrack
   });
   // Só descarta as entradas de antes da edição: o que muda as contagens é a
   // repontuação enfileirada por `updateTrack`, e ela chega depois — pela validade.
-  if (result.ok) {
-    invalidateBoardFacets(candidateId);
-    scoreAfterResponse();
-  }
+  if (result.ok) invalidateBoardFacets(candidateId);
   refresh();
   revalidatePath(`/searches/tracks/${track.id}`);
   return result;
@@ -217,9 +210,6 @@ async function lifecycle(
   const trackId = idFrom(formData, "trackId");
   if (trackId === null) return { ok: false, code: "not_found" };
   const result = await change(candidateId, trackId);
-  // Trocar a principal e restaurar enfileiram repontuação; arquivar não, e a
-  // fatia então só encontra a fila vazia.
-  if (result.ok) scoreAfterResponse();
   // O cockpit lê as facetas sem trilha na chave — a principal da hora da
   // leitura. Trocar, arquivar ou restaurar trilha muda a resposta dele.
   invalidateBoardFacets(candidateId);

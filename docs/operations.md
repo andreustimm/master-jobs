@@ -44,10 +44,11 @@ o acervo.
 
 ## Repontuação de candidato: fatias na web
 
-Candidato que salva o currículo (ou mexe em trilha) não espera a varredura: a
+Candidato que salva o currículo não espera a varredura: a
 ação enfileira em `score_task` e roda **uma fatia** da fila no `after()`, depois
-da resposta. Uma fatia dura até `SCORE_SLICE_MS` (20 s), cabe no teto de 30 s
-da função e para entre dois lotes; o que não couber volta à fila sem gastar
+da resposta. Uma fatia tem orçamento de `SCORE_SLICE_MS` (20 s), conferido entre dois
+lotes — pode passar dele por um lote e uma página de leitura, e cabe no teto
+de 30 s da função; o que não couber volta à fila sem gastar
 tentativa ([ADR 0025](adr/0025-fila-de-repontuacao-em-fatias-na-web.md);
 mecânica em [`scoring.md`](scoring.md#quando-a-nota-é-calculada-a-fila-e-as-fatias)).
 

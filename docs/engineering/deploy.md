@@ -52,8 +52,8 @@ exige exatamente um agendador de `jobs recheck`.
 A repontuação de candidato é a exceção que **roda** na Vercel, porque cabe:
 cada ação que salva currículo pontua uma fatia de até 20 s no `after()`, e
 `/api/cron/score` continua o que sobrou, pelo mesmo segredo. `vercel.json`
-segue sem `crons` — o plano só agenda uma vez por dia; quem chama a rota a cada
-poucos minutos é o `pg_cron` do Supabase (#281). Ver
+segue sem `crons` — o plano só agenda uma vez por dia; quem vai chamar a rota a cada
+poucos minutos é o `pg_cron` do Supabase (#281, **ainda não agendado**). Ver
 [ADR 0025](../adr/0025-fila-de-repontuacao-em-fatias-na-web.md) e o contrato em
 [operations.md](../operations.md#repontuação-de-candidato-fatias-na-web).
 

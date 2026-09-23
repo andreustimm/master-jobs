@@ -719,9 +719,13 @@ linha por candidato, idempotente. Quem consome a fila
 
 | Quem | Quando | Orçamento |
 |---|---|---|
-| `after()` da ação que salvou | logo depois da resposta | uma fatia (`SCORE_SLICE_MS`, 20 s) |
+| `after()` da ação que salvou o currículo (não as de trilha) | logo depois da resposta | uma fatia (`SCORE_SLICE_MS`, 20 s) |
 | `GET /api/cron/score` | chamada pelo agendador externo (#281) ou à mão | uma fatia |
 | `jho jobs rescore run` (varredura diária, CLI) | uma vez por dia / à mão | sem prazo, drena tudo |
+
+A fatia pega a tarefa do topo da fila (prioridade, depois ordem de chegada),
+não necessariamente a de quem salvou: com duas pessoas salvando juntas, a
+segunda pode ser atendida pela fatia da primeira ou pela próxima.
 
 **Fatia.** Com prazo, `scoreAll` lê as vagas desatualizadas em páginas de mil,
 em ordem de id, grava em lotes de cem e confere o prazo **depois** de cada lote.

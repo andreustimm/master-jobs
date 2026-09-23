@@ -32,7 +32,7 @@ import { clock } from "../clock.ts";
 import { getDb } from "../db/client.ts";
 import { scoreTask } from "../db/schema.ts";
 import { scoreAll } from "./apply.ts";
-import { ensureMatchingProfile } from "../../contexts/matching/index.ts";
+import { ensureMatchingProfile, type ResultadoPerfil } from "../../contexts/matching/index.ts";
 
 /**
  * Depois disto, uma tarefa reivindicada e não concluída volta para a fila.
@@ -314,7 +314,7 @@ export type ScoreQueueSnapshot = {
 export type ScoreRefusal = "noCv" | "weakCv" | "emptyCatalog";
 
 /** O código gravado em `lastError` por `runScoreQueue` → o motivo que a tela mostra. */
-const REFUSALS: Readonly<Record<string, ScoreRefusal>> = {
+const REFUSALS: Readonly<Record<Exclude<ResultadoPerfil["estado"], "ja-tinha" | "derivado">, ScoreRefusal>> = {
   "sem-curriculo": "noCv",
   "curriculo-fraco": "weakCv",
   "catalogo-vazio": "emptyCatalog",
@@ -359,7 +359,9 @@ export function scoreQueueDisplay(
   if (snapshot.failed > 0) return { state: "failed", scored: snapshot.scored };
   if (snapshot.done > 0 && snapshot.lastError) {
     // `Object.hasOwn`: um erro de verdade chamado "constructor" não vira recusa.
-    const reason = Object.hasOwn(REFUSALS, snapshot.lastError) ? REFUSALS[snapshot.lastError] : undefined;
+    const reason = Object.hasOwn(REFUSALS, snapshot.lastError)
+      ? REFUSALS[snapshot.lastError as keyof typeof REFUSALS]
+      : undefined;
     return reason
       ? { state: "refused", scored: snapshot.scored, reason }
       : { state: "failed", scored: snapshot.scored };
