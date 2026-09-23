@@ -25,7 +25,7 @@ sendo o único juiz do conjunto (adenda A4).
 - `parseQuery`, `compareByRelevance` e a explicação MUST ser puros.
 - `job_title_trgm_idx` entra em migration aditiva própria.
 - Grupo de proximidade MUST ser separado, rotulado, limitado e só com vagas que passam nos filtros exatos.
-- Reaproveitar `pg_trgm` e os índices de #214; o único índice novo é o do título.
+- Reaproveitar `pg_trgm` (migration `0012`) e os índices `job_description_trgm_idx` e `job_page_text_trgm_idx` (migration `0013`, #214); o único índice novo é o do título.
 - Estado na URL; sem JS de cliente novo; texto do dicionário.
 - Scorer intocado (G08, G11).
 </requirements>

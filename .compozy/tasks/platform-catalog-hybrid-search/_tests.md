@@ -100,7 +100,7 @@ O residual não pode enfraquecer estes testes; cada tarefa os roda como estão.
 
 ## Testes unitários
 
-- **UT-001** (capacidade): `capabilitiesOf` devolve as capacidades de cada kind do registro; kind desconhecido → tudo indisponível; `classifyProbe` classifica 401/403/429 como `blocked` e 5xx/rede como `failed`, nunca como `empty`.
+- **UT-001** (capacidade): `capabilitiesOf` devolve as capacidades de cada kind do registro; kind desconhecido → tudo indisponível; `classifySourceProbe` classifica 401/403/429 como `blocked` e 5xx/rede como `failed`, nunca como `empty`.
 - **UT-002** (validação): `validateCatalogWrite` recusa kind fora do registro, handle malformado, rótulo e handle acima do máximo e kind/handle duplicado, sem rede nem banco.
 - **UT-003** (segredo): `secretRef` aceita só nome de variável; valor com forma de chave é recusado, e o erro não contém o valor.
 - **UT-004** (importação): `planCatalogImport` insere o que falta, não toca linha gerida, espelha `enabled: false` em linha não gerida, marca como órfã a linha não gerida ausente do YAML e lista a divergência; `parseSourcesConfig` passa a devolver a entrada desabilitada com `enabled: false`.
@@ -124,15 +124,15 @@ O residual não pode enfraquecer estes testes; cada tarefa os roda como estão.
 ## Testes de integração
 
 - **IT-001**: migration aplicada; cadastrar, editar, desabilitar e aposentar fonte no PostgreSQL; duplicado e segredo recusados; vagas e execuções de fonte aposentada seguem legíveis.
-- **IT-002**: `ensureSources()` nos dois regimes; linha órfã desabilitada; o sync não seleciona `manual:sample` da fixture nem kind sem adapter; `jho sources import` em simulação e aplicado, `jho sources diff`; a sondagem pela action não grava vaga nem saúde.
+- **IT-002**: `ensureSources()` nos dois regimes; linha órfã desabilitada; o sync não seleciona `manual:sample` da fixture, kind sem adapter nem fonte `<kind>:~terms`, mesmo habilitada, e vaga trazida por captura por termo não fecha; `jho sources import` em simulação e aplicado, `jho sources diff`; a sondagem pela action não grava vaga nem saúde.
 - **IT-003**: dois pedidos equivalentes concorrentes geram uma execução; UPDATE em linha terminal afeta zero linhas; resultado atrasado não sobrescreve.
 - **IT-004**: `syncOne()` grava a execução-filha com contagens e completude; janela parcial registra `closed = 0`; nenhuma escrita em `application`; lista de execuções paginada.
 - **IT-005**: execução "todas" usa o retrato de fontes do momento do pedido; filha falha → pai `partial`; nova tentativa ligada à original; `running` vencida vira `interrupted`.
 - **IT-006**: dispatch sem credencial deixa a execução `queued` com motivo; erro do executor fica limitado e redigido.
 - **IT-007**: `applyVerdict()` grava evento e estado na mesma transação; reabertura preserva o evento de fechamento; candidatura intocada; evento fora de ordem não muda o estado.
-- **IT-008**: `jho jobs verify` e a fila passam pela mesma `applyVerdict()`, que grava vaga e evento na mesma transação; execução de verificação por fonte conta vivo/fechado/inconclusivo; interrupção deixa não verificadas intactas; nada vencido → zero.
+- **IT-008**: `jho jobs verify` e a fila passam pela mesma `applyVerdict()`; execução de verificação por fonte conta vivo/fechado/inconclusivo; interrupção deixa não verificadas intactas; nada vencido → zero.
 - **IT-009**: na fixture de referência, `sort=relevance` e `sort=fit` devolvem o mesmo conjunto e a mesma contagem para os mesmos filtros e termo; para um termo que não aparece em nenhuma localização, o conjunto é idêntico ao do filtro anterior à tarefa 05; uma vaga que só casa na localização aparece e a explicação diz "localização"; a ordem da consulta coincide com `compareByRelevance`.
-- **IT-010**: grupo de proximidade só com vagas que passam nos filtros e não casaram o termo, limitado a 20, exemplo abaixo do limiar excluído; `job_title_trgm_idx` existe e aparece no `EXPLAIN` do grupo com `enable_seqscan = off` dentro da transação do teste (a fixture é pequena demais para o planejador preferi-lo por conta própria); sem a extensão, o resultado principal continua.
+- **IT-010**: grupo de proximidade só com vagas que passam nos filtros e não casaram o termo, limitado a 20, exemplo abaixo do limiar excluído; o grupo filtra por `<%` e `job_title_trgm_idx` existe e aparece no `EXPLAIN` do grupo com `enable_seqscan = off` dentro da transação do teste (a fixture é pequena demais para o planejador preferi-lo por conta própria); sem a extensão, o resultado principal continua.
 - **IT-011**: pedido de análise idempotente sob clique duplo; nova tentativa ligada; cota esgotada → `paused_quota`; `running` sem batimento vira `interrupted` e libera novo pedido; `input_hash` diferente sinaliza vaga alterada; nenhuma coluna guarda chave.
 - **IT-012**: vaga ilegível responde como inexistente; candidato não recebe modelo nem custo; análise não escreve em `application`, `job_score` nem `candidate`.
 - **IT-013**: com vetores presentes, o sinal semântico só reordena; o conjunto filtrado é idêntico ao da busca sem vetor.

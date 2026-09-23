@@ -39,8 +39,9 @@ Runtime só PostgreSQL (adenda A6). Nenhuma frente muda o scorer, o
 - **Execuções** (`src/contexts/operations/`) — domínio puro da máquina de
   estados de execução e da chave de idempotência; infra com `source_run`; a
   `WorkflowDispatchPort` existente passa a aceitar parâmetros.
-- **Ingestão** (`src/core/ingest/`) — `syncOne()` e `recordVerdict()` gravam a
-  execução-filha e o evento de verificação; continuam sem escrever em
+- **Ingestão** (`src/core/ingest/`) — `syncOne()` grava a execução-filha e
+  `applyVerdict()` grava o evento de verificação (a `recordVerdict()` da fila
+  só conclui a `verify_task`); continuam sem escrever em
   `application` (G02).
 - **Busca** (`src/core/db/repo.ts` + domínio puro de consulta e explicação) —
   mantém o filtro whole-word como único juiz do conjunto; relevância e
@@ -68,8 +69,9 @@ export type Capabilities = {
   statusReason: false; // nenhum adapter atual prova filled/cancelled/paused
 };
 export function capabilitiesOf(kind: string): Capabilities; // kind fora do registro → tudo indisponível
-export type ProbeOutcome = "reachable" | "empty" | "blocked" | "failed";
-export function classifyProbe(result: { status: number | null; count: number | null }): ProbeOutcome;
+// sondagem de FONTE; não confundir com classify() de probe.ts, que sonda VAGA
+export type SourceProbeOutcome = "reachable" | "empty" | "blocked" | "failed";
+export function classifySourceProbe(result: { status: number | null; count: number | null }): SourceProbeOutcome;
 // 401/403/429 → blocked; 5xx, timeout ou rede → failed; nunca "empty" sem resposta 2xx
 
 export type CatalogWrite = {
@@ -84,9 +86,10 @@ export function validateCatalogWrite(
 export function planCatalogImport(
   yaml: CatalogWrite[], db: CatalogRow[],
 ): { inserts: CatalogWrite[]; mirrors: CatalogWrite[]; orphans: string[]; drift: DriftItem[] };
-// orphans = linhas não geridas sem entrada no YAML; a aplicação as desabilita
+// orphans = linhas não geridas sem entrada no YAML, exceto `<kind>:~terms` e kinds sem adapter; a aplicação as desabilita
 
-// operations/domain — puro
+// operations/domain — puro. `isStale` nasce na tarefa que chegar primeiro
+// (02 ou 06) e a outra a importa; não há duas regras de vencimento.
 export type RunScope =
   | { kind: "source"; sourceId: string }
   | { kind: "all" }
@@ -95,6 +98,7 @@ export type RunStatus =
   | "queued" | "running" | "succeeded" | "partial"
   | "failed" | "cancelled" | "interrupted";
 export function runKey(scope: RunScope, configRevision: number): string;
+// escopo de uma fonte: a revisão dela; "all" e verificação sem fonte: a maior revisão entre as fontes elegíveis
 export function nextRunStatus(current: RunStatus, event: RunEvent): RunStatus | null; // null = transição recusada
 export function isStale(run: { status: RunStatus; heartbeatAt: string }, now: string, leaseMs: number): boolean;
 
@@ -155,10 +159,16 @@ no DDL (G20).
 - linha **gerida** nunca é sobrescrita por `ensureSources()`: o YAML só
   insere o que falta;
 - o sync seleciona fontes do banco com
-  `enabled and retired_at is null and kind in (<kinds com adapter de sync>)`,
-  não mais da lista do YAML. O filtro por kind é o que mantém fora linhas
-  como `manual:sample` da fixture (`src/core/db/seed-fixtures.ts`) e a fonte
-  `manual` de `src/core/ingest/manual.ts`, que existem em `source` sem adapter;
+  `enabled and retired_at is null and kind in (<kinds com adapter de sync>)
+  and handle <> '~terms'`, não mais da lista do YAML. O filtro por kind é o
+  que mantém fora linhas como `manual:sample` da fixture
+  (`src/core/db/seed-fixtures.ts`) e a fonte `manual` de
+  `src/core/ingest/manual.ts`, que existem em `source` sem adapter. O filtro
+  por handle mantém fora as fontes `<kind>:~terms` da captura por termo
+  (ADR-011 de `term-search-target-tracks`, `src/contexts/sourcing/domain/capture.ts`):
+  elas têm kind com adapter, mas são parciais por definição, e sincronizá-las
+  fecharia por ausência as vagas que a captura trouxe. A tela nunca oferece
+  habilitá-las para sync;
 - `jho sources diff` lista a divergência YAML × banco sem gravar nada.
 
 Banco vazio (local, fixture sintética da ADR 0021) continua funcionando: sem
@@ -212,7 +222,7 @@ desempata por `id`; um evento mais antigo não reabre nem fecha a vaga.
 | `requested_by` | `onDelete: "set null"`. Visível só para admin. |
 | `retry_of` | `onDelete: "restrict"`. |
 | `status` | `queued`, `running`, `succeeded`, `partial`, `failed`, `paused_quota`, `interrupted`. |
-| `claimed_at`, `heartbeat_at` | Lease do processador. `running` sem batimento além do lease vira `interrupted` pela mesma `isStale()` de `source_run`, e sai do índice de idempotência; sem isso, um processador morto prenderia a vaga para sempre. |
+| `claimed_at`, `heartbeat_at` | Lease do processador. `running` sem batimento além do lease vira `interrupted` por uma regra de lease com a forma de `isStale()`, e sai do índice de idempotência; sem isso, um processador morto prenderia a vaga para sempre. |
 | `input_hash` | SHA-256 do texto normalizado analisado; a tela compara com o texto atual para mostrar "vaga mudou depois da análise". |
 | `prompt_version`, `schema_version`, `provider_slug`, `model_id` | Nunca a chave. |
 | `result` | `jsonb` validado por Zod depois de `bindEvidence()`. |
@@ -255,7 +265,10 @@ aparece quando há `q` e nunca altera a contagem do resultado principal.
 ## Pontos de integração
 
 - **PostgreSQL/Supabase** — `pg_trgm` já habilitado (migration `0012`).
-  `word_similarity()` usa a extensão existente. Não há índice trigrama em
+  O grupo de proximidade filtra com o operador `termo <% title` (limiar em
+  `pg_trgm.word_similarity_threshold`, fixado na transação) e só ordena por
+  `word_similarity()`: a função sozinha nunca usa índice GIN, o operador usa.
+  Não há índice trigrama em
   `job.title` (só em descrição e texto de página), então a tarefa 05 cria
   `job_title_trgm_idx` (GIN, parcial em `closed_at is null`) em migration
   aditiva própria. Numa fixture pequena o planejador escolhe varredura
@@ -341,8 +354,8 @@ resposta de provedor. Execução `running` sem batimento além do lease vira
 - **Habilidades não ganham campo próprio** — a vaga não persiste habilidades;
   elas estão na descrição, que o filtro já cobre. A4 fica atendida por
   localização + descrição.
-- **Proximidade em grupo separado e limitado** — `word_similarity()` do termo
-  contra o título, limiar constante calibrado na fixture, no máximo 20 itens,
+- **Proximidade em grupo separado e limitado** — operador `<%` (similaridade
+  por palavra) do termo contra o título, limiar constante calibrado na fixture, no máximo 20 itens,
   só entre vagas que passam pelos filtros exatos e **não** casaram o termo.
   O resultado principal e sua contagem não mudam.
 - **Análise sem dado de candidato** — torna o resultado compartilhável entre
