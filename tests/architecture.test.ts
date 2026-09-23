@@ -267,13 +267,23 @@ describe("layering", () => {
 
 describe("V10-02 fronteiras do domínio e dos adapters", () => {
   /**
-   * Relógio implícito que ainda existe no domínio, com o motivo. Entrada nova
-   * reprova; entrada que deixou de ser verdade também (dívida órfã).
+   * Leitura ambiente que ainda existe no domínio: o que é lido e por quê.
+   * Entrada nova reprova; entrada que deixou de ser verdade também (órfã).
    */
-  const CLOCK_DEBT = new Map<string, string>([
+  const AMBIENT_DEBT = new Map<string, { reads: string[]; why: string }>([
     [
       "src/contexts/auth/domain/policy.ts",
-      "`can()` e `authorize()` aceitam `now = Date.now()` por padrão; os chamadores de sessão ainda não passam o instante",
+      {
+        reads: ["Date.now()"],
+        why: "`can()` e `authorize()` aceitam `now = Date.now()` por padrão; os chamadores de sessão ainda não passam o instante",
+      },
+    ],
+    [
+      "src/contexts/auth/domain/password.ts",
+      {
+        reads: ["crypto random"],
+        why: "o sal do scrypt nasce em `hashPassword`; a verificação, que é a decisão, é determinística e recebe o sal gravado",
+      },
     ],
   ]);
 
@@ -305,13 +315,14 @@ describe("V10-02 fronteiras do domínio e dos adapters", () => {
     for (const file of PURE_CORE) {
       const reads = ambientReads(read(file));
       if (reads.length === 0) continue;
-      if (CLOCK_DEBT.has(file) && reads.every((name) => name === "Date.now()")) {
+      const debt = AMBIENT_DEBT.get(file);
+      if (debt && reads.every((name) => debt.reads.includes(name))) {
         used.add(file);
         continue;
       }
       offenders.push(`${file}: ${reads.join(", ")}`);
     }
-    for (const file of CLOCK_DEBT.keys()) if (!used.has(file)) offenders.push(`${file}: dívida de relógio órfã`);
+    for (const file of AMBIENT_DEBT.keys()) if (!used.has(file)) offenders.push(`${file}: dívida de leitura ambiente órfã`);
     expect(offenders).toEqual([]);
   });
 
@@ -375,6 +386,8 @@ describe("V10-02 fronteiras do domínio e dos adapters", () => {
     expect(ambientReads("export function idade(now = Date.now()) { return now; }")).toEqual(["Date.now()"]);
     expect(ambientReads("const hoje = new Date();\nconst x = new Date;")).toEqual(["new Date()", "new Date"]);
     expect(ambientReads("const r = await fetch(url);")).toEqual(["fetch()"]);
+    expect(ambientReads("const s = randomBytes(16);\nconst id = crypto.randomUUID();")).toEqual(["crypto random", "crypto random"]);
+    expect(ambientReads("const h = createHash('sha256');\nconst k = myrandomBytes(2);")).toEqual([]);
     expect(ambientReads("const y = new Date(asOf);\nport.fetch(url);\nconst s = 'Date.now()';")).toEqual([]);
   });
 });
@@ -397,6 +410,7 @@ function parallelArities(source: string): number[] {
     let depth = 0;
     let items = 0;
     let pending = false;
+    let spread = false;
     for (let i = start; i < code.length; i++) {
       const c = code[i]!;
       if (c === '"' || c === "'" || c === "`") {
@@ -415,10 +429,13 @@ function parallelArities(source: string): number[] {
         if (pending) items++;
         pending = false;
         continue;
+      } else if (depth === 1 && code.startsWith("...", i)) {
+        // `[...rows.map(ler)]` é um item só no texto e N consultas em execução.
+        spread = true;
       }
       if (depth >= 1 && !/\s/.test(c)) pending = true;
     }
-    arities.push(items + (pending ? 1 : 0));
+    arities.push(spread ? Number.POSITIVE_INFINITY : items + (pending ? 1 : 0));
   }
   return arities;
 }
@@ -488,10 +505,13 @@ describe("V10-05 leque de consultas: toda composição de tela está no inventá
     expect(parallelArities("await Promise.all([a(), b(\"x, y\"), c({ d, e })]);")).toEqual([3]);
     expect(parallelArities("await Promise.all([\n  a(),\n  b(),\n]);")).toEqual([2]);
     expect(parallelArities("await Promise.allSettled(rows.map((r) => ler(r)));")).toEqual([Number.POSITIVE_INFINITY]);
+    expect(parallelArities("await Promise.all([...rows.map(ler)]);")).toEqual([Number.POSITIVE_INFINITY]);
+    expect(parallelArities("await Promise.all([a(), ...extras]);")).toEqual([Number.POSITIVE_INFINITY]);
+    expect(parallelArities("await Promise.all([a({ ...opts }), b()]);")).toEqual([2]);
     expect(parallelArities("// Promise.all([a(), b(), c()])\nconst x = 1;")).toEqual([]);
     // Uma página nova que abre quatro leituras no corpo seria recusada.
     const nova = "export default async function Page() { const [a, b, c, d] = await Promise.all([ler1(), ler2(), ler3(), ler4()]); }";
-    expect(parallelArities(nova).some((arity) => arity > 2)).toBe(true);
+    expect(parallelArities(nova).some((arity) => arity > TETO)).toBe(true);
   });
 });
 

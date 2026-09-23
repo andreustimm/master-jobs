@@ -117,7 +117,8 @@ export function forbiddenReach(
 }
 
 /**
- * Leituras de relógio e rede escritas no próprio módulo.
+ * Leituras de relógio, acaso (inclusive o de `node:crypto`) e rede escritas
+ * no próprio módulo.
  *
  * O relógio implícito mais comum não é uma chamada no corpo: é o valor padrão
  * de parâmetro (`now = Date.now()`), que faz a mesma função devolver outra
@@ -135,6 +136,11 @@ export function ambientReads(source: string): string[] {
     [/\bperformance\.now\s*\(/g, "performance.now()"],
     [/(?<![\w$.])fetch\s*\(/g, "fetch()"],
     [/\bMath\.random\s*\(/g, "Math.random()"],
+    // O acaso seguro também é acaso: `import { randomBytes } from "node:crypto"`
+    // não passa pela regra de pacote proibido, porque `node:crypto` também
+    // serve a `createHash`, que é determinístico.
+    [/(?<![\w$])(?:crypto\.)?random(?:Bytes|UUID|Int)\s*\(/g, "crypto random"],
+    [/\bgetRandomValues\s*\(/g, "crypto random"],
   ];
   for (const [pattern, name] of patterns) {
     for (const _ of code.matchAll(pattern)) found.push(name);
