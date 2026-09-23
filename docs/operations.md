@@ -35,20 +35,23 @@ humano**, uma vez, depois de o código estar em produção (a migração
    terceiros responde:
    `curl -s -o /dev/null -w '%{http_code}\n' "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=pontuar"` → `401`;
    `curl -s -H "authorization: Bearer $CRON_SECRET" "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=pontuar"` → JSON com `durationMs`.
-3. **Supabase, SQL Editor do projeto de produção.** Habilite `pg_cron` e
+3. **Um agendador por vez.** Imediatamente antes de rodar o SQL do passo
+   seguinte, desligue o disparo agendado do Actions:
+   `gh variable set VARREDURA_AGENDADOR --body supabase --repo andreustimm/master-jobs`.
+   O disparo manual e a tela de operações continuam. Se o passo 4 falhar,
+   `gh variable delete VARREDURA_AGENDADOR --repo andreustimm/master-jobs`
+   devolve a execução diária.
+4. **Supabase, SQL Editor do projeto de produção.** Habilite `pg_cron` e
    `pg_net` (Integrations, ou as linhas `create extension` do arquivo), grave os
    dois segredos no Vault — o **mesmo** valor do passo 1:
    `select vault.create_secret('<CRON_SECRET>', 'jho_cron_secret');`
    `select vault.create_secret('https://jobs.mastertimm.com.br', 'jho_cron_base_url');`
    e rode [`supabase/cron/varredura.sql`](../supabase/cron/varredura.sql). O
    arquivo é idempotente: rodar de novo só atualiza.
-4. **Conferir em minutos.**
+5. **Conferir em minutos.**
    `select jobname, schedule, active from cron.job where jobname like 'jho-varredura-%';`
    e `select status_code, count(*) from net._http_response where created > now() - interval '15 minutes' group by 1;`
    — tudo `200`. (`pg_net` só guarda respostas por 6 h.)
-5. **Um agendador por vez.** Com as respostas 200, desligue o disparo agendado
-   do Actions: `gh variable set VARREDURA_AGENDADOR --body supabase --repo andreustimm/master-jobs`.
-   O disparo manual e a tela de operações continuam.
 
 **Prova de 24 h** (a entrega da #281). Toda fonte com intervalo ≤ 60 min e
 nenhuma chamada perto do teto:

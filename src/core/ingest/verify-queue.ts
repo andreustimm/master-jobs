@@ -331,9 +331,14 @@ export async function runVerifyQueue(
     attempted++;
 
     try {
+      // Com teto, a sondagem não passa do que resta: uma que começou aos 19 s
+      // com o timeout padrão de 15 s terminaria depois do limite da função.
+      // Esgotado vira timeout, e timeout é inconclusivo — não fecha nada.
+      const left = opts.budgetMs === undefined ? undefined : Math.max(1_000, opts.budgetMs - (began - started));
       const { verdict, status } = await probe(task.url, {
         fetchImpl: opts.fetchImpl,
         lookupHost: opts.lookupHost,
+        timeoutMs: left === undefined ? undefined : Math.min(15_000, left),
       });
       await recordVerdict(task.id, task.jobId, verdict, status);
       result.checked++;
