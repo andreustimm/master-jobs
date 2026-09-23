@@ -72,6 +72,7 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`engineering/skills-evaluation.md`](engineering/skills-evaluation.md) | Entender quais skills de desenvolvimento estão instaladas, sua origem e onde entram no fluxo. |
 | [`engineering/workflow.md`](engineering/workflow.md) | Começar, retomar e limpar worktrees com validação proporcional. |
 | [`engineering/github-project-tasks.md`](engineering/github-project-tasks.md) | Registrar issues no Project 3, assumir e transferir execução, validar e registrar entrega. |
+| [`engineering/github-project-verification.md`](engineering/github-project-verification.md) | Qual teste prova cada cenário CAN-01…14 do coordenador e o que só o piloto real prova. |
 | [`engineering/github-project-migration.md`](engineering/github-project-migration.md) | Inventário, deduplicação, evidências e pendências da migração do legado. |
 | [`.compozy/tasks/README.md`](../.compozy/tasks/README.md) | Separar especificações autorais, histórico e projeções descartáveis das tarefas remotas. |
 | [`engineering/cobertura.md`](engineering/cobertura.md) | O que o piso de cobertura garante, o que os ramos descobertos são, e as duas armadilhas de teste que não pode falhar. |

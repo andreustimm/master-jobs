@@ -59,7 +59,7 @@ decisão explícita no corpo da issue.
 
 | Entrega | Evidência para Concluído |
 |---|---|
-| dev | PR nativamente vinculada, branch da execução → dev, checks atuais e merge posterior ao primeiro claim ("Iniciado em"), para que reclaim ou transferência durante a espera pela promoção não invalidem a entrega |
+| dev | PR nativamente vinculada, branch da execução → dev, checks atuais e merge posterior ao instante do primeiro claim (`firstClaimedAt` no registro de coordenação), para que reclaim ou transferência durante a espera pela promoção não invalidem a entrega. "Iniciado em" é campo de data e não delimita a janela: lido como meia-noite UTC, aceitaria um merge do mesmo dia anterior ao claim |
 | production | Mesmo vínculo/merge + deployment Production bem-sucedido + execução mais recente do workflow exato de fumaça em main, mesmo SHA e posterior ao mesmo merge; ancestralidade comprovada pela API |
 | artifact | Comentário do assignee na própria issue com `Entrega aceita:` e link do artefato; motivo de aceite no comando |
 | operation | Mesmo aceite explícito, com evidência observável da operação remota |
@@ -109,7 +109,10 @@ payload/ator diferente é conflito. Saída **0** confirma leitura/recibo remoto;
 
 Uma projeção contém origem, revisão e instante. `refresh` exige diretório
 exclusivo e recusa sobrescrever arquivos autorais, arquivos desconhecidos ou
-projeção modificada. `.compozy/projections/` é ignorado pelo Git. Specs, PRD,
+projeção modificada. Dois `refresh` do mesmo destino se excluem por um lock
+que guarda o pid do dono; o lock de um processo morto (refresh interrompido) é
+recuperado, e o de um processo vivo ou sem pid legível continua recusando.
+`.compozy/projections/` é ignorado pelo Git. Specs, PRD,
 contrato de testes e evidências não são reescritos pelo refresh.
 
 ## Edição manual e recuperação
@@ -129,7 +132,12 @@ sobrescrever uma decisão sem detecção: a API não tem CAS. O teste CAN-07
 documenta esse limite, não declara a janela segura.
 
 Uma resposta perdida depois da escrita é `uncertain`. Repetir o mesmo UUID
-permite confirmar a mutação já aplicada, sem criar outra. Divergência parcial
+permite confirmar a mutação já aplicada, sem criar outra. A tarefa que muda
+entre o recibo preparado e a escrita recebe `rejected` (`STALE_REVISION after
+preparation`), não `uncertain`: nada foi escrito, e `uncertain` trancaria a
+issue até uma reconciliação. Retomar um `create` interrompido só acrescenta o
+vínculo de pai ou de dependência que ainda falta, porque o GitHub recusa o
+repetido. Divergência parcial
 exige administrador, leitura atual e evidência do estado observado/WIP:
 
 ```sh
@@ -139,6 +147,8 @@ rtk pnpm tasks reconcile 184 --revision <revisão-atual> \
 ```
 
 Reconcile preserva detentor ainda válido e nunca transfere posse implicitamente.
+Confirmado na primeira tentativa ou na retomada, ele rejeita os recibos
+pendentes da mesma issue, citando a própria operação.
 Lease vencido é liberado com nova geração; a worktree antiga não é apagada.
 Pedidos substituídos ficam rejeitados com referência à reconciliação. Para
 interrupção do serviço, mantenha GitHub como autoridade e use pausa auditada;
@@ -155,6 +165,16 @@ minutos drena intenções duráveis e recupera inclusão de issues perdidas.
 Eventos de PR/CI/deploy reconsultam HEAD, tentativa, ambiente, lease e vínculos
 nativos, depois registram evidência/sugestão idempotente. Não alteram Status.
 Payload atrasado, fechamento ou merge isolado não concluem nem regridem tarefa.
+O SHA publicado em main pertence à PR humana `staging → main`, não às PRs das
+tarefas; por isso o deployment chega às PRs de dev pelos commits dessa
+promoção. Só um deployment Production de main bem-sucedido, de uma promoção já
+mesclada, é expandido: deploys de dev e staging também resolvem para a promoção
+aberta e comentariam em toda issue promovida. A mensagem de merge só nomeia
+candidatas: número que é issue ou não existe é descartado, e cada PR restante é
+relida e precisa provar base dev, vínculo nativo, branch reclamada, merge
+posterior ao primeiro claim e ancestralidade do SHA publicado. Promoção com 250
+commits ou mais — o limite que a API lista — exige reconciliação explícita em
+vez de perder candidatas em silêncio.
 O pipeline dev → staging → main e os deployments de branches permanentes
 continuam sob os gates existentes; promoção de main continua humana.
 
@@ -190,11 +210,25 @@ reconhecidas, recusa troca destrutiva de tipo e confirma os campos por releitura
 Opção extra preservada pode reprovar preflight: reconciliar seu significado
 manualmente é preferível a apagar itens por inferência.
 
-As regras nativas do Project foram configuradas e conferidas no bootstrap:
-sub-issue auto-add, item novo → Backlog e Concluído → fechar issue ativos;
-fechar item → Concluído, PR vinculada → Em execução e merge → Concluído
-desativados. A API pública não altera essas opções; conferir pela UI antes do
-corte. Auto-close reflete uma decisão já validada, não prova entrega.
+As regras nativas do Project foram ajustadas pela UI em 22/09/2026 e
+conferidas no bootstrap ([registro em #181](https://github.com/andreustimm/master-jobs/issues/181#issuecomment-5778391182)).
+A API pública lê e apaga essas regras, mas não as edita nem as liga; por isso o
+corte as confere pela UI, com o escritor pausado:
+
+| Regra nativa | Observado antes (inspeção de 22/09) | Configurado depois | Por quê |
+|---|---|---|---|
+| Auto-add sub-issues to project | Ativa | Ativa | Subtarefa entra no Project sem cópia manual |
+| Item added to project | Ativa → Todo | Ativa → Backlog | Entrada nova não é trabalho assumido |
+| Pull request linked to issue | Ativa → In Progress | Desativada | Vínculo de PR regredia tarefa em QA para execução |
+| Item closed | Ativa → Done | Desativada | Fechar issue não comprova a entrega exigida |
+| Pull request merged | Ativa → Done | Desativada | Merge em dev não é produção |
+| Auto-close issue | Ativa (Done fecha) | Ativa (Concluído fecha) | Reflete uma conclusão já validada pelo escritor; não prova entrega |
+
+Conferência no corte, depois de `pause` confirmado: abrir
+Project 3 → ⋯ → Workflows e comparar cada linha com a coluna "Configurado
+depois"; registrar na issue do corte (#190) print ou texto com o estado lido e
+o horário. Uma regra religada entre a conferência e o `unpause` invalida a
+conferência: repita-a.
 
 Sequência de ativação em [#191](https://github.com/andreustimm/master-jobs/issues/191):
 
@@ -222,7 +256,9 @@ preserva epoch, pausa e posses existentes.
 perda de resposta, lease, projeção, evidência de entrega e gate de PR sem banco
 ou dados do produto. `rtk pnpm check` continua sendo o gate geral. Não há mudança
 na interface do produto nesta entrega; o piloto operacional é o teste remoto
-do fluxo, separado de QA de jornada do dashboard.
+do fluxo, separado de QA de jornada do dashboard. O
+[relatório de verificação](github-project-verification.md) liga cada cenário
+CAN-01…14 ao teste que o prova e ao que fica para o ensaio real.
 O [charter do piloto](../qa/charters/CH-task-worktree-handoff.md) acompanha dois
 cenários ainda não testados no QA vivo. Eles são gates da ativação #191 depois
 da implantação; o escritor e o enforcement permanecem desativados até suas

@@ -1,9 +1,9 @@
 import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { Coordinator } from "../scripts/tasks/coordinator.ts";
-import { controlBody, parseCoordination, parseReceipt, snapshotRevision } from "../scripts/tasks/protocol.ts";
+import { controlBody, coordinationBody, parseCoordination, parseReceipt, snapshotRevision } from "../scripts/tasks/protocol.ts";
 import { signCommand } from "../scripts/tasks/signing.ts";
-import type { Command, ProjectConfig, RemoteComment, TaskGateway, TaskPatch, TaskSnapshot } from "../scripts/tasks/types.ts";
+import type { Command, IssueData, ProjectConfig, RemoteComment, TaskGateway, TaskPatch, TaskSnapshot } from "../scripts/tasks/types.ts";
 
 const actor = "andreustimm";
 const time = new Date("2026-09-22T15:00:00.000Z");
@@ -28,7 +28,8 @@ function fixture() {
     comment: async (_issue: number, body: string) => { const c = { id: Math.max(...comments.map(c=>c.id)) + 1, body, author: actor, createdAt: time.toISOString(), updatedAt: time.toISOString(), url: "https://github.com/comment" }; comments.push(c); return structuredClone(c); },
     updateComment: async (id: number, body: string) => { comments.find(c => c.id === id)!.body = body; },
     patchTask: async (_before: TaskSnapshot, patch: TaskPatch) => { writes++; Object.assign(state, patch.fields); if (patch.coordination) state.coordination = structuredClone(patch.coordination); if (patch.body) state.issue.body = patch.body; if (patch.close) { state.issue.state = "CLOSED"; state.issue.stateReason = patch.close; } if (failAfterWrite) { failAfterWrite = false; throw new Error("response lost"); } },
-    createIssue: async () => state.issue, findCreatedIssue: async () => null, addToProject: async () => "PI1", addSubIssue: async () => {}, addDependency: async () => {},
+    createIssue: async () => state.issue, findCreatedIssue: async (_operationId: string): Promise<IssueData | null> => null, addToProject: async () => "PI1",
+    addSubIssue: async (_parent: number, _childId: string) => {}, addDependency: async (_issue: number, _blockedBy: number) => {},
     pullRequest: async () => { throw new Error("no evidence fixture"); }, deployment: async () => { throw new Error("no evidence fixture"); }, containsCommit: async () => false,
     workflowRun: async () => { throw new Error("no evidence fixture"); },
   } satisfies TaskGateway;
@@ -62,6 +63,19 @@ describe("canonical task writer", () => {
     expect((await f.submit(old)).phase).toBe("rejected");
     const forged = signCommand({ ...old, operationId: randomUUID(), expectedRevision: (await f.gateway.readTask(1)).revision }, privateKey);
     expect((await f.submit(forged)).message).toContain("NOT_OWNER");
+  });
+  it("records the exact first-claim instant and keeps it across transfer, release and reclaim", async () => {
+    const f = fixture(); await f.submit(await f.claim());
+    expect(f.state().coordination!.firstClaimedAt).toBe(time.toISOString());
+    expect(f.state().startedAt).toBe("2026-09-22");
+    const earlier = "2026-09-22T09:15:00.000Z";
+    f.mutate(s => { s.coordination!.firstClaimedAt = earlier; });
+    await f.submit(await f.owned("transfer", { reason: "WIP handed off", transferTo: { executionId: randomUUID(), publicKey, branch: "feat/new", worktreeId: "new" } }));
+    expect(f.state().coordination!.firstClaimedAt).toBe(earlier);
+    expect((await f.submit(await f.owned("release", { reason: "WIP preserved in the issue" }))).phase).toBe("confirmed");
+    expect((await f.submit(await f.claim())).phase).toBe("confirmed");
+    expect(f.state().coordination!.firstClaimedAt).toBe(earlier);
+    expect(parseCoordination(coordinationBody(f.state().coordination!))?.firstClaimedAt).toBe(earlier);
   });
   it("coalesces duplicate operations but rejects a UUID with a different payload (CAN-08)", async () => {
     const f = fixture(); const command = await f.claim(); const first = await f.submit(command);
@@ -154,6 +168,45 @@ describe("canonical task writer", () => {
     const receipt = await f.submit({ protocolVersion: 1, operationId: randomUUID(), action: "reconcile", issue: 1, expectedRevision: (await f.gateway.readTask(1)).revision, reason: "WIP and remote state inspected", evidence: ["https://github.com/andreustimm/master-jobs/issues/1#issuecomment-10"] });
     expect(receipt.phase).toBe("confirmed"); expect(f.state().coordination!.revision).toBe(3);
     expect(f.state().coordination!.execution).toEqual(owner);
+  });
+  it("rejects without locking the issue when the task moves between preparation and write", async () => {
+    const f = fixture(); const command = await f.claim();
+    f.coordinator.validate = async () => { f.mutate(s => { s.status = "Analisar"; }); };
+    const receipt = await f.submit(command);
+    expect(receipt.phase).toBe("rejected"); expect(receipt.message).toContain("STALE_REVISION after preparation");
+    expect(f.writes()).toBe(0);
+    f.coordinator.validate = async () => {};
+    expect((await f.submit(await f.claim())).phase).toBe("confirmed");
+  });
+  it("supersedes the pending receipts when a reconciliation is itself recovered", async () => {
+    const f = fixture(); await f.submit(await f.claim());
+    const block = await f.owned("block", { reason: "Wait for external system" });
+    const original = f.gateway.patchTask; f.gateway.patchTask = async () => { throw new Error("not applied"); };
+    await f.submit(block);
+    const reconcile: Command = { protocolVersion: 1, operationId: randomUUID(), action: "reconcile", issue: 1, expectedRevision: (await f.gateway.readTask(1)).revision, reason: "WIP and remote state inspected", evidence: ["https://github.com/andreustimm/master-jobs/issues/1#issuecomment-10"] };
+    expect((await f.submit(reconcile)).phase).toBe("uncertain");
+    f.gateway.patchTask = original;
+    expect((await f.submit(reconcile)).phase).toBe("confirmed");
+    const blocked = f.comments.map(c => parseReceipt(c.body)).find(r => r?.operationId === block.operationId);
+    expect(blocked?.phase).toBe("rejected"); expect(blocked?.message).toContain(reconcile.operationId);
+    expect((await f.submit(await f.owned("heartbeat"))).phase).toBe("confirmed");
+  });
+  it("replays an interrupted create without re-adding the links it already made", async () => {
+    const f = fixture(); let created = false; let lost = true;
+    f.gateway.createIssue = async () => { created = true; return f.state().issue; };
+    f.gateway.findCreatedIssue = async () => created ? f.state().issue : null;
+    // GitHub refuses a duplicate sub-issue or dependency link, and so does this fake.
+    f.gateway.addSubIssue = async (parent) => { if (f.state().parent === parent) throw new Error("duplicate sub-issue"); f.mutate(s => { s.parent = parent; }); };
+    f.gateway.addDependency = async (_issue, dep) => {
+      if (f.state().dependencies.some(d => d.number === dep)) throw new Error("duplicate dependency");
+      f.mutate(s => { s.dependencies.push({ number: dep, state: "OPEN", status: "Backlog" }); });
+      if (lost) { lost = false; throw new Error("response lost"); }
+    };
+    const command: Command = { protocolVersion: 1, operationId: randomUUID(), action: "create", issue: 181, create: { title: "Task", body: "Scope", priority: "Alta", type: "feat", delivery: "dev", parent: 181, dependsOn: [183, 184] } };
+    expect((await f.submit(command)).phase).toBe("uncertain");
+    const receipt = await f.submit(command);
+    expect(receipt.phase).toBe("confirmed");
+    expect(f.state().parent).toBe(181); expect(f.state().dependencies.map(d => d.number)).toEqual([183, 184]);
   });
   it.each(["pause", "unpause"] as const)("recovers %s when its prepared control write did not apply", async (action) => {
     const f = fixture();
