@@ -170,6 +170,12 @@ jobs:
     # TOTAL — é o mesmo piso global do `pnpm check` local, medido sobre a suíte
     # inteira. Os números moram no config: um número repetido aqui só informa
     # enquanto ninguém mexe no primeiro, e depois desinforma.
+    #
+    # Roda também quando uma fatia falhou (`!cancelled()`): sem isso ele seria
+    # pulado, e o relatório mesclado — que lista as falhas de todas as fatias
+    # num lugar só — nunca apareceria justo quando é útil. O veredito não muda:
+    # `qualidade` reprova pela fatia vermelha de qualquer jeito.
+    if: ${{ !cancelled() }}
     needs: testes
     runs-on: ubuntu-latest
     timeout-minutes: 10

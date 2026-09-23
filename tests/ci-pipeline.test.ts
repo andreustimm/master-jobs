@@ -96,6 +96,8 @@ describe("suíte fatiada", () => {
     expect(new Set(zeroed)).toEqual(new Set(["statements", "branches", "functions", "lines"]));
 
     expect(needsOf(coverage)).toEqual(["testes"]);
+    // Uma fatia vermelha não pode pular a mesclagem que mostra as falhas.
+    expect(coverage.if).toBe("${{ !cancelled() }}");
     const download = coverage.steps.find((step) => step.uses?.startsWith("actions/download-artifact@"))!;
     expect(download.with).toMatchObject({ pattern: "blob-*", path: ".vitest-reports", "merge-multiple": true });
     const merge = coverage.steps.find((step) => step.run?.includes("--merge-reports"))!;
