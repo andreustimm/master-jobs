@@ -200,10 +200,13 @@ describe("who reaches tracks and terms", () => {
     );
     expect(edited).toMatchObject({ ok: true });
     expect(await db.select().from(authEvent).where(eq(authEvent.kind, "impersonation_start"))).toHaveLength(1);
+    // A edição agenda só a fatia de repontuação (#280): pontuar não chama
+    // terceiro, então a sessão emprestada pode disparar. Captura, não.
+    expect(state.after).toBe(1);
 
     const saved = await actions.saveTermAction(form({ term: "Laravel", trackId: track.id }));
     expect(saved).toMatchObject({ ok: true, run: "waiting_sweep" });
-    expect(state.after).toBe(0);
+    expect(state.after).toBe(1);
   });
 
   it("IT-130 an admin without impersonation has no candidate scope to act on", async () => {

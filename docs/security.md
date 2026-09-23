@@ -287,6 +287,7 @@ As exceções, e o que substitui a sessão em cada uma:
 | `/login`, `/login/forgot`, `/login/reset` | pré-sessão; `/login` só pergunta se existe alguma conta |
 | `/login/callback` | link mágico de uso único |
 | `/api/cron/recheck` | `CRON_SECRET` em tempo constante; 503 sem ele |
+| `/api/cron/score` | o mesmo `CRON_SECRET`, pela mesma função (`refuseWithoutCronSecret`); só pontua, não chama terceiro |
 | `/p/[slug]` | lista de permissão de `publicProfile()`, 404 para não público, limite por IP |
 
 `tests/entry-denial.test.ts` prova a NEGAÇÃO, não só a presença: chama cada

@@ -939,6 +939,12 @@ describe("authorisation (AUTH-01)", () => {
       methods: ["GET"],
       why: "serviço: `CRON_SECRET` em tempo constante; 503 sem o segredo",
     },
+    // A fatia da repontuação que o agendador externo chama (#280/#281): mesma
+    // autenticação da reconferência, pela mesma função.
+    "app/api/cron/score/route.ts": {
+      methods: ["GET"],
+      why: "serviço: `CRON_SECRET` em tempo constante; 503 sem o segredo",
+    },
   };
   const ROUTE_GUARD = /await (require(?:OwnCandidatePage|Page|Session)|guard(?:OwnCandidate)?)\(/;
 

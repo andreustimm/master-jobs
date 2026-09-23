@@ -218,7 +218,7 @@ describe("status da fila por candidato", () => {
       failed: 0,
       scored: 0,
       lastError: "catalogo-vazio",
-    })).toEqual({ state: "failed", scored: 0 });
+    })).toEqual({ state: "refused", scored: 0, reason: "emptyCatalog" });
 
     expect(scoreQueueDisplay({
       pending: 1,
@@ -367,6 +367,8 @@ describe("o consumo", () => {
       processadas: 0,
       pontuadas: 0,
       falhas: 0,
+      adiadas: 0,
+      interrompida: false,
     });
   });
 

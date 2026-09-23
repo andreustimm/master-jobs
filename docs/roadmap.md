@@ -266,6 +266,10 @@ com o limite da Vercel, só por chamada manual: nada a agenda. A varredura do
 GitHub Actions, onde os comandos longos cabem, é o único agendador da
 reconferência, e segue opt-in desde 03/09/2026.
 
+`app/api/cron/score/route.ts` roda uma fatia da fila de repontuação de
+candidato com o mesmo segredo (#280, ADR 0025); o agendamento a cada poucos
+minutos pelo `pg_cron` do Supabase é a #281 e **ainda não existe**.
+
 > **Invariante:** A rota de cron não pode virar um segundo pipeline. Se ela
 > precisar de lógica que a CLI não tem, a lógica está no lugar errado — vai para
 > `src/core/`, e os dois chamadores compartilham.

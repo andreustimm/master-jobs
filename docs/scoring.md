@@ -708,6 +708,41 @@ cada trilha ativa. Trilha sem linha (vaga fora do portão, ou trilha recém-cria
 ganha a nota calculada na hora, marcada como `computed`, e nada é gravado —
 gravar poria no ranking da trilha uma vaga que o portão deixa de fora.
 
+## Quando a nota é calculada: a fila e as fatias
+
+Salvar currículo (colar, importar PDF, restaurar versão, criar o perfil) e
+mexer em trilha **enfileiram** a repontuação do candidato em `score_task` — uma
+linha por candidato, idempotente. Quem consome a fila
+(`runScoreQueue`, em `src/core/scoring/queue.ts`) primeiro deriva o perfil
+(`ensureMatchingProfile`, que cria a trilha principal) e depois roda
+`scoreAll`. São três consumidores do mesmo código ([ADR 0025](adr/0025-fila-de-repontuacao-em-fatias-na-web.md)):
+
+| Quem | Quando | Orçamento |
+|---|---|---|
+| `after()` da ação que salvou | logo depois da resposta | uma fatia (`SCORE_SLICE_MS`, 20 s) |
+| `GET /api/cron/score` | chamada pelo agendador externo (#281) ou à mão | uma fatia |
+| `jho jobs rescore run` (varredura diária, CLI) | uma vez por dia / à mão | sem prazo, drena tudo |
+
+**Fatia.** Com prazo, `scoreAll` lê as vagas desatualizadas em páginas de mil,
+em ordem de id, grava em lotes de cem e confere o prazo **depois** de cada lote.
+Vencido, devolve `complete: false`; a fila põe a tarefa de volta em `pending`
+**sem** contar tentativa e com a soma das notas já gravadas em `scored`. A
+fatia seguinte recomeça pelo que ainda está desatualizado — o que foi gravado
+saiu do filtro de staleness, então nada é refeito. Toda fatia avança pelo menos
+um lote, mesmo chamada com o prazo vencido.
+
+**Recusa.** Quando a derivação recusa, a tarefa termina `done` com o código em
+`last_error` e nenhuma nota é gravada. A tela de candidato mostra o estado
+`refused` com o motivo e a saída, pelo dicionário:
+
+| Código | Motivo na tela | Quem resolve |
+|---|---|---|
+| `sem-curriculo` | `noCv` | a pessoa: colar ou importar o currículo |
+| `curriculo-fraco` | `weakCv` — currículo curto ou sem skill do catálogo | a pessoa: currículo completo ou PDF |
+| `catalogo-vazio` | `emptyCatalog` | quem administra: `jho skills seed` |
+
+Qualquer outro `last_error` continua `failed`: é erro, não recusa.
+
 ## Como ajustar
 
 ### Mapa: quero X → edito Y

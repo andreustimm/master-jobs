@@ -82,6 +82,8 @@ export async function enqueueScore(
         priority: sql`greatest(${scoreTask.priority}, ${priority})`,
         attempts: 0,
         lastError: null,
+        // Pedido novo conta do zero: o total das fatias é deste pedido.
+        scored: null,
         claimedAt: null,
         claimedBy: null,
         updatedAt: agora,
@@ -89,7 +91,13 @@ export async function enqueueScore(
     });
 }
 
-export type TarefaReivindicada = { id: number; candidateId: number; attempts: number };
+export type TarefaReivindicada = {
+  id: number;
+  candidateId: number;
+  attempts: number;
+  /** Notas já gravadas por fatias anteriores do mesmo pedido. */
+  scored: number | null;
+};
 
 /**
  * A tarefa ainda é a que este trabalhador reivindicou.
@@ -130,15 +138,34 @@ export async function claimScore(worker: string): Promise<TarefaReivindicada | n
       id: scoreTask.id,
       candidateId: scoreTask.candidateId,
       attempts: scoreTask.attempts,
+      scored: scoreTask.scored,
     });
 
   return linhas[0] ?? null;
+}
+
+/**
+ * Devolve à fila a tarefa que o prazo interrompeu, sem gastar tentativa.
+ *
+ * Não é falha: as notas já gravadas ficam, e quem pegar a tarefa depois
+ * recomeça pelo que ainda está desatualizado. Contar como tentativa marcaria
+ * `failed` o candidato cujo acervo só não cabe em uma execução.
+ */
+async function releaseScoreTask(id: number, scored: number): Promise<void> {
+  await getDb()
+    .update(scoreTask)
+    .set({ status: "pending", scored, claimedAt: null, claimedBy: null, updatedAt: clock().iso() })
+    .where(emExecucao(id));
 }
 
 export type ResultadoFila = {
   processadas: number;
   pontuadas: number;
   falhas: number;
+  /** Tarefas que o prazo interrompeu e voltaram à fila com parte das notas gravadas. */
+  adiadas: number;
+  /** Parou pelo prazo, e não por fila vazia nem por `max`: ainda pode haver trabalho. */
+  interrompida: boolean;
 };
 
 /**
@@ -146,16 +173,33 @@ export type ResultadoFila = {
  *
  * Um candidato por vez, de propósito: cada um percorre o acervo inteiro, e dois
  * em paralelo dobrariam a memória e a banda para terminar no mesmo tempo.
+ *
+ * Com `budgetMs`, cabe numa função serverless: não reivindica tarefa nova
+ * depois do prazo, e a pontuação em andamento para entre dois lotes e volta à
+ * fila (`releaseScoreTask`). Sem ele, drena até esvaziar — a varredura e a CLI.
  */
 export async function runScoreQueue(
-  opts: { max?: number; worker?: string } = {},
+  opts: { max?: number; worker?: string; budgetMs?: number } = {},
 ): Promise<ResultadoFila> {
   const worker = opts.worker ?? "local";
   const teto = opts.max ?? Number.POSITIVE_INFINITY;
+  const prazo = opts.budgetMs === undefined ? undefined : clock().now() + opts.budgetMs;
   const db = getDb();
-  const resultado: ResultadoFila = { processadas: 0, pontuadas: 0, falhas: 0 };
+  const resultado: ResultadoFila = {
+    processadas: 0,
+    pontuadas: 0,
+    falhas: 0,
+    adiadas: 0,
+    interrompida: false,
+  };
 
   while (resultado.processadas < teto) {
+    // A primeira tarefa é reivindicada sempre: a fatia chamada tarde demais
+    // ainda avança um lote, em vez de sair sem ter feito nada.
+    if (prazo !== undefined && resultado.processadas > 0 && clock().now() >= prazo) {
+      resultado.interrompida = true;
+      break;
+    }
     const tarefa = await claimScore(worker);
     if (!tarefa) break;
 
@@ -175,11 +219,21 @@ export async function runScoreQueue(
       // Incremental, não `all`: o hash do perfil efetivo é por trilha, então só
       // a trilha editada (ou todas, quando a pessoa mudou) aparece desatualizada
       // — editar uma trilha recalcula só ela (regra 28 do PRD).
-      const r = await scoreAll(tarefa.candidateId);
-      await finishScoreTask(tarefa.id, r.scored, null);
-
-      resultado.processadas++;
+      const r = await scoreAll(tarefa.candidateId, { deadline: prazo });
+      // Somado às fatias anteriores: a tela diz quantas vagas o pedido pontuou,
+      // e não só quantas a última execução alcançou.
+      const acumulado = (tarefa.scored ?? 0) + r.scored;
       resultado.pontuadas += r.scored;
+
+      if (!r.complete) {
+        await releaseScoreTask(tarefa.id, acumulado);
+        resultado.adiadas++;
+        resultado.interrompida = true;
+        break;
+      }
+
+      await finishScoreTask(tarefa.id, acumulado, null);
+      resultado.processadas++;
     } catch (erro) {
       const tentativas = tarefa.attempts + 1;
       // Esgotadas as tentativas, para de tentar: um currículo que quebra o
@@ -206,6 +260,29 @@ export async function runScoreQueue(
   return resultado;
 }
 
+/**
+ * Orçamento de uma fatia na web: o `after()` de quem salvou o currículo e a
+ * rota `/api/cron/score` que o agendador chama.
+ *
+ * A função serverless morre em 30 s (`vercel.json`), e o prazo só é conferido
+ * entre dois lotes — a fatia passa dele por até um lote e uma página de leitura.
+ * No `after()` o relógio da função já correu durante a própria ação (ler um
+ * PDF, gravar o documento), então 20 s deixa folga para as duas coisas.
+ */
+export const SCORE_SLICE_MS = 20_000;
+
+export type ResultadoFatia = ResultadoFila & {
+  /** Tarefas esperando depois da fatia — o agendador sabe se ainda há trabalho. */
+  pendentes: number;
+};
+
+/** Uma fatia da fila dentro do teto da web, com o que ficou para a próxima. */
+export async function runScoreSlice(worker: string): Promise<ResultadoFatia> {
+  const resultado = await runScoreQueue({ budgetMs: SCORE_SLICE_MS, worker });
+  const contagem = await scoreQueueStatus();
+  return { ...resultado, pendentes: contagem.pending ?? 0 };
+}
+
 /** O que a tela mostra sem precisar do trabalhador. */
 export async function scoreQueueStatus(candidateId?: number): Promise<Record<string, number>> {
   const linhas = await getDb()
@@ -226,10 +303,26 @@ export type ScoreQueueSnapshot = {
   lastError: string | null;
 };
 
-export type ScoreQueueDisplay = {
-  state: "idle" | "noCv" | "pending" | "scoring" | "done" | "failed";
-  scored: number | null;
+/**
+ * Por que a derivação do perfil recusou, na chave que a tela traduz.
+ *
+ * Recusa não é falha: nada quebrou, e a saída está na mão de alguém — da
+ * pessoa (currículo ausente ou sem skill reconhecida) ou da instalação
+ * (catálogo vazio). Mostrar "falhou" sem dizer qual das duas deixava quem
+ * colou um currículo curto sem trilha, sem nota e sem saber o que fazer.
+ */
+export type ScoreRefusal = "noCv" | "weakCv" | "emptyCatalog";
+
+/** O código gravado em `lastError` por `runScoreQueue` → o motivo que a tela mostra. */
+const REFUSALS: Readonly<Record<string, ScoreRefusal>> = {
+  "sem-curriculo": "noCv",
+  "curriculo-fraco": "weakCv",
+  "catalogo-vazio": "emptyCatalog",
 };
+
+export type ScoreQueueDisplay =
+  | { state: "idle" | "noCv" | "pending" | "scoring" | "done" | "failed"; scored: number | null }
+  | { state: "refused"; scored: number | null; reason: ScoreRefusal };
 
 /** Leitura privada de uma única fila, filtrada antes de qualquer dado sair do banco. */
 export async function candidateScoreQueueStatus(
@@ -263,8 +356,13 @@ export function scoreQueueDisplay(
   hasCv = true,
 ): ScoreQueueDisplay {
   if (!snapshot) return { state: hasCv ? "idle" : "noCv", scored: null };
-  if (snapshot.failed > 0 || (snapshot.done > 0 && snapshot.lastError)) {
-    return { state: "failed", scored: snapshot.scored };
+  if (snapshot.failed > 0) return { state: "failed", scored: snapshot.scored };
+  if (snapshot.done > 0 && snapshot.lastError) {
+    // `Object.hasOwn`: um erro de verdade chamado "constructor" não vira recusa.
+    const reason = Object.hasOwn(REFUSALS, snapshot.lastError) ? REFUSALS[snapshot.lastError] : undefined;
+    return reason
+      ? { state: "refused", scored: snapshot.scored, reason }
+      : { state: "failed", scored: snapshot.scored };
   }
   if (snapshot.scoring > 0) return { state: "scoring", scored: snapshot.scored };
   if (snapshot.pending > 0) return { state: "pending", scored: snapshot.scored };

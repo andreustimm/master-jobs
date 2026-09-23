@@ -49,6 +49,14 @@ continua, protegida por `CRON_SECRET` e pela política de ingestão, para uma
 chamada manual; nada a agenda. `tests/workflow-environment-isolation.test.ts`
 exige exatamente um agendador de `jobs recheck`.
 
+A repontuação de candidato é a exceção que **roda** na Vercel, porque cabe:
+cada ação que salva currículo pontua uma fatia de até 20 s no `after()`, e
+`/api/cron/score` continua o que sobrou, pelo mesmo segredo. `vercel.json`
+segue sem `crons` — o plano só agenda uma vez por dia; quem chama a rota a cada
+poucos minutos é o `pg_cron` do Supabase (#281). Ver
+[ADR 0025](../adr/0025-fila-de-repontuacao-em-fatias-na-web.md) e o contrato em
+[operations.md](../operations.md#repontuação-de-candidato-fatias-na-web).
+
 ### 3. `profile.yaml` e `sources.yaml` são lidos do disco em runtime
 
 `loadProfile()` e `loadSourcesConfig()` fazem `readFile` sobre `process.cwd()`.
@@ -71,7 +79,7 @@ lugar. Enquanto os dois arquivos forem versionados, o padrão funciona.
 | `SUPABASE_CRAWL_ENABLED` | Actions produção | `true` somente após os gates de quota/retensão |
 | `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela ou sem `RESEND_FROM`, nada é enviado e o log só alerta |
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |
-| `CRON_SECRET` | Vercel | protege `/api/cron/recheck`, hoje só de chamada manual (`authorization: Bearer <segredo>`); nada a agenda |
+| `CRON_SECRET` | Vercel | protege `/api/cron/recheck` (só chamada manual) e `/api/cron/score` (fatia da repontuação, que o agendador da #281 vai chamar), com `authorization: Bearer <segredo>` |
 | `SENTRY_DSN` | Vercel | relato de erro do servidor; **sem ela nada é enviado** ([detalhe](#relato-de-erro)) |
 | `SENTRY_TRACES_SAMPLE_RATE` | Vercel (opcional) | fração de requisições com trace; ausente = `0.1`, `0` ou valor ilegível desliga ([detalhe](#tracing)) |
 | `SENTRY_AUTH_TOKEN` | Vercel, **só build** | publica os mapas de origem do servidor; sem ela o build segue sem mapas ([detalhe](#mapas-de-origem)) |

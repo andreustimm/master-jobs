@@ -42,6 +42,45 @@ devagar, nunca incorreto.
 `jho sources list`. Assim a tela não depende de token para dizer a verdade sobre
 o acervo.
 
+## Repontuação de candidato: fatias na web
+
+Candidato que salva o currículo (ou mexe em trilha) não espera a varredura: a
+ação enfileira em `score_task` e roda **uma fatia** da fila no `after()`, depois
+da resposta. Uma fatia dura até `SCORE_SLICE_MS` (20 s), cabe no teto de 30 s
+da função e para entre dois lotes; o que não couber volta à fila sem gastar
+tentativa ([ADR 0025](adr/0025-fila-de-repontuacao-em-fatias-na-web.md);
+mecânica em [`scoring.md`](scoring.md#quando-a-nota-é-calculada-a-fila-e-as-fatias)).
+
+A continuação é a rota por segredo, que um agendador externo chama a cada poucos
+minutos (#281 — `pg_cron` + `pg_net` no Supabase; **ainda não agendado**
+enquanto a #281 não entrar). Até lá, o que sobra de uma fatia espera a próxima
+ação do candidato ou a varredura diária (`jho jobs rescore run`).
+
+**Contrato de `/api/cron/score`:**
+
+| | |
+|---|---|
+| Método | `GET` |
+| Autenticação | `authorization: Bearer <CRON_SECRET>` — o mesmo segredo de `/api/cron/recheck`; 503 sem ele configurado, 401 errado |
+| Trabalho | uma fatia de `runScoreQueue` (≤ 20 s de pontuação; a função tem `maxDuration` 30 s) |
+| Resposta 200 | `{ processadas, pontuadas, falhas, adiadas, interrompida, pendentes }` |
+| Idempotência | chamar de novo é sempre seguro: reivindicação atômica, fatia interrompida volta a `pending` sem tentativa, nota gravada não é refeita |
+| Timeout de quem chama | ≥ 30 s (`pg_net`: `timeout_milliseconds := 30000`); a resposta só sai no fim da fatia |
+
+`pendentes > 0` ou `interrompida: true` quer dizer "ainda há trabalho"; o
+agendador não precisa ler isso para decidir nada — ele chama no próximo ciclo
+de qualquer jeito. Chamada à mão:
+
+```bash
+curl -sS -H "authorization: Bearer $CRON_SECRET" https://jobs.mastertimm.com.br/api/cron/score
+```
+
+**Diagnóstico.** `jho jobs rescore status` conta a fila por estado. Tarefa em
+`scoring` há mais de `MINUTOS_CLAIM_MORTO` (10 min) é de uma função que morreu
+no meio, e a próxima fatia a retoma. `done` com `last_error` `sem-curriculo`,
+`curriculo-fraco` ou `catalogo-vazio` é **recusa**, não falha: a tela de
+candidato mostra o motivo; `catalogo-vazio` pede `jho skills seed`.
+
 ## Por que isto existe
 
 O `master-jobs` não é um produto: é uma rotina. O banco só vale alguma coisa se
@@ -239,7 +278,8 @@ pnpm jho jobs score --all
 > `job_score.scorer_version <> SCORER_VERSION` — ou seja, sem o bump os scores
 > velhos passam por válidos e se misturam com os novos sem ninguém perceber.
 
-Não existe repontuação de uma vaga só: `scoreAll()` aceita apenas `{ all }`.
+Não existe repontuação de uma vaga só: `scoreAll()` aceita `{ all }` e, na fila
+da web, um `deadline` que interrompe entre lotes.
 `loadProfile(true)` força releitura do YAML a cada run, então não há cache
 antigo em jogo.
 

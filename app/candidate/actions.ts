@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { guard, guardOwnCandidate } from "../auth";
+import { scoreAfterResponse } from "../score-queue-drain";
 import { createOwnCandidate } from "../../src/contexts/auth/index.ts";
 import {
   CV_MIN,
@@ -52,6 +53,8 @@ export async function saveCvAction(formData: FormData) {
   // The id comes from the guard, never from the form: a candidate id in
   // FormData is a request, not a proof.
   await saveDocument({ candidateId, kind: "cv", label, content, format: "text" });
+  // Currículo novo, nota nova: a fatia roda depois da resposta (#280).
+  scoreAfterResponse();
 
   revalidatePath("/candidate");
 }
@@ -91,6 +94,7 @@ export async function importPdfAction(formData: FormData) {
     content: extracted.text,
     format: "text",
   });
+  scoreAfterResponse();
 
   revalidatePath("/candidate");
 }
@@ -142,7 +146,11 @@ export async function restoreVersionAction(
 ): Promise<VersionActionResult> {
   const { candidateId } = await guardOwnCandidate("candidate:write");
   const result = await restoreDocument(candidateId, id, label);
-  if (result.ok) revalidatePath("/candidate");
+  if (result.ok) {
+    // Restaurar grava uma versão nova do currículo e enfileira como salvar.
+    scoreAfterResponse();
+    revalidatePath("/candidate");
+  }
   return result.ok ? { ok: true } : result;
 }
 
@@ -227,7 +235,12 @@ export async function createProfileAction(formData: FormData): Promise<CreatePro
   const result = await createOwnCandidate(session, { ...parsed.value, cvLabel: defaultCvLabel(), publicSlug });
   if (result.status === "no-account") return { ok: false, code: "unavailable" };
   if (result.status === "slug-taken") return { ok: false, code: "slugTaken" };
-  if (result.status === "created" && parsed.value.cv !== null) await requestCvRescore(result.candidateId);
+  if (result.status === "created" && parsed.value.cv !== null) {
+    await requestCvRescore(result.candidateId);
+    // Sem isto a primeira trilha e as primeiras notas esperavam a varredura do
+    // dia seguinte — ou para sempre, quando ela falhava (#280).
+    scoreAfterResponse();
+  }
 
   revalidatePath("/", "layout");
   return { ok: true };
