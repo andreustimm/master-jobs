@@ -220,6 +220,21 @@ describe("a fatia com prazo", () => {
     expect((await tarefaDe(b))!.status).toBe("pending");
   });
 
+  it("a fatia de quem salvou pega a tarefa dele antes das que chegaram primeiro", async () => {
+    // Tarefa de outra pessoa, mais antiga e da mesma prioridade — como a que o
+    // prazo devolveu à fila. Sem a preferência, a fatia do `after()` gastaria o
+    // tempo de quem está olhando com ela.
+    const outra = await criarCandidato("outra");
+    const quemSalvou = await criarCandidato("maria");
+    await enqueueScore(outra);
+    await enqueueScore(quemSalvou);
+
+    await runScoreQueue({ max: 1, prefer: quemSalvou, worker: "teste" });
+
+    expect((await tarefaDe(quemSalvou))!.status).toBe("done");
+    expect((await tarefaDe(outra))!.status).toBe("pending");
+  });
+
   it("pedido novo zera a contagem das fatias anteriores", async () => {
     const id = await criarCandidato("maria");
     await enqueueScore(id);
@@ -379,7 +394,7 @@ describe("toda entrada de currículo enfileira E pontua depois da resposta", () 
         const corpo = codigo.slice(match.index, codigo.indexOf("\n}", match.index));
         if (!ENFILEIRAM.test(corpo)) continue;
         conferidas.push(`${arquivo}: ${match[1]}`);
-        if (!/scoreAfterResponse\(\)/.test(corpo)) faltando.push(`${arquivo}: ${match[1]}`);
+        if (!/scoreAfterResponse\(/.test(corpo)) faltando.push(`${arquivo}: ${match[1]}`);
       }
     }
 

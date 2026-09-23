@@ -738,11 +738,11 @@ linha por candidato, idempotente. Quem consome a fila
 |---|---|---|
 | `after()` da ação que salvou o currículo (não as de trilha) | logo depois da resposta | uma fatia (`SCORE_SLICE_MS`, 20 s) |
 | fatia `repontuar` de `/api/cron/varredura` | a cada 2 min pelo `pg_cron` ([ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)) ou à mão | uma fatia |
-| `jho jobs rescore run` (varredura diária, CLI) | uma vez por dia / à mão | sem prazo, drena tudo |
+| `jho jobs rescore run` (CLI; também no Actions enquanto ele agendar a varredura) | à mão | sem prazo, drena tudo |
 
-A fatia pega a tarefa do topo da fila (prioridade, depois ordem de chegada),
-não necessariamente a de quem salvou: com duas pessoas salvando juntas, a
-segunda pode ser atendida pela fatia da primeira ou pela próxima.
+A fatia do `after()` pega primeiro a tarefa de quem salvou, e depois o topo da
+fila (prioridade, depois ordem de chegada); a fatia `repontuar` só usa a ordem
+da fila.
 
 **Fatia.** Com prazo, `scoreAll` lê as vagas desatualizadas em páginas de mil,
 em ordem de id, grava em lotes de cem e confere o prazo **depois** de cada lote.

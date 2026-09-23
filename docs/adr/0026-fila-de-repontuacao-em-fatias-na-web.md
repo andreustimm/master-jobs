@@ -50,8 +50,9 @@ Os limites do lugar onde o produto roda:
 
 ## Consequências
 
-- Candidato novo tem a trilha principal na primeira fatia (a derivação vem antes
-  de pontuar) e as notas em uma ou poucas fatias. Enquanto o SQL do agendamento
+- Candidato novo tem a trilha principal na primeira fatia que pega a tarefa
+  dele — a do próprio `after()`, que prefere o candidato que salvou (a derivação
+  vem antes de pontuar) e as notas em uma ou poucas fatias. Enquanto o SQL do agendamento
   não for reaplicado em produção, o que não coube na fatia do `after()` espera
   a próxima ação da pessoa ou a CLI — mais devagar, nunca incorreto.
 - O prazo é conferido entre lotes: a fatia passa dele por até um lote e uma

@@ -125,7 +125,8 @@ async function rescoreSlice(worker: string, budgetMs: number): Promise<QueueOutc
   const result = await runScoreQueue({ worker, budgetMs });
   const pending = (await scoreQueueStatus()).pending ?? 0;
   return {
-    items: result.processadas,
+    // Concluídas ou recusadas; a que falhou e voltou à fila conta em `errors`.
+    items: result.processadas - result.falhas,
     errors: result.falhas,
     detail: { scored: result.pontuadas, deferred: result.adiadas, pending },
   };

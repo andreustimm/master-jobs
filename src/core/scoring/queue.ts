@@ -118,7 +118,15 @@ export async function finishScoreTask(id: number, scored: number, lastError: str
     .where(emExecucao(id));
 }
 
-export async function claimScore(worker: string): Promise<TarefaReivindicada | null> {
+/**
+ * `prefer` põe a tarefa desse candidato na frente das outras. É o `after()` de
+ * quem acabou de salvar: sem isso, uma tarefa de outra pessoa devolvida pelo
+ * prazo (mesma prioridade, id menor) gastaria a fatia de quem está olhando.
+ */
+export async function claimScore(
+  worker: string,
+  opts: { prefer?: number } = {},
+): Promise<TarefaReivindicada | null> {
   const agora = clock().iso();
   const morto = emMinutos(-MINUTOS_CLAIM_MORTO);
 
@@ -130,7 +138,7 @@ export async function claimScore(worker: string): Promise<TarefaReivindicada | n
         select id from production.score_task
         where status = 'pending'
            or (status = 'scoring' and claimed_at < ${morto})
-        order by priority desc, id asc
+        order by (candidate_id = ${opts.prefer ?? null}) is true desc, priority desc, id asc
         limit 1 for update skip locked
       )`,
     )
@@ -179,7 +187,7 @@ export type ResultadoFila = {
  * fila (`releaseScoreTask`). Sem ele, drena até esvaziar — a varredura e a CLI.
  */
 export async function runScoreQueue(
-  opts: { max?: number; worker?: string; budgetMs?: number } = {},
+  opts: { max?: number; worker?: string; budgetMs?: number; prefer?: number } = {},
 ): Promise<ResultadoFila> {
   const worker = opts.worker ?? "local";
   const teto = opts.max ?? Number.POSITIVE_INFINITY;
@@ -200,7 +208,7 @@ export async function runScoreQueue(
       resultado.interrompida = true;
       break;
     }
-    const tarefa = await claimScore(worker);
+    const tarefa = await claimScore(worker, { prefer: opts.prefer });
     if (!tarefa) break;
 
     try {

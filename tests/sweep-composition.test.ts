@@ -126,7 +126,7 @@ describe("fatias de fila", () => {
     expect(opts.budgetMs).toBeGreaterThan(0);
     expect(opts.budgetMs).toBeLessThanOrEqual(20_000);
     expect(opts.worker).toMatch(/^varredura-/);
-    expect(report).toMatchObject({ items: 2, errors: 1, detail: { scored: 80, deferred: 1, pending: 3 } });
+    expect(report).toMatchObject({ items: 1, errors: 1, detail: { scored: 80, deferred: 1, pending: 3 } });
   });
 
 

@@ -55,7 +55,7 @@ export async function saveCvAction(formData: FormData) {
   // FormData is a request, not a proof.
   await saveDocument({ candidateId, kind: "cv", label, content, format: "text" });
   // Currículo novo, nota nova: a fatia roda depois da resposta (#280).
-  scoreAfterResponse();
+  scoreAfterResponse(candidateId);
 
   revalidatePath("/candidate");
 }
@@ -84,7 +84,7 @@ export async function importPdfAction(formData: FormData) {
     content: pdf.text,
     format: "text",
   });
-  scoreAfterResponse();
+  scoreAfterResponse(candidateId);
 
   revalidatePath("/candidate");
 }
@@ -138,7 +138,7 @@ export async function restoreVersionAction(
   const result = await restoreDocument(candidateId, id, label);
   if (result.ok) {
     // Restaurar grava uma versão nova do currículo e enfileira como salvar.
-    scoreAfterResponse();
+    scoreAfterResponse(candidateId);
     revalidatePath("/candidate");
   }
   return result.ok ? { ok: true } : result;
@@ -263,7 +263,7 @@ export async function createProfileAction(formData: FormData): Promise<CreatePro
     await requestCvRescore(result.candidateId);
     // Sem isto a primeira trilha e as primeiras notas esperavam a varredura do
     // dia seguinte — ou para sempre, quando ela falhava (#280).
-    scoreAfterResponse();
+    scoreAfterResponse(result.candidateId);
   }
 
   revalidatePath("/", "layout");

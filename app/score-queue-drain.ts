@@ -17,8 +17,8 @@ import { runScoreQueue, SCORE_SLICE_MS } from "../src/core/scoring/queue.ts";
  * ação que o agenda antes de conferir a sessão trabalha para quem não provou
  * ser ninguém.
  */
-export function scoreAfterResponse(): void {
+export function scoreAfterResponse(candidateId: number): void {
   after(async () => {
-    await runScoreQueue({ budgetMs: SCORE_SLICE_MS, worker: "web" });
+    await runScoreQueue({ budgetMs: SCORE_SLICE_MS, worker: "web", prefer: candidateId });
   });
 }

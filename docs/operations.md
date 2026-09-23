@@ -128,7 +128,8 @@ A continuação é a fatia **`repontuar`** da varredura (`GET
 `cronDenied`, métrica em `sweep_run`), agendada a cada dois minutos em
 `supabase/cron/varredura.sql` (`jho-varredura-repontuar`). Ela não consulta a
 política de ingestão: só grava nota no banco do próprio ambiente. O relatório
-traz `items` (tarefas concluídas), `errors` e `detail: { scored, deferred,
+traz `items` (tarefas concluídas ou recusadas), `errors` (tentativas que
+falharam) e `detail: { scored, deferred,
 pending }` — `pending > 0` quer dizer que ainda há fila; o agendador não
 decide nada com isso, chama no próximo ciclo de qualquer jeito.
 
