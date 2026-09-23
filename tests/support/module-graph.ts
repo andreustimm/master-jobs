@@ -55,11 +55,13 @@ export function moduleEdges(source: string): ModuleEdge[] {
   for (const m of code.matchAll(SIDE_EFFECT)) {
     edges.push({ kind: "side-effect", specifier: m[2]!, typeOnly: false });
   }
+  // Template com `${}` não é literal: o arquivo só se sabe em execução.
+  const literal = (spec: string | undefined) => (spec === undefined || spec.includes("${") ? null : spec);
   for (const m of code.matchAll(DYNAMIC)) {
-    edges.push({ kind: "dynamic", specifier: m[2] ?? null, typeOnly: false });
+    edges.push({ kind: "dynamic", specifier: literal(m[2]), typeOnly: false });
   }
   for (const m of code.matchAll(REQUIRE)) {
-    edges.push({ kind: "require", specifier: m[2] ?? null, typeOnly: false });
+    edges.push({ kind: "require", specifier: literal(m[2]), typeOnly: false });
   }
   return edges;
 }
@@ -139,7 +141,7 @@ export function ambientReads(source: string): string[] {
     // O acaso seguro também é acaso: `import { randomBytes } from "node:crypto"`
     // não passa pela regra de pacote proibido, porque `node:crypto` também
     // serve a `createHash`, que é determinístico.
-    [/(?<![\w$])(?:crypto\.)?random(?:Bytes|UUID|Int)\s*\(/g, "crypto random"],
+    [/(?<![\w$])(?:crypto\.)?random(?:Bytes|UUID|Int|Fill|FillSync)\s*\(/g, "crypto random"],
     [/\bgetRandomValues\s*\(/g, "crypto random"],
   ];
   for (const [pattern, name] of patterns) {

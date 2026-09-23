@@ -362,6 +362,7 @@ describe("V10-02 fronteiras do domínio e dos adapters", () => {
       "ctx/domain/so-tipo.ts": "import type { Linha } from '../infra/tabela.ts';\nimport { type Salvar } from '../index.ts';",
       "ctx/domain/rede.ts": "const http = require('node:https');",
       "ctx/domain/dinamico.ts": "const m = await import(caminho);",
+      "ctx/domain/template.ts": "const m = await import(`../infra/${tipo}.ts`);",
     };
     const source = {
       read: (file: string) => files[file]!,
@@ -381,12 +382,17 @@ describe("V10-02 fronteiras do domínio e dos adapters", () => {
       "ctx/domain/dinamico.ts",
       "import dinâmico com especificador não literal",
     ]);
+    expect(forbiddenReach("ctx/domain/template.ts", domainForbidden, source)).toEqual([
+      "ctx/domain/template.ts",
+      "import dinâmico com especificador não literal",
+    ]);
 
     // Relógio: o padrão de parâmetro é a forma que escapava.
     expect(ambientReads("export function idade(now = Date.now()) { return now; }")).toEqual(["Date.now()"]);
     expect(ambientReads("const hoje = new Date();\nconst x = new Date;")).toEqual(["new Date()", "new Date"]);
     expect(ambientReads("const r = await fetch(url);")).toEqual(["fetch()"]);
     expect(ambientReads("const s = randomBytes(16);\nconst id = crypto.randomUUID();")).toEqual(["crypto random", "crypto random"]);
+    expect(ambientReads("randomFillSync(buf);")).toEqual(["crypto random"]);
     expect(ambientReads("const h = createHash('sha256');\nconst k = myrandomBytes(2);")).toEqual([]);
     expect(ambientReads("const y = new Date(asOf);\nport.fetch(url);\nconst s = 'Date.now()';")).toEqual([]);
   });
@@ -401,7 +407,7 @@ describe("V10-02 fronteiras do domínio e dos adapters", () => {
 function parallelArities(source: string): number[] {
   const code = stripComments(source);
   const arities: number[] = [];
-  for (const match of code.matchAll(/\bPromise\.(?:all|allSettled|any|race)\s*\(\s*/g)) {
+  for (const match of code.matchAll(/\bPromise\.(?:all|allSettled|any|race)\s*(?:<[^()]*>)?\s*\(\s*/g)) {
     const start = match.index + match[0].length;
     if (code[start] !== "[") {
       arities.push(Number.POSITIVE_INFINITY);
@@ -508,6 +514,7 @@ describe("V10-05 leque de consultas: toda composição de tela está no inventá
     expect(parallelArities("await Promise.all([...rows.map(ler)]);")).toEqual([Number.POSITIVE_INFINITY]);
     expect(parallelArities("await Promise.all([a(), ...extras]);")).toEqual([Number.POSITIVE_INFINITY]);
     expect(parallelArities("await Promise.all([a({ ...opts }), b()]);")).toEqual([2]);
+    expect(parallelArities("await Promise.all<[A, B, C]>([a(), b(), c()]);")).toEqual([3]);
     expect(parallelArities("// Promise.all([a(), b(), c()])\nconst x = 1;")).toEqual([]);
     // Uma página nova que abre quatro leituras no corpo seria recusada.
     const nova = "export default async function Page() { const [a, b, c, d] = await Promise.all([ler1(), ler2(), ler3(), ler4()]); }";
