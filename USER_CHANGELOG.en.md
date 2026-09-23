@@ -18,6 +18,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.22.2] - 2026-09-23T10:46:42.000Z
+
 
 ### Improved
 

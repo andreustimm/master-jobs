@@ -24,8 +24,8 @@ export function requireSha(value: string): string {
   return value;
 }
 
-/** Read-only: neither dispatch nor a successful event substitutes for these checks. */
-export function requireSourceCI(repository: string, sha: string, eventRunId?: number): number {
+/** Read-only: neither dispatch nor the schedule substitutes for these checks. */
+export function requireSourceCI(repository: string, sha: string): number {
   requireSha(sha);
   const pages = ghApi<Array<{ workflow_runs: Run[] }>>(
     `repos/${repository}/actions/workflows/ci.yml/runs?head_sha=${sha}&branch=dev&event=push&per_page=100`,
@@ -38,9 +38,8 @@ export function requireSourceCI(repository: string, sha: string, eventRunId?: nu
     run.head_sha !== sha || run.head_branch !== "dev" || run.event !== "push" ||
     run.path.split("@")[0] !== ".github/workflows/ci.yml" ||
     run.head_repository.full_name !== repository ||
-    run.status !== "completed" || run.conclusion !== "success" ||
-    (eventRunId !== undefined && run.id !== eventRunId)
-  ) throw new Error(`CI de dev não aprovado para ${sha}: run=${run.id} attempt=${run.run_attempt} status=${run.status} conclusion=${run.conclusion} eventRunId=${eventRunId ?? "manual"}.`);
+    run.status !== "completed" || run.conclusion !== "success"
+  ) throw new Error(`CI de dev não aprovado para ${sha}: run=${run.id} attempt=${run.run_attempt} status=${run.status} conclusion=${run.conclusion}.`);
 
   const jobs = ghApi<Array<{ jobs: Job[] }>>(
     `repos/${repository}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,

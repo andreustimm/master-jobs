@@ -359,7 +359,7 @@ mudou, e não como é agora.
 | Etapa | Quem faz | Como |
 |---|---|---|
 | tarefa → `dev` | pessoa ou agente | worktree a partir de `dev`, PR com CI verde |
-| `dev` → `staging` | automático | `promover-para-staging.yml`, quando o CI de `dev` fica verde |
+| `dev` → `staging` | automático | `promover-para-staging.yml`, às 15:00 e 21:00 UTC, com a ponta de `dev` de CI verde (ou dispatch com `target-sha`) |
 | `staging` → `main` | **humano** | PR aberta pelo robô, mesclada por gente |
 | tag + `main` → `dev` | automático | `sincronizar-apos-main.yml` |
 
@@ -454,15 +454,22 @@ com ele, `staging` e as PRs geradas também recebem checks próprios.
 > PR apenas de Markdown ou metadados de skills, sem alteração de runtime, usa
 > validação estrutural proporcional e não precisa rodar suítes unitárias/E2E.
 
-> **21. Commit releaseável carrega os três changelogs no mesmo estado pronto.**
+> **21. Commit releaseável carrega a nota em um fragmento de changelog.**
 > Se a leva desde a última tag contém `fix:`, `feat:` ou outro commit que pede
-> bump, `CHANGELOG.md`, `USER_CHANGELOG.pt-BR.md` e `USER_CHANGELOG.en.md`
-> precisam ter conteúdo válido em `## [Unreleased]` antes do commit. Não deixe
-> para a promoção descobrir isso: `.githooks/commit-msg` valida o índice, e o
-> CI repete o mesmo gate com `pnpm check:release-ready`. `pnpm install` ativa
-> os hooks versionados via `core.hooksPath=.githooks`. O commit automático
-> `chore(release): X.Y.Z` é a única exceção, porque ele vem depois do preflight
-> e recria intencionalmente o próximo `Unreleased` vazio.
+> bump, a PR adiciona `changelog.d/<slug-da-branch>.md` com os blocos
+> `## Técnico`, `## pt-BR` e `## en` (cada um com `### Seção` e itens `- `;
+> `pt-BR` e `en` podem ser só `<!-- sem-nota-usuario -->`, os dois juntos).
+> **Não edite** o `## [Unreleased]` de `CHANGELOG.md`, `USER_CHANGELOG.pt-BR.md`
+> e `USER_CHANGELOG.en.md`: cada PR editando os mesmos três trechos reabria
+> conflito em todas as outras a cada merge. A promoção junta os fragmentos no
+> carimbo da versão e os apaga no commit de release. Não deixe para a promoção
+> descobrir erro: `.githooks/commit-msg` valida o índice (fragmento malformado
+> reprova mesmo sem bump), e o CI repete o mesmo gate com
+> `pnpm check:release-ready`. `pnpm install` ativa os hooks versionados via
+> `core.hooksPath=.githooks`. O commit automático `chore(release): X.Y.Z` é a
+> única exceção, porque ele vem depois do preflight. Entrada escrita direto no
+> `Unreleased` ainda é aceita, só durante a transição. Formato e exemplo em
+> `docs/engineering/workflow.md`.
 
 > **22. Toda tag SemVer tem uma GitHub Release.**
 > A tag `vX.Y.Z` e a entrada `## [X.Y.Z]` do changelog técnico são a fonte da
