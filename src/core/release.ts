@@ -4,14 +4,19 @@ import {
   changelogSections,
   compareSemanticVersions,
   hasNoUserChangeMarker,
+  isCanonicalUnreleased,
   parseUserChangelog,
   validateLocalizedChangelogs,
   type ChangelogIssueCode,
   type ChangelogLocale,
   type ChangelogParseResult,
-  type ChangelogSection,
   type Publication,
 } from "./changelog.ts";
+import {
+  mergeChangelogFragments,
+  parseChangelogFragments,
+  type ChangelogFragment,
+} from "./changelog-fragments.ts";
 
 /**
  * Versionamento semântico — o núcleo PURO.
@@ -375,15 +380,6 @@ type UnreleasedSection = {
   headerStart: number;
 };
 
-function isCanonicalUnreleased(section: ChangelogSection): boolean {
-  return (
-    section.token === "Unreleased" &&
-    section.publication === undefined &&
-    section.publicationSyntaxValid &&
-    section.versionSyntaxValid
-  );
-}
-
 function findUnreleased(markdown: string): UnreleasedSection {
   const structural = changelogSections(markdown).filter(
     (section) => section.token === "Unreleased",
@@ -491,6 +487,8 @@ export function prepareRelease(input: {
   documents: ReleaseDocuments;
   version: string;
   publishedAt: Date;
+  /** `changelog.d/` entries folded into Unreleased before stamping. */
+  fragments?: readonly ChangelogFragment[];
 }): PrepareReleaseResult {
   if (!versaoSemanticaValida(input.version)) {
     throw new ReleaseDomainError("invalid_release_version", { version: input.version });
@@ -521,9 +519,12 @@ export function prepareRelease(input: {
 
   validateLocalizedChangelogs(ptBefore, enBefore);
 
-  const technicalSection = findUnreleased(input.documents.technical);
-  const ptSection = findUnreleased(input.documents.ptBR);
-  const enSection = findUnreleased(input.documents.en);
+  // Fragments are consumed only by a new release. An existing one (a retry
+  // before its tag) ignores them: they belong to the next version.
+  const documents = mergeChangelogFragments(input.documents, input.fragments ?? []);
+  const technicalSection = findUnreleased(documents.technical);
+  const ptSection = findUnreleased(documents.ptBR);
+  const enSection = findUnreleased(documents.en);
   const ptNoUserChange =
     hasNoUserChangeMarker(ptSection.body) && !bodyHasUserContent(ptSection.body);
   const enNoUserChange =
@@ -547,17 +548,17 @@ export function prepareRelease(input: {
   const instant = input.publishedAt.toISOString();
   const date = instant.slice(0, 10);
   const technical = stampVisible(
-    input.documents.technical,
+    documents.technical,
     technicalSection,
     input.version,
     date,
   );
   const ptBR = ptNoUserChange
-    ? stampOmitted(input.documents.ptBR, ptSection, input.version, instant)
-    : stampVisible(input.documents.ptBR, ptSection, input.version, instant);
+    ? stampOmitted(documents.ptBR, ptSection, input.version, instant)
+    : stampVisible(documents.ptBR, ptSection, input.version, instant);
   const en = enNoUserChange
-    ? stampOmitted(input.documents.en, enSection, input.version, instant)
-    : stampVisible(input.documents.en, enSection, input.version, instant);
+    ? stampOmitted(documents.en, enSection, input.version, instant)
+    : stampVisible(documents.en, enSection, input.version, instant);
   const candidate = { technical, ptBR, en };
   const technicalAfter = parseUserChangelog(technical);
   const ptAfter = parseUserChangelog(ptBR);
@@ -588,7 +589,11 @@ export function validarReleasePendente(input: {
   currentVersion: string;
   documents: ReleaseDocuments;
   publishedAt: Date;
+  fragments?: readonly ChangelogFragment[];
 }): PendingReleaseValidationResult {
+  // A malformed fragment fails even in a maintenance-only batch: waiting for
+  // the next `fix:` would surface it days later, in someone else's commit.
+  parseChangelogFragments(input.fragments ?? []);
   const bump = classificarBump(input.subjects);
   if (!bump) return { status: "no-release" };
 
@@ -597,6 +602,7 @@ export function validarReleasePendente(input: {
     documents: input.documents,
     version,
     publishedAt: input.publishedAt,
+    fragments: input.fragments,
   });
   return { status: "ready", version };
 }

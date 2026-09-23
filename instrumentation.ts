@@ -19,7 +19,7 @@
  */
 
 import type { Instrumentation } from "next";
-import { safeRequest, scrubEvent } from "./src/core/observability.ts";
+import { safeRequest, sentryServerOptions } from "./src/core/observability.ts";
 
 /** Nome do ambiente para o Sentry, com o mais restrito como padrão. */
 function environment(): string {
@@ -53,34 +53,26 @@ async function iniciarRelato(): Promise<void> {
   if (!dsn) return;
 
   const Sentry = await import("@sentry/nextjs");
-  Sentry.init({
-    dsn,
-    environment: environment(),
-    // O SHA do commit é o que liga a exceção ao código que a produziu.
-    release: process.env.VERCEL_GIT_COMMIT_SHA,
-
-    // Nunca anexar IP, cookie, cabeçalho de sessão nem corpo de requisição.
-    // É o padrão do SDK; está escrito porque a linha existe para não mudar
-    // por acidente numa atualização.
-    sendDefaultPii: false,
-
-    // Sem tracing. Transação carrega URL completa com query string, que é o
-    // que a pessoa digitou na busca; e o valor aqui é saber que quebrou, não
-    // quanto demorou. Ligar isso é uma decisão separada, com outra análise.
-    tracesSampleRate: 0,
-
-    /**
-     * Última peneira, depois de tudo que o SDK montou.
-     *
-     * A implementação mora em `src/core/observability.ts`, pura, porque aqui
-     * dentro nenhum teste a alcançava — e é ela que carrega a promessa de
-     * privacidade inteira. A pilha atravessa driver e biblioteca de terceiro,
-     * e nenhum deles prometeu não carregar valor na mensagem: o driver do
-     * PostgreSQL traz a URL de conexão inteira, com senha, no texto da
-     * exceção.
-     */
-    beforeSend: (event) => scrubEvent(event),
-  });
+  /**
+   * A configuração inteira — peneiras, amostragem, `sendDefaultPii: false`,
+   * nenhuma propagação de trace — mora em `src/core/observability.ts`, pura,
+   * porque aqui dentro nenhum teste a alcançava. É ela que carrega a promessa
+   * de privacidade: a pilha atravessa driver e biblioteca de terceiro, o
+   * driver do PostgreSQL traz a URL de conexão com senha no texto da exceção,
+   * e uma transação traz a URL com o filtro da pessoa.
+   *
+   * Tracing amostrado por `SENTRY_TRACES_SAMPLE_RATE` (padrão 10%; `0`
+   * desliga). O SHA do commit é o release: é o que liga a exceção e o trace ao
+   * código que os produziu.
+   */
+  Sentry.init(
+    sentryServerOptions({
+      dsn,
+      environment: environment(),
+      release: process.env.VERCEL_GIT_COMMIT_SHA,
+      tracesSampleRate: process.env.SENTRY_TRACES_SAMPLE_RATE,
+    }),
+  );
 }
 
 /**

@@ -72,9 +72,12 @@ a partir daí um dos temas começa a ficar errado. A paleta bruta pertence à
 **definição** do tema, não ao componente.
 
 **Resolve C08.** A entrada comum dizia em outro parágrafo "use
-`var(--color-*)`", o oposto desta regra. Não vale mais. Componentes que ainda
-leem `--color-*` bruto são dívida a migrar em
-[#204](https://github.com/andreustimm/master-jobs/issues/204), não exemplo.
+`var(--color-*)`", o oposto desta regra. Não vale mais. Um `--color-*` só é
+aceito quando `globals.css` o declara como apelido de variável semântica
+(`--color-hairline: var(--hairline)`); paleta crua reprova. As poucas exceções
+toleradas ficam nomeadas, com motivo, em `STYLE_EXCEPTIONS` de
+`tests/design.test.ts`, e exceção órfã também reprova
+([#204](https://github.com/andreustimm/master-jobs/issues/204)).
 
 **Token de UI não serve como cor de texto.** `--accent-2`, `--warn` e afins são
 feitos para preenchimento, onde o mínimo é 3:1 — `--accent-2` no tema graphy
@@ -83,7 +86,9 @@ sintaxe do editor mora em `--cm-*`, verificada nos seis ambientes por
 `pnpm test:e2e` lendo o estilo computado dos spans reais.
 
 Origem: regra 10 e invariante "Token de UI". Prova: `tests/design.test.ts`
-(`#hex` e valores arbitrários), E2E de contraste.
+(V10-03: hex de qualquer tamanho, `rgb()`/`oklch()`, paleta crua e do
+Tailwind, tamanhos fora da escala, em `.tsx`, `.ts` e `.css` fora dos
+arquivos de definição), E2E de contraste.
 
 <a id="g33"></a>
 ## G33 — Escala fechada; nada de `xs`…`xl` em dimensão

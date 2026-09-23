@@ -350,6 +350,18 @@ teste de arquitetura reprova arquivo que lê `jobScore` sem um dos dois.
 `job_score_candidate_track_fit_idx (candidate_id, track_id, fit)` — o board
 ordena por `coalesce(job_score.fit, 0) DESC` dentro de uma trilha.
 
+`job_score_job_idx (job_id, fit)` (migração `0015_job_score_job_idx`, só
+aditiva) serve às leituras **por vaga**, que a chave primária — começando por
+`candidate_id` — não atende: a invalidação quando o anúncio muda
+(`deleteJobScores`), o cascade de `job` e a melhor nota por vaga. A melhor nota
+entre candidatos, nas trilhas principais, sai de `bestPrimaryFitByJob()`
+(`src/contexts/matching/app/track-scope.ts`): um CTE que agrega `job_score` uma
+vez por consulta e entra por junção. `enqueueStale()` e `verifyJobs()` usavam
+uma subconsulta correlacionada por vaga, repetida no `WHERE` e no `ORDER BY` —
+a forma que leu 77,4 milhões de linhas numa varredura em 03/09.
+`tests/verify-queue.test.ts` lê o plano e reprova `SubPlan` ou mais de uma
+visita a `job_score`.
+
 ### `candidate_matching_profile`
 
 Política persistida de matching por candidato. Guarda o JSON validado do
@@ -642,16 +654,25 @@ caminho de ingestão a chama.
 ### 2. Vaga que some é fechada, não deletada
 
 `syncOne()` compara os fingerprints vistos nesta rodada com os que aquela fonte
-carregava e faz `UPDATE ... SET closed_at = stamp`. Nunca `DELETE`.
+carregava e faz `UPDATE ... SET closed_at = stamp`. Nunca `DELETE`. E só faz
+isso quando a listagem é a fonte inteira:
 
 ```ts
-// Anything this source used to carry but no longer lists is closed.
-if (seenFingerprints.length > 0) {
+// Anything a complete listing no longer carries is closed. A partial
+// window leaves the rest to the 404/410 recheck.
+if (decideAbsenceClosure({ completeness, seen: seenFingerprints.length }).kind === "close-missing") {
 ```
 
-Dois detalhes que um agente precisa preservar:
+Três detalhes que um agente precisa preservar:
 
-- **O guard `seenFingerprints.length > 0` é intencional.** Se uma API devolve
+- **Janela parcial não fecha por ausência.** Todo adapter declara, em
+  `fetchJobs()`, se a listagem é `complete` ou `partial` (`SourceSnapshot` em
+  `src/core/sources/types.ts`; a tabela por fonte está em
+  [`sources.md`](sources.md#completude-da-listagem)). As 50 mais recentes do
+  Remotive não dizem nada sobre a 51ª: ela saiu da janela, não da plataforma.
+  Vaga de janela parcial só fecha por 404/410 na reconferência. A decisão é a
+  função pura `decideAbsenceClosure()` em `src/core/ingest/lifecycle.ts`.
+- **Lista vazia não fecha nada, nem em fonte completa.** Se uma API devolve
   zero vagas (rate limit, mudança de endpoint, board vazio temporariamente),
   nenhuma vaga é fechada. Sem esse guard, um blip de API fecharia o board
   inteiro de uma empresa.

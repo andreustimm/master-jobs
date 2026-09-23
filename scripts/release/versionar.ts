@@ -6,10 +6,16 @@
  * integration tests, so the workflows do not hide release behavior in YAML.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseUserChangelog } from "../../src/core/changelog.ts";
+import {
+  ChangelogFragmentError,
+  FRAGMENT_DIRECTORY,
+  assertFragmentNames,
+  type ChangelogFragment,
+} from "../../src/core/changelog-fragments.ts";
 import {
   changelogTemVersao,
   classificarBump,
@@ -31,12 +37,36 @@ export type ApplyReleaseFilesInput = {
 export type ReleaseFileOperations = {
   read(path: string): string;
   write(path: string, content: string): void;
+  /** Entry names of a directory; empty when it does not exist. */
+  list?(path: string): string[];
+  remove?(path: string): void;
 };
 
-const DEFAULT_FILE_OPERATIONS: ReleaseFileOperations = {
+function listDirectory(path: string): string[] {
+  try {
+    return readdirSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+const DEFAULT_FILE_OPERATIONS: Required<ReleaseFileOperations> = {
   read: (path) => readFileSync(path, "utf8"),
   write: (path, content) => writeFileSync(path, content),
+  list: listDirectory,
+  remove: (path) => rmSync(path),
 };
+
+export function readFragments(
+  directory: string,
+  operations: ReleaseFileOperations = DEFAULT_FILE_OPERATIONS,
+): ChangelogFragment[] {
+  const folder = resolve(directory, FRAGMENT_DIRECTORY);
+  const names = (operations.list ?? DEFAULT_FILE_OPERATIONS.list)(folder);
+  assertFragmentNames(names);
+  return names.map((name) => ({ name, content: operations.read(resolve(folder, name)) }));
+}
 
 const RELEASE_FILES = {
   technical: "CHANGELOG.md",
@@ -82,10 +112,16 @@ export function applyReleaseFiles(
 ): PrepareReleaseResult {
   const documents = readDocuments(input.directory, operations);
   const pkg = readPackage(input.directory, operations);
+  // A retry of an already written version must finish even if a later PR
+  // left a malformed fragment: that fragment belongs to the next version.
+  const fragments = documentsContainVersion(documents, input.version).every(Boolean)
+    ? []
+    : readFragments(input.directory, operations);
   const prepared = prepareRelease({
     documents,
     version: input.version,
     publishedAt: input.publishedAt,
+    fragments,
   });
 
   if (prepared.status === "already-released") {
@@ -103,15 +139,23 @@ export function applyReleaseFiles(
   operations.write(resolve(input.directory, RELEASE_FILES.ptBR), prepared.documents.ptBR);
   operations.write(resolve(input.directory, RELEASE_FILES.en), prepared.documents.en);
   operations.write(resolve(input.directory, "package.json"), nextPackage);
+  // The release commit consumes the fragments: left behind, they would be
+  // folded into the next version a second time.
+  const remove = operations.remove ?? DEFAULT_FILE_OPERATIONS.remove;
+  for (const fragment of fragments) {
+    remove(resolve(input.directory, FRAGMENT_DIRECTORY, fragment.name));
+  }
 
   const persistedDocuments = readDocuments(input.directory, operations);
   const persistedPackageBytes = operations.read(resolve(input.directory, "package.json"));
   const persistedPackage = parsePackage(persistedPackageBytes);
+  const consumed = new Set(fragments.map((fragment) => fragment.name));
   if (
     persistedDocuments.technical !== prepared.documents.technical ||
     persistedDocuments.ptBR !== prepared.documents.ptBR ||
     persistedDocuments.en !== prepared.documents.en ||
-    persistedPackageBytes !== nextPackage
+    persistedPackageBytes !== nextPackage ||
+    readFragments(input.directory, operations).some((fragment) => consumed.has(fragment.name))
   ) {
     throw new ReleaseDomainError("partial_existing_release", { version: input.version });
   }
@@ -181,7 +225,7 @@ export function versionar(
 }
 
 function safeError(error: unknown): string {
-  if (error instanceof ReleaseDomainError) return error.message;
+  if (error instanceof ReleaseDomainError || error instanceof ChangelogFragmentError) return error.message;
   if (
     typeof error === "object" &&
     error !== null &&

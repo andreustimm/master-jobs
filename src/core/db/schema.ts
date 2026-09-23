@@ -237,6 +237,10 @@ export const jobScore = production.table(
     index("job_score_fit_idx").on(t.fit),
     index("job_score_candidate_idx").on(t.candidateId),
     index("job_score_candidate_track_fit_idx").on(t.candidateId, t.trackId, t.fit),
+    // Leituras por vaga — a melhor nota da reconferência, a invalidação quando o
+    // anúncio muda e o cascade de `job` — não podem usar a chave primária, que
+    // começa por candidato. Sem este índice cada uma varre a tabela inteira.
+    index("job_score_job_idx").on(t.jobId, t.fit),
   ],
 );
 

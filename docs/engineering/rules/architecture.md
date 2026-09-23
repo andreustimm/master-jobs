@@ -53,14 +53,15 @@ sem relógio. É o que torna `scoring/`, `skills/domain/` e `analytics/`
 testáveis exaustivamente. Adapter é burro: busca, mapeia, devolve. O relógio é
 injetável (`src/core/clock.ts`) só onde o tempo é decisão, não carimbo.
 
-**Dívida conhecida (C22).** `score` e `freshness` ainda aceitam instante
-implícito (`Date.now()` como default da assinatura legada). O alvo é tempo
-explícito no núcleo, capturado na composição, provado com o mesmo `asOf` sob
-relógios diferentes — tarefa [#204](https://github.com/andreustimm/master-jobs/issues/204).
-Enquanto isso, código novo no domínio não acrescenta default de relógio.
+**Tempo explícito (resolve C22).** `score` e `freshness` recebem o instante
+como argumento obrigatório; o relógio é lido na composição
+(`src/core/scoring/apply.ts`), nunca como default de assinatura no núcleo.
+Código novo no domínio não acrescenta default de relógio.
 
-Origem: regra 4. Prova: `tests/architecture.test.ts` (imports proibidos nos
-domínios).
+Origem: regra 4. Prova: `tests/architecture.test.ts` (grafo de imports de valor
+de todo `domain/`, do scorer e da estatística, sem banco, rede, Next nem
+`infra/`) e `tests/scorer-version.test.ts` ("V10-02 o scorer não lê o
+relógio"), ambos de [#204](https://github.com/andreustimm/master-jobs/issues/204).
 
 <a id="g06"></a>
 ## G06 — Só sintaxe TypeScript apagável (regra 5)
@@ -84,9 +85,10 @@ Prova: `pnpm typecheck` e `tests/architecture.test.ts`.
 **Obrigação.** Imports relativos carregam a extensão `.ts`. Sem build step, o
 Node resolve o caminho literal.
 
-Origem: regra 5. Prova: `tests/architecture.test.ts` (forma `from`; imports
-dinâmicos e aspas simples são ampliação prevista em
-[#204](https://github.com/andreustimm/master-jobs/issues/204)).
+Origem: regra 5. Prova: `tests/architecture.test.ts` — a descoberta de arestas
+não depende de aspas nem de sintaxe: aspas simples, `import("…")`, `require`,
+`export * from` e import de efeito entram; import dinâmico com especificador não
+literal reprova no domínio ([#204](https://github.com/andreustimm/master-jobs/issues/204)).
 
 <a id="g65"></a>
 ## G65 — A UI é adaptador, não implementação paralela

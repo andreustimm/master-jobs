@@ -80,11 +80,12 @@ A pilha que chega no Sentry está **minificada** (`chunks/5303.js:1:1963`) — f
 exatamente assim que o erro da 1.13.1 apareceu no log da Vercel, e é a
 diferença entre um relatório legível e um enigma.
 
-Exige envolver a configuração com `withSentryConfig` em `next.config.ts` e
-cadastrar `SENTRY_AUTH_TOKEN`, `SENTRY_ORG` e `SENTRY_PROJECT` no ambiente de
-**build**. Ficou fora da entrega inicial porque adicionava risco de build sem
-benefício imediato, no mesmo dia de uma queda. Detalhe em
-[`deploy.md`](../engineering/deploy.md#relato-de-erro).
+O código entrou pela #212, sem `withSentryConfig`: o gancho
+`runAfterProductionCompile` publica os mapas do servidor com `sentry-cli`
+quando há `SENTRY_AUTH_TOKEN` no build, e sem ele o build segue igual. Falta
+o passo humano — criar o token e cadastrá-lo na Vercel — e a verificação de
+uma pilha resolvida. Detalhe em
+[`deploy.md`](../engineering/deploy.md#mapas-de-origem).
 
 ### O-03 · Alerta de erro do Sentry para um canal ✅
 
@@ -1703,6 +1704,22 @@ falho. O acompanhamento histórico detalhado continua fora desta onda.
 > fechar por 404/410 vale apenas na reconferência (`src/core/ingest/probe.ts`).
 > Decidir: reescrever como item de desempenho e de completude de fonte no
 > PostgreSQL; fechar deixaria sem dono o fechamento por ausência.
+>
+> **Reconciliado em 22/09/2026 (issue #211).** Entregue na PR
+> `fix/ingestao-custo-completude`: `enqueueStale()` e `verifyJobs()` leem a
+> melhor nota por um CTE agregado uma vez (`bestPrimaryFitByJob`), sem
+> subconsulta por vaga, com plano verificado em teste; índice
+> `job_score_job_idx (job_id, fit)` (migração `0015`); contrato
+> `complete | partial` em todo adapter, e janela parcial não fecha por
+> ausência (`decideAbsenceClosure`); o cron da Vercel saiu de `vercel.json` e a
+> varredura do GitHub é o único agendador do recheck, travado por teste.
+> Fora daqui por já terem dono: retenção de payload e arquivamento, entregues
+> em `job-lifecycle-retention`, e agregação das facetas, nas tarefas de
+> `performance-buscas`. Fica fora,
+> como trabalho separado: identidade estável por `(source_id, external_id)`,
+> circuito de orçamento compartilhado entre rotinas e telemetria diária por
+> rotina — e a cobertura de reconferência para vagas de janela parcial abaixo
+> do corte de nota. A cota e as metas numéricas do Turso abaixo são histórico.
 
 **Incidente:** [`../operations/turso-quota-incident-2026-09-03.md`](../operations/turso-quota-incident-2026-09-03.md).
 

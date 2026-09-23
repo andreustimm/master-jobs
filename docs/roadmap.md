@@ -262,9 +262,9 @@ nunca em arquivos versionados.
 
 **Estado: ✅ entregue para reconferência em lotes.**
 `app/api/cron/recheck/route.ts` valida `CRON_SECRET` e processa um lote compatível
-com o limite da Vercel. A varredura completa pertence ao GitHub Actions, onde
-os comandos longos cabem, mas os dois agendadores estão temporariamente
-desligados desde 03/09/2026.
+com o limite da Vercel, só por chamada manual: nada a agenda. A varredura do
+GitHub Actions, onde os comandos longos cabem, é o único agendador da
+reconferência, e segue opt-in desde 03/09/2026.
 
 > **Invariante:** A rota de cron não pode virar um segundo pipeline. Se ela
 > precisar de lógica que a CLI não tem, a lógica está no lugar errado — vai para

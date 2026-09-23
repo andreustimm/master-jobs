@@ -9,11 +9,45 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.22.2] - 2026-09-23
+
 
 ### Alterado
 
 - Fluxo: a issue fecha quando o código chega a produção — commits das PRs levam `Closes #N` na mensagem, porque a PR aponta para `dev` e só a entrada em `main` fecha issues (AGENTS.md, `docs/engineering/workflow.md`).
-- Instruções: `AGENTS.md` vira entrada comum compacta (regras 1–24 resumidas, roteador por área, fluxo curto) e o detalhe normativo passa para `docs/engineering/rules/`, em seis domínios, com o inventário das 84 obrigações da auditoria e a situação dos conflitos C01–C22 (#200). Contradições antigas corrigidas: token bruto em componente, "sem JS de cliente", "única mutação da UI", versão do scorer copiada, conteúdo alterado que não invalidaria o score, "editar ambos" AGENTS/CLAUDE e o modelo de ameaça "só local". Inventário de comandos movido para `docs/cli.md` e mapa de diretórios para `docs/architecture.md`.
+- Changelog por fragmentos: cada PR adiciona `changelog.d/<slug>.md` com os
+  blocos `## Técnico`, `## pt-BR` e `## en`, em vez de editar o
+  `## [Unreleased]` dos três arquivos. A promoção junta os fragmentos
+  (`mergeChangelogFragments`, ordem pelo nome) antes do carimbo e os apaga no
+  commit de release; `verifyReleaseChild` reconstrói R a partir dos fragmentos
+  de A e recusa filho que mantenha ou reescreva um deles. `check:release-ready`
+  e o hook `commit-msg` aceitam fragmento como nota releaseável e reprovam
+  fragmento malformado mesmo em leva sem bump. O `Unreleased` escrito à mão
+  continua aceito durante a transição — e é o formato desta própria entrada,
+  porque a promoção que a leva a `main` ainda roda o controlador antigo.
+- `promover-para-staging.yml` roda às 15:00 e 21:00 UTC (`schedule`) e por
+  `workflow_dispatch` com `target-sha`, em vez de a cada `workflow_run` do CI de
+  `dev`. O agendado promove a ponta de `dev` somente com CI de push verde, sem
+  aprovação de migração, e termina sem escrita nem consulta quando `staging` já
+  a contém; a publicação usa a entrada fixada na preparação.
+
+### Melhorado
+
+- Facetas de `/jobs` e `/` com cache local no processo (#216):
+  `cachedBoardFacets` em `src/contexts/matching/app/board-facets.ts`, regra pura
+  em `domain/facet-cache.ts`. Chave canônica com candidato da sessão, todos os
+  filtros que a consulta recebe (cluster, termo, fontes, modalidade, trilha,
+  agrupamento, fit) e `SCORER_VERSION`; página, tamanho, ordenação, faixa
+  salarial, empresa e chips de recorte reaproveitam a entrada. Validade de
+  60 s, teto de 200 entradas (LRU), consulta reservada antes do `await` e
+  falha descartada. Triagem e funil invalidam as entradas do candidato; vaga
+  nova (`/jobs/new`, `/compare`) invalida todas; mudar trilha invalida as do
+  candidato; a captura por termo em `after()` invalida todas. O mapa fica em
+  `globalThis`, compartilhado entre a camada das páginas e a das Server
+  Actions. Sync, score e raspagem rodam fora do processo e só a validade os
+  cobre. `pnpm perf:jobs` mede a leitura
+  fria (comparável às anteriores) e a página 2 com cache: no padrão, 56 → 31 ms,
+  facetas 22 → 0 ms, 6 → 5 consultas.
 
 ## [1.22.1] - 2026-09-23
 

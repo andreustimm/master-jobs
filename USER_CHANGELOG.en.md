@@ -18,10 +18,16 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.22.2] - 2026-09-23T10:46:42.000Z
+
 
 ### Improved
 
 - Improvement tracking now marks each item as done when it reaches the published version.
+- On the Jobs screen and the home panel, changing page, sort order or pay
+  range responds faster: the filter counts are reused for up to a minute. When
+  the job catalog is updated, they may take up to a minute to reflect the change; the list and
+  the job total always show the current state.
 
 ## [1.22.1] - 2026-09-23T00:33:04.000Z
 

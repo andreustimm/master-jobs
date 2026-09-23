@@ -62,6 +62,7 @@ export {
   type UpdateTrackResult,
 } from "./app/tracks.ts";
 export {
+  bestPrimaryFitByJob,
   primaryScoreFilter,
   resolveClusterFilter,
   scoreTrackFilter,
@@ -132,6 +133,13 @@ export {
   type GroupPosting,
   type PayFilter,
 } from "../../core/db/repo.ts";
+
+export {
+  FACET_CACHE_TTL_MS,
+  cachedBoardFacets,
+  invalidateBoardFacets,
+  type BoardFacets,
+} from "./app/board-facets.ts";
 
 export {
   ComparisonInputError,

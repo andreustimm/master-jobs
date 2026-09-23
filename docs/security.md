@@ -212,6 +212,7 @@ candidate` dá à conta desvinculada um candidato próprio.
 | **Upload de PDF** | Teto de 10 MB, e o texto extraído é tratado como texto — nunca executado nem renderizado como HTML. |
 | **Escrita no funil** | Caminho único (`setApplicationStatus`), garantido por teste de arquitetura. Ingestão não escreve decisão. |
 | **LinkedIn** | Nenhum código lê `li_at` nem dirige sessão autenticada. ADR 0001. O transporte de URL de vaga recusa o domínio do LinkedIn em cada salto de redirect, antes do DNS — ver `docs/linkedin-policy.md` §5.1. |
+| **Sentry (erro e trace)** | Única saída de dado para terceiro por padrão, e só do servidor. Erro, transação e span passam por peneiras puras de lista de permissão (`scrubEvent`, `scrubTransaction`, `scrubSpan` em `src/core/observability.ts`): sem query string, cookie, IP, corpo, usuário nem texto de SQL. A organização no Sentry tem a limpeza do lado do servidor **desligada** (`dataScrubber: false`, `scrubIPAddresses: false`), então essas peneiras são a única defesa — teste que as remove reprova. Detalhe em `docs/engineering/deploy.md#relato-de-erro`. |
 
 ---
 

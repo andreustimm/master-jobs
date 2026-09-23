@@ -51,7 +51,8 @@ Entre colchetes, o ID do detalhe em `docs/engineering/rules/`.
    `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`. [[G06](docs/engineering/rules/architecture.md#g06), [G07](docs/engineering/rules/architecture.md#g07)]
 6. **Mexeu no scorer ou em `profile.yaml`? Bump `SCORER_VERSION`** (em
    `src/core/scoring/score.ts`; o valor mora só lá) e rode
-   `pnpm jho jobs score --all`. [[G08](docs/engineering/rules/matching-and-evidence.md#g08)]
+   `pnpm jho jobs score --all`. `tests/scorer-version.test.ts` reprova saída
+   nova com a versão antiga. [[G08](docs/engineering/rules/matching-and-evidence.md#g08)]
 7. **Não invente evidência.** Texto que fala pela pessoa só cita `evidence:` do
    `profile.yaml`; `growth:` é lacuna assumida — sinalize, nunca maquie.
    [[G09](docs/engineering/rules/security.md#g09)]
@@ -101,8 +102,10 @@ Entre colchetes, o ID do detalhe em `docs/engineering/rules/`.
     (`docs/qa/`); `Pass` só com observável que sobrevive a refresh e leitura
     independente. Markdown/metadados sem runtime validam só estrutura.
     [[G55](docs/engineering/rules/delivery.md#g55)–[G57](docs/engineering/rules/delivery.md#g57)]
-21. **Commit releaseável carrega os três changelogs** prontos em
-    `## [Unreleased]` (o hook `commit-msg` e o CI conferem).
+21. **Commit releaseável carrega a nota em um fragmento de changelog:**
+    `changelog.d/<slug-da-branch>.md`, com `## Técnico`, `## pt-BR` e `## en`.
+    **Não edite** o `## [Unreleased]` dos três changelogs — a promoção junta os
+    fragmentos (o hook `commit-msg` e o CI conferem).
     [[G58](docs/engineering/rules/delivery.md#g58)]
 22. **Toda tag SemVer tem uma GitHub Release**, gerada do changelog técnico.
     [[G59](docs/engineering/rules/delivery.md#g59)]

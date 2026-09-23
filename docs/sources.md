@@ -28,7 +28,7 @@ export type SourceAdapter = {
   kind: SourceKind;
   /** Human-facing docs URL, so the config file explains itself. */
   docs: string;
-  fetchJobs(config: SourceConfig): Promise<FetchResult>;
+  fetchJobs(config: SourceConfig): Promise<SourceSnapshot>;
 };
 
 export type FetchResult = {
@@ -36,6 +36,10 @@ export type FetchResult = {
   /** Non-fatal problems worth surfacing without failing the whole sync. */
   warnings: string[];
 };
+
+/** `complete` só quando a resposta prova o fim da lista; na dúvida, `partial`. */
+export type Completeness = "complete" | "partial";
+export type SourceSnapshot = FetchResult & { completeness: Completeness };
 ```
 
 `fetchJobs` recebe `SourceConfig` (`kind`, `handle`, `label`, `rationale?`) e
@@ -78,6 +82,33 @@ em amarelo abaixo da linha da fonte, tanto em `jobs sync` quanto em
 | `jobicy` | `jobicy.ts` | Sim (`jobDescription`) | Não, `count=100` | — |
 | `workable` | `workable.ts` | Sim (`description` + seções) | `pageToken`, 20/página, até 5 páginas | — |
 | `hackernews` | `hackernews.ts` | Sim (o próprio comentário) | Não, o fio inteiro numa chamada | — |
+
+### Completude da listagem
+
+Todo `fetchJobs()` devolve `completeness`: `complete` quando a listagem é tudo o
+que a fonte tem aberto, `partial` quando é uma janela. Só a listagem completa
+prova que a vaga ausente saiu — a sincronização fecha por ausência apenas nela
+(`decideAbsenceClosure()` em `src/core/ingest/lifecycle.ts`). Vaga de janela
+parcial só fecha por 404/410 na reconferência (`probe.ts`). Adapter que não
+consegue provar o fim da lista declara `partial`.
+
+| kind | Completude | O que prova o fim |
+|---|---|---|
+| `greenhouse`, `lever`, `ashby`, `recruitee` | `complete` | o board inteiro numa resposta |
+| `smartrecruiters` | `complete` só com página curta | teto de 500 com a última página cheia é `partial` |
+| `workable` | `complete` só sem `nextPageToken` | as 5 páginas do orçamento com token pendente é `partial` |
+| `braintrust` | `complete` só sem `next`, sem corte do handle e com `count` alcançado | — |
+| `himalayas` | `complete` só com `totalCount` alcançado | na prática sempre `partial` (~100.000 vagas) |
+| `careers` | `complete` quando nenhum link foi cortado por `maxJobs` | a página de vagas da própria empresa |
+| `hackernews` | `complete` quando `hits` alcança `nbHits` | a fonte é a thread do mês; a da nova thread fecha as do mês anterior |
+| `remotive`, `arbeitnow`, `remoteok`, `adzuna`, `jobicy` | `partial` | recorte de recência ou primeira página |
+
+Consequência a conhecer: a vaga de fonte parcial que nunca mais aparece fica
+aberta até a reconferência responder 404/410. A varredura periódica
+(`enqueueStale`) só enfileira vagas com nota ≥ 55, então vaga de fonte parcial
+abaixo do corte permanece aberta — ausência não é prova, e dado faltante é
+neutro. `pnpm jho sources probe <kind> <handle>` e `jho jobs sync` mostram a
+completude de cada rodada.
 
 ### ATS — `src/core/sources/ats.ts`
 
@@ -377,17 +408,22 @@ num arquivo novo em `src/core/sources/` se a forma for diferente. Exporte um
 export const minhafonte: SourceAdapter = {
   kind: "minhafonte",
   docs: "https://exemplo.com/api-docs",
-  async fetchJobs(config: SourceConfig): Promise<FetchResult> {
+  async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const url = `https://exemplo.com/api/jobs?board=${encodeURIComponent(config.handle)}`;
     const data = await getJson<{ jobs?: MinhaFonteJob[] }>(url);
     const jobs = (data.jobs ?? []).map((j): RawJob => ({ /* ... */ }));
-    return { jobs, warnings: [] };
+    return { jobs, warnings: [], completeness: "partial" };
   },
 };
 ```
 
 Checklist do adapter:
 
+- Declare `completeness: "complete"` só quando a resposta prova o fim da lista
+  (board inteiro numa resposta, página curta, sem próximo token, total
+  alcançado). Janela de recência, primeira página ou corte por teto é
+  `partial` — e fonte parcial nunca fecha vaga por ausência
+  ([Completude da listagem](#completude-da-listagem)).
 - Sempre `getJson()` do `./http.ts`, nunca `fetch` cru — é o que garante
   user-agent, timeout e política de retry.
 - Sempre `encodeURIComponent(config.handle)` na URL. O `handle` vem de um YAML

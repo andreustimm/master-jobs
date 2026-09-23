@@ -23,22 +23,11 @@
 import { and, eq, isNull, like, or, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { job } from "../db/schema.ts";
-import { primaryScoreFilter } from "../../contexts/matching/index.ts";
+import { bestPrimaryFitByJob } from "../../contexts/matching/index.ts";
 import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
 import { guardIngestion } from "./guard.ts";
 import { probe } from "./probe.ts";
-
-/**
- * A melhor nota da vaga entre candidatos, só nas trilhas principais.
- *
- * Trilha aceita pontua o recorte relevante para ela e costuma dar nota maior
- * nele; somada ao `max`, furaria a fila de quem só tem o alvo principal
- * (ADR-008).
- */
-function bestPrimaryFit() {
-  return sql`coalesce((select max(s.fit) from production.job_score s where s.job_id = ${job.id} and ${primaryScoreFilter("s")}), 0)`;
-}
 
 export type VerifyResult = {
   checked: number;
@@ -71,7 +60,10 @@ export async function verifyJobs(
 
   // Verify what the user might actually click. Checking 6.000 links to police
   // rows nobody will ever see would be rude to the boards and pointless here.
+  const best = bestPrimaryFitByJob();
+  const fit = sql`coalesce(${best.fit}, 0)`;
   const candidates = await db
+    .with(best)
     .select({
       id: job.id,
       url: job.url,
@@ -79,10 +71,11 @@ export async function verifyJobs(
       sourceId: job.sourceId,
     })
     .from(job)
+    .leftJoin(best, eq(best.jobId, job.id))
     .where(
       and(
         isNull(job.closedAt),
-        sql`${bestPrimaryFit()} >= ${minFit}`,
+        sql`${fit} >= ${minFit}`,
         or(
           like(job.applyUrl, "http://%"),
           like(job.applyUrl, "https://%"),
@@ -91,9 +84,7 @@ export async function verifyJobs(
         ),
       ),
     )
-    .orderBy(
-      sql`${bestPrimaryFit()} desc`,
-    );
+    .orderBy(sql`${fit} desc`);
 
   // Parse after the coarse SQL prefix filter so malformed values cannot
   // consume the requested limit or reach fetch().

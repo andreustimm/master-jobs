@@ -93,6 +93,19 @@ export type FetchResult = {
 };
 
 /**
+ * Whether a listing is everything the source has open, or only a window of it.
+ *
+ * Only a `complete` listing proves that a posting it leaves out is gone. A
+ * partial window — the newest 50, the first five pages, a capped offset loop —
+ * says nothing about what fell outside it, so absence there closes nothing;
+ * those postings close only on a 404/410 during verification (`probe.ts`).
+ * An adapter that cannot prove the end of the list declares `partial`.
+ */
+export type Completeness = "complete" | "partial";
+
+export type SourceSnapshot = FetchResult & { completeness: Completeness };
+
+/**
  * What a platform lets us spend, declared by its adapter as data (ADR-010).
  *
  * The limits apply to the whole system — sync included — and are enforced by
@@ -127,7 +140,7 @@ export type SourceAdapter = {
   kind: FetchableSourceKind;
   /** Human-facing docs URL, so the config file explains itself. */
   docs: string;
-  fetchJobs(config: SourceConfig): Promise<FetchResult>;
+  fetchJobs(config: SourceConfig): Promise<SourceSnapshot>;
   /** Present only on platforms that search by term (ADR-004). */
   termSearch?: TermSearch;
 };

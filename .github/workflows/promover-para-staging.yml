@@ -2,10 +2,13 @@
 name: Promover para staging
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [dev]
+  # Duas janelas por dia, e não um disparo por push verde em dev: cada
+  # promoção gera deploy de staging e um `chore(release)` em dev, e o volume
+  # estourou o limite diário da Vercel. 15:00 e 21:00 UTC = 12:00 e 18:00 BRT.
+  # O agendado promove a ponta de dev somente se o CI de push dela está verde.
+  schedule:
+    - cron: "0 15 * * *"
+    - cron: "0 21 * * *"
   workflow_dispatch:
     inputs:
       target-sha:
@@ -30,10 +33,6 @@ concurrency:
 
 jobs:
   preparar:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -42,6 +41,7 @@ jobs:
     outputs:
       source: ${{ steps.alvo.outputs.source }}
       target: ${{ steps.alvo.outputs.target }}
+      skip: ${{ steps.alvo.outputs.skip }}
     steps:
       # O controlador vem da revisão do workflow, nunca do checkout candidato.
       - uses: actions/checkout@v7
@@ -65,6 +65,8 @@ jobs:
 
   validar:
     needs: preparar
+    # Agendado sem nada novo desde a última promoção: sem CI e sem publicação.
+    if: needs.preparar.outputs.skip != 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/ci.yml
@@ -96,6 +98,7 @@ jobs:
         id: promocao
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+          PROMOTION_SOURCE: ${{ needs.preparar.outputs.source }}
           PROMOTION_TARGET: ${{ needs.preparar.outputs.target }}
           VALIDATED_SHA: ${{ needs.validar.outputs.validated-sha }}
         run: node control/scripts/release/promotion.ts complete candidate

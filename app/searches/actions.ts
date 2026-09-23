@@ -10,6 +10,7 @@ import {
   createTrack,
   deleteTerm,
   ensurePrimaryTrack,
+  invalidateBoardFacets,
   listCandidateTracks,
   moveTerm,
   restoreTrack,
@@ -48,6 +49,8 @@ function idFrom(formData: FormData, field: string): number | null {
 function drainAfterResponse(candidateId: number): void {
   after(async () => {
     await runTermCaptures({ budgetMs: 25_000, worker: "web" });
+    // A captura grava vagas no acervo global, aqui mesmo no processo.
+    invalidateBoardFacets();
     await enqueueScore(candidateId, { origin: "perfil" });
   });
 }
@@ -191,6 +194,9 @@ export async function updateTrackAction(formData: FormData): Promise<UpdateTrack
     target: parsed.target,
     expectedUpdatedAt: String(formData.get("expectedUpdatedAt") ?? ""),
   });
+  // Só descarta as entradas de antes da edição: o que muda as contagens é a
+  // repontuação enfileirada por `updateTrack`, e ela chega depois — pela validade.
+  if (result.ok) invalidateBoardFacets(candidateId);
   refresh();
   revalidatePath(`/searches/tracks/${track.id}`);
   return result;
@@ -204,6 +210,9 @@ async function lifecycle(
   const trackId = idFrom(formData, "trackId");
   if (trackId === null) return { ok: false, code: "not_found" };
   const result = await change(candidateId, trackId);
+  // O cockpit lê as facetas sem trilha na chave — a principal da hora da
+  // leitura. Trocar, arquivar ou restaurar trilha muda a resposta dele.
+  invalidateBoardFacets(candidateId);
   refresh();
   revalidatePath(`/searches/tracks/${trackId}`);
   return result;

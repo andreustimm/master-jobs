@@ -1,0 +1,1 @@
+CREATE INDEX "job_score_job_idx" ON "production"."job_score" USING btree ("job_id","fit");

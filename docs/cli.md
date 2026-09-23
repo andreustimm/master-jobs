@@ -348,7 +348,7 @@ pnpm jho sources probe greenhouse stackblitz
 ```
 
 ```
-✓ greenhouse:stackblitz returned 41 job(s)
+✓ greenhouse:stackblitz returned 41 job(s), complete listing
   · Staff Applied AI Engineer — Remote
   · Senior Software Engineer, Platform — Remote
   · Developer Advocate — Remote (US)
@@ -482,11 +482,17 @@ Syncing 12 source(s)…
   ! ashby:reflow returned no listed jobs
   ✗ ashby:handle-errado           GET https://api.ashbyhq.com/... -> 404 183ms
   ✓ lever:jobgether             4691 fetched  +0 new  6 updated  0 closed 14344ms
+  ✓ remotive:ai engineer          50 fetched  +3 new  0 updated  0 closed  partial window: absence closes nothing 612ms
 
-Totals  5069 fetched · 197 new · 7 updated · 24 closed · 1 failed
+Totals  5119 fetched · 200 new · 7 updated · 24 closed · 1 failed
 
-Scoring 197 job(s) scored · best fit 74
+Scoring 200 job(s) scored · best fit 74
 ```
+
+`partial window` marca a fonte que é uma janela (as mais recentes, as
+primeiras páginas): ela nunca fecha vaga por ausência, e o `closed` dela é
+sempre 0. A tabela de completude por fonte está em
+[`sources.md`](sources.md#completude-da-listagem).
 
 Exemplo ilustrativo, com uma fonte quebrada de propósito para mostrar como a
 falha aparece. Um `✗` **não interrompe o sync** — as outras 11 fontes seguem, e

@@ -46,7 +46,7 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G02 | Ingestão nunca escreve em `application` | [data](data-and-sourcing.md#g02) | regra 2 | preservada |
 | G03 | Vaga que some é fechada, não deletada | [data](data-and-sourcing.md#g03) | regra 3 | preservada; exceção de retenção nomeada (C04) |
 | G04 | Variação real entra por porta | [architecture](architecture.md#g04) | regra 4 | preservada |
-| G05 | Domínio puro; adapter burro | [architecture](architecture.md#g05) | regra 4 | preservada; dívida de relógio marcada (C22) |
+| G05 | Domínio puro; adapter burro | [architecture](architecture.md#g05) | regra 4 | preservada; tempo explícito no núcleo (C22) |
 | G06 | Só TypeScript apagável | [architecture](architecture.md#g06) | regra 5 | preservada; versão aponta para `package.json` |
 | G07 | Import relativo com `.ts` | [architecture](architecture.md#g07) | regra 5 | preservada |
 | G08 | Bump de `SCORER_VERSION` e rescore | [matching](matching-and-evidence.md#g08) | regra 6 | preservada; número copiado removido (C09) |
@@ -87,7 +87,7 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G43 | Worktree de `dev`, PR para `dev` | [delivery](delivery.md#g43) | regra 18 | preservada; exceções de automação nomeadas (C21) |
 | G44 | Conferir estado e preservar WIP | [delivery](delivery.md#g44) | "Fluxo de trabalho" | preservada |
 | G45 | `dev`→`staging` por SHA validado | [delivery](delivery.md#g45) | "Fluxo de trabalho" | preservada; contrato de SHA (C20) |
-| G46 | Produção não sai sem gente | [delivery](delivery.md#g46) | "Fluxo de trabalho" | preservada; proteção remota como dívida (C19) |
+| G46 | Produção não sai sem gente | [delivery](delivery.md#g46) | "Fluxo de trabalho" | preservada; proteção remota em `main`, parcial em `dev`/`staging` (C19) |
 | G47 | Toda PR com responsável | [delivery](delivery.md#g47) | "Fluxo de trabalho" | preservada |
 | G48 | Branches permanentes | [delivery](delivery.md#g48) | "Fluxo de trabalho" | preservada |
 | G49 | Branch `<tipo>/<slug>` | [delivery](delivery.md#g49) | "Fluxo de trabalho" | preservada |
@@ -99,7 +99,7 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G55 | QA vivo para mudança visível | [delivery](delivery.md#g55) | regra 20 + "QA de jornada" | preservada |
 | G56 | Cadência única; `Pass` com prova | [delivery](delivery.md#g56) | "QA de jornada" | preservada |
 | G57 | Validação proporcional | [delivery](delivery.md#g57) | regra 20 | preservada; extensão não decide sozinha |
-| G58 | Três changelogs prontos | [delivery](delivery.md#g58) | regra 21 | preservada |
+| G58 | Nota releaseável em fragmento de changelog | [delivery](delivery.md#g58) | regra 21 | preservada; formato de fragmento (#263) substitui a edição do `Unreleased` |
 | G59 | Tag SemVer tem GitHub Release | [delivery](delivery.md#g59) | regra 22 | preservada |
 | G60 | Changelog vs `docs/` | [delivery](delivery.md#g60) | regra 23 | preservada; linha para `docs/engineering/rules/` |
 | G61 | Skills canônicas e symlinks | [delivery](delivery.md#g61) | "Skills compartilhadas" | preservada |
@@ -154,7 +154,7 @@ pendente na issue indicada.
 | C05 | FK explícita × default | Resolvido por #199; G20 |
 | C06 | Skill de migration em SQLite | Resolvido por #199 no `SKILL.md`; resíduos revistos em [#201](https://github.com/andreustimm/master-jobs/issues/201) |
 | C07 | `sslmode` recusado em `deploy.md` | Resolvido por #199; G27 |
-| C08 | Token bruto × semântico | Regra resolvida em G32; componentes com `--color-*` são dívida em [#204](https://github.com/andreustimm/master-jobs/issues/204) |
+| C08 | Token bruto × semântico | Resolvido: G32; `tests/design.test.ts` (V10-03, #204) reprova paleta crua fora das exceções nomeadas |
 | C09 | Versão copiada; invalidação por conteúdo | Resolvido: G08 sem número, G77 e `data-model.md` corrigidos |
 | C10 | "Sem JS de cliente" | Resolvido: G69 |
 | C11 | FIX_BEFORE_SHIP × `ship-pr` | Regra resolvida em G54; skills alinhadas em [#201](https://github.com/andreustimm/master-jobs/issues/201) |
@@ -165,7 +165,7 @@ pendente na issue indicada.
 | C16 | "Toda rede por `getJson`" | Resolvido por #198; G73 |
 | C17 | Zero vagas = handle errado | Regra resolvida em G70; comando `fonte-nova` em [#201](https://github.com/andreustimm/master-jobs/issues/201) |
 | C18 | Triagem × confirmação no funil | Procedimento em [#201](https://github.com/andreustimm/master-jobs/issues/201); G02 continua negando escrita à ingestão |
-| C19 | Produção humana sem proteção remota | Dívida em [#196](https://github.com/andreustimm/master-jobs/issues/196); G46 |
+| C19 | Produção humana sem proteção remota | Resolvido em `main` por #196 (rulesets aplicados em 22/09/2026); `dev`/`staging` só recusam exclusão e force-push no remoto — ver G46 e [github-protections.md](../github-protections.md) |
 | C20 | CI de `dev` × ref posterior | Resolvido por #195; G45 |
 | C21 | Commit direto × bots e hotfix | Resolvido: exceções nomeadas em G43 |
-| C22 | `Date.now()` implícito no domínio | Dívida em [#204](https://github.com/andreustimm/master-jobs/issues/204); G05 |
+| C22 | `Date.now()` implícito no domínio | Resolvido por #204: instante obrigatório no scorer; G05 |

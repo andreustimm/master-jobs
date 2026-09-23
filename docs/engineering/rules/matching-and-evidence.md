@@ -28,9 +28,13 @@ regra de bump continua valendo para mudança do scorer e do perfil.
 
 Origem: regra 6. Detalhes: [scoring.md](../../scoring.md),
 [data-model.md](../../data-model.md) ("Scores são derivados e versionados").
-Prova: `SCORER_VERSION` persistido em `job_score`; o gate que compara diff e
-bump é trabalho de [#204](https://github.com/andreustimm/master-jobs/issues/204)
-— até lá, a obrigação é de revisão.
+Prova: `SCORER_VERSION` persistido em `job_score`, e
+`tests/scorer-version.test.ts` (V10-01, de
+[#204](https://github.com/andreustimm/master-jobs/issues/204)), que guarda a
+impressão da saída do scorer sobre um acervo fixo: saída nova com a versão
+antiga reprova, e a mensagem traz a impressão a gravar junto com o bump. O
+teste mede a saída, não a intenção: mudança de perfil que não altera o acervo
+fixo continua dependendo de revisão.
 
 <a id="g10"></a>
 ## G10 — Dado faltante pontua neutro, nunca punitivo (regra 8)

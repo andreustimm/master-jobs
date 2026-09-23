@@ -68,7 +68,7 @@ Roteiro: [workflow.md](../workflow.md) ("Entregar e limpar").
 | Etapa | Quem faz | Como |
 |---|---|---|
 | tarefa → `dev` | pessoa ou agente | worktree a partir de `dev`, PR com CI verde |
-| `dev` → `staging` | automático | `promover-para-staging.yml`, sobre o SHA cujo CI de `dev` passou |
+| `dev` → `staging` | automático | `promover-para-staging.yml`, às 15:00 e 21:00 UTC, com a ponta de `dev` de CI verde (ou dispatch com `target-sha`) |
 | `staging` → `main` | **humano** | PR aberta pelo robô, mesclada por gente |
 | tag + `main` → `dev` | automático | `sincronizar-apos-main.yml` |
 
@@ -140,9 +140,11 @@ Roteiro: [workflow.md](../workflow.md) ("Entregar e limpar").
 
 **Obrigação.** Nada nasce em `staging`; um merge criaria ali um commit que não
 existe em `dev`, e as duas divergiriam para sempre. A promoção avança `staging`
-por fast-forward até um **SHA imutável** cujo CI passou — nunca "a ponta de
-`dev`" no momento da execução. O commit de release, quando existe, passa pelo
-mesmo CI antes de avançar `staging`; retentativa conserva o alvo.
+por fast-forward até um **SHA imutável** cujo CI de push passou: no agendado, a
+ponta de `dev` lida uma única vez na preparação e repassada à publicação, que
+nunca relê a branch; no dispatch, o `target-sha` explícito. O commit de
+release, quando existe, passa pelo mesmo CI antes de avançar `staging`;
+retentativa conserva o alvo.
 
 **Resolve C20.** O contrato está em [promotion.md](../promotion.md) e é provado
 por `tests/promotion-provenance.test.ts`. Sem `RELEASE_PAT`, push feito com o
@@ -157,10 +159,15 @@ promovido. Com o PAT, `staging` e as PRs geradas recebem checks próprios.
 robô nem por agente. Publicação em `main` exige decisão humana e QA full
 (G56).
 
-**Dívida conhecida (C19).** A regra hoje é garantida por processo e hooks
-locais; a proteção remota de branches e do ambiente Production é trabalho de
-[#196](https://github.com/andreustimm/master-jobs/issues/196). A falta da
-proteção não afrouxa a regra.
+**Proteção remota (C19).** Desde 22/09/2026
+([#196](https://github.com/andreustimm/master-jobs/issues/196)), rulesets do
+GitHub exigem em `main` PR aprovada e CI verde, sem bypass de CI, e o ambiente
+Production só implanta a partir de `main`; `main`, `staging` e `dev` recusam
+exclusão e force-push para todos. `dev` e `staging` ainda não exigem PR nem CI
+no remoto — ali a regra continua garantida por processo e hooks locais. Estado
+aplicado, caminho humano e verificação em
+[github-protections.md](../github-protections.md). O que falta no remoto não
+afrouxa a regra.
 
 <a id="g51"></a>
 ### G51 — Migração suspende a promoção automática
@@ -349,18 +356,27 @@ num slug, onde só quem conhece a feature a encontraria.
 mover ou renomear esses arquivos quebra o gate.
 
 <a id="g58"></a>
-### G58 — Commit releaseável carrega os três changelogs prontos (regra 21)
+### G58 — Commit releaseável carrega a nota em um fragmento de changelog (regra 21)
 
 **Obrigação.** Se a leva desde a última tag contém `fix:`, `feat:` ou outro
-commit que pede bump, `CHANGELOG.md`, `USER_CHANGELOG.pt-BR.md` e
-`USER_CHANGELOG.en.md` precisam ter conteúdo válido em `## [Unreleased]` antes
-do commit. `.githooks/commit-msg` valida o índice, e o CI repete o gate com
+commit que pede bump, a PR adiciona `changelog.d/<slug-da-branch>.md` com os
+blocos `## Técnico`, `## pt-BR` e `## en` (cada um com `### Seção` e itens
+`- `; `pt-BR` e `en` podem ser só `<!-- sem-nota-usuario -->`, os dois juntos).
+**Não edite** o `## [Unreleased]` de `CHANGELOG.md`, `USER_CHANGELOG.pt-BR.md`
+e `USER_CHANGELOG.en.md`: cada PR editando os mesmos três trechos reabria
+conflito em todas as outras a cada merge. A promoção junta os fragmentos no
+carimbo da versão e os apaga no commit de release.
+
+Não deixe para a promoção descobrir erro: `.githooks/commit-msg` valida o
+índice (fragmento malformado reprova mesmo sem bump), e o CI repete o gate com
 `pnpm check:release-ready`. `pnpm install` ativa os hooks versionados via
 `core.hooksPath=.githooks`. O commit automático `chore(release): X.Y.Z` é a
-única exceção, porque vem depois do preflight e recria intencionalmente o
-próximo `Unreleased` vazio.
+única exceção, porque vem depois do preflight. Entrada escrita direto no
+`Unreleased` ainda é aceita, só durante a transição.
 
-Prova: `tests/changelog.test.ts`, `tests/release-commit.test.ts`.
+Formato e exemplo: [workflow.md](../workflow.md#escrever-o-changelog). Prova:
+`tests/changelog.test.ts`, `tests/changelog-fragments.test.ts`,
+`tests/release-commit.test.ts`.
 
 <a id="g59"></a>
 ### G59 — Toda tag SemVer tem uma GitHub Release (regra 22)
