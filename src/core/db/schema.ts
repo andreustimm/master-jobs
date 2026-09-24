@@ -155,6 +155,13 @@ export const job = production.table(
   (t) => [
     uniqueIndex("job_fingerprint_idx").on(t.fingerprint),
     index("job_source_idx").on(t.sourceId),
+    // Identidade estável dentro da fonte (#291): a sincronização procura
+    // primeiro por (fonte, id externo) e só depois pelo fingerprint. Não é
+    // único de propósito: o acervo já tem, da época em que só o fingerprint
+    // identificava, a mesma vaga duas vezes quando o título mudou — e um índice
+    // único faria a migração falhar em produção. `resolveObservedIdentity`
+    // escolhe entre as duplicatas sem apagar nenhuma (regra 3).
+    index("job_source_external_idx").on(t.sourceId, t.externalId),
     index("job_company_idx").on(t.companyName),
     index("job_last_seen_idx").on(t.lastSeenAt),
     index("job_closed_idx").on(t.closedAt),
@@ -1047,6 +1054,28 @@ export const sweepRun = production.table(
     error: text("error"),
   },
   (t) => [index("sweep_run_slice_started_idx").on(t.slice, t.startedAt)],
+);
+
+/**
+ * Orçamento diário de requisições a terceiros, por rotina (#291).
+ *
+ * Uma linha por (rotina, dia UTC). A CLI no GitHub Actions, a fatia da Vercel
+ * e o botão da tela gastam do MESMO contador — é isso que o torna
+ * compartilhado. A reserva é um upsert condicional; ler antes e gravar depois
+ * deixaria dois processos verem "sobra 1" ao mesmo tempo. `used` é também a
+ * telemetria: quantas requisições cada rotina fez por dia. Só números.
+ */
+export const requestBudget = production.table(
+  "request_budget",
+  {
+    routine: text("routine").notNull(),
+    /** UTC `YYYY-MM-DD`. */
+    day: text("day").notNull(),
+    used: integer("used").notNull().default(0),
+    /** Pedidos recusados por orçamento esgotado, para a telemetria. */
+    refused: integer("refused").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.routine, t.day], name: "request_budget_pk" })],
 );
 
 export const jobPage = production.table(

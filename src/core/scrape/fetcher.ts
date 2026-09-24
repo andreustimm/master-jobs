@@ -19,6 +19,8 @@ import {
   type LookupHost,
 } from "../remote-url.ts";
 import { guardIngestion } from "../ingest/guard.ts";
+import type { RequestBudget } from "../ingest/request-budget.ts";
+import { drizzleRequestBudget } from "../ingest/request-budget-store.ts";
 import { mayFetch, robotsFor } from "./robots.ts";
 import { dbQueue, type ClaimedTask, type QueuePort } from "./queue.ts";
 
@@ -163,7 +165,14 @@ export async function capture(
   return { kind: "stored", bytes: html.length, status: res.status };
 }
 
-export type StageResult = { processed: number; stored: number; blocked: number; failed: number };
+export type StageResult = {
+  processed: number;
+  stored: number;
+  blocked: number;
+  failed: number;
+  /** Presente quando a captura parou porque o orçamento do dia acabou (#291). */
+  budgetExhausted?: true;
+};
 
 /**
  * Runs the capture stage until the queue is empty.
@@ -180,6 +189,8 @@ export async function runFetchStage(
     lookupHost?: LookupHost;
     /** Teto por página. A fatia da Vercel encurta para caber em 30 segundos. */
     timeoutMs?: number;
+    /** O orçamento diário compartilhado; o padrão é o do banco (#291). */
+    budget?: RequestBudget;
   } = {},
 ): Promise<StageResult> {
   // Antes de `opts.queue ?? dbQueue`: o padrão resolve a fila do banco, e o
@@ -189,6 +200,7 @@ export async function runFetchStage(
 
   const queue = opts.queue ?? dbQueue;
   const fetcher = opts.fetcher ?? fetch;
+  const budget = opts.budget ?? drizzleRequestBudget();
   const concurrency = Math.max(1, opts.concurrency ?? 4);
   const limit = opts.limit ?? Infinity;
 
@@ -214,14 +226,23 @@ export async function runFetchStage(
 
   async function worker(name: string): Promise<void> {
     for (;;) {
-      if (claimed >= limit) return;
+      if (claimed >= limit || result.budgetExhausted) return;
       claimed++;
+
+      // A unidade do dia sai antes do claim: esgotado, a tarefa fica
+      // `pending` para amanhã em vez de ser reivindicada e devolvida.
+      if (!(await budget.take("captura", Date.now()))) {
+        claimed--;
+        result.budgetExhausted = true;
+        return;
+      }
 
       const task = await queue.claim("pending", name);
       if (!task) {
         // Devolve o slot: a fila esvaziou, e segurar a reserva faria uma
         // execução seguinte parar antes do limite pedido.
         claimed--;
+        await budget.giveBack("captura", Date.now());
         return;
       }
 

@@ -5,11 +5,13 @@
  * resolution, application-link fallback, reopening and score invalidation from
  * drifting as new import paths are added.
  */
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
+import { isDuplicateKey } from "../db/retry.ts";
 import { company, job } from "../db/schema.ts";
 import { deleteJobScores } from "../scoring/apply.ts";
 import { MANUAL_SOURCE_KINDS, type RawJob } from "../sources/types.ts";
+import { ambiguousExternalIds, resolveObservedIdentity, usableExternalId } from "./identity.ts";
 import { decideReopen } from "./lifecycle.ts";
 import { contentHash, fingerprint, slugifyCompany, toIsoDate } from "./normalize.ts";
 
@@ -41,10 +43,23 @@ export type ObserveRawJobOptions = {
    * owner and companies are never deleted, so the cache cannot go stale.
    */
   companies?: Map<string, number>;
+  /**
+   * The source's own id for this posting, when it may serve as identity
+   * (#291): the sync looks the row up by (source, external id) before the
+   * fingerprint. Absent, only the fingerprint identifies — term captures,
+   * manual entries and imports keep that behaviour.
+   */
+  externalKey?: string;
+  /**
+   * Rows of this source with `externalKey`, read in bulk by the caller.
+   * Omitted while `externalKey` is set, the observation reads them itself.
+   */
+  byExternal?: KnownJob[];
 };
 
 export type KnownJob = {
   id: number;
+  fingerprint: string;
   contentHash: string;
   closedAt: string | null;
   archivedAt: string | null;
@@ -52,6 +67,7 @@ export type KnownJob = {
 
 const KNOWN_COLUMNS = {
   id: job.id,
+  fingerprint: job.fingerprint,
   contentHash: job.contentHash,
   closedAt: job.closedAt,
   archivedAt: job.archivedAt,
@@ -62,10 +78,26 @@ export async function loadKnownJobs(fingerprints: string[]): Promise<Map<string,
   const known = new Map<string, KnownJob>();
   if (fingerprints.length === 0) return known;
   const rows = await getDb()
-    .select({ ...KNOWN_COLUMNS, fingerprint: job.fingerprint })
+    .select(KNOWN_COLUMNS)
     .from(job)
     .where(inArray(job.fingerprint, [...new Set(fingerprints)]));
-  for (const { fingerprint: key, ...row } of rows) known.set(key, row);
+  for (const row of rows) known.set(row.fingerprint, row);
+  return known;
+}
+
+/** The stored rows of one source for these external ids, in one query. */
+export async function loadKnownByExternal(sourceId: string, externalIds: string[]): Promise<Map<string, KnownJob[]>> {
+  const known = new Map<string, KnownJob[]>();
+  if (externalIds.length === 0) return known;
+  const rows = await getDb()
+    .select({ ...KNOWN_COLUMNS, externalId: job.externalId })
+    .from(job)
+    .where(and(eq(job.sourceId, sourceId), inArray(job.externalId, [...new Set(externalIds)])));
+  for (const { externalId, ...row } of rows) {
+    const list = known.get(externalId) ?? [];
+    list.push(row);
+    known.set(externalId, list);
+  }
   return known;
 }
 
@@ -89,19 +121,40 @@ export async function observeRawJobs(
 ): Promise<JobObservation[]> {
   const companies = options.companies ?? new Map<string, number>();
   const observations: JobObservation[] = [];
+  const identities = raws.map((raw) => fingerprint(raw));
+  // A capture refreshes postings other sources own; its external ids are not
+  // the owner's, so only the sync identifies by them. Ambiguity is judged over
+  // the whole listing, not per block.
+  const byExternalId = !options.keepExistingSource;
+  const ambiguous = byExternalId
+    ? ambiguousExternalIds(raws.map((raw, index) => ({ externalId: raw.externalId, fingerprint: identities[index]! })))
+    : new Set<string>();
   for (let start = 0; start < raws.length; start += KNOWN_BLOCK) {
     const block = raws.slice(start, start + KNOWN_BLOCK);
-    const identities = block.map((raw) => fingerprint(raw));
-    const known = await loadKnownJobs(identities);
+    const blockIdentities = identities.slice(start, start + KNOWN_BLOCK);
+    const externalKeys = block.map((raw) => (byExternalId ? usableExternalId(raw.externalId, ambiguous) : null));
+    const known = await loadKnownJobs(blockIdentities);
+    const external = await loadKnownByExternal(
+      sourceId,
+      externalKeys.filter((key): key is string => key !== null),
+    );
     for (const [index, raw] of block.entries()) {
-      const identity = identities[index]!;
+      const identity = blockIdentities[index]!;
+      const externalKey = externalKeys[index] ?? undefined;
       observations.push(
-        await observeRawJob(raw, sourceId, { ...options, companies, known: known.get(identity) ?? null }),
+        await observeRawJob(raw, sourceId, {
+          ...options,
+          companies,
+          known: known.get(identity) ?? null,
+          externalKey,
+          byExternal: externalKey === undefined ? undefined : (external.get(externalKey) ?? []),
+        }),
       );
       // A listing can repeat a posting. The second sighting must not trust
-      // the row read before the first one wrote: without the entry it tries
-      // an insert, loses to the unique key and reads the current row.
+      // the rows read before the first one wrote: without the entries it
+      // reads them again.
       known.delete(identity);
+      if (externalKey !== undefined) external.delete(externalKey);
     }
   }
   return observations;
@@ -110,6 +163,10 @@ export async function observeRawJobs(
 async function findKnownJob(identity: string): Promise<KnownJob | undefined> {
   const [row] = await getDb().select(KNOWN_COLUMNS).from(job).where(eq(job.fingerprint, identity)).limit(1);
   return row;
+}
+
+async function findKnownByExternal(sourceId: string, externalKey: string): Promise<KnownJob[]> {
+  return (await loadKnownByExternal(sourceId, [externalKey])).get(externalKey) ?? [];
 }
 
 export type JobObservation = {
@@ -187,7 +244,13 @@ export async function observeRawJob(
   const identity = options.fingerprintOverride ?? fingerprint(raw);
   const nextContentHash = contentHash(raw);
 
-  let existing = options.known === undefined ? await findKnownJob(identity) : (options.known ?? undefined);
+  const byFingerprint = options.known === undefined ? await findKnownJob(identity) : (options.known ?? undefined);
+  const byExternal =
+    options.externalKey === undefined
+      ? []
+      : (options.byExternal ?? (await findKnownByExternal(sourceId, options.externalKey)));
+  const decision = resolveObservedIdentity({ fingerprint: identity, byExternal, byFingerprint: byFingerprint ?? null });
+  let existing = decision.existing ?? undefined;
 
   const companyId = await resolveCompany(raw.companyName, options.companies);
   // Who owns the posting, where it lives and the owner's payload (a manual
@@ -202,7 +265,7 @@ export async function observeRawJob(
     raw: retainedRawPayload(sourceId, raw.raw),
   };
   const content = {
-    fingerprint: identity,
+    fingerprint: decision.fingerprint,
     contentHash: nextContentHash,
     companyId,
     companyName: raw.companyName,
@@ -258,24 +321,36 @@ export async function observeRawJob(
   const wasClosed = reopen.kind === "reopen";
 
   const observed = options.keepExistingSource ? content : values;
-
+  const target = existing;
   // Store the latest complete observation even when scoring content stayed the
   // same: apply URLs and source metadata can change independently of the text.
-  await db
-    .update(job)
-    .set({
-      ...observed,
-      closedAt: null,
-      ...(reopen.kind === "reopen" && reopen.clearsArchive ? { archivedAt: null } : {}),
-    })
-    .where(eq(job.id, existing.id));
+  const write = (fingerprintToWrite: string) =>
+    db
+      .update(job)
+      .set({
+        ...observed,
+        fingerprint: fingerprintToWrite,
+        closedAt: null,
+        ...(reopen.kind === "reopen" && reopen.clearsArchive ? { archivedAt: null } : {}),
+      })
+      .where(eq(job.id, target.id));
+  let written = observed.fingerprint;
+  try {
+    await write(written);
+  } catch (error) {
+    // Another worker inserted the new fingerprint between the read and this
+    // write. The row keeps its old one, exactly as if the read had seen it.
+    if (!isDuplicateKey(error) || written === target.fingerprint) throw error;
+    written = target.fingerprint;
+    await write(written);
+  }
 
   const invalidatedScores = contentChanged
     ? await invalidateScores(existing.id)
     : 0;
   return {
     jobId: existing.id,
-    fingerprint: identity,
+    fingerprint: written,
     outcome: wasClosed ? "reopened" : contentChanged ? "changed" : "unchanged",
     contentChanged,
     invalidatedScores,

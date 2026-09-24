@@ -272,7 +272,7 @@ fato imutável: reingestão atualiza conteúdo e `last_seen_at`, reabre
 | `fingerprint` (UNIQUE) | identidade global da vaga — ver [Fingerprint vs contentHash](#fingerprint-vs-contenthash) |
 | `content_hash` | detector de edição — mesma seção |
 | `source_id` -> `source.id` | `ON DELETE cascade`. **Atenção:** é reescrito quando a vaga é atualizada com conteúdo novo (o `set` do ramo `contentHash` diferente inclui `sourceId`), então numa vaga vista por duas fontes essa coluna aponta para a última fonte que a viu com conteúdo alterado |
-| `external_id` | id estável dentro da fonte; **não** participa da deduplicação |
+| `external_id` | id estável dentro da fonte. Na sincronização, é a **primeira** chave de identidade: `(source_id, external_id)` acha a linha antes do fingerprint, e um título editado atualiza a mesma vaga em vez de criar outra (#291). Entre fontes, quem deduplica continua sendo o fingerprint. Captura por termo, import, e-mail e cadastro manual não identificam por ele |
 | `company_id` -> `company.id` | sem cascade: `ON DELETE no action`, **declarado** no schema. Empresa que ainda nomeia vaga não pode ser apagada; nada apaga empresa hoje |
 | `company_name` | denormalizado de propósito: existe mesmo quando `slugifyCompany()` devolve string vazia e `company_id` fica `null` |
 | `description_html` / `description_text` | `description_text` é o dado durável que scorer e UI leem. `description_html` permanece por compatibilidade de schema, mas ingestão nova grava `null`; `jho db cleanup` remove o legado |
@@ -289,9 +289,26 @@ migration é adicionar essa coluna nullable como estado operacional separado de
 `closed_at`: arquivar tira a vaga do board ativo, mas não apaga a vaga nem suas
 candidaturas. O contrato está em [ADR 0020](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md).
 
-Índices: `job_fingerprint_idx` (único), `job_source_idx`, `job_company_idx`
-(por `company_name`), `job_last_seen_idx`, `job_closed_idx`. O último importa
-porque toda query de board filtra `closed_at IS NULL`.
+Índices: `job_fingerprint_idx` (único), `job_source_idx`,
+`job_source_external_idx` (`source_id, external_id`, **não** único),
+`job_company_idx` (por `company_name`), `job_last_seen_idx`, `job_closed_idx`.
+O último importa porque toda query de board filtra `closed_at IS NULL`.
+
+**Identidade por fonte e id externo (#291).** `observeRawJobs()` lê em lote as
+linhas da fonte com os ids externos do bloco e decide com a função pura
+`resolveObservedIdentity()` (`src/core/ingest/identity.ts`):
+
+- linha achada pelo id externo é a vaga — o fingerprint novo é gravado, a menos
+  que outra linha já o tenha; aí a linha mantém o antigo, porque juntar as duas
+  seria mover candidatura (regras 2 e 3);
+- várias linhas com o mesmo id externo (herança de quando só o fingerprint
+  identificava) não são unidas: vence a que já tem o fingerprint novo, depois a
+  aberta, depois a mais antiga;
+- id externo vazio (regra 17) ou repetido com fingerprints diferentes na mesma
+  listagem não identifica nada, e vale o fingerprint.
+
+O índice não é único de propósito: essas duplicatas herdadas existem em
+produção, e um `UNIQUE` faria a migração falhar.
 
 **Busca por termo (#214).** `job_description_trgm_idx` é GIN `gin_trgm_ops`
 sobre `replace(replace(description_text, ' ', ''), '-', '')`, parcial em
@@ -664,14 +681,15 @@ caminho de ingestão a chama.
 
 ### 2. Vaga que some é fechada, não deletada
 
-`syncOne()` compara os fingerprints vistos nesta rodada com os que aquela fonte
-carregava e faz `UPDATE ... SET closed_at = stamp`. Nunca `DELETE`. E só faz
-isso quando a listagem é a fonte inteira:
+`syncOne()` compara as linhas vistas nesta rodada (por `job.id`, não por
+fingerprint: uma vaga achada pelo id externo pode ter mantido o fingerprint
+antigo) com as abertas daquela fonte e faz `UPDATE ... SET closed_at = stamp`.
+Nunca `DELETE`. E só faz isso quando a listagem é a fonte inteira:
 
 ```ts
 // Anything a complete listing no longer carries is closed. A partial
 // window leaves the rest to the 404/410 recheck.
-if (decideAbsenceClosure({ completeness, seen: seenFingerprints.length }).kind === "close-missing") {
+if (decideAbsenceClosure({ completeness, seen: seenIds.size }).kind === "close-missing") {
 ```
 
 Três detalhes que um agente precisa preservar:
@@ -960,6 +978,19 @@ apagar um candidato não pode falhar por causa de uma reserva de dez minutos.
 |---|---|---|
 | `sweep_lease` | `key` (`sync:<fonte>`, `pontuar:<candidato>`, `alarme:<nome>`, `manutencao:<nome>`) | reserva viva (`claimed_at`, `claimed_by`), última tentativa (`last_claimed_at`, nunca limpa) e último término (`last_finished_at`). Reservada por um único `INSERT … ON CONFLICT DO UPDATE … WHERE`; vence em 5 min |
 | `sweep_run` | `id`; índice `(slice, started_at)` | uma linha por chamada (`unit` nulo) e uma por unidade: duração, itens, erros, mensagem de erro. Só números e ids; podada a cada 24 h para 14 dias |
+
+### Orçamento de requisições — `request_budget`
+
+Do núcleo de ingestão (`src/core/ingest/request-budget.ts`, SQL em
+`request-budget-store.ts`), #291. Sem FK e sem dado de vaga ou pessoa.
+
+| Coluna | Regra |
+|---|---|
+| `(routine, day)` | chave primária: `sync`, `reconferencia` ou `captura`, por dia UTC |
+| `used` | unidades gastas no dia, somando CLI, Vercel e botão. Reservada por upsert condicional abaixo do teto; devolvida quando a fila estava vazia |
+| `refused` | pedidos recusados por teto esgotado — distingue "parou por orçamento" de "não tinha trabalho" |
+
+Nada poda esta tabela: são três linhas por dia.
 
 ### Análise estruturada da vaga — `job_analysis`
 
