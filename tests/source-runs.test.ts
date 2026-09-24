@@ -519,3 +519,60 @@ describe("UT-008/IT-005 teto de filhas, órfãs e lease no pedido", () => {
     expect(await sourceRun(morta.runId)).toMatchObject({ status: "interrupted" });
   });
 });
+
+describe("IT-005 execução de borda: sem linha, sem fonte, verificação global", () => {
+  const vazio = { fetched: 0, inserted: 0, updated: 0, unchanged: 0, closed: 0, alive: null, inconclusive: null };
+  const deps = (extra: object = {}) => ({
+    runs: store,
+    now: () => new Date().toISOString(),
+    concurrency: 1,
+    async work() {
+      return { ok: true, counts: vazio, completeness: "complete" as const };
+    },
+    ...extra,
+  });
+
+  it("execução inexistente devolve run_not_found sem tocar em nada", async () => {
+    expect(await executeRun(987_654, deps())).toEqual({ ok: false, code: "run_not_found" });
+  });
+
+  it("verificação global sem executor global falha com o motivo; com ele, conclui", async () => {
+    const sem = await requestSourceRun({ kind: "verify", sourceId: null }, null);
+    if (!sem.ok) throw new Error("recusado");
+    expect(await executeRun(sem.runId, deps())).toMatchObject({ ok: true, status: "failed" });
+    expect((await sourceRun(sem.runId))!.errorDetail).toContain("verificação global indisponível");
+
+    const com = await requestSourceRun({ kind: "verify", sourceId: null }, null);
+    if (!com.ok) throw new Error("recusado");
+    const workAll = async () => ({ ok: true, counts: { ...vazio, alive: 2, inconclusive: 0 }, completeness: "complete" as const });
+    expect(await executeRun(com.runId, deps({ workAll }))).toMatchObject({ ok: true, status: "succeeded" });
+  });
+
+  it("retrato sem fonte falha em vez de rodar a fonte errada", async () => {
+    await catalogo();
+    const [linha] = await db
+      .insert(sourceRunTable)
+      .values({
+        scopeKind: "source",
+        sourceId: "greenhouse:acme",
+        idempotencyKey: "retrato-vazio",
+        configSnapshot: { sources: [] },
+        status: "queued",
+        queuedAt: new Date().toISOString(),
+      })
+      .returning({ id: sourceRunTable.id });
+
+    expect(await executeRun(linha!.id, deps())).toMatchObject({ ok: true, status: "failed" });
+    expect((await sourceRun(linha!.id))!.errorDetail).toContain("retrato sem fonte");
+  });
+
+  it("nova tentativa de fonte aposentada depois da falha é recusada com o código", async () => {
+    await catalogo();
+    const pedido = await requestSourceRun({ kind: "source", sourceId: "greenhouse:acme" }, null);
+    if (!pedido.ok) throw new Error("recusado");
+    await executeRun(pedido.runId, deps({ work: async () => ({ ok: false, counts: vazio, completeness: null, error: "HTTP 500" }) }));
+    await retireSource("greenhouse:acme", "2026-09-23T12:00:00.000Z");
+
+    expect(await retrySourceRun(pedido.runId, null)).toMatchObject({ ok: false });
+  });
+});

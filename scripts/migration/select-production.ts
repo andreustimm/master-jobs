@@ -62,6 +62,8 @@ export const postSnapshotTables = new Set([
   "job_analysis",
   // Histórico de execução de captura e verificação (#223): nasce das execuções.
   "source_run",
+  // Orçamento diário de requisições por rotina (#291): contador operacional.
+  "request_budget",
 ]);
 
 const selectedJobs = `SELECT id FROM job WHERE

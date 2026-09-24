@@ -24,6 +24,11 @@ on:
   pull_request:
   push:
     branches: [main, staging, dev]
+  # A PR `staging → main` é aberta pelo robô, e push ou PR do `GITHUB_TOKEN`
+  # não dispara workflow; `workflow_dispatch` é a exceção. A promoção o usa
+  # para publicar `qualidade` e `schema-e-migracao` na cabeça de `staging`,
+  # com os nomes que o ruleset de `main` exige. Sem entradas: roda como push.
+  workflow_dispatch:
 
 # Um PR que recebe três pushes seguidos não precisa de três execuções: só a
 # última diz alguma coisa. As anteriores são canceladas.

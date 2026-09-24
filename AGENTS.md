@@ -205,8 +205,10 @@ worktree/tarefa → check/e2e aplicável → QA de jornada aplicável → audito
   commit chega a `main`. [[G47](docs/engineering/rules/delivery.md#g47), [R24](docs/engineering/rules/delivery.md#r24-closes)]
 - Branch mesclada é removida, local e remota; `dev`, `staging` e `main` nunca.
   [[G48](docs/engineering/rules/delivery.md#g48)–[G50](docs/engineering/rules/delivery.md#g50)]
-- Migração em `drizzle/` ou `schema.ts` suspende a promoção automática até
-  revisão humana. [[G51](docs/engineering/rules/delivery.md#g51)]
+- Migração aditiva promove e se aplica sozinha no push para `main`; a não
+  aditiva (detector em `src/core/db/migration-review.ts`) suspende a promoção
+  e a migração automáticas até revisão humana.
+  [[G51](docs/engineering/rules/delivery.md#g51)]
 
 ## Precedência e conflito
 

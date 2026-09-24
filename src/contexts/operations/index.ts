@@ -263,6 +263,7 @@ export {
   type SweepSlice,
 } from "./domain/sweep.ts";
 export type { SliceReport } from "./app/sweep.ts";
+export { routineTelemetry, type RoutineTelemetry } from "./infra/drizzle-telemetry.ts";
 
 /** Capturas por chamada: uma onda de quatro hosts cabe no teto da função. */
 const CAPTURE_PER_SLICE = 4;
@@ -392,6 +393,8 @@ export async function runSweep(
             return countsOfSync(synced);
           },
         });
+        // Outro processo pegou a execução: é dele, e a fatia cede sem erro.
+        if (!executed.ok && executed.code === "not_queued") return { ok: true, items: 0 };
         if (!executed.ok) return { ok: false, items: 0, error: executed.code };
         const result = synced as SyncSourceResult | null;
         return { ok: result?.ok ?? false, items: result?.fetched ?? 0, error: result?.error };

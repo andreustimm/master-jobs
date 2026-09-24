@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { runFetchStage } from "../src/core/scrape/fetcher.ts";
 import type { ClaimedTask, QueuePort } from "../src/core/scrape/queue.ts";
 import type { LookupHost } from "../src/core/remote-url.ts";
+import type { RequestBudget } from "../src/core/ingest/request-budget.ts";
 
 /**
  * O `--limit` do robô de captura, sob concorrência.
@@ -47,10 +48,27 @@ const fetcher = (async () =>
 /** IP público literal: o teste não pode depender de DNS. */
 const lookupHost: LookupHost = async () => [{ address: "93.184.216.34", family: 4 }];
 
+/** Orçamento diário em memória: `teto` unidades, contando reservas e devoluções. */
+function orcamento(teto = Number.POSITIVE_INFINITY): RequestBudget & { usadas: () => number } {
+  let usadas = 0;
+  return {
+    async take() {
+      await Promise.resolve();
+      if (usadas >= teto) return false;
+      usadas++;
+      return true;
+    },
+    async giveBack() {
+      usadas--;
+    },
+    usadas: () => usadas,
+  };
+}
+
 describe("runFetchStage respeita o limite", () => {
   it("com concorrência 1, para exatamente no limite", async () => {
     const queue = filaInfinita();
-    const result = await runFetchStage({ queue, fetcher, lookupHost, concurrency: 1, limit: 3 });
+    const result = await runFetchStage({ queue, fetcher, lookupHost, budget: orcamento(), concurrency: 1, limit: 3 });
     expect(result.processed).toBe(3);
   });
 
@@ -58,7 +76,7 @@ describe("runFetchStage respeita o limite", () => {
     // O caso do defeito: oito workers passando pela checagem antes de o
     // primeiro incrementar processavam até sete tarefas a mais.
     const queue = filaInfinita();
-    const result = await runFetchStage({ queue, fetcher, lookupHost, concurrency: 8, limit: 5 });
+    const result = await runFetchStage({ queue, fetcher, lookupHost, budget: orcamento(), concurrency: 8, limit: 5 });
     expect(result.processed).toBe(5);
   });
 
@@ -67,7 +85,7 @@ describe("runFetchStage respeita o limite", () => {
     // site de terceiro — a tarefa foi retirada da fila e capturada, só não
     // contada. O que se afirma aqui é que a reserva também para.
     const queue = filaInfinita();
-    await runFetchStage({ queue, fetcher, lookupHost, concurrency: 8, limit: 4 });
+    await runFetchStage({ queue, fetcher, lookupHost, budget: orcamento(), concurrency: 8, limit: 4 });
     expect(queue.claims).toBe(4);
   });
 
@@ -89,7 +107,7 @@ describe("runFetchStage respeita o limite", () => {
       },
     };
 
-    const result = await runFetchStage({ queue, fetcher, lookupHost, concurrency: 4, limit: 10 });
+    const result = await runFetchStage({ queue, fetcher, lookupHost, budget: orcamento(), concurrency: 4, limit: 10 });
     expect(result.processed).toBe(2);
   });
 
@@ -109,6 +127,38 @@ describe("runFetchStage respeita o limite", () => {
       },
     };
 
-    expect((await runFetchStage({ queue, fetcher, lookupHost, concurrency: 3 })).processed).toBe(7);
+    expect((await runFetchStage({ queue, fetcher, lookupHost, budget: orcamento(), concurrency: 3 })).processed).toBe(7);
+  });
+});
+
+describe("runFetchStage respeita o orçamento diário (#291)", () => {
+  it("orçamento esgotado para antes do claim: a tarefa fica na fila", async () => {
+    const queue = filaInfinita();
+    const budget = orcamento(3);
+    const result = await runFetchStage({ queue, fetcher, lookupHost, budget, concurrency: 4 });
+    expect(result.processed).toBe(3);
+    expect(queue.claims).toBe(3);
+    expect(result.budgetExhausted).toBe(true);
+  });
+
+  it("fila vazia devolve a unidade reservada", async () => {
+    let restantes = 1;
+    const queue: QueuePort = {
+      async claim() {
+        if (restantes === 0) return null;
+        restantes--;
+        return { id: 1, jobId: 1, url: "https://x.test/1", attempts: 0 };
+      },
+      async complete() {},
+      async fail() {},
+      async stats() {
+        return {};
+      },
+    };
+    const budget = orcamento(10);
+    const result = await runFetchStage({ queue, fetcher, lookupHost, budget, concurrency: 2 });
+    expect(result.processed).toBe(1);
+    expect(budget.usadas()).toBe(1);
+    expect(result.budgetExhausted).toBeUndefined();
   });
 });

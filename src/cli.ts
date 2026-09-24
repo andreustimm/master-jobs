@@ -12,7 +12,7 @@ import { Command } from "commander";
 import { and, desc, eq } from "drizzle-orm";
 import { closeDb, getDb } from "./core/db/client.ts";
 import { runDatabaseCleanup } from "./core/db/retention.ts";
-import { runMigrations } from "./core/db/migrate.ts";
+import { MigrationNeedsReview, runMigrations } from "./core/db/migrate.ts";
 import { listBoard, primaryScoreFilter } from "./contexts/matching/index.ts";
 import { pipelineCounts, setApplicationStatus } from "./contexts/pursuit/index.ts";
 import { application, job, jobScore, positioningTask } from "./core/db/schema.ts";
@@ -198,10 +198,18 @@ const db = program.command("db").description("Database maintenance");
 
 db.command("migrate")
   .description("Create or upgrade the database schema")
-  .action(async () => {
+  .option("--additive-only", "refuse, before any DDL, when a pending migration is not additive")
+  .action(async (opts: { additiveOnly?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
-      console.log(c.green("✓") + " schema is up to date");
+      try {
+        const applied = await runMigrations(undefined, { additiveOnly: opts.additiveOnly === true });
+        if (applied.length > 0) console.log(c.dim(`  aplicadas: ${applied.join(", ")}`));
+        console.log(c.green("✓") + " schema is up to date");
+      } catch (error) {
+        if (!(error instanceof MigrationNeedsReview)) throw error;
+        console.error(c.red(error.message));
+        process.exitCode = 1;
+      }
     });
   });
 
@@ -3345,6 +3353,52 @@ program
     );
     console.log(c.bold("Blockers") + c.dim(` ${profile.blockers.length} patterns`));
     console.log();
+  });
+
+/* ----------------------------------- ops ---------------------------------- */
+
+const ops = program.command("ops").description("Operação da varredura: custo e cadência");
+
+/**
+ * O baseline de custo (#291): requisições a terceiros por rotina e chamadas por
+ * fatia, por dia. Só números — pode rodar contra produção com a URL de leitura.
+ */
+ops
+  .command("telemetry")
+  .description("Requisições por rotina e chamadas por fatia da varredura, por dia")
+  .option("--days <n>", "quantos dias para trás", "7")
+  .option("--json", "saída em JSON")
+  .action(async (opts: { days: string; json?: boolean }) => {
+    await withDb(async () => {
+      const { routineTelemetry } = await import("./contexts/operations/index.ts");
+      const { DAILY_REQUEST_BUDGET } = await import("./core/ingest/request-budget.ts");
+      const days = Number(opts.days);
+      if (!Number.isInteger(days) || days < 1) throw new Error("--days precisa ser um inteiro positivo");
+      const telemetry = await routineTelemetry({ days, now: Date.now() });
+      if (opts.json) {
+        console.log(JSON.stringify({ ...telemetry, limits: DAILY_REQUEST_BUDGET }, null, 2));
+        return;
+      }
+      console.log(c.bold(`\n  REQUISIÇÕES POR ROTINA desde ${telemetry.since}`));
+      console.log(c.dim("  DIA         ROTINA           USADAS   TETO  RECUSADAS"));
+      for (const row of telemetry.requests) {
+        const limit = DAILY_REQUEST_BUDGET[row.routine as keyof typeof DAILY_REQUEST_BUDGET] ?? null;
+        console.log(
+          `  ${row.day}  ${truncate(row.routine, 15)} ${String(row.used).padStart(7)} ` +
+          `${String(limit ?? "—").padStart(6)} ${String(row.refused).padStart(10)}`,
+        );
+      }
+      console.log(c.bold("\n  FATIAS DA VARREDURA"));
+      console.log(c.dim("  DIA         FATIA          CHAMADAS UNIDADES  ITENS  ERROS  TOTAL(s)  P95(ms)  MÁX(ms)"));
+      for (const row of telemetry.sweep) {
+        console.log(
+          `  ${row.day}  ${truncate(row.slice, 13)} ${String(row.calls).padStart(8)} ${String(row.units).padStart(8)} ` +
+          `${String(row.items).padStart(6)} ${String(row.errors).padStart(6)} ${(row.totalMs / 1000).toFixed(0).padStart(9)} ` +
+          `${String(row.p95Ms).padStart(8)} ${String(row.maxMs).padStart(8)}`,
+        );
+      }
+      console.log();
+    });
   });
 
 /**
