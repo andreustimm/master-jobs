@@ -1083,6 +1083,35 @@ export type VerifyTask = typeof verifyTask.$inferSelect;
 export type VerifyStatus = "pending" | "checking" | "done" | "failed";
 
 /**
+ * Cada veredito de verificação de uma vaga (#223, tarefa 04).
+ *
+ * `job.check_status` guarda só o último; o evento guarda todos, e é o que deixa
+ * uma reabertura sem apagar o fechamento anterior. Evento e estado da vaga
+ * mudam na mesma transação (`applyVerdict`). `reason` só é diferente de
+ * `unknown` com evidência: hoje, apenas `closed` por 404/410 (G26).
+ */
+export const jobCheckEvent = production.table(
+  "job_check_event",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    // A retenção só apaga vaga sem candidatura, e o evento sem a vaga não diz nada.
+    jobId: integer("job_id")
+      .notNull()
+      .references(() => job.id, { onDelete: "cascade" }),
+    runId: integer("run_id").references(() => sourceRun.id, { onDelete: "set null" }),
+    checkedAt: text("checked_at").notNull(),
+    /** `alive` | `gone` | `inconclusive` (`ProbeVerdict`). */
+    verdict: text("verdict").notNull(),
+    httpCode: integer("http_code"),
+    /** `closed` | `unknown` hoje; `filled`/`cancelled`/`paused` só com evidência de adapter. */
+    reason: text("reason").notNull(),
+    /** Até 280 caracteres, redigido (`redactDetail`). */
+    evidence: text("evidence"),
+  },
+  (t) => [index("job_check_event_job_idx").on(t.jobId, t.checkedAt)],
+);
+
+/**
  * Reserva de uma unidade da varredura fatiada (ADR 0025).
  *
  * `key` nomeia a unidade — `sync:<fonte>`, `pontuar:<candidato>`, `alarme:<nome>`.

@@ -265,9 +265,9 @@ export type ExecuteDeps = {
   runs: RunStore;
   now(): string;
   /** Captura ou verificação de uma fonte do retrato. Nunca lança: erro vem em `error`. */
-  work(source: SourceSnapshotEntry, scope: "source" | "verify"): Promise<WorkOutcome>;
+  work(source: SourceSnapshotEntry, scope: "source" | "verify", runId: number): Promise<WorkOutcome>;
   /** Verificação sem fonte (todas as vagas vencidas), quando o escopo é `verify` global. */
-  workAll?(): Promise<WorkOutcome>;
+  workAll?(runId: number): Promise<WorkOutcome>;
   /** Teto de filhas em paralelo numa execução "todas". */
   concurrency: number;
   /**
@@ -343,11 +343,11 @@ export async function executeRun(id: number, deps: ExecuteDeps): Promise<Execute
   const outcome: WorkOutcome = await withHeartbeat(deps, () => [id], async () => {
     if (run.scopeKind === "verify" && run.sourceId === null) {
       return deps.workAll
-        ? deps.workAll()
+        ? deps.workAll(id)
         : { ok: false, counts: UNKNOWN_COUNTS, completeness: null, error: "verificação global indisponível" };
     }
     return source
-      ? deps.work(source, run.scopeKind === "verify" ? "verify" : "source")
+      ? deps.work(source, run.scopeKind === "verify" ? "verify" : "source", id)
       : { ok: false, counts: UNKNOWN_COUNTS, completeness: null, error: "retrato sem fonte" };
   });
   if (source && run.sourceId !== null) deps.onChild?.(source, outcome);
@@ -394,7 +394,7 @@ async function executeAll(parent: RunRow, snapshot: RunSnapshot, deps: ExecuteDe
     try {
       if (!(await start(deps, child.id))) return;
       working.add(child.id);
-      const outcome = await deps.work(child.source, "source");
+      const outcome = await deps.work(child.source, "source", child.id);
       working.delete(child.id);
       const status = finalStatus(outcome);
       // Filha dada por morta no meio conta como interrompida: o pai não pode
