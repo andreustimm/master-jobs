@@ -42,13 +42,34 @@ const fitsPhone = (page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
 
 /** Texto da interface fora do dado do usuário: em inglês, não pode ter acento. */
-const interfaceText = (page) =>
+/** Os nós de texto da interface, sem dado do usuário. */
+const interfaceTexts = (page) =>
   page.evaluate(() => {
     const clone = document.querySelector("main")?.cloneNode(true);
-    if (!clone) return "";
+    if (!clone) return [];
     for (const node of clone.querySelectorAll("[data-user-content]")) node.remove();
-    return clone.textContent ?? "";
+    const out = [];
+    const walk = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walk.nextNode())) {
+      const text = (node.textContent ?? "").trim();
+      if (text) out.push(text);
+    }
+    return out;
   });
+
+/**
+ * Os mesmos dois critérios da varredura de `ui.mjs`: texto que É valor do
+ * dicionário português (e não do inglês), e texto acentuado. Acento sozinho
+ * deixaria passar "Sondar" ou "Tentar de novo".
+ */
+async function portugueseDictionary() {
+  const { ptBR } = await import("../../src/core/i18n/pt-BR.ts");
+  const { en } = await import("../../src/core/i18n/en.ts");
+  const flatten = (dict) => Object.values(dict).flatMap((section) => Object.values(section));
+  const shared = new Set(flatten(en).map((v) => v.toLowerCase()));
+  return new Set(flatten(ptBR).map((v) => v.toLowerCase()).filter((v) => v.length > 2 && !shared.has(v)));
+}
 
 /** Roda neste processo, com ingestão liberada só enquanto dura. */
 async function execute(runId, fixtures, opts = {}) {
@@ -115,6 +136,7 @@ export async function checkAdminCatalog(browser, base, accounts, check) {
     check("E2E-001 duplicado recusado com o motivo", (await duplicate.innerText()).includes("já está no catálogo"));
 
     await page.goto(detail, { waitUntil: "networkidle" });
+    check("E2E-001 detalhe da plataforma cabe em 375 px", await fitsPhone(page));
     check("E2E-001 capacidades aparecem com o motivo do que falta",
       (await page.getByTestId("platform-capabilities").innerText()).includes("nenhum adaptador prova"));
     await page.getByTestId("platform-probe").click();
@@ -202,10 +224,12 @@ export async function checkAdminCatalog(browser, base, accounts, check) {
   try {
     const { page } = english;
     const leaks = [];
+    const portuguese = await portugueseDictionary();
     for (const path of [detail, `${base}/admin/execucoes/${captureRun}`]) {
       await page.goto(path, { waitUntil: "networkidle" });
-      const text = await interfaceText(page);
-      if (ACCENT.test(text)) leaks.push(`${path}: ${text.match(/.{0,20}[À-ÿ].{0,20}/)?.[0]}`);
+      for (const text of await interfaceTexts(page)) {
+        if (ACCENT.test(text) || portuguese.has(text.toLowerCase())) leaks.push(`${path}: ${text.slice(0, 40)}`);
+      }
     }
     check("E2E-003 detalhes em inglês sem texto português fora do dado do usuário", leaks.length === 0, leaks.join(" | "));
   } finally {
