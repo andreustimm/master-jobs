@@ -1116,19 +1116,20 @@ jobs
 jobs
   .command("verify")
   .description("Check that top-ranked postings still exist — closes the ones that 404")
-  .option("--min-fit <n>", "only verify above this fit", "55")
+  .option("--min-fit <n>", "only verify above this fit (default 55; with --source, 0 unless given)")
   .option("--limit <n>", "how many to check", "100")
   .option("--dry-run", "report without closing anything")
   .option("--source <kind:handle>", "verify only this source's open jobs, recording a run")
   .option("--run <id>", "execute this queued verification run (as dispatched by the admin screen)")
-  .action(async (opts: { minFit: string; limit: string; dryRun?: boolean; source?: string; run?: string }) => {
+  .action(async (opts: { minFit?: string; limit: string; dryRun?: boolean; source?: string; run?: string }) => {
     await withDb(async () => {
       if (opts.source || opts.run) {
         // Execução registrada fecha de verdade: simulação não tem linha em
         // `source_run`, porque contaria vaga fechada que não foi fechada.
         if (opts.dryRun) throw new Error("--dry-run cannot be combined with --source or --run");
         const runId = await runForCli("verify", opts);
-        const result = await executeSourceRun(runId, { verify: { limit: Number(opts.limit) } });
+        const minFit = opts.minFit === undefined ? {} : { minFit: Number(opts.minFit) };
+        const result = await executeSourceRun(runId, { verify: { limit: Number(opts.limit), ...minFit } });
         if (!result.ok) throw new Error(`run ${runId} did not execute: ${result.code}`);
         const n = result.counts;
         console.log(
@@ -1141,7 +1142,7 @@ jobs
       }
       let last = 0;
       const r = await verifyJobs({
-        minFit: Number(opts.minFit),
+        minFit: Number(opts.minFit ?? "55"),
         limit: Number(opts.limit),
         dryRun: opts.dryRun,
         onProgress: (done, total) => {

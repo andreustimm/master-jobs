@@ -63,6 +63,7 @@ const store: RunStore = {
   note: runs.noteRun,
   heartbeat: runs.heartbeatRun,
   running: runs.runningRuns,
+  orphans: runs.orphanedQueuedChildren,
 };
 
 describe("IT-003 idempotência concorrente e imutabilidade", () => {
@@ -443,5 +444,78 @@ describe("IT-005 nova tentativa de todas e batimento", () => {
     };
     await executeRun(pedido.runId, deps);
     expect(batimentos[1]! > batimentos[0]!).toBe(true);
+  });
+});
+
+describe("UT-008/IT-005 teto de filhas, órfãs e lease no pedido", () => {
+  async function tres(): Promise<void> {
+    await ensureSources([
+      { kind: "greenhouse", handle: "a", label: "A" },
+      { kind: "greenhouse", handle: "b", label: "B" },
+      { kind: "greenhouse", handle: "c", label: "C" },
+    ]);
+  }
+
+  it("filhas além do teto esperam na fila com o motivo, e nunca passam do teto", async () => {
+    await tres();
+    const pedido = await requestSourceRun({ kind: "all" }, null);
+    if (!pedido.ok) throw new Error("recusado");
+    let emVoo = 0;
+    let pico = 0;
+    const motivos: (string | null)[][] = [];
+    await executeRun(pedido.runId, {
+      runs: store,
+      now: () => new Date().toISOString(),
+      concurrency: 1,
+      async work() {
+        emVoo++;
+        pico = Math.max(pico, emVoo);
+        motivos.push((await db.select().from(sourceRunTable).where(eq(sourceRunTable.status, "queued"))).map((r) => r.errorCode));
+        await new Promise((r) => setTimeout(r, 5));
+        emVoo--;
+        return { ok: true, counts: { fetched: 0, inserted: 0, updated: 0, unchanged: 0, closed: 0, alive: null, inconclusive: null }, completeness: "complete" };
+      },
+    });
+    expect(pico).toBe(1);
+    expect(motivos[0]).toEqual(["waiting_slot", "waiting_slot"]);
+  });
+
+  it("filha que esperava vaga de um pai que já acabou é cancelada com o motivo", async () => {
+    await tres();
+    const pedido = await requestSourceRun({ kind: "all" }, null);
+    if (!pedido.ok) throw new Error("recusado");
+    const [filha] = await db
+      .insert(sourceRunTable)
+      .values({
+        scopeKind: "source",
+        sourceId: "greenhouse:a",
+        parentId: pedido.runId,
+        idempotencyKey: "filha-orfa",
+        configSnapshot: { sources: [] },
+        status: "queued",
+        queuedAt: "2026-09-23T12:00:00.000Z",
+        errorCode: "waiting_slot",
+      })
+      .returning({ id: sourceRunTable.id });
+    await db.update(sourceRunTable).set({ status: "interrupted" }).where(eq(sourceRunTable.id, pedido.runId));
+
+    await interruptStaleSourceRuns();
+
+    expect(await sourceRun(filha!.id)).toMatchObject({ status: "cancelled", errorCode: "parent_ended" });
+  });
+
+  it("pedido novo não se junta a uma execução morta sem batimento", async () => {
+    await catalogo();
+    const morta = await requestSourceRun({ kind: "source", sourceId: "greenhouse:acme" }, null);
+    if (!morta.ok) throw new Error("recusado");
+    await db
+      .update(sourceRunTable)
+      .set({ status: "running", heartbeatAt: "2026-01-01T00:00:00.000Z" })
+      .where(eq(sourceRunTable.id, morta.runId));
+
+    const nova = await requestSourceRun({ kind: "source", sourceId: "greenhouse:acme" }, null);
+
+    expect(nova).toMatchObject({ ok: true, created: true });
+    expect(await sourceRun(morta.runId)).toMatchObject({ status: "interrupted" });
   });
 });

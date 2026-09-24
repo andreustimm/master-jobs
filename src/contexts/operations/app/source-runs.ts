@@ -83,6 +83,8 @@ export type RunStore = {
   note(id: number, errorCode: string | null, errorDetail?: string | null): Promise<boolean>;
   heartbeat(id: number, now: string): Promise<void>;
   running(): Promise<{ id: number; status: string; heartbeatAt: string | null }[]>;
+  /** Filhas `queued` cujo pai já terminou. */
+  orphans(): Promise<number[]>;
 };
 
 export type CatalogReader = {
@@ -450,6 +452,11 @@ export async function interruptStaleRuns(deps: { runs: RunStore; now(): string; 
       errorDetail: null,
     });
     if (ok) interrupted.push(run.id);
+  }
+  // Filha que esperava vaga de um pai que já acabou não roda nunca mais:
+  // cancelada, com o motivo, para a tela não mostrá-la na fila para sempre.
+  for (const id of await deps.runs.orphans()) {
+    await deps.runs.transition(id, "queued", "cancelled", { finishedAt: now, errorCode: "parent_ended", errorDetail: null });
   }
   return interrupted;
 }
