@@ -70,10 +70,13 @@ export async function childRuns(parentId: number): Promise<SourceRunRow[]> {
   return getDb().select().from(sourceRun).where(eq(sourceRun.parentId, parentId)).orderBy(asc(sourceRun.id));
 }
 
-/** Lista paginada, mais recente primeiro; só execuções de topo (sem pai). */
-export async function listRuns(opts: { limit: number; offset: number }): Promise<{ rows: SourceRunRow[]; total: number }> {
+/**
+ * Lista paginada, mais recente primeiro; só execuções de topo (sem pai), ou
+ * — com `sourceId` — toda execução daquela fonte, inclusive as filhas.
+ */
+export async function listRuns(opts: { limit: number; offset: number; sourceId?: string }): Promise<{ rows: SourceRunRow[]; total: number }> {
   const db = getDb();
-  const top = sql`${sourceRun.parentId} is null`;
+  const top = opts.sourceId === undefined ? sql`${sourceRun.parentId} is null` : eq(sourceRun.sourceId, opts.sourceId);
   const [rows, [count]] = await Promise.all([
     db.select().from(sourceRun).where(top).orderBy(desc(sourceRun.queuedAt), desc(sourceRun.id)).limit(opts.limit).offset(opts.offset),
     db.select({ n: sql<number>`count(*)::int` }).from(sourceRun).where(top),
