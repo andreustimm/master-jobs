@@ -18,6 +18,15 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-09-24T18:03:44.000Z
+
+### New
+
+- Administrators have new Platforms and Runs screens: register a board, probe it before enabling, request a fetch for one source or all of them, and follow each run with per-source counts and the option to retry only what failed.
+- The job page shows whether the posting is still available at the source and
+  when it was last checked. Without a check it reads "availability unknown";
+  a check older than 14 days reads "stale".
+
 ## [1.24.0] - 2026-09-24T13:12:40.000Z
 
 ### Changed
