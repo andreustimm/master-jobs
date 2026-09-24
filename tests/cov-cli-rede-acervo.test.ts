@@ -775,7 +775,8 @@ describe("jho jobs sync|verify com execução registrada", () => {
   it("`--dry-run` não combina com execução registrada", async () => {
     const r = await rodar("jobs", "verify", "--dry-run", "--source", "lever:acme");
     expect((r.erro as Error).message).toContain("--dry-run cannot be combined");
-||||||| 86b84c4
+  });
+});
 
 /* -------------------- catálogo: diff e import (#223, tarefa 01) -------------------- */
 
