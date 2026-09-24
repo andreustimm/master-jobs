@@ -138,8 +138,15 @@
     {
       "idx": 19,
       "version": "7",
-      "when": 1790208014425,
-      "tag": "0019_ingest_identity_and_request_budget",
+      "when": 1790207849367,
+      "tag": "0019_score_cursor",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790208960986,
+      "tag": "0020_ingest_identity_and_request_budget",
       "breakpoints": true
     }
   ]

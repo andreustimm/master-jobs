@@ -204,13 +204,15 @@ describe("IT-010 grupo de termos parecidos", () => {
     // A fixture é pequena demais para o planejador preferir o índice sozinho.
     // Na transação do teste, desfeita no fim: sem varredura sequencial, sem
     // index scan simples (só bitmap, que exige condição de índice) e sem os
-    // dois índices de `closed_at`, que também cobrem o predicado parcial. Se
+    // índices que também cobrem o predicado parcial `closed_at is null` — os
+    // dois de `closed_at` e o de recência da passada de pontuação (#288). Se
     // `<%` não fosse elegível para `job_title_trgm_idx`, não haveria plano.
     let plan = "";
     await db
       .transaction(async (tx) => {
         await tx.execute(sql`drop index production.job_archive_scan_idx`);
         await tx.execute(sql`drop index production.job_closed_idx`);
+        await tx.execute(sql`drop index production.job_recency_open_idx`);
         await tx.execute(sql`set local enable_seqscan = off`);
         await tx.execute(sql`set local enable_indexscan = off`);
         await tx.execute(sql`select set_config('pg_trgm.word_similarity_threshold', ${String(NEAR_THRESHOLD)}, true)`);

@@ -10,9 +10,27 @@
  * vez; cada fatia faz o que cabe em {@link SWEEP_BUDGET_MS} e devolve (ADR 0025).
  */
 
-export const SWEEP_SLICES = ["sync", "termos", "captura", "reconferencia", "pontuar", "repontuar"] as const;
+export const SWEEP_SLICES = [
+  "sync",
+  "termos",
+  "captura",
+  "reconferencia",
+  "sem-nota",
+  "manutencao",
+  "repontuar",
+] as const;
 
 export type SweepSlice = (typeof SWEEP_SLICES)[number];
+
+/**
+ * As duas filas da pontuação periódica (#288), cada uma uma fatia.
+ *
+ * `sem-nota`: quem nunca completou uma passada na trilha principal — a cada
+ * dez minutos, até completar. `manutencao`: quem já completou — de hora em
+ * hora, para vaga nova, nota desatualizada e frescor. A classificação é de
+ * `scoreQueueOf` (`core/scoring/batch.ts`).
+ */
+export type ScoreQueueSlice = Extract<SweepSlice, "sem-nota" | "manutencao">;
 
 /**
  * Quais fatias tocam rede de terceiro e, por isso, respondem à política de
@@ -23,9 +41,35 @@ export const SLICE_TOUCHES_THIRD_PARTIES: Readonly<Record<SweepSlice, boolean>> 
   termos: true,
   captura: true,
   reconferencia: true,
-  pontuar: false,
+  "sem-nota": false,
+  manutencao: false,
   repontuar: false,
 };
+
+/**
+ * A varredura inteira — toda fatia, inclusive as que só pontuam — roda só em
+ * produção (#288). Dev, staging e preview vivem de fixtures (ADR 0021) e não
+ * têm agendador; uma chamada ali, com o segredo herdado por engano, não pode
+ * gastar a função nem mexer em nota.
+ *
+ * Todas as declarações presentes precisam dizer `production`, e ao menos uma
+ * precisa existir. Precedência (`JHO_ENV` antes de `VERCEL_ENV`) abriria o
+ * furo que `open-mode.ts` já descreve: `JHO_ENV=production` num preview com
+ * `VERCEL_ENV=preview` passaria. Ambiente que não se declara não é produção.
+ *
+ * O `after()` de quem salva currículo não passa por aqui: é produto, não
+ * agendamento, e roda em qualquer ambiente.
+ */
+export function sweepEnvironmentAllowed(env: {
+  jhoEnv?: string | null;
+  vercelEnv?: string | null;
+}): { allowed: true } | { allowed: false; environment: string } {
+  const declared = [env.jhoEnv, env.vercelEnv]
+    .map((value) => value?.trim().toLowerCase() ?? "")
+    .filter((value) => value.length > 0);
+  if (declared.length > 0 && declared.every((value) => value === "production")) return { allowed: true };
+  return { allowed: false, environment: declared.find((value) => value !== "production") ?? "desconhecido" };
+}
 
 /**
  * Orçamento de trabalho de uma chamada.
@@ -55,8 +99,27 @@ export const LEASE_DEAD_MS = 5 * 60_000;
  */
 export const SYNC_MIN_INTERVAL_MS = 45 * 60_000;
 
-/** Vaga nova recebe nota em até ~10 minutos depois de entrar. */
-export const SCORE_MIN_INTERVAL_MS = 10 * 60_000;
+/** Cadência da fila "sem nota": a agenda do `pg_cron` chama a cada dez minutos. */
+export const NO_SCORE_CADENCE_MS = 10 * 60_000;
+
+/** Cadência da manutenção de quem já tem nota: a agenda é de hora em hora. */
+export const MAINTENANCE_CADENCE_MS = 60 * 60_000;
+
+/**
+ * Folga entre a cadência e o intervalo mínimo por candidato.
+ *
+ * Quem dá a cadência é a agenda; o intervalo mínimo só impede que uma chamada
+ * extra (à mão, ou duas sobrepostas) trabalhe no mesmo candidato antes da
+ * hora. Igual à cadência, ele recusaria a própria agenda: a chamada anterior
+ * terminou segundos DEPOIS de começar, e o `pg_net` não chega no segundo exato.
+ */
+export const CADENCE_SLACK_MS = 60_000;
+
+/** Intervalo mínimo entre duas tentativas no mesmo candidato, por fila. */
+export const SCORE_QUEUE_MIN_INTERVAL_MS: Readonly<Record<ScoreQueueSlice, number>> = {
+  "sem-nota": NO_SCORE_CADENCE_MS - CADENCE_SLACK_MS,
+  manutencao: MAINTENANCE_CADENCE_MS - CADENCE_SLACK_MS,
+};
 
 /** Fonte sem sincronização há mais que isto dispara alarme. */
 export const STALE_SOURCE_ALARM_MS = 2 * 3_600_000;

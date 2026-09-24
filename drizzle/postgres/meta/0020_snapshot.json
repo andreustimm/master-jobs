@@ -1,6 +1,6 @@
 {
-  "id": "3df20fe3-cc63-47e0-aa2f-07760e66f9e3",
-  "prevId": "b50b8a15-26e8-4030-a5f7-2dab88d27e6a",
+  "id": "ac461e38-6149-4de9-ac5b-1489d95ddffa",
+  "prevId": "3df20fe3-cc63-47e0-aa2f-07760e66f9e3",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1817,6 +1817,27 @@
           "columns": [
             {
               "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "job_source_external_idx": {
+          "name": "job_source_external_idx",
+          "columns": [
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3681,6 +3702,53 @@
         }
       },
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "production.request_budget": {
+      "name": "request_budget",
+      "schema": "production",
+      "columns": {
+        "routine": {
+          "name": "routine",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day": {
+          "name": "day",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "used": {
+          "name": "used",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "refused": {
+          "name": "refused",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "request_budget_pk": {
+          "name": "request_budget_pk",
+          "columns": [
+            "routine",
+            "day"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

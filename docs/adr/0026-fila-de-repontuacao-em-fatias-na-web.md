@@ -1,7 +1,9 @@
 # ADR 0026 — Repontuação de candidato em fatias na web
 
 **Status:** aceita · 2026-09-23 · issue #280 (sobre a varredura fatiada da
-[ADR 0025](0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md), #281)
+[ADR 0025](0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md), #281) ·
+a ordem e o ponto de retomada da fatia (item 1) foram revistos pela
+[ADR 0027](0027-cadencia-das-notas-em-lotes-com-cursor.md) (#288)
 
 ## Contexto
 
@@ -31,7 +33,10 @@ Os limites do lugar onde o produto roda:
    lê as vagas desatualizadas em páginas por id, grava em lotes de cem e confere
    o prazo depois de cada lote; vencido, devolve `complete: false`. A fatia
    seguinte recomeça pelo que o filtro de staleness ainda aponta — nada é
-   refeito. Toda fatia avança ao menos um lote.
+   refeito. Toda fatia avança ao menos um lote. *(Revisto pela ADR 0027: a
+   leitura é em lotes de cem, da vaga mais recente para a mais antiga, com
+   cursor persistido em `score_cursor`, e só começa um lote que caberia no
+   prazo.)*
 2. **Fatia interrompida não é falha.** `runScoreQueue({ budgetMs })` devolve a
    tarefa a `pending` sem contar tentativa e com a soma das notas já gravadas;
    depois do prazo não reivindica outra tarefa.

@@ -18,7 +18,7 @@
   `budgetExhausted`.
 - `jho ops telemetry [--days N] [--json]`: requisições por rotina e chamadas
   por fatia (`sweep_run`) por dia — o comando do baseline de custo em produção.
-- Migração aditiva `0019_ingest_identity_and_request_budget` (tabela nova e
+- Migração aditiva `0020_ingest_identity_and_request_budget` (tabela nova e
   índice).
 
 ### Alterado

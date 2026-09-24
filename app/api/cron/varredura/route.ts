@@ -3,6 +3,7 @@ import {
   SLICE_TOUCHES_THIRD_PARTIES,
   parseSweepSlice,
   runSweep,
+  sweepEnvironmentAllowed,
   type SliceReport,
 } from "../../../../src/contexts/operations/index.ts";
 import { comVigia } from "../../../timeout-watch.ts";
@@ -12,18 +13,26 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 /**
- * Uma fatia da varredura por chamada: `?fatia=sync|termos|captura|reconferencia|pontuar|repontuar`.
+ * Uma fatia da varredura por chamada:
+ * `?fatia=sync|termos|captura|reconferencia|sem-nota|manutencao|repontuar`.
  *
- * Quem chama é o `pg_cron` do Supabase, via `pg_net` (ADR 0025; SQL em
- * `supabase/cron/varredura.sql`). Nem Vercel Cron, que no plano Hobby roda uma
- * vez por dia, nem GitHub Actions, que processa do outro lado do continente.
+ * Quem chama é o `pg_cron` do Supabase de PRODUÇÃO, via `pg_net` (ADR 0025;
+ * SQL em `supabase/cron/varredura.sql`). Nem Vercel Cron, que no plano Hobby
+ * roda uma vez por dia, nem GitHub Actions, que processa do outro lado do
+ * continente.
  *
- * A ordem das recusas é a ordem do custo: segredo antes de tudo, nome da fatia
- * antes de qualquer leitura, política de ingestão antes de rede de terceiro.
+ * A ordem das recusas é a ordem do custo: segredo antes de tudo, ambiente
+ * antes de qualquer trabalho (só produção, #288), nome da fatia antes de
+ * qualquer leitura, política de ingestão antes de rede de terceiro.
  */
 export async function GET(request: NextRequest) {
   const denied = cronDenied(request);
   if (denied) return denied;
+
+  const where = sweepEnvironmentAllowed({ jhoEnv: process.env.JHO_ENV, vercelEnv: process.env.VERCEL_ENV });
+  if (!where.allowed) {
+    return NextResponse.json({ error: "varredura só roda em produção", ambiente: where.environment }, { status: 503 });
+  }
 
   const parsed = parseSweepSlice(request.nextUrl.searchParams.get("fatia"));
   if (!parsed.ok) return NextResponse.json({ error: "fatia desconhecida" }, { status: 400 });

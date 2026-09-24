@@ -6,10 +6,18 @@
  * every open job; an accepted track scores only the jobs relevant to it. This
  * module is the only writer of `job_score`.
  */
-import { and, eq, getTableColumns, gt, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { clock } from "../clock.ts";
 import { getDb, type DB } from "../db/client.ts";
-import { candidate, job, jobScore } from "../db/schema.ts";
+import { candidate, job, jobScore, scoreCursor } from "../db/schema.ts";
+import {
+  SCORE_BATCH,
+  afterBatch,
+  mayStartBatch,
+  startPosition,
+  type BatchPosition,
+  type StoredCursor,
+} from "./batch.ts";
 import { ageInDays, loadRates, STALE_AFTER_DAYS } from "../../contexts/fx/index.ts";
 import {
   ensureMatchingProfile,
@@ -75,11 +83,12 @@ async function loadTrackContexts(candidateId: number): Promise<TrackContext[] | 
   return contexts;
 }
 
-/** Cem scores por comando: poucas idas ao banco, parâmetros bem abaixo do limite do protocolo. */
-const LOTE = 100;
-
-/** Vagas lidas por consulta: a memória de uma função serverless não carrega o acervo inteiro com descrição. */
-const PAGINA = 1_000;
+/**
+ * A ordem da passada: mais recente primeiro. Precisa ser idêntica à expressão
+ * do índice `job_recency_open_idx` em `schema.ts`, ou o planner não o usa.
+ * `first_seen_at` nunca é nulo, então a chave também não.
+ */
+const RECENCY = sql<string>`coalesce(${job.postedAt}, ${job.firstSeenAt})`;
 
 type Writer = Pick<DB, "insert">;
 
@@ -292,6 +301,57 @@ export async function trackFitsForJob(candidateId: number, jobId: number): Promi
   });
 }
 
+/** O cursor gravado de uma trilha, ou `null` quando ela nunca foi percorrida. */
+async function readCursor(db: DB, candidateId: number, trackId: number): Promise<StoredCursor | null> {
+  const [row] = await db
+    .select()
+    .from(scoreCursor)
+    .where(and(eq(scoreCursor.candidateId, candidateId), eq(scoreCursor.trackId, trackId)))
+    .limit(1);
+  if (!row) return null;
+  const position =
+    row.positionKey !== null && row.positionJobId !== null ? { key: row.positionKey, jobId: row.positionJobId } : null;
+  return { profileHash: row.profileHash, scorerVersion: row.scorerVersion, position, lastCompletedAt: row.lastCompletedAt };
+}
+
+/**
+ * Grava onde a passada parou. `last_completed_at` nunca volta a nulo: um lote
+ * do meio não apaga o registro de que a trilha já completou uma passada — é
+ * ele que tira o candidato da fila "sem nota".
+ */
+async function writeCursor(
+  db: DB,
+  candidateId: number,
+  context: TrackContext,
+  next: { position: BatchPosition | null; completedAt: string | null },
+): Promise<void> {
+  const values = {
+    profileHash: context.profileHash,
+    scorerVersion: SCORER_VERSION,
+    positionKey: next.position?.key ?? null,
+    positionJobId: next.position?.jobId ?? null,
+    updatedAt: clock().iso(),
+  };
+  await db
+    .insert(scoreCursor)
+    .values({
+      candidateId,
+      trackId: context.track.id,
+      ...values,
+      lastCompletedAt: next.completedAt,
+      firstCompletedAt: next.completedAt,
+    })
+    .onConflictDoUpdate({
+      target: [scoreCursor.candidateId, scoreCursor.trackId],
+      set: {
+        ...values,
+        lastCompletedAt: sql`coalesce(excluded.last_completed_at, ${scoreCursor.lastCompletedAt})`,
+        // A primeira só é gravada uma vez: é a medida de "tempo até completo".
+        firstCompletedAt: sql`coalesce(${scoreCursor.firstCompletedAt}, excluded.first_completed_at)`,
+      },
+    });
+}
+
 /**
  * Score every open job whose score is missing or stale, on every active track.
  *
@@ -300,9 +360,17 @@ export async function trackFitsForJob(candidateId: number, jobId: number): Promi
  * everything. On an accepted track, a job that stopped being relevant loses its
  * row: it is outside that track now.
  *
- * With `deadline` (epoch ms, `clock()`), the run stops between two written
- * batches once it passes and returns `complete: false`; the next run picks up
- * what is still stale.
+ * Em lotes de cem, da vaga mais recente para a mais antiga, retomando de onde
+ * a chamada anterior parou (`score_cursor`, regras em `batch.ts`). A trilha
+ * principal vai primeiro: é a nota que a tela mostra. O cursor avança depois
+ * de cada lote, mesmo que nada tenha sido gravado — a vaga fora do alvo de uma
+ * trilha aceita nunca ganha linha, e sem avançar ela voltaria em todo lote.
+ *
+ * Com `deadline` (epoch ms, `clock()`), só começa um lote que caberia pelo mais
+ * lento até ali, e devolve `complete: false` quando o prazo parou a passada; a
+ * próxima execução retoma do cursor. Sem prazo, uma passada retomada do meio é
+ * seguida de outra do topo, para que vaga nova acima do cursor não fique para
+ * depois — é a CLI, que promete tudo em dia ao terminar.
  */
 export async function scoreAll(
   candidateId: number,
@@ -311,51 +379,46 @@ export async function scoreAll(
   const db = getDb();
   const contexts = await loadTrackContexts(candidateId);
   if (!contexts) return { scored: 0, skipped: 0, topFit: 0, complete: true };
+  const ordered = [...contexts].sort((a, b) => Number(b.track.isPrimary) - Number(a.track.isPrimary));
 
   let scored = 0;
   let skipped = 0;
   let topFit = 0;
-  let expired = false;
-  let wrote = false;
-  // Só para depois de ter GRAVADO algo nesta execução: a seguinte recomeça da
-  // primeira página, e uma página inteira fora do alvo de uma trilha aceita não
-  // grava nada — parar nela repetiria a mesma página para sempre.
-  const pastDeadline = () => wrote && opts.deadline !== undefined && clock().now() >= opts.deadline;
+  let complete = true;
+  // Só conta o lote que leu vaga: uma trilha já em dia responde com leitura
+  // vazia, e ela não pode gastar o "primeiro lote sempre começa" da chamada —
+  // senão a trilha seguinte nunca começaria com prazo curto.
+  let batches = 0;
+  let slowest = 0;
 
-  for (const context of contexts) {
-    if (expired) break;
+  for (const context of ordered) {
     const freshnessCutoff = new Date(
       context.asOf - FRESHNESS_RESCORE_AFTER_HOURS * 3_600_000,
     ).toISOString();
     const pending = opts.all
-      ? isNull(job.closedAt)
-      : sql`${job.closedAt} is null and (
+      ? undefined
+      : sql`(
           ${jobScore.jobId} is null
           or ${jobScore.scorerVersion} <> ${SCORER_VERSION}
           or ${jobScore.profileHash} <> ${context.profileHash}
           or ${jobScore.scoredAt} < ${freshnessCutoff}
         )`;
 
-    // Calcula antes e persiste em lotes: cada lote é um único comando, atômico.
-    type Gravacao = { jobId: number; result: ScoreResult };
-    let pendentes: Gravacao[] = [];
-    const descarregar = async () => {
-      if (pendentes.length === 0) return;
-      await upsertScores(db, candidateId, pendentes, context);
-      pendentes = [];
-      wrote = true;
-    };
+    let position = startPosition(
+      await readCursor(db, candidateId, context.track.id),
+      { profileHash: context.profileHash, scorerVersion: SCORER_VERSION },
+      { restart: opts.all },
+    );
+    let fromTop = position === null;
 
-    const outside: number[] = [];
-    // Por páginas, em ordem de id. Com prazo, a execução para entre dois lotes
-    // e a seguinte recomeça pelo que ainda está desatualizado — o que já foi
-    // gravado saiu do filtro. O cursor é por id, e não por "o que sobrou",
-    // porque a vaga fora do alvo de uma trilha aceita nunca ganha linha e
-    // voltaria em toda página.
-    let lastId = 0;
-    pages: for (;;) {
+    for (;;) {
+      if (!mayStartBatch({ batchesDone: batches, now: clock().now(), slowestMs: slowest }, opts.deadline)) {
+        complete = false;
+        break;
+      }
+      const began = clock().now();
       const rows = await db
-        .select({ ...JOB_COLUMNS, existing: jobScore.jobId })
+        .select({ ...JOB_COLUMNS, key: RECENCY, existing: jobScore.jobId })
         .from(job)
         .leftJoin(
           jobScore,
@@ -365,10 +428,18 @@ export async function scoreAll(
             eq(jobScore.trackId, context.track.id),
           ),
         )
-        .where(and(gt(job.id, lastId), pending))
-        .orderBy(job.id)
-        .limit(PAGINA);
+        .where(
+          and(
+            isNull(job.closedAt),
+            position ? sql`(${RECENCY}, ${job.id}) < (${position.key}, ${position.jobId})` : undefined,
+            pending,
+          ),
+        )
+        .orderBy(desc(RECENCY), desc(job.id))
+        .limit(SCORE_BATCH);
 
+      const writes: { jobId: number; result: ScoreResult }[] = [];
+      const outside: number[] = [];
       for (const row of rows) {
         if (!scores(context, row)) {
           if (row.existing !== null) outside.push(row.id);
@@ -377,36 +448,41 @@ export async function scoreAll(
         }
         const result = scoreJob(row, context);
         if (context.track.isPrimary) topFit = Math.max(topFit, result.fit);
-        pendentes.push({ jobId: row.id, result });
+        writes.push({ jobId: row.id, result });
         scored++;
-        if (pendentes.length >= LOTE) {
-          await descarregar();
-          if (pastDeadline()) {
-            expired = true;
-            break pages;
-          }
-        }
       }
-      await descarregar();
-      if (rows.length < PAGINA) break;
-      lastId = rows[rows.length - 1]!.id;
-      if (pastDeadline()) {
-        expired = true;
-        break pages;
+      // Um comando por lote, atômico; o cursor vem depois das notas, então uma
+      // função morta entre os dois só repete o lote.
+      if (writes.length > 0) await upsertScores(db, candidateId, writes, context);
+      if (outside.length > 0) {
+        await db
+          .delete(jobScore)
+          .where(
+            and(
+              eq(jobScore.candidateId, candidateId),
+              eq(jobScore.trackId, context.track.id),
+              inArray(jobScore.jobId, outside),
+            ),
+          );
       }
-    }
+      const next = afterBatch(
+        rows.map((row) => ({ key: row.key, jobId: row.id })),
+        SCORE_BATCH,
+        clock().iso(),
+      );
+      await writeCursor(db, candidateId, context, next);
+      if (rows.length > 0) batches++;
+      slowest = Math.max(slowest, clock().now() - began);
 
-    for (let offset = 0; offset < outside.length; offset += LOTE) {
-      await db
-        .delete(jobScore)
-        .where(
-          and(
-            eq(jobScore.candidateId, candidateId),
-            eq(jobScore.trackId, context.track.id),
-            inArray(jobScore.jobId, outside.slice(offset, offset + LOTE)),
-          ),
-        );
+      if (next.completedAt === null) {
+        position = next.position;
+        continue;
+      }
+      if (fromTop || opts.deadline !== undefined) break;
+      position = null;
+      fromTop = true;
     }
+    if (!complete) break;
   }
 
   const primary = contexts.find((context) => context.track.isPrimary);
@@ -414,7 +490,7 @@ export async function scoreAll(
     scored,
     skipped,
     topFit,
-    complete: !expired,
+    complete,
     fxDate: primary?.fx?.date,
     fxWarning: primary?.fxWarning,
   };
@@ -483,13 +559,14 @@ export type ResultadoDoCandidato = {
 /**
  * Pontua UM candidato, derivando o perfil se ele ainda não tiver. Nunca lança.
  *
- * É a unidade de `scoreEveryCandidate` e da fatia `pontuar` da varredura
- * (ADR 0025): as duas precisam da mesma regra — sem perfil próprio, não
- * pontua —, e duas cópias dela seriam duas chances de divergir.
+ * É a unidade de `scoreEveryCandidate` e das fatias `sem-nota` e `manutencao`
+ * da varredura (ADR 0025, #288): todas precisam da mesma regra — sem perfil
+ * próprio, não pontua —, e duas cópias dela seriam duas chances de divergir.
+ * `deadline` é o prazo da chamada da fatia; `scoreAll` para entre lotes.
  */
 export async function scoreCandidate(
   candidateId: number,
-  opts: { all?: boolean } = {},
+  opts: { all?: boolean; deadline?: number } = {},
 ): Promise<ResultadoDoCandidato> {
   let perfil: ResultadoPerfil["estado"] = "sem-curriculo";
   try {
