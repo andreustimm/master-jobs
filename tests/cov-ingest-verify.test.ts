@@ -342,7 +342,7 @@ describe("verifyJobs", () => {
       }) as unknown as typeof fetch,
     });
 
-    expect(r).toEqual({ checked: 0, gone: 0, alive: 0, inconclusive: 0, bySource: {} });
+    expect(r).toEqual({ checked: 0, gone: 0, alive: 0, inconclusive: 0, bySource: {}, due: 0 });
     expect(chamadas).toBe(0);
   });
 
