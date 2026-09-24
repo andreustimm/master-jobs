@@ -12,7 +12,6 @@ import {
   ERROR_DETAIL_MAX,
   isRetryable,
   isStale,
-  nextRunStatus,
   redactDetail,
   refuseRun,
   runKey,
@@ -266,11 +265,9 @@ async function finish(deps: ExecuteDeps, id: number, status: RunStatus, outcome:
   });
 }
 
+/** `queued → running` com a trava do estado de origem: só um executor ganha a linha. */
 async function start(deps: ExecuteDeps, id: number): Promise<boolean> {
   const now = deps.now();
-  // O domínio decide se `queued → running` vale; a infra aplica com a trava do
-  // estado de origem, e só um executor ganha a linha.
-  if (nextRunStatus("queued", { type: "start" }) !== "running") return false;
   return deps.runs.transition(id, "queued", "running", { startedAt: now, heartbeatAt: now, errorCode: null, errorDetail: null });
 }
 
@@ -368,7 +365,7 @@ async function executeAll(parent: RunRow, snapshot: RunSnapshot, deps: ExecuteDe
   const status = composeParentStatus(statuses);
   const counts = sumCounts(outcomes.map((o) => o.counts));
   const failed = statuses.filter((s) => s !== "succeeded").length;
-  await deps.runs.transition(parent.id, "running", status === "running" ? "partial" : status, {
+  await deps.runs.transition(parent.id, "running", status, {
     ...counts,
     finishedAt: deps.now(),
     errorCode: failed > 0 ? "children_failed" : null,

@@ -24,8 +24,10 @@ explícita e de uma vez (#223):
    desabilitar.
 3. `pnpm jho sources import --apply` — grava e marca toda linha como gerida.
 
-Depois disso, editar o YAML só acrescenta fontes novas; mudar ou desligar uma
-existente é escrita no banco. Rode o `diff` sempre que mexer
+Depois disso, mudar ou desligar uma fonte importada é escrita no banco: o YAML
+não a regrava mais. Entrada **nova** no arquivo entra como linha não gerida e
+continua espelhando o YAML — inclusive desligada ao sair dele — até o próximo
+`import --apply` ou a primeira edição pela tela. Rode o `diff` sempre que mexer
 no arquivo: divergência em linha gerida não é aplicada sozinha.
 
 > **Não rode o passo 3 antes da tela de Plataformas** (tarefa 03 da #223).
