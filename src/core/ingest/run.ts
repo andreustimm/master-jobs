@@ -9,9 +9,9 @@
  *     listed everything it has (`decideAbsenceClosure`). A partial window
  *     closes nothing by absence.
  */
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { catalogId, planCatalogImport } from "../../contexts/sourcing/domain/catalog.ts";
-import { platformQuota, syncableSources } from "../../contexts/sourcing/index.ts";
+import { nextRevision, platformQuota, syncableSources } from "../../contexts/sourcing/index.ts";
 import { clock } from "../clock.ts";
 import { getDb } from "../db/client.ts";
 import { deleteClosedJobsWithoutApplication } from "../db/retention.ts";
@@ -71,10 +71,15 @@ export type SyncResult = {
  * `wholeFile` diz que `configs` é o arquivo inteiro, e só então uma linha não
  * gerida ausente dele é desabilitada. `syncSource` passa uma fonte só, e
  * tratar isso como o arquivo desligaria todas as outras.
+ *
+ * `insertOnly` é para quem recebe as fontes do BANCO (`syncSource`, `syncAll`
+ * depois de `catalogForSync`): elas não são o arquivo, então só garantem que a
+ * linha existe. Espelhar ali deixaria uma seleção velha religar uma linha que o
+ * arquivo acabou de desligar.
  */
 export async function ensureSources(
   configs: readonly (SourceConfig & { enabled?: boolean })[],
-  opts: { wholeFile?: boolean } = {},
+  opts: { wholeFile?: boolean; insertOnly?: boolean } = {},
 ): Promise<void> {
   const db = getDb();
   const rows = await db
@@ -106,14 +111,14 @@ export async function ensureSources(
       })
       .onConflictDoNothing({ target: source.id });
   }
-  for (const entry of plan.mirrors) {
+  for (const entry of opts.insertOnly ? [] : plan.mirrors) {
     await db
       .update(source)
       .set({
         label: entry.label,
         rationale: entry.rationale ?? null,
         enabled: entry.enabled ?? true,
-        configRevision: sql`${source.configRevision} + 1`,
+        configRevision: nextRevision(),
       })
       // A leitura acima pode estar velha: a condição de regime vai no próprio
       // UPDATE, para uma linha que virou gerida no meio não ser regravada.
@@ -122,7 +127,7 @@ export async function ensureSources(
   if (opts.wholeFile && plan.orphans.length > 0) {
     await db
       .update(source)
-      .set({ enabled: false, configRevision: sql`${source.configRevision} + 1` })
+      .set({ enabled: false, configRevision: nextRevision() })
       .where(and(inArray(source.id, plan.orphans), isNull(source.managedAt), eq(source.enabled, true)));
   }
 }
@@ -255,7 +260,7 @@ async function syncOne(config: SourceConfig, companies: Map<string, number>): Pr
  */
 export async function syncSource(config: SourceConfig): Promise<SyncSourceResult> {
   guardIngestion();
-  await ensureSources([config]);
+  await ensureSources([config], { insertOnly: true });
   return syncOne(config, new Map());
 }
 
@@ -282,7 +287,7 @@ export async function syncAll(
   guardIngestion();
 
   const startedAt = new Date().toISOString();
-  await ensureSources(configs);
+  await ensureSources(configs, { insertOnly: true });
 
   const concurrency = opts.concurrency ?? 4;
   const queue = [...configs];

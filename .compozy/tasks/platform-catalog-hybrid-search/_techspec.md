@@ -137,8 +137,8 @@ no DDL (G20).
 | Coluna | Tipo | Regra |
 |---|---|---|
 | `retired_at` | `text` nulo | Aposentadoria suave. Aposentada não entra em execução "todas" nem aceita captura; vagas e execuções continuam legíveis. |
-| `origin` | `text` (`yaml` \| `admin`) | Quem criou a linha. |
-| `config_revision` | `integer` não nulo, padrão 1 | Sobe a cada edição; entra na chave de idempotência e no retrato da execução. |
+| `origin` | `text` (`yaml` \| `admin` \| `system`), padrão `system` | Quem criou a linha. `system` cobre as linhas que não vêm do arquivo nem da tela (`manual`, `recruiter`, `<kind>:~terms`). |
+| `config_revision` | `integer`, padrão 1 | Sobe a cada edição; entra na chave de idempotência e no retrato da execução. Aceita nulo porque `source` atravessa a importação do snapshot legado e coluna posterior a ele é opcional (`tests/postgres-schema.test.ts`); nulo conta como 1. |
 | `secret_ref` | `text` nulo | Nome da variável de ambiente. Validado por padrão de nome; um valor com cara de chave é recusado antes de gravar. |
 | `managed_at` | `text` nulo | Quando a linha passou a ser governada pelo banco (importação ou edição do admin). |
 

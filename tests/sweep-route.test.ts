@@ -17,6 +17,7 @@ vi.mock("../src/contexts/operations/index.ts", async (importOriginal) => {
 });
 
 const { GET } = await import("../app/api/cron/varredura/route.ts");
+const { SWEEP_SLICES } = await import("../src/contexts/operations/index.ts");
 
 const ENV_KEYS = ["CRON_SECRET", "JHO_ENV", "VERCEL_ENV", "JHO_SOURCE_ALLOWLIST", "JHO_INGESTION_OPT_IN"] as const;
 const saved = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -87,9 +88,39 @@ describe("recusa antes de qualquer efeito", () => {
     expect(runSweep).not.toHaveBeenCalled();
   });
 
-  it("deployment que não pode gastar cota: 503 com motivo nas fatias de rede", async () => {
+  it("fora de produção nenhuma fatia trabalha — nem as que só pontuam (#288)", async () => {
+    process.env.CRON_SECRET = "segredo-de-verdade";
+    const ambientes: Array<Record<string, string>> = [
+      {},
+      { VERCEL_ENV: "preview" },
+      { JHO_ENV: "staging" },
+      { JHO_ENV: "dev" },
+      { JHO_ENV: "local" },
+      // Declarações em conflito: `JHO_ENV` não promove um preview.
+      { JHO_ENV: "production", VERCEL_ENV: "preview" },
+    ];
+    for (const ambiente of ambientes) {
+      delete process.env.JHO_ENV;
+      delete process.env.VERCEL_ENV;
+      Object.assign(process.env, ambiente);
+      for (const fatia of SWEEP_SLICES) {
+        const r = await GET(pedido(fatia, "Bearer segredo-de-verdade"));
+        expect(r.status, `${JSON.stringify(ambiente)} ${fatia}`).toBe(503);
+        expect(await r.json()).toMatchObject({ error: "varredura só roda em produção" });
+      }
+    }
+    expect(runSweep).not.toHaveBeenCalled();
+  });
+
+  it("fora de produção, segredo errado continua 401: o ambiente não vaza antes da autenticação", async () => {
     process.env.CRON_SECRET = "segredo-de-verdade";
     process.env.VERCEL_ENV = "preview";
+    expect((await GET(pedido("sem-nota", "Bearer outro"))).status).toBe(401);
+  });
+
+  it("produção sem allowlist declarada bloqueia as fatias de rede, com motivo", async () => {
+    process.env.CRON_SECRET = "segredo-de-verdade";
+    process.env.JHO_ENV = "production";
     for (const fatia of ["sync", "termos", "captura", "reconferencia"]) {
       const r = await GET(pedido(fatia, "Bearer segredo-de-verdade"));
       expect(r.status, fatia).toBe(503);
@@ -98,10 +129,9 @@ describe("recusa antes de qualquer efeito", () => {
     expect(runSweep).not.toHaveBeenCalled();
   });
 
-  it("produção sem allowlist declarada também é bloqueada", async () => {
-    process.env.CRON_SECRET = "segredo-de-verdade";
-    process.env.JHO_ENV = "production";
-    expect((await GET(pedido("sync", "Bearer segredo-de-verdade"))).status).toBe(503);
+  it("a fatia antiga `pontuar` não existe mais: 400, sem trabalho", async () => {
+    produção();
+    expect((await GET(pedido("pontuar", "Bearer segredo-de-verdade"))).status).toBe(400);
     expect(runSweep).not.toHaveBeenCalled();
   });
 });
@@ -117,12 +147,14 @@ describe("com o segredo certo", () => {
     expect(await r.json()).toMatchObject({ slice: "sync", items: 3, durationMs: 1234 });
   });
 
-  it("pontuar não toca rede de terceiro e roda mesmo onde a ingestão é bloqueada", async () => {
+  it("as fatias de pontuação não tocam rede de terceiro: em produção rodam sem allowlist de fontes", async () => {
     process.env.CRON_SECRET = "segredo-de-verdade";
-    process.env.VERCEL_ENV = "preview";
-    const r = await GET(pedido("pontuar", "Bearer segredo-de-verdade"));
-    expect(r.status).toBe(200);
-    expect(runSweep.mock.calls[0]![0]).toBe("pontuar");
+    process.env.VERCEL_ENV = "production";
+    for (const fatia of ["sem-nota", "manutencao", "repontuar"]) {
+      const r = await GET(pedido(fatia, "Bearer segredo-de-verdade"));
+      expect(r.status, fatia).toBe(200);
+    }
+    expect(runSweep.mock.calls.map((call) => call[0])).toEqual(["sem-nota", "manutencao", "repontuar"]);
   });
 
   it("o alarme de fonte sem sync sai no log mesmo sem Sentry", async () => {

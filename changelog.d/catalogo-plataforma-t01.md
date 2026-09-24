@@ -3,7 +3,7 @@
 ### Adicionado
 
 - Catálogo de fontes governado pelo banco (#223, tarefa 01). Migration aditiva
-  `0019_source_catalog` e `0020_backfill_source_origin`: `source` ganha `retired_at`, `origin`, `config_revision`,
+  `0020_source_catalog` e `0021_backfill_source_origin`: `source` ganha `retired_at`, `origin`, `config_revision`,
   `secret_ref` e `managed_at`. Linha não gerida espelha `config/sources.yaml`,
   inclusive `enabled: false`, e é desabilitada quando sai do arquivo; linha
   gerida (importada ou editada) nunca é sobrescrita pelo YAML.
@@ -20,8 +20,10 @@
 - O sync (`jho jobs sync`, `jho jobs sweep` e a fatia `sync` da varredura)
   seleciona as fontes do banco por `catalogForSync()`: habilitada, não
   aposentada, kind com adapter e handle fora de `~terms`. `loadSources()`
-  devolve toda entrada com `enabled`; saúde e captura por termo filtram as
-  habilitadas explicitamente.
+  devolve toda entrada com `enabled`; a captura por termo filtra as
+  habilitadas explicitamente, e a saúde (`jho sources list`, tela de operações)
+  segue o mesmo regime por linha do sync. `syncAll`/`syncSource` só inserem a
+  linha que falta: quem recebe fontes do banco não espelha o arquivo.
 
 ## pt-BR
 

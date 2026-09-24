@@ -9,8 +9,9 @@
  */
 import { and, eq, like, lt, sql } from "drizzle-orm";
 import { getDb } from "../../../core/db/client.ts";
-import { candidate, source, sweepLease, sweepRun } from "../../../core/db/schema.ts";
-import { LEASE_DEAD_MS, type SweepLease, type SweepRuns } from "../domain/sweep.ts";
+import { candidate, scoreCursor, source, sweepLease, sweepRun, targetTrack } from "../../../core/db/schema.ts";
+import { scoreQueueOf } from "../../../core/scoring/batch.ts";
+import { LEASE_DEAD_MS, type ScoreQueueSlice, type SweepLease, type SweepRuns } from "../domain/sweep.ts";
 
 const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -61,9 +62,20 @@ export async function lastSyncedBySource(): Promise<Map<string, string | null>> 
   return new Map(rows.map((row) => [row.id, row.lastSyncedAt]));
 }
 
-export async function candidateIds(): Promise<number[]> {
-  const rows = await getDb().select({ id: candidate.id }).from(candidate).orderBy(candidate.id);
-  return rows.map((row) => row.id);
+/**
+ * Cada candidato com a fila em que está: o `last_completed_at` do cursor da
+ * trilha principal decide (`scoreQueueOf`). Sem trilha principal, ou sem
+ * cursor, é "sem nota" — inclusive quem ainda não tem currículo: a unidade
+ * deriva o perfil, recusa sem gravar nada, e a próxima agenda tenta de novo.
+ */
+export async function candidateScoreQueues(): Promise<{ id: number; queue: ScoreQueueSlice }[]> {
+  const rows = await getDb()
+    .select({ id: candidate.id, lastCompletedAt: scoreCursor.lastCompletedAt })
+    .from(candidate)
+    .leftJoin(targetTrack, and(eq(targetTrack.candidateId, candidate.id), eq(targetTrack.isPrimary, true)))
+    .leftJoin(scoreCursor, and(eq(scoreCursor.candidateId, candidate.id), eq(scoreCursor.trackId, targetTrack.id)))
+    .orderBy(candidate.id);
+  return rows.map((row) => ({ id: row.id, queue: scoreQueueOf(row.lastCompletedAt) }));
 }
 
 export const drizzleSweepRuns: SweepRuns = {

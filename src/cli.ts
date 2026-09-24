@@ -591,7 +591,9 @@ sources
       const plan = await importCatalog({ apply, now: clock().iso() });
       printCatalogPlan(plan);
       console.log(
-        `\n  ${plan.inserts.length} to insert · ${plan.mirrors.length} to update · ${plan.orphans.length} to disable` +
+        (apply
+          ? `\n  ${plan.inserts.length} inserted · ${plan.mirrors.length} updated · ${plan.orphans.length} disabled`
+          : `\n  ${plan.inserts.length} to insert · ${plan.mirrors.length} to update · ${plan.orphans.length} to disable`) +
           (apply ? c.green("  applied: the database now governs the catalog") : c.dim("  dry run: pass --apply to write")),
       );
     });

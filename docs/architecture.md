@@ -97,8 +97,9 @@ pontuada:
 ```mermaid
 flowchart TD
     Y["config/sources.yaml"] -->|"loadSources() + Zod<br/>com enabled"| CFG["CatalogEntry[]"]
-    CFG --> ES["ensureSources()<br/>espelha só linha não gerida"]
-    ES --> SA["syncAll(configs, concurrency)<br/>fila + N workers"]
+    CFG --> ES["catalogForSync() → ensureSources()<br/>espelha só linha não gerida"]
+    ES --> SEL["syncableSources()<br/>seleção do BANCO: habilitada,<br/>não aposentada, com adapter, fora de ~terms"]
+    SEL --> SA["syncAll(configs, concurrency)<br/>fila + N workers"]
 
     SA --> SO["syncOne(config)"]
     SO --> AD["getAdapter(kind)<br/>registry.ts"]

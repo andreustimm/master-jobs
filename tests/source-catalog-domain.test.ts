@@ -16,6 +16,8 @@ import {
   type CatalogRow,
   type CatalogWrite,
 } from "../src/contexts/sourcing/domain/catalog.ts";
+import { probeSource } from "../src/contexts/sourcing/app/catalog.ts";
+import { HttpError } from "../src/core/sources/http-port.ts";
 import { ADAPTERS } from "../src/core/sources/registry.ts";
 import { FETCHABLE_SOURCE_KINDS } from "../src/core/sources/types.ts";
 
@@ -234,5 +236,30 @@ describe("UT-004 plano de importação", () => {
     expect(isSyncEligible({ ...base, retiredAt: "2026-09-23T00:00:00.000Z" })).toBe(false);
     expect(isSyncEligible({ ...base, kind: "manual" })).toBe(false);
     expect(isSyncEligible({ ...base, kind: "remotive", handle: "~terms" })).toBe(false);
+  });
+});
+
+describe("UT-001 sondagem pelo adapter (probeSource)", () => {
+  const snapshot = (count: number, warnings: string[], completeness: "complete" | "partial") => async () => ({
+    jobs: Array.from({ length: count }, (_, i) => ({ externalId: String(i), title: "t", url: "https://x", companyName: "c", raw: {} })),
+    warnings,
+    completeness,
+  });
+
+  it("lista completa e vazia é vazio, mesmo com aviso do adapter", async () => {
+    const report = await probeSource(snapshot(0, ["ashby:acme returned no listed jobs"], "complete") as never);
+    expect(report).toMatchObject({ outcome: "empty", status: 200, count: 0 });
+  });
+
+  it("lista parcial, vazia e com aviso é falha de leitura, nunca vazio", async () => {
+    const report = await probeSource(snapshot(0, ["Sem resposta de https://acme.com/jobs"], "partial") as never);
+    expect(report).toMatchObject({ outcome: "failed", status: null, count: null });
+  });
+
+  it("HttpError leva o status para a classificação", async () => {
+    const report = await probeSource(async () => {
+      throw new HttpError(429, "https://x", "HTTP 429");
+    });
+    expect(report).toMatchObject({ outcome: "blocked", status: 429 });
   });
 });

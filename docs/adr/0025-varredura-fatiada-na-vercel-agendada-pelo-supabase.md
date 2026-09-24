@@ -1,6 +1,8 @@
 # ADR 0025 — Varredura fatiada na Vercel, agendada pelo `pg_cron` do Supabase
 
-**Status:** aceita · ativação pendente de passo humano · 2026-09-23 · issue #281
+**Status:** aceita · ativação pendente de passo humano · 2026-09-23 · issue #281 ·
+fatias de pontuação e restrição a produção revistas pela
+[ADR 0027](0027-cadencia-das-notas-em-lotes-com-cursor.md) (#288)
 
 ## Contexto
 
@@ -25,14 +27,16 @@ agendador; a regra de ser um só continua.
 1. **Trabalho em fatias de menos de 25 s.** `GET /api/cron/varredura?fatia=…`
    executa uma fatia por chamada, com orçamento de 20 s
    (`SWEEP_BUDGET_MS`): `sync`, `termos`, `captura`, `reconferencia`,
-   `pontuar`. Uma fatia só **começa** uma unidade que caberia pelo tempo da
+   `pontuar` (desde a [ADR 0027](0027-cadencia-das-notas-em-lotes-com-cursor.md),
+   `sem-nota` e `manutencao`). Uma fatia só **começa** uma unidade que caberia pelo tempo da
    mais lenta até ali; unidade começada não é interrompida.
 2. **Sync por fonte, round-robin.** A fatia `sync` escolhe a fonte com a
    tentativa mais antiga (nunca tentada primeiro) e segue enquanto couber.
    Cada fonte é sincronizada no máximo a cada 45 min — teto de custo por
    fonte, qualquer que seja a cadência do agendador.
 3. **Reserva por unidade, com prazo.** `sweep_lease` guarda uma reserva por
-   fonte (`sync:<id>`) e por candidato (`pontuar:<id>`), tomada por um único
+   fonte (`sync:<id>`) e por candidato (`pontuar:<id>`; `pontuacao:<id>` desde a
+   ADR 0027), tomada por um único
    `INSERT … ON CONFLICT DO UPDATE … WHERE` — com N chamadas simultâneas, uma
    vence. Reserva de função morta vence em 5 min; a tentativa conta para a
    ordem, então uma fonte que mata a função vai para o fim da fila em vez de
@@ -59,8 +63,9 @@ agendador; a regra de ser um só continua.
    há um só agendador ativo.
 
 As invariantes de sempre continuam: guarda de ingestão (ADR 0021) antes de
-qualquer rede de terceiro — e a fatia `pontuar`, que não toca terceiros, é a
-única que roda sem ela; ingestão nunca escreve em `application` (regra 2); só
+qualquer rede de terceiro — e as fatias que só pontuam (`pontuar`; desde a ADR
+0027, `sem-nota`, `manutencao` e `repontuar`), que não tocam terceiros, são as
+únicas que rodam sem ela; a varredura inteira só roda em produção (ADR 0027); ingestão nunca escreve em `application` (regra 2); só
 404/410 fecham vaga; erro de uma fonte vira linha de métrica e a próxima segue;
 o livro de cota por plataforma vale também para a fonte sincronizada na fatia.
 

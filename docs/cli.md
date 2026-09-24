@@ -343,6 +343,9 @@ divergência segue no `diff`. É a transição de uma vez só; banco vazio e
 fixture continuam nascendo do YAML sem ela. Ver `docs/data-model.md`
 (`source`).
 
+Em produção, não aplique antes da tela de Plataformas: sem ela nada edita ou
+desliga uma linha gerida (`docs/operations.md`, "Catálogo de fontes").
+
 | Flag | Efeito |
 |---|---|
 | `--apply` | Grava o plano em vez de só imprimi-lo |
