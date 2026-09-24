@@ -153,6 +153,16 @@ describe("IT-007 disponibilidade conciliada com a vaga", () => {
     expect((await jobAvailability(id, "2026-09-23T00:00:00.000Z")).state).toBe("unknown");
   });
 
+  it("404 antigo, reabertura e novo fechamento pelo sync: encerrada sem motivo provado", async () => {
+    const id = await vaga("/ciclo");
+    await applyVerdict({ jobId: id, verdict: "gone", httpCode: 404, checkedAt: "2026-09-20T00:00:00.000Z" });
+    // O sync reabre (voltou à listagem) e depois fecha de novo por ausência.
+    await db.update(job).set({ closedAt: null }).where(eq(job.id, id));
+    await db.update(job).set({ closedAt: "2026-09-22T00:00:00.000Z" }).where(eq(job.id, id));
+
+    expect(await jobAvailability(id, "2026-09-23T00:00:00.000Z")).toMatchObject({ state: "closed", reason: "unknown" });
+  });
+
   it("vaga conferida antes dos eventos mostra a data da linha, não 'nunca'", async () => {
     const id = await vaga("/legada");
     await db.update(job).set({ checkedAt: "2026-09-10T00:00:00.000Z", checkStatus: "alive" }).where(eq(job.id, id));

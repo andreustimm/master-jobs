@@ -58,8 +58,13 @@ export async function jobAvailability(jobId: number, now = clock().iso()): Promi
   return {
     state,
     lastCheckedAt: last?.checkedAt ?? row?.checkedAt ?? null,
-    // Só um 404/410 sustenta motivo; encerrada pelo sync fica sem motivo provado.
-    reason: state === "closed" && decisive?.verdict === "gone" ? (decisive.reason as StatusReason) : "unknown",
+    // Só um 404/410 do fechamento em diante sustenta motivo: um 404 antigo,
+    // desmentido por reabertura e seguido de fechamento pelo sync, não explica
+    // este fechamento.
+    reason:
+      state === "closed" && decisive?.verdict === "gone" && decisive.checkedAt >= (row?.closedAt ?? "")
+        ? (decisive.reason as StatusReason)
+        : "unknown",
   };
 }
 
