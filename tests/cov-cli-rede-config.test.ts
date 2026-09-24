@@ -25,6 +25,9 @@
  * Fronteira FORA: o formato de cada provedor (`cov-*`/`fx-context`) e a
  * matemática de conversão.
  */
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { authUser, candidate, positioningTask, skill } from "../src/core/db/schema.ts";
@@ -194,16 +197,44 @@ describe("jho db migrate", () => {
     expect(primeira.code).toBeUndefined();
     expect(segunda.code).toBeUndefined();
     expect(segunda.out).toContain("schema is up to date");
+    expect(segunda.out).not.toContain("aplicadas:");
   });
 
-  it("--additive-only recusa lote não aditivo sem aplicar nada, e aplica o aditivo dizendo o quê", async () => {
-    // Recria a pendência de verdade: a 0014 reescreve dado, a 0015 e a 0016 só criam.
-    const desfazer = [
-      "drop index production.job_score_job_idx",
-      "drop table production.sweep_run, production.sweep_lease",
-      "delete from drizzle.__drizzle_migrations where id >= 15",
-    ];
-    for (const comando of desfazer) await banco().execute(sql.raw(comando));
+  it("--additive-only aplica uma aditiva pendente e diz qual", async () => {
+    await rodar("db", "migrate");
+    // A CLI lê `./drizzle/postgres`; uma cópia com uma migração sintética no
+    // fim do journal simula o próximo push sem desfazer objeto real.
+    const raiz = mkdtempSync(join(tmpdir(), "master-jobs-cli-migrate-"));
+    const pasta = join(raiz, "drizzle", "postgres");
+    cpSync("./drizzle/postgres", pasta, { recursive: true });
+    const caminho = join(pasta, "meta", "_journal.json");
+    const journal = JSON.parse(readFileSync(caminho, "utf8")) as { entries: Array<{ idx: number; when: number; tag: string }> };
+    const ultima = journal.entries.at(-1)!;
+    journal.entries.push({ ...ultima, idx: ultima.idx + 1, when: ultima.when + 1000, tag: "9999_cli_aditiva" });
+    writeFileSync(caminho, JSON.stringify(journal));
+    writeFileSync(join(pasta, "9999_cli_aditiva.sql"), 'CREATE TABLE "production"."cli_aditiva" ("id" integer);');
+    const original = process.cwd();
+    process.chdir(raiz);
+    try {
+      const aditiva = await rodar("db", "migrate", "--additive-only");
+      expect(aditiva.code).toBeUndefined();
+      expect(aditiva.out).toContain("aplicadas: 9999_cli_aditiva");
+      expect(aditiva.out).toContain("schema is up to date");
+    } finally {
+      process.chdir(original);
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+
+  it("--additive-only recusa lote não aditivo sem aplicar nada, e passa quando nada falta", async () => {
+    await rodar("db", "migrate");
+    // Recria a pendência só na tabela de controle: a 0014 reescreve dado. A
+    // recusa vem antes de qualquer DDL, então os objetos já criados não
+    // atrapalham, e devolver as linhas restaura o estado — sem depender de
+    // qual é a última migração do repositório.
+    const removidas = await banco().execute(sql.raw(
+      "delete from drizzle.__drizzle_migrations where id >= 15 returning id, hash, created_at",
+    ));
     const recusa = await rodar("db", "migrate", "--additive-only");
     expect(recusa.code).toBe(1);
     expect(recusa.err).toContain("exige execução manual");
@@ -211,15 +242,13 @@ describe("jho db migrate", () => {
     const [depois] = await banco().execute(sql.raw("select count(*)::int as n from drizzle.__drizzle_migrations"));
     expect(depois!.n).toBe(14);
 
-    await rodar("db", "migrate");
-    await banco().execute(sql.raw("drop table production.sweep_run, production.sweep_lease"));
-    await banco().execute(sql.raw(
-      "delete from drizzle.__drizzle_migrations where created_at = (select max(created_at) from drizzle.__drizzle_migrations)",
-    ));
-    const aditiva = await rodar("db", "migrate", "--additive-only");
-    expect(aditiva.code).toBeUndefined();
-    expect(aditiva.out).toContain("aplicadas: 0016_sweep_lease_and_runs");
-    expect(aditiva.out).toContain("schema is up to date");
+    for (const linha of removidas) {
+      await banco().execute(sql`insert into drizzle.__drizzle_migrations (id, hash, created_at) values (${linha.id}, ${linha.hash}, ${linha.created_at})`);
+    }
+    const emDia = await rodar("db", "migrate", "--additive-only");
+    expect(emDia.code).toBeUndefined();
+    expect(emDia.out).toContain("schema is up to date");
+    expect(emDia.out).not.toContain("aplicadas:");
   });
 });
 

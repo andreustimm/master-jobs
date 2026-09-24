@@ -121,7 +121,8 @@ describe("runMigrations({ additiveOnly }) — o modo do push em main", () => {
   });
 
   it("applies an additive batch and reports its tags", async () => {
-    expect(await runMigrations(folder)).toHaveLength(17);
+    const published = (JSON.parse(readFileSync(join(folder, "meta", "_journal.json"), "utf8")) as { entries: unknown[] }).entries;
+    expect(await runMigrations(folder)).toHaveLength(published.length);
     append("0017_aditiva", 'CREATE TABLE "production"."nova" ("id" integer);');
     expect(await runMigrations(folder, { additiveOnly: true })).toEqual(["0017_aditiva"]);
     expect((await getDb().execute(sql`select to_regclass('production.nova') as t`))[0]!.t).toBe("production.nova");

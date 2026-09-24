@@ -211,6 +211,8 @@ describe("o histórico real de drizzle/postgres calibra o detector", () => {
     "0014_clear_contact_candidate_names": ["data-rewrite"],
     "0015_job_score_job_idx": [],
     "0016_sweep_lease_and_runs": [],
+    "0017_job_title_trgm": [],
+    "0018_job_analysis": [],
   };
 
   it.each(journal.entries.map((entry) => entry.tag))("%s", (tag) => {

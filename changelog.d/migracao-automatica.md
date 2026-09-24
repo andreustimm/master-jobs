@@ -8,6 +8,7 @@
 ### Alterado
 
 - A promoção `dev → staging` classifica `staging..alvo` com o mesmo detector: migração aditiva promove sem `confirmar-migracao`, inclusive no agendamento; não aditiva, `.sql` publicado alterado ou arquivo fora de `drizzle/postgres/` continuam exigindo a confirmação, e o erro lista arquivo, motivo e comando. `schema.ts` sai da guarda (o CI já prova a sincronia com o SQL).
+- A PR `staging → main` aberta pelo robô passa a receber `qualidade` e `schema-e-migracao` na cabeça: a promoção dispara `ci.yml` por `workflow_dispatch` em `staging` (única forma de evento que o `GITHUB_TOKEN` dispara), e o dono não precisa mais fechar e reabrir a PR.
 - `migrar.sh` exige `MIGRATION_MODE` (`aditiva` ou `revisada`); valor ausente ou desconhecido não migra nada.
 
 ## pt-BR

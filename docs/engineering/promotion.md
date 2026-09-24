@@ -145,6 +145,10 @@ Com `GITHUB_TOKEN`, o push de R pode não disparar outro workflow; a chamada
 reutilizável garante o CI sem depender desse efeito. `RELEASE_PAT` continua
 opcional para disparar workflows a jusante. Sem PAT, abrir a PR ainda depende
 da permissão de Actions para criar PRs nas configurações do repositório.
+Essa PR, criada pelo robô, também não dispara o CI de `pull_request`; o último
+passo da promoção dispara `ci.yml` por `workflow_dispatch` em `staging` para
+que os checks exigidos por `main` existam na cabeça dela
+([github-protections.md](github-protections.md#o-caminho-humano)).
 
 O retorno `main → dev`, o versionamento de hotfixes em `main` e a criação
 idempotente de GitHub Releases permanecem em `sincronizar-apos-main.yml`.

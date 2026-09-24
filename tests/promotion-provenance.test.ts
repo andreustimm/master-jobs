@@ -107,6 +107,14 @@ const data = JSON.parse(fs.readFileSync(root + '/api.json', 'utf8'));
 if (data.fail) process.exit(42);
 const path = args.find(arg => arg.startsWith('repos/')) ?? '';
 let result;
+if (args[0] === 'workflow') {
+  if (args[1] !== 'run') throw new Error('Unexpected workflow call');
+  process.exit(0);
+}
+if (args[0] === 'pr' && data.noPR) {
+  if (args[1] !== 'list') throw new Error('Unexpected PR call');
+  process.exit(0);
+}
 if (args[0] === 'pr' && data.promotionPR) {
   if (args[1] !== 'list') throw new Error('Existing PR must be updated');
   process.stdout.write('77');
@@ -488,6 +496,28 @@ describe("V01-05 — ancestry and existing delivery", () => {
     expect(updated).toContain("https://github.com/owner/repo/actions/runs/200");
     expect(updated).not.toContain("run/100");
     expect(calls().some((args) => args.includes("assignees[]=andreustimm"))).toBe(true);
+  });
+
+  it("dispatches CI on staging only while the production PR is open", () => {
+    // PR do robô não recebe `pull_request` CI; sem o dispatch, os checks
+    // exigidos em `main` nunca aparecem na cabeça dela.
+    const workflow = YAML.parse(readFileSync(".github/workflows/promover-para-staging.yml", "utf8"));
+    const step = workflow.jobs.promover.steps.find((candidate: { name?: string }) => candidate.name === "Rodar o CI na cabeça da PR de produção");
+    expect(step.if).toBe("steps.promocao.outputs.promoted == 'true'");
+    expect(step.env.GH_TOKEN).toBe("${{ github.token }}");
+    expect(workflow.jobs.promover.permissions.actions).toBe("write");
+    const ci = YAML.parse(readFileSync(".github/workflows/ci.yml", "utf8"));
+    expect(ci.on).toHaveProperty("workflow_dispatch", null);
+    const env = { ...process.env, PATH: `${root}/bin:${process.env.PATH}`, FIXTURE_ROOT: root, GITHUB_REPOSITORY: "owner/repo" };
+    for (const open of [true, false]) {
+      writeFileSync(`${root}/calls.jsonl`, "");
+      setAPI(open ? { promotionPR: { body: "" } } : { noPR: true });
+      const result = spawnSync("bash", ["-e", "-c", step.run], { cwd: repo, encoding: "utf8", env });
+      expect(result.status, result.stderr).toBe(0);
+      expect(calls().filter((args) => args[0] === "workflow")).toEqual(
+        open ? [["workflow", "run", "ci.yml", "--repo", "owner/repo", "--ref", "staging"]] : [],
+      );
+    }
   });
 
   it("runs the post-main return steps and opens a PR when dev has diverged", () => {

@@ -80,6 +80,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      # Só para disparar o CI na cabeça da PR de produção (último passo).
+      actions: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -151,3 +153,21 @@ jobs:
             --assignee andreustimm \
             --title "chore(release): Promover staging para produção — v${VERSAO}" \
             --body-file "$RUNNER_TEMP/promotion-pr.md"
+
+      # A PR aberta pelo robô nasce sem `pull_request` CI, e o fast-forward de
+      # staging pelo `GITHUB_TOKEN` também não dispara nada: sem este passo os
+      # checks exigidos em `main` nunca apareciam na cabeça e o dono tinha de
+      # fechar e reabrir a PR. `github.token` de propósito — dispatch é a única
+      # coisa que ele consegue disparar, e basta.
+      - name: Rodar o CI na cabeça da PR de produção
+        if: steps.promocao.outputs.promoted == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ABERTA=$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head staging --state open --json number --jq '.[0].number // ""')
+          if [ -z "$ABERTA" ]; then
+            echo "::notice::Nenhuma PR staging → main aberta; CI não disparado."
+            exit 0
+          fi
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref staging
+          echo "::notice::CI disparado em staging para a PR #$ABERTA."
