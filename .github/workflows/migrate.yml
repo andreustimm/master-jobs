@@ -1,8 +1,19 @@
-# Produção única. Execução humana explícita; nunca compete com deploy por push.
-# No corte inicial, aplique a migration revisada pela CLI ANTES da promoção.
+# Produção única. Contrato e ordem com o deploy: docs/adr/0028-migracao-automatica-so-aditiva.md.
+#
+# Todo push em main: aplica sozinho o que o banco tiver pendente, mas SÓ se
+# todo o lote for aditivo (`--additive-only`). Não aditiva interrompe o job,
+# vermelho, antes de qualquer DDL, e espera o dispatch manual abaixo. Sem
+# pendência o job não aplica nada.
+# Sem filtro `paths`, de propósito: o GitHub só avalia os primeiros 300
+# arquivos do diff, e uma promoção grande poderia pular a migração em silêncio
+# enquanto a Vercel publica o código que depende dela. Quem decide é o banco.
+# Dispatch manual: aplica o lote inteiro, depois de revisão humana, e exige
+# o ref do projeto Supabase digitado.
 name: Migrações
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       confirm_project:
@@ -13,13 +24,17 @@ on:
 permissions:
   contents: read
 
+# Um migrador por vez; o segundo espera o primeiro terminar, nunca o cancela
+# no meio de uma transação.
 concurrency:
   group: migrate-supabase-production
   cancel-in-progress: false
 
 jobs:
   migrar:
-    if: github.ref == 'refs/heads/main' && inputs.confirm_project == 'bujawvnxwtmneiggizje'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || inputs.confirm_project == 'bujawvnxwtmneiggizje')
     environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -35,4 +50,5 @@ jobs:
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.SUPABASE_MIGRATION_URL }}
           DATABASE_CA_CERT: config/certs/supabase-ca.crt
+          MIGRATION_MODE: ${{ github.event_name == 'push' && 'aditiva' || 'revisada' }}
         run: ./.github/scripts/migrar.sh
