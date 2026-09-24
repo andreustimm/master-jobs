@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
 
 /**
  * `runSweep`: a composição da varredura fatiada com os casos de uso reais.
@@ -45,7 +46,7 @@ vi.mock("../src/contexts/sourcing/index.ts", async (orig) => ({
 
 const { runSweep } = await import("../src/contexts/operations/index.ts");
 const { getDb } = await import("../src/core/db/client.ts");
-const { candidate, scoreCursor, sourceRun, sweepRun, targetTrack } = await import("../src/core/db/schema.ts");
+const { candidate, scoreCursor, sourceRun, sweepLease, sweepRun, targetTrack } = await import("../src/core/db/schema.ts");
 const { releaseTestDb, useTestDb } = await import("./support/db.ts");
 
 const alarm = vi.fn(async () => {});
@@ -70,9 +71,8 @@ describe("sync", () => {
     await runSweep("sync", { alarm });
     const [primeira] = await getDb().select().from(sourceRun);
     // Uma fatia anterior foi morta pela Vercel: a linha ficou `running`, velha.
-    await getDb().update(sourceRun).set({ status: "running", heartbeatAt: "2026-01-01T00:00:00.000Z" });
+    await getDb().update(sourceRun).set({ status: "running", heartbeatAt: "2026-01-01T00:00:00.000Z" }).where(eq(sourceRun.id, primeira!.id));
     await getDb().delete(sweepRun);
-    const { sweepLease } = await import("../src/core/db/schema.ts");
     await getDb().delete(sweepLease);
 
     const report = await runSweep("sync", { alarm });
@@ -81,6 +81,25 @@ describe("sync", () => {
     const execucoes = await getDb().select().from(sourceRun).orderBy(sourceRun.id);
     expect(execucoes.map((e) => e.status)).toEqual(["interrupted", "succeeded"]);
     expect(execucoes[0]!.id).toBe(primeira!.id);
+  });
+
+  it("execução viva de outro processo fica com ele: a fatia cede sem erro e não sincroniza", async () => {
+    loadSources.mockResolvedValue([{ kind: "greenhouse", handle: "acme", label: "Acme" }]);
+    syncSource.mockResolvedValue({ ok: true, fetched: 3 });
+    await runSweep("sync", { alarm });
+    const [primeira] = await getDb().select().from(sourceRun);
+    // A tela pediu "Buscar agora" e o GitHub está rodando: batimento fresco.
+    await getDb().update(sourceRun).set({ status: "running", heartbeatAt: new Date().toISOString() }).where(eq(sourceRun.id, primeira!.id));
+    await getDb().delete(sweepRun);
+    await getDb().delete(sweepLease);
+    syncSource.mockClear();
+
+    const report = await runSweep("sync", { alarm });
+
+    expect(report.units.map((u) => [u.unit, u.ok, u.items])).toEqual([["sync:greenhouse:acme", true, 0]]);
+    expect(syncSource).not.toHaveBeenCalled();
+    const execucoes = await getDb().select().from(sourceRun);
+    expect(execucoes.map((e) => e.status)).toEqual(["running"]);
   });
 
   it("sincroniza as fontes do YAML pelo mesmo `syncSource` da CLI e grava a métrica", async () => {

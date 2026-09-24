@@ -64,6 +64,8 @@ export const postSnapshotTables = new Set([
   "source_run",
   // Eventos de verificação (#223): nascem das checagens seguintes.
   "job_check_event",
+  // Orçamento diário de requisições por rotina (#291): contador operacional.
+  "request_budget",
 ]);
 
 const selectedJobs = `SELECT id FROM job WHERE

@@ -71,11 +71,18 @@ Quando não há bump, o CI reutilizável valida o próprio A.
 
 ## Migrações, ancestralidade e publicação
 
-Antes de preparar e novamente antes de publicar, a guarda compara
-`staging..alvo` em `drizzle/` e `src/core/db/schema.ts`. Mudanças em um commit
-posterior B não entram nesse intervalo. Havendo alteração, apenas dispatch
-com `confirmar-migracao=true` autoriza prosseguir, depois de revisão humana;
-essa confirmação nunca dispensa CI.
+Antes de preparar e novamente antes de publicar, a guarda classifica o diff
+`staging..alvo` em `drizzle/` com o detector de
+`src/core/db/migration-review.ts` ([ADR 0028](../adr/0028-migracao-automatica-so-aditiva.md)).
+Mudanças em um commit posterior B não entram nesse intervalo. Migração nova e
+aditiva (com seu snapshot e journal em `meta/`) promove sem confirmação,
+inclusive no agendamento. Migração não aditiva, `.sql` publicado alterado ou
+removido (renome conta como remoção) e arquivo fora de `drizzle/postgres/`
+param a promoção: apenas dispatch com `confirmar-migracao=true` autoriza
+prosseguir, depois de revisão humana, e o erro lista arquivo, motivo e comando.
+A confirmação nunca dispensa CI. `schema.ts` não entra na guarda: o SQL é o que
+chega ao banco, e o job `schema-e-migracao` do CI prova que os dois andam
+juntos.
 
 `staging` deve ser ancestral do alvo. Divergência falha; alvo já ultrapassado
 por `staging` termina sem escrita. O push usa o SHA, sem force. A fila
@@ -102,7 +109,8 @@ rtk gh workflow run promover-para-staging.yml \
   --field target-sha=<SHA_COMPLETO_DA_ENTRADA>
 ```
 
-Inclua `--field confirmar-migracao=true` somente após revisar a migração.
+Inclua `--field confirmar-migracao=true` somente após revisar a migração não
+aditiva que a guarda apontou.
 O retry procura o filho de A identificado por `Promotion-Source` no histórico
 de `dev`, verifica pai, versão, conteúdo exato dos quatro arquivos e a remoção
 dos fragmentos, e reutiliza R. Mesmo com `dev` em B, não cria outro release nem troca o alvo/tag. O CI de R
@@ -137,6 +145,10 @@ Com `GITHUB_TOKEN`, o push de R pode não disparar outro workflow; a chamada
 reutilizável garante o CI sem depender desse efeito. `RELEASE_PAT` continua
 opcional para disparar workflows a jusante. Sem PAT, abrir a PR ainda depende
 da permissão de Actions para criar PRs nas configurações do repositório.
+Essa PR, criada pelo robô, também não dispara o CI de `pull_request`; o último
+passo da promoção dispara `ci.yml` por `workflow_dispatch` em `staging` para
+que os checks exigidos por `main` existam na cabeça dela
+([github-protections.md](github-protections.md#o-caminho-humano)).
 
 O retorno `main → dev`, o versionamento de hotfixes em `main` e a criação
 idempotente de GitHub Releases permanecem em `sincronizar-apos-main.yml`.

@@ -15,7 +15,7 @@
 
 ## Catálogo de fontes: passar a verdade para o banco
 
-Com a migration `0020_source_catalog` aplicada, o catálogo continua espelhando
+Com a migration `0021_source_catalog` aplicada, o catálogo continua espelhando
 `config/sources.yaml` linha a linha até alguém importá-lo. A transição é
 explícita e de uma vez (#223):
 
@@ -115,6 +115,59 @@ hora) já deveria tê-la apontado.
 **Desfazer:** `select cron.unschedule(jobname) from cron.job where jobname like 'jho-varredura-%';`
 e `gh variable delete VARREDURA_AGENDADOR --repo andreustimm/master-jobs` — a
 execução diária do Actions volta a valer na manhã seguinte.
+
+## Orçamento de requisições e telemetria por rotina
+
+Três rotinas saem para a internet por conta própria, e cada uma tem mais de um
+disparador (CLI no Actions, fatia da Vercel, botão da tela). O contador
+`production.request_budget` é um só para todos, por rotina e dia UTC (#291):
+
+| Rotina | Teto diário | Onde é gasto |
+|---|---:|---|
+| `reconferencia` | 3.000 | cada sondagem de `runVerifyQueue` e de `jho jobs verify` |
+| `captura` | 1.000 | cada página de `runFetchStage` |
+| `sync` | sem teto (só conta) | cada busca de fonte; o intervalo de 45 min por fonte e a cota por plataforma já limitam |
+
+Os tetos moram em `DAILY_REQUEST_BUDGET` (`src/core/ingest/request-budget.ts`).
+Com o dia esgotado, a rotina para **antes** de reivindicar a tarefa — ela fica
+`pending` para o dia seguinte — e o resultado traz `budgetExhausted`. A recusa
+soma em `refused`, para "parou por orçamento" não parecer "não tinha trabalho".
+
+A reconferência também olha vagas **abaixo da nota 55**, mas só as que a fonte
+deixou de listar há 3 dias ou mais (`last_seen_at`): fonte de janela parcial não
+fecha por ausência, e sem isso a vaga de nota baixa que saiu da janela ficava
+aberta para sempre. As acima do corte continuam na frente da fila; o teto de
+`reconferencia` é o que segura o volume novo.
+
+**Baseline de custo — medir em produção (pendente, passo humano).** Depois de
+24 h com a varredura fatiada ativa e esta versão em produção:
+
+```bash
+DATABASE_URL='<url de produção, role restrita>' pnpm jho ops telemetry --days 7 --json
+```
+
+ou, no SQL Editor do Supabase:
+
+```sql
+select day, routine, used, refused
+from production.request_budget
+where day >= to_char(now() - interval '7 days', 'YYYY-MM-DD')
+order by day, routine;
+
+select substr(started_at, 1, 10) as dia, slice,
+       count(*) filter (where unit is null) as chamadas,
+       count(*) filter (where unit is not null) as unidades,
+       sum(errors) filter (where unit is null) as erros,
+       sum(duration_ms) filter (where unit is null) / 1000 as segundos,
+       percentile_disc(0.95) within group (order by duration_ms) filter (where unit is null) as p95_ms
+from production.sweep_run
+where started_at::timestamptz > now() - interval '7 days'
+group by 1, 2 order by 1, 2;
+```
+
+Só números e nomes de rotina saem dessas consultas. Registre o resultado na
+issue e, se um teto estiver recusando todo dia ou sobrando por ordem de
+grandeza, ajuste `DAILY_REQUEST_BUDGET` com o número medido.
 
 ## Pedir manutenção pela interface — `/admin/operacoes`
 
@@ -554,6 +607,35 @@ arquivada. Fonte manual e de recrutador ficam de fora: ali "fechada" é
 digitação de alguém, não ausência observada. A implementação e os critérios estão em
 [`job-lifecycle-retention`](../.compozy/tasks/job-lifecycle-retention/) e na
 [ADR 0020](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md).
+
+### Migração de produção
+
+Não há passo de rotina: todo merge em `main` dispara `migrate.yml`, que
+aplica sozinho o lote pendente no banco quando ele é aditivo (sem pendência,
+não aplica nada)
+([ADR 0028](adr/0028-migracao-automatica-so-aditiva.md)). O log mostra
+`aplicadas: <tags>` e depois o `jho db check`.
+
+**Job vermelho com `Migração pendente exige execução manual`:** o lote tem
+comando não aditivo, e nada foi aplicado. A lista abaixo da mensagem diz o
+arquivo, o motivo e o comando. Siga
+[deploy.md](engineering/deploy.md#migração-que-não-é-aditiva) para escolher a
+ordem e dispare `migrate.yml` à mão com o ref do projeto — nunca reexecute o job
+do push esperando outro resultado: ele recusa até o lote mudar.
+
+**Job vermelho por outro motivo:** veja qual passo falhou.
+
+- Falhou `jho db migrate` (conexão, SQL que o banco recusou): a transação
+  desfez o lote inteiro, e o código novo pode estar servindo sobre o schema
+  velho. A causa do servidor vem na mensagem (`— causa: <código>`). Se a
+  falha foi de conexão, rode o job de novo. Se o banco recusou o SQL, a
+  migração que falhou **continua pendente** e roda primeiro em qualquer lote
+  seguinte: uma migração nova depois dela não a conserta. Corrija o próprio
+  `.sql` (ele nunca foi aplicado em produção); a promoção vai pedir
+  `confirmar-migracao`, porque o arquivo publicado mudou.
+- Falhou `jho db check`, depois de `aplicadas: <tags>`: o lote **já foi
+  gravado**, e o que falhou é a conferência de integridade. Não reaplique;
+  leia o que o check reprovou e corrija o dado ou o schema numa migração nova.
 
 ### Dev e staging: somente fixtures
 

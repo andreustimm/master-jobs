@@ -47,12 +47,18 @@ A aprovação é válida porque o autor é `github-actions[bot]`.
 Os checks exigidos precisam existir no SHA da cabeça da PR. Quando a promoção
 não faz bump, a cabeça é o commit de `dev` que já passou pelo CI de push. Quando
 faz bump, a cabeça é o commit `chore(release)`, empurrado pelo `GITHUB_TOKEN`.
-Push feito com esse token não dispara workflow, e o CI reutilizável da promoção
-publica seus checks com outro nome (`validar / qualidade`) em outro SHA. Nesse
-caso, **feche e reabra a PR**: a reabertura é um evento humano e roda o CI de
-`pull_request` na cabeça. Com `RELEASE_PAT` configurado a PR já nasceria com
-checks, mas seu autor passaria a ser o dono do token, e o dono não pode aprovar
-a própria PR. Antes de configurar o PAT, revise esta seção.
+Push ou PR feitos com esse token não disparam workflow, e o CI reutilizável da
+promoção publica seus checks com outro nome (`validar / qualidade`) em outro
+SHA. Por isso o último passo da promoção (`Rodar o CI na cabeça da PR de
+produção`) dispara `ci.yml` por `workflow_dispatch` em `staging` — a única
+forma de evento que o `GITHUB_TOKEN` dispara — sempre que há PR de produção
+aberta. O run publica `qualidade` e `schema-e-migracao` com esses nomes no SHA
+da cabeça, que é o que o ruleset lê. Se o passo falhar, o recurso manual
+continua valendo: **feche e reabra a PR** (evento humano, roda o CI de
+`pull_request`) ou rode `gh workflow run ci.yml --ref staging`. Com
+`RELEASE_PAT` configurado a PR já nasceria com checks, mas seu autor passaria a
+ser o dono do token, e o dono não pode aprovar a própria PR. Antes de
+configurar o PAT, revise esta seção.
 
 **Hotfix em `main`.** O dono abre a PR de hotfix e não pode aprová-la. O bypass
 de admin, restrito a PR, aparece na caixa de merge como *bypass rules*. Ele
@@ -134,14 +140,17 @@ atualizar a PR de produção significaria mesclar `main` dentro de `staging`.
 Merge queue também não é usada.
 
 **Revisor obrigatório no ambiente `Production`.** `migrate.yml` usa o ambiente
-por `workflow_dispatch`. `varredura.yml` o usa todo dia por cron, e
+no push para `main` (só migração aditiva, [ADR 0028](../adr/0028-migracao-automatica-so-aditiva.md))
+e por `workflow_dispatch`; um revisor ali também faria o disparo automático
+esperar clique. `varredura.yml` o usa todo dia por cron, e
 `manutencao-banco.yml` toda semana. Um revisor obrigatório pararia as duas
 rotinas à espera de clique, e elas falhariam depois de 30 dias. A aprovação
 humana da migração exige um ambiente só dela (por exemplo
 `production-migrations`, com revisor `andreustimm`, sem autoaprovação
 impedida e restrito a `main`). `migrate.yml` passaria a apontar para ele, e
 `SUPABASE_MIGRATION_URL` seria movido para lá. O valor é *write-only* e
-precisa ser redigitado pelo dono. Hoje a trava humana da migração é o
+precisa ser redigitado pelo dono. Hoje a trava humana da migração não aditiva
+é o detector que para o job do push antes de qualquer DDL, somado ao
 `workflow_dispatch` com confirmação do project ref.
 
 **Uma identidade só.** Os agentes usam a credencial do dono, e o GitHub não

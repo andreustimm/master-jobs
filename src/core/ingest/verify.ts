@@ -29,6 +29,8 @@ import type { LookupHost } from "../remote-url.ts";
 import { guardIngestion } from "./guard.ts";
 import { probe } from "./probe.ts";
 import { applyVerdict } from "./verdict.ts";
+import type { RequestBudget } from "./request-budget.ts";
+import { drizzleRequestBudget } from "./request-budget-store.ts";
 
 export type VerifyResult = {
   checked: number;
@@ -39,6 +41,8 @@ export type VerifyResult = {
   bySource: Record<string, { gone: number; alive: number; inconclusive: number }>;
   /** Quantas vagas estavam na fila antes do `limit`: maior que `checked` = corte. */
   due: number;
+  /** Presente quando o lote parou porque o orçamento do dia acabou (#291). */
+  budgetExhausted?: true;
 };
 
 export async function verifyJobs(
@@ -54,6 +58,8 @@ export async function verifyJobs(
     runId?: number | null;
     fetchImpl?: typeof fetch;
     lookupHost?: LookupHost;
+    /** O mesmo orçamento da fila de reconferência: é a mesma rotina. */
+    budget?: RequestBudget;
     onProgress?: (done: number, total: number) => void;
   } = {},
 ): Promise<VerifyResult> {
@@ -118,11 +124,18 @@ export async function verifyJobs(
   };
 
   const queue = [...rows];
+  const budget = opts.budget ?? drizzleRequestBudget();
 
   async function worker() {
     for (;;) {
       const next = queue.shift();
       if (!next) return;
+      if (!(await budget.take("reconferencia", Date.now()))) {
+        // Esvazia para os outros workers pararem também.
+        queue.length = 0;
+        result.budgetExhausted = true;
+        return;
+      }
 
       const { verdict, status } = await probe(next.url, {
         timeoutMs: 15_000,
