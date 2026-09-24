@@ -99,8 +99,15 @@ export type RunScope =
 export type RunStatus =
   | "queued" | "running" | "succeeded" | "partial"
   | "failed" | "cancelled" | "interrupted";
-export function runKey(scope: RunScope, configRevision: number): string;
-// escopo de uma fonte: a revisão dela; "all" e verificação sem fonte: a maior revisão entre as fontes elegíveis
+export function runKey(scope: RunScope, revision: number | string): string;
+// escopo de uma fonte: a revisão dela; "all" e verificação sem fonte:
+// catalogRevision(fontes elegíveis) — impressão do CONJUNTO (id, revisão), não a
+// maior revisão: editar a fonte de revisão menor também muda o pedido.
+export function catalogRevision(sources: { id: string; revision: number }[]): string;
+export function refuseRun(source: RunnableSource | null): RunRefusal | null; // desabilitada, aposentada ou fora do catálogo
+export function shouldRedispatch(run: { status; errorCode; queuedAt }, now: string): boolean;
+// `queued` sem executor (sem credencial, rede, pendente cancelado pelo grupo de
+// concorrência) é despachada de novo pelo próximo pedido equivalente
 export function nextRunStatus(current: RunStatus, event: RunEvent): RunStatus | null; // null = transição recusada
 export function isStale(run: { status: RunStatus; heartbeatAt: string }, now: string, leaseMs: number): boolean;
 

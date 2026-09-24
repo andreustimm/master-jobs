@@ -276,6 +276,31 @@ que é o que `pnpm jho sources list` imprime.
 Índice único: `source_kind_handle_idx (kind, handle)` — redundante com a PK por
 construção, mas impede duas linhas com o mesmo par se alguém inserir à mão.
 
+### `source_run`
+
+Toda captura e verificação pedida pelo catálogo deixa uma linha (#223, tarefa
+02): uma fonte (`scope_kind = source`), todas (`all`, com uma filha por fonte
+em `parent_id`) ou verificação (`verify`, de uma fonte ou de todas). A captura
+por termo continua em `term_capture` e não entra aqui.
+
+| Coluna | Notas |
+|---|---|
+| `id` | identidade |
+| `scope_kind`, `source_id` | escopo. FK para `source` com `ON DELETE restrict`: fonte é aposentada, nunca apagada |
+| `parent_id` | filha de uma execução `all`. `ON DELETE restrict` |
+| `retry_of` | nova tentativa aponta a original, que não muda. `ON DELETE restrict` |
+| `idempotency_key` | `runKey(escopo, revisão)`; índice único **parcial** `source_run_active_key_idx` onde `status in ('queued','running')` — dois pedidos equivalentes ativos são a mesma execução |
+| `actor_user_id` | quem pediu; nulo para agendador e CLI. `ON DELETE set null` |
+| `config_snapshot` | `jsonb` com kind, handle, rótulo, revisão e capacidades de cada fonte no momento do pedido. Nunca `secret_ref` |
+| `status` | `queued`, `running`, `succeeded`, `partial`, `failed`, `cancelled`, `interrupted` (`nextRunStatus`) |
+| `heartbeat_at`, `queued_at`, `started_at`, `finished_at` | `running` sem batimento por 15 min vira `interrupted` (`isStale`, a mesma regra da análise de vaga) |
+| `fetched`, `inserted`, `updated`, `unchanged`, `closed`, `alive`, `inconclusive` | **nulo = desconhecido**, nunca zero. No pai, a soma só é conhecida quando toda filha contou |
+| `completeness` | o que o adapter declarou (`complete`/`partial`); janela parcial registra `closed = 0` |
+| `error_code`, `error_detail` | código estável (`no_token`, `waiting_slot`, `dispatch_rejected`, `work_failed`, `children_failed`, `lease_expired`); em linha ativa é o motivo da espera. Detalhe com até 500 caracteres, redigido por `redactDetail` |
+
+Linha terminal é imutável: toda escrita de progresso filtra os estados ativos,
+então um resultado atrasado afeta zero linhas.
+
 ### `company`
 
 Empresas deduplicadas entre fontes por `slug` (`slugifyCompany(name)`), mais os

@@ -45,7 +45,13 @@ import {
 } from "./core/positioning/engage.ts";
 import { archiveClosedJobs } from "./core/ingest/archive.ts";
 import { addJob } from "./core/ingest/manual.ts";
-import { catalogForSync, syncAll, pruneClosed } from "./core/ingest/run.ts";
+import { catalogForSync, pruneClosed } from "./core/ingest/run.ts";
+import {
+  executeSourceRun,
+  interruptStaleSourceRuns,
+  requestSourceRun,
+  sourceRun,
+} from "./contexts/operations/index.ts";
 import { verifyJobs } from "./core/ingest/verify.ts";
 import { loadProfile } from "./core/profile/load.ts";
 import {
@@ -686,35 +692,98 @@ tracks
 
 const jobs = program.command("jobs").description("Sync, score and browse jobs");
 
+/** `--run <id>`: número inteiro positivo, ou recusa antes de abrir o banco. */
+function parseRunId(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  if (!/^[1-9]\d{0,9}$/.test(value)) throw new Error(`--run must be a positive integer, got "${value}"`);
+  return Number(value);
+}
+
+/**
+ * A execução que a CLI vai rodar: a pedida por `--run`, ou uma criada aqui
+ * (sem despacho — quem executa é este processo). `--source` sem `--run` pede
+ * uma fonte; nenhum dos dois pede "todas". Com os dois, a execução precisa ser
+ * daquela fonte: um despacho trocado não roda a fonte errada.
+ */
+async function runForCli(
+  scope: "sync" | "verify",
+  opts: { source?: string; run?: string },
+): Promise<number> {
+  const runId = parseRunId(opts.run);
+  // Antes de gravar a execução: num ambiente bloqueado, uma linha `queued`
+  // que nunca vai rodar seguraria a chave de idempotência.
+  guardIngestion();
+  // Uma execução presa em `running` por um processo morto seguraria a chave
+  // de idempotência, e o pedido abaixo se juntaria a ela em vez de rodar.
+  await interruptStaleSourceRuns();
+  if (runId !== null) {
+    const run = await sourceRun(runId);
+    if (!run) throw new Error(`run ${runId} not found`);
+    const expected = scope === "verify" ? ["verify"] : ["source", "all"];
+    if (!expected.includes(run.scopeKind)) throw new Error(`run ${runId} is a ${run.scopeKind} run, not ${scope}`);
+    if (opts.source && run.sourceId !== opts.source) {
+      throw new Error(`run ${runId} belongs to ${run.sourceId ?? "every source"}, not ${opts.source}`);
+    }
+    return runId;
+  }
+  const requested = await requestSourceRun(
+    scope === "verify"
+      ? { kind: "verify", sourceId: opts.source ?? null }
+      : opts.source
+        ? { kind: "source", sourceId: opts.source }
+        : { kind: "all" },
+    null,
+    { dispatch: false },
+  );
+  if (!requested.ok) throw new Error(`cannot start a run: ${requested.code}`);
+  return requested.runId;
+}
+
 jobs
   .command("sync")
-  .description("Fetch every configured source and upsert the results")
+  .description("Fetch every catalog source (or one with --source) and upsert the results, recording a run")
   .option("--concurrency <n>", "parallel sources", "4")
   .option("--no-score", "skip scoring after the sync")
-  .action(async (opts: { concurrency: string; score: boolean }) => {
+  .option("--source <kind:handle>", "sync only this catalog source")
+  .option("--run <id>", "execute this queued run (as dispatched by the admin screen)")
+  .action(async (opts: { concurrency: string; score: boolean; source?: string; run?: string }) => {
     await withDb(async () => {
-      const configs = await catalogForSync(await loadSources());
-      console.log(`Syncing ${configs.length} source(s)…\n`);
+      // O arquivo entra pelo regime de `ensureSources` antes de qualquer
+      // seleção, como sempre; a execução usa o retrato do banco.
+      if (!opts.run) await catalogForSync(await loadSources());
+      const runId = await runForCli("sync", opts);
+      const snapshot = (await sourceRun(runId))?.configSnapshot as { sources?: unknown[] } | undefined;
+      console.log(`Syncing ${snapshot?.sources?.length ?? 0} source(s)… ${c.dim(`run ${runId}`)}\n`);
 
-      const result = await syncAll(configs, {
+      // Totais do que cada fonte contou. O pai guarda desconhecido quando uma
+      // filha falhou (US-009.EC-2); aqui a linha diz quantas falharam.
+      const t = { fetched: 0, inserted: 0, updated: 0, closed: 0, failed: 0, rescored: 0 };
+      const result = await executeSourceRun(runId, {
         concurrency: Number(opts.concurrency),
-        onProgress: (r) => {
-          const mark = r.ok ? c.green("✓") : c.red("✗");
-          const detail = r.ok
-            ? `${String(r.fetched).padStart(4)} fetched  ${c.green(`+${r.inserted}`)} new  ${r.updated} updated  ${r.closed} closed` +
-              (r.completeness === "partial" ? c.dim("  partial window: absence closes nothing") : "")
-            : c.red(r.error ?? "failed");
-          console.log(`  ${mark} ${truncate(r.sourceId, 28)} ${detail} ${c.dim(`${r.durationMs}ms`)}`);
-          for (const w of r.warnings) console.log(c.yellow(`      ! ${w}`));
+        onChild: (child, outcome) => {
+          const n = outcome.counts;
+          const mark = outcome.ok ? c.green("✓") : c.red("✗");
+          const detail = outcome.ok
+            ? `${String(n.fetched).padStart(4)} fetched  ${c.green(`+${n.inserted}`)} new  ${n.updated} updated  ${n.closed} closed` +
+              (outcome.completeness === "partial" ? c.dim("  partial window: absence closes nothing") : "")
+            : c.red(outcome.error ?? "failed");
+          console.log(`  ${mark} ${truncate(child.id, 28)} ${detail} ${c.dim(`${outcome.report?.durationMs ?? 0}ms`)}`);
+          for (const w of outcome.report?.warnings ?? []) console.log(c.yellow(`      ! ${w}`));
+          if (!outcome.ok) t.failed++;
+          t.fetched += n.fetched ?? 0;
+          t.inserted += n.inserted ?? 0;
+          t.updated += n.updated ?? 0;
+          t.closed += n.closed ?? 0;
+          t.rescored += outcome.report?.rescored ?? 0;
         },
       });
+      if (!result.ok) throw new Error(`run ${runId} did not execute: ${result.code}`);
 
-      const t = result.totals;
       console.log(
         `\n${c.bold("Totals")}  ${t.fetched} fetched · ${c.green(`${t.inserted} new`)} · ` +
         `${t.updated} updated · ${t.closed} closed · ` +
         (t.rescored ? `${c.yellow(`${t.rescored} rescore`)} · ` : "") +
-        `${t.failed ? c.red(`${t.failed} failed`) : "0 failed"}`,
+        `${t.failed ? c.red(`${t.failed} failed`) : "0 failed"}  ${c.dim(result.status)}`,
       );
 
       if (opts.score !== false) {
@@ -739,15 +808,31 @@ jobs
   .option("--concurrency <n>", "parallel sources", "4")
   .action(async (opts: { minFit: string; limit: string; concurrency: string }) => {
     await withDb(async () => {
+      // A mesma captura registrada de `jobs sync`: uma execução `all` com uma
+      // filha por fonte do catálogo.
       const configs = await catalogForSync(await loadSources());
-      const result = await syncAll(configs, { concurrency: Number(opts.concurrency) });
+      const runId = await runForCli("sync", {});
+      const sourcesFailed: string[] = [];
+      const totals = { fetched: 0, inserted: 0, updated: 0, unchanged: 0, closed: 0, failed: 0 };
+      const result = await executeSourceRun(runId, {
+        concurrency: Number(opts.concurrency),
+        onChild: (child, outcome) => {
+          if (!outcome.ok) {
+            sourcesFailed.push(child.id);
+            totals.failed++;
+          }
+          totals.fetched += outcome.counts.fetched ?? 0;
+          totals.inserted += outcome.counts.inserted ?? 0;
+          totals.updated += outcome.counts.updated ?? 0;
+          totals.unchanged += outcome.counts.unchanged ?? 0;
+          totals.closed += outcome.counts.closed ?? 0;
+        },
+      });
+      if (!result.ok) throw new Error(`run ${runId} did not execute: ${result.code}`);
       const candidateId = await activeCandidateId();
       await scoreAll(candidateId);
       const minFit = Number(opts.minFit);
       const limit = Number(opts.limit);
-      const sourcesFailed = result.sources
-        .filter((source) => !source.ok)
-        .map((source) => source.sourceId);
       const snapshot = await buildJobSweepSnapshot(candidateId, minFit, limit, sourcesFailed);
       const snapshotPath = resolve(".compozy/runtime/job-sweep-snapshot.json");
       await mkdir(dirname(snapshotPath), { recursive: true });
@@ -760,7 +845,8 @@ jobs
         snapshotPath: ".compozy/runtime/job-sweep-snapshot.json",
         sources: configs.length,
         sourcesFailed,
-        totals: result.totals,
+        run: runId,
+        totals,
         candidates: snapshot.candidates.length,
       }));
     });
@@ -1038,14 +1124,33 @@ jobs
 jobs
   .command("verify")
   .description("Check that top-ranked postings still exist — closes the ones that 404")
-  .option("--min-fit <n>", "only verify above this fit", "55")
+  .option("--min-fit <n>", "only verify above this fit (default 55; with --source, 0 unless given)")
   .option("--limit <n>", "how many to check", "100")
   .option("--dry-run", "report without closing anything")
-  .action(async (opts: { minFit: string; limit: string; dryRun?: boolean }) => {
+  .option("--source <kind:handle>", "verify only this source's open jobs, recording a run")
+  .option("--run <id>", "execute this queued verification run (as dispatched by the admin screen)")
+  .action(async (opts: { minFit?: string; limit: string; dryRun?: boolean; source?: string; run?: string }) => {
     await withDb(async () => {
+      if (opts.source || opts.run) {
+        // Execução registrada fecha de verdade: simulação não tem linha em
+        // `source_run`, porque contaria vaga fechada que não foi fechada.
+        if (opts.dryRun) throw new Error("--dry-run cannot be combined with --source or --run");
+        const runId = await runForCli("verify", opts);
+        const minFit = opts.minFit === undefined ? {} : { minFit: Number(opts.minFit) };
+        const result = await executeSourceRun(runId, { verify: { limit: Number(opts.limit), ...minFit } });
+        if (!result.ok) throw new Error(`run ${runId} did not execute: ${result.code}`);
+        const n = result.counts;
+        console.log(
+          `\n${c.green("✓")} ${n.fetched ?? 0} verificadas · ` +
+          `${c.green(`${n.alive ?? 0} vivas`)} · ${c.red(`${n.closed ?? 0} mortas`)} · ` +
+          c.dim(`${n.inconclusive ?? 0} inconclusivas`) +
+          `  ${c.dim(`run ${runId} · ${result.status}`)}\n`,
+        );
+        return;
+      }
       let last = 0;
       const r = await verifyJobs({
-        minFit: Number(opts.minFit),
+        minFit: Number(opts.minFit ?? "55"),
         limit: Number(opts.limit),
         dryRun: opts.dryRun,
         onProgress: (done, total) => {

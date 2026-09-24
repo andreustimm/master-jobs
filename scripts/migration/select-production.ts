@@ -60,6 +60,8 @@ export const postSnapshotTables = new Set([
   "score_cursor",
   // Análise estruturada da vaga (#223): derivada de LLM, refeita sob pedido.
   "job_analysis",
+  // Histórico de execução de captura e verificação (#223): nasce das execuções.
+  "source_run",
   // Orçamento diário de requisições por rotina (#291): contador operacional.
   "request_budget",
 ]);

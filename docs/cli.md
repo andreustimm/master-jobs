@@ -515,16 +515,24 @@ Grupo `jobs`, descrição `"Sync, score and browse jobs"`.
 
 ### `jho jobs sync`
 
-`"Fetch every configured source and upsert the results"`. Sequência exata:
-`runMigrations()` → `loadSources()` → `catalogForSync()` (espelha o YAML nas linhas não
-geridas e seleciona do banco as fontes habilitadas, não aposentadas, com adapter e fora de
-`~terms`) → `syncAll(configs, { concurrency, onProgress })` → `scoreAll()` (salvo com
-`--no-score`). Uma fonte desligada pela tela fica fora mesmo presente no YAML.
+`"Fetch every catalog source (or one with --source) and upsert the results, recording a
+run"`. Sequência exata: `runMigrations()` → `loadSources()` → `catalogForSync()` (espelha
+o YAML nas linhas não geridas) → pede uma execução em `source_run` (`all`, ou `source`
+com `--source`) sem despacho, porque quem executa é este processo → `executeSourceRun()`
+(uma filha por fonte do retrato do pedido, com `--concurrency` filhas em paralelo) →
+`scoreAll()` (salvo com `--no-score`). O retrato sai do banco: fonte habilitada, não
+aposentada, com adapter e fora de `~terms`; uma fonte desligada pela tela fica fora mesmo
+presente no YAML. Antes de pedir, `running` sem batimento por 15 min vira `interrupted`;
+enquanto roda, a execução bate o coração a cada 5 min. Com `--run`, a CLI pula o
+`catalogForSync()` e o pedido: executa o retrato gravado quando a execução foi pedida.
+`jho jobs sweep` registra a mesma execução `all`.
 
 | Flag | Default | Descrição |
 |---|---|---|
 | `--concurrency <n>` | `"4"` | parallel sources |
 | `--no-score` | — | skip scoring after the sync |
+| `--source <kind:handle>` | — | só esta fonte do catálogo; desabilitada ou aposentada recusa sem criar execução |
+| `--run <id>` | — | executa a execução `queued` pedida pela tela (é o que o `varredura.yml` chama); com `--source`, a execução precisa ser daquela fonte. Execução que já saiu de `queued` recusa com `not_queued` |
 
 `--no-score` é uma booleana negada do Commander: sem ela `opts.score === true`, com ela
 `opts.score === false`, e o código testa `if (opts.score !== false)`.
@@ -763,9 +771,11 @@ pnpm jho jobs verify --min-fit 55 --limit 250
 
 | Flag | Padrão | Efeito |
 |---|---|---|
-| `--min-fit <n>` | `55` | Só verifica acima deste fit |
+| `--min-fit <n>` | `55` | Só verifica acima deste fit. Com `--source` o padrão é 0 (a fonte inteira); passado explícito, vale também ali |
 | `--limit <n>` | `100` | Quantas checar |
 | `--dry-run` | — | Reporta sem fechar nada |
+| `--source <kind:handle>` | — | Verifica as vagas abertas desta fonte (fit mínimo 0, salvo `--min-fit` explícito), até `--limit`, e registra uma execução `verify` em `source_run` com vivas, fechadas e inconclusivas. Cortada pelo limite, a execução fica com `completeness = partial`. Não combina com `--dry-run` |
+| `--run <id>` | — | Executa a verificação `queued` pedida pela tela. Não combina com `--dry-run` |
 
 ```
 ✓ 250 verificadas · 203 vivas · 47 mortas · 0 inconclusivas

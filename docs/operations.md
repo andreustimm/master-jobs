@@ -198,6 +198,34 @@ devagar, nunca incorreto.
 `jho sources list`. Assim a tela não depende de token para dizer a verdade sobre
 o acervo.
 
+### Execuções registradas (`source_run`)
+
+Captura e verificação pedidas pelo catálogo viram uma linha em `source_run`
+(#223): escopo, quem pediu, o retrato da configuração, contagens e erro
+redigido. O pedido cria a execução `queued` e a despacha com a rotina
+`execucao` do `varredura.yml` (insumos `acao`, `execucao` e `fonte`); o workflow
+roda só `pnpm jho jobs sync --run <id>` ou `pnpm jho jobs verify --run <id>`, e
+nenhum passo da varredura inteira. `jho jobs sync` pela cron também registra
+uma execução `all`.
+
+- **Sem credencial**, a execução fica `queued` com `error_code = no_token`: ela
+  não some. Para rodá-la à mão: `pnpm jho jobs sync --run <id>` (captura) ou
+  `pnpm jho jobs verify --run <id>` (verificação). Com a credencial já
+  cadastrada, o próximo pedido equivalente a despacha de novo — o mesmo vale
+  para despacho que falhou na rede (`dispatch_failed`) e para pendente há mais
+  de 30 min, que o grupo de concorrência do workflow pode ter cancelado.
+- **Verificação de uma fonte** pelo workflow cobre até 1000 vagas abertas; o
+  corte aparece como `completeness = partial` na execução.
+- **Clique duplo** devolve a mesma execução: a chave de idempotência tem índice
+  único parcial nos estados ativos.
+- **Executor morto**: `running` sem batimento por 15 min vira `interrupted` na
+  próxima leitura — pedido da tela, da CLI ou da fatia da varredura (e libera um
+  novo pedido); uma fatia da Vercel morta no meio segura a fonte até lá. Nova tentativa é
+  outra linha, ligada por `retry_of`; a original não muda.
+- A fatia `sync` da varredura da Vercel (`/api/cron/varredura`) também registra
+  uma execução `source` por fonte, além da métrica em `sweep_run`; se a tela já
+  pediu uma execução equivalente, é ela que a fatia roda.
+
 ## Repontuação de candidato: fatias na web
 
 Candidato que salva o currículo não espera a varredura: a ação enfileira em
@@ -357,9 +385,10 @@ pnpm jho jobs sync
 
 O que acontece, em ordem: `runMigrations()` (por isso não existe passo separado
 de migração no dia a dia) → `loadSources()` lê `config/sources.yaml` → `catalogForSync()`
-espelha o arquivo nas linhas não geridas e seleciona do banco as fontes habilitadas e não
-aposentadas → `syncAll()` roda as fontes com concorrência 4 →
-`scoreAll()` no final, salvo se você passar `--no-score`.
+espelha o arquivo nas linhas não geridas → uma execução `all` é registrada em `source_run`
+com o retrato das fontes habilitadas e não aposentadas → `executeSourceRun()` roda uma
+filha por fonte, com concorrência 4 → `scoreAll()` no final, salvo se você passar
+`--no-score`.
 
 | Flag | Default | Quando usar |
 |---|---|---|
