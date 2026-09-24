@@ -82,6 +82,7 @@ function jobicyUrl(params: Record<string, string>): string {
 
 export const jobicy: SourceAdapter = {
   kind: "jobicy",
+  snapshot: "partial",
   docs: "https://jobi.cy/apidocs",
   async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     // `handle` is the geography slug; empty means the candidate's default.

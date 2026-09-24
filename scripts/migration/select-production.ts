@@ -36,6 +36,9 @@ export const postSnapshotColumns: Record<string, Record<string, unknown>> = {
   // Endereço público (#235). Nulo na importação: sem endereço o perfil não
   // responde em `/p/`, que é o lado seguro; o dono escolhe um em `/candidate`.
   candidate: { public_slug: null },
+  // Catálogo governado pelo banco (#223). A linha importada nasce não gerida
+  // e na revisão 1: continua espelhando o YAML até `jho sources import --apply`.
+  source: { retired_at: null, origin: "system", config_revision: 1, secret_ref: null, managed_at: null },
 };
 
 /**
@@ -53,6 +56,12 @@ export const postSnapshotTables = new Set([
   // Reserva e métrica da varredura fatiada (ADR 0025): estado operacional.
   "sweep_lease",
   "sweep_run",
+  // Cursor da passada de pontuação (#288): derivado; vazio = começar do topo.
+  "score_cursor",
+  // Análise estruturada da vaga (#223): derivada de LLM, refeita sob pedido.
+  "job_analysis",
+  // Orçamento diário de requisições por rotina (#291): contador operacional.
+  "request_budget",
 ]);
 
 const selectedJobs = `SELECT id FROM job WHERE

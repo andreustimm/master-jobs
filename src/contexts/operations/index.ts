@@ -12,7 +12,7 @@ import { githubDispatch } from "./infra/github-dispatch.ts";
 import { randomUUID } from "node:crypto";
 import { clock } from "../../core/clock.ts";
 import { guardIngestion } from "../../core/ingest/guard.ts";
-import { syncSource } from "../../core/ingest/run.ts";
+import { catalogForSync, syncSource } from "../../core/ingest/run.ts";
 import { enqueueStale, runVerifyQueue, verifyStats } from "../../core/ingest/verify-queue.ts";
 import { runFetchStage } from "../../core/scrape/fetcher.ts";
 import { runParseStage } from "../../core/scrape/parser.ts";
@@ -26,7 +26,7 @@ import { activeTermKeys } from "../matching/index.ts";
 import { requestTermCaptures, runTermCaptures } from "../sourcing/index.ts";
 import { runSweepSlice, type QueueOutcome, type SliceReport, type SweepDeps } from "./app/sweep.ts";
 import { SLICE_TOUCHES_THIRD_PARTIES, type SweepSlice } from "./domain/sweep.ts";
-import { candidateIds, drizzleSweepLease, drizzleSweepRuns, lastSyncedBySource } from "./infra/drizzle-sweep.ts";
+import { candidateScoreQueues, drizzleSweepLease, drizzleSweepRuns, lastSyncedBySource } from "./infra/drizzle-sweep.ts";
 
 export { ROUTINES, ROUTINE_LABEL_KEYS, isRoutine, parseRoutine, type Routine } from "./domain/routine.ts";
 export type { DispatchResult, WorkflowDispatchPort } from "./ports.ts";
@@ -52,9 +52,11 @@ export {
   SLICE_TOUCHES_THIRD_PARTIES,
   isSweepSlice,
   parseSweepSlice,
+  sweepEnvironmentAllowed,
   type SweepSlice,
 } from "./domain/sweep.ts";
 export type { SliceReport } from "./app/sweep.ts";
+export { routineTelemetry, type RoutineTelemetry } from "./infra/drizzle-telemetry.ts";
 
 /** Capturas por chamada: uma onda de quatro hosts cabe no teto da função. */
 const CAPTURE_PER_SLICE = 4;
@@ -118,8 +120,8 @@ async function recheckSlice(worker: string, budgetMs: number): Promise<QueueOutc
 
 /**
  * A fila de repontuação (ADR 0026): pedidos de quem salvou currículo ou mexeu
- * em trilha. `pontuar` percorre todo candidato de dez em dez minutos, mas não
- * conclui a tarefa nem registra a recusa — e é a tarefa que a tela lê.
+ * em trilha. `sem-nota` e `manutencao` percorrem candidatos pela cadência, mas
+ * não concluem a tarefa nem registram a recusa — e é a tarefa que a tela lê.
  */
 async function rescoreSlice(worker: string, budgetMs: number): Promise<QueueOutcome> {
   const result = await runScoreQueue({ worker, budgetMs });
@@ -151,7 +153,10 @@ export async function runSweep(
     runs: drizzleSweepRuns,
     sync: {
       async sources() {
-        for (const config of await loadSources()) configs.set(sourceId(config.kind, config.handle), config);
+        // Do banco, como a CLI: o YAML só entra pelo regime de `ensureSources`.
+        for (const config of await catalogForSync(await loadSources())) {
+          configs.set(sourceId(config.kind, config.handle), config);
+        }
         return [...configs.keys()].map((id) => ({ id }));
       },
       lastSynced: lastSyncedBySource,
@@ -163,9 +168,9 @@ export async function runSweep(
       },
     },
     score: {
-      candidates: candidateIds,
-      async run(candidateId) {
-        const result = await scoreCandidate(candidateId);
+      candidates: candidateScoreQueues,
+      async run(candidateId, deadline) {
+        const result = await scoreCandidate(candidateId, { deadline });
         return { ok: result.erro === undefined, items: result.scored, error: result.erro };
       },
     },

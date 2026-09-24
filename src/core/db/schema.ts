@@ -55,6 +55,26 @@ export const source = production.table(
     lastError: text("last_error"),
     lastJobCount: integer("last_job_count"),
     createdAt: text("created_at").notNull().default(now),
+    /**
+     * Aposentadoria suave: fonte não é apagada (as vagas apontam para ela).
+     * Aposentada sai do sync e de toda execução; vagas e histórico ficam.
+     */
+    retiredAt: text("retired_at"),
+    // `origin` e `config_revision` têm padrão mas aceitam nulo: `source`
+    // atravessa a importação do snapshot legado, e coluna posterior a ele é
+    // opcional por contrato (`tests/postgres-schema.test.ts`). Nada no código
+    // grava nulo nelas.
+    /** Quem criou a linha: `yaml` (arquivo), `admin` (tela) ou `system` (importação, captura por termo). */
+    origin: text("origin").default("system"),
+    /** Sobe a cada edição; entra na chave de idempotência e no retrato da execução. */
+    configRevision: integer("config_revision").default(1),
+    /** NOME da variável de ambiente com a credencial — nunca o valor (G41). */
+    secretRef: text("secret_ref"),
+    /**
+     * Não nulo = o banco governa a linha (importação ou edição do admin), e o
+     * YAML só insere o que falta. Nulo = a linha ainda espelha o arquivo.
+     */
+    managedAt: text("managed_at"),
   },
   (t) => [uniqueIndex("source_kind_handle_idx").on(t.kind, t.handle)],
 );
@@ -155,6 +175,13 @@ export const job = production.table(
   (t) => [
     uniqueIndex("job_fingerprint_idx").on(t.fingerprint),
     index("job_source_idx").on(t.sourceId),
+    // Identidade estável dentro da fonte (#291): a sincronização procura
+    // primeiro por (fonte, id externo) e só depois pelo fingerprint. Não é
+    // único de propósito: o acervo já tem, da época em que só o fingerprint
+    // identificava, a mesma vaga duas vezes quando o título mudou — e um índice
+    // único faria a migração falhar em produção. `resolveObservedIdentity`
+    // escolhe entre as duplicatas sem apagar nenhuma (regra 3).
+    index("job_source_external_idx").on(t.sourceId, t.externalId),
     index("job_company_idx").on(t.companyName),
     index("job_last_seen_idx").on(t.lastSeenAt),
     index("job_closed_idx").on(t.closedAt),
@@ -172,6 +199,18 @@ export const job = production.table(
     // `termTextCandidates` em `repo.ts`, ou o planner não usa o índice.
     index("job_description_trgm_idx")
       .using("gin", sql`${withoutSeparators(t.descriptionText)} gin_trgm_ops`)
+      .where(sql`${t.closedAt} is null`),
+    // Grupo "termos parecidos" (#223): o `termo <% title` de `nearMatchesQuery`.
+    // Sobre o título cru, sem tirar separador: a similaridade por palavra
+    // compara palavras, e é o espaço que as separa.
+    index("job_title_trgm_idx")
+      .using("gin", sql`${t.title} gin_trgm_ops`)
+      .where(sql`${t.closedAt} is null`),
+    // A ordem da passada de pontuação (#288): mais recente primeiro, só
+    // abertas. A expressão precisa ser idêntica à de `RECENCY` em
+    // `scoring/apply.ts`, ou o planner não usa o índice.
+    index("job_recency_open_idx")
+      .on(sql`coalesce(${t.postedAt}, ${t.firstSeenAt})`, t.id)
       .where(sql`${t.closedAt} is null`),
   ],
 );
@@ -242,6 +281,47 @@ export const jobScore = production.table(
     // começa por candidato. Sem este índice cada uma varre a tabela inteira.
     index("job_score_job_idx").on(t.jobId, t.fit),
   ],
+);
+
+/**
+ * Onde a passada de pontuação de uma trilha parou (#288).
+ *
+ * A pontuação percorre as vagas abertas da mais recente para a mais antiga, em
+ * lotes de cem (`src/core/scoring/batch.ts`). Depois de cada lote, a posição da
+ * última vaga lida é gravada aqui, e a chamada seguinte — outra função da
+ * Vercel, trinta segundos depois ou uma hora depois — retoma dela.
+ *
+ * `profile_hash` e `scorer_version` são os da passada em curso: se o perfil
+ * efetivo mudou, a posição não vale mais e a passada recomeça do topo.
+ * `last_completed_at` é o que separa a fila "sem nota" (nunca completou uma
+ * passada na trilha principal) da manutenção de hora em hora.
+ *
+ * Derivado, como `job_score`: apagar a linha só faz a próxima passada começar
+ * do topo.
+ */
+export const scoreCursor = production.table(
+  "score_cursor",
+  {
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => targetTrack.id, { onDelete: "cascade" }),
+    profileHash: text("profile_hash").notNull(),
+    scorerVersion: text("scorer_version").notNull(),
+    /** `coalesce(posted_at, first_seen_at)` da última vaga lida; null = topo. */
+    positionKey: text("position_key"),
+    positionJobId: integer("position_job_id"),
+    /** A passada completa mais recente: o atraso da manutenção se mede daqui. */
+    lastCompletedAt: text("last_completed_at"),
+    /** A primeira passada completa da trilha, gravada uma vez: "tempo até completo". */
+    firstCompletedAt: text("first_completed_at"),
+    /** Quando o primeiro lote da trilha foi gravado: "tempo até o primeiro lote". */
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.candidateId, t.trackId], name: "score_cursor_candidate_track_pk" })],
 );
 
 /* -------------------------------------------------------------------------- */
@@ -1043,6 +1123,28 @@ export const sweepRun = production.table(
   (t) => [index("sweep_run_slice_started_idx").on(t.slice, t.startedAt)],
 );
 
+/**
+ * Orçamento diário de requisições a terceiros, por rotina (#291).
+ *
+ * Uma linha por (rotina, dia UTC). A CLI no GitHub Actions, a fatia da Vercel
+ * e o botão da tela gastam do MESMO contador — é isso que o torna
+ * compartilhado. A reserva é um upsert condicional; ler antes e gravar depois
+ * deixaria dois processos verem "sobra 1" ao mesmo tempo. `used` é também a
+ * telemetria: quantas requisições cada rotina fez por dia. Só números.
+ */
+export const requestBudget = production.table(
+  "request_budget",
+  {
+    routine: text("routine").notNull(),
+    /** UTC `YYYY-MM-DD`. */
+    day: text("day").notNull(),
+    used: integer("used").notNull().default(0),
+    /** Pedidos recusados por orçamento esgotado, para a telemetria. */
+    refused: integer("refused").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.routine, t.day], name: "request_budget_pk" })],
+);
+
 export const jobPage = production.table(
   "job_page",
   {
@@ -1151,6 +1253,64 @@ export const llmModel = production.table(
 
 export type LlmProvider = typeof llmProvider.$inferSelect;
 export type LlmModel = typeof llmModel.$inferSelect;
+
+/**
+ * Análise estruturada da VAGA (#223, tarefa 06): uma linha por tentativa,
+ * imutável depois de terminal. Nova tentativa é linha nova ligada por
+ * `retry_of`; a original não muda. Fila em tabela (ADR 0009), processada pela
+ * CLI — nunca pela requisição da Vercel.
+ *
+ * Nunca guarda a chave nem o corpo da resposta do provedor (G41): `result` é a
+ * estrutura já conferida contra a evidência, e o erro é só um código.
+ */
+export const jobAnalysis = production.table(
+  "job_analysis",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    // A retenção só apaga vaga sem candidatura, e a análise não vale sem a vaga.
+    jobId: integer("job_id")
+      .notNull()
+      .references(() => job.id, { onDelete: "cascade" }),
+    // Quem pediu sai, a análise da vaga fica.
+    requestedBy: integer("requested_by").references(() => authUser.id, { onDelete: "set null" }),
+    /**
+     * Tentativa anterior do mesmo texto. `no action`, não `restrict`: os dois
+     * impedem apagar a original sozinha, mas `restrict` confere na hora e faria
+     * a retenção falhar ao apagar em cascata uma vaga com duas tentativas; `no
+     * action` confere no fim do comando, quando as duas já saíram juntas.
+     */
+    retryOf: integer("retry_of"),
+    /** queued | running | succeeded | partial | failed | paused_quota | interrupted */
+    status: text("status").notNull().default("queued"),
+    /** SHA-256 do texto normalizado enviado; diferente do atual = "a vaga mudou". */
+    inputHash: text("input_hash").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    schemaVersion: text("schema_version").notNull(),
+    providerSlug: text("provider_slug"),
+    modelId: text("model_id"),
+    result: json("result"),
+    errorCode: text("error_code"),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    costEstimate: doublePrecision("cost_estimate"),
+    claimedAt: text("claimed_at"),
+    heartbeatAt: text("heartbeat_at"),
+    finishedAt: text("finished_at"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [
+    foreignKey({ columns: [t.retryOf], foreignColumns: [t.id], name: "job_analysis_retry_of_fk" }).onDelete("no action"),
+    // Idempotência: um pedido ativo por texto e versão. Clique duplo e corrida
+    // de processos batem aqui, não numa leitura antes de gravar.
+    uniqueIndex("job_analysis_active_idx")
+      .on(t.jobId, t.inputHash, t.schemaVersion)
+      .where(sql`${t.status} in ('queued', 'running')`),
+    index("job_analysis_job_idx").on(t.jobId, t.id),
+    index("job_analysis_claim_idx").on(t.status, t.id),
+  ],
+);
+
+export type JobAnalysisRow = typeof jobAnalysis.$inferSelect;
 
 /* -------------------------------------------------------------------------- */
 /* Authentication (AUTH-01)                                                   */

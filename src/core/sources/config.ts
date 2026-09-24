@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
 import { FETCHABLE_SOURCE_KINDS } from "./types.ts";
-import type { SourceConfig } from "./types.ts";
+import type { CatalogEntry } from "./types.ts";
 
 const SourcesFile = z.object({
   sources: z
@@ -31,7 +31,12 @@ export function sourcesPath(): string {
   return process.env.JHO_SOURCES_PATH ?? resolve(process.cwd(), "config/sources.yaml");
 }
 
-export function parseSourcesConfig(text: string): SourceConfig[] {
+/**
+ * Devolve TODA entrada, inclusive a desabilitada, com `enabled`. Quem só quer
+ * as habilitadas filtra explicitamente: descartar aqui impedia o banco de
+ * aprender que uma fonte foi desligada no arquivo.
+ */
+export function parseSourcesConfig(text: string): CatalogEntry[] {
   const parsed = SourcesFile.safeParse(parse(text));
   if (!parsed.success) {
     throw new Error(
@@ -40,11 +45,15 @@ export function parseSourcesConfig(text: string): SourceConfig[] {
         .join("\n")}`,
     );
   }
-  return parsed.data.sources
-    .filter((s) => s.enabled)
-    .map(({ kind, handle, label, rationale }) => ({ kind, handle, label, rationale }));
+  return parsed.data.sources.map(({ kind, handle, label, rationale, enabled }) => ({
+    kind,
+    handle,
+    label,
+    rationale,
+    enabled,
+  }));
 }
 
-export async function loadSources(): Promise<SourceConfig[]> {
+export async function loadSources(): Promise<CatalogEntry[]> {
   return parseSourcesConfig(await readFile(sourcesPath(), "utf8"));
 }

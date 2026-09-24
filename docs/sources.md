@@ -46,6 +46,13 @@ export type SourceSnapshot = FetchResult & { completeness: Completeness };
 devolve `RawJob[]`. Só `externalId`, `companyName`, `title`, `url` e `raw` são
 obrigatórios em `RawJob`; todo o resto é opcional e anulável.
 
+`externalId` precisa ser o id **estável** que a fonte dá à vaga (o `id` do ATS,
+o `slug` do agregador), nunca algo derivado do título: a sincronização acha a
+linha por `(fonte, externalId)` antes do fingerprint, e é isso que mantém uma
+vaga com título editado na mesma linha — e a candidatura nela (#291) — enquanto a linha pertence a esta fonte (vaga listada por duas fontes fica com a última que a viu). Id vazio,
+ou repetido com fingerprints diferentes na mesma listagem, não identifica nada,
+e vale o fingerprint ([data-model.md](data-model.md#job)).
+
 > **Invariante:** Adapters são burros — fetch, mapear, retornar. Normalização,
 > `fingerprint`, deduplicação e scoring acontecem downstream
 > (`src/core/ingest/`, `src/core/scoring/`). Um adapter que normaliza título ou
@@ -474,9 +481,18 @@ o que aconteceu com `workable` antes de ele ganhar adapter.
 `companyName` (Lever, Ashby, Recruitee), então um label preguiçoso vira o nome
 da empresa em todas as vagas daquela fonte.
 
-`enabled` tem default `true`; `loadSources()` **filtra `enabled: true`** e
-descarta o campo do objeto retornado. Uma fonte com `enabled: false` some do
-`sources list` e do `sync`, mas as vagas dela continuam no banco.
+`enabled` tem default `true`; `loadSources()` devolve a entrada com o campo, e
+a linha **não gerida** do banco o espelha. Enquanto a linha não for gerida, uma
+fonte com `enabled: false` some do `sources list` e do `sync`, mas as vagas dela
+continuam no banco. Em linha gerida o arquivo não decide mais: desligar é
+escrita no banco.
+
+**O banco é a fonte da verdade do catálogo.** Depois de `jho sources import
+--apply`, ou de uma edição do admin, a linha passa a ser **gerida**
+(`managed_at`) e o YAML não a regrava mais: só insere entradas novas, que nascem não geridas. O sync
+seleciona as fontes do banco (habilitada, não aposentada, kind com adapter,
+fora de `~terms`), não da lista do arquivo. `jho sources diff` mostra onde
+arquivo e banco divergem. Regime completo em `docs/data-model.md` (`source`).
 
 > **Invariante:** Toda fonte precisa de `rationale`. Em três meses, "por que
 > este board está aqui?" é a pergunta que decide se ele fica ou sai. O campo é

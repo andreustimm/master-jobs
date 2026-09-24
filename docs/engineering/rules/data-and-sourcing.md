@@ -106,7 +106,7 @@ importação do snapshot legado (`data/jobs.db`, gitignored, não é runtime) e 
 material histórico rotulado. Procedimento de migration segue a skill
 `drizzle-safe-migrations`, escrita para PostgreSQL.
 
-**Migração suspende a promoção automática** — ver
+**Migração não aditiva suspende a promoção e a migração automáticas** — ver
 [delivery.md](delivery.md#g51).
 
 Origem: AGENTS ("Convenções de código"). Detalhes:

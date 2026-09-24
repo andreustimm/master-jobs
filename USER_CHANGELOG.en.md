@@ -18,6 +18,28 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-09-24T13:12:40.000Z
+
+### Changed
+
+- After you save your CV, the most recent jobs get scored first; the rest follow in batches without slowing the page down.
+- Scores for existing profiles are now refreshed every hour, and new profiles are scored every ten minutes until they are complete.
+
+### New
+
+- The job page now has a structured analysis: seniority, employment, work model, location restriction, time zone, compensation and what the job requires, each backed by the passage of the posting that supports it. What the posting does not say shows as unknown, and a notice appears when the job changed after the analysis.
+
+### Added
+
+- On the Jobs screen, text in quotes searches for the exact phrase, and the search now also looks at the job location.
+- With a search active, you can sort by relevance: jobs with the term in the title first, then in the company, then elsewhere. Each job says where the search matched.
+- Below the list, jobs with a similar title that the search did not find appear separately. They are not counted.
+
+### Improved
+
+- A job whose title the company edited, on the board it comes from, stays the same job, with the application you already recorded on it, instead of showing up twice.
+- Low-scoring jobs that already left their source board are now checked and closed when the link no longer exists.
+
 ## [1.23.0] - 2026-09-23T18:11:35.000Z
 
 ### Improved

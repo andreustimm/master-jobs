@@ -12,7 +12,7 @@ import { Command } from "commander";
 import { and, desc, eq } from "drizzle-orm";
 import { closeDb, getDb } from "./core/db/client.ts";
 import { runDatabaseCleanup } from "./core/db/retention.ts";
-import { runMigrations } from "./core/db/migrate.ts";
+import { MigrationNeedsReview, runMigrations } from "./core/db/migrate.ts";
 import { listBoard, primaryScoreFilter } from "./contexts/matching/index.ts";
 import { pipelineCounts, setApplicationStatus } from "./contexts/pursuit/index.ts";
 import { application, job, jobScore, positioningTask } from "./core/db/schema.ts";
@@ -45,7 +45,7 @@ import {
 } from "./core/positioning/engage.ts";
 import { archiveClosedJobs } from "./core/ingest/archive.ts";
 import { addJob } from "./core/ingest/manual.ts";
-import { syncAll, pruneClosed } from "./core/ingest/run.ts";
+import { catalogForSync, syncAll, pruneClosed } from "./core/ingest/run.ts";
 import { verifyJobs } from "./core/ingest/verify.ts";
 import { loadProfile } from "./core/profile/load.ts";
 import {
@@ -82,8 +82,10 @@ import { IngestionBlockedError } from "./core/ingest/environment.ts";
 import {
   CAPTURE_LIMIT,
   captureHealth,
+  importCatalog,
   requestTermCaptures,
   runTermCaptures,
+  type CatalogPlan,
 } from "./contexts/sourcing/index.ts";
 import { activeTermKeys, listCandidateTracks, scoredJobsPerTrack } from "./contexts/matching/index.ts";
 import { buildJobSweepSnapshot } from "./core/triage/job-sweep.ts";
@@ -190,10 +192,18 @@ const db = program.command("db").description("Database maintenance");
 
 db.command("migrate")
   .description("Create or upgrade the database schema")
-  .action(async () => {
+  .option("--additive-only", "refuse, before any DDL, when a pending migration is not additive")
+  .action(async (opts: { additiveOnly?: boolean }) => {
     await withDb(async () => {
-      await runMigrations();
-      console.log(c.green("✓") + " schema is up to date");
+      try {
+        const applied = await runMigrations(undefined, { additiveOnly: opts.additiveOnly === true });
+        if (applied.length > 0) console.log(c.dim(`  aplicadas: ${applied.join(", ")}`));
+        console.log(c.green("✓") + " schema is up to date");
+      } catch (error) {
+        if (!(error instanceof MigrationNeedsReview)) throw error;
+        console.error(c.red(error.message));
+        process.exitCode = 1;
+      }
     });
   });
 
@@ -551,6 +561,46 @@ sources
     }
   });
 
+/** Uma linha por divergência; o `diff` e a simulação do `import` falam igual. */
+function printCatalogPlan(plan: CatalogPlan): void {
+  for (const item of plan.drift) {
+    const regime = item.kind === "only_yaml" ? "" : item.managed ? c.dim(" (managed)") : c.dim(" (mirrors yaml)");
+    const what =
+      item.kind === "only_yaml" ? c.green("only in yaml") :
+      item.kind === "only_db" ? c.yellow("only in db") :
+      `${c.yellow("differs")}: ${item.fields.join(", ")}`;
+    console.log(`  ${truncate(item.id, 40)} ${what}${regime}`);
+  }
+  if (plan.drift.length === 0) console.log(c.green("  yaml and database agree"));
+}
+
+sources
+  .command("diff")
+  .description("List where config/sources.yaml and the source catalog in the database differ (writes nothing)")
+  .action(async () => {
+    await withDb(async () => {
+      printCatalogPlan(await importCatalog({ apply: false, now: clock().iso() }));
+    });
+  });
+
+sources
+  .command("import")
+  .description("Make the database the source of truth: dry run by default, --apply writes the yaml state and marks every row as managed")
+  .option("--apply", "write the plan instead of only printing it")
+  .action(async (opts: { apply?: boolean }) => {
+    await withDb(async () => {
+      const apply = opts.apply === true;
+      const plan = await importCatalog({ apply, now: clock().iso() });
+      printCatalogPlan(plan);
+      console.log(
+        (apply
+          ? `\n  ${plan.inserts.length} inserted · ${plan.mirrors.length} updated · ${plan.orphans.length} disabled`
+          : `\n  ${plan.inserts.length} to insert · ${plan.mirrors.length} to update · ${plan.orphans.length} to disable`) +
+          (apply ? c.green("  applied: the database now governs the catalog") : c.dim("  dry run: pass --apply to write")),
+      );
+    });
+  });
+
 /* ---------------------------------- terms --------------------------------- */
 
 const terms = program.command("terms").description("Saved term searches: daily capture and platform health");
@@ -643,7 +693,7 @@ jobs
   .option("--no-score", "skip scoring after the sync")
   .action(async (opts: { concurrency: string; score: boolean }) => {
     await withDb(async () => {
-      const configs = await loadSources();
+      const configs = await catalogForSync(await loadSources());
       console.log(`Syncing ${configs.length} source(s)…\n`);
 
       const result = await syncAll(configs, {
@@ -689,7 +739,7 @@ jobs
   .option("--concurrency <n>", "parallel sources", "4")
   .action(async (opts: { minFit: string; limit: string; concurrency: string }) => {
     await withDb(async () => {
-      const configs = await loadSources();
+      const configs = await catalogForSync(await loadSources());
       const result = await syncAll(configs, { concurrency: Number(opts.concurrency) });
       const candidateId = await activeCandidateId();
       await scoreAll(candidateId);
@@ -2512,6 +2562,108 @@ program
     });
   });
 
+/* ------------------------------ analysis (fila) ----------------------------- */
+
+// `analysis`, e não `analyze`: a leitura qualitativa livre continua sendo
+// `jho analyze <id>`, com o dossiê. Esta é a análise estruturada da VAGA,
+// versionada e guardada (#223), que a tela também pede.
+const analysis = program
+  .command("analysis")
+  .description("Análise estruturada da vaga: fila, processamento com LLM (BYOK) e situação");
+
+analysis
+  .command("queue <id>")
+  .description("Pede a análise estruturada de uma vaga (reaproveita a concluída do mesmo texto)")
+  .action(async (id: string) => {
+    const jobId = idNumerico(id, "vaga");
+    if (jobId === null) return;
+    await withDb(async () => {
+      const { requestJobAnalysis } = await import("./core/llm/job-analysis.ts");
+      const result = await requestJobAnalysis({ jobId, requestedBy: null, now: clock().iso() });
+      if (!result.ok) {
+        console.error(c.red(`\n  Vaga ${id} não encontrada.\n`));
+        process.exitCode = 1;
+        return;
+      }
+      console.log(JSON.stringify({ analysis: result.id, outcome: result.outcome }));
+    });
+  });
+
+analysis
+  .command("run")
+  .description("Processa a fila de análises com a sua chave (pede confirmação antes de enviar)")
+  .option("--max <n>", "parar depois de N análises", "10")
+  .option("--yes", "não pedir confirmação antes de enviar")
+  .option("--model <id>", "modelo específico (ver: jho llm list)")
+  .action(async (opts: { max: string; yes?: boolean; model?: string }) => {
+    const max = idNumerico(opts.max, "análises");
+    if (max === null) return;
+    await withDb(async () => {
+      const { chooseModel, portFor } = await import("./core/llm/registry.ts");
+      const { ENV_KEYS, redactKey } = await import("./core/llm/port.ts");
+      const { processNextAnalysis, queuedAnalyses } = await import("./core/llm/job-analysis.ts");
+
+      // Sem chave, nada é reivindicado: a fila fica como está, e ninguém paga.
+      const choice = await chooseModel(typeof opts.model === "string" ? opts.model : undefined);
+      if (!choice) {
+        console.error(c.red("\n  Nenhum modelo disponível com chave configurada."));
+        console.log(c.dim(`  Cadastre: jho llm seed · defina ${Object.values(ENV_KEYS).join(" ou ")} no .env.\n`));
+        process.exitCode = 1;
+        return;
+      }
+      const waiting = await queuedAnalyses();
+      if (waiting.count === 0) {
+        console.log(c.dim("  Nenhuma análise na fila.\n"));
+        return;
+      }
+
+      // O único comando além de `analyze` que manda algo para fora: diz o quê,
+      // para onde e com qual chave antes de mandar.
+      console.log(`\n${c.bold("Isto vai sair da sua máquina")}`);
+      console.log(
+        c.dim(
+          `  destino: ${choice.providerLabel} (${choice.modelLabel})\n` +
+            `  chave:   ${redactKey(process.env[choice.apiKeyEnv])} (de ${choice.apiKeyEnv})\n` +
+            `  envia:   até ${Math.min(max, waiting.count)} anúncio(s) de vaga, ~${waiting.characters.toLocaleString("pt-BR")} caracteres na fila\n` +
+            `  NÃO envia: currículo, perfil, funil nem piso salarial`,
+        ),
+      );
+      if (!opts.yes) {
+        const answer = await ask(`\n  Enviar? [s/N] `);
+        if (!/^s(im)?$/i.test(answer.trim())) {
+          console.log(c.dim("  Cancelado.\n"));
+          return;
+        }
+      }
+
+      const model = {
+        port: portFor(choice),
+        providerSlug: choice.providerSlug,
+        modelId: choice.modelId,
+        inputCostPerMTok: choice.inputCostPerMTok,
+        outputCostPerMTok: choice.outputCostPerMTok,
+        maxOutputTokens: choice.maxOutputTokens,
+        effort: choice.supportsReasoning ? (choice.effort ?? undefined) : undefined,
+      };
+      for (let done = 0; done < max; done++) {
+        const processed = await processNextAnalysis(model, { now: () => clock().iso() });
+        if (!processed) break;
+        // Só id e estado: nada do texto da vaga nem da resposta vai para o log.
+        console.log(JSON.stringify(processed));
+      }
+    });
+  });
+
+analysis
+  .command("status")
+  .description("Quantas análises em cada estado (só agregados)")
+  .action(async () => {
+    await withDb(async () => {
+      const { analysisQueueStatus } = await import("./core/llm/job-analysis.ts");
+      console.log(JSON.stringify(await analysisQueueStatus()));
+    });
+  });
+
 program
   .command("prep <id>")
   .description("Dossiê para se candidatar a uma vaga: bloqueios, rede, evidências e vocabulário")
@@ -3096,6 +3248,52 @@ program
     );
     console.log(c.bold("Blockers") + c.dim(` ${profile.blockers.length} patterns`));
     console.log();
+  });
+
+/* ----------------------------------- ops ---------------------------------- */
+
+const ops = program.command("ops").description("Operação da varredura: custo e cadência");
+
+/**
+ * O baseline de custo (#291): requisições a terceiros por rotina e chamadas por
+ * fatia, por dia. Só números — pode rodar contra produção com a URL de leitura.
+ */
+ops
+  .command("telemetry")
+  .description("Requisições por rotina e chamadas por fatia da varredura, por dia")
+  .option("--days <n>", "quantos dias para trás", "7")
+  .option("--json", "saída em JSON")
+  .action(async (opts: { days: string; json?: boolean }) => {
+    await withDb(async () => {
+      const { routineTelemetry } = await import("./contexts/operations/index.ts");
+      const { DAILY_REQUEST_BUDGET } = await import("./core/ingest/request-budget.ts");
+      const days = Number(opts.days);
+      if (!Number.isInteger(days) || days < 1) throw new Error("--days precisa ser um inteiro positivo");
+      const telemetry = await routineTelemetry({ days, now: Date.now() });
+      if (opts.json) {
+        console.log(JSON.stringify({ ...telemetry, limits: DAILY_REQUEST_BUDGET }, null, 2));
+        return;
+      }
+      console.log(c.bold(`\n  REQUISIÇÕES POR ROTINA desde ${telemetry.since}`));
+      console.log(c.dim("  DIA         ROTINA           USADAS   TETO  RECUSADAS"));
+      for (const row of telemetry.requests) {
+        const limit = DAILY_REQUEST_BUDGET[row.routine as keyof typeof DAILY_REQUEST_BUDGET] ?? null;
+        console.log(
+          `  ${row.day}  ${truncate(row.routine, 15)} ${String(row.used).padStart(7)} ` +
+          `${String(limit ?? "—").padStart(6)} ${String(row.refused).padStart(10)}`,
+        );
+      }
+      console.log(c.bold("\n  FATIAS DA VARREDURA"));
+      console.log(c.dim("  DIA         FATIA          CHAMADAS UNIDADES  ITENS  ERROS  TOTAL(s)  P95(ms)  MÁX(ms)"));
+      for (const row of telemetry.sweep) {
+        console.log(
+          `  ${row.day}  ${truncate(row.slice, 13)} ${String(row.calls).padStart(8)} ${String(row.units).padStart(8)} ` +
+          `${String(row.items).padStart(6)} ${String(row.errors).padStart(6)} ${(row.totalMs / 1000).toFixed(0).padStart(9)} ` +
+          `${String(row.p95Ms).padStart(8)} ${String(row.maxMs).padStart(8)}`,
+        );
+      }
+      console.log();
+    });
   });
 
 /**

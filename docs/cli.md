@@ -27,7 +27,7 @@ Tudo é invocado através do script `jho` do `package.json`:
 Ou seja: `pnpm jho <comando>`. Não existe binário global instalado.
 
 > **Invariante:** Todo comando é seguro para re-executar. `jobs sync` roda
-> `runMigrations()` antes de qualquer coisa, `ensureSources()` faz upsert do YAML, o
+> `runMigrations()` antes de qualquer coisa, `ensureSources()` leva o YAML ao banco (só nas linhas não geridas), o
 > upsert de `job` é decidido pelo `fingerprint` e o de `job_score` por
 > `onConflictDoUpdate` em `job_id`. Nenhum comando novo pode quebrar essa propriedade.
 
@@ -50,7 +50,7 @@ rtk pnpm qa:browser:install       # Chrome usado pelo QA de jornada
 rtk pnpm dev                     # dashboard em 127.0.0.1:3000
 
 # banco
-rtk pnpm jho db migrate          # cria/atualiza o schema
+rtk pnpm jho db migrate          # cria/atualiza o schema (--additive-only: só lote aditivo)
 rtk pnpm jho db seed             # conta do dono + skills + provedores + posicionamento
 rtk pnpm jho db prune --days 90  # remove vagas fechadas sem candidatura
 
@@ -62,6 +62,8 @@ rtk pnpm jho jobs add <url>      # cadastra vaga por URL, resolvendo pelo ATS
 rtk pnpm jho jobs import <file> --source revelo   # importa JSON de plataforma logada
 rtk pnpm jho sources list        # saúde das fontes
 rtk pnpm jho sources probe ashby textlayer        # testa um handle sem gravar
+rtk pnpm jho sources diff        # YAML × banco, sem gravar
+rtk pnpm jho sources import      # simula; --apply passa o catálogo ao banco
 rtk pnpm jho sources snippet revelo               # extrator para plataforma logada
 
 # autenticação
@@ -78,6 +80,9 @@ rtk pnpm jho llm use <modelo>    # define o padrão
 rtk pnpm jho llm add-provider <slug> --label X --key-env VAR [--kind compatible --base-url URL]
 rtk pnpm jho llm add-model <provedor> <modelo> --label X [--reasoning --effort high]
 rtk pnpm jho analyze <id>        # leitura qualitativa da vaga; pede confirmação antes de enviar
+rtk pnpm jho analysis queue <id> # pede a análise estruturada (reaproveita a concluída)
+rtk pnpm jho analysis run        # processa a fila com a sua chave; pede confirmação
+rtk pnpm jho analysis status     # quantas em cada estado
 
 # candidatura
 rtk pnpm jho prep <id>           # dossiê: bloqueios, rede, evidências, vocabulário
@@ -127,6 +132,7 @@ rtk pnpm jho scrape reparse      # reprocessa tudo sem baixar de novo
 
 # análise
 rtk pnpm jho stats               # diagnóstico do scorer e do funil (--json)
+rtk pnpm jho ops telemetry       # requisições por rotina e fatias da varredura, por dia
 
 # saída
 rtk pnpm jho report              # markdown pro vault Obsidian
@@ -186,15 +192,25 @@ um subcomando.
 usa `DATABASE_MIGRATION_URL`, separado da URL de runtime, e não cria banco de
 arquivo nem faz fallback para SQLite/Turso.
 
-Sem flags.
+| Flag | Default | Descrição |
+|---|---|---|
+| `--additive-only` | desligada | recusa, antes de qualquer DDL, quando o lote pendente no banco tem comando não aditivo (`src/core/db/migration-review.ts`); sai com 1 listando arquivo, motivo e comando |
+
+`--additive-only` é o modo do push em `main` (`migrate.yml`,
+[ADR 0028](adr/0028-migracao-automatica-so-aditiva.md)). Num banco vazio ele
+sempre recusa: o histórico inclui `REVOKE` e mudança de tipo.
 
 ```bash
 pnpm jho db migrate
+pnpm jho db migrate --additive-only
 ```
 
 ```
+  aplicadas: 0017_exemplo
 ✓ schema is up to date
 ```
+
+A linha `aplicadas:` só aparece quando algo foi aplicado.
 
 Rodar duas vezes seguidas é inofensivo: o migrator só aplica o que falta. `jobs sync`
 já executa isso internamente, então na prática você só chama `db migrate` num banco
@@ -277,9 +293,11 @@ Grupo `sources`, descrição `"Inspect configured job sources"`.
 
 ### `jho sources list`
 
-`"Show every configured source and its last sync result"`. Lê `config/sources.yaml` via
-`loadSources()` (que já filtra `enabled: true`) e cruza com as linhas da tabela `source`
-pelo id `${kind}:${handle}`.
+`"Show every configured source and its last sync result"`. Lista o que o sync varre, no
+mesmo regime por linha (`sourceHealth()`): linha **não gerida** (ou ainda inexistente) vem de
+`config/sources.yaml` — só entradas com `enabled: true` —, cruzada com a tabela `source` pelo
+id `${kind}:${handle}`; linha **gerida** vem do banco, com o rótulo do banco, e aparece só se
+o sync a seleciona (habilitada, não aposentada), esteja ou não no arquivo.
 
 Sem flags.
 
@@ -300,11 +318,50 @@ pnpm jho sources list
 Detalhes que importam na leitura:
 
 - Handle vazio (`himalayas`, `arbeitnow`, `remoteok`) é impresso como `(all)`.
-- `STATUS` é `ok`, `error` ou `never` — `never` significa que a fonte está no YAML mas
-  ainda não apareceu em nenhum sync.
+- `STATUS` é `ok`, `error` ou `never` — `never` significa que a fonte não gerida está no
+  YAML mas ainda não apareceu em nenhum sync.
 - A linha `↳` em vermelho é o `lastError` gravado no último sync daquela fonte.
-- Fonte com `enabled: false` no YAML **não aparece** aqui: `loadSources()` a descarta
-  antes.
+- Fonte **não gerida** com `enabled: false` no YAML não aparece aqui. Em linha gerida o
+  arquivo não decide: ela aparece enquanto o banco a mantiver habilitada.
+
+### `jho sources diff`
+
+`"List where config/sources.yaml and the source catalog in the database differ
+(writes nothing)"`. Uma linha por divergência: `only in yaml` (o sync vai
+inserir), `only in db` (linha do catálogo ausente do arquivo) e `differs:
+label, rationale, enabled`. O sufixo diz o regime da linha: `(mirrors yaml)`
+será regravada pelo próximo sync; `(managed)` é governada pelo banco e o
+arquivo não a toca. Fontes `<kind>:~terms`, `manual` e `recruiter` ficam de
+fora — não vêm do YAML. Sem flags.
+
+```bash
+pnpm jho sources diff
+```
+
+```
+  greenhouse:acme                          differs: label (managed)
+  lever:nova                               only in yaml
+```
+
+### `jho sources import [--apply]`
+
+`"Make the database the source of truth: dry run by default, --apply writes the
+yaml state and marks every row as managed"`. Sem `--apply` imprime o mesmo
+plano do `diff` e os totais, sem gravar. Com `--apply`, numa transação: insere
+o que falta, grava o estado do arquivo nas linhas não geridas (inclusive
+`enabled: false`), desabilita a linha não gerida que saiu do arquivo e carimba
+`managed_at` em toda linha do catálogo. Linha já gerida não é regravada:
+importar de novo depois de uma edição na tela não desfaz a edição, e a
+divergência segue no `diff`. É a transição de uma vez só; banco vazio e
+fixture continuam nascendo do YAML sem ela. Ver `docs/data-model.md`
+(`source`).
+
+Em produção, não aplique antes da tela de Plataformas: sem ela nada edita ou
+desliga uma linha gerida (`docs/operations.md`, "Catálogo de fontes").
+
+| Flag | Efeito |
+|---|---|
+| `--apply` | Grava o plano em vez de só imprimi-lo |
 
 ### `jho sources probe <kind> [handle] [--term <termo>]`
 
@@ -459,8 +516,10 @@ Grupo `jobs`, descrição `"Sync, score and browse jobs"`.
 ### `jho jobs sync`
 
 `"Fetch every configured source and upsert the results"`. Sequência exata:
-`runMigrations()` → `loadSources()` → `syncAll(configs, { concurrency, onProgress })` →
-`scoreAll()` (salvo com `--no-score`).
+`runMigrations()` → `loadSources()` → `catalogForSync()` (espelha o YAML nas linhas não
+geridas e seleciona do banco as fontes habilitadas, não aposentadas, com adapter e fora de
+`~terms`) → `syncAll(configs, { concurrency, onProgress })` → `scoreAll()` (salvo com
+`--no-score`). Uma fonte desligada pela tela fica fora mesmo presente no YAML.
 
 | Flag | Default | Descrição |
 |---|---|---|
@@ -720,6 +779,12 @@ pnpm jho jobs verify --min-fit 55 --limit 250
 > bloqueando bot — o Himalayas devolve isso em toda requisição — e fechar por
 > 403 apagaria vagas vivas. Timeout e 5xx não provam nada e entram como
 > inconclusivos.
+
+Cada sondagem gasta uma unidade do orçamento diário `reconferencia`, o mesmo de
+`jho jobs recheck run` e da fatia da Vercel (#291). Com o dia esgotado, o lote
+para antes de sondar o resto. `jho jobs recheck queue` também enfileira vagas
+abaixo de `--min-fit` que a fonte deixou de listar há 3 dias ou mais, depois
+das acima do corte — ver [operations.md](operations.md#orçamento-de-requisições-e-telemetria-por-rotina).
 
 ### `jho jobs archive`
 
@@ -1033,6 +1098,26 @@ vermelho com `exitCode = 1`.
 
 ---
 
+## Área `ops` — custo e cadência da varredura
+
+### `jho ops telemetry`
+
+Requisições a terceiros por rotina (`request_budget`) e chamadas por fatia da
+varredura (`sweep_run`), por dia. Só números e nomes de rotina — é o comando que
+mede o baseline de custo em produção (#291).
+
+```bash
+pnpm jho ops telemetry --days 7
+pnpm jho ops telemetry --days 7 --json   # inclui os tetos em `limits`
+```
+
+| Flag | Padrão | Efeito |
+|---|---|---|
+| `--days <n>` | `7` | Janela, em dias para trás a partir de hoje (UTC) |
+| `--json` | — | Saída em JSON |
+
+---
+
 ## Área `tasks` — plano de posicionamento
 
 O plano de ação da auditoria de julho/2026 como linhas executáveis, em cinco
@@ -1267,6 +1352,46 @@ Cria a conta do dono (admin + candidato `default`) com senha gerada, mostrada
 uma vez. Recusa um e-mail diferente quando o candidato `default` já pertence a
 outra conta.
 
+## Área `analysis` — análise estruturada da vaga
+
+Grupo `analysis`, separado de `jho analyze <id>`: aquele é a leitura
+qualitativa livre, com o dossiê, impressa no terminal; este é a análise da
+**vaga** (só título, empresa, local e anúncio), estruturada, versionada e
+guardada em `job_analysis`, que a tela da vaga também pede. Regras em
+`docs/data-model.md` (`job_analysis`) e o prompt em
+[`docs/prompts/system/job-structure.md`](prompts/system/job-structure.md).
+
+### `jho analysis queue <id>`
+
+Pede a análise. Imprime `{"analysis": <id>, "outcome": ...}`, com `outcome`
+`created` (nova na fila), `active` (já havia uma na fila ou rodando),
+`reused` (há uma concluída do mesmo texto — nada é refeito nem pago) ou
+`exhausted` (três tentativas sem sucesso; só o admin tenta de novo, pela tela).
+Vaga inexistente sai com código 1. Não chama o provedor.
+
+### `jho analysis run [--max <n>] [--yes] [--model <id>]`
+
+Processa a fila, uma análise por vez, com o modelo escolhido como em
+`jho analyze` (`--model`, o padrão, ou o primeiro com chave). Sem modelo com
+chave, sai com código 1 **sem reivindicar nada**: a fila fica como está. Com
+fila, diz o que vai sair da máquina — destino, chave redigida, quantos
+anúncios e quantos caracteres — e espera confirmação (Enter vazio é "não";
+`--yes` pula). Imprime só `{"id", "status"}` por análise: nem texto da vaga,
+nem resposta do provedor.
+
+| Flag | Default | Efeito |
+|---|---|---|
+| `--max <n>` | `10` | para depois de N análises |
+| `--yes` | — | não pede confirmação |
+| `--model <id>` | padrão do cadastro | modelo específico (`jho llm list`) |
+
+Texto da vaga alterado depois do pedido: a análise falha com `input_changed`
+sem chamar o provedor. 429 do provedor vira `paused_quota`.
+
+### `jho analysis status`
+
+Contagem por estado, em JSON. Só agregados.
+
 ## Variáveis de ambiente que a CLI respeita
 
 Carregadas de `.env` pelo `--env-file-if-exists=.env` do script `jho`.
@@ -1468,8 +1593,9 @@ pnpm jho jobs list --min-fit 55 --limit 20
 ```
 
 Se o passo 1 retorna `0 job(s)` ou lança, o handle está errado — não adiante para o
-passo 2. E `enabled: false` no YAML remove a fonte de `loadSources()`, ou seja, ela
-some de `sources list` e do sync sem precisar apagar a entrada nem o `rationale`.
+passo 2. E `enabled: false` no YAML desabilita a linha (enquanto ela não for gerida pelo
+banco), ou seja, ela some de `sources list` e do sync sem precisar apagar a entrada nem o
+`rationale`.
 
 ### 7. Higiene periódica do banco
 

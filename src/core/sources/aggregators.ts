@@ -119,6 +119,7 @@ function mapHimalayas(j: HimalayasJob): RawJob {
 
 export const himalayas: SourceAdapter = {
   kind: "himalayas",
+  snapshot: "complete",
   docs: "https://himalayas.app/api",
   async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     // Himalayas exposes ~101.000 postings but serves 20 per request and
@@ -247,6 +248,7 @@ function mapRemotive(j: RemotiveJob): RawJob {
 
 export const remotive: SourceAdapter = {
   kind: "remotive",
+  snapshot: "partial",
   docs: "https://remotive.com/api/remote-jobs",
   async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const params = new URLSearchParams({ limit: "50" });
@@ -288,6 +290,7 @@ type ArbeitnowJob = {
 
 export const arbeitnow: SourceAdapter = {
   kind: "arbeitnow",
+  snapshot: "partial",
   docs: "https://www.arbeitnow.com/blog/job-board-api",
   async fetchJobs(_config: SourceConfig): Promise<SourceSnapshot> {
     const data = await getJson<{ data?: ArbeitnowJob[] }>(
@@ -364,6 +367,7 @@ export function remoteOkTag(query: string): string {
 
 export const remoteok: SourceAdapter = {
   kind: "remoteok",
+  snapshot: "partial",
   docs: "https://remoteok.com/api",
   async fetchJobs(_config: SourceConfig): Promise<SourceSnapshot> {
     const data = await getJson<RemoteOkJob[]>("https://remoteok.com/api", BUDGETED);
@@ -405,6 +409,7 @@ type AdzunaJob = {
 
 export const adzuna: SourceAdapter = {
   kind: "adzuna",
+  snapshot: "partial",
   docs: "https://developer.adzuna.com/",
   async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const appId = process.env.ADZUNA_APP_ID;

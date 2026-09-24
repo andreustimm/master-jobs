@@ -4,16 +4,36 @@ import { spawnSync } from "node:child_process";
 import { parse } from "yaml";
 import { expect, it } from "vitest";
 
-it("requires manual main dispatch and the production environment for migrations", () => {
+it("migrates on every push to main, and manual dispatch still needs the typed project ref", () => {
   const workflow = parse(readFileSync(".github/workflows/migrate.yml", "utf8"));
-  expect(Object.keys(workflow.on)).toEqual(["workflow_dispatch"]);
+  expect(Object.keys(workflow.on).sort()).toEqual(["push", "workflow_dispatch"]);
+  // Só main (dev e staging não têm banco próprio ainda) e SEM `paths`: o
+  // filtro do GitHub só enxerga 300 arquivos do diff e pularia em silêncio a
+  // migração de uma promoção grande. O lote pendente vem do banco.
+  expect(workflow.on.push).toEqual({ branches: ["main"] });
   expect(workflow.jobs.migrar.if).toContain("github.ref == 'refs/heads/main'");
-  expect(workflow.jobs.migrar.if).toContain("inputs.confirm_project == 'bujawvnxwtmneiggizje'");
+  expect(workflow.jobs.migrar.if).toContain("github.event_name == 'push' || inputs.confirm_project == 'bujawvnxwtmneiggizje'");
   expect(workflow.jobs.migrar.environment).toBe("production");
   expect(workflow.concurrency["cancel-in-progress"]).toBe(false);
   const step = workflow.jobs.migrar.steps.find((s: { env?: unknown }) => s.env);
   expect(step.env.DATABASE_MIGRATION_URL).toBe("${{ secrets.SUPABASE_MIGRATION_URL }}");
   expect(step.env.DATABASE_URL).toBeUndefined();
+  // O push nunca aplica o que não for aditivo; só o disparo humano aplica o lote inteiro.
+  expect(step.env.MIGRATION_MODE).toBe("${{ github.event_name == 'push' && 'aditiva' || 'revisada' }}");
+  const script = readFileSync(".github/scripts/migrar.sh", "utf8");
+  expect(script).toMatch(/aditiva\) flags=\(--additive-only\)/);
+});
+
+it("refuses to migrate without an explicit, known mode", () => {
+  for (const mode of [undefined, "", "completa", "ADITIVA"]) {
+    const env: NodeJS.ProcessEnv = { ...process.env, DATABASE_MIGRATION_URL: "postgres://x:secret-password@localhost/postgres" };
+    delete env.MIGRATION_MODE;
+    if (mode !== undefined) env.MIGRATION_MODE = mode;
+    const result = spawnSync("bash", [".github/scripts/migrar.sh"], { encoding: "utf8", env });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("MIGRATION_MODE deve ser 'aditiva' ou 'revisada'");
+    expect(result.stdout + result.stderr).not.toContain("secret-password");
+  }
 });
 
 it("keeps crawlers opt-in and gives them only runtime credentials", () => {
@@ -102,12 +122,16 @@ it("rejects missing, malformed, other-project and insecure migration destination
   for (const url of ["", "secret-invalid-url", "postgres://postgres:secret-password@localhost/postgres",
     "postgres://postgres.other:secret-password@aws-0-sa-east-1.pooler.supabase.com/postgres",
     "postgres://postgres.bujawvnxwtmneiggizje:secret-password@aws-0-sa-east-1.pooler.supabase.com/postgres?sslmode=disable"]) {
-    const result = spawnSync("bash", [".github/scripts/migrar.sh"], {
-      encoding: "utf8", env: { ...process.env, DATABASE_MIGRATION_URL: url },
-    });
-    expect(result.status).not.toBe(0);
-    expect(result.stdout + result.stderr).not.toContain("secret-password");
-    expect(result.stdout + result.stderr).not.toContain("secret-invalid-url");
+    // Os dois modos passam pela mesma validação de destino.
+    for (const mode of ["aditiva", "revisada"]) {
+      const result = spawnSync("bash", [".github/scripts/migrar.sh"], {
+        encoding: "utf8", env: { ...process.env, DATABASE_MIGRATION_URL: url, MIGRATION_MODE: mode },
+      });
+      expect(result.status).not.toBe(0);
+      expect(result.stdout).not.toContain("MIGRATION_MODE");
+      expect(result.stdout + result.stderr).not.toContain("secret-password");
+      expect(result.stdout + result.stderr).not.toContain("secret-invalid-url");
+    }
   }
 });
 

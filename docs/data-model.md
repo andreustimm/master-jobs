@@ -42,6 +42,8 @@ erDiagram
     job ||--o{ job_score : "job_id PK (cascade)"
     candidate ||--o{ target_track : "candidate_id (cascade)"
     target_track ||--o{ job_score : "track_id PK (cascade)"
+    candidate ||--o{ score_cursor : "candidate_id PK (cascade)"
+    target_track ||--o| score_cursor : "track_id PK (cascade)"
     target_track ||--o{ saved_term : "track_id (cascade)"
     candidate ||--o{ saved_term : "candidate_id (cascade)"
     candidate ||--o{ saved_term_request : "candidate_id (cascade)"
@@ -64,6 +66,11 @@ erDiagram
         TEXT last_error
         INTEGER last_job_count
         TEXT created_at
+        TEXT retired_at "aposentadoria suave"
+        TEXT origin "yaml, admin ou system"
+        INTEGER config_revision
+        TEXT secret_ref "nome da variável, nunca o valor"
+        TEXT managed_at "nulo = espelha o YAML"
     }
     company {
         INTEGER id PK
@@ -231,11 +238,25 @@ ilhas do módulo de posicionamento LinkedIn.
 
 ### `source`
 
-Uma feed configurada: um board de ATS, um agregador ou um import manual.
-`config/sources.yaml` é a fonte da verdade — `ensureSources()` faz
-`onConflictDoUpdate` por `id` no começo de cada `syncAll()`, atualizando
-`label`, `rationale` e `enabled`. A tabela também carrega a **saúde do último
-sync**, que é o que `pnpm jho sources list` imprime.
+Uma feed configurada: um board de ATS, um agregador ou um import manual. O
+**banco é a fonte da verdade do catálogo**, governado por linha (migration
+`0021_source_catalog`, #223):
+
+- linha **não gerida** (`managed_at` nulo) espelha `config/sources.yaml` a cada
+  sync — rótulo, motivo e `enabled`, inclusive `enabled: false`; uma linha não
+  gerida que saiu do arquivo é desabilitada (`ensureSources(…, { wholeFile })`);
+- linha **gerida** (`managed_at` preenchido por `jho sources import --apply` ou
+  por edição do admin) nunca é sobrescrita pelo arquivo, que só insere o que
+  falta — e a linha inserida depois nasce não gerida;
+- o sync seleciona do banco (`syncableSources()`): `enabled`, `retired_at`
+  nulo, kind com adapter e handle fora de `~terms`. Isso deixa de fora
+  `manual:sample` da fixture, `manual`/`recruiter` e as fontes da captura por
+  termo, que sincronizadas fechariam por ausência o que o termo trouxe.
+
+A decisão (quem é gerido, quem é órfão, o que diverge) é pura, em
+`src/contexts/sourcing/domain/catalog.ts` (`planCatalogImport`); `jho sources
+diff` a mostra sem gravar. A tabela também carrega a **saúde do último sync**,
+que é o que `pnpm jho sources list` imprime.
 
 | Coluna | Notas |
 |---|---|
@@ -243,8 +264,13 @@ sync**, que é o que `pnpm jho sources list` imprime.
 | `kind` | `greenhouse \| lever \| ashby \| smartrecruiters \| workable \| himalayas \| remotive \| arbeitnow \| remoteok \| adzuna \| manual` (comentário do schema; a union `SourceKind` real também inclui `recruitee`) |
 | `handle` | board token / company slug / query — o significado muda por `kind`, ver `docs/sources.md` |
 | `label` | nome legível; vários adapters usam como `companyName` quando a API não devolve o nome da empresa |
-| `enabled` | INTEGER boolean, default `true`. `loadSources()` já filtra `enabled: true` e descarta o campo, então o banco praticamente sempre vê `true` |
+| `enabled` | boolean, default `true`. `loadSources()` devolve também a entrada desabilitada, com `enabled: false`, e a linha não gerida a espelha |
 | `rationale` | por que essa fonte está na lista — mantém o config auto-documentado |
+| `retired_at` | aposentadoria suave. Aposentada sai do sync e não é editada; vagas e histórico continuam legíveis, porque a linha fica (fonte nunca é apagada) |
+| `origin` | quem criou a linha: `yaml`, `admin` ou `system` (`manual`, `recruiter`, `<kind>:~terms`, fonte de ATS criada desligada por `jho jobs add`, e linha da importação do snapshot legado). A migration `0022_backfill_source_origin` marcou como `yaml` só as linhas de sync existentes **habilitadas**. Rótulo informativo: o regime é `managed_at` |
+| `config_revision` | começa em 1 e sobe a cada edição (espelhamento, órfã desabilitada, escrita do admin) |
+| `secret_ref` | **nome** da variável de ambiente com a credencial, nunca o valor (G41). Valor com cara de chave é recusado antes de gravar, e o erro não o ecoa |
+| `managed_at` | quando a linha passou a ser governada pelo banco; nulo = ainda espelha o YAML |
 | `last_synced_at`, `last_status`, `last_error`, `last_job_count` | carimbados no fim de `syncOne()`, mas **não do mesmo jeito nos dois caminhos**: o ramo de sucesso grava os quatro (`lastStatus: "ok"`, `lastError: null`, `lastJobCount: result.fetched`); o `catch` grava só `lastSyncedAt`, `lastStatus: "error"` e `lastError`. `last_job_count` fica com o valor do último sync bem-sucedido, então `pnpm jho sources list` imprime esse número obsoleto ao lado do status `error` |
 
 Índice único: `source_kind_handle_idx (kind, handle)` — redundante com a PK por
@@ -272,7 +298,7 @@ fato imutável: reingestão atualiza conteúdo e `last_seen_at`, reabre
 | `fingerprint` (UNIQUE) | identidade global da vaga — ver [Fingerprint vs contentHash](#fingerprint-vs-contenthash) |
 | `content_hash` | detector de edição — mesma seção |
 | `source_id` -> `source.id` | `ON DELETE cascade`. **Atenção:** é reescrito quando a vaga é atualizada com conteúdo novo (o `set` do ramo `contentHash` diferente inclui `sourceId`), então numa vaga vista por duas fontes essa coluna aponta para a última fonte que a viu com conteúdo alterado |
-| `external_id` | id estável dentro da fonte; **não** participa da deduplicação |
+| `external_id` | id estável dentro da fonte. Na sincronização, é a **primeira** chave de identidade: `(source_id, external_id)` acha a linha antes do fingerprint, e um título editado atualiza a mesma vaga em vez de criar outra (#291) — enquanto a linha é daquela fonte. Vaga vista por duas fontes pertence à última que a observou (`source_id` é reescrito), e a edição de título na outra ainda cai no fingerprint e vira linha nova. Entre fontes, quem deduplica continua sendo o fingerprint. Captura por termo, import, e-mail e cadastro manual não identificam por ele |
 | `company_id` -> `company.id` | sem cascade: `ON DELETE no action`, **declarado** no schema. Empresa que ainda nomeia vaga não pode ser apagada; nada apaga empresa hoje |
 | `company_name` | denormalizado de propósito: existe mesmo quando `slugifyCompany()` devolve string vazia e `company_id` fica `null` |
 | `description_html` / `description_text` | `description_text` é o dado durável que scorer e UI leem. `description_html` permanece por compatibilidade de schema, mas ingestão nova grava `null`; `jho db cleanup` remove o legado |
@@ -289,9 +315,28 @@ migration é adicionar essa coluna nullable como estado operacional separado de
 `closed_at`: arquivar tira a vaga do board ativo, mas não apaga a vaga nem suas
 candidaturas. O contrato está em [ADR 0020](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md).
 
-Índices: `job_fingerprint_idx` (único), `job_source_idx`, `job_company_idx`
-(por `company_name`), `job_last_seen_idx`, `job_closed_idx`. O último importa
-porque toda query de board filtra `closed_at IS NULL`.
+Índices: `job_fingerprint_idx` (único), `job_source_idx`,
+`job_source_external_idx` (`source_id, external_id`, **não** único),
+`job_company_idx` (por `company_name`), `job_last_seen_idx`, `job_closed_idx`.
+O último importa porque toda query de board filtra `closed_at IS NULL`.
+
+**Identidade por fonte e id externo (#291).** `observeRawJobs()` lê em lote as
+linhas da fonte com os ids externos do bloco e decide com a função pura
+`resolveObservedIdentity()` (`src/core/ingest/identity.ts`):
+
+- linha achada pelo id externo é a vaga — o fingerprint novo é gravado, a menos
+  que outra linha já o tenha; aí a linha mantém o antigo, porque juntar as duas
+  seria mover candidatura (regras 2 e 3);
+- várias linhas com o mesmo id externo (herança de quando só o fingerprint
+  identificava) não são unidas: vence a que já tem o fingerprint novo, depois a
+  aberta, depois a mais antiga;
+- id externo vazio (regra 17) ou repetido com fingerprints diferentes na mesma
+  listagem não identifica nada, e vale o fingerprint.
+
+Limite conhecido: a busca é por `(source_id, external_id)` da fonte que está sincronizando. Numa vaga que duas fontes listam, a linha pertence à última que a viu, e uma edição de título observada pela outra não a acha pelo id — cai no fingerprint, como antes da #291.
+
+O índice não é único de propósito: essas duplicatas herdadas existem em
+produção, e um `UNIQUE` faria a migração falhar.
 
 **Busca por termo (#214).** `job_description_trgm_idx` é GIN `gin_trgm_ops`
 sobre `replace(replace(description_text, ' ', ''), '-', '')`, parcial em
@@ -311,8 +356,18 @@ reverter é `DROP INDEX` dos dois (a extensão pode ficar). O migrator roda numa
 transação, então `0013` usa `CREATE INDEX` comum, sem `CONCURRENTLY`: durante a
 construção, escritas em `job` e `job_page` esperam. No acervo local (9.060
 vagas) o índice de descrição tem 19 MB e ficou pronto em poucos segundos
-(observado, não cronometrado); rode
-`migrate.yml` fora da janela do sync.
+(observado, não cronometrado). Índice comum é aditivo e o push para `main` o
+aplica sozinho (ADR 0028): mescle fora da janela do sync.
+
+**Termos parecidos (#223).** `job_title_trgm_idx` é GIN `gin_trgm_ops` sobre
+`title` cru (sem tirar separador: a similaridade por palavra compara palavras),
+parcial em `closed_at IS NULL`, migration aditiva `0017_job_title_trgm`. Responde
+ao `termo <% title` do grupo de proximidade (`nearMatchesQuery` em `repo.ts`),
+com o limiar em `pg_trgm.word_similarity_threshold` fixado na transação da
+consulta; `word_similarity()` só ordena, porque sozinha nunca usa o índice.
+`tests/search-relevance.test.ts` (IT-010) prova que o índice é elegível no plano.
+Reverter é `DROP INDEX production.job_title_trgm_idx`; como `0013`, sem
+`CONCURRENTLY`.
 
 A migration que adicionar `archived_at` também deve manter um índice que suporte
 as varreduras por corte de `closed_at`/`archived_at`, conforme o TechSpec de
@@ -361,6 +416,25 @@ uma subconsulta correlacionada por vaga, repetida no `WHERE` e no `ORDER BY` —
 a forma que leu 77,4 milhões de linhas numa varredura em 03/09.
 `tests/verify-queue.test.ts` lê o plano e reprova `SubPlan` ou mais de uma
 visita a `job_score`.
+
+### `score_cursor` — onde a passada de pontuação parou
+
+Migração `0019_score_cursor` (aditiva), [ADR 0027](adr/0027-cadencia-das-notas-em-lotes-com-cursor.md).
+Uma linha por (candidato, trilha), chave primária `(candidate_id, track_id)`;
+as duas FKs com `ON DELETE cascade`. Derivada como `job_score`: apagar a linha
+só faz a próxima passada começar do topo.
+
+| Coluna | Notas |
+|---|---|
+| `profile_hash`, `scorer_version` | os da passada em curso; se o perfil efetivo ou o scorer mudou, a posição não vale e a passada recomeça do topo |
+| `position_key`, `position_job_id` | `coalesce(posted_at, first_seen_at)` e id da última vaga lida; nulos = a próxima leitura começa pela vaga mais recente |
+| `last_completed_at` | a passada completa mais recente; nunca volta a nulo. Nulo na trilha principal = candidato na fila `sem-nota` |
+| `first_completed_at` | a primeira passada completa, gravada uma vez — "tempo até completo" |
+| `created_at` | quando o primeiro lote da trilha foi gravado — "tempo até o primeiro lote" |
+
+A ordem da passada usa o índice parcial `job_recency_open_idx` em `job`,
+`(coalesce(posted_at, first_seen_at), id) where closed_at is null`; a expressão
+é a mesma de `RECENCY` em `src/core/scoring/apply.ts`.
 
 ### `candidate_matching_profile`
 
@@ -654,14 +728,15 @@ caminho de ingestão a chama.
 
 ### 2. Vaga que some é fechada, não deletada
 
-`syncOne()` compara os fingerprints vistos nesta rodada com os que aquela fonte
-carregava e faz `UPDATE ... SET closed_at = stamp`. Nunca `DELETE`. E só faz
-isso quando a listagem é a fonte inteira:
+`syncOne()` compara as linhas vistas nesta rodada (por `job.id`, não por
+fingerprint: uma vaga achada pelo id externo pode ter mantido o fingerprint
+antigo) com as abertas daquela fonte e faz `UPDATE ... SET closed_at = stamp`.
+Nunca `DELETE`. E só faz isso quando a listagem é a fonte inteira:
 
 ```ts
 // Anything a complete listing no longer carries is closed. A partial
 // window leaves the rest to the 404/410 recheck.
-if (decideAbsenceClosure({ completeness, seen: seenFingerprints.length }).kind === "close-missing") {
+if (decideAbsenceClosure({ completeness, seen: seenIds.size }).kind === "close-missing") {
 ```
 
 Três detalhes que um agente precisa preservar:
@@ -948,8 +1023,55 @@ apagar um candidato não pode falhar por causa de uma reserva de dez minutos.
 
 | Tabela | Chave | O que guarda |
 |---|---|---|
-| `sweep_lease` | `key` (`sync:<fonte>`, `pontuar:<candidato>`, `alarme:<nome>`, `manutencao:<nome>`) | reserva viva (`claimed_at`, `claimed_by`), última tentativa (`last_claimed_at`, nunca limpa) e último término (`last_finished_at`). Reservada por um único `INSERT … ON CONFLICT DO UPDATE … WHERE`; vence em 5 min |
+| `sweep_lease` | `key` (`sync:<fonte>`, `pontuacao:<candidato>` — comum às fatias `sem-nota` e `manutencao`; `pontuar:<candidato>` é resíduo da fatia removida —, `alarme:<nome>`, `manutencao:<nome>`) | reserva viva (`claimed_at`, `claimed_by`), última tentativa (`last_claimed_at`, nunca limpa) e último término (`last_finished_at`). Reservada por um único `INSERT … ON CONFLICT DO UPDATE … WHERE`; vence em 5 min |
 | `sweep_run` | `id`; índice `(slice, started_at)` | uma linha por chamada (`unit` nulo) e uma por unidade: duração, itens, erros, mensagem de erro. Só números e ids; podada a cada 24 h para 14 dias |
+
+### Orçamento de requisições — `request_budget`
+
+Do núcleo de ingestão (`src/core/ingest/request-budget.ts`, SQL em
+`request-budget-store.ts`), #291. Sem FK e sem dado de vaga ou pessoa.
+
+| Coluna | Regra |
+|---|---|
+| `(routine, day)` | chave primária: `sync`, `reconferencia` ou `captura`, por dia UTC |
+| `used` | unidades gastas no dia, somando CLI, Vercel e botão. Reservada por upsert condicional abaixo do teto; devolvida quando a fila estava vazia |
+| `refused` | pedidos recusados por teto esgotado — distingue "parou por orçamento" de "não tinha trabalho" |
+
+Nada poda esta tabela: são três linhas por dia.
+
+### Análise estruturada da vaga — `job_analysis`
+
+Do módulo `llm` (`src/core/llm/job-analysis.ts`, regras puras em
+`job-structure.ts`), #223. Uma linha por **tentativa**, imutável depois de
+terminal: toda escrita de término filtra `status = 'running'` e o
+`claimed_at` de quem reivindicou. A análise é da vaga, não da pessoa — a
+entrada do prompt ([`job-structure.md`](prompts/system/job-structure.md)) é só
+título, empresa, local e anúncio, e por isso qualquer sessão que lê a vaga lê
+o resultado. Nada aqui escreve em `application`, `job_score` nem `candidate`.
+
+| Coluna | Regra |
+|---|---|
+| `job_id` | `ON DELETE cascade`: a retenção só apaga vaga sem candidatura, e a análise não vale sem ela |
+| `requested_by` | `auth_user`, `ON DELETE set null`. Vem da sessão, nunca do formulário |
+| `retry_of` | tentativa anterior; `ON DELETE no action`. Não `restrict`: `restrict` confere na hora e faria a cascata da retenção falhar numa vaga com duas tentativas |
+| `status` | `queued`, `running`, `succeeded`, `partial`, `failed`, `paused_quota` (429 do provedor), `interrupted` (lease vencido) |
+| `input_hash` | SHA-256 do texto normalizado enviado. Diferente do atual = "a vaga mudou depois da análise"; o processador falha com `input_changed` sem chamar o provedor se o texto mudou entre o pedido e o processamento |
+| `prompt_version`, `schema_version` | de `JOB_STRUCTURE_PROMPT_VERSION` e `JOB_STRUCTURE_SCHEMA_VERSION` |
+| `provider_slug`, `model_id` | nunca a chave (G41) |
+| `result` | a estrutura depois de `bindEvidence()`: campo cujo trecho não está no texto vira desconhecido. O corpo da resposta do provedor nunca é gravado |
+| `error_code` | só código (`malformed_output`, `input_changed`, `quota`, `provider_error`, `network`, `lease_expired`), nunca mensagem |
+| `input_tokens`, `output_tokens`, `cost_estimate` | só admin vê |
+| `claimed_at`, `heartbeat_at`, `finished_at` | lease de 10 min (`ANALYSIS_LEASE_MS`); `running` além dele vira `interrupted` na leitura seguinte e sai do índice de idempotência |
+
+Índice único parcial `job_analysis_active_idx (job_id, input_hash,
+schema_version) where status in ('queued','running')`: clique duplo e corrida
+de processos resultam numa análise ativa só.
+
+**Reuso e custo.** Pedir a análise de um texto que já tem `succeeded` na mesma
+versão de esquema devolve a existente, sem nova chamada paga. Depois de
+`failed`, `partial`, `paused_quota` ou `interrupted`, um pedido cria nova
+tentativa ligada à anterior, até três por texto (`MAX_REQUEST_ATTEMPTS`); além
+disso, só o admin tenta de novo (`retryJobAnalysisAction`).
 
 ### `fx_rate` — cotações em cache
 

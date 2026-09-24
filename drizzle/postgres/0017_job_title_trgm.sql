@@ -1,0 +1,1 @@
+CREATE INDEX "job_title_trgm_idx" ON "production"."job" USING gin ("title" gin_trgm_ops) WHERE "production"."job"."closed_at" is null;

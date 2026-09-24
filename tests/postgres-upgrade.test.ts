@@ -16,7 +16,7 @@
  * Fronteira DENTRO: o migrator real do Drizzle sobre `drizzle/postgres/`, num
  * banco PostgreSQL descartável; SQL bruto para escrever na forma da 0003,
  * porque o `schema.ts` de hoje não descreve mais aquela forma.
- * Fronteira FORA: migração de produção, que é humana (`migrate.yml`).
+ * Fronteira FORA: migração de produção (`migrate.yml`, ADR 0028).
  */
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

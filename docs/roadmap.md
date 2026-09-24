@@ -269,7 +269,10 @@ reconferência, e segue opt-in desde 03/09/2026.
 A fila de repontuação de candidato é a fatia `repontuar` de
 `/api/cron/varredura` (#280, ADR 0026), agendada em `supabase/cron/varredura.sql`
 com as outras; o agendamento só vale depois de o dono reaplicar o SQL em
-produção.
+produção. A cadência sem pedido é das fatias `sem-nota` (10 min) e
+`manutencao` (60 min), em lotes de 100 vagas mais recentes primeiro com cursor
+(#288, ADR 0027) — código entregue; agenda pendente do mesmo passo humano. A
+varredura inteira só trabalha em produção.
 
 > **Invariante:** A rota de cron não pode virar um segundo pipeline. Se ela
 > precisar de lógica que a CLI não tem, a lógica está no lugar errado — vai para
