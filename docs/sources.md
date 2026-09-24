@@ -49,7 +49,7 @@ obrigatórios em `RawJob`; todo o resto é opcional e anulável.
 `externalId` precisa ser o id **estável** que a fonte dá à vaga (o `id` do ATS,
 o `slug` do agregador), nunca algo derivado do título: a sincronização acha a
 linha por `(fonte, externalId)` antes do fingerprint, e é isso que mantém uma
-vaga com título editado na mesma linha — e a candidatura nela (#291). Id vazio,
+vaga com título editado na mesma linha — e a candidatura nela (#291) — enquanto a linha pertence a esta fonte (vaga listada por duas fontes fica com a última que a viu). Id vazio,
 ou repetido com fingerprints diferentes na mesma listagem, não identifica nada,
 e vale o fingerprint ([data-model.md](data-model.md#job)).
 

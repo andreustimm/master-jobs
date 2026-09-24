@@ -100,7 +100,7 @@ async function fetchWithinBudget(adapter: SourceAdapter, config: SourceConfig): 
   // tem teto próprio — o intervalo por fonte da varredura e a cota por
   // plataforma já limitam —, então isto é telemetria: buscas por dia, somando
   // CLI e Vercel.
-  await drizzleRequestBudget().take("sync", clock().now());
+  if (!(await drizzleRequestBudget().take("sync", clock().now()))) throw new Error("orçamento");
   try {
     return await adapter.fetchJobs(config);
   } catch (error) {

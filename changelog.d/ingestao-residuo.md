@@ -5,7 +5,7 @@
 - Identidade estável da vaga por `(source_id, external_id)` na sincronização
   (#291). `observeRawJobs()` lê em lote as linhas da fonte pelos ids externos
   e decide com a função pura `resolveObservedIdentity()`
-  (`src/core/ingest/identity.ts`): título editado atualiza a mesma linha em vez
+  (`src/core/ingest/identity.ts`): título editado na fonte dona da linha atualiza a mesma linha em vez
   de criar outra e fechar a antiga. Fingerprint novo já de outra linha fica de
   fora (a linha mantém o antigo; nada é unido nem apagado). Id vazio ou
   ambíguo na listagem vale o fingerprint. O fechamento por ausência compara
@@ -30,14 +30,14 @@
 
 ## pt-BR
 
-### Melhorias
+### Melhorado
 
-- Vaga cujo título foi editado pela empresa continua sendo a mesma vaga, com a candidatura que você já registrou nela, em vez de aparecer duplicada.
+- Vaga cujo título foi editado pela empresa, no quadro de onde ela vem, continua sendo a mesma vaga, com a candidatura que você já registrou nela, em vez de aparecer duplicada.
 - Vagas de nota baixa que já saíram do quadro de origem passam a ser conferidas e fechadas quando o link não existe mais.
 
 ## en
 
-### Improvements
+### Improved
 
-- A job whose title the company edited stays the same job, with the application you already recorded on it, instead of showing up twice.
+- A job whose title the company edited, on the board it comes from, stays the same job, with the application you already recorded on it, instead of showing up twice.
 - Low-scoring jobs that already left their source board are now checked and closed when the link no longer exists.

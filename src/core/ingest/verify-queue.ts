@@ -350,13 +350,16 @@ export async function runVerifyQueue(
     if (opts.budgetMs !== undefined && attempted > 0 && clock().now() - started + slowest > opts.budgetMs) break;
     // A unidade do orçamento sai antes do claim: com o dia esgotado, a tarefa
     // fica `pending` para amanhã em vez de ser reivindicada e devolvida.
-    if (!(await budget.take("reconferencia", clock().now()))) {
+    // Um instante só para reservar e devolver: a devolução depois da virada
+    // do dia UTC cairia no contador do dia seguinte.
+    const reservedAt = clock().now();
+    if (!(await budget.take("reconferencia", reservedAt))) {
       result.budgetExhausted = true;
       break;
     }
     const task = await claimCheck(worker);
     if (!task) {
-      await budget.giveBack("reconferencia", clock().now());
+      await budget.giveBack("reconferencia", reservedAt);
       break;
     }
     const began = clock().now();

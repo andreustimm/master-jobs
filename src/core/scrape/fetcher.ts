@@ -18,6 +18,7 @@ import {
   safeRemoteFetch,
   type LookupHost,
 } from "../remote-url.ts";
+import { clock } from "../clock.ts";
 import { guardIngestion } from "../ingest/guard.ts";
 import type { RequestBudget } from "../ingest/request-budget.ts";
 import { drizzleRequestBudget } from "../ingest/request-budget-store.ts";
@@ -231,7 +232,9 @@ export async function runFetchStage(
 
       // A unidade do dia sai antes do claim: esgotado, a tarefa fica
       // `pending` para amanhã em vez de ser reivindicada e devolvida.
-      if (!(await budget.take("captura", Date.now()))) {
+      // Um instante só para reservar e devolver (o dia UTC do contador).
+      const reservedAt = clock().now();
+      if (!(await budget.take("captura", reservedAt))) {
         claimed--;
         result.budgetExhausted = true;
         return;
@@ -242,7 +245,7 @@ export async function runFetchStage(
         // Devolve o slot: a fila esvaziou, e segurar a reserva faria uma
         // execução seguinte parar antes do limite pedido.
         claimed--;
-        await budget.giveBack("captura", Date.now());
+        await budget.giveBack("captura", reservedAt);
         return;
       }
 

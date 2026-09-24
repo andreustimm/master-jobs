@@ -274,7 +274,7 @@ fato imutável: reingestão atualiza conteúdo e `last_seen_at`, reabre
 | `fingerprint` (UNIQUE) | identidade global da vaga — ver [Fingerprint vs contentHash](#fingerprint-vs-contenthash) |
 | `content_hash` | detector de edição — mesma seção |
 | `source_id` -> `source.id` | `ON DELETE cascade`. **Atenção:** é reescrito quando a vaga é atualizada com conteúdo novo (o `set` do ramo `contentHash` diferente inclui `sourceId`), então numa vaga vista por duas fontes essa coluna aponta para a última fonte que a viu com conteúdo alterado |
-| `external_id` | id estável dentro da fonte. Na sincronização, é a **primeira** chave de identidade: `(source_id, external_id)` acha a linha antes do fingerprint, e um título editado atualiza a mesma vaga em vez de criar outra (#291). Entre fontes, quem deduplica continua sendo o fingerprint. Captura por termo, import, e-mail e cadastro manual não identificam por ele |
+| `external_id` | id estável dentro da fonte. Na sincronização, é a **primeira** chave de identidade: `(source_id, external_id)` acha a linha antes do fingerprint, e um título editado atualiza a mesma vaga em vez de criar outra (#291) — enquanto a linha é daquela fonte. Vaga vista por duas fontes pertence à última que a observou (`source_id` é reescrito), e a edição de título na outra ainda cai no fingerprint e vira linha nova. Entre fontes, quem deduplica continua sendo o fingerprint. Captura por termo, import, e-mail e cadastro manual não identificam por ele |
 | `company_id` -> `company.id` | sem cascade: `ON DELETE no action`, **declarado** no schema. Empresa que ainda nomeia vaga não pode ser apagada; nada apaga empresa hoje |
 | `company_name` | denormalizado de propósito: existe mesmo quando `slugifyCompany()` devolve string vazia e `company_id` fica `null` |
 | `description_html` / `description_text` | `description_text` é o dado durável que scorer e UI leem. `description_html` permanece por compatibilidade de schema, mas ingestão nova grava `null`; `jho db cleanup` remove o legado |
@@ -308,6 +308,8 @@ linhas da fonte com os ids externos do bloco e decide com a função pura
   aberta, depois a mais antiga;
 - id externo vazio (regra 17) ou repetido com fingerprints diferentes na mesma
   listagem não identifica nada, e vale o fingerprint.
+
+Limite conhecido: a busca é por `(source_id, external_id)` da fonte que está sincronizando. Numa vaga que duas fontes listam, a linha pertence à última que a viu, e uma edição de título observada pela outra não a acha pelo id — cai no fingerprint, como antes da #291.
 
 O índice não é único de propósito: essas duplicatas herdadas existem em
 produção, e um `UNIQUE` faria a migração falhar.

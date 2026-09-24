@@ -123,6 +123,30 @@ describe("sincronização com identidade por id externo", () => {
     expect(candidatura).toMatchObject({ jobId: antes!.id, status: "applied", notes: "enviei" });
   });
 
+  it("no mesmo bloco, vaga nova com o título antigo de outra não herda a linha dela", async () => {
+    // a1 muda de título; a2 chega na mesma listagem com o título ANTIGO de a1.
+    // O mapa lido no começo do bloco ainda aponta o fingerprint antigo para a
+    // linha de a1 — confiar nele poria a2 (e a candidatura de a1) na linha
+    // errada.
+    board([vaga(1, "Staff Engineer")]);
+    await syncAll([acme]);
+    const [a1] = await db.select().from(job);
+    const [pessoa] = await db.insert(candidate).values({ slug: "dono", name: "Dono" }).returning({ id: candidate.id });
+    await db.insert(application).values({ candidateId: pessoa!.id, jobId: a1!.id, status: "applied" });
+
+    board([vaga(1, "Principal Engineer"), vaga(2, "Staff Engineer")]);
+    const r = await syncAll([acme]);
+
+    expect(r.totals).toMatchObject({ failed: 0, inserted: 1, closed: 0 });
+    const [linhaA1] = await db.select().from(job).where(eq(job.id, a1!.id));
+    expect(linhaA1).toMatchObject({ externalId: "1", title: "Principal Engineer" });
+    const [linhaA2] = await db.select().from(job).where(eq(job.externalId, "2"));
+    expect(linhaA2!.id).not.toBe(a1!.id);
+    expect(linhaA2!.fingerprint).toBe(a1!.fingerprint);
+    const [candidatura] = await db.select().from(application);
+    expect(candidatura!.jobId).toBe(a1!.id);
+  });
+
   it("fingerprint novo já pertence a outra fonte: as duas linhas continuam separadas", async () => {
     // Outra fonte (mesmo empregador, outro board) já tem a vaga com o título
     // que a Acme passa a usar — o mesmo fingerprint.

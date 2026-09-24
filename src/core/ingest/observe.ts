@@ -138,23 +138,31 @@ export async function observeRawJobs(
       sourceId,
       externalKeys.filter((key): key is string => key !== null),
     );
+    // Keys whose batch read can no longer be trusted: the observation reads
+    // them again instead of taking "absent" from the map.
+    const staleKnown = new Set<string>();
+    const staleExternal = new Set<string>();
     for (const [index, raw] of block.entries()) {
       const identity = blockIdentities[index]!;
       const externalKey = externalKeys[index] ?? undefined;
-      observations.push(
-        await observeRawJob(raw, sourceId, {
-          ...options,
-          companies,
-          known: known.get(identity) ?? null,
-          externalKey,
-          byExternal: externalKey === undefined ? undefined : (external.get(externalKey) ?? []),
-        }),
-      );
-      // A listing can repeat a posting. The second sighting must not trust
-      // the rows read before the first one wrote: without the entries it
-      // reads them again.
-      known.delete(identity);
-      if (externalKey !== undefined) external.delete(externalKey);
+      const observation = await observeRawJob(raw, sourceId, {
+        ...options,
+        companies,
+        known: staleKnown.has(identity) ? undefined : (known.get(identity) ?? null),
+        externalKey,
+        byExternal:
+          externalKey === undefined || staleExternal.has(externalKey) ? undefined : (external.get(externalKey) ?? []),
+      });
+      observations.push(observation);
+      // The write may have changed this row's fingerprint or external id
+      // (#291), and a listing can repeat a posting. Every entry of this
+      // posting or of the row it touched is stale from here on: trusting it
+      // would let a later posting of the block land on a row that no longer
+      // carries its key — and on the application hanging from it.
+      staleKnown.add(identity);
+      if (externalKey !== undefined) staleExternal.add(externalKey);
+      for (const [key, row] of known) if (row.id === observation.jobId) staleKnown.add(key);
+      for (const [key, rows] of external) if (rows.some((row) => row.id === observation.jobId)) staleExternal.add(key);
     }
   }
   return observations;
