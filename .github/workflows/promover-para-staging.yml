@@ -171,3 +171,45 @@ jobs:
           fi
           gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref staging
           echo "::notice::CI disparado em staging para a PR #$ABERTA."
+
+      # O dispatch acima publica os checks no SHA, mas na v1.25.0 (#303) o
+      # ruleset de `main` continuou dizendo "expected" por 11 minutos com
+      # `qualidade` e `schema-e-migracao` verdes nele. O que destravou foi o run
+      # de `pull_request` da própria PR — que o GitHub cria para PR do robô, mas
+      # parado em `action_required`, à espera de aprovação, como PR de
+      # contribuidor de primeira viagem. Fechar e reabrir era a aprovação por
+      # outra porta; aqui ela é pedida pela API. Só runs deste repositório, no
+      # SHA da cabeça da PR: é o código que a promoção acabou de validar.
+      # Falhar em aprovar não reprova a promoção — o recurso manual continua
+      # (docs/engineering/github-protections.md#o-caminho-humano).
+      - name: Aprovar o CI de pull_request da PR de produção
+        if: steps.promocao.outputs.promoted == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head staging --state open --json number,headRefOid --jq '.[0] // empty | "\(.number) \(.headRefOid)"')
+          if [ -z "$PR" ]; then
+            echo "::notice::Nenhuma PR staging → main aberta; nada a aprovar."
+            exit 0
+          fi
+          read -r NUMERO CABECA <<< "$PR"
+          # O run nasce alguns segundos depois da PR; sem espera, a consulta
+          # feita logo após abri-la não o encontraria.
+          PENDENTES=""
+          for _ in $(seq "${TENTATIVAS_APROVACAO:-6}"); do
+            PENDENTES=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?event=pull_request&status=action_required&head_sha=$CABECA&per_page=20" \
+              --jq ".workflow_runs[] | select(.head_repository.full_name == \"$GITHUB_REPOSITORY\") | .id")
+            [ -n "$PENDENTES" ] && break
+            sleep "${ESPERA_APROVACAO:-10}"
+          done
+          if [ -z "$PENDENTES" ]; then
+            echo "::notice::Nenhum run da PR #$NUMERO aguardando aprovação."
+            exit 0
+          fi
+          for RUN in $PENDENTES; do
+            if gh api --method POST "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/approve" --silent; then
+              echo "::notice::Run $RUN da PR #$NUMERO aprovado."
+            else
+              echo "::warning::Run $RUN da PR #$NUMERO não foi aprovado pela API; aprove na aba Actions ou feche e reabra a PR."
+            fi
+          done

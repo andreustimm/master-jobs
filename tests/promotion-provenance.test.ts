@@ -1,12 +1,12 @@
 // Real Git/CLI boundaries; GitHub responses and writes terminate in a local fixture executable.
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import YAML from "yaml";
 import { promotionInput } from "../scripts/release/promotion.ts";
-import { REQUIRED_CI_JOBS } from "../scripts/release/promotion-ci.ts";
+import { NON_BLOCKING_CI_JOBS, REQUIRED_CI_JOBS, ciVerdict } from "../scripts/release/promotion-ci.ts";
 import { updatePromotionBody } from "../scripts/release/promotion-pr.ts";
 import { checkoutOf, ciWorkflow } from "./support/ci-workflow.ts";
 
@@ -229,6 +229,59 @@ describe("V01-02 — identical source checks for automatic and manual entry", ()
     expect(result.status).not.toBe(0);
     expect(refs()).toBe(before);
     expect(calls().every((args) => !args.includes("POST"))).toBe(true);
+  });
+
+  it.each(["failed", "running"])("does not let the non-blocking e2e-navegador (%s) veto the promotion (#303)", (state) => {
+    publishSource();
+    const candidate = goodRun();
+    const e2e = { name: "e2e-navegador", head_sha: source, status: "completed", conclusion: "failure" as string | null };
+    if (state === "failed") candidate.conclusion = "failure";
+    else {
+      candidate.status = "in_progress";
+      e2e.status = "in_progress";
+      e2e.conclusion = null;
+    }
+    setAPI({ runs: [candidate], jobs: [...goodJobs(), { name: "build", head_sha: source, status: "completed", conclusion: "success" }, e2e] });
+    const result = run("prepare");
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.outputs.source).toBe(source);
+  });
+
+  it.each([
+    ["another blocking job failed alongside the e2e", { build: "failure", e2e: "failure" }],
+    ["a blocking job is still pending", { build: "pending", e2e: "success" }],
+  ])("still refuses when %s", (_label, states) => {
+    publishSource();
+    const candidate = { ...goodRun(), status: "in_progress", conclusion: null as string | null };
+    const job = (name: string, state: string) => ({
+      name, head_sha: source,
+      status: state === "pending" ? "queued" : "completed",
+      conclusion: state === "pending" ? null : state,
+    });
+    setAPI({ runs: [candidate], jobs: [...goodJobs(), job("build", states.build), job("e2e-navegador", states.e2e)] });
+    const before = refs();
+    const result = run("prepare");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("build");
+    expect(refs()).toBe(before);
+  });
+
+  it("ciVerdict ignores only the registered non-blocking jobs", () => {
+    const sha = "b".repeat(40);
+    const ok = (name: string) => ({ name, head_sha: sha, status: "completed", conclusion: "success" });
+    const required = REQUIRED_CI_JOBS.map(ok);
+    const green = { status: "completed", conclusion: "success" };
+    const red = { status: "completed", conclusion: "failure" };
+    expect(Object.keys(NON_BLOCKING_CI_JOBS)).toEqual(["e2e-navegador"]);
+    expect(ciVerdict(green, required, sha)).toBeNull();
+    expect(ciVerdict(red, [...required, { ...ok("e2e-navegador"), conclusion: "failure" }], sha)).toBeNull();
+    expect(ciVerdict(green, [...required, { ...ok("validacao"), conclusion: "skipped" }], sha)).toBeNull();
+    // Um nome parecido não herda a exceção.
+    expect(ciVerdict(red, [...required, { ...ok("e2e-navegador-2"), conclusion: "failure" }], sha)).toContain("e2e-navegador-2");
+    // Execução vermelha sem culpado não bloqueante: o motivo é desconhecido.
+    expect(ciVerdict(red, [...required, ok("e2e-navegador")], sha)).toContain("sem job não bloqueante");
+    expect(ciVerdict(green, [...required, { ...ok("build"), head_sha: "c".repeat(40) }], sha)).toContain("build");
+    expect(ciVerdict(green, required.slice(1), sha)).toContain("qualidade");
   });
 
   it("requires an explicit full SHA and ignores forged migration approval in scheduled events", () => {
@@ -517,6 +570,75 @@ describe("V01-05 — ancestry and existing delivery", () => {
       expect(calls().filter((args) => args[0] === "workflow")).toEqual(
         open ? [["workflow", "run", "ci.yml", "--repo", "owner/repo", "--ref", "staging"]] : [],
       );
+    }
+  });
+
+  it("approves only this repository's action_required pull_request runs at the production PR head (#303)", () => {
+    // O run de `pull_request` da PR do robô nasce em `action_required`; o
+    // ruleset só reconheceu os checks depois que ele rodou.
+    const workflow = YAML.parse(readFileSync(".github/workflows/promover-para-staging.yml", "utf8"));
+    const steps = workflow.jobs.promover.steps as Array<{ name?: string; if?: string; env?: Record<string, string>; run?: string }>;
+    const step = steps.find((candidate) => candidate.name === "Aprovar o CI de pull_request da PR de produção")!;
+    expect(step.if).toBe("steps.promocao.outputs.promoted == 'true'");
+    expect(step.env).toEqual({ GH_TOKEN: "${{ github.token }}" });
+    // Depois do dispatch: a aprovação é a segunda via, não a substituta.
+    expect(steps.indexOf(step)).toBeGreaterThan(steps.findIndex((candidate) => candidate.name === "Rodar o CI na cabeça da PR de produção"));
+    const head = "a".repeat(40);
+    const bin = `${root}/approve-bin`;
+    mkdirSync(bin);
+    writeFileSync(`${bin}/gh`, `#!${process.execPath}
+const fs = require('node:fs');
+const root = process.env.FIXTURE_ROOT;
+const args = process.argv.slice(2);
+fs.appendFileSync(root + '/approve-calls.jsonl', JSON.stringify(args) + '\\n');
+const data = JSON.parse(fs.readFileSync(root + '/approve.json', 'utf8'));
+if (args[0] === 'pr' && args[1] === 'list') {
+  if (data.pr) process.stdout.write('77 ${head}\\n');
+  process.exit(0);
+}
+const path = args.find((arg) => arg.startsWith('repos/'));
+if (args.includes('POST')) process.exit(data.denied ? 1 : 0);
+if (path === 'repos/owner/repo/actions/runs?event=pull_request&status=action_required&head_sha=${head}&per_page=20') {
+  const polls = Number(fs.existsSync(root + '/polls') ? fs.readFileSync(root + '/polls', 'utf8') : 0) + 1;
+  fs.writeFileSync(root + '/polls', String(polls));
+  // O jq real do workflow roda aqui sobre a resposta, com o filtro do próprio passo.
+  const runs = polls >= data.readyAt ? data.runs : [];
+  const jq = args[args.indexOf('--jq') + 1];
+  const out = require('node:child_process').execFileSync('jq', ['-r', jq], { input: JSON.stringify({ workflow_runs: runs }) });
+  process.stdout.write(out);
+  process.exit(0);
+}
+throw new Error('Unexpected call: ' + args.join(' '));
+`);
+    chmodSync(`${bin}/gh`, 0o755);
+    const own = { id: 501, head_repository: { full_name: "owner/repo" } };
+    const fork = { id: 502, head_repository: { full_name: "fork/repo" } };
+    const scenarios = [
+      { name: "sem PR aberta", api: { pr: false }, approved: [], polls: 0 },
+      { name: "run chega na segunda consulta", api: { pr: true, readyAt: 2, runs: [own, fork] }, approved: ["501"], polls: 2 },
+      { name: "nenhum run pendente", api: { pr: true, readyAt: 99, runs: [own] }, approved: [], polls: 3 },
+      { name: "API recusa a aprovação", api: { pr: true, readyAt: 1, runs: [own], denied: true }, approved: ["501"], polls: 1 },
+    ];
+    for (const scenario of scenarios) {
+      writeFileSync(`${root}/approve-calls.jsonl`, "");
+      writeFileSync(`${root}/approve.json`, JSON.stringify(scenario.api));
+      rmSync(`${root}/polls`, { force: true });
+      const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", step.run!], {
+        cwd: repo, encoding: "utf8",
+        env: {
+          ...process.env, PATH: `${bin}:${process.env.PATH}`, FIXTURE_ROOT: root, GITHUB_REPOSITORY: "owner/repo",
+          TENTATIVAS_APROVACAO: "3", ESPERA_APROVACAO: "0",
+        },
+      });
+      // Aprovar é melhor esforço: nem a recusa da API reprova a promoção.
+      expect(result.status, `${scenario.name}: ${result.stderr}`).toBe(0);
+      const approveCalls = readFileSync(`${root}/approve-calls.jsonl`, "utf8").split("\n").filter(Boolean)
+        .map((line) => JSON.parse(line) as string[]).filter((args) => args.includes("POST"));
+      expect(approveCalls.map((args) => args.find((arg) => arg.endsWith("/approve"))!.split("/").at(-2)), scenario.name)
+        .toEqual(scenario.approved);
+      const polls = existsSync(`${root}/polls`) ? Number(readFileSync(`${root}/polls`, "utf8")) : 0;
+      expect(polls, scenario.name).toBe(scenario.polls);
+      if (scenario.api.denied) expect(result.stdout).toContain("::warning::Run 501");
     }
   });
 

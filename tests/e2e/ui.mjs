@@ -4355,6 +4355,21 @@ try {
     "expired callback soft transition",
   );
   publicPhases.push(callbackSoftTransition);
+  // O callback é um Route Handler que responde 303, e o roteador às vezes cai
+  // numa navegação de DOCUMENTO para `/login?error=invalid` em vez da suave.
+  // Prova, no run 36034122670 (tentativa 1): esta fase saiu com `count` 1 e
+  // `maxOverlayCount` 0 — o overlay foi visto, mas a evidência do
+  // MutationObserver sumiu, e ela só some quando o documento é trocado. O
+  // alerta vem no HTML do servidor e fica visível ANTES da hidratação. O
+  // `push` seguinte saía antes de o Next criar a fila de ações do roteador e
+  // morria sem erro (`window.next.router` já existe desde o carregamento do
+  // módulo): 20 s de espera sem uma única requisição para `/p/` (#303). A fila
+  // nasce logo antes do `hydrateRoot`, então a fibra do React na tela a prova.
+  await publicPage.waitForURL((url) => url.pathname === "/login" && url.searchParams.get("error") === "invalid");
+  await publicPage.waitForFunction(() => {
+    const screen = document.querySelector('[data-testid="route-login"]');
+    return Boolean(screen && Object.keys(screen).some((key) => key.startsWith("__reactFiber$")));
+  });
   // O callback vencido volta para `/login?error=invalid`: a MESMA tela de onde
   // o push saiu, só com outra query — navegação de mesma tela, que não abre
   // overlay (#220). O overlay só aparece quando o roteador chega a confirmar a
@@ -4388,7 +4403,7 @@ try {
     try {
       publicPhases.push(await observeNavigation(
         publicPage,
-        () => publicPage.evaluate((href) => window.next?.router?.push?.(href), task04PublicHref),
+        () => pushOn(publicPage, task04PublicHref),
         '[data-testid="route-public-profile"]',
       ));
     } catch (erro) {

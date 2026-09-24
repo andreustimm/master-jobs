@@ -313,9 +313,22 @@ um quarto da suíte não mede nada; o piso vale sobre a soma, em `cobertura`.
 
 O job `e2e-navegador` roda ao lado a suíte `pnpm test:e2e` inteira, sem
 segredo e com PostgreSQL descartável no loopback do runner. Ele é a única
-exceção registrada a `qualidade.needs` (`NON_BLOCKING_JOBS` em
-`tests/support/ci-workflow.ts`) e não roda na chamada da promoção, até a
-instabilidade estar medida — ver [O que o CI prova](../qa/README.md#o-que-o-ci-prova-e-o-que-só-a-jornada-prova).
+exceção registrada a `qualidade.needs` (`NON_BLOCKING_CI_JOBS` em
+`scripts/release/promotion-ci.ts`), até a instabilidade estar medida — ver
+[O que o CI prova](../qa/README.md#o-que-o-ci-prova-e-o-que-só-a-jornada-prova).
+Não bloqueante vale nas três portas, e não só no agregador:
+
+- **Autorização da promoção.** `requireSourceCI` avalia os jobs da execução de
+  push em `dev`, não a conclusão da execução inteira. `qualidade` e
+  `schema-e-migracao` precisam ter passado; os demais jobs bloqueantes não podem
+  ter reprovado nem estar pendentes; os da lista não bloqueante são ignorados.
+  Uma execução vermelha ou em andamento só autoriza quando a causa está num job
+  da lista — senão o motivo é desconhecido e a promoção recusa. Antes da #303, o
+  E2E vermelho tornava a execução `failure` e barrava a promoção.
+- **Chamada reutilizável da promoção** (`target-sha`): o job nem roda.
+- **`workflow_dispatch` em `staging`**, que a promoção dispara para a PR de
+  produção: o job também não roda. Ali só contam os checks que o ruleset de
+  `main` exige, e `staging` recebe o SHA cujo push em `dev` já rodou o E2E.
 
 Não há atalho para PR só de documentação: cerca de quarenta arquivos de teste
 leem `docs/`, os changelogs e `.claude/skills/`, e o build compila os

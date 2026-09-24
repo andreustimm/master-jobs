@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import YAML from "yaml";
+import { NON_BLOCKING_CI_JOBS } from "../../scripts/release/promotion-ci.ts";
 
 export type CiStep = {
   name?: string;
@@ -22,15 +23,14 @@ export type CiWorkflow = { concurrency: { group: string }; jobs: Record<string, 
 export const AGGREGATOR = "qualidade";
 
 /**
- * Jobs que rodam no CI sem bloquear o agregador, cada um com o porquê.
+ * Jobs que rodam no CI sem bloquear o agregador nem a promoção, cada um com o
+ * porquê. A lista é a da promoção (`scripts/release/promotion-ci.ts`): uma
+ * cópia aqui deixaria o teste aceitar um job que a promoção ainda exige.
  *
  * Exceção é decisão com prazo, não esquecimento: sair daqui é entrar em
  * `qualidade.needs`, e `tests/ci-e2e-job.test.ts` trava a de hoje.
  */
-export const NON_BLOCKING_JOBS: Record<string, string> = {
-  "e2e-navegador":
-    "suíte de navegador inteira; fica fora do portão até a instabilidade no CI estar medida (issue #202)",
-};
+export const NON_BLOCKING_JOBS = NON_BLOCKING_CI_JOBS;
 
 export function ciWorkflow(): CiWorkflow {
   return YAML.parse(readFileSync(".github/workflows/ci.yml", "utf8")) as CiWorkflow;
