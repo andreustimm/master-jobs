@@ -81,6 +81,19 @@ export function redactText(text: string): string {
     .replace(/sk-[A-Za-z0-9_-]{20,}/g, "sk-***");
 }
 
+/**
+ * Tira de um texto o VALOR exato da chave em uso.
+ *
+ * `redactText` só reconhece o formato `sk-…`. Uma chave da NVIDIA (`nvapi-…`),
+ * do OpenCode ou de qualquer serviço compatível passava por ela inteira quando
+ * o provedor a ecoava no erro — e o erro chega ao terminal e ao Sentry, cuja
+ * peneira também não conhece o formato. Quem assina a requisição conhece a
+ * chave; apagar pelo valor não depende de adivinhar o formato.
+ */
+export function redactSecret(text: string, secret: string): string {
+  return secret ? text.split(secret).join("***") : text;
+}
+
 export class LlmError extends Error {
   readonly status: number;
   readonly provider: string;

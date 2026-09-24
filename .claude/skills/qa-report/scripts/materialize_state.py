@@ -86,6 +86,52 @@ def parse_scenario(path: Path) -> dict[str, str]:
     return row
 
 
+def split_list(value: str) -> list[str]:
+    return [item.strip() for item in value.split(";") if item.strip()]
+
+
+def within(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def reference_errors(root: Path, path: Path, row: dict[str, str]) -> list[str]:
+    """Files the scenario cites must exist; a dangling citation is an unproved claim.
+
+    A reference may be written relative to the working directory (the repo root,
+    e.g. `docs/qa/reports/x.md` or `tests/e2e/ui.mjs`) or to the QA root
+    (`reports/x.md`). A report may also be named by its bare slug.
+
+    `evidence/` is the one exception: it is gitignored by contract — screenshots
+    live on disk or as a CI artifact, and the versioned report records where —
+    so a clean checkout cannot see it, and demanding it would fail every CI run.
+    """
+    errors: list[str] = []
+    evidence_dir = root / "evidence"
+
+    def exists(value: str) -> bool:
+        return (root / value).is_file() or Path(value).is_file()
+
+    journey = row["journey"]
+    if journey and not (root / "journeys" / f"{journey}.md").is_file():
+        errors.append(f"{path}: journey {journey!r} has no journeys/{journey}.md")
+    for bug in split_list(row["bug_ids"]):
+        if not (root / "bugs" / f"{bug}.md").is_file():
+            errors.append(f"{path}: bug {bug!r} has no bugs/{bug}.md")
+    report = row["last_report"]
+    if report and not (exists(report) or (root / "reports" / f"{report}.md").is_file()):
+        errors.append(f"{path}: last_report {report!r} does not exist")
+    for item in split_list(row["evidence"]):
+        if within(root / item, evidence_dir) or within(Path(item), evidence_dir):
+            continue
+        if not exists(item):
+            errors.append(f"{path}: evidence {item!r} does not exist")
+    return errors
+
+
 def casefold_duplicate_errors(entries: list[tuple[Path, dict[str, str]]]) -> list[str]:
     errors, ids_by_casefold = [], {}
     for path, row in entries:
@@ -114,6 +160,7 @@ def main() -> int:
         try:
             row = parse_scenario(path)
             entries.append((path, row))
+            errors.extend(reference_errors(root, path, row))
         except ValueError as exc:
             errors.append(str(exc))
     errors.extend(casefold_duplicate_errors(entries))
