@@ -1,6 +1,10 @@
 # Governança das regras de desenvolvimento
 
-**Status: auditoria e planejamento concluídos; implementação não iniciada.**
+**Status (24/09/2026):** as tarefas 01 a 10 foram entregues e as issues
+#195 a #204 estão fechadas. A verificação final (task_11) **não certificou** a
+governança como concluída: restam três pendências P0, descritas em
+[_final-report.md](_final-report.md). O texto abaixo continua como fotografia
+da auditoria.
 
 Este pacote propõe como preservar, organizar e verificar as regras do Master Jobs. A etapa de auditoria criou apenas documentos nesta pasta; a PR deste pacote documenta essa entrega. Nenhuma regra vigente, skill, configuração, teste, workflow, proteção do GitHub ou dado do produto foi alterado por esta PR. As melhorias são entregas posteriores das tarefas planejadas.
 
