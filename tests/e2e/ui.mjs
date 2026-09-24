@@ -27,6 +27,7 @@ import { checkSearchRelevance } from "./search-relevance.mjs";
 import { checkFilterAutoApply } from "./filter-auto-apply.mjs";
 import { checkJobsLoading } from "./jobs-loading.mjs";
 import { checkJobAnalysis } from "./job-analysis.mjs";
+import { checkJobAvailability } from "./job-availability.mjs";
 import {
   ENGLISH_ANONYMOUS_SWEEP,
   ENGLISH_OWNER_SWEEP,
@@ -3817,6 +3818,7 @@ try {
     candidate: { email: "e2e-candidato@local.test", password: E2E_PASSWORD },
     admin: { email: E2E_EMAIL, password: E2E_PASSWORD },
   }, check);
+  await checkJobAvailability(browser, BASE, { email: "e2e-candidato@local.test", password: E2E_PASSWORD }, check);
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   const firstJobLink = page.locator('[data-testid^="job-link-"]').first();
   const contextualPhases = [];

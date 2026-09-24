@@ -787,6 +787,41 @@ Reabertura é automática: nos dois ramos do update (`contentHash` igual ou
 diferente), o `set` inclui `closedAt: null`. Uma vaga que reaparece na fonte
 volta ao board sem intervenção.
 
+**Todo veredito de verificação é um evento** (`job_check_event`, #223). O lote
+(`jho jobs verify`) e a fila de reconferência passam pela mesma
+`applyVerdict()` (`src/core/ingest/verdict.ts`), que grava o evento e o estado
+da vaga (`checked_at`, `check_status`, `check_code`, `closed_at`) na mesma
+transação, com a linha da vaga travada. Só `gone` (404/410) fecha; `alive`
+reabre e desfaz o arquivamento; o evento de fechamento fica no histórico
+depois da reabertura. Evento mais antigo que o último gravado entra no
+histórico e não mexe no estado. "Mais antigo" compara conclusivo com o último
+conclusivo — o mesmo que a tela usa —, e inconclusivo com o último de qualquer
+tipo; a última checagem (`checked_at` da vaga) nunca anda para trás.
+
+| Coluna de `job_check_event` | Notas |
+|---|---|
+| `job_id` | `ON DELETE cascade`: a retenção só apaga vaga sem candidatura, e o evento sem a vaga não diz nada |
+| `run_id` | execução de `source_run` que pediu a verificação; `ON DELETE set null` |
+| `checked_at`, `verdict`, `http_code` | o que a sonda viu; `verdict` é `alive`, `gone` ou `inconclusive` |
+| `reason` | `closed` só com 404/410; `unknown` no resto. `filled`, `cancelled` e `paused` ficam reservados para adapter que prove isso — nenhum prova hoje |
+| `evidence` | o que a sonda viu (`HTTP 404 em <url>` ou `sem resposta em <url>`), até 280 caracteres, redigido (`redactDetail`) |
+
+Índice `job_check_event_job_idx` em `(job_id, checked_at)`: a tela e o portão de ordem leem os eventos de uma vaga pela data.
+
+A disponibilidade que a tela da vaga mostra sai de `currentAvailability()`
+(`src/core/ingest/availability.ts`, pura): o evento **conclusivo** mais recente
+por `checked_at` e `id` decide `open` ou `closed`; mais velho que 14 dias vira
+`stale`; sem evento conclusivo, `unknown`. Em seguida `reconcileAvailability()`
+concilia com a vaga, porque o sync fecha e reabre sem evento: `closed_at`
+preenchido é `closed` (motivo `closed` só se o último conclusivo foi 404/410
+com `checked_at` igual ou posterior a `closed_at`: um 404 antigo, desmentido
+por reabertura e seguido de novo fechamento pelo sync, não explica o
+fechamento atual), e um 404 que o sync já desmentiu vira `unknown`. A tela mostra o motivo: encerrada por 404/410 é "encerrada na origem"; fechada pelo sync sem sondagem é "saiu da listagem da fonte".
+
+O arquivamento (`decideArchive`) só leva em conta o veredito de sondagem feito no fechamento ou depois dele: um `alive` ou inconclusivo anterior, de quando a vaga ainda estava aberta, não segura uma vaga que o sync fechou por ausência. Vaga verificada antes dos
+eventos existirem aparece como desconhecida até a próxima checagem, com a data
+de `job.checked_at`.
+
 **Ausência na fonte e descarte são coisas diferentes.** A ausência — board que
 parou de listar, 404/410 na verificação — só fecha (`closed_at`) e é
 reversível. O descarte é administrativo, pedido por pessoa, e só alcança vaga
