@@ -45,7 +45,7 @@ import {
 } from "./core/positioning/engage.ts";
 import { archiveClosedJobs } from "./core/ingest/archive.ts";
 import { addJob } from "./core/ingest/manual.ts";
-import { syncAll, pruneClosed } from "./core/ingest/run.ts";
+import { catalogForSync, syncAll, pruneClosed } from "./core/ingest/run.ts";
 import { verifyJobs } from "./core/ingest/verify.ts";
 import { loadProfile } from "./core/profile/load.ts";
 import {
@@ -82,8 +82,10 @@ import { IngestionBlockedError } from "./core/ingest/environment.ts";
 import {
   CAPTURE_LIMIT,
   captureHealth,
+  importCatalog,
   requestTermCaptures,
   runTermCaptures,
+  type CatalogPlan,
 } from "./contexts/sourcing/index.ts";
 import { activeTermKeys, listCandidateTracks, scoredJobsPerTrack } from "./contexts/matching/index.ts";
 import { buildJobSweepSnapshot } from "./core/triage/job-sweep.ts";
@@ -559,6 +561,46 @@ sources
     }
   });
 
+/** Uma linha por divergência; o `diff` e a simulação do `import` falam igual. */
+function printCatalogPlan(plan: CatalogPlan): void {
+  for (const item of plan.drift) {
+    const regime = item.kind === "only_yaml" ? "" : item.managed ? c.dim(" (managed)") : c.dim(" (mirrors yaml)");
+    const what =
+      item.kind === "only_yaml" ? c.green("only in yaml") :
+      item.kind === "only_db" ? c.yellow("only in db") :
+      `${c.yellow("differs")}: ${item.fields.join(", ")}`;
+    console.log(`  ${truncate(item.id, 40)} ${what}${regime}`);
+  }
+  if (plan.drift.length === 0) console.log(c.green("  yaml and database agree"));
+}
+
+sources
+  .command("diff")
+  .description("List where config/sources.yaml and the source catalog in the database differ (writes nothing)")
+  .action(async () => {
+    await withDb(async () => {
+      printCatalogPlan(await importCatalog({ apply: false, now: clock().iso() }));
+    });
+  });
+
+sources
+  .command("import")
+  .description("Make the database the source of truth: dry run by default, --apply writes the yaml state and marks every row as managed")
+  .option("--apply", "write the plan instead of only printing it")
+  .action(async (opts: { apply?: boolean }) => {
+    await withDb(async () => {
+      const apply = opts.apply === true;
+      const plan = await importCatalog({ apply, now: clock().iso() });
+      printCatalogPlan(plan);
+      console.log(
+        (apply
+          ? `\n  ${plan.inserts.length} inserted · ${plan.mirrors.length} updated · ${plan.orphans.length} disabled`
+          : `\n  ${plan.inserts.length} to insert · ${plan.mirrors.length} to update · ${plan.orphans.length} to disable`) +
+          (apply ? c.green("  applied: the database now governs the catalog") : c.dim("  dry run: pass --apply to write")),
+      );
+    });
+  });
+
 /* ---------------------------------- terms --------------------------------- */
 
 const terms = program.command("terms").description("Saved term searches: daily capture and platform health");
@@ -651,7 +693,7 @@ jobs
   .option("--no-score", "skip scoring after the sync")
   .action(async (opts: { concurrency: string; score: boolean }) => {
     await withDb(async () => {
-      const configs = await loadSources();
+      const configs = await catalogForSync(await loadSources());
       console.log(`Syncing ${configs.length} source(s)…\n`);
 
       const result = await syncAll(configs, {
@@ -697,7 +739,7 @@ jobs
   .option("--concurrency <n>", "parallel sources", "4")
   .action(async (opts: { minFit: string; limit: string; concurrency: string }) => {
     await withDb(async () => {
-      const configs = await loadSources();
+      const configs = await catalogForSync(await loadSources());
       const result = await syncAll(configs, { concurrency: Number(opts.concurrency) });
       const candidateId = await activeCandidateId();
       await scoreAll(candidateId);

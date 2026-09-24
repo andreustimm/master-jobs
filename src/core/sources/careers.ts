@@ -123,6 +123,7 @@ export function careersAdapter(options: CareersOptions = {}): SourceAdapter {
 
   return {
     kind: "careers",
+    snapshot: "complete",
     docs: "https://developers.google.com/search/docs/crawling-indexing/robots/intro",
 
     async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {

@@ -27,6 +27,7 @@ type GreenhouseJob = {
 
 export const greenhouse: SourceAdapter = {
   kind: "greenhouse",
+  snapshot: "complete",
   docs: "https://developers.greenhouse.io/job-board.html",
   async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     // `content=true` returns the HTML body; without it there is nothing to score.
@@ -80,6 +81,7 @@ type LeverJob = {
 
 export const lever: SourceAdapter = {
   kind: "lever",
+  snapshot: "complete",
   docs: "https://github.com/lever/postings-api",
   async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const url = `https://api.lever.co/v0/postings/${encodeURIComponent(config.handle)}?mode=json`;
@@ -149,6 +151,7 @@ type AshbyJob = {
 
 export const ashby: SourceAdapter = {
   kind: "ashby",
+  snapshot: "complete",
   docs: "https://developers.ashbyhq.com/reference/job-posting-api",
   async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const url = `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(config.handle)}?includeCompensation=true`;
@@ -206,6 +209,7 @@ type SmartRecruitersPosting = {
 
 export const smartrecruiters: SourceAdapter = {
   kind: "smartrecruiters",
+  snapshot: "complete",
   docs: "https://developers.smartrecruiters.com/reference/postings-1",
   async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const jobs: RawJob[] = [];
@@ -273,6 +277,7 @@ type RecruiteeOffer = {
 
 export const recruitee: SourceAdapter = {
   kind: "recruitee",
+  snapshot: "complete",
   docs: "https://docs.recruitee.com/reference/offers",
   async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const url = `https://${encodeURIComponent(config.handle)}.recruitee.com/api/offers/`;

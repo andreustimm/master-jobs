@@ -10,9 +10,26 @@
 import { IngestionBlockedError } from "../../core/ingest/environment.ts";
 import { guardIngestion } from "../../core/ingest/guard.ts";
 import { loadSources } from "../../core/sources/config.ts";
-import { ADAPTERS } from "../../core/sources/registry.ts";
+import { ADAPTERS, getAdapter, parseFetchableSourceKind } from "../../core/sources/registry.ts";
 import type { FetchableSourceKind } from "../../core/sources/types.ts";
+import { probeSource, registerSource, type ProbeReport } from "./app/catalog.ts";
 import { validatedPlatforms } from "./domain/capture.ts";
+import {
+  capabilitiesOf,
+  planCatalogImport,
+  validateCatalogPatch,
+  type Capabilities,
+  type CatalogError,
+  type CatalogPlan,
+  type CatalogWrite,
+} from "./domain/catalog.ts";
+import {
+  allCatalogRows,
+  applyCatalogImport,
+  insertCatalogSource,
+  patchCatalogSource,
+  retireCatalogSource,
+} from "./infra/drizzle-catalog.ts";
 import {
   captureHealthReport,
   captureStatus,
@@ -70,10 +87,83 @@ const deps: CaptureDeps = {
   queue: drizzleCaptureQueue,
   quota: drizzleQuota,
   adapters: Object.values(ADAPTERS),
-  sources: loadSources,
+  // O carregador devolve também as desabilitadas; plataforma ligada é a que
+  // tem ao menos uma entrada habilitada, como antes.
+  sources: async () => (await loadSources()).filter((entry) => entry.enabled),
   termSource: ensureTermSource,
   attribute: recordAttribution,
 };
+
+/* --------------------------------- catálogo --------------------------------- */
+
+export {
+  CATALOG_LIMITS,
+  capabilitiesOf,
+  classifySourceProbe,
+  isSyncEligible,
+  planCatalogImport,
+  validateCatalogWrite,
+  validateSecretRef,
+  type Capabilities,
+  type CatalogError,
+  type CatalogPlan,
+  type CatalogWrite,
+  type DriftItem,
+  type SourceProbeOutcome,
+} from "./domain/catalog.ts";
+export { catalogSource, catalogSources, nextRevision, syncableSources, type CatalogSource } from "./infra/drizzle-catalog.ts";
+export type { ProbeReport } from "./app/catalog.ts";
+
+/** O que o kind sabe fazer, pelo que o adapter registrado declara. */
+export function capabilitiesFor(kind: string): Capabilities {
+  return capabilitiesOf(kind, Object.values(ADAPTERS));
+}
+
+/**
+ * O plano YAML × banco. Sem `apply`, só descreve — é o `jho sources diff` e a
+ * simulação do `import`. Com `apply`, grava o estado do arquivo e passa toda
+ * linha do catálogo para o regime gerido.
+ */
+export async function importCatalog(opts: { apply: boolean; now: string }): Promise<CatalogPlan> {
+  const plan = planCatalogImport(await loadSources(), await allCatalogRows());
+  if (opts.apply) await applyCatalogImport(plan, opts.now);
+  return plan;
+}
+
+export function registerCatalogSource(input: CatalogWrite, now: string): ReturnType<typeof registerSource> {
+  return registerSource(input, {
+    existing: async () => (await allCatalogRows()).map(({ kind, handle }) => ({ kind, handle })),
+    insert: insertCatalogSource,
+    now: () => now,
+  });
+}
+
+export type CatalogEditResult = { ok: true } | { ok: false; code: CatalogError | "not_found_or_retired" };
+
+/** Editar, habilitar ou desabilitar. Fonte aposentada ou fora do catálogo não muda. */
+export async function editCatalogSource(
+  id: string,
+  patch: { label?: string; enabled?: boolean; secretRef?: string | null },
+  now: string,
+): Promise<CatalogEditResult> {
+  const valid = validateCatalogPatch(patch);
+  if (!valid.ok) return valid;
+  return (await patchCatalogSource(id, valid.value, now)) ? { ok: true } : { ok: false, code: "not_found_or_retired" };
+}
+
+export async function retireSource(id: string, now: string): Promise<CatalogEditResult> {
+  return (await retireCatalogSource(id, now)) ? { ok: true } : { ok: false, code: "not_found_or_retired" };
+}
+
+/**
+ * Sonda um handle pelo adapter do kind, sem gravar vaga, saúde nem cota. A
+ * guarda de ingestão vem antes: sondar é tocar o board de terceiro.
+ */
+export async function probeCatalogSource(kind: string, handle: string): Promise<ProbeReport> {
+  guardIngestion();
+  const fetchable = parseFetchableSourceKind(kind);
+  return probeSource(() => getAdapter(fetchable).fetchJobs({ kind: fetchable, handle, label: handle }));
+}
 
 /** As plataformas cuja busca por termo passou pelo probe, em ordem estável. */
 export function termSearchPlatforms(): FetchableSourceKind[] {

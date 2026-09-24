@@ -27,7 +27,7 @@ Tudo é invocado através do script `jho` do `package.json`:
 Ou seja: `pnpm jho <comando>`. Não existe binário global instalado.
 
 > **Invariante:** Todo comando é seguro para re-executar. `jobs sync` roda
-> `runMigrations()` antes de qualquer coisa, `ensureSources()` faz upsert do YAML, o
+> `runMigrations()` antes de qualquer coisa, `ensureSources()` leva o YAML ao banco (só nas linhas não geridas), o
 > upsert de `job` é decidido pelo `fingerprint` e o de `job_score` por
 > `onConflictDoUpdate` em `job_id`. Nenhum comando novo pode quebrar essa propriedade.
 
@@ -62,6 +62,8 @@ rtk pnpm jho jobs add <url>      # cadastra vaga por URL, resolvendo pelo ATS
 rtk pnpm jho jobs import <file> --source revelo   # importa JSON de plataforma logada
 rtk pnpm jho sources list        # saúde das fontes
 rtk pnpm jho sources probe ashby textlayer        # testa um handle sem gravar
+rtk pnpm jho sources diff        # YAML × banco, sem gravar
+rtk pnpm jho sources import      # simula; --apply passa o catálogo ao banco
 rtk pnpm jho sources snippet revelo               # extrator para plataforma logada
 
 # autenticação
@@ -291,9 +293,11 @@ Grupo `sources`, descrição `"Inspect configured job sources"`.
 
 ### `jho sources list`
 
-`"Show every configured source and its last sync result"`. Lê `config/sources.yaml` via
-`loadSources()` (que já filtra `enabled: true`) e cruza com as linhas da tabela `source`
-pelo id `${kind}:${handle}`.
+`"Show every configured source and its last sync result"`. Lista o que o sync varre, no
+mesmo regime por linha (`sourceHealth()`): linha **não gerida** (ou ainda inexistente) vem de
+`config/sources.yaml` — só entradas com `enabled: true` —, cruzada com a tabela `source` pelo
+id `${kind}:${handle}`; linha **gerida** vem do banco, com o rótulo do banco, e aparece só se
+o sync a seleciona (habilitada, não aposentada), esteja ou não no arquivo.
 
 Sem flags.
 
@@ -314,11 +318,50 @@ pnpm jho sources list
 Detalhes que importam na leitura:
 
 - Handle vazio (`himalayas`, `arbeitnow`, `remoteok`) é impresso como `(all)`.
-- `STATUS` é `ok`, `error` ou `never` — `never` significa que a fonte está no YAML mas
-  ainda não apareceu em nenhum sync.
+- `STATUS` é `ok`, `error` ou `never` — `never` significa que a fonte não gerida está no
+  YAML mas ainda não apareceu em nenhum sync.
 - A linha `↳` em vermelho é o `lastError` gravado no último sync daquela fonte.
-- Fonte com `enabled: false` no YAML **não aparece** aqui: `loadSources()` a descarta
-  antes.
+- Fonte **não gerida** com `enabled: false` no YAML não aparece aqui. Em linha gerida o
+  arquivo não decide: ela aparece enquanto o banco a mantiver habilitada.
+
+### `jho sources diff`
+
+`"List where config/sources.yaml and the source catalog in the database differ
+(writes nothing)"`. Uma linha por divergência: `only in yaml` (o sync vai
+inserir), `only in db` (linha do catálogo ausente do arquivo) e `differs:
+label, rationale, enabled`. O sufixo diz o regime da linha: `(mirrors yaml)`
+será regravada pelo próximo sync; `(managed)` é governada pelo banco e o
+arquivo não a toca. Fontes `<kind>:~terms`, `manual` e `recruiter` ficam de
+fora — não vêm do YAML. Sem flags.
+
+```bash
+pnpm jho sources diff
+```
+
+```
+  greenhouse:acme                          differs: label (managed)
+  lever:nova                               only in yaml
+```
+
+### `jho sources import [--apply]`
+
+`"Make the database the source of truth: dry run by default, --apply writes the
+yaml state and marks every row as managed"`. Sem `--apply` imprime o mesmo
+plano do `diff` e os totais, sem gravar. Com `--apply`, numa transação: insere
+o que falta, grava o estado do arquivo nas linhas não geridas (inclusive
+`enabled: false`), desabilita a linha não gerida que saiu do arquivo e carimba
+`managed_at` em toda linha do catálogo. Linha já gerida não é regravada:
+importar de novo depois de uma edição na tela não desfaz a edição, e a
+divergência segue no `diff`. É a transição de uma vez só; banco vazio e
+fixture continuam nascendo do YAML sem ela. Ver `docs/data-model.md`
+(`source`).
+
+Em produção, não aplique antes da tela de Plataformas: sem ela nada edita ou
+desliga uma linha gerida (`docs/operations.md`, "Catálogo de fontes").
+
+| Flag | Efeito |
+|---|---|
+| `--apply` | Grava o plano em vez de só imprimi-lo |
 
 ### `jho sources probe <kind> [handle] [--term <termo>]`
 
@@ -473,8 +516,10 @@ Grupo `jobs`, descrição `"Sync, score and browse jobs"`.
 ### `jho jobs sync`
 
 `"Fetch every configured source and upsert the results"`. Sequência exata:
-`runMigrations()` → `loadSources()` → `syncAll(configs, { concurrency, onProgress })` →
-`scoreAll()` (salvo com `--no-score`).
+`runMigrations()` → `loadSources()` → `catalogForSync()` (espelha o YAML nas linhas não
+geridas e seleciona do banco as fontes habilitadas, não aposentadas, com adapter e fora de
+`~terms`) → `syncAll(configs, { concurrency, onProgress })` → `scoreAll()` (salvo com
+`--no-score`). Uma fonte desligada pela tela fica fora mesmo presente no YAML.
 
 | Flag | Default | Descrição |
 |---|---|---|
@@ -1548,8 +1593,9 @@ pnpm jho jobs list --min-fit 55 --limit 20
 ```
 
 Se o passo 1 retorna `0 job(s)` ou lança, o handle está errado — não adiante para o
-passo 2. E `enabled: false` no YAML remove a fonte de `loadSources()`, ou seja, ela
-some de `sources list` e do sync sem precisar apagar a entrada nem o `rationale`.
+passo 2. E `enabled: false` no YAML desabilita a linha (enquanto ela não for gerida pelo
+banco), ou seja, ela some de `sources list` e do sync sem precisar apagar a entrada nem o
+`rationale`.
 
 ### 7. Higiene periódica do banco
 
