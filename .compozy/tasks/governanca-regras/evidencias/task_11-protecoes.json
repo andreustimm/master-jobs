@@ -2,7 +2,7 @@
   "coletado_em": "2026-09-24T20:59:11Z",
   "repositorio": "andreustimm/master-jobs",
   "commit_verificado": "c23f8ba21f53af8ddcfef1cf5641bb38a4e41076",
-  "metodo": "gh api (GET), sessão andreustimm; nenhum valor de secret lido; nenhuma escrita remota",
+  "metodo": "gh api (GET), sessão andreustimm; nenhum valor de secret lido; nenhuma escrita remota. Campos condensados à mão a partir das respostas: regras reduzidas ao tipo e aos parâmetros relevantes; ids, datas e bypass copiados literalmente",
   "rulesets": [
     {
       "id": 23854305,

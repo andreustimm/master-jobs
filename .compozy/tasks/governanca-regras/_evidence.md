@@ -194,6 +194,9 @@ Continuam **abertas**:
   sentinela V03-06. Isso impede certificar G41.
 - **E27:** o tracker de QA não confere se os arquivos referenciados existem.
 
+Continuam **parciais**: E04, E18, E19, E23, E24, E26, E28, E30 e E33. As
+lacunas de cada uma estão no relatório.
+
 Continuam **sem mudança**: E06–E09, E32 e E34. A E26 foi reobservada e
 registrada em [evidencias/task_11-protecoes.json](evidencias/task_11-protecoes.json).
 

@@ -6,8 +6,8 @@ violação observada. Faltam uma prova planejada (V03-06) e duas observações q
 só o dono pode fazer (G80, e o limite de identidade de G46, que só ele pode
 aceitar ou mudar). O épico
 [#194](https://github.com/andreustimm/master-jobs/issues/194) **não deve ser
-fechado** enquanto essas pendências estiverem abertas ou aceitas por escrito
-pelo dono.
+fechado** enquanto cada uma delas não estiver resolvida, ou aceita por escrito
+pelo dono como limite.
 
 Este relatório separa quatro tipos de prova e não mistura um com outro:
 
@@ -59,13 +59,15 @@ esta verificação refez está nas seções V11-01 a V11-04.
 | CI de `dev` | [X] (observado) | As 14 execuções de push mais recentes, desde 23/09 16:02, terminaram verdes. Houve 1 cancelada antes delas |
 | `pnpm test:e2e` local | não executado | O diff desta tarefa é só Markdown e JSON (G57). O E2E de navegador do mesmo SHA está verde no CI (`e2e-navegador`) |
 | `node scripts/rules/check-instructions.ts` | [X] | "symlinks dos harnesses, links, âncoras e inventário de regras conferem" |
-| Script próprio `g-coverage-v11.mjs` (fora do repo) | [X] | 84 linhas no inventário, 84 âncoras `g01`–`g84` definidas uma vez cada, nenhuma faltando, duplicada ou sobrando. As 54 citações de G em `AGENTS.md` resolvem |
+| Conferência avulsa de completude (script local, fora do repo) | [X] | 84 linhas no inventário, 84 âncoras `g01`–`g84` definidas uma vez cada, nenhuma faltando, duplicada ou sobrando. As 54 citações de G em `AGENTS.md` resolvem |
 
 O gate `check-instructions` confere que âncora e linha do inventário são
 coerentes. Ele **não** confere que G01–G84 estão todas presentes: se uma
-obrigação sumisse das duas camadas ao mesmo tempo, ele passaria. O script
-acima fez essa conferência agora, uma vez só. Não há um gate permanente para
-isso.
+obrigação sumisse das duas camadas ao mesmo tempo, ele passaria. A conferência
+avulsa fez isso agora, uma vez só, e é fácil de repetir. Ela gera os IDs
+`G01`–`G84`, lê as linhas `| Gnn |` de `docs/engineering/rules/README.md` e as
+âncoras `<a id="gnn">` dos outros arquivos de `rules/`, e exige exatamente uma
+linha e uma âncora por ID. Não há um gate permanente para isso.
 
 ## V11-03 — Proteções e configuração remota [R]
 
@@ -116,13 +118,14 @@ Destino e preservação [X/L]: cada obrigação tem um destino primário em
 gate e o script acima. Pelo inventário de `rules/README.md`, C01–C22 estão
 resolvidos. C19 está resolvido só em `main`.
 
-Pela matriz da auditoria, a classificação é: P0 = G01–03, G09, G14, G16–25,
-G27–28, G36–41, G43–46, G48, G50–52, G68, G73, G75–76, G79–80. P1 = 39
-obrigações. P2 = 8.
+Pela matriz da auditoria, a classificação é: P0 = G01–G03, G09, G14,
+G16–G25, G27–G28, G36–G41, G43–G46, G48, G50–G52, G68, G73, G75–G76, G79–G80
+(37 obrigações). P1 = 39 obrigações. P2 = 8.
 
 | Grupo | Situação atual | Base |
 |---|---|---|
-| P0 com prova comportamental executada no `check` de hoje (G01, G02, G03, G09, G14, G16–G22, G24–G25, G27–G28, G36–G40, G73, G75–G76, G79) | preservadas | [X] suíte verde, cujo conteúdo foi conferido por leitura [L]. G14 roda no job `pwa-browser` do CI [X], não no `check` local. G16 e a matriz por papel rodam no `e2e-navegador` [X], que não bloqueia |
+| P0 com prova comportamental no `check` de hoje (G01–G03, G09, G17–G22, G24–G25, G27–G28, G36–G40, G73, G75–G76, G79) | preservadas | [X] suíte verde, cujo conteúdo foi conferido por leitura [L] |
+| P0 provadas só no CI (G14, G16) | preservadas | [X] CI observado em `c23f8ba2`, não no `check` local. G14 roda no job `pwa-browser`, que é obrigatório. G16 (a matriz por papel) roda no `e2e-navegador`, que **não bloqueia** |
 | G23 (CV público) | preservada com limite declarado | [X] `public-profile` e `public-cv`. Valor sem rótulo e telefone sem marcador passam: o limite está declarado no teste. O cenário `PUB-public-cv-protected-content` está `untested` desde o reset de 22/09 [H]. A decisão do dono pedida na #233 (filtrar por padrão ou não publicar) continua sem registro [H] |
 | G41 (chave fora do banco e do log) | preservada por leitura; **prova V03-06 ausente** | ver P0-1 |
 | G43–G46, G48, G50–G52 (fluxo e produção) | `main` protegida no remoto [R]; proveniência por SHA [L+X], com `promotion-provenance` no `check`; retorno com assignee [L+X] | limites em P0-3 |
@@ -212,7 +215,8 @@ executa esses testes está em V11-02.
   política de branch do ambiente.
 - **[H] #233:** a decisão sobre o filtro por padrão do CV público continua
   pendente, e o cenário `PUB-public-cv-protected-content` precisa de reteste.
-  No tracker, 15 cenários estão `untested`. O último relatório full é o da
+  O tracker em `c23f8ba2` tem 96 cenários: 41 `pass`, 34 `untested`, 16
+  `blocked-verify`, 4 `blocked-decision` e 1 `fail`. O último relatório full é o da
   1.22.0, e 1.22.1–1.25.1 foram publicadas depois dele. Pela regra 20, o dono
   confere se a cadência de full valeu para essas versões.
 - **Follow-ups Minor declarados nas PRs** e ainda sem issue:
