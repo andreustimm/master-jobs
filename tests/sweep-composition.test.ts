@@ -45,7 +45,7 @@ vi.mock("../src/contexts/sourcing/index.ts", async (orig) => ({
 
 const { runSweep } = await import("../src/contexts/operations/index.ts");
 const { getDb } = await import("../src/core/db/client.ts");
-const { candidate, scoreCursor, sweepRun, targetTrack } = await import("../src/core/db/schema.ts");
+const { candidate, scoreCursor, sourceRun, sweepRun, targetTrack } = await import("../src/core/db/schema.ts");
 const { releaseTestDb, useTestDb } = await import("./support/db.ts");
 
 const alarm = vi.fn(async () => {});
@@ -82,6 +82,12 @@ describe("sync", () => {
     ]);
     const rows = await getDb().select().from(sweepRun);
     expect(rows).toHaveLength(3);
+    // Cada fonte da fatia deixa uma execução (#223), com o resultado dela.
+    const execucoes = await getDb().select().from(sourceRun).orderBy(sourceRun.id);
+    expect(execucoes.map((e) => [e.sourceId, e.status])).toEqual([
+      ["greenhouse:acme", "succeeded"],
+      ["lever:beta", "failed"],
+    ]);
     // As duas fontes nunca sincronizaram de verdade (o dublê não grava): alarme.
     expect(alarm).toHaveBeenCalledWith({ kind: "fonte_sem_sync", sources: ["greenhouse:acme", "lever:beta"] });
   });

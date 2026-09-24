@@ -180,8 +180,9 @@ uma execução `all`.
 - **Executor morto**: `running` sem batimento por 15 min vira `interrupted` na
   próxima execução pedida pela CLI (e libera um novo pedido). Nova tentativa é
   outra linha, ligada por `retry_of`; a original não muda.
-- A varredura fatiada da Vercel (`/api/cron/varredura`) ainda não registra em
-  `source_run`; ela continua medida por `sweep_run`.
+- A fatia `sync` da varredura da Vercel (`/api/cron/varredura`) também registra
+  uma execução `source` por fonte, além da métrica em `sweep_run`; se a tela já
+  pediu uma execução equivalente, é ela que a fatia roda.
 
 ## Repontuação de candidato: fatias na web
 

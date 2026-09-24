@@ -35,7 +35,11 @@
 ### Alterado
 
 - `jho jobs sync` e `jho jobs sweep` sem flags registram uma execução `all`
-  com as filhas, e a saída mostra o id da execução.
+  com as filhas, e a saída mostra o id da execução; a fatia `sync` da
+  varredura da Vercel registra uma execução por fonte.
+- Todo pedido marca antes como `interrupted` a execução sem batimento, e filha
+  que esperava vaga de um pai já encerrado é cancelada (`parent_ended`).
+- `jho jobs verify --source` usa fit mínimo 0, salvo `--min-fit` explícito.
 
 ## pt-BR
 

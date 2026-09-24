@@ -760,10 +760,10 @@ pnpm jho jobs verify --min-fit 55 --limit 250
 
 | Flag | Padrão | Efeito |
 |---|---|---|
-| `--min-fit <n>` | `55` | Só verifica acima deste fit |
+| `--min-fit <n>` | `55` | Só verifica acima deste fit. Com `--source` o padrão é 0 (a fonte inteira); passado explícito, vale também ali |
 | `--limit <n>` | `100` | Quantas checar |
 | `--dry-run` | — | Reporta sem fechar nada |
-| `--source <kind:handle>` | — | Verifica as vagas abertas desta fonte (fit mínimo 0; `--min-fit` não vale aqui), até `--limit`, e registra uma execução `verify` em `source_run` com vivas, fechadas e inconclusivas. Cortada pelo limite, a execução fica com `completeness = partial`. Não combina com `--dry-run` |
+| `--source <kind:handle>` | — | Verifica as vagas abertas desta fonte (fit mínimo 0, salvo `--min-fit` explícito), até `--limit`, e registra uma execução `verify` em `source_run` com vivas, fechadas e inconclusivas. Cortada pelo limite, a execução fica com `completeness = partial`. Não combina com `--dry-run` |
 | `--run <id>` | — | Executa a verificação `queued` pedida pela tela. Não combina com `--dry-run` |
 
 ```
