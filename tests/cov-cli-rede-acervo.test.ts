@@ -817,3 +817,28 @@ describe("jho sources diff|import", () => {
     expect(depois.out).toContain("yaml and database agree");
   });
 });
+
+describe("jho jobs verify --source com corte", () => {
+  it("cortada pelo --limit, a execução fica com completude parcial", async () => {
+    await semearVaga({ caminho: "/um" });
+    await semearVaga({ caminho: "/dois" });
+    vi.stubGlobal("fetch", fetchPorUrl({}));
+
+    await semRuido(() => rodar("jobs", "verify", "--source", "lever:acme", "--limit", "1"));
+
+    const [execucao] = await banco().select().from(sourceRun);
+    expect(execucao).toMatchObject({ status: "succeeded", fetched: 1, completeness: "partial" });
+  });
+
+  it("`jobs sweep` registra a captura como execução", async () => {
+    await comSources("sources:\n  - kind: greenhouse\n    handle: acme\n    label: Acme\n");
+    setHttpPort(fixtureHttp({ "boards-api.greenhouse.io": { jobs: [] } }));
+
+    const r = await rodar("jobs", "sweep");
+
+    expect(r.code).toBeUndefined();
+    const execucoes = await banco().select().from(sourceRun).orderBy(sourceRun.id);
+    expect(execucoes.map((e) => e.scopeKind)).toEqual(["all", "source"]);
+    expect(JSON.parse(r.out.trim().split("\n").pop()!)).toMatchObject({ status: "prepared", run: execucoes[0]!.id });
+  });
+});

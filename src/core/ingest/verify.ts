@@ -36,6 +36,8 @@ export type VerifyResult = {
   /** Blocked, rate-limited or errored — status unknown, left untouched. */
   inconclusive: number;
   bySource: Record<string, { gone: number; alive: number; inconclusive: number }>;
+  /** Quantas vagas estavam na fila antes do `limit`: maior que `checked` = corte. */
+  due: number;
 };
 
 export async function verifyJobs(
@@ -91,12 +93,11 @@ export async function verifyJobs(
 
   // Parse after the coarse SQL prefix filter so malformed values cannot
   // consume the requested limit or reach fetch().
-  const rows = candidates
-    .flatMap((candidate) => {
-      const url = publicApplyUrl(candidate);
-      return url ? [{ id: candidate.id, sourceId: candidate.sourceId, url }] : [];
-    })
-    .slice(0, limit);
+  const due = candidates.flatMap((candidate) => {
+    const url = publicApplyUrl(candidate);
+    return url ? [{ id: candidate.id, sourceId: candidate.sourceId, url }] : [];
+  });
+  const rows = due.slice(0, limit);
 
   const result: VerifyResult = {
     checked: 0,
@@ -104,6 +105,7 @@ export async function verifyJobs(
     alive: 0,
     inconclusive: 0,
     bySource: {},
+    due: due.length,
   };
 
   const bump = (sourceId: string, key: "gone" | "alive" | "inconclusive") => {

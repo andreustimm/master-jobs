@@ -45,7 +45,7 @@ import {
 } from "./core/positioning/engage.ts";
 import { archiveClosedJobs } from "./core/ingest/archive.ts";
 import { addJob } from "./core/ingest/manual.ts";
-import { catalogForSync, syncAll, pruneClosed } from "./core/ingest/run.ts";
+import { catalogForSync, pruneClosed } from "./core/ingest/run.ts";
 import {
   executeSourceRun,
   interruptStaleSourceRuns,
@@ -800,15 +800,31 @@ jobs
   .option("--concurrency <n>", "parallel sources", "4")
   .action(async (opts: { minFit: string; limit: string; concurrency: string }) => {
     await withDb(async () => {
+      // A mesma captura registrada de `jobs sync`: uma execução `all` com uma
+      // filha por fonte do catálogo.
       const configs = await catalogForSync(await loadSources());
-      const result = await syncAll(configs, { concurrency: Number(opts.concurrency) });
+      const runId = await runForCli("sync", {});
+      const sourcesFailed: string[] = [];
+      const totals = { fetched: 0, inserted: 0, updated: 0, unchanged: 0, closed: 0, failed: 0 };
+      const result = await executeSourceRun(runId, {
+        concurrency: Number(opts.concurrency),
+        onChild: (child, outcome) => {
+          if (!outcome.ok) {
+            sourcesFailed.push(child.id);
+            totals.failed++;
+          }
+          totals.fetched += outcome.counts.fetched ?? 0;
+          totals.inserted += outcome.counts.inserted ?? 0;
+          totals.updated += outcome.counts.updated ?? 0;
+          totals.unchanged += outcome.counts.unchanged ?? 0;
+          totals.closed += outcome.counts.closed ?? 0;
+        },
+      });
+      if (!result.ok) throw new Error(`run ${runId} did not execute: ${result.code}`);
       const candidateId = await activeCandidateId();
       await scoreAll(candidateId);
       const minFit = Number(opts.minFit);
       const limit = Number(opts.limit);
-      const sourcesFailed = result.sources
-        .filter((source) => !source.ok)
-        .map((source) => source.sourceId);
       const snapshot = await buildJobSweepSnapshot(candidateId, minFit, limit, sourcesFailed);
       const snapshotPath = resolve(".compozy/runtime/job-sweep-snapshot.json");
       await mkdir(dirname(snapshotPath), { recursive: true });
@@ -821,7 +837,8 @@ jobs
         snapshotPath: ".compozy/runtime/job-sweep-snapshot.json",
         sources: configs.length,
         sourcesFailed,
-        totals: result.totals,
+        run: runId,
+        totals,
         candidates: snapshot.candidates.length,
       }));
     });

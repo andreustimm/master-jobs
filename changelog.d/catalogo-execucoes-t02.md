@@ -24,10 +24,18 @@
   variável de ambiente), que roda só aquela execução. Sem credencial, a
   execução fica `queued` com o motivo `no_token`.
 
+- Execução `queued` sem executor (sem credencial, despacho que falhou na rede
+  ou pendente há mais de 30 min, que o grupo de concorrência do workflow pode
+  ter cancelado) é despachada de novo pelo próximo pedido equivalente, em vez
+  de segurar a chave para sempre. A execução bate o coração a cada 5 min
+  enquanto trabalha; a que foi dada por morta no meio não grava por cima.
+- Verificação cortada pelo `--limit` registra `completeness = partial`; o
+  workflow verifica até 1000 vagas por fonte.
+
 ### Alterado
 
-- `jho jobs sync` sem flags registra uma execução `all` com as filhas, e a
-  saída mostra o id da execução.
+- `jho jobs sync` e `jho jobs sweep` sem flags registram uma execução `all`
+  com as filhas, e a saída mostra o id da execução.
 
 ## pt-BR
 

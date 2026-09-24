@@ -133,7 +133,9 @@ jobs:
       #    já criada e `queued`. Os insumos entram por variável de ambiente,
       #    nunca interpolados no script, e a CLI valida os dois (id inteiro, e
       #    a fonte precisa ser a da execução). Nenhum passo abaixo casa com a
-      #    rotina `execucao`.
+      #    rotina `execucao`. O grupo `varredura` guarda um pendente só e
+      #    cancela o mais velho: a execução daquele disparo fica `queued`, e o
+      #    próximo pedido equivalente a despacha de novo (`shouldRedispatch`).
       - name: Executar o pedido da tela
         if: github.event_name == 'workflow_dispatch' && inputs.rotina == 'execucao'
         env:
@@ -142,7 +144,7 @@ jobs:
           FONTE: ${{ inputs.fonte }}
         run: |
           if [ "$ACAO" = "recheck" ]; then
-            pnpm jho jobs verify --run "$EXECUCAO" ${FONTE:+--source "$FONTE"}
+            pnpm jho jobs verify --run "$EXECUCAO" --limit 1000 ${FONTE:+--source "$FONTE"}
           else
             pnpm jho jobs sync --run "$EXECUCAO" ${FONTE:+--source "$FONTE"}
           fi
