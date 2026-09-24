@@ -132,6 +132,7 @@ rtk pnpm jho scrape reparse      # reprocessa tudo sem baixar de novo
 
 # análise
 rtk pnpm jho stats               # diagnóstico do scorer e do funil (--json)
+rtk pnpm jho ops telemetry       # requisições por rotina e fatias da varredura, por dia
 
 # saída
 rtk pnpm jho report              # markdown pro vault Obsidian
@@ -769,6 +770,12 @@ pnpm jho jobs verify --min-fit 55 --limit 250
 > 403 apagaria vagas vivas. Timeout e 5xx não provam nada e entram como
 > inconclusivos.
 
+Cada sondagem gasta uma unidade do orçamento diário `reconferencia`, o mesmo de
+`jho jobs recheck run` e da fatia da Vercel (#291). Com o dia esgotado, o lote
+para antes de sondar o resto. `jho jobs recheck queue` também enfileira vagas
+abaixo de `--min-fit` que a fonte deixou de listar há 3 dias ou mais, depois
+das acima do corte — ver [operations.md](operations.md#orçamento-de-requisições-e-telemetria-por-rotina).
+
 ### `jho jobs archive`
 
 Tira do quadro ativo vagas fechadas há muito tempo, sem apagar linha nenhuma.
@@ -1078,6 +1085,26 @@ vermelho com `exitCode = 1`.
 > `weight` deve quebrar no load, não produzir silenciosamente um scorer que ranqueia
 > tudo em zero. `jho profile` é o jeito barato de exercitar essa validação sem tocar o
 > banco.
+
+---
+
+## Área `ops` — custo e cadência da varredura
+
+### `jho ops telemetry`
+
+Requisições a terceiros por rotina (`request_budget`) e chamadas por fatia da
+varredura (`sweep_run`), por dia. Só números e nomes de rotina — é o comando que
+mede o baseline de custo em produção (#291).
+
+```bash
+pnpm jho ops telemetry --days 7
+pnpm jho ops telemetry --days 7 --json   # inclui os tetos em `limits`
+```
+
+| Flag | Padrão | Efeito |
+|---|---|---|
+| `--days <n>` | `7` | Janela, em dias para trás a partir de hoje (UTC) |
+| `--json` | — | Saída em JSON |
 
 ---
 
