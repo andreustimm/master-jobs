@@ -9,6 +9,118 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-09-24
+
+### Adicionado
+
+- Cadência das notas em duas filas (#288, ADR 0027): fatias `sem-nota`
+  (candidato cuja trilha principal nunca completou uma passada, agenda
+  `5-55/10`) e `manutencao` (os demais, de hora em hora) em
+  `/api/cron/varredura`, com reserva comum `pontuacao:<candidato>` em
+  `sweep_lease`, intervalo mínimo por candidato de cadência − 1 min e o prazo
+  da chamada (20 s) passado à unidade. A fatia `pontuar` sai: a rota responde
+  400, e reaplicar `supabase/cron/varredura.sql` remove
+  `jho-varredura-pontuar`.
+- Tabela `score_cursor` (migração aditiva `0019_score_cursor`) e índice
+  parcial `job_recency_open_idx`: `scoreAll` percorre as vagas abertas por
+  `coalesce(posted_at, first_seen_at)` decrescente em lotes de 100
+  (`SCORE_BATCH`), grava a posição depois de cada lote e retoma dela;
+  `profile_hash`/`scorer_version` diferentes recomeçam do topo. Regras puras em
+  `src/core/scoring/batch.ts`. O `after()` do salvar-CV, a `repontuar` e a CLI
+  seguem o mesmo lote e ordem.
+- Análise estruturada da vaga (#223, tarefa 06). Tabela `job_analysis`
+  (migration aditiva `0018_job_analysis`): uma linha imutável por tentativa,
+  `retry_of` para a nova tentativa, índice único parcial por
+  `(job_id, input_hash, schema_version)` nos estados ativos e lease de 10 min
+  (`running` vencido vira `interrupted`). Regras puras em
+  `src/core/llm/job-structure.ts` (`buildStructureInput`, `bindEvidence`,
+  `interpretOutput`, `decideAnalysisRequest`); fila e processador em
+  `src/core/llm/job-analysis.ts`; `isStale` em
+  `src/contexts/operations/domain/runs.ts`.
+- Prompt versionado `docs/prompts/system/job-structure.md`: entrada só com a
+  vaga (título, empresa, local, anúncio), saída JSON por campo com
+  proveniência, confiança e trechos. Trecho que não está no texto rebaixa o
+  campo para desconhecido; o corpo do provedor e a chave nunca são gravados.
+- `jho analysis queue <id>`, `jho analysis run` (confirmação antes de enviar,
+  BYOK) e `jho analysis status`. Seção "Análise estruturada" na tela da vaga,
+  com pedido (`requestJobAnalysisAction`, `job:read`) e, só para admin,
+  modelo, tokens, custo e nova tentativa (`retryJobAnalysisAction`,
+  `admin:access`).
+- Reuso: análise `succeeded` do mesmo texto e versão de esquema é devolvida
+  sem nova chamada paga; nova tentativa só depois de `failed`, `partial`,
+  `paused_quota` ou `interrupted`, até três pedidos por texto.
+- Busca da tela Vagas com frase entre aspas, localização, ordem por relevância,
+  explicação do casamento e grupo de termos parecidos (#223, tarefa 05).
+  `parseQuery`, `compareByRelevance` e `explainMatch` são puros
+  (`src/core/search.ts`); `phraseRegexSql` entra no núcleo de termo. O filtro
+  de palavra inteira continua decidindo o conjunto: `sort=relevance` (só com
+  `q`) ordena por campo casado (cargo > empresa > localização/descrição), fit,
+  recência e id, e devolve o mesmo conjunto e a mesma contagem de `sort=fit`.
+- Grupo de proximidade (`nearMatches`): até 20 vagas que passam nos outros
+  filtros e não casaram a consulta, por `termo <% title` com limiar fixado na
+  transação. Migration aditiva `0017_job_title_trgm` cria `job_title_trgm_idx`
+  (GIN, parcial em `closed_at is null`). Sem `pg_trgm`, o grupo some e o
+  resultado principal segue.
+- Catálogo de fontes governado pelo banco (#223, tarefa 01). Migration aditiva
+  `0021_source_catalog` e `0022_backfill_source_origin`: `source` ganha `retired_at`, `origin`, `config_revision`,
+  `secret_ref` e `managed_at`. Linha não gerida espelha `config/sources.yaml`,
+  inclusive `enabled: false`, e é desabilitada quando sai do arquivo; linha
+  gerida (importada ou editada) nunca é sobrescrita pelo YAML.
+- `jho sources import [--apply]` (simula por padrão) e `jho sources diff` (nunca
+  grava). O plano é puro (`planCatalogImport` em
+  `src/contexts/sourcing/domain/catalog.ts`), com `capabilitiesOf`,
+  `classifySourceProbe`, `validateCatalogWrite` e `validateSecretRef`.
+- Cada adapter declara `snapshot` (`complete` quando pode provar o fim da
+  listagem, `partial` quando nunca). Casos de uso do catálogo no contexto
+  `sourcing`: cadastrar, editar, desabilitar, aposentar e sondar sem gravar.
+- Identidade estável da vaga por `(source_id, external_id)` na sincronização
+  (#291). `observeRawJobs()` lê em lote as linhas da fonte pelos ids externos
+  e decide com a função pura `resolveObservedIdentity()`
+  (`src/core/ingest/identity.ts`): título editado na fonte dona da linha atualiza a mesma linha em vez
+  de criar outra e fechar a antiga. Fingerprint novo já de outra linha fica de
+  fora (a linha mantém o antigo; nada é unido nem apagado). Id vazio ou
+  ambíguo na listagem vale o fingerprint. O fechamento por ausência compara
+  `job.id`, não fingerprint. Índice não único `job_source_external_idx`.
+- Orçamento diário de requisições por rotina, compartilhado entre CLI, Vercel e
+  botão: tabela `request_budget (routine, day, used, refused)`, reserva por
+  upsert condicional. Tetos em `DAILY_REQUEST_BUDGET`: `reconferencia` 3.000,
+  `captura` 1.000, `sync` só conta. `runVerifyQueue`, `verifyJobs` e
+  `runFetchStage` param antes do claim com o dia esgotado e devolvem
+  `budgetExhausted`.
+- `jho ops telemetry [--days N] [--json]`: requisições por rotina e chamadas
+  por fatia (`sweep_run`) por dia — o comando do baseline de custo em produção.
+- Migração aditiva `0020_ingest_identity_and_request_budget` (tabela nova e
+  índice).
+- `migrate.yml` roda sozinho em todo push para `main` (sem filtro `paths`, que o GitHub só avalia nos primeiros 300 arquivos do diff), com `jho db migrate --additive-only`: o lote pendente no banco é classificado antes de qualquer DDL, e comando não aditivo para o job pedindo o dispatch manual, que continua existindo para aplicar o lote inteiro depois de revisão (ADR 0028, #289).
+- Detector puro `src/core/db/migration-review.ts`: separa o SQL em comandos e classifica por lista de permissão (criar tabela, índice, coluna nula ou com default, enum, grant); `DROP`, `RENAME`, mudança de tipo, `SET NOT NULL`, restrição sobre dado existente, reescrita de dado, `REVOKE`, bloco procedural e forma desconhecida pedem revisão. Toda migração publicada tem veredito revisado num arquivo próprio, `tests/fixtures/migration-verdicts/<tag>.json`, conferido por `tests/migration-review.test.ts`: migração sem veredito reprova com a instrução do que criar, e duas PRs de migração não disputam a mesma linha.
+
+### Alterado
+
+- Com prazo, `scoreAll` só começa um lote que caberia pelo mais lento até ali
+  (antes conferia o prazo depois do lote e podia passar dele); a leitura vazia
+  de uma trilha em dia não gasta o primeiro lote da chamada.
+- `/api/cron/varredura` responde 503 (`varredura só roda em produção`) em toda
+  fatia quando `JHO_ENV`/`VERCEL_ENV` não declaram `production` — todas as
+  declarações presentes precisam concordar. O SQL do agendador recusa aplicar
+  fora do projeto de produção. O `after()` do salvar-CV continua valendo em
+  qualquer ambiente.
+- O filtro de termo passou a olhar também `location_raw` (adenda A4). Termo que
+  não aparece em nenhuma localização devolve o mesmo conjunto de antes.
+- O sync (`jho jobs sync`, `jho jobs sweep` e a fatia `sync` da varredura)
+  seleciona as fontes do banco por `catalogForSync()`: habilitada, não
+  aposentada, kind com adapter e handle fora de `~terms`. `loadSources()`
+  devolve toda entrada com `enabled`; a captura por termo filtra as
+  habilitadas explicitamente, e a saúde (`jho sources list`, tela de operações)
+  segue o mesmo regime por linha do sync. `syncAll`/`syncSource` só inserem a
+  linha que falta: quem recebe fontes do banco não espelha o arquivo.
+- A reconferência periódica também enfileira vagas abaixo da nota 55 que a
+  fonte deixou de listar há 3 dias ou mais (`last_seen_at`), depois das acima
+  do corte. Vaga de fonte parcial que saiu da janela deixa de ficar aberta
+  para sempre; só 404/410 fecham.
+- A promoção `dev → staging` classifica `staging..alvo` com o mesmo detector: migração aditiva promove sem `confirmar-migracao`, inclusive no agendamento; não aditiva, `.sql` publicado alterado ou arquivo fora de `drizzle/postgres/` continuam exigindo a confirmação, e o erro lista arquivo, motivo e comando. `schema.ts` sai da guarda (o CI já prova a sincronia com o SQL).
+- A PR `staging → main` aberta pelo robô passa a receber `qualidade` e `schema-e-migracao` na cabeça: a promoção dispara `ci.yml` por `workflow_dispatch` em `staging` (única forma de evento que o `GITHUB_TOKEN` dispara), e o dono não precisa mais fechar e reabrir a PR.
+- `migrar.sh` exige `MIGRATION_MODE` (`aditiva` ou `revisada`); valor ausente ou desconhecido não migra nada.
+
 ## [1.23.0] - 2026-09-23
 
 ### Alterado
