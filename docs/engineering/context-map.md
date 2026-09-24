@@ -9,7 +9,7 @@ inclusive pelo `index.ts` de um contexto, que compõe adapters. O scorer é
 domínio de Matching fisicamente fora do contexto, e por isso é o único de fora
 que importa `contexts/matching/domain/` direto.
 
-<!-- schema-table-count: 41 -->
+<!-- schema-table-count: 42 -->
 
 | Contexto | Aggregate owner / responsabilidade | Tabelas próprias | API pública | Dependências permitidas |
 |---|---|---|---|---|
@@ -29,7 +29,7 @@ ganham API pública quando uma mudança funcional atravessa sua fronteira:
 
 | Módulo | Ownership / tabelas |
 |---|---|
-| sourcing | observação global de `source`, `company`, `job`, `job_page`, `verify_task` (a captura por termo já é contexto) |
+| sourcing | observação global de `source`, `company`, `job`, `job_page`, `verify_task`, `job_check_event` (a captura por termo já é contexto) |
 | candidate | perfil e documentos em `candidate`, `candidate_document` |
 | positioning | `post`, `engagement`, `target_account`, `metric_snapshot`, `positioning_task` |
 | scrape | fila técnica `scrape_task` |
