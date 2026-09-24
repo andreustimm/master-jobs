@@ -18,5 +18,6 @@ overlaps: JOBS-detail-owner-view-english
 
 Novo em #223 (tarefa 04). A disponibilidade vem dos eventos de verificação
 (`job_check_event`); vaga verificada antes dos eventos existirem aparece como
-desconhecida até a próxima checagem. Um 403 ou 5xx não muda o que o último
-veredito conclusivo provou.
+desconhecida até a próxima checagem, com a data da checagem antiga. Vaga
+fechada pelo sync aparece encerrada, igual ao selo. Um 403 ou 5xx não muda o
+que o último veredito conclusivo provou.

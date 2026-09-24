@@ -11,7 +11,7 @@
  * `probe.ts` (só 404/410, G26), o que reabre é `decideReopen` de
  * `lifecycle.ts`, o motivo é `reasonFor` e a ordem é `decidesState`.
  */
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { redactDetail, EVIDENCE_MAX } from "../../contexts/operations/domain/runs.ts";
 import { clock } from "../clock.ts";
 import { getDb } from "../db/client.ts";
@@ -20,8 +20,10 @@ import {
   AVAILABILITY_STALE_MS,
   currentAvailability,
   decidesState,
+  gateInstant,
   latestEvent,
   reasonFor,
+  reconcileAvailability,
   type Availability,
   type StatusReason,
 } from "./availability.ts";
@@ -37,22 +39,27 @@ export type JobAvailability = {
 
 /**
  * O que a tela da vaga mostra: estado derivado dos eventos (puro, em
- * `availability.ts`) e a data da última checagem. Vaga sem evento é
- * "desconhecida" — inclusive a verificada antes de os eventos existirem.
+ * `availability.ts`), conciliado com `closed_at` da vaga — o sync fecha e
+ * reabre sem evento —, e a data da última checagem. Vaga verificada antes de
+ * os eventos existirem é "desconhecida", mas a data vem de `job.checked_at`:
+ * ela foi conferida, e dizer "nunca" seria falso.
  */
 export async function jobAvailability(jobId: number, now = clock().iso()): Promise<JobAvailability> {
-  const events = await getDb()
+  const db = getDb();
+  const [row] = await db.select({ closedAt: job.closedAt, checkedAt: job.checkedAt }).from(job).where(eq(job.id, jobId));
+  const events = await db
     .select({ id: jobCheckEvent.id, checkedAt: jobCheckEvent.checkedAt, verdict: jobCheckEvent.verdict, reason: jobCheckEvent.reason })
     .from(jobCheckEvent)
     .where(eq(jobCheckEvent.jobId, jobId));
   const typed = events.map((event) => ({ ...event, verdict: event.verdict as ProbeVerdict }));
-  const state = currentAvailability(typed, now, AVAILABILITY_STALE_MS);
+  const state = reconcileAvailability(currentAvailability(typed, now, AVAILABILITY_STALE_MS), row?.closedAt ?? null);
   const last = latestEvent(typed);
   const decisive = latestEvent(typed.filter((event) => event.verdict !== "inconclusive"));
   return {
     state,
-    lastCheckedAt: last?.checkedAt ?? null,
-    reason: state === "closed" && decisive ? (decisive.reason as StatusReason) : "unknown",
+    lastCheckedAt: last?.checkedAt ?? row?.checkedAt ?? null,
+    // Só um 404/410 sustenta motivo; encerrada pelo sync fica sem motivo provado.
+    reason: state === "closed" && decisive?.verdict === "gone" ? (decisive.reason as StatusReason) : "unknown",
   };
 }
 
@@ -88,12 +95,20 @@ export async function applyVerdict(input: {
       .for("update");
     if (!current) return { found: false, changedState: false, reopen: { kind: "noop", reason: "not-alive" } };
 
-    const [newest] = await tx
-      .select({ checkedAt: jobCheckEvent.checkedAt })
-      .from(jobCheckEvent)
-      .where(eq(jobCheckEvent.jobId, input.jobId))
-      .orderBy(desc(jobCheckEvent.checkedAt), desc(jobCheckEvent.id))
-      .limit(1);
+    const newestOf = async (onlyConclusive: boolean) => {
+      const [row] = await tx
+        .select({ checkedAt: jobCheckEvent.checkedAt })
+        .from(jobCheckEvent)
+        .where(
+          onlyConclusive
+            ? and(eq(jobCheckEvent.jobId, input.jobId), ne(jobCheckEvent.verdict, "inconclusive"))
+            : eq(jobCheckEvent.jobId, input.jobId),
+        )
+        .orderBy(desc(jobCheckEvent.checkedAt), desc(jobCheckEvent.id))
+        .limit(1);
+      return row?.checkedAt ?? null;
+    };
+    const newest = { any: await newestOf(false), conclusive: await newestOf(true) };
 
     await tx.insert(jobCheckEvent).values({
       jobId: input.jobId,
@@ -105,13 +120,15 @@ export async function applyVerdict(input: {
       evidence: input.evidence ? redactDetail(input.evidence, EVIDENCE_MAX) : null,
     });
 
-    if (!decidesState(checkedAt, newest?.checkedAt ?? null)) {
+    if (!decidesState(checkedAt, gateInstant(input.verdict, newest))) {
       return { found: true, changedState: false, reopen: { kind: "noop", reason: "not-alive" } };
     }
 
     const reopen = decideReopen({ verdict: input.verdict, closedAt: current.closedAt, archivedAt: current.archivedAt });
     const patch: Partial<typeof job.$inferInsert> = {
-      checkedAt,
+      // A última checagem só anda para frente: um conclusivo que decide depois
+      // de um inconclusivo mais novo muda o estado, não o relógio.
+      checkedAt: newest.any !== null && newest.any > checkedAt ? newest.any : checkedAt,
       checkStatus: input.verdict,
       checkCode: input.httpCode,
     };

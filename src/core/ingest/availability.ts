@@ -59,6 +59,30 @@ export function currentAvailability(events: readonly CheckEvent[], now: string, 
 }
 
 /**
+ * O estado que a tela mostra, conciliado com a linha da vaga. O sync fecha
+ * (ausência numa listagem completa) e reabre (a vaga voltou à listagem) sem
+ * evento de verificação, e o selo "Encerrada" da mesma tela lê `closed_at`:
+ * sem conciliar, a página afirmaria dois fatos opostos. `closed_at` preenchido
+ * é encerrada, venha de onde vier; um 404 que o sync já desmentiu não prova
+ * mais nada sobre hoje, então vira desconhecida — nem aberta nem fechada.
+ */
+export function reconcileAvailability(fromEvents: Availability, closedAt: string | null): Availability {
+  if (closedAt !== null) return "closed";
+  return fromEvents === "closed" ? "unknown" : fromEvents;
+}
+
+/**
+ * O instante contra o qual um veredito novo se compara para decidir o estado.
+ * Conclusivo compara com o último CONCLUSIVO — é o mesmo evento que
+ * `currentAvailability` usa, e comparar com um inconclusivo mais novo deixaria
+ * a tela e a linha da vaga discordando. Inconclusivo não fecha nem reabre, só
+ * atualiza a última checagem; compara com o último de qualquer tipo.
+ */
+export function gateInstant(verdict: ProbeVerdict, newest: { any: string | null; conclusive: string | null }): string | null {
+  return verdict === "inconclusive" ? newest.any : newest.conclusive;
+}
+
+/**
  * Se um evento com este instante pode mudar o estado da vaga: só quando não há
  * evento mais novo já gravado. O evento velho entra no histórico mesmo assim.
  */

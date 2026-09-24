@@ -132,6 +132,52 @@ describe("IT-007 evento transacional e reabertura", () => {
   });
 });
 
+describe("IT-007 disponibilidade conciliada com a vaga", () => {
+  it("vaga fechada pelo sync depois de um `alive` aparece encerrada, sem motivo provado", async () => {
+    const id = await vaga("/sync-fechou");
+    await applyVerdict({ jobId: id, verdict: "alive", httpCode: 200, checkedAt: "2026-09-21T00:00:00.000Z" });
+    await db.update(job).set({ closedAt: "2026-09-22T00:00:00.000Z" }).where(eq(job.id, id));
+
+    expect(await jobAvailability(id, "2026-09-23T00:00:00.000Z")).toEqual({
+      state: "closed",
+      lastCheckedAt: "2026-09-21T00:00:00.000Z",
+      reason: "unknown",
+    });
+  });
+
+  it("404 que o sync desmentiu (reabriu) não aparece como encerrada", async () => {
+    const id = await vaga("/sync-reabriu");
+    await applyVerdict({ jobId: id, verdict: "gone", httpCode: 404, checkedAt: "2026-09-21T00:00:00.000Z" });
+    await db.update(job).set({ closedAt: null }).where(eq(job.id, id));
+
+    expect((await jobAvailability(id, "2026-09-23T00:00:00.000Z")).state).toBe("unknown");
+  });
+
+  it("vaga conferida antes dos eventos mostra a data da linha, não 'nunca'", async () => {
+    const id = await vaga("/legada");
+    await db.update(job).set({ checkedAt: "2026-09-10T00:00:00.000Z", checkStatus: "alive" }).where(eq(job.id, id));
+
+    expect(await jobAvailability(id, "2026-09-23T00:00:00.000Z")).toEqual({
+      state: "unknown",
+      lastCheckedAt: "2026-09-10T00:00:00.000Z",
+      reason: "unknown",
+    });
+  });
+
+  it("conclusivo gravado depois de um inconclusivo mais novo decide a vaga e a tela igual", async () => {
+    const id = await vaga("/ordem");
+    await applyVerdict({ jobId: id, verdict: "inconclusive", httpCode: 503, checkedAt: "2026-09-22T00:00:00.000Z" });
+
+    const tarde = await applyVerdict({ jobId: id, verdict: "gone", httpCode: 404, checkedAt: "2026-09-21T00:00:00.000Z" });
+
+    expect(tarde).toMatchObject({ changedState: true });
+    const [linha] = await db.select().from(job).where(eq(job.id, id));
+    // O estado muda; a última checagem não anda para trás.
+    expect(linha).toMatchObject({ closedAt: "2026-09-21T00:00:00.000Z", checkStatus: "gone", checkedAt: "2026-09-22T00:00:00.000Z" });
+    expect((await jobAvailability(id, "2026-09-23T00:00:00.000Z")).state).toBe("closed");
+  });
+});
+
 describe("IT-008 caminho único e execução de verificação", () => {
   it("o lote (`jho jobs verify`) grava evento e check_status; só 404 fecha", async () => {
     const morta = await vaga("/morta");

@@ -11,8 +11,10 @@ import {
   compareEvents,
   currentAvailability,
   decidesState,
+  gateInstant,
   latestEvent,
   reasonFor,
+  reconcileAvailability,
   type CheckEvent,
 } from "../src/core/ingest/availability.ts";
 import { classify } from "../src/core/ingest/probe.ts";
@@ -87,5 +89,29 @@ describe("UT-011 motivo só com 404/410", () => {
       expect(classify(status)).toBe("inconclusive");
       expect(reasonFor(classify(status))).toBe("unknown");
     }
+  });
+});
+
+describe("UT-010 conciliação com a linha da vaga", () => {
+  it("closed_at preenchido é encerrada, mesmo com o último evento vivo (sync fechou)", () => {
+    for (const estado of ["open", "stale", "unknown", "closed"] as const) {
+      expect(reconcileAvailability(estado, "2026-09-22T00:00:00.000Z")).toBe("closed");
+    }
+  });
+
+  it("404 desmentido pelo sync vira desconhecida; o resto passa como veio", () => {
+    expect(reconcileAvailability("closed", null)).toBe("unknown");
+    expect(reconcileAvailability("open", null)).toBe("open");
+    expect(reconcileAvailability("stale", null)).toBe("stale");
+    expect(reconcileAvailability("unknown", null)).toBe("unknown");
+  });
+
+  it("conclusivo compara com o último conclusivo; inconclusivo, com o último de qualquer tipo", () => {
+    const newest = { any: "2026-09-22T00:00:00.000Z", conclusive: "2026-09-20T00:00:00.000Z" };
+    expect(gateInstant("gone", newest)).toBe(newest.conclusive);
+    expect(gateInstant("alive", newest)).toBe(newest.conclusive);
+    expect(gateInstant("inconclusive", newest)).toBe(newest.any);
+    // O caso do achado: conclusivo em T1 gravado depois de inconclusivo em T2 > T1 decide.
+    expect(decidesState("2026-09-21T00:00:00.000Z", gateInstant("gone", newest))).toBe(true);
   });
 });

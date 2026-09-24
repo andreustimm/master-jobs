@@ -774,7 +774,9 @@ da vaga (`checked_at`, `check_status`, `check_code`, `closed_at`) na mesma
 transação, com a linha da vaga travada. Só `gone` (404/410) fecha; `alive`
 reabre e desfaz o arquivamento; o evento de fechamento fica no histórico
 depois da reabertura. Evento mais antigo que o último gravado entra no
-histórico e não mexe no estado.
+histórico e não mexe no estado. "Mais antigo" compara conclusivo com o último
+conclusivo — o mesmo que a tela usa —, e inconclusivo com o último de qualquer
+tipo; a última checagem (`checked_at` da vaga) nunca anda para trás.
 
 | Coluna de `job_check_event` | Notas |
 |---|---|
@@ -787,8 +789,12 @@ histórico e não mexe no estado.
 A disponibilidade que a tela da vaga mostra sai de `currentAvailability()`
 (`src/core/ingest/availability.ts`, pura): o evento **conclusivo** mais recente
 por `checked_at` e `id` decide `open` ou `closed`; mais velho que 14 dias vira
-`stale`; sem evento conclusivo, `unknown`. Vaga verificada antes dos eventos
-existirem aparece como desconhecida até a próxima checagem.
+`stale`; sem evento conclusivo, `unknown`. Em seguida `reconcileAvailability()`
+concilia com a vaga, porque o sync fecha e reabre sem evento: `closed_at`
+preenchido é `closed` (motivo `closed` só se o último conclusivo foi 404/410),
+e um 404 que o sync já desmentiu vira `unknown`. Vaga verificada antes dos
+eventos existirem aparece como desconhecida até a próxima checagem, com a data
+de `job.checked_at`.
 
 **Ausência na fonte e descarte são coisas diferentes.** A ausência — board que
 parou de listar, 404/410 na verificação — só fecha (`closed_at`) e é
