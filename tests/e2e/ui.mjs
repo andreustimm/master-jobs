@@ -4335,20 +4335,18 @@ try {
   ));
   const resetSoftTransition = await observeNavigation(
     publicPage,
-    () => publicPage.evaluate(() => window.next?.router?.push?.("/login/reset?token=nunca-existiu-task04-soft")),
+    () => pushOn(publicPage, "/login/reset?token=nunca-existiu-task04-soft"),
     '[data-testid="route-login-reset"]',
   );
   publicPhases.push(resetSoftTransition);
   publicPhases.push(await observeNavigation(
     publicPage,
-    () => publicPage.evaluate(() => window.next?.router?.push?.("/login")),
+    () => pushOn(publicPage, "/login"),
     '[data-testid="route-login"]',
   ));
   const callbackSoftTransition = await observeNavigation(
     publicPage,
-    () => publicPage.evaluate((token) => {
-      window.next?.router?.push?.(`/login/callback?token=${encodeURIComponent(token)}`);
-    }, E2E_LOGIN_EXPIRED_TOKEN),
+    () => pushOn(publicPage, `/login/callback?token=${encodeURIComponent(E2E_LOGIN_EXPIRED_TOKEN)}`),
     // O alerta, não a tela: `route-login` já está visível ANTES do push, e
     // esperar por ela encerrava a observação antes de a navegação acontecer.
     '[data-testid="route-login"] [role="alert"]',

@@ -323,8 +323,8 @@ Não bloqueante vale nas três portas, e não só no agregador:
   `schema-e-migracao` precisam ter passado; os demais jobs bloqueantes não podem
   ter reprovado nem estar pendentes; os da lista não bloqueante são ignorados.
   Uma execução vermelha ou em andamento só autoriza quando a causa está num job
-  da lista — senão o motivo é desconhecido e a promoção recusa. Antes da #303, o
-  E2E vermelho tornava a execução `failure` e barrava a promoção.
+  da lista — senão o motivo é desconhecido e a promoção recusa. A conclusão da
+  execução inteira não serve: um E2E vermelho a torna `failure`.
 - **Chamada reutilizável da promoção** (`target-sha`): o job nem roda.
 - **`workflow_dispatch` em `staging`**, que a promoção dispara para a PR de
   produção: o job também não roda. Ali só contam os checks que o ruleset de

@@ -154,8 +154,9 @@ jobs:
             --title "chore(release): Promover staging para produção — v${VERSAO}" \
             --body-file "$RUNNER_TEMP/promotion-pr.md"
 
-      # A PR aberta pelo robô nasce sem `pull_request` CI, e o fast-forward de
-      # staging pelo `GITHUB_TOKEN` também não dispara nada: sem este passo os
+      # A PR aberta pelo robô nasce com o CI de `pull_request` parado em
+      # `action_required` (ver o passo seguinte), e o fast-forward de staging
+      # pelo `GITHUB_TOKEN` não dispara nada: sem este passo os
       # checks exigidos em `main` nunca apareciam na cabeça e o dono tinha de
       # fechar e reabrir a PR. `github.token` de propósito — dispatch é a única
       # coisa que ele consegue disparar, e basta.
@@ -184,6 +185,9 @@ jobs:
       # (docs/engineering/github-protections.md#o-caminho-humano).
       - name: Aprovar o CI de pull_request da PR de produção
         if: steps.promocao.outputs.promoted == 'true'
+        # Uma leitura do `gh` que falhe (5xx, limite) também não pode pintar de
+        # vermelho uma promoção que já publicou `staging`.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -194,7 +198,8 @@ jobs:
           fi
           read -r NUMERO CABECA <<< "$PR"
           # O run nasce alguns segundos depois da PR; sem espera, a consulta
-          # feita logo após abri-la não o encontraria.
+          # feita logo após abri-la não o encontraria. TENTATIVAS_APROVACAO e
+          # ESPERA_APROVACAO só existem para o teste rodar o passo sem dormir.
           PENDENTES=""
           for _ in $(seq "${TENTATIVAS_APROVACAO:-6}"); do
             PENDENTES=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?event=pull_request&status=action_required&head_sha=$CABECA&per_page=20" \

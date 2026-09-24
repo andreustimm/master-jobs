@@ -577,9 +577,11 @@ describe("V01-05 — ancestry and existing delivery", () => {
     // O run de `pull_request` da PR do robô nasce em `action_required`; o
     // ruleset só reconheceu os checks depois que ele rodou.
     const workflow = YAML.parse(readFileSync(".github/workflows/promover-para-staging.yml", "utf8"));
-    const steps = workflow.jobs.promover.steps as Array<{ name?: string; if?: string; env?: Record<string, string>; run?: string }>;
+    const steps = workflow.jobs.promover.steps as Array<{ name?: string; if?: string; env?: Record<string, string>; run?: string; "continue-on-error"?: boolean }>;
     const step = steps.find((candidate) => candidate.name === "Aprovar o CI de pull_request da PR de produção")!;
     expect(step.if).toBe("steps.promocao.outputs.promoted == 'true'");
+    // Nem uma leitura do `gh` que falhe reprova a promoção já publicada.
+    expect(step["continue-on-error"]).toBe(true);
     expect(step.env).toEqual({ GH_TOKEN: "${{ github.token }}" });
     // Depois do dispatch: a aprovação é a segunda via, não a substituta.
     expect(steps.indexOf(step)).toBeGreaterThan(steps.findIndex((candidate) => candidate.name === "Rodar o CI na cabeça da PR de produção"));

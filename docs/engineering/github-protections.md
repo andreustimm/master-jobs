@@ -58,7 +58,7 @@ da cabeça, sem o `e2e-navegador`.
 Na v1.25.0 (#303) isso não bastou: com os dois checks verdes no SHA desde
 18:10, o ruleset seguiu dizendo "2 of 2 required status checks are expected".
 Ao mesmo tempo, o GitHub tinha criado o run de `pull_request` da PR do robô,
-mas parado em `action_required` — a aprovação que ele pede a PR de contribuidor
+mas parado em `action_required` — a aprovação que ele pede à PR de contribuidor
 de primeira viagem, e `github-actions[bot]` conta como um. Fechar e reabrir a
 PR (18:21) gerou um run de `pull_request` que rodou, e a PR ficou mesclável 22 s
 depois de o `qualidade` dele passar, com o E2E do mesmo run ainda rodando. Então
@@ -69,7 +69,8 @@ o CI de pull_request da PR de produção**: consulta por até um minuto os runs
 `action_required` deste repositório no SHA da cabeça e os aprova por
 `POST /repos/{repo}/actions/runs/{id}/approve` com o `GITHUB_TOKEN`
 (`actions: write`, que o job já tem). O passo é melhor esforço e nunca reprova
-a promoção: sem permissão, ele deixa um `::warning::` no log.
+a promoção: roda com `continue-on-error`, e a recusa da aprovação deixa um
+`::warning::` no log.
 
 O recurso manual continua valendo, nesta ordem: **aprovar o run** na aba
 Actions (*Approve and run*) ou `gh api --method POST

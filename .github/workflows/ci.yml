@@ -343,7 +343,8 @@ jobs:
     # o CI via apenas o Vitest e a fronteira da PWA.
     #
     # Job próprio, sem `needs`, e fora de `qualidade.needs`: é a única exceção
-    # registrada ao agregador (`NON_BLOCKING_JOBS` em tests/support/ci-workflow.ts).
+    # registrada ao agregador e à promoção (`NON_BLOCKING_CI_JOBS` em
+    # scripts/release/promotion-ci.ts).
     #
     # Banco: o próprio `run-isolated.mjs` sobe um `postgres:17` descartável pelo
     # Docker do runner, preso a 127.0.0.1, com senha aleatória — o mesmo
