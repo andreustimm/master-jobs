@@ -198,7 +198,7 @@ Números do PostgreSQL local com 9 mil vagas, sem rede — o **piso**.
 | Achado | Evidência | Estado |
 |---|---|---|
 | Varreduras repetidas por requisição (`canonicalOfGroup`) | Lista e total compartilham a seleção; as facetas usam outra leitura com dimensões independentes; o aviso salarial mantém sua própria semântica | **MEDIDO**, corrigido na tarefa 11 |
-| Busca por termo: regex `~*` sobre título, empresa e descrição, que nenhum índice atende diretamente | 160–175 ms por consulta × 5 consultas; só `sum(length(description_text))` leva 116 ms | **MEDIDO**, pré-filtro trigrama em revisão (#214, seção abaixo). O padrão `[ -]?` de `term.ts` de fato impede a extração de trigramas: **MEDIDO**, o índice direto devolveu 8.863 de 9.060 linhas |
+| Busca por termo: regex `~*` sobre título, empresa e descrição, que nenhum índice atende diretamente | 160–175 ms por consulta × 5 consultas; só `sum(length(description_text))` leva 116 ms | **MEDIDO**, pré-filtro trigrama em produção (#214, seção abaixo). O padrão `[ -]?` de `term.ts` de fato impede a extração de trigramas: **MEDIDO**, o índice direto devolveu 8.863 de 9.060 linhas |
 | `length(descricao) >= 200` calculado em todas as linhas antes do `LIMIT`, para a UI só testar `< 200` | 103 ms → 26 ms com `substr` (mesmo resultado em 199/200/201, acento, emoji, vazio, nulo) | **MEDIDO**, corrigido |
 | Faixa salarial: `paySql` interpolada repetidamente | Na tela completa com 29 moedas, 183 KB de SQL e 1.169 parâmetros; normalização compartilhada reduziu para 48 KB e 301 | **MEDIDO**, corrigido; comparação abaixo |
 | Estimativa errada do planner em `coalesce(fit,0) >= n` sobre `LEFT JOIN` | estimou 2 linhas, vieram 1.568 | **MEDIDO**, aberto |
@@ -215,7 +215,7 @@ opaco de tela cheia: **180 ms mínimos** (`TRANSITION_MIN_MS`) mais **260 ms** d
 esmaecimento (`SPLASH_FADE_MS`), com o shell `inert`. ~440 ms fixos, mesmo se o
 servidor responder na hora. **MEDIDO no código; não cronometrado no navegador.**
 
-**Mudança da #220 (em revisão para `dev`):** na mesma tela o overlay não abre mais. O store decide
+**Mudança da #220 (em produção):** na mesma tela o overlay não abre mais. O store decide
 por `isSameScreenNavigation` (mesmo `pathname`, query diferente) e marca a
 geração como `soft`; a apresentação vira `aria-busy` e
 `data-navigation="soft"` no `#application-shell`, com o `<main>` esmaecido por
@@ -502,13 +502,13 @@ o próximo passo não é um cache maior, e sim, nesta ordem:
 | 1 ✅ | `description` mínima sem descomprimir o texto | alto × baixo | `repo.ts` |
 | 1 ✅ | Prelúdio de `/jobs`: trilhas ∥ câmbio, sem `listTracks` duplicado, câmbio em 1 consulta | alto × baixo | `jobs-data.ts` |
 | 1 ✅ | Medição: baseline local e log por estágio | habilita o resto | `perf:jobs`, `registrarTempo` |
-| 🟡 | Medição de produção: TTFB frio/quente, região e agregação das linhas `perf` (#221, em revisão; falta a rodada com sessão) | habilita o cache de facetas | `perf:producao` |
-| PR 2 | Overlay só na troca de rota (#220); filtros que se aplicam sozinhos (#218, em revisão; ver [decisão](#filtros-que-se-aplicam-sozinhos-218)) | alto × médio | fase 3 |
+| ✅ | Medição de produção: TTFB frio/quente, região e agregação das linhas `perf` (#221; a rodada com sessão segue pendente em #216/#222) | habilita o cache de facetas | `perf:producao` |
+| PR 2 ✅ | Overlay só na troca de rota (#220); filtros que se aplicam sozinhos (#218, em produção desde a v1.23.0; ver [decisão](#filtros-que-se-aplicam-sozinhos-218)) | alto × médio | fase 3 |
 | 2 ✅ | Seleção compartilhada para lista e total, facetas fundidas | alto × médio | `repo.ts` |
-| 2 🟡 | Busca por termo indexada: pré-filtro `pg_trgm`, `~*` inalterado (#214, em revisão) | alto com termo seletivo × médio | migration `0012`/`0013` |
+| 2 ✅ | Busca por termo indexada: pré-filtro `pg_trgm`, `~*` inalterado (#214, em produção) | alto com termo seletivo × médio | migration `0012`/`0013` |
 | 2 ✅ | Normalização salarial compartilhada, sem repetir cotações a cada uso | alto com faixa | `repo.ts` |
-| 2 🟡 | Cache local das facetas, validade de 60 s (#216, em revisão; ver [seção](#cache-das-facetas--medição-de-22092026)) | alto ao paginar/ordenar, nulo na primeira leitura × médio | `matching/app/board-facets.ts` |
-| 3 🟡 | `loading.tsx` + `Suspense` em `/jobs` (#217, em revisão; ver [fronteira](#fronteira-de-carregamento-217)) | percepção imediata na troca de tela; o total não muda | `app/jobs/(lista)/`, `app/jobs/[id]/` |
+| 2 🟡 | Cache local das facetas, validade de 60 s (#216, em produção; o ganho ainda depende da rodada com sessão; ver [seção](#cache-das-facetas--medição-de-22092026)) | alto ao paginar/ordenar, nulo na primeira leitura × médio | `matching/app/board-facets.ts` |
+| 3 ✅ | `loading.tsx` + `Suspense` em `/jobs` (#217, em produção desde a v1.23.0; ver [fronteira](#fronteira-de-carregamento-217)) | percepção imediata na troca de tela; o total não muda | `app/jobs/(lista)/`, `app/jobs/[id]/` |
 | ✅ | Régua de conexões por **tela**, `comVigia` em `/jobs` e `/` | entregue e exercitado no QA de concorrência | testes |
 
 ### Decisões
