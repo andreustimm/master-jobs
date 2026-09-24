@@ -20,6 +20,7 @@ import {
   refuseRun,
   RUN_STATUSES,
   runKey,
+  shouldRedispatch,
   sumCounts,
   UNKNOWN_COUNTS,
   type RunEvent,
@@ -196,5 +197,25 @@ describe("UT-012 redação e limite de erro e evidência", () => {
 
   it("credencial reconhecível também sai", () => {
     expect(redactDetail("Authorization: Bearer ghp_abcdefghijklmnop", ERROR_DETAIL_MAX)).not.toContain("ghp_abcdefghijklmnop");
+  });
+});
+
+describe("UT-005 execução enfileirada sem executor é despachada de novo", () => {
+  const agora = "2026-09-23T12:00:00.000Z";
+  it("sem credencial ou despacho que falhou: sempre", () => {
+    expect(shouldRedispatch({ status: "queued", errorCode: "no_token", queuedAt: agora }, agora)).toBe(true);
+    expect(shouldRedispatch({ status: "queued", errorCode: "dispatch_failed", queuedAt: agora }, agora)).toBe(true);
+  });
+
+  it("pendente há mais de 30 min, ou com instante ilegível: sim; recente: não", () => {
+    expect(shouldRedispatch({ status: "queued", errorCode: null, queuedAt: "2026-09-23T11:20:00.000Z" }, agora)).toBe(true);
+    expect(shouldRedispatch({ status: "queued", errorCode: null, queuedAt: "2026-09-23T11:50:00.000Z" }, agora)).toBe(false);
+    expect(shouldRedispatch({ status: "queued", errorCode: null, queuedAt: "ontem" }, agora)).toBe(true);
+  });
+
+  it("execução rodando ou terminada nunca é despachada de novo", () => {
+    for (const status of RUN_STATUSES.filter((s) => s !== "queued")) {
+      expect(shouldRedispatch({ status, errorCode: "no_token", queuedAt: "2000-01-01T00:00:00.000Z" }, agora), status).toBe(false);
+    }
   });
 });

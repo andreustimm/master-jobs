@@ -511,7 +511,10 @@ com `--source`) sem despacho, porque quem executa é este processo → `executeS
 (uma filha por fonte do retrato do pedido, com `--concurrency` filhas em paralelo) →
 `scoreAll()` (salvo com `--no-score`). O retrato sai do banco: fonte habilitada, não
 aposentada, com adapter e fora de `~terms`; uma fonte desligada pela tela fica fora mesmo
-presente no YAML. Antes de pedir, `running` sem batimento por 15 min vira `interrupted`.
+presente no YAML. Antes de pedir, `running` sem batimento por 15 min vira `interrupted`;
+enquanto roda, a execução bate o coração a cada 5 min. Com `--run`, a CLI pula o
+`catalogForSync()` e o pedido: executa o retrato gravado quando a execução foi pedida.
+`jho jobs sweep` registra a mesma execução `all`.
 
 | Flag | Default | Descrição |
 |---|---|---|
@@ -760,7 +763,7 @@ pnpm jho jobs verify --min-fit 55 --limit 250
 | `--min-fit <n>` | `55` | Só verifica acima deste fit |
 | `--limit <n>` | `100` | Quantas checar |
 | `--dry-run` | — | Reporta sem fechar nada |
-| `--source <kind:handle>` | — | Verifica todas as vagas abertas desta fonte (fit mínimo 0) e registra uma execução `verify` em `source_run` com vivas, fechadas e inconclusivas |
+| `--source <kind:handle>` | — | Verifica as vagas abertas desta fonte (fit mínimo 0; `--min-fit` não vale aqui), até `--limit`, e registra uma execução `verify` em `source_run` com vivas, fechadas e inconclusivas. Cortada pelo limite, a execução fica com `completeness = partial`. Não combina com `--dry-run` |
 | `--run <id>` | — | Executa a verificação `queued` pedida pela tela. Não combina com `--dry-run` |
 
 ```

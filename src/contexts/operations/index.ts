@@ -178,7 +178,9 @@ function countsOfVerify(result: VerifyResult): WorkOutcome {
       alive: result.alive,
       inconclusive: result.inconclusive,
     },
-    completeness: null,
+    // Cortada pelo `limit`, a verificação não cobriu a fonte inteira; a linha
+    // diz isso em vez de parecer completa.
+    completeness: result.checked < result.due ? "partial" : "complete",
   };
 }
 
@@ -202,6 +204,8 @@ export async function executeSourceRun(
     runs: runStore,
     now: () => clock().iso(),
     concurrency: opts.concurrency ?? 4,
+    // Um terço do lease: dois batimentos perdidos ainda não matam a execução.
+    heartbeatEveryMs: RUN_LEASE_MS / 3,
     onChild: opts.onChild,
     async work(source, scope, runId) {
       if (scope === "verify") {

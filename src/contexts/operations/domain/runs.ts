@@ -167,6 +167,26 @@ export function composeParentStatus(children: readonly RunStatus[]): RunStatus {
   return "partial";
 }
 
+/**
+ * Uma execução `queued` que ninguém vai rodar sozinho: o despacho não saiu
+ * (sem credencial, rede) ou saiu e sumiu (o GitHub cancela o pendente mais
+ * velho de um grupo de concorrência). Ela segura a chave de idempotência, e o
+ * pedido equivalente seguinte se junta a ela — então esse pedido a despacha de
+ * novo, em vez de criar outra ou de responder "pedido" sem nada rodar.
+ * Despachar duas vezes é inofensivo: só um executor ganha `queued → running`.
+ */
+export const REDISPATCH_AFTER_MS = 30 * 60_000;
+
+export function shouldRedispatch(
+  run: { status: string; errorCode: string | null; queuedAt: string },
+  now: string,
+): boolean {
+  if (run.status !== "queued") return false;
+  if (run.errorCode === "no_token" || run.errorCode === "dispatch_failed") return true;
+  const queued = Date.parse(run.queuedAt);
+  return Number.isNaN(queued) || Date.parse(now) - queued > REDISPATCH_AFTER_MS;
+}
+
 /** Quem pode tentar de novo: o que terminou sem sucesso. */
 export function isRetryable(status: RunStatus): boolean {
   return status === "failed" || status === "partial" || status === "interrupted" || status === "cancelled";

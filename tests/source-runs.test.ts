@@ -19,7 +19,7 @@ import {
   sourceRunChildren,
   sourceRuns,
 } from "../src/contexts/operations/index.ts";
-import { requestRun, type CatalogReader, type RunStore } from "../src/contexts/operations/app/source-runs.ts";
+import { executeRun, requestRun, type CatalogReader, type RunStore } from "../src/contexts/operations/app/source-runs.ts";
 import * as runs from "../src/contexts/operations/infra/drizzle-source-runs.ts";
 import type { WorkflowDispatchPort } from "../src/contexts/operations/ports.ts";
 import { editCatalogSource, retireSource } from "../src/contexts/sourcing/index.ts";
@@ -325,5 +325,123 @@ describe("IT-006 despacho sem credencial e erro redigido", () => {
     // A porta recebe rotina, fonte e execução.
     expect(pedidos).toEqual([{ routine: "recheck", source: "greenhouse:acme", run: aceito.runId }]);
     expect(await sourceRun(aceito.runId)).toMatchObject({ status: "queued", errorCode: null });
+  });
+});
+
+describe("IT-006 execução enfileirada sem executor não segura a chave", () => {
+  const catalog: CatalogReader = {
+    async source(id) {
+      const [row] = await db.select().from(source).where(eq(source.id, id));
+      return row ? { ...row, revision: row.configRevision ?? 1, capabilities: {} } : null;
+    },
+    async eligible() {
+      return [];
+    },
+  };
+  const now = () => new Date().toISOString();
+
+  it("sem credencial, o próximo pedido despacha a MESMA execução quando a credencial existe", async () => {
+    await catalogo();
+    const primeira = await requestSourceRun({ kind: "source", sourceId: "greenhouse:acme" }, null);
+    if (!primeira.ok) throw new Error("recusado");
+    expect(await sourceRun(primeira.runId)).toMatchObject({ status: "queued", errorCode: "no_token" });
+
+    const pedidos: unknown[] = [];
+    const comToken: WorkflowDispatchPort = { configured: () => true, dispatch: async (r) => (pedidos.push(r), { ok: true }) };
+    const segunda = await requestRun(
+      { scope: { kind: "source", sourceId: "greenhouse:acme" }, actorUserId: null },
+      { runs: store, catalog, runner: comToken, now },
+    );
+
+    expect(segunda).toMatchObject({ ok: true, created: false, runId: primeira.runId });
+    expect(pedidos).toEqual([{ routine: "sync", source: "greenhouse:acme", run: primeira.runId }]);
+    expect(await sourceRun(primeira.runId)).toMatchObject({ status: "queued", errorCode: null });
+  });
+
+  it("despacho que falha na rede deixa o motivo, redigido, e o próximo pedido tenta de novo", async () => {
+    await catalogo();
+    let tentativas = 0;
+    const quebrado: WorkflowDispatchPort = {
+      configured: () => true,
+      dispatch: async () => {
+        tentativas++;
+        throw new Error("fetch failed https://api.github.com/x?token=segredo");
+      },
+    };
+    const deps = { runs: store, catalog, runner: quebrado, now };
+    const a = await requestRun({ scope: { kind: "source", sourceId: "greenhouse:acme" }, actorUserId: null }, deps);
+    const b = await requestRun({ scope: { kind: "source", sourceId: "greenhouse:acme" }, actorUserId: null }, deps);
+    if (!a.ok || !b.ok) throw new Error("recusado");
+    expect(b.runId).toBe(a.runId);
+    expect(tentativas).toBe(2);
+    const linha = await sourceRun(a.runId);
+    expect(linha).toMatchObject({ status: "queued", errorCode: "dispatch_failed" });
+    expect(linha!.errorDetail).not.toContain("segredo");
+  });
+
+  it("fonte da captura por termo e fonte manual ficam fora, mesmo habilitadas", async () => {
+    await db.insert(source).values([
+      { id: "remotive:~terms", kind: "remotive", handle: "~terms", label: "Termos", enabled: true },
+      { id: "manual:sample", kind: "manual", handle: "sample", label: "Fixture", enabled: true },
+    ]);
+    expect(await requestSourceRun({ kind: "source", sourceId: "remotive:~terms" }, null)).toEqual({ ok: false, code: "source_not_found" });
+    expect(await requestSourceRun({ kind: "verify", sourceId: "manual:sample" }, null)).toEqual({ ok: false, code: "source_not_found" });
+    expect(await db.select().from(sourceRunTable)).toEqual([]);
+  });
+});
+
+describe("IT-005 nova tentativa de todas e batimento", () => {
+  it("nova tentativa de todas não captura a fonte aposentada depois do pedido", async () => {
+    await catalogo();
+    setHttpPort(fixtureHttp(greenhouse([1])));
+    const pedido = await requestSourceRun({ kind: "all" }, null);
+    if (!pedido.ok) throw new Error("recusado");
+    await executeSourceRun(pedido.runId, { concurrency: 1 });
+    await retireSource("lever:globex", "2026-09-23T12:00:00.000Z");
+
+    const tentativa = await retrySourceRun(pedido.runId, null);
+    if (!tentativa.ok) throw new Error("recusado");
+    const snapshot = (await sourceRun(tentativa.runId))!.configSnapshot as { sources: { id: string }[] };
+    expect(snapshot.sources.map((s) => s.id)).toEqual(["greenhouse:acme"]);
+  });
+
+  it("execução que foi dada por morta no meio não grava por cima e avisa", async () => {
+    await catalogo();
+    const pedido = await requestSourceRun({ kind: "source", sourceId: "greenhouse:acme" }, null);
+    if (!pedido.ok) throw new Error("recusado");
+    const deps = {
+      runs: store,
+      now: () => new Date().toISOString(),
+      concurrency: 1,
+      heartbeatEveryMs: 5,
+      async work() {
+        // Outro processo dá a execução por morta enquanto ela trabalha.
+        await db.update(sourceRunTable).set({ status: "interrupted" }).where(eq(sourceRunTable.id, pedido.runId));
+        return { ok: true, counts: { fetched: 1, inserted: 1, updated: 0, unchanged: 0, closed: 0, alive: null, inconclusive: null }, completeness: "complete" };
+      },
+    };
+    expect(await executeRun(pedido.runId, deps)).toEqual({ ok: false, code: "lost_lease" });
+    expect(await sourceRun(pedido.runId)).toMatchObject({ status: "interrupted", fetched: null });
+  });
+
+  it("o batimento sobe enquanto a fonte trabalha", async () => {
+    await catalogo();
+    const pedido = await requestSourceRun({ kind: "source", sourceId: "greenhouse:acme" }, null);
+    if (!pedido.ok) throw new Error("recusado");
+    let batimentos: (string | null)[] = [];
+    const deps = {
+      runs: store,
+      now: () => new Date().toISOString(),
+      concurrency: 1,
+      heartbeatEveryMs: 10,
+      async work() {
+        const antes = (await sourceRun(pedido.runId))!.heartbeatAt;
+        await new Promise((r) => setTimeout(r, 80));
+        batimentos = [antes, (await sourceRun(pedido.runId))!.heartbeatAt];
+        return { ok: true, counts: { fetched: 0, inserted: 0, updated: 0, unchanged: 0, closed: 0, alive: null, inconclusive: null }, completeness: "complete" };
+      },
+    };
+    await executeRun(pedido.runId, deps);
+    expect(batimentos[1]! > batimentos[0]!).toBe(true);
   });
 });
