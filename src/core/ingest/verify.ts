@@ -28,6 +28,7 @@ import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
 import { guardIngestion } from "./guard.ts";
 import { probe } from "./probe.ts";
+import { applyVerdict } from "./verdict.ts";
 
 export type VerifyResult = {
   checked: number;
@@ -47,6 +48,8 @@ export async function verifyJobs(
     dryRun?: boolean;
     /** Só as vagas desta fonte ("Atualizar status" de uma plataforma). */
     sourceId?: string;
+    /** Execução de `source_run` que pediu a verificação; vai no evento. */
+    runId?: number | null;
     fetchImpl?: typeof fetch;
     lookupHost?: LookupHost;
     onProgress?: (done: number, total: number) => void;
@@ -113,7 +116,6 @@ export async function verifyJobs(
   };
 
   const queue = [...rows];
-  const stamp = new Date().toISOString();
 
   async function worker() {
     for (;;) {
@@ -127,13 +129,14 @@ export async function verifyJobs(
       });
       result.checked++;
 
+      // O mesmo caminho da fila: evento e estado da vaga na mesma transação.
+      // Antes o lote fechava sem registrar veredito nenhum.
+      if (!opts.dryRun) {
+        await applyVerdict({ jobId: next.id, verdict, httpCode: status, runId: opts.runId ?? null });
+      }
       if (verdict === "gone") {
         result.gone++;
         bump(next.sourceId, "gone");
-        if (!opts.dryRun) {
-          // Closed, not deleted — ADR 0005: an application may point at it.
-          await db.update(job).set({ closedAt: stamp }).where(eq(job.id, next.id));
-        }
       } else if (verdict === "alive") {
         result.alive++;
         bump(next.sourceId, "alive");

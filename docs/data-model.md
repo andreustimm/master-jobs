@@ -767,6 +767,29 @@ Reabertura é automática: nos dois ramos do update (`contentHash` igual ou
 diferente), o `set` inclui `closedAt: null`. Uma vaga que reaparece na fonte
 volta ao board sem intervenção.
 
+**Todo veredito de verificação é um evento** (`job_check_event`, #223). O lote
+(`jho jobs verify`) e a fila de reconferência passam pela mesma
+`applyVerdict()` (`src/core/ingest/verdict.ts`), que grava o evento e o estado
+da vaga (`checked_at`, `check_status`, `check_code`, `closed_at`) na mesma
+transação, com a linha da vaga travada. Só `gone` (404/410) fecha; `alive`
+reabre e desfaz o arquivamento; o evento de fechamento fica no histórico
+depois da reabertura. Evento mais antigo que o último gravado entra no
+histórico e não mexe no estado.
+
+| Coluna de `job_check_event` | Notas |
+|---|---|
+| `job_id` | `ON DELETE cascade`: a retenção só apaga vaga sem candidatura, e o evento sem a vaga não diz nada |
+| `run_id` | execução de `source_run` que pediu a verificação; `ON DELETE set null` |
+| `checked_at`, `verdict`, `http_code` | o que a sonda viu; `verdict` é `alive`, `gone` ou `inconclusive` |
+| `reason` | `closed` só com 404/410; `unknown` no resto. `filled`, `cancelled` e `paused` ficam reservados para adapter que prove isso — nenhum prova hoje |
+| `evidence` | até 280 caracteres, redigido (`redactDetail`) |
+
+A disponibilidade que a tela da vaga mostra sai de `currentAvailability()`
+(`src/core/ingest/availability.ts`, pura): o evento **conclusivo** mais recente
+por `checked_at` e `id` decide `open` ou `closed`; mais velho que 14 dias vira
+`stale`; sem evento conclusivo, `unknown`. Vaga verificada antes dos eventos
+existirem aparece como desconhecida até a próxima checagem.
+
 **Ausência na fonte e descarte são coisas diferentes.** A ausência — board que
 parou de listar, 404/410 na verificação — só fecha (`closed_at`) e é
 reversível. O descarte é administrativo, pedido por pessoa, e só alcança vaga

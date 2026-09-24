@@ -1003,6 +1003,10 @@ export const ptBR = {
     historyMoved: "de {from} para {to}",
     historyStarted: "registrada em {to}",
     historyNote: "nota",
+    availabilityOpen: "disponível",
+    availabilityClosed: "encerrada na origem",
+    availabilityStale: "disponibilidade vencida",
+    availabilityUnknown: "disponibilidade desconhecida",
   },
   jobAnalysis: {
     title: "Análise estruturada",

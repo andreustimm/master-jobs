@@ -162,6 +162,12 @@ uma execução `all`.
   outra linha, ligada por `retry_of`; a original não muda.
 - A varredura fatiada da Vercel (`/api/cron/varredura`) ainda não registra em
   `source_run`; ela continua medida por `sweep_run`.
+- **Verificação deixa evento.** Todo veredito — lote, fila ou execução
+  `verify` — grava uma linha em `job_check_event` na mesma transação que muda a
+  vaga; o da execução leva o `run_id`. A tela da vaga mostra a disponibilidade
+  e a data da última checagem a partir desses eventos: vaga ainda sem evento
+  aparece como "disponibilidade desconhecida", e checagem com mais de 14 dias
+  como "vencida".
 
 ## Repontuação de candidato: fatias na web
 

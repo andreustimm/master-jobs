@@ -27,8 +27,9 @@ import { job, verifyTask, type VerifyStatus } from "../db/schema.ts";
 import { bestPrimaryFitByJob } from "../../contexts/matching/index.ts";
 import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
-import { decideReopen, type ReopenDecision } from "./lifecycle.ts";
+import type { ReopenDecision } from "./lifecycle.ts";
 import { probe, type ProbeVerdict } from "./probe.ts";
+import { applyVerdict } from "./verdict.ts";
 
 export const MAX_ATTEMPTS = 3;
 
@@ -205,33 +206,11 @@ export async function recordVerdict(
   const db = getDb();
   const nowIso = clock().iso();
 
-  const [current] = await db
-    .select({ closedAt: job.closedAt, archivedAt: job.archivedAt })
-    .from(job)
-    .where(eq(job.id, jobId))
-    .limit(1);
-
-  const reopen = decideReopen({
-    verdict,
-    closedAt: current?.closedAt ?? null,
-    archivedAt: current?.archivedAt ?? null,
-  });
-
-  const patch: Record<string, unknown> = {
-    checkedAt: nowIso,
-    checkStatus: verdict,
-    checkCode: status,
-  };
-  // Fechada, não apagada — ADR 0005: uma candidatura pode apontar para ela.
-  if (verdict === "gone") patch.closedAt = nowIso;
-  if (reopen.kind === "reopen") {
-    patch.closedAt = null;
-    // Um `alive` desfaz também o arquivamento automático: a vaga que voltou a
-    // responder volta ao quadro inteira, não meio escondida.
-    if (reopen.clearsArchive) patch.archivedAt = null;
-  }
-
-  await db.update(job).set(patch).where(eq(job.id, jobId));
+  // Evento e estado da vaga, juntos, pelo mesmo caminho do lote (`verdict.ts`).
+  // Concluir a tarefa é só da fila, e fica fora da transação do veredito: uma
+  // tarefa que não concluiu volta pelo claim vencido, e o evento repetido é
+  // inofensivo.
+  const { reopen } = await applyVerdict({ jobId, verdict, httpCode: status, checkedAt: nowIso });
   await db
     .update(verifyTask)
     .set({

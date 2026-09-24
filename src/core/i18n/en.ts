@@ -979,6 +979,10 @@ export const en: Dictionary = {
     historyMoved: "from {from} to {to}",
     historyStarted: "registered at {to}",
     historyNote: "note",
+    availabilityOpen: "available",
+    availabilityClosed: "closed at the source",
+    availabilityStale: "availability stale",
+    availabilityUnknown: "availability unknown",
   },
   jobAnalysis: {
     title: "Structured analysis",

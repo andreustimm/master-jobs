@@ -240,9 +240,9 @@ export type ExecuteDeps = {
   runs: RunStore;
   now(): string;
   /** Captura ou verificação de uma fonte do retrato. Nunca lança: erro vem em `error`. */
-  work(source: SourceSnapshotEntry, scope: "source" | "verify"): Promise<WorkOutcome>;
+  work(source: SourceSnapshotEntry, scope: "source" | "verify", runId: number): Promise<WorkOutcome>;
   /** Verificação sem fonte (todas as vagas vencidas), quando o escopo é `verify` global. */
-  workAll?(): Promise<WorkOutcome>;
+  workAll?(runId: number): Promise<WorkOutcome>;
   /** Teto de filhas em paralelo numa execução "todas". */
   concurrency: number;
   onChild?(source: SourceSnapshotEntry, outcome: WorkOutcome): void;
@@ -291,12 +291,12 @@ export async function executeRun(id: number, deps: ExecuteDeps): Promise<Execute
   let outcome: WorkOutcome;
   if (run.scopeKind === "verify" && run.sourceId === null) {
     outcome = deps.workAll
-      ? await deps.workAll()
+      ? await deps.workAll(id)
       : { ok: false, counts: UNKNOWN_COUNTS, completeness: null, error: "verificação global indisponível" };
   } else {
     const source = snapshot.sources[0];
     outcome = source
-      ? await deps.work(source, run.scopeKind === "verify" ? "verify" : "source")
+      ? await deps.work(source, run.scopeKind === "verify" ? "verify" : "source", id)
       : { ok: false, counts: UNKNOWN_COUNTS, completeness: null, error: "retrato sem fonte" };
     if (source) deps.onChild?.(source, outcome);
   }
@@ -341,7 +341,7 @@ async function executeAll(parent: RunRow, snapshot: RunSnapshot, deps: ExecuteDe
   const runChild = async (child: { source: SourceSnapshotEntry; id: number }): Promise<void> => {
     try {
       if (!(await start(deps, child.id))) return;
-      const outcome = await deps.work(child.source, "source");
+      const outcome = await deps.work(child.source, "source", child.id);
       const status = finalStatus(outcome);
       await finish(deps, child.id, status, outcome);
       outcomes.push(outcome);

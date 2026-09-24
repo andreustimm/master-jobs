@@ -203,11 +203,11 @@ export async function executeSourceRun(
     now: () => clock().iso(),
     concurrency: opts.concurrency ?? 4,
     onChild: opts.onChild,
-    async work(source, scope) {
+    async work(source, scope, runId) {
       if (scope === "verify") {
         // Pedido para UMA plataforma é sobre todas as vagas abertas dela, não
         // só as de fit alto que a verificação diária prioriza.
-        return countsOfVerify(await verifyJobs({ minFit: 0, ...opts.verify, sourceId: source.id }));
+        return countsOfVerify(await verifyJobs({ minFit: 0, ...opts.verify, sourceId: source.id, runId }));
       }
       const config = {
         kind: parseFetchableSourceKind(source.kind),
@@ -217,8 +217,8 @@ export async function executeSourceRun(
       };
       return countsOfSync(await syncConfigured(config, companies));
     },
-    async workAll() {
-      return countsOfVerify(await verifyJobs({ ...opts.verify }));
+    async workAll(runId) {
+      return countsOfVerify(await verifyJobs({ ...opts.verify, runId }));
     },
   });
 }

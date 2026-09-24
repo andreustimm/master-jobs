@@ -12,6 +12,8 @@ import {
 } from "../../../src/contexts/pursuit/index.ts";
 import { listCandidateTracks, scoreMessages } from "../../../src/contexts/matching/index.ts";
 import { renderScoreMessage } from "../../../src/core/i18n/index.ts";
+import type { Availability } from "../../../src/core/ingest/availability.ts";
+import { jobAvailability } from "../../../src/core/ingest/verdict.ts";
 import { isPublicJobUrl } from "../../../src/core/job-url.ts";
 import { trackFitsForJob } from "../../../src/core/scoring/apply.ts";
 import { trackAction } from "../../actions";
@@ -31,6 +33,14 @@ import { TriageButton } from "../../triage-button";
 
 export const dynamic = "force-dynamic";
 
+/** Chave do dicionário por estado — texto nunca mora aqui (regra 9). */
+const AVAILABILITY_LABEL = {
+  open: "jobDetail.availabilityOpen",
+  closed: "jobDetail.availabilityClosed",
+  stale: "jobDetail.availabilityStale",
+  unknown: "jobDetail.availabilityUnknown",
+} as const satisfies Record<Availability, string>;
+
 export default async function JobDetail({ params }: { params: Promise<{ id: string }> }) {
   const { t, locale } = await getTranslator();
   const session = await requirePage("job:read");
@@ -45,6 +55,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   if (!detail) notFound();
 
   const { job, score, application, source } = detail;
+  const availability = await jobAvailability(job.id);
   // A seção só existe com mais de uma trilha que pontua. Decidir isso antes da
   // fronteira, numa leitura barata, evita reservar espaço e anunciar espera
   // para uma seção que não vem — e o formulário do funil, logo abaixo, subir
@@ -87,6 +98,18 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
         <p className="mt-1.5 font-mono type-meta text-muted-foreground">
           <span data-user-content>{source?.label ?? job.sourceId}</span> ·{" "}
           {t("jobDetail.seenOn")} {job.firstSeenAt.slice(0, 10)}
+        </p>
+        {/* Só o que um evento de verificação prova: sem evento, "desconhecida";
+            checagem velha, "vencida" — nunca "aberta" por omissão (#223). */}
+        <p
+          className="mt-1.5 type-meta text-muted-foreground"
+          data-testid="job-availability"
+          data-availability={availability.state}
+        >
+          {t(AVAILABILITY_LABEL[availability.state])} ·{" "}
+          {availability.lastCheckedAt
+            ? `${t("jobDetail.checkedOn")} ${availability.lastCheckedAt.slice(0, 10)}`
+            : t("jobDetail.checkedNever")}
         </p>
 
         {/* Two destinations: the bare URL shows the description, /apply opens
