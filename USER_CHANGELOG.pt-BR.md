@@ -18,6 +18,28 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-09-24T13:12:40.000Z
+
+### Alterado
+
+- Depois de salvar o currículo, as vagas mais recentes ganham nota primeiro; as demais chegam em seguida, em lotes, sem deixar a tela lenta.
+- As notas de quem já tem perfil passam a ser atualizadas de hora em hora, e as de quem acabou de chegar a cada dez minutos até ficarem completas.
+
+### Novidades
+
+- A tela da vaga ganhou uma análise estruturada: nível, contratação, modelo de trabalho, restrição de local, fuso, remuneração e o que a vaga exige, cada item com o trecho do anúncio que o sustenta. O que o anúncio não diz aparece como desconhecido, e um aviso mostra quando a vaga mudou depois da análise.
+
+### Adicionado
+
+- Na tela Vagas, texto entre aspas busca a frase exata, e a busca passou a olhar também a localização da vaga.
+- Com uma busca ativa, dá para ordenar por relevância: primeiro quem tem o termo no cargo, depois na empresa, depois no resto. Cada vaga diz onde a busca casou.
+- Abaixo da lista aparecem, à parte, vagas com título parecido que a busca não encontrou. Elas não entram na contagem.
+
+### Melhorado
+
+- Vaga cujo título foi editado pela empresa, no quadro de onde ela vem, continua sendo a mesma vaga, com a candidatura que você já registrou nela, em vez de aparecer duplicada.
+- Vagas de nota baixa que já saíram do quadro de origem passam a ser conferidas e fechadas quando o link não existe mais.
+
 ## [1.23.0] - 2026-09-23T18:11:35.000Z
 
 ### Melhorado
