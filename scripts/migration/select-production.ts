@@ -57,6 +57,8 @@ export const postSnapshotTables = new Set([
   "score_cursor",
   // Análise estruturada da vaga (#223): derivada de LLM, refeita sob pedido.
   "job_analysis",
+  // Orçamento diário de requisições por rotina (#291): contador operacional.
+  "request_budget",
 ]);
 
 const selectedJobs = `SELECT id FROM job WHERE
