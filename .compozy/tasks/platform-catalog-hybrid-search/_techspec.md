@@ -68,7 +68,8 @@ export type Capabilities = {
   verify: boolean;
   statusReason: false; // nenhum adapter atual prova filled/cancelled/paused
 };
-export function capabilitiesOf(kind: string): Capabilities; // kind fora do registro → tudo indisponível
+// o registro entra como dado (o que cada adapter declara), para o domínio seguir puro
+export function capabilitiesOf(kind: string, registry: readonly AdapterDescriptor[]): Capabilities; // kind fora do registro → tudo indisponível
 // sondagem de FONTE; não confundir com classify() de probe.ts, que sonda VAGA
 export type SourceProbeOutcome = "reachable" | "empty" | "blocked" | "failed";
 export function classifySourceProbe(result: { status: number | null; count: number | null }): SourceProbeOutcome;
@@ -83,9 +84,10 @@ export function validateCatalogWrite(
 ): { ok: true; value: CatalogWrite } | { ok: false; code: CatalogError };
 
 // CatalogRow carrega managedAt; o regime é por linha, sem chave global.
+// YamlEntry = entrada do arquivo como o carregador devolve (kind, handle, label, rationale?, enabled?)
 export function planCatalogImport(
-  yaml: CatalogWrite[], db: CatalogRow[],
-): { inserts: CatalogWrite[]; mirrors: CatalogWrite[]; orphans: string[]; drift: DriftItem[] };
+  yaml: readonly YamlEntry[], db: readonly CatalogRow[],
+): { inserts: YamlEntry[]; mirrors: YamlEntry[]; orphans: string[]; drift: DriftItem[] };
 // orphans = linhas não geridas sem entrada no YAML, exceto `<kind>:~terms` e kinds sem adapter; a aplicação as desabilita
 
 // operations/domain — puro. `isStale` nasce na tarefa que chegar primeiro
@@ -137,7 +139,7 @@ no DDL (G20).
 | Coluna | Tipo | Regra |
 |---|---|---|
 | `retired_at` | `text` nulo | Aposentadoria suave. Aposentada não entra em execução "todas" nem aceita captura; vagas e execuções continuam legíveis. |
-| `origin` | `text` (`yaml` \| `admin` \| `system`), padrão `system` | Quem criou a linha. `system` cobre as linhas que não vêm do arquivo nem da tela (`manual`, `recruiter`, `<kind>:~terms`). |
+| `origin` | `text` (`yaml` \| `admin` \| `system`), padrão `system` | Quem criou a linha. `system` cobre as linhas que não vêm do arquivo nem da tela (`manual`, `recruiter`, `<kind>:~terms`, fonte criada por `jho jobs add`) e as que chegaram pela importação do snapshot legado, que não sabe distinguir a origem. O rótulo é informativo: o regime da linha é `managed_at`, não `origin`. |
 | `config_revision` | `integer`, padrão 1 | Sobe a cada edição; entra na chave de idempotência e no retrato da execução. Aceita nulo porque `source` atravessa a importação do snapshot legado e coluna posterior a ele é opcional (`tests/postgres-schema.test.ts`); nulo conta como 1. |
 | `secret_ref` | `text` nulo | Nome da variável de ambiente. Validado por padrão de nome; um valor com cara de chave é recusado antes de gravar. |
 | `managed_at` | `text` nulo | Quando a linha passou a ser governada pelo banco (importação ou edição do admin). |
