@@ -26,6 +26,7 @@ export const RUN_REASON_LABEL = {
   no_token: "runs.reasonNoToken",
   waiting_slot: "runs.reasonWaitingSlot",
   dispatch_rejected: "runs.reasonDispatchRejected",
+  dispatch_failed: "runs.reasonDispatchFailed",
   work_failed: "runs.reasonWorkFailed",
   children_failed: "runs.reasonChildrenFailed",
   lease_expired: "runs.reasonLeaseExpired",
