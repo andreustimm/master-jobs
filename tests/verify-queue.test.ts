@@ -1,7 +1,8 @@
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
-import { candidate, company, job, jobScore, source, targetTrack, verifyTask } from "../src/core/db/schema.ts";
+import { candidate, company, job, jobScore, requestBudget, source, targetTrack, verifyTask } from "../src/core/db/schema.ts";
+import { drizzleRequestBudget } from "../src/core/ingest/request-budget-store.ts";
 import { classify } from "../src/core/ingest/probe.ts";
 import type { LookupHost } from "../src/core/remote-url.ts";
 import { fixedClock, resetClock, setClock } from "../src/core/clock.ts";
@@ -50,7 +51,7 @@ afterEach(async () => {
 });
 
 let seq = 0;
-async function seedJob(opts: { fit?: number; checkedAt?: string; closed?: boolean } = {}) {
+async function seedJob(opts: { fit?: number; checkedAt?: string; closed?: boolean; lastSeenAt?: string } = {}) {
   seq++;
   const [row] = await db
     .insert(job)
@@ -65,6 +66,7 @@ async function seedJob(opts: { fit?: number; checkedAt?: string; closed?: boolea
       raw: "{}",
       checkedAt: opts.checkedAt ?? null,
       closedAt: opts.closed ? "2026-08-01T00:00:00.000Z" : null,
+      ...(opts.lastSeenAt ? { lastSeenAt: opts.lastSeenAt } : {}),
     })
     .returning({ id: job.id });
   if (opts.fit !== undefined) {
@@ -266,6 +268,29 @@ describe("enqueueStale", () => {
     expect(await enqueueStale({ minFit: 55 })).toBe(0);
   });
 
+  it("abaixo do corte, reconfere a vaga que a fonte deixou de listar (#291)", async () => {
+    // Fonte de janela parcial não fecha por ausência; sem esta metade, a vaga
+    // de nota baixa que saiu da janela ficava aberta para sempre.
+    const diasAtras = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+    const saiuDaJanela = await seedJob({ fit: 10, lastSeenAt: diasAtras(5) });
+    const aindaListada = await seedJob({ fit: 10, lastSeenAt: diasAtras(1) });
+    const conferidaHaPouco = await seedJob({ fit: 10, lastSeenAt: diasAtras(5), checkedAt: diasAtras(1) });
+
+    expect(await enqueueStale({ minFit: 55, unseenDays: 3 })).toBe(1);
+    expect(await pendingFor(saiuDaJanela)).toBe("pending");
+    expect(await pendingFor(aindaListada)).toBeNull();
+    expect(await pendingFor(conferidaHaPouco)).toBeNull();
+  });
+
+  it("acima do corte vem antes da vaga abaixo do corte que saiu da listagem", async () => {
+    const velha = new Date(Date.now() - 10 * 86_400_000).toISOString();
+    const baixa = await seedJob({ fit: 10, lastSeenAt: velha });
+    const alta = await seedJob({ fit: 80, checkedAt: velha });
+
+    const ids = (await staleCandidates({ minFit: 55, limit: 2 })).map((row) => row.id);
+    expect(ids).toEqual([alta, baixa]);
+  });
+
   it("o plano agrega job_score uma vez, sem subconsulta por vaga", async () => {
     // B-11: a subconsulta correlacionada, repetida no WHERE e no ORDER BY,
     // releu `job_score` para cada vaga e somou 77,4 milhões de linhas numa
@@ -371,6 +396,38 @@ describe("runVerifyQueue", () => {
     });
     expect(result.checked).toBe(3);
     expect(await claimCheck("w1")).toBeNull();
+  });
+});
+
+describe("orçamento diário da reconferência (#291)", () => {
+  it("esgotado, para antes do claim e deixa a tarefa na fila", async () => {
+    for (let i = 0; i < 3; i++) await enqueueVerify(await seedJob());
+    const budget = drizzleRequestBudget({ sync: null, reconferencia: 2, captura: null });
+
+    const result = await runVerifyQueue({ fetchImpl: fakeFetch(200), lookupHost: publicLookup, budget });
+
+    expect(result).toMatchObject({ checked: 2, budgetExhausted: true });
+    expect((await verifyStats()).pending).toBe(1);
+    const [linha] = await db.select().from(requestBudget);
+    expect(linha).toMatchObject({ routine: "reconferencia", used: 2, refused: 1 });
+  });
+
+  it("o contador é um só entre rodadas: a segunda herda o que a primeira gastou", async () => {
+    for (let i = 0; i < 4; i++) await enqueueVerify(await seedJob());
+    const budget = () => drizzleRequestBudget({ sync: null, reconferencia: 3, captura: null });
+
+    const primeira = await runVerifyQueue({ fetchImpl: fakeFetch(200), lookupHost: publicLookup, budget: budget(), max: 2 });
+    const segunda = await runVerifyQueue({ fetchImpl: fakeFetch(200), lookupHost: publicLookup, budget: budget() });
+
+    expect(primeira.checked + segunda.checked).toBe(3);
+    expect(segunda.budgetExhausted).toBe(true);
+  });
+
+  it("fila vazia devolve a unidade: o contador conta só sondagem feita", async () => {
+    await enqueueVerify(await seedJob());
+    await runVerifyQueue({ fetchImpl: fakeFetch(200), lookupHost: publicLookup });
+    const [linha] = await db.select().from(requestBudget);
+    expect(linha).toMatchObject({ routine: "reconferencia", used: 1, refused: 0 });
   });
 });
 

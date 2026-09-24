@@ -73,7 +73,7 @@ Quando não há bump, o CI reutilizável valida o próprio A.
 
 Antes de preparar e novamente antes de publicar, a guarda classifica o diff
 `staging..alvo` em `drizzle/` com o detector de
-`src/core/db/migration-review.ts` ([ADR 0027](../adr/0027-migracao-automatica-so-aditiva.md)).
+`src/core/db/migration-review.ts` ([ADR 0028](../adr/0028-migracao-automatica-so-aditiva.md)).
 Mudanças em um commit posterior B não entram nesse intervalo. Migração nova e
 aditiva (com seu snapshot e journal em `meta/`) promove sem confirmação,
 inclusive no agendamento. Migração não aditiva, `.sql` publicado alterado ou

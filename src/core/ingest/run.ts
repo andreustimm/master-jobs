@@ -21,6 +21,7 @@ import type { Completeness, SourceAdapter, SourceConfig, SourceSnapshot } from "
 import { guardIngestion } from "./guard.ts";
 import { decideAbsenceClosure } from "./lifecycle.ts";
 import { observeRawJobs } from "./observe.ts";
+import { drizzleRequestBudget } from "./request-budget-store.ts";
 
 export type SyncSourceResult = {
   sourceId: string;
@@ -91,13 +92,19 @@ export async function ensureSources(configs: SourceConfig[]): Promise<void> {
  */
 async function fetchWithinBudget(adapter: SourceAdapter, config: SourceConfig): Promise<SourceSnapshot> {
   const budget = adapter.termSearch?.budget;
-  if (!budget) return adapter.fetchJobs(config);
-  const reservation = await platformQuota.reserve(config.kind, budget, new Date(clock().now()));
-  if (!reservation.ok) throw new Error("quota");
+  if (budget) {
+    const reservation = await platformQuota.reserve(config.kind, budget, new Date(clock().now()));
+    if (!reservation.ok) throw new Error("quota");
+  }
+  // A busca que vai sair entra no contador diário da rotina (#291). O sync não
+  // tem teto próprio — o intervalo por fonte da varredura e a cota por
+  // plataforma já limitam —, então isto é telemetria: buscas por dia, somando
+  // CLI e Vercel.
+  if (!(await drizzleRequestBudget().take("sync", clock().now()))) throw new Error("orçamento");
   try {
     return await adapter.fetchJobs(config);
   } catch (error) {
-    if (error instanceof HttpError && error.status === 429) {
+    if (budget && error instanceof HttpError && error.status === 429) {
       await platformQuota.exhaustDay(config.kind, new Date(clock().now()));
     }
     throw error;
@@ -131,12 +138,14 @@ async function syncOne(config: SourceConfig, companies: Map<string, number>): Pr
     result.warnings = warnings;
     result.completeness = completeness;
 
-    const seenFingerprints: string[] = [];
+    // By row, not by fingerprint: a posting found by its external id may keep
+    // an older fingerprint (#291), and it is still the row the listing carries.
+    const seenIds = new Set<number>();
     const stamp = new Date().toISOString();
 
     const usable = rawJobs.filter((raw) => raw.title && raw.url);
     for (const observation of await observeRawJobs(usable, id, { observedAt: stamp, companies })) {
-      seenFingerprints.push(observation.fingerprint);
+      seenIds.add(observation.jobId);
       if (observation.outcome === "inserted") result.inserted++;
       if (observation.outcome === "unchanged") result.unchanged++;
       if (observation.outcome === "changed") result.changed++;
@@ -147,13 +156,12 @@ async function syncOne(config: SourceConfig, companies: Map<string, number>): Pr
 
     // Anything a complete listing no longer carries is closed. A partial
     // window leaves the rest to the 404/410 recheck.
-    if (decideAbsenceClosure({ completeness, seen: seenFingerprints.length }).kind === "close-missing") {
+    if (decideAbsenceClosure({ completeness, seen: seenIds.size }).kind === "close-missing") {
       const stale = await db
-        .select({ id: job.id, fingerprint: job.fingerprint })
+        .select({ id: job.id })
         .from(job)
         .where(and(eq(job.sourceId, id), isNull(job.closedAt)));
-      const seen = new Set(seenFingerprints);
-      const toClose = stale.filter((s) => !seen.has(s.fingerprint)).map((s) => s.id);
+      const toClose = stale.filter((s) => !seenIds.has(s.id)).map((s) => s.id);
       if (toClose.length > 0) {
         await db.update(job).set({ closedAt: stamp }).where(inArray(job.id, toClose));
         result.closed = toClose.length;

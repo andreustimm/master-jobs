@@ -140,7 +140,7 @@ atualizar a PR de produção significaria mesclar `main` dentro de `staging`.
 Merge queue também não é usada.
 
 **Revisor obrigatório no ambiente `Production`.** `migrate.yml` usa o ambiente
-no push para `main` (só migração aditiva, [ADR 0027](../adr/0027-migracao-automatica-so-aditiva.md))
+no push para `main` (só migração aditiva, [ADR 0028](../adr/0028-migracao-automatica-so-aditiva.md))
 e por `workflow_dispatch`; um revisor ali também faria o disparo automático
 esperar clique. `varredura.yml` o usa todo dia por cron, e
 `manutencao-banco.yml` toda semana. Um revisor obrigatório pararia as duas

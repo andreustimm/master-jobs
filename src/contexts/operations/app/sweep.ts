@@ -20,7 +20,7 @@
 import { REDACTED, redactSecrets } from "../../../core/observability.ts";
 import {
   ALARM_MIN_INTERVAL_MS,
-  SCORE_MIN_INTERVAL_MS,
+  SCORE_QUEUE_MIN_INTERVAL_MS,
   SWEEP_BUDGET_MS,
   SYNC_MIN_INTERVAL_MS,
   dueUnits,
@@ -28,6 +28,7 @@ import {
   remainingBudget,
   staleSources,
   type RunRow,
+  type ScoreQueueSlice,
   type SweepLease,
   type SweepRuns,
   type SweepSlice,
@@ -71,8 +72,10 @@ export type SweepDeps = {
     run(sourceId: string): Promise<UnitOutcome>;
   };
   score: {
-    candidates(): Promise<number[]>;
-    run(candidateId: number): Promise<UnitOutcome>;
+    /** Cada candidato e a fila em que está (`scoreQueueOf`). */
+    candidates(): Promise<{ id: number; queue: ScoreQueueSlice }[]>;
+    /** Lotes de cem, mais recentes primeiro, até terminar ou até `deadline` (epoch ms). */
+    run(candidateId: number, deadline: number): Promise<UnitOutcome>;
   };
   terms(budgetMs: number): Promise<QueueOutcome>;
   capture(budgetMs: number): Promise<QueueOutcome>;
@@ -172,16 +175,40 @@ async function syncSlice(deps: SweepDeps, started: number): Promise<Pick<SliceRe
   return { units, staleSources: stale };
 }
 
-async function scoreSlice(deps: SweepDeps, started: number): Promise<UnitReport[]> {
-  const candidates = await deps.score.candidates();
-  const leases = await deps.lease.read("pontuar:");
+/**
+ * A reserva de pontuação é por candidato, comum às duas filas: um candidato
+ * está numa só, e a chave comum impede que a passagem de uma para a outra
+ * ponha duas chamadas no mesmo cursor.
+ */
+const SCORE_LEASE = "pontuacao:";
+
+/**
+ * Uma fila de pontuação: os candidatos dela, na ordem da tentativa mais antiga,
+ * cada um até terminar a passada ou até o prazo da chamada.
+ *
+ * O prazo é o da CHAMADA, não o da unidade: o candidato que pega a fatia usa o
+ * orçamento inteiro em lotes, e o seguinte só começa se ainda couber (a mesma
+ * regra de `mayStartAnother`). Quem não terminou volta na próxima agenda, do
+ * cursor gravado.
+ */
+async function scoreSlice(deps: SweepDeps, queue: ScoreQueueSlice, started: number): Promise<UnitReport[]> {
+  const minIntervalMs = SCORE_QUEUE_MIN_INTERVAL_MS[queue];
+  const deadline = started + (deps.budgetMs ?? SWEEP_BUDGET_MS);
+  const candidates = (await deps.score.candidates()).filter((entry) => entry.queue === queue);
+  const leases = await deps.lease.read(SCORE_LEASE);
   const due = dueUnits(
-    candidates.map((id) => ({ key: `pontuar:${id}`, lastDoneAt: null })),
+    candidates.map((entry) => ({ key: `${SCORE_LEASE}${entry.id}`, lastDoneAt: null })),
     leases,
     deps.now(),
-    { minIntervalMs: SCORE_MIN_INTERVAL_MS },
+    { minIntervalMs },
   );
-  return drainUnits(deps, due, SCORE_MIN_INTERVAL_MS, (key) => deps.score.run(Number(key.slice("pontuar:".length))), started);
+  return drainUnits(
+    deps,
+    due,
+    minIntervalMs,
+    (key) => deps.score.run(Number(key.slice(SCORE_LEASE.length)), deadline),
+    started,
+  );
 }
 
 /**
@@ -205,8 +232,8 @@ export async function runSweepSlice(slice: SweepSlice, deps: SweepDeps): Promise
       const result = await syncSlice(deps, started);
       units = result.units;
       stale = result.staleSources;
-    } else if (slice === "pontuar") {
-      units = await scoreSlice(deps, started);
+    } else if (slice === "sem-nota" || slice === "manutencao") {
+      units = await scoreSlice(deps, slice, started);
     } else {
       const left = remainingBudget(deps.now() - started, budget);
       queue =

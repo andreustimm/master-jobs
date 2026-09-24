@@ -29,6 +29,8 @@ import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
 import { decideReopen, type ReopenDecision } from "./lifecycle.ts";
 import { probe, type ProbeVerdict } from "./probe.ts";
+import type { RequestBudget } from "./request-budget.ts";
+import { drizzleRequestBudget } from "./request-budget-store.ts";
 
 export const MAX_ATTEMPTS = 3;
 
@@ -120,17 +122,27 @@ export async function enqueueStale(opts: StaleOptions = {}): Promise<number> {
   return rows.length;
 }
 
-type StaleOptions = { minFit?: number; limit?: number; olderThanDays?: number };
+type StaleOptions = { minFit?: number; limit?: number; olderThanDays?: number; unseenDays?: number };
 
 /**
  * A consulta da varredura, sem executar — exportada para o teste ler o plano.
  *
  * A melhor nota entra por junção com um agregado calculado uma vez
  * (`bestPrimaryFitByJob`), nunca por subconsulta por vaga.
+ *
+ * Abaixo do corte de nota, entra só a vaga que a fonte deixou de listar há
+ * `unseenDays` (#291). Uma fonte de janela parcial não fecha por ausência
+ * (`decideAbsenceClosure`), então a vaga que saiu da janela só fecha por
+ * 404/410 aqui — e, sem esta segunda metade, a de nota baixa ficava aberta
+ * para sempre. A que a fonte ainda lista não precisa de sondagem: a listagem
+ * já é a prova de vida. Ela vem depois das acima do corte, e o volume é
+ * limitado pelo orçamento diário da reconferência.
  */
 export function staleCandidates(opts: StaleOptions = {}) {
   const minFit = opts.minFit ?? 55;
-  const cutoff = new Date(clock().now() - (opts.olderThanDays ?? 7) * 86_400_000).toISOString();
+  const now = clock().now();
+  const cutoff = new Date(now - (opts.olderThanDays ?? 7) * 86_400_000).toISOString();
+  const unseenBefore = new Date(now - (opts.unseenDays ?? 3) * 86_400_000).toISOString();
 
   // Vaga sem nota vale 0, como antes: com `minFit` 0 ela ainda entra.
   const best = bestPrimaryFitByJob();
@@ -149,12 +161,13 @@ export function staleCandidates(opts: StaleOptions = {}) {
           like(job.url, "http://%"),
           like(job.url, "https://%"),
         ),
-        sql`${fit} >= ${minFit}`,
+        or(sql`${fit} >= ${minFit}`, lt(job.lastSeenAt, unseenBefore)),
         or(isNull(job.checkedAt), lt(job.checkedAt, cutoff)),
       ),
     )
-    // Nunca conferida vem antes; depois, a conferência mais antiga.
-    .orderBy(sql`${job.checkedAt} is not null`, job.checkedAt, desc(fit))
+    // Acima do corte primeiro; dentro de cada faixa, nunca conferida antes e
+    // depois a conferência mais antiga.
+    .orderBy(sql`${fit} < ${minFit}`, sql`${job.checkedAt} is not null`, job.checkedAt, desc(fit))
     .limit(opts.limit ?? 200);
 }
 
@@ -291,7 +304,14 @@ export async function pendingFor(jobId: number): Promise<VerifyStatus | null> {
   return (rows[0]?.status as VerifyStatus) ?? null;
 }
 
-export type RunResult = { checked: number; gone: number; alive: number; inconclusive: number };
+export type RunResult = {
+  checked: number;
+  gone: number;
+  alive: number;
+  inconclusive: number;
+  /** Presente quando a rodada parou porque o orçamento do dia acabou. */
+  budgetExhausted?: true;
+};
 
 /**
  * Consome a fila até esvaziar.
@@ -313,9 +333,12 @@ export async function runVerifyQueue(
     budgetMs?: number;
     fetchImpl?: typeof fetch;
     lookupHost?: LookupHost;
+    /** O orçamento diário compartilhado; o padrão é o do banco (#291). */
+    budget?: RequestBudget;
     onProgress?: (done: number, verdict: ProbeVerdict, url: string) => void;
   } = {},
 ): Promise<RunResult> {
+  const budget = opts.budget ?? drizzleRequestBudget();
   const worker = opts.worker ?? `verify-${process.pid}`;
   const max = opts.max ?? Number.POSITIVE_INFINITY;
   const result: RunResult = { checked: 0, gone: 0, alive: 0, inconclusive: 0 };
@@ -325,8 +348,20 @@ export async function runVerifyQueue(
 
   while (result.checked < max) {
     if (opts.budgetMs !== undefined && attempted > 0 && clock().now() - started + slowest > opts.budgetMs) break;
+    // A unidade do orçamento sai antes do claim: com o dia esgotado, a tarefa
+    // fica `pending` para amanhã em vez de ser reivindicada e devolvida.
+    // Um instante só para reservar e devolver: a devolução depois da virada
+    // do dia UTC cairia no contador do dia seguinte.
+    const reservedAt = clock().now();
+    if (!(await budget.take("reconferencia", reservedAt))) {
+      result.budgetExhausted = true;
+      break;
+    }
     const task = await claimCheck(worker);
-    if (!task) break;
+    if (!task) {
+      await budget.giveBack("reconferencia", reservedAt);
+      break;
+    }
     const began = clock().now();
     attempted++;
 

@@ -30,7 +30,7 @@ text of this skill wherever they differ.
   applied **only** by `migrate.yml` from `main`, which validates the project
   ref before connecting: automatically on push when the pending batch is
   additive (`jho db migrate --additive-only`), by manual dispatch otherwise
-  (ADR 0027, `docs/engineering/deploy.md`). Never point a local command at
+  (ADR 0028, `docs/engineering/deploy.md`). Never point a local command at
   production.
 - `src/core/db/migration-review.ts` classifies migrations by allowlist. A
   non-additive one (drop, rename, type change, `SET NOT NULL`, constraint on

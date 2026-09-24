@@ -17,11 +17,19 @@
 
 Desde a [ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)
 a varredura roda na Vercel em fatias: `GET /api/cron/varredura?fatia=<nome>`,
-com `sync`, `termos`, `captura`, `reconferencia`, `pontuar` e `repontuar`. Cada chamada faz o
+com `sync`, `termos`, `captura`, `reconferencia`, `sem-nota`, `manutencao` e
+`repontuar`. Cada chamada faz o
 que cabe em 20 s, grava uma linha em `production.sweep_run` e devolve o
 relatório em JSON. Quem chama é o `pg_cron` do Supabase — e ligá-lo é **passo
-humano**, uma vez, depois de o código estar em produção (a migração
-`0016_sweep_lease_and_runs` aplicada):
+humano**, uma vez, depois de o código estar em produção (as migrações
+`0016_sweep_lease_and_runs` e `0019_score_cursor` aplicadas).
+
+**Só em produção** ([ADR 0027](adr/0027-cadencia-das-notas-em-lotes-com-cursor.md)).
+O SQL do agendador é aplicado **somente no projeto Supabase de produção** — ele
+recusa rodar se o Vault não apontar para `https://jobs.mastertimm.com.br`. Em
+preview, dev, staging ou local a rota responde `503` (`varredura só roda em
+produção`) em toda fatia, sem trabalhar, mesmo com o segredo certo. O `after()`
+de quem salva o currículo não depende disto e funciona em qualquer ambiente.
 
 1. **Vercel, produção.** O valor de uma variável *Sensitive* não volta pela API,
    então gere um segredo novo e cadastre (ou substitua) `CRON_SECRET`:
@@ -33,8 +41,8 @@ humano**, uma vez, depois de o código estar em produção (a migração
    Redeploy de produção para as variáveis valerem.
 2. **Fumaça.** Sem cabeçalho a rota recusa; com ele, a fatia que não toca
    terceiros responde:
-   `curl -s -o /dev/null -w '%{http_code}\n' "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=pontuar"` → `401`;
-   `curl -s -H "authorization: Bearer $CRON_SECRET" "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=pontuar"` → JSON com `durationMs`.
+   `curl -s -o /dev/null -w '%{http_code}\n' "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=sem-nota"` → `401`;
+   `curl -s -H "authorization: Bearer $CRON_SECRET" "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=sem-nota"` → JSON com `durationMs`.
 3. **Um agendador por vez.** Imediatamente antes de rodar o SQL do passo
    seguinte, desligue o disparo agendado do Actions:
    `gh variable set VARREDURA_AGENDADOR --body supabase --repo andreustimm/master-jobs`.
@@ -47,7 +55,8 @@ humano**, uma vez, depois de o código estar em produção (a migração
    `select vault.create_secret('<CRON_SECRET>', 'jho_cron_secret');`
    `select vault.create_secret('https://jobs.mastertimm.com.br', 'jho_cron_base_url');`
    e rode [`supabase/cron/varredura.sql`](../supabase/cron/varredura.sql). O
-   arquivo é idempotente: rodar de novo só atualiza.
+   arquivo é idempotente: rodar de novo atualiza as agendas pelo nome e remove
+   as que deixaram de existir (`jho-varredura-pontuar`).
 5. **Conferir em minutos.**
    `select jobname, schedule, active from cron.job where jobname like 'jho-varredura-%';`
    e `select status_code, count(*) from net._http_response where created > now() - interval '15 minutes' group by 1;`
@@ -84,6 +93,59 @@ hora) já deveria tê-la apontado.
 e `gh variable delete VARREDURA_AGENDADOR --repo andreustimm/master-jobs` — a
 execução diária do Actions volta a valer na manhã seguinte.
 
+## Orçamento de requisições e telemetria por rotina
+
+Três rotinas saem para a internet por conta própria, e cada uma tem mais de um
+disparador (CLI no Actions, fatia da Vercel, botão da tela). O contador
+`production.request_budget` é um só para todos, por rotina e dia UTC (#291):
+
+| Rotina | Teto diário | Onde é gasto |
+|---|---:|---|
+| `reconferencia` | 3.000 | cada sondagem de `runVerifyQueue` e de `jho jobs verify` |
+| `captura` | 1.000 | cada página de `runFetchStage` |
+| `sync` | sem teto (só conta) | cada busca de fonte; o intervalo de 45 min por fonte e a cota por plataforma já limitam |
+
+Os tetos moram em `DAILY_REQUEST_BUDGET` (`src/core/ingest/request-budget.ts`).
+Com o dia esgotado, a rotina para **antes** de reivindicar a tarefa — ela fica
+`pending` para o dia seguinte — e o resultado traz `budgetExhausted`. A recusa
+soma em `refused`, para "parou por orçamento" não parecer "não tinha trabalho".
+
+A reconferência também olha vagas **abaixo da nota 55**, mas só as que a fonte
+deixou de listar há 3 dias ou mais (`last_seen_at`): fonte de janela parcial não
+fecha por ausência, e sem isso a vaga de nota baixa que saiu da janela ficava
+aberta para sempre. As acima do corte continuam na frente da fila; o teto de
+`reconferencia` é o que segura o volume novo.
+
+**Baseline de custo — medir em produção (pendente, passo humano).** Depois de
+24 h com a varredura fatiada ativa e esta versão em produção:
+
+```bash
+DATABASE_URL='<url de produção, role restrita>' pnpm jho ops telemetry --days 7 --json
+```
+
+ou, no SQL Editor do Supabase:
+
+```sql
+select day, routine, used, refused
+from production.request_budget
+where day >= to_char(now() - interval '7 days', 'YYYY-MM-DD')
+order by day, routine;
+
+select substr(started_at, 1, 10) as dia, slice,
+       count(*) filter (where unit is null) as chamadas,
+       count(*) filter (where unit is not null) as unidades,
+       sum(errors) filter (where unit is null) as erros,
+       sum(duration_ms) filter (where unit is null) / 1000 as segundos,
+       percentile_disc(0.95) within group (order by duration_ms) filter (where unit is null) as p95_ms
+from production.sweep_run
+where started_at::timestamptz > now() - interval '7 days'
+group by 1, 2 order by 1, 2;
+```
+
+Só números e nomes de rotina saem dessas consultas. Registre o resultado na
+issue e, se um teto estiver recusando todo dia ou sobrando por ordem de
+grandeza, ajuste `DAILY_REQUEST_BUDGET` com o número medido.
+
 ## Pedir manutenção pela interface — `/admin/operacoes`
 
 Tela de administrador com um botão por rotina: varredura inteira, buscar vagas
@@ -117,9 +179,9 @@ o acervo.
 
 Candidato que salva o currículo não espera a varredura: a ação enfileira em
 `score_task` e roda **uma fatia** da fila no `after()`, depois da resposta. A
-fatia tem orçamento de `SCORE_SLICE_MS` (20 s), conferido entre dois lotes —
-pode passar dele por um lote e uma página de leitura, e cabe no teto de 30 s da
-função; o que não couber volta à fila sem gastar tentativa
+fatia tem orçamento de `SCORE_SLICE_MS` (20 s): só começa um lote de 100 que
+caberia pelo mais lento até ali, as 100 vagas mais recentes primeiro, e cabe no
+teto de 30 s da função; o que não couber volta à fila sem gastar tentativa
 ([ADR 0026](adr/0026-fila-de-repontuacao-em-fatias-na-web.md); mecânica em
 [`scoring.md`](scoring.md#quando-a-nota-é-calculada-a-fila-e-as-fatias)).
 
@@ -133,9 +195,9 @@ falharam) e `detail: { scored, deferred,
 pending }` — `pending > 0` quer dizer que ainda há fila; o agendador não
 decide nada com isso, chama no próximo ciclo de qualquer jeito.
 
-A fatia `pontuar` continua existindo e é outra coisa: repassa todo candidato de
-dez em dez minutos para as vagas novas. Ela não conclui a tarefa da fila nem
-registra a recusa — e é a tarefa que a tela de candidato lê.
+As fatias `sem-nota` e `manutencao` (seção seguinte) são outra coisa: mantêm a
+nota de todo candidato pela cadência, sem pedido. Elas não concluem a tarefa da
+fila nem registram a recusa — e é a tarefa que a tela de candidato lê.
 
 **Ativar.** O agendamento entra junto com as outras fatias ao reaplicar
 `supabase/cron/varredura.sql` no SQL Editor de produção (idempotente; passo 4
@@ -152,6 +214,90 @@ curl -sS -H "authorization: Bearer $CRON_SECRET" "https://jobs.mastertimm.com.br
 no meio, e a próxima fatia a retoma. `done` com `last_error` `sem-curriculo`,
 `curriculo-fraco` ou `catalogo-vazio` é **recusa**, não falha: a tela de
 candidato mostra o motivo; `catalogo-vazio` pede `jho skills seed`.
+
+## Cadência das notas: `sem-nota` e `manutencao`
+
+[ADR 0027](adr/0027-cadencia-das-notas-em-lotes-com-cursor.md), #288. Toda
+pontuação — `after()`, `repontuar`, as duas fatias abaixo e a CLI — percorre as
+vagas abertas **da mais recente para a mais antiga**, em **lotes de 100**, e
+grava depois de cada lote onde parou (`production.score_cursor`, uma linha por
+candidato e trilha). A chamada seguinte retoma dali; perfil novo recomeça do
+topo.
+
+| Fatia | Agenda (`pg_cron`) | Quem | Intervalo mínimo por candidato |
+|---|---|---|---|
+| `sem-nota` | `5-55/10 * * * *` (`jho-varredura-sem-nota`) | trilha principal nunca completou uma passada | 9 min |
+| `manutencao` | `11 * * * *` (`jho-varredura-manutencao`) | já completou | 59 min |
+
+Cada chamada tem 20 s: o candidato que pega a fatia usa o orçamento em lotes
+(só começa um lote que caberia pelo mais lento até ali), e o seguinte só começa
+se ainda couber. Quem não terminou volta na agenda seguinte, do cursor. A
+reserva é `pontuacao:<candidato>` em `sweep_lease`, comum às duas filas.
+
+**Ativar.** Depois do deploy de produção com a migração `0019_score_cursor`
+aplicada, reaplique `supabase/cron/varredura.sql` no SQL Editor do projeto de
+**produção** (passo 4 de "Varredura horária" acima). Entre o deploy e o SQL, a
+agenda antiga ainda chama `fatia=pontuar`, que agora responde `400`: vaga nova
+só ganha nota pelo `after()` e pela `repontuar` até o SQL ser reaplicado.
+Conferir:
+
+```sql
+select jobname, schedule, active from cron.job where jobname like 'jho-varredura-%' order by 1;
+-- espera: sem-nota, manutencao, repontuar, sync, reconferencia, captura, termos; nenhum `pontuar`
+```
+
+À mão (produção): `curl -sS -H "authorization: Bearer $CRON_SECRET" "https://jobs.mastertimm.com.br/api/cron/varredura?fatia=manutencao"`.
+
+**Consultas de prova.** Em que fila cada candidato está, e as três medidas do
+pedido — tempo até o primeiro lote, tempo até completo e atraso da manutenção:
+
+```sql
+-- Fila atual por candidato (trilha principal).
+select c.id, c.created_at, sc.created_at as primeiro_lote, sc.first_completed_at, sc.last_completed_at,
+       case when sc.last_completed_at is null then 'sem-nota' else 'manutencao' end as fila
+from production.candidate c
+left join production.target_track t on t.candidate_id = c.id and t.is_primary
+left join production.score_cursor sc on sc.candidate_id = c.id and sc.track_id = t.id
+order by c.id;
+
+-- Tempo até o primeiro lote e até completo, a partir do primeiro currículo salvo.
+with cv as (
+  select candidate_id, min(created_at)::timestamptz as salvo
+  from production.candidate_document where kind = 'cv' group by candidate_id
+)
+select sc.candidate_id,
+       sc.created_at::timestamptz - cv.salvo as ate_primeiro_lote,
+       sc.first_completed_at::timestamptz - cv.salvo as ate_completo
+from production.score_cursor sc
+join production.target_track t on t.id = sc.track_id and t.is_primary
+join cv on cv.candidate_id = sc.candidate_id
+where cv.salvo > now() - interval '7 days'
+order by cv.salvo desc;
+
+-- Atraso da manutenção: há quanto tempo cada candidato completou a última passada.
+-- Esperado: até ~1 h (mais as agendas que um acervo grande precisar).
+select sc.candidate_id, now() - sc.last_completed_at::timestamptz as desde_a_ultima_passada,
+       sc.position_job_id is not null as passada_em_curso
+from production.score_cursor sc
+join production.target_track t on t.id = sc.track_id and t.is_primary
+where sc.last_completed_at is not null
+order by 2 desc;
+
+-- Cadência e teto nas últimas 24 h, por fila.
+select slice, count(*) filter (where unit is null) as chamadas,
+       count(*) filter (where unit is not null) as candidatos_atendidos,
+       max(duration_ms) filter (where unit is null) as mais_lenta_ms,
+       -- A linha da chamada já soma os erros das unidades: contar as duas dobraria.
+       sum(errors) filter (where unit is null) as erros
+from production.sweep_run
+where slice in ('sem-nota', 'manutencao', 'repontuar')
+  and started_at::timestamptz > now() - interval '24 hours'
+group by slice;
+```
+
+`first_completed_at` e `created_at` do cursor só valem para candidato que
+entrou depois desta versão: quem já tinha nota ganha cursor na primeira passada
+depois do deploy (passa uma vez por `sem-nota`, quase só leitura).
 
 ## Por que isto existe
 
@@ -408,7 +554,7 @@ digitação de alguém, não ausência observada. A implementação e os critér
 Não há passo de rotina: todo merge em `main` dispara `migrate.yml`, que
 aplica sozinho o lote pendente no banco quando ele é aditivo (sem pendência,
 não aplica nada)
-([ADR 0027](adr/0027-migracao-automatica-so-aditiva.md)). O log mostra
+([ADR 0028](adr/0028-migracao-automatica-so-aditiva.md)). O log mostra
 `aplicadas: <tags>` e depois o `jho db check`.
 
 **Job vermelho com `Migração pendente exige execução manual`:** o lote tem

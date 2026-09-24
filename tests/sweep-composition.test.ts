@@ -45,7 +45,7 @@ vi.mock("../src/contexts/sourcing/index.ts", async (orig) => ({
 
 const { runSweep } = await import("../src/contexts/operations/index.ts");
 const { getDb } = await import("../src/core/db/client.ts");
-const { candidate, sweepRun } = await import("../src/core/db/schema.ts");
+const { candidate, scoreCursor, sweepRun, targetTrack } = await import("../src/core/db/schema.ts");
 const { releaseTestDb, useTestDb } = await import("./support/db.ts");
 
 const alarm = vi.fn(async () => {});
@@ -95,8 +95,8 @@ describe("sync", () => {
   });
 });
 
-describe("pontuar", () => {
-  it("pontua cada candidato pela regra de `scoreCandidate`, e erro de um não para o outro", async () => {
+describe("filas de pontuação", () => {
+  it("sem-nota pontua pela regra de `scoreCandidate`, com o prazo da chamada, e erro de um não para o outro", async () => {
     const ids = await getDb()
       .insert(candidate)
       .values([
@@ -108,10 +108,43 @@ describe("pontuar", () => {
       id === ids[0]!.id ? { perfil: "ja-tinha", scored: 40, topFit: 70 } : { perfil: "derivado", scored: 0, topFit: 0, erro: "perfil ilegível" },
     );
 
-    const report = await runSweep("pontuar", { alarm });
+    const before = Date.now();
+    const report = await runSweep("sem-nota", { alarm });
     expect(report.items).toBe(1);
     expect(report.errors).toBe(1);
     expect(report.units[1]).toMatchObject({ ok: false, error: "perfil ilegível" });
+    const opts = scoreCandidate.mock.calls[0]![1] as { deadline: number };
+    expect(opts.deadline).toBeGreaterThan(before);
+    expect(opts.deadline).toBeLessThanOrEqual(Date.now() + 20_000);
+  });
+
+  it("a fila vem do cursor da trilha principal: sem passada completa é sem-nota, com ela é manutenção", async () => {
+    const db = getDb();
+    const [novo, antigo] = await db
+      .insert(candidate)
+      .values([
+        { slug: "novo", name: "Novo" },
+        { slug: "antigo", name: "Antigo" },
+      ])
+      .returning({ id: candidate.id });
+    const [trilha] = await db
+      .insert(targetTrack)
+      .values({ candidateId: antigo!.id, name: "Principal", nameKey: "principal", isPrimary: true, position: 0 })
+      .returning({ id: targetTrack.id });
+    await db.insert(scoreCursor).values({
+      candidateId: antigo!.id,
+      trackId: trilha!.id,
+      profileHash: "h",
+      scorerVersion: "v",
+      lastCompletedAt: "2026-09-23T10:00:00.000Z",
+    });
+    scoreCandidate.mockResolvedValue({ perfil: "ja-tinha", scored: 1, topFit: 50 });
+
+    const semNota = await runSweep("sem-nota", { alarm });
+    const manutencao = await runSweep("manutencao", { alarm });
+
+    expect(semNota.units.map((u) => u.unit)).toEqual([`pontuacao:${novo!.id}`]);
+    expect(manutencao.units.map((u) => u.unit)).toEqual([`pontuacao:${antigo!.id}`]);
   });
 });
 

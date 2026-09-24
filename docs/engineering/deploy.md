@@ -331,7 +331,7 @@ cobertura mesclada saiu idêntica, contador por contador, à de uma execução
 crescer, a primeira alavanca é o número de fatias.
 
 `migrate.yml` aplica migrações somente em produção, de dois jeitos
-([ADR 0027](../adr/0027-migracao-automatica-so-aditiva.md)): **sozinho**, no
+([ADR 0028](../adr/0028-migracao-automatica-so-aditiva.md)): **sozinho**, no
 push para `main` (todo push, sem filtro de caminho: o filtro do GitHub só vê
 300 arquivos do diff), quando todo o lote pendente no banco é aditivo; e por `workflow_dispatch`, depois de confirmar o
 project ref do Supabase, para o que exige revisão. As migrations de `dev` e

@@ -155,6 +155,13 @@ export const job = production.table(
   (t) => [
     uniqueIndex("job_fingerprint_idx").on(t.fingerprint),
     index("job_source_idx").on(t.sourceId),
+    // Identidade estável dentro da fonte (#291): a sincronização procura
+    // primeiro por (fonte, id externo) e só depois pelo fingerprint. Não é
+    // único de propósito: o acervo já tem, da época em que só o fingerprint
+    // identificava, a mesma vaga duas vezes quando o título mudou — e um índice
+    // único faria a migração falhar em produção. `resolveObservedIdentity`
+    // escolhe entre as duplicatas sem apagar nenhuma (regra 3).
+    index("job_source_external_idx").on(t.sourceId, t.externalId),
     index("job_company_idx").on(t.companyName),
     index("job_last_seen_idx").on(t.lastSeenAt),
     index("job_closed_idx").on(t.closedAt),
@@ -178,6 +185,12 @@ export const job = production.table(
     // compara palavras, e é o espaço que as separa.
     index("job_title_trgm_idx")
       .using("gin", sql`${t.title} gin_trgm_ops`)
+      .where(sql`${t.closedAt} is null`),
+    // A ordem da passada de pontuação (#288): mais recente primeiro, só
+    // abertas. A expressão precisa ser idêntica à de `RECENCY` em
+    // `scoring/apply.ts`, ou o planner não usa o índice.
+    index("job_recency_open_idx")
+      .on(sql`coalesce(${t.postedAt}, ${t.firstSeenAt})`, t.id)
       .where(sql`${t.closedAt} is null`),
   ],
 );
@@ -248,6 +261,47 @@ export const jobScore = production.table(
     // começa por candidato. Sem este índice cada uma varre a tabela inteira.
     index("job_score_job_idx").on(t.jobId, t.fit),
   ],
+);
+
+/**
+ * Onde a passada de pontuação de uma trilha parou (#288).
+ *
+ * A pontuação percorre as vagas abertas da mais recente para a mais antiga, em
+ * lotes de cem (`src/core/scoring/batch.ts`). Depois de cada lote, a posição da
+ * última vaga lida é gravada aqui, e a chamada seguinte — outra função da
+ * Vercel, trinta segundos depois ou uma hora depois — retoma dela.
+ *
+ * `profile_hash` e `scorer_version` são os da passada em curso: se o perfil
+ * efetivo mudou, a posição não vale mais e a passada recomeça do topo.
+ * `last_completed_at` é o que separa a fila "sem nota" (nunca completou uma
+ * passada na trilha principal) da manutenção de hora em hora.
+ *
+ * Derivado, como `job_score`: apagar a linha só faz a próxima passada começar
+ * do topo.
+ */
+export const scoreCursor = production.table(
+  "score_cursor",
+  {
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => targetTrack.id, { onDelete: "cascade" }),
+    profileHash: text("profile_hash").notNull(),
+    scorerVersion: text("scorer_version").notNull(),
+    /** `coalesce(posted_at, first_seen_at)` da última vaga lida; null = topo. */
+    positionKey: text("position_key"),
+    positionJobId: integer("position_job_id"),
+    /** A passada completa mais recente: o atraso da manutenção se mede daqui. */
+    lastCompletedAt: text("last_completed_at"),
+    /** A primeira passada completa da trilha, gravada uma vez: "tempo até completo". */
+    firstCompletedAt: text("first_completed_at"),
+    /** Quando o primeiro lote da trilha foi gravado: "tempo até o primeiro lote". */
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.candidateId, t.trackId], name: "score_cursor_candidate_track_pk" })],
 );
 
 /* -------------------------------------------------------------------------- */
@@ -1047,6 +1101,28 @@ export const sweepRun = production.table(
     error: text("error"),
   },
   (t) => [index("sweep_run_slice_started_idx").on(t.slice, t.startedAt)],
+);
+
+/**
+ * Orçamento diário de requisições a terceiros, por rotina (#291).
+ *
+ * Uma linha por (rotina, dia UTC). A CLI no GitHub Actions, a fatia da Vercel
+ * e o botão da tela gastam do MESMO contador — é isso que o torna
+ * compartilhado. A reserva é um upsert condicional; ler antes e gravar depois
+ * deixaria dois processos verem "sobra 1" ao mesmo tempo. `used` é também a
+ * telemetria: quantas requisições cada rotina fez por dia. Só números.
+ */
+export const requestBudget = production.table(
+  "request_budget",
+  {
+    routine: text("routine").notNull(),
+    /** UTC `YYYY-MM-DD`. */
+    day: text("day").notNull(),
+    used: integer("used").notNull().default(0),
+    /** Pedidos recusados por orçamento esgotado, para a telemetria. */
+    refused: integer("refused").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.routine, t.day], name: "request_budget_pk" })],
 );
 
 export const jobPage = production.table(

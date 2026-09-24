@@ -1,4 +1,4 @@
-# Produção única. Contrato e ordem com o deploy: docs/adr/0027-migracao-automatica-so-aditiva.md.
+# Produção única. Contrato e ordem com o deploy: docs/adr/0028-migracao-automatica-so-aditiva.md.
 #
 # Todo push em main: aplica sozinho o que o banco tiver pendente, mas SÓ se
 # todo o lote for aditivo (`--additive-only`). Não aditiva interrompe o job,

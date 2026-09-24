@@ -167,7 +167,7 @@ A correção:
   convidado de `/admin/users` era pontuado com o `profile.yaml` do dono.
 
 **Ordem em produção.** A migração é manual (dispatch de `migrate.yml`: índice
-único sobre coluna existente não é aditivo, e o push não a aplica — ADR 0027) e
+único sobre coluna existente não é aditivo, e o push não a aplica — ADR 0028) e
 falha se houver duplicata. Antes de aplicá-la, a consulta abaixo precisa voltar vazia:
 
 ```sql

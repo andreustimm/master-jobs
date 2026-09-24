@@ -1,4 +1,4 @@
-# ADR 0027 — Migração de produção automática, só quando aditiva
+# ADR 0028 — Migração de produção automática, só quando aditiva
 
 **Status:** aceita · 2026-09-23 · issue #289
 
