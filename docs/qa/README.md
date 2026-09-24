@@ -159,8 +159,11 @@ de produção para o servidor do E2E. Dado de produção nunca entra na fixture:
 fixture é o `setup.mjs`.
 
 **Ele ainda não é obrigatório** — é a única exceção registrada ao agregador
-`qualidade` (`NON_BLOCKING_JOBS` em `tests/support/ci-workflow.ts`), e não roda
-na chamada da promoção. Torná-lo obrigatório espera a
+`qualidade` (`NON_BLOCKING_CI_JOBS` em `scripts/release/promotion-ci.ts`,
+reexportada como `NON_BLOCKING_JOBS` em `tests/support/ci-workflow.ts`), não roda
+na chamada da promoção nem no `workflow_dispatch` que ela faz em `staging`, e
+a promoção ignora o resultado dele no CI de push de `dev`: vermelho ou ainda
+rodando, ele não barra nada (#303). Torná-lo obrigatório espera a
 medição de instabilidade da #202: um portão que reprova por carga ensina a
 reexecutar até passar, e isso é pior do que não ter portão.
 
@@ -195,6 +198,16 @@ sem resposta porque uma navegação de cliente não chegou.
 Se um relatório vier com muito menos verificações do que o arquivo escreve,
 procure a exceção antes de acreditar no número: `N/N passaram` com `N` pequeno é
 uma suíte que parou, não uma suíte que passou.
+
+**Texto do servidor visível não prova documento hidratado.** Um redirect de
+Route Handler (o `/login/callback`) às vezes vira navegação de documento em vez
+da suave; o alerta da tela nova chega no HTML e fica visível antes da
+hidratação, e um `router.push` disparado nessa janela morre sem erro — o
+roteador do Next só cria a fila de ações logo antes do `hydrateRoot`. Foi a
+instabilidade da transição para `/p/` (#303): 20 s de espera sem nenhuma
+requisição ao perfil. Depois de uma fase que pode trocar o documento, espere a
+fibra do React no nó da tela (`__reactFiber$…`) antes do próximo `push`, e use
+`pushOn`, que falha quando o roteador não existe, em vez de `?.` que engole.
 
 **Ajudante chamado muitas vezes precisa do mesmo tratamento.** `feedbackOf` é
 chamado dezenove vezes e esperava o aviso de mutação por 20 segundos; uma falha

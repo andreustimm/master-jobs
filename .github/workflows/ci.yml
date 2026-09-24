@@ -27,7 +27,8 @@ on:
   # A PR `staging → main` é aberta pelo robô, e push ou PR do `GITHUB_TOKEN`
   # não dispara workflow; `workflow_dispatch` é a exceção. A promoção o usa
   # para publicar `qualidade` e `schema-e-migracao` na cabeça de `staging`,
-  # com os nomes que o ruleset de `main` exige. Sem entradas: roda como push.
+  # com os nomes que o ruleset de `main` exige. Sem entradas: roda como push,
+  # menos o `e2e-navegador` (ver o job).
   workflow_dispatch:
 
 # Um PR que recebe três pushes seguidos não precisa de três execuções: só a
@@ -342,7 +343,8 @@ jobs:
     # o CI via apenas o Vitest e a fronteira da PWA.
     #
     # Job próprio, sem `needs`, e fora de `qualidade.needs`: é a única exceção
-    # registrada ao agregador (`NON_BLOCKING_JOBS` em tests/support/ci-workflow.ts).
+    # registrada ao agregador e à promoção (`NON_BLOCKING_CI_JOBS` em
+    # scripts/release/promotion-ci.ts).
     #
     # Banco: o próprio `run-isolated.mjs` sobe um `postgres:17` descartável pelo
     # Docker do runner, preso a 127.0.0.1, com senha aleatória — o mesmo
@@ -356,8 +358,11 @@ jobs:
     # Fora do agregador e da proteção de branch de propósito, até a
     # instabilidade estar medida (issue #202). Na chamada da promoção ele nem
     # roda: um job vermelho ali reprovaria a promoção inteira, e isso é tornar
-    # o E2E obrigatório por outra porta.
-    if: inputs.target-sha == ''
+    # o E2E obrigatório por outra porta. Nem no `workflow_dispatch` que a
+    # promoção dispara em `staging`: ali só interessam os checks que o ruleset
+    # de `main` exige, e 15 minutos de navegador só atrasam a PR de produção
+    # (#303). `staging` recebe exatamente o SHA cujo push em `dev` já rodou o E2E.
+    if: github.event_name != 'workflow_dispatch' && inputs.target-sha == ''
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
