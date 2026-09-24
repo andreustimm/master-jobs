@@ -24,7 +24,7 @@ import {
 } from "../src/contexts/sourcing/index.ts";
 import type { DB } from "../src/core/db/client.ts";
 import { application, candidate, job, source } from "../src/core/db/schema.ts";
-import { catalogForSync, ensureSources, syncAll } from "../src/core/ingest/run.ts";
+import { catalogForSync, ensureSources, syncAll, syncSource } from "../src/core/ingest/run.ts";
 import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/http-port.ts";
 import "../src/core/sources/http.ts";
 import { FETCHABLE_SOURCE_KINDS } from "../src/core/sources/types.ts";
@@ -192,6 +192,25 @@ describe("IT-002 regimes, seleção, importação, divergência e sondagem", () 
     await ensureSources([{ kind: "greenhouse", handle: "acme", label: "Acme" }, { kind: "lever", handle: "beta", label: "Beta" }]);
     await ensureSources([{ kind: "greenhouse", handle: "acme", label: "Acme" }]);
     expect((await linha("lever:beta"))!.enabled).toBe(true);
+  });
+
+  it("seleção velha não religa a fonte que o arquivo acabou de desligar", async () => {
+    await ensureSources([{ kind: "greenhouse", handle: "acme", label: "Acme" }]);
+    const selecionadas = await syncableSources();
+    await ensureSources([{ kind: "greenhouse", handle: "acme", label: "Acme", enabled: false }], { wholeFile: true });
+    setHttpPort(greenhouseBoard([1]));
+
+    // Quem leu a seleção antes do desligamento ainda roda com ela.
+    await syncAll(selecionadas);
+    await syncSource(selecionadas[0]!);
+
+    expect(await linha("greenhouse:acme")).toMatchObject({ enabled: false, configRevision: 2 });
+  });
+
+  it("revisão nula conta como 1 ao subir, em vez de ficar nula para sempre", async () => {
+    await db.insert(source).values({ id: "greenhouse:acme", kind: "greenhouse", handle: "acme", label: "Acme", configRevision: null });
+    await editCatalogSource("greenhouse:acme", { label: "Outro" }, NOW);
+    expect((await linha("greenhouse:acme"))!.configRevision).toBe(2);
   });
 
   it("uma edição gravada no banco sobrevive ao sync seguinte", async () => {

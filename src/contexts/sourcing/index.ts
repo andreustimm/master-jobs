@@ -111,7 +111,7 @@ export {
   type DriftItem,
   type SourceProbeOutcome,
 } from "./domain/catalog.ts";
-export { catalogSource, catalogSources, syncableSources, type CatalogSource } from "./infra/drizzle-catalog.ts";
+export { catalogSource, catalogSources, nextRevision, syncableSources, type CatalogSource } from "./infra/drizzle-catalog.ts";
 export type { ProbeReport } from "./app/catalog.ts";
 
 /** O que o kind sabe fazer, pelo que o adapter registrado declara. */

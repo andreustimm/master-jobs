@@ -46,8 +46,10 @@ export async function probeSource(readListing: () => Promise<SourceSnapshot>): P
     const snapshot = await readListing();
     const count = snapshot.jobs.length;
     // Adapter que engole a falha (careers sem resposta, robots.txt negando)
-    // devolve lista vazia com aviso. Isso não é board vazio: é não ter lido.
-    if (count === 0 && snapshot.warnings.length > 0) {
+    // devolve lista vazia, parcial e com aviso. Isso não é board vazio: é não
+    // ter lido. Lista COMPLETA e vazia prova o vazio mesmo com aviso — o Ashby
+    // avisa em todo board sem vaga listada.
+    if (count === 0 && snapshot.warnings.length > 0 && snapshot.completeness !== "complete") {
       return { outcome: classifySourceProbe({ status: null, count: null }), status: null, count: null, completeness: null };
     }
     return { outcome: classifySourceProbe({ status: 200, count }), status: 200, count, completeness: snapshot.completeness };

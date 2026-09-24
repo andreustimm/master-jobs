@@ -39,6 +39,13 @@ const columns = {
   createdAt: source.createdAt,
 };
 
+/**
+ * A revisão seguinte. A coluna aceita nulo (coluna posterior ao snapshot
+ * legado, `tests/postgres-schema.test.ts`), e `null + 1` continuaria nulo para
+ * sempre: nulo conta como a revisão inicial, 1.
+ */
+export const nextRevision = () => sql`coalesce(${source.configRevision}, 1) + 1`;
+
 /** Só as linhas do catálogo de sync: com adapter e fora da captura por termo. */
 const catalogOnly = and(
   inArray(source.kind, [...FETCHABLE_SOURCE_KINDS]),
@@ -121,14 +128,14 @@ export async function applyCatalogImport(plan: CatalogPlan, now: string): Promis
           label: entry.label,
           rationale: entry.rationale ?? null,
           enabled: entry.enabled ?? true,
-          configRevision: sql`${source.configRevision} + 1`,
+          configRevision: nextRevision(),
         })
         .where(and(eq(source.id, catalogId(entry.kind, entry.handle)), isNull(source.managedAt)));
     }
     if (plan.orphans.length > 0) {
       await tx
         .update(source)
-        .set({ enabled: false, configRevision: sql`${source.configRevision} + 1` })
+        .set({ enabled: false, configRevision: nextRevision() })
         .where(and(inArray(source.id, plan.orphans), isNull(source.managedAt)));
     }
     await tx.update(source).set({ managedAt: now }).where(and(isNull(source.managedAt), catalogOnly));
@@ -164,7 +171,7 @@ export type CatalogPatch = Partial<Pick<CatalogWrite, "label" | "enabled" | "sec
 export async function patchCatalogSource(id: string, patch: CatalogPatch, now: string): Promise<boolean> {
   const rows = await getDb()
     .update(source)
-    .set({ ...patch, managedAt: now, configRevision: sql`${source.configRevision} + 1` })
+    .set({ ...patch, managedAt: now, configRevision: nextRevision() })
     .where(and(eq(source.id, id), isNull(source.retiredAt), catalogOnly))
     .returning({ id: source.id });
   return rows.length === 1;
@@ -174,7 +181,7 @@ export async function patchCatalogSource(id: string, patch: CatalogPatch, now: s
 export async function retireCatalogSource(id: string, now: string): Promise<boolean> {
   const rows = await getDb()
     .update(source)
-    .set({ retiredAt: now, enabled: false, managedAt: now, configRevision: sql`${source.configRevision} + 1` })
+    .set({ retiredAt: now, enabled: false, managedAt: now, configRevision: nextRevision() })
     .where(and(eq(source.id, id), isNull(source.retiredAt), catalogOnly))
     .returning({ id: source.id });
   return rows.length === 1;

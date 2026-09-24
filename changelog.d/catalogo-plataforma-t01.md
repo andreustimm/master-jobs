@@ -20,8 +20,10 @@
 - O sync (`jho jobs sync`, `jho jobs sweep` e a fatia `sync` da varredura)
   seleciona as fontes do banco por `catalogForSync()`: habilitada, não
   aposentada, kind com adapter e handle fora de `~terms`. `loadSources()`
-  devolve toda entrada com `enabled`; saúde e captura por termo filtram as
-  habilitadas explicitamente.
+  devolve toda entrada com `enabled`; a captura por termo filtra as
+  habilitadas explicitamente, e a saúde (`jho sources list`, tela de operações)
+  segue o mesmo regime por linha do sync. `syncAll`/`syncSource` só inserem a
+  linha que falta: quem recebe fontes do banco não espelha o arquivo.
 
 ## pt-BR
 

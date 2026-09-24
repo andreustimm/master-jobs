@@ -28,6 +28,12 @@ Depois disso, editar o YAML só acrescenta fontes novas; mudar ou desligar uma
 existente é escrita no banco. Rode o `diff` sempre que mexer
 no arquivo: divergência em linha gerida não é aplicada sozinha.
 
+> **Não rode o passo 3 antes da tela de Plataformas** (tarefa 03 da #223).
+> Hoje nenhum comando nem tela edita, desliga ou aposenta uma fonte gerida, e
+> não há como desfazer `managed_at`: depois do `--apply`, desligar um board
+> quebrado exigiria SQL manual em produção. Os passos 1 e 2 não gravam nada e
+> podem rodar a qualquer momento.
+
 ## Varredura horária: ativar o agendador
 
 Desde a [ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)

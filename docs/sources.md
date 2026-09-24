@@ -475,8 +475,10 @@ o que aconteceu com `workable` antes de ele ganhar adapter.
 da empresa em todas as vagas daquela fonte.
 
 `enabled` tem default `true`; `loadSources()` devolve a entrada com o campo, e
-a linha **não gerida** do banco o espelha. Uma fonte com `enabled: false` some do
-`sources list` e do `sync`, mas as vagas dela continuam no banco.
+a linha **não gerida** do banco o espelha. Enquanto a linha não for gerida, uma
+fonte com `enabled: false` some do `sources list` e do `sync`, mas as vagas dela
+continuam no banco. Em linha gerida o arquivo não decide mais: desligar é
+escrita no banco.
 
 **O banco é a fonte da verdade do catálogo.** Depois de `jho sources import
 --apply`, ou de uma edição do admin, a linha passa a ser **gerida**
