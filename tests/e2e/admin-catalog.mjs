@@ -124,8 +124,15 @@ export async function checkAdminCatalog(browser, base, accounts, check) {
     check("E2E-001 sondagem responde sem gravar vaga",
       (await probe.innerText()).length > 0 && probed.length === 0, await probe.innerText());
 
+    // O aviso da sondagem ainda está na tela: esperar por "algum aviso" passaria
+    // antes de a action de habilitar gravar. Espera-se o estado no banco.
+    await page.getByTestId("mutation-feedback-dismiss").click();
     await page.getByTestId("platform-toggle").click();
-    await page.getByTestId("mutation-feedback").waitFor();
+    for (let i = 0; i < 100; i++) {
+      const [row] = await db.select({ enabled: source.enabled }).from(source).where(eq(source.id, OK));
+      if (row?.enabled) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
     await page.reload({ waitUntil: "networkidle" });
     check("E2E-001 habilitar vale depois de refresh", (await page.getByTestId("platform-state").innerText()).trim() === "habilitada");
     await page.goto(`${base}/admin/plataformas/${encodeURIComponent(BROKEN)}`, { waitUntil: "networkidle" });
