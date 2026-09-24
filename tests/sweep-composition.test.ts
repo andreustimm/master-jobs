@@ -64,6 +64,25 @@ afterEach(async () => {
 });
 
 describe("sync", () => {
+  it("fatia morta no meio não trava a fonte: a execução sem batimento é interrompida e a fonte roda", async () => {
+    loadSources.mockResolvedValue([{ kind: "greenhouse", handle: "acme", label: "Acme" }]);
+    syncSource.mockResolvedValue({ ok: true, fetched: 3 });
+    await runSweep("sync", { alarm });
+    const [primeira] = await getDb().select().from(sourceRun);
+    // Uma fatia anterior foi morta pela Vercel: a linha ficou `running`, velha.
+    await getDb().update(sourceRun).set({ status: "running", heartbeatAt: "2026-01-01T00:00:00.000Z" });
+    await getDb().delete(sweepRun);
+    const { sweepLease } = await import("../src/core/db/schema.ts");
+    await getDb().delete(sweepLease);
+
+    const report = await runSweep("sync", { alarm });
+
+    expect(report.units.map((u) => [u.unit, u.ok])).toEqual([["sync:greenhouse:acme", true]]);
+    const execucoes = await getDb().select().from(sourceRun).orderBy(sourceRun.id);
+    expect(execucoes.map((e) => e.status)).toEqual(["interrupted", "succeeded"]);
+    expect(execucoes[0]!.id).toBe(primeira!.id);
+  });
+
   it("sincroniza as fontes do YAML pelo mesmo `syncSource` da CLI e grava a métrica", async () => {
     loadSources.mockResolvedValue([
       { kind: "greenhouse", handle: "acme", label: "Acme" },
