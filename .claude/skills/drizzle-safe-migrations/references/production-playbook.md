@@ -68,8 +68,8 @@ WHERE "status" = 'saved';
 
 ## Deployment Checklist
 
-- The PR says it carries a migration and adds its verdict to the table in
-  `tests/migration-review.test.ts`. An additive migration (per
+- The PR says it carries a migration and adds its reviewed verdict in
+  `tests/fixtures/migration-verdicts/<tag>.json`. An additive migration (per
   `src/core/db/migration-review.ts`) promotes without confirmation; anything
   else suspends automatic `dev` → `staging` promotion until a human reviews it.
 - Confirm a Supabase backup/point-in-time recovery window exists.

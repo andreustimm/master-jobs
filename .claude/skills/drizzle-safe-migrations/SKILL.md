@@ -36,8 +36,9 @@ text of this skill wherever they differ.
   non-additive one (drop, rename, type change, `SET NOT NULL`, constraint on
   existing data, data rewrite, revoke, procedural or unknown form) suspends
   automatic `dev` → `staging` promotion and the automatic production run for
-  human review; add every new migration's verdict to
-  `tests/migration-review.test.ts`. Removing or renaming a column/table is
+  human review; every new migration ships its reviewed verdict in
+  `tests/fixtures/migration-verdicts/<tag>.json` (`[]` when additive) in the
+  same commit — `tests/migration-review.test.ts` fails without it. Removing or renaming a column/table is
   never a single migration: expand, deploy, backfill, then contract in a later
   release.
 - Every FK declares `onDelete` explicitly in `schema.ts`, including

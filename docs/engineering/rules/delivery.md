@@ -182,8 +182,8 @@ promove sem confirmação e é aplicada sozinha por `migrate.yml` no push para
 `drizzle/postgres/` — para a promoção até dispatch com
 `confirmar-migracao=true`, depois de revisão humana, e para o job automático
 antes de qualquer DDL até o dispatch manual de `migrate.yml`. A confirmação
-nunca dispensa CI. Migração nova ganha veredito em
-`tests/migration-review.test.ts` no mesmo commit.
+nunca dispensa CI. Migração nova traz o veredito revisado em
+`tests/fixtures/migration-verdicts/<tag>.json` no mesmo commit.
 
 Detalhes: [ADR 0028](../../adr/0028-migracao-automatica-so-aditiva.md),
 [promotion.md](../promotion.md) ("Migrações, ancestralidade e publicação"),

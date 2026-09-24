@@ -12,7 +12,7 @@
  * sozinha enquanto o código antigo ainda serve. Por isso cada risco tem caso
  * próprio, e a forma desconhecida tem caso próprio também.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   describeFindings, pendingEntries, reviewMigrationChanges, reviewMigrations, splitStatements,
@@ -237,38 +237,36 @@ describe("reviewMigrations — o que exige revisão", () => {
 });
 
 describe("o histórico real de drizzle/postgres calibra o detector", () => {
-  // Cada migração publicada, com o veredito que um revisor humano daria. Uma
-  // mudança no detector que troque um destes precisa ser decisão, não acidente.
+  // Cada migração publicada tem o veredito que um revisor humano daria, num
+  // arquivo SÓ DELA em VERDICTS/<tag>.json. Um arquivo por migração, e não uma
+  // tabela aqui: duas PRs com migração nova nunca editam a mesma linha, e a
+  // que chega depois a `dev` traz o próprio veredito junto. Uma mudança no
+  // detector que troque um destes precisa ser decisão, não acidente.
+  // Fora de `drizzle/postgres/` de propósito: lá, qualquer arquivo que não
+  // seja `.sql` ou `meta/` faz a promoção pedir revisão.
+  const VERDICTS = "tests/fixtures/migration-verdicts";
   const journal = JSON.parse(readFileSync("drizzle/postgres/meta/_journal.json", "utf8")) as { entries: { tag: string }[] };
-  const expected: Record<string, MigrationRisk[]> = {
-    "0000_production_baseline": [],
-    "0001_production_access": ["procedural", "revoke", "revoke", "revoke", "revoke", "procedural"],
-    "0002_steep_korath": ["type-change", "type-change"],
-    "0003_familiar_darwin": [],
-    "0004_tidy_forge": [],
-    "0005_backfill_primary_tracks": ["data-rewrite", "data-rewrite"],
-    "0006_bent_gorgon": ["drop", "set-not-null", "constraint-on-existing"],
-    "0007_term_captures": [],
-    "0008_term_requests": [],
-    "0009_auth_user_candidate_unique": ["constraint-on-existing"],
-    "0010_candidate_public_slug": [],
-    "0011_backfill_candidate_public_slug": ["data-rewrite"],
-    "0012_enable_pg_trgm": [],
-    "0013_term_search_trgm": [],
-    "0014_clear_contact_candidate_names": ["data-rewrite"],
-    "0015_job_score_job_idx": [],
-    "0016_sweep_lease_and_runs": [],
-    "0017_job_title_trgm": [],
-    "0018_job_analysis": [],
-    "0019_score_cursor": [],
-    "0020_ingest_identity_and_request_budget": [],
-  };
+  const tags = journal.entries.map((entry) => entry.tag);
+  const detected = (tag: string) =>
+    reviewMigrations([{ name: tag, sql: readFileSync(`drizzle/postgres/${tag}.sql`, "utf8") }]).findings.map((f) => f.risk);
 
-  it.each(journal.entries.map((entry) => entry.tag))("%s", (tag) => {
-    // Migração nova sem veredito aqui reprova: calibrar é olhar para ela.
-    expect(Object.keys(expected), `acrescente ${tag} a esta tabela`).toContain(tag);
-    const review = reviewMigrations([{ name: tag, sql: readFileSync(`drizzle/postgres/${tag}.sql`, "utf8") }]);
-    expect(review.findings.map((f) => f.risk)).toEqual(expected[tag]);
+  it.each(tags)("%s", (tag) => {
+    const path = `${VERDICTS}/${tag}.json`;
+    if (!existsSync(path)) {
+      // Calibrar é olhar para a migração: o arquivo é escrito por quem a revisou.
+      expect.fail(
+        `${tag} não tem veredito revisado. Leia o SQL e crie ${path} com a lista de riscos ` +
+        `que um revisor humano daria ([] quando é aditiva). O detector hoje diz: ${JSON.stringify(detected(tag))}.`,
+      );
+    }
+    const expected = JSON.parse(readFileSync(path, "utf8")) as MigrationRisk[];
+    expect(detected(tag), `o detector mudou o veredito de ${tag}; se foi de propósito, atualize ${path}`).toEqual(expected);
+  });
+
+  it("nenhum veredito sobra sem migração", () => {
+    // Tag renomeada ou migração apagada deixaria um veredito que nada confere.
+    const orphans = readdirSync(VERDICTS).map((file) => file.replace(/\.json$/, "")).filter((tag) => !tags.includes(tag));
+    expect(orphans, `apague ${VERDICTS}/<tag>.json das migrações que não existem mais`).toEqual([]);
   });
 });
 

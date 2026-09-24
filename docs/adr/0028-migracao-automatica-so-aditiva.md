@@ -74,9 +74,10 @@ promoção `dev → staging` parava em qualquer diferença em `drizzle/` ou em
   tipo, então `--additive-only` recusa o histórico inteiro. Provisionar é
   sempre manual.
 - Falso positivo custa um dispatch; falso negativo derruba produção. Por isso
-  a lista é de permissão e toda migração publicada tem veredito fixado em
-  `tests/migration-review.test.ts` — migração nova entra naquela tabela no
-  mesmo commit.
+  a lista é de permissão e toda migração publicada tem veredito revisado em
+  `tests/fixtures/migration-verdicts/<tag>.json`, um arquivo por migração,
+  que entra no mesmo commit dela; `tests/migration-review.test.ts` reprova
+  a migração sem veredito.
 - `vercel-ignore-build.sh` não muda: `drizzle/` constrói, como todo arquivo
   fora da lista de exclusão.
 

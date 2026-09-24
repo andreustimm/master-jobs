@@ -385,8 +385,10 @@ tabela nasce no mesmo lote ou as colunas são novas e sem default. `DROP`,
 `RENAME`, mudança de tipo, `SET NOT NULL` em coluna existente, restrição sobre
 dado existente, `UPDATE`/`DELETE`/`TRUNCATE`, `REVOKE`, bloco `DO`, função e
 qualquer forma não prevista pedem revisão. Toda migração publicada tem o
-veredito fixado em `tests/migration-review.test.ts`; migração nova entra
-naquela tabela no mesmo commit.
+veredito revisado em `tests/fixtures/migration-verdicts/<tag>.json` (`[]`
+quando aditiva), um arquivo por migração, que entra no mesmo commit dela;
+`tests/migration-review.test.ts` reprova a migração sem veredito e diz o que
+o detector acha dela.
 
 **Ordem com o deploy.** A Vercel constrói `main` no mesmo push em que o job
 migra, e os dois não se esperam. Para aditiva a corrida é aceita: o código
