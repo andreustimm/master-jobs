@@ -282,9 +282,11 @@ Grupo `sources`, descrição `"Inspect configured job sources"`.
 
 ### `jho sources list`
 
-`"Show every configured source and its last sync result"`. Lê `config/sources.yaml` via
-`loadSources()` (só as entradas com `enabled: true`) e cruza com as linhas da tabela `source`
-pelo id `${kind}:${handle}`.
+`"Show every configured source and its last sync result"`. Lista o que o sync varre, no
+mesmo regime por linha (`sourceHealth()`): linha **não gerida** (ou ainda inexistente) vem de
+`config/sources.yaml` — só entradas com `enabled: true` —, cruzada com a tabela `source` pelo
+id `${kind}:${handle}`; linha **gerida** vem do banco, com o rótulo do banco, e aparece só se
+o sync a seleciona (habilitada, não aposentada), esteja ou não no arquivo.
 
 Sem flags.
 
@@ -305,11 +307,11 @@ pnpm jho sources list
 Detalhes que importam na leitura:
 
 - Handle vazio (`himalayas`, `arbeitnow`, `remoteok`) é impresso como `(all)`.
-- `STATUS` é `ok`, `error` ou `never` — `never` significa que a fonte está no YAML mas
-  ainda não apareceu em nenhum sync.
+- `STATUS` é `ok`, `error` ou `never` — `never` significa que a fonte não gerida está no
+  YAML mas ainda não apareceu em nenhum sync.
 - A linha `↳` em vermelho é o `lastError` gravado no último sync daquela fonte.
-- Fonte com `enabled: false` no YAML **não aparece** aqui: `loadSources()` a devolve
-  com `enabled: false` e a saúde filtra as habilitadas.
+- Fonte **não gerida** com `enabled: false` no YAML não aparece aqui. Em linha gerida o
+  arquivo não decide: ela aparece enquanto o banco a mantiver habilitada.
 
 ### `jho sources diff`
 

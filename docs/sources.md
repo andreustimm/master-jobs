@@ -482,7 +482,7 @@ escrita no banco.
 
 **O banco é a fonte da verdade do catálogo.** Depois de `jho sources import
 --apply`, ou de uma edição do admin, a linha passa a ser **gerida**
-(`managed_at`) e o YAML não a regrava mais: só insere entradas novas. O sync
+(`managed_at`) e o YAML não a regrava mais: só insere entradas novas, que nascem não geridas. O sync
 seleciona as fontes do banco (habilitada, não aposentada, kind com adapter,
 fora de `~terms`), não da lista do arquivo. `jho sources diff` mostra onde
 arquivo e banco divergem. Regime completo em `docs/data-model.md` (`source`).

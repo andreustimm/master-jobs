@@ -247,7 +247,7 @@ Uma feed configurada: um board de ATS, um agregador ou um import manual. O
   gerida que saiu do arquivo é desabilitada (`ensureSources(…, { wholeFile })`);
 - linha **gerida** (`managed_at` preenchido por `jho sources import --apply` ou
   por edição do admin) nunca é sobrescrita pelo arquivo, que só insere o que
-  falta;
+  falta — e a linha inserida depois nasce não gerida;
 - o sync seleciona do banco (`syncableSources()`): `enabled`, `retired_at`
   nulo, kind com adapter e handle fora de `~terms`. Isso deixa de fora
   `manual:sample` da fixture, `manual`/`recruiter` e as fontes da captura por

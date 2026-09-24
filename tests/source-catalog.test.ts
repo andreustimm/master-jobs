@@ -151,6 +151,8 @@ describe("IT-001 migration 0021: origem das linhas que já existiam", () => {
       { id: "remotive:~terms", kind: "remotive", handle: "~terms", label: "Termos" },
       { id: "manual:sample", kind: "manual", handle: "sample", label: "Fixture" },
       { id: "lever:tela", kind: "lever", handle: "tela", label: "Tela", origin: "admin" },
+      // Criada por `jho jobs add` para um link de ATS: mesmo kind, mas desligada.
+      { id: "greenhouse:avulsa", kind: "greenhouse", handle: "avulsa", label: "Avulsa", enabled: false },
     ]);
     const backfill = readFileSync(resolve(process.cwd(), "drizzle/postgres/0021_backfill_source_origin.sql"), "utf8");
 
@@ -160,6 +162,7 @@ describe("IT-001 migration 0021: origem das linhas que já existiam", () => {
     const rows = await db.select({ id: source.id, origin: source.origin, managedAt: source.managedAt }).from(source).orderBy(source.id);
     expect(rows).toEqual([
       { id: "greenhouse:acme", origin: "yaml", managedAt: null },
+      { id: "greenhouse:avulsa", origin: "system", managedAt: null },
       { id: "lever:tela", origin: "admin", managedAt: null },
       { id: "manual:sample", origin: "system", managedAt: null },
       { id: "remotive:~terms", origin: "system", managedAt: null },
