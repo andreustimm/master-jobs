@@ -60,7 +60,11 @@ export async function checkJobAvailability(browser, base, account, check) {
     const state = async (id) => {
       await page.goto(`${base}/jobs/${id}`, { waitUntil: "networkidle" });
       const line = page.getByTestId("job-availability");
-      return { state: await line.getAttribute("data-availability"), text: await line.innerText() };
+      return {
+        state: await line.getAttribute("data-availability"),
+        reason: await line.getAttribute("data-reason"),
+        text: await line.innerText(),
+      };
     };
 
     const never = await state(nunca);
@@ -78,7 +82,7 @@ export async function checkJobAvailability(browser, base, account, check) {
 
     const closed = await state(fechada);
     check("E2E-004 vaga fechada com candidatura: encerrada e histórico visível",
-      closed.state === "closed" && (await page.getByTestId("application-timeline").count()) === 1, JSON.stringify(closed));
+      closed.state === "closed" && closed.reason === "closed" && (await page.getByTestId("application-timeline").count()) === 1, JSON.stringify(closed));
     check("E2E-004 cabe em 375 px", await fitsPhone(page));
   } finally {
     await context.close();

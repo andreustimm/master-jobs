@@ -29,6 +29,7 @@ import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
 import type { ReopenDecision } from "./lifecycle.ts";
 import { probe, type ProbeVerdict } from "./probe.ts";
+import { probeEvidence } from "./availability.ts";
 import { applyVerdict } from "./verdict.ts";
 import type { RequestBudget } from "./request-budget.ts";
 import { drizzleRequestBudget } from "./request-budget-store.ts";
@@ -215,6 +216,7 @@ export async function recordVerdict(
   jobId: number,
   verdict: ProbeVerdict,
   status: number | null,
+  evidence: string | null = null,
 ): Promise<ReopenDecision> {
   const db = getDb();
   const nowIso = clock().iso();
@@ -223,7 +225,7 @@ export async function recordVerdict(
   // Concluir a tarefa é só da fila, e fica fora da transação do veredito: uma
   // tarefa que não concluiu volta pelo claim vencido, e o evento repetido é
   // inofensivo.
-  const { reopen } = await applyVerdict({ jobId, verdict, httpCode: status, checkedAt: nowIso });
+  const { reopen } = await applyVerdict({ jobId, verdict, httpCode: status, evidence, checkedAt: nowIso });
   await db
     .update(verifyTask)
     .set({
@@ -354,7 +356,7 @@ export async function runVerifyQueue(
         lookupHost: opts.lookupHost,
         timeoutMs: left === undefined ? undefined : Math.min(15_000, left),
       });
-      await recordVerdict(task.id, task.jobId, verdict, status);
+      await recordVerdict(task.id, task.jobId, verdict, status, probeEvidence(task.url, status));
       result.checked++;
       result[verdict]++;
       opts.onProgress?.(result.checked, verdict, task.url);

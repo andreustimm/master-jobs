@@ -68,6 +68,12 @@ export type ArchiveInput = {
   sourceKind: SourceKind;
   /** Último veredito de sondagem. `null` = nunca sondada. */
   checkStatus: ProbeVerdict | null;
+  /**
+   * Quando esse veredito saiu. Veredito anterior ao fechamento não diz nada
+   * sobre ele: o sync fecha por ausência sem sondar, e um `alive` de antes
+   * seguraria a vaga para sempre. `null` (linha legada) conta, por cautela.
+   */
+  checkedAt: string | null;
 };
 
 const MANUAL: ReadonlySet<string> = new Set(MANUAL_SOURCE_KINDS);
@@ -80,17 +86,19 @@ const MANUAL: ReadonlySet<string> = new Set(MANUAL_SOURCE_KINDS);
  *    digitação de alguém, não observação repetida;
  * 3. aberta fica;
  * 4. sondagem inconclusiva não prova ausência (mesma disciplina de `probe.ts`),
- *    e `alive` depois de fechada é reconciliação pendente, não vaga velha;
+ *    e `alive` depois de fechada é reconciliação pendente, não vaga velha —
+ *    só a sondagem feita no fechamento ou depois dele conta;
  * 5. fechamento recente fica — o corte é a política inteira.
  */
 export function decideArchive(input: ArchiveInput): ArchiveDecision {
   if (input.archivedAt) return { kind: "noop", reason: "already-archived" };
   if (MANUAL.has(input.sourceKind)) return { kind: "keep", reason: "manual-source" };
   if (!input.closedAt) return { kind: "keep", reason: "open" };
-  if (input.checkStatus === "inconclusive") {
+  const probed = input.checkedAt === null || input.checkedAt >= input.closedAt ? input.checkStatus : null;
+  if (probed === "inconclusive") {
     return { kind: "keep", reason: "inconclusive-probe" };
   }
-  if (input.checkStatus === "alive") return { kind: "keep", reason: "reopen-pending" };
+  if (probed === "alive") return { kind: "keep", reason: "reopen-pending" };
   if (input.closedAt > input.cutoff) return { kind: "keep", reason: "recent-closure" };
   return {
     kind: "archive",

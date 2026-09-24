@@ -804,7 +804,9 @@ tipo; a última checagem (`checked_at` da vaga) nunca anda para trás.
 | `run_id` | execução de `source_run` que pediu a verificação; `ON DELETE set null` |
 | `checked_at`, `verdict`, `http_code` | o que a sonda viu; `verdict` é `alive`, `gone` ou `inconclusive` |
 | `reason` | `closed` só com 404/410; `unknown` no resto. `filled`, `cancelled` e `paused` ficam reservados para adapter que prove isso — nenhum prova hoje |
-| `evidence` | até 280 caracteres, redigido (`redactDetail`) |
+| `evidence` | o que a sonda viu (`HTTP 404 em <url>` ou `sem resposta em <url>`), até 280 caracteres, redigido (`redactDetail`) |
+
+Índice `job_check_event_job_idx` em `(job_id, checked_at)`: a tela e o portão de ordem leem os eventos de uma vaga pela data.
 
 A disponibilidade que a tela da vaga mostra sai de `currentAvailability()`
 (`src/core/ingest/availability.ts`, pura): o evento **conclusivo** mais recente
@@ -812,7 +814,9 @@ por `checked_at` e `id` decide `open` ou `closed`; mais velho que 14 dias vira
 `stale`; sem evento conclusivo, `unknown`. Em seguida `reconcileAvailability()`
 concilia com a vaga, porque o sync fecha e reabre sem evento: `closed_at`
 preenchido é `closed` (motivo `closed` só se o último conclusivo foi 404/410),
-e um 404 que o sync já desmentiu vira `unknown`. Vaga verificada antes dos
+e um 404 que o sync já desmentiu vira `unknown`. A tela mostra o motivo: encerrada por 404/410 é "encerrada na origem"; fechada pelo sync sem sondagem é "saiu da listagem da fonte".
+
+O arquivamento (`decideArchive`) só leva em conta o veredito de sondagem feito no fechamento ou depois dele: um `alive` ou inconclusivo anterior, de quando a vaga ainda estava aberta, não segura uma vaga que o sync fechou por ausência. Vaga verificada antes dos
 eventos existirem aparece como desconhecida até a próxima checagem, com a data
 de `job.checked_at`.
 

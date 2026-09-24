@@ -981,6 +981,7 @@ export const en: Dictionary = {
     historyNote: "note",
     availabilityOpen: "available",
     availabilityClosed: "closed at the source",
+    availabilityClosedListing: "closed — dropped from the source listing",
     availabilityStale: "availability stale",
     availabilityUnknown: "availability unknown",
   },

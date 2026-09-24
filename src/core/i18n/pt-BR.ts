@@ -1005,6 +1005,7 @@ export const ptBR = {
     historyNote: "nota",
     availabilityOpen: "disponível",
     availabilityClosed: "encerrada na origem",
+    availabilityClosedListing: "encerrada — saiu da listagem da fonte",
     availabilityStale: "disponibilidade vencida",
     availabilityUnknown: "disponibilidade desconhecida",
   },

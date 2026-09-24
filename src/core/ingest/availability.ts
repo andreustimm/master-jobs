@@ -32,6 +32,15 @@ export function reasonFor(verdict: ProbeVerdict): StatusReason {
   return verdict === "gone" ? "closed" : "unknown";
 }
 
+/**
+ * O que a sonda viu, em uma linha, para o evento: código (ou "sem resposta",
+ * quando a rede falhou) e a URL sondada. `redactDetail` limita e tira query
+ * string na gravação.
+ */
+export function probeEvidence(url: string, httpCode: number | null): string {
+  return `${httpCode === null ? "sem resposta" : `HTTP ${httpCode}`} em ${url}`;
+}
+
 /** Ordem total dos eventos: `checked_at`, e `id` no empate. */
 export function compareEvents(a: CheckEvent, b: CheckEvent): number {
   if (a.checkedAt !== b.checkedAt) return a.checkedAt < b.checkedAt ? -1 : 1;

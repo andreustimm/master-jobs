@@ -105,8 +105,16 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
           className="mt-1.5 type-meta text-muted-foreground"
           data-testid="job-availability"
           data-availability={availability.state}
+          data-reason={availability.reason}
         >
-          {t(AVAILABILITY_LABEL[availability.state])} ·{" "}
+          {/* O motivo é o que o evento prova: 404/410 é "encerrada na origem";
+              fechada pelo sync, sem sondagem, é "saiu da listagem". */}
+          {t(
+            availability.state === "closed" && availability.reason !== "closed"
+              ? "jobDetail.availabilityClosedListing"
+              : AVAILABILITY_LABEL[availability.state],
+          )}{" "}
+          ·{" "}
           {availability.lastCheckedAt
             ? `${t("jobDetail.checkedOn")} ${availability.lastCheckedAt.slice(0, 10)}`
             : t("jobDetail.checkedNever")}

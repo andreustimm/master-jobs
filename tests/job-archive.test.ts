@@ -44,6 +44,7 @@ type JobSeed = {
   closedAt: string | null;
   archivedAt?: string | null;
   checkStatus?: string | null;
+  checkedAt?: string | null;
   sourceId?: string;
 };
 
@@ -61,6 +62,7 @@ async function seedJob(seed: JobSeed): Promise<number> {
       closedAt: seed.closedAt,
       archivedAt: seed.archivedAt ?? null,
       checkStatus: seed.checkStatus ?? null,
+      checkedAt: seed.checkedAt ?? null,
       raw: {},
     })
     .returning({ id: job.id });
@@ -123,6 +125,23 @@ describe("IT-001 — a varredura escreve só o que decidiu escrever", () => {
     const archived = new Map(rows.map((r) => [r.id, r.archivedAt]));
     expect(archived.get(old)).toBe(NOW.toISOString());
     for (const id of [recent, manual, blocked]) expect(archived.get(id)).toBeNull();
+  });
+
+  it("`alive` do lote anterior ao fechamento pelo sync não segura o arquivamento", async () => {
+    // O lote sondou a vaga aberta (alive); depois o sync a fechou por ausência
+    // sem sondar. O veredito velho não diz nada sobre o fechamento.
+    const antiga = await seedJob({
+      externalId: "sondada-antes",
+      closedAt: LONG_AGO,
+      checkStatus: "alive",
+      checkedAt: "2025-12-01T00:00:00.000Z",
+    });
+
+    const report = await archiveClosedJobs({ now: NOW, closedDays: 90, apply: true });
+
+    expect(report.applied).toEqual({ archived: 1, claimedByAnotherRun: 0 });
+    const [row] = await db.select({ archivedAt: job.archivedAt }).from(job).where(eq(job.id, antiga));
+    expect(row!.archivedAt).toBe(NOW.toISOString());
   });
 
   it("zero elegível produz relatório de zero mudança, não erro", async () => {

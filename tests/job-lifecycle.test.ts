@@ -45,6 +45,7 @@ function input(overrides: Partial<ArchiveInput> = {}): ArchiveInput {
     cutoff: CUTOFF,
     sourceKind: "greenhouse",
     checkStatus: "gone",
+    checkedAt: null,
     ...overrides,
   };
 }
@@ -93,6 +94,15 @@ describe("decideArchive", () => {
       kind: "keep",
       reason: "reopen-pending",
     });
+  });
+
+  it("UT-003 sondagem anterior ao fechamento não segura a vaga (o sync fechou depois)", () => {
+    const antes = "2025-12-01T00:00:00.000Z";
+    expect(decideArchive(input({ checkStatus: "alive", checkedAt: antes }))).toMatchObject({ kind: "archive" });
+    expect(decideArchive(input({ checkStatus: "inconclusive", checkedAt: antes }))).toMatchObject({ kind: "archive" });
+    const depois = "2026-01-02T00:00:00.000Z";
+    expect(decideArchive(input({ checkStatus: "alive", checkedAt: depois }))).toMatchObject({ reason: "reopen-pending" });
+    expect(decideArchive(input({ checkStatus: "inconclusive", checkedAt: depois }))).toMatchObject({ reason: "inconclusive-probe" });
   });
 
   it("UT-003 fonte manual e de recrutador ficam fora da rotina", () => {

@@ -190,6 +190,8 @@ describe("IT-008 caminho único e execução de verificação", () => {
     expect(linhas.find((l) => l.id === morta)!.closedAt).not.toBeNull();
     expect(linhas.find((l) => l.id === bloqueada)).toMatchObject({ checkStatus: "inconclusive", checkCode: 403, closedAt: null });
     expect((await eventos(morta)).map((e) => e.reason)).toEqual(["closed"]);
+    // O evento carrega o que a sonda viu (US-013).
+    expect((await eventos(morta))[0]!.evidence).toBe("HTTP 404 em https://[redigido]/morta");
     expect((await eventos(bloqueada)).map((e) => [e.verdict, e.reason])).toEqual([["inconclusive", "unknown"]]);
   });
 
@@ -202,6 +204,7 @@ describe("IT-008 caminho único e execução de verificação", () => {
     const [linha] = await db.select().from(job).where(eq(job.id, id));
     expect(linha).toMatchObject({ checkStatus: "gone", checkCode: 410 });
     expect((await eventos(id)).map((e) => [e.verdict, e.httpCode, e.reason])).toEqual([["gone", 410, "closed"]]);
+    expect((await eventos(id))[0]!.evidence).toBe("HTTP 410 em https://[redigido]/fila");
   });
 
   it("dry-run não grava evento nem fecha", async () => {

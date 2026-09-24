@@ -12,6 +12,7 @@ import {
   currentAvailability,
   decidesState,
   gateInstant,
+  probeEvidence,
   latestEvent,
   reasonFor,
   reconcileAvailability,
@@ -113,5 +114,12 @@ describe("UT-010 conciliação com a linha da vaga", () => {
     expect(gateInstant("inconclusive", newest)).toBe(newest.any);
     // O caso do achado: conclusivo em T1 gravado depois de inconclusivo em T2 > T1 decide.
     expect(decidesState("2026-09-21T00:00:00.000Z", gateInstant("gone", newest))).toBe(true);
+  });
+});
+
+describe("UT-011 evidência da sonda", () => {
+  it("diz o código ou a falta de resposta, e a URL sondada", () => {
+    expect(probeEvidence("https://example.com/job/1", 404)).toBe("HTTP 404 em https://example.com/job/1");
+    expect(probeEvidence("https://example.com/job/1", null)).toBe("sem resposta em https://example.com/job/1");
   });
 });

@@ -28,6 +28,7 @@ import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
 import { guardIngestion } from "./guard.ts";
 import { probe } from "./probe.ts";
+import { probeEvidence } from "./availability.ts";
 import { applyVerdict } from "./verdict.ts";
 import type { RequestBudget } from "./request-budget.ts";
 import { drizzleRequestBudget } from "./request-budget-store.ts";
@@ -36,7 +37,7 @@ export type VerifyResult = {
   checked: number;
   gone: number;
   alive: number;
-  /** Blocked, rate-limited or errored — status unknown, left untouched. */
+  /** Bloqueio, limite ou erro: estado desconhecido; grava o evento e não fecha nem reabre. */
   inconclusive: number;
   bySource: Record<string, { gone: number; alive: number; inconclusive: number }>;
   /** Quantas vagas estavam na fila antes do `limit`: maior que `checked` = corte. */
@@ -147,7 +148,7 @@ export async function verifyJobs(
       // O mesmo caminho da fila: evento e estado da vaga na mesma transação.
       // Antes o lote fechava sem registrar veredito nenhum.
       if (!opts.dryRun) {
-        await applyVerdict({ jobId: next.id, verdict, httpCode: status, runId: opts.runId ?? null });
+        await applyVerdict({ jobId: next.id, verdict, httpCode: status, runId: opts.runId, evidence: probeEvidence(next.url, status) });
       }
       if (verdict === "gone") {
         result.gone++;
