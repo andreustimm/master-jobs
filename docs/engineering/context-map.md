@@ -9,7 +9,7 @@ inclusive pelo `index.ts` de um contexto, que compõe adapters. O scorer é
 domínio de Matching fisicamente fora do contexto, e por isso é o único de fora
 que importa `contexts/matching/domain/` direto.
 
-<!-- schema-table-count: 39 -->
+<!-- schema-table-count: 40 -->
 
 | Contexto | Aggregate owner / responsabilidade | Tabelas próprias | API pública | Dependências permitidas |
 |---|---|---|---|---|

@@ -233,7 +233,9 @@ order by 2 desc;
 -- Cadência e teto nas últimas 24 h, por fila.
 select slice, count(*) filter (where unit is null) as chamadas,
        count(*) filter (where unit is not null) as candidatos_atendidos,
-       max(duration_ms) filter (where unit is null) as mais_lenta_ms, sum(errors) as erros
+       max(duration_ms) filter (where unit is null) as mais_lenta_ms,
+       -- A linha da chamada já soma os erros das unidades: contar as duas dobraria.
+       sum(errors) filter (where unit is null) as erros
 from production.sweep_run
 where slice in ('sem-nota', 'manutencao', 'repontuar')
   and started_at::timestamptz > now() - interval '24 hours'
