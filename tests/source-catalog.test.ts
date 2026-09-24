@@ -144,7 +144,7 @@ describe("IT-001 escrita no catálogo", () => {
   });
 });
 
-describe("IT-001 migration 0020: origem das linhas que já existiam", () => {
+describe("IT-001 migration 0021: origem das linhas que já existiam", () => {
   it("marca como yaml só as linhas de sync, e reaplicar não muda nada", async () => {
     await db.insert(source).values([
       { id: "greenhouse:acme", kind: "greenhouse", handle: "acme", label: "Acme" },
@@ -152,7 +152,7 @@ describe("IT-001 migration 0020: origem das linhas que já existiam", () => {
       { id: "manual:sample", kind: "manual", handle: "sample", label: "Fixture" },
       { id: "lever:tela", kind: "lever", handle: "tela", label: "Tela", origin: "admin" },
     ]);
-    const backfill = readFileSync(resolve(process.cwd(), "drizzle/postgres/0020_backfill_source_origin.sql"), "utf8");
+    const backfill = readFileSync(resolve(process.cwd(), "drizzle/postgres/0021_backfill_source_origin.sql"), "utf8");
 
     await db.execute(sql.raw(backfill));
     await db.execute(sql.raw(backfill));
@@ -170,7 +170,7 @@ describe("IT-001 migration 0020: origem das linhas que já existiam", () => {
     // Migration é congelada: kind novo no registro depois dela nasce `yaml`
     // pelo `ensureSources`, sem precisar do backfill. O inverso — kind na
     // lista sem adapter — marcaria `manual`/`recruiter` como vindos do arquivo.
-    const backfill = readFileSync(resolve(process.cwd(), "drizzle/postgres/0020_backfill_source_origin.sql"), "utf8");
+    const backfill = readFileSync(resolve(process.cwd(), "drizzle/postgres/0021_backfill_source_origin.sql"), "utf8");
     const lista = /"kind" IN \(([^)]*)\)/.exec(backfill)![1]!.split(",").map((k) => k.trim().replaceAll("'", ""));
     expect(lista.length).toBeGreaterThan(0);
     expect([...FETCHABLE_SOURCE_KINDS]).toEqual(expect.arrayContaining(lista));

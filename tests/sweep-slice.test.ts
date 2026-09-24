@@ -17,6 +17,7 @@ type Fake = {
   synced: string[];
   alarms: string[][];
   budgets: number[];
+  deadlines: number[];
 };
 
 function fake(opts: {
@@ -24,7 +25,8 @@ function fake(opts: {
   lastSynced?: Record<string, string | null>;
   syncMs?: Record<string, number>;
   syncFails?: Record<string, "throw" | "error">;
-  candidates?: number[];
+  candidates?: { id: number; queue: "sem-nota" | "manutencao" }[];
+  scoreMs?: Record<number, number>;
   lose?: string[];
   budgetMs?: number;
 } = {}): Fake {
@@ -34,6 +36,7 @@ function fake(opts: {
   const synced: string[] = [];
   const alarms: string[][] = [];
   const budgets: number[] = [];
+  const deadlines: number[] = [];
   const lastSynced = new Map(Object.entries(opts.lastSynced ?? {}));
   const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -84,8 +87,9 @@ function fake(opts: {
       async candidates() {
         return opts.candidates ?? [];
       },
-      async run() {
-        time.now += 1_000;
+      async run(id, deadline) {
+        deadlines.push(deadline);
+        time.now += opts.scoreMs?.[id] ?? 1_000;
         return { ok: true, items: 5 };
       },
     },
@@ -109,7 +113,7 @@ function fake(opts: {
       alarms.push(report.sources);
     },
   };
-  return { deps, time, rows, leases, synced, alarms, budgets };
+  return { deps, time, rows, leases, synced, alarms, budgets, deadlines };
 }
 
 describe("fatia sync", () => {
@@ -203,19 +207,72 @@ describe("fatia sync", () => {
   });
 });
 
-describe("fatia pontuar", () => {
-  it("pontua cada candidato no máximo uma vez a cada dez minutos", async () => {
-    const f = fake({ candidates: [1, 2] });
-    const first = await runSweepSlice("pontuar", f.deps);
-    f.time.now += 5 * 60_000;
-    const second = await runSweepSlice("pontuar", f.deps);
-    f.time.now += 6 * 60_000;
-    const third = await runSweepSlice("pontuar", f.deps);
+describe("filas de pontuação (#288)", () => {
+  const MIN = 60_000;
+  const fila = [
+    { id: 1, queue: "sem-nota" as const },
+    { id: 2, queue: "manutencao" as const },
+    { id: 3, queue: "sem-nota" as const },
+  ];
 
-    expect(first.units.map((u) => u.unit)).toEqual(["pontuar:1", "pontuar:2"]);
-    expect(second.units).toEqual([]);
-    expect(third.units.map((u) => u.unit)).toEqual(["pontuar:1", "pontuar:2"]);
-    expect(first.items).toBe(2);
+  it("cada fatia só atende os candidatos da própria fila", async () => {
+    const f = fake({ candidates: fila });
+    const semNota = await runSweepSlice("sem-nota", f.deps);
+    const manutencao = await runSweepSlice("manutencao", f.deps);
+
+    expect(semNota.units.map((u) => u.unit)).toEqual(["pontuacao:1", "pontuacao:3"]);
+    expect(manutencao.units.map((u) => u.unit)).toEqual(["pontuacao:2"]);
+    expect(semNota.items).toBe(2);
+  });
+
+  it("sem-nota volta ao mesmo candidato na agenda seguinte de 10 min, e não antes", async () => {
+    const f = fake({ candidates: fila });
+    await runSweepSlice("sem-nota", f.deps);
+    f.time.now += 5 * MIN;
+    const extra = await runSweepSlice("sem-nota", f.deps);
+    // A agenda seguinte: 10 min depois do começo da primeira chamada.
+    f.time.now = START + 10 * MIN;
+    const agenda = await runSweepSlice("sem-nota", f.deps);
+
+    expect(extra.units).toEqual([]);
+    expect(agenda.units.map((u) => u.unit)).toEqual(["pontuacao:1", "pontuacao:3"]);
+  });
+
+  it("manutenção volta ao candidato de hora em hora, e não na agenda de 10 min", async () => {
+    const f = fake({ candidates: fila });
+    await runSweepSlice("manutencao", f.deps);
+    f.time.now = START + 10 * MIN;
+    const cedo = await runSweepSlice("manutencao", f.deps);
+    f.time.now = START + 60 * MIN;
+    const hora = await runSweepSlice("manutencao", f.deps);
+
+    expect(cedo.units).toEqual([]);
+    expect(hora.units.map((u) => u.unit)).toEqual(["pontuacao:2"]);
+  });
+
+  it("o prazo passado à unidade é o fim do orçamento da chamada, e o segundo candidato só começa se couber", async () => {
+    // O primeiro usa 15 s em lotes; o segundo levaria outros 15: não começa.
+    const f = fake({ candidates: fila, scoreMs: { 1: 15_000, 3: 15_000 } });
+    const report = await runSweepSlice("sem-nota", f.deps);
+
+    expect(f.deadlines).toEqual([START + 20_000]);
+    expect(report.units.map((u) => u.unit)).toEqual(["pontuacao:1"]);
+    expect(report.durationMs).toBeLessThanOrEqual(20_000);
+
+    // Quem ficou de fora é o primeiro da agenda seguinte: tentativa mais antiga.
+    f.time.now = START + 10 * MIN;
+    const next = await runSweepSlice("sem-nota", f.deps);
+    expect(next.units[0]!.unit).toBe("pontuacao:3");
+  });
+
+  it("a reserva é por candidato, comum às duas filas: quem mudou de fila não roda duas vezes seguidas", async () => {
+    const f = fake({ candidates: [{ id: 7, queue: "sem-nota" }] });
+    await runSweepSlice("sem-nota", f.deps);
+    // Completou a passada e passou para a manutenção logo em seguida.
+    f.deps.score.candidates = async () => [{ id: 7, queue: "manutencao" }];
+    f.time.now = START + 11 * MIN;
+    const logo = await runSweepSlice("manutencao", f.deps);
+    expect(logo.units).toEqual([]);
   });
 });
 

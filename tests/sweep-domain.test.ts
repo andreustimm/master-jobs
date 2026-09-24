@@ -1,12 +1,17 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   LEASE_DEAD_MS,
+  MAINTENANCE_CADENCE_MS,
+  NO_SCORE_CADENCE_MS,
+  SCORE_QUEUE_MIN_INTERVAL_MS,
   SWEEP_SLICES,
   dueUnits,
   mayStartAnother,
   parseSweepSlice,
   remainingBudget,
   staleSources,
+  sweepEnvironmentAllowed,
   type LeaseState,
 } from "../src/contexts/operations/domain/sweep.ts";
 import { authorizeCronRequest } from "../src/contexts/auth/index.ts";
@@ -27,8 +32,78 @@ function lease(key: string, patch: Partial<LeaseState>): [string, LeaseState] {
   return [key, { key, claimedAt: null, lastClaimedAt: null, lastFinishedAt: null, ...patch }];
 }
 
+describe("cadência das filas de pontuação (#288)", () => {
+  it("sem-nota a cada 10 min e manutenção de hora em hora, com folga que não recusa a própria agenda", () => {
+    expect(NO_SCORE_CADENCE_MS).toBe(10 * MIN);
+    expect(MAINTENANCE_CADENCE_MS).toBe(60 * MIN);
+    for (const [queue, cadence] of [
+      ["sem-nota", NO_SCORE_CADENCE_MS],
+      ["manutencao", MAINTENANCE_CADENCE_MS],
+    ] as const) {
+      const interval = SCORE_QUEUE_MIN_INTERVAL_MS[queue];
+      // A chamada anterior terminou até 25 s depois de começar e o `pg_net`
+      // atrasa segundos: a agenda seguinte ainda precisa passar.
+      expect(interval, queue).toBeLessThanOrEqual(cadence - 25_000);
+      // E uma chamada extra no meio do intervalo não repete o candidato.
+      expect(interval, queue).toBeGreaterThan(cadence / 2);
+    }
+  });
+
+  it("a agenda do SQL chama cada fila na cadência do domínio", () => {
+    const sql = readFileSync("supabase/cron/varredura.sql", "utf8");
+    expect(sql).toMatch(/cron\.schedule\('jho-varredura-sem-nota', '5-55\/10 \* \* \* \*', \$\$select jho_cron\.chamar_fatia\('sem-nota'\)\$\$\)/);
+    expect(sql).toMatch(/cron\.schedule\('jho-varredura-manutencao', '11 \* \* \* \*', \$\$select jho_cron\.chamar_fatia\('manutencao'\)\$\$\)/);
+    // A agenda substituída sai ao reaplicar, e nenhuma chama a fatia que não existe mais.
+    expect(sql).toMatch(/cron\.unschedule\(jobname\) from cron\.job where jobname in \('jho-varredura-pontuar'\)/);
+    expect(sql).not.toMatch(/chamar_fatia\('pontuar'\)/);
+    // Toda fatia agendada é uma fatia que a rota aceita.
+    for (const [, slice] of sql.matchAll(/chamar_fatia\('([^']+)'\)/g)) {
+      expect(parseSweepSlice(slice), slice).toEqual({ ok: true, slice });
+    }
+  });
+
+  it("o SQL só se aplica ao projeto de produção", () => {
+    const sql = readFileSync("supabase/cron/varredura.sql", "utf8");
+    expect(sql).toContain("SÓ NO PROJETO SUPABASE DE PRODUÇÃO");
+    const guard = sql.indexOf("raise exception");
+    expect(guard).toBeGreaterThan(0);
+    // A trava vem antes de qualquer função ou agenda.
+    expect(guard).toBeLessThan(sql.indexOf("create or replace function"));
+    expect(guard).toBeLessThan(sql.indexOf("cron.schedule("));
+  });
+});
+
+describe("sweepEnvironmentAllowed — a varredura só roda em produção (#288)", () => {
+  it("produção declarada por qualquer uma das duas variáveis, ou pelas duas", () => {
+    expect(sweepEnvironmentAllowed({ jhoEnv: "production" })).toEqual({ allowed: true });
+    expect(sweepEnvironmentAllowed({ vercelEnv: "production" })).toEqual({ allowed: true });
+    expect(sweepEnvironmentAllowed({ jhoEnv: " Production ", vercelEnv: "production" })).toEqual({ allowed: true });
+  });
+
+  it("qualquer outro ambiente, ou nenhum declarado, recusa", () => {
+    for (const env of [
+      {},
+      { jhoEnv: "", vercelEnv: " " },
+      { vercelEnv: "preview" },
+      { jhoEnv: "staging" },
+      { jhoEnv: "dev" },
+      { jhoEnv: "local" },
+      { jhoEnv: "producao" },
+    ]) {
+      expect(sweepEnvironmentAllowed(env).allowed, JSON.stringify(env)).toBe(false);
+    }
+  });
+
+  it("declarações em conflito recusam: `JHO_ENV=production` não promove um preview", () => {
+    expect(sweepEnvironmentAllowed({ jhoEnv: "production", vercelEnv: "preview" })).toEqual({
+      allowed: false,
+      environment: "preview",
+    });
+  });
+});
+
 describe("parseSweepSlice", () => {
-  it("aceita só as cinco fatias, e nada vira 'tudo'", () => {
+  it("aceita só as fatias declaradas, e nada vira 'tudo'", () => {
     for (const slice of SWEEP_SLICES) expect(parseSweepSlice(slice)).toEqual({ ok: true, slice });
     for (const value of ["", "tudo", "SYNC", " sync", "recheck", null, undefined, 1, {}]) {
       expect(parseSweepSlice(value)).toEqual({ ok: false });
@@ -56,12 +131,12 @@ describe("dueUnits — round-robin pela tentativa mais antiga", () => {
   });
 
   it("o término registrado na reserva conta tanto quanto o da tabela da unidade", () => {
-    const leases = new Map([lease("pontuar:1", { lastFinishedAt: ago(2 * MIN) })]);
+    const leases = new Map([lease("pontuacao:1", { lastFinishedAt: ago(2 * MIN) })]);
     const units = [
-      { key: "pontuar:1", lastDoneAt: null },
-      { key: "pontuar:2", lastDoneAt: null },
+      { key: "pontuacao:1", lastDoneAt: null },
+      { key: "pontuacao:2", lastDoneAt: null },
     ];
-    expect(dueUnits(units, leases, NOW, { minIntervalMs: 10 * MIN })).toEqual(["pontuar:2"]);
+    expect(dueUnits(units, leases, NOW, { minIntervalMs: 10 * MIN })).toEqual(["pontuacao:2"]);
   });
 
   it("reserva viva fica de fora; reserva de função morta volta — no fim da fila", () => {

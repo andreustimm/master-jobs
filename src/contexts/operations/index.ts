@@ -26,7 +26,7 @@ import { activeTermKeys } from "../matching/index.ts";
 import { requestTermCaptures, runTermCaptures } from "../sourcing/index.ts";
 import { runSweepSlice, type QueueOutcome, type SliceReport, type SweepDeps } from "./app/sweep.ts";
 import { SLICE_TOUCHES_THIRD_PARTIES, type SweepSlice } from "./domain/sweep.ts";
-import { candidateIds, drizzleSweepLease, drizzleSweepRuns, lastSyncedBySource } from "./infra/drizzle-sweep.ts";
+import { candidateScoreQueues, drizzleSweepLease, drizzleSweepRuns, lastSyncedBySource } from "./infra/drizzle-sweep.ts";
 
 export { ROUTINES, ROUTINE_LABEL_KEYS, isRoutine, parseRoutine, type Routine } from "./domain/routine.ts";
 export type { DispatchResult, WorkflowDispatchPort } from "./ports.ts";
@@ -52,6 +52,7 @@ export {
   SLICE_TOUCHES_THIRD_PARTIES,
   isSweepSlice,
   parseSweepSlice,
+  sweepEnvironmentAllowed,
   type SweepSlice,
 } from "./domain/sweep.ts";
 export type { SliceReport } from "./app/sweep.ts";
@@ -118,8 +119,8 @@ async function recheckSlice(worker: string, budgetMs: number): Promise<QueueOutc
 
 /**
  * A fila de repontuação (ADR 0026): pedidos de quem salvou currículo ou mexeu
- * em trilha. `pontuar` percorre todo candidato de dez em dez minutos, mas não
- * conclui a tarefa nem registra a recusa — e é a tarefa que a tela lê.
+ * em trilha. `sem-nota` e `manutencao` percorrem candidatos pela cadência, mas
+ * não concluem a tarefa nem registram a recusa — e é a tarefa que a tela lê.
  */
 async function rescoreSlice(worker: string, budgetMs: number): Promise<QueueOutcome> {
   const result = await runScoreQueue({ worker, budgetMs });
@@ -166,9 +167,9 @@ export async function runSweep(
       },
     },
     score: {
-      candidates: candidateIds,
-      async run(candidateId) {
-        const result = await scoreCandidate(candidateId);
+      candidates: candidateScoreQueues,
+      async run(candidateId, deadline) {
+        const result = await scoreCandidate(candidateId, { deadline });
         return { ok: result.erro === undefined, items: result.scored, error: result.erro };
       },
     },

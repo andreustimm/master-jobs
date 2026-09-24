@@ -42,6 +42,8 @@ erDiagram
     job ||--o{ job_score : "job_id PK (cascade)"
     candidate ||--o{ target_track : "candidate_id (cascade)"
     target_track ||--o{ job_score : "track_id PK (cascade)"
+    candidate ||--o{ score_cursor : "candidate_id PK (cascade)"
+    target_track ||--o| score_cursor : "track_id PK (cascade)"
     target_track ||--o{ saved_term : "track_id (cascade)"
     candidate ||--o{ saved_term : "candidate_id (cascade)"
     candidate ||--o{ saved_term_request : "candidate_id (cascade)"
@@ -238,7 +240,7 @@ ilhas do módulo de posicionamento LinkedIn.
 
 Uma feed configurada: um board de ATS, um agregador ou um import manual. O
 **banco é a fonte da verdade do catálogo**, governado por linha (migration
-`0019_source_catalog`, #223):
+`0020_source_catalog`, #223):
 
 - linha **não gerida** (`managed_at` nulo) espelha `config/sources.yaml` a cada
   sync — rótulo, motivo e `enabled`, inclusive `enabled: false`; uma linha não
@@ -265,7 +267,7 @@ que é o que `pnpm jho sources list` imprime.
 | `enabled` | boolean, default `true`. `loadSources()` devolve também a entrada desabilitada, com `enabled: false`, e a linha não gerida a espelha |
 | `rationale` | por que essa fonte está na lista — mantém o config auto-documentado |
 | `retired_at` | aposentadoria suave. Aposentada sai do sync e não é editada; vagas e histórico continuam legíveis, porque a linha fica (fonte nunca é apagada) |
-| `origin` | quem criou a linha: `yaml`, `admin` ou `system` (`manual`, `recruiter`, `<kind>:~terms`). A migration `0020_backfill_source_origin` marcou como `yaml` as linhas de sync existentes |
+| `origin` | quem criou a linha: `yaml`, `admin` ou `system` (`manual`, `recruiter`, `<kind>:~terms`). A migration `0021_backfill_source_origin` marcou como `yaml` as linhas de sync existentes |
 | `config_revision` | começa em 1 e sobe a cada edição (espelhamento, órfã desabilitada, escrita do admin) |
 | `secret_ref` | **nome** da variável de ambiente com a credencial, nunca o valor (G41). Valor com cara de chave é recusado antes de gravar, e o erro não o ecoa |
 | `managed_at` | quando a linha passou a ser governada pelo banco; nulo = ainda espelha o YAML |
@@ -395,6 +397,25 @@ uma subconsulta correlacionada por vaga, repetida no `WHERE` e no `ORDER BY` —
 a forma que leu 77,4 milhões de linhas numa varredura em 03/09.
 `tests/verify-queue.test.ts` lê o plano e reprova `SubPlan` ou mais de uma
 visita a `job_score`.
+
+### `score_cursor` — onde a passada de pontuação parou
+
+Migração `0019_score_cursor` (aditiva), [ADR 0027](adr/0027-cadencia-das-notas-em-lotes-com-cursor.md).
+Uma linha por (candidato, trilha), chave primária `(candidate_id, track_id)`;
+as duas FKs com `ON DELETE cascade`. Derivada como `job_score`: apagar a linha
+só faz a próxima passada começar do topo.
+
+| Coluna | Notas |
+|---|---|
+| `profile_hash`, `scorer_version` | os da passada em curso; se o perfil efetivo ou o scorer mudou, a posição não vale e a passada recomeça do topo |
+| `position_key`, `position_job_id` | `coalesce(posted_at, first_seen_at)` e id da última vaga lida; nulos = a próxima leitura começa pela vaga mais recente |
+| `last_completed_at` | a passada completa mais recente; nunca volta a nulo. Nulo na trilha principal = candidato na fila `sem-nota` |
+| `first_completed_at` | a primeira passada completa, gravada uma vez — "tempo até completo" |
+| `created_at` | quando o primeiro lote da trilha foi gravado — "tempo até o primeiro lote" |
+
+A ordem da passada usa o índice parcial `job_recency_open_idx` em `job`,
+`(coalesce(posted_at, first_seen_at), id) where closed_at is null`; a expressão
+é a mesma de `RECENCY` em `src/core/scoring/apply.ts`.
 
 ### `candidate_matching_profile`
 
@@ -982,7 +1003,7 @@ apagar um candidato não pode falhar por causa de uma reserva de dez minutos.
 
 | Tabela | Chave | O que guarda |
 |---|---|---|
-| `sweep_lease` | `key` (`sync:<fonte>`, `pontuar:<candidato>`, `alarme:<nome>`, `manutencao:<nome>`) | reserva viva (`claimed_at`, `claimed_by`), última tentativa (`last_claimed_at`, nunca limpa) e último término (`last_finished_at`). Reservada por um único `INSERT … ON CONFLICT DO UPDATE … WHERE`; vence em 5 min |
+| `sweep_lease` | `key` (`sync:<fonte>`, `pontuacao:<candidato>` — comum às fatias `sem-nota` e `manutencao`; `pontuar:<candidato>` é resíduo da fatia removida —, `alarme:<nome>`, `manutencao:<nome>`) | reserva viva (`claimed_at`, `claimed_by`), última tentativa (`last_claimed_at`, nunca limpa) e último término (`last_finished_at`). Reservada por um único `INSERT … ON CONFLICT DO UPDATE … WHERE`; vence em 5 min |
 | `sweep_run` | `id`; índice `(slice, started_at)` | uma linha por chamada (`unit` nulo) e uma por unidade: duração, itens, erros, mensagem de erro. Só números e ids; podada a cada 24 h para 14 dias |
 
 ### Análise estruturada da vaga — `job_analysis`
