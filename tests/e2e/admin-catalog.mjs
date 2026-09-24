@@ -215,7 +215,8 @@ export async function checkAdminCatalog(browser, base, accounts, check) {
       for (const path of paths) {
         const response = await page.goto(`${base}${path}`, { waitUntil: "networkidle" });
         const html = await page.content();
-        outcomes.push({ path, status: response?.status(), leaked: html.includes("e2e-catalogo") || html.includes("Catálogo E2E") });
+        // O handle está na própria URL pedida; o que não pode vazar é a configuração.
+        outcomes.push({ path, status: response?.status(), leaked: html.includes("Catálogo E2E") || html.includes("platform-capabilities") });
       }
       check(`E2E-002 ${who} é negado por link direto sem ver configuração`,
         outcomes.every((o) => o.status === 403 && !o.leaked), JSON.stringify(outcomes));
