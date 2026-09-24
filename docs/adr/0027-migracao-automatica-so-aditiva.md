@@ -67,7 +67,9 @@ promoção `dev → staging` parava em qualquer diferença em `drizzle/` ou em
   e a promoção deixa de parar nela.
 - Uma migração aditiva que falhe deixa o código novo servindo sobre o schema
   velho até a correção. O job fica vermelho e o erro traz a causa do servidor
-  (`withDatabaseCause`); a correção vai para frente, numa migração nova.
+  (`withDatabaseCause`). A migração que falhou continua pendente e roda
+  primeiro em qualquer lote seguinte, então a correção é no próprio `.sql`
+  (nunca aplicado), e a promoção pede `confirmar-migracao` por ele ter mudado.
 - Banco vazio nunca é criado pelo push: `0001` revoga privilégio e `0002` muda
   tipo, então `--additive-only` recusa o histórico inteiro. Provisionar é
   sempre manual.

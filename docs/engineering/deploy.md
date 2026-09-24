@@ -393,8 +393,10 @@ migra, e os dois não se esperam. Para aditiva a corrida é aceita: o código
 antigo não enxerga o que foi acrescentado, e o novo só erra se o build
 terminar antes do job (o job leva cerca de um minuto; o build, alguns). Se a
 migração aditiva falhar, o código novo serve sobre o schema velho até a
-correção, que vai para frente numa migração nova — o job vermelho e o alerta
-do Sentry são o sinal.
+correção — o job vermelho e o alerta do Sentry são o sinal. A migração que
+falhou continua pendente e roda primeiro em qualquer lote seguinte; corrija o
+próprio `.sql`, que nunca foi aplicado (a promoção pede `confirmar-migracao`
+por ele ter mudado).
 
 ### Migração que não é aditiva
 

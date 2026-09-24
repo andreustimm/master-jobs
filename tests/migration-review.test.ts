@@ -37,6 +37,9 @@ describe("splitStatements — o que é comando e o que é texto", () => {
     const sql = 'CREATE TABLE "production"."t" ("id" integer)\n--> statement-breakpoint\nALTER TABLE "production"."job" DROP COLUMN "title"';
     expect(splitStatements(sql).map((p) => p.text)).toEqual(["CREATE TABLE @0 . @1 ( @2 integer)", "ALTER TABLE @0 . @1 DROP COLUMN @2"]);
     expect(risks(sql)).toEqual(["drop"]);
+    // O drizzle divide pelo texto literal, até no fim de um comentário.
+    const afterComment = 'CREATE TABLE "production"."t" ("id" integer) -- nota --> statement-breakpoint\nALTER TABLE "production"."job" DROP COLUMN "title"';
+    expect(risks(afterComment)).toEqual(["drop"]);
   });
 
   it("mascara literal, literal com escape e corpo com cifrão", () => {

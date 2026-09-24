@@ -422,8 +422,12 @@ do push esperando outro resultado: ele recusa até o lote mudar.
 
 - Falhou `jho db migrate` (conexão, SQL que o banco recusou): a transação
   desfez o lote inteiro, e o código novo pode estar servindo sobre o schema
-  velho. A causa do servidor vem na mensagem (`— causa: <código>`). Corrija
-  para frente, numa migração nova; o push dela dispara o job de novo.
+  velho. A causa do servidor vem na mensagem (`— causa: <código>`). Se a
+  falha foi de conexão, rode o job de novo. Se o banco recusou o SQL, a
+  migração que falhou **continua pendente** e roda primeiro em qualquer lote
+  seguinte: uma migração nova depois dela não a conserta. Corrija o próprio
+  `.sql` (ele nunca foi aplicado em produção); a promoção vai pedir
+  `confirmar-migracao`, porque o arquivo publicado mudou.
 - Falhou `jho db check`, depois de `aplicadas: <tags>`: o lote **já foi
   gravado**, e o que falhou é a conferência de integridade. Não reaplique;
   leia o que o check reprovou e corrija o dado ou o schema numa migração nova.

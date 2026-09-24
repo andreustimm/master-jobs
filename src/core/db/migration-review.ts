@@ -63,8 +63,20 @@ const QNAME = String.raw`${IDENT}(?:\s*\.\s*${IDENT})*`;
  * `DROP` dentro de um default ou de um comentário não é comando. Identificador
  * entre aspas vira `@N` (o nome fica em `idents`), para que uma coluna chamada
  * "drop" não pareça palavra-chave — e para que o nome não se perca.
+ *
+ * Antes de tudo, divide pelo marcador `--> statement-breakpoint` como o
+ * drizzle divide: pelo texto literal, onde quer que ele apareça — inclusive
+ * depois de `;` ausente ou no fim de um comentário. Qualquer leitura mais
+ * esperta do que a do migrador deixaria um prefixo permitido esconder o
+ * comando que ele vai executar em seguida.
  */
 export function splitStatements(sql: string): Statement[] {
+  return sql.split(BREAKPOINT).flatMap(splitChunk);
+}
+
+const BREAKPOINT = "--> statement-breakpoint";
+
+function splitChunk(sql: string): Statement[] {
   const statements: Statement[] = [];
   let text = "";
   let idents: string[] = [];
@@ -79,14 +91,9 @@ export function splitStatements(sql: string): Statement[] {
     const ch = sql[i]!;
     const next = sql[i + 1];
     if (ch === "-" && next === "-") {
-      // `--> statement-breakpoint` não é só comentário: é por ele que o
-      // drizzle divide o arquivo. Sem `;` antes dele, os dois comandos viram
-      // um só aqui, e o prefixo permitido esconderia o que vem depois.
-      const breakpoint = sql.startsWith("--> statement-breakpoint", i);
       const end = sql.indexOf("\n", i);
       i = end === -1 ? sql.length : end;
-      if (breakpoint) flush();
-      else text += " ";
+      text += " ";
     } else if (ch === "/" && next === "*") {
       // PostgreSQL aninha comentário de bloco.
       let depth = 1;
