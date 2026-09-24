@@ -53,9 +53,30 @@ SHA. Por isso o último passo da promoção (`Rodar o CI na cabeça da PR de
 produção`) dispara `ci.yml` por `workflow_dispatch` em `staging` — a única
 forma de evento que o `GITHUB_TOKEN` dispara — sempre que há PR de produção
 aberta. O run publica `qualidade` e `schema-e-migracao` com esses nomes no SHA
-da cabeça, que é o que o ruleset lê. Se o passo falhar, o recurso manual
-continua valendo: **feche e reabra a PR** (evento humano, roda o CI de
-`pull_request`) ou rode `gh workflow run ci.yml --ref staging`. Com
+da cabeça, sem o `e2e-navegador`.
+
+Na v1.25.0 (#303) isso não bastou: com os dois checks verdes no SHA desde
+18:10, o ruleset seguiu dizendo "2 of 2 required status checks are expected".
+Ao mesmo tempo, o GitHub tinha criado o run de `pull_request` da PR do robô,
+mas parado em `action_required` — a aprovação que ele pede à PR de contribuidor
+de primeira viagem, e `github-actions[bot]` conta como um. Fechar e reabrir a
+PR (18:21) gerou um run de `pull_request` que rodou, e a PR ficou mesclável 22 s
+depois de o `qualidade` dele passar, com o E2E do mesmo run ainda rodando. Então
+o que o ruleset esperava era o check vindo da própria PR, e não a execução
+inteira. Não está provado se o run de `workflow_dispatch` chegaria a contar
+sozinho; por isso ele continua, e a promoção ganhou o passo seguinte, **Aprovar
+o CI de pull_request da PR de produção**: consulta por até um minuto os runs
+`action_required` deste repositório no SHA da cabeça e os aprova por
+`POST /repos/{repo}/actions/runs/{id}/approve` com o `GITHUB_TOKEN`
+(`actions: write`, que o job já tem). O passo é melhor esforço e nunca reprova
+a promoção: roda com `continue-on-error`, e a recusa da aprovação deixa um
+`::warning::` no log.
+
+O recurso manual continua valendo, nesta ordem: **aprovar o run** na aba
+Actions (*Approve and run*) ou `gh api --method POST
+repos/andreustimm/master-jobs/actions/runs/<id>/approve`; **fechar e reabrir a
+PR** (evento humano, roda o CI de `pull_request`); ou
+`gh workflow run ci.yml --ref staging`. Com
 `RELEASE_PAT` configurado a PR já nasceria com checks, mas seu autor passaria a
 ser o dono do token, e o dono não pode aprovar a própria PR. Antes de
 configurar o PAT, revise esta seção.

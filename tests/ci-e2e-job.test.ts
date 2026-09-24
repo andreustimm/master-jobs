@@ -79,7 +79,9 @@ describe("V08-02 — o CI roda o navegador geral", () => {
     expect(NON_BLOCKING_JOBS).toHaveProperty("e2e-navegador");
     expect(needsOf(workflow.jobs[AGGREGATOR]!)).not.toContain("e2e-navegador");
     expect(workflow.jobs.validacao!.needs).not.toContain("e2e-navegador");
-    expect(job.if).toBe("inputs.target-sha == ''");
+    // Nem na chamada da promoção (`target-sha`), nem no dispatch que ela faz
+    // em `staging` para a PR de produção (#303).
+    expect(job.if).toBe("github.event_name != 'workflow_dispatch' && inputs.target-sha == ''");
   });
 
   it("a PWA continua no portão obrigatório", () => {
