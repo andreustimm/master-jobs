@@ -222,7 +222,8 @@ describe("term filter over the corpus (ADR-005, ADR-012)", () => {
     await client
       .begin(async (tx) => {
         await tx.unsafe("set local enable_seqscan = off");
-        await tx.unsafe("drop index production.job_closed_idx, production.job_archive_scan_idx");
+        // `job_recency_open_idx` (#288) também é parcial em `closed_at is null`.
+        await tx.unsafe("drop index production.job_closed_idx, production.job_archive_scan_idx, production.job_recency_open_idx");
         text = JSON.stringify(await tx.unsafe(`explain (format json) ${counted!.query}`, counted!.values));
         throw rollback;
       })

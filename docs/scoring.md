@@ -740,21 +740,39 @@ linha por candidato, idempotente. Quem consome a fila
 | fatia `repontuar` de `/api/cron/varredura` | a cada 2 min pelo `pg_cron` ([ADR 0025](adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)) ou à mão | uma fatia |
 | `jho jobs rescore run` (CLI; também no Actions enquanto ele agendar a varredura) | à mão | sem prazo, drena tudo |
 
+Os três seguem o mesmo lote e a mesma ordem (abaixo).
+
 A fatia do `after()` pega primeiro a tarefa de quem salvou, e depois o topo da
 fila (prioridade, depois ordem de chegada); a fatia `repontuar` só usa a ordem
 da fila.
 
-**Fatia.** Com prazo, `scoreAll` lê as vagas desatualizadas em páginas de mil,
-em ordem de id, grava em lotes de cem e confere o prazo **depois** de cada lote.
-Vencido, devolve `complete: false`; a fila põe a tarefa de volta em `pending`
-**sem** contar tentativa e com a soma das notas já gravadas em `scored`. A
-fatia seguinte recomeça pelo que ainda está desatualizado — o que foi gravado
-saiu do filtro de staleness, então nada é refeito. O prazo só interrompe depois
-de a execução ter gravado algo: uma página inteira fora do alvo de uma trilha
-aceita não grava nada, e parar nela repetiria a mesma página a cada fatia.
+**Passada em lotes** ([ADR 0027](adr/0027-cadencia-das-notas-em-lotes-com-cursor.md)).
+`scoreAll` percorre as vagas abertas da **mais recente para a mais antiga** —
+`coalesce(posted_at, first_seen_at)` decrescente, id no empate (índice
+`job_recency_open_idx`) — em lotes de `SCORE_BATCH` = 100, só as sem nota ou
+com nota desatualizada. A trilha principal vai primeiro. Depois de cada lote,
+grava em `score_cursor` a posição da última vaga lida; lote incompleto fecha a
+passada (posição nula, `last_completed_at`). A execução seguinte retoma do
+cursor, e recomeça do topo quando o `profile_hash` ou a `SCORER_VERSION` da
+trilha mudou — currículo novo vê as cem mais recentes primeiro. O cursor avança
+mesmo quando o lote não grava nada: a vaga fora do alvo de uma trilha aceita
+nunca ganha linha, e sem avançar ela voltaria em todo lote. Regras puras em
+`src/core/scoring/batch.ts`.
 
-A fatia `pontuar` da varredura é outra coisa: repassa todo candidato a cada dez
-minutos para as vagas novas, sem tocar em `score_task`.
+**Fatia.** Com prazo, só começa um lote que caberia pelo mais lento até ali; o
+primeiro lote que lê vagas sempre começa, e a leitura vazia de uma trilha já em
+dia não conta. Parada pelo prazo, devolve `complete: false`; a fila põe a
+tarefa de volta em `pending` **sem** contar tentativa e com a soma das notas
+já gravadas em `scored`, e a fatia seguinte retoma do cursor. Sem prazo (CLI),
+uma passada retomada do meio é seguida de outra do topo.
+
+**Cadência sem pedido.** Duas fatias da varredura mantêm a nota de todos, sem
+tocar em `score_task`: `sem-nota`, a cada 10 min, para quem nunca completou uma
+passada na trilha principal; `manutencao`, de hora em hora, para os demais —
+vaga nova, nota de perfil ou scorer antigo, frescor vencido (24 h). Mecânica e
+consultas de prova em [`operations.md`](operations.md#cadência-das-notas-sem-nota-e-manutencao).
+Nada disso muda a rubrica: `SCORER_VERSION` não se move por causa da cadência,
+e vaga ainda sem nota continua neutra na tela (#279).
 
 **Recusa.** Quando a derivação recusa, a tarefa termina `done` com o código em
 `last_error` e nenhuma nota é gravada. A tela de candidato mostra o estado

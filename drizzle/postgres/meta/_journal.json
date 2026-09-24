@@ -134,6 +134,13 @@
       "when": 1790203769317,
       "tag": "0018_job_analysis",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790207849367,
+      "tag": "0019_score_cursor",
+      "breakpoints": true
     }
   ]
 }

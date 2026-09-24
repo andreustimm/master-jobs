@@ -53,6 +53,8 @@ export const postSnapshotTables = new Set([
   // Reserva e métrica da varredura fatiada (ADR 0025): estado operacional.
   "sweep_lease",
   "sweep_run",
+  // Cursor da passada de pontuação (#288): derivado; vazio = começar do topo.
+  "score_cursor",
   // Análise estruturada da vaga (#223): derivada de LLM, refeita sob pedido.
   "job_analysis",
 ]);
