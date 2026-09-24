@@ -107,6 +107,14 @@ const data = JSON.parse(fs.readFileSync(root + '/api.json', 'utf8'));
 if (data.fail) process.exit(42);
 const path = args.find(arg => arg.startsWith('repos/')) ?? '';
 let result;
+if (args[0] === 'workflow') {
+  if (args[1] !== 'run') throw new Error('Unexpected workflow call');
+  process.exit(0);
+}
+if (args[0] === 'pr' && data.noPR) {
+  if (args[1] !== 'list') throw new Error('Unexpected PR call');
+  process.exit(0);
+}
 if (args[0] === 'pr' && data.promotionPR) {
   if (args[1] !== 'list') throw new Error('Existing PR must be updated');
   process.stdout.write('77');
@@ -237,12 +245,21 @@ describe("V01-02 — identical source checks for automatic and manual entry", ()
   });
 });
 
+const DESTRUCTIVE = { "drizzle/postgres/0017_x.sql": 'ALTER TABLE "production"."job" DROP COLUMN "x";' };
+const ADDITIVE = {
+  "drizzle/postgres/0017_x.sql": 'CREATE TABLE "production"."novo" ("id" integer);',
+  "drizzle/postgres/meta/_journal.json": '{"entries":[]}\n',
+  "src/core/db/schema.ts": "export const changed = true;",
+};
+
 describe("V01-03 — migrations use staging..target", () => {
-  it("requires human confirmation and still refuses missing CI with that confirmation", () => {
-    publishSource("fix: migração", { "src/core/db/schema.ts": "export const changed = true;" });
+  it("requires human confirmation for a non-additive migration and still refuses missing CI with that confirmation", () => {
+    publishSource("fix: migração", DESTRUCTIVE);
     const before = refs();
     const blocked = run("prepare");
     expect(blocked.stderr).toContain("Migração exige confirmação");
+    // O erro diz qual arquivo e por quê: é o que a pessoa vai revisar.
+    expect(blocked.stderr).toContain("drizzle/postgres/0017_x.sql: remove objeto");
     expect(refs()).toBe(before);
     setAPI({ jobs: [] });
     expect(run("prepare", { confirm: true }).status).not.toBe(0);
@@ -256,6 +273,37 @@ describe("V01-03 — migrations use staging..target", () => {
     const done = run("complete", { target, validated: target, confirm: true });
     expect(done.status, done.stderr).toBe(0);
     expect(git(remote, "rev-parse", "staging")).toBe(target);
+  });
+
+  it("promotes an additive migration without confirmation, scheduled or dispatched", () => {
+    publishSource("fix: migração aditiva", ADDITIVE);
+    const prepared = run("prepare", { scheduled: true });
+    expect(prepared.status, prepared.stderr).toBe(0);
+    const target = prepared.outputs.target!;
+    const done = run("complete", { target, validated: target, scheduled: true, preparedSource: source });
+    expect(done.status, done.stderr).toBe(0);
+    expect(git(remote, "rev-parse", "staging")).toBe(target);
+  });
+
+  it("an additive tip does not launder a non-additive migration earlier in the interval", () => {
+    // O intervalo é staging..alvo inteiro, não o último commit.
+    publishSource("fix: destrutiva", DESTRUCTIVE);
+    publishSource("fix: aditiva depois", { "drizzle/postgres/0018_y.sql": 'CREATE TABLE "production"."outro" ("id" integer);' });
+    const before = refs();
+    expect(run("prepare").stderr).toContain("Migração exige confirmação");
+    expect(refs()).toBe(before);
+  });
+
+  it("an edited published migration is never additive", () => {
+    publishSource("fix: base", ADDITIVE);
+    const prepared = run("prepare");
+    expect(prepared.status, prepared.stderr).toBe(0);
+    const target = prepared.outputs.target!;
+    expect(run("complete", { target, validated: target }).status).toBe(0);
+    git(repo, "checkout", "-q", "--detach", target);
+    publishSource("fix: reescreve", { "drizzle/postgres/0017_x.sql": 'CREATE TABLE "production"."novo" ("id" bigint);' });
+    const blocked = run("prepare");
+    expect(blocked.stderr).toContain("altera ou remove migração já publicada");
   });
 });
 
@@ -450,6 +498,28 @@ describe("V01-05 — ancestry and existing delivery", () => {
     expect(calls().some((args) => args.includes("assignees[]=andreustimm"))).toBe(true);
   });
 
+  it("dispatches CI on staging only while the production PR is open", () => {
+    // PR do robô não recebe `pull_request` CI; sem o dispatch, os checks
+    // exigidos em `main` nunca aparecem na cabeça dela.
+    const workflow = YAML.parse(readFileSync(".github/workflows/promover-para-staging.yml", "utf8"));
+    const step = workflow.jobs.promover.steps.find((candidate: { name?: string }) => candidate.name === "Rodar o CI na cabeça da PR de produção");
+    expect(step.if).toBe("steps.promocao.outputs.promoted == 'true'");
+    expect(step.env.GH_TOKEN).toBe("${{ github.token }}");
+    expect(workflow.jobs.promover.permissions.actions).toBe("write");
+    const ci = YAML.parse(readFileSync(".github/workflows/ci.yml", "utf8"));
+    expect(ci.on).toHaveProperty("workflow_dispatch", null);
+    const env = { ...process.env, PATH: `${root}/bin:${process.env.PATH}`, FIXTURE_ROOT: root, GITHUB_REPOSITORY: "owner/repo" };
+    for (const open of [true, false]) {
+      writeFileSync(`${root}/calls.jsonl`, "");
+      setAPI(open ? { promotionPR: { body: "" } } : { noPR: true });
+      const result = spawnSync("bash", ["-e", "-c", step.run], { cwd: repo, encoding: "utf8", env });
+      expect(result.status, result.stderr).toBe(0);
+      expect(calls().filter((args) => args[0] === "workflow")).toEqual(
+        open ? [["workflow", "run", "ci.yml", "--repo", "owner/repo", "--ref", "staging"]] : [],
+      );
+    }
+  });
+
   it("runs the post-main return steps and opens a PR when dev has diverged", () => {
     publishSource();
     git(repo, "checkout", "--detach", base);
@@ -572,7 +642,7 @@ describe("V01-06 — scheduled entry and changelog fragments", () => {
   });
 
   it("schedule never carries migration approval", () => {
-    publishSource("fix: migração", { "src/core/db/schema.ts": "export const changed = true;" });
+    publishSource("fix: migração", DESTRUCTIVE);
     const before = refs();
     expect(run("prepare", { scheduled: true }).stderr).toContain("Migração exige confirmação");
     expect(refs()).toBe(before);

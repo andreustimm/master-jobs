@@ -8,6 +8,7 @@ import {
   proximaVersao, shaDaTagRemota,
 } from "../../src/core/release.ts";
 import { FRAGMENT_DIRECTORY } from "../../src/core/changelog-fragments.ts";
+import { describeFindings, reviewMigrationChanges } from "../../src/core/db/migration-review.ts";
 import { commitSubjectsSince, mostRecentVersionTag } from "./git-context.ts";
 import { ghApi, requireSha, requireSourceCI } from "./promotion-ci.ts";
 import { versionar } from "./versionar.ts";
@@ -80,8 +81,17 @@ export function requirePromotionRange(directory: string, target: string, confirm
   const staging = git(directory, "rev-parse", "origin/staging");
   if (staging !== target && isAncestor(directory, target, staging)) return "superseded";
   if (!isAncestor(directory, staging, target)) throw new Error("staging divergiu: fast-forward impossível.");
-  const changed = git(directory, "diff", "--name-only", staging, target, "--", "drizzle/", "src/core/db/schema.ts");
-  if (changed && !confirmMigration) throw new Error(`Migração exige confirmação humana para o alvo ${target}:\n${changed}`);
+  // `schema.ts` fica de fora: o SQL é o que chega ao banco, e o job
+  // `schema-e-migracao` do CI já prova que os dois andam juntos. Sem detecção
+  // de renome, um `.sql` renomeado aparece como remoção e pede revisão.
+  const changes = git(directory, "diff", "--no-renames", "--name-status", "-z", staging, target, "--", "drizzle/")
+    .split("\0").filter(Boolean);
+  const files = [];
+  for (let i = 0; i + 1 < changes.length; i += 2) files.push({ status: changes[i]!, path: changes[i + 1]! });
+  const review = reviewMigrationChanges(files, (path) => readAt(directory, target, path));
+  if (!review.automatic && !confirmMigration) {
+    throw new Error(`Migração exige confirmação humana para o alvo ${target}:\n${describeFindings(review.findings)}`);
+  }
   return "ready";
 }
 

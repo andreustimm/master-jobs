@@ -573,6 +573,35 @@ digitação de alguém, não ausência observada. A implementação e os critér
 [`job-lifecycle-retention`](../.compozy/tasks/job-lifecycle-retention/) e na
 [ADR 0020](adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md).
 
+### Migração de produção
+
+Não há passo de rotina: todo merge em `main` dispara `migrate.yml`, que
+aplica sozinho o lote pendente no banco quando ele é aditivo (sem pendência,
+não aplica nada)
+([ADR 0028](adr/0028-migracao-automatica-so-aditiva.md)). O log mostra
+`aplicadas: <tags>` e depois o `jho db check`.
+
+**Job vermelho com `Migração pendente exige execução manual`:** o lote tem
+comando não aditivo, e nada foi aplicado. A lista abaixo da mensagem diz o
+arquivo, o motivo e o comando. Siga
+[deploy.md](engineering/deploy.md#migração-que-não-é-aditiva) para escolher a
+ordem e dispare `migrate.yml` à mão com o ref do projeto — nunca reexecute o job
+do push esperando outro resultado: ele recusa até o lote mudar.
+
+**Job vermelho por outro motivo:** veja qual passo falhou.
+
+- Falhou `jho db migrate` (conexão, SQL que o banco recusou): a transação
+  desfez o lote inteiro, e o código novo pode estar servindo sobre o schema
+  velho. A causa do servidor vem na mensagem (`— causa: <código>`). Se a
+  falha foi de conexão, rode o job de novo. Se o banco recusou o SQL, a
+  migração que falhou **continua pendente** e roda primeiro em qualquer lote
+  seguinte: uma migração nova depois dela não a conserta. Corrija o próprio
+  `.sql` (ele nunca foi aplicado em produção); a promoção vai pedir
+  `confirmar-migracao`, porque o arquivo publicado mudou.
+- Falhou `jho db check`, depois de `aplicadas: <tags>`: o lote **já foi
+  gravado**, e o que falhou é a conferência de integridade. Não reaplique;
+  leia o que o check reprovou e corrija o dado ou o schema numa migração nova.
+
 ### Dev e staging: somente fixtures
 
 A promoção para staging é vinculada a um SHA com CI aprovado. Retomada manual

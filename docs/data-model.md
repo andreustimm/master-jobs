@@ -356,8 +356,8 @@ reverter é `DROP INDEX` dos dois (a extensão pode ficar). O migrator roda numa
 transação, então `0013` usa `CREATE INDEX` comum, sem `CONCURRENTLY`: durante a
 construção, escritas em `job` e `job_page` esperam. No acervo local (9.060
 vagas) o índice de descrição tem 19 MB e ficou pronto em poucos segundos
-(observado, não cronometrado); rode
-`migrate.yml` fora da janela do sync.
+(observado, não cronometrado). Índice comum é aditivo e o push para `main` o
+aplica sozinho (ADR 0028): mescle fora da janela do sync.
 
 **Termos parecidos (#223).** `job_title_trgm_idx` é GIN `gin_trgm_ops` sobre
 `title` cru (sem tirar separador: a similaridade por palavra compara palavras),
