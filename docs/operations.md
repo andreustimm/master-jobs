@@ -166,7 +166,8 @@ uma execução `all`.
 - **Clique duplo** devolve a mesma execução: a chave de idempotência tem índice
   único parcial nos estados ativos.
 - **Executor morto**: `running` sem batimento por 15 min vira `interrupted` na
-  próxima execução pedida pela CLI (e libera um novo pedido). Nova tentativa é
+  próxima leitura — pedido da tela, da CLI ou da fatia da varredura (e libera um
+  novo pedido); uma fatia da Vercel morta no meio segura a fonte até lá. Nova tentativa é
   outra linha, ligada por `retry_of`; a original não muda.
 - A fatia `sync` da varredura da Vercel (`/api/cron/varredura`) também registra
   uma execução `source` por fonte, além da métrica em `sweep_run`; se a tela já

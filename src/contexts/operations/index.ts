@@ -372,7 +372,10 @@ export async function runSweep(
         // A fatia também deixa execução em `source_run` (#223): toda captura
         // explica, sozinha, o que trouxe. Uma execução equivalente já ativa
         // (pedida pela tela) é a que esta fatia roda; uma que outro processo
-        // está rodando fica com ele.
+        // está rodando fica com ele. Uma fatia que a Vercel matou no meio deixa
+        // a execução `running`; sem batimento, ela vira `interrupted` aqui
+        // passado o lease, e a fonte volta a ser varrida.
+        await interruptStaleSourceRuns();
         const requested = await requestRun(
           { scope: { kind: "source", sourceId: id }, actorUserId: null, dispatch: false },
           requestDeps(),
@@ -383,6 +386,7 @@ export async function runSweep(
           runs: runStore,
           now: () => clock().iso(),
           concurrency: 1,
+          heartbeatEveryMs: RUN_LEASE_MS / 3,
           async work() {
             synced = await syncSource(config);
             return countsOfSync(synced);
