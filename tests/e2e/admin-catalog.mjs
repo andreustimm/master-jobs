@@ -41,7 +41,6 @@ async function login(browser, base, email, password, locale = "pt-BR") {
 const fitsPhone = (page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
 
-/** Texto da interface fora do dado do usuário: em inglês, não pode ter acento. */
 /** Os nós de texto da interface, sem dado do usuário. */
 const interfaceTexts = (page) =>
   page.evaluate(() => {

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { guard } from "../../auth";
 import { clock } from "../../../src/core/clock.ts";
 import { IngestionBlockedError } from "../../../src/core/ingest/environment.ts";
+import { isFetchableSourceKind } from "../../../src/core/sources/registry.ts";
 import {
   editCatalogSource,
   probeCatalogSource,
@@ -84,13 +85,14 @@ export async function retireSourceAction(formData: FormData) {
  */
 export async function probeSourceAction(formData: FormData) {
   await guard("admin:access");
-  const [kind, ...rest] = text(formData, "id").split(":");
+  const [kind = "", ...rest] = text(formData, "id").split(":");
+  if (!isFetchableSourceKind(kind)) return { status: "error" as const, code: "unknown_kind" };
   try {
-    const report = await probeCatalogSource(kind ?? "", rest.join(":"));
+    const report = await probeCatalogSource(kind, rest.join(":"));
     return { status: "success" as const, run: report.outcome };
   } catch (error) {
     if (error instanceof IngestionBlockedError) return { status: "error" as const, code: "ingestion_blocked" };
-    return { status: "error" as const, code: "unknown_kind" };
+    throw error;
   }
 }
 

@@ -61,7 +61,15 @@ export default async function AdminRunPage({ params }: { params: Promise<{ id: s
             </div>
             <div>
               <dt className="type-caption-sm text-muted-foreground">{t("runs.completeness")}</dt>
-              <dd className="type-body-md font-mono">{run.completeness ?? t("runs.unknown")}</dd>
+              <dd className="type-body-md" data-testid="run-completeness">
+                {t(
+                  run.completeness === "complete"
+                    ? "platforms.snapshotComplete"
+                    : run.completeness === "partial"
+                      ? "platforms.snapshotPartial"
+                      : "platforms.snapshotUnknown",
+                )}
+              </dd>
             </div>
           </dl>
           {run.retryOf !== null && (
