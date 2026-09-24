@@ -813,8 +813,10 @@ A disponibilidade que a tela da vaga mostra sai de `currentAvailability()`
 por `checked_at` e `id` decide `open` ou `closed`; mais velho que 14 dias vira
 `stale`; sem evento conclusivo, `unknown`. Em seguida `reconcileAvailability()`
 concilia com a vaga, porque o sync fecha e reabre sem evento: `closed_at`
-preenchido é `closed` (motivo `closed` só se o último conclusivo foi 404/410),
-e um 404 que o sync já desmentiu vira `unknown`. A tela mostra o motivo: encerrada por 404/410 é "encerrada na origem"; fechada pelo sync sem sondagem é "saiu da listagem da fonte".
+preenchido é `closed` (motivo `closed` só se o último conclusivo foi 404/410
+com `checked_at` igual ou posterior a `closed_at`: um 404 antigo, desmentido
+por reabertura e seguido de novo fechamento pelo sync, não explica o
+fechamento atual), e um 404 que o sync já desmentiu vira `unknown`. A tela mostra o motivo: encerrada por 404/410 é "encerrada na origem"; fechada pelo sync sem sondagem é "saiu da listagem da fonte".
 
 O arquivamento (`decideArchive`) só leva em conta o veredito de sondagem feito no fechamento ou depois dele: um `alive` ou inconclusivo anterior, de quando a vaga ainda estava aberta, não segura uma vaga que o sync fechou por ausência. Vaga verificada antes dos
 eventos existirem aparece como desconhecida até a próxima checagem, com a data
