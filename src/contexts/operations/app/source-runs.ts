@@ -15,6 +15,7 @@ import {
   redactDetail,
   refuseRun,
   runKey,
+  shouldRedispatch,
   sumCounts,
   UNKNOWN_COUNTS,
   type RunCounts,
@@ -48,6 +49,8 @@ export type RunRow = {
   retryOf: number | null;
   status: string;
   heartbeatAt: string | null;
+  queuedAt: string;
+  errorCode: string | null;
   configSnapshot: unknown;
 };
 
@@ -113,19 +116,33 @@ function snapshotOf(source: CatalogSourceView): SourceSnapshotEntry {
 }
 
 /**
- * Só a execução recém-criada é despachada: a equivalente que já estava ativa
- * foi despachada por quem a criou. Sem credencial, a linha fica `queued` com o
- * motivo — some da vista só quando alguém executar ou cancelar.
+ * Despacha a execução recém-criada, ou a equivalente já ativa que ficou
+ * `queued` sem ninguém para rodá-la (`shouldRedispatch`): sem credencial, com
+ * despacho que falhou na rede ou pendente há tempo demais. Sem credencial, a
+ * linha fica `queued` com o motivo — ela não some, e o próximo pedido tenta de
+ * novo.
  */
-async function dispatchCreated(
+async function dispatchIfNeeded(
   deps: RequestDeps,
   run: RunRow,
   created: boolean,
   request: DispatchRequest,
 ): Promise<void> {
-  if (!created) return;
-  const result = await deps.runner.dispatch(request);
-  if (result.ok) return;
+  if (!created && !shouldRedispatch(run, deps.now())) return;
+  let result: Awaited<ReturnType<WorkflowDispatchPort["dispatch"]>>;
+  try {
+    result = await deps.runner.dispatch(request);
+  } catch (error) {
+    // Rede ou executor fora do ar: a linha segue `queued`, com o motivo, e o
+    // próximo pedido equivalente despacha de novo.
+    const detail = redactDetail(error instanceof Error ? error.message : String(error), ERROR_DETAIL_MAX);
+    await deps.runs.note(run.id, "dispatch_failed", detail);
+    return;
+  }
+  if (result.ok) {
+    if (run.errorCode !== null) await deps.runs.note(run.id, null);
+    return;
+  }
   if (result.code === "no_token") {
     await deps.runs.note(run.id, "no_token");
     return;
@@ -177,7 +194,7 @@ export async function requestRun(
     queuedAt: deps.now(),
   });
   if (input.dispatch !== false) {
-    await dispatchCreated(deps, run, created, {
+    await dispatchIfNeeded(deps, run, created, {
       routine: scope.kind === "verify" ? "recheck" : "sync",
       source: sourceId,
       run: run.id,
@@ -205,6 +222,13 @@ export async function retryRun(
     const refusal = refuseRun(await deps.catalog.source(original.sourceId));
     if (refusal) return { ok: false, code: refusal };
   }
+  // Nova tentativa de "todas" é outra execução: fonte aposentada ou desligada
+  // depois do pedido original não volta a ser capturada por ela.
+  let snapshot = original.configSnapshot as RunSnapshot;
+  if (original.sourceId === null) {
+    const eligible = new Set((await deps.catalog.eligible()).map((source) => source.id));
+    snapshot = { sources: snapshot.sources.filter((source) => eligible.has(source.id)) };
+  }
   const { run, created } = await deps.runs.createOrJoin({
     scopeKind,
     sourceId: original.sourceId,
@@ -212,10 +236,10 @@ export async function retryRun(
     retryOf: original.id,
     idempotencyKey: `retry:${original.id}`,
     actorUserId: input.actorUserId,
-    configSnapshot: original.configSnapshot as RunSnapshot,
+    configSnapshot: snapshot,
     queuedAt: deps.now(),
   });
-  await dispatchCreated(deps, run, created, {
+  await dispatchIfNeeded(deps, run, created, {
     routine: scopeKind === "verify" ? "recheck" : "sync",
     source: original.sourceId,
     run: run.id,
@@ -244,19 +268,47 @@ export type ExecuteDeps = {
   workAll?(): Promise<WorkOutcome>;
   /** Teto de filhas em paralelo numa execução "todas". */
   concurrency: number;
+  /**
+   * Intervalo do batimento enquanto a execução trabalha. Sem ele, uma fonte
+   * que demora mais que o lease seria dada como morta no meio do trabalho.
+   */
+  heartbeatEveryMs?: number;
   onChild?(source: SourceSnapshotEntry, outcome: WorkOutcome): void;
 };
 
+/**
+ * Bate o coração de `ids()` a cada `everyMs` enquanto `work` roda. O timer não
+ * segura o processo aberto, e para no fim, com ou sem erro.
+ */
+async function withHeartbeat<T>(deps: ExecuteDeps, ids: () => number[], work: () => Promise<T>): Promise<T> {
+  if (!deps.heartbeatEveryMs) return work();
+  const timer = setInterval(() => {
+    for (const id of ids()) void deps.runs.heartbeat(id, deps.now()).catch(() => undefined);
+  }, deps.heartbeatEveryMs);
+  timer.unref?.();
+  try {
+    return await work();
+  } finally {
+    clearInterval(timer);
+  }
+}
+
 export type ExecuteResult =
   | { ok: true; status: RunStatus; counts: RunCounts }
-  | { ok: false; code: "run_not_found" | "not_queued" };
+  /** `lost_lease`: o trabalho terminou, mas a linha já tinha sido dada como interrompida. */
+  | { ok: false; code: "run_not_found" | "not_queued" | "lost_lease" };
 
 function finalStatus(outcome: WorkOutcome): RunStatus {
   return outcome.ok ? "succeeded" : "failed";
 }
 
-async function finish(deps: ExecuteDeps, id: number, status: RunStatus, outcome: WorkOutcome): Promise<void> {
-  await deps.runs.transition(id, "running", status, {
+/**
+ * Grava o fim. `false` quando a linha já não estava `running` — outro processo
+ * a deu por morta —, e então o resultado não é gravado por cima (linha
+ * terminal é imutável), mas quem chamou fica sabendo.
+ */
+async function finish(deps: ExecuteDeps, id: number, status: RunStatus, outcome: WorkOutcome): Promise<boolean> {
+  return deps.runs.transition(id, "running", status, {
     ...outcome.counts,
     completeness: outcome.completeness,
     finishedAt: deps.now(),
@@ -285,20 +337,20 @@ export async function executeRun(id: number, deps: ExecuteDeps): Promise<Execute
 
   if (run.scopeKind === "all") return executeAll(run, snapshot, deps);
 
-  let outcome: WorkOutcome;
-  if (run.scopeKind === "verify" && run.sourceId === null) {
-    outcome = deps.workAll
-      ? await deps.workAll()
-      : { ok: false, counts: UNKNOWN_COUNTS, completeness: null, error: "verificação global indisponível" };
-  } else {
-    const source = snapshot.sources[0];
-    outcome = source
-      ? await deps.work(source, run.scopeKind === "verify" ? "verify" : "source")
+  const source = snapshot.sources[0];
+  const outcome: WorkOutcome = await withHeartbeat(deps, () => [id], async () => {
+    if (run.scopeKind === "verify" && run.sourceId === null) {
+      return deps.workAll
+        ? deps.workAll()
+        : { ok: false, counts: UNKNOWN_COUNTS, completeness: null, error: "verificação global indisponível" };
+    }
+    return source
+      ? deps.work(source, run.scopeKind === "verify" ? "verify" : "source")
       : { ok: false, counts: UNKNOWN_COUNTS, completeness: null, error: "retrato sem fonte" };
-    if (source) deps.onChild?.(source, outcome);
-  }
+  });
+  if (source && run.sourceId !== null) deps.onChild?.(source, outcome);
   const status = finalStatus(outcome);
-  await finish(deps, id, status, outcome);
+  if (!(await finish(deps, id, status, outcome))) return { ok: false, code: "lost_lease" };
   return { ok: true, status, counts: outcome.counts };
 }
 
@@ -333,44 +385,52 @@ async function executeAll(parent: RunRow, snapshot: RunSnapshot, deps: ExecuteDe
   const outcomes: WorkOutcome[] = [];
   const statuses: RunStatus[] = [];
   const inFlight = new Set<Promise<void>>();
+  const working = new Set<number>();
   const pending = [...children];
 
   const runChild = async (child: { source: SourceSnapshotEntry; id: number }): Promise<void> => {
     try {
       if (!(await start(deps, child.id))) return;
+      working.add(child.id);
       const outcome = await deps.work(child.source, "source");
+      working.delete(child.id);
       const status = finalStatus(outcome);
-      await finish(deps, child.id, status, outcome);
-      outcomes.push(outcome);
-      statuses.push(status);
+      // Filha dada por morta no meio conta como interrompida: o pai não pode
+      // se dizer concluído com uma filha que ninguém gravou.
+      const recorded = await finish(deps, child.id, status, outcome);
+      outcomes.push(recorded ? outcome : { ...outcome, counts: UNKNOWN_COUNTS });
+      statuses.push(recorded ? status : "interrupted");
       deps.onChild?.(child.source, outcome);
-      await deps.runs.heartbeat(parent.id, deps.now());
     } finally {
+      working.delete(child.id);
       limiter.release();
     }
   };
 
-  while (pending.length > 0) {
-    // Reserva antes do `await`: conferir e ocupar no mesmo tique.
-    if (limiter.tryAcquire()) {
-      const child = pending.shift()!;
-      const task: Promise<void> = runChild(child).finally(() => inFlight.delete(task));
-      inFlight.add(task);
-    } else {
-      await Promise.race(inFlight);
+  await withHeartbeat(deps, () => [parent.id, ...working], async () => {
+    while (pending.length > 0) {
+      // Reserva antes do `await`: conferir e ocupar no mesmo tique.
+      if (limiter.tryAcquire()) {
+        const child = pending.shift()!;
+        const task: Promise<void> = runChild(child).finally(() => inFlight.delete(task));
+        inFlight.add(task);
+      } else {
+        await Promise.race(inFlight);
+      }
     }
-  }
-  await Promise.all(inFlight);
+    await Promise.all(inFlight);
+  });
 
   const status = composeParentStatus(statuses);
   const counts = sumCounts(outcomes.map((o) => o.counts));
   const failed = statuses.filter((s) => s !== "succeeded").length;
-  await deps.runs.transition(parent.id, "running", status, {
+  const recorded = await deps.runs.transition(parent.id, "running", status, {
     ...counts,
     finishedAt: deps.now(),
     errorCode: failed > 0 ? "children_failed" : null,
     errorDetail: failed > 0 ? `${failed} de ${statuses.length} fonte(s) sem sucesso` : null,
   });
+  if (!recorded) return { ok: false, code: "lost_lease" };
   return { ok: true, status, counts };
 }
 
