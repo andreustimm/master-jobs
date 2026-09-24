@@ -276,6 +276,31 @@ que é o que `pnpm jho sources list` imprime.
 Índice único: `source_kind_handle_idx (kind, handle)` — redundante com a PK por
 construção, mas impede duas linhas com o mesmo par se alguém inserir à mão.
 
+### `source_run`
+
+Toda captura e verificação pedida pelo catálogo deixa uma linha (#223, tarefa
+02): uma fonte (`scope_kind = source`), todas (`all`, com uma filha por fonte
+em `parent_id`) ou verificação (`verify`, de uma fonte ou de todas). A captura
+por termo continua em `term_capture` e não entra aqui.
+
+| Coluna | Notas |
+|---|---|
+| `id` | identidade |
+| `scope_kind`, `source_id` | escopo. FK para `source` com `ON DELETE restrict`: fonte é aposentada, nunca apagada |
+| `parent_id` | filha de uma execução `all`. `ON DELETE restrict` |
+| `retry_of` | nova tentativa aponta a original, que não muda. `ON DELETE restrict` |
+| `idempotency_key` | `runKey(escopo, revisão)`; índice único **parcial** `source_run_active_key_idx` onde `status in ('queued','running')` — dois pedidos equivalentes ativos são a mesma execução |
+| `actor_user_id` | quem pediu; nulo para agendador e CLI. `ON DELETE set null` |
+| `config_snapshot` | `jsonb` com kind, handle, rótulo, revisão e capacidades de cada fonte no momento do pedido. Nunca `secret_ref` |
+| `status` | `queued`, `running`, `succeeded`, `partial`, `failed`, `cancelled`, `interrupted` (`nextRunStatus`) |
+| `heartbeat_at`, `queued_at`, `started_at`, `finished_at` | `running` sem batimento por 15 min vira `interrupted` (`isStale`, a mesma regra da análise de vaga) |
+| `fetched`, `inserted`, `updated`, `unchanged`, `closed`, `alive`, `inconclusive` | **nulo = desconhecido**, nunca zero. No pai, a soma só é conhecida quando toda filha contou |
+| `completeness` | o que o adapter declarou (`complete`/`partial`); janela parcial registra `closed = 0` |
+| `error_code`, `error_detail` | código estável (`no_token`, `waiting_slot`, `dispatch_rejected`, `work_failed`, `children_failed`, `lease_expired`); em linha ativa é o motivo da espera. Detalhe com até 500 caracteres, redigido por `redactDetail` |
+
+Linha terminal é imutável: toda escrita de progresso filtra os estados ativos,
+então um resultado atrasado afeta zero linhas.
+
 ### `company`
 
 Empresas deduplicadas entre fontes por `slug` (`slugifyCompany(name)`), mais os
@@ -761,6 +786,41 @@ Três detalhes que um agente precisa preservar:
 Reabertura é automática: nos dois ramos do update (`contentHash` igual ou
 diferente), o `set` inclui `closedAt: null`. Uma vaga que reaparece na fonte
 volta ao board sem intervenção.
+
+**Todo veredito de verificação é um evento** (`job_check_event`, #223). O lote
+(`jho jobs verify`) e a fila de reconferência passam pela mesma
+`applyVerdict()` (`src/core/ingest/verdict.ts`), que grava o evento e o estado
+da vaga (`checked_at`, `check_status`, `check_code`, `closed_at`) na mesma
+transação, com a linha da vaga travada. Só `gone` (404/410) fecha; `alive`
+reabre e desfaz o arquivamento; o evento de fechamento fica no histórico
+depois da reabertura. Evento mais antigo que o último gravado entra no
+histórico e não mexe no estado. "Mais antigo" compara conclusivo com o último
+conclusivo — o mesmo que a tela usa —, e inconclusivo com o último de qualquer
+tipo; a última checagem (`checked_at` da vaga) nunca anda para trás.
+
+| Coluna de `job_check_event` | Notas |
+|---|---|
+| `job_id` | `ON DELETE cascade`: a retenção só apaga vaga sem candidatura, e o evento sem a vaga não diz nada |
+| `run_id` | execução de `source_run` que pediu a verificação; `ON DELETE set null` |
+| `checked_at`, `verdict`, `http_code` | o que a sonda viu; `verdict` é `alive`, `gone` ou `inconclusive` |
+| `reason` | `closed` só com 404/410; `unknown` no resto. `filled`, `cancelled` e `paused` ficam reservados para adapter que prove isso — nenhum prova hoje |
+| `evidence` | o que a sonda viu (`HTTP 404 em <url>` ou `sem resposta em <url>`), até 280 caracteres, redigido (`redactDetail`) |
+
+Índice `job_check_event_job_idx` em `(job_id, checked_at)`: a tela e o portão de ordem leem os eventos de uma vaga pela data.
+
+A disponibilidade que a tela da vaga mostra sai de `currentAvailability()`
+(`src/core/ingest/availability.ts`, pura): o evento **conclusivo** mais recente
+por `checked_at` e `id` decide `open` ou `closed`; mais velho que 14 dias vira
+`stale`; sem evento conclusivo, `unknown`. Em seguida `reconcileAvailability()`
+concilia com a vaga, porque o sync fecha e reabre sem evento: `closed_at`
+preenchido é `closed` (motivo `closed` só se o último conclusivo foi 404/410
+com `checked_at` igual ou posterior a `closed_at`: um 404 antigo, desmentido
+por reabertura e seguido de novo fechamento pelo sync, não explica o
+fechamento atual), e um 404 que o sync já desmentiu vira `unknown`. A tela mostra o motivo: encerrada por 404/410 é "encerrada na origem"; fechada pelo sync sem sondagem é "saiu da listagem da fonte".
+
+O arquivamento (`decideArchive`) só leva em conta o veredito de sondagem feito no fechamento ou depois dele: um `alive` ou inconclusivo anterior, de quando a vaga ainda estava aberta, não segura uma vaga que o sync fechou por ausência. Vaga verificada antes dos
+eventos existirem aparece como desconhecida até a próxima checagem, com a data
+de `job.checked_at`.
 
 **Ausência na fonte e descarte são coisas diferentes.** A ausência — board que
 parou de listar, 404/410 na verificação — só fecha (`closed_at`) e é

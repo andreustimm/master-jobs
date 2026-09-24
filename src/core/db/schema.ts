@@ -20,8 +20,10 @@ import {
   pgSchema,
   boolean,
   json,
+  jsonb,
   text,
   uniqueIndex,
+  type AnyPgColumn,
   type PgColumn,
   unique,
 } from "drizzle-orm/pg-core";
@@ -1081,6 +1083,35 @@ export type VerifyTask = typeof verifyTask.$inferSelect;
 export type VerifyStatus = "pending" | "checking" | "done" | "failed";
 
 /**
+ * Cada veredito de verificação de uma vaga (#223, tarefa 04).
+ *
+ * `job.check_status` guarda só o último; o evento guarda todos, e é o que deixa
+ * uma reabertura sem apagar o fechamento anterior. Evento e estado da vaga
+ * mudam na mesma transação (`applyVerdict`). `reason` só é diferente de
+ * `unknown` com evidência: hoje, apenas `closed` por 404/410 (G26).
+ */
+export const jobCheckEvent = production.table(
+  "job_check_event",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    // A retenção só apaga vaga sem candidatura, e o evento sem a vaga não diz nada.
+    jobId: integer("job_id")
+      .notNull()
+      .references(() => job.id, { onDelete: "cascade" }),
+    runId: integer("run_id").references(() => sourceRun.id, { onDelete: "set null" }),
+    checkedAt: text("checked_at").notNull(),
+    /** `alive` | `gone` | `inconclusive` (`ProbeVerdict`). */
+    verdict: text("verdict").notNull(),
+    httpCode: integer("http_code"),
+    /** `closed` | `unknown` hoje; `filled`/`cancelled`/`paused` só com evidência de adapter. */
+    reason: text("reason").notNull(),
+    /** Até 280 caracteres, redigido (`redactDetail`). */
+    evidence: text("evidence"),
+  },
+  (t) => [index("job_check_event_job_idx").on(t.jobId, t.checkedAt)],
+);
+
+/**
  * Reserva de uma unidade da varredura fatiada (ADR 0025).
  *
  * `key` nomeia a unidade — `sync:<fonte>`, `pontuar:<candidato>`, `alarme:<nome>`.
@@ -1121,6 +1152,60 @@ export const sweepRun = production.table(
     error: text("error"),
   },
   (t) => [index("sweep_run_slice_started_idx").on(t.slice, t.startedAt)],
+);
+
+/**
+ * Uma execução de captura ou de verificação (#223): escopo, quem pediu, o
+ * retrato da configuração, contagens e erro limitado.
+ *
+ * Linha terminal é imutável — toda escrita de progresso filtra `status in
+ * ('queued','running')`, e nova tentativa é outra linha (`retry_of`).
+ * Contagem nula é "desconhecido", nunca zero. A captura por termo continua em
+ * `term_capture` (A2/A3).
+ */
+export const sourceRun = production.table(
+  "source_run",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    /** `source` | `all` | `verify`. */
+    scopeKind: text("scope_kind").notNull(),
+    // Fonte não é apagada, é aposentada: `restrict` torna isso explícito.
+    sourceId: text("source_id").references(() => source.id, { onDelete: "restrict" }),
+    parentId: integer("parent_id").references((): AnyPgColumn => sourceRun.id, { onDelete: "restrict" }),
+    retryOf: integer("retry_of").references((): AnyPgColumn => sourceRun.id, { onDelete: "restrict" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    /** Nulo = agendador. */
+    actorUserId: integer("actor_user_id").references(() => authUser.id, { onDelete: "set null" }),
+    /** kind, handle, revisão e capacidades no momento do pedido. Nunca segredo. */
+    configSnapshot: jsonb("config_snapshot").notNull(),
+    status: text("status").notNull(),
+    heartbeatAt: text("heartbeat_at"),
+    queuedAt: text("queued_at").notNull(),
+    startedAt: text("started_at"),
+    finishedAt: text("finished_at"),
+    fetched: integer("fetched"),
+    inserted: integer("inserted"),
+    updated: integer("updated"),
+    unchanged: integer("unchanged"),
+    closed: integer("closed"),
+    /** Verificação: links vivos. Nulo em execução de captura. */
+    alive: integer("alive"),
+    inconclusive: integer("inconclusive"),
+    /** O que o adapter declarou (`SourceSnapshot.completeness`). */
+    completeness: text("completeness"),
+    /** Código estável; em `queued`, o motivo da espera (ex.: `no_token`). */
+    errorCode: text("error_code"),
+    /** No máximo 500 caracteres, redigido (`redactDetail`). */
+    errorDetail: text("error_detail"),
+  },
+  (t) => [
+    uniqueIndex("source_run_active_key_idx")
+      .on(t.idempotencyKey)
+      .where(sql`${t.status} in ('queued', 'running')`),
+    index("source_run_queued_idx").on(t.queuedAt),
+    index("source_run_parent_idx").on(t.parentId),
+    index("source_run_source_idx").on(t.sourceId),
+  ],
 );
 
 /**

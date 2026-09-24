@@ -272,6 +272,18 @@ export async function syncSource(config: SourceConfig): Promise<SyncSourceResult
   return syncOne(config, new Map());
 }
 
+/**
+ * Sincroniza uma fonte do retrato de uma execução (`source_run`, #223).
+ *
+ * Mesmo `syncOne` do sync inteiro, com o mapa de empresas compartilhado entre
+ * as filhas de uma execução "todas". A fonte já está no catálogo — o retrato
+ * saiu dele —, então nada aqui espelha o arquivo.
+ */
+export async function syncConfigured(config: SourceConfig, companies: Map<string, number>): Promise<SyncSourceResult> {
+  guardIngestion();
+  return syncOne(config, companies);
+}
+
 /** Run every enabled source with bounded concurrency. */
 export async function syncAll(
   configs: SourceConfig[],

@@ -886,6 +886,11 @@ describe("authorisation (AUTH-01)", () => {
     "app/account/page.tsx": { guard: 'requirePage("account:read")' },
     "app/admin/captures/page.tsx": { guard: 'requirePage("admin:access")' },
     "app/admin/operacoes/page.tsx": { guard: 'requirePage("admin:access")' },
+    // Catálogo e execuções (#223, tarefa 03): só admin, e sessão emprestada nega.
+    "app/admin/plataformas/page.tsx": { guard: 'requirePage("admin:access")' },
+    "app/admin/plataformas/[id]/page.tsx": { guard: 'requirePage("admin:access")' },
+    "app/admin/execucoes/page.tsx": { guard: 'requirePage("admin:access")' },
+    "app/admin/execucoes/[id]/page.tsx": { guard: 'requirePage("admin:access")' },
     "app/admin/users/page.tsx": { guard: 'requirePage("user:manage")' },
     "app/candidate/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
     "app/candidate/skills/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },

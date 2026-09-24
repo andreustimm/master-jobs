@@ -1,5 +1,22 @@
-import type { Routine } from "../domain/routine.ts";
-import type { DispatchResult, WorkflowDispatchPort } from "../ports.ts";
+import type { DispatchRequest, DispatchResult, WorkflowDispatchPort } from "../ports.ts";
+
+/**
+ * Os insumos do `workflow_dispatch`, que só aceita string. A rotina inteira de
+ * antes continua saindo como `{ rotina }`, sem chave nova. Uma execução de
+ * `source_run` sai como a rotina `execucao`, que nenhum passo da varredura
+ * inteira casa: o workflow roda só aquela execução (`acao` diz se é captura
+ * ou verificação) e nada mais.
+ */
+function inputsOf(request: DispatchRequest): Record<string, string> {
+  if (request.run == null) return { rotina: request.routine };
+  const inputs: Record<string, string> = {
+    rotina: "execucao",
+    acao: request.routine === "recheck" ? "recheck" : "sync",
+    execucao: String(request.run),
+  };
+  if (request.source) inputs.fonte = request.source;
+  return inputs;
+}
 
 /**
  * Quem executa hoje: o workflow `varredura.yml` no GitHub Actions.
@@ -37,7 +54,7 @@ export function githubDispatch(options: GithubDispatchOptions = {}): WorkflowDis
       return Boolean(token());
     },
 
-    async dispatch(routine: Routine): Promise<DispatchResult> {
+    async dispatch(request: DispatchRequest): Promise<DispatchResult> {
       const credential = token();
       // Sem token o pedido não sai, e isso não é erro de sistema: a varredura
       // diária continua rodando pela cron. A tela diz o que falta configurar.
@@ -53,7 +70,7 @@ export function githubDispatch(options: GithubDispatchOptions = {}): WorkflowDis
             "content-type": "application/json",
             "x-github-api-version": "2022-11-28",
           },
-          body: JSON.stringify({ ref: "main", inputs: { rotina: routine } }),
+          body: JSON.stringify({ ref: "main", inputs: inputsOf(request) }),
         },
       );
 

@@ -18,6 +18,15 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-09-24T18:03:44.000Z
+
+### Novidades
+
+- Administradores ganharam as telas Plataformas e Execuções: cadastrar um board, sondá-lo antes de habilitar, pedir a busca de uma fonte ou de todas e acompanhar cada execução, com as contagens por fonte e a opção de tentar de novo só o que falhou.
+- A página da vaga mostra se ela ainda está disponível na origem e quando foi
+  conferida pela última vez. Sem conferência, aparece "disponibilidade
+  desconhecida"; conferência de mais de 14 dias aparece como "vencida".
+
 ## [1.24.0] - 2026-09-24T13:12:40.000Z
 
 ### Alterado

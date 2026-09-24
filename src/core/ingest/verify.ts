@@ -28,6 +28,8 @@ import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
 import { guardIngestion } from "./guard.ts";
 import { probe } from "./probe.ts";
+import { probeEvidence } from "./availability.ts";
+import { applyVerdict } from "./verdict.ts";
 import type { RequestBudget } from "./request-budget.ts";
 import { drizzleRequestBudget } from "./request-budget-store.ts";
 
@@ -35,9 +37,11 @@ export type VerifyResult = {
   checked: number;
   gone: number;
   alive: number;
-  /** Blocked, rate-limited or errored — status unknown, left untouched. */
+  /** Bloqueio, limite ou erro: estado desconhecido; grava o evento e não fecha nem reabre. */
   inconclusive: number;
   bySource: Record<string, { gone: number; alive: number; inconclusive: number }>;
+  /** Quantas vagas estavam na fila antes do `limit`: maior que `checked` = corte. */
+  due: number;
   /** Presente quando o lote parou porque o orçamento do dia acabou (#291). */
   budgetExhausted?: true;
 };
@@ -49,6 +53,10 @@ export async function verifyJobs(
     concurrency?: number;
     delayMs?: number;
     dryRun?: boolean;
+    /** Só as vagas desta fonte ("Atualizar status" de uma plataforma). */
+    sourceId?: string;
+    /** Execução de `source_run` que pediu a verificação; vai no evento. */
+    runId?: number | null;
     fetchImpl?: typeof fetch;
     lookupHost?: LookupHost;
     /** O mesmo orçamento da fila de reconferência: é a mesma rotina. */
@@ -82,6 +90,7 @@ export async function verifyJobs(
       and(
         isNull(job.closedAt),
         sql`${fit} >= ${minFit}`,
+        opts.sourceId === undefined ? undefined : eq(job.sourceId, opts.sourceId),
         or(
           like(job.applyUrl, "http://%"),
           like(job.applyUrl, "https://%"),
@@ -94,12 +103,11 @@ export async function verifyJobs(
 
   // Parse after the coarse SQL prefix filter so malformed values cannot
   // consume the requested limit or reach fetch().
-  const rows = candidates
-    .flatMap((candidate) => {
-      const url = publicApplyUrl(candidate);
-      return url ? [{ id: candidate.id, sourceId: candidate.sourceId, url }] : [];
-    })
-    .slice(0, limit);
+  const due = candidates.flatMap((candidate) => {
+    const url = publicApplyUrl(candidate);
+    return url ? [{ id: candidate.id, sourceId: candidate.sourceId, url }] : [];
+  });
+  const rows = due.slice(0, limit);
 
   const result: VerifyResult = {
     checked: 0,
@@ -107,6 +115,7 @@ export async function verifyJobs(
     alive: 0,
     inconclusive: 0,
     bySource: {},
+    due: due.length,
   };
 
   const bump = (sourceId: string, key: "gone" | "alive" | "inconclusive") => {
@@ -116,7 +125,6 @@ export async function verifyJobs(
   };
 
   const queue = [...rows];
-  const stamp = new Date().toISOString();
   const budget = opts.budget ?? drizzleRequestBudget();
 
   async function worker() {
@@ -137,13 +145,14 @@ export async function verifyJobs(
       });
       result.checked++;
 
+      // O mesmo caminho da fila: evento e estado da vaga na mesma transação.
+      // Antes o lote fechava sem registrar veredito nenhum.
+      if (!opts.dryRun) {
+        await applyVerdict({ jobId: next.id, verdict, httpCode: status, runId: opts.runId, evidence: probeEvidence(next.url, status) });
+      }
       if (verdict === "gone") {
         result.gone++;
         bump(next.sourceId, "gone");
-        if (!opts.dryRun) {
-          // Closed, not deleted — ADR 0005: an application may point at it.
-          await db.update(job).set({ closedAt: stamp }).where(eq(job.id, next.id));
-        }
       } else if (verdict === "alive") {
         result.alive++;
         bump(next.sourceId, "alive");

@@ -100,6 +100,7 @@ export async function archiveClosedJobs(options: ArchiveOptions = {}): Promise<A
       closedAt: job.closedAt,
       archivedAt: job.archivedAt,
       checkStatus: job.checkStatus,
+      checkedAt: job.checkedAt,
       sourceKind: source.kind,
       hasApplication: sql<boolean>`exists (
         select 1 from ${application} a where a.job_id = ${job.id}
@@ -129,6 +130,7 @@ export async function archiveClosedJobs(options: ArchiveOptions = {}): Promise<A
       // cai nas regras de "não sei", que é o comportamento seguro.
       sourceKind: row.sourceKind as SourceKind,
       checkStatus: row.checkStatus as ProbeVerdict | null,
+      checkedAt: row.checkedAt,
     });
     if (decision.kind === "keep") {
       kept[decision.reason] += 1;

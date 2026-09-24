@@ -9,6 +9,76 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-09-24
+
+### Adicionado
+
+- Histórico de execução de captura e verificação (#223, tarefa 02): tabela
+  `source_run` com escopo (`source`, `all`, `verify`), ator, retrato da
+  configuração no momento do pedido (sem segredo), contagens anuláveis
+  (desconhecido nunca vira zero), completude declarada e erro limitado a 500
+  caracteres e redigido (URL sem query string, sem e-mail, sem telefone).
+  Índice único parcial na chave de idempotência dos estados ativos: dois
+  pedidos equivalentes geram uma execução. Linha terminal é imutável; nova
+  tentativa é outra linha ligada por `retry_of`.
+- Domínio puro em `src/contexts/operations/domain/runs.ts`: `refuseRun`,
+  `runKey`, `catalogRevision`, `nextRunStatus`, `composeParentStatus`,
+  `sumCounts`, `redactDetail` e o limitador com reserva síncrona (G13), ao lado
+  do `isStale` que a análise de vaga já usava.
+- `jho jobs sync --source <kind:handle> [--run <id>]` e
+  `jho jobs verify --source <kind:handle> [--run <id>]`. Execução "todas" cria
+  uma filha por fonte do retrato do pedido, com concorrência limitada; filha
+  que falha deixa o pai `partial`. `running` sem batimento por 15 minutos vira
+  `interrupted` e libera novo pedido.
+- A `WorkflowDispatchPort` aceita rotina, fonte e execução. O `varredura.yml`
+  ganha a rotina `execucao` (insumos `acao`, `execucao`, `fonte`, lidos por
+  variável de ambiente), que roda só aquela execução. Sem credencial, a
+  execução fica `queued` com o motivo `no_token`.
+
+- Execução `queued` sem executor (sem credencial, despacho que falhou na rede
+  ou pendente há mais de 30 min, que o grupo de concorrência do workflow pode
+  ter cancelado) é despachada de novo pelo próximo pedido equivalente, em vez
+  de segurar a chave para sempre. A execução bate o coração a cada 5 min
+  enquanto trabalha; a que foi dada por morta no meio não grava por cima.
+- Verificação cortada pelo `--limit` registra `completeness = partial`; o
+  workflow verifica até 1000 vagas por fonte.
+- Telas de administração do catálogo (#223, tarefa 03): `/admin/plataformas`
+  (lista, cadastro), `/admin/plataformas/[id]` (capacidades, sondar sem
+  gravar, habilitar/desabilitar, aposentar com confirmação, "Buscar agora" e
+  "Atualizar status"), `/admin/execucoes` (paginada, "Buscar em todas",
+  "Atualizar status de todas") e `/admin/execucoes/[id]` (estado, contagens
+  com "desconhecido" em vez de zero, motivo, filhas por fonte, "Tentar de
+  novo"). Todas com `requirePage("admin:access")` e as actions com
+  `guard("admin:access")` antes de qualquer efeito; sessão emprestada nega.
+- `listRuns` aceita `sourceId` para o histórico de uma fonte. A captura por
+  termo continua só como agregado em `/admin/captures`.
+- Eventos de verificação da vaga (#223, tarefa 04): tabela `job_check_event`
+  (`job_id` em cascata, `run_id` → `source_run` com `set null`), com veredito,
+  código HTTP, motivo (`closed` só com 404/410; o resto `unknown`) e evidência
+  limitada a 280 caracteres e redigida.
+- `applyVerdict()` (`src/core/ingest/verdict.ts`) é o caminho único do
+  veredito: evento e estado da vaga na mesma transação, com a linha da vaga
+  travada. Evento mais antigo que o último gravado entra no histórico e não
+  reabre nem fecha. Domínio puro em `src/core/ingest/availability.ts`
+  (`currentAvailability`, `reasonFor`, `decidesState`).
+
+### Alterado
+
+- `jho jobs sync` e `jho jobs sweep` sem flags registram uma execução `all`
+  com as filhas, e a saída mostra o id da execução; a fatia `sync` da
+  varredura da Vercel registra uma execução por fonte.
+- Todo pedido marca antes como `interrupted` a execução sem batimento, e filha
+  que esperava vaga de um pai já encerrado é cancelada (`parent_ended`).
+- `jho jobs verify --source` usa fit mínimo 0, salvo `--min-fit` explícito.
+- `jho jobs verify` (o lote) e a fila de reconferência passam por
+  `applyVerdict()`: o lote deixa de fechar vaga sem registrar o veredito e
+  passa a gravar `check_status`; concluir a `verify_task` continua só na fila.
+  A verificação de uma execução de `source_run` liga o evento a ela.
+- Vaga já fechada que recebe outro 404 mantém a data do primeiro fechamento.
+- `docs/engineering/performance-buscas.md` passa a registrar como em produção
+  as entregas #214, #217, #218, #220 e #221; a #216 continua pendente só da
+  rodada de medição com sessão.
+
 ## [1.24.0] - 2026-09-24
 
 ### Adicionado
