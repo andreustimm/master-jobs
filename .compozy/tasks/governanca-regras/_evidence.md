@@ -178,6 +178,25 @@ O plano deve preservar ingestão de alertas por e-mail e referências manuais, e
 
 [job-observation.test.ts:185](../../../tests/job-observation.test.ts#L185) disputa duas observações do mesmo fingerprint e exige uma linha/um ID; exercícios adicionais entram por sync, manual, JSON e e-mail. [architecture.test.ts](../../../tests/architecture.test.ts) restringe caminhos diretos de escrita e [scoring.test.ts](../../../tests/scoring.test.ts) valida um perfil por Zod. Não se deduz desses casos que todo dado editável futuro passe por Zod, que todo adapter tenha probe real recente ou que qualquer erro de fonte seja isolado em qualquer orquestração. Essas obrigações continuam exigindo revisão/procedimento além dos casos automatizados. Gatilhos: **U/M**.
 
+## Reavaliação final (task_11, #205)
+
+Em 24/09/2026, no commit `c23f8ba2` (v1.25.1), E01–E34 foram reavaliadas contra
+o código e os testes atuais. O `pnpm check` foi executado: 4178 testes
+passaram e 8 foram pulados. O CI do mesmo SHA foi observado, e as proteções
+remotas foram reconsultadas. O resultado de cada item e a separação entre
+[R]/[X]/[L]/[H] estão em [_final-report.md](_final-report.md). As seções
+acima continuam como fotografia da baseline `463688f3`; os textos não foram
+reescritos.
+
+Continuam **abertas**:
+
+- **E16:** o gate de chave de API tem o escape `apiKeyEnv`, e falta a
+  sentinela V03-06. Isso impede certificar G41.
+- **E27:** o tracker de QA não confere se os arquivos referenciados existem.
+
+Continuam **sem mudança**: E06–E09, E32 e E34. A E26 foi reobservada e
+registrada em [evidencias/task_11-protecoes.json](evidencias/task_11-protecoes.json).
+
 ## Como usar o catálogo
 
 Uma evidência pode ser forte para uma propriedade estreita e insuficiente para uma frase universal. Cada tarefa futura deve preservar a propriedade já demonstrada, adicionar o caso negativo que falta e registrar o comando que realmente executou. Configuração remota e comportamento em fixture devem permanecer em linhas distintas; nenhum teste local autoriza afirmar que produção está protegida.
