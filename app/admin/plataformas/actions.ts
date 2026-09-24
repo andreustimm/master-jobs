@@ -7,6 +7,7 @@ import { clock } from "../../../src/core/clock.ts";
 import { IngestionBlockedError } from "../../../src/core/ingest/environment.ts";
 import { isFetchableSourceKind } from "../../../src/core/sources/registry.ts";
 import {
+  catalogSource,
   editCatalogSource,
   probeCatalogSource,
   registerCatalogSource,
@@ -85,10 +86,17 @@ export async function retireSourceAction(formData: FormData) {
  */
 export async function probeSourceAction(formData: FormData) {
   await guard("admin:access");
-  const [kind = "", ...rest] = text(formData, "id").split(":");
-  if (!isFetchableSourceKind(kind)) return { status: "error" as const, code: "unknown_kind" };
+  // Sonda a linha gravada, não o `kind:handle` do formulário: o handle já
+  // passou pela validação do cadastro.
+  const stored = await catalogSource(text(formData, "id"));
+  if (!stored || stored.retiredAt) return { status: "error" as const, code: "not_found_or_retired" };
+  if (!isFetchableSourceKind(stored.kind)) return { status: "error" as const, code: "unknown_kind" };
   try {
-    const report = await probeCatalogSource(kind, rest.join(":"));
+    const report = await probeCatalogSource(stored.kind, stored.handle);
+    // Bloqueio e falha não são sucesso: o aviso aparece como erro, com o motivo.
+    if (report.outcome === "failed" || report.outcome === "blocked") {
+      return { status: "error" as const, code: report.outcome };
+    }
     return { status: "success" as const, run: report.outcome };
   } catch (error) {
     if (error instanceof IngestionBlockedError) return { status: "error" as const, code: "ingestion_blocked" };

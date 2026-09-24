@@ -85,7 +85,9 @@ export default async function AdminRunPage({ params }: { params: Promise<{ id: s
               {reason}
             </p>
           )}
-          {run.errorDetail && (
+          {/* O detalhe de "children_failed" é resumo em português escrito pelo
+              sistema, não erro de adapter; o motivo traduzido e as filhas já o dizem. */}
+          {run.errorDetail && run.errorCode !== "children_failed" && (
             <p className="type-caption-md wrap-anywhere text-muted-foreground" data-user-content data-testid="run-error-detail">
               {run.errorDetail}
             </p>

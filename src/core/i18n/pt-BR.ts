@@ -776,7 +776,7 @@ export const ptBR = {
     probeReachable: "Alcançável: o board respondeu com vagas.",
     probeEmpty: "Vazio: o board respondeu, sem vagas listadas.",
     probeBlocked: "Bloqueado: o site recusou o robô (401/403/429). Isso não prova que o board sumiu.",
-    probeFailed: "Falha: erro do servidor, tempo esgotado ou rede.",
+    probeFailed: "Falha: o board não respondeu com uma listagem (handle errado, board removido, recusa do robots.txt, erro do servidor, tempo esgotado ou rede).",
     enable: "Habilitar",
     disable: "Desabilitar",
     enabledSaved: "Fonte habilitada.",

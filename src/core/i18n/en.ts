@@ -756,7 +756,7 @@ export const en: Dictionary = {
     probeReachable: "Reachable: the board answered with jobs.",
     probeEmpty: "Empty: the board answered with no listed jobs.",
     probeBlocked: "Blocked: the site refused the robot (401/403/429). That does not prove the board is gone.",
-    probeFailed: "Failed: server error, timeout or network.",
+    probeFailed: "Failed: the board did not answer with a listing (wrong handle, removed board, robots.txt refusal, server error, timeout or network).",
     enable: "Enable",
     disable: "Disable",
     enabledSaved: "Source enabled.",
