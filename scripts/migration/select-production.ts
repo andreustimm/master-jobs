@@ -56,6 +56,8 @@ export const postSnapshotTables = new Set([
   // Reserva e métrica da varredura fatiada (ADR 0025): estado operacional.
   "sweep_lease",
   "sweep_run",
+  // Análise estruturada da vaga (#223): derivada de LLM, refeita sob pedido.
+  "job_analysis",
 ]);
 
 const selectedJobs = `SELECT id FROM job WHERE

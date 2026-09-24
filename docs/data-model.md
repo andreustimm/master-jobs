@@ -238,7 +238,7 @@ ilhas do módulo de posicionamento LinkedIn.
 
 Uma feed configurada: um board de ATS, um agregador ou um import manual. O
 **banco é a fonte da verdade do catálogo**, governado por linha (migration
-`0017_source_catalog`, #223):
+`0019_source_catalog`, #223):
 
 - linha **não gerida** (`managed_at` nulo) espelha `config/sources.yaml` a cada
   sync — rótulo, motivo e `enabled`, inclusive `enabled: false`; uma linha não
@@ -265,7 +265,7 @@ que é o que `pnpm jho sources list` imprime.
 | `enabled` | boolean, default `true`. `loadSources()` devolve também a entrada desabilitada, com `enabled: false`, e a linha não gerida a espelha |
 | `rationale` | por que essa fonte está na lista — mantém o config auto-documentado |
 | `retired_at` | aposentadoria suave. Aposentada sai do sync e não é editada; vagas e histórico continuam legíveis, porque a linha fica (fonte nunca é apagada) |
-| `origin` | quem criou a linha: `yaml`, `admin` ou `system` (`manual`, `recruiter`, `<kind>:~terms`). A migration marcou como `yaml` as linhas de sync existentes |
+| `origin` | quem criou a linha: `yaml`, `admin` ou `system` (`manual`, `recruiter`, `<kind>:~terms`). A migration `0020_backfill_source_origin` marcou como `yaml` as linhas de sync existentes |
 | `config_revision` | começa em 1 e sobe a cada edição (espelhamento, órfã desabilitada, escrita do admin) |
 | `secret_ref` | **nome** da variável de ambiente com a credencial, nunca o valor (G41). Valor com cara de chave é recusado antes de gravar, e o erro não o ecoa |
 | `managed_at` | quando a linha passou a ser governada pelo banco; nulo = ainda espelha o YAML |
@@ -337,6 +337,16 @@ construção, escritas em `job` e `job_page` esperam. No acervo local (9.060
 vagas) o índice de descrição tem 19 MB e ficou pronto em poucos segundos
 (observado, não cronometrado); rode
 `migrate.yml` fora da janela do sync.
+
+**Termos parecidos (#223).** `job_title_trgm_idx` é GIN `gin_trgm_ops` sobre
+`title` cru (sem tirar separador: a similaridade por palavra compara palavras),
+parcial em `closed_at IS NULL`, migration aditiva `0017_job_title_trgm`. Responde
+ao `termo <% title` do grupo de proximidade (`nearMatchesQuery` em `repo.ts`),
+com o limiar em `pg_trgm.word_similarity_threshold` fixado na transação da
+consulta; `word_similarity()` só ordena, porque sozinha nunca usa o índice.
+`tests/search-relevance.test.ts` (IT-010) prova que o índice é elegível no plano.
+Reverter é `DROP INDEX production.job_title_trgm_idx`; como `0013`, sem
+`CONCURRENTLY`.
 
 A migration que adicionar `archived_at` também deve manter um índice que suporte
 as varreduras por corte de `closed_at`/`archived_at`, conforme o TechSpec de
@@ -974,6 +984,40 @@ apagar um candidato não pode falhar por causa de uma reserva de dez minutos.
 |---|---|---|
 | `sweep_lease` | `key` (`sync:<fonte>`, `pontuar:<candidato>`, `alarme:<nome>`, `manutencao:<nome>`) | reserva viva (`claimed_at`, `claimed_by`), última tentativa (`last_claimed_at`, nunca limpa) e último término (`last_finished_at`). Reservada por um único `INSERT … ON CONFLICT DO UPDATE … WHERE`; vence em 5 min |
 | `sweep_run` | `id`; índice `(slice, started_at)` | uma linha por chamada (`unit` nulo) e uma por unidade: duração, itens, erros, mensagem de erro. Só números e ids; podada a cada 24 h para 14 dias |
+
+### Análise estruturada da vaga — `job_analysis`
+
+Do módulo `llm` (`src/core/llm/job-analysis.ts`, regras puras em
+`job-structure.ts`), #223. Uma linha por **tentativa**, imutável depois de
+terminal: toda escrita de término filtra `status = 'running'` e o
+`claimed_at` de quem reivindicou. A análise é da vaga, não da pessoa — a
+entrada do prompt ([`job-structure.md`](prompts/system/job-structure.md)) é só
+título, empresa, local e anúncio, e por isso qualquer sessão que lê a vaga lê
+o resultado. Nada aqui escreve em `application`, `job_score` nem `candidate`.
+
+| Coluna | Regra |
+|---|---|
+| `job_id` | `ON DELETE cascade`: a retenção só apaga vaga sem candidatura, e a análise não vale sem ela |
+| `requested_by` | `auth_user`, `ON DELETE set null`. Vem da sessão, nunca do formulário |
+| `retry_of` | tentativa anterior; `ON DELETE no action`. Não `restrict`: `restrict` confere na hora e faria a cascata da retenção falhar numa vaga com duas tentativas |
+| `status` | `queued`, `running`, `succeeded`, `partial`, `failed`, `paused_quota` (429 do provedor), `interrupted` (lease vencido) |
+| `input_hash` | SHA-256 do texto normalizado enviado. Diferente do atual = "a vaga mudou depois da análise"; o processador falha com `input_changed` sem chamar o provedor se o texto mudou entre o pedido e o processamento |
+| `prompt_version`, `schema_version` | de `JOB_STRUCTURE_PROMPT_VERSION` e `JOB_STRUCTURE_SCHEMA_VERSION` |
+| `provider_slug`, `model_id` | nunca a chave (G41) |
+| `result` | a estrutura depois de `bindEvidence()`: campo cujo trecho não está no texto vira desconhecido. O corpo da resposta do provedor nunca é gravado |
+| `error_code` | só código (`malformed_output`, `input_changed`, `quota`, `provider_error`, `network`, `lease_expired`), nunca mensagem |
+| `input_tokens`, `output_tokens`, `cost_estimate` | só admin vê |
+| `claimed_at`, `heartbeat_at`, `finished_at` | lease de 10 min (`ANALYSIS_LEASE_MS`); `running` além dele vira `interrupted` na leitura seguinte e sai do índice de idempotência |
+
+Índice único parcial `job_analysis_active_idx (job_id, input_hash,
+schema_version) where status in ('queued','running')`: clique duplo e corrida
+de processos resultam numa análise ativa só.
+
+**Reuso e custo.** Pedir a análise de um texto que já tem `succeeded` na mesma
+versão de esquema devolve a existente, sem nova chamada paga. Depois de
+`failed`, `partial`, `paused_quota` ou `interrupted`, um pedido cria nova
+tentativa ligada à anterior, até três por texto (`MAX_REQUEST_ATTEMPTS`); além
+disso, só o admin tenta de novo (`retryJobAnalysisAction`).
 
 ### `fx_rate` — cotações em cache
 

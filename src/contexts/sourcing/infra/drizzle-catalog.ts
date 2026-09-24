@@ -3,7 +3,7 @@
  * regras — quem é gerido, quem é órfão, o que é válido — vêm prontas do
  * domínio (`../domain/catalog.ts`).
  */
-import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "../../../core/db/client.ts";
 import { source } from "../../../core/db/schema.ts";
 import { FETCHABLE_SOURCE_KINDS, type SourceConfig } from "../../../core/sources/types.ts";
@@ -81,7 +81,7 @@ export async function syncableSources(): Promise<SourceConfig[]> {
   const rows = await getDb()
     .select({ kind: source.kind, handle: source.handle, label: source.label, rationale: source.rationale })
     .from(source)
-    .where(and(eq(source.enabled, true), isNull(source.retiredAt), ne(source.handle, "~terms"), catalogOnly))
+    .where(and(eq(source.enabled, true), isNull(source.retiredAt), catalogOnly))
     .orderBy(asc(source.id));
   return rows.map((row) => ({
     kind: row.kind as SourceConfig["kind"],

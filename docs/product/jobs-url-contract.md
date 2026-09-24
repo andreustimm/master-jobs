@@ -15,7 +15,7 @@ ignorado.
 |---|---|---|
 | `fit` | 0 a 100 | corte padrão de 45 |
 | `fitMax` | 0 a 100 | sem teto de nota |
-| `q` | palavra inteira sobre cargo, empresa e descrição | sem busca |
+| `q` | termos de palavra inteira e frases entre aspas, sobre cargo, empresa, localização e descrição | sem busca |
 | `company` | trecho do nome do empregador, até 80 caracteres | sem filtro de empresa |
 | `source` | **repetido**, uma vez por fonte | todas as fontes |
 | `cluster` | nome do cluster | todos |
@@ -31,7 +31,7 @@ ignorado.
 | `track` | id da trilha, ou `all` | a trilha principal |
 | `by` | id de um termo salvo | qualquer origem |
 | `status` | estado do funil, `unfiled` ou `any` | esconde arquivadas |
-| `sort` | `fit`, `recent`, `comp` | por aderência |
+| `sort` | `fit`, `recent`, `comp`, `relevance` | por aderência |
 
 ## As decisões que um leitor precisa saber
 
@@ -65,6 +65,29 @@ PostgreSQL.
 disso não é salário, e um zero a mais deve ser recusado em vez de esvaziar o
 quadro em silêncio. A escala do slider é bem menor — ela é leitura, e estica
 para caber o que for digitado.
+
+**`q` é analisado, e o filtro de palavra inteira continua sendo o juiz.**
+Texto fora de aspas é um termo, com a semântica de sempre (`tech lead` casa
+"Tech Lead", "tech-lead" e "Techlead"); texto entre aspas é frase — as
+palavras nessa ordem, separadas só por espaço (`"tech lead"` não casa
+"Techlead"). Termos e frases somam condições: todos precisam casar, cada um
+em algum campo. Aspas desbalanceadas viram texto simples. A localização entrou
+no filtro com a #223 (adenda A4); numa consulta que não aparece em nenhuma
+localização, o conjunto é o mesmo de antes.
+
+**`sort=relevance` só ordena, e só com `q`.** A ordem é o campo mais forte onde
+a consulta casou (cargo, depois empresa, depois localização e descrição),
+então fit, recência e id — a mesma de `compareByRelevance` em
+`src/core/search.ts`. Conjunto e contagem são os de `sort=fit`. Sem `q`, a
+lista sai por aderência e o parâmetro fica na URL para voltar a valer com a
+busca; o chip de relevância só aparece com `q`. Cada linha diz onde a
+consulta casou, e nunca fala em semântica: não há vetor.
+
+**Termos parecidos não têm parâmetro.** Com `q`, a tela mostra abaixo da lista
+um grupo separado e rotulado, de no máximo 20 vagas, com título parecido
+(`pg_trgm`, operador `<%`) que passam por todos os outros filtros e que a
+consulta NÃO casou. Ele nunca muda a lista, a paginação nem o total. Sem a
+extensão, o grupo some e nada fala dele.
 
 ## A rota do grupo
 

@@ -11,12 +11,21 @@ import { renderScoreMessage } from "../src/core/i18n/index.ts";
 import { scoreMessages } from "../src/contexts/matching/index.ts";
 import type { listBoard } from "../src/contexts/matching/index.ts";
 import { isPublicJobUrl } from "../src/core/job-url.ts";
+import { explainMatch, type MatchField } from "../src/core/search.ts";
 import { formatMoney, money, parseCurrency, parsePeriod } from "../src/core/money.ts";
 import { ACTION_BUTTON, ACTION_GROUP, Fit, ScoreBar, StatusBadge } from "./ui";
 import { jobOrigin, ORIGIN_LABEL } from "../src/core/job-origin.ts";
 import { TriageButton } from "./triage-button";
 
 type Row = Awaited<ReturnType<typeof listBoard>>[number];
+
+/** Chave do dicionário de cada campo onde a consulta pode casar. */
+export const MATCH_FIELD_LABEL = {
+  title: "jobs.matchTitle",
+  company: "jobs.matchCompany",
+  location: "jobs.matchLocation",
+  description: "jobs.matchDescription",
+} as const satisfies Record<MatchField, string>;
 
 function pay(r: Row): string | null {
   const amount = r.compMax ?? r.compMin;
@@ -176,6 +185,16 @@ export function JobList({
                   )
                 )}
               </div>
+
+              {r.matchedFields !== null && r.matchedFields.length > 0 && (
+                <p className="mt-1 text-xs text-muted-foreground" data-testid={`job-match-${r.jobId}`}>
+                  {t("jobs.matchedIn", {
+                    fields: explainMatch({ fields: r.matchedFields, proximity: false })
+                      .map((signal) => (signal.kind === "field" ? t(MATCH_FIELD_LABEL[signal.field]) : t("jobs.matchProximity")))
+                      .join(", "),
+                  })}
+                </p>
+              )}
 
               {!dense && (
                 <div className="mt-2.5">
