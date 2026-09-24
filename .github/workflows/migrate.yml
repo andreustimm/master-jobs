@@ -1,8 +1,12 @@
 # Produção única. Contrato e ordem com o deploy: docs/adr/0027-migracao-automatica-so-aditiva.md.
 #
-# Push em main que traz migração: aplica sozinho, mas SÓ se todo o lote
-# pendente no banco for aditivo (`--additive-only`). Destrutiva para o job,
-# vermelho, antes de qualquer DDL, e espera o dispatch manual abaixo.
+# Todo push em main: aplica sozinho o que o banco tiver pendente, mas SÓ se
+# todo o lote for aditivo (`--additive-only`). Não aditiva interrompe o job,
+# vermelho, antes de qualquer DDL, e espera o dispatch manual abaixo. Sem
+# pendência o job não aplica nada.
+# Sem filtro `paths`, de propósito: o GitHub só avalia os primeiros 300
+# arquivos do diff, e uma promoção grande poderia pular a migração em silêncio
+# enquanto a Vercel publica o código que depende dela. Quem decide é o banco.
 # Dispatch manual: aplica o lote inteiro, depois de revisão humana, e exige
 # o ref do projeto Supabase digitado.
 name: Migrações
@@ -10,8 +14,6 @@ name: Migrações
 on:
   push:
     branches: [main]
-    paths:
-      - "drizzle/postgres/**"
   workflow_dispatch:
     inputs:
       confirm_project:

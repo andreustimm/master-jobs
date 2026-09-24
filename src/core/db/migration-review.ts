@@ -132,11 +132,24 @@ export function splitStatements(sql: string): Statement[] {
   return statements;
 }
 
-/** Último segmento do nome qualificado: `"production"."job"` e `job` são a mesma tabela. */
+/** Um segmento de nome: identificador entre aspas volta literal, o resto em minúsculas. */
+function segmentOf(segment: string, idents: string[]): string {
+  const quoted = /^@(\d+)$/.exec(segment.trim());
+  return quoted ? idents[Number(quoted[1])]! : segment.trim().toLowerCase();
+}
+
+/** Nome de coluna: último segmento. */
 function nameOf(qualified: string, idents: string[]): string {
-  const last = qualified.split(".").pop()!.trim();
-  const quoted = /^@(\d+)$/.exec(last);
-  return quoted ? idents[Number(quoted[1])]! : last.toLowerCase();
+  return segmentOf(qualified.split(".").pop()!, idents);
+}
+
+/**
+ * Tabela pelo nome COMPLETO, com schema. `backup.job` não é `production.job`,
+ * e `job` sem schema não se confunde com nenhuma das duas: na dúvida a tabela
+ * conta como existente, que é o lado que pede revisão.
+ */
+function tableOf(qualified: string, idents: string[]): string {
+  return qualified.split(".").map((segment) => segmentOf(segment, idents)).join(".");
 }
 
 /** Divide por vírgula de nível zero; parênteses protegem listas de coluna. */
@@ -200,6 +213,9 @@ export function reviewMigrations(batch: readonly MigrationSource[]): MigrationRe
     const constraint = /^add (?:constraint \S+ )?(primary key|unique|foreign key|check|exclude)\b(.*)$/i.exec(action);
     if (constraint) {
       const kind = constraint[1]!.toLowerCase();
+      // NULLS NOT DISTINCT trata os nulos como iguais: numa coluna nova, toda
+      // linha existente é nula, e a segunda já viola a restrição.
+      if (/^\s*nulls not distinct\b/i.test(constraint[2]!)) return "constraint-on-existing";
       const columns = /^\s*(?:nulls (?:not )?distinct )?\(([^()]*)\)/i.exec(constraint[2]!);
       if ((kind === "foreign key" || kind === "unique") && untouched(table, columns ? columnList(columns[1]!, idents) : null)) {
         return null;
@@ -209,14 +225,19 @@ export function reviewMigrations(batch: readonly MigrationSource[]): MigrationRe
     // Restrição de forma não prevista não pode cair no ramo de coluna nova.
     if (/^add constraint\b/i.test(action)) return "unknown";
 
-    const column = new RegExp(`^add (?:column )?(?:if not exists )?(${IDENT})\\s*(.*)$`, "i").exec(action);
+    const column = new RegExp(`^add (?:column )?(if not exists )?(${IDENT})\\s*(.*)$`, "i").exec(action);
     if (column) {
-      const definition = column[2]!;
+      const definition = column[3]!;
       const hasDefault = /\b(default|generated)\b/i.test(definition);
-      const columns = added.get(table) ?? new Map<string, Column>();
-      columns.set(nameOf(column[1]!, idents), { hasDefault });
-      added.set(table, columns);
+      // `IF NOT EXISTS` pode ser no-op sobre coluna que já existe e tem dado:
+      // ela não conta como nova para as restrições seguintes.
+      if (!column[1]) {
+        const columns = newColumns(table);
+        columns.set(nameOf(column[2]!, idents), { hasDefault });
+        added.set(table, columns);
+      }
       if (/\bprimary key\b/i.test(definition)) return "constraint-on-existing";
+      if (/\bnulls not distinct\b/i.test(definition)) return "constraint-on-existing";
       if (/\bnot null\b/i.test(definition) && !hasDefault) return "not-null-without-default";
       if (hasDefault && /\b(unique|references|check)\b/i.test(definition)) return "constraint-on-existing";
       return null;
@@ -238,16 +259,24 @@ export function reviewMigrations(batch: readonly MigrationSource[]): MigrationRe
   const classify = (statement: Statement): MigrationRisk | null => {
     const { text, idents } = statement;
     if (/^create schema\b/i.test(text)) return null;
-    const table = new RegExp(`^create table (?:if not exists )?(${QNAME})`, "i").exec(text);
-    if (table) { created.add(nameOf(table[1]!, idents)); return null; }
+    const table = new RegExp(`^create table (if not exists )?(${QNAME})`, "i").exec(text);
+    if (table) {
+      // Só o CREATE TABLE sem `IF NOT EXISTS` prova que a tabela nasce aqui; o
+      // outro pode ser no-op sobre uma tabela viva, com dado e leitores.
+      if (!table[1]) created.add(tableOf(table[2]!, idents));
+      return null;
+    }
     const index = new RegExp(
       `^create (unique )?index (?:concurrently )?(?:if not exists )?(?:${IDENT} )?on (?:only )?(${QNAME})\\s*(?:using ${IDENT}\\s*)?\\(`,
       "i",
     ).exec(text);
     if (index) {
-      const target = nameOf(index[2]!, idents);
+      const target = tableOf(index[2]!, idents);
       if (!index[1] || created.has(target)) return null;
-      return untouched(target, columnList(untilClose(text.slice(index[0].length)), idents)) ? null : "constraint-on-existing";
+      const rest = text.slice(index[0].length);
+      const list = untilClose(rest);
+      if (/^\)\s*nulls not distinct\b/i.test(rest.slice(list.length))) return "constraint-on-existing";
+      return untouched(target, columnList(list, idents)) ? null : "constraint-on-existing";
     }
     if (/^create (sequence|extension)\b/i.test(text)) return null;
     if (new RegExp(`^create type ${QNAME} as enum\\b`, "i").test(text)) return null;
@@ -261,7 +290,7 @@ export function reviewMigrations(batch: readonly MigrationSource[]): MigrationRe
 
     const alterTable = new RegExp(`^alter table (?:if exists )?(?:only )?(${QNAME}) (.*)$`, "i").exec(text);
     if (alterTable) {
-      const target = nameOf(alterTable[1]!, idents);
+      const target = tableOf(alterTable[1]!, idents);
       // Tabela nascida neste lote não tem dado nem leitor: qualquer ajuste nela é aditivo.
       if (created.has(target)) return null;
       for (const action of topLevel(alterTable[2]!)) {

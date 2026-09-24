@@ -93,7 +93,7 @@ describe("reviewMigrations — o que roda sozinho", () => {
         sql: [
           'ALTER TABLE "production"."novo" ADD CONSTRAINT "fk" FOREIGN KEY ("c") REFERENCES "production"."candidate"("id")',
           'CREATE UNIQUE INDEX "u" ON "production"."novo" USING btree ("c")',
-          'ALTER TABLE novo ALTER COLUMN c SET NOT NULL',
+          'ALTER TABLE production.novo ALTER COLUMN c SET NOT NULL',
         ].join(";--> statement-breakpoint\n"),
       },
     ]);
@@ -105,9 +105,45 @@ describe("reviewMigrations — o que roda sozinho", () => {
     expect(one([
       'ALTER TABLE "production"."job_score" ADD COLUMN "track_id" integer',
       'ALTER TABLE "production"."job_score" ADD CONSTRAINT "fk" FOREIGN KEY ("track_id") REFERENCES "production"."target_track"("id")',
-      'ALTER TABLE job_score ADD UNIQUE NULLS NOT DISTINCT ("track_id")',
+      'ALTER TABLE production.job_score ADD UNIQUE ("track_id")',
       'CREATE UNIQUE INDEX "u" ON "production"."job_score" USING btree ("track_id")',
     ].join(";")).automatic).toBe(true);
+  });
+});
+
+describe("reviewMigrations — o que parece novo e não é", () => {
+  // Falso negativo aqui é o pior erro do detector: um DROP sobre tabela viva
+  // passaria por ajuste em tabela recém-criada e rodaria sozinho.
+  it.each<[string, string[], MigrationRisk[]]>([
+    ["CREATE TABLE IF NOT EXISTS pode ser no-op sobre tabela viva", [
+      'CREATE TABLE IF NOT EXISTS "production"."job" ("id" integer)',
+      'ALTER TABLE "production"."job" DROP COLUMN "title"',
+    ], ["drop"]],
+    ["tabela de mesmo nome em outro schema não é a de produção", [
+      'CREATE TABLE "backup"."job" ("id" integer)',
+      'ALTER TABLE "production"."job" ALTER COLUMN "title" SET NOT NULL',
+    ], ["set-not-null"]],
+    ["nome sem schema não herda a tabela criada com schema", [
+      'CREATE TABLE "production"."novo" ("id" integer)',
+      "ALTER TABLE novo DROP COLUMN id",
+    ], ["drop"]],
+    ["ADD COLUMN IF NOT EXISTS não torna a coluna nova", [
+      'ALTER TABLE "production"."job" ADD COLUMN IF NOT EXISTS "company_id" integer',
+      'ALTER TABLE "production"."job" ADD CONSTRAINT "f" FOREIGN KEY ("company_id") REFERENCES "production"."company"("id")',
+    ], ["constraint-on-existing"]],
+    ["UNIQUE NULLS NOT DISTINCT em coluna nova", [
+      'ALTER TABLE "production"."job" ADD COLUMN "k" integer',
+      'ALTER TABLE "production"."job" ADD CONSTRAINT "u" UNIQUE NULLS NOT DISTINCT ("k")',
+    ], ["constraint-on-existing"]],
+    ["índice único NULLS NOT DISTINCT em coluna nova", [
+      'ALTER TABLE "production"."job" ADD COLUMN "k" integer',
+      'CREATE UNIQUE INDEX "u" ON "production"."job" USING btree ("k") NULLS NOT DISTINCT',
+    ], ["constraint-on-existing"]],
+    ["coluna nova declarada UNIQUE NULLS NOT DISTINCT", [
+      'ALTER TABLE "production"."job" ADD COLUMN "k" integer UNIQUE NULLS NOT DISTINCT',
+    ], ["constraint-on-existing"]],
+  ])("%s", (_, statements, expected) => {
+    expect(risks(statements.join(";\n"))).toEqual(expected);
   });
 
   it("SET NOT NULL em coluna nova com default é aditivo; sem default, não", () => {

@@ -332,8 +332,8 @@ crescer, a primeira alavanca é o número de fatias.
 
 `migrate.yml` aplica migrações somente em produção, de dois jeitos
 ([ADR 0027](../adr/0027-migracao-automatica-so-aditiva.md)): **sozinho**, no
-push para `main` que traz mudança em `drizzle/postgres/**`, quando todo o lote
-pendente no banco é aditivo; e por `workflow_dispatch`, depois de confirmar o
+push para `main` (todo push, sem filtro de caminho: o filtro do GitHub só vê
+300 arquivos do diff), quando todo o lote pendente no banco é aditivo; e por `workflow_dispatch`, depois de confirmar o
 project ref do Supabase, para o que exige revisão. As migrations de `dev` e
 `staging` ficam desativadas até existirem bancos de fixture isolados. Esta
 configuração não pausa os deployments da Vercel.

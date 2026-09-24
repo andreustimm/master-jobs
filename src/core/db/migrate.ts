@@ -60,8 +60,10 @@ export async function runMigrations(folder = "./drizzle/postgres", options: Migr
 async function lastApplied(client: ReturnType<typeof connectDatabase>["client"]): Promise<number | null> {
   const [table] = await client<{ exists: boolean }[]>`select to_regclass('drizzle.__drizzle_migrations') is not null as exists`;
   if (!table!.exists) return null;
-  const [row] = await client<{ last: string | null }[]>`select max(created_at)::text as last from drizzle.__drizzle_migrations`;
-  return row!.last === null ? null : Number(row!.last);
+  // A mesma consulta do migrador do drizzle (`order by created_at desc limit 1`,
+  // nulos primeiro), para que o lote revisado seja exatamente o que ele aplica.
+  const [row] = await client<{ last: string | null }[]>`select created_at::text as last from drizzle.__drizzle_migrations order by created_at desc limit 1`;
+  return row?.last == null ? null : Number(row.last);
 }
 
 /**

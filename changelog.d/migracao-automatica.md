@@ -2,7 +2,7 @@
 
 ### Adicionado
 
-- `migrate.yml` roda sozinho no push para `main` que traz `drizzle/postgres/**`, com `jho db migrate --additive-only`: o lote pendente no banco é classificado antes de qualquer DDL, e comando não aditivo para o job pedindo o dispatch manual, que continua existindo para aplicar o lote inteiro depois de revisão (ADR 0027, #289).
+- `migrate.yml` roda sozinho em todo push para `main` (sem filtro `paths`, que o GitHub só avalia nos primeiros 300 arquivos do diff), com `jho db migrate --additive-only`: o lote pendente no banco é classificado antes de qualquer DDL, e comando não aditivo para o job pedindo o dispatch manual, que continua existindo para aplicar o lote inteiro depois de revisão (ADR 0027, #289).
 - Detector puro `src/core/db/migration-review.ts`: separa o SQL em comandos e classifica por lista de permissão (criar tabela, índice, coluna nula ou com default, enum, grant); `DROP`, `RENAME`, mudança de tipo, `SET NOT NULL`, restrição sobre dado existente, reescrita de dado, `REVOKE`, bloco procedural e forma desconhecida pedem revisão. Toda migração publicada tem veredito fixado em `tests/migration-review.test.ts`.
 
 ### Alterado

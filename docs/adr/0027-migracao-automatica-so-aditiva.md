@@ -29,12 +29,17 @@ promoção `dev → staging` parava em qualquer diferença em `drizzle/` ou em
    `UPDATE`/`DELETE`/`TRUNCATE`, `REVOKE`, bloco `DO`, função e **qualquer
    forma não prevista** — pede revisão humana.
 2. **O push em `main` migra sozinho, se o lote pendente for aditivo.**
-   `migrate.yml` dispara em `push` para `main` com filtro
-   `drizzle/postgres/**` e roda `jho db migrate --additive-only`. O lote
-   classificado é o que o **banco** tem pendente (o critério do migrador do
-   drizzle: `when` maior que a última aplicada), não o diff do push: uma
+   `migrate.yml` dispara em **todo** `push` para `main` e roda
+   `jho db migrate --additive-only`; sem pendência, não aplica nada. Não há
+   filtro `paths`: o GitHub avalia só os primeiros 300 arquivos do diff, e
+   uma promoção grande pularia a migração em silêncio. O lote classificado é
+   o que o **banco** tem pendente (o critério do migrador do drizzle: a
+   última aplicada pela ordem de `created_at`), não o diff do push: uma
    destrutiva barrada continua pendente, e a aditiva do push seguinte não a
-   leva junto. Destrutiva para o job, vermelho, **antes de qualquer DDL**.
+   leva junto. Não aditiva interrompe o job, vermelho, **antes de qualquer
+   DDL**. Uma tabela só conta como nova quando o lote a cria sem
+   `IF NOT EXISTS` e com o mesmo nome qualificado; `IF NOT EXISTS` pode ser
+   no-op sobre uma tabela viva.
 3. **O dispatch manual continua, para o que não é aditivo.** Com o ref do
    projeto digitado, aplica o lote inteiro depois de revisão humana. Mesmo
    segredo, mesmo ambiente `production`, mesma fila de concorrência

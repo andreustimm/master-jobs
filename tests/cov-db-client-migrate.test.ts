@@ -123,8 +123,8 @@ describe("runMigrations({ additiveOnly }) — o modo do push em main", () => {
   it("applies an additive batch and reports its tags", async () => {
     const published = (JSON.parse(readFileSync(join(folder, "meta", "_journal.json"), "utf8")) as { entries: unknown[] }).entries;
     expect(await runMigrations(folder)).toHaveLength(published.length);
-    append("0017_aditiva", 'CREATE TABLE "production"."nova" ("id" integer);');
-    expect(await runMigrations(folder, { additiveOnly: true })).toEqual(["0017_aditiva"]);
+    append("9001_aditiva", 'CREATE TABLE "production"."nova" ("id" integer);');
+    expect(await runMigrations(folder, { additiveOnly: true })).toEqual(["9001_aditiva"]);
     expect((await getDb().execute(sql`select to_regclass('production.nova') as t`))[0]!.t).toBe("production.nova");
     expect(await runMigrations(folder, { additiveOnly: true })).toEqual([]);
   });
@@ -132,15 +132,15 @@ describe("runMigrations({ additiveOnly }) — o modo do push em main", () => {
   it("refuses a destructive batch before any DDL, and keeps refusing when an additive one lands after it", async () => {
     await runMigrations(folder);
     const before = await applied();
-    append("0017_destrutiva", 'ALTER TABLE "production"."job" DROP COLUMN "archived_at";');
-    await expect(runMigrations(folder, { additiveOnly: true })).rejects.toThrow(/0017_destrutiva: remove objeto/);
+    append("9001_destrutiva", 'ALTER TABLE "production"."job" DROP COLUMN "archived_at";');
+    await expect(runMigrations(folder, { additiveOnly: true })).rejects.toThrow(/9001_destrutiva: remove objeto/);
     // O push seguinte traz só uma aditiva; a destrutiva continua no lote pendente.
-    append("0018_aditiva", 'CREATE TABLE "production"."nova" ("id" integer);');
-    await expect(runMigrations(folder, { additiveOnly: true })).rejects.toThrow(/0017_destrutiva/);
+    append("9002_aditiva", 'CREATE TABLE "production"."nova" ("id" integer);');
+    await expect(runMigrations(folder, { additiveOnly: true })).rejects.toThrow(/9001_destrutiva/);
     expect(await applied()).toBe(before);
     expect((await getDb().execute(sql`select to_regclass('production.nova') as t`))[0]!.t).toBeNull();
     // O disparo humano, depois de revisão, aplica o lote inteiro.
-    expect(await runMigrations(folder)).toEqual(["0017_destrutiva", "0018_aditiva"]);
+    expect(await runMigrations(folder)).toEqual(["9001_destrutiva", "9002_aditiva"]);
   });
 
   it("an unreadable journal fails before any DDL", async () => {

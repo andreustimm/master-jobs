@@ -4,12 +4,13 @@ import { spawnSync } from "node:child_process";
 import { parse } from "yaml";
 import { expect, it } from "vitest";
 
-it("migrates main on push only for drizzle/postgres, and manual dispatch still needs the typed project ref", () => {
+it("migrates on every push to main, and manual dispatch still needs the typed project ref", () => {
   const workflow = parse(readFileSync(".github/workflows/migrate.yml", "utf8"));
   expect(Object.keys(workflow.on).sort()).toEqual(["push", "workflow_dispatch"]);
-  // Só main, e só quando o push traz migração: dev e staging não têm banco
-  // próprio ainda, e um push sem migração não tem o que aplicar.
-  expect(workflow.on.push).toEqual({ branches: ["main"], paths: ["drizzle/postgres/**"] });
+  // Só main (dev e staging não têm banco próprio ainda) e SEM `paths`: o
+  // filtro do GitHub só enxerga 300 arquivos do diff e pularia em silêncio a
+  // migração de uma promoção grande. O lote pendente vem do banco.
+  expect(workflow.on.push).toEqual({ branches: ["main"] });
   expect(workflow.jobs.migrar.if).toContain("github.ref == 'refs/heads/main'");
   expect(workflow.jobs.migrar.if).toContain("github.event_name == 'push' || inputs.confirm_project == 'bujawvnxwtmneiggizje'");
   expect(workflow.jobs.migrar.environment).toBe("production");

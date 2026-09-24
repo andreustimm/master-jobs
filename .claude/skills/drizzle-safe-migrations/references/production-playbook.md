@@ -73,8 +73,8 @@ WHERE "status" = 'saved';
   `src/core/db/migration-review.ts`) promotes without confirmation; anything
   else suspends automatic `dev` → `staging` promotion until a human reviews it.
 - Confirm a Supabase backup/point-in-time recovery window exists.
-- Production is migrated by `migrate.yml` from `main` (ADR 0027): on the push
-  that changes `drizzle/postgres/**` it runs `jho db migrate --additive-only`,
+- Production is migrated by `migrate.yml` from `main` (ADR 0027): on every push
+  to `main` (no path filter) it runs `jho db migrate --additive-only`,
   which refuses before any DDL when the pending batch in the database is not
   additive; the manual dispatch, with the confirmed project ref, applies the
   whole batch after review. Both run `jho db check` with the privileged

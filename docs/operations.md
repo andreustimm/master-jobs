@@ -405,8 +405,9 @@ digitação de alguém, não ausência observada. A implementação e os critér
 
 ### Migração de produção
 
-Não há passo de rotina: o merge em `main` que traz `drizzle/postgres/**`
-dispara `migrate.yml`, que aplica sozinho o lote pendente quando ele é aditivo
+Não há passo de rotina: todo merge em `main` dispara `migrate.yml`, que
+aplica sozinho o lote pendente no banco quando ele é aditivo (sem pendência,
+não aplica nada)
 ([ADR 0027](adr/0027-migracao-automatica-so-aditiva.md)). O log mostra
 `aplicadas: <tags>` e depois o `jho db check`.
 
