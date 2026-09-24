@@ -30,11 +30,16 @@ continua espelhando o YAML — inclusive desligada ao sair dele — até o próx
 `import --apply` ou a primeira edição pela tela. Rode o `diff` sempre que mexer
 no arquivo: divergência em linha gerida não é aplicada sozinha.
 
-> **Não rode o passo 3 antes da tela de Plataformas** (tarefa 03 da #223).
-> Hoje nenhum comando nem tela edita, desliga ou aposenta uma fonte gerida, e
-> não há como desfazer `managed_at`: depois do `--apply`, desligar um board
-> quebrado exigiria SQL manual em produção. Os passos 1 e 2 não gravam nada e
-> podem rodar a qualquer momento.
+> **Rode o passo 3 só com a tela de Plataformas em produção** (tarefa 03 da
+> #223). É ela que edita, desliga e aposenta uma fonte gerida
+> (`/admin/plataformas/<kind:handle>`); não há comando que desfaça
+> `managed_at`, então sem a tela desligar um board quebrado exigiria SQL manual.
+> Os passos 1 e 2 não gravam nada e podem rodar a qualquer momento.
+
+Na tela, **aposentar** pede confirmação: a fonte sai de toda execução, e as
+vagas e execuções anteriores continuam legíveis. **Sondar** lê o board uma vez
+sem gravar vaga nem saúde — fora de produção (ou sem opt-in local) a guarda de
+ingestão recusa e a tela diz isso.
 
 ## Varredura horária: ativar o agendador
 
@@ -199,6 +204,13 @@ devagar, nunca incorreto.
 o acervo.
 
 ### Execuções registradas (`source_run`)
+
+Pela tela: **Plataformas** (`/admin/plataformas`) cadastra, sonda, habilita,
+desabilita e aposenta, e pede "Buscar agora" ou "Atualizar status" de uma
+fonte; **Execuções** (`/admin/execucoes`) pede "Buscar em todas" ou "Atualizar
+status de todas", lista as execuções paginadas e abre o detalhe, com uma linha
+por fonte e "Tentar de novo" na que terminou sem sucesso. Pedir leva direto ao
+detalhe da execução. Só administrador; sessão emprestada é recusada.
 
 Captura e verificação pedidas pelo catálogo viram uma linha em `source_run`
 (#223): escopo, quem pediu, o retrato da configuração, contagens e erro

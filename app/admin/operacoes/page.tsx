@@ -11,6 +11,7 @@ import type { TranslationKey } from "../../../src/core/i18n/index.ts";
 import { requirePage } from "../../auth";
 import { getTranslator } from "../../i18n";
 import { MutationFeedbackForm } from "../../mutation-feedback";
+import { TransitionLink } from "../../transition-link";
 import { requestRoutineAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +45,15 @@ export default async function AdminOperationsPage() {
         <h1 className="type-display-md chevron mb-4">{t("operations.title")}</h1>
         <p className="type-body-md max-w-[62ch] text-muted-foreground">{t("operations.lead")}</p>
       </header>
+
+      <nav className="mb-4 grid gap-2 sm:flex sm:flex-wrap sm:gap-4">
+        <TransitionLink href="/admin/plataformas" className="text-[var(--primary-text)] hover:underline" data-testid="operations-platforms-link">
+          {t("operations.platformsLink")}
+        </TransitionLink>
+        <TransitionLink href="/admin/execucoes" className="text-[var(--primary-text)] hover:underline" data-testid="operations-runs-link">
+          {t("operations.runsLink")}
+        </TransitionLink>
+      </nav>
 
       <Card className="mb-4">
         <CardHeader>

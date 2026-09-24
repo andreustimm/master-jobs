@@ -30,6 +30,9 @@ export const ENGLISH_OWNER_SWEEP = [
   "/account",
   "/jobs/new",
   "/admin/operacoes",
+  // Catálogo e execuções (#223, tarefa 03).
+  "/admin/plataformas",
+  "/admin/execucoes",
   // O hub dos países tem quatro chaves de dicionário próprias e estava fora
   // de todas as varreduras.
   "/jobs/904000101/paises",
@@ -114,6 +117,10 @@ export const AXE_SWEEP = [
  * que falta para entrar. A chave é o arquivo, como o inventário o descobre.
  */
 export const UNMEASURED_PAGES = {
+  "app/admin/plataformas/[id]/page.tsx":
+    "o id é `kind:handle` de uma fonte criada na própria suíte; admin-catalog.mjs percorre cadastro, sondagem e captura e mede 375 px e o inglês nela",
+  "app/admin/execucoes/[id]/page.tsx":
+    "o id é de uma execução criada na própria suíte; admin-catalog.mjs confere o detalhe depois de refresh, as filhas e a nova tentativa, em 375 px e em inglês",
   "app/transition-test/page.tsx":
     "fixture do harness: responde 404 sem E2E_BASE e só existe para atrasar ou quebrar uma navegação de propósito",
   "app/recruiter/page.tsx":
