@@ -22,7 +22,8 @@ promoção `dev → staging` parava em qualquer diferença em `drizzle/` ou em
    com literal e corpo `$$` mascarados) e classifica cada um por **lista de
    permissão**: criar schema, tabela, índice não único, sequência, enum e
    extensão; acrescentar coluna nula ou com default; acrescentar valor de enum;
-   afrouxar `NOT NULL`; `GRANT`; `COMMENT`; `INSERT` sem `DO UPDATE`. Restrição
+   afrouxar `NOT NULL`; trocar default (`SET DEFAULT`, que só vale para linha
+   nova); `GRANT`; `COMMENT`; `INSERT` sem `DO UPDATE`. Restrição
    (FK, único) só passa sobre tabela criada no mesmo lote ou sobre coluna nova
    sem default — o código no ar nunca escreve nelas. Todo o resto — `DROP`,
    `RENAME`, mudança de tipo, `SET NOT NULL`, restrição sobre dado existente,

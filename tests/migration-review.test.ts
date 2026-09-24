@@ -31,6 +31,14 @@ describe("splitStatements — o que é comando e o que é texto", () => {
     expect(parts[0]!.idents).toEqual(["a"]);
   });
 
+  it("o marcador do drizzle separa comandos mesmo sem ponto e vírgula", () => {
+    // O drizzle divide pelo marcador; sem esta fronteira, o CREATE TABLE
+    // permitido esconderia o DROP que vem depois dele.
+    const sql = 'CREATE TABLE "production"."t" ("id" integer)\n--> statement-breakpoint\nALTER TABLE "production"."job" DROP COLUMN "title"';
+    expect(splitStatements(sql).map((p) => p.text)).toEqual(["CREATE TABLE @0 . @1 ( @2 integer)", "ALTER TABLE @0 . @1 DROP COLUMN @2"]);
+    expect(risks(sql)).toEqual(["drop"]);
+  });
+
   it("mascara literal, literal com escape e corpo com cifrão", () => {
     const [plain, escaped, dollar, tagged] = splitStatements(
       "SELECT 'DROP TABLE x; ''ok'''; SELECT E'it\\'s; DROP'; DO $$ DROP TABLE y; $$; DO $f$ DELETE FROM z; $f$",

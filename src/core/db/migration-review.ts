@@ -79,9 +79,14 @@ export function splitStatements(sql: string): Statement[] {
     const ch = sql[i]!;
     const next = sql[i + 1];
     if (ch === "-" && next === "-") {
+      // `--> statement-breakpoint` não é só comentário: é por ele que o
+      // drizzle divide o arquivo. Sem `;` antes dele, os dois comandos viram
+      // um só aqui, e o prefixo permitido esconderia o que vem depois.
+      const breakpoint = sql.startsWith("--> statement-breakpoint", i);
       const end = sql.indexOf("\n", i);
       i = end === -1 ? sql.length : end;
-      text += " ";
+      if (breakpoint) flush();
+      else text += " ";
     } else if (ch === "/" && next === "*") {
       // PostgreSQL aninha comentário de bloco.
       let depth = 1;

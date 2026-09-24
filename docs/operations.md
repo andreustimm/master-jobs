@@ -418,10 +418,15 @@ arquivo, o motivo e o comando. Siga
 ordem e dispare `migrate.yml` à mão com o ref do projeto — nunca reexecute o job
 do push esperando outro resultado: ele recusa até o lote mudar.
 
-**Job vermelho por outro motivo** (conexão, SQL que o banco recusou): a
-transação desfez o lote inteiro, e o código novo pode estar servindo sobre o
-schema velho. A causa do servidor vem na mensagem (`— causa: <código>`).
-Corrija para frente, numa migração nova; o push dela dispara o job de novo.
+**Job vermelho por outro motivo:** veja qual passo falhou.
+
+- Falhou `jho db migrate` (conexão, SQL que o banco recusou): a transação
+  desfez o lote inteiro, e o código novo pode estar servindo sobre o schema
+  velho. A causa do servidor vem na mensagem (`— causa: <código>`). Corrija
+  para frente, numa migração nova; o push dela dispara o job de novo.
+- Falhou `jho db check`, depois de `aplicadas: <tags>`: o lote **já foi
+  gravado**, e o que falhou é a conferência de integridade. Não reaplique;
+  leia o que o check reprovou e corrija o dado ou o schema numa migração nova.
 
 ### Dev e staging: somente fixtures
 
