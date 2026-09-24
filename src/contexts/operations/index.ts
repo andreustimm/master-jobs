@@ -263,6 +263,7 @@ export {
   type SweepSlice,
 } from "./domain/sweep.ts";
 export type { SliceReport } from "./app/sweep.ts";
+export { routineTelemetry, type RoutineTelemetry } from "./infra/drizzle-telemetry.ts";
 
 /** Capturas por chamada: uma onda de quatro hosts cabe no teto da função. */
 const CAPTURE_PER_SLICE = 4;

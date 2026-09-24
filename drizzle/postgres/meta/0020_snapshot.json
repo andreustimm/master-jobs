@@ -1,5 +1,5 @@
 {
-  "id": "f744af98-9c91-41f6-baab-d83ab402d20f",
+  "id": "ac461e38-6149-4de9-ac5b-1489d95ddffa",
   "prevId": "3df20fe3-cc63-47e0-aa2f-07760e66f9e3",
   "version": "7",
   "dialect": "postgresql",
@@ -1817,6 +1817,27 @@
           "columns": [
             {
               "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "job_source_external_idx": {
+          "name": "job_source_external_idx",
+          "columns": [
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3686,6 +3707,53 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "production.request_budget": {
+      "name": "request_budget",
+      "schema": "production",
+      "columns": {
+        "routine": {
+          "name": "routine",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day": {
+          "name": "day",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "used": {
+          "name": "used",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "refused": {
+          "name": "refused",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "request_budget_pk": {
+          "name": "request_budget_pk",
+          "columns": [
+            "routine",
+            "day"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "production.saved_term": {
       "name": "saved_term",
       "schema": "production",
@@ -4501,38 +4569,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')"
-        },
-        "retired_at": {
-          "name": "retired_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "origin": {
-          "name": "origin",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'system'"
-        },
-        "config_revision": {
-          "name": "config_revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "default": 1
-        },
-        "secret_ref": {
-          "name": "secret_ref",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "managed_at": {
-          "name": "managed_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {

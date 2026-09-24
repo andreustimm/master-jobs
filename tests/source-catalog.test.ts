@@ -154,7 +154,7 @@ describe("IT-001 migration 0021: origem das linhas que já existiam", () => {
       // Criada por `jho jobs add` para um link de ATS: mesmo kind, mas desligada.
       { id: "greenhouse:avulsa", kind: "greenhouse", handle: "avulsa", label: "Avulsa", enabled: false },
     ]);
-    const backfill = readFileSync(resolve(process.cwd(), "drizzle/postgres/0021_backfill_source_origin.sql"), "utf8");
+    const backfill = readFileSync(resolve(process.cwd(), "drizzle/postgres/0022_backfill_source_origin.sql"), "utf8");
 
     await db.execute(sql.raw(backfill));
     await db.execute(sql.raw(backfill));
@@ -173,7 +173,7 @@ describe("IT-001 migration 0021: origem das linhas que já existiam", () => {
     // Migration é congelada: kind novo no registro depois dela nasce `yaml`
     // pelo `ensureSources`, sem precisar do backfill. O inverso — kind na
     // lista sem adapter — marcaria `manual`/`recruiter` como vindos do arquivo.
-    const backfill = readFileSync(resolve(process.cwd(), "drizzle/postgres/0021_backfill_source_origin.sql"), "utf8");
+    const backfill = readFileSync(resolve(process.cwd(), "drizzle/postgres/0022_backfill_source_origin.sql"), "utf8");
     const lista = /"kind" IN \(([^)]*)\)/.exec(backfill)![1]!.split(",").map((k) => k.trim().replaceAll("'", ""));
     expect(lista.length).toBeGreaterThan(0);
     expect([...FETCHABLE_SOURCE_KINDS]).toEqual(expect.arrayContaining(lista));
