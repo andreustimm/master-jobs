@@ -128,6 +128,26 @@ devagar, nunca incorreto.
 `jho sources list`. Assim a tela não depende de token para dizer a verdade sobre
 o acervo.
 
+### Execuções registradas (`source_run`)
+
+Captura e verificação pedidas pelo catálogo viram uma linha em `source_run`
+(#223): escopo, quem pediu, o retrato da configuração, contagens e erro
+redigido. O pedido cria a execução `queued` e a despacha com a rotina
+`execucao` do `varredura.yml` (insumos `acao`, `execucao` e `fonte`); o workflow
+roda só `pnpm jho jobs sync --run <id>` ou `pnpm jho jobs verify --run <id>`, e
+nenhum passo da varredura inteira. `jho jobs sync` pela cron também registra
+uma execução `all`.
+
+- **Sem credencial**, a execução fica `queued` com `error_code = no_token`: ela
+  não some. Para rodá-la à mão: `pnpm jho jobs sync --run <id>`.
+- **Clique duplo** devolve a mesma execução: a chave de idempotência tem índice
+  único parcial nos estados ativos.
+- **Executor morto**: `running` sem batimento por 15 min vira `interrupted` na
+  próxima execução pedida pela CLI (e libera um novo pedido). Nova tentativa é
+  outra linha, ligada por `retry_of`; a original não muda.
+- A varredura fatiada da Vercel (`/api/cron/varredura`) ainda não registra em
+  `source_run`; ela continua medida por `sweep_run`.
+
 ## Repontuação de candidato: fatias na web
 
 Candidato que salva o currículo não espera a varredura: a ação enfileira em

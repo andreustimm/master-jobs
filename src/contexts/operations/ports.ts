@@ -20,8 +20,19 @@ export type DispatchResult =
   /** Quem executa recusou. `status` entra no texto; corpo de resposta, nunca. */
   | { ok: false; code: "rejected"; status: number };
 
+/**
+ * O que se pede a quem executa. Só `routine` é a rotina inteira de antes;
+ * com `run`, quem executa roda aquela execução de `source_run` (#223), e
+ * `source` diz de qual fonte ela é — o executor confere os dois.
+ */
+export type DispatchRequest = {
+  routine: Routine;
+  source?: string | null;
+  run?: number | null;
+};
+
 export type WorkflowDispatchPort = {
   /** Disponível quando há credencial — a tela usa isto para explicar o botão. */
   configured(): boolean;
-  dispatch(routine: Routine): Promise<DispatchResult>;
+  dispatch(request: DispatchRequest): Promise<DispatchResult>;
 };

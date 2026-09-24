@@ -44,7 +44,7 @@ import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { syncCandidateFromProfile } from "../src/core/candidate.ts";
-import { job, jobScore, platformQuota, source, termCapture, verifyTask } from "../src/core/db/schema.ts";
+import { job, jobScore, platformQuota, source, sourceRun, termCapture, verifyTask } from "../src/core/db/schema.ts";
 import { fixtureHttp, resetHttpPort, setHttpPort } from "../src/core/sources/http-port.ts";
 import "../src/core/sources/http.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
@@ -695,5 +695,85 @@ describe("jho sources snippet [platform]", () => {
     // de Gupy e que o resultado ruim é do preset.
     expect(r.out).toContain("Plataformas conhecidas");
     expect(r.out).toContain('extrator genérico para "gupy"');
+  });
+});
+
+/* ------------------------- execuções (#223, tarefa 02) ------------------------ */
+
+describe("jho jobs sync|verify com execução registrada", () => {
+  const vaga = { id: 7, title: "Arquiteta", absolute_url: "https://boards.greenhouse.io/acme/jobs/7", content: "" };
+
+  it("`jobs sync` grava uma execução `all` com filha por fonte", async () => {
+    await comSources("sources:\n  - kind: greenhouse\n    handle: acme\n    label: Acme\n");
+    setHttpPort(fixtureHttp({ "boards-api.greenhouse.io": { jobs: [vaga] } }));
+
+    const r = await rodar("jobs", "sync", "--no-score");
+
+    expect(r.code).toBeUndefined();
+    expect(r.out).toMatch(/run \d+/);
+    const execucoes = await banco().select().from(sourceRun).orderBy(sourceRun.id);
+    expect(execucoes.map((e) => [e.scopeKind, e.status])).toEqual([
+      ["all", "succeeded"],
+      ["source", "succeeded"],
+    ]);
+  });
+
+  it("`--source` roda só aquela fonte, e fonte desabilitada recusa sem execução", async () => {
+    await comSources(
+      "sources:\n  - kind: greenhouse\n    handle: acme\n    label: Acme\n  - kind: lever\n    handle: off\n    label: Off\n    enabled: false\n",
+    );
+    setHttpPort(fixtureHttp({ "boards-api.greenhouse.io": { jobs: [vaga] } }));
+
+    const r = await rodar("jobs", "sync", "--no-score", "--source", "greenhouse:acme");
+    expect(r.code).toBeUndefined();
+    expect(r.out).toContain("1 new");
+    const [unica] = await banco().select().from(sourceRun);
+    expect(unica).toMatchObject({ scopeKind: "source", sourceId: "greenhouse:acme", status: "succeeded", fetched: 1 });
+
+    const recusa = await rodar("jobs", "sync", "--no-score", "--source", "lever:off");
+    expect((recusa.erro as Error).message).toContain("source_disabled");
+    expect(await banco().select().from(sourceRun)).toHaveLength(1);
+  });
+
+  it("`--run` executa a execução enfileirada e recusa id inválido, escopo trocado e fonte trocada", async () => {
+    await comSources("sources:\n  - kind: greenhouse\n    handle: acme\n    label: Acme\n");
+    setHttpPort(fixtureHttp({ "boards-api.greenhouse.io": { jobs: [vaga] } }));
+    await rodar("jobs", "sync", "--no-score");
+    const [fila] = await banco()
+      .insert(sourceRun)
+      .values({ scopeKind: "source", sourceId: "greenhouse:acme", idempotencyKey: "teste", configSnapshot: { sources: [{ id: "greenhouse:acme", kind: "greenhouse", handle: "acme", label: "Acme", rationale: null, revision: 1, capabilities: {} }] }, status: "queued", queuedAt: "2026-09-23T12:00:00.000Z" })
+      .returning({ id: sourceRun.id });
+
+    expect(((await rodar("jobs", "sync", "--run", "abc")).erro as Error).message).toContain("positive integer");
+    expect(((await rodar("jobs", "sync", "--run", "999999")).erro as Error).message).toContain("not found");
+    expect(((await rodar("jobs", "verify", "--run", String(fila!.id))).erro as Error).message).toContain("not verify");
+    expect(((await rodar("jobs", "sync", "--run", String(fila!.id), "--source", "lever:x")).erro as Error).message).toContain("belongs to");
+
+    const r = await rodar("jobs", "sync", "--no-score", "--run", String(fila!.id), "--source", "greenhouse:acme");
+    expect(r.code).toBeUndefined();
+    const [linha] = await banco().select().from(sourceRun).where(eq(sourceRun.id, fila!.id));
+    expect(linha?.status).toBe("succeeded");
+
+    // Já terminada: repetir o despacho não roda de novo.
+    expect(((await rodar("jobs", "sync", "--no-score", "--run", String(fila!.id))).erro as Error).message).toContain("not_queued");
+  });
+
+  it("`jobs verify --source` conta vivo, fechado e inconclusivo na execução", async () => {
+    await semearVaga({ caminho: "/morta" });
+    await semearVaga({ caminho: "/viva" });
+    await semearVaga({ caminho: "/bloqueada" });
+    vi.stubGlobal("fetch", fetchPorUrl({ "/morta": 404, "/viva": 200, "/bloqueada": 403 }));
+
+    const r = await semRuido(() => rodar("jobs", "verify", "--source", "lever:acme"));
+
+    expect(r.code).toBeUndefined();
+    expect(r.out).toContain("3 verificadas");
+    const [execucao] = await banco().select().from(sourceRun);
+    expect(execucao).toMatchObject({ scopeKind: "verify", sourceId: "lever:acme", status: "succeeded", fetched: 3, alive: 1, closed: 1, inconclusive: 1 });
+  });
+
+  it("`--dry-run` não combina com execução registrada", async () => {
+    const r = await rodar("jobs", "verify", "--dry-run", "--source", "lever:acme");
+    expect((r.erro as Error).message).toContain("--dry-run cannot be combined");
   });
 });

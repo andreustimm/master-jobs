@@ -45,6 +45,8 @@ export async function verifyJobs(
     concurrency?: number;
     delayMs?: number;
     dryRun?: boolean;
+    /** Só as vagas desta fonte ("Atualizar status" de uma plataforma). */
+    sourceId?: string;
     fetchImpl?: typeof fetch;
     lookupHost?: LookupHost;
     onProgress?: (done: number, total: number) => void;
@@ -76,6 +78,7 @@ export async function verifyJobs(
       and(
         isNull(job.closedAt),
         sql`${fit} >= ${minFit}`,
+        opts.sourceId === undefined ? undefined : eq(job.sourceId, opts.sourceId),
         or(
           like(job.applyUrl, "http://%"),
           like(job.applyUrl, "https://%"),

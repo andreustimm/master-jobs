@@ -16,5 +16,5 @@ export async function requestRoutine(
 ): Promise<RequestRoutineResult> {
   const parsed = parseRoutine(input.routine);
   if (!parsed.ok) return parsed;
-  return deps.runner.dispatch(parsed.routine);
+  return deps.runner.dispatch({ routine: parsed.routine });
 }

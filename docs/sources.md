@@ -108,7 +108,8 @@ aberta até a reconferência responder 404/410. A varredura periódica
 (`enqueueStale`) só enfileira vagas com nota ≥ 55, então vaga de fonte parcial
 abaixo do corte permanece aberta — ausência não é prova, e dado faltante é
 neutro. `pnpm jho sources probe <kind> <handle>` e `jho jobs sync` mostram a
-completude de cada rodada.
+completude de cada rodada, e a execução em `source_run` a guarda
+(`completeness`), com `closed = 0` em janela parcial.
 
 ### ATS — `src/core/sources/ats.ts`
 

@@ -44,7 +44,26 @@ on:
         required: false
         default: tudo
         type: choice
-        options: [tudo, sync, termos, recheck, rescore]
+        # `execucao` é o pedido da tela de Plataformas (#223): roda só a
+        # execução de `source_run` indicada abaixo, e nenhum passo da varredura
+        # inteira casa com ela.
+        options: [tudo, sync, termos, recheck, rescore, execucao]
+      acao:
+        description: "Com rotina=execucao: sync (captura) ou recheck (verificação)"
+        required: false
+        default: sync
+        type: choice
+        options: [sync, recheck]
+      execucao:
+        description: "Com rotina=execucao: id da execução em source_run"
+        required: false
+        default: ""
+        type: string
+      fonte:
+        description: "Com rotina=execucao: kind:handle da fonte, conferido contra a execução"
+        required: false
+        default: ""
+        type: string
 
 # Duas varreduras simultâneas dobrariam a carga contra as APIs de terceiros e
 # disputariam as mesmas linhas da fila de captura. `cancel-in-progress: false`
@@ -108,6 +127,24 @@ jobs:
           if [ -z "$JHO_SOURCE_ALLOWLIST" ]; then
             echo "::error::JHO_SOURCE_ALLOWLIST ausente. A política de ingestão exige a lista declarada; nenhuma varredura executada."
             exit 1
+          fi
+
+      # 0. O pedido da tela de Plataformas (#223): uma execução de `source_run`
+      #    já criada e `queued`. Os insumos entram por variável de ambiente,
+      #    nunca interpolados no script, e a CLI valida os dois (id inteiro, e
+      #    a fonte precisa ser a da execução). Nenhum passo abaixo casa com a
+      #    rotina `execucao`.
+      - name: Executar o pedido da tela
+        if: github.event_name == 'workflow_dispatch' && inputs.rotina == 'execucao'
+        env:
+          ACAO: ${{ inputs.acao }}
+          EXECUCAO: ${{ inputs.execucao }}
+          FONTE: ${{ inputs.fonte }}
+        run: |
+          if [ "$ACAO" = "recheck" ]; then
+            pnpm jho jobs verify --run "$EXECUCAO" ${FONTE:+--source "$FONTE"}
+          else
+            pnpm jho jobs sync --run "$EXECUCAO" ${FONTE:+--source "$FONTE"}
           fi
 
       # 1. Buscar. `sync` já pontua ao final; `--no-score` existiria para pular.

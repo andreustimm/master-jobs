@@ -47,7 +47,7 @@ describe("requestRoutine", () => {
     const pedidas: string[] = [];
     const resultado = await requestRoutine(
       { routine: "recheck" },
-      { runner: { configured: () => true, dispatch: async (r) => { pedidas.push(r); return { ok: true }; } } },
+      { runner: { configured: () => true, dispatch: async (r) => { pedidas.push(r.routine); return { ok: true }; } } },
     );
     expect(resultado).toEqual({ ok: true });
     expect(pedidas).toEqual(["recheck"]);
@@ -86,7 +86,7 @@ describe("disparo no GitHub", () => {
       fetchImpl: async () => { chamadas += 1; return new Response(null, { status: 204 }); },
     });
     expect(runner.configured()).toBe(false);
-    await expect(runner.dispatch("sync")).resolves.toEqual({ ok: false, code: "no_token" });
+    await expect(runner.dispatch({ routine: "sync" })).resolves.toEqual({ ok: false, code: "no_token" });
     expect(chamadas).toBe(0);
   });
 
@@ -105,11 +105,31 @@ describe("disparo no GitHub", () => {
       },
     });
 
-    await expect(runner.dispatch("termos")).resolves.toEqual({ ok: true });
+    await expect(runner.dispatch({ routine: "termos" })).resolves.toEqual({ ok: true });
     expect(url).toBe("https://api.github.com/repos/dono/repo/actions/workflows/varredura.yml/dispatches");
     // `workflow_dispatch` só existe sobre a branch padrão.
     expect(body).toEqual({ ref: "main", inputs: { rotina: "termos" } });
     expect(autorizacao).toContain(SEGREDO);
+  });
+
+  it("execução de source_run sai como a rotina `execucao`, com ação, id e fonte", async () => {
+    const corpos: unknown[] = [];
+    const runner = githubDispatch({
+      token: SEGREDO,
+      repo: "dono/repo",
+      fetchImpl: async (_input, init) => {
+        corpos.push(JSON.parse(String(init?.body)));
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    await runner.dispatch({ routine: "sync", source: "greenhouse:acme", run: 42 });
+    await runner.dispatch({ routine: "recheck", source: null, run: 7 });
+
+    expect(corpos).toEqual([
+      { ref: "main", inputs: { rotina: "execucao", acao: "sync", execucao: "42", fonte: "greenhouse:acme" } },
+      { ref: "main", inputs: { rotina: "execucao", acao: "recheck", execucao: "7" } },
+    ]);
   });
 
   it("recusa do GitHub vira código e status, sem corpo nem credencial", async () => {
@@ -117,7 +137,7 @@ describe("disparo no GitHub", () => {
       token: SEGREDO,
       fetchImpl: async () => new Response(JSON.stringify({ message: SEGREDO }), { status: 403 }),
     });
-    const resultado = await runner.dispatch("rescore");
+    const resultado = await runner.dispatch({ routine: "rescore" });
     expect(resultado).toEqual({ ok: false, code: "rejected", status: 403 });
     expect(JSON.stringify(resultado)).not.toContain(SEGREDO);
   });
@@ -131,7 +151,7 @@ describe("varredura.yml aceita o pedido", () => {
 
   it("oferece as rotinas e roda tudo por omissão", () => {
     const input = workflow.on.workflow_dispatch.inputs.rotina;
-    expect(input?.options).toEqual([...ROUTINES]);
+    expect(input?.options).toEqual([...ROUTINES, "execucao"]);
     // Disparo sem escolha não pode significar menos que a execução agendada.
     expect(input?.default).toBe("tudo");
   });
@@ -154,6 +174,20 @@ describe("varredura.yml aceita o pedido", () => {
       // Execução agendada não tem input: ela roda tudo.
       expect(condicao, nome).toContain("github.event_name != 'workflow_dispatch'");
       expect(condicao, nome).toContain("inputs.rotina == 'tudo'");
+      // O pedido de uma execução nunca dispara a varredura inteira.
+      expect(condicao, nome).not.toContain("execucao");
     }
+  });
+
+  it("o pedido de uma execução roda só ela, com insumos fora do script", () => {
+    const passo = workflow.jobs.varrer.steps.find((s) => s.name === "Executar o pedido da tela") as
+      | { if?: string; run?: string; env?: Record<string, string> }
+      | undefined;
+    expect(passo?.if).toBe("github.event_name == 'workflow_dispatch' && inputs.rotina == 'execucao'");
+    // Insumo de `workflow_dispatch` interpolado no script seria injeção de shell.
+    expect(passo?.run).not.toContain("${{");
+    expect(passo?.env).toMatchObject({ EXECUCAO: "${{ inputs.execucao }}", FONTE: "${{ inputs.fonte }}", ACAO: "${{ inputs.acao }}" });
+    expect(passo?.run).toContain('pnpm jho jobs sync --run "$EXECUCAO"');
+    expect(passo?.run).toContain('pnpm jho jobs verify --run "$EXECUCAO"');
   });
 });
