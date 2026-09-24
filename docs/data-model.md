@@ -267,7 +267,7 @@ que é o que `pnpm jho sources list` imprime.
 | `enabled` | boolean, default `true`. `loadSources()` devolve também a entrada desabilitada, com `enabled: false`, e a linha não gerida a espelha |
 | `rationale` | por que essa fonte está na lista — mantém o config auto-documentado |
 | `retired_at` | aposentadoria suave. Aposentada sai do sync e não é editada; vagas e histórico continuam legíveis, porque a linha fica (fonte nunca é apagada) |
-| `origin` | quem criou a linha: `yaml`, `admin` ou `system` (`manual`, `recruiter`, `<kind>:~terms`). A migration `0021_backfill_source_origin` marcou como `yaml` as linhas de sync existentes |
+| `origin` | quem criou a linha: `yaml`, `admin` ou `system` (`manual`, `recruiter`, `<kind>:~terms`, fonte de ATS criada desligada por `jho jobs add`, e linha da importação do snapshot legado). A migration `0021_backfill_source_origin` marcou como `yaml` só as linhas de sync existentes **habilitadas**. Rótulo informativo: o regime é `managed_at` |
 | `config_revision` | começa em 1 e sobe a cada edição (espelhamento, órfã desabilitada, escrita do admin) |
 | `secret_ref` | **nome** da variável de ambiente com a credencial, nunca o valor (G41). Valor com cara de chave é recusado antes de gravar, e o erro não o ecoa |
 | `managed_at` | quando a linha passou a ser governada pelo banco; nulo = ainda espelha o YAML |

@@ -68,7 +68,8 @@ export type Capabilities = {
   verify: boolean;
   statusReason: false; // nenhum adapter atual prova filled/cancelled/paused
 };
-export function capabilitiesOf(kind: string): Capabilities; // kind fora do registro → tudo indisponível
+// o registro entra como dado (o que cada adapter declara), para o domínio seguir puro
+export function capabilitiesOf(kind: string, registry: readonly AdapterDescriptor[]): Capabilities; // kind fora do registro → tudo indisponível
 // sondagem de FONTE; não confundir com classify() de probe.ts, que sonda VAGA
 export type SourceProbeOutcome = "reachable" | "empty" | "blocked" | "failed";
 export function classifySourceProbe(result: { status: number | null; count: number | null }): SourceProbeOutcome;
@@ -83,9 +84,10 @@ export function validateCatalogWrite(
 ): { ok: true; value: CatalogWrite } | { ok: false; code: CatalogError };
 
 // CatalogRow carrega managedAt; o regime é por linha, sem chave global.
+// YamlEntry = entrada do arquivo como o carregador devolve (kind, handle, label, rationale?, enabled?)
 export function planCatalogImport(
-  yaml: CatalogWrite[], db: CatalogRow[],
-): { inserts: CatalogWrite[]; mirrors: CatalogWrite[]; orphans: string[]; drift: DriftItem[] };
+  yaml: readonly YamlEntry[], db: readonly CatalogRow[],
+): { inserts: YamlEntry[]; mirrors: YamlEntry[]; orphans: string[]; drift: DriftItem[] };
 // orphans = linhas não geridas sem entrada no YAML, exceto `<kind>:~terms` e kinds sem adapter; a aplicação as desabilita
 
 // operations/domain — puro. `isStale` nasce na tarefa que chegar primeiro

@@ -697,3 +697,43 @@ describe("jho sources snippet [platform]", () => {
     expect(r.out).toContain('extrator genérico para "gupy"');
   });
 });
+
+/* -------------------- catálogo: diff e import (#223, tarefa 01) -------------------- */
+
+describe("jho sources diff|import", () => {
+  it("`diff` lista a divergência e não grava nada", async () => {
+    await comSources("sources:\n  - kind: greenhouse\n    handle: acme\n    label: Acme\n");
+    const antes = await banco().select().from(source);
+
+    const r = await rodar("sources", "diff");
+
+    expect(r.code).toBeUndefined();
+    expect(r.out).toContain("greenhouse:acme");
+    expect(r.out).toContain("only in yaml");
+    expect(await banco().select().from(source)).toEqual(antes);
+  });
+
+  it("`import` sem flag simula: imprime o plano e não grava", async () => {
+    await comSources("sources:\n  - kind: greenhouse\n    handle: acme\n    label: Acme\n");
+
+    const r = await rodar("sources", "import");
+
+    expect(r.out).toContain("1 to insert");
+    expect(r.out).toContain("dry run");
+    expect(await banco().select().from(source)).toEqual([]);
+  });
+
+  it("`import --apply` grava e passa a linha a gerida", async () => {
+    await comSources("sources:\n  - kind: greenhouse\n    handle: acme\n    label: Acme\n");
+
+    const r = await rodar("sources", "import", "--apply");
+
+    expect(r.out).toContain("1 inserted");
+    const [linha] = await banco().select().from(source).where(eq(source.id, "greenhouse:acme"));
+    expect(linha?.managedAt).not.toBeNull();
+    expect(linha?.origin).toBe("yaml");
+
+    const depois = await rodar("sources", "diff");
+    expect(depois.out).toContain("yaml and database agree");
+  });
+});
