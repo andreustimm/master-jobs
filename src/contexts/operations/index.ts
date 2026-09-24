@@ -46,6 +46,7 @@ import {
   heartbeatRun,
   listRuns,
   noteRun,
+  orphanedQueuedChildren,
   runningRuns,
   transitionRun,
 } from "./infra/drizzle-source-runs.ts";
@@ -99,6 +100,7 @@ const runStore: RunStore = {
   note: noteRun,
   heartbeat: heartbeatRun,
   running: runningRuns,
+  orphans: orphanedQueuedChildren,
 };
 
 function viewOf(row: CatalogSource): CatalogSourceView {
@@ -130,16 +132,24 @@ function requestDeps(): RequestDeps {
   return { runs: runStore, catalog: catalogReader, runner, now: () => clock().iso() };
 }
 
-/** "Buscar agora", "Buscar em todas", "Atualizar status": cria e despacha. */
-export function requestSourceRun(
+/**
+ * "Buscar agora", "Buscar em todas", "Atualizar status": cria e despacha.
+ *
+ * Antes, a execução morta sem batimento vira `interrupted`: sem isso, um
+ * executor que morreu seguraria a chave, e o pedido se juntaria a ela sem que
+ * nada rodasse.
+ */
+export async function requestSourceRun(
   scope: RunScope,
   actorUserId: number | null,
   opts: { dispatch?: boolean } = {},
 ): Promise<RequestResult> {
+  await interruptStaleSourceRuns();
   return requestRun({ scope, actorUserId, dispatch: opts.dispatch }, requestDeps());
 }
 
-export function retrySourceRun(runId: number, actorUserId: number | null): Promise<RequestResult> {
+export async function retrySourceRun(runId: number, actorUserId: number | null): Promise<RequestResult> {
+  await interruptStaleSourceRuns();
   return retryRun({ runId, actorUserId }, requestDeps());
 }
 
@@ -359,8 +369,28 @@ export async function runSweep(
       async run(id) {
         const config = configs.get(id);
         if (!config) return { ok: false, items: 0, error: "fonte fora da configuração" };
-        const result = await syncSource(config);
-        return { ok: result.ok, items: result.fetched, error: result.error };
+        // A fatia também deixa execução em `source_run` (#223): toda captura
+        // explica, sozinha, o que trouxe. Uma execução equivalente já ativa
+        // (pedida pela tela) é a que esta fatia roda; uma que outro processo
+        // está rodando fica com ele.
+        const requested = await requestRun(
+          { scope: { kind: "source", sourceId: id }, actorUserId: null, dispatch: false },
+          requestDeps(),
+        );
+        if (!requested.ok) return { ok: false, items: 0, error: requested.code };
+        let synced: SyncSourceResult | null = null;
+        const executed = await executeRun(requested.runId, {
+          runs: runStore,
+          now: () => clock().iso(),
+          concurrency: 1,
+          async work() {
+            synced = await syncSource(config);
+            return countsOfSync(synced);
+          },
+        });
+        if (!executed.ok) return { ok: false, items: 0, error: executed.code };
+        const result = synced as SyncSourceResult | null;
+        return { ok: result?.ok ?? false, items: result?.fetched ?? 0, error: result?.error };
       },
     },
     score: {

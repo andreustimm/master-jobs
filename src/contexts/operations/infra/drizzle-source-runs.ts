@@ -127,6 +127,18 @@ export async function heartbeatRun(id: number, now: string): Promise<void> {
     .where(and(eq(sourceRun.id, id), eq(sourceRun.status, "running")));
 }
 
+/**
+ * Filhas ainda `queued` de um pai que já terminou (morreu no meio, ou foi
+ * interrompido): ninguém mais vai rodá-las, e a chave delas embute o pai.
+ */
+export async function orphanedQueuedChildren(): Promise<number[]> {
+  const rows = await getDb().execute<{ id: number }>(sql`
+    select child.id from ${sourceRun} child
+    join ${sourceRun} parent on parent.id = child.parent_id
+    where child.status = 'queued' and parent.status not in ('queued', 'running')`);
+  return rows.map((row) => Number(row.id));
+}
+
 /** As execuções `running`, para a regra de lease decidir quais morreram. */
 export async function runningRuns(): Promise<Pick<SourceRunRow, "id" | "status" | "heartbeatAt">[]> {
   return getDb()
