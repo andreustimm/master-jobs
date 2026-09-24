@@ -5,9 +5,10 @@
  * e não cada uma da sua consulta — duplicar a query é exatamente como as duas
  * começam a discordar sobre o que é "fonte quebrada".
  *
- * A configuração manda: uma fonte cadastrada em `config/sources.yaml` que nunca
- * sincronizou aparece como `never`, e não some da lista. Uma linha no banco sem
- * configuração correspondente não inventa uma fonte.
+ * Para linha não gerida, a configuração manda: uma fonte cadastrada em
+ * `config/sources.yaml` que nunca sincronizou aparece como `never`, e não some
+ * da lista; uma linha no banco sem configuração correspondente não inventa uma
+ * fonte. Linha gerida (#223) segue o banco, igual ao sync.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fileURLToPath } from "node:url";
@@ -19,9 +20,10 @@ let db: DB;
 
 vi.mock("../src/core/sources/config.ts", () => ({
   loadSources: async () => [
-    { kind: "lever", handle: "acme", label: "Acme" },
-    { kind: "ashby", handle: "globex", label: "Globex" },
-    { kind: "greenhouse", handle: "initech", label: "Initech" },
+    { kind: "lever", handle: "acme", label: "Acme", enabled: true },
+    { kind: "ashby", handle: "globex", label: "Globex", enabled: true },
+    { kind: "greenhouse", handle: "initech", label: "Initech", enabled: true },
+    { kind: "greenhouse", handle: "desligada", label: "Desligada no arquivo", enabled: false },
   ],
 }));
 
@@ -130,6 +132,29 @@ describe("saúde das fontes", () => {
     const fontes = await sourceHealth();
 
     expect(fontes.map((f) => f.id)).toEqual(["lever:acme", "ashby:globex", "greenhouse:initech"]);
+  });
+
+  it("linha gerida segue o banco, como o sync: aparece se ele a varre e some se não", async () => {
+    const gerida = "2026-09-23T12:00:00.000Z";
+    // Desligada no banco, mas habilitada no arquivo: o sync não a varre.
+    await seedFonte("lever:acme", { managedAt: gerida, enabled: false, lastStatus: "ok" });
+    // Fora do arquivo, mas gerida e habilitada: o sync ainda a varre.
+    await seedFonte("workable:gerida", { managedAt: gerida, enabled: true, label: "Do banco", lastStatus: "error" });
+    // Desligada no arquivo, gerida e habilitada no banco: idem.
+    await seedFonte("greenhouse:desligada", { managedAt: gerida, enabled: true, lastStatus: "ok" });
+    // Aposentada não é varrida, mesmo gerida e habilitada.
+    await seedFonte("ashby:velha", { managedAt: gerida, enabled: true, retiredAt: gerida });
+
+    const fontes = await sourceHealth();
+
+    expect(fontes.map((f) => f.id)).toEqual([
+      "ashby:globex",
+      "greenhouse:initech",
+      "workable:gerida",
+      "greenhouse:desligada",
+    ]);
+    expect(fontes.find((f) => f.id === "workable:gerida")).toMatchObject({ label: "Do banco", status: "error" });
+    expect((await sourceHealthSummary()).broken.map((f) => f.id)).toEqual(["workable:gerida"]);
   });
 });
 

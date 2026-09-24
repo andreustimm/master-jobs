@@ -10,14 +10,15 @@
  *     closes nothing by absence.
  */
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { platformQuota } from "../../contexts/sourcing/index.ts";
+import { catalogId, planCatalogImport } from "../../contexts/sourcing/domain/catalog.ts";
+import { nextRevision, platformQuota, syncableSources } from "../../contexts/sourcing/index.ts";
 import { clock } from "../clock.ts";
 import { getDb } from "../db/client.ts";
 import { deleteClosedJobsWithoutApplication } from "../db/retention.ts";
 import { job, source } from "../db/schema.ts";
 import { HttpError } from "../sources/http.ts";
 import { getAdapter, sourceId } from "../sources/registry.ts";
-import type { Completeness, SourceAdapter, SourceConfig, SourceSnapshot } from "../sources/types.ts";
+import type { CatalogEntry, Completeness, SourceAdapter, SourceConfig, SourceSnapshot } from "../sources/types.ts";
 import { guardIngestion } from "./guard.ts";
 import { decideAbsenceClosure } from "./lifecycle.ts";
 import { observeRawJobs } from "./observe.ts";
@@ -60,26 +61,89 @@ export type SyncResult = {
   };
 };
 
-/** Upsert the configured sources so the YAML config is the source of truth. */
-export async function ensureSources(configs: SourceConfig[]): Promise<void> {
+/**
+ * Leva o YAML ao banco em dois regimes, decididos por linha (`managed_at`).
+ *
+ * Linha NÃO gerida espelha o arquivo — rótulo, motivo e também `enabled:
+ * false`. Linha gerida (importada ou editada pelo admin) nunca é sobrescrita:
+ * o arquivo só insere o que falta, e uma edição feita na tela sobrevive ao
+ * sync seguinte. Banco vazio continua nascendo do YAML, como antes.
+ *
+ * `wholeFile` diz que `configs` é o arquivo inteiro, e só então uma linha não
+ * gerida ausente dele é desabilitada. `syncSource` passa uma fonte só, e
+ * tratar isso como o arquivo desligaria todas as outras.
+ *
+ * `insertOnly` é para quem recebe as fontes do BANCO (`syncSource`, `syncAll`
+ * depois de `catalogForSync`): elas não são o arquivo, então só garantem que a
+ * linha existe. Espelhar ali deixaria uma seleção velha religar uma linha que o
+ * arquivo acabou de desligar.
+ */
+export async function ensureSources(
+  configs: readonly (SourceConfig & { enabled?: boolean })[],
+  opts: { wholeFile?: boolean; insertOnly?: boolean } = {},
+): Promise<void> {
   const db = getDb();
-  for (const config of configs) {
-    const id = sourceId(config.kind, config.handle);
+  const rows = await db
+    .select({
+      id: source.id,
+      kind: source.kind,
+      handle: source.handle,
+      label: source.label,
+      rationale: source.rationale,
+      enabled: source.enabled,
+      retiredAt: source.retiredAt,
+      managedAt: source.managedAt,
+    })
+    .from(source);
+  const plan = planCatalogImport(configs, rows);
+
+  for (const entry of plan.inserts) {
+    // Outro processo pode ter inserido entre a leitura e aqui; a linha dele vale.
     await db
       .insert(source)
       .values({
-        id,
-        kind: config.kind,
-        handle: config.handle,
-        label: config.label,
-        rationale: config.rationale ?? null,
-        enabled: true,
+        id: catalogId(entry.kind, entry.handle),
+        kind: entry.kind,
+        handle: entry.handle,
+        label: entry.label,
+        rationale: entry.rationale ?? null,
+        enabled: entry.enabled ?? true,
+        origin: "yaml",
       })
-      .onConflictDoUpdate({
-        target: source.id,
-        set: { label: config.label, rationale: config.rationale ?? null, enabled: true },
-      });
+      .onConflictDoNothing({ target: source.id });
   }
+  for (const entry of opts.insertOnly ? [] : plan.mirrors) {
+    await db
+      .update(source)
+      .set({
+        label: entry.label,
+        rationale: entry.rationale ?? null,
+        enabled: entry.enabled ?? true,
+        configRevision: nextRevision(),
+      })
+      // A leitura acima pode estar velha: a condição de regime vai no próprio
+      // UPDATE, para uma linha que virou gerida no meio não ser regravada.
+      .where(and(eq(source.id, catalogId(entry.kind, entry.handle)), isNull(source.managedAt)));
+  }
+  if (opts.wholeFile && plan.orphans.length > 0) {
+    await db
+      .update(source)
+      .set({ enabled: false, configRevision: nextRevision() })
+      .where(and(inArray(source.id, plan.orphans), isNull(source.managedAt), eq(source.enabled, true)));
+  }
+}
+
+/**
+ * As fontes que o sync varre, do BANCO: o YAML entra primeiro pelo regime de
+ * `ensureSources` (arquivo inteiro, então órfã não gerida é desabilitada) e a
+ * seleção sai de `syncableSources()`. Uma fonte desligada na tela fica
+ * desligada mesmo presente no arquivo.
+ */
+export async function catalogForSync(yaml: readonly CatalogEntry[]): Promise<SourceConfig[]> {
+  // Antes de qualquer escrita, como em `syncAll`.
+  guardIngestion();
+  await ensureSources(yaml, { wholeFile: true });
+  return syncableSources();
 }
 
 /**
@@ -204,7 +268,7 @@ async function syncOne(config: SourceConfig, companies: Map<string, number>): Pr
  */
 export async function syncSource(config: SourceConfig): Promise<SyncSourceResult> {
   guardIngestion();
-  await ensureSources([config]);
+  await ensureSources([config], { insertOnly: true });
   return syncOne(config, new Map());
 }
 
@@ -219,7 +283,7 @@ export async function syncAll(
   guardIngestion();
 
   const startedAt = new Date().toISOString();
-  await ensureSources(configs);
+  await ensureSources(configs, { insertOnly: true });
 
   const concurrency = opts.concurrency ?? 4;
   const queue = [...configs];

@@ -96,9 +96,10 @@ pontuada:
 
 ```mermaid
 flowchart TD
-    Y["config/sources.yaml"] -->|"loadSources() + Zod<br/>filtra enabled: true"| CFG["SourceConfig[]"]
-    CFG --> ES["ensureSources()<br/>upsert em source por id"]
-    ES --> SA["syncAll(configs, concurrency)<br/>fila + N workers"]
+    Y["config/sources.yaml"] -->|"loadSources() + Zod<br/>com enabled"| CFG["CatalogEntry[]"]
+    CFG --> ES["catalogForSync() → ensureSources()<br/>espelha só linha não gerida"]
+    ES --> SEL["syncableSources()<br/>seleção do BANCO: habilitada,<br/>não aposentada, com adapter, fora de ~terms"]
+    SEL --> SA["syncAll(configs, concurrency)<br/>fila + N workers"]
 
     SA --> SO["syncOne(config)"]
     SO --> AD["getAdapter(kind)<br/>registry.ts"]
@@ -320,7 +321,7 @@ completa de problemas no formato `path: message`:
 | Arquivo | Loader | Schema | Override de caminho |
 |---|---|---|---|
 | `profile/profile.yaml` | `loadProfile(force = false)` (cache em módulo) | `ProfileSchema` | `JHO_PROFILE_PATH` |
-| `config/sources.yaml` | `loadSources()` (filtra `enabled: true` e descarta o campo) | `SourcesFile` | `JHO_SOURCES_PATH` |
+| `config/sources.yaml` | `loadSources()` (devolve toda entrada, com `enabled`; o sync seleciona do banco) | `SourcesFile` | `JHO_SOURCES_PATH` |
 
 `scoreAll()` chama `loadProfile(true)` — força releitura, para que editar o
 YAML e rodar o score na sequência não use um perfil em cache.
@@ -408,7 +409,7 @@ hexagonal/DDD está decidida na ADR 0007 e concluída — ver `MIGRATION.md` e
 |---|---|
 | `src/core/sources/types.ts` | Contratos: `RawJob`, `SourceKind` (12 valores), `SourceConfig`, `FetchResult`, `Completeness`, `SourceSnapshot`, `SourceAdapter`. |
 | `src/core/sources/registry.ts` | `ADAPTERS: Partial<Record<SourceKind, SourceAdapter>>` com 10 adapters, `getAdapter()` (lança para kind não registrado) e `sourceId(kind, handle)`, que devolve `kind:handle`. |
-| `src/core/sources/config.ts` | `sourcesPath()` e `loadSources()`: valida com Zod, filtra `enabled: true` e descarta o campo `enabled` do objeto retornado. |
+| `src/core/sources/config.ts` | `sourcesPath()` e `loadSources()`: valida com Zod e devolve toda entrada com `enabled` — quem quer só as habilitadas filtra. |
 | `src/core/sources/http.ts` | `getJson()` com `AbortController` (timeout 20 000 ms), até 2 retries só para `RETRYABLE`, backoff `500 * 2 ** attempt`, user-agent de `JHO_USER_AGENT`; classe `HttpError`; `htmlToText()` (strip barato de HTML, suficiente para scoring, não para renderizar). |
 | `src/core/sources/ats.ts` | Adapters `greenhouse`, `lever`, `ashby`, `smartrecruiters`, `recruitee`, com os tipos de resposta verificados contra respostas reais. |
 | `src/core/sources/aggregators.ts` | Adapters `himalayas`, `remotive`, `arbeitnow`, `remoteok`, `adzuna`; helpers `toList()` (campo que às vezes é string, às vezes lista) e `toIso()` (número = segundos). |
@@ -418,7 +419,7 @@ hexagonal/DDD está decidida na ADR 0007 e concluída — ver `MIGRATION.md` e
 | Arquivo | O que é |
 |---|---|
 | `src/core/ingest/normalize.ts` | `slugifyCompany()`, `normalizeTitle()`, `normalizeLocation()` (tokeniza, ordena alfabeticamente e rejunta), `fingerprint()` e `contentHash()` (sha256 truncado em 32 chars), `toIsoDate()`. Contém as regexes `COMPANY_NOISE` e `TITLE_NOISE`. |
-| `src/core/ingest/run.ts` | O pipeline de sync: `ensureSources()`, `upsertCompany()`, `syncOne()`, `syncAll()` (workers com concorrência limitada consumindo uma fila) e `pruneClosed()`. O cabeçalho lista os 3 invariantes de ingestão. |
+| `src/core/ingest/run.ts` | O pipeline de sync: `ensureSources()` (dois regimes por `managed_at`), `catalogForSync()`, `upsertCompany()`, `syncOne()`, `syncAll()` (workers com concorrência limitada consumindo uma fila) e `pruneClosed()`. O cabeçalho lista os 3 invariantes de ingestão. |
 | `src/core/scoring/score.ts` | Scorer determinístico puro: `SCORER_VERSION`, `WEIGHTS`, `containsTerm()` (regex com borda de palavra, para "go" não bater em "google"), `scoreTitle` / `scoreKeywords` / `scoreSeniority` / `scoreGeo` / `scoreComp` / `findBlockers` e `scoreJob()`. |
 | `src/core/scoring/apply.ts` | `scoreAll({ all })`: seleciona os jobs elegíveis, chama `scoreJob()` e faz upsert em `job_score` via `onConflictDoUpdate`. Retorna `{ scored, skipped, topFit }` — `skipped` é sempre 0 hoje. |
 

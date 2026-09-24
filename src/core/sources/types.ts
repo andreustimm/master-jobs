@@ -86,6 +86,13 @@ export type SourceConfig = {
   rationale?: string;
 };
 
+/**
+ * Uma entrada de `config/sources.yaml` como o carregador devolve: com
+ * `enabled`, porque a entrada desabilitada também é informação — sem ela, a
+ * linha do banco não teria como aprender que foi desligada no arquivo.
+ */
+export type CatalogEntry = SourceConfig & { enabled: boolean };
+
 export type FetchResult = {
   jobs: RawJob[];
   /** Non-fatal problems worth surfacing without failing the whole sync. */
@@ -140,6 +147,13 @@ export type SourceAdapter = {
   kind: FetchableSourceKind;
   /** Human-facing docs URL, so the config file explains itself. */
   docs: string;
+  /**
+   * Se a listagem PODE provar que terminou: `complete` quando o adapter sabe
+   * reconhecer o fim da lista (cada execução ainda declara a sua completude),
+   * `partial` quando nunca vê mais que uma janela. Ausente = desconhecido, e a
+   * tela de catálogo trata como indisponível.
+   */
+  snapshot?: "complete" | "partial";
   fetchJobs(config: SourceConfig): Promise<SourceSnapshot>;
   /** Present only on platforms that search by term (ADR-004). */
   termSearch?: TermSearch;

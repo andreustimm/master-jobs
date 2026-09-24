@@ -66,6 +66,11 @@ erDiagram
         TEXT last_error
         INTEGER last_job_count
         TEXT created_at
+        TEXT retired_at "aposentadoria suave"
+        TEXT origin "yaml, admin ou system"
+        INTEGER config_revision
+        TEXT secret_ref "nome da variável, nunca o valor"
+        TEXT managed_at "nulo = espelha o YAML"
     }
     company {
         INTEGER id PK
@@ -233,11 +238,25 @@ ilhas do módulo de posicionamento LinkedIn.
 
 ### `source`
 
-Uma feed configurada: um board de ATS, um agregador ou um import manual.
-`config/sources.yaml` é a fonte da verdade — `ensureSources()` faz
-`onConflictDoUpdate` por `id` no começo de cada `syncAll()`, atualizando
-`label`, `rationale` e `enabled`. A tabela também carrega a **saúde do último
-sync**, que é o que `pnpm jho sources list` imprime.
+Uma feed configurada: um board de ATS, um agregador ou um import manual. O
+**banco é a fonte da verdade do catálogo**, governado por linha (migration
+`0021_source_catalog`, #223):
+
+- linha **não gerida** (`managed_at` nulo) espelha `config/sources.yaml` a cada
+  sync — rótulo, motivo e `enabled`, inclusive `enabled: false`; uma linha não
+  gerida que saiu do arquivo é desabilitada (`ensureSources(…, { wholeFile })`);
+- linha **gerida** (`managed_at` preenchido por `jho sources import --apply` ou
+  por edição do admin) nunca é sobrescrita pelo arquivo, que só insere o que
+  falta — e a linha inserida depois nasce não gerida;
+- o sync seleciona do banco (`syncableSources()`): `enabled`, `retired_at`
+  nulo, kind com adapter e handle fora de `~terms`. Isso deixa de fora
+  `manual:sample` da fixture, `manual`/`recruiter` e as fontes da captura por
+  termo, que sincronizadas fechariam por ausência o que o termo trouxe.
+
+A decisão (quem é gerido, quem é órfão, o que diverge) é pura, em
+`src/contexts/sourcing/domain/catalog.ts` (`planCatalogImport`); `jho sources
+diff` a mostra sem gravar. A tabela também carrega a **saúde do último sync**,
+que é o que `pnpm jho sources list` imprime.
 
 | Coluna | Notas |
 |---|---|
@@ -245,8 +264,13 @@ sync**, que é o que `pnpm jho sources list` imprime.
 | `kind` | `greenhouse \| lever \| ashby \| smartrecruiters \| workable \| himalayas \| remotive \| arbeitnow \| remoteok \| adzuna \| manual` (comentário do schema; a union `SourceKind` real também inclui `recruitee`) |
 | `handle` | board token / company slug / query — o significado muda por `kind`, ver `docs/sources.md` |
 | `label` | nome legível; vários adapters usam como `companyName` quando a API não devolve o nome da empresa |
-| `enabled` | INTEGER boolean, default `true`. `loadSources()` já filtra `enabled: true` e descarta o campo, então o banco praticamente sempre vê `true` |
+| `enabled` | boolean, default `true`. `loadSources()` devolve também a entrada desabilitada, com `enabled: false`, e a linha não gerida a espelha |
 | `rationale` | por que essa fonte está na lista — mantém o config auto-documentado |
+| `retired_at` | aposentadoria suave. Aposentada sai do sync e não é editada; vagas e histórico continuam legíveis, porque a linha fica (fonte nunca é apagada) |
+| `origin` | quem criou a linha: `yaml`, `admin` ou `system` (`manual`, `recruiter`, `<kind>:~terms`, fonte de ATS criada desligada por `jho jobs add`, e linha da importação do snapshot legado). A migration `0022_backfill_source_origin` marcou como `yaml` só as linhas de sync existentes **habilitadas**. Rótulo informativo: o regime é `managed_at` |
+| `config_revision` | começa em 1 e sobe a cada edição (espelhamento, órfã desabilitada, escrita do admin) |
+| `secret_ref` | **nome** da variável de ambiente com a credencial, nunca o valor (G41). Valor com cara de chave é recusado antes de gravar, e o erro não o ecoa |
+| `managed_at` | quando a linha passou a ser governada pelo banco; nulo = ainda espelha o YAML |
 | `last_synced_at`, `last_status`, `last_error`, `last_job_count` | carimbados no fim de `syncOne()`, mas **não do mesmo jeito nos dois caminhos**: o ramo de sucesso grava os quatro (`lastStatus: "ok"`, `lastError: null`, `lastJobCount: result.fetched`); o `catch` grava só `lastSyncedAt`, `lastStatus: "error"` e `lastError`. `last_job_count` fica com o valor do último sync bem-sucedido, então `pnpm jho sources list` imprime esse número obsoleto ao lado do status `error` |
 
 Índice único: `source_kind_handle_idx (kind, handle)` — redundante com a PK por

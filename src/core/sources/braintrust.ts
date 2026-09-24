@@ -103,6 +103,7 @@ function eligibilityLine(job: BraintrustJob): string {
 
 export const braintrust: SourceAdapter = {
   kind: "braintrust",
+  snapshot: "complete",
   docs: "https://app.usebraintrust.com/api/jobs/",
   async fetchJobs(config: SourceConfig): Promise<SourceSnapshot> {
     const warnings: string[] = [];

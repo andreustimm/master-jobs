@@ -36,6 +36,9 @@ export const postSnapshotColumns: Record<string, Record<string, unknown>> = {
   // Endereço público (#235). Nulo na importação: sem endereço o perfil não
   // responde em `/p/`, que é o lado seguro; o dono escolhe um em `/candidate`.
   candidate: { public_slug: null },
+  // Catálogo governado pelo banco (#223). A linha importada nasce não gerida
+  // e na revisão 1: continua espelhando o YAML até `jho sources import --apply`.
+  source: { retired_at: null, origin: "system", config_revision: 1, secret_ref: null, managed_at: null },
 };
 
 /**
