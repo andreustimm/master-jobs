@@ -1,38 +1,45 @@
-// `pnpm route <papel> <complexidade> [--author <modelo>] [--unavailable a,b]`
+// `pnpm route <papel> <complexidade> [--session <harness>] [--author <modelo>]… [--unavailable a,b]`
 //
-// Imprime em JSON o provedor, o harness, o modelo e o effort que a política de
+// Imprime em JSON o provedor, o harness, o modelo, o effort e o valor do campo
+// de modelo da chamada de delegação (`agentModel`) que a política de
 // `config/model-routing.json` manda usar. Falha fechado: política inválida,
 // modo desconhecido ou juiz sem alternativa saem com código 1 e sem rota.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { resolveRoute, validateRouting, type Route } from "./model-routing.ts";
+import { resolveRoute, validateRouting, type Route, type RouteRequest, type Routing } from "./model-routing.ts";
 
 export const ROUTING_FILE = "config/model-routing.json";
 
-export function loadRouting(root: string) {
+export function loadRouting(root: string): Routing {
   return validateRouting(JSON.parse(readFileSync(resolve(root, ROUTING_FILE), "utf8")));
 }
 
-export function parseArgs(argv: readonly string[]): { role: string; complexity: string; author?: string; unavailable: string[] } {
+const USAGE =
+  "uso: pnpm route <papel> <complexidade> [--session <harness>] [--author <modelo>]… [--unavailable a,b]";
+
+export function parseArgs(argv: readonly string[]): RouteRequest {
   const positional: string[] = [];
-  let author: string | undefined;
+  const authors: string[] = [];
   const unavailable: string[] = [];
+  let session: string | undefined;
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index]!;
-    if (arg === "--author" || arg === "--unavailable") {
+    if (arg === "--author" || arg === "--unavailable" || arg === "--session") {
       const value = argv[++index];
       if (value === undefined || value.startsWith("--")) throw new Error(`${arg} exige um valor`);
-      if (arg === "--author") author = value;
-      else unavailable.push(...value.split(",").filter((provider) => provider !== ""));
+      const values = value.split(",").filter((item) => item !== "");
+      if (arg === "--author") authors.push(...values);
+      else if (arg === "--unavailable") unavailable.push(...values);
+      else session = value;
     } else if (arg.startsWith("--")) {
       throw new Error(`opção desconhecida: ${arg}`);
     } else {
       positional.push(arg);
     }
   }
-  if (positional.length !== 2) throw new Error("uso: pnpm route <papel> <complexidade> [--author <modelo>] [--unavailable a,b]");
-  return { role: positional[0]!, complexity: positional[1]!, author, unavailable };
+  if (positional.length !== 2) throw new Error(USAGE);
+  return { role: positional[0]!, complexity: positional[1]!, authors, unavailable, session };
 }
 
 export function main(argv: readonly string[], root: string): Route {

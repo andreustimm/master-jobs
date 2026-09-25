@@ -9,8 +9,15 @@ export const COMPLEXITIES = ["low", "medium", "high"] as const;
 export const MODES = ["claude_only", "codex_only", "multi_provider"] as const;
 export const HARNESSES = ["claude", "codex", "opencode"] as const;
 
+/**
+ * Apelidos que o Agent tool do Claude Code aceita no campo `model`: ele não
+ * recebe o ID completo nem effort por chamada (o effort vem do frontmatter do
+ * agente). Todo modelo do provedor do Claude Code precisa de um apelido.
+ */
+export const CLAUDE_AGENT_ALIASES = ["opus", "sonnet", "haiku", "fable"] as const;
+
 /** Modos de um harness só e o harness que eles permitem. */
-const SINGLE_HARNESS_MODES: Partial<Record<string, Harness>> = {
+const SINGLE_HARNESS_MODES: Partial<Record<Mode, Harness>> = {
   claude_only: "claude",
   codex_only: "codex",
 };
@@ -24,6 +31,8 @@ export type Candidate = { model: string; effort: string | null };
 export type Provider = {
   harness: Harness;
   efforts: string[];
+  /** Só no provedor do Claude Code: ID do modelo → apelido do Agent tool. */
+  agentAliases?: Record<string, string>;
   roles: Record<Role, Record<Complexity, Candidate[]>>;
 };
 export type Routing = {
@@ -41,6 +50,11 @@ export type Route = {
   harness: Harness;
   model: string;
   effort: string | null;
+  /**
+   * O que vai no campo de modelo da chamada de delegação do harness: no Claude
+   * Code, o apelido do Agent tool (`opus`…); nos outros, o próprio `model`.
+   */
+  agentModel: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -79,6 +93,7 @@ export function validateRouting(raw: unknown): Routing {
       errors.push(`providers.${name}.efforts precisa ser lista de texto`);
     }
     const roles = isRecord(value.roles) ? value.roles : {};
+    const models = new Set<string>();
     for (const role of ROLES) {
       const cells = isRecord(roles[role]) ? roles[role] : null;
       if (!cells) {
@@ -97,6 +112,7 @@ export function validateRouting(raw: unknown): Routing {
             errors.push(`${where}: candidato sem model`);
             continue;
           }
+          models.add(candidate.model);
           const previous = owner.get(candidate.model);
           if (previous && previous !== name) errors.push(`${where}: ${candidate.model} já pertence a ${previous}`);
           owner.set(candidate.model, name);
@@ -106,12 +122,42 @@ export function validateRouting(raw: unknown): Routing {
             errors.push(`${where}: effort ${JSON.stringify(effort)} fora de [${accepted.join(", ")}]${accepted.length === 0 ? " (use null)" : ""}`);
           }
         }
-        if (role === "judge" && new Set(list.map((candidate) => (candidate as Candidate).model)).size < 2) {
+        const named = list.filter((candidate) => isRecord(candidate) && typeof candidate.model === "string");
+        if (role === "judge" && new Set(named.map((candidate) => (candidate as Candidate).model)).size < 2) {
           // Com um modelo só, o juiz coincide com o autor sempre que o autor
           // for esse modelo — e o modo de um provedor só não teria saída.
           errors.push(`${where}: o juiz precisa de pelo menos dois modelos distintos`);
         }
       }
+    }
+    // Executor e corretor podem ser modelos diferentes no mesmo delta; se todo
+    // candidato a juiz também escreve, dois autores do mesmo provedor deixam
+    // um modo de provedor único sem juiz. Um candidato que nunca escreve fecha
+    // o caso para qualquer combinação de autores.
+    const writers = new Set(
+      (["executor", "fixer"] as const).flatMap((role) =>
+        COMPLEXITIES.flatMap((complexity) => {
+          const list = isRecord(roles[role]) ? (roles[role] as Record<string, unknown>)[complexity] : [];
+          return Array.isArray(list) ? list.filter(isRecord).map((candidate) => candidate.model) : [];
+        }),
+      ),
+    );
+    const judges = isRecord(roles.judge) ? roles.judge : {};
+    for (const complexity of COMPLEXITIES) {
+      const list = Array.isArray(judges[complexity]) ? (judges[complexity] as unknown[]).filter(isRecord) : [];
+      if (list.length > 0 && list.every((candidate) => writers.has(candidate.model))) {
+        errors.push(`providers.${name}.roles.judge.${complexity}: precisa de um candidato que não seja executor nem corretor`);
+      }
+    }
+    if (value.harness === "claude") {
+      const aliases = isRecord(value.agentAliases) ? value.agentAliases : {};
+      for (const model of models) {
+        if (!oneOf(aliases[model], CLAUDE_AGENT_ALIASES)) {
+          errors.push(`providers.${name}.agentAliases: ${model} sem apelido do Agent tool (${CLAUDE_AGENT_ALIASES.join(", ")})`);
+        }
+      }
+    } else if (value.agentAliases !== undefined) {
+      errors.push(`providers.${name}.agentAliases: só o provedor do Claude Code usa apelido`);
     }
   }
 
@@ -170,10 +216,18 @@ export function providerOf(routing: Routing, model: string): string | null {
 export type RouteRequest = {
   role: string;
   complexity: string;
-  /** Modelo que escreveu o delta; obrigatório para o juiz. */
-  author?: string;
+  /**
+   * Modelos que escreveram o delta em julgamento — o do executor e o de cada
+   * corretor; obrigatório para o juiz, que não pode ser nenhum deles.
+   */
+  authors?: readonly string[];
   /** Provedores sem cota agora; saem da ladder. */
   unavailable?: readonly string[];
+  /**
+   * Harness da sessão que delega: fora o juiz, ela só delega a agentes do
+   * próprio harness, então a ladder se restringe aos provedores dele.
+   */
+  session?: string;
 };
 
 export function resolveRoute(routing: Routing, request: RouteRequest): Route {
@@ -181,37 +235,58 @@ export function resolveRoute(routing: Routing, request: RouteRequest): Route {
   if (!oneOf(request.complexity, COMPLEXITIES)) {
     throw new Error(`complexidade "${request.complexity}" desconhecida (aceitas: ${COMPLEXITIES.join(", ")})`);
   }
+  if (request.session !== undefined && !oneOf(request.session, HARNESSES)) {
+    throw new Error(`sessão "${request.session}" desconhecida (aceitas: ${HARNESSES.join(", ")})`);
+  }
+  const unavailable = request.unavailable ?? [];
+  for (const provider of unavailable) {
+    // Um nome errado aqui deixaria o provedor sem cota na ladder em silêncio.
+    if (!(provider in routing.providers)) throw new Error(`provedor "${provider}" desconhecido em --unavailable`);
+  }
   const { role, complexity } = request;
   const mode = routing.subscriptionMode;
-  const ladder = routing.modes[mode].filter((provider) => !(request.unavailable ?? []).includes(provider));
+  let ladder = routing.modes[mode].filter((provider) => !unavailable.includes(provider));
   if (ladder.length === 0) throw new Error(`nenhum provedor disponível no modo ${mode}`);
 
-  const route = (provider: string, candidate: Candidate): Route => ({
-    mode,
-    role,
-    complexity,
-    provider,
-    harness: routing.providers[provider]!.harness,
-    model: candidate.model,
-    effort: candidate.effort,
-  });
+  const route = (provider: string, candidate: Candidate): Route => {
+    const aliases = routing.providers[provider]!.agentAliases;
+    return {
+      mode,
+      role,
+      complexity,
+      provider,
+      harness: routing.providers[provider]!.harness,
+      model: candidate.model,
+      effort: candidate.effort,
+      agentModel: aliases?.[candidate.model] ?? candidate.model,
+    };
+  };
 
   if (role !== "judge") {
+    if (request.session !== undefined) {
+      ladder = ladder.filter((provider) => routing.providers[provider]!.harness === request.session);
+      if (ladder.length === 0) throw new Error(`o modo ${mode} não tem provedor disponível para a sessão ${request.session}`);
+    }
     const provider = ladder[0]!;
     return route(provider, routing.providers[provider]!.roles[role][complexity][0]!);
   }
 
-  if (!request.author) throw new Error("o juiz exige --author (o modelo que escreveu o delta)");
-  const authorProvider = providerOf(routing, request.author);
-  if (authorProvider === null) throw new Error(`autor "${request.author}" não está no registro de modelos`);
+  const authors = request.authors ?? [];
+  if (authors.length === 0) throw new Error("o juiz exige --author (cada modelo que escreveu o delta)");
+  const authorProviders = new Set<string>();
+  for (const author of authors) {
+    const provider = providerOf(routing, author);
+    if (provider === null) throw new Error(`autor "${author}" não está no registro de modelos`);
+    authorProviders.add(provider);
+  }
   // Outro provedor primeiro: independência de família vale mais que de versão.
   const ordered = [
-    ...ladder.filter((provider) => provider !== authorProvider),
-    ...ladder.filter((provider) => provider === authorProvider),
+    ...ladder.filter((provider) => !authorProviders.has(provider)),
+    ...ladder.filter((provider) => authorProviders.has(provider)),
   ];
   for (const provider of ordered) {
-    const candidate = routing.providers[provider]!.roles.judge[complexity].find((option) => option.model !== request.author);
+    const candidate = routing.providers[provider]!.roles.judge[complexity].find((option) => !authors.includes(option.model));
     if (candidate) return route(provider, candidate);
   }
-  throw new Error(`nenhum juiz diferente de ${request.author} no modo ${mode}`);
+  throw new Error(`nenhum juiz diferente de ${authors.join(", ")} no modo ${mode}`);
 }

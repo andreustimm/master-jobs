@@ -2,87 +2,269 @@
   "schemaVersion": 1,
   "subscriptionMode": "claude_only",
   "modes": {
-    "claude_only": ["anthropic"],
-    "codex_only": ["openai"],
-    "multi_provider": ["anthropic", "openai", "opencode"]
+    "claude_only": [
+      "anthropic"
+    ],
+    "codex_only": [
+      "openai"
+    ],
+    "multi_provider": [
+      "anthropic",
+      "openai",
+      "opencode"
+    ]
   },
   "providers": {
     "anthropic": {
       "harness": "claude",
-      "efforts": ["low", "medium", "high", "xhigh", "max"],
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "agentAliases": {
+        "claude-fable-5-1": "fable",
+        "claude-opus-5-5": "opus",
+        "claude-sonnet-5": "sonnet",
+        "claude-haiku-4-5-20251001": "haiku"
+      },
       "roles": {
         "analyst": {
-          "low": [{ "model": "claude-sonnet-5", "effort": "medium" }],
-          "medium": [{ "model": "claude-opus-5-5", "effort": "medium" }],
-          "high": [{ "model": "claude-opus-5-5", "effort": "high" }]
+          "low": [
+            {
+              "model": "claude-sonnet-5",
+              "effort": "medium"
+            }
+          ],
+          "medium": [
+            {
+              "model": "claude-opus-5-5",
+              "effort": "medium"
+            }
+          ],
+          "high": [
+            {
+              "model": "claude-opus-5-5",
+              "effort": "high"
+            }
+          ]
         },
         "executor": {
-          "low": [{ "model": "claude-haiku-4-5-20251001", "effort": "medium" }],
-          "medium": [{ "model": "claude-sonnet-5", "effort": "high" }],
-          "high": [{ "model": "claude-opus-5-5", "effort": "xhigh" }]
+          "low": [
+            {
+              "model": "claude-haiku-4-5-20251001",
+              "effort": "medium"
+            }
+          ],
+          "medium": [
+            {
+              "model": "claude-sonnet-5",
+              "effort": "high"
+            }
+          ],
+          "high": [
+            {
+              "model": "claude-opus-5-5",
+              "effort": "xhigh"
+            }
+          ]
         },
         "fixer": {
-          "low": [{ "model": "claude-haiku-4-5-20251001", "effort": "medium" }],
-          "medium": [{ "model": "claude-sonnet-5", "effort": "high" }],
-          "high": [{ "model": "claude-opus-5-5", "effort": "high" }]
+          "low": [
+            {
+              "model": "claude-haiku-4-5-20251001",
+              "effort": "medium"
+            }
+          ],
+          "medium": [
+            {
+              "model": "claude-sonnet-5",
+              "effort": "high"
+            }
+          ],
+          "high": [
+            {
+              "model": "claude-opus-5-5",
+              "effort": "high"
+            }
+          ]
         },
         "reviewer": {
-          "low": [{ "model": "claude-sonnet-5", "effort": "medium" }],
-          "medium": [{ "model": "claude-opus-5-5", "effort": "high" }],
-          "high": [{ "model": "claude-opus-5-5", "effort": "xhigh" }]
+          "low": [
+            {
+              "model": "claude-sonnet-5",
+              "effort": "medium"
+            }
+          ],
+          "medium": [
+            {
+              "model": "claude-opus-5-5",
+              "effort": "high"
+            }
+          ],
+          "high": [
+            {
+              "model": "claude-opus-5-5",
+              "effort": "xhigh"
+            }
+          ]
         },
         "judge": {
           "low": [
-            { "model": "claude-sonnet-5", "effort": "medium" },
-            { "model": "claude-opus-5-5", "effort": "medium" }
+            {
+              "model": "claude-sonnet-5",
+              "effort": "medium"
+            },
+            {
+              "model": "claude-fable-5-1",
+              "effort": "medium"
+            }
           ],
           "medium": [
-            { "model": "claude-opus-5-5", "effort": "high" },
-            { "model": "claude-fable-5-1", "effort": "high" }
+            {
+              "model": "claude-fable-5-1",
+              "effort": "high"
+            },
+            {
+              "model": "claude-opus-5-5",
+              "effort": "high"
+            }
           ],
           "high": [
-            { "model": "claude-fable-5-1", "effort": "high" },
-            { "model": "claude-opus-5-5", "effort": "xhigh" }
+            {
+              "model": "claude-fable-5-1",
+              "effort": "high"
+            },
+            {
+              "model": "claude-opus-5-5",
+              "effort": "xhigh"
+            }
           ]
         }
       }
     },
     "openai": {
       "harness": "codex",
-      "efforts": ["low", "medium", "high", "xhigh", "max"],
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
       "roles": {
         "analyst": {
-          "low": [{ "model": "gpt-5.6-terra", "effort": "medium" }],
-          "medium": [{ "model": "gpt-6-astra", "effort": "medium" }],
-          "high": [{ "model": "gpt-6-astra", "effort": "high" }]
+          "low": [
+            {
+              "model": "gpt-5.6-terra",
+              "effort": "medium"
+            }
+          ],
+          "medium": [
+            {
+              "model": "gpt-6-astra",
+              "effort": "medium"
+            }
+          ],
+          "high": [
+            {
+              "model": "gpt-6-astra",
+              "effort": "high"
+            }
+          ]
         },
         "executor": {
-          "low": [{ "model": "gpt-5.6-luna", "effort": "high" }],
-          "medium": [{ "model": "gpt-5.6-luna", "effort": "max" }],
-          "high": [{ "model": "gpt-5.6-luna", "effort": "max" }]
+          "low": [
+            {
+              "model": "gpt-5.6-luna",
+              "effort": "high"
+            }
+          ],
+          "medium": [
+            {
+              "model": "gpt-5.6-luna",
+              "effort": "max"
+            }
+          ],
+          "high": [
+            {
+              "model": "gpt-5.6-luna",
+              "effort": "max"
+            }
+          ]
         },
         "fixer": {
-          "low": [{ "model": "gpt-5.6-luna", "effort": "high" }],
-          "medium": [{ "model": "gpt-5.6-luna", "effort": "max" }],
-          "high": [{ "model": "gpt-5.6-luna", "effort": "max" }]
+          "low": [
+            {
+              "model": "gpt-5.6-luna",
+              "effort": "high"
+            }
+          ],
+          "medium": [
+            {
+              "model": "gpt-5.6-luna",
+              "effort": "max"
+            }
+          ],
+          "high": [
+            {
+              "model": "gpt-5.6-luna",
+              "effort": "max"
+            }
+          ]
         },
         "reviewer": {
-          "low": [{ "model": "gpt-5.6-terra", "effort": "medium" }],
-          "medium": [{ "model": "gpt-5.6-terra", "effort": "medium" }],
-          "high": [{ "model": "gpt-5.6-terra", "effort": "high" }]
+          "low": [
+            {
+              "model": "gpt-5.6-terra",
+              "effort": "medium"
+            }
+          ],
+          "medium": [
+            {
+              "model": "gpt-5.6-terra",
+              "effort": "medium"
+            }
+          ],
+          "high": [
+            {
+              "model": "gpt-5.6-terra",
+              "effort": "high"
+            }
+          ]
         },
         "judge": {
           "low": [
-            { "model": "gpt-5.6-terra", "effort": "medium" },
-            { "model": "gpt-5.6-sol", "effort": "medium" }
+            {
+              "model": "gpt-5.6-terra",
+              "effort": "medium"
+            },
+            {
+              "model": "gpt-5.6-sol",
+              "effort": "medium"
+            }
           ],
           "medium": [
-            { "model": "gpt-5.6-terra", "effort": "medium" },
-            { "model": "gpt-5.6-sol", "effort": "medium" }
+            {
+              "model": "gpt-5.6-terra",
+              "effort": "medium"
+            },
+            {
+              "model": "gpt-5.6-sol",
+              "effort": "medium"
+            }
           ],
           "high": [
-            { "model": "gpt-5.6-sol", "effort": "high" },
-            { "model": "gpt-5.6-terra", "effort": "high" }
+            {
+              "model": "gpt-5.6-sol",
+              "effort": "high"
+            },
+            {
+              "model": "gpt-5.6-terra",
+              "effort": "high"
+            }
           ]
         }
       }
@@ -92,37 +274,115 @@
       "efforts": [],
       "roles": {
         "analyst": {
-          "low": [{ "model": "opencode-go/deepseek-v4-pro", "effort": null }],
-          "medium": [{ "model": "opencode-go/deepseek-v4-pro", "effort": null }],
-          "high": [{ "model": "opencode-go/deepseek-v4-pro", "effort": null }]
+          "low": [
+            {
+              "model": "opencode-go/deepseek-v4-pro",
+              "effort": null
+            }
+          ],
+          "medium": [
+            {
+              "model": "opencode-go/deepseek-v4-pro",
+              "effort": null
+            }
+          ],
+          "high": [
+            {
+              "model": "opencode-go/deepseek-v4-pro",
+              "effort": null
+            }
+          ]
         },
         "executor": {
-          "low": [{ "model": "opencode-go/deepseek-v4-pro", "effort": null }],
-          "medium": [{ "model": "opencode-go/deepseek-v4-pro", "effort": null }],
-          "high": [{ "model": "opencode-go/deepseek-v4-pro", "effort": null }]
+          "low": [
+            {
+              "model": "opencode-go/deepseek-v4-pro",
+              "effort": null
+            }
+          ],
+          "medium": [
+            {
+              "model": "opencode-go/deepseek-v4-pro",
+              "effort": null
+            }
+          ],
+          "high": [
+            {
+              "model": "opencode-go/deepseek-v4-pro",
+              "effort": null
+            }
+          ]
         },
         "fixer": {
-          "low": [{ "model": "opencode-go/deepseek-v4-pro", "effort": null }],
-          "medium": [{ "model": "opencode-go/deepseek-v4-pro", "effort": null }],
-          "high": [{ "model": "opencode-go/deepseek-v4-pro", "effort": null }]
+          "low": [
+            {
+              "model": "opencode-go/deepseek-v4-pro",
+              "effort": null
+            }
+          ],
+          "medium": [
+            {
+              "model": "opencode-go/deepseek-v4-pro",
+              "effort": null
+            }
+          ],
+          "high": [
+            {
+              "model": "opencode-go/deepseek-v4-pro",
+              "effort": null
+            }
+          ]
         },
         "reviewer": {
-          "low": [{ "model": "opencode-go/qwen3.7-plus", "effort": null }],
-          "medium": [{ "model": "opencode-go/qwen3.7-plus", "effort": null }],
-          "high": [{ "model": "opencode-go/qwen3.7-plus", "effort": null }]
+          "low": [
+            {
+              "model": "opencode-go/qwen3.7-plus",
+              "effort": null
+            }
+          ],
+          "medium": [
+            {
+              "model": "opencode-go/qwen3.7-plus",
+              "effort": null
+            }
+          ],
+          "high": [
+            {
+              "model": "opencode-go/qwen3.7-plus",
+              "effort": null
+            }
+          ]
         },
         "judge": {
           "low": [
-            { "model": "opencode-go/kimi-k2.7-code", "effort": null },
-            { "model": "opencode-go/qwen3.7-plus", "effort": null }
+            {
+              "model": "opencode-go/kimi-k2.7-code",
+              "effort": null
+            },
+            {
+              "model": "opencode-go/qwen3.7-plus",
+              "effort": null
+            }
           ],
           "medium": [
-            { "model": "opencode-go/kimi-k2.7-code", "effort": null },
-            { "model": "opencode-go/qwen3.7-plus", "effort": null }
+            {
+              "model": "opencode-go/kimi-k2.7-code",
+              "effort": null
+            },
+            {
+              "model": "opencode-go/qwen3.7-plus",
+              "effort": null
+            }
           ],
           "high": [
-            { "model": "opencode-go/kimi-k2.7-code", "effort": null },
-            { "model": "opencode-go/qwen3.7-plus", "effort": null }
+            {
+              "model": "opencode-go/kimi-k2.7-code",
+              "effort": null
+            },
+            {
+              "model": "opencode-go/qwen3.7-plus",
+              "effort": null
+            }
           ]
         }
       }

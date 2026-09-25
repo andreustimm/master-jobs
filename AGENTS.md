@@ -237,11 +237,11 @@ e do OpenCode (`.opencode/agents/`, `opencode.json`) são **gerados** por
 espelho. Agentes de papel: `task-analyst`, `executor`, `fixer`, `reviewer`,
 `judge`. [[G85](docs/engineering/rules/delivery.md#g85)]
 
-Ao delegar, passe modelo e effort explícitos de `pnpm route <papel>
-<complexidade>` (política em `config/model-routing.json`, modo
-`claude_only` | `codex_only` | `multi_provider`, que falha fechado). O juiz
-nunca é o modelo que escreveu o delta, e o agente nunca rebaixa o modelo do
-turno principal por conta própria.
+Ao delegar, passe o modelo de `pnpm route <papel> <complexidade> --session
+<harness>` na chamada (política em `config/model-routing.json`, modo
+`claude_only` | `codex_only` | `multi_provider`; política inválida ou modo
+desconhecido falham fechado). O juiz nunca é modelo que escreveu o delta, e o
+agente nunca rebaixa o modelo do turno principal por conta própria.
 [[G86](docs/engineering/rules/orchestration.md#g86), [G87](docs/engineering/rules/orchestration.md#g87)]
 
 Conforme `~/.claude/RTK.md`: no Codex e no OpenCode todo comando de shell vai
