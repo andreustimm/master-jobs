@@ -60,20 +60,45 @@ export function bashSpecifierMatches(specifier: string, command: string): boolea
 const RTK_PREFIX = /^rtk\s+(?:proxy\s+)?/;
 
 /**
+ * Invólucros que executam o comando seguinte sem mudar o que ele faz:
+ * `env`/atribuição de variável, `command`, `exec`, `nohup`, `time`, `nice` e
+ * `timeout`. Sem tirá-los, `env rm -rf src` escaparia de `rm:*`.
+ */
+const WRAPPER = /^(?:(?:env|command|exec|nohup|time)\s+|nice\s+(?:-n\s*-?\d+\s+)?|timeout\s+\S+\s+|[A-Za-z_][A-Za-z0-9_]*=\S*\s+)/;
+
+/** Tira `rtk`, invólucros e o diretório do executável (`/bin/rm` → `rm`) até estabilizar. */
+function unwrap(segment: string): string {
+  let current = segment;
+  for (let previous = ""; previous !== current; ) {
+    previous = current;
+    current = current.replace(RTK_PREFIX, "").replace(WRAPPER, "").replace(/^\/\S*\/(?=\S)/, "");
+  }
+  return current;
+}
+
+/** O que um shell aninhado vai rodar: `sh -c 'rm -rf src'` → `rm -rf src`. */
+const NESTED_SHELL = /(?:^|\s)(?:ba|z|da|k)?sh\s+-c\s+(['"])([\s\S]*?)\1/g;
+
+/**
  * O comando inteiro e cada trecho dele: `cd x && git push origin main` precisa
  * cair na regra de `git push` mesmo sem começar por ela. Além de `&&`, `||`,
  * `;` e `|`, corta em `&`, subshell, chaves, `$(`, crase e substituição de
- * processo — um trecho a mais só pode acrescentar uma decisão mais forte,
- * nunca tirar uma. Cada trecho vale também sem o prefixo `rtk`.
+ * processo — fora de aspas simples, onde o shell não interpreta nada e cortar
+ * faria de uma mensagem de commit um comando. Cada trecho vale também sem
+ * `rtk`, sem invólucro e sem o caminho do executável, e o corpo de `sh -c`
+ * entra como comando próprio. Trecho a mais só acrescenta decisão mais forte.
  */
-export function commandSegments(command: string): string[] {
+export function commandSegments(command: string, depth = 0): string[] {
   const whole = command.trim();
-  const parts = whole
+  const literal = whole.replace(/'[^']*'/g, "''");
+  const parts = literal
     .split(/&&|\|\||\$\(|[<>]\(|[;|&\n(){}`]/)
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
   const segments = [whole, ...parts];
-  return [...new Set([...segments, ...segments.map((segment) => segment.replace(RTK_PREFIX, ""))])];
+  const nested =
+    depth < 2 ? [...whole.matchAll(NESTED_SHELL)].flatMap((match) => commandSegments(match[2]!, depth + 1)) : [];
+  return [...new Set([...segments, ...segments.map(unwrap), ...nested])];
 }
 
 /**
@@ -184,6 +209,9 @@ export const OPENCODE_TOOL: Readonly<Record<string, readonly string[]>> = {
   WebSearch: ["websearch"],
 };
 
+/** Ferramentas cujo especificador é caminho de arquivo, no estilo gitignore. */
+const PATH_TOOLS = new Set(["Read", "Edit", "Write"]);
+
 /** Ferramentas que o Claude Code pergunta antes de usar quando nada as libera. */
 const ASK_BY_DEFAULT = new Set(["bash", "edit", "webfetch", "websearch"]);
 
@@ -254,8 +282,12 @@ export function toOpenCodePermission(permissions: ClaudePermissions): OpenCodePe
             place(entry, `rtk ${pattern}`, decision);
             place(entry, `rtk proxy ${pattern}`, decision);
           }
-        } else {
+        } else if (PATH_TOOLS.has(rule.tool)) {
           for (const pattern of openCodePathPatterns(rule.specifier)) place(entry, pattern, decision);
+        } else {
+          // `WebFetch(domain:x)` não é caminho: traduzido como tal, o deny
+          // viraria um padrão que nunca casa com a URL e sumiria em silêncio.
+          throw new Error(`regra ${rule.tool}(${rule.specifier}) sem tradução para o OpenCode (scripts/harness/permissions.ts)`);
         }
       }
     }
