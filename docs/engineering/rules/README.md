@@ -94,11 +94,11 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G50 | Limpar branch mesclada | [delivery](delivery.md#g50) | "Fluxo de trabalho" | preservada |
 | G51 | Migração suspende promoção | [delivery](delivery.md#g51) | "Fluxo de trabalho" | preservada |
 | G52 | Retorno `main`→`dev` | [delivery](delivery.md#g52) | "Fluxo de trabalho" | preservada |
-| G53 | Deep-review antes da PR | [delivery](delivery.md#g53) | regra 19 + "Revisão profunda" | preservada; revisão vale para o diff atual |
-| G54 | FIX_BEFORE_SHIP não é aprovação | [delivery](delivery.md#g54) | regra 19 | reformulada sem enfraquecer (C11) |
+| G53 | Deep-review no nível do risco antes da PR pronta | [delivery](delivery.md#g53) | regra 19 + "Revisão profunda" | emendada por decisão do dono (#319): L0/L1/L2 por caminho, rodada 2+ só delta, teto de 3; L2 mantém o pipeline completo |
+| G54 | FIX_BEFORE_SHIP não é aprovação | [delivery](delivery.md#g54) | regra 19 | reformulada sem enfraquecer (C11); só Critical/Major bloqueiam (#319) |
 | G55 | QA vivo para mudança visível | [delivery](delivery.md#g55) | regra 20 + "QA de jornada" | preservada |
 | G56 | Cadência única; `Pass` com prova | [delivery](delivery.md#g56) | "QA de jornada" | preservada |
-| G57 | Validação proporcional | [delivery](delivery.md#g57) | regra 20 | preservada; extensão não decide sozinha |
+| G57 | Validação proporcional | [delivery](delivery.md#g57) | regra 20 | preservada; extensão não decide sozinha; local enxuta, PR draft cedo e orçamento de tempo por gate (#319) |
 | G58 | Nota releaseável em fragmento de changelog | [delivery](delivery.md#g58) | regra 21 | preservada; formato de fragmento (#263) substitui a edição do `Unreleased` |
 | G59 | Tag SemVer tem GitHub Release | [delivery](delivery.md#g59) | regra 22 | preservada |
 | G60 | Changelog vs `docs/` | [delivery](delivery.md#g60) | regra 23 | preservada; linha para `docs/engineering/rules/` |
@@ -125,11 +125,12 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G81 | Re-seed não reseta progresso | [data](data-and-sourcing.md#g81) | `architecture.md` | preservada |
 | G82 | Comentário explica por quê | [architecture](architecture.md#g82) | "Convenções de código" | preservada |
 | G83 | Estado e contagens fora das instruções | [delivery](delivery.md#g83) | "Estado atual", "Comandos" | preservada; inventário movido para `docs/cli.md` |
-| G84 | Revisão relata; auditoria e QA distintos | [delivery](delivery.md#g84) | "Revisão profunda" | preservada |
+| G84 | Revisão relata; auditoria e QA distintos | [delivery](delivery.md#g84) | "Revisão profunda" | preservada; um revisor por diff (#319) |
 
 **Obrigações posteriores à auditoria**, sem ID `G`, preservadas no mesmo
-destino: [R24 — issue e Project 3](delivery.md#r24) e
-[`Closes #N` na mensagem do commit](delivery.md#r24-closes).
+destino: [R24 — issue e Project 3](delivery.md#r24),
+[`Closes #N` na mensagem do commit](delivery.md#r24-closes) e
+[tamanho S/M/L da tarefa](delivery.md#r24-tamanho).
 
 **Para onde foi o resto do texto antigo da entrada**, que não era regra:
 inventário de comandos → [cli.md](../../cli.md) ("Referência rápida"); árvore

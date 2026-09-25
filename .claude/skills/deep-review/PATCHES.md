@@ -52,3 +52,27 @@ ln -s alguma-pasta ./link-para-pasta     # deixado sem rastrear
 python3 .claude/skills/deep-review/scripts/build_manifest.py --out /tmp/x --worktree
 # IsADirectoryError
 ```
+
+## 2. Níveis L0/L1/L2 por risco do caminho
+
+**Instalado em:** 25/09/2026 ([#319](https://github.com/andreustimm/master-jobs/issues/319))
+**Estado na origem:** não existe; é política deste repositório (G53)
+
+A origem roda sempre o pipeline completo: coortes de defeito **e** de polish,
+fan-out por Workflow ou subagente. Para diff de risco comum isso gastava tempo
+e tokens sem mudar o veredito, que só Critical/Major decidem.
+
+- `scripts/review_level.py` (novo): classifica todo caminho tocado, inclusive
+  os filtrados, e grava `<out>/level.json`. A tabela de caminhos L2 mora só ali.
+  O nível de um alvo nunca cai entre rodadas.
+- `scripts/build_jobs.py`: `--level L1|L2` (padrão `L2`, o comportamento da
+  origem). L1 não gera coortes de polish e grava `"level"` em `jobs.json`;
+  recusa L1 quando o diff classifica como L2.
+- `scripts/merge_findings.py`: com `jobs.json` em L1, exige só a cobertura da
+  faixa de defeito; sem `level`, exige as duas, como na origem.
+- `scripts/render_review.py` e `assets/REVIEW_UI.html`: mostram o nível e as
+  faixas cobertas, em vez de afirmar "ambas".
+- `references/orchestration.md`: motor `inline` só para L1.
+
+Ao sincronizar, reaplique os quatro scripts e rode
+`pnpm vitest run tests/deep-review-level.test.ts`.

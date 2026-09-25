@@ -11,7 +11,7 @@ Every stage materializes jobs with lane ownership (`{label, kind, lane, prompt, 
 | Knowledge | `build_knowledge.py` → knowledge.json + rules.template.json | — | source discovery |
 | Plan | `build_jobs.py` → prompts + jobs.json | — | source accounting + ownership |
 | Review | — | jobs.json (defect + polish + sweeps) | `run_jobs.py --validate-only` |
-| Merge | `merge_findings.py` → findings.json + review-stats.json | — | complete two-lane coverage |
+| Merge | `merge_findings.py` → findings.json + review-stats.json | — | complete two-lane coverage (defect only at L1) |
 | Report | `render_review.py` → review.md + state.json; `render_html.py` → review.html | — | `render_review.py` |
 
 All job kinds (`cohort`, `polish`, `sweep`) return the same schema: defects, advisories, objective suppressions, hunk coverage, and rule coverage. `hunk` is the assigned canonical range (`<side>:<start>-<end>`), null outside the diff. Defects use the causal certificate; advisories use the improvement certificate.
@@ -55,7 +55,7 @@ Sweeps are **opt-in and rare** — default to none. Each sweep is one extra agen
 
 ## Engines
 
-The jobs contract makes engines interchangeable — pick one per run, record it in walkthrough.md's Review details (`Mode: workflow | agent-fallback | subagent:<runtime>`), and always close the loop with `run_jobs.py --validate-only`. Validation rejects missing coverage rows, unaccounted rules, wrong-lane results, and silent suppressions.
+The jobs contract makes engines interchangeable — pick one per run, record it in walkthrough.md's Review details (`Mode: workflow | agent-fallback | subagent:<runtime> | inline`), and always close the loop with `run_jobs.py --validate-only`. Validation rejects missing coverage rows, unaccounted rules, wrong-lane results, and silent suppressions.
 
 **Workflow (default).** One generic script executes any stage's pending jobs — pass the pending list from the validate-only status file as `args.jobs`:
 
@@ -81,4 +81,6 @@ After the workflow returns, run the validate-only gate; re-invoke with the still
 
 **External runtimes (`--subagent` ≠ `native`).** `run_jobs.py --command` drives `compozy exec` per subagent-runtimes.md — the runner owns concurrency, retries, output validation, provider-block detection, and the freeze check.
 
-The orchestrator never reviews inline, regardless of PR size: reviewers spend their own context on their cohort; the orchestrator plans, dispatches, gates, and reports.
+**Inline (L1 only — local patch, see PATCHES.md).** When `build_jobs.py --level L1` built the plan, there is no polish lane and, by default, no sweep; the orchestrator executes each defect-cohort prompt itself, in sequence, writing the same output file, then runs the same validate-only gate. No Workflow, no subagent. Record `Mode: inline` in walkthrough.md.
+
+Outside L1, the orchestrator never reviews inline, regardless of PR size: reviewers spend their own context on their cohort; the orchestrator plans, dispatches, gates, and reports.

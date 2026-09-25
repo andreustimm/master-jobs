@@ -1,7 +1,7 @@
 ---
 name: deep-review
 description: Deep review of branch diffs, working trees, or GitHub PRs at any size. Use when the user asks for CodeRabbit-grade review, an incremental re-review after new pushes, publication of findings to a PR, a cross-LLM peer-review verdict round, or conformance review against spec artifacts. Don't use for applying fixes, reviewing specs or PRDs as documents, or quick single-file feedback.
-argument-hint: "[--pr N | --base <ref> | --staged | --worktree] [--files p1,p2] [--spec <path>] [--subagent native|claude-opus|grok|codex] [--max-cohort-files N] [--publish] [--full] [--out <dir>] [--no-workflow]"
+argument-hint: "[--pr N | --base <ref> | --staged | --worktree] [--files p1,p2] [--spec <path>] [--subagent native|claude-opus|grok|codex] [--max-cohort-files N] [--publish] [--full] [--out <dir>] [--no-workflow] [--level L1|L2]"
 ---
 
 # Deep Review
@@ -24,6 +24,30 @@ the revision it pinned, so a relevant change afterwards needs a new
 reviewer or waived by the agent that asked for the review: only a person may
 accept remaining findings, in writing on the PR (G54).
 
+### Level by risk (G53)
+
+Classify before planning: after Step 1, run
+`python3 <skill-dir>/scripts/review_level.py --out <out>`. It reads every path
+the diff touches (filtered ones included) and writes `<out>/level.json` with the
+maximum level and the path that raised it. The path table lives in that script;
+the categories are policy in G53.
+
+| Level | When | How |
+| --- | --- | --- |
+| L0 | only Markdown | no deep-review; structural validators only (G57). Stop after the classifier and say so. |
+| L1 | default | single inline pass: one defect cohort per ~6,000 lines, no polish lane, no sweep unless `--spec`; `build_jobs.py --level L1`; Step 3 uses the inline engine (orchestration.md), not Workflow nor subagents. |
+| L2 | auth/session, `/p/`, schema/`drizzle/`, promotion/deploy, scorer, security/secrets | the full pipeline below, as upstream (`--level L2`, the default). |
+
+`build_jobs.py` refuses `--level L1` for a diff that classifies as L2, and a
+target's level never drops between rounds. Round 2+ reviews **only the delta**
+(the default incremental round; `--full` only when the base moved under the
+diff). Cap: **3 rounds**. If `FIX_BEFORE_SHIP` survives round 3, stop and hand
+the remaining findings to a person (G54) instead of opening round 4.
+
+Only Critical/Major defects produce `FIX_BEFORE_SHIP` (render_review.py already
+derives it that way). Minor/Trivial defects and advisories become one line in
+the PR description — no new round, no automatic issue.
+
 Review at CodeRabbit grade with no file cap and one assertive posture: funnel the diff, discover root/nested project instructions and relevant local skills, shard defects and polish into independent cohorts, fan out reviewers, then merge with complete hunk/rule accounting. Defects require causal evidence and control the verdict; advisories require a concrete improvement and always remain visible.
 
 Steps 1–4 drive an idempotent artifact pipeline under `<out>`: every stage gate is a bundled-script exit 0, valid agent outputs are never re-run, and an interrupted round resumes by re-running the same commands.
@@ -44,7 +68,8 @@ Steps 1–4 drive an idempotent artifact pipeline under `<out>`: every stage gat
 | `--publish` | Post walkthrough + review to the PR | off — local report only |
 | `--full` | Ignore prior state; review the whole diff again | incremental when state exists |
 | `--out <dir>` | Artifact directory | `.deep-review/<target>/` |
-| `--no-workflow` | Skip the Workflow tool; use Agent fan-out | Workflow when available |
+| `--no-workflow` | Skip the Workflow tool; use Agent fan-out (at L1: the inline engine) | Workflow when available |
+| `--level L1\|L2` | Review level (see "Level by risk"); passed to `build_jobs.py` | `L2`; pass `L1` when `level.json` allows |
 
 ## Repo config — `.deep-review.yaml`
 
@@ -63,7 +88,7 @@ The manifest builder resolves `path_filters` into manifest.json; the knowledge s
 - Source is read-only and **frozen**: the manifest pins `worktree_snapshot`, and run_jobs.py / render_review.py refuse a drifted checkout. Writes go only to `<out>`, `.deep-review/` state, and — with `--publish` — the target PR.
 - No file-count cap: a large selection means more cohorts, never a skipped or silently truncated review. Every selected file lands in exactly one cohort.
 - Every defect starts with `Premise → Path → Verdict`; every advisory starts with `Premise → Improvement → Fix`. Investigated rejections remain visible in the suppression ledger.
-- Every selected hunk line receives both defect and polish coverage. Every bound rule receives an explicit compliant/violated/not-applicable assessment.
+- Every selected hunk line receives both defect and polish coverage (defect only at L1). Every bound rule receives an explicit compliant/violated/not-applicable assessment.
 - Run the repo's linters first and record every overlapping candidate as `linter-overlap` rather than reporting it again.
 - Cite rubric rules verbatim with their source path; severity comes from the taxonomy, never inflated.
 - Publishing needs `--publish` or the user's explicit go-ahead in this session; otherwise the review stays local.
@@ -100,10 +125,10 @@ The manifest builder resolves `path_filters` into manifest.json; the knowledge s
 
    ```bash
    python3 <skill-dir>/scripts/build_jobs.py --out <out> \
-     [--max-cohort-files N]
+     [--max-cohort-files N] [--level L1|L2]
    ```
 
-   It rejects incomplete source accounting, proves defect ownership, derives smaller polish cohorts (≤20 files / 1,200 changed lines), injects bound rules into every lane and sweep, and materializes `<out>/jobs.json`.
+   It rejects incomplete source accounting, proves defect ownership, derives smaller polish cohorts (≤20 files / 1,200 changed lines; none at L1), injects bound rules into every lane and sweep, and materializes `<out>/jobs.json`.
 
 *Done when:* build_jobs.py exits 0, every discovered source has an audited decision in rules.json, context-pack.md lists applied source/rule and linter outcomes without copying the full registry, and walkthrough.md satisfies its contract.
 
@@ -127,7 +152,7 @@ python3 <skill-dir>/scripts/render_review.py --out <out> [--rework "<structural 
 python3 <skill-dir>/scripts/render_html.py --out <out>
 ```
 
-merge_findings.py emits `<out>/findings.json` plus `<out>/review-stats.json`, deduplicates both result classes, reconciles rounds, and fails unless every selected hunk line has defect and polish coverage. render_review.py derives the verdict from defects only. render_html.py shows defects, advisories, suppressions, and coverage separately in `<out>/review.html`.
+merge_findings.py emits `<out>/findings.json` plus `<out>/review-stats.json`, deduplicates both result classes, reconciles rounds, and fails unless every selected hunk line has defect and polish coverage (defect only when jobs.json says L1). render_review.py derives the verdict from defects only. render_html.py shows defects, advisories, suppressions, and coverage separately in `<out>/review.html`.
 
 When ReportFindings is available, report defects first and every advisory afterward. The user-facing summary states the verdict, defect/advisory counts, every Critical/Major defect, coverage status, and artifact paths.
 

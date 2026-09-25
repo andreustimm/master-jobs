@@ -61,6 +61,26 @@ correspondente.
 
 Roteiro: [workflow.md](../workflow.md) ("Entregar e limpar").
 
+<a id="r24-tamanho"></a>
+### R24 — A issue declara o tamanho, e o tamanho decide a especificação
+
+Obrigação posterior à auditoria ([#319](https://github.com/andreustimm/master-jobs/issues/319)).
+
+**Obrigação.** Toda issue declara o tamanho da tarefa, e o tamanho decide o
+que precisa existir antes do código:
+
+| Tamanho | Antes de executar |
+|---|---|
+| **S** | objetivo + critério de aceite, na própria issue |
+| **M** | techspec curta + `_tests.md` em `.compozy/tasks/<slug>/` |
+| **L** | PRD + techspec + `_tests.md` |
+
+Especificação acima do tamanho é custo sem retorno; abaixo, é tarefa grande
+executada sem contrato de teste. Na dúvida entre dois tamanhos, fique com o
+maior. O tamanho não muda o nível da revisão: ele vem do caminho do diff (G53).
+
+Roteiro: [workflow.md](../workflow.md) ("Começar ou retomar").
+
 ---
 
 ## Branches, worktrees e promoção
@@ -223,17 +243,42 @@ falso está em `tests/promotion-provenance.test.ts`.
 A ordem do fluxo, de ponta a ponta:
 
 ```
-worktree/tarefa → check/e2e aplicável → QA de jornada aplicável → auditoria de agente aplicável → docs/ + changelogs → deslop → deep-review → ship-pr → PR → dev → (automático) → staging → PR humana → main → tag + volta para dev
+worktree/tarefa → validação local enxuta → PR draft (CI em paralelo) → QA de jornada aplicável → docs/ + changelogs → deslop → um revisor no nível do diff (L0/L1/L2) → ship-pr (PR pronta) → dev → (automático) → staging → PR humana → main → tag + volta para dev
 ```
 
 <a id="g53"></a>
-### G53 — Antes de abrir PR, rode a revisão profunda (regra 19)
+### G53 — Antes de a PR ficar pronta, rode a revisão profunda no nível do risco (regra 19)
 
 **Obrigação.** `/deep-review` revisa o diff com evidência causal, cobertura por
 hunk e veredito **SHIP / FIX_BEFORE_SHIP / REWORK**. Rode antes de pedir revisão
 humana: o CI prova que o código roda; a revisão profunda diz se ele está certo.
-Uma coisa não substitui a outra. Mudança relevante depois do veredito exige nova
-rodada (incremental): revisão de um diff antigo não aprova o atual. Por isso a
+Uma coisa não substitui a outra.
+
+**O nível sai do caminho, não da opinião** (decisão do dono em
+[#319](https://github.com/andreustimm/master-jobs/issues/319)). Revisão completa
+em todo diff gastava tempo e tokens sem mudar o veredito do diff comum, e o
+custo empurrava a revisão para o fim da fila. O nível é o máximo entre os
+caminhos que o diff toca, inclusive os filtrados da revisão:
+
+| Nível | Quando | Como |
+|---|---|---|
+| **L0** | só Markdown | sem deep-review; só os validadores estruturais de G57 |
+| **L1** | padrão — tudo que não é L0 nem L2 | passada única, sem fan-out de subagentes (`--no-workflow`, motor inline) e sem coortes de polish |
+| **L2** | autenticação/sessão, `/p/`, schema e `drizzle/`, workflows e scripts de promoção/deploy, scorer e `profile/`, segurança e segredos | pipeline completo, como antes de #319 |
+
+A tabela de caminhos é executável: `.claude/skills/deep-review/scripts/review_level.py`
+classifica o manifesto, e `build_jobs.py` recusa `--level L1` para diff que
+classifica como L2 — o agente não rebaixa o nível, e ele não cai entre rodadas.
+Palavra de segurança no caminho (`auth`, `session`, `password`, `secret`,
+`security`) também eleva a L2, para que arquivo novo não escape da tabela.
+Caminho desconhecido cai em L1, nunca em L0. Prova:
+`tests/deep-review-level.test.ts`.
+
+**Rodadas.** Mudança relevante depois do veredito exige nova rodada:
+revisão de um diff antigo não aprova o atual. A rodada 2 em diante revisa **só
+o delta** (a rodada incremental; `--full` só quando a base mudou sob o diff).
+Teto de **3 rodadas**: `FIX_BEFORE_SHIP` que sobrevive à terceira vai para uma
+pessoa, na forma de G54, em vez de abrir a quarta. Por isso a
 PR registra o veredito **com o SHA revisado** (campo do
 [modelo de PR](../../../.github/PULL_REQUEST_TEMPLATE.md)): quem lê compara com
 a ponta da PR. O campo é declaração, não prova — nenhum gate julga se o texto é
@@ -269,6 +314,14 @@ achados e ao diff. Agente e skill não concedem essa exceção a si mesmos, e
 `REWORK` não vira PR pronta por texto genérico. `ship-pr` exige SHIP; quando
 não há SHIP, ela para e relata.
 
+**Só Critical e Major bloqueiam** ([#319](https://github.com/andreustimm/master-jobs/issues/319)).
+`FIX_BEFORE_SHIP` nasce apenas de defeito Critical ou Major aberto (ou de
+divergência de spec com `--spec`) — `render_review.py` deriva o veredito assim.
+Minor, Trivial e advisory viram **uma linha** na descrição da PR: não abrem
+rodada nova nem issue automática. Quem quiser tratá-los decide depois, como
+qualquer outra demanda (R24). Diff L0 não tem veredito: a PR declara o nível em
+vez do SHA revisado.
+
 <a id="g84"></a>
 ### G84 — Revisão, auditoria e QA respondem perguntas distintas
 
@@ -278,6 +331,14 @@ botão. `agent-output-audit` certifica que uma tarefa implementada fez o que
 alega (arquivos, diffs, testes, CI), sem substituir revisão nem QA. QA de
 jornada prova experiência pela interface pública. Nenhuma aceita autorrelato
 como prova, e os artefatos ficam separados.
+
+**Um revisor por diff** ([#319](https://github.com/andreustimm/master-jobs/issues/319)).
+`deslop` é higiene do executor, não revisão. O revisor do diff é a
+`deep-review` no nível de G53. `agent-output-audit` só entra em trabalho
+**delegado** e nunca é somado à deep-review no mesmo diff: se o executor
+delegado já trouxe o veredito sobre o SHA atual, o coordenador não audita de
+novo; se não trouxe, escolhe um dos dois — e diff L2 sempre recebe a
+deep-review. QA de jornada continua só para mudança visível (G55).
 
 <a id="g55"></a>
 ### G55 — Mudança percebida por usuário atualiza e percorre o QA vivo (regra 20)
@@ -298,9 +359,10 @@ ignorados. Como a visão não é versionada, `pnpm check:qa-tracker` confere o
 esquema dos cenários dentro do `pnpm check` e do CI — nenhum hook o roda no
 commit. O formato válido não concede `Pass`.
 
-**Ordem para mudança visível:** implementação → `rtk pnpm check` e E2E
-aplicável → `qa-report` (tier targeted) → `qa-execution` → correções/reteste →
-suíte completa → `deep-review` → PR para `dev`. Invoque `qa-report` e depois
+**Ordem para mudança visível:** implementação → validação local enxuta e E2E
+afetado (G57) → PR draft → `qa-report` (tier targeted) → `qa-execution` →
+correções/reteste → suíte completa verde no CI da PR → `deep-review` no nível
+do diff (G53) → PR pronta para `dev`. Invoque `qa-report` e depois
 `qa-execution` com o argumento `docs/qa` (formulação neutra entre harnesses).
 
 <a id="g56"></a>
@@ -344,6 +406,26 @@ pendente ou pulado — e pulado conta como aprovado. A seleção por caminho que
 existe é a do deploy (`scripts/vercel-ignore-build.sh`, provada por
 `tests/vercel-ignore-build.test.ts`): só documentação, testes e automação não
 publicam versão nova.
+
+**Validação local enxuta; a suíte completa é do CI**
+([#319](https://github.com/andreustimm/master-jobs/issues/319)). Mudança de
+runtime valida localmente com `rtk pnpm typecheck` e os testes relacionados ao
+diff (`rtk pnpm exec vitest related --run <arquivos alterados>`), mais os
+validadores estruturais que o diff toca e os gates específicos de schema,
+autenticação ou promoção da tabela de [workflow.md](../workflow.md)
+("Validar pelo risco"), que não se reduzem. O equivalente ao `pnpm check`
+inteiro, cobertura incluída, roda nos jobs `contratos`, `testes` e `cobertura`
+do CI, obrigatórios em toda PR pelo check `qualidade`. Logo
+depois do primeiro verde local, a PR abre como **draft**, para o CI correr em
+paralelo à revisão; ela só vira pronta depois do SHIP (ou do L0) e do CI verde.
+Rodar `pnpm check` local continua permitido — não é mais pré-requisito da PR
+draft.
+
+**Orçamento de tempo por gate.** Check local ≤ 10 min, E2E afetado ≤ 8 min,
+deep-review L1 ≤ 10 min, L2 ≤ 30 min. Estourou: registre na PR o que ficou de
+fora e por quê, delegue ao CI o que ele cobre e siga — nunca espere parado. O
+orçamento não dispensa prova: o que o CI não roda (E2E local, deep-review)
+continua pendente e aparece como pendente, e a PR não fica pronta sem ele.
 
 <a id="g60"></a>
 ### G60 — O changelog conta o que mudou; `docs/` conta como é agora (regra 23)
@@ -467,7 +549,7 @@ regra sem linha no inventário e regra com dois destinos primários.
 
 O conjunto instalado cobre o ciclo: `documentation-writer` na autoria,
 `drizzle-safe-migrations` em schema, `a11y-testing` no E2E,
-`agent-output-audit` para conferir tarefas de agentes, `deslop` antes da revisão
+`agent-output-audit` para conferir tarefas delegadas (G84), `deslop` antes da revisão
 e `ship-pr` depois do veredito de `deep-review`.
 
 <a id="g72"></a>
