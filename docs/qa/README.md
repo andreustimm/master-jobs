@@ -241,8 +241,12 @@ aqui antes de criar o primeiro cenário dela.
   tocadas mais uma canária adjacente.
 - **Sanity:** depois de hotfix; jornada corrigida mais uma adjacente.
 - **Smoke:** depois de deploy; 2–4 jornadas de maior valor.
-- **Full:** release candidate antes da PR humana `staging → main`; todas as
-  jornadas P0/P1 e todas as personas do projeto.
+- **Full:** release candidate com mudança visível ao usuário, antes do merge
+  da PR de produção `staging → main`; todas as jornadas P0/P1 e todas as
+  personas do projeto. Leva sem mudança visível (nenhuma nota de usuário nos
+  fragmentos de changelog) dispensa o full: basta a fumaça pós-deploy
+  (`fumaca-producao.yml`). Critério em
+  [G56](../engineering/rules/delivery.md#g56).
 
 Cada jornada registra `priority: P0 | P1 | P2` no seu YAML durável. `P0` cobre
 caminhos críticos de release, segurança, privacidade e integridade dos dados;

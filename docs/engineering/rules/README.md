@@ -88,7 +88,7 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G43 | Worktree de `dev`, PR para `dev` | [delivery](delivery.md#g43) | regra 18 | preservada; exceções de automação nomeadas (C21) |
 | G44 | Conferir estado e preservar WIP | [delivery](delivery.md#g44) | "Fluxo de trabalho" | preservada |
 | G45 | `dev`→`staging` por SHA validado | [delivery](delivery.md#g45) | "Fluxo de trabalho" | preservada; contrato de SHA (C20) |
-| G46 | Produção não sai sem gente | [delivery](delivery.md#g46) | "Fluxo de trabalho" | preservada; proteção remota em `main`, parcial em `dev`/`staging` (C19) |
+| G46 | Produção só pela PR de produção, com CI verde e decisão do dono | [delivery](delivery.md#g46) | "Fluxo de trabalho" | reformulada em #321: merge pelo agente por delegação do dono (23/09/2026), revogável; proteção remota em `main`, parcial em `dev`/`staging` (C19) |
 | G47 | Toda PR com responsável | [delivery](delivery.md#g47) | "Fluxo de trabalho" | preservada |
 | G48 | Branches permanentes | [delivery](delivery.md#g48) | "Fluxo de trabalho" | preservada |
 | G49 | Branch `<tipo>/<slug>` | [delivery](delivery.md#g49) | "Fluxo de trabalho" | preservada |
@@ -98,14 +98,14 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G53 | Deep-review no nível do risco antes da PR pronta | [delivery](delivery.md#g53) | regra 19 + "Revisão profunda" | emendada por decisão do dono (#319): L0/L1/L2 por caminho, rodada 2+ só delta, teto de 3; L2 mantém o pipeline completo |
 | G54 | FIX_BEFORE_SHIP não é aprovação | [delivery](delivery.md#g54) | regra 19 | reformulada sem enfraquecer (C11); só Critical/Major bloqueiam (#319) |
 | G55 | QA vivo para mudança visível | [delivery](delivery.md#g55) | regra 20 + "QA de jornada" | preservada |
-| G56 | Cadência única; `Pass` com prova | [delivery](delivery.md#g56) | "QA de jornada" | preservada |
+| G56 | Cadência única; `Pass` com prova | [delivery](delivery.md#g56) | "QA de jornada" | reformulada em #321 por decisão do dono: full antes de produção só quando a leva tem mudança visível ao usuário; sem ela, fumaça pós-deploy |
 | G57 | Validação proporcional | [delivery](delivery.md#g57) | regra 20 | preservada; extensão não decide sozinha; local enxuta, PR draft cedo e orçamento de tempo por gate (#319) |
 | G58 | Nota releaseável em fragmento de changelog | [delivery](delivery.md#g58) | regra 21 | preservada; formato de fragmento (#263) substitui a edição do `Unreleased` |
 | G59 | Tag SemVer tem GitHub Release | [delivery](delivery.md#g59) | regra 22 | preservada |
 | G60 | Changelog vs `docs/` | [delivery](delivery.md#g60) | regra 23 | preservada; linha para `docs/engineering/rules/` |
 | G61 | Skills canônicas e symlinks | [delivery](delivery.md#g61) | "Skills compartilhadas" | preservada |
 | G62 | Instruções lidas; skill não é regra | [delivery](delivery.md#g62) | "Skills compartilhadas" | preservada; roteador na entrada |
-| G63 | RTK por harness | [delivery](delivery.md#g63) | nota final do AGENTS | preservada, sem copiar o arquivo global |
+| G63 | RTK por harness; um comando por chamada | [delivery](delivery.md#g63) | nota final do AGENTS | preservada, sem copiar o arquivo global; fallback sem `rtk` e comando único por chamada (#321) |
 | G64 | Bloco do Next intacto | [delivery](delivery.md#g64) | bloco gerado | preservada; bloco continua no fim da entrada |
 | G65 | UI é adaptador | [architecture](architecture.md#g65) | "Arquitetura" | preservada; "única mutação" corrigida (C15) |
 | G66 | Idempotência e isolamento de falha | [architecture](architecture.md#g66) | "Convenções de código" | preservada |
