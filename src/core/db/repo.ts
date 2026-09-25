@@ -822,14 +822,18 @@ async function readBoard(
   const conditions = boardConditions(opts, candidateId, pay);
   const order = boardOrder(opts, pay);
   const parts = queryParts(opts);
-  // Sempre pela janela de ids, com ou sem total: sem ela, o cockpit ordenava as
-  // 2.340 linhas elegíveis já com nota completa e captura, para ficar com doze
-  // (#222). O total por janela custa pouco sobre ids e só é lido com `withTotal`.
-  const page = selectBoardPage(candidateId, opts, conditions, order, pay);
+  // Pela janela de ids também sem total: sem ela, o cockpit ordenava as 2.340
+  // linhas elegíveis já com nota completa e captura, para ficar com doze (#222).
+  // Exceto com a normalização salarial compartilhada: lida pela janela E pela
+  // consulta de fora, o PostgreSQL materializa a CTE em vez de embuti-la, e a
+  // junção sem índice com ela custou 4,5 s no IT-113 (termo + faixa + trilha +
+  // ordem por pagamento), contra 0,26 s pela leitura direta.
+  const sharedPay = pay?.relation.kind === "shared";
+  const page = withTotal || !sharedPay ? selectBoardPage(candidateId, opts, conditions, order, pay) : undefined;
 
-  let query = db.with(...(pay?.relation.kind === "shared" ? [pay.relation.table] : []), page)
+  let query = db.with(...(sharedPay ? [pay!.relation.table] : []), ...(page ? [page] : []))
     .select({
-      boardTotal: sql<number>`${page.total}`,
+      boardTotal: page ? sql<number>`${page.total}` : sql<number | null>`null::bigint`,
       jobId: job.id,
       title: job.title,
       companyName: job.companyName,
@@ -908,9 +912,11 @@ async function readBoard(
     .leftJoin(source, eq(source.id, job.sourceId))
     .leftJoin(verifyTask, eq(verifyTask.jobId, job.id))
     .leftJoin(jobPage, eq(jobPage.jobId, job.id))
-    .innerJoin(page, eq(page.jobId, job.id))
+    .where(page ? undefined : and(...conditions))
     .orderBy(...order)
     .$dynamic();
+  if (page) query = query.innerJoin(page, eq(page.jobId, job.id));
+  else query = query.limit(opts.limit ?? 200).offset(opts.offset ?? 0);
   if (pay?.relation.kind === "shared") query = query.leftJoin(pay.relation.table, eq(pay.relation.table.jobId, job.id));
   else if (pay) query = query.leftJoinLateral(pay.relation.table, sql`true`);
   const rows = await query;

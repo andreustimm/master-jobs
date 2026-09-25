@@ -304,8 +304,12 @@ somente depois do limite da página. Uma página além do fim, ou de tamanho zer
 não tem linha para carregar o total; nesses casos a contagem separada conserva o
 rodapé correto. Desde a #222, `listBoard` (cockpit, CLI, exportação e
 varredura de triagem) passa pela mesma
-janela de ids e só não lê o total. A lista continua usando os mesmos filtros e
-desempates.
+janela de ids e só não lê o total — exceto com faixa ou ordem salarial
+compartilhada: a normalização lida pela janela e pela consulta de fora é
+materializada, e a junção sem índice com ela levou o IT-113 (termo + faixa +
+trilha + ordem por pagamento, 10 mil vagas) de 0,26 s para 1,2 s local e 4,5 s
+no CI. Nesse caso `listBoard` lê direto, como antes. A lista continua usando os
+mesmos filtros e desempates.
 
 A largura da janela importa: carregar descrições nela fez o cenário sem agrupar
 escrever 967 blocos temporários no benchmark. Restringir a janela a ids e chaves
