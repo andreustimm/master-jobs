@@ -137,6 +137,24 @@ describe("regras do Claude Code lidas como o Claude Code lê", () => {
     expect(decideCommand(rules, "git commit -m 'fecha #317 (sudo ls no texto)'")).toBe("allow");
   });
 
+  it("texto literal entre aspas duplas não vira comando; `$(` e crase dentro delas, sim", () => {
+    const real = parseRules(REAL_SETTINGS.permissions);
+    expect(decideCommand(real, 'git commit -m "fix(deploy): x; y | z {a}"')).toBe("allow");
+    expect(decideCommand(real, 'gh pr create --title "feat(x): y" --base dev')).toBe("allow");
+    expect(decideCommand(real, 'grep -rn "a|b" src')).toBe("allow");
+    expect(decideCommand(real, 'git commit -m "a \\" (b)"')).toBe("allow");
+    expect(decideCommand(real, 'git commit -m "x $(sudo ls) y"')).toBe("deny");
+    expect(decideCommand(real, 'git commit -m "x `rm -rf src` y"')).toBe("ask");
+    expect(decideCommand(real, 'git log "sem fechar; sudo ls')).toBe("deny");
+  });
+
+  it("aspas e redirecionamento em volta do alvo não escapam do deny", () => {
+    const real = parseRules(REAL_SETTINGS.permissions);
+    for (const command of ["git push origin 'main'", 'git push origin "main"', 'cat ".env"', "cat '.env'", "cat <.env"]) {
+      expect(decideCommand(real, command), command).toBe("deny");
+    }
+  });
+
   it.each(["git status & sudo ls", "echo $(sudo ls)", "ls `sudo ls`", "git status; (sudo ls)", "cat <(sudo ls)", "{ sudo ls; }"])(
     "comando escondido em sintaxe do shell ainda é julgado: %s",
     (command) => {
