@@ -52,32 +52,101 @@ export function bashSpecifierMatches(specifier: string, command: string): boolea
 }
 
 /**
- * Prefixo que o Codex e o OpenCode põem em todo comando (G63). No Claude Code
- * o hook global do rtk reescreve DEPOIS da decisão de permissão, então a regra
- * vê `sudo ls`; nos outros dois o comando chega como `rtk sudo ls`, e uma regra
- * ancorada no início (`sudo *`, `rm:*`) deixaria de casar.
+ * Invólucros que executam o comando seguinte sem mudar o que ele faz. Sem
+ * tirá-los, `env rm -rf src` ou `timeout -s KILL 5 rm -rf src` escapariam de
+ * `rm:*`.
  */
-const RTK_PREFIX = /^rtk\s+(?:proxy\s+)?/;
+const WRAPPERS = new Set(["env", "command", "exec", "nohup", "time", "nice", "timeout", "stdbuf", "ionice"]);
 
 /**
- * Invólucros que executam o comando seguinte sem mudar o que ele faz:
- * `env`/atribuição de variável, `command`, `exec`, `nohup`, `time`, `nice` e
- * `timeout`. Sem tirá-los, `env rm -rf src` escaparia de `rm:*`.
+ * Comando que roda OUTRO comando que a leitura de texto não enxerga por
+ * inteiro: invólucros, shells, `eval`, `xargs` e afins. Nenhum deles está
+ * liberado no Claude Code, que portanto pergunta; no Codex, deixar o caso ao
+ * sandbox abriria a porta para cada forma nova de embrulhar `rm` ou `sudo`.
+ * Por isso trecho com essa cabeça e sem allow explícito é `ask` — a guarda só
+ * deixa ao padrão do harness o que ela consegue ler.
  */
-const WRAPPER = /^(?:(?:env|command|exec|nohup|time)\s+|nice\s+(?:-n\s*-?\d+\s+)?|timeout\s+\S+\s+|[A-Za-z_][A-Za-z0-9_]*=\S*\s+)/;
+const OPAQUE_HEADS = new Set([
+  ...WRAPPERS,
+  "sh",
+  "bash",
+  "zsh",
+  "dash",
+  "ksh",
+  "fish",
+  "eval",
+  "source",
+  ".",
+  "xargs",
+  "busybox",
+  "su",
+  "doas",
+  "script",
+  "watch",
+  "parallel",
+]);
 
-/** Tira `rtk`, invólucros e o diretório do executável (`/bin/rm` → `rm`) até estabilizar. */
+/** Opção, número/duração, sinal (`KILL`) ou atribuição logo depois de um invólucro. */
+const WRAPPER_ARGUMENT = /^(?:-|\d|[A-Z]+$|[A-Za-z_][A-Za-z0-9_]*=)/;
+
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+/**
+ * Tira, até estabilizar, o prefixo `rtk`/`rtk proxy` (G63: no Claude Code o
+ * hook do rtk reescreve DEPOIS da decisão, então a regra vê `sudo ls`),
+ * atribuição de variável, invólucro com suas opções e o diretório do
+ * executável (`/bin/rm` → `rm`).
+ */
 function unwrap(segment: string): string {
-  let current = segment;
-  for (let previous = ""; previous !== current; ) {
-    previous = current;
-    current = current.replace(RTK_PREFIX, "").replace(WRAPPER, "").replace(/^\/\S*\/(?=\S)/, "");
+  const tokens = segment.split(/\s+/).filter((token) => token !== "");
+  for (let changed = true; changed && tokens.length > 0; ) {
+    const head = tokens[0]!;
+    if (head === "rtk") {
+      tokens.shift();
+      if (tokens[0] === "proxy") tokens.shift();
+    } else if (ASSIGNMENT.test(head)) {
+      tokens.shift();
+    } else if (WRAPPERS.has(head)) {
+      tokens.shift();
+      while (tokens.length > 1 && WRAPPER_ARGUMENT.test(tokens[0]!)) tokens.shift();
+    } else if (head.startsWith("/") && head.lastIndexOf("/") < head.length - 1) {
+      tokens[0] = head.slice(head.lastIndexOf("/") + 1);
+    } else {
+      changed = false;
+    }
   }
-  return current;
+  return tokens.join(" ");
 }
 
-/** O que um shell aninhado vai rodar: `sh -c 'rm -rf src'` → `rm -rf src`. */
-const NESTED_SHELL = /(?:^|\s)(?:ba|z|da|k)?sh\s+-c\s+(['"])([\s\S]*?)\1/g;
+/**
+ * Esconde o conteúdo de aspas simples (fora de aspas duplas), onde o shell não
+ * interpreta nada: cortar ali faria de uma mensagem de commit um comando.
+ * Aspas simples sem fechar devolvem o texto intacto — na dúvida, julga tudo.
+ */
+function maskSingleQuoted(text: string): string {
+  let out = "";
+  let state: "none" | "single" | "double" = "none";
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index]!;
+    if (state === "single") {
+      if (char === "'") state = "none";
+      out += char === "'" ? char : " ";
+    } else if (char === "\\" && index + 1 < text.length) {
+      out += char + text[++index]!;
+    } else if (state === "double") {
+      if (char === '"') state = "none";
+      out += char;
+    } else {
+      if (char === "'") state = "single";
+      else if (char === '"') state = "double";
+      out += char;
+    }
+  }
+  return state === "single" ? text : out;
+}
+
+/** O que um shell aninhado vai rodar: `sh -ec 'rm -rf src'` → `rm -rf src`. */
+const NESTED_SHELL = /(?:^|\s)(?:ba|z|da|k)?sh\s+(?:-[A-Za-z]+\s+)*-[A-Za-z]*c[A-Za-z]*\s+(['"])([\s\S]*?)\1/g;
 
 /**
  * O comando inteiro e cada trecho dele: `cd x && git push origin main` precisa
@@ -90,31 +159,62 @@ const NESTED_SHELL = /(?:^|\s)(?:ba|z|da|k)?sh\s+-c\s+(['"])([\s\S]*?)\1/g;
  */
 export function commandSegments(command: string, depth = 0): string[] {
   const whole = command.trim();
-  const literal = whole.replace(/'[^']*'/g, "''");
-  const parts = literal
-    .split(/&&|\|\||\$\(|[<>]\(|[;|&\n(){}`]/)
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
+  const parts = splitParts(whole);
   const segments = [whole, ...parts];
   const nested =
     depth < 2 ? [...whole.matchAll(NESTED_SHELL)].flatMap((match) => commandSegments(match[2]!, depth + 1)) : [];
   return [...new Set([...segments, ...segments.map(unwrap), ...nested])];
 }
 
+function splitParts(command: string): string[] {
+  return maskSingleQuoted(command)
+    .split(/&&|\|\||\$\(|[<>]\(|[;|&\n(){}`]/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+/** Primeira palavra do trecho, sem `rtk`, atribuições nem diretório. */
+function headOf(segment: string): string {
+  const tokens = segment.split(/\s+/).filter((token) => token !== "");
+  while (tokens[0] === "rtk" || tokens[0] === "proxy" || (tokens[0] !== undefined && ASSIGNMENT.test(tokens[0]))) {
+    tokens.shift();
+  }
+  const head = tokens[0] ?? "";
+  return head.startsWith("/") ? head.slice(head.lastIndexOf("/") + 1) : head;
+}
+
+/** Trechos que a leitura de texto não enxerga por inteiro: cabeça em `OPAQUE_HEADS`. */
+export function opaqueSegments(command: string): string[] {
+  return splitParts(command.trim()).filter((part) => OPAQUE_HEADS.has(headOf(part)));
+}
+
+/**
+ * Aspas `$'…'`/`$"…"`: o shell reinterpreta escapes (`\'`, `\x..`) que o
+ * scanner de aspas não modela, e a divisão em trechos deixa de ser confiável.
+ */
+const REINTERPRETED_QUOTES = /\$['"]/;
+
 /**
  * Decisão mais restritiva entre as regras de `Bash` que casam: deny vence ask,
- * que vence allow — a mesma precedência do Claude Code. `null` quando nenhuma
- * regra casa (o harness aplica o próprio padrão).
+ * que vence allow — a mesma precedência do Claude Code. Trecho opaco sem allow
+ * explícito é pelo menos `ask`, como no Claude, onde nada o libera. `null`
+ * quando nenhuma regra casa (o harness aplica o próprio padrão).
  */
 export function decideCommand(rules: readonly Rule[], command: string): Decision | null {
   const segments = commandSegments(command);
+  const bash = rules.filter((rule) => rule.tool === "Bash");
   let found: Decision | null = null;
-  for (const rule of rules) {
-    if (rule.tool !== "Bash") continue;
+  for (const rule of bash) {
     const matches =
       rule.specifier === null || segments.some((segment) => bashSpecifierMatches(rule.specifier!, segment));
     if (matches && strength(rule.decision) > strength(found)) found = rule.decision;
   }
+  const allowed = (segment: string) =>
+    bash.some(
+      (rule) => rule.decision === "allow" && (rule.specifier === null || bashSpecifierMatches(rule.specifier, segment)),
+    );
+  const unreadable = REINTERPRETED_QUOTES.test(command) || opaqueSegments(command).some((segment) => !allowed(segment));
+  if (unreadable && strength("ask") > strength(found)) found = "ask";
   return found;
 }
 

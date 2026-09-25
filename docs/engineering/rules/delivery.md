@@ -535,9 +535,12 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   (G63); no Claude Code o hook do rtk reescreve depois da decisão. Por isso a
   guarda do Codex julga cada trecho também sem `rtk`, sem invólucro (`env`,
   `command`, `timeout`…), sem o caminho do executável (`/bin/rm`) e com o
-  corpo de `sh -c`, e só corta o comando fora de aspas simples. O OpenCode
-  recebe cada padrão ancorado de `ask`/`deny` também como `rtk <padrão>` e
-  `rtk proxy <padrão>`.
+  corpo de `sh -c`, e só corta o comando fora de aspas simples. O que a
+  leitura de texto não enxerga por inteiro — trecho que começa por invólucro,
+  shell, `eval`, `xargs` e afins sem allow explícito, ou aspas `$'…'` — é
+  `ask`, exatamente como no Claude Code, onde nada o libera; a guarda só deixa
+  ao sandbox do Codex o que consegue ler. O OpenCode recebe cada padrão
+  ancorado de `ask`/`deny` também como `rtk <padrão>` e `rtk proxy <padrão>`.
 - **Limites conhecidos.** Comandos no Codex; ferramenta por agente no Codex
   (só `sandbox_mode` distingue leitura de escrita — não há lista de
   ferramentas por agente); regra `WebFetch`/`WebSearch` com domínio (a
