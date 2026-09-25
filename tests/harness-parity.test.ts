@@ -130,8 +130,11 @@ describe("regras do Claude Code lidas como o Claude Code lê", () => {
     // Apóstrofo dentro de aspas duplas não abre aspas simples.
     expect(decideCommand(rules, `git log --grep "it's" && sudo ls && git commit -m 'x'`)).toBe("deny");
     expect(decideCommand(rules, "git commit -m \\'a && sudo ls && git log 'b'")).toBe("deny");
-    // Aspas sem fechar: na dúvida, julga tudo.
+    // Aspas sem fechar, `$'…'` e comentário: na dúvida, julga tudo.
     expect(decideCommand(rules, "git log 'x && sudo ls")).toBe("deny");
+    expect(decideCommand(rules, `git log $'\\'' ; sudo ls ; git log "'"`)).toBe("deny");
+    expect(decideCommand(rules, "git log #'\n sudo ls #'")).toBe("deny");
+    expect(decideCommand(rules, "git commit -m 'fecha #317 (sudo ls no texto)'")).toBe("allow");
   });
 
   it.each(["git status & sudo ls", "echo $(sudo ls)", "ls `sudo ls`", "git status; (sudo ls)", "cat <(sudo ls)", "{ sudo ls; }"])(

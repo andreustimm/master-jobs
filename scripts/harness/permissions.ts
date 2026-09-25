@@ -93,13 +93,17 @@ function unwrap(segment: string): string {
 /**
  * Esconde o conteúdo de aspas simples (fora de aspas duplas), onde o shell não
  * interpreta nada: cortar ali faria de uma mensagem de commit um comando.
- * Aspas simples sem fechar devolvem o texto intacto — na dúvida, julga tudo.
+ * Na dúvida, julga tudo: aspas simples sem fechar, aspas `$'…'` (onde `\'`
+ * não fecha) e comentário `#` (que o shell corta até o fim da linha, mudando
+ * o que conta como aspas) devolvem o texto intacto, sem máscara.
  */
 function maskSingleQuoted(text: string): string {
   let out = "";
   let state: "none" | "single" | "double" = "none";
   for (let index = 0; index < text.length; index++) {
     const char = text[index]!;
+    if (state === "none" && char === "$" && text[index + 1] === "'") return text;
+    if (state === "none" && char === "#" && (index === 0 || /[\s;&|()]/.test(text[index - 1]!))) return text;
     if (state === "single") {
       if (char === "'") state = "none";
       out += char === "'" ? char : " ";
