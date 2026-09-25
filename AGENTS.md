@@ -240,7 +240,8 @@ espelho. Agentes de papel: `task-analyst`, `executor`, `fixer`, `reviewer`,
 Ao delegar, passe o modelo de `pnpm route <papel> <complexidade> --session
 <harness>` na chamada (política em `config/model-routing.json`, modo
 `claude_only` | `codex_only` | `multi_provider`; política inválida ou modo
-desconhecido falham fechado). O juiz nunca é modelo que escreveu o delta, e o
+desconhecido falham fechado). O juiz nunca é modelo que escreveu o delta
+(`pnpm route judge <complexidade> --author <modelo>`, um por autor), e o
 agente nunca rebaixa o modelo do turno principal por conta própria.
 [[G86](docs/engineering/rules/orchestration.md#g86), [G87](docs/engineering/rules/orchestration.md#g87)]
 

@@ -43,9 +43,11 @@ e só depois outro modelo dentro do provedor de um autor. Resultado por modo:
 | só Anthropic | candidato Anthropic que não é autor | primeiro candidato OpenAI | primeiro candidato OpenAI |
 | só OpenAI | primeiro candidato Anthropic | candidato OpenAI que não é autor | primeiro candidato Anthropic |
 | Anthropic e OpenAI | candidato Anthropic que não é autor | candidato OpenAI que não é autor | primeiro candidato OpenCode |
+| só OpenCode | primeiro candidato Anthropic | primeiro candidato OpenAI | primeiro candidato Anthropic |
 
-Em modo de um provedor só, a linha "outro provedor" só aparece quando o delta
-veio de fora do modo (ex.: escrito à mão em outro harness). Toda célula de
+Em modo de um provedor só, a célula "primeiro candidato" de outro provedor só
+acontece quando o delta veio de fora do modo (ex.: escrito à mão em outro
+harness). Toda célula de
 juiz tem pelo menos dois modelos distintos e um candidato que nunca é
 executor nem corretor do provedor: assim o modo de um provedor sempre tem
 juiz, mesmo quando executor e corretor foram modelos diferentes.
