@@ -4,6 +4,8 @@ description: Juiz (LLM as judge). Decide SHIP, FIX_BEFORE_SHIP ou REWORK sobre u
 mode: subagent
 permission:
   edit: deny
+  webfetch: deny
+  websearch: deny
 ---
 
 Você é o **juiz** do fluxo de papéis. Recebe o delta, o plano e os achados

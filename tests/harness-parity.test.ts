@@ -12,7 +12,14 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { parseAgent, renderCodexAgent, renderOpenCodeAgent } from "../scripts/harness/agents.ts";
+import {
+  CLAUDE_AGENT_TOOLS,
+  openCodeToolsDenied,
+  parseAgent,
+  renderCodexAgent,
+  renderOpenCodeAgent,
+  splitFrontmatter,
+} from "../scripts/harness/agents.ts";
 import { judge, patchPaths, run } from "../scripts/harness/codex-guard.ts";
 import {
   bashSpecifierMatches,
@@ -57,6 +64,22 @@ describe("regras do Claude Code lidas como o Claude Code lê", () => {
     expect(decideCommand(rules, "ls")).toBeNull();
     expect(decideCommand(parseRules({ deny: ["Bash"] }), "ls")).toBe("deny");
   });
+
+  it("o prefixo `rtk` do Codex e do OpenCode não tira o comando da regra ancorada", () => {
+    const rules = parseRules({ allow: ["Bash(git:*)", "Bash(rtk proxy:*)"], ask: ["Bash(rm:*)"], deny: ["Bash(sudo *)"] });
+    expect(decideCommand(rules, "rtk sudo ls")).toBe("deny");
+    expect(decideCommand(rules, "rtk proxy sudo ls")).toBe("deny");
+    expect(decideCommand(rules, "rtk rm -rf build")).toBe("ask");
+    expect(decideCommand(rules, "rtk git status")).toBe("allow");
+  });
+
+  it.each(["git status & sudo ls", "echo $(sudo ls)", "ls `sudo ls`", "git status; (sudo ls)", "cat <(sudo ls)", "{ sudo ls; }"])(
+    "comando escondido em sintaxe do shell ainda é julgado: %s",
+    (command) => {
+      const rules = parseRules({ allow: ["Bash(git:*)", "Bash(echo:*)", "Bash(ls:*)", "Bash(cat:*)"], deny: ["Bash(sudo *)"] });
+      expect(decideCommand(rules, command)).toBe("deny");
+    },
+  );
 
   it("padrão de arquivo segue o gitignore: `./` na raiz, `~/` no pessoal, sem âncora em qualquer nível", () => {
     expect(pathSpecifierMatches("./.env", "/repo/.env", context)).toBe(true);
@@ -127,6 +150,12 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
     "curl https://example.com",
     "docker ps",
     "pwd",
+    "rtk sudo ls",
+    "rtk rm -rf /",
+    "rtk rm -rf build",
+    "rtk proxy rm -rf build",
+    "rtk chmod 777 x",
+    "rtk find . -delete",
   ];
 
   it.each(commands)("nunca é mais permissivo que o Claude Code: %s", (command) => {
@@ -141,6 +170,9 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
     expect(openCodeDecide(permission, "bash", "git push --force origin feat/x")).toBe("ask");
     expect(openCodeDecide(permission, "bash", "git status")).toBe("allow");
     expect(openCodeDecide(permission, "bash", "docker ps")).toBe("ask");
+    expect(openCodeDecide(permission, "bash", "rtk sudo ls")).toBe("deny");
+    expect(openCodeDecide(permission, "bash", "rtk rm -rf /")).toBe("deny");
+    expect(openCodeDecide(permission, "bash", "rtk proxy rm -rf build")).toBe("ask");
   });
 
   it.each([".env", "/repo/.env", "/repo/app/.env.local", "/repo/certs/x.pem", ".linkedin.token.json"])(
@@ -204,8 +236,22 @@ describe("agentes: canônico no Claude Code, espelhos gerados", () => {
     const agent = parseAgent("executor.md", AGENT.replace("revisor", "executor").replace("Bash", "Bash, Edit, Write"));
     expect(agent.access).toBe("workspace-write");
     expect(renderCodexAgent(agent)).not.toContain("sandbox_mode");
-    expect(renderOpenCodeAgent(agent)).not.toContain("permission");
+    expect(renderOpenCodeAgent(agent)).not.toContain("edit: deny");
     expect(renderOpenCodeAgent(agent)).not.toContain("allow");
+  });
+
+  it("no OpenCode, ferramenta fora do `tools:` canônico é negada no agente", () => {
+    expect(openCodeToolsDenied(["Read", "Grep", "Glob", "Bash"]).sort()).toEqual(["edit", "webfetch", "websearch"]);
+    expect(openCodeToolsDenied(["Read", "Grep"]).sort()).toEqual(["bash", "edit", "glob", "list", "webfetch", "websearch"]);
+    expect(openCodeToolsDenied([...CLAUDE_AGENT_TOOLS])).toEqual([]);
+    for (const file of readdirSync(".claude/agents")) {
+      const canonical = parseAgent(file, readFileSync(`.claude/agents/${file}`, "utf8"));
+      const frontmatter = splitFrontmatter(readFileSync(`.opencode/agents/${file}`, "utf8")).data as {
+        permission?: Record<string, string>;
+      };
+      for (const tool of openCodeToolsDenied(canonical.tools)) expect(frontmatter.permission?.[tool], `${file}: ${tool}`).toBe("deny");
+      expect(Object.values(frontmatter.permission ?? {}).every((decision) => decision === "deny")).toBe(true);
+    }
   });
 
   it.each([
@@ -261,7 +307,7 @@ describe("guarda do Codex", () => {
     const patch = "*** Begin Patch\n*** Update File: src/a.ts\n@@\n*** Add File: .env.local\n+X=1\n*** End Patch";
     expect(patchPaths(patch)).toEqual(["src/a.ts", ".env.local"]);
     const verdict = judge({ tool_name: "apply_patch", tool_input: { command: patch }, cwd: "/repo" }, rules, context);
-    expect(verdict).toEqual({ decision: "deny", reason: ".env.local" });
+    expect(verdict).toEqual({ decision: "deny", target: ".env.local" });
     const clean = judge({ tool_name: "apply_patch", tool_input: { command: "*** Update File: src/a.ts" } }, rules, context);
     expect(clean.decision).toBeNull();
     const asked = parseRules({ ask: ["Edit(./docs/**)"], deny: ["Edit(./.env)"] });
@@ -283,6 +329,8 @@ describe("guarda do Codex", () => {
       expect(asked.hookSpecificOutput.permissionDecisionReason).toContain("peça à pessoa para rodar");
       expect(run(JSON.stringify({ tool_name: "Bash", tool_input: { command: "ls" } }), root, "/h")).toBeNull();
       expect(run("não é json", root, "/h")).toContain("guarda sem política legível");
+      expect(run("null", root, "/h")).toContain("entrada não é objeto");
+      expect(run(JSON.stringify({ tool_name: "Bash", tool_input: { command: "rtk sudo ls" } }), root, "/h")).toContain("deny");
       expect(run(JSON.stringify({ tool_name: "Bash", tool_input: {} }), root, "/h")).toContain("sem tool_input.command");
       writeFileSync(join(root, ".claude/settings.json"), "{}");
       expect(run(JSON.stringify({ tool_name: "Bash", tool_input: { command: "ls" } }), root, "/h")).toContain("sem permissions");
@@ -374,7 +422,7 @@ describe("a árvore real e a ligação ao gate", () => {
     expect(checkHarness(process.cwd())).toEqual([]);
   });
 
-  it("os agentes de papel existem nos três harnesses", () => {
+  it("os agentes de papel e o fit-analyst existem nos três harnesses", () => {
     for (const name of ["task-analyst", "executor", "fixer", "reviewer", "judge", "fit-analyst"]) {
       for (const path of [`.claude/agents/${name}.md`, `.codex/agents/${name}.toml`, `.opencode/agents/${name}.md`]) {
         expect(readFileSync(path, "utf8").length, path).toBeGreaterThan(0);
@@ -385,6 +433,20 @@ describe("a árvore real e a ligação ao gate", () => {
   it("o Codex liga a guarda e o hook", () => {
     expect(readFileSync(".codex/config.toml", "utf8")).toMatch(/^\[features\]\n(?:#[^\n]*\n)*hooks = true$/m);
     expect(readFileSync(".codex/hooks.json", "utf8")).toContain("scripts/harness/codex-guard.ts");
+    // Saída ≠ 0/2 faz o Codex seguir sem a guarda: a falha do processo precisa bloquear.
+    expect(readFileSync(".codex/hooks.json", "utf8")).toMatch(/codex-guard\.ts\\" \|\| \{ [^}]*exit 2; \}/);
+    const config = readFileSync(".codex/config.toml", "utf8");
+    expect(config).toMatch(/^approval_policy = "on-request"$/m);
+    expect(config).toMatch(/^sandbox_mode = "workspace-write"$/m);
+  });
+
+  it("o comando do hook bloqueia quando a guarda não consegue rodar", () => {
+    const command = (JSON.parse(readFileSync(".codex/hooks.json", "utf8")) as {
+      hooks: { PreToolUse: { hooks: { command: string }[] }[] };
+    }).hooks.PreToolUse[0]!.hooks[0]!.command.replace("$(git rev-parse --show-toplevel)", "/nao/existe");
+    const result = spawnSync("sh", ["-c", command], { input: "{}", encoding: "utf8" });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("comando bloqueado");
   });
 
   const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };

@@ -4,6 +4,8 @@ description: Analisa profundamente a aderência entre uma vaga e o perfil de And
 mode: subagent
 permission:
   edit: deny
+  webfetch: deny
+  websearch: deny
 ---
 
 Você analisa aderência entre vaga e candidato. Não escreve código, não move

@@ -5,7 +5,8 @@
 // sabe PERGUNTAR (`permissionDecision: "ask"` é recebido e ignorado, o comando
 // segue). Por isso `ask` vira bloqueio com o motivo: o que no Claude Code
 // espera a pessoa aprovar, no Codex espera a pessoa rodar. Falha fecha —
-// entrada ilegível ou política ausente também bloqueiam.
+// entrada ilegível ou política ausente bloqueiam aqui; o processo que nem
+// chega a responder bloqueia pelo `|| exit 2` do comando em `.codex/hooks.json`.
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -18,7 +19,7 @@ export type HookInput = {
   cwd?: unknown;
 };
 
-export type Verdict = { decision: Decision | null; reason: string };
+export type Verdict = { decision: Decision | null; target: string };
 
 /** Caminhos que um patch do Codex cria, altera, apaga ou para onde move. */
 export function patchPaths(patch: string): string[] {
@@ -31,7 +32,7 @@ export function patchPaths(patch: string): string[] {
 
 export function judge(input: HookInput, rules: readonly Rule[], context: { root: string; home: string }): Verdict {
   const command = input.tool_input?.command;
-  if (typeof command !== "string") return { decision: "deny", reason: "entrada do hook sem tool_input.command" };
+  if (typeof command !== "string") return { decision: "deny", target: "entrada do hook sem tool_input.command" };
   const cwd = typeof input.cwd === "string" && isAbsolute(input.cwd) ? input.cwd : context.root;
 
   if (input.tool_name === "apply_patch") {
@@ -45,9 +46,9 @@ export function judge(input: HookInput, rules: readonly Rule[], context: { root:
         target = path;
       }
     }
-    return { decision: worst, reason: target };
+    return { decision: worst, target };
   }
-  return { decision: decideCommand(rules, command), reason: command };
+  return { decision: decideCommand(rules, command), target: command };
 }
 
 export function hookResponse(verdict: Verdict): string | null {
@@ -60,7 +61,7 @@ export function hookResponse(verdict: Verdict): string | null {
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
-      permissionDecisionReason: `${why}: ${verdict.reason}`,
+      permissionDecisionReason: `${why}: ${verdict.target}`,
     },
   });
 }
@@ -69,14 +70,16 @@ export function run(stdin: string, root: string, home: string): string | null {
   let input: HookInput;
   let rules: Rule[];
   try {
-    input = JSON.parse(stdin) as HookInput;
+    const parsed: unknown = JSON.parse(stdin);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("entrada não é objeto");
+    input = parsed as HookInput;
     const settings = JSON.parse(readFileSync(join(root, ".claude/settings.json"), "utf8")) as {
       permissions?: Parameters<typeof parseRules>[0];
     };
     if (!settings.permissions) throw new Error("sem permissions");
     rules = parseRules(settings.permissions);
   } catch (error) {
-    return hookResponse({ decision: "deny", reason: `guarda sem política legível (${(error as Error).message})` });
+    return hookResponse({ decision: "deny", target: `guarda sem política legível (${(error as Error).message})` });
   }
   return hookResponse(judge(input, rules, { root, home }));
 }

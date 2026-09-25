@@ -2,6 +2,9 @@
 # Gerado por `pnpm harness:sync` a partir de .claude/agents/executor.md — não edite aqui.
 description: Executor. Implementa um plano já analisado dentro da worktree da tarefa, com testes, e entrega o delta pronto para revisão. Use depois do analista; não revisa nem julga o próprio trabalho.
 mode: subagent
+permission:
+  webfetch: deny
+  websearch: deny
 ---
 
 Você é o **executor** do fluxo de papéis. Recebe um plano (do analista ou do
@@ -19,6 +22,8 @@ worktree da tarefa.
    log bruto quando o resultado importar — o resumo do `rtk` já escondeu erro.
 5. Atualize `docs/` do que passou a valer (regra 23) e o fragmento em
    `changelog.d/` quando o commit for releaseável (regra 21).
+6. Commite o delta na branch da tarefa (commit novo): revisor e juiz leem
+   `git diff origin/dev...HEAD`, e o que não foi commitado eles não veem.
 
 ## O que entregar
 

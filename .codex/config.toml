@@ -1,27 +1,34 @@
 # Configuração do Codex para o master-jobs — camada de projeto.
 #
 # O Codex só carrega `.codex/` (este arquivo, agentes, hooks) quando o projeto
-# está marcado como confiável no seu `~/.codex/config.toml`. Sem isso, a guarda
-# de permissões abaixo NÃO roda.
+# está marcado como confiável no seu `~/.codex/config.toml`. Sem isso, nem a
+# guarda de permissões (`.codex/hooks.json`) nem os agentes rodam.
 #
 # Instruções: `AGENTS.md` na raiz, descoberto sozinho pelo Codex — a única
 # fonte autoral; `CLAUDE.md` é symlink para ela. Detalhe das regras em
 # `docs/engineering/rules/`. Este arquivo liga o harness; não redefine
 # política (G72). Paridade com Claude Code e OpenCode: G85.
 #
-# - Skills: `.agents/skills` → `.claude/skills` (symlink).
+# - Skills: `.agents/skills` → `.claude/skills` (symlink; `.codex/skills`
+#   continua para versões anteriores do Codex).
 # - Agentes: `.codex/agents/*.toml`, gerados de `.claude/agents/` por
 #   `pnpm harness:sync`. Não edite os .toml.
 # - Permissões: `.codex/hooks.json` (gerado) chama
 #   `scripts/harness/codex-guard.ts`, que aplica a lista de
 #   `.claude/settings.json` a cada comando e patch. `ask` vira bloqueio, porque
 #   o hook do Codex não sabe perguntar.
-# - Comandos (`.claude/commands/`): o Codex não tem comando de projeto (custom
-#   prompts são pessoais e obsoletos). Peça "rode o /vagas" e leia o arquivo.
+# - Comandos: o Codex não tem comando de projeto (custom prompts são pessoais
+#   e obsoletos). Para `/vagas`, leia e siga `.claude/commands/vagas.md`.
 #
-# Todo comando de shell no Codex vai prefixado com `rtk` (G63). Os de uso
-# diário: `rtk pnpm install`, `rtk pnpm check`, `rtk pnpm jho jobs sync`,
-# `rtk pnpm jho jobs list --min-fit 55`, `rtk pnpm jho pipeline`.
+# Todo comando de shell no Codex vai prefixado com `rtk` (G63); a lista de
+# comandos está em docs/cli.md.
+
+# O que o Claude Code pergunta por omissão (comando sem regra, qualquer edição)
+# o Codex resolve pelo sandbox e pela aprovação: gravar só no workspace e pedir
+# aprovação quando precisar sair dele. Fixado aqui para que uma configuração
+# pessoal mais frouxa não valha neste projeto.
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
 
 [features]
 # Ligado por padrão no Codex; explícito porque a guarda depende dele.

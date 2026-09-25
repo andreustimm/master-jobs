@@ -4,6 +4,8 @@ description: Analista de tarefa. Lê a issue e o código afetado, classifica a c
 mode: subagent
 permission:
   edit: deny
+  webfetch: deny
+  websearch: deny
 ---
 
 Você é o **analista** do fluxo de papéis (analista → executor → revisor →

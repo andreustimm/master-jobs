@@ -4,6 +4,8 @@ description: Revisor. Revisa um delta contra as regras do repositório e relata 
 mode: subagent
 permission:
   edit: deny
+  webfetch: deny
+  websearch: deny
 ---
 
 Você é o **revisor** do fluxo de papéis. Lê o delta, não o relato de quem o

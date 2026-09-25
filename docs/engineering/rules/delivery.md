@@ -453,8 +453,9 @@ ela não define política nem concede autorização.
 e `.opencode/skills` são links simbólicos para `../.claude/skills`, e
 `.opencode/commands` para `../.claude/commands`, portanto Codex, Claude Code e
 OpenCode leem o mesmo conteúdo. Agentes não entram por symlink: o formato
-difere entre os harnesses, e o espelho gerado segue [G85](#g85). Nunca copie uma skill para os três diretórios: atualização e
-remoção acontecem só na cópia canônica. O binding da regra 24 prevalece sobre
+difere entre os harnesses, e o espelho gerado segue [G85](#g85). Nunca copie
+uma skill para os três diretórios: atualização e remoção acontecem só na cópia
+canônica. O binding da regra 24 prevalece sobre
 status/grafo locais sugeridos por skills globais: adapte o procedimento neste
 projeto, sem editar a instalação global nem criar cópias por harness.
 
@@ -487,7 +488,8 @@ AGENTS e CLAUDE; como CLAUDE é symlink, há um arquivo só.
 ### G85 — Claude Code, Codex e OpenCode no mesmo contrato
 
 **Obrigação.** Regras, skills, agentes, comandos e permissões valem igual nos
-três harnesses. Cada assunto tem **uma** fonte canônica em `.claude/`; o que é
+três harnesses. Cada assunto tem **uma** fonte canônica — `AGENTS.md` e
+`docs/engineering/rules/` para instruções, `.claude/` para o resto; o que é
 idêntico entre os harnesses chega aos outros por symlink, e o que muda de
 formato chega por espelho **gerado** — nunca escrito à mão.
 
@@ -504,9 +506,10 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
 - **Agente canônico** tem só `name` (igual ao arquivo), `description` e
   `tools`. Sem `tools` o Claude Code dá todas as ferramentas; por isso ele é
   obrigatório. Sem `Edit`/`Write`, o agente é de leitura: `sandbox_mode =
-  "read-only"` no Codex e `edit: deny` no OpenCode. O espelho do OpenCode só
-  restringe — um `allow` no agente venceria o deny global, porque lá a regra do
-  agente é avaliada depois.
+  "read-only"` no Codex e `edit: deny` no OpenCode. No OpenCode, toda
+  ferramenta que o `tools:` não dá (`webfetch`, `websearch`, `bash`…) é
+  negada no agente, e o espelho só restringe — um `allow` no agente venceria o
+  deny global, porque lá a regra do agente é avaliada depois.
 - **Comando** tem só `description` no frontmatter: o OpenCode lê o mesmo
   arquivo e ignora o que só o Claude Code entende (`allowed-tools` ficaria
   mais largo do outro lado).
@@ -516,17 +519,28 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   estreitar. No Codex, que não tem lista por padrão de texto, o hook aplica a
   própria lista do Claude a cada comando e `apply_patch`; `ask` vira
   bloqueio, porque o hook do Codex não sabe perguntar — o que no Claude espera
-  aprovação, no Codex espera a pessoa rodar. O Codex só carrega hooks e
-  agentes de projeto confiável (`trust_level` no `~/.codex/config.toml`).
-- **Limites conhecidos.** Comandos no Codex e a leitura automática das regras
-  por domínio (só o OpenCode carrega por configuração; Claude Code e Codex leem
-  pelo roteador da entrada) são diferenças do harness, não da política.
+  aprovação, no Codex espera a pessoa rodar; se o processo da guarda falhar, o
+  hook sai com código 2 e bloqueia. O `ask` implícito do Claude (comando sem
+  regra, qualquer edição) fica com o sandbox e a aprovação do Codex,
+  fixados em `.codex/config.toml` (`workspace-write`, `on-request`). O Codex só
+  carrega hooks e agentes de projeto confiável (`trust_level` no
+  `~/.codex/config.toml`).
+- **Prefixo `rtk`.** Codex e OpenCode escrevem `rtk sudo ls` (G63); no Claude
+  Code o hook do rtk reescreve depois da decisão. Por isso a guarda do Codex
+  julga cada trecho também sem o prefixo, e o OpenCode recebe cada padrão
+  ancorado de `ask`/`deny` também como `rtk <padrão>` e `rtk proxy <padrão>`.
+- **Limites conhecidos.** Comandos no Codex; ferramenta por agente no Codex
+  (só `sandbox_mode` distingue leitura de escrita — não há lista de
+  ferramentas por agente); e a leitura automática das regras por domínio (só o
+  OpenCode carrega por configuração; Claude Code e Codex leem pelo roteador da
+  entrada) são diferenças do harness, não da política.
 
 Prova: `pnpm check:harness` (no `pnpm check` e no CI) reprova espelho
 ausente, divergente ou órfão, `.opencode/agents` como symlink, agente fora do
 contrato e comando com campo de um harness só. `tests/harness-parity.test.ts`
 prova que a tradução do OpenCode nunca é mais permissiva que o Claude Code e
-que a guarda do Codex nega o que ele nega ou perguntaria.
+que a guarda do Codex nega o que ele nega ou perguntaria por regra explícita,
+inclusive com o prefixo `rtk` e em comando composto.
 
 <a id="g63"></a>
 ### G63 — RTK por harness
