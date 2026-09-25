@@ -73,6 +73,26 @@ describe("regras do Claude Code lidas como o Claude Code lê", () => {
     expect(decideCommand(rules, "rtk git status")).toBe("allow");
   });
 
+  it.each([
+    "env rm -rf src",
+    "command rm -rf src",
+    "timeout 5 rm -rf src",
+    "/bin/rm -rf src",
+    "sh -c 'rm -rf src'",
+    "bash -c \"cd x && rm -rf src\"",
+    "rtk env FOO=1 rm -rf src",
+  ])("invólucro não esconde o comando da regra: %s", (command) => {
+    const rules = parseRules({ allow: ["Bash(git:*)"], ask: ["Bash(rm:*)"] });
+    expect(decideCommand(rules, command)).toBe("ask");
+  });
+
+  it("texto entre aspas simples não vira comando", () => {
+    const rules = parseRules({ allow: ["Bash(git:*)"], deny: ["Bash(sudo *)"] });
+    expect(decideCommand(rules, "git commit -m 'fix(harness): julga (sudo ls) no texto'")).toBe("allow");
+    expect(decideCommand(rules, "git commit -m 'docs: explica `rtk sudo ls`'")).toBe("allow");
+    expect(decideCommand(rules, 'git commit -m "$(sudo ls)"')).toBe("deny");
+  });
+
   it.each(["git status & sudo ls", "echo $(sudo ls)", "ls `sudo ls`", "git status; (sudo ls)", "cat <(sudo ls)", "{ sudo ls; }"])(
     "comando escondido em sintaxe do shell ainda é julgado: %s",
     (command) => {
@@ -204,6 +224,7 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
   it("ferramenta sem regra específica vira decisão simples; ferramenta sem tradução reprova", () => {
     expect(toOpenCodePermission({ deny: ["WebFetch"] }).webfetch).toBe("deny");
     expect(() => toOpenCodePermission({ allow: ["NotebookEdit"] })).toThrow("sem tradução para o OpenCode");
+    expect(() => toOpenCodePermission({ deny: ["WebFetch(domain:evil.com)"] })).toThrow("WebFetch(domain:evil.com) sem tradução");
   });
 });
 
@@ -468,9 +489,10 @@ describe("a árvore real e a ligação ao gate", () => {
     expect(readFileSync(".codex/hooks.json", "utf8")).toContain("scripts/harness/codex-guard.ts");
     // Saída ≠ 0/2 faz o Codex seguir sem a guarda: a falha do processo precisa bloquear.
     expect(readFileSync(".codex/hooks.json", "utf8")).toMatch(/codex-guard\.ts\\" \|\| \{ [^}]*exit 2; \}/);
+    // Fixar aprovação ou sandbox na camada de projeto sobrescreveria também a
+    // escolha pessoal mais estrita (`untrusted`, `read-only`).
     const config = readFileSync(".codex/config.toml", "utf8");
-    expect(config).toMatch(/^approval_policy = "on-request"$/m);
-    expect(config).toMatch(/^sandbox_mode = "workspace-write"$/m);
+    expect(config).not.toMatch(/^\s*(approval_policy|sandbox_mode)\s*=/m);
   });
 
   it("o comando do hook bloqueia quando a guarda não consegue rodar", () => {
