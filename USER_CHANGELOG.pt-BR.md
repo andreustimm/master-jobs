@@ -18,6 +18,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 <!-- sem-nota-usuario: 1.25.1 - 2026-09-24T19:48:27.000Z -->
 
+<!-- sem-nota-usuario: 1.25.4 - 2026-09-25T17:23:44.000Z -->
+
 ## [Unreleased]
 
 ## [1.25.3] - 2026-09-25T15:27:50.000Z

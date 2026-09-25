@@ -68,6 +68,12 @@ describe("vercel-ignore-build.sh", () => {
     expect(decide({ VERCEL_GIT_PREVIOUS_SHA: base })).toBe("constrói");
   });
 
+  it("constrói no redeploy do mesmo commit, que existe para aplicar variável nova", () => {
+    commit({ "docs/c.md": "x" });
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
+    expect(decide({ VERCEL_GIT_PREVIOUS_SHA: head })).toBe("constrói");
+  });
+
   it("está ligado no vercel.json", () => {
     const vercel = JSON.parse(readFileSync("vercel.json", "utf8")) as { ignoreCommand?: string };
     expect(vercel.ignoreCommand).toBe("bash scripts/vercel-ignore-build.sh");

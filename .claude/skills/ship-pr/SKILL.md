@@ -27,11 +27,21 @@ is proved; do not update task status through local Compozy files or bulk sync.
 The policy lives in `AGENTS.md` and [docs/engineering/rules/delivery.md](../../../docs/engineering/rules/delivery.md);
 this binding only maps it onto the steps below, and it wins over the generic text:
 
-- **Verdict (G54).** Only a rendered `SHIP` on the current diff continues. On
-  `FIX_BEFORE_SHIP` or `REWORK` the skill stops and reports. Accepting a
-  remaining finding is a decision only a person can take, written in the PR
-  with the findings and the reason; the skill never grants that exception to
-  itself, and a change after the verdict needs a new review round.
+- **Verdict (G53, G54).** Step 2 runs `deep-review` at the level the diff
+  classifies to (`review_level.py`): L0 (Markdown only) has no deep-review and
+  ships on the structural validators; L1 and L2 need a rendered `SHIP` on the
+  current diff. On `FIX_BEFORE_SHIP` or `REWORK` the skill stops and reports.
+  Only open Critical/Major findings block; Minor/Trivial findings and advisories
+  become one line in the PR body, with no new round and no automatic issue.
+  Accepting a remaining finding is a decision only a person can take, written in
+  the PR with the findings and the reason; the skill never grants that exception
+  to itself, and a change after the verdict needs a new review round (delta
+  only, at most 3 rounds).
+- **Draft first (G57).** The task opens a **draft** PR right after its first
+  green local validation, so CI runs in parallel with review. When a draft PR
+  already exists for the branch, step 7 pushes, replaces its body
+  (`rtk gh pr edit <n> --body-file "$BODY_FILE"`) and marks it ready
+  (`rtk gh pr ready <n>`) after `SHIP`, instead of creating another PR.
 - **Release notes (G58).** Step 3 means the project's changelog fragment:
   `changelog.d/<branch-slug>.md` with `## Técnico`, `## pt-BR` and `## en`
   (format in [workflow.md](../../../docs/engineering/workflow.md#escrever-o-changelog)).
@@ -133,7 +143,8 @@ Gist tripwires:
 ### 2. Pass the mandatory deep review
 
 Run `/deep-review --worktree --base origin/dev` while the payload is uncommitted, or
-`/deep-review --base origin/dev` for a clean branch already ahead of `dev`. Continue
+`/deep-review --base origin/dev` for a clean branch already ahead of `dev`, at the
+level the diff classifies to (L0 skips this step). Continue
 only after the rendered verdict is `SHIP`. A `FIX_BEFORE_SHIP` or `REWORK`
 verdict stops this operating loop: repair the findings, rerun the applicable
 verification, and start a fresh review round before generating release notes or
@@ -225,7 +236,7 @@ rtk compozy reviews watch \
 
 ## When NOT to use
 
-- Draft PRs of unfinished work — finish the implementation first; this skill assumes the change is shippable.
+- Draft PRs of unfinished work — finish the implementation first; this skill assumes the change is shippable. (In master-jobs the early draft is a plain `rtk gh pr create --draft --base dev`; this skill later turns it ready.)
 - Amending an already-merged PR — the `gh pr create` step would fail, and re-running `compozy reviews watch` against a merged PR has no effect.
 - Repo-level release publishing (cutting a tagged release, opening a release PR off `RELEASE_BODY.md`) — that is the `pr-release` CLI's own `pr-release` subcommand. This skill only adds release-note entries; it does not orchestrate the release branch.
 - In-progress development checkpoints / WIP commits — use a plain `git commit` instead. This skill is the end-of-feature ritual.

@@ -215,7 +215,7 @@ def hunk_lines(file: str, hunk: str) -> Counter:
     return Counter((file, side, line) for line in range(start, end + 1))
 
 
-def coverage_ledger(manifest: dict, collected: dict[str, list[dict]]) -> dict:
+def coverage_ledger(manifest: dict, collected: dict[str, list[dict]], lanes: tuple[str, ...]) -> dict:
     expected = Counter()
     for file in manifest["files"]:
         if file["disposition"] != "selected":
@@ -224,7 +224,7 @@ def coverage_ledger(manifest: dict, collected: dict[str, list[dict]]) -> dict:
             expected += hunk_lines(file["path"], hunk_text(hunk))
 
     lane_stats = {}
-    for lane in ("defect", "polish"):
+    for lane in lanes:
         actual = Counter()
         rows = [row for row in collected["hunk_coverage"] if row["lane"] == lane]
         for row in rows:
@@ -262,7 +262,12 @@ def main() -> int:
     try:
         manifest = read_json(out / "manifest.json")
         collected = collect(repo, out)
-        coverage = coverage_ledger(manifest, collected)
+        # PATCH LOCAL (ver PATCHES.md): an L1 plan has no polish lane, so only
+        # defect coverage is owed. jobs.json without a level is the upstream L2.
+        level = read_json(out / "jobs.json").get("level", "L2")
+        lanes = ("defect",) if level == "L1" else ("defect", "polish")
+        coverage = coverage_ledger(manifest, collected, lanes)
+        coverage["summary"]["level"] = level
     except RuntimeError as error:
         sys.stderr.write(f"{error}\n")
         return 1
