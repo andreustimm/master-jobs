@@ -217,8 +217,8 @@ describe("mapa de impacto — validação falha fechado", () => {
 
 describe("pnpm gates — argumentos e comando", () => {
   it("lê base, plano e caminhos, e recusa o resto", () => {
-    expect(parseArgs([])).toEqual({ base: "origin/dev", plan: false, paths: null });
-    expect(parseArgs(["--plan", "--base", "main", "--paths", "a.ts", "b.md"])).toEqual({ base: "main", plan: true, paths: ["a.ts", "b.md"] });
+    expect(parseArgs([])).toEqual({ base: "origin/dev", plan: false, fresh: false, paths: null });
+    expect(parseArgs(["--plan", "--base", "main", "--paths", "a.ts", "b.md"])).toEqual({ base: "main", plan: true, fresh: false, paths: ["a.ts", "b.md"] });
     expect(() => parseArgs(["--base"])).toThrow("--base exige");
     expect(() => parseArgs(["--paths"])).toThrow("--paths exige");
     expect(() => parseArgs(["--rapido"])).toThrow("opção desconhecida");

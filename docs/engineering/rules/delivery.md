@@ -425,8 +425,10 @@ draft.
 [`config/validation-impact.json`](../../../config/validation-impact.json) e
 roda a união dos gates que elas pedem; caminho que nenhuma classe reconhece
 recebe o pacote completo (falha fechado), e o que `review_level.py` chama de L2
-nunca recebe menos que a suíte Vitest inteira. Prova:
-`tests/validation-impact.test.ts`. Roteiro em [workflow.md](../workflow.md)
+nunca recebe menos que a suíte Vitest inteira. Gate verde deixa recibo por
+fingerprint (HEAD, árvore e mapa) e não roda de novo no mesmo estado; recibo
+vencido ou de outro estado não vale. Prova: `tests/validation-impact.test.ts`
+e `tests/gates-receipt.test.ts`. Roteiro em [workflow.md](../workflow.md)
 ("Validar pelo risco").
 
 **Orçamento de tempo por gate.** Check local ≤ 10 min, E2E afetado ≤ 8 min,
