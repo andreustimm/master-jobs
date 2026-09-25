@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "mapVersion": "1.0.0",
+  "unknownPaths": "full",
+  "fullPackage": ["release-ready", "instructions", "harness", "qa-tracker", "typecheck", "coverage", "qa-skills", "pwa-browser", "build", "e2e"],
+  "classes": [
+    {
+      "id": "docs",
+      "description": "Markdown: documentação, regras, changelogs, cenários de QA e metadados de skills",
+      "patterns": ["**/*.md"],
+      "gates": ["release-ready", "instructions", "harness", "qa-tracker"]
+    },
+    {
+      "id": "docs-assets",
+      "description": "arquivo não Markdown de documentação e specs de feature",
+      "patterns": ["docs/**", ".compozy/**", ".audits/**", ".impeccable/**"],
+      "exclude": ["**/*.md"],
+      "gates": ["release-ready", "instructions", "harness", "qa-tracker"]
+    },
+    {
+      "id": "tooling",
+      "description": "ferramenta de desenvolvimento: scripts, skills, agentes, espelhos dos harnesses e configuração do fluxo",
+      "patterns": [
+        "scripts/**",
+        "bin/**",
+        "compozy/**",
+        ".github/ISSUE_TEMPLATE/**",
+        ".claude/**",
+        ".agents/**",
+        ".codex/**",
+        ".opencode/**",
+        "opencode.json",
+        "config/model-routing.json",
+        "config/tasks-project.json",
+        "config/validation-impact.json",
+        ".deep-review.yaml",
+        ".coderabbit.yaml",
+        ".gitignore",
+        ".gitattributes"
+      ],
+      "exclude": ["**/*.md"],
+      "gates": ["release-ready", "instructions", "harness", "qa-tracker", "typecheck", "related-tests"]
+    },
+    {
+      "id": "qa-skills",
+      "description": "scripts das skills de QA, que têm suíte própria em Python",
+      "patterns": [".claude/skills/qa-report/**", ".claude/skills/qa-execution/**"],
+      "exclude": ["**/*.md"],
+      "gates": ["qa-tracker", "qa-skills"]
+    },
+    {
+      "id": "backend",
+      "description": "código de domínio, contexto, CLI e testes unitários",
+      "patterns": ["src/**", "tests/**", "config/sources.yaml"],
+      "exclude": ["**/*.md", "tests/e2e/**", "tests/support/**", "tests/fixtures/**"],
+      "gates": ["typecheck", "related-tests"]
+    },
+    {
+      "id": "ui",
+      "description": "telas, componentes, dicionário, temas e a suíte de navegador",
+      "patterns": ["app/**", "components/**", "lib/**", "public/**", "src/core/i18n/**", "src/core/theme.ts", "tests/e2e/**"],
+      "exclude": ["**/*.md"],
+      "gates": ["typecheck", "related-tests", "e2e"]
+    },
+    {
+      "id": "scorer",
+      "description": "scorer e perfil que o alimenta (regra 6)",
+      "patterns": ["src/core/scoring/**", "profile/**"],
+      "exclude": ["**/*.md"],
+      "gates": ["typecheck", "tests"]
+    },
+    {
+      "id": "db",
+      "description": "schema, migrations e o revisor de migration",
+      "patterns": [
+        "drizzle/**",
+        "drizzle.config.ts",
+        "drizzle.postgres.config.ts",
+        "supabase/**",
+        "docker/**",
+        "docker-compose.local.yml",
+        "src/core/db/schema.ts",
+        "src/core/db/migrate.ts",
+        "src/core/db/migration-review.ts",
+        "tests/fixtures/migration-verdicts/**"
+      ],
+      "exclude": ["**/*.md"],
+      "gates": ["typecheck", "tests"]
+    },
+    {
+      "id": "auth-security",
+      "description": "autenticação, autorização, perfil público, cache do service worker e segredos",
+      "patterns": [
+        "src/contexts/auth/**",
+        "app/login/**",
+        "app/api/**",
+        "app/**/route.ts",
+        "app/**/*action*.ts",
+        "proxy.ts",
+        "tests/support/entry-inventory.ts",
+        "tests/entry-denial.test.ts",
+        "tests/architecture.test.ts",
+        "app/p/**",
+        "src/core/candidate-public.ts",
+        "src/core/public-cv.ts",
+        "src/core/security.ts",
+        "scripts/sw-template.js",
+        "src/core/llm/providers.ts",
+        "src/core/llm/registry.ts",
+        "src/core/db/config.ts",
+        "src/core/db/client.ts",
+        "**/.env*"
+      ],
+      "pathWords": ["auth", "oauth", "session", "sessions", "password", "secret", "secrets", "security", "impersonat*"],
+      "exclude": ["**/*.md"],
+      "gates": ["typecheck", "tests", "pwa-browser", "e2e"]
+    },
+    {
+      "id": "deploy",
+      "description": "CI, promoção, hooks de Git, cabeçalhos e configuração da Vercel",
+      "patterns": [
+        ".github/workflows/**",
+        "scripts/release/**",
+        "scripts/github/**",
+        ".github/scripts/**",
+        "scripts/vercel-ignore-build.sh",
+        "vercel.json",
+        "next.config.ts",
+        ".githooks/**"
+      ],
+      "exclude": ["**/*.md"],
+      "gates": ["release-ready", "instructions", "harness", "qa-tracker", "typecheck", "tests", "build"]
+    },
+    {
+      "id": "transversal",
+      "description": "dependências, compilador, configuração de teste e suporte compartilhado: afeta tudo",
+      "patterns": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "tsconfig.json",
+        "next-env.d.ts",
+        "postcss.config.mjs",
+        "components.json",
+        "vitest.config.ts",
+        "vitest.tasks.config.ts",
+        "tests/support/**",
+        "tests/fixtures/**",
+        "instrumentation.ts",
+        "instrumentation-client.ts",
+        ".nvmrc",
+        ".node-version"
+      ],
+      "exclude": ["**/*.md"],
+      "gates": ["full"]
+    }
+  ],
+  "gates": {
+    "release-ready": {
+      "description": "changelogs e fragmentos prontos para release",
+      "command": ["pnpm", "check:release-ready"]
+    },
+    "instructions": {
+      "description": "symlinks, links, âncoras e IDs de regra",
+      "command": ["pnpm", "check:instructions"]
+    },
+    "harness": {
+      "description": "paridade dos espelhos de Codex e OpenCode",
+      "command": ["pnpm", "check:harness"]
+    },
+    "qa-tracker": {
+      "description": "esquema dos cenários de QA",
+      "command": ["pnpm", "check:qa-tracker"]
+    },
+    "qa-skills": {
+      "description": "contratos dos scripts das skills de QA",
+      "command": ["pnpm", "test:qa-skills"]
+    },
+    "typecheck": {
+      "description": "tipos",
+      "command": ["pnpm", "typecheck"]
+    },
+    "related-tests": {
+      "description": "testes que importam ou citam os arquivos alterados",
+      "command": ["pnpm", "exec", "vitest", "related", "--run", "--passWithNoTests"],
+      "appendFiles": true
+    },
+    "tests": {
+      "description": "suíte Vitest inteira",
+      "command": ["pnpm", "test"],
+      "satisfies": ["related-tests"]
+    },
+    "coverage": {
+      "description": "suíte Vitest inteira com o piso de cobertura",
+      "command": ["pnpm", "test:coverage"],
+      "satisfies": ["tests", "related-tests"]
+    },
+    "pwa-browser": {
+      "description": "fronteira da PWA em Chromium real",
+      "command": ["pnpm", "test:pwa-browser"]
+    },
+    "build": {
+      "description": "build de produção",
+      "command": ["pnpm", "build"]
+    },
+    "e2e": {
+      "description": "navegador real sobre build de produção isolado",
+      "command": ["pnpm", "test:e2e"]
+    }
+  }
+}
