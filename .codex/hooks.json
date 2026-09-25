@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|apply_patch)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --experimental-strip-types --no-warnings \"$(git rev-parse --show-toplevel)/scripts/harness/codex-guard.ts\"",
+            "timeout": 10,
+            "statusMessage": "Conferindo a política de permissões do projeto"
+          }
+        ]
+      }
+    ]
+  }
+}
