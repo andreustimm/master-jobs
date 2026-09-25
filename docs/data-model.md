@@ -451,9 +451,12 @@ linha ocupa quase uma página. O Drizzle não declara colunas incluídas, então
 migração) e o snapshot não o conhece. A varredura só
 índice depende do mapa de visibilidade: páginas reescritas pela repontuação e
 ainda não vistas pelo `vacuum` voltam à tabela. `tests/facet-read-indexes.test.ts`
-reprova se o `INCLUDE` sumir. Quem lê a nota da principal com escopo de
-candidato usa `candidatePrimaryScoreFilter` (a principal como subconsulta
-escalar, casada pela chave), e não o `exists` por linha de `primaryScoreFilter`.
+reprova se o `INCLUDE` sumir. Em `repo.ts`, as leituras da principal com escopo
+de candidato do quadro, das facetas, de `corpusStats` e de `clusterBreakdown`
+usam `candidatePrimaryScoreFilter` (a principal como subconsulta escalar,
+casada pela chave); os demais leitores com candidato conhecido — dossiê,
+varredura de triagem, `analytics`, `contacts`, `cli.ts` — continuam no `exists`
+por linha de `primaryScoreFilter`.
 
 ### `score_cursor` — onde a passada de pontuação parou
 

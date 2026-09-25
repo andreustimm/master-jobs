@@ -302,7 +302,8 @@ restritos à pessoa e à trilha da sessão.
 A tela usa `listBoardPage`: total por janela sobre ids elegíveis e dados completos
 somente depois do limite da página. Uma página além do fim, ou de tamanho zero,
 não tem linha para carregar o total; nesses casos a contagem separada conserva o
-rodapé correto. Desde a #222, `listBoard` (cockpit, CLI) passa pela mesma
+rodapé correto. Desde a #222, `listBoard` (cockpit, CLI, exportação e
+varredura de triagem) passa pela mesma
 janela de ids e só não lê o total. A lista continua usando os mesmos filtros e
 desempates.
 
