@@ -57,27 +57,75 @@ export function bashSpecifierMatches(specifier: string, command: string): boolea
  * vê `sudo ls`; nos outros dois o comando chega como `rtk sudo ls`, e uma regra
  * ancorada no início (`sudo *`, `rm:*`) deixaria de casar.
  */
-const RTK_PREFIX = /^rtk\s+(?:proxy\s+)?/;
+/**
+ * Invólucros que executam o comando seguinte sem mudar o que ele faz. Sem
+ * tirá-los, `env rm -rf src` ou `timeout -s KILL 5 rm -rf src` escapariam de
+ * `rm:*`.
+ */
+const WRAPPERS = new Set(["env", "command", "exec", "nohup", "time", "nice", "timeout", "stdbuf", "ionice"]);
+
+/** Opção, número/duração, sinal (`KILL`) ou atribuição logo depois de um invólucro. */
+const WRAPPER_ARGUMENT = /^(?:-|\d|[A-Z]+$|[A-Za-z_][A-Za-z0-9_]*=)/;
+
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
 /**
- * Invólucros que executam o comando seguinte sem mudar o que ele faz:
- * `env`/atribuição de variável, `command`, `exec`, `nohup`, `time`, `nice` e
- * `timeout`. Sem tirá-los, `env rm -rf src` escaparia de `rm:*`.
+ * Tira, até estabilizar, o prefixo `rtk`/`rtk proxy` (G63: no Claude Code o
+ * hook do rtk reescreve DEPOIS da decisão, então a regra vê `sudo ls`),
+ * atribuição de variável, invólucro com suas opções e o diretório do
+ * executável (`/bin/rm` → `rm`).
  */
-const WRAPPER = /^(?:(?:env|command|exec|nohup|time)\s+|nice\s+(?:-n\s*-?\d+\s+)?|timeout\s+\S+\s+|[A-Za-z_][A-Za-z0-9_]*=\S*\s+)/;
-
-/** Tira `rtk`, invólucros e o diretório do executável (`/bin/rm` → `rm`) até estabilizar. */
 function unwrap(segment: string): string {
-  let current = segment;
-  for (let previous = ""; previous !== current; ) {
-    previous = current;
-    current = current.replace(RTK_PREFIX, "").replace(WRAPPER, "").replace(/^\/\S*\/(?=\S)/, "");
+  const tokens = segment.split(/\s+/).filter((token) => token !== "");
+  for (let changed = true; changed && tokens.length > 0; ) {
+    changed = true;
+    const head = tokens[0]!;
+    if (head === "rtk") {
+      tokens.shift();
+      if (tokens[0] === "proxy") tokens.shift();
+    } else if (ASSIGNMENT.test(head)) {
+      tokens.shift();
+    } else if (WRAPPERS.has(head)) {
+      tokens.shift();
+      while (tokens.length > 1 && WRAPPER_ARGUMENT.test(tokens[0]!)) tokens.shift();
+    } else if (head.startsWith("/") && head.lastIndexOf("/") < head.length - 1) {
+      tokens[0] = head.slice(head.lastIndexOf("/") + 1);
+    } else {
+      changed = false;
+    }
   }
-  return current;
+  return tokens.join(" ");
 }
 
-/** O que um shell aninhado vai rodar: `sh -c 'rm -rf src'` → `rm -rf src`. */
-const NESTED_SHELL = /(?:^|\s)(?:ba|z|da|k)?sh\s+-c\s+(['"])([\s\S]*?)\1/g;
+/**
+ * Esconde o conteúdo de aspas simples (fora de aspas duplas), onde o shell não
+ * interpreta nada: cortar ali faria de uma mensagem de commit um comando.
+ * Aspas simples sem fechar devolvem o texto intacto — na dúvida, julga tudo.
+ */
+function maskSingleQuoted(text: string): string {
+  let out = "";
+  let state: "none" | "single" | "double" = "none";
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index]!;
+    if (state === "single") {
+      if (char === "'") state = "none";
+      out += char === "'" ? char : " ";
+    } else if (char === "\\" && index + 1 < text.length) {
+      out += char + text[++index]!;
+    } else if (state === "double") {
+      if (char === '"') state = "none";
+      out += char;
+    } else {
+      if (char === "'") state = "single";
+      else if (char === '"') state = "double";
+      out += char;
+    }
+  }
+  return state === "single" ? text : out;
+}
+
+/** O que um shell aninhado vai rodar: `sh -ec 'rm -rf src'` → `rm -rf src`. */
+const NESTED_SHELL = /(?:^|\s)(?:ba|z|da|k)?sh\s+(?:-[A-Za-z]+\s+)*-[A-Za-z]*c[A-Za-z]*\s+(['"])([\s\S]*?)\1/g;
 
 /**
  * O comando inteiro e cada trecho dele: `cd x && git push origin main` precisa
@@ -90,8 +138,7 @@ const NESTED_SHELL = /(?:^|\s)(?:ba|z|da|k)?sh\s+-c\s+(['"])([\s\S]*?)\1/g;
  */
 export function commandSegments(command: string, depth = 0): string[] {
   const whole = command.trim();
-  const literal = whole.replace(/'[^']*'/g, "''");
-  const parts = literal
+  const parts = maskSingleQuoted(whole)
     .split(/&&|\|\||\$\(|[<>]\(|[;|&\n(){}`]/)
     .map((part) => part.trim())
     .filter((part) => part.length > 0);

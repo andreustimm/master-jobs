@@ -81,6 +81,12 @@ describe("regras do Claude Code lidas como o Claude Code lê", () => {
     "sh -c 'rm -rf src'",
     "bash -c \"cd x && rm -rf src\"",
     "rtk env FOO=1 rm -rf src",
+    "env -i rm -rf src",
+    "timeout -s KILL 5 rm -rf src",
+    "nice -n 10 rm -rf src",
+    "command -p rm -rf src",
+    "sh -ec 'rm -rf src'",
+    "/usr/bin/env /bin/rm -rf src",
   ])("invólucro não esconde o comando da regra: %s", (command) => {
     const rules = parseRules({ allow: ["Bash(git:*)"], ask: ["Bash(rm:*)"] });
     expect(decideCommand(rules, command)).toBe("ask");
@@ -91,6 +97,11 @@ describe("regras do Claude Code lidas como o Claude Code lê", () => {
     expect(decideCommand(rules, "git commit -m 'fix(harness): julga (sudo ls) no texto'")).toBe("allow");
     expect(decideCommand(rules, "git commit -m 'docs: explica `rtk sudo ls`'")).toBe("allow");
     expect(decideCommand(rules, 'git commit -m "$(sudo ls)"')).toBe("deny");
+    // Apóstrofo dentro de aspas duplas não abre aspas simples.
+    expect(decideCommand(rules, `git log --grep "it's" && sudo ls && git commit -m 'x'`)).toBe("deny");
+    expect(decideCommand(rules, "git commit -m \\'a && sudo ls && git log 'b'")).toBe("deny");
+    // Aspas sem fechar: na dúvida, julga tudo.
+    expect(decideCommand(rules, "git log 'x && sudo ls")).toBe("deny");
   });
 
   it.each(["git status & sudo ls", "echo $(sudo ls)", "ls `sudo ls`", "git status; (sudo ls)", "cat <(sudo ls)", "{ sudo ls; }"])(
