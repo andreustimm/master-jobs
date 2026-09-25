@@ -69,7 +69,7 @@ beforeEach(() => {
   write(".claude/commands/vagas.md", "comando\n");
   link(".codex/skills", "../.claude/skills");
   link(".opencode/skills", "../.claude/skills");
-  link(".opencode/agents", "../.claude/agents");
+  link(".agents/skills", "../.claude/skills");
   link(".opencode/commands", "../.claude/commands");
   write("docs/engineering/rules/README.md", INVENTORY);
   write("docs/engineering/rules/delivery.md", DELIVERY);
@@ -100,11 +100,11 @@ describe("V09-01 — symlink dos harnesses, nunca cópia", () => {
     unlinkSync(join(root, ".opencode/skills"));
     link(".opencode/skills", "../.claude/agents");
     rmSync(join(root, ".claude/commands"), { recursive: true });
-    unlinkSync(join(root, ".opencode/agents"));
+    unlinkSync(join(root, ".agents/skills"));
     const found = errors();
     expect(found).toContain(".opencode/skills: aponta para ../.claude/agents; esperado ../.claude/skills");
     expect(found).toContain(".opencode/commands: symlink quebrado");
-    expect(found).toContain(".opencode/agents: ausente");
+    expect(found).toContain(".agents/skills: ausente");
   });
 
   it("reprova instrução duplicada por harness e aceita o ponteiro legítimo", () => {

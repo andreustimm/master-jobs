@@ -201,7 +201,7 @@ para outros repositórios:
 
 | Mudança | Evidência local necessária | Revisão (G53) |
 |---|---|---|
-| Markdown e metadados | Estrutura, links e scripts afetados: `pnpm check:instructions`, `pnpm check:release-ready`, `pnpm check:qa-tracker` | L0 (só `.md`): nenhuma |
+| Markdown e metadados | Estrutura, links e scripts afetados: `pnpm check:instructions`, `pnpm check:harness`, `pnpm check:release-ready`, `pnpm check:qa-tracker` | L0 (só `.md`): nenhuma |
 | Ferramenta de desenvolvimento | Testes de comportamento da ferramenta e comandos afetados | L1 |
 | Runtime | `rtk pnpm typecheck`, `rtk pnpm exec vitest related --run <arquivos>` e E2E afetado | L1 |
 | Comportamento percebido pelo usuário | Os de runtime e QA targeted conforme [QA vivo](../qa/README.md) | L1 |

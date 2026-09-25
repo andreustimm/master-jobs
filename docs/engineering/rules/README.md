@@ -126,9 +126,10 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G82 | Comentário explica por quê | [architecture](architecture.md#g82) | "Convenções de código" | preservada |
 | G83 | Estado e contagens fora das instruções | [delivery](delivery.md#g83) | "Estado atual", "Comandos" | preservada; inventário movido para `docs/cli.md` |
 | G84 | Revisão relata; auditoria e QA distintos | [delivery](delivery.md#g84) | "Revisão profunda" | preservada; um revisor por diff (#319) |
+| G85 | Paridade dos harnesses | [delivery](delivery.md#g85) | [#317](https://github.com/andreustimm/master-jobs/issues/317) | nova: espelhos gerados de `.claude/` e gate `pnpm check:harness` |
 
-**Obrigações posteriores à auditoria**, sem ID `G`, preservadas no mesmo
-destino: [R24 — issue e Project 3](delivery.md#r24),
+**Obrigações posteriores à auditoria**, sem ID `G` (G85 em diante já nasce com
+ID), preservadas no mesmo destino: [R24 — issue e Project 3](delivery.md#r24),
 [`Closes #N` na mensagem do commit](delivery.md#r24-closes) e
 [tamanho S/M/L da tarefa](delivery.md#r24-tamanho).
 

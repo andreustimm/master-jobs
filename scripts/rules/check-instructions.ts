@@ -10,12 +10,18 @@ import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync, realpat
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-/** Cada harness lê a fonte canônica por symlink — nunca por cópia (G61, G72). */
+/**
+ * Cada harness lê a fonte canônica por symlink — nunca por cópia (G61, G72).
+ * `.agents/skills` é onde o Codex procura skills de repositório; `.codex/skills`
+ * fica para versões anteriores. Agentes NÃO entram aqui: o formato difere entre
+ * os harnesses, e os espelhos gerados são conferidos por
+ * `scripts/harness/sync.ts` (G85).
+ */
 export const HARNESS_LINKS: Readonly<Record<string, string>> = {
   "CLAUDE.md": "AGENTS.md",
+  ".agents/skills": "../.claude/skills",
   ".codex/skills": "../.claude/skills",
   ".opencode/skills": "../.claude/skills",
-  ".opencode/agents": "../.claude/agents",
   ".opencode/commands": "../.claude/commands",
 };
 

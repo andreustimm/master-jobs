@@ -84,6 +84,11 @@ jobs:
         # das regras: só garante que cada ponteiro chega aonde diz chegar.
         run: pnpm check:instructions
 
+      - name: Paridade dos harnesses
+        # Permissões, agentes e hooks de Codex e OpenCode são espelhos gerados
+        # de `.claude/`; espelho ausente, divergente ou órfão reprova (G85).
+        run: pnpm check:harness
+
       - name: Tracker de QA conforme o esquema
         # `docs/qa/state.csv` é visão gerada e ignorada pelo git, então o
         # esquema dos cenários só era conferido quando alguém rodava o

@@ -230,13 +230,20 @@ Mudar uma regra é mudar a entrada e o arquivo de domínio no mesmo commit.
 
 ## Skills e harnesses
 
-Skill de projeto vive **uma vez** em `.claude/skills/<nome>/`; `.codex/skills`
-e `.opencode/skills` (e `.opencode/agents`, `.opencode/commands`) são symlinks
-para os equivalentes em `.claude/`. Nunca copie uma skill por harness. Skill
+Skill de projeto vive **uma vez** em `.claude/skills/<nome>/`; `.agents/skills`,
+`.codex/skills`, `.opencode/skills` e `.opencode/commands` são symlinks para os
+equivalentes em `.claude/`. Nunca copie uma skill por harness. Skill
 ensina procedimento; não define política nem concede autorização. O agente
 invoca `deep-review`, `qa-report`, `qa-execution`, `agent-output-audit` e
 `ship-pr` por conta própria; publicar na PR exige `--publish` ou autorização
 explícita. [[G61](docs/engineering/rules/delivery.md#g61)–[G62](docs/engineering/rules/delivery.md#g62)]
+
+Agentes (`.claude/agents/`) e permissões (`.claude/settings.json`) são a fonte
+dos três harnesses: os espelhos do Codex (`.codex/agents/`, `.codex/hooks.json`)
+e do OpenCode (`.opencode/agents/`, `opencode.json`) são **gerados** por
+`pnpm harness:sync` e conferidos por `pnpm check:harness` — nunca edite o
+espelho. Agentes de papel: `task-analyst`, `executor`, `fixer`, `reviewer`,
+`judge`. [[G85](docs/engineering/rules/delivery.md#g85)]
 
 Conforme `~/.claude/RTK.md`: no Codex e no OpenCode todo comando de shell vai
 prefixado com `rtk`. No Claude Code o hook global reescreve e não duplica o
