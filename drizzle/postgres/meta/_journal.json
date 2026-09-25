@@ -176,6 +176,20 @@
       "when": 1790258983746,
       "tag": "0024_job_check_event",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790345839348,
+      "tag": "0025_job_described_open_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790345842380,
+      "tag": "0026_job_score_board_cover",
+      "breakpoints": true
     }
   ]
 }

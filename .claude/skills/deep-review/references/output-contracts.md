@@ -38,7 +38,7 @@ one mermaid sequenceDiagram per flow, actors = real components>
 
 - **Scope**: <base sha short> → <head sha short> (<incremental round N | full review>)
 - **Files**: <n> selected · <n> ignored by filters · <n> skipped (trivial/similar)
-- **Posture**: assertive · **Mode**: <workflow|agent-fallback|subagent:runtime>
+- **Posture**: assertive · **Mode**: <workflow|agent-fallback|subagent:runtime|inline> · **Level**: <L1|L2>
 - **Rubric**: <sources consulted, comma-separated paths>
 - **Linters**: <lane: ran/unavailable, ...>
 ```

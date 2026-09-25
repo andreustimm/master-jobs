@@ -1,0 +1,1 @@
+CREATE INDEX "job_described_open_idx" ON "production"."job" USING btree ("id") WHERE "production"."job"."closed_at" is null and substr(coalesce("production"."job"."description_text", ''), 200, 1) <> '';

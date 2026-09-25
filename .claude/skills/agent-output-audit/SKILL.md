@@ -20,8 +20,13 @@ metadata:
 
 Prefix shell commands with `rtk`. The canonical gates are `rtk pnpm check` and
 `rtk pnpm test:e2e`, selected proportionally only where `AGENTS.md` permits. This
-audit is independent from the mandatory `deep-review` and from the real-user
-journeys maintained in `docs/qa/`; never use one verdict as evidence for another.
+audit is independent from `deep-review` and from the real-user journeys
+maintained in `docs/qa/`; never use one verdict as evidence for another.
+
+One reviewer per diff (G84): run this audit only on **delegated** work, and
+never on a diff that already carries a `deep-review` verdict for its current
+SHA. When a delegated diff arrives without that verdict, the coordinator picks
+one reviewer, not both — and an L2 diff always gets `deep-review`.
 
 AGENTS rule 24 and [the project workflow](../../../docs/engineering/workflow.md)
 govern operational task state, including bootstrap. Read the remote issue,

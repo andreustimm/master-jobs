@@ -15,7 +15,10 @@ if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
 fi
 
 changed=$(git diff --name-only "$base" HEAD) || { echo "diff falhou: constrói"; exit 1; }
-[ -n "$changed" ] || { echo "nada mudou: pula"; exit 0; }
+# Diff vazio só acontece quando alguém refaz o deploy do MESMO commit — um
+# redeploy manual, quase sempre para aplicar uma variável de ambiente nova.
+# Pular aí cancelava justamente o deploy que a pessoa pediu.
+[ -n "$changed" ] || { echo "mesmo commit (redeploy manual): constrói"; exit 1; }
 
 while IFS= read -r file; do
   case "$file" in

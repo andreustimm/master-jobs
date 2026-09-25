@@ -107,6 +107,9 @@ function maskQuoted(text: string): string {
     const char = text[index]!;
     if (state === "none" && char === "$" && text[index + 1] === "'") return text;
     if (state === "none" && char === "#" && (index === 0 || /[\s;&|()]/.test(text[index - 1]!))) return text;
+    // Heredoc sem aspas no delimitador: o corpo não obedece às aspas da linha
+    // (um apóstrofo ali abriria uma máscara que o shell não vê).
+    if (state === "none" && text.startsWith("<<", index) && !/^<<(?:<|-?\s*['"])/.test(text.slice(index))) return text;
     if (state === "single") {
       if (char === "'") state = "none";
       out += char === "'" ? char : " ";
@@ -153,10 +156,11 @@ const NESTED_SHELL = /(?:^|\s)(?:ba|z|da|k)?sh\s+(?:-[A-Za-z]+\s+)*-[A-Za-z]*c[A
  * O comando inteiro e cada trecho dele: `cd x && git push origin main` precisa
  * cair na regra de `git push` mesmo sem começar por ela. Além de `&&`, `||`,
  * `;` e `|`, corta em `&`, subshell, chaves, `$(`, crase e substituição de
- * processo — fora de aspas simples, onde o shell não interpreta nada e cortar
- * faria de uma mensagem de commit um comando. Cada trecho vale também sem
- * `rtk`, sem invólucro e sem o caminho do executável, e o corpo de `sh -c`
- * entra como comando próprio. Trecho a mais só acrescenta decisão mais forte.
+ * processo — fora do texto literal entre aspas e de heredoc com delimitador
+ * entre aspas, onde cortar faria de uma mensagem de commit um comando. Cada
+ * trecho vale também sem `rtk`, sem invólucro e sem o caminho do executável,
+ * e o corpo de `sh -c` entra como comando próprio. Trecho a mais só acrescenta
+ * decisão mais forte.
  */
 export function commandSegments(command: string, depth = 0): string[] {
   const whole = command.trim();
@@ -164,17 +168,47 @@ export function commandSegments(command: string, depth = 0): string[] {
   const segments = [whole, ...parts];
   const nested =
     depth < 2 ? [...whole.matchAll(NESTED_SHELL)].flatMap((match) => commandSegments(match[2]!, depth + 1)) : [];
-  // Aspas e redirecionamento não mudam o alvo: `git push origin 'main'` e
-  // `cat <.env` precisam cair em `* main` e `* .env` como a forma nua.
-  const bare = segments.map((segment) => segment.replace(/['"]/g, "").replace(/[<>]/g, " "));
+  // Aspas em volta de UMA palavra e redirecionamento não mudam o alvo:
+  // `git push origin 'main'` e `cat <.env` precisam cair em `* main` e
+  // `* .env` como a forma nua. Texto com espaço entre aspas continua texto.
+  const bare = segments.map((segment) => segment.replace(/(['"])([^\s'"]*)\1/g, "$2").replace(/[<>]/g, " "));
   return [...new Set([...segments, ...segments.map(unwrap), ...bare, ...bare.map(unwrap), ...nested])];
 }
 
+/**
+ * Redirecionamento que usa `&` (`2>&1`, `>&2`, `&>`, `&>>`) não separa
+ * comandos: vira espaço antes do corte em `&`.
+ */
+const AMPERSAND_REDIRECT = /\d*>&(?:\d+|-)|&>>?/g;
+
 function splitParts(command: string): string[] {
-  return maskQuoted(command)
+  return maskQuoted(maskQuotedHeredocs(command))
+    .replace(AMPERSAND_REDIRECT, " ")
     .split(/&&|\|\||\$\(|[<>]\(|[;|&\n(){}`]/)
     .map((part) => part.trim())
-    .filter((part) => part.length > 0);
+    // Sobra de aspas (o `"` depois de `$(…)`) não é comando.
+    .filter((part) => part.replace(/['"\s]/g, "").length > 0);
+}
+
+/**
+ * Esconde o corpo de heredoc com delimitador entre aspas (`<<'EOF'`), que o
+ * shell não expande: é texto, como `-m "…"`. Heredoc sem aspas expande `$(…)`
+ * e fica visível; delimitador sem linha de fechamento devolve o texto intacto.
+ */
+function maskQuotedHeredocs(text: string): string {
+  const opener = /<<(-?)\s*(['"])([A-Za-z_][A-Za-z0-9_]*)\2/g;
+  let out = text;
+  for (const match of text.matchAll(opener)) {
+    const bodyStart = out.indexOf("\n", match.index! + match[0].length);
+    if (bodyStart === -1) return text;
+    const lines = out.slice(bodyStart + 1).split("\n");
+    const close = lines.findIndex((line) => (match[1] === "-" ? line.replace(/^\t+/, "") : line) === match[3]);
+    if (close === -1) return text;
+    // A linha do delimitador também sai: `EOF` sozinho não é comando.
+    const body = lines.slice(0, close + 1).join("\n");
+    out = out.slice(0, bodyStart + 1) + body.replace(/[^\n]/g, " ") + out.slice(bodyStart + 1 + body.length);
+  }
+  return out;
 }
 
 /**

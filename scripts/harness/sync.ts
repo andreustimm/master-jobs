@@ -4,8 +4,8 @@
 //   pnpm harness:sync    regenera os espelhos a partir das fontes canônicas
 //
 // Fontes canônicas: `.claude/settings.json` (permissões), `.claude/agents/`
-// (agentes), `.claude/commands/` (comandos) e `docs/engineering/rules/`
-// (regras). Espelhos gerados: `opencode.json`, `.codex/hooks.json`,
+// (agentes) e `.claude/commands/` (comandos); instruções são o `AGENTS.md`
+// (regras por domínio sob demanda). Espelhos gerados: `opencode.json`, `.codex/hooks.json`,
 // `.codex/agents/*.toml` e `.opencode/agents/*.md`. O que é idêntico entre os
 // harnesses continua por symlink — ver `scripts/rules/check-instructions.ts`.
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
@@ -23,7 +23,6 @@ export const CODEX_AGENTS = ".codex/agents";
 export const OPENCODE_AGENTS = ".opencode/agents";
 export const CODEX_HOOKS = ".codex/hooks.json";
 export const OPENCODE_CONFIG = "opencode.json";
-const RULES_DIRECTORY = "docs/engineering/rules";
 
 /** Guarda do Codex: aplica a lista do Claude a cada comando e patch. */
 export const CODEX_GUARD = "scripts/harness/codex-guard.ts";
@@ -46,14 +45,14 @@ export function loadAgents(root: string): Agent[] {
 }
 
 /**
- * Instruções do OpenCode: a entrada comum e cada arquivo de regra por domínio.
- * O inventário (`README.md`) é índice, não regra.
+ * Instruções do OpenCode: só a entrada comum, como no Claude Code e no Codex.
+ * As regras por domínio são lidas sob demanda pelo roteador do `AGENTS.md`;
+ * carregá-las sempre custaria ~26 mil tokens fixos por sessão e daria ao
+ * OpenCode um contexto que os outros dois não têm (G85; alternativa em aberto
+ * na D6 da #321).
  */
-export function openCodeInstructions(root: string): string[] {
-  const rules = listMarkdown(root, RULES_DIRECTORY)
-    .filter((name) => name !== "README.md")
-    .map((name) => `${RULES_DIRECTORY}/${name}`);
-  return ["AGENTS.md", ...rules];
+export function openCodeInstructions(): string[] {
+  return ["AGENTS.md"];
 }
 
 export function renderOpenCodeConfig(root: string): string {
@@ -63,7 +62,7 @@ export function renderOpenCodeConfig(root: string): string {
   if (!settings.permissions) throw new Error(`${CLAUDE_SETTINGS}: sem "permissions"`);
   const config = {
     $schema: "https://opencode.ai/config.json",
-    instructions: openCodeInstructions(root),
+    instructions: openCodeInstructions(),
     permission: toOpenCodePermission(settings.permissions),
   };
   return `${JSON.stringify(config, null, 2)}\n`;

@@ -38,6 +38,7 @@ from _common import (
     skill_rel,
     write_json,
 )
+from review_level import classify, manifest_paths, prior_level
 
 DEFAULT_MAX_COHORT_FILES = 100
 MAX_COHORT_CHANGED_LINES = 6000
@@ -432,6 +433,11 @@ def main() -> int:
         default=DEFAULT_MAX_COHORT_FILES,
         help=f"maximum files per cohort (default: {DEFAULT_MAX_COHORT_FILES})",
     )
+    # PATCH LOCAL (ver PATCHES.md): L1 drops the polish lane; L2 is the upstream pipeline.
+    parser.add_argument(
+        "--level", choices=("L1", "L2"), default="L2",
+        help="review level (default: L2, the full pipeline); L1 is refused when the diff classifies as L2",
+    )
     args = parser.parse_args()
 
     repo = repo_root()
@@ -448,6 +454,12 @@ def main() -> int:
         if "diff_command" not in manifest:
             raise RuntimeError("manifest.json lacks diff_command — rebuild it with the current build_manifest.py")
 
+        required = max(classify(manifest_paths(manifest))["level"], prior_level(out))
+        if args.level < required:
+            raise RuntimeError(
+                f"--level {args.level} refused: the diff classifies as {required} "
+                "(run review_level.py --out <out> to see which paths)"
+            )
         selected = manifest_selected(manifest)
         errors = validate_registry(registry, knowledge, selected) + validate_cohorts(
             plan["cohorts"], selected, args.max_cohort_files
@@ -505,7 +517,7 @@ def main() -> int:
                 "output": rel(output, repo),
             })
 
-        polish = polish_cohorts(
+        polish = [] if args.level == "L1" else polish_cohorts(
             plan["cohorts"], selected, DEFAULT_MAX_POLISH_FILES, MAX_POLISH_CHANGED_LINES
         )
         for cohort in polish:
@@ -564,7 +576,7 @@ def main() -> int:
                 "prompt": rel(prompts_dir / f"{label}.md", repo),
                 "output": rel(output, repo),
             })
-        write_json(out / "jobs.json", {"jobs": jobs})
+        write_json(out / "jobs.json", {"level": args.level, "jobs": jobs})
     except RuntimeError as error:
         sys.stderr.write(f"{error}\n")
         return 1
@@ -576,7 +588,8 @@ def main() -> int:
         f"cohort limit: {args.max_cohort_files} files / {MAX_COHORT_CHANGED_LINES} changed lines\n"
         f"polish limit: {DEFAULT_MAX_POLISH_FILES} files / {MAX_POLISH_CHANGED_LINES} changed lines\n"
         f"rules: {len(rules)} registered; {with_rules}/{len(bound_counts)} review lanes carry bound rules\n"
-        f"every selected hunk has defect + polish ownership; prompts under {out / 'prompts'}"
+        f"level: {args.level}; every selected hunk has "
+        f"{'defect' if args.level == 'L1' else 'defect + polish'} ownership; prompts under {out / 'prompts'}"
     )
     return 0
 

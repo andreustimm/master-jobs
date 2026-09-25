@@ -148,6 +148,22 @@ describe("regras do Claude Code lidas como o Claude Code lê", () => {
     expect(decideCommand(real, 'git log "sem fechar; sudo ls')).toBe("deny");
   });
 
+  it("redirecionamento com `&` e heredoc entre aspas não viram comando", () => {
+    const real = parseRules(REAL_SETTINGS.permissions);
+    expect(decideCommand(real, "rtk pnpm check 2>&1 | tail -5")).toBe("allow");
+    expect(decideCommand(real, "pnpm check &> log.txt")).toBe("allow");
+    expect(decideCommand(real, "echo erro >&2")).toBe("allow");
+    const heredoc = `git commit -m "$(cat <<'EOF'\nfix(x): trata (a) e b; c | d\n\nCo-Authored-By: X\nEOF\n)"`;
+    expect(decideCommand(real, heredoc)).toBe("allow");
+    expect(decideCommand(real, "cat <<EOF\n$(sudo ls)\nEOF")).toBe("deny");
+    expect(decideCommand(real, "cat <<'EOF'\nsudo ls")).toBe("deny");
+    expect(decideCommand(real, "cat <<EOF\necho it's\nEOF\nrm -rf src\n# '")).toBe("ask");
+    expect(decideCommand(real, "echo ok # '\nrm -rf src\n# '")).toBe("ask");
+    expect(decideCommand(real, "echo $'\\'' ; rm -rf src ; echo \\'")).toBe("ask");
+    expect(decideCommand(real, "git commit -m 'git push origin main'")).toBe("allow");
+    expect(decideCommand(real, 'git commit -m "limpa o .env de exemplo"')).toBe("deny");
+  });
+
   it("aspas e redirecionamento em volta do alvo não escapam do deny", () => {
     const real = parseRules(REAL_SETTINGS.permissions);
     for (const command of ["git push origin 'main'", 'git push origin "main"', 'cat ".env"', "cat '.env'", "cat <.env"]) {
@@ -241,8 +257,8 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
   ];
 
   it.each(commands)("nunca é mais permissivo que o Claude Code: %s", (command) => {
-    // Nada casando, o Claude Code pergunta; o OpenCode recebeu "*": "ask".
-    const claude = decideCommand(rules, command) ?? "ask";
+    // `decideCommand` já devolve `ask` para o que nada libera, como o Claude Code.
+    const claude = decideCommand(rules, command);
     // O OpenCode julga cada comando do composto; aqui os casos são simples.
     expect(STRENGTH[openCodeDecide(permission, "bash", command)]).toBeGreaterThanOrEqual(STRENGTH[claude]);
   });
@@ -460,10 +476,10 @@ describe("gate de paridade numa árvore temporária", () => {
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-  it("a árvore sincronizada passa e carrega entrada e regras no OpenCode", () => {
+  it("a árvore sincronizada passa e o OpenCode carrega só a entrada, como os outros", () => {
     expect(checkHarness(root)).toEqual([]);
     const config = JSON.parse(readFileSync(join(root, "opencode.json"), "utf8")) as { instructions: string[] };
-    expect(config.instructions).toEqual(["AGENTS.md", "docs/engineering/rules/delivery.md"]);
+    expect(config.instructions).toEqual(["AGENTS.md"]);
   });
 
   it("reprova espelho editado à mão, ausente ou órfão", () => {

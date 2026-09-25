@@ -96,7 +96,10 @@ Entre colchetes, o ID do detalhe em `docs/engineering/rules/`.
 18. **Tarefa nasce em worktree a partir de `dev`, e a PR aponta para `dev`.**
     Nunca comite direto em `dev`, `staging` ou `main`; exceções são só as
     automações nomeadas e hotfix humano. [[G43](docs/engineering/rules/delivery.md#g43)]
-19. **Antes de abrir PR, rode `deep-review`.** SHIP é o caminho normal;
+19. **Antes de a PR ficar pronta, rode `deep-review` no nível do diff:** L0
+    (só Markdown) dispensa; L1 é passada única; L2 (auth, `/p/`, schema,
+    promoção/deploy, scorer, segredos) é completa. Só Critical/Major geram
+    `FIX_BEFORE_SHIP`; Minor vira uma linha na PR. SHIP é o caminho normal;
     `FIX_BEFORE_SHIP` remanescente vai escrito na PR e só uma pessoa decide
     aceitá-lo — o agente não se concede a exceção.
     [[G53](docs/engineering/rules/delivery.md#g53), [G54](docs/engineering/rules/delivery.md#g54)]
@@ -182,7 +185,10 @@ Comandos: [docs/cli.md](docs/cli.md) (há uma referência rápida no topo).
 
 ## Começar ou retomar
 
-1. Leia a issue remota e verifique a posse da execução (regra 24).
+1. Leia a issue remota e verifique a posse da execução (regra 24). O tamanho
+   que ela declara decide a especificação: S (objetivo + aceite), M (techspec
+   curta + `_tests.md`), L (PRD + techspec + `_tests.md`).
+   [[R24](docs/engineering/rules/delivery.md#r24-tamanho)]
 2. `rtk git status --short --branch` e `rtk pnpm worktrees`. Preserve WIP
    (patch **e** não rastreados) antes de reconciliar a raiz; HEAD já presente em
    `dev` não prova que uma worktree com WIP pode ser removida.
@@ -194,12 +200,15 @@ Roteiro completo, com os comandos de claim e retomada:
 ## Fluxo curto
 
 ```
-worktree/tarefa → check/e2e aplicável → QA de jornada aplicável → auditoria de agente aplicável → docs/ + changelogs → deslop → deep-review → ship-pr → PR → dev → (automático) → staging → PR humana → main → tag + volta para dev
+worktree/tarefa → validação local enxuta → PR draft (CI em paralelo) → QA de jornada aplicável → docs/ + changelogs → deslop → um revisor no nível do diff (L0/L1/L2) → ship-pr (PR pronta) → dev → (automático) → staging → PR humana → main → tag + volta para dev
 ```
 
-- Gate: `rtk pnpm check` verde antes de qualquer entrega de runtime;
-  `rtk pnpm test:e2e` quando a mudança toca navegador. PR só de Markdown ou
-  metadados de skill valida estrutura, links e scripts afetados.
+- Gate local: `rtk pnpm typecheck` + testes relacionados ao diff
+  (`vitest related`), E2E afetado quando toca navegador; a suíte completa é do
+  CI (`qualidade`). PR draft logo após o primeiro verde; pronta após SHIP.
+  Teto por gate (check 10 min, E2E 8, L1 10, L2 30): estourou, registre e siga.
+  PR só de Markdown valida estrutura, links e scripts afetados.
+  [[G57](docs/engineering/rules/delivery.md#g57)]
 - PR para `dev` com responsável atribuído (`andreustimm`), descrição com docs,
   QA, plano de teste real e veredito do `deep-review`. Pelo menos um commit leva
   `Closes #N` (ou `Refs #N`) na **mensagem**: é ela que fecha a issue quando o
