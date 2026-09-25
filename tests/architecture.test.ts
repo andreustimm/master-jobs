@@ -58,6 +58,19 @@ const APP = walk("app");
 const read = (f: string) => readFileSync(f, "utf8");
 
 /**
+ * Linhas (1-based) que manuseiam a chave pelo identificador `apiKey`.
+ *
+ * A exceção de `apiKeyEnv` — o NOME da variável, que pode circular — é por
+ * ocorrência: a borda de palavra não casa `apiKeyEnv`, e a mesma linha com os
+ * dois continua sendo linha que toca a chave.
+ */
+function keyHandlingLines(text: string): number[] {
+  return text
+    .split("\n")
+    .flatMap((line, index) => (/\bapiKey\b/.test(line) ? [index + 1] : []));
+}
+
+/**
  * Arquivos de composição que moram em diretório de domínio puro. Lêem banco por
  * ofício, e cada um diz por quê. Arquivo novo nesses diretórios é puro até
  * alguém escrever aqui o contrário.
@@ -845,10 +858,16 @@ describe("pluggability (rule 4)", () => {
       "src/core/llm/providers.ts",
       "src/contexts/auth/infra/resend-mailer.ts",
     ]);
-    const offenders = SRC.filter(
-      (f) => !allowed.has(f) && /\bapiKey\b/.test(read(f)) && !/apiKeyEnv/.test(read(f)),
-    );
+    const offenders = [...SRC, ...APP].filter((f) => !allowed.has(f) && keyHandlingLines(read(f)).length > 0);
     expect(offenders).toEqual([]);
+  });
+
+  it("the key gate exempts `apiKeyEnv` per occurrence, never the whole file (E16)", () => {
+    // O escape antigo era por ARQUIVO: bastava citar `apiKeyEnv` em qualquer
+    // linha para a chave de verdade passar despercebida no resto dele.
+    expect(keyHandlingLines("const env = row.apiKeyEnv;\nconst apiKey = process.env[env];")).toEqual([2]);
+    expect(keyHandlingLines("send({ apiKeyEnv, apiKey });")).toEqual([1]);
+    expect(keyHandlingLines("const { apiKeyEnv } = choice;\nlabel(apiKeyEnvName);")).toEqual([]);
   });
 
   it("never writes a key to the database", () => {
@@ -861,7 +880,11 @@ describe("pluggability (rule 4)", () => {
   });
 
   it("never prints a key", () => {
-    const offenders = SRC.filter((f) => /console\.(log|error)\([^)]*\bapiKey\b/.test(read(f)));
+    // Estrutural e parcial: o que vale é o comportamento, provado com uma chave
+    // sentinela em `tests/llm-key-sentinel.test.ts` (V03-06).
+    const offenders = [...SRC, ...APP].filter((f) =>
+      /console\.(log|error|warn|info|debug)\([^)]*\bapiKey\b/.test(read(f)),
+    );
     expect(offenders).toEqual([]);
   });
 });

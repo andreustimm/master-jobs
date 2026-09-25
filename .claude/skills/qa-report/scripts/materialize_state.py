@@ -86,6 +86,70 @@ def parse_scenario(path: Path) -> dict[str, str]:
     return row
 
 
+def split_list(value: str) -> list[str]:
+    return [item.strip() for item in value.split(";") if item.strip()]
+
+
+def within(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def repo_bases(root: Path) -> list[Path]:
+    """The QA root and its ancestors up to the repository root, inclusive.
+
+    Stops at the first directory holding `.git` (a directory in a clone, a file
+    in a worktree): going higher would find the main checkout's copy of a file
+    this branch deleted, and the local gate would pass what CI rejects.
+    """
+    bases = []
+    for base in [root.resolve(), *root.resolve().parents]:
+        bases.append(base)
+        if (base / ".git").exists():
+            break
+    return bases
+
+
+def reference_errors(root: Path, path: Path, row: dict[str, str]) -> list[str]:
+    """Files the scenario cites must exist; a dangling citation is an unproved claim.
+
+    A reference may be written relative to the QA root (`reports/x.md`) or to
+    the repo root (`docs/qa/reports/x.md`, `tests/e2e/ui.mjs`). The repo root is
+    found as an ancestor of the QA root, never taken from the working directory,
+    so the verdict does not depend on where the script is launched. A report may
+    also be named by its bare slug.
+
+    `evidence/` is the one exception: it is gitignored by contract — screenshots
+    live on disk or as a CI artifact, and the versioned report records where —
+    so a clean checkout cannot see it, and demanding it would fail every CI run.
+    """
+    errors: list[str] = []
+    evidence_dir = root / "evidence"
+    bases = repo_bases(root)
+
+    def exists(value: str) -> bool:
+        return any((base / value).is_file() for base in bases)
+
+    journey = row["journey"]
+    if journey and not (root / "journeys" / f"{journey}.md").is_file():
+        errors.append(f"{path}: journey {journey!r} has no journeys/{journey}.md")
+    for bug in split_list(row["bug_ids"]):
+        if not (root / "bugs" / f"{bug}.md").is_file():
+            errors.append(f"{path}: bug {bug!r} has no bugs/{bug}.md")
+    report = row["last_report"]
+    if report and not (exists(report) or (root / "reports" / f"{report}.md").is_file()):
+        errors.append(f"{path}: last_report {report!r} does not exist")
+    for item in split_list(row["evidence"]):
+        if any(within(base / item, evidence_dir) for base in bases):
+            continue
+        if not exists(item):
+            errors.append(f"{path}: evidence {item!r} does not exist")
+    return errors
+
+
 def casefold_duplicate_errors(entries: list[tuple[Path, dict[str, str]]]) -> list[str]:
     errors, ids_by_casefold = [], {}
     for path, row in entries:
@@ -114,6 +178,7 @@ def main() -> int:
         try:
             row = parse_scenario(path)
             entries.append((path, row))
+            errors.extend(reference_errors(root, path, row))
         except ValueError as exc:
             errors.append(str(exc))
     errors.extend(casefold_duplicate_errors(entries))

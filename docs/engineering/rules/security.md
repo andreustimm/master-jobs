@@ -288,9 +288,18 @@ ambiente**, jamais a chave. Banco é copiado, versionado em backup e aberto por
 outros processos — chave dentro dele viaja junto. BYOK só é promessa cumprida
 se for estrutural. Nada imprime a chave: nem log, nem erro, nem saída de CLI.
 
-Origem: regra 16. Prova: teste asserindo que nenhuma coluna guarda chave e que
-nada a imprime (`tests/cov-cli-posicionamento.test.ts`,
-`tests/cov-cli-rede-llm.test.ts`, `tests/llm-registry.test.ts`).
+**Quem apaga.** O adapter que assina a requisição conhece a chave e a apaga
+pelo VALOR de todo erro que sai dele (`redactSecret`). Regex de formato
+(`redactText`, peneira do Sentry) é segunda linha: não reconhece `nvapi-…` nem
+chave curta de serviço compatível.
+
+Origem: regra 16. Prova: `tests/llm-key-sentinel.test.ts` (V03-06) — chave
+sentinela pelo caminho real, procurada no erro, no evento do Sentry, na saída
+da CLI, em todas as tabelas e no painel da análise; e testes asserindo que
+nenhuma coluna guarda chave e que nada a imprime
+(`tests/cov-cli-posicionamento.test.ts`, `tests/cov-cli-rede-llm.test.ts`,
+`tests/llm-registry.test.ts`). O gate estrutural de `tests/architecture.test.ts`
+isenta `apiKeyEnv` por ocorrência, nunca por arquivo.
 
 <a id="g36"></a>
 ## G36 — Scripts locais só fazem bind em `127.0.0.1` (regra 12)

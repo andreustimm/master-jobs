@@ -8,6 +8,8 @@
 import {
   ENV_KEYS,
   LlmError,
+  redactSecret,
+  redactText,
   type LlmPort,
   type LlmRequest,
   type LlmResponse,
@@ -15,6 +17,25 @@ import {
 } from "./port.ts";
 
 const TIMEOUT_MS = 120_000;
+
+/**
+ * Nenhuma falha sai do adapter com a chave dentro.
+ *
+ * Todo erro é reconstruído só com a mensagem limpa — `LlmError` do provedor,
+ * `fetch` que recusa um cabeçalho e cita o valor, corpo que não é JSON —, sem
+ * `cause` nem a pilha original, que repetiriam o texto de antes.
+ */
+async function keyNeverEscapes<T>(apiKey: string, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    if (error instanceof LlmError) throw new LlmError(error.provider, error.status, redactSecret(error.message, apiKey));
+    const message = error instanceof Error ? error.message : String(error);
+    const clean = new Error(redactText(redactSecret(message, apiKey)));
+    if (error instanceof Error) clean.name = error.name;
+    throw clean;
+  }
+}
 
 /**
  * Thinking budget per effort level, in tokens.
@@ -52,7 +73,7 @@ export function anthropicProvider(apiKey: string, model?: string, baseUrl?: stri
   return {
     name: "anthropic",
     model: chosen,
-    async complete(req: LlmRequest): Promise<LlmResponse> {
+    complete: (req: LlmRequest) => keyNeverEscapes(apiKey, async (): Promise<LlmResponse> => {
       const res = await fetch(endpoint, {
         method: "POST",
         signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -91,7 +112,7 @@ export function anthropicProvider(apiKey: string, model?: string, baseUrl?: stri
         outputTokens: usage.output_tokens ?? null,
         model: String(json.model ?? chosen),
       };
-    },
+    }),
   };
 }
 
@@ -107,7 +128,7 @@ export function openaiProvider(apiKey: string, model?: string, baseUrl?: string)
   return {
     name: "openai",
     model: chosen,
-    async complete(req: LlmRequest): Promise<LlmResponse> {
+    complete: (req: LlmRequest) => keyNeverEscapes(apiKey, async (): Promise<LlmResponse> => {
       const res = await fetch(endpoint, {
         method: "POST",
         signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -138,7 +159,7 @@ export function openaiProvider(apiKey: string, model?: string, baseUrl?: string)
         outputTokens: usage.completion_tokens ?? null,
         model: String(json.model ?? chosen),
       };
-    },
+    }),
   };
 }
 

@@ -20,6 +20,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.25.2] - 2026-09-25T13:38:35.000Z
+
+### Corrigido
+
+- Quando o provedor de LLM recusa a chave e a repete na resposta, a mensagem de erro do `jho analyze` não mostra mais a chave, qualquer que seja o formato dela.
+
 ## [1.25.0] - 2026-09-24T18:03:44.000Z
 
 ### Novidades

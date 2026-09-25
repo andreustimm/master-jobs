@@ -20,6 +20,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.25.2] - 2026-09-25T13:38:35.000Z
+
+### Fixed
+
+- When the LLM provider rejects the key and echoes it back, the `jho analyze` error message no longer shows the key, whatever its format.
+
 ## [1.25.0] - 2026-09-24T18:03:44.000Z
 
 ### New

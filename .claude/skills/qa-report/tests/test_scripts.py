@@ -61,6 +61,14 @@ def scenario_text(*, notes: str = "Notes.", **overrides: str) -> str:
     return f"---\n{front}\n---\n\n{notes}\n"
 
 
+def cited_files(root: Path) -> None:
+    """The files `scenario_text()` cites, so the canonical scenario resolves."""
+    (root / "journeys").mkdir(parents=True, exist_ok=True)
+    (root / "journeys" / "J-review-ranked-jobs.md").write_text("journey", encoding="utf-8")
+    (root / "reports").mkdir(parents=True, exist_ok=True)
+    (root / "reports" / "run.md").write_text("report", encoding="utf-8")
+
+
 class QaReportScriptTests(unittest.TestCase):
     def run_script(self, script: Path, *args: Path) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -152,6 +160,7 @@ class QaReportScriptTests(unittest.TestCase):
             scenarios = root / "scenarios"
             scenarios.mkdir()
             (scenarios / "JOBS-rank-visible.md").write_text(scenario_text(), encoding="utf-8")
+            cited_files(root)
 
             result = self.run_script(MATERIALIZE, root)
 
@@ -329,6 +338,105 @@ class QaReportScriptTests(unittest.TestCase):
                     result = self.run_script(MATERIALIZE, root)
                     self.assertEqual(result.returncode, 1)
                     self.assertIn(message, result.stderr)
+
+    def test_materialize_rejects_citation_of_a_file_that_does_not_exist(self) -> None:
+        # E27: the schema alone accepted `pass` citing a report nobody wrote.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenarios = root / "scenarios"
+            scenarios.mkdir()
+            cited_files(root)
+            path = scenarios / "JOBS-rank-visible.md"
+            cases = {
+                "missing journey": (scenario_text(journey="J-ghost"), "journey 'J-ghost' has no journeys/J-ghost.md"),
+                "missing bug": (
+                    scenario_text(qa_status="fail", bug_ids="BUG-ghost"),
+                    "bug 'BUG-ghost' has no bugs/BUG-ghost.md",
+                ),
+                "missing report": (scenario_text(last_report="reports/ghost.md"), "last_report 'reports/ghost.md' does not exist"),
+                "missing report slug": (scenario_text(last_report="ghost"), "last_report 'ghost' does not exist"),
+                "missing versioned evidence": (
+                    scenario_text(evidence="evidence/run/checkpoint.png; reports/ghost-evidence.md"),
+                    "evidence 'reports/ghost-evidence.md' does not exist",
+                ),
+            }
+            for name, (text, message) in cases.items():
+                with self.subTest(name=name):
+                    path.write_text(text, encoding="utf-8")
+                    result = self.run_script(MATERIALIZE, root)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn(message, result.stderr)
+                    self.assertFalse((root / "state.csv").exists())
+
+    def test_materialize_resolves_every_citation_form(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenarios = root / "scenarios"
+            scenarios.mkdir()
+            cited_files(root)
+            (root / "bugs").mkdir()
+            (root / "bugs" / "BUG-1.md").write_text("bug", encoding="utf-8")
+            path = scenarios / "JOBS-rank-visible.md"
+            cases = {
+                "report by bare slug": scenario_text(last_report="run"),
+                "bug that exists": scenario_text(qa_status="fail", bug_ids="BUG-1"),
+                # `evidence/` is gitignored by contract: a clean checkout never has it.
+                "gitignored evidence": scenario_text(evidence=f"{root / 'evidence' / 'x.png'}; evidence/y.png"),
+                "versioned evidence": scenario_text(evidence="reports/run.md"),
+            }
+            for name, text in cases.items():
+                with self.subTest(name=name):
+                    path.write_text(text, encoding="utf-8")
+                    result = self.run_script(MATERIALIZE, root)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_materialize_resolves_repo_root_citations_from_any_cwd(self) -> None:
+        # The real tracker cites `docs/qa/reports/…` and `tests/…`: the repo root
+        # is an ancestor of the QA root, whatever directory the gate runs from.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            root = repo / "docs" / "qa"
+            scenarios = root / "scenarios"
+            scenarios.mkdir(parents=True)
+            (repo / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
+            cited_files(root)
+            (repo / "tests").mkdir()
+            (repo / "tests" / "ui.mjs").write_text("test", encoding="utf-8")
+            (scenarios / "JOBS-rank-visible.md").write_text(
+                scenario_text(
+                    evidence="tests/ui.mjs; docs/qa/evidence/local.png",
+                    last_report="docs/qa/reports/run.md",
+                ),
+                encoding="utf-8",
+            )
+            for cwd in (repo, root, SKILL_DIR):
+                with self.subTest(cwd=str(cwd)):
+                    result = subprocess.run(
+                        [sys.executable, str(MATERIALIZE), str(root)],
+                        capture_output=True, text=True, check=False, cwd=cwd,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_materialize_never_resolves_citations_above_the_repo_root(self) -> None:
+        # A worktree lives inside the main checkout: a file only the main
+        # checkout has must not satisfy a citation made by the branch.
+        with tempfile.TemporaryDirectory() as tmp:
+            outer = Path(tmp)
+            (outer / "tests").mkdir()
+            (outer / "tests" / "only-in-main.mjs").write_text("main", encoding="utf-8")
+            repo = outer / "worktree"
+            root = repo / "docs" / "qa"
+            (root / "scenarios").mkdir(parents=True)
+            (repo / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
+            cited_files(root)
+            (root / "scenarios" / "JOBS-rank-visible.md").write_text(
+                scenario_text(evidence="tests/only-in-main.mjs"), encoding="utf-8"
+            )
+
+            result = self.run_script(MATERIALIZE, root)
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("evidence 'tests/only-in-main.mjs' does not exist", result.stderr)
 
 
 if __name__ == "__main__":
