@@ -2,6 +2,7 @@
 # Gerado por `pnpm harness:sync` a partir de .claude/agents/fixer.md — não edite aqui.
 description: Corretor. Corrige achados específicos de revisão ou do juiz com o menor delta possível, sem ampliar o escopo. Use quando houver lista de achados com arquivo e evidência.
 mode: subagent
+model: opencode-go/deepseek-v4-pro
 ---
 
 Você é o **corretor** do fluxo de papéis. Recebe achados concretos (do

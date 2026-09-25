@@ -9,6 +9,7 @@
 //
 // Funções puras: recebem texto, devolvem texto.
 import YAML from "yaml";
+import { ROLES, type Role } from "../routing/model-routing.ts";
 
 /** Ferramentas do Claude Code aceitas no `tools:` de um agente do projeto. */
 export const CLAUDE_AGENT_TOOLS: ReadonlySet<string> = new Set([
@@ -25,17 +26,25 @@ export const CLAUDE_AGENT_TOOLS: ReadonlySet<string> = new Set([
 const WRITE_TOOLS = new Set(["Edit", "Write"]);
 
 /** Campos do frontmatter canônico. Campo de outro harness aqui é política que um lado lê e o outro não. */
-export const AGENT_FIELDS: ReadonlySet<string> = new Set(["name", "description", "tools"]);
+export const AGENT_FIELDS: ReadonlySet<string> = new Set(["name", "description", "role", "tools", "model", "effort"]);
 
 export type Access = "read-only" | "workspace-write";
 
 export type Agent = {
   name: string;
   description: string;
+  /** Papel de G86; decide o modelo e o effort de cada harness pela política. */
+  role: Role;
   tools: string[];
   access: Access;
+  /** Modelo e effort do Claude Code, escritos no canônico e conferidos contra a política. */
+  model: string;
+  effort: string;
   body: string;
 };
+
+/** Modelo e effort que a política dá ao papel no harness do espelho. */
+export type ModelDefault = { model: string; effort: string | null };
 
 export const GENERATED_NOTICE = "Gerado por `pnpm harness:sync` a partir de .claude/agents/";
 
@@ -71,11 +80,22 @@ export function parseAgent(fileName: string, source: string): Agent {
   for (const tool of tools) {
     if (!CLAUDE_AGENT_TOOLS.has(tool)) throw new Error(`${where}: ferramenta "${tool}" desconhecida`);
   }
+  if (!(ROLES as readonly unknown[]).includes(fields.role)) {
+    throw new Error(`${where}: role precisa ser um de ${ROLES.join(", ")}`);
+  }
+  for (const key of ["model", "effort"] as const) {
+    // Sem modelo escrito, o subagente herda o do turno principal — que é
+    // justamente a escolha que o roteador existe para tornar explícita.
+    if (typeof fields[key] !== "string" || (fields[key] as string).trim() === "") throw new Error(`${where}: ${key} obrigatório`);
+  }
   const trimmed = body.replace(/^\n+/, "").replace(/\s*$/, "\n");
   if (trimmed.trim() === "") throw new Error(`${where}: prompt vazio`);
   return {
     name: expectedName,
     description: fields.description.trim(),
+    role: fields.role as Role,
+    model: (fields.model as string).trim(),
+    effort: (fields.effort as string).trim(),
     tools,
     access: tools.some((tool) => WRITE_TOOLS.has(tool)) ? "workspace-write" : "read-only",
     body: trimmed,
@@ -87,7 +107,7 @@ function tomlString(value: string): string {
   return JSON.stringify(value);
 }
 
-export function renderCodexAgent(agent: Agent): string {
+export function renderCodexAgent(agent: Agent, defaults: ModelDefault): string {
   if (agent.body.includes("'''")) {
     throw new Error(`.claude/agents/${agent.name}.md: o prompt não pode conter ''' (delimitador do TOML)`);
   }
@@ -95,7 +115,9 @@ export function renderCodexAgent(agent: Agent): string {
     `# ${GENERATED_NOTICE}${agent.name}.md — não edite aqui.`,
     `name = ${tomlString(agent.name)}`,
     `description = ${tomlString(agent.description)}`,
+    `model = ${tomlString(defaults.model)}`,
   ];
+  if (defaults.effort !== null) lines.push(`model_reasoning_effort = ${tomlString(defaults.effort)}`);
   // Agente de escrita herda o sandbox da sessão; o de leitura é travado aqui.
   if (agent.access === "read-only") lines.push(`sandbox_mode = "read-only"`);
   // String literal multilinha: nada é escapado, e a quebra logo após ''' some.
@@ -103,11 +125,15 @@ export function renderCodexAgent(agent: Agent): string {
   return `${lines.join("\n")}\n`;
 }
 
-export function renderOpenCodeAgent(agent: Agent): string {
+export function renderOpenCodeAgent(agent: Agent, defaults: ModelDefault): string {
   const frontmatter: Record<string, unknown> = {
     description: agent.description,
     mode: "subagent",
+    model: defaults.model,
   };
+  // O OpenCode repassa `reasoningEffort` ao provedor; sem effort na política,
+  // o parâmetro não vai — mandá-lo seria inventar capacidade do modelo.
+  if (defaults.effort !== null) frontmatter.reasoningEffort = defaults.effort;
   // Só restrição: um `allow` aqui venceria o deny global do opencode.json,
   // porque no OpenCode a regra do agente é avaliada depois da global.
   if (agent.access === "read-only") frontmatter.permission = { edit: "deny" };

@@ -13,6 +13,8 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseAgent, renderCodexAgent, renderOpenCodeAgent, splitFrontmatter, type Agent } from "./agents.ts";
 import { toOpenCodePermission, type ClaudePermissions } from "./permissions.ts";
+import { agentDefault } from "../routing/model-routing.ts";
+import { loadRouting, ROUTING_FILE } from "../routing/route.ts";
 
 export const CLAUDE_SETTINGS = ".claude/settings.json";
 export const CLAUDE_AGENTS = ".claude/agents";
@@ -93,11 +95,31 @@ export function expectedMirrors(root: string): Map<string, string> {
   const files = new Map<string, string>();
   files.set(OPENCODE_CONFIG, renderOpenCodeConfig(root));
   files.set(CODEX_HOOKS, renderCodexHooks());
+  const routing = loadRouting(root);
   for (const agent of loadAgents(root)) {
-    files.set(`${CODEX_AGENTS}/${agent.name}.toml`, renderCodexAgent(agent));
-    files.set(`${OPENCODE_AGENTS}/${agent.name}.md`, renderOpenCodeAgent(agent));
+    files.set(`${CODEX_AGENTS}/${agent.name}.toml`, renderCodexAgent(agent, agentDefault(routing, "codex", agent.role)));
+    files.set(`${OPENCODE_AGENTS}/${agent.name}.md`, renderOpenCodeAgent(agent, agentDefault(routing, "opencode", agent.role)));
   }
   return files;
+}
+
+/**
+ * O canônico é escrito à mão, então o modelo dele é conferido e não gerado:
+ * precisa ser o padrão `medium` do papel no provedor do Claude Code (G87).
+ */
+export function checkAgentModels(root: string): string[] {
+  const routing = loadRouting(root);
+  const errors: string[] = [];
+  for (const agent of loadAgents(root)) {
+    const expected = agentDefault(routing, "claude", agent.role);
+    if (agent.model !== expected.model || agent.effort !== expected.effort) {
+      errors.push(
+        `${CLAUDE_AGENTS}/${agent.name}.md: model/effort ${agent.model}/${agent.effort} diverge de ${ROUTING_FILE} ` +
+          `(${agent.role}, medium → ${expected.model}/${String(expected.effort)})`,
+      );
+    }
+  }
+  return errors;
 }
 
 function isSymlink(path: string): boolean {
@@ -154,6 +176,7 @@ export function checkHarness(root: string): string[] {
   let expected: Map<string, string>;
   try {
     expected = expectedMirrors(root);
+    errors.push(...checkAgentModels(root));
   } catch (error) {
     return [...errors, (error as Error).message];
   }

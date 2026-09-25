@@ -7,6 +7,7 @@
     "docs/engineering/rules/delivery.md",
     "docs/engineering/rules/frontend.md",
     "docs/engineering/rules/matching-and-evidence.md",
+    "docs/engineering/rules/orchestration.md",
     "docs/engineering/rules/security.md"
   ],
   "permission": {

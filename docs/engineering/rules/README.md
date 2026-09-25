@@ -2,7 +2,7 @@
 
 [AGENTS.md](../../../AGENTS.md) é a entrada comum dos três harnesses (Claude
 Code lê pelo symlink `CLAUDE.md`). Ela traz as invariantes críticas por escrito
-e o roteador; os seis arquivos abaixo trazem o detalhe normativo — obrigação,
+e o roteador; os arquivos abaixo trazem o detalhe normativo — obrigação,
 escopo, exceções, origem e prova. Procedimento (como executar) fica nas skills
 em `.claude/skills/` e no [roteiro de trabalho](../workflow.md); estado atual do
 produto fica em `docs/`; razão das decisões, em `docs/adr/`.
@@ -15,6 +15,7 @@ produto fica em `docs/`; razão das decisões, em `docs/adr/`.
 | Matching e score | [matching-and-evidence.md](matching-and-evidence.md) | Versão do scorer, dado ausente neutro, rubrica determinística |
 | Interface | [frontend.md](frontend.md) | Dicionário i18n, tokens e temas, escala, celular, URL como estado |
 | Entrega e harnesses | [delivery.md](delivery.md) | Project/issue, branches e promoção, revisão, QA, docs e changelogs, skills, RTK |
+| Papéis e modelos | [orchestration.md](orchestration.md) | Analista, executor, revisor, corretor e juiz; modelo e effort por papel e complexidade; modo de assinatura |
 
 ## Precedência e conflito
 
@@ -127,6 +128,8 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G83 | Estado e contagens fora das instruções | [delivery](delivery.md#g83) | "Estado atual", "Comandos" | preservada; inventário movido para `docs/cli.md` |
 | G84 | Revisão relata; auditoria e QA distintos | [delivery](delivery.md#g84) | "Revisão profunda" | preservada |
 | G85 | Paridade dos harnesses | [delivery](delivery.md#g85) | [#317](https://github.com/andreustimm/master-jobs/issues/317) | nova: espelhos gerados de `.claude/` e gate `pnpm check:harness` |
+| G86 | Cinco papéis; juiz ≠ autor | [orchestration](orchestration.md#g86) | [#318](https://github.com/andreustimm/master-jobs/issues/318) | nova |
+| G87 | Modelo/effort explícitos; modo de assinatura falha fechado | [orchestration](orchestration.md#g87) | [#318](https://github.com/andreustimm/master-jobs/issues/318) | nova: `config/model-routing.json` e `pnpm route` |
 
 **Obrigações posteriores à auditoria**, sem ID `G` (G85 em diante já nasce com
 ID), preservadas no mesmo destino: [R24 — issue e Project 3](delivery.md#r24) e

@@ -171,6 +171,7 @@ Entre colchetes, o ID do detalhe em `docs/engineering/rules/`.
 | envio de candidatura (mesmo que só "estudar") | [ADR 0010](docs/adr/0010-submissao-autonoma.md) |
 | funcionalidade nova | [vision.md](docs/product/vision.md), [personas.md](docs/product/personas.md) |
 | branch, PR, release, QA, docs, skills | [rules/delivery.md](docs/engineering/rules/delivery.md), [workflow.md](docs/engineering/workflow.md) |
+| delegar a outro agente, escolher modelo ou effort, modo de assinatura | [rules/orchestration.md](docs/engineering/rules/orchestration.md), [`config/model-routing.json`](config/model-routing.json) |
 | produção, variáveis, ambientes | [deploy.md](docs/engineering/deploy.md), [operations.md](docs/operations.md) |
 
 Comandos: [docs/cli.md](docs/cli.md) (há uma referência rápida no topo).
@@ -235,6 +236,13 @@ e do OpenCode (`.opencode/agents/`, `opencode.json`) são **gerados** por
 `pnpm harness:sync` e conferidos por `pnpm check:harness` — nunca edite o
 espelho. Agentes de papel: `task-analyst`, `executor`, `fixer`, `reviewer`,
 `judge`. [[G85](docs/engineering/rules/delivery.md#g85)]
+
+Ao delegar, passe modelo e effort explícitos de `pnpm route <papel>
+<complexidade>` (política em `config/model-routing.json`, modo
+`claude_only` | `codex_only` | `multi_provider`, que falha fechado). O juiz
+nunca é o modelo que escreveu o delta, e o agente nunca rebaixa o modelo do
+turno principal por conta própria.
+[[G86](docs/engineering/rules/orchestration.md#g86), [G87](docs/engineering/rules/orchestration.md#g87)]
 
 Conforme `~/.claude/RTK.md`: no Codex e no OpenCode todo comando de shell vai
 prefixado com `rtk`. No Claude Code o hook global reescreve e não duplica o

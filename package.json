@@ -33,6 +33,7 @@
     "check:instructions": "node --experimental-strip-types --no-warnings scripts/rules/check-instructions.ts",
     "check:harness": "node --experimental-strip-types --no-warnings scripts/harness/sync.ts",
     "harness:sync": "node --experimental-strip-types --no-warnings scripts/harness/sync.ts --write",
+    "route": "node --experimental-strip-types --no-warnings scripts/routing/route.ts",
     "check:qa-tracker": "PYTHONDONTWRITEBYTECODE=1 python3 .claude/skills/qa-report/scripts/materialize_state.py docs/qa",
     "test:qa-skills": "PYTHONDONTWRITEBYTECODE=1 python3 .claude/skills/qa-report/tests/test_scripts.py",
     "test:e2e": "node tests/e2e/run-isolated.mjs",

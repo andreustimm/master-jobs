@@ -2,6 +2,7 @@
 # Gerado por `pnpm harness:sync` a partir de .claude/agents/judge.md — não edite aqui.
 description: Juiz (LLM as judge). Decide SHIP, FIX_BEFORE_SHIP ou REWORK sobre um delta e sua revisão. Roda sempre em modelo diferente do que escreveu o delta. Não edita arquivos.
 mode: subagent
+model: opencode-go/kimi-k2.7-code
 permission:
   edit: deny
 ---

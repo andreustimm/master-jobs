@@ -2,6 +2,7 @@
 # Gerado por `pnpm harness:sync` a partir de .claude/agents/task-analyst.md — não edite aqui.
 description: Analista de tarefa. Lê a issue e o código afetado, classifica a complexidade (low, medium, high), aponta riscos e regras que se aplicam e propõe o plano e os papéis. Use antes de delegar a execução. Não edita arquivos.
 mode: subagent
+model: opencode-go/deepseek-v4-pro
 permission:
   edit: deny
 ---
