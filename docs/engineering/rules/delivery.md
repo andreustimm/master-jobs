@@ -521,24 +521,26 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   própria lista do Claude a cada comando e `apply_patch`; `ask` vira
   bloqueio, porque o hook do Codex não sabe perguntar — o que no Claude espera
   aprovação, no Codex espera a pessoa rodar; se o processo da guarda falhar, o
-  hook sai com código 2 e bloqueia. O `ask` implícito do Claude (comando sem
-  regra, qualquer edição) fica com o sandbox e a aprovação que a pessoa
-  escolheu no Codex (recomendado: `workspace-write` com `on-request`, ou mais
-  estrito); o projeto não fixa esses valores, porque a camada de projeto
-  sobrescreveria também a escolha pessoal mais estrita. O Codex só carrega
-  hooks e agentes de projeto confiável (`trust_level` no
+  hook sai com código 2 e bloqueia. A guarda decide como o Claude Code:
+  comando composto só passa quando **todo** trecho é liberado por uma regra
+  `allow` (ou é `cd`), e trecho que nenhuma regra libera é `ask` — isso fecha
+  de uma vez invólucro, shell aninhado, `eval`, palavra reservada e aspas
+  `$'…'`, porque o que a leitura não reconhece como liberado pergunta. Edição
+  por `apply_patch` fora das regras de caminho é a exceção: fica com o sandbox
+  e a aprovação que a pessoa escolheu no Codex (recomendado: `workspace-write`
+  com `on-request`, ou mais estrito); o projeto não fixa esses valores, porque
+  a camada de projeto sobrescreveria também a escolha pessoal mais estrita. O
+  Codex só carrega hooks e agentes de projeto confiável (`trust_level` no
   `~/.codex/config.toml`).
-- **Prefixo `rtk` e invólucros.** Codex e OpenCode escrevem `rtk sudo ls`
-  (G63); no Claude Code o hook do rtk reescreve depois da decisão. Por isso a
-  guarda do Codex julga cada trecho também sem `rtk`, sem invólucro (`env`,
-  `command`, `timeout`…), sem o caminho do executável (`/bin/rm`) e com o
-  corpo de `sh -c`, e só corta o comando fora de aspas simples. O que a
-  leitura de texto não enxerga por inteiro — trecho que começa por invólucro,
-  shell, `eval`, `xargs` e afins sem allow explícito, ou aspas `$'…'` — é
-  `ask`, exatamente como no Claude Code, onde nada o libera; a guarda só deixa
-  ao sandbox do Codex o que consegue ler. O OpenCode recebe cada padrão
-  ancorado de `ask`/`deny` também como `rtk <padrão>` e `rtk proxy <padrão>`.
-- **Limites conhecidos.** Comandos no Codex; ferramenta por agente no Codex
+- **Prefixo `rtk`.** Codex e OpenCode escrevem `rtk sudo ls` (G63); no Claude
+  Code o hook do rtk reescreve depois da decisão. Por isso a guarda do Codex
+  tira `rtk` antes de conferir o allow e julga cada trecho também sem `rtk`,
+  sem invólucro (`env`, `timeout`…), sem o caminho do executável (`/bin/rm`)
+  e com o corpo de `sh -c` — para que o deny apareça como deny —, cortando o
+  comando só fora de aspas simples. O OpenCode recebe cada padrão ancorado de
+  `ask`/`deny` também como `rtk <padrão>` e `rtk proxy <padrão>`.
+- **Limites conhecidos.** Comandos de `.claude/commands/` no Codex (sem
+  comando de projeto; o agente lê o arquivo); ferramenta por agente no Codex
   (só `sandbox_mode` distingue leitura de escrita — não há lista de
   ferramentas por agente); regra `WebFetch`/`WebSearch` com domínio (a
   tradução recusa em vez de perder o deny, e a guarda do Codex só julga shell e
@@ -550,8 +552,9 @@ Prova: `pnpm check:harness` (no `pnpm check` e no CI) reprova espelho
 ausente, divergente ou órfão, `.opencode/agents` como symlink, agente fora do
 contrato e comando com campo de um harness só. `tests/harness-parity.test.ts`
 prova que a tradução do OpenCode nunca é mais permissiva que o Claude Code e
-que a guarda do Codex nega o que ele nega ou perguntaria por regra explícita,
-inclusive com o prefixo `rtk` e em comando composto.
+que a guarda do Codex nega o que ele nega e bloqueia o que ele perguntaria —
+inclusive com o prefixo `rtk`, em comando composto, atrás de invólucro ou
+shell aninhado e em trecho que nenhuma regra libera.
 
 <a id="g63"></a>
 ### G63 — RTK por harness

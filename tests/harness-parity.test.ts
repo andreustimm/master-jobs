@@ -61,7 +61,9 @@ describe("regras do Claude Code lidas como o Claude Code lê", () => {
     expect(decideCommand(rules, "cd x && git push origin main")).toBe("deny");
     expect(decideCommand(rules, "git status; rm -rf build")).toBe("ask");
     expect(decideCommand(rules, "git status")).toBe("allow");
-    expect(decideCommand(rules, "ls")).toBeNull();
+    expect(decideCommand(rules, "ls")).toBe("ask");
+    expect(decideCommand(rules, "cd x && git status")).toBe("allow");
+    expect(decideCommand(rules, "git status && docker ps")).toBe("ask");
     expect(decideCommand(parseRules({ deny: ["Bash"] }), "ls")).toBe("deny");
   });
 
@@ -100,17 +102,24 @@ describe("regras do Claude Code lidas como o Claude Code lê", () => {
     "git status && eval \"$CMD\"",
     "echo x | xargs -0 kill",
     "git log $'it\\'s' && sudo ls",
-    "git commit -m $'a\\nb'",
-  ])("o que a leitura de texto não enxerga por inteiro pergunta, como no Claude: %s", (command) => {
+    "if true; then sudo ls; fi",
+    "for f in a; do rm -rf $f; done",
+    "! rm -rf src",
+    "bash<<<'rm -rf src'",
+    "git status && docker compose down -v",
+  ])("trecho que nenhuma regra libera pergunta, como no Claude: %s", (command) => {
     const rules = parseRules({ allow: ["Bash(git:*)", "Bash(echo:*)"], ask: ["Bash(rm:*)"], deny: ["Bash(sudo *)"] });
     expect(["ask", "deny"]).toContain(decideCommand(rules, command));
   });
 
-  it("invólucro liberado por allow explícito segue liberado; comando comum não vira opaco", () => {
-    const rules = parseRules({ allow: ["Bash(git:*)", "Bash(xargs:*)", "Bash(pnpm:*)"] });
+  it("comando composto só é allow quando todo trecho é liberado", () => {
+    const rules = parseRules({ allow: ["Bash(git:*)", "Bash(xargs:*)", "Bash(pnpm:*)", "Bash(rtk git:*)"] });
     expect(decideCommand(rules, "git ls-files | xargs wc -l")).toBe("allow");
     expect(decideCommand(rules, "pnpm check")).toBe("allow");
+    expect(decideCommand(rules, "rtk pnpm check")).toBe("allow");
     expect(decideCommand(rules, "git commit -m 'env e bash no texto'")).toBe("allow");
+    expect(decideCommand(rules, "git commit -m $'a\\nb'")).toBe("allow");
+    expect(decideCommand(rules, "timeout 5 pnpm check")).toBe("ask");
   });
 
   it("texto entre aspas simples não vira comando", () => {
@@ -353,7 +362,8 @@ describe("guarda do Codex", () => {
     expect(bash("rtk git push origin main")).toBe("deny");
     expect(bash("git push --force origin feat/x")).toBe("ask");
     expect(bash("pnpm check")).toBe("allow");
-    expect(bash("docker ps")).toBeNull();
+    expect(bash("docker ps")).toBe("ask");
+    expect(bash("rtk ls -la")).toBe("allow");
   });
 
   it("patch que toca arquivo secreto é negado, com o caminho no motivo", () => {
