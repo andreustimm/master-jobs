@@ -92,6 +92,27 @@ describe("regras do Claude Code lidas como o Claude Code lê", () => {
     expect(decideCommand(rules, command)).toBe("ask");
   });
 
+  it.each([
+    "exec -a x sudo ls",
+    "env -u foo rm -rf src",
+    "/bin/sh -c 'sudo ls'",
+    "bash --norc -c 'rm -rf src'",
+    "git status && eval \"$CMD\"",
+    "echo x | xargs -0 kill",
+    "git log $'it\\'s' && sudo ls",
+    "git commit -m $'a\\nb'",
+  ])("o que a leitura de texto não enxerga por inteiro pergunta, como no Claude: %s", (command) => {
+    const rules = parseRules({ allow: ["Bash(git:*)", "Bash(echo:*)"], ask: ["Bash(rm:*)"], deny: ["Bash(sudo *)"] });
+    expect(["ask", "deny"]).toContain(decideCommand(rules, command));
+  });
+
+  it("invólucro liberado por allow explícito segue liberado; comando comum não vira opaco", () => {
+    const rules = parseRules({ allow: ["Bash(git:*)", "Bash(xargs:*)", "Bash(pnpm:*)"] });
+    expect(decideCommand(rules, "git ls-files | xargs wc -l")).toBe("allow");
+    expect(decideCommand(rules, "pnpm check")).toBe("allow");
+    expect(decideCommand(rules, "git commit -m 'env e bash no texto'")).toBe("allow");
+  });
+
   it("texto entre aspas simples não vira comando", () => {
     const rules = parseRules({ allow: ["Bash(git:*)"], deny: ["Bash(sudo *)"] });
     expect(decideCommand(rules, "git commit -m 'fix(harness): julga (sudo ls) no texto'")).toBe("allow");

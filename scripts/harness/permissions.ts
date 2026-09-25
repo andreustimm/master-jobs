@@ -52,17 +52,39 @@ export function bashSpecifierMatches(specifier: string, command: string): boolea
 }
 
 /**
- * Prefixo que o Codex e o OpenCode põem em todo comando (G63). No Claude Code
- * o hook global do rtk reescreve DEPOIS da decisão de permissão, então a regra
- * vê `sudo ls`; nos outros dois o comando chega como `rtk sudo ls`, e uma regra
- * ancorada no início (`sudo *`, `rm:*`) deixaria de casar.
- */
-/**
  * Invólucros que executam o comando seguinte sem mudar o que ele faz. Sem
  * tirá-los, `env rm -rf src` ou `timeout -s KILL 5 rm -rf src` escapariam de
  * `rm:*`.
  */
 const WRAPPERS = new Set(["env", "command", "exec", "nohup", "time", "nice", "timeout", "stdbuf", "ionice"]);
+
+/**
+ * Comando que roda OUTRO comando que a leitura de texto não enxerga por
+ * inteiro: invólucros, shells, `eval`, `xargs` e afins. Nenhum deles está
+ * liberado no Claude Code, que portanto pergunta; no Codex, deixar o caso ao
+ * sandbox abriria a porta para cada forma nova de embrulhar `rm` ou `sudo`.
+ * Por isso trecho com essa cabeça e sem allow explícito é `ask` — a guarda só
+ * deixa ao padrão do harness o que ela consegue ler.
+ */
+const OPAQUE_HEADS = new Set([
+  ...WRAPPERS,
+  "sh",
+  "bash",
+  "zsh",
+  "dash",
+  "ksh",
+  "fish",
+  "eval",
+  "source",
+  ".",
+  "xargs",
+  "busybox",
+  "su",
+  "doas",
+  "script",
+  "watch",
+  "parallel",
+]);
 
 /** Opção, número/duração, sinal (`KILL`) ou atribuição logo depois de um invólucro. */
 const WRAPPER_ARGUMENT = /^(?:-|\d|[A-Z]+$|[A-Za-z_][A-Za-z0-9_]*=)/;
@@ -78,7 +100,6 @@ const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 function unwrap(segment: string): string {
   const tokens = segment.split(/\s+/).filter((token) => token !== "");
   for (let changed = true; changed && tokens.length > 0; ) {
-    changed = true;
     const head = tokens[0]!;
     if (head === "rtk") {
       tokens.shift();
@@ -138,30 +159,62 @@ const NESTED_SHELL = /(?:^|\s)(?:ba|z|da|k)?sh\s+(?:-[A-Za-z]+\s+)*-[A-Za-z]*c[A
  */
 export function commandSegments(command: string, depth = 0): string[] {
   const whole = command.trim();
-  const parts = maskSingleQuoted(whole)
-    .split(/&&|\|\||\$\(|[<>]\(|[;|&\n(){}`]/)
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
+  const parts = splitParts(whole);
   const segments = [whole, ...parts];
   const nested =
     depth < 2 ? [...whole.matchAll(NESTED_SHELL)].flatMap((match) => commandSegments(match[2]!, depth + 1)) : [];
   return [...new Set([...segments, ...segments.map(unwrap), ...nested])];
 }
 
+function splitParts(command: string): string[] {
+  return maskSingleQuoted(command)
+    .split(/&&|\|\||\$\(|[<>]\(|[;|&\n(){}`]/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+/** Primeira palavra do trecho, sem `rtk`, atribuições nem diretório. */
+function headOf(segment: string): string {
+  const tokens = segment.split(/\s+/).filter((token) => token !== "");
+  while (tokens[0] === "rtk" || tokens[0] === "proxy" || (tokens[0] !== undefined && ASSIGNMENT.test(tokens[0]))) {
+    tokens.shift();
+  }
+  const head = tokens[0] ?? "";
+  return head.startsWith("/") ? head.slice(head.lastIndexOf("/") + 1) : head;
+}
+
+/** Trechos que a leitura de texto não enxerga por inteiro: cabeça em `OPAQUE_HEADS`. */
+export function opaqueSegments(command: string): string[] {
+  return splitParts(command.trim()).filter((part) => OPAQUE_HEADS.has(headOf(part)));
+}
+
+/**
+ * Aspas `$'…'`/`$"…"`: o shell reinterpreta escapes (`\'`, `\x..`) que o
+ * scanner de aspas não modela, e a divisão em trechos deixa de ser confiável.
+ */
+const REINTERPRETED_QUOTES = /\$['"]/;
+
 /**
  * Decisão mais restritiva entre as regras de `Bash` que casam: deny vence ask,
- * que vence allow — a mesma precedência do Claude Code. `null` quando nenhuma
- * regra casa (o harness aplica o próprio padrão).
+ * que vence allow — a mesma precedência do Claude Code. Trecho opaco sem allow
+ * explícito é pelo menos `ask`, como no Claude, onde nada o libera. `null`
+ * quando nenhuma regra casa (o harness aplica o próprio padrão).
  */
 export function decideCommand(rules: readonly Rule[], command: string): Decision | null {
   const segments = commandSegments(command);
+  const bash = rules.filter((rule) => rule.tool === "Bash");
   let found: Decision | null = null;
-  for (const rule of rules) {
-    if (rule.tool !== "Bash") continue;
+  for (const rule of bash) {
     const matches =
       rule.specifier === null || segments.some((segment) => bashSpecifierMatches(rule.specifier!, segment));
     if (matches && strength(rule.decision) > strength(found)) found = rule.decision;
   }
+  const allowed = (segment: string) =>
+    bash.some(
+      (rule) => rule.decision === "allow" && (rule.specifier === null || bashSpecifierMatches(rule.specifier, segment)),
+    );
+  const unreadable = REINTERPRETED_QUOTES.test(command) || opaqueSegments(command).some((segment) => !allowed(segment));
+  if (unreadable && strength("ask") > strength(found)) found = "ask";
   return found;
 }
 
