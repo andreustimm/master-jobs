@@ -155,7 +155,7 @@ type PlanNode = {
 type Explained = { Plan: PlanNode; "Execution Time": number };
 
 /** Cada consulta que a leitura mandou, na ordem, para reexplicar depois. */
-async function capture<T>(work: () => Promise<T>): Promise<{ result: T; statements: Statement[] }> {
+async function capture(work: () => Promise<unknown>): Promise<Statement[]> {
   const client = db.$client as unknown as { unsafe: (...args: unknown[]) => Promise<unknown> };
   const original = client.unsafe.bind(client);
   const statements: Statement[] = [];
@@ -164,7 +164,8 @@ async function capture<T>(work: () => Promise<T>): Promise<{ result: T; statemen
     return original(...args);
   };
   try {
-    return { result: await work(), statements };
+    await work();
+    return statements;
   } finally {
     client.unsafe = original;
   }
@@ -281,7 +282,7 @@ describe.runIf(enabled)("facetas com acervo de forma de produção", () => {
       const samples = [];
       for (let run = 0; run < RUNS; run++) samples.push(await read.run());
       for (const sample of samples) expect(sample.golden).toEqual(samples[0]!.golden);
-      const { statements } = await capture(read.run);
+      const statements = await capture(read.run);
       const explained = [];
       // Só leitura: `begin`/`commit` e o `set_config` da transação de
       // `nearMatches` não se explicam fora dela.
