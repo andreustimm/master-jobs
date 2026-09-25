@@ -495,7 +495,7 @@ formato chega por espelho **gerado** — nunca escrito à mão.
 
 | Assunto | Fonte canônica | Claude Code | Codex | OpenCode |
 |---|---|---|---|---|
-| Instruções | `AGENTS.md` + `docs/engineering/rules/` | `CLAUDE.md` (symlink) | `AGENTS.md` (descoberta nativa) | `AGENTS.md` + regras em `opencode.json > instructions` |
+| Instruções | `AGENTS.md` + `docs/engineering/rules/` | `CLAUDE.md` (symlink) | `AGENTS.md` (descoberta nativa) | `AGENTS.md` em `opencode.json > instructions` |
 | Skills | `.claude/skills/` | nativo | `.agents/skills` (symlink; `.codex/skills` para versões anteriores) | `.opencode/skills` (symlink) |
 | Comandos | `.claude/commands/` | nativo | sem suporte de projeto — peça pelo nome e leia o arquivo | `.opencode/commands` (symlink) |
 | Agentes | `.claude/agents/*.md` | nativo | `.codex/agents/*.toml` (gerado) | `.opencode/agents/*.md` (gerado) |
@@ -536,17 +536,22 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   Code o hook do rtk reescreve depois da decisão. Por isso a guarda do Codex
   tira `rtk` antes de conferir o allow e julga cada trecho também sem `rtk`,
   sem invólucro (`env`, `timeout`…), sem o caminho do executável (`/bin/rm`)
-  e com o corpo de `sh -c` — para que o deny apareça como deny —, cortando o
-  comando só fora de aspas simples. O OpenCode recebe cada padrão ancorado de
+  e com o corpo de `sh -c` — para que o deny apareça como deny. O comando só
+  é cortado fora do texto literal entre aspas (simples, e duplas fora de
+  `$(…)` e crase) e de heredoc com delimitador entre aspas; redirecionamento
+  com `&` (`2>&1`) não corta. O OpenCode recebe cada padrão ancorado de
   `ask`/`deny` também como `rtk <padrão>` e `rtk proxy <padrão>`.
 - **Limites conhecidos.** Comandos de `.claude/commands/` no Codex (sem
   comando de projeto; o agente lê o arquivo); ferramenta por agente no Codex
   (só `sandbox_mode` distingue leitura de escrita — não há lista de
   ferramentas por agente); regra `WebFetch`/`WebSearch` com domínio (a
   tradução recusa em vez de perder o deny, e a guarda do Codex só julga shell e
-  patch); e a leitura automática das regras por domínio (só o OpenCode carrega
-  por configuração; Claude Code e Codex leem pelo roteador da entrada) são
-  diferenças do harness, não da política.
+  patch) são diferenças do harness, não da política.
+- **Instruções.** Os três carregam só o `AGENTS.md`; as regras por domínio são
+  lidas sob demanda pelo roteador da entrada. Carregar os seis arquivos de
+  `docs/engineering/rules/` em `opencode.json > instructions` custaria ~26 mil
+  tokens fixos por sessão e daria ao OpenCode um contexto que os outros não
+  têm (decisão do dono pendente: D6 da #321).
 
 Prova: `pnpm check:harness` (no `pnpm check` e no CI) reprova espelho
 ausente, divergente ou órfão, `.opencode/agents` como symlink, agente fora do
