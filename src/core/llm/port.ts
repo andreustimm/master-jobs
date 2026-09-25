@@ -89,9 +89,16 @@ export function redactText(text: string): string {
  * o provedor a ecoava no erro — e o erro chega ao terminal e ao Sentry, cuja
  * peneira também não conhece o formato. Quem assina a requisição conhece a
  * chave; apagar pelo valor não depende de adivinhar o formato.
+ *
+ * Apaga também a forma aparada: um `.env` com espaço ou quebra de linha no fim
+ * manda a chave aparada no cabeçalho, e é essa que o provedor ecoa.
  */
 export function redactSecret(text: string, secret: string): string {
-  return secret ? text.split(secret).join("***") : text;
+  let clean = text;
+  for (const value of [secret, secret.trim()]) {
+    if (value) clean = clean.replaceAll(value, "***");
+  }
+  return clean;
 }
 
 export class LlmError extends Error {

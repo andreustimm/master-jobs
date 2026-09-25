@@ -101,9 +101,11 @@ def within(path: Path, parent: Path) -> bool:
 def reference_errors(root: Path, path: Path, row: dict[str, str]) -> list[str]:
     """Files the scenario cites must exist; a dangling citation is an unproved claim.
 
-    A reference may be written relative to the working directory (the repo root,
-    e.g. `docs/qa/reports/x.md` or `tests/e2e/ui.mjs`) or to the QA root
-    (`reports/x.md`). A report may also be named by its bare slug.
+    A reference may be written relative to the QA root (`reports/x.md`) or to
+    the repo root (`docs/qa/reports/x.md`, `tests/e2e/ui.mjs`). The repo root is
+    found as an ancestor of the QA root, never taken from the working directory,
+    so the verdict does not depend on where the script is launched. A report may
+    also be named by its bare slug.
 
     `evidence/` is the one exception: it is gitignored by contract — screenshots
     live on disk or as a CI artifact, and the versioned report records where —
@@ -111,9 +113,10 @@ def reference_errors(root: Path, path: Path, row: dict[str, str]) -> list[str]:
     """
     errors: list[str] = []
     evidence_dir = root / "evidence"
+    bases = [root.resolve(), *root.resolve().parents]
 
     def exists(value: str) -> bool:
-        return (root / value).is_file() or Path(value).is_file()
+        return any((base / value).is_file() for base in bases)
 
     journey = row["journey"]
     if journey and not (root / "journeys" / f"{journey}.md").is_file():
@@ -125,7 +128,7 @@ def reference_errors(root: Path, path: Path, row: dict[str, str]) -> list[str]:
     if report and not (exists(report) or (root / "reports" / f"{report}.md").is_file()):
         errors.append(f"{path}: last_report {report!r} does not exist")
     for item in split_list(row["evidence"]):
-        if within(root / item, evidence_dir) or within(Path(item), evidence_dir):
+        if any(within(base / item, evidence_dir) for base in bases):
             continue
         if not exists(item):
             errors.append(f"{path}: evidence {item!r} does not exist")

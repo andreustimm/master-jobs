@@ -79,7 +79,8 @@ afterEach(async () => {
 
 function credencial(init?: RequestInit): string {
   const headers = new Headers(init?.headers);
-  return headers.get("x-api-key") ?? headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
+  // Como o servidor lê: valor de cabeçalho normalizado e token depois de `Bearer` e espaços.
+  return headers.get("x-api-key") ?? headers.get("authorization")?.replace(/^Bearer\s+/, "") ?? "";
 }
 
 /** Provedor que recusa a chave e a devolve na mensagem, como as APIs reais fazem. */
@@ -186,6 +187,21 @@ describe("V03-06 chave sentinela no caminho real do BYOK", () => {
     expect((erro as LlmError).message).toContain("Incorrect API key provided");
     expect(tudoQueOErroMostra(erro)).not.toContain(SENTINELA);
     expect(eventoDoSentry(erro)).not.toContain(SENTINELA);
+  });
+
+  it("chave com espaço ou quebra de linha no `.env`: a forma aparada, que é a ecoada, também some", async () => {
+    await cadastrarModelo();
+    process.env[VAR_CHAVE] = `  ${SENTINELA}\n`;
+    provedorQueEcoa(401);
+
+    const erro = await portFor((await chooseModel())!).complete({ system: "s", messages: [] }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+
+    // O cabeçalho HTTP é normalizado: o provedor recebe e devolve a chave aparada.
+    expect(recebidas).toEqual([SENTINELA]);
+    expect(tudoQueOErroMostra(erro)).not.toContain(SENTINELA);
   });
 
   it("falha de rede que cita o cabeçalho, nos dois adapters: nem a mensagem nem a pilha levam a chave", async () => {

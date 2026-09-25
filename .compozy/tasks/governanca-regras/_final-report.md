@@ -156,7 +156,7 @@ executa esses testes está em V11-02.
 | E13 | fechada no Vitest | `discoverEntries()` pela semântica do Next; guarda antes do efeito; `entry-denial` contra PostgreSQL. A lista de páginas por escopo de candidato continua literal |
 | E14 | fechada | Duas redenções simultâneas do mesmo token: uma vence, sessões caem |
 | E15 | fechada, com limite | `publicCvText()` no caminho público, sentinelas de piso, e-mail e telefone |
-| **E16** | **aberta** | `architecture.test.ts:849` ainda ignora qualquer arquivo que contenha `apiKeyEnv`; o log só é conferido para `console.log/error` com `apiKey` literal; não há sentinela de chave atravessando erro, log e persistência (V03-06) |
+| **E16** | **aberta** (fechada na #308, ver o fim) | `architecture.test.ts:849` ainda ignora qualquer arquivo que contenha `apiKeyEnv`; o log só é conferido para `console.log/error` com `apiKey` literal; não há sentinela de chave atravessando erro, log e persistência (V03-06) |
 | E17 | fechada | `pwa-browser` é obrigatório no agregador. Servidor sintético, não o Next autenticado |
 | E18 | parcial | Inventário de rotas amarrado ao inventário de páginas; `gotoMeasured` exige destino igual ao pedido. O detector de idioma continua léxico; 6 páginas em `UNMEASURED_PAGES`, com motivo |
 | E19 | parcial | `design.test.ts` pega hex curto, `rgb/oklch`, paleta crua e tamanho fora da escala. axe numa viewport, sem laço de temas |
@@ -167,7 +167,7 @@ executa esses testes está em V11-02.
 | E24 | parcial | `main` exige PR; o cliente GitHub dos testes de release continua falso |
 | E25 | fechada | Promoção por SHA com CI provado também no dispatch; assignee em PR nova e reaproveitada, inclusive no retorno |
 | E26 | parcial | Proteções aplicadas e reobservadas hoje [R]. Nenhum job agendado roda `verify-protections.ts`; limites em P0-3 |
-| **E27** | **aberta** (P1) | `materialize_state.py` sem mudança: não confere se a evidência e o relatório referenciados existem nem se o SHA é atual |
+| **E27** | **aberta** (P1; fechada na #308, ver o fim) | `materialize_state.py` sem mudança: não confere se a evidência e o relatório referenciados existem nem se o SHA é atual |
 | E28 | parcial | Links, âncoras e symlinks cobertos. Nenhum gate lê o corpo real da PR (docs, veredito, SHA); o gate de PR de tarefa está desligado |
 | E29 | fechada, com limite | `ship-pr` alinhada a G54; `.codex/config.toml` corrigido. Coerência texto × regra continua revisão humana |
 | E30 | parcial | Bloqueio de LinkedIn por host em todo salto, com teste. IP literal, proxy e ferramentas de agente ficam fora (limite declarado) |
@@ -260,12 +260,12 @@ Branch `test/governanca-g41`, a partir de `origin/dev` `c565478e`, em
 
 | Item | Estado | Prova |
 |---|---|---|
-| **P0-1 / G41 / V03-06** | **resolvida** | [X] `tests/llm-key-sentinel.test.ts`, 4 casos. Uma sentinela `nvapi-G41-<8 hex>` passa pelo caminho real (cadastro pela CLI → `chooseModel` → `portFor` → adapter → cabeçalho), e o provedor falso a ecoa. Ela é procurada no erro (mensagem, pilha, JSON, `inspect`), no evento após `scrubEvent`, em `jho analyze`, `jho llm list` e `jho analysis run`, no console durante o processamento da fila, em todas as tabelas do banco e no painel admin da análise |
+| **P0-1 / G41 / V03-06** | **resolvida** | [X] `tests/llm-key-sentinel.test.ts`, 5 casos (um deles com a chave cercada de espaço/quebra de linha no `.env`). Uma sentinela `nvapi-G41-<8 hex>` passa pelo caminho real (cadastro pela CLI → `chooseModel` → `portFor` → adapter → cabeçalho), e o provedor falso a ecoa. Ela é procurada no erro (mensagem, pilha, JSON, `inspect`), no evento após `scrubEvent`, em `jho analyze`, `jho llm list` e `jho analysis run`, no console durante o processamento da fila, em todas as tabelas do banco e no painel admin da análise |
 | Defeito achado pela sentinela | corrigido | `redactText` só apagava `sk-…`: uma chave `nvapi-…` ecoada chegava ao terminal e ao Sentry. Agora os adapters apagam o valor exato (`redactSecret`), e a falha de `fetch` volta sem `cause` nem pilha original |
 | **E16** | **fechada** | [X] Exceção por ocorrência (`keyHandlingLines`) em `src/` + `app/`, com caso negativo "arquivo com `apiKeyEnv` e `apiKey`". O log estrutural passa a cobrir também `warn/info/debug` |
 | **E27** | **fechada**, com limite | [X] `materialize_state.py` reprova jornada, bug, `last_report` e evidência versionada inexistentes. Fora: `evidence/` (ignorado pelo git) e o SHA do relatório |
 | Mutação | [X] | Cada mutação local foi revertida em seguida: sem `redactSecret` → 3/4 casos reprovam; chave em `llm_provider.notes` → a varredura do banco reprova; chave em `errorCode` → o painel reprova; escape por arquivo → o caso negativo reprova; sem a checagem de referências → 5 subcasos reprovam |
-| `pnpm check` | [X] verde | 4183 testes passaram e 8 foram pulados (306 arquivos); `test:qa-skills` com 15 OK; `check:qa-tracker` com 96 cenários, todas as citações resolvidas |
+| `pnpm check` | [X] verde | 4184 testes passaram e 8 foram pulados (306 arquivos); `test:qa-skills` com 16 OK; `check:qa-tracker` com 96 cenários, todas as citações resolvidas |
 
 Com isso, só P0-2 e P0-3 continuam impedindo a certificação; as duas
 dependem do dono.

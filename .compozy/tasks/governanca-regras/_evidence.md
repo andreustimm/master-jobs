@@ -188,7 +188,7 @@ remotas foram reconsultadas. O resultado de cada item e a separação entre
 acima continuam como fotografia da baseline `463688f3`; os textos não foram
 reescritos.
 
-Continuam **abertas**:
+Continuavam **abertas** em `c23f8ba2` (as duas foram fechadas pela #308; ver abaixo):
 
 - **E16:** o gate de chave de API tem o escape `apiKeyEnv`, e falta a
   sentinela V03-06. Isso impede certificar G41.

@@ -390,6 +390,32 @@ class QaReportScriptTests(unittest.TestCase):
                     result = self.run_script(MATERIALIZE, root)
                     self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_materialize_resolves_repo_root_citations_from_any_cwd(self) -> None:
+        # The real tracker cites `docs/qa/reports/…` and `tests/…`: the repo root
+        # is an ancestor of the QA root, whatever directory the gate runs from.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            root = repo / "docs" / "qa"
+            scenarios = root / "scenarios"
+            scenarios.mkdir(parents=True)
+            cited_files(root)
+            (repo / "tests").mkdir()
+            (repo / "tests" / "ui.mjs").write_text("test", encoding="utf-8")
+            (scenarios / "JOBS-rank-visible.md").write_text(
+                scenario_text(
+                    evidence="tests/ui.mjs; docs/qa/evidence/local.png",
+                    last_report="docs/qa/reports/run.md",
+                ),
+                encoding="utf-8",
+            )
+            for cwd in (repo, root, SKILL_DIR):
+                with self.subTest(cwd=str(cwd)):
+                    result = subprocess.run(
+                        [sys.executable, str(MATERIALIZE), str(root)],
+                        capture_output=True, text=True, check=False, cwd=cwd,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

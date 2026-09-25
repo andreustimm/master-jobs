@@ -21,15 +21,15 @@ const TIMEOUT_MS = 120_000;
 /**
  * Nenhuma falha sai do adapter com a chave dentro.
  *
- * O `LlmError` já nasce sem ela. O resto — `fetch` que recusa um cabeçalho e
- * cita o valor, corpo que não é JSON — é reconstruído só com a mensagem limpa,
- * sem `cause` nem a pilha original, que repetiriam o texto de antes.
+ * Todo erro é reconstruído só com a mensagem limpa — `LlmError` do provedor,
+ * `fetch` que recusa um cabeçalho e cita o valor, corpo que não é JSON —, sem
+ * `cause` nem a pilha original, que repetiriam o texto de antes.
  */
 async function keyNeverEscapes<T>(apiKey: string, call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (error) {
-    if (error instanceof LlmError) throw error;
+    if (error instanceof LlmError) throw new LlmError(error.provider, error.status, redactSecret(error.message, apiKey));
     const message = error instanceof Error ? error.message : String(error);
     const clean = new Error(redactText(redactSecret(message, apiKey)));
     if (error instanceof Error) clean.name = error.name;
@@ -98,7 +98,7 @@ export function anthropicProvider(apiKey: string, model?: string, baseUrl?: stri
       const json = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
         const error = json.error as { message?: string } | undefined;
-        throw new LlmError("anthropic", res.status, redactSecret(error?.message ?? `HTTP ${res.status}`, apiKey));
+        throw new LlmError("anthropic", res.status, error?.message ?? `HTTP ${res.status}`);
       }
 
       // With thinking enabled the response carries thinking blocks too; only
@@ -147,7 +147,7 @@ export function openaiProvider(apiKey: string, model?: string, baseUrl?: string)
       const json = (await res.json()) as Record<string, unknown>;
       if (!res.ok) {
         const error = json.error as { message?: string } | undefined;
-        throw new LlmError("openai", res.status, redactSecret(error?.message ?? `HTTP ${res.status}`, apiKey));
+        throw new LlmError("openai", res.status, error?.message ?? `HTTP ${res.status}`);
       }
 
       const choices = (json.choices ?? []) as Array<{ message?: { content?: string } }>;
