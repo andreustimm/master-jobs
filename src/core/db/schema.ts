@@ -289,12 +289,12 @@ export const jobScore = production.table(
     // anúncio muda e o cascade de `job` — não podem usar a chave primária, que
     // começa por candidato. Sem este índice cada uma varre a tabela inteira.
     index("job_score_job_idx").on(t.jobId, t.fit),
-    // Cobertura das leituras do quadro, das facetas e do cockpit (#222). Na
-    // migração `0025` o índice leva `INCLUDE (fit, cluster, blockers)`, que o
-    // Drizzle não sabe declarar: com as três colunas no índice, a leitura das
-    // notas de uma trilha não visita a tabela — cada linha de nota ocupa quase
-    // uma página própria, e era essa a maior parte dos blocos lidos.
-    index("job_score_board_cover_idx").on(t.candidateId, t.trackId, t.jobId),
+    // `job_score_board_cover_idx (candidate_id, track_id, job_id) INCLUDE (fit,
+    // cluster, blockers)` existe no banco e NÃO aqui: o Drizzle não declara
+    // colunas incluídas, então ele nasce na migração custom
+    // `0026_job_score_board_cover` (#222). Com as três colunas no índice, ler
+    // as notas de uma trilha não visita a tabela, onde cada linha ocupa quase
+    // uma página. `tests/facet-read-indexes.test.ts` confere a definição.
   ],
 );
 

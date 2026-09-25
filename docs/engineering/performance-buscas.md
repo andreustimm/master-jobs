@@ -617,7 +617,7 @@ contagem divergente do rodapé por minutos.
 | 2 🟡 | Cache local das facetas, validade de 60 s (#216, em produção; o ganho ainda depende da rodada com sessão; ver [seção](#cache-das-facetas--medição-de-22092026)) | alto ao paginar/ordenar, nulo na primeira leitura × médio | `matching/app/board-facets.ts` |
 | 3 ✅ | `loading.tsx` + `Suspense` em `/jobs` (#217, em produção desde a v1.23.0; ver [fronteira](#fronteira-de-carregamento-217)) | percepção imediata na troca de tela; o total não muda | `app/jobs/(lista)/`, `app/jobs/[id]/` |
 | ✅ | Régua de conexões por **tela**, `comVigia` em `/jobs` e `/` | entregue e exercitado no QA de concorrência | testes |
-| 🟡 | Menos blocos por leitura: canônica por `group by`, principal por chave, índices `0025` (#222; ver [seção](#acervo-de-forma-de-produção--medição-de-25092026-222)); o ganho em produção depende da medição depois do deploy | alto em banco pequeno × baixo | `repo.ts`, migração `0025` |
+| 🟡 | Menos blocos por leitura: canônica por `group by`, principal por chave, índices `0025` e `0026` (#222; ver [seção](#acervo-de-forma-de-produção--medição-de-25092026-222)); o ganho em produção depende da medição depois do deploy | alto em banco pequeno × baixo | `repo.ts`, migrações `0025` e `0026` |
 
 ### Decisões
 

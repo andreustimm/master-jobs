@@ -443,11 +443,12 @@ a forma que leu 77,4 milhões de linhas numa varredura em 03/09.
 visita a `job_score`.
 
 `job_score_board_cover_idx (candidate_id, track_id, job_id) INCLUDE (fit,
-cluster, blockers)` (migração `0025_facet_read_indexes`, aditiva, #222) cobre
-as leituras do quadro, das facetas e do cockpit: com as três colunas no índice,
-ler as notas de uma trilha não visita a tabela, onde cada linha ocupa quase uma
-página. O `INCLUDE` está só no SQL da migração — o Drizzle não declara colunas
-incluídas, e `schema.ts` guarda as chaves com um comentário. A varredura só
+cluster, blockers)` (migração custom `0026_job_score_board_cover`, aditiva,
+#222) cobre as leituras do quadro, das facetas e do cockpit: com as três
+colunas no índice, ler as notas de uma trilha não visita a tabela, onde cada
+linha ocupa quase uma página. O Drizzle não declara colunas incluídas, então o
+índice fica fora de `schema.ts` (um comentário em `jobScore` aponta para a
+migração) e o snapshot não o conhece. A varredura só
 índice depende do mapa de visibilidade: páginas reescritas pela repontuação e
 ainda não vistas pelo `vacuum` voltam à tabela. `tests/facet-read-indexes.test.ts`
 reprova se o `INCLUDE` sumir. Quem lê a nota da principal com escopo de
@@ -475,7 +476,7 @@ A ordem da passada usa o índice parcial `job_recency_open_idx` em `job`,
 
 A faceta "com descrição" usa o índice parcial `job_described_open_idx` em
 `job`, `(id) where closed_at is null and substr(coalesce(description_text, ''),
-200, 1) <> ''` (migração `0025`, #222): o predicado é calculado na escrita da
+200, 1) <> ''` (migração `0025_job_described_open_idx`, #222): o predicado é calculado na escrita da
 vaga e a faceta deixa de abrir o TOAST de cada descrição. A expressão precisa
 ser idêntica à de `describedOpenJobIds` em `repo.ts`;
 `tests/facet-read-indexes.test.ts` prova pelo plano que o índice é elegível.

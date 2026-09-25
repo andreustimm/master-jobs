@@ -180,8 +180,15 @@
     {
       "idx": 25,
       "version": "7",
-      "when": 1790345101681,
-      "tag": "0025_facet_read_indexes",
+      "when": 1790345839348,
+      "tag": "0025_job_described_open_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790345842380,
+      "tag": "0026_job_score_board_cover",
       "breakpoints": true
     }
   ]

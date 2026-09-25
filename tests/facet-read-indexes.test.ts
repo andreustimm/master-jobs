@@ -1,12 +1,12 @@
 /**
- * Os dois índices de leitura das facetas e do quadro (#222, migração `0025`).
+ * Os dois índices de leitura das facetas e do quadro (#222, migrações `0025` e `0026`).
  *
  * Nenhum dos dois muda resultado — a prova de equivalência é
  * `tests/board-facets.test.ts` e o `pnpm perf:facetas`, que compara os
  * resultados antes e depois. O que se trava aqui é o que falharia EM SILÊNCIO:
  * um predicado que deixa de casar com o índice parcial (a consulta continua
- * certa, só volta a abrir o TOAST de cada vaga), e o `INCLUDE` escrito à mão na
- * migração, que o Drizzle não declara e um `generate` futuro não recriaria.
+ * certa, só volta a abrir o TOAST de cada vaga), e o `INCLUDE` da migração
+ * custom, que o Drizzle não declara e um `generate` futuro não recriaria.
  */
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -98,7 +98,7 @@ describe("índices de leitura das facetas (#222)", () => {
     expect(plan).toContain("job_described_open_idx");
   });
 
-  it("o índice de notas leva as colunas incluídas que a migração escreve à mão", async () => {
+  it("o índice de notas leva as colunas incluídas da migração custom", async () => {
     const [index] = await db.execute<{ indexdef: string }>(
       sql`select indexdef from pg_indexes where schemaname = 'production' and indexname = 'job_score_board_cover_idx'`,
     );
