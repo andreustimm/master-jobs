@@ -307,4 +307,6 @@ logs extensos e dumps não entram no Git; o relatório registra onde encontrá-l
 3. Invoque a skill `qa-execution` com o argumento `docs/qa`; ela cria o
    relatório antes da primeira sessão e atualiza o tracker após cada sessão e
    correção.
-4. Feche com a suíte completa, depois rode `deep-review` antes da PR.
+4. Feche com a suíte completa (no CI da PR draft), depois rode `deep-review` no
+   nível do diff antes de a PR ficar pronta
+   ([G53](../engineering/rules/delivery.md#g53)).

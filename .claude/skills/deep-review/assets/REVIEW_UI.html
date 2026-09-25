@@ -1093,7 +1093,7 @@
     const laneCoverage = coverage.lanes || {};
     parts.push(`<section class="section"><h3>Review observability</h3>
       <p class="hint">${stats.candidates ?? 0} candidates investigated · ${stats.reported ?? 0} reported before deduplication · ${stats.suppressed ?? 0} suppressions recorded.</p>
-      <p class="hint">${coverage.selected_hunk_lines ?? 0} selected hunk lines · defect coverage ${laneCoverage.defect?.complete ? "complete" : "incomplete"} · polish coverage ${laneCoverage.polish?.complete ? "complete" : "incomplete"}.</p>
+      <p class="hint">${coverage.selected_hunk_lines ?? 0} selected hunk lines · defect coverage ${laneCoverage.defect?.complete ? "complete" : "incomplete"} · polish coverage ${coverage.level === "L1" ? "not run (L1)" : laneCoverage.polish?.complete ? "complete" : "incomplete"}.</p>
     </section>`);
     const suppressions = DATA.suppressions || [];
     if (suppressions.length) {

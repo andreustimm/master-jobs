@@ -104,4 +104,8 @@ describe("V09-04 — a PR declara docs, QA e a revisão do diff atual", () => {
     expect(template.replace(/\s+/g, " ")).toContain("revisão de um SHA anterior a mudança relevante não aprova o diff atual");
     expect(template).toContain("FIX_BEFORE_SHIP");
   });
+
+  it("pede o nível da revisão e a linha dos Minor, que não bloqueiam (#319)", () => {
+    expect(template).toMatch(/^- Nível da revisão \(L0\/L1\/L2\) e Minor\/advisory remanescentes:/m);
+  });
 });

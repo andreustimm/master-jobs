@@ -266,7 +266,9 @@ def main() -> int:
         f"- Candidates investigated: {stats.get('candidates', 0)}",
         f"- Reported before deduplication: {stats.get('reported', 0)}",
         f"- Suppressed with recorded reason: {stats.get('suppressed', 0)}",
-        f"- Selected hunk lines covered by both lanes: {coverage.get('selected_hunk_lines', 0)}",
+        f"- Review level: {coverage.get('level', 'L2')}",
+        f"- Selected hunk lines covered by lanes {' + '.join(coverage.get('lanes', {})) or 'none'}: "
+        f"{coverage.get('selected_hunk_lines', 0)}",
         "",
     ]
     (out / "review.md").write_text("\n".join(review), encoding="utf-8")
