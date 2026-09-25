@@ -264,7 +264,7 @@ caminhos que o diff toca, inclusive os filtrados da revisão:
 |---|---|---|
 | **L0** | só Markdown | sem deep-review; só os validadores estruturais de G57 |
 | **L1** | padrão — tudo que não é L0 nem L2 | passada única, sem fan-out de subagentes (`--no-workflow`, motor inline) e sem coortes de polish |
-| **L2** | autenticação/sessão, `/p/`, schema e `drizzle/`, workflows e scripts de promoção/deploy, scorer e `profile/`, segurança e segredos | pipeline completo, como antes de #319 |
+| **L2** | autenticação/sessão, Server Actions e route handlers (regra 15) e os testes que provam a negação, `/p/`, schema e `drizzle/`, workflows e scripts de promoção/deploy, scorer e `profile/`, segurança e segredos | pipeline completo, como antes de #319 |
 
 A tabela de caminhos é executável: `.claude/skills/deep-review/scripts/review_level.py`
 classifica o manifesto, e `build_jobs.py` recusa `--level L1` para diff que

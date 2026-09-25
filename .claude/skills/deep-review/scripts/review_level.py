@@ -39,8 +39,14 @@ L2_GLOBS: tuple[tuple[str, str], ...] = (
     ("src/contexts/auth/**", "autenticação/sessão"),
     ("app/login/**", "autenticação/sessão"),
     ("app/api/**", "rota sem página: autenticação por omissão"),
+    ("app/**/route.ts", "rota sem página: autenticação por omissão"),
+    # Regra 15: toda Server Action chama guard() antes do efeito. Os arquivos
+    # "use server" se chamam actions.ts, analysis-actions.ts, locale-action.ts…
+    ("app/**/*action*.ts", "autorização: Server Action"),
     ("proxy.ts", "autenticação/sessão"),
     ("tests/support/entry-inventory.ts", "exceções de guarda"),
+    ("tests/entry-denial.test.ts", "prova de negação antes do efeito"),
+    ("tests/architecture.test.ts", "exceções de guarda de página e rota"),
     ("app/p/**", "perfil público /p/"),
     ("src/core/candidate-public.ts", "perfil público /p/"),
     ("src/core/public-cv.ts", "perfil público /p/"),
@@ -68,7 +74,7 @@ L2_GLOBS: tuple[tuple[str, str], ...] = (
 )
 # A path word, anywhere in the path, that means security even where the table
 # has no glob yet: a new `session-*.ts` or a test that guards passwords.
-L2_WORDS = re.compile(r"(?:^|[/_.-])(auth|session|sessions|password|secret|secrets|security|impersonat\w*)(?:$|[/_.-])", re.I)
+L2_WORDS = re.compile(r"(?:^|[/_.-])(auth|oauth|session|sessions|password|secret|secrets|security|impersonat\w*)(?:$|[/_.-])", re.I)
 L0_GLOBS: tuple[str, ...] = ("**/*.md",)
 
 _L2 = [(glob_to_regex(glob), glob, why) for glob, why in L2_GLOBS]
