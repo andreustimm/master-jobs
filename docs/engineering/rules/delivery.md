@@ -585,9 +585,12 @@ formato chega por espelho **gerado** — nunca escrito à mão.
 
 Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
 
-- **Agente canônico** tem só `name` (igual ao arquivo), `description` e
-  `tools`. Sem `tools` o Claude Code dá todas as ferramentas; por isso ele é
-  obrigatório. Sem `Edit`/`Write`, o agente é de leitura: `sandbox_mode =
+- **Agente canônico** tem só `name` (igual ao arquivo), `description`,
+  `role`, `tools`, `model` e `effort`. Sem `tools` o Claude Code dá todas as
+  ferramentas; por isso ele é obrigatório. `role` escolhe, em
+  `config/model-routing.json`, o modelo e o effort de cada espelho; `model` e
+  `effort` do canônico precisam ser os do Claude Code na mesma política
+  ([G87](orchestration.md#g87)). Sem `Edit`/`Write`, o agente é de leitura: `sandbox_mode =
   "read-only"` no Codex e `edit: deny` no OpenCode. No OpenCode, toda
   ferramenta mapeada em `OPENCODE_TOOL` (`scripts/harness/permissions.ts`) que
   o `tools:` não dá (`webfetch`, `websearch`, `bash`…) é negada no agente, e o
@@ -637,7 +640,8 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
 
 Prova: `pnpm check:harness` (no `pnpm check` e no CI) reprova espelho
 ausente, divergente ou órfão, `.opencode/agents` como symlink, agente fora do
-contrato e comando com campo de um harness só. `tests/harness-parity.test.ts`
+contrato ou com modelo diferente da política, e comando com campo de um
+harness só. `tests/harness-parity.test.ts`
 prova que a tradução do OpenCode nunca é mais permissiva que o Claude Code e
 que a guarda do Codex nega o que ele nega e bloqueia o que ele perguntaria —
 inclusive com o prefixo `rtk`, em comando composto, atrás de invólucro ou

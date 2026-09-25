@@ -2,6 +2,7 @@
 # Gerado por `pnpm harness:sync` a partir de .claude/agents/fit-analyst.md — não edite aqui.
 description: Analisa profundamente a aderência entre uma vaga e o perfil de Andreus Timm, indo além do score determinístico. Use quando uma vaga precisar de julgamento qualitativo — se vale aplicar, o que enfatizar, quais lacunas admitir. Não edita código nem move o funil.
 mode: subagent
+model: opencode-go/deepseek-v4-pro
 permission:
   edit: deny
   webfetch: deny

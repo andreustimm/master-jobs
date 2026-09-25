@@ -2,6 +2,7 @@
 # Gerado por `pnpm harness:sync` a partir de .claude/agents/reviewer.md — não edite aqui.
 description: Revisor. Revisa um delta contra as regras do repositório e relata achados com evidência causal e severidade. Use depois da execução e antes do juiz; não corrige nada.
 mode: subagent
+model: opencode-go/qwen3.7-plus
 permission:
   edit: deny
   webfetch: deny
