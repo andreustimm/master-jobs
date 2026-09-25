@@ -63,6 +63,7 @@ export {
 } from "./app/tracks.ts";
 export {
   bestPrimaryFitByJob,
+  candidatePrimaryScoreFilter,
   primaryScoreFilter,
   resolveClusterFilter,
   scoreTrackFilter,
