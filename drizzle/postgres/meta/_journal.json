@@ -176,6 +176,13 @@
       "when": 1790258983746,
       "tag": "0024_job_check_event",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790345101681,
+      "tag": "0025_facet_read_indexes",
+      "breakpoints": true
     }
   ]
 }

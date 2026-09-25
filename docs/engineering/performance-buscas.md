@@ -16,6 +16,7 @@ Três camadas, da mais barata para a mais fiel. Nenhuma substitui a outra.
 | Camada | Comando ou sinal | O que responde | Limite |
 |---|---|---|---|
 | **Piso local** | `pnpm perf:jobs` | Quanto o servidor gasta sobre o banco em 6 cenários (padrão, termo, cluster, faixa salarial, ordenar por pagamento, sem agrupar), 10 mil vagas, e **quantas idas ao banco** cada um faz. Hermético: Postgres em Docker, fora do `pnpm check`. `JHO_PERF_OUT=arquivo` guarda o relatório; `JHO_PERF_JOBS=N` muda o corpus; `JHO_PERF_RUNS=N` e `JHO_PERF_WARMUPS=N` controlam as repetições (inteiros positivos, padrões 3 e 1); `JHO_PERF_JSON=arquivo` guarda amostras, volume de SQL/parâmetros, resultados de referência e plano de execução | Sem rede. Não mede React nem o navegador |
+| **Piso local, forma de produção** | `pnpm perf:facetas` | Tempo e **blocos tocados** (`EXPLAIN (ANALYZE, BUFFERS)`) de cada consulta de `/jobs` (padrão, remoto, termo, sem agrupar) e de `/`, sobre 15 mil vagas (6 mil abertas), 4 candidatos com 3 trilhas pontuadas, descrições no TOAST e capturas. `JHO_PERF_JOBS`, `JHO_PERF_CANDIDATES`, `JHO_PERF_RUNS`, `JHO_PERF_OUT`, `JHO_PERF_JSON` (planos completos e resultados de referência); `JHO_PERF_CHURN=1` reescreve um quinto das notas depois do `vacuum`; `JHO_PERF_EXPERIMENT=<sql>` roda uma instrução antes de medir | Buffers quentes: o tempo é piso. Os blocos são o que atravessa a diferença de máquina |
 | **Produção, por estágio** | Linha JSON `{"perf":"/jobs","totalMs":…,"region":"gru1","stages":{…}}` no log da função | Onde uma requisição real gasta o tempo: `auth`, `prelude`, `board`, `facets`, `tail` (e `cockpit` em `/`) | Sai só se a leitura passa de 1 s, ou sempre com `JHO_PERF_LOG=1`. Log da Vercel na Hobby dura 1 h |
 | **Produção, de fora** | `pnpm perf:producao` (e `--logs`) | TTFB frio e quente, p50/p95, região e cache por rota; com `JHO_PERF_SESSION`, `/jobs` com os filtros comuns; com `--logs`, a agregação das linhas `perf` acima | Ver [Medir a produção](#medir-a-produção-221). De fora não se prova que a instância estava fria |
 | **Produção, amostrada** | Trace do Sentry: span `jho.leitura` por rota e `jho.etapa` por estágio | Os mesmos estágios da linha acima, com os spans de renderização e de PostgreSQL do SDK, e retidos além de 1 h | Amostra de `SENTRY_TRACES_SAMPLE_RATE` (padrão 10%). Ver [Sentry](#sentry-e-o-que-fica-de-fora) |
@@ -201,7 +202,7 @@ Números do PostgreSQL local com 9 mil vagas, sem rede — o **piso**.
 | Busca por termo: regex `~*` sobre título, empresa e descrição, que nenhum índice atende diretamente | 160–175 ms por consulta × 5 consultas; só `sum(length(description_text))` leva 116 ms | **MEDIDO**, pré-filtro trigrama em produção (#214, seção abaixo). O padrão `[ -]?` de `term.ts` de fato impede a extração de trigramas: **MEDIDO**, o índice direto devolveu 8.863 de 9.060 linhas |
 | `length(descricao) >= 200` calculado em todas as linhas antes do `LIMIT`, para a UI só testar `< 200` | 103 ms → 26 ms com `substr` (mesmo resultado em 199/200/201, acento, emoji, vazio, nulo) | **MEDIDO**, corrigido |
 | Faixa salarial: `paySql` interpolada repetidamente | Na tela completa com 29 moedas, 183 KB de SQL e 1.169 parâmetros; normalização compartilhada reduziu para 48 KB e 301 | **MEDIDO**, corrigido; comparação abaixo |
-| Estimativa errada do planner em `coalesce(fit,0) >= n` sobre `LEFT JOIN` | estimou 2 linhas, vieram 1.568 | **MEDIDO**, aberto |
+| Estimativa errada do planner em `coalesce(fit,0) >= n` sobre `LEFT JOIN` | estimou 2 linhas, vieram 1.568 | **MEDIDO**; a parte que derrubava o plano era o `rn = 1` da canônica, corrigida na #222 (seção abaixo) |
 | `/searches`: N+1 de `countNewJobs` (até 20 termos) e `listTracks` duplicado | leitura do código, consultas leves por índice | INFERIDO, custo é round-trip |
 
 Paginação por `OFFSET` **não** é o problema (top-N heapsort de 107 kB), e o
@@ -301,8 +302,9 @@ restritos à pessoa e à trilha da sessão.
 A tela usa `listBoardPage`: total por janela sobre ids elegíveis e dados completos
 somente depois do limite da página. Uma página além do fim, ou de tamanho zero,
 não tem linha para carregar o total; nesses casos a contagem separada conserva o
-rodapé correto. Os demais consumidores de `listBoard` não calculam a janela.
-A lista continua usando os mesmos filtros e desempates.
+rodapé correto. Desde a #222, `listBoard` (cockpit, CLI) passa pela mesma
+janela de ids e só não lê o total. A lista continua usando os mesmos filtros e
+desempates.
 
 A largura da janela importa: carregar descrições nela fez o cenário sem agrupar
 escrever 967 blocos temporários no benchmark. Restringir a janela a ids e chaves
@@ -493,6 +495,111 @@ o próximo passo não é um cache maior, e sim, nesta ordem:
 3. Só com um segundo backend real, trocar o mapa por um `CachePort` (regra 4),
    se a medição mostrar acerto baixo por espalhamento entre instâncias.
 
+## Acervo de forma de produção — medição de 25/09/2026 (#222)
+
+Em 23/09 a primeira leitura de `/jobs` custou 5.674 ms em produção (facets
+3.781, board 1.721, auth 123) e o cockpit de `/`, 6.141 ms; o `perf:jobs` dava
+~24 ms às facetas. Em 25/09 o dump de produção restaurado localmente, com o
+mesmo código, levou 94 ms em `/jobs` (facets 29, board 54, auth 4). O plano,
+portanto, não explica a diferença **sozinho**: o mesmo SQL é rápido quando o
+banco tem RAM e disco de sobra e os dados já estão em memória.
+
+**O que o `perf:facetas` mostra é o volume de trabalho que cada leitura pede.**
+O `perf:jobs` tinha um candidato, uma trilha e descrições de 1,3 KB que nunca
+saem da página. Produção tem vagas fechadas guardadas (regra 3), vários
+candidatos e trilhas com nota, descrições longas no TOAST. Com essa forma, a
+leitura padrão tocava ~65 mil blocos (≈ 500 MB de acesso a buffer) e o
+cockpit ~220 mil — num banco quente isso custa dezenas de milissegundos; numa
+instância pequena, com o conjunto de trabalho maior que a memória, cada bloco
+fora do cache é uma leitura de disco. **INFERIDO**, não medido em produção:
+que a instância de produção (compute Nano do Supabase) não segura esse
+conjunto em memória. O teste decisivo está em [Próximo
+diagnóstico](#próximo-diagnóstico-o-tempo-é-do-banco-ou-da-conexão).
+
+### O que o plano mostrou, e o que mudou
+
+| Achado (EXPLAIN local) | Correção | Efeito |
+|---|---|---|
+| A canônica do grupo filtrava `row_number() ... rn = 1`, estimado em 0,5% (8 linhas para 2.340). Confiando nisso, o planner encadeava laços aninhados: no cockpit, uma varredura inteira de `job_page` e de `application` **por linha elegível** | `min(id) ... group by` (mesma linha escolhida), estimado pelo número de grupos | lista do cockpit 108 mil → 45 mil blocos, antes dos índices |
+| Nota da principal por `exists` correlacionado em `target_track`, linha a linha, via `job_score_job_idx` | `candidatePrimaryScoreFilter`: a principal como subconsulta escalar, casada pela chave | 20 mil blocos a menos na lista do cockpit |
+| `corpusStats` com quatro subconsultas, cada uma relendo as notas do candidato | uma passada com `count(*) filter` | 33 mil → 13 mil blocos, antes dos índices |
+| Ler as notas de uma trilha visitava a tabela: cada linha de nota ocupa quase uma página (~1 KB de razões e palavras-chave), 13 mil páginas para 15 mil notas | `job_score_board_cover_idx` com `INCLUDE (fit, cluster, blockers)` — varredura só índice | 13 mil → ~200 blocos por leitura, com o mapa de visibilidade em dia |
+| A faceta "com descrição" abria o TOAST de cada vaga aberta para testar o 200º caractere: ~10 mil blocos | índice parcial `job_described_open_idx`, lido como conjunto | ~10 mil → dezenas de blocos |
+| `listBoard` (cockpit) ordenava as 2.340 elegíveis com nota completa e captura para ficar com doze | a mesma janela de ids de `listBoardPage` | 45 mil → 2 mil blocos |
+
+Os resultados de referência (linhas, total, facetas, números do cockpit) de
+cada leitura coincidem antes e depois. Nenhuma semântica mudou; nada foi
+pré-calculado.
+
+### Números
+
+`pnpm perf:facetas`, mediana de 5 leituras com o cache de facetas descartado,
+mesma máquina, PostgreSQL local sem rede — **piso, não tempo de produção**.
+
+| Leitura | Total antes → depois | Consulta: blocos antes → depois |
+|---|---:|---|
+| `/jobs` padrão | 134 → 59 ms | board 40.714 → 2.946 · facets 23.793 → 1.015 |
+| `/jobs?workMode=remote` | 121 → 116 ms | board 9.921 → 8.550 · facets 7.430 → 4.806 |
+| `/jobs?q=typescript` | 443 → 396 ms | board 25.321 → 25.459 · facets 14.483 → 13.952 |
+| `/jobs?ungrouped=1` | 73 → 20 ms | board 14.868 → 1.950 · facets 23.793 → 1.015 |
+| `/` cockpit | 281 → 53 ms | lista 108.284 → 2.241 · contagem 45.096 → 1.997 · corpusStats 33.385 → 276 · facets 25.374 → 1.018 |
+
+**Com a repontuação sem `vacuum` (`JHO_PERF_CHURN=1`)** — um quinto das notas
+reescrito, o mapa de visibilidade falso na maior parte das páginas — a
+varredura só índice volta à tabela: `/jobs` padrão 134 ms (board 29.187,
+facets 16.515 blocos); sem o índice de cobertura, no mesmo cenário, 182 ms
+(29.482 e 16.859). O índice não piora o caso ruim e multiplica o bom; quanto
+do tempo ele fica no caso bom depende do `vacuum` de `job_score`. A
+manutenção de hora em hora reescreve cerca de 1/24 das notas por hora, e o
+autovacuum padrão só passa a cada ~20% de linhas mortas. Baixar
+`autovacuum_vacuum_scale_factor` de `job_score` (por exemplo para `0.02`) é
+decisão do dono: `ALTER TABLE ... SET (...)` não é migração aditiva
+(ADR 0028) e pede revisão.
+
+Termo e modalidade quase não mudam: o termo já tinha o pré-filtro trigrama
+(#214) e custa no `~*` das candidatas; a modalidade lê `raw->>'workplaceType'`
+de cada vaga, e `raw` grande em produção também mora no TOAST — **não
+medido** com payload real.
+
+### Conexão: o que o código mostra
+
+- `prepare: false` (`src/core/db/client.ts`): cada consulta é planejada de
+  novo. O planejamento local das maiores consultas leva 0,3–1,3 ms (3,2 ms com
+  termo): não é aqui que somem segundos.
+- `idle_timeout: 20`: conexão ociosa por 20 s é fechada, e a leitura seguinte
+  paga TCP, TLS e autenticação SCRAM pelo pooler, até três conexões em
+  paralelo. Explica dezenas ou centenas de milissegundos por leitura depois de
+  uma pausa — o `auth` de 123 ms contra 4 ms é compatível —, não os 3,8 s de
+  facets. Aumentar o tempo ocioso sem medir arrisca socket morto depois do
+  congelamento da função; ficou como está.
+- `max: 3` é contrato de tela (`tests/db-fan-out.test.ts`) e não mudou.
+
+### Próximo diagnóstico: o tempo é do banco ou da conexão?
+
+Só leitura, no SQL Editor do projeto de produção, logo depois de usar `/jobs`
+e `/`:
+
+```sql
+select calls, round(mean_exec_time::numeric, 1) as media_ms,
+       round(max_exec_time::numeric, 1) as max_ms,
+       shared_blks_hit, shared_blks_read, left(query, 60) as consulta
+from extensions.pg_stat_statements
+where query like '%facet_candidates%' or query like '%board_page%'
+order by mean_exec_time desc limit 10;
+```
+
+`mean_exec_time` perto do estágio `facets` e `shared_blks_read` alto: o tempo é
+leitura de disco dentro do banco, e esta entrega ataca exatamente isso. Tempo
+de execução pequeno com estágio grande: o tempo está fora do banco — conexão,
+pooler, fila de conexões da instância —, e o próximo passo é lá. Depois do
+deploy desta entrega, a rodada com sessão de `pnpm perf:producao` e a linha
+`perf` dizem quanto do ganho local sobreviveu.
+
+**Pré-cálculo de facetas por candidato e trilha fica fora** enquanto não
+houver número dizendo que ele vale: com os índices, as facetas padrão tocam
+~1 mil blocos, e uma tabela pré-calculada traria validade, invalidação e
+contagem divergente do rodapé por minutos.
+
 ## Plano
 
 | Fase | Item | Ganho × esforço | Onde |
@@ -510,6 +617,7 @@ o próximo passo não é um cache maior, e sim, nesta ordem:
 | 2 🟡 | Cache local das facetas, validade de 60 s (#216, em produção; o ganho ainda depende da rodada com sessão; ver [seção](#cache-das-facetas--medição-de-22092026)) | alto ao paginar/ordenar, nulo na primeira leitura × médio | `matching/app/board-facets.ts` |
 | 3 ✅ | `loading.tsx` + `Suspense` em `/jobs` (#217, em produção desde a v1.23.0; ver [fronteira](#fronteira-de-carregamento-217)) | percepção imediata na troca de tela; o total não muda | `app/jobs/(lista)/`, `app/jobs/[id]/` |
 | ✅ | Régua de conexões por **tela**, `comVigia` em `/jobs` e `/` | entregue e exercitado no QA de concorrência | testes |
+| 🟡 | Menos blocos por leitura: canônica por `group by`, principal por chave, índices `0025` (#222; ver [seção](#acervo-de-forma-de-produção--medição-de-25092026-222)); o ganho em produção depende da medição depois do deploy | alto em banco pequeno × baixo | `repo.ts`, migração `0025` |
 
 ### Decisões
 

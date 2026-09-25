@@ -214,6 +214,13 @@ export const job = production.table(
     index("job_recency_open_idx")
       .on(sql`coalesce(${t.postedAt}, ${t.firstSeenAt})`, t.id)
       .where(sql`${t.closedAt} is null`),
+    // As abertas com descrição completa (#222). A faceta "com descrição" lia o
+    // TOAST de cada vaga aberta para testar o 200º caractere; o predicado é
+    // calculado na escrita e a leitura só percorre o índice. Precisa ser
+    // idêntico ao de `describedOpenJobIds` em `repo.ts`.
+    index("job_described_open_idx")
+      .on(t.id)
+      .where(sql`${t.closedAt} is null and substr(coalesce(${t.descriptionText}, ''), 200, 1) <> ''`),
   ],
 );
 
@@ -282,6 +289,12 @@ export const jobScore = production.table(
     // anúncio muda e o cascade de `job` — não podem usar a chave primária, que
     // começa por candidato. Sem este índice cada uma varre a tabela inteira.
     index("job_score_job_idx").on(t.jobId, t.fit),
+    // Cobertura das leituras do quadro, das facetas e do cockpit (#222). Na
+    // migração `0025` o índice leva `INCLUDE (fit, cluster, blockers)`, que o
+    // Drizzle não sabe declarar: com as três colunas no índice, a leitura das
+    // notas de uma trilha não visita a tabela — cada linha de nota ocupa quase
+    // uma página própria, e era essa a maior parte dos blocos lidos.
+    index("job_score_board_cover_idx").on(t.candidateId, t.trackId, t.jobId),
   ],
 );
 

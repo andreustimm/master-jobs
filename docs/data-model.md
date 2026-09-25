@@ -442,6 +442,18 @@ a forma que leu 77,4 milhões de linhas numa varredura em 03/09.
 `tests/verify-queue.test.ts` lê o plano e reprova `SubPlan` ou mais de uma
 visita a `job_score`.
 
+`job_score_board_cover_idx (candidate_id, track_id, job_id) INCLUDE (fit,
+cluster, blockers)` (migração `0025_facet_read_indexes`, aditiva, #222) cobre
+as leituras do quadro, das facetas e do cockpit: com as três colunas no índice,
+ler as notas de uma trilha não visita a tabela, onde cada linha ocupa quase uma
+página. O `INCLUDE` está só no SQL da migração — o Drizzle não declara colunas
+incluídas, e `schema.ts` guarda as chaves com um comentário. A varredura só
+índice depende do mapa de visibilidade: páginas reescritas pela repontuação e
+ainda não vistas pelo `vacuum` voltam à tabela. `tests/facet-read-indexes.test.ts`
+reprova se o `INCLUDE` sumir. Quem lê a nota da principal com escopo de
+candidato usa `candidatePrimaryScoreFilter` (a principal como subconsulta
+escalar, casada pela chave), e não o `exists` por linha de `primaryScoreFilter`.
+
 ### `score_cursor` — onde a passada de pontuação parou
 
 Migração `0019_score_cursor` (aditiva), [ADR 0027](adr/0027-cadencia-das-notas-em-lotes-com-cursor.md).
@@ -460,6 +472,13 @@ só faz a próxima passada começar do topo.
 A ordem da passada usa o índice parcial `job_recency_open_idx` em `job`,
 `(coalesce(posted_at, first_seen_at), id) where closed_at is null`; a expressão
 é a mesma de `RECENCY` em `src/core/scoring/apply.ts`.
+
+A faceta "com descrição" usa o índice parcial `job_described_open_idx` em
+`job`, `(id) where closed_at is null and substr(coalesce(description_text, ''),
+200, 1) <> ''` (migração `0025`, #222): o predicado é calculado na escrita da
+vaga e a faceta deixa de abrir o TOAST de cada descrição. A expressão precisa
+ser idêntica à de `describedOpenJobIds` em `repo.ts`;
+`tests/facet-read-indexes.test.ts` prova pelo plano que o índice é elegível.
 
 ### `candidate_matching_profile`
 
