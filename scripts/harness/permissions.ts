@@ -58,34 +58,6 @@ export function bashSpecifierMatches(specifier: string, command: string): boolea
  */
 const WRAPPERS = new Set(["env", "command", "exec", "nohup", "time", "nice", "timeout", "stdbuf", "ionice"]);
 
-/**
- * Comando que roda OUTRO comando que a leitura de texto não enxerga por
- * inteiro: invólucros, shells, `eval`, `xargs` e afins. Nenhum deles está
- * liberado no Claude Code, que portanto pergunta; no Codex, deixar o caso ao
- * sandbox abriria a porta para cada forma nova de embrulhar `rm` ou `sudo`.
- * Por isso trecho com essa cabeça e sem allow explícito é `ask` — a guarda só
- * deixa ao padrão do harness o que ela consegue ler.
- */
-const OPAQUE_HEADS = new Set([
-  ...WRAPPERS,
-  "sh",
-  "bash",
-  "zsh",
-  "dash",
-  "ksh",
-  "fish",
-  "eval",
-  "source",
-  ".",
-  "xargs",
-  "busybox",
-  "su",
-  "doas",
-  "script",
-  "watch",
-  "parallel",
-]);
-
 /** Opção, número/duração, sinal (`KILL`) ou atribuição logo depois de um invólucro. */
 const WRAPPER_ARGUMENT = /^(?:-|\d|[A-Z]+$|[A-Za-z_][A-Za-z0-9_]*=)/;
 
@@ -173,49 +145,43 @@ function splitParts(command: string): string[] {
     .filter((part) => part.length > 0);
 }
 
-/** Primeira palavra do trecho, sem `rtk`, atribuições nem diretório. */
-function headOf(segment: string): string {
-  const tokens = segment.split(/\s+/).filter((token) => token !== "");
-  while (tokens[0] === "rtk" || tokens[0] === "proxy" || (tokens[0] !== undefined && ASSIGNMENT.test(tokens[0]))) {
-    tokens.shift();
-  }
-  const head = tokens[0] ?? "";
-  return head.startsWith("/") ? head.slice(head.lastIndexOf("/") + 1) : head;
-}
-
-/** Trechos que a leitura de texto não enxerga por inteiro: cabeça em `OPAQUE_HEADS`. */
-export function opaqueSegments(command: string): string[] {
-  return splitParts(command.trim()).filter((part) => OPAQUE_HEADS.has(headOf(part)));
-}
+/**
+ * Comando que o Claude Code libera sem lista: `cd` só muda o diretório do
+ * próprio shell. Nada mais entra aqui — o resto precisa de allow escrito.
+ */
+const BUILTIN_ALLOWED = new Set(["cd"]);
 
 /**
- * Aspas `$'…'`/`$"…"`: o shell reinterpreta escapes (`\'`, `\x..`) que o
- * scanner de aspas não modela, e a divisão em trechos deixa de ser confiável.
+ * Decisão do Claude Code para o comando, com a precedência dele: deny vence
+ * ask, que vence allow, e o comando composto só é `allow` quando TODO trecho
+ * é liberado por uma regra — trecho que nenhuma regra libera é `ask`, como no
+ * Claude, onde o padrão é perguntar. Isso fecha, de uma vez, toda forma de
+ * esconder um comando atrás de outro (invólucro, shell, `eval`, palavra
+ * reservada, aspas `$'…'`): o que a leitura não reconhece como liberado,
+ * pergunta. O prefixo `rtk` sai antes de conferir o allow (G63).
  */
-const REINTERPRETED_QUOTES = /\$['"]/;
-
-/**
- * Decisão mais restritiva entre as regras de `Bash` que casam: deny vence ask,
- * que vence allow — a mesma precedência do Claude Code. Trecho opaco sem allow
- * explícito é pelo menos `ask`, como no Claude, onde nada o libera. `null`
- * quando nenhuma regra casa (o harness aplica o próprio padrão).
- */
-export function decideCommand(rules: readonly Rule[], command: string): Decision | null {
-  const segments = commandSegments(command);
+export function decideCommand(rules: readonly Rule[], command: string): Decision {
   const bash = rules.filter((rule) => rule.tool === "Bash");
+  const segments = commandSegments(command);
   let found: Decision | null = null;
   for (const rule of bash) {
+    if (rule.decision === "allow") continue;
     const matches =
       rule.specifier === null || segments.some((segment) => bashSpecifierMatches(rule.specifier!, segment));
     if (matches && strength(rule.decision) > strength(found)) found = rule.decision;
   }
-  const allowed = (segment: string) =>
-    bash.some(
-      (rule) => rule.decision === "allow" && (rule.specifier === null || bashSpecifierMatches(rule.specifier, segment)),
+  if (found !== null) return found;
+  const allowed = (part: string): boolean => {
+    const candidates = [part, part.replace(/^rtk\s+(?:proxy\s+)?/, "")];
+    if (BUILTIN_ALLOWED.has(candidates[1]!.split(/\s+/)[0]!)) return true;
+    return bash.some(
+      (rule) =>
+        rule.decision === "allow" &&
+        (rule.specifier === null || candidates.some((candidate) => bashSpecifierMatches(rule.specifier!, candidate))),
     );
-  const unreadable = REINTERPRETED_QUOTES.test(command) || opaqueSegments(command).some((segment) => !allowed(segment));
-  if (unreadable && strength("ask") > strength(found)) found = "ask";
-  return found;
+  };
+  const parts = splitParts(command.trim());
+  return parts.length > 0 && parts.every(allowed) ? "allow" : "ask";
 }
 
 function strength(decision: Decision | null): number {
