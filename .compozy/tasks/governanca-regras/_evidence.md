@@ -204,8 +204,8 @@ Continuavam **abertas** em `c23f8ba2` (as duas foram fechadas pela #308; ver aba
   `LlmError`, ao terminal do `jho analyze` e ao Sentry, cuja peneira só apaga
   blocos de 40+ caracteres. Agora os adapters apagam o valor exato
   (`redactSecret`), inclusive em falha de `fetch`. Mutações locais, cada uma
-  revertida em seguida: sem `redactSecret` → 3 de 4 casos reprovam (erro/Sentry,
-  rede nos dois adapters, CLI); chave gravada em `llm_provider.notes` → a
+  revertida em seguida: sem `redactSecret` → 4 de 5 casos reprovam (erro/Sentry,
+  `.env` com espaço, rede nos dois adapters, CLI); chave gravada em `llm_provider.notes` → a
   varredura do banco reprova; chave no `errorCode` → o painel reprova; escape
   por arquivo de volta → o caso negativo reprova.
 - **E27:** `materialize_state.py` reprova jornada, bug, `last_report` e

@@ -394,10 +394,11 @@ class QaReportScriptTests(unittest.TestCase):
         # The real tracker cites `docs/qa/reports/…` and `tests/…`: the repo root
         # is an ancestor of the QA root, whatever directory the gate runs from.
         with tempfile.TemporaryDirectory() as tmp:
-            repo = Path(tmp)
+            repo = Path(tmp) / "repo"
             root = repo / "docs" / "qa"
             scenarios = root / "scenarios"
             scenarios.mkdir(parents=True)
+            (repo / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
             cited_files(root)
             (repo / "tests").mkdir()
             (repo / "tests" / "ui.mjs").write_text("test", encoding="utf-8")
@@ -415,6 +416,27 @@ class QaReportScriptTests(unittest.TestCase):
                         capture_output=True, text=True, check=False, cwd=cwd,
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_materialize_never_resolves_citations_above_the_repo_root(self) -> None:
+        # A worktree lives inside the main checkout: a file only the main
+        # checkout has must not satisfy a citation made by the branch.
+        with tempfile.TemporaryDirectory() as tmp:
+            outer = Path(tmp)
+            (outer / "tests").mkdir()
+            (outer / "tests" / "only-in-main.mjs").write_text("main", encoding="utf-8")
+            repo = outer / "worktree"
+            root = repo / "docs" / "qa"
+            (root / "scenarios").mkdir(parents=True)
+            (repo / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
+            cited_files(root)
+            (root / "scenarios" / "JOBS-rank-visible.md").write_text(
+                scenario_text(evidence="tests/only-in-main.mjs"), encoding="utf-8"
+            )
+
+            result = self.run_script(MATERIALIZE, root)
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("evidence 'tests/only-in-main.mjs' does not exist", result.stderr)
 
 
 if __name__ == "__main__":

@@ -264,8 +264,8 @@ Branch `test/governanca-g41`, a partir de `origin/dev` `c565478e`, em
 | Defeito achado pela sentinela | corrigido | `redactText` só apagava `sk-…`: uma chave `nvapi-…` ecoada chegava ao terminal e ao Sentry. Agora os adapters apagam o valor exato (`redactSecret`), e a falha de `fetch` volta sem `cause` nem pilha original |
 | **E16** | **fechada** | [X] Exceção por ocorrência (`keyHandlingLines`) em `src/` + `app/`, com caso negativo "arquivo com `apiKeyEnv` e `apiKey`". O log estrutural passa a cobrir também `warn/info/debug` |
 | **E27** | **fechada**, com limite | [X] `materialize_state.py` reprova jornada, bug, `last_report` e evidência versionada inexistentes. Fora: `evidence/` (ignorado pelo git) e o SHA do relatório |
-| Mutação | [X] | Cada mutação local foi revertida em seguida: sem `redactSecret` → 3/4 casos reprovam; chave em `llm_provider.notes` → a varredura do banco reprova; chave em `errorCode` → o painel reprova; escape por arquivo → o caso negativo reprova; sem a checagem de referências → 5 subcasos reprovam |
-| `pnpm check` | [X] verde | 4184 testes passaram e 8 foram pulados (306 arquivos); `test:qa-skills` com 16 OK; `check:qa-tracker` com 96 cenários, todas as citações resolvidas |
+| Mutação | [X] | Cada mutação local foi revertida em seguida: sem `redactSecret` → 4/5 casos reprovam (sem a forma aparada, o caso do `.env` com espaço reprova sozinho); fora da raiz do repositório → a citação não é resolvida; chave em `llm_provider.notes` → a varredura do banco reprova; chave em `errorCode` → o painel reprova; escape por arquivo → o caso negativo reprova; sem a checagem de referências → 5 subcasos reprovam |
+| `pnpm check` | [X] verde | 4184 testes passaram e 8 foram pulados (306 arquivos); `test:qa-skills` com 17 OK; `check:qa-tracker` com 96 cenários, todas as citações resolvidas |
 
 Com isso, só P0-2 e P0-3 continuam impedindo a certificação; as duas
 dependem do dono.

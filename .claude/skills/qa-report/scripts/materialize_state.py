@@ -98,6 +98,21 @@ def within(path: Path, parent: Path) -> bool:
         return False
 
 
+def repo_bases(root: Path) -> list[Path]:
+    """The QA root and its ancestors up to the repository root, inclusive.
+
+    Stops at the first directory holding `.git` (a directory in a clone, a file
+    in a worktree): going higher would find the main checkout's copy of a file
+    this branch deleted, and the local gate would pass what CI rejects.
+    """
+    bases = []
+    for base in [root.resolve(), *root.resolve().parents]:
+        bases.append(base)
+        if (base / ".git").exists():
+            break
+    return bases
+
+
 def reference_errors(root: Path, path: Path, row: dict[str, str]) -> list[str]:
     """Files the scenario cites must exist; a dangling citation is an unproved claim.
 
@@ -113,7 +128,7 @@ def reference_errors(root: Path, path: Path, row: dict[str, str]) -> list[str]:
     """
     errors: list[str] = []
     evidence_dir = root / "evidence"
-    bases = [root.resolve(), *root.resolve().parents]
+    bases = repo_bases(root)
 
     def exists(value: str) -> bool:
         return any((base / value).is_file() for base in bases)
