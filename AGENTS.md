@@ -113,8 +113,9 @@ A numeração é estável: código e testes citam "regra N".
 23. **Changelog conta o que mudou; `docs/`, como é agora:** tarefa fechada
     atualiza `docs/` ou a PR diz em uma linha por que não.
     [[G60](docs/engineering/rules/delivery.md#g60)]
-24. **A issue e o GitHub Project 3 mandam no estado da tarefa.** Toda demanda
-    tem issue no Project; antes de começar ou retomar, leia
+24. **A issue e o GitHub Project 3 mandam no estado da tarefa.** Todo trabalho
+    que vira commit tem issue no Project (pergunta, análise e revisão sem
+    commit não exigem); antes de começar ou retomar, leia
     `pnpm tasks show <issue> --json` e confira a posse da execução.
     `.compozy/tasks/` e memória dão contexto, não estado.
     [[R24](docs/engineering/rules/delivery.md#r24)]
@@ -158,6 +159,9 @@ valem mesmo sem abri-lo; o ID leva ao detalhe.
   [rules/delivery.md](docs/engineering/rules/delivery.md),
   [workflow.md](docs/engineering/workflow.md). **Produção e ambientes:**
   [deploy.md](docs/engineering/deploy.md).
+- **Delegar a outro agente, modelo, effort, modo de assinatura:**
+  [rules/orchestration.md](docs/engineering/rules/orchestration.md),
+  [`config/model-routing.json`](config/model-routing.json).
 - **Prompt de LLM:** [docs/prompts/system/](docs/prompts/system/README.md).
   **Envio de candidatura**, mesmo para estudar:
   [ADR 0010](docs/adr/0010-submissao-autonoma.md). **Funcionalidade nova:**
@@ -193,10 +197,11 @@ Comandos: [docs/cli.md](docs/cli.md). Índice: [docs/README.md](docs/README.md).
 `staging → main` é aberta pelo robô e, por delegação do dono (23/09/2026),
 mesclada pelo agente com `gh pr merge <n> --merge --admin` quando `qualidade`
 e `schema-e-migracao` estão verdes, nenhuma migração não aditiva espera
-revisão e o QA de release candidate foi cumprido; fora disso, o agente relata
-e não mescla. Hotfix é decisão do dono. Migração não aditiva para a promoção
+revisão e, se a leva tem mudança visível ao usuário, o QA de jornada full
+passou (sem mudança visível, basta a fumaça pós-deploy); fora disso, o agente
+relata e não mescla. Hotfix é decisão do dono. Migração não aditiva para a promoção
 até revisão humana; o retorno `main → dev` é automático.
-[[G46](docs/engineering/rules/delivery.md#g46), [G51](docs/engineering/rules/delivery.md#g51)]
+[[G46](docs/engineering/rules/delivery.md#g46), [G51](docs/engineering/rules/delivery.md#g51), [G56](docs/engineering/rules/delivery.md#g56)]
 
 ## Precedência
 
@@ -215,6 +220,13 @@ commit. [[G62](docs/engineering/rules/delivery.md#g62)]
   fonte; os espelhos de Codex e OpenCode saem de `pnpm harness:sync` e são
   conferidos por `pnpm check:harness`. Papéis: `task-analyst`, `executor`,
   `fixer`, `reviewer`, `judge`. [[G85](docs/engineering/rules/delivery.md#g85)]
+- Ao delegar, passe o modelo de `pnpm route <papel> <complexidade> --session
+  <harness>` (política em `config/model-routing.json`; modo `claude_only`,
+  `codex_only` ou `multi_provider`; política inválida ou modo desconhecido
+  falham fechado). O juiz nunca é o modelo que escreveu o delta
+  (`pnpm route judge <complexidade> --author <modelo>`), e o agente não
+  rebaixa por conta própria o modelo do turno principal.
+  [[G86](docs/engineering/rules/orchestration.md#g86), [G87](docs/engineering/rules/orchestration.md#g87)]
 - Com `rtk` instalado, Codex e OpenCode prefixam cada comando com `rtk` (no
   Claude Code, um hook reescreve); sem ele, rode o comando puro. Um comando por
   chamada de shell, sem `&&`, `|` ou `;`: a lista de permissão do Claude Code

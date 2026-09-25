@@ -18,8 +18,13 @@ Obrigação posterior à auditoria ([#209](https://github.com/andreustimm/master
 [ADR 0023](../../adr/0023-github-project-como-autoridade-operacional.md)); não
 tem ID `G`.
 
-**Obrigação.** Toda demanda, inclusive pequena, precisa de issue vinculada ao
-[Project 3](https://github.com/users/andreustimm/projects/3) antes de execução.
+**Obrigação.** Todo trabalho que vira commit, inclusive pequeno, precisa de
+issue vinculada ao [Project 3](https://github.com/users/andreustimm/projects/3)
+antes de execução. Pergunta, análise e revisão que não produzem commit não
+exigem issue (decisão do dono em
+[#321](https://github.com/andreustimm/master-jobs/issues/321)): lido ao pé da
+letra, "toda demanda" travava leitura e diagnóstico sem ganho de rastreio —
+o que precisa de rastreio é a mudança.
 Estado, prioridade, assignee e dependências vêm do remoto; specs, código e
 evidências continuam em Git. Antes de iniciar ou retomar, leia o remoto
 (`rtk pnpm tasks show <issue> --json`) e verifique a posse da execução. Claim
@@ -180,7 +185,8 @@ robô (ou da PR de hotfix, que é decisão do dono). O dono delegou o merge dess
 PR ao agente em 23/09/2026 ("staging → main: ficou verde pode mesclar"): o
 agente a mescla com `gh pr merge <n> --merge --admin` quando, na cabeça da PR,
 `qualidade` e `schema-e-migracao` estão verdes, nenhuma migração não aditiva
-espera revisão (G51) e o QA de release candidate de G56 foi cumprido. Em
+espera revisão (G51) e o QA de G56 foi cumprido (full se a leva tem mudança
+visível; senão, a fumaça pós-deploy basta). Em
 qualquer outro estado ele relata e não mescla. `--admin` dispensa só a
 aprovação; o CI de `main` não tem bypass. Squash e rebase ficam fora, porque
 mudam o SHA e tiram a tag de `main`. A delegação vale para a promoção, não para
@@ -380,13 +386,24 @@ do diff (G53) → PR pronta para `dev`. Invoque `qa-report` e depois
 `qa-execution` com o argumento `docs/qa` (formulação neutra entre harnesses).
 
 <a id="g56"></a>
-### G56 — Cadência única; `Pass` exige prova; release candidate cumpre full
+### G56 — Cadência única; `Pass` exige prova; full só quando a leva é visível
 
 **Obrigação.** O escopo de cada tier é definido uma única vez em
 [docs/qa/README.md](../../qa/README.md); nenhum outro documento duplica a
-cadência. Antes do merge da PR de produção `staging → main` (G46), release
-candidate cumpre o tier **full**. QA de jornada não substitui `rtk pnpm check`, `rtk pnpm test:e2e` nem
-`deep-review`.
+cadência. Antes do merge da PR de produção `staging → main` (G46), o release
+candidate cumpre o QA de jornada tier **full** quando a leva tem mudança
+visível ao usuário. Sem mudança visível, basta a fumaça pós-deploy
+(`fumaca-producao.yml`), que roda sozinha no push para `main`. QA de jornada
+não substitui `rtk pnpm check`, `rtk pnpm test:e2e` nem `deep-review`.
+
+**Critério de "mudança visível"** (decisão do dono em
+[#321](https://github.com/andreustimm/master-jobs/issues/321)): a leva tem
+algum commit `feat:` ou `fix:` cuja nota em `## pt-BR`/`## en` do fragmento de
+changelog não é `<!-- sem-nota-usuario -->`. Na PR de produção, isso aparece
+como item novo em `USER_CHANGELOG.pt-BR.md` para a versão promovida. É a mesma
+pergunta que o fragmento já responde, sem segunda classificação. Na dúvida,
+conta como visível. A regra antiga exigia full em toda promoção e ninguém a cumpria:
+depois da 1.22.0, oito promoções saíram sem full.
 
 `qa-execution` exige build alcançável com paridade de produção, autenticação
 real e suíte automatizada verde. Não usa mocks, banco, endpoints internos nem
@@ -599,9 +616,12 @@ formato chega por espelho **gerado** — nunca escrito à mão.
 
 Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
 
-- **Agente canônico** tem só `name` (igual ao arquivo), `description` e
-  `tools`. Sem `tools` o Claude Code dá todas as ferramentas; por isso ele é
-  obrigatório. Sem `Edit`/`Write`, o agente é de leitura: `sandbox_mode =
+- **Agente canônico** tem só `name` (igual ao arquivo), `description`,
+  `role`, `tools`, `model` e `effort`. Sem `tools` o Claude Code dá todas as
+  ferramentas; por isso ele é obrigatório. `role` escolhe, em
+  `config/model-routing.json`, o modelo e o effort de cada espelho; `model` e
+  `effort` do canônico precisam ser os do Claude Code na mesma política
+  ([G87](orchestration.md#g87)). Sem `Edit`/`Write`, o agente é de leitura: `sandbox_mode =
   "read-only"` no Codex e `edit: deny` no OpenCode. No OpenCode, toda
   ferramenta mapeada em `OPENCODE_TOOL` (`scripts/harness/permissions.ts`) que
   o `tools:` não dá (`webfetch`, `websearch`, `bash`…) é negada no agente, e o
@@ -651,7 +671,8 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
 
 Prova: `pnpm check:harness` (no `pnpm check` e no CI) reprova espelho
 ausente, divergente ou órfão, `.opencode/agents` como symlink, agente fora do
-contrato e comando com campo de um harness só. `tests/harness-parity.test.ts`
+contrato ou com modelo diferente da política, e comando com campo de um
+harness só. `tests/harness-parity.test.ts`
 prova que a tradução do OpenCode nunca é mais permissiva que o Claude Code e
 que a guarda do Codex nega o que ele nega e bloqueia o que ele perguntaria —
 inclusive com o prefixo `rtk`, em comando composto, atrás de invólucro ou

@@ -2,6 +2,7 @@
 # Gerado por `pnpm harness:sync` a partir de .claude/agents/task-analyst.md — não edite aqui.
 description: Analista de tarefa. Lê a issue e o código afetado, classifica a complexidade (low, medium, high), aponta riscos e regras que se aplicam e propõe o plano e os papéis. Use antes de delegar a execução. Não edita arquivos.
 mode: subagent
+model: opencode-go/deepseek-v4-pro
 permission:
   edit: deny
   webfetch: deny
@@ -35,6 +36,10 @@ muda estado da issue.
 - **Plano** em passos verificáveis, cada um com o arquivo e o teste que o
   prova. Se a tarefa for grande demais para uma PR segura, a menor fatia
   coerente e o que fica para depois.
+- **Modelos**: para analista, executor, revisor e corretor, a saída de
+  `pnpm route <papel> <complexidade> --session <harness da sessão>` — modelo
+  e effort explícitos (G87). O juiz depende de quem escreveu o delta e é
+  roteado depois, com `--author` (G86).
 - **Riscos** e o que o revisor precisa olhar primeiro.
 - **Validação proporcional**: quais gates rodam (`pnpm check`, E2E, QA de
   jornada) e por quê.

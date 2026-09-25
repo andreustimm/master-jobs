@@ -47,7 +47,7 @@ O que isso garante:
 (23/09/2026, [G46](rules/delivery.md#g46)), o agente a mescla com
 `gh pr merge <n> --merge --admin` quando `qualidade` e `schema-e-migracao`
 estão verdes na cabeça, nenhuma migração não aditiva espera revisão e o QA de
-release candidate foi cumprido. O dono continua podendo aprová-la e mesclá-la
+[G56](rules/delivery.md#g56) foi cumprido. O dono continua podendo aprová-la e mesclá-la
 ele mesmo: a aprovação é válida porque o autor é `github-actions[bot]`. Com a
 delegação revogada, esse volta a ser o único caminho.
 

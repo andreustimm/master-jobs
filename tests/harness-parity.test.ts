@@ -310,33 +310,44 @@ const AGENT = [
   "---",
   "name: revisor",
   "description: Revisa o delta.",
+  "role: reviewer",
   "tools: Read, Grep, Glob, Bash",
+  "model: claude-opus-5-5",
+  "effort: high",
   "---",
   "",
   "Você revisa. Aspas \"duplas\" e barra \\ ficam literais.",
   "",
 ].join("\n");
 
+const CODEX_DEFAULT = { model: "gpt-5.6-terra", effort: "medium" };
+const OPENCODE_DEFAULT = { model: "opencode-go/qwen3.7-plus", effort: null };
+
 describe("agentes: canônico no Claude Code, espelhos gerados", () => {
-  it("agente de leitura vira sandbox read-only no Codex e edit deny no OpenCode", () => {
+  it("agente de leitura vira sandbox read-only no Codex e edit deny no OpenCode, com o modelo da política", () => {
     const agent = parseAgent("revisor.md", AGENT);
-    expect(agent.access).toBe("read-only");
-    const codex = renderCodexAgent(agent);
+    expect(agent).toMatchObject({ access: "read-only", role: "reviewer", model: "claude-opus-5-5", effort: "high" });
+    const codex = renderCodexAgent(agent, CODEX_DEFAULT);
     expect(codex).toContain('name = "revisor"');
+    expect(codex).toContain('model = "gpt-5.6-terra"\nmodel_reasoning_effort = "medium"');
     expect(codex).toContain('sandbox_mode = "read-only"');
     expect(codex).toContain("developer_instructions = '''\nVocê revisa.");
-    const openCode = renderOpenCodeAgent(agent);
+    const openCode = renderOpenCodeAgent(agent, OPENCODE_DEFAULT);
     expect(openCode).toMatch(/^---\n# Gerado/);
     expect(openCode).toContain("mode: subagent");
+    expect(openCode).toContain("model: opencode-go/qwen3.7-plus");
+    expect(openCode).not.toContain("reasoningEffort");
     expect(openCode).toContain("edit: deny");
+    expect(renderOpenCodeAgent(agent, { model: "openai/gpt-x", effort: "high" })).toContain("reasoningEffort: high");
+    expect(renderCodexAgent(agent, { model: "m", effort: null })).not.toContain("model_reasoning_effort");
   });
 
   it("agente de escrita herda o sandbox e nunca recebe `allow` no OpenCode", () => {
     const agent = parseAgent("executor.md", AGENT.replace("revisor", "executor").replace("Bash", "Bash, Edit, Write"));
     expect(agent.access).toBe("workspace-write");
-    expect(renderCodexAgent(agent)).not.toContain("sandbox_mode");
-    expect(renderOpenCodeAgent(agent)).not.toContain("edit: deny");
-    expect(renderOpenCodeAgent(agent)).not.toContain("allow");
+    expect(renderCodexAgent(agent, CODEX_DEFAULT)).not.toContain("sandbox_mode");
+    expect(renderOpenCodeAgent(agent, OPENCODE_DEFAULT)).not.toContain("edit: deny");
+    expect(renderOpenCodeAgent(agent, OPENCODE_DEFAULT)).not.toContain("allow");
   });
 
   it("no OpenCode, ferramenta fora do `tools:` canônico é negada no agente", () => {
@@ -362,13 +373,17 @@ describe("agentes: canônico no Claude Code, espelhos gerados", () => {
     ["sem frontmatter", "sem frontmatter"],
     ["---\n- lista\n---\ncorpo\n", "frontmatter precisa ser um mapa"],
     [AGENT.replace(/Você revisa[^\n]*/, ""), "prompt vazio"],
+    [AGENT.replace("role: reviewer", "role: orquestrador"), "role precisa ser um de"],
+    [AGENT.replace("role: reviewer\n", ""), "role precisa ser um de"],
+    [AGENT.replace("model: claude-opus-5-5\n", ""), "model obrigatório"],
+    [AGENT.replace("effort: high", "effort: ''"), "effort obrigatório"],
   ])("recusa agente fora do contrato (%#)", (source, message) => {
     expect(() => parseAgent("revisor.md", source)).toThrow(message);
   });
 
   it("recusa prompt com o delimitador do TOML", () => {
     const agent = parseAgent("revisor.md", `${AGENT}'''\n`);
-    expect(() => renderCodexAgent(agent)).toThrow("'''");
+    expect(() => renderCodexAgent(agent, CODEX_DEFAULT)).toThrow("'''");
   });
 
   it("o .toml real é TOML válido e carrega o prompt inteiro", () => {
@@ -455,6 +470,7 @@ describe("gate de paridade numa árvore temporária", () => {
     write(".claude/commands/vagas.md", "---\ndescription: Varredura\n---\n\nFaça.\n");
     write("docs/engineering/rules/README.md", "# inventário\n");
     write("docs/engineering/rules/delivery.md", "# entrega\n");
+    write("config/model-routing.json", readFileSync("config/model-routing.json", "utf8"));
     syncHarness(root);
   });
 
@@ -489,8 +505,25 @@ describe("gate de paridade numa árvore temporária", () => {
   });
 
   it("reprova agente canônico fora do contrato", () => {
-    write(".claude/agents/revisor.md", AGENT.replace("tools:", "model: opus\ntools:"));
-    expect(errors()).toContain('campo "model" fora do contrato');
+    write(".claude/agents/revisor.md", AGENT.replace("tools:", "mode: subagent\ntools:"));
+    expect(errors()).toContain('campo "mode" fora do contrato');
+  });
+
+  it("reprova agente cujo modelo diverge da política e política inválida", () => {
+    write(".claude/agents/revisor.md", AGENT.replace("model: claude-opus-5-5", "model: claude-haiku-4-5-20251001"));
+    expect(errors()).toContain("model/effort claude-haiku-4-5-20251001/high diverge de config/model-routing.json");
+    write(".claude/agents/revisor.md", AGENT);
+    write("config/model-routing.json", JSON.stringify({ schemaVersion: 1, subscriptionMode: "tudo" }));
+    expect(errors()).toContain("subscriptionMode");
+  });
+
+  it("muda o modelo na política e o espelho acusa até o sync", () => {
+    const routing = JSON.parse(readFileSync(join(root, "config/model-routing.json"), "utf8"));
+    routing.providers.openai.roles.reviewer.medium[0].effort = "high";
+    write("config/model-routing.json", JSON.stringify(routing));
+    expect(errors()).toContain(".codex/agents/revisor.toml: diverge da fonte canônica");
+    syncHarness(root);
+    expect(readFileSync(join(root, ".codex/agents/revisor.toml"), "utf8")).toContain('model_reasoning_effort = "high"');
   });
 
   it("reprova `.opencode/agents` como symlink e o sync o troca por diretório", () => {

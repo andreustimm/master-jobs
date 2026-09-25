@@ -65,7 +65,9 @@ Quem usa nvm pode executar `nvm use` antes dos comandos.
    Não atualize base nem remova worktree de outro trabalho. Portas, banco e
    build de teste pertencem à execução; dados reais ficam fora.
 
-Toda demanda tem issue, inclusive correção pequena. Se não existir, escreva
+Todo trabalho que vira commit tem issue, inclusive correção pequena; pergunta,
+análise e revisão sem commit não exigem ([R24](rules/delivery.md#r24)). Se não
+existir, escreva
 objetivo, aceite, **Entrega exigida** e **tamanho** em arquivo e use `create`.
 O tamanho decide a especificação ([R24](rules/delivery.md#r24-tamanho)):
 

@@ -582,11 +582,16 @@ def main() -> int:
         return 1
 
     with_rules = sum(1 for count in bound_counts if count)
+    # L1 has no polish lane, so its limit would describe cohorts that do not exist.
+    polish_limit = (
+        "" if args.level == "L1"
+        else f"polish limit: {DEFAULT_MAX_POLISH_FILES} files / {MAX_POLISH_CHANGED_LINES} changed lines\n"
+    )
     print(
         f"jobs: {len(plan['cohorts'])} defect cohorts + {len(polish)} polish cohorts + "
         f"{len(sweeps)} sweeps -> {out / 'jobs.json'}\n"
         f"cohort limit: {args.max_cohort_files} files / {MAX_COHORT_CHANGED_LINES} changed lines\n"
-        f"polish limit: {DEFAULT_MAX_POLISH_FILES} files / {MAX_POLISH_CHANGED_LINES} changed lines\n"
+        f"{polish_limit}"
         f"rules: {len(rules)} registered; {with_rules}/{len(bound_counts)} review lanes carry bound rules\n"
         f"level: {args.level}; every selected hunk has "
         f"{'defect' if args.level == 'L1' else 'defect + polish'} ownership; prompts under {out / 'prompts'}"
