@@ -85,6 +85,22 @@ export function primaryScoreFilter(alias?: string): SQL {
 }
 
 /**
+ * Só a linha da trilha principal DESTE candidato — o mesmo conjunto de
+ * `primaryScoreFilter` para quem já sabe de quem é a nota.
+ *
+ * `primaryScoreFilter` pergunta, linha por linha, se a trilha da nota é uma
+ * principal: um `exists` correlacionado que o planner resolve com um laço sobre
+ * `job_score_job_idx` e `target_track`. No cockpit isso custava 20 mil blocos
+ * por leitura (#222). Aqui a principal é uma subconsulta escalar, calculada uma
+ * vez, e a junção usa a chave primária `(candidato, trilha, vaga)`.
+ */
+export function candidatePrimaryScoreFilter(candidateId: number, alias?: string): SQL {
+  if (alias !== undefined && !/^[a-z_][a-z0-9_]*$/.test(alias)) throw new Error(`invalid alias ${alias}`);
+  const column = alias === undefined ? sql`${jobScore.trackId}` : sql.raw(`${alias}.track_id`);
+  return sql`${column} = (select pt.id from ${targetTrack} pt where pt.candidate_id = ${candidateId} and pt.is_primary)`;
+}
+
+/**
  * A melhor nota de cada vaga entre candidatos, só nas trilhas principais, como
  * CTE: `job_score` é agregado UMA vez por consulta e ligado à vaga por junção.
  *

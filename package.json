@@ -1,6 +1,6 @@
 {
   "name": "master-jobs",
-  "version": "1.25.2",
+  "version": "1.25.4",
   "packageManager": "pnpm@10.28.0",
   "private": true,
   "type": "module",
@@ -51,6 +51,7 @@
     "predev": "node scripts/sw-version.mjs && pnpm changelog:build",
     "test:coverage": "vitest run --coverage",
     "perf:jobs": "JHO_PERF=1 vitest run tests/perf-jobs-baseline.test.ts",
+    "perf:facetas": "JHO_PERF=1 vitest run tests/perf-facetas.test.ts",
     "perf:producao": "node --experimental-strip-types --no-warnings scripts/perf/medir-producao.ts",
     "governance:collect": "node scripts/governance/collect.ts",
     "tasks": "node scripts/tasks/cli.ts",

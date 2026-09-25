@@ -20,11 +20,13 @@ Execução e branch:
      A revisão vale para o SHA que ela fixou: revisão de um SHA anterior a
      mudança relevante não aprova o diff atual — rode nova rodada incremental.
      FIX_BEFORE_SHIP remanescente só segue com os achados listados aqui e a
-     decisão escrita de uma pessoa (G54). -->
+     decisão escrita de uma pessoa (G54). Diff L0 (só Markdown) declara o
+     nível no lugar do veredito (G53). Minor e advisory: uma linha abaixo. -->
 
 - Docs:
 - QA de jornada ou justificativa de ausência de mudança visível:
 - Revisão profunda (veredito e SHA revisado):
+- Nível da revisão (L0/L1/L2) e Minor/advisory remanescentes:
 
 ## Ativação
 

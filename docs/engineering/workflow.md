@@ -64,9 +64,16 @@ Quem usa nvm pode executar `nvm use` antes dos comandos.
    build de teste pertencem à execução; dados reais ficam fora.
 
 Toda demanda tem issue, inclusive correção pequena. Se não existir, escreva
-objetivo, aceite e **Entrega exigida** em arquivo e use `create`. Specs extensas
-e Compozy continuam proporcionais à complexidade; não são pré-requisito para
-registrar uma tarefa pequena.
+objetivo, aceite, **Entrega exigida** e **tamanho** em arquivo e use `create`.
+O tamanho decide a especificação ([R24](rules/delivery.md#r24-tamanho)):
+
+| Tamanho | Antes de executar |
+|---|---|
+| S | objetivo + critério de aceite, na issue |
+| M | techspec curta + `_tests.md` em `.compozy/tasks/<slug>/` |
+| L | PRD + techspec + `_tests.md` (skills `cy-create-prd`, `cy-create-techspec`) |
+
+Na dúvida entre dois tamanhos, fique com o maior.
 
 Nos exemplos, substitua os valores entre `<...>`. Obtenha UUIDs com
 `rtk proxy uuidgen`: um para a execução e um por operação de escrita.
@@ -192,13 +199,27 @@ para outros repositórios:
 
 ## Validar pelo risco
 
-| Mudança | Evidência necessária |
-|---|---|
-| Markdown e metadados | Estrutura, links e scripts afetados: `pnpm check:instructions`, `pnpm check:harness`, `pnpm check:release-ready`, `pnpm check:qa-tracker` |
-| Ferramenta de desenvolvimento | Testes de comportamento da ferramenta e comandos afetados |
-| Runtime | `rtk pnpm check` e E2E aplicável |
-| Comportamento percebido pelo usuário | Gates de runtime e QA targeted conforme [QA vivo](../qa/README.md) |
-| Schema, autenticação ou promoção | Gates específicos existentes; não reduzir os testes por conveniência |
+| Mudança | Evidência local necessária | Revisão (G53) |
+|---|---|---|
+| Markdown e metadados | Estrutura, links e scripts afetados: `pnpm check:instructions`, `pnpm check:harness`, `pnpm check:release-ready`, `pnpm check:qa-tracker` | L0 (só `.md`): nenhuma |
+| Ferramenta de desenvolvimento | Testes de comportamento da ferramenta e comandos afetados | L1 |
+| Runtime | `rtk pnpm typecheck`, `rtk pnpm exec vitest related --run <arquivos>` e E2E afetado | L1 |
+| Comportamento percebido pelo usuário | Os de runtime e QA targeted conforme [QA vivo](../qa/README.md) | L1 |
+| Schema, autenticação, `/p/`, promoção, scorer ou segredos | Os de runtime e os gates específicos existentes; não reduzir os testes por conveniência | L2 |
+
+A suíte completa roda no CI da PR, que abre como **draft** logo depois do
+primeiro verde local e vira pronta depois do SHIP e do CI verde
+([G57](rules/delivery.md#g57)). Orçamento por gate: check local ≤ 10 min, E2E
+afetado ≤ 8 min, deep-review L1 ≤ 10 min, L2 ≤ 30 min. Estourou: registre na
+PR, delegue ao CI o que ele cobre e siga; o que o CI não cobre fica pendente.
+
+O nível da revisão sai de
+`python3 .claude/skills/deep-review/scripts/review_level.py --out <out>`
+depois do manifesto; a tabela acima é o resumo, o script é a regra. Um revisor
+por diff ([G84](rules/delivery.md#g84)): `agent-output-audit` só para trabalho
+delegado que chegou sem veredito da deep-review. Minor e advisory viram uma
+linha na PR; só Critical/Major pedem nova rodada, que revisa só o delta, com
+teto de 3.
 
 Rode suites pesadas em sequência na mesma máquina. Se código/base mudar depois
 da validação, renove os checks afetados. Registre comando, resultado e revisão
@@ -257,8 +278,9 @@ fragmento criado nessa janela sai uma versão depois do código (ver
 
 ## Entregar e limpar
 
-Antes da PR: `show` e `verify` da execução, deslop, deep-review com veredito
-SHIP e responsável atribuído. A descrição liga issue, entrega exigida, evidências
+Antes de a PR ficar pronta: `show` e `verify` da execução, deslop, deep-review
+com veredito SHIP no nível do diff (L0 dispensa) e responsável atribuído — a
+PR draft já ganha o responsável ao nascer. A descrição liga issue, entrega exigida, evidências
 e pendências. Para este projeto, merge em dev só conclui entrega `dev`;
 entrega `production` exige publicação correspondente; `artifact` ou
 `operation` exigem o resultado declarado. Workflow novo em `issue_comment`
