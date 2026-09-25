@@ -10,6 +10,7 @@
 // Funções puras: recebem texto, devolvem texto.
 import YAML from "yaml";
 import { ROLES, type Role } from "../routing/model-routing.ts";
+import { OPENCODE_TOOL } from "./permissions.ts";
 
 /** Ferramentas do Claude Code aceitas no `tools:` de um agente do projeto. */
 export const CLAUDE_AGENT_TOOLS: ReadonlySet<string> = new Set([
@@ -125,6 +126,13 @@ export function renderCodexAgent(agent: Agent, defaults: ModelDefault): string {
   return `${lines.join("\n")}\n`;
 }
 
+/** Permissões do OpenCode que nenhuma ferramenta do agente canônico cobre. */
+export function openCodeToolsDenied(tools: readonly string[]): string[] {
+  const granted = new Set(tools.flatMap((tool) => OPENCODE_TOOL[tool] ?? []));
+  const all = [...new Set(Object.values(OPENCODE_TOOL).flat())];
+  return all.filter((tool) => !granted.has(tool));
+}
+
 export function renderOpenCodeAgent(agent: Agent, defaults: ModelDefault): string {
   const frontmatter: Record<string, unknown> = {
     description: agent.description,
@@ -135,8 +143,11 @@ export function renderOpenCodeAgent(agent: Agent, defaults: ModelDefault): strin
   // o parâmetro não vai — mandá-lo seria inventar capacidade do modelo.
   if (defaults.effort !== null) frontmatter.reasoningEffort = defaults.effort;
   // Só restrição: um `allow` aqui venceria o deny global do opencode.json,
-  // porque no OpenCode a regra do agente é avaliada depois da global.
-  if (agent.access === "read-only") frontmatter.permission = { edit: "deny" };
+  // porque no OpenCode a regra do agente é avaliada depois da global. Toda
+  // ferramenta que o `tools:` canônico não dá é negada — sem isso o agente
+  // herdaria o `allow` global (webfetch, websearch) que o Claude Code não dá.
+  const denied = openCodeToolsDenied(agent.tools);
+  if (denied.length > 0) frontmatter.permission = Object.fromEntries(denied.map((tool) => [tool, "deny"]));
   const yaml = YAML.stringify(frontmatter, { lineWidth: 0 });
   return `---\n# ${GENERATED_NOTICE}${agent.name}.md — não edite aqui.\n${yaml}---\n\n${agent.body}`;
 }

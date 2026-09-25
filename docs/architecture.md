@@ -464,6 +464,7 @@ hexagonal/DDD está decidida na ADR 0007 e concluída — ver `MIGRATION.md` e
 | `vitest.config.ts` | `include: ["tests/**/*.test.ts"]`, `environment: "node"`, `globals: false`. |
 | `AGENTS.md` / `CLAUDE.md` | Entrada comum das instruções para agentes. `AGENTS.md` é a única fonte; `CLAUDE.md` é um symlink para ela. O detalhe normativo fica em `docs/engineering/rules/`. |
 | `.claude/agents/*.md`, `.claude/commands/{aplicar,fonte-nova,funil,vagas}.md` | Agentes canônicos (`fit-analyst` e os de papel: `task-analyst`, `executor`, `fixer`, `reviewer`, `judge`) e slash-commands para triagem e funil. |
+| `config/model-routing.json`, `scripts/routing/` | Política de modelo e effort por papel, complexidade e modo de assinatura; `pnpm route` resolve a rota e falha fechado (G86, G87). |
 | `.codex/agents/`, `.codex/hooks.json`, `.opencode/agents/`, `opencode.json` | Espelhos gerados por `pnpm harness:sync` a partir de `.claude/` (G85); `scripts/harness/` gera, confere e aplica a política do Claude no Codex. |
 | `.claude/skills/{application-kit,candidate-profile,job-triage,linkedin-positioning}/SKILL.md` | As quatro skills que empacotam o procedimento de cada frente. |
 | `.codex/config.toml`, `compozy/loops/job-sweep.yaml`, `compozy/README.md` | Configuração do Codex e o loop de varredura periódica de vagas. |

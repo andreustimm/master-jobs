@@ -12,7 +12,14 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { parseAgent, renderCodexAgent, renderOpenCodeAgent } from "../scripts/harness/agents.ts";
+import {
+  CLAUDE_AGENT_TOOLS,
+  openCodeToolsDenied,
+  parseAgent,
+  renderCodexAgent,
+  renderOpenCodeAgent,
+  splitFrontmatter,
+} from "../scripts/harness/agents.ts";
 import { judge, patchPaths, run } from "../scripts/harness/codex-guard.ts";
 import {
   bashSpecifierMatches,
@@ -57,6 +64,22 @@ describe("regras do Claude Code lidas como o Claude Code lê", () => {
     expect(decideCommand(rules, "ls")).toBeNull();
     expect(decideCommand(parseRules({ deny: ["Bash"] }), "ls")).toBe("deny");
   });
+
+  it("o prefixo `rtk` do Codex e do OpenCode não tira o comando da regra ancorada", () => {
+    const rules = parseRules({ allow: ["Bash(git:*)", "Bash(rtk proxy:*)"], ask: ["Bash(rm:*)"], deny: ["Bash(sudo *)"] });
+    expect(decideCommand(rules, "rtk sudo ls")).toBe("deny");
+    expect(decideCommand(rules, "rtk proxy sudo ls")).toBe("deny");
+    expect(decideCommand(rules, "rtk rm -rf build")).toBe("ask");
+    expect(decideCommand(rules, "rtk git status")).toBe("allow");
+  });
+
+  it.each(["git status & sudo ls", "echo $(sudo ls)", "ls `sudo ls`", "git status; (sudo ls)", "cat <(sudo ls)", "{ sudo ls; }"])(
+    "comando escondido em sintaxe do shell ainda é julgado: %s",
+    (command) => {
+      const rules = parseRules({ allow: ["Bash(git:*)", "Bash(echo:*)", "Bash(ls:*)", "Bash(cat:*)"], deny: ["Bash(sudo *)"] });
+      expect(decideCommand(rules, command)).toBe("deny");
+    },
+  );
 
   it("padrão de arquivo segue o gitignore: `./` na raiz, `~/` no pessoal, sem âncora em qualquer nível", () => {
     expect(pathSpecifierMatches("./.env", "/repo/.env", context)).toBe(true);
@@ -127,6 +150,12 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
     "curl https://example.com",
     "docker ps",
     "pwd",
+    "rtk sudo ls",
+    "rtk rm -rf /",
+    "rtk rm -rf build",
+    "rtk proxy rm -rf build",
+    "rtk chmod 777 x",
+    "rtk find . -delete",
   ];
 
   it.each(commands)("nunca é mais permissivo que o Claude Code: %s", (command) => {
@@ -141,6 +170,9 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
     expect(openCodeDecide(permission, "bash", "git push --force origin feat/x")).toBe("ask");
     expect(openCodeDecide(permission, "bash", "git status")).toBe("allow");
     expect(openCodeDecide(permission, "bash", "docker ps")).toBe("ask");
+    expect(openCodeDecide(permission, "bash", "rtk sudo ls")).toBe("deny");
+    expect(openCodeDecide(permission, "bash", "rtk rm -rf /")).toBe("deny");
+    expect(openCodeDecide(permission, "bash", "rtk proxy rm -rf build")).toBe("ask");
   });
 
   it.each([".env", "/repo/.env", "/repo/app/.env.local", "/repo/certs/x.pem", ".linkedin.token.json"])(
@@ -179,33 +211,58 @@ const AGENT = [
   "---",
   "name: revisor",
   "description: Revisa o delta.",
+  "role: reviewer",
   "tools: Read, Grep, Glob, Bash",
+  "model: claude-opus-5-5",
+  "effort: high",
   "---",
   "",
   "Você revisa. Aspas \"duplas\" e barra \\ ficam literais.",
   "",
 ].join("\n");
 
+const CODEX_DEFAULT = { model: "gpt-5.6-terra", effort: "medium" };
+const OPENCODE_DEFAULT = { model: "opencode-go/qwen3.7-plus", effort: null };
+
 describe("agentes: canônico no Claude Code, espelhos gerados", () => {
-  it("agente de leitura vira sandbox read-only no Codex e edit deny no OpenCode", () => {
+  it("agente de leitura vira sandbox read-only no Codex e edit deny no OpenCode, com o modelo da política", () => {
     const agent = parseAgent("revisor.md", AGENT);
-    expect(agent.access).toBe("read-only");
-    const codex = renderCodexAgent(agent);
+    expect(agent).toMatchObject({ access: "read-only", role: "reviewer", model: "claude-opus-5-5", effort: "high" });
+    const codex = renderCodexAgent(agent, CODEX_DEFAULT);
     expect(codex).toContain('name = "revisor"');
+    expect(codex).toContain('model = "gpt-5.6-terra"\nmodel_reasoning_effort = "medium"');
     expect(codex).toContain('sandbox_mode = "read-only"');
     expect(codex).toContain("developer_instructions = '''\nVocê revisa.");
-    const openCode = renderOpenCodeAgent(agent);
+    const openCode = renderOpenCodeAgent(agent, OPENCODE_DEFAULT);
     expect(openCode).toMatch(/^---\n# Gerado/);
     expect(openCode).toContain("mode: subagent");
+    expect(openCode).toContain("model: opencode-go/qwen3.7-plus");
+    expect(openCode).not.toContain("reasoningEffort");
     expect(openCode).toContain("edit: deny");
+    expect(renderOpenCodeAgent(agent, { model: "openai/gpt-x", effort: "high" })).toContain("reasoningEffort: high");
+    expect(renderCodexAgent(agent, { model: "m", effort: null })).not.toContain("model_reasoning_effort");
   });
 
   it("agente de escrita herda o sandbox e nunca recebe `allow` no OpenCode", () => {
     const agent = parseAgent("executor.md", AGENT.replace("revisor", "executor").replace("Bash", "Bash, Edit, Write"));
     expect(agent.access).toBe("workspace-write");
-    expect(renderCodexAgent(agent)).not.toContain("sandbox_mode");
-    expect(renderOpenCodeAgent(agent)).not.toContain("permission");
-    expect(renderOpenCodeAgent(agent)).not.toContain("allow");
+    expect(renderCodexAgent(agent, CODEX_DEFAULT)).not.toContain("sandbox_mode");
+    expect(renderOpenCodeAgent(agent, OPENCODE_DEFAULT)).not.toContain("edit: deny");
+    expect(renderOpenCodeAgent(agent, OPENCODE_DEFAULT)).not.toContain("allow");
+  });
+
+  it("no OpenCode, ferramenta fora do `tools:` canônico é negada no agente", () => {
+    expect(openCodeToolsDenied(["Read", "Grep", "Glob", "Bash"]).sort()).toEqual(["edit", "webfetch", "websearch"]);
+    expect(openCodeToolsDenied(["Read", "Grep"]).sort()).toEqual(["bash", "edit", "glob", "list", "webfetch", "websearch"]);
+    expect(openCodeToolsDenied([...CLAUDE_AGENT_TOOLS])).toEqual([]);
+    for (const file of readdirSync(".claude/agents")) {
+      const canonical = parseAgent(file, readFileSync(`.claude/agents/${file}`, "utf8"));
+      const frontmatter = splitFrontmatter(readFileSync(`.opencode/agents/${file}`, "utf8")).data as {
+        permission?: Record<string, string>;
+      };
+      for (const tool of openCodeToolsDenied(canonical.tools)) expect(frontmatter.permission?.[tool], `${file}: ${tool}`).toBe("deny");
+      expect(Object.values(frontmatter.permission ?? {}).every((decision) => decision === "deny")).toBe(true);
+    }
   });
 
   it.each([
@@ -217,13 +274,17 @@ describe("agentes: canônico no Claude Code, espelhos gerados", () => {
     ["sem frontmatter", "sem frontmatter"],
     ["---\n- lista\n---\ncorpo\n", "frontmatter precisa ser um mapa"],
     [AGENT.replace(/Você revisa[^\n]*/, ""), "prompt vazio"],
+    [AGENT.replace("role: reviewer", "role: orquestrador"), "role precisa ser um de"],
+    [AGENT.replace("role: reviewer\n", ""), "role precisa ser um de"],
+    [AGENT.replace("model: claude-opus-5-5\n", ""), "model obrigatório"],
+    [AGENT.replace("effort: high", "effort: ''"), "effort obrigatório"],
   ])("recusa agente fora do contrato (%#)", (source, message) => {
     expect(() => parseAgent("revisor.md", source)).toThrow(message);
   });
 
   it("recusa prompt com o delimitador do TOML", () => {
     const agent = parseAgent("revisor.md", `${AGENT}'''\n`);
-    expect(() => renderCodexAgent(agent)).toThrow("'''");
+    expect(() => renderCodexAgent(agent, CODEX_DEFAULT)).toThrow("'''");
   });
 
   it("o .toml real é TOML válido e carrega o prompt inteiro", () => {
@@ -261,7 +322,7 @@ describe("guarda do Codex", () => {
     const patch = "*** Begin Patch\n*** Update File: src/a.ts\n@@\n*** Add File: .env.local\n+X=1\n*** End Patch";
     expect(patchPaths(patch)).toEqual(["src/a.ts", ".env.local"]);
     const verdict = judge({ tool_name: "apply_patch", tool_input: { command: patch }, cwd: "/repo" }, rules, context);
-    expect(verdict).toEqual({ decision: "deny", reason: ".env.local" });
+    expect(verdict).toEqual({ decision: "deny", target: ".env.local" });
     const clean = judge({ tool_name: "apply_patch", tool_input: { command: "*** Update File: src/a.ts" } }, rules, context);
     expect(clean.decision).toBeNull();
     const asked = parseRules({ ask: ["Edit(./docs/**)"], deny: ["Edit(./.env)"] });
@@ -283,6 +344,8 @@ describe("guarda do Codex", () => {
       expect(asked.hookSpecificOutput.permissionDecisionReason).toContain("peça à pessoa para rodar");
       expect(run(JSON.stringify({ tool_name: "Bash", tool_input: { command: "ls" } }), root, "/h")).toBeNull();
       expect(run("não é json", root, "/h")).toContain("guarda sem política legível");
+      expect(run("null", root, "/h")).toContain("entrada não é objeto");
+      expect(run(JSON.stringify({ tool_name: "Bash", tool_input: { command: "rtk sudo ls" } }), root, "/h")).toContain("deny");
       expect(run(JSON.stringify({ tool_name: "Bash", tool_input: {} }), root, "/h")).toContain("sem tool_input.command");
       writeFileSync(join(root, ".claude/settings.json"), "{}");
       expect(run(JSON.stringify({ tool_name: "Bash", tool_input: { command: "ls" } }), root, "/h")).toContain("sem permissions");
@@ -307,6 +370,7 @@ describe("gate de paridade numa árvore temporária", () => {
     write(".claude/commands/vagas.md", "---\ndescription: Varredura\n---\n\nFaça.\n");
     write("docs/engineering/rules/README.md", "# inventário\n");
     write("docs/engineering/rules/delivery.md", "# entrega\n");
+    write("config/model-routing.json", readFileSync("config/model-routing.json", "utf8"));
     syncHarness(root);
   });
 
@@ -341,8 +405,25 @@ describe("gate de paridade numa árvore temporária", () => {
   });
 
   it("reprova agente canônico fora do contrato", () => {
-    write(".claude/agents/revisor.md", AGENT.replace("tools:", "model: opus\ntools:"));
-    expect(errors()).toContain('campo "model" fora do contrato');
+    write(".claude/agents/revisor.md", AGENT.replace("tools:", "mode: subagent\ntools:"));
+    expect(errors()).toContain('campo "mode" fora do contrato');
+  });
+
+  it("reprova agente cujo modelo diverge da política e política inválida", () => {
+    write(".claude/agents/revisor.md", AGENT.replace("model: claude-opus-5-5", "model: claude-haiku-4-5-20251001"));
+    expect(errors()).toContain("model/effort claude-haiku-4-5-20251001/high diverge de config/model-routing.json");
+    write(".claude/agents/revisor.md", AGENT);
+    write("config/model-routing.json", JSON.stringify({ schemaVersion: 1, subscriptionMode: "tudo" }));
+    expect(errors()).toContain("subscriptionMode");
+  });
+
+  it("muda o modelo na política e o espelho acusa até o sync", () => {
+    const routing = JSON.parse(readFileSync(join(root, "config/model-routing.json"), "utf8"));
+    routing.providers.openai.roles.reviewer.medium[0].effort = "high";
+    write("config/model-routing.json", JSON.stringify(routing));
+    expect(errors()).toContain(".codex/agents/revisor.toml: diverge da fonte canônica");
+    syncHarness(root);
+    expect(readFileSync(join(root, ".codex/agents/revisor.toml"), "utf8")).toContain('model_reasoning_effort = "high"');
   });
 
   it("reprova `.opencode/agents` como symlink e o sync o troca por diretório", () => {
@@ -374,7 +455,7 @@ describe("a árvore real e a ligação ao gate", () => {
     expect(checkHarness(process.cwd())).toEqual([]);
   });
 
-  it("os agentes de papel existem nos três harnesses", () => {
+  it("os agentes de papel e o fit-analyst existem nos três harnesses", () => {
     for (const name of ["task-analyst", "executor", "fixer", "reviewer", "judge", "fit-analyst"]) {
       for (const path of [`.claude/agents/${name}.md`, `.codex/agents/${name}.toml`, `.opencode/agents/${name}.md`]) {
         expect(readFileSync(path, "utf8").length, path).toBeGreaterThan(0);
@@ -385,6 +466,20 @@ describe("a árvore real e a ligação ao gate", () => {
   it("o Codex liga a guarda e o hook", () => {
     expect(readFileSync(".codex/config.toml", "utf8")).toMatch(/^\[features\]\n(?:#[^\n]*\n)*hooks = true$/m);
     expect(readFileSync(".codex/hooks.json", "utf8")).toContain("scripts/harness/codex-guard.ts");
+    // Saída ≠ 0/2 faz o Codex seguir sem a guarda: a falha do processo precisa bloquear.
+    expect(readFileSync(".codex/hooks.json", "utf8")).toMatch(/codex-guard\.ts\\" \|\| \{ [^}]*exit 2; \}/);
+    const config = readFileSync(".codex/config.toml", "utf8");
+    expect(config).toMatch(/^approval_policy = "on-request"$/m);
+    expect(config).toMatch(/^sandbox_mode = "workspace-write"$/m);
+  });
+
+  it("o comando do hook bloqueia quando a guarda não consegue rodar", () => {
+    const command = (JSON.parse(readFileSync(".codex/hooks.json", "utf8")) as {
+      hooks: { PreToolUse: { hooks: { command: string }[] }[] };
+    }).hooks.PreToolUse[0]!.hooks[0]!.command.replace("$(git rev-parse --show-toplevel)", "/nao/existe");
+    const result = spawnSync("sh", ["-c", command], { input: "{}", encoding: "utf8" });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("comando bloqueado");
   });
 
   const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };

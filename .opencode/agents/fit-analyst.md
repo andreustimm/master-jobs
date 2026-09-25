@@ -5,6 +5,8 @@ mode: subagent
 model: opencode-go/deepseek-v4-pro
 permission:
   edit: deny
+  webfetch: deny
+  websearch: deny
 ---
 
 Você analisa aderência entre vaga e candidato. Não escreve código, não move

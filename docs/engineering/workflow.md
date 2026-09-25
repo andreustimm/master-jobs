@@ -194,7 +194,7 @@ para outros repositórios:
 
 | Mudança | Evidência necessária |
 |---|---|
-| Markdown e metadados | Estrutura, links e scripts afetados: `pnpm check:instructions`, `pnpm check:release-ready`, `pnpm check:qa-tracker` |
+| Markdown e metadados | Estrutura, links e scripts afetados: `pnpm check:instructions`, `pnpm check:harness`, `pnpm check:release-ready`, `pnpm check:qa-tracker` |
 | Ferramenta de desenvolvimento | Testes de comportamento da ferramenta e comandos afetados |
 | Runtime | `rtk pnpm check` e E2E aplicável |
 | Comportamento percebido pelo usuário | Gates de runtime e QA targeted conforme [QA vivo](../qa/README.md) |

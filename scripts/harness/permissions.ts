@@ -52,16 +52,28 @@ export function bashSpecifierMatches(specifier: string, command: string): boolea
 }
 
 /**
- * O comando inteiro e cada trecho de um comando composto: `cd x && git push
- * origin main` precisa cair na regra de `git push` mesmo sem começar por ela.
+ * Prefixo que o Codex e o OpenCode põem em todo comando (G63). No Claude Code
+ * o hook global do rtk reescreve DEPOIS da decisão de permissão, então a regra
+ * vê `sudo ls`; nos outros dois o comando chega como `rtk sudo ls`, e uma regra
+ * ancorada no início (`sudo *`, `rm:*`) deixaria de casar.
+ */
+const RTK_PREFIX = /^rtk\s+(?:proxy\s+)?/;
+
+/**
+ * O comando inteiro e cada trecho dele: `cd x && git push origin main` precisa
+ * cair na regra de `git push` mesmo sem começar por ela. Além de `&&`, `||`,
+ * `;` e `|`, corta em `&`, subshell, chaves, `$(`, crase e substituição de
+ * processo — um trecho a mais só pode acrescentar uma decisão mais forte,
+ * nunca tirar uma. Cada trecho vale também sem o prefixo `rtk`.
  */
 export function commandSegments(command: string): string[] {
   const whole = command.trim();
   const parts = whole
-    .split(/&&|\|\||[;|\n]/)
+    .split(/&&|\|\||\$\(|[<>]\(|[;|&\n(){}`]/)
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
-  return [...new Set([whole, ...parts])];
+  const segments = [whole, ...parts];
+  return [...new Set([...segments, ...segments.map((segment) => segment.replace(RTK_PREFIX, ""))])];
 }
 
 /**
@@ -220,7 +232,7 @@ export function toOpenCodePermission(permissions: ClaudePermissions): OpenCodePe
     }
     return entry;
   };
-  for (const tool of ["read", "edit", "glob", "list", "grep", "webfetch", "websearch", "bash"]) bucket(tool);
+  for (const tool of new Set(Object.values(OPENCODE_TOOL).flat())) bucket(tool);
 
   for (const decision of DECISIONS) {
     for (const rule of rules) {
@@ -233,7 +245,15 @@ export function toOpenCodePermission(permissions: ClaudePermissions): OpenCodePe
           for (const pattern of Object.keys(entry)) delete entry[pattern];
           entry["*"] = decision;
         } else if (tool === "bash") {
-          place(entry, openCodeBashPattern(rule.specifier), decision);
+          const pattern = openCodeBashPattern(rule.specifier);
+          place(entry, pattern, decision);
+          // O OpenCode recebe `rtk sudo ls` (G63); restrição ancorada no
+          // início precisa valer também depois do prefixo. Allow não ganha a
+          // variante: alargar o que é liberado não é tradução.
+          if (decision !== "allow" && !pattern.startsWith("*")) {
+            place(entry, `rtk ${pattern}`, decision);
+            place(entry, `rtk proxy ${pattern}`, decision);
+          }
         } else {
           for (const pattern of openCodePathPatterns(rule.specifier)) place(entry, pattern, decision);
         }

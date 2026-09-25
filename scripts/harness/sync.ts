@@ -78,7 +78,10 @@ export function renderCodexHooks(): string {
           hooks: [
             {
               type: "command",
-              command: `node --experimental-strip-types --no-warnings "$(git rev-parse --show-toplevel)/${CODEX_GUARD}"`,
+              // Saída diferente de 0 e 2 faz o Codex seguir sem a guarda; o
+              // `exit 2` transforma node ausente, módulo quebrado ou exceção
+              // em bloqueio.
+              command: `node --experimental-strip-types --no-warnings "$(git rev-parse --show-toplevel)/${CODEX_GUARD}" || { echo "guarda de permissões do projeto falhou; comando bloqueado" >&2; exit 2; }`,
               timeout: 10,
               statusMessage: "Conferindo a política de permissões do projeto",
             },
