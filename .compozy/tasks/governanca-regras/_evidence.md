@@ -188,11 +188,31 @@ remotas foram reconsultadas. O resultado de cada item e a separação entre
 acima continuam como fotografia da baseline `463688f3`; os textos não foram
 reescritos.
 
-Continuam **abertas**:
+Continuavam **abertas** em `c23f8ba2` (as duas foram fechadas pela #308; ver abaixo):
 
 - **E16:** o gate de chave de API tem o escape `apiKeyEnv`, e falta a
   sentinela V03-06. Isso impede certificar G41.
 - **E27:** o tracker de QA não confere se os arquivos referenciados existem.
+
+**Fechadas pela #308 (24/09/2026, branch `test/governanca-g41`):**
+
+- **E16:** o gate de `architecture.test.ts` isenta `apiKeyEnv` por ocorrência
+  (`keyHandlingLines`), varre `src/` e `app/`, e o caso negativo "arquivo com
+  `apiKeyEnv` e `apiKey`" reprova. A sentinela V03-06 está em
+  `tests/llm-key-sentinel.test.ts`. Ela achou um defeito real: `redactText` só
+  apagava `sk-…`, e uma chave `nvapi-…` ecoada pelo provedor chegava inteira ao
+  `LlmError`, ao terminal do `jho analyze` e ao Sentry, cuja peneira só apaga
+  blocos de 40+ caracteres. Agora os adapters apagam o valor exato
+  (`redactSecret`), inclusive em falha de `fetch`. Mutações locais, cada uma
+  revertida em seguida: sem `redactSecret` → 4 de 5 casos reprovam (erro/Sentry,
+  `.env` com espaço, rede nos dois adapters, CLI); chave gravada em `llm_provider.notes` → a
+  varredura do banco reprova; chave no `errorCode` → o painel reprova; escape
+  por arquivo de volta → o caso negativo reprova.
+- **E27:** `materialize_state.py` reprova jornada, bug, `last_report` e
+  evidência versionada que não existem. Fica fora apenas `evidence/`, que o git
+  ignora por contrato. Com a chamada da checagem removida, os 5 subcasos do
+  teste novo reprovam. O SHA atual de relatório e a execução real continuam
+  fora (M).
 
 Continuam **parciais**: E04, E18, E19, E23, E24, E26, E28, E30 e E33. As
 lacunas de cada uma estão no relatório.

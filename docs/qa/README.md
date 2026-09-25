@@ -283,7 +283,10 @@ reseta seus cenários para `untested`. Refactor sem efeito observável declara
 `pnpm check:qa-tracker`, que também valida cada cenário contra o esquema e roda
 dentro do `pnpm check` e do CI — cenário com enum inventado, `pass` sem
 evidência ou `fixed` sem `fix_commits` reprova o gate local e a PR; nenhum hook
-o roda no commit. Antes de entrar no gate, o
+o roda no commit. Ele também reprova citação de arquivo que não existe:
+jornada (`journeys/`), bug (`bugs/`), `last_report` e evidência versionada
+(`tests/…`, `reports/…`). Só `evidence/` fica fora, porque é ignorado pelo git
+e um checkout limpo nunca o tem. Antes de entrar no gate, o
 validador só rodava sob demanda, e a primeira execução em semanas achou 15
 registros inválidos. `evidence/` é
 ignorado por padrão: screenshots ficam no disco ou como artefato de CI, e o

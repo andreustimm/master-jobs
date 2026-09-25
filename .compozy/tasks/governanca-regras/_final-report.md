@@ -1,5 +1,10 @@
 # Relatório final da verificação (task_11 / #205)
 
+> **Atualização #308 (24/09/2026, branch `test/governanca-g41`).** P0-1
+> (G41 / V03-06), E16 e E27 foram resolvidos; detalhe em "Atualização #308"
+> no fim deste relatório. Restam P0-2 e P0-3, que dependem do dono. O texto
+> abaixo continua sendo a fotografia de `c23f8ba2`.
+
 **Veredito: governança NÃO certificada como concluída.** Há três pendências
 ligadas a obrigações P0 (seção "Pendências P0"). Nenhuma delas indica uma
 violação observada. Faltam uma prova planejada (V03-06) e duas observações que
@@ -127,7 +132,7 @@ G16–G25, G27–G28, G36–G41, G43–G46, G48, G50–G52, G68, G73, G75–G76,
 | P0 com prova comportamental no `check` de hoje (G01–G03, G09, G17–G22, G24–G25, G27–G28, G36–G40, G73, G75–G76, G79) | preservadas | [X] suíte verde, cujo conteúdo foi conferido por leitura [L] |
 | P0 provadas só no CI (G14, G16) | preservadas | [X] CI observado em `c23f8ba2`, não no `check` local. G14 roda no job `pwa-browser`, que é obrigatório. G16 (a matriz por papel) roda no `e2e-navegador`, que **não bloqueia** |
 | G23 (CV público) | preservada com limite declarado | [X] `public-profile` e `public-cv`. Valor sem rótulo e telefone sem marcador passam: o limite está declarado no teste. O cenário `PUB-public-cv-protected-content` está `untested` desde o reset de 22/09 [H]. A decisão do dono pedida na #233 (filtrar por padrão ou não publicar) continua sem registro [H] |
-| G41 (chave fora do banco e do log) | preservada por leitura; **prova V03-06 ausente** | ver P0-1 |
+| G41 (chave fora do banco e do log) | preservada por leitura; **prova V03-06 ausente** (resolvida na #308, ver o fim) | ver P0-1 |
 | G43–G46, G48, G50–G52 (fluxo e produção) | `main` protegida no remoto [R]; proveniência por SHA [L+X], com `promotion-provenance` no `check`; retorno com assignee [L+X] | limites em P0-3 |
 | G68, G80 (PostgreSQL e privilégio mínimo) | provisionador provado em fixture [X] | a role efetiva em produção não foi observada: P0-2 |
 | P1/P2 | preservadas no inventário. Lacunas residuais abaixo, em E27/E32/E33/E34 | [L] |
@@ -151,7 +156,7 @@ executa esses testes está em V11-02.
 | E13 | fechada no Vitest | `discoverEntries()` pela semântica do Next; guarda antes do efeito; `entry-denial` contra PostgreSQL. A lista de páginas por escopo de candidato continua literal |
 | E14 | fechada | Duas redenções simultâneas do mesmo token: uma vence, sessões caem |
 | E15 | fechada, com limite | `publicCvText()` no caminho público, sentinelas de piso, e-mail e telefone |
-| **E16** | **aberta** | `architecture.test.ts:849` ainda ignora qualquer arquivo que contenha `apiKeyEnv`; o log só é conferido para `console.log/error` com `apiKey` literal; não há sentinela de chave atravessando erro, log e persistência (V03-06) |
+| **E16** | **aberta** (fechada na #308, ver o fim) | `architecture.test.ts:849` ainda ignora qualquer arquivo que contenha `apiKeyEnv`; o log só é conferido para `console.log/error` com `apiKey` literal; não há sentinela de chave atravessando erro, log e persistência (V03-06) |
 | E17 | fechada | `pwa-browser` é obrigatório no agregador. Servidor sintético, não o Next autenticado |
 | E18 | parcial | Inventário de rotas amarrado ao inventário de páginas; `gotoMeasured` exige destino igual ao pedido. O detector de idioma continua léxico; 6 páginas em `UNMEASURED_PAGES`, com motivo |
 | E19 | parcial | `design.test.ts` pega hex curto, `rgb/oklch`, paleta crua e tamanho fora da escala. axe numa viewport, sem laço de temas |
@@ -162,7 +167,7 @@ executa esses testes está em V11-02.
 | E24 | parcial | `main` exige PR; o cliente GitHub dos testes de release continua falso |
 | E25 | fechada | Promoção por SHA com CI provado também no dispatch; assignee em PR nova e reaproveitada, inclusive no retorno |
 | E26 | parcial | Proteções aplicadas e reobservadas hoje [R]. Nenhum job agendado roda `verify-protections.ts`; limites em P0-3 |
-| **E27** | **aberta** (P1) | `materialize_state.py` sem mudança: não confere se a evidência e o relatório referenciados existem nem se o SHA é atual |
+| **E27** | **aberta** (P1; fechada na #308, ver o fim) | `materialize_state.py` sem mudança: não confere se a evidência e o relatório referenciados existem nem se o SHA é atual |
 | E28 | parcial | Links, âncoras e symlinks cobertos. Nenhum gate lê o corpo real da PR (docs, veredito, SHA); o gate de PR de tarefa está desligado |
 | E29 | fechada, com limite | `ship-pr` alinhada a G54; `.codex/config.toml` corrigido. Coerência texto × regra continua revisão humana |
 | E30 | parcial | Bloqueio de LinkedIn por host em todo salto, com teste. IP literal, proxy e ferramentas de agente ficam fora (limite declarado) |
@@ -173,7 +178,8 @@ executa esses testes está em V11-02.
 
 ## Pendências P0 (impedem a certificação)
 
-1. **P0-1 — G41 / V03-06: prova da chave fictícia ausente.** Nenhuma PR da
+1. **P0-1 — G41 / V03-06: prova da chave fictícia ausente.** *(Resolvida
+   pela #308; ver "Atualização #308".)* Nenhuma PR da
    #197 entregou o caso V03-06. Uma chave-sentinela precisa atravessar
    configuração, erro do provedor, persistência e log, e não pode chegar a DB,
    log nem cache. Por leitura, `src/core/llm/providers.ts` não põe a chave no
@@ -227,7 +233,8 @@ executa esses testes está em V11-02.
   - G65 e o texto da regra 2 (#274).
 - **Gates que ainda não existem:**
   - completude G01–G84 como gate permanente;
-  - existência dos arquivos citados pelo tracker de QA (E27);
+  - ~~existência dos arquivos citados pelo tracker de QA (E27)~~ — entregue
+    na #308;
   - corpo real da PR (E28);
   - `verify-protections.ts` agendado;
   - `e2e-navegador` obrigatório, a decidir depois de medida a instabilidade
@@ -245,3 +252,20 @@ executa esses testes está em V11-02.
 - O commit leva **`Refs #205`**, não `Closes`, por causa das pendências P0.
   Nada foi publicado em `main`. A limpeza da worktree fica para depois do merge
   confirmado.
+
+## Atualização #308 — P0-1, E16 e E27
+
+Branch `test/governanca-g41`, a partir de `origin/dev` `c565478e`, em
+24/09/2026.
+
+| Item | Estado | Prova |
+|---|---|---|
+| **P0-1 / G41 / V03-06** | **resolvida** | [X] `tests/llm-key-sentinel.test.ts`, 5 casos (um deles com a chave cercada de espaço/quebra de linha no `.env`). Uma sentinela `nvapi-G41-<8 hex>` passa pelo caminho real (cadastro pela CLI → `chooseModel` → `portFor` → adapter → cabeçalho), e o provedor falso a ecoa. Ela é procurada no erro (mensagem, pilha, JSON, `inspect`), no evento após `scrubEvent`, em `jho analyze`, `jho llm list` e `jho analysis run`, no console durante o processamento da fila, em todas as tabelas do banco e no painel admin da análise |
+| Defeito achado pela sentinela | corrigido | `redactText` só apagava `sk-…`: uma chave `nvapi-…` ecoada chegava ao terminal e ao Sentry. Agora os adapters apagam o valor exato (`redactSecret`), e a falha de `fetch` volta sem `cause` nem pilha original |
+| **E16** | **fechada** | [X] Exceção por ocorrência (`keyHandlingLines`) em `src/` + `app/`, com caso negativo "arquivo com `apiKeyEnv` e `apiKey`". O log estrutural passa a cobrir também `warn/info/debug` |
+| **E27** | **fechada**, com limite | [X] `materialize_state.py` reprova jornada, bug, `last_report` e evidência versionada inexistentes. Fora: `evidence/` (ignorado pelo git) e o SHA do relatório |
+| Mutação | [X] | Cada mutação local foi revertida em seguida: sem `redactSecret` → 4/5 casos reprovam (sem a forma aparada, o caso do `.env` com espaço reprova sozinho); fora da raiz do repositório → a citação não é resolvida; chave em `llm_provider.notes` → a varredura do banco reprova; chave em `errorCode` → o painel reprova; escape por arquivo → o caso negativo reprova; sem a checagem de referências → 5 subcasos reprovam |
+| `pnpm check` | [X] verde | 4184 testes passaram e 8 foram pulados (306 arquivos); `test:qa-skills` com 17 OK; `check:qa-tracker` com 96 cenários, todas as citações resolvidas |
+
+Com isso, só P0-2 e P0-3 continuam impedindo a certificação; as duas
+dependem do dono.
