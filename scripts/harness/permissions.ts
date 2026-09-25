@@ -91,15 +91,18 @@ function unwrap(segment: string): string {
 }
 
 /**
- * Esconde o conteúdo de aspas simples (fora de aspas duplas), onde o shell não
- * interpreta nada: cortar ali faria de uma mensagem de commit um comando.
- * Na dúvida, julga tudo: aspas simples sem fechar, aspas `$'…'` (onde `\'`
- * não fecha) e comentário `#` (que o shell corta até o fim da linha, mudando
- * o que conta como aspas) devolvem o texto intacto, sem máscara.
+ * Esconde o texto literal entre aspas — simples, e duplas fora de `$(…)` e
+ * crase, que o shell executa —: cortar ali faria de `git commit -m "fix(x)"`
+ * um comando. Na dúvida, julga tudo: aspas sem fechar, aspas `$'…'` (onde
+ * `\'` não fecha) e comentário `#` (que o shell corta até o fim da linha,
+ * mudando o que conta como aspas) devolvem o texto intacto, sem máscara.
  */
-function maskSingleQuoted(text: string): string {
+function maskQuoted(text: string): string {
   let out = "";
-  let state: "none" | "single" | "double" = "none";
+  // `subst` é `$(…)` dentro de aspas duplas e `tick` é crase dentro delas:
+  // ali o shell executa, então o texto fica visível para ser julgado.
+  let state: "none" | "single" | "double" | "subst" | "tick" = "none";
+  let depth = 0;
   for (let index = 0; index < text.length; index++) {
     const char = text[index]!;
     if (state === "none" && char === "$" && text[index + 1] === "'") return text;
@@ -107,18 +110,40 @@ function maskSingleQuoted(text: string): string {
     if (state === "single") {
       if (char === "'") state = "none";
       out += char === "'" ? char : " ";
+    } else if (state === "subst") {
+      if (char === "(") depth++;
+      if (char === ")" && --depth === 0) state = "double";
+      out += char;
+    } else if (state === "tick") {
+      if (char === "`") state = "double";
+      out += char;
+    } else if (state === "double") {
+      if (char === "\\" && index + 1 < text.length) {
+        out += "  ";
+        index++;
+      } else if (char === '"') {
+        state = "none";
+        out += char;
+      } else if (char === "$" && text[index + 1] === "(") {
+        state = "subst";
+        depth = 1;
+        out += "$(";
+        index++;
+      } else if (char === "`") {
+        state = "tick";
+        out += char;
+      } else {
+        out += " ";
+      }
     } else if (char === "\\" && index + 1 < text.length) {
       out += char + text[++index]!;
-    } else if (state === "double") {
-      if (char === '"') state = "none";
-      out += char;
     } else {
       if (char === "'") state = "single";
       else if (char === '"') state = "double";
       out += char;
     }
   }
-  return state === "single" ? text : out;
+  return state === "none" ? out : text;
 }
 
 /** O que um shell aninhado vai rodar: `sh -ec 'rm -rf src'` → `rm -rf src`. */
@@ -139,11 +164,14 @@ export function commandSegments(command: string, depth = 0): string[] {
   const segments = [whole, ...parts];
   const nested =
     depth < 2 ? [...whole.matchAll(NESTED_SHELL)].flatMap((match) => commandSegments(match[2]!, depth + 1)) : [];
-  return [...new Set([...segments, ...segments.map(unwrap), ...nested])];
+  // Aspas e redirecionamento não mudam o alvo: `git push origin 'main'` e
+  // `cat <.env` precisam cair em `* main` e `* .env` como a forma nua.
+  const bare = segments.map((segment) => segment.replace(/['"]/g, "").replace(/[<>]/g, " "));
+  return [...new Set([...segments, ...segments.map(unwrap), ...bare, ...bare.map(unwrap), ...nested])];
 }
 
 function splitParts(command: string): string[] {
-  return maskSingleQuoted(command)
+  return maskQuoted(command)
     .split(/&&|\|\||\$\(|[<>]\(|[;|&\n(){}`]/)
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
