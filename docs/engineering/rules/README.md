@@ -87,7 +87,7 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G43 | Worktree de `dev`, PR para `dev` | [delivery](delivery.md#g43) | regra 18 | preservada; exceções de automação nomeadas (C21) |
 | G44 | Conferir estado e preservar WIP | [delivery](delivery.md#g44) | "Fluxo de trabalho" | preservada |
 | G45 | `dev`→`staging` por SHA validado | [delivery](delivery.md#g45) | "Fluxo de trabalho" | preservada; contrato de SHA (C20) |
-| G46 | Produção não sai sem gente | [delivery](delivery.md#g46) | "Fluxo de trabalho" | preservada; proteção remota em `main`, parcial em `dev`/`staging` (C19) |
+| G46 | Produção só pela PR de produção, com CI verde e decisão do dono | [delivery](delivery.md#g46) | "Fluxo de trabalho" | reformulada em #321: merge pelo agente por delegação do dono (23/09/2026), revogável; proteção remota em `main`, parcial em `dev`/`staging` (C19) |
 | G47 | Toda PR com responsável | [delivery](delivery.md#g47) | "Fluxo de trabalho" | preservada |
 | G48 | Branches permanentes | [delivery](delivery.md#g48) | "Fluxo de trabalho" | preservada |
 | G49 | Branch `<tipo>/<slug>` | [delivery](delivery.md#g49) | "Fluxo de trabalho" | preservada |
@@ -104,7 +104,7 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G60 | Changelog vs `docs/` | [delivery](delivery.md#g60) | regra 23 | preservada; linha para `docs/engineering/rules/` |
 | G61 | Skills canônicas e symlinks | [delivery](delivery.md#g61) | "Skills compartilhadas" | preservada |
 | G62 | Instruções lidas; skill não é regra | [delivery](delivery.md#g62) | "Skills compartilhadas" | preservada; roteador na entrada |
-| G63 | RTK por harness | [delivery](delivery.md#g63) | nota final do AGENTS | preservada, sem copiar o arquivo global |
+| G63 | RTK por harness; um comando por chamada | [delivery](delivery.md#g63) | nota final do AGENTS | preservada, sem copiar o arquivo global; fallback sem `rtk` e comando único por chamada (#321) |
 | G64 | Bloco do Next intacto | [delivery](delivery.md#g64) | bloco gerado | preservada; bloco continua no fim da entrada |
 | G65 | UI é adaptador | [architecture](architecture.md#g65) | "Arquitetura" | preservada; "única mutação" corrigida (C15) |
 | G66 | Idempotência e isolamento de falha | [architecture](architecture.md#g66) | "Convenções de código" | preservada |

@@ -37,12 +37,19 @@ O que isso garante:
 - O `GITHUB_TOKEN` não tem bypass em `main`. A PR de produção é aberta pelo robô,
   e o autor não pode aprovar a própria PR. Por isso ela só entra por ação de uma
   pessoa: a aprovação, ou o bypass de admin dentro da PR, que dispensa a
-  aprovação e fica registrado em *Rule insights*. O fluxo normal é aprovar.
+  aprovação e fica registrado em *Rule insights*. Desde 23/09/2026 o caminho
+  normal é o bypass de admin, usado pelo agente por delegação do dono
+  ([G46](rules/delivery.md#g46)).
 
 ## O caminho humano
 
-**Promoção `staging → main`.** O robô abre a PR, e o dono a aprova e mescla.
-A aprovação é válida porque o autor é `github-actions[bot]`.
+**Promoção `staging → main`.** O robô abre a PR. Por delegação do dono
+(23/09/2026, [G46](rules/delivery.md#g46)), o agente a mescla com
+`gh pr merge <n> --merge --admin` quando `qualidade` e `schema-e-migracao`
+estão verdes na cabeça, nenhuma migração não aditiva espera revisão e o QA de
+release candidate foi cumprido. O dono continua podendo aprová-la e mesclá-la
+ele mesmo: a aprovação é válida porque o autor é `github-actions[bot]`. Com a
+delegação revogada, esse volta a ser o único caminho.
 
 Os checks exigidos precisam existir no SHA da cabeça da PR. Quando a promoção
 não faz bump, a cabeça é o commit de `dev` que já passou pelo CI de push. Quando

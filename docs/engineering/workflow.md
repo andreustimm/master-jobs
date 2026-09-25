@@ -1,7 +1,8 @@
 # Trabalhar e retomar sem deixar trabalho perdido
 
 O fluxo continua sendo worktree de `dev` → PR para `dev` → promoção automática
-para `staging` → aprovação humana para `main`. A regra 24 de
+para `staging` → PR de produção para `main`, mesclada pelo agente com CI verde
+por delegação do dono ([G46](rules/delivery.md#g46)). A regra 24 de
 [AGENTS.md](../../AGENTS.md) define a autoridade operacional: issue e
 [Project 3 — Master Jobs](https://github.com/users/andreustimm/projects/3).
 Git continua sendo a fonte de specs, código e evidências. Este documento é o
@@ -14,7 +15,8 @@ Este roteiro acompanha o [épico #181](https://github.com/andreustimm/master-job
 Integrar a CLI e estas instruções em `dev` **não ativa o escritor remoto**.
 O workflow de `issue_comment` precisa do código confiável na branch default
 `main`, de `PROJECTS_TOKEN` e da chave do escritor validados, de `preflight` aprovado e
-do piloto de rollout confirmado. A promoção para `main` continua humana.
+do piloto de rollout confirmado. A promoção para `main` segue G46, e não
+depende do escritor.
 
 Durante o bootstrap do próprio épico, o coordenador registra na issue remota
 a execução, branch, worktree, motivo e evidência dessa preparação. Esse registro

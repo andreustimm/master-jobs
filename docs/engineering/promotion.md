@@ -1,7 +1,8 @@
 # Promoção vinculada ao commit validado
 
 `promover-para-staging.yml` promove um SHA imutável. O fluxo continua sendo
-PR → `dev` → tag + fast-forward para `staging` → PR humana para `main` → GitHub
+PR → `dev` → tag + fast-forward para `staging` → PR de produção para `main`
+([G46](rules/delivery.md#g46)) → GitHub
 Release e retorno para `dev`. A issue [#195](https://github.com/andreustimm/master-jobs/issues/195)
 registra a entrega desta correção; o estado operacional fica no Project 3.
 
@@ -159,7 +160,9 @@ conclusão da execução inteira: um job da lista não bloqueante
 O retorno `main → dev`, o versionamento de hotfixes em `main` e a criação
 idempotente de GitHub Releases permanecem em `sincronizar-apos-main.yml`.
 Uma release existente é preservada. Divergência no retorno continua indo por
-PR, sem reescrever `dev`. Publicação em `main` exige decisão humana e QA full.
+PR, sem reescrever `dev`. Publicação em `main` segue
+[G46](rules/delivery.md#g46): CI verde, QA full de release candidate e o merge
+pelo agente, por delegação do dono.
 Desde 22/09/2026, o ruleset de `main` recusa o push direto do commit de versão
 de um hotfix. O fechamento manual está em
 [github-protections.md](github-protections.md#o-caminho-humano).
@@ -179,7 +182,7 @@ scheduler de Actions nem comprovam permissões/deploys remotos.
 `schedule` usa o workflow da branch padrão. Integrar esta mudança em `dev`
 não demonstra que ela já governa promoções remotas: até chegar a `main`, a
 versão antiga (por `workflow_run`) continua valendo, e a instalação na branch
-padrão permanece parte da publicação humana. Não disparar promoção real como
+padrão permanece parte da publicação em `main`. Não disparar promoção real como
 teste desta correção.
 
 O mesmo vale para os fragmentos: o controlador da promoção vem de `main`. Até
@@ -187,7 +190,7 @@ a versão que traz `changelog.d/` chegar lá, o controlador antigo carimba só o
 `Unreleased` escrito à mão e deixa os fragmentos em `dev` — eles entram na
 primeira versão carimbada pelo controlador novo, uma versão depois do código.
 Se nessa janela o `Unreleased` estiver vazio e a leva pedir bump, a promoção
-antiga recusa por nota ausente até o merge humano em `main`;
+antiga recusa por nota ausente até o merge em `main`;
 nenhum estado é escrito, e o agendado seguinte promove normalmente.
 
 Referências de plataforma: [workflows reutilizáveis](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows),

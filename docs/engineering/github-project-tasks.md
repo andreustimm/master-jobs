@@ -165,7 +165,7 @@ minutos drena intenções duráveis e recupera inclusão de issues perdidas.
 Eventos de PR/CI/deploy reconsultam HEAD, tentativa, ambiente, lease e vínculos
 nativos, depois registram evidência/sugestão idempotente. Não alteram Status.
 Payload atrasado, fechamento ou merge isolado não concluem nem regridem tarefa.
-O SHA publicado em main pertence à PR humana `staging → main`, não às PRs das
+O SHA publicado em main pertence à PR de produção `staging → main`, não às PRs das
 tarefas; por isso o deployment chega às PRs de dev pelos commits dessa
 promoção. Só um deployment Production de main bem-sucedido, de uma promoção já
 mesclada, é expandido: deploys de dev e staging também resolvem para a promoção
@@ -176,7 +176,8 @@ posterior ao primeiro claim e ancestralidade do SHA publicado. Promoção com 25
 commits ou mais — o limite que a API lista — exige reconciliação explícita em
 vez de perder candidatas em silêncio.
 O pipeline dev → staging → main e os deployments de branches permanentes
-continuam sob os gates existentes; promoção de main continua humana.
+continuam sob os gates existentes; a promoção de main segue
+[G46](rules/delivery.md#g46).
 
 `TASKS_WRITER_ENABLED=true` habilita os eventos automáticos somente depois de
 o código confiável e as credenciais estarem prontos. Enquanto a flag estiver
@@ -234,7 +235,7 @@ Sequência de ativação em [#191](https://github.com/andreustimm/master-jobs/is
 
 1. Concluir revisão/gates e integrar ferramenta e regras em dev.
 2. Confirmar a [migração](github-project-migration.md), WIP e vínculos sem duplicação.
-3. Promover pelo fluxo normal; a aprovação staging → main é humana.
+3. Promover pelo fluxo normal; o merge staging → main segue G46.
 4. Provisionar os dois secrets, conferir configurações nativas e executar o
    workflow `Coordenador do GitHub Project` com mode `initialize` em main.
 5. Habilitar `TASKS_WRITER_ENABLED=true` e fazer piloto com duas worktrees:
