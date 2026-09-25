@@ -88,7 +88,10 @@ def classify_path(path: str) -> tuple[str, str]:
 
 
 def classify(paths: list[str]) -> dict:
-    rows = [{"path": path, **dict(zip(("level", "why"), classify_path(path)))} for path in sorted(set(paths))]
+    rows = []
+    for path in sorted(set(paths)):
+        level, why = classify_path(path)
+        rows.append({"path": path, "level": level, "why": why})
     level = max((row["level"] for row in rows), default="L0")
     return {"level": level, "paths": rows}
 
