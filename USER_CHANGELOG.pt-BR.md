@@ -20,6 +20,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.25.3] - 2026-09-25T15:27:50.000Z
+
+### Melhorado
+
+- A tela Vagas e o painel inicial fazem bem menos leitura no banco para montar a lista e contar os filtros.
+
 ## [1.25.2] - 2026-09-25T13:38:35.000Z
 
 ### Corrigido

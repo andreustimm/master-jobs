@@ -9,6 +9,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql, type SQL } from
 import { alias } from "drizzle-orm/pg-core";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import {
+  candidatePrimaryScoreFilter,
   primaryScoreFilter,
   scoreTrackFilter,
   type TrackScope,
@@ -448,10 +449,17 @@ async function groupPostingsOf(linhas: number[]): Promise<Map<number, GroupPosti
  * `countBoard` compartilha o predicado, então o rodapé concordava com a lista e
  * nada parecia errado.
  *
- * `row_number()` sobre o conjunto já filtrado resolve por construção: a janela
- * só vê linhas que passaram, então a canônica é a de menor id ENTRE ELAS. Um
- * filtro novo entra sem precisar ser repetido aqui, que é o que o anti-join não
- * dava.
+ * `min(id)` por grupo sobre o conjunto já filtrado resolve por construção: o
+ * agrupamento só vê linhas que passaram, então a canônica é a de menor id ENTRE
+ * ELAS. Um filtro novo entra sem precisar ser repetido aqui, que é o que o
+ * anti-join não dava.
+ *
+ * `group by`, e não `row_number() ... where rn = 1`, que devolve a mesma linha:
+ * o planner estima o `rn = 1` como 0,5% da entrada (8 linhas para 2.340 reais)
+ * e, confiando nisso, encadeava laços aninhados — no cockpit, uma varredura
+ * inteira de `job_page` para cada linha elegível, 108 mil blocos por leitura.
+ * O agrupamento é estimado pelo número de grupos, e o plano volta a ser hash
+ * (#222).
  *
  * A subconsulta não é correlacionada — nenhuma referência à linha de fora —,
  * então o Postgres a avalia uma vez e casa por hash.
@@ -464,23 +472,20 @@ function canonicalOfGroup(opts: BoardFilters, candidateId: number | null, pay?: 
   // Sem `groupRepeats`, senão a condição se chamaria de dentro dela mesma.
   const dentro = boardConditions({ ...opts, groupRepeats: false }, candidateId, groupPay);
   return sql`${job.id} in (
-    select ordenado.id from (
-      select ${job.id} as id,
-             row_number() over (partition by ${chave} order by ${job.id}) as rn
-      from ${job}
-      left join ${jobScore} on ${scoreJoin(candidateId, opts.track)}
-      left join ${application} on ${and(
-        eq(application.jobId, job.id),
-        scopedTo(application.candidateId, candidateId),
-      )}
-      left join ${source} on ${eq(source.id, job.sourceId)}
-      left join ${jobPage} on ${eq(jobPage.jobId, job.id)}
-      ${groupPay?.relation.kind === "shared"
-        ? sql`left join ${groupPay.relation.table} on ${eq(groupPay.relation.table.jobId, job.id)}`
-        : sql``}
-      where ${and(...dentro)}
-    ) ordenado
-    where ordenado.rn = 1
+    select min(${job.id})
+    from ${job}
+    left join ${jobScore} on ${scoreJoin(candidateId, opts.track)}
+    left join ${application} on ${and(
+      eq(application.jobId, job.id),
+      scopedTo(application.candidateId, candidateId),
+    )}
+    left join ${source} on ${eq(source.id, job.sourceId)}
+    left join ${jobPage} on ${eq(jobPage.jobId, job.id)}
+    ${groupPay?.relation.kind === "shared"
+      ? sql`left join ${groupPay.relation.table} on ${eq(groupPay.relation.table.jobId, job.id)}`
+      : sql``}
+    where ${and(...dentro)}
+    group by ${chave}
   )`;
 }
 
@@ -528,8 +533,27 @@ const MIN_DESCRIPTION_CHARS = 200;
  * do texto. Medido no acervo local (9 mil vagas): 103ms → 26ms, resultado
  * idêntico nas bordas (199/200/201, acento, emoji, vazio, nulo).
  */
-function fullDescriptionSql(): SQL {
-  return sql`substr(coalesce(${job.descriptionText}, ''), ${sql.raw(String(MIN_DESCRIPTION_CHARS))}, 1) <> ''`;
+function fullDescriptionSql(text: PgColumn = job.descriptionText): SQL {
+  return sql`substr(coalesce(${text}, ''), ${sql.raw(String(MIN_DESCRIPTION_CHARS))}, 1) <> ''`;
+}
+
+const APELIDO_DA_DESCRITA = "vaga_descrita";
+
+/**
+ * As vagas abertas com descrição completa, lidas do índice parcial
+ * `job_described_open_idx` em vez da descrição.
+ *
+ * `fullDescriptionSql` linha a linha ainda obriga a abrir o TOAST de cada vaga:
+ * nas facetas eram ~10 mil blocos por leitura sobre 6 mil abertas (#222), a
+ * metade do custo da consulta. O predicado aqui é o do índice, letra por
+ * letra — senão o planner não o usa —, e o PostgreSQL o calcula uma vez, na
+ * escrita da vaga. Como subconsulta de `in`, vira um conjunto com hash
+ * calculado uma vez por consulta.
+ */
+function describedOpenJobIds(): SQL {
+  const descrita = alias(job, APELIDO_DA_DESCRITA);
+  return sql`select ${descrita.id} from ${job} as ${sql.identifier(APELIDO_DA_DESCRITA)}
+    where ${descrita.closedAt} is null and ${fullDescriptionSql(descrita.descriptionText)}`;
 }
 
 const DAY_MS = 86_400_000;
@@ -747,7 +771,9 @@ function scoreJoin(candidateId: number | null, track?: TrackScope): SQL {
   return and(
     eq(jobScore.jobId, job.id),
     scopedTo(jobScore.candidateId, candidateId),
-    track ? scoreTrackFilter(track) : primaryScoreFilter(),
+    track ? scoreTrackFilter(track)
+    : candidateId === null ? primaryScoreFilter()
+    : candidatePrimaryScoreFilter(candidateId),
   )!;
 }
 
@@ -796,9 +822,16 @@ async function readBoard(
   const conditions = boardConditions(opts, candidateId, pay);
   const order = boardOrder(opts, pay);
   const parts = queryParts(opts);
-  const page = withTotal ? selectBoardPage(candidateId, opts, conditions, order, pay) : undefined;
+  // Pela janela de ids também sem total: sem ela, o cockpit ordenava as 2.340
+  // linhas elegíveis já com nota completa e captura, para ficar com doze (#222).
+  // Exceto com a normalização salarial compartilhada: lida pela janela E pela
+  // consulta de fora, o PostgreSQL materializa a CTE em vez de embuti-la, e a
+  // junção sem índice com ela custou 4,5 s no IT-113 (termo + faixa + trilha +
+  // ordem por pagamento), contra 0,26 s pela leitura direta.
+  const sharedPay = pay?.relation.kind === "shared";
+  const page = withTotal || !sharedPay ? selectBoardPage(candidateId, opts, conditions, order, pay) : undefined;
 
-  let query = db.with(...(pay?.relation.kind === "shared" ? [pay.relation.table] : []), ...(page ? [page] : []))
+  let query = db.with(...(sharedPay ? [pay!.relation.table] : []), ...(page ? [page] : []))
     .select({
       boardTotal: page ? sql<number>`${page.total}` : sql<number | null>`null::bigint`,
       jobId: job.id,
@@ -1060,7 +1093,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
         fresh: sql`coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${freshCutoff}`.as("fresh"),
         withComp: sql`coalesce(${job.compMax}, ${job.compMin}, 0) > 0`.as("with_comp"),
         named: sql`lower(${job.companyName}) <> lower(coalesce(${source.label}, ''))`.as("named"),
-        described: fullDescriptionSql().as("described"),
+        described: sql`${job.id} in (${describedOpenJobIds()})`.as("described"),
         notApplied: sql`${application.appliedAt} is null`.as("not_applied"),
       })
       .from(job)
@@ -1457,19 +1490,28 @@ export async function getJobScoringDetail(candidateId: number, jobId: number) {
 /** Headline numbers for the cockpit — primary-track fits, one per job. */
 export async function corpusStats(candidateId: number) {
   const db = getDb();
+  // As quatro contagens de nota numa passada só: eram quatro subconsultas, e
+  // cada uma relia todas as notas do candidato (#222).
   const [row] = await db
     .select({
       open: sql<number>`(select count(*) from ${job} where ${job.closedAt} is null)`.mapWith(Number),
       companies: sql<number>`(select count(*) from ${company})`.mapWith(Number),
       sources: sql<number>`(select count(*) from ${source} where ${source.enabled} = true)`.mapWith(Number),
-      above45: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and ${primaryScoreFilter("s")} and j.closed_at is null and s.fit >= 45)`.mapWith(Number),
-      above60: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and ${primaryScoreFilter("s")} and j.closed_at is null and s.fit >= 60)`.mapWith(Number),
-      above70: sql<number>`(select count(*) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and ${primaryScoreFilter("s")} and j.closed_at is null and s.fit >= 70)`.mapWith(Number),
-      best: sql<number>`(select coalesce(max(fit), 0) from ${jobScore} s join ${job} j on j.id = s.job_id where s.candidate_id = ${candidateId} and ${primaryScoreFilter("s")} and j.closed_at is null)`.mapWith(Number),
+      above45: sql<number>`notas.above45`.mapWith(Number),
+      above60: sql<number>`notas.above60`.mapWith(Number),
+      above70: sql<number>`notas.above70`.mapWith(Number),
+      best: sql<number>`notas.best`.mapWith(Number),
       // `best = 0` não distingue "sem nota" de "nota zero".
       scored: hasPrimaryScoreSql(candidateId),
     })
-    .from(sql`(select 1) as singleton`);
+    .from(sql`(
+      select count(*) filter (where s.fit >= 45) as above45,
+             count(*) filter (where s.fit >= 60) as above60,
+             count(*) filter (where s.fit >= 70) as above70,
+             coalesce(max(s.fit), 0) as best
+      from ${jobScore} s join ${job} j on j.id = s.job_id
+      where s.candidate_id = ${candidateId} and ${candidatePrimaryScoreFilter(candidateId, "s")} and j.closed_at is null
+    ) as notas`);
   return row;
 }
 
@@ -1514,7 +1556,7 @@ export async function clusterBreakdown(candidateId: number, minFit = 45) {
     .where(
       and(
         eq(jobScore.candidateId, candidateId),
-        primaryScoreFilter(),
+        candidatePrimaryScoreFilter(candidateId),
         isNull(job.closedAt),
         gte(jobScore.fit, minFit),
       ),

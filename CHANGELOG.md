@@ -9,6 +9,14 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.25.3] - 2026-09-25
+
+### Alterado
+
+- Facetas, quadro e cockpit leem 10 a 20 vezes menos blocos do banco num acervo com a forma do de produção (#222): a publicação canônica do grupo sai de `min(id) ... group by` em vez de `row_number() ... rn = 1`, cuja estimativa de 0,5% levava a laços aninhados; a trilha principal de quem já tem escopo de candidato é uma subconsulta escalar (`candidatePrimaryScoreFilter`); `corpusStats` conta as notas numa passada só; `listBoard` passa pela mesma janela de ids de `listBoardPage`. Resultados idênticos, conferidos consulta a consulta.
+- Migrações aditivas `0025_job_described_open_idx` (gerada: índice parcial que a faceta "com descrição" usa em vez de abrir o TOAST de cada vaga) e `0026_job_score_board_cover` (custom: `job_score_board_cover_idx` com `INCLUDE (fit, cluster, blockers)`, fora de `schema.ts` porque o Drizzle não declara colunas incluídas).
+- `pnpm perf:facetas`: benchmark com acervo de forma de produção (15 mil vagas, 6 mil abertas, 4 candidatos com 3 trilhas, descrições no TOAST) que imprime tempo e blocos tocados por consulta.
+
 ## [1.25.2] - 2026-09-25
 
 ### Segurança

@@ -20,6 +20,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.25.3] - 2026-09-25T15:27:50.000Z
+
+### Improved
+
+- The Jobs screen and the home dashboard read far less from the database to build the list and count the filters.
+
 ## [1.25.2] - 2026-09-25T13:38:35.000Z
 
 ### Fixed
