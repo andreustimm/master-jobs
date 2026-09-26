@@ -218,10 +218,18 @@ o resultado na Vercel e na PR.
 ### Novidades preparadas no build
 
 `pnpm build` prepara o service worker e executa `pnpm changelog:build` antes
-do Next. O gerador lê `USER_CHANGELOG.pt-BR.md` e `USER_CHANGELOG.en.md` e
-grava metadados e HTML sanitizado em `src/generated/changelog.ts`, ignorado
-pelo Git. Cada build usa o histórico daquele checkout, inclusive em rollback.
-Um arquivo de origem ausente interrompe a geração.
+do Next. O gerador lê `USER_CHANGELOG.pt-BR.md`, `USER_CHANGELOG.en.md` e
+`CHANGELOG.md`, e grava metadados e HTML sanitizado em
+`src/generated/changelog.ts`, ignorado pelo Git. Cada build usa o histórico
+daquele checkout, inclusive em rollback. Um arquivo de origem ausente
+interrompe a geração.
+
+O `CHANGELOG.md` técnico entra só pela lista de versões publicadas: toda versão
+sem nota de usuário — marcada com `sem-nota-usuario` ou anterior ao marcador —
+aparece no modal como "Melhorias internas, sem mudança visível." (texto do
+dicionário i18n), com a data do marcador ou, na falta dele, a do cabeçalho
+técnico. O texto técnico nunca chega ao artefato. Versão com nota de usuário
+malformada não vira "interna": continua fora, com o diagnóstico do gerador.
 
 O rodapé importa o módulo no servidor e envia apenas o idioma ativo a quem
 tem sessão válida. Os Markdown e o renderer não são dependências de runtime

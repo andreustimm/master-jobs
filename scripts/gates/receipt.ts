@@ -140,6 +140,29 @@ export function recordPass(
   return { ...base, gates: { ...base.gates, [gate]: pass } };
 }
 
+/**
+ * Registra o gate vermelho: o recibo deste fingerprint sai sem ele. Gravar é
+ * obrigatório mesmo sem recibo em memória (`--fresh`), porque o do disco pode
+ * ainda trazer o verde antigo deste mesmo estado — e o próximo `pnpm gates`
+ * pularia o gate que acabou de falhar.
+ */
+export function recordFail(receipt: Receipt | null, fingerprint: Fingerprint, gate: string): Receipt {
+  const base: Receipt =
+    receipt !== null && receipt.fingerprint === fingerprint.value
+      ? receipt
+      : {
+          schemaVersion: RECEIPT_SCHEMA_VERSION,
+          fingerprint: fingerprint.value,
+          head: fingerprint.head,
+          tree: fingerprint.tree,
+          mapVersion: fingerprint.mapVersion,
+          mapChecksum: fingerprint.mapChecksum,
+          gates: {},
+        };
+  const { [gate]: _failed, ...gates } = base.gates;
+  return { ...base, gates };
+}
+
 export type TreeEntry = { path: string; kind: "file" | "executable" | "symlink" | "deleted" | "other"; content: string | Buffer };
 
 /**

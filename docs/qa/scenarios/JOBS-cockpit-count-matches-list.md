@@ -4,9 +4,9 @@ area: JOBS
 title: O número da tela inicial conta o mesmo quadro que ela mostra
 persona: Andreus em triagem
 journey: J-trust-the-filtered-board
-expected: O "N vagas" do cockpit reflete os filtros aplicados, e concorda com o que /jobs diz para a mesma URL
-entry_points: /; /?company=Acme; /?notApplied=1; /?fitMax=70
-qa_status: pass
+expected: O "N vagas" do cockpit reflete os filtros aplicados e concorda com /jobs na mesma URL; cada card de contagem abre a lista que ele conta, com o mesmo número
+entry_points: /; /?company=Acme; /?notApplied=1; /?fitMax=70; /?fit=60&workMode=remote
+qa_status: untested
 bug_ids:
 fix_status:
 retest_status:
@@ -42,3 +42,16 @@ A conferir:
 - Os contadores dos chips continuam oferecendo o que cada opção renderia — eles
   não viram cópias do total.
 - Nenhum chip mostra número maior que o total exibido ao lado dele.
+
+**Reset 2026-09-25 (#314):** os cards do topo viraram links. A conferir, no
+padrão e com `/?fit=60&workMode=remote`:
+
+- "Vagas abertas", "empresa nomeada", "sem bloqueio" e "últimos 3 dias": o
+  número do card é o total que `/jobs` mostra ao abrir o link, e o chip do card
+  chega ligado (e desliga). Os de faceta não levam empresa, faixa de Score,
+  faixa salarial nem "ainda não enviadas" digitados no cockpit.
+- "Melhor fit" abre a vaga cuja nota é a do card; sem nota, o card não é link.
+- "No funil" abre `/pipeline`, e o card "Todos" mostra o mesmo número.
+- "Empresas" não tem hover, seta nem link.
+- Teclado: Tab alcança cada card com foco visível e Enter navega; em 375px a
+  faixa não estoura; passar o mouse mostra de que conjunto o número fala.

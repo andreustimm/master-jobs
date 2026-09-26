@@ -686,8 +686,14 @@ describe("localized footer boundary", () => {
           publication: { kind: "date", value: "2026-08-22" },
           html: "<p>Visible change.</p>",
         },
+        {
+          version: "1.1.0",
+          publication: { kind: "date", value: "2026-08-21" },
+          html: "",
+          internal: true,
+        },
       ],
-      labels: { open: "Open", title: "Title", lead: "Lead", close: "Close" },
+      labels: { open: "Open", title: "Title", lead: "Lead", close: "Close", internal: "Internal" },
     };
     expect(JSON.parse(JSON.stringify(props))).toEqual(props);
 

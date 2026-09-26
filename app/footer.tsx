@@ -42,6 +42,7 @@ export function Footer({
               title: t("changelog.title"),
               lead: t("changelog.lead"),
               close: t("changelog.close"),
+              internal: t("changelog.internal"),
             }}
           />
         ) : null}

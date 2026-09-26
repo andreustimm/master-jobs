@@ -504,6 +504,17 @@ Hero photography sits in `{rounded.xl}` (16px) frames with no border. Product fa
 - Background `{colors.canvas}`, text `{colors.primary}`, type `{typography.link-md}`, padding `{spacing.xxs} 0`
 - Used for: "See details", "Read more" inside cards and disclaimer rows
 
+**`button-icon`** — icon-only row action (Master Jobs addition, #312)
+- Outlined like `button-outline-ink` but quieter: 1px `{colors.hairline}` border, muted icon, rounded `{rounded.md}`; destructive actions use the semantic danger token for icon and hover wash, never a new red
+- Target: 44×44px below `xl` (touch screens and tablets), compact 28px on desktop `xl`+; the icon itself stays 14–16px
+- The action's name is never guessed from the glyph. It lives in three places, all from the i18n dictionary: `tooltip` above the icon on hover and keyboard focus, `aria-label` for screen readers, and a visible text label beside the icon below `sm`, because touch never opens a tooltip. No native `title` — it would duplicate the tooltip
+- Any action with an effect opens an inline confirmation below the row that names the target, with Cancel first and focused; Esc cancels and focus returns to the icon
+- Used for: CV version actions on `/candidate` (View, Rename, Restore, Delete)
+
+**`tooltip`** — short action name over a control
+- Background `{colors.ink}` (the theme's foreground), text `{colors.on-primary}` (the theme's background), rounded `{rounded.md}`, 12px caption, placed above the trigger (`side="top"`)
+- Opens on hover and on focus; carries a name, not instructions. Anything longer than a few words belongs in the page
+
 ### Cards & Containers
 
 **`card-product`** — the workhorse product tile

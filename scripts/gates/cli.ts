@@ -14,7 +14,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, writeFile
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { planGates, renderPlan, testsMentioning, validateImpactMap, type ImpactMap, type Plan, type PlannedGate } from "./impact.ts";
-import { covers, fingerprintOf, readReceipt, recordPass, sha256, treeHash, type Fingerprint, type Receipt, type TreeEntry } from "./receipt.ts";
+import { covers, fingerprintOf, readReceipt, recordFail, recordPass, sha256, treeHash, type Fingerprint, type Receipt, type TreeEntry } from "./receipt.ts";
 import { selectE2E, validateE2EMap, type E2EMap, type Selection } from "./e2e-selection.ts";
 
 export const IMPACT_FILE = "config/validation-impact.json";
@@ -193,6 +193,8 @@ export function runPlan(plan: Plan, commands: (gate: PlannedGate) => string[], d
     const seconds = Math.round((deps.now() - started) / 1000);
     if (code !== 0) {
       results.push({ id: gate.id, status: "fail", seconds });
+      receipt = recordFail(receipt, before, gate.id);
+      deps.save(receipt);
       break;
     }
     results.push({ id: gate.id, status: "pass", seconds });

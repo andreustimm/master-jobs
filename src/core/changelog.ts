@@ -22,7 +22,17 @@ export type UserRelease = {
   markdown: string;
 };
 
-export type BuiltUserRelease = Omit<UserRelease, "markdown"> & { html: string };
+/**
+ * `internal: true` marks a published version without a user note: the modal
+ * shows the dictionary's "internal improvements" line and `html` stays empty.
+ */
+export type BuiltUserRelease = Omit<UserRelease, "markdown"> & { html: string; internal?: true };
+
+/** A version the technical changelog published, with the date its header carries. */
+export type TechnicalRelease = {
+  version: string;
+  publication: Publication;
+};
 
 export type OmittedUserRelease = {
   version: string;
@@ -417,6 +427,63 @@ export function parseUserChangelog(markdown: string): ChangelogParseResult {
   releases.sort((a, b) => compareSemanticVersions(a.version, b.version));
   omitted.sort((a, b) => compareSemanticVersions(a.version, b.version));
   return { releases, omitted, issues };
+}
+
+/**
+ * Versions published in the technical changelog (`CHANGELOG.md`). Only a
+ * well-formed `## [X.Y.Z] - date` counts: a malformed header is the release
+ * gate's business, and guessing its version here would invent a release.
+ */
+export function technicalReleases(markdown: string): TechnicalRelease[] {
+  const seen = new Set<string>();
+  const releases: TechnicalRelease[] = [];
+  for (const header of changelogSections(markdown)) {
+    if (header.token === "Unreleased") continue;
+    if (!header.versionSyntaxValid || !VERSION.test(header.token)) continue;
+    if (seen.has(header.token)) continue;
+    const publication =
+      header.publicationSyntaxValid && header.publication
+        ? parsePublication(header.publication)
+        : null;
+    if (!publication) continue;
+    seen.add(header.token);
+    releases.push({ version: header.token, publication });
+  }
+  return releases.sort((a, b) => compareSemanticVersions(a.version, b.version));
+}
+
+/**
+ * Every published version without a user note, newest first (issue #340).
+ *
+ * The user changelogs only list versions with notes, plus the few marked
+ * `sem-nota-usuario`; older releases have no marker at all. So the complete
+ * list comes from the technical changelog, retroactively, without rewriting
+ * history by hand. The omission marker wins on date because it carries the
+ * release instant, while the technical header only has the day. A version
+ * whose user entry is malformed is left out: it HAS a note, just a broken one,
+ * and calling it "internal" would hide that from whoever reads the diagnostic.
+ */
+export function internalReleases(
+  user: ChangelogParseResult,
+  technical: readonly TechnicalRelease[],
+): TechnicalRelease[] {
+  const withNote = new Set([
+    ...user.releases.map((release) => release.version),
+    // A duplicate repeats a version already classified by its first entry.
+    ...user.issues.flatMap((issue) =>
+      issue.version && issue.code !== "duplicate_version" ? [issue.version] : [],
+    ),
+  ]);
+  const publications = new Map<string, Publication>();
+  for (const release of technical) publications.set(release.version, release.publication);
+  for (const release of user.omitted) {
+    if (release.publication) publications.set(release.version, release.publication);
+  }
+  const internal: TechnicalRelease[] = [];
+  for (const [version, publication] of publications) {
+    if (!withNote.has(version)) internal.push({ version, publication });
+  }
+  return internal.sort((a, b) => compareSemanticVersions(a.version, b.version));
 }
 
 function entryLocale(

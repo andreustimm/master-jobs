@@ -363,6 +363,20 @@
       ]
     },
     {
+      "id": "cockpit-cards",
+      "modules": [
+        "tests/e2e/ui/cockpit-cards.mjs",
+        "tests/e2e/cockpit-cards.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/",
+        "/jobs",
+        "/login",
+        "/pipeline"
+      ]
+    },
+    {
       "id": "work-mode",
       "modules": [
         "tests/e2e/ui/work-mode.mjs",
@@ -372,6 +386,17 @@
       "routes": [
         "/",
         "/jobs"
+      ]
+    },
+    {
+      "id": "public-cv-format",
+      "modules": [
+        "tests/e2e/ui/public-cv-format.mjs",
+        "tests/e2e/public-cv-format.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/p/[slug]"
       ]
     },
     {

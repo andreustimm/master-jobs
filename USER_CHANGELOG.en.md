@@ -20,6 +20,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 <!-- sem-nota-usuario: 1.25.4 - 2026-09-25T17:23:44.000Z -->
 
+<!-- sem-nota-usuario: 1.26.0 - 2026-09-25T23:43:56.000Z -->
+
 ## [Unreleased]
 
 ## [1.25.3] - 2026-09-25T15:27:50.000Z

@@ -42,6 +42,7 @@ import { loadProfile } from "../../src/core/profile/load.ts";
 import { scoreOne } from "../../src/core/scoring/apply.ts";
 import { SCORER_VERSION } from "../../src/core/scoring/score.ts";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
+import { PUBLIC_CV_FIXTURE } from "./public-cv-format.mjs";
 import { isolationRefusal } from "./database-guard.mjs";
 
 // Antes de qualquer migração ou escrita. Ver `database-guard.mjs`.
@@ -102,13 +103,31 @@ try {
   // E2E jamais substitui o currículo ou o acervo do usuário.
   const candidateId = await syncCandidateFromProfile();
   if (!(await currentDocument(candidateId, "cv"))) {
+    const cvContent =
+      "# E2E Candidate\n\nSenior AI Software Architect with TypeScript, Python, distributed systems, LLM products, cloud architecture, observability, and technical leadership experience.";
+    // Duas versões anteriores, salvas ANTES da atual, dão alvo às ações de
+    // excluir e restaurar da tabela de versões (#312). O conteúdo repete o da
+    // atual: restaurar pela tabela troca a versão atual, e o resto da suíte lê
+    // o currículo para pontuar e medir lacuna.
+    // Conteúdos distintos entre si: `saveDocument` ignora save idêntico ao atual.
+    for (const [label, note] of [
+      ["E2E CV anterior (excluir)", "Versão anterior A."],
+      ["E2E CV anterior (restaurar)", "Versão anterior B."],
+    ]) {
+      await saveDocument({
+        candidateId,
+        kind: "cv",
+        label,
+        format: "markdown",
+        content: `${cvContent}\n\n${note}`,
+      });
+    }
     await saveDocument({
       candidateId,
       kind: "cv",
       label: "E2E CV",
       format: "markdown",
-      content:
-        "# E2E Candidate\n\nSenior AI Software Architect with TypeScript, Python, distributed systems, LLM products, cloud architecture, observability, and technical leadership experience.",
+      content: cvContent,
     });
   }
 
@@ -536,6 +555,29 @@ try {
         .where(eq(candidate.id, scoped));
     }
   }
+
+  // #325: candidato sem conta, público e com o CV publicado, cujo texto veio
+  // de PDF. `saveDocument` não regrava conteúdo igual, então rodar de novo
+  // numa base reaproveitada é inofensivo.
+  const publicCvCandidate = await ensureCandidate({
+    slug: PUBLIC_CV_FIXTURE.slug,
+    name: PUBLIC_CV_FIXTURE.name,
+    email: PUBLIC_CV_FIXTURE.email,
+  });
+  await getDb()
+    .update(candidate)
+    .set({ visibility: "public", publicCv: true })
+    .where(eq(candidate.id, publicCvCandidate));
+  await saveDocument({
+    candidateId: publicCvCandidate,
+    kind: "cv",
+    label: "E2E CV importado de PDF",
+    format: "text",
+    content: PUBLIC_CV_FIXTURE.content,
+  });
+  // `saveDocument` enfileira repontuação; este candidato não tem perfil de
+  // matching, e a tarefa só faria o worker registrar erro fora do cenário.
+  await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, publicCvCandidate));
 
   const [ownerUser] = await getDb().select({ id: authUser.id }).from(authUser).where(eq(authUser.email, EMAIL)).limit(1);
   const [linkedRecruiter] = await getDb()

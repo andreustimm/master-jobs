@@ -43,6 +43,7 @@ export const en: Dictionary = {
     title: "What's new",
     lead: "What changed in each version.",
     close: "Close",
+    internal: "Internal improvements, no visible change.",
   },
   nav: {
     menu: "Menu",
@@ -478,6 +479,11 @@ export const en: Dictionary = {
     topRanked: "Top ranked",
     matching: "{count} matching",
     seeAll: "see all",
+    openJobsHint: "Every open job, with no score cut and no filter",
+    companiesHint: "Every company in the catalog",
+    withinCutHint: "Within the score cut and the filters on this screen",
+    bestFitHint: "The highest score on your primary track",
+    inPipelineHint: "Applications at any pipeline stage",
   },
   presets: {
     applicableToday: "Worth applying today",

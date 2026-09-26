@@ -20,6 +20,7 @@ import * as auth from "./auth.mjs";
 import * as candidateRescore from "./candidate-rescore.mjs";
 import * as canonicalFlows from "./canonical-flows.mjs";
 import * as cardActions from "./card-actions.mjs";
+import * as cockpitCards from "./cockpit-cards.mjs";
 import * as cvVersions from "./cv-versions.mjs";
 import * as design from "./design.mjs";
 import * as filterAutoApply from "./filter-auto-apply.mjs";
@@ -34,6 +35,7 @@ import * as navigation from "./navigation.mjs";
 import * as onboarding from "./onboarding.mjs";
 import * as passwordReset from "./password-reset.mjs";
 import * as pipeline from "./pipeline.mjs";
+import * as publicCvFormat from "./public-cv-format.mjs";
 import * as publicProfile from "./public-profile.mjs";
 import * as pwa from "./pwa.mjs";
 import * as rateLimit from "./rate-limit.mjs";
@@ -77,7 +79,11 @@ export const AREAS = [
   { id: "onboarding", run: onboarding.run, requires: [] },
   { id: "rate-limit", run: rateLimit.run, requires: [] },
   { id: "navigation", run: navigation.run, requires: [] },
+  // Cada uma entra com as contas e a fixture de `setup.mjs`, não com estado de
+  // outra área: provadas sozinhas com `--areas` no merge de dev (#314, #325).
+  { id: "cockpit-cards", run: cockpitCards.run, requires: [] },
   { id: "work-mode", run: workMode.run, requires: [] },
+  { id: "public-cv-format", run: publicCvFormat.run, requires: [] },
   { id: "search-relevance", run: searchRelevance.run, requires: [] },
   { id: "filter-auto-apply", run: filterAutoApply.run, requires: [] },
   { id: "jobs-loading", run: jobsLoading.run, requires: [] },

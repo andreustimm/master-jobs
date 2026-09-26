@@ -9,6 +9,17 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.26.0] - 2026-09-25
+
+### Corrigido
+
+- `deep-review`: `build_knowledge.py` registrava `AGENTS.md` duas vezes porque `CLAUDE.md` é symlink para ele, e `build_jobs.py` recusava o `rules.json` com "duplicate source accounting rows" (#328). Agora cada arquivo real conta uma fonte só (caminho resolvido, o mais raso vence). O resumo do `build_jobs.py --level L1` deixou de anunciar o limite de polish, faixa que L1 não gera.
+
+### Adicionado
+
+- Roteamento de agentes por papel × complexidade × modo de assinatura (#318): `config/model-routing.json` (modos `claude_only`, `codex_only` e `multi_provider`; política inválida falha fechado), `pnpm route <papel> <complexidade> [--session <harness>] [--author <modelo>]… [--unavailable <provedor,…>]` e as regras G86 (cinco papéis; o juiz nunca é modelo que escreveu o delta) e G87 (modelo e effort pela política; o agente não rebaixa o modelo do turno principal) em `docs/engineering/rules/orchestration.md`.
+- O agente canônico em `.claude/agents/` declara `role`, `model` e `effort`; os espelhos do Codex recebem `model` e `model_reasoning_effort` e os do OpenCode, `model`, todos da política; `pnpm check:harness` reprova agente cujo modelo diverge dela.
+
 ## [1.25.4] - 2026-09-25
 
 ### Alterado

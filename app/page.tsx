@@ -1,6 +1,8 @@
+import type { Route } from "next";
 import { Card } from "@/components/ui/card";
 import { TransitionLink } from "./transition-link";
 import { loadCockpit } from "./cockpit-data.ts";
+import { facetHref, openJobsHref } from "./filter-state.ts";
 import { comVigia, criarCronometro, registrarTempo } from "./timeout-watch.ts";
 import { FilterBar, href, readFilters, toBoardFilters } from "./filters";
 import { JobList } from "./joblist";
@@ -79,14 +81,62 @@ export default async function Cockpit({
         </Card>
       )}
 
+      {/*
+        Cada número leva à lista que ele conta (#314). Os de faceta levam só o
+        que a faceta lê, com o chip correspondente ligado; "empresas" não tem
+        tela para abrir e fica sem link.
+      */}
       <div className="mb-7 grid grid-cols-[repeat(auto-fit,minmax(104px,1fr))] gap-px overflow-hidden rounded-xl border bg-border">
-        <Stat value={stats?.open?.toLocaleString(locale) ?? "0"} label={t("cockpit.openJobs")} />
-        <Stat value={stats?.companies?.toLocaleString(locale) ?? "0"} label={t("cockpit.companies")} />
-        <Stat value={facets.named.toLocaleString(locale)} label={t("cockpit.namedEmployer")} />
-        <Stat value={facets.unblocked} label={t("cockpit.unblocked")} accent />
-        <Stat value={facets.fresh} label={t("cockpit.lastThreeDays")} accent />
-        <Stat value={Number(stats?.best ?? 0).toFixed(0)} label={t("cockpit.bestFit")} />
-        <Stat value={tracked} label={t("cockpit.inPipeline")} />
+        <Stat
+          value={(stats?.open ?? 0).toLocaleString(locale)}
+          label={t("cockpit.openJobs")}
+          hint={t("cockpit.openJobsHint")}
+          href={openJobsHref()}
+          testId="cockpit-stat-open"
+        />
+        <Stat
+          value={(stats?.companies ?? 0).toLocaleString(locale)}
+          label={t("cockpit.companies")}
+          hint={t("cockpit.companiesHint")}
+          testId="cockpit-stat-companies"
+        />
+        <Stat
+          value={facets.named.toLocaleString(locale)}
+          label={t("cockpit.namedEmployer")}
+          hint={t("cockpit.withinCutHint")}
+          href={facetHref(state, "named")}
+          testId="cockpit-stat-named"
+        />
+        <Stat
+          value={facets.unblocked.toLocaleString(locale)}
+          label={t("cockpit.unblocked")}
+          hint={t("cockpit.withinCutHint")}
+          href={facetHref(state, "unblocked")}
+          testId="cockpit-stat-unblocked"
+          accent
+        />
+        <Stat
+          value={facets.fresh.toLocaleString(locale)}
+          label={t("cockpit.lastThreeDays")}
+          hint={t("cockpit.withinCutHint")}
+          href={facetHref(state, "fresh")}
+          testId="cockpit-stat-fresh"
+          accent
+        />
+        <Stat
+          value={Number(stats?.best ?? 0).toFixed(0)}
+          label={t("cockpit.bestFit")}
+          hint={t("cockpit.bestFitHint")}
+          href={stats?.bestJobId ? (`/jobs/${stats.bestJobId}` as Route) : undefined}
+          testId="cockpit-stat-best"
+        />
+        <Stat
+          value={tracked.toLocaleString(locale)}
+          label={t("cockpit.inPipeline")}
+          hint={t("cockpit.inPipelineHint")}
+          href="/pipeline"
+          testId="cockpit-stat-pipeline"
+        />
       </div>
 
       <FilterBar base="/" state={state} facets={facets} t={t} />

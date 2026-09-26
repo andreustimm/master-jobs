@@ -16,6 +16,8 @@ export type ChangelogModalLabels = {
   title: string;
   lead: string;
   close: string;
+  /** Line shown for a version without a user note (issue #340). */
+  internal: string;
 };
 
 export type ChangelogModalProps = {
@@ -75,12 +77,14 @@ function ReleaseCard({
   locale,
   expanded,
   hydrated,
+  internalLabel,
   onToggle,
 }: {
   release: BuiltUserRelease;
   locale: ChangelogLocale;
   expanded: boolean;
   hydrated: boolean;
+  internalLabel: string;
   onToggle: (version: string) => void;
 }) {
   const ids = releaseIds(release.version);
@@ -133,7 +137,13 @@ function ReleaseCard({
         hidden={!expanded}
         className="min-w-0 border-t border-[var(--hairline)] px-4 py-4"
       >
-        {expanded ? <ChangelogContent html={release.html} /> : null}
+        {!expanded ? null : release.internal ? (
+          <p data-testid="changelog-internal" className="type-body-md text-muted-foreground">
+            {internalLabel}
+          </p>
+        ) : (
+          <ChangelogContent html={release.html} />
+        )}
       </div>
     </article>
   );
@@ -253,6 +263,7 @@ export function ChangelogModal({
                   locale={locale}
                   expanded={expanded.has(release.version)}
                   hydrated={hydrated}
+                  internalLabel={labels.internal}
                   onToggle={(version) =>
                     setExpanded((current) => toggleExpanded(current, version))
                   }
