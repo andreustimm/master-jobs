@@ -244,7 +244,9 @@ inteiro de qualquer jeito.
 áreas de `tests/e2e/ui/` (uma por arquivo, na ordem de `ui/index.mjs`), mais a
 varredura axe de `a11y.mjs`. `pnpm test:e2e --areas a,b` roda a fumaça
 (`auth`), essas áreas e o que elas exigem (`requires`: estado que outra área
-cria), na ordem da suíte; nome desconhecido recusa antes do build. O gate
+cria), na ordem da suíte; nome desconhecido recusa antes do build. Cada área
+provou rodar só com a fumaça e o seu `requires`; área nova que ainda não
+provou declara `requires: PREFIX` e roda depois de tudo o que vem antes. O gate
 `e2e` de `pnpm gates` escolhe as áreas por `config/e2e-spec-map.json`: módulo
 da área, padrão da área, ou arquivo de uma rota que ela visita (página,
 layout, componente da pasta, Route Handler; dinâmico casa qualquer valor).

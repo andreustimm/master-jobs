@@ -140,6 +140,8 @@ describe("executor das áreas — fecho e ordem", () => {
   it("requires entra, na ordem da suíte; prefix puxa tudo o que vem antes", () => {
     expect(selectAreas("canonical-flows").map((area) => area.id)).toEqual(["auth", "candidate-rescore", "canonical-flows"]);
     expect(selectAreas("admin").map((area) => area.id)).toEqual(["auth", "design", "roles", "admin"]);
+    // O fecho é transitivo: searches → canonical-flows → candidate-rescore.
+    expect(selectAreas("searches").map((area) => area.id)).toEqual(["auth", "candidate-rescore", "canonical-flows", "searches"]);
     for (const area of AREAS) {
       if (area.requires === PREFIX) {
         const at = AREAS.indexOf(area);

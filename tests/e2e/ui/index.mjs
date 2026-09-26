@@ -7,9 +7,11 @@
  * a única que a suíte inteira já provou.
  *
  * `requires` é a dependência de ESTADO: dado que outra área cria no banco ou
- * deixa em `ctx.state`. Área sem `requires` provou rodar sozinha depois da
- * fumaça (`pnpm test:e2e --areas <id>`); a que não provou declara
- * `requires: PREFIX`, e roda depois de tudo o que vem antes dela.
+ * deixa em `ctx.state`. Cada área provou rodar só com a fumaça e o seu
+ * `requires` (`pnpm test:e2e --areas <id>`, uma execução por área, em
+ * 2026-09-25/26). Área nova que ainda não provou declara `requires: PREFIX`, e
+ * roda depois de tudo o que vem antes dela — o único estado que a suíte
+ * inteira já provou.
  */
 import * as account from "./account.mjs";
 import * as admin from "./admin.mjs";
@@ -68,7 +70,9 @@ export const AREAS = [
   // recrutador e candidato (roles) e a sessão emprestada (aqui).
   { id: "admin", run: admin.run, requires: ["design", "roles"] },
   { id: "card-actions", run: cardActions.run, requires: [] },
-  { id: "cv-versions", run: cvVersions.run, requires: [] },
+  // Só a versão que não é a atual oferece excluir, e a segunda versão do
+  // currículo nasce no salvamento de candidate-rescore.
+  { id: "cv-versions", run: cvVersions.run, requires: ["candidate-rescore"] },
   { id: "i18n", run: i18n.run, requires: [] },
   { id: "onboarding", run: onboarding.run, requires: [] },
   { id: "rate-limit", run: rateLimit.run, requires: [] },
@@ -82,7 +86,9 @@ export const AREAS = [
   { id: "job-availability", run: jobAvailability.run, requires: [] },
   // Reabre a comparação que candidate-rescore cria.
   { id: "canonical-flows", run: canonicalFlows.run, requires: ["candidate-rescore"] },
-  { id: "searches", run: searches.run, requires: [] },
+  // E2E-011 exige que "fixture" case uma vaga de terceira fonte, além de
+  // Ashby e Lever: a que canonical-flows cria ("Task 04 redirect fixture").
+  { id: "searches", run: searches.run, requires: ["canonical-flows"] },
   { id: "logout", run: logout.run, requires: [] },
   { id: "pwa", run: pwa.run, requires: [] },
 ];
