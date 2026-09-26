@@ -230,6 +230,20 @@ arquivos alterados mais os testes que citam o caminho literalmente (teste de
 ferramenta costuma executar o script por caminho, sem importá-lo); script que
 nenhum teste importa nem cita fica coberto só pelo CI.
 
+Gate verde deixa **recibo**: o fingerprint do estado que ele validou — HEAD,
+hash do que difere de HEAD no disco (conteúdo, bit executável, symlink,
+remoção, arquivo novo não ignorado) e versão e checksum do mapa. Rodar
+`pnpm gates` de novo sem mudar nada pula o que já passou (`↺`); qualquer
+mudança invalida o recibo inteiro, e não só o gate que "cobre" o arquivo.
+Recibo vencido não vale: cada gate expira em 12 horas, porque o fingerprint
+não vê o que mora fora do Git (dependência instalada, imagem do Docker,
+navegador). Gate vermelho nunca entra, e gate que mudou a árvore durante a
+execução também não. O recibo mora no diretório Git da worktree
+(`git rev-parse --git-path jho-gates/receipt.json`), fora do que se versiona;
+`--fresh` ignora o recibo e grava um novo. Prova: `tests/gates-receipt.test.ts`.
+O recibo é conveniência local, não evidência de PR: o CI roda o portão
+inteiro de qualquer jeito.
+
 A suíte completa roda no CI da PR, que abre como **draft** logo depois do
 primeiro verde local e vira pronta depois do SHIP e do CI verde
 ([G57](rules/delivery.md#g57)). Orçamento por gate: check local ≤ 10 min, E2E
