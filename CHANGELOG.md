@@ -9,6 +9,28 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-09-26
+
+### Adicionado
+
+- Os cards de contagem do cockpit viraram links (#314): "vagas abertas" abre `/jobs?fit=0&ungrouped=1&status=any`; "empresa nomeada", "sem bloqueio" e "últimos 3 dias" abrem `/jobs` com o chip ligado e só os parâmetros que a faceta lê (`facetHref` em `app/filter-state.ts`); "melhor fit" abre a vaga de maior nota; "no funil" abre `/pipeline`. "Empresas" continua sem link. Cada card tem `data-testid="cockpit-stat-<chave>"` e dica do dicionário sobre o universo do número.
+- `corpusStats` devolve `bestJobId`, calculado na mesma passada das notas por `max(array[fit, job_id])` — agregado de fluxo, sem ordenação nem segunda leitura de `job_score`.
+- Funil: desfazer a última movimentação (`undoApplicationStatus`, `undoTrackAction`) grava um `status_change` compensatório com `application_event.reverts_event_id` (migração aditiva `0027`, FK `cascade`, índice único); o evento revertido nunca é editado. O id do evento visto é o token otimista: outra aba no meio devolve `conflict`. Desfazer o primeiro registro deixa `application.status = 'untracked'` (fora do funil, sem DELETE), excluído de contagens, listas, análise e casamento de e-mail por `inFunnel()` e ainda protegido da retenção (#316).
+- `src/core/cv-markdown.ts`: `cvTextToMarkdown()`, normalizador puro e idempotente que lê o CV importado de PDF como Markdown (título em caixa alta ou nome de seção conhecido vira `##`; `●`, `■`, `►`, `✓` viram item, inclusive dois na mesma linha), e `cvSections()`, que expõe resumo, experiência e formação para a fase 2 do perfil público (#326). Aplicado só na leitura; nenhum documento gravado é reescrito.
+- `/candidate`: a lista de versões do currículo ganhou ações por linha (Ver, Renomear e, fora da atual, Restaurar e Excluir) em `app/candidate/version-table.tsx`, como atalho adicional ao modal Histórico, que não muda. As duas superfícies compartilham `useVersionActions` e chamam as mesmas Server Actions já guardadas; nenhuma action nova. Toda ação com efeito exige confirmação (foco inicial em Cancelar, Esc cancela), Ver abre um `<dialog>` próprio com o conteúdo da versão e o foco volta ao ícone. Botão só-ícone e tooltip entram no DESIGN.md (#312).
+
+### Corrigido
+
+- Os números do cockpit saem com separador de milhar em todos os cards; "sem bloqueio", "últimos 3 dias" e "no funil" saíam crus.
+
+### Alterado
+
+- Máquina de estados do funil: voltar para qualquer estágio anterior, `rejected`/`withdrawn`/`archived` reabrem, Preparando pode arquivar e rejeitar/retirar valem de todo estágio depois de `applied`; `transitionDirection`/`transitionGroups` agrupam avançar, voltar e encerrar. `applied_at` só é limpo ao desfazer a própria entrada em `applied`. Opções de status em ordem de funil, não alfabética. Aceite de sugestão de e-mail que regrediria o funil é recusado (`RegressiveSuggestionError`) e a sugestão fica pendente (#316).
+- `scripts/build-changelog.ts` passa a ler também o `CHANGELOG.md` técnico e compila, de forma retroativa, toda versão publicada sem nota de usuário como entrada `internal: true` (`technicalReleases` e `internalReleases` em `src/core/changelog.ts`, funções puras). A data vem do marcador `sem-nota-usuario` quando ele a traz e, na falta, do cabeçalho técnico; o texto técnico nunca chega ao artefato, e versão com nota de usuário malformada não vira "interna". O modal mostra a linha `changelog.internal` do dicionário. O `CHANGELOG.md` passa a ser entrada obrigatória da geração (#340).
+- `publicProfile()` usa `publicCvMarkdown()` (`src/core/public-cv.ts`), que filtra, normaliza e filtra de novo o CV (`publicCvText` → `cvTextToMarkdown` → `publicCvText`): as garantias sobre o texto gravado seguem intactas e um título de pretensão inferido leva a seção inteira.
+- `MarkdownPreview` normaliza a entrada, mantém a quebra de linha simples como `<br>` e só cria âncora para `http(s)` (`javascript:`, `data:` e `mailto:` viram texto); o padrão de link deixou de voltar atrás quadraticamente numa linha de `[` sem fechamento, e as expressões novas são lineares — `/p/[slug]` roda tudo isso sem sessão, sobre texto sem limite de tamanho.
+- A limpeza de PDF na importação passa a converter `●` (U+25CF) e os demais glifos compartilhados em `- `.
+
 ## [1.26.0] - 2026-09-25
 
 ### Corrigido
