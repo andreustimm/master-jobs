@@ -100,6 +100,27 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 
 const consoleErrors = [];
 const changelogRoleSnapshots = [];
+// 100 noted versions in the user fixtures, plus 0.8.1 (marked) and 0.8.0
+// (technical only) shown as internal improvements — run-isolated.mjs, #340.
+const CHANGELOG_FIXTURE_RELEASES = 102;
+
+/** Expands one internal release and reads its line; leaves the card as it found it. */
+async function internalReleaseLine(dialog, version) {
+  const button = dialog.locator(`[data-testid="changelog-release-${version}"]`);
+  const wasOpen = (await button.getAttribute("aria-expanded")) === "true";
+  if (!wasOpen) await button.click();
+  const panel = dialog.locator(`#${await button.getAttribute("aria-controls")}`);
+  const line = panel.locator('[data-testid="changelog-internal"]');
+  const result = {
+    count: await line.count(),
+    text: (await line.textContent())?.trim() ?? "",
+    time: (await button.locator("time").textContent())?.trim() ?? "",
+    dateTime: await button.locator("time").getAttribute("datetime"),
+    panelText: (await panel.textContent())?.trim() ?? "",
+  };
+  if (!wasOpen) await button.click();
+  return result;
+}
 
 function trackConsole(targetPage) {
   targetPage.on("console", (message) => {
@@ -645,7 +666,7 @@ try {
   let releaseButtons = opened.dialog.locator('[data-testid^="changelog-release-"]');
   check(
     "E2E-005 somente a versão mais nova começa expandida",
-    (await releaseButtons.count()) === 100 &&
+    (await releaseButtons.count()) === CHANGELOG_FIXTURE_RELEASES &&
       (await opened.dialog.locator('[data-testid^="changelog-release-"][aria-expanded="true"]').count()) === 1 &&
       (await opened.dialog.locator('[id$="-content"] > *').count()) === 1 &&
       (await releaseButtons.first().getAttribute("aria-expanded")) === "true",
@@ -669,7 +690,7 @@ try {
   check(
     "E2E-007 fechar a intermediária preserva as demais sem duplicar",
     statesAfterMiddleCollapse.join(",") === "true,false,true" &&
-      (await opened.dialog.locator('[id$="-content"]').count()) === 100 &&
+      (await opened.dialog.locator('[id$="-content"]').count()) === CHANGELOG_FIXTURE_RELEASES &&
       (await opened.dialog.locator('[id$="-content"] > *').count()) === 2 &&
       (await middleBody.locator(":scope > *").count()) === 0,
     statesAfterMiddleCollapse.join(","),
@@ -740,6 +761,22 @@ try {
       !portugueseResponse.includes("ENGLISH_RELEASE_ONLY") &&
       ((await opened.dialog.textContent()) ?? "").includes("Novidades"),
   );
+
+  const internalPtMarked = await internalReleaseLine(opened.dialog, "0.8.1");
+  const internalPtTechnical = await internalReleaseLine(opened.dialog, "0.8.0");
+  check(
+    "E2E-026 versão sem nota mostra a linha de melhorias internas em pt-BR, com a data da versão",
+    internalPtMarked.count === 1 &&
+      internalPtMarked.text === "Melhorias internas, sem mudança visível." &&
+      internalPtMarked.panelText === internalPtMarked.text &&
+      internalPtMarked.dateTime === "2026-08-19T12:00:00.000Z" &&
+      internalPtTechnical.count === 1 &&
+      internalPtTechnical.text === "Melhorias internas, sem mudança visível." &&
+      internalPtTechnical.dateTime === "2026-08-18" &&
+      internalPtTechnical.time === "18/08/2026" &&
+      !((await opened.dialog.textContent()) ?? "").includes("TECHNICAL_ONLY"),
+    JSON.stringify({ internalPtMarked, internalPtTechnical }),
+  );
   await page.locator('[data-testid="changelog-close"]').click();
 
   await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
@@ -754,6 +791,14 @@ try {
       englishResponse.includes("ENGLISH_RELEASE_ONLY") &&
       !englishResponse.includes("CONTEUDO_PT_EXCLUSIVO") &&
       englishText.includes("What's new"),
+  );
+  const internalEn = await internalReleaseLine(opened.dialog, "0.8.0");
+  check(
+    "E2E-027 versão sem nota mostra a linha de melhorias internas em inglês",
+    internalEn.count === 1 &&
+      internalEn.text === "Internal improvements, no visible change." &&
+      internalEn.time === "08/18/2026",
+    JSON.stringify(internalEn),
   );
   await page.locator('[data-testid="changelog-close"]').click();
 
@@ -872,6 +917,30 @@ try {
     JSON.stringify(narrow),
   );
 
+  const narrowInternalButton = opened.dialog.locator('[data-testid="changelog-release-0.8.0"]');
+  await narrowInternalButton.scrollIntoViewIfNeeded();
+  await narrowInternalButton.click();
+  const narrowInternal = await page.evaluate(() => {
+    const dialog = document.querySelector('[data-testid="changelog-dialog"]');
+    const line = dialog?.querySelector('[data-testid="changelog-internal"]');
+    const lineRect = line?.getBoundingClientRect();
+    const dialogRect = dialog?.getBoundingClientRect();
+    return {
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      dialogOverflow: dialog ? dialog.scrollWidth - dialog.clientWidth : 999,
+      contained: Boolean(lineRect && dialogRect) &&
+        lineRect.left >= dialogRect.left && lineRect.right <= dialogRect.right,
+      text: line?.textContent?.trim() ?? "",
+    };
+  });
+  await narrowInternalButton.click();
+  check(
+    "E2E-028 375px contém a linha de melhorias internas sem estouro",
+    narrowInternal.overflow <= 1 && narrowInternal.dialogOverflow <= 1 &&
+      narrowInternal.contained && narrowInternal.text !== "",
+    JSON.stringify(narrowInternal),
+  );
+
   const webkitBrowser = await webkit.launch();
   try {
     const webkitContext = await webkitBrowser.newContext({ viewport: { width: 375, height: 812 } });
@@ -962,7 +1031,8 @@ try {
     }
   });
   await page.waitForFunction(
-    () => document.querySelectorAll('[data-testid="changelog-dialog"] [aria-expanded="true"]').length === 100,
+    (total) => document.querySelectorAll('[data-testid="changelog-dialog"] [aria-expanded="true"]').length === total,
+    CHANGELOG_FIXTURE_RELEASES,
   );
   await scrollArea.evaluate((element) => { element.scrollTop = element.scrollHeight; });
   const largeHistory = {
@@ -972,8 +1042,8 @@ try {
     headerTopAfter: (await opened.dialog.locator("header").boundingBox())?.y,
   };
   check(
-    "E2E-020 100 releases mantêm header, close e scroll interno",
-    largeHistory.expanded === 100 && largeHistory.scrolls && largeHistory.closeVisible &&
+    `E2E-020 ${CHANGELOG_FIXTURE_RELEASES} releases mantêm header, close e scroll interno`,
+    largeHistory.expanded === CHANGELOG_FIXTURE_RELEASES &&largeHistory.scrolls && largeHistory.closeVisible &&
       Math.abs((largeHistory.headerTopAfter ?? 0) - (headerTop ?? 0)) <= 1,
     JSON.stringify(largeHistory),
   );

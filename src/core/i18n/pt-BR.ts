@@ -40,6 +40,7 @@ export const ptBR = {
     title: "Novidades",
     lead: "O que mudou no sistema a cada versão.",
     close: "Fechar",
+    internal: "Melhorias internas, sem mudança visível.",
   },
   nav: {
     menu: "Menu",

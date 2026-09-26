@@ -43,6 +43,7 @@ export const en: Dictionary = {
     title: "What's new",
     lead: "What changed in each version.",
     close: "Close",
+    internal: "Internal improvements, no visible change.",
   },
   nav: {
     menu: "Menu",
