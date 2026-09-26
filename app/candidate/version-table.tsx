@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Eye, Pencil, RotateCcw, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,15 @@ export function VersionTable({
   // Um clique em Ver numa linha e logo em outra não pode deixar a resposta
   // lenta da primeira aparecer sob o cabeçalho da segunda.
   const request = useRef(0);
+
+  // Sucesso também fecha o painel (em `handle`), e o campo ou botão focado
+  // desmonta com ele: sem isto, o teclado recomeçaria do topo da página. Depois
+  // de excluir o ícone não existe mais, e `focus()` num nó solto não faz nada.
+  useEffect(() => {
+    if (panel.kind === "none" && document.activeElement === document.body) {
+      lastTrigger.current?.focus();
+    }
+  }, [panel.kind]);
 
   function openPanel(next: Parameters<typeof setPanel>[0], trigger: HTMLButtonElement) {
     lastTrigger.current = trigger;

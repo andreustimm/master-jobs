@@ -3059,12 +3059,18 @@ try {
   await deleteIcon.hover();
   const hoverTip = page.locator('[data-slot="tooltip-content"]').filter({ hasText: "Excluir" });
   let hoverOk = false;
+  let hoverDetail = "tooltip não abriu";
   try {
     await hoverTip.waitFor({ state: "visible", timeout: 3000 });
+    // A entrada anima de baixo para cima (`slide-in-from-bottom-2`): medida no
+    // meio da transição, a caixa ainda cobre o ícone. Mede depois de assentar,
+    // como o teste dos chips.
+    await page.waitForTimeout(350);
     const [tip, icon] = [await hoverTip.boundingBox(), await deleteIcon.boundingBox()];
-    hoverOk = Boolean(tip && icon && tip.y + tip.height <= icon.y + 1);
+    hoverDetail = JSON.stringify({ tip, icon });
+    hoverOk = Boolean(tip && icon && tip.y + tip.height / 2 < icon.y + icon.height / 2 && tip.y + tip.height <= icon.y + 2);
   } catch {}
-  check("tooltip nomeia a ação acima do ícone no hover", hoverOk);
+  check("tooltip nomeia a ação acima do ícone no hover", hoverOk, hoverDetail);
 
   await page.mouse.move(0, 0);
   await tableRow("E2E CV anterior (excluir)").locator('[data-testid="version-table-view"]').focus();
@@ -3186,12 +3192,16 @@ try {
   await renameField.fill("E2E CV renomeada pela tabela");
   await page.locator('[data-testid="version-table-rename-save"]').click();
   let renamed = false;
+  let renameFocus = null;
   try {
     await tableRow("E2E CV renomeada pela tabela").waitFor({ timeout: 15_000 });
+    await page.waitForFunction(() => !document.querySelector('[data-testid="version-table-rename-field"]'));
+    renameFocus = await focusedTestId();
     await page.reload({ waitUntil: "networkidle" });
     renamed = (await tableRow("E2E CV renomeada pela tabela").count()) === 1;
   } catch {}
   check("Salvar renomeia pela tabela e sobrevive a refresh", renamed);
+  check("após renomear o foco volta ao ícone Renomear", renameFocus === "version-table-rename", String(renameFocus));
 
   // 375px: alvo de toque, rótulo visível no lugar do tooltip, sem rolagem lateral.
   await page.setViewportSize({ width: 375, height: 812 });
