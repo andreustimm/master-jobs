@@ -9,6 +9,18 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.27.1] - 2026-09-26
+
+### Adicionado
+
+- `pnpm gates` roda só os gates que o diff exige: `config/validation-impact.json` classifica os arquivos alterados por impacto e mapeia cada classe para os gates e testes relacionados (#334, #320).
+- Recibo de gates por fingerprint do diff: gate verde para o mesmo fingerprint não roda de novo. Gate que falha sai do recibo gravado, inclusive com `--fresh`, então a próxima execução nunca mostra "já verde" para o que falhou (#336, #320).
+- E2E seletivo: o monolito `tests/e2e/ui.mjs` virou orquestrador de áreas em `tests/e2e/ui/*.mjs`, e `config/e2e-spec-map.json` liga cada área às rotas e módulos que ela cobre. `pnpm test:e2e --areas <a,b>` roda só as áreas afetadas; sem `--areas`, a suíte inteira (404 verificações, mesma contagem do monolito) (#343, Closes #320).
+
+### Alterado
+
+- `promover-para-staging.yml` volta a disparar por `workflow_run` quando o CI de push em `dev` termina, com o `head_sha` daquele run como entrada A (decisão do dono, #347; revertendo o gatilho só agendado de #263). O `schedule` das 15:00 e 21:00 UTC fica como rede de segurança e o `workflow_dispatch` como retomada. Run `failure` também entra, para que um vermelho causado só por job de `NON_BLOCKING_CI_JOBS` promova; `requireSourceCI` volta a exigir que o run mais recente de A seja o do evento. `automaticSkip` (em `scripts/release/promotion.ts`) encerra sem CI, release nem escrita o evento automático cujo SHA `staging` já contém, o evento de CI cujo SHA deixou de ser a ponta de `dev` e o run vermelho com outro job bloqueante reprovado — o primeiro caso é o que encerra o ciclo do `chore(release)` empurrado com `RELEASE_PAT`.
+
 ## [1.27.0] - 2026-09-26
 
 ### Adicionado
