@@ -3195,7 +3195,13 @@ try {
   let renameFocus = null;
   try {
     await tableRow("E2E CV renomeada pela tabela").waitFor({ timeout: 15_000 });
-    await page.waitForFunction(() => !document.querySelector('[data-testid="version-table-rename-field"]'));
+    await page
+      .waitForFunction(
+        () => document.activeElement?.getAttribute("data-testid") === "version-table-rename",
+        undefined,
+        { timeout: 5000 },
+      )
+      .catch(() => {});
     renameFocus = await focusedTestId();
     await page.reload({ waitUntil: "networkidle" });
     renamed = (await tableRow("E2E CV renomeada pela tabela").count()) === 1;

@@ -62,11 +62,13 @@ export function VersionTable({
   // Sucesso também fecha o painel (em `handle`), e o campo ou botão focado
   // desmonta com ele: sem isto, o teclado recomeçaria do topo da página. Depois
   // de excluir o ícone não existe mais, e `focus()` num nó solto não faz nada.
+  // Espera `pending` cair: o painel fecha ainda dentro da transição, com o
+  // ícone `disabled`, e botão desabilitado não recebe foco.
   useEffect(() => {
-    if (panel.kind === "none" && document.activeElement === document.body) {
+    if (!pending && panel.kind === "none" && document.activeElement === document.body) {
       lastTrigger.current?.focus();
     }
-  }, [panel.kind]);
+  }, [panel.kind, pending]);
 
   function openPanel(next: Parameters<typeof setPanel>[0], trigger: HTMLButtonElement) {
     lastTrigger.current = trigger;
