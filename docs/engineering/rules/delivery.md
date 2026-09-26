@@ -93,7 +93,7 @@ Roteiro: [workflow.md](../workflow.md) ("Começar ou retomar").
 | Etapa | Quem faz | Como |
 |---|---|---|
 | tarefa → `dev` | pessoa ou agente | worktree a partir de `dev`, PR com CI verde |
-| `dev` → `staging` | automático | `promover-para-staging.yml`, às 15:00 e 21:00 UTC, com a ponta de `dev` de CI verde (ou dispatch com `target-sha`) |
+| `dev` → `staging` | automático | `promover-para-staging.yml`, quando o CI de push em `dev` termina (rede de segurança às 15:00 e 21:00 UTC; dispatch com `target-sha`) |
 | `staging` → `main` | agente, por delegação do dono (G46) | PR aberta pelo robô, mesclada com CI verde e sem migração não aditiva pendente |
 | tag + `main` → `dev` | automático | `sincronizar-apos-main.yml` |
 
@@ -165,9 +165,12 @@ Roteiro: [workflow.md](../workflow.md) ("Entregar e limpar").
 
 **Obrigação.** Nada nasce em `staging`; um merge criaria ali um commit que não
 existe em `dev`, e as duas divergiriam para sempre. A promoção avança `staging`
-por fast-forward até um **SHA imutável** cujo CI de push passou: no agendado, a
-ponta de `dev` lida uma única vez na preparação e repassada à publicação, que
-nunca relê a branch; no dispatch, o `target-sha` explícito. O commit de
+por fast-forward até um **SHA imutável** cujo CI de push passou: no evento de
+CI, o `head_sha` do run de push em `dev`; no agendado, a ponta de `dev` lida
+uma única vez na preparação; no dispatch, o `target-sha` explícito. A
+publicação recebe o SHA da preparação e nunca relê a branch. Evento automático
+sem nada novo (`staging` já contém o SHA, ou ele deixou de ser a ponta)
+termina em skip, sem release — é o que encerra o ciclo do `chore(release)`. O commit de
 release, quando existe, passa pelo mesmo CI antes de avançar `staging`;
 retentativa conserva o alvo.
 

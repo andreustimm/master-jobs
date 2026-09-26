@@ -201,6 +201,11 @@ commit anterior) estão em `docs/`, `.compozy/`, `tests/`, `.github/`,
 `.claude/` ou são `.md` avulsos. `CHANGELOG.md` e `USER_CHANGELOG.*.md`
 constroem, porque a tela Novidades é compilada deles; arquivo desconhecido
 também constrói — errar para "pular" publicaria código velho.
+A promoção `dev → staging` dispara a cada CI de push em `dev` com veredito
+aprovado e gera deploy de `staging` e um `chore(release)` em `dev` — ao menos
+dois deploys por versão, porque os changelogs sempre constroem. Esse corte e o
+skip da promoção sem nada novo ([promotion.md](promotion.md)) reduzem o volume;
+o limite diário não foi medido depois da volta do gatilho.
 `dev` e `staging` continuam no ambiente **Preview** da Vercel; o nome do
 ambiente não significa que toda PR recebe um deployment.
 

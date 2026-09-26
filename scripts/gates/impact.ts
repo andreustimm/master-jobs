@@ -18,6 +18,11 @@ export type GateSpec = {
   appendFiles?: boolean;
   /** Gates que este cobre por inteiro: presentes os dois, o coberto sai do plano. */
   satisfies?: string[];
+  /**
+   * Recebe `--areas` com as áreas de E2E que os arquivos pedem
+   * (`config/e2e-spec-map.json`), ou nada quando eles pedem a suíte inteira.
+   */
+  e2eAreas?: boolean;
 };
 
 export type ImpactClass = {
@@ -46,6 +51,7 @@ export type PlannedGate = {
   description: string;
   command: string[];
   appendFiles: boolean;
+  e2eAreas: boolean;
   /** Classes (ou `desconhecido`) que exigiram o gate. */
   reasons: string[];
   /** Caminhos do diff que exigiram o gate. */
@@ -140,11 +146,18 @@ export function validateImpactMap(raw: unknown): ImpactMap {
     if (spec.satisfies !== undefined && !isStringList(spec.satisfies)) {
       throw new Error(`validation-impact: satisfies do gate ${id} inválido`);
     }
+    if (spec.e2eAreas !== undefined && typeof spec.e2eAreas !== "boolean") {
+      throw new Error(`validation-impact: e2eAreas do gate ${id} precisa ser booleano`);
+    }
+    if (spec.appendFiles === true && spec.e2eAreas === true) {
+      throw new Error(`validation-impact: gate ${id} não pode receber arquivos e áreas de E2E ao mesmo tempo`);
+    }
     gates[id] = {
       description: spec.description,
       command: [...spec.command],
       ...(spec.appendFiles === undefined ? {} : { appendFiles: spec.appendFiles }),
       ...(spec.satisfies === undefined ? {} : { satisfies: [...spec.satisfies] }),
+      ...(spec.e2eAreas === undefined ? {} : { e2eAreas: spec.e2eAreas }),
     };
   }
   for (const [id, spec] of Object.entries(gates)) {
@@ -258,6 +271,7 @@ export function planGates(map: ImpactMap, paths: readonly string[]): Plan {
         description: spec.description,
         command: [...spec.command],
         appendFiles: spec.appendFiles === true,
+        e2eAreas: spec.e2eAreas === true,
         reasons: [...entry.reasons].sort(),
         files: [...entry.files].sort(),
       };

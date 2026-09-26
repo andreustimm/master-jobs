@@ -33,8 +33,9 @@ confira sua disponibilidade no checkout e a prontidão remota:
 rtk pnpm tasks preflight
 ```
 
-A promoção roda às 15:00 e 21:00 UTC com a ponta de `dev` cujo CI de push está
-verde, ou por dispatch com um SHA explícito. O commit de release recebe o mesmo
+A promoção dispara quando o CI de push em `dev` termina, com o SHA daquele run;
+o agendamento às 15:00 e 21:00 UTC é rede de segurança, e o dispatch com SHA
+explícito, a retomada. O commit de release recebe o mesmo
 CI antes de avançar `staging`; retentativas conservam o alvo. Veja o
 [contrato e a retomada da promoção](promotion.md).
 
@@ -243,6 +244,24 @@ execução também não. O recibo mora no diretório Git da worktree
 `--fresh` ignora o recibo e grava um novo. Prova: `tests/gates-receipt.test.ts`.
 O recibo é conveniência local, não evidência de PR: o CI roda o portão
 inteiro de qualquer jeito.
+
+**E2E seletivo.** A suíte de interface é `tests/e2e/ui.mjs` executando as
+áreas de `tests/e2e/ui/` (uma por arquivo, na ordem de `ui/index.mjs`), mais a
+varredura axe de `a11y.mjs`. `pnpm test:e2e --areas a,b` roda a fumaça
+(`auth`), essas áreas e o que elas exigem (`requires`: estado que outra área
+cria), na ordem da suíte; nome desconhecido recusa antes do build. Cada área
+provou rodar só com a fumaça e o seu `requires`; área nova que ainda não
+provou declara `requires: PREFIX` e roda depois de tudo o que vem antes. O gate
+`e2e` de `pnpm gates` escolhe as áreas por `config/e2e-spec-map.json`: módulo
+da área, padrão da área, ou arquivo de uma rota que ela visita (página,
+layout, componente da pasta, Route Handler; dinâmico casa qualquer valor).
+Caminho transversal (layout raiz, estilos, navegação, `components/`, o próprio
+executor e o mapa) ou sem área pede a **suíte inteira**, com o motivo. O mapa
+é conferido por `tests/e2e-spec-map.test.ts`: toda página servida e toda rota
+de `routes.mjs` têm área, as áreas são exatamente as do executor, e a rota
+que um módulo de área cita está nas rotas dela. O CI não seleciona: o job
+`e2e-navegador` roda sempre a suíte inteira, e continua não obrigatório até a
+medição de instabilidade da #202.
 
 A suíte completa roda no CI da PR, que abre como **draft** logo depois do
 primeiro verde local e vira pronta depois do SHIP e do CI verde
