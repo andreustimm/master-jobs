@@ -102,13 +102,31 @@ try {
   // E2E jamais substitui o currículo ou o acervo do usuário.
   const candidateId = await syncCandidateFromProfile();
   if (!(await currentDocument(candidateId, "cv"))) {
+    const cvContent =
+      "# E2E Candidate\n\nSenior AI Software Architect with TypeScript, Python, distributed systems, LLM products, cloud architecture, observability, and technical leadership experience.";
+    // Duas versões anteriores, salvas ANTES da atual, dão alvo às ações de
+    // excluir e restaurar da tabela de versões (#312). O conteúdo repete o da
+    // atual: restaurar pela tabela troca a versão atual, e o resto da suíte lê
+    // o currículo para pontuar e medir lacuna.
+    // Conteúdos distintos entre si: `saveDocument` ignora save idêntico ao atual.
+    for (const [label, note] of [
+      ["E2E CV anterior (excluir)", "Versão anterior A."],
+      ["E2E CV anterior (restaurar)", "Versão anterior B."],
+    ]) {
+      await saveDocument({
+        candidateId,
+        kind: "cv",
+        label,
+        format: "markdown",
+        content: `${cvContent}\n\n${note}`,
+      });
+    }
     await saveDocument({
       candidateId,
       kind: "cv",
       label: "E2E CV",
       format: "markdown",
-      content:
-        "# E2E Candidate\n\nSenior AI Software Architect with TypeScript, Python, distributed systems, LLM products, cloud architecture, observability, and technical leadership experience.",
+      content: cvContent,
     });
   }
 
