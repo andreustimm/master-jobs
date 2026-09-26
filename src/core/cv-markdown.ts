@@ -31,11 +31,17 @@
 export const BULLET_GLYPHS = "●•▪◦‣■□►▸▶➢➤✓✔";
 
 const LEADING_BULLET = new RegExp(`^[ \\t]*[${BULLET_GLYPHS}][ \\t]*`, "u");
-/** Um segundo item colado na mesma linha: "● Go ● Rust". */
-const INLINE_BULLET = new RegExp(`[ \\t]+[${BULLET_GLYPHS}][ \\t]+`, "gu");
+/**
+ * Um segundo item colado na mesma linha: "● Go ● Rust". Só o glifo, sem os
+ * espaços em volta: `[ \t]+glifo[ \t]+` volta atrás em cada espaço e fica
+ * quadrático numa linha longa de espaços — e esta função roda a cada visita
+ * anônima a `/p/[slug]`, sobre texto que a pessoa escreve sem limite de
+ * tamanho. Os espaços saem no `trim()` de cada item.
+ */
+const INLINE_BULLET = new RegExp(`[${BULLET_GLYPHS}]`, "u");
 
 /** Linha que já é estrutura Markdown: nada a inferir nela. */
-const MARKDOWN_BLOCK = /^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||```|(?:---|\*\*\*|___)\s*$)/u;
+const MARKDOWN_BLOCK = /^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||(?:---|\*\*\*|___)\s*$)/u;
 
 /**
  * Título de seção em texto puro: linha curta, toda em maiúsculas, sem
@@ -120,6 +126,12 @@ export type CvSection = { kind: CvSectionKind; title: string; body: string };
  * segundo consentimento (G23). Derivar de outro texto seria publicar pelo
  * lado o que o filtro retirou.
  */
+function withoutClosingHashes(title: string): string {
+  let end = title.length;
+  while (end > 0 && title[end - 1] === "#") end--;
+  return title.slice(0, end).trimEnd();
+}
+
 export function cvSections(markdown: string): CvSection[] {
   const lines = markdown.split("\n");
   const sections: CvSection[] = [];
@@ -135,7 +147,10 @@ export function cvSections(markdown: string): CvSection[] {
 
   for (const line of lines) {
     if (line.trim().startsWith("```")) fenced = !fenced;
-    const heading = fenced ? null : /^(#{1,6})\s+(.*?)\s*#*\s*$/u.exec(line);
+    // Sem `(.*?)\s*#*\s*$`: com três quantificadores seguidos, uma linha longa
+    // de espaços custa tempo cúbico. O fechamento opcional (`## Resumo ##`)
+    // sai por `withoutClosingHashes()`, em tempo linear.
+    const heading = fenced ? null : /^(#{1,6})\s(.*)$/u.exec(line);
     if (heading) {
       const level = heading[1]!.length;
       if (open && level > open.level) {
@@ -143,7 +158,7 @@ export function cvSections(markdown: string): CvSection[] {
         continue;
       }
       close();
-      const title = heading[2]!;
+      const title = withoutClosingHashes(heading[2]!.trim());
       const plain = title.replace(/[*_`:]/g, "").trim();
       const kind = (Object.keys(SECTION_NAMES) as CvSectionKind[]).find((k) => SECTION_NAMES[k].test(plain));
       if (kind) open = { kind, title, level, body: [] };

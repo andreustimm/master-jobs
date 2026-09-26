@@ -30,8 +30,7 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "./db/client.ts";
 import { authUser, candidate, candidateDocument, candidateSkill, skill } from "./db/schema.ts";
-import { cvTextToMarkdown } from "./cv-markdown.ts";
-import { containsContact, publicCvText, type KnownContact } from "./public-cv.ts";
+import { containsContact, publicCvMarkdown, type KnownContact } from "./public-cv.ts";
 
 export type PublicProfile = {
   slug: string;
@@ -107,13 +106,7 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
         ),
       )
       .limit(1);
-    // Filtro, forma, filtro. O primeiro passe é o de sempre, sobre o texto
-    // gravado: a normalização junta e separa blocos, e nenhuma garantia que
-    // valia antes pode depender dela. O segundo vê os títulos inferidos — um
-    // "PRETENSÃO SALARIAL" em caixa alta vira seção, e a seção inteira sai.
-    // Filtrar só remove, então o segundo passe nunca devolve o que o
-    // primeiro tirou.
-    cv = doc ? publicCvText(cvTextToMarkdown(publicCvText(doc.content, known)), known) : null;
+    cv = doc ? publicCvMarkdown(doc.content, known) : null;
   }
 
   return {

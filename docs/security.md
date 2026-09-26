@@ -323,7 +323,7 @@ sem rótulo e telefone sem marca passam. Não é sanitização perfeita.
 de PDF é texto puro; `cvTextToMarkdown()` (`src/core/cv-markdown.ts`, pura)
 transforma título em caixa alta em `##` e glifo (`●`, `■`, `►`, `✓`) em item,
 sem regravar o documento. Em `publicProfile()` a ordem é
-`publicCvText(cvTextToMarkdown(publicCvText(texto)))`: o primeiro passe
+`publicCvMarkdown()` = `publicCvText(cvTextToMarkdown(publicCvText(texto)))`: o primeiro passe
 preserva tudo o que valia sobre o texto gravado, e o segundo vê as seções
 inferidas (um "PRETENSÃO SALARIAL" que virou título leva a seção inteira).
 `MarkdownPreview` monta nós React — nunca HTML — e só cria âncora para

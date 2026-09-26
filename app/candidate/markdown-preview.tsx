@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, type ReactNode } from "react";
+import { cvTextToMarkdown } from "../../src/core/cv-markdown.ts";
 
 /**
  * Markdown preview, rendered as React nodes.
@@ -22,7 +23,6 @@ import { Fragment, type ReactNode } from "react";
  * items), and a single line break inside a paragraph is kept as a break — in a
  * CV a new line is a new fact, and joining them produced one wall of text.
  */
-import { cvTextToMarkdown } from "../../src/core/cv-markdown.ts";
 
 /**
  * Only web links become anchors. `javascript:`, `data:` and friends are the
@@ -42,8 +42,11 @@ function safeHref(raw: string): string | null {
 /** Inline spans: `code`, **bold**, *italic*, [text](url). */
 function inline(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
-  // Code first: its content must not be re-parsed for emphasis.
-  const pattern = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*|_[^_]+_)|(\[[^\]]+\]\([^)]+\))/g;
+  // Code first: its content must not be re-parsed for emphasis. The link's
+  // label and target stop at the next bracket or parenthesis: `[^\]]+` and
+  // `[^)]+` scanned to the end of the line from every unclosed `[`, which is
+  // quadratic on a line of `[[[[` — and `/p/[slug]` renders this for anyone.
+  const pattern = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*|_[^_]+_)|(\[[^[\]]+\]\([^()]+\))/g;
   let last = 0;
   let match: RegExpExecArray | null;
   let i = 0;
@@ -62,21 +65,21 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
     } else if (token.startsWith("**")) {
       nodes.push(<strong key={key}>{token.slice(2, -2)}</strong>);
     } else if (token.startsWith("[")) {
-      const [, label = "", target = ""] = /\[([^\]]+)\]\(([^)]+)\)/.exec(token) ?? [];
+      const [, label = "", target = ""] = /\[([^[\]]+)\]\(([^()]+)\)/.exec(token) ?? [];
       const href = safeHref(target);
       nodes.push(
         href === null ? (
           <Fragment key={key}>{label}</Fragment>
         ) : (
-        <a
-          key={key}
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[var(--primary-text)] hover:underline"
-        >
-          {label}
-        </a>
+          <a
+            key={key}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[var(--primary-text)] hover:underline"
+          >
+            {label}
+          </a>
         ),
       );
     } else {

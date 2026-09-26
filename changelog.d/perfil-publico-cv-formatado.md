@@ -6,8 +6,8 @@
 
 ### Alterado
 
-- `publicProfile()` filtra, normaliza e filtra de novo o CV (`publicCvText` → `cvTextToMarkdown` → `publicCvText`): as garantias sobre o texto gravado seguem intactas e um título de pretensão inferido leva a seção inteira.
-- `MarkdownPreview` normaliza a entrada, mantém a quebra de linha simples como `<br>` e só cria âncora para `http(s)` (`javascript:`, `data:` e `mailto:` viram texto).
+- `publicProfile()` usa `publicCvMarkdown()` (`src/core/public-cv.ts`), que filtra, normaliza e filtra de novo o CV (`publicCvText` → `cvTextToMarkdown` → `publicCvText`): as garantias sobre o texto gravado seguem intactas e um título de pretensão inferido leva a seção inteira.
+- `MarkdownPreview` normaliza a entrada, mantém a quebra de linha simples como `<br>` e só cria âncora para `http(s)` (`javascript:`, `data:` e `mailto:` viram texto); o padrão de link deixou de voltar atrás quadraticamente numa linha de `[` sem fechamento, e as expressões novas são lineares — `/p/[slug]` roda tudo isso sem sessão, sobre texto sem limite de tamanho.
 - A limpeza de PDF na importação passa a converter `●` (U+25CF) e os demais glifos compartilhados em `- `.
 
 ## pt-BR

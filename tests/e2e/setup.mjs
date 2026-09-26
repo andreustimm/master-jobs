@@ -557,6 +557,8 @@ try {
     format: "text",
     content: PUBLIC_CV_FIXTURE.content,
   });
+  // `saveDocument` enfileira repontuação; este candidato não tem perfil de
+  // matching, e a tarefa só faria o worker registrar erro fora do cenário.
   await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, publicCvCandidate));
 
   const [ownerUser] = await getDb().select({ id: authUser.id }).from(authUser).where(eq(authUser.email, EMAIL)).limit(1);

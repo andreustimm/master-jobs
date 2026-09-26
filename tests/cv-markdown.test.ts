@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { MarkdownPreview } from "../app/candidate/markdown-preview.tsx";
 import { cvSections, cvTextToMarkdown } from "../src/core/cv-markdown.ts";
 import { cleanPdfText } from "../src/core/pdf.ts";
-import { publicCvText } from "../src/core/public-cv.ts";
+import { publicCvMarkdown, publicCvText } from "../src/core/public-cv.ts";
 
 /**
  * Forma do texto que o PDF do dono produz depois de `cleanPdfText` na versão
@@ -91,7 +91,7 @@ describe("cvTextToMarkdown", () => {
     expect(cvTextToMarkdown(markdown)).toBe(markdown);
   });
 
-  it("a importação agora reconhece `●` e `■`", () => {
+  it("a importação agora reconhece `●`, `■` e `✓`", () => {
     expect(cleanPdfText("● um\n■ dois\n✓ três")).toBe("- um\n- dois\n- três");
   });
 });
@@ -121,16 +121,47 @@ describe("cvSections", () => {
 describe("o que a normalização não pode abrir no filtro público", () => {
   it("rótulo de pretensão em caixa alta continua saindo com o valor", () => {
     const text = "SUMMARY\nArquiteto.\n\nPRETENSÃO SALARIAL\nUSD 15,000/month\n\nEDUCATION\nB.Sc.";
-    const out = publicCvText(cvTextToMarkdown(publicCvText(text)));
+    const out = publicCvMarkdown(text);
     expect(out).not.toContain("15,000");
     expect(out).not.toMatch(/pretens/i);
     expect(out).toContain("## EDUCATION");
   });
 
+  it("título de remuneração inferido leva a seção inteira no segundo passe", () => {
+    const text = "SUMMARY\nArquiteto.\n\nCOMPENSATION\nNegotiable\n\nUSD 15k\n\nEDUCATION\nB.Sc.";
+    // Um passe só deixa o valor: o bloco "COMPENSATION\nNegotiable" não tem
+    // rótulo nem valor, e o título em caixa alta ainda não é `#`.
+    expect(cvTextToMarkdown(publicCvText(text))).toContain("USD 15k");
+    const out = publicCvMarkdown(text);
+    expect(out).not.toContain("15k");
+    expect(out).toContain("## EDUCATION");
+  });
+
   it("`RATE:` sozinho na linha sai no primeiro passe, antes de virar título", () => {
     const text = "Arquiteto.\n\nRATE:\n\nUSD 60/h\n\nEDUCATION\nB.Sc.";
-    const out = publicCvText(cvTextToMarkdown(publicCvText(text)));
+    const out = publicCvMarkdown(text);
     expect(out).not.toContain("60/h");
+  });
+});
+
+describe("custo linear na entrada que a pessoa controla", () => {
+  // `/p/[slug]` responde sem sessão e roda estas funções a cada visita, sobre
+  // um CV sem limite de tamanho: regex que volta atrás vira negação de serviço.
+  it("linha de item com muitos espaços, título com muitos espaços e muitos `#`", () => {
+    const spaces = " ".repeat(200_000);
+    const started = performance.now();
+    expect(cvTextToMarkdown(`● a${spaces}x ● b`)).toBe(`- a${spaces}x\n- b`);
+    cvSections(`# a${spaces}x`);
+    cvSections(`## Resumo ${"#".repeat(200_000)}x\ncorpo`);
+    expect(cvSections("## Resumo ##\ncorpo")).toEqual([{ kind: "summary", title: "Resumo", body: "corpo" }]);
+    expect(performance.now() - started).toBeLessThan(2_000);
+  });
+
+  it("renderizador: colchetes e parênteses sem fechamento", () => {
+    const started = performance.now();
+    render("[".repeat(100_000));
+    render("[a](".repeat(50_000));
+    expect(performance.now() - started).toBeLessThan(2_000);
   });
 });
 
