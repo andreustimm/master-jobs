@@ -1,0 +1,3 @@
+ALTER TABLE "production"."application_event" ADD COLUMN "reverts_event_id" integer;--> statement-breakpoint
+ALTER TABLE "production"."application_event" ADD CONSTRAINT "application_event_reverts_event_id_application_event_id_fk" FOREIGN KEY ("reverts_event_id") REFERENCES "production"."application_event"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "application_event_reverts_idx" ON "production"."application_event" USING btree ("reverts_event_id");

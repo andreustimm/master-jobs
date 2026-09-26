@@ -29,6 +29,12 @@ Quando você aceita, a mudança passa por `setApplicationStatus` como qualquer
 outra, então fica registrada em `application_event` igual a uma transição
 manual. Não há caminho paralelo.
 
+E-mail só avança ou encerra. O funil aceita voltar de estágio quando a pessoa
+pede (#316), mas uma sugestão que faria isso — um "recebemos sua candidatura"
+atrasado, aceito com a candidatura já em entrevista — é recusada no `accept`
+com a mensagem de por quê, e fica pendente para ser descartada. Candidatura
+fora do funil (desfeita até o primeiro registro) também não recebe sugestão.
+
 ## Como obter os .eml
 
 Sem OAuth ainda. Hoje é exportação manual:

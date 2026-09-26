@@ -6,9 +6,11 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
-  allowedTransitions,
   applicationTimeline,
   getJobDetail,
+  transitionGroups,
+  undoableEvent,
+  type ApplicationStatus,
 } from "../../../src/contexts/pursuit/index.ts";
 import { listCandidateTracks, scoreMessages } from "../../../src/contexts/matching/index.ts";
 import { renderScoreMessage } from "../../../src/core/i18n/index.ts";
@@ -16,7 +18,7 @@ import type { Availability } from "../../../src/core/ingest/availability.ts";
 import { jobAvailability } from "../../../src/core/ingest/verdict.ts";
 import { isPublicJobUrl } from "../../../src/core/job-url.ts";
 import { trackFitsForJob } from "../../../src/core/scoring/apply.ts";
-import { trackAction } from "../../actions";
+import { trackAction, undoTrackAction } from "../../actions";
 import { Fit, Legend, ScoreBar, StatusBadge } from "../../ui";
 import { candidateScope, mayAdminister, requirePage } from "../../auth";
 import { getTranslator } from "../../i18n";
@@ -28,7 +30,9 @@ import {
   applicationStatusOptions,
 } from "../../status.ts";
 import { JobAnalysisSection } from "./job-analysis";
+import { StageTrail } from "./stage-trail";
 import { TrackForm } from "./track-form";
+import { UndoButton, type UndoLabels } from "./undo";
 import { TriageButton } from "../../triage-button";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +46,7 @@ const AVAILABILITY_LABEL = {
 } as const satisfies Record<Availability, string>;
 
 export default async function JobDetail({ params }: { params: Promise<{ id: string }> }) {
-  const { t, locale } = await getTranslator();
+  const { t } = await getTranslator();
   const session = await requirePage("job:read");
   const candidateId = candidateScope(session);
 
@@ -215,15 +219,15 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
         // Sem `key` pelo status: remontar a cada mudança de estágio apagaria a
         // nota digitada justamente quando a recusa revalida a página. O reset do
         // que precisa ser resetado é explícito dentro do componente.
+        <>
+        <StageTrail current={application?.status ?? null} label={t("jobDetail.stageTrail")} t={t} />
         <TrackForm
           action={trackAction}
+          undoAction={undoTrackAction}
           jobId={job.id}
           currentStatus={application?.status ?? null}
-          options={applicationStatusOptions(
-            t,
-            locale,
-            allowedTransitions(application?.status ?? null, application?.appliedAt ?? null),
-          )}
+          groups={groupOptions(application?.status ?? null, t)}
+          undoLabels={undoLabels(t)}
           statusLabels={applicationStatusLabels(t)}
           labels={{
             moveTo: t("jobDetail.moveTo"),
@@ -233,15 +237,25 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
             error: t("feedback.error"),
             rejected: t("jobDetail.transitionRejected"),
             conflict: t("jobDetail.transitionConflict"),
+            groupForward: t("jobDetail.groupForward"),
+            groupBack: t("jobDetail.groupBack"),
+            groupClose: t("jobDetail.groupClose"),
+            movedTo: t("jobDetail.movedTo"),
           }}
         />
+        </>
       )}
 
       {/* Só quem tem candidatura tem histórico, e a query já nega fora do
           escopo: sem candidatura nem a consulta é feita. */}
       {application && (
         <Suspense fallback={<SectionLoading label={t("jobDetail.loadingSection")} testId="application-timeline-loading" />}>
-          <Timeline candidateId={candidateId} jobId={job.id} t={t} />
+          <Timeline
+            candidateId={candidateId}
+            jobId={job.id}
+            t={t}
+            current={{ status: application.status, appliedAt: application.appliedAt }}
+          />
         </Suspense>
       )}
 
@@ -311,35 +325,86 @@ async function TrackFits({ candidateId, jobId, t }: SectionProps & { candidateId
   );
 }
 
-async function Timeline({ candidateId, jobId, t }: SectionProps) {
+/** As opções do seletor, por grupo, na ordem do funil (#316). */
+function groupOptions(current: ApplicationStatus | null, t: Translator["t"]) {
+  const groups = transitionGroups(current);
+  return {
+    forward: applicationStatusOptions(t, groups.forward),
+    back: applicationStatusOptions(t, groups.back),
+    close: applicationStatusOptions(t, groups.close),
+  };
+}
+
+function undoLabels(t: Translator["t"]): UndoLabels {
+  return {
+    undo: t("jobDetail.undo"),
+    done: t("jobDetail.undoDone"),
+    conflict: t("jobDetail.transitionConflict"),
+    unavailable: t("jobDetail.undoUnavailable"),
+    error: t("feedback.error"),
+  };
+}
+
+/**
+ * O histórico nunca é editado: o evento desfeito continua na lista, marcado, e
+ * o desfazer aparece como uma linha própria. "Desfazer" fica só na
+ * movimentação que o domínio desfaria agora (`undoableEvent`), e só para quem
+ * pode mover o funil — a visão do recrutador lê sem botão.
+ */
+async function Timeline({
+  candidateId,
+  jobId,
+  t,
+  current,
+}: SectionProps & { current: { status: ApplicationStatus; appliedAt: string | null } }) {
   const timeline = await applicationTimeline(candidateId, jobId);
   if (timeline.length === 0) return null;
+  const changes = timeline.flatMap((event) =>
+    event.kind === "status_change" && event.toStatus ? [{ ...event, toStatus: event.toStatus }] : [],
+  );
+  const reverted = new Set(changes.flatMap((event) => (event.revertsEventId === null ? [] : [event.revertsEventId])));
+  const undoable = candidateId === null ? null : undoableEvent(current, changes);
   return (
     <section className="mb-7" data-testid="application-timeline">
       <h2 className="type-display-xs mb-3">{t("jobDetail.history")}</h2>
       <Card>
         <CardContent className="pt-0">
           <ul className="divide-y divide-[var(--hairline)]">
-            {timeline.map((event, index) => (
-              <li key={`${event.at}-${index}`} className="py-3">
-                <p className="type-caption-sm text-muted-foreground">
-                  {event.at.slice(0, 10)}
-                  {" · "}
-                  {event.toStatus
-                    ? event.fromStatus
-                      ? t("jobDetail.historyMoved", {
-                          from: applicationStatusLabel(event.fromStatus, t),
-                          to: applicationStatusLabel(event.toStatus, t),
-                        })
-                      : t("jobDetail.historyStarted", {
-                          to: applicationStatusLabel(event.toStatus, t),
-                        })
-                    : t("jobDetail.historyNote")}
-                </p>
-                {event.detail && (
-                  <p className="type-body-sm mt-1" data-user-content>
-                    {event.detail}
+            {timeline.map((event) => (
+              <li
+                key={event.id}
+                className="flex flex-wrap items-start justify-between gap-2 py-3"
+                data-testid="application-timeline-event"
+                data-undone={reverted.has(event.id) ? "true" : undefined}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="type-caption-sm text-muted-foreground">
+                    {event.at.slice(0, 10)}
+                    {" · "}
+                    <span className={reverted.has(event.id) ? "line-through" : undefined}>
+                      {describeEvent(event, t)}
+                    </span>
+                    {reverted.has(event.id) && (
+                      <>
+                        {" · "}
+                        <span data-testid="application-timeline-undone">{t("jobDetail.historyUndone")}</span>
+                      </>
+                    )}
                   </p>
+                  {event.detail && (
+                    <p className="type-body-sm mt-1" data-user-content>
+                      {event.detail}
+                    </p>
+                  )}
+                </div>
+                {undoable?.id === event.id && (
+                  <UndoButton
+                    action={undoTrackAction}
+                    jobId={jobId}
+                    eventId={event.id}
+                    labels={undoLabels(t)}
+                    label={t("jobDetail.undoLatest")}
+                  />
                 )}
               </li>
             ))}
@@ -348,4 +413,14 @@ async function Timeline({ candidateId, jobId, t }: SectionProps) {
       </Card>
     </section>
   );
+}
+
+type TimelineEvent = Awaited<ReturnType<typeof applicationTimeline>>[number];
+
+function describeEvent(event: TimelineEvent, t: Translator["t"]): string {
+  if (!event.toStatus) return t("jobDetail.historyNote");
+  const to = applicationStatusLabel(event.toStatus, t);
+  if (!event.fromStatus) return t("jobDetail.historyStarted", { to });
+  const from = applicationStatusLabel(event.fromStatus, t);
+  return t(event.revertsEventId === null ? "jobDetail.historyMoved" : "jobDetail.historyUndo", { from, to });
 }

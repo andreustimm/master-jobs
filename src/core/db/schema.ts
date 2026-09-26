@@ -397,8 +397,21 @@ export const applicationEvent = production.table(
     fromStatus: text("from_status", { enum: APPLICATION_STATUSES }),
     toStatus: text("to_status", { enum: APPLICATION_STATUSES }),
     detail: text("detail"),
+    /**
+     * Preenchido no evento que DESFAZ outro (#316). Corrigir é acrescentar, nunca
+     * editar: o evento revertido fica como estava e a tela o marca "desfeito"
+     * lendo esta referência. Cascata porque os dois só somem juntos, com a
+     * candidatura; o índice único garante que um evento é desfeito uma vez só.
+     */
+    revertsEventId: integer("reverts_event_id").references(
+      (): AnyPgColumn => applicationEvent.id,
+      { onDelete: "cascade" },
+    ),
   },
-  (t) => [index("application_event_app_idx").on(t.applicationId)],
+  (t) => [
+    index("application_event_app_idx").on(t.applicationId),
+    uniqueIndex("application_event_reverts_idx").on(t.revertsEventId),
+  ],
 );
 
 /* -------------------------------------------------------------------------- */

@@ -53,7 +53,11 @@ afterEach(async () => {
 
 async function funnel() {
   const applications = await client.unsafe(`select * from production.application order by id`);
-  const events = await client.unsafe(`select * from production.application_event order by id`);
+  // Colunas explícitas: coluna aditiva posterior (como `reverts_event_id`, #316)
+  // não é mudança do funil.
+  const events = await client.unsafe(
+    `select id, application_id, at, kind, from_status, to_status, detail from production.application_event order by id`,
+  );
   return { applications: [...applications], events: [...events] };
 }
 
