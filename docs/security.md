@@ -319,6 +319,16 @@ palavra de remuneração perto de um valor são retirados.
 Detecção por padrão, com limite escrito no arquivo e travado em teste: valor
 sem rótulo e telefone sem marca passam. Não é sanitização perfeita.
 
+**A forma do CV nasce na leitura, entre dois filtros** — #325. O CV importado
+de PDF é texto puro; `cvTextToMarkdown()` (`src/core/cv-markdown.ts`, pura)
+transforma título em caixa alta em `##` e glifo (`●`, `■`, `►`, `✓`) em item,
+sem regravar o documento. Em `publicProfile()` a ordem é
+`publicCvText(cvTextToMarkdown(publicCvText(texto)))`: o primeiro passe
+preserva tudo o que valia sobre o texto gravado, e o segundo vê as seções
+inferidas (um "PRETENSÃO SALARIAL" que virou título leva a seção inteira).
+`MarkdownPreview` monta nós React — nunca HTML — e só cria âncora para
+`http(s)`: `javascript:`, `data:` e `mailto:` saem como texto.
+
 **Fluxo verificado ponta a ponta em 19/08**, no modo autenticado padrão: sem
 sessão o cabeçalho oferece entrar; o link de uso único resgata em
 `/login/callback` e grava o cookie `httpOnly`; a sessão passa a aparecer no
