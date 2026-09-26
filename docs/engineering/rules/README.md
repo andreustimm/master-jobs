@@ -2,7 +2,7 @@
 
 [AGENTS.md](../../../AGENTS.md) é a entrada comum dos três harnesses (Claude
 Code lê pelo symlink `CLAUDE.md`). Ela traz as invariantes críticas por escrito
-e o roteador; os seis arquivos abaixo trazem o detalhe normativo — obrigação,
+e o roteador; os arquivos abaixo trazem o detalhe normativo — obrigação,
 escopo, exceções, origem e prova. Procedimento (como executar) fica nas skills
 em `.claude/skills/` e no [roteiro de trabalho](../workflow.md); estado atual do
 produto fica em `docs/`; razão das decisões, em `docs/adr/`.
@@ -15,6 +15,7 @@ produto fica em `docs/`; razão das decisões, em `docs/adr/`.
 | Matching e score | [matching-and-evidence.md](matching-and-evidence.md) | Versão do scorer, dado ausente neutro, rubrica determinística |
 | Interface | [frontend.md](frontend.md) | Dicionário i18n, tokens e temas, escala, celular, URL como estado |
 | Entrega e harnesses | [delivery.md](delivery.md) | Project/issue, branches e promoção, revisão, QA, docs e changelogs, skills, RTK |
+| Papéis e modelos | [orchestration.md](orchestration.md) | Analista, executor, revisor, corretor e juiz; modelo e effort por papel e complexidade; modo de assinatura |
 
 ## Precedência e conflito
 
@@ -87,7 +88,7 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G43 | Worktree de `dev`, PR para `dev` | [delivery](delivery.md#g43) | regra 18 | preservada; exceções de automação nomeadas (C21) |
 | G44 | Conferir estado e preservar WIP | [delivery](delivery.md#g44) | "Fluxo de trabalho" | preservada |
 | G45 | `dev`→`staging` por SHA validado | [delivery](delivery.md#g45) | "Fluxo de trabalho" | preservada; contrato de SHA (C20) |
-| G46 | Produção não sai sem gente | [delivery](delivery.md#g46) | "Fluxo de trabalho" | preservada; proteção remota em `main`, parcial em `dev`/`staging` (C19) |
+| G46 | Produção só pela PR de produção, com CI verde e decisão do dono | [delivery](delivery.md#g46) | "Fluxo de trabalho" | reformulada em #321: merge pelo agente por delegação do dono (23/09/2026), revogável; proteção remota em `main`, parcial em `dev`/`staging` (C19) |
 | G47 | Toda PR com responsável | [delivery](delivery.md#g47) | "Fluxo de trabalho" | preservada |
 | G48 | Branches permanentes | [delivery](delivery.md#g48) | "Fluxo de trabalho" | preservada |
 | G49 | Branch `<tipo>/<slug>` | [delivery](delivery.md#g49) | "Fluxo de trabalho" | preservada |
@@ -97,14 +98,14 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G53 | Deep-review no nível do risco antes da PR pronta | [delivery](delivery.md#g53) | regra 19 + "Revisão profunda" | emendada por decisão do dono (#319): L0/L1/L2 por caminho, rodada 2+ só delta, teto de 3; L2 mantém o pipeline completo |
 | G54 | FIX_BEFORE_SHIP não é aprovação | [delivery](delivery.md#g54) | regra 19 | reformulada sem enfraquecer (C11); só Critical/Major bloqueiam (#319) |
 | G55 | QA vivo para mudança visível | [delivery](delivery.md#g55) | regra 20 + "QA de jornada" | preservada |
-| G56 | Cadência única; `Pass` com prova | [delivery](delivery.md#g56) | "QA de jornada" | preservada |
+| G56 | Cadência única; `Pass` com prova | [delivery](delivery.md#g56) | "QA de jornada" | reformulada em #321 por decisão do dono: full antes de produção só quando a leva tem mudança visível ao usuário; sem ela, fumaça pós-deploy |
 | G57 | Validação proporcional | [delivery](delivery.md#g57) | regra 20 | preservada; extensão não decide sozinha; local enxuta, PR draft cedo e orçamento de tempo por gate (#319) |
 | G58 | Nota releaseável em fragmento de changelog | [delivery](delivery.md#g58) | regra 21 | preservada; formato de fragmento (#263) substitui a edição do `Unreleased` |
 | G59 | Tag SemVer tem GitHub Release | [delivery](delivery.md#g59) | regra 22 | preservada |
 | G60 | Changelog vs `docs/` | [delivery](delivery.md#g60) | regra 23 | preservada; linha para `docs/engineering/rules/` |
 | G61 | Skills canônicas e symlinks | [delivery](delivery.md#g61) | "Skills compartilhadas" | preservada |
 | G62 | Instruções lidas; skill não é regra | [delivery](delivery.md#g62) | "Skills compartilhadas" | preservada; roteador na entrada |
-| G63 | RTK por harness | [delivery](delivery.md#g63) | nota final do AGENTS | preservada, sem copiar o arquivo global |
+| G63 | RTK por harness; um comando por chamada | [delivery](delivery.md#g63) | nota final do AGENTS | preservada, sem copiar o arquivo global; fallback sem `rtk` e comando único por chamada (#321) |
 | G64 | Bloco do Next intacto | [delivery](delivery.md#g64) | bloco gerado | preservada; bloco continua no fim da entrada |
 | G65 | UI é adaptador | [architecture](architecture.md#g65) | "Arquitetura" | preservada; "única mutação" corrigida (C15) |
 | G66 | Idempotência e isolamento de falha | [architecture](architecture.md#g66) | "Convenções de código" | preservada |
@@ -126,9 +127,12 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G82 | Comentário explica por quê | [architecture](architecture.md#g82) | "Convenções de código" | preservada |
 | G83 | Estado e contagens fora das instruções | [delivery](delivery.md#g83) | "Estado atual", "Comandos" | preservada; inventário movido para `docs/cli.md` |
 | G84 | Revisão relata; auditoria e QA distintos | [delivery](delivery.md#g84) | "Revisão profunda" | preservada; um revisor por diff (#319) |
+| G85 | Paridade dos harnesses | [delivery](delivery.md#g85) | [#317](https://github.com/andreustimm/master-jobs/issues/317) | nova: espelhos gerados de `.claude/` e gate `pnpm check:harness` |
+| G86 | Cinco papéis; juiz ≠ autor | [orchestration](orchestration.md#g86) | [#318](https://github.com/andreustimm/master-jobs/issues/318) | nova |
+| G87 | Modelo/effort explícitos; modo de assinatura falha fechado | [orchestration](orchestration.md#g87) | [#318](https://github.com/andreustimm/master-jobs/issues/318) | nova: `config/model-routing.json` e `pnpm route` |
 
-**Obrigações posteriores à auditoria**, sem ID `G`, preservadas no mesmo
-destino: [R24 — issue e Project 3](delivery.md#r24),
+**Obrigações posteriores à auditoria**, sem ID `G` (G85 em diante já nasce com
+ID), preservadas no mesmo destino: [R24 — issue e Project 3](delivery.md#r24),
 [`Closes #N` na mensagem do commit](delivery.md#r24-closes) e
 [tamanho S/M/L da tarefa](delivery.md#r24-tamanho).
 

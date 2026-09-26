@@ -50,12 +50,17 @@ REFERENCE_RE = re.compile(
 
 
 def walk_named(repo: Path, names: set[str]) -> list[Path]:
-    found: list[Path] = []
+    # PATCH LOCAL (ver PATCHES.md): one source per real file. `rel()` resolves
+    # symlinks, so CLAUDE.md -> AGENTS.md would register AGENTS.md twice and
+    # build_jobs.py refuses the duplicate accounting row. The walk is top-down
+    # and sorted, so the shallowest (widest-scoped) path to a file wins.
+    found: dict[Path, Path] = {}
     for root, dirs, files in os.walk(repo, followlinks=False):
         dirs[:] = sorted(d for d in dirs if d not in IGNORED_DIRS)
         for name in sorted(set(files) & names):
-            found.append(Path(root) / name)
-    return sorted(found)
+            source = Path(root) / name
+            found.setdefault(source.resolve(), source)
+    return sorted(found.values())
 
 
 def walk_skills(repo: Path) -> list[Path]:

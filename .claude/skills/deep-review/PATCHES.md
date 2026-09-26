@@ -76,3 +76,27 @@ e tokens sem mudar o veredito, que só Critical/Major decidem.
 
 Ao sincronizar, reaplique os quatro scripts e rode
 `pnpm vitest run tests/deep-review-level.test.ts`.
+
+No mesmo espírito, o resumo impresso por `build_jobs.py` só mostra a linha
+`polish limit` em L2: em L1 ela descreveria coortes que não existem
+([#328](https://github.com/andreustimm/master-jobs/issues/328)).
+
+## 3. `scripts/build_knowledge.py` — instrução por symlink contada duas vezes
+
+**Instalado em:** 25/09/2026 ([#328](https://github.com/andreustimm/master-jobs/issues/328))
+**Estado na origem:** não reportado ainda
+
+`CLAUDE.md` é symlink para `AGENTS.md` neste repositório. `walk_named()` achava
+as duas entradas, e `rel()` resolve o caminho, então as duas viravam a fonte
+`AGENTS.md`. O `rules.template.json` saía com duas linhas iguais, e
+`build_jobs.py` recusava o `rules.json` com "duplicate source accounting rows"
+— contornado à mão em cada rodada.
+
+**A correção:** `walk_named()` guarda uma entrada por caminho resolvido
+(`Path.resolve()`). O percurso é de cima para baixo e ordenado, então vence o
+caminho mais raso, que tem o escopo mais largo. `walk_skills()` já resolvia.
+
+**Como reproduzir sem o patch:** o teste
+`build_knowledge.py + build_jobs.py — instrução por symlink conta uma vez`, em
+`tests/deep-review-level.test.ts`, monta um repositório temporário com
+`CLAUDE.md -> AGENTS.md` e reprova com `['AGENTS.md', 'AGENTS.md']`.

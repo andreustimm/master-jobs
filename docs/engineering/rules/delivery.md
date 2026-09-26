@@ -18,8 +18,13 @@ Obrigação posterior à auditoria ([#209](https://github.com/andreustimm/master
 [ADR 0023](../../adr/0023-github-project-como-autoridade-operacional.md)); não
 tem ID `G`.
 
-**Obrigação.** Toda demanda, inclusive pequena, precisa de issue vinculada ao
-[Project 3](https://github.com/users/andreustimm/projects/3) antes de execução.
+**Obrigação.** Todo trabalho que vira commit, inclusive pequeno, precisa de
+issue vinculada ao [Project 3](https://github.com/users/andreustimm/projects/3)
+antes de execução. Pergunta, análise e revisão que não produzem commit não
+exigem issue (decisão do dono em
+[#321](https://github.com/andreustimm/master-jobs/issues/321)): lido ao pé da
+letra, "toda demanda" travava leitura e diagnóstico sem ganho de rastreio —
+o que precisa de rastreio é a mudança.
 Estado, prioridade, assignee e dependências vêm do remoto; specs, código e
 evidências continuam em Git. Antes de iniciar ou retomar, leia o remoto
 (`rtk pnpm tasks show <issue> --json`) e verifique a posse da execução. Claim
@@ -41,7 +46,7 @@ mesmo sem invocar skill.
 registra a execução na issue enquanto constrói o escritor. O corte exige código
 confiável de `issue_comment` na default `main`, `PROJECTS_TOKEN` e chave do
 escritor validados, preflight e piloto confirmados. Até esse corte, não anuncie
-enforcement ativo. Produção continua dependente de ação humana.
+enforcement ativo. A publicação em produção segue G46, não o escritor.
 
 Roteiro: [workflow.md](../workflow.md) ("Preparação e ativação" a "Compozy,
 memória e evidências"). Prova: `tests/tasks-*.test.ts`.
@@ -89,16 +94,16 @@ Roteiro: [workflow.md](../workflow.md) ("Começar ou retomar").
 |---|---|---|
 | tarefa → `dev` | pessoa ou agente | worktree a partir de `dev`, PR com CI verde |
 | `dev` → `staging` | automático | `promover-para-staging.yml`, às 15:00 e 21:00 UTC, com a ponta de `dev` de CI verde (ou dispatch com `target-sha`) |
-| `staging` → `main` | **humano** | PR aberta pelo robô, mesclada por gente |
+| `staging` → `main` | agente, por delegação do dono (G46) | PR aberta pelo robô, mesclada com CI verde e sem migração não aditiva pendente |
 | tag + `main` → `dev` | automático | `sincronizar-apos-main.yml` |
 
 <a id="g43"></a>
 ### G43 — Tarefa nasce em worktree a partir de `dev`; PR aponta para `dev` (regra 18)
 
 **Obrigação.** Nunca comite direto em `dev`, `staging` ou `main`. A promoção
-para `staging` é automática e a de `staging` para `main` é humana. Um commit
-direto em `staging` faz as branches divergirem e trava a promoção seguinte, com
-o sintoma aparecendo dias depois da causa.
+para `staging` é automática e a de `staging` para `main` passa pela PR de
+produção (G46). Um commit direto em `staging` faz as branches divergirem e
+trava a promoção seguinte, com o sintoma aparecendo dias depois da causa.
 
 **Exceções nomeadas** (resolve C21), sem bypass genérico para pessoa ou robô:
 o commit automático de release `chore(release): X.Y.Z` criado pela promoção
@@ -173,11 +178,26 @@ GitHub); o fluxo continua seguro porque o CI reutilizável valida o SHA
 promovido. Com o PAT, `staging` e as PRs geradas recebem checks próprios.
 
 <a id="g46"></a>
-### G46 — Produção não sai sem gente
+### G46 — Produção sai só pela PR de produção, com CI verde e decisão do dono
 
-**Obrigação.** A PR `staging → main` é aberta pelo robô e **nunca** mesclada por
-robô nem por agente. Publicação em `main` exige decisão humana e QA full
-(G56).
+**Obrigação.** Nada entra em `main` fora da PR `staging → main`, aberta pelo
+robô (ou da PR de hotfix, que é decisão do dono). O dono delegou o merge dessa
+PR ao agente em 23/09/2026 ("staging → main: ficou verde pode mesclar"): o
+agente a mescla com `gh pr merge <n> --merge --admin` quando, na cabeça da PR,
+`qualidade` e `schema-e-migracao` estão verdes, nenhuma migração não aditiva
+espera revisão (G51) e o QA de G56 foi cumprido (full se a leva tem mudança
+visível; senão, a fumaça pós-deploy basta). Em
+qualquer outro estado ele relata e não mescla. `--admin` dispensa só a
+aprovação; o CI de `main` não tem bypass. Squash e rebase ficam fora, porque
+mudam o SHA e tiram a tag de `main`. A delegação vale para a promoção, não para
+hotfix, e o dono a revoga por escrito na issue ou nesta regra — revogada, a
+aprovação humana volta a ser o caminho.
+
+**Por que o texto mudou** ([#321](https://github.com/andreustimm/master-jobs/issues/321)).
+Até 25/09/2026 esta regra dizia "nunca mesclada por robô nem por agente",
+enquanto as promoções #257 a #311 eram mescladas por agente, por bypass de
+admin, por decisão do dono. Regra que ninguém cumpre é pior que regra nenhuma:
+ela ensina que regra é sugestão.
 
 **Proteção remota (C19).** Desde 22/09/2026
 ([#196](https://github.com/andreustimm/master-jobs/issues/196)), rulesets do
@@ -185,7 +205,7 @@ GitHub exigem em `main` PR aprovada e CI verde, sem bypass de CI, e o ambiente
 Production só implanta a partir de `main`; `main`, `staging` e `dev` recusam
 exclusão e force-push para todos. `dev` e `staging` ainda não exigem PR nem CI
 no remoto — ali a regra continua garantida por processo e hooks locais. Estado
-aplicado, caminho humano e verificação em
+aplicado, caminho do merge de produção e verificação em
 [github-protections.md](../github-protections.md). O que falta no remoto não
 afrouxa a regra.
 
@@ -243,7 +263,7 @@ falso está em `tests/promotion-provenance.test.ts`.
 A ordem do fluxo, de ponta a ponta:
 
 ```
-worktree/tarefa → validação local enxuta → PR draft (CI em paralelo) → QA de jornada aplicável → docs/ + changelogs → deslop → um revisor no nível do diff (L0/L1/L2) → ship-pr (PR pronta) → dev → (automático) → staging → PR humana → main → tag + volta para dev
+worktree/tarefa → validação local enxuta → PR draft (CI em paralelo) → QA de jornada aplicável → docs/ + changelogs → deslop → um revisor no nível do diff (L0/L1/L2) → ship-pr (PR pronta) → dev → (automático) → staging → PR de produção (G46) → main → tag + volta para dev
 ```
 
 <a id="g53"></a>
@@ -366,13 +386,24 @@ do diff (G53) → PR pronta para `dev`. Invoque `qa-report` e depois
 `qa-execution` com o argumento `docs/qa` (formulação neutra entre harnesses).
 
 <a id="g56"></a>
-### G56 — Cadência única; `Pass` exige prova; release candidate cumpre full
+### G56 — Cadência única; `Pass` exige prova; full só quando a leva é visível
 
 **Obrigação.** O escopo de cada tier é definido uma única vez em
 [docs/qa/README.md](../../qa/README.md); nenhum outro documento duplica a
-cadência. Antes da PR humana `staging → main`, release candidate cumpre o tier
-**full**. QA de jornada não substitui `rtk pnpm check`, `rtk pnpm test:e2e` nem
-`deep-review`.
+cadência. Antes do merge da PR de produção `staging → main` (G46), o release
+candidate cumpre o QA de jornada tier **full** quando a leva tem mudança
+visível ao usuário. Sem mudança visível, basta a fumaça pós-deploy
+(`fumaca-producao.yml`), que roda sozinha no push para `main`. QA de jornada
+não substitui `rtk pnpm check`, `rtk pnpm test:e2e` nem `deep-review`.
+
+**Critério de "mudança visível"** (decisão do dono em
+[#321](https://github.com/andreustimm/master-jobs/issues/321)): a leva tem
+algum commit `feat:` ou `fix:` cuja nota em `## pt-BR`/`## en` do fragmento de
+changelog não é `<!-- sem-nota-usuario -->`. Na PR de produção, isso aparece
+como item novo em `USER_CHANGELOG.pt-BR.md` para a versão promovida. É a mesma
+pergunta que o fragmento já responde, sem segunda classificação. Na dúvida,
+conta como visível. A regra antiga exigia full em toda promoção e ninguém a cumpria:
+depois da 1.22.0, oito promoções saíram sem full.
 
 `qa-execution` exige build alcançável com paridade de produção, autenticação
 real e suíte automatizada verde. Não usa mocks, banco, endpoints internos nem
@@ -531,11 +562,13 @@ ela não define política nem concede autorização.
 ### G61 — Skills em `.claude/skills/`; os outros harnesses por symlink
 
 **Obrigação.** Skill de projeto é instalada **uma vez** em
-`.claude/skills/<nome>/`. `.codex/skills` e `.opencode/skills` são links
-simbólicos para `../.claude/skills` (e `.opencode/agents`, `.opencode/commands`
-para os equivalentes em `.claude/`), portanto Codex, Claude Code e OpenCode leem
-o mesmo conteúdo. Nunca copie uma skill para os três diretórios: atualização e
-remoção acontecem só na cópia canônica. O binding da regra 24 prevalece sobre
+`.claude/skills/<nome>/`. `.agents/skills` (onde o Codex procura), `.codex/skills`
+e `.opencode/skills` são links simbólicos para `../.claude/skills`, e
+`.opencode/commands` para `../.claude/commands`, portanto Codex, Claude Code e
+OpenCode leem o mesmo conteúdo. Agentes não entram por symlink: o formato
+difere entre os harnesses, e o espelho gerado segue [G85](#g85). Nunca copie
+uma skill para os três diretórios: atualização e remoção acontecem só na cópia
+canônica. O binding da regra 24 prevalece sobre
 status/grafo locais sugeridos por skills globais: adapte o procedimento neste
 projeto, sem editar a instalação global nem criar cópias por harness.
 
@@ -564,15 +597,105 @@ política para os outros.
 **Resolve C12.** O comentário de `.codex/config.toml` mandava "editar ambos"
 AGENTS e CLAUDE; como CLAUDE é symlink, há um arquivo só.
 
+<a id="g85"></a>
+### G85 — Claude Code, Codex e OpenCode no mesmo contrato
+
+**Obrigação.** Regras, skills, agentes, comandos e permissões valem igual nos
+três harnesses. Cada assunto tem **uma** fonte canônica — `AGENTS.md` e
+`docs/engineering/rules/` para instruções, `.claude/` para o resto; o que é
+idêntico entre os harnesses chega aos outros por symlink, e o que muda de
+formato chega por espelho **gerado** — nunca escrito à mão.
+
+| Assunto | Fonte canônica | Claude Code | Codex | OpenCode |
+|---|---|---|---|---|
+| Instruções | `AGENTS.md` + `docs/engineering/rules/` | `CLAUDE.md` (symlink) | `AGENTS.md` (descoberta nativa) | `AGENTS.md` em `opencode.json > instructions` |
+| Skills | `.claude/skills/` | nativo | `.agents/skills` (symlink; `.codex/skills` para versões anteriores) | `.opencode/skills` (symlink) |
+| Comandos | `.claude/commands/` | nativo | sem suporte de projeto — peça pelo nome e leia o arquivo | `.opencode/commands` (symlink) |
+| Agentes | `.claude/agents/*.md` | nativo | `.codex/agents/*.toml` (gerado) | `.opencode/agents/*.md` (gerado) |
+| Permissões | `.claude/settings.json` | nativo | `.codex/hooks.json` (gerado) → `scripts/harness/codex-guard.ts` | `opencode.json > permission` (gerado) |
+
+Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
+
+- **Agente canônico** tem só `name` (igual ao arquivo), `description`,
+  `role`, `tools`, `model` e `effort`. Sem `tools` o Claude Code dá todas as
+  ferramentas; por isso ele é obrigatório. `role` escolhe, em
+  `config/model-routing.json`, o modelo e o effort de cada espelho; `model` e
+  `effort` do canônico precisam ser os do Claude Code na mesma política
+  ([G87](orchestration.md#g87)). Sem `Edit`/`Write`, o agente é de leitura: `sandbox_mode =
+  "read-only"` no Codex e `edit: deny` no OpenCode. No OpenCode, toda
+  ferramenta mapeada em `OPENCODE_TOOL` (`scripts/harness/permissions.ts`) que
+  o `tools:` não dá (`webfetch`, `websearch`, `bash`…) é negada no agente, e o
+  espelho só restringe — um `allow` no agente venceria o
+  deny global, porque lá a regra do agente é avaliada depois.
+- **Comando** tem só `description` no frontmatter: o OpenCode lê o mesmo
+  arquivo e ignora o que só o Claude Code entende (`allowed-tools` ficaria
+  mais largo do outro lado).
+- **Permissões** não são reescritas por harness. No OpenCode, a tradução
+  mantém a precedência do Claude Code (deny > ask > allow) dentro da regra do
+  OpenCode (a última que casa vence) e alarga padrão de arquivo em vez de
+  estreitar. No Codex, que não tem lista por padrão de texto, o hook aplica a
+  própria lista do Claude a cada comando e `apply_patch`; `ask` vira
+  bloqueio, porque o hook do Codex não sabe perguntar — o que no Claude espera
+  aprovação, no Codex espera a pessoa rodar; se o processo da guarda falhar, o
+  hook sai com código 2 e bloqueia. A guarda decide como o Claude Code:
+  comando composto só passa quando **todo** trecho é liberado por uma regra
+  `allow` (ou é `cd`), e trecho que nenhuma regra libera é `ask` — isso fecha
+  de uma vez invólucro, shell aninhado, `eval`, palavra reservada e aspas
+  `$'…'`, porque o que a leitura não reconhece como liberado pergunta. Edição
+  por `apply_patch` fora das regras de caminho é a exceção: fica com o sandbox
+  e a aprovação que a pessoa escolheu no Codex (recomendado: `workspace-write`
+  com `on-request`, ou mais estrito); o projeto não fixa esses valores, porque
+  a camada de projeto sobrescreveria também a escolha pessoal mais estrita. O
+  Codex só carrega hooks e agentes de projeto confiável (`trust_level` no
+  `~/.codex/config.toml`).
+- **Prefixo `rtk`.** Codex e OpenCode escrevem `rtk sudo ls` (G63); no Claude
+  Code o hook do rtk reescreve depois da decisão. Por isso a guarda do Codex
+  tira `rtk` antes de conferir o allow e julga cada trecho também sem `rtk`,
+  sem invólucro (`env`, `timeout`…), sem o caminho do executável (`/bin/rm`)
+  e com o corpo de `sh -c` — para que o deny apareça como deny. O comando só
+  é cortado fora do texto literal entre aspas (simples, e duplas fora de
+  `$(…)` e crase) e de heredoc com delimitador entre aspas; redirecionamento
+  com `&` (`2>&1`) não corta. O OpenCode recebe cada padrão ancorado de
+  `ask`/`deny` também como `rtk <padrão>` e `rtk proxy <padrão>`.
+- **Limites conhecidos.** Comandos de `.claude/commands/` no Codex (sem
+  comando de projeto; o agente lê o arquivo); ferramenta por agente no Codex
+  (só `sandbox_mode` distingue leitura de escrita — não há lista de
+  ferramentas por agente); regra `WebFetch`/`WebSearch` com domínio (a
+  tradução recusa em vez de perder o deny, e a guarda do Codex só julga shell e
+  patch) são diferenças do harness, não da política.
+- **Instruções.** Os três carregam só o `AGENTS.md`; as regras por domínio são
+  lidas sob demanda pelo roteador da entrada. Carregar os seis arquivos de
+  `docs/engineering/rules/` em `opencode.json > instructions` custaria ~26 mil
+  tokens fixos por sessão e daria ao OpenCode um contexto que os outros não
+  têm (decisão do dono pendente: D6 da #321).
+
+Prova: `pnpm check:harness` (no `pnpm check` e no CI) reprova espelho
+ausente, divergente ou órfão, `.opencode/agents` como symlink, agente fora do
+contrato ou com modelo diferente da política, e comando com campo de um
+harness só. `tests/harness-parity.test.ts`
+prova que a tradução do OpenCode nunca é mais permissiva que o Claude Code e
+que a guarda do Codex nega o que ele nega e bloqueia o que ele perguntaria —
+inclusive com o prefixo `rtk`, em comando composto, atrás de invólucro ou
+shell aninhado e em trecho que nenhuma regra libera.
+
 <a id="g63"></a>
-### G63 — RTK por harness
+### G63 — RTK por harness; um comando por chamada
 
 **Obrigação.** Conforme `~/.claude/RTK.md` (configuração global do usuário, não
-copiada para cá): no Codex e no OpenCode todo comando de shell vai prefixado com
-`rtk`; no Claude Code o hook global reescreve e não duplica o prefixo.
-`rtk proxy <comando>` só quando a saída bruta é necessária — o resumo do `rtk`
-já escondeu erro de ferramenta uma vez, então leia o log bruto quando o
-resultado importa.
+copiada para cá): com `rtk` instalado, no Codex e no OpenCode todo comando de
+shell vai prefixado com `rtk`; no Claude Code o hook global reescreve e não
+duplica o prefixo. Numa máquina sem `rtk`, o comando roda puro — o prefixo é
+economia de saída, não proteção. `rtk proxy <comando>` só quando a saída bruta
+é necessária — o resumo do `rtk` já escondeu erro de ferramenta uma vez, então
+leia o log bruto quando o resultado importa.
+
+**Um comando de shell por chamada**, sem `&&`, `||`, `|` ou `;`. A lista de
+permissão do Claude Code (`.claude/settings.json`) casa pelo prefixo do
+comando: um composto não casa com o `allow` e cai em aprovação manual, e o dono
+vira fila. A guarda do Codex (G85) avalia cada segmento, mas a regra é a mesma
+nos três harnesses, para que o hábito não dependa de onde se roda. Filtre saída
+com a flag do próprio programa (`--jq`, `--format`) e ponha etapas múltiplas
+num script que roda com um comando.
 
 <a id="g64"></a>
 ### G64 — O bloco gerado pelo Next fica intacto

@@ -1,20 +1,35 @@
-# Codex configuration for master-jobs.
+# Configuração do Codex para o master-jobs — camada de projeto.
 #
-# Instructions live in AGENTS.md at the repository root — the single authored
-# source. CLAUDE.md is a symlink to it, so there is only one file to edit.
-# Rule details live in docs/engineering/rules/; this file only wires Codex up.
+# O Codex só carrega `.codex/` (este arquivo, agentes, hooks) quando o projeto
+# está marcado como confiável no seu `~/.codex/config.toml`. Sem isso, nem a
+# guarda de permissões (`.codex/hooks.json`) nem os agentes rodam.
+#
+# Instruções: `AGENTS.md` na raiz, descoberto sozinho pelo Codex — a única
+# fonte autoral; `CLAUDE.md` é symlink para ela. Detalhe das regras em
+# `docs/engineering/rules/`. Este arquivo liga o harness; não redefine
+# política (G72). Paridade com Claude Code e OpenCode: G85.
+#
+# - Skills: `.agents/skills` → `.claude/skills` (symlink; `.codex/skills`
+#   continua para versões anteriores do Codex).
+# - Agentes: `.codex/agents/*.toml`, gerados de `.claude/agents/` por
+#   `pnpm harness:sync`. Não edite os .toml.
+# - Permissões: `.codex/hooks.json` (gerado) chama
+#   `scripts/harness/codex-guard.ts`, que aplica a lista de
+#   `.claude/settings.json` a cada comando e patch. `ask` vira bloqueio, porque
+#   o hook do Codex não sabe perguntar.
+# - Comandos: o Codex não tem comando de projeto (custom prompts são pessoais
+#   e obsoletos). Para `/<nome>`, leia e siga `.claude/commands/<nome>.md`.
+#
+# Todo comando de shell no Codex vai prefixado com `rtk` (G63); a lista de
+# comandos está em docs/cli.md.
+#
+# `approval_policy` e `sandbox_mode` ficam de fora de propósito: comando que
+# nenhuma regra libera a guarda já bloqueia, e a edição que o Claude Code
+# pergunta por omissão o Codex resolve pelo sandbox e pela aprovação da pessoa. Fixar um valor aqui
+# sobrescreveria também a escolha pessoal mais estrita (`untrusted`,
+# `read-only`) — a camada de projeto vence a do usuário. Recomendado:
+# `workspace-write` com `on-request`, ou mais estrito.
 
-[project]
-name = "master-jobs"
-instructions = "AGENTS.md"
-
-# Every shell command must be prefixed with `rtk` in Codex (see AGENTS.md).
-# The commands below are the ones worth knowing before touching anything.
-[project.commands]
-install = "rtk pnpm install"
-test = "rtk pnpm test"
-typecheck = "rtk pnpm typecheck"
-check = "rtk pnpm check"
-sync = "rtk pnpm jho jobs sync"
-list = "rtk pnpm jho jobs list --min-fit 55"
-pipeline = "rtk pnpm jho pipeline"
+[features]
+# Ligado por padrão no Codex; explícito porque a guarda depende dele.
+hooks = true

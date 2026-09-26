@@ -58,7 +58,8 @@ de indisponibilidade real**, pois a sonda não observa os intervalos entre ciclo
   para produção até recuperação da janela ou decisão documentada de Andreus.
   Correções de incidente e segurança continuam elegíveis.
 - Cobertura insuficiente: investigar a coleta; não declarar o serviço saudável
-  por falta de observações. A decisão de release continua humana.
+  por falta de observações. O merge de release segue
+  [G46](rules/delivery.md#g46).
 
 O bloqueio por orçamento é **operacional**, avaliado no relatório antes de
 mesclar `staging → main`; não há bloqueio automático de merge implementado.
@@ -228,6 +229,6 @@ por e-mail não foi comprovado pelo monitor. O Sentry tem seu alerta independent
 
 Toda entrega continua exigindo PR para dev, responsável, validação proporcional,
 deslop e deep-review SHIP; mudanças visíveis percorrem QA. Dev promove para
-staging automaticamente; main exige decisão humana. Previews de branches de
-tarefa permanecem desativados. Estes são critérios de liberação, não percentuais
+staging automaticamente; main segue G46 (merge pelo agente com CI verde, por
+delegação do dono). Previews de branches de tarefa permanecem desativados. Estes são critérios de liberação, não percentuais
 inferidos do dashboard de disponibilidade.

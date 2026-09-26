@@ -1,7 +1,8 @@
 # Trabalhar e retomar sem deixar trabalho perdido
 
 O fluxo continua sendo worktree de `dev` → PR para `dev` → promoção automática
-para `staging` → aprovação humana para `main`. A regra 24 de
+para `staging` → PR de produção para `main`, mesclada pelo agente com CI verde
+por delegação do dono ([G46](rules/delivery.md#g46)). A regra 24 de
 [AGENTS.md](../../AGENTS.md) define a autoridade operacional: issue e
 [Project 3 — Master Jobs](https://github.com/users/andreustimm/projects/3).
 Git continua sendo a fonte de specs, código e evidências. Este documento é o
@@ -14,7 +15,8 @@ Este roteiro acompanha o [épico #181](https://github.com/andreustimm/master-job
 Integrar a CLI e estas instruções em `dev` **não ativa o escritor remoto**.
 O workflow de `issue_comment` precisa do código confiável na branch default
 `main`, de `PROJECTS_TOKEN` e da chave do escritor validados, de `preflight` aprovado e
-do piloto de rollout confirmado. A promoção para `main` continua humana.
+do piloto de rollout confirmado. A promoção para `main` segue G46, e não
+depende do escritor.
 
 Durante o bootstrap do próprio épico, o coordenador registra na issue remota
 a execução, branch, worktree, motivo e evidência dessa preparação. Esse registro
@@ -63,7 +65,9 @@ Quem usa nvm pode executar `nvm use` antes dos comandos.
    Não atualize base nem remova worktree de outro trabalho. Portas, banco e
    build de teste pertencem à execução; dados reais ficam fora.
 
-Toda demanda tem issue, inclusive correção pequena. Se não existir, escreva
+Todo trabalho que vira commit tem issue, inclusive correção pequena; pergunta,
+análise e revisão sem commit não exigem ([R24](rules/delivery.md#r24)). Se não
+existir, escreva
 objetivo, aceite, **Entrega exigida** e **tamanho** em arquivo e use `create`.
 O tamanho decide a especificação ([R24](rules/delivery.md#r24-tamanho)):
 
@@ -201,7 +205,7 @@ para outros repositórios:
 
 | Mudança | Evidência local necessária | Revisão (G53) |
 |---|---|---|
-| Markdown e metadados | Estrutura, links e scripts afetados: `pnpm check:instructions`, `pnpm check:release-ready`, `pnpm check:qa-tracker` | L0 (só `.md`): nenhuma |
+| Markdown e metadados | Estrutura, links e scripts afetados: `pnpm check:instructions`, `pnpm check:harness`, `pnpm check:release-ready`, `pnpm check:qa-tracker` | L0 (só `.md`): nenhuma |
 | Ferramenta de desenvolvimento | Testes de comportamento da ferramenta e comandos afetados | L1 |
 | Runtime | `rtk pnpm typecheck`, `rtk pnpm exec vitest related --run <arquivos>` e E2E afetado | L1 |
 | Comportamento percebido pelo usuário | Os de runtime e QA targeted conforme [QA vivo](../qa/README.md) | L1 |
