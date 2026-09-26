@@ -1,0 +1,560 @@
+{
+  "schemaVersion": 1,
+  "mapVersion": "1.0.0",
+  "crossCutting": [
+    "app/layout.tsx",
+    "app/globals.css",
+    "app/design-tokens.css",
+    "app/themes.css",
+    "app/ui.tsx",
+    "app/i18n.ts",
+    "app/auth.ts",
+    "app/actions.ts",
+    "app/status.ts",
+    "app/navigation-transition.tsx",
+    "app/transition-link.tsx",
+    "app/transition-get-form.tsx",
+    "app/form-navigation.ts",
+    "app/nav-links.tsx",
+    "app/mobile-nav.tsx",
+    "app/error.tsx",
+    "app/not-found.tsx",
+    "app/forbidden.tsx",
+    "app/canonical-route-error.tsx",
+    "app/skeleton.tsx",
+    "app/grid.tsx",
+    "app/footer.tsx",
+    "app/session-badge.tsx",
+    "app/service-worker.tsx",
+    "app/mutation-feedback.tsx",
+    "app/mutation-feedback-server.ts",
+    "app/timeout-watch.ts",
+    "app/auto-submit.tsx",
+    "components/**",
+    "lib/**",
+    "src/core/i18n/**",
+    "src/core/theme.ts",
+    "scripts/sw-template.js",
+    "scripts/sw-version.mjs",
+    "proxy.ts",
+    "next.config.ts",
+    "instrumentation.ts",
+    "instrumentation-client.ts",
+    "tests/e2e/ui.mjs",
+    "tests/e2e/ui/index.mjs",
+    "tests/e2e/ui/shared.mjs",
+    "tests/e2e/run-isolated.mjs",
+    "tests/e2e/setup.mjs",
+    "tests/e2e/setup-manual.ts",
+    "tests/e2e/routes.mjs",
+    "tests/e2e/task04-fixtures.mjs",
+    "tests/e2e/database-guard.mjs",
+    "config/e2e-spec-map.json",
+    "scripts/gates/e2e-selection.ts"
+  ],
+  "routeAliases": [
+    {
+      "route": "/jobs",
+      "patterns": [
+        "app/joblist.tsx",
+        "app/filters.tsx",
+        "app/filter-state.ts",
+        "app/filter-scales.ts",
+        "app/filter-toggle.tsx",
+        "app/pay-range.tsx",
+        "app/range-slider.tsx",
+        "app/job-modal.tsx",
+        "app/job-countries.tsx",
+        "app/triage-button.tsx",
+        "app/auto-apply.ts"
+      ]
+    },
+    {
+      "route": "/",
+      "patterns": [
+        "app/cockpit-data.ts"
+      ]
+    }
+  ],
+  "areas": [
+    {
+      "id": "auth",
+      "modules": [
+        "tests/e2e/ui/auth.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/api/export",
+        "/jobs",
+        "/login"
+      ]
+    },
+    {
+      "id": "design",
+      "modules": [
+        "tests/e2e/ui/design.mjs"
+      ],
+      "patterns": [
+        "app/changelog-content.tsx",
+        "app/changelog-modal.tsx"
+      ],
+      "routes": [
+        "/",
+        "/api/export",
+        "/candidate",
+        "/compare",
+        "/jobs",
+        "/login",
+        "/pipeline",
+        "/referrals"
+      ]
+    },
+    {
+      "id": "candidate-rescore",
+      "modules": [
+        "tests/e2e/ui/candidate-rescore.mjs"
+      ],
+      "patterns": [
+        "app/score-queue-card.tsx",
+        "app/score-queue-drain.ts"
+      ],
+      "routes": [
+        "/candidate",
+        "/compare",
+        "/login"
+      ]
+    },
+    {
+      "id": "mobile",
+      "modules": [
+        "tests/e2e/ui/mobile.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/",
+        "/candidate",
+        "/candidate/skills",
+        "/compare",
+        "/jobs",
+        "/jobs/[id]",
+        "/pipeline",
+        "/searches",
+        "/searches/tracks/new"
+      ]
+    },
+    {
+      "id": "themes",
+      "modules": [
+        "tests/e2e/ui/themes.mjs"
+      ],
+      "patterns": [
+        "app/theme-action.ts",
+        "app/theme-switch.tsx"
+      ],
+      "routes": [
+        "/candidate",
+        "/candidate/skills",
+        "/jobs",
+        "/referrals"
+      ]
+    },
+    {
+      "id": "recheck",
+      "modules": [
+        "tests/e2e/ui/recheck.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs"
+      ]
+    },
+    {
+      "id": "visibility",
+      "modules": [
+        "tests/e2e/ui/visibility.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/candidate"
+      ]
+    },
+    {
+      "id": "pipeline",
+      "modules": [
+        "tests/e2e/ui/pipeline.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs/[id]"
+      ]
+    },
+    {
+      "id": "roles",
+      "modules": [
+        "tests/e2e/ui/roles.mjs"
+      ],
+      "patterns": [
+        "app/changelog-content.tsx",
+        "app/changelog-modal.tsx"
+      ],
+      "routes": [
+        "/",
+        "/account",
+        "/admin/users",
+        "/candidate",
+        "/jobs",
+        "/jobs/new",
+        "/login",
+        "/pipeline",
+        "/recruiter",
+        "/recruiter/[id]"
+      ]
+    },
+    {
+      "id": "account",
+      "modules": [
+        "tests/e2e/ui/account.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/account",
+        "/login"
+      ]
+    },
+    {
+      "id": "password-reset",
+      "modules": [
+        "tests/e2e/ui/password-reset.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/login",
+        "/login/forgot",
+        "/login/reset"
+      ]
+    },
+    {
+      "id": "jobs-new",
+      "modules": [
+        "tests/e2e/ui/jobs-new.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs",
+        "/jobs/new"
+      ]
+    },
+    {
+      "id": "public-profile",
+      "modules": [
+        "tests/e2e/ui/public-profile.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/",
+        "/candidate",
+        "/p/[slug]"
+      ]
+    },
+    {
+      "id": "admin",
+      "modules": [
+        "tests/e2e/ui/admin.mjs"
+      ],
+      "patterns": [
+        "app/changelog-content.tsx",
+        "app/changelog-modal.tsx"
+      ],
+      "routes": [
+        "/",
+        "/account",
+        "/admin/users",
+        "/jobs"
+      ]
+    },
+    {
+      "id": "card-actions",
+      "modules": [
+        "tests/e2e/ui/card-actions.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs"
+      ]
+    },
+    {
+      "id": "cv-versions",
+      "modules": [
+        "tests/e2e/ui/cv-versions.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/candidate"
+      ]
+    },
+    {
+      "id": "i18n",
+      "modules": [
+        "tests/e2e/ui/i18n.mjs"
+      ],
+      "patterns": [
+        "app/locale-action.ts",
+        "app/locale-switch.tsx"
+      ],
+      "routes": [
+        "/",
+        "/account",
+        "/admin/execucoes",
+        "/admin/operacoes",
+        "/admin/plataformas",
+        "/candidate",
+        "/candidate/skills",
+        "/candidate/vocabulary",
+        "/compare",
+        "/jobs",
+        "/jobs/[id]",
+        "/jobs/[id]/paises",
+        "/jobs/new",
+        "/login",
+        "/login/forgot",
+        "/login/reset",
+        "/pipeline",
+        "/referrals"
+      ]
+    },
+    {
+      "id": "onboarding",
+      "modules": [
+        "tests/e2e/ui/onboarding.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/candidate",
+        "/login",
+        "/p/[slug]"
+      ]
+    },
+    {
+      "id": "rate-limit",
+      "modules": [
+        "tests/e2e/ui/rate-limit.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/",
+        "/candidate",
+        "/p/[slug]"
+      ]
+    },
+    {
+      "id": "navigation",
+      "modules": [
+        "tests/e2e/ui/navigation.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/",
+        "/candidate",
+        "/compare",
+        "/jobs",
+        "/login",
+        "/pipeline",
+        "/referrals"
+      ]
+    },
+    {
+      "id": "work-mode",
+      "modules": [
+        "tests/e2e/ui/work-mode.mjs",
+        "tests/e2e/work-mode.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/",
+        "/jobs"
+      ]
+    },
+    {
+      "id": "search-relevance",
+      "modules": [
+        "tests/e2e/ui/search-relevance.mjs",
+        "tests/e2e/search-relevance.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs"
+      ]
+    },
+    {
+      "id": "filter-auto-apply",
+      "modules": [
+        "tests/e2e/ui/filter-auto-apply.mjs",
+        "tests/e2e/filter-auto-apply.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs",
+        "/login"
+      ]
+    },
+    {
+      "id": "jobs-loading",
+      "modules": [
+        "tests/e2e/ui/jobs-loading.mjs",
+        "tests/e2e/jobs-loading.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/compare",
+        "/jobs",
+        "/jobs/[id]",
+        "/login"
+      ]
+    },
+    {
+      "id": "job-analysis",
+      "modules": [
+        "tests/e2e/ui/job-analysis.mjs",
+        "tests/e2e/job-analysis.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs/[id]",
+        "/login"
+      ]
+    },
+    {
+      "id": "admin-catalog",
+      "modules": [
+        "tests/e2e/ui/admin-catalog.mjs",
+        "tests/e2e/admin-catalog.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/",
+        "/admin/execucoes",
+        "/admin/execucoes/[id]",
+        "/admin/plataformas",
+        "/admin/plataformas/[id]",
+        "/admin/users",
+        "/jobs",
+        "/login"
+      ]
+    },
+    {
+      "id": "job-availability",
+      "modules": [
+        "tests/e2e/ui/job-availability.mjs",
+        "tests/e2e/job-availability.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs/[id]",
+        "/login"
+      ]
+    },
+    {
+      "id": "canonical-flows",
+      "modules": [
+        "tests/e2e/ui/canonical-flows.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/",
+        "/admin/users",
+        "/candidate",
+        "/candidate/skills",
+        "/candidate/vocabulary",
+        "/compare",
+        "/jobs",
+        "/jobs/[id]",
+        "/jobs/new",
+        "/login",
+        "/login/callback",
+        "/login/forgot",
+        "/login/reset",
+        "/p/[slug]",
+        "/pipeline",
+        "/referrals",
+        "/transition-test"
+      ]
+    },
+    {
+      "id": "searches",
+      "modules": [
+        "tests/e2e/ui/searches.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/",
+        "/account",
+        "/admin/captures",
+        "/admin/users",
+        "/jobs",
+        "/jobs/[id]",
+        "/jobs/[id]/paises",
+        "/login",
+        "/recruiter",
+        "/searches",
+        "/searches/tracks/[id]",
+        "/searches/tracks/new"
+      ]
+    },
+    {
+      "id": "logout",
+      "modules": [
+        "tests/e2e/ui/logout.mjs"
+      ],
+      "patterns": [
+        "app/logout-action.ts"
+      ],
+      "routes": [
+        "/jobs",
+        "/login"
+      ]
+    },
+    {
+      "id": "pwa",
+      "modules": [
+        "tests/e2e/ui/pwa.mjs"
+      ],
+      "patterns": [
+        "public/**"
+      ],
+      "routes": [
+        "/",
+        "/candidate",
+        "/jobs",
+        "/login",
+        "/manifest.json",
+        "/offline.html",
+        "/p/[slug]",
+        "/pipeline",
+        "/transition-test"
+      ]
+    },
+    {
+      "id": "a11y",
+      "modules": [
+        "tests/e2e/a11y.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/",
+        "/account",
+        "/admin/operacoes",
+        "/admin/users",
+        "/candidate",
+        "/candidate/skills",
+        "/candidate/vocabulary",
+        "/jobs",
+        "/jobs/[id]",
+        "/jobs/[id]/paises",
+        "/jobs/new",
+        "/login",
+        "/pipeline",
+        "/referrals"
+      ]
+    }
+  ]
+}

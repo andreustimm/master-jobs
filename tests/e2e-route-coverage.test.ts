@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { discoverEntries } from "./support/entry-inventory.ts";
 import {
@@ -105,7 +105,10 @@ describe("V08-01 — nenhuma página fica fora da medição sem decisão", () =>
   it("as varreduras do navegador consomem as listas, não cópias delas", () => {
     // Sem isto, `routes.mjs` poderia listar toda página enquanto `ui.mjs` volta
     // a um array literal: a cobertura acima ficaria verde medindo dado morto.
-    const ui = readFileSync("tests/e2e/ui.mjs", "utf8");
+    // A suíte de interface é `ui.mjs` mais as áreas de `ui/` (#320).
+    const ui = ["tests/e2e/ui.mjs", ...readdirSync("tests/e2e/ui").map((file) => `tests/e2e/ui/${file}`)]
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n");
     const a11y = readFileSync("tests/e2e/a11y.mjs", "utf8");
     expect(ui).toContain("portugueseLeaks(ENGLISH_OWNER_SWEEP)");
     expect(ui).toContain("portugueseLeaks(ENGLISH_ANONYMOUS_SWEEP, anonymous)");

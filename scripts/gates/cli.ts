@@ -15,8 +15,10 @@ import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { planGates, renderPlan, testsMentioning, validateImpactMap, type ImpactMap, type Plan, type PlannedGate } from "./impact.ts";
 import { covers, fingerprintOf, readReceipt, recordPass, sha256, treeHash, type Fingerprint, type Receipt, type TreeEntry } from "./receipt.ts";
+import { selectE2E, validateE2EMap, type E2EMap, type Selection } from "./e2e-selection.ts";
 
 export const IMPACT_FILE = "config/validation-impact.json";
+export const E2E_MAP_FILE = "config/e2e-spec-map.json";
 export const DEFAULT_BASE = "origin/dev";
 /** Relativo ao diretório Git da worktree (`git rev-parse --git-path`). */
 export const RECEIPT_GIT_PATH = "jho-gates/receipt.json";
@@ -27,6 +29,15 @@ const USAGE = "uso: pnpm gates [--base <ref>] [--plan] [--fresh] [--paths <camin
 
 export function loadImpactMap(root: string): ImpactMap {
   return validateImpactMap(JSON.parse(readFileSync(resolve(root, IMPACT_FILE), "utf8")));
+}
+
+export function loadE2EMap(root: string): E2EMap {
+  return validateE2EMap(JSON.parse(readFileSync(resolve(root, E2E_MAP_FILE), "utf8")));
+}
+
+/** A seleção de E2E de um gate com `e2eAreas`; `null` para os outros gates. */
+export function e2eSelectionFor(gate: PlannedGate, root: string): Selection | null {
+  return gate.e2eAreas ? selectE2E(loadE2EMap(root), gate.files) : null;
 }
 
 export function parseArgs(argv: readonly string[]): Args {
@@ -130,11 +141,16 @@ function testSources(root: string): Record<string, string> {
 }
 
 /**
- * O comando final de um gate. O que recebe arquivos leva os que existem e os
- * testes que os citam; se nenhum existe (o diff só apagou), roda a suíte
- * inteira — apagar não pode virar "nenhum teste".
+ * O comando final de um gate. O E2E recebe as áreas que os arquivos pedem, ou
+ * roda inteiro quando algum é transversal ou não mapeado. O que recebe
+ * arquivos leva os que existem e os testes que os citam; se nenhum existe (o
+ * diff só apagou), roda a suíte inteira — apagar não pode virar "nenhum teste".
  */
 export function commandFor(gate: PlannedGate, root: string, map: ImpactMap): string[] {
+  const selection = e2eSelectionFor(gate, root);
+  if (selection !== null) {
+    return selection.mode === "affected" ? [...gate.command, "--areas", selection.areas.join(",")] : gate.command;
+  }
   if (!gate.appendFiles) return gate.command;
   const present = gate.files.filter((file) => existsSync(resolve(root, file)));
   if (present.length === 0) return map.gates.tests?.command ?? gate.command;
@@ -203,10 +219,18 @@ export function main(argv: readonly string[], root: string): number {
     const covered = plan.gates
       .filter((gate) => covers(loaded.receipt, gate.id, commandFor(gate, root, map), now))
       .map((gate) => gate.id);
-    console.log(JSON.stringify({ ...plan, fingerprint: fingerprint.value, receipt: { covered, reason: loaded.reason } }, null, 2));
+    const e2e = plan.gates.map((gate) => e2eSelectionFor(gate, root)).find((selection) => selection !== null) ?? null;
+    console.log(JSON.stringify({ ...plan, e2e, fingerprint: fingerprint.value, receipt: { covered, reason: loaded.reason } }, null, 2));
     return 0;
   }
   console.log(renderPlan(plan));
+  for (const gate of plan.gates) {
+    const selection = e2eSelectionFor(gate, root);
+    if (selection?.mode === "affected") console.log(`E2E seletivo: fumaça + ${selection.areas.join(", ")}`);
+    if (selection?.mode === "full") {
+      console.log(`E2E inteiro: ${selection.escalations.map((item) => `${item.path} (${item.reason})`).join("; ")}`);
+    }
+  }
   if (loaded.reason !== null && plan.gates.length > 0) console.log(`recibo: ${loaded.reason} — todos os gates rodam`);
   const results = runPlan(plan, (gate) => commandFor(gate, root, map), {
     exec: ([command, ...rest]) => spawnSync(command!, rest, { cwd: root, stdio: "inherit" }).status ?? 1,

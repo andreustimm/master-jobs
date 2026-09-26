@@ -13,12 +13,33 @@ import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline/promises";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { copiedToHarness } from "./database-guard.mjs";
+import { SMOKE, selectAreas } from "./ui/index.mjs";
 import setupPostgres from "../support/postgres-global.ts";
 import { provisionTestDatabase } from "../support/db.ts";
 import { provisionRuntimeLogin } from "../support/runtime-login.ts";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const manual = process.argv.includes("--manual");
+
+/**
+ * `--areas a,b` (ou `E2E_AREAS`) roda só a fumaça, essas áreas de `ui/index.mjs`
+ * e o que elas exigem; `a11y` é a varredura axe de `a11y.mjs`. Sem lista, a
+ * suíte inteira. A lista é conferida antes do build: nome errado recusa em
+ * segundos, e não depois de minutos rodando menos do que se pediu.
+ */
+function requestedAreas(argv) {
+  const inline = argv.find((arg) => arg.startsWith("--areas="));
+  const at = argv.indexOf("--areas");
+  const value = inline?.slice("--areas=".length) ?? (at >= 0 ? argv[at + 1] : undefined) ?? process.env.E2E_AREAS ?? "";
+  return value.split(",").map((id) => id.trim()).filter(Boolean);
+}
+const requested = requestedAreas(process.argv);
+const fullSuite = requested.length === 0;
+const uiAreas = requested.filter((id) => id !== "a11y");
+const runA11y = fullSuite || requested.includes("a11y");
+// Só `a11y` pedida: a interface roda a fumaça, que é quem prova o login.
+const uiAreaList = fullSuite ? "" : (uiAreas.length > 0 ? uiAreas : SMOKE).join(",");
+if (!fullSuite) console.log(`E2E seletivo: ${selectAreas(uiAreaList).map((area) => area.id).join(", ")}${runA11y ? ", a11y" : ""}`);
 
 function run(command, args, options) {
   return new Promise((resolve, reject) => {
@@ -223,9 +244,8 @@ try {
     try { await terminal.question("Press Enter to stop and remove this isolated QA environment.\n"); }
     finally { terminal.close(); }
   } else {
-  await run(process.execPath, ["tests/e2e/ui.mjs"], { cwd: appRoot, env });
-  await run(process.execPath, ["tests/e2e/a11y.mjs"], { cwd: appRoot, env });
-
+    await run(process.execPath, ["tests/e2e/ui.mjs"], { cwd: appRoot, env: { ...env, E2E_AREAS: uiAreaList } });
+    if (runA11y) await run(process.execPath, ["tests/e2e/a11y.mjs"], { cwd: appRoot, env });
   }
 } finally {
   await stop(server);

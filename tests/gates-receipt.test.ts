@@ -43,7 +43,7 @@ function repo(): string {
 }
 
 function gate(id: string): PlannedGate {
-  return { id, description: id, command: ["run", id], appendFiles: false, reasons: ["x"], files: ["a.ts"] };
+  return { id, description: id, command: ["run", id], appendFiles: false, e2eAreas: false, reasons: ["x"], files: ["a.ts"] };
 }
 
 const PLAN: Plan = { mapVersion: "1.0.0", paths: [], unknown: [], gates: [gate("typecheck"), gate("tests")] };

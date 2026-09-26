@@ -147,7 +147,7 @@ São perguntas diferentes, e nenhuma das quatro camadas responde a da outra.
 |---|---|---|---|
 | `pnpm check` (Vitest, cobertura, inventário de rotas) | jobs `contratos`, `testes` e `cobertura`, obrigatórios via `qualidade` | regra pura, contrato de banco, autorização de toda entrada, que toda página tem varredura ou exceção | que a tela renderiza, cabe ou fala inglês |
 | Fronteira PWA (`pnpm test:pwa-browser`) | job `pwa-browser`, obrigatório via `qualidade` | service worker sem nada autenticado, num Chromium real | o resto da interface |
-| `pnpm test:e2e` (`ui.mjs` + `a11y.mjs`) | job `e2e-navegador`, **ainda não obrigatório** | build de produção, PostgreSQL descartável, login real por papel; as varreduras de `routes.mjs`; temas, contraste do editor, WebKit no histórico de novidades | que uma pessoa consegue cumprir o objetivo; texto literal sem acento; telas em `UNMEASURED_PAGES` |
+| `pnpm test:e2e` (`ui.mjs` com as áreas de `ui/`, e `a11y.mjs`) | job `e2e-navegador`, **ainda não obrigatório**, sempre a suíte inteira | build de produção, PostgreSQL descartável, login real por papel; as varreduras de `routes.mjs`; temas, contraste do editor, WebKit no histórico de novidades | que uma pessoa consegue cumprir o objetivo; texto literal sem acento; telas em `UNMEASURED_PAGES` |
 | QA de jornada (`qa-execution`) | só local, com gente ou agente dirigindo | que a persona chega ao estado final pela interface pública, e que ele sobrevive a refresh e a leitura independente | nada que o CI já reprova — ela não substitui nenhuma das linhas acima |
 
 O job `e2e-navegador` roda em todo PR e push das três branches, sem segredo
@@ -167,9 +167,15 @@ rodando, ele não barra nada (#303). Torná-lo obrigatório espera a
 medição de instabilidade da #202: um portão que reprova por carga ensina a
 reexecutar até passar, e isso é pior do que não ter portão.
 
+Na máquina local, `pnpm gates` roda só as áreas do E2E que o diff afeta
+(`pnpm test:e2e --areas <ids>`), e a suíte inteira quando o diff é transversal
+ou toca caminho sem área — o mapa e as regras estão em
+[workflow.md](../engineering/workflow.md#validar-pelo-risco). O CI não seleciona:
+roda sempre a suíte inteira.
+
 ## Uma espera frágil apaga o relatório de todos os outros cenários
 
-`tests/e2e/ui.mjs` é um script sequencial dentro de um `try` só. Quando um passo
+`tests/e2e/ui.mjs` roda as áreas de `tests/e2e/ui/` em sequência, dentro de um `try` só. Quando um passo
 estoura, a exceção pula para o `catch` final, que registra
 `✗ suíte concluiu sem exceção` — e tudo que vinha depois **não roda**. Em
 2026-09-21 o relatório saiu `42/43` com 262 verificações escritas: um `goto` do

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "mapVersion": "1.0.0",
+  "mapVersion": "1.1.0",
   "unknownPaths": "full",
   "fullPackage": ["release-ready", "instructions", "harness", "qa-tracker", "typecheck", "coverage", "qa-skills", "pwa-browser", "build", "e2e"],
   "classes": [
@@ -33,6 +33,7 @@
         "config/model-routing.json",
         "config/tasks-project.json",
         "config/validation-impact.json",
+        "config/e2e-spec-map.json",
         ".deep-review.yaml",
         ".coderabbit.yaml",
         ".gitignore",
@@ -205,7 +206,8 @@
     },
     "e2e": {
       "description": "navegador real sobre build de produção isolado",
-      "command": ["pnpm", "test:e2e"]
+      "command": ["pnpm", "test:e2e"],
+      "e2eAreas": true
     }
   }
 }

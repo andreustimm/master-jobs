@@ -195,6 +195,8 @@ describe("mapa de impacto — validação falha fechado", () => {
     ["satisfies inválido", broken((map) => { gates(map).tests!.satisfies = "related-tests"; }), "satisfies"],
     ["satisfies inexistente", broken((map) => { gates(map).tests!.satisfies = ["nada"]; }), "inexistente nada"],
     ["satisfies a si", broken((map) => { gates(map).tests!.satisfies = ["tests"]; }), "a si mesmo"],
+    ["e2eAreas", broken((map) => { gates(map).e2e!.e2eAreas = "sim"; }), "e2eAreas"],
+    ["arquivos e áreas", broken((map) => { gates(map).e2e!.appendFiles = true; }), "ao mesmo tempo"],
     ["fullPackage vazio", broken((map) => { map.fullPackage = []; }), "fullPackage"],
     ["fullPackage inexistente", broken((map) => { map.fullPackage = ["nada"]; }), "fullPackage cita"],
     ["classes ausentes", broken((map) => { map.classes = []; }), "classes ausentes"],
