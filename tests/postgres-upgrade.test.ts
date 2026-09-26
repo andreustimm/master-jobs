@@ -104,7 +104,11 @@ async function funnel() {
   const applications = await client.unsafe(
     `select id, candidate_id, job_id, status, applied_at, notes, updated_at from production.application order by id`,
   );
-  const events = await client.unsafe(`select * from production.application_event order by id`);
+  // Colunas explícitas: coluna nova e aditiva (como `reverts_event_id`, #316) não
+  // é mudança do funil; o que importa é que nenhuma das que existiam mude.
+  const events = await client.unsafe(
+    `select id, application_id, at, kind, from_status, to_status, detail from production.application_event order by id`,
+  );
   return { applications: [...applications], events: [...events] };
 }
 

@@ -7,6 +7,7 @@ import {
 import { translator } from "../src/core/i18n/index.ts";
 import {
   allowedTransitions,
+  FUNNEL_STATUSES,
   type ApplicationStatus,
 } from "../src/contexts/pursuit/domain/application.ts";
 
@@ -22,6 +23,7 @@ const expectedLabels = {
     rejected: "Rejeitada",
     withdrawn: "Retirada",
     archived: "Arquivada",
+    untracked: "Fora do funil",
   },
   en: {
     backlog: "Backlog",
@@ -34,6 +36,7 @@ const expectedLabels = {
     rejected: "Rejected",
     withdrawn: "Withdrawn",
     archived: "Archived",
+    untracked: "Out of the funnel",
   },
 } as const;
 
@@ -47,28 +50,26 @@ describe("status de candidatura na interface", () => {
     }
   });
 
-  it("ordena as opções alfabeticamente pelo rótulo traduzido", () => {
+  it("ordena as opções na ordem do funil, e não pelo rótulo", () => {
+    // Em ordem alfabética, "Candidatura enviada" vinha antes de "Preparando" e
+    // a hierarquia sumia do seletor (#316). "Fora do funil" nunca é opção.
     for (const locale of ["pt-BR", "en"] as const) {
       const current = translator(locale);
-      const options = applicationStatusOptions(current.t, locale);
-      const labels = options.map((option) => option.label);
+      const options = applicationStatusOptions(current.t);
 
-      expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b, locale)));
-      expect(labels).not.toContain("shortlisted");
-      expect(options).toHaveLength(10);
-      expect(Object.fromEntries(options.map((option) => [option.value, option.label]))).toEqual(expectedLabels[locale]);
+      expect(options.map((option) => option.value)).toEqual([...FUNNEL_STATUSES]);
+      expect(Object.fromEntries(options.map((option) => [option.value, option.label]))).toEqual(
+        Object.fromEntries(FUNNEL_STATUSES.map((status) => [status, expectedLabels[locale][status]])),
+      );
     }
   });
 
   it("oferece só os estágios alcançáveis quando recebe a lista do domínio", () => {
-    // De `preparing` o seletor listava `interviewing`; o domínio recusava, e o
-    // rascunho ia junto. O que a tela oferece passa a sair de
-    // `allowedTransitions`, então a recusa deixa de ser alcançável por clique.
     const current = translator("pt-BR");
-    const options = applicationStatusOptions(current.t, "pt-BR", allowedTransitions("preparing"));
+    const options = applicationStatusOptions(current.t, allowedTransitions("preparing"));
 
-    // Ordenado pelo rótulo traduzido: "Candidatura enviada" antes de "Preparando".
-    expect(options.map((option) => option.value)).toEqual(["applied", "preparing"]);
+    // Em ordem de funil: voltar (A fazer, Pré-selecionada), o atual, avançar, arquivar.
+    expect(options.map((option) => option.value)).toEqual(["backlog", "shortlisted", "preparing", "applied", "archived"]);
     expect(options.map((option) => option.value)).not.toContain("interviewing");
   });
 

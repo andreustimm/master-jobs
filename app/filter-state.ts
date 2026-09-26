@@ -1,6 +1,6 @@
 import type { Route } from "next";
 import { WORK_MODES, readWorkMode, type BoardFilters, type TrackTarget, type WorkMode } from "../src/contexts/matching/index.ts";
-import { APPLICATION_STATUSES } from "../src/contexts/pursuit/domain/application.ts";
+import { FUNNEL_STATUSES } from "../src/contexts/pursuit/domain/application.ts";
 import { parseQuery } from "../src/core/search.ts";
 import { validateTerm, type TermError, type ValidTerm } from "../src/core/term.ts";
 import { FIT_MAX, PAY_FILTER_MAX } from "./filter-scales.ts";
@@ -297,7 +297,7 @@ export function defaultPay(primary: TrackTarget | null): { currency: string; per
   return { currency: first.currency.toUpperCase(), period: first.period === "year" ? "year" : "month" };
 }
 
-const BOARD_STATUSES = [...APPLICATION_STATUSES, "unfiled", "any"] as const;
+const BOARD_STATUSES = [...FUNNEL_STATUSES, "unfiled", "any"] as const;
 
 /** The board query for the state alone. Track, term and pay are resolved by the page. */
 export function toBoardFilters(state: FilterState): BoardFilters {

@@ -26,11 +26,15 @@ export function TriageButton({
   t: Translator["t"];
   className?: string;
 }) {
-  // Status fora do funil degrada para "nenhum botão": `allowedTransitions`
+  // Status desconhecido degrada para "nenhum botão": `allowedTransitions`
   // devolve só o próprio status, e nenhum dos dois destinos aparece.
-  const allowed = allowedTransitions(status as ApplicationStatus | null, appliedAt);
+  const allowed = allowedTransitions(status as ApplicationStatus | null);
   const restore = status === "archived";
   if (!allowed.includes(restore ? "backlog" : "archived")) return null;
+  // O domínio reabre qualquer arquivada (#316), mas "restaurar" com um clique é
+  // o desfazer do "não me interessa": quem já aplicou volta pelo seletor da
+  // vaga, escolhendo o estágio e deixando nota.
+  if (restore && appliedAt !== null) return null;
 
   const label = restore
     ? t(place === "row" ? "jobs.restore" : "jobDetail.restore")

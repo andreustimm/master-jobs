@@ -5,7 +5,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
-  APPLICATION_STATUSES,
+  FUNNEL_STATUSES,
   PIPELINE_PAGE_SIZE,
   pipelineCounts,
   pipelineRows,
@@ -26,7 +26,7 @@ function readStage(value: string | undefined): {
   invalid: boolean;
 } {
   if (!value) return { stage: null, invalid: false };
-  const stage = APPLICATION_STATUSES.find((status) => status === value);
+  const stage = FUNNEL_STATUSES.find((status) => status === value);
   return stage ? { stage, invalid: false } : { stage: null, invalid: true };
 }
 
@@ -35,7 +35,7 @@ export default async function Pipeline({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { t, locale } = await getTranslator();
+  const { t } = await getTranslator();
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
 
   const params = await searchParams;
@@ -102,7 +102,7 @@ export default async function Pipeline({
             </div>
           </Card>
         </TransitionLink>
-        {applicationStatusOptions(t, locale)
+        {applicationStatusOptions(t)
           .filter(({ value }) => counts[value])
           .map(({ value, label }) => (
             <TransitionLink

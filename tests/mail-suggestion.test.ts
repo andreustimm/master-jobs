@@ -169,4 +169,27 @@ describe("decideSuggestion", () => {
       .where(eq(applicationEvent.applicationId, tracked!.id));
     expect(events).toHaveLength(2);
   });
+
+  it("recusa com mensagem a sugestão que faria o funil voltar, e ela fica pendente (#316)", async () => {
+    // Com as arestas de volta, o domínio aceitaria "Em entrevista → Triagem".
+    // Um e-mail de triagem atrasado não pode desfazer uma entrevista marcada.
+    const seeded = await seedTrackedSuggestion();
+    await setApplicationStatus(seeded.candidateId, seeded.jobId, "screening");
+    await setApplicationStatus(seeded.candidateId, seeded.jobId, "interviewing");
+
+    await expect(
+      decideSuggestion(seeded.candidateId, seeded.suggestionId, "accepted"),
+    ).rejects.toThrow("voltar de interviewing para screening");
+
+    const [suggestion] = await db
+      .select()
+      .from(mailSuggestion)
+      .where(eq(mailSuggestion.id, seeded.suggestionId));
+    const [tracked] = await db
+      .select()
+      .from(application)
+      .where(eq(application.jobId, seeded.jobId));
+    expect(suggestion).toMatchObject({ status: "pending", decidedAt: null });
+    expect(tracked!.status).toBe("interviewing");
+  });
 });

@@ -26,6 +26,10 @@ ativo também torna a triagem impraticável.
    não marca a candidatura como rejeitada, retirada ou arquivada.
 6. Métricas começam por consultas sobre `application` e `application_event`:
    contagem de candidaturas é distinta da contagem de transições/eventos.
+   Emenda (#316): candidatura `untracked` — desfeita até o primeiro registro —
+   não conta como candidatura, mas continua sendo `application` para o item 4:
+   a vaga segue protegida da poda. Leitura por evento ignora os revertidos
+   (`reverts_event_id`).
 7. Reabertura por observação `alive` limpa o arquivamento automático e preserva
    a mesma identidade/fingerprint.
 

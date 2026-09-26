@@ -159,6 +159,7 @@ erDiagram
         TEXT from_status
         TEXT to_status
         TEXT detail
+        INTEGER reverts_event_id FK "UK; evento que este desfaz"
     }
     post {
         INTEGER id PK
@@ -558,9 +559,9 @@ status `null` (o pseudo-status `unfiled` do `jho jobs list --status unfiled`).
 | Coluna | Notas |
 |---|---|
 | `candidate_id` | dono obrigatório da candidatura; FK `candidate.id` com cascade |
-| `status` | default `'backlog'`; valores em `APPLICATION_STATUSES` |
+| `status` | default `'backlog'`; valores em `APPLICATION_STATUSES` — os dez estágios de `FUNNEL_STATUSES` mais `untracked` ("fora do funil", ver abaixo) |
 | `channel` | `direct \| ats \| referral \| recruiter \| agency` — não escrito por nenhum comando hoje |
-| `applied_at` | carimbado **na primeira vez** que o status vira `applied`; transições posteriores preservam o valor original (`status === "applied" && !previous.appliedAt ? stamp : previous.appliedAt`) |
+| `applied_at` | carimbado quando o status vira `applied` sem data gravada; transições posteriores — inclusive voltar de estágio — preservam o valor. Só o desfazer da própria entrada em `applied` (o evento cujo `at` é o carimbo) o limpa |
 | `candidate_document_id` | documento exato enviado; FK composta com `candidate_id` impede referência cross-candidate e `ON DELETE restrict` preserva histórico mesmo após renomear label |
 | `next_action` / `next_action_at` | lidos pelo `jho pipeline` (linha `next:`) e indexados por `application_next_action_idx` |
 | `updated_at` | escrito à mão em cada transição; é a ordenação do `jho pipeline` |
@@ -571,6 +572,25 @@ Histórico **append-only** para reconstruir métricas de funil (tempo em cada
 estágio, taxa de conversão). `setApplicationStatus()` grava um evento
 `kind="status_change"` em toda transição, com `from_status` (ausente na
 criação), `to_status` e `detail` (o `-n/--note` do `jho track`).
+
+Desfazer (`undoApplicationStatus()`, #316) grava **outro** `status_change`, do
+estado atual de volta ao `from_status` do evento revertido, com
+`reverts_event_id` apontando para ele. O evento revertido não é tocado; a tela o
+marca "desfeito" lendo essa referência. `reverts_event_id` é FK para
+`application_event.id` com `ON DELETE cascade` (os dois só somem juntos, com a
+candidatura) e índice único `application_event_reverts_idx` — um evento é
+desfeito uma vez só. Desfazer de novo recua mais um passo, pulando desfazeres e
+eventos já revertidos. A tela manda o id do evento que mostrou; se outra aba
+moveu a candidatura, o alvo mudou e a resposta é conflito.
+
+Desfazer o **primeiro** registro deixa `status = 'untracked'` ("fora do
+funil"): a linha fica — apagá-la levaria o histórico em cascata e tiraria a
+vaga da proteção da retenção —, mas `pipelineCounts`, `pipelineRows`,
+`recruiterCandidateSummaries`, `funnelAnalysis`, o `jho pipeline` e o
+casamento de e-mail a deixam de fora (`inFunnel()`), e o board a trata como
+`unfiled`. A próxima movimentação volta a ser uma primeira observação, com
+`from_status` nulo. Métrica futura que leia eventos precisa ignorar os
+revertidos: conversão mede o estado corrigido, não o percurso.
 
 > **Invariante:** `application_event` nunca é atualizada nem deletada pelo
 > ciclo de vida do funil. É log. Qualquer correção é um evento novo, não um
@@ -584,10 +604,12 @@ não altera nenhuma das duas tabelas. Read models de candidato e recrutador
 devem aplicar o escopo de autorização antes de agregar.
 
 `transitionApplication()` é a máquina de estados pura. Repetir o status atual
-é idempotente (não cria outro evento), estados terminais não reabrem por uma
-transição comum — a exceção é `archived` sem `applied_at`, que volta a
-`backlog` para desfazer um "não me interessa" — e `applied_at` é gravado
-somente na primeira entrada em `applied`. O repositório persiste a nova `application` e seu evento na mesma
+é idempotente (não cria outro evento). Avançar é um passo de cada vez; voltar
+vai para qualquer estágio anterior; `rejected`, `withdrawn` e `archived`
+reabrem para qualquer estágio de progresso; arquivar vale de todo estágio de
+progresso, e rejeitar ou retirar só depois de `applied`. Nenhum comando leva a
+`untracked` — só o desfazer. `applied_at` é gravado na entrada em `applied`
+sem data gravada, e voltar não o apaga. O repositório persiste a nova `application` e seu evento na mesma
 transação e usa o status anterior como token de concorrência otimista.
 
 ### Endereço público (`candidate.public_slug`)
@@ -705,13 +727,16 @@ valida a string contra essa lista **antes de tocar o banco**, e aborta com
 | `offer` | Proposta na mesa |
 | `rejected` | Eles disseram não (ou pararam de responder) |
 | `withdrawn` | **Você** disse não — desistiu do processo |
-| `archived` | Encerrado sem desfecho relevante ou marcado "não me interessa"; some das listas de vagas por padrão sem apagar histórico. Sem `applied_at`, pode voltar a `backlog` |
+| `archived` | Encerrado sem desfecho relevante ou marcado "não me interessa"; some das listas de vagas por padrão sem apagar histórico. Reabre pelo seletor da vaga; o "Restaurar" de um clique só vale sem `applied_at` |
+| `untracked` | "Fora do funil": só o desfazer do primeiro registro chega aqui. Fora de toda contagem e lista do funil; a linha e o histórico ficam |
 
 As transições permitidas ficam em
 `src/contexts/pursuit/domain/application.ts`. A função pura aceita a criação em
-qualquer etapa já observada, mas depois exige avanço legal; estados terminais
-recusam avanço, salvo a restauração de `archived` sem `applied_at` para
-`backlog`. A auditoria da trajetória continua em `application_event`.
+qualquer etapa já observada; depois, `transitionDirection()` classifica cada
+destino como avançar, voltar ou encerrar, e é essa classificação que a tela
+agrupa no seletor. Sugestão de e-mail só avança ou encerra (`mailMayMove()`):
+aceitar uma que voltaria o funil é recusado e ela fica pendente. A auditoria da
+trajetória continua em `application_event`.
 
 > **Invariante:** para adicionar ou renomear um status, edite
 > `APPLICATION_STATUSES` no domínio de Pursuit — é `as const`, não `enum`,

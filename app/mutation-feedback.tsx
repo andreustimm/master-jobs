@@ -16,6 +16,13 @@ export type MutationFeedbackPayload = {
   message: string;
   /** Somewhere the notice points to, e.g. the term that already exists. */
   link?: { href: string; label: string };
+  /**
+   * Um botão no próprio aviso — "Desfazer" depois de mover a candidatura.
+   * Viaja no evento da mesma janela, então pode carregar a função.
+   */
+  action?: { label: string; testId: string; run: () => void };
+  /** Quanto o aviso fica; o de "Desfazer" precisa de mais tempo que 5 s. */
+  durationMs?: number;
 };
 
 type MutationFeedbackState = {
@@ -98,7 +105,7 @@ export function MutationFeedbackHost({
     timer.current = window.setTimeout(() => {
       timer.current = null;
       setFeedback(null);
-    }, MUTATION_FEEDBACK_MS);
+    }, feedback.durationMs ?? MUTATION_FEEDBACK_MS);
     return () => {
       if (timer.current !== null) window.clearTimeout(timer.current);
       timer.current = null;
@@ -106,17 +113,26 @@ export function MutationFeedbackHost({
   }, [feedback]);
 
   if (!feedback) return null;
+  const dismiss = () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = null;
+    setFeedback(null);
+  };
   return (
     <MutationNotice
       kind={feedback.kind}
       message={feedback.message}
       link={feedback.link}
-      dismissLabel={dismissLabel}
-      onDismiss={() => {
-        if (timer.current !== null) window.clearTimeout(timer.current);
-        timer.current = null;
-        setFeedback(null);
+      action={feedback.action && {
+        ...feedback.action,
+        // O clique consome o aviso: um segundo clique desfaria o passo anterior.
+        run: () => {
+          dismiss();
+          feedback.action?.run();
+        },
       }}
+      dismissLabel={dismissLabel}
+      onDismiss={dismiss}
     />
   );
 }
@@ -125,6 +141,7 @@ export function MutationNotice({
   kind,
   message,
   link,
+  action,
   dismissLabel,
   onDismiss,
   testId = "mutation-feedback",
@@ -132,6 +149,7 @@ export function MutationNotice({
   kind: "success" | "error";
   message: string;
   link?: MutationFeedbackPayload["link"];
+  action?: MutationFeedbackPayload["action"];
   dismissLabel: string;
   onDismiss: () => void;
   testId?: string;
@@ -175,6 +193,20 @@ export function MutationNotice({
           </>
         )}
       </p>
+      {action && (
+        <button
+          type="button"
+          data-testid={action.testId}
+          onClick={action.run}
+          className={cn(
+            "inline-flex h-11 shrink-0 cursor-pointer items-center rounded-[var(--radius-action)] px-3",
+            "type-body-sm text-[var(--primary-text)] hover:bg-muted",
+            "focus-visible:outline-2 focus-visible:outline-[var(--primary-text)]",
+          )}
+        >
+          {action.label}
+        </button>
+      )}
       <button
         type="button"
         data-testid={`${testId}-dismiss`}
