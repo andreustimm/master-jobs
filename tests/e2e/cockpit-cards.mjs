@@ -167,10 +167,10 @@ export async function checkCockpitCards(browser, base, accounts, check) {
     await page.getByTestId("cockpit-stat-named").focus();
     await page.keyboard.press("Enter");
     await page.waitForURL((url) => url.pathname === "/jobs" && url.searchParams.get("named") === "1");
-    check(
-      "cockpit #314: Enter no card abre /jobs com o chip ligado",
-      (await page.getByTestId("jobs-total").count()) === 1,
-    );
+    // A URL muda antes de a árvore nova chegar (navegação suave): espere o
+    // destino renderizar em vez de contar no meio da transição.
+    const landed = await page.getByTestId("jobs-total").waitFor({ timeout: 15_000 }).then(() => true, () => false);
+    check("cockpit #314: Enter no card abre /jobs com o chip ligado", landed, page.url());
   } finally {
     await context.close();
   }
