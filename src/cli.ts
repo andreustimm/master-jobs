@@ -9,14 +9,15 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { closeDb, getDb } from "./core/db/client.ts";
 import { runDatabaseCleanup } from "./core/db/retention.ts";
 import { MigrationNeedsReview, runMigrations } from "./core/db/migrate.ts";
 import { listBoard, primaryScoreFilter } from "./contexts/matching/index.ts";
 import { pipelineCounts, setApplicationStatus } from "./contexts/pursuit/index.ts";
 import { application, job, jobScore, positioningTask } from "./core/db/schema.ts";
-import { APPLICATION_STATUSES, type ApplicationStatus } from "./core/db/schema.ts";
+import { type ApplicationStatus } from "./core/db/schema.ts";
+import { FUNNEL_STATUSES, OUT_OF_FUNNEL } from "./contexts/pursuit/domain/application.ts";
 import { ageInDays, loadRates, refreshRates, STALE_AFTER_DAYS } from "./contexts/fx/index.ts";
 import { importJobs, parseFile } from "./core/ingest/import.ts";
 import {
@@ -163,7 +164,7 @@ async function activeCandidateId(): Promise<number> {
 }
 
 function applicationStatus(value: string): ApplicationStatus | null {
-  return APPLICATION_STATUSES.find((status) => status === value) ?? null;
+  return FUNNEL_STATUSES.find((status) => status === value) ?? null;
 }
 
 /**
@@ -969,7 +970,7 @@ jobs
           ? applicationStatus(opts.status)
           : undefined;
       if (opts.status && !status) {
-        throw new Error(`Unknown status "${opts.status}". Valid: ${APPLICATION_STATUSES.join(", ")}, unfiled, any`);
+        throw new Error(`Unknown status "${opts.status}". Valid: ${FUNNEL_STATUSES.join(", ")}, unfiled, any`);
       }
       let rows = await listBoard(candidateId, {
         minFit: Number(opts.minFit),
@@ -1400,7 +1401,7 @@ jobs
 
 program
   .command("track <id> <status>")
-  .description(`Move a job through the pipeline (${APPLICATION_STATUSES.join(" | ")})`)
+  .description(`Move a job through the pipeline (${FUNNEL_STATUSES.join(" | ")})`)
   .option("-n, --note <text>", "attach a note to the transition")
   .option(
     "--channel <name>",
@@ -1411,7 +1412,7 @@ program
     if (jobId === null) return;
     const parsedStatus = applicationStatus(status);
     if (!parsedStatus) {
-      console.error(c.red(`Unknown status "${status}". Valid: ${APPLICATION_STATUSES.join(", ")}`));
+      console.error(c.red(`Unknown status "${status}". Valid: ${FUNNEL_STATUSES.join(", ")}`));
       process.exitCode = 1;
       return;
     }
@@ -1444,7 +1445,7 @@ program
         })
         .from(application)
         .innerJoin(job, eq(job.id, application.jobId))
-        .where(eq(application.candidateId, candidateId))
+        .where(and(eq(application.candidateId, candidateId), ne(application.status, OUT_OF_FUNNEL)))
         .orderBy(desc(application.updatedAt));
 
       if (opts.json) {
@@ -1453,7 +1454,7 @@ program
       }
 
       console.log(c.bold("\n  FUNNEL"));
-      for (const status of APPLICATION_STATUSES) {
+      for (const status of FUNNEL_STATUSES) {
         const n = counts[status];
         if (n) console.log(`    ${truncate(status, 14)} ${String(n).padStart(3)}`);
       }

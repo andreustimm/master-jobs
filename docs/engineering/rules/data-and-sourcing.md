@@ -66,9 +66,14 @@ caminhos de descarte).
 ## G75 — `application_event` é append-only; transição atômica
 
 **Obrigação.** `application_event` nunca é atualizada nem deletada pelo ciclo
-de vida do funil: correção é evento novo. Status e evento são gravados na mesma
-transação, `applied_at` é carimbado só na primeira entrada em `applied`, e o
-status anterior é token de concorrência otimista.
+de vida do funil: correção é evento novo. Voltar de estágio é uma transição
+comum, e desfazer grava um `status_change` compensatório com
+`reverts_event_id` apontando para o revertido (#316). Status e evento são
+gravados na mesma transação, `applied_at` é carimbado na entrada em `applied`
+sem data gravada e só o desfazer dessa entrada o limpa, e o status anterior é
+token de concorrência otimista — do mesmo `commitOverSnapshot` para transição e
+desfazer. Desfazer o primeiro registro não apaga a candidatura: ela fica
+`untracked`, fora do funil e dentro da proteção de G03.
 
 **Limite** (resolve C14). Append-only não é retenção absoluta: a FK é
 `cascade`, e apagar candidatura, candidato ou vaga leva o histórico junto — por
@@ -78,7 +83,8 @@ própria.
 
 Origem: [data-model.md](../../data-model.md) (`application_event`),
 [ADR 0020](../../adr/0020-ciclo-de-vida-e-historico-de-candidaturas.md). Prova:
-`tests/repo.application.test.ts`.
+`tests/repo.application.test.ts` (inclusive um gatilho que recusa UPDATE e
+DELETE em `application_event` enquanto a candidatura avança, volta e desfaz).
 
 <a id="g20"></a>
 ## G20 — FK declara `ON DELETE` no schema e no DDL

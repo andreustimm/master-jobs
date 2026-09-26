@@ -4,9 +4,10 @@
  * The pure analysis lives in `stats.ts`, `scorer-diagnostics.ts` and
  * `funnel.ts`. This file only fetches and wires.
  */
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { application, job, jobScore } from "../db/schema.ts";
+import { OUT_OF_FUNNEL } from "../../contexts/pursuit/domain/application.ts";
 import { primaryScoreFilter } from "../../contexts/matching/index.ts";
 import { WEIGHTS } from "../scoring/score.ts";
 import { analyzeFunnel, hasReplied, type FunnelAnalysis, type Outcome } from "./funnel.ts";
@@ -91,7 +92,8 @@ export async function funnelAnalysis(candidateId: number): Promise<FunnelAnalysi
         primaryScoreFilter(),
       ),
     )
-    .where(eq(application.candidateId, candidateId));
+    // Desfeita até o primeiro registro não é resultado de candidatura (#316).
+    .where(and(eq(application.candidateId, candidateId), ne(application.status, OUT_OF_FUNNEL)));
 
   const outcomes: Outcome[] = rows.map((r) => ({
     jobId: r.jobId,

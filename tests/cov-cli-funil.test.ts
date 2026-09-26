@@ -227,9 +227,9 @@ describe("jho track <id> <status>", () => {
     const vagaId = await semearVaga();
     await rodar("track", String(vagaId), "rejected");
 
-    const r = await rodar("track", String(vagaId), "offer");
+    const r = await rodar("track", String(vagaId), "withdrawn");
 
-    expect((r.erro as Error).message).toContain("rejected -> offer");
+    expect((r.erro as Error).message).toContain("rejected -> withdrawn");
     const [linha] = await banco().select().from(application);
     expect(linha?.status).toBe("rejected");
   });

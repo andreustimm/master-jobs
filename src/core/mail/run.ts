@@ -15,7 +15,7 @@ import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { application, job, mailMessage, mailSuggestion } from "../db/schema.ts";
 import { setApplicationStatusInTransaction } from "../db/repo.ts";
-import { parseApplicationStatus } from "../../contexts/pursuit/domain/application.ts";
+import { mailMayMove, OUT_OF_FUNNEL, parseApplicationStatus } from "../../contexts/pursuit/domain/application.ts";
 import { ensureImportSource } from "../ingest/manual.ts";
 import { observeRawJob } from "../ingest/observe.ts";
 import { htmlToText } from "../sources/http.ts";
@@ -89,6 +89,7 @@ async function matchApplication(
         ne(application.status, "rejected"),
         ne(application.status, "withdrawn"),
         ne(application.status, "archived"),
+        ne(application.status, OUT_OF_FUNNEL),
       ),
     );
 
@@ -374,7 +375,7 @@ export async function decideSuggestion(
     }
 
     const [owned] = await tx
-      .select({ id: application.id })
+      .select({ id: application.id, status: application.status })
       .from(application)
       .where(
         and(
@@ -387,6 +388,13 @@ export async function decideSuggestion(
     if (!owned) throw new Error(`Sugestão ${id} pertence a outro candidato`);
 
     const status = parseApplicationStatus(suggestion.suggestedStatus);
+    // Com as arestas de volta do funil (#316), o domínio aceitaria regredir: um
+    // "recebemos sua candidatura" aceito com a pessoa já em entrevista a
+    // devolveria para "Candidatura enviada". E-mail só avança ou encerra; a
+    // sugestão continua pendente, para ser descartada.
+    if (status !== owned.status && !mailMayMove(owned.status, status)) {
+      throw new RegressiveSuggestionError(id, owned.status, status);
+    }
     await setApplicationStatusInTransaction(
       tx,
       candidateId,
@@ -404,4 +412,14 @@ export async function decideSuggestion(
 
     return { jobId: suggestion.jobId, status };
   });
+}
+
+/** Aceitar a sugestão faria o funil andar para trás; ela fica pendente. */
+export class RegressiveSuggestionError extends Error {
+  readonly code = "regressive_suggestion";
+
+  constructor(id: number, from: string, to: string) {
+    super(`Sugestão ${id} faria a candidatura voltar de ${from} para ${to}; e-mail só avança o funil. Descarte-a ou mova à mão.`);
+    this.name = "RegressiveSuggestionError";
+  }
 }

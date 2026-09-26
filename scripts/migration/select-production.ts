@@ -39,6 +39,8 @@ export const postSnapshotColumns: Record<string, Record<string, unknown>> = {
   // Catálogo governado pelo banco (#223). A linha importada nasce não gerida
   // e na revisão 1: continua espelhando o YAML até `jho sources import --apply`.
   source: { retired_at: null, origin: "system", config_revision: 1, secret_ref: null, managed_at: null },
+  // Desfazer do funil (#316). Todo evento do snapshot é original: nenhum desfaz outro.
+  application_event: { reverts_event_id: null },
 };
 
 /**

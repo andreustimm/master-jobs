@@ -32,6 +32,16 @@ stateDiagram-v2
   archived --> [*]
 ```
 
+O diagrama mostra só o avanço. Desde a #316 também valem, sem desenhar cada
+seta: **voltar** de qualquer estágio de progresso para qualquer anterior;
+**reabrir** `rejected`, `withdrawn` e `archived` para qualquer estágio de
+progresso; **arquivar** de todo estágio de progresso (inclusive `preparing`);
+**rejeitar/retirar** de todo estágio a partir de `applied`. Avançar continua um
+passo de cada vez. **Desfazer** grava um evento compensatório com
+`reverts_event_id`; desfeito o primeiro registro, a candidatura fica
+`untracked` (fora do funil, sem DELETE). A regra é
+`transitionDirection()` em `src/contexts/pursuit/domain/application.ts`.
+
 ## Quem escreve aqui
 
 ```mermaid

@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { guard, guardOwnCandidate } from "./auth";
 import {
   ApplicationTransitionConflictError,
+  ApplicationUndoUnavailableError,
   setApplicationStatus,
+  undoApplicationStatus,
 } from "../src/contexts/pursuit/index.ts";
 import {
   IllegalApplicationTransitionError,
@@ -19,7 +21,8 @@ import { invalidateBoardFacets } from "../src/contexts/matching/index.ts";
  * tem como recalcular o `from`: ele é o estado gravado, não o da página.
  */
 export type TrackResult =
-  | { status: "ok" }
+  /** `eventId` é o que "Desfazer" reverte; `null` quando nada mudou de estágio. */
+  | { status: "ok"; eventId: number | null }
   | { status: "error"; code: "illegal_transition"; from: ApplicationStatus; to: ApplicationStatus }
   | { status: "error"; code: "conflict" };
 
@@ -40,8 +43,9 @@ export async function trackAction(formData: FormData): Promise<TrackResult> {
   const note = formData.get("note");
 
   if (!Number.isFinite(jobId)) throw new Error("jobId inválido");
+  let eventId: number | null;
   try {
-    await setApplicationStatus(
+    eventId = await setApplicationStatus(
       candidateId,
       jobId,
       status,
@@ -69,6 +73,49 @@ export async function trackAction(formData: FormData): Promise<TrackResult> {
     // Depois da escrita, e também na recusa: ela prova que o funil mudou por
     // outro caminho. Invalidar antes da escrita deixaria uma leitura paralela
     // guardar de novo as contagens de antes.
+    invalidateBoardFacets(candidateId);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/pipeline");
+  return { status: "ok", eventId };
+}
+
+export type UndoResult =
+  | { status: "ok" }
+  | { status: "error"; code: "conflict" | "nothing_to_undo" };
+
+/**
+ * Desfaz a última movimentação do funil (#316): grava um evento compensatório,
+ * nunca edita nem apaga o histórico.
+ *
+ * `eventId` é o evento que a tela mostrou como "última movimentação" — o token
+ * que faz uma corrida com outra aba virar `conflict` em vez de desfazer outra
+ * coisa. O escopo vem da sessão: o id do evento só é procurado entre os da
+ * candidatura do próprio candidato.
+ */
+export async function undoTrackAction(formData: FormData): Promise<UndoResult> {
+  const { candidateId } = await guardOwnCandidate("application:write");
+
+  const jobId = Number(formData.get("jobId"));
+  const eventId = Number(formData.get("eventId"));
+  if (!Number.isSafeInteger(jobId) || jobId <= 0) throw new Error("jobId inválido");
+  if (!Number.isSafeInteger(eventId) || eventId <= 0) throw new Error("eventId inválido");
+  try {
+    await undoApplicationStatus(candidateId, jobId, eventId);
+  } catch (error) {
+    if (error instanceof ApplicationTransitionConflictError) {
+      revalidatePath(`/jobs/${jobId}`);
+      return { status: "error", code: "conflict" };
+    }
+    if (error instanceof ApplicationUndoUnavailableError) {
+      revalidatePath(`/jobs/${jobId}`);
+      return { status: "error", code: "nothing_to_undo" };
+    }
+    throw error;
+  } finally {
     invalidateBoardFacets(candidateId);
   }
 
