@@ -488,6 +488,11 @@ export const ptBR = {
     topRanked: "Topo do ranking",
     matching: "{count} correspondem",
     seeAll: "ver todas",
+    openJobsHint: "Todo o acervo aberto, sem corte de nota nem filtro",
+    companiesHint: "Todas as empresas do acervo",
+    withinCutHint: "Dentro do corte de nota e dos filtros desta tela",
+    bestFitHint: "A maior nota na sua trilha principal",
+    inPipelineHint: "Candidaturas em qualquer etapa do funil",
   },
   presets: {
     applicableToday: "Aplicáveis hoje",

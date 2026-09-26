@@ -29,6 +29,7 @@ import { checkJobsLoading } from "./jobs-loading.mjs";
 import { checkJobAnalysis } from "./job-analysis.mjs";
 import { checkAdminCatalog } from "./admin-catalog.mjs";
 import { checkJobAvailability } from "./job-availability.mjs";
+import { checkCockpitCards } from "./cockpit-cards.mjs";
 import {
   ENGLISH_ANONYMOUS_SWEEP,
   ENGLISH_OWNER_SWEEP,
@@ -3811,6 +3812,10 @@ try {
   await candidateMenuCtx.close();
 
   await page.setViewportSize({ width: 1280, height: 900 });
+  await checkCockpitCards(browser, BASE, {
+    owner: { email: E2E_EMAIL, password: E2E_PASSWORD },
+    unscored: { email: "e2e-candidato@local.test", password: E2E_PASSWORD },
+  }, check);
   await checkWorkModes(page, BASE, check);
   await checkSearchRelevance(page, BASE, check);
   await checkFilterAutoApply(browser, BASE, { email: "e2e-candidato@local.test", password: E2E_PASSWORD }, check);

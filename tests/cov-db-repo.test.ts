@@ -482,6 +482,22 @@ describe("números do cockpit", () => {
     expect(Number(stats!.above60)).toBe(2);
     expect(Number(stats!.above70)).toBe(1);
     expect(Number(stats!.best)).toBe(86);
+    // O card "melhor fit" abre esta vaga (#314): a da maior nota ABERTA, não a
+    // fechada de 99.
+    expect(stats!.bestJobId).toBe(alta);
+  });
+
+  it("empate na maior nota escolhe uma vaga só, sempre a mesma", async () => {
+    const candidateId = await seedCandidato("dono", true);
+    const primeira = await seedVaga({ n: 1 });
+    const segunda = await seedVaga({ n: 2 });
+    await seedScore(candidateId, primeira, 80);
+    await seedScore(candidateId, segunda, 80);
+
+    const stats = await corpusStats(candidateId);
+
+    expect(Number(stats!.best)).toBe(80);
+    expect(stats!.bestJobId).toBe(Math.max(primeira, segunda));
   });
 
   it("não deixa o acervo de outro candidato aparecer nos cortes", async () => {
@@ -495,6 +511,8 @@ describe("números do cockpit", () => {
     expect(Number(stats!.open)).toBe(1);
     expect(Number(stats!.above45)).toBe(0);
     expect(Number(stats!.best)).toBe(0);
+    // Sem nota própria, não há vaga para o card abrir — nem a do outro candidato.
+    expect(stats!.bestJobId).toBeNull();
   });
 
   it("agrupa por cluster acima do corte, do maior grupo para o menor", async () => {
