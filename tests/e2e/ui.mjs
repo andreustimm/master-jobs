@@ -3013,12 +3013,14 @@ try {
   // no foco, nome acessível, rótulo visível no toque), e nada com efeito
   // acontece sem um segundo gesto — Cancelar e Esc deixam tudo como estava.
   // As versões-alvo nascem em `setup.mjs`, só no banco isolado desta execução.
+  // Bloco próprio: os nomes abaixo repetem os de outras seções do arquivo.
+  {
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
   const tableRows = page.locator('[data-testid="version-table-row"]');
   const tableRow = (label) => tableRows.filter({ hasText: label }).first();
   const focusedTestId = () =>
     page.evaluate(() => document.activeElement?.getAttribute("data-testid") ?? null);
-  const settle = () =>
+  const shellReady = () =>
     page.waitForFunction(() => {
       const shell = document.getElementById("application-shell");
       return !shell?.hasAttribute("inert") && !shell?.hasAttribute("aria-busy");
@@ -3145,7 +3147,7 @@ try {
   check("Confirmar exclui pela tabela e sobrevive a refresh", deleted);
 
   // Restaurar: Cancelar não cria versão; Confirmar cria a nova atual.
-  await settle();
+  await shellReady();
   const restoreIcon = tableRow("E2E CV anterior (restaurar)").locator('[data-testid="version-table-restore"]');
   const rowsBeforeRestore = await tableRows.count();
   await restoreIcon.click();
@@ -3168,7 +3170,7 @@ try {
   check("Confirmar restaura pela tabela e sobrevive a refresh", restored);
 
   // Renomear: Esc descarta; Salvar grava.
-  await settle();
+  await shellReady();
   // A linha original, não a cópia restaurada que virou a atual.
   const renameRow = page.locator('[data-testid="version-table-row"]:not([data-current="true"])').filter({ hasText: "E2E CV anterior (restaurar)" }).first();
   await renameRow.locator('[data-testid="version-table-rename"]').click();
@@ -3221,6 +3223,7 @@ try {
   }
   check("ícones da tabela têm nome acessível em inglês", namesEn.every((n) => n === 1), JSON.stringify(namesEn));
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  }
 
 
   // Volta ao padrão para não deixar o cookie sujo para a próxima execução.
