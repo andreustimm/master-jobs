@@ -39,6 +39,9 @@ export function requireSha(value: string): string {
   return value;
 }
 
+/** The CI answered and refused by job verdict; an API failure is never this. */
+export class CIVerdictRefusal extends Error {}
+
 const isNonBlocking = (job: Job) => Object.hasOwn(NON_BLOCKING_CI_JOBS, job.name);
 const settled = (job: Job) => job.status === "completed" && job.conclusion === "success";
 
@@ -93,7 +96,7 @@ export function requireSourceCI(repository: string, sha: string, eventRunId?: nu
   ).flatMap((page) => page.jobs);
   const refusal = ciVerdict(run, jobs, sha);
   if (refusal) {
-    throw new Error(`CI de dev não aprovado para ${sha}: ${refusal} (run=${run.id} attempt=${run.run_attempt} status=${run.status} conclusion=${run.conclusion}).`);
+    throw new CIVerdictRefusal(`CI de dev não aprovado para ${sha}: ${refusal} (run=${run.id} attempt=${run.run_attempt} status=${run.status} conclusion=${run.conclusion}).`);
   }
   return run.id;
 }

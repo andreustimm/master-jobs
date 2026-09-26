@@ -126,10 +126,11 @@ ficam intactos. PRs antigas sem delimitadores recebem o bloco no início.
 ## Retomar sem mudar o alvo
 
 Use dispatch com o mesmo A — a saída `source` da preparação registra o SHA.
-**Re-run all jobs** conserva A num run de dispatch ou de evento de CI (o evento
-é o mesmo); num run agendado a preparação relê a ponta de `dev`, que depois de
-R pode ser o próprio R, sem CI de push próprio quando o push usou
-`GITHUB_TOKEN`.
+**Re-run all jobs** conserva A só num run de dispatch. Num run de evento de CI,
+depois que R entrou em `dev`, A já não é a ponta e o re-run termina em skip: a
+retomada é o dispatch com A ou o re-run do CI de push de R. Num run agendado a
+preparação relê a ponta de `dev`, que depois de R pode ser o próprio R, sem CI
+de push próprio quando o push usou `GITHUB_TOKEN`.
 
 ```bash
 rtk gh workflow run promover-para-staging.yml \

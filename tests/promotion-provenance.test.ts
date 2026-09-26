@@ -880,6 +880,34 @@ describe("V01-07 — CI event entry and the release loop", () => {
     expect(promoted.outputs.target).not.toBe(source);
   });
 
+  it("an API error on a red run fails the promotion instead of skipping", () => {
+    publishSource();
+    setAPI({ runs: [{ ...goodRun(), conclusion: "failure" }], fail: true });
+    const before = refs();
+    const result = run("prepare", { ci: { conclusion: "failure" } });
+    expect(result.status).not.toBe(0);
+    expect(result.outputs.skip).toBeUndefined();
+    expect(refs()).toBe(before);
+  });
+
+  it("if the first promotion stopped after pushing R, R's own CI event promotes R without a second release", () => {
+    publishSource();
+    const prepared = run("prepare", { ci: {} });
+    expect(prepared.status, prepared.stderr).toBe(0);
+    const release = prepared.outputs.target!;
+    expect(git(remote, "rev-parse", "staging")).toBe(base);
+    source = release;
+    setAPI();
+    const resumed = run("prepare", { ci: {}, sha: release });
+    expect(resumed.status, resumed.stderr).toBe(0);
+    expect(resumed.outputs).toMatchObject({ source: release, target: release, skip: "false" });
+    expect(git(remote, "rev-parse", "dev")).toBe(release);
+    const done = run("complete", { ci: {}, sha: release, target: release, validated: release });
+    expect(done.status, done.stderr).toBe(0);
+    expect(git(remote, "rev-parse", "staging")).toBe(release);
+    expect(git(remote, "tag", "--list")).toBe("v1.0.0\nv1.0.1");
+  });
+
   it("refuses when a newer CI run than the event's exists for the same SHA", () => {
     publishSource();
     const before = refs();
@@ -901,11 +929,10 @@ describe("V01-07 — CI event entry and the release loop", () => {
     expect(workflow.on.workflow_run).toEqual({ workflows: ["CI"], types: ["completed"], branches: ["dev"] });
     expect(workflow.on.schedule).toEqual([{ cron: "0 15 * * *" }, { cron: "0 21 * * *" }]);
     expect(workflow.on.workflow_dispatch.inputs["target-sha"].required).toBe(true);
-    const gate = workflow.jobs.preparar.if as string;
-    expect(gate).toContain("github.event_name != 'workflow_run'");
-    expect(gate).toContain("github.event.workflow_run.event == 'push'");
-    expect(gate).toContain("github.event.workflow_run.conclusion == 'success'");
-    expect(gate).toContain("github.event.workflow_run.conclusion == 'failure'");
+    expect((workflow.jobs.preparar.if as string).replace(/\s+/g, " ")).toBe(
+      "github.event_name != 'workflow_run' || (github.event.workflow_run.event == 'push' && " +
+      "(github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure'))",
+    );
     expect(workflow.concurrency).toEqual({ group: "release-versionar", queue: "max", "cancel-in-progress": false });
   });
 });

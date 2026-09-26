@@ -10,7 +10,7 @@ import {
 import { FRAGMENT_DIRECTORY } from "../../src/core/changelog-fragments.ts";
 import { describeFindings, reviewMigrationChanges } from "../../src/core/db/migration-review.ts";
 import { commitSubjectsSince, mostRecentVersionTag } from "./git-context.ts";
-import { ghApi, requireSha, requireSourceCI } from "./promotion-ci.ts";
+import { CIVerdictRefusal, ghApi, requireSha, requireSourceCI } from "./promotion-ci.ts";
 import { versionar } from "./versionar.ts";
 
 const CHANGELOGS = {
@@ -85,7 +85,9 @@ export function automaticSkip(directory: string, repository: string, input: Inpu
     try {
       requireSourceCI(repository, input.source, input.runId);
     } catch (error) {
-      // The CI run is already red on dev; a second red here would say nothing new.
+      // Only a job verdict skips: the CI run is already red on dev, and a
+      // second red here would say nothing new. API errors still fail the run.
+      if (!(error instanceof CIVerdictRefusal)) throw error;
       return `CI de push vermelho sem ser só job não bloqueante: ${(error as Error).message}`;
     }
   }
