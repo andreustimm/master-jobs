@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultPay, href, readFilters, toBoardFilters } from "../app/filter-state.ts";
+import { defaultPay, facetHref, href, openJobsHref, readFilters, toBoardFilters } from "../app/filter-state.ts";
 import { targetOf } from "../src/contexts/matching/index.ts";
 import { loadProfile } from "../src/core/profile/load.ts";
 
@@ -233,5 +233,55 @@ describe("Jobs screen filters in the URL", () => {
     // E as duas faixas foram efetivamente trocadas, não só avisadas.
     expect([state.fit, state.fitMax]).toEqual([20, 80]);
     expect([state.pay?.min, state.pay?.max]).toEqual([1000, 5000]);
+  });
+});
+
+describe("links dos cards do cockpit (#314)", () => {
+  it("o card de faceta leva só o que a faceta lê, mais o recorte ligado", () => {
+    // Tudo o que o cockpit aceita na URL, inclusive o que a faceta NÃO aplica.
+    const state = readFilters({
+      fit: "60",
+      fitMax: "90",
+      cluster: "architect",
+      q: "laravel",
+      source: ["lever", "ashby"],
+      workMode: "remote",
+      ungrouped: "1",
+      company: "Acme",
+      status: "applied",
+      sort: "recent",
+      paid: "1",
+      described: "1",
+      notApplied: "1",
+      track: "3",
+      by: "5",
+      pay: "6000",
+      cur: "USD",
+    });
+
+    for (const toggle of ["unblocked", "fresh", "named"] as const) {
+      const link = facetHref(state, toggle);
+      expect(link.startsWith("/jobs?"), toggle).toBe(true);
+      expect(parse(link), toggle).toEqual({
+        fit: "60",
+        cluster: "architect",
+        q: "laravel",
+        source: ["lever", "ashby"],
+        workMode: "remote",
+        ungrouped: "1",
+        [toggle]: "1",
+      });
+    }
+  });
+
+  it("o padrão do cockpit vira o padrão de /jobs com o chip ligado", () => {
+    expect(facetHref(readFilters({}), "fresh")).toBe("/jobs?fit=45&fresh=1");
+    // Um recorte já ligado no cockpit não vaza para o card de outro recorte.
+    expect(facetHref(readFilters({ unblocked: "1" }), "named")).toBe("/jobs?fit=45&named=1");
+  });
+
+  it("vagas abertas abre o acervo inteiro, sem corte, sem agrupamento e com arquivadas", () => {
+    expect(parse(openJobsHref())).toEqual({ fit: "0", status: "any", ungrouped: "1" });
+    expect(openJobsHref().startsWith("/jobs?")).toBe(true);
   });
 });

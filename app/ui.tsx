@@ -1,5 +1,7 @@
+import type { Route } from "next";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { TransitionLink } from "./transition-link";
 import type { Translator } from "../src/core/i18n/index.ts";
 import { applicationStatusLabel } from "./status.ts";
 
@@ -147,28 +149,63 @@ export function StatusBadge({ status, t }: { status: string; t: Translator["t"] 
   );
 }
 
+/**
+ * Um número do cockpit, com ou sem destino (#314).
+ *
+ * Com `href`, o card INTEIRO é um só link: nome acessível = número + rótulo, a
+ * seta é decoração. Sem `href` ele não finge ser clicável — sem hover, sem
+ * seta, sem link —, porque um número que parece botão e não leva a lugar
+ * nenhum ensina a desconfiar dos que levam. `hint` diz de que universo o
+ * número fala (acervo inteiro ou dentro do corte), no texto do dicionário.
+ */
 export function Stat({
   value,
   label,
   accent,
+  href,
+  hint,
+  testId,
 }: {
   value: string | number;
   label: string;
   accent?: boolean;
+  href?: Route;
+  hint?: string;
+  testId?: string;
 }) {
-  return (
-    <div className="bg-card px-4 py-4">
-      <div
-        className={cn(
-          "font-mono text-2xl leading-tight font-bold tabular-nums",
-          accent && "text-[var(--primary-text)]",
-        )}
-      >
-        {value}
-      </div>
-      <div className="mt-1 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
-        {label}
-      </div>
+  const number = (
+    <div
+      className={cn(
+        "font-mono text-2xl leading-tight font-bold tabular-nums",
+        accent && "text-[var(--primary-text)]",
+      )}
+    >
+      {value}
     </div>
+  );
+  const caption = "mt-1 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase";
+  if (!href) {
+    return (
+      <div className="bg-card px-4 py-4" data-testid={testId} title={hint}>
+        {number}
+        <div className={caption}>{label}</div>
+      </div>
+    );
+  }
+  return (
+    <TransitionLink
+      href={href}
+      data-testid={testId}
+      title={hint}
+      className="group block bg-card px-4 py-4 transition-colors hover:bg-[var(--muted)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--primary-text)]"
+    >
+      {number}
+      <div className={caption}>
+        {label}
+        <span aria-hidden="true" className="ml-1 group-hover:text-[var(--primary-text)] group-focus-visible:text-[var(--primary-text)]">
+          →
+        </span>
+      </div>
+    </TransitionLink>
   );
 }

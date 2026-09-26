@@ -1501,6 +1501,7 @@ export async function corpusStats(candidateId: number) {
       above60: sql<number>`notas.above60`.mapWith(Number),
       above70: sql<number>`notas.above70`.mapWith(Number),
       best: sql<number>`notas.best`.mapWith(Number),
+      bestJobId: sql<number | null>`notas.best_job_id`,
       // `best = 0` não distingue "sem nota" de "nota zero".
       scored: hasPrimaryScoreSql(candidateId),
     })
@@ -1508,11 +1509,19 @@ export async function corpusStats(candidateId: number) {
       select count(*) filter (where s.fit >= 45) as above45,
              count(*) filter (where s.fit >= 60) as above60,
              count(*) filter (where s.fit >= 70) as above70,
-             coalesce(max(s.fit), 0) as best
+             coalesce(max(s.fit), 0) as best,
+             -- A vaga da maior nota, na MESMA passada (#314): o máximo de um
+             -- par [nota, id] é agregado de fluxo, sem ordenar as notas nem
+             -- reler a tabela como faria um "order by fit desc limit 1". Empate
+             -- de nota fica com o maior id. O id cabe exato em float8.
+             (max(array[s.fit, s.job_id::float8]))[2]::integer as best_job_id
       from ${jobScore} s join ${job} j on j.id = s.job_id
       where s.candidate_id = ${candidateId} and ${candidatePrimaryScoreFilter(candidateId, "s")} and j.closed_at is null
     ) as notas`);
-  return row;
+  if (!row) return row;
+  // Sem nota nenhuma o máximo é nulo, e o cockpit não tem vaga para abrir.
+  const bestJobId = Number(row.bestJobId);
+  return { ...row, bestJobId: Number.isSafeInteger(bestJobId) && bestJobId > 0 ? bestJobId : null };
 }
 
 /**
