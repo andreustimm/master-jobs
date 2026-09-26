@@ -162,7 +162,26 @@ describe("runPlan — pula o que o recibo cobre e só registra verde estável", 
   it("gate vermelho para a rodada e não entra no recibo", () => {
     const failing = deps({ codes: { typecheck: 2 } });
     expect(runPlan(PLAN, (item) => item.command, failing.value).map((result) => result.status)).toEqual(["fail"]);
-    expect(failing.saved).toEqual([]);
+    expect(failing.saved.map((receipt) => Object.keys(receipt.gates))).toEqual([[]]);
+  });
+
+  it("gate que falha sob --fresh tira do disco o verde antigo do mesmo estado", () => {
+    // O disco tem typecheck verde para FP; `--fresh` entra sem recibo em memória.
+    let disk: Receipt | null = recordPass(null, FP, "typecheck", ["run", "typecheck"], 1, T0);
+    const fresh = deps({ receipt: null, codes: { typecheck: 2 }, save: (receipt) => { disk = receipt; } });
+    expect(runPlan(PLAN, (item) => item.command, fresh.value).map((result) => result.status)).toEqual(["fail"]);
+
+    // Rodada seguinte, sem --fresh, lê o que ficou no disco: typecheck roda de novo.
+    const next = deps({ receipt: disk });
+    expect(runPlan(PLAN, (item) => item.command, next.value).map((result) => result.status)).toEqual(["pass", "pass"]);
+    expect(next.ran).toEqual(["typecheck", "tests"]);
+  });
+
+  it("gate que falha sai do recibo e preserva os verdes anteriores da rodada", () => {
+    const receipt = recordPass(recordPass(null, FP, "typecheck", ["run", "typecheck"], 1, T0), FP, "tests", ["run", "tests"], 1, T0 - RECEIPT_TTL_MS - 1);
+    const failing = deps({ receipt, codes: { tests: 1 } });
+    expect(runPlan(PLAN, (item) => item.command, failing.value).map((result) => result.status)).toEqual(["receipt", "fail"]);
+    expect(Object.keys(failing.saved.at(-1)!.gates)).toEqual(["typecheck"]);
   });
 
   it("gate que mudou a árvore durante a execução não entra no recibo", () => {
