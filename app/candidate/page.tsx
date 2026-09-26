@@ -13,6 +13,7 @@ import {
 } from "../../src/core/candidate.ts";
 import { MarkdownEditor } from "./editor";
 import { VersionHistory } from "./versions";
+import { VersionTable } from "./version-table";
 import { importPdfAction, saveCvAction, setVisibilityAction } from "./actions";
 import { onboardingSession, requireOwnCandidatePage } from "../auth";
 import { CreateProfile } from "./create-profile";
@@ -167,7 +168,10 @@ const VERSION_KEYS = [
 ] as const;
 
 function versionLabels(t: Translator["t"]): Record<string, string> {
-  return Object.fromEntries(VERSION_KEYS.map((key) => [key, t(`versions.${key}`)]));
+  return {
+    ...Object.fromEntries(VERSION_KEYS.map((key) => [key, t(`versions.${key}`)])),
+    loading: t("common.loading"),
+  };
 }
 
 export default async function CandidateArea() {
@@ -188,6 +192,15 @@ export default async function CandidateArea() {
   const doc = person ? await currentDocument(person.id, "cv") : null;
   const history = person ? await documentHistory(person.id, "cv") : [];
   const gap = await analyseGap({ candidateId, minFit: 60 });
+  const versionRows = history.map((h) => ({
+    id: h.id,
+    label: h.label,
+    isCurrent: h.isCurrent,
+    length: h.length,
+    createdAt: h.createdAt,
+  }));
+  const labels = versionLabels(t);
+  const feedback = { success: t("feedback.success"), error: t("feedback.error") };
 
   return (
     <main className="pt-10 pb-16" data-testid="route-candidate">
@@ -424,44 +437,21 @@ export default async function CandidateArea() {
           <section>
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <h2 className="type-display-xs">{t("candidate.versions")}</h2>
-              {/* A lista abaixo é leitura; as operações moram no modal. Ver e
-                  restaurar são decisões que merecem foco e confirmação, não um
-                  clique perdido no meio de uma página longa. */}
+              {/* As operações moram no modal E na lista abaixo (issue #312). A
+                  decisão anterior era deixar a lista só de leitura, contra o
+                  clique perdido numa página longa; o atalho venceu porque abrir
+                  o modal para uma operação pontual custava dois cliques e
+                  rolagem. A defesa contra o clique perdido passou a ser a
+                  confirmação obrigatória de toda ação com efeito na lista. */}
               <VersionHistory
-                rows={history.map((h) => ({
-                  id: h.id,
-                  label: h.label,
-                  isCurrent: h.isCurrent,
-                  length: h.length,
-                  createdAt: h.createdAt,
-                }))}
+                rows={versionRows}
                 currentLength={doc?.content.length ?? 0}
                 locale={locale}
-                labels={versionLabels(t)}
-                feedback={{
-                  success: t("feedback.success"),
-                  error: t("feedback.error"),
-                }}
+                labels={labels}
+                feedback={feedback}
               />
             </div>
-            <div className="divide-y overflow-hidden rounded-xl border">
-              {history.map((h) => (
-                <div key={h.id} className="flex items-center gap-3 bg-card px-4 py-2.5 text-sm">
-                  {h.isCurrent ? (
-                    <Badge className="type-micro">{t("candidate.current")}</Badge>
-                  ) : (
-                    <span className="w-[46px]" />
-                  )}
-                  <span data-user-content className="flex-1">{h.label}</span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {formatNumber(h.length, locale)} {t("candidate.chars")}
-                  </span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {h.createdAt.slice(0, 10)}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <VersionTable rows={versionRows} locale={locale} labels={labels} feedback={feedback} />
           </section>
         </>
       )}

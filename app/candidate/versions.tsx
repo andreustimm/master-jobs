@@ -42,11 +42,13 @@ export type VersionRow = {
 
 export type VersionLabels = Record<string, string>;
 
-type Panel =
+export type Panel =
   | { kind: "none" }
   | { kind: "view"; id: number; label: string; content: string }
   | { kind: "rename"; id: number; label: string }
   | { kind: "confirm"; id: number; label: string; action: "delete" | "restore" };
+
+export type VersionError = { message: string; detail?: string };
 
 const ERROR_KEY: Record<string, string> = {
   "not-found": "errorNotFound",
@@ -56,23 +58,22 @@ const ERROR_KEY: Record<string, string> = {
   referenced: "errorReferenced",
 };
 
-export function VersionHistory({
-  rows,
+/**
+ * Estado e efeitos das operações sobre versões, compartilhados pelo modal
+ * Histórico e pela tabela da página. As duas superfícies chamam as MESMAS
+ * Server Actions e traduzem os MESMOS códigos de erro; o que muda entre elas é
+ * só onde o painel aparece. Cada uma tem a própria instância: não há estado a
+ * sincronizar, porque `revalidatePath("/candidate")` refaz a lista das duas.
+ */
+export function useVersionActions({
   labels,
-  currentLength,
-  locale,
   feedback,
 }: {
-  rows: VersionRow[];
   labels: VersionLabels;
-  /** Tamanho da versão atual, para a diferença por linha. */
-  currentLength: number;
-  locale: string;
   feedback: { success: string; error: string };
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const [panel, setPanel] = useState<Panel>({ kind: "none" });
-  const [error, setError] = useState<{ message: string; detail?: string } | null>(null);
+  const [error, setError] = useState<VersionError | null>(null);
   const [pending, start] = useTransition();
 
   const t = (key: string, values?: Record<string, string | number>) => {
@@ -81,16 +82,6 @@ export function VersionHistory({
       ? raw.replace(/\{(\w+)\}/g, (_, k: string) => String(values[k] ?? `{${k}}`))
       : raw;
   };
-
-  function open() {
-    setError(null);
-    setPanel({ kind: "none" });
-    dialog.current?.showModal();
-  }
-
-  function close() {
-    dialog.current?.close();
-  }
 
   /** Traduz o código que a ação devolveu; nunca exibe o código cru. */
   function handle(result: VersionActionResult) {
@@ -134,6 +125,42 @@ export function VersionHistory({
     start(async () => handle(await renameVersionAction(id, value)));
   }
 
+  /** Código de erro de leitura já traduzido, para quem lê fora do painel. */
+  function errorMessage(code: string) {
+    return t(ERROR_KEY[code] ?? "errorNotFound");
+  }
+
+  return { t, panel, setPanel, error, setError, pending, view, confirmed, rename, errorMessage };
+}
+
+export function VersionHistory({
+  rows,
+  labels,
+  currentLength,
+  locale,
+  feedback,
+}: {
+  rows: VersionRow[];
+  labels: VersionLabels;
+  /** Tamanho da versão atual, para a diferença por linha. */
+  currentLength: number;
+  locale: string;
+  feedback: { success: string; error: string };
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const { t, panel, setPanel, error, setError, pending, view, confirmed, rename } =
+    useVersionActions({ labels, feedback });
+
+  function open() {
+    setError(null);
+    setPanel({ kind: "none" });
+    dialog.current?.showModal();
+  }
+
+  function close() {
+    dialog.current?.close();
+  }
+
   return (
     <>
       <Button
@@ -172,24 +199,11 @@ export function VersionHistory({
         </div>
 
         {error && (
-          <div
-            role="alert"
-            className="border-b border-[var(--hairline)] bg-[var(--bad)]/10 px-5 py-3"
-          >
-            <p className="type-body-sm text-[var(--bad)]">{error.message}</p>
-            {error.detail && (
-              <>
-                <p className="type-meta mt-2 text-muted-foreground">{t("referencedBy")}</p>
-                <ul className="type-meta mt-1 list-disc pl-4 text-muted-foreground">
-                  {error.detail.split(" | ").map((item) => (
-                    <li key={item} data-user-content>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
+          <VersionErrorAlert
+            error={error}
+            referencedBy={t("referencedBy")}
+            className="border-b border-[var(--hairline)] px-5 py-3"
+          />
         )}
 
         <div className="max-h-[calc(85vh-8rem)] overflow-y-auto">
@@ -358,18 +372,54 @@ function RowButton({
   );
 }
 
-function RenameForm({
+/**
+ * Erro devolvido por uma ação, com as candidaturas que impedem a exclusão.
+ * Fica ao lado do que o usuário clicou: é resposta prevista, não falha.
+ */
+export function VersionErrorAlert({
+  error,
+  referencedBy,
+  className,
+  testId,
+}: {
+  error: VersionError;
+  referencedBy: string;
+  className: string;
+  testId?: string;
+}) {
+  return (
+    <div role="alert" data-testid={testId} className={cn("bg-[var(--bad)]/10", className)}>
+      <p className="type-body-sm text-[var(--bad)]">{error.message}</p>
+      {error.detail && (
+        <>
+          <p className="type-meta mt-2 text-muted-foreground">{referencedBy}</p>
+          <ul className="type-meta mt-1 list-disc pl-4 text-muted-foreground">
+            {error.detail.split(" | ").map((item) => (
+              <li key={item} data-user-content>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+export function RenameForm({
   defaultValue,
   labels,
   busy,
   onCancel,
   onSubmit,
+  testIds,
 }: {
   defaultValue: string;
   labels: { field: string; save: string; cancel: string };
   busy: boolean;
   onCancel: () => void;
   onSubmit: (value: string) => void;
+  testIds?: { field: string; save: string; cancel: string };
 }) {
   const [value, setValue] = useState(defaultValue);
   return (
@@ -378,6 +428,7 @@ function RenameForm({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         aria-label={labels.field}
+        data-testid={testIds?.field}
         maxLength={120}
         autoFocus
         className="h-8 max-w-[24rem] flex-1"
@@ -388,10 +439,23 @@ function RenameForm({
           }
         }}
       />
-      <Button type="button" size="sm" disabled={busy} onClick={() => onSubmit(value)}>
+      <Button
+        type="button"
+        size="sm"
+        disabled={busy}
+        onClick={() => onSubmit(value)}
+        data-testid={testIds?.save}
+      >
         {labels.save}
       </Button>
-      <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onCancel}>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={busy}
+        onClick={onCancel}
+        data-testid={testIds?.cancel}
+      >
         {labels.cancel}
       </Button>
     </div>
@@ -405,12 +469,17 @@ function RenameForm({
  * "está bom para ler?", markdown responde "o que mudou?" — e a segunda é a que
  * decide se vale restaurar.
  */
-function VersionView({
+export function VersionView({
   content,
   labels,
+  scrollClassName = "max-h-[40vh]",
+  testId = "version-view",
 }: {
   content: string;
   labels: { rendered: string; raw: string };
+  /** Altura da rolagem interna: o modal próprio de visualização tem mais espaço. */
+  scrollClassName?: string;
+  testId?: string;
 }) {
   const [mode, setMode] = useState<"rendered" | "raw">("rendered");
   return (
@@ -433,7 +502,7 @@ function VersionView({
           </button>
         ))}
       </div>
-      <div data-testid="version-view" data-user-content className="max-h-[40vh] overflow-y-auto p-4">
+      <div data-testid={testId} data-user-content className={cn(scrollClassName, "overflow-y-auto p-4")}>
         {mode === "rendered" ? (
           <MarkdownPreview source={content} emptyLabel="" />
         ) : (
