@@ -6,10 +6,10 @@ persona: Andreus em triagem noturna
 journey: J-preserve-application-decision
 expected: O detalhe da vaga mostra cada mudança de estágio com data e a nota escrita naquele momento, e só do próprio candidato
 entry_points: /jobs/<id>
-qa_status: pass
+qa_status: untested
 bug_ids: BUG-20260917-transition-note-never-readable
 fix_status: fixed
-retest_status: pass
+retest_status: pending
 fix_commits: cb00cbb
 evidence: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md
 last_report: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md
@@ -24,3 +24,8 @@ A leitura é escopada pelo candidato da sessão, e é isso que a sessão precisa
 provar junto com o conteúdo: uma segunda conta abrindo a mesma vaga não vê nem
 a nota nem as transições da primeira. Texto que a pessoa escreveu sobre a
 própria candidatura tem a mesma natureza do funil.
+
+**Reset 2026-09-25 (#316):** o histórico passou a marcar o evento desfeito
+("desfeito", riscado) e a mostrar o desfazer como linha própria ("desfazer: de
+X para Y"); a linha mais recente que pode ser desfeita tem o botão Desfazer. A
+nota continua na linha em que foi escrita.

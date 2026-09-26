@@ -452,6 +452,16 @@ paralelo à revisão; ela só vira pronta depois do SHIP (ou do L0) e do CI verd
 Rodar `pnpm check` local continua permitido — não é mais pré-requisito da PR
 draft.
 
+**A tabela é executável.** `rtk pnpm gates` classifica o diff pelas classes de
+[`config/validation-impact.json`](../../../config/validation-impact.json) e
+roda a união dos gates que elas pedem; caminho que nenhuma classe reconhece
+recebe o pacote completo (falha fechado), e o que `review_level.py` chama de L2
+nunca recebe menos que a suíte Vitest inteira. Gate verde deixa recibo por
+fingerprint (HEAD, árvore e mapa) e não roda de novo no mesmo estado; recibo
+vencido ou de outro estado não vale. Prova: `tests/validation-impact.test.ts`
+e `tests/gates-receipt.test.ts`. Roteiro em [workflow.md](../workflow.md)
+("Validar pelo risco").
+
 **Orçamento de tempo por gate.** Check local ≤ 10 min, E2E afetado ≤ 8 min,
 deep-review L1 ≤ 10 min, L2 ≤ 30 min. Estourou: registre na PR o que ficou de
 fora e por quê, delegue ao CI o que ele cobre e siga — nunca espere parado. O

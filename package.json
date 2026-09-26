@@ -1,6 +1,6 @@
 {
   "name": "master-jobs",
-  "version": "1.26.0",
+  "version": "1.27.0",
   "packageManager": "pnpm@10.28.0",
   "private": true,
   "type": "module",
@@ -34,6 +34,7 @@
     "check:harness": "node --experimental-strip-types --no-warnings scripts/harness/sync.ts",
     "harness:sync": "node --experimental-strip-types --no-warnings scripts/harness/sync.ts --write",
     "route": "node --experimental-strip-types --no-warnings scripts/routing/route.ts",
+    "gates": "node --experimental-strip-types --no-warnings scripts/gates/cli.ts",
     "check:qa-tracker": "PYTHONDONTWRITEBYTECODE=1 python3 .claude/skills/qa-report/scripts/materialize_state.py docs/qa",
     "test:qa-skills": "PYTHONDONTWRITEBYTECODE=1 python3 .claude/skills/qa-report/tests/test_scripts.py",
     "test:e2e": "node tests/e2e/run-isolated.mjs",

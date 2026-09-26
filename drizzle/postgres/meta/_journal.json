@@ -190,6 +190,13 @@
       "when": 1790345842380,
       "tag": "0026_job_score_board_cover",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790390558383,
+      "tag": "0027_application_event_reverts",
+      "breakpoints": true
     }
   ]
 }

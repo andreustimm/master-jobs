@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, type ReactNode } from "react";
+import { cvTextToMarkdown } from "../../src/core/cv-markdown.ts";
 
 /**
  * Markdown preview, rendered as React nodes.
@@ -15,13 +16,37 @@ import { Fragment, type ReactNode } from "react";
  * Scope is deliberately a CV, not CommonMark: headings, lists, emphasis, code,
  * links, quotes, rules. No tables, no footnotes, no HTML passthrough. A parser
  * that pretends to be complete and is not is worse than one with a stated edge.
+ *
+ * Two deliberate departures from CommonMark, both because the source is often a
+ * CV imported from PDF rather than Markdown (#325): the text passes through
+ * `cvTextToMarkdown()` first (caps titles become headings, glyph bullets become
+ * items), and a single line break inside a paragraph is kept as a break — in a
+ * CV a new line is a new fact, and joining them produced one wall of text.
  */
+
+/**
+ * Only web links become anchors. `javascript:`, `data:` and friends are the
+ * XSS a Markdown link carries; React 19 blocks `javascript:` itself, but the
+ * public profile should not lean on a framework default for that — and a
+ * `mailto:` there would publish the address the profile promises to keep out.
+ */
+function safeHref(raw: string): string | null {
+  try {
+    const url = new URL(raw.trim());
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Inline spans: `code`, **bold**, *italic*, [text](url). */
 function inline(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
-  // Code first: its content must not be re-parsed for emphasis.
-  const pattern = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*|_[^_]+_)|(\[[^\]]+\]\([^)]+\))/g;
+  // Code first: its content must not be re-parsed for emphasis. The link's
+  // label and target stop at the next bracket or parenthesis: `[^\]]+` and
+  // `[^)]+` scanned to the end of the line from every unclosed `[`, which is
+  // quadratic on a line of `[[[[` — and `/p/[slug]` renders this for anyone.
+  const pattern = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*|_[^_]+_)|(\[[^[\]]+\]\([^()]+\))/g;
   let last = 0;
   let match: RegExpExecArray | null;
   let i = 0;
@@ -40,17 +65,22 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
     } else if (token.startsWith("**")) {
       nodes.push(<strong key={key}>{token.slice(2, -2)}</strong>);
     } else if (token.startsWith("[")) {
-      const [, label, href] = /\[([^\]]+)\]\(([^)]+)\)/.exec(token) ?? [];
+      const [, label = "", target = ""] = /\[([^[\]]+)\]\(([^()]+)\)/.exec(token) ?? [];
+      const href = safeHref(target);
       nodes.push(
-        <a
-          key={key}
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[var(--primary-text)] hover:underline"
-        >
-          {label}
-        </a>,
+        href === null ? (
+          <Fragment key={key}>{label}</Fragment>
+        ) : (
+          <a
+            key={key}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[var(--primary-text)] hover:underline"
+          >
+            {label}
+          </a>
+        ),
       );
     } else {
       nodes.push(<em key={key}>{token.slice(1, -1)}</em>);
@@ -70,7 +100,7 @@ const HEADING_CLASS: Record<number, string> = {
 };
 
 export function MarkdownPreview({ source, emptyLabel }: { source: string; emptyLabel: string }) {
-  const lines = source.split("\n");
+  const lines = cvTextToMarkdown(source).split("\n");
   const blocks: ReactNode[] = [];
 
   let paragraph: string[] = [];
@@ -81,7 +111,12 @@ export function MarkdownPreview({ source, emptyLabel }: { source: string; emptyL
     if (paragraph.length === 0) return;
     blocks.push(
       <p key={`p-${blocks.length}`} className="type-body-md mb-3 leading-relaxed">
-        {inline(paragraph.join(" "), `p${blocks.length}`)}
+        {paragraph.map((line, i) => (
+          <Fragment key={i}>
+            {i > 0 && <br />}
+            {inline(line, `p${blocks.length}-${i}`)}
+          </Fragment>
+        ))}
       </p>,
     );
     paragraph = [];

@@ -24,6 +24,24 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-09-26T13:44:24.000Z
+
+### New
+
+- The numbers at the top of the cockpit are now clickable: each one opens the list it counts, with the matching filter already on. "Best fit" opens that job and "in pipeline" opens the pipeline. Hover to see which set each number describes.
+- On a job, "Move to" now splits Move forward, Move back and Close, shows which stage the application is in, and lets you go back to any earlier stage — including reopening a rejected, withdrawn or archived application.
+- After a move, the notice offers "Undo" for 10 seconds, and the latest move in the history has the button too. Undone moves stay in the history, marked as undone; undoing the first entry takes the job out of the funnel.
+- In the candidate area, each CV version now has icons to view, rename, restore and delete it right in the list, without opening the history. Every action asks for confirmation before changing anything, and hovering (or focusing with the keyboard) shows the action's name; on phones the name appears next to the icon.
+
+### Fixed
+
+- Every cockpit number now shows a thousands separator.
+
+### Improved
+
+- The What's new dialog now lists every published version, starting with the one in use. Versions without a visible change show their date and the line "Internal improvements, no visible change.".
+- A CV imported from PDF now shows with sections and lists on the public profile and in the `/candidate` preview, instead of a single block of text.
+
 ## [1.25.3] - 2026-09-25T15:27:50.000Z
 
 ### Improved

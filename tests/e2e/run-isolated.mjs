@@ -119,7 +119,12 @@ ${longBody}`;
     older.push(`## [${version}] - ${publication}\n\n### ${heading}\n\n${exclusive} ${patch}.`);
   }
 
+  // 0.8.1 is marked with its instant; 0.8.0 exists only in the technical
+  // fixture below. Both are older than every noted version on purpose, so the
+  // positional checks over the newest cards stay valid (issue #340).
   return `# ${portuguese ? "Novidades" : "What's New"}
+
+<!-- sem-nota-usuario: 0.8.1 - 2026-08-19T12:00:00.000Z -->
 
 ## [Unreleased]
 
@@ -136,6 +141,36 @@ ${exclusive} ${portuguese ? "histórico sem horário" : "historical date without
 ${older.join("\n\n")}
 `;
 }
+
+/** Technical history: lists the versions the user fixtures omit, and nothing a user may read. */
+const TECHNICAL_CHANGELOG_FIXTURE = `# Changelog
+
+## [Unreleased]
+
+## [1.1.0] - 2026-08-22
+
+### Added
+
+- TECHNICAL_ONLY 1.1.0.
+
+## [1.0.0] - 2026-08-21
+
+### Added
+
+- TECHNICAL_ONLY 1.0.0.
+
+## [0.8.1] - 2026-08-19
+
+### Fixed
+
+- TECHNICAL_ONLY 0.8.1.
+
+## [0.8.0] - 2026-08-18
+
+### Fixed
+
+- TECHNICAL_ONLY 0.8.0.
+`;
 
 const tracingRoot = dirname(ROOT);
 const temporaryRoot = await mkdtemp(join(tracingRoot, ".jho-e2e-"));
@@ -157,6 +192,7 @@ try {
   if (!manual) await Promise.all([
     writeFile(join(appRoot, "USER_CHANGELOG.pt-BR.md"), changelogFixture("pt-BR")),
     writeFile(join(appRoot, "USER_CHANGELOG.en.md"), changelogFixture("en")),
+    writeFile(join(appRoot, "CHANGELOG.md"), TECHNICAL_CHANGELOG_FIXTURE),
   ]);
 
   const port = await availablePort();
@@ -182,7 +218,7 @@ try {
   await run(process.execPath, [nextCli, "build", "--webpack"], { cwd: appRoot, env });
   const standaloneAppRoot = join(appRoot, ".next", "standalone", relative(tracingRoot, appRoot));
   await access(join(standaloneAppRoot, "config", "certs", "supabase-ca.crt"));
-  for (const file of ["USER_CHANGELOG.pt-BR.md", "USER_CHANGELOG.en.md"]) {
+  for (const file of ["USER_CHANGELOG.pt-BR.md", "USER_CHANGELOG.en.md", "CHANGELOG.md"]) {
     // The complete browser suite must work without any source Markdown after build.
     await rm(join(appRoot, file));
     await rm(join(standaloneAppRoot, file), { force: true });

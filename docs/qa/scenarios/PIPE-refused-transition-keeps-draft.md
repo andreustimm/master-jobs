@@ -6,7 +6,7 @@ persona: Andreus em triagem noturna
 journey: J-preserve-application-decision
 expected: O seletor oferece só estágios alcançáveis, e uma recusa do servidor mantém a nota no formulário e nomeia os dois estágios
 entry_points: /jobs/<id>; /pipeline
-qa_status: pass
+qa_status: untested
 bug_ids: BUG-20260910-application-edit-not-retained; BUG-20260917-stale-stages-after-refusal
 fix_status: fixed
 retest_status: pending
@@ -40,3 +40,10 @@ aponta para `archived`, o estágio realmente gravado. Evidência:
 `CH-refused-transition-draft-final-head.png`.
 
 Full 1.22.0 (2026-09-22): Com Preparando e nota digitados, a CLI arquivou a vaga por fora; Salvar recusou com 'O funil não vai de Arquivada para Preparando. Sua nota continua aqui', a nota ficou no campo e o seletor passou a oferecer só A fazer e Arquivada.
+
+**Reset 2026-09-25 (#316):** o funil ganhou arestas de volta — encerramentos
+reabrem e todo estágio anterior aparece em "Voltar" —, então "estado terminal
+não alcança nada" deixou de ser o caminho curto para a recusa. Provoque-a com
+dois encerramentos: CLI grava `rejected` por fora com a tela aberta em
+Candidatura enviada, e a tela tenta Retirada (encerramento para encerramento
+continua ilegal). O seletor agora vem agrupado em Avançar / Voltar / Encerrar.

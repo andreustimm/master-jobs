@@ -15,8 +15,13 @@ function dependencyOrder() {
   const pending = new Map(tables.map((table) => [table.name, table]));
   const ordered: typeof tables = [];
   while (pending.size) {
-    const next = [...pending.values()].find((table) => table.foreignKeys.every((fk) =>
-      !pending.has(getTableConfig(fk.reference().foreignTable).name)));
+    // Auto-referência não ordena tabelas: `application_event.reverts_event_id`
+    // (#316) aponta para a própria tabela e chega nula de todo snapshot
+    // (`postSnapshotColumns`). Ciclo ENTRE tabelas continua exigindo estratégia.
+    const next = [...pending.values()].find((table) => table.foreignKeys.every((fk) => {
+      const target = getTableConfig(fk.reference().foreignTable).name;
+      return target === table.name || !pending.has(target);
+    }));
     if (!next) throw new Error("Migration requires an explicit strategy for cyclic foreign keys");
     ordered.push(next);
     pending.delete(next.name);

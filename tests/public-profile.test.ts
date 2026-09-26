@@ -1,7 +1,7 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
-import { candidate, candidateSkill, skill } from "../src/core/db/schema.ts";
+import { candidate, candidateDocument, candidateSkill, skill } from "../src/core/db/schema.ts";
 import {
   ensureCandidate,
   saveDocument,
@@ -194,6 +194,45 @@ describe("o currículo exige o segundo consentimento", () => {
     await setVisibility(candidateId, "public");
     await setPublicCv(candidateId, true);
     expect((await publicProfile("andreus"))?.cv).not.toContain("andreus@intranet");
+  });
+
+  it("#325 CV importado de PDF sai estruturado, e a estrutura não reabre o filtro", async () => {
+    await saveDocument({
+      candidateId,
+      kind: "cv",
+      label: "CV do PDF",
+      format: "text",
+      content: [
+        "ANDREUS TIMM",
+        "andreus@zorbit.com.br · +55 11 91234-5678",
+        "SUMMARY",
+        "Senior AI Software Architect.",
+        "CORE EXPERTISE",
+        "● Software architecture ● Event-driven systems",
+        "",
+        "PRETENSÃO SALARIAL",
+        "USD 15,000/month",
+        "",
+        "EDUCATION",
+        "B.Sc. Computer Science",
+      ].join("\n"),
+    });
+    await setVisibility(candidateId, "public");
+    await setPublicCv(candidateId, true);
+
+    const cv = (await publicProfile("andreus"))?.cv ?? "";
+    expect(cv).toContain("## SUMMARY");
+    expect(cv).toContain("- Software architecture\n- Event-driven systems");
+    expect(cv).toContain("## EDUCATION");
+    for (const sentinel of ["andreus@zorbit.com.br", "91234-5678", "15,000", "PRETENSÃO"]) {
+      expect(cv, sentinel).not.toContain(sentinel);
+    }
+    // Nada é regravado: a normalização acontece na leitura.
+    const [doc] = await db
+      .select({ content: candidateDocument.content })
+      .from(candidateDocument)
+      .where(and(eq(candidateDocument.candidateId, candidateId), eq(candidateDocument.isCurrent, true)));
+    expect(doc!.content).toContain("● Software architecture");
   });
 
   it("o consentimento do CV não vale nada sem o perfil ser público", async () => {

@@ -2,30 +2,40 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   changelogFile,
+  compareSemanticVersions,
   formatChangelogDiagnostic,
+  internalReleases,
   parseUserChangelog,
+  technicalReleases,
   type BuiltUserRelease,
   type ChangelogLocale,
 } from "../src/core/changelog.ts";
 import { renderChangelogMarkdown } from "./changelog-markdown.ts";
 
-export function compileChangelog(source: string, locale: ChangelogLocale) {
+/**
+ * `technical` is the source of `CHANGELOG.md`: it lists every published
+ * version, so versions without a user note still reach the modal (issue #340).
+ */
+export function compileChangelog(source: string, locale: ChangelogLocale, technical: string) {
   const parsed = parseUserChangelog(source);
-  const releases: BuiltUserRelease[] = parsed.releases.map(({ markdown, ...metadata }) => ({
+  const noted: BuiltUserRelease[] = parsed.releases.map(({ markdown, ...metadata }) => ({
     ...metadata,
     html: renderChangelogMarkdown(markdown),
   }));
+  const internal: BuiltUserRelease[] = internalReleases(parsed, technicalReleases(technical))
+    .map((release) => ({ ...release, html: "", internal: true }));
   return {
-    releases,
+    releases: [...noted, ...internal].sort((a, b) => compareSemanticVersions(a.version, b.version)),
     diagnostics: parsed.issues.map((issue) => formatChangelogDiagnostic(issue, locale)),
   };
 }
 
 export async function generateChangelogs(root: string): Promise<void> {
   const changelogs: Record<ChangelogLocale, BuiltUserRelease[]> = { "pt-BR": [], en: [] };
+  const technical = await readFile(join(root, "CHANGELOG.md"), "utf8");
   for (const locale of ["pt-BR", "en"] as const) {
     const source = await readFile(join(root, changelogFile(locale)!), "utf8");
-    const compiled = compileChangelog(source, locale);
+    const compiled = compileChangelog(source, locale, technical);
     for (const diagnostic of compiled.diagnostics) console.warn(diagnostic);
     changelogs[locale] = compiled.releases;
   }

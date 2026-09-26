@@ -30,7 +30,7 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "./db/client.ts";
 import { authUser, candidate, candidateDocument, candidateSkill, skill } from "./db/schema.ts";
-import { containsContact, publicCvText, type KnownContact } from "./public-cv.ts";
+import { containsContact, publicCvMarkdown, type KnownContact } from "./public-cv.ts";
 
 export type PublicProfile = {
   slug: string;
@@ -106,7 +106,7 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
         ),
       )
       .limit(1);
-    cv = doc ? publicCvText(doc.content, known) : null;
+    cv = doc ? publicCvMarkdown(doc.content, known) : null;
   }
 
   return {

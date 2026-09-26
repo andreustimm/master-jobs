@@ -5,7 +5,7 @@
  * query changes it once, and the CLI and dashboard can never disagree about
  * what "shortlisted" or "open" means.
  */
-import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import {
@@ -23,7 +23,11 @@ import type { MatchField } from "../search.ts";
 import { phraseRegexSql, termPrefilterLike, termRegexSql, type ValidTerm } from "../term.ts";
 import {
   IllegalApplicationTransitionError,
+  OUT_OF_FUNNEL,
   transitionApplication,
+  undoTransition,
+  type ApplicationState,
+  type RecordedStatusChange,
 } from "../../contexts/pursuit/domain/application.ts";
 import { getDb, type DB } from "./client.ts";
 import {
@@ -665,7 +669,9 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
     if (opts.hideApplied) {
       conditions.push(sql`(${application.id} is null or ${application.appliedAt} is null)`);
     }
-    if (opts.status === "unfiled") conditions.push(isNull(application.id));
+    // "Fora do funil" (#316) tem linha e não tem estágio: para a lista, é o
+    // mesmo que nunca ter sido registrada.
+    if (opts.status === "unfiled") conditions.push(or(isNull(application.id), eq(application.status, OUT_OF_FUNNEL))!);
     else if (opts.status === undefined) {
       // Arquivar é "não me interessa": a vaga sai de toda lista que não pediu
       // as arquivadas pelo nome (`status=archived`) ou tudo (`any`).
@@ -1167,7 +1173,7 @@ export async function setApplicationStatusInTransaction(
    * medir a única alavanca que o próprio produto diz ser a mais forte.
    */
   channel?: string,
-): Promise<void> {
+): Promise<number | null> {
   const [previous] = await tx
       .select()
       .from(application)
@@ -1215,34 +1221,14 @@ export async function setApplicationStatusInTransaction(
         detail,
       });
     }
-    return;
+    return null;
   }
 
   let applicationId: number;
   if (previous) {
-    const updated = await tx
-        .update(application)
-        .set({
-          status: transition.state.status,
-          appliedAt: transition.state.appliedAt,
-          updatedAt: stamp,
-          // Só sobrescreve quando veio um canal: um `track` sem `--channel` não
-          // pode apagar o que já estava registrado.
-          ...(channel ? { channel } : {}),
-        })
-        // The status is the aggregate's optimistic concurrency token. Two
-        // commands may decide from the same snapshot, but only one can commit
-        // that snapshot and append its matching event.
-        .where(
-          and(
-            eq(application.id, previous.id),
-            eq(application.status, previous.status),
-          ),
-        )
-        .returning({ id: application.id });
-    if (updated.length !== 1) {
-      throw new ApplicationTransitionConflictError(candidateId, jobId);
-    }
+    // Só sobrescreve quando veio um canal: um `track` sem `--channel` não
+    // pode apagar o que já estava registrado.
+    await commitOverSnapshot(tx, candidateId, jobId, previous, transition.state, stamp, channel ? { channel } : {});
     applicationId = previous.id;
   } else {
     const [created] = await tx
@@ -1260,14 +1246,110 @@ export async function setApplicationStatusInTransaction(
     applicationId = created.id;
   }
 
-  await tx.insert(applicationEvent).values({
+  const [event] = await tx.insert(applicationEvent).values({
     applicationId,
     at: transition.event.at,
     kind: transition.event.kind,
     fromStatus: transition.event.fromStatus,
     toStatus: transition.event.toStatus,
     detail: detail ?? null,
+  }).returning({ id: applicationEvent.id });
+  // O id do evento é o que a tela precisa para oferecer "Desfazer" logo depois
+  // de salvar, sem ler o histórico de novo.
+  return event?.id ?? null;
+}
+
+/**
+ * Grava um novo estado sobre o que foi lido, ou recusa com conflito.
+ *
+ * O status é o token de concorrência otimista do agregado: dois comandos podem
+ * decidir a partir do mesmo retrato, mas só um consegue gravar sobre ele e
+ * acrescentar o evento correspondente. Transição e desfazer passam por aqui —
+ * é o mesmo caminho de escrita, e não um segundo.
+ */
+async function commitOverSnapshot(
+  tx: DbTransaction,
+  candidateId: number,
+  jobId: number,
+  previous: { id: number; status: ApplicationStatus },
+  next: ApplicationState,
+  stamp: string,
+  extra: { channel?: string } = {},
+): Promise<void> {
+  const updated = await tx
+    .update(application)
+    .set({ status: next.status, appliedAt: next.appliedAt, updatedAt: stamp, ...extra })
+    .where(and(eq(application.id, previous.id), eq(application.status, previous.status)))
+    .returning({ id: application.id });
+  if (updated.length !== 1) {
+    throw new ApplicationTransitionConflictError(candidateId, jobId);
+  }
+}
+
+/** Os `status_change` de uma candidatura, do mais recente para o mais antigo. */
+async function statusChanges(tx: DbTransaction, applicationId: number): Promise<RecordedStatusChange[]> {
+  const rows = await tx
+    .select({
+      id: applicationEvent.id,
+      at: applicationEvent.at,
+      fromStatus: applicationEvent.fromStatus,
+      toStatus: applicationEvent.toStatus,
+      revertsEventId: applicationEvent.revertsEventId,
+    })
+    .from(applicationEvent)
+    .where(and(eq(applicationEvent.applicationId, applicationId), eq(applicationEvent.kind, "status_change")))
+    .orderBy(desc(applicationEvent.at), desc(applicationEvent.id));
+  return rows.flatMap((row) => (row.toStatus === null ? [] : [{ ...row, toStatus: row.toStatus }]));
+}
+
+/**
+ * Desfaz a última movimentação: um `status_change` NOVO, de volta ao estágio
+ * anterior, apontando para o evento revertido (#316). Nenhum UPDATE nem DELETE
+ * em `application_event` — o revertido continua lá, e a tela o marca
+ * "desfeito". Desfazer o primeiro registro deixa a candidatura fora do funil,
+ * sem apagar a linha.
+ *
+ * `expectedEventId` é o evento que a tela ofereceu desfazer. Se outra aba
+ * moveu a candidatura desde então, o alvo mudou e a resposta é conflito.
+ */
+export async function undoApplicationStatus(
+  candidateId: number,
+  jobId: number,
+  expectedEventId: number,
+  stamp = new Date().toISOString(),
+): Promise<void> {
+  await getDb().transaction(async (tx) => {
+    const [previous] = await tx
+      .select({ id: application.id, status: application.status, appliedAt: application.appliedAt })
+      .from(application)
+      .where(and(eq(application.candidateId, candidateId), eq(application.jobId, jobId)))
+      .limit(1);
+    if (!previous) throw new ApplicationUndoUnavailableError(candidateId, jobId);
+
+    const undo = undoTransition(previous, await statusChanges(tx, previous.id), expectedEventId, stamp);
+    if (!undo.ok) {
+      if (undo.error.code === "stale") throw new ApplicationTransitionConflictError(candidateId, jobId);
+      throw new ApplicationUndoUnavailableError(candidateId, jobId);
+    }
+    await commitOverSnapshot(tx, candidateId, jobId, previous, undo.state, stamp);
+    await tx.insert(applicationEvent).values({
+      applicationId: previous.id,
+      at: undo.event.at,
+      kind: undo.event.kind,
+      fromStatus: undo.event.fromStatus,
+      toStatus: undo.event.toStatus,
+      revertsEventId: undo.event.revertsEventId,
+    });
   });
+}
+
+export class ApplicationUndoUnavailableError extends Error {
+  readonly code = "nothing_to_undo";
+
+  constructor(candidateId: number, jobId: number) {
+    super(`Nothing to undo: candidate ${candidateId}, job ${jobId}`);
+    this.name = "ApplicationUndoUnavailableError";
+  }
 }
 
 /** Move a job through the pipeline and record the transition. */
@@ -1277,9 +1359,9 @@ export async function setApplicationStatus(
   status: ApplicationStatus,
   detail?: string,
   channel?: string,
-): Promise<void> {
+): Promise<number | null> {
   const db = getDb();
-  await db.transaction((tx) =>
+  return db.transaction((tx) =>
     setApplicationStatusInTransaction(tx, candidateId, jobId, status, detail, undefined, channel),
   );
 }
@@ -1331,13 +1413,21 @@ export async function setApplicationDocument(
   });
 }
 
+/**
+ * A candidatura desfeita até o primeiro registro fica como linha, fora do
+ * funil (#316): toda leitura que conta ou lista o funil a deixa de fora.
+ */
+export function inFunnel(): SQL {
+  return ne(application.status, OUT_OF_FUNNEL);
+}
+
 /** Funnel counts for the dashboard header. */
 export async function pipelineCounts(candidateId: number): Promise<Record<string, number>> {
   const db = getDb();
   const rows = await db
     .select({ status: application.status, n: sql<number>`count(*)` })
     .from(application)
-    .where(eq(application.candidateId, candidateId))
+    .where(and(eq(application.candidateId, candidateId), inFunnel()))
     .groupBy(application.status);
   return Object.fromEntries(rows.map((r) => [r.status, Number(r.n)]));
 }
@@ -1381,7 +1471,7 @@ export async function recruiterCandidateSummaries(
         n: sql<number>`count(*)`,
       })
       .from(application)
-      .where(inArray(application.candidateId, scope))
+      .where(and(inArray(application.candidateId, scope), inFunnel()))
       .groupBy(application.candidateId, application.status),
   ]);
 
@@ -1450,11 +1540,13 @@ export async function applicationTimeline(candidateId: number | null, jobId: num
   const db = getDb();
   return db
     .select({
+      id: applicationEvent.id,
       at: applicationEvent.at,
       kind: applicationEvent.kind,
       fromStatus: applicationEvent.fromStatus,
       toStatus: applicationEvent.toStatus,
       detail: applicationEvent.detail,
+      revertsEventId: applicationEvent.revertsEventId,
     })
     .from(applicationEvent)
     .innerJoin(application, eq(application.id, applicationEvent.applicationId))
@@ -1501,6 +1593,7 @@ export async function corpusStats(candidateId: number) {
       above60: sql<number>`notas.above60`.mapWith(Number),
       above70: sql<number>`notas.above70`.mapWith(Number),
       best: sql<number>`notas.best`.mapWith(Number),
+      bestJobId: sql<number | null>`notas.best_job_id`,
       // `best = 0` não distingue "sem nota" de "nota zero".
       scored: hasPrimaryScoreSql(candidateId),
     })
@@ -1508,11 +1601,19 @@ export async function corpusStats(candidateId: number) {
       select count(*) filter (where s.fit >= 45) as above45,
              count(*) filter (where s.fit >= 60) as above60,
              count(*) filter (where s.fit >= 70) as above70,
-             coalesce(max(s.fit), 0) as best
+             coalesce(max(s.fit), 0) as best,
+             -- A vaga da maior nota, na MESMA passada (#314): o máximo de um
+             -- par [nota, id] é agregado de fluxo, sem ordenar as notas nem
+             -- reler a tabela como faria um "order by fit desc limit 1". Empate
+             -- de nota fica com o maior id. O id cabe exato em float8.
+             (max(array[s.fit, s.job_id::float8]))[2]::integer as best_job_id
       from ${jobScore} s join ${job} j on j.id = s.job_id
       where s.candidate_id = ${candidateId} and ${candidatePrimaryScoreFilter(candidateId, "s")} and j.closed_at is null
     ) as notas`);
-  return row;
+  if (!row) return row;
+  // Sem nota nenhuma o máximo é nulo, e o cockpit não tem vaga para abrir.
+  const bestJobId = Number(row.bestJobId);
+  return { ...row, bestJobId: Number.isSafeInteger(bestJobId) && bestJobId > 0 ? bestJobId : null };
 }
 
 /**
@@ -1582,7 +1683,7 @@ export async function pipelineRows(candidateId: number, query: PipelineQuery = {
   const offset = query.offset ?? 0;
   const scope = query.status
     ? and(eq(application.candidateId, candidateId), eq(application.status, query.status))
-    : eq(application.candidateId, candidateId);
+    : and(eq(application.candidateId, candidateId), inFunnel());
 
   return db
     .select({

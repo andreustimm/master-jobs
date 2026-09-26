@@ -32,7 +32,7 @@ export default async function RecruiterCandidateHistory({
   params: Promise<{ candidateId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { t, locale } = await getTranslator();
+  const { t } = await getTranslator();
   const session = await requireSession();
   const { candidateId: raw } = await params;
 
@@ -79,7 +79,7 @@ export default async function RecruiterCandidateHistory({
       </h1>
 
       <div className="mb-8 flex flex-wrap gap-2.5">
-        {applicationStatusOptions(t, locale)
+        {applicationStatusOptions(t)
           .filter(({ value }) => counts[value])
           .map(({ value, label }) => (
             <Card key={value} className="min-w-[96px] gap-0 px-4 py-2.5">

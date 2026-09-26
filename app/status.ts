@@ -1,10 +1,11 @@
 import {
   APPLICATION_STATUSES,
+  FUNNEL_STATUSES,
   type ApplicationStatus,
 } from "../src/contexts/pursuit/domain/application.ts";
-import type { LocaleId, TranslationKey, Translator } from "../src/core/i18n/index.ts";
+import type { Translator } from "../src/core/i18n/index.ts";
 
-const STATUS_TRANSLATION_KEYS: Record<ApplicationStatus, TranslationKey> = {
+const STATUS_TRANSLATION_KEYS = {
   backlog: "applicationStatus.backlog",
   shortlisted: "applicationStatus.shortlisted",
   preparing: "applicationStatus.preparing",
@@ -15,7 +16,8 @@ const STATUS_TRANSLATION_KEYS: Record<ApplicationStatus, TranslationKey> = {
   rejected: "applicationStatus.rejected",
   withdrawn: "applicationStatus.withdrawn",
   archived: "applicationStatus.archived",
-};
+  untracked: "applicationStatus.untracked",
+} as const satisfies Record<ApplicationStatus, string>;
 
 export type ApplicationStatusOption = {
   value: ApplicationStatus;
@@ -39,16 +41,18 @@ export function applicationStatusLabels(t: Translator["t"]): Record<ApplicationS
 }
 
 /**
+ * Opções na ORDEM DO FUNIL, e não alfabética: "Candidatura enviada" antes de
+ * "Preparando" escondia a hierarquia que a pessoa usa para decidir (#316).
+ *
  * `statuses` restringe a lista ao que o domínio aceita a partir do estado
- * atual. Quem lista o funil inteiro (filtros) não passa nada; quem oferece uma
- * mudança passa `allowedTransitions(atual)`.
+ * atual; quem lista o funil inteiro (filtros) não passa nada. "Fora do funil"
+ * nunca é opção: só o desfazer chega lá.
  */
 export function applicationStatusOptions(
   t: Translator["t"],
-  locale: LocaleId,
-  statuses: readonly ApplicationStatus[] = APPLICATION_STATUSES,
+  statuses: readonly ApplicationStatus[] = FUNNEL_STATUSES,
 ): ApplicationStatusOption[] {
-  return statuses
-    .map((value) => ({ value, label: applicationStatusLabel(value, t) }))
-    .sort((a, b) => a.label.localeCompare(b.label, locale));
+  return APPLICATION_STATUSES
+    .filter((value) => statuses.includes(value))
+    .map((value) => ({ value, label: applicationStatusLabel(value, t) }));
 }

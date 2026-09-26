@@ -1,13 +1,24 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { TrackResult } from "../../actions";
+import type { TrackResult, UndoResult } from "../../actions";
 import { isNavigationSignal, publishMutationFeedback } from "../../mutation-feedback";
 import type { ApplicationStatusOption } from "../../status.ts";
 import type { ApplicationStatus } from "../../../src/contexts/pursuit/domain/application.ts";
+import { runUndo, type UndoLabels } from "./undo";
+
+/** Tempo do aviso com "Desfazer": o dobro do aviso comum, para dar tempo de ler. */
+const UNDO_NOTICE_MS = 10_000;
+
+/** As opções do seletor, agrupadas como no domínio (`transitionGroups`). */
+export type TrackFormGroups = {
+  forward: ApplicationStatusOption[];
+  back: ApplicationStatusOption[];
+  close: ApplicationStatusOption[];
+};
 
 export type TrackFormLabels = {
   moveTo: string;
@@ -17,6 +28,10 @@ export type TrackFormLabels = {
   error: string;
   rejected: string;
   conflict: string;
+  groupForward: string;
+  groupBack: string;
+  groupClose: string;
+  movedTo: string;
 };
 
 /**
@@ -31,22 +46,31 @@ export type TrackFormLabels = {
  */
 export function TrackForm({
   action,
+  undoAction,
   jobId,
   currentStatus,
-  options,
+  groups,
   labels,
+  undoLabels,
   statusLabels,
 }: {
   action: (formData: FormData) => Promise<TrackResult>;
+  undoAction: (formData: FormData) => Promise<UndoResult>;
   jobId: number;
   currentStatus: ApplicationStatus | null;
-  options: ApplicationStatusOption[];
+  groups: TrackFormGroups;
   labels: TrackFormLabels;
+  undoLabels: UndoLabels;
   statusLabels: Record<ApplicationStatus, string>;
 }) {
-  // Sem candidatura, o seletor abre em `shortlisted`: o primeiro movimento útil
-  // é encurtar a lista, não registrar que a vaga existe.
-  const [status, setStatus] = useState<string>(currentStatus ?? "shortlisted");
+  // O estágio atual vem primeiro e sozinho: salvar nele grava só a nota. Fora do
+  // funil não é estágio que se escolha — a lista começa pelos grupos.
+  const current: ApplicationStatusOption[] =
+    currentStatus && currentStatus !== "untracked" && statusLabels[currentStatus]
+      ? [{ value: currentStatus, label: statusLabels[currentStatus] }]
+      : [];
+  const options = [...current, ...groups.forward, ...groups.back, ...groups.close];
+  const [status, setStatus] = useState<string>(initialChoice(currentStatus));
   const [note, setNote] = useState("");
   // O estágio pode mudar fora deste formulário — "não me interessa", outra aba.
   // Sem acompanhar, o seletor ficava na escolha anterior e caía na primeira
@@ -55,7 +79,7 @@ export function TrackForm({
   const [seenStatus, setSeenStatus] = useState(currentStatus);
   if (currentStatus !== seenStatus) {
     setSeenStatus(currentStatus);
-    setStatus(currentStatus ?? "shortlisted");
+    setStatus(initialChoice(currentStatus));
   }
   const selected = options.some((option) => option.value === status)
     ? status
@@ -79,7 +103,22 @@ export function TrackForm({
     try {
       const result = await action(formData);
       if (result.status === "ok") {
-        publishMutationFeedback({ kind: "success", message: labels.success });
+        const moved = String(formData.get("status")) as ApplicationStatus;
+        const eventId = result.eventId;
+        publishMutationFeedback(
+          eventId === null
+            ? { kind: "success", message: labels.success }
+            : {
+                kind: "success",
+                message: labels.movedTo.replace("{to}", statusLabels[moved] ?? moved),
+                durationMs: UNDO_NOTICE_MS,
+                action: {
+                  label: undoLabels.undo,
+                  testId: "track-undo",
+                  run: () => startTransition(() => runUndo(undoAction, jobId, eventId, undoLabels)),
+                },
+              },
+        );
         // A nota pertence à transição que acabou de ser gravada; mantê-la na
         // tela convidaria a repeti-la na próxima.
         setNote("");
@@ -131,11 +170,26 @@ export function TrackForm({
           "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
         )}
       >
-        {options.map(({ value, label }) => (
+        {current.map(({ value, label }) => (
           <option key={value} value={value}>
             {label}
           </option>
         ))}
+        {([
+          ["forward", labels.groupForward],
+          ["back", labels.groupBack],
+          ["close", labels.groupClose],
+        ] as const).map(([group, groupLabel]) =>
+          groups[group].length === 0 ? null : (
+            <optgroup key={group} label={groupLabel} data-testid={`track-group-${group}`}>
+              {groups[group].map(({ value, label }) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </optgroup>
+          ),
+        )}
       </select>
       <Input
         name="note"
@@ -161,4 +215,12 @@ function messageFor(
   return labels.rejected
     .replace("{from}", statusLabels[result.from])
     .replace("{to}", statusLabels[result.to]);
+}
+
+/**
+ * Sem candidatura (ou fora do funil), o seletor abre em `shortlisted`: o
+ * primeiro movimento útil é encurtar a lista, não registrar que a vaga existe.
+ */
+function initialChoice(current: ApplicationStatus | null): string {
+  return current === null || current === "untracked" ? "shortlisted" : current;
 }

@@ -887,7 +887,8 @@ No job with id 999999
 
 `"Move a job through the pipeline (backlog | shortlisted | preparing | applied |
 screening | interviewing | offer | rejected | withdrawn | archived)"` — a descrição é
-montada com `${APPLICATION_STATUSES.join(" | ")}`. Valida `status` contra `APPLICATION_STATUSES`
+montada com `${FUNNEL_STATUSES.join(" | ")}` — `untracked` ("fora do funil") não é
+aceito: só o desfazer da tela chega lá. Valida `status` contra `FUNNEL_STATUSES`
 **antes** de abrir o banco; status inválido imprime a lista de válidos e sai com
 `exitCode = 1`. Em seguida chama `setApplicationStatus(jobId, status, note)`, que cria a
 linha em `application` se ainda não existir e **sempre** grava um `application_event`
@@ -943,6 +944,12 @@ Unknown status "interview". Valid: backlog, shortlisted, preparing, applied, scr
 > **Invariante:** `application_event` é append-only. Cada transição gera uma linha com
 > `fromStatus`/`toStatus`; é dela que sai qualquer métrica de funil futura. Nenhum
 > comando deve atualizar status "por fora" de `setApplicationStatus()`.
+>
+> Voltar de estágio é uma transição comum (`jho track 318 shortlisted` a partir
+> de `screening` é aceito e preserva `applied_at`), e encerramentos reabrem.
+> Avançar continua um passo de cada vez, e trocar um encerramento por outro
+> (`rejected` → `withdrawn`) é recusado. Desfazer a última movimentação existe
+> só na tela da vaga (#316).
 
 ---
 

@@ -1,6 +1,6 @@
 import type { Route } from "next";
 import { WORK_MODES, readWorkMode, type BoardFilters, type TrackTarget, type WorkMode } from "../src/contexts/matching/index.ts";
-import { APPLICATION_STATUSES } from "../src/contexts/pursuit/domain/application.ts";
+import { FUNNEL_STATUSES } from "../src/contexts/pursuit/domain/application.ts";
 import { parseQuery } from "../src/core/search.ts";
 import { validateTerm, type TermError, type ValidTerm } from "../src/core/term.ts";
 import { FIT_MAX, PAY_FILTER_MAX } from "./filter-scales.ts";
@@ -286,6 +286,41 @@ export function href(base: BoardRoute, state: FilterState, patch: Record<string,
   return (qs ? `${base}?${qs}` : base) as Route;
 }
 
+/** O recorte que um card de contagem do cockpit liga ao abrir `/jobs` (#314). */
+export type FacetToggle = "unblocked" | "fresh" | "named";
+
+/**
+ * O link de um card do cockpit que conta uma faceta.
+ *
+ * Carrega SÓ o que a faceta lê — corte, cluster, consulta, fontes, modalidade
+ * e agrupamento — mais o recorte do card, e nunca o estado inteiro. `status`,
+ * `company`, `fitMax`, faixa salarial ou "ainda não enviadas" ficam de fora
+ * porque `cachedBoardFacets` não os aplica: levá-los faria `/jobs` contar um
+ * quadro menor que o número do card, e a mesma pergunta teria duas respostas.
+ */
+export function facetHref(state: FilterState, toggle: FacetToggle): Route {
+  const facet: FilterState = {
+    fit: state.fit,
+    cluster: state.cluster,
+    query: state.query,
+    sources: state.sources,
+    workMode: state.workMode,
+    grouped: state.grouped,
+    [toggle]: true,
+    notices: [],
+  };
+  return href("/jobs", facet, {});
+}
+
+/**
+ * O acervo aberto inteiro, que é o que "vagas abertas" conta: toda nota, cada
+ * publicação e todo estado do funil, arquivadas inclusive. Não depende dos
+ * filtros do cockpit porque o número também não depende.
+ */
+export function openJobsHref(): Route {
+  return href("/jobs", { fit: 0, sources: [], grouped: false, status: "any", notices: [] }, {});
+}
+
 /**
  * The pay control's starting currency and period: the primary track's first
  * range, as the candidate thinks about pay. Without a primary target, USD per
@@ -297,7 +332,7 @@ export function defaultPay(primary: TrackTarget | null): { currency: string; per
   return { currency: first.currency.toUpperCase(), period: first.period === "year" ? "year" : "month" };
 }
 
-const BOARD_STATUSES = [...APPLICATION_STATUSES, "unfiled", "any"] as const;
+const BOARD_STATUSES = [...FUNNEL_STATUSES, "unfiled", "any"] as const;
 
 /** The board query for the state alone. Track, term and pay are resolved by the page. */
 export function toBoardFilters(state: FilterState): BoardFilters {

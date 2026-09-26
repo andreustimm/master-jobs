@@ -12,6 +12,7 @@
  */
 import { extractText, getDocumentProxy } from "unpdf";
 import { CV_MIN, CV_PDF_MAX_MB } from "./candidate-identity.ts";
+import { BULLET_GLYPHS } from "./cv-markdown.ts";
 
 export type PdfExtraction = {
   text: string;
@@ -49,9 +50,13 @@ function unwrapParagraphs(text: string): string {
  * Bullets matter beyond cosmetics: the extractor's section detection and its
  * "used in N experience bullets" rationale both key off line starts.
  */
+// Os mesmos glifos que a leitura reconhece (`cv-markdown.ts`), mais o `·`, que
+// só no começo da linha é item. Faltava o `●` (U+25CF), o mais comum (#315).
+const LEADING_GLYPH = new RegExp(`^[ \\t]*[${BULLET_GLYPHS}·]\\s*`, "gmu");
+
 function normalizeBullets(text: string): string {
   return text
-    .replace(/^[ \t]*[•▪◦‣·]\s*/gm, "- ")
+    .replace(LEADING_GLYPH, "- ")
     .replace(/^[ \t]*[–—]\s+/gm, "- ");
 }
 

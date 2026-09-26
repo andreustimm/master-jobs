@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
  * da URL para montar esta lista: id em parâmetro é pedido, não prova.
  */
 export default async function RecruiterHistory() {
-  const { t, locale } = await getTranslator();
+  const { t } = await getTranslator();
   const session = await requirePage("job:read");
   const summaries = await recruiterCandidateSummaries(session.linkedCandidateIds);
 
@@ -48,7 +48,7 @@ export default async function RecruiterHistory() {
               </TransitionLink>
               <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>{t("recruiter.applications", { count: String(summary.total) })}</span>
-                {applicationStatusOptions(t, locale)
+                {applicationStatusOptions(t)
                   .filter(({ value }) => summary.counts[value])
                   .map(({ value, label }) => (
                     <span key={value} className="font-mono type-micro">

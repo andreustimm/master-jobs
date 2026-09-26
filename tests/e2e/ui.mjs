@@ -23,12 +23,14 @@ import { chromium, webkit } from "playwright";
 import { readFile } from "node:fs/promises";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { checkWorkModes } from "./work-mode.mjs";
+import { checkPublicCvFormat } from "./public-cv-format.mjs";
 import { checkSearchRelevance } from "./search-relevance.mjs";
 import { checkFilterAutoApply } from "./filter-auto-apply.mjs";
 import { checkJobsLoading } from "./jobs-loading.mjs";
 import { checkJobAnalysis } from "./job-analysis.mjs";
 import { checkAdminCatalog } from "./admin-catalog.mjs";
 import { checkJobAvailability } from "./job-availability.mjs";
+import { checkCockpitCards } from "./cockpit-cards.mjs";
 import {
   ENGLISH_ANONYMOUS_SWEEP,
   ENGLISH_OWNER_SWEEP,
@@ -100,6 +102,27 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 
 const consoleErrors = [];
 const changelogRoleSnapshots = [];
+// 100 noted versions in the user fixtures, plus 0.8.1 (marked) and 0.8.0
+// (technical only) shown as internal improvements — run-isolated.mjs, #340.
+const CHANGELOG_FIXTURE_RELEASES = 102;
+
+/** Expands one internal release and reads its line; leaves the card as it found it. */
+async function internalReleaseLine(dialog, version) {
+  const button = dialog.locator(`[data-testid="changelog-release-${version}"]`);
+  const wasOpen = (await button.getAttribute("aria-expanded")) === "true";
+  if (!wasOpen) await button.click();
+  const panel = dialog.locator(`#${await button.getAttribute("aria-controls")}`);
+  const line = panel.locator('[data-testid="changelog-internal"]');
+  const result = {
+    count: await line.count(),
+    text: (await line.textContent())?.trim() ?? "",
+    time: (await button.locator("time").textContent())?.trim() ?? "",
+    dateTime: await button.locator("time").getAttribute("datetime"),
+    panelText: (await panel.textContent())?.trim() ?? "",
+  };
+  if (!wasOpen) await button.click();
+  return result;
+}
 
 function trackConsole(targetPage) {
   targetPage.on("console", (message) => {
@@ -645,7 +668,7 @@ try {
   let releaseButtons = opened.dialog.locator('[data-testid^="changelog-release-"]');
   check(
     "E2E-005 somente a versão mais nova começa expandida",
-    (await releaseButtons.count()) === 100 &&
+    (await releaseButtons.count()) === CHANGELOG_FIXTURE_RELEASES &&
       (await opened.dialog.locator('[data-testid^="changelog-release-"][aria-expanded="true"]').count()) === 1 &&
       (await opened.dialog.locator('[id$="-content"] > *').count()) === 1 &&
       (await releaseButtons.first().getAttribute("aria-expanded")) === "true",
@@ -669,7 +692,7 @@ try {
   check(
     "E2E-007 fechar a intermediária preserva as demais sem duplicar",
     statesAfterMiddleCollapse.join(",") === "true,false,true" &&
-      (await opened.dialog.locator('[id$="-content"]').count()) === 100 &&
+      (await opened.dialog.locator('[id$="-content"]').count()) === CHANGELOG_FIXTURE_RELEASES &&
       (await opened.dialog.locator('[id$="-content"] > *').count()) === 2 &&
       (await middleBody.locator(":scope > *").count()) === 0,
     statesAfterMiddleCollapse.join(","),
@@ -740,6 +763,22 @@ try {
       !portugueseResponse.includes("ENGLISH_RELEASE_ONLY") &&
       ((await opened.dialog.textContent()) ?? "").includes("Novidades"),
   );
+
+  const internalPtMarked = await internalReleaseLine(opened.dialog, "0.8.1");
+  const internalPtTechnical = await internalReleaseLine(opened.dialog, "0.8.0");
+  check(
+    "E2E-026 versão sem nota mostra a linha de melhorias internas em pt-BR, com a data da versão",
+    internalPtMarked.count === 1 &&
+      internalPtMarked.text === "Melhorias internas, sem mudança visível." &&
+      internalPtMarked.panelText === internalPtMarked.text &&
+      internalPtMarked.dateTime === "2026-08-19T12:00:00.000Z" &&
+      internalPtTechnical.count === 1 &&
+      internalPtTechnical.text === "Melhorias internas, sem mudança visível." &&
+      internalPtTechnical.dateTime === "2026-08-18" &&
+      internalPtTechnical.time === "18/08/2026" &&
+      !((await opened.dialog.textContent()) ?? "").includes("TECHNICAL_ONLY"),
+    JSON.stringify({ internalPtMarked, internalPtTechnical }),
+  );
   await page.locator('[data-testid="changelog-close"]').click();
 
   await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
@@ -754,6 +793,14 @@ try {
       englishResponse.includes("ENGLISH_RELEASE_ONLY") &&
       !englishResponse.includes("CONTEUDO_PT_EXCLUSIVO") &&
       englishText.includes("What's new"),
+  );
+  const internalEn = await internalReleaseLine(opened.dialog, "0.8.0");
+  check(
+    "E2E-027 versão sem nota mostra a linha de melhorias internas em inglês",
+    internalEn.count === 1 &&
+      internalEn.text === "Internal improvements, no visible change." &&
+      internalEn.time === "08/18/2026",
+    JSON.stringify(internalEn),
   );
   await page.locator('[data-testid="changelog-close"]').click();
 
@@ -872,6 +919,30 @@ try {
     JSON.stringify(narrow),
   );
 
+  const narrowInternalButton = opened.dialog.locator('[data-testid="changelog-release-0.8.0"]');
+  await narrowInternalButton.scrollIntoViewIfNeeded();
+  await narrowInternalButton.click();
+  const narrowInternal = await page.evaluate(() => {
+    const dialog = document.querySelector('[data-testid="changelog-dialog"]');
+    const line = dialog?.querySelector('[data-testid="changelog-internal"]');
+    const lineRect = line?.getBoundingClientRect();
+    const dialogRect = dialog?.getBoundingClientRect();
+    return {
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      dialogOverflow: dialog ? dialog.scrollWidth - dialog.clientWidth : 999,
+      contained: Boolean(lineRect && dialogRect) &&
+        lineRect.left >= dialogRect.left && lineRect.right <= dialogRect.right,
+      text: line?.textContent?.trim() ?? "",
+    };
+  });
+  await narrowInternalButton.click();
+  check(
+    "E2E-028 375px contém a linha de melhorias internas sem estouro",
+    narrowInternal.overflow <= 1 && narrowInternal.dialogOverflow <= 1 &&
+      narrowInternal.contained && narrowInternal.text !== "",
+    JSON.stringify(narrowInternal),
+  );
+
   const webkitBrowser = await webkit.launch();
   try {
     const webkitContext = await webkitBrowser.newContext({ viewport: { width: 375, height: 812 } });
@@ -962,7 +1033,8 @@ try {
     }
   });
   await page.waitForFunction(
-    () => document.querySelectorAll('[data-testid="changelog-dialog"] [aria-expanded="true"]').length === 100,
+    (total) => document.querySelectorAll('[data-testid="changelog-dialog"] [aria-expanded="true"]').length === total,
+    CHANGELOG_FIXTURE_RELEASES,
   );
   await scrollArea.evaluate((element) => { element.scrollTop = element.scrollHeight; });
   const largeHistory = {
@@ -972,8 +1044,8 @@ try {
     headerTopAfter: (await opened.dialog.locator("header").boundingBox())?.y,
   };
   check(
-    "E2E-020 100 releases mantêm header, close e scroll interno",
-    largeHistory.expanded === 100 && largeHistory.scrolls && largeHistory.closeVisible &&
+    `E2E-020 ${CHANGELOG_FIXTURE_RELEASES} releases mantêm header, close e scroll interno`,
+    largeHistory.expanded === CHANGELOG_FIXTURE_RELEASES &&largeHistory.scrolls && largeHistory.closeVisible &&
       Math.abs((largeHistory.headerTopAfter ?? 0) - (headerTop ?? 0)) <= 1,
     JSON.stringify(largeHistory),
   );
@@ -1967,9 +2039,10 @@ try {
   const offered = await page.evaluate(() =>
     [...document.querySelectorAll('[data-testid="track-status"] option')].map((o) => o.value),
   );
+  // Ordem de funil, agrupada (#316): o atual, avançar, voltar, encerrar.
   check(
-    "o seletor oferece só os estágios alcançáveis a partir do atual",
-    offered.length === 3 && ["archived", "preparing", "shortlisted"].every((s) => offered.includes(s)),
+    "o seletor oferece só os estágios alcançáveis a partir do atual, em ordem de funil",
+    offered.join(",") === "shortlisted,preparing,backlog,archived",
     offered.join(","),
   );
   check(
@@ -1978,14 +2051,15 @@ try {
     offered.join(","),
   );
 
-  // A outra aba leva a candidatura a um estado terminal. A primeira continua
-  // aberta e desatualizada — é exatamente assim que a recusa ainda acontece
-  // depois de a lista passar a ser derivada.
+  // A outra aba devolve a candidatura para "A fazer". A primeira continua
+  // aberta e desatualizada, e de "A fazer" não se pula para "Preparando" —
+  // avançar é um passo de cada vez, então a recusa continua alcançável mesmo
+  // com as arestas de volta.
   const funnelCtx = await browser.newContext();
   await funnelCtx.addCookies(await page.context().cookies());
   const funnelOther = await funnelCtx.newPage();
   await funnelOther.goto(funnelUrl, { waitUntil: "networkidle" });
-  await funnelOther.selectOption('[data-testid="track-status"]', "archived");
+  await funnelOther.selectOption('[data-testid="track-status"]', "backlog");
   await funnelOther.locator('[data-testid="track-submit"]').click();
   await funnelOther.locator('[data-testid="mutation-feedback"][role="status"]').waitFor({
     state: "visible",
@@ -2011,20 +2085,15 @@ try {
   );
   check(
     "a recusa nomeia os dois estágios em vez de falhar em geral",
-    rejection.includes("Arquivada") && rejection.includes("Preparando"),
+    rejection.includes("A fazer") && rejection.includes("Preparando"),
     rejection.slice(0, 120),
   );
 
-  // BUG-20260917-stale-stages-after-refusal. O aviso manda escolher um estágio
-  // alcançável; antes da correção a lista continuava a de quando a página
-  // abriu, e as duas opções restantes eram recusadas de novo — instrução que a
-  // própria tela impedia de cumprir.
-  // A revalidação chega pela resposta da própria action; esperar o efeito, e não
-  // um tempo fixo, é o que separa "atualizou" de "ainda não atualizou".
-  // Arquivada sem ter aplicado, a vaga ainda pode ser restaurada: `archived`
-  // e `backlog` são os dois estágios alcançáveis.
+  // BUG-20260917-stale-stages-after-refusal: a lista acompanha o estágio
+  // gravado. A revalidação chega pela resposta da própria action; esperar o
+  // efeito, e não um tempo fixo, separa "atualizou" de "ainda não atualizou".
   await page.waitForFunction(
-    () => document.querySelectorAll('[data-testid="track-status"] option').length === 2,
+    () => document.querySelector('[data-testid="track-status"]')?.value === "backlog",
     undefined,
     { timeout: 15_000 },
   );
@@ -2035,19 +2104,79 @@ try {
   }));
   check(
     "depois da recusa a lista acompanha o estágio realmente gravado",
-    afterRejection.offered.length === 2
-      && ["archived", "backlog"].every((status) => afterRejection.offered.includes(status)),
+    afterRejection.offered.join(",") === "backlog,shortlisted,archived",
     afterRejection.offered.join(","),
   );
   check(
     "depois da recusa o seletor aponta para o estágio gravado",
-    afterRejection.selected === "archived",
+    afterRejection.selected === "backlog",
     afterRejection.selected,
   );
   check(
     "a revalidação da recusa não apaga a nota digitada",
     afterRejection.note === draft,
     afterRejection.note.slice(0, 40),
+  );
+  await page.fill('[data-testid="track-note"]', "");
+
+  /* ------------- Funil: voltar de estágio e desfazer (#316) ------------- */
+
+  // Avança dois passos; de "Preparando" os estágios anteriores aparecem no grupo
+  // "Voltar", e a trilha marca onde a candidatura está.
+  const savedStage = async (target, status) => {
+    await target.waitForFunction(
+      (expected) => document.querySelector('[data-testid="stage-trail"] [aria-current="step"]')
+        ?.getAttribute("data-testid") === `stage-trail-${expected}`,
+      status,
+      { timeout: 15_000 },
+    );
+  };
+  for (const status of ["shortlisted", "preparing"]) {
+    await page.selectOption('[data-testid="track-status"]', status);
+    await page.locator('[data-testid="track-submit"]').click();
+    await savedStage(page, status);
+  }
+  const grouped = await page.evaluate(() => ({
+    back: [...document.querySelectorAll('[data-testid="track-group-back"] option')].map((o) => o.value),
+    close: [...document.querySelectorAll('[data-testid="track-group-close"] option')].map((o) => o.value),
+  }));
+  check(
+    "de Preparando, Voltar lista os estágios anteriores e Encerrar oferece Arquivar",
+    grouped.back.join(",") === "backlog,shortlisted" && grouped.close.join(",") === "archived",
+    JSON.stringify(grouped),
+  );
+
+  // Desfazer pelo aviso: volta ao estágio anterior e o histórico marca o
+  // evento desfeito, sem apagar linha nenhuma.
+  const eventsBefore = await page.locator('[data-testid="application-timeline-event"]').count();
+  await page.selectOption('[data-testid="track-status"]', "applied");
+  await page.locator('[data-testid="track-submit"]').click();
+  await page.locator('[data-testid="track-undo"]').waitFor({ state: "visible", timeout: 15_000 });
+  await savedStage(page, "applied");
+  await page.locator('[data-testid="track-undo"]').click();
+  await savedStage(page, "preparing");
+  await page.reload({ waitUntil: "networkidle" });
+  const undone = {
+    stage: await page.inputValue('[data-testid="track-status"]'),
+    events: await page.locator('[data-testid="application-timeline-event"]').count(),
+    marked: await page.locator('[data-testid="application-timeline-event"][data-undone="true"]').count(),
+  };
+  check(
+    "desfazer pelo aviso volta ao estágio anterior, acrescenta um evento e marca o desfeito",
+    undone.stage === "preparing" && undone.events === eventsBefore + 2 && undone.marked === 1,
+    JSON.stringify({ ...undone, eventsBefore }),
+  );
+
+  // Desfazer pela linha mais recente do histórico, sem prazo: agora o alvo é a
+  // entrada em "Preparando".
+  await page.locator('[data-testid="application-undo"]').click();
+  await savedStage(page, "shortlisted");
+  await page.reload({ waitUntil: "networkidle" });
+  check(
+    "desfazer pelo histórico recua mais um passo e sobrevive à recarga",
+    (await page.inputValue('[data-testid="track-status"]')) === "shortlisted"
+      && (await page.locator('[data-testid="application-timeline-event"][data-undone="true"]').count()) === 2,
+    await page.inputValue('[data-testid="track-status"]'),
   );
 
 
@@ -3006,6 +3135,241 @@ try {
     check("modal fecha com Escape", (await page.locator("dialog[open]").count()) === 0);
   }
 
+  /* ------------------ Ações na tabela de versões (#312) ------------------- */
+
+  // Atalho ADICIONAL ao modal acima. O que a tabela promete e só o browser
+  // prova: o usuário sabe o que o ícone faz antes de agir (tooltip no hover e
+  // no foco, nome acessível, rótulo visível no toque), e nada com efeito
+  // acontece sem um segundo gesto — Cancelar e Esc deixam tudo como estava.
+  // As versões-alvo nascem em `setup.mjs`, só no banco isolado desta execução.
+  // Bloco próprio: os nomes abaixo repetem os de outras seções do arquivo.
+  {
+  await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  const tableRows = page.locator('[data-testid="version-table-row"]');
+  const tableRow = (label) => tableRows.filter({ hasText: label }).first();
+  const focusedTestId = () =>
+    page.evaluate(() => document.activeElement?.getAttribute("data-testid") ?? null);
+  const shellReady = () =>
+    page.waitForFunction(() => {
+      const shell = document.getElementById("application-shell");
+      return !shell?.hasAttribute("inert") && !shell?.hasAttribute("aria-busy");
+    });
+  check("tabela de versões lista as versões", (await tableRows.count()) >= 3, `${await tableRows.count()} linha(s)`);
+  check(
+    "modal Histórico continua presente ao lado da tabela",
+    (await page.locator('[data-testid="version-history-open"]').count()) === 1,
+  );
+
+  const currentActions = await page.evaluate(() => {
+    const row = document.querySelector('[data-testid="version-table-row"][data-current="true"]');
+    return row
+      ? [...row.querySelectorAll("button[data-testid^='version-table-']")].map((b) => b.getAttribute("data-testid"))
+      : null;
+  });
+  check(
+    "linha atual da tabela oferece só Ver e Renomear",
+    JSON.stringify(currentActions) === JSON.stringify(["version-table-view", "version-table-rename"]),
+    JSON.stringify(currentActions),
+  );
+
+  async function accessibleNames(expected) {
+    const row = tableRow("E2E CV anterior (excluir)");
+    const found = [];
+    for (const name of expected) {
+      found.push(await row.getByRole("button", { name, exact: true }).count());
+    }
+    return found;
+  }
+  const namesPt = await accessibleNames(["Ver", "Renomear", "Restaurar", "Excluir"]);
+  check("ícones da tabela têm nome acessível em pt-BR", namesPt.every((n) => n === 1), JSON.stringify(namesPt));
+
+  // Tooltip acima do ícone, no hover e no foco por teclado.
+  const deleteIcon = tableRow("E2E CV anterior (excluir)").locator('[data-testid="version-table-delete"]');
+  await deleteIcon.hover();
+  const hoverTip = page.locator('[data-slot="tooltip-content"]').filter({ hasText: "Excluir" });
+  let hoverOk = false;
+  let hoverDetail = "tooltip não abriu";
+  try {
+    await hoverTip.waitFor({ state: "visible", timeout: 3000 });
+    // A entrada anima de baixo para cima (`slide-in-from-bottom-2`): medida no
+    // meio da transição, a caixa ainda cobre o ícone. Mede depois de assentar,
+    // como o teste dos chips.
+    await page.waitForTimeout(350);
+    const [tip, icon] = [await hoverTip.boundingBox(), await deleteIcon.boundingBox()];
+    hoverDetail = JSON.stringify({ tip, icon });
+    hoverOk = Boolean(tip && icon && tip.y + tip.height / 2 < icon.y + icon.height / 2 && tip.y + tip.height <= icon.y + 2);
+  } catch {}
+  check("tooltip nomeia a ação acima do ícone no hover", hoverOk, hoverDetail);
+
+  await page.mouse.move(0, 0);
+  await tableRow("E2E CV anterior (excluir)").locator('[data-testid="version-table-view"]').focus();
+  await page.keyboard.press("Tab");
+  let focusTipOk = false;
+  try {
+    await page
+      .locator('[data-slot="tooltip-content"]')
+      .filter({ hasText: "Renomear" })
+      .waitFor({ state: "visible", timeout: 3000 });
+    focusTipOk = (await focusedTestId()) === "version-table-rename";
+  } catch {}
+  check("tooltip nomeia a ação ao focar o ícone pelo teclado", focusTipOk);
+  await page.keyboard.press("Escape");
+
+  // Ver: modal próprio com o conteúdo, alternância, Esc e foco de volta.
+  const viewIcon = tableRow("E2E CV anterior (excluir)").locator('[data-testid="version-table-view"]');
+  await viewIcon.click();
+  const viewDialog = page.locator('[data-testid="version-table-dialog"][open]');
+  check("Ver pela tabela abre o modal da versão", (await viewDialog.count()) === 1);
+  let viewedLength = 0;
+  try {
+    await page.locator('[data-testid="version-table-view-content"]').waitFor({ timeout: 5000 });
+    viewedLength = ((await page.locator('[data-testid="version-table-view-content"]').textContent()) ?? "").trim().length;
+  } catch {}
+  check("modal da tabela mostra o conteúdo da versão", viewedLength > 50, `${viewedLength} caracteres`);
+  const headerLabel = await viewDialog.locator("h2[data-user-content]").textContent();
+  check("modal da tabela nomeia a versão", headerLabel === "E2E CV anterior (excluir)", String(headerLabel));
+  await viewDialog.getByRole("button", { name: "Markdown", exact: true }).click();
+  check(
+    "modal da tabela alterna para Markdown",
+    (await page.locator('[data-testid="version-table-view-content"] pre').count()) === 1,
+  );
+  await page.keyboard.press("Escape");
+  check("modal da tabela fecha com Escape", (await viewDialog.count()) === 0);
+  const viewFocus = await page.evaluate(() => ({
+    id: document.activeElement?.getAttribute("data-testid"),
+    row: document.activeElement?.closest("[data-testid='version-table-row']")?.textContent ?? "",
+  }));
+  check(
+    "fechar o modal devolve o foco ao ícone Ver",
+    viewFocus.id === "version-table-view" && viewFocus.row.includes("E2E CV anterior (excluir)"),
+    JSON.stringify(viewFocus),
+  );
+
+  // Excluir: Cancelar e Esc não mudam nada; Confirmar exclui e sobrevive a refresh.
+  const rowsBefore = await tableRows.count();
+  await deleteIcon.click();
+  const confirmPanel = page.locator('[data-testid="version-table-confirm-panel"]');
+  const confirmText = (await confirmPanel.textContent()) ?? "";
+  check(
+    "confirmação de excluir nomeia a versão e foca Cancelar",
+    confirmText.includes("E2E CV anterior (excluir)") && (await focusedTestId()) === "version-table-cancel",
+    `${confirmText} | foco=${await focusedTestId()}`,
+  );
+  await page.locator('[data-testid="version-table-cancel"]').click();
+  check(
+    "Cancelar excluir não altera nada e devolve o foco",
+    (await confirmPanel.count()) === 0 && (await tableRows.count()) === rowsBefore &&
+      (await focusedTestId()) === "version-table-delete",
+  );
+  await deleteIcon.click();
+  await page.keyboard.press("Escape");
+  check(
+    "Esc cancela a exclusão",
+    (await confirmPanel.count()) === 0 && (await tableRows.count()) === rowsBefore,
+  );
+  await deleteIcon.click();
+  await page.locator('[data-testid="version-table-confirm"]').click();
+  let deleted = false;
+  try {
+    await page.waitForFunction(
+      (label) => ![...document.querySelectorAll('[data-testid="version-table-row"]')].some((r) => r.textContent?.includes(label)),
+      "E2E CV anterior (excluir)",
+      { timeout: 15_000 },
+    );
+    await page.reload({ waitUntil: "networkidle" });
+    deleted = (await tableRow("E2E CV anterior (excluir)").count()) === 0 && (await tableRows.count()) === rowsBefore - 1;
+  } catch {}
+  check("Confirmar exclui pela tabela e sobrevive a refresh", deleted);
+
+  // Restaurar: Cancelar não cria versão; Confirmar cria a nova atual.
+  await shellReady();
+  const restoreIcon = tableRow("E2E CV anterior (restaurar)").locator('[data-testid="version-table-restore"]');
+  const rowsBeforeRestore = await tableRows.count();
+  await restoreIcon.click();
+  check("confirmação de restaurar foca Cancelar", (await focusedTestId()) === "version-table-cancel");
+  await page.locator('[data-testid="version-table-cancel"]').click();
+  check("Cancelar restaurar não cria versão", (await tableRows.count()) === rowsBeforeRestore);
+  await restoreIcon.click();
+  await page.locator('[data-testid="version-table-confirm"]').click();
+  let restored = false;
+  try {
+    await page.waitForFunction(
+      (count) => document.querySelectorAll('[data-testid="version-table-row"]').length === count,
+      rowsBeforeRestore + 1,
+      { timeout: 15_000 },
+    );
+    await page.reload({ waitUntil: "networkidle" });
+    const current = (await page.locator('[data-testid="version-table-row"][data-current="true"]').textContent()) ?? "";
+    restored = current.includes("E2E CV anterior (restaurar) (restaurada)");
+  } catch {}
+  check("Confirmar restaura pela tabela e sobrevive a refresh", restored);
+
+  // Renomear: Esc descarta; Salvar grava.
+  await shellReady();
+  // A linha original, não a cópia restaurada que virou a atual.
+  const renameRow = page.locator('[data-testid="version-table-row"]:not([data-current="true"])').filter({ hasText: "E2E CV anterior (restaurar)" }).first();
+  await renameRow.locator('[data-testid="version-table-rename"]').click();
+  const renameField = page.locator('[data-testid="version-table-rename-field"]');
+  await renameField.fill("E2E rótulo descartado");
+  await page.keyboard.press("Escape");
+  await page.reload({ waitUntil: "networkidle" });
+  check(
+    "Esc no renomear não grava",
+    (await renameField.count()) === 0 && (await tableRow("E2E rótulo descartado").count()) === 0,
+  );
+  await renameRow.locator('[data-testid="version-table-rename"]').click();
+  await renameField.fill("E2E CV renomeada pela tabela");
+  await page.locator('[data-testid="version-table-rename-save"]').click();
+  let renamed = false;
+  let renameFocus = null;
+  try {
+    await tableRow("E2E CV renomeada pela tabela").waitFor({ timeout: 15_000 });
+    await page
+      .waitForFunction(
+        () => document.activeElement?.getAttribute("data-testid") === "version-table-rename",
+        undefined,
+        { timeout: 5000 },
+      )
+      .catch(() => {});
+    renameFocus = await focusedTestId();
+    await page.reload({ waitUntil: "networkidle" });
+    renamed = (await tableRow("E2E CV renomeada pela tabela").count()) === 1;
+  } catch {}
+  check("Salvar renomeia pela tabela e sobrevive a refresh", renamed);
+  check("após renomear o foco volta ao ícone Renomear", renameFocus === "version-table-rename", String(renameFocus));
+
+  // 375px: alvo de toque, rótulo visível no lugar do tooltip, sem rolagem lateral.
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.reload({ waitUntil: "networkidle" });
+  const mobileActions = await page.evaluate(() =>
+    [...document.querySelectorAll("[data-testid='version-table-row'] button[data-testid^='version-table-']")].map((b) => {
+      const r = b.getBoundingClientRect();
+      return { w: Math.round(r.width), h: Math.round(r.height), text: (b.textContent ?? "").trim(), name: b.getAttribute("aria-label") };
+    }),
+  );
+  const mobileOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  check(
+    "ações da tabela em 375px: alvo ≥ 44px, rótulo visível e sem rolagem lateral",
+    mobileActions.length > 0 && mobileOverflow <= 0 &&
+      mobileActions.every((a) => a.w >= 44 && a.h >= 44 && a.text === a.name),
+    `overflow=${mobileOverflow} ${JSON.stringify(mobileActions.slice(0, 4))}`,
+  );
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // Nome acessível no outro idioma.
+  await page.context().addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
+  await page.reload({ waitUntil: "networkidle" });
+  const namesEn = [];
+  const enRow = page.locator('[data-testid="version-table-row"]:not([data-current="true"])').first();
+  for (const name of ["View", "Rename", "Restore", "Delete"]) {
+    namesEn.push(await enRow.getByRole("button", { name, exact: true }).count());
+  }
+  check("ícones da tabela têm nome acessível em inglês", namesEn.every((n) => n === 1), JSON.stringify(namesEn));
+  await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  }
+
 
   // Volta ao padrão para não deixar o cookie sujo para a próxima execução.
   await page.context().addCookies([
@@ -3811,7 +4175,12 @@ try {
   await candidateMenuCtx.close();
 
   await page.setViewportSize({ width: 1280, height: 900 });
+  await checkCockpitCards(browser, BASE, {
+    owner: { email: E2E_EMAIL, password: E2E_PASSWORD },
+    unscored: { email: "e2e-candidato@local.test", password: E2E_PASSWORD },
+  }, check);
   await checkWorkModes(page, BASE, check);
+  await checkPublicCvFormat(browser, BASE, check);
   await checkSearchRelevance(page, BASE, check);
   await checkFilterAutoApply(browser, BASE, { email: "e2e-candidato@local.test", password: E2E_PASSWORD }, check);
   await checkJobsLoading(browser, BASE, { email: "e2e-candidato@local.test", password: E2E_PASSWORD }, check);

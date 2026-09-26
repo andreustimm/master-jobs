@@ -83,6 +83,20 @@ lista sai por aderência e o parâmetro fica na URL para voltar a valer com a
 busca; o chip de relevância só aparece com `q`. Cada linha diz onde a
 consulta casou, e nunca fala em semântica: não há vetor.
 
+**Os cards do cockpit levam só o que o número conta.** Cada contagem do topo de
+`/` é um link para a lista que ela descreve (#314). "Empresa nomeada", "sem
+bloqueio" e "últimos 3 dias" são facetas: o link carrega apenas o que a faceta
+lê — `fit`, `cluster`, `q`, `source`, `workMode`, `ungrouped` — mais o chip do
+card (`named`, `unblocked` ou `fresh`), e nunca `status`, `company`, `fitMax`,
+faixa salarial ou `notApplied`, que a faceta não aplica e fariam `/jobs` contar
+outra coisa. O helper é `facetHref`. "Vagas abertas" conta o acervo inteiro e
+abre `/jobs?fit=0&ungrouped=1&status=any` (`openJobsHref`), qualquer que seja o
+filtro do cockpit. "Melhor fit" abre `/jobs/<id>` da vaga de maior nota na
+trilha principal, e fica sem link quando não há nota; "no funil" abre
+`/pipeline`; "empresas" não tem tela e não é link. O cache das facetas vive até
+60 s, então logo depois de um sync o número do card e o de `/jobs` podem
+divergir por esse intervalo.
+
 **Termos parecidos não têm parâmetro.** Com `q`, a tela mostra abaixo da lista
 um grupo separado e rotulado, de no máximo 20 vagas, com título parecido
 (`pg_trgm`, operador `<%`) que passam por todos os outros filtros e que a

@@ -245,6 +245,14 @@ Durabilidade e autoridade de escrita opostas às de Sourcing.
 > é carimbado exatamente uma vez, na primeira entrada em `applied`. Estados
 > terminais recusam avanço. Toda transição grava exatamente um evento com
 > sua `StatusEvidence` — quem ou o quê afirmou aquilo.
+>
+> **Emenda (2026-09-25, #316):** "legal" passou a incluir voltar de estágio e
+> reabrir Rejeitada, Retirada e Arquivada; a integridade vem do log, não do
+> bloqueio. `appliedAt` continua carimbado na entrada em `applied` e voltar não
+> o apaga; só desfazer a própria entrada o limpa. Desfazer é um evento
+> compensatório com referência ao revertido, nunca edição — e desfazer o
+> primeiro registro deixa a candidatura "fora do funil" (`untracked`), sem
+> DELETE. Detalhe em `docs/data-model.md`.
 
 > **Invariante 7:** a transição e seu evento são escritos na **mesma
 > transação**. Hoje `repo.ts` faz dois `await` sequenciais sem transação

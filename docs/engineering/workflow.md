@@ -211,6 +211,39 @@ para outros repositórios:
 | Comportamento percebido pelo usuário | Os de runtime e QA targeted conforme [QA vivo](../qa/README.md) | L1 |
 | Schema, autenticação, `/p/`, promoção, scorer ou segredos | Os de runtime e os gates específicos existentes; não reduzir os testes por conveniência | L2 |
 
+`rtk pnpm gates` executa essa tabela: lê o diff contra a base de mesclagem com
+`origin/dev` (commits, índice, árvore e arquivos novos), classifica cada
+caminho pelas classes de `config/validation-impact.json` — `docs`,
+`docs-assets`, `tooling`, `qa-skills`, `backend`, `ui`, `scorer`, `db`,
+`auth-security`, `deploy` e `transversal` — e roda a união dos gates, dos mais
+baratos aos mais caros, parando no primeiro vermelho. `--plan` só imprime o
+plano; `--paths <caminho>…` classifica uma lista em vez do diff; `--base <ref>`
+troca a base. Caminho que nenhuma classe reconhece recebe o **pacote
+completo** (o `pnpm check` inteiro, a PWA, o build e o E2E) — o mapa nunca
+decide "nada a validar" por não conhecer o arquivo, e dependência, compilador e
+suporte de teste (`package.json`, `tsconfig.json`, `tests/support/`) também
+pedem o pacote completo, porque afetam tudo. O que `review_level.py` chama de
+L2 nunca recebe menos que a suíte Vitest inteira, e o que ele chama de L0 só
+recebe os validadores estruturais; `tests/validation-impact.test.ts` confere as
+duas tabelas uma contra a outra. `related-tests` é `vitest related` sobre os
+arquivos alterados mais os testes que citam o caminho literalmente (teste de
+ferramenta costuma executar o script por caminho, sem importá-lo); script que
+nenhum teste importa nem cita fica coberto só pelo CI.
+
+Gate verde deixa **recibo**: o fingerprint do estado que ele validou — HEAD,
+hash do que difere de HEAD no disco (conteúdo, bit executável, symlink,
+remoção, arquivo novo não ignorado) e versão e checksum do mapa. Rodar
+`pnpm gates` de novo sem mudar nada pula o que já passou (`↺`); qualquer
+mudança invalida o recibo inteiro, e não só o gate que "cobre" o arquivo.
+Recibo vencido não vale: cada gate expira em 12 horas, porque o fingerprint
+não vê o que mora fora do Git (dependência instalada, imagem do Docker,
+navegador). Gate vermelho nunca entra, e gate que mudou a árvore durante a
+execução também não. O recibo mora no diretório Git da worktree
+(`git rev-parse --git-path jho-gates/receipt.json`), fora do que se versiona;
+`--fresh` ignora o recibo e grava um novo. Prova: `tests/gates-receipt.test.ts`.
+O recibo é conveniência local, não evidência de PR: o CI roda o portão
+inteiro de qualquer jeito.
+
 A suíte completa roda no CI da PR, que abre como **draft** logo depois do
 primeiro verde local e vira pronta depois do SHIP e do CI verde
 ([G57](rules/delivery.md#g57)). Orçamento por gate: check local ≤ 10 min, E2E

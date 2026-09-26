@@ -245,7 +245,8 @@ describe("single-fit readers use the primary track", () => {
     expect(await drizzleTargetCorpus.targetTexts({ candidateId: id, minFit: 60, limit: 10 })).toHaveLength(0);
     expect(await drizzleTargetCorpus.targetTexts({ candidateId: id, minFit: 45, limit: 10 })).toHaveLength(1);
 
-    expect(await corpusStats(id)).toMatchObject({ above45: 1, above60: 0, above70: 0, best: 50 });
+    // A vaga do melhor fit é a da trilha principal, não a da trilha de 90.
+    expect(await corpusStats(id)).toMatchObject({ above45: 1, above60: 0, above70: 0, best: 50, bestJobId: jobId });
     expect(await clusterBreakdown(id)).toMatchObject([{ cluster: "architect", n: 1, best: 50 }]);
   });
 

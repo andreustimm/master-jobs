@@ -32,6 +32,8 @@
  * as formas usuais não vazem pelo consentimento dado para outra coisa.
  */
 
+import { cvTextToMarkdown } from "./cv-markdown.ts";
+
 export const REDACTED = "[…]";
 
 const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
@@ -249,4 +251,17 @@ export function publicCvText(content: string, known: KnownContact = {}): string 
   text = text.replace(EMAIL, REDACTED);
   text = redactInternationalPhones(text);
   return text.replace(LOCAL_PHONE, REDACTED);
+}
+
+/**
+ * O CV publicável JÁ com forma de Markdown (#325): filtro, forma, filtro.
+ *
+ * O primeiro passe é o de sempre, sobre o texto gravado — a normalização junta
+ * e separa blocos, e nenhuma garantia que valia antes pode depender dela. O
+ * segundo vê os títulos inferidos: um "COMPENSATION" em caixa alta vira seção,
+ * e a seção inteira sai, inclusive o valor escrito blocos depois. Filtrar só
+ * remove, então o segundo passe nunca devolve o que o primeiro tirou.
+ */
+export function publicCvMarkdown(content: string, known: KnownContact = {}): string {
+  return publicCvText(cvTextToMarkdown(publicCvText(content, known)), known);
 }

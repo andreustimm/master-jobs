@@ -15,6 +15,7 @@ import { ensureCandidate, saveDocument } from "../src/core/candidate.ts";
 import type { DB } from "../src/core/db/client.ts";
 import {
   application,
+  applicationEvent,
   authSession,
   authUser,
   candidateDocument,
@@ -243,8 +244,24 @@ async function seedVictim(): Promise<Record<string, number>> {
       title: "Staff Engineer", url: "https://example.test/1", fingerprint: "fp1", contentHash: "h1", raw: {},
     })
     .returning({ id: job.id });
-  await db.insert(application).values({ candidateId: victim, jobId: posting!.id, status: "interviewing" });
-  return { documentId: doc!.id, candidateSkillId: detected!.id, trackId, termId: term!.id, jobId: posting!.id };
+  const [tracked] = await db
+    .insert(application)
+    .values({ candidateId: victim, jobId: posting!.id, status: "interviewing" })
+    .returning({ id: application.id });
+  // A movimentação que levou a vítima a "Em entrevista": o id que um "Desfazer"
+  // forjado mandaria (#316). Desfazê-la mudaria o status da candidatura dela.
+  const [moved] = await db
+    .insert(applicationEvent)
+    .values({ applicationId: tracked!.id, kind: "status_change", fromStatus: null, toStatus: "interviewing" })
+    .returning({ id: applicationEvent.id });
+  return {
+    documentId: doc!.id,
+    candidateSkillId: detected!.id,
+    trackId,
+    termId: term!.id,
+    jobId: posting!.id,
+    eventId: moved!.id,
+  };
 }
 
 /**
@@ -252,7 +269,13 @@ async function seedVictim(): Promise<Record<string, number>> {
  * em actions diferentes (versão do CV, skill detectada).
  */
 function victimForms(ids: Record<string, number>): FormData[] {
-  const common = { jobId: ids.jobId!, termId: ids.termId!, trackId: ids.trackId!, versionId: ids.documentId! };
+  const common = {
+    jobId: ids.jobId!,
+    termId: ids.termId!,
+    trackId: ids.trackId!,
+    versionId: ids.documentId!,
+    eventId: ids.eventId!,
+  };
   return [
     hostileForm({ ...common, id: ids.documentId!, documentId: ids.documentId! }),
     hostileForm({ ...common, id: ids.candidateSkillId! }),

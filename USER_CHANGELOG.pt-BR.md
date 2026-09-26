@@ -24,6 +24,24 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-09-26T13:44:24.000Z
+
+### Novidade
+
+- Os números do topo do cockpit agora são clicáveis: cada um abre a lista que ele conta, com o filtro correspondente já ligado. "Melhor fit" abre a própria vaga e "no funil" abre o funil. Passe o mouse para ver de que conjunto cada número fala.
+- Na vaga, "Mover para" agora separa Avançar, Voltar e Encerrar, mostra em que estágio a candidatura está e deixa voltar para qualquer estágio anterior — inclusive reabrir uma candidatura rejeitada, retirada ou arquivada.
+- Depois de mover, o aviso traz "Desfazer" por 10 segundos, e a movimentação mais recente do histórico também tem o botão. O que foi desfeito continua no histórico, marcado como desfeito; desfazer o primeiro registro tira a vaga do funil.
+- Na área do candidato, cada versão do currículo tem ícones para ver, renomear, restaurar e excluir direto na lista, sem abrir o histórico. Toda ação pede confirmação antes de mudar alguma coisa, e passar o mouse (ou focar pelo teclado) mostra o nome da ação; no celular o nome aparece ao lado do ícone.
+
+### Corrigido
+
+- Todos os números do cockpit aparecem com separador de milhar.
+
+### Melhorado
+
+- O modal Novidades agora lista todas as versões publicadas, começando pela versão em uso. As versões sem mudança visível aparecem com a data e a linha "Melhorias internas, sem mudança visível.".
+- O currículo importado de PDF agora aparece com seções e listas no perfil público e na pré-visualização de `/candidate`, em vez de um bloco único de texto.
+
 ## [1.25.3] - 2026-09-25T15:27:50.000Z
 
 ### Melhorado
