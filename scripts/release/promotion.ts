@@ -17,27 +17,42 @@ const CHANGELOGS = {
   technical: "CHANGELOG.md", ptBR: "USER_CHANGELOG.pt-BR.md", en: "USER_CHANGELOG.en.md",
 } as const;
 const RELEASE_FILES = ["package.json", ...Object.values(CHANGELOGS)];
-type Input = { source: string; confirmMigration: boolean; scheduled: boolean };
+/**
+ * `automatic` marks the entries no person chose: the CI event and the timer.
+ * Only they may end as a no-op, and neither carries migration approval.
+ * `runId`/`ciConclusion` exist only for the CI event.
+ */
+type Input = { source: string; confirmMigration: boolean; automatic: boolean; runId?: number; ciConclusion?: string };
 type Event = {
   inputs?: { "target-sha"?: string; "confirmar-migracao"?: boolean | string };
+  workflow_run?: { id: number; head_sha: string; head_branch: string; event: string; conclusion: string | null };
 };
 
 /**
- * The scheduled run promotes the tip of dev as it is at preparation time.
- * `devTip` is resolved once, here; the publication phase receives that same
- * SHA from the preparation output and never reads the branch again.
+ * The CI event promotes the `head_sha` of the push run that just finished.
+ * The scheduled run promotes the tip of dev as it is at preparation time;
+ * `devTip` is resolved once, here, and the publication phase receives that
+ * same SHA from the preparation output and never reads the branch again.
  */
 export function promotionInput(eventName: string, event: Event, devTip: () => string): Input {
   if (eventName === "workflow_dispatch") {
     return {
       source: requireSha(event.inputs?.["target-sha"] ?? ""),
       confirmMigration: [true, "true"].includes(event.inputs?.["confirmar-migracao"] ?? false),
-      scheduled: false,
+      automatic: false,
     };
+  }
+  if (eventName === "workflow_run") {
+    const run = event.workflow_run;
+    // `failure` still enters: a red run caused only by a NON_BLOCKING_CI_JOBS
+    // job promotes; the job verdict, not the run conclusion, decides.
+    if (!run || run.head_branch !== "dev" || run.event !== "push" ||
+      !["success", "failure"].includes(run.conclusion ?? "")) throw new Error("Evento de CI inválido.");
+    return { source: requireSha(run.head_sha), confirmMigration: false, automatic: true, runId: run.id, ciConclusion: run.conclusion! };
   }
   if (eventName !== "schedule") throw new Error("Evento de promoção inválido.");
   // Migration approval is a human decision; a timer cannot carry one.
-  return { source: requireSha(devTip()), confirmMigration: false, scheduled: true };
+  return { source: requireSha(devTip()), confirmMigration: false, automatic: true };
 }
 
 function git(directory: string, ...args: string[]): string {
@@ -50,9 +65,31 @@ function fragmentPaths(directory: string, sha: string): string[] {
     .split("\0").filter(Boolean);
 }
 
-/** A scheduled run with nothing new since the last promotion is a no-op, not a CI query. */
-export function nothingToPromote(directory: string, source: string): boolean {
-  return isAncestor(directory, source, "origin/staging");
+/**
+ * Why an automatic entry ends without CI, release or publication, or null to
+ * go on. Staging already containing A is what ends the release loop: the
+ * `chore(release)` R pushed to dev may fire its own CI and this workflow
+ * again, but that run is queued behind the one that publishes R, and by then
+ * `staging` is R. A dispatch never skips: a person asked for that SHA.
+ */
+export function automaticSkip(directory: string, repository: string, input: Input): string | null {
+  if (!input.automatic) return null;
+  refresh(directory);
+  if (isAncestor(directory, input.source, "origin/staging")) return `staging já contém ${input.source}; nada a promover.`;
+  if (input.runId === undefined) return null;
+  // Only the newest push promotes: its own CI event will follow this one.
+  if (git(directory, "rev-parse", "origin/dev") !== input.source && isAncestor(directory, input.source, "origin/dev")) {
+    return `dev já avançou além de ${input.source}; a promoção fica com o CI da nova ponta.`;
+  }
+  if (input.ciConclusion !== "success") {
+    try {
+      requireSourceCI(repository, input.source, input.runId);
+    } catch (error) {
+      // The CI run is already red on dev; a second red here would say nothing new.
+      return `CI de push vermelho sem ser só job não bloqueante: ${(error as Error).message}`;
+    }
+  }
+  return null;
 }
 
 function isAncestor(directory: string, ancestor: string, descendant: string): boolean {
@@ -160,7 +197,7 @@ function pendingPredecessor(directory: string, repository: string, source: strin
 }
 
 export function preparePromotion(directory: string, repository: string, input: Input): string {
-  requireSourceCI(repository, input.source);
+  requireSourceCI(repository, input.source, input.runId);
   refresh(directory);
   const existing = releaseChild(directory, input.source);
   const target = existing ?? input.source;
@@ -226,8 +263,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       refresh(directory);
       return git(directory, "rev-parse", "origin/dev");
     });
-    if (input.scheduled && nothingToPromote(directory, input.source)) {
-      console.log(`::notice::staging já contém ${input.source}; nada a promover.`);
+    const skip = automaticSkip(directory, repository, input);
+    if (skip) {
+      console.log(`::notice::${skip}`);
       output = `source=${input.source}\ntarget=${input.source}\nskip=true\n`;
     } else {
       const target = preparePromotion(directory, repository, input);

@@ -193,8 +193,9 @@ Comandos: [docs/cli.md](docs/cli.md). Índice: [docs/README.md](docs/README.md).
 
 ## Produção
 
-`dev → staging` é automático, por fast-forward do SHA validado. A PR
-`staging → main` é aberta pelo robô e, por delegação do dono (23/09/2026),
+`dev → staging` é automático a cada CI de push verde em `dev`, por
+fast-forward do SHA validado. A PR `staging → main` é aberta pelo robô e, por
+delegação do dono (23/09/2026),
 mesclada pelo agente com `gh pr merge <n> --merge --admin` quando `qualidade`
 e `schema-e-migracao` estão verdes, nenhuma migração não aditiva espera
 revisão e, se a leva tem mudança visível ao usuário, o QA de jornada full

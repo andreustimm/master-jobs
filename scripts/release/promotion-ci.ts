@@ -67,8 +67,11 @@ export function ciVerdict(run: Pick<Run, "status" | "conclusion">, jobs: Job[], 
   return explained ? null : `execução ${run.status}/${run.conclusion} sem job não bloqueante que a explique`;
 }
 
-/** Read-only: neither dispatch nor the schedule substitutes for these checks. */
-export function requireSourceCI(repository: string, sha: string): number {
+/**
+ * Read-only: no event — CI, timer or dispatch — substitutes for these checks.
+ * From the CI event, the newest run must also be the one that fired it.
+ */
+export function requireSourceCI(repository: string, sha: string, eventRunId?: number): number {
   requireSha(sha);
   const pages = ghApi<Array<{ workflow_runs: Run[] }>>(
     `repos/${repository}/actions/workflows/ci.yml/runs?head_sha=${sha}&branch=dev&event=push&per_page=100`,
@@ -80,8 +83,9 @@ export function requireSourceCI(repository: string, sha: string): number {
   if (
     run.head_sha !== sha || run.head_branch !== "dev" || run.event !== "push" ||
     run.path.split("@")[0] !== ".github/workflows/ci.yml" ||
-    run.head_repository.full_name !== repository
-  ) throw new Error(`CI de dev não aprovado para ${sha}: run=${run.id} attempt=${run.run_attempt} status=${run.status} conclusion=${run.conclusion}.`);
+    run.head_repository.full_name !== repository ||
+    (eventRunId !== undefined && run.id !== eventRunId)
+  ) throw new Error(`CI de dev não aprovado para ${sha}: run=${run.id} attempt=${run.run_attempt} status=${run.status} conclusion=${run.conclusion} eventRunId=${eventRunId ?? "nenhum"}.`);
 
   const jobs = ghApi<Array<{ jobs: Job[] }>>(
     `repos/${repository}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,

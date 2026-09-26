@@ -59,12 +59,18 @@ function calls(): string[][] {
 function refs(): string {
   return git(remote, "for-each-ref", "--format=%(refname) %(objectname)");
 }
-function run(phase: string, options: { target?: string; validated?: string; confirm?: boolean; scheduled?: boolean; sha?: string; preparedSource?: string } = {}) {
+type CIEvent = { id?: number; head_branch?: string; event?: string; conclusion?: string | null };
+function run(phase: string, options: { target?: string; validated?: string; confirm?: boolean; scheduled?: boolean; ci?: CIEvent; sha?: string; preparedSource?: string } = {}) {
   const sha = options.sha ?? source;
-  // A scheduled event carries no SHA; the migration flag here is a forgery attempt.
-  const event = options.scheduled
-    ? { schedule: "0 15 * * *", inputs: { "confirmar-migracao": true } }
-    : { inputs: { "target-sha": sha, "confirmar-migracao": options.confirm ?? false } };
+  // Neither automatic event carries approval; the migration flag here is a forgery attempt.
+  const event = options.ci
+    ? {
+      workflow_run: { id: 12, head_sha: sha, head_branch: "dev", event: "push", conclusion: "success", ...options.ci },
+      inputs: { "confirmar-migracao": true },
+    }
+    : options.scheduled
+      ? { schedule: "0 15 * * *", inputs: { "confirmar-migracao": true } }
+      : { inputs: { "target-sha": sha, "confirmar-migracao": options.confirm ?? false } };
   writeFileSync(`${root}/event.json`, JSON.stringify(event));
   writeFileSync(`${root}/output`, "");
   const result = spawnSync(process.execPath, [SCRIPT, phase, repo], {
@@ -72,7 +78,7 @@ function run(phase: string, options: { target?: string; validated?: string; conf
     env: {
       ...process.env, PATH: `${root}/bin:${process.env.PATH}`, FIXTURE_ROOT: root,
       GITHUB_REPOSITORY: "owner/repo", GITHUB_EVENT_PATH: `${root}/event.json`,
-      GITHUB_EVENT_NAME: options.scheduled ? "schedule" : "workflow_dispatch",
+      GITHUB_EVENT_NAME: options.ci ? "workflow_run" : options.scheduled ? "schedule" : "workflow_dispatch",
       GITHUB_OUTPUT: `${root}/output`, PROMOTION_TARGET: options.target ?? "",
       PROMOTION_SOURCE: options.preparedSource ?? sha,
       VALIDATED_SHA: options.validated ?? "",
@@ -284,17 +290,32 @@ describe("V01-02 — identical source checks for automatic and manual entry", ()
     expect(ciVerdict(green, required.slice(1), sha)).toContain("qualidade");
   });
 
-  it("requires an explicit full SHA and ignores forged migration approval in scheduled events", () => {
+  it("requires an explicit full SHA and ignores forged migration approval in automatic events", () => {
     const tip = () => source;
+    const ciRun = (overrides: Record<string, unknown>) => ({
+      workflow_run: { id: 12, head_sha: source, head_branch: "dev", event: "push", conclusion: "success", ...overrides },
+      inputs: { "confirmar-migracao": true },
+    });
     for (const sha of ["", "dev", "deadbee", "a".repeat(40) + "\n"]) {
       expect(() => promotionInput("workflow_dispatch", { inputs: { "target-sha": sha } }, tip)).toThrow();
       expect(() => promotionInput("schedule", {}, () => sha)).toThrow();
+      expect(() => promotionInput("workflow_run", ciRun({ head_sha: sha }), tip)).toThrow();
     }
     publishSource();
     const scheduled = promotionInput("schedule", { inputs: { "confirmar-migracao": true } }, tip);
-    expect(scheduled).toEqual({ source, confirmMigration: false, scheduled: true });
-    // The per-push trigger is gone; a leftover event must not authorize anything.
-    expect(() => promotionInput("workflow_run", {}, tip)).toThrow("Evento de promoção inválido");
+    expect(scheduled).toEqual({ source, confirmMigration: false, automatic: true });
+    // The CI event takes its SHA from the run, never from the dev tip.
+    const other = () => base;
+    expect(promotionInput("workflow_run", ciRun({}), other)).toEqual({
+      source, confirmMigration: false, automatic: true, runId: 12, ciConclusion: "success",
+    });
+    expect(promotionInput("workflow_run", ciRun({ conclusion: "failure" }), other).ciConclusion).toBe("failure");
+    for (const forged of [{ head_branch: "main" }, { event: "pull_request" }, { event: "workflow_dispatch" },
+      { conclusion: "cancelled" }, { conclusion: null }]) {
+      expect(() => promotionInput("workflow_run", ciRun(forged), tip), JSON.stringify(forged)).toThrow("Evento de CI inválido");
+    }
+    expect(() => promotionInput("workflow_run", {}, tip)).toThrow("Evento de CI inválido");
+    expect(() => promotionInput("push", {}, tip)).toThrow("Evento de promoção inválido");
   });
 });
 
@@ -797,6 +818,95 @@ describe("V01-06 — scheduled entry and changelog fragments", () => {
     const before = refs();
     expect(run("complete", { target: forged, validated: forged }).stderr).toContain("fora do versionamento");
     expect(refs()).toBe(before);
+  });
+});
+
+describe("V01-07 — CI event entry and the release loop", () => {
+  it("the push CI event promotes its head_sha; the release commit's own event and the next schedule are no-ops", () => {
+    publishSource();
+    const prepared = run("prepare", { ci: {} });
+    expect(prepared.status, prepared.stderr).toBe(0);
+    expect(prepared.outputs).toMatchObject({ source, skip: "false" });
+    const target = prepared.outputs.target!;
+    expect(target).not.toBe(source);
+    expect(git(remote, "rev-parse", "dev")).toBe(target);
+    const done = run("complete", { ci: {}, target, validated: target });
+    expect(done.status, done.stderr).toBe(0);
+    expect(git(remote, "rev-parse", "staging")).toBe(target);
+    // R pushed with a PAT runs CI on dev and fires this workflow again, queued
+    // behind the publication. It must end before any CI query or write.
+    const after = refs();
+    writeFileSync(`${root}/calls.jsonl`, "");
+    const loop = run("prepare", { ci: {}, sha: target });
+    expect(loop.status, loop.stderr).toBe(0);
+    expect(loop.outputs).toMatchObject({ source: target, target, skip: "true" });
+    expect(loop.stdout).toContain("staging já contém");
+    const scheduled = run("prepare", { scheduled: true });
+    expect(scheduled.status, scheduled.stderr).toBe(0);
+    expect(scheduled.outputs).toMatchObject({ source: target, skip: "true" });
+    expect(calls()).toEqual([]);
+    expect(refs()).toBe(after);
+    expect(git(remote, "tag", "--list")).toBe("v1.0.0\nv1.0.1");
+  });
+
+  it("an event for a SHA that is no longer the dev tip ends in skip without CI query or write", () => {
+    publishSource();
+    const stale = source;
+    publishSource("fix: ponta nova");
+    const before = refs();
+    writeFileSync(`${root}/calls.jsonl`, "");
+    const result = run("prepare", { ci: {}, sha: stale });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.outputs).toMatchObject({ source: stale, skip: "true" });
+    expect(result.stdout).toContain("dev já avançou");
+    expect(calls()).toEqual([]);
+    expect(refs()).toBe(before);
+  });
+
+  it("a red run promotes only when the non-blocking e2e alone explains it; otherwise it is a quiet skip", () => {
+    publishSource();
+    const job = (name: string, conclusion: string) => ({ name, head_sha: source, status: "completed", conclusion });
+    setAPI({ runs: [{ ...goodRun(), conclusion: "failure" }], jobs: [...goodJobs(), job("build", "failure"), job("e2e-navegador", "failure")] });
+    const before = refs();
+    const blocked = run("prepare", { ci: { conclusion: "failure" } });
+    expect(blocked.status, blocked.stderr).toBe(0);
+    expect(blocked.outputs.skip).toBe("true");
+    expect(blocked.stdout).toContain("build");
+    expect(refs()).toBe(before);
+    setAPI({ runs: [{ ...goodRun(), conclusion: "failure" }], jobs: [...goodJobs(), job("build", "success"), job("e2e-navegador", "failure")] });
+    const promoted = run("prepare", { ci: { conclusion: "failure" } });
+    expect(promoted.status, promoted.stderr).toBe(0);
+    expect(promoted.outputs.skip).toBe("false");
+    expect(promoted.outputs.target).not.toBe(source);
+  });
+
+  it("refuses when a newer CI run than the event's exists for the same SHA", () => {
+    publishSource();
+    const before = refs();
+    const result = run("prepare", { ci: { id: 11 } });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("eventRunId=11");
+    expect(refs()).toBe(before);
+  });
+
+  it("the CI event never carries migration approval", () => {
+    publishSource("fix: migração", DESTRUCTIVE);
+    const before = refs();
+    expect(run("prepare", { ci: {} }).stderr).toContain("Migração exige confirmação");
+    expect(refs()).toBe(before);
+  });
+
+  it("wires the CI event, the safety-net schedule and the dispatch", () => {
+    const workflow = YAML.parse(readFileSync(".github/workflows/promover-para-staging.yml", "utf8"));
+    expect(workflow.on.workflow_run).toEqual({ workflows: ["CI"], types: ["completed"], branches: ["dev"] });
+    expect(workflow.on.schedule).toEqual([{ cron: "0 15 * * *" }, { cron: "0 21 * * *" }]);
+    expect(workflow.on.workflow_dispatch.inputs["target-sha"].required).toBe(true);
+    const gate = workflow.jobs.preparar.if as string;
+    expect(gate).toContain("github.event_name != 'workflow_run'");
+    expect(gate).toContain("github.event.workflow_run.event == 'push'");
+    expect(gate).toContain("github.event.workflow_run.conclusion == 'success'");
+    expect(gate).toContain("github.event.workflow_run.conclusion == 'failure'");
+    expect(workflow.concurrency).toEqual({ group: "release-versionar", queue: "max", "cancel-in-progress": false });
   });
 });
 
