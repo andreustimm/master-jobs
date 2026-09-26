@@ -2,10 +2,23 @@
 name: Promover para staging
 
 on:
-  # Duas janelas por dia, e não um disparo por push verde em dev: cada
-  # promoção gera deploy de staging e um `chore(release)` em dev, e o volume
-  # estourou o limite diário da Vercel. 15:00 e 21:00 UTC = 12:00 e 18:00 BRT.
-  # O agendado promove a ponta de dev somente se o CI de push dela está verde.
+  # Dispara quando o CI de push em dev termina (decisão do dono, 26/09/2026,
+  # #347): o que entra em dev chega a staging sem esperar janela. Entre 23/09
+  # e 26/09 (#263) o gatilho foi só o agendado, para poupar o limite diário de
+  # deploys da Vercel (100/dia): cada promoção gera deploy de staging e um
+  # `chore(release)` em dev. O custo volta, mitigado por três cortes: o
+  # `ignoreCommand` da #259 pula deploy sem efeito no site; um evento cujo SHA
+  # já não é a ponta de dev termina em skip (só a ponta mais nova promove); e
+  # o evento que chega depois de staging já conter o SHA também — é o que
+  # encerra o ciclo do `chore(release)`, cujo push pode disparar CI e voltar
+  # aqui. `failure` entra porque um run vermelho só por job de
+  # NON_BLOCKING_CI_JOBS promove; o veredito por job decide, e o resto é skip.
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [dev]
+  # Rede de segurança: pega um evento perdido. Com staging já na ponta de dev,
+  # termina em skip, sem CI e sem release. 15:00 e 21:00 UTC = 12:00 e 18:00 BRT.
   schedule:
     - cron: "0 15 * * *"
     - cron: "0 21 * * *"
@@ -33,6 +46,13 @@ concurrency:
 
 jobs:
   preparar:
+    # Do CI, só run de push concluído com veredito possível; o controlador
+    # confere branch, evento e conclusão de novo.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.event == 'push' &&
+       (github.event.workflow_run.conclusion == 'success' ||
+        github.event.workflow_run.conclusion == 'failure'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -65,7 +85,8 @@ jobs:
 
   validar:
     needs: preparar
-    # Agendado sem nada novo desde a última promoção: sem CI e sem publicação.
+    # Automático sem nada a promover (staging já contém A, A deixou de ser a
+    # ponta, CI vermelho): sem CI e sem publicação.
     if: needs.preparar.outputs.skip != 'true'
     permissions:
       contents: read

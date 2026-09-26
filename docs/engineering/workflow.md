@@ -33,8 +33,9 @@ confira sua disponibilidade no checkout e a prontidão remota:
 rtk pnpm tasks preflight
 ```
 
-A promoção roda às 15:00 e 21:00 UTC com a ponta de `dev` cujo CI de push está
-verde, ou por dispatch com um SHA explícito. O commit de release recebe o mesmo
+A promoção dispara quando o CI de push em `dev` termina, com o SHA daquele run;
+o agendamento às 15:00 e 21:00 UTC é rede de segurança, e o dispatch com SHA
+explícito, a retomada. O commit de release recebe o mesmo
 CI antes de avançar `staging`; retentativas conservam o alvo. Veja o
 [contrato e a retomada da promoção](promotion.md).
 
