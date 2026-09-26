@@ -42,6 +42,7 @@ import { loadProfile } from "../../src/core/profile/load.ts";
 import { scoreOne } from "../../src/core/scoring/apply.ts";
 import { SCORER_VERSION } from "../../src/core/scoring/score.ts";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
+import { PUBLIC_CV_FIXTURE } from "./public-cv-format.mjs";
 import { isolationRefusal } from "./database-guard.mjs";
 
 // Antes de qualquer migração ou escrita. Ver `database-guard.mjs`.
@@ -554,6 +555,29 @@ try {
         .where(eq(candidate.id, scoped));
     }
   }
+
+  // #325: candidato sem conta, público e com o CV publicado, cujo texto veio
+  // de PDF. `saveDocument` não regrava conteúdo igual, então rodar de novo
+  // numa base reaproveitada é inofensivo.
+  const publicCvCandidate = await ensureCandidate({
+    slug: PUBLIC_CV_FIXTURE.slug,
+    name: PUBLIC_CV_FIXTURE.name,
+    email: PUBLIC_CV_FIXTURE.email,
+  });
+  await getDb()
+    .update(candidate)
+    .set({ visibility: "public", publicCv: true })
+    .where(eq(candidate.id, publicCvCandidate));
+  await saveDocument({
+    candidateId: publicCvCandidate,
+    kind: "cv",
+    label: "E2E CV importado de PDF",
+    format: "text",
+    content: PUBLIC_CV_FIXTURE.content,
+  });
+  // `saveDocument` enfileira repontuação; este candidato não tem perfil de
+  // matching, e a tarefa só faria o worker registrar erro fora do cenário.
+  await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, publicCvCandidate));
 
   const [ownerUser] = await getDb().select({ id: authUser.id }).from(authUser).where(eq(authUser.email, EMAIL)).limit(1);
   const [linkedRecruiter] = await getDb()

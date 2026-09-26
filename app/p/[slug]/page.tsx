@@ -123,7 +123,7 @@ export default async function PublicProfilePage({ params }: Params) {
 
       {profile.cv && (
         <Card>
-          <CardContent data-user-content className="pt-0">
+          <CardContent data-user-content data-testid="public-cv" className="pt-0">
             <MarkdownPreview source={profile.cv} emptyLabel="" />
           </CardContent>
         </Card>

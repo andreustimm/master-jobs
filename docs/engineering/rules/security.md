@@ -261,7 +261,13 @@ consentimento não cria exceção tácita a G21.
 `src/core/public-cv.ts` e travado em teste: valor sem rótulo e telefone sem
 marca passam. Não é sanitização perfeita, e não deve ser apresentado como tal.
 
-Origem: AGENTS (mesma invariante). Prova: `tests/public-cv.test.ts`.
+**Forma não abre o filtro.** A estrutura inferida do CV importado
+(`cvTextToMarkdown()`) é aplicada entre dois passes de `publicCvText()`, e o
+que for derivado dela — seções de resumo, experiência e formação
+(`cvSections()`) — parte do `cv` que `publicProfile()` já devolveu filtrado.
+
+Origem: AGENTS (mesma invariante). Prova: `tests/public-cv.test.ts`,
+`tests/cv-markdown.test.ts`, `tests/public-profile.test.ts` (#325).
 
 <a id="g14"></a>
 ## G14 — O service worker não guarda nada autenticado

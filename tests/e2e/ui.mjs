@@ -23,6 +23,7 @@ import { chromium, webkit } from "playwright";
 import { readFile } from "node:fs/promises";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { checkWorkModes } from "./work-mode.mjs";
+import { checkPublicCvFormat } from "./public-cv-format.mjs";
 import { checkSearchRelevance } from "./search-relevance.mjs";
 import { checkFilterAutoApply } from "./filter-auto-apply.mjs";
 import { checkJobsLoading } from "./jobs-loading.mjs";
@@ -4122,6 +4123,7 @@ try {
     unscored: { email: "e2e-candidato@local.test", password: E2E_PASSWORD },
   }, check);
   await checkWorkModes(page, BASE, check);
+  await checkPublicCvFormat(browser, BASE, check);
   await checkSearchRelevance(page, BASE, check);
   await checkFilterAutoApply(browser, BASE, { email: "e2e-candidato@local.test", password: E2E_PASSWORD }, check);
   await checkJobsLoading(browser, BASE, { email: "e2e-candidato@local.test", password: E2E_PASSWORD }, check);

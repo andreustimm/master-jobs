@@ -42,3 +42,7 @@ flowchart LR
 - **Estado final verdadeiro:** 404 estável sem identidade, email, telefone, funil ou confirmação de cadastro.
 - **Saída:** fechar a página ou solicitar um link válido ao candidato.
 - **Abandono:** não há outro link disponível; a retomada exige um novo link publicado.
+- **Variante publicada:** quando o link existe e o currículo foi publicado, o
+  visitante lê o CV com seções e listas, mesmo que ele tenha vindo de PDF como
+  texto puro, e sem contato nem pretensão salarial
+  (`PUB-public-cv-formatted`, `PUB-public-cv-protected-content`).
