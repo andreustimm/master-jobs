@@ -374,6 +374,14 @@ export async function decideSuggestion(
       throw new Error(`Sugestão ${id} não possui candidatura correspondente`);
     }
 
+    // `FOR UPDATE`, mesmo padrão de `setApplicationStatusInTransaction` (#356):
+    // sem a trava, `mailMayMove`/`transitionDirection` decidem com um `status`
+    // que pode ficar velho por trás de um avanço real em voo — e se ele por
+    // coincidência bater com o `suggestedStatus` (comparação de igualdade
+    // trivial, logo abaixo), o guard de regressão nem chega a rodar. A mesma
+    // trava aqui garante que `setApplicationStatusInTransaction`, ao reler
+    // `previous` mais abaixo na mesma transação, decide sobre a MESMA foto —
+    // o segundo `FOR UPDATE` na mesma linha, na mesma transação, é um no-op.
     const [owned] = await tx
       .select({ id: application.id, status: application.status })
       .from(application)
@@ -384,7 +392,8 @@ export async function decideSuggestion(
           eq(application.jobId, suggestion.jobId),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!owned) throw new Error(`Sugestão ${id} pertence a outro candidato`);
 
     const status = parseApplicationStatus(suggestion.suggestedStatus);

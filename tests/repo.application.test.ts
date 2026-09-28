@@ -396,6 +396,54 @@ describe("setApplicationStatus", () => {
     // chamada sob teste a partir de uma foto que ainda via `appliedAt: null`.
     expect(after!.appliedAt).toBe(realAppliedAt);
   });
+
+  it("duas primeiras observações concorrentes do mesmo par candidato/vaga: 23505 vira ApplicationTransitionConflictError, não um erro cru do driver (#356)", async () => {
+    // Sem `previous`, não há linha para travar com `FOR UPDATE` — a defesa
+    // aqui é outra: o índice único `application_candidate_job_idx`. Uma
+    // conexão bruta insere a linha dentro de uma transação ainda aberta
+    // (segurando a entrada do índice sem commitar); a chamada sob teste, sem
+    // ver nada em `previous` (a linha não commitada é invisível para ela),
+    // também tenta o INSERT e fica esperando essa entrada do índice. Só
+    // quando a conexão bruta commita é que a chamada sob teste descobre a
+    // colisão — e deve receber o conflito conhecido, não um erro de driver.
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+
+    const rawConnection = postgres(process.env.DATABASE_URL!, { max: 2, onnotice: () => {} });
+    try {
+      const tx = await rawConnection.reserve();
+      try {
+        await tx`begin`;
+        await tx`
+          insert into production.application (candidate_id, job_id, status)
+          values (${candidateId}, ${jobId}, 'shortlisted')
+        `;
+
+        const creating = setApplicationStatus(candidateId, jobId, "shortlisted");
+        await untilSomeoneWaitsOnALock(rawConnection);
+
+        await tx`commit`;
+
+        await expect(creating).rejects.toBeInstanceOf(ApplicationTransitionConflictError);
+      } finally {
+        tx.release();
+      }
+    } finally {
+      await rawConnection.end({ timeout: 5 });
+    }
+
+    // Uma linha só (a da conexão bruta), e a tentativa perdedora não deixou
+    // nenhum evento para trás: o INSERT da candidatura falhou antes de chegar
+    // ao INSERT do evento, e a transação inteira de `creating` foi desfeita.
+    const rows = await db.select().from(application).where(eq(application.jobId, jobId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ candidateId, jobId, status: "shortlisted" });
+    const events = await db
+      .select()
+      .from(applicationEvent)
+      .where(eq(applicationEvent.applicationId, rows[0]!.id));
+    expect(events).toHaveLength(0);
+  });
 });
 
 describe("transitionApplication", () => {

@@ -777,8 +777,12 @@ As transições permitidas ficam em
 qualquer etapa já observada; depois, `transitionDirection()` classifica cada
 destino como avançar, voltar ou encerrar, e é essa classificação que a tela
 agrupa no seletor. Sugestão de e-mail só avança ou encerra (`mailMayMove()`):
-aceitar uma que voltaria o funil é recusado e ela fica pendente. A auditoria da
-trajetória continua em `application_event`.
+aceitar uma que voltaria o funil é recusado e ela fica pendente. `decideSuggestion()`
+lê a candidatura com `SELECT ... FOR UPDATE` antes de decidir isso, mesmo padrão
+do repositório (#356): sem a trava, um `status` que ficou velho por trás de um
+avanço real em voo podia coincidir com `suggestedStatus` e pular o guard de
+regressão inteiro, deixando `mailMayMove()` nunca ser chamado contra o estado de
+verdade. A auditoria da trajetória continua em `application_event`.
 
 > **Invariante:** para adicionar ou renomear um status, edite
 > `APPLICATION_STATUSES` no domínio de Pursuit — é `as const`, não `enum`,
