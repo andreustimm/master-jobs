@@ -167,8 +167,8 @@ export const CENARIO_VALIDA_SESSAO: Cenario = { nome: "sessão", caminho: "/acco
  *   PRIMEIROS cenários autenticados da lista — antes de "jobs padrão" e de
  *   qualquer outro que bata na mesma chave: se "jobs padrão" viesse antes, a
  *   leitura de "jobs fit=45" já nasceria com o cache quente (povoado por
- *   "jobs padrão"), e "página 2 < 20% de fit=45" teria de reprovar mesmo com
- *   o cache funcionando corretamente. Nesta ordem, "jobs fit=45" é a primeira
+ *   "jobs padrão"), e o critério "fit=45 fria acima de 5 ms" reprovaria mesmo
+ *   com o cache funcionando corretamente. Nesta ordem, "jobs fit=45" é a primeira
  *   requisição a tocar essa chave (fria) e "página 2" é a segunda (deve vir
  *   do cache) — teste de ordem em `tests/perf-producao.test.ts`. Isso só
  *   serve para GERAR, em produção, as duas requisições próximas no tempo que

@@ -135,7 +135,7 @@ describe("medição de produção", () => {
   // #216 (revisão L1): "jobs padrão" também resolve fit=45
   // (`boundedFit(undefined, 45)` em `app/filter-state.ts`), então tem a MESMA
   // chave de facetas de "jobs fit=45". Se viesse antes, "jobs fit=45" já
-  // nasceria quente e a comparação "página 2 < 20% de fit=45" reprovaria com
+  // nasceria quente e o critério "fit=45 fria acima de 5 ms" reprovaria com
   // o cache funcionando. Por isso o par precisa ser o PRIMEIRO e o SEGUNDO
   // cenário autenticado da lista — nenhum outro cenário com a mesma chave
   // pode vir antes.

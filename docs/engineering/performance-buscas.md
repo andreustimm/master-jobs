@@ -146,8 +146,10 @@ da FUNÇÃO na Vercel (Project Settings → Environment Variables), não do
 script: ligá-la exige um novo deploy e é decisão do dono; sem ela a linha
 `perf` só sai quando a leitura passa de 1 s — insuficiente para pegar as
 leituras rápidas que provam o cache. **Feche qualquer outra aba ou sessão
-logada em produção antes de rodar**, para nada mais gerar tráfego em `/jobs`
-na mesma janela:
+logada em produção e fique 15 min sem abrir `/jobs` antes de rodar**: a
+janela de logs abaixo é de 15 min, e qualquer `/jobs` nela invalida a rodada
+(o cache de facetas também expira em 60 s, então a espera garante a leitura
+fria):
 
 ```bash
 read -rs JHO_PERF_SESSION     # cole o valor do cookie jho_session; nada aparece
@@ -185,11 +187,14 @@ números das linhas `perf` correspondentes (não a impressão do relatório
 externo):
 
 - **#216** fecha quando o estágio `facets` da 2ª linha (`fit=45&page=2`) é
-  **menor que 100 ms E menor que 20% do `facets` da 1ª linha
-  (`fit=45`)** (o piso local sem rede é ~24–29 ms — 100 ms já dá margem de
-  sobra para serialização e rede; o teto relativo de 20% é o que separa "esta
-  leitura usou o cache" de "a instância só estava quente por outro motivo").
-  Sem os dois lados do limite, não fecha.
+  **menor que 5 ms** E o da 1ª linha (`fit=45`) é **maior que 5 ms**. Um
+  acerto do cache só espera uma promessa já resolvida (0–0,1 ms na tabela de
+  "Facetas com cache"); a consulta sem cache custa 16,8–57,2 ms mesmo com o
+  banco local quente e ~29 ms com o dump de produção. Um limite relativo não
+  serve: com a 1ª leitura pagando buffers frios (3,5 s), a 2ª refaria a
+  consulta em ~30–60 ms e passaria em "20%" sem o cache ter funcionado. Se a
+  2ª vier acima de 5 ms, ela provavelmente caiu noutra instância: a rodada
+  não fecha nem reprova — repita depois do intervalo abaixo.
 - **#215** fecha só com `JHO_PERF_LOG=1` (sem fallback por TTFB/total — ver os
   quatro motivos acima), comparando a 6ª linha (faixa) e a 7ª (ordenação)
   contra a 1ª (`fit=45`, sem faixa): o estágio `board` de cada uma fica
@@ -577,11 +582,10 @@ A leitura fria não muda (a diferença é ruído). O ganho é todo na leitura qu
 repete filtros.
 
 **Em produção, não confirmado.** Nenhum número da tabela acima é de produção, e o ganho
-lá só se afirma com `pnpm perf:producao` com sessão depois do deploy: cada
-cenário de `/jobs` pede a mesma URL várias vezes, então a "primeira" de cada
-rodada é a leitura sem cache e o "quente" é a leitura com cache. Com
-`JHO_PERF_LOG=1`, a linha `perf` mostra `facets` perto de 0 nas leituras
-servidas pelo cache.
+lá só se afirma pelo estágio `facets` das linhas `perf`, com o procedimento
+de [Cenário salarial (#215) e cache de facetas
+(#216)](#cenário-salarial-215-e-cache-de-facetas-216): o TTFB e a
+comparação "primeira contra quente" do relatório não isolam o cache.
 
 **O limite da função serverless.** O cache vive enquanto a instância vive. Na
 medição de #221, as duas rodadas depois de 10 min ociosos pagaram partida a
