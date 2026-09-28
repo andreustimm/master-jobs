@@ -26,6 +26,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-09-28T17:18:14.000Z
+
+### Added
+
+- The public profile has a new layout: name, headline and location up top, with buttons to view LinkedIn, GitHub and copy the profile link. Summary, Experience and Education show in their own cards (only when present), and confirmed skills are grouped by category instead of all appearing in uppercase.
+
 ## [1.27.3] - 2026-09-28T16:38:21.000Z
 
 ### Fixed

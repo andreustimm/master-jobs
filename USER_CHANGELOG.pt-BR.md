@@ -26,6 +26,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-09-28T17:18:14.000Z
+
+### Adicionado
+
+- O perfil público ganhou um layout novo: nome, cargo e localização em destaque no topo, com botões para ver o LinkedIn, o GitHub e copiar o link do perfil. Resumo, Experiência e Formação aparecem em cartões próprios (só quando existem), e as habilidades confirmadas ficam organizadas por categoria, sem mais aparecer tudo em maiúsculas.
+
 ## [1.27.3] - 2026-09-28T16:38:21.000Z
 
 ### Corrigido
