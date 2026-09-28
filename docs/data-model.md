@@ -638,14 +638,21 @@ vale de todo estágio de progresso, e rejeitar ou retirar só depois de
 `applied`. Nenhum comando leva a `untracked` — só o desfazer. `applied_at` é
 gravado na entrada em `applied` sem data gravada, e voltar não o apaga.
 
-O repositório persiste a nova `application` e seu evento na mesma transação. O
-desfazer lê a linha com `SELECT ... FOR UPDATE` antes de decidir (#346): sem a
-trava, um avançar-e-recuar real de outra sessão entre a leitura e a gravação
-pode devolver o mesmo `status` (ABA) sem ser o mesmo estado, e a comparação
-otimista por status não veria a diferença. A trava serializa — quem chega
-depois só decide já vendo o commit anterior por inteiro — e o índice único de
-`reverts_event_id` (`23505`) vira `ApplicationTransitionConflictError` em vez
-de um erro cru do driver, se ainda assim dois desfazeres colidirem.
+O repositório persiste a nova `application` e seu evento na mesma transação, e
+lê a linha atual com `SELECT ... FOR UPDATE` antes de decidir — tanto no
+desfazer (#346) quanto na transição comum, em `setApplicationStatusInTransaction`
+(#356): sem a trava, um avançar-e-recuar real de outra sessão entre a leitura e
+a gravação pode devolver o mesmo `status` (ABA) sem ser o mesmo estado, e a
+comparação otimista por status não veria a diferença — a decisão, inclusive o
+`appliedAt` que ela carrega na transição comum, seria tomada sobre um retrato
+velho. A trava serializa — quem chega depois só decide já vendo o commit
+anterior por inteiro. Cada caminho mapeia o índice único que pode colidir sob
+essa concorrência para `ApplicationTransitionConflictError`, em vez de deixar
+vazar um erro cru do driver: o desfazer usa `reverts_event_id` (`23505`), se
+ainda assim dois desfazeres colidirem; a transição comum usa
+`application_candidate_job_idx` (`23505`), quando duas primeiras observações
+concorrentes do mesmo par candidato/vaga correm para o mesmo `INSERT` (sem
+`previous`, não há linha para travar com `FOR UPDATE`).
 
 ### Endereço público (`candidate.public_slug`)
 

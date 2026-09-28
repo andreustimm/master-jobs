@@ -111,6 +111,19 @@ async function seedScore(candidateId: number, jobId: number, fit: number): Promi
   });
 }
 
+/** Espera até alguma sessão deste banco estar parada num lock de linha. */
+async function untilSomeoneWaitsOnALock(other: postgres.Sql): Promise<void> {
+  for (let attempt = 0; attempt < 250; attempt++) {
+    const [row] = await other<{ waiting: number }[]>`
+      select count(*)::int as waiting from pg_stat_activity
+      where datname = current_database() and wait_event_type = 'Lock'
+    `;
+    if (row!.waiting > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("ninguém chegou a esperar o lock da candidatura");
+}
+
 beforeEach(async () => {
   db = await useTestDb();
 });
@@ -314,6 +327,74 @@ describe("setApplicationStatus", () => {
     expect(["rejected", "withdrawn"]).toContain(app!.status);
     expect(events).toHaveLength(2);
     expect(events[1]!.toStatus).toBe(app!.status);
+  });
+
+  it("trava a linha (FOR UPDATE) antes de decidir: um avançar-e-recuar real em voo não apaga o appliedAt gravado no meio (ABA, #356)", async () => {
+    // Mesma classe de corrida que #346 fechou em `undoApplicationStatus`: uma
+    // leitura sem `FOR UPDATE` pode decidir sobre uma foto de antes de outra
+    // sessão avançar e recuar de verdade. Aqui a sessão concorrente entra em
+    // "applied" (carimbando appliedAt) e volta para "preparing" — "voltar" não
+    // apaga o carimbo, por regra do domínio — tudo isso ENQUANTO a chamada sob
+    // teste está lendo `previous`. Sem a trava, `moving` decide com
+    // `appliedAt: null` (a foto de antes do round-trip) e sobrescreve o
+    // carimbo real ao gravar "applied" de novo, com um valor fabricado. Com a
+    // trava, `moving` só lê depois do commit concorrente, vê o carimbo real
+    // já gravado e o preserva — é exatamente o que a regra do domínio exige
+    // ("current.appliedAt ?? at").
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "shortlisted");
+    await setApplicationStatus(candidateId, jobId, "preparing");
+    const [app] = await db.select().from(application).where(eq(application.jobId, jobId));
+
+    const realAppliedAt = "2026-01-15T12:00:00.000Z";
+    const backAt = "2026-01-15T12:00:01.000Z";
+    const rawConnection = postgres(process.env.DATABASE_URL!, { max: 2, onnotice: () => {} });
+    try {
+      const tx = await rawConnection.reserve();
+      try {
+        await tx`begin`;
+        // Trava a linha primeiro — exatamente o que `setApplicationStatusInTransaction`
+        // agora também faz ao ler `previous`.
+        await tx`select id from production.application where id = ${app!.id} for update`;
+
+        const moving = setApplicationStatus(candidateId, jobId, "applied");
+        await untilSomeoneWaitsOnALock(rawConnection);
+
+        // Um avançar-e-recuar real, de outra sessão, enquanto `moving` está
+        // bloqueada tentando ler (com a trava) ou gravar (sem ela).
+        await tx`
+          update production.application
+          set status = 'applied', applied_at = ${realAppliedAt}, updated_at = ${realAppliedAt}
+          where id = ${app!.id}
+        `;
+        await tx`
+          insert into production.application_event (application_id, at, kind, from_status, to_status)
+          values (${app!.id}, ${realAppliedAt}, 'status_change', 'preparing', 'applied')
+        `;
+        await tx`
+          update production.application set status = 'preparing', updated_at = ${backAt} where id = ${app!.id}
+        `;
+        await tx`
+          insert into production.application_event (application_id, at, kind, from_status, to_status)
+          values (${app!.id}, ${backAt}, 'status_change', 'applied', 'preparing')
+        `;
+        await tx`commit`;
+
+        await moving;
+      } finally {
+        tx.release();
+      }
+    } finally {
+      await rawConnection.end({ timeout: 5 });
+    }
+
+    const [after] = await db.select().from(application).where(eq(application.jobId, jobId));
+    expect(after!.status).toBe("applied");
+    // A prova da trava: o carimbo gravado DURANTE a janela sobrevive. Sem
+    // `FOR UPDATE`, `after!.appliedAt` seria um valor novo, fabricado pela
+    // chamada sob teste a partir de uma foto que ainda via `appliedAt: null`.
+    expect(after!.appliedAt).toBe(realAppliedAt);
   });
 });
 
@@ -722,19 +803,6 @@ describe("candidate-scoped read models", () => {
     expect(secondCounts).toEqual({ applied: 1 });
   });
 });
-
-/** Espera até alguma sessão deste banco estar parada num lock de linha. */
-async function untilSomeoneWaitsOnALock(other: postgres.Sql): Promise<void> {
-  for (let attempt = 0; attempt < 250; attempt++) {
-    const [row] = await other<{ waiting: number }[]>`
-      select count(*)::int as waiting from pg_stat_activity
-      where datname = current_database() and wait_event_type = 'Lock'
-    `;
-    if (row!.waiting > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  throw new Error("ninguém chegou a esperar o lock da candidatura");
-}
 
 describe("desfazer e voltar (repositório)", () => {
   async function eventsOf(jobId: number) {
