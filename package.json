@@ -1,6 +1,6 @@
 {
   "name": "master-jobs",
-  "version": "1.28.1",
+  "version": "1.28.2",
   "packageManager": "pnpm@10.28.0",
   "private": true,
   "type": "module",

@@ -24,6 +24,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 <!-- sem-nota-usuario: 1.27.1 - 2026-09-26T20:38:21.000Z -->
 
+<!-- sem-nota-usuario: 1.28.2 - 2026-09-28T19:16:57.000Z -->
+
 ## [Unreleased]
 
 ## [1.28.1] - 2026-09-28T18:45:55.000Z
