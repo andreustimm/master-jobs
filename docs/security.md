@@ -315,9 +315,16 @@ chamam a mesma função; nenhum outro arquivo lê a variável.
 e-mail (o cadastrado e qualquer endereço), telefone com código de país ou DDD
 entre parênteses e o bloco inteiro (parágrafo, item ou tabela entre linhas em
 branco; a seção, quando é título) que traz rótulo de pretensão salarial ou
-palavra de remuneração perto de um valor são retirados.
+palavra de remuneração perto de um valor são retirados. Num bloco com títulos
+de seção (CV extraído de PDF, sem linha em branco) sai a seção do piso até o
+próximo nome de seção conhecido; sem título, sem valor na seção, com resto
+que ainda parece piso ou com valor com cara de dinheiro (moeda, `k`, `mil`,
+milhar, taxa por hora) a até duas linhas da seção — contadas depois de uma
+sequência de nomes de seção —, sai o bloco inteiro (#344). A borda é curta
+para que a métrica de um CV de sênior na experiência não derrube o perfil.
 Detecção por padrão, com limite escrito no arquivo e travado em teste: valor
-sem rótulo e telefone sem marca passam. Não é sanitização perfeita.
+sem rótulo e telefone sem marca passam. Não é sanitização perfeita. A rota é
+anônima, então as expressões têm custo linear, travado em teste (#344).
 
 **A forma do CV nasce na leitura, entre dois filtros** — #325. O CV importado
 de PDF é texto puro; `cvTextToMarkdown()` (`src/core/cv-markdown.ts`, pura)
