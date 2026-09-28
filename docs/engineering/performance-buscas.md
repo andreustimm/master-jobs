@@ -193,8 +193,10 @@ externo):
   banco local quente e ~29 ms com o dump de produção. Um limite relativo não
   serve: com a 1ª leitura pagando buffers frios (3,5 s), a 2ª refaria a
   consulta em ~30–60 ms e passaria em "20%" sem o cache ter funcionado. Se a
-  2ª vier acima de 5 ms, ela provavelmente caiu noutra instância: a rodada
-  não fecha nem reprova — repita depois do intervalo abaixo.
+  2ª vier acima de 5 ms, ela provavelmente caiu noutra instância: repita
+  depois de outros 15 min sem `/jobs`. **Três rodadas seguidas** com a 2ª
+  acima de 5 ms reprovam a #216: o cache não está servindo em produção, e
+  isso vira investigação.
 - **#215** fecha só com `JHO_PERF_LOG=1` (sem fallback por TTFB/total — ver os
   quatro motivos acima), comparando a 6ª linha (faixa) e a 7ª (ordenação)
   contra a 1ª (`fit=45`, sem faixa): o estágio `board` de cada uma fica
