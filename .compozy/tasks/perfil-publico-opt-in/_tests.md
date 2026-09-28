@@ -86,3 +86,15 @@ Contra a versão anterior (HEAD `38b81b5`, rodada à parte em rascunho), os 27
 casos de R6–R8 davam o resultado errado: os 17 de valor eram aceitos, as 9
 áreas legítimas recusadas com `areaPay`, e o telefone com `areaPay`. Depois:
 `candidate-public-facts` **30/30**.
+
+## Passada final L2 da #362 (FIX_BEFORE_SHIP, fechar por segurança)
+
+| # | Caso | Onde |
+|---|---|---|
+| R9 | MAJOR: "PJ 30 mil", "CLT 15 mil + benefícios", "Dados — 30 mil/mês", "30 mil por mês", "30 mil mensais", "30mil", "15 mil", "Dados 20 mil líquido", "15 thousand", "1 million", "12,5k", "7.5k", "Dados — 12,5k/mês", "1.5k/h", "9k/mês", "Pay 4k", "4.5K" recusados e esvaziados; "Streaming 4K" e "Vídeo 8K e HDR" aceitos; "10 mil TPS" recusado (falso positivo aceito, substitui a expectativa anterior) | `tests/candidate-public-facts.test.ts` |
+| R10 | MINOR 2: "Marketing (target: B2B)", "Growth (conversion rate: 3%)", "Vídeo: frame rate 60 fps" aceitos; "Target: USD 180k", "Target 150", "IA, rate: 150", "Rate 90", "daily rate: $500" recusados; "Equipes de 1 200 pessoas" recusado (falso positivo aceito) | `tests/candidate-public-facts.test.ts` |
+| R11 | MINOR 3: "RFC 15000", "NBR 20000/mês", "iso 30000", "Dados (ISO 150000)" recusados; "ISO 27001", "ISO/IEC 42001", "ISO 9001:2015", "RFC 9110" aceitos | `tests/candidate-public-facts.test.ts` |
+
+Contra a versão anterior (`b7b5b81`, rodada à parte em rascunho), 24 de 25
+casos de R9–R11 davam o resultado errado. Depois: `candidate-public-facts`
+**37/37**.

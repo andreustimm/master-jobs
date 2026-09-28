@@ -362,18 +362,27 @@ sai, e área/idiomas acima do teto, com e-mail (inclusive o cadastrado, do
 candidato e da conta), telefone (o padrão do perfil mais oito dígitos ou mais
 com separador simples, fora intervalo de anos) ou pretensão salarial saem
 vazios. Pretensão, em campo curto, é rótulo de piso (`containsPay()`, a régua
-do CV), `rate` com número ou dois-pontos em qualquer posição, ou valor pela
-régua própria dos campos curtos (`containsShortFieldPay()`, separada do
-`MONEY_LIKE` do currículo): símbolo de moeda; código ou nome de moeda junto de
-número ("USD15000", "90 dollars" — "euros e câmbio" solto não); `mil` só com
-moeda ("10 mil TPS" não); `k` com dois dígitos ou mais ("20k" — "4K" de
-resolução não); número por unidade de tempo ("90/hr", "150 por hora");
-milhar com ponto, vírgula, espaço ou apóstrofo; quatro dígitos ou mais que
-não sejam ano, depois de retirar número de norma ("ISO 27001", "IEC 61131").
-Contato é conferido antes de valor, para a recusa dar o motivo certo. **Limite
-declarado** (revisões L2 da #362): ano sem moeda nem rótulo ("Dados 2000"),
-número de até três dígitos sozinho ("150"), número por extenso ("vinte mil")
-e `k` de um dígito ("5k") passam — não é detecção de todo valor. As
+do CV) ou valor pela régua própria dos campos curtos
+(`containsShortFieldPay()`, separada do `MONEY_LIKE` do currículo, que fica
+intocado): símbolo de moeda; código ou nome de moeda junto de número
+("USD15000", "90 dollars" — "euros e câmbio" solto não); número com `mil`,
+`thousand`, `million` ou `milhões`, sempre ("30 mil", "1 million"); número
+com `k`, inteiro ou decimal, sempre ("20k", "12,5k", "1.5k/h") — só `4K` e
+`8K` exatos, de resolução, passam; número por unidade de tempo ("90/hr",
+"150 por hora"); milhar com ponto, vírgula, espaço ou apóstrofo; quatro
+dígitos ou mais que não sejam ano, depois de retirar número de norma — sigla
+em maiúscula, até cinco dígitos (RFC, quatro), nunca seguido de unidade de
+tempo, moeda, `k` ou `mil` ("ISO 27001" sai da conta; "NBR 20000/mês" e "iso
+30000" são valor); rótulo forte (`piso`, `pretensão`, `salário`…) com
+dois-pontos ou número; e `target`, `pay` ou `rate` só com número ou moeda
+depois — "target: B2B" passa, e `rate` depois de `frame`, `conversion`,
+`error`, `success`, `churn` ou `retention` nunca conta. Contato é conferido
+antes de valor, para a recusa dar o motivo certo. A régua fecha por
+segurança (passada final L2 da #362): **falso positivo aceito** em "10 mil
+TPS", "Equipes de 1 200 pessoas" e norma escrita em minúscula, recusados com
+a mensagem de pretensão. **Limite declarado:** ano sem moeda nem rótulo
+("Dados 2000"), número de até três dígitos sozinho ("150") e número por
+extenso ("vinte mil") passam — não é detecção de todo valor. As
 expressões rodam sobre espaço colapsado e só abaixo do teto: a alternativa de
 `rate:` em começo de linha do currículo era quadrática numa sequência de
 quebras; e a página só escolhe o lugar (faixa do topo ou "Em resumo"). A gravação é `setPublicFactsAction`, com `guardOwnCandidate` antes

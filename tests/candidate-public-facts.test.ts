@@ -274,9 +274,8 @@ describe("saída: publicFactsFrom", () => {
 /**
  * Revisão L2 da PR #362 (FIX_BEFORE_SHIP): valor sem rótulo de pretensão
  * passava pelos dois filtros. Num campo curto de área ou idiomas não há
- * motivo para dinheiro, então qualquer valor com cara de dinheiro
- * (`MONEY_LIKE`, `containsAmount()`) é recusado na entrada e esvaziado na
- * saída.
+ * motivo para dinheiro: o valor (`containsShortFieldPay()`) é recusado na
+ * entrada e esvaziado na saída.
  */
 const UNLABELED_PAY = [
   "Piso 20k",
@@ -419,7 +418,7 @@ describe("re-revisão L2 #362: formatos de valor nos campos curtos", () => {
     }
   });
 
-  it("Minor 3: área legítima com número de norma, resolução, moeda por extenso solta ou 'mil' de volume passa", () => {
+  it("Minor 3: área legítima com número de norma, resolução, moeda por extenso solta passa", () => {
     for (const text of [
       "Segurança da informação (ISO 27001)",
       "Qualidade ISO 9001",
@@ -429,7 +428,6 @@ describe("re-revisão L2 #362: formatos de valor nos campos curtos", () => {
       "Reais problemas de dados",
       "Projetos reais de IA",
       "Fintech / euros e câmbio",
-      "Engenharia de dados; 10 mil TPS",
     ]) {
       expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }).ok, text).toBe(true);
       expect(publicFactsFrom({ ...FULL_ROW, area: text }).area, text).toBe(text);
@@ -446,6 +444,77 @@ describe("re-revisão L2 #362: formatos de valor nos campos curtos", () => {
 
   it("Minor 3: moeda por extenso colada a número e 'mil' com moeda continuam valor", () => {
     for (const text of ["30 mil reais", "15000 euros", "R$ 30 mil", "Piso 2k USD"]) assertRefused(text);
+  });
+});
+
+/**
+ * Passada final L2 da #362 (FIX_BEFORE_SHIP, "fechar por segurança"): `mil` e
+ * `k` com número são SEMPRE valor — menos `4K`/`8K` exatos, resolução —;
+ * `target`/`pay`/`rate` só com número ou moeda depois; norma só em maiúscula,
+ * com número curto e sem unidade de valor depois.
+ */
+describe("passada final L2 #362", () => {
+  const assertRefused = (text: string) => {
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }), text).toEqual({ ok: false, code: "areaPay" });
+    expect(publicFactsFrom({ ...FULL_ROW, area: text }).area, text).toBeNull();
+  };
+  const assertAccepted = (text: string) => {
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }).ok, text).toBe(true);
+    expect(publicFactsFrom({ ...FULL_ROW, area: text }).area, text).toBe(text);
+  };
+
+  it("MAJOR: 'mil'/'thousand'/'million' e 'k' com número, inteiro ou decimal, são valor", () => {
+    for (const text of [
+      "PJ 30 mil",
+      "CLT 15 mil + benefícios",
+      "Dados — 30 mil/mês",
+      "30 mil por mês",
+      "30 mil mensais",
+      "30mil",
+      "15 mil",
+      "Dados 20 mil líquido",
+      "15 thousand",
+      "1 million",
+      "12,5k",
+      "7.5k",
+      "Dados — 12,5k/mês",
+      "1.5k/h",
+      "9k/mês",
+      "Pay 4k",
+      "4.5K",
+    ]) {
+      assertRefused(text);
+    }
+  });
+
+  it("MAJOR: só '4K' e '8K' exatos, de resolução, passam", () => {
+    assertAccepted("Streaming 4K");
+    assertAccepted("Vídeo 8K e HDR");
+  });
+
+  it("MAJOR, falso positivo aceito: 'mil' de volume é recusado com a mensagem de pretensão", () => {
+    assertRefused("Engenharia de dados; 10 mil TPS");
+  });
+
+  it("MINOR 2: 'target'/'pay'/'rate' sem número ou moeda depois, e 'rate' de métrica, passam", () => {
+    assertAccepted("Marketing (target: B2B)");
+    assertAccepted("Growth (conversion rate: 3%)");
+    assertAccepted("Vídeo: frame rate 60 fps");
+  });
+
+  it("MINOR 2: com número ou moeda depois, continuam valor", () => {
+    for (const text of ["Target: USD 180k", "Target 150", "IA, rate: 150", "Rate 90", "daily rate: $500"]) {
+      assertRefused(text);
+    }
+  });
+
+  it("MINOR 2, falso positivo aceito: milhar com espaço é recusado", () => {
+    assertRefused("Equipes de 1 200 pessoas");
+  });
+
+  it("MINOR 3: norma só em maiúscula, número curto, sem unidade de valor depois", () => {
+    for (const text of ["RFC 15000", "NBR 20000/mês", "iso 30000", "Dados (ISO 150000)"]) assertRefused(text);
+    for (const text of ["ISO 27001", "ISO/IEC 42001", "ISO 9001:2015", "RFC 9110"]) assertAccepted(text);
   });
 });
 

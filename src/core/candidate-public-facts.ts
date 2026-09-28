@@ -155,45 +155,70 @@ export function containsShortFieldContact(text: string, known: KnownContact): bo
   return containsContact(text, known) || containsLoosePhone(text.replace(/\s+/g, " "));
 }
 
+const CURRENCY_CODE = "(?:usd|eur|brl|gbp)";
+const CURRENCY_WORD = "(?:reais|d[óo]lar(?:es)?|dollars?|euros?)";
+const TIME_UNIT = "(?:h|hrs?|hora|hour|dia|day|m[êe]s|mo|month|yr|ano|year|semana|week)";
+const MAGNITUDE = "(?:mil|thousand|million|milh[õo]es)";
+
 /**
  * Número de norma técnica ("ISO 27001", "ISO/IEC 42001", "IEC 61131", "RFC
  * 9110", "NBR 5410") sai antes da régua de valor: quatro dígitos que não são
  * ano seriam lidos como dinheiro, e a área "Segurança da informação (ISO
  * 27001)" seria recusada com a mensagem de pretensão.
+ *
+ * Estreito de propósito, porque o que ele retira a régua não vê: sigla em
+ * MAIÚSCULA (como a norma é escrita — "iso 30000" continua valor), até cinco
+ * dígitos (RFC, até quatro), com uma parte opcional (":2022", "-3"), e nunca
+ * quando o número vem seguido de unidade de tempo, moeda, `k` ou `mil`
+ * ("NBR 20000/mês" é valor).
  */
-const STANDARD_NUMBER = /\b(?:iso|iec|ieee|rfc|nbr)(?: ?\/ ?(?:iso|iec|ieee))*[ :-]*\d[\d.:-]*/giu;
+const STANDARD_NUMBER =
+  /\b(?:(?:ISO|IEC|IEEE|NBR)(?: ?\/ ?(?:ISO|IEC|IEEE))* ?[:-]? ?\d{1,5}|RFC ?[:-]? ?\d{1,4})(?:[-:.]\d{1,4})?(?!\d)/gu;
+const AMOUNT_AFTER = new RegExp(
+  `^ ?(?:/ ?${TIME_UNIT}\\b|${CURRENCY_CODE}\\b|${CURRENCY_WORD}\\b|[$€£¥]|R\\$|k\\b|${MAGNITUDE}\\b)`,
+  "iu",
+);
 
-const CURRENCY_CODE = "(?:usd|eur|brl|gbp)";
-const CURRENCY_WORD = "(?:reais|d[óo]lar(?:es)?|dollars?|euros?)";
-const TIME_UNIT = "(?:h|hrs?|hora|hour|dia|day|m[êe]s|mo|month|yr|ano|year|semana|week)";
+function withoutStandardNumbers(text: string): string {
+  return text.replace(STANDARD_NUMBER, (match: string, offset: number) =>
+    AMOUNT_AFTER.test(text.slice(offset + match.length, offset + match.length + 16)) ? match : " ",
+  );
+}
 
 /**
  * Valor com cara de dinheiro num campo CURTO (área, idiomas). Régua própria,
- * separada do `MONEY_LIKE` do currículo: lá "1.200 clientes" é métrica; aqui
- * não há motivo para dinheiro, mas há área legítima com número ("Streaming
- * 4K", "10 mil TPS", "Projetos reais de IA") que não pode ser recusada com a
- * mensagem de pretensão.
+ * separada do `MONEY_LIKE` do currículo: lá "1.200 clientes" é métrica e fica;
+ * aqui não há motivo para dinheiro, e na dúvida o campo fecha.
  *
  * Conta como valor:
  * - símbolo de moeda (`$`, `€`, `£`, `¥`, `R$`);
  * - código de moeda colado ou vizinho de número ("USD15000", "20k USD");
  * - moeda por extenso só vizinha de número ("90 dollars", "15000 euros") — a
  *   palavra solta ("euros e câmbio", "reais problemas") não;
- * - `mil`/`million` só com moeda ("30 mil reais") — "10 mil TPS" não;
- * - `k` com dois dígitos ou mais ("20k", "150k"); um dígito ("4K", "8K") é
- *   resolução de vídeo;
+ * - número com `mil`, `thousand`, `million`, `milhões`, SEMPRE ("30 mil",
+ *   "1 million", "12,5 mil");
+ * - número com `k`, SEMPRE ("20k", "12,5k", "1.5k/h", "4k"), menos
+ *   exatamente `4K` ou `8K` maiúsculos sem decimal — resolução de vídeo
+ *   (`amountWithK`);
  * - número por unidade de tempo ("90/hr", "150/mo", "150 por hora", "90 an
  *   hour");
  * - milhar com separador, inclusive espaço e apóstrofo ("30 000", "30'000");
  * - quatro dígitos ou mais que não sejam ano, fora número de norma;
- * - rótulo de remuneração seguido de número ("Piso 20k", "Pay 20", "Rate 90",
- *   "Expectativa: 20k"), em qualquer posição — no currículo `rate:` só conta
- *   no começo da linha por causa de "Success rate: 99%"; num campo curto a
- *   dúvida fecha.
+ * - rótulo forte de remuneração seguido de dois-pontos ou número ("Piso 20k",
+ *   "Expectativa: 20k", "Salário:");
+ * - `target`, `pay` ou `rate` (com `hourly`/`daily`/`day` opcional) só quando
+ *   vem número ou moeda depois, com dois-pontos ou não ("Rate 90", "IA, rate:
+ *   150", "Target: USD 180k") — "target: B2B" não; e `rate` depois de
+ *   `frame`, `conversion`, `error`, `success`, `churn` ou `retention` nunca.
+ *
+ * **Falso positivo aceito** (fechar por segurança): "10 mil TPS", "Equipes de
+ * 1 200 pessoas", norma em minúscula ("iso 27001") e `rate`/`pay`/`target`
+ * seguidos de número fora das exceções acima são recusados com a mensagem de
+ * pretensão.
  *
  * **Limite declarado:** ano sem moeda nem rótulo ("Dados 2000"), número de três
- * dígitos ou menos sem nada em volta ("150"), número por extenso ("vinte mil")
- * e `k` de um dígito ("5k") passam.
+ * dígitos ou menos sem nada em volta ("150") e número por extenso ("vinte
+ * mil") passam.
  */
 const SHORT_FIELD_AMOUNT = new RegExp(
   [
@@ -201,25 +226,33 @@ const SHORT_FIELD_AMOUNT = new RegExp(
     `\\b${CURRENCY_CODE} ?\\d`,
     `\\d ?${CURRENCY_CODE}\\b`,
     `\\d ?${CURRENCY_WORD}\\b`,
-    `\\d ?(?:mil|mi|milh[õo]es|thousand|million) (?:de )?(?:${CURRENCY_WORD}|${CURRENCY_CODE})\\b`,
-    "\\d{2,} ?k\\b",
+    `\\d(?:[.,]\\d+)? ?${MAGNITUDE}\\b`,
     `\\d ?/ ?${TIME_UNIT}\\b`,
     `\\d (?:por|per|an?) ${TIME_UNIT}\\b`,
     "(?<![\\d.,])\\d{1,3}(?:[., '’]\\d{3})+(?!\\d)",
     "(?<![\\d.,])(?!(?:19|20)\\d{2}(?!\\d))\\d{4,}",
-    "\\b(?:piso|pretens(?:[ãa]o|[õo]es)|expectativa|target|pay|sal[áa]rio|salary|remunera[çc][ãa]o|compensation|(?:(?:hourly|daily|day) )?rate)\\b ?(?::|floor|\\d)",
+    "\\b(?:piso|pretens(?:[ãa]o|[õo]es)|expectativa|sal[áa]rio|salary|remunera[çc][ãa]o|compensation)\\b ?(?::|floor|\\d)",
+    `(?<!\\b(?:frame|conversion|error|success|churn|retention)[ -]?)\\b(?:target|pay|(?:(?:hourly|daily|day) )?rate)\\b ?(?:(?::|floor) ?)?(?:\\d|[$€£¥]|R\\$|${CURRENCY_CODE}\\b)`,
   ].join("|"),
   "iu",
 );
 
+/** Número com `k`: sempre valor, menos a resolução `4K`/`8K` escrita exatamente assim. */
+const AMOUNT_WITH_K = /(?<![\d.,])\d+(?:[.,]\d+)? ?k\b/giu;
+
+function amountWithK(text: string): boolean {
+  return [...text.matchAll(AMOUNT_WITH_K)].some(([match]) => match !== "4K" && match !== "8K");
+}
+
 /**
- * Pretensão num campo curto: o rótulo do currículo (`containsPay()`) ou o valor
- * de `SHORT_FIELD_AMOUNT`, sobre espaço colapsado — cada ` ?` consome no
- * máximo um caractere, e as expressões ficam lineares.
+ * Pretensão num campo curto: o rótulo do currículo (`containsPay()`), número
+ * com `k` ou o valor de `SHORT_FIELD_AMOUNT`, sobre espaço colapsado — cada
+ * ` ?` consome no máximo um caractere, e as expressões ficam lineares.
  */
 export function containsShortFieldPay(text: string): boolean {
   const collapsed = text.normalize("NFC").replace(/\s+/g, " ");
-  return containsPay(collapsed) || SHORT_FIELD_AMOUNT.test(collapsed.replace(STANDARD_NUMBER, " "));
+  if (containsPay(collapsed) || amountWithK(collapsed)) return true;
+  return SHORT_FIELD_AMOUNT.test(withoutStandardNumbers(collapsed));
 }
 
 const FREE_TEXT_MAX = { area: AREA_MAX, languages: LANGUAGES_MAX } as const;

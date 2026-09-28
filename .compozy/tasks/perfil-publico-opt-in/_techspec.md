@@ -86,10 +86,17 @@ teto sai `null` antes de qualquer expressão.
 currículo (intocado): `rate` com número em qualquer posição, unidade de tempo
 (`/hr`, `/mo`, `/yr`, `por hora`, `an hour`), código de moeda colado
 ("USD15000"), milhar com espaço/apóstrofo, moeda por extenso só junto de
-número, `mil` só com moeda, `k` só com dois dígitos, e número de norma
-(ISO/IEC/IEEE/RFC/NBR) retirado antes. Limite declarado: ano sem moeda nem
-rótulo, número de até três dígitos sozinho, número por extenso e `k` de um
-dígito passam.
+número, e número de norma (ISO/IEC/IEEE/RFC/NBR) retirado antes.
+
+**Passada final L2 da #362 (fechar por segurança).** Número com
+`mil`/`thousand`/`million`/`milhões` ou com `k` é sempre valor, inteiro ou
+decimal — só `4K`/`8K` exatos, de resolução, passam; `target`/`pay`/`rate`
+só contam com número ou moeda depois, e `rate` de métrica (`frame`,
+`conversion`, `error`, `success`, `churn`, `retention`) nunca; norma só em
+maiúscula, até cinco dígitos (RFC, quatro), e nunca seguida de unidade de
+valor. Falso positivo aceito: "10 mil TPS", "1 200 pessoas", norma em
+minúscula. Limite declarado: ano sem moeda nem rótulo, número de até três
+dígitos sozinho e número por extenso passam.
 
 ## DTO — `src/core/candidate-public.ts`
 

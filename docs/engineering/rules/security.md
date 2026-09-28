@@ -242,14 +242,17 @@ consentimento, desligado por padrão (nulo também é desligado);
 idiomas acima do teto, com contato (`containsShortFieldContact()`: o de
 `containsContact()` com os e-mails cadastrados, mais oito dígitos ou mais com
 separador curto, fora par de anos) ou com pretensão
-(`containsShortFieldPay()`: o rótulo de `containsPay()`, `rate` com número em
-qualquer posição e uma régua de valor própria dos campos curtos — moeda,
-código ou nome de moeda junto de número, `k` com dois dígitos, número por
-unidade de tempo, milhar com separador, quatro dígitos que não sejam ano nem
-número de norma); a gravação recusa o mesmo, contato antes de valor, com o
-motivo. **Limite declarado:** ano sem moeda nem rótulo ("Dados 2000"), número
-de até três dígitos sozinho, número por extenso ("vinte mil") e `k` de um
-dígito passam. Pretensão salarial não é fato nem opt-in.
+(`containsShortFieldPay()`: o rótulo de `containsPay()` e uma régua de valor
+própria dos campos curtos — moeda, código ou nome de moeda junto de número,
+número com `mil`/`thousand`/`million` ou com `k` sempre (menos `4K`/`8K`
+exatos), número por unidade de tempo, milhar com separador, quatro dígitos
+que não sejam ano nem número de norma em maiúscula, e `target`/`pay`/`rate`
+seguidos de número ou moeda); a gravação recusa o mesmo, contato antes de
+valor, com o motivo. Fecha por segurança: **falso positivo aceito** em "10
+mil TPS", "1 200 pessoas" e norma em minúscula. **Limite declarado:** ano sem
+moeda nem rótulo ("Piso 2000" com rótulo sai; "Dados 2000" passa), número de
+até três dígitos sozinho e número por extenso ("vinte mil") passam.
+Pretensão salarial não é fato nem opt-in.
 
 **Endereço.** `/p/` lê `public_slug`, nunca o `slug` interno; trocar o endereço
 faz o antigo responder 404 sem redirecionar (ADR 0024).
