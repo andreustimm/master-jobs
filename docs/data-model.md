@@ -695,6 +695,29 @@ Sete fatos que a pessoa preenche em `/candidate` (#327, migração
 - Estes campos são apresentação: o scorer não os lê, e `profile.yaml`
   continua dono do matching. Pretensão salarial não é um deles.
 
+### Foto e capa (`candidate.photo_key` … `public_cover`)
+
+Migração `0029_perfil_publico_foto_capa` (#327), só `ADD COLUMN`:
+
+| Imagem | Chave | Opt-in |
+|---|---|---|
+| Foto | `photo_key text` | `public_photo boolean default false` |
+| Capa | `cover_key text` | `public_cover boolean default false` |
+
+- A coluna guarda só a **chave** do objeto na porta de armazenamento
+  (`candidates/<id>/<tipo>/<aleatório>.webp`), nunca URL de provedor nem
+  credencial ([ADR 0029](adr/0029-armazenamento-de-objetos-formato-s3.md)).
+  Chave nova a cada envio; a antiga é apagada no provedor.
+- Opt-in anulável como o dos fatos; nulo é desligado. Remover a imagem zera a
+  chave **e** o opt-in.
+- Gravação por `setPublicImage`/`removePublicImage`
+  (`src/core/candidate-images.ts`), com a linha travada (`FOR UPDATE`) para
+  duas trocas simultâneas não apagarem a imagem uma da outra. Leitura pública
+  por `publicImageKeyForSlug()` (a rota `/p/<endereço>/image/<tipo>`) e, no
+  perfil, só uma versão opaca (hash da chave) em `publicProfile().images`.
+- A importação do snapshot legado escreve nulo nas chaves e `false` nos
+  opt-ins (`postSnapshotColumns`).
+
 ### Candidato criado pela própria conta
 
 Só o candidato do dono nasce do `profile/profile.yaml` (`syncCandidateFromProfile`,

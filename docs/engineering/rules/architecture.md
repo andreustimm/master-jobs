@@ -22,6 +22,7 @@ espalhada pelo código.
 | `QueuePort` | tabela hoje, Upstash quando for para a web (ADR 0009) |
 | `LlmPort` | Anthropic, OpenAI, o que vier — BYOK |
 | `SkillCatalogPort` · `CandidateSkillPort` · `TargetCorpusPort` | contexto de skills (ADR 0007) |
+| `ObjectStorage` | Vercel Blob em deployment, S3/MinIO local, AWS S3 no futuro — formato S3 (ADR 0029) |
 
 **Quando NÃO criar.** Só onde a variação é real. Porta com uma implementação e
 nenhuma alternativa plausível é cerimônia — a

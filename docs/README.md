@@ -64,6 +64,7 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`product/job-lifecycle-and-application-history.md`](product/job-lifecycle-and-application-history.md) | Regras de fechamento, arquivamento e leitura do histórico para candidato e recrutador. |
 | [`engineering/session-2026-09-16.md`](engineering/session-2026-09-16.md) | Registro histórico das decisões, bloqueios e próximos passos discutidos naquela sessão. |
 | [`engineering/local-postgres.md`](engineering/local-postgres.md) | Compose local com imagem Supabase Postgres, PGMQ, pgvector e limites de paridade. |
+| [`engineering/local-storage.md`](engineering/local-storage.md) | MinIO local para o armazenamento de objetos (foto e capa), suíte de contrato e como apontar para AWS S3. |
 | [`engineering/stack-lts-upgrade-proposal.md`](engineering/stack-lts-upgrade-proposal.md) | Proposta de upgrade LTS e matriz de paridade entre local, CI, Vercel e Supabase. |
 | [`.compozy/tasks/job-lifecycle-retention/`](../.compozy/tasks/job-lifecycle-retention/) | PRD, especificação e testes para arquivar vagas preservando candidaturas. |
 | [`.compozy/tasks/environment-sample-only/`](../.compozy/tasks/environment-sample-only/) | Especificação e evidências da entrega que restringiu dev/staging a fixtures. Estado atual na issue vinculada. |
@@ -114,6 +115,7 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`0026`](adr/0026-fila-de-repontuacao-em-fatias-na-web.md) | Repontuação de candidato: fatia no `after()` de quem salva o currículo e fatia `repontuar` da varredura |
 | [`0027`](adr/0027-cadencia-das-notas-em-lotes-com-cursor.md) | Cadência das notas: fila `sem-nota` (10 min) e `manutencao` (60 min), lotes de 100 mais recentes primeiro com cursor; varredura só em produção |
 | [`0028`](adr/0028-migracao-automatica-so-aditiva.md) | Migração de produção automática no push para `main` só quando o lote pendente é aditivo; a não aditiva interrompe o job e a promoção |
+| [`0029`](adr/0029-armazenamento-de-objetos-formato-s3.md) | Armazenamento de objetos no formato S3: Vercel Blob privado em deployment, S3/MinIO local, imagem servida pelo app que confere a visibilidade |
 
 ---
 

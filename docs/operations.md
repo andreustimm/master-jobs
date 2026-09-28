@@ -948,6 +948,47 @@ segredos da Vercel; nenhum agente faz estes passos:
    recuperação de novo alguns minutos depois; `e-mail não configurado` aponta variável
    faltando no ambiente.
 
+## Ativar foto e capa do perfil público (Vercel Blob)
+
+Foto e capa (#327) passam pela porta de armazenamento no formato S3
+([ADR 0029](adr/0029-armazenamento-de-objetos-formato-s3.md)). Sem
+`JHO_STORAGE_DRIVER` no ambiente, nada quebra: `/candidate` responde "o envio
+de imagens não está configurado neste ambiente" e `/p/` sai sem imagem. Com
+valor desconhecido (erro de digitação), o envio falha fechado em vez de cair
+em outro provedor.
+
+Checklist do dono — só ele tem acesso ao painel e aos segredos da Vercel;
+nenhum agente faz estes passos:
+
+1. **Blob store.** Vercel → projeto master-jobs → **Storage** → criar um Blob
+   store e conectá-lo ao projeto em **Preview** e **Production**.
+2. **Token.** Conferir em **Settings → Environment Variables** que
+   `BLOB_READ_WRITE_TOKEN` existe nos dois ambientes (a integração o
+   cadastra); se não existir, cadastrá-lo como *Sensitive* com o token de
+   leitura e escrita da página do Blob store.
+3. **Driver.** Cadastrar `JHO_STORAGE_DRIVER` = `vercel-blob` em **Preview** e
+   **Production**. `JHO_STORAGE_BUCKET` é opcional (padrão `master-jobs`, o
+   prefixo dos objetos).
+4. **Redeploy.** Variável nova só vale no deploy seguinte.
+5. **Prova.** Em `/candidate`, enviar uma foto (JPEG, PNG ou WebP, até 5 MB) e
+   marcar "Mostrar no perfil público"; com o perfil público, abrir
+   `/p/<endereço>` numa janela anônima e ver a foto. Tornar o perfil privado e
+   recarregar `/p/<endereço>/image/photo` na mesma janela: tem de ser 404.
+
+**Invariantes de produção:**
+
+- O banco guarda só a chave do objeto; o token e as `S3_*` só existem em
+  variável de ambiente, e os adapters apagam o valor de todo erro (regra 16).
+- Os objetos são **privados** no Blob. A imagem sai só pela rota do app, com
+  `no-store` e o mesmo 404 para qualquer recusa; a CSP não abre origem de
+  provedor.
+- Cada envio grava chave nova e apaga a antiga. Se apagar falhar, o log das
+  funções mostra `[imagens] …: objeto <chave> não apagado (…)`: o objeto ficou
+  órfão e privado, sem rota que o sirva. Apague-o pelo painel do Blob store
+  quando aparecer.
+
+Máquina local (MinIO) e AWS S3: [local-storage.md](engineering/local-storage.md).
+
 ---
 
 ## Troubleshooting

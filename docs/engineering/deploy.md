@@ -82,6 +82,10 @@ da varredura fatiada não depende da sorte: `next.config.ts` inclui
 | `SENTRY_TRACES_SAMPLE_RATE` | Vercel (opcional) | fração de requisições com trace; ausente = `0.1`, `0` ou valor ilegível desliga ([detalhe](#tracing)) |
 | `SENTRY_AUTH_TOKEN` | Vercel, **só build** | publica os mapas de origem do servidor; sem ela o build segue sem mapas ([detalhe](#mapas-de-origem)) |
 | `SENTRY_ORG`, `SENTRY_PROJECT` | Vercel (opcional) | padrão `master-timm` / `master-jobs` |
+| `JHO_STORAGE_DRIVER` | Vercel (Preview **e** Production) | `vercel-blob` em deployment; `s3` para MinIO local ou AWS S3. Ausente = sem upload de foto e capa; valor desconhecido falha fechado ([ADR 0029](../adr/0029-armazenamento-de-objetos-formato-s3.md)) |
+| `BLOB_READ_WRITE_TOKEN` | Vercel (Preview **e** Production), criada pela integração do Blob | credencial do Vercel Blob; o adapter grava sempre privado e apaga o valor de todo erro. Nunca em banco, log ou `.env.example` |
+| `JHO_STORAGE_BUCKET` | Vercel (opcional) | prefixo dos objetos no Blob (bucket no S3); padrão `master-jobs` |
+| `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | local (MinIO) ou futuro AWS S3 | só com `JHO_STORAGE_DRIVER=s3`; `S3_ENDPOINT` ausente é a AWS ([local-storage.md](local-storage.md)) |
 
 **A URL pode vir de mais de um nome, e a ordem é declarada.** A integração do
 Supabase com a Vercel cadastra `POSTGRES_URL` e `POSTGRES_URL_NON_POOLING` e as
@@ -137,6 +141,28 @@ do modo aberto (`isLocalProcess`, em `src/contexts/auth/domain/open-mode.ts`). C
 O operador cria a chave no Resend, verifica o domínio e cadastra os dois valores
 diretamente no ambiente da Vercel. Os valores reais não devem ser copiados para
 `.env.example`, documentação, logs ou commits.
+
+**Foto e capa do perfil público (#327) precisam de armazenamento.** Sem
+`JHO_STORAGE_DRIVER`, o deployment funciona igual, mas `/candidate` responde
+que o envio de imagens não está configurado e `/p/` sai sem foto. **Passo do
+dono**, uma vez, antes de a funcionalidade chegar a produção:
+
+1. No painel da Vercel, projeto master-jobs → **Storage** → criar um **Blob
+   store** e conectá-lo ao projeto nos ambientes **Preview** e **Production**.
+   A integração cadastra `BLOB_READ_WRITE_TOKEN` nos ambientes marcados —
+   confira em **Settings → Environment Variables**; se não aparecer, copie o
+   token de leitura e escrita da página do Blob store e cadastre-o com esse
+   nome, como **Sensitive**, direto no painel. Não copie o valor para outro
+   lugar.
+2. Em **Settings → Environment Variables**, cadastrar `JHO_STORAGE_DRIVER` =
+   `vercel-blob` em **Preview** e **Production**.
+3. Fazer um redeploy (variável nova só vale no próximo build) e conferir em
+   `/candidate` que enviar uma foto não mostra "não configurado".
+
+O token dá leitura e escrita na loja inteira: é segredo como a URL do banco.
+Os objetos são gravados privados; ninguém os lê por URL do Blob, só pela rota
+do app, que reconfere a visibilidade do perfil. Local e AWS S3 em
+[local-storage.md](local-storage.md).
 
 O suporte ao Gmail também está completo no código, mas a ativação pertence ao
 operador: criar `GMAIL_CLIENT_ID` e `GMAIL_CLIENT_SECRET` no Google Cloud,
