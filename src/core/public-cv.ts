@@ -206,9 +206,10 @@ function isPayTitle(block: string): boolean {
  *   "Experience"). Um título qualquer em caixa alta ("PJ MENSAL") não fecha
  *   a seção: ele pode ser parte da pretensão.
  *
- * Sem título, a seção é o bloco — o comportamento de antes. E o bloco inteiro
- * também sai quando a seção não traz valor (ele está em outro lugar), quando
- * o que sobra, lido como texto corrido, ainda parece piso, ou quando há valor
+ * Sem título, a seção é o bloco — o comportamento de antes. Seção sem valor do
+ * rótulo em diante ("a combinar") sai sozinha e, se vai até o fim do bloco,
+ * promete o valor no bloco seguinte. O bloco inteiro sai quando o que sobra,
+ * lido como texto corrido, ainda parece piso, ou quando há valor
  * com cara de dinheiro (`MONEY_LIKE`) nas bordas: até duas linhas de cada
  * lado e, depois de uma sequência de nomes de seção conhecidos, as duas
  * primeiras da seção vizinha. Um "Employment:" dentro da pretensão, um título
@@ -217,7 +218,7 @@ function isPayTitle(block: string): boolean {
  * métrica de um CV de sênior ("1.200 clientes") na experiência não é piso, e
  * derrubaria o perfil inteiro.
  */
-function narrowSalaryBlock(lines: string[]): string[] | null {
+function narrowSalaryBlock(lines: string[]): { kept: string[]; valueExpected: boolean } | null {
   const isHit = (text: string) => isSalaryBlock(text) || isPayTitle(text);
   const known = (j: number) => isKnownHeading(lines[j]!.trim());
   const drop = lines.map(() => false);
@@ -244,6 +245,7 @@ function narrowSalaryBlock(lines: string[]): string[] | null {
   };
   // Antes do primeiro título o bloco não tem estrutura: o corte vai do começo.
   let structured = false;
+  let valueExpected = false;
   for (let i = 0; i < lines.length; i++) {
     const title = isHeading(lines[i]!.trim());
     let last = i;
@@ -257,19 +259,21 @@ function narrowSalaryBlock(lines: string[]): string[] | null {
     }
     const start = title || structured ? i : 0;
     while (last + 1 < lines.length && !known(last + 1)) last++;
-    // O valor tem de vir do rótulo em diante: um número acima dele ("Equipe de
-    // 12") não é a pretensão, que então está em outro bloco (#353).
-    if (!HAS_AMOUNT.test(lines.slice(i, last + 1).join("\n"))) return null;
     if (moneyNear(start - 1, -1) || moneyNear(last + 1, 1)) return null;
     for (let j = start; j <= last; j++) drop[j] = true;
     // Valor sem cara de dinheiro ("90/hour", "150") logo acima do rótulo. Um
     // item neutro com número ("Mentoria de 6 engenheiros") sai junto.
     if (start > 0 && HAS_AMOUNT.test(lines[start - 1]!)) drop[start - 1] = true;
+    // Sem valor do rótulo em diante — um número acima dele ("Equipe de 12")
+    // não é a pretensão (#353) —, ela é "a combinar" ou está no parágrafo
+    // seguinte. Se a seção vai até o fim do bloco, o bloco seguinte é esse
+    // parágrafo; se termina num nome de seção, o que vem é outra seção.
+    if (!HAS_AMOUNT.test(lines.slice(i, last + 1).join("\n")) && last === lines.length - 1) valueExpected = true;
     i = last;
   }
   const kept = lines.filter((_, i) => !drop[i]);
   if (isSalaryBlock(kept.join("\n"))) return null;
-  return kept;
+  return { kept, valueExpected };
 }
 
 /**
@@ -374,14 +378,23 @@ export function publicCvText(content: string, known: KnownContact = {}): string 
     }
     if (valueExpected) {
       valueExpected = false;
-      // Um título seguinte abre outra seção; ele não é o valor prometido.
-      if (heading === null && HAS_AMOUNT.test(text)) continue;
+      // Um título seguinte — Markdown ou nome de seção conhecido — abre outra
+      // seção; ele não é o valor prometido.
+      if (heading === null && !isKnownHeading(block[0]!.trim()) && HAS_AMOUNT.test(text)) {
+        // O bloco consumido pode ser, ele mesmo, um rótulo sem valor
+        // ("Opção 2\nPretensão PJ:"), que promete o bloco seguinte.
+        if (isSalaryBlock(text) || isPayTitle(text)) valueExpected = !HAS_AMOUNT.test(fromLabel(block));
+        continue;
+      }
     }
     if (isSalaryBlock(text) || isPayTitle(text) || (heading !== null && PAY_HEADING.test(text))) {
       const narrowed = heading === null && block.length > 1 ? narrowSalaryBlock(block) : null;
       if (heading) skippingSection = heading[1]!.length;
       // Laço, não `push(...)`: um bloco de 130 mil linhas estoura a pilha.
-      else if (narrowed) for (const line of narrowed) out.push(line);
+      else if (narrowed) {
+        for (const line of narrowed.kept) out.push(line);
+        valueExpected = narrowed.valueExpected;
+      }
       // Um ano no rótulo ("Pretensão salarial (2026):") não é o valor.
       else valueExpected = !HAS_AMOUNT.test(fromLabel(block));
       continue;

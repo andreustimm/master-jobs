@@ -338,6 +338,23 @@ describe("publicCvText", () => {
     expect(publicCvText("Equipe de 12\nPretensão salarial: R$ 30.000\n\n2019-2021 Staff")).toBe("\n2019-2021 Staff");
   });
 
+  it("'a combinar' num cabeçalho com número não apaga o CV", () => {
+    for (const cv of [
+      "Andreus Timm\nSão Paulo · (11) 91234-5678\nPretensão salarial: a combinar\nEXPERIÊNCIA\nStaff Engineer na Acme\nFORMAÇÃO\nCiência da Computação",
+      "Andreus Timm\nSenior AI Architect · 15+ anos\nPretensão salarial: a combinar\nEXPERIÊNCIA\nStaff Engineer na Acme\nFORMAÇÃO\nCiência da Computação",
+      "Andreus Timm, 15 anos\nPretensão salarial: a combinar\n\nEXPERIÊNCIA\nStaff Engineer na Acme, equipe de 12\nFORMAÇÃO\nCiência da Computação",
+    ]) {
+      const out = publicCvMarkdown(cv);
+      expect(out, cv).toContain("Staff Engineer na Acme");
+      expect(out, cv).toContain("Ciência da Computação");
+      expect(out, cv).not.toContain("a combinar");
+    }
+  });
+
+  it("bloco consumido como valor prometido também promete o seguinte", () => {
+    expect(publicCvText("Pretensão salarial:\n\nOpção 2\nPretensão PJ:\n\nR$ 40.000\n\nFim")).not.toContain("40.000");
+  });
+
   it("o que sobra do bloco longo ainda com cara de piso sai inteiro", () => {
     // Palavra de remuneração e valor em linhas não vizinhas: nenhuma linha nem
     // par é piso, mas o bloco lido como texto corrido é.
