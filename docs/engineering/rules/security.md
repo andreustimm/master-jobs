@@ -231,7 +231,10 @@ demais classes estão em G39). O que ela mostra é lista de permissão:
 do candidato. Nunca saem e-mail, telefone, funil, candidaturas nem piso
 salarial — o piso é a posição de negociação, e publicá-lo é mostrar a carta
 antes da mesa. Nome, headline, localização e links passam por
-`containsContact()` e são esvaziados quando trazem e-mail ou telefone.
+`containsContact()` e são esvaziados quando trazem e-mail ou telefone. Skill
+confirmada (#326) leva `category` e `level` na lista de permissão — os dois
+passam pelo mesmo `containsContact()` do nome, e a skill inteira some se
+qualquer um dos três (`name`, `category`, `level`) trouxer contato.
 
 **Endereço.** `/p/` lê `public_slug`, nunca o `slug` interno; trocar o endereço
 faz o antigo responder 404 sem redirecionar (ADR 0024).

@@ -588,15 +588,26 @@ try {
   // matching, e a tarefa só faria o worker registrar erro fora do cenário.
   await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, publicCvCandidate));
 
+  // A maioria dos nomes de `PUBLIC_CV_FIXTURE.skills` (TypeScript, Go, Rust,
+  // LangGraph...) já está no catálogo que `seedCatalog()` gravou acima —
+  // criar outra linha para o mesmo nome, com outro slug, duplicaria a skill no
+  // catálogo real. Só o que o catálogo não tem (Scala) nasce aqui.
   for (const item of PUBLIC_CV_FIXTURE.skills) {
-    const [catalogRow] = await getDb()
-      .insert(skill)
-      .values({ slug: `e2e-${item.name.toLowerCase()}`, canonicalName: item.name, category: item.category, aliases: [] })
-      .onConflictDoUpdate({
-        target: skill.slug,
-        set: { canonicalName: item.name, category: item.category },
-      })
-      .returning({ id: skill.id });
+    const [existing] = await getDb()
+      .select({ id: skill.id })
+      .from(skill)
+      .where(eq(skill.canonicalName, item.name))
+      .limit(1);
+    const catalogRow = existing ?? (
+      await getDb()
+        .insert(skill)
+        .values({ slug: `e2e-${item.name.toLowerCase()}`, canonicalName: item.name, category: item.category, aliases: [] })
+        .onConflictDoUpdate({
+          target: skill.slug,
+          set: { canonicalName: item.name, category: item.category },
+        })
+        .returning({ id: skill.id })
+    )[0];
     await getDb()
       .insert(candidateSkill)
       .values({

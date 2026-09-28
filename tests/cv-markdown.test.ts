@@ -116,6 +116,16 @@ describe("cvSections", () => {
   it("título dentro de bloco de código não abre seção", () => {
     expect(cvSections("```\n## Summary\ntexto\n```")).toEqual([]);
   });
+
+  it("#326 seção nunca escrita (não só vazia) também fica de fora — é o predicado que decide o card em /p/[slug]", () => {
+    // `app/p/[slug]/page.tsx` faz `sections.find(s => s.kind === kind)`, um por
+    // um, e omite o `Card` inteiro quando o retorno é `undefined`. Um
+    // currículo sem Formação não é "Formação vazia": a seção nunca existiu.
+    const md = "## Summary\nArquiteta com 10 anos de experiência.\n\n## Experience\nPrincipal Engineer.";
+    const sections = cvSections(md);
+    expect(sections.map((s) => s.kind)).toEqual(["summary", "experience"]);
+    expect(sections.find((s) => s.kind === "education")).toBeUndefined();
+  });
 });
 
 describe("o que a normalização não pode abrir no filtro público", () => {

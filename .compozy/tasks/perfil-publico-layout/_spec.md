@@ -58,8 +58,9 @@ available").
 - Skills: badge sem caixa alta forçada (`type-micro` força `uppercase`; o
   badge de skill usa `type-meta`, que não força). Top 6 por categoria + o
   resto atrás de um `<details>` com "+N".
-- CV completo: mesmo `Card` + `MarkdownPreview` de antes, agora dentro de um
-  `<details>` nativo, recolhido por padrão.
+- CV completo: mesmo `MarkdownPreview` de antes, agora dentro de um `<details>`
+  nativo com borda própria (sem `Card` — é um contêiner de disclosure, não um
+  cartão de conteúdo), recolhido por padrão.
 - Rótulos "LinkedIn"/"GitHub" (antes fixos no JSX) e os textos novos entram
   em `src/core/i18n/` (`publicProfile.*`), pt-BR e en.
 

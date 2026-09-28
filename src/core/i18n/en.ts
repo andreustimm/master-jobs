@@ -1014,6 +1014,7 @@ export const en: Dictionary = {
     github: "GitHub",
     copyLink: "Copy profile link",
     linkCopied: "Link copied",
+    linkCopyFailed: "Couldn't copy the link",
     locationLabel: "Location",
     summary: "Summary",
     experience: "Experience",
@@ -1021,6 +1022,7 @@ export const en: Dictionary = {
     skillsTitle: "Skills",
     fullCv: "Full CV",
     showMoreSkills: "+{count} more",
+    showMoreSkillsAria: "Show {count} more skills in {category}",
   },
   vocabulary: {
     title: "Vocabulary",

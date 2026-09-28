@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ChevronDownIcon } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -151,7 +152,11 @@ export default async function PublicProfilePage({ params }: Params) {
               {t("publicProfile.github")}
             </a>
           )}
-          <CopyProfileLinkButton label={t("publicProfile.copyLink")} copiedLabel={t("publicProfile.linkCopied")} />
+          <CopyProfileLinkButton
+            label={t("publicProfile.copyLink")}
+            copiedLabel={t("publicProfile.linkCopied")}
+            failedLabel={t("publicProfile.linkCopyFailed")}
+          />
         </div>
       </header>
 
@@ -160,12 +165,12 @@ export default async function PublicProfilePage({ params }: Params) {
           do grid segue a do DOM: não precisa de `order-*` para a principal
           cair à esquerda. */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[2fr_1fr]">
-        <div className="flex min-w-0 flex-col gap-6">
+        <div className="flex min-w-0 flex-col gap-6" data-testid="public-profile-main">
           {(Object.keys(SECTION_LABEL_KEYS) as CvSectionKind[]).map((kind) => {
             const section = sectionOf(kind);
             if (!section) return null;
             return (
-              <Card key={kind}>
+              <Card key={kind} data-testid={`public-section-${kind}`}>
                 <CardContent className="pt-0">
                   <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                     <h2 className="type-display-xs">{t(SECTION_LABEL_KEYS[kind])}</h2>
@@ -186,9 +191,10 @@ export default async function PublicProfilePage({ params }: Params) {
           })}
 
           {profile.cv && (
-            <details className="rounded-xl border" data-testid="public-cv-full">
-              <summary className="type-body-emphasis min-h-11 cursor-pointer list-none px-4 py-3 marker:hidden">
+            <details className="group rounded-xl border" data-testid="public-cv-full">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 type-body-emphasis [&::-webkit-details-marker]:hidden">
                 {t("publicProfile.fullCv")}
+                <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden />
               </summary>
               <div className="border-t px-4 py-4">
                 <div data-user-content data-testid="public-cv">
@@ -214,31 +220,47 @@ export default async function PublicProfilePage({ params }: Params) {
   );
 }
 
-/** Uma categoria de skills: top N visível + `<details>` recolhido para o resto. */
+/**
+ * Uma categoria de skills: top N visível + `<details>` recolhido para o resto.
+ *
+ * Categoria fora de `SkillCategory` (schema sem CHECK constraint — uma
+ * migration futura ou um valor manual poderia gravar algo fora do enum) cai no
+ * texto cru, marcado `data-user-content`: não é rótulo de interface, então não
+ * finge ser um, e a varredura de inglês sem sessão não a barra por acidente.
+ */
 function SkillGroup({ group, t }: { group: PublicSkillGroup; t: Translator["t"] }) {
-  const label = isSkillCategory(group.category) ? t(CATEGORY_LABEL_KEYS[group.category]) : group.category;
+  const category = group.category;
+  const label = isSkillCategory(category) ? t(CATEGORY_LABEL_KEYS[category]) : category;
+  const known = isSkillCategory(category);
   const visible = group.skills.slice(0, SKILLS_VISIBLE_PER_GROUP);
   const rest = group.skills.slice(SKILLS_VISIBLE_PER_GROUP);
 
   return (
     <div data-testid="public-skill-group">
-      <h3 className="type-micro mb-2 text-muted-foreground">{label}</h3>
+      <h3
+        className="type-micro mb-2 text-muted-foreground"
+        {...(known ? {} : { "data-user-content": true })}
+      >
+        {label}
+      </h3>
       <div className="flex flex-wrap gap-1.5">
         {visible.map((item) => (
-          <SkillBadge key={item.name} skill={item} />
+          <SkillBadge key={`${group.category}-${item.name}`} skill={item} />
         ))}
       </div>
       {rest.length > 0 && (
-        <details className="mt-1.5">
+        <details className="group mt-1.5">
           <summary
-            className="type-meta min-h-11 cursor-pointer text-[var(--primary-text)]"
+            className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 type-meta text-[var(--primary-text)] [&::-webkit-details-marker]:hidden"
             data-testid="public-skill-more"
+            aria-label={t("publicProfile.showMoreSkillsAria", { count: rest.length, category: label })}
           >
             {t("publicProfile.showMoreSkills", { count: rest.length })}
+            <ChevronDownIcon className="size-3.5 shrink-0 transition-transform group-open:rotate-180" aria-hidden />
           </summary>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {rest.map((item) => (
-              <SkillBadge key={item.name} skill={item} />
+              <SkillBadge key={`${group.category}-${item.name}`} skill={item} />
             ))}
           </div>
         </details>
@@ -251,10 +273,19 @@ function SkillGroup({ group, t }: { group: PublicSkillGroup; t: Translator["t"] 
  * Nome (+ nível, quando alguém confirmou um) sem caixa alta forçada — a
  * `Badge` com `type-micro` deixava as ~20 skills em maiúsculas; `type-meta`
  * não tem `text-transform`. Só as confirmadas chegam aqui — regra 6.
+ *
+ * `level` é texto livre digitado por um humano (schema: "deliberately not
+ * inferred") e pode ser mais longo que um rótulo comum — a `Badge` padrão é
+ * `whitespace-nowrap` e `h-5`, o que estourava a largura em 375px. Aqui ela
+ * quebra linha e cresce em altura em vez de vazar da tela.
  */
 function SkillBadge({ skill }: { skill: PublicSkill }) {
   return (
-    <Badge variant="outline" data-user-content className="type-meta">
+    <Badge
+      variant="outline"
+      data-user-content
+      className="h-auto max-w-full items-start py-1 whitespace-normal type-meta"
+    >
       {skill.name}
       {skill.level ? ` · ${skill.level}` : ""}
     </Badge>

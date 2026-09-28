@@ -4,7 +4,7 @@ area: PUB
 title: Ler o currículo importado de PDF com seções e listas no perfil público
 persona: Visitante do perfil público
 journey: J-open-public-profile
-expected: Com perfil público e currículo publicado, o CV importado de PDF aparece em /p/<slug> com os títulos em caixa alta como seções e os itens com ● como lista, sem parágrafo corrido do texto inteiro, sem contato nem pretensão salarial, antes e depois do reload, em 375 px e no desktop
+expected: Com perfil público e currículo publicado, ao abrir "Currículo completo" em /p/<slug> (recolhido por padrão desde #326) o CV importado de PDF aparece com os títulos em caixa alta como seções e os itens com ● como lista, sem parágrafo corrido do texto inteiro, sem contato nem pretensão salarial, antes e depois do reload, em 375 px e no desktop
 entry_points: /candidate; /p/[slug]
 qa_status: untested
 bug_ids:
@@ -28,3 +28,7 @@ A forma nasce na leitura: a versão gravada em `/candidate` → "Ver versão" é
 mesmo texto importado, agora exibido com a mesma estrutura, e nada foi
 regravado. Uma sigla sozinha na linha ("AWS") ou um cargo com ano não viram
 seção — é o limite declarado da heurística (`src/core/cv-markdown.ts`).
+
+Desde #326 o CV completo mora atrás de um `<details>` ("Currículo completo"),
+recolhido por padrão — quem valida precisa clicar para abrir antes de
+conferir títulos, listas e ausência de contato/pretensão.

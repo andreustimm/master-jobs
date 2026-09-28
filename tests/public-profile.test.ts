@@ -149,6 +149,26 @@ describe("o que NUNCA sai", () => {
     expect(skills.map((s) => s.name)).toEqual(["Rust"]);
     expect(JSON.stringify(skills)).not.toContain("@zorbit");
   });
+
+  it("#326 e-mail no PRÓPRIO NOME da skill esvazia a skill inteira", async () => {
+    // Improvável no catálogo real, mas a lista de permissão confere o VALOR,
+    // não só a coluna (mesma razão do nome do candidato na 1.22.0) — se um dia
+    // um nome de skill chegar com contato colado, o filtro não pode confiar em
+    // "isso é sempre um nome de tecnologia".
+    await confirmarSkill("contate andreus@zorbit.com.br", "confirmed", { category: "language" });
+    await confirmarSkill("Rust", "confirmed", { category: "language" });
+    const skills = (await publicProfile("andreus"))?.skills ?? [];
+    expect(skills.map((s) => s.name)).toEqual(["Rust"]);
+    expect(JSON.stringify(skills)).not.toContain("@zorbit");
+  });
+
+  it("#326 e-mail na CATEGORIA da skill esvazia a skill inteira", async () => {
+    await confirmarSkill("Go", "confirmed", { category: "contate andreus@zorbit.com.br" });
+    await confirmarSkill("Rust", "confirmed", { category: "language" });
+    const skills = (await publicProfile("andreus"))?.skills ?? [];
+    expect(skills.map((s) => s.name)).toEqual(["Rust"]);
+    expect(JSON.stringify(skills)).not.toContain("@zorbit");
+  });
 });
 
 describe("o currículo exige o segundo consentimento", () => {

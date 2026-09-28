@@ -14,17 +14,28 @@
  */
 export const PUBLIC_CV_FIXTURE = Object.freeze({
   slug: "e2e-cv-formatado",
-  name: "Perfil Formatado",
+  // Acentuado de propósito (G30): a varredura de inglês sem sessão
+  // (`ENGLISH_ANONYMOUS_SWEEP`) só passa aqui porque `data-user-content`
+  // isenta o texto da pessoa — sem acento em lugar nenhum, uma regressão que
+  // apagasse a marca passaria batido.
+  name: "André Formatado",
   email: "cv-formatado@local.test",
-  headline: "Senior AI Software Architect",
+  headline: "Arquiteto de Soluções em IA",
   location: "São Paulo, Brazil",
   linkedinUrl: "https://www.linkedin.com/in/e2e-perfil-formatado",
   githubUrl: "https://github.com/e2e-perfil-formatado",
   // Ordem de exibição esperada dentro do grupo `language` (occurrences desc,
   // nome asc no empate): TypeScript, Go, Python, Rust, Java, Kotlin — top 6 —
-  // e Elixir, Scala atrás do "+2".
+  // e Elixir, Scala atrás do "+2". `level` do TypeScript é de propósito longo
+  // e sem quebra natural: prova que o badge quebra linha em vez de estourar a
+  // largura em 375px (`OVERFLOW_SWEEP` já visita esta rota).
   skills: Object.freeze([
-    { name: "TypeScript", category: "language", occurrences: 5 },
+    {
+      name: "TypeScript",
+      category: "language",
+      occurrences: 5,
+      level: "especialista sênior, anos de experiência em produção de alta criticidade",
+    },
     { name: "Go", category: "language", occurrences: 4 },
     { name: "Rust", category: "language", occurrences: 3 },
     { name: "Python", category: "language", occurrences: 3 },
@@ -52,7 +63,9 @@ export const PUBLIC_CV_FIXTURE = Object.freeze({
     "PRETENSÃO SALARIAL",
     "USD 15,000/month",
     "",
-    "EDUCATION",
+    // Acentuado (G30): prova que o micro-rótulo da seção (dado do usuário, ao
+    // lado do título fixo traduzido) sobrevive intacto à varredura de inglês.
+    "FORMAÇÃO",
     "Bacharelado em Ciência da Computação",
   ].join("\n"),
 });
@@ -62,6 +75,11 @@ export async function checkPublicCvFormat(browser, base, check) {
   try {
     const page = await context.newPage();
     const response = await page.goto(`${base}/p/${PUBLIC_CV_FIXTURE.slug}`, { waitUntil: "networkidle" });
+    // #326: o CV completo agora mora atrás de um `<details>` recolhido por
+    // padrão, e conteúdo colapsado não entra no `scrollWidth` (a UA aplica
+    // `display: none`) — medir overflow ANTES de abrir provaria só o hero e
+    // os cards, nunca o currículo inteiro que é o alvo original deste teste.
+    await page.locator('[data-testid="public-cv-full"] summary').click();
     const shape = await page.evaluate(() => {
       const main = document.querySelector('[data-testid="route-public-profile"]');
       const cv = main?.querySelector('[data-testid="public-cv"]');
@@ -79,7 +97,7 @@ export async function checkPublicCvFormat(browser, base, check) {
       "#325 CV do PDF em /p/<slug> sai com h2 e li, sem parágrafo gigante nem glifo solto",
       response?.status() === 200
         && shape.found
-        && ["SUMMARY", "CORE EXPERTISE", "PROFESSIONAL EXPERIENCE", "EDUCATION"].every((h) => shape.headings.includes(h))
+        && ["SUMMARY", "CORE EXPERTISE", "PROFESSIONAL EXPERIENCE", "FORMAÇÃO"].every((h) => shape.headings.includes(h))
         && shape.items === 5
         && shape.longestParagraph <= 600
         && !shape.stray
@@ -115,18 +133,28 @@ export async function checkPublicProfileLayout(browser, base, check) {
         const main = document.querySelector('[data-testid="route-public-profile"]');
         const linkedin = main?.querySelector('[data-testid="public-profile-linkedin"]');
         const github = main?.querySelector('[data-testid="public-profile-github"]');
+        const mainColumn = main?.querySelector('[data-testid="public-profile-main"]');
         const skillsAside = main?.querySelector('[data-testid="public-profile-skills"]');
         const groups = [...(main?.querySelectorAll('[data-testid="public-skill-group"]') ?? [])];
         const cvFull = main?.querySelector('[data-testid="public-cv-full"]');
+        const sectionCards = ["summary", "experience", "education"].map(
+          (kind) => Boolean(main?.querySelector(`[data-testid="public-section-${kind}"]`)),
+        );
+        const longLevelBadge = [...(main?.querySelectorAll('[data-user-content]') ?? [])]
+          .find((n) => n.textContent?.startsWith("TypeScript"));
         const rect = (el) => el?.getBoundingClientRect();
         return {
           heroRect: rect(main?.querySelector("h1")),
+          mainRect: rect(mainColumn),
           skillsRect: rect(skillsAside),
           linkedinHref: linkedin?.getAttribute("href") ?? null,
           linkedinTop: rect(linkedin)?.top ?? null,
           githubHref: github?.getAttribute("href") ?? null,
           groupCount: groups.length,
           cvFullOpen: cvFull?.hasAttribute("open") ?? null,
+          sectionCards,
+          longLevelBadgeWhiteSpace: longLevelBadge ? getComputedStyle(longLevelBadge).whiteSpace : null,
+          longLevelBadgeWidth: rect(longLevelBadge)?.width ?? null,
           overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         };
       });
@@ -141,16 +169,31 @@ export async function checkPublicProfileLayout(browser, base, check) {
         JSON.stringify(shape),
       );
       check(
-        "#326 375px: uma coluna — skills abaixo do conteúdo principal, não ao lado",
-        shape.heroRect !== undefined
+        "#326 375px: uma coluna — skills abaixo do FIM do conteúdo principal, mesmo início horizontal",
+        shape.mainRect !== undefined
           && shape.skillsRect !== undefined
-          && shape.skillsRect.top > shape.heroRect.top,
-        JSON.stringify({ hero: shape.heroRect, skills: shape.skillsRect }),
+          // Tolerância de 1px: arredondamento de subpixel entre o fim de um
+          // elemento e o começo do próximo na mesma coluna.
+          && shape.skillsRect.top >= shape.mainRect.bottom - 1
+          && Math.abs(shape.skillsRect.left - shape.mainRect.left) <= 1,
+        JSON.stringify({ main: shape.mainRect, skills: shape.skillsRect }),
+      );
+      check(
+        "#326 os três cards de seção aparecem (Resumo, Experiência, Formação) — a fixture tem as três",
+        shape.sectionCards.every(Boolean),
+        JSON.stringify(shape.sectionCards),
       );
       check(
         "#326 duas categorias de skill aparecem (ai, language), CV completo recolhido por padrão",
         shape.groupCount === 2 && shape.cvFullOpen === false,
         JSON.stringify(shape),
+      );
+      check(
+        "#326 375px: nível longo quebra linha (badge não é largo o bastante pra estourar a tela)",
+        shape.longLevelBadgeWhiteSpace !== null
+          && shape.longLevelBadgeWhiteSpace !== "nowrap"
+          && (shape.longLevelBadgeWidth ?? 0) < 375,
+        JSON.stringify({ whiteSpace: shape.longLevelBadgeWhiteSpace, width: shape.longLevelBadgeWidth }),
       );
     } finally {
       await context.close();

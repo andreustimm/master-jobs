@@ -1036,6 +1036,7 @@ export const ptBR = {
     github: "GitHub",
     copyLink: "Copiar link do perfil",
     linkCopied: "Link copiado",
+    linkCopyFailed: "Não deu para copiar o link",
     locationLabel: "Localização",
     summary: "Resumo",
     experience: "Experiência",
@@ -1043,6 +1044,7 @@ export const ptBR = {
     skillsTitle: "Habilidades",
     fullCv: "Currículo completo",
     showMoreSkills: "+{count} mais",
+    showMoreSkillsAria: "Mostrar mais {count} habilidades em {category}",
   },
   vocabulary: {
     title: "Vocabulário",
