@@ -44,9 +44,9 @@ S3_SECRET_ACCESS_KEY=master_jobs_local_only
 
 Com `S3_ENDPOINT` presente, o path style (`endpoint/bucket/key`) liga
 sozinho; `S3_FORCE_PATH_STYLE=true|false` sobrepõe. A imagem é o fork
-comunitário `pgsty/minio`, porque a `minio/minio` saiu do Docker Hub; a tag
-fixa está no compose e em `tests/support/minio.ts`, e um teste confere que as
-duas são iguais.
+comunitário `pgsty/minio`, porque a `minio/minio` saiu do Docker Hub; ela é
+fixada por tag e digest no compose e em `tests/support/minio.ts`, e um teste
+confere que as duas referências são iguais (alternativas na ADR 0029).
 
 ## Suíte de contrato
 
@@ -62,8 +62,31 @@ no console — nunca passa em silêncio.
 
 Nada muda no código. Crie o bucket privado (Block Public Access ligado; a
 imagem nunca é lida por URL do bucket, só pela rota do app) e uma credencial
-IAM limitada a ele, com `s3:PutObject`, `s3:GetObject` e `s3:DeleteObject` em
-`arn:aws:s3:::<bucket>/*`. Depois, no ambiente:
+IAM limitada a ele:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::<bucket>/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::<bucket>"
+    }
+  ]
+}
+```
+
+`s3:ListBucket` no **bucket** (sem `/*`) não é para listar nada: sem ela, a
+AWS responde **403 AccessDenied**, e não 404 `NoSuchKey`, a `GetObject` e
+`HeadObject` de chave inexistente — para não revelar o que existe a quem não
+pode listar. O adapter trata 403 como erro, não como "sem imagem", e a rota
+pública viraria 500 onde deveria ser 404. Depois, no ambiente:
 
 ```bash
 JHO_STORAGE_DRIVER=s3

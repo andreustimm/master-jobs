@@ -961,7 +961,9 @@ Checklist do dono — só ele tem acesso ao painel e aos segredos da Vercel;
 nenhum agente faz estes passos:
 
 1. **Blob store.** Vercel → projeto master-jobs → **Storage** → criar um Blob
-   store e conectá-lo ao projeto em **Preview** e **Production**.
+   store com acesso **Private** e conectá-lo ao projeto em **Preview** e
+   **Production**. Loja pública deixaria a URL do objeto legível por quem a
+   tivesse, mesmo com o perfil privado.
 2. **Token.** Conferir em **Settings → Environment Variables** que
    `BLOB_READ_WRITE_TOKEN` existe nos dois ambientes (a integração o
    cadastra); se não existir, cadastrá-lo como *Sensitive* com o token de
@@ -970,10 +972,15 @@ nenhum agente faz estes passos:
    **Production**. `JHO_STORAGE_BUCKET` é opcional (padrão `master-jobs`, o
    prefixo dos objetos).
 4. **Redeploy.** Variável nova só vale no deploy seguinte.
-5. **Prova.** Em `/candidate`, enviar uma foto (JPEG, PNG ou WebP, até 5 MB) e
-   marcar "Mostrar no perfil público"; com o perfil público, abrir
-   `/p/<endereço>` numa janela anônima e ver a foto. Tornar o perfil privado e
-   recarregar `/p/<endereço>/image/photo` na mesma janela: tem de ser 404.
+5. **Prova no preview, com envio real, antes de produção.** Em `/candidate`:
+   uma foto de **~3,9 MB** é aceita e a prévia sobrevive ao reload; um arquivo
+   de **~4,8 MB** é recusado com "A imagem passa de 4 MB." e nada é gravado
+   (o teto é 4 MiB porque a Vercel devolve 413 acima de 4,5 MB antes da
+   action; se aparecer só o erro genérico, o aviso do navegador não rodou —
+   reporte). Marque "Mostrar no perfil público"; com o perfil público, abra
+   `/p/<endereço>` numa janela anônima e veja a foto. Torne o perfil privado e
+   recarregue `/p/<endereço>/image/photo` na mesma janela: tem de ser 404. No
+   painel do Blob store, o objeto aparece como privado.
 
 **Invariantes de produção:**
 

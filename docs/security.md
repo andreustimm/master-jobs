@@ -410,11 +410,19 @@ resposta, `Cross-Origin-Resource-Policy: same-origin`, service worker fora
 (G14) e CSP sem origem de provedor (`img-src 'self' data:`). O perfil recebe
 só uma versão opaca (hash da chave), nunca a chave nem URL. A rota é a
 segunda entrada de conteúdo sem sessão, registrada no inventário de G39, com
-balde próprio no limite por IP do proxy. No upload
+balde próprio no limite por IP do proxy (60 em 5 min). **Custo declarado:**
+a sonda pela imagem não gasta o balde da página, então uma varredura de
+endereços ganha até 60 tentativas a mais por IP a cada 5 min — o proxy decide
+antes de a rota saber a resposta, e os dois não compartilham memória
+confiável; a imagem só responde 200 para perfil público com imagem marcada
+para mostrar (`tests/proxy-public-limits.test.ts`). No upload
 (`savePublicImageAction`, `guardOwnCandidate` antes de ler o formulário): tipo
 pela assinatura dos bytes (JPEG, PNG, WebP — SVG com script renomeado para
-`.png` é recusado), teto de 5 MB antes de ler o arquivo, lado máximo de 8000
-px antes de decodificar e reencode em WebP com `sharp`, que não copia EXIF,
+`.png` é recusado), teto de 4 MiB conferido antes de copiar ou decodificar
+os bytes (o Next já recebeu o multipart inteiro; a Vercel recusa corpo acima de
+4,5 MB antes da action), lado máximo de 8000 px e 50 MP conferidos pelo
+cabeçalho antes de decodificar — contra bomba de pixels —, e reencode em
+WebP com `sharp`, que não copia EXIF,
 XMP, IPTC nem ICC: a localização da câmera não chega ao armazenamento
 (`tests/public-images.test.ts` monta JPEG com GPS e confere o que sobra).
 Chave nova a cada envio; a antiga é apagada na troca e na remoção, que também

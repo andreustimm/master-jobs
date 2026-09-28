@@ -61,9 +61,12 @@ mesmo depois de o perfil deixar de ser público.
   `JHO_STORAGE_DRIVER=s3` e as `S3_*`; a chave gravada no banco vale nos dois,
   mas os objetos precisam ser copiados de um provedor para o outro — não há
   migração automática de conteúdo.
-- O metadado no Blob custa uma leitura a mais (em paralelo) por `get`/`head`,
-  e a escrita do objeto e do irmão não é atômica. Aceito: os objetos do
-  produto são poucos e imutáveis por chave.
+- O metadado no Blob custa uma leitura a mais (em paralelo) por `get`/`head`
+  — exceto no caminho de serviço, que pede `getObject(…, { metadata: false })`
+  e lê só o corpo. A escrita do objeto e do irmão não é atômica: irmão
+  truncado ou corrompido vale como "sem metadado", e se só o irmão falhar na
+  leitura o stream do objeto é cancelado. Aceito: os objetos do produto são
+  poucos e imutáveis por chave.
 - Cada visita ao perfil lê a imagem do provedor (`no-store`, sem CDN). O
   reencode deixa a foto em ~dezenas de KB; se o custo aparecer, a próxima
   decisão é cache com revalidação que ainda reconfira a visibilidade — nunca
@@ -71,6 +74,30 @@ mesmo depois de o perfil deixar de ser público.
 - Objeto antigo que falhar ao ser apagado fica órfão, mas inalcançável:
   privado no provedor e fora do que o banco aponta. A linha no log permite
   apagá-lo à mão.
-- A imagem oficial `minio/minio` saiu do Docker Hub; o compose usa o fork
-  comunitário `pgsty/minio`, fixado por tag. Trocar de imagem é trocar a tag
-  no compose e em `tests/support/minio.ts` (um teste confere que são iguais).
+- A rota da imagem tem balde próprio no limite por IP do proxy (60 em 5
+  min), e a sonda por ela não gasta o balde da página: uma varredura de
+  endereços ganha até 60 tentativas a mais por IP. O proxy decide antes de a
+  rota saber a resposta, e os dois não compartilham memória confiável na
+  Vercel; custo declarado em `proxy.ts` e `docs/security.md`.
+- O teto do upload é 4 MiB, abaixo do limite de corpo de 4,5 MB da Vercel
+  (413 antes de a action rodar); o seletor avisa no navegador acima dele.
+
+## Imagem do MinIO local
+
+A imagem oficial `minio/minio` saiu do Docker Hub, e a de `quay.io/minio`
+passou a pedir login (verificado em 28/09/2026). Alternativas avaliadas:
+
+| Opção | Por que não (ou quando) |
+|---|---|
+| `quay.io/minio/minio` fixada por digest | exige credencial para baixar; o CI e o E2E sobem o contêiner sem segredo nenhum |
+| SeaweedFS (`chrislusf/seaweedfs`) | S3 compatível e mantido, mas é outro servidor — o dono decidiu por MinIO |
+| Garage (`dxflrs/garage`) | leve e mantido, mas exige layout de cluster no bootstrap e não é MinIO |
+| `bitnamilegacy/minio` | congelada: sem atualização de segurança |
+| **`pgsty/minio`** (escolhida) | fork comunitário mantido do mesmo código, com `minio` e `mc` na imagem; baixa sem login |
+
+A imagem é fixada por **tag e digest** (`pgsty/minio:RELEASE…@sha256:…`) no
+compose e em `tests/support/minio.ts`, e um teste confere que as duas
+referências são iguais: a tag de um fork pode ser republicada, o digest não.
+Trocar de imagem (outra tag, ou SeaweedFS/Garage se o fork parar) é trocar a
+referência nos dois lugares e rodar a suíte de contrato contra ela — a porta
+não muda.

@@ -148,7 +148,10 @@ que o envio de imagens não está configurado e `/p/` sai sem foto. **Passo do
 dono**, uma vez, antes de a funcionalidade chegar a produção:
 
 1. No painel da Vercel, projeto master-jobs → **Storage** → criar um **Blob
-   store** e conectá-lo ao projeto nos ambientes **Preview** e **Production**.
+   store** com acesso **Private** e conectá-lo ao projeto nos ambientes
+   **Preview** e **Production**. Público não serve: o adapter grava com
+   `access: "private"`, e numa loja pública a URL do objeto ficaria legível
+   por quem a tivesse, mesmo depois de o perfil deixar de ser público.
    A integração cadastra `BLOB_READ_WRITE_TOKEN` nos ambientes marcados —
    confira em **Settings → Environment Variables**; se não aparecer, copie o
    token de leitura e escrita da página do Blob store e cadastre-o com esse
@@ -156,8 +159,18 @@ dono**, uma vez, antes de a funcionalidade chegar a produção:
    lugar.
 2. Em **Settings → Environment Variables**, cadastrar `JHO_STORAGE_DRIVER` =
    `vercel-blob` em **Preview** e **Production**.
-3. Fazer um redeploy (variável nova só vale no próximo build) e conferir em
-   `/candidate` que enviar uma foto não mostra "não configurado".
+3. Fazer um redeploy (variável nova só vale no próximo build) e provar com
+   **envio real no preview**, antes de produção:
+   - foto de **~3,9 MB** (JPEG ou PNG): aceita, a prévia aparece e
+     sobrevive ao reload;
+   - arquivo de **~4,8 MB**: recusado com "A imagem passa de 4 MB." sem
+     gravar nada. O teto é 4 MiB porque a Vercel recusa corpo acima de 4,5 MB
+     com 413 antes de a action rodar; o seletor de arquivo avisa no
+     navegador, e se o aviso não aparecer a tela mostra o erro genérico —
+     anote e reporte;
+   - com "Mostrar" marcado e o perfil Público, `/p/<endereço>` numa janela
+     anônima mostra a foto; em **Storage → o Blob store**, o objeto aparece
+     como privado e a URL dele, aberta sem token, não serve a imagem.
 
 O token dá leitura e escrita na loja inteira: é segredo como a URL do banco.
 Os objetos são gravados privados; ninguém os lê por URL do Blob, só pela rota
