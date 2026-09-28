@@ -26,6 +26,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.27.3] - 2026-09-28T16:38:21.000Z
+
+### Fixed
+
+- "Salary expectation: negotiable" in an imported résumé no longer empties the public profile: only the salary expectation is left out, and the rest of the résumé stays.
+- The public profile no longer shows a salary expectation written in the paragraph right below its label, or one that follows a "CLT:"/"PJ:" or "Employment:" line of its own.
+
 ## [1.27.2] - 2026-09-28T16:21:47.000Z
 
 ### Fixed

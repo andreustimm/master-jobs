@@ -9,6 +9,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.27.3] - 2026-09-28
+
+### Corrigido
+
+- `publicCvText()`: o valor prometido por um rótulo de pretensão sem valor é procurado do rótulo em diante (`fromLabel()`); um número acima do rótulo ("Equipe de 12 pessoas") não cancela mais a retirada do parágrafo seguinte (#353).
+- `narrowSalaryBlock()`: seção sem valor do rótulo em diante ("a combinar") sai sozinha e promete o bloco seguinte, em vez de derrubar o bloco inteiro; suas bordas veem qualquer número antes do nome de seção vizinho e só valor com cara de dinheiro depois dele. O bloco prometido que abre com sub-rótulo de regime (`Employment:\n150k USD`) é consumido quando a seção que o nome abre traz dinheiro, e o bloco consumido que é rótulo sem valor promete o seguinte. Limite declarado novo em G23: número sem cara de dinheiro ("150") do outro lado de um nome de seção passa (#353).
+
 ## [1.27.2] - 2026-09-28
 
 ### Corrigido

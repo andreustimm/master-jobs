@@ -26,6 +26,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.27.3] - 2026-09-28T16:38:21.000Z
+
+### Corrigido
+
+- "Pretensão salarial: a combinar" no currículo importado não esvazia mais o perfil público: sai só a pretensão, e o resto do currículo fica.
+- O perfil público não mostra mais a pretensão escrita no parágrafo logo abaixo do rótulo, nem a que vem depois de um "CLT:"/"PJ:" ou "Employment:" em linha própria.
+
 ## [1.27.2] - 2026-09-28T16:21:47.000Z
 
 ### Corrigido
