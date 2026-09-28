@@ -284,7 +284,7 @@ function SkillBadge({ skill }: { skill: PublicSkill }) {
     <Badge
       variant="outline"
       data-user-content
-      className="h-auto max-w-full items-start py-1 whitespace-normal type-meta"
+      className="h-auto max-w-full items-start py-1 break-words whitespace-normal type-meta"
     >
       {skill.name}
       {skill.level ? ` · ${skill.level}` : ""}

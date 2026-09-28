@@ -1044,7 +1044,7 @@ export const ptBR = {
     skillsTitle: "Habilidades",
     fullCv: "Currículo completo",
     showMoreSkills: "+{count} mais",
-    showMoreSkillsAria: "Mostrar mais {count} habilidades em {category}",
+    showMoreSkillsAria: "+{count} mais: habilidades de {category}",
   },
   vocabulary: {
     title: "Vocabulário",

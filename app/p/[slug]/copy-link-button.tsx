@@ -14,8 +14,9 @@ type Status = "idle" | "copied" | "failed";
  * Falha visível, não silenciosa: o navegador pode negar a área de
  * transferência (contexto não seguro, permissão negada), e um botão que finge
  * sucesso nesse caso manda a pessoa colar um link que nunca foi copiado.
- * `aria-live="polite"` no rótulo — o único jeito de quem usa leitor de tela
- * saber que o clique teve efeito, já que nada move o foco nem abre diálogo.
+ * Uma região `aria-live="polite"` à parte anuncia a confirmação ou a falha —
+ * o único jeito de quem usa leitor de tela saber que o clique teve efeito, já
+ * que nada move o foco nem abre diálogo.
  */
 export function CopyProfileLinkButton({
   label,
@@ -61,8 +62,13 @@ export function CopyProfileLinkButton({
       {status === "copied" && <Check className="size-3.5" aria-hidden />}
       {status === "failed" && <AlertCircle className="size-3.5" aria-hidden />}
       {status === "idle" && <Copy className="size-3.5" aria-hidden />}
-      <span aria-live="polite">
+      <span aria-hidden={status !== "idle"}>
         {status === "copied" ? copiedLabel : status === "failed" ? failedLabel : label}
+      </span>
+      {/* Só a confirmação ou a falha entram na região viva: a volta ao rótulo
+          neutro depois de 2 s não é notícia. */}
+      <span className="sr-only" aria-live="polite">
+        {status === "copied" ? copiedLabel : status === "failed" ? failedLabel : ""}
       </span>
     </Button>
   );

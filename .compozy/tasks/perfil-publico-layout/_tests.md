@@ -27,7 +27,7 @@
 | T15 | Skill sem caixa alta forçada no badge renderizado | `checkPublicProfileLayout` (E2E, `getComputedStyle`) | bug da fase anterior: ~20 skills em maiúsculas sem agrupamento |
 | T16 | "+N" expande e revela as skills além do topo 6, com o `level` confirmado visível | `checkPublicProfileLayout` (E2E) | top N + expansível é o aceite da issue |
 | T17 | CV completo recolhido por padrão (`<details>` sem `open`) | `checkPublicProfileLayout` (E2E) | não é mais um `Card` sempre aberto |
-| T18 | `level` livre e longo (sem espaço para quebrar naturalmente) não estoura 375px — o badge quebra linha | `checkPublicProfileLayout` (E2E, `getComputedStyle` + largura) | `Badge` padrão é `whitespace-nowrap`; um nível digitado por um humano não tem limite de tamanho |
+| T18 | `level` livre e longo (com espaços) não estoura 375px — o badge quebra linha; um token único longo quebra por `break-words` (não coberto por teste) | `checkPublicProfileLayout` (E2E, `getComputedStyle` + largura) | `Badge` padrão é `whitespace-nowrap`; um nível digitado por um humano não tem limite de tamanho |
 | T19 | Perfil não público continua 404 (regressão) | `ui/public-profile.mjs` (E2E, já existente) | G22, inalterado por esta fase |
 | T20 | `noindex` mantido (regressão) | `ui/public-profile.mjs` (E2E, já existente) | inalterado por esta fase |
 | T21 | `/p/[slug]` sai de `UNMEASURED_PAGES` e é medida por `AXE_SWEEP`, `OVERFLOW_SWEEP`, `ENGLISH_ANONYMOUS_SWEEP` | `tests/e2e-route-coverage.test.ts` + `pnpm test:e2e --areas a11y,mobile,i18n` | aceite da issue: 375px sem overflow, axe sem violação séria, sem vazar português |

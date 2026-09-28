@@ -1022,7 +1022,7 @@ export const en: Dictionary = {
     skillsTitle: "Skills",
     fullCv: "Full CV",
     showMoreSkills: "+{count} more",
-    showMoreSkillsAria: "Show {count} more skills in {category}",
+    showMoreSkillsAria: "+{count} more: {category} skills",
   },
   vocabulary: {
     title: "Vocabulary",
