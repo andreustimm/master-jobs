@@ -51,8 +51,16 @@ function stripNoise(code: string): string {
     .replace(/'(?:[^'\\\n]|\\.)*'/g, "''");
 }
 
-const TRANSPORT_MODULES =
-  /\bfrom\s+["'](node:)?(http|https|http2|net|tls|dgram|child_process|undici|axios|got|node-fetch|ky|ws)["']|\bimport\(\s*["'](node:)?(http|https|http2|net|tls|dgram|child_process|undici|axios|got|node-fetch|ky|ws)["']\s*\)|\brequire\(\s*["'](node:)?(http|https|http2|net|tls|dgram|child_process|undici|axios|got|node-fetch|ky|ws)["']\s*\)/;
+// SDK de armazenamento (#327) conta como transporte: abre conexão com o
+// provedor por dentro, sem `fetch` visível no arquivo que o importa.
+const TRANSPORT_MODULE_NAMES = "http|https|http2|net|tls|dgram|child_process|undici|axios|got|node-fetch|ky|ws|@vercel/blob|@aws-sdk/client-s3";
+const TRANSPORT_MODULES = new RegExp(
+  [
+    `\\bfrom\\s+["'](node:)?(${TRANSPORT_MODULE_NAMES})["']`,
+    `\\bimport\\(\\s*["'](node:)?(${TRANSPORT_MODULE_NAMES})["']\\s*\\)`,
+    `\\brequire\\(\\s*["'](node:)?(${TRANSPORT_MODULE_NAMES})["']\\s*\\)`,
+  ].join("|"),
+);
 
 /**
  * Que tipo de transporte de saída o trecho usa. Vazio quando nenhum.
@@ -94,6 +102,8 @@ const ALLOWED: Record<string, string> = {
   "src/core/mail/gmail.ts": "Gmail somente leitura (ADR 0008) e callback OAuth em loopback",
   "src/contexts/auth/infra/resend-mailer.ts": "e-mail transacional da própria conta (recuperar senha)",
   "src/contexts/operations/infra/github-dispatch.ts": "dispara workflow do próprio repositório",
+  "src/core/storage/infra/vercel-blob.ts": "foto e capa do perfil no Vercel Blob privado (ADR 0029)",
+  "src/core/storage/infra/s3.ts": "foto e capa do perfil em S3/MinIO (ADR 0029)",
 };
 
 const ROOT = resolve(".");
@@ -112,6 +122,9 @@ describe("detector de transporte de saída", () => {
       ['const net = require("net");', "module:net"],
       // Um `curl` ou `gh` em subprocesso também envia, sem passar por `fetch`.
       ['import { execFile } from "node:child_process";', "module:child_process"],
+      // Os SDKs de armazenamento (#327) falam com o provedor por dentro.
+      ['import { put, get } from "@vercel/blob";', "module:@vercel/blob"],
+      ['import { S3Client } from "@aws-sdk/client-s3";', "module:@aws-sdk/client-s3"],
       ["const ws = new WebSocket(url);", "xhr/ws"],
       ["navigator.sendBeacon(url, body);", "beacon"],
       ['  fetch(applyUrl, { method: "POST" });', "fetch"],
