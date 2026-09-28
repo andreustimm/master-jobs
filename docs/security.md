@@ -351,6 +351,22 @@ continuam derivadas na PÁGINA por `cvSections(profile.cv)` (#325): o texto que
 chega já passou pelos dois filtros, e `cvSections()` só lê o que sobrou —
 `publicProfile()` não muda.
 
+**Fatos opt-in, um consentimento por campo** — **28/09 (#327, parte A).**
+Modelo de trabalho, nível de experiência, disponibilidade, prazo para começar,
+aceita mudar, área e idiomas entram em `candidate` com um opt-in cada
+(`public_*`, padrão `false`; nulo, o da linha importada do snapshot, também é
+desligado). Três camadas: a coluna nasce desligada; `publicFactsFrom()`
+(`src/core/candidate-public-facts.ts`, pura) só devolve o fato com opt-in
+`=== true`, valor presente e reconhecido — valor controlado fora da lista não
+sai, e área/idiomas com e-mail, telefone (inclusive o e-mail cadastrado) ou
+pretensão salarial (`containsPay()`, a mesma régua do CV, com o mesmo limite
+declarado) saem vazios; e a página só escolhe o lugar (faixa do topo ou "Em
+resumo"). A gravação é `setPublicFactsAction`, com `guardOwnCandidate` antes
+de ler o formulário, e recusa com código o valor forjado, o texto longo, o
+contato e a pretensão. **Pretensão salarial não é campo nem opt-in** — teste
+de ausência explícito em `tests/public-profile.test.ts`. Foto e capa (parte B)
+ainda não existem.
+
 **Fluxo verificado ponta a ponta em 19/08**, no modo autenticado padrão: sem
 sessão o cabeçalho oferece entrar; o link de uso único resgata em
 `/login/callback` e grava o cookie `httpOnly`; a sessão passa a aparecer no

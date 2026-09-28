@@ -42,7 +42,7 @@ import { loadProfile } from "../../src/core/profile/load.ts";
 import { scoreOne } from "../../src/core/scoring/apply.ts";
 import { SCORER_VERSION } from "../../src/core/scoring/score.ts";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
-import { PUBLIC_CV_FIXTURE } from "./public-cv-format.mjs";
+import { PUBLIC_CV_FIXTURE, PUBLIC_FACTS_OFF_FIXTURE, factColumns } from "./public-cv-format.mjs";
 import { isolationRefusal } from "./database-guard.mjs";
 
 // Antes de qualquer migração ou escrita. Ver `database-guard.mjs`.
@@ -575,8 +575,20 @@ try {
   });
   await getDb()
     .update(candidate)
-    .set({ visibility: "public", publicCv: true })
+    .set({ visibility: "public", publicCv: true, ...factColumns(PUBLIC_CV_FIXTURE) })
     .where(eq(candidate.id, publicCvCandidate));
+
+  // #327: mesmos sete fatos gravados, opt-ins desligados, perfil público e
+  // sem currículo — o "desligado → ausente do HTML" de `checkPublicFacts`.
+  const factsOffCandidate = await ensureCandidate({
+    slug: PUBLIC_FACTS_OFF_FIXTURE.slug,
+    name: PUBLIC_FACTS_OFF_FIXTURE.name,
+    email: PUBLIC_FACTS_OFF_FIXTURE.email,
+  });
+  await getDb()
+    .update(candidate)
+    .set({ visibility: "public", publicCv: false, ...factColumns(PUBLIC_FACTS_OFF_FIXTURE) })
+    .where(eq(candidate.id, factsOffCandidate));
   await saveDocument({
     candidateId: publicCvCandidate,
     kind: "cv",

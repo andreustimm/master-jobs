@@ -26,10 +26,17 @@
  * qualquer texto — um nome digitado, um `profile.yaml`, uma migration futura.
  * Então todo campo de texto que sai passa por `containsContact()` e, se trouxer
  * e-mail ou telefone, sai VAZIO, independentemente de como o dado chegou lá.
+ *
+ * **Fatos opt-in (#327)** — modelo de trabalho, nível, disponibilidade, prazo,
+ * aceita mudar, área, idiomas — entram numa chave só, `facts`, e cada um
+ * depende do PRÓPRIO consentimento, desligado por padrão. O filtro mora em
+ * `publicFactsFrom()` (puro): valor controlado desconhecido não sai, e texto
+ * livre com contato ou pretensão salarial sai vazio.
  */
 import { and, eq } from "drizzle-orm";
 import { getDb } from "./db/client.ts";
 import { authUser, candidate, candidateDocument, candidateSkill, skill } from "./db/schema.ts";
+import { publicFactsFrom, type PublicFacts } from "./candidate-public-facts.ts";
 import { containsContact, publicCvMarkdown, type KnownContact } from "./public-cv.ts";
 
 /**
@@ -67,6 +74,11 @@ export type PublicProfile = {
   githubUrl: string | null;
   /** Só as confirmadas. Detectada não é confirmada — regra 6 do CLAUDE.md. */
   skills: PublicSkill[];
+  /**
+   * Fatos opt-in (#327): cada um só vem preenchido quando a pessoa marcou
+   * "mostrar" para ele; o resto vem `null`/vazio. Ver `publicFactsFrom()`.
+   */
+  facts: PublicFacts;
   /** Presente apenas quando o candidato deu o segundo consentimento. */
   cv: string | null;
 };
@@ -123,6 +135,22 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
       githubUrl: candidate.githubUrl,
       visibility: candidate.visibility,
       publicCv: candidate.publicCv,
+      // #327: valor e opt-in de cada fato, coluna a coluna. Lidos aqui, mas
+      // só saem pelo filtro de `publicFactsFrom()`.
+      workModel: candidate.workModel,
+      experienceLevel: candidate.experienceLevel,
+      availability: candidate.availability,
+      startTimeframe: candidate.startTimeframe,
+      openToRelocation: candidate.openToRelocation,
+      area: candidate.area,
+      languages: candidate.languages,
+      publicWorkModel: candidate.publicWorkModel,
+      publicExperienceLevel: candidate.publicExperienceLevel,
+      publicAvailability: candidate.publicAvailability,
+      publicStartTimeframe: candidate.publicStartTimeframe,
+      publicRelocation: candidate.publicRelocation,
+      publicArea: candidate.publicArea,
+      publicLanguages: candidate.publicLanguages,
       // Lidos para serem RETIRADOS do que sai, nunca devolvidos. O da conta
       // importa porque o candidato criado pela CLI não tem `email` próprio.
       email: candidate.email,
@@ -192,6 +220,7 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
     linkedinUrl: text(row.linkedinUrl),
     githubUrl: text(row.githubUrl),
     skills,
+    facts: publicFactsFrom(row, known),
     cv,
   };
 }

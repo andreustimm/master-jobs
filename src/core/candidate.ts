@@ -28,6 +28,11 @@ import {
   type NameError,
   type PublicSlugError,
 } from "./candidate-identity.ts";
+import {
+  parsePublicFactsForm,
+  type PublicFactsError,
+  type PublicFactsFormInput,
+} from "./candidate-public-facts.ts";
 
 /* -------------------------------------------------------------------------- */
 /* Profile                                                                     */
@@ -336,6 +341,28 @@ export async function setPublicCv(candidateId: number, publish: boolean): Promis
     .update(candidate)
     .set({ publicCv: publish, updatedAt: new Date().toISOString() })
     .where(eq(candidate.id, candidateId));
+}
+
+/**
+ * Grava os fatos do perfil público e o opt-in de cada um (#327). Só o próprio
+ * candidato chama.
+ *
+ * As catorze colunas num `UPDATE` só: o formulário manda o estado inteiro, e
+ * gravar campo a campo deixaria, numa falha no meio, um opt-in ligado com o
+ * valor antigo. Validação em `parsePublicFactsForm` — recusa em vez de gravar
+ * valor fora da lista, texto longo, contato ou pretensão salarial.
+ */
+export async function setPublicFacts(
+  candidateId: number,
+  raw: PublicFactsFormInput,
+): Promise<{ ok: true } | { ok: false; code: PublicFactsError }> {
+  const parsed = parsePublicFactsForm(raw);
+  if (!parsed.ok) return parsed;
+  await getDb()
+    .update(candidate)
+    .set({ ...parsed.value, updatedAt: new Date().toISOString() })
+    .where(eq(candidate.id, candidateId));
+  return { ok: true };
 }
 
 /* -------------------------------------------------------------------------- */

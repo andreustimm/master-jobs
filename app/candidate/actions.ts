@@ -16,9 +16,15 @@ import {
   requestCvRescore,
   setCandidateName,
   setPublicCv,
+  setPublicFacts,
   setPublicSlug,
   setVisibility,
 } from "../../src/core/candidate.ts";
+import {
+  PUBLIC_FACT_KEYS,
+  type PublicFactKey,
+  type PublicFactsError,
+} from "../../src/core/candidate-public-facts.ts";
 import {
   deleteDocument,
   documentById,
@@ -304,6 +310,41 @@ export type PublicSlugResult = { ok: true } | { ok: false; code: PublicSlugError
 export async function setPublicSlugAction(formData: FormData): Promise<PublicSlugResult> {
   const { candidateId } = await guardOwnCandidate("candidate:write");
   const result = await setPublicSlug(candidateId, String(formData.get("publicSlug") ?? ""));
+  if (!result.ok) return result;
+  revalidatePath("/candidate");
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Fatos do perfil público (#327)                                              */
+/* -------------------------------------------------------------------------- */
+
+export type PublicFactsResult = { ok: true } | { ok: false; code: PublicFactsError };
+
+/**
+ * Grava os sete fatos do perfil público e o "mostrar" de cada um.
+ *
+ * O candidato vem da sessão (`guardOwnCandidate`, sem id por parâmetro), e a
+ * guarda vem antes de ler o formulário. Cada opt-in chega como `show-<fato>`
+ * e só vale `on`: caixa desmarcada não é enviada, e ausência é desligado —
+ * o mesmo sentido do default da coluna.
+ */
+export async function setPublicFactsAction(formData: FormData): Promise<PublicFactsResult> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  const text = (name: string) => String(formData.get(name) ?? "");
+  const show: Partial<Record<PublicFactKey, boolean>> = {};
+  for (const key of PUBLIC_FACT_KEYS) show[key] = formData.get(`show-${key}`) === "on";
+
+  const result = await setPublicFacts(candidateId, {
+    workModel: formData.getAll("workModel").map(String),
+    experienceLevel: text("experienceLevel"),
+    availability: text("availability"),
+    startTimeframe: text("startTimeframe"),
+    openToRelocation: text("openToRelocation"),
+    area: text("area"),
+    languages: text("languages"),
+    show,
+  });
   if (!result.ok) return result;
   revalidatePath("/candidate");
   return { ok: true };

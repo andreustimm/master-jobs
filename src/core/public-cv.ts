@@ -359,6 +359,18 @@ export function containsContact(text: string, known: KnownContact = {}): boolean
   return /\d{10,}/.test(normalized);
 }
 
+/**
+ * Um campo CURTO do perfil público (#327: área, idiomas) com cara de
+ * pretensão salarial — a mesma régua do bloco do currículo (`isSalaryBlock`,
+ * `isPayTitle`): rótulo de piso, palavra de remuneração como rótulo ou perto
+ * de um valor. Mesmo limite declarado no topo deste arquivo: valor sem rótulo
+ * passa. Como `containsContact()`, não redige — quem chama descarta o campo.
+ */
+export function containsPay(text: string): boolean {
+  const normalized = text.normalize("NFC");
+  return isSalaryBlock(normalized) || isPayTitle(normalized);
+}
+
 export function publicCvText(content: string, known: KnownContact = {}): string {
   const out: string[] = [];
   // Nível do título cuja seção inteira está saindo, ou nulo.

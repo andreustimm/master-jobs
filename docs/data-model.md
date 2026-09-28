@@ -626,6 +626,33 @@ quem não tem endereço, idempotente). Trocar o endereço faz o antigo responder
 `user-<e-mail>` (criado pelo admin — o endereço publicaria o e-mail), que o
 backfill e `ensureCandidate` deixam sem endereço até a pessoa escolher um.
 
+### Fatos do perfil público (`candidate.work_model` … `public_languages`)
+
+Sete fatos que a pessoa preenche em `/candidate` (#327, migração
+`0028_candidate_public_facts`, só `ADD COLUMN`), cada um com o próprio opt-in:
+
+| Fato | Coluna | Opt-in | Valores |
+|---|---|---|---|
+| Modelo de trabalho | `work_model text[]` | `public_work_model` | `remote`, `hybrid`, `onsite`, `b2b`, `contractor`, `employee` (vários) |
+| Nível de experiência | `experience_level` | `public_experience_level` | `junior`, `mid`, `senior`, `lead`, `staff`, `principal`, `executive` |
+| Disponibilidade | `availability` | `public_availability` | `actively-looking`, `open`, `not-looking` |
+| Prazo para começar | `start_timeframe` | `public_start_timeframe` | `immediate`, `two-weeks`, `one-month`, `two-months`, `three-months-plus` |
+| Aceita mudar | `open_to_relocation boolean` | `public_relocation` | `true`, `false`; nulo = não informado |
+| Área | `area` | `public_area` | texto livre, até 80 caracteres |
+| Idiomas | `languages` | `public_languages` | texto livre, até 160 caracteres |
+
+- Valores nulos; opt-ins `boolean default false` e anuláveis (contrato da
+  importação do snapshot, como `source.origin`) — nulo é desligado.
+- Os controlados são texto validado na aplicação
+  (`src/core/candidate-public-facts.ts`), sem CHECK: acrescentar valor não
+  exige migração não aditiva, e o que a leitura não reconhece não sai.
+- Gravação por `setPublicFacts` (as catorze colunas num `UPDATE` só); leitura
+  pública por `publicFactsFrom()`, dentro de `publicProfile()`.
+- A importação do snapshot legado escreve nulo nos valores e `false` nos
+  opt-ins (`postSnapshotColumns`).
+- Estes campos são apresentação: o scorer não os lê, e `profile.yaml`
+  continua dono do matching. Pretensão salarial não é um deles.
+
 ### Candidato criado pela própria conta
 
 Só o candidato do dono nasce do `profile/profile.yaml` (`syncCandidateFromProfile`,

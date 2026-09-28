@@ -234,14 +234,20 @@ antes da mesa. Nome, headline, localização e links passam por
 `containsContact()` e são esvaziados quando trazem e-mail ou telefone. Skill
 confirmada (#326) leva `category` e `level` na lista de permissão — os dois
 passam pelo mesmo `containsContact()` do nome, e a skill inteira some se
-qualquer um dos três (`name`, `category`, `level`) trouxer contato.
+qualquer um dos três (`name`, `category`, `level`) trouxer contato. Os fatos
+opt-in (#327) — modelo de trabalho, nível, disponibilidade, prazo, aceita
+mudar, área, idiomas — saem numa chave só, `facts`, cada um com o próprio
+consentimento, desligado por padrão (nulo também é desligado);
+`publicFactsFrom()` descarta valor controlado desconhecido e esvazia área e
+idiomas com contato (`containsContact()`) ou pretensão (`containsPay()`).
+Pretensão salarial não é fato nem opt-in.
 
 **Endereço.** `/p/` lê `public_slug`, nunca o `slug` interno; trocar o endereço
 faz o antigo responder 404 sem redirecionar (ADR 0024).
 
 Origem: AGENTS (invariante "`/p/[slug]`"). Prova:
 `tests/public-profile.test.ts`, `tests/public-name.test.ts`,
-`tests/public-slug.test.ts`.
+`tests/public-slug.test.ts`, `tests/candidate-public-facts.test.ts`.
 
 <a id="g22"></a>
 ## G22 — Perfil não público responde 404, não 403

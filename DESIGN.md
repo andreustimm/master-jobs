@@ -562,6 +562,13 @@ Hero photography sits in `{rounded.xl}` (16px) frames with no border. Product fa
 - Card is omitted entirely when the underlying section has no content — no "No data available" placeholder
 - Used for: Résumé / Experience / Education cards on the public profile (`/p/[slug]`)
 
+**`fact-strip`** + **`card-glance`** — opt-in facts on the public profile (Master Jobs addition, #327)
+- Both are a `<dl>` of label/value pairs: label in `type-micro` muted, value in `type-body-sm`, `break-words` so a long free-text value wraps instead of widening the page at 375px
+- `fact-strip`: the hairline-bordered row (`border-y`, `py-3`, `gap-x-8`) under the headline — location plus, when opted in, work model, experience level and availability; wraps to several lines on mobile
+- `card-glance` ("At a glance"): same card primitive as `card-section-eyebrow`, first item of the sidebar above the skills, stacked pairs (`gap-3`) — field, languages, start timeframe, open to relocation
+- Controlled values are translated labels; only text the person typed (location, field, languages) carries `data-user-content`
+- Nothing that is off renders: no "Not specified" placeholder, and the strip or card disappears entirely when empty
+
 ### Inputs & Forms
 
 **`text-input`** + **`text-input-focused`**

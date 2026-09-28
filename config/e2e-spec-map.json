@@ -400,6 +400,16 @@
       ]
     },
     {
+      "id": "public-facts",
+      "modules": [
+        "tests/e2e/ui/public-facts.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/candidate"
+      ]
+    },
+    {
       "id": "search-relevance",
       "modules": [
         "tests/e2e/ui/search-relevance.mjs",
