@@ -141,6 +141,40 @@ export const CENARIO_VALIDA_SESSAO: Cenario = { nome: "sessão", caminho: "/acco
  * `/login` (renderiza e toca o banco uma vez, bom sinal de função fria), o
  * estático `/offline.html` (CDN, sem função) e `/jobs` sem cookie, que o proxy
  * responde com 307 sem renderizar. Com sessão, `/jobs` com os filtros comuns.
+ *
+ * Dois cenários exercitam otimizações específicas que os quatro anteriores
+ * não cobriam. Nenhum dos dois se prova pelo TTFB nem pelo `total p50` deste
+ * relatório: `/jobs` tem `loading.tsx` desde a #217, e o que este script mede
+ * de fora é a chegada do esboço, não o custo real de `board`/`facets`/`tail`
+ * no servidor. O critério de aceite dos dois é o estágio da linha `perf`
+ * interna, só disponível com `JHO_PERF_LOG=1` — ver "Cenário salarial (#215)
+ * e cache de facetas (#216)" em `docs/engineering/performance-buscas.md`.
+ *
+ * - **Faixa e ordenação salarial (#215).** `pay`/`payMax`/`cur`/`per` (faixa)
+ *   e `sort=comp` (ordenação) são os dois jeitos de `payActive` virar `true`
+ *   em `app/jobs/jobs-data.ts`, que é o que aciona a normalização
+ *   compartilhada de remuneração otimizada pela PR #192 (`listBoardPage` e
+ *   `countHiddenByPayRange` em `src/core/db/repo.ts`, estágios `board` e
+ *   `tail`). Sem eles, nenhum cenário deste roteiro tocava esse caminho.
+ *   Moeda e período fixos (`USD`/`month`) para a amostra não variar pela
+ *   moeda padrão da trilha de quem roda o script.
+ * - **Página 2 com a mesma faceta (#216).** `FacetQuery`
+ *   (`src/contexts/matching/app/board-facets.ts`) não inclui `page`: a chave
+ *   do cache de facetas do cenário "jobs fit=45 + página 2" é IDÊNTICA à do
+ *   cenário "jobs fit=45" logo acima — e também à de "jobs padrão", porque
+ *   `boundedFit(undefined, 45)` em `app/filter-state.ts` já cai em `fit=45`
+ *   por padrão. Por isso "jobs fit=45" e "jobs fit=45 + página 2" são os DOIS
+ *   PRIMEIROS cenários autenticados da lista — antes de "jobs padrão" e de
+ *   qualquer outro que bata na mesma chave: se "jobs padrão" viesse antes, a
+ *   leitura de "jobs fit=45" já nasceria com o cache quente (povoado por
+ *   "jobs padrão"), e o critério "fit=45 fria acima de 5 ms" reprovaria mesmo
+ *   com o cache funcionando corretamente. Nesta ordem, "jobs fit=45" é a primeira
+ *   requisição a tocar essa chave (fria) e "página 2" é a segunda (deve vir
+ *   do cache) — teste de ordem em `tests/perf-producao.test.ts`. Isso só
+ *   serve para GERAR, em produção, as duas requisições próximas no tempo que
+ *   o dono precisa achar no log (`--logs`) e comparar pelo estágio `facets`;
+ *   a medição de fora (TTFB, total) não distingue cache de instância já
+ *   aquecida por outro motivo.
  */
 export function montarCenarios(opcoes: { comSessao: boolean; termo: string }): Cenario[] {
   const publicos: Cenario[] = [
@@ -152,10 +186,15 @@ export function montarCenarios(opcoes: { comSessao: boolean; termo: string }): C
   const termo = encodeURIComponent(opcoes.termo);
   return [
     ...publicos,
-    { nome: "jobs padrão", caminho: "/jobs", sessao: true },
+    // Os dois primeiros autenticados, nesta ordem: nenhum outro cenário desta
+    // lista pode bater na chave de facetas de `fit=45` antes deles (#216).
     { nome: "jobs fit=45", caminho: "/jobs?fit=45", sessao: true },
+    { nome: "jobs fit=45 + página 2 (facetas iguais)", caminho: "/jobs?fit=45&page=2", sessao: true },
+    { nome: "jobs padrão", caminho: "/jobs", sessao: true },
     { nome: "jobs fit=45 + remoto", caminho: "/jobs?fit=45&workMode=remote", sessao: true },
     { nome: "jobs fit=45 + termo", caminho: `/jobs?fit=45&q=${termo}`, sessao: true },
+    { nome: "jobs fit=45 + faixa salarial", caminho: "/jobs?fit=45&pay=3000&payMax=15000&cur=USD&per=month", sessao: true },
+    { nome: "jobs fit=45 + ordenar por salário", caminho: "/jobs?fit=45&sort=comp", sessao: true },
   ];
 }
 

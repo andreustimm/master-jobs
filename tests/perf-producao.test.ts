@@ -82,13 +82,70 @@ describe("medição de produção", () => {
     expect(publicos.every((c) => !c.sessao)).toBe(true);
     const todos = montarCenarios({ comSessao: true, termo: "c++ & go" });
     expect(todos.filter((c) => c.sessao).map((c) => c.caminho)).toEqual([
-      "/jobs",
       "/jobs?fit=45",
+      "/jobs?fit=45&page=2",
+      "/jobs",
       "/jobs?fit=45&workMode=remote",
       "/jobs?fit=45&q=c%2B%2B%20%26%20go",
+      "/jobs?fit=45&pay=3000&payMax=15000&cur=USD&per=month",
+      "/jobs?fit=45&sort=comp",
     ]);
     // O nome do cenário vai para o relatório; o termo nunca.
     expect(todos.map((c) => c.nome).join(" ")).not.toContain("c++");
+  });
+
+  // #215: nenhum cenário anterior acionava a normalização salarial
+  // compartilhada da PR #192 — nem faixa (`pay`/`payMax`) nem ordenação
+  // (`sort=comp`), os dois jeitos de `payActive` virar `true` em
+  // `app/jobs/jobs-data.ts`.
+  it("mede faixa e ordenação salarial, os dois gatilhos de payActive", () => {
+    const todos = montarCenarios({ comSessao: true, termo: "typescript" });
+    const faixa = todos.find((c) => c.caminho.includes("pay=") && c.caminho.includes("payMax="));
+    const ordenado = todos.find((c) => c.caminho.includes("sort=comp"));
+    expect(faixa).toBeDefined();
+    expect(ordenado).toBeDefined();
+    expect(faixa!.sessao).toBe(true);
+    expect(ordenado!.sessao).toBe(true);
+  });
+
+  // #216: `page` não entra na chave de `FacetQuery`
+  // (`src/contexts/matching/app/board-facets.ts`), então "jobs fit=45" e
+  // "jobs fit=45 + página 2" têm a MESMA chave de facetas. O TTFB e o total
+  // externos deste roteiro NÃO provam reaproveitamento (a amostra 1 de
+  // "fit=45" já é cache dentro do próprio cenário, e `/jobs` tem
+  // `loading.tsx` — o TTFB mede o esboço, não `facets`). O par de cenários só
+  // serve para GERAR, em sequência e perto no tempo, as duas requisições que
+  // o dono compara pelo estágio `facets` da linha `perf` (`JHO_PERF_LOG=1`).
+  it("o cenário de página 2 usa os mesmos filtros de facetas do cenário fit=45 anterior", () => {
+    const todos = montarCenarios({ comSessao: true, termo: "typescript" });
+    const semPagina = todos.findIndex((c) => c.caminho === "/jobs?fit=45");
+    const comPagina = todos.findIndex((c) => c.caminho === "/jobs?fit=45&page=2");
+    expect(semPagina).toBeGreaterThanOrEqual(0);
+    // Precisa vir logo em seguida: é o que aproxima os dois pedidos no tempo
+    // no roteiro real, que percorre os cenários em ordem — condição para o
+    // dono achá-los próximos no log, não prova de cache por si só.
+    expect(comPagina).toBe(semPagina + 1);
+    const semQuery = (caminho: string) => caminho.split("?")[1] ?? "";
+    const paramsSemPagina = new URLSearchParams(semQuery(todos[semPagina]!.caminho));
+    const paramsComPagina = new URLSearchParams(semQuery(todos[comPagina]!.caminho));
+    paramsComPagina.delete("page");
+    expect(paramsComPagina.toString()).toBe(paramsSemPagina.toString());
+  });
+
+  // #216 (revisão L1): "jobs padrão" também resolve fit=45
+  // (`boundedFit(undefined, 45)` em `app/filter-state.ts`), então tem a MESMA
+  // chave de facetas de "jobs fit=45". Se viesse antes, "jobs fit=45" já
+  // nasceria quente e o critério "fit=45 fria acima de 5 ms" reprovaria com
+  // o cache funcionando. Por isso o par precisa ser o PRIMEIRO e o SEGUNDO
+  // cenário autenticado da lista — nenhum outro cenário com a mesma chave
+  // pode vir antes.
+  it("o par fit=45 / página 2 é o 1º e o 2º cenário autenticado, antes de qualquer outro com a mesma chave", () => {
+    const autenticados = montarCenarios({ comSessao: true, termo: "typescript" }).filter((c) => c.sessao);
+    expect(autenticados[0]!.caminho).toBe("/jobs?fit=45");
+    expect(autenticados[1]!.caminho).toBe("/jobs?fit=45&page=2");
+    // "jobs padrão" (mesma chave de facetas) só pode vir DEPOIS do par.
+    const indicePadrao = autenticados.findIndex((c) => c.caminho === "/jobs");
+    expect(indicePadrao).toBeGreaterThan(1);
   });
 
   it("confere a sessão numa rota autenticada sem fronteira de carregamento", () => {
