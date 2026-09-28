@@ -88,15 +88,16 @@ currículo (intocado): `rate` com número em qualquer posição, unidade de temp
 ("USD15000"), milhar com espaço/apóstrofo, moeda por extenso só junto de
 número, e número de norma (ISO/IEC/IEEE/RFC/NBR) retirado antes.
 
-**Passada final L2 da #362 (fechar por segurança).** Número com
-`mil`/`thousand`/`million`/`milhões` ou com `k` é sempre valor, inteiro ou
-decimal — só `4K`/`8K` exatos, de resolução, passam; `target`/`pay`/`rate`
-só contam com número ou moeda depois, e `rate` de métrica (`frame`,
-`conversion`, `error`, `success`, `churn`, `retention`) nunca; norma só em
-maiúscula, até cinco dígitos (RFC, quatro), e nunca seguida de unidade de
-valor. Falso positivo aceito: "10 mil TPS", "1 200 pessoas", norma em
-minúscula. Limite declarado: ano sem moeda nem rótulo, número de até três
-dígitos sozinho e número por extenso passam.
+**Regra estrutural (passada L2 de `546b302`, decisão do coordenador:
+parar de caçar formatos).** A régua de valor foi substituída por
+`shortFieldProblem()`: contato → rótulo de pretensão (`containsPay()`) →
+qualquer número solto (`(?<![\p{L}\d])\d` ou três dígitos ou mais colados a
+letra), depois de retirar número de norma (sigla em maiúscula, ≤5 dígitos,
+RFC ≤4, sem contexto de valor depois e sem palavra de remuneração no campo).
+Códigos novos `areaNumber`/`languagesNumber`, com mensagem própria ("Use só
+palavras…"). Falso positivo aceito: "Streaming 4K", "8K HDR", "Dados
+2015-2020", "10 mil TPS", norma em minúscula, identificador com três dígitos
+ou mais. Limite declarado: número por extenso.
 
 ## DTO — `src/core/candidate-public.ts`
 

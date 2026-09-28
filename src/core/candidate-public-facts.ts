@@ -8,7 +8,8 @@
  *
  * Duas camadas, de propósito:
  * - `parsePublicFactsForm()` é a ENTRADA. Recusa e explica — valor fora da
- *   lista, texto longo demais, contato, pretensão salarial.
+ *   lista, texto longo demais, contato, pretensão salarial, número em área
+ *   ou idiomas (`shortFieldProblem()`).
  * - `publicFactsFrom()` é a SAÍDA, a que vale para `/p/`. Não confia na
  *   entrada: uma coluna pode ser escrita por migration, CLI ou `UPDATE` à mão,
  *   e o que ela não reconhece ou o que traz contato/pretensão não sai.
@@ -105,9 +106,11 @@ export type PublicFactsError =
   | "areaTooLong"
   | "areaContact"
   | "areaPay"
+  | "areaNumber"
   | "languagesTooLong"
   | "languagesContact"
-  | "languagesPay";
+  | "languagesPay"
+  | "languagesNumber";
 
 function member<T extends string>(list: readonly T[], value: string): value is T {
   return (list as readonly string[]).includes(value);
@@ -158,101 +161,70 @@ export function containsShortFieldContact(text: string, known: KnownContact): bo
 const CURRENCY_CODE = "(?:usd|eur|brl|gbp)";
 const CURRENCY_WORD = "(?:reais|d[óo]lar(?:es)?|dollars?|euros?)";
 const TIME_UNIT = "(?:h|hrs?|hora|hour|dia|day|m[êe]s|mo|month|yr|ano|year|semana|week)";
-const MAGNITUDE = "(?:mil|thousand|million|milh[õo]es)";
 
 /**
- * Número de norma técnica ("ISO 27001", "ISO/IEC 42001", "IEC 61131", "RFC
- * 9110", "NBR 5410") sai antes da régua de valor: quatro dígitos que não são
- * ano seriam lidos como dinheiro, e a área "Segurança da informação (ISO
- * 27001)" seria recusada com a mensagem de pretensão.
- *
- * Estreito de propósito, porque o que ele retira a régua não vê: sigla em
- * MAIÚSCULA (como a norma é escrita — "iso 30000" continua valor), até cinco
- * dígitos (RFC, até quatro), com uma parte opcional (":2022", "-3"), e nunca
- * quando o número vem seguido de unidade de tempo, moeda, `k` ou `mil`
- * ("NBR 20000/mês" é valor).
+ * Número de norma técnica ("ISO 27001", "ISO 27001:2022", "ISO/IEC 42001",
+ * "IEC 61131", "RFC 9110", "NBR 5410"): a única exceção à regra de número dos
+ * campos curtos. Estreita de propósito, porque o que ela retira a regra não
+ * vê — sigla em MAIÚSCULA ("iso 9001" continua número), até cinco dígitos
+ * (RFC, até quatro), uma parte opcional (":2022", "-3"), e nunca quando vem
+ * seguida de unidade de tempo, moeda, `k` ou `mil` ("NBR 20000/mês").
  */
 const STANDARD_NUMBER =
   /\b(?:(?:ISO|IEC|IEEE|NBR)(?: ?\/ ?(?:ISO|IEC|IEEE))* ?[:-]? ?\d{1,5}|RFC ?[:-]? ?\d{1,4})(?:[-:.]\d{1,4})?(?!\d)/gu;
 const AMOUNT_AFTER = new RegExp(
-  `^ ?(?:/ ?${TIME_UNIT}\\b|${CURRENCY_CODE}\\b|${CURRENCY_WORD}\\b|[$€£¥]|R\\$|k\\b|${MAGNITUDE}\\b)`,
+  `^ ?(?:/ ?${TIME_UNIT}\\b|${CURRENCY_CODE}\\b|${CURRENCY_WORD}\\b|[$€£¥]|R\\$|k\\b|(?:mil|thousand|million|milh[õo]es)\\b)`,
   "iu",
 );
 
+/**
+ * Palavra de remuneração em qualquer lugar do campo. Não recusa nada sozinha
+ * — "Payments", "target: B2B" são área —; só impede a exceção de norma: com
+ * ela no campo, "Piso ISO 15000" não vira "Piso". Na dúvida, o número fica
+ * e o campo é recusado.
+ */
+const PAY_HINT =
+  /\b(?:piso|pretens|expectativa|sal[áa]ri|salar|remunera|compensa|target|pay|rate|hourly|daily|di[áa]ri|mensa|per diem|valor|fee|ganho)/iu;
+
 function withoutStandardNumbers(text: string): string {
+  if (PAY_HINT.test(text)) return text;
   return text.replace(STANDARD_NUMBER, (match: string, offset: number) =>
     AMOUNT_AFTER.test(text.slice(offset + match.length, offset + match.length + 16)) ? match : " ",
   );
 }
 
 /**
- * Valor com cara de dinheiro num campo CURTO (área, idiomas). Régua própria,
- * separada do `MONEY_LIKE` do currículo: lá "1.200 clientes" é métrica e fica;
- * aqui não há motivo para dinheiro, e na dúvida o campo fecha.
+ * A regra estrutural dos campos curtos (passada L2 da #362, decisão do
+ * coordenador: parar de caçar formatos de valor). Área e idiomas são
+ * palavras; número não tem lugar neles, e todo formato de piso ("20k", "30
+ * mil", "150/h", "USD15000", "600 a diária") tem número.
  *
- * Conta como valor:
- * - símbolo de moeda (`$`, `€`, `£`, `¥`, `R$`);
- * - código de moeda colado ou vizinho de número ("USD15000", "20k USD");
- * - moeda por extenso só vizinha de número ("90 dollars", "15000 euros") — a
- *   palavra solta ("euros e câmbio", "reais problemas") não;
- * - número com `mil`, `thousand`, `million`, `milhões`, SEMPRE ("30 mil",
- *   "1 million", "12,5 mil");
- * - número com `k`, SEMPRE ("20k", "12,5k", "1.5k/h", "4k"), menos
- *   exatamente `4K` ou `8K` maiúsculos sem decimal — resolução de vídeo
- *   (`amountWithK`);
- * - número por unidade de tempo ("90/hr", "150/mo", "150 por hora", "90 an
- *   hour");
- * - milhar com separador, inclusive espaço e apóstrofo ("30 000", "30'000");
- * - quatro dígitos ou mais que não sejam ano, fora número de norma;
- * - rótulo forte de remuneração seguido de dois-pontos ou número ("Piso 20k",
- *   "Expectativa: 20k", "Salário:");
- * - `target`, `pay` ou `rate` (com `hourly`/`daily`/`day` opcional) só quando
- *   vem número ou moeda depois, com dois-pontos ou não ("Rate 90", "IA, rate:
- *   150", "Target: USD 180k") — "target: B2B" não; e `rate` depois de
- *   `frame`, `conversion`, `error`, `success`, `churn` ou `retention` nunca.
- *
- * **Falso positivo aceito** (fechar por segurança): "10 mil TPS", "Equipes de
- * 1 200 pessoas", norma em minúscula ("iso 27001") e `rate`/`pay`/`target`
- * seguidos de número fora das exceções acima são recusados com a mensagem de
- * pretensão.
- *
- * **Limite declarado:** ano sem moeda nem rótulo ("Dados 2000"), número de três
- * dígitos ou menos sem nada em volta ("150") e número por extenso ("vinte
- * mil") passam.
+ * Recusa o início de uma sequência de dígitos que não esteja colada a uma
+ * letra antes dela, e três dígitos ou mais colados a letra. Dígito curto
+ * colado a letra é identificador e passa: "Web3", "K8s", "S3", "B2B", "C1",
+ * "B2", "IPv6", "Java21".
  */
-const SHORT_FIELD_AMOUNT = new RegExp(
-  [
-    "[$€£¥]|R\\$",
-    `\\b${CURRENCY_CODE} ?\\d`,
-    `\\d ?${CURRENCY_CODE}\\b`,
-    `\\d ?${CURRENCY_WORD}\\b`,
-    `\\d(?:[.,]\\d+)? ?${MAGNITUDE}\\b`,
-    `\\d ?/ ?${TIME_UNIT}\\b`,
-    `\\d (?:por|per|an?) ${TIME_UNIT}\\b`,
-    "(?<![\\d.,])\\d{1,3}(?:[., '’]\\d{3})+(?!\\d)",
-    "(?<![\\d.,])(?!(?:19|20)\\d{2}(?!\\d))\\d{4,}",
-    "\\b(?:piso|pretens(?:[ãa]o|[õo]es)|expectativa|sal[áa]rio|salary|remunera[çc][ãa]o|compensation)\\b ?(?::|floor|\\d)",
-    `(?<!\\b(?:frame|conversion|error|success|churn|retention)[ -]?)\\b(?:target|pay|(?:(?:hourly|daily|day) )?rate)\\b ?(?:(?::|floor) ?)?(?:\\d|[$€£¥]|R\\$|${CURRENCY_CODE}\\b)`,
-  ].join("|"),
-  "iu",
-);
+const LOOSE_NUMBER = /(?<![\p{L}\d])\d|\p{L}\d{3,}/u;
 
-/** Número com `k`: sempre valor, menos a resolução `4K`/`8K` escrita exatamente assim. */
-const AMOUNT_WITH_K = /(?<![\d.,])\d+(?:[.,]\d+)? ?k\b/giu;
-
-function amountWithK(text: string): boolean {
-  return [...text.matchAll(AMOUNT_WITH_K)].some(([match]) => match !== "4K" && match !== "8K");
-}
+/** O motivo de recusar um campo curto, na ordem em que a tela o explica. */
+export type ShortFieldProblem = "contact" | "pay" | "number";
 
 /**
- * Pretensão num campo curto: o rótulo do currículo (`containsPay()`), número
- * com `k` ou o valor de `SHORT_FIELD_AMOUNT`, sobre espaço colapsado — cada
- * ` ?` consome no máximo um caractere, e as expressões ficam lineares.
+ * Por que um campo curto (área, idiomas) não pode sair — ou `null`.
+ *
+ * 1. Contato primeiro: a mensagem de contato é a que diz o que tirar.
+ * 2. Rótulo de pretensão (`containsPay()`, a régua do CV), mesmo sem número
+ *    ("Pretensão a combinar").
+ * 3. Número, depois de retirar o número de norma.
+ *
+ * Tudo sobre espaço colapsado: cada expressão fica linear.
  */
-export function containsShortFieldPay(text: string): boolean {
+export function shortFieldProblem(text: string, known: KnownContact): ShortFieldProblem | null {
   const collapsed = text.normalize("NFC").replace(/\s+/g, " ");
-  if (containsPay(collapsed) || amountWithK(collapsed)) return true;
-  return SHORT_FIELD_AMOUNT.test(withoutStandardNumbers(collapsed));
+  if (containsShortFieldContact(collapsed, known)) return "contact";
+  if (containsPay(collapsed)) return "pay";
+  if (LOOSE_NUMBER.test(withoutStandardNumbers(collapsed))) return "number";
+  return null;
 }
 
 const FREE_TEXT_MAX = { area: AREA_MAX, languages: LANGUAGES_MAX } as const;
@@ -264,8 +236,10 @@ function freeText(field: "area" | "languages", raw: string, known: KnownContact)
   if (value === null) return { ok: true, value: null };
   // O teto vem antes dos filtros: nenhuma expressão roda sobre texto longo.
   if (value.length > FREE_TEXT_MAX[field]) return { ok: false, code: `${field}TooLong` };
-  if (containsShortFieldContact(value, known)) return { ok: false, code: `${field}Contact` };
-  if (containsShortFieldPay(value)) return { ok: false, code: `${field}Pay` };
+  const problem = shortFieldProblem(value, known);
+  if (problem === "contact") return { ok: false, code: `${field}Contact` };
+  if (problem === "pay") return { ok: false, code: `${field}Pay` };
+  if (problem === "number") return { ok: false, code: `${field}Number` };
   return { ok: true, value };
 }
 
@@ -338,7 +312,7 @@ export function publicFactsFrom(row: StoredFacts, known: KnownContact = {}): Pub
     // Acima do teto não sai, e nenhuma expressão roda sobre ele: o valor só
     // chega longo por fora da gravação, e texto longo é onde o custo mora.
     if (text === null || text.length > FREE_TEXT_MAX[field]) return null;
-    return containsShortFieldContact(text, known) || containsShortFieldPay(text) ? null : text;
+    return shortFieldProblem(text, known) === null ? text : null;
   };
 
   return {

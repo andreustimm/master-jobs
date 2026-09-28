@@ -6,10 +6,9 @@ import {
   LANGUAGES_MAX,
   START_TIMEFRAMES,
   WORK_MODELS,
-  containsShortFieldContact,
-  containsShortFieldPay,
   parsePublicFactsForm,
   publicFactsFrom,
+  shortFieldProblem,
   type PublicFactsFormInput,
   type StoredFacts,
 } from "../src/core/candidate-public-facts.ts";
@@ -271,50 +270,6 @@ describe("saída: publicFactsFrom", () => {
   });
 });
 
-/**
- * Revisão L2 da PR #362 (FIX_BEFORE_SHIP): valor sem rótulo de pretensão
- * passava pelos dois filtros. Num campo curto de área ou idiomas não há
- * motivo para dinheiro: o valor (`containsShortFieldPay()`) é recusado na
- * entrada e esvaziado na saída.
- */
-const UNLABELED_PAY = [
-  "Piso 20k",
-  "Expectativa: 20k",
-  "Target: USD 180k",
-  "Min 150k",
-  "Remote only, $150/h",
-  "Rate 90/h",
-  "Pay 20k",
-  "USD 15,000/mês",
-  "Engenharia de dados — 20k USD/mês",
-];
-
-describe("valor sem rótulo (revisão L2 #362)", () => {
-  it("MAJOR entrada recusa cada contraexemplo com a mensagem de pretensão, nos dois campos", () => {
-    for (const text of UNLABELED_PAY) {
-      expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }), text).toEqual({ ok: false, code: "areaPay" });
-      expect(parsePublicFactsForm({ ...EMPTY_FORM, languages: text }), text).toEqual({
-        ok: false,
-        code: "languagesPay",
-      });
-    }
-  });
-
-  it("MAJOR saída esvazia cada contraexemplo gravado direto no banco com opt-in ligado", () => {
-    for (const text of UNLABELED_PAY) {
-      const facts = publicFactsFrom({ ...FULL_ROW, area: text, languages: text });
-      expect(facts.area, text).toBeNull();
-      expect(facts.languages, text).toBeNull();
-    }
-  });
-
-  it("MAJOR o detector de valor não pega área nem idioma comuns, nem ano", () => {
-    for (const text of ["Inglês C1", "Engenharia de dados desde 2015", "Português (nativo), Inglês (fluente)", "Web3 e IA"]) {
-      expect(containsShortFieldPay(text), text).toBe(false);
-    }
-  });
-});
-
 describe("telefone sem marca nos campos curtos (revisão L2 #362)", () => {
   const PHONES = ["WhatsApp 11 91234-5678", "tel 11 9 1234 5678", "Inglês · 11.91234.5678", "(11) 91234 5678"];
 
@@ -334,8 +289,11 @@ describe("telefone sem marca nos campos curtos (revisão L2 #362)", () => {
     }
   });
 
-  it("MINOR 4 intervalo de anos não é telefone", () => {
-    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: "Dados, 2015-2020" }).ok).toBe(true);
+  it("MINOR 4 intervalo de anos não é telefone (é número: outra recusa)", () => {
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: "Dados, 2015-2020" })).toEqual({
+      ok: false,
+      code: "areaNumber",
+    });
   });
 });
 
@@ -360,8 +318,8 @@ describe("custo em entrada longa (revisão L2 #362)", () => {
     const hostile = `${"\n".repeat(80_000)}x`;
     const started = performance.now();
     expect(containsPay(hostile)).toBe(false);
-    expect(containsShortFieldPay(hostile)).toBe(false);
-    expect(containsShortFieldContact(hostile, {})).toBe(false);
+    expect(shortFieldProblem(hostile, {})).toBeNull();
+    expect(shortFieldProblem(`${"1".repeat(80_000)}x`, {})).toBe("contact");
     // Quadrático levava ~3,6 s; linear fica em milissegundos. Folga larga
     // para máquina de CI ocupada, ainda uma ordem de grandeza abaixo.
     expect(performance.now() - started).toBeLessThan(300);
@@ -380,141 +338,165 @@ describe("custo em entrada longa (revisão L2 #362)", () => {
 });
 
 /**
- * Re-revisão L2 da #362 (SHIP com três Minor): o detector dos campos curtos
- * é próprio — não o `MONEY_LIKE` do currículo —, para cobrir os formatos que
- * passavam sem recusar área legítima com mensagem enganosa.
+ * A regra estrutural dos campos curtos (passadas L2 da #362; decisão do
+ * coordenador: parar de caçar formatos de valor). Área e idiomas são
+ * palavras: contato é recusado primeiro, rótulo de pretensão depois, e então
+ * qualquer número solto — exceto número de norma em maiúscula e dígito curto
+ * colado a letra (identificador).
  */
-describe("re-revisão L2 #362: formatos de valor nos campos curtos", () => {
-  const assertRefused = (text: string) => {
-    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }), text).toEqual({ ok: false, code: "areaPay" });
-    expect(parsePublicFactsForm({ ...EMPTY_FORM, languages: text }), text).toEqual({
-      ok: false,
-      code: "languagesPay",
-    });
-    expect(publicFactsFrom({ ...FULL_ROW, area: text }).area, text).toBeNull();
-  };
-
-  it("Minor 1: `rate` com dois-pontos ou número em qualquer posição é pretensão", () => {
-    for (const text of ["Dados\nRate: 150", "IA, rate: 150", "Dados · daily rate 150", "Rate 90"]) assertRefused(text);
-  });
-
-  it("Minor 2: unidade de tempo, moeda colada, milhar com espaço/apóstrofo, moeda por extenso", () => {
-    for (const text of [
-      "90/hr",
-      "90/hrs",
-      "90/yr",
-      "150/mo",
-      "150 por hora",
-      "150 per hour",
-      "90 an hour",
-      "USD15000",
-      "EUR15000",
-      "BRL30000",
-      "Piso 30 000",
-      "30'000",
-      "90 dollars",
-    ]) {
-      assertRefused(text);
+describe("regra estrutural dos campos curtos (#362)", () => {
+  const refused = (text: string) => {
+    for (const field of ["area", "languages"] as const) {
+      const parsed = parsePublicFactsForm({ ...EMPTY_FORM, [field]: text });
+      expect(parsed.ok, `${field}: ${text}`).toBe(false);
+      if (!parsed.ok) expect([`${field}Pay`, `${field}Number`], `${field}: ${text}`).toContain(parsed.code);
     }
-  });
-
-  it("Minor 3: área legítima com número de norma, resolução, moeda por extenso solta passa", () => {
-    for (const text of [
-      "Segurança da informação (ISO 27001)",
-      "Qualidade ISO 9001",
-      "IA (ISO/IEC 42001)",
-      "Automação industrial IEC 61131",
-      "Streaming 4K",
-      "Reais problemas de dados",
-      "Projetos reais de IA",
-      "Fintech / euros e câmbio",
-    ]) {
-      expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }).ok, text).toBe(true);
-      expect(publicFactsFrom({ ...FULL_ROW, area: text }).area, text).toBe(text);
-    }
-  });
-
-  it("Minor 3: contato é conferido antes de valor — telefone com hífen solto leva a mensagem de contato", () => {
-    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: "11 91234 - 5678" })).toEqual({
-      ok: false,
-      code: "areaContact",
-    });
-    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: "Dados, 2015 - 2020" }).ok).toBe(true);
-  });
-
-  it("Minor 3: moeda por extenso colada a número e 'mil' com moeda continuam valor", () => {
-    for (const text of ["30 mil reais", "15000 euros", "R$ 30 mil", "Piso 2k USD"]) assertRefused(text);
-  });
-});
-
-/**
- * Passada final L2 da #362 (FIX_BEFORE_SHIP, "fechar por segurança"): `mil` e
- * `k` com número são SEMPRE valor — menos `4K`/`8K` exatos, resolução —;
- * `target`/`pay`/`rate` só com número ou moeda depois; norma só em maiúscula,
- * com número curto e sem unidade de valor depois.
- */
-describe("passada final L2 #362", () => {
-  const assertRefused = (text: string) => {
-    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }), text).toEqual({ ok: false, code: "areaPay" });
-    expect(publicFactsFrom({ ...FULL_ROW, area: text }).area, text).toBeNull();
+    const out = publicFactsFrom({ ...FULL_ROW, area: text, languages: text });
+    expect(out.area, text).toBeNull();
+    expect(out.languages, text).toBeNull();
   };
-  const assertAccepted = (text: string) => {
+  const accepted = (text: string) => {
     expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }).ok, text).toBe(true);
     expect(publicFactsFrom({ ...FULL_ROW, area: text }).area, text).toBe(text);
   };
 
-  it("MAJOR: 'mil'/'thousand'/'million' e 'k' com número, inteiro ou decimal, são valor", () => {
+  // Todos os contraexemplos de piso das rodadas de revisão.
+  const PAY_COUNTEREXAMPLES = [
+    // revisão L2, os 9 originais
+    "Piso 20k",
+    "Expectativa: 20k",
+    "Target: USD 180k",
+    "Min 150k",
+    "Remote only, $150/h",
+    "Rate 90/h",
+    "Pay 20k",
+    "USD 15,000/mês",
+    "Engenharia de dados — 20k USD/mês",
+    // re-revisão: rate em qualquer posição e os 13 formatos
+    "Dados\nRate: 150",
+    "IA, rate: 150",
+    "Dados · daily rate 150",
+    "Rate 90",
+    "90/hr",
+    "90/hrs",
+    "90/yr",
+    "150/mo",
+    "150 por hora",
+    "150 per hour",
+    "90 an hour",
+    "USD15000",
+    "EUR15000",
+    "BRL30000",
+    "Piso 30 000",
+    "30'000",
+    "90 dollars",
+    "30 mil reais",
+    "15000 euros",
+    "R$ 30 mil",
+    "Piso 2k USD",
+    // passada final: mil e k
+    "PJ 30 mil",
+    "CLT 15 mil + benefícios",
+    "Dados — 30 mil/mês",
+    "30 mil por mês",
+    "30 mil mensais",
+    "30mil",
+    "15 mil",
+    "Dados 20 mil líquido",
+    "15 thousand",
+    "1 million",
+    "12,5k",
+    "7.5k",
+    "Dados — 12,5k/mês",
+    "1.5k/h",
+    "9k/mês",
+    "Pay 4k",
+    "4.5K",
+    "Target 150",
+    "daily rate: $500",
+    "RFC 15000",
+    "NBR 20000/mês",
+    "iso 30000",
+    "Dados (ISO 150000)",
+    // esta rodada
+    "8K USD",
+    "4K/mês",
+    "150 hourly",
+    "150 mensais",
+    "diária 150",
+    "600 a diária",
+    "150 p/h",
+    "150 per diem",
+    "15kUSD",
+    "Piso ISO 15000",
+  ];
+
+  it("todo contraexemplo de piso das rodadas é recusado na entrada e esvaziado na saída", () => {
+    for (const text of PAY_COUNTEREXAMPLES) refused(text);
+  });
+
+  it("palavras, identificadores e número de norma passam", () => {
     for (const text of [
-      "PJ 30 mil",
-      "CLT 15 mil + benefícios",
-      "Dados — 30 mil/mês",
-      "30 mil por mês",
-      "30 mil mensais",
-      "30mil",
-      "15 mil",
-      "Dados 20 mil líquido",
-      "15 thousand",
-      "1 million",
-      "12,5k",
-      "7.5k",
-      "Dados — 12,5k/mês",
-      "1.5k/h",
-      "9k/mês",
-      "Pay 4k",
-      "4.5K",
+      "Dados & IA",
+      "Inglês C1",
+      "Espanhol B2",
+      "Java/Go",
+      "Web3",
+      "K8s",
+      "S3 e IPv6",
+      "Java21",
+      "ISO 27001",
+      "ISO 27001:2022",
+      "ISO/IEC 42001",
+      "IEC 61131",
+      "RFC 9110",
+      "Segurança da informação (ISO 27001)",
+      "Marketing (target: B2B)",
+      "Growth (conversion rate)",
+      "Projetos reais de IA",
+      "euros e câmbio",
     ]) {
-      assertRefused(text);
+      accepted(text);
     }
   });
 
-  it("MAJOR: só '4K' e '8K' exatos, de resolução, passam", () => {
-    assertAccepted("Streaming 4K");
-    assertAccepted("Vídeo 8K e HDR");
+  it("número solto é recusado com a mensagem de número, não a de dinheiro", () => {
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: "15 mil" })).toEqual({ ok: false, code: "areaNumber" });
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, languages: "Inglês 10 anos" })).toEqual({
+      ok: false,
+      code: "languagesNumber",
+    });
   });
 
-  it("MAJOR, falso positivo aceito: 'mil' de volume é recusado com a mensagem de pretensão", () => {
-    assertRefused("Engenharia de dados; 10 mil TPS");
+  it("rótulo de pretensão, mesmo sem número, é recusado como pretensão", () => {
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: "Pretensão a combinar" })).toEqual({
+      ok: false,
+      code: "areaPay",
+    });
   });
 
-  it("MINOR 2: 'target'/'pay'/'rate' sem número ou moeda depois, e 'rate' de métrica, passam", () => {
-    assertAccepted("Marketing (target: B2B)");
-    assertAccepted("Growth (conversion rate: 3%)");
-    assertAccepted("Vídeo: frame rate 60 fps");
+  it("contato é conferido antes de número", () => {
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: "11 91234 - 5678" })).toEqual({
+      ok: false,
+      code: "areaContact",
+    });
   });
 
-  it("MINOR 2: com número ou moeda depois, continuam valor", () => {
-    for (const text of ["Target: USD 180k", "Target 150", "IA, rate: 150", "Rate 90", "daily rate: $500"]) {
-      assertRefused(text);
+  it("falso positivo aceito, declarado em G21: resolução, anos, volume e norma em minúscula", () => {
+    for (const text of ["Streaming 4K", "8K HDR", "Dados 2015-2020", "10 mil TPS", "Qualidade iso 9001"]) {
+      expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }), text).toEqual({ ok: false, code: "areaNumber" });
     }
   });
 
-  it("MINOR 2, falso positivo aceito: milhar com espaço é recusado", () => {
-    assertRefused("Equipes de 1 200 pessoas");
+  it("limite declarado: número por extenso passa", () => {
+    accepted("vinte mil");
   });
 
-  it("MINOR 3: norma só em maiúscula, número curto, sem unidade de valor depois", () => {
-    for (const text of ["RFC 15000", "NBR 20000/mês", "iso 30000", "Dados (ISO 150000)"]) assertRefused(text);
-    for (const text of ["ISO 27001", "ISO/IEC 42001", "ISO 9001:2015", "RFC 9110"]) assertAccepted(text);
+  it("shortFieldProblem devolve o motivo na ordem da tela", () => {
+    expect(shortFieldProblem("pia@local.test 20k", {})).toBe("contact");
+    expect(shortFieldProblem("Pretensão: 20k", {})).toBe("pay");
+    expect(shortFieldProblem("20k", {})).toBe("number");
+    expect(shortFieldProblem("Dados & IA", {})).toBeNull();
   });
 });
 

@@ -98,3 +98,21 @@ casos de R6–R8 davam o resultado errado: os 17 de valor eram aceitos, as 9
 Contra a versão anterior (`b7b5b81`, rodada à parte em rascunho), 24 de 25
 casos de R9–R11 davam o resultado errado. Depois: `candidate-public-facts`
 **37/37**.
+
+## Regra estrutural (passada L2 de `546b302`)
+
+A régua de formatos foi substituída por `shortFieldProblem()` (contato →
+rótulo de pretensão → número solto). R1–R11 foram consolidados em
+`describe("regra estrutural dos campos curtos (#362)")`:
+
+| # | Caso |
+|---|---|
+| R12 | Os 63 contraexemplos de piso de todas as rodadas (9 originais, rate em qualquer posição, os 13 formatos, mil/k, norma com valor, e os 10 desta rodada: "8K USD", "4K/mês", "150 hourly", "150 mensais", "diária 150", "600 a diária", "150 p/h", "150 per diem", "15kUSD", "Piso ISO 15000") recusados na entrada, nos dois campos, e esvaziados na saída |
+| R13 | Aceitos: "Dados & IA", "Inglês C1", "Espanhol B2", "Java/Go", "Web3", "K8s", "S3 e IPv6", "Java21", "ISO 27001", "ISO 27001:2022", "ISO/IEC 42001", "IEC 61131", "RFC 9110", "Segurança da informação (ISO 27001)", "Marketing (target: B2B)", "Growth (conversion rate)", "Projetos reais de IA", "euros e câmbio" |
+| R14 | Número sem rótulo → `areaNumber`/`languagesNumber`; "Pretensão a combinar" → `areaPay`; "11 91234 - 5678" → `areaContact` |
+| R15 | Falso positivo aceito, recusado com `areaNumber`: "Streaming 4K", "8K HDR", "Dados 2015-2020", "10 mil TPS", "Qualidade iso 9001" |
+| R16 | Limite declarado: "vinte mil" passa |
+| R17 | Custo: 80 mil quebras + "x" e 80 mil dígitos + "x" abaixo de 300 ms |
+
+Contra `546b302` (rascunho à parte), os 10 casos novos eram aceitos (10 de
+10). Depois: facts + action + public-profile **59/59**.

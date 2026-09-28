@@ -34,9 +34,11 @@ function factsMessages(t: Translator["t"]): Record<PublicFactsError, string> {
     areaTooLong: t("publicFacts.errorAreaTooLong", { max: AREA_MAX }),
     areaContact: t("publicFacts.errorAreaContact"),
     areaPay: t("publicFacts.errorAreaPay"),
+    areaNumber: t("publicFacts.errorAreaNumber"),
     languagesTooLong: t("publicFacts.errorLanguagesTooLong", { max: LANGUAGES_MAX }),
     languagesContact: t("publicFacts.errorLanguagesContact"),
     languagesPay: t("publicFacts.errorLanguagesPay"),
+    languagesNumber: t("publicFacts.errorLanguagesNumber"),
   };
 }
 

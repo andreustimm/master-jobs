@@ -239,20 +239,20 @@ opt-in (#327) — modelo de trabalho, nível, disponibilidade, prazo, aceita
 mudar, área, idiomas — saem numa chave só, `facts`, cada um com o próprio
 consentimento, desligado por padrão (nulo também é desligado);
 `publicFactsFrom()` descarta valor controlado desconhecido e esvazia área e
-idiomas acima do teto, com contato (`containsShortFieldContact()`: o de
-`containsContact()` com os e-mails cadastrados, mais oito dígitos ou mais com
-separador curto, fora par de anos) ou com pretensão
-(`containsShortFieldPay()`: o rótulo de `containsPay()` e uma régua de valor
-própria dos campos curtos — moeda, código ou nome de moeda junto de número,
-número com `mil`/`thousand`/`million` ou com `k` sempre (menos `4K`/`8K`
-exatos), número por unidade de tempo, milhar com separador, quatro dígitos
-que não sejam ano nem número de norma em maiúscula, e `target`/`pay`/`rate`
-seguidos de número ou moeda); a gravação recusa o mesmo, contato antes de
-valor, com o motivo. Fecha por segurança: **falso positivo aceito** em "10
-mil TPS", "1 200 pessoas" e norma em minúscula. **Limite declarado:** ano sem
-moeda nem rótulo ("Piso 2000" com rótulo sai; "Dados 2000" passa), número de
-até três dígitos sozinho e número por extenso ("vinte mil") passam.
-Pretensão salarial não é fato nem opt-in.
+idiomas acima do teto ou que não passem na regra estrutural dos campos
+curtos (`shortFieldProblem()`): contato primeiro (`containsContact()` com os
+e-mails cadastrados, mais oito dígitos ou mais com separador curto), depois
+rótulo de pretensão (`containsPay()`, mesmo sem número), depois **qualquer
+número solto** — dígito que não esteja colado a uma letra antes, ou três
+dígitos ou mais colados a letra. Passam só palavras, identificador curto
+("Web3", "K8s", "B2B", "C1", "Java21") e número de norma em maiúscula ("ISO
+27001", "ISO/IEC 42001", "RFC 9110"), este só sem contexto de valor depois e
+sem palavra de remuneração no campo. A gravação recusa o mesmo, com o motivo
+(contato, pretensão ou número). **Falso positivo aceito:** "Streaming 4K",
+"8K HDR", "Dados 2015-2020", "10 mil TPS", norma em minúscula ("Qualidade iso
+9001") e identificador com três dígitos ou mais ("H100") são recusados.
+**Limite declarado:** número por extenso ("vinte mil") passa. Pretensão
+salarial não é fato nem opt-in.
 
 **Endereço.** `/p/` lê `public_slug`, nunca o `slug` interno; trocar o endereço
 faz o antigo responder 404 sem redirecionar (ADR 0024).
