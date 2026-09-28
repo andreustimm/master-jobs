@@ -33,6 +33,7 @@ export {
   ApplicationUndoUnavailableError,
   getJobDetail,
   inFunnel,
+  lastStatusChangeFromStatus,
   PIPELINE_PAGE_SIZE,
   pipelineCounts,
   pipelineRows,

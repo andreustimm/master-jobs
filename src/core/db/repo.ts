@@ -668,7 +668,13 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
       conditions.push(sql`coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb`);
     }
     if (opts.hideApplied) {
-      conditions.push(sql`(${application.id} is null or ${application.appliedAt} is null)`);
+      // Linha legada "fora do funil" com `appliedAt` remanescente (dado de
+      // antes da correção #346, ou escrito fora do domínio) não é uma
+      // candidatura ativa: sem o `OUT_OF_FUNNEL` aqui, ela continuaria
+      // escondida mesmo depois de a pessoa tirá-la do funil de propósito.
+      conditions.push(
+        sql`(${application.id} is null or ${application.appliedAt} is null or ${application.status} = ${OUT_OF_FUNNEL})`,
+      );
     }
     // "Fora do funil" (#316) tem linha e não tem estágio: para a lista, é o
     // mesmo que nunca ter sido registrada.
@@ -1186,10 +1192,16 @@ export async function setApplicationStatusInTransaction(
       )
       .limit(1);
 
+  // Só importa para reabrir um encerramento (#346); buscado sempre, e não só
+  // quando `previous.status` fecha, porque `CLOSING` é privado do domínio e
+  // duplicar a lista aqui envelheceria sozinha. Uma linha indexada a mais por
+  // transição, num caminho de escrita de baixo volume.
+  const reopenFrom = previous ? await lastStatusChangeFromStatus(previous.id, tx) : null;
   const transition = transitionApplication(
     previous ? { status: previous.status, appliedAt: previous.appliedAt } : null,
     status,
     stamp,
+    reopenFrom,
   );
   if (!transition.ok) {
     throw new IllegalApplicationTransitionError(
@@ -1285,6 +1297,26 @@ async function commitOverSnapshot(
   if (updated.length !== 1) {
     throw new ApplicationTransitionConflictError(candidateId, jobId);
   }
+}
+
+/**
+ * O `fromStatus` do `status_change` mais recente da candidatura, ou `null`
+ * sem histórico. Quando o status atual é um encerramento, é o estágio de
+ * onde ela veio ao fechar — o limite de até onde reabrir pode voltar (#346).
+ * Aceita `tx` (dentro de uma transação) ou a conexão padrão, para servir tanto
+ * a escrita quanto a leitura sem duplicar a consulta.
+ */
+export async function lastStatusChangeFromStatus(
+  applicationId: number,
+  db: DB | DbTransaction = getDb(),
+): Promise<ApplicationStatus | null> {
+  const [row] = await db
+    .select({ fromStatus: applicationEvent.fromStatus })
+    .from(applicationEvent)
+    .where(and(eq(applicationEvent.applicationId, applicationId), eq(applicationEvent.kind, "status_change")))
+    .orderBy(desc(applicationEvent.at), desc(applicationEvent.id))
+    .limit(1);
+  return row?.fromStatus ?? null;
 }
 
 /** Os `status_change` de uma candidatura, do mais recente para o mais antigo. */

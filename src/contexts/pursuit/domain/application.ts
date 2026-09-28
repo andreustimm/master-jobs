@@ -107,25 +107,28 @@ export type TransitionDirection = "forward" | "back" | "close";
  *
  * - avançar: o próximo estágio de progresso;
  * - voltar: qualquer estágio de progresso anterior — e, de um estado de
- *   encerramento (Rejeitada, Retirada, Arquivada), qualquer estágio até
- *   "Candidatura enviada": é assim que eles reabrem;
+ *   encerramento (Rejeitada, Retirada, Arquivada), até onde a candidatura
+ *   chegou de verdade antes de fechar: é assim que eles reabrem;
  * - encerrar: arquivar de qualquer estágio de progresso; rejeitar e retirar só
  *   depois de a candidatura ter sido enviada.
  *
  * Voltar não mexe em `appliedAt`: o recuo corrige o estágio, não o fato de ter
  * aplicado. Só o desfazer da própria entrada em "Candidatura enviada" o limpa.
  *
- * Reabrir para ALÉM de "Candidatura enviada" (Triagem, Entrevista, Oferta) só
- * é uma correção de estágio quando `appliedAt` já existe: sem ele, o pulo
- * deixaria o carimbo nulo para sempre e "Voltar" mentiria sobre quando a
- * pessoa aplicou (Preparando → Arquivada → Oferta, #346). Reabrir direto para
- * "Candidatura enviada" continua sempre legítimo — o próprio carimbo se
- * autocura nesse ponto.
+ * `reopenFrom` é o `fromStatus` do evento que fechou a candidatura — o estágio
+ * de onde ela veio ao encerrar. Reabrir além DELE é ilegal, não "voltar": um
+ * registro pode nascer direto em "Entrevista" com `appliedAt` nulo de
+ * propósito (primeira observação, #346), e usar `appliedAt` para decidir
+ * bloquearia reabrir de volta a "Entrevista" depois de um "Rejeitada" —
+ * embora a pessoa não tenha ido além daquele estágio nunca. `null` (evento
+ * de fechamento sem `from`, ou histórico não fornecido) mantém a reabertura
+ * livre, como antes desta correção: sem saber de onde veio, restringir seria
+ * arbitrário, não uma correção.
  */
 export function transitionDirection(
   from: ApplicationStatus,
   to: ApplicationStatus,
-  appliedAt: string | null = null,
+  reopenFrom: ApplicationStatus | null = null,
 ): TransitionDirection | null {
   if (from === to || to === OUT_OF_FUNNEL || from === OUT_OF_FUNNEL) return null;
   const fromIndex = PROGRESS.indexOf(from);
@@ -134,7 +137,8 @@ export function transitionDirection(
     // De um encerramento só se sai reabrindo; trocar um encerramento por outro
     // não é correção de estágio, e a nota explica melhor do que a troca.
     if (!CLOSING.includes(from) || toIndex === -1) return null;
-    return toIndex <= FIRST_SENT || appliedAt !== null ? "back" : null;
+    const limitIndex = reopenFrom === null ? -1 : PROGRESS.indexOf(reopenFrom);
+    return limitIndex === -1 || toIndex <= limitIndex ? "back" : null;
   }
   if (toIndex !== -1) {
     if (toIndex < fromIndex) return "back";
@@ -150,11 +154,16 @@ export function transitionDirection(
  * application that already exists outside this system. "Fora do funil" is a
  * first observation again — the row exists, the funnel does not see it, and
  * the event records no `from`, exactly like the original entry.
+ *
+ * `reopenFrom` é o `fromStatus` do evento de encerramento — quem chama busca
+ * no histórico e repassa; sem ele (`null`), reabrir um encerramento continua
+ * livre para qualquer estágio de progresso, como antes de #346.
  */
 export function transitionApplication(
   current: ApplicationState | null,
   next: ApplicationStatus,
   at: string,
+  reopenFrom: ApplicationStatus | null = null,
 ): ApplicationTransitionResult {
   // Replayed commands are observations of the state already committed, not a
   // second transition. Keeping this a no-op prevents duplicate audit events.
@@ -163,7 +172,7 @@ export function transitionApplication(
   }
 
   const fresh = current === null || current.status === OUT_OF_FUNNEL;
-  const legal = next !== OUT_OF_FUNNEL && (fresh || transitionDirection(current.status, next, current.appliedAt) !== null);
+  const legal = next !== OUT_OF_FUNNEL && (fresh || transitionDirection(current.status, next, reopenFrom) !== null);
   if (!legal) {
     return {
       ok: false,
@@ -206,13 +215,13 @@ export type TransitionGroups = {
  */
 export function transitionGroups(
   current: ApplicationStatus | null,
-  appliedAt: string | null = null,
+  reopenFrom: ApplicationStatus | null = null,
 ): TransitionGroups {
   if (current === null || current === OUT_OF_FUNNEL) {
     return { forward: PROGRESS, back: [], close: CLOSING };
   }
   const pick = (direction: TransitionDirection) =>
-    FUNNEL_STATUSES.filter((to) => transitionDirection(current, to, appliedAt) === direction);
+    FUNNEL_STATUSES.filter((to) => transitionDirection(current, to, reopenFrom) === direction);
   return { forward: pick("forward"), back: pick("back"), close: pick("close") };
 }
 
@@ -223,11 +232,11 @@ export function transitionGroups(
  */
 export function allowedTransitions(
   current: ApplicationStatus | null,
-  appliedAt: string | null = null,
+  reopenFrom: ApplicationStatus | null = null,
 ): readonly ApplicationStatus[] {
   if (current === null || current === OUT_OF_FUNNEL) return FUNNEL_STATUSES;
   if (!(APPLICATION_STATUSES as readonly string[]).includes(current)) return [current];
-  const groups = transitionGroups(current, appliedAt);
+  const groups = transitionGroups(current, reopenFrom);
   const reachable = new Set<ApplicationStatus>([current, ...groups.forward, ...groups.back, ...groups.close]);
   return FUNNEL_STATUSES.filter((status) => reachable.has(status));
 }
@@ -238,9 +247,12 @@ export function allowedTransitions(
  * entrevista regrediria o funil — e com as arestas de volta, o domínio
  * aceitaria. Fora do funil também recusa: a pessoa tirou a vaga dali.
  *
- * A checagem é por `=== "forward" || === "close"`, não `!== "back"`: reabrir
- * além de "Candidatura enviada" sem `appliedAt` agora é ILEGAL, não "voltar"
- * (#346), e e-mail nunca deveria empurrar isso adiante silenciosamente.
+ * A checagem é por `=== "forward" || === "close"`, não `!== "back"`: sem
+ * `reopenFrom`, reabrir um encerramento é sempre "voltar" aqui (#346), mas
+ * outra ilegalidade (`null`) não pode virar "permitido" por engano só por não
+ * ser literalmente "voltar" — e-mail nunca deveria empurrar isso adiante
+ * silenciosamente. Quem chama decide se `null` (ilegal) é regressão de
+ * verdade ou outro motivo: ver `decideSuggestion`.
  */
 export function mailMayMove(current: ApplicationStatus, next: ApplicationStatus): boolean {
   if (current === OUT_OF_FUNNEL) return false;

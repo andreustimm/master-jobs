@@ -15,7 +15,7 @@ import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { application, job, mailMessage, mailSuggestion } from "../db/schema.ts";
 import { setApplicationStatusInTransaction } from "../db/repo.ts";
-import { mailMayMove, OUT_OF_FUNNEL, parseApplicationStatus } from "../../contexts/pursuit/domain/application.ts";
+import { mailMayMove, OUT_OF_FUNNEL, parseApplicationStatus, transitionDirection } from "../../contexts/pursuit/domain/application.ts";
 import { ensureImportSource } from "../ingest/manual.ts";
 import { observeRawJob } from "../ingest/observe.ts";
 import { htmlToText } from "../sources/http.ts";
@@ -399,7 +399,12 @@ export async function decideSuggestion(
     if (status !== owned.status && owned.status === OUT_OF_FUNNEL) {
       throw new OutOfFunnelSuggestionError(id, status);
     }
-    if (status !== owned.status && !mailMayMove(owned.status, status)) {
+    // "Regressiva" é só quando a direção é literalmente "voltar" — outra
+    // ilegalidade (ex.: `shortlisted` → `interviewing`, que não existe em
+    // nenhum sentido) não é o funil "andando para trás", e dizer isso seria
+    // falso. Essa cai pela recusa comum do domínio (`IllegalApplicationTransitionError`,
+    // via `setApplicationStatusInTransaction`).
+    if (status !== owned.status && !mailMayMove(owned.status, status) && transitionDirection(owned.status, status) === "back") {
       throw new RegressiveSuggestionError(id, owned.status, status);
     }
     await setApplicationStatusInTransaction(

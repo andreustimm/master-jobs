@@ -32,7 +32,9 @@ ativo também torna a triagem impraticável.
    (`reverts_event_id`). Emenda (#346): chegar a `untracked` sempre limpa
    `applied_at`, mesmo em linha legada — senão o carimbo sobrevive escondido e
    filtros como "ocultar candidatadas" continuam ocultando uma vaga que voltou
-   a ser "nunca registrada".
+   a ser "nunca registrada". O filtro também aceita `status = 'untracked'`
+   direto na consulta, para a linha que já chega pronta com o carimbo
+   remanescente (dado anterior a esta correção).
 7. Reabertura por observação `alive` limpa o arquivamento automático e preserva
    a mesma identidade/fingerprint.
 

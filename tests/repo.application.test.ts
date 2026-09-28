@@ -5,6 +5,7 @@ import {
   allowedTransitions,
   APPLICATION_STATUSES,
   FUNNEL_STATUSES,
+  IllegalApplicationTransitionError,
   mailMayMove,
   OUT_OF_FUNNEL,
   transitionApplication,
@@ -21,6 +22,7 @@ import {
   applicationTimeline,
   ApplicationTransitionConflictError,
   ApplicationUndoUnavailableError,
+  lastStatusChangeFromStatus,
   listBoard,
   pipelineCounts,
   pipelineRows,
@@ -338,11 +340,11 @@ describe("transitionApplication", () => {
 
   it("covers every persisted status pair", () => {
     // Avançar um passo; voltar para qualquer estágio anterior; encerramentos
-    // reabrem até "Candidatura enviada" mesmo sem appliedAt, e além disso só
-    // com appliedAt já gravado (#346); arquivar de todo progresso; rejeitar e
-    // retirar só depois de enviar (#316).
+    // reabrem para qualquer estágio de progresso quando não se sabe de onde
+    // vieram (`reopenFrom` omitido — comportamento anterior a #346, preservado
+    // porque restringir sem saber a história seria arbitrário); arquivar de
+    // todo progresso; rejeitar e retirar só depois de enviar (#316).
     const progress = ["backlog", "shortlisted", "preparing", "applied", "screening", "interviewing", "offer"] as const;
-    const reopenWithoutAppliedAt = ["backlog", "shortlisted", "preparing", "applied"] as const;
     const legal: Record<FunnelStatus, readonly ApplicationStatus[]> = {
       backlog: ["shortlisted", "archived"],
       shortlisted: ["backlog", "preparing", "archived"],
@@ -351,9 +353,9 @@ describe("transitionApplication", () => {
       screening: ["backlog", "shortlisted", "preparing", "applied", "interviewing", "rejected", "withdrawn", "archived"],
       interviewing: [...progress.slice(0, 5), "offer", "rejected", "withdrawn", "archived"],
       offer: [...progress.slice(0, 6), "rejected", "withdrawn", "archived"],
-      rejected: reopenWithoutAppliedAt,
-      withdrawn: reopenWithoutAppliedAt,
-      archived: reopenWithoutAppliedAt,
+      rejected: progress,
+      withdrawn: progress,
+      archived: progress,
     };
 
     for (const from of FUNNEL_STATUSES) {
@@ -388,10 +390,12 @@ describe("transitionApplication", () => {
     expect(transitionGroups("preparing").close).toEqual(["archived"]);
   });
 
-  it("reopens rejected, withdrawn and archived — even after applying — and keeps appliedAt", () => {
+  it("sem saber de onde veio, reopens rejected, withdrawn and archived — even after applying — and keeps appliedAt", () => {
+    // `reopenFrom` omitido (comportamento anterior a #346, preservado): sem
+    // histórico, reabrir continua livre para qualquer estágio de progresso.
     const applied = "2026-08-01T00:00:00.000Z";
     for (const closed of ["rejected", "withdrawn", "archived"] as const) {
-      expect(transitionGroups(closed, applied).back, closed).toEqual(["backlog", "shortlisted", "preparing", "applied", "screening", "interviewing", "offer"]);
+      expect(transitionGroups(closed).back, closed).toEqual(["backlog", "shortlisted", "preparing", "applied", "screening", "interviewing", "offer"]);
       expect(transitionApplication({ status: closed, appliedAt: applied }, "screening", AT)).toMatchObject({
         ok: true,
         state: { status: "screening", appliedAt: applied },
@@ -399,24 +403,52 @@ describe("transitionApplication", () => {
     }
   });
 
-  it("reabrir além de 'Candidatura enviada' sem appliedAt é ilegal — 'Voltar' não pode deixar o carimbo nulo (#346)", () => {
-    // Preparando → Arquivada → Oferta pulava "applied" sem nunca carimbar
-    // appliedAt, e a tela chamava isso de "Voltar". Sem o carimbo, a oferta
-    // fica fora de alcance; reabrir direto para "applied" continua legítimo
-    // porque esse próprio passo grava o carimbo.
+  it("com `reopenFrom`, reabertura fica limitada a até onde a candidatura chegou de verdade", () => {
     for (const closed of ["rejected", "withdrawn", "archived"] as const) {
-      expect(transitionGroups(closed).back, closed).toEqual(["backlog", "shortlisted", "preparing", "applied"]);
-      for (const beyond of ["screening", "interviewing", "offer"] as const) {
-        expect(transitionApplication({ status: closed, appliedAt: null }, beyond, AT)).toEqual({
-          ok: false,
-          error: { code: "illegal_transition", from: closed, to: beyond },
-        });
-      }
-      expect(transitionApplication({ status: closed, appliedAt: null }, "applied", AT)).toMatchObject({
+      // Chegou a "Entrevista" antes de fechar: reabre até lá, appliedAt preservado.
+      expect(transitionGroups(closed, "interviewing").back, closed).toEqual([
+        "backlog", "shortlisted", "preparing", "applied", "screening", "interviewing",
+      ]);
+      const applied = "2026-08-01T00:00:00.000Z";
+      expect(transitionApplication({ status: closed, appliedAt: applied }, "screening", AT, "interviewing")).toMatchObject({
         ok: true,
-        state: { status: "applied", appliedAt: AT },
+        state: { status: "screening", appliedAt: applied },
+      });
+      // "Oferta" fica além do que ela alcançou — ilegal, não "voltar".
+      expect(transitionApplication({ status: closed, appliedAt: applied }, "offer", AT, "interviewing")).toEqual({
+        ok: false,
+        error: { code: "illegal_transition", from: closed, to: "offer" },
       });
     }
+  });
+
+  it("MAJOR (revisão da PR #354, #346): a reabertura usa o fromStatus do fechamento, não a presença de appliedAt", () => {
+    // O domínio cria de propósito um registro direto em estágio avançado com
+    // appliedAt nulo (primeira observação) — usar appliedAt para decidir a
+    // reabertura recusaria voltar para onde a candidatura realmente esteve.
+    const direct = transitionApplication(null, "interviewing", AT);
+    expect(direct).toMatchObject({ ok: true, state: { status: "interviewing", appliedAt: null } });
+    const closed = transitionApplication({ status: "interviewing", appliedAt: null }, "rejected", AT);
+    expect(closed).toMatchObject({ ok: true, state: { status: "rejected", appliedAt: null } });
+
+    // reopenFrom = "interviewing" (o fromStatus do evento que fechou): reabrir
+    // de volta para lá é legal, appliedAt continua nulo (nunca existiu).
+    expect(transitionApplication({ status: "rejected", appliedAt: null }, "interviewing", AT, "interviewing")).toMatchObject({
+      ok: true,
+      state: { status: "interviewing", appliedAt: null },
+    });
+
+    // O caso original da issue #346 continua recusado: Preparando → Arquivada
+    // → Oferta pula além de onde ela chegou (Preparando), appliedAt nulo ou não.
+    expect(transitionApplication({ status: "archived", appliedAt: null }, "offer", AT, "preparing")).toEqual({
+      ok: false,
+      error: { code: "illegal_transition", from: "archived", to: "offer" },
+    });
+    // Reabrir de volta ao próprio limite continua legítimo.
+    expect(transitionApplication({ status: "archived", appliedAt: null }, "preparing", AT, "preparing")).toMatchObject({
+      ok: true,
+      state: { status: "preparing", appliedAt: null },
+    });
   });
 
   it("preserves appliedAt when moving back from screening to shortlisted", () => {
@@ -455,6 +487,47 @@ describe("transitionApplication", () => {
 
   it("offers every funnel status before the first observation", () => {
     expect(allowedTransitions(null)).toEqual(FUNNEL_STATUSES);
+  });
+});
+
+describe("reabertura de encerramento fica limitada a onde a candidatura chegou (repositório, MAJOR #346, revisão da PR #354)", () => {
+  it("registro direto em estágio avançado, fechado e reaberto para o mesmo estágio é legal", async () => {
+    // Repro exato da revisão: `appliedAt` nulo de propósito (primeira
+    // observação) não pode ser usado para recusar reabrir de volta para onde
+    // a candidatura realmente esteve.
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "interviewing");
+    await setApplicationStatus(candidateId, jobId, "rejected");
+
+    await setApplicationStatus(candidateId, jobId, "interviewing");
+
+    const [row] = await db.select().from(application).where(eq(application.jobId, jobId));
+    expect(row).toMatchObject({ status: "interviewing", appliedAt: null });
+  });
+
+  it("o caso original da issue #346 continua recusado: reabrir além de onde a candidatura chegou é ilegal", async () => {
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "shortlisted");
+    await setApplicationStatus(candidateId, jobId, "preparing");
+    await setApplicationStatus(candidateId, jobId, "archived");
+
+    await expect(setApplicationStatus(candidateId, jobId, "offer")).rejects.toBeInstanceOf(IllegalApplicationTransitionError);
+
+    const [row] = await db.select().from(application).where(eq(application.jobId, jobId));
+    expect(row!.status).toBe("archived");
+  });
+
+  it("lastStatusChangeFromStatus lê o fromStatus do evento mais recente", async () => {
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "shortlisted");
+    await setApplicationStatus(candidateId, jobId, "preparing");
+    await setApplicationStatus(candidateId, jobId, "archived");
+
+    const [row] = await db.select().from(application).where(eq(application.jobId, jobId));
+    await expect(lastStatusChangeFromStatus(row!.id)).resolves.toBe("preparing");
   });
 });
 
@@ -815,6 +888,25 @@ describe("desfazer e voltar (repositório)", () => {
 
     const { app } = await eventsOf(jobId);
     expect(app).toMatchObject({ status: OUT_OF_FUNNEL, appliedAt: null });
+    const board = await listBoard(candidateId, { minFit: 0, hideApplied: true });
+    expect(board.map((row) => row.jobId)).toContain(jobId);
+  });
+
+  it("Minor (revisão PR #354, #346): linha já 'untracked' com appliedAt remanescente (dado legado anterior à correção) não fica escondida por 'ocultar candidatadas'", async () => {
+    // Diferente do teste acima: aqui a linha já chega pronta com
+    // `status='untracked'` e `appliedAt` preenchido, sem passar pelo domínio
+    // — o cenário de um registro escrito antes desta correção existir. Só a
+    // condição da consulta (`hideApplied`) resolve este caso.
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await db.insert(application).values({
+      candidateId,
+      jobId,
+      status: OUT_OF_FUNNEL,
+      appliedAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    });
+
     const board = await listBoard(candidateId, { minFit: 0, hideApplied: true });
     expect(board.map((row) => row.jobId)).toContain(jobId);
   });

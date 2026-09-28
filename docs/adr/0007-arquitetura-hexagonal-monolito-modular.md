@@ -254,14 +254,19 @@ Durabilidade e autoridade de escrita opostas às de Sourcing.
 > primeiro registro deixa a candidatura "fora do funil" (`untracked`), sem
 > DELETE. Detalhe em `docs/data-model.md`.
 >
-> **Emenda (2026-09-28, #346):** reabrir além de `applied` (Triagem,
-> Entrevista, Oferta) só é legal com `appliedAt` já gravado — sem isso o pulo
-> deixava o carimbo nulo para sempre. Desfazer até `untracked` sempre limpa
-> `appliedAt`, mesmo em linha legada. O desfazer lê a linha com `FOR UPDATE`
-> antes de decidir, e o índice único de `revertsEventId` (`23505`) vira o
-> conflito conhecido, nunca um erro cru. Sugestão de e-mail para candidatura
-> fora do funil ganhou erro próprio, não a mensagem de regressão. Detalhe em
-> `docs/data-model.md`.
+> **Emenda (2026-09-28, #346):** reabrir um encerramento fica limitado a onde a
+> candidatura chegou de verdade antes de fechar — `reopenFrom`, o `fromStatus`
+> do evento de encerramento, não a presença de `appliedAt` (corrigido na
+> revisão L1 da PR #354: o domínio cria de propósito registro direto em
+> estágio avançado com `appliedAt` nulo, e usar o carimbo recusaria reabrir de
+> volta para lá). Sem histórico conhecido, a reabertura continua livre, como
+> antes desta emenda. Desfazer até `untracked` sempre limpa `appliedAt`, mesmo
+> em linha legada, e o filtro `hideApplied` também aceita `status='untracked'`
+> direto na consulta. O desfazer lê a linha com `FOR UPDATE` antes de decidir,
+> e o índice único de `revertsEventId` (`23505`) vira o conflito conhecido,
+> nunca um erro cru. Sugestão de e-mail para candidatura fora do funil ganhou
+> erro próprio, não a mensagem de regressão — que agora só aparece quando a
+> direção é literalmente "voltar". Detalhe em `docs/data-model.md`.
 
 > **Invariante 7:** a transição e seu evento são escritos na **mesma
 > transação**. Hoje `repo.ts` faz dois `await` sequenciais sem transação

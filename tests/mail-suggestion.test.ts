@@ -1,5 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { IllegalApplicationTransitionError } from "../src/contexts/pursuit/domain/application.ts";
 import type { DB } from "../src/core/db/client.ts";
 import { setApplicationStatus, undoApplicationStatus } from "../src/core/db/repo.ts";
 import {
@@ -224,6 +225,27 @@ describe("decideSuggestion", () => {
     const message = (caught as Error).message;
     expect(message).not.toMatch(/voltar/);
     expect(message).not.toMatch(/untracked/);
+
+    const [suggestion] = await db
+      .select()
+      .from(mailSuggestion)
+      .where(eq(mailSuggestion.id, seeded.suggestionId));
+    expect(suggestion).toMatchObject({ status: "pending", decidedAt: null });
+  });
+
+  it("sugestão ilegal que não é 'voltar' vira o erro comum de transição, não a mensagem de regressão (Minor #346, revisão da PR #354)", async () => {
+    // `shortlisted` → `interviewing` não existe em nenhum sentido (nem avança
+    // um passo, nem volta): dizer que isso "voltaria o funil" seria falso.
+    const seeded = await seedTrackedSuggestion();
+    await db.update(application).set({ status: "shortlisted" }).where(eq(application.jobId, seeded.jobId));
+    await db
+      .update(mailSuggestion)
+      .set({ suggestedStatus: "interviewing" })
+      .where(eq(mailSuggestion.id, seeded.suggestionId));
+
+    await expect(
+      decideSuggestion(seeded.candidateId, seeded.suggestionId, "accepted"),
+    ).rejects.toBeInstanceOf(IllegalApplicationTransitionError);
 
     const [suggestion] = await db
       .select()
