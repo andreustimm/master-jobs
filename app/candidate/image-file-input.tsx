@@ -11,6 +11,9 @@ import { Input } from "@/components/ui/input";
  * na Vercel (413 antes dela), e a tela só mostraria o erro genérico. Com a
  * validade do campo marcada, o navegador não envia o formulário e mostra a
  * mesma mensagem do dicionário que o servidor usaria.
+ *
+ * Isso segura também "Remover" e salvar só o "mostrar": o arquivo selecionado
+ * iria junto no corpo e daria o mesmo 413. A pessoa limpa o seletor antes.
  */
 export function ImageFileInput({
   maxBytes,
