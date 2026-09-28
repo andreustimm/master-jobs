@@ -160,7 +160,7 @@ const HAS_AMOUNT = new RegExp(AMOUNT, "iu");
 // quatro dígitos que não sejam ano —, que não se confunde com "equipe de 12
 // pessoas", "20+ anos" ou "99,9%".
 const MONEY_LIKE =
-  /[$€£¥]|R\$|\b(?:usd|eur|brl|gbp|reais|d[óo]lares|euros)\b|\d\s*k\b|\d\s*(?:mil|mi|milh[õo]es)\b|\d{1,3}(?:[.,]\d{3})+|\b(?!(?:19|20)\d{2}\b)\d{4,}/iu;
+  /[$€£¥]|R\$|\b(?:usd|eur|brl|gbp|reais|d[óo]lares|euros)\b|\d\s*k\b|\d\s*(?:mil|mi|milh[õo]es|thousand|million)\b|\d\s*\/\s*(?:h|hora|hour|dia|day|m[êe]s|month)\b|\d{1,3}(?:[.,]\d{3})+|\b(?!(?:19|20)\d{2}\b)\d{4,}/iu;
 const PAY_NEAR_AMOUNT = new RegExp(`${PAY_WORD}.{0,60}?${AMOUNT}|${AMOUNT}.{0,60}?${PAY_WORD}`, "iu");
 
 function isSalaryBlock(block: string): boolean {
@@ -203,26 +203,34 @@ function isPayTitle(block: string): boolean {
  * Sem título, a seção é o bloco — o comportamento de antes. E o bloco inteiro
  * também sai quando a seção não traz valor (ele está em outro lugar), quando
  * o que sobra, lido como texto corrido, ainda parece piso, ou quando há valor
- * com cara de dinheiro (`MONEY_LIKE`) nas bordas: de cada lado, até o nome de
- * seção conhecido, e a seção vizinha depois dele. Um "Employment:" dentro da
- * pretensão, um título falso acima do rótulo ou um valor duas linhas acima
- * dele cortariam a seção antes do valor; na dúvida, fecha-se.
+ * com cara de dinheiro (`MONEY_LIKE`) nas bordas: até duas linhas de cada
+ * lado e, depois de uma sequência de nomes de seção conhecidos, as duas
+ * primeiras da seção vizinha. Um "Employment:" dentro da pretensão, um título
+ * falso acima do rótulo ou um valor duas linhas acima dele cortariam a seção
+ * antes do valor; na dúvida, fecha-se. A borda é curta de propósito: a
+ * métrica de um CV de sênior ("1.200 clientes") na experiência não é piso, e
+ * derrubaria o perfil inteiro.
  */
 function narrowSalaryBlock(lines: string[]): string[] | null {
   const isHit = (text: string) => isSalaryBlock(text) || isPayTitle(text);
   const known = (j: number) => isKnownHeading(lines[j]!.trim());
   const drop = lines.map(() => false);
-  // Dinheiro numa borda, andando `step` a partir de `from`: o trecho até o
-  // nome de seção conhecido, a sequência deles ("Skills\nIdiomas") e a seção
-  // vizinha. Linha já retirada (outra pretensão) não conta.
+  // Dinheiro numa borda, andando `step` a partir de `from`: até BORDER linhas
+  // antes do nome de seção conhecido e, pulada a sequência deles
+  // ("Skills\nIdiomas"), até BORDER linhas da seção vizinha. Linha já retirada
+  // (outra pretensão) não conta.
+  const BORDER = 2;
   const moneyNear = (from: number, step: 1 | -1): boolean => {
     let sections = 0;
+    let seen = 0;
     for (let j = from; j >= 0 && j < lines.length; ) {
       if (known(j)) {
         if (++sections > 1) return false;
+        seen = 0;
         while (j >= 0 && j < lines.length && known(j)) j += step;
         continue;
       }
+      if (seen++ === BORDER) return false;
       if (!drop[j] && MONEY_LIKE.test(lines[j]!)) return true;
       j += step;
     }

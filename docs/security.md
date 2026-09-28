@@ -319,7 +319,9 @@ palavra de remuneração perto de um valor são retirados. Num bloco com título
 de seção (CV extraído de PDF, sem linha em branco) sai a seção do piso até o
 próximo nome de seção conhecido; sem título, sem valor na seção, com resto
 que ainda parece piso ou com valor com cara de dinheiro (moeda, `k`, `mil`,
-milhar) nas bordas ou na seção vizinha, sai o bloco inteiro (#344).
+milhar, taxa por hora) a até duas linhas da seção — contadas depois de uma
+sequência de nomes de seção —, sai o bloco inteiro (#344). A borda é curta
+para que a métrica de um CV de sênior na experiência não derrube o perfil.
 Detecção por padrão, com limite escrito no arquivo e travado em teste: valor
 sem rótulo e telefone sem marca passam. Não é sanitização perfeita. A rota é
 anônima, então as expressões têm custo linear, travado em teste (#344).

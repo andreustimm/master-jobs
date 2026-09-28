@@ -225,10 +225,15 @@ describe("publicCvText", () => {
       // Nomes de seção seguidos não encerram a borda.
       "PRETENSÃO SALARIAL\nCLT: R$ 30.000\nSkills\nIdiomas\nPJ: R$ 40.000",
       "PJ 40000\nObjetivo\nPRETENSÃO SALARIAL\nCLT R$ 30.000",
+      // Taxa sem moeda e valor por extenso.
+      "PRETENSÃO SALARIAL\nCLT: R$ 30.000\nProjetos\nPJ: 150/hora",
+      "PJ 150/h\nCLT MENSAL\nPretensão salarial\nR$ 30.000",
+      "150/hora\nou\nPRETENSÃO SALARIAL\nCLT R$ 30.000",
+      "Salary expectations\nContract: 90/hour\nEmployment:\n150 thousand per year",
     ]) {
       const cv = `EXPERIÊNCIA\n2019-2021 Staff na Acme\n${piso}\nFORMAÇÃO\nCiência da Computação`;
       for (const out of [publicCvText(cv), publicCvMarkdown(cv)]) {
-        expect(out, piso).not.toMatch(/30\.000|40\.000|40000|30 mil|40 mil|150k|150,000|90 USD|90\/hour/);
+        expect(out, piso).not.toMatch(/30\.000|40\.000|40000|30 mil|40 mil|150k|150,000|90 USD|90\/hour|150\/h|150 thousand/);
       }
     }
   });
@@ -248,6 +253,37 @@ describe("publicCvText", () => {
     expect(out).not.toContain("30.000");
     expect(out).toContain("99,9% uptime");
     expect(out).toContain("Ciência da Computação");
+  });
+
+  it("métrica de CV sênior perto da pretensão não derruba o perfil", () => {
+    for (const [line, education] of [
+      ["Liderei equipe de 12 engenheiros", "Ciência da Computação"],
+      ["Plataforma com 1.200 clientes", "Ciência da Computação"],
+      ["Reduzi custos em US$ 2M", "Ciência da Computação"],
+      ["API com 10000 req/s", "Ciência da Computação"],
+      ["Receita de R$ 5 milhões", "Ciência da Computação"],
+      ["Liderei equipe de 12 engenheiros", "MBA, 1.200 horas"],
+    ]) {
+      const cv = [
+        "ANDREUS TIMM",
+        "Senior AI Software Architect",
+        "EXPERIÊNCIA",
+        line,
+        "2019-2021 Staff na Acme",
+        "Arquitetura de agentes em produção",
+        "PRETENSÃO SALARIAL",
+        "R$ 30.000 mensais",
+        "FORMAÇÃO",
+        "Bacharelado",
+        "Universidade de São Paulo",
+        education,
+      ].join("\n");
+      const out = publicCvMarkdown(cv);
+      expect(out, `${line} / ${education}`).not.toContain("30.000");
+      expect(out, `${line} / ${education}`).toContain("Senior AI Software Architect");
+      expect(out, `${line} / ${education}`).toContain(line);
+      expect(out, `${line} / ${education}`).toContain(education);
+    }
   });
 
   it("bloco com muitas linhas não estoura a pilha", () => {
