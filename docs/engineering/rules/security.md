@@ -264,7 +264,12 @@ custo linear, travado em teste.
 
 **Limite declarado.** Detecção por padrão, com limite escrito em
 `src/core/public-cv.ts` e travado em teste: valor sem rótulo e telefone sem
-marca passam. Não é sanitização perfeita, e não deve ser apresentado como tal.
+marca passam. No bloco com títulos, o corte pela seção do piso tem dois
+preços, ambos escolhidos: valor a três linhas ou mais da seção (ou duas
+seções depois) passa; valor com cara de dinheiro a até duas linhas dela
+derruba o CV inteiro, e a linha com número logo acima do rótulo sai mesmo
+que seja um item neutro. Não é sanitização perfeita, e não deve ser
+apresentado como tal.
 
 **Forma não abre o filtro.** A estrutura inferida do CV importado
 (`cvTextToMarkdown()`) é aplicada entre dois passes de `publicCvText()`, e o

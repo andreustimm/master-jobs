@@ -181,8 +181,6 @@ describe("publicCvText", () => {
     // outras seções ficam.
     for (const piso of [
       "Pretensão salarial: R$ 30.000",
-      "R$ 30.000 mensais\nPretensão salarial",
-      "R$ 30.000\nmensais\nPretensão salarial",
       "Expectativa\nsalarial: 30k",
       "Salary\nexpectation: 150k",
       "Pretensão salarial:\nCLT: R$ 30.000\nPJ: R$ 40.000",
@@ -211,7 +209,9 @@ describe("publicCvText", () => {
       "PRETENSÃO SALARIAL\nCLT: R$ 30.000\nObjetivo\nPJ: R$ 40.000",
       // Título falso acima de rótulo que não é título.
       "PJ R$ 40.000\nCLT MENSAL\nPretensão salarial\nR$ 30.000",
-      // Valor duas linhas acima de rótulo que é título.
+      // Valor uma ou duas linhas acima do rótulo.
+      "R$ 30.000 mensais\nPretensão salarial",
+      "R$ 30.000\nmensais\nPretensão salarial",
       "R$ 30.000 (CLT)\nou\nPRETENSÃO SALARIAL\nPJ R$ 40.000",
       // Valor sem moeda: milhar, `mil`, número solto.
       "30.000\nPRETENSÃO SALARIAL\nPJ R$ 40.000",
@@ -284,6 +284,30 @@ describe("publicCvText", () => {
       expect(out, `${line} / ${education}`).toContain(line);
       expect(out, `${line} / ${education}`).toContain(education);
     }
+  });
+
+  it("pretensão em Title Case ou como item não leva a experiência junto", () => {
+    const experience = ["Staff Engineer na Acme (2019-2021)", "Liderei a migração para LangGraph", "Arquitetei a plataforma de agentes"];
+    for (const [heading, piso, education] of [
+      ["Experiência", "Pretensão Salarial\nR$ 30.000 mensais", "Formação"],
+      ["Experiência", "Pretensão salarial: R$ 30.000", "Formação"],
+      ["EXPERIÊNCIA", "ACME CORP\nPretensão Salarial\nR$ 30.000 mensais", "FORMAÇÃO"],
+    ]) {
+      const cv = ["Andreus Timm", heading, ...experience, piso, education, "Ciência da Computação"].join("\n");
+      const out = publicCvMarkdown(cv);
+      expect(out, piso).not.toContain("30.000");
+      for (const line of experience) expect(out, piso).toContain(line);
+      expect(out, piso).toContain("Ciência da Computação");
+    }
+  });
+
+  it("limite declarado: valor a três linhas ou mais da seção do piso passa", () => {
+    // Escrito em G23 e no topo de `src/core/public-cv.ts`. A borda é curta para
+    // que a métrica da experiência não derrube o perfil; o preço é este.
+    const cv = "EXPERIÊNCIA\nR$ 30.000 (CLT)\nou, se PJ,\nconforme escopo\nPRETENSÃO SALARIAL\nPJ R$ 40.000\nFORMAÇÃO\nCiência";
+    const out = publicCvMarkdown(cv);
+    expect(out).toContain("R$ 30.000 (CLT)");
+    expect(out).not.toContain("40.000");
   });
 
   it("bloco com muitas linhas não estoura a pilha", () => {

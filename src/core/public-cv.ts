@@ -194,8 +194,10 @@ function isPayTitle(block: string): boolean {
  * causa de uma linha de pretensão apagava o perfil (#344).
  *
  * Sai a SEÇÃO do piso, com os títulos que `cvTextToMarkdown()` reconheceria:
- * - começa no rótulo, quando ele é título ("PRETENSÃO SALARIAL"); senão,
- *   logo depois do título anterior, porque o valor pode vir acima do rótulo;
+ * - começa no rótulo — "PRETENSÃO SALARIAL", "Pretensão Salarial" ou
+ *   "Pretensão salarial: R$ 30.000" como último item da experiência —, e não
+ *   no título anterior, que levaria a experiência inteira; antes do primeiro
+ *   título do bloco, começa no início dele;
  * - termina antes do próximo nome de seção conhecido ("FORMAÇÃO",
  *   "Experience"). Um título qualquer em caixa alta ("PJ MENSAL") não fecha
  *   a seção: ele pode ser parte da pretensão.
@@ -236,25 +238,27 @@ function narrowSalaryBlock(lines: string[]): string[] | null {
     }
     return false;
   };
-  let sectionStart = 0;
+  // Antes do primeiro título o bloco não tem estrutura: o corte vai do começo.
+  let structured = false;
   for (let i = 0; i < lines.length; i++) {
     const title = isHeading(lines[i]!.trim());
     let last = i;
     if (!isHit(lines[i]!)) {
       const next = lines[i + 1];
       if (next === undefined || isHit(next) || !isHit(`${lines[i]}\n${next}`)) {
-        if (title) sectionStart = i + 1;
+        structured ||= title;
         continue;
       }
       last = i + 1;
     }
-    const start = title ? i : sectionStart;
+    const start = title || structured ? i : 0;
     while (last + 1 < lines.length && !known(last + 1)) last++;
     if (!HAS_AMOUNT.test(lines.slice(start, last + 1).join("\n"))) return null;
     if (moneyNear(start - 1, -1) || moneyNear(last + 1, 1)) return null;
     for (let j = start; j <= last; j++) drop[j] = true;
-    // Valor sem cara de dinheiro ("90/hour") logo acima de um rótulo-título.
-    if (title && start > 0 && HAS_AMOUNT.test(lines[start - 1]!)) drop[start - 1] = true;
+    // Valor sem cara de dinheiro ("90/hour", "150") logo acima do rótulo. Um
+    // item neutro com número ("Mentoria de 6 engenheiros") sai junto.
+    if (start > 0 && HAS_AMOUNT.test(lines[start - 1]!)) drop[start - 1] = true;
     i = last;
   }
   const kept = lines.filter((_, i) => !drop[i]);
