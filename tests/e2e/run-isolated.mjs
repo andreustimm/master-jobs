@@ -15,6 +15,7 @@ import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { copiedToHarness } from "./database-guard.mjs";
 import { SMOKE, selectAreas } from "./ui/index.mjs";
 import setupPostgres from "../support/postgres-global.ts";
+import { startMinio } from "../support/minio.ts";
 import { provisionTestDatabase } from "../support/db.ts";
 import { provisionRuntimeLogin } from "../support/runtime-login.ts";
 
@@ -199,6 +200,7 @@ const appRoot = join(temporaryRoot, "app");
 const nextCli = join(ROOT, "node_modules", "next", "dist", "bin", "next");
 let server;
 let stopPostgres;
+let stopMinio;
 let testDatabase;
 let runtimeLogin;
 
@@ -216,6 +218,25 @@ try {
     writeFile(join(appRoot, "CHANGELOG.md"), TECHNICAL_CHANGELOG_FIXTURE),
   ]);
 
+  // Armazenamento da foto e da capa (#327): MinIO descartável, como o
+  // PostgreSQL. Sem Docker ou sem a imagem, o servidor sobe sem armazenamento
+  // e a área `public-images` prova só a recusa — com aviso, nunca calada.
+  const minio = await startMinio(["master-jobs"]);
+  if (!minio.ok) console.warn(`[e2e] MinIO indisponível, foto e capa sem armazenamento: ${minio.reason}`);
+  stopMinio = minio.ok ? minio.server.stop : undefined;
+  const storageEnv = minio.ok
+    ? {
+        E2E_STORAGE: "on",
+        JHO_STORAGE_DRIVER: "s3",
+        JHO_STORAGE_BUCKET: "master-jobs",
+        S3_BUCKET: "master-jobs",
+        S3_REGION: "us-east-1",
+        S3_ENDPOINT: minio.server.endpoint,
+        S3_ACCESS_KEY_ID: minio.server.accessKeyId,
+        S3_SECRET_ACCESS_KEY: minio.server.secretAccessKey,
+      }
+    : { E2E_STORAGE: "off", JHO_STORAGE_DRIVER: "" };
+
   const port = await availablePort();
   const env = {
     ...process.env,
@@ -232,6 +253,7 @@ try {
     E2E_LOGIN_RACE_TOKEN: TASK04_FIXTURES.loginRaceToken,
     E2E_CLOSED_JOB_ID: String(TASK04_FIXTURES.closedJobId),
     E2E_DELETED_JOB_ID: String(TASK04_FIXTURES.deletedJobId),
+    ...storageEnv,
   };
 
   await run(process.execPath, ["scripts/sw-version.mjs"], { cwd: appRoot, env });
@@ -287,6 +309,7 @@ try {
   await stop(server);
   try { await runtimeLogin?.drop(); await testDatabase?.drop(); }
   finally {
+    stopMinio?.();
     stopPostgres?.();
     await rm(temporaryRoot, { recursive: true, force: true });
   }

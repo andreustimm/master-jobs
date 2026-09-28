@@ -37,6 +37,7 @@ import * as passwordReset from "./password-reset.mjs";
 import * as pipeline from "./pipeline.mjs";
 import * as publicCvFormat from "./public-cv-format.mjs";
 import * as publicFacts from "./public-facts.mjs";
+import * as publicImages from "./public-images.mjs";
 import * as publicProfile from "./public-profile.mjs";
 import * as pwa from "./pwa.mjs";
 import * as rateLimit from "./rate-limit.mjs";
@@ -87,6 +88,9 @@ export const AREAS = [
   { id: "public-cv-format", run: publicCvFormat.run, requires: [] },
   // Edita os fatos do dono e devolve o estado original (#327).
   { id: "public-facts", run: publicFacts.run, requires: [] },
+  // Envia, mostra e revoga a foto do dono contra o MinIO do runner, e
+  // devolve o estado original (#327).
+  { id: "public-images", run: publicImages.run, requires: [] },
   { id: "search-relevance", run: searchRelevance.run, requires: [] },
   { id: "filter-auto-apply", run: filterAutoApply.run, requires: [] },
   { id: "jobs-loading", run: jobsLoading.run, requires: [] },
