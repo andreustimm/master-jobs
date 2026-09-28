@@ -226,7 +226,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
           undoAction={undoTrackAction}
           jobId={job.id}
           currentStatus={application?.status ?? null}
-          groups={groupOptions(application?.status ?? null, t)}
+          groups={groupOptions(application?.status ?? null, application?.appliedAt ?? null, t)}
           undoLabels={undoLabels(t)}
           statusLabels={applicationStatusLabels(t)}
           labels={{
@@ -326,8 +326,8 @@ async function TrackFits({ candidateId, jobId, t }: SectionProps & { candidateId
 }
 
 /** As opções do seletor, por grupo, na ordem do funil (#316). */
-function groupOptions(current: ApplicationStatus | null, t: Translator["t"]) {
-  const groups = transitionGroups(current);
+function groupOptions(current: ApplicationStatus | null, appliedAt: string | null, t: Translator["t"]) {
+  const groups = transitionGroups(current, appliedAt);
   return {
     forward: applicationStatusOptions(t, groups.forward),
     back: applicationStatusOptions(t, groups.back),

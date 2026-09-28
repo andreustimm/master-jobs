@@ -30,8 +30,10 @@ histórico da vaga):
 3. Mover e clicar "Desfazer" no aviso dentro de 10 s: o estágio volta, o
    histórico mostra "desfazer: de X para Y" e a linha revertida riscada com
    "desfeito". Nenhuma linha some.
-4. Rejeitada e Retirada oferecem os estágios de progresso em "Voltar";
-   Preparando oferece Arquivar.
+4. Rejeitada e Retirada oferecem, em "Voltar", todo estágio até Candidatura
+   enviada sempre; Triagem, Entrevista e Oferta só aparecem se a candidatura já
+   tinha sido enviada antes (#346 — sem isso, reabrir pulava "Candidatura
+   enviada" e a data ficava em branco para sempre). Preparando oferece Arquivar.
 5. Desfazer até o primeiro registro: a vaga some do `/pipeline` e das
    contagens, reaparece no quadro como "sem registro", e o histórico continua
    na vaga.

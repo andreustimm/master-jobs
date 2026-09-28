@@ -392,6 +392,13 @@ export async function decideSuggestion(
     // "recebemos sua candidatura" aceito com a pessoa já em entrevista a
     // devolveria para "Candidatura enviada". E-mail só avança ou encerra; a
     // sugestão continua pendente, para ser descartada.
+    //
+    // "Fora do funil" não é uma regressão — é a pessoa tendo tirado a vaga do
+    // funil de propósito (#346): a mensagem antiga confundia as duas coisas e
+    // mostrava o marcador interno `untracked` como se fosse um estágio real.
+    if (status !== owned.status && owned.status === OUT_OF_FUNNEL) {
+      throw new OutOfFunnelSuggestionError(id, status);
+    }
     if (status !== owned.status && !mailMayMove(owned.status, status)) {
       throw new RegressiveSuggestionError(id, owned.status, status);
     }
@@ -421,5 +428,20 @@ export class RegressiveSuggestionError extends Error {
   constructor(id: number, from: string, to: string) {
     super(`Sugestão ${id} faria a candidatura voltar de ${from} para ${to}; e-mail só avança o funil. Descarte-a ou mova à mão.`);
     this.name = "RegressiveSuggestionError";
+  }
+}
+
+/**
+ * A candidatura está fora do funil (desfeita até o primeiro registro, #316);
+ * e-mail não a recoloca sozinho. Erro próprio, e não `RegressiveSuggestionError`
+ * (#346): não é uma regressão, é a pessoa tendo tirado a vaga do funil, e o
+ * texto não expõe `untracked` — o marcador interno — como se fosse um estágio.
+ */
+export class OutOfFunnelSuggestionError extends Error {
+  readonly code = "out_of_funnel_suggestion";
+
+  constructor(id: number, to: string) {
+    super(`Sugestão ${id}: a candidatura está fora do funil; e-mail não a recoloca sozinho, nem para ${to}. Mova-a à mão primeiro.`);
+    this.name = "OutOfFunnelSuggestionError";
   }
 }

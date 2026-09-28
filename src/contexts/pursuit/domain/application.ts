@@ -107,22 +107,34 @@ export type TransitionDirection = "forward" | "back" | "close";
  *
  * - avançar: o próximo estágio de progresso;
  * - voltar: qualquer estágio de progresso anterior — e, de um estado de
- *   encerramento (Rejeitada, Retirada, Arquivada), qualquer estágio de
- *   progresso: é assim que eles reabrem;
+ *   encerramento (Rejeitada, Retirada, Arquivada), qualquer estágio até
+ *   "Candidatura enviada": é assim que eles reabrem;
  * - encerrar: arquivar de qualquer estágio de progresso; rejeitar e retirar só
  *   depois de a candidatura ter sido enviada.
  *
  * Voltar não mexe em `appliedAt`: o recuo corrige o estágio, não o fato de ter
  * aplicado. Só o desfazer da própria entrada em "Candidatura enviada" o limpa.
+ *
+ * Reabrir para ALÉM de "Candidatura enviada" (Triagem, Entrevista, Oferta) só
+ * é uma correção de estágio quando `appliedAt` já existe: sem ele, o pulo
+ * deixaria o carimbo nulo para sempre e "Voltar" mentiria sobre quando a
+ * pessoa aplicou (Preparando → Arquivada → Oferta, #346). Reabrir direto para
+ * "Candidatura enviada" continua sempre legítimo — o próprio carimbo se
+ * autocura nesse ponto.
  */
-export function transitionDirection(from: ApplicationStatus, to: ApplicationStatus): TransitionDirection | null {
+export function transitionDirection(
+  from: ApplicationStatus,
+  to: ApplicationStatus,
+  appliedAt: string | null = null,
+): TransitionDirection | null {
   if (from === to || to === OUT_OF_FUNNEL || from === OUT_OF_FUNNEL) return null;
   const fromIndex = PROGRESS.indexOf(from);
   const toIndex = PROGRESS.indexOf(to);
   if (fromIndex === -1) {
     // De um encerramento só se sai reabrindo; trocar um encerramento por outro
     // não é correção de estágio, e a nota explica melhor do que a troca.
-    return CLOSING.includes(from) && toIndex !== -1 ? "back" : null;
+    if (!CLOSING.includes(from) || toIndex === -1) return null;
+    return toIndex <= FIRST_SENT || appliedAt !== null ? "back" : null;
   }
   if (toIndex !== -1) {
     if (toIndex < fromIndex) return "back";
@@ -151,7 +163,7 @@ export function transitionApplication(
   }
 
   const fresh = current === null || current.status === OUT_OF_FUNNEL;
-  const legal = next !== OUT_OF_FUNNEL && (fresh || transitionDirection(current.status, next) !== null);
+  const legal = next !== OUT_OF_FUNNEL && (fresh || transitionDirection(current.status, next, current.appliedAt) !== null);
   if (!legal) {
     return {
       ok: false,
@@ -192,12 +204,15 @@ export type TransitionGroups = {
  * coluna é `text` sem CHECK e o acervo veio de um snapshot legado. Esta função
  * roda ao renderizar a tela; ela devolve grupos vazios em vez de quebrar.
  */
-export function transitionGroups(current: ApplicationStatus | null): TransitionGroups {
+export function transitionGroups(
+  current: ApplicationStatus | null,
+  appliedAt: string | null = null,
+): TransitionGroups {
   if (current === null || current === OUT_OF_FUNNEL) {
     return { forward: PROGRESS, back: [], close: CLOSING };
   }
   const pick = (direction: TransitionDirection) =>
-    FUNNEL_STATUSES.filter((to) => transitionDirection(current, to) === direction);
+    FUNNEL_STATUSES.filter((to) => transitionDirection(current, to, appliedAt) === direction);
   return { forward: pick("forward"), back: pick("back"), close: pick("close") };
 }
 
@@ -206,10 +221,13 @@ export function transitionGroups(current: ApplicationStatus | null): TransitionG
  * funil. Derivado de `transitionDirection`: oferecer só o possível é a mesma
  * regra lida uma vez, e não uma segunda cópia dela que envelhece sozinha.
  */
-export function allowedTransitions(current: ApplicationStatus | null): readonly ApplicationStatus[] {
+export function allowedTransitions(
+  current: ApplicationStatus | null,
+  appliedAt: string | null = null,
+): readonly ApplicationStatus[] {
   if (current === null || current === OUT_OF_FUNNEL) return FUNNEL_STATUSES;
   if (!(APPLICATION_STATUSES as readonly string[]).includes(current)) return [current];
-  const groups = transitionGroups(current);
+  const groups = transitionGroups(current, appliedAt);
   const reachable = new Set<ApplicationStatus>([current, ...groups.forward, ...groups.back, ...groups.close]);
   return FUNNEL_STATUSES.filter((status) => reachable.has(status));
 }
@@ -219,10 +237,15 @@ export function allowedTransitions(current: ApplicationStatus | null): readonly 
  * ("recebemos sua candidatura") aceita depois de a pessoa já estar em
  * entrevista regrediria o funil — e com as arestas de volta, o domínio
  * aceitaria. Fora do funil também recusa: a pessoa tirou a vaga dali.
+ *
+ * A checagem é por `=== "forward" || === "close"`, não `!== "back"`: reabrir
+ * além de "Candidatura enviada" sem `appliedAt` agora é ILEGAL, não "voltar"
+ * (#346), e e-mail nunca deveria empurrar isso adiante silenciosamente.
  */
 export function mailMayMove(current: ApplicationStatus, next: ApplicationStatus): boolean {
   if (current === OUT_OF_FUNNEL) return false;
-  return transitionDirection(current, next) !== "back";
+  const direction = transitionDirection(current, next);
+  return direction === "forward" || direction === "close";
 }
 
 /* -------------------------------------------------------------------------- */
@@ -275,7 +298,11 @@ export type UndoResult =
  *
  * `appliedAt` só é limpo quando o evento revertido é a própria entrada em
  * "Candidatura enviada" — o carimbo nasce com o `at` desse evento. Recuos e
- * reentradas posteriores preservam a data real da candidatura.
+ * reentradas posteriores preservam a data real da candidatura. Desfazer até
+ * "fora do funil" (`untracked`) TAMBÉM sempre o limpa, mesmo quando a linha é
+ * legada e o evento revertido não é literalmente "applied" — sem isso o
+ * carimbo sobrevive escondido, e `hideApplied` continuaria escondendo uma
+ * vaga que voltou a ser "nunca registrada" (#346).
  */
 export function undoTransition(
   current: ApplicationState,
@@ -288,7 +315,8 @@ export function undoTransition(
   if (target.id !== expectedEventId) return { ok: false, error: { code: "stale" } };
 
   const toStatus = target.fromStatus ?? OUT_OF_FUNNEL;
-  const clearsApplied = target.toStatus === "applied" && current.appliedAt === target.at;
+  const clearsApplied =
+    toStatus === OUT_OF_FUNNEL || (target.toStatus === "applied" && current.appliedAt === target.at);
   return {
     ok: true,
     state: { status: toStatus, appliedAt: clearsApplied ? null : current.appliedAt },

@@ -253,6 +253,15 @@ Durabilidade e autoridade de escrita opostas às de Sourcing.
 > compensatório com referência ao revertido, nunca edição — e desfazer o
 > primeiro registro deixa a candidatura "fora do funil" (`untracked`), sem
 > DELETE. Detalhe em `docs/data-model.md`.
+>
+> **Emenda (2026-09-28, #346):** reabrir além de `applied` (Triagem,
+> Entrevista, Oferta) só é legal com `appliedAt` já gravado — sem isso o pulo
+> deixava o carimbo nulo para sempre. Desfazer até `untracked` sempre limpa
+> `appliedAt`, mesmo em linha legada. O desfazer lê a linha com `FOR UPDATE`
+> antes de decidir, e o índice único de `revertsEventId` (`23505`) vira o
+> conflito conhecido, nunca um erro cru. Sugestão de e-mail para candidatura
+> fora do funil ganhou erro próprio, não a mensagem de regressão. Detalhe em
+> `docs/data-model.md`.
 
 > **Invariante 7:** a transição e seu evento são escritos na **mesma
 > transação**. Hoje `repo.ts` faz dois `await` sequenciais sem transação

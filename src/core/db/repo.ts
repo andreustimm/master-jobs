@@ -21,6 +21,7 @@ import { loadRates } from "../../contexts/fx/index.ts";
 import { PERIODS_PER_YEAR, annualFactorSql, type Currency, type FxTable } from "../money.ts";
 import type { MatchField } from "../search.ts";
 import { phraseRegexSql, termPrefilterLike, termRegexSql, type ValidTerm } from "../term.ts";
+import { isDuplicateKey } from "./retry.ts";
 import {
   IllegalApplicationTransitionError,
   OUT_OF_FUNNEL,
@@ -1311,6 +1312,17 @@ async function statusChanges(tx: DbTransaction, applicationId: number): Promise<
  *
  * `expectedEventId` é o evento que a tela ofereceu desfazer. Se outra aba
  * moveu a candidatura desde então, o alvo mudou e a resposta é conflito.
+ *
+ * A leitura de `previous` trava a linha (`FOR UPDATE`), não só compara o
+ * status depois: sem a trava, um avançar-e-recuar real de outra sessão entre
+ * esta leitura e a gravação pode devolver o MESMO valor de `status` (ABA) sem
+ * ser o mesmo estado — a comparação otimista não veria a diferença, e o
+ * desfazer gravaria sobre um histórico que já mudou (#346). A trava serializa:
+ * quem chega depois só prossegue já vendo o commit anterior por inteiro, e a
+ * decisão de `undoTransition` fica sempre consistente com o que acabou de ler.
+ * `isDuplicateKey` cobre o que sobrar: se ainda assim dois desfazeres
+ * colidirem no mesmo evento revertido, o índice único devolve `23505`, e vira
+ * o mesmo conflito conhecido em vez de um erro de driver cru.
  */
 export async function undoApplicationStatus(
   candidateId: number,
@@ -1323,7 +1335,8 @@ export async function undoApplicationStatus(
       .select({ id: application.id, status: application.status, appliedAt: application.appliedAt })
       .from(application)
       .where(and(eq(application.candidateId, candidateId), eq(application.jobId, jobId)))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!previous) throw new ApplicationUndoUnavailableError(candidateId, jobId);
 
     const undo = undoTransition(previous, await statusChanges(tx, previous.id), expectedEventId, stamp);
@@ -1331,15 +1344,20 @@ export async function undoApplicationStatus(
       if (undo.error.code === "stale") throw new ApplicationTransitionConflictError(candidateId, jobId);
       throw new ApplicationUndoUnavailableError(candidateId, jobId);
     }
-    await commitOverSnapshot(tx, candidateId, jobId, previous, undo.state, stamp);
-    await tx.insert(applicationEvent).values({
-      applicationId: previous.id,
-      at: undo.event.at,
-      kind: undo.event.kind,
-      fromStatus: undo.event.fromStatus,
-      toStatus: undo.event.toStatus,
-      revertsEventId: undo.event.revertsEventId,
-    });
+    try {
+      await commitOverSnapshot(tx, candidateId, jobId, previous, undo.state, stamp);
+      await tx.insert(applicationEvent).values({
+        applicationId: previous.id,
+        at: undo.event.at,
+        kind: undo.event.kind,
+        fromStatus: undo.event.fromStatus,
+        toStatus: undo.event.toStatus,
+        revertsEventId: undo.event.revertsEventId,
+      });
+    } catch (error) {
+      if (isDuplicateKey(error)) throw new ApplicationTransitionConflictError(candidateId, jobId);
+      throw error;
+    }
   });
 }
 

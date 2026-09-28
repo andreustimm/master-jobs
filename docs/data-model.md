@@ -591,6 +591,12 @@ casamento de e-mail a deixam de fora (`inFunnel()`), e o board a trata como
 `unfiled`. A próxima movimentação volta a ser uma primeira observação, com
 `from_status` nulo. Métrica futura que leia eventos precisa ignorar os
 revertidos: conversão mede o estado corrigido, não o percurso.
+`applied_at` é sempre limpo junto, mesmo em linha legada cujo evento
+revertido não é literalmente `applied` (#346) — sem isso o carimbo sobrevive
+escondido, e `hideApplied` continuaria ocultando uma vaga que voltou a ser
+"nunca registrada". Sugestão de e-mail para candidatura `untracked` é
+recusada com `OutOfFunnelSuggestionError`, não `RegressiveSuggestionError`: não
+é uma regressão, e a mensagem não expõe `untracked` como se fosse um estágio.
 
 > **Invariante:** `application_event` nunca é atualizada nem deletada pelo
 > ciclo de vida do funil. É log. Qualquer correção é um evento novo, não um
@@ -606,11 +612,22 @@ devem aplicar o escopo de autorização antes de agregar.
 `transitionApplication()` é a máquina de estados pura. Repetir o status atual
 é idempotente (não cria outro evento). Avançar é um passo de cada vez; voltar
 vai para qualquer estágio anterior; `rejected`, `withdrawn` e `archived`
-reabrem para qualquer estágio de progresso; arquivar vale de todo estágio de
+reabrem sem restrição até `applied`, e além disso (Triagem, Entrevista,
+Oferta) só quando `applied_at` já existe (#346) — sem essa trava, reabrir
+direto para um estágio à frente de `applied` pulava o carimbo, e "Voltar"
+mentia sobre quando a pessoa aplicou. Arquivar vale de todo estágio de
 progresso, e rejeitar ou retirar só depois de `applied`. Nenhum comando leva a
 `untracked` — só o desfazer. `applied_at` é gravado na entrada em `applied`
-sem data gravada, e voltar não o apaga. O repositório persiste a nova `application` e seu evento na mesma
-transação e usa o status anterior como token de concorrência otimista.
+sem data gravada, e voltar não o apaga.
+
+O repositório persiste a nova `application` e seu evento na mesma transação. O
+desfazer lê a linha com `SELECT ... FOR UPDATE` antes de decidir (#346): sem a
+trava, um avançar-e-recuar real de outra sessão entre a leitura e a gravação
+pode devolver o mesmo `status` (ABA) sem ser o mesmo estado, e a comparação
+otimista por status não veria a diferença. A trava serializa — quem chega
+depois só decide já vendo o commit anterior por inteiro — e o índice único de
+`reverts_event_id` (`23505`) vira `ApplicationTransitionConflictError` em vez
+de um erro cru do driver, se ainda assim dois desfazeres colidirem.
 
 ### Endereço público (`candidate.public_slug`)
 
