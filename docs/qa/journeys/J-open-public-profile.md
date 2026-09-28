@@ -45,4 +45,7 @@ flowchart LR
 - **Variante publicada:** quando o link existe e o currículo foi publicado, o
   visitante lê o CV com seções e listas, mesmo que ele tenha vindo de PDF como
   texto puro, e sem contato nem pretensão salarial
-  (`PUB-public-cv-formatted`, `PUB-public-cv-protected-content`).
+  (`PUB-public-cv-formatted`, `PUB-public-cv-protected-content`). O layout de
+  referência Jobicy (hero, duas colunas a partir de 1024px, skills agrupadas)
+  é o que decide se um recrutador entende o perfil sem instrução
+  (`PUB-public-profile-layout`).

@@ -53,6 +53,10 @@ export const ENGLISH_ANONYMOUS_SWEEP = [
   "/login/forgot",
   // Token que nunca existiu: a tela explica o link morto, sem formulário.
   "/login/reset?token=nunca-existiu-varredura",
+  // Perfil público (#326): candidato fixo de `public-cv-format.mjs`, nome,
+  // headline, localização e skills marcados `data-user-content` — só o rótulo
+  // do CTA, das seções e das categorias vem do dicionário.
+  "/p/e2e-cv-formatado",
 ];
 
 /** Interface em inglês depois de a suíte criar trilhas e termos (task_05 de term-search). */
@@ -77,6 +81,9 @@ export const OVERFLOW_SWEEP = [
   "/candidate",
   "/candidate/skills",
   "/pipeline",
+  // Perfil público (#326): hero, duas colunas e skills agrupadas — o mesmo
+  // candidato fixo de `public-cv-format.mjs`.
+  "/p/e2e-cv-formatado",
 ];
 
 /** Sem rolagem horizontal em 375, 768 e 1024 px, com as trilhas já criadas. */
@@ -108,6 +115,9 @@ export const AXE_SWEEP = [
   // A varredura roda como dono, que vê o formulário de funil; a medição que
   // precedeu a entrada foi como recrutador e não via o `select` sem nome.
   ["job detail", "/jobs/904000103"],
+  // Perfil público (#326): a varredura roda autenticada como dono, mas a
+  // página ignora sessão — o mesmo candidato fixo de `public-cv-format.mjs`.
+  ["public profile", "/p/e2e-cv-formatado"],
 ];
 
 /**
@@ -127,6 +137,4 @@ export const UNMEASURED_PAGES = {
     "só abre com papel de recrutador; ui.mjs a exercita por papel (ROLE_SCENARIOS), mas as varreduras rodam como dono",
   "app/recruiter/[candidateId]/page.tsx":
     "exige vínculo recrutador↔candidato; ui.mjs confere a negação por sonda (1, 999999, abc), sem varredura de idioma, largura ou axe",
-  "app/p/[slug]/page.tsx":
-    "pública e dependente de consentimento; ui.mjs confere privacidade, 404 canônico e limite de taxa, mas o texto é quase todo dado do usuário",
 };
