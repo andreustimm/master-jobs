@@ -243,16 +243,23 @@ idiomas acima do teto ou que não passem na regra estrutural dos campos
 curtos (`shortFieldProblem()`): contato primeiro (`containsContact()` com os
 e-mails cadastrados, mais oito dígitos ou mais com separador curto), depois
 rótulo de pretensão (`containsPay()`, mesmo sem número), depois **qualquer
-número solto** — dígito que não esteja colado a uma letra antes, ou três
-dígitos ou mais colados a letra. Passam só palavras, identificador curto
-("Web3", "K8s", "B2B", "C1", "Java21") e número de norma em maiúscula ("ISO
-27001", "ISO/IEC 42001", "RFC 9110"), este só sem contexto de valor depois e
-sem palavra de remuneração no campo. A gravação recusa o mesmo, com o motivo
-(contato, pretensão ou número). **Falso positivo aceito:** "Streaming 4K",
-"8K HDR", "Dados 2015-2020", "10 mil TPS", norma em minúscula ("Qualidade iso
-9001") e identificador com três dígitos ou mais ("H100") são recusados.
-**Limite declarado:** número por extenso ("vinte mil") passa. Pretensão
-salarial não é fato nem opt-in.
+número** — toda sequência de dígitos (`\p{Nd}`, depois de NFKC: "３０ｋ",
+"³⁰", "٣٠" contam), exceto a de um ou dois dígitos colada a letras que não
+sejam código de moeda ou regime (USD, EUR, BRL, GBP, CHF, CAD, AUD, JPY, US,
+R, PJ, CLT) e não seguida de `k`, barra, decimal ou `mil`. Passam só
+palavras, identificador curto ("Web3", "K8s", "EC2", "B2B", "C1", "Java21",
+"JLPT N2") e número de norma em maiúscula ("ISO 27001", "ISO/IEC 42001", "RFC
+9110"), este só sem contexto de valor depois e sem palavra inteira de
+remuneração no campo. Espaço em volta de `@` é retirado antes de procurar
+e-mail. A gravação recusa o mesmo, com o motivo (contato, pretensão ou
+número). **Falso positivo aceito** (sem exceção): "Streaming 4K", "8K HDR",
+"Dados 2015-2020", "10 mil TPS", norma em minúscula ("Qualidade iso 9001"),
+identificador com três dígitos ou mais ("H100"), notas de proficiência
+("TOEFL 110", "IELTS 7.5", "HSK 4"), versões ("Python 3", "Next.js 15",
+"GPT-4", "Web 3.0", "Indústria 4.0"), "3D", "5G" e rankings ("Tier 1", "Top
+10", "Fortune 500", "Big 4"). **Limite declarado:** número por extenso
+("vinte mil") e e-mail ofuscado por extenso ("pia at local dot test",
+"[at]") passam. Pretensão salarial não é fato nem opt-in.
 
 **Endereço.** `/p/` lê `public_slug`, nunca o `slug` interno; trocar o endereço
 faz o antigo responder 404 sem redirecionar (ADR 0024).

@@ -144,18 +144,30 @@ function choice<T extends string>(list: readonly T[], raw: string): ChoiceResult
  * se distingue de outro qualquer —, mas em área ou idiomas ninguém escreve oito
  * dígitos seguidos que não sejam um telefone. Par de anos ("2015-2020", "2015 -
  * 2020") fica de fora. Cada repetição começa num dígito e o separador tem no
- * máximo três caracteres: custo linear.
+ * máximo três caracteres: custo linear. `\p{Nd}`, não `\d`: dígito de outra
+ * escrita ("٣") também é dígito.
  */
-const LOOSE_PHONE = /\d(?: ?[.()\-–]? ?\d){7,}/g;
-const YEAR_PAIR = /^(?:19|20)\d{2} ?[-–]? ?(?:19|20)\d{2}$/;
+const LOOSE_PHONE = /\p{Nd}(?: ?[.()\-–]? ?\p{Nd}){7,}/gu;
+const YEAR_PAIR = /^(?:19|20)\p{Nd}{2} ?[-–]? ?(?:19|20)\p{Nd}{2}$/u;
 
 function containsLoosePhone(text: string): boolean {
   return [...text.matchAll(LOOSE_PHONE)].some(([match]) => !YEAR_PAIR.test(match));
 }
 
+/**
+ * O texto de um campo curto antes de qualquer expressão: NFKC, para que a
+ * forma de compatibilidade vire a comum ("３０ｋ" → "30k", "³⁰" → "30", "①" →
+ * "1", "＠" → "@"); espaço colapsado, para que cada expressão fique linear; e
+ * sem espaço em volta de `@`, para que "pia @ local.test" seja e-mail.
+ */
+function normalizeShortField(text: string): string {
+  return text.normalize("NFKC").replace(/\s+/g, " ").replace(/ ?@ ?/g, "@");
+}
+
 /** Contato num campo curto: o de todo o perfil, mais o telefone sem marca. */
 export function containsShortFieldContact(text: string, known: KnownContact): boolean {
-  return containsContact(text, known) || containsLoosePhone(text.replace(/\s+/g, " "));
+  const normalized = normalizeShortField(text);
+  return containsContact(normalized, known) || containsLoosePhone(normalized);
 }
 
 const CURRENCY_CODE = "(?:usd|eur|brl|gbp)";
@@ -171,20 +183,20 @@ const TIME_UNIT = "(?:h|hrs?|hora|hour|dia|day|m[êe]s|mo|month|yr|ano|year|sema
  * seguida de unidade de tempo, moeda, `k` ou `mil` ("NBR 20000/mês").
  */
 const STANDARD_NUMBER =
-  /\b(?:(?:ISO|IEC|IEEE|NBR)(?: ?\/ ?(?:ISO|IEC|IEEE))* ?[:-]? ?\d{1,5}|RFC ?[:-]? ?\d{1,4})(?:[-:.]\d{1,4})?(?!\d)/gu;
+  /\b(?:(?:ISO|IEC|IEEE|NBR)(?: ?\/ ?(?:ISO|IEC|IEEE))* ?[:-]? ?\p{Nd}{1,5}|RFC ?[:-]? ?\p{Nd}{1,4})(?:[-:.]\p{Nd}{1,4})?(?!\p{Nd})/gu;
 const AMOUNT_AFTER = new RegExp(
   `^ ?(?:/ ?${TIME_UNIT}\\b|${CURRENCY_CODE}\\b|${CURRENCY_WORD}\\b|[$€£¥]|R\\$|k\\b|(?:mil|thousand|million|milh[õo]es)\\b)`,
   "iu",
 );
 
 /**
- * Palavra de remuneração em qualquer lugar do campo. Não recusa nada sozinha
- * — "Payments", "target: B2B" são área —; só impede a exceção de norma: com
- * ela no campo, "Piso ISO 15000" não vira "Piso". Na dúvida, o número fica
- * e o campo é recusado.
+ * Palavra INTEIRA de remuneração em qualquer lugar do campo. Não recusa nada
+ * sozinha — "Payments", "target: B2B", "Cadeia de valor" são área —; só
+ * impede a exceção de norma: com ela no campo, "Piso ISO 15000" não vira
+ * "Piso". Palavra inteira, para que "Payments e ISO 27001" continue passando.
  */
 const PAY_HINT =
-  /\b(?:piso|pretens|expectativa|sal[áa]ri|salar|remunera|compensa|target|pay|rate|hourly|daily|di[áa]ri|mensa|per diem|valor|fee|ganho)/iu;
+  /\b(?:piso|pretens(?:[ãa]o|[õo]es)|expectativas?|sal[áa]rios?|salarial|salariais|salary|salaries|remunera[çc](?:[ãa]o|[õo]es)|compensa[çc](?:[ãa]o|[õo]es)|compensation|target|pay|rate|hourly|daily|di[áa]rias?|mensal|mensais|per diem|fees?|ganhos?)\b/iu;
 
 function withoutStandardNumbers(text: string): string {
   if (PAY_HINT.test(text)) return text;
@@ -194,17 +206,44 @@ function withoutStandardNumbers(text: string): string {
 }
 
 /**
- * A regra estrutural dos campos curtos (passada L2 da #362, decisão do
+ * Letras que, coladas antes de dígitos, fazem deles valor e não identificador:
+ * código de moeda e regime de contratação ("USD30k", "R30k", "PJ30k",
+ * "CLT15k"). A sequência de letras inteira é comparada, sem distinguir
+ * caixa.
+ */
+const MONEY_PREFIX = /^(?:usd|eur|brl|gbp|chf|cad|aud|jpy|us|r|pj|clt)$/iu;
+/** Depois dos dígitos, o que os faz valor mesmo colados a letra: `k`, barra, decimal, `mil`. */
+const VALUE_SUFFIX = /^(?:k\b|\/|[.,]\p{Nd}| ?mil\b)/iu;
+const DIGIT_RUN = /\p{Nd}+/gu;
+const LETTER = /\p{L}/u;
+
+/**
+ * A regra estrutural dos campos curtos (passadas L2 da #362, decisão do
  * coordenador: parar de caçar formatos de valor). Área e idiomas são
  * palavras; número não tem lugar neles, e todo formato de piso ("20k", "30
  * mil", "150/h", "USD15000", "600 a diária") tem número.
  *
- * Recusa o início de uma sequência de dígitos que não esteja colada a uma
- * letra antes dela, e três dígitos ou mais colados a letra. Dígito curto
- * colado a letra é identificador e passa: "Web3", "K8s", "S3", "B2B", "C1",
- * "B2", "IPv6", "Java21".
+ * Toda sequência de dígitos é número, exceto a de um ou dois dígitos colada a
+ * letras antes dela — identificador: "Web3", "K8s", "S3", "EC2", "B2B",
+ * "C1", "IPv6", "Java21", "JLPT N2" —, e mesmo essa é número quando as letras
+ * são código de moeda ou regime (`MONEY_PREFIX`) ou quando os dígitos vêm
+ * seguidos de `k`, barra, decimal ou `mil` (`VALUE_SUFFIX`).
+ *
+ * As letras antes de cada sequência são lidas andando para trás a partir
+ * dela; cada letra pertence a no máximo uma sequência, então o custo total é
+ * linear.
  */
-const LOOSE_NUMBER = /(?<![\p{L}\d])\d|\p{L}\d{3,}/u;
+function containsLooseNumber(text: string): boolean {
+  for (const run of text.matchAll(DIGIT_RUN)) {
+    const at = run.index;
+    let from = at;
+    while (from > 0 && LETTER.test(text[from - 1]!)) from--;
+    const letters = text.slice(from, at);
+    if (letters === "" || run[0].length > 2 || MONEY_PREFIX.test(letters)) return true;
+    if (VALUE_SUFFIX.test(text.slice(at + run[0].length, at + run[0].length + 8))) return true;
+  }
+  return false;
+}
 
 /** O motivo de recusar um campo curto, na ordem em que a tela o explica. */
 export type ShortFieldProblem = "contact" | "pay" | "number";
@@ -217,13 +256,13 @@ export type ShortFieldProblem = "contact" | "pay" | "number";
  *    ("Pretensão a combinar").
  * 3. Número, depois de retirar o número de norma.
  *
- * Tudo sobre espaço colapsado: cada expressão fica linear.
+ * Tudo sobre o texto de `normalizeShortField()`.
  */
 export function shortFieldProblem(text: string, known: KnownContact): ShortFieldProblem | null {
-  const collapsed = text.normalize("NFC").replace(/\s+/g, " ");
-  if (containsShortFieldContact(collapsed, known)) return "contact";
-  if (containsPay(collapsed)) return "pay";
-  if (LOOSE_NUMBER.test(withoutStandardNumbers(collapsed))) return "number";
+  const normalized = normalizeShortField(text);
+  if (containsShortFieldContact(normalized, known)) return "contact";
+  if (containsPay(normalized)) return "pay";
+  if (containsLooseNumber(withoutStandardNumbers(normalized))) return "number";
   return null;
 }
 

@@ -500,6 +500,89 @@ describe("regra estrutural dos campos curtos (#362)", () => {
   });
 });
 
+/**
+ * Passada L2 de `0fdd8cd`: moeda ou regime colado a dígito curto, forma de
+ * compatibilidade e dígito de outra escrita, e-mail com espaço em volta de
+ * `@`, e a palavra de remuneração inteira.
+ */
+describe("passada L2 de 0fdd8cd (#362)", () => {
+  const refusedAs = (text: string, code: string) => {
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }), text).toEqual({ ok: false, code });
+    expect(publicFactsFrom({ ...FULL_ROW, area: text }).area, text).toBeNull();
+  };
+  const accepted = (text: string) => {
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }).ok, text).toBe(true);
+    expect(publicFactsFrom({ ...FULL_ROW, area: text }).area, text).toBe(text);
+  };
+
+  it("MAJOR: moeda ou regime colado a um ou dois dígitos é número", () => {
+    for (const text of [
+      "USD30k",
+      "EUR12k",
+      "BRL25k",
+      "CHF12k",
+      "USD9K",
+      "USD90/h",
+      "USD90/hr",
+      "EUR9k/mês",
+      "GBP80/day",
+      "USD30",
+      "PJ30k",
+      "CLT15k",
+      "R30k",
+      "US30k",
+    ]) {
+      refusedAs(text, "areaNumber");
+    }
+  });
+
+  it("MAJOR: identificador curto colado a letra continua passando", () => {
+    for (const text of ["Web3", "K8s", "B2B", "C1", "IPv6", "Java21", "S3", "EC2", "JLPT N2"]) accepted(text);
+  });
+
+  it("MINOR 2: forma de compatibilidade e dígito de outra escrita não escapam", () => {
+    for (const text of ["３０ｋ", "１５０/h", "USD ３００００", "٣٠k", "³⁰k", "①⑤⓪/h"]) refusedAs(text, "areaNumber");
+    refusedAs("１１ ９１２３４-５６７８", "areaContact");
+    refusedAs("pia＠local.test", "areaContact");
+  });
+
+  it("MINOR 3: espaço em volta de @ não esconde o e-mail", () => {
+    refusedAs("pia @ local.test", "areaContact");
+    refusedAs("Dados, pia  @  local.test", "areaContact");
+  });
+
+  it("MINOR 4: palavra de remuneração só conta inteira — a exceção de norma volta a valer", () => {
+    accepted("Payments e ISO 27001");
+    accepted("Cadeia de valor e ISO 9001");
+    refusedAs("Piso ISO 15000", "areaNumber");
+  });
+
+  it("MINOR 4, falso positivo aceito e declarado em G21: notas, versões, 3D/5G e rankings", () => {
+    for (const text of [
+      "TOEFL 110",
+      "IELTS 7.5",
+      "HSK 4",
+      "Python 3",
+      "Next.js 15",
+      "GPT-4",
+      "Web 3.0",
+      "Indústria 4.0",
+      "3D",
+      "5G",
+      "Tier 1",
+      "Top 10",
+      "Fortune 500",
+      "Big 4",
+    ]) {
+      refusedAs(text, "areaNumber");
+    }
+  });
+
+  it("limite declarado: ofuscação de e-mail por extenso passa", () => {
+    accepted("pia at local dot test");
+  });
+});
+
 describe("containsPay", () => {
   it("T10 pega rótulo de piso e remuneração perto de valor", () => {
     for (const text of [

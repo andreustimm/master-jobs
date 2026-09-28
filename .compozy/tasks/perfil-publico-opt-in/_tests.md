@@ -116,3 +116,18 @@ rótulo de pretensão → número solto). R1–R11 foram consolidados em
 
 Contra `546b302` (rascunho à parte), os 10 casos novos eram aceitos (10 de
 10). Depois: facts + action + public-profile **59/59**.
+
+## Passada L2 de `0fdd8cd`
+
+`describe("passada L2 de 0fdd8cd (#362)")`:
+
+| # | Caso |
+|---|---|
+| R18 | MAJOR: "USD30k", "EUR12k", "BRL25k", "CHF12k", "USD9K", "USD90/h", "USD90/hr", "EUR9k/mês", "GBP80/day", "USD30", "PJ30k", "CLT15k", "R30k", "US30k" → `areaNumber`; "Web3", "K8s", "B2B", "C1", "IPv6", "Java21", "S3", "EC2", "JLPT N2" aceitos |
+| R19 | MINOR 2: "３０ｋ", "１５０/h", "USD ３００００", "٣٠k", "³⁰k", "①⑤⓪/h" → `areaNumber`; "１１ ９１２３４-５６７８" e "pia＠local.test" → `areaContact` |
+| R20 | MINOR 3: "pia @ local.test" e "Dados, pia  @  local.test" → `areaContact`; limite: "pia at local dot test" passa |
+| R21 | MINOR 4: "Payments e ISO 27001" e "Cadeia de valor e ISO 9001" aceitos; "Piso ISO 15000" recusado; falso positivo aceito: "TOEFL 110", "IELTS 7.5", "HSK 4", "Python 3", "Next.js 15", "GPT-4", "Web 3.0", "Indústria 4.0", "3D", "5G", "Tier 1", "Top 10", "Fortune 500", "Big 4" → `areaNumber` |
+
+Contra `0fdd8cd` (rascunho à parte), os 25 casos de R18–R21 que mudam de
+resultado davam errado (25 de 25). Depois: facts + action + public-profile
+**66/66**.

@@ -99,6 +99,15 @@ palavras…"). Falso positivo aceito: "Streaming 4K", "8K HDR", "Dados
 2015-2020", "10 mil TPS", norma em minúscula, identificador com três dígitos
 ou mais. Limite declarado: número por extenso.
 
+**Passada L2 de `0fdd8cd`.** Dígito curto colado a letra só é identificador
+se as letras não forem código de moeda/regime (USD, EUR, BRL, GBP, CHF, CAD,
+AUD, JPY, US, R, PJ, CLT) e os dígitos não vierem seguidos de `k`, barra,
+decimal ou `mil`. O campo é normalizado com NFKC (não NFC), dígito é
+`\p{Nd}`, e o espaço em volta de `@` sai antes de procurar e-mail. A palavra
+de remuneração que desliga a exceção de norma só conta inteira. Falso
+positivo aceito, sem exceção: notas de proficiência, versões, 3D/5G,
+rankings. Limite declarado: e-mail ofuscado por extenso.
+
 ## DTO — `src/core/candidate-public.ts`
 
 `PublicProfile` ganha **uma** chave, `facts: PublicFacts`, montada por
