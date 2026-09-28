@@ -301,6 +301,13 @@ describe("publicCvText", () => {
     }
   });
 
+  it("limite declarado: número sem marca de dinheiro depois de um nome de seção passa", () => {
+    // Escrito em G23. Do outro lado de um nome de seção só conta valor com cara
+    // de dinheiro, para que "equipe de 12" na experiência não derrube o perfil.
+    const out = publicCvMarkdown("EXPERIÊNCIA\nStaff\nSalary expectations\nEmployment:\n150\nFORMAÇÃO\nCiência");
+    expect(out).toContain("150");
+  });
+
   it("limite declarado: valor a três linhas ou mais da seção do piso passa", () => {
     // Escrito em G23 e no topo de `src/core/public-cv.ts`. A borda é curta para
     // que a métrica da experiência não derrube o perfil; o preço é este.
@@ -363,12 +370,27 @@ describe("publicCvText", () => {
 
   it("seção sem valor: número sem marca nas bordas ou no bloco seguinte não sai", () => {
     for (const cv of [
-      "EXPERIÊNCIA\nStaff\nSalary expectations\nEmployment:\n150\nFORMAÇÃO\nCiência",
       "EXPERIÊNCIA\nStaff\n150\nou\nPretensão salarial\nFORMAÇÃO\nCiência",
       "EXPERIÊNCIA\nStaff\nPretensão salarial:\nFORMAÇÃO\nCiência\n\nR$ 30.000",
     ]) {
       expect(publicCvMarkdown(cv), cv).not.toMatch(/150|30\.000/);
     }
+  });
+
+  it("'a combinar' no cabeçalho não derruba a experiência que começa com número", () => {
+    for (const cv of [
+      "Andreus Timm\nSão Paulo · (11) 91234-5678\nPretensão salarial: a combinar\nEXPERIÊNCIA\nStaff Engineer na Acme — equipe de 12\nArquitetei a plataforma de agentes\nFORMAÇÃO\nCiência da Computação",
+      "Andreus Timm\nSenior AI Architect · 15+ anos\nPretensão salarial: a combinar\nEXPERIÊNCIA\nStaff Engineer na Acme\nMentoria de 6 engenheiros\nFORMAÇÃO\nCiência da Computação",
+    ]) {
+      const out = publicCvMarkdown(cv);
+      expect(out, cv).toContain("Staff Engineer na Acme");
+      expect(out, cv).toContain("Ciência da Computação");
+    }
+  });
+
+  it("sub-rótulo de regime com o valor linhas abaixo ainda é o valor", () => {
+    const cv = "Andreus Timm\n\nSalary expectations:\n\nEmployment:\n(full-time,\nremote)\n150k USD\n\nEXPERIENCE\nStaff at Acme";
+    expect(publicCvMarkdown(cv)).not.toContain("150k");
   });
 
   it("bloco consumido como valor prometido também promete o seguinte", () => {

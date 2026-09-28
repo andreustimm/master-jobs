@@ -27,7 +27,8 @@
  *   próximo nome de seção conhecido; sem título, sem valor na seção ou com
  *   resto que ainda parece piso, o bloco inteiro. Esse corte tem dois
  *   preços, ambos escolhidos: valor a três linhas ou mais da seção (ou duas
- *   seções depois) passa; valor com cara de dinheiro a até duas linhas dela
+ *   seções depois), e número sem cara de dinheiro ("150") do outro lado de
+ *   um nome de seção, passam; valor com cara de dinheiro a até duas linhas dela
  *   derruba o CV inteiro, e a linha com número logo acima do rótulo sai
  *   mesmo que seja um item neutro. Num título Markdown, sai a seção inteira
  *   até o próximo título de mesmo nível ou acima. Um valor sem rótulo nem
@@ -227,7 +228,9 @@ function narrowSalaryBlock(lines: string[]): { kept: string[]; valueExpected: bo
   // ("Skills\nIdiomas"), até BORDER linhas da seção vizinha. Linha já retirada
   // (outra pretensão) não conta.
   const BORDER = 2;
-  const moneyNear = (from: number, step: 1 | -1, value: RegExp = MONEY_LIKE): boolean => {
+  // `here` vale até o nome de seção; do outro lado dele, só `MONEY_LIKE`: a
+  // experiência que abre com "equipe de 12" não é pretensão.
+  const moneyNear = (from: number, step: 1 | -1, here: RegExp = MONEY_LIKE): boolean => {
     let sections = 0;
     let seen = 0;
     for (let j = from; j >= 0 && j < lines.length; ) {
@@ -238,7 +241,7 @@ function narrowSalaryBlock(lines: string[]): { kept: string[]; valueExpected: bo
         continue;
       }
       if (seen++ === BORDER) return false;
-      if (!drop[j] && value.test(lines[j]!)) return true;
+      if (!drop[j] && (sections === 0 ? here : MONEY_LIKE).test(lines[j]!)) return true;
       j += step;
     }
     return false;
@@ -382,10 +385,12 @@ export function publicCvText(content: string, known: KnownContact = {}): string 
       valueExpected = false;
       // Um título seguinte — Markdown ou nome de seção conhecido — abre outra
       // seção; ele não é o valor prometido. Mas "Employment:\n150k USD" é
-      // sub-rótulo de regime, não seção: dinheiro nas duas linhas seguintes
-      // ao nome faz do bloco o valor.
+      // sub-rótulo de regime, não seção: dinheiro na seção que o nome abre (até
+      // o próximo nome conhecido) faz do bloco o valor.
+      const end = block.findIndex((line, i) => i > 0 && isKnownHeading(line.trim()));
       const opensSection =
-        isKnownHeading(block[0]!.trim()) && !block.slice(1, 3).some((line) => MONEY_LIKE.test(line));
+        isKnownHeading(block[0]!.trim()) &&
+        !block.slice(1, end === -1 ? block.length : end).some((line) => MONEY_LIKE.test(line));
       if (heading === null && !opensSection && HAS_AMOUNT.test(text)) {
         // O bloco consumido pode ser, ele mesmo, um rótulo sem valor
         // ("Opção 2\nPretensão PJ:"), que promete o bloco seguinte.
