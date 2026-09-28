@@ -6,13 +6,13 @@ persona: Visitante do perfil público
 journey: J-open-public-profile
 expected: Em /p/<slug>, sem sessão, cada fato com "mostrar" ligado aparece — modelo de trabalho, nível e disponibilidade na faixa do topo; área, idiomas, prazo e aceita mudar no cartão "Em resumo" —, e nenhum fato desligado aparece, nem o rótulo; sem rolagem horizontal em 375px; nenhuma pretensão salarial em lugar nenhum
 entry_points: /candidate; /p/[slug]
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: docs/qa/evidence/2026-09-28T180205401032Z-d6d772a5-perfil-publico-opt-in-targeted/CH-public-facts-visitor-mobile-en-step1.png; docs/qa/evidence/2026-09-28T180205401032Z-d6d772a5-perfil-publico-opt-in-targeted/CH-public-facts-visitor-desktop-ptbr-step1.png; docs/qa/evidence/2026-09-28T180205401032Z-d6d772a5-perfil-publico-opt-in-targeted/CH-public-facts-visitor-mobile-full7-step6.png
+last_report: docs/qa/reports/2026-09-28T180205401032Z-d6d772a5-perfil-publico-opt-in-targeted.md
 overlaps: PUB-edit-public-facts; PUB-public-profile-layout; PUB-public-cv-protected-content
 ---
 

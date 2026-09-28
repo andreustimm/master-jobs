@@ -6,13 +6,13 @@ persona: Andreus no celular
 journey: J-choose-public-address
 expected: Em /candidate, o cartão "Dados do perfil público" mostra os sete fatos, cada um com "Mostrar no perfil público" desmarcado por padrão; salvar grava valor e opt-in, que sobrevivem ao refresh; e-mail, telefone ou pretensão salarial em Área ou Idiomas são recusados com a razão, sem apagar o que já estava salvo
 entry_points: /candidate
-qa_status: untested
-bug_ids:
-fix_status:
+qa_status: pass
+bug_ids: BUG-20260928-public-facts-uncontrolled-field-warning
+fix_status: pending
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: docs/qa/evidence/2026-09-28T180205401032Z-d6d772a5-perfil-publico-opt-in-targeted/CH-public-facts-edit-mobile-step3.png; docs/qa/evidence/2026-09-28T180205401032Z-d6d772a5-perfil-publico-opt-in-targeted/CH-public-facts-edit-desktop-en-step5.png
+last_report: docs/qa/reports/2026-09-28T180205401032Z-d6d772a5-perfil-publico-opt-in-targeted.md
 overlaps: PUB-public-facts-opt-in; PUB-edit-public-name
 ---
 
