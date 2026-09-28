@@ -6,13 +6,13 @@ persona: Recrutador
 journey: J-open-public-profile
 expected: Em /p/<slug>, o hero (nome, headline, localização, CTA LinkedIn, GitHub, copiar link) aparece acima da dobra em 375px sem rolagem horizontal; a partir de 1024px o conteúdo principal (Resumo/Experiência/Formação, só quando existem) e as skills agrupadas por categoria aparecem em duas colunas; skills sem caixa alta forçada, com "+N" recolhido além do topo 6 por categoria; o currículo completo fica atrás de um `<details>` recolhido
 entry_points: /candidate; /p/[slug]
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: evidence/2026-09-28T164126181554Z-de433ca6-perfil-publico-layout-targeted/pub-375-en-fold.png; evidence/2026-09-28T164126181554Z-de433ca6-perfil-publico-layout-targeted/pub-375-pt-fold.png; evidence/2026-09-28T164126181554Z-de433ca6-perfil-publico-layout-targeted/pub-1280-en.png; evidence/2026-09-28T164126181554Z-de433ca6-perfil-publico-layout-targeted/pub-1280-pt-expanded.png
+last_report: docs/qa/reports/2026-09-28T164126181554Z-de433ca6-perfil-publico-layout-targeted.md
 overlaps: PUB-public-cv-formatted; PUB-public-cv-protected-content; PUB-public-profile-mobile-entry
 ---
 
