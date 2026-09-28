@@ -21,7 +21,6 @@ import { loadRates } from "../../contexts/fx/index.ts";
 import { PERIODS_PER_YEAR, annualFactorSql, type Currency, type FxTable } from "../money.ts";
 import type { MatchField } from "../search.ts";
 import { phraseRegexSql, termPrefilterLike, termRegexSql, type ValidTerm } from "../term.ts";
-import { isDuplicateKey } from "./retry.ts";
 import {
   CLOSING,
   IllegalApplicationTransitionError,
@@ -33,6 +32,7 @@ import {
   type RecordedStatusChange,
 } from "../../contexts/pursuit/domain/application.ts";
 import { getDb, type DB } from "./client.ts";
+import { isDuplicateKey } from "./retry.ts";
 import {
   application,
   candidate,
@@ -1183,6 +1183,12 @@ export async function setApplicationStatusInTransaction(
    */
   channel?: string,
 ): Promise<number | null> {
+  // `FOR UPDATE`, não um SELECT comum — o mesmo padrão que `undoApplicationStatus`
+  // já usa (#346): sem a trava, um avançar-e-recuar real de outra sessão entre
+  // esta leitura e a gravação pode devolver o MESMO `status` (ABA) sem ser o
+  // mesmo estado — a comparação otimista de `commitOverSnapshot` não vê a
+  // diferença, e a decisão (inclusive o `appliedAt` que ela carrega) é tomada
+  // sobre uma foto velha (#356).
   const [previous] = await tx
       .select()
       .from(application)
@@ -1192,7 +1198,8 @@ export async function setApplicationStatusInTransaction(
           eq(application.jobId, jobId),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
 
   // Só importa para reabrir um encerramento (#346): fora dele, nem lê o histórico.
   const reopenFrom =
@@ -1240,35 +1247,46 @@ export async function setApplicationStatusInTransaction(
   }
 
   let applicationId: number;
-  if (previous) {
-    // Só sobrescreve quando veio um canal: um `track` sem `--channel` não
-    // pode apagar o que já estava registrado.
-    await commitOverSnapshot(tx, candidateId, jobId, previous, transition.state, stamp, channel ? { channel } : {});
-    applicationId = previous.id;
-  } else {
-    const [created] = await tx
-        .insert(application)
-        .values({
-          candidateId,
-          jobId,
-          status: transition.state.status,
-          appliedAt: transition.state.appliedAt,
-          updatedAt: stamp,
-          channel: channel ?? null,
-        })
-        .returning({ id: application.id });
-    if (!created) throw new Error("application insert returned no row");
-    applicationId = created.id;
-  }
+  let event: { id: number } | undefined;
+  try {
+    if (previous) {
+      // Só sobrescreve quando veio um canal: um `track` sem `--channel` não
+      // pode apagar o que já estava registrado.
+      await commitOverSnapshot(tx, candidateId, jobId, previous, transition.state, stamp, channel ? { channel } : {});
+      applicationId = previous.id;
+    } else {
+      // Sem `previous`, não há linha para travar com `FOR UPDATE` — duas
+      // primeiras observações concorrentes do mesmo par candidato/vaga correm
+      // para este INSERT, e só uma vence `application_candidate_job_idx`
+      // (23505). A outra cai no mesmo conflito conhecido, não num erro cru do
+      // driver.
+      const [created] = await tx
+          .insert(application)
+          .values({
+            candidateId,
+            jobId,
+            status: transition.state.status,
+            appliedAt: transition.state.appliedAt,
+            updatedAt: stamp,
+            channel: channel ?? null,
+          })
+          .returning({ id: application.id });
+      if (!created) throw new Error("application insert returned no row");
+      applicationId = created.id;
+    }
 
-  const [event] = await tx.insert(applicationEvent).values({
-    applicationId,
-    at: transition.event.at,
-    kind: transition.event.kind,
-    fromStatus: transition.event.fromStatus,
-    toStatus: transition.event.toStatus,
-    detail: detail ?? null,
-  }).returning({ id: applicationEvent.id });
+    [event] = await tx.insert(applicationEvent).values({
+      applicationId,
+      at: transition.event.at,
+      kind: transition.event.kind,
+      fromStatus: transition.event.fromStatus,
+      toStatus: transition.event.toStatus,
+      detail: detail ?? null,
+    }).returning({ id: applicationEvent.id });
+  } catch (error) {
+    if (isDuplicateKey(error)) throw new ApplicationTransitionConflictError(candidateId, jobId);
+    throw error;
+  }
   // O id do evento é o que a tela precisa para oferecer "Desfazer" logo depois
   // de salvar, sem ler o histórico de novo.
   return event?.id ?? null;
