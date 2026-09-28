@@ -23,6 +23,7 @@ import type { MatchField } from "../search.ts";
 import { phraseRegexSql, termPrefilterLike, termRegexSql, type ValidTerm } from "../term.ts";
 import { isDuplicateKey } from "./retry.ts";
 import {
+  CLOSING,
   IllegalApplicationTransitionError,
   OUT_OF_FUNNEL,
   transitionApplication,
@@ -1193,11 +1194,11 @@ export async function setApplicationStatusInTransaction(
       )
       .limit(1);
 
-  // Só importa para reabrir um encerramento (#346); buscado sempre, e não só
-  // quando `previous.status` fecha, porque `CLOSING` é privado do domínio e
-  // duplicar a lista aqui envelheceria sozinha. Uma linha indexada a mais por
-  // transição, num caminho de escrita de baixo volume.
-  const reopenFrom = previous ? await lastStatusChangeFromStatus(previous.id, previous.status, tx) : null;
+  // Só importa para reabrir um encerramento (#346): fora dele, nem lê o histórico.
+  const reopenFrom =
+    previous && CLOSING.includes(previous.status)
+      ? await lastStatusChangeFromStatus(previous.id, previous.status, tx)
+      : null;
   const transition = transitionApplication(
     previous ? { status: previous.status, appliedAt: previous.appliedAt } : null,
     status,
