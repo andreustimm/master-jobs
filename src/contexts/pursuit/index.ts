@@ -8,6 +8,7 @@
 export {
   APPLICATION_STATUSES,
   allowedTransitions,
+  CLOSING,
   FUNNEL_STATUSES,
   IllegalApplicationTransitionError,
   mailMayMove,
@@ -33,6 +34,7 @@ export {
   ApplicationUndoUnavailableError,
   getJobDetail,
   inFunnel,
+  lastStatusChangeFromStatus,
   PIPELINE_PAGE_SIZE,
   pipelineCounts,
   pipelineRows,

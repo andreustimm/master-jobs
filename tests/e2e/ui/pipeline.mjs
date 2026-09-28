@@ -172,4 +172,32 @@ export async function run(ctx) {
       && (await page.locator('[data-testid="application-timeline-event"][data-undone="true"]').count()) === 2,
     await page.inputValue('[data-testid="track-status"]'),
   );
+
+  /* --- Reabrir encerramento fica limitado a onde a candidatura chegou (#346, revisão da PR #354) --- */
+
+  // Avança até "Em entrevista" (appliedAt já existe desde "Candidatura
+  // enviada") e nunca chega a "Oferta"; encerra rejeitando.
+  for (const status of ["preparing", "applied", "screening", "interviewing"]) {
+    await page.selectOption('[data-testid="track-status"]', status);
+    await page.locator('[data-testid="track-submit"]').click();
+    await savedStage(page, status);
+  }
+  await page.selectOption('[data-testid="track-status"]', "rejected");
+  await page.locator('[data-testid="track-submit"]').click();
+  await savedStage(page, "rejected");
+  await page.reload({ waitUntil: "networkidle" });
+
+  const reopenBack = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid="track-group-back"] option')].map((o) => o.value),
+  );
+  check(
+    "Rejeitada oferece em 'Voltar' até onde a candidatura chegou de verdade (Triagem e Entrevista incluídas)",
+    reopenBack.join(",") === "backlog,shortlisted,preparing,applied,screening,interviewing",
+    reopenBack.join(","),
+  );
+  check(
+    "'Oferta' não aparece: a candidatura nunca chegou lá antes de ser rejeitada — a lógica original da issue #346",
+    !reopenBack.includes("offer"),
+    reopenBack.join(","),
+  );
 }

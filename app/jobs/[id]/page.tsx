@@ -7,7 +7,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   applicationTimeline,
+  CLOSING,
   getJobDetail,
+  lastStatusChangeFromStatus,
   transitionGroups,
   undoableEvent,
   type ApplicationStatus,
@@ -59,6 +61,17 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   if (!detail) notFound();
 
   const { job, score, application, source } = detail;
+  // Reabrir um encerramento (Rejeitada/Retirada/Arquivada) só volta até onde a
+  // candidatura chegou de verdade antes de fechar (#346); sem isso o seletor
+  // ofereceria estágios que ela nunca alcançou. Só vale a pena ler o histórico
+  // quando o status atual É um encerramento — nos outros casos `reopenFrom`
+  // nem é consultado pelo domínio, e a ida ao banco seria desperdiçada no
+  // caminho crítico da renderização. Fora do `Suspense` porque o formulário de
+  // mover precisa da lista certa já na primeira renderização, não depois.
+  const reopenFrom =
+    application && CLOSING.includes(application.status)
+      ? await lastStatusChangeFromStatus(application.id, application.status)
+      : null;
   const availability = await jobAvailability(job.id);
   // A seção só existe com mais de uma trilha que pontua. Decidir isso antes da
   // fronteira, numa leitura barata, evita reservar espaço e anunciar espera
@@ -226,7 +239,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
           undoAction={undoTrackAction}
           jobId={job.id}
           currentStatus={application?.status ?? null}
-          groups={groupOptions(application?.status ?? null, t)}
+          groups={groupOptions(application?.status ?? null, reopenFrom, t)}
           undoLabels={undoLabels(t)}
           statusLabels={applicationStatusLabels(t)}
           labels={{
@@ -326,8 +339,8 @@ async function TrackFits({ candidateId, jobId, t }: SectionProps & { candidateId
 }
 
 /** As opções do seletor, por grupo, na ordem do funil (#316). */
-function groupOptions(current: ApplicationStatus | null, t: Translator["t"]) {
-  const groups = transitionGroups(current);
+function groupOptions(current: ApplicationStatus | null, reopenFrom: ApplicationStatus | null, t: Translator["t"]) {
+  const groups = transitionGroups(current, reopenFrom);
   return {
     forward: applicationStatusOptions(t, groups.forward),
     back: applicationStatusOptions(t, groups.back),

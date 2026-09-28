@@ -591,6 +591,19 @@ casamento de e-mail a deixam de fora (`inFunnel()`), e o board a trata como
 `unfiled`. A próxima movimentação volta a ser uma primeira observação, com
 `from_status` nulo. Métrica futura que leia eventos precisa ignorar os
 revertidos: conversão mede o estado corrigido, não o percurso.
+`applied_at` é sempre limpo junto, mesmo em linha legada cujo evento
+revertido não é literalmente `applied` (#346). Além disso, o filtro
+`hideApplied` também aceita `status = 'untracked'` diretamente na consulta
+(`listBoard`) — defesa em profundidade para uma linha que já chegou pronta
+"fora do funil" com `applied_at` remanescente, escrita antes desta correção
+existir, e que a limpeza no domínio sozinha não alcançaria. Sugestão de
+e-mail para candidatura `untracked` é recusada com `OutOfFunnelSuggestionError`,
+não `RegressiveSuggestionError`: não é uma regressão, e a mensagem não expõe
+`untracked` como se fosse um estágio. Da mesma forma, uma sugestão ilegal que
+não é literalmente "voltar" (ex.: `shortlisted` → `interviewing`, que não
+existe em nenhum sentido) também não vira `RegressiveSuggestionError` — só a
+direção `"back"` de `transitionDirection` justifica essa mensagem; o resto
+segue para o erro comum de transição ilegal.
 
 > **Invariante:** `application_event` nunca é atualizada nem deletada pelo
 > ciclo de vida do funil. É log. Qualquer correção é um evento novo, não um
@@ -605,12 +618,34 @@ devem aplicar o escopo de autorização antes de agregar.
 
 `transitionApplication()` é a máquina de estados pura. Repetir o status atual
 é idempotente (não cria outro evento). Avançar é um passo de cada vez; voltar
-vai para qualquer estágio anterior; `rejected`, `withdrawn` e `archived`
-reabrem para qualquer estágio de progresso; arquivar vale de todo estágio de
-progresso, e rejeitar ou retirar só depois de `applied`. Nenhum comando leva a
-`untracked` — só o desfazer. `applied_at` é gravado na entrada em `applied`
-sem data gravada, e voltar não o apaga. O repositório persiste a nova `application` e seu evento na mesma
-transação e usa o status anterior como token de concorrência otimista.
+vai para qualquer estágio anterior. `rejected`, `withdrawn` e `archived`
+reabrem até onde a candidatura chegou de verdade antes de fechar (#346):
+`reopenFrom` — de onde ela veio ao chegar no fechamento atual, lido por
+`lastStatusChangeFromStatus()` via `undoableEvent()` (a mesma função do
+desfazer, que já pula desfazeres e eventos revertidos) — é o limite; reabrir
+além dele é ilegal, não "voltar". Ler direto o `from_status` do evento mais
+recente é o bug que a 2ª rodada da revisão da PR #354 achou: se o mais recente
+for um desfazer, o `from_status` dele é só o status no instante do desfazer,
+não um fechamento de verdade. Sem histórico confiável (`reopenFrom` nulo —
+trilha com buraco, sondagem antiga, ou chamador que não o forneceu) a
+reabertura continua livre para qualquer estágio de progresso, como antes de
+#346: restringir sem saber a história seria arbitrário. A decisão **não** usa
+`applied_at`: o domínio cria de propósito um
+registro direto em estágio avançado com `applied_at` nulo (primeira
+observação), e usar o carimbo para decidir recusaria reabrir de volta para
+onde a candidatura realmente esteve (Major da revisão da PR #354). Arquivar
+vale de todo estágio de progresso, e rejeitar ou retirar só depois de
+`applied`. Nenhum comando leva a `untracked` — só o desfazer. `applied_at` é
+gravado na entrada em `applied` sem data gravada, e voltar não o apaga.
+
+O repositório persiste a nova `application` e seu evento na mesma transação. O
+desfazer lê a linha com `SELECT ... FOR UPDATE` antes de decidir (#346): sem a
+trava, um avançar-e-recuar real de outra sessão entre a leitura e a gravação
+pode devolver o mesmo `status` (ABA) sem ser o mesmo estado, e a comparação
+otimista por status não veria a diferença. A trava serializa — quem chega
+depois só decide já vendo o commit anterior por inteiro — e o índice único de
+`reverts_event_id` (`23505`) vira `ApplicationTransitionConflictError` em vez
+de um erro cru do driver, se ainda assim dois desfazeres colidirem.
 
 ### Endereço público (`candidate.public_slug`)
 

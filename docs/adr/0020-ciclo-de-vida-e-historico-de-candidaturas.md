@@ -29,7 +29,12 @@ ativo também torna a triagem impraticável.
    Emenda (#316): candidatura `untracked` — desfeita até o primeiro registro —
    não conta como candidatura, mas continua sendo `application` para o item 4:
    a vaga segue protegida da poda. Leitura por evento ignora os revertidos
-   (`reverts_event_id`).
+   (`reverts_event_id`). Emenda (#346): chegar a `untracked` sempre limpa
+   `applied_at`, mesmo em linha legada — senão o carimbo sobrevive escondido e
+   filtros como "ocultar candidatadas" continuam ocultando uma vaga que voltou
+   a ser "nunca registrada". O filtro também aceita `status = 'untracked'`
+   direto na consulta, para a linha que já chega pronta com o carimbo
+   remanescente (dado anterior a esta correção).
 7. Reabertura por observação `alive` limpa o arquivamento automático e preserva
    a mesma identidade/fingerprint.
 

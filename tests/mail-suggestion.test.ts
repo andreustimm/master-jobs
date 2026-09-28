@@ -1,7 +1,8 @@
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { IllegalApplicationTransitionError } from "../src/contexts/pursuit/domain/application.ts";
 import type { DB } from "../src/core/db/client.ts";
-import { setApplicationStatus } from "../src/core/db/repo.ts";
+import { setApplicationStatus, undoApplicationStatus } from "../src/core/db/repo.ts";
 import {
   application,
   applicationEvent,
@@ -12,7 +13,7 @@ import {
   mailSuggestion,
   source,
 } from "../src/core/db/schema.ts";
-import { decideSuggestion } from "../src/core/mail/run.ts";
+import { decideSuggestion, OutOfFunnelSuggestionError } from "../src/core/mail/run.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
 let db: DB;
@@ -191,5 +192,65 @@ describe("decideSuggestion", () => {
       .where(eq(application.jobId, seeded.jobId));
     expect(suggestion).toMatchObject({ status: "pending", decidedAt: null });
     expect(tracked!.status).toBe("interviewing");
+  });
+
+  it("recusa com erro próprio a sugestão para candidatura fora do funil, sem mostrar o status cru 'untracked' (#346)", async () => {
+    // A pessoa desfez a candidatura até "fora do funil" de propósito; e-mail
+    // não a recoloca sozinho. Isto não é uma regressão (não existe "voltar" a
+    // partir de fora do funil), e a mensagem não pode expor o marcador interno
+    // como se fosse um estágio real.
+    const seeded = await seedTrackedSuggestion();
+    const [tracked] = await db
+      .select({ id: application.id })
+      .from(application)
+      .where(eq(application.jobId, seeded.jobId));
+    const [firstEvent] = await db
+      .select({ id: applicationEvent.id })
+      .from(applicationEvent)
+      .where(eq(applicationEvent.applicationId, tracked!.id));
+    await undoApplicationStatus(seeded.candidateId, seeded.jobId, firstEvent!.id);
+    const [outOfFunnel] = await db
+      .select({ status: application.status })
+      .from(application)
+      .where(eq(application.jobId, seeded.jobId));
+    expect(outOfFunnel!.status).toBe("untracked");
+
+    let caught: unknown;
+    try {
+      await decideSuggestion(seeded.candidateId, seeded.suggestionId, "accepted");
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(OutOfFunnelSuggestionError);
+    const message = (caught as Error).message;
+    expect(message).not.toMatch(/voltar/);
+    expect(message).not.toMatch(/untracked/);
+
+    const [suggestion] = await db
+      .select()
+      .from(mailSuggestion)
+      .where(eq(mailSuggestion.id, seeded.suggestionId));
+    expect(suggestion).toMatchObject({ status: "pending", decidedAt: null });
+  });
+
+  it("sugestão ilegal que não é 'voltar' vira o erro comum de transição, não a mensagem de regressão (Minor #346, revisão da PR #354)", async () => {
+    // `shortlisted` → `interviewing` não existe em nenhum sentido (nem avança
+    // um passo, nem volta): dizer que isso "voltaria o funil" seria falso.
+    const seeded = await seedTrackedSuggestion();
+    await db.update(application).set({ status: "shortlisted" }).where(eq(application.jobId, seeded.jobId));
+    await db
+      .update(mailSuggestion)
+      .set({ suggestedStatus: "interviewing" })
+      .where(eq(mailSuggestion.id, seeded.suggestionId));
+
+    await expect(
+      decideSuggestion(seeded.candidateId, seeded.suggestionId, "accepted"),
+    ).rejects.toBeInstanceOf(IllegalApplicationTransitionError);
+
+    const [suggestion] = await db
+      .select()
+      .from(mailSuggestion)
+      .where(eq(mailSuggestion.id, seeded.suggestionId));
+    expect(suggestion).toMatchObject({ status: "pending", decidedAt: null });
   });
 });
