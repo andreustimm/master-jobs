@@ -6,12 +6,14 @@ import {
   LANGUAGES_MAX,
   START_TIMEFRAMES,
   WORK_MODELS,
+  containsShortFieldContact,
+  containsShortFieldPay,
   parsePublicFactsForm,
   publicFactsFrom,
   type PublicFactsFormInput,
   type StoredFacts,
 } from "../src/core/candidate-public-facts.ts";
-import { containsAmount, containsPay } from "../src/core/public-cv.ts";
+import { containsPay } from "../src/core/public-cv.ts";
 
 /**
  * Fatos do perfil público (#327, parte A). Duas camadas, testadas em
@@ -307,9 +309,9 @@ describe("valor sem rótulo (revisão L2 #362)", () => {
     }
   });
 
-  it("MAJOR containsAmount não pega área nem idioma comuns, nem ano", () => {
+  it("MAJOR o detector de valor não pega área nem idioma comuns, nem ano", () => {
     for (const text of ["Inglês C1", "Engenharia de dados desde 2015", "Português (nativo), Inglês (fluente)", "Web3 e IA"]) {
-      expect(containsAmount(text), text).toBe(false);
+      expect(containsShortFieldPay(text), text).toBe(false);
     }
   });
 });
@@ -355,11 +357,12 @@ describe("e-mail cadastrado na entrada (revisão L2 #362)", () => {
 });
 
 describe("custo em entrada longa (revisão L2 #362)", () => {
-  it("MINOR 2 containsPay e containsAmount são lineares numa linha de quebras", () => {
+  it("MINOR 2 containsPay e os detectores dos campos curtos são lineares numa linha de quebras", () => {
     const hostile = `${"\n".repeat(80_000)}x`;
     const started = performance.now();
     expect(containsPay(hostile)).toBe(false);
-    expect(containsAmount(hostile)).toBe(false);
+    expect(containsShortFieldPay(hostile)).toBe(false);
+    expect(containsShortFieldContact(hostile, {})).toBe(false);
     // Quadrático levava ~3,6 s; linear fica em milissegundos. Folga larga
     // para máquina de CI ocupada, ainda uma ordem de grandeza abaixo.
     expect(performance.now() - started).toBeLessThan(300);
@@ -374,6 +377,75 @@ describe("custo em entrada longa (revisão L2 #362)", () => {
     expect(facts.area).toBeNull();
     expect(facts.languages).toBeNull();
     expect(publicFactsFrom({ ...FULL_ROW, area: "a".repeat(AREA_MAX) }).area).toBe("a".repeat(AREA_MAX));
+  });
+});
+
+/**
+ * Re-revisão L2 da #362 (SHIP com três Minor): o detector dos campos curtos
+ * é próprio — não o `MONEY_LIKE` do currículo —, para cobrir os formatos que
+ * passavam sem recusar área legítima com mensagem enganosa.
+ */
+describe("re-revisão L2 #362: formatos de valor nos campos curtos", () => {
+  const assertRefused = (text: string) => {
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }), text).toEqual({ ok: false, code: "areaPay" });
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, languages: text }), text).toEqual({
+      ok: false,
+      code: "languagesPay",
+    });
+    expect(publicFactsFrom({ ...FULL_ROW, area: text }).area, text).toBeNull();
+  };
+
+  it("Minor 1: `rate` com dois-pontos ou número em qualquer posição é pretensão", () => {
+    for (const text of ["Dados\nRate: 150", "IA, rate: 150", "Dados · daily rate 150", "Rate 90"]) assertRefused(text);
+  });
+
+  it("Minor 2: unidade de tempo, moeda colada, milhar com espaço/apóstrofo, moeda por extenso", () => {
+    for (const text of [
+      "90/hr",
+      "90/hrs",
+      "90/yr",
+      "150/mo",
+      "150 por hora",
+      "150 per hour",
+      "90 an hour",
+      "USD15000",
+      "EUR15000",
+      "BRL30000",
+      "Piso 30 000",
+      "30'000",
+      "90 dollars",
+    ]) {
+      assertRefused(text);
+    }
+  });
+
+  it("Minor 3: área legítima com número de norma, resolução, moeda por extenso solta ou 'mil' de volume passa", () => {
+    for (const text of [
+      "Segurança da informação (ISO 27001)",
+      "Qualidade ISO 9001",
+      "IA (ISO/IEC 42001)",
+      "Automação industrial IEC 61131",
+      "Streaming 4K",
+      "Reais problemas de dados",
+      "Projetos reais de IA",
+      "Fintech / euros e câmbio",
+      "Engenharia de dados; 10 mil TPS",
+    ]) {
+      expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }).ok, text).toBe(true);
+      expect(publicFactsFrom({ ...FULL_ROW, area: text }).area, text).toBe(text);
+    }
+  });
+
+  it("Minor 3: contato é conferido antes de valor — telefone com hífen solto leva a mensagem de contato", () => {
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: "11 91234 - 5678" })).toEqual({
+      ok: false,
+      code: "areaContact",
+    });
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: "Dados, 2015 - 2020" }).ok).toBe(true);
+  });
+
+  it("Minor 3: moeda por extenso colada a número e 'mil' com moeda continuam valor", () => {
+    for (const text of ["30 mil reais", "15000 euros", "R$ 30 mil", "Piso 2k USD"]) assertRefused(text);
   });
 });
 

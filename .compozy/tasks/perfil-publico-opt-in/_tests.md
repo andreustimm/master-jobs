@@ -61,7 +61,7 @@ separadas. Só entra em "Rodado" o que uma execução desta sessão confirmou.
 | # | Caso | Onde |
 |---|---|---|
 | R1 | MAJOR: "Piso 20k", "Expectativa: 20k", "Target: USD 180k", "Min 150k", "Remote only, $150/h", "Rate 90/h", "Pay 20k", "USD 15,000/mês", "Engenharia de dados — 20k USD/mês" recusados na entrada (`*Pay`) e esvaziados na saída, nos dois campos | `tests/candidate-public-facts.test.ts` |
-| R2 | MINOR 2: `containsPay`/`containsAmount` em 80 mil quebras + "x" abaixo de 300 ms; saída descarta texto acima do teto | `tests/candidate-public-facts.test.ts` |
+| R2 | MINOR 2: `containsPay` e os detectores dos campos curtos em 80 mil quebras + "x" abaixo de 300 ms; saída descarta texto acima do teto | `tests/candidate-public-facts.test.ts` |
 | R3 | MINOR 3: e-mail cadastrado fora do padrão genérico recusado na entrada — puro (com `known`) e pela action com banco (do candidato e da conta) | `tests/candidate-public-facts.test.ts`, `tests/candidate-public-facts-action.test.ts` |
 | R4 | MINOR 4: telefone sem marca recusado (`*Contact`) e esvaziado; intervalo de anos aceito | `tests/candidate-public-facts.test.ts` |
 | R5 | MINOR 5: restauração da área E2E `public-facts` em `try/finally` | `tests/e2e/ui/public-facts.mjs` |
@@ -73,3 +73,16 @@ Rodado após a correção (28/09): `pnpm typecheck` limpo; facts/action/
 public-profile/public-cv **83/83**; `vitest related` do delta **2349
 aprovados, 0 reprovados** (9 pulados); E2E isolado `--areas
 public-facts,public-profile,public-cv-format` **34/34**.
+
+## Re-revisão L2 da #362 (SHIP com três Minor)
+
+| # | Caso | Onde |
+|---|---|---|
+| R6 | Minor 1: "Dados\nRate: 150", "IA, rate: 150", "Dados · daily rate 150", "Rate 90" recusados (`*Pay`) e esvaziados | `tests/candidate-public-facts.test.ts` |
+| R7 | Minor 2: "90/hr", "90/hrs", "90/yr", "150/mo", "150 por hora", "150 per hour", "90 an hour", "USD15000", "EUR15000", "BRL30000", "Piso 30 000", "30'000", "90 dollars" recusados e esvaziados; "30 mil reais", "15000 euros", "R$ 30 mil", "Piso 2k USD" também | `tests/candidate-public-facts.test.ts` |
+| R8 | Minor 3: "Segurança da informação (ISO 27001)", "Qualidade ISO 9001", "IA (ISO/IEC 42001)", "Automação industrial IEC 61131", "Streaming 4K", "Reais problemas de dados", "Projetos reais de IA", "Fintech / euros e câmbio", "Engenharia de dados; 10 mil TPS" aceitos e publicados; "11 91234 - 5678" recusado com `areaContact`; "Dados, 2015 - 2020" aceito | `tests/candidate-public-facts.test.ts` |
+
+Contra a versão anterior (HEAD `38b81b5`, rodada à parte em rascunho), os 27
+casos de R6–R8 davam o resultado errado: os 17 de valor eram aceitos, as 9
+áreas legítimas recusadas com `areaPay`, e o telefone com `areaPay`. Depois:
+`candidate-public-facts` **30/30**.

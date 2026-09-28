@@ -239,11 +239,17 @@ opt-in (#327) — modelo de trabalho, nível, disponibilidade, prazo, aceita
 mudar, área, idiomas — saem numa chave só, `facts`, cada um com o próprio
 consentimento, desligado por padrão (nulo também é desligado);
 `publicFactsFrom()` descarta valor controlado desconhecido e esvazia área e
-idiomas acima do teto, com contato (`containsContact()` com os e-mails
-cadastrados, mais oito dígitos ou mais com separador simples) ou com
-pretensão (`containsPay()`, ou qualquer valor com cara de dinheiro,
-`containsAmount()`); a gravação recusa o mesmo, com o motivo.
-Pretensão salarial não é fato nem opt-in.
+idiomas acima do teto, com contato (`containsShortFieldContact()`: o de
+`containsContact()` com os e-mails cadastrados, mais oito dígitos ou mais com
+separador curto, fora par de anos) ou com pretensão
+(`containsShortFieldPay()`: o rótulo de `containsPay()`, `rate` com número em
+qualquer posição e uma régua de valor própria dos campos curtos — moeda,
+código ou nome de moeda junto de número, `k` com dois dígitos, número por
+unidade de tempo, milhar com separador, quatro dígitos que não sejam ano nem
+número de norma); a gravação recusa o mesmo, contato antes de valor, com o
+motivo. **Limite declarado:** ano sem moeda nem rótulo ("Dados 2000"), número
+de até três dígitos sozinho, número por extenso ("vinte mil") e `k` de um
+dígito passam. Pretensão salarial não é fato nem opt-in.
 
 **Endereço.** `/p/` lê `public_slug`, nunca o `slug` interno; trocar o endereço
 faz o antigo responder 404 sem redirecionar (ADR 0024).

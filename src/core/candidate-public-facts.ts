@@ -19,7 +19,7 @@
  *
  * Sem banco, sem rede, sem relógio.
  */
-import { containsAmount, containsContact, containsPay, type KnownContact } from "./public-cv.ts";
+import { containsContact, containsPay, type KnownContact } from "./public-cv.ts";
 
 export const WORK_MODELS = Object.freeze(["remote", "hybrid", "onsite", "b2b", "contractor", "employee"] as const);
 export const EXPERIENCE_LEVELS = Object.freeze(
@@ -134,28 +134,92 @@ function choice<T extends string>(list: readonly T[], raw: string): ChoiceResult
 }
 
 /**
- * Telefone sem marca num campo curto: oito dígitos ou mais separados só por
- * espaço, ponto, hífen ou parêntese ("WhatsApp 11 91234-5678", "tel 11 9 1234
+ * Telefone sem marca num campo curto: oito dígitos ou mais com separador curto
+ * entre eles — espaço, ponto, hífen, travessão ou parêntese, com até um espaço
+ * de cada lado ("WhatsApp 11 91234-5678", "tel 11 9 1234 5678", "11 91234 -
  * 5678"). `containsContact()` deixa passar — no currículo um número assim não
  * se distingue de outro qualquer —, mas em área ou idiomas ninguém escreve oito
- * dígitos seguidos que não sejam um telefone. Intervalo de anos ("2015-2020")
- * fica de fora. Cada repetição começa num dígito: custo linear.
+ * dígitos seguidos que não sejam um telefone. Par de anos ("2015-2020", "2015 -
+ * 2020") fica de fora. Cada repetição começa num dígito e o separador tem no
+ * máximo três caracteres: custo linear.
  */
-const LOOSE_PHONE = /\d(?:[ .()-]?\d){7,}/g;
-const YEAR_RANGE = /^(?:19|20)\d{2}-(?:19|20)\d{2}$/;
+const LOOSE_PHONE = /\d(?: ?[.()\-–]? ?\d){7,}/g;
+const YEAR_PAIR = /^(?:19|20)\d{2} ?[-–]? ?(?:19|20)\d{2}$/;
 
 function containsLoosePhone(text: string): boolean {
-  return [...text.matchAll(LOOSE_PHONE)].some(([match]) => !YEAR_RANGE.test(match));
+  return [...text.matchAll(LOOSE_PHONE)].some(([match]) => !YEAR_PAIR.test(match));
 }
 
 /** Contato num campo curto: o de todo o perfil, mais o telefone sem marca. */
-function shortFieldContact(text: string, known: KnownContact): boolean {
-  return containsContact(text, known) || containsLoosePhone(text);
+export function containsShortFieldContact(text: string, known: KnownContact): boolean {
+  return containsContact(text, known) || containsLoosePhone(text.replace(/\s+/g, " "));
 }
 
-/** Pretensão num campo curto: rótulo de piso ou qualquer valor com cara de dinheiro. */
-function shortFieldPay(text: string): boolean {
-  return containsPay(text) || containsAmount(text);
+/**
+ * Número de norma técnica ("ISO 27001", "ISO/IEC 42001", "IEC 61131", "RFC
+ * 9110", "NBR 5410") sai antes da régua de valor: quatro dígitos que não são
+ * ano seriam lidos como dinheiro, e a área "Segurança da informação (ISO
+ * 27001)" seria recusada com a mensagem de pretensão.
+ */
+const STANDARD_NUMBER = /\b(?:iso|iec|ieee|rfc|nbr)(?: ?\/ ?(?:iso|iec|ieee))*[ :-]*\d[\d.:-]*/giu;
+
+const CURRENCY_CODE = "(?:usd|eur|brl|gbp)";
+const CURRENCY_WORD = "(?:reais|d[óo]lar(?:es)?|dollars?|euros?)";
+const TIME_UNIT = "(?:h|hrs?|hora|hour|dia|day|m[êe]s|mo|month|yr|ano|year|semana|week)";
+
+/**
+ * Valor com cara de dinheiro num campo CURTO (área, idiomas). Régua própria,
+ * separada do `MONEY_LIKE` do currículo: lá "1.200 clientes" é métrica; aqui
+ * não há motivo para dinheiro, mas há área legítima com número ("Streaming
+ * 4K", "10 mil TPS", "Projetos reais de IA") que não pode ser recusada com a
+ * mensagem de pretensão.
+ *
+ * Conta como valor:
+ * - símbolo de moeda (`$`, `€`, `£`, `¥`, `R$`);
+ * - código de moeda colado ou vizinho de número ("USD15000", "20k USD");
+ * - moeda por extenso só vizinha de número ("90 dollars", "15000 euros") — a
+ *   palavra solta ("euros e câmbio", "reais problemas") não;
+ * - `mil`/`million` só com moeda ("30 mil reais") — "10 mil TPS" não;
+ * - `k` com dois dígitos ou mais ("20k", "150k"); um dígito ("4K", "8K") é
+ *   resolução de vídeo;
+ * - número por unidade de tempo ("90/hr", "150/mo", "150 por hora", "90 an
+ *   hour");
+ * - milhar com separador, inclusive espaço e apóstrofo ("30 000", "30'000");
+ * - quatro dígitos ou mais que não sejam ano, fora número de norma;
+ * - rótulo de remuneração seguido de número ("Piso 20k", "Pay 20", "Rate 90",
+ *   "Expectativa: 20k"), em qualquer posição — no currículo `rate:` só conta
+ *   no começo da linha por causa de "Success rate: 99%"; num campo curto a
+ *   dúvida fecha.
+ *
+ * **Limite declarado:** ano sem moeda nem rótulo ("Dados 2000"), número de três
+ * dígitos ou menos sem nada em volta ("150"), número por extenso ("vinte mil")
+ * e `k` de um dígito ("5k") passam.
+ */
+const SHORT_FIELD_AMOUNT = new RegExp(
+  [
+    "[$€£¥]|R\\$",
+    `\\b${CURRENCY_CODE} ?\\d`,
+    `\\d ?${CURRENCY_CODE}\\b`,
+    `\\d ?${CURRENCY_WORD}\\b`,
+    `\\d ?(?:mil|mi|milh[õo]es|thousand|million) (?:de )?(?:${CURRENCY_WORD}|${CURRENCY_CODE})\\b`,
+    "\\d{2,} ?k\\b",
+    `\\d ?/ ?${TIME_UNIT}\\b`,
+    `\\d (?:por|per|an?) ${TIME_UNIT}\\b`,
+    "(?<![\\d.,])\\d{1,3}(?:[., '’]\\d{3})+(?!\\d)",
+    "(?<![\\d.,])(?!(?:19|20)\\d{2}(?!\\d))\\d{4,}",
+    "\\b(?:piso|pretens(?:[ãa]o|[õo]es)|expectativa|target|pay|sal[áa]rio|salary|remunera[çc][ãa]o|compensation|(?:(?:hourly|daily|day) )?rate)\\b ?(?::|floor|\\d)",
+  ].join("|"),
+  "iu",
+);
+
+/**
+ * Pretensão num campo curto: o rótulo do currículo (`containsPay()`) ou o valor
+ * de `SHORT_FIELD_AMOUNT`, sobre espaço colapsado — cada ` ?` consome no
+ * máximo um caractere, e as expressões ficam lineares.
+ */
+export function containsShortFieldPay(text: string): boolean {
+  const collapsed = text.normalize("NFC").replace(/\s+/g, " ");
+  return containsPay(collapsed) || SHORT_FIELD_AMOUNT.test(collapsed.replace(STANDARD_NUMBER, " "));
 }
 
 const FREE_TEXT_MAX = { area: AREA_MAX, languages: LANGUAGES_MAX } as const;
@@ -167,8 +231,8 @@ function freeText(field: "area" | "languages", raw: string, known: KnownContact)
   if (value === null) return { ok: true, value: null };
   // O teto vem antes dos filtros: nenhuma expressão roda sobre texto longo.
   if (value.length > FREE_TEXT_MAX[field]) return { ok: false, code: `${field}TooLong` };
-  if (shortFieldContact(value, known)) return { ok: false, code: `${field}Contact` };
-  if (shortFieldPay(value)) return { ok: false, code: `${field}Pay` };
+  if (containsShortFieldContact(value, known)) return { ok: false, code: `${field}Contact` };
+  if (containsShortFieldPay(value)) return { ok: false, code: `${field}Pay` };
   return { ok: true, value };
 }
 
@@ -241,7 +305,7 @@ export function publicFactsFrom(row: StoredFacts, known: KnownContact = {}): Pub
     // Acima do teto não sai, e nenhuma expressão roda sobre ele: o valor só
     // chega longo por fora da gravação, e texto longo é onde o custo mora.
     if (text === null || text.length > FREE_TEXT_MAX[field]) return null;
-    return shortFieldContact(text, known) || shortFieldPay(text) ? null : text;
+    return containsShortFieldContact(text, known) || containsShortFieldPay(text) ? null : text;
   };
 
   return {

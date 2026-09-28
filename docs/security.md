@@ -362,12 +362,21 @@ sai, e área/idiomas acima do teto, com e-mail (inclusive o cadastrado, do
 candidato e da conta), telefone (o padrão do perfil mais oito dígitos ou mais
 com separador simples, fora intervalo de anos) ou pretensão salarial saem
 vazios. Pretensão, em campo curto, é rótulo de piso (`containsPay()`, a régua
-do CV) **ou qualquer valor com cara de dinheiro** (`containsAmount()`, sobre
-`MONEY_LIKE`: "Piso 20k", "Rate 90/h", "USD 15,000/mês" não têm rótulo e
-passavam — revisão L2 da #362). As expressões rodam sobre espaço colapsado e
-só abaixo do teto: a alternativa de `rate:` em começo de linha era quadrática
-numa sequência de quebras; e a página só escolhe o lugar (faixa do topo ou "Em
-resumo"). A gravação é `setPublicFactsAction`, com `guardOwnCandidate` antes
+do CV), `rate` com número ou dois-pontos em qualquer posição, ou valor pela
+régua própria dos campos curtos (`containsShortFieldPay()`, separada do
+`MONEY_LIKE` do currículo): símbolo de moeda; código ou nome de moeda junto de
+número ("USD15000", "90 dollars" — "euros e câmbio" solto não); `mil` só com
+moeda ("10 mil TPS" não); `k` com dois dígitos ou mais ("20k" — "4K" de
+resolução não); número por unidade de tempo ("90/hr", "150 por hora");
+milhar com ponto, vírgula, espaço ou apóstrofo; quatro dígitos ou mais que
+não sejam ano, depois de retirar número de norma ("ISO 27001", "IEC 61131").
+Contato é conferido antes de valor, para a recusa dar o motivo certo. **Limite
+declarado** (revisões L2 da #362): ano sem moeda nem rótulo ("Dados 2000"),
+número de até três dígitos sozinho ("150"), número por extenso ("vinte mil")
+e `k` de um dígito ("5k") passam — não é detecção de todo valor. As
+expressões rodam sobre espaço colapsado e só abaixo do teto: a alternativa de
+`rate:` em começo de linha do currículo era quadrática numa sequência de
+quebras; e a página só escolhe o lugar (faixa do topo ou "Em resumo"). A gravação é `setPublicFactsAction`, com `guardOwnCandidate` antes
 de ler o formulário, e recusa com código o valor forjado, o texto longo, o
 contato e a pretensão. **Pretensão salarial não é campo nem opt-in** — teste
 de ausência explícito em `tests/public-profile.test.ts`. Foto e capa (parte B)

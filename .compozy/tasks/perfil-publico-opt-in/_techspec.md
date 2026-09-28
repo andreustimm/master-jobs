@@ -76,11 +76,20 @@ linha é quadrática numa sequência de quebras).
 
 **Revisão L2 da #362.** Rótulo não basta num campo curto: "Piso 20k", "Rate
 90/h" e "USD 15,000/mês" passavam. Área e idiomas também recusam/esvaziam
-qualquer valor com cara de dinheiro (`containsAmount()`, sobre `MONEY_LIKE`),
-telefone sem marca (oito dígitos ou mais com separador simples, fora intervalo
-de anos) e os e-mails cadastrados na entrada (`setPublicFacts` os lê do
-candidato e da conta). Na saída, texto acima do teto sai `null` antes de
-qualquer expressão.
+valor pela régua própria dos campos curtos (`containsShortFieldPay()`),
+telefone sem marca (`containsShortFieldContact()`: oito dígitos ou mais com
+separador curto, fora par de anos) e os e-mails cadastrados na entrada
+(`setPublicFacts` os lê do candidato e da conta). Na saída, texto acima do
+teto sai `null` antes de qualquer expressão.
+
+**Re-revisão L2 da #362.** A régua de valor deixou de ser o `MONEY_LIKE` do
+currículo (intocado): `rate` com número em qualquer posição, unidade de tempo
+(`/hr`, `/mo`, `/yr`, `por hora`, `an hour`), código de moeda colado
+("USD15000"), milhar com espaço/apóstrofo, moeda por extenso só junto de
+número, `mil` só com moeda, `k` só com dois dígitos, e número de norma
+(ISO/IEC/IEEE/RFC/NBR) retirado antes. Limite declarado: ano sem moeda nem
+rótulo, número de até três dígitos sozinho, número por extenso e `k` de um
+dígito passam.
 
 ## DTO — `src/core/candidate-public.ts`
 
