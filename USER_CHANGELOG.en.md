@@ -26,6 +26,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.27.2] - 2026-09-28T16:21:47.000Z
+
+### Fixed
+
+- The public profile no longer disappears entirely when a résumé imported from PDF includes a salary expectation: the salary section is left out and the rest of the résumé stays.
+
 ## [1.27.0] - 2026-09-26T13:44:24.000Z
 
 ### New

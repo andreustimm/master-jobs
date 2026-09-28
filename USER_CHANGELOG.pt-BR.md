@@ -26,6 +26,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.27.2] - 2026-09-28T16:21:47.000Z
+
+### Corrigido
+
+- O perfil público não some mais inteiro quando o currículo importado de PDF traz a pretensão salarial: sai a seção da pretensão, e o resto do currículo fica.
+
 ## [1.27.0] - 2026-09-26T13:44:24.000Z
 
 ### Novidade
