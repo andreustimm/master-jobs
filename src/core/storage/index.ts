@@ -45,6 +45,7 @@ export type { StorageConfig, StorageSettings } from "./config.ts";
 export {
   STORAGE_DRIVERS,
   StorageError,
+  type GetObjectOptions,
   type GetObjectOutput,
   type HeadObjectOutput,
   type ObjectAddress,

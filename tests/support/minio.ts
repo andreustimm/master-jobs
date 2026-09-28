@@ -13,8 +13,8 @@ import { spawnSync } from "node:child_process";
 import { setTimeout } from "node:timers/promises";
 import { CreateBucketCommand, S3Client } from "@aws-sdk/client-s3";
 
-/** A mesma imagem do `docker-compose.local.yml` (conferido em teste). */
-export const MINIO_IMAGE = "pgsty/minio:RELEASE.2026-08-04T00-00-00Z";
+/** A mesma imagem do `docker-compose.local.yml`, por tag E digest (conferido em teste). */
+export const MINIO_IMAGE = "pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372";
 
 export type MinioServer = {
   endpoint: string;

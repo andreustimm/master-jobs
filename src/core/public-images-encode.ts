@@ -15,7 +15,7 @@ import sharp from "sharp";
 import {
   checkImageDimensions,
   checkUploadSize,
-  IMAGE_MAX_SIDE,
+  IMAGE_MAX_PIXELS,
   IMAGE_SPEC,
   PUBLIC_IMAGE_CONTENT_TYPE,
   sniffImageFormat,
@@ -43,11 +43,12 @@ export async function encodePublicImage(
 
   // `limitInputPixels` recusa antes de alocar; `failOn: "error"` recusa
   // arquivo truncado em vez de devolver meia imagem cinza.
-  const options = { limitInputPixels: IMAGE_MAX_SIDE * IMAGE_MAX_SIDE, failOn: "error" as const };
+  // `metadata()` só lê o cabeçalho; a dimensão é conferida antes de decodificar.
+  const options = { limitInputPixels: IMAGE_MAX_PIXELS, failOn: "error" as const };
   let width: number;
   let height: number;
   try {
-    const meta = await sharp(bytes, options).metadata();
+    const meta = await sharp(bytes, { limitInputPixels: false }).metadata();
     // Assinatura de um formato e conteúdo de outro é arquivo forjado.
     if (meta.format !== format) return { ok: false, code: "imageType" };
     ({ width, height } = meta.autoOrient);

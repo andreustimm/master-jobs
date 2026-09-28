@@ -1,4 +1,4 @@
-import { ownImageKey, readImageObject } from "../../../../src/core/candidate-images.ts";
+import { ownImageKey, readImageObject } from "../../../../src/core/candidate-image-read.ts";
 import { isPublicImageKind } from "../../../../src/core/public-images.ts";
 import { requireOwnCandidatePage } from "../../../auth";
 import { imageNotFound, imageResponse } from "../../../image-response";

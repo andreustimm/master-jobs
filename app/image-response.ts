@@ -1,4 +1,4 @@
-import type { ServedImage } from "../src/core/candidate-images.ts";
+import type { ServedImage } from "../src/core/candidate-image-read.ts";
 
 /**
  * Respostas das rotas de imagem do perfil (#327), públicas e da prévia.

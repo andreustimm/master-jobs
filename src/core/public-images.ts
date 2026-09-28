@@ -23,8 +23,15 @@ export function isPublicImageKind(value: unknown): value is PublicImageKind {
   return typeof value === "string" && (PUBLIC_IMAGE_KINDS as readonly string[]).includes(value);
 }
 
-/** Teto do arquivo enviado. A action do Next aceita 11 MB; a imagem, bem menos. */
-export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+/**
+ * Teto do arquivo enviado: 4 MiB. A Vercel recusa corpo de requisição acima
+ * de 4,5 MB — Server Action inclusive — com 413 ANTES de a action rodar, e
+ * aí a tela só consegue mostrar o erro genérico. Com 4 MiB mais o envelope do
+ * multipart, todo arquivo que passa na plataforma chega à action e é
+ * recusado com a mensagem própria. O `bodySizeLimit` de 11 MB do
+ * `next.config.ts` vale para o currículo em PDF, não para a imagem.
+ */
+export const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 export const IMAGE_MAX_MEGABYTES = IMAGE_MAX_BYTES / (1024 * 1024);
 
 /**
@@ -33,6 +40,13 @@ export const IMAGE_MAX_MEGABYTES = IMAGE_MAX_BYTES / (1024 * 1024);
  * alocar a imagem inteira.
  */
 export const IMAGE_MAX_SIDE = 8000;
+
+/**
+ * Pixels máximos na entrada (50 MP, acima de quase toda câmera de celular).
+ * O lado máximo sozinho deixava passar 8000 × 8000 = 64 MP — um PNG de cor
+ * lisa com poucos KB, dentro do teto de bytes, que abre em ~190 MB de RAM.
+ */
+export const IMAGE_MAX_PIXELS = 50_000_000;
 
 /**
  * O que cada tipo vira: tamanho de saída (recorte central) e o mínimo de
@@ -68,7 +82,11 @@ export function sniffImageFormat(bytes: Uint8Array): ImageFormat | null {
   return null;
 }
 
-/** Tamanho do arquivo, antes de ler um byte dele. */
+/**
+ * Tamanho do arquivo, pelo `size` do `File`. O Next já recebeu o multipart
+ * inteiro quando a action roda; o que esta checagem evita é copiar os bytes e
+ * decodificar a imagem.
+ */
 export function checkUploadSize(size: number): PublicImageError | null {
   if (size <= 0) return "imageMissing";
   if (size > IMAGE_MAX_BYTES) return "imageTooLarge";
@@ -77,7 +95,7 @@ export function checkUploadSize(size: number): PublicImageError | null {
 
 /** Dimensão já com a orientação da câmera aplicada (retrato deitado conta em pé). */
 export function checkImageDimensions(kind: PublicImageKind, width: number, height: number): PublicImageError | null {
-  if (width > IMAGE_MAX_SIDE || height > IMAGE_MAX_SIDE) return "imageTooBig";
+  if (width > IMAGE_MAX_SIDE || height > IMAGE_MAX_SIDE || width * height > IMAGE_MAX_PIXELS) return "imageTooBig";
   const spec = IMAGE_SPEC[kind];
   if (width < spec.minWidth || height < spec.minHeight) return "imageTooSmall";
   return null;

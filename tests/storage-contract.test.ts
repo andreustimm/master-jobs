@@ -146,6 +146,57 @@ describe("adapter Vercel Blob", () => {
     expect((error as Error).message).not.toContain(TOKEN);
   });
 
+  it("caminho de serviço não lê o irmão de metadado", async () => {
+    const fake = fakeBlobSdk(TOKEN);
+    const storage = vercelBlobStorage(fake.sdk, TOKEN);
+    const address = { bucket: "master-jobs", key: "servir.webp" };
+    await storage.putObject({ ...address, body: new Uint8Array([1]), contentType: "image/webp", metadata: { w: "1" } });
+    fake.calls.length = 0;
+    await storage.getObject(address, { metadata: false });
+    expect(fake.calls.map((call) => call.pathname)).toEqual(["master-jobs/servir.webp"]);
+  });
+
+  it("irmão truncado vale como sem metadado, e o objeto continua legível", async () => {
+    const fake = fakeBlobSdk(TOKEN);
+    const storage = vercelBlobStorage(fake.sdk, TOKEN);
+    const address = { bucket: "master-jobs", key: "k.webp" };
+    await storage.putObject({ ...address, body: new Uint8Array([7]), contentType: "image/webp", metadata: { width: "512" } });
+    const sidecar = fake.store.get(".metadata/master-jobs/k.webp.json")!;
+    fake.store.set(".metadata/master-jobs/k.webp.json", { ...sidecar, body: sidecar.body.slice(0, 6) });
+    expect((await storage.getObject(address))?.metadata).toEqual({});
+    expect((await storage.headObject(address))?.metadata).toEqual({});
+    expect([...(await storage.getObject(address))!.body]).toEqual([7]);
+    // Forma inesperada também vira vazio, e valor que não é texto some.
+    fake.store.set(".metadata/master-jobs/k.webp.json", { ...sidecar, body: new TextEncoder().encode('{"a":"b","n":1}') });
+    expect((await storage.headObject(address))?.metadata).toEqual({ a: "b" });
+    fake.store.set(".metadata/master-jobs/k.webp.json", { ...sidecar, body: new TextEncoder().encode("[1]") });
+    expect((await storage.headObject(address))?.metadata).toEqual({});
+  });
+
+  it("irmão que falha na rede: erro sem token, e o stream do objeto é cancelado", async () => {
+    const fake = fakeBlobSdk(TOKEN);
+    const storage = vercelBlobStorage(fake.sdk, TOKEN);
+    const address = { bucket: "master-jobs", key: "k.webp" };
+    await storage.putObject({ ...address, body: new Uint8Array([1]), contentType: "image/webp", metadata: { w: "1" } });
+    fake.failOn(".metadata/");
+    const error = await storage.getObject(address).catch((caught: unknown) => caught);
+    fake.failOn(null);
+    expect(error).toBeInstanceOf(StorageError);
+    expect(fake.cancelled).toEqual(["master-jobs/k.webp"]);
+  });
+
+  it("objeto que falha com o irmão lido: erro, sem stream pendente", async () => {
+    const fake = fakeBlobSdk(TOKEN);
+    const storage = vercelBlobStorage(fake.sdk, TOKEN);
+    const address = { bucket: "master-jobs", key: "k.webp" };
+    await storage.putObject({ ...address, body: new Uint8Array([1]), contentType: "image/webp", metadata: { w: "1" } });
+    fake.failOn("master-jobs/");
+    const error = await storage.getObject(address).catch((caught: unknown) => caught);
+    fake.failOn(null);
+    expect(error).toBeInstanceOf(StorageError);
+    expect(fake.cancelled).toEqual([]);
+  });
+
   it("a composição de produção usa o SDK de verdade com o token da configuração", () => {
     const storage = vercelBlobFromSettings({ driver: "vercel-blob", bucket: "master-jobs", token: TOKEN });
     expect(storage.driver).toBe("vercel-blob");
@@ -243,6 +294,17 @@ describe("configuração por ambiente", () => {
     await expect(openStorage({ JHO_STORAGE_DRIVER: "gcs" })).rejects.toThrow(/JHO_STORAGE_DRIVER/);
   });
 
+  it("bucket fora das regras do S3 é configuração inválida, nos dois drivers", () => {
+    const base = { S3_REGION: "us-east-1", S3_ACCESS_KEY_ID: "id", S3_SECRET_ACCESS_KEY: SECRET_FOR_CONFIG };
+    expect(
+      parseStorageConfig({ JHO_STORAGE_DRIVER: "vercel-blob", BLOB_READ_WRITE_TOKEN: TOKEN, JHO_STORAGE_BUCKET: "Fotos_Perfil" }),
+    ).toEqual({ status: "invalid", reason: "JHO_STORAGE_BUCKET fora das regras de nome do S3" });
+    expect(parseStorageConfig({ JHO_STORAGE_DRIVER: "s3", ...base, S3_BUCKET: ".metadata" })).toEqual({
+      status: "invalid",
+      reason: "S3_BUCKET fora das regras de nome do S3",
+    });
+  });
+
   it("vercel-blob exige o token e nunca o cita no erro", async () => {
     expect(parseStorageConfig({ JHO_STORAGE_DRIVER: "vercel-blob" })).toEqual({
       status: "invalid",
@@ -287,8 +349,10 @@ describe("configuração por ambiente", () => {
 describe("MinIO local (docker-compose.local.yml)", () => {
   const compose = readFileSync("docker-compose.local.yml", "utf8");
 
-  it("usa a mesma imagem da suíte de contrato", () => {
-    expect(compose).toContain(`pgsty/minio:${MINIO_IMAGE.split(":")[1]}`);
+  it("usa a mesma imagem da suíte de contrato, fixada por digest", () => {
+    expect(MINIO_IMAGE).toMatch(/^pgsty\/minio:RELEASE\.[\w-]+@sha256:[0-9a-f]{64}$/);
+    const images = [...compose.matchAll(/LOCAL_MINIO_IMAGE:-([^}]+)\}/g)].map((match) => match[1]);
+    expect(images).toEqual([MINIO_IMAGE, MINIO_IMAGE]);
   });
 
   it("publica portas só em 127.0.0.1 (regra 12) e cria o bucket no bootstrap", () => {

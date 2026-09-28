@@ -1,4 +1,4 @@
-import { readImageObject } from "../../../../../src/core/candidate-images.ts";
+import { readImageObject } from "../../../../../src/core/candidate-image-read.ts";
 import { publicImageKeyForSlug } from "../../../../../src/core/candidate-public.ts";
 import { isPublicImageKind } from "../../../../../src/core/public-images.ts";
 import { imageNotFound, imageResponse } from "../../../../image-response";

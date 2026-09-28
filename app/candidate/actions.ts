@@ -361,8 +361,9 @@ export type PublicImageActionResult = { ok: true; run?: "removed" } | { ok: fals
 /**
  * Envia, troca ou remove a foto ou a capa, e grava o "mostrar" dela.
  *
- * A guarda vem antes de ler o formulário — e, portanto, antes de ler um byte
- * do arquivo, reencodar ou falar com o armazenamento. O candidato vem da
+ * A guarda vem antes de tocar no formulário — o Next já recebeu o multipart
+ * inteiro, mas nenhum byte do arquivo é copiado, decodificado nem enviado ao
+ * armazenamento antes dela. O candidato vem da
  * sessão (`guardOwnCandidate`); `kind` é só `photo` ou `cover`, validado no
  * domínio, e nenhum id do formulário é lido (regra 15). O botão "Remover"
  * manda `intent=remove` no mesmo formulário.

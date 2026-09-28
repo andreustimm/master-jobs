@@ -103,7 +103,7 @@ export function s3Storage(client: S3Sender, secrets: readonly string[] = []): Ob
       }
     },
 
-    async getObject(address) {
+    async getObject(address, options) {
       assertValidAddress(address);
       try {
         const out = await client.send(new GetObjectCommand(where(address)));
@@ -113,7 +113,7 @@ export function s3Storage(client: S3Sender, secrets: readonly string[] = []): Ob
           contentType: out.ContentType ?? "application/octet-stream",
           contentLength: out.ContentLength ?? body.byteLength,
           etag: out.ETag ?? "",
-          metadata: { ...out.Metadata },
+          metadata: options?.metadata === false ? {} : { ...out.Metadata },
         };
       } catch (error) {
         if (isNotFound(error)) return null;

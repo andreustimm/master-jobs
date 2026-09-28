@@ -1,7 +1,8 @@
 /**
- * Foto e capa do candidato (#327): gravar, remover e ler, pela porta de
+ * Foto e capa do candidato (#327): gravar e remover, pela porta de
  * armazenamento. Orquestração burra — as decisões estão em
- * `public-images.ts` (puro) e o reencode em `public-images-encode.ts`.
+ * `public-images.ts` (puro) e o reencode em `public-images-encode.ts`. A
+ * leitura, que as rotas usam, mora em `candidate-image-read.ts`, sem `sharp`.
  *
  * **Ordem da troca.** Objeto novo primeiro, com chave nova; depois o banco
  * passa a apontar para ele (linha travada, para duas trocas simultâneas não
@@ -14,35 +15,30 @@
  * (`guardOwnCandidate`); nenhuma aceita id vindo de formulário (regra 15).
  */
 import { randomBytes } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
+import { DEFAULT_READ_DEPS, imageKeyColumn, type ImageReadDeps } from "./candidate-image-read.ts";
 import { getDb } from "./db/client.ts";
 import { candidate } from "./db/schema.ts";
 import { encodePublicImage } from "./public-images-encode.ts";
 import {
   checkUploadSize,
   isPublicImageKind,
-  isServableImageType,
   publicImageKey,
   type PublicImageError,
   type PublicImageKind,
 } from "./public-images.ts";
-import { openStorage, type StorageTarget } from "./storage/index.ts";
+import type { StorageTarget } from "./storage/index.ts";
 
-export type ImageDeps = {
-  storage: () => Promise<StorageTarget | null>;
+export type ImageDeps = ImageReadDeps & {
   nonce: () => string;
 };
 
 const DEFAULT_DEPS: ImageDeps = {
-  storage: () => openStorage(),
+  ...DEFAULT_READ_DEPS,
   nonce: () => randomBytes(16).toString("hex"),
 };
 
 export type PublicImageResult = { ok: true } | { ok: false; code: PublicImageError };
-
-export type ServedImage = { body: Uint8Array; contentType: string };
-
-const keyColumn = (kind: PublicImageKind) => (kind === "photo" ? candidate.photoKey : candidate.coverKey);
 
 function imageColumns(kind: PublicImageKind, key: string | null, show: boolean) {
   const updatedAt = new Date().toISOString();
@@ -66,7 +62,7 @@ async function deleteQuietly(target: StorageTarget, key: string, why: string): P
 async function swapKey(candidateId: number, kind: PublicImageKind, key: string | null, show: boolean): Promise<string | null> {
   return getDb().transaction(async (tx) => {
     const [row] = await tx
-      .select({ key: keyColumn(kind) })
+      .select({ key: imageKeyColumn(kind) })
       .from(candidate)
       .where(eq(candidate.id, candidateId))
       .for("update")
@@ -81,7 +77,10 @@ async function swapKey(candidateId: number, kind: PublicImageKind, key: string |
  * Grava a foto ou a capa e o "mostrar no perfil público" dela.
  *
  * Sem arquivo, grava só o opt-in: é o mesmo formulário, e desmarcar
- * "mostrar" não pode exigir reenviar a imagem.
+ * "mostrar" não pode exigir reenviar a imagem. Sem arquivo E sem imagem
+ * gravada, recusa com `imageMissing` e não grava nada — "mostrar" ligado sem
+ * imagem seria um consentimento para publicar o que vier depois, sem a
+ * pessoa ver o quê.
  */
 export async function setPublicImage(
   candidateId: number,
@@ -93,14 +92,18 @@ export async function setPublicImage(
 
   if (!(file instanceof Blob) || file.size === 0) {
     const optIn = kind === "photo" ? { publicPhoto: show } : { publicCover: show };
-    await getDb()
+    // Condição no próprio UPDATE: uma remoção concorrente entre "tem imagem?"
+    // e a escrita não deixa o opt-in ligado sem chave.
+    const updated = await getDb()
       .update(candidate)
       .set({ ...optIn, updatedAt: new Date().toISOString() })
-      .where(eq(candidate.id, candidateId));
-    return { ok: true };
+      .where(and(eq(candidate.id, candidateId), isNotNull(imageKeyColumn(kind))))
+      .returning({ id: candidate.id });
+    return updated.length > 0 ? { ok: true } : { ok: false, code: "imageMissing" };
   }
 
-  // O tamanho é recusado antes de ler um byte do arquivo.
+  // O Next já recebeu o multipart inteiro (a Vercel barra acima de 4,5 MB
+  // antes daqui); o teto é conferido antes de copiar os bytes e decodificar.
   const sizeError = checkUploadSize(file.size);
   if (sizeError) return { ok: false, code: sizeError };
   const encoded = await encodePublicImage(kind, new Uint8Array(await file.arrayBuffer()));
@@ -109,13 +112,21 @@ export async function setPublicImage(
   const target = await deps.storage();
   if (!target) return { ok: false, code: "storageUnavailable" };
   const key = publicImageKey(candidateId, kind, deps.nonce());
-  await target.storage.putObject({
-    bucket: target.bucket,
-    key,
-    body: encoded.image.body,
-    contentType: encoded.image.contentType,
-    metadata: { width: String(encoded.image.width), height: String(encoded.image.height) },
-  });
+  try {
+    await target.storage.putObject({
+      bucket: target.bucket,
+      key,
+      body: encoded.image.body,
+      contentType: encoded.image.contentType,
+      metadata: { width: String(encoded.image.width), height: String(encoded.image.height) },
+    });
+  } catch (error) {
+    // Escrita em duas partes (no Blob, objeto e metadado irmão): a primeira
+    // pode ter ficado. Registra e tenta apagar; o banco não aponta para ela.
+    console.warn(`[imagens] envio falhou: objeto ${key} pode ter ficado parcial; apagando`);
+    await deleteQuietly(target, key, "envio incompleto");
+    throw error;
+  }
 
   let previous: string | null;
   try {
@@ -138,33 +149,15 @@ export async function removePublicImage(
   deps: ImageDeps = DEFAULT_DEPS,
 ): Promise<PublicImageResult> {
   if (!isPublicImageKind(kindRaw)) return { ok: false, code: "invalidKind" };
+  // Armazenamento aberto ANTES de esquecer a chave: configuração inválida
+  // falha aqui, com o banco intacto, e não deixa um objeto sem registro.
+  const target = await deps.storage();
   const previous = await swapKey(candidateId, kindRaw, null, false);
   if (!previous) return { ok: true };
-  const target = await deps.storage();
   if (!target) {
     console.warn(`[imagens] remoção: objeto ${previous} ficou no armazenamento, que não está configurado aqui`);
     return { ok: true };
   }
   await deleteQuietly(target, previous, "remoção");
   return { ok: true };
-}
-
-/** Lê o objeto de uma chave, ou `null` — ausente, tipo não servível ou sem armazenamento. */
-export async function readImageObject(key: string | null, deps: ImageDeps = DEFAULT_DEPS): Promise<ServedImage | null> {
-  if (!key) return null;
-  const target = await deps.storage();
-  if (!target) return null;
-  const object = await target.storage.getObject({ bucket: target.bucket, key });
-  if (!object || !isServableImageType(object.contentType)) return null;
-  return { body: object.body, contentType: object.contentType };
-}
-
-/** A imagem do PRÓPRIO candidato, para a prévia em `/candidate` — com ou sem opt-in. */
-export async function ownImageKey(candidateId: number, kind: PublicImageKind): Promise<string | null> {
-  const [row] = await getDb()
-    .select({ key: keyColumn(kind) })
-    .from(candidate)
-    .where(eq(candidate.id, candidateId))
-    .limit(1);
-  return row?.key ?? null;
 }

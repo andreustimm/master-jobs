@@ -1,10 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MutationFeedbackForm } from "../mutation-feedback";
 import { savePublicImageAction } from "./actions";
+import { ImageFileInput } from "./image-file-input";
 import {
+  IMAGE_MAX_BYTES,
   IMAGE_MAX_MEGABYTES,
   IMAGE_MAX_SIDE,
   IMAGE_SPEC,
@@ -92,12 +93,14 @@ function ImageField({ kind, current, t }: { kind: PublicImageKind; current: OwnI
       >
         <input type="hidden" name="kind" value={kind} />
         <Label htmlFor={inputId}>{t("publicImages.choose")}</Label>
-        {/* `accept` só filtra o seletor; quem decide é a assinatura do arquivo no servidor. */}
-        <Input
+        {/* `accept` só filtra o seletor e o teto no navegador só evita o 413 da
+            plataforma; quem decide é o servidor (tamanho, assinatura, dimensão). */}
+        <ImageFileInput
           id={inputId}
           name="file"
-          type="file"
           accept="image/jpeg,image/png,image/webp"
+          maxBytes={IMAGE_MAX_BYTES}
+          tooLargeMessage={t("publicImages.errorTooLarge", { max: IMAGE_MAX_MEGABYTES })}
           aria-describedby={`${inputId}-hint`}
           className="min-w-0 max-w-[320px]"
           data-testid={inputId}

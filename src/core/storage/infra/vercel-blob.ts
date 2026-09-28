@@ -70,11 +70,24 @@ export function vercelBlobStorage(sdk: BlobSdk, token: string): ObjectStorage {
     return new StorageError("vercel-blob", operation, redactSecret(message, token));
   };
 
+  /**
+   * O irmão é escrito depois do objeto e não atomicamente: truncado,
+   * corrompido ou com outra forma, vale como "sem metadado" — o objeto em si
+   * continua legível, que é o que importa para servir a imagem.
+   */
   async function readMetadata(address: ObjectAddress): Promise<ObjectMetadata> {
     const sidecar = await sdk.get(metadataPathOf(address), { access: "private", token, useCache: false });
     if (!sidecar || sidecar.statusCode !== 200) return {};
-    const parsed: unknown = JSON.parse(new TextDecoder().decode(await bytesOf(sidecar.stream)));
-    return parsed && typeof parsed === "object" ? (parsed as ObjectMetadata) : {};
+    const text = new TextDecoder().decode(await bytesOf(sidecar.stream));
+    try {
+      const parsed: unknown = JSON.parse(text);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+      return Object.fromEntries(
+        Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+      );
+    } catch {
+      return {};
+    }
   }
 
   return {
@@ -130,13 +143,23 @@ export function vercelBlobStorage(sdk: BlobSdk, token: string): ObjectStorage {
       }
     },
 
-    async getObject(address) {
+    async getObject(address, options) {
       assertValidAddress(address);
       try {
-        const [out, metadata] = await Promise.all([
+        const wantsMetadata = options?.metadata !== false;
+        const [main, sidecar] = await Promise.allSettled([
           sdk.get(pathnameOf(address), { access: "private", token, useCache: false }),
-          readMetadata(address),
+          wantsMetadata ? readMetadata(address) : Promise.resolve({}),
         ]);
+        // Se só o irmão falhou, o corpo principal já está aberto: cancelar o
+        // stream devolve a conexão em vez de deixá-la presa até o timeout.
+        if (sidecar.status === "rejected") {
+          if (main.status === "fulfilled" && main.value?.statusCode === 200) await main.value.stream.cancel();
+          throw sidecar.reason;
+        }
+        if (main.status === "rejected") throw main.reason;
+        const out = main.value;
+        const metadata = sidecar.value;
         if (!out || out.statusCode !== 200) return null;
         const body = await bytesOf(out.stream);
         return {

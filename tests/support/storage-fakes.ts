@@ -39,12 +39,19 @@ export type FakeBlob = {
   calls: Array<{ op: string; pathname: string | string[]; options: Record<string, unknown> }>;
   /** Faz a próxima chamada falhar com esta mensagem (para testar a redação do token). */
   failNext: (message: string) => void;
+  /** Faz toda chamada (ou só a operação dada) a um pathname com o prefixo falhar. */
+  failOn: (prefix: string | null, op?: string) => void;
+  /** Pathnames cujo stream de leitura foi cancelado sem ser consumido. */
+  cancelled: string[];
 };
 
 export function fakeBlobSdk(token: string): FakeBlob {
   const store = new Map<string, Stored>();
   const calls: FakeBlob["calls"] = [];
+  const cancelled: string[] = [];
   let pendingFailure: string | null = null;
+  let failingPrefix: string | null = null;
+  let failingOp: string | undefined;
 
   const check = (op: string, pathname: string | string[], options: Record<string, unknown> | undefined) => {
     calls.push({ op, pathname, options: options ?? {} });
@@ -52,6 +59,10 @@ export function fakeBlobSdk(token: string): FakeBlob {
       const message = pendingFailure;
       pendingFailure = null;
       throw Object.assign(new Error(message), { name: "BlobError" });
+    }
+    const paths = Array.isArray(pathname) ? pathname : [pathname];
+    if (failingPrefix !== null && (failingOp === undefined || failingOp === op) && paths.some((path) => path.startsWith(failingPrefix!))) {
+      throw Object.assign(new Error(`falha simulada em ${failingPrefix}`), { name: "BlobError" });
     }
     if (options?.token !== token) throw new Error(`${op} sem o token configurado`);
     if ((op === "put" || op === "get") && options?.access !== "private") {
@@ -76,7 +87,15 @@ export function fakeBlobSdk(token: string): FakeBlob {
       if (!found) return null;
       return {
         statusCode: 200,
-        stream: new Blob([Buffer.from(found.body)]).stream(),
+        stream: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array(found.body));
+            controller.close();
+          },
+          cancel() {
+            cancelled.push(pathname);
+          },
+        }),
         headers: new Headers({ etag: found.etag }),
         blob: {
           url: "",
@@ -122,6 +141,11 @@ export function fakeBlobSdk(token: string): FakeBlob {
     failNext: (message) => {
       pendingFailure = message;
     },
+    failOn: (prefix, op) => {
+      failingPrefix = prefix;
+      failingOp = op;
+    },
+    cancelled,
   };
 }
 

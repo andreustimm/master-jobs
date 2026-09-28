@@ -625,8 +625,10 @@ export const candidate = production.table(
     /*
      * Foto e capa do perfil público (#327). O banco guarda só a CHAVE do
      * objeto na porta de armazenamento (`src/core/storage/`) — nunca URL de
-     * provedor nem credencial (regra 16). Chave nova a cada envio, e a antiga
-     * é apagada: uma URL guardada por alguém não volta a servir a foto nova.
+     * provedor nem credencial (regra 16). Chave nova a cada envio, e o objeto
+     * antigo é apagado no provedor. A URL do app (`/p/<endereço>/image/<tipo>`)
+     * não muda com a troca e passa a servir a foto nova — o que a revoga é a
+     * visibilidade ou o opt-in, reconferidos a cada pedido.
      * O opt-in segue o desenho dos fatos: `false` por padrão, nulo aceito
      * pela importação do snapshot legado e tratado como DESLIGADO.
      */

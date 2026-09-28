@@ -35,6 +35,18 @@ describe("limite do portfólio público", () => {
     expect(proxy(request("/p/maria", "203.0.113.7")).status).toBe(429);
   });
 
+  it("custo declarado: sonda pela imagem não gasta o balde da página, mas tem teto próprio", async () => {
+    // Documenta o limite escrito em `proxy.ts`: esgotado o balde da página,
+    // o mesmo IP ainda faz 60 sondas pela rota da imagem — e não mais.
+    const proxy = await loadProxy();
+    const ip = "192.0.2.44";
+    for (let i = 0; i < 30; i++) proxy(request(`/p/sonda-${i}`, ip));
+    expect(proxy(request("/p/sonda-extra", ip)).status).toBe(429);
+    const statuses = Array.from({ length: 61 }, (_, i) => proxy(request(`/p/sonda-${i}/image/photo`, ip)).status);
+    expect(statuses.slice(0, 60).every((status) => status !== 429)).toBe(true);
+    expect(statuses[60]).toBe(429);
+  });
+
   it("só o caminho exato da imagem usa o balde das imagens", async () => {
     const proxy = await loadProxy();
     // Varredura por caminho aninhado continua no balde da página.

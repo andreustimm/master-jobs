@@ -33,11 +33,13 @@ services:
 
   # Armazenamento de objetos local para o adapter S3 (#327, ADR 0029). A
   # imagem oficial `minio/minio` saiu do Docker Hub; `pgsty/minio` é o fork
-  # comunitário mantido, com o mesmo binário `minio` e o cliente `mc`.
+  # comunitário mantido, com o mesmo binário `minio` e o cliente `mc`. Fixada
+  # por DIGEST, além da tag: a tag de um fork pode ser republicada, o digest
+  # não (ADR 0029 registra a escolha e as alternativas).
   # Portas SÓ em 127.0.0.1 (regra 12): a foto de perfil privada não pode
   # ficar alcançável pela rede local. Credenciais só de desenvolvimento.
   minio:
-    image: ${LOCAL_MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    image: ${LOCAL_MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372}
     container_name: master-jobs-local-minio
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
@@ -59,7 +61,7 @@ services:
   # Cria o bucket uma vez e sai. `--ignore-existing` torna o bootstrap
   # idempotente: `docker compose up` de novo não falha nem apaga nada.
   minio-init:
-    image: ${LOCAL_MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    image: ${LOCAL_MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372}
     container_name: master-jobs-local-minio-init
     depends_on:
       minio:

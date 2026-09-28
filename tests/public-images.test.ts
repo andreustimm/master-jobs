@@ -1,3 +1,4 @@
+import { crc32, deflateSync } from "node:zlib";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { encodePublicImage } from "../src/core/public-images-encode.ts";
@@ -5,6 +6,7 @@ import {
   checkImageDimensions,
   checkUploadSize,
   IMAGE_MAX_BYTES,
+  IMAGE_MAX_PIXELS,
   IMAGE_MAX_SIDE,
   isPublicImageKind,
   isServableImageType,
@@ -40,6 +42,34 @@ async function image(
   return new Uint8Array(await out.toBuffer());
 }
 
+/**
+ * PNG que declara a dimensão e traz só a primeira linha de pixels (um IDAT
+ * mínimo, que o leitor de cabeçalho exige): poucos bytes, qualquer tamanho.
+ */
+function pngHeaderOnly(width: number, height: number): Uint8Array {
+  const chunk = (type: string, data: Buffer) => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr.writeUInt8(8, 8); // profundidade
+  ihdr.writeUInt8(2, 9); // RGB
+  return new Uint8Array(
+    Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      chunk("IHDR", ihdr),
+      chunk("IDAT", deflateSync(Buffer.alloc(1 + width * 3))),
+      chunk("IEND", Buffer.alloc(0)),
+    ]),
+  );
+}
+
 describe("regras puras", () => {
   it("tipo só photo ou cover", () => {
     expect(isPublicImageKind("photo")).toBe(true);
@@ -59,7 +89,10 @@ describe("regras puras", () => {
     expect(sniffImageFormat(new TextEncoder().encode("RIFF\0\0\0\0WAVEfmt "))).toBeNull();
   });
 
-  it("tamanho recusado antes de ler o arquivo", () => {
+  it("tamanho recusado pelo teto de 4 MiB, abaixo do limite de corpo da Vercel", () => {
+    expect(IMAGE_MAX_BYTES).toBe(4 * 1024 * 1024);
+    // Multipart acrescenta cabeçalhos; a folga até 4,5 MB é o envelope.
+    expect(IMAGE_MAX_BYTES).toBeLessThan(4_500_000);
     expect(checkUploadSize(0)).toBe("imageMissing");
     expect(checkUploadSize(IMAGE_MAX_BYTES)).toBeNull();
     expect(checkUploadSize(IMAGE_MAX_BYTES + 1)).toBe("imageTooLarge");
@@ -72,6 +105,8 @@ describe("regras puras", () => {
     expect(checkImageDimensions("cover", 799, 400)).toBe("imageTooSmall");
     expect(checkImageDimensions("cover", 2000, 199)).toBe("imageTooSmall");
     expect(checkImageDimensions("photo", IMAGE_MAX_SIDE + 1, 500)).toBe("imageTooBig");
+    expect(checkImageDimensions("photo", 7500, 7500)).toBe("imageTooBig");
+    expect(checkImageDimensions("photo", 7000, 7000)).toBeNull();
   });
 
   it("chave nova por envio, com o tipo e sem nada vindo do usuário", () => {
@@ -174,14 +209,28 @@ describe("reencode", () => {
     const jpeg = await image("jpeg", 300, 300);
     const forged = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...jpeg]);
     const forgedResult = await encodePublicImage("photo", forged);
-    expect(forgedResult.ok).toBe(false);
+    expect(forgedResult.ok ? "aceitou" : forgedResult.code).toMatch(/^(imageType|imageUnreadable)$/);
 
     const truncated = (await image("png", 400, 400)).slice(0, 120);
     expect(await encodePublicImage("photo", truncated)).toEqual({ ok: false, code: "imageUnreadable" });
   });
 
-  it("recusa lado acima do teto sem decodificar a imagem inteira", async () => {
+  it("recusa lado acima do teto pela dimensão, com código próprio", async () => {
     const tall = await image("png", 10, IMAGE_MAX_SIDE + 1);
     expect(await encodePublicImage("photo", tall)).toEqual({ ok: false, code: "imageTooBig" });
+  });
+
+  it("bomba de pixels dentro do teto de bytes é recusada só pelo cabeçalho", async () => {
+    // Um PNG de ~100 bytes que DECLARA 7500 × 7500 (56 MP, os dois lados
+    // abaixo do teto de 8000), com uma linha de pixels só.
+    // Se o encoder tentasse decodificar, falharia como ilegível; a resposta
+    // `imageTooBig` prova que a recusa veio da dimensão lida no cabeçalho.
+    const bomb = pngHeaderOnly(7500, 7500);
+    expect(bomb.byteLength).toBeLessThan(200);
+    expect(7500 * 7500).toBeGreaterThan(IMAGE_MAX_PIXELS);
+    expect(await encodePublicImage("photo", bomb)).toEqual({ ok: false, code: "imageTooBig" });
+    // A mesma forma dentro do limite de pixels passa da dimensão e só falha
+    // ao decodificar — o cabeçalho sozinho não é uma imagem.
+    expect(await encodePublicImage("photo", pngHeaderOnly(4000, 4000))).toEqual({ ok: false, code: "imageUnreadable" });
   });
 });

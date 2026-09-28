@@ -50,6 +50,16 @@ export type GetObjectOutput = HeadObjectOutput & {
 };
 
 /**
+ * `metadata: false` é o caminho de serviço: quem só entrega o corpo não paga
+ * pelo metadado (no Blob, uma leitura a mais). O contrato é o mesmo nos dois
+ * adapters — `metadata` volta `{}` —, para ninguém depender do que um
+ * provedor devolveria de graça e o outro não.
+ */
+export type GetObjectOptions = {
+  metadata?: boolean;
+};
+
+/**
  * A porta. Chave inexistente devolve `null` em `get`/`head` (o `NoSuchKey`
  * do S3 vira valor, não exceção) e `delete` é idempotente, como no S3.
  * `put` na mesma chave sobrescreve conteúdo, tipo e metadados.
@@ -57,7 +67,7 @@ export type GetObjectOutput = HeadObjectOutput & {
 export type ObjectStorage = {
   readonly driver: StorageDriver;
   putObject(input: PutObjectInput): Promise<PutObjectOutput>;
-  getObject(address: ObjectAddress): Promise<GetObjectOutput | null>;
+  getObject(address: ObjectAddress, options?: GetObjectOptions): Promise<GetObjectOutput | null>;
   headObject(address: ObjectAddress): Promise<HeadObjectOutput | null>;
   deleteObject(address: ObjectAddress): Promise<void>;
 };
@@ -89,8 +99,13 @@ const KEY = /^[A-Za-z0-9!_.*'()-][A-Za-z0-9!_.*'()/-]*$/;
 const METADATA_KEY = /^[a-z0-9-]{1,64}$/;
 const METADATA_VALUE = /^[\x20-\x7e]{0,512}$/;
 
+/** A mesma régua para a configuração: bucket inválido falha na carga, não no primeiro envio. */
+export function isValidBucket(bucket: string): boolean {
+  return BUCKET.test(bucket);
+}
+
 export function assertValidAddress(address: ObjectAddress): void {
-  if (!BUCKET.test(address.bucket)) throw new TypeError(`bucket inválido: ${address.bucket}`);
+  if (!isValidBucket(address.bucket)) throw new TypeError(`bucket inválido: ${address.bucket}`);
   const { key } = address;
   if (key.length > 1024 || !KEY.test(key) || key.split("/").some((part) => part === "..")) {
     throw new TypeError(`key inválida: ${key}`);

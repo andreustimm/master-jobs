@@ -2,7 +2,10 @@ import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureCandidate, getCandidateById, setPublicSlug, setVisibility } from "../src/core/candidate.ts";
 import { publicImageKeyForSlug, publicProfile } from "../src/core/candidate-public.ts";
-import { readImageObject, removePublicImage, setPublicImage } from "../src/core/candidate-images.ts";
+import { readFileSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
+import { readImageObject } from "../src/core/candidate-image-read.ts";
+import { removePublicImage, setPublicImage } from "../src/core/candidate-images.ts";
 import { vercelBlobStorage } from "../src/core/storage/infra/vercel-blob.ts";
 import type { StorageTarget } from "../src/core/storage/index.ts";
 import { fakeBlobSdk, type FakeBlob } from "./support/storage-fakes.ts";
@@ -133,9 +136,54 @@ describe("setPublicImage / removePublicImage", () => {
     await setPublicImage(id, { kind: "photo", file: await photoFile(), show: true });
     const calls = blob.calls.length;
     expect(await setPublicImage(id, { kind: "photo", file: null, show: false })).toEqual({ ok: true });
-    expect(await setPublicImage(id, { kind: "cover", file: new File([], "vazio.png"), show: true })).toEqual({ ok: true });
+    expect(await setPublicImage(id, { kind: "photo", file: new File([], "vazio.png"), show: true })).toEqual({ ok: true });
     expect(blob.calls.length).toBe(calls);
-    expect(await getCandidateById(id)).toMatchObject({ publicPhoto: false, publicCover: true, coverKey: null });
+    expect(await getCandidateById(id)).toMatchObject({ publicPhoto: true });
+  });
+
+  it("sem arquivo e sem imagem gravada: imageMissing, e o \"mostrar\" não liga", async () => {
+    const id = await publicCandidate();
+    expect(await setPublicImage(id, { kind: "cover", file: null, show: true })).toEqual({ ok: false, code: "imageMissing" });
+    expect(await setPublicImage(id, { kind: "cover", file: new File([], "vazio.png"), show: true })).toEqual({
+      ok: false,
+      code: "imageMissing",
+    });
+    expect(await getCandidateById(id)).toMatchObject({ coverKey: null, publicCover: false });
+    expect(blob.calls).toEqual([]);
+  });
+
+  it("envio que falha no meio (irmão de metadado) registra e apaga o objeto parcial", async () => {
+    const id = await publicCandidate();
+    blob.failOn(".metadata/", "put");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let logged = "";
+    try {
+      await expect(setPublicImage(id, { kind: "photo", file: await photoFile(), show: true })).rejects.toThrow();
+      logged = warn.mock.calls.flat().join(" ");
+    } finally {
+      blob.failOn(null);
+      warn.mockRestore();
+    }
+    expect(logged).toMatch(/envio falhou: objeto candidates\/\d+\/photo\/[a-f0-9]{32}\.webp/);
+    expect(logged).not.toContain(TOKEN);
+    // O objeto principal chegou a ser gravado e foi apagado; nada aponta para ele.
+    expect(objectKeys()).toEqual([]);
+    expect(await getCandidateById(id)).toMatchObject({ photoKey: null, publicPhoto: false });
+  });
+
+  it("remover com armazenamento mal configurado falha antes de esquecer a chave", async () => {
+    const id = await publicCandidate();
+    await setPublicImage(id, { kind: "photo", file: await photoFile(), show: true });
+    const key = (await getCandidateById(id))!.photoKey;
+    const previous = state.target;
+    state.target = Promise.reject(new Error("armazenamento mal configurado: JHO_STORAGE_DRIVER"));
+    (state.target as Promise<unknown>).catch(() => undefined);
+    try {
+      await expect(removePublicImage(id, "photo")).rejects.toThrow(/mal configurado/);
+    } finally {
+      state.target = previous;
+    }
+    expect(await getCandidateById(id)).toMatchObject({ photoKey: key, publicPhoto: true });
   });
 
   it("recusa pelo código antes de gravar qualquer coisa", async () => {
@@ -353,12 +401,42 @@ describe("savePublicImageAction", () => {
     });
   });
 
-  it("sem sessão própria, 403 antes de ler o arquivo ou falar com o armazenamento", async () => {
+  it("sem sessão própria, 403 antes de decodificar o arquivo ou falar com o armazenamento", async () => {
     const id = await publicCandidate("maria-silva");
     await expect(savePublicImageAction(form({ kind: "photo", file: await photoFile(), show: "on" }))).rejects.toThrow(/403/);
     expect(state.guarded).toBe(1);
     expect(blob.calls).toEqual([]);
     expect(await getCandidateById(id)).toMatchObject({ photoKey: null, publicPhoto: false });
+  });
+});
+
+describe("rotas não carregam o reencode", () => {
+  it("o grafo de imports das duas rotas de imagem não alcança sharp nem o encoder", () => {
+    // A rota pública é a mais chamada e não tem sessão: carregar libvips a
+    // cada cold start para nunca usá-lo seria custo e superfície por nada.
+    const ROOT = resolve(".");
+    const seen = new Set<string>();
+    const external = new Set<string>();
+    const stack = ["app/p/[slug]/image/[kind]/route.ts", "app/candidate/image/[kind]/route.ts"];
+    while (stack.length > 0) {
+      const file = stack.pop()!;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      const code = readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+      for (const match of code.matchAll(/\bfrom\s+["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']\s*\)/g)) {
+        const spec = match[1] ?? match[2]!;
+        if (!spec.startsWith(".")) {
+          external.add(spec);
+          continue;
+        }
+        const target = relative(ROOT, resolve(dirname(file), spec));
+        const withExt = /\.(ts|tsx)$/.test(target) ? target : `${target}.ts`;
+        stack.push(withExt);
+      }
+    }
+    expect(seen.has("src/core/candidate-image-read.ts")).toBe(true);
+    expect([...seen].filter((file) => /public-images-encode|candidate-images\.ts/.test(file))).toEqual([]);
+    expect(external.has("sharp")).toBe(false);
   });
 });
 

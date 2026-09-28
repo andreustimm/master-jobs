@@ -52,6 +52,16 @@ export function describeStorageContract(label: string, target: () => ContractTar
       expect(got?.metadata).toEqual({ width: "512", height: "512" });
     });
 
+    it("get sem metadados (caminho de serviço) traz o mesmo corpo, tipo e ETag, e metadata vazio", async () => {
+      const { storage, buckets } = target();
+      const address = { bucket: buckets[0], key: `${fresh()}/servir.webp` };
+      const put = await storage.putObject({ ...address, body: bytes("corpo"), contentType: "image/webp", metadata: { width: "1" } });
+      const got = await storage.getObject(address, { metadata: false });
+      expect(got && new TextDecoder().decode(got.body)).toBe("corpo");
+      expect(got).toMatchObject({ contentType: "image/webp", contentLength: 5, etag: put.etag, metadata: {} });
+      expect(await storage.getObject({ ...address, key: `${fresh()}/nada` }, { metadata: false })).toBeNull();
+    });
+
     it("preserva os 256 valores de byte", async () => {
       const { storage, buckets } = target();
       const address = { bucket: buckets[0], key: `${fresh()}.bin` };

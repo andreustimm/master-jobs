@@ -10,7 +10,7 @@
  * **Credencial não sai daqui por mensagem.** Os erros citam o NOME da
  * variável que falta, nunca um valor (regra 16, G41).
  */
-import { STORAGE_DRIVERS, type StorageDriver } from "./ports.ts";
+import { isValidBucket, STORAGE_DRIVERS, type StorageDriver } from "./ports.ts";
 
 /** Bucket padrão quando `JHO_STORAGE_BUCKET` não é dado. No Blob vira prefixo do pathname. */
 export const DEFAULT_BUCKET = "master-jobs";
@@ -57,6 +57,7 @@ export function parseStorageConfig(env: Env): StorageConfig {
     return { status: "invalid", reason: `JHO_STORAGE_DRIVER deve ser ${STORAGE_DRIVERS.join(" ou ")}` };
   }
   const bucket = value(env, "JHO_STORAGE_BUCKET") ?? DEFAULT_BUCKET;
+  if (!isValidBucket(bucket)) return { status: "invalid", reason: "JHO_STORAGE_BUCKET fora das regras de nome do S3" };
 
   if (driver === "vercel-blob") {
     const token = value(env, "BLOB_READ_WRITE_TOKEN");
@@ -71,11 +72,13 @@ export function parseStorageConfig(env: Env): StorageConfig {
   if (pathStyle !== null && pathStyle !== "true" && pathStyle !== "false") {
     return { status: "invalid", reason: "S3_FORCE_PATH_STYLE deve ser true ou false" };
   }
+  const s3Bucket = value(env, "S3_BUCKET") ?? bucket;
+  if (!isValidBucket(s3Bucket)) return { status: "invalid", reason: "S3_BUCKET fora das regras de nome do S3" };
   return {
     status: "configured",
     settings: {
       driver,
-      bucket: value(env, "S3_BUCKET") ?? bucket,
+      bucket: s3Bucket,
       region: value(env, "S3_REGION")!,
       endpoint,
       // MinIO e a maioria dos compatíveis só atendem `endpoint/bucket/key`;
