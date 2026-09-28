@@ -384,7 +384,9 @@ palavras…"), não a de pretensão. **Falso positivo aceito**, declarado:
 9001" (norma em minúscula), identificador com três dígitos ou mais ("H100"),
 notas de proficiência ("TOEFL 110", "IELTS 7.5", "HSK 4"), versões ("Python
 3", "Next.js 15", "GPT-4", "Web 3.0", "Indústria 4.0"), "3D", "5G" e rankings
-("Tier 1", "Top 10", "Fortune 500", "Big 4") — sem exceção para nenhuma
+("Tier 1", "Top 10", "Fortune 500", "Big 4"), "R" colado a dígito ("Cloudflare
+R2", lido como real) e norma ao lado de palavra de remuneração ("Rate limiting
+e ISO 27001") — sem exceção para nenhuma
 dessas classes. **Limite declarado:** número por extenso ("vinte mil") e
 e-mail ofuscado por extenso ("pia at local dot test", "[at]") passam. As expressões
 rodam sobre espaço colapsado e só abaixo do teto: a alternativa de `rate:` em

@@ -185,7 +185,7 @@ const TIME_UNIT = "(?:h|hrs?|hora|hour|dia|day|m[êe]s|mo|month|yr|ano|year|sema
 const STANDARD_NUMBER =
   /\b(?:(?:ISO|IEC|IEEE|NBR)(?: ?\/ ?(?:ISO|IEC|IEEE))* ?[:-]? ?\p{Nd}{1,5}|RFC ?[:-]? ?\p{Nd}{1,4})(?:[-:.]\p{Nd}{1,4})?(?!\p{Nd})/gu;
 const AMOUNT_AFTER = new RegExp(
-  `^ ?(?:/ ?${TIME_UNIT}\\b|${CURRENCY_CODE}\\b|${CURRENCY_WORD}\\b|[$€£¥]|R\\$|k\\b|(?:mil|thousand|million|milh[õo]es)\\b)`,
+  `^ ?(?:/ ?${TIME_UNIT}\\b|(?:por|per|an?) ${TIME_UNIT}\\b|${CURRENCY_CODE}\\b|${CURRENCY_WORD}\\b|[$€£¥]|R\\$|k\\b|(?:mil|thousand|million|milh[õo]es)\\b)`,
   "iu",
 );
 

@@ -416,6 +416,7 @@ describe("regra estrutural dos campos curtos (#362)", () => {
     "daily rate: $500",
     "RFC 15000",
     "NBR 20000/mês",
+    "NBR 12500 por mês",
     "iso 30000",
     "Dados (ISO 150000)",
     // esta rodada
