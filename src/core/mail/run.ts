@@ -15,7 +15,7 @@ import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "../db/client.ts";
 import { application, job, mailMessage, mailSuggestion } from "../db/schema.ts";
 import { setApplicationStatusInTransaction } from "../db/repo.ts";
-import { mailMayMove, OUT_OF_FUNNEL, parseApplicationStatus } from "../../contexts/pursuit/domain/application.ts";
+import { mailMayMove, OUT_OF_FUNNEL, parseApplicationStatus, transitionDirection } from "../../contexts/pursuit/domain/application.ts";
 import { ensureImportSource } from "../ingest/manual.ts";
 import { observeRawJob } from "../ingest/observe.ts";
 import { htmlToText } from "../sources/http.ts";
@@ -374,6 +374,14 @@ export async function decideSuggestion(
       throw new Error(`Sugestão ${id} não possui candidatura correspondente`);
     }
 
+    // `FOR UPDATE`, mesmo padrão de `setApplicationStatusInTransaction` (#356):
+    // sem a trava, `mailMayMove`/`transitionDirection` decidem com um `status`
+    // que pode ficar velho por trás de um avanço real em voo — e se ele por
+    // coincidência bater com o `suggestedStatus` (comparação de igualdade
+    // trivial, logo abaixo), o guard de regressão nem chega a rodar. A mesma
+    // trava aqui garante que `setApplicationStatusInTransaction`, ao reler
+    // `previous` mais abaixo na mesma transação, decide sobre a MESMA foto —
+    // o segundo `FOR UPDATE` na mesma linha, na mesma transação, é um no-op.
     const [owned] = await tx
       .select({ id: application.id, status: application.status })
       .from(application)
@@ -384,7 +392,8 @@ export async function decideSuggestion(
           eq(application.jobId, suggestion.jobId),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!owned) throw new Error(`Sugestão ${id} pertence a outro candidato`);
 
     const status = parseApplicationStatus(suggestion.suggestedStatus);
@@ -392,7 +401,19 @@ export async function decideSuggestion(
     // "recebemos sua candidatura" aceito com a pessoa já em entrevista a
     // devolveria para "Candidatura enviada". E-mail só avança ou encerra; a
     // sugestão continua pendente, para ser descartada.
-    if (status !== owned.status && !mailMayMove(owned.status, status)) {
+    //
+    // "Fora do funil" não é uma regressão — é a pessoa tendo tirado a vaga do
+    // funil de propósito (#346): a mensagem antiga confundia as duas coisas e
+    // mostrava o marcador interno `untracked` como se fosse um estágio real.
+    if (status !== owned.status && owned.status === OUT_OF_FUNNEL) {
+      throw new OutOfFunnelSuggestionError(id, status);
+    }
+    // "Regressiva" é só quando a direção é literalmente "voltar" — outra
+    // ilegalidade (ex.: `shortlisted` → `interviewing`, que não existe em
+    // nenhum sentido) não é o funil "andando para trás", e dizer isso seria
+    // falso. Essa cai pela recusa comum do domínio (`IllegalApplicationTransitionError`,
+    // via `setApplicationStatusInTransaction`).
+    if (status !== owned.status && !mailMayMove(owned.status, status) && transitionDirection(owned.status, status) === "back") {
       throw new RegressiveSuggestionError(id, owned.status, status);
     }
     await setApplicationStatusInTransaction(
@@ -421,5 +442,20 @@ export class RegressiveSuggestionError extends Error {
   constructor(id: number, from: string, to: string) {
     super(`Sugestão ${id} faria a candidatura voltar de ${from} para ${to}; e-mail só avança o funil. Descarte-a ou mova à mão.`);
     this.name = "RegressiveSuggestionError";
+  }
+}
+
+/**
+ * A candidatura está fora do funil (desfeita até o primeiro registro, #316);
+ * e-mail não a recoloca sozinho. Erro próprio, e não `RegressiveSuggestionError`
+ * (#346): não é uma regressão, é a pessoa tendo tirado a vaga do funil, e o
+ * texto não expõe `untracked` — o marcador interno — como se fosse um estágio.
+ */
+export class OutOfFunnelSuggestionError extends Error {
+  readonly code = "out_of_funnel_suggestion";
+
+  constructor(id: number, to: string) {
+    super(`Sugestão ${id}: a candidatura está fora do funil; e-mail não a recoloca sozinho, nem para ${to}. Mova-a à mão primeiro.`);
+    this.name = "OutOfFunnelSuggestionError";
   }
 }

@@ -22,7 +22,15 @@
  *   palavra de remuneração (`salário`, `remuneração`, `salary`,
  *   `compensation`) a até 60 caracteres de um valor que não seja ano. O bloco é lido como texto corrido,
  *   então um rótulo quebrado em duas linhas continua sendo rótulo, e o valor
- *   sai esteja antes ou depois dele. Num título Markdown, sai a seção inteira
+ *   sai esteja antes ou depois dele. Num bloco com títulos de seção — o CV
+ *   extraído de PDF, sem linha em branco —, sai a seção do piso até o
+ *   próximo nome de seção conhecido; sem título, sem valor na seção ou com
+ *   resto que ainda parece piso, o bloco inteiro. Esse corte tem dois
+ *   preços, ambos escolhidos: valor a três linhas ou mais da seção (ou duas
+ *   seções depois), e número sem cara de dinheiro ("150") do outro lado de
+ *   um nome de seção, passam; valor com cara de dinheiro a até duas linhas dela
+ *   derruba o CV inteiro, e a linha com número logo acima do rótulo sai
+ *   mesmo que seja um item neutro. Num título Markdown, sai a seção inteira
  *   até o próximo título de mesmo nível ou acima. Um valor sem rótulo nem
  *   palavra de remuneração não é reconhecido; um bloco com "reduzi o custo de
  *   salário em 30%" some sem ser piso — diante da dúvida, esconde-se.
@@ -32,11 +40,41 @@
  * as formas usuais não vazem pelo consentimento dado para outra coisa.
  */
 
-import { cvTextToMarkdown } from "./cv-markdown.ts";
+import { cvTextToMarkdown, isHeading, isKnownHeading } from "./cv-markdown.ts";
 
 export const REDACTED = "[…]";
 
-const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
+// O lookbehind só deixa a tentativa começar no início de uma sequência de
+// caracteres de endereço: sem ele, cada posição de uma palavra longa sem `@`
+// reexaminava o resto dela, e o custo era quadrático (#344).
+const EMAIL_BODY = String.raw`[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}`;
+const EMAIL = new RegExp(String.raw`(?<![\p{L}\p{N}._%+-])${EMAIL_BODY}`, "gu");
+// Sticky, para o endereço colado ao fim do anterior ("a@x.com-b@y.com"), que
+// o lookbehind esconderia.
+const EMAIL_HERE = new RegExp(EMAIL_BODY, "uy");
+
+function redactEmails(text: string): string {
+  let out = "";
+  let from = 0;
+  // `exec` a partir de `from`: um match descartado por começar antes dele
+  // levaria junto o endereço que começa dentro dele ("…@c.de@f.gh@i.jk").
+  for (;;) {
+    EMAIL.lastIndex = from;
+    const match = EMAIL.exec(text);
+    if (!match) break;
+    let end = match.index + match[0].length;
+    out += text.slice(from, match.index) + REDACTED;
+    for (;;) {
+      EMAIL_HERE.lastIndex = end;
+      const next = EMAIL_HERE.exec(text);
+      if (!next) break;
+      out += REDACTED;
+      end += next[0].length;
+    }
+    from = end;
+  }
+  return out + text.slice(from);
+}
 
 /**
  * Telefone internacional: `+`, código e grupos de dígitos com um separador
@@ -48,7 +86,8 @@ const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
 const INTERNATIONAL_START = /\+(?=\d)/g;
 // Separadores de telefone: espaço, ponto, hífen, traço (– —) e barra.
 // O separador pode vir cercado de espaço: `+55 11 91234 - 5678`.
-const PHONE_GROUP = /^(?:[ \t]*[.\-–—/][ \t]*|[ \t]+)?\(?(\d{1,5})\)?/u;
+// Sticky: lê a partir de `lastIndex` sem copiar o resto do texto a cada grupo.
+const PHONE_GROUP = /(?:[ \t]*[.\-–—/][ \t]*|[ \t]+)?\(?(\d{1,5})\)?/uy;
 const PHONE_SEP = "(?:[ \\t]*[.\\-–—/][ \\t]*|[ \\t]+)?";
 // DDD brasileiro (`(11) 91234-5678`) e código de área norte-americano
 // (`(415) 555-0100`).
@@ -66,7 +105,8 @@ function redactInternationalPhones(text: string): string {
     let digits = 0;
     let end = at;
     for (;;) {
-      const group = PHONE_GROUP.exec(text.slice(at));
+      PHONE_GROUP.lastIndex = at;
+      const group = PHONE_GROUP.exec(text);
       if (!group || digits + group[1]!.length > 15) break;
       // Um ano solto depois de um telefone já completo é o texto seguinte.
       if (digits >= 8 && /^\s+(?:19|20)\d{2}$/.test(group[0])) break;
@@ -94,7 +134,8 @@ const SALARY_LABEL = new RegExp(
     "pretens(?:[ãa]o|[õo]es)\\b(?!\\s+(?:comercia|art[íi]stic|liter[áa]ri|acad[êe]mic))",
     "expectativa\\s+(?:salarial|de\\s+remunera)",
     "faixa\\s+salarial",
-    "valor\\s*[\\s/-]\\s*(?:da\\s+)?hora",
+    // Sem `\s*[\s/-]\s*`: os dois `\s*` voltavam atrás numa linha de espaços.
+    "valor(?:\\s*[/-]\\s*|\\s+)(?:da\\s+)?hora",
     "salary\\s*(?:floor|expectations?|requirements?|minimum)",
     // Palavra de remuneração como RÓTULO ("Salary: 2000 EUR"): vale sem
     // olhar o número, que pode parecer um ano.
@@ -120,6 +161,11 @@ const PAY_WORD = "\\b(?:sal[áa]ri(?:o|os|al|ais)|remunera[çc](?:[ãa]o|[õo]es
 const AMOUNT =
   "(?:[$€£¥]|R\\$|\\b(?:usd|eur|brl|gbp)\\s*\\d|\\b(?!(?:19|20)\\d{2}\\b)\\d|\\b(?:19|20)\\d{2}\\s*(?:k\\b|usd|eur|brl|gbp|reais|d[óo]lares|euros))";
 const HAS_AMOUNT = new RegExp(AMOUNT, "iu");
+// Valor com cara de dinheiro — moeda, `k`, `mil`, milhar com separador ou
+// quatro dígitos que não sejam ano —, que não se confunde com "equipe de 12
+// pessoas", "20+ anos" ou "99,9%".
+const MONEY_LIKE =
+  /[$€£¥]|R\$|\b(?:usd|eur|brl|gbp|reais|d[óo]lares|euros)\b|\d\s*k\b|\d\s*(?:mil|mi|milh[õo]es|thousand|million)\b|\d\s*\/\s*(?:h|hora|hour|dia|day|m[êe]s|month)\b|\d{1,3}(?:[.,]\d{3})+|\b(?!(?:19|20)\d{2}\b)\d{4,}/iu;
 const PAY_NEAR_AMOUNT = new RegExp(`${PAY_WORD}.{0,60}?${AMOUNT}|${AMOUNT}.{0,60}?${PAY_WORD}`, "iu");
 
 function isSalaryBlock(block: string): boolean {
@@ -145,6 +191,111 @@ function isPayTitle(block: string): boolean {
     .split("\n")
     .filter((line) => !/^\s*[-=]{2,}\s*$/.test(line));
   return lines.length === 1 && PAY_ONLY.test(lines[0]!);
+}
+
+/**
+ * O piso dentro de um bloco de várias linhas. Texto extraído de PDF costuma
+ * vir sem linha em branco, e aí o bloco é o CV inteiro: tirá-lo todo por
+ * causa de uma linha de pretensão apagava o perfil (#344).
+ *
+ * Sai a SEÇÃO do piso, com os títulos que `cvTextToMarkdown()` reconheceria:
+ * - começa no rótulo — "PRETENSÃO SALARIAL", "Pretensão Salarial" ou
+ *   "Pretensão salarial: R$ 30.000" como último item da experiência —, e não
+ *   no título anterior, que levaria a experiência inteira; antes do primeiro
+ *   título do bloco, começa no início dele;
+ * - termina antes do próximo nome de seção conhecido ("FORMAÇÃO",
+ *   "Experience"). Um título qualquer em caixa alta ("PJ MENSAL") não fecha
+ *   a seção: ele pode ser parte da pretensão.
+ *
+ * Sem título, a seção é o bloco — o comportamento de antes. Seção sem valor do
+ * rótulo em diante ("a combinar") sai sozinha e, se vai até o fim do bloco,
+ * promete o valor no bloco seguinte. O bloco inteiro sai quando o que sobra,
+ * lido como texto corrido, ainda parece piso, ou quando há valor
+ * com cara de dinheiro (`MONEY_LIKE`) nas bordas: até duas linhas de cada
+ * lado e, depois de uma sequência de nomes de seção conhecidos, as duas
+ * primeiras da seção vizinha. Um "Employment:" dentro da pretensão, um título
+ * falso acima do rótulo ou um valor duas linhas acima dele cortariam a seção
+ * antes do valor; na dúvida, fecha-se. A borda é curta de propósito: a
+ * métrica de um CV de sênior ("1.200 clientes") na experiência não é piso, e
+ * derrubaria o perfil inteiro.
+ */
+function narrowSalaryBlock(lines: string[]): { kept: string[]; valueExpected: boolean } | null {
+  const isHit = (text: string) => isSalaryBlock(text) || isPayTitle(text);
+  const known = (j: number) => isKnownHeading(lines[j]!.trim());
+  const drop = lines.map(() => false);
+  // Dinheiro numa borda, andando `step` a partir de `from`: até BORDER linhas
+  // antes do nome de seção conhecido e, pulada a sequência deles
+  // ("Skills\nIdiomas"), até BORDER linhas da seção vizinha. Linha já retirada
+  // (outra pretensão) não conta.
+  const BORDER = 2;
+  // `here` vale até o nome de seção; do outro lado dele, só `MONEY_LIKE`: a
+  // experiência que abre com "equipe de 12" não é pretensão.
+  const moneyNear = (from: number, step: 1 | -1, here: RegExp = MONEY_LIKE): boolean => {
+    let sections = 0;
+    let seen = 0;
+    for (let j = from; j >= 0 && j < lines.length; ) {
+      if (known(j)) {
+        if (++sections > 1) return false;
+        seen = 0;
+        while (j >= 0 && j < lines.length && known(j)) j += step;
+        continue;
+      }
+      if (seen++ === BORDER) return false;
+      if (!drop[j] && (sections === 0 ? here : MONEY_LIKE).test(lines[j]!)) return true;
+      j += step;
+    }
+    return false;
+  };
+  // Antes do primeiro título o bloco não tem estrutura: o corte vai do começo.
+  let structured = false;
+  let valueExpected = false;
+  for (let i = 0; i < lines.length; i++) {
+    const title = isHeading(lines[i]!.trim());
+    let last = i;
+    if (!isHit(lines[i]!)) {
+      const next = lines[i + 1];
+      if (next === undefined || isHit(next) || !isHit(`${lines[i]}\n${next}`)) {
+        structured ||= title;
+        continue;
+      }
+      last = i + 1;
+    }
+    const start = title || structured ? i : 0;
+    while (last + 1 < lines.length && !known(last + 1)) last++;
+    // Sem valor do rótulo em diante — um número acima dele ("Equipe de 12")
+    // não é a pretensão (#353) —, ela é "a combinar" ou está fora da seção:
+    // qualquer número nas bordas ("150" solto) derruba o bloco, e o bloco
+    // seguinte é o valor prometido.
+    const valueless = !HAS_AMOUNT.test(lines.slice(i, last + 1).join("\n"));
+    const near = valueless ? HAS_AMOUNT : MONEY_LIKE;
+    if (moneyNear(start - 1, -1, near) || moneyNear(last + 1, 1, near)) return null;
+    for (let j = start; j <= last; j++) drop[j] = true;
+    // Valor sem cara de dinheiro ("90/hour", "150") logo acima do rótulo. Um
+    // item neutro com número ("Mentoria de 6 engenheiros") sai junto.
+    if (start > 0 && HAS_AMOUNT.test(lines[start - 1]!)) drop[start - 1] = true;
+    if (valueless) valueExpected = true;
+    i = last;
+  }
+  const kept = lines.filter((_, i) => !drop[i]);
+  if (isSalaryBlock(kept.join("\n"))) return null;
+  return { kept, valueExpected };
+}
+
+/**
+ * O bloco do rótulo, do rótulo em diante. Um número acima dele ("Equipe de 12
+ * pessoas") não é o valor prometido, e não pode cancelar a retirada do
+ * parágrafo seguinte (#353). Sem linha nem par de linhas reconhecido — o
+ * rótulo só aparece no texto corrido —, vale o bloco inteiro.
+ */
+function fromLabel(lines: string[]): string {
+  const isHit = (text: string) => isSalaryBlock(text) || isPayTitle(text);
+  const at = lines.findIndex((line, i) => {
+    if (isHit(line)) return true;
+    const next = lines[i + 1];
+    // O par só conta para o rótulo quebrado, não para a linha antes do rótulo.
+    return next !== undefined && !isHit(next) && isHit(`${line}\n${next}`);
+  });
+  return lines.slice(Math.max(at, 0)).join("\n");
 }
 
 function escapeRegExp(value: string): string {
@@ -202,7 +353,7 @@ export function containsContact(text: string, known: KnownContact = {}): boolean
   const normalized = text.normalize("NFC").replace(/[   ]/g, " ");
   const lower = normalized.toLowerCase();
   if (knownEmails(known).some((email) => lower.includes(email.toLowerCase()))) return true;
-  if (normalized.replace(EMAIL, REDACTED) !== normalized) return true;
+  if (redactEmails(normalized) !== normalized) return true;
   if (redactInternationalPhones(normalized) !== normalized) return true;
   if (normalized.replace(LOCAL_PHONE, REDACTED) !== normalized) return true;
   return /\d{10,}/.test(normalized);
@@ -227,28 +378,46 @@ export function publicCvText(content: string, known: KnownContact = {}): string 
     }
     const text = block.join("\n");
     if (text.trim() === "") {
-      out.push(...block);
+      for (const line of block) out.push(line);
       continue;
     }
     if (valueExpected) {
       valueExpected = false;
-      // Um título seguinte abre outra seção; ele não é o valor prometido.
-      if (heading === null && HAS_AMOUNT.test(text)) continue;
+      // Um título seguinte — Markdown ou nome de seção conhecido — abre outra
+      // seção; ele não é o valor prometido. Mas "Employment:\n150k USD" é
+      // sub-rótulo de regime, não seção: dinheiro na seção que o nome abre (até
+      // o próximo nome conhecido) faz do bloco o valor.
+      const end = block.findIndex((line, i) => i > 0 && isKnownHeading(line.trim()));
+      const opensSection =
+        isKnownHeading(block[0]!.trim()) &&
+        !block.slice(1, end === -1 ? block.length : end).some((line) => MONEY_LIKE.test(line));
+      if (heading === null && !opensSection && HAS_AMOUNT.test(text)) {
+        // O bloco consumido pode ser, ele mesmo, um rótulo sem valor
+        // ("Opção 2\nPretensão PJ:"), que promete o bloco seguinte.
+        if (isSalaryBlock(text) || isPayTitle(text)) valueExpected = !HAS_AMOUNT.test(fromLabel(block));
+        continue;
+      }
     }
     if (isSalaryBlock(text) || isPayTitle(text) || (heading !== null && PAY_HEADING.test(text))) {
+      const narrowed = heading === null && block.length > 1 ? narrowSalaryBlock(block) : null;
       if (heading) skippingSection = heading[1]!.length;
+      // Laço, não `push(...)`: um bloco de 130 mil linhas estoura a pilha.
+      else if (narrowed) {
+        for (const line of narrowed.kept) out.push(line);
+        valueExpected = narrowed.valueExpected;
+      }
       // Um ano no rótulo ("Pretensão salarial (2026):") não é o valor.
-      else valueExpected = !HAS_AMOUNT.test(text);
+      else valueExpected = !HAS_AMOUNT.test(fromLabel(block));
       continue;
     }
-    out.push(...block);
+    for (const line of block) out.push(line);
   }
 
   let text = out.join("\n");
   for (const email of knownEmails(known)) {
     text = text.replace(new RegExp(escapeRegExp(email), "giu"), REDACTED);
   }
-  text = text.replace(EMAIL, REDACTED);
+  text = redactEmails(text);
   text = redactInternationalPhones(text);
   return text.replace(LOCAL_PHONE, REDACTED);
 }

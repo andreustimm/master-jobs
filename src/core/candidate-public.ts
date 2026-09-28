@@ -32,6 +32,31 @@ import { getDb } from "./db/client.ts";
 import { authUser, candidate, candidateDocument, candidateSkill, skill } from "./db/schema.ts";
 import { containsContact, publicCvMarkdown, type KnownContact } from "./public-cv.ts";
 
+/**
+ * Uma skill confirmada, como o perfil público mostra (#326).
+ *
+ * `category` e `level` entram na lista de permissão EXPLICITAMENTE: o schema
+ * já os tinha antes desta função os expor, e a tentação seria "já que a linha
+ * inteira é de uma skill confirmada, tanto faz mostrar tudo". `level` é
+ * digitado por um humano (nunca inferido — mesmo comentário no schema) e por
+ * isso passa pelo mesmo `containsContact()` do nome; `category` vem do
+ * catálogo, mas nada aqui assume que só o catálogo escreve a coluna.
+ */
+export type PublicSkill = {
+  name: string;
+  category: string;
+  /** Só quem confirma escreve; a maioria fica sem. */
+  level: string | null;
+  /** Vezes que a skill aparece no documento fonte — usada para ordenar, nunca mostrada como métrica. */
+  occurrences: number;
+};
+
+/** Uma categoria com as skills que sobraram nela, já na ordem de exibição. */
+export type PublicSkillGroup = {
+  category: string;
+  skills: PublicSkill[];
+};
+
 export type PublicProfile = {
   slug: string;
   /** Vazio quando a pessoa ainda não escolheu um nome publicável. */
@@ -41,10 +66,41 @@ export type PublicProfile = {
   linkedinUrl: string | null;
   githubUrl: string | null;
   /** Só as confirmadas. Detectada não é confirmada — regra 6 do CLAUDE.md. */
-  skills: string[];
+  skills: PublicSkill[];
   /** Presente apenas quando o candidato deu o segundo consentimento. */
   cv: string | null;
 };
+
+/**
+ * Agrupa por categoria, em ordem determinística — puro, sem banco nem
+ * relógio, e testável sem `publicProfile()`.
+ *
+ * **Categoria em ordem alfabética da CHAVE**, não do rótulo traduzido: um
+ * rótulo muda de idioma e mudaria a ordem junto, e a mesma pessoa vendo o
+ * perfil em português e em inglês veria as categorias trocarem de lugar.
+ *
+ * **Dentro do grupo, ocorrências decrescente e depois nome crescente.** A
+ * skill que mais aparece no currículo abre o grupo; empate se desfaz pelo
+ * nome, nunca pela ordem de inserção do banco — que não é estável entre
+ * execuções.
+ */
+export function groupPublicSkills(skills: readonly PublicSkill[]): PublicSkillGroup[] {
+  const byCategory = new Map<string, PublicSkill[]>();
+  for (const item of skills) {
+    const group = byCategory.get(item.category);
+    if (group) group.push(item);
+    else byCategory.set(item.category, [item]);
+  }
+
+  return [...byCategory.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([category, items]) => ({
+      category,
+      skills: [...items].sort(
+        (a, b) => b.occurrences - a.occurrences || a.name.localeCompare(b.name),
+      ),
+    }));
+}
 
 /**
  * Devolve o perfil, ou `null` quando ele não é público.
@@ -87,11 +143,30 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
   const text = (value: string | null): string | null =>
     value === null || containsContact(value, known) ? null : value;
 
-  const skills = await db
-    .select({ name: skill.canonicalName })
+  const skillRows = await db
+    .select({
+      name: skill.canonicalName,
+      category: skill.category,
+      level: candidateSkill.level,
+      occurrences: candidateSkill.occurrences,
+    })
     .from(candidateSkill)
     .innerJoin(skill, eq(skill.id, candidateSkill.skillId))
     .where(and(eq(candidateSkill.candidateId, row.id), eq(candidateSkill.status, "confirmed")));
+
+  // `level` é escrito por um humano (comentário no schema), então passa pelo
+  // mesmo filtro do nome — não pela lista de permissão de COLUNA, que já
+  // decidiu que a coluna existe, mas pelo mesmo `containsContact()` que
+  // esvazia nome, headline e localização. Uma skill com contato no nome ou no
+  // nível some inteira: não há forma curta de "esvaziar só o pedaço".
+  const skills: PublicSkill[] = skillRows
+    .filter(
+      (s) =>
+        !containsContact(s.name, known)
+        && !containsContact(s.category, known)
+        && (s.level === null || !containsContact(s.level, known)),
+    )
+    .map((s) => ({ name: s.name, category: s.category, level: s.level, occurrences: s.occurrences }));
 
   let cv: string | null = null;
   if (row.publicCv) {
@@ -116,7 +191,7 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
     location: text(row.location),
     linkedinUrl: text(row.linkedinUrl),
     githubUrl: text(row.githubUrl),
-    skills: skills.map((s) => s.name),
+    skills,
     cv,
   };
 }

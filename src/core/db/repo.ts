@@ -22,14 +22,17 @@ import { PERIODS_PER_YEAR, annualFactorSql, type Currency, type FxTable } from "
 import type { MatchField } from "../search.ts";
 import { phraseRegexSql, termPrefilterLike, termRegexSql, type ValidTerm } from "../term.ts";
 import {
+  CLOSING,
   IllegalApplicationTransitionError,
   OUT_OF_FUNNEL,
   transitionApplication,
+  undoableEvent,
   undoTransition,
   type ApplicationState,
   type RecordedStatusChange,
 } from "../../contexts/pursuit/domain/application.ts";
 import { getDb, type DB } from "./client.ts";
+import { isDuplicateKey } from "./retry.ts";
 import {
   application,
   candidate,
@@ -667,7 +670,13 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
       conditions.push(sql`coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb`);
     }
     if (opts.hideApplied) {
-      conditions.push(sql`(${application.id} is null or ${application.appliedAt} is null)`);
+      // Linha legada "fora do funil" com `appliedAt` remanescente (dado de
+      // antes da correção #346, ou escrito fora do domínio) não é uma
+      // candidatura ativa: sem o `OUT_OF_FUNNEL` aqui, ela continuaria
+      // escondida mesmo depois de a pessoa tirá-la do funil de propósito.
+      conditions.push(
+        sql`(${application.id} is null or ${application.appliedAt} is null or ${application.status} = ${OUT_OF_FUNNEL})`,
+      );
     }
     // "Fora do funil" (#316) tem linha e não tem estágio: para a lista, é o
     // mesmo que nunca ter sido registrada.
@@ -1174,6 +1183,12 @@ export async function setApplicationStatusInTransaction(
    */
   channel?: string,
 ): Promise<number | null> {
+  // `FOR UPDATE`, não um SELECT comum — o mesmo padrão que `undoApplicationStatus`
+  // já usa (#346): sem a trava, um avançar-e-recuar real de outra sessão entre
+  // esta leitura e a gravação pode devolver o MESMO `status` (ABA) sem ser o
+  // mesmo estado — a comparação otimista de `commitOverSnapshot` não vê a
+  // diferença, e a decisão (inclusive o `appliedAt` que ela carrega) é tomada
+  // sobre uma foto velha (#356).
   const [previous] = await tx
       .select()
       .from(application)
@@ -1183,12 +1198,19 @@ export async function setApplicationStatusInTransaction(
           eq(application.jobId, jobId),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
 
+  // Só importa para reabrir um encerramento (#346): fora dele, nem lê o histórico.
+  const reopenFrom =
+    previous && CLOSING.includes(previous.status)
+      ? await lastStatusChangeFromStatus(previous.id, previous.status, tx)
+      : null;
   const transition = transitionApplication(
     previous ? { status: previous.status, appliedAt: previous.appliedAt } : null,
     status,
     stamp,
+    reopenFrom,
   );
   if (!transition.ok) {
     throw new IllegalApplicationTransitionError(
@@ -1225,35 +1247,46 @@ export async function setApplicationStatusInTransaction(
   }
 
   let applicationId: number;
-  if (previous) {
-    // Só sobrescreve quando veio um canal: um `track` sem `--channel` não
-    // pode apagar o que já estava registrado.
-    await commitOverSnapshot(tx, candidateId, jobId, previous, transition.state, stamp, channel ? { channel } : {});
-    applicationId = previous.id;
-  } else {
-    const [created] = await tx
-        .insert(application)
-        .values({
-          candidateId,
-          jobId,
-          status: transition.state.status,
-          appliedAt: transition.state.appliedAt,
-          updatedAt: stamp,
-          channel: channel ?? null,
-        })
-        .returning({ id: application.id });
-    if (!created) throw new Error("application insert returned no row");
-    applicationId = created.id;
-  }
+  let event: { id: number } | undefined;
+  try {
+    if (previous) {
+      // Só sobrescreve quando veio um canal: um `track` sem `--channel` não
+      // pode apagar o que já estava registrado.
+      await commitOverSnapshot(tx, candidateId, jobId, previous, transition.state, stamp, channel ? { channel } : {});
+      applicationId = previous.id;
+    } else {
+      // Sem `previous`, não há linha para travar com `FOR UPDATE` — duas
+      // primeiras observações concorrentes do mesmo par candidato/vaga correm
+      // para este INSERT, e só uma vence `application_candidate_job_idx`
+      // (23505). A outra cai no mesmo conflito conhecido, não num erro cru do
+      // driver.
+      const [created] = await tx
+          .insert(application)
+          .values({
+            candidateId,
+            jobId,
+            status: transition.state.status,
+            appliedAt: transition.state.appliedAt,
+            updatedAt: stamp,
+            channel: channel ?? null,
+          })
+          .returning({ id: application.id });
+      if (!created) throw new Error("application insert returned no row");
+      applicationId = created.id;
+    }
 
-  const [event] = await tx.insert(applicationEvent).values({
-    applicationId,
-    at: transition.event.at,
-    kind: transition.event.kind,
-    fromStatus: transition.event.fromStatus,
-    toStatus: transition.event.toStatus,
-    detail: detail ?? null,
-  }).returning({ id: applicationEvent.id });
+    [event] = await tx.insert(applicationEvent).values({
+      applicationId,
+      at: transition.event.at,
+      kind: transition.event.kind,
+      fromStatus: transition.event.fromStatus,
+      toStatus: transition.event.toStatus,
+      detail: detail ?? null,
+    }).returning({ id: applicationEvent.id });
+  } catch (error) {
+    if (isDuplicateKey(error)) throw new ApplicationTransitionConflictError(candidateId, jobId);
+    throw error;
+  }
   // O id do evento é o que a tela precisa para oferecer "Desfazer" logo depois
   // de salvar, sem ler o histórico de novo.
   return event?.id ?? null;
@@ -1286,8 +1319,33 @@ async function commitOverSnapshot(
   }
 }
 
+/**
+ * O `fromStatus` de onde a candidatura veio ao chegar no encerramento atual —
+ * o limite de até onde reabrir pode voltar (#346) —, ou `null` sem histórico
+ * confiável.
+ *
+ * NÃO é "o `fromStatus` do evento mais recente": o mais recente pode ser um
+ * desfazer (`revertsEventId` preenchido), cujo `fromStatus` é só o status no
+ * instante do desfazer, não um encerramento de verdade. `undoableEvent` já
+ * pula desfazeres e eventos revertidos, e devolve `null` — não um limite
+ * qualquer — quando a trilha tem um buraco (`toStatus` do candidato não bate
+ * com o status atual): revisão L1 da PR #354 achou o Major de uma versão
+ * anterior que lia direto o último evento.
+ *
+ * Aceita `tx` (dentro de uma transação) ou a conexão padrão, para servir tanto
+ * a escrita quanto a leitura sem duplicar a consulta.
+ */
+export async function lastStatusChangeFromStatus(
+  applicationId: number,
+  currentStatus: ApplicationStatus,
+  db: DB | DbTransaction = getDb(),
+): Promise<ApplicationStatus | null> {
+  const events = await statusChanges(db, applicationId);
+  return undoableEvent({ status: currentStatus, appliedAt: null }, events)?.fromStatus ?? null;
+}
+
 /** Os `status_change` de uma candidatura, do mais recente para o mais antigo. */
-async function statusChanges(tx: DbTransaction, applicationId: number): Promise<RecordedStatusChange[]> {
+async function statusChanges(tx: DB | DbTransaction, applicationId: number): Promise<RecordedStatusChange[]> {
   const rows = await tx
     .select({
       id: applicationEvent.id,
@@ -1311,6 +1369,17 @@ async function statusChanges(tx: DbTransaction, applicationId: number): Promise<
  *
  * `expectedEventId` é o evento que a tela ofereceu desfazer. Se outra aba
  * moveu a candidatura desde então, o alvo mudou e a resposta é conflito.
+ *
+ * A leitura de `previous` trava a linha (`FOR UPDATE`), não só compara o
+ * status depois: sem a trava, um avançar-e-recuar real de outra sessão entre
+ * esta leitura e a gravação pode devolver o MESMO valor de `status` (ABA) sem
+ * ser o mesmo estado — a comparação otimista não veria a diferença, e o
+ * desfazer gravaria sobre um histórico que já mudou (#346). A trava serializa:
+ * quem chega depois só prossegue já vendo o commit anterior por inteiro, e a
+ * decisão de `undoTransition` fica sempre consistente com o que acabou de ler.
+ * `isDuplicateKey` cobre o que sobrar: se ainda assim dois desfazeres
+ * colidirem no mesmo evento revertido, o índice único devolve `23505`, e vira
+ * o mesmo conflito conhecido em vez de um erro de driver cru.
  */
 export async function undoApplicationStatus(
   candidateId: number,
@@ -1323,7 +1392,8 @@ export async function undoApplicationStatus(
       .select({ id: application.id, status: application.status, appliedAt: application.appliedAt })
       .from(application)
       .where(and(eq(application.candidateId, candidateId), eq(application.jobId, jobId)))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!previous) throw new ApplicationUndoUnavailableError(candidateId, jobId);
 
     const undo = undoTransition(previous, await statusChanges(tx, previous.id), expectedEventId, stamp);
@@ -1331,15 +1401,20 @@ export async function undoApplicationStatus(
       if (undo.error.code === "stale") throw new ApplicationTransitionConflictError(candidateId, jobId);
       throw new ApplicationUndoUnavailableError(candidateId, jobId);
     }
-    await commitOverSnapshot(tx, candidateId, jobId, previous, undo.state, stamp);
-    await tx.insert(applicationEvent).values({
-      applicationId: previous.id,
-      at: undo.event.at,
-      kind: undo.event.kind,
-      fromStatus: undo.event.fromStatus,
-      toStatus: undo.event.toStatus,
-      revertsEventId: undo.event.revertsEventId,
-    });
+    try {
+      await commitOverSnapshot(tx, candidateId, jobId, previous, undo.state, stamp);
+      await tx.insert(applicationEvent).values({
+        applicationId: previous.id,
+        at: undo.event.at,
+        kind: undo.event.kind,
+        fromStatus: undo.event.fromStatus,
+        toStatus: undo.event.toStatus,
+        revertsEventId: undo.event.revertsEventId,
+      });
+    } catch (error) {
+      if (isDuplicateKey(error)) throw new ApplicationTransitionConflictError(candidateId, jobId);
+      throw error;
+    }
   });
 }
 

@@ -231,7 +231,10 @@ demais classes estão em G39). O que ela mostra é lista de permissão:
 do candidato. Nunca saem e-mail, telefone, funil, candidaturas nem piso
 salarial — o piso é a posição de negociação, e publicá-lo é mostrar a carta
 antes da mesa. Nome, headline, localização e links passam por
-`containsContact()` e são esvaziados quando trazem e-mail ou telefone.
+`containsContact()` e são esvaziados quando trazem e-mail ou telefone. Skill
+confirmada (#326) leva `category` e `level` na lista de permissão — os dois
+passam pelo mesmo `containsContact()` do nome, e a skill inteira some se
+qualquer um dos três (`name`, `category`, `level`) trouxer contato.
 
 **Endereço.** `/p/` lê `public_slug`, nunca o `slug` interno; trocar o endereço
 faz o antigo responder 404 sem redirecionar (ADR 0024).
@@ -254,12 +257,23 @@ serviço de perfil público; o status HTTP real é conferido no E2E.
 
 **Obrigação.** Publicar o texto do currículo exige um **segundo**
 consentimento, separado de tornar o perfil público. Mesmo com ele, o texto
-passa por `publicCvText()`: e-mail, telefone e o bloco do piso saem. O
-consentimento não cria exceção tácita a G21.
+passa por `publicCvText()`: e-mail, telefone e o trecho do piso saem — o
+bloco entre linhas em branco ou, num bloco com títulos de seção (CV de PDF),
+a seção do piso até o próximo nome de seção conhecido; na dúvida (seção sem
+valor, resto que ainda parece piso, valor com cara de dinheiro a até duas
+linhas da seção), o bloco inteiro. O consentimento não
+cria exceção tácita a G21. A rota é anônima: as expressões do filtro têm
+custo linear, travado em teste.
 
 **Limite declarado.** Detecção por padrão, com limite escrito em
 `src/core/public-cv.ts` e travado em teste: valor sem rótulo e telefone sem
-marca passam. Não é sanitização perfeita, e não deve ser apresentado como tal.
+marca passam. No bloco com títulos, o corte pela seção do piso tem dois
+preços, ambos escolhidos: valor a três linhas ou mais da seção (ou duas
+seções depois), e número sem cara de dinheiro ("150") do outro lado de um
+nome de seção, passam; valor com cara de dinheiro a até duas linhas dela
+derruba o CV inteiro, e a linha com número logo acima do rótulo sai mesmo
+que seja um item neutro. Não é sanitização perfeita, e não deve ser
+apresentado como tal.
 
 **Forma não abre o filtro.** A estrutura inferida do CV importado
 (`cvTextToMarkdown()`) é aplicada entre dois passes de `publicCvText()`, e o

@@ -6,13 +6,13 @@ persona: Andreus em triagem noturna
 journey: J-preserve-application-decision
 expected: Todo estágio anterior aparece em Voltar e encerramentos reabrem; Desfazer (aviso de 10 s ou linha mais recente do histórico) volta ao estágio anterior, marca o evento desfeito e, no primeiro registro, tira a vaga do funil sem apagar o histórico
 entry_points: /jobs/<id>; /pipeline
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence:
-last_report:
+evidence: docs/qa/reports/2026-09-28-pr-354-funil-desfazer.md
+last_report: docs/qa/reports/2026-09-28-pr-354-funil-desfazer.md
 overlaps: PIPE-refused-transition-keeps-draft; PIPE-read-application-history; PIPE-save-resume-decision
 ---
 
@@ -30,7 +30,11 @@ histórico da vaga):
 3. Mover e clicar "Desfazer" no aviso dentro de 10 s: o estágio volta, o
    histórico mostra "desfazer: de X para Y" e a linha revertida riscada com
    "desfeito". Nenhuma linha some.
-4. Rejeitada e Retirada oferecem os estágios de progresso em "Voltar";
+4. Rejeitada e Retirada oferecem, em "Voltar", até onde a candidatura chegou
+   de verdade antes de fechar — nunca um estágio mais adiantado que ela nunca
+   alcançou (#346: confirmado por E2E, `tests/e2e/ui/pipeline.mjs` — avança até
+   Entrevista, rejeita, e "Voltar" oferece até Entrevista mas nunca Oferta).
+   Sem histórico conhecido, a reabertura continua livre para qualquer estágio.
    Preparando oferece Arquivar.
 5. Desfazer até o primeiro registro: a vaga some do `/pipeline` e das
    contagens, reaparece no quadro como "sem registro", e o histórico continua
@@ -40,3 +44,12 @@ histórico da vaga):
    desfaz nada.
 7. 375 px: seletor, trilha e botão Desfazer cabem sem rolagem horizontal; em
    inglês, nenhum texto em português.
+
+**QA de jornada 28/09 (PR #354, commit `da2b8f9`): os 7 passos passam.**
+Cobertos com e sem `appliedAt` (progresso real vs. registro direto em
+estágio avançado); a reabertura de uma vaga registrada direto em Entrevista
+respeita o teto real (não trava pela ausência do carimbo, não libera sem
+teto); desfazer uma reabertura e reabrir de novo chega ao estágio certo — o
+Major da 2ª rodada de revisão (`da2b8f9`) está corrigido. O conflito de duas
+abas avisa "Esta candidatura mudou em outra tela..." e não corrompe nada.
+Relatório: `docs/qa/reports/2026-09-28-pr-354-funil-desfazer.md`.

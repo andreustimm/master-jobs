@@ -24,7 +24,36 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 <!-- sem-nota-usuario: 1.27.1 - 2026-09-26T20:38:21.000Z -->
 
+<!-- sem-nota-usuario: 1.28.2 - 2026-09-28T19:16:57.000Z -->
+
 ## [Unreleased]
+
+## [1.28.1] - 2026-09-28T18:45:55.000Z
+
+### Fixed
+
+- In the "Move to" selector, reopening a Rejected, Withdrawn or Archived application now only offers stages up to where it actually reached before closing — never a further stage it never got to.
+- Undoing all the way out of the funnel now always clears the application date, even on legacy records — the job shows up normally again with the "hide applied" filter.
+- Rejecting an email suggestion for a job that's outside the funnel, or for a change that doesn't exist in the funnel, now explains the real reason, instead of a regression message with an internal or false code.
+
+## [1.28.0] - 2026-09-28T17:18:14.000Z
+
+### Added
+
+- The public profile has a new layout: name, headline and location up top, with buttons to view LinkedIn, GitHub and copy the profile link. Summary, Experience and Education show in their own cards (only when present), and confirmed skills are grouped by category instead of all appearing in uppercase.
+
+## [1.27.3] - 2026-09-28T16:38:21.000Z
+
+### Fixed
+
+- "Salary expectation: negotiable" in an imported résumé no longer empties the public profile: only the salary expectation is left out, and the rest of the résumé stays.
+- The public profile no longer shows a salary expectation written in the paragraph right below its label, or one that follows a "CLT:"/"PJ:" or "Employment:" line of its own.
+
+## [1.27.2] - 2026-09-28T16:21:47.000Z
+
+### Fixed
+
+- The public profile no longer disappears entirely when a résumé imported from PDF includes a salary expectation: the salary section is left out and the rest of the résumé stays.
 
 ## [1.27.0] - 2026-09-26T13:44:24.000Z
 

@@ -24,7 +24,36 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 <!-- sem-nota-usuario: 1.27.1 - 2026-09-26T20:38:21.000Z -->
 
+<!-- sem-nota-usuario: 1.28.2 - 2026-09-28T19:16:57.000Z -->
+
 ## [Unreleased]
+
+## [1.28.1] - 2026-09-28T18:45:55.000Z
+
+### Corrigido
+
+- No seletor "Mover para", reabrir uma candidatura Rejeitada, Retirada ou Arquivada agora só oferece até o estágio em que ela realmente esteve antes de fechar — nunca um estágio mais adiantado que ela nunca alcançou.
+- Desfazer até tirar a vaga do funil agora sempre limpa a data de candidatura, mesmo em registros antigos — a vaga volta a aparecer normalmente com o filtro "ocultar candidatadas".
+- A recusa de uma sugestão de e-mail para uma vaga fora do funil, ou para uma mudança que não existe no funil, agora explica o motivo certo, em vez de uma mensagem de regressão com um código interno ou falsa.
+
+## [1.28.0] - 2026-09-28T17:18:14.000Z
+
+### Adicionado
+
+- O perfil público ganhou um layout novo: nome, cargo e localização em destaque no topo, com botões para ver o LinkedIn, o GitHub e copiar o link do perfil. Resumo, Experiência e Formação aparecem em cartões próprios (só quando existem), e as habilidades confirmadas ficam organizadas por categoria, sem mais aparecer tudo em maiúsculas.
+
+## [1.27.3] - 2026-09-28T16:38:21.000Z
+
+### Corrigido
+
+- "Pretensão salarial: a combinar" no currículo importado não esvazia mais o perfil público: sai só a pretensão, e o resto do currículo fica.
+- O perfil público não mostra mais a pretensão escrita no parágrafo logo abaixo do rótulo, nem a que vem depois de um "CLT:"/"PJ:" ou "Employment:" em linha própria.
+
+## [1.27.2] - 2026-09-28T16:21:47.000Z
+
+### Corrigido
+
+- O perfil público não some mais inteiro quando o currículo importado de PDF traz a pretensão salarial: sai a seção da pretensão, e o resto do currículo fica.
 
 ## [1.27.0] - 2026-09-26T13:44:24.000Z
 

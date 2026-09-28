@@ -9,6 +9,50 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.28.2] - 2026-09-28
+
+### Corrigido
+
+- `setApplicationStatusInTransaction` (`src/core/db/repo.ts`) passa a seguir o mesmo padrão que `undoApplicationStatus` já usa (#346): a leitura de `previous` agora usa `SELECT ... FOR UPDATE`, e não um `SELECT` comum — sem a trava, um avançar-e-recuar real de outra sessão entre a leitura e a gravação podia devolver o mesmo `status` (ABA) sem ser o mesmo estado, e a comparação otimista de `commitOverSnapshot` não via a diferença: a decisão (inclusive o `appliedAt` que ela carrega) era tomada sobre uma foto velha e sobrescrevia um carimbo real gravado no meio da janela (#356). O bloco que grava a transição (criação ou `commitOverSnapshot`, mais o evento) mapeia `23505` para `ApplicationTransitionConflictError` via `isDuplicateKey`, cobrindo também a primeira observação: duas transições concorrentes para o mesmo par candidato/vaga sem candidatura prévia correm para o mesmo `INSERT`, e só uma vence `application_candidate_job_idx` — a outra recebe o conflito conhecido, não um erro cru do driver. `decideSuggestion` (`src/core/mail/run.ts`) lê `owned` com `FOR UPDATE` pela mesma razão: sem a trava, uma igualdade trivial entre `suggestedStatus` e um `status` que já ficou velho por trás de um avanço real em voo podia pular o guard de regressão de `mailMayMove` inteiro, e a gravação (que relê `previous` já travada) regredia o funil em silêncio. Três testes de corrida real com duas conexões PostgreSQL, que reprovam sem a trava correspondente (`tests/repo.application.test.ts`, `tests/mail-suggestion.test.ts`).
+
+## [1.28.1] - 2026-09-28
+
+### Corrigido
+
+- `transitionDirection`/`transitionApplication`/`transitionGroups`/`allowedTransitions` (`src/contexts/pursuit/domain/application.ts`) ganham `reopenFrom` opcional: reabrir Rejeitada, Retirada ou Arquivada fica limitado a até onde a candidatura chegou de verdade antes de fechar, e reabrir além disso é ilegal, não "voltar". Sem esse histórico, a reabertura continua livre para qualquer estágio, como antes desta correção. A decisão **não** usa `appliedAt` — a versão original desta correção usava, e a 1ª rodada da revisão L1 da PR #354 achou o Major: o domínio cria de propósito um registro direto em estágio avançado com `appliedAt` nulo (primeira observação), e `appliedAt` recusaria reabrir de volta para onde a candidatura realmente esteve. `mailMayMove` passou a checar `=== "forward" || === "close"`, e não `!== "back"` (#346).
+- `lastStatusChangeFromStatus()` (`src/core/db/repo.ts`), que calcula `reopenFrom` para `setApplicationStatusInTransaction`, usa `undoableEvent()` — a mesma função do desfazer, que já pula desfazeres e eventos revertidos e devolve `null` com trilha furada — em vez de ler direto o `fromStatus` do evento mais recente: a 2ª rodada da revisão achou o Major de uma versão anterior que lia o evento mais recente puro, e reabrir → desfazer → reabrir podia recusar um estágio legítimo (`reopenFrom` calculado a partir do desfazer, não do fechamento real). `app/jobs/[id]/page.tsx` só consulta o limite quando o status atual é um encerramento, evitando a ida ao banco no caminho crítico dos demais estágios (#346).
+- `undoApplicationStatus` (`src/core/db/repo.ts`) lê a linha com `SELECT ... FOR UPDATE` antes de decidir: sem a trava, um avançar-e-recuar real de outra sessão entre a leitura e a gravação podia devolver o mesmo `status` (ABA) sem ser o mesmo estado, e a comparação otimista por status não via a diferença. O índice único de `reverts_event_id` (`23505`) agora vira `ApplicationTransitionConflictError`, nunca um erro cru do driver. Testes de concorrência real com duas conexões em `tests/repo.application.test.ts` (#346).
+- `undoTransition` (`src/contexts/pursuit/domain/application.ts`): desfazer até `untracked` ("fora do funil") sempre limpa `appliedAt`, mesmo em linha legada cujo evento revertido não é literalmente `applied`. `listBoard`'s `hideApplied` (`src/core/db/repo.ts`) também aceita `status = 'untracked'` direto na consulta, para a linha que já chega pronta com o carimbo remanescente (dado anterior a esta correção) (#346).
+- `decideSuggestion` (`src/core/mail/run.ts`): sugestão de e-mail para candidatura fora do funil recusa com `OutOfFunnelSuggestionError`, não `RegressiveSuggestionError` — não é uma regressão, e a mensagem não expõe o marcador interno `untracked` como se fosse um estágio real. `RegressiveSuggestionError` só é lançado quando a direção é literalmente `"back"`; outra ilegalidade (ex.: `shortlisted` → `interviewing`) segue para `IllegalApplicationTransitionError` (#346).
+
+## [1.28.0] - 2026-09-28
+
+### Adicionado
+
+- `src/core/candidate-public.ts`: `PublicSkill` (`name`, `category`, `level`, `occurrences`) substitui `string[]` em `PublicProfile.skills` — `category` e `level` entram na lista de permissão explicitamente (G21), com o mesmo `containsContact()` do nome. `groupPublicSkills()` (pura) agrupa por categoria em ordem alfabética da chave e, dentro do grupo, ocorrências decrescente e nome crescente — determinístico (#326).
+- `app/p/[slug]/page.tsx`: layout de referência Jobicy sobre o mesmo dado — hero (nome, headline, faixa de localização, CTA "Ver no LinkedIn", GitHub secundário, copiar link), duas colunas a partir de 1024px (Resumo/Experiência/Formação em card, só quando a seção existe, derivadas na página por `cvSections(profile.cv)` de #325; skills agrupadas na lateral, top 6 por categoria + "+N" em `<details>`, sem caixa alta forçada), currículo completo recolhido em `<details>` nativo. Uma coluna abaixo de 1024px.
+- `app/p/[slug]/copy-link-button.tsx` (novo, cliente): copia a URL do perfil, sem servidor envolvido.
+- Rótulos "LinkedIn"/"GitHub" (antes fixos no JSX) e os novos textos de UI migram para `src/core/i18n/` (`publicProfile.*`), em pt-BR e en.
+- `tests/e2e/public-cv-format.mjs`: `checkPublicProfileLayout()` cobre hero/CTA acima da dobra em 375px, duas colunas em 1024px, agrupamento e expansão de skills, e ausência de caixa alta forçada. `/p/[slug]` sai de `UNMEASURED_PAGES` (`tests/e2e/routes.mjs`) e entra em `AXE_SWEEP`, `OVERFLOW_SWEEP` e `ENGLISH_ANONYMOUS_SWEEP`, sobre o mesmo candidato fixo.
+
+### Fora do escopo
+
+- `--color-cloud` em `app/candidate/markdown-preview.tsx` (linhas 61, 149, 233) é paleta bruta fora de token semântico (G32) — pré-existente, não tocado nesta PR.
+
+## [1.27.3] - 2026-09-28
+
+### Corrigido
+
+- `publicCvText()`: o valor prometido por um rótulo de pretensão sem valor é procurado do rótulo em diante (`fromLabel()`); um número acima do rótulo ("Equipe de 12 pessoas") não cancela mais a retirada do parágrafo seguinte (#353).
+- `narrowSalaryBlock()`: seção sem valor do rótulo em diante ("a combinar") sai sozinha e promete o bloco seguinte, em vez de derrubar o bloco inteiro; suas bordas veem qualquer número antes do nome de seção vizinho e só valor com cara de dinheiro depois dele. O bloco prometido que abre com sub-rótulo de regime (`Employment:\n150k USD`) é consumido quando a seção que o nome abre traz dinheiro, e o bloco consumido que é rótulo sem valor promete o seguinte. Limite declarado novo em G23: número sem cara de dinheiro ("150") do outro lado de um nome de seção passa (#353).
+
+## [1.27.2] - 2026-09-28
+
+### Corrigido
+
+- `src/core/public-cv.ts`: custo linear na rota anônima `/p/[slug]`, que filtra o CV duas vezes por visita. A regex `EMAIL` só começa no início de uma sequência de caracteres de endereço (lookbehind), com leitura sticky para o endereço colado ao anterior; o telefone internacional lê os grupos com regex sticky em vez de `slice`; o rótulo `valor hora` deixa de ter dois `\s*` em volta do separador. Teste de custo sobre `publicCvMarkdown()` em `tests/public-cv.test.ts` (#344).
+- `publicCvText()`: num bloco com títulos de seção (CV de PDF sem linha em branco), sai a seção do piso — do rótulo, quando é título, ou do título anterior, até o próximo nome de seção conhecido (`isKnownHeading()`, exportado de `src/core/cv-markdown.ts` com `isHeading()`). Sem título, sem valor na seção ou com resto que ainda parece piso, o bloco inteiro sai, como antes. G23 atualizada (#344).
+
 ## [1.27.1] - 2026-09-26
 
 ### Adicionado

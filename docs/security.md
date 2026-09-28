@@ -315,9 +315,16 @@ chamam a mesma função; nenhum outro arquivo lê a variável.
 e-mail (o cadastrado e qualquer endereço), telefone com código de país ou DDD
 entre parênteses e o bloco inteiro (parágrafo, item ou tabela entre linhas em
 branco; a seção, quando é título) que traz rótulo de pretensão salarial ou
-palavra de remuneração perto de um valor são retirados.
+palavra de remuneração perto de um valor são retirados. Num bloco com títulos
+de seção (CV extraído de PDF, sem linha em branco) sai a seção do piso até o
+próximo nome de seção conhecido; sem título, sem valor na seção, com resto
+que ainda parece piso ou com valor com cara de dinheiro (moeda, `k`, `mil`,
+milhar, taxa por hora) a até duas linhas da seção — contadas depois de uma
+sequência de nomes de seção —, sai o bloco inteiro (#344). A borda é curta
+para que a métrica de um CV de sênior na experiência não derrube o perfil.
 Detecção por padrão, com limite escrito no arquivo e travado em teste: valor
-sem rótulo e telefone sem marca passam. Não é sanitização perfeita.
+sem rótulo e telefone sem marca passam. Não é sanitização perfeita. A rota é
+anônima, então as expressões têm custo linear, travado em teste (#344).
 
 **A forma do CV nasce na leitura, entre dois filtros** — #325. O CV importado
 de PDF é texto puro; `cvTextToMarkdown()` (`src/core/cv-markdown.ts`, pura)
@@ -328,6 +335,21 @@ preserva tudo o que valia sobre o texto gravado, e o segundo vê as seções
 inferidas (um "PRETENSÃO SALARIAL" que virou título leva a seção inteira).
 `MarkdownPreview` monta nós React — nunca HTML — e só cria âncora para
 `http(s)`: `javascript:`, `data:` e `mailto:` saem como texto.
+
+**Skill confirmada ganha `category`, `level` e `occurrences` na lista de
+permissão** — ✅ **28/09 (#326).** O layout do perfil público passou a
+agrupar skills por categoria; `category` (do catálogo) e `level` (só um humano
+escreve — nunca inferido) entraram em `publicProfile()` como campos NOVOS e
+EXPLÍCITOS, não como "a linha inteira já é confirmada, então tudo bem". Os
+dois passam pelo mesmo `containsContact()` do nome: uma skill com e-mail ou
+telefone em `name`, `category` ou `level` some da lista inteira — não há
+"esvaziar só o campo" dentro de um item de array. `groupPublicSkills()`
+(`src/core/candidate-public.ts`, pura) ordena por categoria alfabética e, dentro
+dela, ocorrências decrescente e nome crescente — determinístico, sem depender
+da ordem de inserção do banco. Seções do CV (Resumo/Experiência/Formação)
+continuam derivadas na PÁGINA por `cvSections(profile.cv)` (#325): o texto que
+chega já passou pelos dois filtros, e `cvSections()` só lê o que sobrou —
+`publicProfile()` não muda.
 
 **Fluxo verificado ponta a ponta em 19/08**, no modo autenticado padrão: sem
 sessão o cabeçalho oferece entrar; o link de uso único resgata em

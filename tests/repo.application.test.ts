@@ -1,9 +1,11 @@
 import { and, eq, sql } from "drizzle-orm";
+import postgres from "postgres";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   allowedTransitions,
   APPLICATION_STATUSES,
   FUNNEL_STATUSES,
+  IllegalApplicationTransitionError,
   mailMayMove,
   OUT_OF_FUNNEL,
   transitionApplication,
@@ -20,6 +22,7 @@ import {
   applicationTimeline,
   ApplicationTransitionConflictError,
   ApplicationUndoUnavailableError,
+  lastStatusChangeFromStatus,
   listBoard,
   pipelineCounts,
   pipelineRows,
@@ -106,6 +109,19 @@ async function seedScore(candidateId: number, jobId: number, fit: number): Promi
     blockers: [],
     scorerVersion: "test",
   });
+}
+
+/** Espera até alguma sessão deste banco estar parada num lock de linha. */
+async function untilSomeoneWaitsOnALock(other: postgres.Sql): Promise<void> {
+  for (let attempt = 0; attempt < 250; attempt++) {
+    const [row] = await other<{ waiting: number }[]>`
+      select count(*)::int as waiting from pg_stat_activity
+      where datname = current_database() and wait_event_type = 'Lock'
+    `;
+    if (row!.waiting > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("ninguém chegou a esperar o lock da candidatura");
 }
 
 beforeEach(async () => {
@@ -312,6 +328,122 @@ describe("setApplicationStatus", () => {
     expect(events).toHaveLength(2);
     expect(events[1]!.toStatus).toBe(app!.status);
   });
+
+  it("trava a linha (FOR UPDATE) antes de decidir: um avançar-e-recuar real em voo não apaga o appliedAt gravado no meio (ABA, #356)", async () => {
+    // Mesma classe de corrida que #346 fechou em `undoApplicationStatus`: uma
+    // leitura sem `FOR UPDATE` pode decidir sobre uma foto de antes de outra
+    // sessão avançar e recuar de verdade. Aqui a sessão concorrente entra em
+    // "applied" (carimbando appliedAt) e volta para "preparing" — "voltar" não
+    // apaga o carimbo, por regra do domínio — tudo isso ENQUANTO a chamada sob
+    // teste está lendo `previous`. Sem a trava, `moving` decide com
+    // `appliedAt: null` (a foto de antes do round-trip) e sobrescreve o
+    // carimbo real ao gravar "applied" de novo, com um valor fabricado. Com a
+    // trava, `moving` só lê depois do commit concorrente, vê o carimbo real
+    // já gravado e o preserva — é exatamente o que a regra do domínio exige
+    // ("current.appliedAt ?? at").
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "shortlisted");
+    await setApplicationStatus(candidateId, jobId, "preparing");
+    const [app] = await db.select().from(application).where(eq(application.jobId, jobId));
+
+    const realAppliedAt = "2026-01-15T12:00:00.000Z";
+    const backAt = "2026-01-15T12:00:01.000Z";
+    const rawConnection = postgres(process.env.DATABASE_URL!, { max: 2, onnotice: () => {} });
+    try {
+      const tx = await rawConnection.reserve();
+      try {
+        await tx`begin`;
+        // Trava a linha primeiro — exatamente o que `setApplicationStatusInTransaction`
+        // agora também faz ao ler `previous`.
+        await tx`select id from production.application where id = ${app!.id} for update`;
+
+        const moving = setApplicationStatus(candidateId, jobId, "applied");
+        await untilSomeoneWaitsOnALock(rawConnection);
+
+        // Um avançar-e-recuar real, de outra sessão, enquanto `moving` está
+        // bloqueada tentando ler (com a trava) ou gravar (sem ela).
+        await tx`
+          update production.application
+          set status = 'applied', applied_at = ${realAppliedAt}, updated_at = ${realAppliedAt}
+          where id = ${app!.id}
+        `;
+        await tx`
+          insert into production.application_event (application_id, at, kind, from_status, to_status)
+          values (${app!.id}, ${realAppliedAt}, 'status_change', 'preparing', 'applied')
+        `;
+        await tx`
+          update production.application set status = 'preparing', updated_at = ${backAt} where id = ${app!.id}
+        `;
+        await tx`
+          insert into production.application_event (application_id, at, kind, from_status, to_status)
+          values (${app!.id}, ${backAt}, 'status_change', 'applied', 'preparing')
+        `;
+        await tx`commit`;
+
+        await moving;
+      } finally {
+        tx.release();
+      }
+    } finally {
+      await rawConnection.end({ timeout: 5 });
+    }
+
+    const [after] = await db.select().from(application).where(eq(application.jobId, jobId));
+    expect(after!.status).toBe("applied");
+    // A prova da trava: o carimbo gravado DURANTE a janela sobrevive. Sem
+    // `FOR UPDATE`, `after!.appliedAt` seria um valor novo, fabricado pela
+    // chamada sob teste a partir de uma foto que ainda via `appliedAt: null`.
+    expect(after!.appliedAt).toBe(realAppliedAt);
+  });
+
+  it("duas primeiras observações concorrentes do mesmo par candidato/vaga: 23505 vira ApplicationTransitionConflictError, não um erro cru do driver (#356)", async () => {
+    // Sem `previous`, não há linha para travar com `FOR UPDATE` — a defesa
+    // aqui é outra: o índice único `application_candidate_job_idx`. Uma
+    // conexão bruta insere a linha dentro de uma transação ainda aberta
+    // (segurando a entrada do índice sem commitar); a chamada sob teste, sem
+    // ver nada em `previous` (a linha não commitada é invisível para ela),
+    // também tenta o INSERT e fica esperando essa entrada do índice. Só
+    // quando a conexão bruta commita é que a chamada sob teste descobre a
+    // colisão — e deve receber o conflito conhecido, não um erro de driver.
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+
+    const rawConnection = postgres(process.env.DATABASE_URL!, { max: 2, onnotice: () => {} });
+    try {
+      const tx = await rawConnection.reserve();
+      try {
+        await tx`begin`;
+        await tx`
+          insert into production.application (candidate_id, job_id, status)
+          values (${candidateId}, ${jobId}, 'shortlisted')
+        `;
+
+        const creating = setApplicationStatus(candidateId, jobId, "shortlisted");
+        await untilSomeoneWaitsOnALock(rawConnection);
+
+        await tx`commit`;
+
+        await expect(creating).rejects.toBeInstanceOf(ApplicationTransitionConflictError);
+      } finally {
+        tx.release();
+      }
+    } finally {
+      await rawConnection.end({ timeout: 5 });
+    }
+
+    // Uma linha só (a da conexão bruta), e a tentativa perdedora não deixou
+    // nenhum evento para trás: o INSERT da candidatura falhou antes de chegar
+    // ao INSERT do evento, e a transação inteira de `creating` foi desfeita.
+    const rows = await db.select().from(application).where(eq(application.jobId, jobId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ candidateId, jobId, status: "shortlisted" });
+    const events = await db
+      .select()
+      .from(applicationEvent)
+      .where(eq(applicationEvent.applicationId, rows[0]!.id));
+    expect(events).toHaveLength(0);
+  });
 });
 
 describe("transitionApplication", () => {
@@ -337,8 +469,10 @@ describe("transitionApplication", () => {
 
   it("covers every persisted status pair", () => {
     // Avançar um passo; voltar para qualquer estágio anterior; encerramentos
-    // reabrem para qualquer estágio de progresso; arquivar de todo progresso;
-    // rejeitar e retirar só depois de enviar (#316).
+    // reabrem para qualquer estágio de progresso quando não se sabe de onde
+    // vieram (`reopenFrom` omitido — comportamento anterior a #346, preservado
+    // porque restringir sem saber a história seria arbitrário); arquivar de
+    // todo progresso; rejeitar e retirar só depois de enviar (#316).
     const progress = ["backlog", "shortlisted", "preparing", "applied", "screening", "interviewing", "offer"] as const;
     const legal: Record<FunnelStatus, readonly ApplicationStatus[]> = {
       backlog: ["shortlisted", "archived"],
@@ -385,7 +519,9 @@ describe("transitionApplication", () => {
     expect(transitionGroups("preparing").close).toEqual(["archived"]);
   });
 
-  it("reopens rejected, withdrawn and archived — even after applying — and keeps appliedAt", () => {
+  it("sem saber de onde veio, reopens rejected, withdrawn and archived — even after applying — and keeps appliedAt", () => {
+    // `reopenFrom` omitido (comportamento anterior a #346, preservado): sem
+    // histórico, reabrir continua livre para qualquer estágio de progresso.
     const applied = "2026-08-01T00:00:00.000Z";
     for (const closed of ["rejected", "withdrawn", "archived"] as const) {
       expect(transitionGroups(closed).back, closed).toEqual(["backlog", "shortlisted", "preparing", "applied", "screening", "interviewing", "offer"]);
@@ -394,6 +530,54 @@ describe("transitionApplication", () => {
         state: { status: "screening", appliedAt: applied },
       });
     }
+  });
+
+  it("com `reopenFrom`, reabertura fica limitada a até onde a candidatura chegou de verdade", () => {
+    for (const closed of ["rejected", "withdrawn", "archived"] as const) {
+      // Chegou a "Entrevista" antes de fechar: reabre até lá, appliedAt preservado.
+      expect(transitionGroups(closed, "interviewing").back, closed).toEqual([
+        "backlog", "shortlisted", "preparing", "applied", "screening", "interviewing",
+      ]);
+      const applied = "2026-08-01T00:00:00.000Z";
+      expect(transitionApplication({ status: closed, appliedAt: applied }, "screening", AT, "interviewing")).toMatchObject({
+        ok: true,
+        state: { status: "screening", appliedAt: applied },
+      });
+      // "Oferta" fica além do que ela alcançou — ilegal, não "voltar".
+      expect(transitionApplication({ status: closed, appliedAt: applied }, "offer", AT, "interviewing")).toEqual({
+        ok: false,
+        error: { code: "illegal_transition", from: closed, to: "offer" },
+      });
+    }
+  });
+
+  it("MAJOR (revisão da PR #354, #346): a reabertura usa o fromStatus do fechamento, não a presença de appliedAt", () => {
+    // O domínio cria de propósito um registro direto em estágio avançado com
+    // appliedAt nulo (primeira observação) — usar appliedAt para decidir a
+    // reabertura recusaria voltar para onde a candidatura realmente esteve.
+    const direct = transitionApplication(null, "interviewing", AT);
+    expect(direct).toMatchObject({ ok: true, state: { status: "interviewing", appliedAt: null } });
+    const closed = transitionApplication({ status: "interviewing", appliedAt: null }, "rejected", AT);
+    expect(closed).toMatchObject({ ok: true, state: { status: "rejected", appliedAt: null } });
+
+    // reopenFrom = "interviewing" (o fromStatus do evento que fechou): reabrir
+    // de volta para lá é legal, appliedAt continua nulo (nunca existiu).
+    expect(transitionApplication({ status: "rejected", appliedAt: null }, "interviewing", AT, "interviewing")).toMatchObject({
+      ok: true,
+      state: { status: "interviewing", appliedAt: null },
+    });
+
+    // O caso original da issue #346 continua recusado: Preparando → Arquivada
+    // → Oferta pula além de onde ela chegou (Preparando), appliedAt nulo ou não.
+    expect(transitionApplication({ status: "archived", appliedAt: null }, "offer", AT, "preparing")).toEqual({
+      ok: false,
+      error: { code: "illegal_transition", from: "archived", to: "offer" },
+    });
+    // Reabrir de volta ao próprio limite continua legítimo.
+    expect(transitionApplication({ status: "archived", appliedAt: null }, "preparing", AT, "preparing")).toMatchObject({
+      ok: true,
+      state: { status: "preparing", appliedAt: null },
+    });
   });
 
   it("preserves appliedAt when moving back from screening to shortlisted", () => {
@@ -432,6 +616,97 @@ describe("transitionApplication", () => {
 
   it("offers every funnel status before the first observation", () => {
     expect(allowedTransitions(null)).toEqual(FUNNEL_STATUSES);
+  });
+});
+
+describe("reabertura de encerramento fica limitada a onde a candidatura chegou (repositório, MAJOR #346, revisão da PR #354)", () => {
+  it("registro direto em estágio avançado, fechado e reaberto para o mesmo estágio é legal", async () => {
+    // Repro exato da revisão: `appliedAt` nulo de propósito (primeira
+    // observação) não pode ser usado para recusar reabrir de volta para onde
+    // a candidatura realmente esteve.
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "interviewing");
+    await setApplicationStatus(candidateId, jobId, "rejected");
+
+    await setApplicationStatus(candidateId, jobId, "interviewing");
+
+    const [row] = await db.select().from(application).where(eq(application.jobId, jobId));
+    expect(row).toMatchObject({ status: "interviewing", appliedAt: null });
+  });
+
+  it("o caso original da issue #346 continua recusado: reabrir além de onde a candidatura chegou é ilegal", async () => {
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "shortlisted");
+    await setApplicationStatus(candidateId, jobId, "preparing");
+    await setApplicationStatus(candidateId, jobId, "archived");
+
+    await expect(setApplicationStatus(candidateId, jobId, "offer")).rejects.toBeInstanceOf(IllegalApplicationTransitionError);
+
+    const [row] = await db.select().from(application).where(eq(application.jobId, jobId));
+    expect(row!.status).toBe("archived");
+  });
+
+  it("lastStatusChangeFromStatus lê de onde a candidatura veio ao fechar, não o evento mais recente qualquer", async () => {
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "shortlisted");
+    await setApplicationStatus(candidateId, jobId, "preparing");
+    await setApplicationStatus(candidateId, jobId, "archived");
+
+    const [row] = await db.select().from(application).where(eq(application.jobId, jobId));
+    await expect(lastStatusChangeFromStatus(row!.id, "archived")).resolves.toBe("preparing");
+  });
+
+  it("MAJOR (revisão L1, 2ª rodada, #346): reabrir → desfazer → reabrir até o estágio original continua legal", async () => {
+    // Repro exato da revisão: null→interviewing, interviewing→rejected,
+    // reabre para screening, desfaz o reabrir (evento compensatório
+    // {from: screening, to: rejected, revertsEventId}). O evento mais recente
+    // por si só diria reopenFrom="screening" (errado); `undoableEvent` pula o
+    // desfazer e o reabrir desfeito, e chega ao fechamento real: "interviewing".
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "interviewing");
+    await setApplicationStatus(candidateId, jobId, "rejected");
+    const reopened = await setApplicationStatus(candidateId, jobId, "screening");
+
+    await undoApplicationStatus(candidateId, jobId, reopened!);
+
+    const [afterUndo] = await db.select().from(application).where(eq(application.jobId, jobId));
+    expect(afterUndo).toMatchObject({ status: "rejected", appliedAt: null });
+    await expect(lastStatusChangeFromStatus(afterUndo!.id, "rejected")).resolves.toBe("interviewing");
+
+    // Reabrir de volta ao estágio real ("interviewing") continua legal.
+    await setApplicationStatus(candidateId, jobId, "interviewing");
+    const [reopenedAgain] = await db.select().from(application).where(eq(application.jobId, jobId));
+    expect(reopenedAgain).toMatchObject({ status: "interviewing", appliedAt: null });
+  });
+
+  it("MAJOR (revisão L1, 2ª rodada, #346): trilha com buraco devolve null, não um limite qualquer", async () => {
+    // Linha legada: o único evento registrado não bate com o status atual —
+    // dado escrito fora do domínio, ou importação. `undoableEvent` recusa
+    // adivinhar e devolve `null`; a reabertura fica livre, não presa a um
+    // valor arbitrário que a trilha não sustenta.
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    const stamp = "2025-01-01T00:00:00.000Z";
+    const [app] = await db
+      .insert(application)
+      .values({ candidateId, jobId, status: "archived", appliedAt: null, updatedAt: stamp })
+      .returning({ id: application.id });
+    await db.insert(applicationEvent).values({
+      applicationId: app!.id,
+      at: stamp,
+      kind: "status_change",
+      // fromStatus não-nulo de propósito: uma versão ingênua que só lê o
+      // evento mais recente devolveria "shortlisted" aqui — um limite
+      // fabricado, não um "sem limite conhecido" honesto.
+      fromStatus: "shortlisted",
+      toStatus: "preparing", // não bate com o status atual ("archived"): buraco.
+    });
+
+    await expect(lastStatusChangeFromStatus(app!.id, "archived")).resolves.toBeNull();
   });
 });
 
@@ -481,6 +756,19 @@ describe("desfazer (domínio)", () => {
   it("desfazer o primeiro registro deixa a candidatura fora do funil", () => {
     const result = undoTransition({ status: "shortlisted", appliedAt: null }, [change(1, T1, null, "shortlisted")], 1, NOW);
     expect(result).toMatchObject({ ok: true, state: { status: OUT_OF_FUNNEL, appliedAt: null } });
+  });
+
+  it("desfazer até fora do funil sempre limpa appliedAt, mesmo em linha legada cujo evento revertido não é 'applied' (#346)", () => {
+    // Linha legada: appliedAt foi gravado fora do domínio (import/migração), e
+    // o único evento registrado nunca passou por "applied". Sem essa limpeza,
+    // o carimbo sobrevive escondido e `hideApplied` continua ocultando uma
+    // vaga que voltou a ser "nunca registrada".
+    const result = undoTransition({ status: "preparing", appliedAt: T1 }, [change(1, T1, null, "preparing")], 1, NOW);
+    expect(result).toEqual({
+      ok: true,
+      state: { status: OUT_OF_FUNNEL, appliedAt: null },
+      event: { kind: "status_change", fromStatus: "preparing", toStatus: OUT_OF_FUNNEL, at: NOW, revertsEventId: 1 },
+    });
   });
 
   it("limpa appliedAt só ao desfazer a própria entrada em 'Candidatura enviada'", () => {
@@ -688,5 +976,125 @@ describe("desfazer e voltar (repositório)", () => {
 
     await expect(undoApplicationStatus(other, jobId, moved!)).rejects.toBeInstanceOf(ApplicationUndoUnavailableError);
     expect((await eventsOf(jobId)).app.status).toBe("shortlisted");
+  });
+
+  it("desfazer trava a linha (FOR UPDATE): um fechar-e-reabrir real em voo não deixa a decisão gravar sobre uma foto velha (ABA, #346)", async () => {
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "shortlisted");
+    const moved = await setApplicationStatus(candidateId, jobId, "preparing");
+    const { app } = await eventsOf(jobId);
+    // Depois de "moved" no relógio de verdade: a pilha de desfazer ordena por
+    // `at`, e um round-trip "mais antigo" que o topo não o substituiria.
+    const closedAt = new Date(Date.now() + 60_000).toISOString();
+    const reopenedAt = new Date(Date.now() + 61_000).toISOString();
+
+    const rawConnection = postgres(process.env.DATABASE_URL!, { max: 2, onnotice: () => {} });
+    try {
+      const tx = await rawConnection.reserve();
+      try {
+        await tx`begin`;
+        // Outra sessão trava a linha primeiro — exatamente o que o próprio
+        // desfazer faz ao ler `previous` antes de decidir.
+        await tx`select id from production.application where id = ${app.id} for update`;
+
+        const undoing = undoApplicationStatus(candidateId, jobId, moved!);
+        await untilSomeoneWaitsOnALock(rawConnection);
+
+        // Enquanto a linha está travada, um fechamento e uma reabertura de
+        // verdade acontecem e voltam ao MESMO status ("preparing") — mas nenhum
+        // dos dois é um "desfazer" (nenhum `reverts_event_id`), então a pilha
+        // de desfazer não vê os dois se cancelando.
+        await tx`update production.application set status = 'archived', updated_at = ${closedAt} where id = ${app.id}`;
+        await tx`
+          insert into production.application_event (application_id, at, kind, from_status, to_status)
+          values (${app.id}, ${closedAt}, 'status_change', 'preparing', 'archived')
+        `;
+        await tx`update production.application set status = 'preparing', updated_at = ${reopenedAt} where id = ${app.id}`;
+        await tx`
+          insert into production.application_event (application_id, at, kind, from_status, to_status)
+          values (${app.id}, ${reopenedAt}, 'status_change', 'archived', 'preparing')
+        `;
+        await tx`commit`;
+
+        // Liberado, o desfazer lê o estado JÁ avançado: "moved" não é mais o
+        // topo da pilha (a reabertura virou o novo topo), e a trava garante
+        // que a decisão foi tomada olhando esse estado inteiro, não uma foto
+        // de antes do round-trip que por coincidência tem o mesmo status.
+        await expect(undoing).rejects.toBeInstanceOf(ApplicationTransitionConflictError);
+      } finally {
+        tx.release();
+      }
+    } finally {
+      await rawConnection.end({ timeout: 5 });
+    }
+
+    const after = await eventsOf(jobId);
+    expect(after.app.status).toBe("preparing");
+    // Nenhum evento fantasma revertendo "moved": a trilha continua coerente.
+    expect(after.events.filter((event) => event.revertsEventId !== null)).toHaveLength(0);
+  });
+
+  it("desfazer até fora do funil limpa appliedAt de uma linha legada, e a vaga volta a aparecer com 'ocultar candidatadas' (#346)", async () => {
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    const legacyStamp = "2025-01-01T00:00:00.000Z";
+    // Linha legada: appliedAt gravado fora do domínio, e o único evento nunca
+    // passou por "applied".
+    const [legacy] = await db
+      .insert(application)
+      .values({ candidateId, jobId, status: "preparing", appliedAt: legacyStamp, updatedAt: legacyStamp })
+      .returning({ id: application.id });
+    const [legacyEvent] = await db
+      .insert(applicationEvent)
+      .values({ applicationId: legacy!.id, at: legacyStamp, kind: "status_change", fromStatus: null, toStatus: "preparing" })
+      .returning({ id: applicationEvent.id });
+
+    await undoApplicationStatus(candidateId, jobId, legacyEvent!.id);
+
+    const { app } = await eventsOf(jobId);
+    expect(app).toMatchObject({ status: OUT_OF_FUNNEL, appliedAt: null });
+    const board = await listBoard(candidateId, { minFit: 0, hideApplied: true });
+    expect(board.map((row) => row.jobId)).toContain(jobId);
+  });
+
+  it("Minor (revisão PR #354, #346): linha já 'untracked' com appliedAt remanescente (dado legado anterior à correção) não fica escondida por 'ocultar candidatadas'", async () => {
+    // Diferente do teste acima: aqui a linha já chega pronta com
+    // `status='untracked'` e `appliedAt` preenchido, sem passar pelo domínio
+    // — o cenário de um registro escrito antes desta correção existir. Só a
+    // condição da consulta (`hideApplied`) resolve este caso.
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await db.insert(application).values({
+      candidateId,
+      jobId,
+      status: OUT_OF_FUNNEL,
+      appliedAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    });
+
+    const board = await listBoard(candidateId, { minFit: 0, hideApplied: true });
+    expect(board.map((row) => row.jobId)).toContain(jobId);
+  });
+
+  it("mapeia 23505 do índice único de reverts_event_id para ApplicationTransitionConflictError, nunca um erro cru do driver (#346)", async () => {
+    // O índice único (`application_event_reverts_idx`) é a última linha de
+    // defesa se, por qualquer via, dois desfazeres colidirem no mesmo evento
+    // revertido apesar da trava de linha. Forçado aqui com um gatilho, porque
+    // a trava por si só já fecha a janela de corrida no caminho normal.
+    await db.execute(sql.raw(`
+      create function production.force_reverts_collision() returns trigger language plpgsql as $$
+      begin raise exception 'colisão simulada' using errcode = '23505'; end $$;
+      create trigger force_reverts_collision before insert on production.application_event
+      for each row when (new.reverts_event_id is not null)
+      execute function production.force_reverts_collision()
+    `));
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "shortlisted");
+    const moved = await setApplicationStatus(candidateId, jobId, "preparing");
+
+    await expect(undoApplicationStatus(candidateId, jobId, moved!)).rejects.toBeInstanceOf(ApplicationTransitionConflictError);
+    expect((await eventsOf(jobId)).app.status).toBe("preparing");
   });
 });
