@@ -301,6 +301,13 @@ describe("publicCvText", () => {
     }
   });
 
+  it("limite declarado: número sem marca de dinheiro depois de um nome de seção passa", () => {
+    // Escrito em G23. Do outro lado de um nome de seção só conta valor com cara
+    // de dinheiro, para que "equipe de 12" na experiência não derrube o perfil.
+    const out = publicCvMarkdown("EXPERIÊNCIA\nStaff\nSalary expectations\nEmployment:\n150\nFORMAÇÃO\nCiência");
+    expect(out).toContain("150");
+  });
+
   it("limite declarado: valor a três linhas ou mais da seção do piso passa", () => {
     // Escrito em G23 e no topo de `src/core/public-cv.ts`. A borda é curta para
     // que a métrica da experiência não derrube o perfil; o preço é este.
@@ -322,6 +329,72 @@ describe("publicCvText", () => {
 
   it("rótulo sem valor no bloco longo leva o bloco e o parágrafo seguinte, como no bloco curto", () => {
     expect(publicCvText("Topo\nPretensão salarial:\n\nR$ 30.000 mensais\n\nFim")).toBe("\n\nFim");
+  });
+
+  it("número acima do rótulo não cancela a retirada do parágrafo do valor", () => {
+    for (const cv of [
+      "Equipe de 12 pessoas\nPretensão salarial:\n\nR$ 30.000 mensais",
+      "Mentoria de 6 engenheiros\nExpectativa\nsalarial:\n\n30k",
+      "20+ anos\nSalário\n-------\n\nR$ 30.000",
+    ]) {
+      expect(publicCvText(cv), cv).not.toMatch(/30\.000|30k/);
+      expect(publicCvMarkdown(cv), cv).not.toMatch(/30\.000|30k/);
+    }
+    // O valor no próprio bloco do rótulo cumpre a promessa: o parágrafo
+    // seguinte é currículo.
+    expect(publicCvText("Equipe de 12\nPretensão salarial: R$ 30.000\n\n2019-2021 Staff")).toBe("\n2019-2021 Staff");
+  });
+
+  it("'a combinar' num cabeçalho com número não apaga o CV", () => {
+    for (const cv of [
+      "Andreus Timm\nSão Paulo · (11) 91234-5678\nPretensão salarial: a combinar\nEXPERIÊNCIA\nStaff Engineer na Acme\nFORMAÇÃO\nCiência da Computação",
+      "Andreus Timm\nSenior AI Architect · 15+ anos\nPretensão salarial: a combinar\nEXPERIÊNCIA\nStaff Engineer na Acme\nFORMAÇÃO\nCiência da Computação",
+      "Andreus Timm, 15 anos\nPretensão salarial: a combinar\n\nEXPERIÊNCIA\nStaff Engineer na Acme, equipe de 12\nFORMAÇÃO\nCiência da Computação",
+    ]) {
+      const out = publicCvMarkdown(cv);
+      expect(out, cv).toContain("Staff Engineer na Acme");
+      expect(out, cv).toContain("Ciência da Computação");
+      expect(out, cv).not.toContain("a combinar");
+    }
+  });
+
+  it("bloco prometido que abre com sub-rótulo de regime ainda é o valor", () => {
+    for (const cv of [
+      "Andreus Timm\n\nSalary expectations:\n\nEmployment:\n150k USD\nContract:\n90 USD/hour\n\nEXPERIENCE\nStaff at Acme",
+      "Topo\n\nPretensão salarial:\n\nObjetivo\nPJ R$ 40.000\n\nFim",
+      "Topo\n\nPretensão salarial:\n\nResumo\nCLT 30 mil / PJ 40 mil\n\nFim",
+    ]) {
+      expect(publicCvMarkdown(cv), cv).not.toMatch(/150k|90 USD|40\.000|30 mil|40 mil/);
+    }
+  });
+
+  it("seção sem valor: número sem marca nas bordas ou no bloco seguinte não sai", () => {
+    for (const cv of [
+      "EXPERIÊNCIA\nStaff\n150\nou\nPretensão salarial\nFORMAÇÃO\nCiência",
+      "EXPERIÊNCIA\nStaff\nPretensão salarial:\nFORMAÇÃO\nCiência\n\nR$ 30.000",
+    ]) {
+      expect(publicCvMarkdown(cv), cv).not.toMatch(/150|30\.000/);
+    }
+  });
+
+  it("'a combinar' no cabeçalho não derruba a experiência que começa com número", () => {
+    for (const cv of [
+      "Andreus Timm\nSão Paulo · (11) 91234-5678\nPretensão salarial: a combinar\nEXPERIÊNCIA\nStaff Engineer na Acme — equipe de 12\nArquitetei a plataforma de agentes\nFORMAÇÃO\nCiência da Computação",
+      "Andreus Timm\nSenior AI Architect · 15+ anos\nPretensão salarial: a combinar\nEXPERIÊNCIA\nStaff Engineer na Acme\nMentoria de 6 engenheiros\nFORMAÇÃO\nCiência da Computação",
+    ]) {
+      const out = publicCvMarkdown(cv);
+      expect(out, cv).toContain("Staff Engineer na Acme");
+      expect(out, cv).toContain("Ciência da Computação");
+    }
+  });
+
+  it("sub-rótulo de regime com o valor linhas abaixo ainda é o valor", () => {
+    const cv = "Andreus Timm\n\nSalary expectations:\n\nEmployment:\n(full-time,\nremote)\n150k USD\n\nEXPERIENCE\nStaff at Acme";
+    expect(publicCvMarkdown(cv)).not.toContain("150k");
+  });
+
+  it("bloco consumido como valor prometido também promete o seguinte", () => {
+    expect(publicCvText("Pretensão salarial:\n\nOpção 2\nPretensão PJ:\n\nR$ 40.000\n\nFim")).not.toContain("40.000");
   });
 
   it("o que sobra do bloco longo ainda com cara de piso sai inteiro", () => {

@@ -266,7 +266,8 @@ custo linear, travado em teste.
 `src/core/public-cv.ts` e travado em teste: valor sem rótulo e telefone sem
 marca passam. No bloco com títulos, o corte pela seção do piso tem dois
 preços, ambos escolhidos: valor a três linhas ou mais da seção (ou duas
-seções depois) passa; valor com cara de dinheiro a até duas linhas dela
+seções depois), e número sem cara de dinheiro ("150") do outro lado de um
+nome de seção, passam; valor com cara de dinheiro a até duas linhas dela
 derruba o CV inteiro, e a linha com número logo acima do rótulo sai mesmo
 que seja um item neutro. Não é sanitização perfeita, e não deve ser
 apresentado como tal.
