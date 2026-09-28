@@ -11,7 +11,7 @@ import {
   type PublicFactsFormInput,
   type StoredFacts,
 } from "../src/core/candidate-public-facts.ts";
-import { containsPay } from "../src/core/public-cv.ts";
+import { containsAmount, containsPay } from "../src/core/public-cv.ts";
 
 /**
  * Fatos do perfil público (#327, parte A). Duas camadas, testadas em
@@ -266,6 +266,114 @@ describe("saída: publicFactsFrom", () => {
     expect(publicFactsFrom({ ...FULL_ROW, area: "Dados, 11912345678" }).area).toBeNull();
     // Espaço em volta e vazio não viram fato.
     expect(publicFactsFrom({ ...FULL_ROW, area: "   " }).area).toBeNull();
+  });
+});
+
+/**
+ * Revisão L2 da PR #362 (FIX_BEFORE_SHIP): valor sem rótulo de pretensão
+ * passava pelos dois filtros. Num campo curto de área ou idiomas não há
+ * motivo para dinheiro, então qualquer valor com cara de dinheiro
+ * (`MONEY_LIKE`, `containsAmount()`) é recusado na entrada e esvaziado na
+ * saída.
+ */
+const UNLABELED_PAY = [
+  "Piso 20k",
+  "Expectativa: 20k",
+  "Target: USD 180k",
+  "Min 150k",
+  "Remote only, $150/h",
+  "Rate 90/h",
+  "Pay 20k",
+  "USD 15,000/mês",
+  "Engenharia de dados — 20k USD/mês",
+];
+
+describe("valor sem rótulo (revisão L2 #362)", () => {
+  it("MAJOR entrada recusa cada contraexemplo com a mensagem de pretensão, nos dois campos", () => {
+    for (const text of UNLABELED_PAY) {
+      expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }), text).toEqual({ ok: false, code: "areaPay" });
+      expect(parsePublicFactsForm({ ...EMPTY_FORM, languages: text }), text).toEqual({
+        ok: false,
+        code: "languagesPay",
+      });
+    }
+  });
+
+  it("MAJOR saída esvazia cada contraexemplo gravado direto no banco com opt-in ligado", () => {
+    for (const text of UNLABELED_PAY) {
+      const facts = publicFactsFrom({ ...FULL_ROW, area: text, languages: text });
+      expect(facts.area, text).toBeNull();
+      expect(facts.languages, text).toBeNull();
+    }
+  });
+
+  it("MAJOR containsAmount não pega área nem idioma comuns, nem ano", () => {
+    for (const text of ["Inglês C1", "Engenharia de dados desde 2015", "Português (nativo), Inglês (fluente)", "Web3 e IA"]) {
+      expect(containsAmount(text), text).toBe(false);
+    }
+  });
+});
+
+describe("telefone sem marca nos campos curtos (revisão L2 #362)", () => {
+  const PHONES = ["WhatsApp 11 91234-5678", "tel 11 9 1234 5678", "Inglês · 11.91234.5678", "(11) 91234 5678"];
+
+  it("MINOR 4 entrada recusa com a mensagem de contato", () => {
+    for (const text of PHONES) {
+      expect(parsePublicFactsForm({ ...EMPTY_FORM, area: text }), text).toEqual({ ok: false, code: "areaContact" });
+      expect(parsePublicFactsForm({ ...EMPTY_FORM, languages: text }), text).toEqual({
+        ok: false,
+        code: "languagesContact",
+      });
+    }
+  });
+
+  it("MINOR 4 saída esvazia", () => {
+    for (const text of PHONES) {
+      expect(publicFactsFrom({ ...FULL_ROW, area: text }).area, text).toBeNull();
+    }
+  });
+
+  it("MINOR 4 intervalo de anos não é telefone", () => {
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: "Dados, 2015-2020" }).ok).toBe(true);
+  });
+});
+
+describe("e-mail cadastrado na entrada (revisão L2 #362)", () => {
+  it("MINOR 3 recusa o e-mail conhecido mesmo fora do padrão genérico", () => {
+    const known = { emails: ["pia@intranet"] };
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: "Dados — pia@intranet" }, known)).toEqual({
+      ok: false,
+      code: "areaContact",
+    });
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, languages: "Inglês, pia@intranet" }, known)).toEqual({
+      ok: false,
+      code: "languagesContact",
+    });
+    // Sem o conhecido, o padrão genérico não o reconhece: é por isso que ele é passado.
+    expect(parsePublicFactsForm({ ...EMPTY_FORM, area: "Dados — pia@intranet" }).ok).toBe(true);
+  });
+});
+
+describe("custo em entrada longa (revisão L2 #362)", () => {
+  it("MINOR 2 containsPay e containsAmount são lineares numa linha de quebras", () => {
+    const hostile = `${"\n".repeat(80_000)}x`;
+    const started = performance.now();
+    expect(containsPay(hostile)).toBe(false);
+    expect(containsAmount(hostile)).toBe(false);
+    // Quadrático levava ~3,6 s; linear fica em milissegundos. Folga larga
+    // para máquina de CI ocupada, ainda uma ordem de grandeza abaixo.
+    expect(performance.now() - started).toBeLessThan(300);
+  });
+
+  it("MINOR 2 saída descarta texto acima do teto antes de filtrar", () => {
+    const facts = publicFactsFrom({
+      ...FULL_ROW,
+      area: "a".repeat(AREA_MAX + 1),
+      languages: "l".repeat(LANGUAGES_MAX + 1),
+    });
+    expect(facts.area).toBeNull();
+    expect(facts.languages).toBeNull();
+    expect(publicFactsFrom({ ...FULL_ROW, area: "a".repeat(AREA_MAX) }).area).toBe("a".repeat(AREA_MAX));
   });
 });
 

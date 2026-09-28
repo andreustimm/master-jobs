@@ -16,7 +16,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb, type DbTransaction } from "./db/client.ts";
 import { isDuplicateKey } from "./db/retry.ts";
 import { randomBytes } from "node:crypto";
-import { application, candidate, candidateDocument, job, jobScore } from "./db/schema.ts";
+import { application, authUser, candidate, candidateDocument, job, jobScore } from "./db/schema.ts";
 import { loadProfile } from "./profile/load.ts";
 import { isVisibility, type Visibility } from "../contexts/auth/index.ts";
 import { primaryScoreFilter } from "../contexts/matching/index.ts";
@@ -351,12 +351,23 @@ export async function setPublicCv(candidateId: number, publish: boolean): Promis
  * gravar campo a campo deixaria, numa falha no meio, um opt-in ligado com o
  * valor antigo. Validação em `parsePublicFactsForm` — recusa em vez de gravar
  * valor fora da lista, texto longo, contato ou pretensão salarial.
+ *
+ * Os e-mails cadastrados — o do candidato e o da conta vinculada — entram na
+ * validação como em `publicProfile()`: um endereço interno fora do padrão
+ * genérico ("pia@intranet") seria aceito aqui e só esvaziado na saída, e a
+ * pessoa não saberia por que o campo não aparece.
  */
 export async function setPublicFacts(
   candidateId: number,
   raw: PublicFactsFormInput,
 ): Promise<{ ok: true } | { ok: false; code: PublicFactsError }> {
-  const parsed = parsePublicFactsForm(raw);
+  const emails = await getDb()
+    .select({ email: candidate.email, accountEmail: authUser.email })
+    .from(candidate)
+    .leftJoin(authUser, eq(authUser.candidateId, candidate.id))
+    .where(eq(candidate.id, candidateId));
+  const known = { emails: emails.flatMap((row) => [row.email, row.accountEmail]) };
+  const parsed = parsePublicFactsForm(raw, known);
   if (!parsed.ok) return parsed;
   await getDb()
     .update(candidate)

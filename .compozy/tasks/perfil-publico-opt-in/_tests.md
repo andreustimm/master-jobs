@@ -55,3 +55,21 @@ separadas. Só entra em "Rodado" o que uma execução desta sessão confirmou.
   **58/58** verificações e **14/14** páginas sem violação axe. A área
   `public-facts` sozinha (`--areas public-facts`): **13/13**.
 - `pnpm typecheck`: limpo.
+
+## Revisão L2 da #362 (FIX_BEFORE_SHIP)
+
+| # | Caso | Onde |
+|---|---|---|
+| R1 | MAJOR: "Piso 20k", "Expectativa: 20k", "Target: USD 180k", "Min 150k", "Remote only, $150/h", "Rate 90/h", "Pay 20k", "USD 15,000/mês", "Engenharia de dados — 20k USD/mês" recusados na entrada (`*Pay`) e esvaziados na saída, nos dois campos | `tests/candidate-public-facts.test.ts` |
+| R2 | MINOR 2: `containsPay`/`containsAmount` em 80 mil quebras + "x" abaixo de 300 ms; saída descarta texto acima do teto | `tests/candidate-public-facts.test.ts` |
+| R3 | MINOR 3: e-mail cadastrado fora do padrão genérico recusado na entrada — puro (com `known`) e pela action com banco (do candidato e da conta) | `tests/candidate-public-facts.test.ts`, `tests/candidate-public-facts-action.test.ts` |
+| R4 | MINOR 4: telefone sem marca recusado (`*Contact`) e esvaziado; intervalo de anos aceito | `tests/candidate-public-facts.test.ts` |
+| R5 | MINOR 5: restauração da área E2E `public-facts` em `try/finally` | `tests/e2e/ui/public-facts.mjs` |
+
+Os 8 testes novos do arquivo puro reprovaram antes da correção (a
+linearidade levou 3,7 s); depois, verdes — números na seção abaixo.
+
+Rodado após a correção (28/09): `pnpm typecheck` limpo; facts/action/
+public-profile/public-cv **83/83**; `vitest related` do delta **2349
+aprovados, 0 reprovados** (9 pulados); E2E isolado `--areas
+public-facts,public-profile,public-cv-format` **34/34**.

@@ -19,7 +19,7 @@
  *
  * Sem banco, sem rede, sem relógio.
  */
-import { containsContact, containsPay, type KnownContact } from "./public-cv.ts";
+import { containsAmount, containsContact, containsPay, type KnownContact } from "./public-cv.ts";
 
 export const WORK_MODELS = Object.freeze(["remote", "hybrid", "onsite", "b2b", "contractor", "employee"] as const);
 export const EXPERIENCE_LEVELS = Object.freeze(
@@ -133,14 +133,42 @@ function choice<T extends string>(list: readonly T[], raw: string): ChoiceResult
   return member(list, value) ? { ok: true, value } : { ok: false };
 }
 
+/**
+ * Telefone sem marca num campo curto: oito dígitos ou mais separados só por
+ * espaço, ponto, hífen ou parêntese ("WhatsApp 11 91234-5678", "tel 11 9 1234
+ * 5678"). `containsContact()` deixa passar — no currículo um número assim não
+ * se distingue de outro qualquer —, mas em área ou idiomas ninguém escreve oito
+ * dígitos seguidos que não sejam um telefone. Intervalo de anos ("2015-2020")
+ * fica de fora. Cada repetição começa num dígito: custo linear.
+ */
+const LOOSE_PHONE = /\d(?:[ .()-]?\d){7,}/g;
+const YEAR_RANGE = /^(?:19|20)\d{2}-(?:19|20)\d{2}$/;
+
+function containsLoosePhone(text: string): boolean {
+  return [...text.matchAll(LOOSE_PHONE)].some(([match]) => !YEAR_RANGE.test(match));
+}
+
+/** Contato num campo curto: o de todo o perfil, mais o telefone sem marca. */
+function shortFieldContact(text: string, known: KnownContact): boolean {
+  return containsContact(text, known) || containsLoosePhone(text);
+}
+
+/** Pretensão num campo curto: rótulo de piso ou qualquer valor com cara de dinheiro. */
+function shortFieldPay(text: string): boolean {
+  return containsPay(text) || containsAmount(text);
+}
+
+const FREE_TEXT_MAX = { area: AREA_MAX, languages: LANGUAGES_MAX } as const;
+
 type FreeTextResult = { ok: true; value: string | null } | { ok: false; code: PublicFactsError };
 
-function freeText(field: "area" | "languages", raw: string, max: number): FreeTextResult {
+function freeText(field: "area" | "languages", raw: string, known: KnownContact): FreeTextResult {
   const value = optional(raw);
   if (value === null) return { ok: true, value: null };
-  if (value.length > max) return { ok: false, code: `${field}TooLong` };
-  if (containsContact(value)) return { ok: false, code: `${field}Contact` };
-  if (containsPay(value)) return { ok: false, code: `${field}Pay` };
+  // O teto vem antes dos filtros: nenhuma expressão roda sobre texto longo.
+  if (value.length > FREE_TEXT_MAX[field]) return { ok: false, code: `${field}TooLong` };
+  if (shortFieldContact(value, known)) return { ok: false, code: `${field}Contact` };
+  if (shortFieldPay(value)) return { ok: false, code: `${field}Pay` };
   return { ok: true, value };
 }
 
@@ -150,9 +178,13 @@ function freeText(field: "area" | "languages", raw: string, max: number): FreeTe
  * Valor controlado fora da lista é `invalidChoice`: o formulário só oferece a
  * lista, e outro valor é requisição forjada, não digitação — gravá-lo
  * deixaria a coluna num estado que nenhum ramo da leitura reconhece.
+ *
+ * `known` leva os e-mails cadastrados (do candidato e da conta), que o padrão
+ * genérico pode não reconhecer — a mesma régua da saída.
  */
 export function parsePublicFactsForm(
   raw: PublicFactsFormInput,
+  known: KnownContact = {},
 ): { ok: true; value: StoredFacts } | { ok: false; code: PublicFactsError } {
   const models = raw.workModel.map((value) => value.trim()).filter((value) => value !== "");
   if (!models.every((value) => member(WORK_MODELS, value))) return { ok: false, code: "invalidChoice" };
@@ -165,9 +197,9 @@ export function parsePublicFactsForm(
   const relocationRaw = raw.openToRelocation.trim();
   if (!["", "yes", "no"].includes(relocationRaw)) return { ok: false, code: "invalidChoice" };
 
-  const area = freeText("area", raw.area, AREA_MAX);
+  const area = freeText("area", raw.area, known);
   if (!area.ok) return area;
-  const languages = freeText("languages", raw.languages, LANGUAGES_MAX);
+  const languages = freeText("languages", raw.languages, known);
   if (!languages.ok) return languages;
 
   const canonical = canonicalWorkModels(models);
@@ -204,9 +236,12 @@ export function publicFactsFrom(row: StoredFacts, known: KnownContact = {}): Pub
   const on = (field: PublicFactKey) => row[OPT_IN_COLUMN[field]] === true;
   const controlled = <T extends string>(list: readonly T[], field: PublicFactKey, value: string | null): T | null =>
     on(field) && value !== null && member(list, value) ? value : null;
-  const free = (field: PublicFactKey, value: string | null): string | null => {
+  const free = (field: "area" | "languages", value: string | null): string | null => {
     const text = on(field) ? optional(value) : null;
-    return text === null || containsContact(text, known) || containsPay(text) ? null : text;
+    // Acima do teto não sai, e nenhuma expressão roda sobre ele: o valor só
+    // chega longo por fora da gravação, e texto longo é onde o custo mora.
+    if (text === null || text.length > FREE_TEXT_MAX[field]) return null;
+    return shortFieldContact(text, known) || shortFieldPay(text) ? null : text;
   };
 
   return {

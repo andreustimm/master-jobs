@@ -239,7 +239,10 @@ opt-in (#327) — modelo de trabalho, nível, disponibilidade, prazo, aceita
 mudar, área, idiomas — saem numa chave só, `facts`, cada um com o próprio
 consentimento, desligado por padrão (nulo também é desligado);
 `publicFactsFrom()` descarta valor controlado desconhecido e esvazia área e
-idiomas com contato (`containsContact()`) ou pretensão (`containsPay()`).
+idiomas acima do teto, com contato (`containsContact()` com os e-mails
+cadastrados, mais oito dígitos ou mais com separador simples) ou com
+pretensão (`containsPay()`, ou qualquer valor com cara de dinheiro,
+`containsAmount()`); a gravação recusa o mesmo, com o motivo.
 Pretensão salarial não é fato nem opt-in.
 
 **Endereço.** `/p/` lê `public_slug`, nunca o `slug` interno; trocar o endereço

@@ -1087,10 +1087,10 @@ export const ptBR = {
     errorInvalidChoice: "Um dos valores escolhidos não é válido. Recarregue a página e tente de novo.",
     errorAreaTooLong: "A área passa de {max} caracteres.",
     errorAreaContact: "A área não pode ter e-mail nem telefone: ela pode sair no perfil público.",
-    errorAreaPay: "A área não pode ter pretensão salarial: ela nunca sai no perfil público.",
+    errorAreaPay: "A área não pode ter valor em dinheiro nem pretensão salarial: ela nunca sai no perfil público.",
     errorLanguagesTooLong: "Idiomas passa de {max} caracteres.",
     errorLanguagesContact: "Idiomas não pode ter e-mail nem telefone: o campo pode sair no perfil público.",
-    errorLanguagesPay: "Idiomas não pode ter pretensão salarial: ela nunca sai no perfil público.",
+    errorLanguagesPay: "Idiomas não pode ter valor em dinheiro nem pretensão salarial: ela nunca sai no perfil público.",
   },
   vocabulary: {
     title: "Vocabulário",

@@ -3,8 +3,8 @@
 ### Adicionado
 
 - Migração `0028_candidate_public_facts` (aditiva, veredito `[]`): sete fatos em `candidate` — `work_model text[]`, `experience_level`, `availability`, `start_timeframe`, `open_to_relocation`, `area`, `languages`, todos anuláveis — e um opt-in por fato (`public_*`, `boolean default false`, anulável pelo contrato da importação do snapshot; nulo é desligado). Sem FK. `postSnapshotColumns` declara nulo/`false` para a importação legada (#327, parte A).
-- `src/core/candidate-public-facts.ts` (puro): listas controladas, `parsePublicFactsForm()` (recusa com código valor fora da lista, texto longo, contato e pretensão salarial) e `publicFactsFrom()` (só publica com opt-in `=== true`, valor reconhecido e texto livre sem contato nem pretensão).
-- `containsPay()` em `src/core/public-cv.ts`: a régua de pretensão do CV aplicada a campo curto.
+- `src/core/candidate-public-facts.ts` (puro): listas controladas, `parsePublicFactsForm()` (recusa com código valor fora da lista, texto longo, contato — inclusive os e-mails cadastrados e telefone sem marca — e pretensão salarial ou valor com cara de dinheiro) e `publicFactsFrom()` (só publica com opt-in `=== true`, valor reconhecido e texto livre dentro do teto, sem contato nem valor).
+- `src/core/public-cv.ts`: `containsPay()` (a régua de pretensão do CV em campo curto, sobre espaço colapsado — linear) e `containsAmount()` (`MONEY_LIKE`).
 - `PublicProfile.facts` na lista de permissão de `publicProfile()`, coluna a coluna.
 - `setPublicFactsAction` (`guardOwnCandidate` antes de ler o formulário, candidato da sessão) e o cartão "Dados do perfil público" em `/candidate` (`app/candidate/public-facts.tsx`), com o "Mostrar no perfil público" ao lado de cada campo.
 - `/p/[slug]`: faixa de fatos com modelo de trabalho, nível e disponibilidade; cartão "Em resumo" na lateral com área, idiomas, prazo e aceita mudar. Rótulos em `publicFacts.*` (pt-BR e en).

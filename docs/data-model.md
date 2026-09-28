@@ -638,8 +638,8 @@ Sete fatos que a pessoa preenche em `/candidate` (#327, migração
 | Disponibilidade | `availability` | `public_availability` | `actively-looking`, `open`, `not-looking` |
 | Prazo para começar | `start_timeframe` | `public_start_timeframe` | `immediate`, `two-weeks`, `one-month`, `two-months`, `three-months-plus` |
 | Aceita mudar | `open_to_relocation boolean` | `public_relocation` | `true`, `false`; nulo = não informado |
-| Área | `area` | `public_area` | texto livre, até 80 caracteres |
-| Idiomas | `languages` | `public_languages` | texto livre, até 160 caracteres |
+| Área | `area` | `public_area` | texto livre, até 80 caracteres, sem contato nem valor |
+| Idiomas | `languages` | `public_languages` | texto livre, até 160 caracteres, sem contato nem valor |
 
 - Valores nulos; opt-ins `boolean default false` e anuláveis (contrato da
   importação do snapshot, como `source.origin`) — nulo é desligado.

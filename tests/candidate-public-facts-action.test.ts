@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { createUser } from "../src/contexts/auth/index.ts";
 import { ensureCandidate, getCandidateById } from "../src/core/candidate.ts";
+import { getDb } from "../src/core/db/client.ts";
+import { authUser } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
 /**
@@ -107,5 +111,22 @@ describe("setPublicFactsAction", () => {
       code: "invalidChoice",
     });
     expect(await getCandidateById(id)).toMatchObject({ area: null, publicArea: false, languages: null });
+  });
+
+  it("MINOR 3 (revisão L2 #362) recusa o e-mail cadastrado do candidato e o da conta, fora do padrão genérico", async () => {
+    const id = await ensureCandidate({ slug: "maria", name: "Maria", email: "maria@intranet" });
+    const { id: userId } = await createUser({ email: "conta@intranet", roles: ["candidate"] });
+    await getDb().update(authUser).set({ candidateId: id }).where(eq(authUser.id, userId));
+    state.candidateId = id;
+
+    expect(await setPublicFactsAction(form({ area: "Dados — maria@intranet" }))).toEqual({
+      ok: false,
+      code: "areaContact",
+    });
+    expect(await setPublicFactsAction(form({ languages: "Inglês, conta@intranet" }))).toEqual({
+      ok: false,
+      code: "languagesContact",
+    });
+    expect(await getCandidateById(id)).toMatchObject({ area: null, languages: null });
   });
 });

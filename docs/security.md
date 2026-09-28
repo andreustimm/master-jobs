@@ -358,9 +358,15 @@ aceita mudar, área e idiomas entram em `candidate` com um opt-in cada
 desligado). Três camadas: a coluna nasce desligada; `publicFactsFrom()`
 (`src/core/candidate-public-facts.ts`, pura) só devolve o fato com opt-in
 `=== true`, valor presente e reconhecido — valor controlado fora da lista não
-sai, e área/idiomas com e-mail, telefone (inclusive o e-mail cadastrado) ou
-pretensão salarial (`containsPay()`, a mesma régua do CV, com o mesmo limite
-declarado) saem vazios; e a página só escolhe o lugar (faixa do topo ou "Em
+sai, e área/idiomas acima do teto, com e-mail (inclusive o cadastrado, do
+candidato e da conta), telefone (o padrão do perfil mais oito dígitos ou mais
+com separador simples, fora intervalo de anos) ou pretensão salarial saem
+vazios. Pretensão, em campo curto, é rótulo de piso (`containsPay()`, a régua
+do CV) **ou qualquer valor com cara de dinheiro** (`containsAmount()`, sobre
+`MONEY_LIKE`: "Piso 20k", "Rate 90/h", "USD 15,000/mês" não têm rótulo e
+passavam — revisão L2 da #362). As expressões rodam sobre espaço colapsado e
+só abaixo do teto: a alternativa de `rate:` em começo de linha era quadrática
+numa sequência de quebras; e a página só escolhe o lugar (faixa do topo ou "Em
 resumo"). A gravação é `setPublicFactsAction`, com `guardOwnCandidate` antes
 de ler o formulário, e recusa com código o valor forjado, o texto longo, o
 contato e a pretensão. **Pretensão salarial não é campo nem opt-in** — teste

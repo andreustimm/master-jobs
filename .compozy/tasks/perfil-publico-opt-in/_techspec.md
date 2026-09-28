@@ -71,7 +71,16 @@ export function publicFactsFrom(row: StoredFacts, known: KnownContact): PublicFa
 
 `containsPay()` é exportada de `src/core/public-cv.ts`, reaproveitando
 `isSalaryBlock()`/`isPayTitle()` do filtro do CV — mesma régua, mesmo limite
-declarado (G23), expressões de custo linear.
+declarado (G23), sobre espaço colapsado (a alternativa de `rate:` em começo de
+linha é quadrática numa sequência de quebras).
+
+**Revisão L2 da #362.** Rótulo não basta num campo curto: "Piso 20k", "Rate
+90/h" e "USD 15,000/mês" passavam. Área e idiomas também recusam/esvaziam
+qualquer valor com cara de dinheiro (`containsAmount()`, sobre `MONEY_LIKE`),
+telefone sem marca (oito dígitos ou mais com separador simples, fora intervalo
+de anos) e os e-mails cadastrados na entrada (`setPublicFacts` os lê do
+candidato e da conta). Na saída, texto acima do teto sai `null` antes de
+qualquer expressão.
 
 ## DTO — `src/core/candidate-public.ts`
 

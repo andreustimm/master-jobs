@@ -1065,10 +1065,10 @@ export const en: Dictionary = {
     errorInvalidChoice: "One of the chosen values is not valid. Reload the page and try again.",
     errorAreaTooLong: "Field is longer than {max} characters.",
     errorAreaContact: "Field can't contain an email or phone number: it may be shown on the public profile.",
-    errorAreaPay: "Field can't contain a salary expectation: that is never shown on the public profile.",
+    errorAreaPay: "Field can't contain an amount of money or a salary expectation: that is never shown on the public profile.",
     errorLanguagesTooLong: "Languages is longer than {max} characters.",
     errorLanguagesContact: "Languages can't contain an email or phone number: it may be shown on the public profile.",
-    errorLanguagesPay: "Languages can't contain a salary expectation: that is never shown on the public profile.",
+    errorLanguagesPay: "Languages can't contain an amount of money or a salary expectation: that is never shown on the public profile.",
   },
   vocabulary: {
     title: "Vocabulary",
