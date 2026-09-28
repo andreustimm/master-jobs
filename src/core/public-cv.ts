@@ -22,7 +22,10 @@
  *   palavra de remuneração (`salário`, `remuneração`, `salary`,
  *   `compensation`) a até 60 caracteres de um valor que não seja ano. O bloco é lido como texto corrido,
  *   então um rótulo quebrado em duas linhas continua sendo rótulo, e o valor
- *   sai esteja antes ou depois dele. Num título Markdown, sai a seção inteira
+ *   sai esteja antes ou depois dele. Num bloco de várias linhas — o CV
+ *   extraído de PDF, sem linha em branco —, sai só o trecho do piso e as
+ *   linhas vizinhas que o completam; se o resto ainda parece piso, o bloco
+ *   inteiro sai. Num título Markdown, sai a seção inteira
  *   até o próximo título de mesmo nível ou acima. Um valor sem rótulo nem
  *   palavra de remuneração não é reconhecido; um bloco com "reduzi o custo de
  *   salário em 30%" some sem ser piso — diante da dúvida, esconde-se.
@@ -36,7 +39,10 @@ import { cvTextToMarkdown } from "./cv-markdown.ts";
 
 export const REDACTED = "[…]";
 
-const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
+// O lookbehind só deixa a tentativa começar no início de uma sequência de
+// caracteres de endereço: sem ele, cada posição de uma palavra longa sem `@`
+// reexaminava o resto dela, e o custo era quadrático (#344).
+const EMAIL = /(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
 
 /**
  * Telefone internacional: `+`, código e grupos de dígitos com um separador
@@ -48,7 +54,8 @@ const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
 const INTERNATIONAL_START = /\+(?=\d)/g;
 // Separadores de telefone: espaço, ponto, hífen, traço (– —) e barra.
 // O separador pode vir cercado de espaço: `+55 11 91234 - 5678`.
-const PHONE_GROUP = /^(?:[ \t]*[.\-–—/][ \t]*|[ \t]+)?\(?(\d{1,5})\)?/u;
+// Sticky: lê a partir de `lastIndex` sem copiar o resto do texto a cada grupo.
+const PHONE_GROUP = /(?:[ \t]*[.\-–—/][ \t]*|[ \t]+)?\(?(\d{1,5})\)?/uy;
 const PHONE_SEP = "(?:[ \\t]*[.\\-–—/][ \\t]*|[ \\t]+)?";
 // DDD brasileiro (`(11) 91234-5678`) e código de área norte-americano
 // (`(415) 555-0100`).
@@ -66,7 +73,8 @@ function redactInternationalPhones(text: string): string {
     let digits = 0;
     let end = at;
     for (;;) {
-      const group = PHONE_GROUP.exec(text.slice(at));
+      PHONE_GROUP.lastIndex = at;
+      const group = PHONE_GROUP.exec(text);
       if (!group || digits + group[1]!.length > 15) break;
       // Um ano solto depois de um telefone já completo é o texto seguinte.
       if (digits >= 8 && /^\s+(?:19|20)\d{2}$/.test(group[0])) break;
@@ -145,6 +153,58 @@ function isPayTitle(block: string): boolean {
     .split("\n")
     .filter((line) => !/^\s*[-=]{2,}\s*$/.test(line));
   return lines.length === 1 && PAY_ONLY.test(lines[0]!);
+}
+
+/**
+ * O piso dentro de um bloco de várias linhas. Texto extraído de PDF costuma
+ * vir sem linha em branco, e aí o bloco é o CV inteiro: tirá-lo todo por
+ * causa de uma linha de pretensão apagava o perfil (#344).
+ *
+ * Sai a linha que o detector reconhece — ou o par de linhas, para o rótulo
+ * quebrado —, a linha de cima se ela começa o rótulo ou traz um valor, e a de
+ * baixo se traz um valor. Sem valor no trecho nem acima, saem as de baixo até
+ * a primeira que traga. O que sobra é relido como texto corrido: se ainda
+ * parece piso (palavra e valor em linhas não vizinhas), devolve nulo e o
+ * bloco inteiro sai, como antes.
+ */
+function narrowSalaryBlock(lines: string[]): { kept: string[]; valueExpected: boolean } | null {
+  const isHit = (text: string) => isSalaryBlock(text) || isPayTitle(text);
+  const drop = lines.map(() => false);
+  let valueExpected = false;
+  for (let i = 0; i < lines.length; i++) {
+    let last = i;
+    if (!isHit(lines[i]!)) {
+      const next = lines[i + 1];
+      if (next === undefined || isHit(next) || !isHit(`${lines[i]}\n${next}`)) continue;
+      last = i + 1;
+    }
+    for (let j = i; j <= last; j++) drop[j] = true;
+    let valueFound = HAS_AMOUNT.test(lines.slice(i, last + 1).join("\n"));
+    const prev = lines[i - 1];
+    if (prev !== undefined) {
+      // "Expectativa\nsalarial: 30k": a última palavra de cima abre o rótulo.
+      const head = lines[i]!.trim().split(/\s+/)[0]!;
+      const tail = prev.trim().split(/\s+/).at(-1)!;
+      const opensLabel = isSalaryBlock(`${tail} ${head}`) && !isSalaryBlock(head);
+      const hasValue = HAS_AMOUNT.test(prev);
+      if (opensLabel || hasValue) drop[i - 1] = true;
+      valueFound ||= hasValue;
+    }
+    if (valueFound) {
+      if (last + 1 < lines.length && HAS_AMOUNT.test(lines[last + 1]!)) drop[++last] = true;
+    } else {
+      while (last + 1 < lines.length) {
+        drop[++last] = true;
+        if (HAS_AMOUNT.test(lines[last]!)) break;
+      }
+      // O valor prometido não veio neste bloco: pode estar no seguinte.
+      valueExpected = !HAS_AMOUNT.test(lines[last]!);
+    }
+    i = last;
+  }
+  const kept = lines.filter((_, i) => !drop[i]);
+  if (isSalaryBlock(kept.join("\n"))) return null;
+  return { kept, valueExpected };
 }
 
 function escapeRegExp(value: string): string {
@@ -236,7 +296,12 @@ export function publicCvText(content: string, known: KnownContact = {}): string 
       if (heading === null && HAS_AMOUNT.test(text)) continue;
     }
     if (isSalaryBlock(text) || isPayTitle(text) || (heading !== null && PAY_HEADING.test(text))) {
+      const narrowed = heading === null && block.length > 1 ? narrowSalaryBlock(block) : null;
       if (heading) skippingSection = heading[1]!.length;
+      else if (narrowed) {
+        out.push(...narrowed.kept);
+        valueExpected = narrowed.valueExpected;
+      }
       // Um ano no rótulo ("Pretensão salarial (2026):") não é o valor.
       else valueExpected = !HAS_AMOUNT.test(text);
       continue;

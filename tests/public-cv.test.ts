@@ -151,6 +151,65 @@ describe("publicCvText", () => {
     expect(publicCvText("ligue 91234-5678")).toContain("91234-5678");
   });
 
+  it("CV sem linha em branco perde só as linhas do piso, não o documento", () => {
+    // Texto extraído de PDF costuma vir sem parágrafos: o bloco é o CV inteiro.
+    const cv = [
+      "ANDREUS TIMM",
+      "Senior AI Software Architect",
+      "EXPERIÊNCIA",
+      "2019-2021 Staff Engineer na Acme",
+      "PRETENSÃO SALARIAL",
+      "R$ 30.000 mensais",
+      "FORMAÇÃO",
+      "Ciência da Computação",
+    ].join("\n");
+    const out = publicCvText(cv);
+    expect(out).not.toMatch(/30\.000|PRETENSÃO/);
+    expect(out).toContain("Senior AI Software Architect");
+    expect(out).toContain("2019-2021 Staff Engineer na Acme");
+    expect(out).toContain("Ciência da Computação");
+  });
+
+  it("no bloco longo, o valor sai antes, depois ou linhas abaixo do rótulo", () => {
+    for (const [piso, value] of [
+      ["Pretensão salarial: R$ 30.000", "30.000"],
+      ["R$ 30.000 mensais\nPretensão salarial", "30.000"],
+      ["Expectativa\nsalarial: 30k", "30k"],
+      ["Salary\nexpectation: 150k", "150k"],
+      ["| Pretensão salarial | Disponibilidade |\n|---|---|\n| R$ 30.000 | Imediata |", "30.000"],
+      ["Salário\n-------\nR$ 30.000", "30.000"],
+      ["Salary expectations (12 months):\n150k USD", "150k"],
+      ["Pretensão salarial (2026):\nR$ 30.000 mensais", "30.000"],
+    ] as const) {
+      const out = publicCvText(`Topo\nAntes\n${piso}\nDepois`);
+      expect(out, piso).not.toContain(value);
+      expect(out, piso).toContain("Antes");
+      expect(out, piso).toContain("Depois");
+    }
+  });
+
+  it("rótulo no fim do bloco longo leva o parágrafo seguinte, como no bloco curto", () => {
+    expect(publicCvText("Topo\nPretensão salarial:\n\nR$ 30.000 mensais\n\nFim")).toBe("Topo\n\n\nFim");
+  });
+
+  it("o que sobra do bloco longo ainda com cara de piso sai inteiro", () => {
+    // Palavra de remuneração e valor em linhas não vizinhas: nenhuma linha nem
+    // par é piso, mas o bloco lido como texto corrido é.
+    expect(publicCvText("Topo\n\nContratado com salário\nx\nde R$ 30.000\n\nFim")).toBe("Topo\n\n\nFim");
+  });
+
+  it("custo linear na entrada que a pessoa controla", () => {
+    // `/p/[slug]` responde sem sessão e filtra o CV duas vezes por visita.
+    const started = performance.now();
+    publicCvText("a".repeat(200_000));
+    publicCvText(`a@${"b".repeat(200_000)}`);
+    publicCvText("a.".repeat(100_000));
+    publicCvText("+1 ".repeat(100_000));
+    publicCvText(`+1${" ".repeat(200_000)}`);
+    publicCvText("Pretensão salarial:\nlinha\n".repeat(20_000));
+    expect(performance.now() - started).toBeLessThan(2_000);
+  });
+
   it("texto sem nada protegido sai idêntico", () => {
     const cv = "# Nome\n\nSenior AI Software Architect.\n\n- LangGraph\n- TypeScript";
     expect(publicCvText(cv)).toBe(cv);
