@@ -161,10 +161,20 @@ export const CENARIO_VALIDA_SESSAO: Cenario = { nome: "sessão", caminho: "/acco
  * - **Página 2 com a mesma faceta (#216).** `FacetQuery`
  *   (`src/contexts/matching/app/board-facets.ts`) não inclui `page`: a chave
  *   do cache de facetas do cenário "jobs fit=45 + página 2" é IDÊNTICA à do
- *   cenário "jobs fit=45" logo acima. Isso só serve para GERAR, em produção,
- *   as duas requisições próximas no tempo que o dono precisa achar no log
- *   (`--logs`) e comparar pelo estágio `facets`; a medição de fora (TTFB,
- *   total) não distingue cache de instância já aquecida por outro motivo.
+ *   cenário "jobs fit=45" logo acima — e também à de "jobs padrão", porque
+ *   `boundedFit(undefined, 45)` em `app/filter-state.ts` já cai em `fit=45`
+ *   por padrão. Por isso "jobs fit=45" e "jobs fit=45 + página 2" são os DOIS
+ *   PRIMEIROS cenários autenticados da lista — antes de "jobs padrão" e de
+ *   qualquer outro que bata na mesma chave: se "jobs padrão" viesse antes, a
+ *   leitura de "jobs fit=45" já nasceria com o cache quente (povoado por
+ *   "jobs padrão"), e "página 2 < 20% de fit=45" teria de reprovar mesmo com
+ *   o cache funcionando corretamente. Nesta ordem, "jobs fit=45" é a primeira
+ *   requisição a tocar essa chave (fria) e "página 2" é a segunda (deve vir
+ *   do cache) — teste de ordem em `tests/perf-producao.test.ts`. Isso só
+ *   serve para GERAR, em produção, as duas requisições próximas no tempo que
+ *   o dono precisa achar no log (`--logs`) e comparar pelo estágio `facets`;
+ *   a medição de fora (TTFB, total) não distingue cache de instância já
+ *   aquecida por outro motivo.
  */
 export function montarCenarios(opcoes: { comSessao: boolean; termo: string }): Cenario[] {
   const publicos: Cenario[] = [
@@ -176,9 +186,11 @@ export function montarCenarios(opcoes: { comSessao: boolean; termo: string }): C
   const termo = encodeURIComponent(opcoes.termo);
   return [
     ...publicos,
-    { nome: "jobs padrão", caminho: "/jobs", sessao: true },
+    // Os dois primeiros autenticados, nesta ordem: nenhum outro cenário desta
+    // lista pode bater na chave de facetas de `fit=45` antes deles (#216).
     { nome: "jobs fit=45", caminho: "/jobs?fit=45", sessao: true },
     { nome: "jobs fit=45 + página 2 (facetas iguais)", caminho: "/jobs?fit=45&page=2", sessao: true },
+    { nome: "jobs padrão", caminho: "/jobs", sessao: true },
     { nome: "jobs fit=45 + remoto", caminho: "/jobs?fit=45&workMode=remote", sessao: true },
     { nome: "jobs fit=45 + termo", caminho: `/jobs?fit=45&q=${termo}`, sessao: true },
     { nome: "jobs fit=45 + faixa salarial", caminho: "/jobs?fit=45&pay=3000&payMax=15000&cur=USD&per=month", sessao: true },

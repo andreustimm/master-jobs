@@ -82,9 +82,9 @@ describe("medição de produção", () => {
     expect(publicos.every((c) => !c.sessao)).toBe(true);
     const todos = montarCenarios({ comSessao: true, termo: "c++ & go" });
     expect(todos.filter((c) => c.sessao).map((c) => c.caminho)).toEqual([
-      "/jobs",
       "/jobs?fit=45",
       "/jobs?fit=45&page=2",
+      "/jobs",
       "/jobs?fit=45&workMode=remote",
       "/jobs?fit=45&q=c%2B%2B%20%26%20go",
       "/jobs?fit=45&pay=3000&payMax=15000&cur=USD&per=month",
@@ -130,6 +130,22 @@ describe("medição de produção", () => {
     const paramsComPagina = new URLSearchParams(semQuery(todos[comPagina]!.caminho));
     paramsComPagina.delete("page");
     expect(paramsComPagina.toString()).toBe(paramsSemPagina.toString());
+  });
+
+  // #216 (revisão L1): "jobs padrão" também resolve fit=45
+  // (`boundedFit(undefined, 45)` em `app/filter-state.ts`), então tem a MESMA
+  // chave de facetas de "jobs fit=45". Se viesse antes, "jobs fit=45" já
+  // nasceria quente e a comparação "página 2 < 20% de fit=45" reprovaria com
+  // o cache funcionando. Por isso o par precisa ser o PRIMEIRO e o SEGUNDO
+  // cenário autenticado da lista — nenhum outro cenário com a mesma chave
+  // pode vir antes.
+  it("o par fit=45 / página 2 é o 1º e o 2º cenário autenticado, antes de qualquer outro com a mesma chave", () => {
+    const autenticados = montarCenarios({ comSessao: true, termo: "typescript" }).filter((c) => c.sessao);
+    expect(autenticados[0]!.caminho).toBe("/jobs?fit=45");
+    expect(autenticados[1]!.caminho).toBe("/jobs?fit=45&page=2");
+    // "jobs padrão" (mesma chave de facetas) só pode vir DEPOIS do par.
+    const indicePadrao = autenticados.findIndex((c) => c.caminho === "/jobs");
+    expect(indicePadrao).toBeGreaterThan(1);
   });
 
   it("confere a sessão numa rota autenticada sem fronteira de carregamento", () => {
