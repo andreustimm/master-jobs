@@ -87,7 +87,7 @@ describe("medição de produção", () => {
       "/jobs?fit=45&page=2",
       "/jobs?fit=45&workMode=remote",
       "/jobs?fit=45&q=c%2B%2B%20%26%20go",
-      "/jobs?fit=45&pay=3000&payMax=15000",
+      "/jobs?fit=45&pay=3000&payMax=15000&cur=USD&per=month",
       "/jobs?fit=45&sort=comp",
     ]);
     // O nome do cenário vai para o relatório; o termo nunca.
@@ -110,15 +110,20 @@ describe("medição de produção", () => {
 
   // #216: `page` não entra na chave de `FacetQuery`
   // (`src/contexts/matching/app/board-facets.ts`), então "jobs fit=45" e
-  // "jobs fit=45 + página 2" têm a MESMA chave de facetas — só o cenário de
-  // página 2, rodado logo depois, prova reaproveitamento dentro do TTL.
+  // "jobs fit=45 + página 2" têm a MESMA chave de facetas. O TTFB e o total
+  // externos deste roteiro NÃO provam reaproveitamento (a amostra 1 de
+  // "fit=45" já é cache dentro do próprio cenário, e `/jobs` tem
+  // `loading.tsx` — o TTFB mede o esboço, não `facets`). O par de cenários só
+  // serve para GERAR, em sequência e perto no tempo, as duas requisições que
+  // o dono compara pelo estágio `facets` da linha `perf` (`JHO_PERF_LOG=1`).
   it("o cenário de página 2 usa os mesmos filtros de facetas do cenário fit=45 anterior", () => {
     const todos = montarCenarios({ comSessao: true, termo: "typescript" });
     const semPagina = todos.findIndex((c) => c.caminho === "/jobs?fit=45");
     const comPagina = todos.findIndex((c) => c.caminho === "/jobs?fit=45&page=2");
     expect(semPagina).toBeGreaterThanOrEqual(0);
-    // Precisa vir logo em seguida: é o que garante estar dentro do TTL de 60 s
-    // no roteiro real, que percorre os cenários em ordem.
+    // Precisa vir logo em seguida: é o que aproxima os dois pedidos no tempo
+    // no roteiro real, que percorre os cenários em ordem — condição para o
+    // dono achá-los próximos no log, não prova de cache por si só.
     expect(comPagina).toBe(semPagina + 1);
     const semQuery = (caminho: string) => caminho.split("?")[1] ?? "";
     const paramsSemPagina = new URLSearchParams(semQuery(todos[semPagina]!.caminho));

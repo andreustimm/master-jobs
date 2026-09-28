@@ -90,9 +90,9 @@ impresso ou mandado a outro host que não seja HTTPS ou `127.0.0.1`/`localhost`:
 
 Além dos três públicos, mede `/jobs`, `/jobs?fit=45`,
 `/jobs?fit=45&page=2`, `/jobs?fit=45&workMode=remote`, `/jobs?fit=45&q=<termo>`,
-`/jobs?fit=45&pay=3000&payMax=15000` e `/jobs?fit=45&sort=comp`. O termo
-padrão é `typescript`; `JHO_PERF_TERMO` troca, e o valor nunca aparece na
-saída — o relatório só diz "termo". Ao fim de cada rodada — depois das
+`/jobs?fit=45&pay=3000&payMax=15000&cur=USD&per=month` e `/jobs?fit=45&sort=comp`.
+O termo padrão é `typescript`; `JHO_PERF_TERMO` troca, e o valor nunca aparece
+na saída — o relatório só diz "termo". Ao fim de cada rodada — depois das
 amostras, para não aquecer a função antes da "primeira" — o script confere a
 sessão em `/account`, que não tem fronteira de carregamento: se ela venceu,
 para no 307 para `/login` sem gravar nada. Em `/jobs` esse 307 não existe mais
@@ -104,54 +104,90 @@ um `?by=` salvo nunca é pedido.
 
 #### Cenário salarial (#215) e cache de facetas (#216)
 
-`jobs?fit=45&pay=3000&payMax=15000` (faixa) e `jobs?fit=45&sort=comp`
-(ordenação) são os dois jeitos de `payActive` virar `true` em
-`app/jobs/jobs-data.ts` — o gatilho da normalização compartilhada de
-remuneração que a PR #192 otimizou (localmente, mediana de faixa salarial caiu
-de 395,05 para 109,95 ms). Nenhum cenário anterior tocava esse caminho: sem
-eles, `pnpm perf:producao` media tudo, menos o que a #192 mudou.
+**Nem TTFB nem `total p50` deste roteiro fecham #215 ou #216 sozinhos.** Os
+dois medem de fora, e três coisas os enviesam: (1) `medirRotas` roda todas as
+amostras de UM cenário antes de passar ao próximo — as amostras 2ª–10ª de
+`jobs fit=45` já são cache tanto quanto a 1ª de `jobs fit=45&page=2`, então
+comparar "quente" com "primeira" não isola o cache de facetas de qualquer
+outro motivo da instância estar aquecida; (2) desde a #217 `/jobs` tem
+`loading.tsx`, e o TTFB mede a chegada do esboço, não o tempo de `board` ou
+`facets`; (3) o cache de `cachedBoardFacets` é por PROCESSO
+(`globalThis`, `src/contexts/matching/app/board-facets.ts`) — outra instância
+da função não o vê, e nada de fora do servidor prova em qual instância a
+requisição caiu. O critério de aceite dos dois é o estágio das linhas `perf`
+internas, e por isso exige `JHO_PERF_LOG=1`.
 
-`jobs?fit=45&page=2` é o cenário do cache de facetas (#216). `page` não entra
-em `FacetQuery` (`src/contexts/matching/app/board-facets.ts`), então este
-cenário e o `jobs?fit=45` logo acima pedem a MESMA chave de facetas — e rodam
-em sequência, dentro do `FACET_CACHE_TTL_MS` de 60 s. Critério de aceite: a
-"primeira" amostra de `jobs?fit=45&page=2` deve se aproximar do "quente" de
-`jobs?fit=45` (facetas já no cache), não da própria "primeira" fria de
-`jobs?fit=45`; com `JHO_PERF_LOG=1` na Vercel, a linha `perf` correspondente
-deve ter `facets` perto de 0 ms.
+`jobs?fit=45&pay=3000&payMax=15000&cur=USD&per=month` (faixa, com moeda e
+período fixos para não variar pela trilha de quem roda o script) e
+`jobs?fit=45&sort=comp` (ordenação) são os dois jeitos de `payActive` virar
+`true` em `app/jobs/jobs-data.ts` — o gatilho da normalização compartilhada de
+remuneração que a PR #192 otimizou (localmente, mediana de faixa salarial
+caiu de 395,05 para 109,95 ms, e a de ordenação, de 96,75 para 89,15 ms).
+Nenhum cenário anterior tocava esse caminho.
+
+`jobs?fit=45&page=2` é o cenário do cache de facetas (#216): `page` não entra
+em `FacetQuery` (`src/contexts/matching/app/board-facets.ts`), então ele e o
+`jobs?fit=45` logo acima pedem a MESMA chave — e como o roteiro os põe em
+sequência, as duas requisições reais acontecem perto no tempo, dentro do
+`FACET_CACHE_TTL_MS` de 60 s. Isso só serve para GERAR o par que o dono compara
+no log; não prova nada por si.
 
 **Comando exato para o dono rodar** (sessão de produção, ver passo a passo
-acima para obter `JHO_PERF_SESSION`):
+acima para obter `JHO_PERF_SESSION`). `JHO_PERF_LOG=1` é variável de ambiente
+da FUNÇÃO na Vercel (Project Settings → Environment Variables), não do
+script: ligá-la exige um novo deploy e é decisão do dono; sem ela a linha
+`perf` só sai quando a leitura passa de 1 s — insuficiente para pegar as
+leituras rápidas que provam o cache:
 
 ```bash
 read -rs JHO_PERF_SESSION     # cole o valor do cookie jho_session; nada aparece
 export JHO_PERF_SESSION
-pnpm perf:producao --rodadas 3 --pausa 600 --amostras 10 --json perf-215-216.json
+pnpm perf:producao --rodadas 1 --amostras 1 --json perf-215-216.json
 unset JHO_PERF_SESSION
 ```
 
-`JHO_PERF_LOG=1` é variável de ambiente da função na Vercel (Project Settings
-→ Environment Variables), não do script: ligá-la exige um novo deploy e é
-decisão do dono (ver acima). Sem ela, a linha `perf` só sai quando a leitura
-passa de 1 s.
-
-Em seguida, para ler os estágios do log da função (janela de 1 h na Hobby):
+Uma rodada de uma amostra por cenário, não três de dez: o que importa aqui é
+a ORDEM das requisições reais (`jobs fit=45` imediatamente seguido de
+`jobs fit=45&page=2`, faixa e ordenação salarial cada uma uma vez), não o
+TTFB delas. Em seguida, dentro da janela de 1 h da Hobby:
 
 ```bash
-pnpm perf:producao --logs --since 1h
+pnpm perf:producao --logs --since 15m
+```
+
+A rota no log NÃO carrega a query string (regra de privacidade — só número,
+estágio, rota e região), então `agregarLinhasPerf` junta todo `/jobs` numa
+linha só e não distingue os cenários entre si. Para o par `fit=45` ×
+`fit=45&page=2`, leia as linhas cruas na ORDEM em que chegaram (o comando
+acima já roda uma de cada por vez, então a penúltima e a última `/jobs` da
+janela são, respectivamente, `fit=45` e `fit=45&page=2`):
+
+```bash
+vercel logs --project master-jobs --environment production --query perf --since 15m --json --non-interactive
 ```
 
 **Critério de aceite de cada issue**, a colar como comentário junto com as
-tabelas impressas:
+linhas `perf` correspondentes (número, não impressão do relatório):
 
-- **#215** fecha quando a tabela do cenário `jobs fit=45 + faixa salarial` (e,
-  de preferência, `+ ordenar por salário`) aparece no relatório de produção
-  com TTFB "quente" — a primeira leitura fria não prova nada sobre a
-  normalização, só a segunda em diante na mesma instância.
-- **#216** fecha quando a "primeira" de `jobs fit=45 + página 2` está perto do
-  "quente" de `jobs fit=45` (não da própria "primeira" fria), ou quando
-  `JHO_PERF_LOG=1` mostra `facets` perto de 0 ms numa requisição de página 2
-  ou reordenação que segue um `jobs fit=45` recente.
+- **#216** fecha quando, no par gerado acima, o estágio `facets` da linha de
+  `jobs fit=45&page=2` (a última) é **menor que 100 ms E menor que 20% do
+  `facets` da linha de `jobs fit=45` que veio logo antes** (a piso local sem
+  rede é ~24–29 ms — 100 ms já dá margem de sobra para serialização e rede; o
+  teto relativo de 20% é o que separa "esta leitura usou o cache" de "a
+  instância só estava quente por outro motivo"). Sem os dois lados do limite,
+  não fecha.
+- **#215** fecha, preferencialmente, quando o estágio `board` da linha
+  `perf` de `jobs fit=45&pay=…` (ou `&sort=comp`) fica **dentro de 2× o
+  `board` de uma linha de `jobs fit=45` da mesma janela** — não em ordem de
+  grandeza maior, que era o comportamento sem a CTE/junção lateral
+  compartilhada da #192 — e o estágio `tail` (que embute
+  `countHiddenByPayRange`, só ativo com `payActive`) fica **abaixo de
+  150 ms** (referência: `perf:jobs` mede a faixa salarial já otimizada em
+  ~110 ms de total, banco isolado sem rede). Sem `JHO_PERF_LOG=1`, o critério
+  cai para o `total p50` quente do relatório externo: o dos cenários de faixa
+  e ordenação salarial não deve passar de **1,5× o `total p50` quente de
+  `jobs fit=45`** — mais que isso volta a parecer O(vagas), o problema que a
+  #192 resolveu.
 
 ### Por dentro: as linhas `perf` do log
 
