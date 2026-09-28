@@ -84,11 +84,47 @@ describe("medição de produção", () => {
     expect(todos.filter((c) => c.sessao).map((c) => c.caminho)).toEqual([
       "/jobs",
       "/jobs?fit=45",
+      "/jobs?fit=45&page=2",
       "/jobs?fit=45&workMode=remote",
       "/jobs?fit=45&q=c%2B%2B%20%26%20go",
+      "/jobs?fit=45&pay=3000&payMax=15000",
+      "/jobs?fit=45&sort=comp",
     ]);
     // O nome do cenário vai para o relatório; o termo nunca.
     expect(todos.map((c) => c.nome).join(" ")).not.toContain("c++");
+  });
+
+  // #215: nenhum cenário anterior acionava a normalização salarial
+  // compartilhada da PR #192 — nem faixa (`pay`/`payMax`) nem ordenação
+  // (`sort=comp`), os dois jeitos de `payActive` virar `true` em
+  // `app/jobs/jobs-data.ts`.
+  it("mede faixa e ordenação salarial, os dois gatilhos de payActive", () => {
+    const todos = montarCenarios({ comSessao: true, termo: "typescript" });
+    const faixa = todos.find((c) => c.caminho.includes("pay=") && c.caminho.includes("payMax="));
+    const ordenado = todos.find((c) => c.caminho.includes("sort=comp"));
+    expect(faixa).toBeDefined();
+    expect(ordenado).toBeDefined();
+    expect(faixa!.sessao).toBe(true);
+    expect(ordenado!.sessao).toBe(true);
+  });
+
+  // #216: `page` não entra na chave de `FacetQuery`
+  // (`src/contexts/matching/app/board-facets.ts`), então "jobs fit=45" e
+  // "jobs fit=45 + página 2" têm a MESMA chave de facetas — só o cenário de
+  // página 2, rodado logo depois, prova reaproveitamento dentro do TTL.
+  it("o cenário de página 2 usa os mesmos filtros de facetas do cenário fit=45 anterior", () => {
+    const todos = montarCenarios({ comSessao: true, termo: "typescript" });
+    const semPagina = todos.findIndex((c) => c.caminho === "/jobs?fit=45");
+    const comPagina = todos.findIndex((c) => c.caminho === "/jobs?fit=45&page=2");
+    expect(semPagina).toBeGreaterThanOrEqual(0);
+    // Precisa vir logo em seguida: é o que garante estar dentro do TTL de 60 s
+    // no roteiro real, que percorre os cenários em ordem.
+    expect(comPagina).toBe(semPagina + 1);
+    const semQuery = (caminho: string) => caminho.split("?")[1] ?? "";
+    const paramsSemPagina = new URLSearchParams(semQuery(todos[semPagina]!.caminho));
+    const paramsComPagina = new URLSearchParams(semQuery(todos[comPagina]!.caminho));
+    paramsComPagina.delete("page");
+    expect(paramsComPagina.toString()).toBe(paramsSemPagina.toString());
   });
 
   it("confere a sessão numa rota autenticada sem fronteira de carregamento", () => {

@@ -141,6 +141,26 @@ export const CENARIO_VALIDA_SESSAO: Cenario = { nome: "sessão", caminho: "/acco
  * `/login` (renderiza e toca o banco uma vez, bom sinal de função fria), o
  * estático `/offline.html` (CDN, sem função) e `/jobs` sem cookie, que o proxy
  * responde com 307 sem renderizar. Com sessão, `/jobs` com os filtros comuns.
+ *
+ * Dois cenários exercitam otimizações específicas que os quatro anteriores
+ * não cobriam:
+ *
+ * - **Faixa e ordenação salarial (#215).** `pay`/`payMax` (faixa) e
+ *   `sort=comp` (ordenação) são os dois jeitos de `payActive` virar `true` em
+ *   `app/jobs/jobs-data.ts`, que é o que aciona a normalização compartilhada
+ *   de remuneração otimizada pela PR #192 (`listBoardPage` e
+ *   `countHiddenByPayRange` em `src/core/db/repo.ts`). Sem eles, nenhum
+ *   cenário deste roteiro tocava esse caminho.
+ * - **Página 2 com a mesma faceta (#216).** `FacetQuery`
+ *   (`src/contexts/matching/app/board-facets.ts`) não inclui `page`: a chave
+ *   do cache de facetas do cenário "jobs fit=45 + página 2" é IDÊNTICA à do
+ *   cenário "jobs fit=45" logo acima. Rodado a seguir, dentro do TTL de 60 s
+ *   (`FACET_CACHE_TTL_MS`), a leitura de facetas deste cenário deve vir do
+ *   cache povoado pelo anterior — visível pelo TTFB da "primeira" amostra
+ *   (deve se aproximar do "quente" do cenário anterior, não da sua própria
+ *   "primeira" fria) ou, com `JHO_PERF_LOG=1`, pelo estágio `facets` perto de
+ *   0 ms na linha `perf` correspondente. Ver "Ler os cenários novos" em
+ *   `docs/engineering/performance-buscas.md`.
  */
 export function montarCenarios(opcoes: { comSessao: boolean; termo: string }): Cenario[] {
   const publicos: Cenario[] = [
@@ -154,8 +174,11 @@ export function montarCenarios(opcoes: { comSessao: boolean; termo: string }): C
     ...publicos,
     { nome: "jobs padrão", caminho: "/jobs", sessao: true },
     { nome: "jobs fit=45", caminho: "/jobs?fit=45", sessao: true },
+    { nome: "jobs fit=45 + página 2 (facetas iguais)", caminho: "/jobs?fit=45&page=2", sessao: true },
     { nome: "jobs fit=45 + remoto", caminho: "/jobs?fit=45&workMode=remote", sessao: true },
     { nome: "jobs fit=45 + termo", caminho: `/jobs?fit=45&q=${termo}`, sessao: true },
+    { nome: "jobs fit=45 + faixa salarial", caminho: "/jobs?fit=45&pay=3000&payMax=15000", sessao: true },
+    { nome: "jobs fit=45 + ordenar por salário", caminho: "/jobs?fit=45&sort=comp", sessao: true },
   ];
 }
 
