@@ -227,7 +227,7 @@ function narrowSalaryBlock(lines: string[]): { kept: string[]; valueExpected: bo
   // ("Skills\nIdiomas"), até BORDER linhas da seção vizinha. Linha já retirada
   // (outra pretensão) não conta.
   const BORDER = 2;
-  const moneyNear = (from: number, step: 1 | -1): boolean => {
+  const moneyNear = (from: number, step: 1 | -1, value: RegExp = MONEY_LIKE): boolean => {
     let sections = 0;
     let seen = 0;
     for (let j = from; j >= 0 && j < lines.length; ) {
@@ -238,7 +238,7 @@ function narrowSalaryBlock(lines: string[]): { kept: string[]; valueExpected: bo
         continue;
       }
       if (seen++ === BORDER) return false;
-      if (!drop[j] && MONEY_LIKE.test(lines[j]!)) return true;
+      if (!drop[j] && value.test(lines[j]!)) return true;
       j += step;
     }
     return false;
@@ -259,16 +259,18 @@ function narrowSalaryBlock(lines: string[]): { kept: string[]; valueExpected: bo
     }
     const start = title || structured ? i : 0;
     while (last + 1 < lines.length && !known(last + 1)) last++;
-    if (moneyNear(start - 1, -1) || moneyNear(last + 1, 1)) return null;
+    // Sem valor do rótulo em diante — um número acima dele ("Equipe de 12")
+    // não é a pretensão (#353) —, ela é "a combinar" ou está fora da seção:
+    // qualquer número nas bordas ("150" solto) derruba o bloco, e o bloco
+    // seguinte é o valor prometido.
+    const valueless = !HAS_AMOUNT.test(lines.slice(i, last + 1).join("\n"));
+    const near = valueless ? HAS_AMOUNT : MONEY_LIKE;
+    if (moneyNear(start - 1, -1, near) || moneyNear(last + 1, 1, near)) return null;
     for (let j = start; j <= last; j++) drop[j] = true;
     // Valor sem cara de dinheiro ("90/hour", "150") logo acima do rótulo. Um
     // item neutro com número ("Mentoria de 6 engenheiros") sai junto.
     if (start > 0 && HAS_AMOUNT.test(lines[start - 1]!)) drop[start - 1] = true;
-    // Sem valor do rótulo em diante — um número acima dele ("Equipe de 12")
-    // não é a pretensão (#353) —, ela é "a combinar" ou está no parágrafo
-    // seguinte. Se a seção vai até o fim do bloco, o bloco seguinte é esse
-    // parágrafo; se termina num nome de seção, o que vem é outra seção.
-    if (!HAS_AMOUNT.test(lines.slice(i, last + 1).join("\n")) && last === lines.length - 1) valueExpected = true;
+    if (valueless) valueExpected = true;
     i = last;
   }
   const kept = lines.filter((_, i) => !drop[i]);
@@ -379,8 +381,12 @@ export function publicCvText(content: string, known: KnownContact = {}): string 
     if (valueExpected) {
       valueExpected = false;
       // Um título seguinte — Markdown ou nome de seção conhecido — abre outra
-      // seção; ele não é o valor prometido.
-      if (heading === null && !isKnownHeading(block[0]!.trim()) && HAS_AMOUNT.test(text)) {
+      // seção; ele não é o valor prometido. Mas "Employment:\n150k USD" é
+      // sub-rótulo de regime, não seção: dinheiro nas duas linhas seguintes
+      // ao nome faz do bloco o valor.
+      const opensSection =
+        isKnownHeading(block[0]!.trim()) && !block.slice(1, 3).some((line) => MONEY_LIKE.test(line));
+      if (heading === null && !opensSection && HAS_AMOUNT.test(text)) {
         // O bloco consumido pode ser, ele mesmo, um rótulo sem valor
         // ("Opção 2\nPretensão PJ:"), que promete o bloco seguinte.
         if (isSalaryBlock(text) || isPayTitle(text)) valueExpected = !HAS_AMOUNT.test(fromLabel(block));

@@ -351,6 +351,26 @@ describe("publicCvText", () => {
     }
   });
 
+  it("bloco prometido que abre com sub-rótulo de regime ainda é o valor", () => {
+    for (const cv of [
+      "Andreus Timm\n\nSalary expectations:\n\nEmployment:\n150k USD\nContract:\n90 USD/hour\n\nEXPERIENCE\nStaff at Acme",
+      "Topo\n\nPretensão salarial:\n\nObjetivo\nPJ R$ 40.000\n\nFim",
+      "Topo\n\nPretensão salarial:\n\nResumo\nCLT 30 mil / PJ 40 mil\n\nFim",
+    ]) {
+      expect(publicCvMarkdown(cv), cv).not.toMatch(/150k|90 USD|40\.000|30 mil|40 mil/);
+    }
+  });
+
+  it("seção sem valor: número sem marca nas bordas ou no bloco seguinte não sai", () => {
+    for (const cv of [
+      "EXPERIÊNCIA\nStaff\nSalary expectations\nEmployment:\n150\nFORMAÇÃO\nCiência",
+      "EXPERIÊNCIA\nStaff\n150\nou\nPretensão salarial\nFORMAÇÃO\nCiência",
+      "EXPERIÊNCIA\nStaff\nPretensão salarial:\nFORMAÇÃO\nCiência\n\nR$ 30.000",
+    ]) {
+      expect(publicCvMarkdown(cv), cv).not.toMatch(/150|30\.000/);
+    }
+  });
+
   it("bloco consumido como valor prometido também promete o seguinte", () => {
     expect(publicCvText("Pretensão salarial:\n\nOpção 2\nPretensão PJ:\n\nR$ 40.000\n\nFim")).not.toContain("40.000");
   });
