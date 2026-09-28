@@ -156,9 +156,11 @@ const PAY_WORD = "\\b(?:sal[áa]ri(?:o|os|al|ais)|remunera[çc](?:[ãa]o|[õo]es
 const AMOUNT =
   "(?:[$€£¥]|R\\$|\\b(?:usd|eur|brl|gbp)\\s*\\d|\\b(?!(?:19|20)\\d{2}\\b)\\d|\\b(?:19|20)\\d{2}\\s*(?:k\\b|usd|eur|brl|gbp|reais|d[óo]lares|euros))";
 const HAS_AMOUNT = new RegExp(AMOUNT, "iu");
-// Valor com marca de dinheiro — moeda ou `k` —, que não se confunde com
-// "equipe de 12 pessoas".
-const CURRENCY_AMOUNT = /[$€£¥]|R\$|\b(?:usd|eur|brl|gbp|reais|d[óo]lares|euros)\b|\d\s*k\b/iu;
+// Valor com cara de dinheiro — moeda, `k`, `mil`, milhar com separador ou
+// quatro dígitos que não sejam ano —, que não se confunde com "equipe de 12
+// pessoas", "20+ anos" ou "99,9%".
+const MONEY_LIKE =
+  /[$€£¥]|R\$|\b(?:usd|eur|brl|gbp|reais|d[óo]lares|euros)\b|\d\s*k\b|\d\s*(?:mil|mi|milh[õo]es)\b|\d{1,3}(?:[.,]\d{3})+|\b(?!(?:19|20)\d{2}\b)\d{4,}/iu;
 const PAY_NEAR_AMOUNT = new RegExp(`${PAY_WORD}.{0,60}?${AMOUNT}|${AMOUNT}.{0,60}?${PAY_WORD}`, "iu");
 
 function isSalaryBlock(block: string): boolean {
@@ -201,18 +203,32 @@ function isPayTitle(block: string): boolean {
  * Sem título, a seção é o bloco — o comportamento de antes. E o bloco inteiro
  * também sai quando a seção não traz valor (ele está em outro lugar), quando
  * o que sobra, lido como texto corrido, ainda parece piso, ou quando há valor
- * com moeda nas bordas: entre o nome de seção conhecido anterior e a seção, ou
- * na seção seguinte. Um "Employment:" dentro da pretensão, um título falso
- * acima do rótulo ou um valor duas linhas acima dele cortariam a seção antes
- * do valor; na dúvida, fecha-se.
+ * com cara de dinheiro (`MONEY_LIKE`) nas bordas: de cada lado, até o nome de
+ * seção conhecido, e a seção vizinha depois dele. Um "Employment:" dentro da
+ * pretensão, um título falso acima do rótulo ou um valor duas linhas acima
+ * dele cortariam a seção antes do valor; na dúvida, fecha-se.
  */
 function narrowSalaryBlock(lines: string[]): string[] | null {
   const isHit = (text: string) => isSalaryBlock(text) || isPayTitle(text);
   const known = (j: number) => isKnownHeading(lines[j]!.trim());
   const drop = lines.map(() => false);
+  // Dinheiro numa borda, andando `step` a partir de `from`: o trecho até o
+  // nome de seção conhecido, a sequência deles ("Skills\nIdiomas") e a seção
+  // vizinha. Linha já retirada (outra pretensão) não conta.
+  const moneyNear = (from: number, step: 1 | -1): boolean => {
+    let sections = 0;
+    for (let j = from; j >= 0 && j < lines.length; ) {
+      if (known(j)) {
+        if (++sections > 1) return false;
+        while (j >= 0 && j < lines.length && known(j)) j += step;
+        continue;
+      }
+      if (!drop[j] && MONEY_LIKE.test(lines[j]!)) return true;
+      j += step;
+    }
+    return false;
+  };
   let sectionStart = 0;
-  // Primeira linha depois do último nome de seção conhecido.
-  let knownStart = 0;
   for (let i = 0; i < lines.length; i++) {
     const title = isHeading(lines[i]!.trim());
     let last = i;
@@ -220,7 +236,6 @@ function narrowSalaryBlock(lines: string[]): string[] | null {
       const next = lines[i + 1];
       if (next === undefined || isHit(next) || !isHit(`${lines[i]}\n${next}`)) {
         if (title) sectionStart = i + 1;
-        if (known(i)) knownStart = i + 1;
         continue;
       }
       last = i + 1;
@@ -228,11 +243,10 @@ function narrowSalaryBlock(lines: string[]): string[] | null {
     const start = title ? i : sectionStart;
     while (last + 1 < lines.length && !known(last + 1)) last++;
     if (!HAS_AMOUNT.test(lines.slice(start, last + 1).join("\n"))) return null;
-    if (lines.slice(knownStart, start).some((line) => CURRENCY_AMOUNT.test(line))) return null;
-    for (let j = last + 2; j < lines.length && !known(j); j++) {
-      if (CURRENCY_AMOUNT.test(lines[j]!)) return null;
-    }
+    if (moneyNear(start - 1, -1) || moneyNear(last + 1, 1)) return null;
     for (let j = start; j <= last; j++) drop[j] = true;
+    // Valor sem cara de dinheiro ("90/hour") logo acima de um rótulo-título.
+    if (title && start > 0 && HAS_AMOUNT.test(lines[start - 1]!)) drop[start - 1] = true;
     i = last;
   }
   const kept = lines.filter((_, i) => !drop[i]);
@@ -320,7 +334,7 @@ export function publicCvText(content: string, known: KnownContact = {}): string 
     }
     const text = block.join("\n");
     if (text.trim() === "") {
-      out.push(...block);
+      for (const line of block) out.push(line);
       continue;
     }
     if (valueExpected) {
@@ -331,12 +345,13 @@ export function publicCvText(content: string, known: KnownContact = {}): string 
     if (isSalaryBlock(text) || isPayTitle(text) || (heading !== null && PAY_HEADING.test(text))) {
       const narrowed = heading === null && block.length > 1 ? narrowSalaryBlock(block) : null;
       if (heading) skippingSection = heading[1]!.length;
-      else if (narrowed) out.push(...narrowed);
+      // Laço, não `push(...)`: um bloco de 130 mil linhas estoura a pilha.
+      else if (narrowed) for (const line of narrowed) out.push(line);
       // Um ano no rótulo ("Pretensão salarial (2026):") não é o valor.
       else valueExpected = !HAS_AMOUNT.test(text);
       continue;
     }
-    out.push(...block);
+    for (const line of block) out.push(line);
   }
 
   let text = out.join("\n");

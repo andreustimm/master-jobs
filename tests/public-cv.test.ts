@@ -213,12 +213,46 @@ describe("publicCvText", () => {
       "PJ R$ 40.000\nCLT MENSAL\nPretensão salarial\nR$ 30.000",
       // Valor duas linhas acima de rótulo que é título.
       "R$ 30.000 (CLT)\nou\nPRETENSÃO SALARIAL\nPJ R$ 40.000",
+      // Valor sem moeda: milhar, `mil`, número solto.
+      "30.000\nPRETENSÃO SALARIAL\nPJ R$ 40.000",
+      "30.000 mensais\nPRETENSÃO SALARIAL\nPJ: 40.000",
+      "CLT 30 mil\nPRETENSÃO SALARIAL\nPJ 40 mil",
+      "PRETENSÃO SALARIAL\nCLT: 30.000\nObjetivo\nPJ: 40.000",
+      "Salary expectations\nContract: 90/hour\nEmployment:\n150,000 per year",
+      "PJ 40.000\nCLT MENSAL\nPretensão salarial\nR$ 30.000",
+      "PRETENSÃO SALARIAL\nCLT 30 mil\nResumo\nPJ 40 mil",
+      "Contract: 90/hour\nPRETENSÃO SALARIAL\nCLT R$ 30.000",
+      // Nomes de seção seguidos não encerram a borda.
+      "PRETENSÃO SALARIAL\nCLT: R$ 30.000\nSkills\nIdiomas\nPJ: R$ 40.000",
+      "PJ 40000\nObjetivo\nPRETENSÃO SALARIAL\nCLT R$ 30.000",
     ]) {
       const cv = `EXPERIÊNCIA\n2019-2021 Staff na Acme\n${piso}\nFORMAÇÃO\nCiência da Computação`;
       for (const out of [publicCvText(cv), publicCvMarkdown(cv)]) {
-        expect(out, piso).not.toMatch(/30\.000|40\.000|150k|90 USD/);
+        expect(out, piso).not.toMatch(/30\.000|40\.000|40000|30 mil|40 mil|150k|150,000|90 USD|90\/hour/);
       }
     }
+  });
+
+  it("número que não é dinheiro na seção vizinha não derruba o currículo", () => {
+    const cv = [
+      "EXPERIÊNCIA",
+      "Equipe de 12 pessoas, 20+ anos, 99,9% uptime, 2019-2021",
+      // A linha colada acima de um rótulo-título sai se tiver número.
+      "Staff Engineer na Acme",
+      "PRETENSÃO SALARIAL",
+      "R$ 30.000",
+      "FORMAÇÃO",
+      "Ciência da Computação",
+    ].join("\n");
+    const out = publicCvMarkdown(cv);
+    expect(out).not.toContain("30.000");
+    expect(out).toContain("99,9% uptime");
+    expect(out).toContain("Ciência da Computação");
+  });
+
+  it("bloco com muitas linhas não estoura a pilha", () => {
+    expect(() => publicCvMarkdown("x\n".repeat(200_000))).not.toThrow();
+    expect(() => publicCvMarkdown(`${"x\n".repeat(200_000)}PRETENSÃO SALARIAL\nR$ 1`)).not.toThrow();
   });
 
   it("no bloco longo sem nome de seção depois do piso, sai tudo até o fim do bloco", () => {
