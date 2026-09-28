@@ -329,6 +329,21 @@ inferidas (um "PRETENSÃO SALARIAL" que virou título leva a seção inteira).
 `MarkdownPreview` monta nós React — nunca HTML — e só cria âncora para
 `http(s)`: `javascript:`, `data:` e `mailto:` saem como texto.
 
+**Skill confirmada ganha `category`, `level` e `occurrences` na lista de
+permissão** — ✅ **28/09 (#326).** O layout do perfil público passou a
+agrupar skills por categoria; `category` (do catálogo) e `level` (só um humano
+escreve — nunca inferido) entraram em `publicProfile()` como campos NOVOS e
+EXPLÍCITOS, não como "a linha inteira já é confirmada, então tudo bem". Os
+dois passam pelo mesmo `containsContact()` do nome: uma skill com e-mail ou
+telefone em `name`, `category` ou `level` some da lista inteira — não há
+"esvaziar só o campo" dentro de um item de array. `groupPublicSkills()`
+(`src/core/candidate-public.ts`, pura) ordena por categoria alfabética e, dentro
+dela, ocorrências decrescente e nome crescente — determinístico, sem depender
+da ordem de inserção do banco. Seções do CV (Resumo/Experiência/Formação)
+continuam derivadas na PÁGINA por `cvSections(profile.cv)` (#325): o texto que
+chega já passou pelos dois filtros, e `cvSections()` só lê o que sobrou —
+`publicProfile()` não muda.
+
 **Fluxo verificado ponta a ponta em 19/08**, no modo autenticado padrão: sem
 sessão o cabeçalho oferece entrar; o link de uso único resgata em
 `/login/callback` e grava o cookie `httpOnly`; a sessão passa a aparecer no

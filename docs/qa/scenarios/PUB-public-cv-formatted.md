@@ -13,7 +13,7 @@ retest_status:
 fix_commits:
 evidence:
 last_report:
-overlaps: PUB-public-cv-protected-content; PUB-public-profile-mobile-entry
+overlaps: PUB-public-cv-protected-content; PUB-public-profile-mobile-entry; PUB-public-profile-layout
 ---
 
 O candidato importa em `/candidate` um PDF de currículo cujo texto tem títulos

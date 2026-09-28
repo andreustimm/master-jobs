@@ -555,6 +555,13 @@ Hero photography sits in `{rounded.xl}` (16px) frames with no border. Product fa
 - Background `{colors.ink}`, text `{colors.on-ink}`, rounded `{rounded.xl}`, padding `{spacing.xxl} 48px`
 - Used for: "When did work start getting in the way of work?" mid-page promo, the SMB testimonial slab
 
+**`card-section-eyebrow`** — a content card with a translated title and a raw user-content eyebrow (Master Jobs addition, #326)
+- Background `{colors.canvas}` (`bg-card`), rounded `{rounded.lg}` (matches the app's `rounded-xl` card token), default padding, no Soft Lift shadow (flat, hairline ring only — the app's card primitive)
+- Header row: fixed, translated section name in `{typography.display-xs}` on the left (e.g. "Summary"), and the person's own heading from their source document in `{typography.caption-sm}`-scale muted micro-text on the right (e.g. "PROFESSIONAL SUMMARY") — the eyebrow is user content, not decoration, and carries `data-user-content`
+- The two never merge into one string: the fixed label is what every visitor reads regardless of how the person titled their own document; the eyebrow is what that specific person wrote
+- Card is omitted entirely when the underlying section has no content — no "No data available" placeholder
+- Used for: Résumé / Experience / Education cards on the public profile (`/p/[slug]`)
+
 ### Inputs & Forms
 
 **`text-input`** + **`text-input-focused`**

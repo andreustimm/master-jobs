@@ -1008,6 +1008,20 @@ export const en: Dictionary = {
     tool: "Tools",
     soft: "Interpersonal",
   },
+  /** Public profile layout (#326): chrome labels, outside candidate data. */
+  publicProfile: {
+    linkedin: "View on LinkedIn",
+    github: "GitHub",
+    copyLink: "Copy profile link",
+    linkCopied: "Link copied",
+    locationLabel: "Location",
+    summary: "Summary",
+    experience: "Experience",
+    education: "Education",
+    skillsTitle: "Skills",
+    fullCv: "Full CV",
+    showMoreSkills: "+{count} more",
+  },
   vocabulary: {
     title: "Vocabulary",
     quickWin: "Quick win",

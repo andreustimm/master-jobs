@@ -12,7 +12,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { application, authEvent, authLoginToken, authUser, candidate, candidateDocument, fxRate, job, jobScore, savedTerm, scoreTask, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
+import { application, authEvent, authLoginToken, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
 import { linkRecruiterToCandidate } from "../../src/contexts/auth/index.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
 import { hashToken } from "../../src/contexts/auth/infra/drizzle-store.ts";
@@ -559,10 +559,19 @@ try {
   // #325: candidato sem conta, público e com o CV publicado, cujo texto veio
   // de PDF. `saveDocument` não regrava conteúdo igual, então rodar de novo
   // numa base reaproveitada é inofensivo.
+  //
+  // #326 reaproveita o MESMO candidato para o layout: headline, localização e
+  // links entram no `ensureCandidate` (idempotente — o `found` branch
+  // atualiza), e as skills confirmadas de `PUBLIC_CV_FIXTURE.skills` entram
+  // por `onConflictDoUpdate`, também seguro numa base reaproveitada.
   const publicCvCandidate = await ensureCandidate({
     slug: PUBLIC_CV_FIXTURE.slug,
     name: PUBLIC_CV_FIXTURE.name,
     email: PUBLIC_CV_FIXTURE.email,
+    headline: PUBLIC_CV_FIXTURE.headline,
+    location: PUBLIC_CV_FIXTURE.location,
+    linkedinUrl: PUBLIC_CV_FIXTURE.linkedinUrl,
+    githubUrl: PUBLIC_CV_FIXTURE.githubUrl,
   });
   await getDb()
     .update(candidate)
@@ -578,6 +587,30 @@ try {
   // `saveDocument` enfileira repontuação; este candidato não tem perfil de
   // matching, e a tarefa só faria o worker registrar erro fora do cenário.
   await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, publicCvCandidate));
+
+  for (const item of PUBLIC_CV_FIXTURE.skills) {
+    const [catalogRow] = await getDb()
+      .insert(skill)
+      .values({ slug: `e2e-${item.name.toLowerCase()}`, canonicalName: item.name, category: item.category, aliases: [] })
+      .onConflictDoUpdate({
+        target: skill.slug,
+        set: { canonicalName: item.name, category: item.category },
+      })
+      .returning({ id: skill.id });
+    await getDb()
+      .insert(candidateSkill)
+      .values({
+        candidateId: publicCvCandidate,
+        skillId: catalogRow.id,
+        status: "confirmed",
+        level: item.level ?? null,
+        occurrences: item.occurrences,
+      })
+      .onConflictDoUpdate({
+        target: [candidateSkill.candidateId, candidateSkill.skillId],
+        set: { status: "confirmed", level: item.level ?? null, occurrences: item.occurrences },
+      });
+  }
 
   const [ownerUser] = await getDb().select({ id: authUser.id }).from(authUser).where(eq(authUser.email, EMAIL)).limit(1);
   const [linkedRecruiter] = await getDb()

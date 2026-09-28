@@ -43,12 +43,19 @@ afterEach(async () => {
   await releaseTestDb();
 });
 
-async function confirmarSkill(name: string, status = "confirmed") {
+async function confirmarSkill(
+  name: string,
+  status = "confirmed",
+  opts: { category?: string; level?: string; occurrences?: number } = {},
+) {
+  const category = opts.category ?? "ai";
   const [row] = await db
     .insert(skill)
-    .values({ slug: name.toLowerCase(), canonicalName: name, category: "ai", aliases: [] })
+    .values({ slug: `${name.toLowerCase()}-${category}`, canonicalName: name, category, aliases: [] })
     .returning({ id: skill.id });
-  await db.insert(candidateSkill).values({ candidateId, skillId: row!.id, status });
+  await db
+    .insert(candidateSkill)
+    .values({ candidateId, skillId: row!.id, status, level: opts.level, occurrences: opts.occurrences ?? 1 });
 }
 
 describe("quem alcança o perfil", () => {
@@ -117,7 +124,30 @@ describe("o que NUNCA sai", () => {
     await confirmarSkill("Kubernetes", "detected");
     await confirmarSkill("Scala", "rejected");
 
-    expect((await publicProfile("andreus"))?.skills).toEqual(["LangGraph"]);
+    const skills = (await publicProfile("andreus"))?.skills;
+    expect(skills?.map((s) => s.name)).toEqual(["LangGraph"]);
+  });
+
+  it("#326 category, level e occurrences entram na lista de permissão da skill", async () => {
+    await confirmarSkill("Go", "confirmed", { category: "language", level: "expert", occurrences: 4 });
+    const [skillOut] = (await publicProfile("andreus"))?.skills ?? [];
+    // Igualdade exata: um campo novo na linha (ex.: `auditedBy`) tem que
+    // aparecer aqui para ser notado, não vazar por composição de objeto.
+    expect(skillOut).toEqual({ name: "Go", category: "language", level: "expert", occurrences: 4 });
+  });
+
+  it("#326 skill confirmada sem `level` sai com `null`, não `undefined`", async () => {
+    await confirmarSkill("Rust", "confirmed", { category: "language" });
+    const [skillOut] = (await publicProfile("andreus"))?.skills ?? [];
+    expect(skillOut?.level).toBeNull();
+  });
+
+  it("#326 e-mail escrito no `level` de uma skill esvazia a skill inteira, não só o campo", async () => {
+    await confirmarSkill("Go", "confirmed", { category: "language", level: "contate andreus@zorbit.com.br" });
+    await confirmarSkill("Rust", "confirmed", { category: "language", level: "expert" });
+    const skills = (await publicProfile("andreus"))?.skills ?? [];
+    expect(skills.map((s) => s.name)).toEqual(["Rust"]);
+    expect(JSON.stringify(skills)).not.toContain("@zorbit");
   });
 });
 

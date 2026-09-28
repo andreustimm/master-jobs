@@ -1030,6 +1030,20 @@ export const ptBR = {
     tool: "Ferramentas",
     soft: "Interpessoais",
   },
+  /** Layout do perfil público (#326): rótulos fora do dado do candidato. */
+  publicProfile: {
+    linkedin: "Ver no LinkedIn",
+    github: "GitHub",
+    copyLink: "Copiar link do perfil",
+    linkCopied: "Link copiado",
+    locationLabel: "Localização",
+    summary: "Resumo",
+    experience: "Experiência",
+    education: "Formação",
+    skillsTitle: "Habilidades",
+    fullCv: "Currículo completo",
+    showMoreSkills: "+{count} mais",
+  },
   vocabulary: {
     title: "Vocabulário",
     quickWin: "Ganho rápido",
