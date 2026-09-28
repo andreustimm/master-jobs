@@ -71,6 +71,17 @@ export async function run(ctx) {
       (await page.locator('[data-testid="public-image-preview-photo"]').count()) === 0,
     );
 
+    // Acima de 4 MiB o navegador segura o envio: na Vercel, corpo acima de
+    // 4,5 MB leva 413 antes da action, e a tela só teria o erro genérico.
+    await file.setInputFiles({ name: "grande.png", mimeType: "image/png", buffer: Buffer.alloc(4 * 1024 * 1024 + 1) });
+    const oversized = await file.evaluate((input) => ({ valid: input.checkValidity(), message: input.validationMessage }));
+    check(
+      "#327 arquivo acima de 4 MB é barrado no navegador com a mensagem de tamanho",
+      !oversized.valid && /4 MB/.test(oversized.message),
+      JSON.stringify(oversized),
+    );
+    await file.setInputFiles([]);
+
     await file.setInputFiles(photo);
     await page.locator('[data-testid="public-image-show-photo"]').check();
     await submit(page, save);
