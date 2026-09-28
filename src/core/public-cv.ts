@@ -25,7 +25,11 @@
  *   sai esteja antes ou depois dele. Num bloco com títulos de seção — o CV
  *   extraído de PDF, sem linha em branco —, sai a seção do piso até o
  *   próximo nome de seção conhecido; sem título, sem valor na seção ou com
- *   resto que ainda parece piso, o bloco inteiro. Num título Markdown, sai a seção inteira
+ *   resto que ainda parece piso, o bloco inteiro. Esse corte tem dois
+ *   preços, ambos escolhidos: valor a três linhas ou mais da seção (ou duas
+ *   seções depois) passa; valor com cara de dinheiro a até duas linhas dela
+ *   derruba o CV inteiro, e a linha com número logo acima do rótulo sai
+ *   mesmo que seja um item neutro. Num título Markdown, sai a seção inteira
  *   até o próximo título de mesmo nível ou acima. Um valor sem rótulo nem
  *   palavra de remuneração não é reconhecido; um bloco com "reduzi o custo de
  *   salário em 30%" some sem ser piso — diante da dúvida, esconde-se.
