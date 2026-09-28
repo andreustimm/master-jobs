@@ -622,6 +622,18 @@ export const candidate = production.table(
     publicRelocation: boolean("public_relocation").default(false),
     publicArea: boolean("public_area").default(false),
     publicLanguages: boolean("public_languages").default(false),
+    /*
+     * Foto e capa do perfil público (#327). O banco guarda só a CHAVE do
+     * objeto na porta de armazenamento (`src/core/storage/`) — nunca URL de
+     * provedor nem credencial (regra 16). Chave nova a cada envio, e a antiga
+     * é apagada: uma URL guardada por alguém não volta a servir a foto nova.
+     * O opt-in segue o desenho dos fatos: `false` por padrão, nulo aceito
+     * pela importação do snapshot legado e tratado como DESLIGADO.
+     */
+    photoKey: text("photo_key"),
+    coverKey: text("cover_key"),
+    publicPhoto: boolean("public_photo").default(false),
+    publicCover: boolean("public_cover").default(false),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },

@@ -967,6 +967,15 @@ describe("authorisation (AUTH-01)", () => {
       methods: ["GET"],
       why: "serviço: `CRON_SECRET` em tempo constante; 503 sem o segredo",
     },
+    // Foto e capa do perfil público (#327): conteúdo público como `/p/[slug]`,
+    // mesma classe. O que substitui a sessão é a lista de permissão
+    // reconsultada a cada requisição — `public_slug`, `visibility = public` e
+    // o opt-in do tipo, por `publicImageKeyForSlug()` —, o 404 uniforme para
+    // qualquer recusa (G22), `no-store` e o limite por IP do proxy.
+    "app/p/[slug]/image/[kind]/route.ts": {
+      methods: ["GET"],
+      why: "conteúdo público: `publicImageKeyForSlug()` reconfere visibilidade e opt-in a cada requisição; 404 uniforme; `no-store`; limite por IP no proxy",
+    },
     // A varredura fatiada (ADR 0025): quem chama é o `pg_cron` do Supabase,
     // via `pg_net`, também sem cookie. Mesmo segredo, mesma borda.
     "app/api/cron/varredura/route.ts": {

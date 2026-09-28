@@ -55,6 +55,16 @@ const PUBLIC = [
  */
 const publicProfileLimiter = createRateLimiter({ limit: 30, windowMs: 5 * 60_000 });
 
+/**
+ * Foto e capa (#327) em balde próprio. Cada visita ao perfil pede a página e
+ * até duas imagens; no mesmo balde, dez visitas esgotariam o limite de quem
+ * só abriu o link algumas vezes. O balde das imagens comporta as duas por
+ * visita, e a varredura de endereços continua contada no da página — a
+ * imagem responde o mesmo 404 para qualquer recusa e não ensina mais que ela.
+ */
+const publicImageLimiter = createRateLimiter({ limit: 60, windowMs: 5 * 60_000 });
+const PUBLIC_IMAGE_PATH = /^\/p\/[^/]+\/image\/[^/]+$/;
+
 export function proxy(request: NextRequest) {
   // Mesma regra de `isOpenMode()`, importada do domínio e não da composição:
   // a borda não pode puxar o banco. Em deployment, `open` é ignorado e a rede
@@ -66,7 +76,8 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname === "/p" || pathname.startsWith("/p/")) {
-    const decision = publicProfileLimiter.check(clientKey(request.headers));
+    const limiter = PUBLIC_IMAGE_PATH.test(pathname) ? publicImageLimiter : publicProfileLimiter;
+    const decision = limiter.check(clientKey(request.headers));
     if (!decision.allowed) {
       return new NextResponse("Too Many Requests", {
         status: 429,

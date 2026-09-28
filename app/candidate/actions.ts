@@ -34,6 +34,8 @@ import {
   type VersionError,
 } from "../../src/core/candidate.ts";
 import type { CvPdfError } from "../../src/core/pdf.ts";
+import { removePublicImage, setPublicImage } from "../../src/core/candidate-images.ts";
+import type { PublicImageError } from "../../src/core/public-images.ts";
 
 /** Rótulo de versão sem idioma: a data. Fica gravado, então não pode ser frase. */
 function defaultCvLabel(): string {
@@ -344,6 +346,40 @@ export async function setPublicFactsAction(formData: FormData): Promise<PublicFa
     area: text("area"),
     languages: text("languages"),
     show,
+  });
+  if (!result.ok) return result;
+  revalidatePath("/candidate");
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Foto e capa do perfil público (#327)                                        */
+/* -------------------------------------------------------------------------- */
+
+export type PublicImageActionResult = { ok: true; run?: "removed" } | { ok: false; code: PublicImageError };
+
+/**
+ * Envia, troca ou remove a foto ou a capa, e grava o "mostrar" dela.
+ *
+ * A guarda vem antes de ler o formulário — e, portanto, antes de ler um byte
+ * do arquivo, reencodar ou falar com o armazenamento. O candidato vem da
+ * sessão (`guardOwnCandidate`); `kind` é só `photo` ou `cover`, validado no
+ * domínio, e nenhum id do formulário é lido (regra 15). O botão "Remover"
+ * manda `intent=remove` no mesmo formulário.
+ */
+export async function savePublicImageAction(formData: FormData): Promise<PublicImageActionResult> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  const kind = String(formData.get("kind") ?? "");
+  if (formData.get("intent") === "remove") {
+    const removed = await removePublicImage(candidateId, kind);
+    if (!removed.ok) return removed;
+    revalidatePath("/candidate");
+    return { ok: true, run: "removed" };
+  }
+  const result = await setPublicImage(candidateId, {
+    kind,
+    file: formData.get("file"),
+    show: formData.get("show") === "on",
   });
   if (!result.ok) return result;
   revalidatePath("/candidate");
