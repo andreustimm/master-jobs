@@ -2,7 +2,7 @@ import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureCandidate, getCandidateById, setPublicSlug, setVisibility } from "../src/core/candidate.ts";
 import { publicImageKeyForSlug, publicProfile } from "../src/core/candidate-public.ts";
-import { removePublicImage, setPublicImage } from "../src/core/candidate-images.ts";
+import { readImageObject, removePublicImage, setPublicImage } from "../src/core/candidate-images.ts";
 import { vercelBlobStorage } from "../src/core/storage/infra/vercel-blob.ts";
 import type { StorageTarget } from "../src/core/storage/index.ts";
 import { fakeBlobSdk, type FakeBlob } from "./support/storage-fakes.ts";
@@ -165,6 +165,45 @@ describe("setPublicImage / removePublicImage", () => {
       code: "storageUnavailable",
     });
     expect(await getCandidateById(id)).toMatchObject({ photoKey: null, publicPhoto: false });
+  });
+
+  it("remover num ambiente sem armazenamento ainda esquece a chave e avisa do objeto que ficou", async () => {
+    const id = await publicCandidate();
+    await setPublicImage(id, { kind: "photo", file: await photoFile(), show: true });
+    const key = (await getCandidateById(id))!.photoKey!;
+    state.target = null;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let logged = "";
+    try {
+      expect(await removePublicImage(id, "photo")).toEqual({ ok: true });
+      logged = warn.mock.calls.flat().join(" ");
+    } finally {
+      warn.mockRestore();
+    }
+    expect(await getCandidateById(id)).toMatchObject({ photoKey: null, publicPhoto: false });
+    expect(logged).toContain(key);
+    // Sem armazenamento e sem chave, a leitura é ausência — nunca erro.
+    expect(await readImageObject(key)).toBeNull();
+    expect(await readImageObject(null)).toBeNull();
+  });
+
+  it("falha ao apagar que não é Error ainda é registrada sem vazar nada", async () => {
+    const id = await publicCandidate();
+    await setPublicImage(id, { kind: "cover", file: await photoFile(1600, 500), show: true });
+    const del = blob.sdk.del;
+    blob.sdk.del = (async () => {
+      throw "recusado";
+    }) as typeof del;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let logged = "";
+    try {
+      expect(await removePublicImage(id, "cover")).toEqual({ ok: true });
+      logged = warn.mock.calls.flat().join(" ");
+    } finally {
+      blob.sdk.del = del;
+      warn.mockRestore();
+    }
+    expect(logged).toContain("remoção");
   });
 
   it("banco que falha depois do envio: o objeto novo é apagado e nada muda", async () => {

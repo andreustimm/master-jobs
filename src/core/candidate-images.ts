@@ -92,9 +92,10 @@ export async function setPublicImage(
   if (!isPublicImageKind(kind)) return { ok: false, code: "invalidKind" };
 
   if (!(file instanceof Blob) || file.size === 0) {
+    const optIn = kind === "photo" ? { publicPhoto: show } : { publicCover: show };
     await getDb()
       .update(candidate)
-      .set(kind === "photo" ? { publicPhoto: show, updatedAt: new Date().toISOString() } : { publicCover: show, updatedAt: new Date().toISOString() })
+      .set({ ...optIn, updatedAt: new Date().toISOString() })
       .where(eq(candidate.id, candidateId));
     return { ok: true };
   }

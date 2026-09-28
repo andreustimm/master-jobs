@@ -123,6 +123,29 @@ describe("adapter Vercel Blob", () => {
     }
   });
 
+  it("irmão de metadado corrompido vira metadado vazio, e falha sem Error ainda é StorageError", async () => {
+    const fake = fakeBlobSdk(TOKEN);
+    const storage = vercelBlobStorage(fake.sdk, TOKEN);
+    const address = { bucket: "master-jobs", key: "k.webp" };
+    await storage.putObject({ ...address, body: new Uint8Array([1]), contentType: "image/webp" });
+    fake.store.set(".metadata/master-jobs/k.webp.json", {
+      body: new TextEncoder().encode("null"),
+      contentType: "application/json",
+      metadata: {},
+      etag: '"x"',
+    });
+    expect((await storage.headObject(address))?.metadata).toEqual({});
+
+    const head = fake.sdk.head;
+    fake.sdk.head = (async () => {
+      throw `sem Error, com ${TOKEN}`;
+    }) as typeof head;
+    const error = await storage.headObject(address).catch((caught: unknown) => caught);
+    fake.sdk.head = head;
+    expect(error).toBeInstanceOf(StorageError);
+    expect((error as Error).message).not.toContain(TOKEN);
+  });
+
   it("a composição de produção usa o SDK de verdade com o token da configuração", () => {
     const storage = vercelBlobFromSettings({ driver: "vercel-blob", bucket: "master-jobs", token: TOKEN });
     expect(storage.driver).toBe("vercel-blob");
@@ -155,6 +178,40 @@ describe("adapter S3", () => {
     // NoSuchBucket responde 404 também; tratá-lo como "sem foto" esconderia
     // uma configuração errada atrás de um perfil vazio.
     await expect(storage.getObject({ bucket: "outro-bucket", key: "k" })).rejects.toThrow(StorageError);
+  });
+
+  it("compatível que omite cabeçalhos e nomes de erro ainda cumpre a porta", async () => {
+    // Nem todo servidor "compatível com S3" devolve ETag, tipo, tamanho ou
+    // corpo, nem preenche o nome do erro: o 404 cru ainda é "não existe", e
+    // o que faltar vira o valor neutro da porta, nunca `undefined`.
+    const calls: string[] = [];
+    const sparse = {
+      async send(command: { constructor: { name: string } }) {
+        const name = command.constructor.name;
+        calls.push(name);
+        if (name === "HeadObjectCommand" && calls.length === 1) throw { $metadata: { httpStatusCode: 404 } };
+        if (name === "GetObjectCommand" && calls.filter((c) => c === name).length === 1) throw "falha sem Error";
+        return {};
+      },
+    };
+    const storage = s3Storage(sparse as never);
+    const address = { bucket: "b-ok", key: "k" };
+    expect(await storage.headObject(address)).toBeNull();
+    await expect(storage.getObject(address)).rejects.toThrow(/s3 GetObject: falha sem Error/);
+    expect(await storage.putObject({ ...address, body: new Uint8Array([1]), contentType: "image/webp" })).toEqual({ etag: "" });
+    expect(await storage.headObject(address)).toEqual({
+      contentType: "application/octet-stream",
+      contentLength: 0,
+      etag: "",
+      metadata: {},
+    });
+    expect(await storage.getObject(address)).toEqual({
+      body: new Uint8Array(),
+      contentType: "application/octet-stream",
+      contentLength: 0,
+      etag: "",
+      metadata: {},
+    });
   });
 
   it("o cliente respeita endpoint e path style da configuração", async () => {
