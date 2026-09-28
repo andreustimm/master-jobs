@@ -118,6 +118,7 @@ describe("publicCvText", () => {
       expect(publicCvText(`ana@empresa.com${sep}bia@empresa.org`), sep).not.toContain("bia@");
     }
     expect(publicCvText("ana@empresa.com-bia@empresa.org")).toBe(`${REDACTED}${REDACTED}`);
+    expect(publicCvText("a@x.co-b@c.de@f.gh@i.jk")).toBe(`${REDACTED}${REDACTED}@${REDACTED}`);
   });
 
   it("troca telefone com código de país ou DDD entre parênteses", () => {
@@ -199,6 +200,23 @@ describe("publicCvText", () => {
         expect(out, piso).not.toMatch(/30\.000|40\.000|30k|150k/);
         expect(out, piso).toContain("Nome");
         expect(out, piso).toContain("Ciência da Computação");
+      }
+    }
+  });
+
+  it("valor com moeda nas bordas da seção derruba o bloco inteiro", () => {
+    for (const piso of [
+      // Nome de seção conhecido dentro da pretensão.
+      "Salary expectations\nContractor: 90 USD/hour\nEmployment:\n150k USD",
+      "PRETENSÃO SALARIAL\nCLT: R$ 30.000\nObjetivo\nPJ: R$ 40.000",
+      // Título falso acima de rótulo que não é título.
+      "PJ R$ 40.000\nCLT MENSAL\nPretensão salarial\nR$ 30.000",
+      // Valor duas linhas acima de rótulo que é título.
+      "R$ 30.000 (CLT)\nou\nPRETENSÃO SALARIAL\nPJ R$ 40.000",
+    ]) {
+      const cv = `EXPERIÊNCIA\n2019-2021 Staff na Acme\n${piso}\nFORMAÇÃO\nCiência da Computação`;
+      for (const out of [publicCvText(cv), publicCvMarkdown(cv)]) {
+        expect(out, piso).not.toMatch(/30\.000|40\.000|150k|90 USD/);
       }
     }
   });

@@ -317,8 +317,9 @@ entre parênteses e o bloco inteiro (parágrafo, item ou tabela entre linhas em
 branco; a seção, quando é título) que traz rótulo de pretensão salarial ou
 palavra de remuneração perto de um valor são retirados. Num bloco com títulos
 de seção (CV extraído de PDF, sem linha em branco) sai a seção do piso até o
-próximo nome de seção conhecido; sem título, sem valor na seção ou com resto
-que ainda parece piso, sai o bloco inteiro (#344).
+próximo nome de seção conhecido; sem título, sem valor na seção, com resto
+que ainda parece piso ou com valor em moeda nas bordas da seção, sai o bloco
+inteiro (#344).
 Detecção por padrão, com limite escrito no arquivo e travado em teste: valor
 sem rótulo e telefone sem marca passam. Não é sanitização perfeita. A rota é
 anônima, então as expressões têm custo linear, travado em teste (#344).

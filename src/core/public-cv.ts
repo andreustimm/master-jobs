@@ -51,8 +51,12 @@ const EMAIL_HERE = new RegExp(EMAIL_BODY, "uy");
 function redactEmails(text: string): string {
   let out = "";
   let from = 0;
-  for (const match of text.matchAll(EMAIL)) {
-    if (match.index < from) continue;
+  // `exec` a partir de `from`: um match descartado por começar antes dele
+  // levaria junto o endereço que começa dentro dele ("…@c.de@f.gh@i.jk").
+  for (;;) {
+    EMAIL.lastIndex = from;
+    const match = EMAIL.exec(text);
+    if (!match) break;
     let end = match.index + match[0].length;
     out += text.slice(from, match.index) + REDACTED;
     for (;;) {
@@ -152,6 +156,9 @@ const PAY_WORD = "\\b(?:sal[áa]ri(?:o|os|al|ais)|remunera[çc](?:[ãa]o|[õo]es
 const AMOUNT =
   "(?:[$€£¥]|R\\$|\\b(?:usd|eur|brl|gbp)\\s*\\d|\\b(?!(?:19|20)\\d{2}\\b)\\d|\\b(?:19|20)\\d{2}\\s*(?:k\\b|usd|eur|brl|gbp|reais|d[óo]lares|euros))";
 const HAS_AMOUNT = new RegExp(AMOUNT, "iu");
+// Valor com marca de dinheiro — moeda ou `k` —, que não se confunde com
+// "equipe de 12 pessoas".
+const CURRENCY_AMOUNT = /[$€£¥]|R\$|\b(?:usd|eur|brl|gbp|reais|d[óo]lares|euros)\b|\d\s*k\b/iu;
 const PAY_NEAR_AMOUNT = new RegExp(`${PAY_WORD}.{0,60}?${AMOUNT}|${AMOUNT}.{0,60}?${PAY_WORD}`, "iu");
 
 function isSalaryBlock(block: string): boolean {
@@ -192,13 +199,20 @@ function isPayTitle(block: string): boolean {
  *   a seção: ele pode ser parte da pretensão.
  *
  * Sem título, a seção é o bloco — o comportamento de antes. E o bloco inteiro
- * também sai quando a seção não traz valor (ele está em outro lugar) ou
- * quando o que sobra, lido como texto corrido, ainda parece piso.
+ * também sai quando a seção não traz valor (ele está em outro lugar), quando
+ * o que sobra, lido como texto corrido, ainda parece piso, ou quando há valor
+ * com moeda nas bordas: entre o nome de seção conhecido anterior e a seção, ou
+ * na seção seguinte. Um "Employment:" dentro da pretensão, um título falso
+ * acima do rótulo ou um valor duas linhas acima dele cortariam a seção antes
+ * do valor; na dúvida, fecha-se.
  */
 function narrowSalaryBlock(lines: string[]): string[] | null {
   const isHit = (text: string) => isSalaryBlock(text) || isPayTitle(text);
+  const known = (j: number) => isKnownHeading(lines[j]!.trim());
   const drop = lines.map(() => false);
   let sectionStart = 0;
+  // Primeira linha depois do último nome de seção conhecido.
+  let knownStart = 0;
   for (let i = 0; i < lines.length; i++) {
     const title = isHeading(lines[i]!.trim());
     let last = i;
@@ -206,17 +220,19 @@ function narrowSalaryBlock(lines: string[]): string[] | null {
       const next = lines[i + 1];
       if (next === undefined || isHit(next) || !isHit(`${lines[i]}\n${next}`)) {
         if (title) sectionStart = i + 1;
+        if (known(i)) knownStart = i + 1;
         continue;
       }
       last = i + 1;
     }
     const start = title ? i : sectionStart;
-    while (last + 1 < lines.length && !isKnownHeading(lines[last + 1]!.trim())) last++;
-    const section = lines.slice(start, last + 1);
-    if (!HAS_AMOUNT.test(section.join("\n"))) return null;
+    while (last + 1 < lines.length && !known(last + 1)) last++;
+    if (!HAS_AMOUNT.test(lines.slice(start, last + 1).join("\n"))) return null;
+    if (lines.slice(knownStart, start).some((line) => CURRENCY_AMOUNT.test(line))) return null;
+    for (let j = last + 2; j < lines.length && !known(j); j++) {
+      if (CURRENCY_AMOUNT.test(lines[j]!)) return null;
+    }
     for (let j = start; j <= last; j++) drop[j] = true;
-    // Valor logo acima de um rótulo que é título.
-    if (title && start > 0 && HAS_AMOUNT.test(lines[start - 1]!)) drop[start - 1] = true;
     i = last;
   }
   const kept = lines.filter((_, i) => !drop[i]);

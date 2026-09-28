@@ -257,7 +257,8 @@ consentimento, separado de tornar o perfil público. Mesmo com ele, o texto
 passa por `publicCvText()`: e-mail, telefone e o trecho do piso saem — o
 bloco entre linhas em branco ou, num bloco com títulos de seção (CV de PDF),
 a seção do piso até o próximo nome de seção conhecido; na dúvida (seção sem
-valor, resto que ainda parece piso), o bloco inteiro. O consentimento não
+valor, resto que ainda parece piso, valor com moeda nas bordas da seção), o
+bloco inteiro. O consentimento não
 cria exceção tácita a G21. A rota é anônima: as expressões do filtro têm
 custo linear, travado em teste.
 
