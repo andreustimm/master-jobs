@@ -22,10 +22,10 @@
  *   palavra de remuneração (`salário`, `remuneração`, `salary`,
  *   `compensation`) a até 60 caracteres de um valor que não seja ano. O bloco é lido como texto corrido,
  *   então um rótulo quebrado em duas linhas continua sendo rótulo, e o valor
- *   sai esteja antes ou depois dele. Num bloco de várias linhas — o CV
- *   extraído de PDF, sem linha em branco —, sai só o trecho do piso e as
- *   linhas vizinhas que o completam; se o resto ainda parece piso, o bloco
- *   inteiro sai. Num título Markdown, sai a seção inteira
+ *   sai esteja antes ou depois dele. Num bloco com títulos de seção — o CV
+ *   extraído de PDF, sem linha em branco —, sai a seção do piso até o
+ *   próximo nome de seção conhecido; sem título, sem valor na seção ou com
+ *   resto que ainda parece piso, o bloco inteiro. Num título Markdown, sai a seção inteira
  *   até o próximo título de mesmo nível ou acima. Um valor sem rótulo nem
  *   palavra de remuneração não é reconhecido; um bloco com "reduzi o custo de
  *   salário em 30%" some sem ser piso — diante da dúvida, esconde-se.
@@ -35,14 +35,37 @@
  * as formas usuais não vazem pelo consentimento dado para outra coisa.
  */
 
-import { cvTextToMarkdown } from "./cv-markdown.ts";
+import { cvTextToMarkdown, isHeading, isKnownHeading } from "./cv-markdown.ts";
 
 export const REDACTED = "[…]";
 
 // O lookbehind só deixa a tentativa começar no início de uma sequência de
 // caracteres de endereço: sem ele, cada posição de uma palavra longa sem `@`
 // reexaminava o resto dela, e o custo era quadrático (#344).
-const EMAIL = /(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
+const EMAIL_BODY = String.raw`[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}`;
+const EMAIL = new RegExp(String.raw`(?<![\p{L}\p{N}._%+-])${EMAIL_BODY}`, "gu");
+// Sticky, para o endereço colado ao fim do anterior ("a@x.com-b@y.com"), que
+// o lookbehind esconderia.
+const EMAIL_HERE = new RegExp(EMAIL_BODY, "uy");
+
+function redactEmails(text: string): string {
+  let out = "";
+  let from = 0;
+  for (const match of text.matchAll(EMAIL)) {
+    if (match.index < from) continue;
+    let end = match.index + match[0].length;
+    out += text.slice(from, match.index) + REDACTED;
+    for (;;) {
+      EMAIL_HERE.lastIndex = end;
+      const next = EMAIL_HERE.exec(text);
+      if (!next) break;
+      out += REDACTED;
+      end += next[0].length;
+    }
+    from = end;
+  }
+  return out + text.slice(from);
+}
 
 /**
  * Telefone internacional: `+`, código e grupos de dígitos com um separador
@@ -102,7 +125,8 @@ const SALARY_LABEL = new RegExp(
     "pretens(?:[ãa]o|[õo]es)\\b(?!\\s+(?:comercia|art[íi]stic|liter[áa]ri|acad[êe]mic))",
     "expectativa\\s+(?:salarial|de\\s+remunera)",
     "faixa\\s+salarial",
-    "valor\\s*[\\s/-]\\s*(?:da\\s+)?hora",
+    // Sem `\s*[\s/-]\s*`: os dois `\s*` voltavam atrás numa linha de espaços.
+    "valor(?:\\s*[/-]\\s*|\\s+)(?:da\\s+)?hora",
     "salary\\s*(?:floor|expectations?|requirements?|minimum)",
     // Palavra de remuneração como RÓTULO ("Salary: 2000 EUR"): vale sem
     // olhar o número, que pode parecer um ano.
@@ -160,51 +184,44 @@ function isPayTitle(block: string): boolean {
  * vir sem linha em branco, e aí o bloco é o CV inteiro: tirá-lo todo por
  * causa de uma linha de pretensão apagava o perfil (#344).
  *
- * Sai a linha que o detector reconhece — ou o par de linhas, para o rótulo
- * quebrado —, a linha de cima se ela começa o rótulo ou traz um valor, e a de
- * baixo se traz um valor. Sem valor no trecho nem acima, saem as de baixo até
- * a primeira que traga. O que sobra é relido como texto corrido: se ainda
- * parece piso (palavra e valor em linhas não vizinhas), devolve nulo e o
- * bloco inteiro sai, como antes.
+ * Sai a SEÇÃO do piso, com os títulos que `cvTextToMarkdown()` reconheceria:
+ * - começa no rótulo, quando ele é título ("PRETENSÃO SALARIAL"); senão,
+ *   logo depois do título anterior, porque o valor pode vir acima do rótulo;
+ * - termina antes do próximo nome de seção conhecido ("FORMAÇÃO",
+ *   "Experience"). Um título qualquer em caixa alta ("PJ MENSAL") não fecha
+ *   a seção: ele pode ser parte da pretensão.
+ *
+ * Sem título, a seção é o bloco — o comportamento de antes. E o bloco inteiro
+ * também sai quando a seção não traz valor (ele está em outro lugar) ou
+ * quando o que sobra, lido como texto corrido, ainda parece piso.
  */
-function narrowSalaryBlock(lines: string[]): { kept: string[]; valueExpected: boolean } | null {
+function narrowSalaryBlock(lines: string[]): string[] | null {
   const isHit = (text: string) => isSalaryBlock(text) || isPayTitle(text);
   const drop = lines.map(() => false);
-  let valueExpected = false;
+  let sectionStart = 0;
   for (let i = 0; i < lines.length; i++) {
+    const title = isHeading(lines[i]!.trim());
     let last = i;
     if (!isHit(lines[i]!)) {
       const next = lines[i + 1];
-      if (next === undefined || isHit(next) || !isHit(`${lines[i]}\n${next}`)) continue;
+      if (next === undefined || isHit(next) || !isHit(`${lines[i]}\n${next}`)) {
+        if (title) sectionStart = i + 1;
+        continue;
+      }
       last = i + 1;
     }
-    for (let j = i; j <= last; j++) drop[j] = true;
-    let valueFound = HAS_AMOUNT.test(lines.slice(i, last + 1).join("\n"));
-    const prev = lines[i - 1];
-    if (prev !== undefined) {
-      // "Expectativa\nsalarial: 30k": a última palavra de cima abre o rótulo.
-      const head = lines[i]!.trim().split(/\s+/)[0]!;
-      const tail = prev.trim().split(/\s+/).at(-1)!;
-      const opensLabel = isSalaryBlock(`${tail} ${head}`) && !isSalaryBlock(head);
-      const hasValue = HAS_AMOUNT.test(prev);
-      if (opensLabel || hasValue) drop[i - 1] = true;
-      valueFound ||= hasValue;
-    }
-    if (valueFound) {
-      if (last + 1 < lines.length && HAS_AMOUNT.test(lines[last + 1]!)) drop[++last] = true;
-    } else {
-      while (last + 1 < lines.length) {
-        drop[++last] = true;
-        if (HAS_AMOUNT.test(lines[last]!)) break;
-      }
-      // O valor prometido não veio neste bloco: pode estar no seguinte.
-      valueExpected = !HAS_AMOUNT.test(lines[last]!);
-    }
+    const start = title ? i : sectionStart;
+    while (last + 1 < lines.length && !isKnownHeading(lines[last + 1]!.trim())) last++;
+    const section = lines.slice(start, last + 1);
+    if (!HAS_AMOUNT.test(section.join("\n"))) return null;
+    for (let j = start; j <= last; j++) drop[j] = true;
+    // Valor logo acima de um rótulo que é título.
+    if (title && start > 0 && HAS_AMOUNT.test(lines[start - 1]!)) drop[start - 1] = true;
     i = last;
   }
   const kept = lines.filter((_, i) => !drop[i]);
   if (isSalaryBlock(kept.join("\n"))) return null;
-  return { kept, valueExpected };
+  return kept;
 }
 
 function escapeRegExp(value: string): string {
@@ -262,7 +279,7 @@ export function containsContact(text: string, known: KnownContact = {}): boolean
   const normalized = text.normalize("NFC").replace(/[   ]/g, " ");
   const lower = normalized.toLowerCase();
   if (knownEmails(known).some((email) => lower.includes(email.toLowerCase()))) return true;
-  if (normalized.replace(EMAIL, REDACTED) !== normalized) return true;
+  if (redactEmails(normalized) !== normalized) return true;
   if (redactInternationalPhones(normalized) !== normalized) return true;
   if (normalized.replace(LOCAL_PHONE, REDACTED) !== normalized) return true;
   return /\d{10,}/.test(normalized);
@@ -298,10 +315,7 @@ export function publicCvText(content: string, known: KnownContact = {}): string 
     if (isSalaryBlock(text) || isPayTitle(text) || (heading !== null && PAY_HEADING.test(text))) {
       const narrowed = heading === null && block.length > 1 ? narrowSalaryBlock(block) : null;
       if (heading) skippingSection = heading[1]!.length;
-      else if (narrowed) {
-        out.push(...narrowed.kept);
-        valueExpected = narrowed.valueExpected;
-      }
+      else if (narrowed) out.push(...narrowed);
       // Um ano no rótulo ("Pretensão salarial (2026):") não é o valor.
       else valueExpected = !HAS_AMOUNT.test(text);
       continue;
@@ -313,7 +327,7 @@ export function publicCvText(content: string, known: KnownContact = {}): string 
   for (const email of knownEmails(known)) {
     text = text.replace(new RegExp(escapeRegExp(email), "giu"), REDACTED);
   }
-  text = text.replace(EMAIL, REDACTED);
+  text = redactEmails(text);
   text = redactInternationalPhones(text);
   return text.replace(LOCAL_PHONE, REDACTED);
 }

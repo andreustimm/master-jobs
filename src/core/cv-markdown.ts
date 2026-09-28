@@ -62,9 +62,15 @@ const MIN_HEADING_LETTERS = 4;
 const KNOWN_HEADING =
   /^(?:resumo(?: profissional)?|sum[áa]rio|summary|professional summary|profile|perfil(?: profissional)?|about(?: me)?|sobre(?: mim)?|objective|objetivo|experi[êe]ncias?(?: profissional| profissionais)?|(?:professional |work )?experience|employment(?: history)?|career(?: history)?|hist[óo]rico profissional|forma[çc][ãa]o(?: acad[êe]mica)?|educa[çc][ãa]o|education|academic background|escolaridade|skills|(?:core |technical )?(?:skills|expertise|competencies)|compet[êe]ncias(?: t[ée]cnicas)?|habilidades|certifica(?:tions|[çc][õo]es)|languages|idiomas|projects|projetos|publications|publica[çc][õo]es|awards|pr[êe]mios)$/iu;
 
-function isHeading(line: string): boolean {
+/** Linha (já aparada) com nome de seção reconhecido: "Experiência", "FORMAÇÃO:". */
+export function isKnownHeading(line: string): boolean {
+  return line.length <= MAX_HEADING && KNOWN_HEADING.test(line.replace(/:$/, ""));
+}
+
+/** Linha (já aparada) que `cvTextToMarkdown()` transforma em título. */
+export function isHeading(line: string): boolean {
   if (line.length > MAX_HEADING) return false;
-  if (KNOWN_HEADING.test(line.replace(/:$/, ""))) return true;
+  if (isKnownHeading(line)) return true;
   if (!CAPS_HEADING.test(line)) return false;
   return (line.match(/\p{L}/gu)?.length ?? 0) >= MIN_HEADING_LETTERS;
 }

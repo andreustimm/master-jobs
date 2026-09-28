@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { publicCvText, REDACTED } from "../src/core/public-cv.ts";
+import { publicCvMarkdown, publicCvText, REDACTED } from "../src/core/public-cv.ts";
 
 /**
  * A versão publicável do CV, como função pura. O teste de `publicProfile`
@@ -113,6 +113,11 @@ describe("publicCvText", () => {
     expect(publicCvText("fale com a.b+c@exemplo.com.br hoje")).toBe(`fale com ${REDACTED} hoje`);
     expect(publicCvText("contato: dono@intranet", { email: "dono@intranet" })).toBe(`contato: ${REDACTED}`);
     expect(publicCvText("DONO@INTRANET", { email: "dono@intranet" })).toBe(REDACTED);
+    // Endereço colado ao fim do anterior também sai.
+    for (const sep of ["-", "_", "+", "1", "."]) {
+      expect(publicCvText(`ana@empresa.com${sep}bia@empresa.org`), sep).not.toContain("bia@");
+    }
+    expect(publicCvText("ana@empresa.com-bia@empresa.org")).toBe(`${REDACTED}${REDACTED}`);
   });
 
   it("troca telefone com código de país ou DDD entre parênteses", () => {
@@ -170,26 +175,41 @@ describe("publicCvText", () => {
     expect(out).toContain("Ciência da Computação");
   });
 
-  it("no bloco longo, o valor sai antes, depois ou linhas abaixo do rótulo", () => {
-    for (const [piso, value] of [
-      ["Pretensão salarial: R$ 30.000", "30.000"],
-      ["R$ 30.000 mensais\nPretensão salarial", "30.000"],
-      ["Expectativa\nsalarial: 30k", "30k"],
-      ["Salary\nexpectation: 150k", "150k"],
-      ["| Pretensão salarial | Disponibilidade |\n|---|---|\n| R$ 30.000 | Imediata |", "30.000"],
-      ["Salário\n-------\nR$ 30.000", "30.000"],
-      ["Salary expectations (12 months):\n150k USD", "150k"],
-      ["Pretensão salarial (2026):\nR$ 30.000 mensais", "30.000"],
-    ] as const) {
-      const out = publicCvText(`Topo\nAntes\n${piso}\nDepois`);
-      expect(out, piso).not.toContain(value);
-      expect(out, piso).toContain("Antes");
-      expect(out, piso).toContain("Depois");
+  it("no bloco longo, sai a seção do piso até o próximo nome de seção conhecido", () => {
+    // Cada trecho entre EXPERIÊNCIA e FORMAÇÃO; nenhum valor pode sobrar, e as
+    // outras seções ficam.
+    for (const piso of [
+      "Pretensão salarial: R$ 30.000",
+      "R$ 30.000 mensais\nPretensão salarial",
+      "R$ 30.000\nmensais\nPretensão salarial",
+      "Expectativa\nsalarial: 30k",
+      "Salary\nexpectation: 150k",
+      "Pretensão salarial:\nCLT: R$ 30.000\nPJ: R$ 40.000",
+      "PRETENSÃO SALARIAL\nCLT\nR$ 30.000\nPJ\nR$ 40.000",
+      "PRETENSÃO SALARIAL\nCLT: R$ 30.000\nPJ MENSAL\nR$ 40.000",
+      "| Pretensão salarial | Disponibilidade |\n|---|---|\n| R$ 30.000 | Imediata |",
+      "| Cargo | Pretensão salarial |\n|---|---|\n| Staff | R$ 30.000 |\n| Senior | R$ 40.000 |",
+      "Salário\n-------\nCLT R$ 30.000\nPJ R$ 40.000",
+      "Salary expectations (12 months):\n150k USD",
+      "Pretensão salarial (2026):\nR$ 30.000 mensais",
+      "Pretensão salarial (CLT, 40h/semana):\nA combinar\nR$ 30.000",
+    ]) {
+      const cv = `Nome\nEXPERIÊNCIA\n2019-2021 Staff na Acme\n${piso}\nFORMAÇÃO\nCiência da Computação`;
+      for (const out of [publicCvText(cv), publicCvMarkdown(cv)]) {
+        expect(out, piso).not.toMatch(/30\.000|40\.000|30k|150k/);
+        expect(out, piso).toContain("Nome");
+        expect(out, piso).toContain("Ciência da Computação");
+      }
     }
   });
 
-  it("rótulo no fim do bloco longo leva o parágrafo seguinte, como no bloco curto", () => {
-    expect(publicCvText("Topo\nPretensão salarial:\n\nR$ 30.000 mensais\n\nFim")).toBe("Topo\n\n\nFim");
+  it("no bloco longo sem nome de seção depois do piso, sai tudo até o fim do bloco", () => {
+    const out = publicCvText("Topo\nPretensão salarial:\nCLT: R$ 30.000\nPJ: R$ 40.000\nDepois\n\nFim");
+    expect(out).toBe("\nFim");
+  });
+
+  it("rótulo sem valor no bloco longo leva o bloco e o parágrafo seguinte, como no bloco curto", () => {
+    expect(publicCvText("Topo\nPretensão salarial:\n\nR$ 30.000 mensais\n\nFim")).toBe("\n\nFim");
   });
 
   it("o que sobra do bloco longo ainda com cara de piso sai inteiro", () => {
@@ -199,14 +219,20 @@ describe("publicCvText", () => {
   });
 
   it("custo linear na entrada que a pessoa controla", () => {
-    // `/p/[slug]` responde sem sessão e filtra o CV duas vezes por visita.
+    // `/p/[slug]` responde sem sessão e filtra o CV duas vezes por visita. Com
+    // uma expressão quadrática, cada entrada destas leva dezenas de segundos.
     const started = performance.now();
-    publicCvText("a".repeat(200_000));
-    publicCvText(`a@${"b".repeat(200_000)}`);
-    publicCvText("a.".repeat(100_000));
-    publicCvText("+1 ".repeat(100_000));
-    publicCvText(`+1${" ".repeat(200_000)}`);
-    publicCvText("Pretensão salarial:\nlinha\n".repeat(20_000));
+    publicCvMarkdown("a".repeat(200_000));
+    publicCvMarkdown(`a@${"b".repeat(200_000)}`);
+    publicCvMarkdown("a.".repeat(100_000));
+    publicCvMarkdown("a@x.co-".repeat(50_000));
+    publicCvMarkdown("+1 ".repeat(100_000));
+    publicCvMarkdown(`+1${" ".repeat(200_000)}`);
+    publicCvMarkdown(`valor${" ".repeat(200_000)}`);
+    publicCvMarkdown(`(11)${" ".repeat(200_000)}`);
+    publicCvMarkdown(`salário ${"1 ".repeat(100_000)}`);
+    publicCvMarkdown("Pretensão salarial:\nlinha\n".repeat(20_000));
+    publicCvMarkdown("EXPERIÊNCIA\nPRETENSÃO SALARIAL\nR$ 1\n".repeat(20_000));
     expect(performance.now() - started).toBeLessThan(2_000);
   });
 

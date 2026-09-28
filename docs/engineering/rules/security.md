@@ -254,8 +254,12 @@ serviço de perfil público; o status HTTP real é conferido no E2E.
 
 **Obrigação.** Publicar o texto do currículo exige um **segundo**
 consentimento, separado de tornar o perfil público. Mesmo com ele, o texto
-passa por `publicCvText()`: e-mail, telefone e o bloco do piso saem. O
-consentimento não cria exceção tácita a G21.
+passa por `publicCvText()`: e-mail, telefone e o trecho do piso saem — o
+bloco entre linhas em branco ou, num bloco com títulos de seção (CV de PDF),
+a seção do piso até o próximo nome de seção conhecido; na dúvida (seção sem
+valor, resto que ainda parece piso), o bloco inteiro. O consentimento não
+cria exceção tácita a G21. A rota é anônima: as expressões do filtro têm
+custo linear, travado em teste.
 
 **Limite declarado.** Detecção por padrão, com limite escrito em
 `src/core/public-cv.ts` e travado em teste: valor sem rótulo e telefone sem
