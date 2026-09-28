@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   applicationTimeline,
+  CLOSING,
   getJobDetail,
   lastStatusChangeFromStatus,
   transitionGroups,
@@ -62,10 +63,15 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   const { job, score, application, source } = detail;
   // Reabrir um encerramento (Rejeitada/Retirada/Arquivada) só volta até onde a
   // candidatura chegou de verdade antes de fechar (#346); sem isso o seletor
-  // ofereceria estágios que ela nunca alcançou. Uma leitura indexada a mais,
-  // fora do `Suspense` porque o formulário de mover precisa da lista certa já
-  // na primeira renderização, não depois.
-  const reopenFrom = application ? await lastStatusChangeFromStatus(application.id) : null;
+  // ofereceria estágios que ela nunca alcançou. Só vale a pena ler o histórico
+  // quando o status atual É um encerramento — nos outros casos `reopenFrom`
+  // nem é consultado pelo domínio, e a ida ao banco seria desperdiçada no
+  // caminho crítico da renderização. Fora do `Suspense` porque o formulário de
+  // mover precisa da lista certa já na primeira renderização, não depois.
+  const reopenFrom =
+    application && CLOSING.includes(application.status)
+      ? await lastStatusChangeFromStatus(application.id, application.status)
+      : null;
   const availability = await jobAvailability(job.id);
   // A seção só existe com mais de uma trilha que pontua. Decidir isso antes da
   // fronteira, numa leitura barata, evita reservar espaço e anunciar espera

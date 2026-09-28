@@ -8,6 +8,7 @@
 export {
   APPLICATION_STATUSES,
   allowedTransitions,
+  CLOSING,
   FUNNEL_STATUSES,
   IllegalApplicationTransitionError,
   mailMayMove,

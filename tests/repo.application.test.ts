@@ -519,7 +519,7 @@ describe("reabertura de encerramento fica limitada a onde a candidatura chegou (
     expect(row!.status).toBe("archived");
   });
 
-  it("lastStatusChangeFromStatus lê o fromStatus do evento mais recente", async () => {
+  it("lastStatusChangeFromStatus lê de onde a candidatura veio ao fechar, não o evento mais recente qualquer", async () => {
     const candidateId = await seedCandidate("one", true);
     const jobId = await seedJob();
     await setApplicationStatus(candidateId, jobId, "shortlisted");
@@ -527,7 +527,57 @@ describe("reabertura de encerramento fica limitada a onde a candidatura chegou (
     await setApplicationStatus(candidateId, jobId, "archived");
 
     const [row] = await db.select().from(application).where(eq(application.jobId, jobId));
-    await expect(lastStatusChangeFromStatus(row!.id)).resolves.toBe("preparing");
+    await expect(lastStatusChangeFromStatus(row!.id, "archived")).resolves.toBe("preparing");
+  });
+
+  it("MAJOR (revisão L1, 2ª rodada, #346): reabrir → desfazer → reabrir até o estágio original continua legal", async () => {
+    // Repro exato da revisão: null→interviewing, interviewing→rejected,
+    // reabre para screening, desfaz o reabrir (evento compensatório
+    // {from: screening, to: rejected, revertsEventId}). O evento mais recente
+    // por si só diria reopenFrom="screening" (errado); `undoableEvent` pula o
+    // desfazer e o reabrir desfeito, e chega ao fechamento real: "interviewing".
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    await setApplicationStatus(candidateId, jobId, "interviewing");
+    await setApplicationStatus(candidateId, jobId, "rejected");
+    const reopened = await setApplicationStatus(candidateId, jobId, "screening");
+
+    await undoApplicationStatus(candidateId, jobId, reopened!);
+
+    const [afterUndo] = await db.select().from(application).where(eq(application.jobId, jobId));
+    expect(afterUndo).toMatchObject({ status: "rejected", appliedAt: null });
+    await expect(lastStatusChangeFromStatus(afterUndo!.id, "rejected")).resolves.toBe("interviewing");
+
+    // Reabrir de volta ao estágio real ("interviewing") continua legal.
+    await setApplicationStatus(candidateId, jobId, "interviewing");
+    const [reopenedAgain] = await db.select().from(application).where(eq(application.jobId, jobId));
+    expect(reopenedAgain).toMatchObject({ status: "interviewing", appliedAt: null });
+  });
+
+  it("MAJOR (revisão L1, 2ª rodada, #346): trilha com buraco devolve null, não um limite qualquer", async () => {
+    // Linha legada: o único evento registrado não bate com o status atual —
+    // dado escrito fora do domínio, ou importação. `undoableEvent` recusa
+    // adivinhar e devolve `null`; a reabertura fica livre, não presa a um
+    // valor arbitrário que a trilha não sustenta.
+    const candidateId = await seedCandidate("one", true);
+    const jobId = await seedJob();
+    const stamp = "2025-01-01T00:00:00.000Z";
+    const [app] = await db
+      .insert(application)
+      .values({ candidateId, jobId, status: "archived", appliedAt: null, updatedAt: stamp })
+      .returning({ id: application.id });
+    await db.insert(applicationEvent).values({
+      applicationId: app!.id,
+      at: stamp,
+      kind: "status_change",
+      // fromStatus não-nulo de propósito: uma versão ingênua que só lê o
+      // evento mais recente devolveria "shortlisted" aqui — um limite
+      // fabricado, não um "sem limite conhecido" honesto.
+      fromStatus: "shortlisted",
+      toStatus: "preparing", // não bate com o status atual ("archived"): buraco.
+    });
+
+    await expect(lastStatusChangeFromStatus(app!.id, "archived")).resolves.toBeNull();
   });
 });
 

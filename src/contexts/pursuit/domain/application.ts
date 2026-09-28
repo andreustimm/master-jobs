@@ -81,7 +81,8 @@ const PROGRESS: readonly ApplicationStatus[] = [
   "offer",
 ];
 
-const CLOSING: readonly ApplicationStatus[] = ["rejected", "withdrawn", "archived"];
+/** Exportado para quem decide sem chamar o domínio se vale buscar `reopenFrom` (#346). */
+export const CLOSING: readonly ApplicationStatus[] = ["rejected", "withdrawn", "archived"];
 
 /** Rejeição e desistência só existem depois de a candidatura sair. */
 const FIRST_SENT = PROGRESS.indexOf("applied");

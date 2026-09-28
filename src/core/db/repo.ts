@@ -26,6 +26,7 @@ import {
   IllegalApplicationTransitionError,
   OUT_OF_FUNNEL,
   transitionApplication,
+  undoableEvent,
   undoTransition,
   type ApplicationState,
   type RecordedStatusChange,
@@ -1196,7 +1197,7 @@ export async function setApplicationStatusInTransaction(
   // quando `previous.status` fecha, porque `CLOSING` é privado do domínio e
   // duplicar a lista aqui envelheceria sozinha. Uma linha indexada a mais por
   // transição, num caminho de escrita de baixo volume.
-  const reopenFrom = previous ? await lastStatusChangeFromStatus(previous.id, tx) : null;
+  const reopenFrom = previous ? await lastStatusChangeFromStatus(previous.id, previous.status, tx) : null;
   const transition = transitionApplication(
     previous ? { status: previous.status, appliedAt: previous.appliedAt } : null,
     status,
@@ -1300,27 +1301,32 @@ async function commitOverSnapshot(
 }
 
 /**
- * O `fromStatus` do `status_change` mais recente da candidatura, ou `null`
- * sem histórico. Quando o status atual é um encerramento, é o estágio de
- * onde ela veio ao fechar — o limite de até onde reabrir pode voltar (#346).
+ * O `fromStatus` de onde a candidatura veio ao chegar no encerramento atual —
+ * o limite de até onde reabrir pode voltar (#346) —, ou `null` sem histórico
+ * confiável.
+ *
+ * NÃO é "o `fromStatus` do evento mais recente": o mais recente pode ser um
+ * desfazer (`revertsEventId` preenchido), cujo `fromStatus` é só o status no
+ * instante do desfazer, não um encerramento de verdade. `undoableEvent` já
+ * pula desfazeres e eventos revertidos, e devolve `null` — não um limite
+ * qualquer — quando a trilha tem um buraco (`toStatus` do candidato não bate
+ * com o status atual): revisão L1 da PR #354 achou o Major de uma versão
+ * anterior que lia direto o último evento.
+ *
  * Aceita `tx` (dentro de uma transação) ou a conexão padrão, para servir tanto
  * a escrita quanto a leitura sem duplicar a consulta.
  */
 export async function lastStatusChangeFromStatus(
   applicationId: number,
+  currentStatus: ApplicationStatus,
   db: DB | DbTransaction = getDb(),
 ): Promise<ApplicationStatus | null> {
-  const [row] = await db
-    .select({ fromStatus: applicationEvent.fromStatus })
-    .from(applicationEvent)
-    .where(and(eq(applicationEvent.applicationId, applicationId), eq(applicationEvent.kind, "status_change")))
-    .orderBy(desc(applicationEvent.at), desc(applicationEvent.id))
-    .limit(1);
-  return row?.fromStatus ?? null;
+  const events = await statusChanges(db, applicationId);
+  return undoableEvent({ status: currentStatus, appliedAt: null }, events)?.fromStatus ?? null;
 }
 
 /** Os `status_change` de uma candidatura, do mais recente para o mais antigo. */
-async function statusChanges(tx: DbTransaction, applicationId: number): Promise<RecordedStatusChange[]> {
+async function statusChanges(tx: DB | DbTransaction, applicationId: number): Promise<RecordedStatusChange[]> {
   const rows = await tx
     .select({
       id: applicationEvent.id,

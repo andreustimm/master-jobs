@@ -255,12 +255,15 @@ Durabilidade e autoridade de escrita opostas às de Sourcing.
 > DELETE. Detalhe em `docs/data-model.md`.
 >
 > **Emenda (2026-09-28, #346):** reabrir um encerramento fica limitado a onde a
-> candidatura chegou de verdade antes de fechar — `reopenFrom`, o `fromStatus`
-> do evento de encerramento, não a presença de `appliedAt` (corrigido na
-> revisão L1 da PR #354: o domínio cria de propósito registro direto em
-> estágio avançado com `appliedAt` nulo, e usar o carimbo recusaria reabrir de
-> volta para lá). Sem histórico conhecido, a reabertura continua livre, como
-> antes desta emenda. Desfazer até `untracked` sempre limpa `appliedAt`, mesmo
+> candidatura chegou de verdade antes de fechar — `reopenFrom`, não a presença
+> de `appliedAt` (corrigido na 1ª rodada da revisão L1 da PR #354: o domínio
+> cria de propósito registro direto em estágio avançado com `appliedAt` nulo,
+> e usar o carimbo recusaria reabrir de volta para lá). `reopenFrom` vem de
+> `lastStatusChangeFromStatus()` via `undoableEvent()` — não do `fromStatus`
+> do evento mais recente (2ª rodada: se o mais recente for um desfazer, aquele
+> `fromStatus` é só o status no instante do desfazer). Sem histórico
+> confiável, a reabertura continua livre, como antes desta emenda. Desfazer
+> até `untracked` sempre limpa `appliedAt`, mesmo
 > em linha legada, e o filtro `hideApplied` também aceita `status='untracked'`
 > direto na consulta. O desfazer lê a linha com `FOR UPDATE` antes de decidir,
 > e o índice único de `revertsEventId` (`23505`) vira o conflito conhecido,

@@ -620,12 +620,17 @@ devem aplicar o escopo de autorização antes de agregar.
 é idempotente (não cria outro evento). Avançar é um passo de cada vez; voltar
 vai para qualquer estágio anterior. `rejected`, `withdrawn` e `archived`
 reabrem até onde a candidatura chegou de verdade antes de fechar (#346):
-`reopenFrom` — o `from_status` do evento que fechou, lido por
-`lastStatusChangeFromStatus()` — é o limite; reabrir além dele é ilegal, não
-"voltar". Sem esse histórico (`reopenFrom` nulo — sondagem antiga, ou chamador
-que não o forneceu) a reabertura continua livre para qualquer estágio de
-progresso, como antes de #346: restringir sem saber a história seria
-arbitrário. A decisão **não** usa `applied_at`: o domínio cria de propósito um
+`reopenFrom` — de onde ela veio ao chegar no fechamento atual, lido por
+`lastStatusChangeFromStatus()` via `undoableEvent()` (a mesma função do
+desfazer, que já pula desfazeres e eventos revertidos) — é o limite; reabrir
+além dele é ilegal, não "voltar". Ler direto o `from_status` do evento mais
+recente é o bug que a 2ª rodada da revisão da PR #354 achou: se o mais recente
+for um desfazer, o `from_status` dele é só o status no instante do desfazer,
+não um fechamento de verdade. Sem histórico confiável (`reopenFrom` nulo —
+trilha com buraco, sondagem antiga, ou chamador que não o forneceu) a
+reabertura continua livre para qualquer estágio de progresso, como antes de
+#346: restringir sem saber a história seria arbitrário. A decisão **não** usa
+`applied_at`: o domínio cria de propósito um
 registro direto em estágio avançado com `applied_at` nulo (primeira
 observação), e usar o carimbo para decidir recusaria reabrir de volta para
 onde a candidatura realmente esteve (Major da revisão da PR #354). Arquivar
