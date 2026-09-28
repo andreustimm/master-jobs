@@ -100,6 +100,7 @@ describe("o que NUNCA sai", () => {
     // que é exatamente quando se quer ser avisado.
     expect(chaves).toEqual([
       "cv",
+      "facts",
       "githubUrl",
       "headline",
       "linkedinUrl",
@@ -107,6 +108,16 @@ describe("o que NUNCA sai", () => {
       "name",
       "skills",
       "slug",
+    ]);
+    // #327: `facts` também é lista de permissão, com as sete chaves exatas.
+    expect(Object.keys(profile!.facts).sort()).toEqual([
+      "area",
+      "availability",
+      "experienceLevel",
+      "languages",
+      "openToRelocation",
+      "startTimeframe",
+      "workModel",
     ]);
   });
 
@@ -168,6 +179,131 @@ describe("o que NUNCA sai", () => {
     const skills = (await publicProfile("andreus"))?.skills ?? [];
     expect(skills.map((s) => s.name)).toEqual(["Rust"]);
     expect(JSON.stringify(skills)).not.toContain("@zorbit");
+  });
+});
+
+describe("#327 fatos opt-in", () => {
+  // Os sete valores gravados. Os opt-ins ficam fora: cada teste decide.
+  const VALUES = {
+    workModel: ["remote", "b2b"],
+    experienceLevel: "principal",
+    availability: "open",
+    startTimeframe: "one-month",
+    openToRelocation: true,
+    area: "Arquitetura de software e IA",
+    languages: "Português (nativo), Inglês (fluente)",
+  };
+  const ALL_ON = {
+    publicWorkModel: true,
+    publicExperienceLevel: true,
+    publicAvailability: true,
+    publicStartTimeframe: true,
+    publicRelocation: true,
+    publicArea: true,
+    publicLanguages: true,
+  };
+
+  it("T11 candidato novo nasce com os sete opt-ins desligados e os valores nulos", async () => {
+    const [row] = await db.select().from(candidate).where(eq(candidate.id, candidateId));
+    expect(row).toMatchObject({
+      workModel: null,
+      experienceLevel: null,
+      availability: null,
+      startTimeframe: null,
+      openToRelocation: null,
+      area: null,
+      languages: null,
+      publicWorkModel: false,
+      publicExperienceLevel: false,
+      publicAvailability: false,
+      publicStartTimeframe: false,
+      publicRelocation: false,
+      publicArea: false,
+      publicLanguages: false,
+    });
+  });
+
+  it("T13 valores gravados com opt-in desligado não saem, nem serializados", async () => {
+    await db.update(candidate).set(VALUES).where(eq(candidate.id, candidateId));
+    await setVisibility(candidateId, "public");
+
+    const profile = await publicProfile("andreus");
+    expect(profile?.facts).toEqual({
+      workModel: [],
+      experienceLevel: null,
+      availability: null,
+      startTimeframe: null,
+      openToRelocation: null,
+      area: null,
+      languages: null,
+    });
+    const serializado = JSON.stringify(profile);
+    for (const sentinel of ['"b2b"', '"principal"', '"one-month"', "Arquitetura de software", "Português (nativo)"]) {
+      expect(serializado, sentinel).not.toContain(sentinel);
+    }
+  });
+
+  it("T14 com o opt-in ligado, os sete saem", async () => {
+    await db.update(candidate).set({ ...VALUES, ...ALL_ON }).where(eq(candidate.id, candidateId));
+    await setVisibility(candidateId, "public");
+
+    expect((await publicProfile("andreus"))?.facts).toEqual(VALUES);
+  });
+
+  it("T15 pretensão salarial nunca: nenhuma chave a nomeia, e texto de piso gravado direto não sai", async () => {
+    // Gravado por fora da action (que recusaria) e com o opt-in LIGADO: a
+    // saída é quem garante, venha o dado de onde vier.
+    await db
+      .update(candidate)
+      .set({
+        ...VALUES,
+        ...ALL_ON,
+        area: "Pretensão salarial: USD 15,000/month",
+        languages: "Inglês · salário: R$ 30.000",
+      })
+      .where(eq(candidate.id, candidateId));
+    await setVisibility(candidateId, "public");
+    await setPublicCv(candidateId, true);
+
+    const profile = await publicProfile("andreus");
+    expect(profile?.facts.area).toBeNull();
+    expect(profile?.facts.languages).toBeNull();
+
+    const keys: string[] = [];
+    const walk = (value: unknown) => {
+      if (value === null || typeof value !== "object") return;
+      for (const [key, child] of Object.entries(value)) {
+        keys.push(key);
+        walk(child);
+      }
+    };
+    walk(profile);
+    expect(keys.filter((key) => /salar|floor|piso|pretens|compensation|remunera|pay|rate/i.test(key))).toEqual([]);
+
+    const serializado = JSON.stringify(profile);
+    for (const sentinel of ["15,000", "30.000", "180000", "Pretensão", "salário"]) {
+      expect(serializado, sentinel).not.toContain(sentinel);
+    }
+  });
+
+  it("T15 contato no texto livre, inclusive o e-mail cadastrado, esvazia só aquele fato", async () => {
+    await db
+      .update(candidate)
+      .set({ ...VALUES, ...ALL_ON, area: "IA — andreus@zorbit.com.br" })
+      .where(eq(candidate.id, candidateId));
+    await setVisibility(candidateId, "public");
+
+    const facts = (await publicProfile("andreus"))?.facts;
+    expect(facts?.area).toBeNull();
+    expect(facts?.languages).toBe(VALUES.languages);
+    expect(JSON.stringify(facts)).not.toContain("@zorbit");
+  });
+
+  it("T16 perfil não público com todos os opt-ins ligados continua null (404)", async () => {
+    await db.update(candidate).set({ ...VALUES, ...ALL_ON }).where(eq(candidate.id, candidateId));
+    expect(await publicProfile("andreus")).toBeNull();
+    await setVisibility(candidateId, "recruiters");
+    expect(await publicProfile("andreus")).toBeNull();
   });
 });
 

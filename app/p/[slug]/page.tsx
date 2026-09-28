@@ -9,9 +9,17 @@ import { cvSections, type CvSectionKind } from "../../../src/core/cv-markdown.ts
 import {
   groupPublicSkills,
   publicProfile,
+  type PublicProfile,
   type PublicSkill,
   type PublicSkillGroup,
 } from "../../../src/core/candidate-public.ts";
+import {
+  AVAILABILITY_LABEL,
+  EXPERIENCE_LEVEL_LABEL,
+  FACT_LABEL,
+  START_TIMEFRAME_LABEL,
+  WORK_MODEL_LABEL,
+} from "../../candidate/public-facts-labels";
 import { isSkillCategory, type SkillCategory } from "../../../src/contexts/skills/index.ts";
 import type { Translator, TranslationKey } from "../../../src/core/i18n/index.ts";
 import { MarkdownPreview } from "../../candidate/markdown-preview";
@@ -39,6 +47,10 @@ import { CopyProfileLinkButton } from "./copy-link-button";
  * devolve o que os filtros tiraram, porque `cvSections()` só lê o que sobrou.
  * Card sem a seção correspondente simplesmente não aparece — Jobicy mostra
  * "No data available" nesse caso; aqui a ausência de card é a informação.
+ *
+ * **Fatos opt-in (#327, fase 3)** chegam em `profile.facts` já filtrados: só
+ * o que a pessoa marcou para mostrar. A página só escolhe o lugar — faixa do
+ * topo ou "Em resumo" na lateral (`factItems`).
  */
 
 export const dynamic = "force-dynamic";
@@ -94,6 +106,7 @@ export default async function PublicProfilePage({ params }: Params) {
   const sections = profile.cv ? cvSections(profile.cv) : [];
   const sectionOf = (kind: CvSectionKind) => sections.find((section) => section.kind === kind);
   const skillGroups = groupPublicSkills(profile.skills);
+  const { strip, glance } = factItems(profile, t);
 
   return (
     <main className="mx-auto w-full max-w-[74rem] pt-12 pb-16" data-testid="route-public-profile">
@@ -114,17 +127,14 @@ export default async function PublicProfilePage({ params }: Params) {
           </p>
         )}
 
-        {/* Faixa de fatos: só localização por ora — fase 3 acrescenta modelo
-            de trabalho, nível e disponibilidade na mesma faixa (#315). */}
-        {profile.location && (
-          <div className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-y py-3">
-            <div>
-              <p className="type-micro text-muted-foreground">{t("publicProfile.locationLabel")}</p>
-              <p data-user-content className="type-body-sm">
-                {profile.location}
-              </p>
-            </div>
-          </div>
+        {/* Faixa de fatos: localização e, com opt-in (#327), modelo de
+            trabalho, nível e disponibilidade. Some inteira sem nenhum. */}
+        {strip.length > 0 && (
+          <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-y py-3" data-testid="public-profile-facts">
+            {strip.map((fact) => (
+              <FactItem key={fact.key} fact={fact} />
+            ))}
+          </dl>
         )}
 
         {/* CTA acima da dobra em 375px: link real (regra 1), nunca envio nem
@@ -205,18 +215,120 @@ export default async function PublicProfilePage({ params }: Params) {
           )}
         </div>
 
-        {skillGroups.length > 0 && (
-          <aside className="min-w-0" data-testid="public-profile-skills">
-            <h2 className="type-display-xs mb-3">{t("publicProfile.skillsTitle")}</h2>
-            <div className="flex flex-col gap-4">
-              {skillGroups.map((group) => (
-                <SkillGroup key={group.category} group={group} t={t} />
-              ))}
-            </div>
+        {(glance.length > 0 || skillGroups.length > 0) && (
+          <aside className="flex min-w-0 flex-col gap-6" data-testid="public-profile-aside">
+            {/* "Em resumo" (#327): só os fatos com opt-in; sem nenhum, o
+                cartão não existe — nada de "não informado" para o visitante. */}
+            {glance.length > 0 && (
+              <Card data-testid="public-profile-glance">
+                <CardContent className="pt-0">
+                  <h2 className="type-display-xs mb-3">{t("publicFacts.glance")}</h2>
+                  <dl className="flex flex-col gap-3">
+                    {glance.map((fact) => (
+                      <FactItem key={fact.key} fact={fact} />
+                    ))}
+                  </dl>
+                </CardContent>
+              </Card>
+            )}
+            {skillGroups.length > 0 && (
+              <section className="min-w-0" data-testid="public-profile-skills">
+                <h2 className="type-display-xs mb-3">{t("publicProfile.skillsTitle")}</h2>
+                <div className="flex flex-col gap-4">
+                  {skillGroups.map((group) => (
+                    <SkillGroup key={group.category} group={group} t={t} />
+                  ))}
+                </div>
+              </section>
+            )}
           </aside>
         )}
       </div>
     </main>
+  );
+}
+
+/**
+ * Um fato já pronto para a tela. `userContent` marca o texto que a pessoa
+ * ESCREVEU (localização, área, idiomas): fica no idioma dela, com
+ * `data-user-content` (G30). Valor controlado vem traduzido do dicionário.
+ */
+type FactView = { key: string; label: string; value: string; userContent: boolean };
+
+/**
+ * Separa os fatos entre a faixa do topo e o "Em resumo" da lateral.
+ *
+ * Só entra o que `publicProfile()` devolveu preenchido — e ele só devolve o
+ * que tem opt-in (`publicFactsFrom()`). Esta função não decide visibilidade;
+ * decide LUGAR. Faixa: o que o recrutador pergunta primeiro (onde, como,
+ * que nível, está procurando?). Resumo: o resto.
+ */
+function factItems(profile: PublicProfile, t: Translator["t"]): { strip: FactView[]; glance: FactView[] } {
+  const { facts } = profile;
+  const strip: FactView[] = [];
+  const glance: FactView[] = [];
+
+  if (profile.location) {
+    strip.push({ key: "location", label: t("publicProfile.locationLabel"), value: profile.location, userContent: true });
+  }
+  if (facts.workModel.length > 0) {
+    strip.push({
+      key: "workModel",
+      label: t(FACT_LABEL.workModel),
+      value: facts.workModel.map((model) => t(WORK_MODEL_LABEL[model])).join(" · "),
+      userContent: false,
+    });
+  }
+  if (facts.experienceLevel) {
+    strip.push({
+      key: "experienceLevel",
+      label: t(FACT_LABEL.experienceLevel),
+      value: t(EXPERIENCE_LEVEL_LABEL[facts.experienceLevel]),
+      userContent: false,
+    });
+  }
+  if (facts.availability) {
+    strip.push({
+      key: "availability",
+      label: t(FACT_LABEL.availability),
+      value: t(AVAILABILITY_LABEL[facts.availability]),
+      userContent: false,
+    });
+  }
+
+  if (facts.area) glance.push({ key: "area", label: t(FACT_LABEL.area), value: facts.area, userContent: true });
+  if (facts.languages) {
+    glance.push({ key: "languages", label: t(FACT_LABEL.languages), value: facts.languages, userContent: true });
+  }
+  if (facts.startTimeframe) {
+    glance.push({
+      key: "startTimeframe",
+      label: t(FACT_LABEL.startTimeframe),
+      value: t(START_TIMEFRAME_LABEL[facts.startTimeframe]),
+      userContent: false,
+    });
+  }
+  if (facts.openToRelocation !== null) {
+    glance.push({
+      key: "openToRelocation",
+      label: t(FACT_LABEL.openToRelocation),
+      value: t(facts.openToRelocation ? "publicFacts.yes" : "publicFacts.no"),
+      userContent: false,
+    });
+  }
+
+  return { strip, glance };
+}
+
+/** Rótulo pequeno em cima, valor embaixo — o mesmo desenho da faixa de #326. */
+function FactItem({ fact }: { fact: FactView }) {
+  return (
+    <div className="min-w-0" data-testid={`public-fact-${fact.key}`}>
+      <dt className="type-micro text-muted-foreground">{fact.label}</dt>
+      <dd className="type-body-sm break-words" {...(fact.userContent ? { "data-user-content": true } : {})}>
+        {fact.value}
+      </dd>
+    </div>
   );
 }
 

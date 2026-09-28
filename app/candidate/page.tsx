@@ -18,6 +18,7 @@ import { importPdfAction, saveCvAction, setVisibilityAction } from "./actions";
 import { onboardingSession, requireOwnCandidatePage } from "../auth";
 import { CreateProfile } from "./create-profile";
 import { PublicAddressCard } from "./public-address";
+import { PublicFactsCard } from "./public-facts";
 import { PublicNameCard } from "./public-name";
 import { getTranslator } from "../i18n";
 import { formatNumber, type TranslationKey, type Translator } from "../../src/core/i18n/index.ts";
@@ -236,6 +237,8 @@ export default async function CandidateArea() {
       )}
 
       {person && <PublicAddressCard current={person.publicSlug ?? ""} t={t} />}
+
+      {person && <PublicFactsCard current={person} t={t} />}
 
       {person && (
         <Card className="mb-6">

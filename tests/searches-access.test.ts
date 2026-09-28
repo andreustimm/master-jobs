@@ -224,7 +224,9 @@ describe("who reaches tracks and terms", () => {
 
     const profile = await publicProfile(row!.slug!);
 
-    expect(Object.keys(profile!).sort()).toEqual(["cv", "githubUrl", "headline", "linkedinUrl", "location", "name", "skills", "slug"]);
+    // `facts` (#327): fatos opt-in, cada um desligado por padrão — ampliação
+    // explícita da lista de permissão, conferida em `public-profile.test.ts`.
+    expect(Object.keys(profile!).sort()).toEqual(["cv", "facts", "githubUrl", "headline", "linkedinUrl", "location", "name", "skills", "slug"]);
     const text = JSON.stringify(profile);
     expect(text).not.toMatch(/Laravel|PHP Developer|floor|ranges|reference_currency|target_track/);
   });

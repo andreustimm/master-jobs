@@ -351,6 +351,51 @@ continuam derivadas na PÁGINA por `cvSections(profile.cv)` (#325): o texto que
 chega já passou pelos dois filtros, e `cvSections()` só lê o que sobrou —
 `publicProfile()` não muda.
 
+**Fatos opt-in, um consentimento por campo** — **28/09 (#327, parte A).**
+Modelo de trabalho, nível de experiência, disponibilidade, prazo para começar,
+aceita mudar, área e idiomas entram em `candidate` com um opt-in cada
+(`public_*`, padrão `false`; nulo, o da linha importada do snapshot, também é
+desligado). Três camadas: a coluna nasce desligada; `publicFactsFrom()`
+(`src/core/candidate-public-facts.ts`, pura) só devolve o fato com opt-in
+`=== true`, valor presente e reconhecido — valor controlado fora da lista não
+sai, e área/idiomas acima do teto, com e-mail (inclusive o cadastrado, do
+candidato e da conta), telefone (o padrão do perfil mais oito dígitos ou mais
+com separador simples, fora intervalo de anos) ou pretensão salarial saem
+vazios. Em área e idiomas vale uma **regra estrutural**, não uma lista de
+formatos (passadas L2 da #362 — cada lista de formatos de piso deixava outros
+passarem): `shortFieldProblem()` recusa contato primeiro, depois rótulo de
+pretensão (`containsPay()`, a régua do CV, mesmo sem número: "Pretensão a
+combinar"), depois **qualquer número**. O campo é normalizado antes (NFKC,
+espaço colapsado, sem espaço em volta de `@`), e dígito é `\p{Nd}`: "３０ｋ",
+"³⁰k", "①⑤⓪/h", "٣٠k" e "pia＠local.test" não escapam. Toda sequência de
+dígitos é número, exceto a de um ou dois dígitos colada a letras — e mesmo
+essa é número quando as letras são código de moeda ou regime (USD, EUR, BRL,
+GBP, CHF, CAD, AUD, JPY, US, R, PJ, CLT: "USD30k", "PJ30k", "R30k") ou quando
+os dígitos vêm seguidos de `k`, barra, decimal ou `mil` ("EUR9k/mês").
+Todo formato de piso tem número ("20k", "30 mil", "150/h", "600 a diária",
+"15kUSD"), e nenhum sai. Passam palavras, identificador curto ("Web3", "K8s",
+"S3", "EC2", "B2B", "C1", "IPv6", "Java21", "JLPT N2") e número de norma: sigla em maiúscula (ISO, IEC, IEEE, NBR, RFC,
+com barra entre siglas), até cinco dígitos (RFC, quatro), parte opcional
+(":2022"), nunca seguido de unidade de tempo, moeda, `k` ou `mil`, e só
+quando o campo não tem palavra INTEIRA de remuneração ("Piso ISO 15000" é
+recusado; "Payments e ISO 27001" e "Cadeia de valor e ISO 9001" passam). Número sem rótulo recebe a mensagem de número ("Use só
+palavras…"), não a de pretensão. **Falso positivo aceito**, declarado:
+"Streaming 4K", "8K HDR", "Dados 2015-2020", "10 mil TPS", "Qualidade iso
+9001" (norma em minúscula), identificador com três dígitos ou mais ("H100"),
+notas de proficiência ("TOEFL 110", "IELTS 7.5", "HSK 4"), versões ("Python
+3", "Next.js 15", "GPT-4", "Web 3.0", "Indústria 4.0"), "3D", "5G" e rankings
+("Tier 1", "Top 10", "Fortune 500", "Big 4"), "R" colado a dígito ("Cloudflare
+R2", lido como real) e norma ao lado de palavra de remuneração ("Rate limiting
+e ISO 27001") — sem exceção para nenhuma
+dessas classes. **Limite declarado:** número por extenso ("vinte mil") e
+e-mail ofuscado por extenso ("pia at local dot test", "[at]") passam. As expressões
+rodam sobre espaço colapsado e só abaixo do teto: a alternativa de `rate:` em
+começo de linha do currículo era quadrática numa sequência de quebras; e a página só escolhe o lugar (faixa do topo ou "Em resumo"). A gravação é `setPublicFactsAction`, com `guardOwnCandidate` antes
+de ler o formulário, e recusa com código o valor forjado, o texto longo, o
+contato e a pretensão. **Pretensão salarial não é campo nem opt-in** — teste
+de ausência explícito em `tests/public-profile.test.ts`. Foto e capa (parte B)
+ainda não existem.
+
 **Fluxo verificado ponta a ponta em 19/08**, no modo autenticado padrão: sem
 sessão o cabeçalho oferece entrar; o link de uso único resgata em
 `/login/callback` e grava o cookie `httpOnly`; a sessão passa a aparecer no
