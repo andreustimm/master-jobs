@@ -257,7 +257,9 @@ function narrowSalaryBlock(lines: string[]): string[] | null {
     }
     const start = title || structured ? i : 0;
     while (last + 1 < lines.length && !known(last + 1)) last++;
-    if (!HAS_AMOUNT.test(lines.slice(start, last + 1).join("\n"))) return null;
+    // O valor tem de vir do rótulo em diante: um número acima dele ("Equipe de
+    // 12") não é a pretensão, que então está em outro bloco (#353).
+    if (!HAS_AMOUNT.test(lines.slice(i, last + 1).join("\n"))) return null;
     if (moneyNear(start - 1, -1) || moneyNear(last + 1, 1)) return null;
     for (let j = start; j <= last; j++) drop[j] = true;
     // Valor sem cara de dinheiro ("90/hour", "150") logo acima do rótulo. Um
@@ -268,6 +270,23 @@ function narrowSalaryBlock(lines: string[]): string[] | null {
   const kept = lines.filter((_, i) => !drop[i]);
   if (isSalaryBlock(kept.join("\n"))) return null;
   return kept;
+}
+
+/**
+ * O bloco do rótulo, do rótulo em diante. Um número acima dele ("Equipe de 12
+ * pessoas") não é o valor prometido, e não pode cancelar a retirada do
+ * parágrafo seguinte (#353). Sem linha nem par de linhas reconhecido — o
+ * rótulo só aparece no texto corrido —, vale o bloco inteiro.
+ */
+function fromLabel(lines: string[]): string {
+  const isHit = (text: string) => isSalaryBlock(text) || isPayTitle(text);
+  const at = lines.findIndex((line, i) => {
+    if (isHit(line)) return true;
+    const next = lines[i + 1];
+    // O par só conta para o rótulo quebrado, não para a linha antes do rótulo.
+    return next !== undefined && !isHit(next) && isHit(`${line}\n${next}`);
+  });
+  return lines.slice(Math.max(at, 0)).join("\n");
 }
 
 function escapeRegExp(value: string): string {
@@ -364,7 +383,7 @@ export function publicCvText(content: string, known: KnownContact = {}): string 
       // Laço, não `push(...)`: um bloco de 130 mil linhas estoura a pilha.
       else if (narrowed) for (const line of narrowed) out.push(line);
       // Um ano no rótulo ("Pretensão salarial (2026):") não é o valor.
-      else valueExpected = !HAS_AMOUNT.test(text);
+      else valueExpected = !HAS_AMOUNT.test(fromLabel(block));
       continue;
     }
     for (const line of block) out.push(line);

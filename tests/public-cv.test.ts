@@ -324,6 +324,20 @@ describe("publicCvText", () => {
     expect(publicCvText("Topo\nPretensão salarial:\n\nR$ 30.000 mensais\n\nFim")).toBe("\n\nFim");
   });
 
+  it("número acima do rótulo não cancela a retirada do parágrafo do valor", () => {
+    for (const cv of [
+      "Equipe de 12 pessoas\nPretensão salarial:\n\nR$ 30.000 mensais",
+      "Mentoria de 6 engenheiros\nExpectativa\nsalarial:\n\n30k",
+      "20+ anos\nSalário\n-------\n\nR$ 30.000",
+    ]) {
+      expect(publicCvText(cv), cv).not.toMatch(/30\.000|30k/);
+      expect(publicCvMarkdown(cv), cv).not.toMatch(/30\.000|30k/);
+    }
+    // O valor no próprio bloco do rótulo cumpre a promessa: o parágrafo
+    // seguinte é currículo.
+    expect(publicCvText("Equipe de 12\nPretensão salarial: R$ 30.000\n\n2019-2021 Staff")).toBe("\n2019-2021 Staff");
+  });
+
   it("o que sobra do bloco longo ainda com cara de piso sai inteiro", () => {
     // Palavra de remuneração e valor em linhas não vizinhas: nenhuma linha nem
     // par é piso, mas o bloco lido como texto corrido é.
