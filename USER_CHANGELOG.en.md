@@ -26,6 +26,14 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.28.1] - 2026-09-28T18:45:55.000Z
+
+### Fixed
+
+- In the "Move to" selector, reopening a Rejected, Withdrawn or Archived application now only offers stages up to where it actually reached before closing — never a further stage it never got to.
+- Undoing all the way out of the funnel now always clears the application date, even on legacy records — the job shows up normally again with the "hide applied" filter.
+- Rejecting an email suggestion for a job that's outside the funnel, or for a change that doesn't exist in the funnel, now explains the real reason, instead of a regression message with an internal or false code.
+
 ## [1.28.0] - 2026-09-28T17:18:14.000Z
 
 ### Added

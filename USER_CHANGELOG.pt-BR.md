@@ -26,6 +26,14 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.28.1] - 2026-09-28T18:45:55.000Z
+
+### Corrigido
+
+- No seletor "Mover para", reabrir uma candidatura Rejeitada, Retirada ou Arquivada agora só oferece até o estágio em que ela realmente esteve antes de fechar — nunca um estágio mais adiantado que ela nunca alcançou.
+- Desfazer até tirar a vaga do funil agora sempre limpa a data de candidatura, mesmo em registros antigos — a vaga volta a aparecer normalmente com o filtro "ocultar candidatadas".
+- A recusa de uma sugestão de e-mail para uma vaga fora do funil, ou para uma mudança que não existe no funil, agora explica o motivo certo, em vez de uma mensagem de regressão com um código interno ou falsa.
+
 ## [1.28.0] - 2026-09-28T17:18:14.000Z
 
 ### Adicionado
