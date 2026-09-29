@@ -233,7 +233,10 @@ commit. [[G62](docs/engineering/rules/delivery.md#g62)]
 - Com `rtk` instalado, Codex e OpenCode prefixam cada comando com `rtk` (no
   Claude Code, um hook reescreve); sem ele, rode o comando puro. Um comando por
   chamada de shell, sem `&&`, `|` ou `;`: a lista de permissão do Claude Code
-  casa pelo prefixo, e composto cai em aprovação manual.
+  casa pelo prefixo, e composto cai em aprovação manual. No Claude Code o gate
+  é `.claude/hooks/no-compound-bash.mjs`, registrado em `.claude/settings.json`
+  (`hooks.PreToolUse`, matcher `Bash`); Codex e OpenCode ainda dependem do
+  hábito — lacuna registrada, não fechada por hook lá.
   [[G63](docs/engineering/rules/delivery.md#g63)]
 - O bloco abaixo é gerado pelo `next dev`; não o edite nem o mova.
   [[G64](docs/engineering/rules/delivery.md#g64)]

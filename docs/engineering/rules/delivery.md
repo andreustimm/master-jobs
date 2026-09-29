@@ -710,6 +710,29 @@ nos três harnesses, para que o hábito não dependa de onde se roda. Filtre sa�
 com a flag do próprio programa (`--jq`, `--format`) e ponha etapas múltiplas
 num script que roda com um comando.
 
+**Gate no Claude Code (#380).** `.claude/hooks/no-compound-bash.mjs`
+(`findCompound`, exportado e testado por `tests/no-compound-bash.test.ts`) é
+registrado em `.claude/settings.json` → `hooks.PreToolUse` com matcher `Bash` e
+caminho relativo ao projeto (`$CLAUDE_PROJECT_DIR`): recusa (saída 2) `&&`,
+`||`, `;`, `|`, `&` de segundo plano, `$(...)`, crase e quebra de linha fora de
+aspas, mesmo quando cada trecho isolado seria `allow` — fecha o composto ANTES
+da aprovação manual, sem depender de hook global do usuário. Prova:
+`pnpm check:harness` roda como sempre e não muda, porque `hooks` não é
+traduzido pelo `pnpm harness:sync` (ele só espelha `permissions`).
+
+**Lacuna nos outros dois harnesses.** O OpenCode não tem mecanismo de hook —
+só o DSL declarativo de `opencode.json > permission` — e não há como expressar
+"recusar todo composto fora de aspas" sem reescrever o parser em padrão de
+texto; nenhum espelho foi gerado para ele. O Codex tem hook PreToolUse
+equivalente (`.codex/hooks.json`), mas o que já roda ali (`codex-guard.ts`,
+G85) é mais permissivo nesse ponto: libera o composto quando **todo** trecho
+casa com uma regra `allow` (`git ls-files | xargs wc -l` passa se ambos forem
+liberados), em vez de recusar qualquer composto de saída. Estender o Codex para
+a mesma recusa incondicional mudaria comportamento hoje documentado e coberto
+por teste (`tests/harness-parity.test.ts`); decisão registrada como lacuna
+aberta em vez de feita às pressas — segue para o dono decidir em issue
+separada se vale alinhar.
+
 <a id="g64"></a>
 ### G64 — O bloco gerado pelo Next fica intacto
 
