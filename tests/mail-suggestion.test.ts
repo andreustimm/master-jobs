@@ -295,6 +295,9 @@ describe("decideSuggestion", () => {
         await tx`select id from production.application where id = ${app!.id} for update`;
 
         const deciding = decideSuggestion(seeded.candidateId, seeded.suggestionId, "accepted");
+        // Presa já: a recusa chega logo depois do commit abaixo, antes de a
+        // asserção se prender — e uma rejeição sem tratamento reprova o shard.
+        const decided = deciding.then(() => undefined, (error: unknown) => error);
         await untilSomeoneWaitsOnALock(rawConnection);
 
         // Avanço real, de outra sessão, enquanto `deciding` está bloqueada
@@ -313,7 +316,7 @@ describe("decideSuggestion", () => {
         `;
         await tx`commit`;
 
-        await expect(deciding).rejects.toBeInstanceOf(RegressiveSuggestionError);
+        expect(await decided).toBeInstanceOf(RegressiveSuggestionError);
       } finally {
         tx.release();
       }
