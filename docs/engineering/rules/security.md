@@ -375,7 +375,22 @@ ameaça, descrito em [security.md](../../security.md) e
 [deploy.md](../deploy.md). O Achado 1 de `security.md` registra o incidente
 original em que `next dev` escutava em `0.0.0.0`.
 
-Origem: regra 12. Prova: `tests/security.test.ts`.
+**Exceção de contêiner (Fase 4 da #351, ADR 0030).** A imagem do plano B de
+deploy (`Dockerfile`, publicada no GHCR e implantada no Fly.io — região
+`gru`) roda `node server.js` do build `standalone` com `ENV HOSTNAME=0.0.0.0`
+declarado **dentro da própria imagem**, nunca em `package.json`. É a única
+forma de o proxy de borda do Fly alcançar o processo, que fica fora do
+namespace de rede do container — bind em `127.0.0.1` ali tornaria o serviço
+inatingível de fora, não mais seguro: G38 (sessão exigida por omissão) já é a
+barreira real nesse ambiente, o mesmo raciocínio que já vale para a Vercel.
+`dev` e `start` continuam presos a `127.0.0.1` e são a única coisa que o
+laptop do dono executa; `pnpm start:container` (ou script equivalente) **não
+existe** — a exceção mora só no `CMD`/`ENV` do `Dockerfile`, para que não
+exista um script local capaz de reabrir o bind amplo por engano.
+
+Origem: regra 12. Prova: `tests/security.test.ts`,
+`tests/deploy-fly.test.ts` (a exceção fica só no `Dockerfile`; `dev`/`start`
+continuam em `127.0.0.1`).
 
 <a id="g73"></a>
 ## G73 — Rede controlada nas operações que a pedem

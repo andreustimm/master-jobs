@@ -1,0 +1,43 @@
+# Plano B de deploy (Fase 4 da #351, ADR 0030). Só existe para o dono acionar
+# manualmente pelo workflow `publicar-imagem-fly.yml` — não é um segundo
+# destino automático, e a Vercel continua o padrão
+# (docs/engineering/deploy.md, "Plano B (Fly.io)").
+#
+# `app` é criado uma vez pelo dono (`fly apps create`, passo humano — ver
+# techspec da Fase 4); este arquivo não cria nem apaga o app.
+app = "master-jobs"
+
+# São Paulo — mesma região do Supabase de produção (sa-east-1); é a região
+# Fly mais próxima, preservando o raciocínio de deploy.md ("Os três
+# ambientes") sobre round-trip curto ao banco.
+primary_region = "gru"
+
+[build]
+
+[env]
+  PORT = "3000"
+
+# Health check contra `/manifest.json`: já é rota pública sem sessão
+# (`proxy.ts`, lista `PUBLIC`) e não depende do banco — cair o Postgres não
+# deve derrubar o health check e mascarar a causa raiz. Criar uma rota nova só
+# para o Fly ampliaria a superfície sem sessão (regra 15/G39) por uma
+# necessidade que a rota existente já cobre.
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/manifest.json"
+    protocol = "http"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

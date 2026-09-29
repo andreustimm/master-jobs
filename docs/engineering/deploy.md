@@ -300,6 +300,103 @@ deliberado — ambiente de teste com dado de teste não precisa de plateia. Para
 abri-los seria preciso desligar a proteção do projeto inteiro, o que tornaria
 públicas também as URLs diretas dos deployments de teste.
 
+## Plano B: Fly.io como destino alternativo (Fase 4 da contingência)
+
+A Vercel continua o destino padrão. O que segue existe só para o incidente em
+que ela recusa deploy ou fica fora do ar por tempo maior do que a espera é
+razoável ([issue #369](https://github.com/andreustimm/master-jobs/issues/369),
+Fase 4 de [#351](https://github.com/andreustimm/master-jobs/issues/351),
+[ADR 0030](../adr/0030-contingencia-de-ci-e-deploy.md)). Nenhuma peça daqui
+roda automaticamente: publicar a imagem e implantá-la são passo manual do
+dono, sempre.
+
+**Artefatos.** `Dockerfile` (multi-stage: `deps` → `builder` roda `pnpm
+build`, que já produz `output: "standalone"` — `next.config.ts` — → `runner`
+copia só `.next/standalone`, `.next/static` e `public/`, e roda como o usuário
+`nextjs`, uid 1101, nunca root). `.dockerignore` exclui `.env*` e todo
+diretório operacional (`.claude/`, `.compozy/`, `tests/`, `docs/` etc.) do
+contexto de build — regra 16: nenhum valor de ambiente entra numa camada.
+`fly.toml` fixa `primary_region = "gru"` (São Paulo, a região Fly mais
+próxima do Supabase de produção em `sa-east-1`, preservando o raciocínio de
+round-trip curto descrito em "Os três ambientes") e um health check HTTP
+contra `/manifest.json` — rota pública sem sessão (`proxy.ts`) e sem
+dependência do banco, para que o check não confunda "Postgres fora do ar" com
+"o processo não subiu". `.github/workflows/publicar-imagem-fly.yml` é
+`workflow_dispatch` puro: constrói a imagem, publica em
+`ghcr.io/andreustimm/master-jobs`, confere que nenhuma camada carrega um valor
+com formato de segredo (`docker history --no-trunc`) e, só se o dono marcar
+`deploy: true` no disparo, implanta a imagem publicada no Fly (`environment:
+production`, o mesmo padrão de `migrate.yml`).
+
+**A tensão com a regra 12 (G36).** `pnpm dev` e `pnpm start` continuam presos
+a `127.0.0.1` — nada muda para o laptop do dono. O contêiner do plano B
+precisa escutar em todas as interfaces porque o proxy de borda do Fly fica
+fora do namespace de rede dele; a exceção mora só no `ENV HOSTNAME=0.0.0.0`
+do `Dockerfile`, nunca em `package.json` — não existe um `pnpm
+start:container` nem qualquer script local capaz de reabrir esse bind por
+engano. Detalhe e prova em
+[security.md#g36](rules/security.md#g36).
+
+**Segredos replicados, nunca automatizados.** Toda variável da tabela acima
+que a aplicação lê em runtime (`DATABASE_URL`, `DATABASE_CA_CERT`,
+`RESEND_API_KEY`, `RESEND_FROM`, `SENTRY_DSN`, `CRON_SECRET`,
+`JHO_SOURCE_ALLOWLIST` etc.) precisa existir também no Fly, cadastrada à mão
+pelo dono com `fly secrets set <NOME>=...` — nunca em `fly.toml`, na PR, no
+ADR ou neste documento, que citam só o nome (regra 16). `JHO_STORAGE_DRIVER`
+merece decisão própria do dono antes do primeiro failover real:
+`vercel-blob` depende da integração de Blob da própria Vercel e não segue
+para o Fly; a alternativa portável é `s3` contra um bucket real (não o MinIO
+local), documentada em [local-storage.md](local-storage.md) — sem essa
+decisão, `/candidate` e `/p/` sobem sem upload de foto e capa no plano B, o
+mesmo comportamento (não uma regressão nova) de quando `JHO_STORAGE_DRIVER`
+está ausente.
+
+**A varredura fatiada perde o alvo durante o failover.** O `pg_cron` do
+Supabase chama `/api/cron/varredura` **na Vercel** (ADR 0025); ele não sabe
+que o Fly existe. Duas saídas, nenhuma delas código novo:
+
+1. Repontar o SQL do agendador (`supabase/cron/varredura.sql`) para a URL do
+   Fly durante o incidente, com o mesmo `CRON_SECRET` também cadastrado lá —
+   trabalho manual do dono, revertido junto com o DNS.
+2. Aceitar a pausa da varredura fatiada pelo tempo do failover e deixar
+   `.github/workflows/varredura.yml` (a rede de segurança já documentada em
+   "A varredura diária") cobrir `sync`/captura/reconferência por
+   `workflow_dispatch` — ele roda contra o banco de produção
+   independentemente de qual frontend serve HTTP.
+
+A opção 2 é o caminho recomendado: o failover existe para manter o dashboard
+no ar, não para migrar a infraestrutura de ingestão sob a pressão de um
+incidente.
+
+**Runbook de failover de DNS (Cloudflare), os dois sentidos.** Os três CNAMEs
+de produção/staging/dev já são "DNS only" (nuvem cinza) e TTL padrão — a
+seção "DNS" acima explica por quê. Ida:
+
+1. **Passo do dono:** publicar a imagem (`workflow_dispatch` em
+   `publicar-imagem-fly.yml`) e confirmar `fly status` saudável; se for a
+   primeira vez, `fly certs add jobs.mastertimm.com.br` no app Fly e esperar o
+   certificado ficar `Ready`.
+2. Confirmar a aplicação respondendo direto no host temporário do Fly
+   (`https://<app>.fly.dev/manifest.json`, depois login e um `/p/<slug>` de
+   teste) **antes** de tocar o DNS.
+3. **Passo do dono:** na Cloudflare, trocar o registro `CNAME` de
+   `jobs.mastertimm.com.br` de `cname.vercel-dns.com` para o host do Fly,
+   mantendo "DNS only" (nuvem laranja duplicaria CDN sem ganho, como já
+   registrado para a Vercel) e baixando o TTL para 300 s antes da troca, se
+   ainda não estiver nesse valor.
+4. Confirmar propagação (`dig +trace jobs.mastertimm.com.br`) dentro do TTL
+   declarado e TLS válido no destino novo.
+5. Smoke test manual: `/login` autentica, nenhuma rota responde sem sessão,
+   `/p/<slug>` de um perfil de teste devolve o esperado (mesma checklist de
+   "O que confirmar depois de subir").
+
+Volta, quando a Vercel normalizar: repetir o passo 3 apontando de volta para
+`cname.vercel-dns.com`, confirmar propagação e TLS, e então (se a opção 1 da
+varredura foi usada) repontar `supabase/cron/varredura.sql` de volta à
+Vercel. O Fly pode ficar parado (`fly scale count 0`) até o próximo
+incidente — `auto_stop_machines` em `fly.toml` já reduz o custo entre
+failovers.
+
 ## A varredura diária
 
 > **Pausa operacional:** o workflow permanece opt-in até concluir o corte para

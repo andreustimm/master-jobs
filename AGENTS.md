@@ -74,7 +74,9 @@ A numeração é estável: código e testes citam "regra N".
     [DESIGN.md](DESIGN.md). [[G32](docs/engineering/rules/frontend.md#g32)–[G34](docs/engineering/rules/frontend.md#g34)]
 11. **Toda tela funciona em 375px** (E2E); viewport `device-width`, zoom livre.
     [[G35](docs/engineering/rules/frontend.md#g35)]
-12. **`dev` e `start` fazem bind só em `127.0.0.1`.**
+12. **`dev` e `start` fazem bind só em `127.0.0.1`.** A única exceção é o
+    contêiner do plano B de deploy (Fly.io), que escuta em todas as
+    interfaces só dentro da imagem — nunca no laptop do dono.
     [[G36](docs/engineering/rules/security.md#g36)]
 13. **Nada envia candidatura**, nem adapter "desabilitado": `jho prep` monta o
     dossiê e a pessoa envia (ADR 0010). [[G37](docs/engineering/rules/security.md#g37)]
