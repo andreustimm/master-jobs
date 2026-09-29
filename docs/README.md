@@ -116,7 +116,7 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`0027`](adr/0027-cadencia-das-notas-em-lotes-com-cursor.md) | Cadência das notas: fila `sem-nota` (10 min) e `manutencao` (60 min), lotes de 100 mais recentes primeiro com cursor; varredura só em produção |
 | [`0028`](adr/0028-migracao-automatica-so-aditiva.md) | Migração de produção automática no push para `main` só quando o lote pendente é aditivo; a não aditiva interrompe o job e a promoção |
 | [`0029`](adr/0029-armazenamento-de-objetos-formato-s3.md) | Armazenamento de objetos no formato S3: Vercel Blob privado em deployment, S3/MinIO local, imagem servida pelo app que confere a visibilidade |
-| [`0030`](adr/0030-contingencia-de-ci-e-deploy.md) | Contingência de CI e deploy: deploy só em `main`, runner self-hosted opt-in, watchdog de cota fora dos provedores e plano B da Vercel |
+| [`0030`](adr/0030-contingencia-de-ci-e-deploy.md) | Contingência de CI e deploy: variável de repositório como único mecanismo de virar uma chave, corte do deploy de preview, runner self-hosted efêmero com guarda de fork, vigia de cota fora dos provedores monitorados, plano B no Fly.io |
 
 ---
 

@@ -12,6 +12,7 @@ import {
   type ResetDeps,
 } from "../src/contexts/auth/app/password-reset.ts";
 import { hashPassword, verifyPassword } from "../src/contexts/auth/domain/password.ts";
+import { recordResetSendFailure } from "../src/contexts/auth/index.ts";
 import type { Mailer, OutgoingMail } from "../src/contexts/auth/ports-mailer.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
@@ -421,5 +422,43 @@ describe("resgatar o link", () => {
     }));
     expect(eventos).toContain("reset_completed");
     void authEvent;
+  });
+});
+
+describe("MAJOR M1 (revisão da PR #373) — sem origem pública, o pedido ainda é auditado", () => {
+  it("grava reset_send_failed sem consultar se a conta existe", async () => {
+    // `recordResetSendFailure` é chamada quando `resolvePublicOrigin` devolve
+    // `null` (deployment sem JHO_PUBLIC_URL) — o pedido de recuperação nunca
+    // chega a `requestPasswordReset`. O registro precisa acontecer do mesmo
+    // jeito para um endereço cadastrado E UM DE VERDADE no banco (não só
+    // duas strings arbitrárias) e um desconhecido, sem diferença observável
+    // (G17): esta função nunca lê `auth_user`.
+    await seedUser("cadastrado@exemplo.test");
+
+    await recordResetSendFailure("CADASTRADO@Exemplo.test", "origem pública não configurada");
+    await recordResetSendFailure("desconhecido@exemplo.test", "origem pública não configurada");
+
+    const eventos = await db
+      .select({ email: authEvent.email, kind: authEvent.kind, detail: authEvent.detail })
+      .from(authEvent)
+      .where(eq(authEvent.kind, "reset_send_failed"))
+      .orderBy(authEvent.email);
+
+    expect(eventos).toHaveLength(2);
+    // As duas linhas são idênticas em forma — kind e detail iguais, só o
+    // e-mail (normalizado) muda. Comparar as duas contas, e não só o total,
+    // é o que prova que a conta cadastrada de verdade não ganha tratamento
+    // diferente da desconhecida.
+    const [cadastrado, desconhecido] = eventos;
+    expect(cadastrado).toEqual({
+      email: "cadastrado@exemplo.test",
+      kind: "reset_send_failed",
+      detail: "origem pública não configurada",
+    });
+    expect(desconhecido).toEqual({
+      email: "desconhecido@exemplo.test",
+      kind: "reset_send_failed",
+      detail: "origem pública não configurada",
+    });
   });
 });

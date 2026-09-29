@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fixedClock, resetClock, setClock } from "../src/core/clock.ts";
 import { clientKey, createRateLimiter } from "../src/core/rate-limit.ts";
 
@@ -25,6 +25,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetClock();
+  vi.unstubAllEnvs();
 });
 
 describe("janela deslizante", () => {
@@ -122,5 +123,73 @@ describe("de quem é a requisição", () => {
 
   it("T6b · aceita x-real-ip quando é o que existe", () => {
     expect(clientKey(new Headers({ "x-real-ip": "198.51.100.9" }))).toBe("198.51.100.9");
+  });
+
+  describe("no Fly (sinal POSITIVO: FLY_APP_NAME, e sem VERCEL) — Fly-Client-IP vence o x-forwarded-for que o cliente escolhe", () => {
+    it("usa fly-client-ip quando FLY_APP_NAME está presente, mesmo com x-forwarded-for também presente", () => {
+      const headers = new Headers({
+        "fly-client-ip": "203.0.113.9",
+        "x-forwarded-for": "1.2.3.4, 10.0.0.1",
+      });
+      expect(clientKey(headers, { FLY_APP_NAME: "master-jobs" })).toBe("203.0.113.9");
+    });
+
+    it("sem FLY_APP_NAME, ignora fly-client-ip mesmo forjado — a ausência de VERCEL não basta (G27)", () => {
+      // Este é o defeito que a revisão da PR #373 pegou: confiar na AUSÊNCIA
+      // de `VERCEL` (lista de proibição) em vez de exigir um sinal POSITIVO
+      // de estar no Fly. Sem `FLY_APP_NAME`, um cliente falando direto com
+      // qualquer deployment sem `VERCEL` poderia forjar `fly-client-ip` e
+      // escolher o próprio balde — exatamente o que este cabeçalho existe
+      // para evitar.
+      const headers = new Headers({
+        "fly-client-ip": "203.0.113.9",
+        "x-forwarded-for": "1.2.3.4, 10.0.0.1",
+      });
+      expect(clientKey(headers, {})).toBe("1.2.3.4");
+    });
+
+    it("REPRODUZ o risco: sem fly-client-ip nem FLY_APP_NAME, o cliente escolhe o balde pelo primeiro x-forwarded-for", () => {
+      // `x-forwarded-for` é o cabeçalho que o próprio cliente pode mandar; o
+      // primeiro item da lista é o que ele escreveu, não o que um proxy
+      // confiável verificou. Isto é aceito de propósito na Vercel (a borda
+      // dela sobrescreve o valor recebido do cliente antes de repassar à
+      // função) — no Fly, sem `fly-client-ip`, o mesmo valor decide o balde.
+      const headers = new Headers({ "x-forwarded-for": "1.2.3.4, 10.0.0.1" });
+      expect(clientKey(headers, { FLY_APP_NAME: "master-jobs" })).toBe("1.2.3.4");
+    });
+
+    it("FLY_APP_NAME vazio conta como ausente (regra 17) — ignora fly-client-ip", () => {
+      // Sem nenhum outro cabeçalho, cair no balde comum prova que
+      // `fly-client-ip` foi mesmo ignorado (não usado, e não confundido com
+      // um x-forwarded-for/x-real-ip presente).
+      const headers = new Headers({ "fly-client-ip": "203.0.113.9" });
+      expect(clientKey(headers, { FLY_APP_NAME: "" })).toBe("sem-proxy");
+    });
+  });
+
+  describe("na Vercel, fly-client-ip nunca é confiável, mesmo com FLY_APP_NAME presente por acidente", () => {
+    it("ignora fly-client-ip quando VERCEL está declarado", () => {
+      const headers = new Headers({
+        "fly-client-ip": "203.0.113.9",
+        "x-forwarded-for": "198.51.100.9, 10.0.0.1",
+      });
+      expect(clientKey(headers, { VERCEL: "1", FLY_APP_NAME: "master-jobs" })).toBe("198.51.100.9");
+    });
+
+    it("VERCEL vazio conta como ausente (regra 17) — ainda confia em fly-client-ip, com FLY_APP_NAME presente", () => {
+      const headers = new Headers({ "fly-client-ip": "203.0.113.9" });
+      expect(clientKey(headers, { VERCEL: "", FLY_APP_NAME: "master-jobs" })).toBe("203.0.113.9");
+    });
+  });
+
+  it("sem segundo argumento, lê o ambiente real do processo (o default de clientKey)", () => {
+    // m3 da revisão: exercitar o parâmetro default (`= process.env`), não só
+    // o valor passado explicitamente — é a única forma de provar que a
+    // chamada de produção (`clientKey(request.headers)`, em `proxy.ts`, sem
+    // segundo argumento) realmente lê `FLY_APP_NAME`/`VERCEL` do processo.
+    vi.stubEnv("FLY_APP_NAME", "master-jobs");
+    vi.stubEnv("VERCEL", "");
+    const headers = new Headers({ "fly-client-ip": "203.0.113.9", "x-forwarded-for": "1.2.3.4" });
+    expect(clientKey(headers)).toBe("203.0.113.9");
   });
 });

@@ -86,6 +86,49 @@ da varredura fatiada não depende da sorte: `next.config.ts` inclui
 | `BLOB_READ_WRITE_TOKEN` | Vercel (Preview **e** Production), criada pela integração do Blob | credencial do Vercel Blob; o adapter grava sempre privado e apaga o valor de todo erro. Nunca em banco, log ou `.env.example` |
 | `JHO_STORAGE_BUCKET` | Vercel (opcional) | prefixo dos objetos no Blob (bucket no S3); padrão `master-jobs` |
 | `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | local (MinIO) ou futuro AWS S3 | só com `JHO_STORAGE_DRIVER=s3`; `S3_ENDPOINT` ausente é a AWS ([local-storage.md](local-storage.md)) |
+| `JHO_ENV` | qualquer deployment que não seja a Vercel (o plano B no Fly, `fly.toml` **e** `Dockerfile`); recomendado também na Vercel, ver abaixo | declara o ambiente para `isLocalProcess()` (`src/contexts/auth/domain/open-mode.ts`) e para a guarda de ingestão (`src/core/ingest/guard.ts`); sem ela, fora da Vercel, o processo seria tratado como a máquina do dono — libera o modo aberto, imprime link de recuperação no log (G18) e recusa a varredura |
+| `JHO_PUBLIC_URL` | **só em Production** na Vercel; obrigatória no plano B no Fly (já fixada em `fly.toml`) | origem confiável (`https://host`) para o link de recuperação de senha (`src/contexts/auth/domain/public-origin.ts`), nunca o `Host` da requisição (G17/G18, host poisoning). **Na Vercel Production não precisa ser cadastrada**: sem ela, a função usa `VERCEL_PROJECT_PRODUCTION_URL` — variável de sistema da própria plataforma, não controlada pelo cliente. `VERCEL_PROJECT_PRODUCTION_URL` deve resolver para `jobs.mastertimm.com.br` (o domínio próprio tem precedência sobre o `*.vercel.app` gerado, quando o projeto tem um domínio de produção configurado) — confirmar isso é o item novo do checklist pós-deploy, abaixo. Cadastrar `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br` em Production elimina a dúvida por completo, sem depender de nenhuma variável de sistema. **Nunca cadastrar em Preview**: um valor fixo enviaria o token de recuperação de qualquer branch de preview para o domínio de produção — Preview precisa continuar resolvendo por `VERCEL_BRANCH_URL`/`VERCEL_URL` (variáveis por branch/deployment). Fora da Vercel e da máquina do dono (o plano B no Fly), a ausência falha fechado |
+
+**Dependência silenciosa: "Automatically expose System Environment
+Variables".** A documentação da Vercel condiciona o acesso, em runtime de
+função (não só no build), às variáveis de sistema — `VERCEL_ENV`,
+`VERCEL_PROJECT_PRODUCTION_URL`, `VERCEL_BRANCH_URL`, `VERCEL_URL` — a essa
+opção estar ligada em **Project Settings → Environment Variables**. Vem
+ligada por padrão em projeto novo, mas é uma configuração, não uma garantia
+imutável da plataforma — projeto migrado ou reconfigurado pode tê-la
+desligado sem ninguém notar. **Não verificado nesta entrega** exatamente
+quais variáveis sobrevivem com a opção desligada (documentação da Vercel e
+comportamento real podem divergir).
+
+**O efeito real não é "falha fechada" — é o oposto.** Se `VERCEL` também não
+chegar ao runtime (cenário não confirmado, mas é o que esta dependência
+poderia causar), `isLocalProcess()`
+(`src/contexts/auth/domain/open-mode.ts`) trata o processo como a **máquina
+do dono**, porque ele decide pela ausência de variável, não por um sinal
+positivo de estar local (issue [#378](https://github.com/andreustimm/master-jobs/issues/378),
+aberta por esta revisão, não corrigida aqui). Nesse cenário: `resolvePublicOrigin`
+cairia no ramo do `Host` da requisição — reabrindo o host poisoning que ela
+existe para impedir (G17) —, `JHO_AUTH_MODE=open` seria aceito (G38), e o
+mailer de recuperação imprimiria o link no log em vez de omiti-lo (G18). A
+mitigação, disponível hoje, cadastrada explicitamente na Vercel, **com
+valores diferentes por ambiente**:
+
+- **Production:** `JHO_ENV=production` e
+  `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br`.
+- **Preview:** `JHO_ENV=preview` — nunca `production`, porque a mesma
+  variável também é lida pela guarda de ingestão
+  (`src/core/ingest/guard.ts`), e `production` ali liberaria a varredura real
+  contra fontes externas num ambiente que só deveria exercitar fixtures
+  (ADR 0021); `preview` nega ingestão do mesmo jeito que `dev`/`staging`, sem
+  depender de `JHO_SOURCE_ALLOWLIST` estar ausente por acaso. **Nunca**
+  `JHO_PUBLIC_URL` em Preview — ver a tabela acima.
+
+Isso elimina a dependência da opção em Production por completo. Em Preview
+reduz ao mínimo: `JHO_ENV=preview` corrige o modo aberto e o mailer, mas
+`resolvePublicOrigin` continua dependendo de `VERCEL_BRANCH_URL`/`VERCEL_URL`
+chegarem ao runtime — um `JHO_PUBLIC_URL` fixo ali seria pior, não melhor
+(ver a tabela acima). A correção
+completa é a estrutural da issue #378, não esta mitigação.
 
 **A URL pode vir de mais de um nome, e a ordem é declarada.** A integração do
 Supabase com a Vercel cadastra `POSTGRES_URL` e `POSTGRES_URL_NON_POOLING` e as
@@ -363,6 +406,153 @@ exigem.
 deliberado — ambiente de teste com dado de teste não precisa de plateia. Para
 abri-los seria preciso desligar a proteção do projeto inteiro, o que tornaria
 públicas também as URLs diretas dos deployments de teste.
+
+## Plano B: Fly.io como destino alternativo (Fase 4 da contingência)
+
+A Vercel continua o destino padrão. O que segue existe só para o incidente em
+que ela recusa deploy ou fica fora do ar por tempo maior do que a espera é
+razoável ([issue #369](https://github.com/andreustimm/master-jobs/issues/369),
+Fase 4 de [#351](https://github.com/andreustimm/master-jobs/issues/351),
+[ADR 0030](../adr/0030-contingencia-de-ci-e-deploy.md)). Nenhuma peça daqui
+roda automaticamente: publicar a imagem e implantá-la são passo manual do
+dono, sempre.
+
+**Artefatos.** `Dockerfile` (multi-stage: `deps` → `builder` roda `pnpm
+build`, que já produz `output: "standalone"` — `next.config.ts` — → `runner`
+copia só `.next/standalone`, `.next/static` e `public/`, e roda como o usuário
+`nextjs`, uid 1101, nunca root). `.dockerignore` exclui `.env*` e todo
+diretório operacional (`.claude/`, `.compozy/`, `tests/`, `docs/` etc.) do
+contexto de build — regra 16: nenhum valor de ambiente entra numa camada.
+`fly.toml` fixa `primary_region = "gru"` (São Paulo, a região Fly mais
+próxima do Supabase de produção em `sa-east-1`, preservando o raciocínio de
+round-trip curto descrito em "Os três ambientes") e um health check HTTP
+contra `/manifest.json` — rota pública sem sessão (`proxy.ts`) e sem
+dependência do banco, para que o check não confunda "Postgres fora do ar" com
+"o processo não subiu". `.github/workflows/publicar-imagem-fly.yml` é
+`workflow_dispatch` puro, e só publica a partir de `main` (o `if` do job
+trava o ref, mesmo disparado à mão de outra branch): builda a imagem
+localmente no runner (`load: true`, sem publicar ainda), **inspeciona o
+sistema de arquivos dela** (`docker run … find` por `.env*`/`*.token.json`
+etc. e `grep` por padrão de segredo) **antes** de qualquer login ou push,
+publica em `ghcr.io/andreustimm/master-jobs`, confere de novo — agora nos
+metadados da imagem publicada (`docker history --no-trunc`) — e, só se o dono
+marcar `deploy: true` no disparo, implanta a imagem no Fly (`environment:
+production`, o mesmo padrão de `migrate.yml`; `FLY_API_TOKEN` cadastrado
+nesse ambiente é passo do dono, abaixo).
+
+**Teste local do Dockerfile.** `docker build .` e, para exercitar o
+contêiner sem expor a porta à rede local (o mesmo raciocínio da regra 12):
+
+```bash
+docker run --rm -p 127.0.0.1:3000:3000 <imagem>
+```
+
+Nunca `-p 3000:3000` sozinho — isso publica a porta em todas as interfaces do
+host que roda o teste, não só em loopback.
+
+**A tensão com a regra 12 (G36).** `pnpm dev` e `pnpm start` continuam presos
+a `127.0.0.1` — nada muda para o laptop do dono. O contêiner do plano B
+precisa escutar em todas as interfaces porque o proxy de borda do Fly fica
+fora do namespace de rede dele; a exceção mora só no `ENV HOSTNAME=0.0.0.0`
+do `Dockerfile`, nunca em `package.json` — não existe um `pnpm
+start:container` nem qualquer script local capaz de reabrir esse bind por
+engano. Detalhe e prova em
+[security.md#g36](rules/security.md#g36).
+
+**Segredos replicados, nunca automatizados.** Toda variável da tabela acima
+que a aplicação lê em runtime (`DATABASE_URL`, `DATABASE_CA_CERT`,
+`RESEND_API_KEY`, `RESEND_FROM`, `SENTRY_DSN`, `CRON_SECRET`,
+`JHO_SOURCE_ALLOWLIST` etc.) precisa existir também no Fly, cadastrada à mão
+pelo dono com `fly secrets set <NOME>=...` — nunca em `fly.toml`, na PR, no
+ADR ou neste documento, que citam só o nome (regra 16). `JHO_ENV=production`
+e `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br` já vêm fixados no `fly.toml`
+(não são segredo, não precisam de `fly secrets set`) — ver a tabela acima
+para o porquê de cada um (G38, G17/G18). `JHO_STORAGE_DRIVER` merece decisão
+própria do dono antes do primeiro failover real: `vercel-blob` depende da
+integração de Blob da própria Vercel e não segue para o Fly; a alternativa
+portável é `s3` contra um bucket real (não o MinIO local), documentada em
+[local-storage.md](local-storage.md) — sem essa decisão, `/candidate` e `/p/`
+sobem sem upload de foto e capa no plano B, o mesmo comportamento (não uma
+regressão nova) de quando `JHO_STORAGE_DRIVER` está ausente.
+
+**Limite por IP: a direção certa do risco.** `clientKey`
+(`src/core/rate-limit.ts`) usa o primeiro valor de `x-forwarded-for` como
+chave do balde — e o primeiro valor dessa lista é o que **o cliente
+escreveu**, não o que um proxy confiável verificou. Na Vercel isso é aceito
+porque a borda dela sobrescreve o `x-forwarded-for` recebido do cliente antes
+de repassar à função; o risco não é "degradar para um balde só" (mais
+restritivo), é o oposto — **um cliente escolhendo livremente o próprio balde**
+para escapar do limite, ou forçando outro visitante para o seu. Fora da
+Vercel essa garantia não existe. Por isso `clientKey` agora prefere
+`Fly-Client-IP` — escrito pelo proxy de borda do próprio Fly, que o cliente
+não alcança sem passar por ele — sempre que `VERCEL` não está declarado no
+ambiente; declarado (a Vercel), o cabeçalho é ignorado, porque ali qualquer
+cliente poderia forjá-lo sem que a borda o filtrasse. Prova em
+`tests/rate-limit.test.ts`.
+
+**Pré-requisitos, uma vez, antes do primeiro failover — todos passo do
+dono:**
+
+1. `fly apps create master-jobs` (ou o nome escolhido, igual ao `app` de
+   `fly.toml`) na organização Fly do dono.
+2. Cadastrar `FLY_API_TOKEN` no ambiente `production` deste repositório no
+   GitHub (Settings → Environments → production → Secrets) — é o que o job
+   `implantar` de `publicar-imagem-fly.yml` lê; sem ele, o disparo com
+   `deploy: true` falha ao chamar `flyctl deploy`.
+3. `fly certs add jobs.mastertimm.com.br` **antes** de qualquer incidente
+   (o comando aceita o hostname mesmo com o DNS ainda apontando para a
+   Vercel). `fly certs show jobs.mastertimm.com.br` devolve um registro
+   `_acme-challenge.jobs.mastertimm.com.br` para cadastrar como `CNAME` na
+   Cloudflare — isso deixa o certificado `Ready` com antecedência, para que o
+   runbook abaixo não fique esperando emissão de TLS no meio do incidente.
+
+**A varredura fatiada perde o alvo durante o failover.** O `pg_cron` do
+Supabase chama `/api/cron/varredura` **na Vercel** (ADR 0025); ele não sabe
+que o Fly existe. Duas saídas, nenhuma delas código novo:
+
+1. Repontar o SQL do agendador (`supabase/cron/varredura.sql`) para a URL do
+   Fly durante o incidente, com o mesmo `CRON_SECRET` também cadastrado lá —
+   trabalho manual do dono, revertido junto com o DNS.
+2. Aceitar a pausa da varredura fatiada pelo tempo do failover e deixar
+   `.github/workflows/varredura.yml` (a rede de segurança já documentada em
+   "A varredura diária") cobrir `sync`/captura/reconferência por
+   `workflow_dispatch` — ele roda contra o banco de produção
+   independentemente de qual frontend serve HTTP.
+
+A opção 2 é o caminho recomendado: o failover existe para manter o dashboard
+no ar, não para migrar a infraestrutura de ingestão sob a pressão de um
+incidente.
+
+**Runbook de failover de DNS (Cloudflare), os dois sentidos.** Os três CNAMEs
+de produção/staging/dev já são "DNS only" (nuvem cinza) e TTL padrão — a
+seção "DNS" acima explica por quê. Ida:
+
+1. **Passo do dono:** confirmar os pré-requisitos acima já feitos (app criado,
+   `FLY_API_TOKEN` cadastrado, certificado `Ready` — se o certificado ainda
+   não foi pedido com antecedência, pedir agora com `fly certs add
+   jobs.mastertimm.com.br` custa o tempo de emissão do TLS no meio do
+   incidente). Disparar `publicar-imagem-fly.yml` (`workflow_dispatch`, com
+   `deploy: true`) e confirmar `fly status` saudável.
+2. Confirmar a aplicação respondendo direto no host temporário do Fly
+   (`https://<app>.fly.dev/manifest.json`, depois login e um `/p/<slug>` de
+   teste) **antes** de tocar o DNS.
+3. **Passo do dono:** na Cloudflare, trocar o registro `CNAME` de
+   `jobs.mastertimm.com.br` de `cname.vercel-dns.com` para o host do Fly,
+   mantendo "DNS only" (nuvem laranja duplicaria CDN sem ganho, como já
+   registrado para a Vercel) e baixando o TTL para 300 s antes da troca, se
+   ainda não estiver nesse valor.
+4. Confirmar propagação (`dig +trace jobs.mastertimm.com.br`) dentro do TTL
+   declarado e TLS válido no destino novo.
+5. Smoke test manual: `/login` autentica, nenhuma rota responde sem sessão,
+   `/p/<slug>` de um perfil de teste devolve o esperado (mesma checklist de
+   "O que confirmar depois de subir").
+
+Volta, quando a Vercel normalizar: repetir o passo 3 apontando de volta para
+`cname.vercel-dns.com`, confirmar propagação e TLS, e então (se a opção 1 da
+varredura foi usada) repontar `supabase/cron/varredura.sql` de volta à
+Vercel. O Fly pode ficar parado (`fly scale count 0`) até o próximo
+incidente — `auto_stop_machines` em `fly.toml` já reduz o custo entre
+failovers.
 
 ## A varredura diária
 
@@ -897,3 +1087,12 @@ de execução da Vercel; esse diagnóstico continua no
    limpar cache nem reinstalar. No aparelho físico, confirmar o piso protetor
    em retrato e, em paisagem baixa de telefone, a ausência da faixa artificial
    de 48px sem perder o inset real informado pelo sistema.
+7. Com `RESEND_API_KEY`/`RESEND_FROM` configuradas em produção (G18: sem
+   provedor real, o link não vai para lugar nenhum que este teste possa ler —
+   em deployment o mailer omite, nunca imprime), pedir recuperação de senha
+   para uma conta de teste e conferir no e-mail recebido que o link aponta
+   para `jobs.mastertimm.com.br` — nunca para um `*.vercel.app` gerado nem
+   para qualquer outro host. Sem provedor configurado, confirmar em vez disso
+   que `JHO_PUBLIC_URL` está cadastrada em Production (tabela acima) — não
+   basta ler `VERCEL_PROJECT_PRODUCTION_URL` no painel, porque isso não prova
+   o que o runtime realmente recebeu.

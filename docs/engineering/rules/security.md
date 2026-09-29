@@ -82,9 +82,18 @@ instrumentado responde 200 a tudo e nenhum pedido sai),
 
 **Obrigação.** Nenhuma página nem API responde sem sessão válida — inclusive
 `/api/export`, que carrega o acervo inteiro. O modo aberto existe mas precisa
-ser pedido (`JHO_AUTH_MODE=open`) e só vale na máquina local: em deployment o
-código ignora o pedido (`src/contexts/auth/domain/open-mode.ts`). Produção,
-preview, staging, dev e valor desconhecido continuam exigindo login.
+ser pedido (`JHO_AUTH_MODE=open`) e só vale onde `isLocalProcess()`
+reconhece a máquina do dono: sem `VERCEL`, `VERCEL_ENV` nem `JHO_ENV`
+declarados (`src/contexts/auth/domain/open-mode.ts`). **Todo deployment
+precisa se declarar** para o código recusar o pedido — a Vercel já declara
+`VERCEL`/`VERCEL_ENV` por conta própria, mas qualquer outro destino não
+declara nada por padrão. O plano B no Fly.io (Fase 4 da contingência,
+`docs/engineering/deploy.md`) por isso fixa `JHO_ENV=production` no `fly.toml`
+**e** no `Dockerfile`: sem essa declaração explícita, o contêiner seria
+tratado como a máquina local — liberando o modo aberto, imprimindo o link de
+recuperação de senha no log (G18) e recusando a varredura. Produção, preview,
+staging, dev e valor desconhecido — todos declarados — continuam exigindo
+login.
 
 **Por quê.** "Só roda em loopback" protege contra a internet, não contra outro
 processo, outra conta da máquina, nem contra um bind errado — que já aconteceu
@@ -192,8 +201,30 @@ Origem: AGENTS (mesma invariante). Detalhes: [security.md](../../security.md)
 texto, redigido como "se existir uma conta". Isso vale também para erro de
 envio e limite de tentativas.
 
+**A origem do link nunca vem do `Host` da requisição.** Atrás de qualquer
+proxy — Vercel, o plano B no Fly.io, o que vier depois —, quem manda a
+requisição controla o cabeçalho `Host`; montar o link de recuperação a partir
+dele é host poisoning (o e-mail sai do remetente certo, mas o link aponta
+para o domínio de quem atacou, e o token vaza para lá). `resolvePublicOrigin`
+(`src/contexts/auth/domain/public-origin.ts`) resolve, em ordem: 1)
+`JHO_PUBLIC_URL`, se cadastrada; 2) **na Vercel, sem cadastro nenhum**,
+`VERCEL_PROJECT_PRODUCTION_URL` (produção) ou, em preview,
+`VERCEL_BRANCH_URL` (estável por branch) antes de `VERCEL_URL` (único por
+deployment, muda a cada push) — todas variáveis de sistema que a própria
+plataforma escreve, não o cliente; 3) na máquina do dono, o `Host` da
+requisição, como sempre. Fora dessas três (o plano B no Fly.io sem
+`JHO_PUBLIC_URL`), falha fechado — devolve `null`, e a Server Action
+(`app/login/forgot/actions.ts`) não constrói link nenhum a partir da entrada
+do cliente. **Isto depende de a Vercel expor as variáveis de sistema no
+runtime da função** ("Automatically expose System Environment Variables",
+[deploy.md](../deploy.md#variáveis)); se ela não expuser nem `VERCEL`, o
+efeito não é falha fechada — é `isLocalProcess()` tratar o deployment como a
+máquina do dono, reabrindo o `Host` da requisição como origem (issue
+[#378](https://github.com/andreustimm/master-jobs/issues/378)).
+
 Origem: AGENTS (invariante "Recuperar senha"). Prova:
-`tests/password-reset.test.ts` e comparação no navegador no E2E.
+`tests/password-reset.test.ts`, `tests/public-origin.test.ts` e comparação no
+navegador no E2E.
 
 <a id="g18"></a>
 ## G18 — Token de recuperação: uso único, uma hora, sessões derrubadas
@@ -375,7 +406,22 @@ ameaça, descrito em [security.md](../../security.md) e
 [deploy.md](../deploy.md). O Achado 1 de `security.md` registra o incidente
 original em que `next dev` escutava em `0.0.0.0`.
 
-Origem: regra 12. Prova: `tests/security.test.ts`.
+**Exceção de contêiner (Fase 4 da #351, ADR 0030).** A imagem do plano B de
+deploy (`Dockerfile`, publicada no GHCR e implantada no Fly.io — região
+`gru`) roda `node server.js` do build `standalone` com `ENV HOSTNAME=0.0.0.0`
+declarado **dentro da própria imagem**, nunca em `package.json`. É a única
+forma de o proxy de borda do Fly alcançar o processo, que fica fora do
+namespace de rede do container — bind em `127.0.0.1` ali tornaria o serviço
+inatingível de fora, não mais seguro: G38 (sessão exigida por omissão) já é a
+barreira real nesse ambiente, o mesmo raciocínio que já vale para a Vercel.
+`dev` e `start` continuam presos a `127.0.0.1` e são a única coisa que o
+laptop do dono executa; `pnpm start:container` (ou script equivalente) **não
+existe** — a exceção mora só no `CMD`/`ENV` do `Dockerfile`, para que não
+exista um script local capaz de reabrir o bind amplo por engano.
+
+Origem: regra 12. Prova: `tests/security.test.ts`,
+`tests/deploy-fly.test.ts` (a exceção fica só no `Dockerfile`; `dev`/`start`
+continuam em `127.0.0.1`).
 
 <a id="g73"></a>
 ## G73 — Rede controlada nas operações que a pedem
