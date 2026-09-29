@@ -3,11 +3,13 @@ import {
   clusterBreakdown,
   corpusStats,
   countBoard,
+  listCandidateTracks,
   listBoard,
   type BoardFilters,
 } from "../src/contexts/matching/index.ts";
+import { loadRates } from "../src/contexts/fx/index.ts";
 import { pipelineCounts } from "../src/contexts/pursuit/index.ts";
-import type { FilterState } from "./filter-state.ts";
+import { resolvePayFilter, type FilterState } from "./filter-state.ts";
 
 /**
  * As leituras do cockpit, na ordem em que podem acontecer.
@@ -34,6 +36,19 @@ export async function loadCockpit(
     corpusStats(candidateId),
     pipelineCounts(candidateId),
   ]);
+  // A faixa salarial precisa da moeda/período da trilha principal e da mesma
+  // cotação que `/jobs` usa. Sem esta resolução o cockpit caía no acervo
+  // inteiro enquanto a lista aplicava a faixa da URL.
+  const payContext = state.pay !== undefined || state.sort === "comp"
+    ? await Promise.all([listCandidateTracks(candidateId), loadRates()])
+    : null;
+  const primary = payContext?.[0].find((track) => track.isPrimary);
+  const pay = resolvePayFilter(state, primary?.target ?? null);
+  const boardFilters: BoardFilters = {
+    ...filters,
+    pay,
+    rates: payContext?.[1],
+  };
   // A contagem do título vem de `countBoard`, com o conjunto COMPLETO de
   // filtros — não de `facets.total`.
   //
@@ -47,17 +62,20 @@ export async function loadCockpit(
   // pode ter duas respostas em duas telas.
   const [clusters, total] = await Promise.all([
     clusterBreakdown(candidateId, 45),
-    countBoard(candidateId, filters),
+    countBoard(candidateId, boardFilters),
   ]);
-  const top = await listBoard(candidateId, { ...filters, limit: 12 });
+  const top = await listBoard(candidateId, { ...boardFilters, limit: 12 });
   const facets = await cachedBoardFacets(candidateId, {
     minFit: state.fit,
-    keepUnscored: filters.keepUnscored,
+    keepUnscored: boardFilters.keepUnscored,
     cluster: state.cluster,
-    query: filters.query,
+    query: boardFilters.query,
+    company: boardFilters.company,
     sourceKinds: state.sources,
     workMode: state.workMode,
-    groupRepeats: filters.groupRepeats,
+    pay: boardFilters.pay,
+    rates: boardFilters.rates,
+    groupRepeats: boardFilters.groupRepeats,
   });
   return { stats, counts, clusters, total, top, facets };
 }

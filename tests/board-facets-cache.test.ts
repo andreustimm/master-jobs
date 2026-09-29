@@ -87,7 +87,7 @@ describe("cache das facetas", () => {
     expect(reads).toBe(2);
   });
 
-  it("paginar, ordenar, a faixa salarial, a empresa e os chips de recorte não refazem as facetas", async () => {
+  it("paginar e chips independentes reaproveitam, mas salário e empresa criam faceta própria", async () => {
     await scored(1, 1, "architect");
     const view = (params: Record<string, string>, page = 1) =>
       loadJobsView({
@@ -105,7 +105,7 @@ describe("cache das facetas", () => {
       const last = await view({}, 3);
       expect(last.facets).toEqual(first.facets);
     });
-    expect(reads).toBe(1);
+    expect(reads).toBe(4);
 
     // Um filtro que muda as facetas é outra entrada.
     expect(await facetReads(() => view({ cluster: "architect" }))).toBe(1);

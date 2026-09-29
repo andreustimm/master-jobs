@@ -1,5 +1,12 @@
 import type { Route } from "next";
-import { WORK_MODES, readWorkMode, type BoardFilters, type TrackTarget, type WorkMode } from "../src/contexts/matching/index.ts";
+import {
+  WORK_MODES,
+  readWorkMode,
+  type BoardFilters,
+  type PayFilter,
+  type TrackTarget,
+  type WorkMode,
+} from "../src/contexts/matching/index.ts";
 import { FUNNEL_STATUSES } from "../src/contexts/pursuit/domain/application.ts";
 import { parseQuery } from "../src/core/search.ts";
 import { validateTerm, type TermError, type ValidTerm } from "../src/core/term.ts";
@@ -292,20 +299,22 @@ export type FacetToggle = "unblocked" | "fresh" | "named";
 /**
  * O link de um card do cockpit que conta uma faceta.
  *
- * Carrega SÓ o que a faceta lê — corte, cluster, consulta, fontes, modalidade
- * e agrupamento — mais o recorte do card, e nunca o estado inteiro. `status`,
- * `company`, `fitMax`, faixa salarial ou "ainda não enviadas" ficam de fora
+ * Carrega SÓ o que a faceta lê — corte, cluster, consulta, fontes, modalidade,
+ * empresa, faixa salarial e agrupamento — mais o recorte do card, e nunca o
+ * estado inteiro. `status`, `fitMax` e "ainda não enviadas" ficam de fora
  * porque `cachedBoardFacets` não os aplica: levá-los faria `/jobs` contar um
- * quadro menor que o número do card, e a mesma pergunta teria duas respostas.
+ * quadro menor que o número do card.
  */
 export function facetHref(state: FilterState, toggle: FacetToggle): Route {
   const facet: FilterState = {
     fit: state.fit,
     cluster: state.cluster,
     query: state.query,
+    company: state.company,
     sources: state.sources,
     workMode: state.workMode,
     grouped: state.grouped,
+    pay: state.pay,
     [toggle]: true,
     notices: [],
   };
@@ -330,6 +339,26 @@ export function defaultPay(primary: TrackTarget | null): { currency: string; per
   const first = primary?.compensation.ranges[0];
   if (!first) return { currency: "USD", period: "month" };
   return { currency: first.currency.toUpperCase(), period: first.period === "year" ? "year" : "month" };
+}
+
+/**
+ * Normaliza a faixa da URL para o filtro do repositório.
+ *
+ * A moeda e o período omitidos significam o primeiro intervalo da trilha
+ * principal. O cockpit e `/jobs` chamam esta mesma função para não responderem
+ * perguntas diferentes quando a URL só informa o piso/teto.
+ */
+export function resolvePayFilter(state: FilterState, primary: TrackTarget | null): PayFilter | undefined {
+  const active = state.pay !== undefined || state.sort === "comp";
+  if (!active) return undefined;
+  const defaults = defaultPay(primary);
+  return {
+    min: state.pay?.min,
+    max: state.pay?.max,
+    currency: state.pay?.currency ?? defaults.currency,
+    period: state.pay?.period ?? defaults.period,
+    disclosedOnly: state.pay?.disclosedOnly ?? false,
+  };
 }
 
 const BOARD_STATUSES = [...FUNNEL_STATUSES, "unfiled", "any"] as const;

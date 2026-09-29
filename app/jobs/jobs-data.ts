@@ -22,7 +22,7 @@ import {
 } from "../../src/contexts/matching/index.ts";
 import { loadRates } from "../../src/contexts/fx/index.ts";
 import type { StageTimer } from "../../src/core/observability.ts";
-import { defaultPay, readFilters, toBoardFilters, type FilterNotice, type FilterState } from "../filter-state";
+import { defaultPay, readFilters, resolvePayFilter, toBoardFilters, type FilterNotice, type FilterState } from "../filter-state";
 
 /** Abaixo disto, a oferta de buscar o termo nas plataformas ganha destaque. */
 export const FEW_MATCHES = 10;
@@ -131,21 +131,22 @@ export async function loadJobsView(input: {
 
   const primary = tracks.find((track) => track.isPrimary);
   const defaults = defaultPay(primary?.target ?? null);
+  const resolvedPay = resolvePayFilter(state, primary?.target ?? null);
   const currencies = fx
     ? [...new Set([fx.base, ...Object.keys(fx.rates)].map((code) => code.toUpperCase()))].sort()
     : [defaults.currency];
   const currency =
     state.pay?.currency && currencies.includes(state.pay.currency) ? state.pay.currency : defaults.currency;
   const pay: PayFilter = {
-    min: state.pay?.min,
-    max: state.pay?.max,
+    min: resolvedPay?.min,
+    max: resolvedPay?.max,
     currency,
-    period: state.pay?.period ?? defaults.period,
-    disclosedOnly: state.pay?.disclosedOnly ?? false,
+    period: state.pay?.period ?? resolvedPay?.period ?? defaults.period,
+    disclosedOnly: resolvedPay?.disclosedOnly ?? false,
   };
   // Pay is normalized when the viewer set any pay control or sorts by pay;
   // otherwise the board stays as fast as before.
-  const payActive = state.pay !== undefined || state.sort === "comp";
+  const payActive = resolvedPay !== undefined;
 
   const filters: BoardFilters = {
     ...toBoardFilters(state),
@@ -164,17 +165,21 @@ export async function loadJobsView(input: {
   const { rows, total } = await stage("board", () =>
     listBoardPage(candidateId, { ...filters, limit: input.pageSize, offset: (input.page - 1) * input.pageSize }),
   );
-  // Com cache: paginar, reordenar ou trocar a faixa salarial não muda as
-  // facetas, e elas eram a leitura mais cara da tela. Ver `cachedBoardFacets`.
+  // Com cache: paginar e reordenar não mudam as facetas; empresa e faixa
+  // salarial mudam o universo contado e entram na chave. Ver
+  // `cachedBoardFacets`.
   const facets = await stage("facets", () =>
     cachedBoardFacets(candidateId, {
       minFit: state.fit,
       keepUnscored: filters.keepUnscored,
       cluster,
       query: filters.query,
+      company: filters.company,
       sourceKinds: state.sources,
       workMode: state.workMode,
       track: scope ?? undefined,
+      pay: filters.pay,
+      rates: filters.rates,
       // Os chips têm de contar a MESMA coisa que o rodapé. Sem isto o rodapé
       // contava grupos e os chips contavam publicações, e um chip podia mostrar
       // número maior que o total exibido ao lado dele.

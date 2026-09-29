@@ -993,12 +993,21 @@ export async function countHiddenByPayRange(
   opts: BoardFilters = {},
 ): Promise<number> {
   if (!opts.pay || (opts.pay.min === undefined && opts.pay.max === undefined)) return 0;
-  const pay = await payContext(opts);
-  const conditions = boardConditions({ ...opts, pay: undefined }, candidateId);
-  const outside: SQL[] = [];
-  if (opts.pay.min !== undefined) outside.push(sql`${pay!.amount} < ${opts.pay.min}`);
-  if (opts.pay.max !== undefined) outside.push(sql`${pay!.amount} > ${opts.pay.max}`);
-  return countWhere(candidateId, opts, [...conditions, sql`(${sql.join(outside, sql` or `)})`], pay);
+  // A faixa pode mudar a publicação canônica de um grupo. Contar os salários
+  // fora da faixa diretamente sobre a linha mínima escolhia a irmã errada e
+  // somava uma publicação a mais ao aviso quando a lista estava agrupada.
+  // A diferença entre o mesmo predicado sem e com a faixa conta grupos (ou
+  // publicações, sem agrupamento) que realmente desapareceram da lista.
+  //
+  // O aviso fala de salários fora da faixa; uma publicação sem salário não é
+  // uma ocorrência fora dela. Por isso a leitura comparável mantém os não
+  // divulgados, mesmo quando `disclosedOnly` também os oculta na lista.
+  const all = await countBoard(candidateId, { ...opts, pay: undefined, rates: undefined });
+  const visible = await countBoard(candidateId, {
+    ...opts,
+    pay: { ...opts.pay, disclosedOnly: false },
+  });
+  return Math.max(0, all - visible);
 }
 
 /**
@@ -1079,6 +1088,7 @@ export async function nearMatches(
 
 /** Counts for the filter chips, so the UI can show what each option yields. */
 export async function boardFacets(candidateId: number | null, base: BoardFilters = {}) {
+  const pay = await payContext(base);
   const sourceKind = sql<string>`split_part(${job.sourceId}, ':', 1)`;
   const matchesSource = base.sourceKinds?.length
     ? inArray(sourceKind, [...base.sourceKinds]) : sql`true`;
@@ -1091,39 +1101,43 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
   // grupo, então seu filtro aceita ou recusa o grupo inteiro. Cluster pode
   // mudar entre irmãs: o resumo precisa da primeira que passa pelo cluster,
   // enquanto as opções de cluster precisam da primeira sem esse filtro.
-  const eligible = getDb().$with("facet_candidates").as(
-    getDb()
-      .select({
-        id: job.id,
-        cluster: jobScore.cluster,
-        kind: sourceKind.as("kind"),
-        matchesSource: matchesSource.as("matches_source"),
-        matchesCluster: matchesCluster.as("matches_cluster"),
-        firstId: (base.groupRepeats
-          ? sql`min(${job.id}) over (partition by ${group})` : sql`${job.id}`).as("first_id"),
-        firstSelectedId: (base.groupRepeats
-          ? sql`min(${job.id}) filter (where ${matchesCluster}) over (partition by ${group})`
-          : sql`${job.id}`).as("first_selected_id"),
-        unblocked: sql`coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb`.as("unblocked"),
-        fresh: sql`coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${freshCutoff}`.as("fresh"),
-        withComp: sql`coalesce(${job.compMax}, ${job.compMin}, 0) > 0`.as("with_comp"),
-        named: sql`lower(${job.companyName}) <> lower(coalesce(${source.label}, ''))`.as("named"),
-        described: sql`${job.id} in (${describedOpenJobIds()})`.as("described"),
-        notApplied: sql`${application.appliedAt} is null`.as("not_applied"),
-      })
-      .from(job)
-      .leftJoin(jobScore, scoreJoin(candidateId, base.track))
-      .leftJoin(
-        application,
-        and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
-      )
-      .leftJoin(source, eq(source.id, job.sourceId))
-      .leftJoin(jobPage, eq(jobPage.jobId, job.id))
-      .where(and(...boardConditions({ ...base, sourceKinds: undefined, cluster: undefined, groupRepeats: false }, candidateId))),
-  );
+  let eligibleQuery = getDb()
+    .select({
+      id: job.id,
+      cluster: jobScore.cluster,
+      kind: sourceKind.as("kind"),
+      matchesSource: matchesSource.as("matches_source"),
+      matchesCluster: matchesCluster.as("matches_cluster"),
+      firstId: (base.groupRepeats
+        ? sql`min(${job.id}) over (partition by ${group})` : sql`${job.id}`).as("first_id"),
+      firstSelectedId: (base.groupRepeats
+        ? sql`min(${job.id}) filter (where ${matchesCluster}) over (partition by ${group})`
+        : sql`${job.id}`).as("first_selected_id"),
+      unblocked: sql`coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb`.as("unblocked"),
+      fresh: sql`coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${freshCutoff}`.as("fresh"),
+      withComp: sql`coalesce(${job.compMax}, ${job.compMin}, 0) > 0`.as("with_comp"),
+      named: sql`lower(${job.companyName}) <> lower(coalesce(${source.label}, ''))`.as("named"),
+      described: sql`${job.id} in (${describedOpenJobIds()})`.as("described"),
+      notApplied: sql`${application.appliedAt} is null`.as("not_applied"),
+    })
+    .from(job)
+    .leftJoin(jobScore, scoreJoin(candidateId, base.track))
+    .leftJoin(
+      application,
+      and(eq(application.jobId, job.id), scopedTo(application.candidateId, candidateId)),
+    )
+    .leftJoin(source, eq(source.id, job.sourceId))
+    .leftJoin(jobPage, eq(jobPage.jobId, job.id))
+    .where(and(...boardConditions({ ...base, sourceKinds: undefined, cluster: undefined, groupRepeats: false }, candidateId, pay)))
+    .$dynamic();
+  if (pay?.relation.kind === "shared") eligibleQuery = eligibleQuery.leftJoin(pay.relation.table, eq(pay.relation.table.jobId, job.id));
+  else if (pay) eligibleQuery = eligibleQuery.leftJoinLateral(pay.relation.table, sql`true`);
+  const eligible = getDb().$with("facet_candidates").as(eligibleQuery);
   const inSummary = sql`${eligible.matchesSource} and ${eligible.matchesCluster} and ${eligible.id} = ${eligible.firstSelectedId}`;
   const count = (condition: SQL = sql`true`) => sql<number>`count(*) filter (where ${inSummary} and ${condition})`;
-  const [summary] = await getDb().with(eligible).select({
+  const [summary] = await getDb()
+    .with(...(pay?.relation.kind === "shared" ? [pay.relation.table] : []), eligible)
+    .select({
     total: count(),
     unblocked: count(sql`${eligible.unblocked}`),
     fresh: count(sql`${eligible.fresh}`),

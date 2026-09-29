@@ -89,15 +89,21 @@ export async function checkCockpitCards(browser, base, accounts, check) {
       );
     }
 
-    // O campo de empresa é renderizado no cockpit, mas a faceta não o aplica:
-    // o link não pode carregá-lo, ou o destino contaria outra coisa.
-    await page.goto(`${base}/?company=Acme&fitMax=90&notApplied=1`, { waitUntil: "networkidle" });
+    // Empresa e faixa salarial fazem parte do universo que a faceta conta;
+    // teto de Score e "ainda não enviadas" continuam fora dele.
+    await page.goto(`${base}/?company=Acme&pay=6000&payMax=9000&cur=USD&per=month&fitMax=90&notApplied=1`, { waitUntil: "networkidle" });
     const typed = await readCards(page);
     check(
-      "cockpit #314: link de faceta não carrega empresa, teto de Score nem não enviadas",
+      "cockpit #396: link de faceta carrega empresa e faixa, sem teto de Score nem não enviadas",
       ["named", "unblocked", "fresh"].every((key) => {
         const params = new URL(typed[key].href, base).searchParams;
-        return !params.has("company") && !params.has("fitMax") && !params.has("notApplied");
+        return params.get("company") === "Acme"
+          && params.get("pay") === "6000"
+          && params.get("payMax") === "9000"
+          && params.get("cur") === "USD"
+          && params.get("per") === "month"
+          && !params.has("fitMax")
+          && !params.has("notApplied");
       }),
       JSON.stringify(typed.named),
     );

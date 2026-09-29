@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: O campo de empresa devolve só as vagas daquele empregador, e não as que mencionam o nome na descrição
 entry_points: /jobs?company=Shopify
-qa_status: untested
-bug_ids:
-fix_status:
-retest_status:
+qa_status: pass
+bug_ids: BUG-20260929-jobs-chips-ignore-employer-filter
+fix_status: fixed
+retest_status: pass
 fix_commits:
-evidence: docs/qa/evidence/2026-09-21-docs-qa-jornada-do-quadro-filtrado/numbers-agree-empty-employer.png
-last_report: 2026-09-21-docs-qa-jornada-do-quadro-filtrado
+evidence: docs/qa/evidence/2026-09-21-docs-qa-jornada-do-quadro-filtrado/numbers-agree-empty-employer.png; docs/qa/evidence/2026-09-29-cockpit-contagens-filtros/CH-filtered-board-numbers-agree/company-aurora-counts-agree.png; docs/qa/evidence/2026-09-29-cockpit-contagens-filtros/CH-filtered-board-numbers-agree/jobs-company-aurora.png
+last_report: docs/qa/reports/2026-09-29-cockpit-contagens-filtros.md
 overlaps: JOBS-source-multi-select
 ---
 
@@ -25,3 +25,7 @@ A conferir: uma vaga que apenas cita a empresa na descrição NÃO aparece;
 limpar remove o filtro.
 
 **Reset 2026-09-23 (#218):** o campo Empresa passou a aplicar sozinho depois de 400 ms sem digitar, com três caracteres ou mais; Enter continua aplicando na hora para nomes curtos.
+
+Reteste targeted de #396 (29/09): `Aurora` no cockpit mostrou um chip sem
+bloqueio com 1, o ranking com 1 correspondência e a leitura independente em
+`/jobs?company=Aurora` mostrou a mesma única vaga após recarga.

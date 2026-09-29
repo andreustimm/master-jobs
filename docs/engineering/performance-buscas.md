@@ -526,17 +526,17 @@ faz nada. Se a migration a criar, ela vai para o primeiro schema do
 ## Cache das facetas — medição de 22/09/2026
 
 A requisição de produção medida acima gastou 3.479 ms em `facets`, 66% do
-total. As facetas dependem só do escopo da sessão e de sete filtros; paginar,
-reordenar, mudar a faixa salarial, a empresa ou os chips de recorte refazia a
-mesma consulta para devolver os mesmos números. Desde a #216,
+total. As facetas dependem só do escopo da sessão e dos filtros que definem o
+universo contado; paginar, reordenar ou trocar os chips de recorte não muda a
+consulta, enquanto empresa e faixa salarial mudam seus números. Desde a #216,
 `cachedBoardFacets` (`src/contexts/matching/app/board-facets.ts`) guarda o
 resultado num mapa do processo. `/jobs` e `/` passam por ele; `boardFacets`
 continua sendo a consulta, sem mudança de semântica.
 
 **A chave** (`facetCacheKey`, pura, em `domain/facet-cache.ts`) é a serialização
 canônica de tudo que a consulta recebe — `minFit`, `cluster`, `term` (texto e
-chave), `sourceKinds` na ordem dada, `workMode`, `track` (candidato, trilha
-principal, trilhas e modo) e `groupRepeats` —, mais o `candidateId` **da
+chave), `sourceKinds` na ordem dada, `company`, `workMode`, `track` (candidato,
+trilha principal, trilhas e modo), `pay`/`rates` e `groupRepeats` —, mais o `candidateId` **da
 sessão** e `SCORER_VERSION`. A chave não mantém lista própria de campos: tudo
 que `FacetQuery` deixa passar entra nela. Um filtro novo da consulta só precisa
 entrar no `Pick` de `FacetQuery`, e daí chega à chave sozinho. Idioma não entra porque as
