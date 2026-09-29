@@ -1,6 +1,6 @@
 # BUG-20260929-platform-offer-opens-wrong-screen: oferta "Buscar nas plataformas" em Vagas abre Nova trilha vazia em vez de Buscas preenchida
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Blocks-Completion
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Andreus em triagem
@@ -39,13 +39,12 @@ termo já está salvo".
 
 ## Fix
 
-<!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** A oferta usava `/searches/tracks/new?term=...`, desviando o termo para o formulário de nova trilha; a tela Buscas também não lia `searchParams` para preencher o campo.
+- **Fix commit:** `fix/oferta-termo-em-buscas` (PR a abrir).
+- **Regression test:** `tests/searches-offer.test.ts` e `term-search E2E-001/E2E-020` cobrem o destino, o preenchimento, o salvamento na trilha existente e a persistência após refresh.
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** 2026-09-29, viewport 375×812, pt-BR, cenário `SRCH-save-term-from-jobs`.
+- **Result:** Pass — a oferta abriu `/searches?term=Laravel`, o campo permaneceu intacto, Laravel foi salvo uma vez na trilha principal e a leitura após refresh confirmou o estado.

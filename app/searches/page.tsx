@@ -84,8 +84,14 @@ const REASON_KEYS = {
   stale: "captureReason.stale",
 } as const satisfies Record<string, TranslationKey>;
 
-export default async function SearchesPage() {
+export default async function SearchesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { t, locale } = await getTranslator();
+  const params = await searchParams;
+  const requestedTerm = typeof params.term === "string" ? params.term : undefined;
   // Guard antes de ler qualquer dado. O escopo vem da sessão: termos e trilhas
   // são do candidato e de mais ninguém (ADR-006).
   const { session, candidateId } = await requireOwnCandidatePage("candidate:read");
@@ -116,7 +122,18 @@ export default async function SearchesPage() {
 
       {(tracks.pending || terms.capturesOff || terms.dailyRepeatPaused) && (
         <Card className="mb-4 gap-1 p-4" role="status" data-testid="searches-notices">
-          {tracks.pending && <p className="type-body-md" data-testid="searches-pending">{t("searches.pendingPrimary")}</p>}
+          {tracks.pending && (
+            <>
+              <p className="type-body-md" data-testid="searches-pending">{t("searches.pendingPrimary")}</p>
+              <TransitionLink
+                href="/candidate"
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }), TOUCH)}
+                data-testid="searches-pending-candidate"
+              >
+                {t("nav.candidate")}
+              </TransitionLink>
+            </>
+          )}
           {terms.capturesOff && <p className="type-body-md" data-testid="searches-captures-off">{t("searches.capturesOff")}</p>}
           {terms.dailyRepeatPaused && (
             <p className="type-body-md" data-testid="searches-daily-paused">{t("searches.dailyRepeatPaused")}</p>
@@ -141,7 +158,7 @@ export default async function SearchesPage() {
             >
               <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1 type-caption-sm text-muted-foreground">
                 {t("searches.term")}
-                <Input name="term" required maxLength={60} data-testid="searches-term-input" />
+                <Input name="term" required defaultValue={requestedTerm} data-testid="searches-term-input" />
               </label>
               <label className="flex flex-col gap-1 type-caption-sm text-muted-foreground">
                 {t("searches.track")}

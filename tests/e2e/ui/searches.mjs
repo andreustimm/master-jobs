@@ -345,7 +345,7 @@ export async function run(ctx) {
   check(
     "term-search E2E-020 termo sem vaga: o vazio nomeia o termo e oferece buscar nas plataformas",
     emptyTerm.empty.includes("zzqxunmatched")
-      && emptyTerm.offer === "/searches/tracks/new?term=zzqxunmatched"
+      && emptyTerm.offer === "/searches?term=zzqxunmatched"
       && emptyTerm.emphasized === "true",
     JSON.stringify(emptyTerm),
   );
@@ -442,35 +442,47 @@ export async function run(ctx) {
     offer: document.querySelector('[data-testid="jobs-offer-search-link"]')?.getAttribute("href") ?? "",
   }));
   await page.locator('[data-testid="jobs-offer-search-link"]').click();
-  await settle(/\/searches\/tracks\/new\?term=Laravel/);
+  await settle(/\/searches\?term=Laravel/);
+  const prefilled = await page.locator('[data-testid="searches-term-input"]').inputValue();
+
+  // A oferta leva à tela de Buscas. A sugestão continua coberta pelo caminho
+  // explícito, que também é usado quando a pessoa escolhe criar uma trilha.
+  await page.goto(`${BASE}/searches/tracks/new?term=Laravel`, { waitUntil: "networkidle" });
   const suggested = await page.evaluate(() => ({
     titles: document.querySelector('[data-testid="track-titles"]')?.value ?? "",
     evidence: document.querySelector('[data-testid="track-suggestion-evidence"]')?.textContent?.trim() ?? "",
   }));
-  const laravelCreated = await feedbackOf(async () => {
-    await page.locator('[data-testid="track-create"]').click();
-    await settle(/\/searches$/);
-  });
-  const laravelTrack = (await trackCards()).find((card) => card.name === "Laravel");
+  await page.goto(`${BASE}/searches?term=Laravel`, { waitUntil: "networkidle" });
+  await settle(/\/searches\?term=Laravel/);
+  const laravelCreated = await saveTermOnPage("Laravel");
+  const laravelTrack = (await trackCards()).find((card) => card.primary);
   const laravelTermId = await termIdOf("Laravel");
+  await page.reload({ waitUntil: "networkidle" });
+  const laravelOccurrences = await page.evaluate((wanted) =>
+    [...document.querySelectorAll('div[data-state][data-testid^="term-"]')]
+      .filter((node) => node.querySelector("span[data-user-content]")?.textContent?.trim() === wanted).length,
+    "Laravel",
+  );
   const laravelTerm = {
     inTrack: await page.locator(`[data-testid="track-${laravelTrack?.id}"] [data-testid="term-${laravelTermId}"]`).count(),
     platforms: await page.locator(`[data-testid="term-platforms-${laravelTermId}"] li`).allTextContents(),
     coverage: ((await page.locator('[data-testid="searches-coverage"]').textContent()) ?? "").trim(),
   };
   check(
-    "term-search E2E-001 Laravel só na descrição aparece, a oferta sugere a trilha e o termo salvo mostra capturas desligadas por plataforma",
+    "term-search E2E-001 Laravel só na descrição aparece, a oferta preenche Buscas e o termo salvo sobrevive ao refresh",
     laravelBoard.descriptionOnly
       && laravelBoard.hint === ptBR.filters.searchHint
-      && laravelBoard.offer === "/searches/tracks/new?term=Laravel"
+      && laravelBoard.offer === "/searches?term=Laravel"
+      && prefilled === "Laravel"
       && suggested.titles.length > 0
       && suggested.evidence.length > 0
       && laravelCreated.role === "status"
       && laravelTerm.inTrack === 1
+      && laravelOccurrences === 1
       && laravelTerm.platforms.length > 0
       && laravelTerm.platforms.every((line) => line.includes(ptBR.captureState.captures_off))
       && laravelTerm.coverage === ptBR.searches.coverage,
-    JSON.stringify({ laravelBoard, suggested, laravelCreated, laravelTrack, laravelTerm }),
+    JSON.stringify({ laravelBoard, prefilled, suggested, laravelCreated, laravelTrack, laravelTerm, laravelOccurrences }),
   );
 
   const tooShort = await saveTermOnPage("a");

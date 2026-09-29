@@ -140,7 +140,7 @@ export default async function Jobs({
         >
           <p className="type-body-md text-muted-foreground">{t("jobs.offerSearchLead")}</p>
           <TransitionLink
-            href={`/searches/tracks/new?term=${encodeURIComponent(offer.term)}` as Route}
+            href={`/searches?term=${encodeURIComponent(offer.term)}` as Route}
             // A sugestão de trilha é montada no servidor para o termo; buscá-la
             // de antemão a cada termo digitado seria trabalho jogado fora.
             prefetch={false}
