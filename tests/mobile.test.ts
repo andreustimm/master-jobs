@@ -149,6 +149,11 @@ describe("layout", () => {
     expect(searches.match(/className=\{TERM_ACTION\}/g)?.length).toBeGreaterThanOrEqual(2);
   });
 
+  it("lets the term validator receive values longer than its limit", () => {
+    const searches = read("app/searches/page.tsx");
+    expect(searches).not.toMatch(/<Input name="term"[^>]*maxLength=/);
+  });
+
   it("keeps administrative row actions touchable on mobile", () => {
     const users = read("app/admin/users/page.tsx");
     expect(users.match(/min-h-11 xl:h-7 xl:min-h-0/g)?.length).toBeGreaterThanOrEqual(4);

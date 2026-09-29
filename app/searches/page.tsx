@@ -141,7 +141,7 @@ export default async function SearchesPage() {
             >
               <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1 type-caption-sm text-muted-foreground">
                 {t("searches.term")}
-                <Input name="term" required maxLength={60} data-testid="searches-term-input" />
+                <Input name="term" required data-testid="searches-term-input" />
               </label>
               <label className="flex flex-col gap-1 type-caption-sm text-muted-foreground">
                 {t("searches.track")}

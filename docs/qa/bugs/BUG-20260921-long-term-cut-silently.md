@@ -1,6 +1,6 @@
 # BUG-20260921-long-term-cut-silently: termo colado acima de 60 caracteres é cortado e salvo sem aviso
 
-- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
+- **Status:** fixed <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Friction
 - **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Andreus em triagem
@@ -38,11 +38,18 @@ cria termo.
 
 <!-- filled when status moves to fixed -->
 - **Root cause:** o sintoma é o termo cortado sem aviso; a causa é o `maxlength` do campo, que impede o envio do texto inteiro e com ele a mensagem de termo longo que o servidor já tem.
-- **Fix commit:**
-- **Regression test:**
+- **Fix commit:** a preencher após o commit desta correção.
+- **Regression test:** `tests/mobile.test.ts` (o campo não corta antes da validação); `tests/e2e/ui/searches.mjs` (termo de 65 caracteres mostra `term_too_long` e não aparece após recarregar).
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** E2E seletivo (81/81) e jornada manual `CH-term-input-mistreated` em 375×812, PT-BR, com refresh e leitura independente.
+- **Result:** o aviso "O termo passa de 60 caracteres." apareceu; após recarregar, o termo longo não foi criado.
+
+## Re-found (2026-09-29)
+
+- **Charter:** CH-term-input-mistreated · **Report:** docs/qa/reports/2026-09-29T035351654581Z-97f37e1c-full-release-candidate-1.29-full.md (QA full do release candidate 1.29)
+- Mesmo sintoma reproduzido: colar 61 caracteres em Buscas corta para 60 e
+  salva sem a mensagem de termo longo. `maxlength=60` continua no campo.
+- **Evidence:** `docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-term-input-mistreated/01-61-chars-cortado-salvo.png`

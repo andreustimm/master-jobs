@@ -490,6 +490,18 @@ export async function run(ctx) {
     JSON.stringify({ tooShort, techleadSaved, duplicate, techleadId }),
   );
 
+  const longTermInput = "LongTermInput".repeat(5);
+  const longTermNotice = await saveTermOnPage(longTermInput);
+  await page.reload({ waitUntil: "networkidle" });
+  check(
+    "term-search E2E-021 termo acima de 60 caracteres chega à validação, mostra o aviso próprio e não é criado após recarregar",
+    longTermInput.length > 60
+      && longTermNotice.role === "alert"
+      && longTermNotice.text.includes(ptBR.searchFeedback.term_too_long)
+      && (await page.evaluate(findTerm, longTermInput)) === null,
+    JSON.stringify({ length: longTermInput.length, longTermNotice }),
+  );
+
   const pausedResult = await feedbackOf(() => page.locator(`[data-testid="term-toggle-${techleadId}"]`).click());
   const paused = {
     state: await eventually(termStateIs, [techleadId, "paused"]),
