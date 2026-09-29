@@ -10,6 +10,21 @@
 # (`scripts/release/promotion-ci.ts`) e a proteção de branch exigem, então um
 # job novo neste arquivo precisa entrar em `qualidade.needs` — o teste
 # `tests/ci-pipeline.test.ts` reprova quem esquecer.
+#
+# `runs-on:` de todo job é a mesma expressão, nunca um literal (issue #367,
+# ADR 0030 decisão 1/4): `vars.CI_RUNS_ON` ausente ou vazia mantém o runner
+# hospedado de hoje (`fromJSON(... || '"ubuntu-latest"')`); setada, troca o
+# runner de todo job sem editar este arquivo. A primeira metade da expressão é
+# a guarda de fork, embutida no próprio `runs-on:` e não num job de guarda
+# separado: uma PR cuja `head.repo` difere de `github.repository` sempre cai
+# em `ubuntu-latest`, mesmo com `CI_RUNS_ON` apontando para o runner próprio —
+# nenhum job chega a iniciar no runner próprio para código de terceiro. A
+# mesma decisão é testada isolada, sem o motor de expressões do Actions, em
+# `scripts/github/fork-guard.ts` (`isForkPullRequest`), e
+# `tests/ci-runner-selection.test.ts` confere que as duas nunca divergem
+# (F2-01–F2-04 em `.compozy/tasks/contingencia-ci-deploy/_tests.md`). A
+# exigência de aprovação humana para workflow de fork ("Approve and run", já
+# ativa no repositório) continua como segunda barreira.
 name: CI
 
 on:
@@ -43,7 +58,7 @@ jobs:
     # Os gates curtos que não dependem de teste: changelogs, tracker de QA,
     # tipos e os contratos das skills de QA. Juntos custam menos que a
     # preparação de um runner, por isso dividem um.
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 10
 
     steps:
@@ -111,7 +126,7 @@ jobs:
     #
     # A cobertura de uma fatia é parcial e não diz nada sozinha: os limiares
     # ficam zerados aqui e são aplicados sobre o total, no job `cobertura`.
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 15
     strategy:
       # Uma fatia vermelha não cancela as outras: a lista completa de falhas
@@ -198,7 +213,7 @@ jobs:
     # `qualidade` reprova pela fatia vermelha de qualquer jeito.
     if: ${{ !cancelled() }}
     needs: testes
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 10
 
     steps:
@@ -231,7 +246,7 @@ jobs:
     # O contrato de privacidade abre um Chromium real. Ele fica separado da
     # cobertura para não concorrer com os testes curtos, mas continua sendo
     # obrigatório no mesmo portão que autoriza a promoção.
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 10
 
     steps:
@@ -275,7 +290,7 @@ jobs:
         run: pnpm test:pwa-browser
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 15
 
     steps:
@@ -312,7 +327,7 @@ jobs:
     # código funciona", é "o banco acompanha o código". Um schema.ts alterado
     # sem migração correspondente passa em todos os testes — eles rodam sobre um
     # banco recriado do zero — e quebra só no ambiente que já tem dado.
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 10
 
     steps:
@@ -368,7 +383,7 @@ jobs:
     # de `main` exige, e 15 minutos de navegador só atrasam a PR de produção
     # (#303). `staging` recebe exatamente o SHA cujo push em `dev` já rodou o E2E.
     if: github.event_name != 'workflow_dispatch' && inputs.target-sha == ''
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 40
     permissions:
       contents: read
@@ -432,7 +447,7 @@ jobs:
     # falha, pulo ou cancelamento.
     if: ${{ always() }}
     needs: [contratos, testes, cobertura, pwa-browser, build, schema-e-migracao]
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 5
 
     steps:
@@ -446,7 +461,7 @@ jobs:
   validacao:
     if: inputs.target-sha != ''
     needs: [qualidade, schema-e-migracao]
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     outputs:
       sha: ${{ steps.alvo.outputs.sha }}
     steps:

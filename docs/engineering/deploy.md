@@ -677,6 +677,74 @@ no pooler de sessão da mesma região (`aws-0-sa-east-1.pooler.supabase.com:5432
 usuário `postgres.<ref>`, mesma senha) por `reachableMigrationTarget()` e mascara
 o resultado no log. A porta 6543 (transação) continua recusada.
 
+### Runner self-hosted opt-in (`CI_RUNS_ON`)
+
+Fase 2 da contingência de CI/deploy ([issue #367](https://github.com/andreustimm/master-jobs/issues/367),
+[ADR 0030](../adr/0030-contingencia-de-ci-e-deploy.md)). O `runs-on:` de todo
+job de `ci.yml` é uma única expressão, nunca um literal
+(`tests/ci-runner-selection.test.ts` reprova quem adicionar `runs-on:
+ubuntu-latest` de novo):
+
+```yaml
+runs-on: ${{ github.event_name == 'pull_request' &&
+  github.event.pull_request.head.repo.full_name != github.repository &&
+  'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+```
+
+- **Ausente ou vazia** (padrão): `ubuntu-latest`, o runner hospedado de hoje —
+  nada muda sem ação do dono (princípio 1/2 da ADR).
+- **Setada** (`gh variable set CI_RUNS_ON --body
+  '["self-hosted","linux","master-jobs"]'`): todo job passa a rodar no runner
+  próprio, sem editar `ci.yml`.
+- **PR de fork nunca roda no runner próprio**, mesmo com a variável setada — a
+  guarda está embutida na própria expressão (a metade antes de `||`), não num
+  job separado que rodaria depois de outros já terem começado. A mesma
+  comparação é testada isolada em `scripts/github/fork-guard.ts`
+  (`isForkPullRequest`) e conferida contra o YAML por
+  `tests/ci-runner-selection.test.ts` (F2-01–F2-04 em
+  `.compozy/tasks/contingencia-ci-deploy/_tests.md`). A exigência de
+  aprovação humana para workflow de fork ("Approve and run", em *Settings →
+  Actions → General*) continua ligada como segunda barreira — a guarda daqui
+  não a substitui.
+
+**Provisionamento da VPS.** `scripts/runner/provision-vps.sh` instala, de
+forma idempotente, Node 24.19 (`engines.node` de `package.json`), pnpm
+(`packageManager`), Docker (o E2E e a suíte já sobem `postgres:17` em Docker;
+a VPS não roda um Postgres residente) e as dependências de sistema do
+Chromium/WebKit; cria o usuário dedicado `gha-runner` (sem sudo, só no grupo
+`docker`); baixa o binário do runner do GitHub; e instala o serviço systemd
+`master-jobs-runner.service`, que registra o runner em modo **efêmero**
+(`config.sh --ephemeral`) via `scripts/runner/runner-loop.sh` — cada job roda
+num registro novo, e o diretório de trabalho é limpo entre um job e o
+próximo, para que nenhum estado (nem credencial em cache) sobreviva de uma
+execução para a seguinte (ADR 0030 decisão 5). Nenhum dos dois scripts contém
+credencial: o token de registro é pedido em tempo de execução à API do
+GitHub com um PAT que o dono cola manualmente em
+`/etc/master-jobs-runner/env` (fora do repositório, `chmod 600`,
+`GH_RUNNER_REGISTRATION_PAT=` — regra 16, só o nome aparece aqui).
+
+**Passo do dono, antes de ligar a chave:**
+
+1. Contratar a VPS (Hetzner CPX22 ou DigitalOcean 4 GB — Decisão 2 do PRD da
+   issue #367), Ubuntu 24.04 LTS.
+2. Copiar o repositório (ou só `scripts/runner/`) para a VPS e rodar como
+   root: `sudo bash scripts/runner/provision-vps.sh`.
+3. Criar `/etc/master-jobs-runner/env` com `GH_RUNNER_REGISTRATION_PAT=<PAT
+   com escopo de administração do repositório>` (o script cria o arquivo
+   vazio com o `chmod` certo, se ainda não existir) e `systemctl start
+   master-jobs-runner`.
+4. Confirmar o runner **Idle** em *Settings → Actions → Runners*, com os
+   labels `self-hosted`, `linux`, `master-jobs`.
+5. Só então: `gh variable set CI_RUNS_ON --body
+   '["self-hosted","linux","master-jobs"]'` e um push real em `dev` para
+   confirmar o CI inteiro verde no runner próprio (checklist F2-M01–F2-M03 em
+   `_tests.md`).
+
+**Voltar ao hospedado**, a qualquer momento e sem tocar na VPS:
+`gh variable set CI_RUNS_ON --body '"ubuntu-latest"'` (ou `gh variable delete
+CI_RUNS_ON`). O próximo push já roda em `ubuntu-latest` — reversível em
+segundos, como todo o resto desta contingência.
+
 ## Migrar o banco
 
 ```bash
