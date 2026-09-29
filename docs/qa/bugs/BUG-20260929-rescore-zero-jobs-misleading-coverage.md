@@ -1,6 +1,6 @@
 # BUG-20260929-rescore-zero-jobs-misleading-coverage: rescore com CV fraco zera o ranking sem motivo e a análise de lacunas mente sobre cobertura
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Trust-Damage
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Andreus em triagem noturna
@@ -57,4 +57,4 @@ lacunas diz "cobre o que as vagas pedem" comparando com 0 vagas.
 - **Retested:**
 - **Result:**
 
-Correção em implementação com teste vermelho/verde registrado; reteste de jornada pendente.
+Correção43ecd2d, PR418 draft. Reteste Pass: weakCv distinto de noJobsUpdated; zero vagas não afirma cobertura; recuperação pontuou6 vagas. Evidências e limitações: docs/qa/reports/2026-09-29T144500Z-codex387-zero-vagas.md
