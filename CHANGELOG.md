@@ -9,6 +9,25 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-09-29
+
+### Adicionado
+
+- Porta `ObjectStorage` em `src/core/storage/` na semântica do S3 (bucket + key, `putObject`/`getObject`/`headObject`/`deleteObject`, `ContentType`, `ContentLength`, metadados, ETag), escolhida por `JHO_STORAGE_DRIVER=vercel-blob|s3` em `openStorage()`; ausente é "sem armazenamento", valor desconhecido falha fechado (ADR 0029, #327 parte B).
+- Adapter Vercel Blob (`@vercel/blob` 2.x) sempre privado, bucket/key → pathname `<bucket>/<key>`, metadados num objeto irmão `.metadata/…`, leitura sem cache de CDN; adapter S3 (`@aws-sdk/client-s3`) com `S3_ENDPOINT` e `S3_FORCE_PATH_STYLE`. Os dois apagam o valor da credencial de todo erro e entram no inventário de transporte de saída.
+- Suíte de contrato única (`tests/support/storage-contract.ts`) para os dois adapters: SDK do Blob dublado (recusa chamada não privada), `send` do S3 dublado e S3 contra MinIO real quando há Docker, com PULADO e motivo no nome quando não há.
+- MinIO no `docker-compose.local.yml` (`pgsty/minio`, fork comunitário fixado por tag e digest), portas só em `127.0.0.1` e bucket criado por um serviço de bootstrap idempotente.
+- Migração `0029_perfil_publico_foto_capa` (aditiva, veredito `[]`): `photo_key`, `cover_key` (nulas) e `public_photo`, `public_cover` (`boolean default false`, anuláveis; nulo é desligado). `postSnapshotColumns` declara nulo/`false`.
+- `savePublicImageAction` (`guardOwnCandidate` antes de ler o formulário): tipo pela assinatura (JPEG, PNG, WebP), 4 MiB (abaixo do limite de corpo de 4,5 MB da Vercel, para toda recusa chegar à action com a mensagem própria; o seletor de arquivo já avisa no navegador), lado máximo de 8000 px e 50 MP pelo cabeçalho (bomba de pixels) e mínimo por tipo; reencode em WebP com `sharp` (orientação aplicada, EXIF/XMP/IPTC/ICC fora), foto 512×512 e capa 1600×400; chave nova por envio e objeto antigo apagado na troca e na remoção, com a linha travada. `sharp` vira dependência direta na versão que o Next já resolvia.
+- `/p/[slug]/image/[kind]` sem sessão (exceção registrada no inventário de G39): reconfere `public_slug`, visibilidade e opt-in a cada requisição, mesmo 404 vazio para qualquer recusa, `no-store`, `Cross-Origin-Resource-Policy: same-origin`, balde próprio no limite por IP do proxy. `/candidate/image/[kind]` é a prévia do dono, com sessão. `PublicProfile.images` traz só versão opaca (hash da chave). CSP inalterada (`img-src 'self' data:`); o service worker não guarda nenhuma das rotas.
+- Migração `0028_candidate_public_facts` (aditiva, veredito `[]`): sete fatos em `candidate` — `work_model text[]`, `experience_level`, `availability`, `start_timeframe`, `open_to_relocation`, `area`, `languages`, todos anuláveis — e um opt-in por fato (`public_*`, `boolean default false`, anulável pelo contrato da importação do snapshot; nulo é desligado). Sem FK. `postSnapshotColumns` declara nulo/`false` para a importação legada (#327, parte A).
+- `src/core/candidate-public-facts.ts` (puro): listas controladas, `parsePublicFactsForm()` (recusa com código valor fora da lista, texto longo, contato — inclusive os e-mails cadastrados e telefone sem marca —, rótulo de pretensão e número em área/idiomas) e `publicFactsFrom()` (só publica com opt-in `=== true`, valor reconhecido e texto livre dentro do teto que passe na mesma regra).
+- Regra estrutural de área e idiomas (`shortFieldProblem()`): contato, depois rótulo de pretensão (`containsPay()` em `src/core/public-cv.ts`, sobre espaço colapsado — linear), depois qualquer número (NFKC, `\p{Nd}`); passam palavras, identificador curto colado a letra que não seja moeda nem regime ("Web3", "C1") e número de norma em maiúscula ("ISO 27001"). Falso positivo aceito ("Streaming 4K", "Dados 2015-2020", "10 mil TPS", "Python 3", "Top 10"); número e e-mail por extenso passam.
+- `PublicProfile.facts` na lista de permissão de `publicProfile()`, coluna a coluna.
+- `setPublicFactsAction` (`guardOwnCandidate` antes de ler o formulário, candidato da sessão) e o cartão "Dados do perfil público" em `/candidate` (`app/candidate/public-facts.tsx`), com o "Mostrar no perfil público" ao lado de cada campo.
+- `/p/[slug]`: faixa de fatos com modelo de trabalho, nível e disponibilidade; cartão "Em resumo" na lateral com área, idiomas, prazo e aceita mudar. Rótulos em `publicFacts.*` (pt-BR e en).
+- E2E: `checkPublicFacts` (ligado aparece, desligado ausente do HTML, 375px) sobre duas fixtures, e a área `public-facts` (edição, persistência, recusa de contato). O teste de duas colunas passa a medir a lateral inteira contra a coluna principal.
+
 ## [1.28.2] - 2026-09-28
 
 ### Corrigido
