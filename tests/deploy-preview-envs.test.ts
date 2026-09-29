@@ -1,19 +1,37 @@
 // Suite: Fase 1 da contingência de CI e deploy (#351) — deploy só em `main`.
-// vercel.json é o mecanismo real; DEPLOY_PREVIEW_ENVS é o registro
-// documentado, e este contrato prova que os dois nunca divergem.
+// vercel.json é o mecanismo real, aplicado pelo commit de cada branch, e
+// DEPLOY_PREVIEW_ENVS é o registro documentado. Este contrato prova que os
+// dois nunca divergem, em nenhuma das três branches, e que a leitura da
+// variável nunca finge normalidade quando a API não responde o que se espera.
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  ALLOWED_DEPLOYMENT_KEYS,
   InvalidDeployPreviewEnvs,
+  RELEVANT_BRANCHES,
+  RepositoryNotFound,
+  assertRepositoryExists,
   compareDeploymentEnabled,
   expectedDeploymentEnabled,
+  httpStatusOf,
   parseDeployPreviewEnvs,
+  readRepositoryVariable,
+  readVariableFromEnv,
+  runCli,
   verifyDeployPreviewEnvs,
+  verifyDeployPreviewEnvsAcrossBranches,
+  type ReadVariable,
 } from "../scripts/github/verify-deploy-preview-envs.ts";
 
 const vercelConfig = JSON.parse(readFileSync("vercel.json", "utf8")) as {
   git: { deploymentEnabled: { "**": boolean; main: boolean; dev: boolean; staging: boolean } };
 };
+
+function ghError(httpStatus: number): Error & { stderr: string } {
+  const error = new Error(`Command failed`) as Error & { stderr: string };
+  error.stderr = `gh: ${httpStatus === 404 ? "Not Found" : "Forbidden"} (HTTP ${httpStatus})\n`;
+  return error;
+}
 
 describe("vercel.json — deploy só em main (F1-01, F1-02)", () => {
   it("F1-01: main deploya e dev/staging não", () => {
@@ -62,8 +80,8 @@ describe("expectedDeploymentEnabled / compareDeploymentEnabled", () => {
     expect(expectedDeploymentEnabled(["dev", "staging"]).main).toBe(true);
   });
 
-  it("** é sempre false — branch de tarefa nunca deploya", () => {
-    expect(expectedDeploymentEnabled([]).main).toBe(true);
+  it("** é sempre false — branch de tarefa nunca deploya, mesmo com a lista vazia", () => {
+    expect(expectedDeploymentEnabled([])["**"]).toBe(false);
     expect(expectedDeploymentEnabled(["dev", "staging"])["**"]).toBe(false);
   });
 
@@ -81,11 +99,24 @@ describe("expectedDeploymentEnabled / compareDeploymentEnabled", () => {
     const problems = compareDeploymentEnabled(expected, { "**": false, main: true, dev: false, staging: false });
     expect(problems).toEqual(["git.deploymentEnabled.dev: esperado true, encontrado false"]);
   });
+
+  it("MAJOR 3: acusa chave fora da lista de permissão, mesmo com as quatro conhecidas corretas", () => {
+    const expected = expectedDeploymentEnabled([]);
+    const actual = { ...expected, "release/*": true };
+    const problems = compareDeploymentEnabled(expected, actual);
+    expect(problems).toEqual([
+      `git.deploymentEnabled.release/*: chave fora da lista de permissão {${ALLOWED_DEPLOYMENT_KEYS.join(", ")}} — valor true`,
+    ]);
+  });
+
+  it("MAJOR 3: a lista de permissão é exatamente {**, main, dev, staging}", () => {
+    expect(ALLOWED_DEPLOYMENT_KEYS).toEqual(["**", "main", "dev", "staging"]);
+  });
 });
 
 describe("verifyDeployPreviewEnvs — detecta divergência com um fake de gh api (F1-04)", () => {
   it("acusa quando a variável religa dev, mas vercel.json continua com dev:false", () => {
-    const fakeRead = () => "dev";
+    const fakeRead: ReadVariable = () => "dev";
     const { problems } = verifyDeployPreviewEnvs(
       "andreustimm/master-jobs",
       vercelConfig.git.deploymentEnabled,
@@ -95,7 +126,7 @@ describe("verifyDeployPreviewEnvs — detecta divergência com um fake de gh api
   });
 
   it("sem divergência quando a variável está ausente e vercel.json é o padrão desta entrega", () => {
-    const fakeRead = () => undefined;
+    const fakeRead: ReadVariable = () => undefined;
     const { problems, envs } = verifyDeployPreviewEnvs(
       "andreustimm/master-jobs",
       vercelConfig.git.deploymentEnabled,
@@ -105,21 +136,182 @@ describe("verifyDeployPreviewEnvs — detecta divergência com um fake de gh api
     expect(problems).toEqual([]);
   });
 
-  it("acusa quando o mapa está totalmente errado (dev e staging religados sem a variável)", () => {
-    const fakeRead = () => undefined;
-    const { problems } = verifyDeployPreviewEnvs(
-      "andreustimm/master-jobs",
-      { "**": false, main: true, dev: true, staging: true },
-      fakeRead,
-    );
-    expect(problems).toHaveLength(2);
-  });
-
   it("propaga erro de valor inválido na variável, em vez de mascarar como ok", () => {
-    const fakeRead = () => "producao";
+    const fakeRead: ReadVariable = () => "producao";
     expect(() =>
       verifyDeployPreviewEnvs("andreustimm/master-jobs", vercelConfig.git.deploymentEnabled, fakeRead),
     ).toThrow(InvalidDeployPreviewEnvs);
+  });
+});
+
+describe("MAJOR 2 — verifyDeployPreviewEnvsAcrossBranches confere a ponta de cada branch, não o checkout local", () => {
+  it("sem divergência quando as três branches casam com a variável ausente", () => {
+    const readVariable: ReadVariable = () => undefined;
+    const readVercelConfigAt = () => vercelConfig.git.deploymentEnabled;
+    const { problems } = verifyDeployPreviewEnvsAcrossBranches(
+      "andreustimm/master-jobs",
+      RELEVANT_BRANCHES,
+      readVariable,
+      readVercelConfigAt,
+    );
+    expect(problems).toEqual([]);
+  });
+
+  it("acusa só a branch divergente, prefixada pelo nome, quando dev foi editado sem passar por main", () => {
+    const readVariable: ReadVariable = () => undefined;
+    const perBranch: Record<string, Record<string, unknown>> = {
+      main: vercelConfig.git.deploymentEnabled,
+      // dev foi editado direto, religando o próprio ambiente sem tocar a
+      // variável — exatamente o cenário que checar só o checkout de main não pega.
+      dev: { "**": false, main: true, dev: true, staging: false },
+      staging: vercelConfig.git.deploymentEnabled,
+    };
+    const readVercelConfigAt = (_repo: string, ref: string) => perBranch[ref]!;
+    const { problems } = verifyDeployPreviewEnvsAcrossBranches(
+      "andreustimm/master-jobs",
+      RELEVANT_BRANCHES,
+      readVariable,
+      readVercelConfigAt,
+    );
+    expect(problems).toEqual(["dev: git.deploymentEnabled.dev: esperado false, encontrado true"]);
+  });
+
+  it("acusa as três branches quando todas estão erradas", () => {
+    const readVariable: ReadVariable = () => undefined;
+    const readVercelConfigAt = () => ({ "**": false, main: true, dev: true, staging: true });
+    const { problems } = verifyDeployPreviewEnvsAcrossBranches(
+      "andreustimm/master-jobs",
+      RELEVANT_BRANCHES,
+      readVariable,
+      readVercelConfigAt,
+    );
+    expect(problems).toHaveLength(6); // dev e staging, em cada uma das 3 branches
+    expect(problems.every((problem) => /^(main|dev|staging): /.test(problem))).toBe(true);
+  });
+});
+
+describe("MAJOR 8/9 — readRepositoryVariable distingue 404 de variável ausente, 404 de repositório ausente e 403 (gh injetável)", () => {
+  it("404 na variável, repositório existe → variável ausente (undefined)", () => {
+    const api = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw ghError(404);
+      })
+      .mockImplementationOnce(() => ({})); // GET repos/{repo} responde 200
+    expect(readRepositoryVariable("andreustimm/master-jobs", "DEPLOY_PREVIEW_ENVS", api)).toBeUndefined();
+    expect(api).toHaveBeenCalledTimes(2);
+  });
+
+  it("404 na variável, e o repositório também não existe → RepositoryNotFound, nunca 'ausente'", () => {
+    const api = vi.fn().mockImplementation(() => {
+      throw ghError(404);
+    });
+    expect(() => readRepositoryVariable("andreustimm/repo-que-nao-existe", "DEPLOY_PREVIEW_ENVS", api)).toThrow(
+      RepositoryNotFound,
+    );
+  });
+
+  it("403 na variável propaga o erro — nunca finge que a variável está ausente", () => {
+    const api = vi.fn().mockImplementation(() => {
+      throw ghError(403);
+    });
+    expect(() => readRepositoryVariable("andreustimm/master-jobs", "DEPLOY_PREVIEW_ENVS", api)).toThrow();
+    expect(api).toHaveBeenCalledTimes(1); // nunca chega a checar o repositório
+  });
+
+  it("httpStatusOf lê o código do stderr do gh, e undefined quando não há um", () => {
+    expect(httpStatusOf(ghError(404))).toBe(404);
+    expect(httpStatusOf(ghError(403))).toBe(403);
+    expect(httpStatusOf(new Error("sem stderr"))).toBeUndefined();
+    expect(httpStatusOf("não é um Error")).toBeUndefined();
+  });
+
+  it("assertRepositoryExists não lança quando a API responde", () => {
+    const api = vi.fn().mockReturnValue({});
+    expect(() => assertRepositoryExists("andreustimm/master-jobs", api)).not.toThrow();
+  });
+
+  it("assertRepositoryExists propaga erro que não é 404 (ex.: 403) sem reclassificar", () => {
+    const api = vi.fn().mockImplementation(() => {
+      throw ghError(403);
+    });
+    let thrown: unknown;
+    try {
+      assertRepositoryExists("andreustimm/master-jobs", api);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeDefined();
+    expect(thrown).not.toBeInstanceOf(RepositoryNotFound);
+  });
+});
+
+describe("readVariableFromEnv — leitura de process.env no job de CI (MAJOR 1)", () => {
+  it("presente, mesmo vazia, é usada — nunca cai para gh api", () => {
+    const read = readVariableFromEnv({ DEPLOY_PREVIEW_ENVS: "" });
+    expect(read("andreustimm/master-jobs", "DEPLOY_PREVIEW_ENVS")).toBe("");
+  });
+
+  it("presente com valor não vazio", () => {
+    const read = readVariableFromEnv({ DEPLOY_PREVIEW_ENVS: "dev" });
+    expect(read("andreustimm/master-jobs", "DEPLOY_PREVIEW_ENVS")).toBe("dev");
+  });
+
+  it("ausente do env vira undefined (distinto de string vazia)", () => {
+    const read = readVariableFromEnv({});
+    expect(read("andreustimm/master-jobs", "DEPLOY_PREVIEW_ENVS")).toBeUndefined();
+  });
+});
+
+describe("runCli — código de saída do CLI, sem subprocesso nem rede real (MAJOR 9)", () => {
+  it("0 quando as três branches casam com a variável", () => {
+    const logs: string[] = [];
+    const code = runCli([], {
+      readVariable: () => undefined,
+      readVercelConfigAt: () => vercelConfig.git.deploymentEnabled,
+      log: (line) => logs.push(line),
+    });
+    expect(code).toBe(0);
+    expect(logs[0]).toMatch(/^ok\s+DEPLOY_PREVIEW_ENVS/);
+  });
+
+  it("1 e lista o problema quando alguma branch diverge", () => {
+    const errors: string[] = [];
+    const code = runCli([], {
+      readVariable: () => undefined,
+      readVercelConfigAt: (_repo, ref) => (ref === "dev" ? { "**": false, main: true, dev: true, staging: false } : vercelConfig.git.deploymentEnabled),
+      logError: (line) => errors.push(line),
+    });
+    expect(code).toBe(1);
+    expect(errors.some((line) => line.startsWith("DIVERGE"))).toBe(true);
+    expect(errors.some((line) => line.includes("dev:"))).toBe(true);
+  });
+
+  it("1 quando a variável é inválida — erro propagado, não engolido", () => {
+    const errors: string[] = [];
+    const code = runCli([], {
+      readVariable: () => "producao",
+      readVercelConfigAt: () => vercelConfig.git.deploymentEnabled,
+      logError: (line) => errors.push(line),
+    });
+    expect(code).toBe(1);
+    expect(errors[0]).toMatch(/DEPLOY_PREVIEW_ENVS/);
+  });
+
+  it("--repo passa o repositório para os leitores injetados", () => {
+    const seenRepos = new Set<string>();
+    const code = runCli(["--repo", "outra/org"], {
+      readVariable: (repo) => {
+        seenRepos.add(repo);
+        return undefined;
+      },
+      readVercelConfigAt: (repo) => {
+        seenRepos.add(repo);
+        return vercelConfig.git.deploymentEnabled;
+      },
+    });
+    expect(code).toBe(0);
+    expect(seenRepos).toEqual(new Set(["outra/org"]));
   });
 });
 

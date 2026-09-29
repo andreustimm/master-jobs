@@ -28,12 +28,17 @@ o dono escolher (registrado em
 
 ## Decisão
 
-1. **Uma variável de repositório é o único mecanismo de virar uma chave.**
-   Nunca edição de workflow durante o incidente. Toda chave desta entrega
-   (`DEPLOY_PREVIEW_ENVS`, `CI_RUNS_ON`, e a que a Fase 3 vier a usar para o
-   plano B) é lida em tempo de execução por uma expressão fixa no YAML; mudar
-   o comportamento é `gh variable set`, nunca um commit no arquivo de
-   workflow.
+1. **Uma variável de repositório é o único mecanismo documentado de virar uma
+   chave, nunca edição de workflow durante o incidente.** `CI_RUNS_ON` e a que
+   a Fase 3 vier a usar para o plano B são lidas em tempo de execução por uma
+   expressão fixa no YAML; mudar o comportamento delas é `gh variable set`,
+   nunca um commit no arquivo de workflow. **`DEPLOY_PREVIEW_ENVS` é a
+   exceção documentada, não uma contradição:** a Vercel não lê variável de
+   ambiente dentro de `vercel.json` — o arquivo é estático e é o mecanismo
+   real (decisão 3). A variável é só o registro verificável de qual ambiente
+   de preview está religado; religar de verdade continua exigindo um commit
+   em `vercel.json`, e `scripts/github/verify-deploy-preview-envs.ts` garante
+   que os dois nunca divirjam em silêncio.
 2. **O padrão, sem nenhuma variável setada, é sempre o caminho hospedado e
    barato de hoje.** Nenhuma chave desta entrega é ativada por omissão; todas
    são opt-in.

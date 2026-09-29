@@ -159,8 +159,13 @@ dono**, uma vez, antes de a funcionalidade chegar a produção:
    lugar.
 2. Em **Settings → Environment Variables**, cadastrar `JHO_STORAGE_DRIVER` =
    `vercel-blob` em **Preview** e **Production**.
-3. Fazer um redeploy (variável nova só vale no próximo build) e provar com
-   **envio real no preview**, antes de produção:
+3. Provar com **envio real num deployment de Preview**, antes de produção
+   (variável nova só vale no próximo build). Desde a Fase 1 da contingência
+   de CI e deploy ([#351](https://github.com/andreustimm/master-jobs/issues/351)),
+   push em `dev`/`staging` não cria deployment automático — publique um
+   Preview avulso do SHA atual pela CLI da Vercel, autenticado no projeto
+   `master-jobs` (`vercel deploy`, sem `--prod`; usa as variáveis do
+   ambiente **Preview**, as mesmas cadastradas no passo 2):
    - foto de **~3,9 MB** (JPEG ou PNG): aceita, a prévia aparece e
      sobrevive ao reload;
    - arquivo de **~4,8 MB**: recusado com "A imagem passa de 4 MB." sem
@@ -255,17 +260,29 @@ lugar só" a editar em vez de abrir `vercel.json` à mão:
   `""`, `"dev"`, `"dev,staging"`.
 - **Contrato executável:**
   [`scripts/github/verify-deploy-preview-envs.ts`](../../scripts/github/verify-deploy-preview-envs.ts)
-  lê a variável por `gh api repos/.../actions/variables/DEPLOY_PREVIEW_ENVS` e
-  compara ao mapa `git.deploymentEnabled` de `vercel.json`; diverge, sai com
-  código 1:
+  compara a variável ao `git.deploymentEnabled` publicado na **ponta de
+  `main`, `dev` e `staging`** (API de conteúdo do GitHub, não o checkout
+  local — a Vercel aplica o arquivo do commit de cada branch, então só isso
+  prova que nenhuma delas divergiu em silêncio); diverge em qualquer uma, sai
+  com código 1. Também recusa qualquer chave fora de
+  `{"**", "main", "dev", "staging"}` (ex.: um padrão `"release/*"` esquecido
+  no arquivo). `GITHUB_TOKEN` não lê a API de variáveis de repositório (403,
+  mesmo com `actions: read`) — só a leitura do `vercel.json` de cada branch
+  usa `gh api`/`GITHUB_TOKEN` (via `contents: read`); a variável em si chega
+  pronta pelo `vars.…` do próprio workflow (job
+  `verificar-deploy-preview-envs` em `governanca.yml`, a cada corrida
+  agendada de `main`) ou por `gh api` no uso manual, com a credencial de quem
+  roda:
 
   ```bash
   rtk node scripts/github/verify-deploy-preview-envs.ts
   ```
 - **Runbook de religar** um ambiente, quando a fixture existir: 1) confirmar a
   fixture do ambiente provisionada; 2) `gh variable set DEPLOY_PREVIEW_ENVS
-  --body "dev"`; 3) editar `vercel.json` para `"dev": true`; 4) rodar o
-  verificador; 5) confirmar o primeiro deploy de `dev` na Vercel.
+  --body "dev"`; 3) editar `vercel.json` para `"dev": true`, na branch `dev`
+  (o commit que a Vercel de fato lê para decidir o deploy de `dev` — não
+  basta mudar em `main`); 4) rodar o verificador; 5) confirmar o primeiro
+  deploy de `dev` na Vercel.
 
 **Commit que não muda o site não gera deploy**, mesmo em `main`. O plano
 Hobby limita os deploys por dia; `ignoreCommand` roda

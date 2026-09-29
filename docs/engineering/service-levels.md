@@ -169,6 +169,14 @@ antes de expirar. Se o histórico anterior existir mas estiver expirado/ilegíve
 a execução falha e exige recuperação; não apagar arquivos para forçar verde.
 A primeira execução inicia uma janela nova, sem retroagir medições.
 
+O mesmo workflow também roda, a cada corrida agendada, um segundo job —
+`verificar-deploy-preview-envs`, sem relação com SLO — que confere
+`DEPLOY_PREVIEW_ENVS` contra `vercel.json` (Fase 1 da contingência de CI e
+deploy, [#351](https://github.com/andreustimm/master-jobs/issues/351)). Ele
+roda com permissão própria, mais estreita que a do job `medir`
+(`contents: read`, sem `persist-credentials`): ver
+[deploy.md](deploy.md#branches-que-geram-deploy).
+
 ### Recuperar uma coleta interrompida
 
 `--restore` é usado pelo workflow: exige `GITHUB_REPOSITORY=andreustimm/master-jobs`
