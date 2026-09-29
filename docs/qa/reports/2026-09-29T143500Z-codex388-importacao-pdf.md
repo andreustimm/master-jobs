@@ -3,8 +3,8 @@
 - Issue: #388; branch: fix/importacao-cv-pdf-recusa; base: 36c120c.
 - Persona: candidato revisando o currículo, pt-BR/en, 375px.
 - Ambiente: runner isolado, banco descartável, autenticação real.
-- Charter: CH-save-cv-ranking-refresh; cenário: PROF-create-own-profile-pdf.
-- Estado: Pending — E2E e jornada em andamento.
+- Charter: CH-save-cv-ranking-refresh; cenário: PROF-import-existing-cv-pdf (canário automatizado: PROF-create-own-profile-pdf).
+- Estado: Pass no escopo da importação em perfil existente, commit 053a5d8.
 
 ## Validação
 
@@ -14,9 +14,13 @@ Antes da correção, os testes com arquivo renomeado e ausente falharam porque
 
 ## Jornada
 
-Planejada: recusar arquivo renomeado, ler a razão localizada, recarregar e
-conferir que a versão anterior permanece; importar PDF com texto e reler o CV.
-Confirmar que a tela não anuncia upload inexistente. Estado pendente.
+Percorrida por agent-browser, conta Alex, em 375px. O arquivo renomeado recebeu ‘The file is not a readable PDF.’ e ‘O arquivo não é um PDF legível.’. Após refresh, o rótulo Currículo e o texto anterior permaneceram. Na tentativa seguinte, curriculo-atualizado.pdf importou 243 caracteres; o editor e a leitura independente em Versões mostraram o mesmo conteúdo após refresh. scrollWidth 360 para innerWidth 375. A mensagem obsoleta estava ausente.
+
+Evidências no diretório docs/qa/evidence/2026-09-29T143500Z-codex388-importacao-pdf/: recusa-en.png, recusa-pt.png, pdf-salvo-refresh.png e versao-independente.png.
+
+O primeiro upload do driver usou caminho relativo que não estava acessível ao processo do navegador, produzindo falha de transporte sem resposta HTTP. Repetido com caminho absoluto, o mesmo arquivo percorreu a ação e recebeu a recusa esperada. Esse incidente não foi contado como aprovação.
+
+Probes: arquivo com extensão enganosa, alternância de idioma, refresh após recusa, recuperação com PDF válido e viewport estreito. A criação inicial de perfil e os demais tipos de PDF estão cobertos pelos testes relacionados; não receberam veredito manual novo nesta sessão.
 
 ## Limitações
 

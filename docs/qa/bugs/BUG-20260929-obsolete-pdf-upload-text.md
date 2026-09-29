@@ -1,6 +1,6 @@
 # BUG-20260929-obsolete-pdf-upload-text: texto obsoleto diz que upload de PDF não existe, ao lado da importação que já funciona
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Friction
 - **Severity:** Low · **Priority:** P3
 - **Persona Affected:** Andreus em triagem noturna; Candidato convidado sem perfil
@@ -55,4 +55,4 @@ visível ao lado do controle funcional.
 
 Correção #388: recusa tipada traduzida pela tela e remoção do aviso obsoleto.
 37 testes relacionados, typecheck e E2E onboarding 44/44 passaram.
-Reteste manual pendente no relatório 2026-09-29T143500Z-codex388-importacao-pdf.
+Reteste manual Pass em 053a5d8, relatório docs/qa/reports/2026-09-29T143500Z-codex388-importacao-pdf.md. Razão localizada, CV preservado e recuperação com PDF válido confirmadas após refresh e no histórico.
