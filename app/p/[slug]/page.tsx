@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { cvSections, type CvSectionKind } from "../../../src/core/cv-markdown.ts";
+import { parseStorageConfig } from "../../../src/core/storage/config.ts";
 import {
   groupPublicSkills,
   publicProfile,
@@ -115,15 +116,21 @@ export default async function PublicProfilePage({ params }: Params) {
   const { strip, glance } = factItems(profile, t);
   const imageUrl = (kind: "photo" | "cover", version: string) =>
     `/p/${encodeURIComponent(profile.slug)}/image/${kind}?v=${version}`;
+  // Sem armazenamento configurado a rota da imagem não tem de onde ler: em vez
+  // do ícone de imagem quebrada, a página omite foto e capa, como faz quando o
+  // "mostrar" está desligado.
+  const storageReady = parseStorageConfig(process.env).status === "configured";
+  const cover = storageReady ? profile.images.cover : null;
+  const photo = storageReady ? profile.images.photo : null;
 
   return (
     <main className="mx-auto w-full max-w-[74rem] pt-12 pb-16" data-testid="route-public-profile">
       {/* Capa (#327): faixa larga acima do nome, moldura de foto do DESIGN.md
           (`rounded-xl`). Decorativa — o nome logo abaixo já diz de quem é —,
           por isso `alt` vazio. Mais alta no celular (3:1) para não virar fita. */}
-      {profile.images.cover && (
+      {cover && (
         <img
-          src={imageUrl("cover", profile.images.cover)}
+          src={imageUrl("cover", cover)}
           alt=""
           width={1600}
           height={400}
@@ -136,9 +143,9 @@ export default async function PublicProfilePage({ params }: Params) {
           {/* Foto (#327): quadrada, com o raio das ações — o DESIGN.md não usa
               avatar circular. Ao lado do nome, sem sobrepor a capa, para a
               ordem de leitura continuar nome → headline em 375px. */}
-          {profile.images.photo && (
+          {photo && (
             <img
-              src={imageUrl("photo", profile.images.photo)}
+              src={imageUrl("photo", photo)}
               alt={profile.name ? t("publicImages.photoAlt", { name: profile.name }) : t("publicImages.photoAltUnnamed")}
               width={512}
               height={512}

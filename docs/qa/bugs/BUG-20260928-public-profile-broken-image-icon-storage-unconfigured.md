@@ -1,6 +1,6 @@
 # BUG-20260928-public-profile-broken-image-icon-storage-unconfigured: perfil público mostra ícone de imagem quebrada (em vez de nada) quando o armazenamento fica sem configuração
 
-- **Status:** open
+- **Status:** fixed <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Trust-Damage
 - **Severity:** Low · **Priority:** P3
 - **Persona Affected:** Visitante do perfil público
@@ -62,3 +62,7 @@ aparecem como ícone de imagem quebrada do navegador (a requisição para
 ## Verification
 
 <!-- pendente -->
+
+## Fix
+
+`app/p/[slug]/page.tsx` só renderiza foto e capa quando `parseStorageConfig(process.env)` está `configured`; sem armazenamento, omite as duas, como faz quando o "mostrar" está desligado. Aguarda verificação independente.
