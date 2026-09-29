@@ -48,3 +48,12 @@ aviso — a pessoa lê notas de uma trilha achando que são da outra.
 <!-- filled when status moves to verified -->
 - **Retested:**
 - **Result:**
+
+## Re-found (2026-09-29)
+
+- **Charter:** CH-target-track-edit-archive · **Report:** docs/qa/reports/2026-09-29T035351654581Z-97f37e1c-full-release-candidate-1.29-full.md (QA full do release candidate 1.29)
+- Mesmo sintoma reproduzido: depois de tornar outra trilha principal, o
+  seletor de Vagas mostra dois botões "PRINCIPAL", sem distinguir qual é
+  qual.
+- **Evidence:** `docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-target-track-edit-archive/04-seletor-dois-principal.png`
+- Ainda `open` — sem fix aplicado entre 2026-09-21 e esta rodada.
