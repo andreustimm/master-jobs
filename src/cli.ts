@@ -2232,6 +2232,7 @@ auth
   .action(async () => {
     await withDb(async () => {
       const { isOpenMode, openModeRefused } = await import("./contexts/auth/index.ts");
+      const { declaredJhoEnv } = await import("./core/dev-env.ts");
       const { authUser } = await import("./core/db/schema.ts");
       const users = await getDb().select().from(authUser);
 
@@ -2240,8 +2241,9 @@ auth
       // `pnpm dev` declara `JHO_ENV=local` sozinho quando o `.env` não declara
       // nada (scripts/dev.ts), então o mesmo `.env` pode recusar aqui e abrir lá.
       const refused = openModeRefused(process.env);
-      // Sem JHO_ENV aqui, o `.env` não declara nada, e `pnpm dev` declara local.
-      const openInDev = refused && process.env.JHO_ENV === undefined;
+      // Mesma decisão do `scripts/dev.ts`: se nem o processo nem os `.env*` do
+      // Next declaram JHO_ENV, `pnpm dev` declara local e o modo aberto vale lá.
+      const openInDev = refused && declaredJhoEnv(process.env) === undefined;
       const mode = open
         ? c.red("SEM PROTEÇÃO")
         : openInDev

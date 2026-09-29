@@ -30,6 +30,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { authUser, positioningTask } from "../src/core/db/schema.ts";
+import { declaredJhoEnv } from "../src/core/dev-env.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 import { banco, carregarCli, rodar } from "./cov-cli-harness.ts";
 
@@ -177,7 +178,11 @@ describe("jho auth status", () => {
     process.env.JHO_AUTH_MODE = "open";
     delete process.env.JHO_ENV;
     const semDeclaracao = await rodar("auth", "status");
-    expect(semDeclaracao.out).toContain("SEM PROTEÇÃO no pnpm dev");
+    // A CLI decide como o `scripts/dev.ts` (processo + `.env*` do Next no
+    // cwd). Numa máquina cujo `.env` declara JHO_ENV, o `pnpm dev` também
+    // recusaria — e o aviso certo é o outro.
+    if (declaredJhoEnv({}) === undefined) expect(semDeclaracao.out).toContain("SEM PROTEÇÃO no pnpm dev");
+    else expect(semDeclaracao.out).toContain("ignorado");
 
     process.env.JHO_ENV = "preview";
     const declaradoPreview = await rodar("auth", "status");
