@@ -53,6 +53,11 @@ export const postSnapshotColumns: Record<string, Record<string, unknown>> = {
     public_relocation: false,
     public_area: false,
     public_languages: false,
+    // Foto e capa (#327): sem objeto e sem opt-in — o snapshot não tem imagem.
+    photo_key: null,
+    cover_key: null,
+    public_photo: false,
+    public_cover: false,
   },
   // Catálogo governado pelo banco (#223). A linha importada nasce não gerida
   // e na revisão 1: continua espelhando o YAML até `jho sources import --apply`.

@@ -1,9 +1,12 @@
 # PostgreSQL local com extensões do Supabase
 
-O runtime do master-jobs usa PostgreSQL. Este Compose sobe apenas o banco, em
-uma porta local separada, com a distribuição oficial `supabase/postgres` e as
-extensões `pgmq` e `vector` habilitadas. Ele não sobe Auth, PostgREST, Studio,
-Storage ou Realtime; para isso é necessário o stack completo do Supabase CLI.
+O runtime do master-jobs usa PostgreSQL. Este Compose sobe o banco, em uma
+porta local separada, com a distribuição oficial `supabase/postgres` e as
+extensões `pgmq` e `vector` habilitadas, e o MinIO do armazenamento de
+objetos ([local-storage.md](local-storage.md)). Ele não sobe Auth, PostgREST,
+Studio, Storage ou Realtime do Supabase; para isso é necessário o stack
+completo do Supabase CLI. Para subir só o banco, nomeie o serviço:
+`docker compose -f docker-compose.local.yml up -d db`.
 
 ## Subir
 

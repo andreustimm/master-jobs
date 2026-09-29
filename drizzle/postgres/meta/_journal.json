@@ -204,6 +204,13 @@
       "when": 1790617213040,
       "tag": "0028_candidate_public_facts",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790625702265,
+      "tag": "0029_perfil_publico_foto_capa",
+      "breakpoints": true
     }
   ]
 }

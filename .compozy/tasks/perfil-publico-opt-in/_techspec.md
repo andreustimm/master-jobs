@@ -164,6 +164,13 @@ rótulo de cada valor controlado, "Mostrar no perfil público", "Não informado"
 
 ## Parte B — plano técnico
 
+> **Executado em `feat/perfil-publico-foto-capa`** (ADR 0029). Desvios do
+> plano: a porta ficou em `src/core/storage/` (`ports.ts`, `config.ts`,
+> `infra/`, `index.ts` com `openStorage()`), no padrão de `src/core/scrape/`
+> — é infraestrutura de um recurso, não um contexto de negócio; o Blob grava
+> sempre privado e guarda metadados num objeto irmão; a imagem pública tem
+> balde próprio no limite do proxy. O resto segue abaixo.
+
 - `src/contexts/storage/` (porta `ObjectStorage` em semântica S3) com
   `adapters/vercel-blob.ts` e `adapters/s3.ts`; `createStorage(env)` escolhe
   por `JHO_STORAGE_DRIVER` e falha fechado com valor desconhecido.

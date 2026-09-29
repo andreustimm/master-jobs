@@ -103,12 +103,15 @@ describe("o que NUNCA sai", () => {
       "facts",
       "githubUrl",
       "headline",
+      "images",
       "linkedinUrl",
       "location",
       "name",
       "skills",
       "slug",
     ]);
+    // #327: foto e capa saem só como versão opaca, nunca chave nem URL.
+    expect(Object.keys(profile!.images).sort()).toEqual(["cover", "photo"]);
     // #327: `facts` também é lista de permissão, com as sete chaves exatas.
     expect(Object.keys(profile!.facts).sort()).toEqual([
       "area",

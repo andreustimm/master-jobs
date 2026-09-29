@@ -50,4 +50,7 @@ flowchart LR
   é o que decide se um recrutador entende o perfil sem instrução
   (`PUB-public-profile-layout`). Os fatos opt-in — modelo de trabalho, nível,
   disponibilidade, prazo, aceita mudar, área, idiomas — aparecem só quando o
-  candidato ligou cada um (`PUB-public-facts-opt-in`).
+  candidato ligou cada um (`PUB-public-facts-opt-in`). Foto e capa seguem a
+  mesma regra (`PUB-public-photo-cover-opt-in`), e a URL de uma imagem
+  guardada responde o mesmo 404 quando o perfil ou o "mostrar" é revogado
+  (`PUB-public-image-revoked-404`).

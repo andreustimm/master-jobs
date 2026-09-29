@@ -393,8 +393,41 @@ rodam sobre espaço colapsado e só abaixo do teto: a alternativa de `rate:` em
 começo de linha do currículo era quadrática numa sequência de quebras; e a página só escolhe o lugar (faixa do topo ou "Em resumo"). A gravação é `setPublicFactsAction`, com `guardOwnCandidate` antes
 de ler o formulário, e recusa com código o valor forjado, o texto longo, o
 contato e a pretensão. **Pretensão salarial não é campo nem opt-in** — teste
-de ausência explícito em `tests/public-profile.test.ts`. Foto e capa (parte B)
-ainda não existem.
+de ausência explícito em `tests/public-profile.test.ts`.
+
+**Foto e capa, servidas pelo app e revogáveis** — **28/09 (#327, parte B).**
+A imagem é o primeiro arquivo que o produto guarda, e a #327 apontou o risco:
+URL de blob público é legível por quem a tiver, mesmo depois de o perfil
+deixar de ser público. As travas, em camadas
+([ADR 0029](adr/0029-armazenamento-de-objetos-formato-s3.md)):
+o objeto é **privado** no provedor (Vercel Blob `access: "private"`; o dublê
+do SDK recusa chamada pública em teste); a imagem sai só por
+`/p/<endereço>/image/<tipo>`, que reconsulta `public_slug`, `visibility =
+public` e o opt-in do tipo a CADA requisição e responde o mesmo 404, sem
+corpo, para inexistente, privado, endereço trocado, opt-in desligado e sem
+imagem (G22) — inclusive para quem guardou a URL; `no-store` em toda
+resposta, `Cross-Origin-Resource-Policy: same-origin`, service worker fora
+(G14) e CSP sem origem de provedor (`img-src 'self' data:`). O perfil recebe
+só uma versão opaca (hash da chave), nunca a chave nem URL. A rota é a
+segunda entrada de conteúdo sem sessão, registrada no inventário de G39, com
+balde próprio no limite por IP do proxy (60 em 5 min). **Custo declarado:**
+a sonda pela imagem não gasta o balde da página, então uma varredura de
+endereços ganha até 60 tentativas a mais por IP a cada 5 min — o proxy decide
+antes de a rota saber a resposta, e os dois não compartilham memória
+confiável; a imagem só responde 200 para perfil público com imagem marcada
+para mostrar (`tests/proxy-public-limits.test.ts`). No upload
+(`savePublicImageAction`, `guardOwnCandidate` antes de ler o formulário): tipo
+pela assinatura dos bytes (JPEG, PNG, WebP — SVG com script renomeado para
+`.png` é recusado), teto de 4 MiB conferido antes de copiar ou decodificar
+os bytes (o Next já recebeu o multipart inteiro; a Vercel recusa corpo acima de
+4,5 MB antes da action), lado máximo de 8000 px e 50 MP conferidos pelo
+cabeçalho antes de decodificar — contra bomba de pixels —, e reencode em
+WebP com `sharp`, que não copia EXIF,
+XMP, IPTC nem ICC: a localização da câmera não chega ao armazenamento
+(`tests/public-images.test.ts` monta JPEG com GPS e confere o que sobra).
+Chave nova a cada envio; a antiga é apagada na troca e na remoção, que também
+desliga o opt-in. Credencial (`BLOB_READ_WRITE_TOKEN`, `S3_*`) só em variável
+de ambiente, apagada pelo valor de todo erro dos adapters (G41).
 
 **Fluxo verificado ponta a ponta em 19/08**, no modo autenticado padrão: sem
 sessão o cabeçalho oferece entrar; o link de uso único resgata em

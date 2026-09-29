@@ -112,10 +112,12 @@ uniforme, token de uso único), `logoutAction` e `stopImpersonatingAction` (só
 revogam/restauram o próprio cookie), preferência de interface
 (`setLocaleAction`, `setAppearanceAction`), as telas pré-sessão `/login`,
 `/login/forgot`, `/login/reset` e `/login/callback`, o cron por segredo
-(`/api/cron/recheck`) e `/p/[slug]` (G21).
+(`/api/cron/recheck`), `/p/[slug]` (G21) e a foto e a capa dele,
+`/p/[slug]/image/[kind]` (#327), que reconfere a mesma lista de permissão a
+cada requisição.
 
 **Classes de superfície sem sessão** (resolve C02): conteúdo público
-(`/p/[slug]`, único), pré-sessão (login, recuperação, callback), shell e
+(`/p/[slug]` e as imagens dele, `/p/[slug]/image/[kind]`), pré-sessão (login, recuperação, callback), shell e
 assets (`/offline.html`, manifest, estáticos) e serviço com autenticação
 própria (cron). Rota desconhecida é privada.
 
@@ -225,8 +227,9 @@ Origem: AGENTS (invariante "Hash de senha com tamanho errado"). Prova:
 <a id="g21"></a>
 ## G21 — `/p/[slug]` mostra só a lista de permissão
 
-**Obrigação.** `/p/[slug]` é a única rota de **conteúdo** sem sessão (as
-demais classes estão em G39). O que ela mostra é lista de permissão:
+**Obrigação.** `/p/[slug]` é a única página de **conteúdo** sem sessão (as
+demais classes estão em G39); a foto e a capa dela saem por
+`/p/[slug]/image/[kind]`, sob a mesma lista de permissão. O que ela mostra é lista de permissão:
 `publicProfile()` enumera os campos que saem, e a página não alcança o registro
 do candidato. Nunca saem e-mail, telefone, funil, candidaturas nem piso
 salarial — o piso é a posição de negociação, e publicá-lo é mostrar a carta
@@ -261,14 +264,22 @@ identificador com três dígitos ou mais ("H100"), notas de proficiência
 como real) e norma ao lado de palavra de remuneração ("Rate limiting e ISO
 27001"). **Limite declarado:** número por extenso
 ("vinte mil") e e-mail ofuscado por extenso ("pia at local dot test",
-"[at]") passam. Pretensão salarial não é fato nem opt-in.
+"[at]") passam. Pretensão salarial não é fato nem opt-in. **Foto e capa**
+(#327) também têm opt-in próprio, desligado por padrão (nulo é desligado): o
+perfil recebe só uma versão opaca por imagem, nunca a chave do objeto nem URL
+de provedor, e a rota da imagem reconfere `public_slug`, `visibility =
+public` e o opt-in a cada requisição (`publicImageKeyForSlug()`), com o mesmo
+404 de G22 para qualquer recusa e `no-store`. O objeto é privado no provedor
+e a CSP não abre origem dele
+([ADR 0029](../../adr/0029-armazenamento-de-objetos-formato-s3.md)).
 
 **Endereço.** `/p/` lê `public_slug`, nunca o `slug` interno; trocar o endereço
 faz o antigo responder 404 sem redirecionar (ADR 0024).
 
 Origem: AGENTS (invariante "`/p/[slug]`"). Prova:
 `tests/public-profile.test.ts`, `tests/public-name.test.ts`,
-`tests/public-slug.test.ts`, `tests/candidate-public-facts.test.ts`.
+`tests/public-slug.test.ts`, `tests/candidate-public-facts.test.ts`,
+`tests/candidate-images.test.ts`.
 
 <a id="g22"></a>
 ## G22 — Perfil não público responde 404, não 403
@@ -316,7 +327,9 @@ Origem: AGENTS (mesma invariante). Prova: `tests/public-cv.test.ts`,
 **Obrigação.** A ausência é a política. Só caches `static-` e `shell-`
 (`/offline.html`, gerado e sem credenciais). `/login` nunca entra no cache. Sem
 `pages-`, sem `api-`, e `/p/` também fora — público por escolha revogável, e
-cópia em disco não obedece a revogação.
+cópia em disco não obedece a revogação. Vale para a foto e a capa
+(`/p/<endereço>/image/<tipo>`, `/candidate/image/<tipo>`), que também saem
+com `no-store` para o cache HTTP.
 
 **Não é alternativa.** Limpar no logout não bastaria: `logoutAction` não roda
 em sessão vencida nem em aparelho perdido.

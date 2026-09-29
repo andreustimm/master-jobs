@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { cvSections, type CvSectionKind } from "../../../src/core/cv-markdown.ts";
+import { parseStorageConfig } from "../../../src/core/storage/config.ts";
 import {
   groupPublicSkills,
   publicProfile,
@@ -51,6 +52,12 @@ import { CopyProfileLinkButton } from "./copy-link-button";
  * **Fatos opt-in (#327, fase 3)** chegam em `profile.facts` já filtrados: só
  * o que a pessoa marcou para mostrar. A página só escolhe o lugar — faixa do
  * topo ou "Em resumo" na lateral (`factItems`).
+ *
+ * **Foto e capa (#327)** chegam como versão opaca em `profile.images`, só com
+ * opt-in. A página nunca vê a chave nem URL de provedor: aponta para a rota
+ * `/p/<endereço>/image/<tipo>`, que reconfere a visibilidade a cada pedido.
+ * `<img>` e não `next/image`: o otimizador guardaria cópia em cache, e a
+ * cópia não obedece a quem desmarcar "mostrar" depois.
  */
 
 export const dynamic = "force-dynamic";
@@ -107,25 +114,63 @@ export default async function PublicProfilePage({ params }: Params) {
   const sectionOf = (kind: CvSectionKind) => sections.find((section) => section.kind === kind);
   const skillGroups = groupPublicSkills(profile.skills);
   const { strip, glance } = factItems(profile, t);
+  const imageUrl = (kind: "photo" | "cover", version: string) =>
+    `/p/${encodeURIComponent(profile.slug)}/image/${kind}?v=${version}`;
+  // Sem armazenamento configurado a rota da imagem não tem de onde ler: em vez
+  // do ícone de imagem quebrada, a página omite foto e capa, como faz quando o
+  // "mostrar" está desligado.
+  const storageReady = parseStorageConfig(process.env).status === "configured";
+  const cover = storageReady ? profile.images.cover : null;
+  const photo = storageReady ? profile.images.photo : null;
 
   return (
     <main className="mx-auto w-full max-w-[74rem] pt-12 pb-16" data-testid="route-public-profile">
+      {/* Capa (#327): faixa larga acima do nome, moldura de foto do DESIGN.md
+          (`rounded-xl`). Decorativa — o nome logo abaixo já diz de quem é —,
+          por isso `alt` vazio. Mais alta no celular (3:1) para não virar fita. */}
+      {cover && (
+        <img
+          src={imageUrl("cover", cover)}
+          alt=""
+          width={1600}
+          height={400}
+          className="mb-6 aspect-[3/1] h-auto w-full rounded-xl object-cover sm:aspect-[4/1]"
+          data-testid="public-profile-cover"
+        />
+      )}
       <header className="mb-8">
-        {/* Nome vazio é perfil que ainda não escolheu um nome publicável —
-            `publicProfile()` também esvazia o que parece e-mail ou telefone.
-            O título neutro vem do dicionário, nunca de outro campo da pessoa. */}
-        {profile.name ? (
-          <h1 data-user-content className="type-display-md">
-            {profile.name}
-          </h1>
-        ) : (
-          <h1 className="type-display-md">{t("publicName.unnamed")}</h1>
-        )}
-        {profile.headline && (
-          <p data-user-content className="type-body-lg mt-1 text-muted-foreground">
-            {profile.headline}
-          </p>
-        )}
+        <div className="flex min-w-0 items-start gap-4">
+          {/* Foto (#327): quadrada, com o raio das ações — o DESIGN.md não usa
+              avatar circular. Ao lado do nome, sem sobrepor a capa, para a
+              ordem de leitura continuar nome → headline em 375px. */}
+          {photo && (
+            <img
+              src={imageUrl("photo", photo)}
+              alt={profile.name ? t("publicImages.photoAlt", { name: profile.name }) : t("publicImages.photoAltUnnamed")}
+              width={512}
+              height={512}
+              className="size-20 shrink-0 rounded-[var(--radius-action)] object-cover sm:size-24 lg:size-32"
+              data-testid="public-profile-photo"
+            />
+          )}
+          <div className="min-w-0">
+            {/* Nome vazio é perfil que ainda não escolheu um nome publicável —
+                `publicProfile()` também esvazia o que parece e-mail ou telefone.
+                O título neutro vem do dicionário, nunca de outro campo da pessoa. */}
+            {profile.name ? (
+              <h1 data-user-content className="type-display-md break-words">
+                {profile.name}
+              </h1>
+            ) : (
+              <h1 className="type-display-md">{t("publicName.unnamed")}</h1>
+            )}
+            {profile.headline && (
+              <p data-user-content className="type-body-lg mt-1 text-muted-foreground">
+                {profile.headline}
+              </p>
+            )}
+          </div>
+        </div>
 
         {/* Faixa de fatos: localização e, com opt-in (#327), modelo de
             trabalho, nível e disponibilidade. Some inteira sem nenhum. */}

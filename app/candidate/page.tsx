@@ -19,6 +19,8 @@ import { onboardingSession, requireOwnCandidatePage } from "../auth";
 import { CreateProfile } from "./create-profile";
 import { PublicAddressCard } from "./public-address";
 import { PublicFactsCard } from "./public-facts";
+import { PublicImagesCard } from "./public-images";
+import { imageVersion } from "../../src/core/candidate-public.ts";
 import { PublicNameCard } from "./public-name";
 import { getTranslator } from "../i18n";
 import { formatNumber, type TranslationKey, type Translator } from "../../src/core/i18n/index.ts";
@@ -239,6 +241,17 @@ export default async function CandidateArea() {
       {person && <PublicAddressCard current={person.publicSlug ?? ""} t={t} />}
 
       {person && <PublicFactsCard current={person} t={t} />}
+
+      {person && (
+        <PublicImagesCard
+          current={{
+            // Nulo (linha importada) é desligado, como na saída.
+            photo: { version: imageVersion(person.photoKey), shown: person.publicPhoto === true },
+            cover: { version: imageVersion(person.coverKey), shown: person.publicCover === true },
+          }}
+          t={t}
+        />
+      )}
 
       {person && (
         <Card className="mb-6">

@@ -569,6 +569,13 @@ Hero photography sits in `{rounded.xl}` (16px) frames with no border. Product fa
 - Controlled values are translated labels; only text the person typed (location, field, languages) carries `data-user-content`
 - Nothing that is off renders: no "Not specified" placeholder, and the strip or card disappears entirely when empty
 
+**`profile-cover`** + **`profile-photo`** — opt-in cover and photo on the public profile (Master Jobs addition, #327)
+- `profile-cover`: full content width above the name, `{rounded.xl}` photo frame with no border (Photography Geometry), `object-cover`; 3:1 below 640px so it doesn't shrink to a ribbon at 375px, 4:1 from `sm:` up (the stored image is 1600×400). Decorative — the name right below says whose it is — so `alt=""`
+- `profile-photo`: square, radius `--radius-action` (the system has no circular avatars; avatars are small-radius squares), 80px → 96px (`sm:`) → 128px (`lg:`), beside the name/headline block in a `flex items-start gap-4` row, never overlapping the cover, so reading order stays name → headline on mobile. `alt` is the translated "Photo of {name}"
+- Both render only when the person ticked "Show on public profile" for that image; nothing (no placeholder, no initials) when off
+- Served by the app route `/p/<slug>/image/<kind>`, plain `<img>` with explicit `width`/`height` (no layout shift) — never `next/image`, whose optimizer would keep a cached copy that ignores a later opt-out
+- The owner's editing card on `/candidate` (`card-public-images`) previews the same geometry at smaller size: 96px square photo, cover up to 480px wide, both with a `--hairline` border
+
 ### Inputs & Forms
 
 **`text-input`** + **`text-input-focused`**
