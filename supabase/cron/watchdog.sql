@@ -188,19 +188,37 @@ begin
 
     if pendente.metrica = 'vercel_deploys' then
       begin
-        vercel_deploys := jsonb_array_length(coalesce((resp.content::jsonb) -> 'deployments', '[]'::jsonb));
+        -- `deployments` ausente é resposta malformada — nunca "zero
+        -- deployments" (F3-02). `?` testa a CHAVE, não o valor: só um corpo
+        -- que realmente declara o array (mesmo vazio) conta como amostra.
+        if (resp.content::jsonb) ? 'deployments' then
+          vercel_deploys := jsonb_array_length((resp.content::jsonb) -> 'deployments');
+        else
+          vercel_deploys := null;
+        end if;
       exception when others then
-        vercel_deploys := null; -- JSON inesperado não derruba as outras métricas.
+        vercel_deploys := null; -- JSON inesperado (ex.: `deployments` não é array) não derruba as outras métricas.
       end;
     elsif pendente.metrica = 'actions_queue' then
       begin
-        -- `run_started_at` só existe quando o runner já pegou o run; runs
-        -- ainda `queued` não têm — `created_at` é o fallback (sempre existe).
-        select coalesce(max(extract(epoch from (
-                 now() - coalesce((run.value ->> 'run_started_at'), (run.value ->> 'created_at'))::timestamptz
-               )))::int, 0)
-          into actions_wait_s
-        from jsonb_array_elements(coalesce((resp.content::jsonb) -> 'workflow_runs', '[]'::jsonb)) as run;
+        -- `workflow_runs` ausente é resposta malformada — nunca "fila vazia".
+        -- Presente e vazio, esse sim, é zero de verdade. Presente com runs
+        -- mas nenhum com data legível: `max` sobre só nulos é nulo, e o
+        -- `coalesce` NÃO entra aqui — só cobre a lista vazia, para não
+        -- confundir "sem dado" com "zero".
+        if not ((resp.content::jsonb) ? 'workflow_runs') then
+          actions_wait_s := null;
+        elsif jsonb_array_length((resp.content::jsonb) -> 'workflow_runs') = 0 then
+          actions_wait_s := 0;
+        else
+          -- `run_started_at` só existe quando o runner já pegou o run; runs
+          -- ainda `queued` não têm — `created_at` é o fallback (sempre existe).
+          select max(extract(epoch from (
+                   now() - coalesce((run.value ->> 'run_started_at'), (run.value ->> 'created_at'))::timestamptz
+                 )))::int
+            into actions_wait_s
+          from jsonb_array_elements((resp.content::jsonb) -> 'workflow_runs') as run;
+        end if;
       exception when others then
         actions_wait_s := null;
       end;

@@ -194,6 +194,18 @@ describe("actions: fila (com run_started_at, M7) e status por componente (M2)", 
     expect(authorization).toBe("Bearer gh-token");
   });
 
+  it("200 sem o campo `workflow_runs`: null, nunca 'fila vazia' (M3 residual)", async () => {
+    const metrics = quotaWatchMetrics({
+      now: () => NOW,
+      fetchImpl: router({
+        "https://api.github.com": () => new Response(JSON.stringify({}), { status: 200 }),
+        "https://www.githubstatus.com": () => new Response(STATUS_OPERATIONAL, { status: 200 }),
+      }),
+      githubToken: "gh-token",
+    });
+    expect((await metrics.sample()).actionsQueueMaxWaitS).toBeNull();
+  });
+
   it("repo vazio (\"\") cai no repositório padrão", async () => {
     let url = "";
     const metrics = quotaWatchMetrics({

@@ -94,7 +94,10 @@ async function actionsQueueMaxWaitS(
     });
     if (!response.ok) return null;
     const body = (await response.json()) as { workflow_runs?: Array<{ created_at?: string; run_started_at?: string }> };
-    const runs = Array.isArray(body.workflow_runs) ? body.workflow_runs : [];
+    // `workflow_runs` ausente é resposta malformada — nunca "fila vazia" (F3-02).
+    // Um array presente e vazio, esse sim, é zero de verdade.
+    if (!Array.isArray(body.workflow_runs)) return null;
+    const runs = body.workflow_runs;
     if (runs.length === 0) return 0;
     const waits = runs
       .map((run) => {

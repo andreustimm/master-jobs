@@ -296,6 +296,41 @@ describe("F3-02 — amostra ausente ou inválida nunca decide como se fosse ok",
     expect(row!.vercel_deploys_24h).toBeNull();
     expect(row!.decision).toBe("amostra-indisponivel");
   });
+
+  it("200 sem o campo `deployments`: null, nunca '0 deployments' (M3 residual)", async () => {
+    await seedSecret("watchdog_vercel_token", "v-token");
+    await seedSecret("watchdog_vercel_project_id", "proj_1");
+    await seedSecret("watchdog_github_token", "gh-token");
+    // Corpo 200 válido, mas sem a chave `deployments` — resposta malformada,
+    // não "zero deployments". Actions segue lido normalmente para provar que
+    // só a métrica ausente vira null.
+    await seedResponse("https://api.vercel.com", 200, JSON.stringify({}));
+    await seedResponse("https://api.github.com/repos/andreustimm/master-jobs/actions", 200, ACTIONS_EMPTY);
+    await seedResponse("https://www.githubstatus.com", 200, STATUS_OPERATIONAL);
+
+    await disparar();
+    await coletar();
+
+    const [row] = await rows();
+    expect(row!.vercel_deploys_24h).toBeNull();
+    expect(row!.actions_queue_max_wait_s).toBe(0);
+    expect(row!.decision).toBe("amostra-indisponivel");
+  });
+
+  it("200 sem o campo `workflow_runs`: null, nunca 'fila vazia' (M3 residual)", async () => {
+    await seedSecret("watchdog_github_token", "gh-token");
+    // Corpo 200 válido, mas sem a chave `workflow_runs` — diferente de um
+    // array vazio de verdade (esse sim vira 0, ver ACTIONS_EMPTY acima).
+    await seedResponse("https://api.github.com/repos/andreustimm/master-jobs/actions", 200, JSON.stringify({}));
+    await seedResponse("https://www.githubstatus.com", 200, STATUS_OPERATIONAL);
+
+    await disparar();
+    await coletar();
+
+    const [row] = await rows();
+    expect(row!.actions_queue_max_wait_s).toBeNull();
+    expect(row!.decision).toBe("amostra-indisponivel");
+  });
 });
 
 describe("M1 — dedupe: mesma decisão e gatilho comentam, não abrem outra issue", () => {
