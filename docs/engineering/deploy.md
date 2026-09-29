@@ -98,11 +98,31 @@ ligada por padrão em projeto novo, mas é uma configuração, não uma garantia
 imutável da plataforma — projeto migrado ou reconfigurado pode tê-la
 desligado sem ninguém notar. **Não verificado nesta entrega** exatamente
 quais variáveis sobrevivem com a opção desligada (documentação da Vercel e
-comportamento real podem divergir); o efeito, se alguma delas faltar, é
-`resolvePublicOrigin` cair na falha fechada mesmo na Vercel, sem nenhum
-aviso visível além do `console.warn` no log da função. Cadastrar
-`JHO_PUBLIC_URL` explicitamente elimina esta dependência por completo — é a
-mitigação, não a verificação.
+comportamento real podem divergir).
+
+**O efeito real não é "falha fechada" — é o oposto.** Se `VERCEL` também não
+chegar ao runtime (cenário não confirmado, mas é o que esta dependência
+poderia causar), `isLocalProcess()`
+(`src/contexts/auth/domain/open-mode.ts`) trata o processo como a **máquina
+do dono**, porque ele decide pela ausência de variável, não por um sinal
+positivo de estar local (issue [#378](https://github.com/andreustimm/master-jobs/issues/378),
+aberta por esta revisão, não corrigida aqui). Nesse cenário: `resolvePublicOrigin`
+cairia no ramo do `Host` da requisição — reabrindo o host poisoning que ela
+existe para impedir (G17) —, `JHO_AUTH_MODE=open` seria aceito (G38), e o
+mailer de recuperação imprimiria o link no log em vez de omiti-lo (G18). A
+mitigação, disponível hoje: cadastrar explicitamente, na Vercel, em
+**Production e em Preview**, `JHO_ENV=production` e
+`JHO_PUBLIC_URL=https://jobs.mastertimm.com.br` — elimina por completo a
+dependência da opção, nos dois ambientes, sem esperar a correção estrutural
+da issue #378.
+
+**Ressalva sobre `JHO_ENV` em Preview.** A mesma variável também é lida pela
+guarda de ingestão (`src/core/ingest/guard.ts`); cadastrar
+`JHO_ENV=production` em Preview só continua seguro (nenhuma varredura real
+ali) enquanto `JHO_SOURCE_ALLOWLIST` **não** estiver cadastrada nesse
+ambiente — ela hoje só existe em "Vercel produção e Actions" (tabela acima),
+e é essa ausência, não o valor de `JHO_ENV`, que impede Preview de gastar
+cota de fonte externa (ADR 0021).
 
 **A URL pode vir de mais de um nome, e a ordem é declarada.** A integração do
 Supabase com a Vercel cadastra `POSTGRES_URL` e `POSTGRES_URL_NON_POOLING` e as
@@ -997,10 +1017,12 @@ de execução da Vercel; esse diagnóstico continua no
    limpar cache nem reinstalar. No aparelho físico, confirmar o piso protetor
    em retrato e, em paisagem baixa de telefone, a ausência da faixa artificial
    de 48px sem perder o inset real informado pelo sistema.
-7. Pedir recuperação de senha para uma conta de teste e conferir que o link no
-   e-mail (ou no log, se `RESEND_API_KEY` não estiver configurada) aponta para
-   `jobs.mastertimm.com.br` — nunca para um `*.vercel.app` gerado nem para
-   qualquer outro host. É a confirmação de que `VERCEL_PROJECT_PRODUCTION_URL`
-   resolve para o domínio próprio (ou de que `JHO_PUBLIC_URL` está cadastrada)
-   sem depender de leitura de variável em painel, que não prova o que o
-   runtime realmente recebeu.
+7. Com `RESEND_API_KEY`/`RESEND_FROM` configuradas em produção (G18: sem
+   provedor real, o link não vai para lugar nenhum que este teste possa ler —
+   em deployment o mailer omite, nunca imprime), pedir recuperação de senha
+   para uma conta de teste e conferir no e-mail recebido que o link aponta
+   para `jobs.mastertimm.com.br` — nunca para um `*.vercel.app` gerado nem
+   para qualquer outro host. Sem provedor configurado, confirmar em vez disso
+   que `JHO_PUBLIC_URL` está cadastrada em Production (tabela acima) — não
+   basta ler `VERCEL_PROJECT_PRODUCTION_URL` no painel, porque isso não prova
+   o que o runtime realmente recebeu.

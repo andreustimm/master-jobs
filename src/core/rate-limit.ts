@@ -104,11 +104,18 @@ export function clientKey(headers: Headers, env: Record<string, string | undefin
   // No plano B (Fly.io), `Fly-Client-IP` é escrito pelo proxy de borda do
   // próprio Fly, que está entre o cliente e este processo — o cliente não
   // alcança o servidor sem passar por ele, e a borda sobrescreve qualquer
-  // valor que tente mandar com esse nome. Só é confiável fora da Vercel: lá
-  // seria só mais um cabeçalho que qualquer cliente poderia forjar, porque a
-  // borda dela não o filtra (não é dela).
-  const onVercel = env.VERCEL !== undefined && env.VERCEL !== "";
-  if (!onVercel) {
+  // valor que tente mandar com esse nome.
+  //
+  // A ausência de `VERCEL` NÃO é prova de estar no Fly (G27: lista de
+  // permissão, nunca de proibição) — um cliente falando direto com qualquer
+  // deployment sem `VERCEL` (uma VPS mal configurada, um ambiente novo que
+  // este código nunca previu) poderia forjar `Fly-Client-IP` e escolher o
+  // próprio balde, exatamente o problema que este cabeçalho existe para
+  // evitar. Por isso a condição exige o sinal POSITIVO de estar no Fly —
+  // `FLY_APP_NAME`, que o runtime do Fly declara e o cliente não alcança —
+  // e não só a ausência de `VERCEL`.
+  const onFly = Boolean(env.FLY_APP_NAME?.trim()) && !(env.VERCEL !== undefined && env.VERCEL !== "");
+  if (onFly) {
     const flyClientIp = headers.get("fly-client-ip")?.trim();
     if (flyClientIp) return flyClientIp;
   }

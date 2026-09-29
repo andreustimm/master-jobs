@@ -18,19 +18,31 @@ const PACKAGE_JSON = JSON.parse(readFileSync("package.json", "utf8")) as {
 };
 
 /**
- * A última diretiva `USER` antes do último `CMD` decide quem roda o
- * processo — é como o Docker resolve, e é o que este contrato precisa
- * espelhar para não aprovar um Dockerfile que troca de volta para root
- * depois de um `USER nextjs` de fachada. Sem `USER` nenhum, ou com a última
- * sendo `root`/`0`, o contêiner roda como root.
+ * A última diretiva `USER` antes do último `CMD`, DENTRO DO ÚLTIMO ESTÁGIO
+ * (`FROM`), decide quem roda o processo — é como o Docker resolve um build
+ * multi-stage: só o último estágio é exportado por padrão, e um `USER`
+ * definido num estágio anterior (o `builder`, por exemplo) não decide nada
+ * sobre a imagem final. É o que este contrato precisa espelhar para não
+ * aprovar um Dockerfile que troca de volta para root depois de um `USER
+ * nextjs` de fachada, ou que só declara o usuário no estágio errado.
+ *
+ * `USER usuario:grupo` (ou `uid:gid`) é sintaxe válida do Docker — a parte
+ * antes de `:` é quem decide o processo; `USER root:root` e `USER 0:0` são
+ * root, do mesmo jeito que `USER root`/`USER 0` sem grupo.
  */
 function runsAsNonRootBeforeCmd(dockerfile: string): boolean {
-  const cmdIndex = dockerfile.lastIndexOf("CMD");
+  const estagios = [...dockerfile.matchAll(/^FROM\s+/gm)];
+  const ultimoEstagio = dockerfile.slice(estagios.at(-1)?.index ?? 0);
+
+  const cmdIndex = ultimoEstagio.lastIndexOf("CMD");
   if (cmdIndex < 0) return false;
-  const before = dockerfile.slice(0, cmdIndex);
+  const before = ultimoEstagio.slice(0, cmdIndex);
   const users = [...before.matchAll(/^USER\s+(\S+)\s*$/gm)];
   const last = users.at(-1)?.[1];
-  return last !== undefined && last !== "root" && last !== "0";
+  if (last === undefined) return false;
+
+  const nome = last.split(":")[0];
+  return nome !== "root" && nome !== "0";
 }
 
 describe("Dockerfile — o contêiner nunca roda como root", () => {
@@ -61,6 +73,21 @@ describe("Dockerfile — o contêiner nunca roda como root", () => {
       expect(runsAsNonRootBeforeCmd(fixture)).toBe(false);
     });
 
+    it("USER root:root (sintaxe usuário:grupo) também conta como root", () => {
+      const fixture = "FROM node:24-slim\nUSER root:root\nCMD [\"node\", \"server.js\"]\n";
+      expect(runsAsNonRootBeforeCmd(fixture)).toBe(false);
+    });
+
+    it("USER 0:0 (uid:gid de root) também conta como root", () => {
+      const fixture = "FROM node:24-slim\nUSER 0:0\nCMD [\"node\", \"server.js\"]\n";
+      expect(runsAsNonRootBeforeCmd(fixture)).toBe(false);
+    });
+
+    it("USER não-root:grupo (sintaxe usuário:grupo) passa, comparando só a parte antes de ':'", () => {
+      const fixture = "FROM node:24-slim\nUSER nextjs:nextjs\nCMD [\"node\", \"server.js\"]\n";
+      expect(runsAsNonRootBeforeCmd(fixture)).toBe(true);
+    });
+
     it("USER não-root depois do CMD não conta — o Docker já decidiu antes dele", () => {
       const fixture = "FROM node:24-slim\nCMD [\"node\", \"server.js\"]\nUSER nextjs\n";
       expect(runsAsNonRootBeforeCmd(fixture)).toBe(false);
@@ -68,6 +95,35 @@ describe("Dockerfile — o contêiner nunca roda como root", () => {
 
     it("USER não-root antes do CMD passa", () => {
       const fixture = "FROM node:24-slim\nUSER nextjs\nCMD [\"node\", \"server.js\"]\n";
+      expect(runsAsNonRootBeforeCmd(fixture)).toBe(true);
+    });
+
+    it("USER só num estágio anterior (multi-stage) não conta — só o último FROM é exportado", () => {
+      // O `builder` adota `nextjs` só para ilustrar um caso real (uma
+      // instalação que não deveria rodar como root durante o build), mas o
+      // estágio final (`runner`) nunca declara USER — o contêiner exportado
+      // roda como root, mesmo com um `USER` "correto" mais acima no arquivo.
+      const fixture = [
+        "FROM node:24-slim AS builder",
+        "USER nextjs",
+        "RUN pnpm build",
+        "FROM node:24-slim AS runner",
+        "COPY --from=builder /app/.next/standalone ./",
+        'CMD ["node", "server.js"]',
+        "",
+      ].join("\n");
+      expect(runsAsNonRootBeforeCmd(fixture)).toBe(false);
+    });
+
+    it("USER no último estágio conta, mesmo que um estágio anterior nunca tenha declarado nenhum", () => {
+      const fixture = [
+        "FROM node:24-slim AS builder",
+        "RUN pnpm build",
+        "FROM node:24-slim AS runner",
+        "USER nextjs",
+        'CMD ["node", "server.js"]',
+        "",
+      ].join("\n");
       expect(runsAsNonRootBeforeCmd(fixture)).toBe(true);
     });
   });

@@ -208,12 +208,19 @@ dele é host poisoning (o e-mail sai do remetente certo, mas o link aponta
 para o domínio de quem atacou, e o token vaza para lá). `resolvePublicOrigin`
 (`src/contexts/auth/domain/public-origin.ts`) resolve, em ordem: 1)
 `JHO_PUBLIC_URL`, se cadastrada; 2) **na Vercel, sem cadastro nenhum**,
-`VERCEL_PROJECT_PRODUCTION_URL` (produção) ou `VERCEL_URL` (preview) —
-variáveis de sistema que a própria plataforma escreve, não o cliente; 3) na
-máquina do dono, o `Host` da requisição, como sempre. Fora dessas três (o
-plano B no Fly.io sem `JHO_PUBLIC_URL`), falha fechado — devolve `null`, e a
-Server Action (`app/login/forgot/actions.ts`) não constrói link nenhum a
-partir da entrada do cliente.
+`VERCEL_PROJECT_PRODUCTION_URL` (produção) ou, em preview,
+`VERCEL_BRANCH_URL` (estável por branch) antes de `VERCEL_URL` (único por
+deployment, muda a cada push) — todas variáveis de sistema que a própria
+plataforma escreve, não o cliente; 3) na máquina do dono, o `Host` da
+requisição, como sempre. Fora dessas três (o plano B no Fly.io sem
+`JHO_PUBLIC_URL`), falha fechado — devolve `null`, e a Server Action
+(`app/login/forgot/actions.ts`) não constrói link nenhum a partir da entrada
+do cliente. **Isto depende de a Vercel expor as variáveis de sistema no
+runtime da função** ("Automatically expose System Environment Variables",
+[deploy.md](../deploy.md#variáveis)); se ela não expuser nem `VERCEL`, o
+efeito não é falha fechada — é `isLocalProcess()` tratar o deployment como a
+máquina do dono, reabrindo o `Host` da requisição como origem (issue
+[#378](https://github.com/andreustimm/master-jobs/issues/378)).
 
 Origem: AGENTS (invariante "Recuperar senha"). Prova:
 `tests/password-reset.test.ts`, `tests/public-origin.test.ts` e comparação no
