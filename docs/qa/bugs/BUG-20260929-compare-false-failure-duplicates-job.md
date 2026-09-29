@@ -6,7 +6,7 @@
 - **Persona Affected:** Andreus em triagem
 - **Journey Step:** J-trust-the-filtered-board, ao cadastrar uma vaga manual em `/compare`
 - **Scenarios:** `docs/qa/scenarios/COMPARE-manual-cadastro-idempotente.md`
-- **Found:** 2026-09-29 · **Report:** docs/qa/reports/2026-09-29T035351654581Z-97f37e1c-full-release-candidate-1.29-full.md
+- **Found:** 2026-09-29 · **Report:** docs/qa/reports/2026-09-29T141502414000Z-af40deb5-comparacao-cadastro-consistente.md
 
 ## Summary
 
@@ -44,6 +44,7 @@ mesmo cadastro mantém um único `jobId`.
 - **Fix:** o score da comparação passou a ser derivado em melhor esforço. A
   persistência continua idempotente pelo fingerprint isolado de comparação;
   depois de obter o `jobId`, a ação redireciona para a ficha mesmo sem score.
+- **Fix commit:** `a80dd061b7598189e06fd8741545b7c6686f5a01`
 - **Regression test:** `tests/cov-matching-manual-comparison.test.ts`, caso
   "mantém o cadastro quando o candidato ainda não tem perfil para pontuar".
 

@@ -4,7 +4,7 @@
 - **Issue:** [#401](https://github.com/andreustimm/master-jobs/issues/401)
 - **PR:** pendente de abertura após validação automatizada
 - **Cadence tier:** targeted
-- **Build:** `791663959001a8a0d1bb8428be3845651719b1a4` · **Environment:** local de produção-paridade, ainda não iniciado
+- **Build:** `a80dd061b7598189e06fd8741545b7c6686f5a01` · **Environment:** local de produção-paridade, ainda não iniciado
 - **Started:** 2026-09-29T14:15:02Z · **Status:** in-progress
 
 ## Personas
@@ -44,7 +44,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 - **Symptom:** a mensagem dizia falha depois que a vaga já havia entrado no acervo.
 - **Root cause:** `scoreOne` retornava `null` para candidato sem perfil próprio e o caso de uso transformava isso em `unexpected` depois da persistência.
-- **Fix:** pendente de SHA do commit desta branch.
+- **Fix:** `a80dd061b7598189e06fd8741545b7c6686f5a01` — o score derivado passou a ser melhor esforço após a persistência do `jobId`.
 - **Regression test:** `tests/cov-matching-manual-comparison.test.ts` — falhou antes e passou depois.
 - **Retested:** jornada original e canário adjacente ainda pendentes.
 
