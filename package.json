@@ -1,6 +1,6 @@
 {
   "name": "master-jobs",
-  "version": "1.30.0",
+  "version": "1.31.0",
   "packageManager": "pnpm@10.28.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
   },
   "scripts": {
     "prepare": "node scripts/configure-git-hooks.mjs",
-    "dev": "next dev --turbopack --hostname 127.0.0.1",
+    "dev": "node --experimental-strip-types --no-warnings scripts/dev.ts next dev --turbopack --hostname 127.0.0.1",
     "build": "next build --webpack",
     "start": "next start --hostname 127.0.0.1",
     "jho": "node --experimental-strip-types --no-warnings --env-file-if-exists=.env src/cli.ts",

@@ -11,8 +11,8 @@ bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence: docs/qa/evidence/2026-09-28T180205401032Z-d6d772a5-perfil-publico-opt-in-targeted/CH-public-facts-visitor-mobile-en-step1.png; docs/qa/evidence/2026-09-28T180205401032Z-d6d772a5-perfil-publico-opt-in-targeted/CH-public-facts-visitor-desktop-ptbr-step1.png; docs/qa/evidence/2026-09-28T180205401032Z-d6d772a5-perfil-publico-opt-in-targeted/CH-public-facts-visitor-mobile-full7-step6.png
-last_report: docs/qa/reports/2026-09-28T180205401032Z-d6d772a5-perfil-publico-opt-in-targeted.md
+evidence: docs/qa/evidence/2026-09-28T180205401032Z-d6d772a5-perfil-publico-opt-in-targeted/CH-public-facts-visitor-mobile-en-step1.png; docs/qa/evidence/2026-09-28T180205401032Z-d6d772a5-perfil-publico-opt-in-targeted/CH-public-facts-visitor-desktop-ptbr-step1.png; docs/qa/evidence/2026-09-28T180205401032Z-d6d772a5-perfil-publico-opt-in-targeted/CH-public-facts-visitor-mobile-full7-step6.png; docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-public-facts-and-name-desktop/public-profile-1280-facts-name.png; docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-public-facts-and-name-desktop/public-profile-375-facts-name.png
+last_report: docs/qa/reports/2026-09-29T035351654581Z-97f37e1c-full-release-candidate-1.29-full.md
 overlaps: PUB-edit-public-facts; PUB-public-profile-layout; PUB-public-cv-protected-content
 ---
 
@@ -24,3 +24,15 @@ aparecem no lugar certo, os desligados não aparecem nem como "não informado"
 recarregar o tira da página na hora. Em inglês, os rótulos e os valores
 escolhidos em lista saem traduzidos; área e idiomas continuam como a pessoa
 escreveu.
+
+**Reconfirmado na Full 1.29 (2026-09-29, HEAD `494aa37`, 375px e 1280×900,
+`curl` sem cookie, sem cookie de idioma — locale padrão pt-BR):** com os sete
+fatos ligados, `/p/qa-full-pub-v2` mostrou "Modelo de trabalho: Remoto",
+"Nível de experiência: Senior", "Disponibilidade: Procurando ativamente",
+"Prazo para começar: Imediato", "Aceita mudar de cidade ou país: Sim", "Área:
+AI Engineering" e "Portuguese (native)" em Idiomas — todos os valores de
+enum traduzidos para pt-BR, área e idiomas como escritos. Desligando o
+modelo de trabalho e recarregando, "Modelo de trabalho" e "Remoto" saíram por
+completo da página (sem rótulo vazio), os outros seis fatos continuaram.
+`document.documentElement.scrollWidth === innerWidth` em 375px e em 1280px
+(sem rolagem horizontal).

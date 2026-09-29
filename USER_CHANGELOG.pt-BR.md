@@ -32,6 +32,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-09-29T14:04:44.000Z
+
+### Adicionado
+
+- Um vigia pode ser ativado (passo do dono, fora do código) para rodar de hora em hora, fora da Vercel e do GitHub, checando se algum dos dois está perto do limite de uso. Perto do limite, ele abre um aviso; muito perto (ou com um dos dois fora do ar por três checagens seguidas), ele recomenda a mudança e já indica o comando exato para desfazer, evitando abrir o mesmo aviso duas vezes seguidas — mas quem aplica a mudança continua sendo o dono. O objetivo é nunca mais passar 24 h sem poder publicar uma correção, como aconteceu em 22/09.
+
 ## [1.29.0] - 2026-09-29T04:43:43.000Z
 
 ### Adicionado
