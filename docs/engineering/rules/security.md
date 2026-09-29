@@ -206,11 +206,14 @@ proxy — Vercel, o plano B no Fly.io, o que vier depois —, quem manda a
 requisição controla o cabeçalho `Host`; montar o link de recuperação a partir
 dele é host poisoning (o e-mail sai do remetente certo, mas o link aponta
 para o domínio de quem atacou, e o token vaza para lá). `resolvePublicOrigin`
-(`src/contexts/auth/domain/public-origin.ts`) resolve pela variável
-`JHO_PUBLIC_URL`, cadastrada por deployment; fora da máquina do dono, sem ela
-configurada, falha fechado — devolve `null`, e a Server Action
-(`app/login/forgot/actions.ts`) não constrói link nenhum a partir da entrada
-do cliente.
+(`src/contexts/auth/domain/public-origin.ts`) resolve, em ordem: 1)
+`JHO_PUBLIC_URL`, se cadastrada; 2) **na Vercel, sem cadastro nenhum**,
+`VERCEL_PROJECT_PRODUCTION_URL` (produção) ou `VERCEL_URL` (preview) —
+variáveis de sistema que a própria plataforma escreve, não o cliente; 3) na
+máquina do dono, o `Host` da requisição, como sempre. Fora dessas três (o
+plano B no Fly.io sem `JHO_PUBLIC_URL`), falha fechado — devolve `null`, e a
+Server Action (`app/login/forgot/actions.ts`) não constrói link nenhum a
+partir da entrada do cliente.
 
 Origem: AGENTS (invariante "Recuperar senha"). Prova:
 `tests/password-reset.test.ts`, `tests/public-origin.test.ts` e comparação no

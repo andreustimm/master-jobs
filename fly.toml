@@ -24,6 +24,13 @@ primary_region = "gru"
   # se reconhecer como produção. Também declarado no `ENV` do `Dockerfile`
   # (defesa em profundidade); os dois precisam dizer o mesmo.
   JHO_ENV = "production"
+  # MAJOR M1 (revisão da #373): a Vercel resolve este valor sozinha, por
+  # `VERCEL_PROJECT_PRODUCTION_URL`/`VERCEL_URL` (variáveis de sistema da
+  # própria plataforma — `src/contexts/auth/domain/public-origin.ts`); o Fly
+  # não declara nada parecido, então esta é a única fonte confiável para o
+  # link de recuperação de senha aqui. Não é segredo (é o domínio público de
+  # produção), por isso fica em `[env]`, não em `fly secrets set`.
+  JHO_PUBLIC_URL = "https://jobs.mastertimm.com.br"
 
 # Health check contra `/manifest.json`: já é rota pública sem sessão
 # (`proxy.ts`, lista `PUBLIC`) e não depende do banco — cair o Postgres não

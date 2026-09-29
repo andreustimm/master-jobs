@@ -44,7 +44,7 @@ describe("resolvePublicOrigin", () => {
     expect(resolvePublicOrigin(LOCAL, { host: null, proto: "http" })).toBe("http://127.0.0.1:3000");
   });
 
-  it("REPRODUZ o defeito: em deployment sem JHO_PUBLIC_URL, o Host do cliente NUNCA é usado", () => {
+  it("REPRODUZ o defeito: em deployment sem JHO_PUBLIC_URL nem variável de host, o Host do cliente NUNCA é usado", () => {
     // Esta é a reprodução do MAJOR M1: sem a correção, esta chamada devolveria
     // "https://atacante.example" — o link de recuperação apontaria para o
     // domínio de quem atacou (host poisoning), atrás de qualquer proxy que
@@ -61,5 +61,52 @@ describe("resolvePublicOrigin", () => {
       { host: "atacante.example", proto: "https" },
     );
     expect(origin).toBeNull();
+  });
+
+  describe("na Vercel, sem JHO_PUBLIC_URL cadastrada — funciona sem cadastro manual", () => {
+    it("produção usa VERCEL_PROJECT_PRODUCTION_URL, nunca o Host do cliente", () => {
+      const origin = resolvePublicOrigin(
+        { VERCEL: "1", VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "jobs.mastertimm.com.br" },
+        { host: "atacante.example", proto: "https" },
+      );
+      expect(origin).toBe("https://jobs.mastertimm.com.br");
+    });
+
+    it("preview usa VERCEL_URL, nunca o Host do cliente", () => {
+      const origin = resolvePublicOrigin(
+        { VERCEL: "1", VERCEL_ENV: "preview", VERCEL_URL: "master-jobs-git-tarefa.vercel.app" },
+        { host: "atacante.example", proto: "https" },
+      );
+      expect(origin).toBe("https://master-jobs-git-tarefa.vercel.app");
+    });
+
+    it("VERCEL_ENV ausente ou diferente de production também usa VERCEL_URL (o mesmo ramo de preview)", () => {
+      const origin = resolvePublicOrigin(
+        { VERCEL: "1", VERCEL_URL: "master-jobs-abc123.vercel.app" },
+        { host: "atacante.example", proto: "https" },
+      );
+      expect(origin).toBe("https://master-jobs-abc123.vercel.app");
+    });
+
+    it("produção sem VERCEL_PROJECT_PRODUCTION_URL falha fechado — nunca usa VERCEL_URL nem o Host", () => {
+      const origin = resolvePublicOrigin(
+        { VERCEL: "1", VERCEL_ENV: "production", VERCEL_URL: "algum-deployment.vercel.app" },
+        { host: "atacante.example", proto: "https" },
+      );
+      expect(origin).toBeNull();
+    });
+
+    it("JHO_PUBLIC_URL, quando cadastrada, tem prioridade sobre as variáveis da Vercel", () => {
+      const origin = resolvePublicOrigin(
+        {
+          VERCEL: "1",
+          VERCEL_ENV: "production",
+          VERCEL_PROJECT_PRODUCTION_URL: "outro-host.vercel.app",
+          JHO_PUBLIC_URL: "https://jobs.mastertimm.com.br",
+        },
+        { host: "atacante.example", proto: "https" },
+      );
+      expect(origin).toBe("https://jobs.mastertimm.com.br");
+    });
   });
 });

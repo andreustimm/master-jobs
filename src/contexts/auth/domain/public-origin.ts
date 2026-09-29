@@ -9,13 +9,23 @@
  * para o domínio de quem atacou, e o token de uso único (G18) vaza para lá no
  * clique de quem está recuperando a senha de verdade (G17).
  *
- * `JHO_PUBLIC_URL` é a fonte confiável, cadastrada uma vez por deployment
- * (Vercel Production/Preview e o plano B no Fly —
- * `docs/engineering/deploy.md`). Sem ela, e fora da máquina do dono, a
- * função falha fechado: devolve `null`, e quem chama não constrói link
- * nenhum a partir do `Host` do cliente — o mesmo espírito de
- * `JHO_STORAGE_DRIVER` desconhecido (ADR 0029) e de `sslmode` fora da lista de
- * permissão (`src/core/db/config.ts`).
+ * **Ordem de resolução:**
+ * 1. `JHO_PUBLIC_URL`, quando configurada e válida — a fonte confiável,
+ *    cadastrada por deployment (`docs/engineering/deploy.md`). Malformada,
+ *    falha fechado imediatamente: nunca cai para os ramos abaixo só porque a
+ *    variável está quebrada.
+ * 2. **Na Vercel**, sem `JHO_PUBLIC_URL` cadastrada: `VERCEL_ENV` e
+ *    `VERCEL_PROJECT_PRODUCTION_URL`/`VERCEL_URL` são variáveis de **sistema**
+ *    da plataforma — a build/runtime as recebe da própria Vercel, nunca do
+ *    cliente, ao contrário do `Host` da requisição. Isso é o que faz a
+ *    recuperação de senha continuar funcionando em produção e preview sem
+ *    exigir cadastro manual antes desta função existir.
+ * 3. **Na máquina do dono** (`isLocalProcess`), sem nenhuma das duas acima: o
+ *    `Host` da requisição, como sempre — é loopback, e só o próprio dono
+ *    alcança o processo.
+ * 4. Nenhuma das três: falha fechada. É o caso do plano B no Fly.io sem
+ *    `JHO_PUBLIC_URL` cadastrada — o Fly não declara `VERCEL*`, e o runbook
+ *    exige a variável antes do primeiro failover.
  */
 import { isLocalProcess, type AuthEnvironment } from "./open-mode.ts";
 
@@ -40,13 +50,26 @@ function originOf(value: string): string | null {
  * `null` significa "não construa o link" — nunca uma string vazia
  * concatenada, que produziria um link relativo e ainda assim atravessaria a
  * checagem de tipos.
- *
- * `JHO_PUBLIC_URL` configurada e malformada também devolve `null`: nunca cai
- * de volta para o `Host` do cliente só porque a variável está quebrada.
  */
 export function resolvePublicOrigin(env: AuthEnvironment, request: RequestOrigin): string | null {
   const configured = env.JHO_PUBLIC_URL?.trim();
   if (configured) return originOf(configured);
+
+  // `VERCEL` presença = a mesma prova de deployment que `isLocalProcess` usa.
+  // As duas variáveis de host abaixo só existem porque a Vercel as escreve no
+  // ambiente da função — a pessoa que faz a requisição não as controla.
+  if (env.VERCEL !== undefined && env.VERCEL !== "") {
+    const host = (
+      env.VERCEL_ENV === "production" ? env.VERCEL_PROJECT_PRODUCTION_URL : env.VERCEL_URL
+    )?.trim();
+    if (host) return originOf(`https://${host}`);
+    // Declarado como Vercel, mas sem a variável de host esperada para este
+    // VERCEL_ENV: nunca cai para o Host do cliente (isLocalProcess já seria
+    // `false` aqui de qualquer forma) — segue direto para a falha fechada.
+    return null;
+  }
+
   if (isLocalProcess(env)) return `${request.proto}://${request.host ?? "127.0.0.1:3000"}`;
+
   return null;
 }

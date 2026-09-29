@@ -93,6 +93,15 @@ describe("Dockerfile e fly.toml — JHO_ENV=production (CRITICAL C1 da revisão)
   });
 });
 
+describe("fly.toml — JHO_PUBLIC_URL fixada (MAJOR M1 da revisão)", () => {
+  it("o Fly não tem equivalente às variáveis de sistema da Vercel, então JHO_PUBLIC_URL vem fixada", () => {
+    // Sem isto, resolvePublicOrigin() (src/contexts/auth/domain/public-origin.ts)
+    // falharia fechado no plano B: o Fly nunca declara VERCEL_PROJECT_PRODUCTION_URL
+    // nem VERCEL_URL, e o Host da requisição não é confiável fora da máquina do dono.
+    expect(FLY_TOML).toMatch(/JHO_PUBLIC_URL\s*=\s*"https:\/\/jobs\.mastertimm\.com\.br"/);
+  });
+});
+
 describe("regra 12 (G36) continua intacta para dev/start locais", () => {
   it("dev e start seguem presos a 127.0.0.1 — a mesma trava de tests/security.test.ts", () => {
     expect(PACKAGE_JSON.scripts.dev).toMatch(/--hostname\s+(127\.0\.0\.1|localhost)/);

@@ -106,16 +106,18 @@ invariantes acima.
   impresso no log (G18), varredura recusada. `fly.toml` **e** `Dockerfile`
   fixam `JHO_ENV=production` por isso (defesa em profundidade). Achado na
   revisão da execução (PR #373), não previsto neste ADR original.
-- **`JHO_PUBLIC_URL` substitui o `Host` da requisição em todo deployment.**
-  Achado também na revisão da PR #373: o link de recuperação de senha
+- **O `Host` da requisição nunca monta o link de recuperação de senha, em
+  nenhum deployment.** Achado também na revisão da PR #373: o link
   (`app/login/forgot/actions.ts`) usava o cabeçalho `Host` do cliente para
-  montar a URL — atrás de qualquer proxy, isso é host poisoning (G17/G18), e
-  vale tanto para o plano B quanto para a Vercel de hoje. A correção
-  (`src/contexts/auth/domain/public-origin.ts`) exige `JHO_PUBLIC_URL`
-  configurada em todo deployment; sem ela, falha fechado — nenhum link é
-  construído a partir da entrada do cliente. Passo do dono, antes desta
-  mudança chegar a produção: cadastrar `JHO_PUBLIC_URL` também na Vercel
-  (Production), listado em [deploy.md](../engineering/deploy.md#variáveis).
+  montar a URL — atrás de qualquer proxy, isso é host poisoning (G17/G18). A
+  correção (`src/contexts/auth/domain/public-origin.ts`) resolve, em ordem,
+  `JHO_PUBLIC_URL` (se cadastrada), depois — **só na Vercel, sem cadastro
+  nenhum** — `VERCEL_PROJECT_PRODUCTION_URL`/`VERCEL_URL` (variáveis de
+  sistema da própria plataforma), depois o `Host` só na máquina do dono. O
+  plano B no Fly não tem equivalente às variáveis da Vercel, por isso
+  `JHO_PUBLIC_URL` já vem fixada em `fly.toml`; sem alguma das três, falha
+  fechado. Nenhum passo manual na Vercel é necessário — ver
+  [deploy.md](../engineering/deploy.md#variáveis).
 
 ## Alternativas rejeitadas
 
