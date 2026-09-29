@@ -693,57 +693,132 @@ runs-on: ${{ github.event_name == 'pull_request' &&
 
 - **Ausente ou vazia** (padrão): `ubuntu-latest`, o runner hospedado de hoje —
   nada muda sem ação do dono (princípio 1/2 da ADR).
-- **Setada** (`gh variable set CI_RUNS_ON --body
+- **Setada** com **JSON válido** (`gh variable set CI_RUNS_ON --body
   '["self-hosted","linux","master-jobs"]'`): todo job passa a rodar no runner
-  próprio, sem editar `ci.yml`.
-- **PR de fork nunca roda no runner próprio**, mesmo com a variável setada — a
-  guarda está embutida na própria expressão (a metade antes de `||`), não num
-  job separado que rodaria depois de outros já terem começado. A mesma
-  comparação é testada isolada em `scripts/github/fork-guard.ts`
-  (`isForkPullRequest`) e conferida contra o YAML por
-  `tests/ci-runner-selection.test.ts` (F2-01–F2-04 em
-  `.compozy/tasks/contingencia-ci-deploy/_tests.md`). A exigência de
-  aprovação humana para workflow de fork ("Approve and run", em *Settings →
-  Actions → General*) continua ligada como segunda barreira — a guarda daqui
-  não a substitui.
+  próprio, sem editar `ci.yml`. **Cuidado com a citação:** o valor precisa ser
+  JSON — uma string entre aspas duplas ou um array — nunca texto cru. `gh
+  variable set CI_RUNS_ON --body 'self-hosted'` (sem aspas internas) faz
+  `fromJSON` falhar e derruba o CI inteiro no próximo push; os dois comandos
+  acima, com as aspas simples e duplas exatamente como estão, são os únicos
+  valores testados.
 
-**Provisionamento da VPS.** `scripts/runner/provision-vps.sh` instala, de
-forma idempotente, Node 24.19 (`engines.node` de `package.json`), pnpm
-(`packageManager`), Docker (o E2E e a suíte já sobem `postgres:17` em Docker;
-a VPS não roda um Postgres residente) e as dependências de sistema do
-Chromium/WebKit; cria o usuário dedicado `gha-runner` (sem sudo, só no grupo
-`docker`); baixa o binário do runner do GitHub; e instala o serviço systemd
-`master-jobs-runner.service`, que registra o runner em modo **efêmero**
-(`config.sh --ephemeral`) via `scripts/runner/runner-loop.sh` — cada job roda
-num registro novo, e o diretório de trabalho é limpo entre um job e o
-próximo, para que nenhum estado (nem credencial em cache) sobreviva de uma
-execução para a seguinte (ADR 0030 decisão 5). Nenhum dos dois scripts contém
-credencial: o token de registro é pedido em tempo de execução à API do
-GitHub com um PAT que o dono cola manualmente em
-`/etc/master-jobs-runner/env` (fora do repositório, `chmod 600`,
-`GH_RUNNER_REGISTRATION_PAT=` — regra 16, só o nome aparece aqui).
+#### Pré-requisito do dono: aprovação de workflow de fork
+
+**A metade da expressão antes de `||` (a guarda de fork embutida no
+`runs-on:`) é defesa em profundidade, NÃO a barreira real** (achado da
+revisão L2 da PR #376, C1). Num evento `pull_request`, o GitHub executa a
+versão de `ci.yml` que está na `head` da PRÓPRIA PR — uma PR de fork pode
+editar o arquivo e substituir a expressão inteira por `runs-on:
+[self-hosted, ...]` literal, sem esbarrar em nada que esteja dentro do
+workflow, porque é o próprio workflow que está sendo reescrito. Nenhuma
+guarda embutida no YAML resolve isso sozinha.
+
+A barreira que de fato impede a execução é externa ao arquivo: a política de
+aprovação de workflow de colaborador externo do repositório. Confira o valor
+atual:
+
+```bash
+gh api repos/andreustimm/master-jobs/actions/permissions/fork-pr-contributor-approval
+```
+
+Antes de qualquer `gh variable set CI_RUNS_ON` apontando para o runner
+próprio, **o dono** muda essa política para `all_external_contributors` (todo
+PR de colaborador externo, não só o primeiro, exige "Approve and run" de
+alguém com escrita no repositório):
+
+```bash
+gh api -X PUT repos/andreustimm/master-jobs/actions/permissions/fork-pr-contributor-approval \
+  -f approval_policy=all_external_contributors
+```
+
+O padrão de hoje, `first_time_contributors`, dispensa aprovação para quem já
+teve uma contribuição aceita antes — insuficiente aqui, porque uma conta
+comprometida ou um colaborador que vira malicioso depois de aprovado uma vez
+não passaria por aprovação nenhuma na PR seguinte. **Nenhum agente muda essa
+política sozinho** — é decisão e ação do dono, assim como contratar a VPS. A
+exigência de aprovação em si ("Approve and run", em *Settings → Actions →
+General*) já está ativa; o que muda aqui é o alcance dela.
+
+#### Provisionamento: contêiner descartável, sem credencial de longa duração no job
+
+Revisão L2 da PR #376 (C2) trocou o desenho original (runner instalado direto
+no host, registrado por token reutilizável) por um mais estreito:
+
+- **`scripts/runner/Dockerfile`** builda uma imagem IMUTÁVEL com Node/pnpm na
+  versão de `package.json`, os navegadores do Playwright já instalados, o
+  binário do runner do GitHub (checksum verificado, M5) e um Docker Engine
+  para um dockerd **isolado dentro do próprio contêiner** — o job nunca recebe
+  o socket Docker do host, só o seu próprio, descartado com o contêiner.
+- **Cada job roda num CONTÊINER DESCARTÁVEL** (`docker run --rm`) criado
+  dessa imagem — nunca num processo de longa duração no host. `scripts/runner/
+  entrypoint.sh`, root-owned e só leitura dentro da imagem, limpa qualquer
+  resquício de execução anterior, sobe o dockerd isolado e roda o runner como
+  o usuário não-root `runner` sobre uma CÓPIA gravável e descartável do
+  binário (a origem em `/opt/actions-runner` nunca é escrita depois do build
+  da imagem — M1).
+- **`scripts/runner/runner-controller.sh`** roda no HOST, como o serviço
+  systemd `master-jobs-runner-controller.service` (instalado por
+  `provision-vps.sh`). Para cada job, ele pede à API do GitHub uma
+  **configuração JIT de uso único** (`POST .../actions/runners/
+  generate-jitconfig`) e passa só essa configuração (`JIT_CONFIG`, variável de
+  ambiente daquele contêiner específico) para `docker run` — o PAT de longa
+  duração nunca sai do processo do controller, e nunca entra no contêiner do
+  job.
+- **Escopo do PAT.** Fine-grained, com a permissão de repositório
+  **"Administration: write"** — é a permissão mínima que a API de
+  configuração JIT aceita hoje; não existe uma mais estreita para esta
+  capacidade específica (o próprio endpoint de registro de runner exige
+  administração do repositório). **Nunca** um PAT clássico com escopo `repo`:
+  esse escopo clássico dá leitura/escrita de código, issues e muito mais,
+  bem além do que registrar um runner precisa — a diferença importa porque o
+  PAT fica na VPS, fora do controle de acesso do GitHub.
 
 **Passo do dono, antes de ligar a chave:**
 
-1. Contratar a VPS (Hetzner CPX22 ou DigitalOcean 4 GB — Decisão 2 do PRD da
+1. Mudar `fork-pr-contributor-approval` para `all_external_contributors`
+   (seção acima) — **antes** de tudo o resto.
+2. Contratar a VPS (Hetzner CPX22 ou DigitalOcean 4 GB — Decisão 2 do PRD da
    issue #367), Ubuntu 24.04 LTS.
-2. Copiar o repositório (ou só `scripts/runner/`) para a VPS e rodar como
-   root: `sudo bash scripts/runner/provision-vps.sh`.
-3. Criar `/etc/master-jobs-runner/env` com `GH_RUNNER_REGISTRATION_PAT=<PAT
-   com escopo de administração do repositório>` (o script cria o arquivo
-   vazio com o `chmod` certo, se ainda não existir) e `systemctl start
-   master-jobs-runner`.
-4. Confirmar o runner **Idle** em *Settings → Actions → Runners*, com os
-   labels `self-hosted`, `linux`, `master-jobs`.
-5. Só então: `gh variable set CI_RUNS_ON --body
+3. Copiar o repositório para a VPS e rodar como root:
+   `sudo bash scripts/runner/provision-vps.sh`. O script builda a imagem do
+   runner (`docker build`) e falha de propósito se `RUNNER_SHA256` no
+   `Dockerfile` ainda for o placeholder — confira o SHA-256 publicado em
+   <https://github.com/actions/runner/releases> para a versão fixada e edite
+   o `ARG RUNNER_SHA256` antes de rodar de novo.
+4. Criar um PAT fine-grained com "Administration: write" só neste
+   repositório, e colar em `/etc/master-jobs-runner/env` (o script cria o
+   arquivo vazio com o `chmod 600` certo, se ainda não existir):
+   `GH_RUNNER_REGISTRATION_PAT=<valor>`. Depois: `systemctl start
+   master-jobs-runner-controller`.
+5. Confirmar, no log do serviço (`journalctl -u
+   master-jobs-runner-controller -f`), um contêiner subindo e um runner
+   aparecendo em *Settings → Actions → Runners* com os labels `self-hosted`,
+   `linux`, `master-jobs`, e desaparecendo de novo ao fim de cada job (é
+   efêmero — "sumir" entre jobs é o comportamento esperado, não uma falha).
+6. Só então: `gh variable set CI_RUNS_ON --body
    '["self-hosted","linux","master-jobs"]'` e um push real em `dev` para
    confirmar o CI inteiro verde no runner próprio (checklist F2-M01–F2-M03 em
    `_tests.md`).
 
 **Voltar ao hospedado**, a qualquer momento e sem tocar na VPS:
-`gh variable set CI_RUNS_ON --body '"ubuntu-latest"'` (ou `gh variable delete
-CI_RUNS_ON`). O próximo push já roda em `ubuntu-latest` — reversível em
-segundos, como todo o resto desta contingência.
+
+```bash
+gh variable set CI_RUNS_ON --body '"ubuntu-latest"'   # ou: gh variable delete CI_RUNS_ON
+```
+
+O próximo push já roda em `ubuntu-latest`. **Se havia execução em fila ou em
+andamento esperando o runner próprio** no momento da troca, ela fica presa
+(nenhum runner com aquele label vai aparecer para pegá-la): cancele e
+redispare, em vez de esperar —
+
+```bash
+gh run list --status queued --json databaseId -q '.[].databaseId' \
+  | xargs -n1 gh run cancel
+gh run list --status in_progress --json databaseId -q '.[].databaseId' \
+  | xargs -n1 gh run cancel
+# Redisparo: um push vazio ou re-run manual do último commit de cada branch afetada.
+git commit --allow-empty -m "chore(ci): redisparar após voltar ao runner hospedado" && git push
+```
 
 ## Migrar o banco
 

@@ -70,6 +70,11 @@ describe("F2-04 — a guarda de F2-03 está embutida em todo runs-on que pode re
     expect(CANONICAL_RUNS_ON).toContain(
       "github.event.pull_request.head.repo.full_name != github.repository",
     );
+    // Trava o fragmento exato, não só as duas metades soltas: prova que o
+    // `&&`/`||` que decide "fork cai no hospedado, senão lê a variável" está
+    // na ordem certa, não só que as palavras aparecem em algum lugar
+    // (revisão L2 da PR #376, minor F2-04).
+    expect(CANONICAL_RUNS_ON).toContain("!= github.repository && 'ubuntu-latest' ||");
     // A guarda decide ANTES do fromJSON: uma PR de fork nunca alcança
     // `vars.CI_RUNS_ON`, mesmo que ela aponte para o runner próprio.
     const guardIndex = CANONICAL_RUNS_ON.indexOf("head.repo.full_name != github.repository");
@@ -81,6 +86,26 @@ describe("F2-04 — a guarda de F2-03 está embutida em todo runs-on que pode re
   it("nenhum job de ci.yml escapa da expressão guardada — nenhum literal e nenhuma variação", () => {
     for (const [name, job] of Object.entries(ci.jobs)) {
       expect(job["runs-on"], name).toBe(CANONICAL_RUNS_ON);
+    }
+  });
+});
+
+describe("M2 (revisão L2 da PR #376) — instalação do Playwright pula no runner próprio", () => {
+  // `--with-deps`/`install-deps` pedem apt/sudo, que o job do runner próprio
+  // não tem — e não precisa, com Chromium/WebKit já na imagem
+  // (scripts/runner/Dockerfile). `runner.environment` é `github-hosted` ou
+  // `self-hosted`, contexto do próprio GitHub Actions.
+  const stepsThatInstallBrowsers = Object.values(ci.jobs)
+    .flatMap((job) => job.steps)
+    .filter((step) => /playwright (install|install-deps)\b.*(--with-deps|chromium|webkit)/.test(step.run ?? ""));
+
+  it("existe ao menos um passo de instalação de navegador para proteger", () => {
+    expect(stepsThatInstallBrowsers.length).toBeGreaterThan(0);
+  });
+
+  it("todo passo que instala navegador/dependência do Playwright exige runner hospedado", () => {
+    for (const step of stepsThatInstallBrowsers) {
+      expect(step.if, step.name ?? step.run).toContain("runner.environment != 'self-hosted'");
     }
   });
 });

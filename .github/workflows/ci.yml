@@ -13,18 +13,31 @@
 #
 # `runs-on:` de todo job é a mesma expressão, nunca um literal (issue #367,
 # ADR 0030 decisão 1/4): `vars.CI_RUNS_ON` ausente ou vazia mantém o runner
-# hospedado de hoje (`fromJSON(... || '"ubuntu-latest"')`); setada, troca o
-# runner de todo job sem editar este arquivo. A primeira metade da expressão é
-# a guarda de fork, embutida no próprio `runs-on:` e não num job de guarda
-# separado: uma PR cuja `head.repo` difere de `github.repository` sempre cai
-# em `ubuntu-latest`, mesmo com `CI_RUNS_ON` apontando para o runner próprio —
-# nenhum job chega a iniciar no runner próprio para código de terceiro. A
-# mesma decisão é testada isolada, sem o motor de expressões do Actions, em
+# hospedado de hoje (`fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"')`); setada
+# com JSON válido, troca o runner de todo job sem editar este arquivo. Um
+# valor SEM aspas (`self-hosted`, em vez de `'"self-hosted"'` ou
+# `'["self-hosted","linux","master-jobs"]'`) não é JSON válido: `fromJSON`
+# falha e derruba o CI inteiro — a seção "Runner self-hosted opt-in" de
+# docs/engineering/deploy.md mostra o `gh variable set` com a citação certa.
+#
+# A primeira metade da expressão (antes do `||`) é uma guarda de fork
+# embutida no próprio `runs-on:` — DEFESA EM PROFUNDIDADE, NÃO a barreira
+# real (revisão L2 da PR #376, C1): num evento `pull_request`, o GitHub
+# executa a versão de ci.yml que está na `head` da PRÓPRIA PR, então uma PR
+# de fork pode simplesmente editar este arquivo e trocar a expressão inteira
+# por `runs-on: [self-hosted, ...]` literal, sem esbarrar nesta guarda. A
+# barreira que de fato impede a execução é a política de aprovação de
+# workflow de colaborador externo do repositório
+# (`fork-pr-contributor-approval` = `all_external_contributors`), pré-requisito
+# do dono documentado em docs/engineering/deploy.md ANTES de qualquer `gh
+# variable set CI_RUNS_ON` — nenhum agente a muda sozinho. A guarda aqui só
+# cobre o caso em que essa política aprovou o run mas a PR ainda assim tenta
+# resolver para o runner próprio (ex.: um colaborador de confiança com PR
+# aprovada, mas cuja branch não é deste repositório). A mesma comparação é
+# testada isolada, sem o motor de expressões do Actions, em
 # `scripts/github/fork-guard.ts` (`isForkPullRequest`), e
 # `tests/ci-runner-selection.test.ts` confere que as duas nunca divergem
-# (F2-01–F2-04 em `.compozy/tasks/contingencia-ci-deploy/_tests.md`). A
-# exigência de aprovação humana para workflow de fork ("Approve and run", já
-# ativa no repositório) continua como segunda barreira.
+# (F2-01–F2-04 em `.compozy/tasks/contingencia-ci-deploy/_tests.md`).
 name: CI
 
 on:
@@ -278,12 +291,21 @@ jobs:
       - uses: actions/cache@v6
         # O Chromium pinado só muda quando o Playwright muda; baixá-lo em toda
         # execução custava mais que o próprio teste. As dependências do sistema
-        # continuam vindo do `--with-deps`, que não fica em cache.
+        # continuam vindo do `--with-deps`, que não fica em cache. Sem efeito
+        # no runner próprio (ver o passo seguinte): não há cache a restaurar
+        # nem a gravar ali, e a ação simplesmente não encontra a chave.
+        if: runner.environment != 'self-hosted'
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.versao }}
 
       - name: Instalar Chromium do gate PWA
+        # `--with-deps` pede apt/sudo, que o job do runner próprio não tem —
+        # e não precisa: a imagem do runner (scripts/runner/Dockerfile) já
+        # traz Chromium/WebKit instalados (revisão L2 da PR #376, M2).
+        # `runner.environment` é `github-hosted` ou `self-hosted`, contexto do
+        # próprio GitHub Actions — não depende de `vars.CI_RUNS_ON` aqui.
+        if: runner.environment != 'self-hosted'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Fronteira PWA em navegador real
@@ -413,7 +435,10 @@ jobs:
         id: cache-navegadores
         # Restauração e gravação separadas: o `actions/cache` inteiro só grava
         # quando o job termina verde, e enquanto a suíte reprovar cada execução
-        # baixaria os navegadores de novo.
+        # baixaria os navegadores de novo. Sem efeito no runner próprio: a
+        # imagem já traz Chromium/WebKit (scripts/runner/Dockerfile), e os
+        # dois passos de instalação abaixo ficam pulados ali.
+        if: runner.environment != 'self-hosted'
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/ms-playwright
@@ -421,19 +446,23 @@ jobs:
 
       - name: Instalar Chromium e WebKit
         # `ui.mjs` abre o WebKit para o histórico de novidades no Safari.
-        if: steps.cache-navegadores.outputs.cache-hit != 'true'
+        # `--with-deps` pede apt/sudo, que o runner próprio não tem — e não
+        # precisa, com os navegadores já na imagem (revisão L2 da PR #376, M2).
+        if: runner.environment != 'self-hosted' && steps.cache-navegadores.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium webkit
 
       - name: Guardar os navegadores no cache
-        if: steps.cache-navegadores.outputs.cache-hit != 'true'
+        if: runner.environment != 'self-hosted' && steps.cache-navegadores.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ steps.cache-navegadores.outputs.cache-primary-key }}
 
       - name: Dependências de sistema dos navegadores
-        # O cache guarda os binários, não as bibliotecas do apt.
-        if: steps.cache-navegadores.outputs.cache-hit == 'true'
+        # O cache guarda os binários, não as bibliotecas do apt. Mesmo motivo
+        # do passo acima para pular no runner próprio: sem sudo, e sem
+        # necessidade — a imagem já tem as bibliotecas do sistema.
+        if: runner.environment != 'self-hosted' && steps.cache-navegadores.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium webkit
 
       - name: E2E hermético (UI + axe)

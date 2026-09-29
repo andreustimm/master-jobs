@@ -58,6 +58,24 @@ o dono escolher (registrado em
    rodar nele, e nunca é uma camada opcional. A exigência de aprovação humana
    para workflow de fork ("Approve and run", já ativa no repositório)
    continua ligada como segunda barreira, não substituída pela guarda.
+
+   > **Atualização de 30/09/2026 (revisão L2 da PR #376):** a guarda embutida
+   > em `runs-on:` é **defesa em profundidade, não a barreira real**. Num
+   > evento `pull_request`, o GitHub executa a versão de `ci.yml` que está na
+   > `head` da própria PR — uma PR de fork pode editar o arquivo e trocar a
+   > expressão inteira por `runs-on: [self-hosted, ...]` literal, sem tocar em
+   > nenhuma outra proteção deste repositório. A barreira que de fato impede a
+   > execução é a política de aprovação de workflow de colaborador externo
+   > (`fork-pr-contributor-approval`), que precisa estar em
+   > `all_external_contributors` — não no padrão `first_time_contributors`,
+   > que dispensa aprovação para quem já teve uma contribuição aceita antes
+   > (conta comprometida ou colaborador que vira malicioso). Mudar essa
+   > política é decisão e ação do dono (`gh api -X PUT
+   > repos/andreustimm/master-jobs/actions/permissions/fork-pr-contributor-approval
+   > -f approval_policy=all_external_contributors`), registrada como
+   > pré-requisito em [deploy.md](../engineering/deploy.md#runner-self-hosted-opt-in-ci_runs_on)
+   > **antes** de qualquer `gh variable set CI_RUNS_ON`. Nenhum agente altera
+   > essa política sozinho.
 5. **O runner self-hosted, quando existir, é efêmero.** Um container por job,
    destruído ao fim. Um job comprometido não deixa estado para o próximo.
 6. **O vigia de cota mora fora dos provedores que ele monitora.** Um watchdog
