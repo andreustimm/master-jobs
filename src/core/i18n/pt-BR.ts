@@ -138,7 +138,7 @@ export const ptBR = {
     countryUnknown: "sem localização",
     offerSearch: "Buscar “{term}” nas plataformas",
     offerSearchLead: "Salvar o termo busca vagas novas com ele nas plataformas cadastradas, todo dia.",
-    emptyTerm: "Nenhuma vaga do acervo menciona “{term}”.",
+    emptyTerm: "Nenhuma vaga corresponde a “{term}” com os filtros atuais. Remova filtros ou tente outro termo.",
     broughtByEmpty: "O termo “{term}” ainda não trouxe vagas. Última busca: {state}.",
     notInterested: "não me interessa",
     notInterestedHint: "Tira a vaga das suas listas. Ela fica em “Arquivadas”, e dá para restaurar enquanto você não tiver aplicado.",

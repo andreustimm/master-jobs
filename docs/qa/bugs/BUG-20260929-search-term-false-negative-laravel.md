@@ -47,3 +47,5 @@ mencionam o termo sem o filtro de modalidade.
 <!-- filled when status moves to verified -->
 - **Retested:**
 - **Result:**
+
+Correção em implementação com teste vermelho/verde registrado; reteste de jornada pendente.

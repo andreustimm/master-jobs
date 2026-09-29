@@ -1,7 +1,7 @@
 // Área `searches` do E2E de navegador: Buscas: trilha, termo e salário na tela Vagas, saúde das capturas, papéis e arquivamento.
 // Fatiada de ui.mjs (#320); a ordem e o contexto compartilhado moram em ./index.mjs.
 import { ENGLISH_SEARCHES_SWEEP, OVERFLOW_SEARCHES_SWEEP } from "../routes.mjs";
-import { makePortugueseLeaks, ptBR } from "./shared.mjs";
+import { en, makePortugueseLeaks, ptBR } from "./shared.mjs";
 
 export async function run(ctx) {
   const { BASE, E2E_EMAIL, E2E_PASSWORD, browser, check, gotoMeasured, page } = ctx;
@@ -351,6 +351,22 @@ export async function run(ctx) {
   );
 
   /* ------ term-search task_05: Buscas, trilhas, saúde das capturas e papéis ------ */
+  await page.setViewportSize({ width: 375, height: 812 });
+  for (const [locale, dictionary] of [["pt-BR", ptBR], ["en", en]]) {
+    await page.context().addCookies([{ name: "jho_locale", value: locale, url: BASE }]);
+    await page.goto(`${BASE}/jobs?q=Laravel&fit=0`, { waitUntil: "networkidle" });
+    const beforeFilter = await page.locator('[data-testid="job-link-905000001"]').count();
+    await page.goto(`${BASE}/jobs?q=Laravel&fit=0&workMode=onsite`, { waitUntil: "networkidle" });
+    await page.reload({ waitUntil: "networkidle" });
+    const emptyText = (await page.locator('[data-testid="jobs-empty"]').textContent()) ?? "";
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    check(`termo existente com filtro sem resultado explica o recorte em ${locale}`, beforeFilter === 1 && emptyText.includes(dictionary.jobs.emptyTerm.replace("{term}", "Laravel")), emptyText);
+    check(`vazio contextualizado cabe em 375px em ${locale}`, overflow <= 1, `${overflow}px`);
+    await page.goto(`${BASE}/jobs?q=Laravel&fit=0`, { waitUntil: "networkidle" });
+    check(`remover modalidade recupera a vaga que menciona o termo em ${locale}`, await page.locator('[data-testid="job-link-905000001"]').count() === 1);
+  }
+  await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  await page.setViewportSize({ width: 1280, height: 900 });
   const notice = page.locator('[data-testid="mutation-feedback"]');
   /**
    * Runs an action and reads the notice it leaves, then clears it for the next one.

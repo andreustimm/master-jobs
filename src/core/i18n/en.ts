@@ -141,7 +141,7 @@ export const en: Dictionary = {
     countryUnknown: "no location",
     offerSearch: "Search the platforms for “{term}”",
     offerSearchLead: "Saving the term searches the registered platforms for new jobs with it, every day.",
-    emptyTerm: "No job in the corpus mentions “{term}”.",
+    emptyTerm: "No jobs match “{term}” with the current filters. Remove filters or try another term.",
     broughtByEmpty: "The term “{term}” has not brought any jobs yet. Last search: {state}.",
     notInterested: "not interested",
     notInterestedHint: "Takes the job off your lists. It stays under “Archived”, and you can restore it while you have not applied.",

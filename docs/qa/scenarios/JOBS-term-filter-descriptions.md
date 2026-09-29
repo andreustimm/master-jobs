@@ -23,3 +23,5 @@ a oferta de salvar o termo em Buscas.
 Full 1.22.0 (2026-09-22): typescript e observabilidade acham vagas só pela descrição; type e java não acham pedaço; empresa (Aurora) e título (architect) acham; termo acentuado e frase funcionam; o termo sobrevive ao reload.
 
 **Reset 2026-09-23 (#223, tarefa 05):** a busca passou a olhar também a localização, e texto entre aspas virou frase exata. Conferir de novo que um termo que não aparece em nenhuma localização devolve o mesmo conjunto de antes, e que "go" continua sem trazer "Google".
+
+Reteste #402: termo existente com modalidade incompatível deve produzir vazio dos filtros atuais; remover modalidade recupera a vaga. O vazio não pode afirmar ausência em todo o acervo.
