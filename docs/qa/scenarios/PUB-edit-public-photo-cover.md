@@ -11,8 +11,8 @@ bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence: docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-edit-mobile-upload-preview.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-edit-mobile-svg-rejected.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-edit-mobile-wrong-type-rejected.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-edit-mobile-cover-too-small.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/exif-strip-check.txt; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-not-configured-candidate-card.png
-last_report: docs/qa/reports/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted.md
+evidence: docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-edit-mobile-upload-preview.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-edit-mobile-svg-rejected.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-edit-mobile-wrong-type-rejected.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-edit-mobile-cover-too-small.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/exif-strip-check.txt; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-not-configured-candidate-card.png; docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-public-photo-cover-mobile-selfserve/public-profile-photo-only-post-cover-removal.png
+last_report: docs/qa/reports/2026-09-29T035351654581Z-97f37e1c-full-release-candidate-1.29-full.md
 overlaps: PUB-public-photo-cover-opt-in; PUB-public-image-revoked-404; PUB-edit-public-facts
 ---
 
@@ -44,3 +44,15 @@ not configured in this environment." ao tentar enviar sem
 nesse mesmo cenário mostra ícone de imagem quebrada em vez de nada (ver
 `BUG-20260928-public-profile-broken-image-icon-storage-unconfigured`, ligado
 ao cenário `PUB-public-photo-cover-opt-in`).
+
+**Reconfirmado na Full 1.29 (2026-09-29, HEAD `494aa37`, 375px, conta
+`qa-full-candidate-e`, imagens sintéticas geradas com Pillow):** foto
+(300×300) e capa (1200×300) enviadas com sucesso; a prévia trocou de "No
+image uploaded." para `<img>` sem precisar de reload manual; o servidor
+re-hospeda como WebP recortado — foto 512×512, capa 1600×400 — confirmado
+baixando a imagem servida. "Remover imagem" na capa voltou o cartão para "No
+image uploaded." e desmarcou "Show on public profile" sozinho, confirmado
+sem reload adicional. Não tentei os casos de recusa (SVG renomeado, tamanho
+acima de 4 MB, dimensão pequena) nesta rodada — já cobertos com evidência
+própria na rodada de 2026-09-28 acima, sem mudança de código neste caminho
+desde então.

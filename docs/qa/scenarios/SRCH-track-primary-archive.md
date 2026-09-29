@@ -25,3 +25,9 @@ o reteste desta correção passou e está documentado no relatório da branch. O
 campo `retest_status` permanece `pending` enquanto o cenário inteiro continua
 bloqueado pela decisão pendente do seletor com dois rótulos `PRINCIPAL`
 (`BUG-20260921-track-selector-two-principal`).
+
+Registro original do QA full do release candidate 1.29: o seletor de Vagas
+ainda mostrava dois botões `PRINCIPAL` depois da troca (sem fix desde 21/09).
+Na mesma sessão, o painel de evidência mostrava “perfil padrão” em vez do CV
+real da candidata logada e contradizia `/candidate`; esse achado é o
+`BUG-20260929-track-evidence-ignores-candidate-cv` retestado nesta branch.

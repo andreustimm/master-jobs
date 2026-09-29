@@ -13,7 +13,8 @@
 Depois de tornar uma trilha principal, o painel de evidência mostra “perfil
 padrão” em vez do CV real da candidata que está logada e tem CV cadastrado em
 `/candidate`. A evidência que deveria justificar o ranking daquela trilha
-contradiz o que a própria conta mostra em outra tela.
+contradiz o que a própria conta mostra em outra tela — quem lê a evidência não
+sabe se ela reflete o CV certo.
 
 ## Reproduction
 

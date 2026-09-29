@@ -2231,18 +2231,37 @@ auth
   .description("Modo de autenticação e contas cadastradas")
   .action(async () => {
     await withDb(async () => {
-      const { isOpenMode } = await import("./contexts/auth/index.ts");
+      const { isOpenMode, openModeRefused } = await import("./contexts/auth/index.ts");
+      const { declaredJhoEnv } = await import("./core/dev-env.ts");
       const { authUser } = await import("./core/db/schema.ts");
       const users = await getDb().select().from(authUser);
 
       const open = isOpenMode();
-      console.log(`\n${c.bold("Modo")} ${open ? c.red("SEM PROTEÇÃO") : c.green("autenticado")}`);
+      // O modo aberto depende do ambiente de QUEM serve, não desta CLI:
+      // `pnpm dev` declara `JHO_ENV=local` sozinho quando o `.env` não declara
+      // nada (scripts/dev.ts), então o mesmo `.env` pode recusar aqui e abrir lá.
+      const refused = openModeRefused(process.env);
+      // Mesma decisão do `scripts/dev.ts`: se nem o processo nem os `.env*` do
+      // Next declaram JHO_ENV, `pnpm dev` declara local e o modo aberto vale lá.
+      const openInDev = refused && declaredJhoEnv(process.env) === undefined;
+      const mode = open
+        ? c.red("SEM PROTEÇÃO")
+        : openInDev
+          ? c.yellow("autenticado nesta CLI; SEM PROTEÇÃO no pnpm dev")
+          : c.green("autenticado");
+      console.log(`\n${c.bold("Modo")} ${mode}`);
       console.log(
         c.dim(
           open
             ? "  JHO_AUTH_MODE=open — currículo, funil e export acessíveis sem login.\n" +
               "  Remova a variável do .env para exigir autenticação."
-            : "  Login obrigatório. Nenhuma página ou API responde sem sessão válida.",
+            : openInDev
+              ? "  JHO_AUTH_MODE=open está no .env, e o .env não declara JHO_ENV. Esta CLI recusa,\n" +
+                "  mas `pnpm dev` declara JHO_ENV=local sozinho e ali currículo, funil e export\n" +
+                "  ficam acessíveis sem login. Remova JHO_AUTH_MODE do .env para exigir login."
+              : refused
+                ? "  JHO_AUTH_MODE=open é ignorado: JHO_ENV não é local. Login obrigatório."
+                : "  Login obrigatório. Nenhuma página ou API responde sem sessão válida.",
         ),
       );
 

@@ -55,13 +55,12 @@ FROM ${NODE_IMAGE} AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-# CRITICAL C1 (revisão da #373): sem isto, `isLocalProcess()`
-# (`src/contexts/auth/domain/open-mode.ts`) trataria este contêiner como a
-# máquina do dono — nenhuma variável VERCEL/VERCEL_ENV existe no Fly. As
-# consequências reais: `JHO_AUTH_MODE=open` liberaria `/api/export` e todo o
-# resto sem sessão (G38); o mailer de recuperação imprimiria o link no log em
-# vez de omiti-lo (G18); e a varredura recusaria por não se reconhecer como
-# produção (`src/core/ingest/guard.ts`). Declarado aqui E em `fly.toml`
+# CRITICAL C1 (revisão da #373): sem isto, a varredura recusaria por não se
+# reconhecer como produção (`src/core/ingest/guard.ts`). Até a #378, a
+# ausência também fazia `isLocalProcess()` tratar o contêiner como a máquina
+# do dono; hoje ela exige `JHO_ENV=local` e nega por omissão, então o modo
+# aberto e o mailer de terminal já não dependem desta linha — ela continua
+# como declaração explícita do ambiente. Declarado aqui E em `fly.toml`
 # (defesa em profundidade: qualquer jeito de rodar esta imagem, inclusive
 # `docker run` direto fora do Fly, se declara produção).
 ENV JHO_ENV=production

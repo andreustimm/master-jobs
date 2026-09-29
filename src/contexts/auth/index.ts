@@ -43,6 +43,7 @@ export { RESET_MINUTES, RESET_MAX_PER_HOUR } from "./app/password-reset.ts";
 export type { Mailer, OutgoingMail, MailResult } from "./ports-mailer.ts";
 export { configuredMailer, consoleMailer, resendMailer } from "./infra/resend-mailer.ts";
 export { resolvePublicOrigin, type RequestOrigin } from "./domain/public-origin.ts";
+export { openModeRefused } from "./domain/open-mode.ts";
 
 import {
   createOwnCandidate as createOwnCandidateRow,

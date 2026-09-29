@@ -30,6 +30,8 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 <!-- sem-nota-usuario: 1.30.0 - 2026-09-29T11:55:09.000Z -->
 
+<!-- sem-nota-usuario: 1.32.0 - 2026-09-29T15:11:03.000Z -->
+
 ## [Unreleased]
 
 ## [1.31.0] - 2026-09-29T14:04:44.000Z
