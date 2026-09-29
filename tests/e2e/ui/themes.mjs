@@ -80,6 +80,30 @@ export async function run(ctx) {
         if (ratio < 4.5) lowContrast.push(`${theme}/${mode} "${sample.label}" ${ratio.toFixed(2)}:1`);
       }
 
+      // `--warn` é token de preenchimento (G32); o texto de aviso usa
+      // `--warn-text` (#383), que o axe não pega porque só roda no tema
+      // padrão. Este elemento é sempre visível, independente da escolha de
+      // visibilidade, então cada uma das seis combinações mede o token real.
+      await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+      const warnSample = await page.evaluate(() => {
+        const el = document.querySelector('[data-testid="visibility-public-warning"]');
+        if (!el) return null;
+        let node = el;
+        let bg = getComputedStyle(el).backgroundColor;
+        while (node && (bg === "rgba(0, 0, 0, 0)" || bg === "transparent")) {
+          node = node.parentElement;
+          if (!node) break;
+          bg = getComputedStyle(node).backgroundColor;
+        }
+        return { fg: getComputedStyle(el).color, bg: bg || "rgb(255,255,255)" };
+      });
+      if (!warnSample) {
+        lowContrast.push(`${theme}/${mode} aviso-público: elemento ausente`);
+      } else {
+        const ratio = contrast(toRgb(warnSample.fg), toRgb(warnSample.bg));
+        if (ratio < 4.5) lowContrast.push(`${theme}/${mode} aviso-público ${ratio.toFixed(2)}:1`);
+      }
+
       await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
       const { dialog: themedDialog } = await openChangelog(page);
       const changelogSamples = await themedDialog.evaluate((dialog) => {

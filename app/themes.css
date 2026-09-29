@@ -76,6 +76,12 @@
      diferentes; usar `--primary` para os dois deixava o link em 4.19:1. */
   --primary-text: #024ad8;
 
+  /* `--warn` é feito para PREENCHIMENTO (faixa, borda), onde o mínimo é 3:1.
+     Texto precisa de 4.5:1, e `--warn` sozinho não chega lá em todo tema
+     (huly e graphy claros davam 4.06:1, medido). `--warn-text` é mais escuro
+     que `--warn` só onde precisa (#383). */
+  --warn-text: #8f640f;
+
   --radius-action: 8px;
   --radius-surface: 12px;
   --tracking-display: 0em;
@@ -127,6 +133,9 @@
 
   --good: #4ba585;
   --warn: #d9a441;
+  /* Já passa em 4.5:1 contra os três fundos escuros (~7.6–7.9:1, medido);
+     `--warn-text` reaproveita o mesmo valor em vez de duplicar sem motivo. */
+  --warn-text: #d9a441;
   --bad: #e0655a;
 }
 
@@ -178,6 +187,9 @@
 
   --good: #1f7a5c;
   --warn: #a8741a;
+  /* #a8741a sozinho dava 4.06:1 contra branco (abaixo de 4.5:1, medido —
+     #383); `--warn-text` é mais escuro só para o texto. */
+  --warn-text: #8f640f;
   --bad: #c0453a;
 
   --radius-action: 9999px;
@@ -223,6 +235,9 @@
 
   --good: #4ba585;
   --warn: #d9a441;
+  /* Já passa em 4.5:1 contra os três fundos escuros (~7.6–7.9:1, medido);
+     `--warn-text` reaproveita o mesmo valor em vez de duplicar sem motivo. */
+  --warn-text: #d9a441;
   --bad: #e0655a;
 }
 
@@ -267,6 +282,9 @@
 
   --good: #1f7a5c;
   --warn: #a8741a;
+  /* #a8741a sozinho dava 4.06:1 contra branco (abaixo de 4.5:1, medido —
+     #383); `--warn-text` é mais escuro só para o texto. */
+  --warn-text: #8f640f;
   --bad: #c0392b;
 
   --radius-action: 12px;
@@ -322,6 +340,9 @@
 
   --good: #4ba585;
   --warn: #d9a441;
+  /* Já passa em 4.5:1 contra os três fundos escuros (~7.6–7.9:1, medido);
+     `--warn-text` reaproveita o mesmo valor em vez de duplicar sem motivo. */
+  --warn-text: #d9a441;
   --bad: #e0655a;
 }
 
@@ -362,6 +383,7 @@
     --hairline: #242931;
     --good: #4ba585;
     --warn: #d9a441;
+    --warn-text: #d9a441;
     --bad: #e0655a;
   }
 
@@ -393,6 +415,7 @@
     --hairline: #24272e;
     --good: #4ba585;
     --warn: #d9a441;
+    --warn-text: #d9a441;
     --bad: #e0655a;
   }
 
@@ -424,6 +447,7 @@
     --hairline: #ffffff1a;
     --good: #4ba585;
     --warn: #d9a441;
+    --warn-text: #d9a441;
     --bad: #e0655a;
   }
 }
