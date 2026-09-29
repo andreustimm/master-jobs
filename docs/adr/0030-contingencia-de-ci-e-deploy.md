@@ -1,4 +1,4 @@
-# ADR 0029 — Contingência de CI e deploy
+# ADR 0030 — Contingência de CI e deploy
 
 **Status:** Proposta · 2026-09-28 · issue [#351](https://github.com/andreustimm/master-jobs/issues/351)
 

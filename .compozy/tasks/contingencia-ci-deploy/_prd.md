@@ -206,7 +206,7 @@ controle do fluxo — o mesmo artefato serve à alternativa.
 
 ## Architecture Decision Records
 
-- [ADR 0029 — Contingência de CI e deploy](../../../docs/adr/0029-contingencia-de-ci-e-deploy.md)
+- [ADR 0030 — Contingência de CI e deploy](../../../docs/adr/0030-contingencia-de-ci-e-deploy.md)
 
 ## Questões abertas (fora do bloco de decisões do dono)
 

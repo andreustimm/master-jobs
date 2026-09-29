@@ -375,6 +375,6 @@ datada (G83), não como cotação vigente no momento da execução:
 
 ## Architecture Decision Records
 
-- [ADR 0029 — Contingência de CI e deploy](../../../docs/adr/0029-contingencia-de-ci-e-deploy.md)
+- [ADR 0030 — Contingência de CI e deploy](../../../docs/adr/0030-contingencia-de-ci-e-deploy.md)
 - [ADR 0025 — Varredura fatiada na Vercel, agendada pelo `pg_cron` do Supabase](../../../docs/adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md) (padrão reaproveitado pelo vigia da Fase 3)
 - [ADR 0028 — Migração de produção automática, só quando aditiva](../../../docs/adr/0028-migracao-automatica-so-aditiva.md) (a tabela `quota_watch` segue o mesmo detector de aditividade)
