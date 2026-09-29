@@ -776,10 +776,14 @@ contêiner:
   por `-H @-`/stdin — nunca como argumento visível em `ps`) e passa só essa
   configuração (`JIT_CONFIG`, variável de ambiente daquele contêiner
   específico) para `docker run` — o PAT de longa duração nunca sai do
-  processo do controller, e nunca entra no contêiner do job. Um contêiner que
-  termina antes de um minuto (job real nunca é tão rápido) ou cujo `docker
-  run` falha faz o controller desregistrar o runner órfão e esperar com
-  backoff exponencial (30s a 10min) antes de tentar de novo.
+  processo do controller, e nunca entra no contêiner do job. Um `docker run`
+  que falha (status ≠ 0), ou um contêiner que sinaliza "nunca peguei um job"
+  (`entrypoint.sh` sai com o código 75 quando `run.sh` termina sem o log
+  `_diag/Worker_*.log`) faz o controller desregistrar o runner órfão e
+  esperar com backoff exponencial (30s a 10min) antes de tentar de novo —
+  NUNCA por duração de parede (3ª revisão L2 de 29/09/2026, minor 2): um job
+  curto e legítimo, como uma PR só de documentação, não pode ser tratado como
+  falha só por ser rápido.
 - **Escopo do PAT.** Fine-grained, com a permissão de repositório
   **"Administration: write"** — é a permissão mínima que a API de
   configuração JIT aceita hoje; não existe uma mais estreita para esta
@@ -795,12 +799,14 @@ contêiner:
    (seção acima — já aplicada em 29/09/2026).
 2. Contratar a VPS (Hetzner CPX22 ou DigitalOcean 4 GB — Decisão 2 do PRD da
    issue #367), Ubuntu 24.04 LTS.
-3. Antes de rodar o script, confirmar os dois checksums placeholder: o do
-   runner do GitHub (`RUNNER_SHA256` em `scripts/runner/Dockerfile`,
-   publicado em <https://github.com/actions/runner/releases>) e o do
-   `sysbox-ce` (`SYSBOX_SHA256` em `scripts/runner/provision-vps.sh`,
-   publicado em <https://github.com/nestybox/sysbox/releases>) — os dois
-   scripts falham de propósito enquanto o valor for o placeholder.
+3. Antes de rodar o script, confirmar o checksum ainda placeholder do runner
+   do GitHub (`RUNNER_SHA256` em `scripts/runner/Dockerfile`, publicado em
+   <https://github.com/actions/runner/releases> para a versão fixada) — o
+   build da imagem falha de propósito enquanto o valor for o placeholder. O
+   checksum do `sysbox-ce` (`SYSBOX_SHA256` em
+   `scripts/runner/provision-vps.sh`) já foi conferido pelo agente com `gh
+   api repos/nestybox/sysbox/releases/tags/v0.7.1` em 29/09/2026 — só
+   reconfira se `SYSBOX_VERSION` mudar.
 4. Copiar o repositório para a VPS e rodar como root:
    `sudo bash scripts/runner/provision-vps.sh`. O script instala Docker,
    depois `sysbox-runc` (registrando o runtime no Docker do host) e só então
@@ -839,6 +845,11 @@ nada de commit avulso fora do fluxo de PR só para forçar um re-run):
 presos=$(gh run list --workflow ci.yml --status queued --json databaseId -q '.[].databaseId'; \
          gh run list --workflow ci.yml --status in_progress --json databaseId -q '.[].databaseId')
 for id in $presos; do gh run cancel "$id"; done
+# `gh run cancel` é assíncrono — sem esperar o cancelamento terminar de
+# verdade, `gh run rerun` num run ainda "cancelling" falha ou não faz nada
+# (minor 3, 3ª revisão L2 de 29/09/2026). `gh run watch` bloqueia até o run
+# concluir (`--exit-status` não importa aqui, só queremos o estado final).
+for id in $presos; do gh run watch "$id" --exit-status || true; done
 for id in $presos; do gh run rerun "$id"; done
 ```
 

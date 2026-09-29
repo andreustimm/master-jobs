@@ -33,6 +33,15 @@ RUNNER_SOURCE=/opt/actions-runner
 # só ela é escrita, e desaparece com o contêiner.
 RUNNER_RUNTIME=/run/actions-runner
 
+# 3ª revisão L2 de 29/09/2026, minor 2 — sinaliza ao controller (host) que o
+# runner nunca chegou a pegar um job, sem depender de duração de parede: o
+# controller não enxerga dentro deste contêiner depois que ele some
+# (`--rm`), então o único jeito de distinguir "job real, rápido" de "ninguém
+# pegou trabalho nenhum" é este contêiner decidir e sinalizar pelo próprio
+# código de saída. 75 (EX_TEMPFAIL de sysexits.h — "falha temporária, tente
+# de novo") não colide com o que `run.sh` já usa para os próprios erros.
+readonly NO_JOB_PICKED_UP_EXIT_CODE=75
+
 log() { echo "[entrypoint] $*"; }
 
 # M4 — limpa qualquer resquício de execução anterior antes de copiar e rodar.
@@ -97,12 +106,38 @@ main() {
   # quatro variáveis abaixo) não depende dessa sutileza. `su -p` (preserve)
   # aceita o ambiente que `env -i` já deixou pronto, sem o próprio `su`
   # tentar montar outro por cima.
-  exec env -i \
+  #
+  # SEM `exec` aqui (3ª revisão, minor 2): o entrypoint precisa continuar
+  # vivo depois do `run.sh` para decidir o código de saída certo — `&&
+  # run_status=0 || run_status=$?` é o jeito de capturar o status sob
+  # `set -e` sem que uma falha encerre o script antes da checagem abaixo.
+  local run_status
+  env -i \
     "JIT_CONFIG=${JIT_CONFIG}" \
     "PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/opt/ms-playwright}" \
     "HOME=/home/runner" \
     "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
-    su -p runner -c "cd '${RUNNER_RUNTIME}' && exec ./run.sh --jitconfig \"\$JIT_CONFIG\""
+    su -p runner -c "cd '${RUNNER_RUNTIME}' && exec ./run.sh --jitconfig \"\$JIT_CONFIG\"" \
+    && run_status=0 || run_status=$?
+
+  if [ "$run_status" -ne 0 ]; then
+    log "run.sh terminou com status ${run_status} — falha do PROCESSO do runner, não do job"
+    exit "$run_status"
+  fi
+
+  # minor 2 — a duração da parede pune job curto legítimo (uma PR só de
+  # documentação, por exemplo, termina em segundos). O sinal correto é a
+  # presença do log do Worker: o runner só cria `_diag/Worker_*.log` quando
+  # de fato pega e executa um job; `run.sh` saindo 0 sem isso significa que a
+  # configuração JIT expirou ou nunca foi atribuída a um job — infraestrutura
+  # falhando, não o job sendo rápido.
+  if ! compgen -G "${RUNNER_RUNTIME}/_diag/Worker_*.log" > /dev/null; then
+    log "run.sh saiu 0 mas sem log de Worker: nenhum job foi pego, sinalizando ao controller"
+    exit "$NO_JOB_PICKED_UP_EXIT_CODE"
+  fi
+
+  log "job concluído (run.sh saiu 0 e há log de Worker) — o resultado do job em si já foi reportado ao GitHub pelo próprio runner"
+  exit 0
 }
 
 main "$@"

@@ -11,12 +11,15 @@
 #   2. sobe um CONTÊINER DESCARTÁVEL (`--rm`), com o runtime `sysbox-runc`
 #      (NUNCA `--privileged` — ver o porquê abaixo), passando só a config JIT
 #      como variável de ambiente daquele contêiner;
-#   3. espera o contêiner terminar (um job = um contêiner = uma vida); se ele
-#      durou menos que o mínimo plausível de um job real, ou o `docker run`
-#      falhou, desregistra o runner (se chegou a existir) e aplica backoff
-#      exponencial antes de tentar de novo — um laço apertado pedindo
-#      configuração JIT sem parar, contra uma API fora do ar ou uma imagem
-#      quebrada, é ruído (e possível limite de taxa) sem necessidade.
+#   3. espera o contêiner terminar (um job = um contêiner = uma vida); se o
+#      `docker run` falhou (não zero) ou o próprio contêiner sinalizou "nunca
+#      peguei um job" (código de saída 75 — `entrypoint.sh` só sai assim
+#      quando `run.sh` termina sem o log `_diag/Worker_*.log`, isto é, sem
+#      nunca ter executado um job de verdade), desregistra o runner e aplica
+#      backoff exponencial antes de tentar de novo. Duração de parede NUNCA
+#      decide isso (3ª revisão L2 de 29/09/2026, minor 2): um job curto e
+#      legítimo (PR só de documentação, por exemplo) não pode ser tratado
+#      como falha só por ser rápido.
 #
 # O `GH_RUNNER_REGISTRATION_PAT` só existe no ambiente DESTE processo
 # (`EnvironmentFile=` do systemd, arquivo root-only) — nunca é repassado ao
@@ -45,12 +48,14 @@ set -euo pipefail
 RUNNER_IMAGE="${RUNNER_IMAGE:-master-jobs-runner:latest}"
 RUNNER_GROUP_ID="${RUNNER_GROUP_ID:-1}"
 
-# M2 (re-revisão) — um job de verdade (checkout, instalar dependências,
-# testar) nunca termina em menos de um minuto; um contêiner mais curto que
-# isso é sinal de imagem quebrada, JIT inválido ou runtime indisponível, não
-# de sorte. `BACKOFF_SECONDS` cresce em dobro a cada falha/execução curta,
-# até o teto, e volta ao piso na primeira execução que durou o suficiente.
-readonly MIN_JOB_SECONDS=60
+# M2/minor 2 (re-revisões) — `BACKOFF_SECONDS` cresce em dobro a cada falha
+# de verdade (status ≠ 0, ou o sentinel de "nenhum job pego" de
+# entrypoint.sh), até o teto, e volta ao piso no primeiro job concluído.
+# `NO_JOB_PICKED_UP_EXIT_CODE` precisa bater com o mesmo valor em
+# entrypoint.sh (comentado lá também) — os dois lados dessa combinação vivem
+# em processos/contêineres diferentes, então não há import para mantê-los
+# sincronizados automaticamente.
+readonly NO_JOB_PICKED_UP_EXIT_CODE=75
 readonly BACKOFF_FLOOR_SECONDS=30
 readonly BACKOFF_CEILING_SECONDS=600
 BACKOFF_SECONDS=$BACKOFF_FLOOR_SECONDS
@@ -158,26 +163,27 @@ run_one_job() {
   fi
 
   log "subindo contêiner descartável ${name} (runtime sysbox-runc, sem --privileged, sem socket Docker do host)"
-  local started ended duration status
-  started=$(date +%s)
+  local status
   # `&& status=0 || status=$?`, não `; status=$?`: sob `set -e`, um comando
   # simples que falha encerra o script ANTES de chegar na linha seguinte —
   # só uma lista `&&`/`||` protege a captura do status de saída.
   docker run --rm --runtime=sysbox-runc --name "$name" \
     -e "JIT_CONFIG=${jit}" \
     "$RUNNER_IMAGE" && status=0 || status=$?
-  ended=$(date +%s)
-  duration=$((ended - started))
 
-  if [ "$status" -ne 0 ] || [ "$duration" -lt "$MIN_JOB_SECONDS" ]; then
-    log "contêiner ${name} terminou em ${duration}s com status ${status} (mínimo esperado: ${MIN_JOB_SECONDS}s)"
-    delete_orphan_runner "$runner_id"
-    apply_backoff
+  if [ "$status" -eq 0 ]; then
+    log "contêiner ${name} concluiu um job (o resultado do job em si já foi reportado ao GitHub)"
+    reset_backoff
     return
   fi
 
-  log "contêiner ${name} concluiu um job em ${duration}s"
-  reset_backoff
+  if [ "$status" -eq "$NO_JOB_PICKED_UP_EXIT_CODE" ]; then
+    log "contêiner ${name} terminou sem pegar job nenhum (sentinela ${NO_JOB_PICKED_UP_EXIT_CODE})"
+  else
+    log "contêiner ${name} terminou com status ${status} (falha do processo do runner)"
+  fi
+  delete_orphan_runner "$runner_id"
+  apply_backoff
 }
 
 main() {

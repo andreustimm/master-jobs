@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import YAML from "yaml";
-import { isForkPullRequest, type WorkflowEvent } from "../../scripts/github/fork-guard.ts";
+import type { WorkflowEvent } from "../../scripts/github/fork-guard.ts";
 import { NON_BLOCKING_CI_JOBS } from "../../scripts/release/promotion-ci.ts";
+import { evaluateGithubActionsExpression } from "./expr-eval.ts";
 
 export type CiStep = {
   name?: string;
@@ -43,17 +44,30 @@ export function runsOnViolations(workflow: CiWorkflow): string[] {
 }
 
 /**
- * Mini-avaliador da expressão `CANONICAL_RUNS_ON` — NÃO um motor de
- * expressões do GitHub Actions genérico, só a semântica exata desta
- * expressão (`A && B && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON ||
- * '"ubuntu-latest"')`), para provar equivalência comportamental com
- * `isForkPullRequest` sobre os MESMOS eventos de F2-03 (re-revisão L2 da PR
- * #376, m4) — não só que as duas fontes compartilham um trecho de texto
- * igual, que é o que o teste de F2-04 anterior provava.
+ * Resolve `CANONICAL_RUNS_ON` de verdade — avaliando a STRING (via
+ * `evaluateGithubActionsExpression`, `tests/support/expr-eval.ts`), não
+ * reimplementando a decisão do lado do teste. Isso é o que prova equivalência
+ * comportamental com `isForkPullRequest` sobre os MESMOS eventos de F2-03
+ * (3ª revisão L2 da PR #376, minor 1): se `CANONICAL_RUNS_ON` divergir do
+ * texto que `isForkPullRequest` implementa, é a expressão avaliada de
+ * verdade que vai discordar — chamar `isForkPullRequest` aqui dentro seria
+ * tautológico e não pegaria essa divergência.
  */
 export function resolveCanonicalRunsOn(event: WorkflowEvent, ciRunsOn: string | undefined): unknown {
-  if (isForkPullRequest(event)) return "ubuntu-latest";
-  return JSON.parse(ciRunsOn && ciRunsOn.length > 0 ? ciRunsOn : '"ubuntu-latest"');
+  const context = {
+    github: {
+      event_name: event.eventName,
+      repository: event.repository,
+      event: {
+        pull_request:
+          event.pullRequestHeadRepoFullName === undefined
+            ? undefined
+            : { head: { repo: { full_name: event.pullRequestHeadRepoFullName } } },
+      },
+    },
+    vars: { CI_RUNS_ON: ciRunsOn },
+  };
+  return evaluateGithubActionsExpression(CANONICAL_RUNS_ON, context);
 }
 
 export function ciWorkflowFrom(yaml: string): CiWorkflow {

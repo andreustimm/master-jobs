@@ -44,13 +44,20 @@ REPO="andreustimm/master-jobs"
 # Sem ele, `--privileged` daria ao contêiner do job acesso aos dispositivos
 # de bloco do PRÓPRIO HOST — o job poderia montar `/dev/sda` de dentro de si
 # e ler `/etc/master-jobs-runner/env`, o PAT que controla até a política de
-# aprovação de fork. Versão e checksum FIXOS; o valor abaixo é um
-# PLACEHOLDER — o dono confere o SHA-256 publicado em
-# https://github.com/nestybox/sysbox/releases antes do primeiro
-# provisionamento real, e o script falha fechado enquanto não for trocado.
-SYSBOX_VERSION="0.6.6"
-SYSBOX_DEB_URL="https://downloads.nestybox.com/sysbox/releases/v${SYSBOX_VERSION}/sysbox-ce_${SYSBOX_VERSION}-0.linux_amd64.deb"
-SYSBOX_SHA256="PREENCHER_COM_O_SHA256_PUBLICADO_NA_PAGINA_DE_RELEASE"
+# aprovação de fork.
+#
+# v0.7.1, não uma anterior (3ª revisão L2 de 29/09/2026): é a primeira versão
+# com suporte a Ubuntu 24.04/kernel 6.8+ sob containerd 2.x — a VPS-alvo desta
+# Fase 2 (Decisão 2 do PRD da issue #367, Ubuntu 24.04 LTS) — e a que carrega
+# os patches de CVE-2025-31133/52565/52881. Nome do arquivo mudou nesta
+# versão: sem o sufixo `-0` das releases anteriores. SHA-256 conferido pelo
+# agente com `gh api repos/nestybox/sysbox/releases/tags/v0.7.1` (campo
+# `digest` do asset `sysbox-ce_0.7.1.linux_amd64.deb`, e repetido na íntegra
+# na seção "Checksums" do corpo da release) em 29/09/2026 — bate com o valor
+# abaixo; o script ainda falha fechado se algum dia divergir do download real.
+SYSBOX_VERSION="0.7.1"
+SYSBOX_DEB_URL="https://github.com/nestybox/sysbox/releases/download/v${SYSBOX_VERSION}/sysbox-ce_${SYSBOX_VERSION}.linux_amd64.deb"
+SYSBOX_SHA256="9d6d5484f980d0a17f86c492c1262015c2afb66280bdb97215b79fde6a0261c5"
 
 log() { echo "[provision-vps] $*"; }
 
@@ -96,12 +103,22 @@ install_docker() {
 }
 
 install_sysbox() {
+  # 3ª revisão L2 (minor 4) — compara a versão INSTALADA com SYSBOX_VERSION,
+  # não só "existe o binário": uma VPS provisionada antes desta correção
+  # ficaria presa numa versão sem os patches de CVE e sem suporte a
+  # Ubuntu 24.04/kernel 6.8+, e rodar `install_sysbox` de novo (idempotente
+  # nesse sentido) precisa detectar e corrigir isso sozinho.
   if command -v sysbox-runc >/dev/null 2>&1; then
-    log "sysbox-runc já instalado ($(sysbox-runc --version 2>/dev/null | head -1)); pulando"
-    return
+    local installed_version
+    installed_version="$(sysbox-runc --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+    if [ "$installed_version" = "$SYSBOX_VERSION" ]; then
+      log "sysbox-runc ${SYSBOX_VERSION} já instalado; pulando"
+      return
+    fi
+    log "sysbox-runc instalado é ${installed_version:-desconhecido}, esperado ${SYSBOX_VERSION}; reinstalando"
   fi
-  if [ "$SYSBOX_SHA256" = "PREENCHER_COM_O_SHA256_PUBLICADO_NA_PAGINA_DE_RELEASE" ]; then
-    echo "SYSBOX_SHA256 ainda é o placeholder — confira o valor publicado em" >&2
+  if [ -z "$SYSBOX_SHA256" ]; then
+    echo "SYSBOX_SHA256 está vazio — confira o valor publicado em" >&2
     echo "https://github.com/nestybox/sysbox/releases/tag/v${SYSBOX_VERSION} e edite este script antes de continuar." >&2
     echo "Sem isso, o contêiner do job rodaria com --privileged, que expõe o host — ver o comentário no topo do arquivo." >&2
     exit 1
