@@ -45,6 +45,7 @@ import * as recheck from "./recheck.mjs";
 import * as roles from "./roles.mjs";
 import * as searchRelevance from "./search-relevance.mjs";
 import * as searches from "./searches.mjs";
+import * as staleTabLogin from "./stale-tab-login.mjs";
 import * as themes from "./themes.mjs";
 import * as visibility from "./visibility.mjs";
 import * as workMode from "./work-mode.mjs";
@@ -102,6 +103,7 @@ export const AREAS = [
   // E2E-011 exige que "fixture" case uma vaga de terceira fonte, além de
   // Ashby e Lever: a que canonical-flows cria ("Task 04 redirect fixture").
   { id: "searches", run: searches.run, requires: ["canonical-flows"] },
+  { id: "stale-tab-login", run: staleTabLogin.run, requires: [] },
   { id: "logout", run: logout.run, requires: [] },
   { id: "pwa", run: pwa.run, requires: [] },
 ];

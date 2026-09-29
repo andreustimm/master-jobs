@@ -45,12 +45,22 @@ reload libera.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
+- **Root cause:** uma navegação iniciada na aba antiga mantinha o destino
+  solicitado como alvo ativo da transição. O servidor redirecionava a rota
+  efetiva para `/login`, mas a guarda genérica de commit rejeitava corretamente
+  essa URL diferente e nenhuma fronteira do login liberava a geração ativa.
 - **Fix commit:**
-- **Regression test:**
+- **Regression test:** `tests/e2e/ui/stale-tab-login.mjs` percorre candidato e
+  recrutador em duas abas do mesmo contexto de 375px, encerra a sessão em uma
+  aba, navega na outra e entra novamente pelo login liberado.
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** 2026-09-29, build standalone isolado com duas abas no mesmo
+  contexto, pt-BR e viewport 375 × 812, para candidato e recrutador.
+- **Result:** PASS no gatilho desta issue: após sair numa aba, a navegação da
+  aba antiga chegou ao login sem shell `inert` ou overlay residual e permitiu
+  novo acesso até a rota esperada. Capturas ignoradas em
+  `docs/qa/evidence/2026-09-29T-stale-tab-login-manual/`; o cenário abrangente
+  permanece pendente por ainda exigir o percurso completo de QA.
