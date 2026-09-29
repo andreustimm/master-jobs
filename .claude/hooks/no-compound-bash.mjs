@@ -6,6 +6,7 @@
 // (ex.: `--jq ".[] | .name"`), exceto substituição de comando, que o shell
 // expande também entre aspas duplas.
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 export function findCompound(command) {
   let single = false;
@@ -44,6 +45,14 @@ export function findCompound(command) {
   return null;
 }
 
+/**
+ * Heredoc e `$(...)` continuam recusados de propósito, mesmo em mensagem de
+ * commit: uma recusa custa uma nova tentativa, um prompt de aprovação trava
+ * o dono. Só esses dois motivos ganham a sugestão de escrever a mensagem com
+ * a ferramenta Write e usar `git commit -F <arquivo>` (ou vários `-m`).
+ */
+const SUGGESTS_COMMIT_FILE = new Set(["quebra de linha (vários comandos)", "$(...) (substituição de comando)"]);
+
 function main() {
   let input;
   try {
@@ -55,13 +64,22 @@ function main() {
   if (typeof command !== "string") process.exit(0);
   const found = findCompound(command.trim());
   if (!found) process.exit(0);
+  const suggestion = SUGGESTS_COMMIT_FILE.has(found)
+    ? " Mensagem de commit com corpo ou heredoc: escreva com a ferramenta Write e rode " +
+      "`git commit -F <arquivo>`, ou use vários `-m`."
+    : "";
   process.stderr.write(
     `Comando composto recusado (${found}). Regra: um comando por chamada de shell — ` +
       "sem &&, ||, ;, |, &, $(...), crase ou várias linhas fora de aspas. " +
       "Divida em chamadas separadas (independentes podem ir em paralelo na mesma resposta); " +
-      "para filtrar saída use a opção do próprio comando (--jq, --json, grep com arquivo) ou um script em arquivo.\n",
+      "para filtrar saída use a opção do próprio comando (--jq, --json, grep com arquivo) ou um script em arquivo." +
+      `${suggestion}\n`,
   );
   process.exit(2);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+// `pathToFileURL` resolve `process.argv[1]` relativo ao cwd, como o `node`
+// resolve o módulo: comparação por template string quebraria se o hook fosse
+// chamado com caminho relativo (é sempre absoluto em produção, via
+// `$CLAUDE_PROJECT_DIR`, mas o teste de integração roda os dois jeitos).
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();

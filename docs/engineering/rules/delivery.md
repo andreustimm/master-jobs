@@ -720,6 +720,13 @@ da aprovação manual, sem depender de hook global do usuário. Prova:
 `pnpm check:harness` roda como sempre e não muda, porque `hooks` não é
 traduzido pelo `pnpm harness:sync` (ele só espelha `permissions`).
 
+**Heredoc e `$(...)` são recusados de propósito**, inclusive dentro de
+mensagem de commit (`git commit -m "$(cat <<'EOF' ... EOF)"`): uma recusa
+custa uma nova tentativa, um prompt de aprovação trava o dono. Mensagem com
+corpo ou heredoc escreve com a ferramenta de arquivo e roda `git commit -F
+<arquivo>` (ou vários `-m`); a própria mensagem de recusa sugere isso quando o
+motivo é `$(...)` ou quebra de linha.
+
 **Lacuna nos outros dois harnesses.** O OpenCode não tem mecanismo de hook —
 só o DSL declarativo de `opencode.json > permission` — e não há como expressar
 "recusar todo composto fora de aspas" sem reescrever o parser em padrão de
@@ -727,11 +734,13 @@ texto; nenhum espelho foi gerado para ele. O Codex tem hook PreToolUse
 equivalente (`.codex/hooks.json`), mas o que já roda ali (`codex-guard.ts`,
 G85) é mais permissivo nesse ponto: libera o composto quando **todo** trecho
 casa com uma regra `allow` (`git ls-files | xargs wc -l` passa se ambos forem
-liberados), em vez de recusar qualquer composto de saída. Estender o Codex para
-a mesma recusa incondicional mudaria comportamento hoje documentado e coberto
-por teste (`tests/harness-parity.test.ts`); decisão registrada como lacuna
-aberta em vez de feita às pressas — segue para o dono decidir em issue
-separada se vale alinhar.
+liberados) e trata heredoc de commit como texto — mascara o corpo em vez de
+recusar (`permissions.ts`, `maskQuotedHeredocs`), então `git commit -m
+"$(cat <<'EOF' ...)"` passa no Codex. Estender o Codex para a mesma recusa
+incondicional mudaria comportamento hoje documentado e coberto por teste
+(`tests/harness-parity.test.ts`); decisão registrada como lacuna aberta em vez
+de feita às pressas — segue para o dono decidir em issue separada se vale
+alinhar.
 
 <a id="g64"></a>
 ### G64 — O bloco gerado pelo Next fica intacto

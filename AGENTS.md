@@ -236,7 +236,9 @@ commit. [[G62](docs/engineering/rules/delivery.md#g62)]
   casa pelo prefixo, e composto cai em aprovação manual. No Claude Code o gate
   é `.claude/hooks/no-compound-bash.mjs`, registrado em `.claude/settings.json`
   (`hooks.PreToolUse`, matcher `Bash`); Codex e OpenCode ainda dependem do
-  hábito — lacuna registrada, não fechada por hook lá.
+  hábito — lacuna registrada, não fechada por hook lá. Heredoc e `$(...)` são
+  recusados mesmo em mensagem de commit: escreva a mensagem com a ferramenta
+  de arquivo e rode `git commit -F <arquivo>` (ou vários `-m`).
   [[G63](docs/engineering/rules/delivery.md#g63)]
 - O bloco abaixo é gerado pelo `next dev`; não o edite nem o mova.
   [[G64](docs/engineering/rules/delivery.md#g64)]
