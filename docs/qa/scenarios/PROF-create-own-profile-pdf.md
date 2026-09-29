@@ -17,3 +17,5 @@ overlaps: PROF-create-own-profile; PROF-create-own-profile-identity
 ---
 
 Entrega da #278. Percorrer em 375 px e em inglês: o campo de arquivo cabe, a recusa mantém os campos preenchidos e o PDF escolhido, e depois de criar o editor do currículo mostra o texto do PDF com a versão nomeada pelo arquivo. Conferir no refresh que a área do candidato permanece e que o texto continua lá.
+
+Reteste #388 inclui o perfil já existente: importar arquivo de texto renomeado para PDF deve explicar a recusa, manter o CV e sua versão após refresh e permitir nova tentativa. O formulário não anuncia upload inexistente.

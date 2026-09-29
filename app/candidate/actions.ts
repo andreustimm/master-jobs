@@ -81,9 +81,7 @@ export async function importPdfAction(formData: FormData) {
 
   const { readCvPdf } = await import("../../src/core/pdf.ts");
   const pdf = await readCvPdf(formData.get("file"));
-  // Só o log lê esta mensagem (a tela mostra o erro genérico do formulário),
-  // e para o log o código é o identificador estável.
-  if (!pdf.ok) throw new Error(`importPdfAction: ${pdf.code}`);
+  if (!pdf.ok) return pdf;
 
   await saveDocument({
     candidateId,
@@ -104,8 +102,7 @@ export async function importPdfAction(formData: FormData) {
 /**
  * As ações de versão **retornam** o erro em vez de lançar.
  *
- * As duas outras ações deste arquivo lançam, e para elas serve: "PDF sem texto"
- * é excepcional. Aqui não é. "Não dá para excluir, três candidaturas citam esta
+ * "Não dá para excluir, três candidaturas citam esta
  * versão" é uma resposta prevista, que o usuário precisa ler ao lado da linha
  * que clicou — e não numa fronteira de erro que substitui a página inteira.
  *

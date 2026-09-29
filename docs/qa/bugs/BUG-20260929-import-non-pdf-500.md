@@ -45,3 +45,8 @@ caso cai em erro não tratado.
 <!-- filled when status moves to verified -->
 - **Retested:**
 - **Result:**
+
+
+Correção #388: recusa tipada traduzida pela tela e remoção do aviso obsoleto.
+37 testes relacionados, typecheck e E2E onboarding 44/44 passaram.
+Reteste manual pendente no relatório 2026-09-29T143500Z-codex388-importacao-pdf.
