@@ -1,6 +1,7 @@
 # ADR 0030 — Contingência de CI e deploy
 
-**Status:** Proposta · 2026-09-28 · issue [#351](https://github.com/andreustimm/master-jobs/issues/351)
+**Status:** aceita · 2026-09-29 · issue [#351](https://github.com/andreustimm/master-jobs/issues/351)
+(decisões do dono de 29/09/2026: D1=A, D2=B, D3=A, D4=A)
 
 ## Contexto
 
@@ -27,12 +28,17 @@ o dono escolher (registrado em
 
 ## Decisão
 
-1. **Uma variável de repositório é o único mecanismo de virar uma chave.**
-   Nunca edição de workflow durante o incidente. Toda chave desta entrega
-   (`DEPLOY_PREVIEW_ENVS`, `CI_RUNS_ON`, e a que a Fase 3 vier a usar para o
-   plano B) é lida em tempo de execução por uma expressão fixa no YAML; mudar
-   o comportamento é `gh variable set`, nunca um commit no arquivo de
-   workflow.
+1. **Uma variável de repositório é o único mecanismo documentado de virar uma
+   chave, nunca edição de workflow durante o incidente.** `CI_RUNS_ON` e a que
+   a Fase 3 vier a usar para o plano B são lidas em tempo de execução por uma
+   expressão fixa no YAML; mudar o comportamento delas é `gh variable set`,
+   nunca um commit no arquivo de workflow. **`DEPLOY_PREVIEW_ENVS` é a
+   exceção documentada, não uma contradição:** a Vercel não lê variável de
+   ambiente dentro de `vercel.json` — o arquivo é estático e é o mecanismo
+   real (decisão 3). A variável é só o registro verificável de qual ambiente
+   de preview está religado; religar de verdade continua exigindo um commit
+   em `vercel.json`, e `scripts/github/verify-deploy-preview-envs.ts` garante
+   que os dois nunca divirjam em silêncio.
 2. **O padrão, sem nenhuma variável setada, é sempre o caminho hospedado e
    barato de hoje.** Nenhuma chave desta entrega é ativada por omissão; todas
    são opt-in.
@@ -72,9 +78,16 @@ o dono escolher (registrado em
 
 As escolhas de **onde** (runner próprio: máquina do dono vs. VPS; vigia:
 Supabase vs. outro; destino alternativo: Fly.io vs. Railway vs. VPS+Coolify)
-são registradas como pendentes no PRD e não fazem parte desta decisão — elas
-podem mudar sem reabrir esta ADR, desde que continuem satisfazendo as oito
-invariantes acima.
+ficam registradas no bloco "Decisões do dono" do PRD e não fazem parte desta
+decisão — elas podem mudar sem reabrir esta ADR, desde que continuem
+satisfazendo as oito invariantes acima. Decidido em 29/09/2026: **D1 = A**
+(Fase 1 agora, como sub-issue S/M já executável; Fases 2–4 depois, cada uma
+com sua própria issue); **D2 = B** (runner self-hosted em VPS dedicada —
+Hetzner CPX22 ou DigitalOcean 4 GB, contratação só com ok do dono); **D3 = A**
+(vigia de cota no Supabase, `pg_cron`/`pg_net`/Vault); **D4 = A** (plano B da
+Vercel no Fly.io, região `gru`). Por D1, esta entrega (issue #351) executa
+somente a Fase 1; Fases 2–4 abrem issue própria cada uma, quando o dono
+decidir avançar.
 
 ## Consequências
 

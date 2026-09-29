@@ -1,0 +1,55 @@
+name: Verificar DEPLOY_PREVIEW_ENVS
+
+# Fase 1 da contingência de CI e deploy (#351, ADR 0030): DEPLOY_PREVIEW_ENVS
+# é só o registro documentado do que git.deploymentEnabled de vercel.json
+# realmente aplica em main, dev e staging — esta corrida garante que os dois
+# nunca divirjam em silêncio, sem esperar alguém lembrar de rodar o
+# verificador à mão. Dispara no push que toca vercel.json em qualquer uma das
+# três branches (detecção quase imediata) e, como rede de segurança, uma vez
+# por dia — o script sempre lê as três pontas pela API de conteúdo, então o
+# resultado não depende de qual branch/ref disparou o run (por isso não há
+# `if` de ref no job). Workflow próprio, fora de "Governança em produção": uma
+# divergência de configuração aqui não tem nada a ver com disponibilidade de
+# produção, e não pode aparecer misturada com o sinal da sonda `medir` — quem
+# olha o histórico daquele workflow para julgar disponibilidade não pode ver
+# um vermelho que é, na verdade, este outro contrato.
+#
+# GITHUB_TOKEN não lê a API de variáveis de repositório (403), então o valor
+# chega pronto por `vars.…` no env, nunca por `gh api`; a leitura do
+# vercel.json de cada branch usa a API de conteúdo, que só exige
+# `contents: read`.
+
+on:
+  push:
+    branches: [main, dev, staging]
+    paths:
+      - vercel.json
+  schedule:
+    # Rede de segurança diária, para o caso raro de a variável mudar sem
+    # nenhum push em vercel.json (ex.: gh variable set direto, sem PR).
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verificar-deploy-preview-envs
+  cancel-in-progress: false
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+      - name: Confere DEPLOY_PREVIEW_ENVS contra vercel.json em main, dev e staging
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_PREVIEW_ENVS: ${{ vars.DEPLOY_PREVIEW_ENVS }}
+        run: node scripts/github/verify-deploy-preview-envs.ts

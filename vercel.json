@@ -4,8 +4,8 @@
     "deploymentEnabled": {
       "**": false,
       "main": true,
-      "dev": true,
-      "staging": true
+      "dev": false,
+      "staging": false
     }
   },
   "ignoreCommand": "bash scripts/vercel-ignore-build.sh",
