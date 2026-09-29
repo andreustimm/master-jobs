@@ -703,6 +703,7 @@ export async function run(ctx) {
     const url = new URL(loginPage.url());
     return url.pathname + url.search;
   });
+  const loginRaceOrigins = loginRacePages.map((loginPage) => new URL(loginPage.url()).origin);
   const loginRaceSessions = await Promise.all(loginRaceContexts.map(async (context) =>
     (await context.cookies()).some((cookie) => cookie.name === "jho_session")
   ));
@@ -754,8 +755,9 @@ export async function run(ctx) {
       && expiredCallbackUrl === "/login?error=invalid"
       && expiredCallbackOrigin === new URL(BASE).origin
       && expiredCallbackMessage?.trim() === ptBR.login.invalid
-      && loginRaceUrls.filter((url) => url === "/login").length === 1
+      && loginRaceUrls.filter((url) => url === "/").length === 1
       && loginRaceUrls.filter((url) => url === "/login?error=invalid").length === 1
+      && loginRaceOrigins.every((origin) => origin === new URL(BASE).origin)
       && loginRaceSessions.filter(Boolean).length === 1
       && replayCallbackUrl === "/login?error=invalid"
       && [resetReplayAfterConsume, resetReplayAfterReload, resetReplayAfterHistory]
@@ -785,6 +787,7 @@ export async function run(ctx) {
       expiredCallbackOrigin,
       expiredCallbackMessage,
       loginRaceUrls,
+      loginRaceOrigins,
       loginRaceSessions,
       replayCallbackUrl,
       resetReplayAfterConsume,
