@@ -51,6 +51,46 @@ describe("Dockerfile e .dockerignore — nenhum segredo de produção na imagem"
     expect(DOCKERIGNORE).toMatch(/^\.env$/m);
     expect(DOCKERIGNORE).toMatch(/^\.env\.\*$/m);
   });
+
+  it("espelha os padrões sensíveis do .gitignore (o que o Git nunca versiona)", () => {
+    const gitignore = readFileSync(".gitignore", "utf8");
+    for (const pattern of ["*.token.json", ".linkedin-session.json", "*.db"]) {
+      expect(gitignore, ".gitignore").toContain(pattern);
+      expect(DOCKERIGNORE, ".dockerignore").toContain(pattern);
+    }
+  });
+});
+
+describe("Dockerfile — reprodutibilidade e diretiva de sintaxe (minors da revisão)", () => {
+  it("a diretiva # syntax é a primeira linha", () => {
+    expect(DOCKERFILE.split("\n")[0]).toBe("# syntax=docker/dockerfile:1");
+  });
+
+  it("a imagem base é pinada por digest, não por tag flutuante", () => {
+    expect(DOCKERFILE).toMatch(/node:24-slim@sha256:[0-9a-f]{64}/);
+  });
+
+  it("recebe o SHA do commit como build-arg para o marcador de versão do service worker", () => {
+    // Sem isto, `scripts/sw-version.mjs` cairia sempre em "sem-revisao" dentro
+    // da imagem (sem .git no contexto — .dockerignore o exclui), e o PWA
+    // nunca detectaria uma atualização entre deploys do plano B.
+    expect(DOCKERFILE).toMatch(/ARG\s+GIT_REVISION=/);
+    expect(DOCKERFILE).toMatch(/ENV\s+VERCEL_GIT_COMMIT_SHA=\$\{?GIT_REVISION\}?/);
+  });
+});
+
+describe("Dockerfile e fly.toml — JHO_ENV=production (CRITICAL C1 da revisão)", () => {
+  it("o Dockerfile declara o deployment, e não deixa isLocalProcess() confundir o contêiner com o laptop", () => {
+    // Reprodução do defeito: sem JHO_ENV (e sem VERCEL/VERCEL_ENV, que não
+    // existem no Fly), isLocalProcess() devolveria true dentro do contêiner —
+    // liberando JHO_AUTH_MODE=open, imprimindo o link de recuperação no log
+    // (G18) e recusando a varredura por não se reconhecer como produção.
+    expect(DOCKERFILE).toMatch(/ENV\s+JHO_ENV=production/);
+  });
+
+  it("fly.toml declara o mesmo, por defesa em profundidade", () => {
+    expect(FLY_TOML).toMatch(/JHO_ENV\s*=\s*"production"/);
+  });
 });
 
 describe("regra 12 (G36) continua intacta para dev/start locais", () => {
@@ -90,10 +130,17 @@ describe("fly.toml — região gru e health check", () => {
 
 describe("workflow do plano B — estritamente manual", () => {
   const raw = readFileSync(".github/workflows/publicar-imagem-fly.yml", "utf8");
+  type Step = { name?: string; run?: string; uses?: string; with?: Record<string, unknown> };
+  type Job = {
+    if?: string;
+    environment?: string;
+    permissions?: Record<string, string>;
+    steps: Step[];
+  };
   const workflow = YAML.parse(raw) as {
     on: Record<string, unknown>;
     permissions: Record<string, string>;
-    jobs: Record<string, { environment?: string; if?: string }>;
+    jobs: Record<string, Job>;
   };
 
   it("só workflow_dispatch aciona — nenhum push, PR ou agendamento", () => {
@@ -107,13 +154,69 @@ describe("workflow do plano B — estritamente manual", () => {
     expect(Object.keys(comPush.on)).not.toEqual(["workflow_dispatch"]);
   });
 
-  it("permissões mínimas: só ler o checkout e escrever no GHCR", () => {
-    expect(workflow.permissions).toEqual({ contents: "read", packages: "write" });
+  it("permissões mínimas no topo — packages:write só existe no job publicar, nunca em implantar", () => {
+    expect(workflow.permissions).toEqual({ contents: "read" });
+    expect(workflow.jobs.publicar?.permissions).toEqual({ contents: "read", packages: "write" });
+    expect(workflow.jobs.implantar?.permissions).toEqual({ contents: "read" });
+  });
+
+  it("mesmo manual, só publica a partir de main — disparo de outra branch não publica nada", () => {
+    expect(workflow.jobs.publicar?.if).toBe("github.ref == 'refs/heads/main'");
   });
 
   it("o job de implantação no Fly só roda quando o dono marca deploy no disparo", () => {
     expect(workflow.jobs.implantar?.if).toBe("${{ inputs.deploy }}");
     expect(workflow.jobs.implantar?.environment).toBe("production");
+  });
+
+  it("setup-flyctl é pinado por SHA de commit, nunca @master (branch flutuante)", () => {
+    const passo = workflow.jobs.implantar?.steps.find((step) => step.uses?.startsWith("superfly/flyctl-actions/setup-flyctl@"));
+    expect(passo?.uses, "passo setup-flyctl ausente").toBeDefined();
+    expect(passo?.uses).toMatch(/setup-flyctl@[0-9a-f]{40}/);
+    expect(passo?.uses).not.toContain("@master");
+  });
+
+  it("a tag de entrada passa por variável de ambiente e por uma allowlist de caracteres, nunca interpolada direto no shell", () => {
+    const passo = workflow.jobs.publicar?.steps.find((step) => step.name === "Resolver e validar a tag");
+    expect(passo?.run, "passo de resolução da tag ausente").toBeDefined();
+    // A entrada do disparo vira variável de ambiente do passo — nunca
+    // `${{ inputs.tag }}` interpolado direto dentro do `run:` — e o script
+    // recusa qualquer caractere fora de [a-zA-Z0-9._-] antes de usar o valor.
+    expect(passo?.run).not.toContain("${{ inputs.tag }}");
+    expect((passo as unknown as { env?: Record<string, string> }).env).toEqual({
+      TAG_ENTRADA: "${{ inputs.tag }}",
+    });
+    expect(passo?.run).toMatch(/\[a-zA-Z0-9._-\]/);
+  });
+
+  it("MAJOR M2: a imagem é inspecionada (docker run) ANTES de qualquer login ou push no GHCR", () => {
+    const nomes = workflow.jobs.publicar?.steps.map((step) => step.name ?? "") ?? [];
+    const build = nomes.findIndex((nome) => nome.includes("Build local"));
+    const inspecao = nomes.findIndex((nome) => nome.toLowerCase().includes("inspecionar"));
+    const login = nomes.findIndex((nome) => nome.includes("Login no GHCR"));
+    const push = nomes.findIndex((nome) => nome.includes("Publicar a imagem"));
+    for (const indice of [build, inspecao, login, push]) expect(indice).toBeGreaterThanOrEqual(0);
+    expect(build).toBeLessThan(inspecao);
+    expect(inspecao).toBeLessThan(login);
+    expect(login).toBeLessThan(push);
+  });
+
+  it("o build local carrega no daemon (load) sem publicar (push) — a inspeção roda sobre ele", () => {
+    const build = workflow.jobs.publicar?.steps.find((step) => step.name?.includes("Build local"));
+    expect(build?.with?.push).toBe(false);
+    expect(build?.with?.load).toBe(true);
+  });
+
+  it("o build passa o SHA do commit como build-arg, para o marcador de versão do PWA", () => {
+    const build = workflow.jobs.publicar?.steps.find((step) => step.name?.includes("Build local"));
+    expect(String(build?.with?.["build-args"])).toContain("GIT_REVISION=${{ github.sha }}");
+  });
+
+  it("a inspeção procura arquivo sensível e padrão de segredo no sistema de arquivos, não só nos metadados", () => {
+    const inspecao = workflow.jobs.publicar?.steps.find((step) => step.name?.toLowerCase().includes("inspecionar"));
+    expect(inspecao?.run).toContain("docker run");
+    expect(inspecao?.run).toContain("find");
+    expect(inspecao?.run).toContain(".env");
   });
 
   it("confere, na própria publicação, que nenhuma camada carrega um valor com formato de segredo", () => {

@@ -1,8 +1,19 @@
 # Contexto do build da imagem do plano B (Fase 4, ADR 0030). Regra 16: nenhum
 # valor versionado do dev entra no contexto — .env* nunca sobe uma camada.
+# Espelha .gitignore ("secrets" e "runtime data") de propósito: o que o Git
+# nunca versiona, o contexto do build também nunca deveria receber, mesmo que
+# alguém o tenha criado localmente sem `git add`.
 .env
 .env.*
 !.env.example
+*.token.json
+.linkedin-session.json
+out/
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 
 node_modules
 .next
@@ -24,7 +35,6 @@ node_modules
 .pnpm-store
 
 coverage
-data
 tests
 docs
 compozy
@@ -33,6 +43,8 @@ drizzle
 changelog.d
 docker
 docker-compose.local.yml
+.vitest-reports
+__pycache__
 
 AGENTS.md
 CLAUDE.md

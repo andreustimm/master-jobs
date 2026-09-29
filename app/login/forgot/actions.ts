@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { askPasswordReset } from "../../../src/contexts/auth/index.ts";
+import { askPasswordReset, resolvePublicOrigin } from "../../../src/contexts/auth/index.ts";
 import { setMutationFeedbackCookie } from "../../mutation-feedback-server";
 
 /**
@@ -19,9 +19,23 @@ import { setMutationFeedbackCookie } from "../../mutation-feedback-server";
 export async function requestResetAction(formData: FormData) {
   const email = String(formData.get("email") ?? "");
 
-  const host = (await headers()).get("host") ?? "127.0.0.1:3000";
   const proto = process.env.NODE_ENV === "production" ? "https" : "http";
-  await askPasswordReset(email, `${proto}://${host}`);
+  const origin = resolvePublicOrigin(process.env, {
+    host: (await headers()).get("host"),
+    proto,
+  });
+
+  if (origin) {
+    await askPasswordReset(email, origin);
+  } else {
+    // Falha fechada (host poisoning, G17/G18): sem `JHO_PUBLIC_URL` num
+    // deployment, o `Host` do cliente não é confiável para montar o link —
+    // nenhum e-mail sai, e a resposta continua idêntica, para não revelar a
+    // conta nem o defeito de configuração a quem pediu.
+    console.warn(
+      "[auth] ALERTA: recuperação de senha sem JHO_PUBLIC_URL configurada — nenhum link foi enviado.",
+    );
+  }
 
   await setMutationFeedbackCookie("success");
   redirect("/login/forgot?sent=1");

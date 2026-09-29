@@ -1,8 +1,11 @@
 # Plano B de deploy (Fase 4 da #351, ADR 0030). SÓ `workflow_dispatch` —
-# nenhum push, PR ou agendamento aciona isto. A Vercel continua o destino
-# padrão; este workflow existe para o dono publicar a imagem standalone no
-# GHCR e, se decidir, implantá-la no Fly.io (região `gru`) durante um
-# failover. Ver docs/engineering/deploy.md ("Plano B (Fly.io)").
+# nenhum push, PR ou agendamento aciona isto. Mesmo manual, só publica o que
+# está em `main` (o `if` do job `publicar` trava o ref): quem dispara escolhe
+# QUANDO, nunca a partir de qual código — o mesmo espírito de `migrate.yml`
+# ("Produção única"). A Vercel continua o destino padrão; este workflow
+# existe para o dono publicar a imagem standalone no GHCR e, se decidir,
+# implantá-la no Fly.io (região `gru`) durante um failover. Ver
+# docs/engineering/deploy.md ("Plano B: Fly.io").
 name: Publicar imagem (plano B Fly.io)
 
 on:
@@ -13,15 +16,14 @@ on:
         type: boolean
         default: false
       tag:
-        description: "Tag da imagem (padrão: o SHA curto do commit disparado)"
+        description: "Tag da imagem (padrão: o SHA curto do commit); só [a-zA-Z0-9._-]"
         required: false
         type: string
 
-# Permissões mínimas: ler o checkout e escrever no GHCR. Nada de escrita em
-# variável de repositório, issue ou pull request neste workflow.
+# Permissões mínimas por job (abaixo), não no topo: `packages: write` só onde
+# a imagem é publicada, nunca no job que implanta no Fly.
 permissions:
   contents: read
-  packages: write
 
 # Uma publicação por vez; a segunda espera a primeira terminar, nunca cancela
 # um push de imagem no meio.
@@ -34,21 +36,80 @@ env:
 
 jobs:
   publicar:
+    # Só publica a partir de `main`, mesmo disparado à mão de outra branch no
+    # seletor do GitHub — a imagem do plano B nunca deveria ser uma branch de
+    # tarefa não revisada.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
     outputs:
       tag: ${{ steps.tag.outputs.value }}
     steps:
       - uses: actions/checkout@v7
 
-      - name: Resolver a tag
+      - name: Resolver e validar a tag
         id: tag
+        env:
+          TAG_ENTRADA: ${{ inputs.tag }}
         run: |
-          tag="${{ inputs.tag }}"
+          tag="$TAG_ENTRADA"
           if [ -z "$tag" ]; then tag="${GITHUB_SHA:0:7}"; fi
+          if ! [[ "$tag" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+            echo "tag inválida (\"$tag\"): só [a-zA-Z0-9._-]" >&2
+            exit 1
+          fi
           echo "value=$tag" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
+
+      # Constrói e CARREGA no daemon local (`load: true`, `push: false`) —
+      # nada vai ao GHCR ainda. A inspeção abaixo roda sobre esta imagem, e só
+      # depois dela passar é que o login e o push acontecem.
+      - name: Build local da imagem (ainda sem publicar)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          build-args: |
+            GIT_REVISION=${{ github.sha }}
+          tags: |
+            ${{ env.IMAGEM }}:${{ steps.tag.outputs.value }}
+            ${{ env.IMAGEM }}:latest
+
+      # MAJOR M2 (revisão da #373): inspeciona o sistema de arquivos de
+      # verdade, não só os metadados do `docker history` — um segredo COPIADO
+      # (e depois apagado numa camada seguinte) ainda aparece no `history`,
+      # mas só um `docker run`/`find` sobre o filesystem final o pega. Roda
+      # ANTES de qualquer login ou push: nada sensível sai do runner se a
+      # inspeção reprovar.
+      - name: Inspecionar o sistema de arquivos da imagem ANTES de publicar
+        run: |
+          set -e
+          IMG="${{ env.IMAGEM }}:${{ steps.tag.outputs.value }}"
+          achou=0
+
+          if docker run --rm --entrypoint find "$IMG" / -xdev \
+              \( -path /proc -o -path /sys \) -prune -o \
+              \( -name '.env' -o -name '.env.*' -o -name '*.token.json' \
+                 -o -name '.linkedin-session.json' -o -name '*.db' \) -print \
+              2>/dev/null | grep -q .; then
+            echo "Arquivo sensível encontrado no sistema de arquivos da imagem." >&2
+            achou=1
+          fi
+
+          if docker run --rm --entrypoint sh "$IMG" -c \
+              "grep -rIlE 'DATABASE_URL=postgres|_API_KEY=[^\$]|_AUTH_TOKEN=[^\$]|READ_WRITE_TOKEN=[^\$]' / \
+                --exclude-dir=proc --exclude-dir=sys 2>/dev/null" \
+              | grep -q .; then
+            echo "Valor com formato de segredo encontrado no sistema de arquivos da imagem." >&2
+            achou=1
+          fi
+
+          if [ "$achou" -ne 0 ]; then exit 1; fi
 
       - name: Login no GHCR
         uses: docker/login-action@v3
@@ -57,19 +118,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build e push da imagem standalone
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ env.IMAGEM }}:${{ steps.tag.outputs.value }}
-            ${{ env.IMAGEM }}:latest
+      - name: Publicar a imagem já inspecionada
+        run: |
+          docker push "${{ env.IMAGEM }}:${{ steps.tag.outputs.value }}"
+          docker push "${{ env.IMAGEM }}:latest"
 
-      # Regra 16: nenhum valor de variável de produção pode ter entrado numa
-      # camada, mesmo que `.dockerignore` já devesse ter impedido o contexto
-      # de carregá-lo. Segunda linha, sobre a imagem publicada de verdade.
-      - name: Confirmar que nenhum segredo entrou numa camada
+      # Regra 16, segunda linha: sobre a imagem publicada de verdade, e não só
+      # a que ficou no daemon local — confere que o registro devolve a mesma
+      # coisa que foi inspecionada.
+      - name: Confirmar, na imagem publicada, que nenhuma camada carrega segredo
         run: |
           docker pull "${{ env.IMAGEM }}:${{ steps.tag.outputs.value }}"
           docker history --no-trunc "${{ env.IMAGEM }}:${{ steps.tag.outputs.value }}" > /tmp/history.txt
@@ -83,12 +140,18 @@ jobs:
     if: ${{ inputs.deploy }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
     # `environment: production` exige a aprovação/segredo cadastrados nesse
-    # ambiente do repositório — o mesmo padrão de `migrate.yml`.
+    # ambiente do repositório (`FLY_API_TOKEN`, passo do dono) — o mesmo
+    # padrão de `migrate.yml`.
     environment: production
     steps:
       - uses: actions/checkout@v7
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # Pinado pelo SHA da tag `v1.6`/`1.6` (checados em 29/09/2026) — nunca
+      # `@master`, que é um branch flutuante e correria código não revisado
+      # neste ponto do pipeline.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6
       - name: Implantar a imagem publicada no Fly.io (gru)
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

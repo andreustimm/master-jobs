@@ -16,6 +16,14 @@ primary_region = "gru"
 
 [env]
   PORT = "3000"
+  # CRITICAL C1 (revisão da #373): sem isto, `isLocalProcess()`
+  # (src/contexts/auth/domain/open-mode.ts) trataria a máquina do Fly como o
+  # laptop do dono — nenhuma variável VERCEL/VERCEL_ENV existe aqui.
+  # `JHO_AUTH_MODE=open` liberaria tudo sem sessão (G38), o mailer de
+  # recuperação imprimiria o link no log (G18) e a varredura recusaria por não
+  # se reconhecer como produção. Também declarado no `ENV` do `Dockerfile`
+  # (defesa em profundidade); os dois precisam dizer o mesmo.
+  JHO_ENV = "production"
 
 # Health check contra `/manifest.json`: já é rota pública sem sessão
 # (`proxy.ts`, lista `PUBLIC`) e não depende do banco — cair o Postgres não

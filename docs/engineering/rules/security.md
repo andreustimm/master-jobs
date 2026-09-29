@@ -82,9 +82,18 @@ instrumentado responde 200 a tudo e nenhum pedido sai),
 
 **Obrigação.** Nenhuma página nem API responde sem sessão válida — inclusive
 `/api/export`, que carrega o acervo inteiro. O modo aberto existe mas precisa
-ser pedido (`JHO_AUTH_MODE=open`) e só vale na máquina local: em deployment o
-código ignora o pedido (`src/contexts/auth/domain/open-mode.ts`). Produção,
-preview, staging, dev e valor desconhecido continuam exigindo login.
+ser pedido (`JHO_AUTH_MODE=open`) e só vale onde `isLocalProcess()`
+reconhece a máquina do dono: sem `VERCEL`, `VERCEL_ENV` nem `JHO_ENV`
+declarados (`src/contexts/auth/domain/open-mode.ts`). **Todo deployment
+precisa se declarar** para o código recusar o pedido — a Vercel já declara
+`VERCEL`/`VERCEL_ENV` por conta própria, mas qualquer outro destino não
+declara nada por padrão. O plano B no Fly.io (Fase 4 da contingência,
+`docs/engineering/deploy.md`) por isso fixa `JHO_ENV=production` no `fly.toml`
+**e** no `Dockerfile`: sem essa declaração explícita, o contêiner seria
+tratado como a máquina local — liberando o modo aberto, imprimindo o link de
+recuperação de senha no log (G18) e recusando a varredura. Produção, preview,
+staging, dev e valor desconhecido — todos declarados — continuam exigindo
+login.
 
 **Por quê.** "Só roda em loopback" protege contra a internet, não contra outro
 processo, outra conta da máquina, nem contra um bind errado — que já aconteceu
@@ -192,8 +201,20 @@ Origem: AGENTS (mesma invariante). Detalhes: [security.md](../../security.md)
 texto, redigido como "se existir uma conta". Isso vale também para erro de
 envio e limite de tentativas.
 
+**A origem do link nunca vem do `Host` da requisição.** Atrás de qualquer
+proxy — Vercel, o plano B no Fly.io, o que vier depois —, quem manda a
+requisição controla o cabeçalho `Host`; montar o link de recuperação a partir
+dele é host poisoning (o e-mail sai do remetente certo, mas o link aponta
+para o domínio de quem atacou, e o token vaza para lá). `resolvePublicOrigin`
+(`src/contexts/auth/domain/public-origin.ts`) resolve pela variável
+`JHO_PUBLIC_URL`, cadastrada por deployment; fora da máquina do dono, sem ela
+configurada, falha fechado — devolve `null`, e a Server Action
+(`app/login/forgot/actions.ts`) não constrói link nenhum a partir da entrada
+do cliente.
+
 Origem: AGENTS (invariante "Recuperar senha"). Prova:
-`tests/password-reset.test.ts` e comparação no navegador no E2E.
+`tests/password-reset.test.ts`, `tests/public-origin.test.ts` e comparação no
+navegador no E2E.
 
 <a id="g18"></a>
 ## G18 — Token de recuperação: uso único, uma hora, sessões derrubadas

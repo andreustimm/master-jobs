@@ -1,16 +1,21 @@
+# syntax=docker/dockerfile:1
+#
 # Plano B de deploy (Fase 4 da #351, ADR 0030): imagem do dashboard Next.js
 # para o Fly.io, região `gru` — publicada manualmente no GHCR, nunca no push
 # automático (ver .github/workflows/publicar-imagem-fly.yml). A Vercel
 # continua o destino padrão; esta imagem só serve quando o dono decide o
-# failover (docs/engineering/deploy.md, "Plano B (Fly.io)").
-#
-# syntax=docker/dockerfile:1
+# failover (docs/engineering/deploy.md, "Plano B: Fly.io").
 
-ARG NODE_VERSION=24-slim
+# `node:24-slim` (multi-arch), pinada pelo digest do índice em 2026-09-29 —
+# o mesmo padrão de `docker-compose.local.yml` (imagens locais fixadas por
+# tag e digest). O índice resolve para a arquitetura certa em cada `docker
+# build`; atualizar exige trocar o digest de propósito, não puxar o que a
+# tag `24-slim` apontar no dia.
+ARG NODE_IMAGE=node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
 
 # ---- deps: só o lockfile, para o cache de camada sobreviver a mudança de
 # código sem reinstalar o mundo -----------------------------------------------
-FROM node:${NODE_VERSION} AS deps
+FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
 COPY package.json pnpm-lock.yaml ./
@@ -28,19 +33,38 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 # (config/certs/supabase-ca.crt, config/sources.yaml) que o rastreamento de
 # arquivos do Next precisa copiar para o pacote — o mesmo mecanismo que já
 # funciona no build da Vercel.
-FROM node:${NODE_VERSION} AS builder
+FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
 ENV NEXT_TELEMETRY_DISABLED=1
+# `scripts/sw-version.mjs` (o marcador de versão do service worker) lê
+# `VERCEL_GIT_COMMIT_SHA` quando presente e, na falta, tenta `git
+# rev-parse` — que não existe aqui: `.dockerignore` exclui `.git` de
+# propósito (regra 16, contexto de build enxuto). Sem este build-arg, toda
+# imagem sairia com o mesmo marcador "sem-revisao", e o PWA nunca detectaria
+# uma atualização entre deploys do plano B. O workflow de publicação passa o
+# SHA real do commit publicado.
+ARG GIT_REVISION=sem-revisao
+ENV VERCEL_GIT_COMMIT_SHA=${GIT_REVISION}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm build
 
 # ---- runner: a menor imagem que roda `node server.js`, sem root ------------
-FROM node:${NODE_VERSION} AS runner
+FROM ${NODE_IMAGE} AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# CRITICAL C1 (revisão da #373): sem isto, `isLocalProcess()`
+# (`src/contexts/auth/domain/open-mode.ts`) trataria este contêiner como a
+# máquina do dono — nenhuma variável VERCEL/VERCEL_ENV existe no Fly. As
+# consequências reais: `JHO_AUTH_MODE=open` liberaria `/api/export` e todo o
+# resto sem sessão (G38); o mailer de recuperação imprimiria o link no log em
+# vez de omiti-lo (G18); e a varredura recusaria por não se reconhecer como
+# produção (`src/core/ingest/guard.ts`). Declarado aqui E em `fly.toml`
+# (defesa em profundidade: qualquer jeito de rodar esta imagem, inclusive
+# `docker run` direto fora do Fly, se declara produção).
+ENV JHO_ENV=production
 
 # Grupo e usuário dedicados — nunca a conta `node` genérica da imagem base,
 # para que um `docker history`/inspeção não confunda este processo com outro

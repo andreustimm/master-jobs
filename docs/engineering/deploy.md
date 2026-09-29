@@ -86,6 +86,8 @@ da varredura fatiada não depende da sorte: `next.config.ts` inclui
 | `BLOB_READ_WRITE_TOKEN` | Vercel (Preview **e** Production), criada pela integração do Blob | credencial do Vercel Blob; o adapter grava sempre privado e apaga o valor de todo erro. Nunca em banco, log ou `.env.example` |
 | `JHO_STORAGE_BUCKET` | Vercel (opcional) | prefixo dos objetos no Blob (bucket no S3); padrão `master-jobs` |
 | `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | local (MinIO) ou futuro AWS S3 | só com `JHO_STORAGE_DRIVER=s3`; `S3_ENDPOINT` ausente é a AWS ([local-storage.md](local-storage.md)) |
+| `JHO_ENV` | qualquer deployment que não seja a Vercel (o plano B no Fly, `fly.toml` **e** `Dockerfile`) | declara o ambiente para `isLocalProcess()` (`src/contexts/auth/domain/open-mode.ts`); sem ela, fora da Vercel, o processo seria tratado como a máquina do dono — libera o modo aberto, imprime link de recuperação no log (G18) e recusa a varredura |
+| `JHO_PUBLIC_URL` | **todo deployment** — Vercel (Production e Preview) e o plano B no Fly | origem confiável (`https://host`) para o link de recuperação de senha (`src/contexts/auth/domain/public-origin.ts`); sem ela, fora da máquina do dono, nenhum link é construído a partir do `Host` do cliente (G17/G18, host poisoning) — **passo do dono antes desta mudança chegar a produção**: cadastrar `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br` na Vercel (Production), ou a recuperação de senha para de enviar e-mail lá também |
 
 **A URL pode vir de mais de um nome, e a ordem é declarada.** A integração do
 Supabase com a Vercel cadastra `POSTGRES_URL` e `POSTGRES_URL_NON_POOLING` e as
@@ -322,11 +324,26 @@ round-trip curto descrito em "Os três ambientes") e um health check HTTP
 contra `/manifest.json` — rota pública sem sessão (`proxy.ts`) e sem
 dependência do banco, para que o check não confunda "Postgres fora do ar" com
 "o processo não subiu". `.github/workflows/publicar-imagem-fly.yml` é
-`workflow_dispatch` puro: constrói a imagem, publica em
-`ghcr.io/andreustimm/master-jobs`, confere que nenhuma camada carrega um valor
-com formato de segredo (`docker history --no-trunc`) e, só se o dono marcar
-`deploy: true` no disparo, implanta a imagem publicada no Fly (`environment:
-production`, o mesmo padrão de `migrate.yml`).
+`workflow_dispatch` puro, e só publica a partir de `main` (o `if` do job
+trava o ref, mesmo disparado à mão de outra branch): builda a imagem
+localmente no runner (`load: true`, sem publicar ainda), **inspeciona o
+sistema de arquivos dela** (`docker run … find` por `.env*`/`*.token.json`
+etc. e `grep` por padrão de segredo) **antes** de qualquer login ou push,
+publica em `ghcr.io/andreustimm/master-jobs`, confere de novo — agora nos
+metadados da imagem publicada (`docker history --no-trunc`) — e, só se o dono
+marcar `deploy: true` no disparo, implanta a imagem no Fly (`environment:
+production`, o mesmo padrão de `migrate.yml`; `FLY_API_TOKEN` cadastrado
+nesse ambiente é passo do dono, abaixo).
+
+**Teste local do Dockerfile.** `docker build .` e, para exercitar o
+contêiner sem expor a porta à rede local (o mesmo raciocínio da regra 12):
+
+```bash
+docker run --rm -p 127.0.0.1:3000:3000 <imagem>
+```
+
+Nunca `-p 3000:3000` sozinho — isso publica a porta em todas as interfaces do
+host que roda o teste, não só em loopback.
 
 **A tensão com a regra 12 (G36).** `pnpm dev` e `pnpm start` continuam presos
 a `127.0.0.1` — nada muda para o laptop do dono. O contêiner do plano B
@@ -342,14 +359,42 @@ que a aplicação lê em runtime (`DATABASE_URL`, `DATABASE_CA_CERT`,
 `RESEND_API_KEY`, `RESEND_FROM`, `SENTRY_DSN`, `CRON_SECRET`,
 `JHO_SOURCE_ALLOWLIST` etc.) precisa existir também no Fly, cadastrada à mão
 pelo dono com `fly secrets set <NOME>=...` — nunca em `fly.toml`, na PR, no
-ADR ou neste documento, que citam só o nome (regra 16). `JHO_STORAGE_DRIVER`
-merece decisão própria do dono antes do primeiro failover real:
-`vercel-blob` depende da integração de Blob da própria Vercel e não segue
-para o Fly; a alternativa portável é `s3` contra um bucket real (não o MinIO
-local), documentada em [local-storage.md](local-storage.md) — sem essa
-decisão, `/candidate` e `/p/` sobem sem upload de foto e capa no plano B, o
-mesmo comportamento (não uma regressão nova) de quando `JHO_STORAGE_DRIVER`
-está ausente.
+ADR ou neste documento, que citam só o nome (regra 16). `JHO_ENV=production`
+e `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br` já vêm fixados no `fly.toml`
+(não são segredo, não precisam de `fly secrets set`) — ver a tabela acima
+para o porquê de cada um (G38, G17/G18). `JHO_STORAGE_DRIVER` merece decisão
+própria do dono antes do primeiro failover real: `vercel-blob` depende da
+integração de Blob da própria Vercel e não segue para o Fly; a alternativa
+portável é `s3` contra um bucket real (não o MinIO local), documentada em
+[local-storage.md](local-storage.md) — sem essa decisão, `/candidate` e `/p/`
+sobem sem upload de foto e capa no plano B, o mesmo comportamento (não uma
+regressão nova) de quando `JHO_STORAGE_DRIVER` está ausente.
+
+**Limite por IP, não verificado no Fly.** `clientKey`
+(`src/core/rate-limit.ts`) lê `x-forwarded-for`/`x-real-ip` para separar
+visitantes do limite de requisição. O Fly também expõe `Fly-Client-IP` com o
+IP real do cliente; se o proxy dele não preencher `X-Forwarded-For` do mesmo
+jeito que a Vercel preenche, o limite por IP no plano B pode degradar para
+"todo mundo no mesmo balde" (mais restritivo, não mais permissivo) até
+alguém confirmar o cabeçalho de verdade contra um deployment real — **não
+verificado nesta entrega**; confirmar antes de tratar o plano B como
+equivalente à Vercel sob esse aspecto.
+
+**Pré-requisitos, uma vez, antes do primeiro failover — todos passo do
+dono:**
+
+1. `fly apps create master-jobs` (ou o nome escolhido, igual ao `app` de
+   `fly.toml`) na organização Fly do dono.
+2. Cadastrar `FLY_API_TOKEN` no ambiente `production` deste repositório no
+   GitHub (Settings → Environments → production → Secrets) — é o que o job
+   `implantar` de `publicar-imagem-fly.yml` lê; sem ele, o disparo com
+   `deploy: true` falha ao chamar `flyctl deploy`.
+3. `fly certs add jobs.mastertimm.com.br` **antes** de qualquer incidente
+   (o comando aceita o hostname mesmo com o DNS ainda apontando para a
+   Vercel). `fly certs show jobs.mastertimm.com.br` devolve um registro
+   `_acme-challenge.jobs.mastertimm.com.br` para cadastrar como `CNAME` na
+   Cloudflare — isso deixa o certificado `Ready` com antecedência, para que o
+   runbook abaixo não fique esperando emissão de TLS no meio do incidente.
 
 **A varredura fatiada perde o alvo durante o failover.** O `pg_cron` do
 Supabase chama `/api/cron/varredura` **na Vercel** (ADR 0025); ele não sabe
@@ -372,10 +417,12 @@ incidente.
 de produção/staging/dev já são "DNS only" (nuvem cinza) e TTL padrão — a
 seção "DNS" acima explica por quê. Ida:
 
-1. **Passo do dono:** publicar a imagem (`workflow_dispatch` em
-   `publicar-imagem-fly.yml`) e confirmar `fly status` saudável; se for a
-   primeira vez, `fly certs add jobs.mastertimm.com.br` no app Fly e esperar o
-   certificado ficar `Ready`.
+1. **Passo do dono:** confirmar os pré-requisitos acima já feitos (app criado,
+   `FLY_API_TOKEN` cadastrado, certificado `Ready` — se o certificado ainda
+   não foi pedido com antecedência, pedir agora com `fly certs add
+   jobs.mastertimm.com.br` custa o tempo de emissão do TLS no meio do
+   incidente). Disparar `publicar-imagem-fly.yml` (`workflow_dispatch`, com
+   `deploy: true`) e confirmar `fly status` saudável.
 2. Confirmar a aplicação respondendo direto no host temporário do Fly
    (`https://<app>.fly.dev/manifest.json`, depois login e um `/p/<slug>` de
    teste) **antes** de tocar o DNS.

@@ -91,13 +91,31 @@ invariantes acima.
   sendo um ponto de falha, um nível abaixo do problema original; a mitigação
   é a reversibilidade da chave, não a eliminação do risco. Ver "Riscos
   residuais" no PRD.
-- **Tensão a resolver na execução, não aqui.** A regra 12/G36 (scripts locais
-  só fazem bind em `127.0.0.1`) foi escrita para o laptop do dono; um
-  container do plano B de produção precisa escutar em todas as interfaces
-  para o proxy do destino alternativo alcançá-lo. Resolver isso é criar um
-  script de arranque distinto de `start`, não afrouxar G36 — mudança de regra,
-  se vier a ocorrer, exige atualizar `AGENTS.md` e `security.md` no mesmo
-  commit (G62).
+- **Tensão G36 resolvida na execução da Fase 4.** A regra 12/G36 (scripts
+  locais só fazem bind em `127.0.0.1`) continua intacta para `pnpm
+  dev`/`pnpm start`; a exceção do contêiner do plano B (`ENV
+  HOSTNAME=0.0.0.0`) mora só dentro da imagem (`Dockerfile`), nunca num
+  script de `package.json`. `AGENTS.md` e `security.md` foram atualizados no
+  mesmo commit (G62). Detalhe em
+  [deploy.md](../engineering/deploy.md#plano-b-flyio-como-destino-alternativo-fase-4-da-contingência).
+- **Declaração de ambiente exigida fora da Vercel.** `isLocalProcess()`
+  (`src/contexts/auth/domain/open-mode.ts`) só reconhece "produção" quando o
+  processo se declara — `VERCEL`/`VERCEL_ENV` na Vercel, `JHO_ENV` em
+  qualquer outro destino. Sem essa declaração, o plano B seria tratado como a
+  máquina do dono: modo aberto liberado, link de recuperação de senha
+  impresso no log (G18), varredura recusada. `fly.toml` **e** `Dockerfile`
+  fixam `JHO_ENV=production` por isso (defesa em profundidade). Achado na
+  revisão da execução (PR #373), não previsto neste ADR original.
+- **`JHO_PUBLIC_URL` substitui o `Host` da requisição em todo deployment.**
+  Achado também na revisão da PR #373: o link de recuperação de senha
+  (`app/login/forgot/actions.ts`) usava o cabeçalho `Host` do cliente para
+  montar a URL — atrás de qualquer proxy, isso é host poisoning (G17/G18), e
+  vale tanto para o plano B quanto para a Vercel de hoje. A correção
+  (`src/contexts/auth/domain/public-origin.ts`) exige `JHO_PUBLIC_URL`
+  configurada em todo deployment; sem ela, falha fechado — nenhum link é
+  construído a partir da entrada do cliente. Passo do dono, antes desta
+  mudança chegar a produção: cadastrar `JHO_PUBLIC_URL` também na Vercel
+  (Production), listado em [deploy.md](../engineering/deploy.md#variáveis).
 
 ## Alternativas rejeitadas
 
