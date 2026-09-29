@@ -12,15 +12,20 @@
 #   2. Docker Engine no HOST — só para o `docker run --rm` de cada job; o job
 #      em si nunca recebe o socket deste Docker (docker-in-docker isolado
 #      dentro do próprio contêiner, ver entrypoint.sh);
-#   3. a imagem imutável do runner (`docker build`), com Node/pnpm na versão
-#      de package.json e o binário do runner com checksum verificado —
-#      NENHUMA dessas dependências é baixada em tempo de job;
-#   4. o modelo de /etc/master-jobs-runner/env (vazio, 600, root:root) — O
+#   3. sysbox-runc (checksum verificado), o runtime OCI que deixa o
+#      dockerd interno do job funcionar SEM `--privileged` — sem ele, o job
+#      teria o mesmo poder do host (re-revisão L2 de 29/09/2026, C1);
+#   4. a imagem imutável do runner (`docker build`), com Node/pnpm na versão
+#      de package.json, a versão EXATA de Playwright do pnpm-lock.yaml e o
+#      binário do runner com checksum verificado — NENHUMA dessas
+#      dependências é baixada em tempo de job;
+#   5. o modelo de /etc/master-jobs-runner/env (vazio, 600, root:root) — O
 #      DONO preenche o PAT manualmente, nunca este script;
-#   5. o serviço systemd `master-jobs-runner-controller.service`
+#   6. o serviço systemd `master-jobs-runner-controller.service`
 #      (scripts/runner/runner-controller.sh), que pede uma configuração JIT
-#      de uso único por job e sobe um contêiner descartável — nunca um token
-#      de registro reutilizável, nunca o PAT dentro do contêiner do job.
+#      de uso único por job e sobe um contêiner descartável (runtime
+#      sysbox-runc, sem `--privileged`) — nunca um token de registro
+#      reutilizável, nunca o PAT dentro do contêiner do job.
 #
 # Uso: como root, com o repositório clonado na VPS (Ubuntu 24.04 LTS):
 #   sudo bash scripts/runner/provision-vps.sh
@@ -33,6 +38,19 @@ SERVICE_FILE="/etc/systemd/system/master-jobs-runner-controller.service"
 RUNNER_IMAGE="master-jobs-runner:latest"
 LABELS="self-hosted,linux,master-jobs"
 REPO="andreustimm/master-jobs"
+
+# sysbox-runc (re-revisão L2 de 29/09/2026, C1): runtime OCI que deixa o
+# contêiner do job rodar um dockerd interno de verdade sem `--privileged`.
+# Sem ele, `--privileged` daria ao contêiner do job acesso aos dispositivos
+# de bloco do PRÓPRIO HOST — o job poderia montar `/dev/sda` de dentro de si
+# e ler `/etc/master-jobs-runner/env`, o PAT que controla até a política de
+# aprovação de fork. Versão e checksum FIXOS; o valor abaixo é um
+# PLACEHOLDER — o dono confere o SHA-256 publicado em
+# https://github.com/nestybox/sysbox/releases antes do primeiro
+# provisionamento real, e o script falha fechado enquanto não for trocado.
+SYSBOX_VERSION="0.6.6"
+SYSBOX_DEB_URL="https://downloads.nestybox.com/sysbox/releases/v${SYSBOX_VERSION}/sysbox-ce_${SYSBOX_VERSION}-0.linux_amd64.deb"
+SYSBOX_SHA256="PREENCHER_COM_O_SHA256_PUBLICADO_NA_PAGINA_DE_RELEASE"
 
 log() { echo "[provision-vps] $*"; }
 
@@ -77,14 +95,50 @@ install_docker() {
   systemctl enable --now docker
 }
 
+install_sysbox() {
+  if command -v sysbox-runc >/dev/null 2>&1; then
+    log "sysbox-runc já instalado ($(sysbox-runc --version 2>/dev/null | head -1)); pulando"
+    return
+  fi
+  if [ "$SYSBOX_SHA256" = "PREENCHER_COM_O_SHA256_PUBLICADO_NA_PAGINA_DE_RELEASE" ]; then
+    echo "SYSBOX_SHA256 ainda é o placeholder — confira o valor publicado em" >&2
+    echo "https://github.com/nestybox/sysbox/releases/tag/v${SYSBOX_VERSION} e edite este script antes de continuar." >&2
+    echo "Sem isso, o contêiner do job rodaria com --privileged, que expõe o host — ver o comentário no topo do arquivo." >&2
+    exit 1
+  fi
+  log "instalando sysbox-runc ${SYSBOX_VERSION} (runtime sem --privileged para o dockerd interno do job)"
+  curl -fsSL -o /tmp/sysbox.deb "$SYSBOX_DEB_URL"
+  echo "${SYSBOX_SHA256}  /tmp/sysbox.deb" | sha256sum -c -
+  apt-get install -y /tmp/sysbox.deb
+  rm -f /tmp/sysbox.deb
+  # O pacote registra o runtime em /etc/docker/daemon.json e sobe os próprios
+  # serviços (sysbox-mgr, sysbox-fs); reiniciar o Docker garante que ele
+  # releia o daemon.json com o runtime novo antes do primeiro `docker run
+  # --runtime=sysbox-runc`.
+  systemctl enable --now sysbox 2>/dev/null || true
+  systemctl restart docker
+  if ! docker info 2>/dev/null | grep -q sysbox-runc; then
+    echo "sysbox-runc instalado, mas o Docker não relatou o runtime em 'docker info'. Confira /etc/docker/daemon.json." >&2
+    exit 1
+  fi
+}
+
 build_runner_image() {
   log "construindo a imagem imutável do runner (${RUNNER_IMAGE})"
-  # `jq`, não `node`: o host não precisa de Node instalado — o job roda
-  # inteiro dentro do contêiner, que traz o próprio Node (Dockerfile).
+  # `pnpm-lock.yaml`, não `package.json` (re-revisão L2, m3): `package.json`
+  # declara um INTERVALO (`^1.62.1`), e o intervalo pode resolver para uma
+  # versão diferente da que o lockfile fixou para esta árvore de dependências
+  # — a imagem do runner precisa da mesma versão EXATA que os testes usam, não
+  # de "qualquer uma dentro do intervalo". `grep`/`sed`, não `jq` nem `node`:
+  # o host não precisa de nenhum dos dois instalado — o job roda inteiro
+  # dentro do contêiner, que traz o próprio Node (Dockerfile). O formato do
+  # lockfile (pnpm v9) lista cada pacote resolvido como uma chave de dois
+  # espaços de indentação: `  playwright@1.62.1:`.
   local playwright_version
-  playwright_version="$(jq -r '.devDependencies.playwright' "${REPO_ROOT}/package.json" | sed 's/^[\^~]//')"
-  if [ -z "$playwright_version" ] || [ "$playwright_version" = "null" ]; then
-    echo "Não consegui ler devDependencies.playwright de package.json." >&2
+  playwright_version="$(grep -m1 -E '^  playwright@[0-9]+\.[0-9]+\.[0-9]+:' "${REPO_ROOT}/pnpm-lock.yaml" \
+    | sed -E 's/^  playwright@([0-9.]+):.*/\1/')"
+  if [ -z "$playwright_version" ]; then
+    echo "Não consegui ler a versão resolvida de playwright em pnpm-lock.yaml." >&2
     exit 1
   fi
   docker build \
@@ -130,14 +184,15 @@ install_controller_service() {
 [Unit]
 Description=Controller do runner efêmero do GitHub Actions (master-jobs, issue #367)
 After=network-online.target docker.service
+Requires=docker.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-# Roda como root: docker run --privileged (exigido pelo dockerd isolado de
-# dentro do contêiner do job) já é equivalente a root no host — um usuário
-# só no grupo docker teria o mesmo poder sob outro nome (ver o comentário no
-# topo de runner-controller.sh).
+# Roda como root: precisa de acesso ao Docker do host para subir e derrubar
+# o contêiner descartável de cada job (nunca --privileged — ver o comentário
+# no topo de runner-controller.sh e scripts/runner/Dockerfile sobre
+# sysbox-runc).
 EnvironmentFile=${ENV_FILE}
 ExecStart=/usr/local/sbin/master-jobs-runner-controller.sh
 Restart=always
@@ -157,6 +212,7 @@ main() {
   require_repo_checkout
   apt_packages
   install_docker
+  install_sysbox
   build_runner_image
   write_env_file_template
   install_controller_service

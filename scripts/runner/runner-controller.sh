@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Controller do runner self-hosted efêmero (issue #367, ADR 0030 decisão 5;
-# revisão L2 da PR #376, C2).
+# revisão L2 da PR #376, C2; re-revisão de 29/09/2026, C1/M2/m2).
 #
 # Roda no HOST (fora de qualquer contêiner de job), como o serviço systemd
 # `master-jobs-runner-controller.service` instalado por provision-vps.sh.
@@ -8,22 +8,35 @@
 #   1. pede à API do GitHub uma configuração JIT (uso único, escopo de
 #      exatamente um runner efêmero) — NUNCA um token de registro reutilizável
 #      nem o PAT em si;
-#   2. sobe um CONTÊINER DESCARTÁVEL (`--rm`) da imagem imutável
-#      (scripts/runner/Dockerfile), passando só a config JIT como variável de
-#      ambiente daquele contêiner;
-#   3. espera o contêiner terminar (um job = um contêiner = uma vida) e
-#      recomeça.
+#   2. sobe um CONTÊINER DESCARTÁVEL (`--rm`), com o runtime `sysbox-runc`
+#      (NUNCA `--privileged` — ver o porquê abaixo), passando só a config JIT
+#      como variável de ambiente daquele contêiner;
+#   3. espera o contêiner terminar (um job = um contêiner = uma vida); se ele
+#      durou menos que o mínimo plausível de um job real, ou o `docker run`
+#      falhou, desregistra o runner (se chegou a existir) e aplica backoff
+#      exponencial antes de tentar de novo — um laço apertado pedindo
+#      configuração JIT sem parar, contra uma API fora do ar ou uma imagem
+#      quebrada, é ruído (e possível limite de taxa) sem necessidade.
 #
 # O `GH_RUNNER_REGISTRATION_PAT` só existe no ambiente DESTE processo
 # (`EnvironmentFile=` do systemd, arquivo root-only) — nunca é repassado ao
 # `docker run` do job. O contêiner do job só recebe `JIT_CONFIG`, que expira
-# depois de um uso e não serve para registrar outro runner.
+# depois de um uso e não serve para registrar outro runner. O PAT também
+# nunca aparece no `argv` deste processo (m2, re-revisão): o cabeçalho
+# `Authorization` vai para o `curl` via `-H @-` (lido do stdin), não como
+# argumento de linha de comando — `ps aux`/`/proc/<pid>/cmdline` de qualquer
+# outro processo local não o veem.
 #
-# Este controller roda como root porque `docker run --privileged` (exigido
-# pelo dockerd isolado de dentro do contêiner do job, scripts/runner/
-# entrypoint.sh) já exige o equivalente a root no host — um usuário "sem
-# privilégio" só no grupo `docker` teria o mesmo poder sob outro nome. Não
-# fingimos uma redução de privilégio que não existe.
+# Este controller roda como root porque ele precisa de acesso ao Docker do
+# host para subir e derrubar o contêiner de cada job. Isso NÃO é o mesmo que
+# dar `--privileged` ao contêiner do job: `--privileged`, se usado, daria ao
+# contêiner do JOB acesso aos dispositivos de bloco do PRÓPRIO HOST (montar
+# `/dev/sda`, ler `/etc/master-jobs-runner/env` — o arquivo com este mesmo
+# PAT) — por isso o `docker run` abaixo usa `--runtime=sysbox-runc`
+# (instalado por provision-vps.sh, checksum verificado) em vez de
+# `--privileged`: o dockerd interno do job funciona de verdade, sem o job
+# herdar poder sobre o host (re-revisão L2 de 29/09/2026, C1). Ver
+# docs/engineering/deploy.md e ADR 0030 para o porquê completo.
 set -euo pipefail
 
 : "${GH_RUNNER_REGISTRATION_PAT:?defina em /etc/master-jobs-runner/env}"
@@ -31,6 +44,16 @@ set -euo pipefail
 : "${RUNNER_LABELS:?defina RUNNER_LABELS separado por vírgula (ex.: self-hosted,linux,master-jobs)}"
 RUNNER_IMAGE="${RUNNER_IMAGE:-master-jobs-runner:latest}"
 RUNNER_GROUP_ID="${RUNNER_GROUP_ID:-1}"
+
+# M2 (re-revisão) — um job de verdade (checkout, instalar dependências,
+# testar) nunca termina em menos de um minuto; um contêiner mais curto que
+# isso é sinal de imagem quebrada, JIT inválido ou runtime indisponível, não
+# de sorte. `BACKOFF_SECONDS` cresce em dobro a cada falha/execução curta,
+# até o teto, e volta ao piso na primeira execução que durou o suficiente.
+readonly MIN_JOB_SECONDS=60
+readonly BACKOFF_FLOOR_SECONDS=30
+readonly BACKOFF_CEILING_SECONDS=600
+BACKOFF_SECONDS=$BACKOFF_FLOOR_SECONDS
 
 log() { echo "[runner-controller] $*"; }
 
@@ -47,45 +70,120 @@ labels_json() {
   printf ']'
 }
 
+# m2 (re-revisão) — chama a API do GitHub com o cabeçalho `Authorization`
+# fora do `argv`: `-H @-` faz o curl ler a linha do cabeçalho do stdin, em
+# vez de recebê-la como argumento de linha de comando (visível em
+# `ps`/`/proc`). Sem `-L`/`--location` de propósito: o próprio manual do curl
+# avisa que cabeçalho passado por `-H` é reenviado em qualquer redirecionamento,
+# inclusive para outro host — a API do GitHub não deveria redirecionar uma
+# chamada destas, e não seguir automaticamente elimina esse risco por completo
+# em vez de confiar nisso. `$1` é o método HTTP, `$2` o caminho (sem o host),
+# `$3` (opcional) o corpo da requisição.
+gh_api() {
+  local method="$1" path="$2" body="${3:-}"
+  if [ -n "$body" ]; then
+    printf 'Authorization: Bearer %s\n' "$GH_RUNNER_REGISTRATION_PAT" \
+      | curl -fsS -X "$method" \
+          -H @- \
+          -H "Accept: application/vnd.github+json" \
+          -H "Content-Type: application/json" \
+          -d "$body" \
+          "https://api.github.com${path}"
+  else
+    printf 'Authorization: Bearer %s\n' "$GH_RUNNER_REGISTRATION_PAT" \
+      | curl -fsS -X "$method" \
+          -H @- \
+          -H "Accept: application/vnd.github+json" \
+          "https://api.github.com${path}"
+  fi
+}
+
 request_jit_config() {
   local name="$1"
-  curl -fsSL -X POST \
-    -H "Authorization: Bearer ${GH_RUNNER_REGISTRATION_PAT}" \
-    -H "Accept: application/vnd.github+json" \
-    "https://api.github.com/repos/${RUNNER_REPO}/actions/runners/generate-jitconfig" \
-    -d "{\"name\":\"${name}\",\"runner_group_id\":${RUNNER_GROUP_ID},\"labels\":$(labels_json),\"work_folder\":\"_work\"}" \
-    | jq -er ".encoded_jit_config"
+  local body
+  body="{\"name\":\"${name}\",\"runner_group_id\":${RUNNER_GROUP_ID},\"labels\":$(labels_json),\"work_folder\":\"_work\"}"
+  gh_api POST "/repos/${RUNNER_REPO}/actions/runners/generate-jitconfig" "$body"
+}
+
+# M2 (re-revisão) — desregistra um runner que a API criou mas que não chegou
+# a pegar um job de verdade (contêiner morreu cedo, `docker run` falhou).
+# Melhor esforço: se a API já removeu sozinha (o runner terminou o próprio
+# ciclo efêmero) ou a chamada falhar, só registra e segue — nunca trava o
+# laço por causa da limpeza.
+delete_orphan_runner() {
+  local runner_id="$1"
+  [ -n "$runner_id" ] || return 0
+  log "desregistrando runner órfão ${runner_id} (não chegou a completar um job)"
+  gh_api DELETE "/repos/${RUNNER_REPO}/actions/runners/${runner_id}" >/dev/null 2>&1 \
+    || log "não consegui desregistrar ${runner_id} (pode já ter sumido sozinho); seguindo"
+}
+
+apply_backoff() {
+  log "aguardando ${BACKOFF_SECONDS}s antes de tentar de novo"
+  sleep "$BACKOFF_SECONDS"
+  local next=$((BACKOFF_SECONDS * 2))
+  if [ "$next" -gt "$BACKOFF_CEILING_SECONDS" ]; then
+    next=$BACKOFF_CEILING_SECONDS
+  fi
+  BACKOFF_SECONDS=$next
+}
+
+reset_backoff() {
+  BACKOFF_SECONDS=$BACKOFF_FLOOR_SECONDS
 }
 
 run_one_job() {
   local name
   name="master-jobs-$(date +%s)-$$"
   log "pedindo configuração JIT para ${name}"
-  # `|| jit=""` é obrigatório sob `set -e`: sem ele, uma falha de rede na
-  # substituição de comando encerraria o laço inteiro em vez de esperar e
-  # tentar de novo (revisão L2, minor).
-  local jit
-  jit="$(request_jit_config "$name")" || jit=""
-  if [ -z "$jit" ]; then
-    log "configuração JIT vazia (API fora, ou PAT sem 'Administration: write'); aguardando 30s"
-    sleep 30
+  # `|| response=""` é obrigatório sob `set -e`: sem ele, uma falha de rede
+  # na substituição de comando encerraria o laço inteiro em vez de esperar e
+  # tentar de novo.
+  local response
+  response="$(request_jit_config "$name")" || response=""
+  if [ -z "$response" ]; then
+    log "configuração JIT vazia (API fora, ou PAT sem 'Administration: write')"
+    apply_backoff
     return
   fi
 
-  log "subindo contêiner descartável ${name} (sem socket Docker do host)"
-  # --privileged: exigido pelo dockerd ISOLADO de dentro do contêiner
-  # (entrypoint.sh) — não expõe nem monta o daemon do host. `--rm` garante
-  # que nada sobrevive ao fim do job, mesmo se o job travar o próprio
-  # contêiner: a próxima iteração nasce de imagem limpa de novo.
-  docker run --rm --privileged --name "$name" \
+  local runner_id jit
+  runner_id="$(printf '%s' "$response" | jq -er '.runner.id')" || runner_id=""
+  jit="$(printf '%s' "$response" | jq -er '.encoded_jit_config')" || jit=""
+  if [ -z "$jit" ]; then
+    log "resposta da API sem encoded_jit_config"
+    delete_orphan_runner "$runner_id"
+    apply_backoff
+    return
+  fi
+
+  log "subindo contêiner descartável ${name} (runtime sysbox-runc, sem --privileged, sem socket Docker do host)"
+  local started ended duration status
+  started=$(date +%s)
+  # `&& status=0 || status=$?`, não `; status=$?`: sob `set -e`, um comando
+  # simples que falha encerra o script ANTES de chegar na linha seguinte —
+  # só uma lista `&&`/`||` protege a captura do status de saída.
+  docker run --rm --runtime=sysbox-runc --name "$name" \
     -e "JIT_CONFIG=${jit}" \
-    "$RUNNER_IMAGE"
+    "$RUNNER_IMAGE" && status=0 || status=$?
+  ended=$(date +%s)
+  duration=$((ended - started))
+
+  if [ "$status" -ne 0 ] || [ "$duration" -lt "$MIN_JOB_SECONDS" ]; then
+    log "contêiner ${name} terminou em ${duration}s com status ${status} (mínimo esperado: ${MIN_JOB_SECONDS}s)"
+    delete_orphan_runner "$runner_id"
+    apply_backoff
+    return
+  fi
+
+  log "contêiner ${name} concluiu um job em ${duration}s"
+  reset_backoff
 }
 
 main() {
   log "controller iniciado (repositório=${RUNNER_REPO}, labels=${RUNNER_LABELS}, imagem=${RUNNER_IMAGE})"
   while true; do
-    run_one_job || log "job terminou com erro; controller continua o laço"
+    run_one_job || log "job terminou com erro inesperado; controller continua o laço"
   done
 }
 

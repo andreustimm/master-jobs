@@ -59,7 +59,7 @@ o dono escolher (registrado em
    para workflow de fork ("Approve and run", já ativa no repositório)
    continua ligada como segunda barreira, não substituída pela guarda.
 
-   > **Atualização de 30/09/2026 (revisão L2 da PR #376):** a guarda embutida
+   > **Atualização de 29/09/2026 (revisão L2 da PR #376):** a guarda embutida
    > em `runs-on:` é **defesa em profundidade, não a barreira real**. Num
    > evento `pull_request`, o GitHub executa a versão de `ci.yml` que está na
    > `head` da própria PR — uma PR de fork pode editar o arquivo e trocar a
@@ -69,15 +69,26 @@ o dono escolher (registrado em
    > (`fork-pr-contributor-approval`), que precisa estar em
    > `all_external_contributors` — não no padrão `first_time_contributors`,
    > que dispensa aprovação para quem já teve uma contribuição aceita antes
-   > (conta comprometida ou colaborador que vira malicioso). Mudar essa
-   > política é decisão e ação do dono (`gh api -X PUT
-   > repos/andreustimm/master-jobs/actions/permissions/fork-pr-contributor-approval
-   > -f approval_policy=all_external_contributors`), registrada como
-   > pré-requisito em [deploy.md](../engineering/deploy.md#runner-self-hosted-opt-in-ci_runs_on)
-   > **antes** de qualquer `gh variable set CI_RUNS_ON`. Nenhum agente altera
-   > essa política sozinho.
+   > (conta comprometida ou colaborador que vira malicioso). **Aplicada pelo
+   > dono em 29/09/2026**, confirmada na re-revisão L2 do mesmo dia — ver
+   > [deploy.md](../engineering/deploy.md#runner-self-hosted-opt-in-ci_runs_on)
+   > para o comando de conferência e reversão. Nenhum agente altera essa
+   > política sozinho.
 5. **O runner self-hosted, quando existir, é efêmero.** Um container por job,
    destruído ao fim. Um job comprometido não deixa estado para o próximo.
+
+   > **Atualização de 29/09/2026 (re-revisão L2 da PR #376, C1):** o
+   > contêiner do job precisa de um dockerd interno de verdade (o E2E e a
+   > suíte já sobem `postgres:17` em Docker) — a forma óbvia de dar isso a
+   > ele, `docker run --privileged`, daria ao contêiner do JOB acesso aos
+   > dispositivos de bloco do PRÓPRIO HOST (montar `/dev/sda`, ler
+   > `/etc/master-jobs-runner/env`, o arquivo com o PAT que controla até a
+   > política de aprovação de fork da decisão 4). O runtime OCI
+   > `sysbox-runc` (instalado por `provision-vps.sh`, checksum verificado)
+   > resolve isso: dá ao contêiner o suficiente para um Docker interno
+   > funcionar sem as capacidades amplas de `--privileged`. Nenhum
+   > `docker run`/`dockerd` deste repositório usa `--privileged` — ver
+   > [deploy.md](../engineering/deploy.md#runner-self-hosted-opt-in-ci_runs_on).
 6. **O vigia de cota mora fora dos provedores que ele monitora.** Um watchdog
    hospedado no mesmo provedor que caiu não consegue reagir — por isso ele
    roda em Supabase (`pg_cron`/`pg_net`, reaproveitando o padrão da

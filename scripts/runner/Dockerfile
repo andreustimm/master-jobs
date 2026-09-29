@@ -21,6 +21,17 @@
 # job é passado como variável de ambiente pelo controller (root, fora desta
 # imagem) na hora de `docker run`, um valor de uso único gerado pela API do
 # GitHub — nunca o PAT de longa duração (revisão L2, C2).
+#
+# ESTE CONTÊINER NUNCA SOBE COM `--privileged`. `scripts/runner/
+# runner-controller.sh` usa `--runtime=sysbox-runc` (instalado por
+# `provision-vps.sh`, checksum verificado) para dar ao dockerd interno o que
+# ele precisa sem as capacidades amplas de `--privileged` — que, num host de
+# verdade, dariam ao job acesso aos dispositivos de bloco do PRÓPRIO HOST
+# (montar `/dev/sda`, ler `/etc/master-jobs-runner/env`, o arquivo com o PAT
+# que controla até a política de aprovação de fork). Sem sysbox, a
+# "isolação" do dockerd interno seria teatro; com ele, o contêiner roda um
+# Docker completo por dentro sem escalar poder para fora de si mesmo
+# (re-revisão L2 de 29/09/2026, C1). Ver docs/engineering/deploy.md e ADR 0030.
 FROM node:24-bookworm-slim AS base
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
