@@ -9,6 +9,24 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.1] - 2026-09-29
+
+### Adicionado
+
+- Gate da G63 versionado (#380): `.claude/hooks/no-compound-bash.mjs`, registrado em `.claude/settings.json` como `PreToolUse` do Bash, recusa com saída 2 comando de shell composto (`&&`, `||`, `;`, `|`, `&` de segundo plano, `$(...)`, crase, heredoc e várias linhas fora de aspas); separadores entre aspas, `2>&1`, `&>` e `\;` do `find -exec` passam. A mensagem de recusa sugere `git commit -F <arquivo>` quando o motivo é heredoc ou `$(...)`. `tests/no-compound-bash.test.ts` cobre a tabela de casos e executa o hook real com o JSON do `PreToolUse` na entrada. Codex mantém o guard próprio, que julga por trecho; OpenCode não tem hook (lacuna registrada na G63).
+
+### Corrigido
+
+- `/compare` mantém o cadastro manual bem-sucedido mesmo quando o score ainda
+  não pode ser calculado para a conta; o fingerprint existente continua
+  evitando duplicação em novas tentativas.
+- Avisos de recusa de transição no funil usam sete segundos, com regressão de duração e preservação do rascunho em navegador a 375px (#389).
+
+### Segurança
+
+- `target_account` ganha `candidate_id` (anulável), com FK `ON DELETE CASCADE` para `candidate` (G20) e índice `target_account_candidate_idx`, pela migration aditiva `0031_contatos_por_candidato`. `addContact`, `listContacts`, `companiesWithContacts`, `referralOpportunities`, `seedWorkHistory` e `coldTargets` recebem `candidateId` e filtram por ele; `/referrals` e o dossiê usam o candidato da sessão, e a CLI (`contacts`, `referrals`, `engage targets`) o candidato ativo. Antes, `/referrals` mostrava a qualquer conta a contagem de empresas e os nomes dos contatos da rede do dono (#379, G39/G40).
+- Contatos gravados antes da 0031 ficam sem dono e **ocultos para todas as contas, inclusive o dono**, até o lote da #405 (backfill para o candidato `default`, URL única por candidato, drop do índice global e NOT NULL), que exige revisão humana da migration. Até lá, a URL do LinkedIn continua única no banco inteiro: a segunda conta que cadastra a mesma pessoa é recusada.
+
 ## [1.32.0] - 2026-09-29
 
 ### Adicionado
