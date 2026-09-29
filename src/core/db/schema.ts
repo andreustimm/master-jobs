@@ -471,11 +471,21 @@ export const engagement = production.table(
   (t) => [index("engagement_status_idx").on(t.status, t.queuedFor)],
 );
 
-/** The 30 target accounts from section 2.2 of the audit. */
+/**
+ * A rede de contatos de um candidato (a auditoria chamava de "30 contas-alvo").
+ *
+ * Contato pertence a um candidato: são nomes de pessoas de fora, e a rede de
+ * uma conta não aparece para outra (#379). Toda leitura e escrita filtra por
+ * `candidate_id`, que nasce da sessão ou do candidato ativo da CLI. Apagar o
+ * candidato apaga a rede dele — é dado dele, sem valor para mais ninguém.
+ */
 export const targetAccount = production.table(
   "target_account",
   {
     id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     linkedinUrl: text("linkedin_url"),
     category: text("category").notNull(), // recruiter | ai-leader | peer | company
@@ -487,7 +497,9 @@ export const targetAccount = production.table(
     notes: text("notes"),
     createdAt: text("created_at").notNull().default(now),
   },
-  (t) => [uniqueIndex("target_account_url_idx").on(t.linkedinUrl)],
+  // A URL do LinkedIn é chave natural DENTRO da rede de um candidato: duas
+  // contas podem conhecer a mesma pessoa, e cada uma guarda o próprio registro.
+  (t) => [uniqueIndex("target_account_candidate_url_idx").on(t.candidateId, t.linkedinUrl)],
 );
 
 /** Manually recorded funnel metrics — SSI, search appearances, profile views. */

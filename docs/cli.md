@@ -1289,6 +1289,11 @@ mudança manual — não há caminho paralelo.
 Referrals são ~7% dos candidatos e ~40% das contratações. Até esta área existir,
 `application.channel` era uma coluna que nada preenchia.
 
+A rede é do candidato ativo da CLI (o de slug `default`): `contacts`,
+`referrals` e `engage targets` leem e gravam só nela, e sem esse candidato
+recusam com "Candidato padrão não cadastrado" (`jho db seed` o cria). No
+dashboard, `/referrals` mostra só a rede do candidato da sessão (#379).
+
 ### `jho contacts seed`
 
 Carrega as 14 empresas onde Andreus já trabalhou ou entregou, a partir do
@@ -1306,7 +1311,7 @@ pnpm jho contacts add "Fulana de Tal" -c Braintrust -k ai-leader -r "Head of AI"
 | `-c, --company <name>` | sim | Onde a pessoa trabalha |
 | `-k, --category <name>` | não (`peer`) | `recruiter`, `ai-leader`, `peer`, `former`, `company` |
 | `-r, --role <title>` | não | Cargo |
-| `-u, --url <linkedin>` | não | Perfil — é a chave natural de deduplicação |
+| `-u, --url <linkedin>` | não | Perfil — é a chave natural de deduplicação dentro da rede do candidato |
 | `--country <code>` | não | País |
 | `-n, --notes <text>` | não | Como você conhece a pessoa |
 

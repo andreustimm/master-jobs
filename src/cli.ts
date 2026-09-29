@@ -1503,7 +1503,8 @@ contacts
       return;
     }
     await withDb(async () => {
-      const r = await addContact({
+      const candidateId = await activeCandidateId();
+      const r = await addContact(candidateId, {
         name,
         company: opts.company,
         role: opts.role,
@@ -1518,7 +1519,7 @@ contacts
       );
 
       // Immediately useful: does this unlock anything already in the board?
-      const opps = await referralOpportunities(await activeCandidateId(), 45);
+      const opps = await referralOpportunities(candidateId, 45);
       const here = opps.filter((o) => o.contacts.some((x) => x.startsWith(name)));
       if (here.length > 0) {
         console.log(c.green(`\n  ${here.length} vaga(s) aberta(s) nessa empresa:`));
@@ -1535,11 +1536,12 @@ contacts
   .description("Seed companies you have worked with — your strongest referral surface")
   .action(async () => {
     await withDb(async () => {
-      const r = await seedWorkHistory();
+      const candidateId = await activeCandidateId();
+      const r = await seedWorkHistory(candidateId);
       console.log(
         `${c.green("\u2713")} ${r.inserted} empresa(s) adicionada(s), ${r.updated} atualizada(s)`,
       );
-      const opps = await referralOpportunities(await activeCandidateId(), 45);
+      const opps = await referralOpportunities(candidateId, 45);
       if (opps.length > 0) {
         console.log(c.green(`\n  ${opps.length} vaga(s) aberta(s) onde você já tem histórico:`));
         for (const o of opps.slice(0, 8)) {
@@ -1558,7 +1560,7 @@ contacts
   .option("-k, --category <name>", "filter by category")
   .action(async (opts: { category?: string }) => {
     await withDb(async () => {
-      const rows = await listContacts(opts.category);
+      const rows = await listContacts(await activeCandidateId(), opts.category);
       if (rows.length === 0) {
         console.log(c.dim("\n  Nenhum contato. Comece com: jho contacts add \"Nome\" -c Empresa\n"));
         return;
@@ -1581,16 +1583,14 @@ program
   .option("--json", "saída legível por máquina")
   .action(async (opts: { minFit: string; json?: boolean }) => {
     await withDb(async () => {
-      const opps = await referralOpportunities(
-        await activeCandidateId(),
-        Number(opts.minFit),
-      );
+      const candidateId = await activeCandidateId();
+      const opps = await referralOpportunities(candidateId, Number(opts.minFit));
       if (opts.json) {
         console.log(JSON.stringify(opps, null, 2));
         return;
       }
       if (opps.length === 0) {
-        const known = await companiesWithContacts();
+        const known = await companiesWithContacts(candidateId);
         console.log(
           known.size === 0
             ? c.dim("\n  Nenhum contato registrado ainda. jho contacts add \"Nome\" -c Empresa\n")
@@ -1884,7 +1884,7 @@ engage
   .description("Target accounts never engaged — the §2.2 gap")
   .action(async () => {
     await withDb(async () => {
-      const rows = await coldTargets();
+      const rows = await coldTargets(await activeCandidateId());
       if (rows.length === 0) {
         console.log(c.dim("\n  Nenhuma conta-alvo com URL cadastrada ainda.\n"));
         return;

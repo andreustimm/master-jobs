@@ -11,6 +11,7 @@ erDiagram
   job ||--o| application : "candidatura"
   application ||--o{ application_event : "histórico"
   candidate ||--o{ candidate_document : "CV e cartas"
+  candidate ||--o{ target_account : "rede de contatos"
   mail_message ||--o{ mail_suggestion : "sugere"
   application ||--o{ mail_suggestion : "alvo"
   job ||--o{ mail_suggestion : "alvo"
@@ -106,6 +107,7 @@ erDiagram
 
   target_account {
     int id PK
+    int candidate_id FK "dono da rede"
     text name
     text company
     text category "former é o mais forte"

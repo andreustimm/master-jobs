@@ -187,8 +187,8 @@ describe("jho tasks done <id>", () => {
  * porque é a primeira coisa que confunde quem for escrever a próxima consulta.
  */
 describe("jho contacts add <name>", () => {
-  it("grava o contato com a categoria padrão `peer`", async () => {
-    await syncCandidateFromProfile();
+  it("grava o contato com a categoria padrão `peer`, na rede do candidato ativo", async () => {
+    const ativo = await syncCandidateFromProfile();
 
     const r = await rodar("contacts", "add", "Rafael Souza", "-c", "Acme");
 
@@ -196,6 +196,15 @@ describe("jho contacts add <name>", () => {
     const [linha] = await banco().select().from(targetAccount);
     expect(linha?.name).toBe("Rafael Souza");
     expect(linha?.category).toBe("peer");
+    // #379: o contato é da rede de quem a CLI opera, nunca sem dono.
+    expect(linha?.candidateId).toBe(ativo);
+  });
+
+  it("sem candidato ativo, recusa em vez de gravar contato sem dono", async () => {
+    const r = await rodar("contacts", "add", "Rafael Souza", "-c", "Acme");
+
+    expect(String(r.erro)).toContain("Candidato padrão não cadastrado");
+    expect(await banco().select().from(targetAccount)).toHaveLength(0);
   });
 
   it("`-k former` grava a categoria mais valiosa da rede", async () => {
@@ -518,6 +527,7 @@ describe("jho skills seed", () => {
 
 describe("jho engage targets", () => {
   it("não inventa alvo quando ninguém foi cadastrado", async () => {
+    await syncCandidateFromProfile();
     const r = await rodar("engage", "targets");
 
     expect(r.out).toContain("Nenhuma conta-alvo");

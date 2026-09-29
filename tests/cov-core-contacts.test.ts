@@ -9,7 +9,15 @@ import {
   seedWorkHistory,
 } from "../src/core/contacts.ts";
 import type { DB } from "../src/core/db/client.ts";
-import { application, company, job, jobScore, source, targetAccount } from "../src/core/db/schema.ts";
+import {
+  application,
+  candidate,
+  company,
+  job,
+  jobScore,
+  source,
+  targetAccount,
+} from "../src/core/db/schema.ts";
 import { SCORER_VERSION } from "../src/core/scoring/score.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 import { primaryTrackId } from "./support/tracks.ts";
@@ -48,6 +56,7 @@ async function criarVaga(input: {
   fit?: number | null;
   fechada?: boolean;
   cluster?: string;
+  para?: number;
 }): Promise<number> {
   sequencia += 1;
   const [empresa] = await db
@@ -73,8 +82,8 @@ async function criarVaga(input: {
 
   if (input.fit != null) {
     await db.insert(jobScore).values({
-      candidateId: candidatoId,
-      trackId: await primaryTrackId(db, candidatoId),
+      candidateId: input.para ?? candidatoId,
+      trackId: await primaryTrackId(db, input.para ?? candidatoId),
       jobId: vaga!.id,
       fit: input.fit,
       titleScore: 0,
@@ -101,7 +110,7 @@ async function criarVaga(input: {
 
 describe("addContact: a URL do LinkedIn é a chave natural", () => {
   it("insere quando o contato é novo", async () => {
-    const r = await addContact({
+    const r = await addContact(candidatoId, {
       name: "Marina Alves",
       company: "Nubank",
       role: "Head of AI",
@@ -127,13 +136,13 @@ describe("addContact: a URL do LinkedIn é a chave natural", () => {
     // Duplicar contato é pior do que não ter contato: o relatório de
     // indicações passaria a listar a mesma pessoa duas vezes e a contagem
     // deixaria de significar alguma coisa.
-    const primeiro = await addContact({
+    const primeiro = await addContact(candidatoId, {
       name: "Marina Alves",
       company: "Nubank",
       category: "peer",
       linkedinUrl: "https://www.linkedin.com/in/marina",
     });
-    const segundo = await addContact({
+    const segundo = await addContact(candidatoId, {
       name: "Marina Alves Ferreira",
       company: "Nubank Ltd",
       role: "VP Engineering",
@@ -159,7 +168,7 @@ describe("addContact: a URL do LinkedIn é a chave natural", () => {
     // substituição, não mesclagem. Quem reenvia o formulário sem o cargo está
     // dizendo "não sei o cargo", e manter o valor antigo seria inventar dado
     // que o usuário acabou de apagar.
-    const primeiro = await addContact({
+    const primeiro = await addContact(candidatoId, {
       name: "Marina",
       company: "Nubank",
       role: "Head of AI",
@@ -168,7 +177,7 @@ describe("addContact: a URL do LinkedIn é a chave natural", () => {
       category: "ai-leader",
       linkedinUrl: "https://www.linkedin.com/in/marina",
     });
-    await addContact({
+    await addContact(candidatoId, {
       name: "Marina",
       category: "ai-leader",
       linkedinUrl: "https://www.linkedin.com/in/marina",
@@ -181,8 +190,8 @@ describe("addContact: a URL do LinkedIn é a chave natural", () => {
   it("permite homônimos quando não há URL para desempatar", async () => {
     // Sem URL não existe chave natural, e adivinhar por nome uniria duas
     // pessoas diferentes num contato só — erro silencioso e irreversível.
-    const a = await addContact({ name: "João Silva", category: "recruiter" });
-    const b = await addContact({ name: "João Silva", category: "recruiter" });
+    const a = await addContact(candidatoId, { name: "João Silva", category: "recruiter" });
+    const b = await addContact(candidatoId, { name: "João Silva", category: "recruiter" });
     expect(a.id).not.toBe(b.id);
     expect(await db.select().from(targetAccount)).toHaveLength(2);
   });
@@ -190,15 +199,15 @@ describe("addContact: a URL do LinkedIn é a chave natural", () => {
 
 describe("listContacts", () => {
   it("devolve tudo, ou só a categoria pedida", async () => {
-    await addContact({ name: "Recrutadora", category: "recruiter" });
-    await addContact({ name: "Ex-colega", category: "former" });
-    await addContact({ name: "Par", category: "peer" });
+    await addContact(candidatoId, { name: "Recrutadora", category: "recruiter" });
+    await addContact(candidatoId, { name: "Ex-colega", category: "former" });
+    await addContact(candidatoId, { name: "Par", category: "peer" });
 
-    expect(await listContacts()).toHaveLength(3);
-    expect((await listContacts("former")).map((c) => c.name)).toEqual(["Ex-colega"]);
+    expect(await listContacts(candidatoId)).toHaveLength(3);
+    expect((await listContacts(candidatoId, "former")).map((c) => c.name)).toEqual(["Ex-colega"]);
     // Categoria inexistente devolve lista vazia, não a lista inteira: um
     // filtro que falha aberto engana quem está lendo.
-    expect(await listContacts("nao-existe")).toEqual([]);
+    expect(await listContacts(candidatoId, "nao-existe")).toEqual([]);
   });
 });
 
@@ -207,20 +216,20 @@ describe("companiesWithContacts: casamento por slug, não por texto", () => {
     // A mesma normalização que o deduplicador usa, pelo mesmo motivo: a vaga
     // vem de um board escrevendo "Nubank Ltd" e o contato foi cadastrado à
     // mão como "Nubank".
-    await addContact({ name: "Marina", company: "Nubank", category: "ai-leader" });
-    await addContact({ name: "Rafael", company: "Nubank Ltd", category: "peer" });
+    await addContact(candidatoId, { name: "Marina", company: "Nubank", category: "ai-leader" });
+    await addContact(candidatoId, { name: "Rafael", company: "Nubank Ltd", category: "peer" });
 
-    const mapa = await companiesWithContacts();
+    const mapa = await companiesWithContacts(candidatoId);
     expect(mapa.get("nubank")).toEqual(["Marina", "Rafael"]);
   });
 
   it("marca ex-colega no rótulo, porque é o vínculo mais forte que existe", async () => {
     // O rótulo é o que o usuário lê antes de decidir pedir indicação. Um
     // ex-colega e um contato frio pedem abordagens completamente diferentes.
-    await addContact({ name: "Bruno", company: "Regal Rexnord", category: "former" });
-    await addContact({ name: "Carla", company: "Regal Rexnord", category: "recruiter" });
+    await addContact(candidatoId, { name: "Bruno", company: "Regal Rexnord", category: "former" });
+    await addContact(candidatoId, { name: "Carla", company: "Regal Rexnord", category: "recruiter" });
 
-    expect((await companiesWithContacts()).get("regal-rexnord")).toEqual([
+    expect((await companiesWithContacts(candidatoId)).get("regal-rexnord")).toEqual([
       "Bruno (ex-colega)",
       "Carla",
     ]);
@@ -232,21 +241,21 @@ describe("companiesWithContacts: casamento por slug, não por texto", () => {
     // pelo `is not null` do SQL. Sem a checagem de verdade, esse contato
     // entraria no mapa sob slug vazio e casaria com toda vaga cuja empresa
     // também normalizasse para vazio.
-    await addContact({ name: "Sem empresa de verdade", company: "", category: "peer" });
-    await addContact({ name: "Com empresa", company: "Zorbit", category: "company" });
+    await addContact(candidatoId, { name: "Sem empresa de verdade", company: "", category: "peer" });
+    await addContact(candidatoId, { name: "Com empresa", company: "Zorbit", category: "company" });
 
-    expect([...(await companiesWithContacts()).keys()]).toEqual(["zorbit"]);
+    expect([...(await companiesWithContacts(candidatoId)).keys()]).toEqual(["zorbit"]);
   });
 
   it("ignora contato sem empresa e empresa que não vira slug", async () => {
     // Contato pessoal sem empresa não indica ninguém, e um nome que normaliza
     // para string vazia casaria com toda vaga cuja empresa também normalizasse
     // para vazio — casamento acidental é o pior defeito possível aqui.
-    await addContact({ name: "Sem empresa", category: "peer" });
-    await addContact({ name: "Empresa simbólica", company: "###", category: "company" });
-    await addContact({ name: "Válido", company: "Zorbit", category: "company" });
+    await addContact(candidatoId, { name: "Sem empresa", category: "peer" });
+    await addContact(candidatoId, { name: "Empresa simbólica", company: "###", category: "company" });
+    await addContact(candidatoId, { name: "Válido", company: "Zorbit", category: "company" });
 
-    const mapa = await companiesWithContacts();
+    const mapa = await companiesWithContacts(candidatoId);
     expect([...mapa.keys()]).toEqual(["zorbit"]);
   });
 });
@@ -260,8 +269,8 @@ describe("referralOpportunities: o relatório que deveria guiar a semana", () =>
   });
 
   it("lista só vagas abertas, acima do corte, onde existe contato", async () => {
-    await addContact({ name: "Marina", company: "Nubank", category: "ai-leader" });
-    await addContact({ name: "Bruno", company: "Regal Rexnord", category: "former" });
+    await addContact(candidatoId, { name: "Marina", company: "Nubank", category: "ai-leader" });
+    await addContact(candidatoId, { name: "Bruno", company: "Regal Rexnord", category: "former" });
 
     const boa = await criarVaga({ empresa: "Nubank Ltd", fit: 72 });
     await criarVaga({ empresa: "Nubank", titulo: "Estágio", fit: 20 }); // abaixo do corte
@@ -281,7 +290,7 @@ describe("referralOpportunities: o relatório que deveria guiar a semana", () =>
   });
 
   it("ordena por fit decrescente, porque a lista é uma fila de trabalho", async () => {
-    await addContact({ name: "Marina", company: "Nubank", category: "ai-leader" });
+    await addContact(candidatoId, { name: "Marina", company: "Nubank", category: "ai-leader" });
     const media = await criarVaga({ empresa: "Nubank", titulo: "Staff", fit: 61 });
     const alta = await criarVaga({ empresa: "Nubank", titulo: "Principal", fit: 84 });
     const baixa = await criarVaga({ empresa: "Nubank", titulo: "Pleno", fit: 47 });
@@ -296,7 +305,7 @@ describe("referralOpportunities: o relatório que deveria guiar a semana", () =>
   it("mostra o estado da candidatura para não repetir contato já feito", async () => {
     // Pedir indicação de novo para uma vaga onde já se candidatou queima a
     // relação — e essa é a única coisa que a rede não recupera.
-    await addContact({ name: "Marina", company: "Nubank", category: "ai-leader" });
+    await addContact(candidatoId, { name: "Marina", company: "Nubank", category: "ai-leader" });
     const vagaId = await criarVaga({ empresa: "Nubank", fit: 70 });
     await db.insert(application).values({
       candidateId: candidatoId,
@@ -311,7 +320,7 @@ describe("referralOpportunities: o relatório que deveria guiar a semana", () =>
   it("pontua por candidato: a vaga de outro candidato não vaza", async () => {
     // `job_score` é por candidato. Ler o fit sem filtrar traria a nota de
     // outra pessoa e mudaria a ordem da fila de trabalho de quem consultou.
-    await addContact({ name: "Marina", company: "Nubank", category: "ai-leader" });
+    await addContact(candidatoId, { name: "Marina", company: "Nubank", category: "ai-leader" });
     await criarVaga({ empresa: "Nubank", fit: 90 });
     const outro = await ensureCandidate({ slug: "outro", name: "Outro Candidato" });
 
@@ -320,7 +329,7 @@ describe("referralOpportunities: o relatório que deveria guiar a semana", () =>
   });
 
   it("usa 45 como corte padrão", async () => {
-    await addContact({ name: "Marina", company: "Nubank", category: "ai-leader" });
+    await addContact(candidatoId, { name: "Marina", company: "Nubank", category: "ai-leader" });
     await criarVaga({ empresa: "Nubank", titulo: "Quase", fit: 44 });
     const passa = await criarVaga({ empresa: "Nubank", titulo: "Passa", fit: 45 });
     expect((await referralOpportunities(candidatoId)).map((o) => o.jobId)).toEqual([passa]);
@@ -331,7 +340,7 @@ describe("seedWorkHistory: o histórico de trabalho é a rede mais forte", () =>
   it("cadastra as empresas onde o candidato realmente entregou", async () => {
     // Não são alvos aspiracionais — são ex-empregadores e ex-clientes, o mais
     // perto de apresentação calorosa que existe. Estavam no currículo, sem uso.
-    const r = await seedWorkHistory();
+    const r = await seedWorkHistory(candidatoId);
     expect(r.inserted).toBeGreaterThan(10);
     expect(r.updated).toBe(0);
 
@@ -345,8 +354,8 @@ describe("seedWorkHistory: o histórico de trabalho é a rede mais forte", () =>
   it("é idempotente: rodar de novo atualiza a nota, não duplica a linha", async () => {
     // Regra do projeto: tudo idempotente. Um seed que duplica inflaria a
     // contagem de contatos e o relatório de indicação junto.
-    const primeira = await seedWorkHistory();
-    const segunda = await seedWorkHistory();
+    const primeira = await seedWorkHistory(candidatoId);
+    const segunda = await seedWorkHistory(candidatoId);
 
     expect(segunda.inserted).toBe(0);
     expect(segunda.updated).toBe(primeira.inserted);
@@ -356,8 +365,8 @@ describe("seedWorkHistory: o histórico de trabalho é a rede mais forte", () =>
   it("não sequestra um contato homônimo de outra categoria", async () => {
     // A busca do seed casa por nome E categoria 'former'. Um recrutador
     // chamado "Revelo" cadastrado à mão continua sendo recrutador.
-    await addContact({ name: "Revelo", company: "Revelo", category: "recruiter" });
-    await seedWorkHistory();
+    await addContact(candidatoId, { name: "Revelo", company: "Revelo", category: "recruiter" });
+    await seedWorkHistory(candidatoId);
 
     const revelos = await db.select().from(targetAccount).where(eq(targetAccount.name, "Revelo"));
     expect(revelos.map((r) => r.category).sort()).toEqual(["former", "recruiter"]);
@@ -367,10 +376,92 @@ describe("seedWorkHistory: o histórico de trabalho é a rede mais forte", () =>
     // O teste que justifica o resto: depois do seed, uma vaga na Regal
     // Rexnord aparece como oportunidade de indicação sem nenhum cadastro
     // manual — que é o valor todo da funcionalidade.
-    await seedWorkHistory();
+    await seedWorkHistory(candidatoId);
     await criarVaga({ empresa: "Regal Rexnord Inc.", fit: 66 });
 
     const [oportunidade] = await referralOpportunities(candidatoId, 45);
     expect(oportunidade?.contacts).toEqual(["Regal Rexnord (ex-colega)"]);
+  });
+});
+
+describe("a rede é de um candidato só (#379)", () => {
+  // A rede do dono vazava em /referrals para qualquer conta: `target_account`
+  // não tinha dono, e uma conta nova via "14 empresas na sua rede" e, ao lado
+  // de cada vaga, os NOMES dos contatos dele. São pessoas de fora, que nunca
+  // consentiram em aparecer para outra conta.
+  let outra: number;
+
+  beforeEach(async () => {
+    outra = await ensureCandidate({ slug: "outra-conta", name: "Outra Conta" });
+  });
+
+  it("a outra conta não vê empresa nem nome da rede do dono", async () => {
+    await addContact(candidatoId, { name: "Marina", company: "Nubank", category: "ai-leader" });
+    await seedWorkHistory(candidatoId);
+    // A outra conta tem nota alta na mesma vaga: sem o escopo, ela veria
+    // "via Marina" ao lado.
+    await criarVaga({ empresa: "Nubank", fit: 90, para: outra });
+
+    expect(await companiesWithContacts(outra)).toEqual(new Map());
+    expect(await listContacts(outra)).toEqual([]);
+    expect(await referralOpportunities(outra, 45)).toEqual([]);
+    // A rede do dono continua inteira para ele.
+    expect((await companiesWithContacts(candidatoId)).get("nubank")).toEqual(["Marina"]);
+  });
+
+  it("cada conta lê só a própria rede, mesmo na mesma empresa", async () => {
+    await addContact(candidatoId, { name: "Marina", company: "Nubank", category: "ai-leader" });
+    await addContact(outra, { name: "Rafael", company: "Nubank", category: "peer" });
+    await criarVaga({ empresa: "Nubank", fit: 70 });
+    await criarVaga({ empresa: "Nubank", titulo: "Staff", fit: 80, para: outra });
+
+    expect((await referralOpportunities(candidatoId, 45)).map((o) => o.contacts)).toEqual([["Marina"]]);
+    expect((await referralOpportunities(outra, 45)).map((o) => o.contacts)).toEqual([["Rafael"]]);
+    expect((await listContacts(outra)).map((c) => c.name)).toEqual(["Rafael"]);
+  });
+
+  it("a mesma URL do LinkedIn em outra conta cria outro registro, sem tocar no do dono", async () => {
+    // A URL é chave natural dentro de uma rede. Casar pela URL global faria a
+    // outra conta sobrescrever nome, cargo e nota do contato do dono.
+    const url = "https://www.linkedin.com/in/marina";
+    const doDono = await addContact(candidatoId, {
+      name: "Marina Alves",
+      company: "Nubank",
+      category: "ai-leader",
+      linkedinUrl: url,
+      notes: "nota do dono",
+    });
+    const daOutra = await addContact(outra, {
+      name: "Marina",
+      company: "Outra Empresa",
+      category: "peer",
+      linkedinUrl: url,
+    });
+
+    expect(daOutra.created).toBe(true);
+    expect(daOutra.id).not.toBe(doDono.id);
+    const [linha] = await db.select().from(targetAccount).where(eq(targetAccount.id, doDono.id));
+    expect(linha).toMatchObject({ candidateId: candidatoId, name: "Marina Alves", notes: "nota do dono" });
+  });
+
+  it("o seed de uma conta não atualiza a linha homônima de outra", async () => {
+    await seedWorkHistory(outra);
+    const antes = await db.select().from(targetAccount).where(eq(targetAccount.candidateId, outra));
+
+    const r = await seedWorkHistory(candidatoId);
+    expect(r.updated).toBe(0);
+    expect(await db.select().from(targetAccount).where(eq(targetAccount.candidateId, outra))).toEqual(antes);
+  });
+
+  it("apagar o candidato apaga a rede dele, e só a dele", async () => {
+    // `ON DELETE CASCADE` (G20): contato sem dono não teria a quem pertencer,
+    // e deixá-lo órfão seria reabrir o vazamento na próxima leitura sem filtro.
+    await addContact(candidatoId, { name: "Marina", company: "Nubank", category: "ai-leader" });
+    await addContact(outra, { name: "Rafael", company: "Nubank", category: "peer" });
+
+    await db.delete(candidate).where(eq(candidate.id, outra));
+
+    const restantes = await db.select().from(targetAccount);
+    expect(restantes.map((l) => [l.candidateId, l.name])).toEqual([[candidatoId, "Marina"]]);
   });
 });

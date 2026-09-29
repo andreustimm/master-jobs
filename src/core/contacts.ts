@@ -9,6 +9,11 @@
  * The job here is narrow and unglamorous: know who you know, at which company,
  * so that when a strong match appears the system says "you know someone here"
  * instead of leaving that connection in your memory.
+ *
+ * A rede é de um candidato. Toda função recebe `candidateId` — da sessão na
+ * página, do candidato ativo na CLI — e nenhuma lê ou grava fora dele: os
+ * nomes aqui são de pessoas de fora, e a rede de uma conta não aparece para
+ * outra (#379, regra 15).
  */
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "./db/client.ts";
@@ -36,15 +41,25 @@ export type NewContact = {
   notes?: string | null;
 };
 
-export async function addContact(input: NewContact): Promise<{ id: number; created: boolean }> {
+export async function addContact(
+  candidateId: number,
+  input: NewContact,
+): Promise<{ id: number; created: boolean }> {
   const db = getDb();
 
-  // The LinkedIn URL is the natural key when present.
+  // The LinkedIn URL is the natural key when present — within this
+  // candidate's network. Another account knowing the same person keeps its
+  // own row; matching globally would overwrite their notes.
   if (input.linkedinUrl) {
     const existing = await db
       .select({ id: targetAccount.id })
       .from(targetAccount)
-      .where(eq(targetAccount.linkedinUrl, input.linkedinUrl))
+      .where(
+        and(
+          eq(targetAccount.candidateId, candidateId),
+          eq(targetAccount.linkedinUrl, input.linkedinUrl),
+        ),
+      )
       .limit(1);
     const found = existing[0];
     if (found) {
@@ -66,6 +81,7 @@ export async function addContact(input: NewContact): Promise<{ id: number; creat
   const inserted = await db
     .insert(targetAccount)
     .values({
+      candidateId,
       name: input.name,
       company: input.company ?? null,
       role: input.role ?? null,
@@ -81,9 +97,13 @@ export async function addContact(input: NewContact): Promise<{ id: number; creat
   return { id: row.id, created: true };
 }
 
-export async function listContacts(category?: string) {
+export async function listContacts(candidateId: number, category?: string) {
   const db = getDb();
-  const rows = await db.select().from(targetAccount).orderBy(targetAccount.category);
+  const rows = await db
+    .select()
+    .from(targetAccount)
+    .where(eq(targetAccount.candidateId, candidateId))
+    .orderBy(targetAccount.category);
   return category ? rows.filter((r) => r.category === category) : rows;
 }
 
@@ -93,7 +113,7 @@ export async function listContacts(category?: string) {
  * Slugified on both sides so "Nubank" matches "Nubank Ltd" — the same
  * normalisation the deduper uses, for the same reason.
  */
-export async function companiesWithContacts(): Promise<Map<string, string[]>> {
+export async function companiesWithContacts(candidateId: number): Promise<Map<string, string[]>> {
   const db = getDb();
   const rows = await db
     .select({
@@ -102,7 +122,9 @@ export async function companiesWithContacts(): Promise<Map<string, string[]>> {
       category: targetAccount.category,
     })
     .from(targetAccount)
-    .where(sql`${targetAccount.company} is not null`);
+    .where(
+      and(eq(targetAccount.candidateId, candidateId), sql`${targetAccount.company} is not null`),
+    );
 
   const map = new Map<string, string[]>();
   for (const row of rows) {
@@ -139,7 +161,7 @@ export async function referralOpportunities(
   minFit = 45,
 ): Promise<ReferralOpportunity[]> {
   const db = getDb();
-  const contacts = await companiesWithContacts();
+  const contacts = await companiesWithContacts(candidateId);
   if (contacts.size === 0) return [];
 
   const rows = await db
@@ -199,8 +221,14 @@ const WORK_HISTORY: Array<{ company: string; note: string }> = [
 
 export type SeedResult = { inserted: number; updated: number };
 
-/** Idempotent: re-running refreshes notes but never duplicates. */
-export async function seedWorkHistory(): Promise<SeedResult> {
+/**
+ * Idempotent: re-running refreshes notes but never duplicates.
+ *
+ * `WORK_HISTORY` is the owner's CV, so only the owner's candidate should be
+ * seeded — the CLI passes its active candidate, and nothing on the web calls
+ * this.
+ */
+export async function seedWorkHistory(candidateId: number): Promise<SeedResult> {
   let inserted = 0;
   let updated = 0;
 
@@ -210,7 +238,11 @@ export async function seedWorkHistory(): Promise<SeedResult> {
       .select({ id: targetAccount.id })
       .from(targetAccount)
       .where(
-        sql`${targetAccount.name} = ${entry.company} and ${targetAccount.category} = 'former'`,
+        and(
+          eq(targetAccount.candidateId, candidateId),
+          eq(targetAccount.name, entry.company),
+          eq(targetAccount.category, "former"),
+        ),
       )
       .limit(1);
 
@@ -223,6 +255,7 @@ export async function seedWorkHistory(): Promise<SeedResult> {
       updated++;
     } else {
       await db.insert(targetAccount).values({
+        candidateId,
         name: entry.company,
         company: entry.company,
         category: "former",

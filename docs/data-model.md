@@ -195,8 +195,9 @@ erDiagram
     }
     target_account {
         INTEGER id PK
+        INTEGER candidate_id FK "dono da rede, ON DELETE CASCADE"
         TEXT name
-        TEXT linkedin_url UK
+        TEXT linkedin_url UK "único por candidato"
         TEXT category "recruiter, ai-leader, peer, company"
         TEXT company
         TEXT role
@@ -853,7 +854,7 @@ escreve hoje**. A única leitura é `repo.openTasks()`, sobre `positioning_task`
 |---|---|---|
 | `post` | Rascunhos de conteúdo. *"Published through the official `w_member_social` API only."* | `slug` (UNIQUE), `pillar`, `status` (`draft \| ready \| published \| archived`), `linkedin_urn` (ex. `urn:li:share:123`), métricas `impressions` / `reactions` / `comment_count` |
 | `engagement` | Fila de engajamento **assistido** | `kind` (`comment \| connect \| follow \| message \| endorse`), `target_url`, `draft`, `status` (`queued \| done \| skipped`), índice `(status, queued_for)` |
-| `target_account` | As 30 contas-alvo da §2.2 do audit de posicionamento | `linkedin_url` (UNIQUE), `category` (`recruiter \| ai-leader \| peer \| company`), `status` (`identified \| following \| engaged \| connected \| conversing`) |
+| `target_account` | A rede de contatos de um candidato (nasceu das 30 contas-alvo da §2.2 do audit) | `candidate_id` (NOT NULL, `ON DELETE CASCADE`), UNIQUE `(candidate_id, linkedin_url)`, `category` (`recruiter \| ai-leader \| peer \| company`), `status` (`identified \| following \| engaged \| connected \| conversing`) |
 | `metric_snapshot` | Métricas de funil registradas à mão — SSI, search appearances, profile views | UNIQUE `(at, key)`, `value REAL` |
 | `positioning_task` | O plano de ação da §14 do audit como linhas executáveis | `id TEXT` no formato `PT-0001`, `horizon` (`24h \| week \| 30d \| 60d \| 90d`), `priority` (`P0 \| P1 \| P2 \| P3`), `source_ref` apontando de volta pro audit |
 
@@ -1333,3 +1334,14 @@ candidato já trabalhou ou entregou**, categoria `former` — o vínculo mais fo
 que existe, e que estava parado no currículo.
 
 Categorias: `recruiter`, `ai-leader`, `peer`, `former`, `company`.
+
+**Contato tem dono** (#379). `candidate_id` é obrigatório, com FK
+`ON DELETE CASCADE` para `candidate`: a rede é dado do candidato, e apagar o
+candidato apaga a rede dele. Toda leitura e escrita em `src/core/contacts.ts` e
+`coldTargets()` filtra por ele — da sessão em `/referrals` e no dossiê, do
+candidato ativo na CLI. A URL do LinkedIn é única **por candidato**
+(`target_account_candidate_url_idx` em `candidate_id, linkedin_url`): duas
+contas podem conhecer a mesma pessoa, cada uma com o próprio registro. Antes
+disso a tabela não tinha dono e `/referrals` mostrava a rede do dono, com nomes,
+para qualquer conta. As migrations 0030–0032 atribuíram as linhas existentes ao
+candidato de slug `default`, que é quem as gravou pela CLI.

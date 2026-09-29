@@ -17,7 +17,7 @@ export default async function Referrals() {
 
   const [opps, network] = await Promise.all([
     referralOpportunities(candidateId, 40),
-    companiesWithContacts(),
+    companiesWithContacts(candidateId),
   ]);
 
   return (
@@ -27,7 +27,10 @@ export default async function Referrals() {
         {t("copy.referralsLead")}</p>
 
       {opps.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">
+        <Card
+          className="p-6 text-muted-foreground"
+          data-testid={network.size === 0 ? "referrals-empty-network" : "referrals-empty-matches"}
+        >
           {network.size === 0 ? (
             <>
               Nenhum contato registrado. Comece com{" "}
@@ -36,7 +39,7 @@ export default async function Referrals() {
             </>
           ) : (
             <>
-              <strong className="text-foreground">{network.size} {t("referrals.companies")}</strong>{" "}
+              <strong className="text-foreground" data-testid="referrals-network-count">{network.size} {t("referrals.companies")}</strong>{" "}
               {t("copy.referralsEmpty")}
             </>
           )}

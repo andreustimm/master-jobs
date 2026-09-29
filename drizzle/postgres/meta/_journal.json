@@ -211,6 +211,27 @@
       "when": 1790625702265,
       "tag": "0029_perfil_publico_foto_capa",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1790688737287,
+      "tag": "0030_contatos_por_candidato",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790688741988,
+      "tag": "0031_backfill_contatos_do_dono",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790688758091,
+      "tag": "0032_contatos_candidato_obrigatorio",
+      "breakpoints": true
     }
   ]
 }
