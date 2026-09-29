@@ -22,6 +22,7 @@ import { ageInDays, loadRates, refreshRates, STALE_AFTER_DAYS } from "./contexts
 import { importJobs, parseFile } from "./core/ingest/import.ts";
 import {
   CONTACT_CATEGORIES,
+  ContactUrlTaken,
   addContact,
   companiesWithContacts,
   listContacts,
@@ -1503,22 +1504,38 @@ contacts
       return;
     }
     await withDb(async () => {
-      const r = await addContact({
-        name,
-        company: opts.company,
-        role: opts.role,
-        linkedinUrl: opts.url,
-        category,
-        country: opts.country,
-        notes: opts.notes,
-      });
+      const candidateId = await activeCandidateId();
+      let r: { id: number; created: boolean };
+      try {
+        r = await addContact(candidateId, {
+          name,
+          company: opts.company,
+          role: opts.role,
+          linkedinUrl: opts.url,
+          category,
+          country: opts.country,
+          notes: opts.notes,
+        });
+      } catch (error) {
+        if (!(error instanceof ContactUrlTaken)) throw error;
+        console.error(c.red(`Recusado: ${error.linkedinUrl} já está cadastrada fora da sua rede.`));
+        console.log(
+          c.dim(
+            "  A URL do LinkedIn ainda é única no banco inteiro, e contatos gravados antes da\n" +
+            "  separação por candidato (#379) ficam sem dono até o backfill da #405.\n" +
+            "  Cadastre sem -u por enquanto, ou aguarde a #405.",
+          ),
+        );
+        process.exitCode = 1;
+        return;
+      }
       console.log(
         `${c.green("\u2713")} ${r.created ? "adicionado" : "atualizado"}: ${c.bold(name)} ` +
         c.dim(`@ ${opts.company} · ${opts.category} · #${r.id}`),
       );
 
       // Immediately useful: does this unlock anything already in the board?
-      const opps = await referralOpportunities(await activeCandidateId(), 45);
+      const opps = await referralOpportunities(candidateId, 45);
       const here = opps.filter((o) => o.contacts.some((x) => x.startsWith(name)));
       if (here.length > 0) {
         console.log(c.green(`\n  ${here.length} vaga(s) aberta(s) nessa empresa:`));
@@ -1535,11 +1552,12 @@ contacts
   .description("Seed companies you have worked with — your strongest referral surface")
   .action(async () => {
     await withDb(async () => {
-      const r = await seedWorkHistory();
+      const candidateId = await activeCandidateId();
+      const r = await seedWorkHistory(candidateId);
       console.log(
         `${c.green("\u2713")} ${r.inserted} empresa(s) adicionada(s), ${r.updated} atualizada(s)`,
       );
-      const opps = await referralOpportunities(await activeCandidateId(), 45);
+      const opps = await referralOpportunities(candidateId, 45);
       if (opps.length > 0) {
         console.log(c.green(`\n  ${opps.length} vaga(s) aberta(s) onde você já tem histórico:`));
         for (const o of opps.slice(0, 8)) {
@@ -1558,7 +1576,7 @@ contacts
   .option("-k, --category <name>", "filter by category")
   .action(async (opts: { category?: string }) => {
     await withDb(async () => {
-      const rows = await listContacts(opts.category);
+      const rows = await listContacts(await activeCandidateId(), opts.category);
       if (rows.length === 0) {
         console.log(c.dim("\n  Nenhum contato. Comece com: jho contacts add \"Nome\" -c Empresa\n"));
         return;
@@ -1581,16 +1599,14 @@ program
   .option("--json", "saída legível por máquina")
   .action(async (opts: { minFit: string; json?: boolean }) => {
     await withDb(async () => {
-      const opps = await referralOpportunities(
-        await activeCandidateId(),
-        Number(opts.minFit),
-      );
+      const candidateId = await activeCandidateId();
+      const opps = await referralOpportunities(candidateId, Number(opts.minFit));
       if (opts.json) {
         console.log(JSON.stringify(opps, null, 2));
         return;
       }
       if (opps.length === 0) {
-        const known = await companiesWithContacts();
+        const known = await companiesWithContacts(candidateId);
         console.log(
           known.size === 0
             ? c.dim("\n  Nenhum contato registrado ainda. jho contacts add \"Nome\" -c Empresa\n")
@@ -1884,7 +1900,7 @@ engage
   .description("Target accounts never engaged — the §2.2 gap")
   .action(async () => {
     await withDb(async () => {
-      const rows = await coldTargets();
+      const rows = await coldTargets(await activeCandidateId());
       if (rows.length === 0) {
         console.log(c.dim("\n  Nenhuma conta-alvo com URL cadastrada ainda.\n"));
         return;
