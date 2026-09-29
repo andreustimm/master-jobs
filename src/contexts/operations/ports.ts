@@ -11,6 +11,7 @@
  * seria cerimônia — a ADR 0007 recusa isso explicitamente.
  */
 import type { Routine } from "./domain/routine.ts";
+import type { QuotaDecision, QuotaSample } from "./domain/quota-watch.ts";
 
 export type DispatchResult =
   /** Aceito por quem executa; a rotina roda fora daqui. */
@@ -35,4 +36,31 @@ export type WorkflowDispatchPort = {
   /** Disponível quando há credencial — a tela usa isto para explicar o botão. */
   configured(): boolean;
   dispatch(request: DispatchRequest): Promise<DispatchResult>;
+};
+
+/* ------------------------- Vigia de cota (ADR 0030, Fase 3) ------------------------- */
+
+export type QuotaWatchRow = {
+  checkedAt: string;
+  vercelDeploys24h: number | null;
+  actionsQueueMaxWaitS: number | null;
+  actionsStatus: QuotaSample["actionsStatus"];
+  decision: QuotaDecision["state"];
+  actionTaken: string | null;
+  reversalCommand: string | null;
+  note: string | null;
+};
+
+export type QuotaWatchStore = {
+  record(row: QuotaWatchRow): Promise<void>;
+};
+
+/** Uma amostra: cada campo `null` quando a coleta daquela métrica falhou. */
+export type QuotaMetricsPort = {
+  sample(): Promise<QuotaSample>;
+};
+
+export type QuotaAlertPort = {
+  /** Sempre tentado em `aviso`/`acao-automatica`; nunca lança — o chamador só lê `ok`. */
+  open(input: { title: string; body: string }): Promise<{ ok: boolean; reason?: string }>;
 };

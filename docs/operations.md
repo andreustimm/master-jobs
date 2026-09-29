@@ -121,6 +121,60 @@ hora) já deveria tê-la apontado.
 e `gh variable delete VARREDURA_AGENDADOR --repo andreustimm/master-jobs` — a
 execução diária do Actions volta a valer na manhã seguinte.
 
+## Vigia de cota: ativar (ADR 0030, Fase 3)
+
+O vigia detecta risco de estourar a cota da Vercel (deploys/dia) ou do GitHub
+Actions (fila, indisponibilidade) **fora dos dois provedores monitorados**: o
+`pg_cron`/`pg_net` do Supabase chama a API da Vercel e a do GitHub
+diretamente — nunca `jobs.mastertimm.com.br` — para que uma indisponibilidade
+real de qualquer um dos dois não derrube o próprio vigia junto (ADR 0030
+decisão 6). `GET /api/cron/watchdog` (mesmo `CRON_SECRET` das outras rotas de
+cron) é só a checagem manual/de teste, nunca o agendador de produção.
+
+Ativar é **passo humano**, depois de a migração de `production.quota_watch`
+estar aplicada (deploy de `main` já cria a tabela, se aditiva):
+
+1. **PAT do GitHub**, escopo mínimo (leitura de `actions`, escrita de
+   `issues` e de `variables` do repositório) — criado em
+   github.com/settings/tokens, nunca colado em log nem em commit (regra 16).
+2. **Token de leitura da API da Vercel** (dashboard → Settings → Tokens,
+   escopo de leitura) e o **project id** do projeto `master-jobs`.
+3. **Supabase, SQL Editor do projeto de produção** — os mesmos `pg_cron`/
+   `pg_net` da varredura, mais quatro segredos novos no Vault (o **valor**
+   nunca entra em commit, só o nome da variável abaixo):
+   ```sql
+   select vault.create_secret('<PAT do passo 1>', 'watchdog_github_token');
+   select vault.create_secret('andreustimm/master-jobs', 'watchdog_github_repo');
+   select vault.create_secret('<token do passo 2>', 'watchdog_vercel_token');
+   select vault.create_secret('<project id do passo 2>', 'watchdog_vercel_project_id');
+   ```
+   Rode [`supabase/cron/watchdog.sql`](../supabase/cron/watchdog.sql) — recusa
+   aplicar fora do projeto de produção, mesma trava de `varredura.sql`.
+4. **Conferir em uma hora** (a agenda dispara na hora cheia e coleta cinco
+   minutos depois):
+   `select * from production.quota_watch order by checked_at desc limit 5;`
+   — uma linha nova, com `decision = 'ok'` no dia a dia.
+5. **Fumaça manual, sem esperar a agenda:**
+   `curl -s -H "authorization: Bearer $CRON_SECRET" "https://jobs.mastertimm.com.br/api/cron/watchdog"`
+   devolve o mesmo relatório, com os adapters de verdade (variáveis
+   `WATCHDOG_GITHUB_TOKEN`, `WATCHDOG_GITHUB_REPO`, `WATCHDOG_VERCEL_TOKEN`,
+   `WATCHDOG_VERCEL_PROJECT_ID` na Vercel, produção).
+
+**O que o vigia NÃO faz ainda, de propósito.** Em `aviso` e `acao-automatica`
+ele sempre grava a linha e sempre tenta abrir uma issue (rótulo
+`vigia-de-cota`) com o comando de reversão — mas **nunca aplica** o
+`gh variable set` recomendado sozinho: `CI_RUNS_ON` sem o runner da Fase 2
+registrado enfileiraria todo job para sempre, e `pg_net` não tem o método
+`PATCH` que a API de variáveis exige para atualizar. Ler a issue (ou a linha
+em `quota_watch`) e rodar o comando é, por ora, decisão do dono. O segredo
+`watchdog_auto_apply` no Vault fica reservado para quando essa aplicação for
+implementada.
+
+**Desfazer:**
+`select cron.unschedule(jobname) from cron.job where jobname like 'jho-vigia-%';`
+— o comentário final de `watchdog.sql` tem os `drop` de função e tabela, e os
+segredos do Vault (`watchdog_*`) se apagam à parte.
+
 ## Orçamento de requisições e telemetria por rotina
 
 Três rotinas saem para a internet por conta própria, e cada uma tem mais de um

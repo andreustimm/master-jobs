@@ -62,6 +62,10 @@ import { activeTermKeys } from "../matching/index.ts";
 import { runSweepSlice, type QueueOutcome, type SliceReport, type SweepDeps } from "./app/sweep.ts";
 import { SLICE_TOUCHES_THIRD_PARTIES, type SweepSlice } from "./domain/sweep.ts";
 import { candidateScoreQueues, drizzleSweepLease, drizzleSweepRuns, lastSyncedBySource } from "./infra/drizzle-sweep.ts";
+import { runQuotaWatch } from "./app/quota-watch.ts";
+import { drizzleQuotaWatch } from "./infra/drizzle-quota-watch.ts";
+import { quotaWatchMetrics } from "./infra/quota-watch-metrics.ts";
+import { quotaWatchIssue } from "./infra/quota-watch-issue.ts";
 
 export { ROUTINES, ROUTINE_LABEL_KEYS, isRoutine, parseRoutine, type Routine } from "./domain/routine.ts";
 export type { DispatchResult, WorkflowDispatchPort } from "./ports.ts";
@@ -264,6 +268,29 @@ export {
 } from "./domain/sweep.ts";
 export type { SliceReport } from "./app/sweep.ts";
 export { routineTelemetry, type RoutineTelemetry } from "./infra/drizzle-telemetry.ts";
+
+/* ---------------------------- Vigia de cota (ADR 0030) ---------------------------- */
+
+export {
+  DEFAULT_QUOTA_THRESHOLDS,
+  decideQuotaWatch,
+  type QuotaDecision,
+  type QuotaSample,
+  type QuotaThresholds,
+  type QuotaTrigger,
+} from "./domain/quota-watch.ts";
+export type { QuotaWatchDeps, QuotaWatchReport, QuotaWatchRow } from "./app/quota-watch.ts";
+export { recentQuotaWatch } from "./infra/drizzle-quota-watch.ts";
+
+/** A checagem com os adapters de verdade — o que a rota `/api/cron/watchdog` chama. */
+export function runQuotaWatchNow() {
+  return runQuotaWatch({
+    now: () => clock().iso(),
+    metrics: quotaWatchMetrics(),
+    store: drizzleQuotaWatch,
+    alert: quotaWatchIssue(),
+  });
+}
 
 /** Capturas por chamada: uma onda de quatro hosts cabe no teto da função. */
 const CAPTURE_PER_SLICE = 4;
