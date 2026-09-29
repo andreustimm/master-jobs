@@ -185,6 +185,10 @@ export function convert(m: Money, to: Currency, fx: FxTable): Money | null {
 }
 
 export function formatMoney(m: Money, locale = "en-US"): string {
+  const localizedPeriod = (period: Exclude<Period, "year" | "project">): string => {
+    if (!locale.toLowerCase().startsWith("pt")) return period;
+    return { month: "mês", week: "semana", day: "dia", hour: "hora" }[period];
+  };
   const perYear =
     m.period === "year"
       ? ""
@@ -192,7 +196,7 @@ export function formatMoney(m: Money, locale = "en-US"): string {
         ? m.durationMonths
           ? ` total (${m.durationMonths} meses)`
           : " total"
-        : `/${m.period}`;
+        : `/${localizedPeriod(m.period)}`;
   try {
     const formatted = new Intl.NumberFormat(locale, {
       style: "currency",

@@ -9,7 +9,7 @@
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { href, type BoardRoute, type FilterState } from "./filters";
-import type { Translator } from "../src/core/i18n/index.ts";
+import type { LocaleId, Translator } from "../src/core/i18n/index.ts";
 import { TransitionLink } from "./transition-link";
 
 export const PAGE_SIZES = [25, 50, 100, 200] as const;
@@ -20,6 +20,7 @@ export function Pagination({
   page,
   pageSize,
   total,
+  locale,
   t,
 }: {
   base: BoardRoute;
@@ -27,6 +28,7 @@ export function Pagination({
   page: number;
   pageSize: number;
   total: number;
+  locale: LocaleId;
   t: Translator["t"];
 }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
@@ -50,9 +52,8 @@ export function Pagination({
 
   return (
     <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
-      <span className="font-mono text-xs text-muted-foreground">
-        {from.toLocaleString("pt-BR")}–{to.toLocaleString("pt-BR")} de{" "}
-        {total.toLocaleString("pt-BR")}
+      <span className="font-mono text-xs text-muted-foreground" data-testid="pagination-range">
+        {from.toLocaleString(locale)}–{to.toLocaleString(locale)} {t("grid.of")} {total.toLocaleString(locale)}
       </span>
 
       <div className="flex flex-wrap items-center gap-1.5">

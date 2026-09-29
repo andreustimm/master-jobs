@@ -27,12 +27,12 @@ export const MATCH_FIELD_LABEL = {
   description: "jobs.matchDescription",
 } as const satisfies Record<MatchField, string>;
 
-function pay(r: Row): string | null {
+function pay(r: Row, locale: LocaleId): string | null {
   const amount = r.compMax ?? r.compMin;
   const currency = parseCurrency(r.compCurrency);
   const period = parsePeriod(r.compPeriod);
   if (!amount || amount <= 0 || !currency || !period) return null;
-  return formatMoney(money(amount, currency, period), "pt-BR");
+  return formatMoney(money(amount, currency, period), locale);
 }
 
 /** How the Jobs screen asked rows to be read: which track, which pay unit. */
@@ -77,7 +77,7 @@ export function JobList({
         const blockers = scoreMessages(r.blockers);
         // Mais de uma publicação no grupo: a linha fala pelo conjunto.
         const agrupada = r.repeats.length > 1;
-        const salary = pay(r);
+        const salary = pay(r, locale);
         const externalUrl = isPublicJobUrl(r.url);
         const externalApplyUrl = isPublicJobUrl(r.applyUrl) ? r.applyUrl : null;
         // Jobgether and other intermediaries publish under their own name, so
@@ -111,6 +111,7 @@ export function JobList({
                   // o de menor id, que é escolha de ordenação, não de produto.
                   href={agrupada ? `/jobs/${r.jobId}/paises` : `/jobs/${r.jobId}`}
                   data-testid={`job-link-${r.jobId}`}
+                  data-user-content="true"
                   className="type-body-md font-semibold hover:underline"
                 >
                   {r.title}

@@ -39,6 +39,50 @@ export async function run(ctx) {
     leaks.length === 0,
     leaks.slice(0, 8).join(" | "),
   );
+
+  // A varredura de texto não enxerga aria-label nem distingue uma marca
+  // ausente de um título vindo do acervo. Este percurso mantém a prova da
+  // lista em uma viewport de telefone, onde o modal e a paginação também
+  // precisam continuar acessíveis.
+  const jobsContext = await browser.newContext({
+    storageState: await page.context().storageState(),
+    viewport: { width: 375, height: 812 },
+  });
+  const jobsPage = await jobsContext.newPage();
+  try {
+    await jobsContext.addCookies([{ name: "jho_locale", value: "en", url: BASE }]);
+    const jobsResponse = await jobsPage.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+    const jobsRoute = new URL(jobsPage.url()).pathname;
+    const title = jobsPage.locator('[data-testid^="job-link-"]').first();
+    await title.waitFor({ state: "visible" });
+    const modalTrigger = jobsPage.locator('button[popovertarget^="job-modal-"]').first();
+    await modalTrigger.click();
+    const closeLabel = await jobsPage.locator('[id^="job-modal-"] button[aria-label]').first().getAttribute("aria-label");
+    const paginationRange = jobsPage.locator('[data-testid="pagination-range"]');
+    const paginationText = await paginationRange.innerText();
+    check(
+      "lista de vagas em inglês mantém a rota e os nomes acessíveis",
+      jobsResponse?.ok() === true && jobsRoute === "/jobs" && closeLabel === "Close" && await title.getAttribute("data-user-content") === "true",
+      `status=${jobsResponse?.status() ?? "none"} rota=${jobsRoute} aria=${closeLabel ?? "none"}`,
+    );
+    check(
+      "lista de vagas em inglês usa números e texto de paginação traduzidos",
+      paginationText.includes(" of ") && !paginationText.includes(" de "),
+      paginationText,
+    );
+
+    await jobsContext.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+    await jobsPage.goto(`${BASE}/jobs?fit=0&sort=comp&cur=BRL&per=month`, { waitUntil: "networkidle" });
+    const pay = jobsPage.locator('[data-testid^="job-pay-"]').first();
+    await pay.waitFor({ state: "visible" });
+    check(
+      "lista de vagas em pt-BR localiza o período do salário",
+      (await pay.innerText()).includes("/mês"),
+      await pay.innerText(),
+    );
+  } finally {
+    await jobsContext.close();
+  }
   {
     // As telas anteriores à sessão, num contexto sem cookie: com o do dono,
     // `/login` redirecionaria e a varredura não mediria nada.

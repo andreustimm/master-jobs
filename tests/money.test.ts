@@ -135,6 +135,11 @@ describe("formatMoney", () => {
     expect(formatMoney(money(150_000, "USD", "year"))).not.toContain("/");
   });
 
+  it("localizes the period suffix used on the jobs board", () => {
+    expect(formatMoney(money(5_000, "BRL", "month"), "pt-BR")).toContain("/mês");
+    expect(formatMoney(money(5_000, "USD", "month"), "en")).toContain("/month");
+  });
+
   it("renders a project with its duration", () => {
     expect(formatMoney(money(30_000, "USD", "project", 2))).toContain("2 meses");
   });
