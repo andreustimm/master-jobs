@@ -6,13 +6,13 @@ persona: Candidato após falha
 journey: J-switch-workspace-screen
 expected: Login, recovery, callback, papéis, sessão expirada e recursos revogados terminam no resultado canônico sem revelar conteúdo anterior nem a modal de Novidades antes de uma sessão válida
 entry_points: /login; /login/forgot; /login/reset; /login/callback; /p/[slug]
-qa_status: pass
-bug_ids: BUG-20260824-canonical-route-splash; BUG-20260827-changelog-visible-before-login
-fix_status: fixed
-retest_status: pass
+qa_status: fail
+bug_ids: BUG-20260824-canonical-route-splash; BUG-20260827-changelog-visible-before-login; BUG-20260929-stale-tab-login-inert; BUG-20260929-login-callback-redirect-leaves-canonical-host
+fix_status: pending
+retest_status:
 fix_commits: 7ba2890; fe5cdbf; 1570ccd
-evidence: tests/e2e/ui.mjs; tests/changelog.test.ts; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-repeated-reset-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-impersonated-target-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-impersonation-ended-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-candidate-forbidden-admin.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-candidate-forbidden-admin-goal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/recruiter-forbidden-candidate.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/recruiter-forbidden-candidate-goal.png; docs/qa/reports/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh.md
-last_report: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md
+evidence: tests/e2e/ui.mjs; tests/changelog.test.ts; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-repeated-reset-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-impersonated-target-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-impersonation-ended-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-candidate-forbidden-admin.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-candidate-forbidden-admin-goal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/recruiter-forbidden-candidate.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/recruiter-forbidden-candidate-goal.png; docs/qa/reports/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh.md; docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-auth-boundary-recovery/stale-tab-login-inert.png; docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-recruiter-private-boundary/stale-tab-login-inert-recruiter.png
+last_report: docs/qa/reports/2026-09-29T035351654581Z-97f37e1c-full-release-candidate-1.29-full.md
 overlaps:
 ---
 
@@ -42,3 +42,11 @@ Full rodar com o seed que os cria. Relatório:
 docs/qa/reports/2026-09-17T230607949478Z-796f372b-pre-varredura-cenarios-nao-testados.md
 
 O Full QA confirmou token consumido, impersonação e as respostas canônicas. O primeiro percurso revelou que o layout inserido por Flight deixava o splash inerte sobre 403/404 após reload. A correção passou a remover somente esse splash sem timer ativo; candidato e recrutador foram retestados em build de produção local, com HTTP 403 preservado, tela localizada visível e nenhuma camada residual.
+
+QA full do release candidate 1.29 (29/09) achou dois defeitos novos e volta
+o `qa_status` para `fail`: (1) quando a sessão termina numa aba, a aba
+antiga fica com o shell `inert` em `/login` por >20 s ao clicar no menu —
+mesma família do splash já corrigido, gatilho novo (`BUG-20260929-stale-tab-login-inert`);
+(2) `/login/callback` com token inválido redireciona para
+`http://localhost:3210/login?error=invalid`, saindo do host canônico
+`127.0.0.1` e perdendo o idioma da sessão (`BUG-20260929-login-callback-redirect-leaves-canonical-host`).

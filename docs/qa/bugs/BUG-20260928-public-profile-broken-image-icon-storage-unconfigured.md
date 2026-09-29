@@ -57,12 +57,8 @@ aparecem como ícone de imagem quebrada do navegador (a requisição para
 
 ## Fix
 
-<!-- não corrigido nesta rodada — instrução da tarefa foi registrar e reportar, não corrigir -->
+`app/p/[slug]/page.tsx` só renderiza foto e capa quando `parseStorageConfig(process.env)` está `configured`; sem armazenamento, omite as duas, como faz quando o "mostrar" está desligado. Não corrigido pela sessão de QA que registrou o bug (instrução da tarefa foi registrar e reportar, não corrigir) — o commit `21724ef`, já presente quando este bug foi registrado, trazia a correção.
 
 ## Verification
 
-<!-- pendente -->
-
-## Fix
-
-`app/p/[slug]/page.tsx` só renderiza foto e capa quando `parseStorageConfig(process.env)` está `configured`; sem armazenamento, omite as duas, como faz quando o "mostrar" está desligado. Aguarda verificação independente.
+**Full 1.29 (2026-09-29):** `git merge-base --is-ancestor 21724ef HEAD` confirma que `21724ef` (o commit contra o qual a rodada de 2026-09-28 já havia reconfirmado ao vivo, com `rm -rf .next` e reinício limpo) é ancestral do HEAD desta rodada (`494aa37`) — nada mudou neste caminho desde então. **Não é uma verificação ao vivo desta rodada**: abrir um segundo `next dev` sem `JHO_STORAGE_DRIVER` na mesma worktree usada por quatro outras sessões de QA em paralelo arriscava corromper o cache `.next` compartilhado, então optei por não fazer. `Status` permanece `fixed` (não `verified`) até uma sessão dedicada, num ambiente isolado, repetir o passo a passo com o servidor sem `JHO_STORAGE_DRIVER` e ver o resultado com os próprios olhos.
