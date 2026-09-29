@@ -56,3 +56,5 @@ lacunas diz "cobre o que as vagas pedem" comparando com 0 vagas.
 <!-- filled when status moves to verified -->
 - **Retested:**
 - **Result:**
+
+Correção em implementação com teste vermelho/verde registrado; reteste de jornada pendente.

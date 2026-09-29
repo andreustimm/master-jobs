@@ -374,14 +374,18 @@ export default async function CandidateArea() {
       {gap && (
         <>
           <Separator className="my-8" />
-          <section>
+          <section data-testid="candidate-vocabulary-gap">
             <h2 className="type-display-sm mb-2">
               {t("copy.vocabularyGapTitle")}
             </h2>
             <p className="mb-5 text-sm text-muted-foreground">
               {t("copy.vocabularyCompared", { jobs: gap.jobsAnalysed, cut: gap.minFit })}</p>
 
-            {gap.missing.length === 0 ? (
+            {gap.jobsAnalysed === 0 ? (
+              <Card className="p-5 text-sm text-muted-foreground" data-testid="candidate-gap-no-jobs">
+                {t("candidate.noJobsForGap")}
+              </Card>
+            ) : gap.missing.length === 0 ? (
               <Card className="p-5 text-sm text-muted-foreground">
                 {t("candidate.noRelevantGap")}
               </Card>

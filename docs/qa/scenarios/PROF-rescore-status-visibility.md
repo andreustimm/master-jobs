@@ -21,3 +21,5 @@ Cobertura funcional e experiencial do caminho principal, incluindo locale e leit
 Migração PostgreSQL: percurso local confirmado em 10/09. Texto e rótulo novos
 persistiram após refresh e no histórico; estado Na fila permaneceu verdadeiro.
 Não é prova de processamento concluído pelo worker nem de configuração remota.
+
+Reteste #387: distinguir recusa weakCv de conclusão incremental com noJobsUpdated; zero vagas no recorte de lacunas não confirma cobertura. Conferir texto localizado, refresh e 375px.

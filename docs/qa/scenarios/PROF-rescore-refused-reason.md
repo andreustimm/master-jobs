@@ -21,3 +21,5 @@ sem motivo. Colar um texto com mais de 100 caracteres e nenhuma skill do
 catálogo; esperar a fatia; conferir o estado `refused` (`data-reason="weakCv"`)
 em 375 px e em inglês. Depois salvar um currículo completo e ver o cartão sair
 da recusa.
+
+Reteste #387: distinguir recusa weakCv de conclusão incremental com noJobsUpdated; zero vagas no recorte de lacunas não confirma cobertura. Conferir texto localizado, refresh e 375px.
