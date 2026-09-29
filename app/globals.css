@@ -688,6 +688,13 @@ body {
    o desktop continua compacto — a densidade da grade de triagem é uma
    qualidade lá, e seria desperdício de tela aumentar tudo por causa do celular.
 
+   44px, não 40: é o piso que o DESIGN.md pede ("Touch Targets", 44×44px) e o
+   que `min-h-11` já assume em toda tela — este `@media` fica FORA de camada,
+   então sem ele bater no mesmo número o CSS sem camada vencia o utilitário
+   Tailwind (que mora em `@layer utilities`) e todo `min-h-11` virava 40px de
+   verdade num aparelho de toque, sem nenhum teste pegando porque a suíte
+   não simula `hasTouch`/`isMobile` (#403).
+
    Aplicada por padding, não por altura fixa: assim o conteúdo continua
    centralizado e nada muda de posição.
    =========================================================================== */
@@ -696,7 +703,7 @@ body {
   button:not([popovertargetaction]),
   [role="button"],
   summary {
-    min-height: 40px;
+    min-height: 44px;
   }
 
   /* Link de texto corrido fica de fora: aumentar a caixa dele criaria zonas
