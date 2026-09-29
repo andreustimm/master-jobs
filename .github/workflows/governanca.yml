@@ -43,3 +43,24 @@ jobs:
           # Cada artefato contém a janela móvel inteira. Retenção curta limita
           # armazenamento; arquivar o relatório mensal antes de expirar.
           retention-days: 3
+
+  # Fase 1 da contingência de CI e deploy (#351, ADR 0030): DEPLOY_PREVIEW_ENVS
+  # é só o registro documentado do que git.deploymentEnabled de vercel.json
+  # realmente aplica — esta corrida garante que os dois nunca divirjam em
+  # silêncio, sem esperar alguém lembrar de rodar o verificador à mão.
+  verificar-deploy-preview-envs:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Confere DEPLOY_PREVIEW_ENVS contra vercel.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/github/verify-deploy-preview-envs.ts

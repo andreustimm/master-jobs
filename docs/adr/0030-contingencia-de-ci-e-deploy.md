@@ -1,6 +1,7 @@
 # ADR 0030 — Contingência de CI e deploy
 
-**Status:** Proposta · 2026-09-28 · issue [#351](https://github.com/andreustimm/master-jobs/issues/351)
+**Status:** aceita · 2026-09-29 · issue [#351](https://github.com/andreustimm/master-jobs/issues/351)
+(decisões do dono de 29/09/2026: D1=A, D2=B, D3=A, D4=A)
 
 ## Contexto
 
@@ -72,9 +73,16 @@ o dono escolher (registrado em
 
 As escolhas de **onde** (runner próprio: máquina do dono vs. VPS; vigia:
 Supabase vs. outro; destino alternativo: Fly.io vs. Railway vs. VPS+Coolify)
-são registradas como pendentes no PRD e não fazem parte desta decisão — elas
-podem mudar sem reabrir esta ADR, desde que continuem satisfazendo as oito
-invariantes acima.
+ficam registradas no bloco "Decisões do dono" do PRD e não fazem parte desta
+decisão — elas podem mudar sem reabrir esta ADR, desde que continuem
+satisfazendo as oito invariantes acima. Decidido em 29/09/2026: **D1 = A**
+(Fase 1 agora, como sub-issue S/M já executável; Fases 2–4 depois, cada uma
+com sua própria issue); **D2 = B** (runner self-hosted em VPS dedicada —
+Hetzner CPX22 ou DigitalOcean 4 GB, contratação só com ok do dono); **D3 = A**
+(vigia de cota no Supabase, `pg_cron`/`pg_net`/Vault); **D4 = A** (plano B da
+Vercel no Fly.io, região `gru`). Por D1, esta entrega (issue #351) executa
+somente a Fase 1; Fases 2–4 abrem issue própria cada uma, quando o dono
+decidir avançar.
 
 ## Consequências
 

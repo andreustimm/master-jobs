@@ -12,10 +12,16 @@ A promoção dispara quando o CI de push em `dev` termina (`workflow_run`),
 decisão do dono em 26/09/2026 ([#347](https://github.com/andreustimm/master-jobs/issues/347)).
 Entre 23/09 e 26/09 ([#263](https://github.com/andreustimm/master-jobs/issues/263))
 ela rodou só por agenda, para poupar o limite diário de deploys da Vercel:
-cada promoção gera deploy de `staging` e um `chore(release)` em `dev`. O
-custo volta, mitigado pelo `ignoreCommand` da #259 (deploy sem efeito no site
-é pulado) e pelos skips abaixo. O agendamento às 15:00 e 21:00 UTC
-(`schedule`) fica como rede de segurança, e o dispatch, como retomada.
+cada promoção gerava deploy de `staging` e um `chore(release)` em `dev`.
+Desde a Fase 1 do [ADR 0030](../adr/0030-contingencia-de-ci-e-deploy.md)
+([#351](https://github.com/andreustimm/master-jobs/issues/351)),
+`git.deploymentEnabled` do `vercel.json` desliga `dev` e `staging`, e a
+promoção continua fazendo fast-forward e criando o `chore(release)` **sem
+acionar deploy nenhum** — o custo por ciclo que motivou rodar só por agenda
+deixou de existir. O agendamento às 15:00 e 21:00 UTC (`schedule`) fica como
+rede de segurança do próprio fluxo de Git/CI, e o dispatch, como retomada; os
+skips abaixo continuam reduzindo execuções redundantes do workflow, não mais
+deploys.
 
 - **Evento de CI:** a entrada **A** é `workflow_run.head_sha`, de um run de
   push em `dev` concluído com `success` ou `failure` — `failure` entra porque

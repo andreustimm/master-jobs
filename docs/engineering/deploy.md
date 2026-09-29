@@ -205,12 +205,12 @@ um sem o outro reprova a suíte. Para conferir em produção, o cabeçalho
 quem pediu, só o segundo é a região da função. `<borda>::iad1::…` é a função no
 lugar errado.
 
-| Branch | Endereço | Banco | Ambiente Vercel |
-|---|---|---|---|
-| `main` | `jobs.mastertimm.com.br` | Supabase produção (`production`) | Production |
-| `staging` | `jobs-staging.mastertimm.com.br` | fixture PostgreSQL isolada (provisionamento pendente) | Preview |
-| `dev` | `jobs-dev.mastertimm.com.br` | fixture PostgreSQL isolada (provisionamento pendente) | Preview |
-| — | local | PostgreSQL Docker isolado (`127.0.0.1:5432`) | Development |
+| Branch | Endereço | Banco | Ambiente Vercel | Deploy automático |
+|---|---|---|---|---|
+| `main` | `jobs.mastertimm.com.br` | Supabase produção (`production`) | Production | sim |
+| `staging` | `jobs-staging.mastertimm.com.br` | fixture PostgreSQL isolada (provisionamento pendente) | Preview | não (Fase 1 da [#351](https://github.com/andreustimm/master-jobs/issues/351)) |
+| `dev` | `jobs-dev.mastertimm.com.br` | fixture PostgreSQL isolada (provisionamento pendente) | Preview | não (Fase 1 da [#351](https://github.com/andreustimm/master-jobs/issues/351)) |
+| — | local | PostgreSQL Docker isolado (`127.0.0.1:5432`) | Development | — |
 
 Os três compartilham o schema; só o de produção carrega dado real. `dev` e
 `staging` nascem vazios de propósito: copiar produção para lá levaria junto
@@ -227,37 +227,70 @@ atalho seguro.
 
 ### Branches que geram deploy
 
-Somente `main`, `dev` e `staging` geram deployments automáticos. A lista de
-permissão fica em `git.deploymentEnabled` no `vercel.json`: `**: false` cobre
-também branches com `/`, e as três exceções explícitas habilitam os ambientes.
-Branches de tarefa e suas PRs executam o CI do GitHub, sem preview próprio.
+**Somente `main` gera deployment automático.** A lista de permissão fica em
+`git.deploymentEnabled` no `vercel.json`: `**: false` cobre branches de tarefa
+(inclusive com `/`), e `dev`/`staging` são `false` desde a Fase 1 do
+[ADR 0030](../adr/0030-contingencia-de-ci-e-deploy.md) ([#351](https://github.com/andreustimm/master-jobs/issues/351)).
+Branches de tarefa e suas PRs executam o CI do GitHub, sem preview próprio —
+e, agora, `dev` e `staging` também não recebem preview a cada push, porque os
+dois ambientes não têm banco próprio ([Os três ambientes](#os-três-ambientes)):
+cada deploy deles não validava nada que dependesse de dado, só consumia cota.
 
-**Commit que não muda o site não gera deploy.** O plano Hobby limita os
-deploys por dia; em 22/09/2026 o limite estourou e bloqueou a produção por
-24 h. `ignoreCommand` roda `scripts/vercel-ignore-build.sh`, que pula o build
-quando todos os arquivos alterados (desde `VERCEL_GIT_PREVIOUS_SHA`, ou o
-commit anterior) estão em `docs/`, `.compozy/`, `tests/`, `.github/`,
-`.claude/` ou são `.md` avulsos. `CHANGELOG.md` e `USER_CHANGELOG.*.md`
-constroem, porque a tela Novidades é compilada deles; arquivo desconhecido
-também constrói — errar para "pular" publicaria código velho.
-A promoção `dev → staging` dispara a cada CI de push em `dev` com veredito
-aprovado e gera deploy de `staging` e um `chore(release)` em `dev` — ao menos
-dois deploys por versão, porque os changelogs sempre constroem. Esse corte e o
-skip da promoção sem nada novo ([promotion.md](promotion.md)) reduzem o volume;
-o limite diário não foi medido depois da volta do gatilho.
-`dev` e `staging` continuam no ambiente **Preview** da Vercel; o nome do
-ambiente não significa que toda PR recebe um deployment.
+**Causa do corte:** em 22/09/2026 o limite de 100 deploys/dia da Vercel Hobby
+recusou novo deploy com "Deployment rate limited — retry in 24 hours", e
+produção ficou mais de 24 h sem poder publicar — inclusive a correção de
+segurança da 1.22.1. Cada merge em `dev` e cada promoção geravam deploy de
+`dev` **e** `staging` além do de `main` quando aplicável; cortar os dois
+elimina a causa concreta do incidente.
+
+**Religar um ambiente de preview** exige a fixture de banco dele já
+provisionada (fora do escopo desta entrega) — a variável de repositório
+`DEPLOY_PREVIEW_ENVS` não contorna essa pré-condição, só é o registro
+documentado e verificável de qual ambiente está religado, para que exista "um
+lugar só" a editar em vez de abrir `vercel.json` à mão:
+
+- **Formato:** lista separada por vírgula, subconjunto de `dev,staging`
+  (nunca `main`, que é sempre `true` e não depende da variável). Vazia ou
+  ausente = só `main` deploya (o estado desta entrega). Exemplos válidos:
+  `""`, `"dev"`, `"dev,staging"`.
+- **Contrato executável:**
+  [`scripts/github/verify-deploy-preview-envs.ts`](../../scripts/github/verify-deploy-preview-envs.ts)
+  lê a variável por `gh api repos/.../actions/variables/DEPLOY_PREVIEW_ENVS` e
+  compara ao mapa `git.deploymentEnabled` de `vercel.json`; diverge, sai com
+  código 1:
+
+  ```bash
+  rtk node scripts/github/verify-deploy-preview-envs.ts
+  ```
+- **Runbook de religar** um ambiente, quando a fixture existir: 1) confirmar a
+  fixture do ambiente provisionada; 2) `gh variable set DEPLOY_PREVIEW_ENVS
+  --body "dev"`; 3) editar `vercel.json` para `"dev": true`; 4) rodar o
+  verificador; 5) confirmar o primeiro deploy de `dev` na Vercel.
+
+**Commit que não muda o site não gera deploy**, mesmo em `main`. O plano
+Hobby limita os deploys por dia; `ignoreCommand` roda
+`scripts/vercel-ignore-build.sh`, que pula o build quando todos os arquivos
+alterados (desde `VERCEL_GIT_PREVIOUS_SHA`, ou o commit anterior) estão em
+`docs/`, `.compozy/`, `tests/`, `.github/`, `.claude/` ou são `.md` avulsos.
+`CHANGELOG.md` e `USER_CHANGELOG.*.md` constroem, porque a tela Novidades é
+compilada deles; arquivo desconhecido também constrói — errar para "pular"
+publicaria código velho.
+
+A promoção `dev → staging` continua existindo como etapa de Git e CI (SHA
+validado, versionamento, PR de produção — [promotion.md](promotion.md)), só
+sem gerar deploy nenhum: `staging` e `dev` continuam no ambiente **Preview**
+da Vercel, apenas desligado por `git.deploymentEnabled`. O nome do ambiente
+nunca significou que toda PR recebe um deployment.
 
 A Vercel [aplica a regra por branch e dá precedência a uma correspondência
 `true`](https://vercel.com/docs/project-configuration/git-configuration#gitdeploymentenabled).
-Uma PR `staging → main` usa o deployment de `staging`; produção continua
-dependendo do merge humano em `main`. A restrição vale para a integração Git;
-na CLI ou API, o operador deve selecionar o ambiente explicitamente.
+Produção continua dependendo só do merge humano em `main`. A restrição vale
+para a integração Git; na CLI ou API, o operador deve selecionar o ambiente
+explicitamente.
 
-Essa configuração evita consumir builds com branches de tarefa. Um status
-antigo de limite de deployments não é apagado pela mudança: depois da liberação
-da cota, retome o deployment do commit vigente no ambiente afetado e confira
-o resultado na Vercel e na PR.
+Um status antigo de limite de deployments não é apagado pela mudança: depois
+da liberação da cota, retome o deployment do commit vigente no ambiente
+afetado e confira o resultado na Vercel e na PR.
 
 ### Novidades preparadas no build
 
