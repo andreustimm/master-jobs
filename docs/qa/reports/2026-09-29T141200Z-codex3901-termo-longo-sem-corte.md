@@ -2,7 +2,7 @@
 
 - **Scope:** correção do campo de termo em `/searches`: entradas acima de 60 caracteres chegam à validação e não criam termo truncado.
 - **Cadence tier:** targeted
-- **Build:** `b7a3fbce` + worktree `fix/termo-longo-sem-corte` · **Environment:** runner isolado local, PostgreSQL descartável, autenticação real.
+- **Build:** `e6ff264` · **Environment:** runner isolado local, PostgreSQL descartável, autenticação real.
 - **Started:** 2026-09-29T14:12:00Z · **Status:** closed
 
 ## Personas
@@ -19,7 +19,7 @@
 
 | # | Charter | Journey / Scenario | Persona | Tour | Status | Issue | Fix commit |
 |---|---|---|---|---|---|---|---|
-| 1 | CH-term-input-mistreated | J-save-term-search / SRCH-term-validation | Andreus em triagem | Garbage Tour | Pass | BUG-20260921-long-term-cut-silently | pendente de SHA |
+| 1 | CH-term-input-mistreated | J-save-term-search / SRCH-term-validation | Andreus em triagem | Garbage Tour | Fixed | BUG-20260921-long-term-cut-silently | e6ff264 |
 
 Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human verify) | Blocked (human decision)`
 
@@ -47,7 +47,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 - **Symptom:** termo acima de 60 caracteres era cortado pelo navegador e salvo sem aviso.
 - **Root cause:** o limite HTML descartava o excedente antes de `validateTerm` receber a entrada.
-- **Fix:** remoção do limite HTML; SHA será preenchido após o commit.
+- **Fix:** e6ff264 remove o limite HTML e deixa a validação do domínio receber o termo completo.
 - **Regression test:** `tests/mobile.test.ts` e `tests/e2e/ui/searches.mjs`.
 - **Retested:** E2E seletivo 81/81 e sessão manual em 375×812, com refresh.
 

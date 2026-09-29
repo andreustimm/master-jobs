@@ -38,7 +38,7 @@ cria termo.
 
 <!-- filled when status moves to fixed -->
 - **Root cause:** o sintoma é o termo cortado sem aviso; a causa é o `maxlength` do campo, que impede o envio do texto inteiro e com ele a mensagem de termo longo que o servidor já tem.
-- **Fix commit:** a preencher após o commit desta correção.
+- **Fix commit:** e6ff264 (`fix: validar termo longo sem corte`).
 - **Regression test:** `tests/mobile.test.ts` (o campo não corta antes da validação); `tests/e2e/ui/searches.mjs` (termo de 65 caracteres mostra `term_too_long` e não aparece após recarregar).
 
 ## Verification
