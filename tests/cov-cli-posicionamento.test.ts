@@ -200,6 +200,28 @@ describe("jho contacts add <name>", () => {
     expect(linha?.candidateId).toBe(ativo);
   });
 
+  it("URL de contato antigo sem dono é recusada com explicação, não com erro do banco", async () => {
+    // Contato gravado antes da 0031 fica sem dono e ainda ocupa a URL no índice
+    // global. O dono que o recadastra recebe a recusa legível apontando a #405.
+    await syncCandidateFromProfile();
+    await banco().insert(targetAccount).values({
+      name: "Rafael Souza",
+      category: "peer",
+      linkedinUrl: "https://www.linkedin.com/in/rafael",
+    });
+
+    const r = await rodar(
+      "contacts", "add", "Rafael Souza", "-c", "Acme", "-u", "https://www.linkedin.com/in/rafael",
+    );
+
+    expect(r.erro).toBeUndefined();
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("Recusado");
+    expect(r.out).toContain("#405");
+    expect(`${r.err}\n${r.out}`).not.toContain("23505");
+    expect(await banco().select().from(targetAccount)).toHaveLength(1);
+  });
+
   it("sem candidato ativo, recusa em vez de gravar contato sem dono", async () => {
     const r = await rodar("contacts", "add", "Rafael Souza", "-c", "Acme");
 

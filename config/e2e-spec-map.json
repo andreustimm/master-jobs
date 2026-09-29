@@ -207,7 +207,8 @@
         "/login",
         "/pipeline",
         "/recruiter",
-        "/recruiter/[id]"
+        "/recruiter/[id]",
+        "/referrals"
       ]
     },
     {

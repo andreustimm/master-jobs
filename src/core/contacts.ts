@@ -17,6 +17,7 @@
  */
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "./db/client.ts";
+import { isDuplicateKey } from "./db/retry.ts";
 import { application, job, targetAccount } from "./db/schema.ts";
 import { slugifyCompany } from "./ingest/normalize.ts";
 import { primaryScoreFilter } from "../contexts/matching/index.ts";
@@ -41,6 +42,26 @@ export type NewContact = {
   notes?: string | null;
 };
 
+/**
+ * A URL do LinkedIn já está gravada fora da rede deste candidato.
+ *
+ * O índice `target_account_url_idx` ainda é global: a mesma pessoa não entra
+ * em duas redes, e contato gravado antes da migration 0031 (sem dono) também
+ * ocupa a URL. Recusar é o lado seguro — casar pela URL global sobrescreveria
+ * o contato de outra conta. Some quando o índice passar a ser por candidato
+ * (#405). `cause` guarda o erro do banco (23505).
+ */
+export class ContactUrlTaken extends Error {
+  readonly code = "contact_url_taken";
+  readonly linkedinUrl: string;
+
+  constructor(linkedinUrl: string, cause: unknown) {
+    super(`A URL ${linkedinUrl} já está cadastrada fora da sua rede.`, { cause });
+    this.name = "ContactUrlTaken";
+    this.linkedinUrl = linkedinUrl;
+  }
+}
+
 export async function addContact(
   candidateId: number,
   input: NewContact,
@@ -48,8 +69,8 @@ export async function addContact(
   const db = getDb();
 
   // The LinkedIn URL is the natural key when present — within this
-  // candidate's network. Another account knowing the same person keeps its
-  // own row; matching globally would overwrite their notes.
+  // candidate's network. Matching globally would overwrite another
+  // account's notes; a URL taken elsewhere is refused below.
   if (input.linkedinUrl) {
     const existing = await db
       .select({ id: targetAccount.id })
@@ -78,19 +99,26 @@ export async function addContact(
     }
   }
 
-  const inserted = await db
-    .insert(targetAccount)
-    .values({
-      candidateId,
-      name: input.name,
-      company: input.company ?? null,
-      role: input.role ?? null,
-      linkedinUrl: input.linkedinUrl ?? null,
-      category: input.category,
-      country: input.country ?? null,
-      notes: input.notes ?? null,
-    })
-    .returning({ id: targetAccount.id });
+  let inserted: { id: number }[];
+  try {
+    inserted = await db
+      .insert(targetAccount)
+      .values({
+        candidateId,
+        name: input.name,
+        company: input.company ?? null,
+        role: input.role ?? null,
+        linkedinUrl: input.linkedinUrl ?? null,
+        category: input.category,
+        country: input.country ?? null,
+        notes: input.notes ?? null,
+      })
+      .returning({ id: targetAccount.id });
+  } catch (error) {
+    // Só a URL tem índice único nesta tabela; sem URL não há o que colidir.
+    if (input.linkedinUrl && isDuplicateKey(error)) throw new ContactUrlTaken(input.linkedinUrl, error);
+    throw error;
+  }
 
   const row = inserted[0];
   if (!row) throw new Error("insert returned no row");

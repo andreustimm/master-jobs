@@ -1,7 +1,9 @@
 import { eq, isNull } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ensureCandidate } from "../src/core/candidate.ts";
+import { isDuplicateKey } from "../src/core/db/retry.ts";
 import {
+  ContactUrlTaken,
   addContact,
   companiesWithContacts,
   listContacts,
@@ -434,9 +436,17 @@ describe("a rede é de um candidato só (#379)", () => {
       notes: "nota do dono",
     });
 
-    await expect(
-      addContact(outra, { name: "Marina", company: "Outra Empresa", category: "peer", linkedinUrl: url }),
-    ).rejects.toThrow();
+    // A recusa é a da URL ocupada (23505 no índice global), não qualquer erro:
+    // outra falha passaria por este teste fingindo ser a proteção.
+    const recusa = await addContact(outra, {
+      name: "Marina",
+      company: "Outra Empresa",
+      category: "peer",
+      linkedinUrl: url,
+    }).catch((e: unknown) => e);
+    expect(recusa).toBeInstanceOf(ContactUrlTaken);
+    expect(recusa).toMatchObject({ code: "contact_url_taken", linkedinUrl: url });
+    expect(isDuplicateKey((recusa as ContactUrlTaken).cause)).toBe(true);
 
     const linhas = await db.select().from(targetAccount);
     expect(linhas).toHaveLength(1);

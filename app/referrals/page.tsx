@@ -32,11 +32,7 @@ export default async function Referrals() {
           data-testid={network.size === 0 ? "referrals-empty-network" : "referrals-empty-matches"}
         >
           {network.size === 0 ? (
-            <>
-              Nenhum contato registrado. Comece com{" "}
-              <code className="font-mono text-foreground">pnpm jho contacts seed</code>, que
-              {t("copy.referralsSeed")}
-            </>
+            t("copy.referralsNoNetwork")
           ) : (
             <>
               <strong className="text-foreground" data-testid="referrals-network-count">{network.size} {t("referrals.companies")}</strong>{" "}
@@ -71,7 +67,10 @@ export default async function Referrals() {
                 </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">{o.companyName}</div>
                 <div className="mt-1 text-xs text-[var(--color-strong)]">
-                  via {o.contacts.join(", ")}
+                  {t("referrals.via")}{" "}
+                  <span data-user-content data-testid={`referral-contacts-${o.jobId}`}>
+                    {o.contacts.join(", ")}
+                  </span>
                 </div>
               </div>
                 {externalUrl ? (
