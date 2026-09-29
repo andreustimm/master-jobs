@@ -2,7 +2,7 @@
 
 ### Corrigido
 
-- `@media (pointer: coarse)` em `app/globals.css` fixava `min-height: 40px`, fora de `@layer` — vencia `min-h-11` (44px) do Tailwind v4 e derrubava para 40px todo botão, `summary` e link `inline-flex` num aparelho de toque real, inclusive botões `size="sm"` sem altura explícita (`save-public-facts`, `save-visibility`). DESIGN.md pede 44×44px ("Touch Targets"); a regra agora bate com o número (#403). `tests/e2e/ui/mobile.mjs` ganhou um bloco com contexto `hasTouch: true, isMobile: true` (o resto da suíte não emula toque real, então `pointer: coarse` nunca casava) medindo `save-public-facts`, `save-visibility`, `public-profile-linkedin`, `public-profile-github`, `public-profile-copy-link` e `public-skill-more`.
+- `@media (pointer: coarse)` em `app/globals.css` fixava `min-height: 40px`, fora de `@layer` — vencia `min-h-11` (44px) do Tailwind v4 e derrubava para 40px todo botão, `summary` e link `inline-flex` num aparelho de toque real, inclusive botões `size="sm"` sem altura explícita (`save-public-facts`, `save-visibility`). DESIGN.md pede 44×44px ("Touch Targets"); a regra agora bate com o número (#403). `tests/e2e/ui/mobile.mjs` ganhou um bloco com contexto `hasTouch: true, isMobile: true` (o resto da suíte não emula toque real, então `pointer: coarse` nunca casava) medindo `save-public-facts`, `save-visibility`, `public-profile-linkedin`, `public-profile-github`, `public-profile-copy-link` e `public-skill-more`, mais uma varredura de `OVERFLOW_SWEEP` inteiro (dez rotas, inclusive `/jobs` com chips e barra de filtro, e o cabeçalho com idioma/aparência/sessão) em 375px de toque real — nada quebrou com o piso mais alto.
 
 ## pt-BR
 

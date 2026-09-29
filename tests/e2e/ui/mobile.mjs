@@ -360,6 +360,52 @@ export async function run(ctx) {
     });
     const touchPage = await touchCtx.newPage();
 
+    // O bump de 40 para 44px vale para TODO `button`, `[role="button"]`,
+    // `summary` e link `inline-flex` em toque — não só os seis controles
+    // medidos abaixo. Reaproveita `OVERFLOW_SWEEP` (revisão L1): mesma
+    // varredura de `scrollWidth` e "elemento além da borda" do topo deste
+    // arquivo, mas em `hasTouch`/`isMobile` reais, o único contexto em que a
+    // regra de `pointer: coarse` chega a valer. Cobre `/jobs` (chips de
+    // filtro, barra de filtros) e o cabeçalho (idioma, aparência, sessão),
+    // que aparece em toda rota da lista.
+    const touchOverflows = [];
+    const touchClipped = [];
+    for (const path of OVERFLOW_SWEEP) {
+      if (!(await gotoMeasured(touchPage, path, touchOverflows, "toque 375px "))) continue;
+      const overflow = await touchPage.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      if (overflow > 1) touchOverflows.push(`${path}: ${overflow}px`);
+      const beyond = await touchPage.evaluate(() => {
+        const viewport = document.documentElement.clientWidth;
+        const scrollsSideways = (node) => {
+          for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+            const overflowX = getComputedStyle(parent).overflowX;
+            if (overflowX === "auto" || overflowX === "scroll") return true;
+          }
+          return false;
+        };
+        return [...document.querySelectorAll("main *, header *")]
+          .filter((node) => {
+            const box = node.getBoundingClientRect();
+            return box.width > 1 && box.right > viewport + 1 && !scrollsSideways(node);
+          })
+          .slice(0, 2)
+          .map((node) => node.getAttribute("data-testid") || node.tagName.toLowerCase());
+      });
+      if (beyond.length > 0) touchClipped.push(`${path}: ${beyond.join(", ")}`);
+    }
+    check(
+      "sem rolagem horizontal em 375px de toque real, nas rotas de OVERFLOW_SWEEP (#403)",
+      touchOverflows.length === 0,
+      touchOverflows.slice(0, 3).join(" · "),
+    );
+    check(
+      "nenhum elemento (inclusive cabeçalho e filtros) passa da borda em 375px de toque real (#403)",
+      touchClipped.length === 0,
+      touchClipped.slice(0, 3).join(" · "),
+    );
+
     const targets = [];
     const measure = async (testid) => {
       const box = await touchPage.locator(`[data-testid="${testid}"]`).first().boundingBox();
