@@ -16,12 +16,11 @@ primary_region = "gru"
 
 [env]
   PORT = "3000"
-  # CRITICAL C1 (revisão da #373): sem isto, `isLocalProcess()`
-  # (src/contexts/auth/domain/open-mode.ts) trataria a máquina do Fly como o
-  # laptop do dono — nenhuma variável VERCEL/VERCEL_ENV existe aqui.
-  # `JHO_AUTH_MODE=open` liberaria tudo sem sessão (G38), o mailer de
-  # recuperação imprimiria o link no log (G18) e a varredura recusaria por não
-  # se reconhecer como produção. Também declarado no `ENV` do `Dockerfile`
+  # CRITICAL C1 (revisão da #373): sem isto, a varredura recusaria por não se
+  # reconhecer como produção. Até a #378, a ausência também fazia
+  # `isLocalProcess()` (src/contexts/auth/domain/open-mode.ts) tratar a máquina
+  # do Fly como o laptop do dono; hoje ela exige `JHO_ENV=local` e nega por
+  # omissão. Também declarado no `ENV` do `Dockerfile`
   # (defesa em profundidade); os dois precisam dizer o mesmo.
   JHO_ENV = "production"
   # MAJOR M1 (revisão da #373): a Vercel resolve este valor sozinha, por

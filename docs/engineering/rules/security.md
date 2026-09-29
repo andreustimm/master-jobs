@@ -83,17 +83,18 @@ instrumentado responde 200 a tudo e nenhum pedido sai),
 **Obrigação.** Nenhuma página nem API responde sem sessão válida — inclusive
 `/api/export`, que carrega o acervo inteiro. O modo aberto existe mas precisa
 ser pedido (`JHO_AUTH_MODE=open`) e só vale onde `isLocalProcess()`
-reconhece a máquina do dono: sem `VERCEL`, `VERCEL_ENV` nem `JHO_ENV`
-declarados (`src/contexts/auth/domain/open-mode.ts`). **Todo deployment
-precisa se declarar** para o código recusar o pedido — a Vercel já declara
-`VERCEL`/`VERCEL_ENV` por conta própria, mas qualquer outro destino não
-declara nada por padrão. O plano B no Fly.io (Fase 4 da contingência,
-`docs/engineering/deploy.md`) por isso fixa `JHO_ENV=production` no `fly.toml`
-**e** no `Dockerfile`: sem essa declaração explícita, o contêiner seria
-tratado como a máquina local — liberando o modo aberto, imprimindo o link de
-recuperação de senha no log (G18) e recusando a varredura. Produção, preview,
-staging, dev e valor desconhecido — todos declarados — continuam exigindo
-login.
+reconhece a máquina do dono pelo **sinal positivo** `JHO_ENV=local`, sem
+`VERCEL` nem `VERCEL_ENV` (`src/contexts/auth/domain/open-mode.ts`). É lista
+de permissão (G27): produção, preview, staging, dev, valor desconhecido **e a
+ausência de declaração** recusam — até a #378 a ausência contava como local,
+e um destino que não declarasse nada abria o modo aberto. A recusa é
+silenciosa na resposta (o login continua exigido) e avisada uma vez no log do
+servidor. Na máquina do dono, `pnpm dev` declara `JHO_ENV=local` no próprio
+script e a suíte em `tests/support/ingestion-env.ts`; nenhum outro script do
+`package.json` pode declará-lo (`tests/deploy-fly.test.ts`). O plano B no
+Fly.io continua fixando `JHO_ENV=production` no `fly.toml` **e** no
+`Dockerfile`, agora pela guarda de ingestão e como declaração explícita, não
+porque a ausência abriria o modo aberto.
 
 **Por quê.** "Só roda em loopback" protege contra a internet, não contra outro
 processo, outra conta da máquina, nem contra um bind errado — que já aconteceu
@@ -211,15 +212,15 @@ para o domínio de quem atacou, e o token vaza para lá). `resolvePublicOrigin`
 `VERCEL_PROJECT_PRODUCTION_URL` (produção) ou, em preview,
 `VERCEL_BRANCH_URL` (estável por branch) antes de `VERCEL_URL` (único por
 deployment, muda a cada push) — todas variáveis de sistema que a própria
-plataforma escreve, não o cliente; 3) na máquina do dono, o `Host` da
-requisição, como sempre. Fora dessas três (o plano B no Fly.io sem
-`JHO_PUBLIC_URL`), falha fechado — devolve `null`, e a Server Action
+plataforma escreve, não o cliente; 3) na máquina do dono (`JHO_ENV=local`
+declarado, ver G38), o `Host` da requisição, como sempre. Fora dessas três
+(o plano B no Fly.io sem `JHO_PUBLIC_URL`, ou processo que não declara
+ambiente nenhum), falha fechado — devolve `null`, e a Server Action
 (`app/login/forgot/actions.ts`) não constrói link nenhum a partir da entrada
-do cliente. **Isto depende de a Vercel expor as variáveis de sistema no
-runtime da função** ("Automatically expose System Environment Variables",
-[deploy.md](../deploy.md#variáveis)); se ela não expuser nem `VERCEL`, o
-efeito não é falha fechada — é `isLocalProcess()` tratar o deployment como a
-máquina do dono, reabrindo o `Host` da requisição como origem (issue
+do cliente. Se a Vercel deixar de expor as variáveis de sistema no runtime
+("Automatically expose System Environment Variables",
+[deploy.md](../deploy.md#variáveis)), o efeito é essa mesma falha fechada —
+a recuperação para de enviar, o `Host` nunca volta a decidir (issue
 [#378](https://github.com/andreustimm/master-jobs/issues/378)).
 
 Origem: AGENTS (invariante "Recuperar senha"). Prova:

@@ -86,7 +86,7 @@ da varredura fatiada não depende da sorte: `next.config.ts` inclui
 | `BLOB_READ_WRITE_TOKEN` | Vercel (Preview **e** Production), criada pela integração do Blob | credencial do Vercel Blob; o adapter grava sempre privado e apaga o valor de todo erro. Nunca em banco, log ou `.env.example` |
 | `JHO_STORAGE_BUCKET` | Vercel (opcional) | prefixo dos objetos no Blob (bucket no S3); padrão `master-jobs` |
 | `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | local (MinIO) ou futuro AWS S3 | só com `JHO_STORAGE_DRIVER=s3`; `S3_ENDPOINT` ausente é a AWS ([local-storage.md](local-storage.md)) |
-| `JHO_ENV` | qualquer deployment que não seja a Vercel (o plano B no Fly, `fly.toml` **e** `Dockerfile`); recomendado também na Vercel, ver abaixo | declara o ambiente para `isLocalProcess()` (`src/contexts/auth/domain/open-mode.ts`) e para a guarda de ingestão (`src/core/ingest/guard.ts`); sem ela, fora da Vercel, o processo seria tratado como a máquina do dono — libera o modo aberto, imprime link de recuperação no log (G18) e recusa a varredura |
+| `JHO_ENV` | todo deployment (Vercel Production `production`, Preview `preview`; plano B no Fly em `fly.toml` **e** `Dockerfile`); na máquina do dono, `local` | declara o ambiente para `isLocalProcess()` (`src/contexts/auth/domain/open-mode.ts`) e para a guarda de ingestão (`src/core/ingest/guard.ts`). Só `JHO_ENV=local` (sem `VERCEL`/`VERCEL_ENV`) conta como máquina do dono — o sinal é positivo (G27, #378): ausente ou vazia, o processo **não** é local, então o modo aberto é recusado, o mailer omite o link (G18), `resolvePublicOrigin` não usa o `Host` (G17) e a varredura recusa. `pnpm dev` declara `JHO_ENV=local` sozinho (`${JHO_ENV:-local}` no script); `pnpm jho` e `pnpm start` locais leem do `.env` e precisam da linha lá para o modo aberto e o mailer de terminal |
 | `JHO_PUBLIC_URL` | **só em Production** na Vercel; obrigatória no plano B no Fly (já fixada em `fly.toml`) | origem confiável (`https://host`) para o link de recuperação de senha (`src/contexts/auth/domain/public-origin.ts`), nunca o `Host` da requisição (G17/G18, host poisoning). **Na Vercel Production não precisa ser cadastrada**: sem ela, a função usa `VERCEL_PROJECT_PRODUCTION_URL` — variável de sistema da própria plataforma, não controlada pelo cliente. `VERCEL_PROJECT_PRODUCTION_URL` deve resolver para `jobs.mastertimm.com.br` (o domínio próprio tem precedência sobre o `*.vercel.app` gerado, quando o projeto tem um domínio de produção configurado) — confirmar isso é o item novo do checklist pós-deploy, abaixo. Cadastrar `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br` em Production elimina a dúvida por completo, sem depender de nenhuma variável de sistema. **Nunca cadastrar em Preview**: um valor fixo enviaria o token de recuperação de qualquer branch de preview para o domínio de produção — Preview precisa continuar resolvendo por `VERCEL_BRANCH_URL`/`VERCEL_URL` (variáveis por branch/deployment). Fora da Vercel e da máquina do dono (o plano B no Fly), a ausência falha fechado |
 
 **Dependência silenciosa: "Automatically expose System Environment
@@ -100,18 +100,18 @@ desligado sem ninguém notar. **Não verificado nesta entrega** exatamente
 quais variáveis sobrevivem com a opção desligada (documentação da Vercel e
 comportamento real podem divergir).
 
-**O efeito real não é "falha fechada" — é o oposto.** Se `VERCEL` também não
-chegar ao runtime (cenário não confirmado, mas é o que esta dependência
-poderia causar), `isLocalProcess()`
-(`src/contexts/auth/domain/open-mode.ts`) trata o processo como a **máquina
-do dono**, porque ele decide pela ausência de variável, não por um sinal
-positivo de estar local (issue [#378](https://github.com/andreustimm/master-jobs/issues/378),
-aberta por esta revisão, não corrigida aqui). Nesse cenário: `resolvePublicOrigin`
-cairia no ramo do `Host` da requisição — reabrindo o host poisoning que ela
-existe para impedir (G17) —, `JHO_AUTH_MODE=open` seria aceito (G38), e o
-mailer de recuperação imprimiria o link no log em vez de omiti-lo (G18). A
-mitigação, disponível hoje, cadastrada explicitamente na Vercel, **com
-valores diferentes por ambiente**:
+**O efeito é falha fechada, de disponibilidade e não de segurança.** Se
+`VERCEL` e `VERCEL_ENV` não chegarem ao runtime, `isLocalProcess()`
+(`src/contexts/auth/domain/open-mode.ts`) **não** trata o processo como a
+máquina do dono: ela exige o sinal positivo `JHO_ENV=local` e nega por
+omissão (issue [#378](https://github.com/andreustimm/master-jobs/issues/378);
+até ela, a ausência de variáveis contava como "local", e esse cenário
+reabria o modo aberto, o link no log e o `Host` do cliente como origem). O
+que sobra é disponibilidade: sem `JHO_PUBLIC_URL` nem as variáveis de host
+da Vercel, `resolvePublicOrigin` devolve `null` e a recuperação de senha
+grava `reset_send_failed` em vez de enviar. A configuração que evita isso,
+cadastrada explicitamente na Vercel, **com valores diferentes por
+ambiente**:
 
 - **Production:** `JHO_ENV=production` e
   `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br`.
@@ -123,12 +123,12 @@ valores diferentes por ambiente**:
   depender de `JHO_SOURCE_ALLOWLIST` estar ausente por acaso. **Nunca**
   `JHO_PUBLIC_URL` em Preview — ver a tabela acima.
 
-Isso elimina a dependência da opção em Production por completo. Em Preview
-reduz ao mínimo: `JHO_ENV=preview` corrige o modo aberto e o mailer, mas
-`resolvePublicOrigin` continua dependendo de `VERCEL_BRANCH_URL`/`VERCEL_URL`
-chegarem ao runtime — um `JHO_PUBLIC_URL` fixo ali seria pior, não melhor
-(ver a tabela acima). A correção
-completa é a estrutural da issue #378, não esta mitigação.
+Isso elimina a dependência da opção em Production por completo. Em Preview,
+a recuperação de senha continua dependendo de `VERCEL_BRANCH_URL`/`VERCEL_URL`
+chegarem ao runtime — sem elas, falha fechado; um `JHO_PUBLIC_URL` fixo ali
+seria pior, não melhor (ver a tabela acima). `JHO_ENV` nos dois ambientes
+continua valendo pela guarda de ingestão e como declaração explícita, mas a
+segurança do modo aberto, do mailer e da origem já não depende dela.
 
 **A URL pode vir de mais de um nome, e a ordem é declarada.** A integração do
 Supabase com a Vercel cadastra `POSTGRES_URL` e `POSTGRES_URL_NON_POOLING` e as
@@ -170,12 +170,11 @@ bundle. Valor que não é nenhum dos dois falha nomeando a variável.
 
 `RESEND_API_KEY` e `RESEND_FROM` formam um par: se qualquer uma estiver ausente
 ou vazia, nenhum e-mail é enviado. Onde o link vai parar depende de quem lê o
-log: sem chave nenhuma, num processo que se declara local (`JHO_ENV=local`) ou
-não se declara deployment nenhum (nem `JHO_ENV`, nem `VERCEL_ENV`, nem
-`VERCEL`), `configuredMailer` usa o adapter de console, que imprime o e-mail
-inteiro no terminal de quem opera. Em qualquer outro caso — deployment na
-Vercel, `JHO_ENV` diferente de `local`, ou chave presente com o remetente
-faltando — usa `withheldMailer`, que registra um alerta **sem** destinatário, assunto nem link —
+log: sem chave nenhuma, num processo que se declara local (`JHO_ENV=local`,
+sem `VERCEL` nem `VERCEL_ENV`), `configuredMailer` usa o adapter de console,
+que imprime o e-mail inteiro no terminal de quem opera. Em qualquer outro caso
+— deployment na Vercel, `JHO_ENV` diferente de `local` **ou ausente**, ou
+chave presente com o remetente faltando — usa `withheldMailer`, que registra um alerta **sem** destinatário, assunto nem link —
 o link de recuperação é credencial, e o log das funções é lido por outras
 pessoas. O pedido de recuperação continua respondendo igual para quem pede, e o
 `auth_event` grava `reset_send_failed`. A regra de "processo local" é a mesma
@@ -234,9 +233,12 @@ manual de `.eml`.
 **`JHO_AUTH_MODE` não deve existir em produção.** Com `open`, o sistema sintetiza
 uma sessão e serve currículo, funil e export para qualquer requisição. É modo de
 desenvolvimento local e num endereço público é o vazamento inteiro. Desde #197 o
-código também recusa: em qualquer deployment (`VERCEL` presente, ou
-`VERCEL_ENV`/`JHO_ENV` diferente de `local`) o pedido é ignorado e o login continua exigido —
-ver `src/contexts/auth/domain/open-mode.ts`.
+código também recusa: o pedido só vale num processo que se declara local
+(`JHO_ENV=local`, sem `VERCEL` nem `VERCEL_ENV`); em qualquer outro — inclusive
+o que não declara ambiente nenhum (#378) — é ignorado, o login continua exigido
+e o servidor registra uma vez no log `[auth] JHO_AUTH_MODE=open ignorado` com a
+instrução de declarar `JHO_ENV=local` — ver
+`src/contexts/auth/domain/open-mode.ts`.
 
 ## Os três ambientes
 
