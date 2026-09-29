@@ -4,14 +4,14 @@
 - Branch: fix/recusa-transicao-legivel; base: 36c120c.
 - Persona: Andreus em triagem noturna, pt-BR, laptop; prova adicional em 375px.
 - Ambiente: build standalone, PostgreSQL descartável, login real; sem produção.
-- Driver planejado: agent-browser, interface pública.
+- Driver: agent-browser, interface pública.
 
 ## Matriz
 
 | Charter | Cenário | Tour | Estado |
 |---|---|---|---|
-| CH-refused-transition-draft | PIPE-refused-transition-keeps-draft | Back-Button Tour | Pending |
-| CH-save-resume-application | PIPE-save-resume-decision | Back-Button Tour | Pending |
+| CH-refused-transition-draft | PIPE-refused-transition-keeps-draft | Back-Button Tour | Pass |
+| CH-save-resume-application | PIPE-save-resume-decision | Back-Button Tour | Pass |
 
 ## Plano de sessão
 
@@ -29,7 +29,13 @@ nota com acentos, abandono sem salvar e viewport estreito.
 
 ## Sessões e observáveis
 
-Aguardando ambiente manual.
+Reteste em 29/09/2026 sobre `5b70e2c`, login real como Alex no ambiente descartável. Duas abas: a segunda voltou a candidatura para A fazer; a primeira tentou Preparando com nota. O aviso nomeou os estágios e permaneceu visível aos seis segundos; o campo conservou o texto. Screenshot: `docs/qa/evidence/2026-09-29T141040713402Z-531aac7a-recusa-transicao-legivel/recusa-6s.png`.
+
+Na repetição, sem redigitar a nota recusada, selecionei Pré-selecionada e salvei pelo teclado. A nota ‘Confirmar com recrutadora na sexta-feira às 14h.’ apareceu no histórico após refresh, retorno pelo Funil, voltar/avançar e novo login. A CLI pública `jobs show 1` confirmou `Pipeline shortlisted`; ela não exibe notas. Evidência: `docs/qa/evidence/2026-09-29T141040713402Z-531aac7a-recusa-transicao-legivel/persistencia.png`.
+
+Probes: concorrência em duas abas, acentos e horário, refresh, voltar/avançar, abandono de nota antes de sair e 375px (scrollWidth 360, innerWidth 375). A edição abandonada não substituiu a nota salva.
+
+O driver não ativou alguns controles por clique; a jornada prosseguiu por foco e Enter. Uma tentativa com localizador de foco inválido acionou Desfazer; repeti a preparação e a recusa, e só a repetição completa sustenta a persistência. Dispensa do toast está coberta pelo E2E, sem atribuir prova manual inexistente.
 
 ## Limitações
 
@@ -38,4 +44,4 @@ Suíte completa será executada pelo CI, conforme G57; esta rodada cobre os test
 
 ## Estado final
 
-Em execução.
+Pass nos dois cenários sobre o commit indicado. PR #407 permanece draft para revisão da coordenadora.
